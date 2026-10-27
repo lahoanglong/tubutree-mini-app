@@ -13,7 +13,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
 import { ShareSheet } from '../components/share-sheet';
 import { getDealerMe } from '../services/dealer-api';
-import { BadgePercent, Check, Leaf, Plus, Share2, Sparkles, Store } from 'lucide-react';
+import { BadgePercent, Check, Leaf, MapPin, Plus, Share2, Sparkles, Store } from 'lucide-react';
 import { copyText } from '../utils/clipboard';
 import { StorePageShell } from '../components/store-page-shell';
 import { Text, Heading } from '../components/ui/text';
@@ -273,10 +273,34 @@ export default function BrandViewPage() {
           </div>
         )}
 
-        {b.story && (
+        {(b.story || b.origin || b.storyImages.length > 0) && (
           <div style={{ marginTop: 16, padding: '0 16px' }}>
             <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Câu chuyện thương hiệu</Heading>
-            <Text variant="body-sm" tone="secondary" as="div" style={{ whiteSpace: 'pre-line' }}>{b.story}</Text>
+            {b.origin && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <MapPin size={16} color="var(--color-text-brand)" aria-hidden />
+                  <Text variant="body-sm" as="span">Xuất xứ: {b.origin}</Text>
+                </span>
+                <Button variant="secondary" onPress={() => navigate('/brand-story')} style={{ flexShrink: 0 }}>
+                  Xem trên bản đồ
+                </Button>
+              </div>
+            )}
+            {b.story && <Text variant="body-sm" tone="secondary" as="div" style={{ whiteSpace: 'pre-line' }}>{b.story}</Text>}
+            {b.storyImages.length > 0 && (
+              <ScrollRow label="Ảnh câu chuyện thương hiệu" style={{ gap: 8, marginTop: 12, minWidth: 0, maxWidth: '100%' }}>
+                {b.storyImages.map((src, i) => (
+                  <img
+                    key={src}
+                    src={src}
+                    alt={`${b.name}, ảnh ${i + 1}`}
+                    loading="lazy"
+                    style={{ flex: '0 0 auto', width: 240, height: 160, objectFit: 'cover', borderRadius: 'var(--radius-card)', background: 'var(--color-bg-subtle)' }}
+                  />
+                ))}
+              </ScrollRow>
+            )}
           </div>
         )}
       </StorePageShell>

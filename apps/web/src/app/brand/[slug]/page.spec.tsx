@@ -34,6 +34,8 @@ const BRAND = {
   followerCount: 12,
   tagline: 'Giặt sạch, nhẹ với đất',
   story: 'Câu chuyện\nnhiều dòng',
+  storyImages: [] as string[],
+  origin: null as string | null,
   isVerified: true,
   coverUrl: null,
   logoUrl: null,
@@ -214,5 +216,20 @@ describe('/brand/[slug] — hạn trang dựng sẵn', () => {
   it('trang nhãn làm mới tối đa 60 giây để nhãn gỡ đăng không còn hiện lâu; vẫn dựng phía server cho SEO', () => {
     expect(revalidate).toBeLessThanOrEqual(60);
     expect(BrandPage.constructor.name).toBe('AsyncFunction');
+  });
+
+  it('có xuất xứ và ảnh câu chuyện thì hiện cùng khối "Câu chuyện thương hiệu" như Mini App', async () => {
+    mocks.brand = { ...BRAND, origin: 'Lâm Đồng, Việt Nam', storyImages: ['https://img.test/a.jpg', 'https://img.test/b.jpg'] };
+    const box = await html();
+    expect(box.textContent).toContain('Xuất xứ: Lâm Đồng, Việt Nam');
+    expect(box.querySelector('a[href="/cau-chuyen"]')?.textContent).toBe('Xem trên bản đồ');
+    const imgs = box.querySelectorAll('[role="region"][aria-label="Ảnh câu chuyện thương hiệu"] img');
+    expect(imgs).toHaveLength(2);
+    expect(imgs[0]!.getAttribute('alt')).toBe('Bồ Hòn Xanh, ảnh 1');
+  });
+  it('không có câu chuyện, xuất xứ lẫn ảnh thì không vẽ khối câu chuyện', async () => {
+    mocks.brand = { ...BRAND, story: null };
+    const box = await html();
+    expect(box.textContent).not.toContain('Câu chuyện thương hiệu');
   });
 });

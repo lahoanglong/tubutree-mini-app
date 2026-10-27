@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import path from 'path';
 import type { AuthUser, UserRole } from '@tubutree/shared-types';
 import type { OrderView, PageResponse, ProductCard } from '../../../miniapp/src/services/shop-api';
+import { DEMO_BRAND_CONTENT } from './demo-brand';
 import { makeOrder, makeUser, publicConfig, reply, type MockApi, type MockCall } from './mock-api';
 
 /**
@@ -180,6 +181,13 @@ export function mockTourWorld(api: MockApi, user: AuthUser): void {
   api.get('/products/:slug/bought-together', []);
   api.get('/products/:slug/reviews', { average: 4.6, count: 0, items: [] });
   api.get('/products/:slug/reviews/can-review', { canReview: false });
+  api.get('/brand/public/:slug', ({ params }) => ({
+    id: 'brand-visante', slug: params.slug, name: 'Visante', logoUrl: null, dealerRewards: [], promotions: [],
+    ...DEMO_BRAND_CONTENT,
+    products: seedCatalog().filter((p) => p.brand === 'Visante').slice(0, 4),
+  }));
+  api.get('/brand/:slug/follow-state', { following: false, followerCount: 12 });
+  api.get('/brand/:slug/share-to-earn', { eligible: false });
   api.get('/brands', [{ brand: 'Visante', count: 6 }, { brand: 'Pơ Lang', count: 5 }, { brand: 'Fuwa3e', count: 4 }]);
   api.get('/categories', CATEGORIES.map((c) => ({ ...c, productCount: seedCatalog().filter((p) => p.categoryId === c.id).length })));
   api.get('/search/suggest', []);

@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { Award, BadgeCheck, Sparkles, Leaf } from 'lucide-react';
+import Link from 'next/link';
+import { Award, BadgeCheck, Sparkles, Leaf, MapPin } from 'lucide-react';
 import { getBrand, type ProductCard as ProductCardData } from '@/lib/api';
 import ProductCard from '@/components/product-card';
 import { EmptyState } from '@/components/empty-state';
@@ -76,14 +77,14 @@ export default async function BrandPage({
                 </span>
               )}
             </h1>
-            {b.tagline && <p className="text-stone-600 max-md:mt-2 max-md:text-sm">{b.tagline}</p>}
+            {b.tagline && <p className="text-stone-600 max-md:mt-1 max-md:text-sm">{b.tagline}</p>}
           </div>
         </div>
 
         <BrandActions slug={b.slug} name={b.name} followerCount={b.followerCount} />
 
       {b.certifications.length > 0 && (
-        <section className="mt-5">
+        <section className="mt-5 max-md:mt-4">
           <h2 className="mb-2 flex items-center gap-1.5 font-display font-semibold text-stone-900">
             <Award className="h-4 w-4 text-forest-600 max-md:hidden" aria-hidden="true" />
             <span>Chứng nhận</span>
@@ -92,7 +93,7 @@ export default async function BrandPage({
             {b.certifications.map((c) => (
               <span
                 key={c.code}
-                className="flex items-center gap-1 whitespace-nowrap rounded-control border border-forest-200 bg-forest-50 px-3 py-1.5 text-sm text-forest-800 max-md:rounded-full max-md:border-0 max-md:bg-[var(--color-status-success-bg)] max-md:px-2 max-md:py-[3px] max-md:text-xs max-md:text-[var(--color-status-success-fg)]"
+                className="flex items-center gap-1 whitespace-nowrap rounded-control border border-forest-200 bg-forest-50 px-3 py-1.5 text-sm text-forest-800 max-md:rounded-full max-md:border-0 max-md:bg-[var(--color-status-success-bg)] max-md:px-2 max-md:py-[3px] max-md:text-caption max-md:text-[var(--color-status-success-fg)]"
               >
                 <Leaf className="h-3.5 w-3.5 text-forest-600" aria-hidden="true" />
                 <span>{c.label}</span>
@@ -103,7 +104,7 @@ export default async function BrandPage({
       )}
 
       {b.promotions.length > 0 && (
-        <section className="mt-5">
+        <section className="mt-5 max-md:mt-4">
           <h2 className="mb-2 flex items-center gap-1.5 font-display font-semibold text-stone-900">
             <Sparkles className="h-4 w-4 text-promo-solid" aria-hidden="true" />
             <span>Khuyến mãi</span>
@@ -133,7 +134,7 @@ export default async function BrandPage({
         />
       )}
       {b.products.length > 0 && (
-        <section className="mt-6">
+        <section className="mt-6 max-md:mt-4">
           <h2 className="mb-3 font-display font-semibold text-stone-900">Sản phẩm</h2>
           <div className={GRID_PRODUCTS}>
             {b.products.map((p) => (
@@ -146,10 +147,29 @@ export default async function BrandPage({
 
       <BrandDealerBlock rewards={b.dealerRewards} />
 
-      {b.story && (
-        <section className="mt-6">
+      {(b.story || b.origin || b.storyImages.length > 0) && (
+        <section className="mt-6 max-md:mt-4">
           <h2 className="mb-2 font-display font-semibold text-stone-900">Câu chuyện thương hiệu</h2>
-          <p className="whitespace-pre-line break-words text-stone-700">{b.story}</p>
+          {b.origin && (
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="flex min-w-0 items-center gap-1.5 text-sm text-stone-900">
+                <MapPin className="h-4 w-4 flex-none text-[color:var(--color-text-brand)]" aria-hidden="true" />
+                Xuất xứ: {b.origin}
+              </span>
+              <Link href="/cau-chuyen" className="inline-flex min-h-11 flex-none items-center justify-center rounded-control bg-[var(--color-action-secondary-bg)] px-4 text-sm font-semibold text-[color:var(--color-action-secondary-fg)]">
+                Xem trên bản đồ
+              </Link>
+            </div>
+          )}
+          {b.story && <p className="whitespace-pre-line break-words text-sm text-[color:var(--color-text-secondary)] md:text-base md:text-stone-700">{b.story}</p>}
+          {b.storyImages.length > 0 && (
+            <div role="region" aria-label="Ảnh câu chuyện thương hiệu" className="mt-3 flex gap-2 overflow-x-auto max-md:-mx-4 max-md:px-4">
+              {b.storyImages.map((src, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={src} src={src} alt={`${b.name}, ảnh ${i + 1}`} loading="lazy" className="h-40 w-60 flex-none rounded-card bg-[var(--color-bg-subtle)] object-cover" />
+              ))}
+            </div>
+          )}
         </section>
       )}
       </div>
