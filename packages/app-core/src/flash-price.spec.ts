@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { syncServerClock } from './server-clock';
 import { cardPricing, defaultVariationFor, discountView, flashDisplay, pickDefaultVariation, variationPricing } from './flash-price';
 
 const flash = [{ productSlug: 'hat-dieu', variationId: 'v1', flashPrice: 119_000 }];
@@ -288,5 +289,38 @@ describe('B-140: món gian hàng CTV ghim phân loại', () => {
   });
   it('Giờ vàng của chính phân loại ghim thắng khi rẻ hơn', () => {
     expect(cardPricing(pinned, [flashOf('v2', 200_000)])).toMatchObject({ price: 200_000, isFlash: true, flashVariationId: 'v2' });
+  });
+});
+
+describe('B-132/B-143: thẻ bỏ suất Giờ vàng đã quá hạn theo giờ máy chủ', () => {
+  const NOW = Date.parse('2026-10-27T12:00:00.000Z');
+  const product = { slug: 'hat-dieu', basePrice: 180_000, salePrice: 159_000 };
+  const live = { productSlug: 'hat-dieu', variationId: 'v1', flashPrice: 119_000, endAt: '2026-10-27T12:00:01.000Z' };
+
+  it('còn hạn: Giờ vàng thắng', () => {
+    expect(cardPricing(product, [live], NOW)).toMatchObject({ price: 119_000, isFlash: true });
+  });
+  it('đúng hạn hoặc quá hạn: về giá thường, không flashVariationId', () => {
+    for (const endAt of ['2026-10-27T12:00:00.000Z', '2026-10-27T11:59:00.000Z']) {
+      const r = cardPricing(product, [{ ...live, endAt }], NOW);
+      expect(r).toMatchObject({ price: 159_000, isFlash: false });
+      expect(r.flashVariationId).toBeUndefined();
+    }
+  });
+  it('không có endAt (API cũ) hoặc endAt hỏng: giữ như cũ', () => {
+    expect(cardPricing(product, [{ ...live, endAt: undefined }], NOW).isFlash).toBe(true);
+    expect(cardPricing(product, [{ ...live, endAt: 'không phải ngày' }], NOW).isFlash).toBe(true);
+  });
+  it('mặc định dùng giờ máy chủ đã đồng bộ', () => {
+    syncServerClock(new Date(Date.now() + 3_600_000).toISOString());
+    expect(cardPricing(product, [{ ...live, endAt: new Date(Date.now() + 1_800_000).toISOString() }]).isFlash).toBe(false);
+    syncServerClock(new Date().toISOString());
+  });
+  it('trang chi tiết mở phân loại đại diện khi suất đã quá hạn', () => {
+    const v = [
+      { id: 'v1', sku: 'A', retailPrice: 200_000, salePrice: null, stock: 4 },
+      { id: 'v2', sku: 'B', retailPrice: 150_000, salePrice: null, stock: 4 },
+    ];
+    expect(defaultVariationFor({ slug: 'hat-dieu' }, v, [{ ...live, variationId: 'v1', flashPrice: 100_000, endAt: '2026-10-27T11:00:00.000Z' }], NOW)?.id).toBe('v2');
   });
 });

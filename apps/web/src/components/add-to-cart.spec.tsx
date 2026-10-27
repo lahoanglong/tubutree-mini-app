@@ -226,7 +226,7 @@ describe('AddToCart — gian hàng chưa nhận đơn (R3-MERCHANT-3)', () => {
 describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', () => {
   const FLASH_V2 = {
     itemId: 'f2', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 200000, retailPrice: 300000,
-    salePrice: null, soldCount: 1, quota: 10, endAt: '2026-10-14T16:00:00.000Z',
+    salePrice: null, soldCount: 1, quota: 10, endAt: '2099-10-14T16:00:00.000Z',
   };
 
   const openedFrom = (search: string) => window.history.replaceState(null, '', `/san-pham/dau-goi${search}`);
@@ -243,7 +243,7 @@ describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', (
     expect(chip.textContent).toContain('Giờ vàng');
     expect((byText(container, 'button', /250ml/) as HTMLButtonElement).textContent).not.toContain('Giờ vàng');
     expect(container.querySelector('[data-testid="flash-price-note"]')!.textContent).toBe(
-      'Giá Giờ vàng 200.000đ, giá gốc 300.000đ · đến 23:00 14/10/2026',
+      'Giá Giờ vàng 200.000đ, giá gốc 300.000đ · đến 23:00 14/10/2099',
     );
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 200.000đ');
   });

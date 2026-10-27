@@ -41,6 +41,8 @@ import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
+import { flashRefetchInterval } from '@tubutree/app-core/queries/flash-sale';
+import { serverNow } from '../utils/server-clock';
 import { cardPricing, defaultVariationFor, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -159,7 +161,7 @@ export default function ProductDetailPage() {
   const flashQ = useQuery({
     queryKey: ['flash-sales', 'active'],
     queryFn: fetchActiveFlashSales,
-    refetchInterval: 60_000,
+    refetchInterval: flashRefetchInterval,
   });
 
   // Mặc định: phân loại còn hàng có giá đang bán thấp nhất, cùng phân loại mà thẻ sản phẩm lấy giá.
@@ -170,7 +172,7 @@ export default function ProductDetailPage() {
     const entry =
       variations.find((v) => v.id === navState?.variationId && v.stock > 0 && variationPricing(v, flashNow).isFlash) ??
       variations.find((v) => v.id === navState?.pinnedVariationId && v.stock > 0);
-    autoPick.current = { slug: slug ?? '', id: (entry ?? defaultVariationFor({ slug: product.data.slug }, variations, flashNow))?.id ?? null };
+    autoPick.current = { slug: slug ?? '', id: (entry ?? defaultVariationFor({ slug: product.data.slug }, variations, flashNow, serverNow()))?.id ?? null };
   }
   const auto = autoPick.current;
   const autoId = auto && auto.slug === slug ? auto.id : null;

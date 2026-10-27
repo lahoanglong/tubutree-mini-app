@@ -10,7 +10,7 @@ import { ProductLink } from './product-link';
 const PRODUCT = { slug: 'hat-dieu', basePrice: 180_000, salePrice: 159_000 };
 const item = (over: Record<string, unknown>) => ({
   itemId: 'f1', variationId: 'v2', productSlug: 'hat-dieu', flashPrice: 150_000, retailPrice: 300_000, salePrice: null,
-  soldCount: 0, quota: 5, endAt: '2026-10-01T00:00:00.000Z', ...over,
+  soldCount: 0, quota: 5, endAt: '2099-01-01T00:00:00.000Z', ...over,
 });
 
 let mounted: Rendered | null = null;

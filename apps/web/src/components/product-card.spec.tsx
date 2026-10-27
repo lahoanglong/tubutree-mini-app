@@ -26,7 +26,7 @@ const PRODUCT = {
 };
 const FLASH: FlashItem = {
   itemId: 'f1', variationId: 'v1', productSlug: 'nuoc-rua-chen', flashPrice: 79000, retailPrice: 120000,
-  salePrice: null, soldCount: 3, quota: 20, endAt: '2026-10-14T16:00:00.000Z',
+  salePrice: null, soldCount: 3, quota: 20, endAt: '2099-10-14T16:00:00.000Z',
 };
 
 let mounted: Rendered[] = [];

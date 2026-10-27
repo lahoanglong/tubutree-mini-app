@@ -42,7 +42,7 @@ afterEach(() => {
 
 describe('ProductPicker', () => {
   it('đang Giờ vàng: gợi ý ghi giá khách trả, khớp thẻ sản phẩm', async () => {
-    mocks.flash = [{ itemId: 'f1', variationId: 'v1', productSlug: 'xit-phong', flashPrice: 90_000, retailPrice: 120_000, salePrice: null, soldCount: 0, quota: 5, endAt: '2026-10-01T00:00:00.000Z' }];
+    mocks.flash = [{ itemId: 'f1', variationId: 'v1', productSlug: 'xit-phong', flashPrice: 90_000, retailPrice: 120_000, salePrice: null, soldCount: 0, quota: 5, endAt: '2099-01-01T00:00:00.000Z' }];
     const { c } = mountPicker();
     await search(c, 'xịt');
     expect(c.textContent).toContain('90.000đ');

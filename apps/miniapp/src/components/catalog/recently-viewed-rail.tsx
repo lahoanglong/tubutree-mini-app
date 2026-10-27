@@ -1,3 +1,4 @@
+import { flashRefetchInterval } from '@tubutree/app-core/queries/flash-sale';
 import { useId } from 'react';
 import { useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
@@ -35,6 +36,7 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
     queryFn: fetchActiveFlashSales,
     enabled: slugs.length > 0,
     staleTime: 30_000,
+    refetchInterval: flashRefetchInterval,
   });
   const live = new Map((productsQ.data ?? []).map((p) => [p.slug, p]));
   const items = productsQ.isSuccess ? stored.filter((it) => live.has(it.slug)) : stored;

@@ -154,3 +154,11 @@ describe('queries — danh sách đơn và trang Duyệt (infinite)', () => {
     expect(calls[0]!.path).toBe('/waste/requests/by-order/o1');
   });
 });
+
+describe('flashRefetchInterval (B-132)', () => {
+  it('có suất đang chạy: tải lại mỗi phút; không có suất hoặc chưa có dữ liệu: không thêm request', () => {
+    expect(flash.flashRefetchInterval({ state: { data: [{ itemId: 'a' }] } })).toBe(60_000);
+    expect(flash.flashRefetchInterval({ state: { data: [] } })).toBe(false);
+    expect(flash.flashRefetchInterval({ state: { data: undefined } })).toBe(false);
+  });
+});

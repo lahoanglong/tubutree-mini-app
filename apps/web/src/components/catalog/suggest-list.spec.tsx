@@ -42,7 +42,7 @@ describe('SuggestList: giá sản phẩm', () => {
   });
 
   it('đang Giờ vàng: giá khách trả như thẻ sản phẩm', () => {
-    mocks.flash = [{ itemId: 'f1', variationId: 'v1', productSlug: 'hat-dieu', flashPrice: 119_000, retailPrice: 180_000, salePrice: 159_000, soldCount: 0, quota: 5, endAt: '2026-10-01T00:00:00.000Z' }];
+    mocks.flash = [{ itemId: 'f1', variationId: 'v1', productSlug: 'hat-dieu', flashPrice: 119_000, retailPrice: 180_000, salePrice: 159_000, soldCount: 0, quota: 5, endAt: '2099-01-01T00:00:00.000Z' }];
     const text = mount().textContent;
     expect(text).toContain('119.000đ');
     expect(text).not.toContain('159.000đ');

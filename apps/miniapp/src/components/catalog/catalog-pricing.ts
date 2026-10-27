@@ -1,4 +1,5 @@
 import { cardPricing } from '@tubutree/app-core/flash-price';
+import { serverNow } from '../../utils/server-clock';
 import type { FlashSaleActiveItem } from '../../services/shop-api';
 
 export interface TilePricing {
@@ -16,7 +17,7 @@ export function tilePricing(
   product: { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string; pinnedVariationId?: string },
   flashSales: FlashSaleActiveItem[],
 ): TilePricing {
-  return cardPricing(product, flashSales);
+  return cardPricing(product, flashSales, serverNow());
 }
 
 export { flashDisplay } from '@tubutree/app-core/flash-price';

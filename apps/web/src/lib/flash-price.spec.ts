@@ -10,7 +10,7 @@ const flash = (over: Partial<FlashItem> = {}): FlashItem => ({
   salePrice: null,
   soldCount: 3,
   quota: 20,
-  endAt: '2026-10-14T16:00:00.000Z',
+  endAt: '2099-10-14T16:00:00.000Z',
   ...over,
 });
 
@@ -50,7 +50,7 @@ describe('variationPricing (giá từng phân loại ở trang chi tiết)', () 
   const variation = { id: 'v1', retailPrice: 120000, salePrice: null };
 
   it('đúng phân loại đang giảm: giá Giờ vàng + hạn kết thúc', () => {
-    expect(variationPricing(variation, [flash()])).toMatchObject({ price: 79000, isFlash: true, endAt: '2026-10-14T16:00:00.000Z' });
+    expect(variationPricing(variation, [flash()])).toMatchObject({ price: 79000, isFlash: true, endAt: '2099-10-14T16:00:00.000Z' });
   });
 
   it('phân loại khác của cùng sản phẩm: giá thường', () => {
