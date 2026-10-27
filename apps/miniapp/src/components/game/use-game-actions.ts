@@ -21,7 +21,7 @@ import {
 import { haptic } from '../../utils/haptic';
 import { getErrorMessage } from '../../services/api';
 import { vi } from '../../i18n/vi';
-import { formatDrops, formatNumber, formatPoints } from '../../utils/format';
+import { formatDrops, formatPoints } from '../../utils/format';
 import { useLockedMutation } from './use-locked-mutation';
 
 export type { HarvestReward };
@@ -138,7 +138,8 @@ export function useGameActions({
     if (r.harvested) {
       onHarvest(r.reward, harvestMeta(r));
     } else {
-      openSnackbar({ text: `${label} · ${formatNumber(r.progress)}/${formatDrops(r.target)}`, type: 'success' });
+      const left = Math.max(0, r.target - r.progress);
+      openSnackbar({ text: `${label} · còn ${formatDrops(left)} nữa là thu hoạch`, type: 'success' });
     }
     refresh();
     void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
@@ -146,7 +147,7 @@ export function useGameActions({
 
   const waterM = useLockedMutation({
     mutationFn: (drops: number) => waterTree(drops),
-    onSuccess: (r) => afterWatering('Đã tưới', r),
+    onSuccess: (r, drops) => afterWatering(`Đã tưới −${formatDrops(drops)}`, r),
     onError,
   });
   // Khoá chống chạm đúp của lượt góp nằm ở TreeActions (cần biết kết quả để quyết định đóng hộp hay giữ key), nên
@@ -170,7 +171,7 @@ export function useGameActions({
   });
   const waterPlotM = useLockedMutation({
     mutationFn: (plotId: string) => waterPlot(plotId, 20),
-    onSuccess: (r) => afterWatering('Đã tưới lô', r),
+    onSuccess: (r) => afterWatering(`Đã tưới lô −${formatDrops(20)}`, r),
     onError,
   }, (plotId) => plotId);
   const claimPassM = useLockedMutation({

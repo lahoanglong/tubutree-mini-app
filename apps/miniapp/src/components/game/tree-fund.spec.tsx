@@ -41,7 +41,7 @@ describe('TreeFund — xác nhận góp quỹ trồng cây', () => {
     openBox();
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveTextContent('50 điểm');
-    expect(dialog).toHaveTextContent(/điểm thường trừ trước, rồi điểm quy đổi không hết hạn/i);
+    expect(dialog).toHaveTextContent(/điểm sắp hết hạn được dùng trước/i);
     expect(onBuy).not.toHaveBeenCalled();
   });
 

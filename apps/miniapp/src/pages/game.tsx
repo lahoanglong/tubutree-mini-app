@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/auth';
 import { SessionUnavailable } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { useCouponUse } from '../hooks/use-coupon-use';
 import { ErrorState } from '../components/ui/empty-state';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
@@ -26,6 +27,8 @@ import { TreeHealthAlert } from '../components/game/tree-health-alert';
 import { CheckInStreak } from '../components/game/checkin-streak';
 import { StreakRepair } from '../components/game/streak-repair';
 import { TreeActions } from '../components/game/tree-actions';
+import { OrderWaterCard } from '../components/game/order-water-card';
+import { GuestBanner } from '../components/game/guest-banner';
 import { TreeFund } from '../components/game/tree-fund';
 import { EarnWaterSheet, type EarnQuizState } from '../components/game/earn-water-sheet';
 import { NewbieGuide } from '../components/game/newbie-guide';
@@ -55,12 +58,14 @@ const MISSION_PATHS: Record<Exclude<MissionTarget, 'checkin'>, string> = {
 export default function GamePage() {
   const phase = useAuthPhase();
   const login = useAuthStore((s) => s.login);
+  const couponUse = useCouponUse();
   const navigate = useNavigate();
   const publicConfig = usePublicConfig();
   const authed = phase === 'authenticated';
 
+  const [tab, setTab] = useState<GameTabKey>('today');
   const { profileQ, quizQ, quiz, missions, forest, community, codex, season, garden, seasonPass } =
-    useGameData(authed);
+    useGameData(authed, tab === 'garden');
   const { data: profile, isLoading, isError, error: profileError, refetch } = profileQ;
 
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời client-side để hiện câu kế tiếp (§6.7.8).
@@ -68,7 +73,6 @@ export default function GamePage() {
   const currentQuiz = quiz?.find((q) => !answeredIds.has(q.id));
   // Reveal "Bạn có biết…" sau khi trả lời, trước khi sang câu kế.
   const [reveal, setReveal] = useState<QuizReveal | null>(null);
-  const [tab, setTab] = useState<GameTabKey>('today');
   const [harvested, setHarvested] = useState(false);
   const [harvestCoupons, setHarvestCoupons] = useState<string[]>([]);
   const [harvestCert, setHarvestCert] = useState<string | null>(null);
@@ -161,7 +165,14 @@ export default function GamePage() {
   return shell(
     <>
       <div style={{ padding: '12px 16px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <GardenHero eco={eco} totalSeeds={profile?.totalSeeds} streakDays={profile?.streakDays} />
+        <GuestBanner />
+        <GardenHero
+          eco={eco}
+          totalSeeds={profile?.totalSeeds}
+          streakDays={profile?.streakDays}
+          harvestReady={profile?.harvestReady}
+          wilted={profile?.treeHealth === 'WILTED' || profile?.treeHealth === 'DEAD'}
+        />
 
         {/* Điều hướng nội bộ: giữ thanh tab trong tầm tay khi cuộn hết khối dài của "Hôm nay".
             top = safe-top vì app immersive: dính mép 0 thì tab "Cộng đồng" nằm dưới status bar/capsule Zalo. */}
@@ -201,8 +212,11 @@ export default function GamePage() {
             pending={waterM.isPending || checkInM.isPending || dewM.isPending}
             onClaim={claimDaily}
             onWater={(drops) => waterM.mutate(drops)}
+            onHarvest={() => waterM.mutate(0)}
             onEarn={() => openEarn()}
           />
+
+          <OrderWaterCard info={profile?.orderWater} onShop={() => navigate('/browse')} />
 
           {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
           <div id={GAME_CHECKIN_ANCHOR}>
@@ -361,10 +375,7 @@ export default function GamePage() {
         couponCapped={harvestMeta?.couponCapped ?? null}
         nextTarget={harvestMeta?.nextTarget ?? null}
         onClose={() => setHarvested(false)}
-        onUseCoupon={() => {
-          setHarvested(false);
-          navigate('/browse');
-        }}
+        onUseCoupon={(code) => void couponUse.use(code, () => setHarvested(false))}
         onShare={shareHarvest}
       />
     </>,

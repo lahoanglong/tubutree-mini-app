@@ -82,7 +82,7 @@ export function TreeFund({
         </Button>
       )}
       <Text variant="caption" tone="tertiary" as="div" style={{ textAlign: 'center' }}>
-        Góp bằng Điểm Xanh — dùng điểm thường trước, thiếu mới dùng điểm không hết hạn.
+        {vi.game.newbie.fund.line}
       </Text>
       <BottomSheet
         open={confirmOpen}
@@ -104,7 +104,7 @@ export function TreeFund({
           {treePointsPrice != null ? `Góp quỹ trồng cây sẽ trừ ${formatPoints(treePointsPrice)} từ Điểm Xanh của bạn.` : 'Góp quỹ trồng cây sẽ trừ Điểm Xanh của bạn.'}
         </Text>
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
-          Điểm thường trừ trước, rồi điểm quy đổi không hết hạn. Không hoàn lại sau khi góp.
+          {vi.game.newbie.fund.confirmOrder}
         </Text>
       </BottomSheet>
     </div>

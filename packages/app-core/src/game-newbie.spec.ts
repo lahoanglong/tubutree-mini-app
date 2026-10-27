@@ -28,6 +28,14 @@ describe('primaryWaterAction', () => {
   });
 });
 
+describe('cây đã đủ nước từ trước (B-107)', () => {
+  it('harvestReady thắng mọi nút khác, kể cả khi bình dưới 20💧 hoặc chưa nhận nước hôm nay', () => {
+    expect(primaryWaterAction({ ...BASE, harvestReady: true, totalSeeds: 0 })).toEqual({ kind: 'harvest' });
+    expect(primaryWaterAction({ ...BASE, harvestReady: true, checkedInToday: true, totalSeeds: 5 })).toEqual({ kind: 'harvest' });
+    expect(primaryWaterAction({ ...BASE, harvestReady: false, checkedInToday: true, totalSeeds: 5 })).toEqual({ kind: 'earn' });
+  });
+});
+
 describe('thẻ 3 bước và lô phụ', () => {
   it('bước theo dữ liệu, tự ẩn khi bấm "Đã hiểu"', () => {
     expect(tutorialState({ lastCheckInAt: null, treesPlanted: 0, dismissed: false })).toMatchObject({ visible: true, current: 1 });
@@ -54,6 +62,12 @@ describe('chữ dùng chung', () => {
     expect(gameNewbieCopy.primary.claim(30)).toBe('Nhận nước hôm nay (+30💧)');
     expect(gameNewbieCopy.primary.claimFirst(65)).toBe('Điểm danh nhận 65💧');
     expect(gameNewbieCopy.primary.water(1250)).toBe('Tưới hết (1.250💧)');
+  });
+  it('báo trần mã tắt không hứa "mai/sang tháng có mã" (B-108)', () => {
+    expect(gameNewbieCopy.harvest.capped.OFF).not.toMatch(/mai|sang tháng|tiếp/);
+  });
+  it('không còn chữ thuật ngữ điểm thường / điểm quy đổi (B-99)', () => {
+    expect(JSON.stringify(gameNewbieCopy)).not.toMatch(/điểm thường|điểm quy đổi/i);
   });
 });
 

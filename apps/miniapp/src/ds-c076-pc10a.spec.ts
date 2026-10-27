@@ -50,7 +50,8 @@ const ALLOWED_EMOJI: Record<string, string[]> = {
   'src/pages/game.tsx': ['💧'],
   // Game: giai đoạn cây 🌱🌿🌳, đơn vị giọt nước 💧, chuỗi ngày 🔥, huy chương, phần thưởng 🎁, nhãn phân loại quiz
   // và lời chúc trong thông báo là NỘI DUNG; nút, tiêu đề khối, trạng thái và hàng lối tắt dùng Icon Lucide.
-  'src/components/game/garden-hero.tsx': ['🌱', '🌿', '🌳', '💧', '🔥'],
+  'src/components/game/garden-hero.tsx': ['🌱', '🌿', '🌳', '💧', '🔥', '🥀'],
+  'src/components/game/water-tank.tsx': ['💧'],
   'src/components/game/game-utils.ts': ['🌳', '💧', '🌍', '🌬', '🐾', '♻', '⚡', '🌿', '🌟', '💎', '🍃'],
   'src/components/game/checkin-streak.tsx': ['💧', '🎁'],
   'src/components/game/tree-actions.tsx': ['💧'],

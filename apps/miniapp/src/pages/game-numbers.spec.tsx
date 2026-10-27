@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi } from 'vitest';
@@ -79,6 +79,7 @@ function renderPage() {
 describe('GamePage — số hiển thị có dấu phân cách nghìn (C-083)', () => {
   it('giọt nước và mục tiêu cộng đồng theo kiểu "1.250.000", giá góp quỹ là Điểm Xanh, không có số trần', async () => {
     const { container } = renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Vườn' }));
     expect(await screen.findByText(/Góp quỹ trồng cây/)).toBeInTheDocument();
     await screen.findByText(/Rừng Tubu/);
     const text = container.textContent ?? '';
@@ -87,7 +88,7 @@ describe('GamePage — số hiển thị có dấu phân cách nghìn (C-083)', 
     expect(text).toContain('Góp quỹ trồng cây (50 điểm)');
     expect(text).toContain('1.250.000/5.000.000💧');
     expect(text).toContain('Bạn đã góp 89.000💧');
-    expect(text).toContain('12.000/50.000💧 · 💧 1.250.000');
+    expect(text).toContain('12.000/50.000💧 · 🔥 Chuỗi 12 ngày');
     expect(text).toContain('Mở lô (1.200💧)');
     expect(text).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])/iu);
     expect(text).not.toMatch(/(^|[^\d.])\d{4,}(?![\d.])/);

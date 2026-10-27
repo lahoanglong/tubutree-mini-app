@@ -14,6 +14,8 @@ export const STREAK_3_SEEDS = 5;
 
 export interface PrimaryWaterInput {
   totalSeeds: number;
+  /** Cây đã đủ nước (hồ sơ cũ tưới vượt đích): nút chính là thu hoạch, không cần thêm giọt nào. */
+  harvestReady?: boolean;
   checkedInToday: boolean;
   dewToday: boolean;
   dailyLoginSeeds?: number;
@@ -24,6 +26,7 @@ export interface PrimaryWaterInput {
 }
 
 export type PrimaryWaterAction =
+  | { kind: 'harvest' }
   /** Chưa nhận nước hôm nay. `first`: lần điểm danh đầu (chỉ điểm danh, sương để bước 3). `withDew`: gộp luôn hứng sương. */
   | { kind: 'claim'; first: boolean; withDew: boolean; gain: number | null }
   | { kind: 'water'; drops: number }
@@ -32,6 +35,7 @@ export type PrimaryWaterAction =
 /** Nút chính trên cây: nhận nước hôm nay, tưới hết, hoặc mở sheet "Kiếm nước". Không bao giờ dẫn tới lỗi thiếu nước. */
 export function primaryWaterAction(p: PrimaryWaterInput): PrimaryWaterAction {
   const seeds = Math.max(0, Math.floor(Number.isFinite(p.totalSeeds) ? p.totalSeeds : 0));
+  if (p.harvestReady) return { kind: 'harvest' };
   if (!p.checkedInToday) {
     const bonus = p.firstCheckinBonus ?? 0;
     const first = bonus > 0;
@@ -93,7 +97,32 @@ export const gameNewbieCopy = {
     claim: (gain: number | null) => (gain == null ? 'Nhận nước hôm nay' : `Nhận nước hôm nay (+${drops(gain)})`),
     claimFirst: (gain: number | null) => (gain == null ? 'Điểm danh nhận nước' : `Điểm danh nhận ${drops(gain)}`),
     water: (d: number) => `Tưới hết (${drops(d)})`,
+    harvest: 'Thu hoạch cây',
     earn: 'Kiếm thêm nước',
+  },
+  hero: {
+    tankLabel: 'giọt nước',
+    remaining: (left: number) => `Còn ${drops(left)} nữa là thu hoạch`,
+    ready: 'Cây đã đủ nước, thu hoạch ngay',
+    wilted: 'Cây đang khát, tưới để cây tươi lại',
+    streak: (days: number) => `🔥 Chuỗi ${n(days)} ngày`,
+    harvested: (trees: number) => `🌳 Đã thu hoạch ${n(trees)} cây`,
+    pour: (spent: number) => `−${drops(spent)}`,
+    gain: (v: number) => `+${drops(v)}`,
+  },
+  orderWater: {
+    title: 'Từ đơn hàng',
+    perOrder: (v: number) => `Mỗi đơn giao thành công +${drops(v)}`,
+    progress: (got: number, cap: number) => `Đã nhận ${n(got)}/${drops(cap)} tuần này`,
+    full: 'Tuần này bạn đã nhận đủ nước từ đơn hàng. Thứ Hai tuần sau nhận tiếp.',
+    cta: 'Mua sắm',
+  },
+  guest: {
+    banner: 'Bạn đang chơi thử. Cây và nước có thể mất nếu bạn không đăng nhập Zalo.',
+    // Khớp AuthService.ensurePhoneForCurrentUser: nâng cấp tại chỗ giữ nguyên vườn; gộp vào tài khoản Zalo đã có vườn thì giữ vườn của tài khoản đó.
+    note: 'Nếu tài khoản Zalo của bạn đã có vườn, vườn đó được giữ và phần chơi thử này không được gộp thêm.',
+    cta: 'Đăng nhập Zalo',
+    failed: 'Chưa đăng nhập được Zalo. Bạn thử lại nhé.',
   },
   short: (missing: number) => `Còn thiếu ${drops(missing)}`,
   earn: {
@@ -130,7 +159,15 @@ export const gameNewbieCopy = {
     quizTotal: (v: number) => `Câu đố đúng hết thêm khoảng ${drops(v)}.`,
     gotIt: 'Đã hiểu',
   },
+  recycle: {
+    hint: 'Mang rác tái chế đến kho, nhận giọt nước và Điểm Xanh',
+  },
+  communityGoal: {
+    body: 'Mỗi cây bạn thu hoạch, số 💧 đã tưới cho cây đó được tính vào mục tiêu chung. Đủ mục tiêu, Tubu góp quỹ trồng cây 🌿',
+  },
   checkin: {
+    title: (days: number) => `Chuỗi ${n(days)} ngày`,
+    bonusNote: (d3: number, d7: number | null) => (d7 == null ? `Thưởng thêm ngày 3 (+${drops(d3)}) và ngày 7` : `Thưởng thêm ngày 3 (+${drops(d3)}) và ngày 7 (+${drops(d7)})`),
     sub: (daily: number | null, first: number) =>
       daily == null
         ? 'Nhận giọt nước và Điểm Xanh mỗi ngày'
@@ -141,6 +178,9 @@ export const gameNewbieCopy = {
     dayReward: (v: number) => `+${n(v)}`,
   },
   fund: {
+    hint: 'Góp quỹ bằng Điểm Xanh của bạn.',
+    line: 'Góp bằng Điểm Xanh. Điểm sắp hết hạn được dùng trước.',
+    confirmOrder: 'Điểm sắp hết hạn được dùng trước. Điểm đã góp không được hoàn lại.',
     have: (have: number, cost: number) => `Bạn có ${n(have)} / ${n(cost)} Điểm Xanh`,
     howToEarn: 'Cách kiếm Điểm Xanh',
   },
@@ -158,12 +198,15 @@ export const gameNewbieCopy = {
     progressLabel: (title: string, progress: number, goal: number) => `${title}: ${progress}/${goal}`,
   },
   plots: {
+    intro: 'Mỗi lô đất trồng một cây riêng. Thu hoạch cây nào thì nhận mã giảm giá, góp quỹ trồng cây và thêm loài vào sổ sưu tập cho cây đó.',
     locked: 'Thu hoạch cây thứ 2 để mở thêm lô đất.',
   },
   harvest: {
     seedling: 'Cây mầm đầu tiên của bạn đã lớn! 🌱',
     grown: 'Cây ảo của bạn đã lớn 🌿',
     fund: 'Cây ảo của bạn đã lớn. Tubu sẽ góp 1 cây vào quỹ trồng cây 🌿',
+    useCoupon: 'Dùng mã giảm giá ngay',
+    later: 'Để sau',
     points: (v: number) => `+${n(v)} Điểm Xanh`,
     pointsCaption: 'Quà cây mầm, dùng khi mua hàng',
     guest: 'Đăng nhập Zalo để nhận quà khi thu hoạch.',
@@ -181,6 +224,7 @@ export const gameNewbieCopy = {
     capped: {
       DAY: 'Hôm nay bạn đã nhận mã giảm giá. Cây vẫn được tính, mai thu hoạch tiếp bạn sẽ có mã.',
       MONTH: 'Tháng này bạn đã nhận đủ mã giảm giá. Cây vẫn được tính, sang tháng bạn nhận mã tiếp nhé.',
+      OFF: 'Lần thu hoạch này chưa có mã giảm giá. Cây vẫn được tính vào vườn của bạn.',
     },
   },
 } as const;

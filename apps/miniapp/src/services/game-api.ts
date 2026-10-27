@@ -31,6 +31,10 @@ export interface GameProfile {
   /** 💧 cần để thu hoạch cây đang trồng, và cây kế tiếp sau khi thu hoạch (thang game.tree_target_ladder). */
   currentTreeTarget?: number;
   nextTreeTarget?: number;
+  /** Cây đã đủ nước từ trước (hồ sơ cũ tưới vượt đích): thu hoạch bằng `waterTree(0)`. */
+  harvestReady?: boolean;
+  /** Nước thưởng đơn giao thành công: số giọt mỗi đơn, trần tuần (giờ VN) và phần đã nhận tuần này. null = tắt hoặc API cũ. */
+  orderWater?: { perOrder: number; weeklyCap: number; weeklyGranted: number } | null;
 }
 export type { CheckInResult };
 export interface QuizItem {
@@ -109,7 +113,8 @@ export interface HarvestSpecies {
   rarity: 'COMMON' | 'RARE' | 'LEGENDARY';
   ecoFact: string | null;
 }
-export type HarvestCouponCap = 'DAY' | 'MONTH';
+/** 'OFF': admin tắt mã thu hoạch (trần ngày hoặc tháng bằng 0). */
+export type HarvestCouponCap = 'DAY' | 'MONTH' | 'OFF';
 export interface HarvestReward {
   coupon?: string;
   certificate?: string;

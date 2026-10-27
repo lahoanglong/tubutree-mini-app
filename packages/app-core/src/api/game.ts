@@ -32,6 +32,10 @@ export interface GameProfile {
   /** 💧 cần để thu hoạch cây đang trồng, và cây kế tiếp sau khi thu hoạch (thang game.tree_target_ladder). */
   currentTreeTarget?: number;
   nextTreeTarget?: number;
+  /** Cây đã đủ nước từ trước (hồ sơ cũ tưới vượt đích): thu hoạch bằng `waterTree(0)`, không cần thêm giọt nào. */
+  harvestReady?: boolean;
+  /** Nước thưởng đơn giao thành công: số giọt mỗi đơn, trần tuần (giờ VN, thứ Hai đến Chủ nhật) và phần đã nhận tuần này. null/thiếu = API cũ. */
+  orderWater?: { perOrder: number; weeklyCap: number; weeklyGranted: number } | null;
 }
 export type { CheckInResult };
 export interface QuizItem {
@@ -111,7 +115,8 @@ export interface HarvestSpecies {
   rarity: 'COMMON' | 'RARE' | 'LEGENDARY';
   ecoFact: string | null;
 }
-export type HarvestCouponCap = 'DAY' | 'MONTH';
+/** 'OFF': admin tắt mã thu hoạch (trần ngày hoặc tháng bằng 0), không phải "hôm nay/tháng này đã đủ". */
+export type HarvestCouponCap = 'DAY' | 'MONTH' | 'OFF';
 /** Lý do không phát thưởng thu hoạch: 'GUEST' = chưa đăng nhập Zalo/SĐT nên không nhận mã và điểm cây mầm. */
 export type HarvestRewardBlocked = 'GUEST';
 export interface HarvestReward {
@@ -138,13 +143,13 @@ export const waterTree = (http: HttpClient, drops: number) =>
     harvested: boolean;
     treesPlanted: number;
     revivedFromDead?: boolean;
-    /** Lần thu hoạch có cây nhưng không cấp mã vì chạm trần mã theo ngày hoặc theo tháng. */
+    /** Lần thu hoạch có cây nhưng không cấp mã vì chạm trần mã theo ngày hoặc theo tháng, hoặc mã đang tắt. */
     couponCapped?: HarvestCouponCap;
     rewardBlocked?: HarvestRewardBlocked;
     reward?: HarvestReward;
   }>('/game/tree/water', { drops });
 /**
- * Góp 1 cây vào quỹ trồng cây (PlantedTree) bằng Điểm Xanh: BE lấy điểm thường trước, thiếu thì lấy điểm không hết hạn.
+ * Góp 1 cây vào quỹ trồng cây (PlantedTree) bằng Điểm Xanh: BE lấy điểm có hạn trước, thiếu thì lấy điểm không hết hạn.
  * Mỗi lượt góp là một lần trừ điểm thật, nên kèm Idempotency-Key: gửi lại cùng key (chạm đúp, thử lại sau lỗi mạng
  * khi server đã xử lý xong) nhận lại đúng kết quả cũ thay vì trừ điểm lần nữa.
  */

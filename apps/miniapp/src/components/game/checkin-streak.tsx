@@ -47,14 +47,16 @@ export function CheckInStreak({
         <div style={{ minWidth: 0 }}>
           <Heading variant="title-sm" as="h2" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon icon={Flame} tone="brand" />
-            Điểm danh chuỗi {streakDays ?? 0} ngày
+            {t.title(streakDays ?? 0)}
           </Heading>
           <Text variant="caption" tone="tertiary" as="div">
             {t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}
           </Text>
         </div>
         {/* flexShrink 0: cạnh tiêu đề dài, nhãn nút bị rút gọn thành "Điểm d…" nếu để nút co lại. */}
+        {/* Nút phụ: nút chính của tab Hôm nay là nút trên cây, nút này chỉ lặp lại việc điểm danh. */}
         <Button
+          variant="secondary"
           icon={allDone ? Check : undefined}
           disabled={allDone || checkInPending}
           loading={checkInPending}
@@ -86,11 +88,8 @@ export function CheckInStreak({
               >
                 {done ? '💧' : bonus ? '🎁' : day}
               </div>
-              <Text variant="label" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-                N{day}
-              </Text>
               {bonus && reward != null && (
-                <Text variant="label" tone="secondary" as="div" style={{ fontWeight: 700 }}>
+                <Text variant="label" tone="secondary" as="div" style={{ fontWeight: 700, marginTop: 2 }}>
                   {t.dayReward(reward)}💧
                 </Text>
               )}
@@ -98,6 +97,10 @@ export function CheckInStreak({
           );
         })}
       </div>
+
+      <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
+        {t.bonusNote(STREAK_3_SEEDS, profile?.streak7Seeds ?? null)}
+      </Text>
 
       {/* Vé giữ lửa (streak-freeze) + giọt sương sáng (dew) */}
       <div style={{ marginTop: 12, paddingTop: 4, borderTop: '1px solid var(--color-border-subtle)' }}>

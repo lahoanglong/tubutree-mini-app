@@ -1,4 +1,4 @@
-import { Droplets, ShowerHead } from 'lucide-react';
+import { Droplets, ShowerHead, TreePine } from 'lucide-react';
 import { primaryWaterAction, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
 import type { GameProfile } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
@@ -10,6 +10,7 @@ const t = vi.game.newbie.primary;
 export function primaryActionOf(profile: GameProfile | undefined): PrimaryWaterAction {
   return primaryWaterAction({
     totalSeeds: profile?.totalSeeds ?? 0,
+    harvestReady: profile?.harvestReady,
     checkedInToday: isSameVNDay(profile?.lastCheckInAt ?? null),
     dewToday: isSameVNDay(profile?.lastDewAt ?? null),
     dailyLoginSeeds: profile?.dailyLoginSeeds,
@@ -28,24 +29,36 @@ export function TreeActions({
   pending,
   onClaim,
   onWater,
+  onHarvest,
   onEarn,
 }: {
   profile: GameProfile | undefined;
   pending: boolean;
   onClaim: (action: Extract<PrimaryWaterAction, { kind: 'claim' }>) => void;
   onWater: (drops: number) => void;
+  /** Cây đã đủ nước từ trước: thu hoạch không cần thêm giọt nào. */
+  onHarvest: () => void;
   onEarn: () => void;
 }) {
   const action = primaryActionOf(profile);
   const label =
-    action.kind === 'claim' ? (action.first ? t.claimFirst(action.gain) : t.claim(action.gain)) : action.kind === 'water' ? t.water(action.drops) : t.earn;
+    action.kind === 'claim'
+      ? action.first
+        ? t.claimFirst(action.gain)
+        : t.claim(action.gain)
+      : action.kind === 'water'
+        ? t.water(action.drops)
+        : action.kind === 'harvest'
+          ? t.harvest
+          : t.earn;
   const press = () => {
     if (action.kind === 'claim') onClaim(action);
     else if (action.kind === 'water') onWater(action.drops);
+    else if (action.kind === 'harvest') onHarvest();
     else onEarn();
   };
   return (
-    <Button size="lg" fullWidth icon={action.kind === 'water' ? ShowerHead : Droplets} disabled={pending} loading={pending} onPress={press}>
+    <Button size="lg" fullWidth icon={action.kind === 'harvest' ? TreePine : action.kind === 'water' ? ShowerHead : Droplets} disabled={pending} loading={pending} onPress={press}>
       {label}
     </Button>
   );
