@@ -293,7 +293,7 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
     await lookUp(c);
     expect(lineOf(c, 'Pin đã dùng').querySelector('[aria-label="Tăng số lượng"]')).not.toBeNull();
     expect(lineOf(c, 'Pin đã dùng').textContent).toContain('Cất riêng vào thùng kín, không lẫn rác khác');
-    expect(lineOf(c, 'Pin đã dùng').textContent).toContain('Pin phồng hoặc chảy nước thì không đếm, chọn lý do nhận thiếu "Hỏng"');
+    expect(lineOf(c, 'Pin đã dùng').textContent).toContain('Pin phồng hoặc chảy nước thì không đếm, không giữ lại, trả khách; chọn lý do nhận thiếu "Hỏng"');
     expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 2.000 điểm');
     expect(button(c, 'Xác nhận đã nhận')!.disabled).toBe(false);
     click(button(c, 'Xác nhận đã nhận'));

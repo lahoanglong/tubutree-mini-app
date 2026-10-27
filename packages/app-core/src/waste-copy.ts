@@ -147,7 +147,7 @@ export function warehouseOnlyPointsNote(names: readonly string[], warehouseAvail
 /** Dòng nhắc ở quầy với món cần xử lý riêng (pin): chỉ dùng lý do nhận thiếu có sẵn, không thêm lý do mới. */
 export const HAZARDOUS_DESK_NOTES = [
   'Cất riêng vào thùng kín, không lẫn rác khác',
-  'Pin phồng hoặc chảy nước thì không đếm, chọn lý do nhận thiếu "Hỏng"',
+  'Pin phồng hoặc chảy nước thì không đếm, không giữ lại, trả khách; chọn lý do nhận thiếu "Hỏng"',
 ] as const;
 
 /** Ngày theo giờ Việt Nam (UTC+7), dạng yyyy-mm-dd, cùng quy ước `capDayKey` của máy chủ. */

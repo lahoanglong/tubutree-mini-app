@@ -117,7 +117,7 @@ describe('WasteRequestDetail: màn đếm và từ chối', () => {
     expect(input(c, 'received-i3')!.disabled).toBe(false);
     expect(select(c, 'shortfall-i3')).toBeNull();
     expect(c.textContent).toContain('Cất riêng vào thùng kín, không lẫn rác khác');
-    expect(c.textContent).toContain('Pin phồng hoặc chảy nước thì không đếm, chọn lý do nhận thiếu "Hỏng"');
+    expect(c.textContent).toContain('Pin phồng hoặc chảy nước thì không đếm, không giữ lại, trả khách; chọn lý do nhận thiếu "Hỏng"');
     expect(btn(c, 'Xác nhận số đếm')!.disabled).toBe(false);
 
     click(btn(c, 'Xác nhận số đếm'));

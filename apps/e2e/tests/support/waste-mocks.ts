@@ -210,12 +210,12 @@ export function mockWasteCustomer(
       estimatedGrams: null,
       pointsValueVnd: estimatedPoints,
       // Như máy chủ: món nguy hại (pin) chỉ nhận khi khách mang tới điểm nhận, và chỉ báo khi đã chọn cách giao;
-      // trần ngày chỉ áp cho Mang tới điểm nhận (kể cả khi chưa chọn cách giao).
+      // trần ngày chỉ báo khi body.method === 'DROP_OFF' (máy chủ không báo khi chưa chọn cách giao).
       blocks: [
         ...(body.method && body.method !== 'DROP_OFF' && body.lines.some((l) => WASTE_ITEMS.find((i) => i.id === l.itemId)?.hazardous)
           ? [{ code: 'ITEM_DROPOFF_ONLY' as const, itemId: WASTE_ITEMS.find((i) => i.hazardous)!.id }]
           : []),
-        ...(body.method === undefined || body.method === 'DROP_OFF'
+        ...(body.method === 'DROP_OFF'
           ? body.lines.flatMap((l) => {
               const item = WASTE_ITEMS.find((i) => i.id === l.itemId);
               return item && item.dayRemainingQty != null && l.declaredQty > item.dayRemainingQty ? [{ code: 'ITEM_DAY_CAP' as const, itemId: item.id }] : [];
