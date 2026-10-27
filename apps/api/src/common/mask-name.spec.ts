@@ -78,3 +78,32 @@ describe('publicDisplayName (bài viết, bình luận, đánh giá công khai)'
     expect(publicDisplayName(name)).toBe('Bạn Tubu');
   });
 });
+
+describe('tên giống số điện thoại hay email không bao giờ ra BXH, bạn bè hay đơn đối tác', () => {
+  it.each(['0912345678', 'an@mail.com', 'Long 0912345678', '０９１２３４５６７８', '𝟎𝟗𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖'])('"%s"', (name) => {
+    expect(maskName(name)).toBe('Bạn Tubu');
+    expect(maskFullName(name)).toBe('Khách Tubu');
+    expect(publicDisplayName(name)).toBe('Bạn Tubu');
+  });
+
+  it('tên thường vẫn rút gọn như cũ', () => {
+    expect(maskName('Lã Hoàng Long')).toBe('Long***');
+    expect(maskFullName('Lã Hoàng Long')).toBe('Long***');
+  });
+});
+
+describe('publicDisplayName: chọn từ khi tên có emoji, dấu câu, ngoặc, khoảng trắng rộng 0', () => {
+  it.each([
+    ['Hoa 🌸', 'Hoa'],
+    ['🌸', 'Bạn Tubu'],
+    ['Lan (Shop cây)', 'Lan'],
+    ['Lan [Shop cây] Nguyễn', 'Nguyễn L.'],
+    ['Nguyễn​Văn​An', 'An N.'],
+    ['Nguyễn Văn An.', 'An N.'],
+    ['~Mai~ ✨', 'Mai'],
+    ['Quỳnh-Anh Trần', 'Trần Q.'],
+    ['(Shop)', 'Bạn Tubu'],
+  ])('%s -> %s', (name, want) => {
+    expect(publicDisplayName(name)).toBe(want);
+  });
+});

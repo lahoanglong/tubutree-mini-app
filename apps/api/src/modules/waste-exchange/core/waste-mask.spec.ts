@@ -16,4 +16,8 @@ describe('customerView (spec 15.1: masked unless the re-read role is ADMIN; user
     expect(customerView({ ...u, fullName: '  ' }, true).name).toBe('Khách Tubu');
     expect(customerView({ ...u, fullName: null, phone: null }, false)).toEqual({ name: 'Khách Tubu', phone: null });
   });
+  it('tên là số điện thoại hay email: người không phải admin thấy "Khách Tubu", không thấy số', () => {
+    expect(customerView({ ...u, fullName: '0912345678' }, false).name).toBe('Khách Tubu');
+    expect(customerView({ ...u, fullName: 'an@mail.com' }, false).name).toBe('Khách Tubu');
+  });
 });

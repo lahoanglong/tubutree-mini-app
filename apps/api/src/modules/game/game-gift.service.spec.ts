@@ -129,6 +129,8 @@ const MASK_NAME_CASES: [string, string | null, string][] = [
   ['hai dấu cách liền nhau', 'Lã  Long', 'Long***'],
   ['tab giữa tên -> không tách', 'Lã\tLong', 'Lã\tLong***'],
   ['nbsp giữa tên -> không tách', 'Lã\u00a0Long', 'Lã\u00a0Long***'],
+  ['số điện thoại -> mặc định, không in số', '0912345678', 'Bạn Tubu'],
+  ['email -> mặc định, không in địa chỉ', 'an@mail.com', 'Bạn Tubu'],
 ];
 
 describe('GameGiftService.getFriends — che tên (đặc tả maskName, C-040)', () => {
