@@ -14,7 +14,7 @@ const PHONE_RE = /^0\d{8,10}$/;
 const ROLE_LABEL: Record<StaffRole, string> = { STAFF: 'Nhân viên', ADMIN: 'Quản trị' };
 
 /** Nhân sự: danh sách người có quyền, cấp quyền theo SĐT (STAFF hoặc ADMIN), thu hồi và huỷ lời mời chờ mở app. */
-export function StaffRosterTab() {
+export function StaffRosterTab({ meId }: { meId?: string } = {}) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const staffQ = useQuery(adminStaffQuery(coreHttp));
@@ -40,7 +40,7 @@ export function StaffRosterTab() {
         res.storeBlocked
           ? {
               tone: 'warning',
-              text: 'Đã gỡ quyền, nhưng gian hàng đối tác của người này còn việc dở nên được giữ nguyên và họ có thể chưa dùng được Cổng người bán. Xử lý ở tab "Đơn đối tác & đối soát" trên web admin xong thì: gian hàng loại CTV tắt cờ đối tác; gian hàng loại MERCHANT không tắt bằng cờ được, hãy đặt lại vai trò cho người này. Hoặc đặt lại vai trò DEALER để giữ nguyên gian hàng.',
+              text: 'Đã gỡ quyền, nhưng gian hàng đối tác của người này còn việc dở nên được giữ nguyên và họ có thể chưa dùng được Cổng người bán. Xử lý ở tab "Đơn đối tác & đối soát" trên web admin xong thì: gian hàng loại CTV tắt quyền đối tác; gian hàng loại MERCHANT không tắt bằng cờ được, hãy đặt lại vai trò cho người này. Hoặc đặt lại vai trò DEALER để giữ nguyên gian hàng.',
             }
           : { tone: 'success', text: 'Đã thu hồi quyền.' },
       );
@@ -148,7 +148,8 @@ export function StaffRosterTab() {
                       {m.phone ?? '—'} · <ToneBadge tone={m.role === 'ADMIN' ? 'warning' : 'neutral'}>{ROLE_LABEL[m.role]}</ToneBadge>
                     </div>
                   </div>
-                  {m.phone && (
+                  {m.id === meId && <span className="shrink-0 text-xs text-stone-500">(bạn)</span>}
+                  {m.phone && m.id !== meId && (
                     <button
                       type="button"
                       aria-label={`Thu hồi · ${m.fullName ?? m.phone}`}

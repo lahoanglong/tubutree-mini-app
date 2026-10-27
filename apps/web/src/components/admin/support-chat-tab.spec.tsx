@@ -170,6 +170,18 @@ describe('SupportChatTab — thẻ trạng thái cầu nối', () => {
     expect(container.textContent).toContain('nhưng cầu nối đang mất kết nối');
   });
 
+  it('mới mất kết nối chưa tới 10 phút: chưa hiện băng đỏ (cùng ngưỡng với cảnh báo của hệ thống)', async () => {
+    const recent = new Date(Date.now() - 3 * 60_000).toISOString();
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state: 'UNREACHABLE', enabled: true, since: recent } }) });
+    const a = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect(a.container.querySelector('[data-bridge-down]')).toBeNull();
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state: 'UNREACHABLE', enabled: true, since: new Date(Date.now() - 11 * 60_000).toISOString() } }) });
+    const b = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect(b.container.querySelector('[data-bridge-down]')).not.toBeNull();
+  });
+
   it.each([
     ['NEED_QR', 'quét mã QR'],
     ['KICKED', 'Đóng Zalo đó lại'],

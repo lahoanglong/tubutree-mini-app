@@ -39,6 +39,15 @@ function stateView(s: SupportBridgeStatus): { tone: Tone; text: string } {
   }
 }
 
+/** Cùng ngưỡng với bridgeIsDown của API (STALE_AFTER_MS): dưới mức này là chập chờn ngắn, chưa báo động. */
+const BRIDGE_DOWN_AFTER_MS = 10 * 60_000;
+
+function downLongEnough(since: string | null): boolean {
+  if (!since) return true;
+  const at = new Date(since).getTime();
+  return !Number.isFinite(at) || Date.now() - at > BRIDGE_DOWN_AFTER_MS;
+}
+
 /** "từ 10:05, cách đây 2 giờ": thời lượng thô theo phút/giờ/ngày để chủ cửa hàng biết tin đã nằm chờ bao lâu. */
 function outageSince(since: string | null): string {
   if (!since) return '';
@@ -180,7 +189,7 @@ export function BridgeCard({ isAdmin }: { isAdmin: boolean }) {
             {status.lastError && <span className="min-w-0 break-words text-xs text-stone-500">{status.lastError}</span>}
           </div>
 
-          {status.enabled && !connected && (
+          {status.enabled && !connected && downLongEnough(status.since) && (
             <div data-bridge-down>
               <Notice tone="danger" role="alert">
                 <strong>Tin khách đang không tới nhóm Zalo{outageSince(status.since)}.</strong> Khách vẫn gửi được tin và tin được giữ lại

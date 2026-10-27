@@ -55,6 +55,15 @@ describe('StaffRosterTab (Nhân sự)', () => {
     expect(t).toContain('0933333333');
   });
 
+  it('dòng của chính mình: không có nút Thu hồi, ghi "(bạn)"; dòng người khác vẫn có', async () => {
+    stub();
+    const { container } = mount(<StaffRosterTab meId="u2" />);
+    await flush();
+    expect(container.querySelector('[aria-label="Thu hồi · 0922222222"]')).toBeNull();
+    expect(container.textContent).toContain('(bạn)');
+    expect(container.querySelector('[aria-label="Thu hồi · Lan"]')).not.toBeNull();
+  });
+
   it('nút Lưu quyền khoá tới khi SĐT hợp lệ; cấp STAFF gửi đúng body, báo "sẽ áp khi họ mở app"', async () => {
     const api = stub();
     const { container } = mount(<StaffRosterTab />);

@@ -604,7 +604,7 @@ export default function AdminPage() {
           {active === 'config' && <ConfigTab onOpenSupportChat={allowed.has('supportChat') ? () => setTab('supportChat') : undefined} />}
           {active === 'opsHealth' && <OpsHealthTab onOpenOrder={openOrderByCode} isAdmin={isAdmin} />}
           {active === 'attendance' && <AttendanceTab />}
-          {active === 'staffRoster' && <StaffRosterTab />}
+          {active === 'staffRoster' && <StaffRosterTab meId={user?.id} />}
           {active === 'shiftApproval' && <ShiftApprovalTab />}
           {active === 'payroll' && <PayrollAdminTab />}
           {active === 'coupons' && <CouponsTab />}
