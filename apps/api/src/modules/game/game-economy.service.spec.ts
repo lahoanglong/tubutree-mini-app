@@ -66,6 +66,7 @@ describe('GameEconomyService.checkIn', () => {
     expect(r.streakFrozeUsed).toBe(true);
     const upd = (p.gameProfile.updateMany as jest.Mock).mock.calls[0][0].data;
     expect(upd.streakFreezes).toBe(0);
+    expect(upd.lastStreakFreezeAt).toBeInstanceOf(Date);
   });
 
   it('lỡ 1 ngày + hết vé → reset streak = 1', async () => {

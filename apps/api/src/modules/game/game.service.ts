@@ -737,18 +737,27 @@ export class GameService {
    * Chuỗi điểm danh tính từ mốc. `streakDays` là giá trị đã lưu, chỉ đặt lại ở lần điểm danh kế tiếp, nên chuỗi đã đứt vẫn
    * giữ số cũ: đứt (lần cuối trước hôm qua theo ngày VN) hoặc lần cuối trước ngày của mốc thì tiến độ 0; còn lại là số ngày liền
    * từ mốc tới lần điểm danh cuối (cả hai đầu), tối đa chuỗi đang có.
+   *
+   * Hồi sinh chuỗi cộng cả những ngày không điểm danh vào `streakDays`, và vé giữ lửa che một ngày lỡ: nếu một trong hai xảy ra từ
+   * ngày của mốc thì chỉ đếm từ ngày đó (hồi sinh) hoặc từ ngày điểm danh dùng vé (vé) trở đi, ít nhất 1 ngày vì lần điểm danh cuối
+   * đã nằm sau mốc.
    */
   private streakSince(
-    profile: { streakDays: number; lastCheckInAt: Date | null } | null,
+    profile: { streakDays: number; lastCheckInAt: Date | null; lastStreakRepairAt?: Date | null; lastStreakFreezeAt?: Date | null } | null,
     since: Date | null,
     now: Date,
   ): number {
     const streak = profile?.streakDays ?? 0;
     if (!since) return streak;
     const last = profile?.lastCheckInAt;
-    if (!last || last.getTime() < startOfVnDay(since).getTime()) return 0;
+    const sinceDay = startOfVnDay(since).getTime();
+    if (!last || last.getTime() < sinceDay) return 0;
     if (vnDaysBetween(last, now) > 1) return 0;
-    return Math.min(streak, vnDaysBetween(since, last) + 1);
+    let from = since;
+    for (const bridged of [profile?.lastStreakRepairAt, profile?.lastStreakFreezeAt]) {
+      if (bridged && bridged.getTime() >= sinceDay && bridged.getTime() > from.getTime()) from = bridged;
+    }
+    return Math.min(streak, vnDaysBetween(from, last) + 1);
   }
 
   /** returns.window_days (cùng khoá và mặc định 7 với OrderReturnsService.request); sai kiểu → 7. */

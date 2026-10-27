@@ -2598,9 +2598,9 @@ describe('Nhiệm vụ quản trị thêm: chỉ tính việc từ lúc tạo (s
   });
 
   const checkinMission = (goal: number) => custom({ id: 'mk', code: 'CUSTOM_2', kind: 'CHECKIN_STREAK', goal });
-  const withCheckin = (streakDays: number, lastCheckInAt: Date | null, goal: number) =>
+  const withCheckin = (streakDays: number, lastCheckInAt: Date | null, goal: number, extra: Record<string, Date | null> = {}) =>
     makePrisma({
-      gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays, lastCheckInAt }) },
+      gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays, lastCheckInAt, ...extra }) },
       mission: { findMany: jest.fn().mockResolvedValue([checkinMission(goal)]), findUnique: jest.fn().mockResolvedValue(checkinMission(goal)) },
     });
 
@@ -2631,6 +2631,25 @@ describe('Nhiệm vụ quản trị thêm: chỉ tính việc từ lúc tạo (s
     expect((await svc(broken).getMissions('u1'))[0]).toMatchObject({ progress: 0 });
     const alive = withCheckin(4, new Date('2026-10-29T05:00:00.000Z'), 3);
     expect((await svc(alive).getMissions('u1'))[0]).toMatchObject({ progress: 3, completed: true });
+  });
+
+  it('chuỗi hồi sinh sau mốc: chỉ đếm từ ngày hồi sinh, không cộng các ngày chuỗi cũ được hồi sinh vào (chuỗi 11, mốc ngày 26, hồi sinh ngày 29 → 1/3)', async () => {
+    jest.setSystemTime(new Date('2026-10-29T05:00:00.000Z'));
+    const day29 = new Date('2026-10-29T03:00:00.000Z');
+    const repaired = withCheckin(11, day29, 3, { lastStreakRepairAt: day29 });
+    expect((await svc(repaired).getMissions('u1'))[0]).toMatchObject({ progress: 1, completed: false });
+    await expect(svc(repaired).claimMission('u1', 'CUSTOM_2')).rejects.toThrow('Chưa đủ điều kiện');
+    const earlier = withCheckin(4, day29, 3, { lastStreakRepairAt: new Date('2026-10-10T03:00:00.000Z') });
+    expect((await svc(earlier).getMissions('u1'))[0]).toMatchObject({ progress: 3, completed: true });
+  });
+
+  it('vé giữ lửa dùng sau mốc: ngày lỡ không phải ngày điểm danh, chỉ đếm từ ngày dùng vé (chuỗi 7, mốc ngày 26, vé ngày 28 → 1/3; ngày 29 điểm danh tiếp → 2/3)', async () => {
+    jest.setSystemTime(new Date('2026-10-28T05:00:00.000Z'));
+    const froze = withCheckin(7, new Date('2026-10-28T03:00:00.000Z'), 3, { lastStreakFreezeAt: new Date('2026-10-28T03:00:00.000Z') });
+    expect((await svc(froze).getMissions('u1'))[0]).toMatchObject({ progress: 1, completed: false });
+    jest.setSystemTime(new Date('2026-10-29T05:00:00.000Z'));
+    const next = withCheckin(8, new Date('2026-10-29T03:00:00.000Z'), 3, { lastStreakFreezeAt: new Date('2026-10-28T03:00:00.000Z') });
+    expect((await svc(next).getMissions('u1'))[0]).toMatchObject({ progress: 2, completed: false });
   });
 
   it('đánh giá viết SAU mốc cho đơn giao TRƯỚC mốc vẫn tính; đánh giá viết trước mốc thì không', async () => {
@@ -2702,7 +2721,7 @@ describe('Nhiệm vụ quản trị thêm: chỉ tính việc từ lúc tạo (s
     expect(reviewFind).toHaveBeenCalledTimes(1);
   });
 
-  it('nhận thưởng khoá dòng nhiệm vụ và lấy điểm thưởng đọc trong giao dịch (quản trị vừa sửa điểm thì theo giá mới)', async () => {
+  it('nhận thưởng khoá chia sẻ dòng nhiệm vụ và lấy điểm thưởng đọc trong giao dịch (quản trị vừa sửa điểm thì theo giá mới)', async () => {
     const queryRaw = jest.fn().mockResolvedValue([{ pointsBalance: 100 }]);
     const startsAt = new Date(Date.now() - 60 * DAY_MS);
     const prisma = makePrisma({
@@ -2713,7 +2732,7 @@ describe('Nhiệm vụ quản trị thêm: chỉ tính việc từ lúc tạo (s
     const r = await svc(prisma).claimMission('u1', 'CUSTOM_1');
     expect(r).toMatchObject({ claimed: true, rewardPoints: 5_000 });
     const sql = queryRaw.mock.calls.map((c) => (c[0] as TemplateStringsArray).join('?')).join('|');
-    expect(sql).toMatch(/FROM "missions" WHERE "id" = \? FOR UPDATE/);
+    expect(sql).toMatch(/FROM "missions" WHERE "id" = \? FOR SHARE/);
   });
 
   it('bị tạm dừng ngay giữa lúc nhận (đọc lại trong giao dịch) → không cộng điểm', async () => {

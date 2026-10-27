@@ -2040,6 +2040,7 @@ model GameProfile {
   brokenStreakDays   Int       @default(0) // §streak-repair: số ngày của chuỗi vừa bị mất, chờ hồi sinh
   brokenStreakAt     DateTime? // thời điểm mất chuỗi (cửa sổ hồi sinh 48h tính từ đây)
   lastStreakRepairAt DateTime? // lần hồi sinh gần nhất (cooldown 30 ngày)
+  lastStreakFreezeAt DateTime? // lần điểm danh gần nhất phải dùng vé giữ lửa (ngày lỡ không phải ngày điểm danh thật)
 
   @@map("game_profiles")
 }
