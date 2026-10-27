@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listAdminMissions, updateAdminMission, type AdminMission } from '@/lib/admin-client';
 import { BTN_XS_PRIMARY, INPUT_CLASS, Notice, LoadError } from './ui';
+import { SeasonAdmin } from './season-admin';
 
 const REWARD_POINTS_MAX = 500_000;
 
@@ -25,6 +26,8 @@ export function EngagementTab() {
           {missionsQ.data?.map((m) => <MissionRow key={m.id} item={m} />)}
         </div>
       </section>
+
+      <SeasonAdmin />
 
       <Notice tone="info">Quà đổi Điểm Xanh nay quản lý ở tab Đổi rác, mục Quà.</Notice>
     </div>

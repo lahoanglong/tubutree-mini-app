@@ -33,7 +33,7 @@ import { HarvestCelebration } from '@/components/game/harvest-celebration';
 import { LuckyWheelCard } from '@/components/game/lucky-wheel-card';
 import { MissionsCard } from '@/components/game/missions-card';
 import { QuizCard, type QuizReveal } from '@/components/game/quiz-card';
-import { SeasonBanner } from '@/components/game/season-banner';
+import { SeasonBanner, SeasonEmpty } from '@/components/game/season-banner';
 import { SeasonLeaderboard } from '@/components/game/season-leaderboard';
 import { SeasonPass } from '@/components/game/season-pass';
 import { SpeciesCodex } from '@/components/game/species-codex';
@@ -277,7 +277,7 @@ function GameBody() {
 
         <GameTabPanel tab="community" active={tab === 'community'}>
           {/* Banner mùa/sự kiện (Phase 4) */}
-          {season && <SeasonBanner season={season} />}
+          {season ? <SeasonBanner season={season} /> : season === null ? <SeasonEmpty /> : null}
 
           {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
           {SEASON_PASS_ENABLED && seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (

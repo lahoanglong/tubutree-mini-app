@@ -2155,6 +2155,29 @@ export const listAdminMissions = () => apiFetch<AdminMission[]>('/admin/engageme
 export const updateAdminMission = (id: string, body: { title: string; description: string; rewardPoints: number }) =>
   apiFetch<AdminMission>(`/admin/engagement/missions/${encodeURIComponent(id)}`, { method: 'PATCH', body });
 
+export interface AdminSeason {
+  id: string;
+  name: string;
+  theme: string | null;
+  region: string | null;
+  startAt: string;
+  endAt: string;
+  status: 'UPCOMING' | 'ACTIVE' | 'ENDED';
+}
+export interface AdminSeasonInput {
+  name: string;
+  theme?: string | null;
+  region?: string | null;
+  startAt: string;
+  endAt: string;
+}
+export const listAdminSeasons = () => apiFetch<AdminSeason[]>('/admin/engagement/seasons');
+export const createAdminSeason = (body: AdminSeasonInput) => apiFetch<AdminSeason>('/admin/engagement/seasons', { method: 'POST', body });
+export const updateAdminSeason = (id: string, body: Partial<AdminSeasonInput>) =>
+  apiFetch<AdminSeason>(`/admin/engagement/seasons/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+export const deleteAdminSeason = (id: string) =>
+  apiFetch<{ deleted: true }>(`/admin/engagement/seasons/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
 export interface DealerPriceChange {
   id: string;
   variationId: string;

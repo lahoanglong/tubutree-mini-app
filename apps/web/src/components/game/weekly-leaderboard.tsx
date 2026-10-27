@@ -39,9 +39,16 @@ export function WeeklyLeaderboard({ board }: { board: LeaderRow[] | undefined })
               </span>
             </div>
           ))}
+          {board.length < 3 && (
+            <p data-testid="leaderboard-few" className="mt-2 text-xs text-stone-600">
+              Mới có {board.length} người trên bảng. Điểm danh mỗi ngày để giữ chuỗi và lên hạng.
+            </p>
+          )}
         </>
       ) : (
-        <p className="text-sm text-stone-600">Chưa có dữ liệu xếp hạng.</p>
+        <p data-testid="leaderboard-empty" className="text-sm text-stone-600">
+          Chưa có ai trên bảng. Điểm danh mỗi ngày để trở thành người đầu tiên.
+        </p>
       )}
     </GameCard>
   );

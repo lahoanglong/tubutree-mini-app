@@ -21,3 +21,16 @@ export function SeasonBanner({ season }: { season: Season }) {
     </div>
   );
 }
+
+/** Không có mùa nào đang chạy (chưa tạo mùa mới hoặc mùa cũ đã hết hạn): nói rõ thay vì để trống hay hiện mùa cũ. */
+export function SeasonEmpty() {
+  return (
+    <div data-testid="season-empty" className="rounded-card border border-stone-200 bg-stone-0 p-3">
+      <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-stone-700">
+        <Leaf className="h-4 w-4" aria-hidden="true" />
+        Chưa có mùa nào đang mở
+      </span>
+      <p className="mt-0.5 text-xs text-stone-600">Mùa mới sẽ sớm ra mắt. Trong lúc chờ, bạn vẫn điểm danh và tưới cây mỗi ngày như thường.</p>
+    </div>
+  );
+}
