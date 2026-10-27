@@ -172,3 +172,20 @@ describe('với route map thật (sau khi lane pro và recycle gộp)', () => {
     expect(to).not.toContain('/admin');
   });
 });
+
+describe('lối vào Hoàn tiền sàn ngoài theo cờ CASHBACK_ENABLED', () => {
+  it('cờ bật: mục nằm ở nhóm Tài khoản, sau Thông báo, trỏ /hoan-tien', () => {
+    const items = buildAccountMenu(ctx({ cashbackEnabled: true })).find((g) => g.group === 'Tài khoản')!.items;
+    expect(items.map((i) => i.label)).toEqual(['Sản phẩm yêu thích', 'Sổ địa chỉ', 'Thông báo', 'Hoàn tiền sàn ngoài', 'Cài đặt']);
+    expect(items.find((i) => i.label === 'Hoàn tiền sàn ngoài')!.to).toBe('/hoan-tien');
+  });
+
+  it('cờ tắt hoặc không truyền: không có mục', () => {
+    expect(all(buildAccountMenu(ctx({ cashbackEnabled: false }))).map((i) => i.to)).not.toContain('/hoan-tien');
+    expect(all(buildAccountMenu(ctx())).map((i) => i.to)).not.toContain('/hoan-tien');
+  });
+
+  it('route /hoan-tien có thật trong route map (mục không bị ẩn khi bật cờ)', () => {
+    expect(isWebRouteReady('/hoan-tien')).toBe(true);
+  });
+});
