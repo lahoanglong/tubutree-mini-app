@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { CheckCircle2, Hash, Heart, MessageCircle } from 'lucide-react';
 import type { FeedItem } from '@tubutree/app-core/api/feed';
-import { formatVnd } from '@/lib/format-vnd';
+import { TagPrice } from './tag-price';
 import { AuthorLine, Avatar, KIND_ICON, KIND_LABEL, safeMediaUrl, timeAgo } from './post-parts';
 import { dedupeTagsAgainstProducts } from './post-tags';
 import { miniBleed } from '@/components/loyalty/mini-surface';
@@ -72,7 +72,7 @@ export function PostCard({ post }: { post: FeedItem }) {
                 <span className="block text-xs text-stone-800" style={CLAMP1}>
                   {p.name}
                 </span>
-                <span className="block text-xs font-semibold text-forest-700">{formatVnd(p.salePrice ?? p.basePrice)}</span>
+                <TagPrice product={p} className="block text-xs font-semibold text-forest-700" />
               </span>
             </Link>
           ))}

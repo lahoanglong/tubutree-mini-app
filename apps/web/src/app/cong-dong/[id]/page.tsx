@@ -26,7 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
-import { formatVnd } from '@/lib/format-vnd';
+import { TagPrice } from '@/components/community/tag-price';
 import { ui } from '@/lib/guest-ui';
 import { CommentRow } from './comment-row';
 import { ConfirmDeleteSheet, EditPostSheet, ReportSheet } from './post-sheets';
@@ -330,7 +330,7 @@ export default function PostDetailPage() {
                     <span className="block text-sm text-stone-800" style={CLAMP1}>
                       {pt.name}
                     </span>
-                    <span className="block text-sm font-semibold text-forest-700">{formatVnd(pt.salePrice ?? pt.basePrice)}</span>
+                    <TagPrice product={pt} className="block text-sm font-semibold text-forest-700" />
                   </span>
                 </Link>
               ))}

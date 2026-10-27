@@ -5,7 +5,6 @@ import type { LucideIcon } from 'lucide-react';
 import { apiMediaUrl } from '../../services/api';
 import type { FeedItem } from '../../services/feed-api';
 import { timeAgo } from '../../utils/time-ago';
-import { formatVnd } from '../../utils/format';
 import { vi } from '../../i18n/vi';
 import { Chip } from '../ui/chip';
 import { Icon } from '../ui/icon';
@@ -15,6 +14,7 @@ import { Text } from '../ui/text';
 import { AuthorLine } from './author-line';
 import { dedupeTagsAgainstProducts } from './post-tags';
 import { ProductThumb } from '../ui/product-thumb';
+import { TagPrice } from './tag-price';
 
 // Xuất để dùng lại ở community-moderation.tsx (localize post.kind thô "QUESTION"/"TIP"...).
 export const KIND_LABEL: Partial<Record<FeedItem['kind'], string>> = {
@@ -160,7 +160,7 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
               <ProductThumb src={p.thumbnail} alt="" size={28} />
               <div>
                 <Text variant="caption" as="div" style={CLAMP(1)}>{p.name}</Text>
-                <Text variant="label" tone="brand" as="div">{formatVnd(p.salePrice ?? p.basePrice)}</Text>
+                <TagPrice product={p} variant="label" />
               </div>
             </div>
           ))}
