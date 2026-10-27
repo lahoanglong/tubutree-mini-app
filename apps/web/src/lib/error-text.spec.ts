@@ -12,7 +12,7 @@ describe('loadErrorText (khớp getErrorMessage của Mini App)', () => {
     expect(loadErrorText(new ApiError('ThrottlerException', 429))).toContain('đợi vài giây');
   });
   it('mất mạng / quá hạn / lỗi lạ', () => {
-    expect(loadErrorText(new NetworkError(true))).toBe('Hơi chậm tí, bạn đợi nhé');
+    expect(loadErrorText(new NetworkError(true))).toBe('Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại rồi thử lại nhé.');
     expect(loadErrorText(new Error('x'))).toBe('Có chút trục trặc, thử lại nhé');
   });
   it('không có phản hồi nhưng máy còn mạng (máy chủ/CORS không đáp): máy chủ bận; thật sự mất mạng: câu mất mạng', () => {

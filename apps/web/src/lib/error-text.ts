@@ -20,7 +20,7 @@ export function loadErrorText(error: unknown): string {
     return SERVER_BUSY;
   }
   if (error instanceof NetworkError) {
-    if (error.timedOut) return 'Hơi chậm tí, bạn đợi nhé';
+    if (error.timedOut) return 'Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại rồi thử lại nhé.';
     return typeof navigator !== 'undefined' && navigator.onLine === false ? OFFLINE : SERVER_BUSY;
   }
   // Lỗi do chính web ném (không qua máy chủ) kèm lời tiếng Việt tự viết thì giữ; lời tiếng Anh của trình duyệt/thư viện (Failed to fetch…) thì câu chung.

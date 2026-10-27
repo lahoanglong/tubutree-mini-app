@@ -73,6 +73,22 @@ describe('AccountShell (menu tài khoản từ lg)', () => {
     mocks.restoring = false;
   });
 
+  it('phase "unavailable" (cờ còn, mất mạng lúc khôi phục): giữ khung hai cột và menu khung xương, không có menu thật', () => {
+    mocks.phase = 'unavailable';
+    mocks.restoring = false;
+    const c = mount(
+      <AccountShell>
+        <main>mất mạng</main>
+      </AccountShell>,
+    );
+    expect(c.firstElementChild?.className).toContain('lg:grid-cols-[240px_minmax(0,1fr)]');
+    const skeleton = c.querySelector('[data-testid="account-shell-nav-skeleton"]') as HTMLElement;
+    expect(skeleton.className.split(/\s+/)).toContain('lg:block');
+    expect(c.querySelector('nav')).toBeNull();
+    expect(c.textContent).toContain('mất mạng');
+    mocks.phase = 'authenticated';
+  });
+
   it('lần dựng đầu (chưa biết phiên): khung chỉ ăn khi <html> có data-restoring (script ở head), không có lớp khung vô điều kiện', () => {
     mocks.phase = 'loading';
     mocks.restoring = false;

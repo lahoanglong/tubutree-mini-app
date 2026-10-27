@@ -165,6 +165,24 @@ describe('/dang-nhap/callback', () => {
     expect(mocks.replace).not.toHaveBeenCalled();
   });
 
+  it('đăng nhập hỏng: gỡ data-restoring khỏi <html> để khung tài khoản không nháy khi sang /tai-khoan', async () => {
+    document.documentElement.setAttribute('data-restoring', '');
+    mocks.search = new URLSearchParams({ code: 'abc', state: 'sai' });
+    mocks.auth.handleCallback.mockRejectedValue(new ApiError('invalid_grant', 400));
+    mount(<CallbackPage />);
+    await flush();
+    expect(document.documentElement.hasAttribute('data-restoring')).toBe(false);
+  });
+
+  it('đăng nhập thành công: không đụng data-restoring (AccountShell gỡ khi biết phiên)', async () => {
+    document.documentElement.setAttribute('data-restoring', '');
+    mocks.search = new URLSearchParams({ code: 'abc', state: 's' });
+    mount(<CallbackPage />);
+    await flush();
+    expect(document.documentElement.hasAttribute('data-restoring')).toBe(true);
+    document.documentElement.removeAttribute('data-restoring');
+  });
+
   it('mất mạng khi đổi mã: báo mất kết nối bằng tiếng Việt', async () => {
     mocks.search = new URLSearchParams({ code: 'abc', state: 's' });
     mocks.auth.handleCallback.mockRejectedValue(new NetworkError(false));

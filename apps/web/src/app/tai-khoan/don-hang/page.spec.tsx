@@ -49,7 +49,7 @@ function stubApi() {
       calls.push({ method, path, query: u.searchParams, body: init?.body ? JSON.parse(String(init.body)) : undefined });
       const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } });
       if (path === '/orders') {
-        if (ordersFail) return json({ message: 'Máy chủ bận' }, 500);
+        if (ordersFail) return json({ message: 'ECONNRESET tại bảng orders' }, 500);
         const page = Number(u.searchParams.get('page') ?? 1);
         const limit = Number(u.searchParams.get('limit') ?? 20);
         return json({ data: orders.slice((page - 1) * limit, page * limit), meta: { page, limit, total: total ?? orders.length } });
@@ -193,6 +193,7 @@ describe('trang Đơn hàng /tai-khoan/don-hang', () => {
     ordersFail = true;
     const c = await mount();
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ đang bận');
+    expect(c.textContent).not.toContain('ECONNRESET');
     ordersFail = false;
     click(btn('Thử lại', c) ?? null);
     await flush(8);
