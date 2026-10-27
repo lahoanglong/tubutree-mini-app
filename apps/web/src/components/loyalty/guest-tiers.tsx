@@ -6,13 +6,14 @@ import { guestPreviewCopy, tierRequirementText } from '@tubutree/app-core/guest-
 import { loyaltyPreviewQuery } from '@tubutree/app-core/queries/loyalty';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
-import { formatMultiplier, moneyShort } from '@/lib/loyalty-copy';
+import { moneyShort } from '@/lib/loyalty-copy';
 import { loginHref } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { miniOutline } from './mini-surface';
 import { loadErrorText } from '@/lib/error-text';
+import { multiplierLabel, tierPerkLabel } from '@tubutree/app-core/number-format';
 
 /** Nút đăng nhập của màn xem trước dành cho khách; đăng nhập xong quay lại đúng trang. */
 export function GuestLoginLink({ returnTo }: { returnTo: string }) {
@@ -43,11 +44,11 @@ export function GuestTiers({ returnTo }: { returnTo: string }) {
             <div key={t.id} data-tier className={`space-y-1 p-4 ${miniOutline}`}>
               <div className="flex items-center justify-between gap-2">
                 <div className="text-base font-semibold text-stone-900">{t.name}</div>
-                <div className="text-caption font-semibold text-forest-700">{`Điểm x${formatMultiplier(t.multiplier)}`}</div>
+                <div className="text-caption font-semibold text-forest-700">{`Điểm ${multiplierLabel(t.multiplier)}`}</div>
               </div>
               <div className="text-caption text-stone-700">{tierRequirementText(t, (n) => `${formatCount(n)} điểm`, moneyShort)}</div>
               {t.perks.map((p) => (
-                <div key={p} className="text-caption text-stone-600">{p}</div>
+                <div key={p} className="text-caption text-stone-600">{tierPerkLabel(p)}</div>
               ))}
             </div>
           ))}

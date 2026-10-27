@@ -42,6 +42,7 @@ import { QrCode } from '@/components/ui/qr-code';
 import { miniBtnSecondary, miniCard, miniSectionTitle, miniSurface } from '@/components/loyalty/mini-surface';
 import { LedgerShell, SignedAmount } from '../ledger-shell';
 import { loadErrorText } from '@/lib/error-text';
+import { tierPerkLabel } from '@tubutree/app-core/number-format';
 
 const TITLE = 'Hạng thành viên & Điểm Xanh';
 const TIER_KEY = 'tubu_last_tier_min_v2';
@@ -275,7 +276,7 @@ export default function LoyaltyPage() {
                 {perks.map((p) => (
                   <li key={p} className="flex items-center gap-2 text-sm text-stone-800">
                     <Check className="h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
-                    {p}
+                    {tierPerkLabel(p)}
                   </li>
                 ))}
               </ul>
@@ -374,7 +375,7 @@ export default function LoyaltyPage() {
               {perks.slice(0, 4).map((p) => (
                 <li key={p} className="flex items-center gap-2 text-sm text-stone-800">
                   <Check className="h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
-                  {p}
+                  {tierPerkLabel(p)}
                 </li>
               ))}
             </ul>

@@ -39,6 +39,7 @@ import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
 import { CouponCard } from '../components/loyalty/coupon-card';
 import { DailyCheckInCard } from '../components/loyalty/daily-check-in-card';
 import { convertedPointsNote, expiringPointsNote, pointExpiryPolicyNote, pointsSummary } from '../utils/points-lots';
+import { tierPerkLabel } from '@tubutree/app-core/number-format';
 
 /**
  * Biểu tượng + màu theo hạng (4 hạng §6.6). Emoji là NỘI DUNG của hạng nên được giữ. Màu trỏ thẳng
@@ -362,7 +363,7 @@ export default function LoyaltyPage() {
                 {perks.map((p, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Icon icon={Check} size="sm" tone="brand" />
-                    <Text variant="body-sm">{p}</Text>
+                    <Text variant="body-sm">{tierPerkLabel(p)}</Text>
                   </div>
                 ))}
               </div>
@@ -554,7 +555,7 @@ export default function LoyaltyPage() {
                 {perks.slice(0, 4).map((p, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Icon icon={Check} size="sm" tone="brand" />
-                    <Text variant="body-sm">{p}</Text>
+                    <Text variant="body-sm">{tierPerkLabel(p)}</Text>
                   </div>
                 ))}
               </div>

@@ -4,13 +4,14 @@ import { loyaltyPreviewQuery } from '@tubutree/app-core/queries/loyalty';
 import { coreHttp } from '../../services/core-http';
 import { getErrorMessage } from '../../services/api';
 import { useAuthStore } from '../../store/auth';
-import { formatMultiplier, formatPoints } from '../../utils/format';
+import { formatPoints } from '../../utils/format';
 import { moneyShort } from '../../utils/loyalty-copy';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { ErrorState } from '../ui/empty-state';
 import { Skeleton } from '../ui/skeleton';
 import { Heading, Text } from '../ui/text';
+import { multiplierLabel, tierPerkLabel } from '@tubutree/app-core/number-format';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 
@@ -39,11 +40,11 @@ export function GuestTiers() {
               <div data-tier style={{ ...COLUMN, gap: 4 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                   <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{t.name}</Text>
-                  <Text variant="caption" tone="brand" as="div">{`Điểm x${formatMultiplier(t.multiplier)}`}</Text>
+                  <Text variant="caption" tone="brand" as="div">{`Điểm ${multiplierLabel(t.multiplier)}`}</Text>
                 </div>
                 <Text variant="caption" tone="secondary" as="div">{tierRequirementText(t, formatPoints, moneyShort)}</Text>
                 {t.perks.map((p) => (
-                  <Text key={p} variant="caption" tone="tertiary" as="div">{p}</Text>
+                  <Text key={p} variant="caption" tone="tertiary" as="div">{tierPerkLabel(p)}</Text>
                 ))}
               </div>
             </Card>
