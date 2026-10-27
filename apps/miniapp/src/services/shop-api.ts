@@ -625,6 +625,8 @@ export type OrderView = Omit<OrderDTO, 'items'> & {
   fulfilment?: { kind: 'TUBU' | 'MERCHANT'; name: string; phone: string | null };
   /** Các đơn khác cùng lần đặt (đơn bị tách theo nơi giao). */
   siblings?: { code: string; status: string; total: number; fulfillerName: string }[];
+  /** Giờ đơn chạm từng trạng thái lần đầu (ISO). API cũ chưa trả. */
+  statusTimes?: Partial<Record<string, string>>;
 };
 /** Response place-order: đơn chính, kèm danh sách đơn con khi lần đặt bị tách theo nơi giao. */
 export type PlacedOrder = OrderDTO & { splitOrders?: SplitOrderDTO[] };

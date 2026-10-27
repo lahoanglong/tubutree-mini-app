@@ -82,6 +82,8 @@ export type OrderView = Omit<OrderWithItems, 'items' | BuyerHiddenOrderField> & 
   canCancel: boolean;
   /** Chỉ chi tiết đơn: Điểm Xanh tích của đơn thực sự đã thu lại do trả một phần (returnPointsTaken). */
   pointsReturnReversed?: number;
+  /** Chỉ chi tiết đơn: lúc đơn chạm từng trạng thái (ISO), từ sổ lịch sử; chỉ trạng thái + giờ, không ghi chú hay người thao tác. */
+  statusTimes?: Record<string, string>;
   /**
    * Đơn chờ thanh toán mà hàng đã bàn giao vận chuyển (Pancake đã gửi hàng, hệ thống thôi tự huỷ): Tubu xử lý tay với khách.
    * App/web thay hạn thanh toán, nút trả tiền và nút huỷ bằng câu trung tính "Tubu đang xử lý đơn này" (R5-SYNC-1).
@@ -244,18 +246,39 @@ export class OrdersService {
    * (cancel/repurchase/requestReturn) dùng detail() thô, không tốn thêm truy vấn; đơn trả ra cho khách vẫn qua forBuyer. */
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
-    const [[view], fulfilment, reviewOf, pointsReturnReversed] = await Promise.all([
+    const [[view], fulfilment, reviewOf, pointsReturnReversed, statusTimes] = await Promise.all([
       this.attachItemMedia([order], userId),
       this.fulfilmentOf(order),
       orderLineReviews(this.prisma, order),
       order.status === 'DELIVERED' || order.status === 'RETURNED' ? returnPointsTaken(this.prisma, order) : undefined,
+      this.statusTimesOf(order),
     ]);
     return {
       ...view!,
+      statusTimes,
       items: view!.items.map((it) => ({ ...it, ...reviewOf(it.id) })),
       ...fulfilment,
       pointsReturnReversed,
     };
+  }
+
+  /**
+   * Lúc đơn chạm từng trạng thái, cho dòng giờ dưới mỗi bước hành trình. Chỉ trạng thái + giờ: không trả ghi chú hay người thao tác
+   * của sổ lịch sử. Lần đầu chạm mỗi trạng thái; dòng chuyển về chính nó (admin chạy lại việc sau giao) bỏ qua.
+   */
+  private async statusTimesOf(order: { id: string }): Promise<Record<string, string>> {
+    const rows = await this.prisma.orderStatusHistory.findMany({
+      where: { orderId: order.id },
+      orderBy: { createdAt: 'asc' },
+      select: { fromStatus: true, toStatus: true, createdAt: true },
+      take: 100,
+    });
+    const times: Record<string, string> = {};
+    for (const r of rows) {
+      if (r.fromStatus === r.toStatus || r.toStatus in times) continue;
+      times[r.toStatus] = r.createdAt.toISOString();
+    }
+    return times;
   }
 
   private async fulfilmentOf(order: {

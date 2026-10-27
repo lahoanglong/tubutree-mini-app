@@ -389,6 +389,8 @@ export interface ShippingEvent {
   code?: string | null;
 }
 export interface OrderDetailDTO extends OrderDTO {
+  /** Giờ đơn chạm từng trạng thái lần đầu (ISO). API cũ chưa trả. */
+  statusTimes?: Partial<Record<string, string>>;
   id?: string;
   /** Hai trường dưới quyết định khách có tự hủy được không (xem canCancelOrder). */
   placedForCustomer?: boolean | null;

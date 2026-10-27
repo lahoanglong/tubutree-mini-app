@@ -305,6 +305,28 @@ describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, 
     expect(await screen.findByText(/Đặt lúc/)).toBeInTheDocument();
   });
 
+  it('hành trình ghi giờ từng bước đã tới; bước chưa tới không có giờ; đơn huỷ ghi "Huỷ lúc"', async () => {
+    const at = (d: number, h: number, m: number) => new Date(2026, 9, d, h, m).toISOString();
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER,
+      status: 'PACKED',
+      paymentMethod: 'COD',
+      createdAt: at(1, 8, 0),
+      statusTimes: { CONFIRMED: at(1, 8, 5), PACKED: at(2, 9, 30) },
+    });
+    const first = renderPage();
+    await screen.findByText('Hành trình đơn hàng');
+    expect(screen.getByText(/^08:05 01\/10/)).toBeInTheDocument();
+    expect(screen.getByText(/^09:30 02\/10/)).toBeInTheDocument();
+    expect(screen.getAllByText(/^\d\d:\d\d \d\d\/10/).length).toBeGreaterThanOrEqual(2);
+    first.unmount();
+
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'CANCELLED', createdAt: at(1, 8, 0), statusTimes: { CANCELLED: at(3, 14, 45) } });
+    renderPage();
+    expect(await screen.findByText(/Huỷ lúc/)).toBeInTheDocument();
+    expect(screen.getByText('14:45 03/10/2026')).toBeInTheDocument();
+  });
+
   it('đơn COD không có bước "Chờ thanh toán" trong hành trình; chuyển khoản thì có', async () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING', paymentMethod: 'COD' });
     const cod = renderPage();

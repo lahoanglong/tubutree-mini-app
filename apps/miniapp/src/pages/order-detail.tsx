@@ -25,6 +25,7 @@ import {
   isHandedToCarrier,
   orderPointsNote,
   orderStamp,
+  stepTime,
   returnWindowState,
   timelineIndex,
   timelineStepsFor,
@@ -331,7 +332,11 @@ export default function OrderDetailPage() {
           <Text bold size="small" style={{ marginBottom: 12 }}>
             {vi.orders.timeline}
           </Text>
-          <Timeline steps={timelineSteps} current={timelineIndex(o.status, timelineSteps)} />
+          <Timeline
+            steps={timelineSteps}
+            current={timelineIndex(o.status, timelineSteps)}
+            times={timelineSteps.map((s, i) => stepTime(o, s, i, timelineIndex(o.status, timelineSteps)))}
+          />
         </Box>
       )}
 
@@ -847,7 +852,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 /** Timeline dọc 5 bước — bước hiện tại pulse, bước qua tick lá. */
-function Timeline({ steps, current }: { steps: readonly string[]; current: number }) {
+function Timeline({ steps, current, times }: { steps: readonly string[]; current: number; times?: readonly (string | null)[] }) {
   return (
     <Box style={{ display: 'flex', flexDirection: 'column' }}>
       {steps.map((step, i) => {
@@ -889,16 +894,23 @@ function Timeline({ steps, current }: { steps: readonly string[]; current: numbe
                 />
               )}
             </Box>
-            <Text
-              size="small"
-              bold={active}
-              style={{
-                color: active ? 'var(--color-text-brand)' : done ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
-                paddingTop: 0,
-              }}
-            >
-              {vi.orderStatus[step]}
-            </Text>
+            <Box>
+              <Text
+                size="small"
+                bold={active}
+                style={{
+                  color: active ? 'var(--color-text-brand)' : done ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
+                  paddingTop: 0,
+                }}
+              >
+                {vi.orderStatus[step]}
+              </Text>
+              {times?.[i] && (
+                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+                  {formatDateTime(times[i])}
+                </Text>
+              )}
+            </Box>
           </Box>
         );
       })}

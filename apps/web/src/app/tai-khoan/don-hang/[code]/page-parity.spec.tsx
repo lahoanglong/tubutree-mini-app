@@ -121,6 +121,25 @@ describe('chi tiết đơn web — mốc thời gian và Điểm Xanh', () => {
     expect(text((await mount()).container)).toContain('Đặt lúc 10:00 01/10/2026');
   });
 
+  it('hành trình ghi giờ từng bước đã tới; bước chưa tới không có giờ; đơn huỷ ghi "Huỷ lúc"', async () => {
+    mocks.order = {
+      ...ORDER,
+      status: 'PACKED',
+      paymentMethod: 'COD',
+      statusTimes: { CONFIRMED: '2026-10-01T03:05:00Z', PACKED: '2026-10-02T04:30:00Z' },
+    };
+    const { container } = await mount();
+    const steps = [...container.querySelectorAll('#order-timeline-title ~ ol > li')].map((li) => li.textContent ?? '');
+    expect(steps).toHaveLength(4);
+    expect(steps[0]).toContain('10:05 01/10/2026');
+    expect(steps[1]).toContain('11:30 02/10/2026');
+    expect(steps[2]).not.toMatch(/\d\d:\d\d/);
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    mocks.order = { ...ORDER, status: 'CANCELLED', statusTimes: { CANCELLED: '2026-10-03T07:45:00Z' } };
+    expect(text((await mount()).container)).toContain('Huỷ lúc 14:45 03/10/2026');
+  });
+
   it('dòng Điểm Xanh theo trạng thái: chưa giao thì "Nhận +…", đã giao thì "Đã cộng +…"', async () => {
     mocks.order = { ...ORDER, pointsEarned: 1200 };
     expect(text((await mount()).container)).toContain('Nhận +1.200 Điểm Xanh khi giao thành công');

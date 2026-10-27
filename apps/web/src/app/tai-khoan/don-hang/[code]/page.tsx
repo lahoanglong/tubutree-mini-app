@@ -242,7 +242,7 @@ export default function OrderDetailPage() {
       )}
 
       <div className="max-md:px-4 max-md:empty:hidden"><FollowOaPrompt /></div>
-      <OrderTimeline status={o.status} paymentMethod={o.paymentMethod} />
+      <OrderTimeline status={o.status} paymentMethod={o.paymentMethod} createdAt={o.createdAt} statusTimes={o.statusTimes} />
       <OrderActions order={o} userId={user?.id} />
       <div className="max-md:px-4 max-md:empty:hidden">
         {o.id && showsRefundPanel(o) && <OrderRefunds orderId={o.id} returnRequestIds={new Set(orderReturns.map((r) => r.id))} />}
