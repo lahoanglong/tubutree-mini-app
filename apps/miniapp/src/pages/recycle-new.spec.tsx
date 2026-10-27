@@ -95,13 +95,14 @@ beforeEach(() => {
 });
 
 describe('bước 1: chọn món (§4.2)', () => {
-  it('món chỉ mang tới (pin): dòng nhắc trần ngày, thẻ thường không có', async () => {
-    const pin = { ...ITEM_BATTERY, status: 'ACTIVE' as const, hazardous: true, dailyCapQty: 20, monthlyCapQty: 50, monthRemainingQty: 50, dayRemainingQty: 20 };
+  it('món chỉ mang tới (pin): trần ngày đã bớt thì một dòng gộp thay câu trần ngày; còn nguyên trần thì chỉ câu trần', async () => {
+    const pin = { ...ITEM_BATTERY, status: 'ACTIVE' as const, hazardous: true, dailyCapQty: 20, monthlyCapQty: 50, monthRemainingQty: 50, dayRemainingQty: 12 };
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true }, items: [ITEM_CARTON, pin] }));
     renderPage();
     const card = (await screen.findByText('Pin đã dùng')).closest('[data-item]') as HTMLElement;
-    expect(within(card).getByText('Tối đa 20 viên mỗi ngày')).toBeInTheDocument();
-    expect(within((await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement).queryByText(/^Tối đa \d+ thùng mỗi ngày$/)).toBeNull();
+    expect(within(card).getByText('Hôm nay còn nhận được 12 viên (tối đa 20 viên mỗi ngày)')).toBeInTheDocument();
+    expect(within(card).queryByText(/Mỗi ngày mang tới điểm nhận tối đa 20 viên/)).toBeNull();
+    expect(within((await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement).getByText(/Mỗi ngày mang tới điểm nhận tối đa 10 thùng/)).toBeInTheDocument();
   });
   it('thẻ món: quy tắc, chuẩn bị, câu trần; món sắp nhận không có bộ đếm', async () => {
     renderPage();

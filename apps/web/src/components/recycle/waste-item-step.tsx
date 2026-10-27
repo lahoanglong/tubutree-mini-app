@@ -25,7 +25,8 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
     <div className="grid gap-3 md:grid-cols-2">
       {sorted.map((item) => {
         const qty = lines[item.id] ?? 0;
-        const cap = capSentence(item);
+        const dayLine = dropOffDayLimitText(item);
+        const cap = capSentence(item, dayLine !== null);
         const monthLeft = monthRemainingText(item);
         const progress = groupProgressText(qty, item);
         const comingSoon = item.status === 'COMING_SOON';
@@ -54,7 +55,7 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
               {item.prepInstructions && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{item.prepInstructions}</p>}
               {cap && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{cap}</p>}
               {monthLeft && <p className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${item.monthRemainingQty === 0 ? 'text-warning-fg' : 'text-stone-600'}`}>{monthLeft}</p>}
-              {dropOffDayLimitText(item) && item.status === 'ACTIVE' && <p className="text-xs text-warning-fg max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{dropOffDayLimitText(item)}</p>}
+              {dayLine && item.status === 'ACTIVE' && <p className="text-xs text-warning-fg max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{dayLine}</p>}
               {item.status === 'ACTIVE' && (
                 <div className="mt-1 flex flex-col gap-2">
                   <div>

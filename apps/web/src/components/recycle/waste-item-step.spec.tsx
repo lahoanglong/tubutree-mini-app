@@ -44,11 +44,17 @@ describe('WasteItemStep (web)', () => {
     expect(btn(battery, 'Tăng số lượng')).toBeNull();
     expect(c.textContent).not.toContain('Vỏ hộp sữa');
   });
-  it('món chỉ mang tới (pin): dòng nhắc trần ngày, thẻ thường không có', () => {
-    const pin = { ...ITEM_BATTERY, status: 'ACTIVE' as const, hazardous: true, dailyCapQty: 20, monthlyCapQty: 50, monthRemainingQty: 50, dayRemainingQty: 20 };
+  it('món chỉ mang tới (pin): trần ngày đã bớt thì một dòng gộp thay câu trần ngày; còn nguyên trần thì chỉ câu trần', () => {
+    const pin = { ...ITEM_BATTERY, status: 'ACTIVE' as const, hazardous: true, dailyCapQty: 20, monthlyCapQty: 50, monthRemainingQty: 50, dayRemainingQty: 12 };
     const { c } = mount({ items: [ITEM_CARTON, pin] });
-    expect(card(c, 'Pin đã dùng').textContent).toContain('Tối đa 20 viên mỗi ngày');
-    expect(card(c, 'Thùng carton').textContent).not.toContain('mỗi ngày.');
+    const t = card(c, 'Pin đã dùng').textContent!;
+    expect(t).toContain('Hôm nay còn nhận được 12 viên (tối đa 20 viên mỗi ngày)');
+    expect(t).not.toContain('Mỗi ngày mang tới điểm nhận tối đa 20 viên');
+    expect(card(c, 'Thùng carton').textContent).toContain('Mỗi ngày mang tới điểm nhận tối đa 10 thùng');
+    const full = mount({ items: [{ ...pin, dayRemainingQty: 20 }] });
+    const ft = card(full.c, 'Pin đã dùng').textContent!;
+    expect(ft).toContain('Mỗi ngày mang tới điểm nhận tối đa 20 viên');
+    expect(ft).not.toContain('Hôm nay còn nhận được');
   });
   it('trần tháng đã bớt hoặc hết: thẻ món nói lý do dưới câu trần', () => {
     const { c } = mount({ items: [{ ...ITEM_CARTON, monthRemainingQty: 3 }, { ...ITEM_MILK, monthRemainingQty: 0 }] });

@@ -110,9 +110,12 @@ describe('itemQtyMax và dropOffDayLimitText', () => {
     expect(itemQtyMax({ monthRemainingQty: null, dayRemainingQty: 20, hazardous: true }, 5, 999)).toBe(25);
     expect(itemQtyMax({ monthRemainingQty: null, dayRemainingQty: null, hazardous: true }, 0, 999)).toBe(999);
   });
-  it('dòng nhắc trần ngày chỉ cho món nguy hại có trần ngày', () => {
-    expect(dropOffDayLimitText({ hazardous: true, dayRemainingQty: 20, unitLabel: 'viên' })).toBe('Tối đa 20 viên mỗi ngày');
-    expect(dropOffDayLimitText({ hazardous: false, dayRemainingQty: 20, unitLabel: 'viên' })).toBeNull();
-    expect(dropOffDayLimitText({ hazardous: true, dayRemainingQty: null, unitLabel: 'viên' })).toBeNull();
+  it('dòng trần ngày gộp: chỉ khi phần còn lại hôm nay đã bớt so với trần; còn nguyên trần thì để câu trần đứng một mình', () => {
+    const base = { hazardous: true, dailyCapQty: 20, unitLabel: 'viên' };
+    expect(dropOffDayLimitText({ ...base, dayRemainingQty: 12 })).toBe('Hôm nay còn nhận được 12 viên (tối đa 20 viên mỗi ngày)');
+    expect(dropOffDayLimitText({ ...base, dayRemainingQty: 0 })).toBe('Hôm nay còn nhận được 0 viên (tối đa 20 viên mỗi ngày)');
+    expect(dropOffDayLimitText({ ...base, dayRemainingQty: 20 })).toBeNull();
+    expect(dropOffDayLimitText({ ...base, hazardous: false, dayRemainingQty: 12 })).toBeNull();
+    expect(dropOffDayLimitText({ ...base, dayRemainingQty: null })).toBeNull();
   });
 });

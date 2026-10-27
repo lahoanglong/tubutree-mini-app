@@ -86,11 +86,11 @@ export function ruleText(item: WasteItemDTO): string {
   return `${item.unitsPerPoint} ${item.unitLabel} = ${formatPoints(item.pointsPerGroup)}`;
 }
 
-export function capSentence(item: WasteItemDTO): string | null {
+export function capSentence(item: WasteItemDTO, omitDaily = false): string | null {
   const parts: string[] = [];
   if (item.monthlyCapQty != null) parts.push(`Tối đa ${formatNumber(item.monthlyCapQty)} ${item.unitLabel} mỗi tháng`);
   // Trần ngày vẫn áp cho DROP_OFF tới kho (waste-hold.service); món chỉ kho nhận thì nơi mang tới là kho.
-  if (item.dailyCapQty != null) parts.push(`Mỗi ngày mang tới ${item.warehouseOnly ? 'kho' : 'điểm nhận'} tối đa ${formatNumber(item.dailyCapQty)} ${item.unitLabel}`);
+  if (item.dailyCapQty != null && !omitDaily) parts.push(`Mỗi ngày mang tới ${item.warehouseOnly ? 'kho' : 'điểm nhận'} tối đa ${formatNumber(item.dailyCapQty)} ${item.unitLabel}`);
   return parts.length ? parts.join('. ') : null;
 }
 

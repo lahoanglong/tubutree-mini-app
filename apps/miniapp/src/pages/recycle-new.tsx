@@ -128,7 +128,8 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
     <div style={{ ...COLUMN, gap: 12 }}>
       {sorted.map((item) => {
         const qty = lines[item.id] ?? 0;
-        const cap = capSentence(item);
+        const dayLine = dropOffDayLimitText(item);
+        const cap = capSentence(item, dayLine !== null);
         const monthLeft = monthRemainingText(item);
         const progress = groupProgressText(qty, item);
         const comingSoon = item.status === 'COMING_SOON';
@@ -180,9 +181,9 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
                   {monthLeft}
                 </Text>
               )}
-              {dropOffDayLimitText(item) && item.status === 'ACTIVE' && (
+              {dayLine && item.status === 'ACTIVE' && (
                 <Text variant="caption" tone="warning" as="div">
-                  {dropOffDayLimitText(item)}
+                  {dayLine}
                 </Text>
               )}
               {item.status === 'ACTIVE' && (

@@ -164,7 +164,12 @@ export function itemQtyMax(
   return limit + allowance;
 }
 
-export function dropOffDayLimitText(item: { hazardous?: boolean; dayRemainingQty?: number | null; unitLabel: string }): string | null {
-  if (!item.hazardous || item.dayRemainingQty == null) return null;
-  return `Tối đa ${item.dayRemainingQty.toLocaleString('vi-VN')} ${item.unitLabel} mỗi ngày`;
+/**
+ * Dòng trần ngày cho món chỉ mang tới, thay cho câu trần ngày có sẵn khi phần còn lại hôm nay đã bớt.
+ * Còn nguyên trần (hoặc không có trần ngày) thì trả null để câu trần của thẻ đứng một mình.
+ */
+export function dropOffDayLimitText(item: { hazardous?: boolean; dailyCapQty?: number | null; dayRemainingQty?: number | null; unitLabel: string }): string | null {
+  if (!item.hazardous || item.dayRemainingQty == null || item.dailyCapQty == null || item.dayRemainingQty >= item.dailyCapQty) return null;
+  const fmt = (n: number) => n.toLocaleString('vi-VN');
+  return `Hôm nay còn nhận được ${fmt(item.dayRemainingQty)} ${item.unitLabel} (tối đa ${fmt(item.dailyCapQty)} ${item.unitLabel} mỗi ngày)`;
 }
