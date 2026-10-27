@@ -213,6 +213,17 @@ test.describe('Web khách: Vườn Xanh', () => {
     await expect(page.getByTestId('season-empty')).toBeVisible();
   });
 
+  test('API bảng xếp hạng lỗi: tab Cộng đồng báo lỗi có nút Thử lại', async ({ page, api }) => {
+    mockGame(api, { checkedIn: false });
+    let failing = true;
+    api.get('/game/leaderboard', () => (failing ? reply(500, { message: 'lỗi' }) : [{ rank: 1, nickname: 'Nhất', streak: 30, treesPlanted: 9 }]));
+    await page.goto('/vuon-xanh?tab=community');
+    await expect(page.getByText(/Chưa tải được bảng xếp hạng/)).toBeVisible();
+    failing = false;
+    await page.getByRole('button', { name: 'Thử lại' }).click();
+    await expect(page.getByText('Nhất').first()).toBeVisible();
+  });
+
   test('tab Cộng đồng: xếp hạng, tặng nước gọi đúng bạn một lần, bạn đã tặng hôm nay bị khoá', async ({ page, api }) => {
     mockGame(api, { checkedIn: false });
     await page.goto('/vuon-xanh?tab=community');

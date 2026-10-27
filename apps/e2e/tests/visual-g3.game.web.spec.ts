@@ -1,6 +1,6 @@
 import { mkdirSync } from 'fs';
 import path from 'path';
-import { test, expect, replyEmptyBody } from './support/mock-api';
+import { test, expect, reply, replyEmptyBody } from './support/mock-api';
 import { installVisualMode, settle } from './support/visual';
 import { mockNewbieGame, newbieProfile } from './support/game-newbie-states';
 
@@ -106,4 +106,27 @@ test('chụp g3 chưa có mùa, thân rỗng từ server (web)', async ({ page, 
   await expect(page.getByTestId('season-empty')).toBeVisible({ timeout: 15_000 });
   await settle(page);
   await shot(page, 'g3-season-empty', false);
+});
+
+test('chụp g3 thẻ nước từ đơn hàng (web)', async ({ page, api }) => {
+  test.skip(!OUT, 'đặt GAME_SHOTS_DIR để chụp');
+  await setup(page, api);
+  api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 65, orderWater: ORDER_WATER });
+  await page.goto('/vuon-xanh');
+  const card = page.getByTestId('order-water-progress').locator('xpath=ancestor::*[self::div or self::section][2]');
+  await expect(page.getByTestId('order-water-progress')).toBeVisible({ timeout: 15_000 });
+  await card.scrollIntoViewIfNeeded();
+  await settle(page);
+  await page.screenshot({ path: path.join(OUT!, 'web', 'g3-order-card.png'), clip: (await card.boundingBox()) ?? undefined });
+});
+
+test('chụp g3 màn lỗi tải có nút Thử lại (web)', async ({ page, api }) => {
+  test.skip(!OUT, 'đặt GAME_SHOTS_DIR để chụp');
+  await setup(page, api);
+  api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 65 });
+  api.get('/game/leaderboard', () => reply(500, { message: 'lỗi' }));
+  await page.goto('/vuon-xanh?tab=community');
+  await expect(page.getByText(/Chưa tải được bảng xếp hạng/)).toBeVisible({ timeout: 15_000 });
+  await settle(page);
+  await shot(page, 'g3-load-error', false);
 });

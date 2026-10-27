@@ -76,6 +76,18 @@ test.describe('Vườn Xanh', () => {
     await expect(page.getByTestId('season-empty')).toBeVisible({ timeout: 15_000 });
   });
 
+  test('API vườn lỗi: tab Vườn báo lỗi có nút Thử lại, không quay khung chờ mãi', async ({ page, api }) => {
+    mockGame(api);
+    let failing = true;
+    api.get('/game/garden', () => (failing ? reply(500, { message: 'lỗi' }) : GARDEN));
+    await page.goto('/game');
+    await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+    await expect(page.getByText(/Chưa tải được vườn/)).toBeVisible({ timeout: 15_000 });
+    failing = false;
+    await page.getByRole('button', { name: 'Thử lại' }).click();
+    await expect(page.getByText('Lô đất của bạn (2/4)')).toBeVisible();
+  });
+
   test('chạm đúp "Tưới hết" chỉ gửi một request (drops = toàn bộ số giọt) và hiện tiến độ mới', async ({ page, api }) => {
     mockGame(api, { ...PROFILE, lastCheckInAt: new Date().toISOString() });
     api.post('/game/tree/water', slow({ progress: 60, target: 100, harvested: false, treesPlanted: 3 }));
