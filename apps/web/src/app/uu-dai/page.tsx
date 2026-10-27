@@ -261,7 +261,7 @@ function OffersContent() {
           {couponsQ.isLoading ? (
             <Skeleton height={64} />
           ) : couponsQ.isError ? (
-            <ErrorState message={`Chưa tải được mã giảm giá: ${errText(couponsQ.error)}`} onRetry={() => void couponsQ.refetch()} />
+            <ErrorState variant="inline" message={`Chưa tải được mã giảm giá: ${errText(couponsQ.error)}`} onRetry={() => void couponsQ.refetch()} />
           ) : coupons.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {coupons.map((c) => (

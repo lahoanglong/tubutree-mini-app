@@ -44,7 +44,7 @@ export function SalesTab() {
           <Skeleton height={84} rounded="rounded-card" />
         </div>
       ) : !d ? (
-        <ErrorState message={ownerLoadError(q.error)} onRetry={errorStatus(q.error) === 403 ? undefined : () => void q.refetch()} />
+        <ErrorState variant="inline" message={ownerLoadError(q.error)} onRetry={errorStatus(q.error) === 403 ? undefined : () => void q.refetch()} />
       ) : d.orderCount === 0 ? (
         <section aria-label="Chưa có đơn" className={`p-8 text-center ${skin.card}`}>
           <h2 className="font-display text-base font-semibold text-stone-900">Chưa có đơn nào trong kỳ này</h2>

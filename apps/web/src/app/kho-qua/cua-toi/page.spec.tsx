@@ -142,7 +142,8 @@ describe('/kho-qua/cua-toi — Quà của tôi', () => {
     click(byText(c, 'button', 'Thử lại'));
     await flush(5);
     expect(c.textContent).toContain('QG-8K2M9P4T');
-    expect(state.calls).toHaveLength(2);
+    // Màn lỗi cả trang còn đọc hotline từ cấu hình công khai: không tính request đó.
+    expect(state.calls.filter((p) => !p.includes('/config/'))).toHaveLength(2);
   });
 
   it('đang khôi phục phiên → không gọi API; khách → đăng nhập quay lại /kho-qua/cua-toi', async () => {

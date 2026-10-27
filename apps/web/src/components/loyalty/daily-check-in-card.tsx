@@ -21,7 +21,7 @@ export function DailyCheckInCard({ authed }: { authed: boolean }) {
   if (statusQ.isError) {
     return (
       <Card padding={16}>
-        <ErrorState message={checkInCopy.loadError(errText(statusQ.error))} onRetry={() => void statusQ.refetch()} />
+        <ErrorState variant="inline" message={checkInCopy.loadError(errText(statusQ.error))} onRetry={() => void statusQ.refetch()} />
       </Card>
     );
   }
