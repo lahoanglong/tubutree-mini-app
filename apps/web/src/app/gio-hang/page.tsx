@@ -395,7 +395,7 @@ export default function CartPage() {
             </div>
           </div>
 
-          <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:max-h-[calc(100vh-var(--header-h)-32px)] lg:self-start lg:overflow-y-auto`}>
+          <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:max-h-[calc(100vh-var(--header-h)-9rem)] lg:self-start lg:overflow-y-auto`}>
             <div data-testid="cart-summary-rows" className="max-md:hidden">
             <div className="flex justify-between text-sm">
               <span className="text-stone-600">Tạm tính</span>
@@ -442,10 +442,10 @@ export default function CartPage() {
               <span>{formatVnd(payTotal)}</span>
             </div>
             {/* Dưới lg nút và lời giải thích nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải. */}
-            <div className="hidden lg:sticky lg:bottom-0 lg:block lg:bg-stone-0 lg:pb-4">
+            <div className="hidden lg:sticky lg:bottom-0 lg:block lg:bg-stone-0 lg:py-4">
               {selectedItems.length === 0 ? (
                 <>
-                  <button type="button" disabled className={`${ui.btnPrimary} mt-4 w-full`}>
+                  <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
                     Thanh toán (0)
                   </button>
                   <p role="status" className="mt-2 text-xs text-stone-600">
@@ -454,7 +454,7 @@ export default function CartPage() {
                 </>
               ) : stockBlocked ? (
                 <>
-                  <button type="button" disabled className={`${ui.btnPrimary} mt-4 w-full`}>
+                  <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
                     Thanh toán ({selectedCount})
                   </button>
                   <p role="alert" className="mt-2 text-xs text-danger-fg">
@@ -462,8 +462,8 @@ export default function CartPage() {
                   </p>
                 </>
               ) : (
-                <Link href="/thanh-toan" onClick={onPay} className={`${ui.btnPrimary} mt-4 w-full`}>
-                  Thanh toán ({selectedCount})
+                <Link href="/thanh-toan" onClick={onPay} className={`${ui.btnPrimary} w-full`}>
+                  Thanh toán ({selectedCount}) · {formatVnd(payTotal)}
                 </Link>
               )}
             </div>

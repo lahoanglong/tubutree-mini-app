@@ -620,7 +620,8 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        <div className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:max-h-[calc(100vh-var(--header-h)-32px)] lg:self-start lg:overflow-y-auto`}>
+        {/* 9rem: khung chưa dính ở đầu trang nằm thấp hơn vị trí dính khoảng 6.5rem (tiêu đề + đường dẫn); trừ thêm để đáy khung, nơi có nút Đặt hàng, đã trong màn ngay khi chưa cuộn. */}
+        <div className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:max-h-[calc(100vh-var(--header-h)-9rem)] lg:self-start lg:overflow-y-auto`}>
           <h2 className={`${ui.sectionTitle} max-md:hidden`}>Đơn hàng</h2>
           {/* Giỏ một nơi giao: cuộn trong khung (focus được bằng bàn phím, axe scrollable-region-focusable). Giỏ tách kiện
               hiện hết để khách thấy đủ mọi kiện và phí giao cộng vào tổng. */}
@@ -764,15 +765,15 @@ export default function CheckoutPage() {
           {/* Dưới lg nút đặt hàng nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải, dính đáy khung để màn thấp (1366×768) vẫn thấy nút và lỗi đặt hàng. */}
           </div>
           {/* Con trực tiếp của khung cuộn (không nằm trong khối tổng): sticky chỉ trượt trong khối cha của nó. Điện thoại giữ thứ tự và đệm cũ. */}
-          <div data-mini-part="place-order" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4 lg:sticky lg:bottom-0 lg:bg-stone-0 lg:pb-4">
-          <OrderConsent className="mt-4 hidden lg:block" />
+          <div data-mini-part="place-order" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4 lg:sticky lg:bottom-0 lg:bg-stone-0 lg:py-4">
+          <OrderConsent className="hidden lg:block" />
           <button
             type="button"
             onClick={() => place.mutate()}
             disabled={placeDisabled}
             className={`${ui.btnPrimary} mt-2 hidden w-full lg:inline-flex`}
           >
-            {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}
+            {place.isPending ? 'Đang đặt hàng…' : quote ? `Đặt hàng · ${formatVnd(quote.total)}` : 'Đặt hàng'}
           </button>
           {place.isError && !priceChanged && !(placeErrorMessage && isCartFixableError(placeErrorMessage)) && (
             <div role="alert" className={`mt-2 ${ui.error}`}>
