@@ -270,8 +270,9 @@ export class OrdersService {
     const rows = await this.prisma.orderStatusHistory.findMany({
       where: { orderId: order.id },
       orderBy: { createdAt: 'asc' },
+      // Dòng đầu tiên của mỗi trạng thái, không giới hạn số dòng: lịch sử dài (qua lại nhiều lần) không làm rớt trạng thái mới nhất.
+      distinct: ['toStatus'],
       select: { fromStatus: true, toStatus: true, createdAt: true },
-      take: 100,
     });
     const times: Record<string, string> = {};
     for (const r of rows) {

@@ -924,6 +924,10 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     const q = history.mock.calls[0][0];
     expect(q.where).toEqual({ orderId: 'o1' });
     expect(Object.keys(q.select).sort()).toEqual(['createdAt', 'fromStatus', 'toStatus']);
+    // Lấy dòng đầu mỗi trạng thái, không cắt theo số dòng: lịch sử dài không làm rớt trạng thái mới nhất.
+    expect(q.distinct).toEqual(['toStatus']);
+    expect(q.orderBy).toEqual({ createdAt: 'asc' });
+    expect(q).not.toHaveProperty('take');
   });
 
   it('D4: đơn đối tác tự giao → chi tiết đơn nêu gian hàng giao + hotline, và các đơn cùng lần đặt', async () => {
