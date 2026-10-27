@@ -685,6 +685,7 @@ export class MerchantService {
       thumbnail: dto.thumbnail === undefined ? baseline.thumbnail : dto.thumbnail,
     };
     const contentChanged = !sameContent(merged, baseline);
+    const imagesChanged = JSON.stringify(merged.images) !== JSON.stringify(product.images) || (merged.thumbnail ?? null) !== (product.thumbnail ?? null);
     // Mở bán lại sản phẩm đã gỡ liên kết, hoặc xin mã Pancake khác, thì admin duyệt lại để liên kết biến thể Pancake. Bỏ mã (tự
     // giao) giữ nguyên trạng thái duyệt: nội dung đã được duyệt, giá và tồn do gian hàng tự đặt như mọi sản phẩm tự giao.
     const requestsLink = awaitingLink && codeChanged && !!codeChange;
@@ -740,6 +741,7 @@ export class MerchantService {
                   ...(product.approvalStatus === 'APPROVED' && !product.approvedAt ? { approvedAt: new Date() } : {}),
                 }
               : {}),
+            ...(!liveEdit && imagesChanged ? { approvedAt: null } : {}),
           },
         });
       } catch (err) {

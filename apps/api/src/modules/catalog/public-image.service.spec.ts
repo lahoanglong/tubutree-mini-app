@@ -29,7 +29,7 @@ describe('PublicImageService', () => {
     expect(prisma.product.findFirst).not.toHaveBeenCalled();
     const q = prisma.$queryRaw.mock.calls[0]![0] as unknown as { sql: string; values: unknown[] };
     expect(q.sql).toMatch(/"images"\[\?::int\] AS image/);
-    expect(q.sql).toContain('"approvalStatus" = \'APPROVED\' OR "approvedAt" IS NOT NULL');
+    expect(q.sql).toContain(`"approvalStatus" = 'APPROVED' OR ("approvalStatus" = 'PENDING_REVIEW' AND "approvedAt" IS NOT NULL)`);
     expect(q.values).toEqual([3, 'p1']);
     expect((await svc.get('product', 'p1', '2', 'sai')).versionOk).toBe(false);
   });
@@ -37,7 +37,7 @@ describe('PublicImageService', () => {
   it('thumb với thumbnail base64: chỉ select cột thumbnail, không đụng mảng images', async () => {
     const { svc, prisma } = make({ product: { thumbnail: PNG } });
     expect((await svc.get('product', 'p1', 'thumb', publicImageVersion('product', 'p1', 'thumb', PNG))).versionOk).toBe(true);
-    expect(prisma.product.findFirst).toHaveBeenCalledWith({ where: { id: 'p1', OR: [{ approvalStatus: 'APPROVED' }, { approvedAt: { not: null } }] }, select: { thumbnail: true } });
+    expect(prisma.product.findFirst).toHaveBeenCalledWith({ where: { id: 'p1', OR: [{ approvalStatus: 'APPROVED' }, { approvalStatus: 'PENDING_REVIEW', approvedAt: { not: null } }] }, select: { thumbnail: true } });
     expect(prisma.$queryRaw).not.toHaveBeenCalled();
   });
 
@@ -69,6 +69,9 @@ describe('PublicImageService', () => {
     ['loại lạ', 'user', '1', '0'],
     ['ô không phải số', 'product', 'p1', 'abc'],
     ['ô quá lớn', 'product', 'p1', '99'],
+    ['ô có số 0 đứng đầu', 'product', 'p1', '00'],
+    ['ô hex', 'product', 'p1', '0x0'],
+    ['ô có khoảng trắng', 'product', 'p1', ' 0'],
   ])('404: %s', async (_l, kind, id, slot) => {
     await expect(make({ images: [PNG] }).svc.get(kind, id, slot, undefined)).rejects.toBeInstanceOf(NotFoundException);
   });

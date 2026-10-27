@@ -12,9 +12,9 @@ const same = (a: unknown, b: string) => typeof a === 'string' && a.length === b.
  * Mỗi lần chỉ đọc đúng một ảnh từ Postgres: mảng `images` của sản phẩm có thể nặng hàng chục MB, một trang danh mục xin cả chục ảnh.
  *
  * Sản phẩm đang chờ duyệt lại (đối tác đổi mã/liên kết) vẫn phát ảnh nếu từng được duyệt (`approvedAt`): giỏ, đơn cũ và hàng đã mua
- * của khách vẫn có ảnh như trước khi ảnh đi qua endpoint này. Sản phẩm chưa từng được duyệt (chờ duyệt lần đầu, bị từ chối) thì không.
+ * của khách vẫn có ảnh như trước khi ảnh đi qua endpoint này. Sản phẩm chưa từng được duyệt, bị từ chối, hoặc đã đổi ảnh chờ duyệt lại (`approvedAt` bị xoá) thì không.
  */
-const EVER_PUBLIC = Prisma.sql`("approvalStatus" = 'APPROVED' OR "approvedAt" IS NOT NULL)`;
+const EVER_PUBLIC = Prisma.sql`("approvalStatus" = 'APPROVED' OR ("approvalStatus" = 'PENDING_REVIEW' AND "approvedAt" IS NOT NULL))`;
 
 @Injectable()
 export class PublicImageService {
@@ -36,11 +36,12 @@ export class PublicImageService {
     if (kind === 'product') {
       if (slotRaw === 'thumb') {
         slot = 'thumb';
-        const p = await this.prisma.product.findFirst({ where: { id, OR: [{ approvalStatus: 'APPROVED' }, { approvedAt: { not: null } }] }, select: { thumbnail: true } });
+        const p = await this.prisma.product.findFirst({ where: { id, OR: [{ approvalStatus: 'APPROVED' }, { approvalStatus: 'PENDING_REVIEW', approvedAt: { not: null } }] }, select: { thumbnail: true } });
         image = p ? (p.thumbnail?.startsWith('data:') ? p.thumbnail : await this.productImage(id, 0)) : null;
       } else {
+        if (!/^(0|[1-9]\d?)$/.test(slotRaw)) throw notFound();
         const n = Number(slotRaw);
-        if (!Number.isInteger(n) || n < 0 || n > 20) throw notFound();
+        if (n > 20) throw notFound();
         slot = n;
         image = await this.productImage(id, n);
       }
