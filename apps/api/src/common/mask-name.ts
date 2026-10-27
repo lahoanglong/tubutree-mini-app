@@ -24,10 +24,10 @@ function looksLikeContact(name: string): boolean {
 }
 
 const BRACKETED = /[([{][^)\]}]*[)\]}]/gu;
-const EDGE_NON_LETTERS = /^[^\p{L}\p{M}]+|[^\p{L}\p{M}]+$/gu;
+const NON_LETTERS = /[^\p{L}\p{M}]+/u;
 
 /**
- * Các từ chữ của tên để chọn từ hiển thị: bỏ phần trong ngoặc, emoji và dấu câu; tách theo mọi khoảng trắng gồm cả ký tự rộng 0 (U+200B).
+ * Các từ chữ của tên để chọn từ hiển thị: bỏ phần trong ngoặc, emoji và dấu câu; tách ở mọi đoạn ký tự không phải chữ hay dấu kết hợp (khoảng trắng, chấm, gạch, gạch dưới, ・, ký tự rộng 0 hay U+00AD), để tên dính liền bằng dấu phân cách vẫn che được.
  * Rỗng khi không có tên dùng được (trống, toàn ký hiệu, có chữ số hoặc "@").
  */
 function nameWords(fullName: string | null | undefined): string[] {
@@ -35,8 +35,7 @@ function nameWords(fullName: string | null | undefined): string[] {
   if (!name || looksLikeContact(name)) return [];
   return name
     .replace(BRACKETED, ' ')
-    .split(/[\s\u200B-\u200D\u2060\uFEFF]+/u)
-    .map((w) => w.replace(EDGE_NON_LETTERS, ''))
+    .split(NON_LETTERS)
     .filter(Boolean);
 }
 
