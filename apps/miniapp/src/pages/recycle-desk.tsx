@@ -14,7 +14,7 @@ import type {
   WasteShortfallReason,
 } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, deskConfirm, deskFulfilGift, deskLookup, deskReject, getDeskPoints } from '../services/waste-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { extractWasteLookupCode, normalizeWasteLookupCode } from '@tubutree/app-core/waste-code-input';
 import { scanCode } from '../services/zmp-bridge';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -96,7 +96,7 @@ function QuotaCard({ point }: { point: WasteDeskPointDTO }) {
         {point.quota ? (
           <>
             <Text variant="body-md" as="div">{`Đã dùng ${formatNumber(point.quota.used)} / ${formatNumber(point.quota.limit)} điểm`}</Text>
-            {point.quota.limit > 0 && <ProgressBar value={point.quota.used} max={point.quota.limit} />}
+            {point.quota.limit > 0 && <ProgressBar value={point.quota.used} max={point.quota.limit} ariaLabel="Mức dùng hạn mức điểm nhận rác" />}
             <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{`Còn lại ${formatNumber(point.quota.remaining)} điểm`}</Text>
           </>
         ) : (
@@ -507,7 +507,7 @@ function DeskContent() {
   const cfg = usePublicConfig();
   if (pointsQ.isPending) return <Skeleton height={120} />;
   if (pointsQ.isError) {
-    return <ErrorState message={getErrorMessage(pointsQ.error)} onRetry={() => void pointsQ.refetch()} retrying={pointsQ.isFetching} />;
+    return <ErrorState message={getLoadErrorMessage(pointsQ.error)} onRetry={() => void pointsQ.refetch()} retrying={pointsQ.isFetching} />;
   }
   if (pointsQ.data.length === 0) {
     // Máy chủ bỏ qua điểm của đại lý khi chương trình tắt, nên danh sách rỗng lúc đó không có nghĩa là mất quyền.

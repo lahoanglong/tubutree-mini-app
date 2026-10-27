@@ -6,7 +6,7 @@ import { homeCopy } from '@tubutree/app-core/home-copy';
 import { vi } from '../../i18n/vi';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { usePurchasedItems } from '../../hooks/use-purchased-items';
-import { getErrorMessage } from '../../services/api';
+import { getLoadErrorMessage } from '../../services/api';
 import { fetchActiveFlashSales, type PurchasedItem } from '../../services/shop-api';
 import { serverNow } from '../../utils/server-clock';
 import { haptic } from '../../utils/haptic';
@@ -123,7 +123,7 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
       {q.isError && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '0 16px 8px' }}>
           <Text variant="body-sm" tone="secondary" style={{ minWidth: 0 }}>
-            {getErrorMessage(q.error)}
+            {getLoadErrorMessage(q.error)}
           </Text>
           <Button
             variant="secondary"

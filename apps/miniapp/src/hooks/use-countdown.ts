@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react';
+import { formatCountdown } from '@tubutree/app-core/countdown-format';
 import { serverNow } from '../utils/server-clock';
 
-/** "Xh YYm" cho `ms` còn lại, làm tròn LÊN theo phút (phút cuối không hiện "0h 00m" khi chưa hết giờ). Hết giờ → ''. */
-export function formatCountdown(ms: number): string {
-  if (!(ms > 0)) return '';
-  const totalMin = Math.ceil(ms / 60_000);
-  return `${Math.floor(totalMin / 60)}h ${(totalMin % 60).toString().padStart(2, '0')}m`;
-}
+export { formatCountdown };
 
 /** Đếm ngược tới `target` (Date hoặc ISO string), cập nhật mỗi 30s. "Xh Ym"; '' nếu target null, không parse được hoặc đã qua. */
 export function useCountdown(target: Date | string | null): string {

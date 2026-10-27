@@ -29,7 +29,7 @@ export function OrderWaterCard({ info, shopHref }: { info: GameProfile['orderWat
             <ShoppingBag className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
             {t.title}
           </h2>
-          <p className="text-xs text-stone-600">{t.perOrder(info.perOrder, info.weeklyCap)}</p>
+          <p className="text-caption text-stone-600">{t.perOrder(info.perOrder, info.weeklyCap)}</p>
         </div>
         <Link href={shopHref} className={`${miniBtnSecondary} flex-none`}>
           {t.cta}
@@ -45,11 +45,11 @@ export function OrderWaterCard({ info, shopHref }: { info: GameProfile['orderWat
       >
         <div className="h-2 rounded-full bg-forest-600" style={{ width: `${pct}%` }} />
       </div>
-      <p data-testid="order-water-progress" className="mt-1.5 text-xs text-stone-700">
+      <p data-testid="order-water-progress" className="mt-1.5 text-caption text-stone-700">
         {got >= info.weeklyCap ? t.full : t.progress(got, info.weeklyCap)}
       </p>
       {claimed > 0 && (
-        <p data-testid="order-water-claimed" className="mt-1 text-xs font-semibold text-forest-700">
+        <p data-testid="order-water-claimed" className="mt-1 text-caption font-semibold text-forest-700">
           {t.claimedNow(claimed)}
         </p>
       )}

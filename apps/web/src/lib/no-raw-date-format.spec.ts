@@ -50,7 +50,6 @@ const NUMBER_TO_LOCALE_STRING: Record<string, { count: number; why: string }> = 
   'components/admin/account-deletion-panel.tsx': { count: 1, why: 'pointsConvertedBalance (điểm không hết hạn)' },
   'components/admin/pos-screen.tsx': { count: 2, why: 'tổng Điểm Xanh của hội viên' },
   'lib/admin-config-forms.ts': { count: 2, why: 'cận min và max của ô cấu hình số nguyên' },
-  'lib/checkout-points.ts': { count: 1, why: 'group(n): nhóm nghìn của số điểm' },
   'lib/commission-rates.ts': { count: 1, why: 'formatRate: phần trăm hoa hồng' },
   'lib/dealer-accounts-client.ts': { count: 1, why: 'formatTierPct: phần trăm chiết khấu bậc đại lý' },
   'lib/format-vnd.ts': { count: 1, why: 'formatVnd: số tiền' },

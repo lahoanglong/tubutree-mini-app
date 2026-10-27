@@ -96,11 +96,11 @@ function LoginInner() {
       {!unavailable && (
         <p className="mt-3 text-xs text-stone-600">
           Bằng việc đăng nhập, bạn đồng ý với{' '}
-          <Link href="/chinh-sach/dieu-khoan" className="font-medium text-forest-700 underline underline-offset-2">
+          <Link href="/chinh-sach/dieu-khoan" className="tubu-inline-link font-medium text-forest-700 underline underline-offset-2">
             Điều khoản
           </Link>{' '}
           và{' '}
-          <Link href="/chinh-sach/bao-mat" className="font-medium text-forest-700 underline underline-offset-2">
+          <Link href="/chinh-sach/bao-mat" className="tubu-inline-link font-medium text-forest-700 underline underline-offset-2">
             Chính sách bảo mật
           </Link>
           .

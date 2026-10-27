@@ -42,7 +42,7 @@ export function BestSellerRail({ initial }: { initial?: PageResponse<ProductCard
           </Text>
         </button>
       </div>
-      <ScrollRow arrows label="Sản phẩm bán chạy" style={{ gap: 10, padding: '4px 16px 12px', margin: '0 -16px' }}>
+      <ScrollRow arrows label="Sản phẩm bán chạy" style={{ gap: 10, padding: '4px 16px 12px', margin: '0 -16px', maxWidth: 'none' }}>
         {q.isLoading
           ? Array.from({ length: BEST_SELLER_LIMIT }, (_, i) => (
               <div key={i} data-testid="catalog-tile-skeleton" aria-hidden="true" style={{ flex: `0 0 ${TILE_WIDTH}px`, width: TILE_WIDTH }}>

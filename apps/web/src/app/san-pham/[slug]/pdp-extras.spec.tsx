@@ -120,13 +120,13 @@ describe('PdpCoupons', () => {
     expect(unnamedControls(container)).toEqual([]);
     expect(smallTouchTargets(container)).toEqual([]);
   });
-  it('ở điện thoại mã xếp dọc, nút rộng hết hàng như Mini App', async () => {
+  it('ở điện thoại mã xếp thành hàng cuộn ngang, chip ôm nội dung như Mini App', async () => {
     mocks.http.get.mockResolvedValue([coupon('ALL')]);
     const { container } = mount(<PdpCoupons productId="p1" />);
     await flush();
-    expect(container.querySelector('ul')!.className).toContain('max-md:flex-col');
-    expect(container.querySelector('button')!.className).toContain('max-md:w-full');
-    expect(container.querySelector('li')!.className).toContain('max-md:min-w-0');
+    expect(container.querySelector('ul')!.className).toContain('max-md:overflow-x-auto');
+    expect(container.querySelector('ul')!.className).not.toContain('max-md:flex-col');
+    expect(container.querySelector('button')!.className).not.toContain('max-md:w-full');
   });
   it('chạm chép mã và báo mã đã có sẵn trong ví; không chép được thì cho khách tự ghi mã', async () => {
     mocks.http.get.mockResolvedValue([coupon('ALL')]);

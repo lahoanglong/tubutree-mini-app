@@ -37,7 +37,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StorefrontImageUpload } from './storefront-image-upload';
 import { StorefrontPreview } from './storefront-preview';
-import { PickerSheet, errText } from './storefront-sheets';
+import { PickerSheet, actErrText, errText } from './storefront-sheets';
 
 interface Props {
   /** null = chưa có gian hàng (API trả 404). */
@@ -143,7 +143,7 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
       await qc.invalidateQueries({ queryKey: ['my-storefront'] });
       onStarted();
     },
-    onError: (e) => setError(errText(e)),
+    onError: (e) => setError(actErrText(e)),
   });
 
   if (meQ.isLoading) return <Skeleton height={160} />;
@@ -212,7 +212,7 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
       await qc.invalidateQueries({ queryKey: ['my-storefront'] });
       onDone();
     },
-    onError: (e) => setSaveError(errText(e)),
+    onError: (e) => setSaveError(actErrText(e)),
   });
 
   const next = () => {
@@ -272,7 +272,7 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
   const [error, setError] = useState<string | null>(null);
   const items = sf.collections.flatMap((c) => c.items);
   const refresh = () => qc.invalidateQueries({ queryKey: ['my-storefront'] });
-  const fail = (e: unknown) => setError(errText(e));
+  const fail = (e: unknown) => setError(actErrText(e));
 
   const templateMut = useMutation({
     mutationFn: (categoryId: string) => applyStorefrontTemplate(coreHttp, categoryId),
@@ -388,7 +388,7 @@ function ReviewStep({ sf, onBack }: { sf: StorefrontEdit; onBack: () => void }) 
       void qc.invalidateQueries({ queryKey: storefrontQuestsQuery(coreHttp).queryKey });
       await qc.invalidateQueries({ queryKey: ['my-storefront'] });
     },
-    onError: (e) => setError(errText(e)),
+    onError: (e) => setError(actErrText(e)),
   });
 
   return (

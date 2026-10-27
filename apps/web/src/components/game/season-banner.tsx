@@ -15,9 +15,9 @@ export function SeasonBanner({ season }: { season: Season }) {
           {season.featuredSpecies.map((s) => s.emoji).join(' ')}
         </span>
       </div>
-      {(season.theme || season.region) && <div className="text-xs text-stone-700">{[season.theme, season.region].filter(Boolean).join(' · ')}</div>}
+      {(season.theme || season.region) && <div className="text-caption text-stone-700">{[season.theme, season.region].filter(Boolean).join(' · ')}</div>}
       {season.featuredSpecies.length > 0 && (
-        <div className="mt-0.5 text-xs text-stone-600">Loài nổi bật mùa này: {season.featuredSpecies.map((s) => s.name).join(', ')}</div>
+        <div className="mt-0.5 text-caption text-stone-600">Loài nổi bật mùa này: {season.featuredSpecies.map((s) => s.name).join(', ')}</div>
       )}
     </div>
   );
@@ -31,7 +31,7 @@ export function SeasonEmpty() {
         <Leaf className="h-4 w-4" aria-hidden="true" />
         {gameNewbieCopy.seasonEmpty.title}
       </span>
-      <p className="mt-0.5 text-xs text-stone-600">{gameNewbieCopy.seasonEmpty.body}</p>
+      <p className="mt-0.5 text-caption text-stone-600">{gameNewbieCopy.seasonEmpty.body}</p>
     </div>
   );
 }

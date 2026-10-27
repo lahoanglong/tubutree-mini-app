@@ -30,6 +30,7 @@ import {
   TOUCH_H,
   chipClass,
 } from '@/components/admin/ui';
+import { actionErrorText } from '@/lib/error-text';
 
 const FILTERS: { k: FulfilStatus | ''; label: string }[] = [
   { k: 'CONFIRMED', label: 'Chờ xử lý' },
@@ -151,7 +152,7 @@ export function FulfilOrderCard({ order: o }: { order: FulfilOrder }) {
       setPanel(null);
       void qc.invalidateQueries({ queryKey: ['merchant-fulfil-orders'] });
     },
-    onError: (e: unknown) => setError(e instanceof Error ? e.message : 'Không cập nhật được đơn.'),
+    onError: (e: unknown) => setError(actionErrorText(e)),
   });
   const busy = mut.isPending;
   const open = (p: Panel) => {

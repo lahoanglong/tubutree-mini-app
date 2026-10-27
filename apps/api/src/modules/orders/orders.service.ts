@@ -13,6 +13,7 @@ import { AffiliateService } from '../affiliate/affiliate.service';
 import { OrderReversalService, type ReversalResult } from './order-reversal.service';
 import { OrderStatusService } from './order-status.service';
 import { WastePickupHooks } from '../waste-exchange/pickup/waste-pickup-hooks.service';
+import { cancelReasonNote } from './cancel-reasons';
 import { parseRefundDestination, type RefundDestinationInput } from './refund-destination';
 import { announceBankRefund, announceDeletedAccountRefund, receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { refundNote } from './order-returns.service';
@@ -29,6 +30,8 @@ import { markReversalEffectsDone } from './reversal-effects';
 import { foldVietnamese } from '../catalog/search-text';
 import { orderLineReviews, type OrderLineReview } from '../reviews/review-eligibility';
 import { publicProductThumb } from '../../common/public-image';
+
+export type CancelOrderInput = RefundDestinationInput & { cancelReasonCode?: string; cancelReasonText?: string };
 
 export interface OrderListFilter {
   status?: OrderStatus;
@@ -79,6 +82,8 @@ export type OrderView = Omit<OrderWithItems, 'items' | BuyerHiddenOrderField> & 
   canCancel: boolean;
   /** Chỉ chi tiết đơn: Điểm Xanh tích của đơn thực sự đã thu lại do trả một phần (returnPointsTaken). */
   pointsReturnReversed?: number;
+  /** Chỉ chi tiết đơn: lúc đơn chạm từng trạng thái (ISO), từ sổ lịch sử; chỉ trạng thái + giờ, không ghi chú hay người thao tác. */
+  statusTimes?: Record<string, string>;
   /**
    * Đơn chờ thanh toán mà hàng đã bàn giao vận chuyển (Pancake đã gửi hàng, hệ thống thôi tự huỷ): Tubu xử lý tay với khách.
    * App/web thay hạn thanh toán, nút trả tiền và nút huỷ bằng câu trung tính "Tubu đang xử lý đơn này" (R5-SYNC-1).
@@ -241,18 +246,40 @@ export class OrdersService {
    * (cancel/repurchase/requestReturn) dùng detail() thô, không tốn thêm truy vấn; đơn trả ra cho khách vẫn qua forBuyer. */
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
-    const [[view], fulfilment, reviewOf, pointsReturnReversed] = await Promise.all([
+    const [[view], fulfilment, reviewOf, pointsReturnReversed, statusTimes] = await Promise.all([
       this.attachItemMedia([order], userId),
       this.fulfilmentOf(order),
       orderLineReviews(this.prisma, order),
       order.status === 'DELIVERED' || order.status === 'RETURNED' ? returnPointsTaken(this.prisma, order) : undefined,
+      this.statusTimesOf(order),
     ]);
     return {
       ...view!,
+      statusTimes,
       items: view!.items.map((it) => ({ ...it, ...reviewOf(it.id) })),
       ...fulfilment,
       pointsReturnReversed,
     };
+  }
+
+  /**
+   * Lúc đơn chạm từng trạng thái, cho dòng giờ dưới mỗi bước hành trình. Chỉ trạng thái + giờ: không trả ghi chú hay người thao tác
+   * của sổ lịch sử. Lần đầu chạm mỗi trạng thái; dòng chuyển về chính nó (admin chạy lại việc sau giao) bỏ qua.
+   */
+  private async statusTimesOf(order: { id: string }): Promise<Record<string, string>> {
+    const rows = await this.prisma.orderStatusHistory.findMany({
+      where: { orderId: order.id },
+      orderBy: { createdAt: 'asc' },
+      // Dòng đầu tiên của mỗi trạng thái, không giới hạn số dòng: lịch sử dài (qua lại nhiều lần) không làm rớt trạng thái mới nhất.
+      distinct: ['toStatus'],
+      select: { fromStatus: true, toStatus: true, createdAt: true },
+    });
+    const times: Record<string, string> = {};
+    for (const r of rows) {
+      if (r.fromStatus === r.toStatus || r.toStatus in times) continue;
+      times[r.toStatus] = r.createdAt.toISOString();
+    }
+    return times;
   }
 
   private async fulfilmentOf(order: {
@@ -336,12 +363,12 @@ export class OrdersService {
     }));
   }
 
-  async cancel(userId: string, code: string, refundInput: RefundDestinationInput = {}) {
+  async cancel(userId: string, code: string, refundInput: CancelOrderInput = {}) {
     const order = await this.cancelOrder(userId, code, refundInput);
     return { ...forBuyer(order), canCancel: customerCancelBlock(order, userId) === null, manualHandling: isManualHandling(order) };
   }
 
-  private async cancelOrder(userId: string, code: string, refundInput: RefundDestinationInput) {
+  private async cancelOrder(userId: string, code: string, refundInput: CancelOrderInput) {
     // Kiểm tra sớm trên ảnh chụp (thông báo thân thiện, không mở tx vô ích). Ảnh chụp này đọc NGOÀI tx
     // nên KHÔNG được dùng để quyết định ghi — tx bên dưới khoá dòng đơn rồi kiểm tra lại trên dữ liệu thật.
     const order = await this.detail(userId, code);
@@ -390,6 +417,7 @@ export class OrdersService {
           toStatus: 'CANCELLED',
           actorType: 'CUSTOMER',
           actorId: userId,
+          note: cancelReasonNote(refundInput.cancelReasonCode, refundInput.cancelReasonText),
         },
       });
       // Hoàn ví/Điểm Xanh + restock + release flash quota — logic dùng chung với admin.reviewReturn/

@@ -1,5 +1,5 @@
 import { vi } from '../../i18n/vi';
-import { getErrorMessage } from '../../services/api';
+import { getLoadErrorMessage } from '../../services/api';
 import { Card } from '../ui/card';
 import { ErrorState } from '../ui/empty-state';
 
@@ -22,7 +22,7 @@ export function HomePageError({ error, onRetry, retrying }: HomePageErrorProps) 
           variant="inline"
           showSupport
           title={vi.home.loadErrorTitle}
-          message={getErrorMessage(error)}
+          message={getLoadErrorMessage(error)}
           retrying={retrying}
           onRetry={() => void onRetry()}
         />

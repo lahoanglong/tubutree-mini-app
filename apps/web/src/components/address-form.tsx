@@ -15,6 +15,7 @@ import {
   type AddressPayload,
 } from '@/lib/address-form';
 import { ui } from '@/lib/guest-ui';
+import { actionErrorText } from '@/lib/error-text';
 
 const EMPTY_FORM: AddressFormValues = { recipient: '', phone: '', street: '' };
 
@@ -107,7 +108,7 @@ export function AddressForm({
       />
       {save.isError && (
         <p role="alert" className={ui.error}>
-          {save.error instanceof Error ? save.error.message : 'Không lưu được địa chỉ. Vui lòng thử lại.'}
+          {actionErrorText(save.error)}
         </p>
       )}
       <div className="flex gap-2">

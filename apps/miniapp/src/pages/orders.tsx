@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { fetchOrders } from '../services/shop-api';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { getNewCustomerOffer } from '../services/account-api';
 import { useAuthStore } from '../store/auth';
 import { AuthGate } from '../components/ui/auth-gate';
@@ -91,7 +91,7 @@ export default function OrdersPage() {
             <LineItemSkeleton />
           </div>
         ) : orders.isError && list.length === 0 ? (
-          <ErrorState message={getErrorMessage(orders.error)} onRetry={() => void orders.refetch()} />
+          <ErrorState message={getLoadErrorMessage(orders.error)} onRetry={() => void orders.refetch()} />
         ) : list.length === 0 ? (
           tab === 'all' ? (
             <EmptyState

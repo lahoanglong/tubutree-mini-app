@@ -25,8 +25,13 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
    */
   async validate(payload: JwtPayload): Promise<JwtPayload> {
     const state = await this.sessions.get(payload.sub);
-    if (!state) throw new UnauthorizedException('Phiên đăng nhập không còn hợp lệ.');
-    if (state.isBlocked) throw new UnauthorizedException('Tài khoản đã bị khoá.');
+    if (!state) throw new UnauthorizedException({
+        statusCode: 401,
+        error: 'Unauthorized',
+        code: 'SESSION_EXPIRED',
+        message: 'Phiên đăng nhập không còn hợp lệ.',
+      });
+    if (state.isBlocked) throw new UnauthorizedException({ statusCode: 401, error: 'Unauthorized', code: 'ACCOUNT_BLOCKED', message: 'Tài khoản đã bị khoá.' });
     const staffPermissions = state.role === 'STAFF' ? (state.staffPermissions ?? []) : [];
     if (state.role === payload.role) return { ...payload, staffPermissions };
     return { ...payload, role: state.role, ...roleClaims(state.role), staffPermissions };

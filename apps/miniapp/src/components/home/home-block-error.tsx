@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 import { vi } from '../../i18n/vi';
-import { getErrorMessage } from '../../services/api';
+import { getLoadErrorMessage } from '../../services/api';
 import { haptic } from '../../utils/haptic';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -41,7 +41,7 @@ export function HomeBlockError({ title, error, onRetry, retrying, seeAllRow = tr
       <Card variant="outline" padding={12}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <Text variant="body-sm" tone="secondary" style={{ minWidth: 0 }}>
-            {getErrorMessage(error)}
+            {getLoadErrorMessage(error)}
           </Text>
           <Button
             variant="secondary"

@@ -13,6 +13,7 @@ import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { formatVnDate, nextRunAfterIntervalChange, SUBSCRIPTION_INTERVAL_WEEKS, vnDateOf } from '@/lib/subscription-options';
 import { AddressPicker, PaymentMethodPicker, SectionLabel } from './subscription-options';
+import { actionErrorText } from '@/lib/error-text';
 
 /** Trần ở client chỉ để nút + không chạy vô hạn; còn hàng hay không do API kiểm khi sinh đơn kỳ. */
 const MAX_QTY = 99;
@@ -67,7 +68,7 @@ export function SubscriptionEditSheet({ sub, onClose, onSaved }: { sub: Subscrip
         <div className="flex flex-col gap-2">
           {save.isError && (
             <p role="alert" className={ui.error}>
-              {save.error instanceof Error ? save.error.message : 'Không lưu được. Vui lòng thử lại.'}
+              {actionErrorText(save.error)}
             </p>
           )}
           <button type="button" disabled={!dirty || save.isPending} onClick={() => save.mutate()} className={`${ui.btnPrimary} w-full`}>

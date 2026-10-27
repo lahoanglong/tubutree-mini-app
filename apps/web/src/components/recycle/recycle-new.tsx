@@ -27,7 +27,7 @@ import {
   wasteStepCopy,
   writeLastPointId,
 } from '@tubutree/app-core/waste-copy';
-import { friendlyError as errText } from '@/lib/friendly-error';
+import { friendlyActionError as actErrText, friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { useDebounced } from '@/lib/use-debounced';
@@ -521,7 +521,7 @@ export function RecycleNew() {
       )}
       {create.isError && (
         <p role="alert" className={ui.error}>
-          {errText(create.error)}
+          {actErrText(create.error)}
         </p>
       )}
       <Actions label="Tạo yêu cầu đổi rác" summary={blockedHint ? <p className="text-sm text-stone-600">{blockedHint}</p> : undefined}>

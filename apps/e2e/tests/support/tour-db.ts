@@ -1,3 +1,4 @@
+import { DEMO_BRAND_CONTENT } from './demo-brand';
 import path from 'path';
 
 /**
@@ -14,10 +15,7 @@ export async function seedTourPublicData(): Promise<void> {
   const { PrismaClient } = require(path.resolve(__dirname, '../../../api/node_modules/@prisma/client')) as { PrismaClient: new (o: unknown) => any };
   const prisma = new PrismaClient({ datasources: { db: { url } } });
   try {
-    const data = {
-      tagline: 'Mỹ phẩm thiên nhiên từ rau má', story: 'Visante khởi nguồn từ vùng đất Tây Nguyên.', origin: 'Việt Nam', isVerified: true, isPublished: true,
-      followerCount: 12, certifications: [{ code: 'VEGAN', label: 'Vegan', proofUrl: null, verified: true }],
-    };
+    const data = DEMO_BRAND_CONTENT;
     // Seed đã có nhãn Visante nhưng chưa công khai; chỉ bật công khai và thêm nội dung giới thiệu.
     const brand = await prisma.brand.upsert({ where: { slug: 'visante' }, update: data, create: { slug: 'visante', name: 'Visante', ...data } });
     await prisma.product.updateMany({ where: { brand: 'Visante' }, data: { brandId: brand.id } });

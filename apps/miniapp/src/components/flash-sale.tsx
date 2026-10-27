@@ -158,12 +158,16 @@ export function FlashSale() {
                     {formatVnd(was)}
                   </Text>
                 )}
-                <div style={{ marginTop: 4 }}>
-                  <ProgressBar value={soldPct} max={100} tone="flash" />
-                </div>
-                <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-                  {vi.flashSale.soldPct(soldPct)}
-                </Text>
+                {soldPct > 0 && (
+                  <>
+                    <div style={{ marginTop: 4 }}>
+                      <ProgressBar value={soldPct} max={100} tone="flash" ariaLabel="Tỉ lệ đã bán" />
+                    </div>
+                    <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
+                      {vi.flashSale.soldPct(soldPct)}
+                    </Text>
+                  </>
+                )}
               </div>
             </div>
           );

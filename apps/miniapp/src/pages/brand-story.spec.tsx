@@ -2,14 +2,14 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ navigate: vi.fn() }));
+const mocks = vi.hoisted(() => ({ navigate: vi.fn(), search: '' }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) =>
     visible ? <div data-testid="sheet">{children}</div> : null,
   useNavigate: () => mocks.navigate,
-  useLocation: () => ({ pathname: '/brand-story', search: '', hash: '', state: null, key: 'k' }),
+  useLocation: () => ({ pathname: '/brand-story', search: mocks.search, hash: '', state: null, key: 'k' }),
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -25,7 +25,20 @@ const tile = (brand: string) => {
 };
 
 describe('BrandStoryPage — Hành trình nguyên liệu dẫn đúng danh sách (C-079)', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.search = '';
+  });
+
+  it('?brand=<id> mở sẵn sheet của nhãn đó; id lạ thì không mở', () => {
+    mocks.search = '?brand=fuwa3e';
+    const { unmount } = render(<BrandStoryPage />);
+    expect(within(screen.getByTestId('sheet')).getByRole('button', { name: /Khám phá sản phẩm Fuwa3e/ })).toBeInTheDocument();
+    unmount();
+    mocks.search = '?brand=khong-co';
+    render(<BrandStoryPage />);
+    expect(screen.queryByTestId('sheet')).toBeNull();
+  });
 
   it.each(BRAND_ORIGINS.map((o) => [o.brand, o.catalogBrand] as const))(
     'bấm %s rồi "Khám phá sản phẩm" mở /browse?brand= theo tên nhãn trong catalog (%s)',

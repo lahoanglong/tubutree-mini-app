@@ -5,7 +5,7 @@ import { useInfiniteQuery, useQuery, type UseInfiniteQueryResult, type InfiniteD
 import { walletCopy } from '@tubutree/app-core/account-copy';
 import { CheckCircle2, ChevronRight, Clock, History, Leaf, ShoppingBag, Wallet, type LucideIcon } from 'lucide-react';
 import { getWallet, getWalletTransactions, getLoyalty, type WalletTxnPage } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -79,7 +79,7 @@ export default function WalletPage() {
         pageSkeleton
       ) : walletQ.isError && !w ? (
         <div style={{ padding: 24 }}>
-          <ErrorState message={getErrorMessage(walletQ.error)} onRetry={() => void walletQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(walletQ.error)} onRetry={() => void walletQ.refetch()} />
         </div>
       ) : w ? (
         <>
@@ -242,7 +242,7 @@ function WalletHistory({ q }: { q: UseInfiniteQueryResult<InfiniteData<WalletTxn
           <Skeleton height={44} />
         </div>
       ) : q.isError ? (
-        <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
       ) : rows.length === 0 ? (
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
           Chưa có biến động nào trong Ví.

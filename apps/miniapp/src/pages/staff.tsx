@@ -20,7 +20,7 @@ import {
   type Shift,
   type ShiftTemplate,
 } from '../services/shifts-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -484,7 +484,7 @@ function StaffHub() {
 
         {(tplQ.isLoading || shiftsQ.isLoading) && <Skeleton height={120} radius="var(--radius-card)" />}
         {shiftsQ.isError && (
-          <ErrorState message={getErrorMessage(shiftsQ.error)} onRetry={() => void shiftsQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(shiftsQ.error)} onRetry={() => void shiftsQ.refetch()} />
         )}
 
         {shiftsQ.data &&

@@ -58,10 +58,27 @@ export function timelineIndex(status: string, steps: readonly string[] = TIMELIN
  * Mốc thời gian đầu trang chi tiết đơn. `createdAt` là giờ ĐẶT; để nó đứng cạnh "Giao thành công" mà không có nhãn
  * thì khách đọc thành giờ giao. Đơn đã giao có mốc giao thật thì hiện mốc đó.
  */
-export function orderStamp(o: { status: string; createdAt: string; deliveredAt?: string | null }): { label: string; at: string } {
+export function orderStamp(o: {
+  status: string;
+  createdAt: string;
+  deliveredAt?: string | null;
+  statusTimes?: Partial<Record<string, string>>;
+}): { label: string; at: string } {
+  if (o.status === 'CANCELLED' && o.statusTimes?.CANCELLED) return { label: 'Huỷ lúc', at: o.statusTimes.CANCELLED };
   return o.status === 'DELIVERED' && o.deliveredAt
     ? { label: 'Giao lúc', at: o.deliveredAt }
     : { label: 'Đặt lúc', at: o.createdAt };
+}
+
+/** Giờ một bước của hành trình đã tới; bước đầu tiên không có dòng lịch sử thì lấy giờ đặt. Bước chưa tới: không có giờ. */
+export function stepTime(
+  o: { createdAt: string; statusTimes?: Partial<Record<string, string>> },
+  step: string,
+  index: number,
+  current: number,
+): string | null {
+  if (index > current) return null;
+  return o.statusTimes?.[step] ?? (index === 0 ? o.createdAt : null);
 }
 
 /**

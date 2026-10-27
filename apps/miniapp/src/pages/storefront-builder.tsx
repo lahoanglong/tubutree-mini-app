@@ -14,7 +14,7 @@ import {
 } from '../services/storefront-api';
 import { STOREFRONT_REVIEW_PROMISE, shouldStartSignupWizard, storefrontPublishCopy,
   storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
@@ -78,7 +78,7 @@ export default function StorefrontBuilderPage() {
   if (sfQ.isError && !sfQ.data && status !== 404) {
     return (
       <BuilderShell>
-        <div style={{ padding: 24 }}><ErrorState message={getErrorMessage(sfQ.error)} onRetry={() => void sfQ.refetch()} /></div>
+        <div style={{ padding: 24 }}><ErrorState message={getLoadErrorMessage(sfQ.error)} onRetry={() => void sfQ.refetch()} /></div>
       </BuilderShell>
     );
   }
@@ -688,7 +688,7 @@ function QuestSection() {
               )}
             </div>
             <div style={{ marginTop: 6 }}>
-              <ProgressBar value={pct} max={100} />
+              <ProgressBar value={pct} max={100} ariaLabel={`${q.title}: tiến độ nhiệm vụ`} />
             </div>
           </div>
         );

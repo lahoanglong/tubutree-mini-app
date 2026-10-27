@@ -23,7 +23,12 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   // Lỗi do chiến lược ném (ví dụ tài khoản bị khoá) đã có chữ Việt riêng nên giữ nguyên.
   override handleRequest<TUser>(err: unknown, user: TUser | false): TUser {
     if (err) throw err;
-    if (!user) throw new UnauthorizedException('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.');
+    if (!user) throw new UnauthorizedException({
+        statusCode: 401,
+        error: 'Unauthorized',
+        code: 'SESSION_EXPIRED',
+        message: 'Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.',
+      });
     return user;
   }
 }

@@ -219,11 +219,12 @@ test.describe('Buy-flow 4b — bố cục 320/375/390, vùng chạm, khung chờ
         const chip = page.getByRole('group', { name: 'Sắp xếp' }).getByRole('button', { name, exact: true });
         const hit = await chip.evaluate((el) => {
           const r = el.getBoundingClientRect();
+          if (r.height < 44) return { above: false, below: false, height: r.height };
           const x = r.left + r.width / 2;
           const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
-          return { above: at(r.top - 3), below: at(r.bottom + 3) };
+          return { above: at(r.top + 2), below: at(r.bottom - 2), height: r.height };
         });
-        expect(hit, `"${name}": vùng chạm phải phủ ≥ 44px theo chiều dọc`).toEqual({ above: true, below: true });
+        expect(hit, `"${name}": chip cao ≥ 44px và vùng chạm phủ trọn chiều dọc`).toMatchObject({ above: true, below: true });
       }
       await page.screenshot({ path: test.info().outputPath(`browse-4b-${width}.png`) });
 

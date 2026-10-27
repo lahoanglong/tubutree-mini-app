@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
 import { getWasteCatalogue, getWasteMe, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { getLoyaltyRewards } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { useRecycleLogin } from '../hooks/use-recycle-login';
 import { WasteItemThumb } from '../components/waste-item-thumb';
@@ -262,7 +262,7 @@ export default function RecyclePage() {
       loginBar(guestLogin),
     );
   }
-  if (meQ.isError || !me) return shell(<ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />);
+  if (meQ.isError || !me) return shell(<ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />);
 
   const requestsBlock = <RequestsBlock me={me} onOpen={(id) => navigate(`/recycle/r/${id}`)} />;
   // Kho vẫn mở quầy khi chương trình tạm dừng hoặc khách bị khoá (15.1), nên lối vào không phụ thuộc hai nhánh đó.

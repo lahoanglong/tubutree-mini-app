@@ -537,6 +537,17 @@ describe('Thanh toán chuyển khoản: nút Kiểm tra khi phiên hết hạn (
     expect(screen.getByAltText('VietQR')).toBeInTheDocument();
   });
 
+  it('401 mã SESSION_EXPIRED (lời máy chủ viết tiếng Việt): vẫn là câu của màn này, mời bấm Kiểm tra lại', async () => {
+    const expired = new HttpError('x', 'ERR_BAD_REQUEST', {
+      status: 401, data: { code: 'SESSION_EXPIRED', message: 'Phiên đăng nhập không còn hợp lệ.' },
+    });
+    mocks.getBankQr.mockResolvedValueOnce(QR).mockRejectedValue(expired);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Tôi đã chuyển khoản/ }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    expect((mocks.openSnackbar.mock.calls[0]![0] as { text: string }).text).toMatch(/rồi bấm Kiểm tra nhé/);
+  });
+
   it('401 kèm lý do cụ thể của máy chủ (tài khoản bị khoá): hiện đúng lý do, không nói chung chung là hết phiên', async () => {
     const blocked = new HttpError('x', 'ERR_BAD_REQUEST', {
       status: 401, data: { message: 'Tài khoản đã bị khoá.' },

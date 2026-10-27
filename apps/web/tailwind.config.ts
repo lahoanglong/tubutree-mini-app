@@ -83,6 +83,8 @@ const config: Config = {
   theme: {
     extend: {
       colors: { ...legacyV1Colors, promo, ...statusColors },
+      // Chữ phụ của Mini App (--type-caption-*): 13px, không phải 12px của text-xs.
+      fontSize: { caption: ['var(--type-caption-size)', { lineHeight: 'var(--type-caption-lh)' }] },
       borderRadius: { sm: '6px', md: '10px', lg: '16px', xl: '24px' },
       // Bóng đổ ấm của DS v2 (tokens.css --elevation-*); cần tokens.css được nạp trong globals.css.
       boxShadow: { card: 'var(--elevation-1)', raised: 'var(--elevation-2)' },

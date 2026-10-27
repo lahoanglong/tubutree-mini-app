@@ -24,7 +24,7 @@ import {
   type PayrollStatus,
 } from '../services/payroll-api';
 import { adminEditSession } from '../services/attendance-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { Badge, type BadgeTone } from '../components/ui/badge';
@@ -185,7 +185,7 @@ function PayrollSection() {
       />
 
       {payQ.isLoading && <Skeleton height={120} radius="var(--radius-card)" />}
-      {payQ.isError && <ErrorState message={getErrorMessage(payQ.error)} onRetry={() => void payQ.refetch()} />}
+      {payQ.isError && <ErrorState message={getLoadErrorMessage(payQ.error)} onRetry={() => void payQ.refetch()} />}
 
       {payQ.data?.map((row) => {
         const name = row.staff.fullName ?? row.staff.phone ?? 'NV';
@@ -536,7 +536,7 @@ function StaffSection() {
       </div>
 
       {staffQ.isLoading && <Skeleton height={80} radius="var(--radius-card)" />}
-      {staffQ.isError && <ErrorState message={getErrorMessage(staffQ.error)} onRetry={() => void staffQ.refetch()} />}
+      {staffQ.isError && <ErrorState message={getLoadErrorMessage(staffQ.error)} onRetry={() => void staffQ.refetch()} />}
 
       {staffQ.data && (
         <>
@@ -753,7 +753,7 @@ function ShiftsSection() {
       )}
 
       {shiftsQ.isLoading && <Skeleton height={120} radius="var(--radius-card)" />}
-      {shiftsQ.isError && <ErrorState message={getErrorMessage(shiftsQ.error)} onRetry={() => void shiftsQ.refetch()} />}
+      {shiftsQ.isError && <ErrorState message={getLoadErrorMessage(shiftsQ.error)} onRetry={() => void shiftsQ.refetch()} />}
       {shiftsQ.data && grouped.length === 0 && (
         <EmptyState art="box" heading="Không có ca nào trong tuần này" />
       )}

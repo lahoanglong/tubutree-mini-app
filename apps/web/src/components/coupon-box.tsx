@@ -90,7 +90,7 @@ export function CouponBox({
    * dấu này là số xem trước cũ hết đúng và phải hỏi lại.
    */
   previewKey?: string;
-  /** Chữ bên phải thẻ mã khi chưa áp mã nào: giỏ "Chọn mã", thanh toán "Xem mã" như Mini App. */
+  /** Chữ bên phải thẻ mã khi chưa áp mã nào: giỏ "Chọn mã", thanh toán cũng "Chọn mã" như Mini App. */
   actionLabel?: string;
   /** Thanh toán: dải phẳng tràn ngang như các khối khác của Mini App thay vì thẻ nổi của giỏ. */
   band?: boolean;
@@ -208,18 +208,18 @@ export function CouponBox({
               <span className="flex flex-col text-sm font-semibold text-stone-900">
                 Mã giảm giá
                 <span className="inline-flex items-center gap-2">
-                  <span className="rounded-control border border-dashed border-[var(--clay-500)] bg-[var(--clay-50)] px-1.5 py-0.5 text-xs font-bold text-[color:var(--clay-700)]">
+                  <span className="rounded-control border border-dashed border-[var(--clay-500)] bg-[var(--clay-50)] px-1.5 py-0.5 text-caption font-bold text-[color:var(--clay-700)]">
                     {currentCode}
                   </span>
                   {appliedDiscount > 0 && (
-                    <span className="text-xs font-normal text-success-fg">
+                    <span className="text-caption font-normal text-success-fg">
                       -{formatVnd(appliedDiscount)}
                     </span>
                   )}
                 </span>
               </span>
             </span>
-            <span className="inline-flex items-center gap-1 text-xs font-bold text-[color:var(--color-text-brand)]">
+            <span className="inline-flex items-center gap-1 text-caption font-medium text-[color:var(--color-text-brand)]">
               Thay đổi
               <ChevronRight
                 className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}
@@ -245,12 +245,12 @@ export function CouponBox({
             </span>
             <span className="flex flex-col">
               Mã giảm giá
-              <span className="text-xs font-normal text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">
+              <span className="text-caption font-normal text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">
                 Chọn hoặc nhập mã giảm giá
               </span>
             </span>
           </span>
-          <span className="inline-flex items-center gap-1 text-xs font-bold text-forest-700">
+          <span className="inline-flex items-center gap-1 text-caption font-medium text-forest-700">
             {actionLabel}
             <ChevronRight
               className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}
@@ -329,28 +329,28 @@ export function CouponBox({
                           <div className="break-all text-sm font-bold text-promo-fg">
                             {autoCouponName(c.code) ?? c.code}
                           </div>
-                          <div className="text-xs text-stone-800">{couponValueLabel(c)}</div>
+                          <div className="text-caption text-stone-800">{couponValueLabel(c)}</div>
                           {saving && (
-                            <div className="text-xs font-semibold text-success-fg">{saving}</div>
+                            <div className="text-caption font-semibold text-success-fg">{saving}</div>
                           )}
                           {serverBlocked && pv.reason && (
-                            <div className="text-xs font-medium text-warning-fg">{pv.reason}</div>
+                            <div className="text-caption font-medium text-warning-fg">{pv.reason}</div>
                           )}
                           {redundant && (
-                            <div className="text-xs text-stone-700">
+                            <div className="text-caption text-stone-700">
                               Đơn này đã miễn phí giao hàng
                             </div>
                           )}
                           {c.minOrder != null && (
                             <div
-                              className={`text-xs ${meetsMin ? 'text-stone-700' : 'font-medium text-warning-fg'}`}
+                              className={`text-caption ${meetsMin ? 'text-stone-700' : 'font-medium text-warning-fg'}`}
                             >
                               {meetsMin
                                 ? `Đơn tối thiểu ${formatVnd(c.minOrder)}`
                                 : `Cần đơn tối thiểu ${formatVnd(c.minOrder)} — mua thêm ${formatVnd(c.minOrder - subtotal)} để dùng mã này`}
                             </div>
                           )}
-                          <div className="text-xs text-stone-700">{couponExpiryLabel(c.endAt)}</div>
+                          <div className="text-caption text-stone-700">{couponExpiryLabel(c.endAt)}</div>
                         </div>
                         <button
                           type="button"
@@ -387,17 +387,17 @@ export function CouponBox({
         </div>
       )}
       {currentCode && notice && (
-        <p role="status" data-testid="coupon-notice" className="mt-2 text-xs text-warning-fg">
+        <p role="status" data-testid="coupon-notice" className="mt-2 text-caption text-warning-fg">
           {notice}
         </p>
       )}
       {applyWarning && !(currentCode && notice) && (
-        <p role="status" data-testid="coupon-apply-warning" className="mt-2 text-xs text-warning-fg">
+        <p role="status" data-testid="coupon-apply-warning" className="mt-2 text-caption text-warning-fg">
           {applyWarning}
         </p>
       )}
       {err && (
-        <p role="alert" className="mt-2 text-xs text-danger-fg">
+        <p role="alert" className="mt-2 text-caption text-danger-fg">
           {err}
         </p>
       )}

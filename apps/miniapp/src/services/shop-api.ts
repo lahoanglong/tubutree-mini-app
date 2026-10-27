@@ -1,3 +1,4 @@
+import type { CancelReasonBody } from '@tubutree/app-core/cancel-reasons';
 import { api } from './api';
 import { isHttpError } from './http';
 import { syncServerClock } from '../utils/server-clock';
@@ -626,6 +627,8 @@ export type OrderView = Omit<OrderDTO, 'items'> & {
   fulfilment?: { kind: 'TUBU' | 'MERCHANT'; name: string; phone: string | null };
   /** Các đơn khác cùng lần đặt (đơn bị tách theo nơi giao). */
   siblings?: { code: string; status: string; total: number; fulfillerName: string }[];
+  /** Giờ đơn chạm từng trạng thái lần đầu (ISO). API cũ chưa trả. */
+  statusTimes?: Partial<Record<string, string>>;
 };
 /** Response place-order: đơn chính, kèm danh sách đơn con khi lần đặt bị tách theo nơi giao. */
 export type PlacedOrder = OrderDTO & { splitOrders?: SplitOrderDTO[] };
@@ -691,8 +694,18 @@ export type RefundDestinationBody =
   | { refundMethod: 'WALLET' }
   | { refundMethod: 'BANK'; bankName: string; accountNumber: string; accountName: string };
 
-export const cancelOrder = (code: string, destination?: RefundDestinationBody) =>
-  api.post<OrderDTO>(`/orders/${code}/cancel`, destination ?? {}).then((r) => r.data);
+export async function cancelOrder(code: string, destination?: RefundDestinationBody, reason?: CancelReasonBody): Promise<OrderDTO> {
+  try {
+    return (await api.post<OrderDTO>(`/orders/${code}/cancel`, { ...destination, ...reason })).data;
+  } catch (err) {
+    // API cũ (lúc triển khai, hoặc quay về bản trước) từ chối trường lạ bằng 400 «Không nhận trường cancelReason…»: gửi lại không kèm lý do.
+    const data = isHttpError(err) ? (err.response?.data as { message?: unknown } | undefined) : undefined;
+    // Bộ kiểm tra dữ liệu của API trả message là mảng chuỗi; Nest mặc định cũng vậy.
+    const message = Array.isArray(data?.message) ? data.message.join(' ') : String(data?.message ?? '');
+    if (!reason || !isHttpError(err) || err.response?.status !== 400 || !/cancelReason/.test(message)) throw err;
+    return (await api.post<OrderDTO>(`/orders/${code}/cancel`, { ...destination })).data;
+  }
+}
 export type RepurchaseAddSource = 'repurchase' | 'reorder_notification';
 export type RepurchaseSkipReason = 'OUT_OF_STOCK' | 'INACTIVE' | 'NOT_APPROVED' | 'EXCEEDS_STOCK';
 export interface RepurchaseLineResult {

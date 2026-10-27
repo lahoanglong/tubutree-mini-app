@@ -12,7 +12,7 @@ export function SeasonLeaderboard({ rows }: { rows: SeasonLeaderRow[] }) {
           <span className="min-w-0 truncate text-sm text-stone-900">
             {r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : `#${r.rank}`} {r.nickname}
           </span>
-          <span className="flex-none text-xs font-semibold text-forest-700">{formatDrops(r.drops)}</span>
+          <span className="flex-none text-caption font-semibold text-forest-700">{formatDrops(r.drops)}</span>
         </div>
       ))}
     </GameCard>

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Share2 } from 'lucide-react';
 import { groupMemberStatus, groupMissing, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
 import { getGroupBuy, listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { fetchActiveFlashSales } from '../services/shop-api';
 import { serverNow } from '../utils/server-clock';
 import { formatVnd } from '../utils/format';
@@ -107,7 +107,7 @@ export default function GroupBuyPage() {
           <LineItemSkeleton />
         </div>
       ) : isError ? (
-        <ErrorState message={getErrorMessage(error)} onRetry={() => void refetch()} />
+        <ErrorState message={getLoadErrorMessage(error)} onRetry={() => void refetch()} />
       ) : invited || others.length > 0 || done.length > 0 ? (
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {invited && renderCard(invited, !invited.isOwner && !invited.joined)}
@@ -196,7 +196,7 @@ function GroupCard({
         </div>
       </div>
       <div style={{ marginTop: 8 }}>
-        <ProgressBar value={pct} max={100} />
+        <ProgressBar value={pct} max={100} ariaLabel={`${g.product.name}: tiến độ nhóm mua chung`} />
       </div>
       {g.status !== 'SUCCESS' && (
         <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>

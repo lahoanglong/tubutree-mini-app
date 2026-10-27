@@ -19,6 +19,7 @@ import { bankPaymentHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { addressText, formatVnDate, isStartDateAllowed, startDateRange } from '@/lib/subscription-options';
+import { actionErrorText } from '@/lib/error-text';
 
 const INTERVALS = [4, 6, 8, 10];
 
@@ -157,7 +158,7 @@ export function SubscribeSheet({
           <div>
             {create.isError && (
               <p role="alert" className={`mb-2 ${ui.error}`}>
-                {create.error instanceof Error ? create.error.message : 'Không tạo được lịch định kỳ.'}
+                {actionErrorText(create.error)}
               </p>
             )}
             <button

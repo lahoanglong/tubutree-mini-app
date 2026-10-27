@@ -205,8 +205,8 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
       await screen.findByText('Cobote bột giặt');
       expect(screen.getByText('Mua thêm 125.000đ để được miễn phí giao hàng')).toBeInTheDocument();
       expect(screen.queryByText('Bạn được miễn phí giao hàng 🌿')).toBeNull();
-      expect(screen.getByText('Tạm tính (đã giảm, chưa gồm phí giao hàng)').parentElement).toHaveTextContent('75.000đ');
-      expect(screen.getByText('Tạm tính (đã giảm, chưa gồm phí giao hàng)').parentElement).not.toHaveTextContent('233.000đ');
+      expect(screen.getByText('Tạm tính (đã giảm)').parentElement).toHaveTextContent('75.000đ');
+      expect(screen.getByText('Tạm tính (đã giảm)').parentElement).not.toHaveTextContent('233.000đ');
     });
 
     it('thanh dưới nêu đúng dòng hết hàng và cách gỡ (bỏ chọn hoặc xoá), không bảo giảm số lượng', async () => {

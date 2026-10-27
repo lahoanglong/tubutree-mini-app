@@ -6,6 +6,7 @@ import { listMerchantReturns, markMerchantReturnReceived, type MerchantReturn } 
 import { formatDateTime } from '@/lib/format-date';
 import { BTN_XS_PRIMARY, ToneBadge } from '@/components/admin/ui';
 import { EvidenceImages } from '@/components/admin/evidence-images';
+import { actionErrorText } from '@/lib/error-text';
 
 export const MERCHANT_RETURNS_KEY = ['merchant-returns'] as const;
 
@@ -45,7 +46,7 @@ export function MerchantReturnsSection({ showEmpty = false }: { showEmpty?: bool
       </p>
       {received.isError && (
         <p role="alert" className="text-sm text-danger-fg">
-          {received.error instanceof Error ? received.error.message : 'Không ghi nhận được.'}
+          {actionErrorText(received.error)}
         </p>
       )}
       <ul className="space-y-2">

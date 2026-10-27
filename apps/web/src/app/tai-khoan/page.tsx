@@ -33,7 +33,7 @@ import { PAGE_WIDE } from '@/lib/page-frame';
 
 const ORDER_ROW_TARGETS = ORDER_STATUS_ROW.filter((r) => r.counted && r.key !== 'subscriptions');
 const ROW =
-  'flex min-h-11 w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600';
+  'flex min-h-11 w-full items-center gap-[10px] px-3 py-3 text-left transition hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600';
 
 function RowBody({ item, unread = 0, dot = false }: { item: AccountMenuItem; unread?: number; dot?: boolean }) {
   const Icon = item.icon;
@@ -43,11 +43,11 @@ function RowBody({ item, unread = 0, dot = false }: { item: AccountMenuItem; unr
         <Icon className="h-5 w-5" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-stone-900">{item.label}</span>
-        {item.hint && <span className="block text-xs text-stone-600">{item.hint}</span>}
+        <span className="block text-[length:var(--type-body-sm-size)] font-semibold leading-[var(--type-body-sm-lh)] text-stone-900">{item.label}</span>
+        {item.hint && <span className="mt-0.5 block text-caption text-[color:var(--color-text-tertiary)]">{item.hint}</span>}
       </span>
       {unread > 0 && (
-        <span aria-hidden="true" className="flex h-[18px] min-w-[18px] flex-none items-center justify-center rounded-full bg-forest-600 px-1.5 text-xs font-bold text-stone-0">
+        <span aria-hidden="true" className="flex h-[18px] min-w-[18px] flex-none items-center justify-center rounded-full bg-forest-600 px-1.5 text-caption font-bold text-stone-0">
           {unread}
         </span>
       )}
@@ -226,14 +226,14 @@ export default function AccountPage() {
               </Heading>
               <span className="mt-1.5 flex flex-wrap items-center gap-2">
                 {tierName ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-forest-50 px-2 py-0.5 text-xs font-semibold text-forest-800">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-forest-50 px-2 py-0.5 text-caption font-semibold text-forest-800">
                     <Leaf className="h-3.5 w-3.5" aria-hidden="true" />
                     {tierName}
                   </span>
                 ) : !tierFailed ? (
                   <span aria-hidden="true" className="inline-block h-6 w-[76px] rounded-full" style={{ background: 'color-mix(in srgb, var(--color-text-inverse) 28%, transparent)' }} />
                 ) : null}
-                <span className="inline-flex items-center gap-1 rounded-full border border-stone-0 px-2 py-0.5 text-xs font-semibold">
+                <span className="inline-flex items-center gap-1 rounded-full border border-stone-0 px-2 py-0.5 text-caption font-semibold">
                   <Pencil className="h-3 w-3" aria-hidden="true" />
                   {homeCopy.profile.editProfile}
                   <ChevronRight className="h-3 w-3" aria-hidden="true" />
@@ -243,11 +243,11 @@ export default function AccountPage() {
           </Link>
           {tierFailed && (
             <div role="alert" className="mt-2 flex items-center justify-between gap-2">
-              <span className="text-xs">{homeCopy.member.tierFailed}</span>
+              <span className="text-caption">{homeCopy.member.tierFailed}</span>
               <button
                 type="button"
                 onClick={() => void loyaltyQ.refetch()}
-                className="tubu-press -my-3 -mx-1.5 min-h-11 px-1.5 text-xs font-bold underline"
+                className="tubu-press -my-3 -mx-1.5 min-h-11 px-1.5 text-caption font-bold underline"
               >
                 {homeCopy.member.retry}
               </button>
@@ -337,7 +337,7 @@ export default function AccountPage() {
                   {homeCopy.profile.referralShare}
                 </button>
               </div>
-              <p role="status" className={copyMsg ? 'mt-1.5 text-xs text-stone-600' : 'sr-only'}>
+              <p role="status" className={copyMsg ? 'mt-1.5 text-caption text-stone-600' : 'sr-only'}>
                 {copyMsg ?? ''}
               </p>
             </Card>
@@ -346,7 +346,7 @@ export default function AccountPage() {
 
         {menu.map((section, gi) => (
           <section key={section.group} aria-labelledby={`account-g${gi}`} className="mx-4 mt-3">
-            <h2 id={`account-g${gi}`} className="mb-1.5 ml-1 text-xs font-semibold uppercase tracking-wide text-[color:var(--color-text-tertiary)]">
+            <h2 id={`account-g${gi}`} className="mb-1.5 ml-1 text-caption font-semibold uppercase tracking-wide text-[color:var(--color-text-tertiary)]">
               {section.group}
             </h2>
             <ul className="divide-y divide-[var(--color-border-subtle)] overflow-hidden rounded-card bg-[var(--color-bg-surface)] shadow-[var(--elevation-1)]">

@@ -13,7 +13,7 @@ import {
   type UnavailableCartLine,
 } from '../services/shop-api';
 import { cartPreviewKey, cartProductIds } from '../utils/coupon-scope';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { QuantitySelector } from '../components/ui/quantity-selector';
@@ -176,7 +176,7 @@ export default function CartPage() {
   if (!summary) {
     return (
       <Shell>
-        <ErrorState message={getErrorMessage(cart.error)} onRetry={() => void cart.refetch()} />
+        <ErrorState message={getLoadErrorMessage(cart.error)} onRetry={() => void cart.refetch()} />
       </Shell>
     );
   }
@@ -487,7 +487,7 @@ function CartLineRow({
             <Badge tone="promo" size="sm" icon={Zap}>
               {vi.flashSale.badge}
             </Badge>
-            {line.soldPct != null && Number.isFinite(line.soldPct) && (
+            {line.soldPct != null && Number.isFinite(line.soldPct) && clampPercent(line.soldPct) > 0 && (
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                 {vi.flashSale.soldPct(clampPercent(line.soldPct))}
               </Text>

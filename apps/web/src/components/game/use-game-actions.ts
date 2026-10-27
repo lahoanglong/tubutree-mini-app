@@ -156,6 +156,7 @@ export function useGameActions({
       return r;
     } catch (e) {
       notify(errText(e), 'error');
+      if (e instanceof NetworkError && e.timedOut) refresh();
       throw e;
     }
   };

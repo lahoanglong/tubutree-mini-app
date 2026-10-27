@@ -15,6 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { IsUploadedImage } from '../../../common/uploaded-image';
+import { CANCEL_REASON_CODES, type CancelReasonCode } from '../cancel-reasons';
 import { RETURN_REASON_CODES, type ReturnReasonCode } from '../return-reasons';
 
 /** Trường nơi nhận tiền hoàn dùng chung cho huỷ đơn, trả hàng và chọn nơi nhận khoản tiền về muộn (D2). */
@@ -26,7 +27,10 @@ export class RefundDestinationDto {
 }
 
 /** Body tuỳ chọn của POST /orders/:code/cancel — app bản cũ gửi rỗng (hoàn về Ví như trước). */
-export class CancelOrderDto extends RefundDestinationDto {}
+export class CancelOrderDto extends RefundDestinationDto {
+  @IsOptional() @IsIn(CANCEL_REASON_CODES) cancelReasonCode?: CancelReasonCode;
+  @IsOptional() @IsString() @MaxLength(200) cancelReasonText?: string;
+}
 
 export class ChooseRefundDestinationDto {
   @IsIn(['WALLET', 'BANK']) refundMethod!: 'WALLET' | 'BANK';

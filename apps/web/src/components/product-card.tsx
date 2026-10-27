@@ -45,7 +45,7 @@ export default function ProductCard({ product, priority = false }: { product: P;
           {!soldOut && (
             <CardSaleBadge
               product={product}
-              className="absolute left-2.5 top-2.5 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-900 shadow-card"
+              className="absolute left-2.5 top-2.5 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-900 shadow-card max-md:[&:not([data-flash])]:bg-promo-bg max-md:[&:not([data-flash])]:text-promo-fg max-md:[&:not([data-flash])]:shadow-none"
             />
           )}
 
@@ -75,19 +75,17 @@ export default function ProductCard({ product, priority = false }: { product: P;
             originalClassName="text-xs text-stone-500 line-through"
           />
 
-          {/* Sao hiện cả khi chưa có đánh giá ("★ Mới" như Mini App); số sao chỉ khi có đánh giá THẬT, không khoe ★5.0 giả. */}
+          {/* Số sao chỉ khi có đánh giá THẬT (không khoe ★5.0 giả, không dán nhãn "Mới" cho mọi món); chưa có đánh giá thì chỉ còn lượt bán, như Shopee. */}
           <div data-testid="card-meta" className="order-1 mt-1 flex items-center gap-1 text-xs text-stone-600 md:order-2 md:mt-auto md:justify-between md:pt-2">
             {reviewed ? (
               <span className="font-medium text-stone-700">
                 <span className="text-honey-500">★</span>
                 {` ${(product.ratingAvg ?? 0).toFixed(1)} (${product.reviewCount})`}
               </span>
-            ) : (
-              <span>★ Mới</span>
-            )}
+            ) : null}
             {sold && (
               <span className="font-semibold md:font-normal">
-                <span className="md:hidden">{' · '}</span>
+                {reviewed && <span className="md:hidden">{' · '}</span>}
                 {sold}
               </span>
             )}

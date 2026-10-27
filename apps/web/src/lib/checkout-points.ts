@@ -1,6 +1,8 @@
+import { formatVnNumber } from '@tubutree/app-core/number-format';
+
 const clamp = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
 /** Nhóm nghìn kiểu Việt: 1800 → "1.800". Dùng cho mọi số điểm/số lượng hiển thị. */
-export const formatCount = (n: number) => n.toLocaleString('vi-VN');
+export const formatCount = (n: number) => formatVnNumber(n);
 const group = formatCount;
 const CONVERTED_FULL_VALUE = ', trả tới 100% giá trị hàng';
 const convertedPointsNote = (converted: number) => `trong đó ${group(converted)} điểm không hết hạn`;

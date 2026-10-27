@@ -11,7 +11,7 @@ import {
   type MyReviewRef,
   type ReviewableOrder,
 } from '../services/shop-api';
-import { apiMediaUrl, getErrorMessage } from '../services/api';
+import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { MultiImageUpload, VideoUpload } from './image-upload';
 import { formatDate, formatNumber } from '../utils/format';
@@ -233,7 +233,7 @@ export function ReviewsSection({
           <Skeleton width="100%" height={64} />
         </div>
       ) : reviewsQ.isError ? (
-        <ErrorState message={getErrorMessage(reviewsQ.error)} onRetry={() => void reviewsQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(reviewsQ.error)} onRetry={() => void reviewsQ.refetch()} />
       ) : data && data.count > 0 ? (
         <>
           {/* Trung bình + breakdown sao 5→1 */}
@@ -386,7 +386,7 @@ export function ReviewsSection({
             <Skeleton width="100%" height={96} />
           </div>
         ) : editingId && myReviewQ.isError ? (
-          <ErrorState message={getErrorMessage(myReviewQ.error)} onRetry={() => void myReviewQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(myReviewQ.error)} onRetry={() => void myReviewQ.refetch()} />
         ) : target ? (
           <WriteReview
             slug={slug}

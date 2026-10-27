@@ -4,6 +4,7 @@ import { useId, useMemo, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { estimateReturn, formatVnd, requestReturn, type OrderDetailDTO, type ReturnRequestDTO } from '@/lib/shop-client';
+import { formatVnNumber } from '@tubutree/app-core/number-format';
 import { ui } from '@/lib/guest-ui';
 import { EvidenceUpload } from '@/components/evidence-upload';
 import {
@@ -20,6 +21,7 @@ import {
   type ReturnReasonCode,
 } from '@/lib/refund-rules';
 import { RefundDestinationPicker } from './refund-destination-picker';
+import { actionErrorText } from '@/lib/error-text';
 
 const REASON_MAX = 500;
 const STEPPER_BTN =
@@ -243,7 +245,7 @@ export function ReturnRequestForm({
           <p className="mt-0.5 text-xs text-stone-600">
             {[
               estimated.shipping > 0 ? `gồm ${formatVnd(estimated.shipping)} phí vận chuyển` : null,
-              estimated.pointsUsedBack > 0 ? `hoàn lại ${estimated.pointsUsedBack} Điểm Xanh đã dùng` : null,
+              estimated.pointsUsedBack > 0 ? `hoàn lại ${formatVnNumber(estimated.pointsUsedBack)} Điểm Xanh đã dùng` : null,
               'Tubu xác nhận số cuối cùng khi duyệt',
             ]
               .filter(Boolean)
@@ -263,7 +265,7 @@ export function ReturnRequestForm({
       )}
       {submit.isError && (
         <p role="alert" className={ui.error}>
-          {submit.error instanceof Error ? submit.error.message : 'Không gửi được yêu cầu.'}
+          {actionErrorText(submit.error)}
         </p>
       )}
       <div className="flex flex-wrap gap-2">

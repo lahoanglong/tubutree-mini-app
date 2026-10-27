@@ -10,7 +10,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../../services/affiliate-api', () => ({ claimCtvMilestone: mocks.claim }));
-vi.mock('../../services/api', () => ({ getErrorMessage: (e: unknown) => (e as Error).message }));
+vi.mock('../../services/api', () => ({ getErrorMessage: (e: unknown) => (e as Error).message, getLoadErrorMessage: (e: unknown) => (e as Error).message }));
 
 import { MilestoneRewards } from './milestone-rewards';
 

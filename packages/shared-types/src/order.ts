@@ -109,6 +109,11 @@ export interface OrderDTO {
    * có thể nhỏ hơn tổng pointsReversed của các yêu cầu trả. API cũ chưa trả.
    */
   pointsReturnReversed?: number;
+  /**
+   * Chỉ chi tiết đơn: lúc đơn chạm từng trạng thái (ISO, khoá là OrderStatus), lấy từ sổ lịch sử đơn của chính khách. Chỉ trạng thái
+   * và giờ, không có ghi chú hay người thao tác. Thiếu khoá = không rõ giờ (đơn tạo thẳng ở trạng thái đầu thì dùng createdAt). API cũ chưa trả.
+   */
+  statusTimes?: Partial<Record<OrderStatus, string>>;
   items: OrderItemDTO[];
   createdAt: string;
   updatedAt: string;

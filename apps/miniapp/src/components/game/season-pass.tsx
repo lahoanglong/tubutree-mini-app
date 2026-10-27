@@ -47,7 +47,7 @@ export function SeasonPass({
           {vi.game.seasonPass.xp(maxXp)}
         </Text>
       </div>
-      <ProgressBar value={ppct} max={100} />
+      <ProgressBar value={ppct} max={100} ariaLabel="Tiến độ bậc mùa" />
 
       {!pass.premiumEligible && (
         <Text variant="caption" as="div" style={{ color: 'var(--color-promo-fg)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>

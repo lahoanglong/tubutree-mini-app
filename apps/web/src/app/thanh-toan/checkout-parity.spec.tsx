@@ -237,8 +237,8 @@ describe('/thanh-toan — mã giới thiệu CTV (R2-BUYERWEB-6)', () => {
   it('nhập mã, máy chủ xác nhận → gửi kèm đơn dạng chữ hoa không khoảng trắng', async () => {
     const r = await mount();
     click(byText(r.container, 'button', 'Nhập mã'));
-    typeInto(r.container.querySelector('input[aria-label="Mã giới thiệu"]'), ' ctv 01 ');
-    click(byText(r.container.querySelector('section[aria-label="Mã giới thiệu"]')!, 'button', 'Áp dụng'));
+    typeInto(r.container.querySelector('input[aria-label="Mã người giới thiệu"]'), ' ctv 01 ');
+    click(byText(r.container.querySelector('section[aria-label="Mã người giới thiệu"]')!, 'button', 'Áp dụng'));
     await flush(4);
     expect(m.touch).toHaveBeenCalledWith({ referralCode: 'CTV01', kind: 'ctv' });
     click(placeButton(r));
@@ -250,8 +250,8 @@ describe('/thanh-toan — mã giới thiệu CTV (R2-BUYERWEB-6)', () => {
     m.touch.mockResolvedValue({ ok: false });
     const r = await mount();
     click(byText(r.container, 'button', 'Nhập mã'));
-    typeInto(r.container.querySelector('input[aria-label="Mã giới thiệu"]'), 'SAI');
-    click(byText(r.container.querySelector('section[aria-label="Mã giới thiệu"]')!, 'button', 'Áp dụng'));
+    typeInto(r.container.querySelector('input[aria-label="Mã người giới thiệu"]'), 'SAI');
+    click(byText(r.container.querySelector('section[aria-label="Mã người giới thiệu"]')!, 'button', 'Áp dụng'));
     await flush(4);
     expect(r.container.querySelector('[role="alert"]')?.textContent).toContain('Không tìm thấy mã này');
     click(placeButton(r));

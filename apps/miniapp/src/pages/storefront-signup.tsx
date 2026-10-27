@@ -23,7 +23,7 @@ import {
   type StorefrontEdit,
 } from '../services/storefront-api';
 import { getAffiliateMe } from '../services/affiliate-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
@@ -64,7 +64,7 @@ export function StorefrontSignupFlow({ sf, onOpenEditor }: Props) {
         </Text>
         <Heading variant="title-md" as="h2" style={{ marginTop: 2 }}>{SIGNUP_STEPS[step]!.title}</Heading>
         <div style={{ marginTop: 8 }}>
-          <ProgressBar value={step + 1} max={SIGNUP_STEPS.length} label={undefined} />
+          <ProgressBar value={step + 1} max={SIGNUP_STEPS.length} ariaLabel={`Bước ${step + 1} trên ${SIGNUP_STEPS.length}`} />
         </div>
         <ol style={{ display: 'flex', justifyContent: 'space-between', listStyle: 'none', margin: '6px 0 0', padding: 0 }}>
           {SIGNUP_STEPS.map((s, i) => (
@@ -112,7 +112,7 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
 
   if (meQ.isLoading) return <div style={{ padding: 16 }}><Skeleton height={160} radius="var(--radius-card)" /></div>;
   if (meQ.isError) {
-    return <div style={{ padding: 16 }}><ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} /></div>;
+    return <div style={{ padding: 16 }}><ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} /></div>;
   }
 
   return (

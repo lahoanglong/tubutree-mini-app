@@ -29,7 +29,7 @@ export function CommunityGoal({
         </span>
       </Text>
       <div style={{ margin: '10px 0 6px' }}>
-        <ProgressBar value={pct} max={100} />
+        <ProgressBar value={pct} max={100} ariaLabel="Tiến độ mục tiêu cộng đồng" />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
         <Text variant="caption" tone="secondary">

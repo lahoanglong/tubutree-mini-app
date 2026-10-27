@@ -1,4 +1,5 @@
 import type { OrderDTO, OrderItemDTO } from '@tubutree/shared-types';
+import type { CancelReasonBody } from '../cancel-reasons';
 import type { HttpClient } from '../http';
 import type { PageResponse } from './catalog';
 import type { CartSummary } from './cart';
@@ -114,8 +115,8 @@ export type RefundDestinationBody =
   | { refundMethod: 'BANK'; bankName: string; accountNumber: string; accountName: string };
 
 
-export const cancelOrder = (http: HttpClient, code: string, destination?: RefundDestinationBody) =>
-  http.post<OrderDTO>(`/orders/${code}/cancel`, destination ?? {});
+export const cancelOrder = (http: HttpClient, code: string, destination?: RefundDestinationBody, reason?: CancelReasonBody) =>
+  http.post<OrderDTO>(`/orders/${code}/cancel`, { ...destination, ...reason });
 export type RepurchaseAddSource = 'repurchase' | 'reorder_notification';
 export type RepurchaseSkipReason = 'OUT_OF_STOCK' | 'INACTIVE' | 'NOT_APPROVED' | 'EXCEEDS_STOCK';
 export interface RepurchaseLineResult {

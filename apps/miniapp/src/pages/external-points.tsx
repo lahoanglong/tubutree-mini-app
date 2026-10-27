@@ -9,7 +9,7 @@ import {
   type MyExternalClaimItem,
   type SubmitExternalClaimResponse,
 } from '../services/external-points-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { getPublicConfig } from '../services/shop-api';
 import { followOA, getOaPromptState, hasOA, openOAChat, requestNotifyPermission, scanCode, setOaPromptState } from '../services/zmp-bridge';
@@ -509,7 +509,7 @@ export default function ExternalPointsPage() {
 
   let body;
   if (cfgQ.isError) {
-    body = <ErrorState message={getErrorMessage(cfgQ.error)} onRetry={() => void cfgQ.refetch()} />;
+    body = <ErrorState message={getLoadErrorMessage(cfgQ.error)} onRetry={() => void cfgQ.refetch()} />;
   } else if (cfgQ.isPending) {
     body = <div style={{ padding: 16 }}><Skeleton height={160} radius="var(--radius-card)" /></div>;
   } else if (!enabled) {

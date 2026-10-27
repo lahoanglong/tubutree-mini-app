@@ -637,7 +637,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await expect(page.getByTestId('offers-dot')).toHaveCount(0);
   });
 
-  test('chip dải thương hiệu và tab gợi ý có vùng chạm phủ đủ 44px', async ({ page, api }) => {
+  test('chip dải thương hiệu và tab gợi ý cao thật 44px, mép trên và dưới vẫn trúng chip', async ({ page, api }) => {
     await login(page, api);
     mockHomeEngagement(api, { checkedIn: true, expiringInDays: null });
     api.get('/brands', [{ brand: 'Tubu', count: 28 }, { brand: 'Mộc An', count: 2 }]);
@@ -649,11 +649,12 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     for (const chip of chips) {
       await chip.evaluate((el) => el.scrollIntoView({ block: 'center' }));
       const box = (await chip.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(44);
       const hit = await chip.evaluate(
         (el, b) => {
           const x = b.x + b.width / 2;
           const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
-          return { above3: at(b.y - 3), below3: at(b.y + b.height + 3), inside: at(b.y + b.height / 2) };
+          return { above3: at(b.y + 2), below3: at(b.y + b.height - 2), inside: at(b.y + b.height / 2) };
         },
         { x: box.x, y: box.y, width: box.width, height: box.height },
       );

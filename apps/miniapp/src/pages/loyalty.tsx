@@ -14,7 +14,7 @@ import {
   type PointsTxn,
 } from '../services/account-api';
 import { wasteHistoryMenu } from '@tubutree/app-core/waste-copy';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { WASTE_QUERY_KEYS, listWasteRequests } from '../services/waste-api';
 import { GuestTiers } from '../components/loyalty/guest-tiers';
 import { AuthPhaseView } from '../components/ui/auth-gate';
@@ -39,6 +39,7 @@ import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
 import { CouponCard } from '../components/loyalty/coupon-card';
 import { DailyCheckInCard } from '../components/loyalty/daily-check-in-card';
 import { convertedPointsNote, expiringPointsNote, pointExpiryPolicyNote, pointsSummary } from '../utils/points-lots';
+import { tierPerkLabel } from '@tubutree/app-core/number-format';
 
 /**
  * Biểu tượng + màu theo hạng (4 hạng §6.6). Emoji là NỘI DUNG của hạng nên được giữ. Màu trỏ thẳng
@@ -150,7 +151,7 @@ export default function LoyaltyPage() {
       ) : loyaltyQ.isLoading ? (
         pageSkeleton
       ) : loyaltyQ.isError && !loyaltyQ.data ? (
-        <ErrorState message={getErrorMessage(loyaltyQ.error)} onRetry={() => void loyaltyQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(loyaltyQ.error)} onRetry={() => void loyaltyQ.refetch()} />
       ) : data ? (
         <>
           <PointsBoostStrip placement="wallet" />
@@ -278,7 +279,7 @@ export default function LoyaltyPage() {
             ) : couponsQ.isError ? (
               <ErrorState
                 variant="inline"
-                message={`Chưa tải được mã giảm giá: ${getErrorMessage(couponsQ.error)}`}
+                message={`Chưa tải được mã giảm giá: ${getLoadErrorMessage(couponsQ.error)}`}
                 onRetry={() => void couponsQ.refetch()}
               />
             ) : couponsQ.data && couponsQ.data.length > 0 ? (
@@ -362,7 +363,7 @@ export default function LoyaltyPage() {
                 {perks.map((p, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Icon icon={Check} size="sm" tone="brand" />
-                    <Text variant="body-sm">{p}</Text>
+                    <Text variant="body-sm">{tierPerkLabel(p)}</Text>
                   </div>
                 ))}
               </div>
@@ -484,7 +485,7 @@ export default function LoyaltyPage() {
           ) : memberCardQ.isError || !memberCardQ.data ? (
             <ErrorState
               variant="inline"
-              message={`Chưa tải được mã thành viên: ${getErrorMessage(memberCardQ.error)}`}
+              message={`Chưa tải được mã thành viên: ${getLoadErrorMessage(memberCardQ.error)}`}
               onRetry={() => void memberCardQ.refetch()}
             />
           ) : (
@@ -554,7 +555,7 @@ export default function LoyaltyPage() {
                 {perks.slice(0, 4).map((p, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <Icon icon={Check} size="sm" tone="brand" />
-                    <Text variant="body-sm">{p}</Text>
+                    <Text variant="body-sm">{tierPerkLabel(p)}</Text>
                   </div>
                 ))}
               </div>

@@ -15,7 +15,7 @@ function Row({ title, hint, gain, children }: { title: string; hint?: string; ga
     <div className="flex items-center justify-between gap-3 rounded-control bg-stone-50 p-3">
       <div className="min-w-0">
         <div className="text-sm font-semibold text-stone-900">{title}</div>
-        {(gain || hint) && <div className="text-xs text-stone-700">{[gain, hint].filter(Boolean).join(' · ')}</div>}
+        {(gain || hint) && <div className="text-caption text-stone-700">{[gain, hint].filter(Boolean).join(' · ')}</div>}
       </div>
       <div className="flex-none">{children}</div>
     </div>
@@ -83,7 +83,7 @@ export function EarnWaterSheet({
     >
       <div className="flex flex-col gap-2">
         {error && (
-          <p role="alert" className="text-xs text-danger-fg">
+          <p role="alert" className="text-caption text-danger-fg">
             {error}
           </p>
         )}
@@ -132,7 +132,7 @@ export function EarnWaterSheet({
           </Row>
         )}
         {allDone && <p className="text-sm text-stone-700">{t.allDone}</p>}
-        <p className="text-xs text-stone-700">{t.tomorrow}</p>
+        <p className="text-caption text-stone-700">{t.tomorrow}</p>
       </div>
     </Sheet>
   );

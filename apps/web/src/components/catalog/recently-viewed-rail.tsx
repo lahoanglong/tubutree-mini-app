@@ -25,7 +25,7 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed }: { titl
   return (
     <section aria-label={title} className="py-2">
       <h2 className="mb-2 font-display text-lg font-semibold text-stone-900">{title}</h2>
-      <ScrollRail className="flex gap-2.5 overflow-x-auto px-1 pb-3 pt-1">
+      <ScrollRail className="flex gap-2.5 overflow-x-auto px-1 pb-3 pt-1 max-md:-mx-4 max-md:px-4">
         {items.map((it) => {
           const product = bySlug.get(it.slug);
           return (

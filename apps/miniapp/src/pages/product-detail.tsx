@@ -13,7 +13,7 @@ import {
   type ProductCard as ProductCardData,
   type FlashSaleActiveItem,
 } from '../services/shop-api';
-import { getErrorMessage, isNotFoundError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isNotFoundError } from '../services/api';
 import { getCoupons, type CouponDTO } from '../services/account-api';
 import { createGroupBuy } from '../services/groupbuy-api';
 import { groupBuyPitch } from '../utils/group-buy-copy';
@@ -281,7 +281,7 @@ export default function ProductDetailPage() {
             <SuggestedRail listSource="pdp_not_found" />
           </>
         ) : (
-          <ErrorState message={getErrorMessage(product.error)} onRetry={() => void product.refetch()} />
+          <ErrorState message={getLoadErrorMessage(product.error)} onRetry={() => void product.refetch()} />
         )}
       </Page>
     );
@@ -429,9 +429,11 @@ export default function ProductDetailPage() {
                 {vi.flashSale.endsIn(flashLeft)}
               </Badge>
             )}
-            <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-              {vi.flashSale.soldPct(soldPercent(flashItem.soldCount, flashItem.quota))}
-            </Text>
+            {soldPercent(flashItem.soldCount, flashItem.quota) > 0 && (
+              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+                {vi.flashSale.soldPct(soldPercent(flashItem.soldCount, flashItem.quota))}
+              </Text>
+            )}
           </Box>
         )}
 

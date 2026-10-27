@@ -16,6 +16,7 @@ import {
   type RefundMethodChoice,
 } from '@/lib/refund-rules';
 import { RefundDestinationPicker } from './refund-destination-picker';
+import { actionErrorText } from '@/lib/error-text';
 
 const TONE = {
   success: { Icon: CheckCircle2, text: 'text-success-fg' },
@@ -153,7 +154,7 @@ function ChooseDestination({
       />
       {save.isError && (
         <p role="alert" className={`mt-2 ${ui.error}`}>
-          {save.error instanceof Error ? save.error.message : 'Không lưu được nơi nhận tiền.'}
+          {actionErrorText(save.error)}
         </p>
       )}
       <div className="mt-3 flex flex-wrap gap-2">

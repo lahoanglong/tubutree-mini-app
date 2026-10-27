@@ -23,7 +23,7 @@ import { ScrollRail } from '@/components/scroll-rail';
 import { ProductImage } from '@/components/mini/product-image';
 
 const CARD = 'flex w-36 flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition hover:shadow-raised sm:w-44 lg:w-48';
-const RAIL = 'flex gap-3 overflow-x-auto px-1 pb-3 pt-1';
+const RAIL = 'flex gap-3 overflow-x-auto px-1 pb-3 pt-1 max-md:-mx-4 max-md:px-4';
 const TITLE = 'flex items-center gap-1.5 font-display text-lg font-semibold text-promo-fg';
 
 /** Nền cam đặc như nhãn Giờ vàng của Mini App và của thẻ sản phẩm. */
@@ -98,10 +98,14 @@ export function FlashSale() {
                   {item.variationName && <p className="truncate text-xs leading-4 text-stone-500">{item.variationName}</p>}
                   <p className="mt-0.5 text-sm font-bold text-promo-fg">{formatVnd(price)}</p>
                   {was > price && <p className="text-xs text-stone-500 line-through">{formatVnd(was)}</p>}
-                  <div className="mt-1">
-                    <ProgressBar value={sold} max={100} tone="flash" ariaLabel={flashSaleText.soldPct(sold)} />
-                  </div>
-                  <p className="mt-0.5 text-xs text-stone-600">{flashSaleText.soldPct(sold)}</p>
+                  {sold > 0 && (
+                    <>
+                      <div className="mt-1">
+                        <ProgressBar value={sold} max={100} tone="flash" ariaLabel={flashSaleText.soldPct(sold)} />
+                      </div>
+                      <p className="mt-0.5 text-xs text-stone-600">{flashSaleText.soldPct(sold)}</p>
+                    </>
+                  )}
                 </div>
               </Link>
             </li>

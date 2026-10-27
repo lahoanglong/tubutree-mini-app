@@ -54,7 +54,7 @@ import { useWheelPrize } from '@/components/game/use-wheel-prize';
 import { WeeklyLeaderboard } from '@/components/game/weekly-leaderboard';
 import { WheelPrizeSheet } from '@/components/game/wheel-prize-sheet';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Vườn Xanh';
 const WASTE_PATH = '/doi-rac';
@@ -143,7 +143,7 @@ function GameBody() {
       ? { status: 'error' }
       : { status: 'loading' };
   const quizTotal = quiz ? quiz.reduce((sum, q) => sum + (q.waterReward ?? 0), 0) : null;
-  const earnError = checkInM.isError ? errText(checkInM.error) : dewM.isError ? errText(dewM.error) : null;
+  const earnError = checkInM.isError ? actionErrorText(checkInM.error) : dewM.isError ? actionErrorText(dewM.error) : null;
   const plotsOpen = garden ? extraPlotsVisible(eco?.treesPlanted, garden.plots.some((p) => !p.isHome)) : false;
   const wasteLink = publicConfig.waste.enabled && isWebRouteReady(WASTE_PATH);
   const feedLink = isWebRouteReady(FEED_PATH);
@@ -291,7 +291,7 @@ function GameBody() {
             />
           )}
 
-          {garden && !plotsOpen && <p className="text-xs text-stone-700">{gameNewbieCopy.plots.locked}</p>}
+          {garden && !plotsOpen && <p className="text-caption text-stone-700">{gameNewbieCopy.plots.locked}</p>}
 
           {/* Sổ tay loài cây (Phase 3) — sưu tập khi thu hoạch */}
           {codex && codex.length > 0 && <SpeciesCodex codex={codex} />}

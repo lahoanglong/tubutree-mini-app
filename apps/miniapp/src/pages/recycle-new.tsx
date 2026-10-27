@@ -24,7 +24,7 @@ import {
 import { getLoyaltyRewards } from '../services/account-api';
 import { getProvinces } from '../services/geo-api';
 import { getZaloAccessToken, requestZaloLocation } from '../services/zmp-bridge';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useIdempotencyKey } from '../hooks/use-idempotency-key';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -405,7 +405,7 @@ export default function RecycleNewPage() {
 
   if (phase === 'unavailable') return shell(<SessionUnavailable />, subtitle);
   if (phase === 'authenticated' && meQ.isError) {
-    return shell(<ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />, subtitle);
+    return shell(<ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />, subtitle);
   }
   if (!me || leave || missingDraft || replayed) {
     return shell(

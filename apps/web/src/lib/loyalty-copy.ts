@@ -7,12 +7,7 @@ import { formatVnd } from './format-vnd';
 export type { LoyaltyRates };
 export { checkInView, earnPctOf, earnRuleLine, memberCardHint, percentLabel, pointsToSpend, tierProgressPercent } from '@tubutree/app-core/loyalty-copy';
 
-/** Hệ số hạng kiểu Việt: 1.5 → "1,5", 2 → "2"; thiếu hay không dương thì "1" để không nhân sai lên. */
-export function formatMultiplier(x: number | null | undefined): string {
-  const v = Number(x ?? 0);
-  if (!Number.isFinite(v) || v <= 0) return '1';
-  return v.toFixed(2).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
-}
+export { formatMultiplier } from '@tubutree/app-core/number-format';
 
 /** Tiền gọn cho mốc hạng: ≥ 1 triệu → "5 triệu"/"12,5 triệu", nhỏ hơn thì "750.000đ". */
 export function moneyShort(n: number): string {

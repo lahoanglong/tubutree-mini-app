@@ -61,7 +61,7 @@ afterEach(() => {
 });
 
 describe('/thanh-toan — khối xếp như Mini App ở điện thoại', () => {
-  it('Địa chỉ → Sản phẩm → Mã giảm giá → Mã giới thiệu → Phương thức → Điểm → Ghi chú → VAT → Tóm tắt', async () => {
+  it('Địa chỉ → Sản phẩm → Mã giảm giá → Mã người giới thiệu → Phương thức → Điểm → Ghi chú → VAT → Tóm tắt', async () => {
     const c = await mount();
     const blocks = Array.from(c.querySelectorAll<HTMLElement>('[data-mini-block]'))
       .map((el) => ({ name: el.dataset.miniBlock!, order: Number(/max-md:order-(\d+)/.exec(el.className)?.[1]) }))
@@ -109,11 +109,11 @@ describe('/thanh-toan — khối Sản phẩm và thẻ mã', () => {
     expect(items.textContent).toContain('300.000đ');
   });
 
-  it('thẻ mã giảm giá riêng, chữ "Xem mã"', async () => {
+  it('thẻ mã giảm giá riêng, chữ "Chọn mã"', async () => {
     const c = await mount();
     const coupon = c.querySelector<HTMLElement>('[data-mini-block="coupon"]')!;
     expect(coupon.textContent).toContain('Chọn hoặc nhập mã giảm giá');
-    expect(coupon.textContent).toContain('Xem mã');
+    expect(coupon.textContent).toContain('Chọn mã');
   });
 });
 

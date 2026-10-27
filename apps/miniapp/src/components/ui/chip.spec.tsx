@@ -12,9 +12,9 @@ describe('Chip', () => {
     rerender(<Chip>Còn hàng</Chip>);
     expect(screen.getByText('Còn hàng').style.background).toBe('var(--stone-100)');
   });
-  it('min touch height 36 visual / 44 hit area via padding', () => {
+  it('chip cỡ md cao tối thiểu 44px', () => {
     render(<Chip>x</Chip>);
-    expect(screen.getByRole('button').style.minHeight).toBe('36px');
+    expect(screen.getByRole('button').style.minHeight).toBe('44px');
   });
   it('không co lại trong hàng cuộn ngang: flexShrink 0 để nhãn đủ chữ, hàng cuộn thay vì bóp chip còn 44px (R2-ENGAGE-5)', () => {
     render(<Chip>🌿 Mẹ và bé</Chip>);
@@ -26,11 +26,11 @@ describe('Chip', () => {
     fireEvent.click(screen.getByRole('button'));
     expect(onPress).toHaveBeenCalledTimes(1);
   });
-  it('vùng chạm 44px (class tubu-hit-44) mà không đổi chiều cao nhìn thấy', () => {
+  it('cỡ md cao thật 44px, vẫn giữ class tubu-hit-44', () => {
     render(<Chip>x</Chip>);
     const chip = screen.getByRole('button');
     expect(chip.className).toContain('tubu-hit-44');
-    expect(chip.style.minHeight).toBe('36px');
+    expect(chip.style.minHeight).toBe('44px');
   });
   it('vùng chạm >= 44px cả hai chiều cho cả hai cỡ: cao nhờ ::after 44px, rộng nhờ minWidth 44', () => {
     const css = readFileSync(resolve(__dirname, '../../css/tokens.css'), 'utf8');

@@ -56,6 +56,7 @@ import { CreateProductModal, EditProductModal, MerchantProductPrice } from './pr
 import { ImageUrlField } from './image-url-field';
 import { ProductThumb } from './product-thumb';
 import { RowMenu } from './row-menu';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 const POPULAR_BANKS = [
   { bin: '970436', name: 'Vietcombank (VCB)' },
@@ -397,7 +398,7 @@ export default function MerchantPage() {
         )}
         {storeQ.isError && (
           <div className="rounded-control border border-danger-fg bg-danger-bg p-4 text-sm text-danger-fg">
-            {(storeQ.error as Error).message}
+            {loadErrorText(storeQ.error)}
           </div>
         )}
         {authed && !storeQ.isLoading && !storeQ.isError && !store && (
@@ -448,7 +449,7 @@ function OrdersPauseControl({ store, onUpdated }: { store: MerchantStore; onUpda
       setError(null);
       onUpdated();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: unknown) => setError(actionErrorText(e)),
   });
   return (
     <div className={`space-y-2 rounded-control border p-3 text-xs ${paused ? 'border-warning-fg bg-warning-bg text-warning-fg' : 'border-stone-200 bg-stone-50 text-stone-700'}`}>
@@ -505,7 +506,7 @@ function StoreSettingsTab({
       onUpdated();
     },
     onError: (e: Error) => {
-      setMsg({ ok: false, text: e.message });
+      setMsg({ ok: false, text: actionErrorText(e) });
     },
   });
 
@@ -750,7 +751,7 @@ function PayoutAccountTab({ store, onUpdated }: { store: MerchantStore; onUpdate
       setMsg({ ok: true, text: dto.bankAccountNo ? 'Đã lưu tài khoản nhận đối soát.' : 'Đã gỡ tài khoản nhận đối soát.' });
       onUpdated();
     },
-    onError: (e: Error) => setMsg({ ok: false, text: e.message }),
+    onError: (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -877,7 +878,7 @@ function ShippingTab({ store, onUpdated }: { store: MerchantStore; onUpdated: ()
       setMsg({ ok: true, text: 'Đã lưu cài đặt giao hàng.' });
       onUpdated();
     },
-    onError: (e: Error) => setMsg({ ok: false, text: e.message }),
+    onError: (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) }),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1029,7 +1030,7 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
       void qc.invalidateQueries({ queryKey: ['merchant-products'] });
     },
     onError: (e: unknown) =>
-      setRemoveError(e instanceof Error ? e.message : 'Không gỡ được sản phẩm khỏi gian hàng.'),
+      setRemoveError(actionErrorText(e)),
   });
 
   const [ownError, setOwnError] = useState<string | null>(null);
@@ -1040,7 +1041,7 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
       setOwnError(null);
       void qc.invalidateQueries({ queryKey: ['merchant-products'] });
     },
-    onError: (e: unknown) => setOwnError(e instanceof Error ? e.message : 'Không cập nhật được sản phẩm.'),
+    onError: (e: unknown) => setOwnError(actionErrorText(e)),
   });
 
   return (
@@ -1335,7 +1336,7 @@ function OrdersTab({ selfFulfils, onOpenFulfil }: { selfFulfils: boolean; onOpen
       void qc.invalidateQueries({ queryKey: ['merchant-orders'] });
     },
     onError: (e: unknown) =>
-      setUpdateError(e instanceof Error ? e.message : 'Không cập nhật được trạng thái đơn.'),
+      setUpdateError(actionErrorText(e)),
   });
 
   return (

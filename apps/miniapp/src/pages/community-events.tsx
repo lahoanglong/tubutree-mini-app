@@ -9,7 +9,7 @@ import {
 } from '@tanstack/react-query';
 import { ChevronLeft, Gift } from 'lucide-react';
 import { listEvents, eventPosts, type CommunityEvent, type FeedPage } from '../services/feed-api';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { SessionUnavailable } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -145,7 +145,7 @@ function EventsList({
     return <CardSkeletons height={140} gap={12} />;
   }
   if (eventsQ.isError && !eventsQ.data) {
-    return <ErrorState message={getErrorMessage(eventsQ.error)} onRetry={() => void eventsQ.refetch()} />;
+    return <ErrorState message={getLoadErrorMessage(eventsQ.error)} onRetry={() => void eventsQ.refetch()} />;
   }
   if (!eventsQ.data || eventsQ.data.length === 0) {
     return <EmptyState art="leaf" heading={vi.community.noEvents} />;
@@ -280,7 +280,7 @@ function EventEntries({
           ))}
         </div>
       ) : entriesQ.isError ? (
-        <ErrorState message={getErrorMessage(entriesQ.error)} onRetry={() => void entriesQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(entriesQ.error)} onRetry={() => void entriesQ.refetch()} />
       ) : entries.length === 0 ? (
         <EmptyState art="leaf" heading={vi.community.emptyHeading} body={vi.community.eventNoEntries} />
       ) : (

@@ -7,7 +7,7 @@ import { getAddresses, getCart, checkoutQuote, placeOrder, type PlacedOrder } fr
 import { cartPreviewKey, cartProductIds } from '../utils/coupon-scope';
 import { fulfillerLabel, shipmentsNote } from '../utils/shipments';
 import { getWallet, getLoyalty } from '../services/account-api';
-import { getErrorCode, getErrorMessage, isOutcomeUnknown } from '../services/api';
+import { getErrorCode, getErrorMessage, getLoadErrorMessage, isOutcomeUnknown } from '../services/api';
 import { isHttpError } from '../services/http';
 import { getWasteMe, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { trackEvent } from '../services/analytics';
@@ -397,7 +397,7 @@ export default function CheckoutPage() {
     };
     return (
       <Shell>
-        <ErrorState message={getErrorMessage(err)} onRetry={retry} />
+        <ErrorState message={getLoadErrorMessage(err)} onRetry={retry} />
       </Shell>
     );
   }
@@ -650,7 +650,7 @@ export default function CheckoutPage() {
 
           <Box flex alignItems="center" style={{ gap: 4, color: 'var(--color-text-brand)' }}>
             <Text size="xSmall" bold style={{ color: 'var(--color-text-brand)' }}>
-              {cart.data?.couponCode ? 'Thay đổi' : 'Xem mã'}
+              {cart.data?.couponCode ? 'Thay đổi' : 'Chọn mã'}
             </Text>
             <ChevronRight size={16} color="var(--color-text-brand)" />
           </Box>
@@ -976,7 +976,7 @@ export default function CheckoutPage() {
             <Box flex alignItems="center" style={{ gap: 4 }}>
               <AlertCircle size={13} color="var(--color-text-danger)" aria-hidden />
               <Text size="xSmall" style={{ color: 'var(--color-text-danger)' }}>
-                {getErrorMessage(quote.error)}
+                {getLoadErrorMessage(quote.error)}
               </Text>
             </Box>
             <Text
@@ -1255,6 +1255,7 @@ function ConsentLink({ onPress, children }: { onPress: () => void; children: Rea
   return (
     <button
       type="button"
+      className="tubu-hit-44"
       onClick={onPress}
       style={{ border: 'none', background: 'none', padding: 0, font: 'inherit', color: 'var(--color-text-brand)', textDecoration: 'underline', cursor: 'pointer' }}
     >

@@ -73,7 +73,7 @@ afterEach(() => {
 });
 
 describe('cài đặt như Mini App (điện thoại)', () => {
-  it('tiêu đề khối chữ không chân đậm; nhãn dòng semibold; Đăng xuất nền xanh nhạt; có dòng phiên bản', async () => {
+  it('tiêu đề khối chữ không chân đậm; nhãn dòng semibold; Đăng xuất nền xanh nhạt; không ghi phiên bản cứng', async () => {
     const { container } = await mount();
     const h2 = container.querySelector('h2')!;
     expect(h2.className).toContain('max-md:font-ui');
@@ -84,7 +84,7 @@ describe('cài đặt như Mini App (điện thoại)', () => {
     expect(link.className).toContain('max-md:font-semibold');
     const logout = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Đăng xuất')!;
     expect(logout.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
-    expect(container.textContent).toContain('Tubu Tree · phiên bản 1.0.0');
+    expect(container.textContent).not.toContain('phiên bản');
     expect(container.querySelector('[data-page-bleed] h1')!.textContent).toBe('Cài đặt');
   });
 });
