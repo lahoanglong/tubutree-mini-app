@@ -1655,6 +1655,17 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
       expect(notifications.notify).not.toHaveBeenCalled();
     });
 
+    it('duyệt ghi approvedAt (lần đầu được duyệt bán), từ chối thì không', async () => {
+      const { prisma, productUpdateMany } = setup();
+      (prisma.product.findUnique as jest.Mock).mockResolvedValue({ ...product, editDraft: null });
+      await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true).catch(() => undefined);
+      await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'x').catch(() => undefined);
+      const datas = productUpdateMany.mock.calls.map((c) => c[0].data);
+      expect(datas[0]).toMatchObject({ approvalStatus: 'APPROVED', approvedAt: expect.any(Date) });
+      expect(datas[1]).toMatchObject({ approvalStatus: 'REJECTED' });
+      expect(datas[1]).not.toHaveProperty('approvedAt');
+    });
+
     it('dòng không mang phiên bản mà sản phẩm có bản chờ (client cũ) → 409, không duyệt/từ chối cả sản phẩm', async () => {
       const { prisma, productUpdate, productUpdateMany, draftDeleteMany } = setup();
       productUpdateMany.mockResolvedValue({ count: 0 });

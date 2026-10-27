@@ -458,6 +458,8 @@ model Product {
   storefront       Storefront?           @relation("StorefrontProducts", fields: [storefrontId], references: [id])
   approvalStatus   ProductApprovalStatus @default(APPROVED)
   rejectReason     String?
+  /// Lần đầu được duyệt bán (NULL = chưa từng; sản phẩm tạo thẳng APPROVED không đặt, vẫn APPROVED). Chỉ để quyết định có phát ảnh công khai khi sản phẩm đang chờ duyệt lại.
+  approvedAt       DateTime?
   communityTags    PostProductTag[]
   contentKit       ProductContentKit?
   pancakeLinks     MerchantPancakeLink[] @relation("PancakeLinkProduct")

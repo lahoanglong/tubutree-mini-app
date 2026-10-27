@@ -1833,7 +1833,7 @@ export class AdminService {
           pancakeLinkCode: product.pancakeLinkCode,
           ...(seenVersion !== undefined ? { updatedAt: new Date(seenVersion) } : {}),
         },
-        data: { approvalStatus: approve ? 'APPROVED' : 'REJECTED', rejectReason: reason },
+        data: { approvalStatus: approve ? 'APPROVED' : 'REJECTED', rejectReason: reason, ...(approve ? { approvedAt: new Date() } : {}) },
       });
       if (moved.count === 0) {
         const now = await tx.product.findUnique({

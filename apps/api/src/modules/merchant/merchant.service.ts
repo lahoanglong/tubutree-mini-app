@@ -733,7 +733,13 @@ export class MerchantService {
             ...(tubuFulfilled ? {} : { basePrice, salePrice }),
             // Sản phẩm đang bán: nội dung đang bán không đổi cho tới khi duyệt; lời từ chối bản sửa cũ hết nghĩa khi gửi bản mới.
             ...(liveEdit ? (contentChanged ? { rejectReason: null } : {}) : contentChanged || draft ? merged : {}),
-            ...(reReview ? { approvalStatus: 'PENDING_REVIEW' as const, rejectReason: null } : {}),
+            ...(reReview
+              ? {
+                  approvalStatus: 'PENDING_REVIEW' as const,
+                  rejectReason: null,
+                  ...(product.approvalStatus === 'APPROVED' && !product.approvedAt ? { approvedAt: new Date() } : {}),
+                }
+              : {}),
           },
         });
       } catch (err) {
