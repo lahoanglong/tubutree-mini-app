@@ -79,8 +79,8 @@ describe('GroupBuyPage — hành vi giữ nguyên khi chuyển DS v2', () => {
   it('hiện tên, giá nhóm, giá gốc, % giảm, số người và thời hạn của từng nhóm', async () => {
     renderPage();
     expect(await screen.findByText('Sản phẩm a')).toBeInTheDocument();
-    expect(screen.getAllByText(formatVnd(80_000))).toHaveLength(2);
-    expect(screen.getAllByText(formatVnd(100_000))).toHaveLength(2);
+    expect(screen.getAllByText(`Giá nhóm ${formatVnd(80_000)}`)).toHaveLength(2);
+    expect(screen.getAllByText(`Mua một mình ${formatVnd(100_000)}`)).toHaveLength(2);
     expect(screen.getAllByText('−20%')).toHaveLength(2);
     expect(screen.getAllByText('2/5 người · còn 2 giờ')).toHaveLength(2);
   });
@@ -121,12 +121,21 @@ describe('GroupBuyPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     expect(mocks.listGroupBuys).toHaveBeenCalledTimes(1);
   });
 
-  it('đã tham gia: nút "Đã tham gia" bị khoá', async () => {
+  it('đã tham gia: chữ trạng thái kèm số người còn thiếu, nút chính là "Mời bạn bè", không có nút tham gia', async () => {
     renderPage();
-    const joined = await screen.findByRole('button', { name: 'Đã tham gia' });
-    expect(joined).toBeDisabled();
-    fireEvent.click(joined);
+    expect(await screen.findByText(/Bạn đã ở trong nhóm · cần thêm \d+ người/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đã tham gia' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Mời bạn bè' })).toBeInTheDocument();
     expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
+  });
+
+  it('B-72: ghi giá nhóm và giá mua một mình, không gạch giá', async () => {
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a', { unitPrice: 102_000, basePrice: 120_000, discountPct: 15 })]);
+    renderPage();
+    expect(await screen.findByText(`Giá nhóm ${formatVnd(102_000)}`)).toBeInTheDocument();
+    const solo = screen.getByText(`Mua một mình ${formatVnd(120_000)}`);
+    expect(solo).toBeInTheDocument();
+    expect((solo as HTMLElement).style.textDecoration).not.toContain('line-through');
   });
 
   it('chưa đăng nhập: nút "Đăng nhập để tham gia" gọi login, không gửi yêu cầu tham gia, kể cả nhóm đã joined', async () => {
@@ -224,11 +233,11 @@ describe('GroupBuyPage — tiêu đề, vùng chạm, thanh tiến độ (C-076,
 
 // ENGAGE-9: người mở nhóm vẫn thấy "Tham gia" (bấm ra lỗi "đã tham gia") và không có cách gửi nhóm cho bạn.
 describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => {
-  it('người mở nhóm thấy "Nhóm của bạn" (khoá) thay vì "Tham gia", kèm nút mời bạn', async () => {
+  it('người mở nhóm thấy chữ trạng thái thay vì "Tham gia", nút chính là mời bạn', async () => {
     mocks.listGroupBuys.mockResolvedValue([GROUP('mine', { joined: true, isOwner: true })]);
     renderPage();
-    const mine = await screen.findByRole('button', { name: 'Nhóm của bạn' });
-    expect(mine).toBeDisabled();
+    expect(await screen.findByText(/Bạn đã ở trong nhóm/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Nhóm của bạn' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Tham gia mua chung/ })).toBeNull();
     expect(screen.getByRole('button', { name: 'Mời bạn bè' })).toBeInTheDocument();
   });
@@ -259,7 +268,7 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     renderPage();
     await screen.findByText('Sản phẩm a');
     expect(screen.getAllByRole('button', { name: 'Mời bạn bè' })).toHaveLength(1);
-    expect(screen.getByRole('button', { name: 'Đã tham gia' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Đã tham gia' })).toBeNull();
   });
 
   it('nhóm đã đóng không còn nút mời', async () => {
@@ -300,7 +309,7 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
 
   it('nói rõ cơ chế: đủ người thì nhận mã giảm theo % của nhóm (mã giảm % trên biến thể khách mua, không phải số tiền cố định)', async () => {
     renderPage();
-    const hints = await screen.findAllByText(`Đủ nhóm: nhận mã giảm 20%, dùng cho đơn từ ${formatVnd(80_000)}`);
+    const hints = await screen.findAllByText(`Đủ 5 người: mỗi người nhận mã giảm 20%, dùng cho đơn từ ${formatVnd(80_000)}`);
     expect(hints).toHaveLength(2);
     expect(screen.queryByText(new RegExp(`mã giảm ${formatVnd(20_000)}`))).toBeNull();
   });
@@ -308,7 +317,7 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
   it('Q18: đơn từ ghi đúng đơn tối thiểu của mã (biến thể rẻ nhất), không phải giá nhóm của sản phẩm', async () => {
     mocks.listGroupBuys.mockResolvedValue([GROUP('a', { unitPrice: 365_500, basePrice: 430_000, minOrder: 102_000, discountPct: 15 })]);
     renderPage();
-    expect((await screen.findAllByText(`Đủ nhóm: nhận mã giảm 15%, dùng cho đơn từ ${formatVnd(102_000)}`)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(`Đủ 5 người: mỗi người nhận mã giảm 15%, dùng cho đơn từ ${formatVnd(102_000)}`)).length).toBeGreaterThan(0);
   });
 
   it('R2-BUYERMINI-4: người mở nhóm vào nhóm của chính mình không thấy banner "Bạn được mời"', async () => {
@@ -316,7 +325,7 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     mocks.getGroupBuy.mockResolvedValue(GROUP('mine', { joined: true, isOwner: true }));
     mocks.listGroupBuys.mockResolvedValue([]);
     renderPage();
-    expect(await screen.findByRole('button', { name: 'Nhóm của bạn' })).toBeInTheDocument();
+    expect(await screen.findByText(/Bạn đã ở trong nhóm/)).toBeInTheDocument();
     expect(screen.queryByText('Bạn được mời vào nhóm này')).toBeNull();
   });
 

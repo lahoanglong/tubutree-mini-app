@@ -1,6 +1,7 @@
 import { Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Share2 } from 'lucide-react';
+import { groupMemberStatus, groupMissing, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
 import { getGroupBuy, listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
@@ -72,7 +73,7 @@ export default function GroupBuyPage() {
     void shareWithFallback(
       {
         title: `Mua chung ${g.product.name} giảm ${g.discountPct}%`,
-        description: `Còn thiếu ${Math.max(0, g.targetSize - g.currentSize)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`,
+        description: `Còn thiếu ${groupMissing(g)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`,
         thumbnail: g.product.thumbnail ?? undefined,
         path: withReferral(`/group-buy/${g.id}`, referralCode),
       },
@@ -152,15 +153,9 @@ function GroupCard({
   const isOpen = g.status === 'OPEN';
   const member = authed && g.joined;
   const closedLabel = g.status === 'SUCCESS' ? 'Nhóm đã đủ người' : 'Nhóm đã hết hạn';
-  const label = !isOpen
-    ? closedLabel
-    : !authed
-      ? 'Đăng nhập để tham gia'
-      : g.joined
-        ? g.isOwner
-          ? 'Nhóm của bạn'
-          : 'Đã tham gia'
-        : `Tham gia mua chung (−${g.discountPct}%)`;
+  const label = !isOpen ? closedLabel : !authed ? 'Đăng nhập để tham gia' : `Tham gia mua chung (−${g.discountPct}%)`;
+  const prices = groupPriceLabels(g, formatVnd);
+  const inOpenGroup = member && isOpen;
   return (
     <Card padding={12}>
       {invitedBanner && (
@@ -187,10 +182,10 @@ function GroupCard({
             {g.product.name}
           </Text>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Text variant="body-sm" tone="brand" style={{ fontWeight: 600 }}>{formatVnd(g.unitPrice)}</Text>
-            <Text variant="caption" tone="tertiary" style={{ textDecoration: 'line-through' }}>{formatVnd(g.basePrice)}</Text>
+            <Text variant="body-sm" tone="brand" style={{ fontWeight: 600 }}>{prices.group}</Text>
             <Badge tone="promo" size="sm">−{g.discountPct}%</Badge>
           </div>
+          <Text variant="caption" tone="tertiary" as="div">{prices.solo}</Text>
           <Text variant="caption" tone="tertiary" as="div">
             {g.currentSize}/{g.targetSize} người · {g.status === 'SUCCESS' ? 'đã đủ nhóm' : timeLeft(g.expiresAt)}
           </Text>
@@ -201,7 +196,7 @@ function GroupCard({
       </div>
       {g.status !== 'SUCCESS' && (
         <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
-          {`Đủ nhóm: nhận mã giảm ${g.discountPct}%, dùng cho đơn từ ${formatVnd(g.minOrder ?? g.unitPrice)}`}
+          {groupRewardLine(g, formatVnd)}
         </Text>
       )}
       {g.status === 'SUCCESS' && member ? (
@@ -219,14 +214,18 @@ function GroupCard({
             {`Mua ngay với mã giảm ${g.discountPct}%`}
           </Button>
         </>
+      ) : inOpenGroup ? (
+        <>
+          <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 8, fontWeight: 600 }}>
+            {groupMemberStatus(g)}
+          </Text>
+          <Button fullWidth icon={Share2} onPress={onShare} style={{ marginTop: 8 }}>
+            Mời bạn bè
+          </Button>
+        </>
       ) : (
         <Button fullWidth disabled={!isOpen || member} loading={joining} onPress={onJoin} style={{ marginTop: 10 }}>
           {label}
-        </Button>
-      )}
-      {member && isOpen && (
-        <Button fullWidth variant="secondary" icon={Share2} onPress={onShare} style={{ marginTop: 8 }}>
-          Mời bạn bè
         </Button>
       )}
     </Card>

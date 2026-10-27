@@ -126,21 +126,21 @@ describe('/mua-chung — danh sách nhóm', () => {
 
   it('nói rõ cơ chế: đủ người thì nhận mã giảm theo % của nhóm (mã giảm % trên biến thể khách mua, không phải số tiền cố định)', async () => {
     const c = await mount();
-    expect(c.textContent).toContain(`Đủ nhóm: nhận mã giảm 20%, dùng cho đơn từ ${formatVnd(80_000)}`);
+    expect(c.textContent).toContain(`Đủ 5 người: mỗi người nhận mã giảm 20%, dùng cho đơn từ ${formatVnd(80_000)}`);
     expect(c.textContent).not.toContain(`mã giảm ${formatVnd(20_000)}`);
   });
 
   it('Q18: đơn từ ghi đúng đơn tối thiểu của mã (minOrder) khi API trả, thiếu thì dùng giá nhóm', async () => {
     mocks.list = [GROUP('a', { unitPrice: 365_500, basePrice: 430_000, minOrder: 102_000, discountPct: 15 })];
     const c = await mount();
-    expect(c.textContent).toContain(`Đủ nhóm: nhận mã giảm 15%, dùng cho đơn từ ${formatVnd(102_000)}`);
+    expect(c.textContent).toContain(`Đủ 5 người: mỗi người nhận mã giảm 15%, dùng cho đơn từ ${formatVnd(102_000)}`);
     expect(c.textContent).not.toContain(`dùng cho đơn từ ${formatVnd(365_500)}`);
   });
 
   it('% lấy từ discountPct của nhóm, không tính lại từ basePrice - unitPrice', async () => {
     mocks.list = [GROUP('a', { discountPct: 15, basePrice: 100_000, unitPrice: 80_000 })];
     const c = await mount();
-    expect(c.textContent).toContain('Đủ nhóm: nhận mã giảm 15%');
+    expect(c.textContent).toContain('mỗi người nhận mã giảm 15%');
     expect(c.textContent).not.toContain('mã giảm 20%');
   });
 
@@ -202,9 +202,19 @@ describe('/mua-chung — tham gia', () => {
     expect(mocks.get.mock.calls.length).toBe(before);
   });
 
-  it('đã tham gia: nút "Đã tham gia" bị khoá', async () => {
+  it('đã tham gia: chữ trạng thái kèm số người còn thiếu, không còn nút "Đã tham gia" bị khoá', async () => {
     const c = await mount();
-    expect((btn(c, 'Đã tham gia') as HTMLButtonElement).disabled).toBe(true);
+    expect(btn(c, 'Đã tham gia')).toBeUndefined();
+    expect(c.textContent).toMatch(/Bạn đã ở trong nhóm · cần thêm \d+ người/);
+    expect(btn(c, 'Mời bạn bè')).toBeDefined();
+  });
+
+  it('B-72: ghi giá nhóm và giá mua một mình, không gạch giá', async () => {
+    mocks.list = [GROUP('a', { unitPrice: 102_000, basePrice: 120_000, discountPct: 15 })];
+    const c = await mount();
+    expect(c.textContent).toContain(`Giá nhóm ${formatVnd(102_000)}`);
+    expect(c.textContent).toContain(`Mua một mình ${formatVnd(120_000)}`);
+    expect(c.querySelector('.line-through')).toBeNull();
   });
 
   it('đang gửi tham gia: bấm lại không gửi thêm', async () => {
@@ -241,10 +251,11 @@ describe('/mua-chung — tham gia', () => {
 });
 
 describe('/mua-chung — nhóm của mình và mời bạn', () => {
-  it('người mở nhóm thấy "Nhóm của bạn" (khoá) thay vì "Tham gia", kèm nút mời bạn', async () => {
+  it('người mở nhóm thấy chữ trạng thái thay vì "Tham gia", nút chính là mời bạn', async () => {
     mocks.list = [GROUP('mine', { joined: true, isOwner: true })];
     const c = await mount();
-    expect((btn(c, 'Nhóm của bạn') as HTMLButtonElement).disabled).toBe(true);
+    expect(btn(c, 'Nhóm của bạn')).toBeUndefined();
+    expect(c.textContent).toContain('Bạn đã ở trong nhóm');
     expect(btn(c, /^Tham gia mua chung/)).toBeUndefined();
     expect(btn(c, 'Mời bạn bè')).toBeDefined();
   });
@@ -316,7 +327,7 @@ describe('/mua-chung/[id] — nhóm được mời', () => {
     mocks.one = GROUP('mine', { joined: true, isOwner: true });
     mocks.list = [];
     const c = await mount('mine');
-    expect(btn(c, 'Nhóm của bạn')).toBeDefined();
+    expect(c.textContent).toContain('Bạn đã ở trong nhóm');
     expect(c.textContent).not.toContain('Bạn được mời vào nhóm này');
   });
 
