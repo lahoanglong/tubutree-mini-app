@@ -94,6 +94,7 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
     await expect(sheet.getByRole('button', { name: 'Giữ đơn' })).toBeVisible();
 
     const cancelled = api.waitForCall('POST', '/orders/:code/cancel');
+    await sheet.getByRole('button', { name: /Đổi ý/ }).click();
     await sheet.getByRole('button', { name: 'Huỷ đơn', exact: true }).click();
     const call = await cancelled;
     expect(call.path).toBe(`/orders/${ORDER_CONFIRMED.code}/cancel`);
@@ -125,6 +126,7 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
     await page.getByRole('button', { name: 'Huỷ đơn', exact: true }).click();
     const sheet = page.locator('.zaui-sheet').filter({ hasText: 'Bạn muốn huỷ đơn này?' });
     await expect(sheet.getByText('Bạn muốn huỷ đơn này?')).toBeVisible({ timeout: 5_000 });
+    await sheet.getByRole('button', { name: /Đổi ý/ }).click();
     await sheet.getByRole('button', { name: 'Huỷ đơn', exact: true }).click();
 
     await expect(page.getByText('Đã huỷ đơn cho bạn')).toBeVisible({ timeout: 5_000 });
