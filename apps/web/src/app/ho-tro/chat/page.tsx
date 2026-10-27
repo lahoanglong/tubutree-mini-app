@@ -135,6 +135,8 @@ function ChatBody() {
   useEffect(() => {
     if (!thread) return;
     setSeen((prev) => mergeWindow(prev, thread.messages, thread.hasMore));
+    // Đã thấy đầu cuộc trò chuyện thì nhớ: tin mới đẩy cửa sổ poll vượt 50 tin cũng không bật lại "Xem tin cũ hơn" và không làm mất lời chào.
+    if (!thread.hasMore) setOlderHasMore(false);
   }, [thread]);
 
   // Một kho theo id cho mọi tin đã thấy (poll và trang cũ cùng ghi đè vào đây): cửa sổ poll trượt đi cũng không làm rơi tin.

@@ -760,6 +760,18 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
       expect(buttonByName(c, 'Xem tin cũ hơn')).toBeNull();
     });
 
+    it('đã thấy đầu cuộc trò chuyện: tin thứ 51 làm cửa sổ poll trượt đi vẫn giữ lời chào, không hiện "Xem tin cũ hơn"', async () => {
+      mocks.getThread.mockResolvedValueOnce(thread({ hasMore: false, messages: range(1, 50) }));
+      const c = mount();
+      await waitFor(() => expect(c.querySelector('[data-testid="msg-greeting"]')).not.toBeNull());
+      mocks.getThread.mockResolvedValue(thread({ hasMore: true, messages: range(2, 51) }));
+      await refetch();
+      await waitFor(() => expect(bubble(c, 'm51')).not.toBeNull());
+      expect(c.querySelector('[data-testid="msg-greeting"]')).not.toBeNull();
+      expect(buttonByName(c, 'Xem tin cũ hơn')).toBeNull();
+      expect(msgIds(c)).toEqual(range(1, 51).map((x) => `msg-${x.id}`));
+    });
+
     it('poll làm cửa sổ trượt đi: tin đã tải vẫn còn đủ, đúng thứ tự, không trùng; tin cập nhật lấy bản mới', async () => {
       mocks.getThread.mockResolvedValueOnce(thread({ hasMore: true, messages: range(11, 50) }));
       mocks.getPage.mockResolvedValue({ hasMore: false, messages: range(1, 10) });
