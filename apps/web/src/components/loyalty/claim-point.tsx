@@ -8,8 +8,8 @@ export function ClaimPointInfo({ point, heading }: { point: ClaimPoint; heading:
   return (
     <div className="space-y-0.5">
       <div className="text-sm font-semibold text-stone-900">{heading}</div>
-      <div className="text-xs text-stone-700">{pointAddress(point)}</div>
-      <div className="text-xs text-stone-700">{openingHoursText(point.openingHours)}</div>
+      <div className="text-caption text-stone-700">{pointAddress(point)}</div>
+      <div className="text-caption text-stone-700">{openingHoursText(point.openingHours)}</div>
     </div>
   );
 }

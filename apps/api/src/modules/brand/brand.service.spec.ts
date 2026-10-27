@@ -62,6 +62,17 @@ describe('BrandService.getPublicBySlug', () => {
     expect(out.certifications[0]?.code).toBe('ORG');
   });
 
+  it('ảnh câu chuyện base64 đi ra dưới dạng đường dẫn endpoint ảnh, link thường giữ nguyên', async () => {
+    const prisma = makePrisma();
+    const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+    prisma.brand.findFirst.mockResolvedValue({
+      id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: ['https://x.test/a.jpg', PNG], isVerified: false, followerCount: 0,
+    });
+    const out = await new BrandService(prisma, brandConfig).getPublicBySlug('sachi', NOW);
+    expect(out.storyImages[0]).toBe('https://x.test/a.jpg');
+    expect(out.storyImages[1]).toMatch(/^\/public-image\/brand\/b1\/1\?v=[0-9a-f]{16}$/);
+  });
+
   it('lọc promotions theo isActive + khoảng thời gian', async () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({

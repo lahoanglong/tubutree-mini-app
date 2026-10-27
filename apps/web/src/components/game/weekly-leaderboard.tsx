@@ -28,9 +28,9 @@ export function WeeklyLeaderboard({ board, failed = false, onRetry }: { board: L
               return (
                 <div key={idx} data-slot className="min-w-0 flex-1 text-center">
                   <div className={`leading-tight ${isFirst ? 'text-3xl' : 'text-2xl'}`}>{medal}</div>
-                  <div className="truncate text-xs font-semibold text-stone-900">{r.nickname}</div>
+                  <div className="truncate text-caption font-semibold text-stone-900">{r.nickname}</div>
                   <div
-                    className={`mt-1 flex items-center justify-center rounded-t-control text-xs font-bold text-stone-0 ${height} ${isFirst ? 'bg-forest-700' : 'bg-forest-600'}`}
+                    className={`mt-1 flex items-center justify-center rounded-t-control text-caption font-bold text-stone-0 ${height} ${isFirst ? 'bg-forest-700' : 'bg-forest-600'}`}
                   >
                     🔥{r.streak}
                   </div>
@@ -43,13 +43,13 @@ export function WeeklyLeaderboard({ board, failed = false, onRetry }: { board: L
               <span className="min-w-0 truncate text-sm text-stone-900">
                 #{r.rank} {r.nickname}
               </span>
-              <span className="flex-none text-xs text-stone-600">
+              <span className="flex-none text-caption text-stone-600">
                 🔥{r.streak} · 🌳{r.treesPlanted}
               </span>
             </div>
           ))}
           {board.length < 3 && (
-            <p data-testid="leaderboard-few" className="mt-2 text-xs text-stone-600">
+            <p data-testid="leaderboard-few" className="mt-2 text-caption text-stone-600">
               Mới có {board.length} người trên bảng. Điểm danh mỗi ngày để giữ chuỗi và lên hạng.
             </p>
           )}

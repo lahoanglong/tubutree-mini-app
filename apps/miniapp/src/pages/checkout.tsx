@@ -1255,6 +1255,7 @@ function ConsentLink({ onPress, children }: { onPress: () => void; children: Rea
   return (
     <button
       type="button"
+      className="tubu-hit-44"
       onClick={onPress}
       style={{ border: 'none', background: 'none', padding: 0, font: 'inherit', color: 'var(--color-text-brand)', textDecoration: 'underline', cursor: 'pointer' }}
     >

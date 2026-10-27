@@ -105,7 +105,7 @@ function QuotaCard({ point }: { point: WasteDeskPointDTO }) {
       {point.quota ? (
         <>
           <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">{`Đã dùng ${formatCount(point.quota.used)} / ${formatCount(point.quota.limit)} điểm`}</p>
-          {point.quota.limit > 0 && <ProgressBar value={point.quota.used} max={point.quota.limit} />}
+          {point.quota.limit > 0 && <ProgressBar value={point.quota.used} max={point.quota.limit} ariaLabel="Mức dùng hạn mức điểm nhận rác" />}
           <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] font-semibold text-stone-900">{`Còn lại ${formatCount(point.quota.remaining)} điểm`}</p>
         </>
       ) : (

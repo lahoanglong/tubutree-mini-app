@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Page, useNavigate } from 'zmp-ui';
+import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { MapPin } from 'lucide-react';
 import { haptic } from '../utils/haptic';
 import { BRAND_ORIGINS, PIN_CIRCLE, PIN_GAP, type BrandOrigin } from '../utils/brand-origins';
@@ -20,7 +20,11 @@ const TEXT_SCRIM = {
 } as const;
 
 export default function BrandStoryPage() {
-  const [selected, setSelected] = useState<BrandOrigin | null>(null);
+  const { search } = useLocation();
+  const [selected, setSelected] = useState<BrandOrigin | null>(() => {
+    const id = new URLSearchParams(search).get('brand');
+    return BRAND_ORIGINS.find((o) => o.id === id) ?? null;
+  });
   const pick = (loc: BrandOrigin) => {
     haptic('light');
     setSelected(loc);

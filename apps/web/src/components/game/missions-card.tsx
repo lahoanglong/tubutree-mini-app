@@ -48,9 +48,9 @@ export function MissionsCard({
                   {m.title}
                   {m.claimed && <span className="sr-only"> (đã nhận thưởng)</span>}
                 </span>
-                <span className="whitespace-nowrap text-xs text-forest-700">+{formatNumber(m.rewardPoints)} Điểm Xanh</span>
+                <span className="whitespace-nowrap text-caption text-forest-700">+{formatNumber(m.rewardPoints)} Điểm Xanh</span>
               </div>
-              {m.description && <div className="text-xs text-stone-600">{m.description}</div>}
+              {m.description && <div className="text-caption text-stone-600">{m.description}</div>}
               <div className="mt-2">
                 <ProgressBar
                   value={Math.round((progress / Math.max(1, goal)) * 100)}
@@ -58,7 +58,7 @@ export function MissionsCard({
                   ariaLabel={gameNewbieCopy.missions.progressLabel(m.title, progress, goal)}
                 />
               </div>
-              <div className="mt-0.5 text-xs text-stone-600">
+              <div className="mt-0.5 text-caption text-stone-600">
                 {progress}/{goal}
               </div>
               {target && (

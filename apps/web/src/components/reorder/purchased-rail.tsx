@@ -202,7 +202,7 @@ export function PurchasedRail({ restoring = false }: { restoring?: boolean }) {
           ))}
         </div>
       ) : (
-        <ScrollRail className="-mx-1 -mt-1 flex gap-2.5 overflow-x-auto px-1 pb-3 pt-1">
+        <ScrollRail className="-mx-1 -mt-1 flex gap-2.5 overflow-x-auto px-1 pb-3 pt-1 max-md:-mx-4 max-md:px-4">
           {items.map((p) => (
             <RebuyTile key={p.variationId} item={p} onRebuy={() => setTarget(itemReorderTarget(p))} />
           ))}

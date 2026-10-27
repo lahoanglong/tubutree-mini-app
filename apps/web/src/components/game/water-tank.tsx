@@ -31,9 +31,9 @@ export function WaterTank({ seeds, capacity }: { seeds: number | undefined; capa
       <span key={pop?.key ?? 'idle'} className={`text-[32px] font-bold leading-[1.1] text-stone-0 ${pop ? 'tubu-bump' : ''}`}>
         💧 {formatNumber(seeds)}
       </span>
-      <span className="text-xs text-stone-0">{t.tankLabel}</span>
+      <span className="text-caption text-stone-0">{t.tankLabel}</span>
       {capacity != null && seeds != null && seeds > capacity && (
-        <span data-testid="tank-over" className="text-xs text-stone-0">
+        <span data-testid="tank-over" className="text-caption text-stone-0">
           {t.overCap(capacity)}
         </span>
       )}

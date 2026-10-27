@@ -123,7 +123,7 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
       {claimPoint && (
         <div className="space-y-0.5">
           <ClaimPointInfo point={claimPoint} heading={claimPoint.name} />
-          <div className="text-xs text-stone-700">{`Hạn nhận ${catalog.giftClaimDays} ngày`}</div>
+          <div className="text-caption text-stone-700">{`Hạn nhận ${catalog.giftClaimDays} ngày`}</div>
         </div>
       )}
       {error && (
@@ -155,7 +155,7 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
   const freeNote = preview ? null : rewardFreeShipNote(reward, catalog, formatVnd);
   const KindIcon = KIND_ICON[reward.kind];
   return (
-    <div data-reward className={`flex flex-col gap-2.5 p-4 ${miniOutline}`}>
+    <div data-reward className={`flex flex-col gap-2.5 p-3 ${miniOutline}`}>
       <div className="flex items-start gap-3">
         <span data-testid="reward-icon" className="flex h-10 w-10 flex-none items-center justify-center rounded-control bg-forest-50 text-forest-700">
           <KindIcon className="h-5 w-5" aria-hidden="true" />
@@ -165,10 +165,10 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
             <div className="text-base font-semibold text-stone-900">{reward.name}</div>
             {reward.label && !freeNote && <Badge tone="brand">{reward.label}</Badge>}
           </div>
-          {reward.description && <div className="text-xs text-stone-700">{reward.description}</div>}
-          {reward.stockRemaining != null && !reward.soldOut && <div className="text-xs text-stone-600">{`Còn ${formatCount(reward.stockRemaining)}`}</div>}
-          {reward.claimInstructions && <div className="text-xs text-stone-600">{reward.claimInstructions}</div>}
-          {freeNote && <div className="text-xs text-stone-700">{freeNote}</div>}
+          {reward.description && <div className="text-caption text-stone-700">{reward.description}</div>}
+          {reward.stockRemaining != null && !reward.soldOut && <div className="text-caption text-stone-600">{`Còn ${formatCount(reward.stockRemaining)}`}</div>}
+          {reward.claimInstructions && <div className="text-caption text-stone-600">{reward.claimInstructions}</div>}
+          {freeNote && <div className="text-caption text-stone-700">{freeNote}</div>}
           {isWarehousePickup(reward) && <Badge>{WAREHOUSE_ONLY_LABEL}</Badge>}
         </div>
       </div>
@@ -185,9 +185,9 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
             Chờ mở khoá điểm
           </button>
         )}
-        {!preview && s.kind === 'need' && <div className="text-xs text-stone-700">{`Cần thêm ${formatCount(s.missing)} điểm`}</div>}
+        {!preview && s.kind === 'need' && <div className="text-caption text-stone-700">{`Cần thêm ${formatCount(s.missing)} điểm`}</div>}
       </div>
-      {!preview && s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} />}
+      {!preview && s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} ariaLabel={`${reward.name}: điểm đang có so với điểm cần để đổi`} />}
     </div>
   );
 }
@@ -209,7 +209,7 @@ function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onC
             </button>
           )}
           {notice && (
-            <p role={notice.error ? 'alert' : 'status'} className={`text-xs ${notice.error ? 'text-danger-fg' : 'text-stone-700'}`}>
+            <p role={notice.error ? 'alert' : 'status'} className={`text-caption ${notice.error ? 'text-danger-fg' : 'text-stone-700'}`}>
               {notice.text}
             </p>
           )}
@@ -260,10 +260,10 @@ function RewardsBody() {
           {points(total)}
         </div>
         {c.redeemablePoints !== total && <p className="text-sm text-stone-700">{`Đổi quà dùng được ${points(c.redeemablePoints)}`}</p>}
-        {rulesNote && <p className="text-xs text-stone-600">{rulesNote}</p>}
-        {lockedNote && <p className="text-xs text-stone-600">{lockedNote}</p>}
+        {rulesNote && <p className="text-caption text-stone-600">{rulesNote}</p>}
+        {lockedNote && <p className="text-caption text-stone-600">{lockedNote}</p>}
         {c.pointsConvertedBalance > 0 && (
-          <p className="text-xs text-stone-600">
+          <p className="text-caption text-stone-600">
             Điểm không hết hạn chỉ dùng khi thanh toán và góp quỹ trồng cây, không dùng để đổi mã giảm giá hay quà.
           </p>
         )}

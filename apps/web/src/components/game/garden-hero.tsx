@@ -46,7 +46,7 @@ export function GardenHero({
         <div className="h-2.5 rounded-full bg-stone-0 transition-[width]" style={{ width: `${pct}%` }} />
       </div>
       <p className="text-sm font-semibold text-stone-0">{wilted ? t.wilted : harvestReady || left === 0 ? t.ready : t.remaining(left)}</p>
-      <p className="mt-0.5 text-xs text-stone-0">
+      <p className="mt-0.5 text-caption text-stone-0">
         {formatNumber(progress)}/{formatNumber(eco?.target)}💧 · {t.streak(streakDays ?? 0)} · {t.harvested(eco?.treesPlanted ?? 0)}
       </p>
     </div>

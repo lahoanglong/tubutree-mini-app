@@ -23,17 +23,17 @@ const tilesOf = (page: Page): Locator => page.getByTestId('catalog-grid').locato
 const scrollTopOf = (loc: Locator): Promise<number> => loc.evaluate((el) => el.scrollTop);
 
 /**
- * Chip nhìn cao 36px nhưng vùng chạm 44px (`.tubu-hit-44::after`). Điểm 3px NGOÀI mép trên/dưới của viên thuốc
- * vẫn phải trúng chính chip (không bị `.scroll-x` cắt); điểm 8px ngoài mép thì KHÔNG (đối chứng: phép đo không vô nghĩa).
+ * Chip cao thật 44px. Điểm sát mép trên/dưới (2px bên trong) phải trúng chính chip (không bị `.scroll-x` cắt);
+ * điểm 8px ngoài mép thì KHÔNG (đối chứng: phép đo không vô nghĩa).
  */
 async function expectChipHitArea44(chip: Locator): Promise<void> {
   const box = (await chip.boundingBox())!;
-  expect(box.height).toBeLessThan(44);
+  expect(box.height).toBeGreaterThanOrEqual(44);
   const hit = await chip.evaluate(
     (el, b) => {
       const x = b.x + b.width / 2;
       const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
-      return { above3: at(b.y - 3), below3: at(b.y + b.height + 3), above8: at(b.y - 8), below8: at(b.y + b.height + 8), inside: at(b.y + b.height / 2) };
+      return { above3: at(b.y + 2), below3: at(b.y + b.height - 2), above8: at(b.y - 8), below8: at(b.y + b.height + 8), inside: at(b.y + b.height / 2) };
     },
     { x: box.x, y: box.y, width: box.width, height: box.height },
   );
@@ -90,7 +90,7 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     mockDiscovery(api);
     await page.goto('/browse');
     await waitBrowseSettled(page, api);
-    const cats = page.getByRole('region', { name: 'Danh mục' });
+    const cats = page.getByRole('region', { name: 'Danh mục', exact: true });
     await expect(cats.getByRole('button', { name: 'Tẩy rửa sinh học' })).toBeVisible({ timeout: 15_000 });
 
     const box = page.getByRole('searchbox', { name: 'Tìm sản phẩm' });
@@ -121,12 +121,12 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     await box.click();
     const recent = page.getByRole('group', { name: 'Tìm gần đây' });
     await expect(recent.getByRole('button', { name: 'nuoc rua' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Danh mục' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Danh mục', exact: true })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Xoá lịch sử tìm' }).click();
     await expect(recent).toHaveCount(0);
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('tubu_recent_searches') ?? '[]'))).toEqual([]);
-    await expect(page.getByRole('region', { name: 'Danh mục' })).toBeVisible(); // không còn gì để gợi ý → không trang trắng
+    await expect(page.getByRole('region', { name: 'Danh mục', exact: true })).toBeVisible(); // không còn gì để gợi ý → không trang trắng
 
     await page.evaluate(() => localStorage.setItem('tubu_recent_searches', JSON.stringify(['nuoc rua'])));
     await page.goto('/browse');
@@ -276,7 +276,7 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
   test('Chọn danh mục thật ở trang gốc: đổi URL bằng replace, chip gỡ được, lưới danh mục ẩn; danh mục rỗng không hiện', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/browse');
-    const cats = page.getByRole('region', { name: 'Danh mục' });
+    const cats = page.getByRole('region', { name: 'Danh mục', exact: true });
     await expect(cats.getByRole('button', { name: 'Tẩy rửa sinh học' })).toBeVisible({ timeout: 15_000 });
     await expect(cats.getByRole('button', { name: 'Cho bé' })).toBeVisible();
     await expect(cats.getByRole('button', { name: 'Cà phê & Đồ uống' })).toHaveCount(0); // productCount 0
@@ -305,7 +305,7 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     await page.goto('/browse');
     await expect.poll(() => api.callsTo('GET', '/categories').length, { timeout: 15_000 }).toBeGreaterThan(0);
     await expect(page.getByTestId('category-grid-loading')).toHaveCount(0);
-    const cats = page.getByRole('region', { name: 'Danh mục' });
+    const cats = page.getByRole('region', { name: 'Danh mục', exact: true });
     await expect(cats.getByRole('button', { name: 'Cho mẹ & bé' })).toBeVisible({ timeout: 15_000 });
     await expect(cats.getByRole('button', { name: 'Tẩy rửa sinh học' })).toHaveCount(0);
     await expect(cats.getByRole('button')).toHaveCount(4); // đúng 4 phân khúc

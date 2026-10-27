@@ -35,7 +35,7 @@ export function GardenPlots({
   return (
     <GameCard title={`Lô đất của bạn (${garden.plots.length}/${garden.maxPlots})`} icon={Sprout}>
       {extraPlots.length === 0 && (
-        <p className="text-xs text-stone-600">
+        <p className="text-caption text-stone-600">
           Mở thêm lô đất để trồng nhiều cây cùng lúc — mỗi lô thu hoạch cho mã giảm giá, phần góp quỹ trồng cây & loài sưu tập riêng.
         </p>
       )}
@@ -55,7 +55,7 @@ export function GardenPlots({
                     <div className="text-sm font-semibold text-stone-900">
                       Lô {p.slot} · {p.treeType}
                     </div>
-                    <div className="text-xs text-stone-700">
+                    <div className="text-caption text-stone-700">
                       {formatNumber(p.progress)}/{formatDrops(p.target)} · 🌳 {formatNumber(p.treesPlanted)}
                       {p.treeHealth === 'WILTED' || p.treeHealth === 'DEAD' ? ' · 🥀 héo' : ''}
                     </div>
@@ -72,7 +72,7 @@ export function GardenPlots({
                 </button>
               </div>
               <div className="mt-2">
-                <ProgressBar value={ppct} max={100} />
+                <ProgressBar value={ppct} max={100} ariaLabel={`Lô ${p.slot}, ${p.treeType}: tiến độ lớn của cây`} />
               </div>
             </div>
           );
@@ -84,7 +84,7 @@ export function GardenPlots({
           {unlockShort > 0 ? gameNewbieCopy.short(unlockShort) : `Mở lô (${formatDrops(garden.nextUnlock.seedCost)})`}
         </button>
       ) : (
-        <p className="mt-2 text-xs text-stone-600">Bạn đã mở tối đa số lô đất 🌳</p>
+        <p className="mt-2 text-caption text-stone-600">Bạn đã mở tối đa số lô đất 🌳</p>
       )}
     </GameCard>
   );

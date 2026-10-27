@@ -21,7 +21,7 @@ export function CouponActions({ code }: { code: string }) {
         </Button>
       </div>
       {notice && notice.code === code && (
-        <p role={notice.error ? 'alert' : 'status'} className={`mt-1.5 text-xs ${notice.error ? 'text-danger-fg' : 'text-stone-700'}`}>
+        <p role={notice.error ? 'alert' : 'status'} className={`mt-1.5 text-caption ${notice.error ? 'text-danger-fg' : 'text-stone-700'}`}>
           {notice.text}
         </p>
       )}

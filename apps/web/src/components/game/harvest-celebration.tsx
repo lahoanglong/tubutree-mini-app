@@ -92,7 +92,7 @@ export function HarvestCelebration({
       footer={
         <div className="flex flex-col gap-2">
           {couponNotice && (
-            <p role={couponNotice.error ? 'alert' : 'status'} className={`text-center text-xs ${couponNotice.error ? 'text-danger-fg' : 'text-stone-700'}`}>
+            <p role={couponNotice.error ? 'alert' : 'status'} className={`text-center text-caption ${couponNotice.error ? 'text-danger-fg' : 'text-stone-700'}`}>
               {couponNotice.text}
             </p>
           )}
@@ -111,7 +111,7 @@ export function HarvestCelebration({
               <button type="button" disabled={shared || sharing} onClick={onShare} className={`${miniBtnSecondary} w-full`}>
                 {shared ? t.shareCommunityDone : sharing ? t.shareCommunityBusy : t.shareCommunity}
               </button>
-              <p className="text-center text-xs text-stone-700">{t.shareCommunityNote}</p>
+              <p className="text-center text-caption text-stone-700">{t.shareCommunityNote}</p>
             </>
           )}
           <button type="button" onClick={onClose} className={`${coupons.length > 0 || guest ? miniBtnSecondary : ui.btnPrimary} w-full`}>
@@ -133,16 +133,16 @@ export function HarvestCelebration({
         {showPoints && (
           <div className="mt-3 rounded-control border border-dashed border-stone-450 bg-stone-50 p-3">
             <div className="text-base font-bold text-forest-700">{t.points(points)}</div>
-            <div className="text-xs text-stone-700">{t.pointsCaption}</div>
+            <div className="text-caption text-stone-700">{t.pointsCaption}</div>
           </div>
         )}
         {guest && (
-          <p role="note" className="mt-3 rounded-control bg-warning-bg p-3 text-xs text-warning-fg">
+          <p role="note" className="mt-3 rounded-control bg-warning-bg p-3 text-caption text-warning-fg">
             {t.guest}
           </p>
         )}
         {couponCapped && (
-          <p role="note" className="mt-3 rounded-control bg-warning-bg p-3 text-xs text-warning-fg">
+          <p role="note" className="mt-3 rounded-control bg-warning-bg p-3 text-caption text-warning-fg">
             {t.capped[couponCapped]}
           </p>
         )}
@@ -154,10 +154,10 @@ export function HarvestCelebration({
             onClick={() => onCopyCoupon(coupon)}
             className="mt-3 block w-full rounded-control border border-dashed border-stone-450 bg-stone-50 p-3 text-center"
           >
-            <span className="block text-xs text-stone-700">Quà thu hoạch — mã giảm giá (chạm để sao chép)</span>
+            <span className="block text-caption text-stone-700">Quà thu hoạch — mã giảm giá (chạm để sao chép)</span>
             <span className="block break-all text-base font-bold tracking-wide text-forest-700">{coupon}</span>
             {couponTerms.find((x) => x.code === coupon) && (
-              <span data-testid="coupon-terms" className="mt-0.5 block text-xs text-stone-700">
+              <span data-testid="coupon-terms" className="mt-0.5 block text-caption text-stone-700">
                 {t.couponTerms(couponTerms.find((x) => x.code === coupon)!)}
               </span>
             )}
@@ -165,18 +165,18 @@ export function HarvestCelebration({
         ))}
         {certificate && (
           <div className="mt-2 rounded-control bg-stone-50 p-3">
-            <div className="text-xs text-stone-700">Mã đóng góp quỹ trồng cây</div>
+            <div className="text-caption text-stone-700">Mã đóng góp quỹ trồng cây</div>
             <div className="break-all text-base font-bold tracking-wide text-forest-700">{certificate}</div>
           </div>
         )}
         {species && (
           <div className={`mt-3 rounded-control border bg-stone-50 p-3 ${rarityBorder(species.rarity)}`}>
-            <div className={`text-xs font-bold ${rarityText(species.rarity)}`}>{rarityLabel(species.rarity)} · Sưu tập mới!</div>
+            <div className={`text-caption font-bold ${rarityText(species.rarity)}`}>{rarityLabel(species.rarity)} · Sưu tập mới!</div>
             <div className="mt-0.5 text-base font-bold text-stone-900">
               {species.emoji} {species.name}
             </div>
             {species.ecoFact && (
-              <div className="mt-1 flex justify-center gap-1.5 text-xs text-stone-700">
+              <div className="mt-1 flex justify-center gap-1.5 text-caption text-stone-700">
                 <Lightbulb className="mt-0.5 h-4 w-4 flex-none text-stone-500" aria-hidden="true" />
                 <span>{species.ecoFact}</span>
               </div>

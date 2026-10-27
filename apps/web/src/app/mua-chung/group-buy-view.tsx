@@ -227,7 +227,7 @@ function GroupCard({
         </div>
       </div>
       <div className="mt-2">
-        <ProgressBar value={g.currentSize} max={g.targetSize} />
+        <ProgressBar value={g.currentSize} max={g.targetSize} ariaLabel={`${g.product.name}: tiến độ nhóm mua chung`} />
       </div>
       {g.status !== 'SUCCESS' && (
         <p className="mt-1.5 text-xs text-stone-700 max-md:text-[length:var(--type-caption-size)]">{`Đủ nhóm: nhận mã giảm ${g.discountPct}%, dùng cho đơn từ ${formatVnd(g.minOrder ?? g.unitPrice)}`}</p>

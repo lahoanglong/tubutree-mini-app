@@ -74,7 +74,7 @@ export function WheelPrizeSheet({
               <div className="break-all text-base font-bold tracking-wide text-stone-900">{prize.coupon.code}</div>
               <p className="mt-1 text-sm text-stone-700">Đơn tối thiểu {formatVnd(prize.coupon.minOrder)}</p>
               <p className="text-sm text-stone-700">Hạn dùng {formatDate(prize.coupon.expiresAt)}</p>
-              <p className="mt-1.5 text-xs text-stone-600">Mã đã vào mục Mã giảm giá của tôi</p>
+              <p className="mt-1.5 text-caption text-stone-600">Mã đã vào mục Mã giảm giá của tôi</p>
             </div>
           )}
         </div>

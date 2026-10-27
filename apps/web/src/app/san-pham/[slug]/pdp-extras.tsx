@@ -116,19 +116,19 @@ export function PdpCoupons({ productId }: { productId: string }) {
 
   return (
     <div className="mt-3">
-      <ul aria-label="Mã giảm giá có thể dùng" className="flex gap-2 pb-1 max-md:flex-col md:grid md:grid-cols-2">
+      <ul aria-label="Mã giảm giá có thể dùng" className="flex gap-2 pb-1 max-md:-mx-4 max-md:overflow-x-auto max-md:px-4 max-md:pt-1 md:grid md:grid-cols-2">
         {list.map((c) => (
-          <li key={c.code} className="shrink-0 max-md:min-w-0 max-md:shrink md:min-w-0">
+          <li key={c.code} className="shrink-0 md:min-w-0">
             <button
               type="button"
               aria-label={`Sao chép mã ${c.code}`}
               onClick={() => void onCopy(c.code)}
-              className="flex min-h-11 flex-col items-start justify-center gap-0.5 rounded-control border border-dashed border-promo-fg bg-promo-bg px-3 py-1.5 text-left max-md:w-full md:w-full"
+              className="flex min-h-11 flex-col items-start justify-center gap-0.5 rounded-control border border-dashed border-[color:var(--clay-500)] bg-[color:var(--clay-50)] px-3 py-1.5 text-left md:w-full"
             >
-              <span className="text-xs font-bold text-promo-fg">
+              <span className="text-caption font-bold text-[color:var(--clay-700)]">
                 {c.code} · {couponLabel(c)}
               </span>
-              {c.minOrder ? <span className="text-xs text-stone-600">Đơn từ {formatVnd(c.minOrder)}</span> : null}
+              {c.minOrder ? <span className="text-caption text-[color:var(--color-text-tertiary)]">Đơn từ {formatVnd(c.minOrder)}</span> : null}
             </button>
           </li>
         ))}

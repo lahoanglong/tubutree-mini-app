@@ -125,7 +125,7 @@ function FaqSection({ initialFaqs, initialConfig }: { initialFaqs?: FaqItem[]; i
                 setCat(c);
                 setOpen(null);
               }}
-              className={`relative min-h-11 rounded-control border px-4 text-sm font-medium transition active:scale-95 max-md:min-h-9 max-md:shrink-0 max-md:whitespace-nowrap max-md:rounded-full max-md:border-transparent max-md:px-3.5 max-md:after:absolute max-md:after:inset-x-0 max-md:after:-inset-y-1 max-md:after:content-[''] ${
+              className={`relative min-h-11 rounded-control border px-4 text-sm font-medium transition active:scale-95 max-md:shrink-0 max-md:whitespace-nowrap max-md:rounded-full max-md:border-transparent max-md:px-3.5 max-md:after:absolute max-md:after:inset-x-0 max-md:after:-inset-y-1 max-md:after:content-[''] ${
                 selected
                   ? 'border-forest-600 bg-forest-600 text-stone-0 max-md:bg-[var(--color-action-primary-bg)] max-md:text-[color:var(--color-action-primary-fg)]'
                   : 'border-stone-450 bg-stone-0 text-stone-800 hover:bg-stone-50 max-md:bg-[var(--stone-100)] max-md:text-[color:var(--color-text-secondary)]'

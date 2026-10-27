@@ -64,7 +64,7 @@ export function StorefrontSignupFlow({ sf, onOpenEditor }: Props) {
         </Text>
         <Heading variant="title-md" as="h2" style={{ marginTop: 2 }}>{SIGNUP_STEPS[step]!.title}</Heading>
         <div style={{ marginTop: 8 }}>
-          <ProgressBar value={step + 1} max={SIGNUP_STEPS.length} label={undefined} />
+          <ProgressBar value={step + 1} max={SIGNUP_STEPS.length} ariaLabel={`Bước ${step + 1} trên ${SIGNUP_STEPS.length}`} />
         </div>
         <ol style={{ display: 'flex', justifyContent: 'space-between', listStyle: 'none', margin: '6px 0 0', padding: 0 }}>
           {SIGNUP_STEPS.map((s, i) => (
