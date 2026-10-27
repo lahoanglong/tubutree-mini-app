@@ -65,6 +65,8 @@ Sau khi duyệt, nhắn đại lý: mở **Kênh đại lý**, xem bảng giá s
 
 **Content Kit, Academy cho CTV:** marketing soạn. Xem [marketing.md](marketing.md).
 
+**Đại lý làm điểm nhận Đổi rác: pin.** Đại lý chỉ nhận pin cũ khi Tubu đã bật pin trong Quản trị VÀ điểm của đại lý đã được gắn món "Pin đã dùng" (không có hai điều này thì đại lý không nhận pin). Dặn đại lý: cất pin riêng vào thùng kín, không để lẫn rác khác; pin phồng hoặc chảy nước thì không đếm (ở quầy chọn lý do nhận thiếu "Hỏng"); không nhận pin xe điện hay ắc quy. Pin chỉ nhận khi khách mang tới điểm, không qua đường gửi hay thu kèm đơn.
+
 ## Cuối ca
 
 1. Các thẻ của bạn đã hết chưa. Còn thì ghi người nhận ca sau.

@@ -455,14 +455,17 @@ Cron chạy mỗi ngày nên hạn giữ chỗ được kiểm trễ tới dư�
 
 Phần này không phải tư vấn pháp lý. Nguồn tôi tìm được chủ yếu là báo chí và blog luật, có chỗ mâu thuẫn nhau; số điều, mức phạt và hiệu lực cần đối chiếu văn bản gốc trước khi dựa vào. Phần này chỉ nói hệ quả của chúng lên thiết kế, và liệt kê những việc chỉ chủ dự án làm được.
 
-### 14.1 Pin: không nhận ở đợt 1
-Pin đã qua sử dụng là chất thải nguy hại (theo Luật Bảo vệ môi trường 2020 và Nghị định 45/2022, qua nguồn thứ cấp). Bên gom và lưu giữ chất thải nguy hại phải có điều kiện (đăng ký chủ nguồn thải hoặc giấy phép môi trường, nơi lưu giữ đạt chuẩn, giao cho đơn vị có phép). Tôi không tìm thấy nguồn nào cho phép một cửa hàng thương mại nhận pin từ hộ gia đình mà không cần các điều kiện đó. Hãng chuyển phát nhiều khả năng từ chối pin đã qua sử dụng, và pin lithium có nguy cơ cháy khi gom và vận chuyển. Vì vậy:
-- Món pin tồn tại trong danh mục với `hazardous = true` và trạng thái `COMING_SOON`. API và ràng buộc DB không cho đặt một món `hazardous` sang `ACTIVE`.
+### 14.1 Pin: hệ thống sẵn sàng, chỉ bật khi đủ điều kiện
+Pin đã qua sử dụng là chất thải nguy hại (theo Luật Bảo vệ môi trường 2020 và Nghị định 45/2022, qua nguồn thứ cấp). Bên gom và lưu giữ chất thải nguy hại phải có điều kiện (đăng ký chủ nguồn thải hoặc giấy phép môi trường, nơi lưu giữ đạt chuẩn, giao cho đơn vị có phép). Tôi không tìm thấy nguồn nào cho phép một cửa hàng thương mại nhận pin từ hộ gia đình mà không cần các điều kiện đó. Hãng chuyển phát nhiều khả năng từ chối pin đã qua sử dụng, và pin lithium có nguy cơ cháy khi gom và vận chuyển. Vì vậy (cập nhật 2026-10-27, chủ chốt "chủ tự bật sau"): hệ thống đã sẵn sàng nhận pin nhưng pin giữ `COMING_SOON` cho tới khi chủ bật trong Quản trị.
+- Điều kiện bật (cả ba): hợp đồng bằng văn bản với đơn vị có giấy phép xử lý chất thải nguy hại; văn bản trả lời của Sở Nông nghiệp và Môi trường TP.HCM; bản Mini App mới (quầy đếm pin như món thường) đã Live.
+- Món pin (`BATTERY`, "Pin đã dùng") có `hazardous = true`. Cờ này nghĩa là "cần xử lý riêng", không còn nghĩa là không nhận: ràng buộc DB `waste_items_hazardous_not_active_chk` đã gỡ (migration `20261027000000_waste_battery_ready`) và admin đặt được `ACTIVE`; hộp xác nhận nhắc điều kiện bật. Migration nạp mức 10 viên = 1.000 Điểm Xanh, trần 20 viên/ngày và 50 viên/tháng nhưng không đổi trạng thái, không gắn pin vào điểm nào.
 - Cờ `hazardous` chỉ đặt được, không gỡ được qua giao diện admin. Gỡ cần migration có người duyệt.
-- Thẻ pin ở màn Chọn món hiện mờ, ghi "Sắp nhận", kèm một dòng hướng dẫn do admin soạn (ví dụ chỉ khách tới điểm thu pin của địa phương). Spec không nêu tên chương trình cụ thể để khỏi sai khi địa phương đổi.
-- Đường gửi về kho bắt khách tích đồng ý "không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn" trước khi tạo yêu cầu. Nơi nhận thấy pin lẫn trong hàng thì từ chối dòng đó (lý do `FOREIGN_OBJECT`) hoặc cả yêu cầu (lý do `HAZARDOUS`, hiện cho khách là "có vật không nhận"), ghi nhật ký.
-- Điều khoản với đại lý ghi rõ: không nhận pin và chất thải nguy hại.
-- Chỉ mở lại pin khi có hợp đồng bằng văn bản với đơn vị có giấy phép xử lý chất thải nguy hại và có văn bản trả lời của Sở Nông nghiệp và Môi trường TP.HCM.
+- Pin chỉ nhận khi khách mang tới điểm nhận (`DROP_OFF`): tạo hoặc sửa yêu cầu `MAIL_IN`/`PICKUP` có pin bị chặn (`ITEM_DROPOFF_ONLY`, "không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được"). Kho TP.HCM nhận mọi món đang nhận; điểm đại lý chỉ nhận khi điểm có món pin (`waste_point_items`).
+- Khi chưa bật, thẻ pin ở màn Chọn món hiện mờ, ghi "Sắp nhận", kèm dòng hướng dẫn do admin soạn.
+- Ở quầy: cất pin riêng vào thùng kín, không lẫn rác khác; pin phồng hoặc chảy nước thì không đếm (chọn lý do nhận thiếu "Hỏng"); giao đơn vị xử lý chất thải nguy hại có hợp đồng.
+- Đường gửi về kho vẫn bắt khách tích đồng ý "không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn" trước khi tạo yêu cầu. Nơi nhận thấy pin lẫn trong kiện gửi hoặc thu kèm đơn thì từ chối dòng đó (lý do `FOREIGN_OBJECT`) hoặc cả yêu cầu (lý do `HAZARDOUS`, hiện cho khách là "có vật không nhận"), ghi nhật ký.
+- Điều khoản với đại lý ghi rõ: chỉ nhận pin khi Tubu đã bật pin và điểm có món pin, cất riêng, không đếm pin phồng hoặc chảy nước; không nhận chất thải nguy hại khác.
+- Quay lại phiên bản cũ khi pin đã bật: đặt lại `COMING_SOON` (runbook triển khai 7.2b).
 
 ### 14.2 Điểm và quà: ưu đãi cho khách hàng, không phải mua phế liệu
 Chủ dự án đã chốt điểm chỉ để trừ vào đơn Tubu hoặc đổi quà Tubu. Thiết kế giữ đúng điều đó để chương trình rơi vào nhóm "ưu đãi cho khách hàng thường xuyên" thay vì "thu mua phế liệu" (loại này kéo theo bảng kê thu mua, giấy tờ nhân thân người bán và thuế thu nhập cá nhân):
