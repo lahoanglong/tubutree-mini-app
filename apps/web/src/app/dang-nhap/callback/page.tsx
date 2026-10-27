@@ -27,6 +27,8 @@ function CallbackInner() {
     // Thất bại thì giữ nơi cần quay lại để "Đăng nhập lại" đưa khách về đúng chỗ sau lần thử kế tiếp.
     const fail = (message: string, detail?: unknown, transient = false) => {
       if (detail !== undefined) console.error('[dang-nhap] đăng nhập thất bại', detail);
+      // Dấu khung chờ do script ở <head> đặt chỉ được AccountShell gỡ; đăng nhập hỏng rồi sang /tai-khoan thì dấu còn sót làm khung nháy một khung hình.
+      document.documentElement.removeAttribute('data-restoring');
       setFailure({ message, retryHref: loginHref(takeReturnTo()), transient });
     };
     const oauthError = params.get('error');

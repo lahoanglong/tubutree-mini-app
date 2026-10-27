@@ -19,6 +19,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { miniBtnSecondary, miniOutline } from '@/components/loyalty/mini-surface';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { ProductThumb } from '@/components/mini';
+import { loadErrorText } from '@/lib/error-text';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -41,7 +42,7 @@ const SORRY = 'Xin lỗi, mình chưa trả lời được lúc này 🌿';
 // khiến MỌI tin nhắn sau đó bị 400 và tính năng hỏng hẳn cho tới khi reload. Cắt còn cửa sổ gần nhất.
 const MAX_HISTORY_TURNS = 20;
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 const toHistory = (list: ChatMessage[]): AiChatTurn[] =>
   list.slice(-MAX_HISTORY_TURNS).map((m) => ({ role: m.role, content: m.content }));

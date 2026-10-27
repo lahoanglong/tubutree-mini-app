@@ -48,10 +48,11 @@ import {
 import BackLink from '@/components/back-link';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_NARROW, PAGE_WIDE } from '@/lib/page-frame';
+import { loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Cộng tác viên';
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 
 async function copyToClipboard(text: string): Promise<boolean> {

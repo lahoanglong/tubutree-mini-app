@@ -3,6 +3,7 @@
 import { createContext, useContext } from 'react';
 import { homeText } from '@/lib/home-text';
 import { ui } from '@/lib/guest-ui';
+import { loadErrorText } from '@/lib/error-text';
 
 /**
  * true khi Trang chủ đã hiện MỘT dải lỗi cấp trang (API sập hẳn): khối lỗi từng kệ ẩn đi, không xếp chồng 6 thẻ giống hệt nhau.
@@ -10,9 +11,9 @@ import { ui } from '@/lib/guest-ui';
  */
 export const HomeBlockErrorSuppressed = createContext(false);
 
-/** Lỗi của ApiError/NetworkError đã là câu tiếng Việt cho khách; lỗi lạ thì dùng câu chung. */
+/** Câu tiếng Việt cho khách theo loadErrorText (không lộ lời máy chủ thô); không có lỗi cụ thể thì câu chung của Trang chủ. */
 export function homeErrorMessage(error: unknown): string {
-  return error instanceof Error && error.message ? error.message : homeText.loadErrorMessage;
+  return error instanceof Error ? loadErrorText(error) : homeText.loadErrorMessage;
 }
 
 export interface HomeBlockErrorProps {

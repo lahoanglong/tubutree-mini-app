@@ -21,6 +21,7 @@ import { subscriptionCycleView } from './subscription-price';
 import { SubscriptionEditSheet } from './subscription-edit-sheet';
 import { PAY_SHORT, addressText } from './subscription-options';
 import { ProductThumb } from '@/components/mini';
+import { loadErrorText } from '@/lib/error-text';
 
 type SubStatus = SubscriptionDTO['status'];
 const STATUS_TONE: Record<SubStatus, BadgeTone> = { ACTIVE: 'success', PAUSED: 'warning', CANCELLED: 'neutral' };
@@ -28,7 +29,7 @@ const STATUS_LABEL: Record<SubStatus, string> = { ACTIVE: 'Đang chạy', PAUSED
 /** Chỉ để hiện lời giới thiệu khi chưa có lịch nào; máy chủ vẫn là nơi quyết định % giảm khi tính tiền. */
 const FALLBACK_DISCOUNT_PCT = 0.12;
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Có lỗi xảy ra. Vui lòng thử lại.');
+const errText = loadErrorText;
 
 /**
  * Nội dung "Đặt định kỳ": tab "Định kỳ" của trang Đơn hàng. Tạm dừng/tiếp tục, sửa số lượng/địa chỉ/cách trả, huỷ qua sheet giữ chân

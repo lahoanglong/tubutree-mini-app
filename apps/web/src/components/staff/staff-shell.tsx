@@ -9,6 +9,7 @@ import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import BackLink from '@/components/back-link';
 import { PageHeader } from '@/components/ui/page-header';
+import { loadErrorText } from '@/lib/error-text';
 
 /** Khung chung của màn nhân sự: mỗi nhánh render có đúng một h1. */
 export function StaffShell({ title, children }: { title: string; children: React.ReactNode }) {
@@ -23,7 +24,7 @@ export function StaffShell({ title, children }: { title: string; children: React
   );
 }
 
-export const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+export const errText = loadErrorText;
 
 /**
  * Cổng vào màn nhân sự: chưa đăng nhập, mất kết nối phiên, hoặc không phải STAFF/ADMIN thì dừng ở đây và không gọi API

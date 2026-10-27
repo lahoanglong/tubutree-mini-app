@@ -22,6 +22,7 @@ import { loadErrorText } from '@/lib/error-text';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { KeyValueRow, ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { actionErrorText } from '@/lib/error-text';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
 const UNDO_WINDOW_MS = 3500;
@@ -100,7 +101,7 @@ export default function CartPage() {
     if (undoTimer.current) clearTimeout(undoTimer.current);
     addToCart(line.variationId, line.quantity)
       .then((c) => qc.setQueryData(cartKey(), c))
-      .catch((e: unknown) => setUndoError(e instanceof Error ? e.message : 'Không thêm lại được sản phẩm.'));
+      .catch((e: unknown) => setUndoError(actionErrorText(e)));
   };
   // Chặn double-click/race trên cùng 1 dòng: trong lúc đang cập nhật/xóa 1 item, khóa các
   // nút của đúng item đó (item khác vẫn thao tác được bình thường).

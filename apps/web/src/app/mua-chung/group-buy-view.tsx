@@ -23,12 +23,12 @@ import { loginHref } from '@/lib/return-to';
 import { withReferral } from '@/lib/share-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { ProductThumb } from '@/components/mini';
+import { loadErrorText } from '@/lib/error-text';
 
 type Note = { text: string; error: boolean } | null;
 
 const JUST_CREATED_PARAM = 'moi';
-const FALLBACK_ERROR = 'Đã có lỗi xảy ra — Vui lòng thử lại';
-const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : FALLBACK_ERROR);
+const errorText = loadErrorText;
 
 function timeLeft(iso: string): string {
   const diff = (new Date(iso).getTime() - Date.now()) / 1000;

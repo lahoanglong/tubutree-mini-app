@@ -1,4 +1,5 @@
 import type { LoginResponse } from '@tubutree/shared-types';
+import { errorCode } from '@tubutree/app-core/api/error-status';
 import { vi } from '../i18n/vi';
 import type { FirstTouch } from './first-touch';
 import { resolveServedMedia } from '@tubutree/app-core/served-media';
@@ -176,6 +177,7 @@ export const api = {
 };
 
 /** Lời kỹ thuật tiếng Anh của framework (Nest/class-validator/proxy) lọt ra từ 4xx: không phải lời nghiệp vụ, khách không đọc hiểu. */
+const NO_VIETNAMESE = /^(?=[^]*[A-Za-z])[^\u0080-\uffff]*$/;
 const TECHNICAL_MESSAGE = /^(?=[ -~]*$)(cannot \w+ \/|not found|bad request|unauthorized|forbidden|conflict|unprocessable|too many|request failed|throttler|validation failed|.*\b(must be|should not|should be|too large|not allowed|not acceptable|unexpected token)\b)/i;
 
 /**
@@ -186,11 +188,14 @@ const TECHNICAL_MESSAGE = /^(?=[ -~]*$)(cannot \w+ \/|not found|bad request|unau
 export function getErrorMessage(error: unknown): string {
   if (isHttpError(error)) {
     // Message của throttler là tiếng Anh kỹ thuật ("ThrottlerException: ...") — không hiển thị.
-    if (error.response?.status === 429) return RATE_LIMITED_MESSAGE;
     const data = error.response?.data as { message?: string | string[] } | undefined;
     const backendMsg = Array.isArray(data?.message) ? data.message[0] : data?.message;
-    // Message backend 4xx là nghiệp vụ (viết sẵn tiếng Việt) — hiển thị thẳng.
-    if (backendMsg && error.response && error.response.status < 500) return TECHNICAL_MESSAGE.test(backendMsg.trim()) ? vi.errors.generic : backendMsg;
+    const businessMsg = backendMsg && !TECHNICAL_MESSAGE.test(backendMsg.trim()) && !NO_VIETNAMESE.test(backendMsg.trim()) ? backendMsg : null;
+    // 429 của bộ giới hạn tốc độ không có mã; 429 kèm mã nghiệp vụ (CHAT_DAILY_LIMIT, hết lượt tích điểm...) là lời máy chủ viết cho khách.
+    if (error.response?.status === 429) return errorCode(error) && businessMsg ? businessMsg : RATE_LIMITED_MESSAGE;
+    if (error.response?.status === 401) return vi.errors.sessionExpired;
+    // Message backend 4xx là nghiệp vụ (viết sẵn tiếng Việt) — hiển thị thẳng; lời tiếng Anh của framework thì câu chung.
+    if (backendMsg && error.response && error.response.status < 500) return businessMsg ?? vi.errors.generic;
     if (error.code === 'ECONNABORTED') return vi.errors.timeout;
     // Không có response: phân biệt MẤT MẠNG thật (navigator.onLine=false) với server/CORS không
     // phản hồi (vẫn có mạng) — tránh báo "mất mạng" sai khi thực chất là lỗi máy chủ.

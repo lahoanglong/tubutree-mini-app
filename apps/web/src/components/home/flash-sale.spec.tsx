@@ -53,12 +53,13 @@ describe('FlashSale', () => {
   it('tải lỗi → khối có tiêu đề, thông báo và "Thử lại" thay vì biến mất; thử lại thành công hiện đợt giờ vàng', async () => {
     let calls = 0;
     activeResult = async () => {
-      if (calls++ === 0) throw new ApiError('Có chút trục trặc, thử lại nhé', 500);
+      if (calls++ === 0) throw new ApiError('Internal server error', 500);
       return [active()];
     };
     const c = await mount(<FlashSale />);
     const region = c.querySelector('section[aria-label="Ưu đãi giờ vàng"]')!;
-    expect(region.textContent).toContain('Có chút trục trặc, thử lại nhé');
+    expect(region.textContent).toContain('Máy chủ đang bận, thử lại nhé.');
+    expect(region.textContent).not.toContain('Internal server error');
     click(region.querySelector('button[aria-label="Thử lại Ưu đãi giờ vàng"]'));
     await flush(8);
     expect(c.textContent).toContain('Nước rửa chén');

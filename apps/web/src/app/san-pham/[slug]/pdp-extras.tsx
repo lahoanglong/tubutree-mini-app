@@ -28,6 +28,7 @@ import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
 import { ContentKitSheet } from './content-kit-sheet';
 import { SubscribeSheet } from './subscribe-sheet';
+import { actionErrorText } from '@/lib/error-text';
 
 type PointsEarnProduct = {
   slug: string;
@@ -246,7 +247,7 @@ export function PdpGroupBuyRow({ productId, slug }: { productId: string; slug: s
   const create = useMutation({
     mutationFn: () => createGroupBuy(coreHttp, productId),
     onSuccess: (group) => router.push(`/mua-chung/${encodeURIComponent(group.id)}?moi=1`),
-    onError: (e: unknown) => setError(e instanceof Error ? e.message : 'Không mở được nhóm mua chung.'),
+    onError: (e: unknown) => setError(actionErrorText(e)),
   });
 
   const onClick = () => {

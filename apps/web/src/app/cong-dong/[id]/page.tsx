@@ -32,12 +32,13 @@ import { CommentRow } from './comment-row';
 import { ConfirmDeleteSheet, EditPostSheet, ReportSheet } from './post-sheets';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { ProductThumb } from '@/components/mini';
+import { loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Cộng đồng Vườn Tubu';
 const ICON_BTN = 'inline-flex h-11 min-h-11 w-11 shrink-0 items-center justify-center rounded-control text-stone-700 hover:bg-stone-100';
 const CLAMP1 = { display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as const;
 
-const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errorText = loadErrorText;
 
 type ReportTarget = { targetType: 'POST' | 'COMMENT'; targetId?: string };
 

@@ -31,6 +31,7 @@ import { ChoiceCard } from './choice-card';
 import { CTV_ORDER_COPY as t } from './ctv-order-copy';
 import { loadRecentCustomers, normalizeCustomerPhone, recentCustomerLabel, saveRecentCustomer, type RecentCustomer } from './recent-customers';
 import { ProductThumb } from '@/components/mini';
+import { loadErrorText } from '@/lib/error-text';
 
 interface OrderLine {
   variationId: string;
@@ -51,7 +52,7 @@ export const RECHECK_DELAY_MS = 1_500;
 const SUGGEST_DEBOUNCE_MS = 300;
 const QUOTE_DEBOUNCE_MS = 300;
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 const errCode = (e: unknown) => (e instanceof ApiError ? e.code : null);
 /** Không có phản hồi hoặc 5xx: máy chủ có thể đã ghi đơn, nên gửi lại phải dùng đúng Idempotency-Key cũ; 4xx là đã từ chối. */
 const isOutcomeUnknown = (e: unknown) => e instanceof NetworkError || (e instanceof ApiError && e.status >= 500);
