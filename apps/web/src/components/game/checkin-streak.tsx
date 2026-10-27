@@ -44,7 +44,7 @@ export function CheckInStreak({
         <div className="min-w-0">
           <h2 className={`flex items-center gap-1.5 whitespace-nowrap ${ui.sectionTitle} ${miniSectionTitle}`}>
             <Flame className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
-            Điểm danh chuỗi {streakDays} ngày
+            <span className="min-w-0 truncate">Điểm danh chuỗi {streakDays} ngày</span>
           </h2>
           <p className="text-xs text-stone-600">{t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}</p>
         </div>

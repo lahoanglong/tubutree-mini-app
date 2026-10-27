@@ -762,11 +762,16 @@ describe('Vườn Xanh: khung rộng và thanh tab', () => {
     const today = panel(c, 'Hôm nay');
     expect(today.className).toContain('lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]');
     expect(today.className).toContain('flex-col');
-    const [main, side] = Array.from(today.children) as HTMLElement[];
-    expect(main!.className).toContain('contents');
-    expect(side!.className).toContain('contents');
+    // Thứ tự DOM = thứ tự nhìn ở điện thoại (WCAG 2.4.3): việc chính, rồi điểm danh + nhiệm vụ, rồi quiz + vòng quay; từ lg ba khối đặt vào ô lưới.
+    const [top, side, bottom] = Array.from(today.children) as HTMLElement[];
+    for (const col of [top!, side!, bottom!]) expect(col.className).toContain('contents');
     expect(side!.querySelector('#game-checkin')).not.toBeNull();
-    expect(main!.querySelector('#game-quiz')?.className).toContain('max-lg:order-1');
+    expect(bottom!.querySelector('#game-quiz')).not.toBeNull();
+    expect(top!.querySelector('#game-quiz')).toBeNull();
+    expect(top!.className).toContain('lg:col-start-1 lg:row-start-1');
+    expect(side!.className).toContain('lg:col-start-2 lg:row-span-2');
+    expect(bottom!.className).toContain('lg:col-start-1 lg:row-start-2');
+    expect(today.innerHTML).not.toContain('max-lg:order-1');
     expect(panel(c, 'Vườn').className).toBe('hidden');
   });
 });

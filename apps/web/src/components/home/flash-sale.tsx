@@ -28,7 +28,12 @@ function Thumb({ src, name, pct }: { src: string | null; name: string; pct: numb
   return (
     <div className="relative aspect-square w-full bg-stone-100">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      {src ? <img src={src} alt={name} width={176} height={176} loading="lazy" className="h-full w-full object-cover" /> : <ThumbPlaceholder />}
+      {src ? <img src={src} alt={name} width={176} height={176} loading="lazy" className="h-full w-full object-cover" /> : (
+        // Mini App để ô nền trống khi thiếu ảnh; hình lá chỉ có từ md.
+        <div className="hidden h-full w-full md:block">
+          <ThumbPlaceholder />
+        </div>
+      )}
       {pct > 0 && (
         <span className="absolute left-1.5 top-1.5">
           <Badge tone="promo" size="sm">

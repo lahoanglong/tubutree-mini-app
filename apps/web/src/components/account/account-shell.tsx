@@ -15,6 +15,7 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { isWebRouteReady } from '@/lib/route-map';
 import { useShellPathname } from '@/lib/shell-pathname';
@@ -73,12 +74,26 @@ export function AccountShell({ children }: { children: ReactNode }) {
   const phase = useAuthPhase();
   const pathname = useShellPathname();
   const authed = phase === 'authenticated';
+  // Lúc đang khôi phục phiên cũng dựng khung hai cột với menu khung xương: phiên về thì nội dung không dịch ngang 264px.
+  const framed = authed || phase === 'loading';
 
   // Cây DOM giữ nguyên khi phiên đổi từ đang kiểm tra sang đã đăng nhập (chỉ lớp và menu thay đổi): trang con không bị dựng lại.
   return (
     <div
-      className={`mx-auto w-full max-w-frame ${authed ? 'lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start lg:gap-6 lg:px-6 lg:pt-6' : ''}`}
+      className={`mx-auto w-full max-w-frame ${framed ? 'lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start lg:gap-6 lg:px-6 lg:pt-6' : ''}`}
     >
+      {phase === 'loading' && (
+        <div aria-hidden="true" data-testid="account-shell-nav-skeleton" className="hidden lg:block">
+          {[0, 1, 2].map((g) => (
+            <div key={g} className="mb-4 space-y-2">
+              <Skeleton width={90} height={12} />
+              {[0, 1, 2, 3].map((r) => (
+                <Skeleton key={r} height={36} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
       {authed && (
         <nav
           aria-label="Menu tài khoản"
@@ -122,7 +137,7 @@ export function AccountShell({ children }: { children: ReactNode }) {
       )}
       <div
         className={
-          authed
+          framed
             ? 'min-w-0 lg:[&_main]:mx-0 lg:[&_main]:px-0 lg:[&_main.max-w-frame]:max-w-none lg:[&_[data-back-link]]:hidden'
             : undefined
         }

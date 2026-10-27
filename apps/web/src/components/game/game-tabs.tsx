@@ -32,8 +32,15 @@ export function GameTabPanel({ tab, active, children, layout = 'columns' }: { ta
 
 /**
  * Cột của tab dùng `split`. Dưới lg là `display: contents` nên con của nó vẫn là phần tử của khối một cột như trước (thứ tự giữ nguyên
- * bằng `order` ở từng con khi cần); từ lg là một cột dọc.
+ * nên không cần `order`: DOM đã theo thứ tự điện thoại); từ lg là một cột dọc đặt vào ô lưới theo `place`.
  */
-export function GameCol({ children }: { children: ReactNode }) {
-  return <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-3">{children}</div>;
+export function GameCol({ children, place }: { children: ReactNode; place: string }) {
+  return <div className={`contents lg:flex lg:min-w-0 lg:flex-col lg:gap-3 ${place}`}>{children}</div>;
 }
+
+/** Vị trí lưới từ lg cho ba khối của tab Hôm nay, khai báo theo THỨ TỰ DOM của điện thoại (đọc/Tab đúng như thứ tự nhìn). */
+export const GAME_COL = {
+  top: 'lg:col-start-1 lg:row-start-1',
+  side: 'lg:col-start-2 lg:row-span-2 lg:row-start-1',
+  bottom: 'lg:col-start-1 lg:row-start-2',
+} as const;

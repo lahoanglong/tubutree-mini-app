@@ -27,7 +27,7 @@ import { GardenPlots } from '@/components/game/garden-plots';
 import { GameLinkRow } from '@/components/game/game-link-row';
 import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { GameLoginGate, GameSkeleton } from '@/components/game/game-states';
-import { GAME_TAB_KEYS, GAME_TABS, GameCol, GameTabPanel, type GameTabKey } from '@/components/game/game-tabs';
+import { GAME_TAB_KEYS, GAME_COL, GAME_TABS, GameCol, GameTabPanel, type GameTabKey } from '@/components/game/game-tabs';
 import { GardenHero } from '@/components/game/garden-hero';
 import { HarvestCelebration } from '@/components/game/harvest-celebration';
 import { LuckyWheelCard } from '@/components/game/lucky-wheel-card';
@@ -161,7 +161,7 @@ function GameBody() {
         </div>
 
         <GameTabPanel tab="today" active={tab === ('today' satisfies GameTabKey)} layout="split">
-          <GameCol>
+          <GameCol place={GAME_COL.top}>
           <TreeHealthAlert health={profile?.treeHealth} />
 
           {/* Hồi sinh chuỗi vừa mất (§streak-repair) — chỉ hiện trong cửa sổ hồi sinh */}
@@ -192,37 +192,9 @@ function GameBody() {
             onWater={(drops) => waterM.mutate(drops)}
             onEarn={() => openEarn()}
           />
-          <div id="game-quiz" className="max-lg:order-1">
-            <QuizCard
-              quiz={quiz}
-              currentQuiz={currentQuiz}
-              answeredCount={answeredIds.size}
-              reveal={reveal}
-              pending={answerM.isPending}
-              onAnswer={(id, choice) => answerM.mutate({ id, choice })}
-              onNext={nextQuiz}
-            />
-          </div>
-
-          <div className="max-lg:order-1">
-          <LuckyWheelCard
-            cost={profile?.spinCostPoints ?? 10_000}
-            points={wheelPoints}
-            onEarnPoints={() => router.push(POINTS_PATH)}
-            onSpin={handleSpin}
-            onResult={wheelPrize.onResult}
-          />
-          </div>
-
-          {/* Lối vào Đổi rác lấy quà (spec 4.9): chỉ khi chương trình bật và trang đổi rác đã có trên web */}
-          {wasteLink && (
-            <div className="max-lg:order-1">
-              <GameLinkRow icon={Recycle} title="Đổi rác lấy quà" badge="Mới" hint="Giọt nước dùng trong Vườn, Điểm Xanh dùng để mua sắm" href={WASTE_PATH} />
-            </div>
-          )}
           </GameCol>
 
-          <GameCol>
+          <GameCol place={GAME_COL.side}>
           <div id={GAME_CHECKIN_ANCHOR}>
           <CheckInStreak
             profile={profile}
@@ -247,6 +219,37 @@ function GameBody() {
             onGo={goMission}
           />
           </div>
+          </GameCol>
+
+          <GameCol place={GAME_COL.bottom}>
+          <div id="game-quiz">
+            <QuizCard
+              quiz={quiz}
+              currentQuiz={currentQuiz}
+              answeredCount={answeredIds.size}
+              reveal={reveal}
+              pending={answerM.isPending}
+              onAnswer={(id, choice) => answerM.mutate({ id, choice })}
+              onNext={nextQuiz}
+            />
+          </div>
+
+          <div>
+          <LuckyWheelCard
+            cost={profile?.spinCostPoints ?? 10_000}
+            points={wheelPoints}
+            onEarnPoints={() => router.push(POINTS_PATH)}
+            onSpin={handleSpin}
+            onResult={wheelPrize.onResult}
+          />
+          </div>
+
+          {/* Lối vào Đổi rác lấy quà (spec 4.9): chỉ khi chương trình bật và trang đổi rác đã có trên web */}
+          {wasteLink && (
+            <div>
+              <GameLinkRow icon={Recycle} title="Đổi rác lấy quà" badge="Mới" hint="Giọt nước dùng trong Vườn, Điểm Xanh dùng để mua sắm" href={WASTE_PATH} />
+            </div>
+          )}
           </GameCol>
         </GameTabPanel>
 

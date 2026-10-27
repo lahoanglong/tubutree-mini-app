@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Bell } from 'lucide-react';
@@ -13,7 +14,20 @@ import { isWebRouteReady } from '@/lib/route-map';
  * của điện thoại nên không thêm request. Khách chưa đăng nhập không có chuông.
  */
 export function HeaderBell({ authed }: { authed: boolean }) {
-  const q = useQuery({ ...notificationsQuery(coreHttp), enabled: authed });
+  // Thanh đầu chỉ hiện từ md; điện thoại có chuông riêng ở Trang chủ, nên không gọi thêm request ở đó (giữ như trước khi có chuông này).
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      setWide(true);
+      return;
+    }
+    const mq = window.matchMedia('(min-width: 768px)');
+    const sync = () => setWide(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+  const q = useQuery({ ...notificationsQuery(coreHttp), enabled: authed && wide });
   if (!authed || !isWebRouteReady('/tai-khoan/thong-bao')) return null;
   const unread = Array.isArray(q.data) ? q.data.filter((n) => n.status !== 'READ').length : 0;
   return (

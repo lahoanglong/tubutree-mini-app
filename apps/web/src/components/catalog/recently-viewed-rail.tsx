@@ -37,7 +37,12 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed }: { titl
               >
                 <div className="aspect-square w-full bg-stone-100">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {it.thumbnail ? <img src={it.thumbnail} alt="" width={128} height={128} loading="lazy" className="h-full w-full object-cover" /> : <ThumbPlaceholder iconSize={28} />}
+                  {it.thumbnail ? <img src={it.thumbnail} alt="" width={128} height={128} loading="lazy" className="h-full w-full object-cover" /> : (
+                    // Mini App để ô nền trống khi thiếu ảnh; hình lá chỉ có từ md.
+                    <div className="hidden h-full w-full md:block">
+                      <ThumbPlaceholder iconSize={28} />
+                    </div>
+                  )}
                 </div>
                 <div className="p-2">
                   <p className="line-clamp-2 min-h-[2rem] text-xs text-stone-900">{it.name}</p>

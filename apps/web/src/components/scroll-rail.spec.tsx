@@ -29,7 +29,7 @@ describe('ScrollRail', () => {
     expect(c.querySelector('button')).toBeNull();
   });
 
-  it('hàng tràn ở đầu: chỉ có nút tiếp (ẩn ở điện thoại bằng class), bấm cuộn ngang bằng scrollBy', () => {
+  it('hàng tràn ở đầu: nút trước bị disabled, nút tiếp bật (cả hai ẩn ở điện thoại bằng class), bấm cuộn ngang bằng scrollBy', () => {
     overflow();
     const { container: c } = mount(
       <ScrollRail className="flex overflow-x-auto">
@@ -38,7 +38,9 @@ describe('ScrollRail', () => {
     );
     const next = c.querySelector('button[aria-label="Xem các mục tiếp"]') as HTMLButtonElement;
     expect(next).not.toBeNull();
-    expect(c.querySelector('button[aria-label="Xem các mục trước"]')).toBeNull();
+    const prev = c.querySelector('button[aria-label="Xem các mục trước"]') as HTMLButtonElement;
+    expect(prev.disabled).toBe(true);
+    expect(next.disabled).toBe(false);
     expect(next.className).toMatch(/\bhidden\b/);
     expect(next.className).toMatch(/\bmd:flex\b/);
     const ul = c.querySelector('ul') as HTMLUListElement;

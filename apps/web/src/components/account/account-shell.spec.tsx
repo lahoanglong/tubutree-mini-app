@@ -57,4 +57,17 @@ describe('AccountShell (menu tài khoản từ lg)', () => {
     expect(c.querySelector('main')?.parentElement?.parentElement).toBe(c.firstElementChild);
     mocks.phase = 'authenticated';
   });
+
+  it('đang khôi phục phiên: đã dựng khung hai cột kèm menu khung xương để nội dung không dịch khi phiên về', () => {
+    mocks.phase = 'loading';
+    const c = mount(
+      <AccountShell>
+        <main>đang tải</main>
+      </AccountShell>,
+    );
+    expect(c.firstElementChild?.className).toContain('lg:grid-cols-[240px_minmax(0,1fr)]');
+    expect(c.querySelector('[data-testid="account-shell-nav-skeleton"]')).not.toBeNull();
+    expect(c.querySelector('nav')).toBeNull();
+    mocks.phase = 'authenticated';
+  });
 });
