@@ -11,6 +11,9 @@ const PHRASES = [
   'thuong tien',
   'tang tien',
   'tra tien',
+  'tra thuong',
+  'nhan tien',
+  'the cao',
   'hoan tien',
   'rut tien',
   'chuyen tien',
@@ -72,14 +75,27 @@ const GIVE_AMOUNT = new RegExp(
   'u',
 );
 // "Hoàn 5% giá trị đơn", "thưởng 3%": hoàn/thưởng theo phần trăm là tiền trừ khi nói rõ là điểm.
-// Hoàn theo điều kiện hàng lỗi/sai là bảo hành hàng hoá, không phải thưởng tiền.
-const REFUND_PERCENT =
-  /(?<![a-z0-9])(?:hoan(?: lai)?|tra lai|thuong)(?: ngay)? \d+(?:[.,]\d+)? ?%(?![^.;,]*\bdiem\b)(?![^.;,]*\b(?:neu|khi|truong hop)\b[^.;,]*\b(?:loi|hu hong|hong|sai|vo|bep|khong dung|khong giong|khong dat|that lac|khong hai long)\b)/u;
-// Quà/Trả + số tiền ("Quà 50k", "Trả 10k cho mỗi kg giấy"): "qua" và "tra" không dấu trùng "quá", "trà", nên chỉ tính khi mở đầu một ý.
-const GIFT_AMOUNT = new RegExp(`(?:^|[.,;:!?(\\-]\\s*)(?:qua|tra)${FILLER}\\s+${MONEY}`, 'u');
-// "Thẻ cào" chỉ tính khi đi với nhà mạng/điện thoại: bỏ dấu thì "thể cao" (có thể cao hơn) trùng.
-const PHONE_CARD =
-  /(?:(?<![a-z0-9])(?:nap|mua|doi) the cao|(?<![a-z0-9])the cao (?:dien thoai|mobifone|viettel|vinaphone|vietnamobile|vina\b|\d[\d.,]*\s?(?:k|d|vnd|dong|nghin|ngan|trieu|tr)\b))/u;
+// Hoàn/trả lại theo điều kiện hàng lỗi/vỡ là bảo hành hàng hoá, không phải thưởng tiền; "thưởng X%" thì luôn chặn.
+const REFUND_PERCENT = new RegExp(
+  '(?<![a-z0-9])(?:' +
+    '(?:hoan(?: lai)?|tra lai)(?: ngay)? \\d+(?:[.,]\\d+)? ?%(?![^.;,]*\\bdiem\\b)' +
+    '(?![^.;,]*\\b(?:neu|khi|truong hop)\\b[^.;,]*\\b(?:hang (?:loi|hu|hong|sai|vo|bep)|bi (?:loi|hu|hong|vo|bep|sai)|giao sai|loi san xuat|hu hong|vo hong)\\b)' +
+    '|thuong(?: ngay)? \\d+(?:[.,]\\d+)? ?%(?![^.;,]*\\bdiem\\b)' +
+    ')',
+  'u',
+);
+// Tiền trả cho rác: "Trả 10k cho mỗi kg giấy", "Mỗi kg giấy trả 10k", "Thu mua giấy 5k/kg", "1kg giấy = 10k".
+// "qua"/"tra" bỏ dấu trùng "quá"/"trà", nên chỉ tính khi mở đầu một ý, đi với người, hoặc đi với đơn vị rác. Đơn vị cho dạng
+// `<tiền>/<đơn vị>` không gồm "chai"/"hộp" trơn để "Nước suối 5k/chai" qua.
+const WASTE_UNIT = '(?:kg|ky|kilo|can|thung|chai|vo|hop|lon|bao|bich)';
+const SLASH_UNIT = '(?:kg|ky|kilo|can|vo)';
+const GIFT_AMOUNT = new RegExp(
+  `(?:^|[.,;:!?(\\-]\\s*)(?:qua${FILLER}\\s*[:=]?\\s+${MONEY}|tra\\s+(?:khach|ban|nguoi|thanh vien)${FILLER}\\s+${MONEY})` +
+    `|(?<![a-z0-9])tra(?:\\s+(?:ngay|lai|luon|them))*\\s+${UNIT_AMOUNT}(?=\\s*(?:\\/\\s*${SLASH_UNIT}|(?:cho\\s+)?(?:moi|1|mot)\\s*${WASTE_UNIT})\\b)` +
+    `|${UNIT_AMOUNT}\\s*\\/\\s*${SLASH_UNIT}\\b` +
+    `|(?<![a-z0-9])(?:moi|1|mot)\\s*${WASTE_UNIT}\\b[^.;!?]{0,40}?(?:tra|duoc|nhan|lay|=)\\s+${UNIT_AMOUNT}`,
+  'u',
+);
 const WORD = '[a-z0-9]';
 const PHRASE_RES = PHRASES.map((p) => ({ phrase: p, re: new RegExp(`(?<!${WORD})${p}(?!${WORD})`, 'u') }));
 
@@ -97,9 +113,11 @@ const HARMLESS: RegExp[] = [
   /(?<![\d])(?:\+?84|0)(?:[\s.-]?\d){8,10}(?!\d)/g,
 ];
 
+const ACCENTED_HARMLESS = /nhân tiện|trà thượng|thể cao/iu;
+
 type Folded = { text: string; src: number[] };
 
-/** Bỏ dấu, chữ thường, gộp khoảng trắng; `src[i]` là vị trí trong chuỗi gốc của ký tự thứ i để lấy lại đoạn chữ gốc cho lời nhắn. */
+/** Bỏ dấu, chữ thường, gộp khoảng trắng (xuống dòng, •, | là ngắt ý nên thành dấu chấm); `src[i]` là vị trí trong chuỗi gốc của ký tự thứ i để lấy lại đoạn chữ gốc cho lời nhắn. */
 function fold(text: string): Folded {
   let out = '';
   const src: number[] = [];
@@ -113,7 +131,11 @@ function fold(text: string): Folded {
       .replace(/Đ/g, 'D')
       .toLowerCase();
     for (const c of folded) {
-      if (/\s/.test(c)) {
+      if (/[\r\n•|]/.test(c)) {
+        out += '.';
+        src.push(i);
+        lastSpace = false;
+      } else if (/\s/.test(c)) {
         if (!lastSpace) {
           out += ' ';
           src.push(i);
@@ -121,7 +143,7 @@ function fold(text: string): Folded {
         lastSpace = true;
       } else {
         out += c;
-        src.push(i);
+        for (let k = 0; k < c.length; k += 1) src.push(i);
         lastSpace = false;
       }
     }
@@ -133,7 +155,7 @@ function fold(text: string): Folded {
 function original(text: string, f: Folded, start: number, end: number): string {
   const from = f.src[start] ?? 0;
   const to = (f.src[end - 1] ?? text.length - 1) + 1;
-  return text.slice(from, to).trim();
+  return text.slice(from, to).replace(/^[^\p{L}\p{N}]+/u, '').trim();
 }
 
 const SLANG_TAIL = new RegExp(`${SLANG_UNIT}$`, 'u');
@@ -155,16 +177,20 @@ function firstReal(re: RegExp, t: string): RegExpExecArray | null {
 }
 
 /** Đoạn chữ vi phạm đầu tiên tìm thấy, đúng như đại lý đã viết (có dấu), hoặc null nếu không có. */
-export function findCashWording(text: string): string | null {
+export function findCashWording(input: string): string | null {
+  const text = input.normalize('NFC');
   const f = fold(text);
   let t = f.text;
+  // Chữ vô hại còn dấu: bỏ dấu thì "nhân tiện", "trà thượng", "thể cao" trùng "nhận tiền", "trả thưởng", "thẻ cào".
+  const accented = new RegExp(ACCENTED_HARMLESS.source, 'giu');
+  const masked = new Set<number>();
+  for (let m = accented.exec(text); m; m = accented.exec(text)) for (let k = m.index; k < m.index + m[0].length; k += 1) masked.add(k);
+  if (masked.size > 0) t = t.split('').map((c, k) => (masked.has(f.src[k] ?? -1) ? ' ' : c)).join('');
   for (const re of HARMLESS) t = t.replace(re, (m) => ' '.repeat(m.length));
   for (const { re } of PHRASE_RES) {
     const m = re.exec(t);
     if (m) return original(text, f, m.index, m.index + m[0].length);
   }
-  const card = PHONE_CARD.exec(t);
-  if (card) return original(text, f, card.index, card.index + card[0].length);
   for (const re of [GIVE_AMOUNT, GIFT_AMOUNT, REFUND_PERCENT]) {
     const m = firstReal(re, t);
     if (m) return original(text, f, m.index, m.index + m[0].length);

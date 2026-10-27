@@ -53,6 +53,28 @@ describe('Chữ thưởng/trả bằng tiền mặt (ưu đãi riêng của cử
     'Tặng thẻ cào 10k',
     'Nhận tiền 50k mỗi tháng',
     'Hoàn 5% khi mua đơn đầu',
+    'Hoàn 5% khi mang vỏ chai tới',
+    'Thưởng 10% khi đổi vỏ hộp sữa',
+    'Hoàn 3% nếu đổi vỏ chai',
+    'Thưởng 2% trường hợp khách mang vỏ hộp',
+    'Hoàn 5% khi có lợi',
+    'Thưởng 3% khi sai địa chỉ',
+    'Đổi rác nhận tiền',
+    'Mang rác tới nhận tiền ngay',
+    'Tặng thẻ cào',
+    'Tặng 1 thẻ cào',
+    'Trả thưởng bằng thẻ cào',
+    'Trả thưởng cho khách mang rác',
+    'Mỗi kg giấy trả 10k',
+    'Thu mua giấy 5k/kg',
+    'Giấy vụn 3.000đ/kg',
+    '1kg giấy = 10k',
+    'Quà: 50k',
+    'Quà = 50k',
+    'Ưu đãi hôm nay\nQuà 50k',
+    '• Quà 50k',
+    'Ưu đãi | Quà 50k',
+    'Trả 1k cho mỗi vỏ chai',
   ])('chặn: %s', (text) => {
     expect(findCashWording(text)).not.toBeNull();
   });
@@ -102,6 +124,14 @@ describe('Chữ thưởng/trả bằng tiền mặt (ưu đãi riêng của cử
     'Hoàn 100% nếu hàng lỗi',
     'Tặng voucher 50k cho lần mua sau',
     'Tặng 50k voucher',
+    'Trà 25k',
+    'Trà 25k/ly',
+    'Trà 30000',
+    'Giá: trà 25k',
+    'Đồ uống: trà 20k',
+    'Nước suối 5k/chai',
+    'Trà 25k/chai',
+    'Hoàn 10% nếu hàng bị vỡ',
   ])('cho qua: %s', (text) => {
     expect(findCashWording(text)).toBeNull();
   });
@@ -111,6 +141,11 @@ describe('Chữ thưởng/trả bằng tiền mặt (ưu đãi riêng của cử
     expect(cashWordingMessage('Chúng tôi Hoàn Tiền mặt tại quầy')).toMatch(/^Chữ "Tiền mặt"|^Chữ "Hoàn Tiền"/);
     expect(cashWordingMessage('Thưởng 2 củ')).toContain('Chữ "Thưởng 2 củ"');
     expect(cashWordingMessage('Giảm 10% hoá đơn đầu')).toBe(CASH_WORDING_MESSAGE);
+  });
+
+  it('đoạn trích không có dấu thừa ở đầu', () => {
+    expect(findCashWording('Ưu đãi hôm nay\nQuà 50k')).toBe('Quà 50k');
+    expect(findCashWording('Hôm nay: Quà: 50k')).toBe('Quà: 50k');
   });
 
   it('lời nhắn nói bằng chữ thường và gợi ý cách viết khác', () => {
