@@ -28,11 +28,12 @@ const row = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function setup(current: ReturnType<typeof row> | null = row(), categories = 1) {
+function setup(current: ReturnType<typeof row> | null = row(), categories = 1, sellableVariations = 1) {
   const update = jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...current, ...data }));
   const prisma = {
     product: { findUnique: jest.fn().mockResolvedValue(current), update },
     category: { count: jest.fn().mockResolvedValue(categories) },
+    variation: { count: jest.fn().mockResolvedValue(sellableVariations) },
   };
   return { svc: new ProductAdminService(prisma as never), update, prisma };
 }
@@ -104,6 +105,23 @@ describe('ProductAdminService — sửa sản phẩm', () => {
     expect(update).not.toHaveBeenCalled();
     await svc.update('a1', 'p1', { isFeatured: true });
     expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('hàng đối tác: bật hay tắt đều bị chặn ở đây (đi qua luồng gian hàng/duyệt), gửi lại đúng trạng thái hiện tại thì không sao', async () => {
+    const off = setup(row({ storefrontId: 'sf1', pancakeId: null, isActive: false }));
+    await expect(off.svc.update('a1', 'p1', { isActive: true })).rejects.toThrow('qua gian hàng');
+    const on = setup(row({ storefrontId: 'sf1', pancakeId: null, isActive: true }));
+    await expect(on.svc.update('a1', 'p1', { isActive: false })).rejects.toThrow('qua gian hàng');
+    expect(on.update).not.toHaveBeenCalled();
+    await on.svc.update('a1', 'p1', { isActive: true, isFeatured: true });
+    expect(on.update.mock.calls[0][0].data).toEqual({ isFeatured: true });
+  });
+
+  it('bật sản phẩm không còn biến thể nào đang bán (ví dụ đã chuyển hết sang đối tác) → 400, không ghi', async () => {
+    const { svc, update, prisma } = setup(row({ isActive: false }), 1, 0);
+    await expect(svc.update('a1', 'p1', { isActive: true })).rejects.toThrow('không còn biến thể');
+    expect(prisma.variation.count).toHaveBeenCalledWith({ where: { productId: 'p1', isActive: true } });
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('không có gì đổi thì không ghi; tên và giá không có đường nào để sửa', async () => {

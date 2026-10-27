@@ -86,13 +86,22 @@ export class ProductAdminService {
       data.shortDesc = shortDesc;
     }
     if (patch.isFeatured !== undefined) data.isFeatured = patch.isFeatured;
-    if (patch.isActive !== undefined) {
-      if (patch.isActive && !current.isActive) {
+    if (patch.isActive !== undefined && patch.isActive !== current.isActive) {
+      // Hàng đối tác bật/tắt theo luồng của gian hàng (duyệt lại, gỡ/gắn liên kết Pancake): bật ở đây bỏ qua luồng đó và có thể
+      // mở bán sản phẩm không còn biến thể nào, tắt ở đây thì gian hàng thấy trạng thái lệch với bản duyệt.
+      if (current.storefrontId !== null) {
+        throw new BadRequestException('Hàng của đối tác bật hoặc tắt qua gian hàng và luồng duyệt, không đổi ở đây.');
+      }
+      if (patch.isActive) {
         if (current.pancakeHold !== null) {
           throw new ConflictException('Sản phẩm đang bị Pancake giữ lại (đã xoá khỏi Pancake hoặc chưa có giá), chưa bán lại được. Sửa ở Pancake rồi đợi đồng bộ.');
         }
         if (current.approvalStatus !== 'APPROVED') {
           throw new BadRequestException('Sản phẩm chưa được duyệt nên chưa bật bán được.');
+        }
+        const sellable = await this.prisma.variation.count({ where: { productId: id, isActive: true } });
+        if (sellable === 0) {
+          throw new BadRequestException('Sản phẩm không còn biến thể nào đang bán (có thể đã chuyển sang gian hàng đối tác), bật lên khách cũng không mua được.');
         }
       }
       data.isActive = patch.isActive;

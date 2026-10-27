@@ -147,7 +147,7 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
       await flush();
       const patch = m.calls.find((c) => c.init?.method === 'PATCH')!;
       expect(JSON.parse(String(patch.init?.body))).toEqual({
-        images: ['https://cdn.example.com/a.jpg'], description: 'Mô tả mới', shortDesc: null, isActive: true, isFeatured: false, categoryIds: ['c1'],
+        images: ['https://cdn.example.com/a.jpg'], description: 'Mô tả mới', categoryIds: ['c1'],
       });
       expect(body.textContent).toContain('Đã lưu.');
     });
@@ -158,10 +158,29 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
       click(container.querySelector('button[aria-label="Sửa Nước rửa chén"]'));
       await flush();
       expect(document.body.querySelector('textarea')).toBeNull();
+      expect(document.body.querySelector<HTMLInputElement>('[role="dialog"] input[type="checkbox"]')!.disabled).toBe(true);
+      click(byText(document.body, 'button', 'Giặt tẩy'));
       click(byText(document.body, 'button', 'Lưu'));
       await flush();
       const patch = m.calls.find((c) => c.init?.method === 'PATCH')!;
-      expect(Object.keys(JSON.parse(String(patch.init?.body))).sort()).toEqual(['categoryIds', 'isActive', 'isFeatured']);
+      expect(Object.keys(JSON.parse(String(patch.init?.body))).sort()).toEqual(['categoryIds']);
+    });
+
+    it('chưa sửa gì thì nút Lưu khoá; chỉ đổi nổi bật thì chỉ gửi isFeatured; có ghi chú đồng bộ Pancake sẽ đè ảnh và mô tả', async () => {
+      const { m, container } = editSetup();
+      await flush();
+      click(container.querySelector('button[aria-label="Sửa Nước rửa chén"]'));
+      await flush();
+      const save = byText(document.body, 'button', 'Lưu') as HTMLButtonElement;
+      expect(save.disabled).toBe(true);
+      expect(document.body.textContent).toContain('bị thay bằng ảnh của Pancake');
+      click(Array.from(document.body.querySelectorAll<HTMLInputElement>('[role="dialog"] input[type="checkbox"]'))[1]!);
+      await flush();
+      expect(save.disabled).toBe(false);
+      click(save);
+      await flush();
+      const patch = m.calls.find((c) => c.init?.method === 'PATCH')!;
+      expect(JSON.parse(String(patch.init?.body))).toEqual({ isFeatured: true });
     });
 
     it('sản phẩm đang bị Pancake giữ: nói rõ lý do chưa bật bán được', async () => {

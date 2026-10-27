@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { getAdminProduct, patchAdminProduct, type CategoryOption, type ProductDetail } from '@/lib/product-categories';
+import { getAdminProduct, patchAdminProduct, type CategoryOption, type ProductDetail, type ProductPatch } from '@/lib/product-categories';
 import { formatVnd } from '@/lib/format-vnd';
 import { ImageUrlField } from './image-url-field';
 import { SideDrawer } from './side-drawer';
@@ -50,14 +50,20 @@ function Form({ product, categories, onClose, onSaved }: { product: ProductDetai
   const cleanImages = images.map((s) => s.trim()).filter(Boolean);
   const showBlocked = !product.isActive && product.cannotShowReason !== null;
 
+  // Chỉ gửi phần khách sửa: gửi cả trường không đổi thì ghi đè chữ mà đồng bộ Pancake vừa cập nhật sau lúc mở màn này.
+  const patch: ProductPatch = {};
+  if (!locked) {
+    if (JSON.stringify(cleanImages) !== JSON.stringify(product.images)) patch.images = cleanImages;
+    if (description !== product.description) patch.description = description;
+    if ((shortDesc.trim() || null) !== (product.shortDesc?.trim() || null)) patch.shortDesc = shortDesc.trim() || null;
+  }
+  if (isActive !== product.isActive) patch.isActive = isActive;
+  if (isFeatured !== product.isFeatured) patch.isFeatured = isFeatured;
+  if (JSON.stringify([...categoryIds].sort()) !== JSON.stringify([...product.categoryIds].sort())) patch.categoryIds = categoryIds;
+  const changed = Object.keys(patch).length > 0;
+
   const save = useMutation({
-    mutationFn: () =>
-      patchAdminProduct(product.id, {
-        ...(locked ? {} : { images: cleanImages, description, shortDesc: shortDesc.trim() || null }),
-        isActive,
-        isFeatured,
-        categoryIds,
-      }),
+    mutationFn: () => patchAdminProduct(product.id, patch),
     onSuccess: () => {
       setMsg({ ok: true, text: 'Đã lưu.' });
       onSaved();
@@ -73,7 +79,7 @@ function Form({ product, categories, onClose, onSaved }: { product: ProductDetai
       className="space-y-4 p-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!save.isPending) save.mutate();
+        if (!save.isPending && changed) save.mutate();
       }}
     >
       <div className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm text-stone-700">
@@ -113,15 +119,21 @@ function Form({ product, categories, onClose, onSaved }: { product: ProductDetai
             Mô tả
             <textarea value={description} maxLength={5000} rows={6} onChange={(e) => setDescription(e.target.value)} className={`${INPUT_CLASS} mt-1`} />
           </label>
-          <p className="text-xs text-stone-500">Nếu Pancake có gửi ảnh thì lần đồng bộ sau sẽ thay ảnh ở đây. Mô tả để trống bên Pancake thì giữ mô tả này.</p>
+          {product.managedByPancake && (
+            <p className="text-xs text-stone-500">
+              Lưu ý: mỗi lần đồng bộ, Pancake có ảnh thì ảnh ở đây bị thay bằng ảnh của Pancake, Pancake có mô tả thì mô tả ở đây bị thay. Pancake để
+              trống thì giữ nguyên bản của bạn. Danh mục đã chọn ở đây thì đồng bộ không đổi; sản phẩm chưa có danh mục sẽ được điền theo bản đồ nhóm hàng Pancake.
+            </p>
+          )}
         </fieldset>
       )}
 
       <div className="space-y-2">
         <label className="flex min-h-[44px] items-center gap-2 text-sm text-stone-800 sm:min-h-0">
-          <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+          <input type="checkbox" checked={isActive} disabled={locked} onChange={(e) => setIsActive(e.target.checked)} />
           Đang bán (hiện trên Mini App và web)
         </label>
+        {locked && <p className="text-xs text-stone-500">Hàng của đối tác bật hoặc tắt qua gian hàng và luồng duyệt.</p>}
         {showBlocked && !isActive && <p className="text-xs text-warning-fg">Chưa bật bán được: {product.cannotShowReason}</p>}
         <label className="flex min-h-[44px] items-center gap-2 text-sm text-stone-800 sm:min-h-0">
           <input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} />
@@ -142,7 +154,7 @@ function Form({ product, categories, onClose, onSaved }: { product: ProductDetai
 
       {msg && <Notice tone={msg.ok ? 'success' : 'danger'} role={msg.ok ? 'status' : 'alert'}>{msg.text}</Notice>}
       <div className="flex gap-2">
-        <button type="submit" disabled={save.isPending} className={BTN_PRIMARY}>
+        <button type="submit" disabled={save.isPending || !changed} className={BTN_PRIMARY}>
           {save.isPending ? 'Đang lưu…' : 'Lưu'}
         </button>
         <button type="button" onClick={onClose} className={BTN_SECONDARY}>
