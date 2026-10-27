@@ -10,7 +10,7 @@ import { WASTE_CONFIG_KEYS } from '../../src/modules/waste-exchange/waste-config
 
 const MIGRATION = 'prisma/migrations/20261020000000_waste_exchange/migration.sql';
 // Trạng thái BATTERY mà migration 20261027000000 đặt khi migrate deploy; đổi ở đây nếu chủ chọn khác.
-const BATTERY_STATUS_AFTER_MIGRATE = 'ACTIVE';
+const BATTERY_STATUS_AFTER_MIGRATE = 'COMING_SOON';
 // Spec 11.4 (lines 306-312) with $3 and $4 cast to int; M3.1a incrementPointUsage uses this exact text.
 const QUOTA_SQL = `INSERT INTO waste_point_usage ("pointId", "monthKey", "pointsUsed", confirmations) VALUES ($1, $2, $3::int, 1) ON CONFLICT ("pointId", "monthKey") DO UPDATE SET "pointsUsed" = waste_point_usage."pointsUsed" + EXCLUDED."pointsUsed", confirmations = waste_point_usage.confirmations + 1 WHERE waste_point_usage."pointsUsed" + EXCLUDED."pointsUsed" <= $4::int RETURNING "pointsUsed"`;
 

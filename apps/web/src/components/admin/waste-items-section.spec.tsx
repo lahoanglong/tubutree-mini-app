@@ -140,6 +140,37 @@ describe('WasteItemsSection', () => {
     expect(body(patch[0]!)).toEqual({ prepInstructions: 'Chưa nhận pin. Gom riêng, không bỏ chung với rác khác.' });
   });
 
+  it('bật món nguy hại (chọn Đang nhận ở bảng) hỏi xác nhận; Huỷ thì không gọi API, Đồng ý thì PATCH ACTIVE', async () => {
+    const { c, api } = await mount();
+    selectValue(c.querySelector('select[aria-label="Trạng thái Pin đã dùng"]'), 'ACTIVE');
+    await flush();
+    const text = confirmDialog()!.textContent!;
+    expect(text).toContain('Chỉ bật khi đã có hợp đồng xử lý chất thải nguy hại và bản Mini App mới đã lên.');
+    expect(text).toContain('Kho nhận ngay mọi món đang nhận; đại lý chỉ nhận khi điểm có món này.');
+    answerConfirm(false);
+    await flush();
+    expect(callsTo(api, '/admin/waste/items/i5', 'PATCH')).toHaveLength(0);
+    selectValue(c.querySelector('select[aria-label="Trạng thái Pin đã dùng"]'), 'ACTIVE');
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const patch = callsTo(api, '/admin/waste/items/i5', 'PATCH');
+    expect(patch).toHaveLength(1);
+    expect(body(patch[0]!)).toEqual({ status: 'ACTIVE' });
+  });
+
+  it('bật món nguy hại trong bảng sửa cũng hỏi xác nhận', async () => {
+    const { c, api } = await mount();
+    click(Array.from(row(c, 'i5').querySelectorAll('button')).find((b) => b.textContent === 'Sửa')!);
+    selectValue(c.querySelector('[name="status"]'), 'ACTIVE');
+    click(saveBtn(c));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Chỉ bật khi đã có hợp đồng xử lý chất thải nguy hại');
+    answerConfirm(true);
+    await flush();
+    expect(body(callsTo(api, '/admin/waste/items/i5', 'PATCH')[0]!)).toEqual({ status: 'ACTIVE' });
+  });
+
   it('thêm món: ô trần để trống gửi null; xem trước thẻ khách cập nhật theo ô nhập', async () => {
     const { c, api } = await mount();
     fillNew(c);

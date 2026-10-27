@@ -132,6 +132,15 @@ export function WasteItemsSection() {
   const errors = panel ? validate(panel.form) : {};
   const setForm = (p: Partial<Form>) => setPanel((cur) => (cur ? { ...cur, form: { ...cur.form, ...p } } : cur));
 
+  const confirmEnableHazardous = () =>
+    confirm({
+      title: 'Bật món nguy hại',
+      message:
+        'Chỉ bật khi đã có hợp đồng xử lý chất thải nguy hại và bản Mini App mới đã lên. Kho nhận ngay mọi món đang nhận; đại lý chỉ nhận khi điểm có món này.',
+      confirmLabel: 'Bật nhận',
+      tone: 'danger',
+    });
+
   const save = async () => {
     if (!panel || Object.keys(errors).length > 0) return;
     const full = toBody(panel.form);
@@ -147,6 +156,7 @@ export function WasteItemsSection() {
         });
         if (!ok) return;
       }
+      if (body.status === 'ACTIVE' && (editing.hazardous || full.hazardous) && !(await confirmEnableHazardous())) return;
       patch.mutate({ id: editing.id, body }, { onSuccess: () => setPanel(null) });
       return;
     }
@@ -159,6 +169,7 @@ export function WasteItemsSection() {
       });
       if (!ok) return;
     }
+    if (full.status === 'ACTIVE' && full.hazardous && !(await confirmEnableHazardous())) return;
     create.mutate(full);
   };
 
@@ -228,7 +239,11 @@ export function WasteItemsSection() {
                     className={FIELD_XS}
                     value={i.status}
                     disabled={panel?.id === i.id}
-                    onChange={(e) => patch.mutate({ id: i.id, body: { status: e.target.value as WasteItemStatus } })}
+                    onChange={async (e) => {
+                      const status = e.target.value as WasteItemStatus;
+                      if (status === 'ACTIVE' && i.hazardous && i.status !== 'ACTIVE' && !(await confirmEnableHazardous())) return;
+                      patch.mutate({ id: i.id, body: { status } });
+                    }}
                   >
                     {STATUSES.map((s) => (
                       <option key={s} value={s}>{WASTE_ITEM_STATUS_LABELS[s]}</option>

@@ -382,7 +382,7 @@ Không đạt thì để `AI_ADVISOR_ENABLED=false`: Mini App ẩn lối vào, k
 
 - Kiểm chỉ mục từng phần (partial index) chạy trên một database CHƯA áp `20261020000000_waste_exchange` (ví dụ PROD trước khi deploy) sẽ báo THIẾU năm chỉ mục của migration này: ba khoá chống cộng điểm hai lần của `points_transactions` (`points_transactions_recycle_ref_key`, `points_transactions_recycle_reverse_key`, `points_transactions_gift_refund_key`), rồi `waste_points_one_warehouse_key` và `waste_point_staff_one_owner_key`. Kiểm này còn báo thiếu các chỉ mục từng phần của migration khác đang chờ áp trên database đó (ví dụ ba chỉ mục của `20261019100000_external_orders` nếu nó đi cùng lần deploy này). Đó là đúng, vì kiểm đọc thư mục migration của mã đang chạy. Sau khi migrate nó phải báo không thiếu cái nào.
 - Bộ test race (gồm `partial-unique-indexes` pin 26) chạy trong workflow `.github/workflows/race.yml` (PR vào main có đụng `apps/api`, và hằng đêm) và trong `docs/2026-10-review/handoff/verify-full.sh`. Check "Race suite" đỏ trên PR phát hành là chặn phát hành.
-- Migration `20261027000000_waste_battery_active` bật pin ngay khi migrate. Chỉ deploy khi Mini App bản mới (quầy đếm pin như món thường) đã Live; quay lại thì làm theo 7.2b.
+- Migration `20261027000000_waste_battery_ready` nạp mức tính điểm của pin (10 viên = 1.000 điểm, trần 20/ngày, 50/tháng) và gỡ CHECK nguy hại, nhưng GIỮ pin ở Sắp nhận: migrate không bật pin cho khách. Chủ bật trong Quản trị (Đổi rác, Món) khi đã có hợp đồng xử lý chất thải nguy hại có giấy phép, có văn bản trả lời của Sở NN&MT và bản Mini App mới đã Live. Quay lại: 7.2b.
 - Tắt khẩn cấp: đặt waste.enabled = false, rồi khởi động lại API (xoá bộ đệm cấu hình) và xoá bộ đệm proxy/CDN nếu có.
 - Kiểm khoá mã giảm giá trùng lớp khoá Đổi rác (rủi ro đã chấp nhận, spec 10.1). Chạy sau mỗi lần tạo mã có giới hạn mỗi khách:
 
@@ -990,9 +990,9 @@ Sau khi quay image: màn Quản trị, Sức khoẻ hệ thống và `curl .../a
 psqlq -c 'DROP INDEX "reviews_userId_productId_key"'
 ```
 
-### 7.2b Quay image khi đã áp migration `20261027000000_waste_battery_active` (pin)
+### 7.2b Quay image khi đã áp migration `20261027000000_waste_battery_ready` (pin)
 
-Migration này bật pin (`BATTERY` thành ACTIVE, 10 viên = 1.000 điểm) và gỡ ràng buộc `waste_items_hazardous_not_active_chk`. Image cũ không biết pin được nhận: nó ép dòng pin về 0 điểm (lý do WRONG_TYPE) ở quầy và không có khối `ITEM_DROPOFF_ONLY`, nên khách vẫn tạo được yêu cầu pin gửi kho. Trước khi bật image cũ, chạy (khi API đã dừng hoặc ngay trước `up -d` ở 7.2):
+Migration này chỉ nạp mức tính điểm của pin và gỡ ràng buộc `waste_items_hazardous_not_active_chk`; pin vẫn Sắp nhận cho tới khi chủ bật trong Quản trị. Nếu CHƯA ai bật pin (BATTERY còn COMING_SOON) thì không cần làm gì thêm cho pin khi quay image. Chỉ khi admin ĐÃ bật pin (BATTERY ACTIVE) mới cần bước dưới: image cũ không biết pin được nhận, nó ép dòng pin về 0 điểm (lý do WRONG_TYPE) ở quầy và không có khối `ITEM_DROPOFF_ONLY`, nên khách vẫn tạo được yêu cầu pin gửi kho. Trước khi bật image cũ, chạy (khi API đã dừng hoặc ngay trước `up -d` ở 7.2):
 
 ```bash
 psqlq -c "UPDATE waste_items SET status='COMING_SOON' WHERE code='BATTERY'"
@@ -1000,7 +1000,7 @@ psqlq -c "UPDATE waste_items SET status='COMING_SOON' WHERE code='BATTERY'"
 
 KHÔNG thêm lại ràng buộc `waste_items_hazardous_not_active_chk`: chạy lại câu thêm ràng buộc sẽ lỗi nếu còn món nguy hại ACTIVE, và không cần nữa khi pin đã về COMING_SOON. Yêu cầu pin đang mở (nếu có) hết hạn tự nhiên hoặc huỷ tay ở Quản trị; không xác nhận chúng bằng image cũ.
 
-Ngược lại, Mini App bản cũ gửi dòng pin về 0 ở quầy. Vì vậy chỉ bật pin (để `BATTERY` ACTIVE, hoặc gắn pin vào điểm đối tác) khi Mini App bản mới đã Live.
+Ngược lại, Mini App bản cũ gửi dòng pin về 0 ở quầy. Vì vậy chủ chỉ bật pin (đặt BATTERY Đang nhận, hoặc gắn pin vào điểm đối tác) khi Mini App bản mới đã Live.
 
 ### 7.3 Khôi phục bản backup trước deploy (về đúng trạng thái trước bước 7)
 
