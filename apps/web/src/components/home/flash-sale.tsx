@@ -14,7 +14,6 @@ import { productHref } from '@/lib/product-href';
 import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
 import { serverNow } from '@tubutree/app-core/server-clock';
-import { flashItemLabel } from '@tubutree/app-core/flash-price';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { HomeBlockError } from './home-block-error';
@@ -91,7 +90,8 @@ export function FlashSale() {
               <Link href={productHref(encodeURIComponent(item.productSlug), price < was ? item.variationId : null)} className={CARD}>
                 <Thumb src={item.thumbnail} name={item.productName} pct={pct} />
                 <div className="p-2">
-                  <p className="line-clamp-2 h-8 text-xs leading-4 text-stone-900">{flashItemLabel(item)}</p>
+                  <p className="line-clamp-2 h-8 text-xs leading-4 text-stone-900">{item.productName}</p>
+                  {item.variationName && <p className="truncate text-xs leading-4 text-stone-500">{item.variationName}</p>}
                   <p className="mt-0.5 text-sm font-bold text-promo-fg">{formatVnd(price)}</p>
                   {was > price && <p className="text-xs text-stone-500 line-through">{formatVnd(was)}</p>}
                   <div className="mt-1">

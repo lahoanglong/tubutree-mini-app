@@ -22,14 +22,14 @@ describe('cardPrices (dữ liệu kiểu Pancake: Product.salePrice rỗng)', ()
   const product = { basePrice: 180_000, salePrice: null };
 
   it('giá bán nằm ở phân loại: thẻ nhận giá niêm yết và giá đang bán của phân loại đó', () => {
-    expect(cardPrices(product, [v('v1', 180_000, 159_000, 4), v('v2', 300_000, null, 4)])).toEqual({ basePrice: 180_000, salePrice: 159_000 });
+    expect(cardPrices(product, [v('v1', 180_000, 159_000, 4), v('v2', 300_000, null, 4)])).toEqual({ basePrice: 180_000, salePrice: 159_000, repVariationId: 'v1' });
   });
 
   it('nhiều mức giá: thẻ lấy phân loại rẻ nhất còn hàng, khớp giá giỏ hàng tính cho phân loại mặc định', () => {
     const variations = [v('big', 300_000, null, 4), v('small', 200_000, 150_000, 4)];
     const rep = representativeVariation(variations)!;
     const card = cardPrices({ basePrice: 300_000, salePrice: null }, variations);
-    expect(card).toEqual({ basePrice: 200_000, salePrice: 150_000 });
+    expect(card).toEqual({ basePrice: 200_000, salePrice: 150_000, repVariationId: 'small' });
     expect(card.salePrice ?? card.basePrice).toBe(rep.salePrice ?? rep.retailPrice);
   });
 

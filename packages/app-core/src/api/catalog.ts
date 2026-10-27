@@ -15,6 +15,8 @@ export interface ProductCard {
   thumbnail: string | null;
   basePrice: number;
   salePrice: number | null;
+  /** Phân loại đại diện của thẻ (đã lấy giá); cùng id mà trang chi tiết mở sẵn. */
+  repVariationId?: string;
   isFeatured: boolean;
   ratingAvg?: number;
   reviewCount?: number;

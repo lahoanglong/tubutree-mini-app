@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -120,15 +120,32 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
     expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('chờ danh sách Giờ vàng rồi mới hiện giá: không có lúc hiện giá 150.000đ của đại diện rồi đổi sang 100.000đ', async () => {
+  it('trang hiện ngay với phân loại đại diện khi Giờ vàng còn pending; Giờ vàng về thì chốt lại sang phân loại đang giảm', async () => {
     let release: (v: unknown[]) => void = () => undefined;
     mocks.fetchActiveFlashSales.mockReturnValue(new Promise((r) => { release = r; }));
     renderPdp();
-    await waitFor(() => expect(mocks.fetchProduct).toHaveBeenCalled());
-    await new Promise((r) => setTimeout(r, 30));
-    expect(screen.queryByText('500g')).toBeNull();
-    expect(screen.queryByText('150.000đ')).toBeNull();
+    await screen.findByText('500g');
+    expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
     release([flash('v-1kg', 100_000, 300_000)]);
+    await waitFor(() => expect(chip('1kg')).toHaveAttribute('aria-pressed', 'true'));
+  });
+
+  it('khách đã tự chọn trước khi Giờ vàng về: không bị đổi lại', async () => {
+    let release: (v: unknown[]) => void = () => undefined;
+    mocks.fetchActiveFlashSales.mockReturnValue(new Promise((r) => { release = r; }));
+    renderPdp();
+    await screen.findByText('500g');
+    fireEvent.click(chip('500g'));
+    release([flash('v-1kg', 100_000, 300_000)]);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
+    expect(chip('1kg')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('Giờ vàng của phân loại hết hàng (danh sách cũ): vẫn mở phân loại đại diện còn hàng', async () => {
+    mocks.fetchProduct.mockResolvedValue({ ...product, variations: [product.variations[0]!, { ...product.variations[1]!, stock: 0 }].reverse() });
+    mocks.fetchActiveFlashSales.mockResolvedValue([flash('v-500', 90_000, 150_000)]);
+    renderPdp();
     await screen.findByText('1kg');
     expect(chip('1kg')).toHaveAttribute('aria-pressed', 'true');
   });
@@ -136,7 +153,7 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
   it('Giờ vàng lỗi: vẫn mở trang với phân loại đại diện', async () => {
     mocks.fetchActiveFlashSales.mockRejectedValue(new Error('x'));
     renderPdp();
-    await screen.findByText('500g', undefined, { timeout: 4000 });
+    await screen.findByText('500g');
     expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
   });
 });

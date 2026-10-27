@@ -12,8 +12,9 @@ export function isStillDiscounted(it: { flashPrice: number; variation: { salePri
 /** Thứ tự cố định của suất đang chạy: sản phẩm nhiều suất không đổi thứ tự theo DB giữa hai lần gọi. */
 export const ACTIVE_FLASH_ORDER_BY = [{ flashPrice: 'asc' }, { variationId: 'asc' }, { id: 'asc' }] satisfies Prisma.FlashSaleItemOrderByWithRelationInput[];
 
+/** Chỉ để hiển thị: phân loại hết hàng không được quảng bá Giờ vàng. Giỏ và thanh toán dùng điều kiện riêng, không bị ảnh hưởng. */
 export const activeFlashWhere = (now: Date) =>
   ({
-    variation: SELLABLE_VARIATION_WHERE,
+    variation: { ...SELLABLE_VARIATION_WHERE, stock: { gt: 0 } },
     flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } },
   }) satisfies Prisma.FlashSaleItemWhereInput;

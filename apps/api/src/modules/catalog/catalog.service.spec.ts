@@ -1168,6 +1168,13 @@ describe('CatalogService.list: giá thẻ lấy từ phân loại đại diện 
       expect(ids(r)).toEqual(['low', 'sale', 'big']);
     });
 
+    it('truy vấn suất đang chạy chỉ lấy phân loại còn hàng', async () => {
+      const findMany = jest.fn().mockResolvedValue([]);
+      const prisma = { product: { findMany: jest.fn().mockResolvedValue([]) }, flashSaleItem: { findMany } } as unknown as PrismaService;
+      await new CatalogService(prisma).list({ page: 1, limit: 10, sort: 'price_asc' });
+      expect(findMany.mock.calls[0][0].where.variation).toMatchObject({ stock: { gt: 0 } });
+    });
+
     it('giá giảm dần và lọc khoảng giá cùng dùng giá Giờ vàng', async () => {
       const flashRows = [offer('m2-a', 'm2', 99_000, 280_000)];
       const svc = setup(flashRows);

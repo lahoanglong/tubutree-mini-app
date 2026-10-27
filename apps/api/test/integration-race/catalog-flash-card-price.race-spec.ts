@@ -68,4 +68,16 @@ describe('Giá thẻ có Giờ vàng khi sắp và lọc (real Postgres)', () =>
     const active = (await flash.listActive()).filter((i) => i.productSlug === rice.p.slug);
     expect(active.map((i) => [i.variationId, i.variationName])).toEqual([[g500.id, '500g'], [kg.id, '1kg']]);
   });
+
+  it('suất của phân loại hết hàng không thắng trên thẻ, không lên dải Giờ vàng, không tính khi sắp và lọc', async () => {
+    const brand = `FCP${randCode(6)}`;
+    const rice = await product(brand, 'Gạo', [{ sku: '1KG', name: '1kg', retailPrice: 300_000 }, { sku: '500', name: '500g', retailPrice: 150_000 }]);
+    const [kg] = rice.vars as [typeof rice.vars[number]];
+    await prisma.variation.update({ where: { id: kg.id }, data: { stock: 0 } });
+    await sale([{ variationId: kg.id, flashPrice: 120_000 }]);
+
+    const under = await catalog.list({ page: 1, limit: 10, sort: 'newest', brand, maxPrice: 125_000 });
+    expect(under.data).toEqual([]);
+    expect((await flash.listActive()).filter((i) => i.productSlug === rice.p.slug)).toEqual([]);
+  });
 });

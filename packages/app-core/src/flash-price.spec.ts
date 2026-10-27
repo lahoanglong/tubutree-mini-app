@@ -183,7 +183,7 @@ describe('nhiều suất Giờ vàng trong một sản phẩm (đại diện 500
     const tie1kg = { ...kg, flashPrice: 120_000 };
     expect(cardPricing(card, [tie1kg, g500]).flashVariationId).toBe('v-500');
     expect(cardPricing(card, [g500, tie1kg]).flashVariationId).toBe('v-500');
-    expect(cardPricing({ ...card, variationId: 'v-500' }, [tie1kg, g500]).flashVariationId).toBe('v-500');
+    expect(cardPricing({ ...card, repVariationId: 'v-500' }, [tie1kg, g500]).flashVariationId).toBe('v-500');
   });
 
   it('không suất nào thắng (đắt hơn thẻ): giá thẻ, không nhãn', () => {
@@ -215,6 +215,11 @@ describe('defaultVariationFor (phân loại mặc định của trang chi tiết
     expect(defaultVariationFor({ slug: 'gao' }, [v500, v1kg], [...items].reverse())?.id).toBe('v-500');
   });
 
+  it('suất Giờ vàng của phân loại hết hàng (danh sách ở trình duyệt còn cũ): mở phân loại đại diện còn hàng', () => {
+    const out1kg = { ...v1kg, stock: 0 };
+    expect(defaultVariationFor({ slug: 'gao' }, [v500, out1kg], [f('v-1kg', 120_000, 300_000)])?.id).toBe('v-500');
+  });
+
   it('Giờ vàng đã hết (danh sách rỗng): đại diện; không có phân loại: undefined', () => {
     expect(defaultVariationFor({ slug: 'gao' }, [v500, v1kg], [])?.id).toBe('v-500');
     expect(defaultVariationFor({ slug: 'gao' }, [], [])).toBeUndefined();
@@ -242,5 +247,22 @@ describe('thẻ và trang chi tiết ra cùng một giá ở mọi tổ hợp su
     const opened = defaultVariationFor({ slug: 'gao' }, [v1kg, v500], flash)!;
     expect(variationPricing(opened, flash).price).toBe(card.price);
     expect(variationPricing(opened, flash).isFlash).toBe(card.isFlash);
+  });
+});
+
+describe('hai phân loại cùng giá, cùng có suất Giờ vàng cùng giá', () => {
+  const a = { id: 'v-z', sku: 'A', retailPrice: 150_000, salePrice: null, stock: 5 };
+  const b = { id: 'v-a', sku: 'B', retailPrice: 150_000, salePrice: null, stock: 5 };
+  const item = (variationId: string) => ({ productSlug: 'gao', variationId, flashPrice: 120_000, retailPrice: 150_000, salePrice: null });
+
+  it.each([
+    ['a trước', [item('v-z'), item('v-a')]],
+    ['b trước', [item('v-a'), item('v-z')]],
+  ])('thẻ có repVariationId và trang chi tiết chọn cùng một phân loại: %s', (_n, flash) => {
+    const rep = pickDefaultVariation([a, b])!;
+    const card = cardPricing({ slug: 'gao', basePrice: 150_000, salePrice: null, repVariationId: rep.id }, flash);
+    expect(rep.id).toBe('v-z');
+    expect(card.flashVariationId).toBe('v-z');
+    expect(defaultVariationFor({ slug: 'gao' }, [a, b], flash)?.id).toBe('v-z');
   });
 });

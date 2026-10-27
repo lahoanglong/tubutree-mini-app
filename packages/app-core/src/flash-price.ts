@@ -12,10 +12,6 @@ export interface FlashPriceItem {
   salePrice?: number | null;
 }
 
-/** Tên hiển thị của một suất Giờ vàng: thêm tên phân loại khi sản phẩm có nhiều phân loại, để khách biết suất giảm là của loại nào. */
-export const flashItemLabel = (item: { productName: string; variationName?: string | null }): string =>
-  item.variationName ? `${item.productName} · ${item.variationName}` : item.productName;
-
 export interface CardPricing {
   /** Giá khách thật sự trả cho một đơn vị (đã gồm Giờ vàng). */
   price: number;
@@ -57,20 +53,20 @@ export function pickDefaultVariation<T extends { id: string; sku?: string; retai
 /**
  * Giá thẻ sản phẩm. `basePrice`/`salePrice` của thẻ là giá của phân loại đại diện (API đã chọn, xem `pickDefaultVariation`).
  * Một suất Giờ vàng chỉ thắng khi rẻ hơn cả giá đang bán của chính phân loại có suất lẫn giá đang bán của thẻ. Sản phẩm có nhiều
- * suất thì xét hết, lấy suất có `flashPrice` thấp nhất; hoà thì suất của phân loại đại diện (`variationId` nếu biết, không thì
+ * suất thì xét hết, lấy suất có `flashPrice` thấp nhất; hoà thì suất của phân loại đại diện (`repVariationId` của thẻ nếu API trả, không thì
  * suất có giá giống thẻ), rồi `variationId`. Thắng thì thẻ dùng giá niêm yết và giá đang bán của phân loại Giờ vàng (như dải Giờ
  * vàng và trang chi tiết mở ở phân loại đó) và trả `flashVariationId`. Không suất nào thắng thì thẻ giữ giá phân loại đại diện,
  * không nhãn Giờ vàng, không `flashVariationId`.
  */
 export function cardPricing(
-  product: { slug: string; basePrice: number; salePrice?: number | null; variationId?: string },
+  product: { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string },
   flash: readonly FlashPriceItem[],
 ): CardPricing {
   const cardStanding = product.salePrice ?? product.basePrice;
   const standingOf = (f: FlashPriceItem) => (f.retailPrice != null ? (f.salePrice ?? f.retailPrice) : cardStanding);
   const isRep = (f: FlashPriceItem) =>
-    product.variationId != null
-      ? f.variationId === product.variationId
+    product.repVariationId != null
+      ? f.variationId === product.repVariationId
       : f.retailPrice == null || (f.retailPrice === product.basePrice && standingOf(f) === cardStanding);
   const item = flash
     .filter((f) => f.productSlug === product.slug && f.flashPrice < standingOf(f) && f.flashPrice < cardStanding)
@@ -100,10 +96,10 @@ export function defaultVariationFor<T extends { id: string; sku?: string; retail
   const rep = pickDefaultVariation(variations);
   if (!rep) return undefined;
   const { flashVariationId } = cardPricing(
-    { slug: product.slug, basePrice: rep.retailPrice, salePrice: rep.salePrice, variationId: rep.id },
+    { slug: product.slug, basePrice: rep.retailPrice, salePrice: rep.salePrice, repVariationId: rep.id },
     flash,
   );
-  return (flashVariationId ? variations.find((v) => v.id === flashVariationId) : undefined) ?? rep;
+  return (flashVariationId ? variations.find((v) => v.id === flashVariationId && v.stock > 0) : undefined) ?? rep;
 }
 
 export interface VariationPricingResult {

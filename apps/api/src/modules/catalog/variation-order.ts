@@ -28,13 +28,18 @@ export function representativeVariation<T extends PricedVariation>(variations: r
   return sorted.find((v) => v.stock > 0) ?? sorted[0] ?? null;
 }
 
-/** Giá niêm yết và giá đang bán của thẻ sản phẩm; không có phân loại nào thì giữ giá cột của sản phẩm. */
+/**
+ * Giá niêm yết và giá đang bán của thẻ sản phẩm, kèm `repVariationId` (phân loại đại diện) để thẻ và trang chi tiết chọn cùng một
+ * phân loại khi nhiều phân loại cùng giá. Không có phân loại nào thì giữ giá cột của sản phẩm và không có `repVariationId`.
+ */
 export function cardPrices(
   product: { basePrice: number; salePrice: number | null },
   variations: readonly PricedVariation[] | null | undefined,
-): { basePrice: number; salePrice: number | null } {
+): { basePrice: number; salePrice: number | null; repVariationId?: string } {
   const rep = representativeVariation(variations ?? []);
-  return rep ? { basePrice: rep.retailPrice, salePrice: rep.salePrice } : { basePrice: product.basePrice, salePrice: product.salePrice };
+  return rep
+    ? { basePrice: rep.retailPrice, salePrice: rep.salePrice, repVariationId: rep.id }
+    : { basePrice: product.basePrice, salePrice: product.salePrice };
 }
 
 /** Suất Giờ vàng đang chạy của một phân loại, cùng dạng với `FlashPriceItem` ở app-core. */

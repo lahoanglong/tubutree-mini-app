@@ -9,7 +9,6 @@ import {
   cancelFlashReminder,
   type UpcomingFlashItem,
 } from '../services/shop-api';
-import { flashItemLabel } from '@tubutree/app-core/flash-price';
 import { formatVnd } from '../utils/format';
 import { soldPercent } from '../utils/flash-display';
 import { haptic } from '../utils/haptic';
@@ -55,6 +54,8 @@ const NAME_CLAMP_STYLE: CSSProperties = {
   overflow: 'hidden',
   minHeight: 40,
 };
+
+const VARIATION_LINE_STYLE: CSSProperties = { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 
 const CARD_ROW_STYLE: CSSProperties = { gap: 12, padding: '0 16px' };
 
@@ -143,8 +144,13 @@ export function FlashSale() {
               </div>
               <div style={{ padding: 8 }}>
                 <Text variant="caption" style={NAME_CLAMP_STYLE}>
-                  {flashItemLabel(item)}
+                  {item.productName}
                 </Text>
+                {item.variationName && (
+                  <Text variant="caption" tone="secondary" style={VARIATION_LINE_STYLE}>
+                    {item.variationName}
+                  </Text>
+                )}
                 <div style={{ marginTop: 2 }}>
                   <PriceTag value={price} flash={{ price }} size="sm" />
                 </div>

@@ -135,7 +135,7 @@ describe('FlashSaleService.listActive', () => {
     const prisma = { flashSaleItem: { findMany } } as unknown as PrismaService;
     await new FlashSaleService(prisma, config, notifications, lifecycle).listActive(NOW);
     expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ variation: { isActive: true, product: { isActive: true, approvalStatus: 'APPROVED' } } }) }),
+      expect.objectContaining({ where: expect.objectContaining({ variation: { isActive: true, product: { isActive: true, approvalStatus: 'APPROVED' }, stock: { gt: 0 } } }) }),
     );
   });
 });
