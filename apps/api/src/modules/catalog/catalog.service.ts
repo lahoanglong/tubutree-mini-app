@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma, type Category } from '@prisma/client';
-import { VARIATION_ORDER_BY, sortVariationsByPrice } from './variation-order';
+import { VARIATION_ORDER_BY, cardPrices, sortVariationsByPrice } from './variation-order';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
@@ -519,9 +519,16 @@ export class CatalogService {
     const rows = await this.prisma.product.findMany({
       where: { ...PUBLIC_PRODUCT_WHERE, AND: [text] },
       take: 8,
-      select: { id: true, slug: true, name: true, thumbnail: true, basePrice: true, salePrice: true },
+      select: {
+        id: true, slug: true, name: true, thumbnail: true, basePrice: true, salePrice: true,
+        variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
+      },
     });
-    return rows.map(({ id, ...r }) => ({ ...r, thumbnail: publicImage('product', id, 'thumb', r.thumbnail) }));
+    return rows.map(({ id, variations, ...r }) => ({
+      ...r,
+      ...cardPrices(r, variations),
+      thumbnail: publicImage('product', id, 'thumb', r.thumbnail),
+    }));
   }
 
   private orderBy(sort?: string): Prisma.ProductOrderByWithRelationInput {
@@ -549,7 +556,7 @@ export class CatalogService {
     reviewCount: number;
     soldExternal: number;
     soldApp: number;
-    variations: { stock: number }[];
+    variations: { id: string; sku: string; retailPrice: number; salePrice: number | null; stock: number }[];
   }) {
     return {
       id: p.id,
@@ -557,8 +564,7 @@ export class CatalogService {
       brand: p.brand,
       name: p.name,
       thumbnail: publicProductThumb(p),
-      basePrice: p.basePrice,
-      salePrice: p.salePrice,
+      ...cardPrices(p, p.variations),
       isFeatured: p.isFeatured,
       ratingAvg: p.ratingAvg,
       reviewCount: p.reviewCount,

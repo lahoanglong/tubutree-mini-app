@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardPricing, discountView, flashDisplay, variationPricing } from './flash-price';
+import { cardPricing, discountView, flashDisplay, pickDefaultVariation, variationPricing } from './flash-price';
 
 const flash = [{ productSlug: 'hat-dieu', variationId: 'v1', flashPrice: 119_000 }];
 
@@ -83,5 +83,63 @@ describe('một món, một giá ở mọi màn (B-24)', () => {
   it('phần trăm dải Giờ vàng kẹp 1 đến 99 như thẻ', () => {
     expect(flashDisplay({ flashPrice: 99_600, retailPrice: 100_000 }).pct).toBe(1);
     expect(flashDisplay({ flashPrice: 100, retailPrice: 100_000 }).pct).toBe(99);
+  });
+});
+
+describe('dữ liệu kiểu Pancake: Product.salePrice rỗng, giá nằm ở phân loại', () => {
+  const v1 = { id: 'v1', sku: 'HD-1', retailPrice: 180_000, salePrice: 159_000, stock: 10 };
+  const v2 = { id: 'v2', sku: 'HD-2', retailPrice: 300_000, salePrice: null, stock: 10 };
+  const variations = [v1, v2];
+  /** Thẻ nhận giá của phân loại đại diện (API: cardPrices), không phải cột Product. */
+  const cardOf = (vs: typeof variations) => {
+    const rep = pickDefaultVariation(vs)!;
+    return { slug: 'hat-dieu', basePrice: rep.retailPrice, salePrice: rep.salePrice };
+  };
+
+  it('đang bán 159.000đ, Giờ vàng 119.000đ: thẻ giống trang chi tiết, gạch 159.000đ, -25%', () => {
+    const flash = [{ productSlug: 'hat-dieu', variationId: 'v1', flashPrice: 119_000, retailPrice: 180_000, salePrice: 159_000 }];
+    const card = cardPricing(cardOf(variations), flash);
+    expect(card).toMatchObject({ price: 119_000, isFlash: true, compareAt: 159_000, salePct: 25 });
+    expect(variationPricing(v1, flash)).toMatchObject({ price: card.price, compareAt: card.compareAt, salePct: card.salePct });
+  });
+
+  it('hết Giờ vàng: thẻ ghi 159.000đ như trang chi tiết và máy chủ, gạch 180.000đ', () => {
+    const card = cardPricing(cardOf(variations), []);
+    expect(card).toMatchObject({ price: 159_000, isFlash: false, compareAt: 180_000 });
+    expect(variationPricing(v1, [])).toMatchObject({ price: card.price, compareAt: card.compareAt, salePct: card.salePct });
+  });
+
+  it('Giờ vàng ở phân loại thứ hai (niêm yết 300.000đ, Giờ vàng 150.000đ): thẻ như dải Giờ vàng, -50%, gạch 300.000đ', () => {
+    const flash = [{ productSlug: 'hat-dieu', variationId: 'v2', flashPrice: 150_000, retailPrice: 300_000, salePrice: null }];
+    const card = cardPricing(cardOf(variations), flash);
+    const strip = flashDisplay({ flashPrice: 150_000, retailPrice: 300_000, salePrice: null });
+    expect(card).toMatchObject({ price: 150_000, isFlash: true, compareAt: 300_000, salePct: 50, flashVariationId: 'v2' });
+    expect(strip).toEqual({ price: card.price, was: card.compareAt, pct: card.salePct });
+    expect(variationPricing(v2, flash)).toMatchObject({ price: card.price, compareAt: card.compareAt, salePct: card.salePct });
+  });
+
+  it('Giờ vàng ở phân loại hai không rẻ hơn giá đang bán của chính nó: thẻ giữ giá phân loại đại diện', () => {
+    const flash = [{ productSlug: 'hat-dieu', variationId: 'v2', flashPrice: 320_000, retailPrice: 300_000, salePrice: null }];
+    expect(cardPricing(cardOf(variations), flash)).toMatchObject({ price: 159_000, isFlash: false, compareAt: 180_000 });
+  });
+});
+
+describe('pickDefaultVariation', () => {
+  const mk = (id: string, retailPrice: number, salePrice: number | null, stock: number, sku = id) => ({ id, sku, retailPrice, salePrice, stock });
+
+  it('lấy phân loại còn hàng có giá đang bán thấp nhất, không phải phân loại đầu danh sách', () => {
+    expect(pickDefaultVariation([mk('a', 500_000, null, 3), mk('b', 400_000, 250_000, 3), mk('c', 300_000, null, 3)])?.id).toBe('b');
+  });
+  it('bỏ qua phân loại hết hàng dù rẻ nhất', () => {
+    expect(pickDefaultVariation([mk('a', 100_000, null, 0), mk('b', 200_000, null, 5)])?.id).toBe('b');
+  });
+  it('hết hàng cả: phân loại rẻ nhất', () => {
+    expect(pickDefaultVariation([mk('a', 200_000, null, 0), mk('b', 100_000, null, 0)])?.id).toBe('b');
+  });
+  it('giá hoà: theo sku rồi id', () => {
+    expect(pickDefaultVariation([mk('x', 100_000, null, 1, 'B'), mk('y', 100_000, null, 1, 'A')])?.id).toBe('y');
+  });
+  it('không có phân loại: undefined', () => {
+    expect(pickDefaultVariation([])).toBeUndefined();
   });
 });

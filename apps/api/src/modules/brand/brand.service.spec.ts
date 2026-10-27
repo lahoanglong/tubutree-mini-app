@@ -93,17 +93,18 @@ describe('BrandService.getPublicBySlug', () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: [], isVerified: false, followerCount: 0 });
     prisma.product.findMany.mockResolvedValue([
-      { id: 'p1', name: 'Còn hàng', slug: 'p1', thumbnail: null, basePrice: 100000, salePrice: null, ratingAvg: 0, reviewCount: 0, soldExternal: 0, soldApp: 0, variations: [{ stock: 0 }, { stock: 3 }] },
+      { id: 'p1', name: 'Còn hàng', slug: 'p1', thumbnail: null, basePrice: 100000, salePrice: null, ratingAvg: 0, reviewCount: 0, soldExternal: 0, soldApp: 0, variations: [{ id: 'a', sku: 'A', retailPrice: 100000, salePrice: null, stock: 0 }, { id: 'b', sku: 'B', retailPrice: 120000, salePrice: 99000, stock: 3 }] },
       { id: 'p2', name: 'Hết hàng', slug: 'p2', thumbnail: null, basePrice: 100000, salePrice: null, ratingAvg: 0, reviewCount: 0, soldExternal: 0, soldApp: 0, variations: [{ stock: 0 }] },
     ]);
     const svc = new BrandService(prisma, brandConfig);
     const out = await svc.getPublicBySlug('sachi', NOW);
     expect(out.products.find((p) => p.id === 'p1')!.inStock).toBe(true);
     expect(out.products.find((p) => p.id === 'p2')!.inStock).toBe(false);
+    expect(out.products.find((p) => p.id === 'p1')).toMatchObject({ basePrice: 120000, salePrice: 99000 });
     expect(JSON.stringify(out)).not.toContain('variations');
     // Chỉ tính variation đang bán: variation ngừng bán còn tồn kho KHÔNG được làm SP "còn hàng".
     expect(prisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      select: expect.objectContaining({ variations: { where: { isActive: true }, select: { stock: true } } }),
+      select: expect.objectContaining({ variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } } }),
     }));
   });
 

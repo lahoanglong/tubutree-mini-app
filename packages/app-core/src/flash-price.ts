@@ -7,6 +7,9 @@ export interface FlashPriceItem {
   productSlug: string;
   variationId: string;
   flashPrice: number;
+  /** Giá niêm yết và giá đang bán của chính phân loại có Giờ vàng; thiếu thì thẻ dùng giá của sản phẩm. */
+  retailPrice?: number;
+  salePrice?: number | null;
 }
 
 export interface CardPricing {
@@ -31,16 +34,39 @@ export function discountView(price: number, compareAt: number | null | undefined
   return { compareAt, salePct: Math.min(99, Math.max(1, Math.round((1 - price / compareAt) * 100))) };
 }
 
+/**
+ * Phân loại mặc định của trang chi tiết: giá đang bán thấp nhất trong các phân loại còn hàng, hoà thì sku rồi id; hết hàng cả
+ * thì phân loại đầu theo cùng thứ tự. Thẻ sản phẩm lấy giá của đúng phân loại này (API cũng chọn theo quy tắc đó).
+ */
+export function pickDefaultVariation<T extends { id: string; sku?: string; retailPrice: number; salePrice?: number | null; stock: number }>(
+  variations: readonly T[],
+): T | undefined {
+  const sorted = [...variations].sort(
+    (a, b) =>
+      (a.salePrice ?? a.retailPrice) - (b.salePrice ?? b.retailPrice) ||
+      ((a.sku ?? '') < (b.sku ?? '') ? -1 : (a.sku ?? '') > (b.sku ?? '') ? 1 : 0) ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+  return sorted.find((v) => v.stock > 0) ?? sorted[0];
+}
+
+/**
+ * Giá thẻ sản phẩm. `basePrice`/`salePrice` của thẻ là giá của phân loại đại diện (API đã chọn, xem `pickDefaultVariation`). Giờ vàng
+ * ở một phân loại khác thì thẻ dùng giá niêm yết và giá đang bán của chính phân loại đó, như dải Giờ vàng và trang chi tiết.
+ */
 export function cardPricing(
   product: { slug: string; basePrice: number; salePrice?: number | null },
   flash: readonly FlashPriceItem[],
 ): CardPricing {
   const item = flash.find((f) => f.productSlug === product.slug);
-  const standing = product.salePrice ?? product.basePrice;
-  const price = item && item.flashPrice < standing ? item.flashPrice : standing;
-  const isFlash = price !== standing;
-  const view = discountView(price, isFlash ? standing : product.basePrice);
-  return { price, isFlash, salePct: view.salePct, compareAt: view.compareAt, flashVariationId: item?.variationId };
+  const cardStanding = product.salePrice ?? product.basePrice;
+  const flashStanding = item && item.retailPrice != null ? (item.salePrice ?? item.retailPrice) : cardStanding;
+  if (item && item.flashPrice < flashStanding) {
+    const view = discountView(item.flashPrice, flashStanding);
+    return { price: item.flashPrice, isFlash: true, salePct: view.salePct, compareAt: view.compareAt, flashVariationId: item.variationId };
+  }
+  const view = discountView(cardStanding, product.basePrice);
+  return { price: cardStanding, isFlash: false, salePct: view.salePct, compareAt: view.compareAt, flashVariationId: item?.variationId };
 }
 
 export interface VariationPricingResult {

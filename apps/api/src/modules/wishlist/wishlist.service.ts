@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { VARIATION_ORDER_BY } from '../catalog/variation-order';
+import { VARIATION_ORDER_BY, cardPrices } from '../catalog/variation-order';
 import { publicProductThumb } from '../../common/public-image';
 
 // Chặn tăng trưởng vô hạn: giới hạn hợp lý cho 1 wishlist (không ai cần thích quá số này).
@@ -35,8 +35,7 @@ export class WishlistService {
         brand: p.brand,
         name: p.name,
         thumbnail: publicProductThumb(p),
-        basePrice: p.basePrice,
-        salePrice: p.salePrice,
+        ...cardPrices(p, p.variations),
         isFeatured: p.isFeatured,
         inStock: p.variations.some((v) => v.stock > 0),
         // Đồng bộ với CatalogService.toCard() — thiếu các field này khiến card wishlist

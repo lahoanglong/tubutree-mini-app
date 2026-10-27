@@ -19,7 +19,7 @@ const card = (id: string) => ({
   reviewCount: 0,
   soldExternal: 0,
   soldApp: 0,
-  variations: [{ stock: 5 }],
+  variations: [{ id: `${id}-v`, sku: `${id}-sku`, retailPrice: 1000, salePrice: null, stock: 5 }],
 });
 
 describe('CatalogService.boughtTogether (§6.12 thường mua kèm)', () => {
@@ -771,7 +771,10 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     expect(findMany).toHaveBeenCalledWith({
       where: { isActive: true, approvalStatus: 'APPROVED', AND: [{ id: { in: ['p1'] } }] },
       take: 8,
-      select: { id: true, slug: true, name: true, thumbnail: true, basePrice: true, salePrice: true },
+      select: {
+        id: true, slug: true, name: true, thumbnail: true, basePrice: true, salePrice: true,
+        variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
+      },
     });
     await expect(svc.suggest('  ')).resolves.toEqual([]);
   });
@@ -1054,5 +1057,36 @@ describe('CatalogService — JSON công khai không nhúng ảnh base64', () => 
     const r = await new CatalogService(prisma).getBySlug('a');
     expect(JSON.stringify(r)).not.toContain('data:image');
     expect(r.images).toEqual([expect.stringMatching(/^\/public-image\/product\/p1\/0\?v=/), 'https://cdn.example.com/b.jpg']);
+  });
+});
+
+describe('CatalogService — giá thẻ lấy từ phân loại đại diện (dữ liệu kiểu Pancake)', () => {
+  const pancake = {
+    ...card('hat-dieu'),
+    basePrice: 300_000,
+    salePrice: null,
+    variations: [
+      { id: 'v2', sku: 'HD-2', retailPrice: 300_000, salePrice: null, stock: 5 },
+      { id: 'v1', sku: 'HD-1', retailPrice: 180_000, salePrice: 159_000, stock: 5 },
+    ],
+  };
+
+  it('related(): thẻ ghi giá của phân loại mặc định trang chi tiết, không phải cột Product', async () => {
+    const prisma = {
+      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p0', brand: 'b' }), findMany: jest.fn().mockResolvedValue([pancake]) },
+    } as unknown as PrismaService;
+    const [c] = await new CatalogService(prisma).related('x');
+    expect(c).toMatchObject({ basePrice: 180_000, salePrice: 159_000 });
+  });
+
+  it('suggest(): gợi ý tìm kiếm cũng ghi giá của phân loại mặc định và không lộ danh sách phân loại', async () => {
+    const prisma = {
+      product: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'p1', slug: 'hat-dieu', name: 'Hạt điều', thumbnail: null, basePrice: 300_000, salePrice: null, variations: pancake.variations }]),
+      },
+    } as unknown as PrismaService;
+    const [c] = await new CatalogService(prisma).suggest('hat dieu');
+    expect(c).toMatchObject({ slug: 'hat-dieu', basePrice: 180_000, salePrice: 159_000 });
+    expect(c).not.toHaveProperty('variations');
   });
 });

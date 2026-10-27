@@ -16,6 +16,7 @@ import { EVENT_REWARD_MAX_POINTS, EVENT_REWARD_MIN_POINTS } from './community-li
 import { loadFeedImages, matchesFeedImageVersion, MAX_FEED_IMAGES, type FeedPostImages } from './feed-images';
 import { leaderboardAuthorName, PUBLIC_PREVIEW_DEFAULT, PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_KINDS, PUBLIC_PREVIEW_POSTS, toPublicPreviewItem } from './community-public-preview';
 import { containsBannedContent, DEFAULT_BANNED_KEYWORDS, parseBannedKeywords } from './content-filter';
+import { cardPrices } from '../catalog/variation-order';
 import { DEFAULT_UNANSWERED_ALERT_HOURS, listUnansweredQuestions, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from './community-unanswered';
 
 const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];
@@ -108,7 +109,14 @@ const FEED_INCLUDE = {
   // Chip trên bài cũ mở trang sản phẩm: hàng đã ngừng bán thì ẩn chip (trang đó 404).
   productTags: {
     where: { product: PUBLIC_PRODUCT_WHERE },
-    include: { product: { select: { slug: true, name: true, thumbnail: true, salePrice: true, basePrice: true } } },
+    include: {
+      product: {
+        select: {
+          slug: true, name: true, thumbnail: true, salePrice: true, basePrice: true,
+          variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
+        },
+      },
+    },
   },
   tags: { include: { tag: { select: { slug: true, name: true } } } },
 } as const;
@@ -525,7 +533,7 @@ export class CommunityFeedService {
       productTags: (p.productTags ?? []).map((t) => ({
         slug: t.product.slug, name: t.product.name,
         thumbnail: opts.list && t.product.thumbnail?.startsWith('data:') ? null : t.product.thumbnail,
-        salePrice: t.product.salePrice, basePrice: t.product.basePrice,
+        ...cardPrices(t.product, t.product.variations ?? []),
       })),
       tags: (p.tags ?? []).map((t) => ({ slug: t.tag.slug, name: t.tag.name })),
       likeCount: counts.likes.get(p.id) ?? 0,

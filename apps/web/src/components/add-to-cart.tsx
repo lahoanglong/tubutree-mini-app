@@ -12,7 +12,7 @@ import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ui, uiBar } from '@/lib/guest-ui';
 import { phoneSecondary } from '@/lib/phone-ui';
 import { CountBadge } from '@/components/mini/badge';
-import { variationPricing } from '@/lib/flash-price';
+import { pickDefaultVariation, variationPricing } from '@/lib/flash-price';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { formatDateTime } from '@/lib/format-date';
 import { usePdpSelection } from './pdp-selection';
@@ -54,9 +54,8 @@ export default function AddToCart({
     () => isrVariations.map((v) => ({ ...v, stock: stockQ.data?.[v.id] ?? v.stock })),
     [isrVariations, stockQ.data],
   );
-  const inStock = isrVariations.filter((v) => v.stock > 0);
   const shared = usePdpSelection();
-  const [localId, setLocalId] = useState<string>((inStock[0] ?? isrVariations[0])?.id ?? '');
+  const [localId, setLocalId] = useState<string>(pickDefaultVariation(isrVariations)?.id ?? '');
   const selectedId = shared?.selectedId ?? localId;
   const setSelectedId = shared?.setSelectedId ?? setLocalId;
   const [localQty, setLocalQty] = useState(1);

@@ -901,7 +901,7 @@ describe('StorefrontService.getPublicBySlug', () => {
         collections: [{ id: 'c1', title: 'A', kind: 'NORMAL', layout: 'CAROUSEL', sortOrder: 0,
           items: [
             { id: 'i1', isHidden: false, isPinned: false, sortOrder: 0, note: null, variationId: null,
-              product: { id: 'p1', name: 'Còn hàng', slug: 'p1', thumbnail: 't', brand: 'B', basePrice: 100, salePrice: null, ratingAvg: 0, reviewCount: 0, isActive: true, affiliateBlocked: false, variations: [{ stock: 0 }, { stock: 5 }] } },
+              product: { id: 'p1', name: 'Còn hàng', slug: 'p1', thumbnail: 't', brand: 'B', basePrice: 100, salePrice: null, ratingAvg: 0, reviewCount: 0, isActive: true, affiliateBlocked: false, variations: [{ id: 'a', sku: 'A', retailPrice: 100, salePrice: null, stock: 0 }, { id: 'b', sku: 'B', retailPrice: 150, salePrice: 120, stock: 5 }] } },
             { id: 'i2', isHidden: false, isPinned: false, sortOrder: 1, note: null, variationId: null,
               product: { id: 'p2', name: 'Hết hàng', slug: 'p2', thumbnail: 't', brand: 'B', basePrice: 100, salePrice: null, ratingAvg: 0, reviewCount: 0, isActive: true, affiliateBlocked: false, variations: [{ stock: 0 }] } },
           ] }],
@@ -912,10 +912,11 @@ describe('StorefrontService.getPublicBySlug', () => {
     const items = r.collections[0]!.items;
     expect(items.find((i) => i.id === 'i1')!.product.inStock).toBe(true);
     expect(items.find((i) => i.id === 'i2')!.product.inStock).toBe(false);
+    expect(items.find((i) => i.id === 'i1')!.product).toMatchObject({ basePrice: 150, salePrice: 120 });
     // Chỉ tính variation đang bán (isActive) — variation ngừng bán còn tồn kho không làm SP "còn hàng".
     const arg = (prisma.storefront.findFirst as jest.Mock).mock.calls[0][0];
     expect(arg.include.collections.include.items.include.product.select.variations)
-      .toEqual({ where: { isActive: true }, select: { stock: true } });
+      .toEqual({ where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } });
   });
 
   it('SP chỉ còn tồn kho ở variation ngừng bán → inStock=false (DB lọc isActive nên mảng rỗng)', async () => {

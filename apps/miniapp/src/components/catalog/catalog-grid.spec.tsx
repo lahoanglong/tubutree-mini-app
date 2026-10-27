@@ -76,7 +76,7 @@ describe('CatalogGrid', () => {
 
   it('đang giờ vàng → giá flash, badge giờ vàng, mở đúng phân loại', async () => {
     mocks.fetchActiveFlashSales.mockResolvedValue([
-      { itemId: 'f1', variationId: 'v9', productSlug: 'nrc', productName: 'x', thumbnail: null, flashPrice: 75000, retailPrice: 150000, soldCount: 0, quota: 5, endAt: '2026-10-01T00:00:00.000Z' },
+      { itemId: 'f1', variationId: 'v9', productSlug: 'nrc', productName: 'x', thumbnail: null, flashPrice: 75000, retailPrice: 150000, salePrice: 120000, soldCount: 0, quota: 5, endAt: '2026-10-01T00:00:00.000Z' },
     ]);
     renderGrid(undefined, [SALE]);
     const badge = await screen.findByText(/Giờ vàng -38%/);

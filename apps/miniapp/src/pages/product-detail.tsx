@@ -41,7 +41,7 @@ import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
-import { cardPricing, variationPricing } from '@tubutree/app-core/flash-price';
+import { cardPricing, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
@@ -161,14 +161,12 @@ export default function ProductDetailPage() {
     refetchInterval: 60_000,
   });
 
-  // Mặc định chọn phân loại đầu tiên CÒN HÀNG (không phải đầu danh sách).
+  // Mặc định: phân loại còn hàng có giá đang bán thấp nhất, cùng phân loại mà thẻ sản phẩm lấy giá.
   const variations = product.data?.variations ?? [];
   // Memo theo (selectedId + danh sách variation) — tránh tạo ref mới mỗi render gây effect chạy dư.
   const selected = useMemo(
     () =>
-      variations.find((v) => v.id === selectedId) ??
-      variations.find((v) => v.stock > 0) ??
-      variations[0],
+      variations.find((v) => v.id === selectedId) ?? pickDefaultVariation(variations),
     [selectedId, variations],
   );
 
