@@ -434,7 +434,7 @@ describe('GameEconomyService.collectDew — số nước thật', () => {
   it('bình 500 đang 495, sương 15 → trả 5', async () => {
     const { prisma: p, state } = fakeDb(prof({ totalSeeds: 495, lastDewAt: null }));
     // fakeDb.updateMany xử lý lastDewAt như điểm danh: thêm điều kiện riêng cho dew
-    (p.gameProfile.updateMany as jest.Mock).mockImplementation(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+    (p.gameProfile.updateMany as jest.Mock).mockImplementation(async ({ data }: { data: Record<string, unknown> }) => {
       state.totalSeeds = (state.totalSeeds as number) + (data.totalSeeds as { increment: number }).increment;
       return { count: 1 };
     });
