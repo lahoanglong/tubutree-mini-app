@@ -8,7 +8,6 @@ export interface ReviewItem {
   videoUrl: string | null;
   createdAt: string;
   author: string;
-  avatar: string | null;
   verifiedPurchase?: boolean;
 }
 export interface ReviewSummary {
@@ -65,7 +64,7 @@ export interface MyReview {
 export const fetchMyReview = (http: HttpClient, id: string) => http.get<MyReview>(`/reviews/${id}`);
 
 /**
- * POST /products/:slug/reviews trả nguyên dòng Review (không có author/avatar như mục của danh sách công khai) kèm
+ * POST /products/:slug/reviews trả nguyên dòng Review (không có author như mục của danh sách công khai) kèm
  * `updated`. Hai trường dưới là optional để chịu được API cũ chưa trả.
  * - `updated`: true khi đơn đó đã có đánh giá và lần gọi này SỬA nó (không cộng Điểm Xanh), false khi tạo mới.
  * - `pointsEarned`: cột của dòng Review. 5/10/15 khi được thưởng; 0 khi khách đã nhận thưởng cho đánh giá đầu tiên của

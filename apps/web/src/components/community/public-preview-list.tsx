@@ -23,7 +23,7 @@ export function PublicPreviewList({ posts }: { posts: FeedPreviewItem[] }) {
           return (
             <article key={post.id} data-testid="preview-card" className={`${ui.card} p-4`}>
               <div className="flex items-center gap-2">
-                <Avatar />
+                <Avatar name={post.author} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold text-stone-900">{post.author}</div>
                   <div className="flex flex-wrap items-center gap-x-1.5">

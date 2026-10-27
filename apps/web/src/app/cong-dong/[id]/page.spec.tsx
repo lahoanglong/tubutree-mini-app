@@ -29,12 +29,12 @@ import PostDetailPage from './page';
 
 const POST = (over: Partial<FeedItem> = {}): FeedItem => ({
   id: 'p1', kind: 'TIP', status: 'APPROVED', title: null, body: 'Mẹo rửa bình sữa bằng nước rửa chén sinh học.', images: [], meta: null,
-  createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), author: 'Lan Anh', avatar: null, badge: null, authorLevel: 1,
+  createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString(), author: 'Lan Anh', badge: null, authorLevel: 1,
   category: { id: 'c1', slug: 'bep', name: 'Nhà bếp', icon: null }, productTags: [], tags: [], isPinned: false, likeCount: 5, commentCount: 2,
   liked: false, bestCommentId: null, isOwner: false, ...over,
 });
 const COMMENT = (id: string, author: string, over: Partial<FeedComment> = {}): FeedComment => ({
-  id, body: `Trả lời của ${author}`, author, avatar: null, badge: null, authorLevel: 1, isAccepted: false,
+  id, body: `Trả lời của ${author}`, author, badge: null, authorLevel: 1, isAccepted: false,
   createdAt: new Date(Date.now() - 3600 * 1000).toISOString(), isOwner: false, ...over,
 });
 const COMMENTS = [COMMENT('c1', 'Bình'), COMMENT('c2', 'Hạnh', { isAccepted: true }), COMMENT('c3', 'Tôi', { isOwner: true })];

@@ -16,8 +16,8 @@ vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 
 import LeaderboardPage from './page';
 
-const ENTRY = (author: string, level: number, reputation: number, avatar: string | null = null): LeaderboardEntry => ({ author, avatar, reputation, level, levelName: `Hạng ${level}` });
-const BOARD = [ENTRY('Lan Anh', 4, 980, 'https://img.test/lan.jpg'), ENTRY('Minh Tâm', 3, 640), ENTRY('Hà My', 2, 410), ENTRY('Quốc Bảo', 2, 120)];
+const ENTRY = (author: string, level: number, reputation: number): LeaderboardEntry => ({ author, reputation, level, levelName: `Hạng ${level}` });
+const BOARD = [ENTRY('Lan Anh', 4, 980), ENTRY('Minh Tâm', 3, 640), ENTRY('Hà My', 2, 410), ENTRY('Quốc Bảo', 2, 120)];
 
 let mounted: Rendered[] = [];
 const mount = async () => {
@@ -93,19 +93,12 @@ describe('/cong-dong/xep-hang', () => {
     expect(container.textContent).toContain('điểm uy tín');
   });
 
-  it('có ảnh đại diện thì hiện ảnh; không có thì dùng biểu tượng, không dùng emoji 🌱', async () => {
-    const { container } = await mount();
-    expect(container.querySelector('img[src="https://img.test/lan.jpg"]')).not.toBeNull();
-    mocks.get.mockResolvedValue([ENTRY('Minh Tâm', 3, 640)]);
-    const solo = await mount();
-    expect(solo.container.querySelector('img')).toBeNull();
-    expect(solo.container.textContent).not.toContain('🌱');
-  });
-
-  it('ảnh đại diện lạ (javascript:) không thành thẻ img', async () => {
-    mocks.get.mockResolvedValue([ENTRY('Minh Tâm', 3, 640, 'javascript:alert(1)')]);
+  it('B-136: mỗi hàng là vòng tròn chữ cái đầu của tên, không có thẻ img, không dùng emoji 🌱', async () => {
     const { container } = await mount();
     expect(container.querySelector('img')).toBeNull();
+    const initials = Array.from(container.querySelectorAll('[data-testid="initials-avatar"]')).map((e) => e.textContent);
+    expect(initials).toEqual(['L', 'M', 'H', 'Q']);
+    expect(container.textContent).not.toContain('🌱');
   });
 
   it('bảng trống: hiện trạng thái trống', async () => {

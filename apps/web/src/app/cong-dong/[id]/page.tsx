@@ -264,7 +264,7 @@ export default function PostDetailPage() {
           </button>
         )}
         <div className="flex items-center gap-2">
-          <Avatar src={p.avatar} size={40} />
+          <Avatar name={p.author} size={40} />
           <AuthorLine
             name={p.author}
             badge={p.badge}

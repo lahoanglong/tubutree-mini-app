@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Input, Avatar, useSnackbar } from 'zmp-ui';
+import { Input, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Star, Video, type LucideIcon } from 'lucide-react';
 import {
@@ -21,6 +21,7 @@ import { Badge } from './ui/badge';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { Chip } from './ui/chip';
+import { InitialsAvatar } from './ui/initials-avatar';
 import { EmptyState, ErrorState } from './ui/empty-state';
 import { SectionTitle } from './ui/section-title';
 import { Skeleton } from './ui/skeleton';
@@ -294,7 +295,7 @@ export function ReviewsSection({
               return (
               <div key={r.id} style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Avatar size={28} src={r.avatar ?? undefined} />
+                  <InitialsAvatar name={r.author} size={28} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       <Text variant="label">{r.author}</Text>

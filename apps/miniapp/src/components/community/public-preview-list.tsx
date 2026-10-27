@@ -1,10 +1,11 @@
-import { MessageCircle, Sprout } from 'lucide-react';
+import { MessageCircle } from 'lucide-react';
 import { apiMediaUrl } from '../../services/api';
 import type { FeedPreviewItem } from '../../services/feed-api';
 import { timeAgo } from '../../utils/time-ago';
 import { vi } from '../../i18n/vi';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
+import { InitialsAvatar } from '../ui/initials-avatar';
 import { Text } from '../ui/text';
 import { ExpertBadge } from './author-line';
 import { KIND_ICON, KIND_LABEL } from './post-card';
@@ -34,19 +35,7 @@ export function PublicPreviewList({ posts, onLogin }: { posts: FeedPreviewItem[]
             style={{ marginTop: 12, padding: 16, background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: '50%',
-                  background: 'var(--color-action-secondary-bg)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Icon icon={Sprout} size="sm" tone="brand" />
-              </div>
+              <InitialsAvatar name={post.author} size={32} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <Text variant="body-sm" as="div" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {post.author}

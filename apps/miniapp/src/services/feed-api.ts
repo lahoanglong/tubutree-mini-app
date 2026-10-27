@@ -32,7 +32,6 @@ export interface FeedItem {
   meta: unknown;
   createdAt: string;
   author: string;
-  avatar: string | null;
   badge: 'EXPERT' | null;
   authorLevel: number;
   category: FeedCategory | null;
@@ -49,7 +48,6 @@ export interface FeedComment {
   id: string;
   body: string;
   author: string;
-  avatar: string | null;
   badge: 'EXPERT' | null;
   authorLevel: number;
   isAccepted: boolean;
@@ -58,7 +56,6 @@ export interface FeedComment {
 }
 export interface LeaderboardEntry {
   author: string;
-  avatar: string | null;
   reputation: number;
   level: number;
   levelName: string;

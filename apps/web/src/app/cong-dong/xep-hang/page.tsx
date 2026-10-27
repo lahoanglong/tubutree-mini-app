@@ -51,7 +51,7 @@ function LeaderRow({ rank, entry }: { rank: number; entry: LeaderboardEntry }) {
       <span className="w-7 text-center text-base font-semibold text-stone-900">
         {MEDAL[rank] ? <Medal size={22} strokeWidth={1.75} role="img" aria-label={MEDAL[rank].label} color={MEDAL[rank].color} /> : `#${rank}`}
       </span>
-      <Avatar src={entry.avatar} size={36} />
+      <Avatar name={entry.author} size={36} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold text-stone-900">{entry.author}</div>
         <div className="text-xs text-forest-700">

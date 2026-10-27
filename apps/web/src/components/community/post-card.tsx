@@ -24,7 +24,7 @@ export function PostCard({ post }: { post: FeedItem }) {
   return (
     <article data-testid="post-card" className={`relative isolate rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card ${miniBleed}`}>
       <div className="flex items-center gap-2">
-        <Avatar src={post.avatar} />
+        <Avatar name={post.author} />
         <AuthorLine
           name={post.author}
           badge={post.badge}

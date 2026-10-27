@@ -31,7 +31,6 @@ const POST: FeedItem = {
   meta: null,
   createdAt: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),
   author: 'Lan Anh',
-  avatar: null,
   badge: null,
   authorLevel: 1,
   category: { id: 'c1', slug: 'bep', name: 'Nhà bếp', icon: null },
@@ -359,3 +358,12 @@ describe('PostCard — không lồng phần tử tương tác (axe nested-intera
     expect(css).toMatch(/\.tubu-tile-link\[data-flat\]::after\s*\{[^}]*border-radius:\s*0/);
   });
 });
+
+describe('B-136: ảnh đại diện tác giả', () => {
+  it('thẻ bài vẽ vòng tròn chữ cái đầu của tên đang hiển thị, không có thẻ img', () => {
+    const { container } = renderCard({ ...POST, author: 'Lại N.' });
+    expect(screen.getByTestId('initials-avatar').textContent).toBe('L');
+    expect(container.querySelector('img')).toBeNull();
+  });
+});
+

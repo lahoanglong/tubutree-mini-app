@@ -9,7 +9,6 @@ export interface PublicReview {
   videoUrl: string | null;
   createdAt: string;
   author: string;
-  avatar: string | null;
   verifiedPurchase?: boolean;
 }
 

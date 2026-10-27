@@ -104,7 +104,7 @@ export interface CreateEventInput {
 }
 
 const FEED_INCLUDE = {
-  user: { select: { fullName: true, avatarUrl: true, role: true, communityProfile: { select: { level: true } } } },
+  user: { select: { fullName: true, role: true, communityProfile: { select: { level: true } } } },
   category: { select: { slug: true, name: true, icon: true } },
   // Chip trên bài cũ mở trang sản phẩm: hàng đã ngừng bán thì ẩn chip (trang đó 404).
   productTags: {
@@ -152,7 +152,7 @@ type FeedPostRow = Prisma.FeedPostGetPayload<{
 /**
  * Community Feed (§6.14.12) — bảng tin cộng đồng Vườn Xanh.
  * User khoe thành tích xanh (thu hoạch cây, mốc cộng đồng, sưu tập loài) hoặc đăng
- * bài tự do; người khác thả tim 💚 + bình luận. Hiện tên thật + avatar + badge tác giả
+ * bài tự do; người khác thả tim 💚 + bình luận. Hiện tên rút gọn + badge tác giả, không ảnh đại diện Zalo của khách
  * (khác BXH — leaderboard vẫn ẩn danh riêng ở GameService).
  * Auto-post thành tích qua createAchievementPost (gọi @Optional từ GameService).
  */
@@ -287,17 +287,16 @@ export class CommunityFeedService {
     }
   }
 
-  /** Bảng xếp hạng cộng đồng theo reputation — tên thật + avatar (khác BXH ẩn danh của GameService). */
+  /** Bảng xếp hạng cộng đồng theo reputation — tên rút gọn, không ảnh đại diện (khác BXH ẩn danh của GameService). */
   async getLeaderboard(take = 20) {
     const rows = await this.prisma.communityProfile.findMany({
       orderBy: { reputation: 'desc' },
       take,
       where: { reputation: { gt: 0 } },
-      include: { user: { select: { fullName: true, avatarUrl: true } } },
+      include: { user: { select: { fullName: true } } },
     });
     return rows.map((p) => ({
       author: publicAuthorName(p.user.fullName),
-      avatar: p.user.avatarUrl ?? null,
       reputation: p.reputation,
       level: p.level,
       levelName: levelName(p.level),
@@ -524,7 +523,6 @@ export class CommunityFeedService {
       createdAt: p.createdAt,
       // Người khác chỉ thấy tên rút gọn; chính chủ thấy tên đầy đủ của mình.
       author: p.userId === userId ? (p.user.fullName ?? 'Bạn Tubu') : publicDisplayName(p.user.fullName),
-      avatar: p.user.avatarUrl ?? null,
       badge: authorBadge(p.user.role),
       authorLevel: p.user.communityProfile?.level ?? 1,
       category: p.category ? { slug: p.category.slug, name: p.category.name, icon: p.category.icon } : null,
@@ -939,7 +937,7 @@ export class CommunityFeedService {
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      include: { user: { select: { fullName: true, avatarUrl: true, role: true, communityProfile: { select: { level: true } } } } },
+      include: { user: { select: { fullName: true, role: true, communityProfile: { select: { level: true } } } } },
     });
     const hasMore = rows.length > limit;
     const comments = hasMore ? rows.slice(0, limit) : rows;
@@ -947,7 +945,6 @@ export class CommunityFeedService {
       id: c.id,
       body: c.body,
       author: viewerId && c.userId === viewerId ? (c.user.fullName ?? 'Bạn Tubu') : publicDisplayName(c.user.fullName),
-      avatar: c.user.avatarUrl ?? null,
       badge: authorBadge(c.user.role),
       authorLevel: c.user.communityProfile?.level ?? 1,
       isAccepted: c.isAccepted,
