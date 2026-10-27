@@ -326,7 +326,7 @@ export const fetchForYou = async () =>
 export const fetchBoughtTogether = (slug: string) =>
   api.get<ProductCard[]>(`/products/${slug}/bought-together`).then((r) => r.data);
 
-export interface ProductSuggestion { slug: string; name: string; thumbnail: string | null; basePrice: number; }
+export interface ProductSuggestion { slug: string; name: string; thumbnail: string | null; basePrice: number; salePrice?: number | null }
 export const suggestProducts = (q: string) =>
   api.get<ProductSuggestion[]>('/search/suggest', { params: { q } }).then((r) => r.data);
 

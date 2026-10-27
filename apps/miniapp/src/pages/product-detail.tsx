@@ -41,6 +41,7 @@ import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
+import { cardPricing, variationPricing } from '@tubutree/app-core/flash-price';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
@@ -62,6 +63,7 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { ScrollRow } from '../components/ui/scroll-row';
 import { useScrollHints } from '../components/ui/use-scroll-hints';
 import { cartKey, useCartKey } from '../services/cart-key';
+import { LeafGlyph } from '../components/ui/product-image';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
@@ -200,17 +202,17 @@ export default function ProductDetailPage() {
     const viewKey = `${product.data.id}:${selected.id}`;
     if (trackedViewKey.current === viewKey) return;
     trackedViewKey.current = viewKey;
-    const baseSelectedPrice = selected.salePrice ?? selected.retailPrice ?? product.data.basePrice;
-    const viewPrice = flashItem ? Math.min(flashItem.flashPrice, baseSelectedPrice) : baseSelectedPrice;
+    const view = variationPricing(selected, flashQ.data ?? []);
+    const viewPrice = view.price;
     void trackEvent('product_viewed', 'miniapp', {
       productId: product.data.id,
       variationId: selected.id,
       price: viewPrice,
-      isFlash: Boolean(flashItem),
+      isFlash: view.isFlash,
       inStock: selected.stock > 0,
       listSource: navState?.listSource ?? 'browse',
     });
-  }, [product.isSuccess, product.data, selected, flashItem, flashQ.isPending]);
+  }, [product.isSuccess, product.data, selected, flashQ.data, flashQ.isPending]);
 
   const addMutation = useMutation({
     mutationFn: (input: { variation: VariationDetail; qty: number }) =>
@@ -280,13 +282,11 @@ export default function ProductDetailPage() {
 
   const p = product.data;
   const pdpCoupons = (couponsQ.data ?? []).filter((c) => !c.products || c.products.some((x) => x.id === p?.id));
-  // Flash không bao giờ tính cao hơn giá đang niêm yết — khớp BE (min(flashPrice, giá chuẩn)).
-  const baseSelectedPrice = selected?.salePrice ?? selected?.retailPrice ?? p.basePrice;
-  const price = flashItem ? Math.min(flashItem.flashPrice, baseSelectedPrice) : baseSelectedPrice;
-  // Giờ vàng gạch giá đang bán trước giờ vàng (khớp dải trang chủ và thẻ SP); flash không rẻ hơn thì như không có flash.
-  const originalPrice = flashItem && price < baseSelectedPrice ? baseSelectedPrice : selected ? selected.retailPrice : p.basePrice;
-  // % badge tính từ giá THỰC hiển thị (price/originalPrice) — không dùng flashItem.retailPrice (snapshot cũ).
-  const flashPct = originalPrice > 0 ? Math.round((1 - price / originalPrice) * 100) : 0;
+  const flashList = flashQ.data ?? [];
+  const priceView = selected ? variationPricing(selected, flashList) : cardPricing(p, flashList);
+  const price = priceView.price;
+  const originalPrice = priceView.compareAt;
+  const flashPct = priceView.salePct;
   const inStock = (selected?.stock ?? 0) > 0;
   const lowStock = inStock && (selected?.stock ?? 0) <= LOW_STOCK_THRESHOLD;
   const cartCount = cart.data?.itemCount ?? 0;
@@ -409,7 +409,7 @@ export default function ProductDetailPage() {
         <PointsBoostStrip placement="product" />
 
         {/* Giờ vàng cho phân loại đang chọn — badge % + đếm ngược êm + đã bán bao nhiêu%. */}
-        {flashItem && (
+        {flashItem && priceView.isFlash && (
           <Box flex alignItems="center" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             <Badge tone="promo" size="sm" style={{ background: 'var(--color-flash-solid-bg)', color: 'var(--color-flash-solid-fg)' }}>
               -{flashPct}%
@@ -975,10 +975,7 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
           justifyContent: 'center',
         }}
       >
-        <svg width="72" height="72" viewBox="0 0 48 48" fill="none" aria-hidden>
-          <path d="M14 36c-1.5-14 8-26 24-27 1 16-7 27-20 28-2 .2-3.4-.4-4-1z" fill="var(--forest-200)" />
-          <path d="M17 34c4-10 12-18 19-22" stroke="var(--color-text-brand)" strokeWidth="1.6" strokeLinecap="round" fill="none" />
-        </svg>
+        <LeafGlyph size={72} />
       </Box>
     );
   }

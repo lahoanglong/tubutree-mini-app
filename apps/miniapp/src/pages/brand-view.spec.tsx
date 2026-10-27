@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   unfollowBrand: vi.fn(),
   getDealerMe: vi.fn(),
   copyText: vi.fn(),
+  fetchFlash: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -28,6 +29,10 @@ vi.mock('../services/brand-api', () => ({
   getBrandFollowState: mocks.getBrandFollowState,
   followBrand: mocks.followBrand,
   unfollowBrand: mocks.unfollowBrand,
+}));
+vi.mock('../services/shop-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  fetchActiveFlashSales: mocks.fetchFlash,
 }));
 vi.mock('../services/dealer-api', () => ({ getDealerMe: mocks.getDealerMe }));
 vi.mock('../store/auth', () => ({
@@ -71,6 +76,7 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     mocks.unfollowBrand.mockResolvedValue({ following: false, followerCount: 12 });
     mocks.getDealerMe.mockResolvedValue({ isDealer: false });
     mocks.copyText.mockResolvedValue(true);
+    mocks.fetchFlash.mockResolvedValue([]);
   });
 
   it('hiện tên nhãn, tagline, số theo dõi và các khối nội dung', async () => {
@@ -132,6 +138,16 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Mã giảm giá: TUBU20', type: 'info' })),
     );
+  });
+
+  it('Giờ vàng: thẻ sản phẩm hiện giá Giờ vàng như Trang chủ và web (B-24)', async () => {
+    mocks.fetchFlash.mockResolvedValue([{ itemId: 'i1', variationId: 'v1', productSlug: 'nrc-sachi', productName: 'Nước rửa chén Sachi', thumbnail: null, flashPrice: 60000, retailPrice: 100000, salePrice: 80000, soldCount: 1, quota: 10, endAt: '2099-01-01T00:00:00.000Z' }]);
+    renderPage();
+    const grid = (await screen.findByRole('heading', { level: 2, name: 'Sản phẩm' })).parentElement!;
+    await waitFor(() => expect(within(grid).getByText('60.000đ')).toBeInTheDocument());
+    expect(within(grid).getByText('80.000đ')).toBeInTheDocument();
+    expect(within(grid).getByText(/Giờ vàng/)).toBeInTheDocument();
+    expect(within(grid).queryByText('100.000đ')).toBeNull();
   });
 
   it('bấm sản phẩm mở trang chi tiết', async () => {

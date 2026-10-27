@@ -149,6 +149,7 @@ export function mockPilotCart(api: MockApi): void {
 export function mockPilotStorefront(api: MockApi): void {
   mockPilotSession(api);
   api.get('/storefront/public/:slug', PILOT_STOREFRONT);
+  api.get('/flash-sales/active', []);
   api.allowUnmocked('GET /me/coupons');
 }
 

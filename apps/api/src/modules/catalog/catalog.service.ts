@@ -519,7 +519,7 @@ export class CatalogService {
     const rows = await this.prisma.product.findMany({
       where: { ...PUBLIC_PRODUCT_WHERE, AND: [text] },
       take: 8,
-      select: { id: true, slug: true, name: true, thumbnail: true, basePrice: true },
+      select: { id: true, slug: true, name: true, thumbnail: true, basePrice: true, salePrice: true },
     });
     return rows.map(({ id, ...r }) => ({ ...r, thumbnail: publicImage('product', id, 'thumb', r.thumbnail) }));
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardPricing, discountView, variationPricing } from './flash-price';
+import { cardPricing, discountView, flashDisplay, variationPricing } from './flash-price';
 
 const flash = [{ productSlug: 'hat-dieu', variationId: 'v1', flashPrice: 119_000 }];
 
@@ -53,5 +53,35 @@ describe('variationPricing (trang chi tiết gạch giống thẻ)', () => {
   });
   it('giá bán 0: không gạch, không phần trăm', () => {
     expect(variationPricing({ id: 'v1', retailPrice: 100_000, salePrice: 0 }, [])).toMatchObject({ price: 0, compareAt: null, salePct: 0 });
+  });
+});
+
+describe('một món, một giá ở mọi màn (B-24)', () => {
+  const caGaiLeo = { slug: 'cao-ca-gai-leo', basePrice: 220_000, salePrice: null };
+  const flashCaGai = [{ productSlug: 'cao-ca-gai-leo', variationId: 'v-cg', flashPrice: 165_000 }];
+
+  it('cao cà gai leo: thẻ, chi tiết và dải Giờ vàng cùng 165.000đ, gạch 220.000đ, -25%', () => {
+    expect(cardPricing(caGaiLeo, flashCaGai)).toMatchObject({ price: 165_000, compareAt: 220_000, salePct: 25, isFlash: true });
+    expect(variationPricing({ id: 'v-cg', retailPrice: 220_000, salePrice: null }, flashCaGai)).toMatchObject({ price: 165_000, compareAt: 220_000, salePct: 25 });
+    expect(flashDisplay({ flashPrice: 165_000, retailPrice: 220_000, salePrice: null })).toEqual({ price: 165_000, was: 220_000, pct: 25 });
+  });
+
+  it('hạt điều: dải Giờ vàng và lưới cùng gạch 159.000đ và -25%, không có -34%', () => {
+    const hatDieu = { slug: 'hat-dieu', basePrice: 180_000, salePrice: 159_000 };
+    const card = cardPricing(hatDieu, flash);
+    const strip = flashDisplay({ flashPrice: 119_000, retailPrice: 180_000, salePrice: 159_000 });
+    expect(card).toMatchObject({ price: 119_000, compareAt: 159_000, salePct: 25 });
+    expect(strip).toEqual({ price: card.price, was: card.compareAt, pct: card.salePct });
+  });
+
+  it('Giờ vàng không rẻ hơn giá đang bán: mọi nơi giữ giá đang bán, không phần trăm âm', () => {
+    const p = { slug: 'hat-dieu', basePrice: 180_000, salePrice: 100_000 };
+    expect(cardPricing(p, flash)).toMatchObject({ price: 100_000, isFlash: false, compareAt: 180_000 });
+    expect(flashDisplay({ flashPrice: 119_000, retailPrice: 180_000, salePrice: 100_000 })).toEqual({ price: 100_000, was: 100_000, pct: 0 });
+  });
+
+  it('phần trăm dải Giờ vàng kẹp 1 đến 99 như thẻ', () => {
+    expect(flashDisplay({ flashPrice: 99_600, retailPrice: 100_000 }).pct).toBe(1);
+    expect(flashDisplay({ flashPrice: 100, retailPrice: 100_000 }).pct).toBe(99);
   });
 });

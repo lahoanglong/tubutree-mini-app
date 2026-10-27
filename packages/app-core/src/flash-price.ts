@@ -63,3 +63,13 @@ export function variationPricing(
   const view = discountView(price, isFlash ? standing : v.retailPrice);
   return { price, isFlash, salePct: view.salePct, compareAt: view.compareAt, ...(isFlash && item!.endAt ? { endAt: item!.endAt } : {}) };
 }
+
+/**
+ * Giá và phần trăm của một suất Giờ vàng (dải Giờ vàng ở Trang chủ). Giá khách trả = min(giá Giờ vàng, giá đang bán); giá niêm yết
+ * hạ sau khi tạo đợt thì Giờ vàng không còn rẻ hơn: không hiện phần trăm âm hay giá gạch thấp hơn giá bán. Phần trăm kẹp như `discountView`.
+ */
+export function flashDisplay(item: { flashPrice: number; retailPrice: number; salePrice?: number | null }) {
+  const was = item.salePrice ?? item.retailPrice;
+  const price = Math.min(item.flashPrice, was);
+  return { price, was, pct: discountView(price, was).salePct };
+}

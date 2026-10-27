@@ -84,7 +84,7 @@ export function SuggestList({
       {productsShown.length > 0 && (
         <Group title={browseText.suggest.products}>
           {productsShown.map((p, i) => (
-            <SuggestRow key={p.slug} icon={<Thumb src={p.thumbnail} />} subtitle={formatVnd(p.basePrice)} onPress={() => onPickProduct(p, i)}>
+            <SuggestRow key={p.slug} icon={<Thumb src={p.thumbnail} />} subtitle={formatVnd(p.salePrice ?? p.basePrice)} onPress={() => onPickProduct(p, i)}>
               {p.name}
             </SuggestRow>
           ))}

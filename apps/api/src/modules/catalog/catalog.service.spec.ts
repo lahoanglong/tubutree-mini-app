@@ -771,7 +771,7 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     expect(findMany).toHaveBeenCalledWith({
       where: { isActive: true, approvalStatus: 'APPROVED', AND: [{ id: { in: ['p1'] } }] },
       take: 8,
-      select: { id: true, slug: true, name: true, thumbnail: true, basePrice: true },
+      select: { id: true, slug: true, name: true, thumbnail: true, basePrice: true, salePrice: true },
     });
     await expect(svc.suggest('  ')).resolves.toEqual([]);
   });

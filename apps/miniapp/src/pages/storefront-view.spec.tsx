@@ -8,11 +8,16 @@ const mocks = vi.hoisted(() => ({
   getPublicStorefront: vi.fn(),
   shareSheetProps: vi.fn(),
   navigate: vi.fn(),
+  fetchFlash: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useNavigate: () => mocks.navigate,
+}));
+vi.mock('../services/shop-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  fetchActiveFlashSales: mocks.fetchFlash,
 }));
 vi.mock('../services/storefront-api', () => ({ getPublicStorefront: mocks.getPublicStorefront }));
 vi.mock('../components/share-sheet', () => ({
@@ -207,5 +212,26 @@ describe('StorefrontViewPage — ảnh do API phục vụ (D3-10)', () => {
     renderPage('abcd1234');
     const urls = (await screen.findByTestId('shell-urls')).textContent!;
     expect(urls).toMatch(/^https?:\/\/[^|]+\/storefront\/image\/sf1\/cover\?v=a\|https:\/\/cdn\.x\/a\.jpg$/);
+  });
+});
+
+describe('StorefrontViewPage: giá trong gian hàng khớp trang chủ và web (B-24)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useStorefrontContext.getState().clear();
+    useAuthStore.setState({ user: null });
+  });
+
+  it('đang Giờ vàng: thẻ hiện giá Giờ vàng và giá gạch đang bán, không hiện giá niêm yết cũ', async () => {
+    mocks.fetchFlash.mockResolvedValue([{ itemId: 'i1', variationId: 'v1', productSlug: 'cao-ca-gai-leo', productName: 'Cao cà gai leo', thumbnail: null, flashPrice: 165_000, retailPrice: 220_000, salePrice: null, soldCount: 1, quota: 10, endAt: '2099-01-01T00:00:00.000Z' }]);
+    mocks.getPublicStorefront.mockResolvedValue(storefront({
+      collections: [{ id: 'c1', title: 'Bán chạy', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, items: [
+        { id: 'it1', note: null, variationId: null, product: { id: 'p1', name: 'Cao cà gai leo', slug: 'cao-ca-gai-leo', thumbnail: null, brand: 'Tubu', basePrice: 220_000, salePrice: null, ratingAvg: 0, reviewCount: 0, inStock: true } },
+      ] }],
+    }));
+    renderPage('abcd1234');
+    await waitFor(() => expect(screen.getByText('165.000đ')).toBeInTheDocument());
+    expect(screen.getByText('220.000đ')).toBeInTheDocument();
+    expect(screen.getByText(/Giờ vàng/)).toBeInTheDocument();
   });
 });

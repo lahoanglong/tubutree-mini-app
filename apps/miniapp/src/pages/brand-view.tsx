@@ -19,7 +19,7 @@ import { StorePageShell } from '../components/store-page-shell';
 import { Text, Heading } from '../components/ui/text';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
-import { ProductTile } from '../components/ui/product-tile';
+import ProductCard from '../components/product-card';
 import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
 import { ScrollRow } from '../components/ui/scroll-row';
@@ -241,14 +241,11 @@ export default function BrandViewPage() {
             <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Sản phẩm</Heading>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {b.products.map((p) => (
-                <ProductTile
+                <ProductCard
                   key={p.id}
                   // Payload sản phẩm của trang nhãn không kèm `brand` (mọi SP đều thuộc nhãn này) —
                   // ProductTile cần để hiện tên nhãn, dùng luôn tên nhãn của trang.
                   product={{ ...p, brand: b.name }}
-                  variant="grid"
-                  priceOverride={null}
-                  onPress={() => navigate(`/product/${p.slug}`)}
                 />
               ))}
             </div>
