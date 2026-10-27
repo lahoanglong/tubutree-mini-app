@@ -14,7 +14,7 @@ import { useConfirm } from './confirm-dialog';
 import { BTN_PRIMARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, INPUT_CLASS, Notice, LoadError, ToneBadge } from './ui';
 
 const REWARD_POINTS_MAX = 500_000;
-const CHECKIN_NOTE = 'Nhiệm vụ điểm danh: nếu khách dùng vé giữ lửa hay hồi sinh chuỗi thì nhiệm vụ đếm lại từ ngày đó (khách thấy dòng này trên thẻ nhiệm vụ).';
+const CHECKIN_NOTE = 'Nhiệm vụ điểm danh: nếu khách dùng vé giữ lửa hay hồi sinh chuỗi thì nhiệm vụ đếm lại từ ngày đó (khách chỉ thấy dòng này trên thẻ nhiệm vụ khi đã dùng vé giữ lửa hay hồi sinh sau ngày bắt đầu nhiệm vụ).';
 
 /** Nhiệm vụ Vườn Xanh. Thêm nhiệm vụ mới trong các loại hệ thống biết chấm; nhiệm vụ có sẵn sửa chữ, điểm thưởng và tạm dừng được (mục tiêu giữ nguyên vì đổi sẽ lệch lượt đã nhận). */
 export function EngagementTab() {

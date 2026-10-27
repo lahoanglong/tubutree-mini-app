@@ -87,13 +87,15 @@ const REFUND_PERCENT = new RegExp(
 // Tiền trả cho rác: "Trả 10k cho mỗi kg giấy", "Mỗi kg giấy trả 10k", "Thu mua giấy 5k/kg", "1kg giấy = 10k".
 // "qua"/"tra" bỏ dấu trùng "quá"/"trà", nên chỉ tính khi mở đầu một ý, đi với người, hoặc đi với đơn vị rác. Đơn vị cho dạng
 // `<tiền>/<đơn vị>` không gồm "chai"/"hộp" trơn để "Nước suối 5k/chai" qua.
-const WASTE_UNIT = '(?:kg|ky|kilo|can|thung|chai|vo|hop|lon|bao|bich)';
+const WASTE_UNIT = '(?:kg|ky|ki|kilo|can|thung|chai|vo|hop|lon|bao|bich)';
 const SLASH_UNIT = '(?:kg|ky|kilo|can|vo)';
+// Từ chỉ rác/phế liệu: giá theo đơn vị (`5k/kg`) chỉ là tiền trả cho rác khi cùng ý có từ này; `Gạo 2k/kg` là giá hàng.
+const MATERIAL = '(?<![a-z0-9])(?:giay|carton|thung|vo|chai|lon|nhua|sat|nhom|dong|rac|phe lieu|ve chai|hop sua|pin|nilon|bao bi|thu mua|quy doi)(?![a-z0-9])';
 const GIFT_AMOUNT = new RegExp(
   `(?:^|[.,;:!?(\\-]\\s*)(?:qua${FILLER}\\s*[:=]?\\s+${MONEY}|tra\\s+(?:khach|ban|nguoi|thanh vien)${FILLER}\\s+${MONEY})` +
-    `|(?<![a-z0-9])tra(?:\\s+(?:ngay|lai|luon|them))*\\s+${UNIT_AMOUNT}(?=\\s*(?:\\/\\s*${SLASH_UNIT}|(?:cho\\s+)?(?:moi|1|mot)\\s*${WASTE_UNIT})\\b)` +
-    `|${UNIT_AMOUNT}\\s*\\/\\s*${SLASH_UNIT}\\b` +
-    `|(?<![a-z0-9])(?:moi|1|mot)\\s*${WASTE_UNIT}\\b[^.;!?]{0,40}?(?:tra|duoc|nhan|lay|=)\\s+${UNIT_AMOUNT}`,
+    `|(?<![a-z0-9])tra(?:\\s+(?:ngay|lai|luon|them))*\\s+${UNIT_AMOUNT}(?=\\s*(?:\\/\\s*${SLASH_UNIT}|(?:cho\\s+)?(?:moi\\s*)?(?:\\d+|mot|moi)\\s*${WASTE_UNIT})\\b)` +
+    `|(?:${MATERIAL}[^.;!?]{0,40}?${UNIT_AMOUNT}\\s*\\/\\s*${SLASH_UNIT}\\b|${UNIT_AMOUNT}\\s*\\/\\s*${SLASH_UNIT}\\b[^.;!?]{0,40}?${MATERIAL})` +
+    `|(?<![a-z0-9])(?:moi|1|mot)\\s*${WASTE_UNIT}\\b[^.;!?]{0,40}?(?:(?<![a-z0-9])(?:tra|duoc|nhan|lay)|=)\\s+${UNIT_AMOUNT}${NOT_MONEY_AFTER_UNIT}(?!\\s?(?:uong|an)\\b)(?!\\s+tra\\b)`,
   'u',
 );
 const WORD = '[a-z0-9]';
@@ -113,7 +115,7 @@ const HARMLESS: RegExp[] = [
   /(?<![\d])(?:\+?84|0)(?:[\s.-]?\d){8,10}(?!\d)/g,
 ];
 
-const ACCENTED_HARMLESS = /nhân tiện|trà thượng|thể cao/iu;
+const ACCENTED_HARMLESS = /nhân tiện|trà thượng|thể cao|thế cao/iu;
 
 type Folded = { text: string; src: number[] };
 
@@ -170,7 +172,7 @@ function firstReal(re: RegExp, t: string): RegExpExecArray | null {
     const unit = SLANG_TAIL.exec(m[0]);
     const goodsBefore = unit && new RegExp(`(?:\\d|${NUMBER_WORDS})\\s?${unit[0]}\\b`, 'u').test(t.slice(0, m.index));
     // "Tặng 5 cành cho khách nữ": tặng/biếu + lóng + "cho" là quà hiện vật; thưởng/hoàn/chuyển... + lóng thì vẫn là tiền.
-    const softGift = unit && /^(?:tang|bieu)\b/u.test(m[0]) && /^\s*cho\b/u.test(t.slice(m.index + m[0].length));
+    const softGift = unit && /^(?:canh|chuc)$/u.test(unit[0]) && /^(?:tang|bieu)\b/u.test(m[0]) && /^\s*cho\b/u.test(t.slice(m.index + m[0].length));
     if (!goodsBefore && !softGift) return m;
   }
   return null;

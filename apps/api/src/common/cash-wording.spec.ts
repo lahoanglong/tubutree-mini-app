@@ -75,6 +75,17 @@ describe('Chữ thưởng/trả bằng tiền mặt (ưu đãi riêng của cử
     '• Quà 50k',
     'Ưu đãi | Quà 50k',
     'Trả 1k cho mỗi vỏ chai',
+    'Trả 5k cho 10 vỏ chai',
+    'Trả 1k cho 2 vỏ chai',
+    'Trả 10k cho mỗi 1kg giấy',
+    'Trả 10k cho 1 kí giấy',
+    'Mỗi kí giấy trả 10k',
+    'Vỏ lon 20k/kg',
+    'Quy đổi 10k/kg',
+    'Nhựa 5k/kg',
+    'Tặng 2 củ cho khách',
+    'Biếu 2 củ cho khách',
+    'Tặng 1 trăm cho khách',
   ])('chặn: %s', (text) => {
     expect(findCashWording(text)).not.toBeNull();
   });
@@ -131,6 +142,16 @@ describe('Chữ thưởng/trả bằng tiền mặt (ưu đãi riêng của cử
     'Đồ uống: trà 20k',
     'Nước suối 5k/chai',
     'Trà 25k/chai',
+    'Mỗi kg giấy được 1 đồ uống',
+    'Mỗi kg nhận 5k điểm',
+    '1kg giấy = 5k điểm',
+    'Gạo giảm 2k/kg',
+    'Giảm 3k/kg',
+    'Rau sạch chỉ 15k/kg',
+    'Nước mắm 50k/can',
+    'Tặng 5 cành cho khách nữ',
+    'Tặng 2 củ khoai cho khách',
+    'Mua 2 củ tặng 1 củ',
     'Hoàn 10% nếu hàng bị vỡ',
   ])('cho qua: %s', (text) => {
     expect(findCashWording(text)).toBeNull();
