@@ -45,7 +45,11 @@ describe('loadErrorText (khớp getErrorMessage của Mini App)', () => {
   });
   it('401: báo hết phiên và đăng nhập lại, không phải câu thử lại', () => {
     expect(loadErrorText(new ApiError('Unauthorized', 401))).toBe(SESSION_EXPIRED_TEXT);
-    expect(actionErrorText(new ApiError('Phiên hết hạn', 401))).toBe(SESSION_EXPIRED_TEXT);
+    expect(actionErrorText(new ApiError('', 401))).toBe(SESSION_EXPIRED_TEXT);
+  });
+  it('401 mang lời nghiệp vụ tiếng Việt (tài khoản bị khoá): giữ lời đó', () => {
+    expect(loadErrorText(new ApiError('Tài khoản đã bị khoá.', 401))).toBe('Tài khoản đã bị khoá.');
+    expect(actionErrorText(new ApiError('Tài khoản đã bị khoá.', 401))).toBe('Tài khoản đã bị khoá.');
   });
   it('4xx chỉ có chữ tiếng Anh (không dấu): câu chung tiếng Việt', () => {
     expect(loadErrorText(new ApiError('Bad Gateway from upstream', 400))).toBe('Có chút trục trặc, thử lại nhé');

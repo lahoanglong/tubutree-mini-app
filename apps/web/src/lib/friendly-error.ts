@@ -17,7 +17,8 @@ export function isAuthError(e: unknown): boolean {
 export function friendlyError(e: unknown): string {
   const s = errorStatus(e);
   const raw = e instanceof Error ? e.message.trim() : '';
-  if (s === 401 || /^unauthorized$/i.test(raw)) return SESSION_EXPIRED_TEXT;
+  if (/^unauthorized$/i.test(raw)) return SESSION_EXPIRED_TEXT;
+  if (s === 401) return loadErrorText(e);
   // 403 kèm câu nghiệp vụ tiếng Việt (đường gửi kho bị khoá, chương trình tắt...) giữ nguyên như Mini App; chỉ chữ thô hoặc rỗng mới thay.
   if (/^forbidden$/i.test(raw) || (s === 403 && !raw)) return NO_ACCESS_TEXT;
   return loadErrorText(e);

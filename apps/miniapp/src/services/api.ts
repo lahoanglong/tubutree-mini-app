@@ -193,7 +193,7 @@ export function getErrorMessage(error: unknown): string {
     const businessMsg = backendMsg && !TECHNICAL_MESSAGE.test(backendMsg.trim()) && !NO_VIETNAMESE.test(backendMsg.trim()) ? backendMsg : null;
     // 429 của bộ giới hạn tốc độ không có mã; 429 kèm mã nghiệp vụ (CHAT_DAILY_LIMIT, hết lượt tích điểm...) là lời máy chủ viết cho khách.
     if (error.response?.status === 429) return errorCode(error) && businessMsg ? businessMsg : RATE_LIMITED_MESSAGE;
-    if (error.response?.status === 401) return vi.errors.sessionExpired;
+    if (error.response?.status === 401) return businessMsg ?? vi.errors.sessionExpired;
     // Message backend 4xx là nghiệp vụ (viết sẵn tiếng Việt) — hiển thị thẳng; lời tiếng Anh của framework thì câu chung.
     if (backendMsg && error.response && error.response.status < 500) return businessMsg ?? vi.errors.generic;
     if (error.code === 'ECONNABORTED') return vi.errors.timeout;

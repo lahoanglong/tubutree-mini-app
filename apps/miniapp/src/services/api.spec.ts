@@ -34,6 +34,8 @@ describe('getErrorMessage', () => {
 
   it('401 → báo hết phiên; 4xx chỉ có chữ tiếng Anh không dấu → câu chung', () => {
     expect(getErrorMessage(httpError({ response: { status: 401, data: { message: 'Unauthorized' } } }))).toBe(viCopy.errors.sessionExpired);
+    expect(getErrorMessage(httpError({ response: { status: 401, data: {} } }))).toBe(viCopy.errors.sessionExpired);
+    expect(getErrorMessage(httpError({ response: { status: 401, data: { message: 'Tài khoản đã bị khoá.' } } }))).toBe('Tài khoản đã bị khoá.');
     expect(getErrorMessage(httpError({ response: { status: 400, data: { message: 'Bad Gateway from upstream' } } }))).toBe(viCopy.errors.generic);
   });
 

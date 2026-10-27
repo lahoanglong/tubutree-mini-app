@@ -26,6 +26,10 @@ describe('friendlyError', () => {
     expect(friendlyError(new ApiError(m, 429, 'CHAT_DAILY_LIMIT'))).toBe(m);
     expect(friendlyError(new ApiError('ThrottlerException', 429))).toContain('đợi vài giây');
   });
+  it('401 mang lời nghiệp vụ tiếng Việt giữ lời đó, 401 thô thì câu hết phiên', () => {
+    expect(friendlyError(new ApiError('Tài khoản đã bị khoá.', 401))).toBe('Tài khoản đã bị khoá.');
+    expect(friendlyError(new ApiError('Unauthorized', 401))).toBe(SESSION_EXPIRED_TEXT);
+  });
   it('isAuthError: 401/403 hoặc message thô', () => {
     expect(isAuthError(new ApiError('x', 403))).toBe(true);
     expect(isAuthError(new Error('Unauthorized'))).toBe(true);
