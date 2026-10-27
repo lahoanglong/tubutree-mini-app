@@ -657,6 +657,18 @@ describe('ReviewsService.listByProduct (video UGC §6.14.9)', () => {
   });
 });
 
+describe('ReviewsService.listByProduct: tên người đánh giá rút gọn (B-109)', () => {
+  it('họ tên đầy đủ thành "Lại N.", tên số điện thoại thành "Khách Tubu", tên trống thành "Khách Tubu"', async () => {
+    const mk = (id: string, fullName: string | null) => ({
+      id, rating: 5, comment: null, images: [], videoUrl: null, createdAt: new Date(), user: { fullName, avatarUrl: null },
+    });
+    const prisma = listPrisma([mk('r1', 'Nguyễn Thị Quay Lại'), mk('r2', '0912345678'), mk('r3', null), mk('r4', 'Bình')], [{ rating: 5, n: 4 }], 0);
+    const r = await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau');
+    expect(r.items.map((i) => i.author)).toEqual(['Lại N.', 'Khách Tubu', 'Khách Tubu', 'Bình']);
+    expect(JSON.stringify(r)).not.toContain('0912345678');
+  });
+});
+
 // Khách mua lại viết được nhiều đánh giá, sản phẩm dễ vượt số dòng trả về: số đánh giá, điểm trung bình, phân bổ sao phải
 // tính trên mọi đánh giá đang hiện (khớp reviewCount/ratingAvg của sản phẩm), không trên 100 dòng mới nhất.
 describe('ReviewsService.listByProduct — thống kê trên mọi đánh giá đang hiện', () => {

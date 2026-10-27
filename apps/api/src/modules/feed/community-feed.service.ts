@@ -8,6 +8,7 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { authorBadge } from './author-badge';
 import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { startOfVnDay } from '../../common/vn-time';
+import { publicDisplayName } from '../../common/mask-name';
 import { formatPoints } from '../../common/format-points';
 import { decodeServedImage } from '../../common/served-image';
 import { COMMUNITY_MODERATORS } from '../../common/staff-permissions';
@@ -513,7 +514,8 @@ export class CommunityFeedService {
       imageCount: postImages?.count ?? 0,
       meta: p.meta,
       createdAt: p.createdAt,
-      author: p.user.fullName ?? 'Bạn Tubu',
+      // Người khác chỉ thấy tên rút gọn; chính chủ thấy tên đầy đủ của mình.
+      author: p.userId === userId ? (p.user.fullName ?? 'Bạn Tubu') : publicDisplayName(p.user.fullName),
       avatar: p.user.avatarUrl ?? null,
       badge: authorBadge(p.user.role),
       authorLevel: p.user.communityProfile?.level ?? 1,
@@ -936,7 +938,7 @@ export class CommunityFeedService {
     const items = comments.map((c) => ({
       id: c.id,
       body: c.body,
-      author: c.user.fullName ?? 'Bạn Tubu',
+      author: viewerId && c.userId === viewerId ? (c.user.fullName ?? 'Bạn Tubu') : publicDisplayName(c.user.fullName),
       avatar: c.user.avatarUrl ?? null,
       badge: authorBadge(c.user.role),
       authorLevel: c.user.communityProfile?.level ?? 1,
@@ -1227,7 +1229,7 @@ export class CommunityFeedService {
       title: p.title,
       body: p.body,
       images: images.get(p.id)?.images ?? [],
-      author: p.user.fullName ?? 'Bạn Tubu',
+      author: publicDisplayName(p.user.fullName),
       category: p.category?.name ?? null,
       createdAt: p.createdAt,
     }));
@@ -1258,7 +1260,7 @@ export class CommunityFeedService {
         kind: p.kind,
         title: p.title,
         excerpt: p.body.slice(0, 200),
-        author: p.user.fullName ?? 'Bạn Tubu',
+        author: publicDisplayName(p.user.fullName),
         category: p.category?.name ?? null,
         createdAt: p.createdAt,
         isPinned: p.isPinned,

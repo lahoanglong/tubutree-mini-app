@@ -1,4 +1,4 @@
-import { maskFullName, maskName } from './mask-name';
+import { maskFullName, maskName, publicDisplayName } from './mask-name';
 
 // Bảng ca dùng chung với đặc tả ở game/game-gift/game-season/merchant (viết trước khi gom, xanh trên
 // bản chép tay): hai hàm phải cho đúng kết quả của các bản cũ trên cùng một tập đầu vào.
@@ -57,4 +57,24 @@ describe('maskFullName (đơn gian hàng đối tác)', () => {
       expect(maskFullName(input)).toBe(expected);
     },
   );
+});
+
+describe('publicDisplayName (bài viết, bình luận, đánh giá công khai)', () => {
+  it.each([
+    ['Nguyễn Thị Quay Lại', 'Lại N.'],
+    ['  Lã  Hoàng Long ', 'Long L.'],
+    ['đỗ hương', 'hương Đ.'],
+    ['Long', 'Long'],
+  ])('%s -> %s', (name, want) => {
+    expect(publicDisplayName(name)).toBe(want);
+  });
+
+  it.each([null, undefined, '', '   '])('trống (%p) dùng tên chung', (name) => {
+    expect(publicDisplayName(name)).toBe('Bạn Tubu');
+    expect(publicDisplayName(name, 'Khách Tubu')).toBe('Khách Tubu');
+  });
+
+  it.each(['0912345678', '+84 912 345 678', '0912.345.678', 'Long 0912345678', 'an@mail.com'])('"%s" giống số điện thoại hoặc email: không in ra', (name) => {
+    expect(publicDisplayName(name)).toBe('Bạn Tubu');
+  });
 });
