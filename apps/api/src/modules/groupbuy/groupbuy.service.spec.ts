@@ -641,12 +641,35 @@ describe('D11-05: mã mua chung giảm đúng % trên biến thể khách mua, k
   });
 });
 
+describe('B-139: giá gốc của nhóm theo phân loại đại diện, không theo cột sản phẩm', () => {
+  it('cột Product ghi 180.000đ nhưng phân loại đại diện còn hàng giá 159.000đ → giá gốc 159.000đ, giá nhóm 135.150đ', async () => {
+    const prisma = makePrisma();
+    (prisma.product.findUnique as jest.Mock).mockResolvedValue({
+      id: 'prod1', isActive: true, approvalStatus: 'APPROVED', basePrice: 180000, salePrice: null, name: 'X', slug: 'x', thumbnail: null,
+    });
+    (prisma.variation.findMany as jest.Mock).mockResolvedValue([
+      { id: 'v1', sku: 'A', retailPrice: 180000, salePrice: null, stock: 5 },
+      { id: 'v2', sku: 'B', retailPrice: 159000, salePrice: null, stock: 5 },
+      { id: 'v3', sku: 'C', retailPrice: 99000, salePrice: null, stock: 0 },
+    ]);
+    await new GroupBuyService(prisma, makeConfig({ 'groupbuy.discount_pct': 15, 'groupbuy.target_size': 3 })).create('u1', 'prod1');
+    expect((prisma.groupBuy.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ basePrice: 159000, unitPrice: 135150 });
+  });
+
+  it('phân loại đại diện có salePrice → giá gốc là salePrice', async () => {
+    const prisma = makePrisma();
+    (prisma.variation.findMany as jest.Mock).mockResolvedValue([{ id: 'v1', sku: 'A', retailPrice: 120000, salePrice: 100000, stock: 3 }]);
+    await new GroupBuyService(prisma, makeConfig({ 'groupbuy.discount_pct': 15, 'groupbuy.target_size': 3 })).create('u1', 'prod1');
+    expect((prisma.groupBuy.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ basePrice: 100000, unitPrice: 85000 });
+  });
+});
+
 describe('Q18: đơn tối thiểu của mã mua chung theo giá nhóm của biến thể rẻ nhất đang bán', () => {
   // Pancake trả biến thể đắt trước nên product.basePrice = 430.000đ, biến thể rẻ 120.000đ nằm sau.
   const variations = [
-    { retailPrice: 430000, salePrice: null },
-    { retailPrice: 120000, salePrice: null },
-    { retailPrice: 0, salePrice: null },
+    { id: 'v1', sku: 'A', retailPrice: 430000, salePrice: null, stock: 5 },
+    { id: 'v2', sku: 'B', retailPrice: 120000, salePrice: null, stock: 5 },
+    { id: 'v0', sku: 'Z', retailPrice: 0, salePrice: null, stock: 0 },
   ];
 
   function prismaDearFirst() {

@@ -5,6 +5,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
+import { cardPrices } from '../catalog/variation-order';
 import { isPublicProduct, PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { formatVnDate } from '../../common/vn-time';
 import { publicImage } from '../../common/public-image';
@@ -101,7 +102,13 @@ export class GroupBuyService {
       this.config.get<number>('groupbuy.target_size', 3),
       this.config.get<number>('groupbuy.window_hours', 48),
     ]);
-    const basePrice = product.salePrice ?? product.basePrice;
+    const variations = await this.prisma.variation.findMany({
+      where: { productId, isActive: true },
+      select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true },
+    });
+    // Giá gốc theo phân loại đại diện như thẻ sản phẩm: cột Product chỉ là giá của phân loại đầu Pancake trả về.
+    const card = cardPrices(product, variations);
+    const basePrice = card.salePrice ?? card.basePrice;
     const unitPrice = Math.round((basePrice * (100 - pct)) / 100);
     const expiresAt = new Date(Date.now() + windowHours * 3600 * 1000);
 
