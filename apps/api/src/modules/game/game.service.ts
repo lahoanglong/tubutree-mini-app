@@ -862,9 +862,9 @@ export class GameService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        // Khoá dòng nhiệm vụ rồi đọc lại: quản trị tạm dừng hay sửa điểm thưởng giữa lúc đọc và lúc ghi thì lần nhận này
+        // Khoá chia sẻ dòng nhiệm vụ rồi đọc lại (khách nhận song song không chờ nhau; chỉ lần sửa của quản trị phải chờ): quản trị tạm dừng hay sửa điểm thưởng giữa lúc đọc và lúc ghi thì lần nhận này
         // thấy đúng giá trị mới (lần sửa chờ giao dịch này xong, hoặc đã xong trước khi ta khoá).
-        await tx.$queryRaw`SELECT "id" FROM "missions" WHERE "id" = ${mission.id} FOR UPDATE`;
+        await tx.$queryRaw`SELECT "id" FROM "missions" WHERE "id" = ${mission.id} FOR SHARE`;
         const live = await tx.mission.findUnique({ where: { id: mission.id }, select: { disabledAt: true, rewardPoints: true } });
         if (!live || live.disabledAt) throw new BadRequestException('Nhiệm vụ này đang tạm dừng.');
         // Insert claim TRƯỚC khi cộng thưởng — khoá idempotency thật là unique của mission_progress,

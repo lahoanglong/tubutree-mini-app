@@ -94,4 +94,51 @@ describe('Nhiệm vụ quản trị thêm (real Postgres)', () => {
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     expect(await prisma.mission.count({ where: { id: { in: [a.id, b.id] }, disabledAt: null } })).toBe(1);
   });
+
+  async function buyers(n: number) {
+    const users = [];
+    for (let i = 0; i < n; i += 1) {
+      const u = await createUser(prisma);
+      await createOrder(prisma, { userId: u.id, status: 'DELIVERED', deliveredAt: ago(10) });
+      users.push(u);
+    }
+    return users;
+  }
+
+  it('100 khách khác nhau nhận cùng một nhiệm vụ đồng thời: không lỗi, mỗi người được cộng đúng một lần (khoá chia sẻ không xếp hàng)', async () => {
+    await prisma.mission.updateMany({ where: { title: { startsWith: 'IT ' }, code: { startsWith: 'CUSTOM_' } }, data: { disabledAt: new Date() } });
+    const mission = await create();
+    await prisma.mission.update({ where: { id: mission.id }, data: { startsAt: ago(20) } });
+    const users = await buyers(100);
+    const results = await Promise.allSettled(users.map((u) => game.claimMission(u.id, mission.code)));
+    expect(results.filter((r) => r.status === 'rejected').map((r) => String((r as PromiseRejectedResult).reason))).toEqual([]);
+    const ids = users.map((u) => u.id);
+    expect(await prisma.missionProgress.count({ where: { userId: { in: ids }, missionId: mission.id } })).toBe(100);
+    expect(await prisma.pointsTransaction.count({ where: { userId: { in: ids }, reason: { startsWith: `MISSION:${mission.code}` } } })).toBe(100);
+  });
+
+  it('quản trị tạm dừng giữa chừng: lượt nhận sau đó đọc lại và bị chặn, lượt đã thành công mỗi người đúng một lần', async () => {
+    const mission = await create(3);
+    await prisma.mission.update({ where: { id: mission.id }, data: { startsAt: ago(20) } });
+    const users = await Promise.all(
+      Array.from({ length: 40 }, async () => {
+        const u = await createUser(prisma);
+        for (let i = 0; i < 3; i += 1) await createOrder(prisma, { userId: u.id, status: 'DELIVERED', deliveredAt: ago(10 + i) });
+        return u;
+      }),
+    );
+    const first = users.slice(0, 20);
+    const later = users.slice(20);
+    const [pause, ...claims] = await Promise.allSettled([
+      admin.updateMission(mission.id, { disabled: true }),
+      ...first.map((u) => game.claimMission(u.id, mission.code)),
+    ]);
+    expect(pause.status).toBe('fulfilled');
+    for (const r of claims) if (r.status === 'rejected') expect(String(r.reason)).toContain('tạm dừng');
+    const ok = claims.filter((r) => r.status === 'fulfilled').length;
+    expect(await prisma.missionProgress.count({ where: { missionId: mission.id } })).toBe(ok);
+    const after = await Promise.allSettled(later.map((u) => game.claimMission(u.id, mission.code)));
+    expect(after.every((r) => r.status === 'rejected' && String(r.reason).includes('tạm dừng'))).toBe(true);
+    expect(await prisma.missionProgress.count({ where: { missionId: mission.id } })).toBe(ok);
+  });
 });
