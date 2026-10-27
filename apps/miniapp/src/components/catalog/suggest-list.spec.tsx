@@ -119,3 +119,22 @@ describe('SuggestList', () => {
     expect(screen.getByRole('button', { name: 'Tìm “z”' })).toBeInTheDocument();
   });
 });
+
+describe('SuggestList: giá sản phẩm khớp thẻ', () => {
+  const HAT_DIEU: ProductSuggestion = { slug: 'hat-dieu', name: 'Hạt điều rang', thumbnail: null, basePrice: 180000, salePrice: 159000 };
+
+  it('không Giờ vàng: giá đang bán', () => {
+    renderList({ draft: 'hạt', products: [HAT_DIEU] });
+    expect(screen.getByText('159.000đ')).toBeInTheDocument();
+  });
+
+  it('đang Giờ vàng: giá khách trả', () => {
+    renderList({
+      draft: 'hạt',
+      products: [HAT_DIEU],
+      flashSales: [{ itemId: 'f1', variationId: 'v1', productSlug: 'hat-dieu', productName: 'x', thumbnail: null, flashPrice: 119000, retailPrice: 180000, salePrice: 159000, soldCount: 0, quota: 5, endAt: '2026-10-01T00:00:00.000Z' }],
+    });
+    expect(screen.getByText('119.000đ')).toBeInTheDocument();
+    expect(screen.queryByText('159.000đ')).toBeNull();
+  });
+});

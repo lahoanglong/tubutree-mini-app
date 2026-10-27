@@ -19,6 +19,7 @@ import { formatDate, formatDateTime } from '@/lib/format-date';
 import { canPayNow, showsPaymentDeadline } from '@/components/orders/order-rules';
 import { formatCount } from '@/lib/checkout-points';
 import { ProductThumb } from '@/components/mini';
+import { useScrollHints } from '@/components/mini/use-scroll-hints';
 
 /** Số sản phẩm đầu mỗi đơn hiện tên + ảnh; phần còn lại gộp thành "và N sản phẩm khác". */
 const PREVIEW_ITEMS = 2;
@@ -46,6 +47,7 @@ function OrderItemsPreview({ items }: { items: OrderDTO['items'] }) {
 /** Danh sách đơn có lọc theo trạng thái, ô tìm theo mã/tên sản phẩm, tải thêm từng trang 20 đơn và hiện tổng số đơn. */
 export function OrdersSection() {
   const [tab, setTab] = useState<OrderTabKey>('all');
+  const tabHints = useScrollHints<HTMLDivElement>();
   const [draft, setDraft] = useState('');
   const [query, setQuery] = useState('');
   const current = ORDER_TABS.find((t) => t.key === tab) ?? ORDER_TABS[0];
@@ -104,7 +106,7 @@ export function OrdersSection() {
         </div>
       )}
 
-      <div role="group" aria-label="Lọc đơn hàng theo trạng thái" className="-mx-1 mt-2 flex gap-2 overflow-x-auto px-1 pb-1">
+      <div {...tabHints} role="group" aria-label="Lọc đơn hàng theo trạng thái" className="tubu-scroll-fade -mx-1 mt-2 flex gap-2 overflow-x-auto px-1 pb-1">
         {ORDER_TABS.map((t) => (
           <button
             key={t.key}

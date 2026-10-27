@@ -15,7 +15,7 @@ import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import BackLink from '@/components/back-link';
-import { CheckMark, miniCheckboxWrap, miniCheckbox, mini } from '@/components/order-mobile/mobile-ui';
+import { CheckMark, miniCheckboxWrap, miniCheckbox } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
 import { loadErrorText } from '@/lib/error-text';

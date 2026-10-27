@@ -6,6 +6,8 @@ import { X } from 'lucide-react';
 import { suggestProducts, type ProductSuggestion } from '@tubutree/app-core/api/catalog';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
+import { cardPricing } from '@/lib/flash-price';
+import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { ui } from '@/lib/guest-ui';
 import { safeMediaUrl } from './post-parts';
 import { useDebounced } from './use-debounced';
@@ -17,6 +19,7 @@ const isSuggestable = (s: string) => foldVietnamese(s).length >= SUGGEST_MIN_CHA
 
 /** Chọn sản phẩm để gắn vào bài đăng cộng đồng: ô tìm + chip đã chọn (tối đa `max`). */
 export function ProductPicker({ value, onChange, max = 5 }: { value: ProductSuggestion[]; onChange: (v: ProductSuggestion[]) => void; max?: number }) {
+  const flash = useActiveFlashSales();
   const [q, setQ] = useState('');
   const [maxWarning, setMaxWarning] = useState(false);
   const dq = useDebounced(q, 300);
@@ -86,7 +89,7 @@ export function ProductPicker({ value, onChange, max = 5 }: { value: ProductSugg
                 <ProductThumb src={thumb} alt="" size={32} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm text-stone-900">{p.name}</span>
-                  <span className="block text-xs font-semibold text-forest-700">{formatVnd(p.basePrice)}</span>
+                  <span className="block text-xs font-semibold text-forest-700">{formatVnd(cardPricing(p, flash).price)}</span>
                 </span>
               </button>
             );

@@ -5,7 +5,8 @@ import { X } from 'lucide-react';
 import { Text } from '../ui/text';
 import { IconButton } from '../ui/icon-button';
 import { ListRow } from '../ui/list-row';
-import { suggestProducts, type ProductSuggestion } from '../../services/shop-api';
+import { fetchActiveFlashSales, suggestProducts, type ProductSuggestion } from '../../services/shop-api';
+import { tilePricing } from '../catalog/catalog-pricing';
 import { isSuggestable } from '../../hooks/use-suggest';
 import { useDebounced } from '../../utils/use-debounced';
 import { formatVnd } from '../../utils/format';
@@ -37,6 +38,8 @@ export function ProductPicker({
     enabled: canSuggest,
   });
 
+  const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000, enabled: canSuggest });
+  const flashSales = flashQ.data ?? [];
   const results = (suggestQ.data ?? []).filter((p) => !value.some((v) => v.slug === p.slug));
 
   const add = (p: ProductSuggestion) => {
@@ -119,7 +122,7 @@ export function ProductPicker({
               key={p.slug}
               icon={<ProductThumb src={p.thumbnail} alt="" size={32} />}
               title={p.name}
-              subtitle={<Text variant="price-sm" tone="brand">{formatVnd(p.basePrice)}</Text>}
+              subtitle={<Text variant="price-sm" tone="brand">{formatVnd(tilePricing(p, flashSales).price)}</Text>}
               onPress={() => add(p)}
               style={{ padding: '6px 0' }}
             />

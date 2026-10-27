@@ -262,11 +262,11 @@ describe('/dang-nhap — đồng ý điều khoản (D5-01)', () => {
     expect(button.compareDocumentPosition(consent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('vẫn hiện khi đăng nhập Zalo tạm ngưng (khách vẫn đọc được điều khoản)', async () => {
+  it('ẩn khi đăng nhập Zalo tạm ngưng (không có gì để đồng ý)', async () => {
     mocks.auth.zaloLoginConfigured = false;
     const { container } = mount(<LoginPage />);
     await flush();
-    expect(container.textContent).toContain('Bằng việc đăng nhập, bạn đồng ý với');
+    expect(container.textContent).not.toContain('Bằng việc đăng nhập, bạn đồng ý với');
   });
 
   it('không đổi luồng: bấm liên kết điều khoản không ghi returnTo, không gọi startZaloLogin', async () => {

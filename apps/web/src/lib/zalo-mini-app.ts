@@ -1,5 +1,8 @@
 import { miniappPathFor } from './route-map';
 
+/** ID Mini App chính thức (https://zalo.me/s/2070857098114207963/). */
+export const DEFAULT_MINIAPP_ID = '2070857098114207963';
+
 /**
  * Link mở Zalo Mini App Tubu Tree (`https://zalo.me/s/<id>`), dùng cho nút "Mở trên Zalo" ở trang đăng nhập: khách đã dùng Zalo
  * vào Mini App là xong, không phải qua vòng OAuth của web. Chỉ đọc `NEXT_PUBLIC_ZALO_MINIAPP_ID` (ID của Mini App, khác App ID
@@ -9,9 +12,6 @@ import { miniappPathFor } from './route-map';
  * `returnTo` là trang web khách đang xem: tra ngược route map để mở đúng màn Mini App tương ứng (sản phẩm → `/product/:slug`,
  * giỏ hàng → `/cart`...); trang không có màn tương ứng thì mở trang chủ.
  */
-/** ID Mini App chính thức (https://zalo.me/s/2070857098114207963/). */
-export const DEFAULT_MINIAPP_ID = '2070857098114207963';
-
 export function miniAppLink(returnTo?: string | null): string {
   const configured = (process.env.NEXT_PUBLIC_ZALO_MINIAPP_ID ?? '').trim();
   const id = /^\d+$/.test(configured) ? configured : DEFAULT_MINIAPP_ID;

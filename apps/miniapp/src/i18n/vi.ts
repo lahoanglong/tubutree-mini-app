@@ -402,11 +402,6 @@ export const vi = {
     CANCELLED: 'Đã huỷ',
   } as Record<string, string>,
 
-  /**
-   * Trạng thái vận đơn của hãng vận chuyển (Pancake ghi nguyên `partner_status` vào lịch sử đơn).
-   * Khoá đã chuẩn hoá: chữ thường, phân cách bằng "_" — xem utils/format-shipping.ts.
-   */
-
   paymentMethod: {
     COD: 'Khi nhận hàng (COD)',
     ZALOPAY: 'ZaloPay',

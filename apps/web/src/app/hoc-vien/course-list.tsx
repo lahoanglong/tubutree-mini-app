@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { CheckCircle2 } from 'lucide-react';
+import { BookOpen, CheckCircle2 } from 'lucide-react';
 import type { AcademyCourseSummary } from '@tubutree/app-core/api/academy';
 import { academyCoursesQuery } from '@tubutree/app-core/queries/academy';
 import { safeMediaUrl } from '@/components/community/post-parts';
@@ -15,7 +15,6 @@ import { friendlyError, isAuthError } from '@/lib/friendly-error';
 import { ui } from '@/lib/guest-ui';
 import { miniCard } from '@/components/loyalty/mini-surface';
 import { AcademyAuthGate } from './academy-auth';
-import { ProductThumb } from '@/components/mini';
 
 export const errorText = friendlyError;
 
@@ -24,8 +23,13 @@ function CourseCard({ course }: { course: AcademyCourseSummary }) {
   const cover = safeMediaUrl(course.coverUrl);
   return (
     <Link href={`/hoc-vien/${encodeURIComponent(course.id)}`} className={`${miniCard} flex min-h-11 items-start gap-3 p-3 transition active:scale-[0.99]`}>
-      <span className="shrink-0">
-        <ProductThumb src={cover} alt="" size={64} />
+      <span className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-control bg-forest-50 text-forest-600">
+        {cover ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={cover} alt="" loading="lazy" className="h-full w-full object-cover" />
+        ) : (
+          <BookOpen className="h-6 w-6" aria-hidden="true" />
+        )}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-base font-semibold text-stone-900 max-md:text-[length:var(--type-body-sm-size)]">{course.title}</span>

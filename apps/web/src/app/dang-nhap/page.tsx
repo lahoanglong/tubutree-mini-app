@@ -69,7 +69,7 @@ function LoginInner() {
             Mở Tubu Tree trên Zalo
           </a>
           <div className="mt-5 hidden flex-col items-center gap-2 md:flex" data-testid="login-qr">
-            <QrCode value={miniAppUrl} size={160} />
+            <QrCode value={miniAppUrl} size={160} alt="Mã QR mở Tubu Tree trên Zalo" />
             <p className="text-xs text-stone-600">Hoặc quét mã này bằng Zalo trên điện thoại.</p>
           </div>
           <p className="mt-4 text-xs text-stone-600">Cần hỗ trợ đặt hàng? Gọi hotline {formatPhoneDisplay(support.hotline)}.</p>
@@ -93,17 +93,19 @@ function LoginInner() {
         </>
       )}
 
-      <p className="mt-3 text-xs text-stone-600">
-        Bằng việc đăng nhập, bạn đồng ý với{' '}
-        <Link href="/chinh-sach/dieu-khoan" className="font-medium text-forest-700 underline underline-offset-2">
-          Điều khoản
-        </Link>{' '}
-        và{' '}
-        <Link href="/chinh-sach/bao-mat" className="font-medium text-forest-700 underline underline-offset-2">
-          Chính sách bảo mật
-        </Link>
-        .
-      </p>
+      {!unavailable && (
+        <p className="mt-3 text-xs text-stone-600">
+          Bằng việc đăng nhập, bạn đồng ý với{' '}
+          <Link href="/chinh-sach/dieu-khoan" className="font-medium text-forest-700 underline underline-offset-2">
+            Điều khoản
+          </Link>{' '}
+          và{' '}
+          <Link href="/chinh-sach/bao-mat" className="font-medium text-forest-700 underline underline-offset-2">
+            Chính sách bảo mật
+          </Link>
+          .
+        </p>
+      )}
 
       <Link href="/" className={`${ui.backLink} mt-4 text-stone-600 hover:text-stone-900`}>
         {unavailable ? 'Tiếp tục xem sản phẩm' : 'Quay lại trang chủ'}

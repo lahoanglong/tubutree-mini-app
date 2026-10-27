@@ -16,7 +16,7 @@ import {
   formatDateTime,
   addressLine,
 } from '../utils/format';
-import { journeyEventLabel, shippingEventLabel } from '../utils/format-shipping';
+import { journeyEventLabel, journeyEvents, shippingEventLabel } from '../utils/format-shipping';
 import {
   STATUS_COLOR,
   buyerStatusLabel,
@@ -242,8 +242,7 @@ export default function OrderDetailPage() {
   const o = order.data;
   const wasteReq = wasteQ.data;
   const color = STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!;
-  // Bỏ entry shape cũ ({at,data} trước khi chuẩn hoá) — chỉ hiện mốc có trạng thái/mã.
-  const journey = (o.shippingHistory ?? []).filter((e) => e && (e.status || e.code));
+  const journey = journeyEvents(o.shippingHistory);
   // Đơn CTV lên hộ khách: OrderDTO chung chưa khai báo 2 cột này dù API trả nguyên bản ghi đơn.
   const assisted = o as { placedForCustomer?: boolean; referrerUserId?: string | null };
   const canCancel = canCustomerCancel({ ...o, ...assisted }, meId);
@@ -511,43 +510,40 @@ export default function OrderDetailPage() {
 
           {journey.length > 0 && (
             <Box mt={3}>
-              {journey
-                .slice()
-                .reverse()
-                .map((ev, i) => (
-                  <Box key={i} flex style={{ gap: 10 }}>
-                    <Box flex flexDirection="column" alignItems="center" style={{ flex: '0 0 auto' }}>
-                      <span
-                        style={{
-                          width: 9,
-                          height: 9,
-                          borderRadius: '50%',
-                          background: i === 0 ? 'var(--color-action-primary-bg)' : 'var(--stone-300)',
-                          marginTop: 4,
-                        }}
-                      />
-                      {i < journey.length - 1 && (
-                        <span style={{ width: 2, flex: 1, background: 'var(--color-border-subtle)', marginTop: 2 }} />
-                      )}
-                    </Box>
-                    <Box style={{ flex: 1, paddingBottom: 12 }}>
-                      <Text
-                        size="xSmall"
-                        style={{
-                          color: i === 0 ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-                          fontWeight: i === 0 ? 600 : 400,
-                        }}
-                      >
-                        {journeyEventLabel(ev)}
-                      </Text>
-                      {ev.at && (
-                        <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-                          {formatDateTime(ev.at)}
-                        </Text>
-                      )}
-                    </Box>
+              {journey.map((ev, i) => (
+                <Box key={i} flex style={{ gap: 10 }}>
+                  <Box flex flexDirection="column" alignItems="center" style={{ flex: '0 0 auto' }}>
+                    <span
+                      style={{
+                        width: 9,
+                        height: 9,
+                        borderRadius: '50%',
+                        background: i === 0 ? 'var(--color-action-primary-bg)' : 'var(--stone-300)',
+                        marginTop: 4,
+                      }}
+                    />
+                    {i < journey.length - 1 && (
+                      <span style={{ width: 2, flex: 1, background: 'var(--color-border-subtle)', marginTop: 2 }} />
+                    )}
                   </Box>
-                ))}
+                  <Box style={{ flex: 1, paddingBottom: 12 }}>
+                    <Text
+                      size="xSmall"
+                      style={{
+                        color: i === 0 ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+                        fontWeight: i === 0 ? 600 : 400,
+                      }}
+                    >
+                      {journeyEventLabel(ev)}
+                    </Text>
+                    {ev.at && (
+                      <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+                        {formatDateTime(ev.at)}
+                      </Text>
+                    )}
+                  </Box>
+                </Box>
+              ))}
             </Box>
           )}
         </Box>

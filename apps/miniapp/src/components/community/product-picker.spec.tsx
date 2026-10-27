@@ -5,9 +5,9 @@ import type { ProductSuggestion } from '../../services/shop-api';
 import { vi as strings } from '../../i18n/vi';
 import { SUGGEST_MIN_CHARS } from '../../hooks/use-suggest';
 
-const mocks = vi.hoisted(() => ({ suggestProducts: vi.fn(), haptic: vi.fn() }));
+const mocks = vi.hoisted(() => ({ suggestProducts: vi.fn(), fetchActiveFlashSales: vi.fn(), haptic: vi.fn() }));
 
-vi.mock('../../services/shop-api', () => ({ suggestProducts: mocks.suggestProducts }));
+vi.mock('../../services/shop-api', () => ({ suggestProducts: mocks.suggestProducts, fetchActiveFlashSales: mocks.fetchActiveFlashSales }));
 vi.mock('../../utils/haptic', () => ({ haptic: mocks.haptic }));
 vi.mock('../../utils/use-debounced', () => ({ useDebounced: <T,>(v: T) => v }));
 
@@ -34,6 +34,7 @@ const search = (text: string) =>
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.suggestProducts.mockResolvedValue([A, B]);
+  mocks.fetchActiveFlashSales.mockResolvedValue([]);
 });
 
 describe('ProductPicker — hành vi giữ nguyên khi chuyển DS v2', () => {
@@ -141,5 +142,17 @@ describe('ProductPicker — vùng chạm, bàn phím (C-076)', () => {
     expect(Number.parseFloat(row.style.minHeight)).toBeGreaterThanOrEqual(44);
     fireEvent.keyDown(row, { key: 'Enter' });
     await waitFor(() => expect(onChange).toHaveBeenCalledWith([A]));
+  });
+});
+
+describe('ProductPicker — giá khớp thẻ sản phẩm khi đang Giờ vàng', () => {
+  it('gợi ý ghi giá Giờ vàng thay cho giá niêm yết', async () => {
+    mocks.fetchActiveFlashSales.mockResolvedValue([
+      { itemId: 'f1', variationId: 'v1', productSlug: 'xit-phong', productName: 'x', thumbnail: null, flashPrice: 90_000, retailPrice: 120_000, salePrice: null, soldCount: 0, quota: 5, endAt: '2026-10-01T00:00:00.000Z' },
+    ]);
+    renderPicker();
+    search('xit');
+    await waitFor(() => expect(screen.getByText('90.000đ')).toBeInTheDocument());
+    expect(screen.queryByText('120.000đ')).toBeNull();
   });
 });
