@@ -188,4 +188,12 @@ describe('AdminNav — gom nhóm, gập mở, tìm mục', () => {
     expect(head.getAttribute('aria-expanded')).toBe('false');
     expect(head.querySelector('[data-badge]')?.textContent).toBe('3');
   });
+
+  it('điện thoại, ngăn kéo đóng: nút "Đổi mục" vẫn hiện huy hiệu của mọi mục', () => {
+    const r = render(<AdminNav groups={GROUPS} active="orders" onSelect={() => {}} badge={(k) => (k === 'config' ? <span data-badge>3</span> : null)} />);
+    mounted.push(r);
+    const openBtn = r.container.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
+    expect(openBtn.querySelector('[data-badge]')?.textContent).toBe('3');
+    expect(openBtn.textContent).toContain('Đổi mục');
+  });
 });

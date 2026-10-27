@@ -204,6 +204,8 @@ export function AdminNav<K extends string>({
             <span className="text-stone-500">{current?.group ?? 'Mục'} · </span>
             <span className="font-semibold text-stone-900">{current?.label ?? 'Chọn mục'}</span>
           </span>
+          {/* Ngăn kéo đóng: số việc chờ vẫn hiện ở nút, không phải mở menu mới thấy. */}
+          {groups.flatMap((g) => g.items).map((i) => <Fragment key={i.k}>{badge?.(i.k)}</Fragment>)}
           <span className="shrink-0 text-xs font-medium text-forest-700">Đổi mục</span>
         </button>
       </div>
