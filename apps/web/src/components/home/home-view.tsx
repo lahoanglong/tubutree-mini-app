@@ -17,7 +17,6 @@ import { coreHttp } from '@/lib/core-http';
 import { homeText } from '@/lib/home-text';
 import { HomeRestoreHintContext } from '@/lib/home-restore-context';
 import type { HomeRestoreHint } from '@/lib/home-restore-hint';
-import { isWebRouteReady } from '@/lib/route-map';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
 import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '@/components/reorder/purchased-rail';
 import { usePurchasedItems } from '@/components/reorder/use-purchased-items';

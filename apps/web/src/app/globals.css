@@ -47,13 +47,13 @@ html[data-tenant-host] [data-site-search] {
   display: none;
 }
 
-/* Chiều cao thanh đầu máy tính (hai hàng 64 + 44 và hai đường viền): cột dính của trang đặt dưới nó. Điện thoại không có thanh này. */
+/* Chiều cao thanh đầu máy tính (hai hàng h-16 + h-11 tính theo rem, nên chữ lớn không làm cột dính sát header, cộng hai đường viền 2px): cột dính của trang đặt dưới nó. Điện thoại không có thanh này. */
 :root {
   --header-h: 0px;
 }
 @media (min-width: 768px) {
   :root {
-    --header-h: calc(110px + env(safe-area-inset-top, 0px));
+    --header-h: calc(6.75rem + 2px + env(safe-area-inset-top, 0px));
   }
 }
 
