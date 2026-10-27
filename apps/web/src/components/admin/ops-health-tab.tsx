@@ -127,8 +127,8 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'orders.pending-payment-expiry': 'Huỷ đơn quá hạn thanh toán',
   'orders.reversal-effects-resync': 'Chạy lại phần đảo sau huỷ hoặc trả đơn (đảo điểm, thu hồi hoa hồng, lệnh huỷ Pancake) cho đơn bị sót',
   'AttendanceJob.sweep': 'Đóng ca chấm công đã quá giờ hết ca',
-  'PayrollJob.nightly': 'Tính lại lương tháng hiện tại mỗi sáng (cả tháng trước trong 3 ngày đầu tháng)',
-  'StorefrontReminderService.remindTrendingProducts': 'Nhắc gian hàng về sản phẩm đang được quan tâm (thứ Hai hằng tuần)',
+  'PayrollJob.nightly': 'Tính lại lương tháng hiện tại lúc 0 giờ 30 mỗi đêm (cả tháng trước trong 3 ngày đầu tháng)',
+  'StorefrontReminderService.remindTrendingProducts': 'Nhắc cộng tác viên thêm sản phẩm nổi bật vào gian hàng (9 giờ thứ Hai)',
   'SubscriptionsService.processDue': 'Tạo đơn kỳ cho gói định kỳ đến hạn',
   'BridgeHealthCron.everyMinute': 'Kiểm tra cầu nối chat Zalo, báo khi mất kết nối, gửi lại tin chưa chuyển',
   'VouchersService.welcomeVouchers': 'Tặng mã chào mừng cho khách mới chưa có đơn',
@@ -137,7 +137,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'VouchersService.milestoneVouchers': 'Tặng mã tri ân khi chi tiêu trong tháng đạt mốc',
   'VouchersService.secondOrderVouchers': 'Tặng mã khuyến khích đơn thứ hai',
   'wallet.referral-notice-reconcile': 'Gửi bù tin báo thưởng giới thiệu bị sót',
-  'waste.expiry': 'Quét yêu cầu đổi rác quá hạn',
+  'waste.expiry': 'Đóng yêu cầu đổi rác quá hạn giữ chỗ hoặc lỡ hẹn thu gom',
   'waste.pickup-sweep': 'Quét bù yêu cầu thu gom rác còn mở khi đơn đã giao, huỷ hoặc trả',
 };
 
