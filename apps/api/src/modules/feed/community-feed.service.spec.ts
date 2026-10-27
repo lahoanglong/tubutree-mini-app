@@ -81,6 +81,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
   base.$transaction = jest.fn((arg: unknown) =>
     typeof arg === 'function' ? (arg as (tx: unknown) => unknown)(base) : Promise.all(arg as Promise<unknown>[]),
   );
+  base.$executeRaw = jest.fn().mockResolvedValue(1);
   const merged = { ...base, ...over } as Record<string, unknown>;
   // Nếu test override 1 bảng nào đó, callback tx vẫn phải thấy bản override.
   merged.$transaction = jest.fn((arg: unknown) =>
@@ -767,6 +768,25 @@ describe('CommunityFeedService.addComment', () => {
     expect(prisma.feedComment.create).not.toHaveBeenCalled();
     expect(reward.rewardAnswer).not.toHaveBeenCalled();
     expect(analytics.recordBestEffort).not.toHaveBeenCalled();
+  });
+
+  it('khoá tư vấn theo (người, bài) lấy TRƯỚC khi tìm bản trùng và tạo, trong cùng giao dịch; chữ NFC được lưu và so trùng', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'SHOWCASE', status: 'PUBLISHED' });
+    const order: string[] = [];
+    (prisma.$executeRaw as unknown as jest.Mock).mockImplementation(async (strings: TemplateStringsArray, ...vals: unknown[]) => {
+      order.push('lock');
+      expect(strings.join('?')).toContain('pg_advisory_xact_lock(hashtext(');
+      expect(vals).toEqual(['feed-comment:u1:p1']);
+      return 1;
+    });
+    (prisma.feedComment.findFirst as jest.Mock).mockImplementation(async () => (order.push('find'), null));
+    (prisma.feedComment.create as jest.Mock).mockImplementation(async ({ data }: { data: Record<string, unknown> }) => (order.push('create'), { id: 'c1', ...data }));
+    const decomposed = 'Cây đẹp'.normalize('NFD');
+    await makeSvc(prisma).addComment('u1', 'CUSTOMER', 'p1', decomposed);
+    expect(order).toEqual(['lock', 'find', 'create']);
+    expect((prisma.feedComment.findFirst as jest.Mock).mock.calls[0][0].where.body).toBe('Cây đẹp'.normalize('NFC'));
+    expect((prisma.feedComment.create as jest.Mock).mock.calls[0][0].data.body).toBe('Cây đẹp'.normalize('NFC'));
   });
 
   it('Task 9: bình luận tạo thành công → recordBestEffort đúng eventName/action/props (addComment luôn TẠO, không có nhánh xoá)', async () => {
