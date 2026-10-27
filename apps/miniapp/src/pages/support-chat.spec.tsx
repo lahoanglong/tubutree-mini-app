@@ -635,6 +635,22 @@ describe('Màn chat với Tubu Tree', () => {
       expect(screen.queryByRole('button', { name: 'Xem tin cũ hơn' })).toBeNull();
     });
 
+    it('đã thấy đầu cuộc trò chuyện: tin thứ 51 làm cửa sổ poll trượt đi vẫn giữ lời chào, không hiện "Xem tin cũ hơn"', async () => {
+      const m = (n: number) => msg({ id: `m${String(n).padStart(2, '0')}`, body: `tin ${n}`, createdAt: `2026-10-23T03:${String(n).padStart(2, '0')}:00.000Z` });
+      const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => m(a + i));
+      mocks.getThread.mockResolvedValueOnce(thread({ hasMore: false, messages: range(1, 50) }));
+      renderPage();
+      await screen.findByTestId('msg-greeting');
+      mocks.getThread.mockResolvedValue(thread({ hasMore: true, messages: range(2, 51) }));
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['support-chat'] });
+      });
+      await screen.findByTestId('msg-m51');
+      expect(screen.getByTestId('msg-greeting')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Xem tin cũ hơn' })).toBeNull();
+      expect(msgIds()).toEqual(range(1, 51).map((x) => `msg-${x.id}`));
+    });
+
     it('poll làm cửa sổ trượt đi: tin đã tải vẫn còn đủ, đúng thứ tự, không trùng; tin cập nhật thì lấy bản mới (ghi đè theo id)', async () => {
       const m = (n: number, over: Record<string, unknown> = {}) =>
         msg({ id: `m${String(n).padStart(2, '0')}`, body: `tin ${n}`, createdAt: `2026-10-23T03:${String(n).padStart(2, '0')}:00.000Z`, ...over });

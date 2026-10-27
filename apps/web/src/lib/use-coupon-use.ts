@@ -7,8 +7,9 @@ import { couponUseCopy, couponUseOutcome, couponUseTarget } from '@tubutree/app-
 import { cartKey } from '@/lib/cart-key';
 import { copyText } from '@/lib/copy-text';
 import { applyCoupon, getCart } from '@/lib/shop-client';
+import { actionErrorText } from '@/lib/error-text';
 
-const errMessage = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra');
+const errMessage = actionErrorText;
 
 export interface CouponNotice {
   code: string;

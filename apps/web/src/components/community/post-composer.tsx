@@ -10,6 +10,7 @@ import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { ImageUpload } from './image-upload';
 import { ProductPicker } from './product-picker';
+import { actionErrorText } from '@/lib/error-text';
 
 type ComposeKind = Extract<CreatePostInput['kind'], 'QUESTION' | 'SHOWCASE' | 'TIP'>;
 
@@ -39,7 +40,7 @@ function parseTags(raw: string): string[] {
   return out;
 }
 
-const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errorText = actionErrorText;
 
 const chipClass = (on: boolean) =>
   `inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium ${

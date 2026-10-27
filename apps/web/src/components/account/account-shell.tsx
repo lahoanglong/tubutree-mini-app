@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
+  BadgeDollarSign,
   Bell,
   Gift,
   Heart,
@@ -15,6 +16,7 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
+import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -50,6 +52,7 @@ const GROUPS: { group: string; items: ShellItem[] }[] = [
     items: [
       { to: '/tai-khoan/ho-so', label: 'Sửa hồ sơ', icon: UserRound },
       { to: '/tai-khoan/thong-bao', label: 'Thông báo', icon: Bell },
+      { to: '/hoan-tien', label: 'Hoàn tiền sàn ngoài', icon: BadgeDollarSign },
       { to: '/tai-khoan/cai-dat', label: 'Cài đặt', icon: Settings },
     ],
   },
@@ -124,7 +127,7 @@ export function AccountShell({ children }: { children: ReactNode }) {
           className="hidden lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:block lg:max-h-[calc(100vh-var(--header-h)-32px)] lg:self-start lg:overflow-y-auto"
         >
           {GROUPS.map((g) => {
-            const items = g.items.filter((i) => isWebRouteReady(i.to));
+            const items = g.items.filter((i) => isWebRouteReady(i.to) && (CASHBACK_ENABLED || i.to !== '/hoan-tien'));
             if (items.length === 0) return null;
             return (
               <div key={g.group} className="mb-4">

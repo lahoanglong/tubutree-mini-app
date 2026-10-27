@@ -20,13 +20,13 @@ import { ui } from '@/lib/guest-ui';
 import { MAX_IMAGE_BYTES, isUsableImageFile, readAndCompressImage } from '@/lib/image-compress';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { PAGE_NARROW } from '@/lib/page-frame';
+import { loadErrorText } from '@/lib/error-text';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const AVATAR_UPLOAD_FAILED = 'Chưa tải được ảnh lên nên ảnh đại diện chưa đổi. Bạn thử lại nhé.';
 const AVATAR_NOT_SAVED = 'Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử chọn lại ảnh sau nhé.';
 const AVATAR_READ_FAILED = 'Không tải được ảnh, vui lòng thử lại.';
-const SAVE_FAILED = 'Chưa lưu được. Bạn thử lại sau ít phút nhé.';
 
 // Ảnh đã cắt là data URL; đổi sang Blob bằng atob thay vì fetch vì CSP connect-src của web không mở cho data:.
 function dataUrlToBlob(dataUrl: string): Blob {
@@ -35,7 +35,7 @@ function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([bytes], { type: /^data:([^;]+)/.exec(head)?.[1] ?? 'image/jpeg' });
 }
 
-const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : SAVE_FAILED);
+const errorText = loadErrorText;
 
 /** Sửa hồ sơ (cùng PATCH /me với `edit-profile.tsx` của Mini App): họ tên, email, ngày sinh, ảnh đại diện; SĐT chỉ đọc. */
 /** Ô nhập của Mini App cao khoảng 50px (Input của zmp-ui), cao hơn ô 44px của web. */

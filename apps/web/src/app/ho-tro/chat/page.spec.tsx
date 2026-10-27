@@ -3,6 +3,7 @@ import { act, type ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider, focusManager, type QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '@/lib/client-api';
 import { createQueryClient } from '@/lib/query-client';
 import { flush } from '@/test-utils/dom';
 
@@ -59,7 +60,7 @@ const msg = (over: Record<string, unknown>) => ({
 const thread = (over: Record<string, unknown> = {}) => ({
   code: 'K7Q3', blocked: false, enabled: true, slow: false, hasMore: false, messages: [], ...over,
 });
-const statusError = (status: number, message: string, code: string | null = null) => Object.assign(new Error(message), { status, code });
+const statusError = (status: number, message: string, code: string | null = null) => new ApiError(message, status, code);
 
 let qc: QueryClient;
 let unmounts: (() => void)[] = [];
@@ -758,6 +759,18 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
       expect(mocks.getPage).toHaveBeenCalledWith({ before: 'm05' });
       expect(msgIds(c)).toEqual(['msg-m03', 'msg-m05']);
       expect(buttonByName(c, 'Xem tin cũ hơn')).toBeNull();
+    });
+
+    it('đã thấy đầu cuộc trò chuyện: tin thứ 51 làm cửa sổ poll trượt đi vẫn giữ lời chào, không hiện "Xem tin cũ hơn"', async () => {
+      mocks.getThread.mockResolvedValueOnce(thread({ hasMore: false, messages: range(1, 50) }));
+      const c = mount();
+      await waitFor(() => expect(c.querySelector('[data-testid="msg-greeting"]')).not.toBeNull());
+      mocks.getThread.mockResolvedValue(thread({ hasMore: true, messages: range(2, 51) }));
+      await refetch();
+      await waitFor(() => expect(bubble(c, 'm51')).not.toBeNull());
+      expect(c.querySelector('[data-testid="msg-greeting"]')).not.toBeNull();
+      expect(buttonByName(c, 'Xem tin cũ hơn')).toBeNull();
+      expect(msgIds(c)).toEqual(range(1, 51).map((x) => `msg-${x.id}`));
     });
 
     it('poll làm cửa sổ trượt đi: tin đã tải vẫn còn đủ, đúng thứ tự, không trùng; tin cập nhật lấy bản mới', async () => {

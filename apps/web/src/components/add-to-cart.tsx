@@ -18,6 +18,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { usePdpSelection } from './pdp-selection';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
+import { actionErrorText } from '@/lib/error-text';
 
 interface Variation {
   id: string;
@@ -135,7 +136,7 @@ export default function AddToCart({
       setMsg('Đã thêm vào giỏ!');
       setSuccess(true);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Không thêm được vào giỏ.');
+      setMsg(actionErrorText(e));
       setSuccess(false);
       // Thường là "Chỉ còn N sản phẩm": tồn kho đang hiển thị đã cũ, lấy lại để nút/giới hạn khớp thực tế.
       void qc.invalidateQueries({ queryKey: ['product-stock', slug] });

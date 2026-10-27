@@ -15,7 +15,7 @@ const product = (n: number, over: Record<string, unknown> = {}) => ({
 });
 const pageOf = (data: unknown[], total: number, page = 1, limit = 24) => ({ data, meta: { page, limit, total } });
 
-/** Làm dữ liệu SSR hết tươi rồi kích tải lại khi có mạng trở lại; lặp tới khi mock nhận được lời gọi (có thể chạy trước lúc hydrate xong, máy CI hydrate chậm hơn 5 giây). */
+/** Làm dữ liệu SSR hết tươi rồi kích tải lại khi có mạng trở lại; lặp tới khi mock nhận được lời gọi (có thể chạy trước lúc hydrate xong). Giữ 15 giây làm đệm cho máy CI chậm; chưa đo lại trên GitHub Actions sau khi web chạy bằng bản build, hạ về 5 giây khi CI ổn định. */
 async function refetchStale(page: Page, api: MockApi, method: string, pattern: string) {
   await expect
     .poll(async () => {
@@ -240,7 +240,7 @@ test.describe('Web khách: Trang chủ /', () => {
     mockHome(api);
     // HTML đầu dựng từ cấu hình của DB e2e; trình duyệt phải nhận đúng cấu hình đó, nếu không chữ Quà khách mới đổi số dòng
     // (vd "đơn đầu tiên từ 199.000đ" so với "đơn từ 350.000đ") và Danh mục lệch vì dữ liệu mock chứ không vì bố cục.
-    // Lấy theo URL trình duyệt gọi: cổng API trên CI đến từ apps/api/.env chứ không từ E2E_API_PORT.
+    // Lấy theo URL trình duyệt gọi, không theo cổng mặc định.
     api.get('/config/public', async ({ request: browserRequest }) => (await request.get(browserRequest.url())).json());
     let openJs!: () => void;
     const jsHeld = new Promise<void>((resolve) => { openJs = resolve; });
@@ -294,7 +294,7 @@ test.describe('Web khách: Trang chủ /', () => {
  * spec lấy một sản phẩm có sẵn trong DB e2e và tự bỏ qua khi DB không có sản phẩm nào; mọi lời gọi từ trình duyệt đi qua mock.
  */
 test.describe('Web khách: trang sản phẩm', () => {
-  const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT ?? '3001'}`;
+  const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT}`;
 
   async function firstProduct(request: import('@playwright/test').APIRequestContext) {
     const res = await request.get(`${API_ORIGIN}/api/products?limit=1`).catch(() => null);
@@ -523,7 +523,7 @@ test.describe('Web: mua chung', () => {
 });
 
 test.describe('Web: nhãn hàng', () => {
-  const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT ?? '3001'}`;
+  const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT}`;
 
   async function firstBrandSlug(request: import('@playwright/test').APIRequestContext) {
     const res = await request.get(`${API_ORIGIN}/api/brands`).catch(() => null);

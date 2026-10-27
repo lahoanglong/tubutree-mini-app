@@ -14,6 +14,7 @@ import { phoneFlatCard } from '@/lib/phone-ui';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { formatPoints, milestoneStatusText, monthLabel, revenueRuleText } from './milestone-copy';
+import { loadErrorText } from '@/lib/error-text';
 
 interface ClaimTarget {
   id: string;
@@ -29,7 +30,7 @@ interface ClaimFailure {
   message: string;
 }
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 const toTargets = (items: CtvMilestoneItem[], month: string): ClaimTarget[] =>
   items.filter((m) => m.canClaim).map((m) => ({ id: m.id, month, title: m.title, points: m.rewardPoints }));

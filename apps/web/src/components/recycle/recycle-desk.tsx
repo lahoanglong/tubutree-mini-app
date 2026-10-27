@@ -36,6 +36,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StickyActionBar } from '@/components/sticky-action-bar';
+import { loadErrorText } from '@/lib/error-text';
 import { WasteDeskPerk, WasteDeskReport } from './recycle-desk-perk';
 import { DESK_REJECTION_OPTIONS, METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS, formatPoints } from './recycle-labels';
 
@@ -61,8 +62,7 @@ interface DeskDone {
 type DeskLine = WasteDeskRequestDTO['lines'][number];
 type Notice = { text: string; ok: boolean };
 
-const errText = (e: unknown) =>
-  errorStatus(e) === 403 ? NO_PERMISSION : e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại';
+const errText = (e: unknown) => (errorStatus(e) === 403 ? NO_PERMISSION : loadErrorText(e));
 
 /** Ước tính phía máy khách: máy chủ vẫn áp trần và hạn mức khi xác nhận. */
 export function deskPreviewPoints(

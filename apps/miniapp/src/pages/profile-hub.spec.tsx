@@ -20,6 +20,13 @@ const mocks = vi.hoisted(() => ({
   getReferral: vi.fn(),
   getSubscriptions: vi.fn(),
   shareLink: vi.fn(),
+  cashback: false,
+}));
+vi.mock('../utils/features', () => ({
+  get CASHBACK_ENABLED() {
+    return mocks.cashback;
+  },
+  SEASON_PASS_ENABLED: false,
 }));
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -93,6 +100,19 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     mocks.authStatus = 'authenticated';
     mocks.notifications = [];
     mocks.role = 'CUSTOMER';
+    mocks.cashback = false;
+  });
+
+  it('cờ CASHBACK_ENABLED bật: Hoàn tiền sàn ngoài có lối vào ở nhóm Tài khoản và mở /cashback; tắt thì ẩn', async () => {
+    mocks.cashback = true;
+    const { unmount } = renderPage();
+    fireEvent.click(await screen.findByText('Hoàn tiền sàn ngoài'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/cashback');
+    unmount();
+    mocks.cashback = false;
+    renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    expect(screen.queryByText('Hoàn tiền sàn ngoài')).toBeNull();
   });
 
   it('có đúng ba số dư: Điểm Xanh (tổng hai lô), Ví Tubu, Mã giảm giá — không còn ô xu (C-047, PD-3)', async () => {

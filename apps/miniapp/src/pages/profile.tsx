@@ -2,9 +2,10 @@ import { ctvMenuEntry } from '@tubutree/app-core/storefront-signup';
 import { Avatar, Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import {
-  Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Pencil, Bell, Store, Settings, Info, ChevronRight, Copy, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, type LucideIcon,
+  Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Pencil, Bell, Store, Settings, Info, ChevronRight, Copy, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, BadgeDollarSign, type LucideIcon,
 } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
+import { CASHBACK_ENABLED } from '../utils/features';
 import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
 import { useAuthStore } from '../store/auth';
 import { getCoupons, getLoyalty, getNotifications, getReferral, getWallet } from '../services/account-api';
@@ -142,6 +143,10 @@ export default function ProfilePage() {
       })
       .filter((it): it is MenuItem => it !== null),
   })).map((s) =>
+    CASHBACK_ENABLED && s.group === homeCopy.profile.groupAccount
+      ? { ...s, items: [...s.items.slice(0, 3), { Icon: BadgeDollarSign, label: 'Hoàn tiền sàn ngoài', to: '/cashback' }, ...s.items.slice(3)] }
+      : s,
+  ).map((s) =>
     ownedBrand && s.group === homeCopy.profile.groupEarn
       ? { ...s, items: [...s.items, { Icon: Store, label: 'Quản lý nhãn hàng', to: '/brand-owner', hint: ownedBrand.name }] }
       : s,

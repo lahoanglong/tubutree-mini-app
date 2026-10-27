@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, NetworkError } from '@/lib/client-api';
-import { loadErrorText } from './error-text';
+import { actionErrorText, loadErrorText, SESSION_EXPIRED_TEXT } from './error-text';
 
 describe('loadErrorText (khớp getErrorMessage của Mini App)', () => {
   it('5xx: máy chủ bận, không lộ lời kỹ thuật', () => {
@@ -12,7 +12,8 @@ describe('loadErrorText (khớp getErrorMessage của Mini App)', () => {
     expect(loadErrorText(new ApiError('ThrottlerException', 429))).toContain('đợi vài giây');
   });
   it('mất mạng / quá hạn / lỗi lạ', () => {
-    expect(loadErrorText(new NetworkError(true))).toBe('Hơi chậm tí, bạn đợi nhé');
+    expect(loadErrorText(new NetworkError(true))).toBe('Tải chậm quá, thử lại nhé.');
+    expect(actionErrorText(new NetworkError(true))).toBe('Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại rồi thử lại nhé.');
     expect(loadErrorText(new Error('x'))).toBe('Có chút trục trặc, thử lại nhé');
   });
   it('không có phản hồi nhưng máy còn mạng (máy chủ/CORS không đáp): máy chủ bận; thật sự mất mạng: câu mất mạng', () => {
@@ -32,5 +33,22 @@ describe('loadErrorText (khớp getErrorMessage của Mini App)', () => {
   });
   it('lỗi lạ', () => {
     expect(loadErrorText(new Error('x'))).toBe('Có chút trục trặc, thử lại nhé');
+  });
+  it('429 kèm mã nghiệp vụ giữ lời máy chủ; 429 của bộ giới hạn tốc độ (không mã) vẫn là câu đợi vài giây', () => {
+    const daily = 'Bạn đã gửi quá nhiều tin hôm nay. Cần hỗ trợ, gọi hotline.';
+    expect(loadErrorText(new ApiError(daily, 429, 'CHAT_DAILY_LIMIT'))).toBe(daily);
+    expect(actionErrorText(new ApiError(daily, 429, 'CHAT_DAILY_LIMIT'))).toBe(daily);
+    const claim = 'Hôm nay bạn đã nhập mã quá số lần cho phép. Hãy thử lại vào ngày mai.';
+    expect(loadErrorText(new ApiError(claim, 429, 'DAILY_ATTEMPTS'))).toBe(claim);
+    expect(loadErrorText(new ApiError('Too Many Requests', 429, 'X'))).toContain('đợi vài giây');
+    expect(loadErrorText(new ApiError(daily, 429))).toContain('đợi vài giây');
+  });
+  it('401: báo hết phiên và đăng nhập lại, không phải câu thử lại', () => {
+    expect(loadErrorText(new ApiError('Unauthorized', 401))).toBe(SESSION_EXPIRED_TEXT);
+    expect(actionErrorText(new ApiError('Phiên hết hạn', 401))).toBe(SESSION_EXPIRED_TEXT);
+  });
+  it('4xx chỉ có chữ tiếng Anh (không dấu): câu chung tiếng Việt', () => {
+    expect(loadErrorText(new ApiError('Bad Gateway from upstream', 400))).toBe('Có chút trục trặc, thử lại nhé');
+    expect(loadErrorText(new ApiError('Mã giảm giá đã hết hạn', 400))).toBe('Mã giảm giá đã hết hạn');
   });
 });

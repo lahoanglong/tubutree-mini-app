@@ -77,16 +77,20 @@ jobs:
     - name: Check partial unique indexes
       run: pnpm --filter @tubutree/api exec tsx prisma/check-partial-indexes.ts
 
-    # 8. Build toàn bộ dự án (shared-types cần build trước khi API/web dev import được).
+    # 8. Build mọi dự án trừ web (shared-types cần build trước khi API/web import được). Web không build ở đây: địa chỉ API nhúng vào bản build
+    #    (NEXT_PUBLIC_API_BASE_URL) và dữ liệu ISR lấy lúc build đều cần API e2e đang chạy, nên webServer của Playwright build web sau khi API đã lên.
     - name: Build Monorepo
-      run: pnpm build
+      run: pnpm build --filter='!@tubutree/web'
       env:
         VITE_API_BASE_URL: https://api.tubutree.com/api
 
     # 9. Chạy Playwright — webServer trong playwright.config.ts TỰ start API/web/miniapp rồi chờ health.
+    #    E2E_WEB_PROD=1: web chạy bằng `next build` + `next start`. `next dev` dịch trang lúc gọi lần đầu (có webpack-hmr), lệnh RSC còn treo
+    #    khi `toHaveURL` hết 5 giây nên 10–15 ca web chập chờn mỗi lượt CI.
     - name: Run Playwright tests
       run: pnpm --filter @tubutree/e2e test
       env:
+        E2E_WEB_PROD: '1'
         TEST_JWT_TOKEN: ${{ secrets.TEST_JWT_TOKEN }}
 
     # 8. Upload báo cáo nếu test rớt

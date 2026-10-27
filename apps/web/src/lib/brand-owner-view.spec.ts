@@ -38,6 +38,6 @@ describe('lỗi', () => {
     expect(ownerLoadError(e403)).toBe(OWNER_FORBIDDEN);
     expect(ownerActionError(e403)).toBe('Bạn không có quyền thực hiện thao tác này.');
     expect(ownerActionError(new Error('Mã sai'))).toBe('Mã sai');
-    expect(ownerLoadError('x')).toBe('Đã có lỗi xảy ra — Vui lòng thử lại');
+    expect(ownerLoadError('x')).toBe('Có chút trục trặc, thử lại nhé');
   });
 });
