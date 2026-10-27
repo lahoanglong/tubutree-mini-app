@@ -109,6 +109,8 @@ function mockLoyalty(
   // Analytics tracker (services/analytics.ts) xả lô khi ẩn app / mỗi 10s: spec chạy chậm sẽ chạm POST /events.
   api.post('/events', { accepted: 1 });
   api.get('/me/loyalty', () => overview(s));
+  // Chương trình Đổi rác tắt trong mock: trang Điểm Xanh hỏi lịch sử yêu cầu để quyết định có hiện lối xem lại.
+  api.get('/waste/requests', []);
   api.get('/me/coupons', () => s.coupons);
   api.get('/me/points/transactions', []);
   api.get('/me/loyalty/rewards', () => catalog(s));

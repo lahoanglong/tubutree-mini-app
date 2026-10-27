@@ -175,6 +175,14 @@ describe('/doi-rac/yeu-cau (§4.6, §16.1)', () => {
     expect(link(c, '/doi-rac/tao')?.textContent).toContain('Đổi rác ngay');
   });
 
+  it('rỗng + chương trình tắt: không mời tạo yêu cầu mới', async () => {
+    state.rows = [];
+    state.config = { isLoaded: true, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } };
+    const c = await mount();
+    expect(c.textContent).toContain('Chưa có yêu cầu nào');
+    expect(link(c, '/doi-rac/tao')).toBeNull();
+  });
+
   it('không có liên kết "Xem kết quả mẫu" của mockup (§19)', async () => {
     const c = await mount();
     expect(c.textContent).not.toContain('Xem kết quả mẫu');
@@ -194,6 +202,9 @@ describe('/doi-rac/yeu-cau (§4.6, §16.1)', () => {
     state.phase = 'guest';
     const c = await mount();
     expect(c.querySelector('a[href*="/dang-nhap"]')?.getAttribute('href')).toContain(encodeURIComponent('/doi-rac/yeu-cau'));
+    expect(c.textContent).toContain('Đăng nhập để xem các yêu cầu đổi rác của bạn');
+    expect(c.textContent).toContain('Cần số điện thoại để cộng Điểm Xanh');
+    expect(c.textContent).not.toContain('Lỗi');
     expect(state.calls).toEqual([]);
   });
 

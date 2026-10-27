@@ -6,7 +6,9 @@ import { copyText } from '../utils/clipboard';
 import { haptic } from '../utils/haptic';
 import { formatNumber } from '../utils/format';
 import { formatPhoneDisplay } from '../utils/phone';
-import { isOpenNow, pointAddress } from '../utils/waste-labels';
+import { missingItemsReason } from '@tubutree/app-core/waste-copy';
+import { openingStatus } from '@tubutree/app-core/waste-hours';
+import { pointAddress } from '../utils/waste-labels';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Icon } from './ui/icon';
@@ -17,7 +19,7 @@ export interface WastePointPickerProps {
   value: string | null;
   onChange: (pointId: string) => void;
   /** Các món đang bật, liệt kê trên từng thẻ. */
-  items: readonly { id: string; name: string }[];
+  items: readonly { id: string; name: string; warehouseOnly?: boolean }[];
   selectedItemIds: readonly string[];
   showDistance: boolean;
   now?: Date;
@@ -61,7 +63,8 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
         const selected = p.id === value;
         const locked = isLocked(p);
         const missing = missingItemIds(p, selectedItemIds);
-        const missingNames = items.filter((it) => missing.includes(it.id)).map((it) => it.name);
+        const missingItems = items.filter((it) => missing.includes(it.id));
+        const hours = openingStatus(p.openingHours, clock);
         return (
           <div
             key={p.id}
@@ -138,8 +141,8 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <Icon icon={Clock} size="sm" tone="brand" />
-                  <Text variant="body-sm" as="span">
-                    {isOpenNow(p.openingHours, clock) ? 'Đang mở' : 'Đang đóng'}
+                  <Text variant="body-sm" as="span" tone={hours.open === null ? 'tertiary' : 'primary'}>
+                    {hours.text}
                   </Text>
                   {showDistance && p.distanceKm != null && (
                     <Text variant="body-sm" as="span">{`${formatNumber(Math.round(p.distanceKm * 10) / 10)} km`}</Text>
@@ -168,12 +171,12 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 12px 12px 42px' }}>
               {locked && (
                 <div>
-                  <Badge tone="warning" style={{ whiteSpace: 'normal', display: 'inline-block' }}>{p.quotaFull ? 'Tạm hết hạn mức tháng này' : `Điểm này không nhận: ${missingNames.join(', ')}`}</Badge>
+                  <Badge tone="warning" style={{ whiteSpace: 'normal', display: 'inline-block' }}>{p.quotaFull ? 'Tạm hết hạn mức tháng này' : missingItemsReason(missingItems)}</Badge>
                 </div>
               )}
               {p.perkText && (
                 <Text variant="body-sm" as="p" style={{ margin: 0 }}>
-                  {`Ưu đãi riêng của cửa hàng (cửa hàng tự chịu, không qua Điểm Xanh, Tubu không đảm bảo): ${p.perkText}`}
+                  {`Ưu đãi của cửa hàng (không dùng Điểm Xanh): ${p.perkText}`}
                 </Text>
               )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>

@@ -10,7 +10,7 @@ import { WasteConfigService } from '../core/waste-config.service';
 import { computeWastePublicFlags } from '../core/waste-public-config';
 import { WasteHoldService } from '../core/waste-hold.service';
 import { WASTE_OPEN_STATUSES } from '../waste.constants';
-import { toWasteItemDTO } from './waste-catalogue.service';
+import { CUSTOMER_VISIBLE_ITEMS_WHERE, toWasteItemDTO } from './waste-catalogue.service';
 import { toRequestSummary, WASTE_REQUEST_SUMMARY_INCLUDE } from './waste-request.mapper';
 
 @Injectable()
@@ -49,7 +49,7 @@ export class WasteMeService {
     const eligibility = user ? eligibilityOf(user) : 'GUEST';
     const [snapshot, flags] = await Promise.all([this.config.snapshot(), computeWastePublicFlags(this.systemConfig)]);
     const itemRows = await this.prisma.wasteItem.findMany({
-      where: { status: { in: ['ACTIVE', 'COMING_SOON'] } },
+      where: CUSTOMER_VISIBLE_ITEMS_WHERE,
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
     const deskPoints: WasteDeskPointRefDTO[] = user

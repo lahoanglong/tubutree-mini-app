@@ -1,0 +1,23 @@
+{
+  "lookup": [
+    ["TR-6NY3J", "TR-6NY3J"],
+    ["6NY3J", "TR-6NY3J"],
+    ["6ny3j", "TR-6NY3J"],
+    ["tr6ny3j", "TR-6NY3J"],
+    ["TR 6NY3J", "TR-6NY3J"],
+    ["  tr - 6ny3j ", "TR-6NY3J"],
+    ["QG-ABCD2345", "QG-ABCD2345"],
+    ["ABCD2345", "QG-ABCD2345"],
+    ["qgabcd2345", "QG-ABCD2345"],
+    ["QG ABCD 2345", "QG-ABCD2345"],
+    ["TR2AB", "TR-TR2AB"],
+    ["12345", "12345"],
+    ["0900123456", "0900123456"],
+    ["", ""],
+    ["TR-6NY3", "TR-6NY3"],
+    ["TR-ABCD2345", "TR-ABCD2345"],
+    ["QG 6NY3J", "QG-6NY3J"],
+    ["tr-trabcd23", "TR-TRABCD23"],
+    ["qg-tr2ab", "QG-TR2AB"]
+  ]
+}

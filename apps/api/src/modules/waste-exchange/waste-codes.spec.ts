@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { WASTE_CODE_ALPHABET, WASTE_LOOKUP_PATTERN } from './waste.constants';
-import { generateWasteCode, lookupMissMeta, normalizeTracking, normalizeWasteCode } from './waste-codes';
+import { canonicalWasteLookup, generateWasteCode, lookupMissMeta, normalizeTracking, normalizeWasteCode } from './waste-codes';
 
 describe('generateWasteCode', () => {
   it('maps rand(n) indexes onto the alphabet', () => {
@@ -52,5 +54,12 @@ describe('lookupMissMeta (spec 11.1 LOOKUP_MISS rule)', () => {
     expect(lookupMissMeta('a.b')).toEqual({ length: 3, classes: 'LS' });
     expect(lookupMissMeta('đ12')).toEqual({ length: 3, classes: 'LD' });
     expect(Object.keys(lookupMissMeta('0901234567'))).toEqual(['length', 'classes']);
+  });
+});
+
+describe('canonicalWasteLookup (cùng bộ ca với app-core)', () => {
+  const cases = JSON.parse(readFileSync(join(__dirname, '../../../../../packages/app-core/src/waste-code-cases.json'), 'utf8')) as { lookup: [string, string][] };
+  it.each(cases.lookup)('%j -> %j', (input, expected) => {
+    expect(canonicalWasteLookup(input)).toBe(expected);
   });
 });

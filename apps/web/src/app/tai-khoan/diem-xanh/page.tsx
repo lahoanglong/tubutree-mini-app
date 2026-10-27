@@ -7,6 +7,8 @@ import { Check, ChevronRight, Copy, Gift, Lightbulb, QrCode as QrCodeIcon, Recyc
 import type { CouponDTO } from '@tubutree/app-core/api/loyalty';
 import { couponsQuery, loyaltyQuery, memberCardQuery, pointsTxnQuery } from '@tubutree/app-core/queries/loyalty';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
+import { wasteRequestsQuery } from '@tubutree/app-core/queries/waste';
+import { wasteHistoryMenu } from '@tubutree/app-core/waste-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -67,6 +69,10 @@ export default function LoyaltyPage() {
   const txnQ = useQuery({ ...pointsTxnQuery(coreHttp), enabled: authed });
   const cardQ = useQuery({ ...memberCardQuery(coreHttp), enabled: authed });
   const configQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: authed });
+  // Chương trình tắt mà khách từng có yêu cầu thì vẫn cho xem lại (không tạo mới được).
+  const wasteOff = configQ.data != null && configQ.data.waste?.enabled !== true;
+  const wasteHistoryQ = useQuery({ ...wasteRequestsQuery(coreHttp), enabled: authed && wasteOff, retry: false });
+  const hasWasteHistory = (wasteHistoryQ.data?.length ?? 0) > 0;
 
   const [showCard, setShowCard] = useState(false);
   const [celebrate, setCelebrate] = useState<string | null>(null);
@@ -141,6 +147,7 @@ export default function LoyaltyPage() {
   const shortcuts = [
     { href: '/vuon-xanh', icon: Sprout, title: 'Vườn Xanh', sub: 'Chăm cây nhận quà', show: isWebRouteReady('/vuon-xanh') },
     { href: '/doi-rac', icon: Recycle, title: 'Đổi rác lấy quà', sub: 'Đổi bao bì lấy Điểm Xanh', show: wasteOn && isWebRouteReady('/doi-rac') },
+    { href: '/doi-rac/yeu-cau', icon: Recycle, title: wasteHistoryMenu.label, sub: wasteHistoryMenu.hint, show: wasteOff && hasWasteHistory && isWebRouteReady('/doi-rac/yeu-cau') },
     { href: '/kho-qua', icon: Gift, title: 'Kho quà', sub: 'Đổi Điểm Xanh lấy mã giảm giá và quà', show: isWebRouteReady('/kho-qua') },
   ].filter((s) => s.show);
   const celebrateStyle = celebrate ? (TIER_STYLE[celebrate] ?? DEFAULT_STYLE) : DEFAULT_STYLE;

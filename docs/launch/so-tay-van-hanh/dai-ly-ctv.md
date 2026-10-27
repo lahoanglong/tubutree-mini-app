@@ -65,6 +65,8 @@ Sau khi duyệt, nhắn đại lý: mở **Kênh đại lý**, xem bảng giá s
 
 **Content Kit, Academy cho CTV:** marketing soạn. Xem [marketing.md](marketing.md).
 
+**Đại lý làm điểm nhận Đổi rác: pin.** Pin đã dùng hiện chưa nhận. Khi Tubu bật pin, chỉ kho TP.HCM nhận; đại lý vẫn chưa nhận cho tới khi Sở NN&MT trả lời về điểm đối tác và có quy trình chuyển pin về kho hoặc đơn vị có giấy phép. Chưa gắn pin cho điểm đại lý nào. Chỉ admin gắn pin cho điểm (chủ điểm không tự gắn được), và chủ Tubu Tree chỉ cho gắn khi Sở NN&MT đã trả lời về điểm đối tác và đã có quy trình chuyển pin từ đại lý về kho hoặc đơn vị có giấy phép. Việc này của chủ. Khi được gắn, dặn đại lý: cất pin riêng vào thùng kín, không để lẫn rác khác; pin phồng hoặc chảy nước thì không đếm, không giữ lại, trả khách (ở quầy chọn lý do nhận thiếu "Hỏng"); không nhận pin xe điện hay ắc quy. Pin chỉ nhận khi khách mang tới điểm, không qua đường gửi hay thu kèm đơn.
+
 ## Cuối ca
 
 1. Các thẻ của bạn đã hết chưa. Còn thì ghi người nhận ca sau.

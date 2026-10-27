@@ -93,7 +93,7 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     await page.goto('/doi-rac');
     await expect(page.getByRole('heading', { name: 'Đổi rác lấy quà', level: 1 })).toBeVisible();
     await expect(page.getByText('14.000 điểm', { exact: true })).toBeVisible();
-    await expect(page.getByText('Còn 6.000 điểm tới mã giảm giá Miễn phí vận chuyển')).toBeVisible();
+    await expect(page.getByText('Còn 6.000 điểm tới mã Miễn phí vận chuyển')).toBeVisible();
     await expect(page.getByText('Bạn đã gửi khoảng 1,9 kg bao bì cho Tubu')).toBeVisible();
     await expect(page.getByRole('link', { name: /TR-8K2M9/ })).toHaveAttribute('href', '/doi-rac/yeu-cau/req-1');
     await expect(page.getByRole('link', { name: 'Đổi rác ngay' })).toHaveAttribute('href', '/doi-rac/tao');
@@ -147,7 +147,7 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
 
     await page.goto('/doi-rac/tao');
     await expect(page.getByRole('heading', { name: 'Đổi rác', level: 1 })).toBeVisible();
-    await expect(page.getByText('Bước 1/3: Chọn món')).toBeVisible();
+    await expect(page.getByText('Bước 1/2: Chọn món')).toBeVisible();
     const next = page.getByRole('button', { name: 'Tiếp tục' });
     await expect(next).toBeDisabled();
     const plus = page.getByRole('button', { name: 'Tăng số lượng' });
@@ -157,19 +157,19 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     await expect(page.getByText('Ước tính 3.000 điểm').filter({ visible: true }).first()).toBeVisible();
     await next.click();
 
-    await expect(page.getByText('Bước 2/3: Chọn cách giao')).toBeVisible();
+    await expect(page.getByText('Bước 2/2: Chọn cách giao')).toBeVisible();
     await page.getByRole('radio', { name: /Mang tới điểm nhận/ }).click();
     await page.getByRole('button', { name: 'Chọn điểm nhận' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Điểm nhận gần bạn', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Chọn điểm nhận', level: 1 })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Dùng vị trí của tôi' })).toHaveCount(0);
     await expect(page.getByRole('tab', { name: 'Gần tôi' })).toHaveCount(0);
     await page.getByRole('radio', { name: /Đại lý Cô Ba/ }).click();
     await page.getByRole('button', { name: 'Chọn điểm này' }).click();
 
-    await expect(page.getByText('Bước 2/3: Chọn cách giao')).toBeVisible();
+    await expect(page.getByText('Bước 2/2: Chọn cách giao')).toBeVisible();
     await expect(page.getByText('Đại lý Cô Ba', { exact: true })).toBeVisible();
-    await page.getByRole('checkbox', { name: 'Tôi đồng ý cho Tubu Tree xử lý yêu cầu này' }).check();
+    await page.getByRole('checkbox', { name: 'Tôi đồng ý với Thể lệ Đổi rác và để Tubu Tree xử lý yêu cầu này' }).check();
     const created = api.waitForCall('POST', '/waste/requests');
     await page.getByRole('button', { name: 'Tạo yêu cầu' }).click();
     const call = await created;
@@ -261,7 +261,7 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     await expect(page.getByText('Đã cộng 4.000 điểm')).toBeVisible();
     await expect(page.getByRole('table', { name: 'Đã khai và đã đếm' }).getByText('Bẩn')).toBeVisible();
     await expect(page.getByText('Số dư mới 14.000 điểm')).toBeVisible();
-    await expect(page.getByText('Còn 6.000 điểm tới mã giảm giá Miễn phí vận chuyển')).toBeVisible();
+    await expect(page.getByText('Còn 6.000 điểm tới mã Miễn phí vận chuyển')).toBeVisible();
     await expect(page.getByText('+3 giọt nước vào bình của bạn')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Đổi quà ngay' })).toHaveAttribute('href', '/kho-qua');
   });

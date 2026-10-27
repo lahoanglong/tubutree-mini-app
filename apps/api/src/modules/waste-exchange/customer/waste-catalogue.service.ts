@@ -11,6 +11,14 @@ const MAX_POINTS = 200;
 const DAY_MS = 86_400_000;
 const EARTH_RADIUS_KM = 6371;
 
+/**
+ * Món khách (và khách chưa đăng nhập) được thấy. Món nguy hại (pin) chưa ACTIVE bị giấu hẳn: Sắp nhận mà vẫn lộ mức điểm,
+ * trần và cách chuẩn bị là hứa một việc chưa được phép làm. Món thường Sắp nhận vẫn hiện. Admin dùng danh sách riêng.
+ */
+export const CUSTOMER_VISIBLE_ITEMS_WHERE = {
+  OR: [{ status: 'ACTIVE' as const }, { status: 'COMING_SOON' as const, hazardous: false }],
+};
+
 export function toWasteItemDTO(i: WasteItem): WasteItemDTO {
   return {
     id: i.id,
@@ -28,6 +36,7 @@ export function toWasteItemDTO(i: WasteItem): WasteItemDTO {
     gramsPerUnit: i.gramsPerUnit,
     hazardous: i.hazardous,
     sortOrder: i.sortOrder,
+    warehouseOnly: i.warehouseOnly,
   };
 }
 
@@ -82,10 +91,15 @@ export class WasteCatalogueService {
 
   async listItems(): Promise<WasteItemDTO[]> {
     const rows = await this.prisma.wasteItem.findMany({
-      where: { status: { in: ['ACTIVE', 'COMING_SOON'] } },
+      where: CUSTOMER_VISIBLE_ITEMS_WHERE,
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
     return rows.map(toWasteItemDTO);
+  }
+
+  /** Danh mục món cho khách chưa đăng nhập xem chương trình; chỉ trả khi chương trình đang bật. */
+  async publicItems(): Promise<WasteItemDTO[]> {
+    return (await this.config.isEnabled()) ? this.listItems() : [];
   }
 
   async listPoints(provinceCode?: string): Promise<WastePointDTO[]> {
