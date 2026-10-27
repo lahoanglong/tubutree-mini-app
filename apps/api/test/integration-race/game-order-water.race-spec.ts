@@ -190,16 +190,35 @@ describe('GameOrderWaterService (real Postgres)', () => {
     expect((await seedsOf(u.id))!).toBeGreaterThanOrEqual(1050);
   });
 
-  it('vòng quay trúng giọt: không cắt nước đơn đã vượt bể', async () => {
-    const u = await createUser(prisma, { zaloId: `z_${randCode(10)}`, pointsBalance: 50_000 });
-    await prisma.gameProfile.create({ data: { userId: u.id, totalSeeds: 950 } });
-    const o = await delivered(u.id);
-    await water.grantForOrder(o.id);
-    expect(await seedsOf(u.id)).toBe(1050);
-    const res = await game.spin(u.id);
-    expect(res.prize).toMatchObject({ id: 'p5' });
-    // Bể đã đầy: phần nước đơn (1050) được giữ, 30 giọt trúng bị kẹp như điểm danh và sương; trước đây còn 1000.
-    expect(await seedsOf(u.id)).toBe(1050);
+  describe('vòng quay: giải nước trả bằng Điểm Xanh nên cộng đủ, được vượt bể', () => {
+    const spinner = async (seeds: number) => {
+      const u = await createUser(prisma, { zaloId: `z_${randCode(10)}`, pointsBalance: 50_000 });
+      await prisma.gameProfile.create({ data: { userId: u.id, totalSeeds: seeds } });
+      return u;
+    };
+    const points = async (id: string) => (await prisma.user.findUniqueOrThrow({ where: { id } })).pointsBalance;
+
+    it('950 + 100 nước đơn = 1050, trúng 30 thì ra 1080', async () => {
+      const u = await spinner(950);
+      await water.grantForOrder((await delivered(u.id)).id);
+      expect(await seedsOf(u.id)).toBe(1050);
+      await game.spin(u.id);
+      expect(await seedsOf(u.id)).toBe(1080);
+    });
+
+    it('bể đúng 1000, trúng 30 thì ra 1030', async () => {
+      const u = await spinner(1000);
+      await game.spin(u.id);
+      expect(await seedsOf(u.id)).toBe(1030);
+    });
+
+    it('hai lần quay song song: cộng đủ cả hai và trừ điểm đúng hai lần', async () => {
+      const u = await spinner(1000);
+      const results = await Promise.allSettled([game.spin(u.id), game.spin(u.id)]);
+      expect(summarize(results).errors).toEqual([]);
+      expect(await seedsOf(u.id)).toBe(1060);
+      expect(await points(u.id)).toBe(50_000 - 2 * 10_000);
+    });
   });
 
   describe('đơn đã giao rồi trả/huỷ: đảo nước (idempotent, trần tuần trả lại)', () => {

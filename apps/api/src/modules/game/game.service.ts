@@ -29,7 +29,7 @@ import {
   treeTargetLadder,
 } from './game.constants';
 import { countReferralSuccesses } from '../wallet/referral-reward';
-import { clampTankKeepingOverflow, ensureGameProfile, initialEcoImpact, sproutAlreadyRewarded } from './game-profile';
+import { ensureGameProfile, initialEcoImpact, sproutAlreadyRewarded } from './game-profile';
 import { isRealUser } from '../../common/real-user';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { startOfVnDay, startOfVnMonth } from '../../common/vn-time';
@@ -192,9 +192,6 @@ export class GameService {
     // trong tx xin kết nối pool thứ hai khi tx đang giữ một (và khoá dòng user), nhiều lượt quay cùng chạm lúc cache hết
     // hạn có thể cạn pool (P2024). Làm ấm cache không đủ vì khoảng hở gồm cả thời gian chờ FOR UPDATE.
     const windowDays = await loyalty.returnWindowDays();
-    // Trần bình nước của giải SEEDS: cùng lý do, không đọc cấu hình trong tx. Mặc định khớp với các call site khác
-    // (buySeeds/checkIn/collectDew/quiz/gift) và giá trị SystemConfig thật (500) — tránh clamp sai xuống 200 khi config thiếu.
-    const tankCap = prize.rewardType === 'SEEDS' ? await this.config.get<number>('game.tank_capacity', 500) : 0;
     const seedsEcoImpact = prize.rewardType === 'SEEDS' ? await initialEcoImpact(this.config) : null;
     const voucherMinOrder = prize.rewardType === 'COUPON' ? await spinVoucherMinOrder(this.config, prize.value) : 0;
 
@@ -235,9 +232,10 @@ export class GameService {
       if (prize.rewardType === 'POINTS') {
         await this.creditPoints(userId, prize.value, `GAME_SPIN_WIN:${prize.id}`, tx, winExpiresAt);
       } else if (prize.rewardType === 'SEEDS') {
-        // Cộng totalSeeds ATOMIC bằng increment + guard cap (updateMany) trong CÙNG tx — chống
-        // lost-update khi trúng SEEDS đồng thời với spin/checkin/quiz/gift khác đang đổi
-        // totalSeeds (pattern cũ đọc-rồi-ghi-tuyệt-đối sẽ đè mất phần cộng của thao tác kia).
+        // Cộng totalSeeds ATOMIC bằng increment trong CÙNG tx — chống lost-update khi trúng SEEDS đồng thời với
+        // checkin/quiz/gift khác đang đổi totalSeeds (pattern cũ đọc-rồi-ghi-tuyệt-đối sẽ đè mất phần cộng của thao tác kia).
+        // KHÔNG kẹp theo sức chứa bình: khách đã trả Điểm Xanh để quay, bể đầy mà nhận 0 là mất tiền oan. Giải này được vượt
+        // bể như nước từ đơn hàng; chỉ các nguồn miễn phí hằng ngày (điểm danh, sương, quiz, quà) mới bị kẹp.
         // Upsert: khách quay trước khi từng mở Vườn Xanh chưa có hồ sơ (update ném P2025 → 404 "Không tìm thấy bản ghi").
         await tx.gameProfile.upsert({
           where: { userId },
@@ -248,7 +246,6 @@ export class GameService {
             ecoImpact: seedsEcoImpact ?? {},
           },
         });
-        await clampTankKeepingOverflow(tx, userId, tankCap, prize.value);
       } else if (prize.rewardType === 'COUPON') {
         coupon = await this.grantCouponWithTerms(userId, prize.value, tx, voucherMinOrder);
         rewardRefId = coupon.code;

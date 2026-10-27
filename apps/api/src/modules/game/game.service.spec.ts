@@ -284,7 +284,7 @@ describe('GameService.spin', () => {
       expect(configGets.map((g) => g.key)).not.toContain('returns.window_days');
     });
 
-    it('PF-6a (b): trúng giải SEEDS → game.tank_capacity cũng đọc NGOÀI tx, và vẫn kẹp totalSeeds theo đúng trần đã đọc', async () => {
+    it('trúng giải SEEDS → cộng đủ, không đọc game.tank_capacity và không kẹp theo sức chứa bình', async () => {
       const prisma = makePrisma();
       jest.spyOn(Math, 'random').mockReturnValue(0);
       const prizes = [{ id: 's', name: '30 giọt', weight: 1, rewardType: 'SEEDS', value: 30 }];
@@ -297,14 +297,14 @@ describe('GameService.spin', () => {
 
       await new GameService(prisma, config, analytics, undefined, undefined, undefined, loyalty).spin('u1');
 
-      expect(configGets.map((g) => g.key)).toContain('game.tank_capacity');
+      expect(configGets.map((g) => g.key)).not.toContain('game.tank_capacity');
       expect(configGets.filter((g) => g.inTx)).toEqual([]);
-      // Kẹp qua SQL giữ phần nước từ đơn hàng đã vượt bể: GREATEST(cap, total - added), tham số [, cap, added, userId, cap].
+      // Giải trả bằng Điểm Xanh: cộng đủ, không kẹp theo sức chứa bình.
       expect(prisma.gameProfile.updateMany).not.toHaveBeenCalled();
-      expect((prisma.$executeRaw as jest.Mock).mock.calls[0]!.slice(1)).toEqual([250, 30, 'u1', 250]);
+      expect(prisma.$executeRaw).not.toHaveBeenCalled();
     });
 
-    it('ENGAGE-17: trúng giải SEEDS khi chưa có hồ sơ vườn → upsert hồ sơ (không P2025), rồi kẹp theo trần', async () => {
+    it('ENGAGE-17: trúng giải SEEDS khi chưa có hồ sơ vườn → upsert hồ sơ (không P2025), không kẹp', async () => {
       const prisma = makePrisma();
       jest.spyOn(Math, 'random').mockReturnValue(0);
       const prizes = [{ id: 's', name: '30 giọt', weight: 1, rewardType: 'SEEDS', value: 30 }];
@@ -323,9 +323,9 @@ describe('GameService.spin', () => {
           ecoImpact: { progress: 0, target: 60, treeType: 'Cây Dứa Fuwa3e', treesPlanted: 0, sproutRewarded: false },
         },
       });
-      // Kẹp qua SQL giữ phần nước từ đơn hàng đã vượt bể: GREATEST(cap, total - added), tham số [, cap, added, userId, cap].
+      // Giải trả bằng Điểm Xanh: cộng đủ, không kẹp theo sức chứa bình.
       expect(prisma.gameProfile.updateMany).not.toHaveBeenCalled();
-      expect((prisma.$executeRaw as jest.Mock).mock.calls[0]!.slice(1)).toEqual([250, 30, 'u1', 250]);
+      expect(prisma.$executeRaw).not.toHaveBeenCalled();
     });
 
     it('ENGAGE-10: voucher trúng vòng quay có đơn tối thiểu = giá trị × game.spin_voucher_min_order_multiplier (mặc định 6, như quà đổi điểm 50k/300k)', async () => {
