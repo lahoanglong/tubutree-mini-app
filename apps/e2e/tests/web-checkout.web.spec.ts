@@ -92,16 +92,17 @@ test.describe('Web khách: thanh toán', () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/thanh-toan');
     await expect(page.getByRole('button', { name: /^Đặt hàng/ })).toBeVisible();
+    // Nút hiện trước khi báo giá về: chờ tới khi cây có số tiền rồi mới so.
+    await expect.poll(() => page.getByRole('main').ariaSnapshot()).toMatch(/280\.000đ/);
     const checkout = await page.getByRole('main').ariaSnapshot();
     expect(checkout).toMatch(/Tổng cộng/);
-    expect(checkout).toMatch(/280\.000đ/);
     expect(checkout.match(/Tổng cộng/g)).toHaveLength(1);
 
     await page.goto('/gio-hang');
     await expect(page.getByRole('link', { name: /^Thanh toán \(/ })).toBeVisible();
+    await expect.poll(() => page.getByRole('main').ariaSnapshot()).toMatch(/250\.000đ/);
     const cart = await page.getByRole('main').ariaSnapshot();
     expect(cart).toMatch(/Tổng\b/);
-    expect(cart).toMatch(/250\.000đ/);
     expect(cart.match(/\bTổng\b/g)).toHaveLength(1);
   });
 

@@ -15,7 +15,7 @@ const product = (n: number, over: Record<string, unknown> = {}) => ({
 });
 const pageOf = (data: unknown[], total: number, page = 1, limit = 24) => ({ data, meta: { page, limit, total } });
 
-/** Làm dữ liệu SSR hết tươi rồi kích tải lại khi có mạng trở lại; lặp tới khi mock nhận được lời gọi (có thể chạy trước lúc hydrate xong). */
+/** Làm dữ liệu SSR hết tươi rồi kích tải lại khi có mạng trở lại; lặp tới khi mock nhận được lời gọi (có thể chạy trước lúc hydrate xong, máy CI hydrate chậm hơn 5 giây). */
 async function refetchStale(page: Page, api: MockApi, method: string, pattern: string) {
   await expect
     .poll(async () => {
@@ -30,7 +30,7 @@ async function refetchStale(page: Page, api: MockApi, method: string, pattern: s
         window.dispatchEvent(new Event('online'));
       });
       return api.callsTo(method, pattern).length;
-    })
+    }, { timeout: 15_000 })
     .toBeGreaterThan(0);
 }
 
