@@ -506,6 +506,12 @@ export class OrderStatusService {
       failure ??= err;
       this.logger.error(`Thu hồi hoa hồng của đơn ${order.code} sau khi huỷ/trả lỗi: ${err instanceof Error ? err.message : err} — gọi lại setStatus cùng trạng thái để làm nốt.`);
     }
+    try {
+      await this.gameWater?.reverseForOrder(order.id);
+    } catch (err) {
+      failure ??= err;
+      this.logger.error(`Đảo nước game của đơn ${order.code} sau khi huỷ/trả lỗi: ${err instanceof Error ? err.message : err} — cron chạy lại phần đảo sẽ làm nốt.`);
+    }
     return { standardPointsBack, failure };
   }
 

@@ -657,7 +657,8 @@ export class AuthService {
       // thay bằng hồ sơ khách và cộng số giọt nước của nó vào, để khách không mất vườn chơi thử.
       const targetProfile = await tx.gameProfile.findUnique({ where: { userId: tid } });
       let targetPlays = targetProfile !== null;
-      if (targetProfile && !targetProfile.lastCheckInAt && !targetProfile.lastWateredAt) {
+      // Vé giữ chuỗi mua bằng giọt hay đã hứng sương cũng là đã chơi: thay hồ sơ sẽ làm mất vé khách đã trả bằng nước.
+      if (targetProfile && !targetProfile.lastCheckInAt && !targetProfile.lastWateredAt && !targetProfile.lastDewAt && targetProfile.streakFreezes === 0) {
         const treesPlanted = Number((targetProfile.ecoImpact as { treesPlanted?: unknown } | null)?.treesPlanted ?? 0);
         const [trees, plots, guestProfile] = await Promise.all([
           tx.plantedTree.count({ where: { userId: tid } }),

@@ -53,7 +53,7 @@ describe('GameOrderWaterService (real Postgres)', () => {
         { provide: RewardPointsService, useValue: { grantPoints: jest.fn().mockResolvedValue(undefined) } },
         {
           provide: AffiliateService,
-          useValue: { lockCommissionsForOrder: jest.fn().mockResolvedValue(0), grantReferralReward: jest.fn().mockResolvedValue(undefined) },
+          useValue: { lockCommissionsForOrder: jest.fn().mockResolvedValue(0), reverseCommissionsForOrder: jest.fn().mockResolvedValue(0), grantReferralReward: jest.fn().mockResolvedValue(undefined) },
         },
         { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
         { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
@@ -67,6 +67,9 @@ describe('GameOrderWaterService (real Postgres)', () => {
     await setConfig(prisma, 'game.order_seeds', 100);
     await setConfig(prisma, 'game.order_seeds_weekly_cap', 300);
     await setConfig(prisma, 'game.tank_capacity', 1000);
+    await setConfig(prisma, 'game.spin_buy_cost_points', 10_000);
+    await setConfig(prisma, 'game.spin_buy_daily_limit', 5);
+    await setConfig(prisma, 'game.spin_prizes', [{ id: 'p5', name: '30 giọt', weight: 1, rewardType: 'SEEDS', value: 30 }]);
     water = moduleRef.get(GameOrderWaterService);
     orderStatus = moduleRef.get(OrderStatusService);
     game = moduleRef.get(GameService);
@@ -134,6 +137,76 @@ describe('GameOrderWaterService (real Postgres)', () => {
     expect((await seedsOf(u.id))!).toBeGreaterThanOrEqual(1050);
   });
 
+  it('vòng quay trúng giọt: không cắt nước đơn đã vượt bể', async () => {
+    const u = await createUser(prisma, { zaloId: `z_${randCode(10)}`, pointsBalance: 50_000 });
+    await prisma.gameProfile.create({ data: { userId: u.id, totalSeeds: 950 } });
+    const o = await delivered(u.id);
+    await water.grantForOrder(o.id);
+    expect(await seedsOf(u.id)).toBe(1050);
+    const res = await game.spin(u.id);
+    expect(res.prize).toMatchObject({ id: 'p5' });
+    // Bể đã đầy: phần nước đơn (1050) được giữ, 30 giọt trúng bị kẹp như điểm danh và sương; trước đây còn 1000.
+    expect(await seedsOf(u.id)).toBe(1050);
+  });
+
+  describe('đơn đã giao rồi trả/huỷ: đảo nước (idempotent, trần tuần trả lại)', () => {
+    const close = (id: string, status: 'RETURNED' | 'CANCELLED') => prisma.order.update({ where: { id }, data: { status, reversalEffectsAt: null } });
+
+    it('trả đơn hai lần song song chỉ trừ một lần; trần tuần được trả lại nên mua lại vẫn nhận', async () => {
+      const u = await player();
+      const orders = await Promise.all([delivered(u.id), delivered(u.id), delivered(u.id)]);
+      for (const o of orders) await water.grantForOrder(o.id);
+      expect(await seedsOf(u.id)).toBe(300);
+      await close(orders[0]!.id, 'RETURNED');
+      const results = await Promise.allSettled([water.reverseForOrder(orders[0]!.id), water.reverseForOrder(orders[0]!.id), orderStatus.resyncReversalEffects(orders[0]!.id)]);
+      expect(summarize(results).errors).toEqual([]);
+      expect(await seedsOf(u.id)).toBe(200);
+      expect((await water.summary(u.id)).weeklyGranted).toBe(200);
+      const again = await delivered(u.id);
+      await expect(water.grantForOrder(again.id)).resolves.toEqual({ granted: 100 });
+      expect(await seedsOf(u.id)).toBe(300);
+    });
+
+    it('đơn còn chờ (khách chưa mở game): huỷ đơn chờ, mở game sau đó không cộng', async () => {
+      const u = await realUser();
+      const o = await delivered(u.id);
+      await expect(water.grantForOrder(o.id)).resolves.toEqual({ granted: 0, pending: true });
+      await close(o.id, 'CANCELLED');
+      await water.reverseForOrder(o.id);
+      const first = (await game.getProfile(u.id)) as unknown as { orderWater: { claimedNow: number } };
+      expect(first.orderWater.claimedNow).toBe(0);
+      expect(await seedsOf(u.id)).toBe(0);
+    });
+
+    it('nước đã tiêu hết: chỉ trừ tối đa bằng số dư, không xuống dưới 0', async () => {
+      const u = await player();
+      const o = await delivered(u.id);
+      await water.grantForOrder(o.id);
+      await prisma.gameProfile.update({ where: { userId: u.id }, data: { totalSeeds: 30 } });
+      await close(o.id, 'RETURNED');
+      await expect(water.reverseForOrder(o.id)).resolves.toEqual({ reversed: 30 });
+      expect(await seedsOf(u.id)).toBe(0);
+      await expect(water.reverseForOrder(o.id)).resolves.toMatchObject({ reversed: 0, skipped: 'ALREADY_REVERSED' });
+      expect(await seedsOf(u.id)).toBe(0);
+    });
+
+    it('một lần thanh toán nhiều kiện: chỉ đảo khi mọi kiện đã trả/huỷ', async () => {
+      const u = await player();
+      const group = `grp_${randCode(8)}`;
+      const a = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', deliveredAt: new Date(), deliveredEffectsAt: null, checkoutGroup: group });
+      const b = await createOrder(prisma, { userId: u.id, status: 'DELIVERED', deliveredAt: new Date(), deliveredEffectsAt: null, checkoutGroup: group });
+      await water.grantForOrder(a.id);
+      await water.grantForOrder(b.id);
+      expect(await seedsOf(u.id)).toBe(100);
+      await close(a.id, 'RETURNED');
+      await expect(water.reverseForOrder(a.id)).resolves.toMatchObject({ reversed: 0, skipped: 'GROUP_ACTIVE' });
+      expect(await seedsOf(u.id)).toBe(100);
+      await close(b.id, 'CANCELLED');
+      await expect(Promise.all([water.reverseForOrder(a.id), water.reverseForOrder(b.id)])).resolves.toBeDefined();
+      expect(await seedsOf(u.id)).toBe(0);
+    });
+  });
+
   it('gộp tài khoản: guest đã chơi chuyển sang người mua chưa chơi (có nước đơn), cộng dồn nước', async () => {
     const target = await realUser();
     const o = await delivered(target.id);
@@ -169,6 +242,18 @@ describe('GameOrderWaterService (real Postgres)', () => {
     const first = (await game.getProfile(target.id)) as unknown as { orderWater: { claimedNow: number } };
     expect(first.orderWater.claimedNow).toBe(100);
     expect(await seedsOf(target.id)).toBe(520);
+  });
+
+  it('gộp tài khoản: đích đã mua vé giữ chuỗi bằng giọt là đã chơi, không bị thay hồ sơ (không mất vé)', async () => {
+    const target = await realUser();
+    await prisma.gameProfile.create({ data: { userId: target.id, totalSeeds: 5, streakFreezes: 2 } });
+    const guest = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}`, fullName: 'Khach' });
+    await prisma.refreshToken.create({ data: { userId: guest.id, tokenHash: `it-${randCode(16)}`, expiresAt: new Date(Date.now() + 86_400_000) } });
+    await prisma.gameProfile.create({ data: { userId: guest.id, totalSeeds: 420, streakDays: 6, lastCheckInAt: new Date() } });
+    zaloIdForNextCall = target.zaloId!;
+    await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
+    const t = await prisma.gameProfile.findUniqueOrThrow({ where: { userId: target.id } });
+    expect(t).toMatchObject({ totalSeeds: 5, streakFreezes: 2 });
   });
 
   it('gọi lại và 10 lần song song cho cùng một đơn: chỉ cộng đúng 100 một lần, một dòng sổ', async () => {

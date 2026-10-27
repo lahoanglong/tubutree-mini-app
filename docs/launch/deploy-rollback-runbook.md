@@ -428,6 +428,8 @@ Nếu việc cộng nước lỗi (game hỏng, DB chậm), đơn vẫn sang DEL
 
 Nhận biết: kết quả INCOMPLETE của đơn mang câu `Cộng nước thưởng game lỗi: ...` (hiện ở log API và kết quả chạy lại tay); cron cảnh báo khi hai lượt liền không chạy; hoặc đơn giao hơn 15 phút mà `deliveredEffectsAt` còn rỗng. Chạy lại tay cho một đơn: admin web, chi tiết đơn, nút chạy lại việc sau giao (`POST /admin/orders/:id/resync-delivered-effects`). Quá 14 ngày cron không nhặt nữa: sửa nguyên nhân rồi chạy tay từng đơn.
 
+Đơn đã giao rồi bị trả hoặc huỷ: nước được đảo cùng lúc với Điểm Xanh (`reverseClosedOrderEffects`, chạy lại bởi `ReversalEffectsResyncCron`, idempotent theo dòng sổ `ORDER_REVERSED` cùng `refId`). Đã cộng thì ghi dòng âm bằng phần đã cộng (mang `createdAt` của dòng cộng nên trần tuần của tuần đó được trả lại, khách mua lại vẫn nhận) và trừ khỏi hồ sơ tối đa bằng số dư, không xuống dưới 0, nước đã tiêu thì không đòi lại. Còn chờ thì huỷ đơn chờ. Nhiều kiện cùng `checkoutGroup` chỉ đảo khi mọi kiện đã trả hoặc huỷ. Đảo lỗi thì đơn chưa có mốc `reversalEffectsAt` và cron thử lại; không có nút chạy tay riêng cho phần đảo: chờ cron (5 phút một lượt, cửa sổ 14 ngày).
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.

@@ -4,7 +4,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isRealUser } from '../../common/real-user';
 import { startOfNextVnWeek, startOfVnWeek } from '../../common/vn-time';
-import { ORDER_WATER_REASON, ORDER_WATER_SEEDS_DEFAULT, ORDER_WATER_WEEKLY_CAP_DEFAULT } from './game.constants';
+import { ORDER_WATER_REASON, ORDER_WATER_REVERSED_REASON, ORDER_WATER_SEEDS_DEFAULT, ORDER_WATER_WEEKLY_CAP_DEFAULT } from './game.constants';
+
+const WATER_LEDGER_REASONS = [ORDER_WATER_REASON, ORDER_WATER_REVERSED_REASON];
 
 export type OrderWaterResult =
   | { granted: number; skipped?: undefined; pending?: boolean }
@@ -50,9 +52,9 @@ export class GameOrderWaterService {
     const { perOrder, weeklyCap } = await this.settings();
     const agg = await this.prisma.gameWaterEvent.aggregate({
       _sum: { delta: true },
-      where: { userId, reason: ORDER_WATER_REASON, createdAt: { gte: startOfVnWeek(now), lt: startOfNextVnWeek(now) } },
+      where: { userId, reason: { in: WATER_LEDGER_REASONS }, createdAt: { gte: startOfVnWeek(now), lt: startOfNextVnWeek(now) } },
     });
-    return { perOrder, weeklyCap, weeklyGranted: agg._sum.delta ?? 0, claimedNow };
+    return { perOrder, weeklyCap, weeklyGranted: Math.max(0, agg._sum.delta ?? 0), claimedNow };
   }
 
   /**
@@ -101,7 +103,7 @@ export class GameOrderWaterService {
 
         const used = await tx.gameWaterEvent.aggregate({
           _sum: { delta: true },
-          where: { userId: order.userId, reason: ORDER_WATER_REASON, createdAt: { gte: weekStart, lt: weekEnd } },
+          where: { userId: order.userId, reason: { in: WATER_LEDGER_REASONS }, createdAt: { gte: weekStart, lt: weekEnd } },
         });
         const granted = Math.min(perOrder, Math.max(0, weeklyCap - (used._sum.delta ?? 0)));
         await tx.gameWaterEvent.create({
@@ -117,6 +119,56 @@ export class GameOrderWaterService {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         return { granted: 0, skipped: 'ALREADY_GRANTED' };
       }
+      throw e;
+    }
+  }
+
+  /**
+   * Đảo nước của đơn đã giao rồi bị trả/huỷ, giống đảo Điểm Xanh và idempotent (unique reason+refId của dòng ORDER_REVERSED).
+   * Đã cộng: ghi dòng âm bằng đúng phần đã cộng và trừ khỏi hồ sơ tối đa bằng số dư hiện có (không xuống dưới 0; nước đã tiêu
+   * thì không đòi lại). Dòng âm mang createdAt của dòng cộng nên trần tuần được trả lại đúng tuần đó và khách mua lại vẫn nhận.
+   * Còn chờ (khách chưa mở game): huỷ đơn chờ, không cộng. Nhiều kiện cùng `checkoutGroup` là một lần cộng nên chỉ đảo khi
+   * MỌI kiện của nhóm đã trả hoặc huỷ; còn kiện khác đang đi hoặc đã giao thì giữ nguyên.
+   */
+  async reverseForOrder(orderId: string): Promise<{ reversed: number; skipped?: 'NOT_CLOSED' | 'GROUP_ACTIVE' | 'NOTHING_GRANTED' | 'ALREADY_REVERSED' }> {
+    const order = await this.prisma.order.findUnique({ where: { id: orderId }, select: { id: true, userId: true, status: true, checkoutGroup: true } });
+    if (!order || (order.status !== 'RETURNED' && order.status !== 'CANCELLED')) return { reversed: 0, skipped: 'NOT_CLOSED' };
+    if (order.checkoutGroup) {
+      const open = await this.prisma.order.count({
+        where: { checkoutGroup: order.checkoutGroup, status: { notIn: ['RETURNED', 'CANCELLED'] } },
+      });
+      if (open > 0) return { reversed: 0, skipped: 'GROUP_ACTIVE' };
+    }
+    const refId = order.checkoutGroup ? `grp:${order.checkoutGroup}` : order.id;
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${order.userId} FOR UPDATE`;
+        const profile = await tx.$queryRaw<{ totalSeeds: number }[]>`
+          SELECT "totalSeeds" FROM "game_profiles" WHERE "userId" = ${order.userId} FOR UPDATE`;
+        const granted = await tx.gameWaterEvent.findUnique({
+          where: { reason_refId: { reason: ORDER_WATER_REASON, refId } },
+          select: { id: true, delta: true, pending: true, createdAt: true },
+        });
+        if (!granted) return { reversed: 0, skipped: 'NOTHING_GRANTED' as const };
+        const done = await tx.gameWaterEvent.findUnique({
+          where: { reason_refId: { reason: ORDER_WATER_REVERSED_REASON, refId } },
+          select: { id: true },
+        });
+        if (done) return { reversed: 0, skipped: 'ALREADY_REVERSED' as const };
+        if (granted.pending) {
+          await tx.gameWaterEvent.update({ where: { id: granted.id }, data: { pending: false } });
+          return { reversed: 0, skipped: 'NOTHING_GRANTED' as const };
+        }
+        if (granted.delta <= 0) return { reversed: 0, skipped: 'NOTHING_GRANTED' as const };
+        await tx.gameWaterEvent.create({
+          data: { userId: order.userId, delta: -granted.delta, reason: ORDER_WATER_REVERSED_REASON, refId, createdAt: granted.createdAt },
+        });
+        const take = Math.min(granted.delta, Math.max(0, profile[0]?.totalSeeds ?? 0));
+        if (take > 0) await tx.gameProfile.update({ where: { userId: order.userId }, data: { totalSeeds: { decrement: take } } });
+        return { reversed: take };
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') return { reversed: 0, skipped: 'ALREADY_REVERSED' };
       throw e;
     }
   }
@@ -142,7 +194,7 @@ export class GameOrderWaterService {
       });
       const used = await tx.gameWaterEvent.aggregate({
         _sum: { delta: true },
-        where: { userId, reason: ORDER_WATER_REASON, pending: false, createdAt: { gte: weekStart, lt: weekEnd } },
+        where: { userId, reason: { in: WATER_LEDGER_REASONS }, pending: false, createdAt: { gte: weekStart, lt: weekEnd } },
       });
       let weekLeft = Math.max(0, weeklyCap - (used._sum.delta ?? 0));
       let total = 0;

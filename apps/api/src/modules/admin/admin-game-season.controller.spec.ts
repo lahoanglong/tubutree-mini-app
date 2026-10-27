@@ -61,7 +61,7 @@ describe('Mùa Vườn Xanh (admin)', () => {
     const existing = { id: 's1', name: 'Mùa Hè', theme: null, region: null, featuredSpeciesIds: [], startAt: day('2026-06-01'), endAt: day('2026-08-31') };
     const { svc } = make([existing]);
     await expect(svc.create({ name: 'Mùa Thu', startAt: day('2026-08-15'), endAt: day('2026-10-01') })).rejects.toThrow(/Mùa Hè/);
-    await expect(svc.update('s1', { endAt: day('2026-09-15') })).resolves.toMatchObject({ id: 's1' });
+    await expect(svc.update('s1', { name: 'Mùa Hè 2' })).resolves.toMatchObject({ id: 's1' });
   });
 
   it('mùa đã hết hạn báo ENDED trong danh sách; sửa/xoá mùa không có → 404', async () => {
@@ -70,6 +70,20 @@ describe('Mùa Vườn Xanh (admin)', () => {
     await expect(svc.list()).resolves.toMatchObject([{ id: 's1', status: 'ENDED' }]);
     await expect(svc.update('nope', { name: 'x' })).rejects.toBeInstanceOf(NotFoundException);
     await expect(svc.remove('nope')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('sửa ngày: mùa đã kết thúc khoá hẳn, đang chạy chỉ kéo dài, sắp tới sửa tự do', async () => {
+    const now = Date.now();
+    const mk = (id: string, from: number, to: number) => ({ id, name: id, theme: null, region: null, featuredSpeciesIds: [], startAt: new Date(now + from * 86_400_000), endAt: new Date(now + to * 86_400_000) });
+    const { svc } = make([mk('past', -20, -10), mk('live', -1, 5), mk('next', 10, 20)]);
+    const at = (d: number) => new Date(now + d * 86_400_000);
+    await expect(svc.update('past', { startAt: at(400), endAt: at(401) })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.update('past', { endAt: at(-5) })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.update('past', { name: 'Đổi tên' })).resolves.toMatchObject({ id: 'past' });
+    await expect(svc.update('live', { startAt: at(30), endAt: at(40) })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.update('live', { endAt: at(2) })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.update('live', { endAt: at(8) })).resolves.toMatchObject({ id: 'live' });
+    await expect(svc.update('next', { startAt: at(12), endAt: at(22) })).resolves.toMatchObject({ id: 'next' });
   });
 
   it('chỉ xoá được mùa sắp tới; mùa đang chạy hoặc đã hết hạn bị chặn', async () => {

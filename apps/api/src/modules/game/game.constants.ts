@@ -95,3 +95,5 @@ export const ORDER_WATER_SEEDS_DEFAULT = 100;
 export const ORDER_WATER_WEEKLY_CAP_DEFAULT = 300;
 /** Lý do (cột reason của game_water_events) của nước thưởng đơn giao; refId = id đơn. */
 export const ORDER_WATER_REASON = 'ORDER_DELIVERED';
+/** Dòng sổ âm khi đơn đã giao bị trả/huỷ; cùng refId với dòng cộng, createdAt = của dòng cộng để trần tuần cũ được trả lại. */
+export const ORDER_WATER_REVERSED_REASON = 'ORDER_REVERSED';

@@ -29,7 +29,7 @@ import {
   treeTargetLadder,
 } from './game.constants';
 import { countReferralSuccesses } from '../wallet/referral-reward';
-import { ensureGameProfile, initialEcoImpact, sproutAlreadyRewarded } from './game-profile';
+import { clampTankKeepingOverflow, ensureGameProfile, initialEcoImpact, sproutAlreadyRewarded } from './game-profile';
 import { isRealUser } from '../../common/real-user';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { startOfVnDay, startOfVnMonth } from '../../common/vn-time';
@@ -248,10 +248,7 @@ export class GameService {
             ecoImpact: seedsEcoImpact ?? {},
           },
         });
-        await tx.gameProfile.updateMany({
-          where: { userId, totalSeeds: { gt: tankCap } },
-          data: { totalSeeds: tankCap },
-        });
+        await clampTankKeepingOverflow(tx, userId, tankCap, prize.value);
       } else if (prize.rewardType === 'COUPON') {
         coupon = await this.grantCouponWithTerms(userId, prize.value, tx, voucherMinOrder);
         rewardRefId = coupon.code;

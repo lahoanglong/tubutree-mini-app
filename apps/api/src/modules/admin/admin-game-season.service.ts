@@ -64,6 +64,16 @@ export class AdminGameSeasonService {
     if (!found) throw new NotFoundException('Không tìm thấy mùa.');
     const startAt = patch.startAt ?? found.startAt;
     const endAt = patch.endAt ?? found.endAt;
+    // Đổi ngày để "hồi sinh" mùa đã chạy rồi xoá sẽ mất xếp hạng/chặng mùa: mùa không còn sắp tới thì khoá ngày bắt đầu,
+    // mùa đang chạy chỉ được kéo dài ngày kết thúc, mùa đã kết thúc không đổi ngày.
+    const status = this.status(found);
+    const startChanged = startAt.getTime() !== found.startAt.getTime();
+    const endChanged = endAt.getTime() !== found.endAt.getTime();
+    if (status !== 'UPCOMING' && startChanged) throw new BadRequestException('Mùa đã bắt đầu: không đổi được ngày bắt đầu.');
+    if (status === 'ENDED' && endChanged) throw new BadRequestException('Mùa đã kết thúc: không đổi được ngày.');
+    if (status === 'ACTIVE' && endChanged && endAt.getTime() < found.endAt.getTime()) {
+      throw new BadRequestException('Mùa đang chạy chỉ được kéo dài ngày kết thúc, không rút ngắn.');
+    }
     this.assertRange(startAt, endAt);
     await this.assertNoOverlap(startAt, endAt, id);
     const row = await this.prisma.season.update({

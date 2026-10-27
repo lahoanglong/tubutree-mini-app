@@ -100,6 +100,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     pointsTransaction: { create: jest.fn(), count: jest.fn().mockResolvedValue(0), findFirst: jest.fn().mockResolvedValue(null) },
     coinTransaction: { count: jest.fn().mockResolvedValue(0) },
     $queryRaw: jest.fn().mockResolvedValue([{ pointsBalance: 100 }]),
+    $executeRaw: jest.fn().mockResolvedValue(1),
     gameSpin: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
     gameQuiz: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     gameQuizAttempt: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), create: jest.fn().mockResolvedValue({}) },
@@ -298,10 +299,9 @@ describe('GameService.spin', () => {
 
       expect(configGets.map((g) => g.key)).toContain('game.tank_capacity');
       expect(configGets.filter((g) => g.inTx)).toEqual([]);
-      expect(prisma.gameProfile.updateMany).toHaveBeenCalledWith({
-        where: { userId: 'u1', totalSeeds: { gt: 250 } },
-        data: { totalSeeds: 250 },
-      });
+      // Kẹp qua SQL giữ phần nước từ đơn hàng đã vượt bể: GREATEST(cap, total - added), tham số [, cap, added, userId, cap].
+      expect(prisma.gameProfile.updateMany).not.toHaveBeenCalled();
+      expect((prisma.$executeRaw as jest.Mock).mock.calls[0]!.slice(1)).toEqual([250, 30, 'u1', 250]);
     });
 
     it('ENGAGE-17: trúng giải SEEDS khi chưa có hồ sơ vườn → upsert hồ sơ (không P2025), rồi kẹp theo trần', async () => {
@@ -323,10 +323,9 @@ describe('GameService.spin', () => {
           ecoImpact: { progress: 0, target: 60, treeType: 'Cây Dứa Fuwa3e', treesPlanted: 0, sproutRewarded: false },
         },
       });
-      expect(prisma.gameProfile.updateMany).toHaveBeenCalledWith({
-        where: { userId: 'u1', totalSeeds: { gt: 250 } },
-        data: { totalSeeds: 250 },
-      });
+      // Kẹp qua SQL giữ phần nước từ đơn hàng đã vượt bể: GREATEST(cap, total - added), tham số [, cap, added, userId, cap].
+      expect(prisma.gameProfile.updateMany).not.toHaveBeenCalled();
+      expect((prisma.$executeRaw as jest.Mock).mock.calls[0]!.slice(1)).toEqual([250, 30, 'u1', 250]);
     });
 
     it('ENGAGE-10: voucher trúng vòng quay có đơn tối thiểu = giá trị × game.spin_voucher_min_order_multiplier (mặc định 6, như quà đổi điểm 50k/300k)', async () => {
