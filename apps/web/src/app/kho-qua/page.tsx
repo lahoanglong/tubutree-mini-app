@@ -186,7 +186,7 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
         )}
         {!preview && s.kind === 'need' && <div className="text-caption text-stone-700">{`Cần thêm ${formatCount(s.missing)} điểm`}</div>}
       </div>
-      {!preview && s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} />}
+      {!preview && s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} ariaLabel="Điểm đang có so với điểm cần để đổi" />}
     </div>
   );
 }

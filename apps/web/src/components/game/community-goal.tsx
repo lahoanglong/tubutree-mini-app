@@ -17,7 +17,7 @@ export function CommunityGoal({ goal, myDrops, pct }: { goal: NonNullable<Commun
         </span>
       </div>
       <div className="my-2.5">
-        <ProgressBar value={pct} max={100} />
+        <ProgressBar value={pct} max={100} ariaLabel="Tiến độ mục tiêu cộng đồng" />
       </div>
       <div className="flex justify-between gap-2 text-caption">
         <span className="text-stone-700">

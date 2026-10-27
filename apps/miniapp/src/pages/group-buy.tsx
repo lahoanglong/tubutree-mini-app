@@ -197,7 +197,7 @@ function GroupCard({
         </div>
       </div>
       <div style={{ marginTop: 8 }}>
-        <ProgressBar value={pct} max={100} />
+        <ProgressBar value={pct} max={100} ariaLabel="Tiến độ nhóm mua chung" />
       </div>
       {g.status !== 'SUCCESS' && (
         <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>

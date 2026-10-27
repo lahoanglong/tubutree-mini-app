@@ -688,7 +688,7 @@ function QuestSection() {
               )}
             </div>
             <div style={{ marginTop: 6 }}>
-              <ProgressBar value={pct} max={100} />
+              <ProgressBar value={pct} max={100} ariaLabel="Tiến độ nhiệm vụ" />
             </div>
           </div>
         );

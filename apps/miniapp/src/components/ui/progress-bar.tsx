@@ -1,11 +1,11 @@
-export interface ProgressBarProps {
+interface ProgressBarBase {
   value: number;
   max: number;
   tone?: 'brand' | 'flash';
-  label?: string;
-  /** Tên truy cập khi không muốn in `label` ra màn hình (nhãn đã có ở chỗ khác). */
-  ariaLabel?: string;
 }
+
+/** Thanh tiến độ luôn phải có tên đọc được: `label` (in ra màn hình, cũng là tên truy cập) hoặc `ariaLabel` khi nhãn đã nằm ở chỗ khác. */
+export type ProgressBarProps = ProgressBarBase & ({ label: string; ariaLabel?: string } | { label?: undefined; ariaLabel: string });
 
 /** Thay 12 thanh tự vẽ (audit A4-19). */
 export function ProgressBar({ value, max, tone = 'brand', label, ariaLabel }: ProgressBarProps) {

@@ -43,7 +43,7 @@ export function SeasonPass({
         <span className="font-semibold text-forest-700">{xpText(xp)}</span>
         <span className="text-stone-600">{xpText(maxXp)}</span>
       </div>
-      <ProgressBar value={ppct} max={100} />
+      <ProgressBar value={ppct} max={100} ariaLabel="Tiến độ bậc mùa" />
 
       {!pass.premiumEligible && (
         <p className="mt-2 flex items-center gap-1.5 text-caption text-promo-fg">

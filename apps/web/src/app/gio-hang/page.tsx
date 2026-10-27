@@ -300,7 +300,7 @@ export default function CartPage() {
                         </Link>
                         <div className="min-w-0 flex-1">
                           <div className="break-words text-sm font-medium text-stone-900 max-md:font-semibold">
-                            <Link href={`/san-pham/${it.slug}`} className="hover:underline">
+                            <Link href={`/san-pham/${it.slug}`} className="tubu-inline-link hover:underline">
                               {it.productName}
                             </Link>
                           </div>
@@ -366,7 +366,7 @@ export default function CartPage() {
                               onClick={() => removeWithUndo(it)}
                               disabled={busy}
                               aria-label={`Xoá ${it.productName} khỏi giỏ hàng`}
-                              className={`inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 max-md:ml-auto max-md:justify-center max-md:px-0 ${
+                              className={`inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 max-md:ml-auto max-md:min-w-11 max-md:justify-center max-md:px-0 ${
                                 soldOut ? 'rounded-control border border-danger-fg font-semibold' : ''
                               }`}
                             >

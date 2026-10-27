@@ -29,7 +29,7 @@ export function TierCard({ dash, tiers }: { dash: Pick<AffiliateDashboard, 'tier
       </div>
       {tier.nextName && tier.nextThreshold && (
         <div className="mt-3">
-          <ProgressBar value={progressPct(dash.monthRevenue, tier.nextThreshold)} max={100} />
+          <ProgressBar value={progressPct(dash.monthRevenue, tier.nextThreshold)} max={100} ariaLabel="Tiến độ lên hạng kế tiếp" />
           <div className="mt-1 text-xs text-stone-700">
             Còn <b>{formatVnd(tier.toNext)}</b> doanh số đã chốt để lên bậc {tier.nextName}
           </div>

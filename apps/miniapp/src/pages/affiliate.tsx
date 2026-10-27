@@ -421,7 +421,7 @@ function Dashboard() {
           </div>
           {d.tier.nextName && d.tier.nextThreshold && (
             <div style={{ marginTop: 12 }}>
-              <ProgressBar value={progressPct(d.monthRevenue, d.tier.nextThreshold)} max={100} />
+              <ProgressBar value={progressPct(d.monthRevenue, d.tier.nextThreshold)} max={100} ariaLabel="Tiến độ lên hạng kế tiếp" />
               <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
                 Còn <b>{formatVnd(d.tier.toNext)}</b> doanh số đã chốt để lên bậc {d.tier.nextName}
               </Text>

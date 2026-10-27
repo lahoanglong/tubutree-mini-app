@@ -37,7 +37,7 @@ function CourseCard({ course }: { course: AcademyCourseSummary }) {
           <span className="block truncate text-sm text-stone-700 max-md:text-[length:var(--type-caption-size)] max-md:text-stone-600">{course.description}</span>
         )}
         <span className="my-2 block">
-          <ProgressBar value={pct} max={100} />
+          <ProgressBar value={pct} max={100} ariaLabel="Tiến độ khoá học" />
         </span>
         {course.isCompleted ? (
           <span className="inline-flex items-center gap-1 text-xs font-semibold text-forest-700">

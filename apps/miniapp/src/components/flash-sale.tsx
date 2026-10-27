@@ -160,7 +160,7 @@ export function FlashSale() {
                   </Text>
                 )}
                 <div style={{ marginTop: 4 }}>
-                  <ProgressBar value={soldPct} max={100} tone="flash" />
+                  <ProgressBar value={soldPct} max={100} tone="flash" ariaLabel="Tỉ lệ đã bán" />
                 </div>
                 <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
                   {vi.flashSale.soldPct(soldPct)}

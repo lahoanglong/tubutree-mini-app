@@ -73,7 +73,7 @@ describe('Badge / Chip / TierBadge', () => {
     const b = mount(<Chip selected count={3} onPress={onPress}>Tubu</Chip>).container.querySelector('button')!;
     expect(b.getAttribute('aria-pressed')).toBe('true');
     expect(b.className).toContain('tubu-hit-44');
-    expect(b.style.minHeight).toBe('36px');
+    expect(b.style.minHeight).toBe('44px');
     expect(b.style.minWidth).toBe('44px');
     expect(b.style.background).toBe('var(--color-action-primary-bg)');
     expect(b.textContent).toBe('Tubu(3)');
@@ -112,7 +112,7 @@ describe('Tiles', () => {
 
 describe('ProgressBar / Skeleton', () => {
   it('ProgressBar kẹp phần trăm trong 0..100 và đổi màu theo tông', () => {
-    const fill = (v: number, tone?: 'flash') => mount(<ProgressBar value={v} max={10} tone={tone} />).container.querySelector('[data-testid="progress-fill"]') as HTMLElement;
+    const fill = (v: number, tone?: 'flash') => mount(<ProgressBar value={v} max={10} tone={tone} ariaLabel="Tiến độ thử" />).container.querySelector('[data-testid="progress-fill"]') as HTMLElement;
     expect(fill(5).style.width).toBe('50%');
     expect(fill(50).style.width).toBe('100%');
     expect(fill(-3).style.width).toBe('0%');
@@ -167,5 +167,14 @@ describe('StickyActionBar', () => {
 describe('icon trong Badge nhận Zap', () => {
   it('icon lucide tuỳ ý', () => {
     expect(mount(<Badge tone="promo" size="sm" icon={Zap}>-10%</Badge>).container.querySelector('svg')!.getAttribute('width')).toBe('12');
+  });
+});
+
+describe('ProgressBar có tên đọc được', () => {
+  it('render role="progressbar" kèm tên từ ariaLabel hoặc label', () => {
+    const a = mount(<ProgressBar value={1} max={4} ariaLabel="Bước 1 trên 4" />).container.querySelector('[role="progressbar"]')!;
+    expect(a.getAttribute('aria-label')).toBe('Bước 1 trên 4');
+    const b = mount(<ProgressBar value={1} max={4} label="Tiến độ nhiệm vụ" />).container.querySelector('[role="progressbar"]')!;
+    expect(b.getAttribute('aria-label')).toBe('Tiến độ nhiệm vụ');
   });
 });

@@ -121,7 +121,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
         </Text>
         {!m.achieved && (
           <div style={{ marginTop: 6 }}>
-            <ProgressBar value={m.progressPct} max={100} />
+            <ProgressBar value={m.progressPct} max={100} ariaLabel="Tiến độ mốc thưởng" />
           </div>
         )}
       </div>

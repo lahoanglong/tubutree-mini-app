@@ -65,7 +65,7 @@ export function GardenPlots({
                 </Button>
               </div>
               <div style={{ marginTop: 8 }}>
-                <ProgressBar value={ppct} max={100} />
+                <ProgressBar value={ppct} max={100} ariaLabel="Tiến độ lớn của cây" />
               </div>
             </div>
           );

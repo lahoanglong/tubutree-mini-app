@@ -1150,7 +1150,7 @@ function DealerRewardsCard() {
               <Text variant="caption" tone="tertiary" as="div">{r.description}</Text>
             )}
             <div style={{ marginTop: 6 }}>
-              <ProgressBar value={pct} max={100} />
+              <ProgressBar value={pct} max={100} ariaLabel="Tiến độ phần thưởng" />
             </div>
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
               <Text variant="caption" tone="tertiary" style={{ flex: '1 1 140px', minWidth: 0 }}>
