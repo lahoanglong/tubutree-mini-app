@@ -79,7 +79,7 @@ function NewMission() {
         setErr(null);
         const ok = await confirm({
           title: 'Thêm nhiệm vụ mới',
-          message: `Chỉ tính việc khách làm từ lúc tạo, việc đã làm trước đó không được tính. Mỗi khách nhận tối đa ${points.toLocaleString('vi-VN')} Điểm Xanh một lần cho nhiệm vụ này. Thêm nhiệm vụ "${f.title.trim()}"?`,
+          message: `Chỉ tính việc khách làm từ lúc tạo, việc đã làm trước đó không được tính. Mỗi khách nhận tối đa ${new Intl.NumberFormat("vi-VN").format(points)} Điểm Xanh một lần cho nhiệm vụ này. Thêm nhiệm vụ "${f.title.trim()}"?`,
           confirmLabel: 'Thêm nhiệm vụ',
         });
         if (ok) create.mutate();
