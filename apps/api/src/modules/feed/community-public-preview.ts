@@ -17,20 +17,10 @@ const EMAIL = /[^\s@]+@[^\s@]+\.[^\s@]+/g;
 const PHONE = /\+?\d[\d .-]{7,}\d/g;
 
 /**
- * Tên hiển thị cho người chưa đăng nhập: chỉ tên gọi (từ cuối của họ tên), không lộ họ tên đầy đủ. Tên có số hoặc "@"
- * (người dùng gõ số điện thoại/email làm tên) thì dùng tên chung.
+ * Tên tác giả cho mọi người xem bài (khách chưa đăng nhập và đã đăng nhập): tên gọi kèm chữ cái đầu của họ ("Lại N."),
+ * không lộ họ tên đầy đủ. Tên không dùng được (trống, có số hoặc "@") dùng tên chung.
  */
 export function publicAuthorName(fullName: string | null | undefined): string {
-  const name = fullName?.trim() ?? '';
-  if (!name || /[\d@]/.test(name)) return ANONYMOUS_AUTHOR;
-  return name.split(/\s+/).at(-1) ?? ANONYMOUS_AUTHOR;
-}
-
-/**
- * Tên trên bảng xếp hạng cho người đã đăng nhập: tên gọi kèm chữ cái đầu của họ ("Lại N."), không lộ họ tên đầy đủ.
- * Tên có số hoặc "@" dùng tên chung như {@link publicAuthorName}.
- */
-export function leaderboardAuthorName(fullName: string | null | undefined): string {
   return publicDisplayName(fullName, ANONYMOUS_AUTHOR);
 }
 
