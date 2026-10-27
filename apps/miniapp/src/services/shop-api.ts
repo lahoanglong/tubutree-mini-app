@@ -698,7 +698,8 @@ export async function cancelOrder(code: string, destination?: RefundDestinationB
   } catch (err) {
     // API cũ (lúc triển khai, hoặc quay về bản trước) từ chối trường lạ bằng 400 «Không nhận trường cancelReason…»: gửi lại không kèm lý do.
     const data = isHttpError(err) ? (err.response?.data as { message?: unknown } | undefined) : undefined;
-    const message = typeof data?.message === 'string' ? data.message : '';
+    // Bộ kiểm tra dữ liệu của API trả message là mảng chuỗi; Nest mặc định cũng vậy.
+    const message = Array.isArray(data?.message) ? data.message.join(' ') : String(data?.message ?? '');
     if (!reason || !isHttpError(err) || err.response?.status !== 400 || !/cancelReason/.test(message)) throw err;
     return (await api.post<OrderDTO>(`/orders/${code}/cancel`, { ...destination })).data;
   }

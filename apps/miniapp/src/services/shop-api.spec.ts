@@ -193,6 +193,14 @@ describe('cancelOrder — API cũ chưa nhận lý do huỷ', () => {
     expect(post).toHaveBeenNthCalledWith(2, '/orders/T1/cancel', { refundMethod: 'WALLET' });
   });
 
+  it('400 với message là MẢNG (dạng thật của bộ kiểm tra dữ liệu API) → vẫn gửi lại không kèm lý do', async () => {
+    post
+      .mockRejectedValueOnce(new HttpError('x', undefined, { status: 400, data: { message: ['Không nhận trường «cancelReasonCode».'] } }))
+      .mockResolvedValueOnce({ data: { code: 'T1' } });
+    await expect(cancelOrder('T1', undefined, reason)).resolves.toEqual({ code: 'T1' });
+    expect(post).toHaveBeenNthCalledWith(2, '/orders/T1/cancel', {});
+  });
+
   it('lỗi 400 khác, hoặc không có lý do → không gửi lại', async () => {
     post.mockRejectedValue(new HttpError('x', undefined, { status: 400, data: { message: 'Đơn đã giao.' } }));
     await expect(cancelOrder('T1', undefined, reason)).rejects.toBeInstanceOf(HttpError);

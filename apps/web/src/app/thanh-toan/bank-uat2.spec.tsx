@@ -113,6 +113,14 @@ describe('QR chỉ hiện khi đơn còn chờ chuyển khoản (bfd3918d)', () 
 });
 
 describe('lỗi tải có lối ra và hotline (9968242c)', () => {
+  it('503 thân tiếng Anh ("Service Unavailable"): không hiện nguyên văn, dùng câu chung', async () => {
+    stubQr([err(503, 'Service Unavailable')]);
+    const { container } = mount(<BankTransferPanel order={order} orderHref="/tai-khoan/don-hang/TB-777" />);
+    await flush(8);
+    expect(container.textContent).not.toContain('Service Unavailable');
+    expect(container.textContent).toContain('Máy chủ đang bận, thử lại nhé.');
+  });
+
   it('máy chủ lỗi: tiêu đề, câu hướng dẫn, Thử lại, Xem đơn hàng và hotline thay cho một dòng chữ trơn', async () => {
     stubQr([err(503, 'Máy chủ đang bận, thử lại nhé.')]);
     const { container } = mount(<BankTransferPanel order={order} orderHref="/tai-khoan/don-hang/TB-777" />);
@@ -177,6 +185,11 @@ describe('nút Kiểm tra gặp 401/403 (9dcc431b, 9968242c, 4ee6b81d)', () => {
     expect(msg).toMatch(/đăng nhập lại/i);
     expect(msg).not.toMatch(/kết nối|mạng/i);
     expect(c.querySelector('img[alt="VietQR"]')).not.toBeNull();
+  });
+
+  it('401 mã SESSION_EXPIRED (lời máy chủ viết tiếng Việt): vẫn là câu của màn này "…rồi bấm Kiểm tra nhé"', async () => {
+    const c = await check(() => json(401, { code: 'SESSION_EXPIRED', message: 'Phiên đăng nhập không còn hợp lệ.' }));
+    expect(c.querySelector('[data-testid="bank-check-result"]')?.textContent).toMatch(/rồi bấm Kiểm tra nhé/);
   });
 
   it('401 kèm lý do cụ thể của máy chủ: hiện đúng lý do', async () => {

@@ -194,6 +194,12 @@ export function getLoadErrorMessage(error: unknown): string {
   return errorMessage(error, vi.errors.loadTimeout);
 }
 
+/** Lời của máy chủ đủ tiếng Việt để đọc thẳng cho khách (không phải câu kỹ thuật của framework). */
+export const isBusinessMessage = (raw: string | null | undefined): boolean => {
+  const message = (raw ?? '').trim();
+  return !!message && !TECHNICAL_MESSAGE.test(message) && !NO_VIETNAMESE.test(message);
+};
+
 function errorMessage(error: unknown, timeoutMessage: string): string {
   if (isHttpError(error)) {
     // Message của throttler là tiếng Anh kỹ thuật ("ThrottlerException: ...") — không hiển thị.
