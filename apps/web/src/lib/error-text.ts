@@ -1,4 +1,4 @@
-import { ApiError, NetworkError } from '@/lib/client-api';
+import { ApiError, GENERIC_ERROR, NetworkError } from '@/lib/client-api';
 
 const RATE_LIMITED = 'Bạn thao tác hơi nhanh, đợi vài giây rồi thử lại nhé.';
 const SERVER_BUSY = 'Máy chủ đang bận, thử lại nhé.';
@@ -21,9 +21,10 @@ const TECHNICAL_MESSAGE = /^(?=[ -~]*$)(cannot \w+ \/|not found|bad request|unau
 function errorText(error: unknown, timeout: string): string {
   if (error instanceof ApiError) {
     const message = error.message.trim();
-    const businessText = message && !TECHNICAL_MESSAGE.test(message) && !NO_VIETNAMESE.test(message);
+    const businessText = message && message !== GENERIC_ERROR && !TECHNICAL_MESSAGE.test(message) && !NO_VIETNAMESE.test(message);
     if (error.status === 429) return error.code && businessText ? message : RATE_LIMITED;
-    if (error.status === 401) return businessText ? message : SESSION_EXPIRED_TEXT;
+    // Mã của máy chủ quyết định: SESSION_EXPIRED luôn là câu hết phiên của web; 401 khác mang lời tiếng Việt (tài khoản bị khoá) giữ lời đó.
+    if (error.status === 401) return error.code !== 'SESSION_EXPIRED' && businessText ? message : SESSION_EXPIRED_TEXT;
     if (error.status < 500 && message) return businessText ? message : GENERIC;
     return SERVER_BUSY;
   }

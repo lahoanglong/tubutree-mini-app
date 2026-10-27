@@ -187,7 +187,8 @@ export class NetworkError extends Error {
 export const REQUEST_TIMEOUT_MS = 20_000;
 const OFFLINE_MESSAGE = 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.';
 const TIMEOUT_MESSAGE = 'Máy chủ phản hồi quá lâu. Vui lòng thử lại.';
-const GENERIC_ERROR = 'Có lỗi xảy ra. Vui lòng thử lại.';
+/** Câu thay khi phản hồi lỗi không có lời nào (thân rỗng/không phải JSON); error-text không coi đây là lời nghiệp vụ. */
+export const GENERIC_ERROR = 'Có lỗi xảy ra. Vui lòng thử lại.';
 
 interface Reply {
   status: number;

@@ -202,7 +202,8 @@ function errorMessage(error: unknown, timeoutMessage: string): string {
     const businessMsg = backendMsg && !TECHNICAL_MESSAGE.test(backendMsg.trim()) && !NO_VIETNAMESE.test(backendMsg.trim()) ? backendMsg : null;
     // 429 của bộ giới hạn tốc độ không có mã; 429 kèm mã nghiệp vụ (CHAT_DAILY_LIMIT, hết lượt tích điểm...) là lời máy chủ viết cho khách.
     if (error.response?.status === 429) return errorCode(error) && businessMsg ? businessMsg : RATE_LIMITED_MESSAGE;
-    if (error.response?.status === 401) return businessMsg ?? vi.errors.sessionExpired;
+    // Mã SESSION_EXPIRED của máy chủ luôn là câu hết phiên của Mini App (có hướng dẫn mở lại ứng dụng); 401 khác mang lời tiếng Việt (tài khoản bị khoá) giữ lời đó.
+    if (error.response?.status === 401) return errorCode(error) !== 'SESSION_EXPIRED' && businessMsg ? businessMsg : vi.errors.sessionExpired;
     // Message backend 4xx là nghiệp vụ (viết sẵn tiếng Việt) — hiển thị thẳng; lời tiếng Anh của framework thì câu chung.
     if (backendMsg && error.response && error.response.status < 500) return businessMsg ?? vi.errors.generic;
     if (error.code === 'ECONNABORTED') return timeoutMessage;

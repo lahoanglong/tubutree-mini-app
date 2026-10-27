@@ -30,12 +30,12 @@ describe('JwtStrategy.validate — quyền đọc từ DB, không tin role trong
 
   it('tài khoản bị khoá → 401 ngay, không đợi access token hết hạn', async () => {
     const { strategy } = setup({ role: 'ADMIN', isBlocked: true });
-    await expect(strategy.validate(ADMIN_TOKEN)).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(strategy.validate(ADMIN_TOKEN)).rejects.toMatchObject({ response: { code: 'ACCOUNT_BLOCKED' } });
   });
 
   it('user không còn tồn tại → 401', async () => {
     const { strategy } = setup(null);
-    await expect(strategy.validate(ADMIN_TOKEN)).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(strategy.validate(ADMIN_TOKEN)).rejects.toMatchObject({ response: { code: 'SESSION_EXPIRED' } });
   });
 
   it('cache ngắn: hai request liền nhau chỉ đọc DB một lần; invalidate buộc đọc lại', async () => {

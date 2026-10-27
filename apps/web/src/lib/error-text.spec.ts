@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError, NetworkError } from '@/lib/client-api';
+import { ApiError, GENERIC_ERROR, NetworkError } from '@/lib/client-api';
 import { actionErrorText, loadErrorText, SESSION_EXPIRED_TEXT } from './error-text';
 
 describe('loadErrorText (khớp getErrorMessage của Mini App)', () => {
@@ -46,6 +46,14 @@ describe('loadErrorText (khớp getErrorMessage của Mini App)', () => {
   it('401: báo hết phiên và đăng nhập lại, không phải câu thử lại', () => {
     expect(loadErrorText(new ApiError('Unauthorized', 401))).toBe(SESSION_EXPIRED_TEXT);
     expect(actionErrorText(new ApiError('', 401))).toBe(SESSION_EXPIRED_TEXT);
+  });
+  it('401 thân rỗng/không phải JSON (apiFetch đặt câu chung GENERIC_ERROR): vẫn là hết phiên, không phải "Có lỗi xảy ra"', () => {
+    expect(loadErrorText(new ApiError(GENERIC_ERROR, 401))).toBe(SESSION_EXPIRED_TEXT);
+    expect(actionErrorText(new ApiError(GENERIC_ERROR, 401))).toBe(SESSION_EXPIRED_TEXT);
+  });
+  it('401 mã SESSION_EXPIRED: câu hết phiên của web dù máy chủ viết gì; ACCOUNT_BLOCKED: lời của máy chủ', () => {
+    expect(loadErrorText(new ApiError('Phiên đăng nhập không còn hợp lệ.', 401, 'SESSION_EXPIRED'))).toBe(SESSION_EXPIRED_TEXT);
+    expect(actionErrorText(new ApiError('Tài khoản đã bị khoá.', 401, 'ACCOUNT_BLOCKED'))).toBe('Tài khoản đã bị khoá.');
   });
   it('401 mang lời nghiệp vụ tiếng Việt (tài khoản bị khoá): giữ lời đó', () => {
     expect(loadErrorText(new ApiError('Tài khoản đã bị khoá.', 401))).toBe('Tài khoản đã bị khoá.');

@@ -57,7 +57,7 @@ describe('JwtAuthGuard — lỗi 401 bằng tiếng Việt (D8-3)', () => {
 
   const call = async (path: string, authorization?: string) => {
     const res = await fetch(`${base}/probe${path}`, { headers: authorization ? { authorization } : {} });
-    return { status: res.status, body: (await res.json()) as { message?: string; statusCode?: number; error?: string; sub?: string } };
+    return { status: res.status, body: (await res.json()) as { message?: string; code?: string; statusCode?: number; error?: string; sub?: string } };
   };
 
   it.each([
@@ -69,12 +69,14 @@ describe('JwtAuthGuard — lỗi 401 bằng tiếng Việt (D8-3)', () => {
     expect(status).toBe(401);
     expect(body.statusCode).toBe(401);
     expect(body.message).toBe('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.');
+    expect(body.code).toBe('SESSION_EXPIRED');
   });
 
   it('thông điệp riêng của chiến lược (tài khoản bị khoá) không bị ghi đè', async () => {
     const { status, body } = await call('', `Bearer ${jwt.sign({ sub: 'u-blocked' })}`);
     expect(status).toBe(401);
     expect(body.message).toBe('Tài khoản đã bị khoá.');
+    expect(body.code).toBe('ACCOUNT_BLOCKED');
   });
 
   it('token hợp lệ → 200; route @Public không cần token', async () => {

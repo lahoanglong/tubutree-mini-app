@@ -42,6 +42,11 @@ describe('getErrorMessage', () => {
     expect(getErrorMessage(httpError({ response: { status: 429, data: { message: 'ThrottlerException: Too Many Requests' } } }))).toContain('đợi vài giây');
   });
 
+  it('401 mã SESSION_EXPIRED → câu hết phiên của Mini App dù máy chủ viết gì; ACCOUNT_BLOCKED → lời máy chủ', () => {
+    expect(getErrorMessage(httpError({ response: { status: 401, data: { code: 'SESSION_EXPIRED', message: 'Phiên đăng nhập không còn hợp lệ.' } } }))).toBe(viCopy.errors.sessionExpired);
+    expect(getErrorMessage(httpError({ response: { status: 401, data: { code: 'ACCOUNT_BLOCKED', message: 'Tài khoản đã bị khoá.' } } }))).toBe('Tài khoản đã bị khoá.');
+  });
+
   it('401 → báo hết phiên; 4xx chỉ có chữ tiếng Anh không dấu → câu chung', () => {
     expect(getErrorMessage(httpError({ response: { status: 401, data: { message: 'Unauthorized' } } }))).toBe(viCopy.errors.sessionExpired);
     expect(getErrorMessage(httpError({ response: { status: 401, data: {} } }))).toBe(viCopy.errors.sessionExpired);
