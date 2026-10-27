@@ -90,7 +90,8 @@ const REFUND_PERCENT = new RegExp(
 const WASTE_UNIT = '(?:kg|ky|ki|kilo|can|thung|chai|vo|hop|lon|bao|bich)';
 const SLASH_UNIT = '(?:kg|ky|kilo|can|vo)';
 // Từ chỉ rác/phế liệu: giá theo đơn vị (`5k/kg`) chỉ là tiền trả cho rác khi cùng ý có từ này; `Gạo 2k/kg` là giá hàng.
-const MATERIAL = '(?<![a-z0-9])(?:giay|carton|thung|vo|chai|lon|nhua|sat|nhom|dong|rac|phe lieu|ve chai|hop sua|pin|nilon|bao bi|thu mua|quy doi)(?![a-z0-9])';
+// "bia" trơn trùng "bia" (đồ uống) sau khi bỏ dấu, nên chỉ nhận "bìa cứng"/"bìa carton".
+const MATERIAL = '(?<![a-z0-9])(?:giay|carton|thung|vo|chai|lon|nhua|sat|nhom|dong|rac|phe lieu|ve chai|hop sua|pin|nilon|bao bi|bia cung|bia carton|bao cu|bao giay|do cu|thu mua|thu gom|mua lai|tai che|quy doi)(?![a-z0-9])';
 const GIFT_AMOUNT = new RegExp(
   `(?:^|[.,;:!?(\\-]\\s*)(?:qua${FILLER}\\s*[:=]?\\s+${MONEY}|tra\\s+(?:khach|ban|nguoi|thanh vien)${FILLER}\\s+${MONEY})` +
     `|(?<![a-z0-9])tra(?:\\s+(?:ngay|lai|luon|them))*\\s+${UNIT_AMOUNT}(?=\\s*(?:\\/\\s*${SLASH_UNIT}|(?:cho\\s+)?(?:moi\\s*)?(?:\\d+|mot|moi)\\s*${WASTE_UNIT})\\b)` +
