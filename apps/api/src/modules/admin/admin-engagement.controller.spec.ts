@@ -42,9 +42,15 @@ describe('AdminEngagementController — nhiệm vụ & quà đổi điểm (ENGA
   });
 });
 
+const withTx = (client: Record<string, unknown>) => {
+  const c = { ...client, $executeRaw: jest.fn().mockResolvedValue(1) } as Record<string, unknown>;
+  c.$transaction = (cb: (tx: unknown) => unknown) => cb(c);
+  return c as never;
+};
+
 describe('AdminEngagementService', () => {
   const make = (prisma: Record<string, unknown>) =>
-    new AdminEngagementService({ ...prisma, mission: { findMany: jest.fn().mockResolvedValue([]), ...(prisma.mission as object) } } as never);
+    new AdminEngagementService(withTx({ ...prisma, mission: { findMany: jest.fn().mockResolvedValue([]), ...(prisma.mission as object) } }));
 
   it('danh sách nhiệm vụ kèm số lượt đã nhận thưởng', async () => {
     const prisma = {
@@ -104,7 +110,7 @@ describe('CreateMissionDto — nhiệm vụ mới', () => {
 
 describe('AdminEngagementService — thêm và tạm dừng nhiệm vụ', () => {
   const make = (prisma: Record<string, unknown>) =>
-    new AdminEngagementService({ ...prisma, mission: { findMany: jest.fn().mockResolvedValue([]), ...(prisma.mission as object) } } as never);
+    new AdminEngagementService(withTx({ ...prisma, mission: { findMany: jest.fn().mockResolvedValue([]), ...(prisma.mission as object) } }));
   const input = { title: 'Mời bạn', description: 'Mời 2 bạn', kind: 'INVITE_COUNT', goal: 2, rewardPoints: 30_000 } as const;
 
   it('tạo nhiệm vụ: mã do hệ thống sinh, không lặp lại, mục tiêu và điểm đúng như nhập', async () => {
@@ -150,7 +156,7 @@ describe('AdminEngagementService — thêm và tạm dừng nhiệm vụ', () =>
 
 describe('AdminEngagementService — chặn nhiệm vụ trùng và mốc bắt đầu', () => {
   const make = (active: unknown[], create = jest.fn().mockImplementation(({ data }) => Promise.resolve(data))) => ({
-    svc: new AdminEngagementService({ mission: { findMany: jest.fn().mockResolvedValue(active), create } } as never),
+    svc: new AdminEngagementService(withTx({ mission: { findMany: jest.fn().mockResolvedValue(active), create } })),
     create,
   });
   const input = { title: 'Mua 1 đơn', description: '', kind: 'ORDER_COUNT', goal: 1, rewardPoints: 10_000 } as const;
@@ -168,6 +174,17 @@ describe('AdminEngagementService — chặn nhiệm vụ trùng và mốc bắt 
     const none = make([]);
     await none.svc.createMission('a', input);
     expect(none.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('bật lại nhiệm vụ đang tạm dừng mà đã có nhiệm vụ bật cùng (loại, mục tiêu) → 409, không ghi; bật lại bình thường khi không trùng', async () => {
+    const paused = { id: 'm9', code: 'CUSTOM_9', kind: 'ORDER_COUNT', goal: 1, title: 'Cũ', disabledAt: new Date() };
+    const update = jest.fn().mockResolvedValue({});
+    const mk = (active: unknown[]) =>
+      new AdminEngagementService(withTx({ mission: { findUnique: jest.fn().mockResolvedValue(paused), findMany: jest.fn().mockResolvedValue(active), update } }));
+    await expect(mk([{ id: 'm1', code: 'FIRST_ORDER', kind: null, goal: 1, title: 'Đơn hàng đầu tiên' }]).updateMission('m9', { disabled: false })).rejects.toBeInstanceOf(ConflictException);
+    expect(update).not.toHaveBeenCalled();
+    await mk([{ id: 'm1', code: 'FIRST_ORDER', kind: null, goal: 2, title: 'x' }]).updateMission('m9', { disabled: false });
+    expect(update).toHaveBeenCalledTimes(1);
   });
 
   it('nhiệm vụ mới có startsAt = lúc tạo', async () => {

@@ -74,4 +74,24 @@ describe('Nhiệm vụ quản trị thêm (real Postgres)', () => {
     await create(2);
     await expect(create(2)).rejects.toThrow('cùng loại và cùng mục tiêu');
   });
+  it('hai lần tạo đồng thời cùng (loại, mục tiêu): chỉ một lần thành công', async () => {
+    const mk = () => admin.createMission('it-admin', { title: `IT ${randCode(4)}`, description: 'IT', kind: 'REVIEW_COUNT', goal: 5, rewardPoints: 10 });
+    const results = await Promise.allSettled([mk(), mk(), mk()]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(2);
+  });
+
+  it('hai nhiệm vụ trùng đang tạm dừng bật lại đồng thời: chỉ một cái bật được', async () => {
+    const mkPaused = () =>
+      prisma.mission.create({
+        data: {
+          id: `it-${randCode(8)}`, code: `CUSTOM_${randCode(6)}`, title: `IT ${randCode(4)}`, description: 'IT', kind: 'INVITE_COUNT',
+          goal: 7, rewardPoints: 10, disabledAt: new Date(), startsAt: new Date(),
+        },
+      });
+    const [a, b] = await Promise.all([mkPaused(), mkPaused()]);
+    const results = await Promise.allSettled([admin.updateMission(a.id, { disabled: false }), admin.updateMission(b.id, { disabled: false })]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(await prisma.mission.count({ where: { id: { in: [a.id, b.id] }, disabledAt: null } })).toBe(1);
+  });
 });

@@ -27,7 +27,7 @@ import {
   streak7Seeds,
   treeTargetLadder,
 } from './game.constants';
-import { countReferralSuccesses } from '../wallet/referral-reward';
+import { readReferralSuccessRows, referralSuccessesSince } from '../wallet/referral-reward';
 import { ensureGameProfile, initialEcoImpact, sproutAlreadyRewarded } from './game-profile';
 import { isRealUser } from '../../common/real-user';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -666,50 +666,31 @@ export class GameService {
    * `pending*` là phần đã có nhưng còn chờ hết hạn đổi/trả, để thẻ nhiệm vụ nói đúng lý do chưa tính.
    */
   private async missionMetrics(userId: string, since: Date | null = null) {
-    const [profile, orders, imageReviews, referralsCount] = await Promise.all([
-      this.prisma.gameProfile.findUnique({ where: { userId } }),
-      this.deliveredOrders(userId, since),
-      this.prisma.review.findMany({
-        where: { userId, NOT: { images: { isEmpty: true } }, ...(since ? { createdAt: { gte: since } } : {}) },
-        select: { productId: true, orderId: true },
-      }),
-      countReferralSuccesses(this.prisma, userId, since),
-    ]);
-    // Sản phẩm đã bị trả (dù một phần) trên đơn đó đã mất thưởng đánh giá nên không tính vào nhiệm vụ nữa.
-    const returned = await returnedProductsByOrder(this.prisma, [...new Set(imageReviews.map((r) => r.orderId))]);
-    const counted = imageReviews.filter((r) => !returned.get(r.orderId)?.has(r.productId));
-    const settledProducts = new Set(counted.filter((r) => orders.settled.has(r.orderId)).map((r) => r.productId));
-    const pendingProducts = new Set(
-      counted.filter((r) => orders.pending.has(r.orderId) && !settledProducts.has(r.productId)).map((r) => r.productId),
-    );
-    const streak = profile?.streakDays ?? 0;
-    return {
-      // Nhiệm vụ có mốc bắt đầu chỉ tính chuỗi điểm danh từ ngày đó: ngày VN từ mốc tới nay (cả hai đầu) là trần của chuỗi.
-      streakDays: since ? Math.min(streak, vnDaysBetween(since, new Date()) + 1) : streak,
-      ordersCount: orders.settled.size,
-      pendingOrdersCount: orders.pending.size,
-      reviewedProductsCount: settledProducts.size,
-      pendingReviewedProductsCount: pendingProducts.size,
-      referralsCount,
-    };
+    return this.missionMetricsFor(await this.loadMissionData(userId), since);
   }
 
   /**
-   * Đơn bán lẻ đã giao của khách (cùng REVIEWABLE_ORDER với đánh giá): `settled` đã qua hạn đổi/trả và không có yêu cầu trả
-   * chờ duyệt; `pending` là phần còn lại. Hết hạn thì khách không gửi thêm được yêu cầu trả (OrderReturnsService.request), nên
-   * đơn settled không còn đường nào bị trả sau lúc nhận thưởng.
+   * Dữ liệu thô của khách (đơn, đánh giá có ảnh, thưởng giới thiệu, hồ sơ điểm danh), có mốc thời gian, tải MỘT lần: số truy vấn
+   * không đổi dù có bao nhiêu nhiệm vụ với mốc bắt đầu khác nhau; mỗi mốc chỉ lọc trong bộ nhớ (missionMetricsFor).
+   * Đơn bán lẻ đã giao (cùng REVIEWABLE_ORDER với đánh giá): `settled` đã qua hạn đổi/trả và không có yêu cầu trả chờ duyệt, `pending`
+   * là phần còn lại. Hết hạn thì khách không gửi thêm được yêu cầu trả (OrderReturnsService.request), nên đơn settled không còn
+   * đường nào bị trả sau lúc nhận thưởng.
    */
-  private async deliveredOrders(userId: string, since: Date | null): Promise<{ settled: Set<string>; pending: Set<string> }> {
-    const [windowDays, allOrders] = await Promise.all([
+  private async loadMissionData(userId: string) {
+    const [profile, windowDays, allOrders, imageReviews, referralRows] = await Promise.all([
+      this.prisma.gameProfile.findUnique({ where: { userId } }),
       this.returnWindowDays(),
       this.prisma.order.findMany({ where: { userId, ...REVIEWABLE_ORDER }, select: { id: true, deliveredAt: true, updatedAt: true } }),
+      this.prisma.review.findMany({
+        where: { userId, NOT: { images: { isEmpty: true } } },
+        select: { productId: true, orderId: true, createdAt: true },
+      }),
+      readReferralSuccessRows(this.prisma, userId),
     ]);
-    // Mốc của đơn là lúc giao (không có thì lần cập nhật cuối), đúng mốc returnWindowClosed dùng để tính hạn đổi/trả.
-    const orders = since ? allOrders.filter((o) => (o.deliveredAt ?? o.updatedAt).getTime() >= since.getTime()) : allOrders;
     const open =
-      orders.length > 0
+      allOrders.length > 0
         ? await this.prisma.returnRequest.findMany({
-            where: { orderId: { in: orders.map((o) => o.id) }, status: 'REQUESTED' },
+            where: { orderId: { in: allOrders.map((o) => o.id) }, status: 'REQUESTED' },
             select: { orderId: true },
           })
         : [];
@@ -717,10 +698,57 @@ export class GameService {
     const now = new Date();
     const settled = new Set<string>();
     const pending = new Set<string>();
-    for (const o of orders) {
+    // Mốc của đơn là lúc giao (không có thì lần cập nhật cuối), đúng mốc returnWindowClosed dùng để tính hạn đổi/trả.
+    const orderAt = new Map<string, number>();
+    for (const o of allOrders) {
+      orderAt.set(o.id, (o.deliveredAt ?? o.updatedAt).getTime());
       (returnWindowClosed(o, windowDays, now) && !withOpenRequest.has(o.id) ? settled : pending).add(o.id);
     }
-    return { settled, pending };
+    // Sản phẩm đã bị trả (dù một phần) trên đơn đó đã mất thưởng đánh giá nên không tính vào nhiệm vụ nữa.
+    const returned = await returnedProductsByOrder(this.prisma, [...new Set(imageReviews.map((r) => r.orderId))]);
+    const counted = imageReviews.filter((r) => !returned.get(r.orderId)?.has(r.productId));
+    return { profile, settled, pending, orderAt, counted, referralRows, now };
+  }
+
+  /**
+   * Chỉ số của một mốc bắt đầu (`since` rỗng = trọn đời). ORDER_COUNT chỉ tính đơn giao từ mốc; REVIEW_COUNT chỉ tính đánh giá
+   * VIẾT từ mốc, còn đơn gốc của nó (giao trước mốc cũng được) vẫn xét hết hạn đổi/trả như thường.
+   */
+  private missionMetricsFor(data: Awaited<ReturnType<GameService['loadMissionData']>>, since: Date | null) {
+    const { profile, settled, pending, orderAt, counted, referralRows, now } = data;
+    const sinceMs = since ? since.getTime() : null;
+    const ordersFrom = (ids: Set<string>) => [...ids].filter((id) => sinceMs === null || (orderAt.get(id) ?? 0) >= sinceMs).length;
+    const reviews = counted.filter((r) => sinceMs === null || r.createdAt.getTime() >= sinceMs);
+    const settledProducts = new Set(reviews.filter((r) => settled.has(r.orderId)).map((r) => r.productId));
+    const pendingProducts = new Set(
+      reviews.filter((r) => pending.has(r.orderId) && !settledProducts.has(r.productId)).map((r) => r.productId),
+    );
+    return {
+      streakDays: this.streakSince(profile, since, now),
+      ordersCount: ordersFrom(settled),
+      pendingOrdersCount: ordersFrom(pending),
+      reviewedProductsCount: settledProducts.size,
+      pendingReviewedProductsCount: pendingProducts.size,
+      referralsCount: referralSuccessesSince(referralRows, since),
+    };
+  }
+
+  /**
+   * Chuỗi điểm danh tính từ mốc. `streakDays` là giá trị đã lưu, chỉ đặt lại ở lần điểm danh kế tiếp, nên chuỗi đã đứt vẫn
+   * giữ số cũ: đứt (lần cuối trước hôm qua theo ngày VN) hoặc lần cuối trước ngày của mốc thì tiến độ 0; còn lại là số ngày liền
+   * từ mốc tới lần điểm danh cuối (cả hai đầu), tối đa chuỗi đang có.
+   */
+  private streakSince(
+    profile: { streakDays: number; lastCheckInAt: Date | null } | null,
+    since: Date | null,
+    now: Date,
+  ): number {
+    const streak = profile?.streakDays ?? 0;
+    if (!since) return streak;
+    const last = profile?.lastCheckInAt;
+    if (!last || last.getTime() < startOfVnDay(since).getTime()) return 0;
+    if (vnDaysBetween(last, now) > 1) return 0;
+    return Math.min(streak, vnDaysBetween(since, last) + 1);
   }
 
   /** returns.window_days (cùng khoá và mặc định 7 với OrderReturnsService.request); sai kiểu → 7. */
@@ -751,16 +779,19 @@ export class GameService {
   }
 
   /** Chỉ số theo từng mốc bắt đầu khác nhau (đa số nhiệm vụ không có mốc nên chỉ tính một lần). */
-  private async metricsBySince(userId: string, missions: { startsAt: Date | null }[]) {
-    const keys = [...new Set(missions.map((m) => m.startsAt?.getTime() ?? 0))];
-    const entries = await Promise.all(keys.map(async (k) => [k, await this.missionMetrics(userId, k ? new Date(k) : null)] as const));
-    const byKey = new Map(entries);
-    return (m: { startsAt: Date | null }) => byKey.get(m.startsAt?.getTime() ?? 0)!;
+  private async metricsBySince(userId: string) {
+    const data = await this.loadMissionData(userId);
+    const byKey = new Map<number, ReturnType<GameService['missionMetricsFor']>>();
+    return (m: { startsAt: Date | null }) => {
+      const k = m.startsAt?.getTime() ?? 0;
+      if (!byKey.has(k)) byKey.set(k, this.missionMetricsFor(data, k ? new Date(k) : null));
+      return byKey.get(k)!;
+    };
   }
 
   async getMissions(userId: string) {
     const missions = await this.prisma.mission.findMany({ where: { disabledAt: null } });
-    const metricsFor = await this.metricsBySince(userId, missions);
+    const metricsFor = await this.metricsBySince(userId);
 
     const missionIds = missions.map((m) => m.id);
     // A1-02: mission_progress giờ là khoá "đã nhận" thật (trước đây tồn tại trong schema nhưng
@@ -831,8 +862,10 @@ export class GameService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        // Quản trị có thể tạm dừng giữa lúc đọc và lúc ghi; đọc lại trong tx để lần nhận cuối không lọt qua.
-        const live = await tx.mission.findUnique({ where: { id: mission.id }, select: { disabledAt: true } });
+        // Khoá dòng nhiệm vụ rồi đọc lại: quản trị tạm dừng hay sửa điểm thưởng giữa lúc đọc và lúc ghi thì lần nhận này
+        // thấy đúng giá trị mới (lần sửa chờ giao dịch này xong, hoặc đã xong trước khi ta khoá).
+        await tx.$queryRaw`SELECT "id" FROM "missions" WHERE "id" = ${mission.id} FOR UPDATE`;
+        const live = await tx.mission.findUnique({ where: { id: mission.id }, select: { disabledAt: true, rewardPoints: true } });
         if (!live || live.disabledAt) throw new BadRequestException('Nhiệm vụ này đang tạm dừng.');
         // Insert claim TRƯỚC khi cộng thưởng — khoá idempotency thật là unique của mission_progress,
         // không phải check đọc-rồi-ghi (TOCTOU dưới đồng thời).
@@ -847,7 +880,8 @@ export class GameService {
           },
         });
 
-        await this.creditPoints(userId, mission.rewardPoints, `MISSION:${mission.code}:${cycleKey}`, tx, rewardExpiresAt);
+        const expiresAt = rewardExpiresAt ?? (live.rewardPoints > 0 ? await this.rewardPointsExpiresAt() : null);
+        await this.creditPoints(userId, live.rewardPoints, `MISSION:${mission.code}:${cycleKey}`, tx, expiresAt);
 
         // rewardCoupon (schema) chưa được seed dùng ở nhiệm vụ nào hiện tại — hỗ trợ sẵn để nhiệm
         // vụ tương lai cấu hình coupon không bị lặp lại lỗi "hứa mà không trả" như A1-02.
@@ -857,7 +891,7 @@ export class GameService {
           couponCode = await this.grantCoupon(userId, couponAmount, tx);
         }
 
-        return { claimed: true, rewardPoints: mission.rewardPoints, couponCode };
+        return { claimed: true, rewardPoints: live.rewardPoints, couponCode };
       });
     } catch (err) {
       if (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
