@@ -427,9 +427,10 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     expect(await prisma.gardenPlot.count({ where: { userId: target.id } })).toBe(1);
     expect(await prisma.gameSpin.count({ where: { userId: target.id } })).toBe(1);
 
+    // Đích đã chơi (đã điểm danh): vườn guest ở lại guest. Đích chỉ có nước từ đơn (chưa chơi) được nhận vườn guest: xem game-order-water.race-spec.
     const other = await guestAndTarget({}, {});
     await prisma.gameProfile.create({ data: { userId: other.guest.id, totalSeeds: 40 } });
-    await prisma.gameProfile.create({ data: { userId: other.target.id, totalSeeds: 9 } });
+    await prisma.gameProfile.create({ data: { userId: other.target.id, totalSeeds: 9, lastCheckInAt: new Date() } });
     await prisma.gardenPlot.create({ data: { userId: other.guest.id, slot: 1 } });
     zaloIdForNextCall = other.target.zaloId!;
     await auth.ensurePhoneForCurrentUser(other.guest.id, 'code', 'access');
