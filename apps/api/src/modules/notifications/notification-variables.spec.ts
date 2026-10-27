@@ -79,7 +79,7 @@ describe('Biến của mẫu thông báo', () => {
  * Dò ba dạng: `notify(user, MÃ, { ... })` / `notifySafe(n, user, MÃ, { ... })`, và object `{ template|templateCode: MÃ, data: ... }`.
  * MÃ có thể là chuỗi, nhánh `a ? 'X' : 'Y'`, hằng thành viên như `CTV_NOTIFICATION.NEW` hay hằng cùng tên ở file khác. Dữ liệu có thể là
  * object literal hoặc biến cục bộ `const data = { ... }` (kèm `data.khoá = ...`). Chỗ KHÔNG giải mã được tĩnh phải có trong
- * DYNAMIC_SITES kèm lý do (và nếu khai `codes` thì khoá của object literal ở đó vẫn được kiểm: `each` = phải có ở từng mã, mặc định = có ở ít nhất một mã); chỗ chưa liệt kê làm spec đỏ.
+ * DYNAMIC_SITES kèm lý do (và nếu khai `codes` thì khoá của object literal ở đó vẫn được kiểm cho TỪNG mã, không dựa vào nội dung seed); chỗ chưa liệt kê làm spec đỏ.
  */
 describe('Bảng biến khớp các chỗ gọi notify()', () => {
   const INTERNAL_KEYS = new Set(['post_id', 'route', 'product_slug']);
@@ -93,7 +93,7 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
   };
 
   /** Chỗ gọi không giải mã được tĩnh: `tệp|đoạn mã của mã mẫu` (hoặc `|data: đoạn mã dữ liệu`) → lý do, và `codes` nếu biết mã nào đi qua. */
-  const DYNAMIC_SITES: Record<string, { reason: string; codes?: string[]; each?: boolean }> = {
+  const DYNAMIC_SITES: Record<string, { reason: string; codes?: string[] }> = {
     'modules/dealer/dealer.service.ts|code': { reason: 'Hàm gửi báo đại lý nhận mã mẫu làm tham số (DEALER_REWARD_CLAIM_*); chỗ gọi truyền chuỗi cùng object literal.', codes: ['DEALER_REWARD_CLAIM_NEW', 'DEALER_REWARD_CLAIM_APPROVED', 'DEALER_REWARD_CLAIM_REJECTED', 'DEALER_REWARD_CLAIM_PAID'] },
     'modules/dealer/dealer.service.ts|\'DEALER_BONUS_ADJUSTED\'|data:data': { reason: 'Gửi sau commit; dữ liệu là tham số của notifyBonusAdjustedAfterCommit, được dò ở chỗ gọi hàm đó (FIXED_CODE_CALLS).' },
     'modules/external-points/external-claim-status.ts|code': { reason: 'notifySafe chuyển tiếp mã và dữ liệu của người gọi; chỗ gọi notifySafe được dò (NOTIFY_CALLS).' },
@@ -110,8 +110,26 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
     'modules/vouchers/vouchers.service.ts|opts.templateCode': {
       reason: 'Hàm dùng chung cho mọi loại mã giảm giá; mã mẫu do người gọi truyền (templateCode) và dữ liệu là object literal ngay tại chỗ.',
       codes: ['WELCOME_VOUCHER', 'BIRTHDAY_VOUCHER', 'WINBACK_VOUCHER', 'MILESTONE_VOUCHER', 'SECOND_ORDER_VOUCHER'],
-      each: true,
     },
+  };
+
+  /**
+   * Khoá mà chỗ gọi điền chung cho cả các nhánh `a ? 'X' : 'Y'` (hoặc nhiều mã đi qua cùng một object) nhưng mẫu của mã này không
+   * dùng nên cố ý không có trong bảng của mã đó: mã → khoá.
+   */
+  const FILLED_NOT_LISTED: Record<string, string[]> = {
+    DEALER_APPLICATION_APPROVED: ['reason'],
+    DEALER_APPLICATION_REJECTED: ['tier'],
+    MERCHANT_PRODUCT_APPROVED: ['reason'],
+    MERCHANT_PRODUCT_EDIT_APPROVED: ['reason'],
+    CHAT_ORDER_POINTS_CREDITED: ['code'],
+    COMMUNITY_EXPERT_REPLIED: ['author'],
+    ORDER_CONFIRMED: ['points_note', 'refund_note'],
+    ORDER_PACKED: ['points_note', 'refund_note'],
+    ORDER_SHIPPING: ['points_note', 'refund_note'],
+    ORDER_DELIVERED: ['refund_note'],
+    ORDER_CANCELLED: ['points_note'],
+    ORDER_RETURNED: ['points_note'],
   };
 
   function sourceFiles(dir: string, out: string[] = []): string[] {
@@ -229,7 +247,7 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
     return [...base, ...extra];
   };
 
-  interface Found { code: string; key: string; site: string; group: string[] }
+  interface Found { code: string; key: string; site: string }
   const scan = () => {
     const filled: Found[] = [];
     const undecodable: { site: string; id: string; reason: string }[] = [];
@@ -240,7 +258,7 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
         const cs = codesOf(codeExpr);
         const ks = keysOf(dataExpr, sf);
         if (cs && ks) {
-          for (const code of cs) for (const key of ks) filled.push({ code, key, site: where(at), group: cs });
+          for (const code of cs) for (const key of ks) filled.push({ code, key, site: where(at) });
           return;
         }
         const codeId = `${rel}|${codeExpr?.getText(sf)}`;
@@ -249,7 +267,7 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
         if (!dyn) return void undecodable.push({ site: where(at), id, reason: cs ? 'dữ liệu không giải mã được tĩnh' : 'mã mẫu không giải mã được tĩnh' });
         dynamicHit.add(id);
         const declared = dyn.codes ?? [];
-        for (const c of declared) for (const key of ks ?? []) filled.push({ code: c, key, site: where(at), group: dyn.each ? [c] : declared });
+        for (const c of declared) for (const key of ks ?? []) filled.push({ code: c, key, site: where(at) });
       };
       const visit = (n: ts.Node): void => {
         if (ts.isCallExpression(n)) {
@@ -260,7 +278,7 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
           if (at !== undefined && n.arguments.length > at + 1) record(n.arguments[at], n.arguments[at + 1], n);
           else if (fixed && n.arguments.length > fixed.dataAt) {
             const keys = keysOf(n.arguments[fixed.dataAt], sf);
-            if (keys) for (const key of keys) filled.push({ code: fixed.code, key, site: where(n), group: [fixed.code] });
+            if (keys) for (const key of keys) filled.push({ code: fixed.code, key, site: where(n) });
           }
         } else if (ts.isObjectLiteralExpression(n)) {
           const tpl = n.properties.find((p): p is ts.PropertyAssignment => ts.isPropertyAssignment(p) && /^(template|templateCode)$/.test(p.name.getText(sf)));
@@ -278,9 +296,21 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
 
   it('không có biến nào mã điền mà bảng thiếu', () => {
     expect(result.filled.length).toBeGreaterThan(80);
-    // Chỗ chọn mã bằng `a ? 'X' : 'Y'` điền chung một object: biến chỉ cần có ở một trong các mã (nhánh kia không dùng).
-    const missing = result.filled.filter((f) => TEMPLATE_VARIABLES[f.code] && !INTERNAL_KEYS.has(f.key) && !f.key.endsWith('_id') && !f.group.some((c) => TEMPLATE_VARIABLES[c]?.includes(f.key)));
+    // Chỗ chọn mã bằng `a ? 'X' : 'Y'` điền chung một object, nhưng từng mã phải có đủ khoá mà chỗ đó điền, trừ những cặp ghi rõ trong
+    // FILLED_NOT_LISTED (khoá chỉ một nhánh dùng). Không dựa vào nội dung mẫu seed.
+    const missing = result.filled.filter(
+      (f) => TEMPLATE_VARIABLES[f.code] && !INTERNAL_KEYS.has(f.key) && !f.key.endsWith('_id') && !TEMPLATE_VARIABLES[f.code]!.includes(f.key) && !FILLED_NOT_LISTED[f.code]?.includes(f.key),
+    );
     expect(missing).toEqual([]);
+  });
+
+  it('FILLED_NOT_LISTED không còn mục thừa: khoá vẫn được điền ở đâu đó và vẫn chưa có trong bảng của mã', () => {
+    for (const [code, keys] of Object.entries(FILLED_NOT_LISTED)) {
+      for (const key of keys) {
+        expect({ code, key, filled: result.filled.some((f) => f.code === code && f.key === key) }).toEqual({ code, key, filled: true });
+        expect({ code, key, listed: TEMPLATE_VARIABLES[code]?.includes(key) }).toEqual({ code, key, listed: false });
+      }
+    }
   });
 
   it('mã mẫu điền ở chỗ gọi đều có trong bảng (hoặc là mẫu tự thêm ngoài bảng)', () => {
