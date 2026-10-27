@@ -16,7 +16,7 @@ import {
   formatDateTime,
   addressLine,
 } from '../utils/format';
-import { shippingEventLabel } from '../utils/format-shipping';
+import { journeyEventLabel, shippingEventLabel } from '../utils/format-shipping';
 import {
   STATUS_COLOR,
   buyerStatusLabel,
@@ -538,7 +538,7 @@ export default function OrderDetailPage() {
                           fontWeight: i === 0 ? 600 : 400,
                         }}
                       >
-                        {shippingEventLabel(ev.status) ?? '—'}
+                        {journeyEventLabel(ev)}
                       </Text>
                       {ev.at && (
                         <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
