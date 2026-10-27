@@ -79,6 +79,12 @@ describe('FlashSale', () => {
     expect(c.textContent).toContain('80.000đ');
     expect(c.querySelector('s, del, .line-through')?.textContent).toBe('100.000đ');
     expect(c.textContent).toContain('Đã bán 20%');
+    expect(c.querySelector('a[href="/san-pham/nuoc-rua-chen?v=v1"]')).not.toBeNull();
+  });
+
+  it('giá Giờ vàng không rẻ hơn giá đang bán: liên kết không ép mở phân loại Giờ vàng', async () => {
+    activeResult = async () => [active({ flashPrice: 100000 })];
+    const c = await mount(<FlashSale />);
     expect(c.querySelector('a[href="/san-pham/nuoc-rua-chen"]')).not.toBeNull();
   });
 
@@ -203,7 +209,7 @@ describe('FlashSale — khổ máy tính', () => {
   it('thẻ giờ vàng rộng cố định từ md (ít món thì hàng ngắn lại, thẻ không phình), không giãn theo số món', async () => {
     activeResult = async () => [active()];
     const c = await mount(<FlashSale />);
-    const tile = c.querySelector('a[href="/san-pham/nuoc-rua-chen"]')!;
+    const tile = c.querySelector('a[href="/san-pham/nuoc-rua-chen?v=v1"]')!;
     expect(tile.className).toContain('sm:w-44');
     expect(tile.className).toContain('lg:w-48');
     expect(tile.className).not.toContain('md:flex-1');

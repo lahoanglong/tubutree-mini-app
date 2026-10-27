@@ -10,6 +10,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { flashDisplay, soldPercent } from '@/lib/flash-display';
 import { formatVnd } from '@/lib/format-vnd';
+import { productHref } from '@/lib/product-href';
 import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
 import { serverNow } from '@tubutree/app-core/server-clock';
@@ -86,7 +87,7 @@ export function FlashSale() {
           const sold = soldPercent(item.soldCount, item.quota);
           return (
             <li key={item.itemId} className="flex-none">
-              <Link href={`/san-pham/${encodeURIComponent(item.productSlug)}`} className={CARD}>
+              <Link href={productHref(encodeURIComponent(item.productSlug), price < was ? item.variationId : null)} className={CARD}>
                 <Thumb src={item.thumbnail} name={item.productName} pct={pct} />
                 <div className="p-2">
                   <p className="line-clamp-2 h-8 text-xs leading-4 text-stone-900">{item.productName}</p>

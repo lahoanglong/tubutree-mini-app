@@ -90,14 +90,15 @@ export default function AddToCart({
     setQty((q) => Math.min(q, maxQty));
   }, [maxQty, setQty]);
 
-  // Khách vào từ thẻ ghi giá Giờ vàng thì mở đúng phân loại đang giảm (cùng cách Mini App), trừ khi khách đã tự chọn hoặc
-  // phân loại đó hết hàng.
+  // Khách vào từ thẻ hay dải Giờ vàng (`?v=<variationId>`, như Mini App truyền state.variationId) thì mở đúng phân loại đang giảm.
+  // Vào từ nơi khác thì giữ phân loại mặc định, kể cả khi sản phẩm có Giờ vàng ở phân loại khác.
   useEffect(() => {
-    if (userPicked.current || flash.length === 0) return;
-    const onSale = variations.find((v) => v.stock > 0 && variationPricing(v, flash).isFlash);
-    if (onSale && onSale.id !== selectedId) setSelectedId(onSale.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy khi đợt Giờ vàng vừa về
-  }, [flash]);
+    const wanted = new URLSearchParams(window.location.search).get('v');
+    if (!wanted || userPicked.current) return;
+    const target = variations.find((v) => v.id === wanted && v.stock > 0);
+    if (target && target.id !== selectedId) setSelectedId(target.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy một lần khi trang vừa mở
+  }, []);
 
   // Phân loại mặc định (theo bản ISR) hết hàng thật rồi mà còn phân loại khác → chọn giúp, trừ khi khách đã tự chọn.
   useEffect(() => {

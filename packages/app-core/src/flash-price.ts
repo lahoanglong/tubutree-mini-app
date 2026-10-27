@@ -19,7 +19,7 @@ export interface CardPricing {
   salePct: number;
   /** Giá gạch; null = không gạch. */
   compareAt: number | null;
-  /** Có Giờ vàng cho sản phẩm này, dù không rẻ hơn: trang chi tiết mở đúng phân loại đang giảm. */
+  /** Chỉ có khi Giờ vàng thắng trên thẻ: trang chi tiết mở đúng phân loại đang giảm. */
   flashVariationId?: string;
 }
 
@@ -51,8 +51,10 @@ export function pickDefaultVariation<T extends { id: string; sku?: string; retai
 }
 
 /**
- * Giá thẻ sản phẩm. `basePrice`/`salePrice` của thẻ là giá của phân loại đại diện (API đã chọn, xem `pickDefaultVariation`). Giờ vàng
- * ở một phân loại khác thì thẻ dùng giá niêm yết và giá đang bán của chính phân loại đó, như dải Giờ vàng và trang chi tiết.
+ * Giá thẻ sản phẩm. `basePrice`/`salePrice` của thẻ là giá của phân loại đại diện (API đã chọn, xem `pickDefaultVariation`).
+ * Giờ vàng chỉ thắng khi rẻ hơn cả giá đang bán của chính phân loại có Giờ vàng lẫn giá đang bán của thẻ; khi đó thẻ dùng giá niêm yết
+ * và giá đang bán của phân loại Giờ vàng (như dải Giờ vàng và trang chi tiết mở ở phân loại đó) và trả `flashVariationId`. Không thắng
+ * thì thẻ giữ giá phân loại đại diện, không nhãn Giờ vàng, không `flashVariationId`: trang chi tiết mở ở phân loại mặc định.
  */
 export function cardPricing(
   product: { slug: string; basePrice: number; salePrice?: number | null },
@@ -61,12 +63,12 @@ export function cardPricing(
   const item = flash.find((f) => f.productSlug === product.slug);
   const cardStanding = product.salePrice ?? product.basePrice;
   const flashStanding = item && item.retailPrice != null ? (item.salePrice ?? item.retailPrice) : cardStanding;
-  if (item && item.flashPrice < flashStanding) {
+  if (item && item.flashPrice < flashStanding && item.flashPrice < cardStanding) {
     const view = discountView(item.flashPrice, flashStanding);
     return { price: item.flashPrice, isFlash: true, salePct: view.salePct, compareAt: view.compareAt, flashVariationId: item.variationId };
   }
   const view = discountView(cardStanding, product.basePrice);
-  return { price: cardStanding, isFlash: false, salePct: view.salePct, compareAt: view.compareAt, flashVariationId: item?.variationId };
+  return { price: cardStanding, isFlash: false, salePct: view.salePct, compareAt: view.compareAt };
 }
 
 export interface VariationPricingResult {

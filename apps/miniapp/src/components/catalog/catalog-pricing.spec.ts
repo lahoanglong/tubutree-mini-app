@@ -16,8 +16,8 @@ describe('tilePricing — quy tắc flash > sale > base (giống ProductCard cũ
     expect(tilePricing({ slug: 'nrc', basePrice: 100000, salePrice: 80000 }, [{ ...FLASH, salePrice: 80000 }])).toEqual({ price: 50000, isFlash: true, salePct: 38, compareAt: 80000, flashVariationId: 'v9' });
   });
 
-  it('flash KHÔNG rẻ hơn → giữ giá đang bán, nhưng vẫn mở đúng phân loại flash (như ProductCard cũ)', () => {
-    expect(tilePricing({ slug: 'nrc', basePrice: 100000, salePrice: 40000 }, [{ ...FLASH, salePrice: 40000 }])).toEqual({ price: 40000, isFlash: false, salePct: 60, compareAt: 100000, flashVariationId: 'v9' });
+  it('flash KHÔNG rẻ hơn → giữ giá đang bán, không mang phân loại flash', () => {
+    expect(tilePricing({ slug: 'nrc', basePrice: 100000, salePrice: 40000 }, [{ ...FLASH, salePrice: 40000 }])).toEqual({ price: 40000, isFlash: false, salePct: 60, compareAt: 100000 });
   });
 
   it('flash của sản phẩm KHÁC không ảnh hưởng', () => {

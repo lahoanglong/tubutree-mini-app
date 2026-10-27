@@ -17,9 +17,10 @@ describe('cardPricing', () => {
     expect(cardPricing({ slug: 'khac', basePrice: 100_000, salePrice: 80_000 }, [])).toMatchObject({ price: 80_000, compareAt: 100_000, salePct: 20 });
   });
 
-  it('Giờ vàng không rẻ hơn giá đang bán thì bỏ qua nhưng vẫn nhớ phân loại', () => {
+  it('Giờ vàng không rẻ hơn giá đang bán thì bỏ qua, thẻ không mang phân loại Giờ vàng', () => {
     const p = cardPricing({ slug: 'hat-dieu', basePrice: 100_000, salePrice: 90_000 }, flash.map((f) => ({ ...f, flashPrice: 95_000 })));
-    expect(p).toMatchObject({ price: 90_000, isFlash: false, compareAt: 100_000, flashVariationId: 'v1' });
+    expect(p).toMatchObject({ price: 90_000, isFlash: false, compareAt: 100_000 });
+    expect(p.flashVariationId).toBeUndefined();
   });
 });
 
@@ -120,7 +121,21 @@ describe('dữ liệu kiểu Pancake: Product.salePrice rỗng, giá nằm ở p
 
   it('Giờ vàng ở phân loại hai không rẻ hơn giá đang bán của chính nó: thẻ giữ giá phân loại đại diện', () => {
     const flash = [{ productSlug: 'hat-dieu', variationId: 'v2', flashPrice: 320_000, retailPrice: 300_000, salePrice: null }];
-    expect(cardPricing(cardOf(variations), flash)).toMatchObject({ price: 159_000, isFlash: false, compareAt: 180_000 });
+    const card = cardPricing(cardOf(variations), flash);
+    expect(card).toMatchObject({ price: 159_000, isFlash: false, compareAt: 180_000 });
+    expect(card.flashVariationId).toBeUndefined();
+  });
+
+  it('Giờ vàng ở phân loại hai rẻ hơn phân loại hai nhưng đắt hơn giá thẻ (200.000đ so với 159.000đ): thẻ giữ giá thẻ, không nhãn, trang chi tiết mở phân loại mặc định', () => {
+    const flash = [{ productSlug: 'hat-dieu', variationId: 'v2', flashPrice: 200_000, retailPrice: 300_000, salePrice: null }];
+    const card = cardPricing(cardOf(variations), flash);
+    expect(card).toMatchObject({ price: 159_000, isFlash: false, compareAt: 180_000, salePct: 12 });
+    expect(card.flashVariationId).toBeUndefined();
+  });
+
+  it('Giờ vàng ở phân loại hai rẻ hơn giá thẻ: thẻ dùng giá Giờ vàng và mang phân loại đó', () => {
+    const flash = [{ productSlug: 'hat-dieu', variationId: 'v2', flashPrice: 150_000, retailPrice: 300_000, salePrice: null }];
+    expect(cardPricing(cardOf(variations), flash)).toMatchObject({ price: 150_000, isFlash: true, flashVariationId: 'v2' });
   });
 });
 
