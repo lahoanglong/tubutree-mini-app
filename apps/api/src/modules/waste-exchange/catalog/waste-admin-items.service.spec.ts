@@ -86,12 +86,13 @@ describe('WasteAdminItemsService', () => {
     });
   });
 
-  it('create rejects a hazardous item set to ACTIVE', async () => {
+  it('create accepts a hazardous item set to ACTIVE (pin: xử lý riêng, vẫn nhận)', async () => {
     const { svc, wasteItem } = setup();
+    wasteItem.create.mockResolvedValue({ ...battery, id: 'i10', status: 'ACTIVE' });
     await expect(
-      svc.create('a1', { code: 'PIN', name: 'Pin', unitLabel: 'viên', unitsPerPoint: 1, pointsPerGroup: 1000, hazardous: true, status: 'ACTIVE' }),
-    ).rejects.toThrow(new BadRequestException('Món nguy hại không được đặt Đang nhận.'));
-    expect(wasteItem.create).not.toHaveBeenCalled();
+      svc.create('a1', { code: 'PIN', name: 'Pin', unitLabel: 'viên', unitsPerPoint: 10, pointsPerGroup: 1000, hazardous: true, status: 'ACTIVE' }),
+    ).resolves.toMatchObject({ code: 'PIN', hazardous: true, status: 'ACTIVE' });
+    expect(wasteItem.create).toHaveBeenCalledWith({ data: expect.objectContaining({ hazardous: true, status: 'ACTIVE' }) });
   });
 
   it('create maps a P2002 on code to a 409', async () => {
@@ -152,18 +153,19 @@ describe('WasteAdminItemsService', () => {
     expect(writeEvent).not.toHaveBeenCalled();
   });
 
-  it('update refuses ACTIVE on a hazardous item', async () => {
-    const { svc, $queryRaw } = setup();
+  it('update sets ACTIVE on a hazardous item (admin bật pin)', async () => {
+    const { svc, wasteItem, $queryRaw } = setup();
     $queryRaw.mockResolvedValue([battery]);
-    await expect(svc.update('a1', 'i9', { status: 'ACTIVE' })).rejects.toThrow(new BadRequestException('Món nguy hại không được đặt Đang nhận.'));
+    wasteItem.update.mockResolvedValue({ ...battery, status: 'ACTIVE' });
+    await expect(svc.update('a1', 'i9', { status: 'ACTIVE' })).resolves.toMatchObject({ id: 'i9', hazardous: true, status: 'ACTIVE' });
+    expect(wasteItem.update).toHaveBeenCalledWith({ where: { id: 'i9' }, data: { status: 'ACTIVE' } });
   });
 
-  it('update refuses to flag an ACTIVE item hazardous', async () => {
-    const { svc, $queryRaw } = setup();
+  it('update can flag an ACTIVE item hazardous (xử lý riêng), but never un-flag', async () => {
+    const { svc, wasteItem, $queryRaw } = setup();
     $queryRaw.mockResolvedValue([carton]);
-    await expect(svc.update('a1', 'i1', { hazardous: true })).rejects.toThrow(
-      new BadRequestException('Món đang nhận không bật được cờ nguy hại; hãy chuyển món sang Sắp nhận hoặc Ẩn trước.'),
-    );
+    wasteItem.update.mockResolvedValue({ ...carton, hazardous: true });
+    await expect(svc.update('a1', 'i1', { hazardous: true })).resolves.toMatchObject({ id: 'i1', hazardous: true, status: 'ACTIVE' });
   });
 
   it('update accepts hazardous together with a non-ACTIVE status', async () => {

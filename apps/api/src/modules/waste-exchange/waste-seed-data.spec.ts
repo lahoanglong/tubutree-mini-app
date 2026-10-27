@@ -15,7 +15,7 @@ const EXPECTED_ITEMS = [
   item('wi-bubble-wrap', 'BUBBLE_WRAP', 'Nilon chống sốc', 'túi lớn', 1, 1000, 0, 10, 60, 'ACTIVE', 'Túi còn nguyên, khô, không dính băng keo hay nhãn.', 20, false),
   item('wi-milk-carton', 'MILK_CARTON', 'Vỏ hộp sữa sạch', 'vỏ', 5, 1000, 0, 50, 300, 'ACTIVE', 'Rửa sạch, để ráo, ép dẹt.', 30, false, true),
   item('wi-tubu-bottle', 'TUBU_BOTTLE', 'Vỏ chai, hộp Tubu Tree', 'vỏ', 1, 2000, 2, null, 20, 'ACTIVE', 'Vỏ chai hoặc hộp Tubu Tree đã dùng hết, rửa sạch, để ráo.', 40, false, true),
-  item('wi-battery', 'BATTERY', 'Pin đã dùng', 'viên', 1, 1000, 0, null, null, 'COMING_SOON', null, 50, true),
+  item('wi-battery', 'BATTERY', 'Pin đã dùng', 'viên', 10, 1000, 0, 20, 50, 'ACTIVE', 'Dán băng keo hai đầu cực. Không nhận pin phồng, chảy nước, pin xe điện hay ắc quy.', 50, true),
 ];
 
 const gift = (id: string, kind: 'VOUCHER' | 'TREE', name: string, description: string, label: string | null, cost: number, sort: number, v: [ 'FREESHIP' | 'AMOUNT' | 'PERCENT', number, number, number | null ] | null) =>
@@ -79,12 +79,18 @@ describe('waste reference data constants', () => {
   });
 });
 
+// Hàng pin trong migration gốc (20261020000000) còn là Sắp nhận; migration 20261027000000 mới đưa lên mức hiện hành, nên phần so khớp migration gốc dùng giá trị cũ.
+const ORIGINAL_BATTERY = { unitsPerPoint: 1, pointsPerGroup: 1000, dailyCapQty: null, monthlyCapQty: null, status: 'COMING_SOON', prepInstructions: null };
+
 const q = (v: string | number | boolean | null) => (v === null ? 'NULL' : typeof v === 'string' ? `'${v}'` : String(v));
 const cols = (names: string[]) => names.map((c) => `"${c}"`).join(', ');
 
 function renderItems(): string {
   const names = ['id', 'code', 'name', 'unitLabel', 'unitsPerPoint', 'pointsPerGroup', 'dropsPerUnit', 'dailyCapQty', 'monthlyCapQty', 'status', 'prepInstructions', 'sortOrder', 'hazardous'];
-  const rows = WASTE_SEED_ITEMS.map((i) => `  (${names.map((n) => q((i as unknown as Record<string, string | number | boolean | null>)[n]!)).join(', ')}, NOW())`);
+  const rows = WASTE_SEED_ITEMS.map((raw) => {
+    const i = raw.id === 'wi-battery' ? { ...raw, ...ORIGINAL_BATTERY } : raw;
+    return `  (${names.map((n) => q((i as unknown as Record<string, string | number | boolean | null>)[n]!)).join(', ')}, NOW())`;
+  });
   return `INSERT INTO "waste_items" (${cols(names)}, "updatedAt") VALUES\n${rows.join(',\n')}\nON CONFLICT DO NOTHING;`;
 }
 function renderGifts(): string {
@@ -101,6 +107,17 @@ describe('waste reference data in the migration and in seed.ts', () => {
   it('migration section equals the rendering of the constants (so prod and dev seed the same rows)', () => {
     expect(a).toBeGreaterThanOrEqual(0);
     expect(body).toBe(`${renderItems()}\n${renderGifts()}`);
+  });
+  it('migration 20261027000000 bỏ CHECK nguy hại và đưa pin lên đúng mức của hằng số, chỉ động tới món BATTERY', () => {
+    const sql = readFileSync(join(__dirname, '../../../prisma/migrations/20261027000000_waste_battery_active/migration.sql'), 'utf-8')
+      .split('\n').filter((l) => !l.trim().startsWith('--')).join(' ').replace(/\s+/g, ' ').trim();
+    const battery = WASTE_SEED_ITEMS.find((i) => i.code === 'BATTERY')!;
+    expect(sql).toContain('ALTER TABLE "waste_items" DROP CONSTRAINT IF EXISTS "waste_items_hazardous_not_active_chk";');
+    expect(sql).toContain(`SET "unitsPerPoint" = ${battery.unitsPerPoint}, "pointsPerGroup" = ${battery.pointsPerGroup}, "dailyCapQty" = ${battery.dailyCapQty}, "monthlyCapQty" = ${battery.monthlyCapQty}, "status" = '${battery.status}', "prepInstructions" = '${battery.prepInstructions}'`);
+    expect(sql).toContain(`WHERE "code" = 'BATTERY' AND "hazardous" = true;`);
+    expect(sql.match(/UPDATE/g)).toHaveLength(1);
+    expect(sql).not.toMatch(/waste_point_items|INSERT/i);
+    expect(battery.warehouseOnly).toBe(false);
   });
   it('no seed tuple can be mistaken for a notification template tuple by the template spec', () => {
     expect(body.match(/\('[^']+', '([A-Z_]+)', '[A-Z]+', '([^']*)'\)/g)).toBeNull();

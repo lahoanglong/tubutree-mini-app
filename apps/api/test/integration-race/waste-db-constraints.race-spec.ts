@@ -49,9 +49,10 @@ describe('waste DB constraints (real Postgres)', () => {
     await set(`"dailyCapQty" = NULL`);
     await violates(set(`"monthlyCapQty" = 0`), 'waste_items_monthly_cap_chk');
     await set(`"monthlyCapQty" = 60`);
-    await violates(set(`"hazardous" = true`), 'waste_items_hazardous_not_active_chk');
+    // Migration 20261027000000 bỏ CHECK cũ: món nguy hại (xử lý riêng, như pin) được phép ACTIVE.
+    await set(`"hazardous" = true`);
     await set(`"hazardous" = true, "status" = 'COMING_SOON'`);
-    await violates(set(`"status" = 'ACTIVE'`), 'waste_items_hazardous_not_active_chk');
+    await set(`"status" = 'ACTIVE'`);
   });
 
   it('waste_points checks: partner needs a quota, warehouse never pauses', async () => {
@@ -258,8 +259,11 @@ describe('seeded reference data after migrate deploy', () => {
       expect([typeof g.voucherType, typeof g.voucherValue, typeof g.voucherValidDays, typeof g.pointsCost]).toEqual(['string', 'number', 'number', 'number']);
     }
   });
-  it('the seeded rows are protected by the CHECKs (a hazardous battery cannot go ACTIVE, vouchers keep their fields and cost range)', async () => {
-    await violates(exec(`UPDATE "waste_items" SET "status" = 'ACTIVE', "hazardous" = true WHERE "id" = 'wi-battery'`), 'waste_items_hazardous_not_active_chk');
+  it('pin được seed ACTIVE ở mức mới và CHECK nguy hại đã bỏ; vouchers vẫn giữ trường và khoảng giá', async () => {
+    const [battery] = await prisma.wasteItem.findMany({ where: { id: 'wi-battery' } });
+    expect(battery).toMatchObject({ hazardous: true, warehouseOnly: false, status: 'ACTIVE', unitsPerPoint: 10, pointsPerGroup: 1000, dailyCapQty: 20, monthlyCapQty: 50 });
+    const gone = await prisma.$queryRaw<{ n: number }[]>`SELECT COUNT(*)::int AS n FROM pg_constraint WHERE conname = 'waste_items_hazardous_not_active_chk'`;
+    expect(gone[0]!.n).toBe(0);
     await violates(exec(`UPDATE "waste_gifts" SET "voucherType" = NULL WHERE "id" = 'reward-freeship'`), 'waste_gifts_voucher_fields_chk');
     await violates(exec(`UPDATE "waste_gifts" SET "pointsCost" = 2000001 WHERE "id" = 'reward-percent-15pct'`), 'waste_gifts_points_cost_chk');
     await violates(exec(`UPDATE "waste_gifts" SET "pointsCost" = 0 WHERE "id" = 'reward-discount-50k'`), 'waste_gifts_points_cost_chk');

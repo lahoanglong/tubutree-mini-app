@@ -55,6 +55,50 @@ describe('WasteHoldService, warehouse-only items', () => {
   });
 });
 
+describe('WasteHoldService, pin (hazardous = xử lý riêng, chỉ mang tới điểm)', () => {
+  const pin = { ...battery, status: 'ACTIVE', unitsPerPoint: 10, pointsPerGroup: 1_000, dailyCapQty: 20, monthlyCapQty: 50 };
+  const pinLines = (declaredQty: number) => [{ itemId: 'pin', declaredQty }];
+  const SHIP_REFUSED = 'Pin cũ không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được';
+
+  it('DROP_OFF tới điểm có nhận pin: 25 viên = 2 nhóm = 2.000 điểm', async () => {
+    const { svc, tx } = setup({ items: [pin], links: ['pin'] });
+    await expect(svc.validateAndHold(tx, input({ lines: pinLines(20) }), CFG)).resolves.toMatchObject({ estimatedPoints: 2_000 });
+    const grams = setup({ items: [{ ...pin, dailyCapQty: null }], links: ['pin'] });
+    await expect(grams.svc.validateAndHold(grams.tx, input({ lines: pinLines(25) }), CFG)).resolves.toMatchObject({ estimatedPoints: 2_000 });
+  });
+  it('điểm không gắn pin thì vẫn từ chối (pin không tự gắn vào điểm nào)', async () => {
+    const { svc, tx } = setup({ items: [pin], links: [] });
+    await expect(svc.validateAndHold(tx, input({ lines: pinLines(10) }), CFG)).rejects.toThrow('Điểm nhận này không nhận: Pin cũ');
+  });
+  it.each([
+    ['MAIL_IN', { method: 'MAIL_IN' as const, pointId: null }],
+    ['PICKUP', { method: 'PICKUP' as const, pointId: null }],
+  ])('%s có pin bị chặn kèm lý do, cả lúc tạo lẫn lúc xem trước', async (_n, over) => {
+    const a = setup({ items: [carton, pin], links: [] });
+    const lines = [{ itemId: 'carton', declaredQty: 20 }, ...pinLines(10)];
+    const call = a.svc.validateAndHold(a.tx, input({ ...over, lines }), CFG);
+    await expect(call).rejects.toThrow(new ConflictException(SHIP_REFUSED));
+    const b = setup({ items: [carton, pin], links: [] });
+    expect((await b.svc.evaluate(b.tx, input({ ...over, lines }), CFG)).blocks).toContainEqual({ code: 'ITEM_DROPOFF_ONLY', itemId: 'pin' });
+  });
+  it('EDIT một yêu cầu gửi kho để thêm pin cũng bị chặn', async () => {
+    const { svc, tx } = setup({ items: [carton, pin], links: [] });
+    await expect(
+      svc.validateAndHold(tx, input({ path: 'EDIT', method: 'MAIL_IN', pointId: null, existing: { ...existing, pointId: 'wh' }, lines: [{ itemId: 'carton', declaredQty: 20 }, ...pinLines(10)] }), CFG),
+    ).rejects.toThrow(SHIP_REFUSED);
+  });
+  it('trần ngày 20 viên và trần tháng 50 viên', async () => {
+    const day = setup({ items: [pin], links: ['pin'], usage: { itemDay: new Map([['pin', 15]]) } });
+    expect((await day.svc.evaluate(day.tx, input({ lines: pinLines(10) }), CFG)).blocks).toContainEqual({ code: 'ITEM_DAY_CAP', itemId: 'pin' });
+    const over = setup({ items: [pin], links: ['pin'] });
+    expect((await over.svc.evaluate(over.tx, input({ lines: pinLines(21) }), CFG)).blocks).toContainEqual({ code: 'ITEM_DAY_CAP', itemId: 'pin' });
+    const ok = setup({ items: [pin], links: ['pin'] });
+    expect((await ok.svc.evaluate(ok.tx, input({ lines: pinLines(20) }), CFG)).blocks).toEqual([]);
+    const month = setup({ items: [pin], links: ['pin'], usage: { itemMonth: new Map([['pin', 45]]) } });
+    expect((await month.svc.evaluate(month.tx, input({ lines: pinLines(10) }), CFG)).blocks).toContainEqual({ code: 'ITEM_MONTH_CAP', itemId: 'pin' });
+  });
+});
+
 describe('WasteHoldService.validateAndHold', () => {
   it('CREATE DROP_OFF: snapshot lines, totals, VN cap keys, expiresAt = now + requestHoldDays', async () => {
     const { svc, tx } = setup();
@@ -77,7 +121,7 @@ describe('WasteHoldService.validateAndHold', () => {
     ['lane off', {}, {}, new ConflictException('Cách giao này đang tạm tắt, hãy chọn cách khác')],
     ['max open', { usage: { openCount: 3 } }, {}, new ConflictException('Bạn đang có 3 yêu cầu chưa xong, hãy hoàn tất hoặc huỷ bớt trước khi tạo thêm')],
     ['second unattached PICKUP', { usage: { pickupPendingCode: 'TR-AAAAA' } }, { method: 'PICKUP', lines: [{ itemId: 'carton', declaredQty: 10 }] }, new ConflictException('Bạn đã có yêu cầu thu kèm TR-AAAAA, hãy gắn vào đơn kế tiếp')],
-    ['battery line (hazardous, never ACTIVE)', { items: [carton, battery], links: ['carton', 'pin'] }, { lines: [{ itemId: 'carton', declaredQty: 1 }, { itemId: 'pin', declaredQty: 1 }] }, new ConflictException('Món này hiện chưa nhận, hãy bỏ khỏi danh sách')],
+    ['battery line while still COMING_SOON', { items: [carton, battery], links: ['carton', 'pin'] }, { lines: [{ itemId: 'carton', declaredQty: 1 }, { itemId: 'pin', declaredQty: 1 }] }, new ConflictException('Món này hiện chưa nhận, hãy bỏ khỏi danh sách')],
     ['unknown item id', { items: [] }, { lines: [{ itemId: 'gone', declaredQty: 1 }] }, new ConflictException('Món này hiện chưa nhận, hãy bỏ khỏi danh sách')],
     ['point unavailable', { available: false }, {}, new ConflictException('Điểm nhận đang tạm ngừng, hãy chọn điểm khác')],
     ['quota full', { usageRow: { pointsUsed: 100_000 } }, {}, new ConflictException('Điểm nhận đã hết hạn mức tháng này, hãy chọn điểm khác')],
