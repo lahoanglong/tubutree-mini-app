@@ -326,11 +326,11 @@ export default function OrderDetailPage() {
         </div>
       </section>
 
+      <ShippingSection order={o} />
       <div className="max-md:px-4 max-md:empty:hidden">
         <OrderInvoice order={o} />
         <OrderWasteLink order={o} />
       </div>
-      <ShippingSection order={o} />
       <AddressSection order={o} />
 
       {o.note && (

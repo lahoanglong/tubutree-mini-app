@@ -203,6 +203,23 @@ describe('chi tiết đơn web — dòng hàng và vận chuyển', () => {
     expect(at('Địa chỉ giao hàng')).toBeLessThan(at('nên không huỷ được'));
   });
 
+  it('có cả hoá đơn VAT và phiếu thu rác: Vận chuyển → Hoá đơn VAT → thu rác → Địa chỉ → "không huỷ được" → liên hệ', async () => {
+    mocks.order = {
+      ...ORDER,
+      status: 'SHIPPING',
+      shippingPartner: 'GHN',
+      shippingCode: 'GHN123',
+      invoiceStatus: 'ISSUED',
+      invoiceUrl: 'https://hd.example/1.pdf',
+      hasRecyclingPickup: true,
+    };
+    mocks.waste = { id: 'w1', code: 'RC-77' };
+    const t = text((await mount()).container);
+    const order = ['Vận chuyển', 'Hoá đơn VAT', 'Yêu cầu thu rác RC-77', 'Địa chỉ giao hàng', 'nên không huỷ được', 'Cần hỗ trợ'].map((s) => t.indexOf(s));
+    expect(order.every((i) => i > -1)).toBe(true);
+    expect([...order].sort((x, y) => x - y)).toEqual(order);
+  });
+
   it('không chép được thì báo chép tay', async () => {
     mocks.writeText.mockRejectedValue(new Error('chặn'));
     mocks.order = { ...ORDER, status: 'SHIPPING', shippingCode: 'GHN123' };
