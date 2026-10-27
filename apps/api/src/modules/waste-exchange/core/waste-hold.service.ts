@@ -213,6 +213,17 @@ export class WasteHoldService {
       });
       if (inactive) add({ dto: { code: 'ITEM_NOT_ACTIVE', itemId: inactive.itemId }, message: WASTE_MESSAGES.ITEM_NOT_ACTIVE });
     }
+    // Món cần xử lý riêng (hazardous, như pin) chỉ nhận khi khách mang tới điểm nhận: không đi đường bưu điện hay thu kèm đơn.
+    if (editsPoint && method !== 'DROP_OFF') {
+      const dropOffOnly = input.lines.filter((l) => itemById.get(l.itemId)?.hazardous);
+      const first = dropOffOnly[0];
+      if (first) {
+        add({
+          dto: { code: 'ITEM_DROPOFF_ONLY', itemId: first.itemId },
+          message: WASTE_MESSAGES.ITEM_DROPOFF_ONLY(dropOffOnly.map((l) => itemById.get(l.itemId)!.name)),
+        });
+      }
+    }
 
     if (editsPoint && (pointId !== null || method !== 'DROP_OFF')) {
       const point = pointId === null ? null : await tx.wastePoint.findUnique({ where: { id: pointId }, select: { id: true, kind: true, monthlyQuotaPoints: true } });

@@ -23,6 +23,7 @@ export const WASTE_MESSAGES = {
   POINTS_MONTH_CAP: (remaining: number) => `Tháng này bạn chỉ còn ${formatPoints(remaining)} Điểm Xanh trong trần đổi rác`,
   MAX_OPEN: (max: number) => `Bạn đang có ${max} yêu cầu chưa xong, hãy hoàn tất hoặc huỷ bớt trước khi tạo thêm`,
   PICKUP_PENDING: (code: string) => `Bạn đã có yêu cầu thu kèm ${code}, hãy gắn vào đơn kế tiếp`,
+  ITEM_DROPOFF_ONLY: (names: string[]) => `${names.join(', ')} không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được`,
   POINT_MISSING_ITEMS: (names: string[]) => `Điểm nhận này không nhận: ${names.join(', ')}`,
 
   REQUEST_NOT_FOUND: 'Không tìm thấy yêu cầu',

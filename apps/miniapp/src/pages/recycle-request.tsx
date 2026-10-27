@@ -1,3 +1,4 @@
+import { pausedNote } from '@tubutree/app-core/waste-copy';
 import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
@@ -27,10 +28,11 @@ import { PageHeader } from '../components/ui/page-header';
 import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
 import { Timeline } from '../components/ui/timeline';
+import { openingStatus, todayHoursText } from '@tubutree/app-core/waste-hours';
 import { copyText } from '../utils/clipboard';
 import { formatDate, formatNumber, formatPoints } from '../utils/format';
 import { formatPhoneDisplay } from '../utils/phone';
-import { METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS, TIMELINE_STEPS, closedLabel, dayMonth, pointAddress, isRequestPaused, requestStatusText, timelineFor } from '../utils/waste-labels';
+import { METHOD_LABELS, SHORTFALL_LABELS, TIMELINE_STEPS, closedLabel, dayMonth, pointAddress, isRequestPaused, requestStatusText, timelineFor } from '../utils/waste-labels';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 const BLOCK: CSSProperties = {
@@ -42,6 +44,7 @@ const BLOCK: CSSProperties = {
 };
 const CELL: CSSProperties = { textAlign: 'left', padding: '8px 4px', verticalAlign: 'top' };
 
+const QR_POLL_MS = 5000;
 const POINT_PAUSED = 'Điểm nhận đang tạm ngừng, hãy chọn điểm khác';
 const POINT_QUOTA_FULL = 'Điểm này tạm hết hạn mức tháng này, hãy chọn điểm khác';
 
@@ -142,9 +145,21 @@ export default function RecycleRequestPage() {
   }, [phase, navigate]);
 
   const authed = phase === 'authenticated';
-  const q = useQuery({ queryKey: WASTE_QUERY_KEYS.request(id), queryFn: () => getWasteRequest(id), enabled: authed });
+  // Mở mã QR ở quầy thì hỏi lại trạng thái mỗi 5 giây để thấy ngay lúc nhân viên xác nhận; dừng khi đóng tấm mã hoặc yêu cầu không còn chờ.
+  const q = useQuery({
+    queryKey: WASTE_QUERY_KEYS.request(id),
+    queryFn: () => getWasteRequest(id),
+    enabled: authed,
+    refetchInterval: (query) => (qrOpen && query.state.data?.status === 'OPEN' ? QR_POLL_MS : false),
+  });
   const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: authed });
   const r: WasteRequestDetailDTO | undefined = q.data;
+  const liveStatus = r?.status;
+  useEffect(() => {
+    if (!qrOpen || !liveStatus || liveStatus === 'OPEN') return;
+    setQrOpen(false);
+    if (liveStatus === 'COMPLETED') navigate(`/recycle/done/${id}`, { replace: true });
+  }, [qrOpen, liveStatus, id, navigate]);
   const pointsQ = useQuery({
     queryKey: WASTE_QUERY_KEYS.points(null),
     queryFn: () => getWastePoints(),
@@ -195,12 +210,13 @@ export default function RecycleRequestPage() {
   const t = timelineFor(r);
   const closed = t ? null : closedLabel(r);
 
-  const paused = isRequestPaused(r, {
+  const pauseFacts = {
     programmeEnabled: me?.programmeEnabled,
     blocked: me?.blocked,
     shipLockedAt: me?.shipLockedAt,
     cfg: { enabled: cfg.waste.enabled, pickup: cfg.waste.pickup, isLoaded: cfg.isLoaded },
-  });
+  };
+  const paused = isRequestPaused(r, pauseFacts);
   const pausedPickup = paused && r.method === 'PICKUP';
   const dropOffPaused = paused && r.method === 'DROP_OFF';
 
@@ -211,7 +227,7 @@ export default function RecycleRequestPage() {
     (pointsQ.data ?? []).some((p) => p.id === r.point?.id && p.quotaFull);
 
   const cancelButton = (
-    <Button variant="secondary" fullWidth onPress={() => setCancelOpen(true)}>
+    <Button variant="ghost" fullWidth onPress={() => setCancelOpen(true)} style={{ color: 'var(--color-text-danger)' }}>
       Huỷ yêu cầu
     </Button>
   );
@@ -254,7 +270,7 @@ export default function RecycleRequestPage() {
         )}
         <Text variant="body-sm">Đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn</Text>
         <Text variant="body-sm">Kho từ chối kiện còn cước phải trả khi nhận</Text>
-        <Text variant="body-sm" tone="secondary">{`Nhập trước ${dayMonth(r.expiresAt ?? r.createdAt)}`}</Text>
+        <Text variant="body-sm" tone="secondary">{`Nhập mã vận đơn trước ${dayMonth(r.expiresAt ?? r.createdAt)}`}</Text>
         <TrackingForm id={id} initialCarrier={r.carrier ?? ''} initialCode={r.trackingCode ?? ''} />
       </section>
     ) : null;
@@ -269,7 +285,7 @@ export default function RecycleRequestPage() {
         ) : pausedPickup ? (
           <>
             <Text variant="body-sm">
-              {`Thu kèm rác đang tạm dừng, yêu cầu này chưa gắn được vào đơn và sẽ tự hết hạn ngày ${dayMonth(r.expiresAt ?? r.createdAt)}`}
+              {`Yêu cầu này chưa gắn được vào đơn lúc này và sẽ tự hết hạn ngày ${dayMonth(r.expiresAt ?? r.createdAt)}`}
             </Text>
             {r.cancellable && cancelButton}
           </>
@@ -290,6 +306,7 @@ export default function RecycleRequestPage() {
       </section>
     ) : null;
 
+  const hoursLine = r.point ? [todayHoursText(r.point.openingHours, new Date()), openingStatus(r.point.openingHours, new Date()).text].filter(Boolean).join(' · ') : '';
   const stepHints =
     r.method === 'DROP_OFF' && open && r.point && r.pointAvailable && !quotaFull && !dropOffPaused
       ? {
@@ -297,6 +314,7 @@ export default function RecycleRequestPage() {
             <>
               <Text variant="caption" tone="secondary" as="span">{`Mang tới ${r.point.name} trước ${dayMonth(r.expiresAt ?? r.createdAt)}`}</Text>
               <Text variant="caption" tone="secondary" as="span">{pointAddress(r.point)}</Text>
+              <Text variant="caption" tone="secondary" as="span">{hoursLine}</Text>
             </>
           ),
         }
@@ -307,12 +325,17 @@ export default function RecycleRequestPage() {
     <>
       {t && (
         <div>
-          <Badge tone="brand">{requestStatusText(r, { blocked: !!me?.blocked, paused })}</Badge>
+          <Badge tone={paused ? 'warning' : 'brand'}>{requestStatusText(r, { blocked: !!me?.blocked, paused })}</Badge>
         </div>
       )}
       {mailBlock}
       {pickupBlock}
       {pointNotice}
+      {paused && (
+        <Text variant="body-sm" tone="secondary" as="p" style={{ margin: 0 }}>
+          {pausedNote(r, pauseFacts, dayMonth(r.expiresAt ?? r.createdAt))}
+        </Text>
+      )}
       {t ? (
         <Timeline steps={TIMELINE_STEPS[r.method]} current={t.current} hints={stepHints} />
       ) : (
@@ -327,7 +350,7 @@ export default function RecycleRequestPage() {
         <div style={{ ...COLUMN, gap: 10 }}>
           {r.method === 'DROP_OFF' &&
             (dropOffPaused ? (
-              <Text variant="body-sm">{PAUSED_TEXT}</Text>
+              <Text variant="body-sm">Tạm chưa mang tới điểm được</Text>
             ) : (
               <Button fullWidth onPress={() => setQrOpen(true)}>Xem mã QR</Button>
             ))}
@@ -392,6 +415,7 @@ export default function RecycleRequestPage() {
             <div style={{ ...COLUMN, gap: 2 }}>
               <Text variant="body-md" style={{ fontWeight: 600 }}>{r.point.name}</Text>
               <Text variant="body-sm" tone="secondary">{pointAddress(r.point)}</Text>
+              <Text variant="body-sm" tone="secondary">{hoursLine}</Text>
             </div>
           )}
           <Text variant="body-sm">{`Giữ chỗ tới ${formatDate(r.expiresAt)}`}</Text>
@@ -414,7 +438,7 @@ export default function RecycleRequestPage() {
           </Button>
         }
       >
-        {null}
+        <Text variant="body-md">{`Mã ${r.code} sẽ hết hiệu lực. Bạn có thể tạo yêu cầu mới bất cứ lúc nào.`}</Text>
       </BottomSheet>
     </>,
     codeBlockShown ? 'Yêu cầu đổi rác' : r.code,

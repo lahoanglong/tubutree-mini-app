@@ -8,7 +8,7 @@ import { WasteAccessService, type WastePointAccess } from '../core/waste-access.
 import { WasteConfigService, type WasteConfigSnapshot } from '../core/waste-config.service';
 import { writeWasteEvent } from '../core/waste-events';
 import { customerView } from '../core/waste-mask';
-import { lookupMissMeta, normalizeWasteCode } from '../waste-codes';
+import { canonicalWasteLookup, lookupMissMeta } from '../waste-codes';
 import { WASTE_DESK_RECENT_MS, WASTE_LOOKUP_PATTERN } from '../waste.constants';
 import { pointUsage, staffConfirmedToday } from './waste-quota';
 
@@ -39,7 +39,7 @@ export class WasteDeskService {
     const cfg = await this.config.snapshot();
     const points = await this.access.listOperablePoints(userId, cfg.enabled);
     if (points.length === 0) throw new ForbiddenException(cfg.enabled ? NO_POINT : PROGRAMME_OFF);
-    const norm = normalizeWasteCode(code);
+    const norm = canonicalWasteLookup(code);
     const now = new Date();
 
     if (WASTE_LOOKUP_PATTERN.test(norm)) {

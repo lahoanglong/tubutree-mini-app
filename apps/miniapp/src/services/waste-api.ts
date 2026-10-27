@@ -40,6 +40,7 @@ export const WASTE_QUERY_KEYS = {
 } as const;
 
 export const getWasteMe = () => api.get<WasteMeDTO>('/waste/me').then((r) => r.data);
+export const getWasteCatalogue = () => api.get<WasteItemDTO[]>('/waste/catalogue').then((r) => r.data);
 export const getWasteItems = () => api.get<WasteItemDTO[]>('/waste/items').then((r) => r.data);
 export const getWastePoints = (provinceCode?: string) =>
   api.get<WastePointDTO[]>('/waste/points', { params: provinceCode ? { provinceCode } : {} }).then((r) => r.data);

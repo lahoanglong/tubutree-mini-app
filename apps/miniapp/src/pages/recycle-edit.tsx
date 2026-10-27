@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createdTodayVn } from '@tubutree/app-core/waste-copy';
 import type { ReactNode } from 'react';
 import { Page, useLocation, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -162,6 +163,7 @@ export default function RecycleEditPage() {
         lines={lines}
         onChange={setLine}
         allowance={Object.fromEntries(r.lines.map((l) => [l.itemId, l.declaredQty]))}
+        dayCap={createdTodayVn(r.createdAt)}
       />
       {isDropOff && shownPoint && (
         <div style={{ ...COLUMN, gap: 8 }}>

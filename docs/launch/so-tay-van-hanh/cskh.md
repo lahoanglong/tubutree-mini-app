@@ -8,7 +8,7 @@ Bạn dùng: web **Quản trị** (nhóm việc CSKH thấy: Việc cần xử l
 ## Đầu ca
 
 1. **Quản trị › Tổng quan › Việc cần xử lý.** Bạn thấy thẻ "Yêu cầu đổi / trả chờ duyệt". Bấm thẻ đổi/trả để mở danh sách.
-2. Mở **Quản trị › Hoàn tiền & đổi trả › Đổi / Trả**, bộ lọc "Chờ duyệt". Yêu cầu cũ nhất nằm trên cùng. Hệ thống đã hứa với khách "phản hồi trong 24h": không để yêu cầu nào quá 24 giờ.
+2. Mở **Quản trị › Bán hàng › Đổi / Trả**, bộ lọc "Chờ duyệt". Yêu cầu cũ nhất nằm trên cùng. Hệ thống đã hứa với khách "phản hồi trong 24h": không để yêu cầu nào quá 24 giờ.
 3. Mở hộp tin Zalo OA. Chat chưa nằm trong Tubu (chat bằng OA Manager hay Pancake: cần xác nhận với chủ shop).
 
 ## Trong ca
@@ -41,7 +41,7 @@ Bạn dùng: web **Quản trị** (nhóm việc CSKH thấy: Việc cần xử l
 
 Hệ thống chỉ **hoàn tiền**. Khách muốn đổi sang sản phẩm khác: duyệt trả, bảo khách đặt đơn mới.
 
-**Mẫu tin nhanh.** **Quản trị › Nội dung › CSKH mẫu tin nhanh.** Đây là tin bot Zalo OA tự trả lời khách (theo từ khoá, hoặc lời chào cho tin đầu tiên). Không phải kho câu để bạn sao chép. Thêm mẫu: nhóm, tên nội bộ, từ khoá cách nhau dấu phẩy, nội dung, "Thêm mẫu tin". Bạn **chưa** xem được bot đã trả lời khách câu gì (**⏳ đang làm**): hỏi lại khách trước khi trả lời, tránh trả trùng hoặc ngược với bot.
+**Mẫu tin nhanh.** **Quản trị › Khách hàng › CSKH mẫu tin nhanh.** Đây là tin bot Zalo OA tự trả lời khách (theo từ khoá, hoặc lời chào cho tin đầu tiên). Không phải kho câu để bạn sao chép. Thêm mẫu: nhóm, tên nội bộ, từ khoá cách nhau dấu phẩy, nội dung, "Thêm mẫu tin". Bạn **chưa** xem được bot đã trả lời khách câu gì (**⏳ đang làm**): hỏi lại khách trước khi trả lời, tránh trả trùng hoặc ngược với bot.
 
 ## Cuối ca
 

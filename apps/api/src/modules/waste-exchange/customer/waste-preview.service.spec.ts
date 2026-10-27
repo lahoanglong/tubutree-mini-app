@@ -1,4 +1,5 @@
 import { computeWastePublicFlags } from '../core/waste-public-config';
+import { CUSTOMER_VISIBLE_ITEMS_WHERE } from './waste-catalogue.service';
 import { WastePreviewService } from './waste-preview.service';
 
 jest.mock('../core/waste-public-config', () => ({ computeWastePublicFlags: jest.fn().mockResolvedValue({ enabled: true, dropoff: true, mailin: true, pickup: true }) }));
@@ -34,6 +35,17 @@ describe('WastePreviewService.preview (spec 15.2)', () => {
       blocks: [{ code: 'ITEM_MONTH_CAP', itemId: 'carton' }, { code: 'POINTS_MONTH_CAP', pointsRemaining: 10_000 }],
       feeEstimate: null, itemCaps: [{ itemId: 'carton', monthRemainingQty: 20, dayRemainingQty: 15 }], pointsMonthRemaining: 10_000,
     });
+  });
+  it('món nguy hại chưa ACTIVE (pin): không tính điểm, trần để null, vẫn giữ khối ITEM_NOT_ACTIVE; lọc theo CUSTOMER_VISIBLE_ITEMS_WHERE', async () => {
+    const pin = { ...line, itemId: 'pin', itemCode: 'BATTERY', itemName: 'Pin đã dùng', unitLabel: 'viên', unitsPerPoint: 10, pointsPerGroup: 1_000, dropsPerUnit: 0, gramsPerUnit: 50, declaredQty: 10, hazardous: true };
+    const { svc, hold, prisma } = setup({ blocks: [{ code: 'ITEM_NOT_ACTIVE', itemId: 'pin' }] });
+    hold.evaluate.mockResolvedValue({ result: { pointId: 'wh', capDayKey: '2026-10-17', capMonthKey: '2026-10', lines: [line, pin], estimatedPoints: 13_000, estimatedDrops: 24 }, blocks: [{ code: 'ITEM_NOT_ACTIVE', itemId: 'pin' }] });
+    const r = await svc.preview('u1', { method: 'DROP_OFF', pointId: 'p1', lines: [{ itemId: 'carton', declaredQty: 12 }, { itemId: 'pin', declaredQty: 10 }] });
+    expect(r.estimatedPoints).toBe(12_000);
+    expect(r.estimatedGrams).toBe(3600);
+    expect(r.itemCaps).toEqual([{ itemId: 'carton', monthRemainingQty: 20, dayRemainingQty: 15 }, { itemId: 'pin', monthRemainingQty: null, dayRemainingQty: null }]);
+    expect(r.blocks).toEqual([{ code: 'ITEM_NOT_ACTIVE', itemId: 'pin' }]);
+    expect(prisma.wasteItem.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { AND: [{ id: { in: ['carton', 'pin'] } }, CUSTOMER_VISIBLE_ITEMS_WHERE] } }));
   });
   it('DROP_OFF passes the body pointId; MAIL_IN and PICKUP pass null', async () => {
     const { svc, hold } = setup();

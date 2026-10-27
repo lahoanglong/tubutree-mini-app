@@ -48,9 +48,31 @@ export const WASTE_ITEMS: WasteMeItemDTO[] = [
     imageUrl: null,
     gramsPerUnit: null,
     hazardous: false,
+    // Như seed thật: hộp sữa chỉ kho TP.HCM nhận.
+    warehouseOnly: true,
     sortOrder: 30,
     monthRemainingQty: 300,
     dayRemainingQty: 50,
+  },
+  {
+    id: 'wi-battery',
+    code: 'BATTERY',
+    name: 'Pin đã dùng',
+    unitLabel: 'viên',
+    unitsPerPoint: 10,
+    pointsPerGroup: 1000,
+    dropsPerUnit: 0,
+    dailyCapQty: 20,
+    monthlyCapQty: 50,
+    status: 'ACTIVE',
+    prepInstructions: 'Dán băng keo hai đầu cực. Không nhận pin phồng, chảy nước, pin xe điện hay ắc quy.',
+    imageUrl: null,
+    gramsPerUnit: null,
+    hazardous: true,
+    warehouseOnly: false,
+    sortOrder: 40,
+    monthRemainingQty: 50,
+    dayRemainingQty: 20,
   },
 ];
 
@@ -187,9 +209,21 @@ export function mockWasteCustomer(
       estimatedDrops: 0,
       estimatedGrams: null,
       pointsValueVnd: estimatedPoints,
-      blocks: [],
+      // Như máy chủ: món nguy hại (pin) chỉ nhận khi khách mang tới điểm nhận, và chỉ báo khi đã chọn cách giao;
+      // trần ngày chỉ báo khi body.method === 'DROP_OFF' (máy chủ không báo khi chưa chọn cách giao).
+      blocks: [
+        ...(body.method && body.method !== 'DROP_OFF' && body.lines.some((l) => WASTE_ITEMS.find((i) => i.id === l.itemId)?.hazardous)
+          ? [{ code: 'ITEM_DROPOFF_ONLY' as const, itemId: WASTE_ITEMS.find((i) => i.hazardous)!.id }]
+          : []),
+        ...(body.method === 'DROP_OFF'
+          ? body.lines.flatMap((l) => {
+              const item = WASTE_ITEMS.find((i) => i.id === l.itemId);
+              return item && item.dayRemainingQty != null && l.declaredQty > item.dayRemainingQty ? [{ code: 'ITEM_DAY_CAP' as const, itemId: item.id }] : [];
+            })
+          : []),
+      ],
       feeEstimate: null,
-      itemCaps: [],
+      itemCaps: WASTE_ITEMS.filter((i) => body.lines.some((l) => l.itemId === i.id)).map((i) => ({ itemId: i.id, monthRemainingQty: i.monthRemainingQty ?? null, dayRemainingQty: i.dayRemainingQty ?? null })),
       pointsMonthRemaining: 60_000,
     };
   });

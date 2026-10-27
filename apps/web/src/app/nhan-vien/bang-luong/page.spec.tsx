@@ -240,7 +240,7 @@ describe('thông tin nhận lương', () => {
     await mount();
     await open();
     expect(sheetOpen()).toBe(true);
-    typeInto(labelled('Mã ngân hàng (BIN Napas, VD 970407)'), ' 970436 ');
+    typeInto(labelled('Mã số ngân hàng (6 chữ số, VD 970407; chưa biết thì tải ảnh QR ở dưới)'), ' 970436 ');
     expect(labelled('Số tài khoản')?.value).toBe('0123456789');
     expect(labelled('Tên chủ tài khoản')?.value).toBe('NGUYEN VAN A');
     const before = gets('/staff/payroll').length;
@@ -270,7 +270,7 @@ describe('thông tin nhận lương', () => {
     await press('Lưu');
     expect(document.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ bận');
     expect(sheetOpen()).toBe(true);
-    expect(labelled('Mã ngân hàng (BIN Napas, VD 970407)')?.value).toBe('970407');
+    expect(labelled('Mã số ngân hàng (6 chữ số, VD 970407; chưa biết thì tải ảnh QR ở dưới)')?.value).toBe('970407');
   });
 
   it('đổi tháng đang tải mà mở thông tin nhận lương: vẫn nạp hồ sơ ngân hàng đã có, không để ô rỗng', async () => {
@@ -279,7 +279,7 @@ describe('thông tin nhận lương', () => {
     await press('Tháng trước');
     expect(text()).toContain('Tháng 2/2026');
     await open();
-    expect(labelled('Mã ngân hàng (BIN Napas, VD 970407)')?.value).toBe('970407');
+    expect(labelled('Mã số ngân hàng (6 chữ số, VD 970407; chưa biết thì tải ảnh QR ở dưới)')?.value).toBe('970407');
     expect(labelled('Số tài khoản')?.value).toBe('0123456789');
     expect(labelled('Tên chủ tài khoản')?.value).toBe('NGUYEN VAN A');
   });

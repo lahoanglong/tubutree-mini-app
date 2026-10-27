@@ -170,12 +170,19 @@ describe('/doi-rac/quay: vào màn (§16.1, §4.10)', () => {
     expect(c.textContent).toContain('Hạn mức điểm tháng này');
     expect(c.textContent).toContain('Đã dùng 120.000 / 500.000 điểm');
     expect(c.textContent).toContain('Còn lại 380.000 điểm');
-    expect(c.textContent).toContain('Đại lý không tự cộng điểm. Tubu cộng điểm cho khách theo số bạn xác nhận.');
+    expect(c.textContent).toContain('Tubu cộng điểm cho khách theo số bạn xác nhận. Điểm không do cửa hàng cộng.');
   });
   it('một điểm: tên điểm hiện dưới tiêu đề; hạn mức có thanh tiến độ theo đã dùng trên giới hạn', async () => {
     const c = await mount();
     expect(byText(c, 'p', 'Đại lý Cô Ba')).not.toBeNull();
     expect(c.querySelector<HTMLElement>('[data-testid="progress-fill"]')?.style.width).toBe('24%');
+  });
+  it('khổ điện thoại: tên điểm nằm trên cùng, trước ô nhập mã, như Mini App', async () => {
+    const c = await mount();
+    const mobileName = Array.from(c.querySelectorAll('p')).find((p) => p.textContent === 'Đại lý Cô Ba' && p.className.includes('md:hidden'))!;
+    expect(mobileName).toBeDefined();
+    const input = c.querySelector('input')!;
+    expect(mobileName.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
   it('nhiều điểm: tên điểm chỉ nằm trên các tab, không lặp thành dòng riêng', async () => {
     state.points = [makeDeskPoint(), WAREHOUSE_DESK];
@@ -203,7 +210,7 @@ describe('/doi-rac/quay: vào màn (§16.1, §4.10)', () => {
   it('kho: không có thẻ hạn mức, có dòng trần nhân viên trong ngày', async () => {
     state.points = [WAREHOUSE_DESK];
     const c = await mount();
-    expect(c.textContent).toContain('Còn 150.000 điểm được xác nhận hôm nay');
+    expect(c.textContent).toContain('Hôm nay còn xác nhận được 150.000 điểm');
     expect(c.textContent).not.toContain('Hạn mức điểm tháng này');
   });
   it('nhiều điểm: chọn điểm ở đầu màn', async () => {
@@ -211,7 +218,7 @@ describe('/doi-rac/quay: vào màn (§16.1, §4.10)', () => {
     const c = await mount();
     click(byText(c, '[role="tab"]', 'Kho Tubu TP.HCM'));
     await flush();
-    expect(c.textContent).toContain('Còn 150.000 điểm được xác nhận hôm nay');
+    expect(c.textContent).toContain('Hôm nay còn xác nhận được 150.000 điểm');
   });
   it('một h1, mọi điều khiển có tên', async () => {
     const c = await mount();
@@ -225,7 +232,7 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
   it('gửi đúng mã đã cắt khoảng trắng; thẻ yêu cầu che tên và số', async () => {
     const c = await mount();
     await lookUp(c, '  tr-8k2m9 ');
-    expect(calls('/waste/desk/lookup')[0]!.body).toEqual({ code: 'tr-8k2m9' });
+    expect(calls('/waste/desk/lookup')[0]!.body).toEqual({ code: 'TR-8K2M9' });
     expect(c.textContent).toContain('Ng*** A');
     expect(c.textContent).toContain('090****567');
     expect(lineOf(c, 'Thùng carton').textContent).toContain('Khách khai 5 thùng');
@@ -261,7 +268,7 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
     minus(c, 'Thùng carton', 5);
     minus(c, 'Vỏ hộp sữa', 4);
     expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 0 điểm');
-    expect(deskPreviewPoints([{ unitsPerPoint: 5, pointsPerGroup: 1000, hazardous: true }], { a: 5 }, ['a'])).toBe(0);
+    expect(deskPreviewPoints([{ unitsPerPoint: 10, pointsPerGroup: 1000 }], { a: 25 }, ['a'])).toBe(2000);
   });
   it('dòng thiếu phải có lý do (7 lý do) thì nút xác nhận mới mở', async () => {
     const c = await mount();
@@ -280,17 +287,19 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
     expect(button(c, 'Xác nhận đã nhận')!.disabled).toBe(false);
     expect(c.textContent).not.toContain('Chọn lý do cho món nhận thiếu để xác nhận');
   });
-  it('món nguy hại: không có bộ đếm, gửi receivedQty 0 và lý do Sai loại', async () => {
-    lookupReq({ lines: [{ ...LINE0, itemId: 'item-battery', itemName: 'Pin cũ', unitLabel: 'viên', hazardous: true, declaredQty: 2 }] });
+  it('pin: có bộ đếm, nhắc cất riêng, 25 viên cộng 2.000 điểm, gửi số nhận thật không kèm lý do', async () => {
+    lookupReq({ lines: [{ ...LINE0, itemId: 'item-battery', itemName: 'Pin đã dùng', unitLabel: 'viên', hazardous: true, declaredQty: 25, unitsPerPoint: 10, pointsPerGroup: 1000 }] });
     const c = await mount();
     await lookUp(c);
-    expect(lineOf(c, 'Pin cũ').querySelector('[aria-label="Tăng số lượng"]')).toBeNull();
-    expect(lineOf(c, 'Pin cũ').textContent).toContain('Không nhận món này');
+    expect(lineOf(c, 'Pin đã dùng').querySelector('[aria-label="Tăng số lượng"]')).not.toBeNull();
+    expect(lineOf(c, 'Pin đã dùng').textContent).toContain('Cất riêng vào thùng kín, không lẫn rác khác');
+    expect(lineOf(c, 'Pin đã dùng').textContent).toContain('Pin phồng hoặc chảy nước thì không đếm, không giữ lại, trả khách; chọn lý do nhận thiếu "Hỏng"');
+    expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 2.000 điểm');
     expect(button(c, 'Xác nhận đã nhận')!.disabled).toBe(false);
     click(button(c, 'Xác nhận đã nhận'));
     await flush(10);
     expect(calls('/waste/desk/requests/req-1/confirm')[0]!.body).toEqual({
-      lines: [{ itemId: 'item-battery', declaredQty: 2, receivedQty: 0, shortfallReason: 'WRONG_TYPE' }],
+      lines: [{ itemId: 'item-battery', declaredQty: 25, receivedQty: 25 }],
     });
   });
   it.each([
@@ -477,7 +486,7 @@ describe('/doi-rac/quay: trao quà ở kho (§8, §15.3)', () => {
     expect(c.textContent).toContain('Hạn nhận 17/12/2026');
     click(button(c, 'Trao quà'));
     await flush(10);
-    expect(calls('/waste/desk/gifts/fulfil')[0]!.body).toEqual({ code: 'qg-8k2m9p4t', pointId: 'wh-1' });
+    expect(calls('/waste/desk/gifts/fulfil')[0]!.body).toEqual({ code: 'QG-8K2M9P4T', pointId: 'wh-1' });
     expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã trao Gói hạt giống Tubu');
     expect(button(c, 'Trao quà')).toBeNull();
   });

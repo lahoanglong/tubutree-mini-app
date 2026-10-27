@@ -1,4 +1,5 @@
 import { Plus, Minus } from 'lucide-react';
+import { parseQtyInput } from '@tubutree/app-core/waste-copy';
 import { Text } from './text';
 
 /**
@@ -14,9 +15,13 @@ interface QuantitySelectorProps {
   min?: number;
   size?: 'sm' | 'md';
   onChange: (n: number) => void;
+  /** Cho gõ số trực tiếp vào ô giữa (bàn phím số) thay vì chỉ bấm − và +. */
+  editable?: boolean;
+  /** Nút cộng nhanh (+5, +10...) đặt dưới bộ đếm; cộng dồn rồi kẹp vào max. */
+  quickSteps?: readonly number[];
 }
 
-export function QuantitySelector({ value, max, min = 1, size = 'md', onChange }: QuantitySelectorProps) {
+export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, editable, quickSteps }: QuantitySelectorProps) {
   const side = size === 'md' ? 44 : 36;
   const btn = (disabled: boolean): React.CSSProperties => ({
     width: side,
@@ -35,7 +40,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange }:
     cursor: disabled ? 'default' : 'pointer',
   });
 
-  return (
+  const row = (
     <div style={{ display: 'flex', alignItems: 'center', gap: size === 'md' ? 12 : 8 }}>
       <button
         type="button"
@@ -47,9 +52,33 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange }:
       >
         <Minus size={size === 'md' ? 18 : 15} strokeWidth={2.2} />
       </button>
-      <Text variant={size === 'md' ? 'body-lg' : 'body-sm'} style={{ minWidth: 22, textAlign: 'center', fontWeight: 600 }}>
-        {value}
-      </Text>
+      {editable ? (
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          aria-label="Số lượng"
+          value={String(value)}
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => onChange(parseQtyInput(e.target.value, min, max))}
+          style={{
+            width: 56,
+            height: side,
+            boxSizing: 'border-box',
+            textAlign: 'center',
+            fontWeight: 600,
+            font: 'inherit',
+            color: 'var(--color-text-primary)',
+            border: '1px solid var(--color-border-subtle)',
+            borderRadius: 'var(--radius-control)',
+            background: 'var(--color-bg-surface)',
+          }}
+        />
+      ) : (
+        <Text variant={size === 'md' ? 'body-lg' : 'body-sm'} style={{ minWidth: 22, textAlign: 'center', fontWeight: 600 }}>
+          {value}
+        </Text>
+      )}
       <button
         type="button"
         aria-label="Tăng số lượng"
@@ -60,6 +89,27 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange }:
       >
         <Plus size={size === 'md' ? 18 : 15} strokeWidth={2.2} />
       </button>
+    </div>
+  );
+  if (!quickSteps || quickSteps.length === 0) return row;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {row}
+      <div style={{ display: 'flex', gap: 8 }}>
+        {quickSteps.map((n) => (
+          <button
+            key={n}
+            type="button"
+            aria-label={`Thêm ${n}`}
+            aria-disabled={value >= max}
+            className={value < max ? 'tubu-press tubu-hit-44-square' : 'tubu-hit-44-square'}
+            onClick={() => value < max && onChange(Math.min(max, value + n))}
+            style={{ ...btn(value >= max), width: 'auto', minWidth: side, padding: '0 12px', fontWeight: 600 }}
+          >
+            {`+${n}`}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

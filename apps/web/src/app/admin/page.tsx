@@ -103,6 +103,7 @@ import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
 import { ConfigItem } from '@/components/admin/config-item';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { FeatureFlagsCard } from '@/components/admin/feature-flags-card';
+import { PartnerRulesCard } from '@/components/admin/partner-rules-card';
 import { ShopInfoCard } from '@/components/admin/shop-info-card';
 import { TabErrorBoundary } from '@/components/admin/tab-error-boundary';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
@@ -228,35 +229,15 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     ],
   },
   {
-    label: 'Đơn hàng & giao vận',
+    label: 'Bán hàng',
     items: [
       { k: 'orders', label: 'Đơn hàng' },
       { k: 'externalOrders', label: 'Đơn ngoài app' },
-      { k: 'externalClaims', label: 'Tích điểm đơn sàn' },
-      { k: 'merchantFulfilment', label: 'Đơn đối tác & đối soát' },
-    ],
-  },
-  {
-    label: 'Hoàn tiền & đổi trả',
-    items: [
       { k: 'returns', label: 'Đổi / Trả' },
       { k: 'customerRefunds', label: 'Hoàn tiền khách' },
       ...(CASHBACK_ENABLED ? [{ k: 'cashback' as const, label: 'Hoàn tiền sàn ngoài' }] : []),
-    ],
-  },
-  {
-    label: 'Người bán',
-    items: [
-      { k: 'dealers', label: 'Đại lý' },
-      { k: 'dealerClaims', label: 'Thưởng đại lý' },
-      { k: 'dealerAccounts', label: 'Đại lý & công nợ' },
-      { k: 'dealerPrices', label: 'Lịch sử giá đại lý' },
-      { k: 'commissionRates', label: 'Hoa hồng & giá sỉ' },
+      { k: 'subscriptions', label: 'Gói định kỳ' },
       { k: 'productCategories', label: 'Danh mục sản phẩm' },
-      { k: 'payouts', label: 'Thuế TNCN hoa hồng' },
-      { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
-      { k: 'storefronts', label: 'Gian hàng' },
-      { k: 'brands', label: 'Nhãn hàng' },
     ],
   },
   {
@@ -266,17 +247,38 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'reviews', label: 'Đánh giá' },
       { k: 'community', label: 'Cộng đồng' },
       { k: 'supportChat', label: 'Chat CSKH' },
-      { k: 'subscriptions', label: 'Gói định kỳ' },
-      { k: 'posCredits', label: 'Tích điểm tại quầy' },
-      { k: 'waste', label: 'Đổi rác' },
+      { k: 'quickReplies', label: 'CSKH mẫu tin nhanh' },
     ],
   },
   {
-    label: 'Khuyến mãi',
+    label: 'Khuyến mãi và điểm',
     items: [
       { k: 'coupons', label: 'Mã giảm giá' },
       { k: 'flashSales', label: 'Giờ vàng' },
+      { k: 'posCredits', label: 'Tích điểm tại quầy' },
+      { k: 'externalClaims', label: 'Tích điểm đơn sàn' },
+    ],
+  },
+  {
+    label: 'Đổi rác và game',
+    items: [
+      { k: 'waste', label: 'Đổi rác' },
       { k: 'engagement', label: 'Nhiệm vụ' },
+    ],
+  },
+  {
+    label: 'Đại lý và đối tác',
+    items: [
+      { k: 'dealers', label: 'Đại lý' },
+      { k: 'dealerClaims', label: 'Thưởng đại lý' },
+      { k: 'dealerAccounts', label: 'Đại lý & công nợ' },
+      { k: 'dealerPrices', label: 'Lịch sử giá đại lý' },
+      { k: 'commissionRates', label: 'Hoa hồng & giá sỉ' },
+      { k: 'payouts', label: 'Thuế TNCN hoa hồng' },
+      { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
+      { k: 'merchantFulfilment', label: 'Đơn đối tác & đối soát' },
+      { k: 'storefronts', label: 'Gian hàng' },
+      { k: 'brands', label: 'Nhãn hàng' },
     ],
   },
   {
@@ -285,7 +287,6 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'faqs', label: 'Câu hỏi thường gặp' },
       { k: 'contentKit', label: 'Bộ nội dung CTV' },
       { k: 'academy', label: 'Học viện CTV' },
-      { k: 'quickReplies', label: 'CSKH mẫu tin nhanh' },
       { k: 'notificationTemplates', label: 'Mẫu thông báo' },
     ],
   },
@@ -299,7 +300,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     ],
   },
   {
-    label: 'Cấu hình & tích hợp',
+    label: 'Cài đặt',
     items: [
       { k: 'config', label: 'Cấu hình' },
       { k: 'opsHealth', label: 'Sức khoẻ hệ thống' },
@@ -541,14 +542,14 @@ export default function AdminPage() {
   const returnsDefault: ReturnsFilter = canReceiveReturns && !canReviewReturns ? 'TO_RECEIVE' : 'REQUESTED';
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="font-display text-xl font-semibold text-stone-900">Quản trị Tubu Tree</h1>
-        <Link href="/admin/pos" className="inline-flex min-h-[44px] items-center rounded-control border border-stone-450 bg-stone-0 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 sm:min-h-[36px]">
-          Màn thu ngân (tích điểm tại quầy)
+    <main className="mx-auto max-w-7xl px-4 py-3 sm:py-6">
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="min-w-0 truncate font-display text-lg font-semibold text-stone-900 sm:text-xl">Quản trị Tubu Tree</h1>
+        <Link href="/admin/pos" className="inline-flex min-h-[44px] shrink-0 items-center rounded-control border border-stone-450 bg-stone-0 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 sm:min-h-[36px]">
+          Màn thu ngân<span className="hidden sm:inline">&nbsp;(tích điểm tại quầy)</span>
         </Link>
       </div>
-      <div className="mt-4 lg:flex lg:items-start lg:gap-6">
+      <div className="mt-2 sm:mt-4 lg:flex lg:items-start lg:gap-6">
         <AdminNav
           groups={groups}
           active={active}
@@ -618,7 +619,7 @@ export default function AdminPage() {
           {active === 'academy' && <AcademyTab />}
           {active === 'quickReplies' && <QuickReplyTab />}
           {active === 'notificationTemplates' && <NotificationTemplatesTab canEditAll={isAdmin} />}
-          {active === 'analytics' && <AnalyticsTab />}
+          {active === 'analytics' && <AnalyticsTab onOpenReports={allowed.has('reports') ? () => setTab('reports') : undefined} />}
           {active === 'reports' && <ReportsTab sections={reportSectionsFor(isAdmin, accessQ.data?.staffPermissions ?? [])} />}
           </TabErrorBoundary>
         </div>
@@ -805,6 +806,9 @@ function OrderStatusBadge({ status }: { status: string }) {
   return <span className={`inline-block whitespace-nowrap rounded px-2 py-0.5 text-xs ${color}`}>{label}</span>;
 }
 
+/** Thẻ tổng quan dùng đúng tên trạng thái của bảng đơn (một bảng tên chung), chỉ hạ chữ hoa đầu để đứng sau con số. */
+const statusChipText = (k: string) => (ORDER_STATUS_LABELS[k] ?? k).toLocaleLowerCase('vi');
+
 function DashboardTab({
   onSelectTab,
   onOpenRecyclingQueue,
@@ -897,7 +901,7 @@ function DashboardTab({
           {stats.gmv !== undefined && (
             <dl className="mt-2 space-y-0.5 text-xs text-stone-600" data-kpi-revenue-breakdown>
               <div className="flex justify-between gap-2">
-                <dt>Giá trị đơn còn hiệu lực</dt>
+                <dt>Giá trị đơn đã xác nhận, đang giao và đã giao</dt>
                 <dd className="font-medium text-stone-900">{formatVnd(stats.gmv)}</dd>
               </div>
               <div className="flex justify-between gap-2">
@@ -919,14 +923,14 @@ function DashboardTab({
           <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Tổng đơn hàng</div>
           <div className="mt-2 text-2xl font-bold text-stone-900">{stats.totalOrders}</div>
           <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
-            <span className="rounded bg-warning-bg px-1.5 py-0.5 font-medium text-warning-fg">{stats.pendingOrders} chờ xử lý</span>
-            <span className="rounded bg-info-bg px-1.5 py-0.5 font-medium text-info-fg">{stats.shippingOrders} đang giao</span>
-            <span className="rounded bg-success-bg px-1.5 py-0.5 font-medium text-success-fg">{stats.deliveredOrders} đã giao</span>
+            <span className="rounded bg-warning-bg px-1.5 py-0.5 font-medium text-warning-fg">{stats.pendingOrders} {statusChipText('PENDING_PAYMENT')} / {statusChipText('CONFIRMED')}</span>
+            <span className="rounded bg-info-bg px-1.5 py-0.5 font-medium text-info-fg">{stats.shippingOrders} {statusChipText('PACKED')} / {statusChipText('SHIPPING')}</span>
+            <span className="rounded bg-success-bg px-1.5 py-0.5 font-medium text-success-fg">{stats.deliveredOrders} {statusChipText('DELIVERED')}</span>
             {stats.cancelledOrders > 0 && (
-              <span className="rounded bg-danger-bg px-1.5 py-0.5 font-medium text-danger-fg">{stats.cancelledOrders} đã huỷ</span>
+              <span className="rounded bg-danger-bg px-1.5 py-0.5 font-medium text-danger-fg">{stats.cancelledOrders} {statusChipText('CANCELLED')}</span>
             )}
             {(stats.returnedOrders ?? 0) > 0 && (
-              <span className="rounded bg-promo-bg px-1.5 py-0.5 font-medium text-promo-fg">{stats.returnedOrders} đã trả hàng</span>
+              <span className="rounded bg-promo-bg px-1.5 py-0.5 font-medium text-promo-fg">{stats.returnedOrders} {statusChipText('RETURNED')}</span>
             )}
           </div>
           {stats.returnRefundTotal !== undefined && (
@@ -946,7 +950,7 @@ function DashboardTab({
           <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">Cộng đồng & Đối tác</div>
           <div className="mt-2 text-2xl font-bold text-stone-900">{stats.totalUsers} <span className="text-xs font-normal text-stone-500">người dùng</span></div>
           <div className="mt-1 text-xs text-stone-600">
-            Trong đó: <span className="font-semibold text-forest-700">{stats.totalAffiliates}</span> đối tác CTV / Affiliate
+            Trong đó: <span className="font-semibold text-forest-700">{stats.totalAffiliates}</span> cộng tác viên (CTV)
           </div>
         </div>
 
@@ -1909,7 +1913,7 @@ function roleChangeConsequences(target: UserRole, current?: string | null): stri
   }
   if (target === 'CUSTOMER' || target === 'AFFILIATE') {
     lines.push(
-      'Nếu tài khoản sở hữu gian hàng đối tác (đại lý, nhân viên hoặc admin): gian hàng bị tắt cờ đối tác; gian hàng MERCHANT chuyển về CTV.',
+      'Nếu tài khoản sở hữu gian hàng đối tác (đại lý, nhân viên hoặc admin): gian hàng bị tắt quyền đối tác; gian hàng MERCHANT chuyển về CTV.',
     );
   } else if (target === 'DEALER' && (!current || current === 'DEALER')) {
     lines.push(`${current ? 'Tài khoản đã là đại lý' : 'Nếu tài khoản đã là đại lý'}: chỉ đổi bậc, gian hàng đối tác giữ nguyên.`);
@@ -2053,6 +2057,7 @@ function ConfigTab({ onOpenSupportChat }: { onOpenSupportChat?: () => void }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-config'], queryFn: () => getConfig() });
   const [search, setSearch] = useState('');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const needle = foldSearch(search.trim());
   const matches = (c: ConfigRow) => !needle || foldSearch(`${c.key} ${c.description ?? ''}`).includes(needle);
   const groups = groupConfigRows(q.data ?? []);
@@ -2062,12 +2067,18 @@ function ConfigTab({ onOpenSupportChat }: { onOpenSupportChat?: () => void }) {
     <div className="space-y-4">
       <FeatureFlagsCard rows={q.data} onOpenSupportChat={onOpenSupportChat} />
       <ShopInfoCard rows={q.data} />
-      <GomdonConfigCard rows={q.data} />
+      <PartnerRulesCard rows={q.data} />
       <LoyaltyConfigCard rows={q.data} />
+      <details open={advancedOpen} onToggle={(e) => setAdvancedOpen(e.currentTarget.open)} className="rounded-card border border-stone-200 bg-stone-0 p-3">
+        <summary className="flex min-h-[44px] cursor-pointer items-center font-display text-sm font-semibold text-stone-900">
+          Cài đặt kỹ thuật (dành cho người cài đặt hệ thống)
+        </summary>
+      <div className="mt-3 space-y-4">
+      <GomdonConfigCard rows={q.data} />
       <div>
         <h2 className="font-display text-sm font-semibold text-stone-900">Tất cả tham số (JSON)</h2>
         <p className="mt-0.5 text-xs text-stone-500">
-          Giá trị có tên chứa password/secret/token luôn hiện dạng ••••••••; giữ nguyên chuỗi đó khi lưu thì giá trị thật không đổi.
+          Mật khẩu và khoá bí mật luôn hiện dạng ••••••••; giữ nguyên chuỗi đó khi lưu thì giá trị thật không đổi. Chỉ sửa khi đã biết rõ mình đang đổi gì.
         </p>
         <input
           type="search"
@@ -2094,6 +2105,8 @@ function ConfigTab({ onOpenSupportChat }: { onOpenSupportChat?: () => void }) {
           {needle && shownCount === 0 && <p className="text-sm text-stone-500">Không có khoá nào khớp &quot;{search.trim()}&quot;.</p>}
         </div>
       </div>
+      </div>
+      </details>
     </div>
   );
 }
@@ -3065,7 +3078,7 @@ function QuickReplyTab() {
       <div className={CARD_CLASS}>
         <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Thêm mẫu tin nhanh</h2>
         <p className="mb-2 text-xs text-stone-500">
-          Dùng để auto-reply khi khách nhắn vào Zalo OA — so khớp từ khoá (cách nhau bằng dấu phẩy),
+          Dùng để tự trả lời khi khách nhắn vào Zalo của shop — so khớp từ khoá (cách nhau bằng dấu phẩy),
           hoặc bật &quot;Lời chào tự động&quot; để gửi cho tin nhắn đầu tiên của khách.
         </p>
         <div className="space-y-2">

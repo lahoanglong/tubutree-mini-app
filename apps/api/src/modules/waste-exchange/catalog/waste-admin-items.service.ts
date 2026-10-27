@@ -5,7 +5,6 @@ import { assertActiveAdmin } from '../../../common/staff-access';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { writeWasteEvent } from '../core/waste-events';
 
-const HAZARDOUS_NOT_ACTIVE = 'Món nguy hại không được đặt Đang nhận.';
 const CODE_TAKEN = 'Mã món đã tồn tại.';
 
 const pick = (o: Record<string, unknown>, keys: string[]): Record<string, unknown> => Object.fromEntries(keys.map((k) => [k, o[k]]));
@@ -49,7 +48,6 @@ export class WasteAdminItemsService {
 
   async create(adminUserId: string, body: WasteItemUpsertRequest): Promise<AdminWasteItemDTO> {
     const admin = await assertActiveAdmin(this.prisma, adminUserId);
-    if (body.hazardous === true && body.status === 'ACTIVE') throw new BadRequestException(HAZARDOUS_NOT_ACTIVE);
 
     try {
       const created = await this.prisma.$transaction(async (tx) => {
@@ -101,20 +99,10 @@ export class WasteAdminItemsService {
 
     try {
       const row = await this.prisma.$transaction(async (tx) => {
-        // FOR UPDATE: the hazardous/ACTIVE check and the logged "before" read the committed row, not a stale one.
+        // FOR UPDATE: the un-flag check and the logged "before" read the committed row, not a stale one.
         const [cur] = await tx.$queryRaw<WasteItem[]>`SELECT * FROM "waste_items" WHERE "id" = ${id} FOR UPDATE`;
         if (!cur) throw new NotFoundException('Không tìm thấy món.');
         if (body.hazardous === false && cur.hazardous) throw new BadRequestException('Không gỡ được cờ nguy hại của món.');
-
-        const nextHazardous = body.hazardous ?? cur.hazardous;
-        const nextStatus = body.status ?? cur.status;
-        if (nextHazardous && nextStatus === 'ACTIVE') {
-          throw new BadRequestException(
-            cur.hazardous || body.hazardous === undefined
-              ? HAZARDOUS_NOT_ACTIVE
-              : 'Món đang nhận không bật được cờ nguy hại; hãy chuyển món sang Sắp nhận hoặc Ẩn trước.',
-          );
-        }
 
         const data = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined));
         const curRecord = cur as unknown as Record<string, unknown>;

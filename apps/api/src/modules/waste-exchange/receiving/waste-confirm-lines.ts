@@ -10,7 +10,6 @@ export interface WasteStoredLine {
   pointsPerGroup: number;
   dropsPerUnit: number;
   gramsPerUnit: number | null;
-  hazardous: boolean;
 }
 
 export interface WasteValidatedLine {
@@ -26,7 +25,6 @@ export interface WasteValidatedLine {
 const STALE_REQUEST = 'Khách vừa sửa yêu cầu, vui lòng tra lại mã';
 const RECEIVED_OUT_OF_RANGE = 'Số thực nhận phải là số nguyên từ 0 tới số khai';
 const SHORT_NEEDS_REASON = 'Dòng nhận thiếu phải có lý do';
-const HAZARDOUS_ONLY_WRONG_TYPE = 'Món nguy hại chỉ được đếm 0 với lý do sai loại';
 
 /**
  * Checks the desk's confirm body against the lines stored on the request (spec 15.5 step 5). The rates come from the
@@ -49,7 +47,6 @@ export function validateConfirmLines(stored: ReadonlyArray<WasteStoredLine>, bod
     const b = byItem.get(s.itemId) as WasteConfirmLineInput;
     const received = b.receivedQty;
     if (!Number.isInteger(received) || received < 0 || received > s.declaredQty) throw new BadRequestException(RECEIVED_OUT_OF_RANGE);
-    if (s.hazardous && (received !== 0 || b.shortfallReason !== 'WRONG_TYPE')) throw new BadRequestException(HAZARDOUS_ONLY_WRONG_TYPE);
     const short = received < s.declaredQty;
     if (short && !b.shortfallReason) throw new BadRequestException(SHORT_NEEDS_REASON);
     return {

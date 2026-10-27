@@ -13,7 +13,9 @@ import {
   tierProgressPercent,
   type PointsTxn,
 } from '../services/account-api';
+import { wasteHistoryMenu } from '@tubutree/app-core/waste-copy';
 import { getErrorMessage } from '../services/api';
+import { WASTE_QUERY_KEYS, listWasteRequests } from '../services/waste-api';
 import { GuestTiers } from '../components/loyalty/guest-tiers';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -68,6 +70,10 @@ export default function LoyaltyPage() {
   // (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (cùng bug đã fix ở wallet.tsx).
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
+  // Chương trình tắt mà khách từng có yêu cầu thì vẫn cho xem lại (không tạo mới được).
+  const wasteOff = publicConfig.isLoaded && !publicConfig.waste.enabled;
+  const wasteHistoryQ = useQuery({ queryKey: WASTE_QUERY_KEYS.requests, queryFn: listWasteRequests, enabled: authed && wasteOff, retry: false });
+  const hasWasteHistory = (wasteHistoryQ.data?.length ?? 0) > 0;
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const txnQ = useQuery({ queryKey: ['points-txn'], queryFn: getPointsTransactions, enabled: authed });
@@ -306,6 +312,20 @@ export default function LoyaltyPage() {
               trailing="chevron"
               onPress={() => navigate('/game')}
             />
+            {!publicConfig.waste.enabled && hasWasteHistory && (
+              <ListRow
+                icon={
+                  <IconTile>
+                    <Icon icon={Recycle} tone="brand" />
+                  </IconTile>
+                }
+                title={wasteHistoryMenu.label}
+                subtitle={wasteHistoryMenu.hint}
+                trailing="chevron"
+                onPress={() => navigate('/recycle/requests')}
+                style={{ borderTop: '1px solid var(--color-border-subtle)' }}
+              />
+            )}
             {publicConfig.waste.enabled && (
               <ListRow
                 icon={

@@ -292,7 +292,7 @@ describe('evaluateDb', () => {
         const r = W({ totalPoints: 3, activeWarehouses: 0 }, { 'waste.enabled': true }, phase);
         expect(r.status).toBe('FAIL');
         expect(r.detail).toContain('chưa có kho');
-        expect(r.hint).toContain('Quản trị, Khách hàng, Đổi rác, Điểm nhận');
+        expect(r.hint).toContain('Quản trị, Đổi rác và game, Đổi rác, Điểm nhận');
       }
     });
     it('waste.enabled bật và có một kho ACTIVE: PASS, nêu số kho và số điểm', () => {
@@ -305,7 +305,7 @@ describe('evaluateDb', () => {
       const r = W({ activeWarehouses: 1, activeWarehousesWithPhone: 0 }, { 'waste.enabled': true });
       expect(r.status).toBe('FAIL');
       expect(r.detail).toContain('số điện thoại');
-      expect(r.hint).toContain('Quản trị, Khách hàng, Đổi rác, Điểm nhận');
+      expect(r.hint).toContain('Quản trị, Đổi rác và game, Đổi rác, Điểm nhận');
       expect(r.hint).toContain('Số điện thoại');
       expect(W({ activeWarehouses: 1, activeWarehousesWithPhone: 0 }, { 'waste.enabled': true, 'waste.lane_mailin_enabled': true }).status).toBe('FAIL');
     });

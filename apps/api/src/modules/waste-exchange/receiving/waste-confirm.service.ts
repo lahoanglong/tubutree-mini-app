@@ -56,7 +56,7 @@ type StoredRequest = {
   lines: StoredLine[];
 };
 const CONFIRM_INCLUDE = {
-  lines: { include: { item: { select: { hazardous: true, warehouseOnly: true } } } },
+  lines: { include: { item: { select: { warehouseOnly: true } } } },
   user: { select: { id: true, phone: true, isBlocked: true } },
   order: { select: { status: true } },
 } satisfies Prisma.WasteRequestInclude;
@@ -122,7 +122,6 @@ export class WasteConfirmService {
             pointsPerGroup: l.pointsPerGroup,
             dropsPerUnit: l.dropsPerUnit,
             gramsPerUnit: l.gramsPerUnit,
-            hazardous: l.item.hazardous,
           })),
           body.lines,
         );

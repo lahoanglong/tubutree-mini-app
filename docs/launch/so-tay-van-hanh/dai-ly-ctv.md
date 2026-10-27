@@ -3,7 +3,7 @@
 Bạn duyệt đại lý và sản phẩm đối tác, theo dõi thưởng, đơn đối tác, lập phiếu đối soát, trả lời CTV và đại lý. Đọc [README](README.md) trước.
 Ký hiệu: **⏳ đang làm** = chưa có chức năng, làm theo đường tạm. **(cần xác nhận)** = chưa kiểm thực tế.
 
-Bạn dùng: web **Quản trị** (nhóm Người bán, Đơn hàng & giao vận). Chưa có nhóm quyền riêng (**⏳ đang làm**): bạn đang dùng vai trò "Quản trị", thấy cả màn tiền bạc. Đừng bấm vào màn của kế toán.
+Bạn dùng: web **Quản trị** (nhóm Đại lý và đối tác, Bán hàng). Chưa có nhóm quyền riêng (**⏳ đang làm**): bạn đang dùng vai trò "Quản trị", thấy cả màn tiền bạc. Đừng bấm vào màn của kế toán.
 Chuyển tiền thật ở ngân hàng là việc của [kế toán](ke-toan.md).
 
 ## Ba loại người bán
@@ -23,7 +23,7 @@ Mini App chưa có nút dẫn tới Cổng người bán. Gửi link cho đối 
 
 ## Trong ca
 
-**Duyệt hồ sơ đại lý.** **Quản trị › Người bán › Đại lý** (mở sẵn bộ lọc chờ duyệt, hồ sơ cũ nhất trên cùng).
+**Duyệt hồ sơ đại lý.** **Quản trị › Đại lý và đối tác › Đại lý** (mở sẵn bộ lọc chờ duyệt, hồ sơ cũ nhất trên cùng).
 1. Đọc tên doanh nghiệp, người đại diện, SĐT, địa chỉ. Mở ảnh "CCCD trước", "CCCD sau": đối chiếu tên với người đại diện. Hệ thống không tự kiểm, bạn kiểm bằng mắt.
 2. Chọn bậc ở ô bậc đại lý, bấm "Duyệt". Chưa chọn bậc thì nút bị mờ.
 3. Không duyệt thì bấm "Từ chối". Lý do ghi lại luôn là "Không đạt yêu cầu", chưa nhập lý do riêng được. Nên gọi đại lý giải thích.
@@ -37,18 +37,18 @@ Bậc mặc định (đổi chiết khấu, hạn mức: nhờ kỹ thuật, **�
 | Đại lý Cấp 3 | 38% | 50 triệu | NET 30 |
 | Đại lý VIP | 45% | 150 triệu | NET 30 |
 
-Chưa có màn nhập bảng giá sỉ riêng cho từng đại lý và chưa có danh sách đại lý kèm công nợ từng người (**⏳ đang làm**). Màn **Người bán › Lịch sử giá đại lý** chỉ để xem. Hệ thống **không** tự kiểm đơn sỉ tối thiểu, **không** tự nhắc nợ quá hạn NET, và phí giao đơn sỉ luôn bằng 0 (**⏳ đang làm**, chờ chủ shop quyết). Đường tạm: ghi sổ riêng ngày đến hạn của từng đại lý, gọi nhắc trước hạn.
+Chưa có màn nhập bảng giá sỉ riêng cho từng đại lý và chưa có danh sách đại lý kèm công nợ từng người (**⏳ đang làm**). Màn **Đại lý và đối tác › Lịch sử giá đại lý** chỉ để xem. Hệ thống **không** tự kiểm đơn sỉ tối thiểu, **không** tự nhắc nợ quá hạn NET, và phí giao đơn sỉ luôn bằng 0 (**⏳ đang làm**, chờ chủ shop quyết). Đường tạm: ghi sổ riêng ngày đến hạn của từng đại lý, gọi nhắc trước hạn.
 
 Sau khi duyệt, nhắn đại lý: mở **Kênh đại lý**, xem bảng giá sỉ, đặt hàng, xem công nợ. Muốn bán online: vào Cổng người bán.
 
-**Thưởng đại lý.** **Người bán › Thưởng đại lý.** Đại lý đạt mốc doanh số quý hoặc năm sẽ gửi yêu cầu (trong 30 ngày sau khi kỳ kết thúc). Mở yêu cầu "Đang chờ duyệt": bấm "Duyệt", hoặc "Từ chối" (bắt buộc ghi lý do, đại lý đọc được). Trao thưởng (tour, quà) ngoài hệ thống, rồi bấm "Đã trao thưởng". Từ chối nhầm: bấm "Mở lại". Lỗi doanh số tụt dưới mốc (có đơn huỷ/trả sau khi gửi) hiện nguyên văn: đọc, giải thích cho đại lý. Thưởng quý trừ thẳng vào công nợ.
+**Thưởng đại lý.** **Đại lý và đối tác › Thưởng đại lý.** Đại lý đạt mốc doanh số quý hoặc năm sẽ gửi yêu cầu (trong 30 ngày sau khi kỳ kết thúc). Mở yêu cầu "Đang chờ duyệt": bấm "Duyệt", hoặc "Từ chối" (bắt buộc ghi lý do, đại lý đọc được). Trao thưởng (tour, quà) ngoài hệ thống, rồi bấm "Đã trao thưởng". Từ chối nhầm: bấm "Mở lại". Lỗi doanh số tụt dưới mốc (có đơn huỷ/trả sau khi gửi) hiện nguyên văn: đọc, giải thích cho đại lý. Thưởng quý trừ thẳng vào công nợ.
 
-**Duyệt sản phẩm đối tác.** **Người bán › Duyệt SP đối tác.** Đọc tên, mô tả, thành phần, chứng nhận, tiêu chí xanh, ảnh. Bấm "Duyệt xuất bản" (sản phẩm mới) hoặc "Duyệt bản sửa". Không đạt thì ghi lý do rồi bấm "Từ chối". Khách vẫn thấy bản cũ cho tới khi bạn duyệt bản sửa.
+**Duyệt sản phẩm đối tác.** **Đại lý và đối tác › Duyệt SP đối tác.** Đọc tên, mô tả, thành phần, chứng nhận, tiêu chí xanh, ảnh. Bấm "Duyệt xuất bản" (sản phẩm mới) hoặc "Duyệt bản sửa". Không đạt thì ghi lý do rồi bấm "Từ chối". Khách vẫn thấy bản cũ cho tới khi bạn duyệt bản sửa.
 - Sản phẩm "Tubu giao hộ" (đối tác dùng mã Pancake của Tubu): màn hiện hộp so sánh với sản phẩm đang bán. Đọc, tick "Tôi đã xem sản phẩm đang bán… đồng ý chuyển", rồi duyệt. Biến thể sẽ chuyển sang gian hàng đối tác.
 - Mở mục "Liên kết chờ xác nhận hàng ký gửi" (chip **"Chờ xác nhận ký gửi"**). Đối chiếu tồn trên Pancake trước. Chỉ bấm "Xác nhận ký gửi" khi đúng là hàng ký gửi của đối tác, không phải hàng Tubu đã mua. Đơn từ mốc đó mới vào đối soát.
 - Gỡ liên kết: bấm "Gỡ liên kết", ghi lý do gửi đối tác. Biến thể về sản phẩm gốc, sản phẩm đối tác ngừng bán.
 
-**Theo dõi đơn đối tác.** **Đơn hàng & giao vận › Đơn đối tác & đối soát.** Bảng "Gian hàng đối tác" và "Đơn quá hạn". Hạn mặc định: xác nhận 24 giờ, gửi hàng 48 giờ, giao xong 7 ngày. Hệ thống tự nhắc đối tác mỗi giờ. Đơn quá hạn: gọi đối tác. Quá hạn nhiều: báo chủ shop.
+**Theo dõi đơn đối tác.** **Đại lý và đối tác › Đơn đối tác & đối soát.** Bảng "Gian hàng đối tác" và "Đơn quá hạn". Hạn mặc định: xác nhận 24 giờ, gửi hàng 48 giờ, giao xong 7 ngày. Hệ thống tự nhắc đối tác mỗi giờ. Đơn quá hạn: gọi đối tác. Quá hạn nhiều: báo chủ shop.
 
 **Lập phiếu đối soát.** Cùng màn. Tiền chỉ vào bảng kê 7 ngày sau khi giao đơn (bằng hạn đổi/trả). Mỗi gian hàng: bấm "Xem khoản" để xem, "Lập phiếu đối soát" để tạo phiếu (nút mờ nghĩa là chưa có khoản). "Sửa phí" đổi "Phí sàn riêng (%)" hoặc phí Tubu giao hộ cho từng gian hàng. Nên lập phiếu mỗi tuần (gợi ý, chủ shop quyết). Kế toán chuyển tiền và bấm "Đã chuyển". Phiếu lập nhầm: "Huỷ phiếu", ghi lý do (đối tác đọc được). Đơn COD đối tác tự thu thì phiếu âm: đối tác nộp lại Tubu trong 7 ngày, kế toán bấm "Đã thu".
 
@@ -64,6 +64,8 @@ Sau khi duyệt, nhắn đại lý: mở **Kênh đại lý**, xem bảng giá s
 **Gian hàng CTV.** CTV đăng ký xong có trang công khai ngay, có dấu tích xanh và "100% Chính hãng". Không ai duyệt, bạn không gỡ được, và khoá tài khoản không ẩn gian hàng (**⏳ đang làm**). Phát hiện gian hàng vi phạm: chụp màn hình, gửi kỹ thuật gỡ. Tên miền con `ten-ban.tubutree.com` chưa chạy: đừng hứa với CTV.
 
 **Content Kit, Academy cho CTV:** marketing soạn. Xem [marketing.md](marketing.md).
+
+**Đại lý làm điểm nhận Đổi rác: pin.** Pin đã dùng hiện chưa nhận. Khi Tubu bật pin, chỉ kho TP.HCM nhận; đại lý vẫn chưa nhận cho tới khi Sở NN&MT trả lời về điểm đối tác và có quy trình chuyển pin về kho hoặc đơn vị có giấy phép. Chưa gắn pin cho điểm đại lý nào. Chỉ admin gắn pin cho điểm (chủ điểm không tự gắn được), và chủ Tubu Tree chỉ cho gắn khi Sở NN&MT đã trả lời về điểm đối tác và đã có quy trình chuyển pin từ đại lý về kho hoặc đơn vị có giấy phép. Việc này của chủ. Khi được gắn, dặn đại lý: cất pin riêng vào thùng kín, không để lẫn rác khác; pin phồng hoặc chảy nước thì không đếm, không giữ lại, trả khách (ở quầy chọn lý do nhận thiếu "Hỏng"); không nhận pin xe điện hay ắc quy. Pin chỉ nhận khi khách mang tới điểm, không qua đường gửi hay thu kèm đơn.
 
 ## Cuối ca
 

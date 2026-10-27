@@ -10,6 +10,8 @@ export interface TimelineProps {
   current: number;
   label?: string;
   compact?: boolean;
+  /** Chữ thay cho tên bước hiện tại ở dải thu gọn, ví dụ "Bước 2/4: Mang tới điểm". */
+  caption?: string;
   /** Dòng phụ dưới tên bước, theo chỉ số bước; chỉ hiện ở bản đầy đủ. */
   hints?: Readonly<Record<number, ReactNode>>;
 }
@@ -22,7 +24,7 @@ const STATE_TEXT: Record<StepState, string> = {
   upcoming: ', chưa tới',
 };
 
-export function Timeline({ steps, current, label = 'Tiến độ yêu cầu', compact = false, hints }: TimelineProps) {
+export function Timeline({ steps, current, label = 'Tiến độ yêu cầu', compact = false, hints, caption: captionText }: TimelineProps) {
   const size = compact ? 16 : 24;
   const list = (
     <ol
@@ -76,7 +78,7 @@ export function Timeline({ steps, current, label = 'Tiến độ yêu cầu', co
     </ol>
   );
   if (!compact) return list;
-  const caption = steps[Math.min(current, steps.length - 1)];
+  const caption = captionText ?? steps[Math.min(current, steps.length - 1)];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
       {list}

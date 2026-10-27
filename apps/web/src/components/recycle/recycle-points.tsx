@@ -19,6 +19,7 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { ErrorState } from '@/components/ui/error-state';
+import { wasteStepCopy, warehouseOnlyPointsNote } from '@tubutree/app-core/waste-copy';
 import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedTabs } from '@/components/ui/segmented-tabs';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -73,7 +74,7 @@ export function RecyclePoints() {
 
   const shell = (content: ReactNode, bar?: ReactNode) => (
     <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12">
-      <PageHeader title="Điểm nhận gần bạn" backHref={nav?.returnTo ?? '/doi-rac/tao'} backLabel="Quay lại" />
+      <PageHeader title={wasteStepCopy.points} backHref={nav?.returnTo ?? '/doi-rac/tao'} backLabel="Quay lại" />
       {content}
       {bar}
     </main>
@@ -108,6 +109,7 @@ export function RecyclePoints() {
 
   const tabItems = provinces.map((x) => ({ key: x.code, label: x.name }));
   const list = filterPointsByText(points.filter((p) => p.provinceCode === tab), q);
+  const warehouseOnlyNames = me.items.filter((i) => nav.selectedItemIds.includes(i.id) && i.warehouseOnly).map((i) => i.name);
   const pickedPoint = list.find((p) => p.id === picked) ?? null;
   const canChoose =
     pickedPoint !== null && !pickedPoint.quotaFull && nav.selectedItemIds.every((id) => pickedPoint.acceptedItemIds.includes(id));
@@ -135,6 +137,9 @@ export function RecyclePoints() {
 
   return shell(
     <>
+      {warehouseOnlyNames.length > 0 && (
+        <p className="text-sm text-stone-600">{warehouseOnlyPointsNote(warehouseOnlyNames, points.some((p) => p.kind === 'WAREHOUSE'))}</p>
+      )}
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
         <input

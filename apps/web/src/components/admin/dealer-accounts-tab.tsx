@@ -122,7 +122,7 @@ export function DealerAccountsTab({ isAdmin = true }: { isAdmin?: boolean } = {}
               <>
                 <p className="font-medium text-stone-800">Chưa có đại lý nào được duyệt.</p>
                 <p className="mt-1 text-xs text-stone-500">
-                  Duyệt hồ sơ ở tab &quot;Đại lý&quot; (mục Người bán) thì đại lý sẽ hiện ở đây cùng bậc, dư nợ và doanh số tháng.
+                  Duyệt hồ sơ ở tab &quot;Đại lý&quot; (nhóm Đại lý và đối tác) thì đại lý sẽ hiện ở đây cùng bậc, dư nợ và doanh số tháng.
                 </p>
               </>
             )}

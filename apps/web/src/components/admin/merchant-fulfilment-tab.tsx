@@ -95,10 +95,11 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
     const ok = await confirm({
       title: next ? 'Bật gian hàng đối tác' : 'Tắt gian hàng đối tác',
       message: next
-        ? `Bật cờ đối tác cho "${s.title}"? Chủ gian hàng sẽ dùng được Cổng người bán (đăng sản phẩm, đơn tự giao, đối soát).`
-        : `Tắt cờ đối tác của "${s.title}"? Hệ thống từ chối nếu gian hàng còn việc đối tác dở dang (đơn tự giao, khoản chờ đối soát, phiếu chưa chuyển, yêu cầu trả hàng, sản phẩm đang bán).`,
+        ? `Bật quyền đối tác cho "${s.title}"? Chủ gian hàng sẽ dùng được Cổng người bán (đăng sản phẩm, đơn tự giao, đối soát).`
+        : `Tắt quyền đối tác của "${s.title}"? Hệ thống từ chối nếu gian hàng còn việc đối tác dở dang (đơn tự giao, khoản chờ đối soát, phiếu chưa chuyển, yêu cầu trả hàng, sản phẩm đang bán).`,
       confirmLabel: next ? 'Bật' : 'Tắt',
       cancelLabel: 'Đóng',
+      tone: next ? 'default' : 'danger',
     });
     if (ok && !partnerMut.isPending) partnerMut.mutate({ storefrontId: s.storefrontId, isPartner: next });
   };
@@ -120,8 +121,8 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
       </div>
       {o && (
         <p className="text-xs text-stone-500">
-          Hạn SLA: xác nhận {o.slaConfig.confirmHours} giờ, gửi hàng {o.slaConfig.shipHours} giờ, giao xong {o.slaConfig.deliverDays} ngày
-          (sửa ở tab Cấu hình, nhóm merchant).
+          Thời hạn xử lý: xác nhận {o.slaConfig.confirmHours} giờ, gửi hàng {o.slaConfig.shipHours} giờ, giao xong {o.slaConfig.deliverDays} ngày
+          (sửa ở tab Cấu hình, thẻ &quot;Hoa hồng cộng tác viên và hạn xử lý của đối tác&quot;).
         </p>
       )}
       {error && (
