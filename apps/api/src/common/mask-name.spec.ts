@@ -135,6 +135,13 @@ describe('tên dính liền bằng dấu phân cách không phải khoảng tr�
     ['Nguyễn⁣Văn⁣Lại', 'Lại N.'],
     ['Nguyễn᠎Văn᠎Lại', 'Lại N.'],
     ['Nguyễn/Văn|Lại', 'Lại N.'],
+    ['Nguyễn\u3164Văn\u3164Lại', 'Lại N.'],
+    ['Nguyễn\uFFA0Văn\uFFA0Lại', 'Lại N.'],
+    ['Nguyễn\u115FVăn\u1160Lại', 'Lại N.'],
+    ['Nguyễn\u2800Văn\u2800Lại', 'Lại N.'],
+    ['Nguyễn\u034FVăn\u034FLại', 'Lại N.'],
+    ['Nguyễn\u17B4Văn\u17B5Lại', 'Lại N.'],
+    ['Nguyễn\u180BVăn\u180DLại', 'Lại N.'],
   ])('publicDisplayName(%j) = %s, không lộ họ tên đầy đủ', (name, want) => {
     expect(publicDisplayName(name)).toBe(want);
     expect(maskName(name)).toBe(`${want.split(' ')[0]}***`);
