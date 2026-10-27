@@ -16,6 +16,7 @@ const gateOf = () => {
 
 async function expectChipHitArea44(chip: Locator): Promise<void> {
   const box = (await chip.boundingBox())!;
+  expect(box.height).toBeGreaterThanOrEqual(44);
   const hit = await chip.evaluate(
     (el, b) => {
       const x = b.x + b.width / 2;

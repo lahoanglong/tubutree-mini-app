@@ -644,6 +644,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     for (const chip of chips) {
       await chip.evaluate((el) => el.scrollIntoView({ block: 'center' }));
       const box = (await chip.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(44);
       const hit = await chip.evaluate(
         (el, b) => {
           const x = b.x + b.width / 2;
