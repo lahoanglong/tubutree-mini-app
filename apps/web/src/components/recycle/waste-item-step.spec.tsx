@@ -29,20 +29,32 @@ describe('WasteItemStep (web)', () => {
     const carton = card(c, 'Thùng carton');
     expect(carton.textContent).toContain('1 thùng = 1.000 điểm');
     expect(carton.textContent).toContain('Gấp phẳng, bỏ băng keo');
-    expect(carton.textContent).toContain('Tối đa 20 thùng mỗi tháng. Mang tới điểm nhận: tối đa 10 thùng mỗi ngày');
+    expect(carton.textContent).toContain('Tối đa 20 thùng mỗi tháng. Mỗi ngày mang tới điểm nhận tối đa 10 thùng');
     expect(carton.querySelector('[data-item-media] svg, [data-item-media] img')).not.toBeNull();
   });
   it('món sắp nhận mờ đi, có nhãn và không có bộ đếm; món ẩn không hiện', () => {
     const { c } = mount({ items: [ITEM_CARTON, ITEM_BATTERY, { ...ITEM_MILK, status: 'HIDDEN' }] });
-    const battery = card(c, 'Pin cũ');
+    const battery = card(c, 'Pin đã dùng');
     expect(battery.textContent).toContain('Sắp nhận');
     expect(battery.textContent).toContain('Đợt này Tubu chưa nhận pin');
     expect(battery.className).not.toContain('opacity-');
     expect(battery.getAttribute('aria-disabled')).toBe('true');
-    expect(card(c, 'Pin cũ').querySelector('span.text-stone-500')?.textContent).toBe('Pin cũ');
+    expect(card(c, 'Pin đã dùng').querySelector('span.text-stone-500')?.textContent).toBe('Pin đã dùng');
     expect(card(c, 'Thùng carton').hasAttribute('aria-disabled')).toBe(false);
     expect(btn(battery, 'Tăng số lượng')).toBeNull();
     expect(c.textContent).not.toContain('Vỏ hộp sữa');
+  });
+  it('món chỉ mang tới (pin): trần ngày đã bớt thì một dòng gộp thay câu trần ngày; còn nguyên trần thì chỉ câu trần', () => {
+    const pin = { ...ITEM_BATTERY, status: 'ACTIVE' as const, hazardous: true, dailyCapQty: 20, monthlyCapQty: 50, monthRemainingQty: 50, dayRemainingQty: 12 };
+    const { c } = mount({ items: [ITEM_CARTON, pin] });
+    const t = card(c, 'Pin đã dùng').textContent!;
+    expect(t).toContain('Hôm nay còn nhận được 12 viên (tối đa 20 viên mỗi ngày)');
+    expect(t).not.toContain('Mỗi ngày mang tới điểm nhận tối đa 20 viên');
+    expect(card(c, 'Thùng carton').textContent).toContain('Mỗi ngày mang tới điểm nhận tối đa 10 thùng');
+    const full = mount({ items: [{ ...pin, dayRemainingQty: 20 }] });
+    const ft = card(full.c, 'Pin đã dùng').textContent!;
+    expect(ft).toContain('Mỗi ngày mang tới điểm nhận tối đa 20 viên');
+    expect(ft).not.toContain('Hôm nay còn nhận được');
   });
   it('trần tháng đã bớt hoặc hết: thẻ món nói lý do dưới câu trần', () => {
     const { c } = mount({ items: [{ ...ITEM_CARTON, monthRemainingQty: 3 }, { ...ITEM_MILK, monthRemainingQty: 0 }] });
@@ -82,12 +94,20 @@ describe('WasteItemStep (web)', () => {
   });
 });
 
+describe('WasteItemStep — biểu tượng món', () => {
+  it('Vỏ chai Tubu dùng biểu tượng hộp trung tính, không phải ly rượu', () => {
+    const { c } = mount({ items: [{ ...ITEM_CARTON, code: 'TUBU_BOTTLE', name: 'Vỏ chai Tubu', imageUrl: null }] });
+    const icon = c.querySelector('[data-item-icon="bottle"] svg')!;
+    expect(icon.getAttribute('class')).toContain('lucide-container');
+    expect(icon.getAttribute('class')).not.toContain('wine');
+  });
+});
+
 describe('WasteItemStep — diện mạo Mini App ở điện thoại', () => {
-  it('món chưa có ảnh dùng lá xanh nhạt của ProductThumb thay icon Recycle; chữ phụ cỡ caption', () => {
+  it('món chưa có ảnh dùng biểu tượng theo loại món; chữ phụ cỡ caption', () => {
     const { c } = mount({ items: [{ ...ITEM_CARTON, imageUrl: null }] });
     const media = c.querySelector('[data-item-media]')!;
-    expect(media.querySelector('svg[class*="lucide"]')).toBeNull();
-    expect(media.querySelector('path')?.getAttribute('fill')).toBe('var(--forest-200)');
+    expect(media.querySelector('[data-item-icon="package"]')).not.toBeNull();
     expect(card(c, 'Thùng carton').querySelector('p')!.className).toContain('max-md:text-[length:var(--type-caption-size)]');
   });
 });

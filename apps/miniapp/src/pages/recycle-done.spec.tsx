@@ -89,7 +89,7 @@ describe('/recycle/done/:id (§4.7)', () => {
   it('số dư mới (tổng hai lô) và tiến độ tới quà từ redeemablePoints', async () => {
     renderPage();
     expect(await screen.findByText('Số dư mới 14.000 điểm')).toBeInTheDocument();
-    expect(await screen.findByText('Còn 6.000 điểm tới mã giảm giá Miễn phí vận chuyển')).toBeInTheDocument();
+    expect(await screen.findByText('Còn 6.000 điểm tới mã Miễn phí vận chuyển')).toBeInTheDocument();
   });
   it('giọt nước: chỉ khi dropsAwarded > 0, dùng icon không dùng emoji', async () => {
     mocks.getWasteRequest.mockResolvedValue(DONE({ dropsAwarded: 3 }));

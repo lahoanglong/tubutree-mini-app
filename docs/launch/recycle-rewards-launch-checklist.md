@@ -30,11 +30,13 @@ Tắt khẩn cấp: đặt waste.enabled = false, rồi khởi động lại API
 
 - [ ] Sở Công Thương TP.HCM: chương trình có phải khuyến mại không, có phải thông báo theo `Nghị định 128/2024` không. Owner: chủ dự án. Bằng chứng: văn bản trả lời hoặc ghi chú cuộc gọi, và Thể lệ công khai.
 - [ ] Kế toán thuế: hạch toán điểm phát hành, điểm đã dùng và quà; hoá đơn; xem lại nếu Tubu trả tiền cho đại lý hoặc mua vật liệu. Owner: kế toán. Bằng chứng: văn bản tư vấn.
-- [ ] Sở Nông nghiệp và Môi trường TP.HCM: phạm vi giai đoạn 1 có hợp pháp không; điều kiện để mở pin sau này (pin chỉ mở lại khi có hợp đồng xử lý chất thải nguy hại có giấy phép VÀ có văn bản trả lời này). Owner: chủ dự án. Bằng chứng: văn bản trả lời.
+- [ ] Sở Nông nghiệp và Môi trường TP.HCM: phạm vi giai đoạn 1 có hợp pháp không; điều kiện nhận pin. Hệ thống đã sẵn sàng nhận pin (migration `20261027000000_waste_battery_ready`, mức 10 viên = 1.000 điểm) nhưng pin giữ Sắp nhận; chỉ bật khi đủ cả ba điều kiện: có hợp đồng xử lý chất thải nguy hại có giấy phép, có văn bản trả lời này, và bản Mini App mới đã Live. Owner: chủ dự án. Bằng chứng: văn bản trả lời.
+- [ ] Chủ bật pin trong Quản trị (Đổi rác, tab Hàng nhận, chọn Đang nhận cho "Pin đã dùng"; hộp xác nhận nhắc điều kiện) CHỈ SAU KHI đủ ba điều kiện ở dòng trên. Kho TP.HCM nhận pin ngay khi pin Đang nhận. Chưa gắn pin cho điểm đại lý nào: chỉ kho nhận pin cho tới khi Sở NN&MT trả lời về điểm đối tác và có quy trình chuyển pin từ đại lý về kho hoặc đơn vị có giấy phép; khi đủ, admin (chủ điểm không tự gắn được) mới gắn pin cho điểm đó. Chưa bật thì khách không thấy pin trong ứng dụng. Owner: chủ dự án. Bằng chứng: ảnh màn Quản trị và ngày bật.
+- [ ] Thông báo trong ứng dụng khi bật pin (hệ thống không tự thông báo: bài viết, banner hoặc tin Zalo OA cho khách đang dùng Đổi rác); đổi câu "Hàng không thuộc bốn loại trên sẽ bị từ chối" ở mục 2 Thể lệ (đoạn thêm trong bản nháp 01). Owner: chủ dự án. Bằng chứng: ảnh thông báo.
 - [ ] Gomdon trả lời bằng văn bản (danh sách hàng không nhận, thu theo khối lượng, báo giá cước gửi về kho). Chỉ chặn phần 4. Owner: chủ dự án. Bằng chứng: email hoặc tin nhắn lưu lại.
 - [ ] Luật sư dữ liệu: câu chữ đồng ý, điều khoản đại lý, quyết định có chặn xoá tài khoản của khách bị gắn cờ không (nếu chưa xác nhận thì gỡ chặn và ghi là giới hạn đã biết), thời hạn lưu chi tiết yêu cầu và nhật ký sự kiện kể cả IP/UA đã cắt ngắn (spec 14.4 và 14.8). Owner: chủ dự án. Bằng chứng: văn bản tư vấn.
 - [x] Chủ dự án chọn một nơi nhận hộp sữa và vỏ chai Tubu, hoặc bỏ cả hai món khỏi đợt 1. Đã chốt 2026-10-19: chỉ kho HCMC nhận. Khi đăng ký kho HCMC, tick "Vỏ hộp sữa sạch" và "Vỏ chai, hộp Tubu Tree"; khi đăng ký đại lý, KHÔNG tick hai món này. Owner: chủ dự án (quyết định), admin (cấu hình điểm nhận). Bằng chứng: quyết định này và ảnh màn điểm nhận.
-- [ ] Điều khoản đại lý đã ký: không nhận pin hay chất thải nguy hại; đại lý không tự cộng điểm; hạn mức, kiểm tra và thu hồi; "Ưu đãi riêng" là khuyến mại và trách nhiệm của chính đại lý; đại lý là bên xử lý dữ liệu; giữ bí mật dữ liệu khách. Owner: pháp chế. Bằng chứng: bản ký.
+- [ ] Điều khoản đại lý đã ký: chỉ nhận pin khi Tubu đã bật pin và điểm có món pin (cất riêng, không đếm pin phồng hoặc chảy nước), không nhận chất thải nguy hại khác; đại lý không tự cộng điểm; hạn mức, kiểm tra và thu hồi; "Ưu đãi riêng" là khuyến mại và trách nhiệm của chính đại lý; đại lý là bên xử lý dữ liệu; giữ bí mật dữ liệu khách. Owner: pháp chế. Bằng chứng: bản ký.
 - [ ] Vị trí (không chặn): chủ dự án bật `scope.userLocation` cho Mini App, đặt `ZALO_APP_SECRET` thật, thử "Gần tôi" trên điện thoại thật. Owner: chủ dự án. Bằng chứng: ảnh chụp trên máy thật.
 - [ ] Kiểm tra Tubu có thuộc diện EPR không (được loại trừ nếu doanh thu nhóm bao bì dưới 30 tỷ đồng mỗi năm; không phải điều kiện để chạy chương trình). Owner: kế toán. Bằng chứng: ghi chú kết luận.
 - [ ] Không câu chữ nào nói "được tính EPR", "tái chế 100%", "xử lý đúng chuẩn", "cây thật", "mua cây", "CO2", "Mã chứng nhận" (chưa có hợp đồng đối tác trồng cây). Owner: nội dung. Bằng chứng: kết quả tìm chuỗi trong mã và Thể lệ.
@@ -59,7 +61,7 @@ Tắt khẩn cấp: đặt waste.enabled = false, rồi khởi động lại API
 
 - [ ] Nhận kiện theo mã `TR-`, không theo mã vận đơn của hãng. Owner: kho. Bằng chứng: nhật ký nhận.
 - [ ] Từ chối kiện còn cước thu khi nhận; nếu mã `TR-` đọc được thì từ chối yêu cầu. Owner: kho. Bằng chứng: nhật ký nhận.
-- [ ] Kiện có pin hoặc món nguy hại: để riêng, đưa tới điểm thu pin có giấy phép gần nhất, từ chối yêu cầu với lý do `HAZARDOUS` và ghi nhật ký. Owner: kho. Bằng chứng: nhật ký sự kiện.
+- [ ] Pin mang tới điểm nhận hoặc kho (khi pin đã bật): cất riêng vào thùng kín, không đếm, không giữ lại, trả khách pin phồng hoặc chảy nước (chọn lý do nhận thiếu "Hỏng"), giao đơn vị xử lý chất thải nguy hại có hợp đồng. Kiện gửi về kho hoặc thu kèm đơn có pin (đường này không nhận pin) hoặc món nguy hại khác: để riêng, đưa tới điểm thu pin có giấy phép gần nhất, từ chối yêu cầu với lý do `HAZARDOUS` và ghi nhật ký. Owner: kho. Bằng chứng: nhật ký sự kiện.
 - [ ] Việc gỡ cờ hazardous của một món chỉ bằng migration có người duyệt (spec 14.1), không sửa tay trên PROD. Owner: kỹ thuật. Bằng chứng: PR migration.
 
 ## 7. Xử lý gian lận
@@ -82,5 +84,5 @@ Làm đúng thứ tự:
 - Chưa kiểm chứng: Gomdon xử lý đơn loại 3, chiều hoàn, địa chỉ hoàn, cước và việc nhận theo khối lượng.
 - Cấu trúc `/me/info` của Zalo, quyền vị trí và `scanQRCode` phải kiểm trên điện thoại thật.
 - Các dữ kiện về mã trong spec được đọc tại `8b0ea824` và `46901969`; bản triển khai đã kiểm lại trên nhánh.
-- Chưa làm ở giai đoạn này: nhận diện ảnh bằng AI, in vận đơn, hoàn cước bằng điểm, trạm gom từ xa, phí tiền mặt theo đơn vị cho đại lý, ảnh bằng chứng, pin. TubuXu không được dùng lại. Các câu hỏi ở mục 18.1 vẫn thuộc chủ dự án.
+- Chưa làm ở giai đoạn này: nhận diện ảnh bằng AI, in vận đơn, hoàn cước bằng điểm, trạm gom từ xa, phí tiền mặt theo đơn vị cho đại lý, ảnh bằng chứng, nhận pin ở điểm đại lý (kho có thể nhận pin khi chủ bật, xem dòng về Sở NN&MT). TubuXu không được dùng lại. Các câu hỏi ở mục 18.1 vẫn thuộc chủ dự án.
 - [ ] Chạy lại scripts/audit/routes.json và personas.json trên bộ máy audit (seed-audit-personas) khi bộ đó được bật lại lần tới.

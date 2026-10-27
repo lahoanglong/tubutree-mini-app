@@ -15,6 +15,7 @@ import { createWastePoint, updateWastePoint } from '@/lib/admin-client';
 import { EMPTY_GEO, type GeoValue } from '@/components/geo-picker';
 import { getCommunes, getProvinces } from '@/lib/geo-client';
 import { WASTE_ITEM_STATUS_LABELS, WASTE_POINT_KIND_LABELS, WASTE_POINT_STATUS_LABELS } from '@/lib/waste-labels';
+import { useConfirm } from './confirm-dialog';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
 
 type Slot = { open: string; close: string };
@@ -278,9 +279,20 @@ export function WastePointForm({
     else delete next[day];
     set({ hours: next });
   };
-  const toggleItem = (id: string, on: boolean) =>
+  const toggleItem = async (id: string, on: boolean) => {
+    if (on && f.kind === 'PARTNER' && items.find((i) => i.id === id)?.hazardous) {
+      const ok = await confirm({
+        title: 'Gắn món nguy hại cho điểm đại lý',
+        message: 'Chỉ gắn pin cho điểm đại lý khi Sở NN&MT đã trả lời về điểm đối tác và đã có quy trình chuyển pin về kho hoặc đơn vị có giấy phép.',
+        confirmLabel: 'Gắn món này',
+        tone: 'danger',
+      });
+      if (!ok) return;
+    }
     set({ itemIds: on ? [...f.itemIds, id] : f.itemIds.filter((x) => x !== id) });
+  };
 
+  const { confirm, dialog } = useConfirm();
   const busy = create.isPending || update.isPending;
   const disableKind = (k: WastePointKind) => !!point || (k === 'WAREHOUSE' && warehouseExists);
 
@@ -406,6 +418,7 @@ export function WastePointForm({
         </button>
         <button type="button" className={BTN_SECONDARY} onClick={onCancel}>Huỷ</button>
       </div>
+      {dialog}
     </div>
   );
 }

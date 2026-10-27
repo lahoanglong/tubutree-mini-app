@@ -86,10 +86,11 @@ export function ruleText(item: WasteItemDTO): string {
   return `${item.unitsPerPoint} ${item.unitLabel} = ${formatPoints(item.pointsPerGroup)}`;
 }
 
-export function capSentence(item: WasteItemDTO): string | null {
+export function capSentence(item: WasteItemDTO, omitDaily = false): string | null {
   const parts: string[] = [];
   if (item.monthlyCapQty != null) parts.push(`Tối đa ${formatNumber(item.monthlyCapQty)} ${item.unitLabel} mỗi tháng`);
-  if (item.dailyCapQty != null) parts.push(`Mang tới điểm nhận: tối đa ${formatNumber(item.dailyCapQty)} ${item.unitLabel} mỗi ngày`);
+  // Trần ngày vẫn áp cho DROP_OFF tới kho (waste-hold.service); món chỉ kho nhận thì nơi mang tới là kho.
+  if (item.dailyCapQty != null && !omitDaily) parts.push(`Mỗi ngày mang tới ${item.warehouseOnly ? 'kho' : 'điểm nhận'} tối đa ${formatNumber(item.dailyCapQty)} ${item.unitLabel}`);
   return parts.length ? parts.join('. ') : null;
 }
 
@@ -231,6 +232,8 @@ export function blockMessage(block: WastePreviewBlockDTO, ctx: BlockContext): st
       return `${name}: món này hiện chưa nhận, hãy bỏ khỏi danh sách`;
     case 'POINT_MISSING_ITEMS':
       return `Điểm này không nhận: ${name}`;
+    case 'ITEM_DROPOFF_ONLY':
+      return `${name}: không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được`;
     case 'LANE_DISABLED':
       return 'Cách giao này đang tạm dừng';
     case 'SHIP_LOCKED':
@@ -247,7 +250,7 @@ export function feeRangeText(fee: WasteFeeEstimate): string {
 }
 
 function voucherPhrase(name: string): string {
-  return /^giảm/i.test(name) ? `mã ${name.charAt(0).toLowerCase()}${name.slice(1)}` : `mã giảm giá ${name}`;
+  return /^giảm/i.test(name) ? `mã ${name.charAt(0).toLowerCase()}${name.slice(1)}` : `mã ${name}`;
 }
 
 export function nextRewardProgress(

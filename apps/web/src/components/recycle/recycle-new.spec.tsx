@@ -83,7 +83,7 @@ const atStep2 = (draft: WasteWizardDraft = DRAFT) => {
   markResume();
 };
 const toLineInputsOf = (d: WasteWizardDraft | null) => Object.entries(d?.lines ?? {}).filter(([, q]) => q > 0);
-const CONSENT = 'Tôi đồng ý cho Tubu Tree xử lý yêu cầu này';
+const CONSENT = 'Tôi đồng ý với Thể lệ Đổi rác và để Tubu Tree xử lý yêu cầu này';
 
 let mounted: Rendered[] = [];
 const mount = async () => {
@@ -95,6 +95,7 @@ const mount = async () => {
 const bar = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="sticky-bar"]')!;
 const barButton = (c: HTMLElement, name: string) => byText(bar(c), 'button', name) as HTMLButtonElement;
 const card = (c: HTMLElement, name: string) => byText(c, '[data-item]', name)!;
+const qtyOf = (c: HTMLElement, item: string) => card(c, item).querySelector<HTMLInputElement>('input[aria-label="Số lượng"]')?.value;
 const stepper = (c: HTMLElement, item: string, label: 'Tăng số lượng' | 'Giảm số lượng') =>
   card(c, item).querySelector<HTMLElement>(`button[aria-label="${label}"]`)!;
 const methods = (c: HTMLElement) => Array.from(c.querySelectorAll('[role="radio"]')).map((r) => r.getAttribute('data-method'));
@@ -138,7 +139,7 @@ afterEach(() => {
 describe('bước 1: chọn món (§4.2)', () => {
   it('thẻ món và tiêu đề: một h1, mọi điều khiển có tên, "Tiếp tục" khoá khi chưa chọn món', async () => {
     const c = await mount();
-    expect(c.textContent).toContain('Bước 1/3: Chọn món');
+    expect(c.textContent).toContain('Bước 1/2: Chọn món');
     expect(card(c, 'Thùng carton').textContent).toContain('1 thùng = 1.000 điểm');
     expect(headingProblems(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
@@ -230,13 +231,13 @@ describe('bước 1: chọn món (§4.2)', () => {
     saveDraft({ ...EMPTY_DRAFT, lines: { 'item-carton': 7 } });
     markResume();
     const c = await mount();
-    expect(card(c, 'Thùng carton').textContent).toContain('7');
+    expect(qtyOf(c, 'Thùng carton')).toBe('7');
     expect(state.replace).not.toHaveBeenCalled();
   });
   it('vào mới bước 1 (không từ trong wizard) → nháp rỗng, nháp cũ bị xoá', async () => {
     saveDraft({ ...EMPTY_DRAFT, lines: { 'item-carton': 7, 'item-gone': 3 } });
     const c = await mount();
-    expect(card(c, 'Thùng carton').textContent).not.toContain('7');
+    expect(qtyOf(c, 'Thùng carton')).not.toBe('7');
     expect(toLineInputsOf(loadDraft())).toEqual([]);
   });
   it('nháp còn món đã ẩn hoặc sắp ra mắt: bỏ khỏi nháp và khỏi body ước tính', async () => {
@@ -244,7 +245,7 @@ describe('bước 1: chọn món (§4.2)', () => {
     markResume();
     const c = await mount();
     await flush(10);
-    expect(card(c, 'Thùng carton').textContent).toContain('3');
+    expect(qtyOf(c, 'Thùng carton')).toBe('3');
     expect(toLineInputsOf(loadDraft())).toEqual([['item-carton', 3]]);
     expect(previewCalls().every((b) => b.lines.every((l) => l.itemId !== 'item-battery'))).toBe(true);
     expect(previewCalls().length).toBeGreaterThan(0);
@@ -350,6 +351,19 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     expect(c.textContent).toContain('Cần thêm 6.000 điểm');
     expect(Array.from(c.querySelectorAll('[role="radio"]')).every((r) => r.getAttribute('aria-disabled') === 'true')).toBe(true);
     expect(c.textContent).toContain('Bạn đang có 3 yêu cầu chưa xong');
+  });
+  it('ITEM_DROPOFF_ONLY: thẻ Gửi về kho và Thu kèm đơn khoá kèm lý do, thẻ Mang tới điểm nhận vẫn chọn được', async () => {
+    state.preview = (b) => {
+      const m = (b as WastePreviewRequest).method;
+      return preview(m === 'PICKUP' || m === 'MAIL_IN' ? { blocks: [{ code: 'ITEM_DROPOFF_ONLY', itemId: 'item-carton' }] } : {});
+    };
+    atStep2();
+    const c = await mount();
+    for (const m of ['PICKUP', 'MAIL_IN'] as const) {
+      expect(method(c, m).textContent).toContain('không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được');
+      expect(method(c, m).getAttribute('aria-disabled')).toBe('true');
+    }
+    expect(method(c, 'DROP_OFF').getAttribute('aria-disabled')).not.toBe('true');
   });
   it('MONTH_CAP_FOR_MIN: thẻ Thu kèm đơn nói gói thu kèm đơn, thẻ Gửi về kho nói gói gửi kho', async () => {
     state.preview = (b) => {
@@ -549,3 +563,20 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
   });
 });
 
+describe('Thể lệ từ bước 2: quay lại không mất ô đồng ý', () => {
+  it('bấm Xem Thể lệ lưu nháp + cờ tiếp tục + ô đồng ý; mở lại bước 2 thì khôi phục rồi xoá', async () => {
+    atStep2(PICKED);
+    let c = await mount();
+    click(check(c, CONSENT));
+    expect(check(c, CONSENT).checked).toBe(true);
+    const rules = byText(c, 'a', 'Xem Thể lệ') as HTMLAnchorElement;
+    rules.addEventListener('click', (e) => e.preventDefault());
+    click(rules);
+    expect(JSON.parse(window.sessionStorage.getItem('tubu.waste.consents')!)).toEqual({ consent: true, packaging: false, postage: false });
+    mounted.pop()!.unmount();
+    c = await mount();
+    expect(check(c, CONSENT).checked).toBe(true);
+    expect(window.sessionStorage.getItem('tubu.waste.consents')).toBeNull();
+    expect(method(c, 'DROP_OFF').getAttribute('aria-checked')).toBe('true');
+  });
+});

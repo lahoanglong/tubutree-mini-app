@@ -123,21 +123,86 @@ describe('WasteItemsSection', () => {
     expect(sel.disabled).toBe(false);
   });
 
-  it('món nguy hại: không bỏ được cờ, không chọn được Đang nhận (14.1)', async () => {
+  it('món nguy hại: không bỏ được cờ, vẫn đặt được Đang nhận', async () => {
     const { c, api } = await mount();
     const opt = row(c, 'i5').querySelector<HTMLOptionElement>('option[value="ACTIVE"]')!;
-    expect(opt.disabled).toBe(true);
+    expect(opt.disabled).toBe(false);
     click(Array.from(row(c, 'i5').querySelectorAll('button')).find((b) => b.textContent === 'Sửa')!);
     const hz = field(c, 'hazardous')!;
     expect(hz.checked).toBe(true);
     expect(hz.disabled).toBe(true);
-    expect(c.textContent).toContain('Đã đánh dấu nguy hại: không bỏ được và không đặt Đang nhận được.');
+    expect(c.textContent).toContain('Đã đánh dấu nguy hại: không bỏ được cờ, món chỉ nhận khi khách mang tới điểm nhận.');
     typeInto(field(c, 'prepInstructions'), 'Chưa nhận pin. Gom riêng, không bỏ chung với rác khác.');
     click(saveBtn(c));
     await flush();
     const patch = callsTo(api, '/admin/waste/items/i5', 'PATCH');
     expect(patch).toHaveLength(1);
     expect(body(patch[0]!)).toEqual({ prepInstructions: 'Chưa nhận pin. Gom riêng, không bỏ chung với rác khác.' });
+  });
+
+  it('bật món nguy hại (chọn Đang nhận ở bảng) hỏi xác nhận; Huỷ thì không gọi API, Đồng ý thì PATCH ACTIVE', async () => {
+    const { c, api } = await mount();
+    selectValue(c.querySelector('select[aria-label="Trạng thái Pin đã dùng"]'), 'ACTIVE');
+    await flush();
+    const text = confirmDialog()!.textContent!;
+    expect(text).toContain('Chỉ bật khi đã có đủ: hợp đồng với đơn vị có giấy phép xử lý chất thải nguy hại, văn bản trả lời của Sở NN&MT, và bản Mini App mới đã lên.');
+    expect(text).toContain('Kho nhận ngay mọi món đang nhận; đại lý chỉ nhận khi điểm có món này.');
+    answerConfirm(false);
+    await flush();
+    expect(callsTo(api, '/admin/waste/items/i5', 'PATCH')).toHaveLength(0);
+    selectValue(c.querySelector('select[aria-label="Trạng thái Pin đã dùng"]'), 'ACTIVE');
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const patch = callsTo(api, '/admin/waste/items/i5', 'PATCH');
+    expect(patch).toHaveLength(1);
+    expect(body(patch[0]!)).toEqual({ status: 'ACTIVE' });
+  });
+
+  it('bật món nguy hại trong bảng sửa cũng hỏi xác nhận', async () => {
+    const { c, api } = await mount();
+    click(Array.from(row(c, 'i5').querySelectorAll('button')).find((b) => b.textContent === 'Sửa')!);
+    selectValue(c.querySelector('[name="status"]'), 'ACTIVE');
+    click(saveBtn(c));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Chỉ bật khi đã có đủ: hợp đồng với đơn vị có giấy phép');
+    answerConfirm(true);
+    await flush();
+    expect(body(callsTo(api, '/admin/waste/items/i5', 'PATCH')[0]!)).toEqual({ status: 'ACTIVE' });
+  });
+
+  it('bật cờ nguy hại cho món ĐANG Đang nhận: sau hộp đánh dấu còn hộp điều kiện bật; không đổi trạng thái vẫn hỏi', async () => {
+    const { c, api } = await mount();
+    click(Array.from(row(c, 'i2').querySelectorAll('button')).find((b) => b.textContent === 'Sửa')!);
+    click(field(c, 'hazardous'));
+    click(saveBtn(c));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Không bỏ được cờ này sau khi lưu');
+    answerConfirm(true);
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Chỉ bật khi đã có đủ: hợp đồng với đơn vị có giấy phép');
+    answerConfirm(false);
+    await flush();
+    expect(callsTo(api, '/admin/waste/items/i2', 'PATCH')).toHaveLength(0);
+  });
+
+  it('tắt món nguy hại kèm gắn cờ trong cùng lần lưu thì không hỏi điều kiện bật; hộp bật nhắc chưa gắn cho đại lý', async () => {
+    const { c, api } = await mount();
+    click(Array.from(row(c, 'i2').querySelectorAll('button')).find((b) => b.textContent === 'Sửa')!);
+    click(field(c, 'hazardous'));
+    selectValue(c.querySelector('[name="status"]'), 'HIDDEN');
+    click(saveBtn(c));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Không bỏ được cờ này sau khi lưu');
+    answerConfirm(true);
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    expect(callsTo(api, '/admin/waste/items/i2', 'PATCH')).toHaveLength(1);
+    click(Array.from(row(c, 'i5').querySelectorAll('button')).find((b) => b.textContent === 'Sửa')!);
+    selectValue(c.querySelector('[name="status"]'), 'ACTIVE');
+    click(saveBtn(c));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Chưa gắn món này cho điểm đại lý cho tới khi Sở trả lời về điểm đối tác.');
   });
 
   it('thêm món: ô trần để trống gửi null; xem trước thẻ khách cập nhật theo ô nhập', async () => {
@@ -163,7 +228,7 @@ describe('WasteItemsSection', () => {
     const { c, api } = await mount();
     fillNew(c);
     click(field(c, 'hazardous'));
-    expect(c.querySelector<HTMLOptionElement>('[name="status"] option[value="ACTIVE"]')!.disabled).toBe(true);
+    expect(c.querySelector<HTMLOptionElement>('[name="status"] option[value="ACTIVE"]')!.disabled).toBe(false);
     click(saveBtn(c));
     await flush();
     expect(confirmDialog()!.textContent).toContain('Không bỏ được cờ này sau khi lưu');
@@ -206,10 +271,10 @@ describe('WasteItemsSection', () => {
   });
 
   it('lỗi API hiện nguyên văn', async () => {
-    const { c } = await mount({ status: 400, body: { message: 'Món nguy hại không được đặt Đang nhận' } });
+    const { c } = await mount({ status: 400, body: { message: 'Không gỡ được cờ nguy hại của món.' } });
     selectValue(c.querySelector('select[aria-label="Trạng thái Vỏ hộp sữa"]'), 'HIDDEN');
     await flush();
-    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Món nguy hại không được đặt Đang nhận');
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Không gỡ được cờ nguy hại của món.');
   });
 
   it('không có trường CO2e và không có chữ cấm', async () => {

@@ -13,7 +13,7 @@ function noDeadlock(results: PromiseSettledResult<unknown>[]) {
 }
 
 /**
- * WasteAdminItemsService trên Postgres thật: hai lần tạo cùng mã món, và cờ nguy hại đua với việc đặt Đang nhận.
+ * WasteAdminItemsService trên Postgres thật: hai lần tạo cùng mã món, và cờ nguy hại đua với việc đặt Đang nhận (hai thao tác đều được, kết quả cuối là nguy hại + Đang nhận).
  */
 describe('waste-admin-items race (real Postgres)', () => {
   let moduleRef: TestingModule;
@@ -35,10 +35,6 @@ describe('waste-admin-items race (real Postgres)', () => {
   };
   const itemLock = (id: string) => Prisma.sql`SELECT "id" FROM "waste_items" WHERE "id" = ${id} FOR UPDATE`;
   const rowOf = (id: string) => prisma.wasteItem.findUniqueOrThrow({ where: { id }, select: { hazardous: true, status: true } });
-  const noHazardousActive = async () => {
-    const [row] = await prisma.$queryRaw<{ n: number }[]>`SELECT COUNT(*)::int AS "n" FROM "waste_items" WHERE "hazardous" AND "status" = 'ACTIVE'`;
-    expect(row?.n).toBe(0);
-  };
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({ imports: [PrismaModule], providers: [WasteAdminItemsService] }).compile();
@@ -79,7 +75,7 @@ describe('waste-admin-items race (real Postgres)', () => {
 
   it('create B then create A with the same code: one wins, the other gets a 409', () => duplicateCreate(true));
 
-  it('hazardous then activate: the flag stands and the ACTIVE edit is refused', async () => {
+  it('hazardous then activate: both succeed and the item ends hazardous and ACTIVE', async () => {
     const admin = await newAdmin();
     const item = await newItem();
 
@@ -90,15 +86,12 @@ describe('waste-admin-items race (real Postgres)', () => {
       () => items.update(admin.id, item.id, { status: 'ACTIVE' }),
     );
 
-    expect(results[0].status).toBe('fulfilled');
-    expect(results[1].status).toBe('rejected');
-    expect((results[1] as PromiseRejectedResult).reason).toMatchObject({ status: 400, message: 'Món nguy hại không được đặt Đang nhận.' });
-    expect(await rowOf(item.id)).toEqual({ hazardous: true, status: 'COMING_SOON' });
-    await noHazardousActive();
+    expect(results.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled']);
+    expect(await rowOf(item.id)).toEqual({ hazardous: true, status: 'ACTIVE' });
     noDeadlock(results);
   });
 
-  it('activate then hazardous: the item stays ACTIVE and the flag is refused', async () => {
+  it('activate then hazardous: both succeed and the item ends hazardous and ACTIVE', async () => {
     const admin = await newAdmin();
     const item = await newItem();
 
@@ -109,14 +102,8 @@ describe('waste-admin-items race (real Postgres)', () => {
       () => items.update(admin.id, item.id, { hazardous: true }),
     );
 
-    expect(results[0].status).toBe('fulfilled');
-    expect(results[1].status).toBe('rejected');
-    expect((results[1] as PromiseRejectedResult).reason).toMatchObject({
-      status: 400,
-      message: 'Món đang nhận không bật được cờ nguy hại; hãy chuyển món sang Sắp nhận hoặc Ẩn trước.',
-    });
-    expect(await rowOf(item.id)).toEqual({ hazardous: false, status: 'ACTIVE' });
-    await noHazardousActive();
+    expect(results.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled']);
+    expect(await rowOf(item.id)).toEqual({ hazardous: true, status: 'ACTIVE' });
     noDeadlock(results);
   });
 });

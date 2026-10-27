@@ -96,7 +96,7 @@ describe('WastePointPicker (§4.4, §16.1)', () => {
     expect(screen.getAllByText('Đại lý').length).toBeGreaterThan(0);
     expect(screen.getByText('Kho Tubu')).toBeInTheDocument();
     expect(screen.getAllByText('12 Lê Lợi, Phường Bến Thành, TP.HCM').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Đang mở').length).toBe(4);
+    expect(screen.getAllByText('Đang mở, đến 18:00').length).toBe(4);
   });
   it('Chép địa chỉ chép địa chỉ điểm, không mở Google Maps; Gọi gọi số của điểm', async () => {
     mocks.copyText.mockResolvedValue(true);
@@ -109,10 +109,36 @@ describe('WastePointPicker (§4.4, §16.1)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Gọi/ }));
     expect(mocks.callPhone).toHaveBeenCalledWith('0901234567');
   });
-  it('ưu đãi riêng hiện tách riêng, nói rõ cửa hàng tự chịu và Tubu không đảm bảo (§5.6)', () => {
+  it('ưu đãi riêng hiện tách riêng, nói rõ không dùng Điểm Xanh (§5.6)', () => {
     renderPicker();
-    const perk = screen.getByText('Ưu đãi riêng của cửa hàng (cửa hàng tự chịu, không qua Điểm Xanh, Tubu không đảm bảo): Giảm 10% hoá đơn đầu');
+    const perk = screen.getByText('Ưu đãi của cửa hàng (không dùng Điểm Xanh): Giảm 10% hoá đơn đầu');
     expect(perk).toBeInTheDocument();
     expect(within(screen.getByRole('radio', { name: /Đại lý Thiếu/ })).queryByText(/Ưu đãi riêng/)).toBeNull();
+  });
+});
+
+describe('WastePointPicker — món chỉ kho nhận và giờ mở cửa (B-36, B-83)', () => {
+  const MILK = [{ id: 'item-carton', name: 'Thùng carton' }, { id: 'item-milk', name: 'Vỏ hộp sữa', warehouseOnly: true }];
+  it('điểm đại lý bị khoá vì món chỉ kho nhận thì nói lý do rõ', () => {
+    renderPicker({ items: MILK });
+    const part = screen.getByRole('radio', { name: /Đại lý Thiếu/ }).closest('div')!.parentElement as HTMLElement;
+    expect(within(part).getByText('Đại lý không nhận Vỏ hộp sữa, món này chỉ kho TP.HCM nhận')).toBeInTheDocument();
+  });
+  it('điểm đủ món (kho) không bị khoá và xếp trước', () => {
+    renderPicker({ items: MILK, points: [PARTIAL, makeWastePoint({ id: 'wh', name: 'Kho X', kind: 'WAREHOUSE', acceptedItemIds: ['item-carton', 'item-milk'] })] });
+    const radios = screen.getAllByRole('radio');
+    expect(radios[0]).toHaveAccessibleName(/Kho X/);
+    expect(radios[0]).toHaveAttribute('aria-disabled', 'false');
+  });
+  it('giờ mở cửa lấy từ openingHours: đang đóng ghi giờ mở lại', () => {
+    const closedNow = new Date('2026-10-19T14:00:00.000Z');
+    renderPicker({ now: closedNow, points: [makeWastePoint({ id: 'a', name: 'Điểm A' })] });
+    expect(screen.getByText('Đang đóng, mở lại 8:00 Thứ hai')).toBeInTheDocument();
+    expect(screen.queryByText(/Đang mở/)).toBeNull();
+  });
+  it('điểm chưa có giờ mở cửa thì không khẳng định đang đóng', () => {
+    renderPicker({ points: [makeWastePoint({ id: 'a', name: 'Điểm A', openingHours: {} })] });
+    expect(screen.getByText('Chưa cập nhật giờ mở cửa')).toBeInTheDocument();
+    expect(screen.queryByText(/Đang đóng/)).toBeNull();
   });
 });

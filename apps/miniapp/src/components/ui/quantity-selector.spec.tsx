@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { QuantitySelector } from './quantity-selector';
@@ -93,5 +93,38 @@ describe('QuantitySelector', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe('QuantitySelector — nhập nhanh (editable, quickSteps)', () => {
+  it('gõ số vào ô, bỏ chữ, kẹp vào [min, max]', () => {
+    const onChange = vi.fn();
+    render(<QuantitySelector value={3} max={50} min={0} editable onChange={onChange} />);
+    const box = screen.getByRole('textbox', { name: 'Số lượng' });
+    expect(box).toHaveAttribute('inputmode', 'numeric');
+    fireEvent.change(box, { target: { value: '3o0' } });
+    expect(onChange).toHaveBeenLastCalledWith(30);
+    fireEvent.change(box, { target: { value: '900' } });
+    expect(onChange).toHaveBeenLastCalledWith(50);
+    fireEvent.change(box, { target: { value: '' } });
+    expect(onChange).toHaveBeenLastCalledWith(0);
+  });
+  it('nút +5, +10 cộng dồn và dừng ở max; hết chỗ thì aria-disabled', () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<QuantitySelector value={8} max={12} min={0} quickSteps={[5, 10]} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm 5' }));
+    expect(onChange).toHaveBeenLastCalledWith(12);
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm 10' }));
+    expect(onChange).toHaveBeenLastCalledWith(12);
+    onChange.mockClear();
+    rerender(<QuantitySelector value={12} max={12} min={0} quickSteps={[5]} onChange={onChange} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm 5' }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Thêm 5' })).toHaveAttribute('aria-disabled', 'true');
+  });
+  it('không bật thì không có ô gõ hay nút nhanh', () => {
+    render(<QuantitySelector value={1} max={5} onChange={() => {}} />);
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Thêm/ })).toBeNull();
   });
 });

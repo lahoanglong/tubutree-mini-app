@@ -1,5 +1,6 @@
 'use client';
 
+import { createdTodayVn } from '@tubutree/app-core/waste-copy';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
@@ -196,6 +197,7 @@ export function RecycleEdit({ id }: { id: string }) {
         lines={lines}
         onChange={setLine}
         allowance={Object.fromEntries(r.lines.map((l) => [l.itemId, l.declaredQty]))}
+        dayCap={createdTodayVn(r.createdAt)}
       />
       {isDropOff && shownPoint && (
         <div className="flex flex-col gap-2">

@@ -9,6 +9,8 @@ import {
 import { WASTE_CONFIG_KEYS } from '../../src/modules/waste-exchange/waste-config.keys';
 
 const MIGRATION = 'prisma/migrations/20261020000000_waste_exchange/migration.sql';
+// Trạng thái BATTERY mà migration 20261027000000 đặt khi migrate deploy; đổi ở đây nếu chủ chọn khác.
+const BATTERY_STATUS_AFTER_MIGRATE = 'COMING_SOON';
 // Spec 11.4 (lines 306-312) with $3 and $4 cast to int; M3.1a incrementPointUsage uses this exact text.
 const QUOTA_SQL = `INSERT INTO waste_point_usage ("pointId", "monthKey", "pointsUsed", confirmations) VALUES ($1, $2, $3::int, 1) ON CONFLICT ("pointId", "monthKey") DO UPDATE SET "pointsUsed" = waste_point_usage."pointsUsed" + EXCLUDED."pointsUsed", confirmations = waste_point_usage.confirmations + 1 WHERE waste_point_usage."pointsUsed" + EXCLUDED."pointsUsed" <= $4::int RETURNING "pointsUsed"`;
 
@@ -49,9 +51,10 @@ describe('waste DB constraints (real Postgres)', () => {
     await set(`"dailyCapQty" = NULL`);
     await violates(set(`"monthlyCapQty" = 0`), 'waste_items_monthly_cap_chk');
     await set(`"monthlyCapQty" = 60`);
-    await violates(set(`"hazardous" = true`), 'waste_items_hazardous_not_active_chk');
+    // Migration 20261027000000 bỏ CHECK cũ: món nguy hại (xử lý riêng, như pin) được phép ACTIVE.
+    await set(`"hazardous" = true`);
     await set(`"hazardous" = true, "status" = 'COMING_SOON'`);
-    await violates(set(`"status" = 'ACTIVE'`), 'waste_items_hazardous_not_active_chk');
+    await set(`"status" = 'ACTIVE'`);
   });
 
   it('waste_points checks: partner needs a quota, warehouse never pauses', async () => {
@@ -215,13 +218,14 @@ describe('waste DB constraints (real Postgres)', () => {
     expect(usage).toMatchObject({ pointsUsed: 10_000, confirmations: 2 });
   });
 
-  it('re-applying the hand-written section is a no-op (IF NOT EXISTS and duplicate_object guards)', async () => {
+  it('re-applying the hand-written section is a no-op, except the hazardous CHECK that migration 20261027000000 dropped and cannot be re-added', async () => {
     const sql = readApiSql(MIGRATION);
     const a = sql.indexOf('-- BEGIN WASTE HAND-WRITTEN CONSTRAINTS');
     const b = sql.indexOf('-- END WASTE HAND-WRITTEN CONSTRAINTS');
     const statements = splitSqlStatements(sql.slice(a, b));
     expect(statements).toHaveLength(21);
-    for (let pass = 0; pass < 2; pass++) for (const s of statements) await prisma.$executeRawUnsafe(s);
+    // Migration 20261027000000 đã gỡ ràng buộc nguy hại và món nguy hại ACTIVE hợp lệ, nên bỏ câu thêm lại nó khỏi lần chạy lại.
+    for (let pass = 0; pass < 2; pass++) for (const s of statements.filter((x) => !x.includes('waste_items_hazardous_not_active_chk'))) await prisma.$executeRawUnsafe(s);
   });
 });
 
@@ -258,8 +262,31 @@ describe('seeded reference data after migrate deploy', () => {
       expect([typeof g.voucherType, typeof g.voucherValue, typeof g.voucherValidDays, typeof g.pointsCost]).toEqual(['string', 'number', 'number', 'number']);
     }
   });
-  it('the seeded rows are protected by the CHECKs (a hazardous battery cannot go ACTIVE, vouchers keep their fields and cost range)', async () => {
-    await violates(exec(`UPDATE "waste_items" SET "status" = 'ACTIVE', "hazardous" = true WHERE "id" = 'wi-battery'`), 'waste_items_hazardous_not_active_chk');
+  it('pin sau migrate deploy: 10 viên = 1.000 điểm, trần 20/ngày và 50/tháng, không chỉ kho nhận', async () => {
+    const pin = await prisma.wasteItem.findUniqueOrThrow({ where: { id: 'wi-battery' } });
+    expect(pin).toMatchObject({ hazardous: true, warehouseOnly: false, unitsPerPoint: 10, pointsPerGroup: 1000, dailyCapQty: 20, monthlyCapQty: 50, status: BATTERY_STATUS_AFTER_MIGRATE });
+  });
+  it('chạy migration pin không ghi đè hướng dẫn admin đã soạn, chỉ điền khi còn trống', async () => {
+    const original = await prisma.wasteItem.findUniqueOrThrow({ where: { id: 'wi-battery' }, select: { prepInstructions: true } });
+    const run = async () => {
+      for (const st of splitSqlStatements(readApiSql('prisma/migrations/20261027000000_waste_battery_ready/migration.sql'))) await exec(st);
+    };
+    const prep = async () => (await prisma.wasteItem.findUniqueOrThrow({ where: { id: 'wi-battery' }, select: { prepInstructions: true } })).prepInstructions;
+    try {
+      await prisma.wasteItem.update({ where: { id: 'wi-battery' }, data: { prepInstructions: 'Chữ admin soạn' } });
+      await run();
+      expect(await prep()).toBe('Chữ admin soạn');
+      await prisma.wasteItem.update({ where: { id: 'wi-battery' }, data: { prepInstructions: '' } });
+      await run();
+      expect(await prep()).toMatch(/^Dán băng keo hai đầu cực/);
+      await prisma.wasteItem.update({ where: { id: 'wi-battery' }, data: { prepInstructions: null } });
+      await run();
+      expect(await prep()).toMatch(/^Dán băng keo hai đầu cực/);
+    } finally {
+      await prisma.wasteItem.update({ where: { id: 'wi-battery' }, data: { prepInstructions: original.prepInstructions } });
+    }
+  });
+  it('the seeded vouchers are protected by the CHECKs (fields and cost range)', async () => {
     await violates(exec(`UPDATE "waste_gifts" SET "voucherType" = NULL WHERE "id" = 'reward-freeship'`), 'waste_gifts_voucher_fields_chk');
     await violates(exec(`UPDATE "waste_gifts" SET "pointsCost" = 2000001 WHERE "id" = 'reward-percent-15pct'`), 'waste_gifts_points_cost_chk');
     await violates(exec(`UPDATE "waste_gifts" SET "pointsCost" = 0 WHERE "id" = 'reward-discount-50k'`), 'waste_gifts_points_cost_chk');

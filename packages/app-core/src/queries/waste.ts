@@ -3,6 +3,7 @@ import {
   WASTE_QUERY_KEYS,
   getDeskPointReport,
   getDeskPoints,
+  getWasteCatalogue,
   getWasteItems,
   getWasteMe,
   getWastePoints,
@@ -14,6 +15,7 @@ import {
 
 export const wasteMeQuery = (http: HttpClient) => ({ queryKey: WASTE_QUERY_KEYS.me, queryFn: () => getWasteMe(http) });
 export const wasteItemsQuery = (http: HttpClient) => ({ queryKey: WASTE_QUERY_KEYS.items, queryFn: () => getWasteItems(http) });
+export const wasteCatalogueQuery = (http: HttpClient) => ({ queryKey: [...WASTE_QUERY_KEYS.all, 'catalogue'] as const, queryFn: () => getWasteCatalogue(http) });
 export const wastePointsQuery = (http: HttpClient, provinceCode: string | null) => ({
   queryKey: WASTE_QUERY_KEYS.points(provinceCode),
   queryFn: () => getWastePoints(http, provinceCode ?? undefined),

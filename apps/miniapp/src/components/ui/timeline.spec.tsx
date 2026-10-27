@@ -60,3 +60,10 @@ describe('Timeline (§16.1)', () => {
     expect(items[0]!.style.alignItems).toBe('center');
   });
 });
+
+describe('Timeline compact — caption', () => {
+  it('có caption thì thay tên bước hiện tại', () => {
+    render(<Timeline compact steps={STEPS} current={1} caption="Bước 2/4: Vận chuyển" />);
+    expect(screen.getByText('Bước 2/4: Vận chuyển')).toBeInTheDocument();
+  });
+});

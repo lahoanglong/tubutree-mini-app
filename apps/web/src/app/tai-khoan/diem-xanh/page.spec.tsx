@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   preview: null as object | null,
   card: null as Record<string, unknown> | null,
   config: { waste: { enabled: true } } as Record<string, unknown>,
+  wasteRequests: [] as unknown[],
   fail: new Set<string>(),
   readyRoutes: new Set<string>(),
   calls: [] as { method: string; path: string; body?: unknown; headers?: Record<string, string> }[],
@@ -42,6 +43,7 @@ vi.mock('@/lib/core-http', () => {
     '/me/daily-check-in': () => state.checkIn,
     '/me/loyalty/member-card': () => state.card,
     '/config/public': () => state.config,
+    '/waste/requests': () => state.wasteRequests,
   };
   return {
     coreHttp: {
@@ -85,6 +87,7 @@ beforeEach(() => {
   state.cartCount = 0;
   state.applied = [];
   state.config = { waste: { enabled: true } };
+  state.wasteRequests = [];
   state.loyalty = {
     pointsBalance: 1681,
     pointsConvertedBalance: 119,
@@ -382,6 +385,27 @@ describe('/tai-khoan/diem-xanh — lối tắt', () => {
     const off = await mount();
     expect(off.querySelectorAll('a[href="/doi-rac"]')).toHaveLength(0);
     expect(off.querySelectorAll('a[href="/kho-qua"]')).toHaveLength(1);
+  });
+});
+
+describe('/tai-khoan/diem-xanh — xem lại yêu cầu đổi rác khi chương trình tắt', () => {
+  it('chương trình tắt + khách từng có yêu cầu: có lối xem lại; không có yêu cầu hoặc chương trình bật thì không', async () => {
+    state.readyRoutes = new Set(['/doi-rac', '/doi-rac/yeu-cau']);
+    state.config = { waste: { enabled: false } };
+    state.wasteRequests = [{ id: 'r1' }];
+    const c = await mount();
+    expect(c.querySelector('a[href="/doi-rac/yeu-cau"]')?.textContent).toContain('Yêu cầu đổi rác');
+    expect(c.querySelector('a[href="/doi-rac"]')).toBeNull();
+    mounted.pop()!.unmount();
+    state.wasteRequests = [];
+    const none = await mount();
+    expect(none.querySelector('a[href="/doi-rac/yeu-cau"]')).toBeNull();
+    mounted.pop()!.unmount();
+    state.config = { waste: { enabled: true } };
+    state.wasteRequests = [{ id: 'r1' }];
+    const on = await mount();
+    expect(on.querySelector('a[href="/doi-rac/yeu-cau"]')).toBeNull();
+    expect(on.querySelector('a[href="/doi-rac"]')).not.toBeNull();
   });
 });
 
