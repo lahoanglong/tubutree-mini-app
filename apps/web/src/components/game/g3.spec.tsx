@@ -4,6 +4,9 @@ import { render, type Rendered } from '@/test-utils/dom';
 import { OrderWaterCard } from './order-water-card';
 import { HarvestCelebration } from './harvest-celebration';
 import { GardenHero } from './garden-hero';
+import { WaterTank } from './water-tank';
+import { SeasonEmpty } from './season-banner';
+import { WeeklyLeaderboard } from './weekly-leaderboard';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: React.ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
@@ -52,5 +55,54 @@ describe('GardenHero (B-107)', () => {
     mounted = render(<GardenHero eco={{ progress: 400, target: 60, treeType: 'Sồi', treesPlanted: 1 }} totalSeeds={10} streakDays={1} harvestReady />);
     expect(mounted.container.textContent).not.toContain('400');
     expect(mounted.container.textContent).toMatch(/thu hoạch ngay/i);
+  });
+});
+
+describe('G3 lượt 2', () => {
+  const q = (id: string) => mounted!.container.querySelector(`[data-testid="${id}"]`);
+  it('bể: vượt sức chứa thì nói rõ nhờ nước đơn hàng; không vượt thì không nói', () => {
+    mounted = render(<WaterTank seeds={1050} capacity={1000} />);
+    expect(q('tank-over')!.textContent).toContain('vượt sức chứa 1.000');
+    mounted.unmount();
+    mounted = render(<WaterTank seeds={900} capacity={1000} />);
+    expect(q('tank-over')).toBeNull();
+  });
+  it('nước từ đơn nhận khi mở game lần đầu: hiện claimedNow', () => {
+    mounted = render(<OrderWaterCard info={{ perOrder: 100, weeklyCap: 300, weeklyGranted: 100, claimedNow: 100 }} shopHref="/san-pham" />);
+    expect(q('order-water-claimed')!.textContent).toContain('+100');
+  });
+  it('màn mùa rỗng hiện', () => {
+    mounted = render(<SeasonEmpty />);
+    expect(q('season-empty')).not.toBeNull();
+  });
+  it('bảng xếp hạng chưa tải: khung chờ, không phải "chưa có ai"', () => {
+    mounted = render(<WeeklyLeaderboard board={undefined} />);
+    expect(q('leaderboard-loading')).not.toBeNull();
+    expect(q('leaderboard-empty')).toBeNull();
+  });
+  it('hộp thu hoạch ghi giá trị, đơn tối thiểu, hạn của mã', () => {
+    mounted = render(
+      <HarvestCelebration
+        open
+        guest={false}
+        onLogin={vi.fn()}
+        certificate={null}
+        species={null}
+        points={null}
+        sprout={false}
+        couponCapped={null}
+        nextTarget={60}
+        onClose={vi.fn()}
+        onShare={vi.fn()}
+        onUseCoupon={vi.fn()}
+        canShare={false}
+        onCopyCoupon={vi.fn()}
+        shared={false}
+        sharing={false}
+        coupons={['GIAM10']}
+        couponTerms={[{ code: 'GIAM10', value: 10000, minOrder: 100000, expiresAt: '2026-12-31T00:00:00.000Z' }]}
+      />,
+    );
+    expect(document.body.querySelector('[data-testid="coupon-terms"]')!.textContent).toMatch(/10\.000/);
   });
 });

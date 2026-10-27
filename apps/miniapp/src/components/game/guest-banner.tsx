@@ -16,11 +16,17 @@ export function GuestBanner() {
   const ensurePhone = useAuthStore((s) => s.ensurePhone);
   const queryClient = useQueryClient();
   const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
   if (!user || user.phone || !user.zaloId?.startsWith('guest_')) return null;
   const login = async () => {
     setPending(true);
+    setFailed(false);
     try {
-      await ensurePhone();
+      const phone = await ensurePhone();
+      if (!phone) {
+        setFailed(true);
+        return;
+      }
       void queryClient.invalidateQueries({ queryKey: ['game'] });
       void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
     } finally {
@@ -39,6 +45,13 @@ export function GuestBanner() {
       <Text variant="caption" tone="warning" as="div">
         {t.note}
       </Text>
+      {failed && (
+        <div role="alert">
+          <Text variant="caption" tone="danger" as="div">
+            {t.failed}
+          </Text>
+        </div>
+      )}
       <Button fullWidth loading={pending} disabled={pending} onPress={() => void login()}>
         {t.cta}
       </Button>

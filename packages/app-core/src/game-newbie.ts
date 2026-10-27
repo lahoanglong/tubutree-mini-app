@@ -102,6 +102,8 @@ export const gameNewbieCopy = {
   },
   hero: {
     tankLabel: 'giọt nước',
+    /** Nước thưởng đơn hàng được vượt sức chứa bình; nói rõ để số lớn hơn sức chứa không trông như lỗi. */
+    overCap: (cap: number) => `đang vượt sức chứa ${n(cap)}💧 nhờ nước từ đơn hàng`,
     remaining: (left: number) => `Còn ${drops(left)} nữa là thu hoạch`,
     ready: 'Cây đã đủ nước, thu hoạch ngay',
     wilted: 'Cây đang khát, tưới để cây tươi lại',
@@ -116,6 +118,7 @@ export const gameNewbieCopy = {
     progress: (got: number, cap: number) => `Đã nhận ${n(got)}/${drops(cap)} tuần này`,
     full: 'Tuần này bạn đã nhận đủ nước từ đơn hàng. Thứ Hai tuần sau nhận tiếp.',
     cta: 'Mua sắm',
+    claimedNow: (v: number) => `+${drops(v)} từ các đơn bạn đã nhận trước khi mở game`,
   },
   guest: {
     banner: 'Bạn đang chơi thử. Cây và nước có thể mất nếu bạn không đăng nhập Zalo.',
@@ -188,6 +191,10 @@ export const gameNewbieCopy = {
     have: (have: number, cost: number) => `Bạn có ${n(have)} / ${n(cost)} Điểm Xanh cho 1 lượt quay`,
     howToEarn: 'Cách kiếm Điểm Xanh',
   },
+  seasonEmpty: {
+    title: 'Chưa có mùa nào đang mở',
+    body: 'Mùa mới sẽ sớm ra mắt. Trong lúc chờ, bạn vẫn điểm danh và tưới cây mỗi ngày như thường.',
+  },
   community: {
     feedTitle: 'Bảng tin cộng đồng',
     feedHintReadOnly: 'Xem mẹo sống xanh từ mọi người',
@@ -206,6 +213,9 @@ export const gameNewbieCopy = {
     grown: 'Cây ảo của bạn đã lớn 🌿',
     fund: 'Cây ảo của bạn đã lớn. Tubu sẽ góp 1 cây vào quỹ trồng cây 🌿',
     useCoupon: 'Dùng mã giảm giá ngay',
+    /** Dòng điều kiện dưới mã: giảm bao nhiêu, đơn tối thiểu, hạn dùng (ngày giờ VN). */
+    couponTerms: (t: { value: number; minOrder: number; expiresAt: string }) =>
+      `Giảm ${n(t.value)}đ cho đơn từ ${n(t.minOrder)}đ · dùng đến ${new Date(t.expiresAt).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}`,
     later: 'Để sau',
     points: (v: number) => `+${n(v)} Điểm Xanh`,
     pointsCaption: 'Quà cây mầm, dùng khi mua hàng',

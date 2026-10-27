@@ -9,7 +9,7 @@ const t = vi.game.newbie.hero;
  * Số giọt nước hiện to ở đầu trang. Khi số đổi (tưới trừ, điểm danh cộng) nó nảy lên và hiện số chênh bay lên một nhịp ngắn;
  * giảm chuyển động thì chỉ còn dòng chữ chênh, không có nảy/bay.
  */
-export function WaterTank({ seeds }: { seeds: number | undefined }) {
+export function WaterTank({ seeds, capacity }: { seeds: number | undefined; capacity?: number }) {
   const prev = useRef(seeds);
   const [pop, setPop] = useState<{ key: number; delta: number } | null>(null);
   useEffect(() => {
@@ -33,6 +33,11 @@ export function WaterTank({ seeds }: { seeds: number | undefined }) {
       <Text variant="caption" tone="inverse">
         {t.tankLabel}
       </Text>
+      {capacity != null && seeds != null && seeds > capacity && (
+        <Text variant="caption" tone="inverse" data-testid="tank-over">
+          {t.overCap(capacity)}
+        </Text>
+      )}
       {pop && (
         <span
           key={`d${pop.key}`}

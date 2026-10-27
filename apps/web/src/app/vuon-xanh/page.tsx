@@ -17,6 +17,7 @@ import { isWebRouteReady } from '@/lib/route-map';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { useCouponUse } from '@/lib/use-coupon-use';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedTabs, useTabParam } from '@/components/ui/segmented-tabs';
@@ -164,6 +165,7 @@ function GameBody() {
           totalSeeds={profile?.totalSeeds}
           streakDays={profile?.streakDays}
           harvestReady={profile?.harvestReady}
+          tankCapacity={profile?.tankCapacity}
           wilted={profile?.treeHealth === 'WILTED' || profile?.treeHealth === 'DEAD'}
         />
 
@@ -258,6 +260,7 @@ function GameBody() {
 
         <GameTabPanel tab="garden" active={tab === 'garden'}>
           {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
+          {garden === undefined && <Skeleton height={120} rounded="rounded-card" />}
           {garden && plotsOpen && (
             <GardenPlots
               garden={garden}
@@ -346,6 +349,7 @@ function GameBody() {
       <HarvestCelebration
         open={harvest.open}
         coupons={harvest.meta?.coupons ?? []}
+        couponTerms={harvest.reward?.couponTerms}
         guest={harvest.meta?.guest ?? false}
         onLogin={() => {
           closeHarvest();

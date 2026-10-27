@@ -1,5 +1,5 @@
 import { Lightbulb } from 'lucide-react';
-import type { HarvestCouponCap, HarvestSpecies } from '@tubutree/app-core/api/game';
+import type { HarvestCouponCap, HarvestCouponTerms, HarvestSpecies } from '@tubutree/app-core/api/game';
 import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import type { CouponNotice } from '@/lib/use-coupon-use';
 import { Sheet } from '@/components/ui/sheet';
@@ -34,6 +34,7 @@ function Confetti() {
 export function HarvestCelebration({
   open,
   coupons,
+  couponTerms = [],
   guest,
   onLogin,
   certificate,
@@ -53,6 +54,8 @@ export function HarvestCelebration({
 }: {
   open: boolean;
   coupons: string[];
+  /** Điều kiện từng mã (API cũ không trả thì chỉ hiện mã). */
+  couponTerms?: HarvestCouponTerms[];
   /** Khách vãng lai: không có quà thu hoạch, mời đăng nhập. */
   guest: boolean;
   onLogin: () => void;
@@ -153,6 +156,11 @@ export function HarvestCelebration({
           >
             <span className="block text-xs text-stone-700">Quà thu hoạch — mã giảm giá (chạm để sao chép)</span>
             <span className="block break-all text-base font-bold tracking-wide text-forest-700">{coupon}</span>
+            {couponTerms.find((x) => x.code === coupon) && (
+              <span data-testid="coupon-terms" className="mt-0.5 block text-xs text-stone-700">
+                {t.couponTerms(couponTerms.find((x) => x.code === coupon)!)}
+              </span>
+            )}
           </button>
         ))}
         {certificate && (

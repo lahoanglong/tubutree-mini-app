@@ -1,6 +1,6 @@
 import { Lightbulb } from 'lucide-react';
 import { useSnackbar } from 'zmp-ui';
-import type { HarvestCouponCap, HarvestSpecies } from '../../services/game-api';
+import type { HarvestCouponCap, HarvestCouponTerms, HarvestSpecies } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { copyText } from '../../utils/clipboard';
 import { BottomSheet } from '../ui/bottom-sheet';
@@ -38,6 +38,7 @@ function Confetti() {
 export function HarvestCelebration({
   open,
   coupons,
+  couponTerms = [],
   guest,
   onLogin,
   certificate,
@@ -52,6 +53,8 @@ export function HarvestCelebration({
 }: {
   open: boolean;
   coupons: string[];
+  /** Điều kiện từng mã (API cũ không trả thì chỉ hiện mã). */
+  couponTerms?: HarvestCouponTerms[];
   /** Khách vãng lai: không có quà thu hoạch, mời đăng nhập. */
   guest: boolean;
   onLogin: () => void;
@@ -168,6 +171,11 @@ export function HarvestCelebration({
             <Text variant="body-md" tone="brand" as="div" style={{ fontWeight: 700, letterSpacing: 1 }}>
               {coupon}
             </Text>
+            {couponTerms.find((x) => x.code === coupon) && (
+              <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }} data-testid="coupon-terms">
+                {t.couponTerms(couponTerms.find((x) => x.code === coupon)!)}
+              </Text>
+            )}
           </div>
         ))}
         {certificate && (

@@ -13,6 +13,7 @@ export function GardenHero({
   streakDays,
   harvestReady = false,
   wilted = false,
+  tankCapacity,
 }: {
   eco: GameProfile['ecoImpact'] | undefined;
   totalSeeds: number | undefined;
@@ -20,6 +21,7 @@ export function GardenHero({
   harvestReady?: boolean;
   /** Cây quá hạn chưa tưới: héo nhưng giữ tiến độ. */
   wilted?: boolean;
+  tankCapacity?: number;
 }) {
   const progress = eco ? Math.min(eco.progress, eco.target) : 0;
   const pct = eco && eco.target > 0 ? Math.min(100, Math.round((progress / eco.target) * 100)) : 0;
@@ -35,7 +37,7 @@ export function GardenHero({
         padding: '14px 16px 14px',
       }}
     >
-      <WaterTank seeds={totalSeeds} />
+      <WaterTank seeds={totalSeeds} capacity={tankCapacity} />
       <div style={{ fontSize: 56, lineHeight: 1.1, marginTop: 4 }}>
         <span key={stage} className="tubu-grow" style={wilted ? { filter: 'saturate(0.55)', opacity: 0.85 } : undefined}>
           <span className={wilted ? undefined : 'tubu-sway'}>{stage}</span>

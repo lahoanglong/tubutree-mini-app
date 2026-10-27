@@ -10,7 +10,7 @@ const t = gameNewbieCopy.hero;
  * Số giọt nước hiện to ở đầu trang, cùng dáng với Mini App. Khi số đổi (tưới trừ, điểm danh cộng) nó nảy lên và hiện số
  * chênh bay lên một nhịp ngắn; giảm chuyển động thì chỉ còn dòng chữ chênh (CSS .tubu-bump/.tubu-float).
  */
-export function WaterTank({ seeds }: { seeds: number | undefined }) {
+export function WaterTank({ seeds, capacity }: { seeds: number | undefined; capacity?: number }) {
   const prev = useRef(seeds);
   const [pop, setPop] = useState<{ key: number; delta: number } | null>(null);
   useEffect(() => {
@@ -32,6 +32,11 @@ export function WaterTank({ seeds }: { seeds: number | undefined }) {
         💧 {formatNumber(seeds)}
       </span>
       <span className="text-xs text-stone-0">{t.tankLabel}</span>
+      {capacity != null && seeds != null && seeds > capacity && (
+        <span data-testid="tank-over" className="text-xs text-stone-0">
+          {t.overCap(capacity)}
+        </span>
+      )}
       {pop && (
         <span
           key={`d${pop.key}`}

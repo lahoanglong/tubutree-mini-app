@@ -2,13 +2,14 @@ import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, type MissionTarget, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
 import { Page, useNavigate } from 'zmp-ui';
-import type { HarvestSpecies } from '../services/game-api';
+import type { HarvestCouponTerms, HarvestSpecies } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
 import { SessionUnavailable } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useCouponUse } from '../hooks/use-coupon-use';
 import { ErrorState } from '../components/ui/empty-state';
+import { Skeleton } from '../components/ui/skeleton';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { getErrorMessage } from '../services/api';
@@ -22,7 +23,7 @@ import { Text } from '../components/ui/text';
 import { GameLoginGate, GameSkeleton } from '../components/game/game-states';
 import { GardenHero } from '../components/game/garden-hero';
 import { GameLinkRow } from '../components/game/game-link-row';
-import { SeasonBanner } from '../components/game/season-banner';
+import { SeasonBanner, SeasonEmpty } from '../components/game/season-banner';
 import { TreeHealthAlert } from '../components/game/tree-health-alert';
 import { CheckInStreak } from '../components/game/checkin-streak';
 import { StreakRepair } from '../components/game/streak-repair';
@@ -75,6 +76,7 @@ export default function GamePage() {
   const [reveal, setReveal] = useState<QuizReveal | null>(null);
   const [harvested, setHarvested] = useState(false);
   const [harvestCoupons, setHarvestCoupons] = useState<string[]>([]);
+  const [harvestTerms, setHarvestTerms] = useState<HarvestCouponTerms[]>([]);
   const [harvestCert, setHarvestCert] = useState<string | null>(null);
   const [harvestSpecies, setHarvestSpecies] = useState<HarvestSpecies | null>(null);
   const [harvestPoints, setHarvestPoints] = useState<number | null>(null);
@@ -95,6 +97,7 @@ export default function GamePage() {
     useGameActions({
       onHarvest: (reward: HarvestReward | undefined, meta: HarvestMeta) => {
         setHarvestCoupons(meta.coupons);
+        setHarvestTerms(reward?.couponTerms ?? []);
         setHarvestCert(reward?.certificate ?? null);
         setHarvestSpecies(reward?.species ?? null);
         setHarvestPoints(reward?.points ?? null);
@@ -171,6 +174,7 @@ export default function GamePage() {
           totalSeeds={profile?.totalSeeds}
           streakDays={profile?.streakDays}
           harvestReady={profile?.harvestReady}
+          tankCapacity={profile?.tankCapacity}
           wilted={profile?.treeHealth === 'WILTED' || profile?.treeHealth === 'DEAD'}
         />
 
@@ -276,6 +280,7 @@ export default function GamePage() {
 
         <GameTabPanel tab="garden" active={tab === 'garden'}>
           {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
+          {garden === undefined && <Skeleton height={120} radius="var(--radius-card)" />}
           {garden && plotsOpen && (
             <GardenPlots
               garden={garden}
@@ -313,7 +318,7 @@ export default function GamePage() {
           {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}
 
           {/* Banner mùa/sự kiện (Phase 4) */}
-          {season && <SeasonBanner season={season} />}
+          {season ? <SeasonBanner season={season} /> : season === null ? <SeasonEmpty /> : null}
 
           {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
           {SEASON_PASS_ENABLED && seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
@@ -363,6 +368,7 @@ export default function GamePage() {
       <HarvestCelebration
         open={harvested}
         coupons={harvestCoupons}
+        couponTerms={harvestTerms}
         guest={harvestMeta?.guest ?? false}
         onLogin={() => {
           setHarvested(false);

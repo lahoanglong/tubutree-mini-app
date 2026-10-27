@@ -35,7 +35,7 @@ export interface GameProfile {
   /** Cây đã đủ nước từ trước (hồ sơ cũ tưới vượt đích): thu hoạch bằng `waterTree(0)`, không cần thêm giọt nào. */
   harvestReady?: boolean;
   /** Nước thưởng đơn giao thành công: số giọt mỗi đơn, trần tuần (giờ VN, thứ Hai đến Chủ nhật) và phần đã nhận tuần này. null/thiếu = API cũ. */
-  orderWater?: { perOrder: number; weeklyCap: number; weeklyGranted: number } | null;
+  orderWater?: { perOrder: number; weeklyCap: number; weeklyGranted: number; claimedNow?: number } | null;
 }
 export type { CheckInResult };
 export interface QuizItem {
@@ -119,10 +119,21 @@ export interface HarvestSpecies {
 export type HarvestCouponCap = 'DAY' | 'MONTH' | 'OFF';
 /** Lý do không phát thưởng thu hoạch: 'GUEST' = chưa đăng nhập Zalo/SĐT nên không nhận mã và điểm cây mầm. */
 export type HarvestRewardBlocked = 'GUEST';
+export interface HarvestCouponTerms {
+  code: string;
+  /** Giá trị giảm (đ). */
+  value: number;
+  /** Đơn tối thiểu (đ) để dùng mã. */
+  minOrder: number;
+  /** Hạn dùng, ISO. */
+  expiresAt: string;
+}
 export interface HarvestReward {
   coupon?: string;
   /** Mọi mã cấp trong lần tưới (một lần tưới có thể thu hoạch nhiều cây); `coupon` là mã đầu tiên. */
   coupons?: string[];
+  /** Mệnh giá, đơn tối thiểu và hạn của từng mã (API cũ không trả). */
+  couponTerms?: HarvestCouponTerms[];
   certificate?: string;
   species?: HarvestSpecies;
   /** Điểm Xanh thưởng cây mầm (lần thu hoạch đầu tiên); lần đó không có mã và không ghi góp quỹ cây. */

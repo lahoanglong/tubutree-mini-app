@@ -1,3 +1,6 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ShoppingBag } from 'lucide-react';
 import type { GameProfile } from '@tubutree/app-core/api/game';
@@ -9,6 +12,12 @@ const t = gameNewbieCopy.orderWater;
 
 /** Nguồn nước "Từ đơn hàng" kèm tiến độ tuần (thứ Hai đến Chủ nhật, giờ VN). Ẩn khi admin tắt hoặc API cũ không trả. */
 export function OrderWaterCard({ info, shopHref }: { info: GameProfile['orderWater']; shopHref: string }) {
+  // Hồ sơ chỉ trả claimedNow ở lần mở đầu; giữ lại để dòng không biến mất khi trang tải lại dữ liệu.
+  const [claimed, setClaimed] = useState(0);
+  const claimedNow = info?.claimedNow ?? 0;
+  useEffect(() => {
+    if (claimedNow > 0) setClaimed(claimedNow);
+  }, [claimedNow]);
   if (!info || info.perOrder <= 0 || info.weeklyCap <= 0) return null;
   const got = Math.min(info.weeklyGranted, info.weeklyCap);
   const pct = Math.round((got / info.weeklyCap) * 100);
@@ -39,6 +48,11 @@ export function OrderWaterCard({ info, shopHref }: { info: GameProfile['orderWat
       <p data-testid="order-water-progress" className="mt-1.5 text-xs text-stone-700">
         {got >= info.weeklyCap ? t.full : t.progress(got, info.weeklyCap)}
       </p>
+      {claimed > 0 && (
+        <p data-testid="order-water-claimed" className="mt-1 text-xs font-semibold text-forest-700">
+          {t.claimedNow(claimed)}
+        </p>
+      )}
     </section>
   );
 }

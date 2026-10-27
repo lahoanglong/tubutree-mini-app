@@ -34,7 +34,7 @@ export interface GameProfile {
   /** Cây đã đủ nước từ trước (hồ sơ cũ tưới vượt đích): thu hoạch bằng `waterTree(0)`. */
   harvestReady?: boolean;
   /** Nước thưởng đơn giao thành công: số giọt mỗi đơn, trần tuần (giờ VN) và phần đã nhận tuần này. null = tắt hoặc API cũ. */
-  orderWater?: { perOrder: number; weeklyCap: number; weeklyGranted: number } | null;
+  orderWater?: { perOrder: number; weeklyCap: number; weeklyGranted: number; claimedNow?: number } | null;
 }
 export type { CheckInResult };
 export interface QuizItem {
@@ -115,8 +115,19 @@ export interface HarvestSpecies {
 }
 /** 'OFF': admin tắt mã thu hoạch (trần ngày hoặc tháng bằng 0). */
 export type HarvestCouponCap = 'DAY' | 'MONTH' | 'OFF';
+export interface HarvestCouponTerms {
+  code: string;
+  /** Giá trị giảm (đ). */
+  value: number;
+  /** Đơn tối thiểu (đ) để dùng mã. */
+  minOrder: number;
+  /** Hạn dùng, ISO. */
+  expiresAt: string;
+}
 export interface HarvestReward {
   coupon?: string;
+  /** Mệnh giá, đơn tối thiểu và hạn của từng mã (API cũ không trả). */
+  couponTerms?: HarvestCouponTerms[];
   certificate?: string;
   species?: HarvestSpecies;
   /** Điểm Xanh thưởng cây mầm (lần thu hoạch đầu tiên); lần đó không có mã và không ghi góp quỹ cây. */
@@ -211,7 +222,7 @@ export interface SeasonLeaderRow {
   nickname: string;
   drops: number;
 }
-export const getSeason = () => api.get<Season | null>('/game/season').then((r) => r.data);
+export const getSeason = () => api.get<Season | null>('/game/season').then((r) => r.data || null);
 export const getSeasonLeaderboard = () =>
   api.get<SeasonLeaderRow[]>('/game/season/leaderboard').then((r) => r.data);
 

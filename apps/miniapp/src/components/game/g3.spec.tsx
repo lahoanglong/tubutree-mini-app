@@ -20,6 +20,8 @@ import { GuestBanner } from './guest-banner';
 import { OrderWaterCard } from './order-water-card';
 import { HarvestCelebration } from './harvest-celebration';
 import { GardenHero } from './garden-hero';
+import { WaterTank } from './water-tank';
+import { SeasonEmpty } from './season-banner';
 
 describe('OrderWaterCard (B-81)', () => {
   it('hiện nguồn "Từ đơn hàng" và tiến độ tuần', () => {
@@ -88,5 +90,42 @@ describe('GardenHero (B-107)', () => {
     render(<GardenHero eco={{ progress: 400, target: 60, treeType: 'Sồi', treesPlanted: 1 }} totalSeeds={10} streakDays={1} harvestReady />);
     expect(screen.queryByText(/400/)).toBeNull();
     expect(screen.getByText(/thu hoạch ngay/i)).toBeInTheDocument();
+  });
+});
+
+describe('G3 lượt 2', () => {
+  it('bể: vượt sức chứa thì nói rõ nhờ nước đơn hàng; không vượt thì không nói', () => {
+    const { rerender } = render(<WaterTank seeds={1050} capacity={1000} />);
+    expect(screen.getByTestId('tank-over')).toHaveTextContent('vượt sức chứa 1.000');
+    rerender(<WaterTank seeds={900} capacity={1000} />);
+    expect(screen.queryByTestId('tank-over')).toBeNull();
+  });
+  it('nước từ đơn nhận khi mở game lần đầu: hiện claimedNow và giữ lại', () => {
+    const info = { perOrder: 100, weeklyCap: 300, weeklyGranted: 100, claimedNow: 100 };
+    const { rerender } = render(<OrderWaterCard info={info} onShop={vi.fn()} />);
+    expect(screen.getByTestId('order-water-claimed')).toHaveTextContent('+100');
+    rerender(<OrderWaterCard info={{ ...info, claimedNow: 0 }} onShop={vi.fn()} />);
+    expect(screen.getByTestId('order-water-claimed')).toHaveTextContent('+100');
+  });
+  it('màn mùa rỗng có tiêu đề và lời nhắn', () => {
+    render(<SeasonEmpty />);
+    expect(screen.getByTestId('season-empty')).toBeInTheDocument();
+  });
+  it('hộp thu hoạch ghi giá trị, đơn tối thiểu, hạn của mã', () => {
+    const base = { open: true, guest: false, onLogin: vi.fn(), certificate: null, species: null, points: null, sprout: false, couponCapped: null, nextTarget: 60, onClose: vi.fn(), onShare: vi.fn(), onUseCoupon: vi.fn() };
+    render(<HarvestCelebration {...base} coupons={['GIAM10']} couponTerms={[{ code: 'GIAM10', value: 10000, minOrder: 100000, expiresAt: '2026-12-31T00:00:00.000Z' }]} />);
+    expect(screen.getByTestId('coupon-terms')).toHaveTextContent(/10\.000/);
+  });
+  it('đăng nhập khách thất bại: banner báo lỗi', async () => {
+    mocks.user = { id: 'u', zaloId: 'guest_abc', phone: null };
+    mocks.ensurePhone.mockResolvedValueOnce(null);
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <GuestBanner />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập Zalo' }));
+    expect(await screen.findByTestId('guest-banner')).toHaveTextContent(/chưa|không/i);
   });
 });

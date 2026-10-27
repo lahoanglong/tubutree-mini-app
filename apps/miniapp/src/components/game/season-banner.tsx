@@ -1,4 +1,5 @@
 import { Leaf } from 'lucide-react';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import type { Season } from '../../services/game-api';
 import { Card } from '../ui/card';
 import { Icon } from '../ui/icon';
@@ -26,5 +27,22 @@ export function SeasonBanner({ season }: { season: Season }) {
         </Text>
       )}
     </Card>
+  );
+}
+
+/** Không có mùa nào đang chạy (chưa tạo mùa mới hoặc mùa cũ đã hết hạn): nói rõ thay vì để trống hay hiện mùa cũ. */
+export function SeasonEmpty() {
+  return (
+    <div data-testid="season-empty">
+    <Card variant="flat" padding={12} style={{ border: '1px solid var(--color-border-subtle)' }}>
+      <Text variant="body-sm" tone="secondary" style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <Icon icon={Leaf} size="sm" tone="muted" />
+        {gameNewbieCopy.seasonEmpty.title}
+      </Text>
+      <Text variant="caption" tone="tertiary" as="div">
+        {gameNewbieCopy.seasonEmpty.body}
+      </Text>
+    </Card>
+    </div>
   );
 }

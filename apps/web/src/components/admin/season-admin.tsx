@@ -57,9 +57,11 @@ export function SeasonAdmin() {
                 {[s.theme, s.region].filter(Boolean).length > 0 ? ` · ${[s.theme, s.region].filter(Boolean).join(' · ')}` : ''}
               </div>
             </div>
-            <button type="button" className={BTN_XS_DANGER} disabled={remove.isPending} onClick={() => void confirm(`Xoá mùa "${s.name}"?`).then((ok) => ok && remove.mutate(s.id))}>
-              Xoá
-            </button>
+            {s.status === 'UPCOMING' && (
+              <button type="button" className={BTN_XS_DANGER} disabled={remove.isPending} onClick={() => void confirm(`Xoá mùa "${s.name}"?`).then((ok) => ok && remove.mutate(s.id))}>
+                Xoá
+              </button>
+            )}
           </li>
         ))}
       </ul>

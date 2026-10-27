@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { ShoppingBag } from 'lucide-react';
 import type { GameProfile } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
@@ -10,6 +11,12 @@ const t = vi.game.newbie.orderWater;
 
 /** Nguồn nước "Từ đơn hàng" kèm tiến độ tuần (thứ Hai đến Chủ nhật, giờ VN). Ẩn khi admin tắt hoặc API cũ không trả. */
 export function OrderWaterCard({ info, onShop }: { info: GameProfile['orderWater']; onShop: () => void }) {
+  // Hồ sơ chỉ trả claimedNow ở lần mở đầu; giữ lại để dòng không biến mất khi trang tải lại dữ liệu.
+  const [claimed, setClaimed] = useState(0);
+  const claimedNow = info?.claimedNow ?? 0;
+  useEffect(() => {
+    if (claimedNow > 0) setClaimed(claimedNow);
+  }, [claimedNow]);
   if (!info || info.perOrder <= 0 || info.weeklyCap <= 0) return null;
   const got = Math.min(info.weeklyGranted, info.weeklyCap);
   const pct = Math.round((got / info.weeklyCap) * 100);
@@ -43,6 +50,11 @@ export function OrderWaterCard({ info, onShop }: { info: GameProfile['orderWater
       <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }} data-testid="order-water-progress">
         {full ? t.full : t.progress(got, info.weeklyCap)}
       </Text>
+      {claimed > 0 && (
+        <Text variant="caption" tone="brand" as="div" style={{ marginTop: 4, fontWeight: 600 }} data-testid="order-water-claimed">
+          {t.claimedNow(claimed)}
+        </Text>
+      )}
     </Card>
   );
 }

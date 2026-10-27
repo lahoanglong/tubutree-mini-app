@@ -204,12 +204,18 @@ async function exchange(url: string, init: RequestInit): Promise<Reply> {
     const res = await fetch(url, { ...init, signal: ctrl.signal });
     let body: unknown;
     if (res.status !== 204) {
+      // Bản sao để đọc lại khi json() ném: header Content-Length không đọc được qua CORS nên không dùng để nhận ra thân rỗng.
+      const copy = res.ok && typeof res.clone === 'function' ? res.clone() : null;
       try {
         body = await res.json();
       } catch (e) {
+        // Thân rỗng khi 200 (endpoint trả "không có gì", vd. /game/season lúc không có mùa) là null, không phải lỗi.
+        if (copy && (await copy.text().catch(() => 'x')) === '') body = null;
         // Thân hỏng/không phải JSON: phản hồi lỗi vẫn có status để báo; phản hồi thành công thì ném như trước.
-        if (res.ok || ctrl.signal.aborted) throw e;
+        else if (res.ok || ctrl.signal.aborted) throw e;
       }
+    } else {
+      body = null;
     }
     return { status: res.status, ok: res.ok, body };
   } catch (e) {
@@ -272,7 +278,7 @@ export async function apiFetch<T>(
     const { message, code } = parseError(reply.body);
     throw new ApiError(message, reply.status, code);
   }
-  if (reply.status === 204) return undefined as T;
+  if (reply.status === 204) return null as T;
   return reply.body as T;
 }
 

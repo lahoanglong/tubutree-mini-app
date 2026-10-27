@@ -1,5 +1,6 @@
 import { Trophy } from 'lucide-react';
 import type { LeaderRow } from '@tubutree/app-core/api/game';
+import { Skeleton } from '@/components/ui/skeleton';
 import { GameCard } from './game-card';
 
 // API xếp theo chuỗi điểm danh dài nhất mọi thời gian (không reset theo tuần), nên nhãn và số trên bục là chuỗi ngày.
@@ -7,7 +8,11 @@ import { GameCard } from './game-card';
 export function WeeklyLeaderboard({ board }: { board: LeaderRow[] | undefined }) {
   return (
     <GameCard title="Chuỗi điểm danh dài nhất" icon={Trophy}>
-      {board && board.length > 0 ? (
+      {board === undefined ? (
+        <div aria-busy="true" data-testid="leaderboard-loading">
+          <Skeleton height={96} rounded="rounded-control" />
+        </div>
+      ) : board.length > 0 ? (
         <>
           {/* Bục top 3. Khoá theo vị trí ô: khoá theo hạng va với khoá ô trống khi chỉ có 2 người (hạng 2 đứng ở ô 0). */}
           <div data-podium className="mb-3 flex items-end justify-center gap-2">
