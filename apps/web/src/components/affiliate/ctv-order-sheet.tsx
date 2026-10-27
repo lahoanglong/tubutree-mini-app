@@ -148,7 +148,7 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
   const quote = quoteFresh ? quoteQ.data : undefined;
   const quoteFailed = quoteFresh && quoteQ.isError;
   // Máy chủ từ chối báo giá vì chính các dòng hàng (vd hàng gian hàng đối tác tự giao): bước tạo đơn cũng sẽ từ chối như vậy.
-  const quoteProblem = quoteFailed && quoteQ.error instanceof ApiError && quoteQ.error.status === 400 ? quoteQ.error.message : null;
+  const quoteProblem = quoteFailed && quoteQ.error instanceof ApiError && quoteQ.error.status === 400 ? loadErrorText(quoteQ.error) : null;
   const priceMovedMessage = priceMoved?.itemsKey === itemsKey ? priceMoved.message : null;
   const quotedLines = new Map((quote?.items ?? []).map((i) => [i.variationId, i]));
   const goods = quote?.goods ?? lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0);

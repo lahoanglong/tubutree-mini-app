@@ -16,6 +16,7 @@ import { safeAreaPadX } from '@/lib/safe-area';
 import { formatVnd } from '@/lib/shop-client';
 import { useModalA11y } from '@/lib/use-modal-a11y';
 import { BTN_XS_SECONDARY, INPUT_CLASS, Notice, TOUCH_H } from '@/components/admin/ui';
+import { actionErrorText } from '@/lib/error-text';
 
 const INPUT = `mt-1 ${INPUT_CLASS} ${TOUCH_H}`;
 const MAX_PRICE = 100_000_000;
@@ -116,14 +117,14 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
     },
     onError: (e: Error) => {
       setLinked(null);
-      setCheckError(e.message);
+      setCheckError(actionErrorText(e));
     },
   });
 
   const mut = useMutation({
     mutationFn: (dto: CreateMerchantProductInput) => createMerchantProduct(dto),
     onSuccess: () => onSuccess(),
-    onError: (e: Error) => setMsg(e.message),
+    onError: (e: unknown) => setMsg(actionErrorText(e)),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -296,7 +297,7 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
   const mut = useMutation({
     mutationFn: (dto: UpdateMerchantProductInput) => updateMerchantProduct(product.id, dto),
     onSuccess: () => onSuccess(),
-    onError: (e: Error) => setMsg(e.message),
+    onError: (e: unknown) => setMsg(actionErrorText(e)),
   });
 
   const checkMut = useMutation({
@@ -307,7 +308,7 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
     },
     onError: (e: Error) => {
       setLinked(null);
-      setCheckError(e.message);
+      setCheckError(actionErrorText(e));
     },
   });
 

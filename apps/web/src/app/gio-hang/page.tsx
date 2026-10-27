@@ -18,11 +18,10 @@ import BackLink from '@/components/back-link';
 import { CheckMark, miniCheckboxWrap, miniCheckbox } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
-import { loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { KeyValueRow, ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { actionErrorText } from '@/lib/error-text';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
 const UNDO_WINDOW_MS = 3500;
@@ -376,9 +375,7 @@ export default function CartPage() {
                           </div>
                           {failedItemId === it.id && (
                             <p role="alert" className="mt-1 text-xs text-danger-fg">
-                              {(update.error ?? remove.error) instanceof Error
-                                ? (update.error ?? remove.error)?.message
-                                : 'Cập nhật giỏ hàng thất bại.'}
+                              {actionErrorText(update.error ?? remove.error)}
                             </p>
                           )}
                         </div>

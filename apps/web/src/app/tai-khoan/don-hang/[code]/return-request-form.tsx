@@ -20,6 +20,7 @@ import {
   type ReturnReasonCode,
 } from '@/lib/refund-rules';
 import { RefundDestinationPicker } from './refund-destination-picker';
+import { actionErrorText } from '@/lib/error-text';
 
 const REASON_MAX = 500;
 const STEPPER_BTN =
@@ -263,7 +264,7 @@ export function ReturnRequestForm({
       )}
       {submit.isError && (
         <p role="alert" className={ui.error}>
-          {submit.error instanceof Error ? submit.error.message : 'Không gửi được yêu cầu.'}
+          {actionErrorText(submit.error)}
         </p>
       )}
       <div className="flex flex-wrap gap-2">

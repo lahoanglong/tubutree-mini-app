@@ -44,6 +44,7 @@ import { bankPaymentHref, orderDetailHref } from '@/lib/order-view';
 import { ui, uiBar } from '@/lib/guest-ui';
 import { invalidateBalances } from '@/lib/balances';
 import { ApiError, NetworkError } from '@/lib/client-api';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { CouponBox, COUPON_MUTATION_KEY, couponPreviewKey } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ReferralCodeBox } from '@/components/referral-code-box';
@@ -415,7 +416,7 @@ export default function CheckoutPage() {
 
   const cart = cartQ.data;
   const priceChanged = place.error instanceof Error && place.error.message === PRICE_CHANGED;
-  const placeErrorMessage = place.error instanceof Error && !priceChanged ? place.error.message : null;
+  const placeErrorMessage = place.error instanceof Error && !priceChanged ? (place.error instanceof NetworkError ? place.error.message : actionErrorText(place.error)) : null;
   const cartIssue = overStock
     ? overStockMessage(overStock.productName, overStock.stock)
     : placeErrorMessage && isCartFixableError(placeErrorMessage)
@@ -746,7 +747,7 @@ export default function CheckoutPage() {
           {quoteQ.isError && (
             <p className={`mt-2 ${ui.error}`}>
               {quoteQ.error instanceof ApiError && quoteQ.error.code === 'ADDRESS_OUTDATED'
-                ? `${quoteQ.error.message} Hãy bấm Sửa ở địa chỉ đó để chọn lại tỉnh/phường, hoặc thêm địa chỉ mới.`
+                ? `${loadErrorText(quoteQ.error)} Hãy bấm Sửa ở địa chỉ đó để chọn lại tỉnh/phường, hoặc thêm địa chỉ mới.`
                 : 'Không tính được phí ship/tổng tiền.'}{' '}
               <button type="button" onClick={() => void quoteQ.refetch()} className={ui.btnText}>
                 Thử lại

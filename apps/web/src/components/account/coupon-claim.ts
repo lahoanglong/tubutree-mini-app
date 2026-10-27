@@ -1,5 +1,6 @@
 import type { ClaimedCoupon } from '@tubutree/app-core/api/coupon-claim';
 import { ApiError, NetworkError } from '@/lib/client-api';
+import { actionErrorText } from '@/lib/error-text';
 import { formatVnd } from '@/lib/format-vnd';
 import { platformBridge } from '@/lib/platform-bridge';
 
@@ -90,7 +91,7 @@ export function claimFailure(err: unknown): { message: string; retryable: boolea
   if (err instanceof ApiError) {
     if (err.status === 429) return { message: RATE_LIMITED_MESSAGE, retryable: true };
     if (err.status >= 500) return { message: SERVER_BUSY_MESSAGE, retryable: true };
-    return { message: err.message, retryable: false };
+    return { message: actionErrorText(err), retryable: false };
   }
   return { message: GENERIC_MESSAGE, retryable: false };
 }

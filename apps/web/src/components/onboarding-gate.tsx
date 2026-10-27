@@ -15,6 +15,7 @@ import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
 import { useModalA11y } from '@/lib/use-modal-a11y';
 import { useShellPathname } from '@/lib/shell-pathname';
+import { actionErrorText } from '@/lib/error-text';
 
 interface Q {
   id: string;
@@ -71,7 +72,6 @@ const QUESTIONS: Q[] = [
   },
 ];
 
-const SUBMIT_FAILED = 'Chưa gửi được câu trả lời. Kiểm tra mạng rồi thử lại.';
 
 async function readSnoozedUntil(): Promise<number | null> {
   try {
@@ -211,7 +211,7 @@ function Onboarding({ onSnooze, onDone }: { onSnooze: () => void; onDone: () => 
 
               {submit.isError && (
                 <p role="alert" className="mt-3 rounded-control bg-stone-0 px-3 py-2 text-sm text-danger-fg">
-                  {submit.error instanceof Error && submit.error.message ? submit.error.message : SUBMIT_FAILED}
+                  {actionErrorText(submit.error)}
                 </p>
               )}
 

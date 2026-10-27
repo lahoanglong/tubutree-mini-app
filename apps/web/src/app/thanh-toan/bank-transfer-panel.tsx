@@ -12,6 +12,7 @@ import { saveImage, type SaveImageResult } from '@/lib/download-image';
 import { useRemaining } from '@/lib/use-remaining';
 import { copyText } from '@/lib/copy-text';
 import { ApiError, NetworkError } from '@/lib/client-api';
+import { loadErrorText } from '@/lib/error-text';
 import { SupportHotline } from '@/components/support-hotline';
 
 export type BankPanelState = 'loading' | 'error' | 'ready' | 'paid' | 'closed';
@@ -30,8 +31,9 @@ const GENERIC_AUTH_MESSAGES = new Set(['Unauthorized', 'Forbidden']);
 const sessionExpiredText = (e: ApiError) => (e.message && !GENERIC_AUTH_MESSAGES.has(e.message) ? e.message : SESSION_EXPIRED_MESSAGE);
 
 const EXPIRED_MESSAGE = 'Đơn đã quá hạn chuyển khoản. Nếu bạn đã chuyển tiền, Tubu sẽ hoàn lại cho bạn.';
-const LOAD_ERROR_FALLBACK = 'Có lỗi xảy ra. Vui lòng thử lại.';
-const errorMessage = (e: unknown) => (e instanceof ApiError || e instanceof NetworkError) && e.message ? e.message : LOAD_ERROR_FALLBACK;
+// 503 kèm lý do (vd. chưa cấu hình tài khoản nhận tiền): lý do ấy là thứ khách cần đọc, như Mini App; lỗi khác theo loadErrorText.
+const errorMessage = (e: unknown) =>
+  (e instanceof ApiError && e.status === 503 && e.message) || e instanceof NetworkError ? (e as Error).message : loadErrorText(e);
 
 /**
  * A2-02 = A6-01 (docs/audit-2026-09): web cho chọn "Chuyển khoản ngân hàng" nhưng trước đây sau
