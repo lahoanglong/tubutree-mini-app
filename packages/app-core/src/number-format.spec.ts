@@ -27,5 +27,15 @@ describe('số kiểu Việt dùng chung', () => {
     expect(tierPerkLabel('Tích Điểm Xanh ×1,5')).toBe('Tích Điểm Xanh ×1,5');
     expect(tierPerkLabel('Freeship + giảm 5% mọi đơn')).toBe('Freeship + giảm 5% mọi đơn');
     expect(tierPerkLabel('Giao xe hơi')).toBe('Giao xe hơi');
+    expect(tierPerkLabel('Tặng x1.000 điểm')).toBe('Tặng x1.000 điểm');
+    expect(tierPerkLabel('Tích Điểm Xanh x1.5, freeship')).toBe('Tích Điểm Xanh ×1,5, freeship');
+    expect(tierPerkLabel('Điểm thưởng x2.')).toBe('Điểm thưởng ×2.');
+    expect(tierPerkLabel('Điểm thưởng (x1.2)')).toBe('Điểm thưởng (×1,2)');
+    expect(tierPerkLabel('Tích điểm 1.2x')).toBe('Tích điểm ×1,2');
+    expect(tierPerkLabel('Tích điểm 2x;')).toBe('Tích điểm ×2;');
+    expect(tierPerkLabel('Tích Điểm Xanh x1.25')).toBe('Tích Điểm Xanh ×1,25');
+    expect(tierPerkLabel('Cây xanh, Xuất xứ rõ ràng')).toBe('Cây xanh, Xuất xứ rõ ràng');
+    expect(tierPerkLabel('Freeship đơn ≥ 99k')).toBe('Freeship đơn ≥ 99k');
+    expect(tierPerkLabel('Mã giảm giá sinh nhật 50k')).toBe('Mã giảm giá sinh nhật 50k');
   });
 });

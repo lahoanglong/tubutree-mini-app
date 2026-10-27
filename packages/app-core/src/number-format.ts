@@ -17,10 +17,18 @@ export function multiplierLabel(x: number | null | undefined): string {
   return `×${formatMultiplier(x)}`;
 }
 
+/** Hệ số nhân hợp lệ: tối đa hai chữ số thập phân; "1.000" (nhóm nghìn) không phải hệ số. */
+const NUM = String.raw`(\d+(?:[.,]\d{1,2})?)`;
+const PREFIX_MULT = new RegExp(String.raw`(^|[\s(])[xX×]${NUM}(?![\d\p{L}]|[.,]\d)`, 'gu');
+const POSTFIX_MULT = new RegExp(String.raw`(^|[\s(])${NUM}[xX](?![\d\p{L}])`, 'gu');
+
 /**
- * Quyền lợi hạng do admin nhập tay nên có thể còn kiểu cũ ("x1.2"): chỉ chuẩn hoá hệ số nhân thành "×1,2",
- * giữ nguyên phần chữ còn lại.
+ * Quyền lợi hạng do admin nhập tay nên có thể còn kiểu cũ ("x1.2", "1.2x"): chỉ chuẩn hoá hệ số nhân thành "×1,2",
+ * giữ nguyên phần chữ còn lại. Số có nhóm nghìn ("x1.000") không phải hệ số nên để nguyên.
  */
 export function tierPerkLabel(perk: string): string {
-  return perk.replace(/(^|[\s(])[x×](\d+(?:[.,]\d+)?)(?![\w.,])/gi, (_m, pre: string, num: string) => `${pre}×${num.replace('.', ',')}`);
+  const mult = (n: string) => `×${n.replace('.', ',')}`;
+  return perk
+    .replace(PREFIX_MULT, (_m, pre: string, n: string) => `${pre}${mult(n)}`)
+    .replace(POSTFIX_MULT, (_m, pre: string, n: string) => `${pre}${mult(n)}`);
 }
