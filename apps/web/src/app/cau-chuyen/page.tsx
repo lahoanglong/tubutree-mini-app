@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { BrandStoryView } from './brand-story-view';
 
@@ -14,5 +15,10 @@ export const metadata: Metadata = {
 };
 
 export default function BrandStoryPage() {
-  return <BrandStoryView />;
+  // useSearchParams (?brand= mở sẵn câu chuyện của nhãn) cần Suspense để trang vẫn render tĩnh.
+  return (
+    <Suspense>
+      <BrandStoryView />
+    </Suspense>
+  );
 }

@@ -219,13 +219,19 @@ describe('/brand/[slug] — hạn trang dựng sẵn', () => {
   });
 
   it('có xuất xứ và ảnh câu chuyện thì hiện cùng khối "Câu chuyện thương hiệu" như Mini App', async () => {
-    mocks.brand = { ...BRAND, origin: 'Lâm Đồng, Việt Nam', storyImages: ['https://img.test/a.jpg', 'https://img.test/b.jpg'] };
+    mocks.brand = { ...BRAND, slug: 'fuwa3e', name: 'Fuwa3e', origin: 'Lâm Đồng, Việt Nam', storyImages: ['https://img.test/a.jpg', 'https://img.test/b.jpg'] };
     const box = await html();
     expect(box.textContent).toContain('Xuất xứ: Lâm Đồng, Việt Nam');
-    expect(box.querySelector('a[href="/cau-chuyen"]')?.textContent).toBe('Xem trên bản đồ');
+    expect(box.querySelector('a[href="/cau-chuyen?brand=fuwa3e"]')?.textContent).toBe('Xem trên bản đồ');
     const imgs = box.querySelectorAll('[role="region"][aria-label="Ảnh câu chuyện thương hiệu"] img');
     expect(imgs).toHaveLength(2);
-    expect(imgs[0]!.getAttribute('alt')).toBe('Bồ Hòn Xanh, ảnh 1');
+    expect(imgs[0]!.getAttribute('alt')).toBe('Fuwa3e, ảnh 1');
+  });
+  it('nhãn chưa có ghim trên bản đồ thì không hiện liên kết "Xem trên bản đồ"', async () => {
+    mocks.brand = { ...BRAND, origin: 'Lâm Đồng, Việt Nam' };
+    const box = await html();
+    expect(box.textContent).toContain('Xuất xứ: Lâm Đồng, Việt Nam');
+    expect(box.textContent).not.toContain('Xem trên bản đồ');
   });
   it('không có câu chuyện, xuất xứ lẫn ảnh thì không vẽ khối câu chuyện', async () => {
     mocks.brand = { ...BRAND, story: null };

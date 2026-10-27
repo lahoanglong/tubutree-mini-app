@@ -9,6 +9,8 @@ import { safeHexColor } from '@/lib/safe-color';
 import { BrandActions, BrandDealerBlock, BrandPromoCode } from './brand-actions';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { GRID_PRODUCTS } from '@/lib/product-grid';
+import { ScrollRow } from '@/components/mini/scroll-row';
+import { findBrandOrigin } from '@/lib/brand-origins';
 
 // Admin gỡ đăng không làm mới được trang này, nên hạn ngắn để nhãn bị gỡ không còn hiện lâu; vẫn dựng phía server cho SEO.
 export const revalidate = 60;
@@ -39,6 +41,7 @@ export default async function BrandPage({
   const { slug } = await params;
   const b = await getBrand(slug);
   if (!b) notFound();
+  const mapOrigin = findBrandOrigin({ slug: b.slug, name: b.name });
 
   return (
     <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:p-0 max-md:pb-[calc(90px+var(--safe-bottom))]`}>
@@ -156,19 +159,21 @@ export default async function BrandPage({
                 <MapPin className="h-4 w-4 flex-none text-[color:var(--color-text-brand)]" aria-hidden="true" />
                 Xuất xứ: {b.origin}
               </span>
-              <Link href="/cau-chuyen" className="inline-flex min-h-11 flex-none items-center justify-center rounded-control bg-[var(--color-action-secondary-bg)] px-4 text-sm font-semibold text-[color:var(--color-action-secondary-fg)]">
-                Xem trên bản đồ
-              </Link>
+              {mapOrigin && (
+                <Link href={`/cau-chuyen?brand=${mapOrigin.id}`} className="inline-flex min-h-11 flex-none items-center justify-center rounded-control bg-[var(--color-action-secondary-bg)] px-4 text-sm font-semibold text-[color:var(--color-action-secondary-fg)]">
+                  Xem trên bản đồ
+                </Link>
+              )}
             </div>
           )}
           {b.story && <p className="whitespace-pre-line break-words text-sm text-[color:var(--color-text-secondary)] md:text-base md:text-stone-700">{b.story}</p>}
           {b.storyImages.length > 0 && (
-            <div role="region" aria-label="Ảnh câu chuyện thương hiệu" className="mt-3 flex gap-2 overflow-x-auto max-md:-mx-4 max-md:px-4">
+            <ScrollRow label="Ảnh câu chuyện thương hiệu" className="mt-3 gap-2 max-md:-mx-4 max-md:max-w-none max-md:px-4">
               {b.storyImages.map((src, i) => (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={src} src={src} alt={`${b.name}, ảnh ${i + 1}`} loading="lazy" className="h-40 w-60 flex-none rounded-card bg-[var(--color-bg-subtle)] object-cover" />
+                <img key={`${i}:${src}`} src={src} alt={`${b.name}, ảnh ${i + 1}`} loading="lazy" className="h-40 w-60 flex-none rounded-card bg-[var(--color-bg-subtle)] object-cover" />
               ))}
-            </div>
+            </ScrollRow>
           )}
         </section>
       )}

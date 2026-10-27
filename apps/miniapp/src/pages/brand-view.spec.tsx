@@ -193,13 +193,20 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
   });
 
   it('có xuất xứ và ảnh câu chuyện: hiện cùng khối câu chuyện, nút "Xem trên bản đồ" mở /brand-story', async () => {
-    mocks.getPublicBrand.mockResolvedValue({ ...BRAND, origin: 'Lâm Đồng, Việt Nam', storyImages: ['https://img.test/a.jpg', 'https://img.test/b.jpg'] });
+    mocks.getPublicBrand.mockResolvedValue({ ...BRAND, slug: 'fuwa3e', name: 'Fuwa3e', origin: 'Lâm Đồng, Việt Nam', storyImages: ['https://img.test/a.jpg', 'https://img.test/b.jpg'] });
     renderPage();
     expect(await screen.findByText('Xuất xứ: Lâm Đồng, Việt Nam')).toBeInTheDocument();
     const gallery = screen.getByRole('region', { name: 'Ảnh câu chuyện thương hiệu' });
     expect(within(gallery).getAllByRole('img')).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Xem trên bản đồ' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/brand-story');
+    expect(mocks.navigate).toHaveBeenCalledWith('/brand-story?brand=fuwa3e');
+  });
+
+  it('nhãn chưa có ghim trên bản đồ thì không hiện nút "Xem trên bản đồ"', async () => {
+    mocks.getPublicBrand.mockResolvedValue({ ...BRAND, origin: 'Lâm Đồng, Việt Nam' });
+    renderPage();
+    expect(await screen.findByText('Xuất xứ: Lâm Đồng, Việt Nam')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Xem trên bản đồ' })).toBeNull();
   });
 
   it('khối chương trình đại lý dẫn tới /dealer; đại lý đã duyệt chỉ đổi chữ nút', async () => {

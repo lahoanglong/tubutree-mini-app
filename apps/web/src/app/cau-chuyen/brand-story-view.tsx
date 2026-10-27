@@ -3,6 +3,7 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { MapPin } from 'lucide-react';
 import { Sheet } from '@/components/ui/sheet';
 import { BRAND_ORIGINS, brandBrowseHref, type BrandOrigin } from '@/lib/brand-origins';
@@ -15,7 +16,8 @@ const TEXT_SCRIM = 'rounded-control bg-[var(--color-brand-tile-scrim)] px-2.5 py
 
 /** Hành trình nguyên liệu: bản đồ gỗ 3D và 8 ô nhãn gắn với tỉnh xuất xứ; chạm mở sheet câu chuyện kèm lối sang sản phẩm của nhãn. */
 export function BrandStoryView() {
-  const [selected, setSelected] = useState<BrandOrigin | null>(null);
+  const params = useSearchParams();
+  const [selected, setSelected] = useState<BrandOrigin | null>(() => BRAND_ORIGINS.find((o) => o.id === params?.get('brand')) ?? null);
 
   return (
     <main className="mx-auto w-full max-w-frame pb-8">

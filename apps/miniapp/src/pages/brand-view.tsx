@@ -24,6 +24,7 @@ import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
 import { ScrollRow } from '../components/ui/scroll-row';
 import { safeHexColor } from '../utils/hex-color';
+import { findBrandOrigin } from '../utils/brand-origins';
 
 /** Tiêu đề khi chưa có tên nhãn (đang tải/lỗi); tải xong thì tên nhãn là h1 của StorePageShell. */
 const PAGE_TITLE = 'Nhãn hàng';
@@ -74,6 +75,7 @@ export default function BrandViewPage() {
   const myRef = ste?.eligible ? ste.referralCode : null;
 
   const b = q.data;
+  const mapOrigin = b ? findBrandOrigin({ slug, name: b.name }) : null;
 
   if (q.isLoading) {
     return (
@@ -282,9 +284,11 @@ export default function BrandViewPage() {
                   <MapPin size={16} color="var(--color-text-brand)" aria-hidden />
                   <Text variant="body-sm" as="span">Xuất xứ: {b.origin}</Text>
                 </span>
-                <Button variant="secondary" onPress={() => navigate('/brand-story')} style={{ flexShrink: 0 }}>
-                  Xem trên bản đồ
-                </Button>
+                {mapOrigin && (
+                  <Button variant="secondary" onPress={() => navigate(`/brand-story?brand=${mapOrigin.id}`)} style={{ flexShrink: 0 }}>
+                    Xem trên bản đồ
+                  </Button>
+                )}
               </div>
             )}
             {b.story && <Text variant="body-sm" tone="secondary" as="div" style={{ whiteSpace: 'pre-line' }}>{b.story}</Text>}
@@ -292,7 +296,7 @@ export default function BrandViewPage() {
               <ScrollRow label="Ảnh câu chuyện thương hiệu" style={{ gap: 8, marginTop: 12, minWidth: 0, maxWidth: '100%' }}>
                 {b.storyImages.map((src, i) => (
                   <img
-                    key={src}
+                    key={`${i}:${src}`}
                     src={src}
                     alt={`${b.name}, ảnh ${i + 1}`}
                     loading="lazy"

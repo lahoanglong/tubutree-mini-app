@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
 import { BRAND_ORIGINS } from '@/lib/brand-origins';
 import { BrandStoryView } from './brand-story-view';
+
+const nav = vi.hoisted(() => ({ search: '' }));
+vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(nav.search) }));
 
 // Cùng ý nghĩa brand-story.tsx của Mini App: 8 nhãn gắn với tỉnh xuất xứ, ghim bản đồ và ô lưới cùng mở sheet, sheet dẫn tới danh sách sản phẩm nhãn.
 
@@ -14,6 +17,7 @@ const mount = () => {
   return r.container;
 };
 afterEach(() => {
+  nav.search = '';
   mounted.forEach((m) => m.unmount());
   mounted = [];
   document.body.innerHTML = '';
@@ -28,6 +32,16 @@ const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
 const minHeight = (el: HTMLElement) => parseInt(el.style.minHeight, 10);
 
 describe('/cau-chuyen — Hành trình nguyên liệu', () => {
+  it('?brand=<id> mở sẵn sheet của nhãn đó; id lạ thì không mở', () => {
+    nav.search = 'brand=fuwa3e';
+    mount();
+    expect(dialog()?.textContent).toContain('Fuwa3e');
+    mounted.pop()!.unmount();
+    nav.search = 'brand=khong-co';
+    mount();
+    expect(dialog()).toBeNull();
+  });
+
   it('có đúng một h1 là tiêu đề trang, lời dẫn và số nhãn', () => {
     const c = mount();
     const h1 = c.querySelectorAll('h1');
