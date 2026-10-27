@@ -241,6 +241,7 @@ describe('/recycle/desk — tra mã và đếm (§4.10)', () => {
     await screen.findByText('Ng*** A');
     expect(within(line('Pin đã dùng')).getByRole('button', { name: 'Tăng số lượng' })).toBeInTheDocument();
     expect(within(line('Pin đã dùng')).getByText('Cất riêng vào thùng kín, không lẫn rác khác')).toBeInTheDocument();
+    expect(within(line('Pin đã dùng')).getByText('Pin phồng hoặc chảy nước thì không đếm, chọn lý do nhận thiếu "Hỏng"')).toBeInTheDocument();
     expect(screen.getByText('Điểm Tubu sẽ cộng cho khách: 2.000 điểm')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Xác nhận đã nhận' })).toBeEnabled();
     mocks.deskConfirm.mockResolvedValue({ requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 2000, dropsAwarded: 0, quota: { limit: 500_000, used: 120_000, remaining: 380_000 }, staffDailyCapRemaining: 150_000 });

@@ -131,7 +131,7 @@ export function pausedNote(
   const expiry = `Yêu cầu hết hạn ngày ${expiryDayMonth}.`;
   if (f.programmeEnabled === false || (f.cfg.isLoaded && !f.cfg.enabled)) return `Chương trình đang tạm dừng. ${expiry}`;
   if (f.blocked) return `Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree. ${expiry}`;
-  if (r.method === 'PICKUP' && f.shipLockedAt) return `Tài khoản của bạn tạm chưa gửi hàng được, liên hệ Tubu Tree. ${expiry}`;
+  if (r.method === 'PICKUP' && f.shipLockedAt) return `Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn, liên hệ CSKH. ${expiry}`;
   if (r.method === 'PICKUP' && !f.cfg.pickup) return `Thu kèm đơn đang tạm dừng. ${expiry}`;
   return expiry;
 }
@@ -142,4 +142,29 @@ export function warehouseOnlyPointsNote(names: readonly string[], warehouseAvail
   return warehouseAvailable
     ? `${list} chỉ kho TP.HCM nhận, nên các điểm đại lý đang bị khoá. Bạn có thể chọn kho Tubu hoặc bỏ món này khỏi yêu cầu.`
     : `${list} chỉ kho TP.HCM nhận, mà kho chưa nhận được lúc này. Hiện chưa có điểm nào nhận món này, bạn có thể bỏ món này khỏi yêu cầu.`;
+}
+
+/** Dòng nhắc ở quầy với món cần xử lý riêng (pin): chỉ dùng lý do nhận thiếu có sẵn, không thêm lý do mới. */
+export const HAZARDOUS_DESK_NOTES = [
+  'Cất riêng vào thùng kín, không lẫn rác khác',
+  'Pin phồng hoặc chảy nước thì không đếm, chọn lý do nhận thiếu "Hỏng"',
+] as const;
+
+/**
+ * Số tối đa của ô chọn số. Món chỉ mang tới (nguy hại, như pin) bị chặn cả bởi trần ngày còn lại, vì máy chủ không
+ * cho gửi nó qua đường vận chuyển nên không có đường nào khác để mang phần vượt; món khác chỉ theo trần tháng.
+ */
+export function itemQtyMax(
+  item: { monthRemainingQty?: number | null; dayRemainingQty?: number | null; hazardous?: boolean },
+  allowance: number,
+  uncapped: number,
+): number {
+  const month = item.monthRemainingQty ?? uncapped;
+  const limit = item.hazardous && item.dayRemainingQty != null ? Math.min(month, item.dayRemainingQty) : month;
+  return limit + allowance;
+}
+
+export function dropOffDayLimitText(item: { hazardous?: boolean; dayRemainingQty?: number | null; unitLabel: string }): string | null {
+  if (!item.hazardous || item.dayRemainingQty == null) return null;
+  return `Tối đa ${item.dayRemainingQty.toLocaleString('vi-VN')} ${item.unitLabel} mỗi ngày`;
 }

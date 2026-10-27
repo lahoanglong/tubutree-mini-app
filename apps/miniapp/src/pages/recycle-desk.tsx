@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { HAZARDOUS_DESK_NOTES } from '@tubutree/app-core/waste-copy';
 import type { CSSProperties } from 'react';
 import { Input, Page, useSnackbar } from 'zmp-ui';
 import { CheckCircle2, ChevronDown, ScanLine } from 'lucide-react';
@@ -383,7 +384,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                 ) : (
                   <>
                     <Text variant="body-sm" tone="secondary" as="div">{`Khách khai ${l.declaredQty} ${l.unitLabel}`}</Text>
-                    {l.hazardous && <Text variant="body-sm" tone="danger" as="div">Cất riêng vào thùng kín, không lẫn rác khác</Text>}
+                    {l.hazardous && HAZARDOUS_DESK_NOTES.map((t) => <Text key={t} variant="body-sm" tone="danger" as="div">{t}</Text>)}
                       <>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                           <QuantitySelector

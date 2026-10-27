@@ -1,5 +1,6 @@
 'use client';
 
+import { HAZARDOUS_DESK_NOTES } from '@tubutree/app-core/waste-copy';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
@@ -394,7 +395,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                   ) : (
                     <>
                       <p className="text-sm text-stone-600">{`Khách khai ${l.declaredQty} ${l.unitLabel}`}</p>
-                      {l.hazardous && <p className="text-sm text-danger-fg">Cất riêng vào thùng kín, không lẫn rác khác</p>}
+                      {l.hazardous && HAZARDOUS_DESK_NOTES.map((t) => <p key={t} className="text-sm text-danger-fg">{t}</p>)}
                         <>
                           <div className="flex items-center gap-3">
                             <QuantitySelector

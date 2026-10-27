@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createBlockedHint, defaultPointId, missingItemsReason, pausedNote, warehouseOnlyPointsNote, parseQtyInput, readLastPointId, timelineCaption, wasteItemIconKey, writeLastPointId } from './waste-copy';
+import { createBlockedHint, dropOffDayLimitText, itemQtyMax, defaultPointId, missingItemsReason, pausedNote, warehouseOnlyPointsNote, parseQtyInput, readLastPointId, timelineCaption, wasteItemIconKey, writeLastPointId } from './waste-copy';
 
 describe('parseQtyInput', () => {
   it('chỉ giữ chữ số và kẹp vào khoảng', () => {
@@ -84,7 +84,7 @@ describe('pausedNote', () => {
     expect(pausedNote({ method: 'DROP_OFF' }, { programmeEnabled: false, cfg: on }, '25/10')).toBe('Chương trình đang tạm dừng. Yêu cầu hết hạn ngày 25/10.');
     expect(pausedNote({ method: 'DROP_OFF' }, { cfg: { ...on, enabled: false } }, '25/10')).toBe('Chương trình đang tạm dừng. Yêu cầu hết hạn ngày 25/10.');
     expect(pausedNote({ method: 'DROP_OFF' }, { blocked: true, cfg: on }, '25/10')).toBe('Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree. Yêu cầu hết hạn ngày 25/10.');
-    expect(pausedNote({ method: 'PICKUP' }, { shipLockedAt: '2026-10-01', cfg: on }, '25/10')).toBe('Tài khoản của bạn tạm chưa gửi hàng được, liên hệ Tubu Tree. Yêu cầu hết hạn ngày 25/10.');
+    expect(pausedNote({ method: 'PICKUP' }, { shipLockedAt: '2026-10-01', cfg: on }, '25/10')).toBe('Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn, liên hệ CSKH. Yêu cầu hết hạn ngày 25/10.');
     expect(pausedNote({ method: 'PICKUP' }, { cfg: { ...on, pickup: false } }, '25/10')).toBe('Thu kèm đơn đang tạm dừng. Yêu cầu hết hạn ngày 25/10.');
   });
   it('chương trình tắt thắng khoá; khoá gửi và kênh Thu kèm không áp cho Mang tới điểm', () => {
@@ -99,5 +99,20 @@ describe('warehouseOnlyPointsNote', () => {
     expect(warehouseOnlyPointsNote(['Vỏ hộp sữa'], true)).toContain('chọn kho Tubu');
     expect(warehouseOnlyPointsNote(['Vỏ hộp sữa'], false)).toContain('Hiện chưa có điểm nào nhận món này');
     expect(warehouseOnlyPointsNote(['Vỏ hộp sữa'], false)).not.toContain('chọn kho Tubu');
+  });
+});
+
+describe('itemQtyMax và dropOffDayLimitText', () => {
+  it('món thường chỉ theo trần tháng; món nguy hại còn theo trần ngày còn lại; cộng phần của yêu cầu đang sửa', () => {
+    expect(itemQtyMax({ monthRemainingQty: 50, dayRemainingQty: 20 }, 0, 999)).toBe(50);
+    expect(itemQtyMax({ monthRemainingQty: 50, dayRemainingQty: 20, hazardous: true }, 0, 999)).toBe(20);
+    expect(itemQtyMax({ monthRemainingQty: 12, dayRemainingQty: 20, hazardous: true }, 0, 999)).toBe(12);
+    expect(itemQtyMax({ monthRemainingQty: null, dayRemainingQty: 20, hazardous: true }, 5, 999)).toBe(25);
+    expect(itemQtyMax({ monthRemainingQty: null, dayRemainingQty: null, hazardous: true }, 0, 999)).toBe(999);
+  });
+  it('dòng nhắc trần ngày chỉ cho món nguy hại có trần ngày', () => {
+    expect(dropOffDayLimitText({ hazardous: true, dayRemainingQty: 20, unitLabel: 'viên' })).toBe('Tối đa 20 viên mỗi ngày');
+    expect(dropOffDayLimitText({ hazardous: false, dayRemainingQty: 20, unitLabel: 'viên' })).toBeNull();
+    expect(dropOffDayLimitText({ hazardous: true, dayRemainingQty: null, unitLabel: 'viên' })).toBeNull();
   });
 });

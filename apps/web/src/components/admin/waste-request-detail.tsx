@@ -1,5 +1,6 @@
 'use client';
 
+import { HAZARDOUS_DESK_NOTES } from '@tubutree/app-core/waste-copy';
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
@@ -279,7 +280,7 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
                           {SHORTFALL_KEYS.map((k) => <option key={k} value={k}>{WASTE_SHORTFALL_REASON_LABELS[k]}</option>)}
                         </select>
                       )}
-                      {l.hazardous && <span className="text-xs text-danger-fg">Cất riêng vào thùng kín, không lẫn rác khác</span>}
+                      {l.hazardous && HAZARDOUS_DESK_NOTES.map((t) => <span key={t} className="block text-xs text-danger-fg">{t}</span>)}
                       {qty === null && <span className="text-xs text-danger-fg">{`Số thực nhận từ 0 tới ${formatCount(l.declaredQty)}`}</span>}
                     </div>
                   </td>
