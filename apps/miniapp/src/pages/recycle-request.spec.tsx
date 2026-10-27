@@ -140,20 +140,28 @@ describe('/recycle/r/:id — Mang tới điểm nhận (§4.5, §4.6)', () => {
   it('chương trình tạm dừng: yêu cầu mang tới điểm không còn "Xem mã QR", có câu tạm dừng và vẫn huỷ được', async () => {
     mocks.publicConfig.waste = { enabled: false, dropoff: false, mailin: false, pickup: false };
     renderPage();
-    expect(await screen.findByText('Chương trình đang tạm dừng')).toBeInTheDocument();
+    expect(await screen.findByText('Chương trình đang tạm dừng. Yêu cầu hết hạn ngày 25/10.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Xem mã QR' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Huỷ yêu cầu' })).toBeEnabled();
     expect(screen.getByText('Đang tạm dừng')).toBeInTheDocument();
     expect(screen.queryByText('Chờ bạn mang tới')).toBeNull();
   });
-  it('khách bị khoá: cùng câu trung tính, không lộ việc bị khoá, vẫn huỷ được', async () => {
+  it('khách bị khoá: câu riêng nói tạm không tham gia (không nói chương trình tạm dừng), vẫn huỷ được', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ blocked: true }));
     renderPage();
-    expect(await screen.findByText('Chương trình đang tạm dừng')).toBeInTheDocument();
+    expect(await screen.findByText('Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree. Yêu cầu hết hạn ngày 25/10.')).toBeInTheDocument();
+    expect(screen.queryByText(/Chương trình đang tạm dừng/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Xem mã QR' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Huỷ yêu cầu' })).toBeEnabled();
-    expect(screen.queryByText(/khoá/i)).toBeNull();
     expect(screen.getByText('Đang tạm dừng')).toBeInTheDocument();
+  });
+  it('khoá gửi hàng không làm yêu cầu mang tới điểm tạm dừng; kênh Thu kèm tắt riêng cũng không', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z' }));
+    mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: false };
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Xem mã QR' })).toBeInTheDocument();
+    expect(screen.queryByText('Đang tạm dừng')).toBeNull();
+    expect(screen.queryByText(/Yêu cầu hết hạn ngày/)).toBeNull();
   });
   it('bình thường: có "Xem mã QR" và không có câu tạm dừng', async () => {
     renderPage();
@@ -275,15 +283,16 @@ describe('/recycle/r/:id — Thu kèm đơn mua (§4.5b, §15.6)', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/');
   });
   it.each([
-    ['khoá đường kho', () => mocks.getWasteMe.mockResolvedValue(makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z' }))],
-    ['bị khoá chương trình', () => mocks.getWasteMe.mockResolvedValue(makeWasteMe({ blocked: true }))],
-    ['cờ pickup tắt', () => { mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: false }; }],
-    ['chương trình tắt khi cấu hình công khai cũ vẫn bật pickup', () => mocks.getWasteMe.mockResolvedValue(makeWasteMe({ programmeEnabled: false }))],
-  ])('%s → câu tạm dừng trung tính + "Huỷ yêu cầu", không có nút đi mua hàng', async (_n, arrange) => {
+    ['khoá đường kho', () => mocks.getWasteMe.mockResolvedValue(makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z' })), 'Tài khoản của bạn tạm chưa gửi hàng được, liên hệ Tubu Tree. Yêu cầu hết hạn ngày 25/10.'],
+    ['bị khoá chương trình', () => mocks.getWasteMe.mockResolvedValue(makeWasteMe({ blocked: true })), 'Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree. Yêu cầu hết hạn ngày 25/10.'],
+    ['cờ pickup tắt', () => { mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: false }; }, 'Thu kèm đơn đang tạm dừng. Yêu cầu hết hạn ngày 25/10.'],
+    ['chương trình tắt khi cấu hình công khai cũ vẫn bật pickup', () => mocks.getWasteMe.mockResolvedValue(makeWasteMe({ programmeEnabled: false })), 'Chương trình đang tạm dừng. Yêu cầu hết hạn ngày 25/10.'],
+  ])('%s → câu đúng lý do + "Huỷ yêu cầu", không có nút đi mua hàng', async (_n, arrange, note) => {
     arrange();
     mocks.getWasteRequest.mockResolvedValue(PICKUP());
     renderPage();
-    expect(await screen.findByText('Thu kèm rác đang tạm dừng, yêu cầu này chưa gắn được vào đơn và sẽ tự hết hạn ngày 25/10')).toBeInTheDocument();
+    expect(await screen.findByText(note)).toBeInTheDocument();
+    expect(screen.getByText('Yêu cầu này chưa gắn được vào đơn lúc này và sẽ tự hết hạn ngày 25/10')).toBeInTheDocument();
     expect(screen.queryByText('Gắn yêu cầu này vào đơn mua kế tiếp ở bước thanh toán')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Đi mua hàng' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Huỷ yêu cầu' })).toBeInTheDocument();
@@ -367,7 +376,7 @@ describe('/recycle/r/:id — trạng thái, ước tính, tiêu đề (F2, F10)'
   it('chương trình tạm dừng: bước 2 không dặn mang tới điểm', async () => {
     mocks.publicConfig.waste = { enabled: false, dropoff: false, mailin: false, pickup: false };
     renderPage();
-    await screen.findByText('Chương trình đang tạm dừng');
+    await screen.findByText('Chương trình đang tạm dừng. Yêu cầu hết hạn ngày 25/10.');
     const tl = screen.getByRole('list', { name: 'Tiến độ yêu cầu' });
     expect(within(tl).getByText('Mang tới điểm').closest('li')).not.toHaveTextContent('Mang tới Đại lý Cô Ba');
   });
@@ -451,7 +460,8 @@ describe('/recycle/r/:id — theo dõi (B-83)', () => {
     renderPage();
     const badge = await screen.findByText('Đang tạm dừng');
     expect(badge.closest('span')?.getAttribute('style') ?? '').toContain('--color-status-warning');
-    expect(screen.getByText(/sẽ hết hạn ngày 25\/10 nếu chương trình chưa mở lại/)).toBeInTheDocument();
+    expect(screen.getByText(/Yêu cầu hết hạn ngày 25\/10\./)).toBeInTheDocument();
+    expect(screen.queryByText(/nếu chương trình chưa mở lại/)).toBeNull();
   });
   it('tấm xác nhận huỷ nói rõ hậu quả', async () => {
     renderPage();

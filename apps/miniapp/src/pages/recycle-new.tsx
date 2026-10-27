@@ -236,9 +236,15 @@ export default function RecycleNewPage() {
     if (stateDraft) setDraft(stateDraft);
   }, [stateDraft]);
 
-  const [consent, setConsent] = useState(false);
-  const [packagingConsent, setPackagingConsent] = useState(false);
-  const [postageConsent, setPostageConsent] = useState(false);
+  // Khách mở Thể lệ rồi quay lại thì giữ cả cách giao lẫn các ô đồng ý (lưu vào state của mục lịch sử trước khi rời trang).
+  const stateConsents = (location.state as { consents?: { consent: boolean; packaging: boolean; postage: boolean } } | null)?.consents;
+  const [consent, setConsent] = useState(stateConsents?.consent ?? false);
+  const [packagingConsent, setPackagingConsent] = useState(stateConsents?.packaging ?? false);
+  const [postageConsent, setPostageConsent] = useState(stateConsents?.postage ?? false);
+  const openRules = () => {
+    navigate(`/recycle/new?step=${step}`, { replace: true, state: { draft, consents: { consent, packaging: packagingConsent, postage: postageConsent } } });
+    navigate('/recycle/rules');
+  };
 
   const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: phase === 'authenticated' });
   const me: WasteMeDTO | undefined = meQ.data;
@@ -312,6 +318,7 @@ export default function RecycleNewPage() {
   const dropoffEnabled = cfg.waste.dropoff && !!me?.laneFlags.dropoff;
   const needNearby = step === 'method' && dropoffEnabled && draft.nearby === null;
   const locationTried = useRef(false);
+  const [locationSettled, setLocationSettled] = useState(false);
   useEffect(() => {
     if (step === 'items') locationTried.current = false;
   }, [step]);
@@ -328,6 +335,8 @@ export default function RecycleNewPage() {
         if (nearby.some((p) => p.distanceKm != null)) setDraft((d) => ({ ...d, nearby }));
       } catch {
         // Location only decorates the cards; a failure shows nothing (spec 16.1).
+      } finally {
+        setLocationSettled(true);
       }
     })();
   }, [needNearby]);
@@ -336,13 +345,18 @@ export default function RecycleNewPage() {
   const prefilled = useRef(false);
   useEffect(() => {
     if (prefilled.current || step !== 'method' || draft.method !== null || !pointsQ.data || !enabledMethods.includes('DROP_OFF')) return;
-    prefilled.current = true;
     const ids = toLineInputs(draft.lines).map((l) => l.itemId);
     const live = draft.nearby ? pointsQ.data.map((pt) => ({ ...pt, distanceKm: draft.nearby?.find((n) => n.id === pt.id)?.distanceKm ?? null })) : pointsQ.data;
     const id = defaultPointId(live, ids, readLastPointId(browserStore()));
     const point = id ? pointsQ.data.find((pt) => pt.id === id) : undefined;
-    if (point) setDraft((d) => ({ ...d, method: 'DROP_OFF', pointId: point.id, pickedPoint: point }));
-  }, [step, draft.method, draft.lines, draft.nearby, pointsQ.data, enabledMethods]);
+    if (point) {
+      prefilled.current = true;
+      setDraft((d) => ({ ...d, method: 'DROP_OFF', pointId: point.id, pickedPoint: point }));
+    } else if (locationSettled || !needNearby) {
+      // Không có điểm lần trước dùng được và vị trí đã có kết quả (hoặc không cần): thôi, để khách tự chọn.
+      prefilled.current = true;
+    }
+  }, [step, draft.method, draft.lines, draft.nearby, pointsQ.data, enabledMethods, locationSettled, needNearby]);
 
   const selected = draft.method && enabledMethods.includes(draft.method) ? draft.method : null;
   const keyContent = { method: draft.method, lines: lineInputs, pointId: draft.method === 'DROP_OFF' ? draft.pointId : null };
@@ -663,7 +677,7 @@ export default function RecycleNewPage() {
         <div style={{ ...COLUMN, gap: 4 }}>
           <Checkbox checked={consent} onChange={() => setConsent((v) => !v)} label={WASTE_CONSENT_TEXT} />
           <div>
-            <Button variant="ghost" onPress={() => navigate('/recycle/rules')}>
+            <Button variant="ghost" onPress={openRules}>
               {WASTE_RULES_LINK}
             </Button>
           </div>

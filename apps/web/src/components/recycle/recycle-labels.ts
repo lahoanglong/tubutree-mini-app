@@ -228,8 +228,8 @@ export function equivalentUnits(missingPoints: number, item: WasteItemDTO): numb
 export function capSentence(item: WasteItemDTO): string | null {
   const parts: string[] = [];
   if (item.monthlyCapQty != null) parts.push(`Tối đa ${formatCount(item.monthlyCapQty)} ${item.unitLabel} mỗi tháng`);
-  // Món chỉ kho nhận không qua điểm nhận nên trần theo ngày của điểm không áp dụng.
-  if (item.dailyCapQty != null && !item.warehouseOnly) parts.push(`Mỗi ngày mang tới điểm nhận tối đa ${formatCount(item.dailyCapQty)} ${item.unitLabel}`);
+  // Trần ngày vẫn áp cho DROP_OFF tới kho (waste-hold.service); món chỉ kho nhận thì nơi mang tới là kho.
+  if (item.dailyCapQty != null) parts.push(`Mỗi ngày mang tới ${item.warehouseOnly ? 'kho' : 'điểm nhận'} tối đa ${formatCount(item.dailyCapQty)} ${item.unitLabel}`);
   return parts.length ? parts.join('. ') : null;
 }
 

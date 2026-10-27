@@ -70,6 +70,9 @@ describe('nhãn Đổi rác', () => {
     expect(capSentence(ITEM_CARTON)).toBe('Tối đa 20 thùng mỗi tháng. Mỗi ngày mang tới điểm nhận tối đa 10 thùng');
     expect(capSentence({ ...ITEM_CARTON, monthlyCapQty: null, dailyCapQty: null })).toBeNull();
   });
+  it('capSentence: món chỉ kho nhận vẫn hiện trần ngày, nơi mang tới là kho', () => {
+    expect(capSentence({ ...ITEM_CARTON, monthlyCapQty: null, warehouseOnly: true })).toBe('Mỗi ngày mang tới kho tối đa 10 thùng');
+  });
   it('groupProgressText chỉ cho món nhóm và khi đã có số lượng', () => {
     expect(groupProgressText(0, ITEM_MILK)).toBeNull();
     expect(groupProgressText(2, ITEM_CARTON)).toBeNull();

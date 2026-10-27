@@ -177,6 +177,13 @@ describe('/doi-rac/quay: vào màn (§16.1, §4.10)', () => {
     expect(byText(c, 'p', 'Đại lý Cô Ba')).not.toBeNull();
     expect(c.querySelector<HTMLElement>('[data-testid="progress-fill"]')?.style.width).toBe('24%');
   });
+  it('khổ điện thoại: tên điểm nằm trên cùng, trước ô nhập mã, như Mini App', async () => {
+    const c = await mount();
+    const mobileName = Array.from(c.querySelectorAll('p')).find((p) => p.textContent === 'Đại lý Cô Ba' && p.className.includes('md:hidden'))!;
+    expect(mobileName).toBeDefined();
+    const input = c.querySelector('input')!;
+    expect(mobileName.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
   it('nhiều điểm: tên điểm chỉ nằm trên các tab, không lặp thành dòng riêng', async () => {
     state.points = [makeDeskPoint(), WAREHOUSE_DESK];
     const c = await mount();

@@ -48,6 +48,8 @@ export const WASTE_ITEMS: WasteMeItemDTO[] = [
     imageUrl: null,
     gramsPerUnit: null,
     hazardous: false,
+    // Như seed thật: hộp sữa chỉ kho TP.HCM nhận.
+    warehouseOnly: true,
     sortOrder: 30,
     monthRemainingQty: 300,
     dayRemainingQty: 50,

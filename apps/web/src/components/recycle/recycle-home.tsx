@@ -75,6 +75,7 @@ function NoticeCard({ text }: { text: string }) {
 }
 
 function ItemList({ items }: { items: readonly WasteItemDTO[] }) {
+  if (items.length === 0) return null;
   return (
     <section className="space-y-2">
       <h2 className={skin.sectionTitle}>{wasteGuestCopy.itemsTitle}</h2>

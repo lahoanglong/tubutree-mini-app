@@ -17,7 +17,7 @@ import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Text } from '../components/ui/text';
-import { wasteStepCopy } from '@tubutree/app-core/waste-copy';
+import { wasteStepCopy, warehouseOnlyPointsNote } from '@tubutree/app-core/waste-copy';
 import { WastePointPicker } from '../components/waste-point-picker';
 import { METHOD_LABELS } from '../utils/waste-labels';
 import type { WastePointsNavState, WastePointsReturnState } from './recycle-new';
@@ -162,7 +162,7 @@ export default function RecyclePointsPage() {
     <>
       {warehouseOnlyNames.length > 0 && (
         <Text variant="body-sm" tone="secondary" as="p" style={{ margin: 0 }}>
-          {`${warehouseOnlyNames.join(', ')} chỉ kho TP.HCM nhận, nên các điểm đại lý đang bị khoá. Bạn có thể chọn kho Tubu hoặc bỏ món này khỏi yêu cầu.`}
+          {warehouseOnlyPointsNote(warehouseOnlyNames, points.some((p) => p.kind === 'WAREHOUSE'))}
         </Text>
       )}
       <SearchField

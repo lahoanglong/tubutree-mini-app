@@ -10,6 +10,7 @@ describe('câu quy tắc và câu trần (§4.2, §5.1)', () => {
   it('trần tháng + trần ngày', () => {
     expect(L.capSentence(ITEM_CARTON)).toBe('Tối đa 20 thùng mỗi tháng. Mỗi ngày mang tới điểm nhận tối đa 10 thùng');
   });
+  it('món chỉ kho nhận vẫn hiện trần ngày, nơi mang tới là kho', () => { expect(L.capSentence({ ...ITEM_CARTON, monthlyCapQty: null, warehouseOnly: true })).toBe('Mỗi ngày mang tới kho tối đa 10 thùng'); });
   it('chỉ trần tháng', () => { expect(L.capSentence(ITEM_MILK)).toBe('Tối đa 100 vỏ mỗi tháng'); });
   it('chỉ trần ngày', () => { expect(L.capSentence({ ...ITEM_CARTON, monthlyCapQty: null })).toBe('Mỗi ngày mang tới điểm nhận tối đa 10 thùng'); });
   it('không trần → không có câu (R5.1.37)', () => { expect(L.capSentence({ ...ITEM_CARTON, monthlyCapQty: null, dailyCapQty: null })).toBeNull(); });

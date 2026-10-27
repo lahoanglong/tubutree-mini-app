@@ -160,21 +160,30 @@ describe('/doi-rac/yeu-cau/[id]: Mang tới điểm nhận (§4.5, §4.6)', () =
   it('chương trình tạm dừng: không còn "Xem mã QR", có câu tạm dừng và vẫn huỷ được', async () => {
     state.config = { isLoaded: true, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } };
     const c = await mount();
-    expect(c.textContent).toContain(PAUSED);
+    expect(c.textContent).toContain('Chương trình đang tạm dừng. Yêu cầu hết hạn ngày 25/10.');
     expect(button(c, 'Xem mã QR')).toBeNull();
     expect(button(c, 'Huỷ yêu cầu')?.disabled).toBe(false);
     expect(c.textContent).toContain('Đang tạm dừng');
     expect(c.textContent).not.toContain('Chờ bạn mang tới');
   });
 
-  it('khách bị khoá: cùng câu trung tính, không lộ việc bị khoá, vẫn huỷ được', async () => {
+  it('khách bị khoá: câu riêng nói tạm không tham gia (không nói chương trình tạm dừng), vẫn huỷ được', async () => {
     state.me = makeWasteMe({ blocked: true });
     const c = await mount();
-    expect(c.textContent).toContain(PAUSED);
+    expect(c.textContent).toContain('Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree. Yêu cầu hết hạn ngày 25/10.');
+    expect(c.textContent).not.toContain(PAUSED);
     expect(button(c, 'Xem mã QR')).toBeNull();
     expect(button(c, 'Huỷ yêu cầu')?.disabled).toBe(false);
-    expect(c.textContent).not.toMatch(/khoá/i);
     expect(c.textContent).toContain('Đang tạm dừng');
+  });
+
+  it('khoá gửi hàng không làm yêu cầu mang tới điểm tạm dừng; kênh Thu kèm tắt riêng cũng không', async () => {
+    state.me = makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z' });
+    state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } };
+    const c = await mount();
+    expect(button(c, 'Xem mã QR')).not.toBeNull();
+    expect(c.textContent).not.toContain('Đang tạm dừng');
+    expect(c.textContent).not.toContain('Yêu cầu hết hạn ngày');
   });
 
   it('bình thường: có "Xem mã QR" và không có câu tạm dừng', async () => {
@@ -328,15 +337,16 @@ describe('/doi-rac/yeu-cau/[id]: Thu kèm đơn mua (§4.5b, §15.6)', () => {
   });
 
   it.each([
-    ['khoá đường kho', () => { state.me = makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z' }); }],
-    ['bị khoá chương trình', () => { state.me = makeWasteMe({ blocked: true }); }],
-    ['cờ pickup tắt', () => { state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } }; }],
-    ['chương trình tắt khi cấu hình công khai cũ vẫn bật pickup', () => { state.me = makeWasteMe({ programmeEnabled: false }); }],
-  ])('%s: câu tạm dừng trung tính + "Huỷ yêu cầu", không có lối đi mua hàng', async (_n, arrange) => {
+    ['khoá đường kho', () => { state.me = makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z' }); }, 'Tài khoản của bạn tạm chưa gửi hàng được, liên hệ Tubu Tree. Yêu cầu hết hạn ngày 25/10.'],
+    ['bị khoá chương trình', () => { state.me = makeWasteMe({ blocked: true }); }, 'Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree. Yêu cầu hết hạn ngày 25/10.'],
+    ['cờ pickup tắt', () => { state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } }; }, 'Thu kèm đơn đang tạm dừng. Yêu cầu hết hạn ngày 25/10.'],
+    ['chương trình tắt khi cấu hình công khai cũ vẫn bật pickup', () => { state.me = makeWasteMe({ programmeEnabled: false }); }, 'Chương trình đang tạm dừng. Yêu cầu hết hạn ngày 25/10.'],
+  ])('%s: câu đúng lý do + "Huỷ yêu cầu", không có lối đi mua hàng', async (_n, arrange, note) => {
     arrange();
     state.request = PICKUP();
     const c = await mount();
-    expect(c.textContent).toContain('Thu kèm rác đang tạm dừng, yêu cầu này chưa gắn được vào đơn và sẽ tự hết hạn ngày 25/10');
+    expect(c.textContent).toContain(note);
+    expect(c.textContent).toContain('Yêu cầu này chưa gắn được vào đơn lúc này và sẽ tự hết hạn ngày 25/10');
     expect(c.textContent).not.toContain('Gắn yêu cầu này vào đơn mua kế tiếp ở bước thanh toán');
     expect(byText(c, 'a', 'Đi mua hàng')).toBeNull();
     expect(button(c, 'Huỷ yêu cầu')).not.toBeNull();

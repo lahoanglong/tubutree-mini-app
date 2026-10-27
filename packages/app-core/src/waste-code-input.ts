@@ -2,14 +2,19 @@
 const BODY = '[2-9A-HJKMNP-TV-Z]';
 const REQUEST_BODY = new RegExp(`^${BODY}{5}$`);
 const GIFT_BODY = new RegExp(`^${BODY}{8}$`);
-const SCAN_TOKEN = new RegExp(`(?:^|[^A-Z0-9])(TR|QG)[-\\s]?(${BODY}{5}|${BODY}{8})(?![A-Z0-9])`);
+const SCAN_TOKEN = new RegExp(`(?:^|[^A-Z0-9])(TR[-\\s]?${BODY}{5}|QG[-\\s]?${BODY}{8})(?![A-Z0-9])`);
+const EXPLICIT_PREFIX = /^\s*(TR|QG)[\s-]/;
 
 /**
  * Đưa mã gõ tay về dạng máy chủ nhận: bỏ khoảng trắng và gạch, viết hoa, tự thêm "TR-" (5 ký tự) hoặc "QG-" (8 ký tự).
  * Phần thân 5 ký tự có thể tự nó bắt đầu bằng "TR" nên chỉ cắt tiền tố khi độ dài còn lại đúng khớp; chuỗi không giống mã giữ nguyên.
+ * Khách đã gõ rõ "TR-" hay "QG " rồi thì giữ đúng loại đó: sai độ dài thì để máy chủ báo không thấy, không đổi sang loại khác.
  */
 export function normalizeWasteLookupCode(raw: string): string {
-  const text = raw.toUpperCase().replace(/[\s-]+/g, '');
+  const upper = raw.toUpperCase();
+  const text = upper.replace(/[\s-]+/g, '');
+  const explicit = EXPLICIT_PREFIX.exec(upper);
+  if (explicit) return `${explicit[1]}-${text.slice(2)}`;
   if (REQUEST_BODY.test(text)) return `TR-${text}`;
   if (GIFT_BODY.test(text)) return `QG-${text}`;
   if (text.startsWith('TR') && REQUEST_BODY.test(text.slice(2))) return `TR-${text.slice(2)}`;
@@ -21,7 +26,7 @@ export function normalizeWasteLookupCode(raw: string): string {
 export function extractWasteLookupCode(content: string): string | null {
   const text = content.toUpperCase();
   const m = SCAN_TOKEN.exec(text);
-  if (m) return `${m[1]}-${m[2]}`;
+  if (m) return `${m[1]!.slice(0, 2)}-${m[1]!.replace(/[-\s]/g, '').slice(2)}`;
   const whole = normalizeWasteLookupCode(content);
   return /^(TR-[2-9A-HJKMNP-TV-Z]{5}|QG-[2-9A-HJKMNP-TV-Z]{8})$/.test(whole) ? whole : null;
 }

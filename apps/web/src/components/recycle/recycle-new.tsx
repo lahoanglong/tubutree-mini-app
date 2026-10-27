@@ -112,6 +112,8 @@ function Actions({ label, summary, children }: { label: string; summary?: ReactN
   );
 }
 
+const CONSENT_KEY = 'tubu.waste.consents';
+
 export function RecycleNew() {
   const router = useRouter();
   const params = useSearchParams();
@@ -160,6 +162,30 @@ export function RecycleNew() {
   const [consent, setConsent] = useState(false);
   const [packagingConsent, setPackagingConsent] = useState(false);
   const [postageConsent, setPostageConsent] = useState(false);
+  // Khách mở Thể lệ rồi quay lại thì giữ các ô đồng ý (cách giao nằm trong nháp, đã lưu cùng lúc).
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem(CONSENT_KEY);
+      if (!raw) return;
+      window.sessionStorage.removeItem(CONSENT_KEY);
+      const c = JSON.parse(raw) as { consent?: boolean; packaging?: boolean; postage?: boolean };
+      setConsent(c.consent === true);
+      setPackagingConsent(c.packaging === true);
+      setPostageConsent(c.postage === true);
+    } catch {
+      // Không có sessionStorage thì chỉ mất các ô đồng ý, khách tích lại.
+    }
+  }, []);
+  const openRules = () => {
+    toPicker.current = true;
+    saveDraft(draft);
+    markResume();
+    try {
+      window.sessionStorage.setItem(CONSENT_KEY, JSON.stringify({ consent, packaging: packagingConsent, postage: postageConsent }));
+    } catch {
+      // như trên
+    }
+  };
 
   const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed });
   const me: WasteMeDTO | undefined = meQ.data;
@@ -481,7 +507,7 @@ export function RecycleNew() {
       {selected && (
         <div className="flex flex-col">
           <Check checked={consent} onChange={() => setConsent((v) => !v)} label={WASTE_CONSENT_TEXT} />
-          <Link href="/doi-rac/quy-dinh" className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-forest-700 underline">
+          <Link href="/doi-rac/quy-dinh" onClick={openRules} className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-forest-700 underline">
             {WASTE_RULES_LINK}
           </Link>
           {selected === 'MAIL_IN' && (

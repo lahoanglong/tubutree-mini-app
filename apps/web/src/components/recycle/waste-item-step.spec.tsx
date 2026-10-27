@@ -82,6 +82,15 @@ describe('WasteItemStep (web)', () => {
   });
 });
 
+describe('WasteItemStep — biểu tượng món', () => {
+  it('Vỏ chai Tubu dùng biểu tượng hộp trung tính, không phải ly rượu', () => {
+    const { c } = mount({ items: [{ ...ITEM_CARTON, code: 'TUBU_BOTTLE', name: 'Vỏ chai Tubu', imageUrl: null }] });
+    const icon = c.querySelector('[data-item-icon="bottle"] svg')!;
+    expect(icon.getAttribute('class')).toContain('lucide-container');
+    expect(icon.getAttribute('class')).not.toContain('wine');
+  });
+});
+
 describe('WasteItemStep — diện mạo Mini App ở điện thoại', () => {
   it('món chưa có ảnh dùng biểu tượng theo loại món; chữ phụ cỡ caption', () => {
     const { c } = mount({ items: [{ ...ITEM_CARTON, imageUrl: null }] });

@@ -1,3 +1,4 @@
+import { pausedNote } from '@tubutree/app-core/waste-copy';
 import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
@@ -31,7 +32,7 @@ import { openingStatus, todayHoursText } from '@tubutree/app-core/waste-hours';
 import { copyText } from '../utils/clipboard';
 import { formatDate, formatNumber, formatPoints } from '../utils/format';
 import { formatPhoneDisplay } from '../utils/phone';
-import { METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS, TIMELINE_STEPS, closedLabel, dayMonth, pointAddress, isRequestPaused, requestStatusText, timelineFor } from '../utils/waste-labels';
+import { METHOD_LABELS, SHORTFALL_LABELS, TIMELINE_STEPS, closedLabel, dayMonth, pointAddress, isRequestPaused, requestStatusText, timelineFor } from '../utils/waste-labels';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 const BLOCK: CSSProperties = {
@@ -209,12 +210,13 @@ export default function RecycleRequestPage() {
   const t = timelineFor(r);
   const closed = t ? null : closedLabel(r);
 
-  const paused = isRequestPaused(r, {
+  const pauseFacts = {
     programmeEnabled: me?.programmeEnabled,
     blocked: me?.blocked,
     shipLockedAt: me?.shipLockedAt,
     cfg: { enabled: cfg.waste.enabled, pickup: cfg.waste.pickup, isLoaded: cfg.isLoaded },
-  });
+  };
+  const paused = isRequestPaused(r, pauseFacts);
   const pausedPickup = paused && r.method === 'PICKUP';
   const dropOffPaused = paused && r.method === 'DROP_OFF';
 
@@ -283,7 +285,7 @@ export default function RecycleRequestPage() {
         ) : pausedPickup ? (
           <>
             <Text variant="body-sm">
-              {`Thu kèm rác đang tạm dừng, yêu cầu này chưa gắn được vào đơn và sẽ tự hết hạn ngày ${dayMonth(r.expiresAt ?? r.createdAt)}`}
+              {`Yêu cầu này chưa gắn được vào đơn lúc này và sẽ tự hết hạn ngày ${dayMonth(r.expiresAt ?? r.createdAt)}`}
             </Text>
             {r.cancellable && cancelButton}
           </>
@@ -331,7 +333,7 @@ export default function RecycleRequestPage() {
       {pointNotice}
       {paused && (
         <Text variant="body-sm" tone="secondary" as="p" style={{ margin: 0 }}>
-          {`${PAUSED_TEXT}. Yêu cầu sẽ hết hạn ngày ${dayMonth(r.expiresAt ?? r.createdAt)} nếu chương trình chưa mở lại.`}
+          {pausedNote(r, pauseFacts, dayMonth(r.expiresAt ?? r.createdAt))}
         </Text>
       )}
       {t ? (
@@ -348,7 +350,7 @@ export default function RecycleRequestPage() {
         <div style={{ ...COLUMN, gap: 10 }}>
           {r.method === 'DROP_OFF' &&
             (dropOffPaused ? (
-              <Text variant="body-sm">{PAUSED_TEXT}</Text>
+              <Text variant="body-sm">Tạm chưa mang tới điểm được</Text>
             ) : (
               <Button fullWidth onPress={() => setQrOpen(true)}>Xem mã QR</Button>
             ))}

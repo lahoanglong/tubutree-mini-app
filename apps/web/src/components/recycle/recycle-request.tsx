@@ -1,5 +1,6 @@
 'use client';
 
+import { pausedNote } from '@tubutree/app-core/waste-copy';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
@@ -31,7 +32,6 @@ import { SupportContact } from '@/components/support-contact';
 import { RecycleTimeline } from './recycle-timeline';
 import {
   METHOD_LABELS,
-  PAUSED_TEXT,
   TIMELINE_STEPS,
   closedLabel,
   dayMonth,
@@ -189,12 +189,13 @@ export function RecycleRequestDetail({ id }: { id: string }) {
   const t = timelineFor(r);
   const closed = t ? null : closedLabel(r);
 
-  const paused = isRequestPaused(r, {
+  const pauseFacts = {
     programmeEnabled: me?.programmeEnabled,
     blocked: me?.blocked,
     shipLockedAt: me?.shipLockedAt,
     cfg: { enabled: cfg.waste.enabled, pickup: cfg.waste.pickup, isLoaded: cfg.isLoaded },
-  });
+  };
+  const paused = isRequestPaused(r, pauseFacts);
   const pausedPickup = paused && r.method === 'PICKUP';
   const dropOffPaused = paused && r.method === 'DROP_OFF';
   const quotaFull =
@@ -271,7 +272,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
         ) : pausedPickup ? (
           <>
             <p className="text-sm text-stone-800">
-              {`Thu kèm rác đang tạm dừng, yêu cầu này chưa gắn được vào đơn và sẽ tự hết hạn ngày ${dayMonth(r.expiresAt ?? r.createdAt)}`}
+              {`Yêu cầu này chưa gắn được vào đơn lúc này và sẽ tự hết hạn ngày ${dayMonth(r.expiresAt ?? r.createdAt)}`}
             </p>
             {r.cancellable && cancelButton}
           </>
@@ -327,7 +328,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
           {pickupBlock}
           {pointNotice}
           {paused && (
-            <p className="text-sm text-stone-600">{`${PAUSED_TEXT}. Yêu cầu sẽ hết hạn ngày ${dayMonth(r.expiresAt ?? r.createdAt)} nếu chương trình chưa mở lại.`}</p>
+            <p className="text-sm text-stone-600">{pausedNote(r, pauseFacts, dayMonth(r.expiresAt ?? r.createdAt))}</p>
           )}
           {t ? (
             <RecycleTimeline steps={TIMELINE_STEPS[r.method]} current={t.current} hints={stepHints} />
@@ -343,7 +344,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
             <div className="flex flex-col gap-2.5">
               {r.method === 'DROP_OFF' &&
                 (dropOffPaused ? (
-                  <p className="text-sm text-stone-800">{PAUSED_TEXT}</p>
+                  <p className="text-sm text-stone-800">Tạm chưa mang tới điểm được</p>
                 ) : (
                   <button type="button" className={`${ui.btnPrimary} w-full`} onClick={() => setQrOpen(true)}>
                     Xem mã QR

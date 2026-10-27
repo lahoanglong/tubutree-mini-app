@@ -550,3 +550,20 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
   });
 });
 
+describe('Thể lệ từ bước 2: quay lại không mất ô đồng ý', () => {
+  it('bấm Xem Thể lệ lưu nháp + cờ tiếp tục + ô đồng ý; mở lại bước 2 thì khôi phục rồi xoá', async () => {
+    atStep2(PICKED);
+    let c = await mount();
+    click(check(c, CONSENT));
+    expect(check(c, CONSENT).checked).toBe(true);
+    const rules = byText(c, 'a', 'Xem Thể lệ') as HTMLAnchorElement;
+    rules.addEventListener('click', (e) => e.preventDefault());
+    click(rules);
+    expect(JSON.parse(window.sessionStorage.getItem('tubu.waste.consents')!)).toEqual({ consent: true, packaging: false, postage: false });
+    mounted.pop()!.unmount();
+    c = await mount();
+    expect(check(c, CONSENT).checked).toBe(true);
+    expect(window.sessionStorage.getItem('tubu.waste.consents')).toBeNull();
+    expect(method(c, 'DROP_OFF').getAttribute('aria-checked')).toBe('true');
+  });
+});

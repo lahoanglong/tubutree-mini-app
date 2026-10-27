@@ -19,7 +19,7 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { ErrorState } from '@/components/ui/error-state';
-import { wasteStepCopy } from '@tubutree/app-core/waste-copy';
+import { wasteStepCopy, warehouseOnlyPointsNote } from '@tubutree/app-core/waste-copy';
 import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedTabs } from '@/components/ui/segmented-tabs';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -138,7 +138,7 @@ export function RecyclePoints() {
   return shell(
     <>
       {warehouseOnlyNames.length > 0 && (
-        <p className="text-sm text-stone-600">{`${warehouseOnlyNames.join(', ')} chỉ kho TP.HCM nhận, nên các điểm đại lý đang bị khoá. Bạn có thể chọn kho Tubu hoặc bỏ món này khỏi yêu cầu.`}</p>
+        <p className="text-sm text-stone-600">{warehouseOnlyPointsNote(warehouseOnlyNames, points.some((p) => p.kind === 'WAREHOUSE'))}</p>
       )}
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />

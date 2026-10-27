@@ -96,6 +96,7 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
       ['list', 0, 'requests'], ['byOrder', 0, 'requests/by-order/:orderId'], ['detail', 0, 'requests/:id'], ['create', 1, 'requests'], ['edit', 4, 'requests/:id'],
       ['setTracking', 2, 'requests/:id/tracking'], ['cancel', 1, 'requests/:id/cancel'],
     ]);
+    expect(Reflect.getMetadata('__headers__', p.publicCatalogue)).toEqual([{ name: 'Cache-Control', value: 'public, max-age=60' }]);
     expect(Reflect.getMetadata(HTTP_CODE_METADATA, p.nearby)).toBe(200);
     expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, p.nearby)).toBe(30);
     expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, p.nearby)).toBe(60_000);

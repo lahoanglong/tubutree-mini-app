@@ -289,6 +289,13 @@ describe('/recycle thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     await waitFor(() => expect(spy).toHaveBeenCalledWith({ queryKey: ['waste'] }));
     expect(mocks.login).not.toHaveBeenCalled();
   });
+  it('NEED_PHONE + danh mục món rỗng: không hiện tiêu đề món với danh sách trống, vẫn có nút đăng nhập', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null, items: [] }));
+    renderPage();
+    expect(await screen.findByText('Cần số điện thoại để cộng Điểm Xanh đúng tài khoản của bạn.')).toBeInTheDocument();
+    expect(screen.queryByText('Tubu nhận những món này')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Đăng nhập để đổi rác' })).toBeInTheDocument();
+  });
   it('NEED_PHONE + chương trình bật + có deskPoints: thẻ xin số kèm lối vào /recycle/desk', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null, deskPoints: [{ id: 'pt-1', name: 'Đại lý Cô Ba', kind: 'PARTNER' }] }));
     renderPage();

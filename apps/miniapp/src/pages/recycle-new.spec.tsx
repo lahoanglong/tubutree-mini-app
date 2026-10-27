@@ -541,10 +541,37 @@ describe('khai món nhanh và báo trước (B-35/B-36/B-82)', () => {
     expect(screen.getByRole('radio', { name: /Mang tới điểm nhận/ })).toHaveAttribute('aria-checked', 'false');
     expect(mocks.requestZaloLocation).toHaveBeenCalledTimes(1);
   });
-  it('link Thể lệ cạnh ô đồng ý', async () => {
-    atStep2({ ...DRAFT, method: 'DROP_OFF', pointId: 'pt-1', pickedPoint: makeWastePoint() });
+  it('link Thể lệ cạnh ô đồng ý: lưu nháp đầy đủ và các ô đồng ý vào mục lịch sử rồi mới sang Thể lệ', async () => {
+    const draft = { ...DRAFT, method: 'DROP_OFF' as const, pointId: 'pt-1', pickedPoint: makeWastePoint() };
+    atStep2(draft);
     renderPage();
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Tôi đồng ý với Thể lệ/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Xem Thể lệ' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/recycle/rules');
+    expect(mocks.navigate.mock.calls.slice(-2)).toEqual([
+      ['/recycle/new?step=method', { replace: true, state: { draft, consents: { consent: true, packaging: false, postage: false } } }],
+      ['/recycle/rules'],
+    ]);
+  });
+  it('quay về từ Thể lệ: giữ Gửi về kho và các ô đồng ý dù máy có điểm lần trước', async () => {
+    const store = new Map<string, string>([['tubu.waste.lastPointId', 'pt-1']]);
+    vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) });
+    mocks.location.search = '?step=method';
+    mocks.location.state = { draft: { ...DRAFT, method: 'MAIL_IN', provinceCode: '79' }, consents: { consent: true, packaging: true, postage: false } };
+    renderPage();
+    const mail = await screen.findByRole('radio', { name: /Gửi về kho/ });
+    await waitFor(() => expect(mail).toHaveAttribute('aria-checked', 'true'));
+    expect(screen.getByRole('radio', { name: /Mang tới điểm nhận/ })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('checkbox', { name: /Tôi đồng ý với Thể lệ/ })).toBeChecked();
+    vi.unstubAllGlobals();
+  });
+  it('không có điểm lần trước, vị trí về sau khi danh sách điểm đã có: chọn sẵn điểm gần nhất', async () => {
+    mocks.requestZaloLocation.mockResolvedValue({ token: 'loc' });
+    mocks.getZaloAccessToken.mockResolvedValue({ accessToken: 'acc', code: 'c' });
+    mocks.getWastePoints.mockResolvedValue([makeWastePoint(), makeWastePoint({ id: 'pt-2', name: 'Đại lý Hai' })]);
+    mocks.getNearbyWastePoints.mockResolvedValue([makeWastePoint({ distanceKm: 3 }), makeWastePoint({ id: 'pt-2', name: 'Đại lý Hai', distanceKm: 0.5 })]);
+    atStep2();
+    renderPage();
+    expect(await screen.findByText('Đại lý Hai')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Mang tới điểm nhận/ })).toHaveAttribute('aria-checked', 'true');
   });
 });

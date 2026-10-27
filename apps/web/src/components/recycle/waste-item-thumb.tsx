@@ -1,9 +1,9 @@
-import { Battery, Layers, Milk, Package, Wine } from 'lucide-react';
+import { Battery, Layers, Milk, Package, Container } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { wasteItemIconKey, type WasteItemIconKey } from '@tubutree/app-core/waste-copy';
 import { ProductThumb } from '@/components/mini';
 
-const ICONS: Record<WasteItemIconKey, LucideIcon> = { package: Package, layers: Layers, milk: Milk, bottle: Wine, battery: Battery };
+const ICONS: Record<WasteItemIconKey, LucideIcon> = { package: Package, layers: Layers, milk: Milk, bottle: Container, battery: Battery };
 
 /** Ảnh món Đổi rác; chưa có ảnh thì dùng biểu tượng theo loại món, mã lạ thì lá xanh mặc định (cùng Mini App). */
 export function WasteItemThumb({ item, size = 48 }: { item: { code: string; imageUrl: string | null }; size?: number }) {

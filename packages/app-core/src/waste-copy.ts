@@ -118,3 +118,28 @@ export function wasteItemIconKey(code: string): WasteItemIconKey | null {
 
 /** Mục xem lịch sử trong Cá nhân khi chương trình Đổi rác đang tắt mà khách từng có yêu cầu: chỉ để xem, không tạo mới. */
 export const wasteHistoryMenu = { label: 'Yêu cầu đổi rác', hint: 'Xem lại các yêu cầu của bạn' } as const;
+
+/**
+ * Câu dưới nhãn "Đang tạm dừng" của yêu cầu: nói đúng lý do đang tạm dừng. Cron hết hạn không xét cờ chương trình nên
+ * hạn giữ chỗ vẫn chạy ở mọi lý do.
+ */
+export function pausedNote(
+  r: { method: string },
+  f: { programmeEnabled?: boolean | null; blocked?: boolean; shipLockedAt?: string | null; cfg: { enabled: boolean; pickup: boolean; isLoaded: boolean } },
+  expiryDayMonth: string,
+): string {
+  const expiry = `Yêu cầu hết hạn ngày ${expiryDayMonth}.`;
+  if (f.programmeEnabled === false || (f.cfg.isLoaded && !f.cfg.enabled)) return `Chương trình đang tạm dừng. ${expiry}`;
+  if (f.blocked) return `Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree. ${expiry}`;
+  if (r.method === 'PICKUP' && f.shipLockedAt) return `Tài khoản của bạn tạm chưa gửi hàng được, liên hệ Tubu Tree. ${expiry}`;
+  if (r.method === 'PICKUP' && !f.cfg.pickup) return `Thu kèm đơn đang tạm dừng. ${expiry}`;
+  return expiry;
+}
+
+/** Câu ở màn chọn điểm khi giỏ có món chỉ kho nhận: chỉ bảo khách chọn kho khi kho đang nhận được. */
+export function warehouseOnlyPointsNote(names: readonly string[], warehouseAvailable: boolean): string {
+  const list = names.join(', ');
+  return warehouseAvailable
+    ? `${list} chỉ kho TP.HCM nhận, nên các điểm đại lý đang bị khoá. Bạn có thể chọn kho Tubu hoặc bỏ món này khỏi yêu cầu.`
+    : `${list} chỉ kho TP.HCM nhận, mà kho chưa nhận được lúc này. Hiện chưa có điểm nào nhận món này, bạn có thể bỏ món này khỏi yêu cầu.`;
+}

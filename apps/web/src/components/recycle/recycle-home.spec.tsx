@@ -314,6 +314,14 @@ describe('/doi-rac thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     expect(c.textContent!.indexOf('Tubu nhận những món này')).toBeLessThan(c.textContent!.indexOf('Đăng nhập để đổi rác'));
   });
 
+  it('khách chưa đăng nhập: danh mục rỗng thì không hiện tiêu đề món với danh sách trống', async () => {
+    state.phase = 'guest';
+    state.catalogue = [];
+    const c = await mount();
+    expect(c.textContent).not.toContain('Tubu nhận những món này');
+    expect(c.querySelector('a[href*="/dang-nhap"]')).not.toBeNull();
+  });
+
   it('khách chưa đăng nhập: danh mục lỗi thì vẫn thấy bước và nút đăng nhập', async () => {
     state.phase = 'guest';
     state.fail.add('/waste/catalogue');

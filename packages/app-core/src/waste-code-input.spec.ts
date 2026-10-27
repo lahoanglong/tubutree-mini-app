@@ -19,6 +19,8 @@ describe('extractWasteLookupCode', () => {
   });
   it('không giống mã thì trả null', () => {
     expect(extractWasteLookupCode('0900123456')).toBeNull();
+    expect(extractWasteLookupCode('TR-ABCD2345')).toBeNull();
+    expect(extractWasteLookupCode('tr 6ny3j')).toBe('TR-6NY3J');
     expect(extractWasteLookupCode('')).toBeNull();
   });
 });

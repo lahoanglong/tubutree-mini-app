@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, Header, Headers, HttpCode, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, Equals, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
@@ -165,6 +165,7 @@ export class WasteCustomerController {
 
   // Công khai như thể lệ: khách chưa đăng nhập xem được món nhận và mức điểm trước khi được xin số điện thoại.
   @Public()
+  @Header('Cache-Control', 'public, max-age=60')
   @Get('catalogue')
   publicCatalogue() {
     return this.catalogue.publicItems();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createBlockedHint, defaultPointId, missingItemsReason, parseQtyInput, readLastPointId, timelineCaption, wasteItemIconKey, writeLastPointId } from './waste-copy';
+import { createBlockedHint, defaultPointId, missingItemsReason, pausedNote, warehouseOnlyPointsNote, parseQtyInput, readLastPointId, timelineCaption, wasteItemIconKey, writeLastPointId } from './waste-copy';
 
 describe('parseQtyInput', () => {
   it('chỉ giữ chữ số và kẹp vào khoảng', () => {
@@ -75,5 +75,29 @@ describe('wasteItemIconKey', () => {
   it('biểu tượng theo mã món, mã lạ không có', () => {
     expect(wasteItemIconKey('MILK_CARTON')).toBe('milk');
     expect(wasteItemIconKey('KHAC')).toBeNull();
+  });
+});
+
+describe('pausedNote', () => {
+  const on = { enabled: true, pickup: true, isLoaded: true };
+  it('mỗi lý do một câu đúng sự thật, đều kèm hạn hết hiệu lực', () => {
+    expect(pausedNote({ method: 'DROP_OFF' }, { programmeEnabled: false, cfg: on }, '25/10')).toBe('Chương trình đang tạm dừng. Yêu cầu hết hạn ngày 25/10.');
+    expect(pausedNote({ method: 'DROP_OFF' }, { cfg: { ...on, enabled: false } }, '25/10')).toBe('Chương trình đang tạm dừng. Yêu cầu hết hạn ngày 25/10.');
+    expect(pausedNote({ method: 'DROP_OFF' }, { blocked: true, cfg: on }, '25/10')).toBe('Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree. Yêu cầu hết hạn ngày 25/10.');
+    expect(pausedNote({ method: 'PICKUP' }, { shipLockedAt: '2026-10-01', cfg: on }, '25/10')).toBe('Tài khoản của bạn tạm chưa gửi hàng được, liên hệ Tubu Tree. Yêu cầu hết hạn ngày 25/10.');
+    expect(pausedNote({ method: 'PICKUP' }, { cfg: { ...on, pickup: false } }, '25/10')).toBe('Thu kèm đơn đang tạm dừng. Yêu cầu hết hạn ngày 25/10.');
+  });
+  it('chương trình tắt thắng khoá; khoá gửi và kênh Thu kèm không áp cho Mang tới điểm', () => {
+    expect(pausedNote({ method: 'DROP_OFF' }, { programmeEnabled: false, blocked: true, cfg: on }, '25/10')).toContain('Chương trình đang tạm dừng');
+    expect(pausedNote({ method: 'DROP_OFF' }, { shipLockedAt: '2026-10-01', cfg: { ...on, pickup: false } }, '25/10')).toBe('Yêu cầu hết hạn ngày 25/10.');
+  });
+});
+
+describe('warehouseOnlyPointsNote', () => {
+  it('chỉ bảo chọn kho khi kho nhận được', () => {
+    expect(warehouseOnlyPointsNote(['Vỏ hộp sữa', 'Vỏ chai Tubu'], true)).toContain('Vỏ hộp sữa, Vỏ chai Tubu chỉ kho TP.HCM nhận');
+    expect(warehouseOnlyPointsNote(['Vỏ hộp sữa'], true)).toContain('chọn kho Tubu');
+    expect(warehouseOnlyPointsNote(['Vỏ hộp sữa'], false)).toContain('Hiện chưa có điểm nào nhận món này');
+    expect(warehouseOnlyPointsNote(['Vỏ hộp sữa'], false)).not.toContain('chọn kho Tubu');
   });
 });

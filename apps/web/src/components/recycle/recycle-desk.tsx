@@ -316,9 +316,10 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       {points.length > 1 && (
         <SegmentedTabs scroll value={pointId} onChange={setPointId} items={points.map((p) => ({ key: p.id, label: p.name }))} label="Điểm nhận" />
       )}
+      {points.length === 1 && <p className="text-sm text-stone-600 md:hidden">{point.name}</p>}
       <div className="grid gap-4 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] md:items-start">
         <div className="flex flex-col gap-4 max-md:order-2">
-          {points.length === 1 && <p className="text-sm text-stone-600">{point.name}</p>}
+          {points.length === 1 && <p className="text-sm text-stone-600 max-md:hidden">{point.name}</p>}
           <QuotaCard point={point} />
           {point.kind === 'PARTNER' && (
             <p className="text-sm text-stone-600">Tubu cộng điểm cho khách theo số bạn xác nhận. Điểm không do cửa hàng cộng.</p>
