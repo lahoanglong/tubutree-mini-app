@@ -244,11 +244,6 @@ export default function OrderDetailPage() {
       <div className="max-md:px-4 max-md:empty:hidden"><FollowOaPrompt /></div>
       <OrderTimeline status={o.status} paymentMethod={o.paymentMethod} />
       <OrderActions order={o} userId={user?.id} />
-      {cancelClosed && (
-        <p className="mt-3 text-sm text-stone-700 max-md:px-4">
-          Đơn đã giao cho đơn vị vận chuyển nên không huỷ được. Khi nhận hàng, bạn có thể gửi yêu cầu đổi/trả.
-        </p>
-      )}
       <div className="max-md:px-4 max-md:empty:hidden">
         {o.id && showsRefundPanel(o) && <OrderRefunds orderId={o.id} returnRequestIds={new Set(orderReturns.map((r) => r.id))} />}
       </div>
@@ -335,13 +330,20 @@ export default function OrderDetailPage() {
         <OrderInvoice order={o} />
         <OrderWasteLink order={o} />
       </div>
-      <DeliverySection order={o} />
+      <ShippingSection order={o} />
+      <AddressSection order={o} />
 
       {o.note && (
         <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
           <h2 className={ui.sectionTitle}>Ghi chú</h2>
           <p className="mt-2 whitespace-pre-line text-sm text-stone-700">{o.note}</p>
         </section>
+      )}
+
+      {cancelClosed && (
+        <p className="mt-4 text-sm text-stone-700 max-md:px-4">
+          Đơn đã giao cho đơn vị vận chuyển nên không huỷ được. Khi nhận hàng, bạn có thể gửi yêu cầu đổi/trả.
+        </p>
       )}
 
       <div className="mt-4 px-4 md:px-0">
@@ -351,23 +353,16 @@ export default function OrderDetailPage() {
   );
 }
 
-function DeliverySection({ order: o }: { order: OrderDetailDTO }) {
-  const addr = o.shippingAddress;
-  const line = addressLine(addr);
-  const contact = [addr?.recipient, addr?.phone].filter(Boolean).join(' · ');
+function ShippingSection({ order: o }: { order: OrderDetailDTO }) {
   const tracking = safeHttpUrl(o.trackingLink);
   const journey = journeyEvents(o.shippingHistory);
   const hasShipping = !!(o.shippingPartner || o.shippingCode || tracking || journey.length > 0);
-  // Đơn đại lý giao theo hợp đồng nên snapshot chỉ có `note`; không dựng khối rỗng.
-  if (!contact && !line && !addr?.note && !hasShipping) return null;
+  if (!hasShipping) return null;
 
   return (
     <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
-      <h2 className={ui.sectionTitle}>Giao hàng</h2>
+      <h2 className={ui.sectionTitle}>Vận chuyển</h2>
       <div className="mt-2 space-y-1 text-sm">
-        {contact && <p className="font-medium text-stone-900">{contact}</p>}
-        {line && <p className="text-stone-700">{line}</p>}
-        {!contact && !line && addr?.note && <p className="text-stone-700">{addr.note}</p>}
         {o.shippingPartner && <Row label="Đơn vị vận chuyển" value={o.shippingPartner} />}
         {o.shippingCode && (
           <div className="flex items-center justify-between gap-3">
@@ -411,6 +406,25 @@ function DeliverySection({ order: o }: { order: OrderDetailDTO }) {
           </ol>
         </>
       )}
+    </section>
+  );
+}
+
+function AddressSection({ order: o }: { order: OrderDetailDTO }) {
+  const addr = o.shippingAddress;
+  const line = addressLine(addr);
+  const contact = [addr?.recipient, addr?.phone].filter(Boolean).join(' · ');
+  // Đơn đại lý giao theo hợp đồng nên snapshot chỉ có `note`; không dựng khối rỗng.
+  if (!contact && !line && !addr?.note) return null;
+
+  return (
+    <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
+      <h2 className={ui.sectionTitle}>Địa chỉ giao hàng</h2>
+      <div className="mt-2 space-y-1 text-sm">
+        {contact && <p className="font-medium text-stone-900">{contact}</p>}
+        {line && <p className="text-stone-700">{line}</p>}
+        {!contact && !line && addr?.note && <p className="text-stone-700">{addr.note}</p>}
+      </div>
     </section>
   );
 }

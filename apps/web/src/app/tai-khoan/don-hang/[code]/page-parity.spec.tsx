@@ -158,11 +158,11 @@ describe('chi tiết đơn web — dòng hàng và vận chuyển', () => {
     expect(text((await mount()).container)).toContain('Đặt trước 2/5 — chờ hàng về');
   });
 
-  it('có mã vận đơn: hiện trạng thái hãng và nút Sao chép đưa đúng mã vào clipboard', async () => {
+  it('có mã vận đơn: hiện trạng thái hãng và nút Chép mã đưa đúng mã vào clipboard', async () => {
     mocks.order = { ...ORDER, status: 'SHIPPING', shippingPartner: 'GHN', shippingCode: 'GHN123', shippingStatus: 'delivering' };
     const { container } = await mount();
     expect(text(container)).toContain('Đang giao hàng');
-    click(byText(container, 'button', 'Sao chép'));
+    click(byText(container, 'button', 'Chép mã'));
     await flush();
     expect(mocks.writeText).toHaveBeenCalledWith('GHN123');
     expect(text(container)).toContain('Đã sao chép mã vận đơn');
@@ -175,11 +175,20 @@ describe('chi tiết đơn web — dòng hàng và vận chuyển', () => {
     expect(t).not.toContain('lost');
   });
 
+  it('thứ tự khối như Mini App: Vận chuyển, Địa chỉ giao hàng, câu "không huỷ được", rồi phần liên hệ', async () => {
+    mocks.order = { ...ORDER, status: 'SHIPPING', shippingPartner: 'GHN', shippingCode: 'GHN123' };
+    const t = text((await mount()).container);
+    const at = (s: string) => t.indexOf(s);
+    expect(at('Vận chuyển')).toBeGreaterThan(-1);
+    expect(at('Vận chuyển')).toBeLessThan(at('Địa chỉ giao hàng'));
+    expect(at('Địa chỉ giao hàng')).toBeLessThan(at('nên không huỷ được'));
+  });
+
   it('không chép được thì báo chép tay', async () => {
     mocks.writeText.mockRejectedValue(new Error('chặn'));
     mocks.order = { ...ORDER, status: 'SHIPPING', shippingCode: 'GHN123' };
     const { container } = await mount();
-    click(byText(container, 'button', 'Sao chép'));
+    click(byText(container, 'button', 'Chép mã'));
     await flush();
     expect(text(container)).toContain('Không sao chép được — hãy chép mã thủ công.');
   });
