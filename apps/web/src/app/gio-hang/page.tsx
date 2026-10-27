@@ -437,12 +437,16 @@ export default function CartPage() {
             {!allSelected && !priced && cart.couponCode && (
               <p className="mt-2 text-xs text-stone-600 max-md:mt-0 max-md:px-1">Mua một phần giỏ: mã giảm giá được tính lại ở bước thanh toán.</p>
             )}
-            <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 max-md:hidden">
+            <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 max-md:hidden lg:hidden">
               <span>Tổng</span>
               <span>{formatVnd(payTotal)}</span>
             </div>
             {/* Dưới lg nút và lời giải thích nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải. */}
             <div className="hidden lg:sticky lg:bottom-0 lg:block lg:bg-stone-0 lg:py-4">
+              <div aria-hidden="true" className="mb-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
+                <span>Tổng</span>
+                <span>{formatVnd(payTotal)}</span>
+              </div>
               {selectedItems.length === 0 ? (
                 <>
                   <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
@@ -463,7 +467,7 @@ export default function CartPage() {
                 </>
               ) : (
                 <Link href="/thanh-toan" onClick={onPay} className={`${ui.btnPrimary} w-full`}>
-                  Thanh toán ({selectedCount}) · {formatVnd(payTotal)}
+                  Thanh toán ({selectedCount})
                 </Link>
               )}
             </div>

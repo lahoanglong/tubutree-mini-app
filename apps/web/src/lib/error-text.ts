@@ -6,7 +6,7 @@ const OFFLINE = 'Có vẻ mất mạng. Kiểm tra kết nối rồi thử lại
 const GENERIC = 'Có chút trục trặc, thử lại nhé';
 
 /** Lời kỹ thuật tiếng Anh của framework (Nest/class-validator/proxy) lọt ra từ 4xx: không phải lời nghiệp vụ, khách không đọc hiểu. */
-const TECHNICAL_MESSAGE = /^(?=[\x00-\x7F]*$)(cannot (get|post|put|patch|delete)\b|not found|bad request|unauthorized|forbidden|conflict|unprocessable|too many|request failed|throttler|validation failed|.*\b(must be|should not|should be)\b)/i;
+const TECHNICAL_MESSAGE = /^(?=[ -~]*$)(cannot (get|post|put|patch|delete)\b|not found|bad request|unauthorized|forbidden|conflict|unprocessable|too many|request failed|throttler|validation failed|.*\b(must be|should not|should be)\b)/i;
 
 /**
  * Chữ báo lỗi tải dữ liệu, cùng quy tắc với getErrorMessage của Mini App: lỗi nghiệp vụ 4xx hiện lời của máy chủ (trừ lời kỹ thuật tiếng

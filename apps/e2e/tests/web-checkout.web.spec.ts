@@ -78,7 +78,7 @@ test.describe('Web khách: thanh toán', () => {
       // Đầu trang (chưa cuộn): khung tóm tắt chưa dính vào thanh đầu nên đáy khung phải đã nằm trong màn.
       expect(await page.evaluate(() => window.scrollY)).toBe(0);
       await expect(place).toBeInViewport({ ratio: 1 });
-      await expect(place).toContainText('đ');
+      await expect(page.getByText('Tổng cộng').locator('visible=true')).toBeVisible();
       // Cuộn vừa đủ để khung dính vào dưới thanh đầu: nút vẫn trong khung nhìn.
       await page.evaluate(() => window.scrollTo(0, 400));
       await expect(place).toBeInViewport({ ratio: 1 });

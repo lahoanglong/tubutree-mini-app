@@ -107,10 +107,23 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     const coupons = page.getByRole('region', { name: 'Mã giảm giá của tôi' });
     await expect(coupons).toBeVisible();
     await expect(page.getByTestId('daily-check-in')).toBeVisible();
-    const c = (await coupons.boundingBox())!;
-    const d = (await page.getByTestId('daily-check-in').boundingBox())!;
-    const h = (await page.getByRole('region', { name: 'Lịch sử Điểm Xanh' }).boundingBox())!;
-    const right = (await page.getByRole('region', { name: 'Các hạng' }).boundingBox())!;
+    // Chờ mọi khối tải xong (không còn lời gọi nào chạy) rồi đo cả bốn hộp trong MỘT lần đọc, để chiều cao không đổi giữa các lần đo.
+    await expect(page.getByRole('region', { name: 'Lịch sử Điểm Xanh' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Các hạng' })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    const { c, d, h, right } = await page.evaluate(() => {
+      const r = (el: Element | null) => {
+        const b = el!.getBoundingClientRect();
+        return { y: b.top + window.scrollY, height: b.height };
+      };
+      const region = (name: string) => document.querySelector(`[role="region"][aria-label="${name}"], section[aria-label="${name}"]`);
+      return {
+        c: r(region('Mã giảm giá của tôi')),
+        d: r(document.querySelector('[data-testid="daily-check-in"]')),
+        h: r(region('Lịch sử Điểm Xanh')),
+        right: r(region('Các hạng')),
+      };
+    });
     expect(right.y + right.height).toBeGreaterThan(h.y + h.height); // đúng ca: cột phải thật sự cao hơn
     expect(Math.abs(d.y - (c.y + c.height) - 16)).toBeLessThanOrEqual(1);
     expect(Math.abs(h.y - (d.y + d.height) - 16)).toBeLessThanOrEqual(1);

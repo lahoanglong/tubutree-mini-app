@@ -173,7 +173,7 @@ export const api = {
 };
 
 /** Lời kỹ thuật tiếng Anh của framework (Nest/class-validator/proxy) lọt ra từ 4xx: không phải lời nghiệp vụ, khách không đọc hiểu. */
-const TECHNICAL_MESSAGE = /^(?=[\x00-\x7F]*$)(cannot (get|post|put|patch|delete)\b|not found|bad request|unauthorized|forbidden|conflict|unprocessable|too many|request failed|throttler|validation failed|.*\b(must be|should not|should be)\b)/i;
+const TECHNICAL_MESSAGE = /^(?=[ -~]*$)(cannot (get|post|put|patch|delete)\b|not found|bad request|unauthorized|forbidden|conflict|unprocessable|too many|request failed|throttler|validation failed|.*\b(must be|should not|should be)\b)/i;
 
 /**
  * Chuẩn hóa mọi lỗi API thành message Việt thân thiện (Voice & Tone §7.5).
