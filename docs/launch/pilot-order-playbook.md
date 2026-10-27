@@ -243,7 +243,7 @@ Nguồn: [GO-LIVE-KEYS.md](../GO-LIVE-KEYS.md) mục 6. Webhook vào Tubu: `http
 - **Bằng chứng**: chụp màn hình. Phụ lục P5 cho 10 webhook gần nhất.
 - **Hoàn tác**: không cần.
 
-> **Giả định cần xác nhận:** Webhook đã được đăng ký đúng URL và header ở Pancake POS (mục Webhook/API). Chưa nhận được webhook thật nào cho tới khi có đơn đầu tiên (bảng `pancake_webhook_events` từng trống ở môi trường thử). "Nhận webhook gần nhất" sẽ chỉ có giá trị sau bước 2.2.
+> **Giả định cần xác nhận:** Webhook đã được đăng ký đúng URL và header ở Pancake POS (mục Webhook/API). Chưa nhận được webhook thật nào cho tới khi có đơn đầu tiên (bảng `pancake_webhook_events` từng trống ở môi trường thử). "Nhận tin báo gần nhất" sẽ chỉ có giá trị sau bước 2.2.
 
 `[ ] Đạt  [ ] Không đạt`
 
@@ -289,7 +289,7 @@ Nguồn: [GO-LIVE-KEYS.md](../GO-LIVE-KEYS.md) mục 6. Webhook vào Tubu: `http
 
 - **Ai**: Người thử đặt T2 (giống 2.2); Kho làm tiếp trên Pancake POS.
 - **Làm**: sau khi T2 lên Pancake, Kho lần lượt: Xác nhận, Đóng hàng, rồi đặt hãng vận chuyển và đổi sang "Đã gửi hàng" (mã vận đơn của hãng thật). Sau mỗi bước chờ 1 phút rồi nhìn Tubu.
-- **Đúng là**: Mini App và Quản trị lần lượt thấy "Đã xác nhận", "Đang đóng gói", "Đang giao"; Quản trị, mở đơn: có hãng và mã vận đơn. Tin ZNS `ORDER_SHIPPING` về điện thoại (bước 1.6). Sức khoẻ hệ thống: "Nhận webhook gần nhất" và "Xử lý webhook gần nhất" đều vừa mới đây.
+- **Đúng là**: Mini App và Quản trị lần lượt thấy "Đã xác nhận", "Đang đóng gói", "Đang giao"; Quản trị, mở đơn: có hãng và mã vận đơn. Tin ZNS `ORDER_SHIPPING` về điện thoại (bước 1.6). Sức khoẻ hệ thống: "Nhận tin báo gần nhất" và "Xử lý tin báo gần nhất" đều vừa mới đây.
 - **Bằng chứng**: Phụ lục P5: các dòng `status = PROCESSED`; Phụ lục P1: `shippingPartner`, `shippingCode`; Phụ lục P2.
 - **Hoàn tác**: không có; sang 2.6.
 
@@ -409,7 +409,7 @@ Trước khi sang 3.2, bật thêm hai công tắc của khách để thẻ "Thu
 
 - **Ai**: Bưu tá BestExpress làm thật; Người theo dõi nhìn Quản trị.
 - **Làm**: không có thao tác của bạn: để bưu tá tới lấy hàng ở kho, giao tới Người thử và lấy lại vật liệu tái chế (nếu có đưa). Sau mỗi mốc, nhìn lại đơn.
-- **Đúng là**: đơn lần lượt thấy "Đã lấy hàng" (3, đơn Tubu chuyển "Đang giao"), "Đang vận chuyển đến bưu cục nhận" (4), "Đang đi giao hàng" (5), "Giao thành công" (7, đơn COD chuyển "Đã giao"). Sức khoẻ hệ thống, phần Gomdon: "Nhận webhook gần nhất" mới; "Tin báo lỗi chưa xử lý" 0. Webhook cho vận đơn không thuộc đơn nào của ta sẽ ghi `IGNORED`: bình thường.
+- **Đúng là**: đơn lần lượt thấy "Đã lấy hàng" (3, đơn Tubu chuyển "Đang giao"), "Đang vận chuyển đến bưu cục nhận" (4), "Đang đi giao hàng" (5), "Giao thành công" (7, đơn COD chuyển "Đã giao"). Sức khoẻ hệ thống, phần Gomdon: "Nhận tin báo gần nhất" mới; "Tin báo lỗi chưa xử lý" 0. Webhook cho vận đơn không thuộc đơn nào của ta sẽ ghi `IGNORED`: bình thường.
 - **Bằng chứng**: Phụ lục P6 (các dòng `status = PROCESSED`, `gomdonStatus` 1, 3, 5, 7), Phụ lục P1, P2.
 - **Hoàn tác**: không có.
 - **Nếu không thấy webhook nào sau khi bưu tá đã lấy hàng**: không có cách hỏi lại Gomdon bằng mã (Gomdon không có API tra đơn). Đối chiếu tay trên cổng Gomdon, báo Tech lead, và nhờ Gomdon bắn lại webhook (gomdon.md, mục 3, điều 5).
