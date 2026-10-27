@@ -22,7 +22,7 @@ interface Balances {
   points: number;
 }
 
-function mockBuyer(api: MockApi, balances: Balances) {
+function mockBuyer(api: MockApi, balances: Balances, opts: { coupons?: unknown[] } = {}) {
   const user = () => ({
     id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
     pointsBalance: balances.points, pointsConvertedBalance: 0, walletBalance: balances.wallet,
@@ -30,7 +30,7 @@ function mockBuyer(api: MockApi, balances: Balances) {
   api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: user() }));
   api.get('/me', () => user());
   api.get('/me/addresses', [ADDR]);
-  api.get('/me/coupons', []);
+  api.get('/me/coupons', opts.coupons ?? []);
   api.get('/config/public', { freeshipThreshold: 500000 });
   api.get('/cart', () => {
     const subtotal = LINES.reduce((s, l) => s + l.total, 0);
@@ -62,6 +62,21 @@ test.describe('Web khách: thanh toán', () => {
         // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
       }
     });
+  });
+
+  test('1280×720: mở bảng mã giảm giá dài thì nút Đặt hàng vẫn nằm trong khung nhìn (sticky ở đáy khung cuộn)', async ({ page, api }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer', 'Cột tóm tắt dính chỉ có ở máy tính');
+    const coupons = [1, 2, 3, 4, 5, 6].map((n) => ({ code: `GIAM${n}0K`, type: 'FIXED', value: n * 10000, minOrder: 100000, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' }));
+    mockBuyer(api, { wallet: 0, points: 0 }, { coupons });
+    api.post('/checkout/coupon-previews', { previews: [] });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/thanh-toan');
+    await page.getByRole('button', { name: /Xem mã/ }).click();
+    await expect(page.getByText('GIAM10K').first()).toBeVisible();
+    // Cuộn trang vừa đủ để khung tóm tắt dính vào dưới thanh đầu: nút Đặt hàng phải nằm trong khung nhìn dù bảng mã làm nội dung khung dài hơn màn.
+    await page.evaluate(() => window.scrollTo(0, 400));
+    const place = page.getByRole('button', { name: 'Đặt hàng', exact: true });
+    await expect(place).toBeInViewport({ ratio: 1 });
   });
 
   test('đặt đơn bằng Ví Tubu rồi số dư ở Tài khoản giảm ngay, không chờ làm mới trang', async ({ page, api }) => {

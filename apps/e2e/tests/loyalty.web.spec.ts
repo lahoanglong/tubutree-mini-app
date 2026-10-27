@@ -15,19 +15,23 @@ const TIERS = [
 ];
 const REWARDS = [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, points: day === 7 ? 10 : day, claimed: day < 3, isToday: day === 3 }));
 
-function mockLoyalty(api: MockApi, checkIn: { done: boolean }) {
+/** `tall`: cột phải rất cao (4 hạng × 3 quyền lợi, đủ 3 lối tắt) còn cột trái ngắn (chưa có mã, chưa có lịch sử), ca làm hở hàng ở lưới hai cột. */
+function mockLoyalty(api: MockApi, checkIn: { done: boolean }, opts: { tall?: boolean } = {}) {
+  const tiers = opts.tall
+    ? ['Mầm Xanh', 'Lộc Biếc', 'Cổ Thụ', 'Rừng Xanh'].map((name, i) => ({ id: `t${i + 1}`, name, minPoints: i * 200, minSpending: i * 4_000_000, multiplier: 1 + i * 0.1, perks: ['Quà sinh nhật', 'Freeship đơn từ 99k', 'Ưu tiên chăm sóc'] }))
+    : TIERS;
   api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
   api.get('/me', () => USER);
-  api.get('/config/public', { freeshipThreshold: 500000, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
+  api.get('/config/public', { freeshipThreshold: 500000, waste: { enabled: !!opts.tall, dropoff: !!opts.tall, mailin: false, pickup: false } });
   api.get('/me/loyalty', {
     pointsBalance: 1681, pointsConvertedBalance: 119,
     tier: { id: 't1', name: 'Mầm Xanh', multiplier: 1, perks: ['Quà sinh nhật'] },
     nextTier: { id: 't2', name: 'Lộc Biếc', minPoints: 200, minSpending: 4_000_000, pointsToGo: 120, spendingToGo: 2_500_000 },
-    tiers: TIERS, spent12m: 1_500_000, tierPoints: 80,
+    tiers, spent12m: 1_500_000, tierPoints: 80,
     rates: { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1000, maxRedeemPct: 0.5 },
   });
-  api.get('/me/coupons', [{ code: 'FREESHIP1', type: 'FREESHIP', value: 0, minOrder: 199000, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' }]);
-  api.get('/me/points/transactions', [{ id: 'p1', delta: 250, reason: 'ORDER_DELIVERED:TB0', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }]);
+  api.get('/me/coupons', opts.tall ? [] : [{ code: 'FREESHIP1', type: 'FREESHIP', value: 0, minOrder: 199000, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' }]);
+  api.get('/me/points/transactions', opts.tall ? [] : [{ id: 'p1', delta: 250, reason: 'ORDER_DELIVERED:TB0', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }]);
   api.get('/me/daily-check-in', () => ({ checkedInToday: checkIn.done, streakDays: 2, currentCycleDay: 3, todayPoints: 3, todayWater: 10, rewards: REWARDS }));
   api.post('/me/daily-check-in', () => {
     checkIn.done = true;
@@ -82,14 +86,34 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
   test('từ lg mã giảm giá và điểm danh nằm ở cột trái, trên lịch sử; không rơi xuống dưới', async ({ page, api }, testInfo) => {
     test.skip(testInfo.project.name !== 'Web Customer', 'Hai cột chỉ có ở máy tính');
     mockLoyalty(api, { done: false });
-    await page.setViewportSize({ width: 1000, height: 900 });
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/tai-khoan/diem-xanh');
-    const y = async (name: string) => (await page.getByRole('region', { name }).boundingBox())!.y;
+    const box = async (name: string) => (await page.getByRole('region', { name }).boundingBox())!;
     await expect(page.getByRole('region', { name: 'Mã giảm giá của tôi' })).toBeVisible();
-    const coupons = await y('Mã giảm giá của tôi');
-    const history = await y('Lịch sử Điểm Xanh');
-    expect(coupons).toBeLessThan(history);
-    expect(coupons).toBeLessThan(900);
+    const coupons = await box('Mã giảm giá của tôi');
+    const history = await box('Lịch sử Điểm Xanh');
+    expect(coupons.y).toBeLessThan(history.y);
+    expect(coupons.y).toBeLessThan(900);
+    // Hai cột thật: cột phải (các hạng) nằm bên phải thẻ mã giảm giá.
+    const tiers = await box('Các hạng');
+    expect(tiers.x).toBeGreaterThan(coupons.x + coupons.width - 1);
+  });
+
+  test('từ lg cột phải cao hơn cột trái: thẻ trái vẫn cách nhau đúng 16px, không bị chia thêm chiều cao dư', async ({ page, api }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer', 'Hai cột chỉ có ở máy tính');
+    mockLoyalty(api, { done: false }, { tall: true });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/tai-khoan/diem-xanh');
+    const coupons = page.getByRole('region', { name: 'Mã giảm giá của tôi' });
+    await expect(coupons).toBeVisible();
+    await expect(page.getByTestId('daily-check-in')).toBeVisible();
+    const c = (await coupons.boundingBox())!;
+    const d = (await page.getByTestId('daily-check-in').boundingBox())!;
+    const h = (await page.getByRole('region', { name: 'Lịch sử Điểm Xanh' }).boundingBox())!;
+    const right = (await page.getByRole('region', { name: 'Các hạng' }).boundingBox())!;
+    expect(right.y + right.height).toBeGreaterThan(h.y + h.height); // đúng ca: cột phải thật sự cao hơn
+    expect(Math.abs(d.y - (c.y + c.height) - 16)).toBeLessThanOrEqual(1);
+    expect(Math.abs(h.y - (d.y + d.height) - 16)).toBeLessThanOrEqual(1);
   });
 
   test('điểm danh: bấm đúp chỉ gửi một POST, báo kết quả và nút chuyển "Đã điểm danh"', async ({ page, api }) => {
