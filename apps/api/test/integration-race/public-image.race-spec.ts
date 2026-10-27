@@ -4,6 +4,7 @@ import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { PublicImageService } from '../../src/modules/catalog/public-image.service';
 import { publicImageVersion } from '../../src/common/public-image';
+import { AdminService } from '../../src/modules/admin/admin.service';
 import { MerchantService } from '../../src/modules/merchant/merchant.service';
 import type { OrderStatusService } from '../../src/modules/orders/order-status.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
@@ -18,6 +19,7 @@ describe('PublicImageService (real Postgres)', () => {
   let prisma: PrismaService;
   let svc: PublicImageService;
   let merchant: MerchantService;
+  let admin: AdminService;
   const ids: string[] = [];
 
   beforeAll(async () => {
@@ -26,6 +28,9 @@ describe('PublicImageService (real Postgres)', () => {
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
     svc = moduleRef.get(PublicImageService);
+    const none = {} as never;
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    admin = new AdminService(prisma, none, none, none, notifications, none, none, none, none, none);
     merchant = new MerchantService(prisma, {} as OrderStatusService, { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService);
   });
 
@@ -106,5 +111,15 @@ describe('PublicImageService (real Postgres)', () => {
     expect((await svc.get('product', pending.p.id, '0', undefined)).mime).toBe('image/png');
     await merchant.updateProduct(pending.owner.id, pending.p.id, { images: [PNG_B], thumbnail: PNG_B });
     await expect(svc.get('product', pending.p.id, '0', undefined)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('admin từ chối vì ảnh, đối tác chỉ đổi tên để về chờ duyệt: ảnh bị từ chối không được phát lại', async () => {
+    const { owner, p } = await partnerProduct('PENDING_REVIEW', { pancakeLinkCode: null });
+    await admin.reviewMerchantProduct('admin-it', p.id, false, 'Ảnh không rõ', false, undefined, { pancakeCode: '' });
+    const rejected = await prisma.product.findUniqueOrThrow({ where: { id: p.id } });
+    expect(rejected).toMatchObject({ approvalStatus: 'REJECTED', approvedAt: null });
+    await merchant.updateProduct(owner.id, p.id, { name: 'Tên mới sau khi bị từ chối' });
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: p.id } })).approvalStatus).toBe('PENDING_REVIEW');
+    for (const slot of ['0', 'thumb']) await expect(svc.get('product', p.id, slot, undefined)).rejects.toBeInstanceOf(NotFoundException);
   });
 });

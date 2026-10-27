@@ -141,4 +141,32 @@ describe('Nhiệm vụ quản trị thêm (real Postgres)', () => {
     expect(after.every((r) => r.status === 'rejected' && String(r.reason).includes('tạm dừng'))).toBe(true);
     expect(await prisma.missionProgress.count({ where: { missionId: mission.id } })).toBe(ok);
   });
+
+  it('một giao dịch khác giữ khoá chia sẻ dòng nhiệm vụ 2 giây: lượt nhận không phải chờ (dưới 1 giây), lệnh tạm dừng của quản trị phải chờ (trên 1,5 giây)', async () => {
+    await prisma.mission.updateMany({ where: { title: { startsWith: 'IT ' }, code: { startsWith: 'CUSTOM_' } }, data: { disabledAt: new Date() } });
+    const mission = await create();
+    await prisma.mission.update({ where: { id: mission.id }, data: { startsAt: ago(20) } });
+    const [buyer] = await buyers(1);
+    let held!: () => void;
+    const holding = new Promise<void>((r) => (held = r));
+    const holder = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "missions" WHERE "id" = ${mission.id} FOR SHARE`;
+        held();
+        await new Promise((r) => setTimeout(r, 2000));
+      },
+      { timeout: 10_000 },
+    );
+    await holding;
+    const t0 = Date.now();
+    const pause = admin.updateMission(mission.id, { disabled: true }).then(() => Date.now() - t0);
+    await new Promise((r) => setTimeout(r, 100));
+    const c0 = Date.now();
+    await game.claimMission(buyer!.id, mission.code);
+    const claimMs = Date.now() - c0;
+    const pauseMs = await pause;
+    await holder;
+    expect(claimMs).toBeLessThan(1000);
+    expect(pauseMs).toBeGreaterThan(1500);
+  });
 });
