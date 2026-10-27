@@ -180,7 +180,7 @@ export class GameGardenService {
     let harvestCount = 0;
     let couponCodes: string[] = [];
     let certificateCode: string | undefined;
-    let couponCapped: 'DAY' | 'MONTH' | undefined;
+    let couponCapped: 'DAY' | 'MONTH' | 'OFF' | undefined;
     let rewardBlocked: 'GUEST' | undefined;
 
     // Chỉ khách thật nhận mã thu hoạch (guest_ tạo vô hạn bằng deviceId). Đọc ngoài tx như các cấu hình khác.
@@ -229,7 +229,7 @@ export class GameGardenService {
           const coupons: string[] = [];
           let blocked: 'GUEST' | undefined;
           let certificate: string | undefined;
-          let capped: 'DAY' | 'MONTH' | undefined;
+          let capped: 'DAY' | 'MONTH' | 'OFF' | undefined;
           while (p >= plot.target) {
             p -= plot.target;
             planted += 1;
@@ -238,6 +238,8 @@ export class GameGardenService {
             certificate = await this.plantTree(userId, plot.treeType, db);
             if (!realUser) {
               blocked = 'GUEST';
+            } else if (monthlyCap <= 0 || dailyCap <= 0) {
+              capped = 'OFF';
             } else if (couponsMonth >= monthlyCap) {
               capped = 'MONTH';
             } else if (couponsToday >= dailyCap) {

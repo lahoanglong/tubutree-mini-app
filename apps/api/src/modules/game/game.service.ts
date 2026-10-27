@@ -129,7 +129,9 @@ export class GameService {
       (!profile.lastStreakRepairAt || Date.now() - new Date(profile.lastStreakRepairAt).getTime() >= cooldownD * 86400 * 1000);
     return {
       ...profile,
-      ecoImpact: eco,
+      // Hồ sơ cũ có thể đã tưới vượt đích khi chưa có cây (400/60): hiện kẹp ở đích, phần dư vẫn tính ở lần thu hoạch.
+      ecoImpact: { ...eco, progress: Math.min(eco.progress, eco.target) },
+      harvestReady: eco.progress >= eco.target,
       treeHealth: this.treeHealth(profile, wiltDays),
       brokenStreakDays: profile.brokenStreakDays,
       streakRepairCost,
@@ -299,7 +301,8 @@ export class GameService {
 
   // ── Tree water + harvest ───────────────────────────
   async waterTree(userId: string, drops: number) {
-    if (drops <= 0) throw new BadRequestException('Số giọt nước không hợp lệ.');
+    // drops = 0 chỉ để thu hoạch cây hồ sơ cũ đã đủ nước từ trước (xem harvestReady ở getProfile).
+    if (drops < 0) throw new BadRequestException('Số giọt nước không hợp lệ.');
 
     const harvestAmount = await this.config.get<number>('game.harvest_coupon_amount', 30000);
     const harvestMinOrder = await harvestCouponMinOrder(this.config, harvestAmount);
@@ -335,7 +338,7 @@ export class GameService {
     let harvestedDrops = 0;
     const couponCodes: string[] = [];
     let certificateCode: string | undefined;
-    let couponCapped: 'DAY' | 'MONTH' | undefined;
+    let couponCapped: 'DAY' | 'MONTH' | 'OFF' | undefined;
     let rewardBlocked: 'GUEST' | undefined;
     let sproutPoints = 0;
     let sproutHarvested = false;
@@ -367,6 +370,7 @@ export class GameService {
           let couponsMonth = await tx.coupon.count({ where: { ...harvestCouponWhere, startAt: { gte: monthStart } } });
 
           eco = this.eco(profile.ecoImpact, ladder);
+          if (drops === 0 && eco.progress < eco.target) throw new BadRequestException('Cây chưa đủ nước để thu hoạch.');
           let sproutDue = sproutEligible && !sproutAlreadyRewarded(eco);
           // Cây bỏ lâu chỉ héo (treeHealth), KHÔNG mất tiến độ.
           eco.progress += drops;
@@ -413,7 +417,10 @@ export class GameService {
             // Khoản góp quỹ trồng cây + mã ghi nhận KHÔNG bị cap — chỉ coupon (giá trị tiền) mới giới hạn.
             certificateCode = await this.plantTree(userId, eco.treeType, tx);
             if (!realUser) continue;
-            if (couponsMonth >= monthlyCap) {
+            // Admin đặt trần 0 là tắt mã: không phải "hôm nay/tháng này đã đủ", nên báo riêng để khách không chờ mã sẽ không tới.
+            if (monthlyCap <= 0 || dailyCap <= 0) {
+              couponCapped = 'OFF';
+            } else if (couponsMonth >= monthlyCap) {
               couponCapped = 'MONTH';
             } else if (couponsToday >= dailyCap) {
               couponCapped = 'DAY';

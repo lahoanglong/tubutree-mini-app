@@ -2379,6 +2379,19 @@ describe('GameService.waterTree — nhịp người mới (thang cây, cây mầ
       expect(r).not.toHaveProperty('couponCapped');
     });
 
+    it.each([
+      ['trần ngày = 0', { 'game.harvest_coupon_daily_cap': 0 }],
+      ['trần tháng = 0', { 'game.harvest_coupon_monthly_cap': 0 }],
+    ])('admin đặt %s (tắt mã) → couponCapped = OFF, không cấp mã, vẫn thu hoạch và góp quỹ', async (_n, cfg) => {
+      const prisma = makePrisma();
+      setProfile(prisma, secondTree());
+      const r = await svcWith(prisma, makeConfig(cfg)).waterTree('u1', 300);
+      expect(r.couponCapped).toBe('OFF');
+      expect(r.harvested).toBe(true);
+      expect(prisma.coupon.create).not.toHaveBeenCalled();
+      expect(prisma.plantedTree.create).toHaveBeenCalledTimes(1);
+    });
+
     it('đủ trần ngày (1/ngày), tháng còn suất → couponCapped = DAY', async () => {
       const prisma = makePrisma();
       setProfile(prisma, secondTree());
@@ -2520,7 +2533,8 @@ describe('GameService.getProfile — số hiện trước khi bấm', () => {
     const fresh = await run({ ecoImpact: { progress: 0, target: 600, treeType: 't', treesPlanted: 0 } });
     expect(fresh.ecoImpact).toEqual(expect.objectContaining({ progress: 0, target: 60, treesPlanted: 0 }));
     const watered = await run({ ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 0 } });
-    expect(watered.ecoImpact).toEqual(expect.objectContaining({ progress: 100, target: 60 }));
+    // Đã tưới vượt đích khi chưa có cây: hiện kẹp ở 60/60 (B-107), phần dư tính ở lần thu hoạch.
+    expect(watered.ecoImpact).toEqual(expect.objectContaining({ progress: 60, target: 60 }));
     const planted = await run({ ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 1 } });
     expect(planted.ecoImpact).toEqual(expect.objectContaining({ progress: 100, target: 600, treesPlanted: 1 }));
   });
@@ -2531,5 +2545,48 @@ describe('GameService.getProfile — số hiện trước khi bấm', () => {
     expect(r.dewSeeds).toBe(15);
     expect(r.streak7Seeds).toBe(20);
     expect(r.quizWrongSeeds).toBe(2);
+  });
+});
+
+describe('GameService — hồ sơ cũ đã tưới vượt đích (B-107)', () => {
+  const legacy = () =>
+    profile({ totalSeeds: 0, ecoImpact: { progress: 400, target: 60, treeType: 't', treesPlanted: 0 } });
+
+  it('getProfile kẹp tiến độ ở đích và báo harvestReady, không đợi lần tưới kế', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(legacy());
+    const r = (await new GameService(prisma, makeConfig(), analytics).getProfile('u1')) as {
+      ecoImpact: { progress: number; target: number };
+      harvestReady: boolean;
+    };
+    expect(r.ecoImpact).toMatchObject({ progress: 60, target: 60 });
+    expect(r.harvestReady).toBe(true);
+  });
+
+  it('hồ sơ bình thường: harvestReady = false, tiến độ giữ nguyên', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ ecoImpact: { progress: 10, target: 60, treeType: 't', treesPlanted: 0 } }),
+    );
+    const r = (await new GameService(prisma, makeConfig(), analytics).getProfile('u1')) as { ecoImpact: { progress: number }; harvestReady: boolean };
+    expect(r.ecoImpact.progress).toBe(10);
+    expect(r.harvestReady).toBe(false);
+  });
+
+  it('waterTree(0) thu hoạch phần nước đã đủ, không trừ giọt nào', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(legacy());
+    const r = await new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty).waterTree('u1', 0);
+    expect(r.harvested).toBe(true);
+    expect(r.treesPlanted).toBeGreaterThanOrEqual(1);
+    expect(r.progress).toBeLessThan(r.target);
+  });
+
+  it('waterTree(0) khi cây chưa đủ nước → lỗi', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
+      profile({ totalSeeds: 50, ecoImpact: { progress: 10, target: 60, treeType: 't', treesPlanted: 0 } }),
+    );
+    await expect(new GameService(prisma, makeConfig(), analytics).waterTree('u1', 0)).rejects.toBeInstanceOf(BadRequestException);
   });
 });

@@ -15,6 +15,7 @@ import { SeasonPassService } from './season-pass.service';
 
 class AnswerDto { @IsInt() @Min(0) choice!: number; }
 class WaterDto { @IsInt() @Min(1) drops!: number; }
+class TreeWaterDto { @IsInt() @Min(0) drops!: number; }
 class BuySeedsDto { @IsInt() @Min(1) seeds!: number; }
 // 'XU' vẫn nhận ở DTO để GameGardenService trả 410 (PD-3: mở lô bằng xu đã ngừng) thay vì 400.
 class UnlockPlotDto {
@@ -73,7 +74,7 @@ export class GameController {
   shareHarvest(@CurrentUser('sub') userId: string) { return this.game.shareHarvest(userId); }
 
   @Post('tree/water')
-  water(@CurrentUser('sub') userId: string, @Body() dto: WaterDto) { return this.game.waterTree(userId, dto.drops); }
+  water(@CurrentUser('sub') userId: string, @Body() dto: TreeWaterDto) { return this.game.waterTree(userId, dto.drops); }
 
   @Post('seeds/buy')
   buySeeds(@CurrentUser('sub') userId: string, @Body() dto: BuySeedsDto) { return this.game.buySeeds(userId, dto.seeds); }
