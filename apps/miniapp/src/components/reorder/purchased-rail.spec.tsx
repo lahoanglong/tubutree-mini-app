@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
 
 const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(), openSnackbar: vi.fn(), fetchPurchasedItems: vi.fn(), addToCart: vi.fn(), repurchaseOrder: vi.fn(),
+  navigate: vi.fn(), openSnackbar: vi.fn(), fetchPurchasedItems: vi.fn(), addToCart: vi.fn(), repurchaseOrder: vi.fn(), fetchActiveFlashSales: vi.fn(),
   status: 'authenticated',
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -14,13 +14,14 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../../services/shop-api', () => ({
   fetchPurchasedItems: mocks.fetchPurchasedItems, addToCart: mocks.addToCart, repurchaseOrder: mocks.repurchaseOrder,
+  fetchActiveFlashSales: mocks.fetchActiveFlashSales,
 }));
 vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1 }) }));
 vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.status }) }));
 vi.mock('../../services/buy-flow-events', () => ({ trackReorderClicked: vi.fn(), trackReorderCompleted: vi.fn() }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
-import { PurchasedRail, toTileProduct } from './purchased-rail';
+import { PurchasedRail, rebuyPricing } from './purchased-rail';
 
 const ITEM = {
   variationId: 'v1', productId: 'p1', slug: 'nuoc-rua-chen', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
@@ -38,6 +39,7 @@ describe('PurchasedRail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.status = 'authenticated';
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
   });
 
   it('khách cũ: vùng "Mua lại" với thẻ SP + nhãn số lần đã mua', async () => {
@@ -115,7 +117,7 @@ describe('PurchasedRail', () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
     renderRail();
     fireEvent.click(await screen.findByRole('button', { name: 'Nước rửa chén' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-rua-chen');
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-rua-chen', { state: { variationId: 'v1' } });
   });
 
   describe('làm mới lỗi (React Query v5 giữ dữ liệu cũ, status=error)', () => {
@@ -213,12 +215,28 @@ describe('PurchasedRail', () => {
   });
 });
 
-describe('toTileProduct', () => {
-  it('B-146: thẻ Mua lại mang phân loại đã mua làm phân loại đại diện của thẻ', () => {
-    const tile = toTileProduct({
-      variationId: 'v-500', productId: 'p1', slug: 'gao', productName: 'Gạo', variationName: '500g', brand: 'Tubu', thumbnail: null,
-      price: 150_000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-10-01T00:00:00.000Z',
-    });
-    expect(tile.repVariationId).toBe('v-500');
+describe('rebuyPricing / phân loại đã mua (B-146)', () => {
+  const FLASH = (over: Record<string, unknown> = {}) => ({
+    itemId: 'f1', variationId: 'v1', productSlug: 'nuoc-rua-chen', flashPrice: 50_000, retailPrice: 65_000, salePrice: null,
+    endAt: new Date(Date.now() + 3_600_000).toISOString(), ...over,
+  });
+
+  it('Giờ vàng của đúng phân loại đã mua: thẻ hiện giá flash, gạch giá niêm yết', () => {
+    expect(rebuyPricing(ITEM as never, [FLASH()] as never)).toMatchObject({ price: 50_000, isFlash: true, compareAt: 65_000 });
+  });
+
+  it('Giờ vàng của phân loại khác, hoặc đã hết giờ: giữ giá phân loại đã mua', () => {
+    expect(rebuyPricing(ITEM as never, [FLASH({ variationId: 'v2' })] as never)).toMatchObject({ price: 65_000, isFlash: false });
+    expect(rebuyPricing(ITEM as never, [FLASH({ endAt: new Date(Date.now() - 1000).toISOString() })] as never)).toMatchObject({ price: 65_000, isFlash: false });
+  });
+
+  it('thẻ trên kệ hiện giá flash của phân loại đã mua và chạm mở đúng phân loại đó', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM, { ...ITEM, variationId: 'v3', slug: 'xa-bong', productName: 'Xà bông' }, { ...ITEM, variationId: 'v4', slug: 'tay', productName: 'Tẩy' }], nextCursor: null });
+    mocks.fetchActiveFlashSales.mockResolvedValue([FLASH()]);
+    renderRail();
+    const region = await screen.findByRole('region', { name: 'Mua lại' });
+    await waitFor(() => expect(region).toHaveTextContent('50.000'));
+    fireEvent.click(region.querySelector('.tubu-tile-link')!);
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-rua-chen', { state: { variationId: 'v1' } });
   });
 });

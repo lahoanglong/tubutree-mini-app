@@ -1,11 +1,14 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { isFlashRunning, variationPricing } from '@tubutree/app-core/flash-price';
 import { useNavigate } from 'zmp-ui';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { vi } from '../../i18n/vi';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { usePurchasedItems } from '../../hooks/use-purchased-items';
 import { getErrorMessage } from '../../services/api';
-import type { PurchasedItem } from '../../services/shop-api';
+import { fetchActiveFlashSales, type PurchasedItem } from '../../services/shop-api';
+import { serverNow } from '../../utils/server-clock';
 import { haptic } from '../../utils/haptic';
 import { SubscribeSheet } from '../subscribe-sheet';
 import { isEndpointMissing } from '../home/home-blocks';
@@ -46,10 +49,16 @@ export function toTileProduct(p: PurchasedItem): ProductTileProduct {
     thumbnail: p.thumbnail,
     basePrice: p.price,
     salePrice: p.salePrice,
-    repVariationId: p.variationId,
     inStock: p.inStock,
   };
 }
+
+/** Giá của đúng phân loại đã mua (gồm Giờ vàng đang chạy của phân loại đó): kệ mở trang chi tiết ở phân loại này nên giá thẻ và giá trang là một. */
+export function rebuyPricing(p: PurchasedItem, flash: Parameters<typeof variationPricing>[1], now: number = serverNow()) {
+  return variationPricing({ id: p.variationId, retailPrice: p.price, salePrice: p.salePrice }, flash.filter((f) => isFlashRunning(f, now)));
+}
+
+const openVariation = (p: PurchasedItem) => ({ state: { variationId: p.variationId } });
 
 export interface PurchasedRailProps {
   source: 'home_rail' | 'orders_tab';
@@ -73,6 +82,8 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
   const [target, setTarget] = useState<ReorderTarget | null>(null);
   const [subscribeFor, setSubscribeFor] = useState<PurchasedItem | null>(null);
   const discountPct = Math.round(usePublicConfig().subscribeDiscountPct * 100);
+  // Chỉ đọc cache Giờ vàng (nhịp tải lại do useFlashSalesPoller ở gốc app lo).
+  const flash = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 }).data ?? [];
 
   if (restoring || q.isLoading) {
     // Khớp đúng khung kệ thật (tiêu đề + hàng tile + đệm dưới) để dữ liệu về không đẩy nội dung bên dưới.
@@ -141,7 +152,8 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
               discountPct={discountPct}
               onRebuy={() => setTarget(itemReorderTarget(p))}
               onSubscribe={() => setSubscribeFor(p)}
-              onOpen={() => navigate(`/product/${encodeURIComponent(p.slug)}`)}
+              pricing={rebuyPricing(p, flash)}
+              onOpen={() => navigate(`/product/${encodeURIComponent(p.slug)}`, openVariation(p))}
             />
           ))}
         </div>
@@ -151,12 +163,13 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
             <div key={p.variationId} style={{ flex: `0 0 ${TILE_WIDTH}px`, width: TILE_WIDTH }}>
               <ProductTile
                 product={toTileProduct(p)}
+                priceOverride={rebuyPricing(p, flash)}
                 variant="rail"
                 showWishlist={false}
                 action="rebuy"
                 badge={p.timesBought > 1 ? <Badge tone="brand" size="sm">{vi.reorder.timesBought(p.timesBought)}</Badge> : undefined}
                 onAction={() => setTarget(itemReorderTarget(p))}
-                onPress={() => navigate(`/product/${encodeURIComponent(p.slug)}`)}
+                onPress={() => navigate(`/product/${encodeURIComponent(p.slug)}`, openVariation(p))}
               />
             </div>
           ))}
@@ -174,18 +187,18 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
 function CompactRebuyCard({
   item,
   discountPct,
+  pricing,
   onRebuy,
   onSubscribe,
   onOpen,
 }: {
   item: PurchasedItem;
   discountPct: number;
+  pricing: { price: number; compareAt: number | null };
   onRebuy: () => void;
   onSubscribe: () => void;
   onOpen: () => void;
 }) {
-  const standing = item.salePrice ?? item.price;
-  const hasSale = standing < item.price;
   const available = item.inStock !== false && item.stock > 0;
   // Chỉ mời "Định kỳ" khi API xác nhận hàng không chỉ bán lẻ; API cũ chưa trả `retailOnly` thì không mời (máy chủ có thể từ chối).
   const subscribable = item.retailOnly === false;
@@ -209,7 +222,7 @@ function CompactRebuyCard({
             </Text>
           )}
           <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
-            <PriceTag value={standing} compareAt={hasSale ? item.price : undefined} size="sm" />
+            <PriceTag value={pricing.price} compareAt={pricing.compareAt ?? undefined} size="sm" />
             {item.timesBought > 1 && <Badge tone="brand" size="sm">{vi.reorder.timesBought(item.timesBought)}</Badge>}
           </span>
         </span>
