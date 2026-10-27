@@ -443,7 +443,7 @@ export default function CartPage() {
             </div>
             {/* Dưới lg nút và lời giải thích nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải. */}
             <div className="hidden lg:sticky lg:bottom-0 lg:block lg:bg-stone-0 lg:py-4">
-              <div aria-hidden="true" className="mb-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
+              <div className="mb-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
                 <span>Tổng</span>
                 <span>{formatVnd(payTotal)}</span>
               </div>

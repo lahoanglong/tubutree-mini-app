@@ -78,12 +78,56 @@ test.describe('Web khách: thanh toán', () => {
       // Đầu trang (chưa cuộn): khung tóm tắt chưa dính vào thanh đầu nên đáy khung phải đã nằm trong màn.
       expect(await page.evaluate(() => window.scrollY)).toBe(0);
       await expect(place).toBeInViewport({ ratio: 1 });
-      await expect(page.getByText('Tổng cộng').locator('visible=true')).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Đặt hàng/ })).toBeVisible();
       // Cuộn vừa đủ để khung dính vào dưới thanh đầu: nút vẫn trong khung nhìn.
       await page.evaluate(() => window.scrollTo(0, 400));
       await expect(place).toBeInViewport({ ratio: 1 });
     });
   }
+
+  test('1280: cây trợ năng của thanh toán và giỏ hàng có tổng tiền kèm số (dòng cạnh nút không bị aria-hidden)', async ({ page, api }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer', 'Dòng tổng cạnh nút chỉ có từ lg');
+    mockBuyer(api, { wallet: 0, points: 0 });
+    api.post('/checkout/coupon-previews', { previews: [] });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/thanh-toan');
+    await expect(page.getByRole('button', { name: /^Đặt hàng/ })).toBeVisible();
+    const checkout = await page.getByRole('main').ariaSnapshot();
+    expect(checkout).toMatch(/Tổng cộng/);
+    expect(checkout).toMatch(/280\.000đ/);
+    expect(checkout.match(/Tổng cộng/g)).toHaveLength(1);
+
+    await page.goto('/gio-hang');
+    await expect(page.getByRole('link', { name: /^Thanh toán \(/ })).toBeVisible();
+    const cart = await page.getByRole('main').ariaSnapshot();
+    expect(cart).toMatch(/Tổng\b/);
+    expect(cart).toMatch(/250\.000đ/);
+    expect(cart.match(/\bTổng\b/g)).toHaveLength(1);
+  });
+
+  test('375: thanh toán, giỏ hàng, tài khoản, Kho quà không tràn ngang', async ({ page, api }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer', 'đặt khổ 375 trong một project');
+    mockBuyer(api, { wallet: 0, points: 1681 });
+    api.post('/checkout/coupon-previews', { previews: [] });
+    const longLines = LINES.map((l, i) => ({ ...l, productName: `Sản phẩm số ${i + 1} dầu gội bồ kết hữu cơ` }));
+    api.get('/cart', { items: longLines, couponCode: null, subtotal: 250000, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: 3 });
+    api.get('/me/loyalty/rewards', { pointsBalance: 0, pointsConvertedBalance: 0, lockedPoints: 0, redeemablePoints: 0, giftClaimDays: 60, claimPoint: null, rewards: [] });
+    await page.setViewportSize({ width: 375, height: 812 });
+    for (const path of ['/thanh-toan', '/gio-hang', '/tai-khoan', '/kho-qua']) {
+      await page.goto(path);
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(800);
+      const wide = await page.evaluate(() => {
+        const w = window.innerWidth;
+        const bad = [...document.querySelectorAll('body *')]
+          .filter((el) => el.getBoundingClientRect().right > w + 0.5 && getComputedStyle(el).position !== 'fixed')
+          .slice(0, 4)
+          .map((el) => `${el.tagName.toLowerCase()}.${String(el.className).slice(0, 60)}`);
+        return { scrollWidth: document.documentElement.scrollWidth, w, bad };
+      });
+      expect(wide.scrollWidth, `${path} tràn ngang: ${JSON.stringify(wide)}`).toBeLessThanOrEqual(wide.w);
+    }
+  });
 
   test('đặt đơn bằng Ví Tubu rồi số dư ở Tài khoản giảm ngay, không chờ làm mới trang', async ({ page, api }) => {
     const balances: Balances = { wallet: 500000, points: 0 };

@@ -463,7 +463,7 @@ export default function CheckoutPage() {
           </Link>
         </div>
       )}
-      <div className="grid gap-6 max-md:gap-0 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-6 max-md:grid-cols-[minmax(0,1fr)] max-md:gap-0 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4 max-md:contents">
           <section data-mini-block="address" className={`${MINI_BAND} max-md:order-1`}>
             <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Địa chỉ giao hàng</h2>
@@ -767,7 +767,7 @@ export default function CheckoutPage() {
           {/* Con trực tiếp của khung cuộn (không nằm trong khối tổng): sticky chỉ trượt trong khối cha của nó. Điện thoại giữ thứ tự và đệm cũ. */}
           <div data-mini-part="place-order" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4 lg:sticky lg:bottom-0 lg:bg-stone-0 lg:py-4">
           {/* Bản sao hiển thị của dòng Tổng cộng: khung tóm tắt cuộn được nên dòng gốc có thể trượt khỏi màn, tổng tiền phải luôn nằm cạnh nút Đặt hàng. */}
-          <div aria-hidden="true" className="mb-3 hidden justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 lg:flex">
+          <div className="mb-3 hidden justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 lg:flex">
             <span>Tổng cộng</span>
             <span>{totalText}</span>
           </div>
