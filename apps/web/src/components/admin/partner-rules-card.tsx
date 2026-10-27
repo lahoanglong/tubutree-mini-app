@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Percent } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { NetworkError } from '@/lib/client-api';
+import { ApiError, NetworkError } from '@/lib/client-api';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { buildPartnerRuleWrites, configValue, friendlyPartnerRuleError, PARTNER_RULE_FIELDS, readPartnerRuleForm, type PartnerRuleForm, type PartnerRuleWrite } from '@/lib/admin-config-forms';
 import { BTN_PRIMARY, Field, INPUT_CLASS, Notice } from './ui';
@@ -12,6 +12,10 @@ import { useConfirm } from './confirm-dialog';
 const shortLabel = (w: PartnerRuleWrite) => w.label.replace(/ \((?:%|giờ|ngày)\)$/, '');
 const isRate = (key: string) => key.startsWith('affiliate.');
 const isLoweredSla = (w: PartnerRuleWrite, current: (key: string) => unknown) => !isRate(w.key) && w.value < Number(current(w.key));
+// merchant-sla.cron chỉ báo khách khi quá hạn xác nhận hoặc quá hạn gửi hàng; quá hạn giao xong chỉ nhắc đối tác.
+const notifiesBuyer = (key: string) => key === 'merchant.confirm_sla_hours' || key === 'merchant.ship_sla_hours';
+// Proxy trả 502/503/504 khi API chậm: máy chủ vẫn có thể đã ghi.
+const mayHaveSaved = (e: unknown) => e instanceof NetworkError || (e instanceof ApiError && e.status >= 502 && e.status <= 504);
 
 /** Mỗi loại khoá một câu hậu quả riêng: hoa hồng chốt lúc đặt đơn, còn hạn xử lý tính lại mỗi lần xem và nhắc mỗi giờ. */
 export function partnerRuleConfirmMessage(changed: PartnerRuleWrite[], current: (key: string) => unknown): string {
@@ -23,17 +27,17 @@ export function partnerRuleConfirmMessage(changed: PartnerRuleWrite[], current: 
   if (changed.some((w) => w.key === 'affiliate.max_rate_pct' && w.value < Number(current(w.key)))) {
     notes.push('Hạ trần không đổi những % riêng đã đặt trước đó cho từng sản phẩm.');
   }
-  const buyerNotified = changed.some((w) => w.key === 'merchant.confirm_sla_hours' || w.key === 'merchant.ship_sla_hours');
+  const buyerNotified = changed.some((w) => notifiesBuyer(w.key));
   if (changed.some((w) => !isRate(w.key))) {
     notes.push(
       buyerNotified
-        ? 'Hạn xử lý: áp ngay cho cả đơn đang xử lý. Đơn vừa thành quá hạn sẽ được nhắc trong vòng một giờ, kể cả báo cho khách là đơn bị chậm.'
+        ? 'Hạn xử lý: áp ngay cho cả đơn đang xử lý. Đơn vừa thành quá hạn sẽ được nhắc trong vòng một giờ, kể cả báo cho khách là đơn bị chậm (khách chỉ được báo ở lần đầu đơn quá hạn).'
         : 'Hạn giao: áp ngay cho cả đơn đang giao. Đơn vừa thành quá hạn sẽ hiện ở danh sách quá hạn và đối tác được nhắc trong vòng một giờ; khách không nhận thông báo.',
     );
   }
   if (changed.some((w) => isLoweredSla(w, current))) {
     notes.push(
-      buyerNotified
+      changed.some((w) => isLoweredSla(w, current) && notifiesBuyer(w.key))
         ? 'Bạn đang HẠ hạn: nhiều đơn có thể quá hạn cùng lúc và khách nhận thông báo chậm trễ hàng loạt. Hãy chắc chắn trước khi lưu.'
         : 'Bạn đang HẠ hạn: nhiều đơn có thể quá hạn cùng lúc và đối tác bị nhắc hàng loạt. Hãy chắc chắn trước khi lưu.',
     );
@@ -88,8 +92,10 @@ export function PartnerRulesCard({ rows }: { rows: ConfigRow[] | undefined }) {
           const reason = friendlyPartnerRuleError(e instanceof Error ? e.message : 'không lưu được');
           const rest = changed.slice(saved.length).map(shortLabel).join(', ');
           const done = saved.length > 0 ? `Đã lưu: ${saved.join(', ')}. ` : '';
-          // Mất mạng hoặc quá giờ chờ: máy chủ có thể đã ghi xong mà ta không nhận được trả lời.
-          if (e instanceof NetworkError) throw new Error(`${done}${reason} Có thể chưa lưu: ${rest}. Hãy xem lại các số sau khi tải lại.`);
+          if (mayHaveSaved(e)) {
+            const notSent = changed.slice(saved.length + 1).map(shortLabel).join(', ');
+            throw new Error(`${done}${reason} Có thể chưa lưu: ${shortLabel(w)}.${notSent ? ` Chưa gửi: ${notSent}.` : ''} Hãy xem lại các số sau khi tải lại.`);
+          }
           if (saved.length > 0) throw new Error(`${done}Chưa lưu: ${rest}. ${reason}`);
           throw new Error(changed.length > 1 ? `Chưa lưu thay đổi nào (${rest}). ${reason}` : `Chưa lưu được ${shortLabel(w)}. ${reason}`);
         }

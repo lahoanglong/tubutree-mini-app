@@ -18,14 +18,14 @@ const ROWS: ConfigRow[] = [
   { key: 'merchant.confirm_sla_hours', value: 24, description: null, category: 'merchant' },
 ];
 
-function mount(failKey?: string, networkFailKey?: string) {
+function mount(failKey?: string, networkFailKey?: string, failStatus = 400) {
   const puts: { key: string; value: unknown }[] = [];
   const api = mockFetch({
     '/admin/config': (init) => {
       if (init?.method === 'PUT') {
         const b = JSON.parse(String(init.body));
         puts.push(b);
-        if (b.key === failKey) return { status: 400, body: { message: `"${b.key}" (${b.value}%) vượt trần 10% của "affiliate.max_rate_pct". Nâng trần trước.` } };
+        if (b.key === failKey) return { status: failStatus, body: { message: `"${b.key}" (${b.value}%) vượt trần 10% của "affiliate.max_rate_pct". Nâng trần trước.` } };
       }
       return { body: { ok: true } };
     },
@@ -177,6 +177,32 @@ describe('PartnerRulesCard', () => {
     expect(t).toContain('khách không nhận thông báo');
     expect(t).toContain('Bạn đang HẠ hạn');
     expect(t).toContain('đối tác bị nhắc hàng loạt');
+  });
+
+  it('nâng hạn xác nhận nhưng hạ hạn giao xong: cảnh báo HẠ hạn chỉ nói nhắc đối tác, không nói khách bị báo hàng loạt', async () => {
+    const { c } = mount();
+    typeInto(input(c, 'Hạn gian hàng đối tác xác nhận'), '30');
+    typeInto(input(c, 'Hạn giao xong'), '3');
+    submit(c);
+    await flush();
+    const t = confirmDialog()?.textContent ?? '';
+    expect(t).toContain('Bạn đang HẠ hạn');
+    expect(t).toContain('đối tác bị nhắc hàng loạt');
+    expect(t).not.toContain('thông báo chậm trễ hàng loạt');
+  });
+
+  it('proxy trả 504 khi đang lưu: nói có thể chưa lưu mục đang gửi, mục sau ghi là chưa gửi', async () => {
+    const { c } = mount('affiliate.max_rate_pct', undefined, 504);
+    typeInto(input(c, 'Trần hoa hồng'), '12');
+    typeInto(input(c, 'Hạn gian hàng đối tác xác nhận'), '30');
+    submit(c);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const text = c.textContent ?? '';
+    expect(text).toContain('Có thể chưa lưu: Trần hoa hồng mỗi sản phẩm.');
+    expect(text).toContain('Chưa gửi: Hạn gian hàng đối tác xác nhận đơn.');
+    expect(text).not.toContain('Chưa lưu thay đổi nào');
   });
 
   it('không lưu được gì mà đổi nhiều mục: liệt kê cả các mục, không nói "đã lưu"', async () => {
