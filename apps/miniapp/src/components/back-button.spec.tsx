@@ -47,4 +47,37 @@ describe('BackButton — ROOTS từ nav-config', () => {
     expect(bar.dataset.scrolled).toBe('true');
     page.remove();
   });
+  it('cuộn hàng ngang hay sheet bên trong không làm đổi thanh', () => {
+    mocks.location = { pathname: '/orders', search: '', state: null };
+    const { container } = render(<BackButton />);
+    const bar = container.querySelector('[data-back-bar]') as HTMLElement;
+    const page = document.createElement('div');
+    page.className = 'zaui-page';
+    const rail = document.createElement('div');
+    page.appendChild(rail);
+    document.body.appendChild(page);
+    Object.defineProperty(page, 'scrollTop', { value: 200, configurable: true });
+    act(() => {
+      page.dispatchEvent(new Event('scroll'));
+    });
+    expect(bar.dataset.scrolled).toBe('true');
+    // Vuốt hàng ngang về 0 không được làm thanh trong suốt trở lại.
+    Object.defineProperty(rail, 'scrollTop', { value: 0, configurable: true });
+    act(() => {
+      rail.dispatchEvent(new Event('scroll'));
+    });
+    expect(bar.dataset.scrolled).toBe('true');
+    // Trang ở đỉnh, sheet cuộn xuống không làm thanh đặc.
+    Object.defineProperty(page, 'scrollTop', { value: 0, configurable: true });
+    act(() => {
+      page.dispatchEvent(new Event('scroll'));
+    });
+    expect(bar.dataset.scrolled).toBe('false');
+    Object.defineProperty(rail, 'scrollTop', { value: 300, configurable: true });
+    act(() => {
+      rail.dispatchEvent(new Event('scroll'));
+    });
+    expect(bar.dataset.scrolled).toBe('false');
+    page.remove();
+  });
 });

@@ -53,8 +53,13 @@ export default function BackButton() {
     // Cuộn xảy ra ở .zaui-page chứ không ở window; sự kiện scroll không nổi bọt nên bắt ở pha capture trên document.
     const onScroll = (e: Event) => {
       const t = e.target;
-      const top = t instanceof Element ? t.scrollTop : window.scrollY;
-      setScrolled(top > 8);
+      // Hàng ngang, sheet, danh sách con cũng phát scroll; chỉ vùng cuộn của trang (hoặc document) quyết định thanh.
+      if (t instanceof Element) {
+        if (!t.classList.contains('zaui-page')) return;
+        setScrolled(t.scrollTop > 8);
+      } else {
+        setScrolled(window.scrollY > 8);
+      }
     };
     document.addEventListener('scroll', onScroll, { capture: true, passive: true });
     return () => document.removeEventListener('scroll', onScroll, { capture: true });
