@@ -62,7 +62,7 @@ vi.mock('../services/geo-api', () => ({ getProvinces: mocks.getProvinces }));
 vi.mock('../services/zmp-bridge', () => ({ requestZaloLocation: mocks.requestZaloLocation, getZaloAccessToken: mocks.getZaloAccessToken }));
 
 import RecycleNewPage, { toLineInputs, type WasteWizardDraft } from './recycle-new';
-import { ITEM_CARTON, ITEM_MILK, makeWasteMe, makeWastePoint, makeRewardCatalog, makeRequestDetail } from '../services/waste-test-fixtures';
+import { ITEM_BATTERY, ITEM_CARTON, ITEM_MILK, makeWasteMe, makeWastePoint, makeRewardCatalog, makeRequestDetail } from '../services/waste-test-fixtures';
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 
 function renderPage() {
@@ -95,6 +95,14 @@ beforeEach(() => {
 });
 
 describe('bước 1: chọn món (§4.2)', () => {
+  it('món chỉ mang tới (pin): dòng nhắc trần ngày, thẻ thường không có', async () => {
+    const pin = { ...ITEM_BATTERY, status: 'ACTIVE' as const, hazardous: true, dailyCapQty: 20, monthlyCapQty: 50, monthRemainingQty: 50, dayRemainingQty: 20 };
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true }, items: [ITEM_CARTON, pin] }));
+    renderPage();
+    const card = (await screen.findByText('Pin đã dùng')).closest('[data-item]') as HTMLElement;
+    expect(within(card).getByText('Tối đa 20 viên mỗi ngày')).toBeInTheDocument();
+    expect(within((await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement).queryByText(/^Tối đa \d+ thùng mỗi ngày$/)).toBeNull();
+  });
   it('thẻ món: quy tắc, chuẩn bị, câu trần; món sắp nhận không có bộ đếm', async () => {
     renderPage();
     const carton = (await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement;

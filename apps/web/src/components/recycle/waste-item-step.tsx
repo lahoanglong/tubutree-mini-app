@@ -1,5 +1,6 @@
 'use client';
 
+import { dropOffDayLimitText, itemQtyMax } from '@tubutree/app-core/waste-copy';
 import { useMemo } from 'react';
 import type { WasteMeItemDTO } from '@tubutree/shared-types';
 import { Badge } from '@/components/ui/badge';
@@ -53,6 +54,7 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
               {item.prepInstructions && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{item.prepInstructions}</p>}
               {cap && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{cap}</p>}
               {monthLeft && <p className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${item.monthRemainingQty === 0 ? 'text-warning-fg' : 'text-stone-600'}`}>{monthLeft}</p>}
+              {dropOffDayLimitText(item) && item.status === 'ACTIVE' && <p className="text-xs text-warning-fg max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{dropOffDayLimitText(item)}</p>}
               {item.status === 'ACTIVE' && (
                 <div className="mt-1 flex flex-col gap-2">
                   <div>
@@ -61,7 +63,7 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
                       editable
                       quickSteps={QUICK_QTY_STEPS}
                       min={0}
-                      max={(item.monthRemainingQty ?? UNCAPPED_QTY_MAX) + (allowance?.[item.id] ?? 0)}
+                      max={itemQtyMax(item, allowance?.[item.id] ?? 0, UNCAPPED_QTY_MAX)}
                       value={qty}
                       onChange={(n) => onChange(item.id, n)}
                     />

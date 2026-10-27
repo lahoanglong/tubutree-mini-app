@@ -44,6 +44,12 @@ describe('WasteItemStep (web)', () => {
     expect(btn(battery, 'Tăng số lượng')).toBeNull();
     expect(c.textContent).not.toContain('Vỏ hộp sữa');
   });
+  it('món chỉ mang tới (pin): dòng nhắc trần ngày, thẻ thường không có', () => {
+    const pin = { ...ITEM_BATTERY, status: 'ACTIVE' as const, hazardous: true, dailyCapQty: 20, monthlyCapQty: 50, monthRemainingQty: 50, dayRemainingQty: 20 };
+    const { c } = mount({ items: [ITEM_CARTON, pin] });
+    expect(card(c, 'Pin đã dùng').textContent).toContain('Tối đa 20 viên mỗi ngày');
+    expect(card(c, 'Thùng carton').textContent).not.toContain('mỗi ngày.');
+  });
   it('trần tháng đã bớt hoặc hết: thẻ món nói lý do dưới câu trần', () => {
     const { c } = mount({ items: [{ ...ITEM_CARTON, monthRemainingQty: 3 }, { ...ITEM_MILK, monthRemainingQty: 0 }] });
     expect(card(c, 'Thùng carton').textContent).toContain('Tháng này còn 3 thùng');

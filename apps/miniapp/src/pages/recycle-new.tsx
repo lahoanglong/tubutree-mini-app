@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { dropOffDayLimitText, itemQtyMax } from '@tubutree/app-core/waste-copy';
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
@@ -179,6 +180,11 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
                   {monthLeft}
                 </Text>
               )}
+              {dropOffDayLimitText(item) && item.status === 'ACTIVE' && (
+                <Text variant="caption" tone="warning" as="div">
+                  {dropOffDayLimitText(item)}
+                </Text>
+              )}
               {item.status === 'ACTIVE' && (
                 <div style={{ ...COLUMN, gap: 8, marginTop: 4 }}>
                   <div>
@@ -187,7 +193,7 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
                       editable
                       quickSteps={QUICK_QTY_STEPS}
                       min={0}
-                      max={(item.monthRemainingQty ?? UNCAPPED_QTY_MAX) + (allowance?.[item.id] ?? 0)}
+                      max={itemQtyMax(item, allowance?.[item.id] ?? 0, UNCAPPED_QTY_MAX)}
                       value={qty}
                       onChange={(n) => onChange(item.id, n)}
                     />

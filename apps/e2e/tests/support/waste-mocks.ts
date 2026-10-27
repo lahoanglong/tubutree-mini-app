@@ -209,13 +209,21 @@ export function mockWasteCustomer(
       estimatedDrops: 0,
       estimatedGrams: null,
       pointsValueVnd: estimatedPoints,
-      // Như máy chủ: món nguy hại (pin) chỉ nhận khi khách mang tới điểm nhận.
-      blocks:
-        body.method !== 'DROP_OFF' && body.lines.some((l) => WASTE_ITEMS.find((i) => i.id === l.itemId)?.hazardous)
-          ? [{ code: 'ITEM_DROPOFF_ONLY', itemId: WASTE_ITEMS.find((i) => i.hazardous)!.id }]
-          : [],
+      // Như máy chủ: món nguy hại (pin) chỉ nhận khi khách mang tới điểm nhận, và chỉ báo khi đã chọn cách giao;
+      // trần ngày chỉ áp cho Mang tới điểm nhận (kể cả khi chưa chọn cách giao).
+      blocks: [
+        ...(body.method && body.method !== 'DROP_OFF' && body.lines.some((l) => WASTE_ITEMS.find((i) => i.id === l.itemId)?.hazardous)
+          ? [{ code: 'ITEM_DROPOFF_ONLY' as const, itemId: WASTE_ITEMS.find((i) => i.hazardous)!.id }]
+          : []),
+        ...(body.method === undefined || body.method === 'DROP_OFF'
+          ? body.lines.flatMap((l) => {
+              const item = WASTE_ITEMS.find((i) => i.id === l.itemId);
+              return item && item.dayRemainingQty != null && l.declaredQty > item.dayRemainingQty ? [{ code: 'ITEM_DAY_CAP' as const, itemId: item.id }] : [];
+            })
+          : []),
+      ],
       feeEstimate: null,
-      itemCaps: [],
+      itemCaps: WASTE_ITEMS.filter((i) => body.lines.some((l) => l.itemId === i.id)).map((i) => ({ itemId: i.id, monthRemainingQty: i.monthRemainingQty ?? null, dayRemainingQty: i.dayRemainingQty ?? null })),
       pointsMonthRemaining: 60_000,
     };
   });
