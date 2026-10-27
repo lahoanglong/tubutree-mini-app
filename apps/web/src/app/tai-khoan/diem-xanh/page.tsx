@@ -203,7 +203,7 @@ export default function LoyaltyPage() {
             </button>
           </section>
 
-          <Section title="Mã giảm giá của tôi" action={couponsQ.data && couponsQ.data.length > 0 ? `${couponsQ.data.length} mã` : undefined}>
+          <Section className="lg:col-start-1 lg:row-start-2" title="Mã giảm giá của tôi" action={couponsQ.data && couponsQ.data.length > 0 ? `${couponsQ.data.length} mã` : undefined}>
             {couponsQ.isLoading ? (
               <Skeleton height={64} />
             ) : couponsQ.isError ? (
@@ -236,10 +236,12 @@ export default function LoyaltyPage() {
             )}
           </Section>
 
-          <DailyCheckInCard authed={authed} />
+          <div className="contents lg:col-start-1 lg:row-start-3 lg:block">
+            <DailyCheckInCard authed={authed} />
+          </div>
 
-          {/* Từ lg: cột phụ 1/3 bên phải (lối tắt, quyền lợi, các hạng), lịch sử chiếm 2/3 bên trái; dưới lg thứ tự và khoảng cách như một cột. */}
-          <div className="contents lg:col-start-2 lg:row-start-2 lg:flex lg:min-w-0 lg:flex-col lg:gap-4">
+          {/* Từ lg: cột trái 2/3 gồm mã giảm giá, điểm danh, lịch sử; cột phụ 1/3 bên phải (lối tắt, quyền lợi, các hạng) trải qua ba hàng đó; dưới lg thứ tự và khoảng cách như một cột. */}
+          <div className="contents lg:col-start-2 lg:row-span-3 lg:row-start-2 lg:flex lg:min-w-0 lg:flex-col lg:gap-4">
           {shortcuts.length > 0 && (
             <ul className={`divide-y divide-stone-200 ${miniCard}`}>
               {shortcuts.map((s) => (
@@ -298,7 +300,7 @@ export default function LoyaltyPage() {
           </section>
           </div>
 
-          <section aria-label="Lịch sử Điểm Xanh" className={`p-4 lg:col-start-1 lg:row-start-2 ${miniCard}`}>
+          <section aria-label="Lịch sử Điểm Xanh" className={`p-4 lg:col-start-1 lg:row-start-4 ${miniCard}`}>
             <h2 className={`mb-2 ${ui.sectionTitle} ${miniSectionTitle}`}>Lịch sử Điểm Xanh</h2>
             {txnQ.isLoading ? (
               <Skeleton height={64} />
@@ -465,9 +467,9 @@ function MemberCardSheet({
   );
 }
 
-function Section({ title, action, children }: { title: string; action?: string; children: React.ReactNode }) {
+function Section({ title, action, children, className = '' }: { title: string; action?: string; children: React.ReactNode; className?: string }) {
   return (
-    <section aria-label={title} className={`p-4 ${miniCard}`}>
+    <section aria-label={title} className={`p-4 ${miniCard} ${className}`}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className={`${ui.sectionTitle} ${miniSectionTitle}`}>{title}</h2>
         {action && <span className="text-xs text-stone-600">{action}</span>}
