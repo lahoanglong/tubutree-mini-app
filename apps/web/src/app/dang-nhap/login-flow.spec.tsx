@@ -100,15 +100,22 @@ describe('/dang-nhap — returnTo', () => {
 });
 
 describe('/dang-nhap — bản build thiếu NEXT_PUBLIC_ZALO_APP_ID (BUYERWEB-4)', () => {
-  it('khoá nút và giải thích thân thiện kèm hotline, không để khách bấm rồi gặp lỗi kỹ thuật', async () => {
+  it('không còn nút đăng nhập xám: một câu ngắn, nút chính mở Tubu Tree trên Zalo, hotline, đường xem tiếp (B-25)', async () => {
+    vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', '');
     mocks.auth.zaloLoginConfigured = false;
     const { container } = mount(<LoginPage />);
     await flush();
-    const btn = byText(container, 'button', 'Đăng nhập với Zalo') as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
+    expect(byText(container, 'button', 'Đăng nhập với Zalo')).toBeNull();
+    const open = Array.from(container.querySelectorAll('a')).find((a) => a.textContent === 'Mở Tubu Tree trên Zalo')!;
+    expect(open.getAttribute('href')).toBe('https://zalo.me/s/2070857098114207963/');
+    expect(open.className).toContain('min-h-11');
     expect(container.textContent).toContain('tạm ngưng');
     expect(container.textContent).toContain('1900 1234');
     expect(container.textContent).not.toContain('NEXT_PUBLIC');
+    expect(container.querySelector('[data-testid="login-qr"]')).not.toBeNull();
+    const keepBrowsing = Array.from(container.querySelectorAll('a')).find((a) => a.textContent === 'Tiếp tục xem sản phẩm')!;
+    expect(keepBrowsing.getAttribute('href')).toBe('/');
+    vi.unstubAllEnvs();
   });
 
   it('đã cấu hình thì nút bấm được và không có cảnh báo', async () => {
@@ -213,19 +220,18 @@ describe('/dang-nhap — Mở trên Zalo', () => {
     expect(openLink(container)!.getAttribute('href')).toBe('https://zalo.me/s/123/product/dau-goi');
   });
 
-  it('chưa cấu hình id Mini App: ẩn nút', async () => {
+  it('chưa cấu hình id Mini App: nút vẫn có, trỏ tới Mini App chính thức', async () => {
     vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', '');
     const { container } = mount(<LoginPage />);
     await flush();
-    expect(openLink(container)).toBeUndefined();
+    expect(openLink(container)!.getAttribute('href')).toBe('https://zalo.me/s/2070857098114207963/');
   });
 
-  it('chỉ có App ID của Zalo App, thiếu id Mini App: ẩn nút, không dựng link tới App ID', async () => {
+  it('chỉ có App ID của Zalo App, thiếu id Mini App: không dựng link tới App ID', async () => {
     vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '565779011239360460');
     vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', '');
     const { container } = mount(<LoginPage />);
     await flush();
-    expect(openLink(container)).toBeUndefined();
     expect(container.innerHTML).not.toContain('zalo.me/s/565779011239360460');
   });
 
