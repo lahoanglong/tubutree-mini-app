@@ -151,10 +151,10 @@ export function buildPartnerRuleWrites(f: PartnerRuleForm, current?: PartnerRule
     }
     writes.push({ key: field.key, label: field.label, value: n });
   }
-  const newDefault = Number(f.defaultRate);
-  const newMax = Number(f.maxRate.replace(',', '.'));
+  const newDefault = Number(f.defaultRate.trim().replace(',', '.'));
+  const newMax = Number(f.maxRate.trim().replace(',', '.'));
   if (newDefault > newMax) return { error: 'Hoa hồng mặc định không được cao hơn trần hoa hồng.' };
-  const curMax = Number((current ?? f).maxRate.replace(',', '.'));
+  const curMax = Number((current ?? f).maxRate.trim().replace(',', '.'));
   if (newDefault > curMax) {
     const i = writes.findIndex((w) => w.key === 'affiliate.max_rate_pct');
     const [cap] = writes.splice(i, 1);

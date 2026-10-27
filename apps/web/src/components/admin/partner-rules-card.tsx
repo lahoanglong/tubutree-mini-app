@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Percent } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { NetworkError } from '@/lib/client-api';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { buildPartnerRuleWrites, configValue, friendlyPartnerRuleError, PARTNER_RULE_FIELDS, readPartnerRuleForm, type PartnerRuleForm, type PartnerRuleWrite } from '@/lib/admin-config-forms';
 import { BTN_PRIMARY, Field, INPUT_CLASS, Notice } from './ui';
@@ -22,13 +23,20 @@ export function partnerRuleConfirmMessage(changed: PartnerRuleWrite[], current: 
   if (changed.some((w) => w.key === 'affiliate.max_rate_pct' && w.value < Number(current(w.key)))) {
     notes.push('Hạ trần không đổi những % riêng đã đặt trước đó cho từng sản phẩm.');
   }
+  const buyerNotified = changed.some((w) => w.key === 'merchant.confirm_sla_hours' || w.key === 'merchant.ship_sla_hours');
   if (changed.some((w) => !isRate(w.key))) {
     notes.push(
-      'Hạn xử lý: áp ngay cho cả đơn đang xử lý. Đơn vừa thành quá hạn sẽ được nhắc trong vòng một giờ, kể cả báo cho khách là đơn bị chậm.',
+      buyerNotified
+        ? 'Hạn xử lý: áp ngay cho cả đơn đang xử lý. Đơn vừa thành quá hạn sẽ được nhắc trong vòng một giờ, kể cả báo cho khách là đơn bị chậm.'
+        : 'Hạn giao: áp ngay cho cả đơn đang giao. Đơn vừa thành quá hạn sẽ hiện ở danh sách quá hạn và đối tác được nhắc trong vòng một giờ; khách không nhận thông báo.',
     );
   }
   if (changed.some((w) => isLoweredSla(w, current))) {
-    notes.push('Bạn đang HẠ hạn: nhiều đơn có thể quá hạn cùng lúc và khách nhận thông báo chậm trễ hàng loạt. Hãy chắc chắn trước khi lưu.');
+    notes.push(
+      buyerNotified
+        ? 'Bạn đang HẠ hạn: nhiều đơn có thể quá hạn cùng lúc và khách nhận thông báo chậm trễ hàng loạt. Hãy chắc chắn trước khi lưu.'
+        : 'Bạn đang HẠ hạn: nhiều đơn có thể quá hạn cùng lúc và đối tác bị nhắc hàng loạt. Hãy chắc chắn trước khi lưu.',
+    );
   }
   return `${lines}\n\n${notes.join('\n')}`;
 }
@@ -78,12 +86,12 @@ export function PartnerRulesCard({ rows }: { rows: ConfigRow[] | undefined }) {
           saved.push(shortLabel(w));
         } catch (e) {
           const reason = friendlyPartnerRuleError(e instanceof Error ? e.message : 'không lưu được');
-          const notSaved = changed.slice(saved.length).map(shortLabel).join(', ');
-          throw new Error(
-            saved.length > 0
-              ? `Đã lưu: ${saved.join(', ')}. Chưa lưu: ${notSaved}. ${reason}`
-              : `Chưa lưu được ${shortLabel(w)}. ${reason}`,
-          );
+          const rest = changed.slice(saved.length).map(shortLabel).join(', ');
+          const done = saved.length > 0 ? `Đã lưu: ${saved.join(', ')}. ` : '';
+          // Mất mạng hoặc quá giờ chờ: máy chủ có thể đã ghi xong mà ta không nhận được trả lời.
+          if (e instanceof NetworkError) throw new Error(`${done}${reason} Có thể chưa lưu: ${rest}. Hãy xem lại các số sau khi tải lại.`);
+          if (saved.length > 0) throw new Error(`${done}Chưa lưu: ${rest}. ${reason}`);
+          throw new Error(changed.length > 1 ? `Chưa lưu thay đổi nào (${rest}). ${reason}` : `Chưa lưu được ${shortLabel(w)}. ${reason}`);
         }
       }
       return changed.length;
@@ -125,7 +133,7 @@ export function PartnerRulesCard({ rows }: { rows: ConfigRow[] | undefined }) {
             />
           </Field>
         ))}
-        {Number(form.confirmHours) >= Number(form.shipHours) && (
+        {Number(form.confirmHours.replace(',', '.')) >= Number(form.shipHours.replace(',', '.')) && (
           <div className="sm:col-span-2">
             <Notice tone="warning">Hạn xác nhận đang bằng hoặc lớn hơn hạn gửi hàng, nên đơn vừa được nhận có thể quá hạn gửi hàng ngay.</Notice>
           </div>

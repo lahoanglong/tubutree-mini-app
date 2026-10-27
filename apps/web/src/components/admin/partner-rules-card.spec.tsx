@@ -18,7 +18,7 @@ const ROWS: ConfigRow[] = [
   { key: 'merchant.confirm_sla_hours', value: 24, description: null, category: 'merchant' },
 ];
 
-function mount(failKey?: string) {
+function mount(failKey?: string, networkFailKey?: string) {
   const puts: { key: string; value: unknown }[] = [];
   const api = mockFetch({
     '/admin/config': (init) => {
@@ -30,7 +30,13 @@ function mount(failKey?: string) {
       return { body: { ok: true } };
     },
   });
-  vi.stubGlobal('fetch', vi.fn(api.fn));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, init?: RequestInit) => {
+      if (networkFailKey && init?.method === 'PUT' && String(init.body).includes(networkFailKey)) return Promise.reject(new TypeError('Failed to fetch'));
+      return api.fn(url, init);
+    }),
+  );
   const r = render(<PartnerRulesCard rows={ROWS} />);
   mounted.push(r);
   return { puts, c: r.container };
@@ -52,6 +58,17 @@ describe('buildPartnerRuleWrites', () => {
     expect(buildPartnerRuleWrites({ ...ok, confirmHours: '0' }).error).toContain('từ 1 đến 168');
     expect(buildPartnerRuleWrites({ ...ok, shipHours: '-3' }).error).toBeDefined();
     expect(buildPartnerRuleWrites({ ...ok, defaultRate: '30', maxRate: '20' }).error).toContain('không được cao hơn trần');
+  });
+});
+
+describe('số có dấu phẩy', () => {
+  it('"20,0" cho mặc định vẫn bị chặn khi cao hơn trần', () => {
+    const f = { ...readPartnerRuleForm(ROWS), defaultRate: '20,0' };
+    expect(buildPartnerRuleWrites(f).error).toContain('không được cao hơn trần');
+  });
+  it('trần "20,0" nâng cùng mặc định "15": ghi trần trước', () => {
+    const f = { ...readPartnerRuleForm(ROWS), defaultRate: '15', maxRate: '20,0' };
+    expect(buildPartnerRuleWrites(f, readPartnerRuleForm(ROWS)).writes?.[0]?.key).toBe('affiliate.max_rate_pct');
   });
 });
 
@@ -147,6 +164,51 @@ describe('PartnerRulesCard', () => {
     expect(text).not.toContain('affiliate.');
     expect(text).not.toContain('merchant.');
     expect(input(c, 'Hạn gian hàng đối tác xác nhận')!.value).toBe('30');
+  });
+
+  it('chỉ đổi hạn giao xong: không nói báo khách, nói nhắc đối tác', async () => {
+    const { c } = mount();
+    typeInto(input(c, 'Hạn giao xong'), '3');
+    submit(c);
+    await flush();
+    const t = confirmDialog()?.textContent ?? '';
+    expect(t).not.toContain('báo cho khách');
+    expect(t).not.toContain('thông báo chậm trễ');
+    expect(t).toContain('khách không nhận thông báo');
+    expect(t).toContain('Bạn đang HẠ hạn');
+    expect(t).toContain('đối tác bị nhắc hàng loạt');
+  });
+
+  it('không lưu được gì mà đổi nhiều mục: liệt kê cả các mục, không nói "đã lưu"', async () => {
+    const { c } = mount('affiliate.max_rate_pct');
+    typeInto(input(c, 'Trần hoa hồng'), '12');
+    typeInto(input(c, 'Hạn gian hàng đối tác xác nhận'), '30');
+    submit(c);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const text = c.textContent ?? '';
+    expect(text).toContain('Chưa lưu thay đổi nào (Trần hoa hồng mỗi sản phẩm, Hạn gian hàng đối tác xác nhận đơn)');
+    expect(text).not.toContain('Đã lưu');
+  });
+
+  it('mất mạng giữa chừng: nói có thể chưa lưu và dặn xem lại, không khẳng định "Chưa lưu"', async () => {
+    const { c } = mount(undefined, 'merchant.confirm_sla_hours');
+    typeInto(input(c, 'Hạn gian hàng đối tác xác nhận'), '30');
+    submit(c);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const text = c.textContent ?? '';
+    expect(text).toContain('Có thể chưa lưu: Hạn gian hàng đối tác xác nhận');
+    expect(text).toContain('xem lại các số sau khi tải lại');
+    expect(text).not.toContain('Chưa lưu');
+  });
+
+  it('số có dấu phẩy ("48,0") vẫn được so với hạn gửi hàng', async () => {
+    const { c } = mount();
+    typeInto(input(c, 'Hạn gian hàng đối tác xác nhận'), '48,0');
+    expect(c.textContent).toContain('quá hạn gửi hàng ngay');
   });
 
   it('hạn xác nhận lớn hơn hoặc bằng hạn gửi hàng: cảnh báo ngay trên form', async () => {
