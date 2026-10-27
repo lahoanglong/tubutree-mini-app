@@ -1,14 +1,12 @@
+import { formatVnNumber } from '@tubutree/app-core/number-format';
+
 /**
  * Số có dấu phân cách nghìn kiểu Việt: 1250000 → "1.250.000". Mọi số tiền/điểm/giọt nước hiển thị
  * cho khách đi qua đây (trực tiếp hoặc qua formatVnd/formatPoints/formatDrops) — không gọi
  * toLocaleString rải rác trong pages, nên cùng một con số không còn hiện ba dáng khác nhau.
  * Rác (null/NaN/vô cực) → "0" thay vì "NaN".
  */
-export function formatNumber(n: number | null | undefined): string {
-  const v = Number(n ?? 0);
-  // `+ 0` đổi -0 thành 0 (toLocaleString in "-0").
-  return ((Number.isFinite(v) ? v : 0) + 0).toLocaleString('vi-VN');
-}
+export const formatNumber = formatVnNumber;
 
 /** Chữ hiện thay cho giá/số tiền không có: "0đ" nghĩa là miễn phí, không được dùng để che giá thiếu. */
 export const MISSING_AMOUNT = '—';
@@ -115,9 +113,4 @@ export function formatVndShort(amount: number | null | undefined): string {
   return formatVnd(v);
 }
 
-/** Hệ số nhân kiểu Việt: 1.5 → "1,5" (không có ",0" thừa với số tròn). */
-export function formatMultiplier(x: number | null | undefined): string {
-  const v = Number(x ?? 0);
-  if (!Number.isFinite(v) || v <= 0) return '1';
-  return v.toFixed(2).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
-}
+export { formatMultiplier } from '@tubutree/app-core/number-format';

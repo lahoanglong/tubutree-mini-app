@@ -46,7 +46,7 @@ export function CheckInStreak({
             <Flame className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
             <span className="min-w-0 truncate">{t.title(streakDays)}</span>
           </h2>
-          <p className="text-xs text-stone-600">{t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}</p>
+          <p className="text-caption text-stone-600">{t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}</p>
         </div>
         <button type="button" disabled={allDone || checkInPending} onClick={onCheckIn} className={`${miniBtnSecondary} flex-none gap-1`}>
           {allDone && <Check className="h-4 w-4" aria-hidden="true" />}
@@ -67,12 +67,12 @@ export function CheckInStreak({
               >
                 {done ? '💧' : bonus ? '🎁' : day}
               </div>
-              {bonus && reward != null && <div className="mt-0.5 text-xs font-bold text-stone-700">{t.dayReward(reward)}💧</div>}
+              {bonus && reward != null && <div className="mt-0.5 text-caption font-bold text-stone-700">{t.dayReward(reward)}💧</div>}
             </div>
           );
         })}
       </div>
-      <p className="mt-2 text-xs text-stone-600">{t.bonusNote(STREAK_3_SEEDS, profile?.streak7Seeds ?? null)}</p>
+      <p className="mt-2 text-caption text-stone-600">{t.bonusNote(STREAK_3_SEEDS, profile?.streak7Seeds ?? null)}</p>
 
       {/* Vé giữ lửa (streak-freeze) + giọt sương sáng (dew) */}
       <div className="mt-3 border-t border-stone-200 pt-1">
@@ -94,7 +94,7 @@ export function CheckInStreak({
           <Droplets className="h-4 w-4" aria-hidden="true" />
           {dewCollectedToday ? 'Đã hứng sương' : t.dew(profile?.dewSeeds ?? null)}
         </button>
-        <p className="mt-2 text-xs text-stone-600">Vé giữ lửa giúp chuỗi không đứt khi bạn lỡ 1 ngày. Giọt sương sáng tặng 💧 mỗi ngày.</p>
+        <p className="mt-2 text-caption text-stone-600">Vé giữ lửa giúp chuỗi không đứt khi bạn lỡ 1 ngày. Giọt sương sáng tặng 💧 mỗi ngày.</p>
       </div>
     </section>
   );

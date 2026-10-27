@@ -1,18 +1,24 @@
-import Link from 'next/link';
-import { Compass } from 'lucide-react';
-import { ui } from '@/lib/guest-ui';
+'use client';
 
+import { useRouter } from 'next/navigation';
+import { EmptyState } from '@/components/mini';
+import { SR_ONLY } from '@/components/mini/sr-only';
+
+/** 404 cùng chữ và hình với `pages/not-found.tsx` của Mini App. */
 export default function NotFound() {
+  const router = useRouter();
   return (
-    <main className="mx-auto max-w-3xl px-4 py-24 text-center">
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">
-        <Compass className="h-8 w-8" aria-hidden="true" />
+    <main className="mx-auto max-w-3xl px-4">
+      <h1 style={SR_ONLY}>Không tìm thấy trang</h1>
+      <div style={{ minHeight: '80vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <EmptyState
+          art="search"
+          heading="Trang này lạc vào vườn rồi"
+          body="Có thể liên kết đã cũ hoặc trang không tồn tại. Quay về trang chủ để tiếp tục dạo vườn nhé."
+          ctaLabel="Về trang chủ"
+          onCta={() => router.replace('/')}
+        />
       </div>
-      <h1 className="mt-5 font-display text-2xl font-semibold text-stone-900">Không tìm thấy trang</h1>
-      <p className="mt-2 text-stone-700">Trang bạn tìm không tồn tại hoặc đã được chuyển đi.</p>
-      <Link href="/" className={`${ui.btnPrimary} mt-6`}>
-        Về trang chủ
-      </Link>
     </main>
   );
 }

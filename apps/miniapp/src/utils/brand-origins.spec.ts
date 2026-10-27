@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BRAND_ORIGINS, pinBoxes, type PinBox } from './brand-origins';
+import { BRAND_ORIGINS, findBrandOrigin, pinBoxes, type PinBox } from './brand-origins';
 
 const hit = (a: PinBox, b: PinBox) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 
@@ -37,5 +37,13 @@ describe('tên tỉnh hiển thị (D8-13)', () => {
     const provinces = BRAND_ORIGINS.map((o) => o.province);
     expect(provinces.join('|')).not.toMatch(/Đắc/);
     expect(provinces).toContain('Đắk Lắk');
+  });
+});
+
+describe('findBrandOrigin', () => {
+  it('khớp theo slug hoặc tên (không phân biệt hoa thường), nhãn lạ thì null', () => {
+    expect(findBrandOrigin({ slug: 'fuwa3e', name: 'x' })?.id).toBe('fuwa3e');
+    expect(findBrandOrigin({ slug: 'khac', name: ' BH.NONG ' })?.id).toBe('bhnong');
+    expect(findBrandOrigin({ slug: 'khac', name: 'Không có' })).toBeNull();
   });
 });

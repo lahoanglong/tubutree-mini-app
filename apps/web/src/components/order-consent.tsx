@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-const LINK = 'font-medium text-forest-700 underline underline-offset-2';
+const LINK = 'tubu-inline-link font-medium text-forest-700 underline underline-offset-2';
 
 /** Dòng đồng ý điều khoản ngay cạnh nút Đặt hàng (không có ô tick): đặt hàng là hành vi đồng ý. */
 export function OrderConsent({ className = '' }: { className?: string }) {

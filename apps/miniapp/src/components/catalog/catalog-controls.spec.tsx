@@ -53,13 +53,13 @@ describe('CategoryGrid', () => {
     expect(loading.children).toHaveLength(SEGMENT_ENTRIES.length);
   });
 
-  it('placeholderCount tuỳ biến đổi số ô chờ, và ô chờ cao bằng ô thật (48px)', () => {
+  it('placeholderCount tuỳ biến đổi số ô chờ, và ô chờ cao bằng ô thật (44px)', () => {
     const { rerender } = render(<CategoryGrid entries={ENTRIES} isLoading placeholderCount={6} onSelect={vi.fn()} />);
     const loading = screen.getByTestId('category-grid-loading');
     expect(loading.children).toHaveLength(6);
-    expect((loading.children[0] as HTMLElement).style.height).toBe('48px');
+    expect(((loading.children[0] as HTMLElement).firstElementChild as HTMLElement).style.height).toBe('44px');
     rerender(<CategoryGrid entries={ENTRIES} isLoading={false} onSelect={vi.fn()} />);
-    expect(screen.getByRole('button', { name: 'Cho mẹ & bé' }).style.minHeight).toBe('48px');
+    expect(screen.getByRole('button', { name: 'Cho mẹ & bé' }).style.minHeight).toBe('44px');
   });
 });
 

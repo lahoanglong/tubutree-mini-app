@@ -32,7 +32,7 @@ describe('GuestTiers (khách xem hạng thành viên)', () => {
     expect(screen.getByText('Hạng khởi đầu')).toBeInTheDocument();
     expect(screen.getByText('Chi tiêu từ 5 triệu trong 12 tháng')).toBeInTheDocument();
     expect(screen.getByText('Freeship đơn từ 99k')).toBeInTheDocument();
-    expect(screen.getByText('Điểm x1,2')).toBeInTheDocument();
+    expect(screen.getByText('Điểm ×1,2')).toBeInTheDocument();
     expect(mocks.coreGet).toHaveBeenCalledWith('/loyalty/preview');
     fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập để đổi' }));
     expect(mocks.login).toHaveBeenCalled();

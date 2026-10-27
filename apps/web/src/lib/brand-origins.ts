@@ -164,3 +164,9 @@ export function brandBrowseHref(catalogBrand: string): string {
   const name = catalogBrand.trim();
   return name ? `/san-pham?brand=${encodeURIComponent(name)}` : '/san-pham';
 }
+
+/** Nhãn có trên bản đồ xuất xứ (khớp theo id/slug hoặc tên catalog); nhãn chưa có ghim thì null. */
+export function findBrandOrigin(brand: { slug: string; name: string }): BrandOrigin | null {
+  const name = brand.name.trim().toLowerCase();
+  return BRAND_ORIGINS.find((o) => o.id === brand.slug || o.catalogBrand.toLowerCase() === name || o.brand.toLowerCase() === name) ?? null;
+}

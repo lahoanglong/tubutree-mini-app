@@ -12,7 +12,7 @@ import { RefundDestinationPicker } from './refund-destination-picker';
 import { estimateReturn, fetchRefundBank, requestReturn, type OrderView, type ReturnRequestDTO } from '../../services/shop-api';
 import { getErrorMessage } from '../../services/api';
 import { haptic } from '../../utils/haptic';
-import { formatVnd } from '../../utils/format';
+import { formatNumber, formatVnd } from '../../utils/format';
 import {
   EMPTY_BANK,
   RETURN_REASONS,
@@ -143,7 +143,7 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
               <Text variant="caption" tone="tertiary" as="div">
                 {[
                   estimated.shipping > 0 ? `gồm ${formatVnd(estimated.shipping)} phí vận chuyển` : null,
-                  estimated.pointsUsedBack > 0 ? `hoàn lại ${estimated.pointsUsedBack} Điểm Xanh đã dùng` : null,
+                  estimated.pointsUsedBack > 0 ? `hoàn lại ${formatNumber(estimated.pointsUsedBack)} Điểm Xanh đã dùng` : null,
                   'Tubu xác nhận số cuối cùng khi duyệt',
                 ]
                   .filter(Boolean)

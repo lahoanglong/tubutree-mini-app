@@ -27,7 +27,7 @@ export function StreakRepair({
         <Flame className="h-4 w-4" aria-hidden="true" />
         {`Bạn vừa mất chuỗi ${formatNumber(brokenStreakDays ?? 0)} ngày`}
       </div>
-      <p className="mt-0.5 text-xs text-stone-700">Hồi sinh ngay để giữ lại thành tích trước khi hết hạn.</p>
+      <p className="mt-0.5 text-caption text-stone-700">Hồi sinh ngay để giữ lại thành tích trước khi hết hạn.</p>
       <button type="button" disabled={pending} onClick={() => (short > 0 ? onNeedWater(short) : onRepair())} className={`${ui.btnPrimary} mt-2.5 w-full`}>
         {short > 0 ? gameNewbieCopy.short(short) : `Hồi sinh (${formatDrops(cost ?? 0)})`}
       </button>

@@ -67,7 +67,7 @@ export function BrandActions({ slug, name, followerCount }: { slug: string; name
   };
 
   return (
-    <div className="mt-3">
+    <div className="mt-3 max-md:mt-0">
       {count > 0 && <p className="text-xs text-stone-600 max-md:mt-0.5 max-md:text-[length:var(--type-caption-size)] max-md:text-[var(--color-text-tertiary)]">{count} người theo dõi</p>}
       {/* Điện thoại: thanh dính đáy như StickyActionBar của Mini App (Theo dõi nền nhạt + Chia sẻ nền đậm); từ md nằm ngay dưới tên. */}
       <div

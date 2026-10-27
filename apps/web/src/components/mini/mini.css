@@ -82,6 +82,11 @@
   transform: translate(-50%, -50%);
 }
 
+/* ── Link nằm giữa câu (Điều khoản, Chính sách): đệm dọc của phần tử inline làm hộp chạm cao 44px mà không đổi chiều cao dòng ── */
+.tubu-inline-link {
+  padding-block: 13px;
+}
+
 .tubu-scroll-fade[data-fade-end] {
   -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
   mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);

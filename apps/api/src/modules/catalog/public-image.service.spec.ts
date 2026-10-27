@@ -54,6 +54,19 @@ describe('PublicImageService', () => {
     await expect(svc.get('product', 'p1', '0', undefined)).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('nhãn: ảnh câu chuyện theo số thứ tự storyImages, số lạ hoặc ngoài mảng thì 404', async () => {
+    const { svc, prisma } = make({ images: ['https://x.test/a.jpg', PNG] });
+    expect((await svc.get('brand', 'b1', '1', undefined)).mime).toBe('image/png');
+    const q = prisma.$queryRaw.mock.calls[0]![0] as unknown as { sql: string; values: unknown[] };
+    expect(q.sql).toMatch(/"storyImages"\[\?::int\] AS image FROM "brands"/);
+    expect(q.sql).toContain('"isPublished" = true');
+    expect(q.values).toEqual([2, 'b1']);
+    expect(prisma.brand.findFirst).not.toHaveBeenCalled();
+    await expect(svc.get('brand', 'b1', '0', undefined)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.get('brand', 'b1', '5', undefined)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.get('brand', 'b1', '01', undefined)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('nhãn: chỉ select đúng cột cần, và chỉ khi đã công bố; khoá học chỉ ô cover', async () => {
     const { svc, prisma } = make({ brand: { logoUrl: PNG }, course: { coverUrl: PNG } });
     expect((await svc.get('brand', 'b1', 'logo', undefined)).mime).toBe('image/png');
