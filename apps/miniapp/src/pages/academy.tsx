@@ -1,6 +1,6 @@
 import { Page, useSnackbar, useNavigate, useParams } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PlayCircle, FileText, CheckCircle2, BookOpen } from 'lucide-react';
+import { PlayCircle, FileText, CheckCircle2 } from 'lucide-react';
 import {
   fetchCourses,
   fetchCourse,
@@ -22,6 +22,7 @@ import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { isDirectVideoUrl } from '../utils/video-url';
 import { isHttpError } from '../services/http';
+import { ProductThumb } from '../components/ui/product-thumb';
 
 /** API chỉ mở cho CTV/đại lý/nhân viên: khách thường vào thẳng link thì được chỉ đường, Thử lại không đổi được kết quả. */
 function isForbidden(e: unknown): boolean {
@@ -94,26 +95,7 @@ function CourseCard({ course, onOpen }: { course: AcademyCourseSummary; onOpen: 
   return (
     <Card padding={0}>
       <ListRow
-        icon={
-          <div
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 'var(--radius-control)',
-              overflow: 'hidden',
-              background: 'var(--color-action-secondary-bg)',
-              flexShrink: 0,
-              display: 'grid',
-              placeItems: 'center',
-            }}
-          >
-            {course.coverUrl ? (
-              <img src={course.coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : (
-              <Icon icon={BookOpen} size="lg" tone="brand" />
-            )}
-          </div>
-        }
+        icon={<ProductThumb src={course.coverUrl} alt="" size={64} />}
         title={<span style={ellipsis}>{course.title}</span>}
         subtitle={
           <>

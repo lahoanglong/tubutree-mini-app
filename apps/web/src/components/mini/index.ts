@@ -16,6 +16,7 @@ export { Chip } from './chip';
 export { KeyValueRow } from './key-value-row';
 export { PriceTag, Money, Points } from './price-tag';
 export { ProductThumb } from './product-thumb';
+export { ProductImage, ProductImageFallback, LeafGlyph } from './product-image';
 export { ProductTile } from './product-tile';
 export { default as ProductCard } from './product-card';
 export { SearchField } from './search-field';

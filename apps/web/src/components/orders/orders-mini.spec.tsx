@@ -56,7 +56,7 @@ describe('OrderCard như Mini App', () => {
   it('thẻ nổi không viền, ô ảnh nền sage, "Mua lại" là nút phụ nền xanh nhạt không viền', async () => {
     const c = await mount(<OrderCard order={ORDER} onReorder={() => undefined} />);
     expect(c.querySelector('li')!.className).toMatch(/\bmax-md:border-0\b/);
-    expect(c.querySelector('li img, li svg')!.parentElement!.className).toMatch(/max-md:bg-\[var\(--color-bg-subtle\)\]/);
+    expect(c.querySelector('li svg')!.parentElement!.style.background).toContain('var(--color-bg-subtle)');
     const reorder = button(c, 'Mua lại');
     expect(reorder.className).toMatch(/max-md:bg-\[var\(--color-action-secondary-bg\)\]/);
     expect(reorder.className).toMatch(/\bmax-md:border-transparent\b/);
@@ -70,7 +70,7 @@ describe('SubscriptionsPanel như Mini App', () => {
       const b = button(c, label);
       expect(b.className).toMatch(/max-md:bg-\[var\(--color-action-secondary-bg\)\]/);
     }
-    expect(c.querySelector('li svg')!.parentElement!.className).toMatch(/max-md:bg-\[var\(--color-bg-subtle\)\]/);
+    expect(c.querySelector('li svg')!.parentElement!.style.background).toContain('var(--color-bg-subtle)');
   });
 
   it('"Huỷ" chữ đỏ thật: không mang lớp màu chữ stone của nút phụ để thắng thua không phụ thuộc thứ tự CSS', async () => {

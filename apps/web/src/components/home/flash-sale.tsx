@@ -18,7 +18,7 @@ import { ProgressBar } from '@/components/ui/progress-bar';
 import { HomeBlockError } from './home-block-error';
 import { useBlockQuery } from './use-block-query';
 import { ScrollRail } from '@/components/scroll-rail';
-import { ThumbPlaceholder } from '@/components/thumb-placeholder';
+import { ProductImage } from '@/components/mini/product-image';
 
 const CARD = 'flex w-36 flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition hover:shadow-raised sm:w-44 lg:w-48';
 const RAIL = 'flex gap-3 overflow-x-auto px-1 pb-3 pt-1';
@@ -27,13 +27,7 @@ const TITLE = 'flex items-center gap-1.5 font-display text-lg font-semibold text
 function Thumb({ src, name, pct }: { src: string | null; name: string; pct: number }) {
   return (
     <div className="relative aspect-square w-full bg-stone-100">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      {src ? <img src={src} alt={name} width={176} height={176} loading="lazy" className="h-full w-full object-cover" /> : (
-        // Mini App để ô nền trống khi thiếu ảnh; hình lá chỉ có từ md.
-        <div className="hidden h-full w-full md:block">
-          <ThumbPlaceholder />
-        </div>
-      )}
+      <ProductImage src={src} brand="" alt={name} size={176} className="h-full w-full object-cover" />
       {pct > 0 && (
         <span className="absolute left-1.5 top-1.5">
           <Badge tone="promo" size="sm">

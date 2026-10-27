@@ -11,6 +11,7 @@ import { useDebounced } from '../../utils/use-debounced';
 import { formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
 import { vi } from '../../i18n/vi';
+import { ProductThumb } from '../ui/product-thumb';
 
 /** Chọn sản phẩm để gắn vào bài đăng cộng đồng — tìm + chip đã chọn (cap `max`). */
 export function ProductPicker({
@@ -78,9 +79,7 @@ export function ProductPicker({
                 background: 'var(--color-bg-surface)',
               }}
             >
-              {p.thumbnail && (
-                <img src={p.thumbnail} alt="" width={24} height={24} style={{ borderRadius: 4, objectFit: 'cover' }} />
-              )}
+              <ProductThumb src={p.thumbnail} alt="" size={24} />
               <Text variant="caption" style={{ maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {p.name}
               </Text>
@@ -118,11 +117,7 @@ export function ProductPicker({
           {results.map((p) => (
             <ListRow
               key={p.slug}
-              icon={
-                p.thumbnail ? (
-                  <img src={p.thumbnail} alt="" width={32} height={32} style={{ borderRadius: 6, objectFit: 'cover', flex: '0 0 auto' }} />
-                ) : undefined
-              }
+              icon={<ProductThumb src={p.thumbnail} alt="" size={32} />}
               title={p.name}
               subtitle={<Text variant="price-sm" tone="brand">{formatVnd(p.basePrice)}</Text>}
               onPress={() => add(p)}

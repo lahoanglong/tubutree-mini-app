@@ -8,6 +8,7 @@ import { vi } from '../../i18n/vi';
 import { haptic } from '../../utils/haptic';
 import { PriceTag } from '../ui/price-tag';
 import { Heading, Text } from '../ui/text';
+import { ProductImage } from '../ui/product-image';
 
 const CARD_WIDTH = 120;
 
@@ -76,17 +77,8 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
                 overflow: 'hidden',
               }}
             >
-              <div style={{ width: CARD_WIDTH, height: CARD_WIDTH, background: 'var(--stone-100)' }}>
-                {it.thumbnail && (
-                  <img
-                    src={it.thumbnail}
-                    alt=""
-                    width={CARD_WIDTH}
-                    height={CARD_WIDTH}
-                    loading="lazy"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                  />
-                )}
+              <div style={{ position: 'relative', width: CARD_WIDTH, height: CARD_WIDTH, background: 'var(--stone-100)' }}>
+                <ProductImage src={it.thumbnail} brand="" />
               </div>
               <div style={{ padding: 8 }}>
                 <Text

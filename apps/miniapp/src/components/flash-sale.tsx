@@ -26,6 +26,7 @@ import { ProgressBar } from './ui/progress-bar';
 import { ScrollRow } from './ui/scroll-row';
 import { linkKeyboardProps, rowKeyboardProps } from './ui/row-keyboard';
 import { Heading, Text } from './ui/text';
+import { ProductImage } from './ui/product-image';
 
 const PROMO_TITLE_STYLE: CSSProperties = { color: 'var(--color-promo-fg)', display: 'flex', alignItems: 'center', gap: 6 };
 
@@ -132,14 +133,7 @@ export function FlashSale() {
               style={CARD_STYLE}
             >
               <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--stone-100)' }}>
-                {item.thumbnail && (
-                  <img
-                    src={item.thumbnail}
-                    alt={item.productName}
-                    loading="lazy"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                  />
-                )}
+                <ProductImage src={item.thumbnail} brand="" />
                 {pct > 0 && (
                   <Badge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
                     -{pct}%
@@ -191,14 +185,7 @@ function UpcomingFlashCard({
   return (
     <div className="tubu-press" role="link" {...linkKeyboardProps()} onClick={onOpen} style={CARD_STYLE}>
       <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--stone-100)' }}>
-        {item.thumbnail && (
-          <img
-            src={item.thumbnail}
-            alt={item.productName}
-            loading="lazy"
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          />
-        )}
+        <ProductImage src={item.thumbnail} brand="" />
         {pct > 0 && (
           <Badge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
             -{pct}%

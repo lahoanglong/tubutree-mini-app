@@ -213,6 +213,6 @@ describe('FlashSale — khổ máy tính', () => {
   it('thẻ chưa có ảnh dùng ô thay thế hình lá như thẻ sản phẩm', async () => {
     activeResult = async () => [{ ...active(), thumbnail: null }];
     const c = await mount(<FlashSale />);
-    expect(c.querySelector('[data-testid="card-placeholder"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="product-image-fallback"]')).not.toBeNull();
   });
 });

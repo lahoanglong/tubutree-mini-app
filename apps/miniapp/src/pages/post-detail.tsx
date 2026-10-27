@@ -22,6 +22,7 @@ import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { AuthorLine } from '../components/community/author-line';
 import { KIND_ICON, KIND_LABEL } from '../components/community/post-card';
+import { ProductThumb } from '../components/ui/product-thumb';
 
 export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -238,9 +239,7 @@ export default function PostDetailPage() {
                   marginBottom: 8,
                 }}
               >
-                {pt.thumbnail && (
-                  <img src={pt.thumbnail} alt="" width={48} height={48} style={{ borderRadius: 8, objectFit: 'cover' }} />
-                )}
+                <ProductThumb src={pt.thumbnail} alt="" size={48} />
                 <div style={{ flex: 1 }}>
                   <Text
                     variant="body-sm"

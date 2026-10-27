@@ -14,6 +14,7 @@ import { STRETCHED_LINK_CLASS, STRETCHED_LINK_RESET, stretchedLinkHit44 } from '
 import { Text } from '../ui/text';
 import { AuthorLine } from './author-line';
 import { dedupeTagsAgainstProducts } from './post-tags';
+import { ProductThumb } from '../ui/product-thumb';
 
 // Xuất để dùng lại ở community-moderation.tsx (localize post.kind thô "QUESTION"/"TIP"...).
 export const KIND_LABEL: Partial<Record<FeedItem['kind'], string>> = {
@@ -156,7 +157,7 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
                 maxWidth: 200,
               }}
             >
-              {p.thumbnail && <img src={p.thumbnail} alt="" width={28} height={28} style={{ borderRadius: 6, objectFit: 'cover' }} />}
+              <ProductThumb src={p.thumbnail} alt="" size={28} />
               <div>
                 <Text variant="caption" as="div" style={CLAMP(1)}>{p.name}</Text>
                 <Text variant="label" tone="brand" as="div">{formatVnd(p.salePrice ?? p.basePrice)}</Text>

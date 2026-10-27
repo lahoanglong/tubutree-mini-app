@@ -30,6 +30,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { ChoiceCard } from './choice-card';
 import { CTV_ORDER_COPY as t } from './ctv-order-copy';
 import { loadRecentCustomers, normalizeCustomerPhone, recentCustomerLabel, saveRecentCustomer, type RecentCustomer } from './recent-customers';
+import { ProductThumb } from '@/components/mini';
 
 interface OrderLine {
   variationId: string;
@@ -584,7 +585,7 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
                 {results.map((p) => (
                   <li key={p.slug}>
                     <button type="button" onClick={() => setSlug(p.slug)} className="flex min-h-11 w-full items-center gap-2 text-left">
-                      {p.thumbnail && <img src={p.thumbnail} alt="" width={32} height={32} className="h-8 w-8 shrink-0 rounded-media object-cover" />}
+                      <ProductThumb src={p.thumbnail} alt="" size={32} />
                       <span className="min-w-0 flex-1 text-sm text-stone-900">{p.name}</span>
                       <span className="text-xs font-semibold text-forest-700">{formatVnd(p.basePrice)}</span>
                     </button>

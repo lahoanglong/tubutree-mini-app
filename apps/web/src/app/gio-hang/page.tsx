@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ShoppingBag, Truck, Leaf, Zap, Trash2, Minus, Plus } from 'lucide-react';
+import { ShoppingBag, Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { addToCart, getCart, getCartSelection, updateCartItem, removeCartItem, formatVnd, type CartLine } from '@/lib/shop-client';
@@ -20,7 +20,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
 import { loadErrorText } from '@/lib/error-text';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
-import { KeyValueRow } from '@/components/mini';
+import { KeyValueRow, ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
@@ -293,14 +293,9 @@ export default function CartPage() {
                           href={`/san-pham/${it.slug}`}
                           tabIndex={-1}
                           aria-hidden="true"
-                          className={`flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-control bg-forest-50 ${mini.thumb}`}
+                          className={`flex-none ${mini.thumb}`}
                         >
-                          {it.thumbnail ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={it.thumbnail} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            <Leaf className="h-6 w-6 text-forest-600 max-md:h-7 max-md:w-7 max-md:text-[color:var(--forest-200)]" aria-hidden="true" />
-                          )}
+                          <ProductThumb src={it.thumbnail} alt="" size={64} />
                         </Link>
                         <div className="min-w-0 flex-1">
                           <div className="break-words text-sm font-medium text-stone-900 max-md:font-semibold">

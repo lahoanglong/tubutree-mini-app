@@ -5,7 +5,7 @@ import type { KeyboardEvent } from 'react';
 import Link from 'next/link';
 import { useMutation } from '@tanstack/react-query';
 import { useStickyBarOffset } from '@/components/use-sticky-bar-offset';
-import { ChevronRight, Sparkles, Sprout } from 'lucide-react';
+import { ChevronRight, Sparkles } from 'lucide-react';
 import { aiChat, type AiChatTurn, type AiProduct } from '@tubutree/app-core/api/ai';
 import { coreHttp } from '@/lib/core-http';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -18,6 +18,7 @@ import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { PageHeader } from '@/components/ui/page-header';
 import { miniBtnSecondary, miniOutline } from '@/components/loyalty/mini-surface';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { ProductThumb } from '@/components/mini';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -48,14 +49,7 @@ const toHistory = (list: ChatMessage[]): AiChatTurn[] =>
 function ProductRow({ p }: { p: AiProduct }) {
   return (
     <Link href={`/san-pham/${p.slug}`} className={`${miniOutline} flex min-h-11 items-center gap-3 p-2 hover:bg-stone-50`}>
-      {p.thumbnail ? (
-        // eslint-disable-next-line @next/next/no-img-element -- ảnh do server tư vấn trả về, miền không cố định
-        <img src={p.thumbnail} alt={p.name} className="h-11 w-11 shrink-0 rounded-control object-cover" />
-      ) : (
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-control bg-forest-50 text-forest-600">
-          <Sprout className="h-5 w-5" aria-hidden="true" />
-        </div>
-      )}
+      <ProductThumb src={p.thumbnail} alt={p.name} size={44} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium text-stone-900">{p.name}</div>
         <div className="text-xs font-semibold text-forest-700">{formatVnd(p.salePrice ?? p.basePrice)}</div>

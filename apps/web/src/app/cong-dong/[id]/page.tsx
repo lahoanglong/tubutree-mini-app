@@ -31,6 +31,7 @@ import { ui } from '@/lib/guest-ui';
 import { CommentRow } from './comment-row';
 import { ConfirmDeleteSheet, EditPostSheet, ReportSheet } from './post-sheets';
 import { PAGE_NARROW } from '@/lib/page-frame';
+import { ProductThumb } from '@/components/mini';
 
 const TITLE = 'Cộng đồng Vườn Tubu';
 const ICON_BTN = 'inline-flex h-11 min-h-11 w-11 shrink-0 items-center justify-center rounded-control text-stone-700 hover:bg-stone-100';
@@ -324,10 +325,7 @@ export default function PostDetailPage() {
                   href={`/san-pham/${encodeURIComponent(pt.slug)}`}
                   className="flex min-h-11 items-center gap-2.5 rounded-control border border-stone-200 bg-stone-0 p-2.5"
                 >
-                  {pt.thumbnail && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={safeMediaUrl(pt.thumbnail) ?? undefined} alt="" width={48} height={48} className="rounded-lg object-cover" />
-                  )}
+                  <ProductThumb src={safeMediaUrl(pt.thumbnail)} alt="" size={48} />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm text-stone-800" style={CLAMP1}>
                       {pt.name}

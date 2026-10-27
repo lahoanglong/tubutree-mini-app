@@ -5,6 +5,7 @@ import { formatVnd } from '@/lib/format-vnd';
 import { AuthorLine, Avatar, KIND_ICON, KIND_LABEL, safeMediaUrl, timeAgo } from './post-parts';
 import { dedupeTagsAgainstProducts } from './post-tags';
 import { miniBleed } from '@/components/loyalty/mini-surface';
+import { ProductThumb } from '@/components/mini';
 
 const CLAMP3 = { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as const;
 const CLAMP1 = { display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as const;
@@ -66,10 +67,7 @@ export function PostCard({ post }: { post: FeedItem }) {
               href={`/san-pham/${encodeURIComponent(p.slug)}`}
               className="flex min-h-11 max-w-[200px] shrink-0 items-center gap-1.5 rounded-control border border-stone-200 bg-stone-0 p-1.5"
             >
-              {p.thumbnail && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={safeMediaUrl(p.thumbnail) ?? undefined} alt="" width={28} height={28} className="rounded-md object-cover" />
-              )}
+              <ProductThumb src={safeMediaUrl(p.thumbnail)} alt="" size={28} />
               <span className="min-w-0">
                 <span className="block text-xs text-stone-800" style={CLAMP1}>
                   {p.name}

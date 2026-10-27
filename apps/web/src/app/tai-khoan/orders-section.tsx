@@ -4,7 +4,7 @@ import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { Leaf, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { fetchOrdersPage, formatVnd, type OrderDTO } from '@/lib/shop-client';
 import {
   ORDER_TABS,
@@ -18,6 +18,7 @@ import { ui } from '@/lib/guest-ui';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { canPayNow, showsPaymentDeadline } from '@/components/orders/order-rules';
 import { formatCount } from '@/lib/checkout-points';
+import { ProductThumb } from '@/components/mini';
 
 /** Số sản phẩm đầu mỗi đơn hiện tên + ảnh; phần còn lại gộp thành "và N sản phẩm khác". */
 const PREVIEW_ITEMS = 2;
@@ -29,14 +30,7 @@ function OrderItemsPreview({ items }: { items: OrderDTO['items'] }) {
     <div className="mt-2 space-y-1.5">
       {shown.map((it, i) => (
         <div key={`${it.productName}-${it.variationName}-${i}`} className="flex items-center gap-2.5">
-          <div className="flex h-10 w-10 flex-none items-center justify-center overflow-hidden rounded-control bg-forest-50">
-            {it.thumbnail ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={it.thumbnail} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <Leaf className="h-4 w-4 text-forest-600" aria-hidden="true" />
-            )}
-          </div>
+          <ProductThumb src={it.thumbnail} alt="" size={40} />
           <div className="min-w-0 flex-1 text-sm text-stone-900">
             <span className="line-clamp-2 break-words">{it.productName}</span>
             {it.variationName ? <span className="block text-xs text-stone-600">{it.variationName}</span> : null}

@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Sprout } from 'lucide-react';
 import { setSubscriptionStatus, skipSubscriptionCycle, type SubscriptionDTO } from '@tubutree/app-core/api/subscriptions';
 import { subscriptionsQuery } from '@tubutree/app-core/queries/subscriptions';
 import { addressesQuery } from '@tubutree/app-core/queries/checkout';
@@ -21,6 +20,7 @@ import { mini, miniGhostDanger } from '@/components/order-mobile/mobile-ui';
 import { subscriptionCycleView } from './subscription-price';
 import { SubscriptionEditSheet } from './subscription-edit-sheet';
 import { PAY_SHORT, addressText } from './subscription-options';
+import { ProductThumb } from '@/components/mini';
 
 type SubStatus = SubscriptionDTO['status'];
 const STATUS_TONE: Record<SubStatus, BadgeTone> = { ACTIVE: 'success', PAUSED: 'warning', CANCELLED: 'neutral' };
@@ -194,13 +194,8 @@ function SubscriptionCard({
   return (
     <li className={`p-3 ${ui.card} ${mini.card}`}>
       <div className="flex gap-3">
-        <div className={`flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded-control bg-stone-100 ${mini.thumb}`}>
-          {s.thumbnail ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={s.thumbnail} alt={s.productName} className="h-full w-full object-cover" />
-          ) : (
-            <Sprout className="h-5 w-5 text-forest-600" aria-hidden="true" />
-          )}
+        <div className={`flex-none ${mini.thumb}`}>
+          <ProductThumb src={s.thumbnail} alt={s.productName} size={56} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-stone-900">{s.productName}</div>

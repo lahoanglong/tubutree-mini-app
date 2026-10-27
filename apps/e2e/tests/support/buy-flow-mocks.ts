@@ -13,7 +13,7 @@ import { publicConfig } from './checkout-mocks';
  *   GET /me/subscriptions, GET /me/notifications + POST /me/notifications/:id/read.
  * Ảnh dùng data: URI (host ngoài bị chặn trong mock-api.ts).
  */
-export const THUMB = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+export const THUMB = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 export const PURCHASED: PurchasedItem = {
   variationId: 'var-1',
