@@ -55,6 +55,15 @@ describe('ProductCard (danh sách yêu thích, C-076 di cư DS v2: giữ nguyên
     expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc', { state: { variationId: 'v1' } });
   });
 
+  it('B-140: món gian hàng CTV ghim phân loại mở đúng phân loại ghim, Giờ vàng của phân loại khác không thắng', async () => {
+    mocks.fetchActive.mockResolvedValue([FLASH]);
+    await renderCard({ ...P, pinnedVariationId: 'v9', repVariationId: 'v9' });
+    expect(await screen.findByText('120.000đ')).toBeInTheDocument();
+    expect(screen.queryByText('99.000đ')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Nước rửa chén' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc', { state: { pinnedVariationId: 'v9' } });
+  });
+
   it('giá giờ vàng KHÔNG rẻ hơn giá đang bán: giữ giá đang bán, không nhãn Giờ vàng, mở phân loại mặc định', async () => {
     mocks.fetchActive.mockResolvedValue([{ ...FLASH, flashPrice: 130_000 }]);
     await renderCard();

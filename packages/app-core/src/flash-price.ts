@@ -59,9 +59,11 @@ export function pickDefaultVariation<T extends { id: string; sku?: string; retai
  * không nhãn Giờ vàng, không `flashVariationId`.
  */
 export function cardPricing(
-  product: { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string },
-  flash: readonly FlashPriceItem[],
+  product: { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string; pinnedVariationId?: string },
+  allFlash: readonly FlashPriceItem[],
 ): CardPricing {
+  // Món gian hàng CTV ghim một phân loại: thẻ chỉ xét Giờ vàng của chính phân loại đó, để giá thẻ và phân loại mở ra luôn là một.
+  const flash = product.pinnedVariationId ? allFlash.filter((f) => f.variationId === product.pinnedVariationId) : allFlash;
   const cardStanding = product.salePrice ?? product.basePrice;
   const standingOf = (f: FlashPriceItem) => (f.retailPrice != null ? (f.salePrice ?? f.retailPrice) : cardStanding);
   const isRep = (f: FlashPriceItem) =>

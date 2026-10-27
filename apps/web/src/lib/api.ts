@@ -77,6 +77,8 @@ export interface ProductCard {
   salePrice: number | null;
   /** Phân loại đại diện của thẻ (đã lấy giá); cùng id mà trang chi tiết mở sẵn. */
   repVariationId?: string;
+  /** Món gian hàng CTV ghim phân loại: thẻ ghi giá phân loại này và trang chi tiết mở đúng nó. */
+  pinnedVariationId?: string;
   isFeatured: boolean;
   sold?: number;
   inStock: boolean;

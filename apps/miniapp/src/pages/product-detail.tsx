@@ -105,11 +105,11 @@ export default function ProductDetailPage() {
   const chatOn = config.chat?.enabled === true;
   const chatReady = chatOn && status === 'authenticated';
 
-  // Thẻ và dải "Giờ vàng" truyền variationId qua state; hợp lệ khi phân loại đó còn hàng và còn Giờ vàng. Mọi lối vào khác
+  // Thẻ và dải "Giờ vàng" truyền variationId qua state; hợp lệ khi phân loại đó còn hàng và còn Giờ vàng; `pinnedVariationId` (món gian hàng CTV ghim phân loại) chỉ cần còn hàng. Mọi lối vào khác
   // (lưới, gợi ý tìm, bài cộng đồng, deep link) mở phân loại mà thẻ đã ghi giá (`defaultVariationFor`). Chỉ khách bấm chọn mới
   // là `selectedId`. Trang hiện ngay với phân loại đại diện; khi danh sách Giờ vàng về thì chốt lại một lần, không đổi lại khi đợt hết giờ lúc khách đang xem.
   const location = useLocation();
-  const navState = location.state as { variationId?: string; listSource?: string; reviewOrderId?: string } | null;
+  const navState = location.state as { variationId?: string; pinnedVariationId?: string; listSource?: string; reviewOrderId?: string } | null;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const autoPick = useRef<{ slug: string; id: string | null } | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -167,7 +167,9 @@ export default function ProductDetailPage() {
   // Memo theo (selectedId + danh sách variation) — tránh tạo ref mới mỗi render gây effect chạy dư.
   if (product.data && !flashQ.isPending && autoPick.current?.slug !== slug) {
     const flashNow = flashQ.data ?? [];
-    const entry = variations.find((v) => v.id === navState?.variationId && v.stock > 0 && variationPricing(v, flashNow).isFlash);
+    const entry =
+      variations.find((v) => v.id === navState?.variationId && v.stock > 0 && variationPricing(v, flashNow).isFlash) ??
+      variations.find((v) => v.id === navState?.pinnedVariationId && v.stock > 0);
     autoPick.current = { slug: slug ?? '', id: (entry ?? defaultVariationFor({ slug: product.data.slug }, variations, flashNow))?.id ?? null };
   }
   const auto = autoPick.current;

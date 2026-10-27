@@ -92,7 +92,7 @@ export default function AddToCart({
   }, [maxQty, setQty]);
 
   // Phân loại mở sẵn chốt một lần khi danh sách Giờ vàng về (để giá không đổi hai lần). `?v=<variationId>` (thẻ, dải Giờ vàng) thắng
-  // khi phân loại đó còn hàng và còn Giờ vàng; không thì cùng luật với thẻ (`defaultVariationFor`), nên gợi ý tìm, bài cộng đồng,
+  // khi phân loại đó còn hàng và còn Giờ vàng (`?pv=` của món gian hàng CTV ghim phân loại chỉ cần còn hàng); không thì cùng luật với thẻ (`defaultVariationFor`), nên gợi ý tìm, bài cộng đồng,
   // Đã xem gần đây, liên kết trực tiếp đều mở đúng phân loại có giá đã hiện. Khách đã tự chọn thì không tự đổi.
   const flashLoaded = useFlashSalesLoaded();
   const autoPicked = useRef(false);
@@ -101,8 +101,10 @@ export default function AddToCart({
     autoPicked.current = true;
     if (userPicked.current) return;
     const wanted = new URLSearchParams(window.location.search).get('v');
+    const pinned = new URLSearchParams(window.location.search).get('pv');
     const entry = wanted ? variations.find((v) => v.id === wanted && v.stock > 0 && variationPricing(v, flash).isFlash) : undefined;
-    const target = entry ?? defaultVariationFor({ slug }, variations, flash);
+    const pinnedEntry = pinned ? variations.find((v) => v.id === pinned && v.stock > 0) : undefined;
+    const target = entry ?? pinnedEntry ?? defaultVariationFor({ slug }, variations, flash);
     if (target && target.id !== selectedId) setSelectedId(target.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chốt một lần khi Giờ vàng vừa về
   }, [flashLoaded]);

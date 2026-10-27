@@ -42,6 +42,22 @@ export function cardPrices(
     : { basePrice: product.basePrice, salePrice: product.salePrice };
 }
 
+/**
+ * Giá thẻ của món gian hàng CTV có ghim phân loại: thẻ ghi giá của đúng phân loại đã ghim (và trang chi tiết mở phân loại đó), không phải
+ * phân loại đại diện. Chỉ áp khi phân loại ghim còn bán và còn hàng; hết hàng hay đã tắt thì thẻ về phân loại đại diện như món không ghim,
+ * khớp trang chi tiết (nó chỉ mở phân loại ghim khi còn hàng).
+ */
+export function pinnedCardPrices(
+  product: { basePrice: number; salePrice: number | null },
+  variations: readonly PricedVariation[] | null | undefined,
+  pinnedVariationId: string | null | undefined,
+): { basePrice: number; salePrice: number | null; repVariationId?: string; pinnedVariationId?: string } {
+  const pinned = pinnedVariationId ? (variations ?? []).find((v) => v.id === pinnedVariationId && v.stock > 0) : undefined;
+  return pinned
+    ? { basePrice: pinned.retailPrice, salePrice: pinned.salePrice, repVariationId: pinned.id, pinnedVariationId: pinned.id }
+    : cardPrices(product, variations);
+}
+
 /** Suất Giờ vàng đang chạy của một phân loại, cùng dạng với `FlashPriceItem` ở app-core. */
 export type FlashOffer = { variationId: string; flashPrice: number; retailPrice: number; salePrice: number | null };
 

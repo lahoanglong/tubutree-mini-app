@@ -266,3 +266,20 @@ describe('hai phân loại cùng giá, cùng có suất Giờ vàng cùng giá',
     expect(defaultVariationFor({ slug: 'gao' }, [a, b], flash)?.id).toBe('v-z');
   });
 });
+
+describe('B-140: món gian hàng CTV ghim phân loại', () => {
+  const pinned = { slug: 'nrc', basePrice: 300_000, salePrice: 270_000, repVariationId: 'v2', pinnedVariationId: 'v2' };
+  const flashOf = (variationId: string, flashPrice: number) => ({ productSlug: 'nrc', variationId, flashPrice, retailPrice: 300_000, salePrice: null });
+
+  it('không có Giờ vàng: giá của phân loại ghim', () => {
+    expect(cardPricing(pinned, [])).toMatchObject({ price: 270_000, isFlash: false });
+  });
+  it('Giờ vàng của phân loại khác không thắng thẻ ghim', () => {
+    const r = cardPricing(pinned, [flashOf('v1', 100_000)]);
+    expect(r).toMatchObject({ price: 270_000, isFlash: false });
+    expect(r.flashVariationId).toBeUndefined();
+  });
+  it('Giờ vàng của chính phân loại ghim thắng khi rẻ hơn', () => {
+    expect(cardPricing(pinned, [flashOf('v2', 200_000)])).toMatchObject({ price: 200_000, isFlash: true, flashVariationId: 'v2' });
+  });
+});

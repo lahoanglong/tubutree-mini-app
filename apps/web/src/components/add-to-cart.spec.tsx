@@ -260,6 +260,14 @@ describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', (
     expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('250ml');
   });
 
+  it('B-140: ?pv= (món gian hàng CTV ghim) mở đúng phân loại ghim dù không có Giờ vàng', async () => {
+    openedFrom('?pv=v2');
+    mocks.getActiveFlashSales.mockResolvedValue([]);
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
+  });
+
   it('?v= còn Giờ vàng thắng suất khác rẻ hơn ở phân loại khác', async () => {
     openedFrom('?v=v2');
     mocks.getActiveFlashSales.mockResolvedValue([FLASH_V2, { ...FLASH_V2, variationId: 'v1', flashPrice: 120000, retailPrice: 200000, salePrice: 150000, itemId: 'b' }]);

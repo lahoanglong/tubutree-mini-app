@@ -51,7 +51,7 @@ const flash = (variationId: string, flashPrice: number, retailPrice: number) => 
   retailPrice, flashPrice, quota: 10, soldCount: 1, endAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
 });
 
-function renderPdp(state?: { variationId: string }) {
+function renderPdp(state?: { variationId?: string; pinnedVariationId?: string }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
@@ -118,6 +118,13 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
     renderPdp({ variationId: 'v-1kg' });
     await screen.findByText('500g');
     expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('B-140: state.pinnedVariationId (món gian hàng CTV ghim) mở đúng phân loại ghim dù không có Giờ vàng', async () => {
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    renderPdp({ pinnedVariationId: 'v-1kg' });
+    await screen.findByText('1kg');
+    expect(chip('1kg')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('trang hiện ngay với phân loại đại diện khi Giờ vàng còn pending; Giờ vàng về thì chốt lại sang phân loại đang giảm', async () => {

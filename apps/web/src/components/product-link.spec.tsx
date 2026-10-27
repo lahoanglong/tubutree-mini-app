@@ -14,8 +14,8 @@ const item = (over: Record<string, unknown>) => ({
 });
 
 let mounted: Rendered | null = null;
-const hrefOf = () => {
-  mounted = render(<ProductLink product={PRODUCT}>Hạt điều</ProductLink>);
+const hrefOf = (product: Record<string, unknown> = PRODUCT) => {
+  mounted = render(<ProductLink product={product as typeof PRODUCT}>Hạt điều</ProductLink>);
   return mounted.container.querySelector('a')!.getAttribute('href');
 };
 
@@ -40,6 +40,13 @@ describe('ProductLink', () => {
   it('Giờ vàng đắt hơn giá thẻ (200.000đ so với 159.000đ): liên kết trần, mở phân loại mặc định', () => {
     mocks.flash = [item({ flashPrice: 200_000 })];
     expect(hrefOf()).toBe('/san-pham/hat-dieu');
+  });
+
+  it('B-140: món gian hàng CTV ghim phân loại: gắn ?pv=; Giờ vàng của phân loại khác không đổi liên kết', () => {
+    const pinned = { ...PRODUCT, pinnedVariationId: 'v1', repVariationId: 'v1' };
+    expect(hrefOf(pinned)).toBe('/san-pham/hat-dieu?pv=v1');
+    mocks.flash = [item({ variationId: 'v2' })];
+    expect(hrefOf(pinned)).toBe('/san-pham/hat-dieu?pv=v1');
   });
 
   it('hết Giờ vàng: liên kết trần', () => {

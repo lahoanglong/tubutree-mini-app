@@ -12,13 +12,13 @@ export function ProductLink({
   className,
   children,
 }: {
-  product: { slug: string; basePrice: number; salePrice?: number | null };
+  product: { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string; pinnedVariationId?: string };
   className?: string;
   children: ReactNode;
 }) {
   const pricing = cardPricing(product, useActiveFlashSales());
   return (
-    <Link href={productHref(product.slug, pricing.flashVariationId)} className={className}>
+    <Link href={productHref(product.slug, pricing.flashVariationId, product.pinnedVariationId)} className={className}>
       {children}
     </Link>
   );
