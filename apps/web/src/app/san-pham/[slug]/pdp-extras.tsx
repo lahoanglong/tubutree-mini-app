@@ -116,7 +116,7 @@ export function PdpCoupons({ productId }: { productId: string }) {
 
   return (
     <div className="mt-3">
-      <ul aria-label="Mã giảm giá có thể dùng" className="flex gap-2 pb-1 max-md:-mx-4 max-md:overflow-x-auto max-md:px-4 md:grid md:grid-cols-2">
+      <ul aria-label="Mã giảm giá có thể dùng" className="flex gap-2 pb-1 max-md:-mx-4 max-md:overflow-x-auto max-md:px-4 max-md:pt-1 md:grid md:grid-cols-2">
         {list.map((c) => (
           <li key={c.code} className="shrink-0 md:min-w-0">
             <button
