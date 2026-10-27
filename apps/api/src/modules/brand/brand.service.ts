@@ -5,7 +5,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanitizeEligibleRoles } from '../affiliate/commission-eligibility';
 import { loadDefaultRate, maxResolvedRate } from '../affiliate/commission-rate';
 import type { BrandSalesPeriod } from './dto/brand.dto';
-import { publicImage } from '../../common/public-image';
+import { publicImage, publicImages } from '../../common/public-image';
 import { cardPrices } from '../catalog/variation-order';
 import { isStorefrontImageValue } from '../../common/uploaded-image';
 
@@ -134,7 +134,7 @@ export class BrandService {
       coverUrl: publicImage('brand', brand.id, 'cover', brand.coverUrl),
       tagline: brand.tagline,
       story: brand.story,
-      storyImages: brand.storyImages,
+      storyImages: publicImages('brand', brand.id, brand.storyImages),
       origin: brand.origin,
       isVerified: brand.isVerified,
       followerCount: brand.followerCount,

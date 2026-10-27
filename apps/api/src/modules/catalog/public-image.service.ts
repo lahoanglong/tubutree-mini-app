@@ -46,11 +46,19 @@ export class PublicImageService {
         image = await this.productImage(id, n);
       }
     } else if (kind === 'brand') {
-      if (slotRaw !== 'logo' && slotRaw !== 'cover') throw notFound();
-      slot = slotRaw;
-      const field = slotRaw === 'logo' ? 'logoUrl' : 'coverUrl';
-      const b = await this.prisma.brand.findFirst({ where: { id, isPublished: true }, select: { [field]: true } });
-      image = (b as Record<string, string | null> | null)?.[field];
+      if (slotRaw === 'logo' || slotRaw === 'cover') {
+        slot = slotRaw;
+        const field = slotRaw === 'logo' ? 'logoUrl' : 'coverUrl';
+        const b = await this.prisma.brand.findFirst({ where: { id, isPublished: true }, select: { [field]: true } });
+        image = (b as Record<string, string | null> | null)?.[field];
+      } else {
+        // Ảnh câu chuyện: số thứ tự trong storyImages, cùng chỉ số mà publicImages() đã dùng khi dựng URL.
+        if (!/^(0|[1-9]\d?)$/.test(slotRaw)) throw notFound();
+        const n = Number(slotRaw);
+        slot = n;
+        const b = await this.prisma.brand.findFirst({ where: { id, isPublished: true }, select: { storyImages: true } });
+        image = b?.storyImages[n];
+      }
     } else {
       if (slotRaw !== 'cover') throw notFound();
       slot = 'cover';

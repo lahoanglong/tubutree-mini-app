@@ -54,6 +54,15 @@ describe('PublicImageService', () => {
     await expect(svc.get('product', 'p1', '0', undefined)).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('nhãn: ảnh câu chuyện theo số thứ tự storyImages, số lạ hoặc ngoài mảng thì 404', async () => {
+    const { svc, prisma } = make({ brand: { storyImages: ['https://x.test/a.jpg', PNG] } });
+    expect((await svc.get('brand', 'b1', '1', undefined)).mime).toBe('image/png');
+    expect(prisma.brand.findFirst).toHaveBeenCalledWith({ where: { id: 'b1', isPublished: true }, select: { storyImages: true } });
+    await expect(svc.get('brand', 'b1', '0', undefined)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.get('brand', 'b1', '5', undefined)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.get('brand', 'b1', '01', undefined)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('nhãn: chỉ select đúng cột cần, và chỉ khi đã công bố; khoá học chỉ ô cover', async () => {
     const { svc, prisma } = make({ brand: { logoUrl: PNG }, course: { coverUrl: PNG } });
     expect((await svc.get('brand', 'b1', 'logo', undefined)).mime).toBe('image/png');
