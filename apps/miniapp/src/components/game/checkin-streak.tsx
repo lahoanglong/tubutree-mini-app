@@ -48,7 +48,7 @@ export function CheckInStreak({
         <div style={{ minWidth: 0 }}>
           <Heading variant="title-sm" as="h2" style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
             <Icon icon={Flame} tone="brand" />
-            Điểm danh chuỗi {streakDays ?? 0} ngày
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>Điểm danh chuỗi {streakDays ?? 0} ngày</span>
           </Heading>
           <Text variant="caption" tone="tertiary" as="div">
             {t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}
