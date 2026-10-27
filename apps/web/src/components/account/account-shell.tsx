@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   Bell,
@@ -82,13 +82,31 @@ export function AccountShell({ children }: { children: ReactNode }) {
   const waiting = restoring || phase === 'unavailable';
   const framed = authed || waiting;
 
+  const settled = phase === 'authenticated' || phase === 'guest';
+  useEffect(() => {
+    // Biết kết quả rồi (đã đăng nhập hoặc là khách): gỡ dấu của script khởi động, từ đây khung do state quyết định.
+    if (settled) document.documentElement.removeAttribute('data-restoring');
+  }, [settled]);
+
+  // Lần dựng đầu (SSR và hydrate) state luôn là "chưa biết": bố cục khung do thuộc tính data-restoring trên <html> (script ở <head> đặt
+  // từ cờ phiên) quyết định bằng CSS, nên HTML server giống nhau cho mọi người và không lệch hydrate; sau mount state React thay thế.
+  // Tailwind chỉ nhận lớp viết nguyên văn (không ghép chuỗi), nên các lớp "boot" ghi đủ từng cái.
+  const frameCls = 'lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start lg:gap-6 lg:px-6 lg:pt-6';
+  const bootFrameCls =
+    '[html[data-restoring]_&]:lg:grid [html[data-restoring]_&]:lg:grid-cols-[240px_minmax(0,1fr)] [html[data-restoring]_&]:lg:items-start [html[data-restoring]_&]:lg:gap-6 [html[data-restoring]_&]:lg:px-6 [html[data-restoring]_&]:lg:pt-6';
+  const innerFrameCls = 'min-w-0 lg:[&_main]:mx-0 lg:[&_main]:px-0 lg:[&_main.max-w-frame]:max-w-none lg:[&_[data-back-link]]:hidden';
+  const bootInnerCls =
+    'min-w-0 [html[data-restoring]_&]:lg:[&_main]:mx-0 [html[data-restoring]_&]:lg:[&_main]:px-0 [html[data-restoring]_&]:lg:[&_main.max-w-frame]:max-w-none [html[data-restoring]_&]:lg:[&_[data-back-link]]:hidden';
+
   // Cây DOM giữ nguyên khi phiên đổi từ đang kiểm tra sang đã đăng nhập (chỉ lớp và menu thay đổi): trang con không bị dựng lại.
   return (
-    <div
-      className={`mx-auto w-full max-w-frame ${framed ? 'lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start lg:gap-6 lg:px-6 lg:pt-6' : ''}`}
-    >
-      {waiting && !authed && (
-        <div aria-hidden="true" data-testid="account-shell-nav-skeleton" className="hidden lg:block">
+    <div className={`mx-auto w-full max-w-frame ${framed ? frameCls : bootFrameCls}`}>
+      {!authed && (
+        <div
+          aria-hidden="true"
+          data-testid="account-shell-nav-skeleton"
+          className={waiting ? 'hidden lg:block' : 'hidden [html[data-restoring]_&]:lg:block'}
+        >
           {[0, 1, 2].map((g) => (
             <div key={g} className="mb-4 space-y-2">
               <Skeleton width={90} height={12} />
@@ -140,13 +158,7 @@ export function AccountShell({ children }: { children: ReactNode }) {
           })}
         </nav>
       )}
-      <div
-        className={
-          framed
-            ? 'min-w-0 lg:[&_main]:mx-0 lg:[&_main]:px-0 lg:[&_main.max-w-frame]:max-w-none lg:[&_[data-back-link]]:hidden'
-            : undefined
-        }
-      >
+      <div className={framed ? innerFrameCls : bootInnerCls}>
         {children}
       </div>
     </div>

@@ -73,7 +73,7 @@ describe('AccountShell (menu tài khoản từ lg)', () => {
     mocks.restoring = false;
   });
 
-  it('khách vãng lai ở phase loading (SSR, lần render đầu) không có cờ phiên: không dựng khung, không nhảy ngang', () => {
+  it('lần dựng đầu (chưa biết phiên): khung chỉ ăn khi <html> có data-restoring (script ở head), không có lớp khung vô điều kiện', () => {
     mocks.phase = 'loading';
     mocks.restoring = false;
     const c = mount(
@@ -81,8 +81,30 @@ describe('AccountShell (menu tài khoản từ lg)', () => {
         <main>đang tải</main>
       </AccountShell>,
     );
-    expect(c.firstElementChild?.className).not.toContain('lg:grid-cols-[240px_minmax(0,1fr)]');
-    expect(c.querySelector('[data-testid="account-shell-nav-skeleton"]')).toBeNull();
+    const root = c.firstElementChild as HTMLElement;
+    const cls = root.className.split(/\s+/);
+    expect(cls).not.toContain('lg:grid');
+    expect(cls).not.toContain('lg:grid-cols-[240px_minmax(0,1fr)]');
+    expect(cls).toContain('[html[data-restoring]_&]:lg:grid');
+    const skeleton = c.querySelector('[data-testid="account-shell-nav-skeleton"]') as HTMLElement;
+    expect(skeleton.className.split(/\s+/)).not.toContain('lg:block');
+    expect(skeleton.className).toContain('[html[data-restoring]_&]:lg:block');
     mocks.phase = 'authenticated';
+  });
+
+  it('biết là khách (phiên hết hạn/không có cờ): gỡ data-restoring khỏi <html>; đã đăng nhập cũng gỡ; còn đang tải thì giữ', () => {
+    document.documentElement.setAttribute('data-restoring', '');
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    mount(<AccountShell>x</AccountShell>);
+    expect(document.documentElement.hasAttribute('data-restoring')).toBe(true);
+    mocks.phase = 'guest';
+    mocks.restoring = false;
+    mount(<AccountShell>x</AccountShell>);
+    expect(document.documentElement.hasAttribute('data-restoring')).toBe(false);
+    document.documentElement.setAttribute('data-restoring', '');
+    mocks.phase = 'authenticated';
+    mount(<AccountShell>x</AccountShell>);
+    expect(document.documentElement.hasAttribute('data-restoring')).toBe(false);
   });
 });

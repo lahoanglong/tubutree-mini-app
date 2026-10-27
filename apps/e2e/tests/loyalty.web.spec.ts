@@ -353,17 +353,31 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
 });
 
 /**
- * Khung khu tài khoản từ 1024px: khách có cookie phiên thấy khung hai cột ngay HTML đầu (SSR đọc cookie), nên nội dung không dịch ngang
- * khi phiên khôi phục xong; khách vãng lai không có cookie thì không có khung. Giữ /auth/refresh lại để đo đúng lúc "đang khôi phục".
+ * Khung khu tài khoản từ 1024px: máy có cờ phiên thấy khung hai cột ngay từ khung hình đầu (script ở <head> đặt data-restoring, CSS dựng
+ * khung; HTML server giống nhau cho mọi người), nên vị trí ngang của <main> không đổi suốt từ lúc vẽ lần đầu đến khi phiên khôi phục xong.
+ * Ghi vị trí main ở MỌI khung hình bằng rAF rồi kiểm chỉ có một giá trị. Giữ /auth/refresh lại để có đoạn "đang khôi phục" đủ dài.
  */
 test.describe('Web khách: khung tài khoản không nhảy ngang khi khôi phục phiên (lg)', () => {
   test.use({ viewport: { width: 1280, height: 800 } });
 
-  const mainLeft = (page: import('@playwright/test').Page) =>
-    page.evaluate(() => Math.round(document.querySelector('main')!.getBoundingClientRect().left));
+  const recordMainLeft = (page: import('@playwright/test').Page) =>
+    page.addInitScript(() => {
+      const seen: number[] = [];
+      (window as unknown as { __mainLefts: number[] }).__mainLefts = seen;
+      const tick = () => {
+        const m = document.querySelector('main');
+        if (m) {
+          const left = Math.round(m.getBoundingClientRect().left);
+          if (seen[seen.length - 1] !== left) seen.push(left);
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+  const lefts = (page: import('@playwright/test').Page) => page.evaluate(() => (window as unknown as { __mainLefts: number[] }).__mainLefts);
 
   for (const path of ['/tai-khoan/vi-tubu', '/kho-qua']) {
-    test(`${path}: có cookie phiên, main đứng đúng chỗ ở HTML đầu và sau khi phiên về`, async ({ page, context, api, baseURL }) => {
+    test(`${path}: có cờ phiên, main giữ một vị trí ngang từ khung hình đầu đến khi phiên về`, async ({ page, api }) => {
       test.skip(test.info().project.name !== 'Web Customer', 'chỉ đo bố cục máy tính');
       if (path === '/kho-qua') mockRewards(api, { redeemed: false });
       else mockWallet(api);
@@ -373,24 +387,45 @@ test.describe('Web khách: khung tài khoản không nhảy ngang khi khôi ph�
         await gate;
         return { accessToken: 'e2e-token', user: USER };
       });
-      await context.addCookies([{ name: 'tubu_web_session', value: '1', url: baseURL! }]);
       await page.addInitScript(() => localStorage.setItem('tubu_web_session', '1'));
+      await recordMainLeft(page);
 
       await page.goto(path, { waitUntil: 'domcontentloaded' });
       await expect(page.getByTestId('account-shell-nav-skeleton')).toBeVisible();
-      const first = await mainLeft(page);
+      await page.waitForTimeout(600);
       release();
       await expect(page.getByTestId('account-shell-nav')).toBeVisible();
-      await expect(page.getByRole('main').first()).toBeVisible();
-      expect(await mainLeft(page)).toBe(first);
+      await page.waitForTimeout(600);
+      const seen = await lefts(page);
+      expect(seen, `vị trí main theo từng khung hình: ${seen.join(' → ')}`).toHaveLength(1);
+      expect(seen[0]).toBeGreaterThan(200);
     });
   }
 
-  test('khách vãng lai (không cookie, không cờ): không có khung khôi phục', async ({ page, api }) => {
+  test('khách vãng lai (không cờ): không có khung khôi phục, main không nhảy', async ({ page, api }) => {
     test.skip(test.info().project.name !== 'Web Customer', 'chỉ đo bố cục máy tính');
     mockWallet(api);
+    await recordMainLeft(page);
     await page.goto('/tai-khoan/vi-tubu');
-    await expect(page.getByTestId('account-shell-nav-skeleton')).toHaveCount(0);
+    await expect(page.getByText('Đăng nhập').first()).toBeVisible();
+    await page.waitForTimeout(600);
+    expect(await page.evaluate(() => document.documentElement.hasAttribute('data-restoring'))).toBe(false);
     await expect(page.getByTestId('account-shell-nav')).toHaveCount(0);
+    await expect(page.getByTestId('account-shell-nav-skeleton')).toBeHidden();
+    const seen = await lefts(page);
+    expect(seen, `vị trí main theo từng khung hình: ${seen.join(' → ')}`).toHaveLength(1);
+  });
+
+  test('cờ còn nhưng phiên hết hạn (refresh 401): khung gỡ đúng một lần, data-restoring bị gỡ', async ({ page, api }) => {
+    test.skip(test.info().project.name !== 'Web Customer', 'chỉ đo bố cục máy tính');
+    mockWallet(api);
+    api.post('/auth/refresh', () => reply(401, { message: 'Phiên hết hạn' }));
+    await page.addInitScript(() => localStorage.setItem('tubu_web_session', '1'));
+    await recordMainLeft(page);
+    await page.goto('/tai-khoan/vi-tubu');
+    await expect.poll(() => page.evaluate(() => document.documentElement.hasAttribute('data-restoring'))).toBe(false);
+    await page.waitForTimeout(400);
+    const seen = await lefts(page);
+    expect(seen.length, `vị trí main theo từng khung hình: ${seen.join(' → ')}`).toBeLessThanOrEqual(2);
   });
 });
