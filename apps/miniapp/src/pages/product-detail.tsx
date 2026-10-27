@@ -315,6 +315,8 @@ export default function ProductDetailPage() {
       if (useAuthStore.getState().status !== 'authenticated') return;
     }
     if (selected && inStock && !addMutation.isPending) {
+      // Bấm mua là đã chọn: danh sách Giờ vàng về muộn không được đổi phân loại dưới tay khách sau khi bấm.
+      setSelectedId(selected.id);
       addMutation.mutate({ variation: selected, qty: quantity });
     }
   };
@@ -325,6 +327,7 @@ export default function ProductDetailPage() {
       if (useAuthStore.getState().status !== 'authenticated') return;
     }
     if (selected && inStock && !buyNowMutation.isPending) {
+      setSelectedId(selected.id);
       buyNowMutation.mutate({ variation: selected, qty: quantity });
     }
   };

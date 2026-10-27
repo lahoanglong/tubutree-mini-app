@@ -145,6 +145,36 @@ describe('AddToCart — tồn kho thật thay cho bản ISR', () => {
     expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
   });
 
+  it('B-141: bản ISR báo phân loại rẻ nhất hết, tồn thật báo có lại: chọn lại phân loại rẻ nhất, giá khớp thẻ', async () => {
+    mocks.getProductStock.mockResolvedValue({ v1: 6, v2: 9 });
+    const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }, VARIATIONS[1]!]);
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('250ml');
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 150.000đ');
+  });
+
+  it('B-141: khách đã tự chọn thì tồn kho về không đổi lại', async () => {
+    mocks.getProductStock.mockImplementation(() => new Promise((r) => setTimeout(() => r({ v1: 6, v2: 9 }), 0)));
+    const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }, VARIATIONS[1]!]);
+    click(byText(container, 'button', '500ml'));
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
+  });
+
+  it('B-145: bấm Thêm vào giỏ là đã chọn, tồn kho về muộn không đổi phân loại sau đó', async () => {
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    let release: (v: Record<string, number>) => void = () => undefined;
+    mocks.getProductStock.mockImplementation(() => new Promise((r) => { release = r; }));
+    const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }, VARIATIONS[1]!]);
+    await flush();
+    click(addButton(container));
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v2', 1);
+    release({ v1: 6, v2: 9 });
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
+  });
+
   it('khách đã tự chọn phân loại thì không bị đổi ngầm', async () => {
     mocks.getProductStock.mockImplementation(() => new Promise((r) => setTimeout(() => r({ v1: 0, v2: 9 }), 0)));
     const { container } = mount();

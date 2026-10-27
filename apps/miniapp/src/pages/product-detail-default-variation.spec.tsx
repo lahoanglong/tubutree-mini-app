@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchActiveFlashSales: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchActiveFlashSales: vi.fn(), addToCart: vi.fn(), authStatus: 'guest' }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
@@ -18,14 +18,17 @@ vi.mock('../services/shop-api', () => ({
   fetchReviews: vi.fn().mockResolvedValue({ data: [], count: 0, average: 0 }),
   fetchActiveFlashSales: mocks.fetchActiveFlashSales,
   getCart: vi.fn().mockResolvedValue({ items: [], itemCount: 0 }),
-  addToCart: vi.fn(),
+  addToCart: mocks.addToCart,
 }));
 vi.mock('../services/account-api', () => ({ getCoupons: vi.fn().mockResolvedValue([]) }));
 vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: vi.fn() }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn().mockResolvedValue({ isAffiliate: false }) }));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
 vi.mock('../services/zmp-bridge', () => ({ shareLink: vi.fn(), hasOA: false, openOAChat: vi.fn() }));
-vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: 'guest', login: vi.fn() }) }));
+vi.mock('../store/auth', () => {
+  const state = () => ({ status: mocks.authStatus, login: vi.fn(), user: null });
+  return { useAuthStore: Object.assign(state, { getState: state }) };
+});
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1 }) }));
 vi.mock('../components/reviews-section', () => ({ ReviewsSection: () => null, Stars: () => null }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
@@ -69,6 +72,7 @@ const chip = (name: string) => screen.getByText(name).closest('[role="button"]')
 describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với thẻ (đại diện 500g 150.000đ, 1kg 300.000đ)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.authStatus = 'guest';
     mocks.fetchProduct.mockResolvedValue(product);
   });
 
@@ -135,6 +139,21 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
     expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
     release([flash('v-1kg', 100_000, 300_000)]);
     await waitFor(() => expect(chip('1kg')).toHaveAttribute('aria-pressed', 'true'));
+  });
+
+  it('B-145: bấm Thêm vào giỏ là đã chọn, Giờ vàng về muộn không đổi phân loại sau đó', async () => {
+    mocks.authStatus = 'authenticated';
+    mocks.addToCart.mockResolvedValue({ items: [], itemCount: 1 });
+    let release: (v: unknown[]) => void = () => undefined;
+    mocks.fetchActiveFlashSales.mockReturnValue(new Promise((r) => { release = r; }));
+    renderPdp();
+    await screen.findByText('500g');
+    fireEvent.click(await screen.findByRole('button', { name: /Thêm vào giỏ/ }));
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v-500', 1));
+    release([flash('v-1kg', 100_000, 300_000)]);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
+    expect(chip('1kg')).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('khách đã tự chọn trước khi Giờ vàng về: không bị đổi lại', async () => {
