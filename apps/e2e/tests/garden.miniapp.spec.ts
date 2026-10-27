@@ -59,7 +59,7 @@ test.describe('Vườn Xanh', () => {
 
     await expect(page.getByText('Cây Sưa Đỏ').first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('progressbar', { name: 'Tiến độ cây' })).toHaveAttribute('aria-valuenow', '40');
-    await expect(page.getByText(/🔥 5 ngày/)).toBeVisible();
+    await expect(page.getByText(/🔥 Chuỗi 5 ngày/)).toBeVisible();
     await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible();
 
     await page.getByText('Vườn', { exact: true }).first().click();
@@ -81,7 +81,7 @@ test.describe('Vườn Xanh', () => {
       (el as HTMLButtonElement).click();
     });
 
-    await expect(page.getByText(/Đã tưới · 60\/100/)).toBeVisible();
+    await expect(page.getByText(/Đã tưới −340💧 · còn 40💧 nữa là thu hoạch/)).toBeVisible();
     expect(api.callsTo('POST', '/game/tree/water')).toHaveLength(1);
     expect(api.callsTo('POST', '/game/tree/water')[0]!.body).toEqual({ drops: 340 });
   });
@@ -156,7 +156,7 @@ test.describe('Vườn Xanh', () => {
       (el as HTMLButtonElement).click();
     });
 
-    await expect(page.getByText(/Đã tưới lô · 50\/60/)).toBeVisible();
+    await expect(page.getByText(/Đã tưới lô −20💧 · còn 10💧 nữa là thu hoạch/)).toBeVisible();
     const calls = api.callsTo('POST', '/game/garden/plot/:id/water');
     expect(calls).toHaveLength(1);
     expect(calls[0]!.path).toBe('/game/garden/plot/plot-2/water');
