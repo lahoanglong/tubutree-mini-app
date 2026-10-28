@@ -72,7 +72,7 @@ export class WasteExpiryCron {
     }
   }
 
-  private async sweep(now: Date, cfg: { shortfallLockPct: number; shortfallLockStreak: number }): Promise<{ expired: number }> {
+  private async sweep(now: Date, cfg: { enabled: boolean; shortfallLockPct: number; shortfallLockStreak: number }): Promise<{ expired: number }> {
     const base: Prisma.WasteRequestWhereInput = {
       expiresAt: { lt: now },
       OR: [{ status: 'OPEN', orderId: null }, { status: 'IN_TRANSIT', method: 'PICKUP' }],
@@ -108,20 +108,24 @@ export class WasteExpiryCron {
         this.logger.error(`Xét khoá giao hàng cho ${userId} lỗi: ${err instanceof Error ? (err.stack ?? err.message) : err}`);
       }
     }
-    await this.remindExpiring(now);
+    await this.remindExpiring(now, cfg.enabled);
     return { expired };
   }
 
   /**
    * Nhắc khách còn khoảng một đến hai ngày giữ chỗ. MAIL_IN đã nhập mã vận đơn chuyển sang IN_TRANSIT và không còn hạn nên không vào đây;
    * `trackingCode: null` giữ điều đó ngay cả khi trạng thái chưa kịp đổi. Tin trùng bị chặn bằng dedupeKey theo id yêu cầu.
+   * Chỉ nhắc khi khách làm theo được: chương trình tắt thì quầy từ chối nhận mang tới, khách bị khoá thì kho không cộng điểm,
+   * và màn yêu cầu của họ đang nói "tạm dừng" (pausedNote). Hạn giữ chỗ vẫn chạy ở bước đóng, không phụ thuộc cờ.
    */
-  private async remindExpiring(now: Date): Promise<void> {
+  private async remindExpiring(now: Date, programmeEnabled: boolean): Promise<void> {
+    if (!programmeEnabled) return;
     const base: Prisma.WasteRequestWhereInput = {
       status: 'OPEN',
       orderId: null,
       trackingCode: null,
       method: { in: ['DROP_OFF', 'MAIL_IN'] },
+      user: { isBlocked: false, mergedIntoId: null, OR: [{ wasteFlags: null }, { wasteFlags: { blockedAt: null } }] },
       expiresAt: { gte: new Date(now.getTime() + REMIND_FROM_HOURS * HOUR_MS), lt: new Date(now.getTime() + REMIND_TO_HOURS * HOUR_MS) },
     };
     try {

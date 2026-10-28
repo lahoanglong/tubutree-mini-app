@@ -11,13 +11,19 @@ type Row = { id: string; code: string; userId: string; method: 'DROP_OFF' | 'MAI
 const openRow = (id: string, method: Row['method'] = 'MAIL_IN', userId = 'u1'): Row => ({ id, code: `TR-${id.toUpperCase().padEnd(5, '2')}`, userId, method, status: 'OPEN', orderId: null });
 const transitRow = (id: string, userId = 'u1'): Row => ({ id, code: `TR-${id.toUpperCase().padEnd(5, '3')}`, userId, method: 'PICKUP', status: 'IN_TRANSIT', orderId: `o-${id}` });
 
-type RemindRow = { id: string; code: string; userId: string; method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP'; status: string; orderId: string | null; trackingCode: string | null; expiresAt: Date | null };
+type RemindUser = { isBlocked: boolean; mergedIntoId: string | null; wasteFlags: { blockedAt: Date | null } | null };
+type RemindRow = {
+  id: string; code: string; userId: string; method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP'; status: string; orderId: string | null; trackingCode: string | null; expiresAt: Date | null;
+  user: RemindUser;
+};
 const HOUR = 3_600_000;
 const remindRow = (id: string, hoursLeft: number | null, o: Partial<RemindRow> = {}): RemindRow => ({
   id, code: `TR-${id.toUpperCase().padEnd(5, '4')}`, userId: 'u1', method: 'DROP_OFF', status: 'OPEN', orderId: null, trackingCode: null,
-  expiresAt: hoursLeft === null ? null : new Date(NOW.getTime() + hoursLeft * HOUR), ...o,
+  expiresAt: hoursLeft === null ? null : new Date(NOW.getTime() + hoursLeft * HOUR), user: { isBlocked: false, mergedIntoId: null, wasteFlags: null }, ...o,
 });
-type Where = { status?: string; orderId?: null; trackingCode?: null; method?: { in: string[] }; expiresAt?: { gte?: Date; lt?: Date }; id?: { gt: string }; AND?: Where[] };
+const USER_OK = { isBlocked: false, mergedIntoId: null, OR: [{ wasteFlags: null }, { wasteFlags: { blockedAt: null } }] };
+type UserWhere = { isBlocked?: boolean; mergedIntoId?: null; OR?: ({ wasteFlags: null } | { wasteFlags: { blockedAt: null } })[] };
+type Where = { status?: string; orderId?: null; trackingCode?: null; method?: { in: string[] }; user?: UserWhere; expiresAt?: { gte?: Date; lt?: Date }; id?: { gt: string }; AND?: Where[] };
 /** Chạy lại điều kiện where của bước nhắc trên dữ liệu trong bộ nhớ, để ca kiểm chứng đúng điều kiện chứ không chỉ cú gọi. */
 function matches(r: RemindRow, w: Where): boolean {
   if (w.AND) return w.AND.every((x) => matches(r, x));
@@ -25,6 +31,12 @@ function matches(r: RemindRow, w: Where): boolean {
   if (w.orderId === null && r.orderId !== null) return false;
   if (w.trackingCode === null && r.trackingCode !== null) return false;
   if (w.method && !w.method.in.includes(r.method)) return false;
+  if (w.user) {
+    const u = r.user;
+    if (w.user.isBlocked !== undefined && u.isBlocked !== w.user.isBlocked) return false;
+    if (w.user.mergedIntoId === null && u.mergedIntoId !== null) return false;
+    if (w.user.OR && !w.user.OR.some((c) => (c.wasteFlags === null ? u.wasteFlags === null : u.wasteFlags !== null && u.wasteFlags.blockedAt === null))) return false;
+  }
   if (w.expiresAt) {
     if (!r.expiresAt) return false;
     if (w.expiresAt.gte && r.expiresAt < w.expiresAt.gte) return false;
@@ -36,7 +48,7 @@ function matches(r: RemindRow, w: Where): boolean {
 
 function setup(
   rows: Row[],
-  o: { locked?: boolean; counts?: Record<string, number>; gomdon?: Record<string, string | null>; failIds?: string[]; remind?: RemindRow[]; notifier?: unknown } = {},
+  o: { locked?: boolean; counts?: Record<string, number>; gomdon?: Record<string, string | null>; failIds?: string[]; remind?: RemindRow[]; notifier?: unknown; enabled?: boolean } = {},
 ) {
   const findMany = jest.fn().mockResolvedValueOnce(rows).mockResolvedValue([]);
   // Bước nhắc dùng cùng wasteRequest.findMany nhưng lọc theo cửa sổ expiresAt [gte, lt); bước đóng hạn giữ mock riêng ở trên.
@@ -61,7 +73,7 @@ function setup(
       return r;
     }),
   };
-  const config = { snapshot: jest.fn().mockResolvedValue({ shortfallLockPct: 50, shortfallLockStreak: 3 }) };
+  const config = { snapshot: jest.fn().mockResolvedValue({ enabled: o.enabled ?? true, shortfallLockPct: 50, shortfallLockStreak: 3 }) };
   const notifier = o.notifier ?? { requestExpired: jest.fn(async () => { order.push('requestExpired'); }), requestExpiring: jest.fn(async () => undefined) };
   const shipLock = {
     evaluateAndLock: jest.fn(async () => {
@@ -222,7 +234,7 @@ describe('WasteExpiryCron: nhắc trước hạn', () => {
     const { cron, remindFindMany } = setup([]);
     await cron.run(NOW);
     expect(remindFindMany).toHaveBeenCalledWith({
-      where: { status: 'OPEN', orderId: null, trackingCode: null, method: { in: ['DROP_OFF', 'MAIL_IN'] }, expiresAt: { gte: day(1), lt: day(2) } },
+      where: { status: 'OPEN', orderId: null, trackingCode: null, method: { in: ['DROP_OFF', 'MAIL_IN'] }, user: USER_OK, expiresAt: { gte: day(1), lt: day(2) } },
       select: { id: true, code: true, userId: true, method: true, expiresAt: true },
       orderBy: { id: 'asc' },
       take: 200,
@@ -277,8 +289,29 @@ describe('WasteExpiryCron: nhắc trước hạn', () => {
     expect(notifier.requestExpiring).toHaveBeenCalledTimes(201);
     expect(remindFindMany).toHaveBeenCalledTimes(2);
     expect(remindFindMany.mock.calls[1]![0].where).toEqual({
-      AND: [{ status: 'OPEN', orderId: null, trackingCode: null, method: { in: ['DROP_OFF', 'MAIL_IN'] }, expiresAt: { gte: day(1), lt: day(2) } }, { id: { gt: 'r199' } }],
+      AND: [{ status: 'OPEN', orderId: null, trackingCode: null, method: { in: ['DROP_OFF', 'MAIL_IN'] }, user: USER_OK, expiresAt: { gte: day(1), lt: day(2) } }, { id: { gt: 'r199' } }],
     });
+  });
+
+  it('chương trình đang tắt thì không nhắc, nhưng vẫn đóng yêu cầu quá hạn', async () => {
+    const { cron, notifier, remindFindMany, updateMany } = setup([openRow('r1')], { enabled: false, remind: [remindRow('a', 30), remindRow('b', 40, { method: 'MAIL_IN' })] });
+    await expect(cron.run(NOW)).resolves.toEqual({ expired: 1 });
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(remindFindMany).not.toHaveBeenCalled();
+    expect(notifier.requestExpiring).not.toHaveBeenCalled();
+  });
+
+  it('khách bị khoá (tài khoản, cờ đổi rác) hoặc đã gộp sang tài khoản khác thì không nhắc; khách có dòng cờ nhưng chưa khoá vẫn được nhắc', async () => {
+    const remind = [
+      remindRow('a', 30),
+      remindRow('b', 30, { user: { isBlocked: true, mergedIntoId: null, wasteFlags: null } }),
+      remindRow('c', 30, { user: { isBlocked: false, mergedIntoId: null, wasteFlags: { blockedAt: new Date('2026-11-01T00:00:00Z') } } }),
+      remindRow('d', 30, { user: { isBlocked: false, mergedIntoId: 'u9', wasteFlags: null } }),
+      remindRow('e', 30, { user: { isBlocked: false, mergedIntoId: null, wasteFlags: { blockedAt: null } } }),
+    ];
+    const { cron, notifier } = setup([], { remind });
+    await cron.run(NOW);
+    expect(notifier.requestExpiring.mock.calls.map((c) => c[1].id)).toEqual(['a', 'e']);
   });
 
   it('không lấy được try-lock thì không nhắc', async () => {
