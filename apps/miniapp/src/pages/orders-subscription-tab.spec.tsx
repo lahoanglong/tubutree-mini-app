@@ -109,18 +109,54 @@ describe('OrdersPage: huỷ gói cuối cùng khi đang xem tab Định kỳ', (
     mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: false });
   });
 
-  it('giữ tab Định kỳ và đang đứng ở đó, không nhảy về Tất cả', async () => {
+  // API danh sách gói bỏ hẳn gói đã huỷ, nên sau khi huỷ gói cuối cùng danh sách trả về là [].
+  async function cancelLastSubscription() {
     mocks.getSubscriptions.mockResolvedValue([SUB('ACTIVE')]);
     const { qc } = renderPage();
     fireEvent.click(await screen.findByRole('tab', { name: 'Định kỳ' }));
     expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
 
-    mocks.getSubscriptions.mockResolvedValue([SUB('CANCELLED')]);
+    mocks.getSubscriptions.mockResolvedValue([]);
     await act(async () => {
       await qc.invalidateQueries({ queryKey: ['subscriptions'] });
     });
-    expect(await screen.findByText('Đã huỷ')).toBeInTheDocument();
+    return qc;
+  }
+
+  it('giữ tab Định kỳ, báo hết gói, không mời đặt định kỳ vì Mini không có lối đó', async () => {
+    await cancelLastSubscription();
+    expect(await screen.findByText('Bạn không còn gói định kỳ nào')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Định kỳ' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByText('Nước rửa chén')).toBeInTheDocument();
+    expect(screen.queryByText(/Đặt định kỳ/)).toBeNull();
+    expect(screen.queryByText('Khám phá sản phẩm')).toBeNull();
+    expect(screen.queryByText('Chưa có lịch đặt định kỳ')).toBeNull();
+  });
+
+  it('nút "Xem đơn hàng" đưa về tab Tất cả và bỏ tab Định kỳ', async () => {
+    await cancelLastSubscription();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem đơn hàng' }));
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Tất cả' })).toHaveAttribute('aria-selected', 'true'));
+    expect(tabNames()).not.toContain('Định kỳ');
+  });
+
+  it('khách tự bấm sang tab khác thì tab Định kỳ cũng gỡ đi', async () => {
+    await cancelLastSubscription();
+    fireEvent.click(screen.getByRole('tab', { name: 'Đang giao' }));
+    await waitFor(() => expect(tabNames()).not.toContain('Định kỳ'));
+  });
+
+  it('còn gói khác sau khi huỷ một gói: vẫn xem được danh sách gói', async () => {
+    mocks.getSubscriptions.mockResolvedValue([SUB('ACTIVE'), { ...SUB('PAUSED'), id: 's-2', productName: 'Nước lau sàn' }]);
+    const { qc } = renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Định kỳ' }));
+    expect(await screen.findByText('Nước lau sàn')).toBeInTheDocument();
+
+    mocks.getSubscriptions.mockResolvedValue([{ ...SUB('PAUSED'), id: 's-2', productName: 'Nước lau sàn' }]);
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ['subscriptions'] });
+    });
+    await waitFor(() => expect(screen.queryByText('Nước rửa chén')).toBeNull());
+    expect(screen.getByText('Nước lau sàn')).toBeInTheDocument();
+    expect(screen.queryByText('Bạn không còn gói định kỳ nào')).toBeNull();
   });
 });
