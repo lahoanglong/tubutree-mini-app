@@ -722,7 +722,7 @@ describe('OrderDetailPage — không mở trang ngoài (Zalo 4.1)', () => {
     expect(screen.getByText('GHN001')).toBeInTheDocument();
     expect(screen.getAllByText('Đang giao hàng').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByRole('button', { name: 'Tra cứu hành trình' })).toBeNull();
-    expect(screen.queryAllByRole('link')).toHaveLength(0);
+    expect(screen.queryAllByRole('link').filter((l) => !/^Xem sản phẩm/.test(l.getAttribute('aria-label') ?? ''))).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'Chép mã' }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('GHN001'));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã vận đơn', type: 'success' }));
@@ -734,5 +734,61 @@ describe('OrderDetailPage — không mở trang ngoài (Zalo 4.1)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Chép đường dẫn' }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('https://hoadon.test/abc.pdf'));
     expect(screen.queryByRole('button', { name: 'Tải PDF' })).toBeNull();
+  });
+});
+
+describe('OrderDetailPage — ngày giao dự kiến, ảnh món, ghi chú (R-9, R-107, R-108)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+    mocks.getPublicConfig.mockResolvedValue({ shippingEta: { minDays: 2, maxDays: 4 }, waste: {} });
+  });
+  const processing = (extra: Record<string, unknown> = {}) => ({
+    ...ORDER,
+    status: 'SHIPPING',
+    createdAt: '2026-10-28T01:39:00.000Z',
+    statusTimes: { CONFIRMED: '2026-10-28T02:00:00.000Z' },
+    ...extra,
+  });
+
+  it('đơn đang xử lý và đã cấu hình: dải đầu và mốc giao thành công ghi "Dự kiến giao 30/10 – 01/11"', async () => {
+    mocks.fetchOrder.mockResolvedValue(processing());
+    renderPage();
+    await waitFor(() => expect(screen.getAllByText('Dự kiến giao 30/10 – 01/11')).toHaveLength(2));
+  });
+
+  it('chưa cấu hình ngày giao: ẩn dòng, không bịa ngày', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ shippingEta: null, waste: {} });
+    mocks.fetchOrder.mockResolvedValue(processing());
+    renderPage();
+    await screen.findByText('TT001');
+    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
+    expect(screen.queryByText(/Dự kiến giao/)).toBeNull();
+  });
+
+  it('đơn đã giao: không hiện dự kiến giao', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'DELIVERED' });
+    renderPage();
+    await screen.findByText('TT001');
+    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
+    expect(screen.queryByText(/Dự kiến giao/)).toBeNull();
+  });
+
+  it('chạm vào dòng món mở trang sản phẩm', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, items: [{ ...ORDER.items[0], thumbnail: 'https://img.test/a.jpg' }] });
+    renderPage();
+    fireEvent.click(await screen.findByRole('link', { name: 'Xem sản phẩm Xà bông thảo mộc' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/xa-bong');
+  });
+
+  it('ghi chú của khách hiện thành khối riêng; không có ghi chú thì không có khối', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, note: 'Gọi trước khi giao' });
+    const first = renderPage();
+    expect(await screen.findByText('Gọi trước khi giao')).toBeInTheDocument();
+    first.unmount();
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, note: null });
+    renderPage();
+    await screen.findByText('TT001');
+    expect(screen.queryByText('Ghi chú')).toBeNull();
   });
 });

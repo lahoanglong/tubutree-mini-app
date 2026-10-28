@@ -1,6 +1,7 @@
 import { Check } from 'lucide-react';
 import { TIMELINE_STEPS, orderStatusLabel, stepTime } from '@/lib/order-view';
 import { formatDateTime } from '@/lib/format-date';
+import { orderCopy } from '@tubutree/app-core/account-copy';
 import { mini } from '@/components/order-mobile/mobile-ui';
 
 /** Như timelineStepsFor của Mini App: COD và Ví Tubu không bao giờ chờ thanh toán nên bỏ bước đầu. */
@@ -17,11 +18,14 @@ export function OrderTimeline({
   paymentMethod,
   createdAt,
   statusTimes,
+  etaLabel,
 }: {
   status: string;
   paymentMethod?: string | null;
   createdAt?: string;
   statusTimes?: Partial<Record<string, string>>;
+  /** Khoảng ngày giao dự kiến đã ghép, ví dụ 30/10 – 01/11; null thì không hiện. */
+  etaLabel?: string | null;
 }) {
   const steps = stepsFor(paymentMethod);
   const current = (steps as readonly string[]).indexOf(status);
@@ -66,6 +70,9 @@ export function OrderTimeline({
                 {done && <span className="sr-only"> — đã qua</span>}
                 {active && <span className="sr-only"> — hiện tại</span>}
                 {at && <p className="text-xs text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">{formatDateTime(at)}</p>}
+                {etaLabel && i === steps.length - 1 && !at && (
+                  <p className="text-xs text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">{orderCopy.etaLine(etaLabel)}</p>
+                )}
               </div>
             </li>
           );

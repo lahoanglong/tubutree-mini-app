@@ -15,13 +15,14 @@ const mocks = vi.hoisted(() => ({
   orderCalls: [] as string[],
   qr: { paymentStatus: 'UNPAID' as string, calls: 0, paymentDeadline: undefined as string | undefined, error: null as unknown },
   support: { hotline: '0984 606 774', email: 'tubutree@gmail.com' } as Record<string, string> | Error,
+  eta: null as null | { minDays: number; maxDays: number },
 }));
 vi.mock('@/lib/core-http', () => ({
   coreHttp: {
     get: async (path: string) => {
       if (path !== '/config/public') throw new Error(`chưa mock ${path}`);
       if (mocks.support instanceof Error) throw mocks.support;
-      return { support: mocks.support };
+      return { support: mocks.support, shippingEta: mocks.eta };
     },
   },
 }));
@@ -93,6 +94,7 @@ beforeEach(() => {
   mocks.orderCalls = [];
   mocks.qr = { paymentStatus: 'UNPAID', calls: 0, paymentDeadline: undefined, error: null };
   mocks.support = { hotline: '0984 606 774', email: 'tubutree@gmail.com' };
+  mocks.eta = null;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -393,7 +395,9 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
       await new Promise((r) => setTimeout(r, 1200));
     });
     await flush(2);
-    expect(container.textContent).toContain('Không tải được đơn hàng');
+    expect(container.textContent).toContain('Chi tiết đơn hàng');
+    expect(container.textContent).toContain('Chưa tải được trang này');
+    expect(container.textContent).toContain('Cần hỗ trợ');
     expect(container.textContent).not.toContain('Không tìm thấy đơn hàng');
     expect(buttons(container).some((b) => b.textContent === 'Thử lại')).toBe(true);
   });
@@ -471,5 +475,77 @@ describe('/tai-khoan/don-hang/[code] — đánh giá theo từng dòng của đ�
     mocks.order = { ...delivered(item), status };
     const { container } = await mount();
     expect(reviewLinks(container)).toEqual([]);
+  });
+});
+
+describe('/tai-khoan/don-hang/[code] — ngày giao dự kiến, ảnh món, ghi chú, khung chờ (R-9, R-35, R-107, R-108)', () => {
+  const shipping = (extra: Record<string, unknown> = {}) => ({
+    ...ORDER,
+    status: 'SHIPPING',
+    paymentMethod: 'COD',
+    createdAt: '2026-10-28T01:39:00Z',
+    statusTimes: { CONFIRMED: '2026-10-28T02:00:00Z' },
+    ...extra,
+  });
+
+  it('đã cấu hình: dải đầu trang và mốc giao thành công ghi "Dự kiến giao 30/10 – 01/11"', async () => {
+    mocks.eta = { minDays: 2, maxDays: 4 };
+    mocks.order = shipping();
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="order-eta"]')?.textContent).toBe('Dự kiến giao 30/10 – 01/11');
+    expect(container.textContent?.match(/Dự kiến giao 30\/10 – 01\/11/g)).toHaveLength(2);
+  });
+
+  it('chưa cấu hình hoặc đơn đã giao: ẩn dòng, không bịa ngày', async () => {
+    mocks.order = shipping();
+    const first = await mount();
+    expect(first.container.textContent).not.toContain('Dự kiến giao');
+    mocks.eta = { minDays: 2, maxDays: 4 };
+    mocks.order = shipping({ status: 'DELIVERED' });
+    const second = await mount();
+    expect(second.container.textContent).not.toContain('Dự kiến giao');
+  });
+
+  it('chạm vào dòng món mở trang sản phẩm; có ảnh 48px ở điện thoại', async () => {
+    mocks.order = shipping({ items: [{ productName: 'Dầu gội bồ kết', variationName: '500ml', productSlug: 'dau-goi', unitPrice: 150000, quantity: 2, total: 300000, thumbnail: null }] });
+    const { container } = await mount();
+    const link = container.querySelector<HTMLAnchorElement>('a[aria-label="Xem sản phẩm Dầu gội bồ kết"]')!;
+    expect(link.getAttribute('href')).toBe('/san-pham/dau-goi');
+    expect(link.querySelector('div[style*="width: 48px"]')).not.toBeNull();
+  });
+
+  it('ghi chú của khách có khối riêng, tiêu đề dùng chữ của Mini App', async () => {
+    mocks.order = shipping({ note: 'Gọi trước khi giao' });
+    const { container } = await mount();
+    const h = Array.from(container.querySelectorAll('h2')).find((e) => e.textContent === 'Ghi chú')!;
+    expect(h.className).toContain('max-md:font-ui');
+    expect(container.textContent).toContain('Gọi trước khi giao');
+  });
+
+  it('khối xếp theo thứ tự của Mini App ở điện thoại: ... Sản phẩm, Thanh toán, Vận chuyển, Địa chỉ, Ghi chú, thao tác, hỗ trợ', async () => {
+    mocks.order = shipping({ note: 'x', shippingPartner: 'GHN', shippingCode: 'GHN001' });
+    const { container } = await mount();
+    const col = container.querySelector('.max-md\\:flex-col')!;
+    const orderOf = (el: Element) => Number(/max-md:order-(\d+)/.exec(el.className)?.[1] ?? 0);
+    const find = (text: string) => Array.from(col.children).find((c) => c.textContent?.includes(text))!;
+    expect(orderOf(find('Vận chuyển'))).toBeLessThan(orderOf(find('Địa chỉ giao hàng')));
+    expect(orderOf(find('Địa chỉ giao hàng'))).toBeLessThan(orderOf(find('Ghi chú')));
+    expect(orderOf(find('Ghi chú'))).toBeLessThan(orderOf(col.querySelector('.max-md\\:order-11')!));
+  });
+
+  it('đang tải: khung chờ thay chữ "Đang tải đơn hàng…"', async () => {
+    mocks.order = () => new Promise(() => undefined);
+    const { container } = await mount();
+    expect(container.querySelector('[role="status"][aria-label="Đang tải đơn hàng"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('Đang tải đơn hàng…');
+  });
+
+  it('không tìm thấy: tiêu đề vẫn là "Chi tiết đơn hàng", có lối về trang chủ, không nút Thử lại', async () => {
+    mocks.order = new ApiError('x', 404);
+    const { container } = await mount();
+    expect(container.textContent).toContain('Chi tiết đơn hàng');
+    expect(container.textContent).toContain('Không tìm thấy đơn hàng');
+    expect(buttons(container).some((b) => b.textContent === 'Về trang chủ')).toBe(true);
+    expect(buttons(container).some((b) => b.textContent === 'Thử lại')).toBe(false);
   });
 });

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ui } from '@/lib/guest-ui';
+import { mini } from '@/components/order-mobile/mobile-ui';
 
 /** Chép mã vận đơn để dán vào trang hãng; trình duyệt chặn clipboard thì nhắc khách chép tay. */
 export function CopyShippingCode({ code }: { code: string }) {
@@ -16,7 +17,7 @@ export function CopyShippingCode({ code }: { code: string }) {
   };
   return (
     <>
-      <button type="button" onClick={() => void copy()} className={ui.btnSecondary}>
+      <button type="button" onClick={() => void copy()} className={`${ui.btnSecondary} ${mini.secondary}`}>
         Chép mã
       </button>
       {result && (

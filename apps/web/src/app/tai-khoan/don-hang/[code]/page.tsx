@@ -2,11 +2,16 @@
 
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Leaf, ExternalLink, Star } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { orderCopy } from '@tubutree/app-core/account-copy';
+import { publicConfigQuery } from '@tubutree/app-core/queries/config';
+import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { coreHttp } from '@/lib/core-http';
+import { loadErrorText } from '@/lib/error-text';
 import { ApiError } from '@/lib/client-api';
 import { fetchMyRefunds, fetchMyReturns, fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
 import {
@@ -40,6 +45,8 @@ import { FollowOaPrompt, OrderInvoice, OrderWasteLink } from './order-extras';
 import { CopyShippingCode } from './copy-shipping-code';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
+import { ErrorState } from '@/components/ui/error-state';
+import { LineItemSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { ProductThumb } from '@/components/mini';
 
@@ -70,6 +77,8 @@ export default function OrderDetailPage() {
   const phase = useAuthPhase();
   const { user } = useAuth();
   const qc = useQueryClient();
+  const router = useRouter();
+  const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: phase === 'authenticated' });
   const orderQ = useQuery({
     queryKey: ['order', code],
     queryFn: () => fetchOrder(code),
@@ -135,26 +144,30 @@ export default function OrderDetailPage() {
   if (orderQ.isLoading) {
     return (
       <Shell title="Chi tiết đơn hàng">
-        <p className="py-16 text-center text-stone-600 max-md:px-4">Đang tải đơn hàng…</p>
+        <div role="status" aria-label="Đang tải đơn hàng" className="flex flex-col gap-2.5 p-4 md:p-0">
+          <Skeleton height={64} rounded="rounded-card" />
+          <LineItemSkeleton />
+          <Skeleton height={120} rounded="rounded-card" />
+        </div>
       </Shell>
     );
   }
 
   if (orderQ.isError || !orderQ.data) {
-    // API trả 404 cho cả đơn không tồn tại lẫn đơn của người khác — không phân biệt để không lộ mã đơn.
+    // API trả 404 cho cả đơn không tồn tại lẫn đơn của người khác: không phân biệt để không lộ mã đơn.
     const notFound = orderQ.error instanceof ApiError && orderQ.error.status === 404;
     return (
-      <Shell title={notFound ? 'Không tìm thấy đơn hàng' : 'Không tải được đơn hàng'}>
-        <div className="py-12 text-center">
-          <p className="text-stone-700">
-            {notFound ? 'Đơn hàng này không tồn tại hoặc không thuộc tài khoản của bạn.' : 'Không tải được đơn hàng, vui lòng thử lại.'}
-          </p>
-          {!notFound && (
-            <button type="button" onClick={() => void orderQ.refetch()} className={`${ui.btnPrimary} mt-4`}>
-              Thử lại
-            </button>
-          )}
-        </div>
+      <Shell title="Chi tiết đơn hàng">
+        {notFound ? (
+          <ErrorState
+            title="Không tìm thấy đơn hàng"
+            message="Đơn hàng này không tồn tại hoặc không thuộc tài khoản của bạn."
+            retryLabel="Về trang chủ"
+            onRetry={() => router.push('/')}
+          />
+        ) : (
+          <ErrorState message={loadErrorText(orderQ.error)} onRetry={() => void orderQ.refetch()} />
+        )}
       </Shell>
     );
   }
@@ -162,6 +175,7 @@ export default function OrderDetailPage() {
   const o = orderQ.data;
   const orderReturns = o.id ? (returnsQ.data ?? []).filter((r) => r.orderId === o.id) : [];
   const stamp = orderStamp(o);
+  const etaLabel = orderDeliveryEtaLabel(cfgQ.data?.shippingEta, o);
   const pointsReversed = orderReturns.filter((r) => r.status === 'APPROVED').reduce((sum, r) => sum + (r.pointsReversed ?? 0), 0);
   const pointsNote = orderPointsNote(o.status, o.pointsEarned ?? 0, pointsReversed, o.pointsReturnReversed);
   const cancelClosed = !canCancelOrder(o, user?.id) && isHandedToCarrier(o);
@@ -187,6 +201,11 @@ export default function OrderDetailPage() {
             {stamp.label} {formatDateTime(stamp.at)}
           </span>
         </div>
+        {etaLabel && (
+          <p data-testid="order-eta" className="mt-1 text-sm font-medium text-stone-800 max-md:text-xs max-md:font-normal max-md:text-[color:inherit]">
+            {orderCopy.etaLine(etaLabel)}
+          </p>
+        )}
         {o.manualHandling ? (
           <p className="mt-2 text-sm text-stone-700 max-md:mt-1 max-md:text-xs max-md:text-[color:inherit]">
             Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.
@@ -202,7 +221,7 @@ export default function OrderDetailPage() {
       </div>
 
       {o.fulfilment?.kind === 'MERCHANT' && (
-        <p className="mt-2 text-sm text-stone-700 max-md:px-4">
+        <p className="mt-2 text-sm text-stone-700 max-md:order-5 max-md:px-4">
           Giao bởi <span className="font-semibold text-stone-900">{o.fulfilment.name}</span> (gian hàng đối tác tự đóng gói và giao)
           {o.fulfilment.phone && (
             <>
@@ -212,7 +231,7 @@ export default function OrderDetailPage() {
         </p>
       )}
       {(o.siblings?.length ?? 0) > 0 && (
-        <section aria-label="Đơn cùng lần đặt" className={`mt-3 p-3 text-sm max-md:mx-4 ${ui.card}`}>
+        <section aria-label="Đơn cùng lần đặt" className={`mt-3 p-3 text-sm max-md:order-5 max-md:mx-4 ${ui.card}`}>
           <p className="text-stone-700">Lần đặt này được tách theo nơi giao, các đơn còn lại:</p>
           <ul className="mt-1 space-y-1">
             {o.siblings!.map((sb) => (
@@ -242,56 +261,80 @@ export default function OrderDetailPage() {
       )}
 
       <div className="max-md:px-4 max-md:empty:hidden"><FollowOaPrompt /></div>
-      <OrderTimeline status={o.status} paymentMethod={o.paymentMethod} createdAt={o.createdAt} statusTimes={o.statusTimes} />
-      <OrderActions order={o} userId={user?.id} />
-      <div className="max-md:px-4 max-md:empty:hidden">
+      <OrderTimeline status={o.status} paymentMethod={o.paymentMethod} createdAt={o.createdAt} statusTimes={o.statusTimes} etaLabel={etaLabel} />
+      {/* Điện thoại xếp khối theo thứ tự của Mini App (order-N); từ md giữ nút thao tác ngay dưới hành trình. */}
+      <div className="max-md:order-11">
+        <OrderActions order={o} userId={user?.id} />
+      </div>
+      <div className="max-md:order-6 max-md:px-4 max-md:empty:hidden">
         {o.id && showsRefundPanel(o) && <OrderRefunds orderId={o.id} returnRequestIds={new Set(orderReturns.map((r) => r.id))} />}
       </div>
 
       <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
         <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Sản phẩm</h2>
         <ul className="mt-2 divide-y divide-stone-200">
-          {o.items.map((it, i) => (
-            <li key={`${it.productName}-${it.variationName}-${i}`} className="flex gap-3 py-3 max-md:py-1.5">
-              <div className="flex-none max-md:hidden">
-                <ProductThumb src={it.thumbnail} alt="" size={56} />
-              </div>
-              <div className="min-w-0 flex-1">
-                {/* Điện thoại: một dòng gọn "tên · phân loại ×SL" như Mini App, không ảnh. */}
-                <div data-testid="mini-line" className="text-sm text-stone-900 md:hidden">
-                  {it.productName}
-                  {it.variationName ? ` · ${it.variationName}` : ''}{' '}
-                  <span className="text-xs text-[color:var(--color-text-tertiary)]">×{it.quantity}</span>
-                </div>
-                <div className="text-sm font-medium text-stone-900 max-md:hidden">{it.productName}</div>
-                {it.variationName && <div className="text-xs text-stone-600 max-md:hidden">{it.variationName}</div>}
-                <div className="mt-0.5 text-xs text-stone-600 max-md:hidden">
-                  {formatVnd(it.unitPrice)} × {it.quantity}
-                </div>
-                {(it.backorderedQty ?? 0) > 0 && (
-                  <div className="mt-0.5 inline-block rounded-full bg-warning-bg px-2 py-0.5 text-xs font-medium text-warning-fg">
-                    Đặt trước {it.backorderedQty}/{it.quantity} — chờ hàng về
+          {o.items.map((it, i) => {
+            const rowBody = (
+              <>
+                <span className="flex-none md:hidden">
+                  <ProductThumb src={it.thumbnail} alt="" size={48} />
+                </span>
+                <span className="flex-none max-md:hidden">
+                  <ProductThumb src={it.thumbnail} alt="" size={56} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  {/* Điện thoại: một dòng gọn "tên · phân loại ×SL" như Mini App. */}
+                  <div data-testid="mini-line" className="text-sm text-stone-900 md:hidden">
+                    {it.productName}
+                    {it.variationName ? ` · ${it.variationName}` : ''}{' '}
+                    <span className="text-xs text-[color:var(--color-text-tertiary)]">×{it.quantity}</span>
                   </div>
-                )}
-                {it.id && returnedQty.has(it.id) && (
-                  <div className="mt-0.5 text-xs font-medium text-promo-fg">
-                    Đã duyệt trả {returnedQty.get(it.id)}/{it.quantity}
+                  <div className="text-sm font-medium text-stone-900 max-md:hidden">{it.productName}</div>
+                  {it.variationName && <div className="text-xs text-stone-600 max-md:hidden">{it.variationName}</div>}
+                  <div className="mt-0.5 text-xs text-stone-600 max-md:hidden">
+                    {formatVnd(it.unitPrice)} × {it.quantity}
                   </div>
-                )}
-                {/* Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó. */}
-                {o.status === 'DELIVERED' && it.productSlug && (it.reviewId || it.reviewable !== false) && (
-                  <Link
-                    href={reviewHref(it.productSlug, o.id)}
-                    className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline max-md:min-h-0 max-md:py-1 max-md:text-xs max-md:text-[color:var(--color-text-brand)] max-md:no-underline"
-                  >
-                    <Star className="h-4 w-4" aria-hidden="true" />
-                    {it.reviewId ? 'Sửa đánh giá' : 'Viết đánh giá'}
-                  </Link>
-                )}
-              </div>
-              <div className="flex-none text-sm font-semibold text-stone-900 max-md:font-normal">{formatVnd(it.total)}</div>
-            </li>
-          ))}
+                </div>
+              </>
+            );
+            return (
+              <li key={`${it.productName}-${it.variationName}-${i}`} className="py-3 max-md:py-1.5">
+                <div className="flex items-center justify-between gap-3">
+                  {/* Chạm vào món để mở lại trang sản phẩm. */}
+                  {it.productSlug ? (
+                    <Link href={`/san-pham/${it.productSlug}`} aria-label={`Xem sản phẩm ${it.productName}`} className="tubu-press flex min-h-12 min-w-0 flex-1 items-center gap-3">
+                      {rowBody}
+                    </Link>
+                  ) : (
+                    <div className="flex min-h-12 min-w-0 flex-1 items-center gap-3">{rowBody}</div>
+                  )}
+                  <div className="flex-none text-sm font-semibold text-stone-900 max-md:font-normal">{formatVnd(it.total)}</div>
+                </div>
+                <div className="md:ml-[68px]">
+                  {(it.backorderedQty ?? 0) > 0 && (
+                    <div className="mt-0.5 inline-block rounded-full bg-warning-bg px-2 py-0.5 text-xs font-medium text-warning-fg">
+                      Đặt trước {it.backorderedQty}/{it.quantity} — chờ hàng về
+                    </div>
+                  )}
+                  {it.id && returnedQty.has(it.id) && (
+                    <div className="mt-0.5 text-xs font-medium text-promo-fg">
+                      Đã duyệt trả {returnedQty.get(it.id)}/{it.quantity}
+                    </div>
+                  )}
+                  {/* Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó. */}
+                  {o.status === 'DELIVERED' && it.productSlug && (it.reviewId || it.reviewable !== false) && (
+                    <Link
+                      href={reviewHref(it.productSlug, o.id)}
+                      className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline max-md:min-h-0 max-md:py-1 max-md:text-xs max-md:text-[color:var(--color-text-brand)] max-md:no-underline"
+                    >
+                      <Star className="h-4 w-4" aria-hidden="true" />
+                      {it.reviewId ? 'Sửa đánh giá' : 'Viết đánh giá'}
+                    </Link>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </section>
 
@@ -306,7 +349,7 @@ export default function OrderDetailPage() {
           {(o.pointsUsed ?? 0) > 0 && !o.pointsDiscount && (
             <Row label="Điểm Xanh đã dùng" value={`${formatCount(o.pointsUsed ?? 0)} điểm`} />
           )}
-          <Row label="Phí vận chuyển" value={o.shippingFee === 0 ? 'Miễn phí' : formatVnd(o.shippingFee)} />
+          <Row label="Phí vận chuyển" value={o.shippingFee === 0 ? 'Miễn phí' : formatVnd(o.shippingFee)} valueTone={o.shippingFee === 0 ? 'success' : undefined} />
           <div className="flex justify-between border-t border-stone-200 pt-2 font-bold text-stone-900 max-md:border-t-0 max-md:pt-0 max-md:text-base">
             <span>Tổng cộng</span>
             <span>{formatVnd(o.total)}</span>
@@ -326,27 +369,31 @@ export default function OrderDetailPage() {
         </div>
       </section>
 
-      <ShippingSection order={o} />
-      <div className="max-md:px-4 max-md:empty:hidden">
+      <div className="max-md:order-7">
+        <ShippingSection order={o} />
+      </div>
+      <div className="max-md:order-8 max-md:px-4 max-md:empty:hidden">
         <OrderInvoice order={o} />
         <OrderWasteLink order={o} />
       </div>
-      <AddressSection order={o} />
+      <div className="max-md:order-9">
+        <AddressSection order={o} />
+      </div>
 
       {o.note && (
-        <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
-          <h2 className={ui.sectionTitle}>Ghi chú</h2>
+        <section className={`mt-4 p-4 max-md:order-10 max-md:mt-2 ${ui.card} ${mini.band}`}>
+          <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Ghi chú</h2>
           <p className="mt-2 whitespace-pre-line text-sm text-stone-700">{o.note}</p>
         </section>
       )}
 
       {cancelClosed && (
-        <p className="mt-4 text-sm text-stone-700 max-md:px-4">
+        <p className="mt-4 text-sm text-stone-700 max-md:order-12 max-md:px-4">
           Đơn đã giao cho đơn vị vận chuyển nên không huỷ được. Khi nhận hàng, bạn có thể gửi yêu cầu đổi/trả.
         </p>
       )}
 
-      <div className="mt-4 px-4 md:px-0">
+      <div className="mt-4 px-4 max-md:order-13 md:px-0">
         <SupportContact orderCode={o.code} />
       </div>
     </Shell>
@@ -361,7 +408,7 @@ function ShippingSection({ order: o }: { order: OrderDetailDTO }) {
 
   return (
     <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
-      <h2 className={ui.sectionTitle}>Vận chuyển</h2>
+      <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Vận chuyển</h2>
       <div className="mt-2 space-y-1 text-sm">
         {o.shippingPartner && <Row label="Đơn vị vận chuyển" value={o.shippingPartner} />}
         {o.shippingCode && (
@@ -419,7 +466,7 @@ function AddressSection({ order: o }: { order: OrderDetailDTO }) {
 
   return (
     <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
-      <h2 className={ui.sectionTitle}>Địa chỉ giao hàng</h2>
+      <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Địa chỉ giao hàng</h2>
       <div className="mt-2 space-y-1 text-sm">
         {contact && <p className="font-medium text-stone-900">{contact}</p>}
         {line && <p className="text-stone-700">{line}</p>}
@@ -440,11 +487,11 @@ function PaymentStatusRow({ order: o }: { order: OrderDetailDTO }) {
   return <Row label="Tình trạng" value={orderPaymentStatusLabel(o, refunds.data)} />;
 }
 
-function Row({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
+function Row({ label, value, positive, valueTone }: { label: string; value: string; positive?: boolean; valueTone?: 'success' }) {
   return (
     <div className={`flex justify-between gap-3 ${positive ? 'text-success-fg' : 'text-stone-900'}`}>
       <span className={positive ? '' : 'text-stone-600 max-md:text-[color:var(--color-text-tertiary)]'}>{label}</span>
-      <span className="text-right max-md:font-semibold">{value}</span>
+      <span className={`text-right max-md:font-semibold ${valueTone === 'success' ? 'text-success-fg' : ''}`}>{value}</span>
     </div>
   );
 }
@@ -453,7 +500,7 @@ function Shell({ title, subtitle, children }: { title: string; subtitle?: string
   return (
     <main className={`${PAGE_NARROW} py-6 max-md:px-0 max-md:py-0`}>
       <PageHeader title={title} subtitle={subtitle} subtitleClassName="md:text-sm" backHref="/tai-khoan" backLabel="Đơn hàng của tôi" />
-      <div className="mt-3 max-md:mt-0 max-md:pb-6">{children}</div>
+      <div className="mt-3 max-md:mt-0 max-md:flex max-md:flex-col max-md:pb-6">{children}</div>
     </main>
   );
 }

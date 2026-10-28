@@ -13,6 +13,7 @@ import { getOaPromptState, setOaPromptState, shouldShowFollowOaPrompt } from '@/
 import { isWebRouteReady } from '@/lib/route-map';
 import { platformBridge } from '@/lib/platform-bridge';
 import { ui } from '@/lib/guest-ui';
+import { mini } from '@/components/order-mobile/mobile-ui';
 
 const INVOICE_STATUS_TEXT: Record<string, string> = {
   ISSUED: 'Đã phát hành',
@@ -25,7 +26,7 @@ export function OrderInvoice({ order: o }: { order: OrderDetailDTO }) {
   const url = safeHttpUrl(o.invoiceUrl);
   return (
     <section className={`mt-4 p-4 ${ui.card}`}>
-      <h2 className={ui.sectionTitle}>Hoá đơn VAT</h2>
+      <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Hoá đơn VAT</h2>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
         <span className="text-stone-700">{INVOICE_STATUS_TEXT[o.invoiceStatus] ?? 'Phát hành lỗi — vui lòng liên hệ hỗ trợ'}</span>
         {url && (
