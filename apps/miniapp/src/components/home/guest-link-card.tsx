@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
+import { getErrorMessage } from '../../services/api';
 import { useAuthStore } from '../../store/auth';
 import { haptic } from '../../utils/haptic';
 import { Button } from '../ui/button';
@@ -11,15 +12,20 @@ import { isGuestUser } from '../../utils/guest-user';
 export function GuestLinkCard({ title, body, cta }: { title: string; body: string; cta: string }) {
   const user = useAuthStore((s) => s.user);
   const authed = useAuthStore((s) => s.status === 'authenticated');
-  const ensurePhone = useAuthStore((s) => s.ensurePhone);
+  const ensurePhoneOrThrow = useAuthStore((s) => s.ensurePhoneOrThrow);
   const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle');
+  const [failure, setFailure] = useState<string>(homeCopy.guestGift.failed);
   if (!authed || !user || !isGuestUser(user)) return null;
   const link = async () => {
     haptic('light');
     setState('busy');
     try {
-      setState((await ensurePhone()) ? 'idle' : 'failed');
-    } catch {
+      const phone = await ensurePhoneOrThrow();
+      // null = khách từ chối sheet số điện thoại: không phải lỗi của máy chủ nên giữ câu chung.
+      setFailure(homeCopy.guestGift.failed);
+      setState(phone ? 'idle' : 'failed');
+    } catch (err) {
+      setFailure(getErrorMessage(err));
       setState('failed');
     }
   };
@@ -38,7 +44,7 @@ export function GuestLinkCard({ title, body, cta }: { title: string; body: strin
           </Button>
           {state === 'failed' && (
             <Text variant="caption" tone="danger" as="p" style={{ marginTop: 6 }}>
-              {homeCopy.guestGift.failed}
+              {failure}
             </Text>
           )}
         </div>

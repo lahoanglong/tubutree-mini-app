@@ -29,10 +29,11 @@ export { isGuestUser };
 type Phase =
   | { kind: 'closed' }
   | { kind: 'claiming' }
-  | { kind: 'needLogin'; loginFailed?: boolean }
+  | { kind: 'needLogin'; loginFailed?: string }
   | { kind: 'done'; coupon: ClaimedCoupon }
   | { kind: 'failed'; message: string; retryable: boolean };
 
+const LOGIN_FAILED = 'Chưa đăng nhập được. Bạn thử lại nhé.';
 const isRateLimited = (err: unknown) => isHttpError(err) && err.response?.status === 429;
 const needsZaloLogin = (message: string) => /đăng nhập Zalo/i.test(message);
 const isNewCustomerOnlyRefusal = (message: string) => /đơn đầu tiên/i.test(message);
@@ -57,7 +58,7 @@ async function marketplaceFlagOn(queryClient: ReturnType<typeof useQueryClient>)
 export function CouponClaimGate() {
   const status = useAuthStore((s) => s.status);
   const user = useAuthStore((s) => s.user);
-  const ensurePhone = useAuthStore((s) => s.ensurePhone);
+  const ensurePhoneOrThrow = useAuthStore((s) => s.ensurePhoneOrThrow);
   const queryClient = useQueryClient();
   const cfgQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000, enabled: onScanRoute() });
   // Cờ tắt thì màn Tích điểm chỉ là "sắp mở": nút chính của sheet không được hứa việc chưa làm được.
@@ -143,8 +144,10 @@ export function CouponClaimGate() {
   const login = async () => {
     setLoggingIn(true);
     try {
-      const phone = await ensurePhone();
-      if (!phone) setPhase({ kind: 'needLogin', loginFailed: true });
+      const phone = await ensurePhoneOrThrow();
+      if (!phone) setPhase({ kind: 'needLogin', loginFailed: LOGIN_FAILED });
+    } catch (err) {
+      setPhase({ kind: 'needLogin', loginFailed: getErrorMessage(err) });
     } finally {
       setLoggingIn(false);
     }
@@ -240,7 +243,7 @@ function describe(phase: Phase): { title: string; lines: string[] } {
         title: 'Đăng nhập Zalo để nhận ưu đãi',
         lines: [
           'Ưu đãi từ thẻ trong hộp hàng dành cho tài khoản Zalo. Đăng nhập một chạm, ưu đãi tự vào ví của bạn.',
-          ...(phase.loginFailed ? ['Chưa đăng nhập được. Bạn thử lại nhé.'] : []),
+          ...(phase.loginFailed ? [phase.loginFailed] : []),
         ],
       };
     case 'failed':

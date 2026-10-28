@@ -1,6 +1,21 @@
 import { describe, it, expect, vi as vitestVi, afterEach } from 'vitest';
-import { api, apiMediaUrl, getErrorMessage, getLoadErrorMessage, HttpError, isOutcomeUnknown, loginGuest, loginZaloMiniApp } from './api';
+import {
+  api,
+  apiMediaUrl,
+  getErrorMessage,
+  getLoadErrorMessage,
+  HttpError,
+  isAnonAuthCall,
+  isOutcomeUnknown,
+  loginGuest,
+  loginZaloMiniApp,
+  setAccessToken,
+  setUnauthorizedHandler,
+} from './api';
 import { vi as viCopy } from '../i18n/vi';
+import { stubFetch } from '../test/fetch-stub';
+
+vitestVi.mock('../store/auth', () => ({ getDeviceId: async () => 'dev-1' }));
 
 function httpError(o: { code?: string; response?: { status: number; data?: unknown } }): unknown {
   return new HttpError('boom', o.code, o.response);
@@ -134,5 +149,68 @@ describe('isOutcomeUnknown', () => {
     ['lỗi không phải HttpError', new Error('x')],
   ])('%s → đã biết kết quả (máy chủ từ chối)', (_label, err) => {
     expect(isOutcomeUnknown(err)).toBe(false);
+  });
+});
+
+describe('isAnonAuthCall — chỉ các lệnh /auth/* không cần phiên mới được miễn refresh và chờ phiên', () => {
+  it.each(['/auth/zalo-mini-app', '/auth/guest', '/auth/zalo-oauth', '/auth/refresh', '/auth/logout', '/auth/refresh?x=1'])(
+    '%s → true',
+    (url) => {
+      expect(isAnonAuthCall(url)).toBe(true);
+    },
+  );
+
+  it.each(['/auth/ensure-phone', '/auth/me', '/products', '/orders?next=/auth/guest', '/auth/refresh/extra'])('%s → false', (url) => {
+    expect(isAnonAuthCall(url)).toBe(false);
+  });
+});
+
+describe('401 ở lệnh /auth/* (E-13)', () => {
+  afterEach(() => {
+    setUnauthorizedHandler(null);
+    setAccessToken(null);
+    vitestVi.unstubAllGlobals();
+  });
+
+  it('401 ở /auth/ensure-phone (cần JWT, token hết hạn sau 15 phút) → gọi refresh rồi gửi lại với token mới', async () => {
+    // Handler thật (store/auth.ts) đặt access token mới trước khi trả về; lần gửi lại đọc token từ đó.
+    const refresh = vitestVi.fn(async () => {
+      setAccessToken('fresh-token');
+      return 'fresh-token';
+    });
+    setUnauthorizedHandler(refresh);
+    setAccessToken('stale-token');
+    const { calls } = stubFetch((_c, n) =>
+      n === 1 ? { status: 401, body: { statusCode: 401, message: 'Unauthorized' } } : { status: 200, body: { accessToken: 'a2' } },
+    );
+
+    const res = await api.post('/auth/ensure-phone', { code: 'c', accessToken: 'z' });
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]!.headers.get('Authorization')).toBe('Bearer stale-token');
+    expect(calls[1]!.headers.get('Authorization')).toBe('Bearer fresh-token');
+    expect(res.data).toEqual({ accessToken: 'a2' });
+  });
+
+  it('401 ở /auth/refresh → không refresh (tránh deadlock), ném lỗi nguyên văn', async () => {
+    const refresh = vitestVi.fn(async () => 'fresh-token');
+    setUnauthorizedHandler(refresh);
+    const { calls } = stubFetch(() => ({ status: 401, body: { statusCode: 401, message: 'Refresh token không hợp lệ.' } }));
+
+    await expect(api.post('/auth/refresh', { refreshToken: 'x' })).rejects.toMatchObject({ response: { status: 401 } });
+
+    expect(refresh).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(1);
+  });
+
+  it('401 ở /auth/zalo-mini-app (đăng nhập khi đang bị khoá) → không refresh', async () => {
+    const refresh = vitestVi.fn(async () => 'fresh-token');
+    setUnauthorizedHandler(refresh);
+    stubFetch(() => ({ status: 401, body: { code: 'ACCOUNT_BLOCKED', message: 'Tài khoản đã bị khoá.' } }));
+
+    await expect(loginZaloMiniApp('c', 'a')).rejects.toMatchObject({ response: { status: 401 } });
+
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

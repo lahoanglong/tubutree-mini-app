@@ -17,6 +17,7 @@ import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-not
 import { firstTouchColumns } from '../../common/attribution';
 import { VouchersService } from '../vouchers/vouchers.service';
 import { ExternalChatService } from '../external-points/external-chat.service';
+import { guestZaloId, isHashedGuestKey, legacyGuestZaloId } from './device-id';
 
 /** Khoá advisory theo transaction của mọi lần gộp phiên khách (quy ước pg_advisory_xact_lock(hashtext(...)) của repo). */
 export const GUEST_MERGE_LOCK_KEY = 'auth.merge_guest';
@@ -98,12 +99,13 @@ export class AuthService {
 
   /**
    * Đăng nhập KHÁCH (guest) theo deviceId — dùng khi Zalo login chưa khả dụng
-   * (app chưa kích hoạt -1401). Tạo/lấy user ổn định theo thiết bị để app chạy đầy đủ.
+   * (app chưa kích hoạt -1401). Tạo/lấy user ổn định theo thiết bị để app chạy đầy đủ; khoá lưu là băm của deviceId (device-id.ts).
    * Khi Zalo login khả dụng, có thể nâng cấp guest → tài khoản Zalo qua phone-merge.
    */
   async loginAsGuest(deviceId: string, referralCode?: string, firstTouch?: unknown): Promise<LoginResponse> {
-    const guestKey = `guest_${deviceId}`;
+    const guestKey = guestZaloId(deviceId);
     let user = await this.prisma.user.findUnique({ where: { zaloId: guestKey } });
+    if (!user) user = await this.adoptLegacyGuest(deviceId, guestKey);
     if (!user) {
       try {
         user = await this.prisma.user.create({
@@ -122,6 +124,24 @@ export class AuthService {
       }
     }
     return this.issueTokens(user);
+  }
+
+  /**
+   * Dòng khách tạo trước khi băm mang khoá thô `guest_<deviceId>`: đổi tại chỗ sang khoá băm để không mất tài khoản (điểm, đơn,
+   * giỏ). updateMany có điều kiện trên khoá cũ nên hai request song song chỉ một bên đổi được; bên còn lại đọc lại theo khoá băm.
+   */
+  private async adoptLegacyGuest(deviceId: string, guestKey: string): Promise<User | null> {
+    const legacyKey = legacyGuestZaloId(deviceId);
+    if (isHashedGuestKey(legacyKey)) return null;
+    const legacy = await this.prisma.user.findUnique({ where: { zaloId: legacyKey } });
+    if (!legacy) return null;
+    try {
+      await this.prisma.user.updateMany({ where: { id: legacy.id, zaloId: legacyKey }, data: { zaloId: guestKey } });
+    } catch (err) {
+      // Khoá băm vừa được request khác tạo: dùng dòng đó.
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+    }
+    return this.prisma.user.findUnique({ where: { zaloId: guestKey } });
   }
 
   /** Luồng đăng nhập Mini App: verify token Zalo → upsert user (+ SĐT) → trả JWT. */
@@ -242,7 +262,7 @@ export class AuthService {
    *
    *  - Zalo trên máy xác nhận ĐÚNG danh tính đang có (kể cả gọi lại nhiều lần) → không có ai
    *    khác để đổi, chỉ gắn thêm SĐT nếu còn thiếu.
-   *  - Phiên hiện tại là KHÁCH (`zaloId` dạng `guest_<deviceId>`) và chưa ai giữ zaloId Zalo
+   *  - Phiên hiện tại là KHÁCH (`zaloId` dạng `guest_h_<băm deviceId>`) và chưa ai giữ zaloId Zalo
    *    vừa xác nhận → "nâng cấp" NGAY dòng khách hiện tại (đổi zaloId/tên/avatar, giữ nguyên
    *    id) — giỏ/địa chỉ/điểm/đơn tự động đúng vì vẫn cùng 1 id, không cần gộp, không rủi ro.
    *  - Phiên hiện tại là KHÁCH nhưng zaloId (hoặc SĐT) đó đã thuộc một user THẬT khác có từ
@@ -739,7 +759,7 @@ export class AuthService {
       });
 
       // 9) Khoá phiên khách: thu hồi refresh token còn sống, đổi zaloId để giải phóng
-      //    "guest_<deviceId>" (thiết bị cần fallback khách lần sau sẽ tạo dòng MỚI) và đưa số dư
+      //    "guest_h_<băm deviceId>" (thiết bị cần fallback khách lần sau sẽ tạo dòng MỚI) và đưa số dư
       //    về 0. zaloId mới cũng là dấu hiệu "đã gộp" cho request song song ở trên.
       await tx.refreshToken.updateMany({ where: { userId: gid, revokedAt: null }, data: { revokedAt: new Date() } });
       await tx.user.update({
@@ -958,7 +978,7 @@ export class AuthService {
     // nếu chỉ chặn ở refresh(), user bị khoá có thể đăng nhập lại để lấy token mới, bỏ qua
     // hoàn toàn việc khoá. Access token đang có bị JwtStrategy chặn qua SessionStateService.
     if (user.isBlocked) {
-      throw new UnauthorizedException({ statusCode: 401, error: 'Unauthorized', code: 'ACCOUNT_BLOCKED', message: 'Tài khoản đã bị khoá.' });
+      throw new UnauthorizedException({ statusCode: 401, error: 'Unauthorized', code: 'ACCOUNT_BLOCKED', message: 'Tài khoản đã bị khoá. Bạn liên hệ CSKH Tubu Tree để được hỗ trợ.' });
     }
     // Khách đã gộp không còn là danh tính: refresh token cũ của khách không được đổi ra phiên mới (phải đăng nhập lại để
     // nhận token của tài khoản đích; mergedSessionTokens cấp token cho đích, không qua dòng khách).

@@ -75,7 +75,7 @@ describe('JwtAuthGuard — lỗi 401 bằng tiếng Việt (D8-3)', () => {
   it('thông điệp riêng của chiến lược (tài khoản bị khoá) không bị ghi đè', async () => {
     const { status, body } = await call('', `Bearer ${jwt.sign({ sub: 'u-blocked' })}`);
     expect(status).toBe(401);
-    expect(body.message).toBe('Tài khoản đã bị khoá.');
+    expect(body.message).toBe('Tài khoản đã bị khoá. Bạn liên hệ CSKH Tubu Tree để được hỗ trợ.');
     expect(body.code).toBe('ACCOUNT_BLOCKED');
   });
 
