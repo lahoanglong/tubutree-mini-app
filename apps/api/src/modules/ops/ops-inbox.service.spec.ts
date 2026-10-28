@@ -17,7 +17,7 @@ import {
 } from '../waste-exchange/core/waste-queue-filters';
 
 const build = (
-  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean; supportUnforwarded?: number; deletions?: number; bridge?: { state: string; since: Date }; bridgeUrl?: string } = {},
+  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean; supportUnforwarded?: number; deletions?: number; shifts?: number; bridge?: { state: string; since: Date }; bridgeUrl?: string } = {},
 ) => {
   const zero = { count: jest.fn().mockResolvedValue(0) };
   const orderCount = jest.fn((args?: { where?: { paymentMethod?: string } }) => Promise.resolve(args?.where?.paymentMethod === 'BANK_TRANSFER' ? 0 : (over.invoices ?? 0)));
@@ -65,6 +65,7 @@ const build = (
     supportConversation: { count: supportConvCount },
     supportBridgeStatus: { findUnique: bridgeFind },
     accountDeletionRequest: { count: jest.fn().mockResolvedValue(over.deletions ?? 0) },
+    shift: { count: jest.fn().mockResolvedValue(over.shifts ?? 0) },
     $queryRaw: queryRaw,
   } as unknown as PrismaService;
   const merchant = {
@@ -319,7 +320,7 @@ describe('OpsInboxService — đổi rác (spec 13.2)', () => {
     const res = await svc.counts({ role: 'ADMIN' }, now);
 
     expect(keys(res)).toEqual([
-      'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'returnsPending', 'returnsToReceive', 'bankTransferToConfirm', 'dealerTransferToConfirm', 'storefrontsPending', 'accountDeletionPending', 'productsMissingImage', 'merchantOverdue', 'merchantProducts',
+      'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'returnsPending', 'returnsToReceive', 'bankTransferToConfirm', 'dealerTransferToConfirm', 'storefrontsPending', 'accountDeletionPending', 'shiftsPending', 'productsMissingImage', 'merchantOverdue', 'merchantProducts',
       'consignmentPending', 'merchantToSettle', 'merchantPayoutsPending', 'dealerApplications', 'dealerClaims', 'dealerClaimsToPay', 'payouts', 'payoutsToPay', 'communityReports', 'communityPending',
       'communityUnanswered', 'invoicePending', 'externalPoints', 'supportChatUnforwarded', 'zaloBridgeDown', 'wasteToCount', 'wasteUnmatched', 'wasteBlockedPending', 'wastePointsPending', 'wastePerksPending',
       'wasteTransitOverdue', 'wasteGiftOverdue', 'wasteOrderMismatch',
@@ -517,6 +518,19 @@ describe('OpsInboxService: hàng đợi đã có ở tab nhưng từng thiếu t
     expect(prisma.accountDeletionRequest.count).toHaveBeenCalledWith({ where: { status: 'PENDING' } });
     for (const perm of ['KE_TOAN', 'CSKH', 'KHO', 'MARKETING']) {
       expect(find(await svc.counts({ role: 'STAFF', staffPermissions: [perm] }, now), 'accountDeletionPending')).toBeUndefined();
+    }
+  });
+
+  it('shiftsPending: đếm ca PENDING từ hôm nay (giờ VN) trở đi, ca quá khứ không đếm; chỉ ADMIN thấy', async () => {
+    const b = build({ shifts: 4 });
+    const prisma = (b.svc as unknown as { prisma: Record<string, any> }).prisma;
+    // 28/10 22:00Z = 29/10 05:00 giờ VN: "hôm nay" là ngày 29, ngày làm việc lưu dạng 00:00Z của ngày VN.
+    const lateNow = new Date('2026-10-28T22:00:00Z');
+
+    expect(find(await b.svc.counts({ role: 'ADMIN' }, lateNow), 'shiftsPending')).toEqual({ key: 'shiftsPending', count: 4 });
+    expect(prisma.shift.count).toHaveBeenCalledWith({ where: { status: 'PENDING', workDate: { gte: new Date('2026-10-29T00:00:00Z') } } });
+    for (const perm of ['KE_TOAN', 'CSKH', 'KHO']) {
+      expect(find(await b.svc.counts({ role: 'STAFF', staffPermissions: [perm] }, lateNow), 'shiftsPending')).toBeUndefined();
     }
   });
 

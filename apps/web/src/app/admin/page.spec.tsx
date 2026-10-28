@@ -160,6 +160,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'dealerTransferToConfirm', count: 2, hoursLeft: 40 },
           { key: 'storefrontsPending', count: 2 },
           { key: 'accountDeletionPending', count: 1 },
+          { key: 'shiftsPending', count: 2 },
           { key: 'communityReports', count: 3 },
           { key: 'productsMissingImage', count: 4 },
         ],
@@ -3628,6 +3629,15 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(window.location.search).toBe('?tab=users');
     expect(container.querySelector('#account-deletions')).not.toBeNull();
     expect(scroll).toHaveBeenCalled();
+  });
+
+  it('thẻ ca nhân viên chờ duyệt mở tab Duyệt ca', async () => {
+    const api = mockFetch({ '/admin/shifts': { body: [] }, '/admin/shift-templates': { body: [] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    click(container.querySelector('[data-inbox="shiftsPending"]')!);
+    await flush();
+    expect(window.location.search).toBe('?tab=shiftApproval');
   });
 
   it('thẻ gian hàng chờ duyệt và sản phẩm thiếu ảnh mở đúng tab', async () => {

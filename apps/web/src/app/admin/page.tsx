@@ -563,6 +563,7 @@ export default function AdminPage() {
       externalPoints: 'externalClaims',
       supportChatUnforwarded: 'supportChat',
       zaloBridgeDown: 'supportChat',
+      shiftsPending: 'shiftApproval',
     };
     setTab(target[k]);
   };

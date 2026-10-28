@@ -2,6 +2,7 @@ import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../../config/env.validation';
 import { PrismaService } from '../../prisma/prisma.service';
+import { vnDateKey } from '../../common/vn-time';
 import { COMMUNITY_MODERATORS, type StaffPermission } from '../../common/staff-permissions';
 import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
 import { PENDING_MERCHANT_PRODUCT_WHERE } from '../merchant/merchant-product-review';
@@ -61,6 +62,7 @@ export type InboxKey =
   | 'dealerTransferToConfirm'
   | 'storefrontsPending'
   | 'accountDeletionPending'
+  | 'shiftsPending'
   | 'communityReports'
   | 'productsMissingImage';
 
@@ -134,6 +136,8 @@ export class OpsInboxService {
       { key: 'storefrontsPending', audience: 'ADMIN', count: async () => ((this.config ? await isStorefrontApprovalRequired(this.config) : true) ? p.storefront.count({ where: STOREFRONT_PENDING_APPROVAL_WHERE }) : 0) },
       // Khách được hứa xử lý trong 3 ngày làm việc (UsersService.requestDeletion); chỉ ADMIN xử lý được (AdminAccountDeletionController).
       { key: 'accountDeletionPending', audience: 'ADMIN', count: () => p.accountDeletionRequest.count({ where: { status: 'PENDING' } }) },
+      // Ca nhân viên đăng ký chờ duyệt (ShiftApprovalTab): ca đã qua ngày làm việc thì không còn gì để duyệt. workDate là cột DATE lưu 00:00Z của ngày VN.
+      { key: 'shiftsPending', audience: 'ADMIN', count: () => p.shift.count({ where: { status: 'PENDING', workDate: { gte: new Date(vnDateKey(now)) } } }) },
       { key: 'productsMissingImage', audience: 'ADMIN', count: () => p.product.count({ where: { isActive: true, images: { isEmpty: true } } }) },
       { key: 'merchantOverdue', audience: 'ADMIN', count: () => this.merchant.countOverdue(now) },
       { key: 'merchantProducts', audience: 'ADMIN', count: () => p.product.count({ where: PENDING_MERCHANT_PRODUCT_WHERE }) },

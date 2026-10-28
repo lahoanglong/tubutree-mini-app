@@ -196,6 +196,23 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     expect(onOpen).toHaveBeenCalledWith('accountDeletionPending');
   });
 
+  it('thẻ ca nhân viên chờ duyệt mở đúng khoá và cộng vào huy hiệu mục Duyệt ca', async () => {
+    stub([{ key: 'shiftsPending', count: 3 }]);
+    const onOpen = vi.fn();
+    const r = render(<OpsInboxTab onOpen={onOpen} />);
+    mounted.push(r);
+    await flush();
+    const card = r.container.querySelector<HTMLButtonElement>('[data-inbox="shiftsPending"]')!;
+    expect(card.textContent).toContain('Ca nhân viên chờ duyệt');
+    expect(card.textContent).toContain('3');
+    click(card);
+    expect(onOpen).toHaveBeenCalledWith('shiftsPending');
+    const badge = render(<InboxBadge tab="shiftApproval" />);
+    mounted.push(badge);
+    await flush();
+    expect(badge.container.querySelector('[data-inbox-badge="shiftApproval"]')!.textContent).toContain('3');
+  });
+
   it('đơn chuyển khoản đã quá hạn ghi rõ sắp tự huỷ', async () => {
     stub([{ key: 'bankTransferToConfirm', count: 1, hoursLeft: 0 }]);
     const r = render(<OpsInboxTab onOpen={vi.fn()} />);

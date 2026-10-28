@@ -1743,6 +1743,7 @@ export type InboxKey =
   | 'dealerTransferToConfirm'
   | 'storefrontsPending'
   | 'accountDeletionPending'
+  | 'shiftsPending'
   | 'communityReports'
   | 'productsMissingImage';
 export interface OpsInbox {
