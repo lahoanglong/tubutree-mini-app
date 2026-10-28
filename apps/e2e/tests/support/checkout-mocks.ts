@@ -109,14 +109,19 @@ export const ORDER_CODE_BANK = 'TUBU-BANK-67890';
 /** Đơn trả về từ place-order — phản chiếu body (paymentMethod, recycling) như BE lưu vào Order. */
 export function placedOrderFor(body: Record<string, unknown>): OrderDTO {
   const bank = body.paymentMethod === 'BANK_TRANSFER';
-  return makeOrder({
-    code: bank ? ORDER_CODE_BANK : ORDER_CODE_COD,
-    status: bank ? 'PENDING_PAYMENT' : 'CONFIRMED',
-    paymentMethod: bank ? 'BANK_TRANSFER' : 'COD',
-    paymentStatus: 'UNPAID',
-    hasRecyclingPickup: typeof body.wasteRequestId === 'string',
-    recyclingNote: null,
-  });
+  // Máy chủ trả cột `fulfiller` của đơn (OrderDTO chưa khai báo): màn thành công chỉ hứa ngày giao khi Tubu giao.
+  const order: OrderDTO & { fulfiller: 'TUBU' } = {
+    ...makeOrder({
+      code: bank ? ORDER_CODE_BANK : ORDER_CODE_COD,
+      status: bank ? 'PENDING_PAYMENT' : 'CONFIRMED',
+      paymentMethod: bank ? 'BANK_TRANSFER' : 'COD',
+      paymentStatus: 'UNPAID',
+      hasRecyclingPickup: typeof body.wasteRequestId === 'string',
+      recyclingNote: null,
+    }),
+    fulfiller: 'TUBU',
+  };
+  return order;
 }
 
 export const BANK_QR: BankQr = {
