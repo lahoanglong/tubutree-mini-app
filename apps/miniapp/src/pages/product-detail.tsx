@@ -43,7 +43,7 @@ import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
 import { serverNow } from '../utils/server-clock';
-import { cardPricing, defaultVariationFor, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
+import { cardPricing, defaultVariationFor, isFlashRunning, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -79,6 +79,15 @@ function merchantShippingLine(fee: number, freeShipFrom: number | null): string 
   if (fee <= 0) return 'Gian hàng miễn phí giao hàng';
   const base = `Phí giao ${formatVnd(fee)}`;
   return freeShipFrom != null ? `${base}, miễn phí cho đơn của gian hàng từ ${formatVnd(freeShipFrom)}` : base;
+}
+
+/**
+ * Danh sách Giờ vàng tải ở máy có thể cũ hơn mốc kết thúc của đợt (nhịp tải lại 5 đến 60 giây): trang chỉ dùng suất còn chạy theo giờ
+ * máy chủ, không đợi lần tải lại, để giá và nhãn Giờ vàng biến mất đúng lúc đợt hết.
+ */
+function runningFlash(list: readonly FlashSaleActiveItem[] | undefined): FlashSaleActiveItem[] {
+  const now = serverNow();
+  return (list ?? []).filter((f) => isFlashRunning(f, now));
 }
 
 /** Nhãn ngắn cho voucher hiển thị ở PDP. */
@@ -172,7 +181,7 @@ export default function ProductDetailPage() {
   const variations = product.data?.variations ?? [];
   // Memo theo (selectedId + danh sách variation) — tránh tạo ref mới mỗi render gây effect chạy dư.
   if (product.data && !flashQ.isPending && autoPick.current?.slug !== slug) {
-    const flashNow = flashQ.data ?? [];
+    const flashNow = runningFlash(flashQ.data);
     const entry =
       variations.find((v) => v.id === navState?.variationId && v.stock > 0 && variationPricing(v, flashNow).isFlash) ??
       variations.find((v) => v.id === navState?.pinnedVariationId && v.stock > 0);
@@ -186,7 +195,7 @@ export default function ProductDetailPage() {
   );
 
   // Flash sale đang chạy cho ĐÚNG phân loại đang chọn (BE re-resolve giá thật lúc thêm giỏ/checkout).
-  const flashItem = selected ? (flashQ.data ?? []).find((f) => f.variationId === selected.id) : undefined;
+  const flashItem = selected ? runningFlash(flashQ.data).find((f) => f.variationId === selected.id) : undefined;
   const flashLeft = useCountdown(flashItem?.endAt ?? null);
 
   // Đổi phân loại → kẹp lại số lượng theo tồn kho mới (chỉ phụ thuộc id/stock, không phải ref).
@@ -215,7 +224,7 @@ export default function ProductDetailPage() {
     const viewKey = `${product.data.id}:${selected.id}`;
     if (trackedViewKey.current === viewKey) return;
     trackedViewKey.current = viewKey;
-    const view = variationPricing(selected, flashQ.data ?? []);
+    const view = variationPricing(selected, runningFlash(flashQ.data));
     const viewPrice = view.price;
     void trackEvent('product_viewed', 'miniapp', {
       productId: product.data.id,
@@ -295,7 +304,7 @@ export default function ProductDetailPage() {
 
   const p = product.data;
   const pdpCoupons = (couponsQ.data ?? []).filter((c) => !c.products || c.products.some((x) => x.id === p?.id));
-  const flashList = flashQ.data ?? [];
+  const flashList = runningFlash(flashQ.data);
   const priceView = selected ? variationPricing(selected, flashList) : cardPricing(p, flashList, serverNow());
   const price = priceView.price;
   const originalPrice = priceView.compareAt;

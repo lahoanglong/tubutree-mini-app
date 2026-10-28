@@ -22,6 +22,7 @@ import { usePdpSelection } from './pdp-selection';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
 import { actionErrorText } from '@/lib/error-text';
+import { runningFlash } from '@/lib/pdp-logic';
 
 // Bảng chỉ dùng ở khổ điện thoại khi khách bấm mua: tách khỏi First Load của trang sản phẩm.
 const VariationSheet = dynamic(() => import('./variation-sheet').then((m) => m.VariationSheet), { ssr: false });
@@ -91,7 +92,7 @@ export default function AddToCart({
 
   // Số món ở nút giỏ của thanh dính (như Mini App); cùng khoá và cùng GET /cart với giỏ ở thanh đầu.
   const cartCount = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' }).data?.itemCount ?? 0;
-  const flash = useActiveFlashSales();
+  const flash = runningFlash(useActiveFlashSales());
   const selected = variations.find((v) => v.id === selectedId);
   const selectedPricing = selected ? variationPricing(selected, flash) : null;
   const price = selectedPricing?.price ?? 0;

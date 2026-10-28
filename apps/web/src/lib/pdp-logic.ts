@@ -2,6 +2,8 @@ import type { ProductFulfiller } from './api';
 import type { CouponDTO } from './shop-client';
 import type { AuthPhase } from './auth-phase';
 import { formatVnd } from './format-vnd';
+import { isFlashRunning } from '@tubutree/app-core/flash-price';
+import { serverNow } from '@tubutree/app-core/server-clock';
 
 /**
  * Hàng chỉ bán giá lẻ, không đặt định kỳ và không mua chung: gian hàng tự giao hoặc đang tạm nghỉ/ngừng bán, hay hàng của gian hàng
@@ -17,6 +19,14 @@ export function groupBuyPitch(cfg?: { discountPct: number; targetSize: number } 
     return `Rủ đủ ${cfg.targetSize} người, mỗi người nhận mã giảm ${cfg.discountPct}% khi nhóm đủ`;
   }
   return 'Rủ bạn bè cho đủ nhóm, mỗi người nhận mã giảm giá';
+}
+
+/**
+ * Danh sách Giờ vàng tải ở trình duyệt có thể cũ hơn mốc kết thúc của đợt: trang sản phẩm chỉ dùng suất còn chạy theo giờ máy chủ,
+ * không đợi lần tải lại, để giá và nhãn Giờ vàng biến mất đúng lúc đợt hết.
+ */
+export function runningFlash<T extends { endAt?: string }>(list: readonly T[], now: number = serverNow()): T[] {
+  return list.filter((f) => isFlashRunning(f, now));
 }
 
 /** Nhãn ngắn cho mã giảm giá hiển thị ở trang sản phẩm. */

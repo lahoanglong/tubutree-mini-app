@@ -294,6 +294,17 @@ describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', (
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 120.000đ');
   });
 
+  it('danh sách ở máy còn suất đã quá hạn: không nhãn Giờ vàng, nút thêm giỏ theo giá thường', async () => {
+    openedFrom('?v=v2');
+    mocks.getActiveFlashSales.mockResolvedValue([{ ...FLASH_V2, endAt: '2020-01-01T00:00:00.000Z' }]);
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('[data-testid="flash-price-note"]')).toBeNull();
+    expect(container.textContent).not.toContain('Giờ vàng');
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('250ml');
+  });
+
   it('?v= của suất Giờ vàng đã hết: về phân loại mặc định', async () => {
     openedFrom('?v=v2');
     mocks.getActiveFlashSales.mockResolvedValue([]);

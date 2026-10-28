@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { couponLabel, freeshipLine, groupBuyPitch, isRetailOnly, pdpCoupons, resolveFreeshipFrom } from './pdp-logic';
+import { couponLabel, freeshipLine, groupBuyPitch, isRetailOnly, pdpCoupons, resolveFreeshipFrom, runningFlash } from './pdp-logic';
 
 describe('isRetailOnly: hàng chỉ bán giá lẻ, không định kỳ, không mua chung', () => {
   it('gian hàng tự giao, tạm nghỉ/ngừng bán và hàng đối tác đều là retail only', () => {
@@ -51,5 +51,19 @@ describe('dòng freeship', () => {
     expect(resolveFreeshipFrom({ phase: 'guest', cartThreshold: undefined, configThreshold: 199000, configLoaded: true })).toBe(199000);
     expect(resolveFreeshipFrom({ phase: 'guest', cartThreshold: undefined, configThreshold: 199000, configLoaded: false })).toBeUndefined();
     expect(resolveFreeshipFrom({ phase: 'loading', cartThreshold: undefined, configThreshold: 199000, configLoaded: true })).toBeUndefined();
+  });
+});
+
+describe('runningFlash: trang sản phẩm chỉ dùng suất Giờ vàng còn chạy', () => {
+  const NOW = Date.parse('2026-10-28T10:00:00.000Z');
+  const item = (id: string, endAt?: string) => ({ id, ...(endAt ? { endAt } : {}) });
+
+  it('bỏ suất đã quá hạn hoặc đúng mốc kết thúc, giữ suất còn hạn', () => {
+    const list = [item('hết', '2026-10-28T09:59:59.000Z'), item('đúng mốc', '2026-10-28T10:00:00.000Z'), item('còn', '2026-10-28T10:00:01.000Z')];
+    expect(runningFlash(list, NOW).map((f) => f.id)).toEqual(['còn']);
+  });
+
+  it('suất không có hạn hoặc hạn không đọc được thì coi như còn chạy (máy chủ tính lại giá lúc thêm giỏ)', () => {
+    expect(runningFlash([item('a'), item('b', 'không phải ngày')], NOW).map((f) => f.id)).toEqual(['a', 'b']);
   });
 });
