@@ -29,7 +29,9 @@ const loyalty = {
   pointsExpiresAt: jest.fn().mockResolvedValue(POINTS_EXPIRES_AT),
 } as unknown as LoyaltyService;
 const cart = {} as unknown as CartService;
-const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+const notifyMock = jest.fn().mockResolvedValue(true);
+// Service gửi tin qua notifySafe; hai tên dùng chung một mock để kiểm theo mã tin.
+const notifications = { notify: notifyMock, notifySafe: notifyMock } as unknown as NotificationsService;
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
 const flash = { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService;
 const affiliate = { reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined) } as unknown as AffiliateService;
@@ -212,7 +214,7 @@ describe('OrdersService.cancel', () => {
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', {
       order_code: 'TUBU1',
       refund_note: ' Đã hoàn 95.000đ vào Ví Tubu. Đã hoàn 19 Điểm Xanh.',
-    });
+    }, undefined, 'order=TUBU1');
   });
 
   it('đơn dùng coupon → hoàn coupon (release) khi hủy, không bị đốt vĩnh viễn', async () => {
@@ -837,8 +839,9 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     product: { thumbnail: `https://img.test/${id}.jpg`, images: [], isActive: true, approvalStatus: 'APPROVED', ...product },
   });
 
-  function makeMediaService(orders: Record<string, unknown>[], variations: Record<string, unknown>[]) {
+  function makeMediaService(orders: Record<string, unknown>[], variations: Record<string, unknown>[], products: Record<string, unknown>[] = []) {
     const variationFindMany = jest.fn().mockResolvedValue(variations);
+    const productFindMany = jest.fn().mockResolvedValue(products);
     const prisma = {
       order: {
         findMany: jest.fn().mockResolvedValue(orders),
@@ -846,10 +849,11 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
         findUnique: jest.fn().mockResolvedValue(orders[0] ?? null),
       },
       variation: { findMany: variationFindMany },
+      product: { findMany: productFindMany },
       orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
     } as unknown as PrismaService;
-    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), variationFindMany };
+    return { svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal), variationFindMany, productFindMany };
   }
 
   it('list: MỘT truy vấn variation cho cả trang; mỗi dòng có thumbnail/stock/available/currentPrice', async () => {
@@ -875,6 +879,56 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     const { svc } = makeMediaService([{ ...baseOrder, items: [line('i1', 'v1')] }], [v('v1', vOver, pOver)]);
     const res = await svc.list('u1', {}, 1, 20);
     expect(res.data[0]!.items[0]!.available).toBe(false);
+  });
+
+  it.each([
+    ['sản phẩm đang bán', {}, {}, true],
+    ['chỉ variation tắt (trang sản phẩm vẫn mở được)', { isActive: false }, {}, true],
+    ['sản phẩm tắt', {}, { isActive: false }, false],
+    ['sản phẩm chưa duyệt', {}, { approvalStatus: 'PENDING_REVIEW' }, false],
+    ['sản phẩm bị từ chối', {}, { approvalStatus: 'REJECTED' }, false],
+  ])('productPublic theo trang sản phẩm công khai: %s', async (_label, vOver, pOver, expected) => {
+    const { svc } = makeMediaService([{ ...baseOrder, items: [line('i1', 'v1')] }], [v('v1', vOver, pOver)]);
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(res.data[0]!.items[0]!.productPublic).toBe(expected);
+  });
+
+  describe('variation đã bị xoá (gắn mã Pancake xoá biến thể tạm của sản phẩm đối tác): productPublic tra theo slug đã lưu trong dòng đơn', () => {
+    const goneLine = (slug: string | null) => ({ ...line('i1', 'gone'), productSlug: slug });
+
+    it('sản phẩm vẫn đang bán → productPublic true, khách vẫn viết đánh giá và mở trang sản phẩm được', async () => {
+      const { svc, productFindMany } = makeMediaService(
+        [{ ...baseOrder, items: [goneLine('tra-xanh')] }],
+        [],
+        [{ slug: 'tra-xanh', isActive: true, approvalStatus: 'APPROVED' }],
+      );
+      const res = await svc.list('u1', {}, 1, 20);
+      expect(res.data[0]!.items[0]!.productPublic).toBe(true);
+      expect(productFindMany.mock.calls[0]![0].where).toEqual({ slug: { in: ['tra-xanh'] } });
+    });
+
+    it.each([
+      ['sản phẩm đã tắt', [{ slug: 'tra-xanh', isActive: false, approvalStatus: 'APPROVED' }]],
+      ['sản phẩm bị rút duyệt', [{ slug: 'tra-xanh', isActive: true, approvalStatus: 'PENDING_REVIEW' }]],
+      ['sản phẩm đã bị xoá hẳn', []],
+    ])('%s → productPublic false (không dẫn khách tới trang 404)', async (_label, products) => {
+      const { svc } = makeMediaService([{ ...baseOrder, items: [goneLine('tra-xanh')] }], [], products);
+      const res = await svc.list('u1', {}, 1, 20);
+      expect(res.data[0]!.items[0]!.productPublic).toBe(false);
+    });
+
+    it('đơn cũ không lưu slug → productPublic false, không truy vấn sản phẩm', async () => {
+      const { svc, productFindMany } = makeMediaService([{ ...baseOrder, items: [goneLine(null)] }], []);
+      const res = await svc.list('u1', {}, 1, 20);
+      expect(res.data[0]!.items[0]!.productPublic).toBe(false);
+      expect(productFindMany).not.toHaveBeenCalled();
+    });
+
+    it('mọi biến thể còn → không truy vấn sản phẩm thêm', async () => {
+      const { svc, productFindMany } = makeMediaService([{ ...baseOrder, items: [line('i1', 'v1')] }], [v('v1')]);
+      await svc.list('u1', {}, 1, 20);
+      expect(productFindMany).not.toHaveBeenCalled();
+    });
   });
 
   it('variation đã bị xoá → thumbnail null, stock 0, available false, currentPrice null', async () => {
@@ -1463,6 +1517,6 @@ describe('OrdersService.cancel — hook thu kèm rác (§12.2 bước 3, §17.3)
     const wastePickupHooks = { onOrderCancelled: jest.fn().mockRejectedValue(new Error('hook')) };
     const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED' }, { wastePickupHooks });
     await expect(svc.cancel('u1', 'TUBU1')).resolves.toBeDefined();
-    expect(notifications.notify as jest.Mock).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', expect.anything());
+    expect(notifications.notify as jest.Mock).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', expect.anything(), undefined, 'order=TUBU1');
   });
 });

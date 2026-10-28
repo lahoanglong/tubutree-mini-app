@@ -21,7 +21,7 @@ describe('DealerService.reopenRewardClaim (real Postgres)', () => {
       providers: [
         SystemConfigService,
         DealerService,
-        { provide: NotificationsService, useValue: { notify } },
+        { provide: NotificationsService, useValue: { notify, notifySafe: notify } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();

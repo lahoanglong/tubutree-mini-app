@@ -10,6 +10,7 @@ import {
 } from '@/lib/dealer-accounts-client';
 import { formatVnd } from '@/lib/format-vnd';
 import { DealerCreditPanel } from './dealer-credit-panel';
+import { DealerCreditReportsSection } from './dealer-credit-reports';
 import { DealerTiersSection } from './dealer-tiers-section';
 import { useDebounced } from './search-picker';
 import { BTN_LINK, BTN_SMALL, FIELD_XS, ToneBadge, chipClass } from './ui';
@@ -50,6 +51,7 @@ export function DealerAccountsTab({ isAdmin = true }: { isAdmin?: boolean } = {}
 
   return (
     <div className="space-y-6">
+      <DealerCreditReportsSection onChanged={refetchList} />
       <section aria-label="Đại lý đã duyệt" data-dealer-accounts className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="font-display text-lg font-semibold text-stone-900">Đại lý đã duyệt</h2>

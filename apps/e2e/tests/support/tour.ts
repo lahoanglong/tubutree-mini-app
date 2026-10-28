@@ -60,7 +60,7 @@ export const TOUR: Record<string, Omit<TourEntry, 'key'>> = {
   '/game': { name: 'Vườn Xanh', miniapp: '/game', web: '/vuon-xanh', role: 'CUSTOMER' },
   '/ai-advisor': { name: 'Trợ lý AI', miniapp: '/ai-advisor', web: '/tu-van', role: 'CUSTOMER' },
   '/feed': { name: 'Cộng đồng', miniapp: '/feed', web: '/cong-dong', role: 'CUSTOMER' },
-  '/feed/leaderboard': { name: 'Bảng xếp hạng', miniapp: '/feed/leaderboard', web: '/cong-dong/xep-hang', role: 'CUSTOMER' },
+  '/feed/leaderboard': { name: 'Bảng xếp hạng cũ (chuyển về Cộng đồng)', miniapp: '/feed/leaderboard', web: '/cong-dong', role: 'CUSTOMER' },
   '/feed/events': { name: 'Sự kiện cộng đồng', miniapp: '/feed/events', web: '/cong-dong/su-kien', role: 'CUSTOMER' },
   '/feed/:id': { name: 'Bài viết', miniapp: '/feed/p1', web: '/cong-dong/p1', role: 'CUSTOMER' },
   '/academy': { name: 'Học viện', miniapp: '/academy', web: '/hoc-vien', role: 'CUSTOMER' },
@@ -83,6 +83,7 @@ export const TOUR: Record<string, Omit<TourEntry, 'key'>> = {
   '/recycle/requests': { name: 'Yêu cầu đổi rác của tôi', miniapp: '/recycle/requests', web: '/doi-rac/yeu-cau', role: 'CUSTOMER' },
   '/recycle/done/:id': { name: 'Đổi rác hoàn tất', miniapp: '/recycle/done/wr-done-1', web: '/doi-rac/xong/wr-done-1', role: 'CUSTOMER' },
   '/recycle/desk': { name: 'Quầy nhận rác', miniapp: '/recycle/desk', web: '/doi-rac/quay', role: 'STAFF' },
+  '/refill': { name: 'Refill cũ (chuyển sang Đổi rác)', miniapp: '/refill', web: '/doi-rac', role: 'CUSTOMER' },
 };
 
 export function tourEntries(): TourEntry[] {

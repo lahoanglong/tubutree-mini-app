@@ -9,6 +9,9 @@ import {
   getMyRedemptions,
   getNewCustomerOffer,
   getPointsTransactions,
+  getPointsTransactionsPage,
+  nextPointsTxnCursor,
+  POINTS_TXN_PAGE_SIZE,
   getReferral,
   postDailyCheckIn,
   redeemLoyaltyReward,
@@ -55,5 +58,27 @@ describe('loyalty — hợp đồng gọi API', () => {
         opts: { headers: { 'Idempotency-Key': 'key-1' } },
       },
     ]);
+  });
+});
+
+describe('loyalty — lịch sử điểm phân trang', () => {
+  const txn = (id: string, createdAt: string) => ({ id, delta: 1, reason: 'X', refType: null, expiresAt: null, createdAt });
+
+  it('trang đầu chỉ gửi limit; trang kế gửi thêm before + beforeId của dòng cuối trang trước', async () => {
+    const { http, calls } = fakeHttp();
+    await getPointsTransactionsPage(http);
+    await getPointsTransactionsPage(http, { before: '2026-10-20T03:00:00.123Z', beforeId: 'tx9' });
+    expect(calls.map((c) => ({ path: c.path, query: c.opts?.query }))).toEqual([
+      { path: '/me/points/transactions', query: { limit: POINTS_TXN_PAGE_SIZE, before: undefined, beforeId: undefined } },
+      { path: '/me/points/transactions', query: { limit: POINTS_TXN_PAGE_SIZE, before: '2026-10-20T03:00:00.123Z', beforeId: 'tx9' } },
+    ]);
+    expect(POINTS_TXN_PAGE_SIZE).toBe(20);
+  });
+
+  it('nextPointsTxnCursor: trang đầy thì trả mốc dòng cuối, trang thiếu hoặc rỗng là hết', () => {
+    const full = Array.from({ length: POINTS_TXN_PAGE_SIZE }, (_, i) => txn(`t${i}`, `2026-10-20T03:00:${String(i).padStart(2, '0')}.000Z`));
+    expect(nextPointsTxnCursor(full)).toEqual({ before: full[POINTS_TXN_PAGE_SIZE - 1]!.createdAt, beforeId: `t${POINTS_TXN_PAGE_SIZE - 1}` });
+    expect(nextPointsTxnCursor(full.slice(0, 5))).toBeUndefined();
+    expect(nextPointsTxnCursor([])).toBeUndefined();
   });
 });

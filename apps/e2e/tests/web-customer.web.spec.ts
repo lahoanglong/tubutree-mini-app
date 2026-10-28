@@ -85,6 +85,9 @@ test.describe('Web khách (smoke)', () => {
       await page.getByRole('link', { name: 'Bạn đang tìm gì hôm nay?' }).click();
       input = page.locator('#browse-q');
     }
+    // Ô tìm ở thanh đầu nằm trong Suspense (useSearchParams): HTML server chỉ có khung chờ, React dựng ô thật thay vào khi hydrate nên
+    // chữ gõ vào khung chờ bị mất và Enter gửi từ khoá rỗng. Chờ ô đã là của React rồi mới gõ.
+    await expect.poll(() => input.evaluate((el) => Object.keys(el).some((k) => k.startsWith('__reactFiber$')))).toBe(true);
     await input.fill('xanh');
     await input.press('Enter');
     await expect(page).toHaveURL(/\/san-pham\?q=xanh/);

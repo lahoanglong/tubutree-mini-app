@@ -23,7 +23,7 @@ describe('Nhắc mua lại chỉ cho đơn bán lẻ khách tự mua (real Postg
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
-    lifecycle = new LifecycleService(prisma, moduleRef.get(SystemConfigService), { notify } as unknown as NotificationsService);
+    lifecycle = new LifecycleService(prisma, moduleRef.get(SystemConfigService), { notify, notifySafe: notify } as unknown as NotificationsService);
   });
 
   afterAll(async () => {

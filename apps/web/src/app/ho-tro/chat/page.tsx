@@ -8,6 +8,7 @@ import { errorCode, errorStatus } from '@tubutree/app-core/api/error-status';
 import { getSupportChatPage, markSupportChatRead, sendSupportChat } from '@tubutree/app-core/api/support-chat';
 import { productQuery } from '@tubutree/app-core/queries/catalog';
 import { ordersHomeStripQuery } from '@tubutree/app-core/queries/orders';
+import { notificationsQuery } from '@tubutree/app-core/queries/account';
 import { supportContactQuery } from '@tubutree/app-core/queries/config';
 import { supportChatQuery, supportChatSummaryQuery } from '@tubutree/app-core/queries/support-chat';
 import { quickReplies, supportCopy, type QuickReply } from '@tubutree/app-core/support-copy';
@@ -154,7 +155,8 @@ function ChatBody() {
       const ids = todo.slice(i, i + 100);
       for (const id of ids) reportedRef.current.add(id);
       void markSupportChatRead(coreHttp, ids)
-        .then(() => qc.invalidateQueries({ queryKey: supportChatSummaryQuery(coreHttp).queryKey }))
+        // Chuông "Tubu Tree đã trả lời" cũng được máy chủ đánh dấu đã đọc: làm mới để chuông ở thanh đầu hết số.
+        .then(() => Promise.all([qc.invalidateQueries({ queryKey: supportChatSummaryQuery(coreHttp).queryKey }), qc.invalidateQueries({ queryKey: notificationsQuery(coreHttp).queryKey })]))
         .catch(() => {
           // Chưa báo được thì lần tải thread kế tiếp (dataUpdatedAt tăng sau mỗi lần tải thành công, kể cả dữ liệu y hệt) gửi lại.
           for (const id of ids) reportedRef.current.delete(id);
@@ -243,7 +245,7 @@ function ChatBody() {
         {/* Máy tính: khung chat cao 60vh nên lúc chưa có tin còn trống nhiều; đặt câu hỏi mẫu ngay trong khung thay vì sát đáy. */}
         {empty && quickReady && !closed && !closedText && (
           <div data-chat-suggest="" className="max-md:hidden">
-            <QuickReplies items={quickReplies(shippingCode)} onPick={pickQuick} />
+            <QuickReplies items={quickReplies(shippingCode)} onPick={pickQuick} inPane />
           </div>
         )}
       </div>

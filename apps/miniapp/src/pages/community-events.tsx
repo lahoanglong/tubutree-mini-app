@@ -43,30 +43,35 @@ function CardSkeletons({ height, gap }: { height: number; gap: number }) {
   );
 }
 
-/** Hạn kết thúc + thưởng + nhãn đã kết thúc, dùng chung cho thẻ danh sách và trang chi tiết. */
-function EventMeta({ event, joinOnWeb }: { event: CommunityEvent; joinOnWeb?: boolean }) {
+/**
+ * Cách tham gia (dòng chính), rồi hạn kết thúc, điểm thưởng (dòng phụ) và nhãn đã kết thúc; dùng chung cho thẻ danh sách và trang chi
+ * tiết. Mini App chỉ đọc: khách dự thi trên web nên không có nút hay liên kết.
+ */
+function EventMeta({ event }: { event: CommunityEvent }) {
+  const ended = isEventEnded(event);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
-      <Text variant="caption" tone="tertiary">
-        {vi.community.eventEnds}: {formatDate(event.endAt)}
-      </Text>
-      {joinOnWeb ? (
-        <Text variant="caption" tone="brand" style={{ fontWeight: 600 }}>
+    <div style={{ marginTop: 8 }}>
+      {!ended && (
+        <Text variant="caption" tone="brand" as="div" style={{ fontWeight: 600 }}>
           {vi.community.eventJoinOnWeb}
         </Text>
-      ) : (
-        event.rewardPoints > 0 && (
-          <Text variant="caption" tone="brand" style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <Icon icon={Gift} size="sm" tone="brand" />
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: ended ? 0 : 4, flexWrap: 'wrap' }}>
+        <Text variant="caption" tone="tertiary">
+          {vi.community.eventEnds}: {formatDate(event.endAt)}
+        </Text>
+        {event.rewardPoints > 0 && (
+          <Text variant="caption" tone="tertiary" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Icon icon={Gift} size="sm" tone="muted" />
             {formatPoints(event.rewardPoints)}
           </Text>
-        )
-      )}
-      {isEventEnded(event) && (
-        <Badge tone="neutral" size="sm">
-          {vi.community.eventEnded}
-        </Badge>
-      )}
+        )}
+        {ended && (
+          <Badge tone="neutral" size="sm">
+            {vi.community.eventEnded}
+          </Badge>
+        )}
+      </div>
     </div>
   );
 }
@@ -264,7 +269,7 @@ function EventEntries({
                 {event.description}
               </Text>
             )}
-            <EventMeta event={event} joinOnWeb />
+            <EventMeta event={event} />
           </div>
         </div>
 

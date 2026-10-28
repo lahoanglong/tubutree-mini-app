@@ -32,12 +32,7 @@ export const WASTE_RULES_LINK = 'Xem Thể lệ';
 /** Số lượng nhập nhanh: nút cộng thêm cho món tính theo gói. */
 export const QUICK_QTY_STEPS = [5, 10] as const;
 
-/** Gõ số vào ô: bỏ ký tự không phải số, kẹp vào [min, max]; rỗng thì về min. */
-export function parseQtyInput(raw: string, min: number, max: number): number {
-  const digits = raw.replace(/\D/g, '').slice(0, 7);
-  if (digits === '') return min;
-  return Math.max(min, Math.min(max, Number(digits)));
-}
+export { parseQtyInput } from './qty-input';
 
 /** Lý do một điểm nhận bị khoá vì thiếu món; món chỉ kho nhận thì nói thẳng để khách biết phải đi kho. */
 export function missingItemsReason(missing: readonly { name: string; warehouseOnly?: boolean }[]): string {

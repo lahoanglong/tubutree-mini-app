@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flush, render, type Rendered } from '@/test-utils/dom';
+import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 
 // Dòng "Giao dự kiến" ở tóm tắt đơn như Mini App (544c9ad7): cùng nhãn, cùng hàm ghép ngày, ẩn khi chưa có cấu hình.
 
-const mocks = vi.hoisted(() => ({ config: null as unknown, configPending: false, addresses: [] as unknown[], quoteError: null as unknown }));
+const mocks = vi.hoisted(() => ({ config: null as unknown, configPending: false, addresses: [] as unknown[], quoteError: null as unknown, kinds: ['TUBU'] as string[], placed: null as unknown }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
 vi.mock('@/lib/geo-client', () => ({
@@ -18,11 +18,17 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     couponCode: null, subtotal: 300000, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: 1,
   }),
   getMyCoupons: async () => [],
+  placeOrder: async () => mocks.placed,
   getAddresses: async () => mocks.addresses,
   getPublicConfig: () => (mocks.configPending ? new Promise(() => {}) : Promise.resolve(mocks.config)),
   checkoutQuote: async () => {
     if (mocks.quoteError) throw mocks.quoteError;
-    return { subtotal: 300000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000, total: 330000, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0 };
+    return {
+      subtotal: 300000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000, total: 330000, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0,
+      shipments: mocks.kinds.map((kind, i) => ({
+        key: `k${i}`, fulfiller: { kind, storefrontId: kind === 'MERCHANT' ? 'sf1' : null, name: kind }, itemIds: ['i1'], subtotal: 300000, discount: 0, shippingFee: 30000, total: 330000,
+      })),
+    };
   },
 }));
 
@@ -49,6 +55,8 @@ beforeEach(() => {
   mocks.config = { freeshipThreshold: 500000, shippingEta: { minDays: 2, maxDays: 4 } };
   mocks.configPending = false;
   mocks.quoteError = null;
+  mocks.kinds = ['TUBU'];
+  mocks.placed = null;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -74,6 +82,69 @@ describe('/thanh-toan — dòng "Giao dự kiến"', () => {
   it('cấu hình chưa tải xong: không hứa ngày giao', async () => {
     mocks.configPending = true;
     expect(row(await mount(), 'Giao dự kiến')).toBeUndefined();
+  });
+});
+
+describe('/thanh-toan — "Giao dự kiến" theo nơi giao của từng kiện', () => {
+  it('giỏ chỉ có hàng gian hàng tự giao: không hứa ngày thay họ', async () => {
+    mocks.kinds = ['MERCHANT'];
+    const c = await mount();
+    expect(row(c, 'Phí vận chuyển')).toBeDefined();
+    expect(row(c, 'Giao dự kiến')).toBeUndefined();
+  });
+
+  it('giỏ trộn hàng Tubu và hàng gian hàng tự giao: ngày kèm "(hàng Tubu Tree)"', async () => {
+    mocks.kinds = ['TUBU', 'MERCHANT'];
+    const c = await mount();
+    expect(row(c, 'Giao dự kiến')!.lastElementChild!.textContent).toBe('02/10 – 04/10 (hàng Tubu Tree)');
+  });
+});
+
+describe('/thanh-toan — "Giao dự kiến" ở màn đặt xong theo nơi giao của đơn', () => {
+  const placedOrder = (over: Record<string, unknown>) => ({
+    id: 'o1', code: 'TB1', status: 'CONFIRMED', subtotal: 300000, discount: 0, shippingFee: 30000, total: 330000, pointsEarned: 0,
+    paymentMethod: 'COD', createdAt: '2026-09-30T05:00:00Z', items: [], fulfiller: 'TUBU', ...over,
+  });
+  const place = async (order: unknown) => {
+    mocks.placed = order;
+    const r = await mount();
+    click(byText(r, 'button', 'Đặt hàng'));
+    await flush(8);
+    return r.querySelector<HTMLElement>('[data-testid="order-success-mobile"]')!;
+  };
+
+  it('đơn Tubu giao: có "Giao dự kiến" như cũ', async () => {
+    const m = await place(placedOrder({}));
+    expect(m.textContent).toContain('Giao dự kiến');
+    expect(m.textContent).toContain('02/10 – 04/10');
+    expect(m.textContent).not.toContain('(hàng Tubu Tree)');
+  });
+
+  it('đơn của gian hàng tự giao: không hứa ngày', async () => {
+    const m = await place(placedOrder({ fulfiller: 'MERCHANT' }));
+    expect(m.textContent).toContain('Cảm ơn bạn đã chọn Tubu');
+    expect(m.textContent).not.toContain('Giao dự kiến');
+  });
+
+  it('tách đơn trộn Tubu + gian hàng: ngày kèm "(hàng Tubu Tree)"', async () => {
+    const m = await place(placedOrder({
+      splitOrders: [
+        { id: 'o1', code: 'TB1', total: 130000, status: 'CONFIRMED', fulfiller: 'TUBU', fulfillerName: 'Tubu Tree' },
+        { id: 'o2', code: 'TB2', total: 225000, status: 'CONFIRMED', fulfiller: 'MERCHANT', fulfillerName: 'Mật ong Linh' },
+      ],
+    }));
+    expect(m.textContent).toContain('02/10 – 04/10 (hàng Tubu Tree)');
+  });
+
+  it('tách nhiều đơn toàn gian hàng tự giao: không hứa ngày', async () => {
+    const m = await place(placedOrder({
+      fulfiller: 'MERCHANT',
+      splitOrders: [
+        { id: 'o1', code: 'TB1', total: 130000, status: 'CONFIRMED', fulfiller: 'MERCHANT', fulfillerName: 'A' },
+        { id: 'o2', code: 'TB2', total: 225000, status: 'CONFIRMED', fulfiller: 'MERCHANT', fulfillerName: 'B' },
+      ],
+    }));
+    expect(m.textContent).not.toContain('Giao dự kiến');
   });
 });
 

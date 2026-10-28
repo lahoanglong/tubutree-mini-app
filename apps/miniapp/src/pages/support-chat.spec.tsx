@@ -373,6 +373,24 @@ describe('Màn chat với Tubu Tree', () => {
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['support-chat-summary'] }));
   });
 
+  it('đánh dấu đã đọc xong thì làm mới cả chuông thông báo (chuông "Tubu Tree đã trả lời" hết số)', async () => {
+    mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'm1', sender: 'STAFF' })] }));
+    renderPage();
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith(['m1']));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['notifications'] }));
+  });
+
+  it('báo đã đọc lỗi thì không làm mới chuông', async () => {
+    mocks.markRead.mockRejectedValue(new Error('mạng'));
+    mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'm1', sender: 'STAFF' })] }));
+    renderPage();
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    await waitFor(() => expect(mocks.markRead).toHaveBeenCalled());
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['notifications'] });
+  });
+
   it('hỏi tin mới mỗi 5 giây, ngừng khi mất focus và hỏi lại ngay khi quay lại', async () => {
     vi.useFakeTimers();
     try {

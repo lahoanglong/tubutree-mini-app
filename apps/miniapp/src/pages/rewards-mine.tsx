@@ -1,11 +1,14 @@
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { NEW_COUPON_BADGE, NEW_COUPON_PARAM, sortRedemptions } from '@tubutree/app-core/reward-rules';
+import { redemptionCouponLine } from '@tubutree/app-core/redemption-coupon';
+import { couponUseCopy } from '@tubutree/app-core/coupon-use';
 import { useQuery } from '@tanstack/react-query';
 import { Ticket } from 'lucide-react';
 import type { GiftRedemption } from '../services/account-api';
 import { getMyRedemptions } from '../services/account-api';
 import { getLoadErrorMessage } from '../services/api';
 import { WASTE_QUERY_KEYS } from '../services/waste-api';
+import { useCouponUse } from '../hooks/use-coupon-use';
 import { AuthGate } from '../components/ui/auth-gate';
 import { Badge } from '../components/ui/badge';
 import { Card } from '../components/ui/card';
@@ -57,17 +60,19 @@ function RedemptionStatus({ r }: { r: GiftRedemption }) {
 }
 
 function RedemptionEntry({ r, isNew }: { r: GiftRedemption; isNew?: boolean }) {
-  const navigate = useNavigate();
+  const { use } = useCouponUse();
   if (r.giftKind === 'VOUCHER') {
+    const line = redemptionCouponLine(r);
     return (
       <div data-redemption>
         <Card variant="outline" padding={0}>
           <ListRow
             icon={<Icon icon={Ticket} tone="brand" />}
             title={isNew ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{r.giftName}<Badge tone="brand">{NEW_COUPON_BADGE}</Badge></span> : r.giftName}
-            subtitle={r.couponCode ? `Mã ${r.couponCode}` : ''}
-            trailing="chevron"
-            onPress={() => navigate('/loyalty')}
+            subtitle={line.text}
+            // Chỉ mã còn hạn và chưa dùng mới bấm được, giống nút "Dùng ngay" ở Kho quà; mã đã dùng hay hết hạn chỉ để xem.
+            trailing={line.usable ? <Text variant="caption" tone="brand" as="span" style={{ fontWeight: 600 }}>{couponUseCopy.use}</Text> : undefined}
+            onPress={line.usable && r.couponCode ? () => void use(r.couponCode ?? '') : undefined}
             style={{ padding: '12px' }}
           />
         </Card>

@@ -28,7 +28,7 @@ describe('Quản trị viên cuối cùng an toàn khi đồng thời (real Post
     await warmPool(prisma);
     const fulfilment = new MerchantFulfilmentService(prisma, {} as never, undefined, new SystemConfigService(prisma));
     rbac = new RbacService(prisma, fulfilment);
-    const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } as unknown as NotificationsService;
     const none = {} as never;
     admin = new AdminService(prisma, none, none, none, notifications, none, none, rbac, none, none, fulfilment);
     blocks = new UserBlockService(prisma, new SessionStateService(prisma));

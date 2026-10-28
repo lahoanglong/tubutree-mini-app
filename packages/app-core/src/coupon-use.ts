@@ -1,3 +1,5 @@
+import type { CouponPreviewDTO } from '@tubutree/shared-types';
+
 /** Chữ và điểm đến của nút "Sao chép" / "Dùng ngay" trên thẻ mã giảm giá (Mini App và web dùng chung). */
 export const couponUseCopy = {
   copy: 'Sao chép',
@@ -13,6 +15,27 @@ export const couponUseCopy = {
 } as const;
 
 export type CouponUseTarget = 'cart' | 'products';
+
+/** Dòng gợi ý ở giỏ/thanh toán khi giỏ chưa có mã: không tự áp, chỉ cho khách biết đang có mã dùng được. */
+export interface CouponHint {
+  count: number;
+  /** Mức tiết kiệm lớn nhất của một mã dùng được (giảm tiền hàng + phí giao được miễn); 0 khi chưa biết phí giao (giỏ chưa chọn địa chỉ). */
+  maxSaving: number;
+}
+
+/** Từ kết quả xem trước từng mã của máy chủ (`/checkout/coupon-previews`); null khi chưa có số hoặc không mã nào dùng được. */
+export function couponHint(previews: readonly CouponPreviewDTO[] | null | undefined): CouponHint | null {
+  const usable = (previews ?? []).filter((p) => p.eligible);
+  if (usable.length === 0) return null;
+  const saving = (p: CouponPreviewDTO) => Math.max(0, p.discount || 0) + Math.max(0, p.freeshipSaving ?? 0);
+  return { count: usable.length, maxSaving: Math.max(...usable.map(saving)) };
+}
+
+/** Giỏ chưa chọn địa chỉ thì mã freeship chưa có số tiền: nói số mã thôi, không hứa "giảm đến 0đ". */
+export function couponHintText(hint: CouponHint, formatMoney: (n: number) => string): string {
+  const base = `Bạn có ${hint.count} mã dùng được`;
+  return hint.maxSaving > 0 ? `${base} · giảm đến ${formatMoney(hint.maxSaving)}` : base;
+}
 
 /** Giỏ có hàng thì tới giỏ (chọn sẵn mã ở đó), chưa có thì tới danh sách sản phẩm để mua. */
 export function couponUseTarget(cartItemCount: number): CouponUseTarget {

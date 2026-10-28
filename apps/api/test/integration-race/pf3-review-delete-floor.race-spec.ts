@@ -38,7 +38,7 @@ describe('xoá đánh giá đã thưởng không đẩy số dư xuống âm (re
         LoyaltyService,
         LoyaltyExpiryService,
         ReviewsService,
-        { provide: NotificationsService, useValue: { notify: async () => undefined } },
+        { provide: NotificationsService, useValue: { notify: async () => undefined, notifySafe: jest.fn().mockResolvedValue(true) } },
       ],
     }).compile();
     await moduleRef.init();

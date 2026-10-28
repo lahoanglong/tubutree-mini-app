@@ -2,8 +2,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { OrderStatusActions, orderStatusActions } from './order-status-actions';
+import { useQuery } from '@tanstack/react-query';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
-import type { AdminOrder } from '@/lib/admin-client';
+import { getOpsInbox, OPS_INBOX_QUERY_KEY, type AdminOrder } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -105,6 +106,81 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     expect(api.calls[0]!.init?.method).toBe('POST');
     expect(api.calls[0]!.init?.body).toBe('{}');
     expect(container.querySelector('[role="status"]')?.textContent).toBe('Đã xác nhận nhận tiền đơn TB-300.');
+  });
+
+  it('xác nhận tiền xong thì số trên hộp việc tải lại ngay, không chờ vòng 60 giây (E-52)', async () => {
+    const InboxProbe = () => {
+      useQuery({ queryKey: OPS_INBOX_QUERY_KEY, queryFn: getOpsInbox, refetchInterval: 60_000 });
+      return null;
+    };
+    const api = mockFetch({
+      '/admin/ops/inbox': { body: { generatedAt: '2026-10-28T03:00:00.000Z', items: [] } },
+      '/confirm-payment': { body: { ok: true, alreadyPaid: false, message: 'Đã xác nhận nhận tiền đơn TB-300.', order: {} } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(
+      <>
+        <InboxProbe />
+        <OrderStatusActions order={order()} />
+      </>,
+    );
+    await flush();
+    const inboxCalls = () => api.calls.filter((c) => c.url.includes('/admin/ops/inbox')).length;
+    expect(inboxCalls()).toBe(1);
+    click(byText(container, 'button', 'Đã nhận tiền'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.calls.some((c) => c.url.includes('/confirm-payment'))).toBe(true);
+    expect(inboxCalls()).toBe(2);
+  });
+
+  it('onPaid chỉ gọi khi xác nhận tiền thành công, kèm câu của máy chủ; huỷ hộp thoại hay lỗi 400 thì không gọi', async () => {
+    let fail = true;
+    const onPaid = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        fail
+          ? new Response(JSON.stringify({ message: 'Đơn đã huỷ.' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+          : new Response(JSON.stringify({ ok: true, alreadyPaid: false, message: 'Đã xác nhận nhận tiền đơn TB-300.', order: {} }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+      ),
+    );
+    const { container } = mount(<OrderStatusActions order={order()} onPaid={onPaid} />);
+    const btn = byText(container, 'button', 'Đã nhận tiền');
+    click(btn);
+    await flush();
+    answerConfirm(false);
+    await flush();
+    click(btn);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(onPaid).not.toHaveBeenCalled();
+    fail = false;
+    click(btn);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(onPaid).toHaveBeenCalledTimes(1);
+    expect(onPaid).toHaveBeenCalledWith('Đã xác nhận nhận tiền đơn TB-300.', false);
+  });
+
+  it('máy chủ báo alreadyPaid thì onPaid nhận cờ true cùng câu của máy chủ', async () => {
+    const onPaid = vi.fn();
+    const api = mockFetch({
+      '/confirm-payment': { body: { ok: true, alreadyPaid: true, message: 'Đơn TB-300 đã được ghi nhận thanh toán trước đó.', order: {} } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<OrderStatusActions order={order()} onPaid={onPaid} />);
+    click(byText(container, 'button', 'Đã nhận tiền'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(onPaid).toHaveBeenCalledWith('Đơn TB-300 đã được ghi nhận thanh toán trước đó.', true);
   });
 
   it('"Đã nhận tiền" bấm dồn → chỉ 1 request', async () => {

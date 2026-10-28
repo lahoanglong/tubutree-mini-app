@@ -19,7 +19,7 @@ const PERK_OWNER_ONLY = 'Chỉ chủ điểm nhận mới gửi được ưu đ�
 const PERK_EMPTY = 'Nội dung ưu đãi không được để trống';
 
 const OPEN_MAIL_STATUSES = ['OPEN', 'IN_TRANSIT', 'RECEIVED'];
-const CLOSED_BY_CALLER_STATUSES = ['COMPLETED', 'REJECTED'];
+const RECENTLY_CLOSED_STATUSES = ['COMPLETED', 'REJECTED'];
 
 @Injectable()
 export class WasteDeskService {
@@ -43,7 +43,7 @@ export class WasteDeskService {
     const now = new Date();
 
     if (WASTE_LOOKUP_PATTERN.test(norm)) {
-      const found = norm.startsWith('TR-') ? await this.findRequest(userId, norm, points, now) : await this.findGift(norm, points);
+      const found = norm.startsWith('TR-') ? await this.findRequest(norm, points, now) : await this.findGift(norm, points);
       if (found) return found;
     }
 
@@ -121,23 +121,21 @@ export class WasteDeskService {
     return out;
   }
 
-  private async findRequest(userId: string, norm: string, points: WastePointAccess[], now: Date): Promise<WasteDeskLookupDTO | null> {
+  private async findRequest(norm: string, points: WastePointAccess[], now: Date): Promise<WasteDeskLookupDTO | null> {
     const req = await this.prisma.wasteRequest.findUnique({
       where: { code: norm },
       include: {
-        lines: { include: { item: { select: { hazardous: true } } } },
+        lines: { include: { item: { select: { hazardous: true, warehouseOnly: true } } } },
         user: { select: { id: true, fullName: true, phone: true } },
       },
     });
     if (!req || !points.some((p) => p.pointId === req.pointId)) return null;
 
-    const recentlyClosedByCaller =
-      req.confirmedByUserId === userId &&
-      CLOSED_BY_CALLER_STATUSES.includes(req.status) &&
-      req.closedAt !== null &&
-      now.getTime() - req.closedAt.getTime() < WASTE_DESK_RECENT_MS;
+    // Mọi nhân viên của điểm xem được yêu cầu vừa đóng (dạng chỉ đọc): đồng nghiệp quét lại mã vừa duyệt không nên gặp 404 và một lượt tra trượt.
+    const recentlyClosed =
+      RECENTLY_CLOSED_STATUSES.includes(req.status) && req.closedAt !== null && now.getTime() - req.closedAt.getTime() < WASTE_DESK_RECENT_MS;
     const visible =
-      recentlyClosedByCaller ||
+      recentlyClosed ||
       (req.method === 'DROP_OFF' ? req.status === 'OPEN' : OPEN_MAIL_STATUSES.includes(req.status));
     if (!visible) return null;
 
@@ -153,6 +151,7 @@ export class WasteDeskService {
         customerName: who.name,
         customerPhone: who.phone,
         estimatedPoints: req.estimatedPoints,
+        closedAt: req.closedAt === null ? null : req.closedAt.toISOString(),
         lines: req.lines.map((l) => ({
           itemId: l.itemId,
           itemName: l.itemName,
@@ -162,6 +161,7 @@ export class WasteDeskService {
           declaredQty: l.declaredQty,
           receivedQty: l.receivedQty,
           hazardous: l.item.hazardous,
+          warehouseOnly: l.item.warehouseOnly,
         })),
       },
     };

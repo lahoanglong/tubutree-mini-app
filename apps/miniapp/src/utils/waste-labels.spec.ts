@@ -36,12 +36,12 @@ describe('timeline 4 bước (§4.6) — current = chỉ số bước đang di�
   it('nhãn từng đường', () => {
     expect(L.TIMELINE_STEPS.MAIL_IN).toEqual(['Gửi kiện', 'Vận chuyển', 'Đã nhận ở kho', 'Cộng điểm']);
     expect(L.TIMELINE_STEPS.DROP_OFF).toEqual(['Đã tạo', 'Mang tới điểm', 'Điểm nhận đếm', 'Cộng điểm']);
-    expect(L.TIMELINE_STEPS.PICKUP).toEqual(['Đã tạo', 'Gắn vào đơn', 'Chờ kho nhận', 'Cộng điểm']);
+    expect(L.TIMELINE_STEPS.PICKUP).toEqual(['Đã tạo', 'Gắn vào đơn', 'Kho nhận, đếm', 'Cộng điểm']);
   });
   it.each([
     ['MAIL_IN', 'OPEN', null, 0], ['MAIL_IN', 'IN_TRANSIT', null, 1], ['MAIL_IN', 'RECEIVED', null, 2], ['MAIL_IN', 'COMPLETED', null, 4],
     ['DROP_OFF', 'OPEN', null, 1], ['DROP_OFF', 'COMPLETED', null, 4],
-    ['PICKUP', 'OPEN', null, 1], ['PICKUP', 'OPEN', 'TUBU123', 2], ['PICKUP', 'IN_TRANSIT', 'TUBU123', 2], ['PICKUP', 'RECEIVED', 'TUBU123', 2], ['PICKUP', 'COMPLETED', 'TUBU123', 4],
+    ['PICKUP', 'OPEN', null, 1], ['PICKUP', 'OPEN', 'TUBU123', 2], ['PICKUP', 'IN_TRANSIT', 'TUBU123', 2], ['PICKUP', 'RECEIVED', 'TUBU123', 3], ['PICKUP', 'COMPLETED', 'TUBU123', 4],
   ] as const)('%s %s (order %s) → %i', (m, s, o, cur) => { expect(t(m, s, o)?.current).toBe(cur); });
   it.each(['REJECTED', 'EXPIRED', 'CANCELLED', 'REVERSED'])('%s thay timeline bằng nhãn (null)', (s) => { expect(t('MAIL_IN', s)).toBeNull(); });
 });

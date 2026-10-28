@@ -253,11 +253,88 @@ describe('/recycle/desk — tra mã và đếm (§4.10)', () => {
     lookupReq({ status: 'COMPLETED', lines: [{ ...LINE0, receivedQty: 5 }] });
     renderPage();
     await lookUp();
-    expect(await screen.findByText('Đã xác nhận')).toBeInTheDocument();
+    expect(await screen.findByText('Đã duyệt')).toBeInTheDocument();
     expect(within(line('Thùng carton')).getByText('Đã nhận 5 thùng')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Tăng số lượng' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Xác nhận đã nhận' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Từ chối cả yêu cầu' })).toBeNull();
+  });
+});
+
+describe('/recycle/desk — yêu cầu đồng nghiệp vừa đóng, chỉ đọc', () => {
+  it('đã duyệt: ghi giờ duyệt theo giờ Việt Nam, không nút duyệt hay từ chối', async () => {
+    lookupReq({ status: 'COMPLETED', closedAt: '2026-10-28T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
+    renderPage();
+    await lookUp();
+    expect(await screen.findByText('Đã duyệt lúc 10:05')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Xác nhận đã nhận' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Từ chối cả yêu cầu' })).toBeNull();
+  });
+  it('đã từ chối: "Đã từ chối", không nút nào', async () => {
+    lookupReq({ status: 'REJECTED', closedAt: '2026-10-28T03:05:00.000Z' });
+    renderPage();
+    await lookUp();
+    expect(await screen.findByText('Đã từ chối')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Xác nhận đã nhận' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Từ chối cả yêu cầu' })).toBeNull();
+  });
+});
+
+describe('/recycle/desk — món chỉ kho HCMC nhận (E-127)', () => {
+  const MILK_ONLY = { ...REQ.lines[1]!, itemName: 'Vỏ chai Tubu', warehouseOnly: true };
+  it('điểm đối tác: dòng đó mặc định 0, có câu giải thích, không bộ đếm; duyệt gửi số nhận 0 kèm lý do "Không nhận"', async () => {
+    lookupReq({ lines: [LINE0, MILK_ONLY] });
+    mocks.deskConfirm.mockResolvedValue({ requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 5000, dropsAwarded: 0, quota: null, staffDailyCapRemaining: 150_000 });
+    renderPage();
+    await lookUp();
+    await screen.findByText('Ng*** A');
+    expect(within(line('Vỏ chai Tubu')).getByText('Chỉ kho HCMC nhận, trả lại khách')).toBeInTheDocument();
+    expect(within(line('Vỏ chai Tubu')).queryByRole('button', { name: 'Tăng số lượng' })).toBeNull();
+    expect(within(line('Vỏ chai Tubu')).queryByRole('combobox')).toBeNull();
+    expect(within(line('Thùng carton')).queryByText('Chỉ kho HCMC nhận, trả lại khách')).toBeNull();
+    expect(screen.getByText('Điểm Tubu sẽ cộng cho khách: 5.000 điểm')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Xác nhận đã nhận' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
+    await waitFor(() =>
+      expect(mocks.deskConfirm).toHaveBeenCalledWith('req-1', {
+        lines: [
+          { itemId: 'item-carton', declaredQty: 5, receivedQty: 5 },
+          { itemId: 'item-milk', declaredQty: 5, receivedQty: 0, shortfallReason: 'NOT_ACCEPTED' },
+        ],
+      }),
+    );
+  });
+  it('kho Tubu: món chỉ kho nhận vẫn mặc định số khai, có bộ đếm', async () => {
+    mocks.getDeskPoints.mockResolvedValue([WAREHOUSE_DESK]);
+    lookupReq({ pointId: 'wh-1', lines: [LINE0, MILK_ONLY] });
+    renderPage();
+    await lookUp();
+    await screen.findByText('Ng*** A');
+    expect(screen.queryByText('Chỉ kho HCMC nhận, trả lại khách')).toBeNull();
+    expect(within(line('Vỏ chai Tubu')).getByRole('button', { name: 'Tăng số lượng' })).toBeInTheDocument();
+    expect(screen.getByText('Điểm Tubu sẽ cộng cho khách: 6.000 điểm')).toBeInTheDocument();
+  });
+  it('đang ở tab đối tác nhưng tra kiện về kho: theo luật của kho, không khoá dòng', async () => {
+    mocks.getDeskPoints.mockResolvedValue([makeDeskPoint(), WAREHOUSE_DESK]);
+    lookupReq({ method: 'MAIL_IN', pointId: 'wh-1', lines: [LINE0, MILK_ONLY] });
+    renderPage();
+    await lookUp();
+    await screen.findByText('Ng*** A');
+    expect(screen.queryByText('Chỉ kho HCMC nhận, trả lại khách')).toBeNull();
+    expect(within(line('Vỏ chai Tubu')).getByRole('button', { name: 'Tăng số lượng' })).toBeInTheDocument();
+  });
+});
+
+describe('/recycle/desk — duyệt mà chưa đủ để cộng điểm (E-41)', () => {
+  it('0 điểm: tiêu đề và snackbar không nói "cộng 0 điểm"', async () => {
+    mocks.deskConfirm.mockResolvedValue({ requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 0, dropsAwarded: 0, quota: null, staffDailyCapRemaining: 150_000 });
+    renderPage();
+    await lookUp();
+    await screen.findByText('Ng*** A');
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Đã ghi nhận. Lần này chưa đủ để cộng điểm');
+    expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã ghi nhận. Lần này chưa đủ để cộng điểm', type: 'success' }));
+    expect(screen.getByRole('status').textContent).not.toMatch(/cộng 0/);
   });
 });
 

@@ -2,10 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
-import { Check, ChevronRight, Copy, Gift, Lightbulb, QrCode as QrCodeIcon, Recycle, Sprout } from 'lucide-react';
-import type { CouponDTO } from '@tubutree/app-core/api/loyalty';
-import { couponsQuery, loyaltyQuery, memberCardQuery, pointsTxnQuery } from '@tubutree/app-core/queries/loyalty';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { Check, ChevronRight, Copy, Gift, Lightbulb, QrCode as QrCodeIcon, Recycle, Sprout, Ticket } from 'lucide-react';
+import { couponsQuery, loyaltyQuery, memberCardQuery, pointsTxnPagesQuery } from '@tubutree/app-core/queries/loyalty';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { wasteRequestsQuery } from '@tubutree/app-core/queries/waste';
 import { wasteHistoryMenu } from '@tubutree/app-core/waste-copy';
@@ -15,8 +14,6 @@ import { isWebRouteReady } from '@/lib/route-map';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { pointsReasonLabel } from '@/lib/ledger-labels';
 import { formatDate } from '@/lib/format-date';
-import { formatVnd } from '@/lib/format-vnd';
-import { autoCouponName } from '@/lib/coupon-name';
 import {
   earnRuleLine,
   expiringPointsNote,
@@ -36,13 +33,12 @@ import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sheet } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
-import { CouponActions } from '@/components/loyalty/coupon-actions';
 import { DailyCheckInCard } from '@/components/loyalty/daily-check-in-card';
 import { QrCode } from '@/components/ui/qr-code';
 import { miniBtnSecondary, miniCard, miniSectionTitle, miniSurface } from '@/components/loyalty/mini-surface';
 import { LedgerShell, SignedAmount } from '../ledger-shell';
 import { loadErrorText } from '@/lib/error-text';
-import { tierGraceLine, tierRank } from '@tubutree/app-core/loyalty-tier-copy';
+import { couponShortcut, tierGraceLine, tierRank } from '@tubutree/app-core/loyalty-tier-copy';
 import { tierPerkLabel } from '@tubutree/app-core/number-format';
 
 const TITLE = 'Hạng thành viên & Điểm Xanh';
@@ -56,22 +52,15 @@ const TIER_STYLES: readonly { emoji: string; bg: string; fg: string }[] = [
 ];
 /** Tra theo THỨ HẠNG (không theo tên): đổi tên hạng trong admin vẫn giữ biểu tượng và màu. */
 const tierStyleAt = (rank: number) => TIER_STYLES[Math.min(Math.max(rank, 0), TIER_STYLES.length - 1)]!;
-const HISTORY_PAGE = 20;
 
 const errText = loadErrorText;
-
-function couponLabel(c: CouponDTO): string {
-  if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
-  if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
-  return `Giảm ${formatVnd(c.value)}`;
-}
 
 export default function LoyaltyPage() {
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed, refetchOnWindowFocus: true });
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
-  const txnQ = useQuery({ ...pointsTxnQuery(coreHttp), enabled: authed });
+  const txnQ = useInfiniteQuery({ ...pointsTxnPagesQuery(coreHttp), enabled: authed });
   const configQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: authed });
   // Chương trình tắt mà khách từng có yêu cầu thì vẫn cho xem lại (không tạo mới được).
   const wasteOff = configQ.data != null && configQ.data.waste?.enabled !== true;
@@ -81,7 +70,6 @@ export default function LoyaltyPage() {
   const [showCard, setShowCard] = useState(false);
   // Thẻ thành viên chỉ tải khi khách mở thẻ: bớt một lần gọi mỗi lần vào trang.
   const cardQ = useQuery({ ...memberCardQuery(coreHttp), enabled: authed && showCard });
-  const [historyShown, setHistoryShown] = useState(HISTORY_PAGE);
   const [celebrate, setCelebrate] = useState<string | null>(null);
   const data = loyaltyQ.data;
   const curMin = data?.tiers.find((t) => t.id === data.tier?.id)?.minPoints ?? 0;
@@ -152,11 +140,16 @@ export default function LoyaltyPage() {
   const expiring = expiringPointsNote(data.expiringPoints);
   const expiryPolicy = pointExpiryPolicyNote(data.pointExpireMonths);
   const wasteOn = configQ.data?.waste?.enabled === true;
+  const history = txnQ.data?.pages.flat() ?? [];
+  const couponRow = couponShortcut(couponsQ.isError ? null : (couponsQ.data?.length ?? 0));
+  const couponRowHref = couponRow.to === 'coupons' ? '/uu-dai?section=coupons' : '/kho-qua';
+  const couponRowReady = isWebRouteReady(couponRow.to === 'coupons' ? '/uu-dai' : '/kho-qua');
   const shortcuts = [
     { href: '/vuon-xanh', icon: Sprout, title: 'Vườn Xanh', sub: 'Chăm cây nhận quà', show: isWebRouteReady('/vuon-xanh') },
     { href: '/doi-rac', icon: Recycle, title: 'Đổi rác lấy quà', sub: 'Đổi bao bì lấy Điểm Xanh', show: wasteOn && isWebRouteReady('/doi-rac') },
     { href: '/doi-rac/yeu-cau', icon: Recycle, title: wasteHistoryMenu.label, sub: wasteHistoryMenu.hint, show: wasteOff && hasWasteHistory && isWebRouteReady('/doi-rac/yeu-cau') },
-    { href: '/kho-qua', icon: Gift, title: 'Kho quà', sub: 'Đổi Điểm Xanh lấy mã giảm giá và quà', show: isWebRouteReady('/kho-qua') },
+    // Khi chưa có mã, dòng "Đổi quà" ngay dưới thẻ hạng đã dẫn tới Kho quà: không lặp lại.
+    { href: '/kho-qua', icon: Gift, title: 'Kho quà', sub: 'Đổi Điểm Xanh lấy mã giảm giá và quà', show: couponRow.to === 'coupons' && isWebRouteReady('/kho-qua') },
   ].filter((s) => s.show);
   const celebrateStyle = tierStyleAt(celebrate ? tierRank(data.tiers, { name: celebrate }) : 0);
 
@@ -220,38 +213,33 @@ export default function LoyaltyPage() {
             </button>
           </section>
 
-          <Section className="lg:col-start-1" title="Mã giảm giá của tôi" action={couponsQ.data && couponsQ.data.length > 0 ? `${couponsQ.data.length} mã` : undefined}>
-            {couponsQ.isLoading ? (
-              <Skeleton height={64} />
-            ) : couponsQ.isError ? (
-              <InlineError message={`Chưa tải được mã giảm giá: ${errText(couponsQ.error)}`} onRetry={() => void couponsQ.refetch()} />
-            ) : couponsQ.data && couponsQ.data.length > 0 ? (
-              <ul className="space-y-2">
-                {couponsQ.data.map((c) => (
-                  <li key={c.code} className="rounded-control border border-dashed border-stone-450 bg-promo-bg p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-sm font-bold text-promo-fg">{couponLabel(c)}</div>
-                        <div className="break-words text-caption text-stone-700">
-                          {autoCouponName(c.code) ?? `Mã ${c.code}`}
-                          {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
-                        </div>
-                      </div>
-                      <div className="shrink-0 text-caption text-stone-600">HSD {formatDate(c.endAt)}</div>
-                    </div>
-                    <div className="mt-2.5">
-                      <CouponActions code={c.code} />
-                    </div>
-                  </li>
-                ))}
+          {/* Mã giảm giá nằm ở Ưu đãi: trang Hạng chỉ giữ một dòng lối tắt ngay dưới thẻ hạng, cho khách có mã vẫn thấy lý do quay lại. */}
+          {couponsQ.isLoading ? (
+            <div className="lg:col-start-1">
+              <Skeleton height={56} />
+            </div>
+          ) : (
+            couponRowReady && (
+              <ul className={`lg:col-start-1 ${miniCard}`}>
+                <li>
+                  <Link href={couponRowHref} className="flex min-h-11 items-center gap-3 p-3 hover:bg-stone-50">
+                    <IconTile>
+                      {couponRow.to === 'coupons' ? (
+                        <Ticket className="h-4 w-4 text-forest-600" aria-hidden="true" />
+                      ) : (
+                        <Gift className="h-4 w-4 text-forest-600" aria-hidden="true" />
+                      )}
+                    </IconTile>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-stone-900">{couponRow.title}</span>
+                      <span className="block text-caption text-stone-600">{couponRow.sub}</span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-stone-500" aria-hidden="true" />
+                  </Link>
+                </li>
               </ul>
-            ) : (
-              <p className="py-3 text-center text-sm text-stone-600">
-                <span className="block font-semibold text-stone-800">Chưa có mã giảm giá khả dụng</span>
-                Đổi Điểm Xanh ở mục bên dưới để nhận mã.
-              </p>
-            )}
-          </Section>
+            )
+          )}
 
           <div className="contents empty:hidden lg:col-start-1 lg:block">
             <DailyCheckInCard authed={authed} />
@@ -321,13 +309,13 @@ export default function LoyaltyPage() {
             <h2 className={`mb-2 ${ui.sectionTitle} ${miniSectionTitle}`}>Lịch sử Điểm Xanh</h2>
             {txnQ.isLoading ? (
               <Skeleton height={64} />
-            ) : txnQ.isError ? (
+            ) : txnQ.isError && history.length === 0 ? (
               <InlineError message="Không tải được lịch sử Điểm Xanh." onRetry={() => void txnQ.refetch()} />
-            ) : !txnQ.data || txnQ.data.length === 0 ? (
+            ) : history.length === 0 ? (
               <p className="py-3 text-center text-sm text-stone-600">Chưa có giao dịch điểm nào.</p>
             ) : (
               <ul className="divide-y divide-stone-200">
-                {txnQ.data.slice(0, historyShown).map((t) => (
+                {history.map((t) => (
                   <li key={t.id} className="flex items-start justify-between gap-3 py-2.5">
                     <div className="min-w-0">
                       <div className="break-words text-sm font-medium text-stone-900">{pointsReasonLabel(t.reason)}</div>
@@ -341,9 +329,14 @@ export default function LoyaltyPage() {
                 ))}
               </ul>
             )}
-            {txnQ.data && txnQ.data.length > historyShown && (
-              <button type="button" onClick={() => setHistoryShown((n) => n + HISTORY_PAGE)} className={`${miniBtnSecondary} mt-3 w-full`}>
-                {`Xem thêm (${txnQ.data.length - historyShown})`}
+            {txnQ.hasNextPage && (
+              <button
+                type="button"
+                disabled={txnQ.isFetchingNextPage}
+                onClick={() => void txnQ.fetchNextPage()}
+                className={`${miniBtnSecondary} mt-3 w-full`}
+              >
+                {txnQ.isFetchingNextPage ? 'Đang tải…' : txnQ.isFetchNextPageError ? 'Chưa tải được, bấm để thử lại' : 'Xem thêm'}
               </button>
             )}
           </section>

@@ -25,7 +25,7 @@ vi.mock('../subscribe-sheet', () => ({
 import { OrderSuccess } from './order-success';
 
 const ORDER = {
-  id: 'o1', code: 'TUBU-COD-12345', status: 'CONFIRMED', total: 149000, pointsEarned: 14, paymentMethod: 'COD',
+  id: 'o1', code: 'TUBU-COD-12345', status: 'CONFIRMED', total: 149000, pointsEarned: 14, paymentMethod: 'COD', fulfiller: 'TUBU',
   items: [{ id: 'i1', variationId: 'var-1', productName: 'Nước rửa chén', productSlug: 'nrc', variationName: 'Chanh', unitPrice: 65000, quantity: 2, total: 130000, backorderedQty: 0 }],
 } as unknown as OrderDTO;
 const CONFIG = { freeshipThreshold: 200000, subscribeDiscountPct: 0.12, affiliateWalletMultiplier: 1.5, cashbackHoldDays: 30 };
@@ -72,6 +72,31 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     renderSuccess();
     expect(await screen.findByText('Giao dự kiến')).toBeInTheDocument();
     expect(screen.getByText(/^\d{2}\/\d{2} – \d{2}\/\d{2}$/)).toBeInTheDocument();
+  });
+
+  describe('ngày giao dự kiến theo nơi giao (chỉ hứa cho hàng Tubu giao)', () => {
+    const split = (...kinds: string[]) => ({
+      ...ORDER,
+      splitOrders: kinds.map((fulfiller, i) => ({ id: `s${i}`, code: `TUBU-S${i}`, total: 50000, status: 'CONFIRMED', fulfiller, fulfillerName: fulfiller })),
+    }) as unknown as typeof ORDER;
+
+    it('đơn của gian hàng tự giao → không có dòng giao dự kiến (sau khi config đã tải xong)', async () => {
+      const { qc } = renderSuccess({ order: { ...ORDER, fulfiller: 'MERCHANT' } as unknown as typeof ORDER });
+      await waitFor(() => expect(qc.getQueryState(['public-config'])?.status).toBe('success'));
+      expect(screen.queryByText('Giao dự kiến')).toBeNull();
+    });
+
+    it('tách nhiều đơn toàn gian hàng tự giao → cũng không hứa ngày', async () => {
+      const { qc } = renderSuccess({ order: split('MERCHANT', 'MERCHANT') });
+      await waitFor(() => expect(qc.getQueryState(['public-config'])?.status).toBe('success'));
+      expect(screen.queryByText('Giao dự kiến')).toBeNull();
+    });
+
+    it('tách đơn trộn Tubu + gian hàng tự giao → ngày kèm "(hàng Tubu Tree)"', async () => {
+      renderSuccess({ order: split('TUBU', 'MERCHANT') });
+      expect(await screen.findByText('Giao dự kiến')).toBeInTheDocument();
+      expect(screen.getByText(/^\d{2}\/\d{2} – \d{2}\/\d{2} \(hàng Tubu Tree\)$/)).toBeInTheDocument();
+    });
   });
 
   it('chưa cấu hình ETA (null) → không có dòng giao dự kiến (sau khi config đã tải xong)', async () => {

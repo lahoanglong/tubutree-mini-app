@@ -46,9 +46,6 @@ export class GameController {
   @Get('profile')
   profile(@CurrentUser('sub') userId: string) { return this.game.getProfile(userId); }
 
-  @Post('check-in')
-  checkIn(@CurrentUser('sub') userId: string) { return this.economy.checkIn(userId); }
-
   @Post('dew/collect')
   dew(@CurrentUser('sub') userId: string) { return this.economy.collectDew(userId); }
 

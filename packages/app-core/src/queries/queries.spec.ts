@@ -15,8 +15,6 @@ import * as groupbuy from './groupbuy';
 import * as home from './home';
 import * as loyalty from './loyalty';
 import * as orders from './orders';
-import * as payment from './payment';
-import * as reviews from './reviews';
 import * as subs from './subscriptions';
 import * as wallet from './wallet';
 import * as waste from './waste';
@@ -55,25 +53,22 @@ const cases: Case[] = [
   ['myRefunds', (h) => orders.myRefundsQuery(h, 'o1'), ['my-refunds', 'o1'], '/orders/me/refunds'],
   ['refundBank', (h) => orders.refundBankQuery(h), ['refund-bank'], '/orders/me/refund-bank'],
   ['returnEstimate', (h) => orders.returnEstimateQuery(h, 'T1', [], 'DEFECTIVE'), ['return-estimate', 'T1', [], 'DEFECTIVE'], '/orders/T1/return-estimate'],
-  ['reviews', (h) => reviews.reviewsQuery(h, 'sp'), ['reviews', 'sp'], '/products/sp/reviews'],
-  ['canReview', (h) => reviews.canReviewQuery(h, 'sp'), ['can-review', 'sp'], '/products/sp/reviews/can-review'],
-  ['myReview', (h) => reviews.myReviewQuery(h, 'r1'), ['my-review', 'r1'], '/reviews/r1'],
   ['flashActive', (h) => flash.flashActiveQuery(h), ['flash-sales', 'active'], '/flash-sales/active'],
   ['flashUpcoming', (h) => flash.flashUpcomingQuery(h), ['flash-sales', 'upcoming'], '/flash-sales/upcoming'],
   ['publicConfig', (h) => config.publicConfigQuery(h), ['public-config'], '/config/public'],
   ['groupBuyList', (h) => groupbuy.groupBuyListQuery(h), ['group-buy', 'list', 'guest'], '/group-buy'],
-  ['groupBuyOne', (h) => groupbuy.groupBuyOneQuery(h, 'g1'), ['group-buy', 'one', 'g1'], '/group-buy/g1'],
+  ['groupBuyOne', (h) => groupbuy.groupBuyOneQuery(h, 'g1'), ['group-buy', 'one', 'g1', 'guest'], '/group-buy/g1'],
   ['publicBrand', (h) => brand.publicBrandQuery(h, 'tubu'), ['public-brand', 'tubu'], '/brand/public/tubu'],
   ['brandFollow', (h) => brand.brandFollowQuery(h, 'tubu'), ['brand-follow', 'tubu'], '/brand/tubu/follow-state'],
   ['brandShareToEarn', (h) => brand.brandShareToEarnQuery(h, 'tubu'), ['brand-ste', 'tubu'], '/brand/tubu/share-to-earn'],
   ['subscriptions', (h) => subs.subscriptionsQuery(h), ['subscriptions'], '/me/subscriptions'],
-  ['bankQr', (h) => payment.bankQrQuery(h, 'T1'), ['bank-qr', 'T1'], '/payments/bank-qr/T1'],
   ['geoProvinces', (h) => geo.provincesQuery(h), ['geo-provinces'], '/geo/provinces'],
   ['wishlist', (h) => wishlist.wishlistQuery(h), ['wishlist'], '/me/wishlist'],
   ['wishlistIds', (h) => wishlist.wishlistIdsQuery(h), ['wishlist-ids'], '/me/wishlist/ids'],
   ['geoCommunes', (h) => geo.communesQuery(h, 'p'), ['geo-communes', 'p'], '/geo/communes'],
   ['me', (h) => account.meQuery(h), ['me'], '/me'],
   ['notifications', (h) => account.notificationsQuery(h), ['notifications'], '/me/notifications'],
+  ['unreadNotifications', (h) => account.unreadNotificationCountQuery(h), ['notifications', 'unread'], '/me/notifications/unread-count'],
   ['faqs', (h) => config.faqsQuery(h), ['faqs'], '/faqs'],
   ['supportContact', (h) => config.supportContactQuery(h), ['support-contact'], '/config/public'],
   ['loyalty', (h) => loyalty.loyaltyQuery(h), ['loyalty'], '/me/loyalty'],
@@ -107,6 +102,31 @@ describe('queries — queryKey giống Mini App, queryFn gọi đúng đường 
     expect(calls).toHaveLength(0);
     await q.queryFn();
     expect(calls[0]!.path).toBe(path);
+  });
+});
+
+describe('queries — danh sách thông báo (infinite)', () => {
+  const row = (i: number) => ({ id: `n${i}`, templateCode: 'X', payload: {}, status: 'SENT' as const, sentAt: `2026-10-28T03:00:0${i}.000Z` });
+
+  it('khoá con của ["notifications"] (invalidate cũ vẫn đúng) và khác khoá mảng phẳng; trang đầu không con trỏ', async () => {
+    const { http, calls } = fakeHttp();
+    const q = account.notificationsInfiniteQuery(http);
+    expect(q.queryKey).toEqual(['notifications', 'list']);
+    expect(q.queryKey[0]).toBe(account.notificationsQuery(http).queryKey[0]);
+    await q.queryFn({ pageParam: undefined });
+    await q.queryFn({ pageParam: { before: '2026-10-28T03:00:00.000Z', beforeId: 'n9' } });
+    expect(calls.map((c) => c.opts)).toEqual([
+      { query: { limit: 20 } },
+      { query: { before: '2026-10-28T03:00:00.000Z', beforeId: 'n9', limit: 20 } },
+    ]);
+  });
+
+  it('trang đủ 20 tin: con trỏ là sentAt + id của tin cuối; trang ít hơn hoặc rỗng: hết tin', () => {
+    const full = Array.from({ length: 20 }, (_, i) => row(i % 10));
+    expect(account.nextNotificationCursor(full)).toEqual({ before: full[19]!.sentAt, beforeId: full[19]!.id });
+    expect(account.nextNotificationCursor(full.slice(0, 19))).toBeUndefined();
+    expect(account.nextNotificationCursor([])).toBeUndefined();
+    expect(account.nextNotificationCursor(full.slice(0, 5), 5)).toEqual({ before: full[4]!.sentAt, beforeId: full[4]!.id });
   });
 });
 
@@ -182,6 +202,15 @@ describe('makeFlashRefetchInterval (B-132)', () => {
 
   it('suất không có endAt hợp lệ: nhịp 60 giây', () => {
     expect(poll({ state: { data: [{}, { endAt: 'abc' }] } })).toBe(60_000);
+  });
+});
+
+describe('groupBuyOneQuery gắn với người xem (E-44)', () => {
+  it('khách và người đã đăng nhập không dùng chung bản chi tiết nhóm (joined/couponCode theo người xem)', async () => {
+    const { groupBuyOneQuery } = await import('./groupbuy');
+    const http = {} as never;
+    expect(groupBuyOneQuery(http, 'g1', 'guest').queryKey).not.toEqual(groupBuyOneQuery(http, 'g1', 'u1').queryKey);
+    expect(groupBuyOneQuery(http, 'g1', 'u1').queryKey).toEqual(['group-buy', 'one', 'g1', 'u1']);
   });
 });
 

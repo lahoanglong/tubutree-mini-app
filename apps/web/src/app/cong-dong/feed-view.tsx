@@ -181,11 +181,6 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
 
       <div className="flex flex-col gap-3 max-md:-mx-4 max-md:gap-2 max-md:bg-stone-0 max-md:px-3 max-md:pb-1 md:contents">
         <div className="flex items-center gap-2 max-md:gap-1.5">
-          {isWebRouteReady('/cong-dong/xep-hang') && (
-            <Link href="/cong-dong/xep-hang" aria-label="Bảng xếp hạng" className={linkBtn}>
-              Xếp hạng
-            </Link>
-          )}
           {isWebRouteReady('/cong-dong/su-kien') && (
             <Link href="/cong-dong/su-kien" aria-label="Sự kiện" className={linkBtn}>
               Sự kiện

@@ -24,7 +24,7 @@ describe('Merchant product edit draft (real Postgres)', () => {
     prisma = new PrismaService();
     await prisma.$connect();
     await warmPool(prisma);
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     const none = {} as never;
     admin = new AdminService(prisma, none, none, none, notifications, none, none, none, none, none);
     merchant = new MerchantService(prisma, {} as OrderStatusService, notifications);

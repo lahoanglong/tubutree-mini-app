@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
+import type { NotificationFeedService } from './notification-feed.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { ZnsClient } from '../integrations/zns/zns.client';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -59,7 +60,7 @@ describe('NotificationsService.markAllRead (R6-BUYER-5)', () => {
 describe('NotificationsController read-all', () => {
   it('POST me/notifications/read-all dùng userId của người gọi và tách khỏi :id/read', () => {
     const markAllRead = jest.fn().mockResolvedValue({ ok: true, count: 3 });
-    const ctrl = new NotificationsController({ markAllRead } as unknown as NotificationsService);
+    const ctrl = new NotificationsController({ markAllRead } as unknown as NotificationsService, {} as NotificationFeedService);
     expect(Reflect.getMetadata('path', NotificationsController)).toBe('me/notifications');
     expect(Reflect.getMetadata('path', NotificationsController.prototype.markAllRead)).toBe('read-all');
     void ctrl.markAllRead('u1');

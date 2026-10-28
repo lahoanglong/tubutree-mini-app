@@ -236,9 +236,9 @@ export class GroupBuyService {
   private async grantAllMembers(group: GroupRow): Promise<boolean> {
     const members = await this.prisma.groupBuyMember.findMany({ where: { groupBuyId: group.id } });
     const terms = await this.couponTerms(group);
-    // Tên sản phẩm chỉ để điền tin: tra lỗi không được chặn việc cấp mã.
+    // Tên và slug sản phẩm chỉ để điền tin: tra lỗi không được chặn việc cấp mã.
     const product = await this.prisma.product
-      .findUnique({ where: { id: group.productId }, select: { name: true } })
+      .findUnique({ where: { id: group.productId }, select: { name: true, slug: true } })
       .catch(() => null);
     let allGranted = true;
     for (const m of members) {
@@ -259,6 +259,8 @@ export class GroupBuyService {
             // Mã là % có trần: số tiền cố định sẽ hứa nhiều hơn mức giảm thật khi khách mua biến thể rẻ.
             discount: `${terms.pct}%`,
             product: product?.name ?? '',
+            // Nút trong tin mở thẳng trang sản phẩm; thiếu slug (tra lỗi) thì bỏ khoá, client rơi về danh sách Mua chung.
+            ...(product?.slug ? { product_slug: product.slug } : {}),
             code: granted.code,
             expires: formatVnDate(granted.endAt),
           })

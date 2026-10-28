@@ -8,6 +8,7 @@ import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { LoyaltyController } from './loyalty.controller';
 import type { LoyaltyService } from './loyalty.service';
 import { PosCreditDto, PosCreditListQuery, ScanMemberDto } from './dto/loyalty-staff.dto';
+import { PointsTransactionsQuery } from './dto/points-transactions.dto';
 
 async function errorKeys<T extends object>(cls: new () => T, plain: Record<string, unknown>): Promise<string[]> {
   const errs = await validate(plainToInstance(cls, plain), { whitelist: true, forbidNonWhitelisted: true });
@@ -32,15 +33,16 @@ describe('LoyaltyController — route nhân viên (POS)', () => {
     expect(Reflect.getMetadata(ROLES_KEY, h)).toBeUndefined();
   });
 
-  it('route khách (trạng thái điểm danh/đổi quà) KHÔNG giới hạn role', () => {
-    expect(Reflect.getMetadata(ROLES_KEY, LoyaltyController.prototype.checkInStatus)).toBeUndefined();
+  it('route khách (đổi quà) KHÔNG giới hạn role', () => {
     expect(Reflect.getMetadata(ROLES_KEY, LoyaltyController.prototype.redeemReward)).toBeUndefined();
   });
 });
 
 describe('LoyaltyController — điểm danh', () => {
-  it('không còn POST /me/loyalty/check-in: điểm danh thật đi qua /me/daily-check-in để chuỗi chung được cập nhật', () => {
-    expect((LoyaltyController.prototype as unknown as Record<string, unknown>).checkIn).toBeUndefined();
+  it('không còn POST/GET /me/loyalty/check-in: điểm danh và trạng thái đều đi qua /me/daily-check-in để chuỗi chung được cập nhật', () => {
+    const proto = LoyaltyController.prototype as unknown as Record<string, unknown>;
+    expect(proto.checkIn).toBeUndefined();
+    expect(proto.checkInStatus).toBeUndefined();
   });
 });
 
@@ -57,7 +59,7 @@ describe('LoyaltyController.preview — xem trước cho khách chưa đăng nh�
   });
 
   it('các route /me/loyalty/* còn lại KHÔNG công khai', () => {
-    for (const m of ['overview', 'rewards', 'myRedemptions', 'redeemReward', 'checkInStatus'] as const) {
+    for (const m of ['overview', 'rewards', 'myRedemptions', 'redeemReward'] as const) {
       expect(Reflect.getMetadata(IS_PUBLIC_KEY, LoyaltyController.prototype[m])).toBeUndefined();
     }
   });
@@ -133,5 +135,31 @@ describe('PosCreditListQuery', () => {
 
   it.each(['27/09/2026', '2026-9-27', "2026-09-27' OR 1=1"])('day "%s" sai định dạng → lỗi', async (day) => {
     expect((await errorKeys(PosCreditListQuery, { day })).length).toBeGreaterThan(0);
+  });
+});
+
+describe('LoyaltyController.transactions — phân trang lịch sử điểm', () => {
+  const svc = () => ({ getPointsTransactions: jest.fn().mockResolvedValue([]) });
+  const make = (s: ReturnType<typeof svc>) => new LoyaltyController(s as unknown as LoyaltyService);
+
+  it('không tham số: gọi service với trang rỗng (client cũ vẫn nhận 100 dòng)', async () => {
+    const s = svc();
+    await make(s).transactions('u1', new PointsTransactionsQuery());
+    expect(s.getPointsTransactions).toHaveBeenCalledWith('u1', { before: undefined, beforeId: undefined, limit: undefined });
+  });
+
+  it('before/beforeId/limit được chuyển cho service, before thành Date', async () => {
+    const s = svc();
+    await make(s).transactions('u1', plainToInstance(PointsTransactionsQuery, { before: '2026-10-20T03:00:00.123Z', beforeId: 'tx9', limit: '20' }));
+    expect(s.getPointsTransactions).toHaveBeenCalledWith('u1', { before: new Date('2026-10-20T03:00:00.123Z'), beforeId: 'tx9', limit: 20 });
+  });
+
+  it('DTO: before phải là ngày giờ ISO, limit 1..100 và là số nguyên', async () => {
+    expect(await errorKeys(PointsTransactionsQuery, { before: '2026-10-20T03:00:00.123Z', beforeId: 'tx9', limit: '20' })).toEqual([]);
+    expect(await errorKeys(PointsTransactionsQuery, {})).toEqual([]);
+    expect(await errorKeys(PointsTransactionsQuery, { before: 'hôm qua' })).toContain('isDateString');
+    expect(await errorKeys(PointsTransactionsQuery, { limit: '0' })).toContain('min');
+    expect(await errorKeys(PointsTransactionsQuery, { limit: '101' })).toContain('max');
+    expect(await errorKeys(PointsTransactionsQuery, { limit: '1.5' })).toContain('isInt');
   });
 });

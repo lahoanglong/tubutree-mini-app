@@ -5,6 +5,7 @@ import type { JwtPayload } from '@tubutree/shared-types';
 import { AnalyticsEventsService } from './analytics-events.service';
 import { normalizeEntryToken } from '../../common/attribution';
 import { IngestEventsDto } from './dto/ingest-events.dto';
+import { hashDeviceId } from '../auth/device-id';
 
 @Controller('events')
 export class AnalyticsController {
@@ -19,13 +20,15 @@ export class AnalyticsController {
     @Body() dto: IngestEventsDto,
     @Headers('x-device-id') deviceId?: string,
   ): Promise<{ accepted: number }> {
+    // deviceId thô là khoá đăng nhập tài khoản khách: bảng sự kiện (xem được ở báo cáo) chỉ giữ bản băm.
+    const anonymousFromDevice = deviceId ? hashDeviceId(deviceId).slice(0, 32) : null;
     await this.analytics.recordManyBestEffort(
       dto.events.map((e) => ({
         eventId: e.eventId,
         eventName: e.eventName,
         occurredAt: new Date(e.occurredAt),
         userId: user?.sub ?? null,
-        anonymousId: e.anonymousId ?? deviceId ?? null,
+        anonymousId: e.anonymousId ?? anonymousFromDevice,
         sessionId: e.sessionId ?? null,
         platform: e.platform,
         appVersion: e.appVersion ?? null,

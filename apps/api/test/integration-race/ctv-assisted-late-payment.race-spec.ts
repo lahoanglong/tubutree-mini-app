@@ -33,7 +33,7 @@ describe('Tiền khách cuối của đơn CTV lên hộ: về muộn / dư / th
   let orderStatus: OrderStatusService;
   let refunds: CustomerRefundsService;
   const notify = jest.fn().mockResolvedValue(undefined);
-  const ctx = () => ({ prisma, notifications: { notify }, logger: { warn: jest.fn(), log: jest.fn() } });
+  const ctx = () => ({ prisma, notifications: { notify, notifySafe: notify }, logger: { warn: jest.fn(), log: jest.fn() } });
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -49,7 +49,7 @@ describe('Tiền khách cuối của đơn CTV lên hộ: về muộn / dư / th
       grantReferralReward: jest.fn().mockResolvedValue(undefined),
       reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
     } as unknown as AffiliateService;
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     const reversal = new OrderReversalService(
       { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService,
       { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService,
@@ -299,7 +299,7 @@ describe('Tiền khách cuối của đơn CTV lên hộ: về muộn / dư / th
 
     const row = await prisma.orderCustomerRefund.findFirstOrThrow({ where: { orderId: order.id } });
     expect(row).toMatchObject({ userId: buyer.id, kind: 'LATE_PAYMENT', method: 'MANUAL_TRANSFER', status: 'PENDING', phone: null });
-    expect(notify).toHaveBeenCalledWith(buyer.id, 'REFUND_LATE_PAYMENT', expect.objectContaining({ order_code: order.code }));
+    expect(notify).toHaveBeenCalledWith(buyer.id, 'REFUND_LATE_PAYMENT', expect.objectContaining({ order_code: order.code }), undefined, `order=${order.code}`);
     expect(await refunds.listMine(buyer.id)).toEqual([expect.objectContaining({ id: row.id, canChooseDestination: true })]);
     await refunds.chooseDestination(buyer.id, row.id, { refundMethod: 'WALLET' });
     expect(await walletOf(buyer.id)).toBe(150_000);

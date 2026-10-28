@@ -7,6 +7,8 @@ import { AdminEngagementController } from './admin-engagement.controller';
 import { AdminEngagementService } from './admin-engagement.service';
 import { AdminGameSeasonController } from './admin-game-season.controller';
 import { AdminGameSeasonService } from './admin-game-season.service';
+import { AdminGameQuizController } from './admin-game-quiz.controller';
+import { GameQuizService } from '../game/game-quiz.service';
 import { AdminCouponBatchController } from './admin-coupon-batch.controller';
 import { AdminCouponBatchService } from './admin-coupon-batch.service';
 import { AdminReportsController } from './admin-reports.controller';
@@ -21,7 +23,7 @@ import { GomdonModule } from '../integrations/gomdon/gomdon.module';
 
 @Module({
   imports: [CatalogModule, OrdersModule, StaffModule, GomdonModule, MerchantModule],
-  controllers: [AdminController, AdminUsersController, AdminEngagementController, AdminGameSeasonController, AdminCouponBatchController, AdminReportsController],
-  providers: [AdminService, UserBlockService, AdminEngagementService, AdminGameSeasonService, AdminCouponBatchService, AdminReportsService],
+  controllers: [AdminController, AdminUsersController, AdminEngagementController, AdminGameSeasonController, AdminGameQuizController, AdminCouponBatchController, AdminReportsController],
+  providers: [AdminService, UserBlockService, AdminEngagementService, AdminGameSeasonService, GameQuizService, AdminCouponBatchService, AdminReportsService],
 })
 export class AdminModule {}

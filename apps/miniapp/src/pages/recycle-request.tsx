@@ -158,8 +158,11 @@ export default function RecycleRequestPage() {
   useEffect(() => {
     if (!qrOpen || !liveStatus || liveStatus === 'OPEN') return;
     setQrOpen(false);
+    // Quầy vừa cộng điểm: làm mới số dư và tiến tới quà trước khi sang màn kết quả, nếu không màn đó dùng lại số cũ còn tươi trong bộ nhớ.
+    void invalidateAfterWasteWrite(qc);
+    void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards });
     if (liveStatus === 'COMPLETED') navigate(`/recycle/done/${id}`, { replace: true });
-  }, [qrOpen, liveStatus, id, navigate]);
+  }, [qrOpen, liveStatus, id, navigate, qc]);
   const pointsQ = useQuery({
     queryKey: WASTE_QUERY_KEYS.points(null),
     queryFn: () => getWastePoints(),

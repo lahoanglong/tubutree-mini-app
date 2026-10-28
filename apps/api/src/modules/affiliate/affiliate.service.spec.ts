@@ -10,6 +10,7 @@ import type { PancakeOrderService } from '../integrations/pancake/pancake-order.
 import type { RewardPointsService } from '../wallet/reward-points.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import type { FlashSaleService } from '../flash-sale/flash-sale.service';
+import type { NotificationsService } from '../notifications/notifications.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 
 // Sổ cái thật (khoá dòng + wallet_transactions) chạy trên Postgres ở
@@ -310,7 +311,12 @@ describe('AffiliateService.reverseCommissionsForOrder (guard đối xứng cho l
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = {
       order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
-      commission: { updateMany, findMany: jest.fn().mockResolvedValue([{ affiliateUserId: 'ctv', amount: 12_000 }]) },
+      commission: {
+        updateMany,
+        findMany: jest.fn(async ({ where }: { where: { status: { in: string[] } } }) =>
+          where.status.in.includes('PENDING') ? [{ affiliateUserId: 'ctv', amount: 12_000 }] : [],
+        ),
+      },
     } as unknown as PrismaService;
     return { prisma, updateMany };
   }
@@ -339,6 +345,100 @@ describe('AffiliateService.reverseCommissionsForOrder (guard đối xứng cho l
     const { prisma, updateMany } = makePrisma({ id: 'o1', userId: 'u1', referrerUserId: null, placedForCustomer: false });
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).reverseCommissionsForOrder('o1');
     expect(updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('AffiliateService.reverseCommissionsForOrder: hoa hồng đã duyệt/đã chuyển mà đơn bị trả → báo kế toán (không trừ Ví)', () => {
+  const order = { id: 'o1', code: 'TUBU1', userId: 'buyer', referrerUserId: 'ctv', placedForCustomer: false };
+
+  function setup(commissions: Array<{ status: string; amount: number; affiliateUserId?: string; user?: unknown }>) {
+    const updateMany = jest.fn().mockResolvedValue({ count: 0 });
+    const userUpdate = jest.fn();
+    const prisma = {
+      order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+      commission: {
+        updateMany,
+        findMany: jest.fn(async ({ where }: { where: { status: { in: string[] } } }) =>
+          commissions.filter((c) => where.status.in.includes(c.status)).map((c) => ({ affiliateUserId: 'ctv', user: { fullName: 'Linh', referralCode: 'LINH' }, ...c })),
+        ),
+      },
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 'adm1' }, { id: 'adm2' }]), update: userUpdate },
+    } as unknown as PrismaService;
+    // Giữ đúng luật chặn lặp của NotificationsService.notify: cùng (người nhận, dedupeKey) chỉ lưu một lần.
+    const seen = new Set<string>();
+    const delivered: string[] = [];
+    const notify = jest.fn(async (userId: string, code: string, _data: Record<string, string>, opts: { dedupeKey?: string } = {}) => {
+      const key = `${userId}:${opts.dedupeKey}`;
+      if (opts.dedupeKey && seen.has(key)) return;
+      seen.add(key);
+      if (code === 'OPS_REFUND_ALERT') delivered.push(userId);
+    });
+    const notifications = { notify } as unknown as NotificationsService;
+    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics, notifications);
+    return { svc, notify, updateMany, userUpdate, delivered };
+  }
+  const alerts = (notify: jest.Mock) => notify.mock.calls.filter(([, code]) => code === 'OPS_REFUND_ALERT');
+
+  it('hoa hồng PAID: mỗi admin được báo một lần, nêu mã đơn, CTV, số tiền, trạng thái; không ghi trạng thái hoa hồng hay Ví', async () => {
+    const { svc, notify, updateMany, userUpdate } = setup([{ status: 'PAID', amount: 45_000 }]);
+    await svc.reverseCommissionsForOrder('o1');
+    const sent = alerts(notify);
+    expect(sent.map(([uid]) => uid)).toEqual(['adm1', 'adm2']);
+    const data = sent[0][2] as { order_code: string; message: string };
+    expect(data.order_code).toBe('TUBU1');
+    expect(data.message).toContain('Linh');
+    expect(data.message).toContain(`${(45_000).toLocaleString('vi-VN')}đ`);
+    expect(data.message).toContain('đã chuyển vào Ví');
+    expect(data.message).toContain('kế toán');
+    expect(sent[0][3]).toEqual({ dedupeKey: 'commission-paid-order-reversed:o1' });
+    // Chỉ dòng PENDING/LOCKED được đảo; dòng PAID/APPROVED không bị đụng, Ví không đổi.
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(updateMany.mock.calls[0][0].where.status).toEqual({ in: ['PENDING', 'LOCKED'] });
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(ledger).not.toHaveBeenCalled();
+  });
+
+  it('hoa hồng APPROVED (chờ chuyển vào Ví) cũng báo, ghi "đã duyệt"', async () => {
+    const { svc, notify } = setup([{ status: 'APPROVED', amount: 10_000 }]);
+    await svc.reverseCommissionsForOrder('o1');
+    expect((alerts(notify)[0][2] as { message: string }).message).toContain('đã duyệt');
+  });
+
+  it('gọi lần hai cho cùng đơn (setStatus chạy lại) không báo lại', async () => {
+    const { svc, delivered } = setup([{ status: 'PAID', amount: 45_000 }]);
+    await svc.reverseCommissionsForOrder('o1');
+    await svc.reverseCommissionsForOrder('o1');
+    expect(delivered).toEqual(['adm1', 'adm2']);
+  });
+
+  it('đường trả một phần gọi thẳng cảnh báo: báo "trả một phần", khoá chống lặp theo yêu cầu trả; hai yêu cầu khác nhau đều được báo, cùng yêu cầu thì không lặp', async () => {
+    const { svc, notify, delivered, updateMany, userUpdate } = setup([{ status: 'PAID', amount: 45_000 }]);
+    await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', { returnRequestId: 'rr1' });
+    const first = alerts(notify);
+    expect(first.map(([uid]) => uid)).toEqual(['adm1', 'adm2']);
+    expect((first[0][2] as { message: string }).message).toContain('trả một phần');
+    expect((first[0][2] as { message: string }).message).toContain('đã chuyển vào Ví');
+    expect(first[0][3]).toEqual({ dedupeKey: 'commission-paid-order-reversed:o1:rr1' });
+    await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', { returnRequestId: 'rr1' });
+    expect(delivered).toEqual(['adm1', 'adm2']);
+    await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', { returnRequestId: 'rr2' });
+    expect(delivered).toEqual(['adm1', 'adm2', 'adm1', 'adm2']);
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(ledger).not.toHaveBeenCalled();
+  });
+
+  it('chỉ có hoa hồng PENDING/LOCKED (đảo được): không báo kế toán', async () => {
+    const { svc, notify, updateMany } = setup([{ status: 'PENDING', amount: 12_000 }, { status: 'LOCKED', amount: 3_000 }]);
+    await svc.reverseCommissionsForOrder('o1');
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(alerts(notify)).toHaveLength(0);
+  });
+
+  it('báo admin lỗi không làm hỏng việc thu hồi (setStatus gọi lại được)', async () => {
+    const { svc, notify } = setup([{ status: 'PAID', amount: 45_000 }]);
+    notify.mockRejectedValue(new Error('queue down'));
+    await expect(svc.reverseCommissionsForOrder('o1')).resolves.toBeUndefined();
   });
 });
 
@@ -1786,6 +1886,15 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
     expect(analyticsLocal.record).not.toHaveBeenCalled();
   });
 
+  it('recordTouch: nền web → referral_touched ghi platform web (không còn luôn miniapp)', async () => {
+    const prisma = makePrisma();
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'ctv1', role: 'AFFILIATE', storefronts: [] });
+    const analyticsLocal = { record: jest.fn(), recordBestEffort: jest.fn().mockResolvedValue(undefined) };
+    await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analyticsLocal as unknown as AnalyticsEventsService)
+      .recordTouch('buyer1', { referralCode: 'LINH', kind: 'ctv' }, NOW, 'web');
+    expect(analyticsLocal.recordBestEffort).toHaveBeenCalledWith(expect.objectContaining({ eventName: 'referral_touched', platform: 'web' }));
+  });
+
   it('recordTouch: bỏ qua nếu không có referralCode → KHÔNG phát referral_touched', async () => {
     const prisma = makePrisma();
     const analyticsLocal = {
@@ -1851,7 +1960,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
     }
     findUnique.mockResolvedValueOnce(null);
     expect(await svc.isCommissionEligible('x')).toBe(false);
-    expect(findUnique).toHaveBeenLastCalledWith({ where: { id: 'x' }, select: { role: true, isBlocked: true, storefronts: SAMPLE_SELECT } });
+    expect(findUnique).toHaveBeenLastCalledWith({ where: { id: 'x' }, select: { role: true, isBlocked: true, mergedIntoId: true, storefronts: SAMPLE_SELECT } });
   });
 
   it('isCommissionEligible: tài khoản bị khoá không còn được ghi công đơn mới dù còn vai trò CTV', async () => {
@@ -1876,13 +1985,27 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
     const svc = new AffiliateService(makePrisma({ user: { findUnique } }), config, pricing, pancakeOrder, coins, analytics);
     findUnique.mockResolvedValueOnce({ id: 'ctv1', role: 'AFFILIATE', isBlocked: false, storefronts: [] });
     expect(await svc.findEligibleReferrer('linh', 'buyer1')).toBe('ctv1');
-    expect(findUnique).toHaveBeenLastCalledWith({ where: { referralCode: 'LINH' }, select: { id: true, role: true, isBlocked: true, storefronts: SAMPLE_SELECT } });
+    expect(findUnique).toHaveBeenLastCalledWith({ where: { referralCode: 'LINH' }, select: { id: true, role: true, isBlocked: true, mergedIntoId: true, storefronts: SAMPLE_SELECT } });
     findUnique.mockResolvedValueOnce(null);
     expect(await svc.findEligibleReferrer('NOPE', 'buyer1')).toBeNull();
     findUnique.mockResolvedValueOnce({ id: 'buyer1', role: 'AFFILIATE', storefronts: [] });
     expect(await svc.findEligibleReferrer('SELF', 'buyer1')).toBeNull();
     findUnique.mockResolvedValueOnce({ id: 'friend1', role: 'CUSTOMER', storefronts: [] });
     expect(await svc.findEligibleReferrer('FRIEND1', 'buyer1')).toBeNull();
+  });
+
+  it('findEligibleReferrer / isCommissionEligible: dòng khách đã gộp vào tài khoản khác (mergedIntoId) không được ghi công', async () => {
+    const findUnique = jest.fn().mockResolvedValue({ id: 'old1', role: 'AFFILIATE', isBlocked: false, mergedIntoId: 'new1', storefronts: [] });
+    const svc = new AffiliateService(makePrisma({ user: { findUnique } }), config, pricing, pancakeOrder, coins, analytics);
+    expect(await svc.findEligibleReferrer('OLD1', 'buyer1')).toBeNull();
+    expect(await svc.isCommissionEligible('old1')).toBe(false);
+  });
+
+  it('findEligibleReferrer / isCommissionEligible: tài khoản thật (mergedIntoId null) vẫn được ghi công như cũ', async () => {
+    const findUnique = jest.fn().mockResolvedValue({ id: 'ctv1', role: 'AFFILIATE', isBlocked: false, mergedIntoId: null, storefronts: [] });
+    const svc = new AffiliateService(makePrisma({ user: { findUnique } }), config, pricing, pancakeOrder, coins, analytics);
+    expect(await svc.findEligibleReferrer('LINH', 'buyer1')).toBe('ctv1');
+    expect(await svc.isCommissionEligible('ctv1')).toBe(true);
   });
 
   it('findEligibleReferrer: chủ gian hàng mẫu không được ghi công dù đúng vai trò', async () => {
@@ -1922,7 +2045,7 @@ describe('AffiliateService.recordTouch / getActiveTouch (attribution 7 ngày, Q-
     expect(r.ok).toBe(true);
     // Lookup PHẢI dùng mã đã hoa hoá — gửi thẳng 'linh' sẽ luôn trượt trên Postgres thật (referralCode
     // lưu 'LINH', so khớp phân biệt hoa/thường), dù mock ở trên không tự mô phỏng việc đó.
-    expect((prisma as any).user.findUnique).toHaveBeenCalledWith({ where: { referralCode: 'LINH' }, select: { id: true, role: true, isBlocked: true, storefronts: SAMPLE_SELECT } });
+    expect((prisma as any).user.findUnique).toHaveBeenCalledWith({ where: { referralCode: 'LINH' }, select: { id: true, role: true, isBlocked: true, mergedIntoId: true, storefronts: SAMPLE_SELECT } });
     const call = (prisma as any).referralTouch.upsert.mock.calls[0][0];
     expect(call.create.referrerUserId).toBe('ctv1');
     // storefrontSlug giữ NGUYÊN chữ thường — quy ước của slug khác với referralCode, không đổi ở đây.
@@ -2501,6 +2624,58 @@ describe('AffiliateService.listLinks (giới hạn, C-100)', () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({ take: 200, cursor: { id: 'l9' }, skip: 1 }),
     );
+  });
+});
+
+describe('AffiliateService.listCommissions / listMyPayouts: phân trang con trỏ', () => {
+  /** findMany giả lập đúng nghĩa orderBy + cursor + skip + take của Prisma trên một mảng cùng mốc thời gian (hoà nhau → id quyết định). */
+  function fakeTable<T extends { id: string; at: number }>(rows: T[]) {
+    const sorted = [...rows].sort((a, b) => b.at - a.at || (a.id < b.id ? 1 : -1));
+    return jest.fn(async (args: { take: number; cursor?: { id: string }; skip?: number }) => {
+      const start = args.cursor ? sorted.findIndex((r) => r.id === args.cursor!.id) + (args.skip ?? 0) : 0;
+      return sorted.slice(start, start + args.take);
+    });
+  }
+  const orderOf = (id: string) => ({ order: { code: `C${id}`, status: 'DELIVERED' }, withdrawing: false });
+
+  it('listCommissions không tham số: 100 dòng mới nhất như cũ, sắp theo (createdAt, id)', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    await new AffiliateService({ commission: { findMany } } as unknown as PrismaService, config, pricing, pancakeOrder, coins, analytics).listCommissions('u1');
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { affiliateUserId: 'u1' }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 100 }));
+    expect(findMany.mock.calls[0][0]).not.toHaveProperty('cursor');
+  });
+
+  it('listCommissions: lật hết các trang với take nhỏ — đủ dòng, không trùng, không sót dù createdAt trùng nhau', async () => {
+    const rows = Array.from({ length: 7 }, (_, i) => ({ id: `c${i}`, at: 1, status: 'PAID', payoutBatchId: null, ...orderOf(String(i)) }));
+    const findMany = fakeTable(rows);
+    const svc = new AffiliateService({ commission: { findMany } } as unknown as PrismaService, config, pricing, pancakeOrder, coins, analytics);
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let guard = 0; guard < 10; guard++) {
+      const page = await svc.listCommissions('u1', { take: 3, cursor });
+      seen.push(...page.map((r) => r.id));
+      if (page.length < 3) break;
+      cursor = page[page.length - 1]!.id;
+    }
+    expect(seen).toHaveLength(7);
+    expect(new Set(seen).size).toBe(7);
+    expect(findMany.mock.calls[1]![0]).toEqual(expect.objectContaining({ cursor: { id: seen[2] }, skip: 1, take: 3 }));
+  });
+
+  it('listCommissions: take bị kẹp ở 200', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    await new AffiliateService({ commission: { findMany } } as unknown as PrismaService, config, pricing, pancakeOrder, coins, analytics).listCommissions('u1', { take: 5000 });
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 200 }));
+  });
+
+  it('listMyPayouts không tham số: 50 lệnh mới nhất như cũ; có cursor thì cursor+skip, thứ tự ổn định', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const svc = new AffiliateService({ payout: { findMany } } as unknown as PrismaService, config, pricing, pancakeOrder, coins, analytics);
+    await svc.listMyPayouts('u1');
+    expect(findMany).toHaveBeenLastCalledWith(expect.objectContaining({ where: { userId: 'u1' }, orderBy: [{ requestedAt: 'desc' }, { id: 'desc' }], take: 50 }));
+    expect(findMany.mock.calls[0][0]).not.toHaveProperty('cursor');
+    await svc.listMyPayouts('u1', { take: 20, cursor: 'p9' });
+    expect(findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 20, cursor: { id: 'p9' }, skip: 1 }));
   });
 });
 

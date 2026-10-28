@@ -5,10 +5,12 @@ import { CalendarClock, ChevronDown, ChevronUp, Gift, Leaf, Ticket, Truck, type 
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { HOME_HERO_HEIGHT } from '@tubutree/app-core/home-layout';
 import { getNewCustomerOffer, type NewCustomerOffer } from '../../services/account-api';
+import { getErrorMessage } from '../../services/api';
 import { fetchOrders, getPublicConfig, type PublicConfig } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
 import { isGuestUser } from '../../utils/guest-user';
 import { vi } from '../../i18n/vi';
+import { SUBSCRIPTIONS_IN_MINIAPP } from '../../utils/features';
 import { formatDate, formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
 import { earnPctOf, percentLabel } from '../../utils/loyalty-copy';
@@ -26,7 +28,7 @@ interface Benefit {
 }
 
 /**
- * 3 lợi ích mua trực tiếp, mọi con số lấy từ cấu hình công khai (không viết cứng ở đây). Thiếu số (API cũ chưa trả) thì bỏ
+ * Các lợi ích mua trực tiếp (giao hàng, điểm, và giảm khi đặt định kỳ nếu Mini App đang mở định kỳ), mọi con số lấy từ cấu hình công khai (không viết cứng ở đây). Thiếu số (API cũ chưa trả) thì bỏ
  * dòng đó thay vì hiện con số mặc định.
  */
 export function directBenefits(cfg: PublicConfig): Benefit[] {
@@ -44,7 +46,9 @@ export function directBenefits(cfg: PublicConfig): Benefit[] {
   if (cfg.loyalty && earnPct != null) {
     out.push({ icon: Leaf, text: vi.home.newGift.points(percentLabel(earnPct), formatVnd(cfg.loyalty.vndPerPointRedeem)) });
   }
-  out.push({ icon: CalendarClock, text: vi.home.newGift.subscribe(Math.round(cfg.subscribeDiscountPct * 100)) });
+  if (SUBSCRIPTIONS_IN_MINIAPP) {
+    out.push({ icon: CalendarClock, text: vi.home.newGift.subscribe(Math.round(cfg.subscribeDiscountPct * 100)) });
+  }
   return out;
 }
 
@@ -61,7 +65,7 @@ function voucherTitle(v: NonNullable<NewCustomerOffer['welcomeVoucher']>): strin
 }
 
 /**
- * Khối "Quà khách mới" ở Trang chủ (D2-07b): voucher chào mừng của khách (nếu có) và 3 lợi ích mua trực tiếp. Chỉ khách chưa có
+ * Khối "Quà khách mới" ở Trang chủ (D2-07b): voucher chào mừng của khách (nếu có) và các lợi ích mua trực tiếp. Chỉ khách chưa có
  * đơn theo định nghĩa đơn đầu của API (GET /me/new-customer-offer); khách chưa đăng nhập thì chỉ thấy phần lợi ích.
  * Đang tải, lỗi tải hay thiếu cấu hình → không vẽ gì: đây là khối quảng bá phụ, không đáng một khung chờ hay thẻ lỗi và không được hiện số suy đoán.
  */
@@ -70,12 +74,13 @@ export function NewCustomerGift() {
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const userId = useAuthStore((s) => s.user?.id);
   const user = useAuthStore((s) => s.user);
-  const ensurePhone = useAuthStore((s) => s.ensurePhone);
+  const ensurePhoneOrThrow = useAuthStore((s) => s.ensurePhoneOrThrow);
   // Tài khoản khách (vào bằng thiết bị, chưa liên kết Zalo): máy chủ cố ý trả isNewCustomer=false để không hứa quà nó không phát.
   // Đây lại là nhóm cần mồi nhất, nên vẫn hiện lợi ích và mời liên kết Zalo để nhận quà; quà chỉ vào ví sau khi liên kết.
   const guestAccount = authed && user ? isGuestUser(user) : false;
   const [expanded, setExpanded] = useState(false);
   const [linking, setLinking] = useState<'idle' | 'busy' | 'failed'>('idle');
+  const [linkFailure, setLinkFailure] = useState<string>(homeCopy.guestGift.failed);
   // Cùng queryKey/hàm với usePublicConfig → một cache; cần trạng thái lỗi riêng để ẩn khối thay vì hiện giá trị dự phòng.
   const cfgQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
   const offerQ = useQuery({
@@ -111,9 +116,11 @@ export function NewCustomerGift() {
   const linkZalo = async () => {
     setLinking('busy');
     try {
-      const phone = await ensurePhone();
+      const phone = await ensurePhoneOrThrow();
+      setLinkFailure(homeCopy.guestGift.failed);
       setLinking(phone ? 'idle' : 'failed');
-    } catch {
+    } catch (err) {
+      setLinkFailure(getErrorMessage(err));
       setLinking('failed');
     }
   };
@@ -144,7 +151,7 @@ export function NewCustomerGift() {
               <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {vi.home.newGift.title}
               </Text>
-              <Text variant="caption" tone="secondary" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Text variant="caption" tone="secondary" as="div" style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                 {headline}
               </Text>
             </span>
@@ -177,7 +184,7 @@ export function NewCustomerGift() {
         </div>
         {linking === 'failed' && (
           <Text variant="caption" tone="danger" as="p" style={{ margin: 0, padding: '0 16px 8px' }}>
-            {homeCopy.guestGift.failed}
+            {linkFailure}
           </Text>
         )}
         {expanded && (

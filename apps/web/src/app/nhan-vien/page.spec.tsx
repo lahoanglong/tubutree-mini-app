@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 
@@ -107,6 +107,11 @@ const OPEN_SESSION = {
   lastHeartbeatAt: '2026-03-11T04:00:00.000Z',
 };
 const TODAY_SHIFT = shift('sh1', TODAY, 'APPROVED');
+
+// Trang chặn (không phải nhân viên) vẽ EmptyState nạp bằng next/dynamic; lần nạp đầu phải biên dịch, trên máy CI chậm lâu hơn các nhịp flush() của mount.
+beforeAll(async () => {
+  await import('@/components/mini/empty-state');
+});
 
 let mounted: Rendered[] = [];
 const mount = async () => {

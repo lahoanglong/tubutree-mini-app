@@ -8,6 +8,7 @@ import {
   reviewReturnRequest,
   type AdminReturnPreview,
   type AdminReturnRequest,
+  invalidateInbox,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDateTime } from '@/lib/format-date';
@@ -69,6 +70,7 @@ export function ReturnRow({
     void qc.invalidateQueries({ queryKey: ['admin-returns'] });
     void qc.invalidateQueries({ queryKey: ['admin-orders'] });
     void qc.invalidateQueries({ queryKey: ['admin-customer-refunds'] });
+    void invalidateInbox(qc);
   };
   const approve = useMutation({
     mutationFn: (p: AdminReturnPreview) =>

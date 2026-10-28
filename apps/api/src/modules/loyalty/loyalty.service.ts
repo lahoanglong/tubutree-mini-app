@@ -17,7 +17,7 @@ import { NO_PARTIAL_RETURNS, partialReturnTotals } from '../orders/return-ledger
 import { remainingPointsBack } from '../orders/refund-allocation';
 import { OWN_RETAIL_SPEND_WHERE } from '../orders/own-retail-spend';
 import { parseVnPhoneStrict } from '../../common/phone';
-import { vnDateKey } from '../../common/vn-time';
+import { VN_OFFSET_MS, vnDateKey, vnDateParts } from '../../common/vn-time';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible, requiresRealUser } from '../coupons/coupon-scope';
 import { hasPriorOrder } from '../../common/first-order';
@@ -37,6 +37,16 @@ import { formatPoints } from '../../common/format-points';
 import { assertActiveStaff } from '../../common/staff-access';
 import { generateWasteCode } from '../waste-exchange/waste-codes';
 import { loadPointExpiryTxns, lotRecoverable, nextPointExpiry, orderLotKey } from './loyalty-expiry.service';
+
+/** Số dòng tối đa mỗi lần đọc lịch sử điểm (cũng là số dòng khi client cũ không gửi limit). */
+const POINTS_HISTORY_MAX_PAGE = 100;
+
+/** Lượt tính lại hạng 03:15 giờ VN đầu tiên không sớm hơn `t` (cùng giờ với `@Cron('0 15 3 * * *')` ở loyalty.cron.ts). */
+function firstTierRecalcAtOrAfter(t: Date): Date {
+  const { year, month, day } = vnDateParts(t);
+  const sameDay = new Date(Date.UTC(year, month - 1, day, 3, 15) - VN_OFFSET_MS);
+  return sameDay.getTime() >= t.getTime() ? sameDay : new Date(sameDay.getTime() + 86_400_000);
+}
 
 /**
  * Loyalty core (Build Spec §6.6). Phase 1 dùng cho vòng đời đơn:
@@ -439,7 +449,7 @@ export class LoyaltyService {
       if (users.length === 0) break;
       cursor = users[users.length - 1]!.id;
       for (const u of users) {
-        await this.recalcTier(u.id, tiers).catch((e) => this.logger.warn(`recalcTier lỗi user=${u.id}: ${(e as Error).message}`));
+        await this.recalcTier(u.id, tiers).catch((e) => this.logger.error(`recalcTier lỗi user=${u.id}: ${(e as Error).message}`));
         processed++;
       }
       if (users.length < LoyaltyService.RECALC_PAGE) break;
@@ -639,15 +649,16 @@ export class LoyaltyService {
 
   /**
    * Còn thiếu bao nhiêu để GIỮ hạng `tier`: tiền đơn giao thành công với hạng xét theo chi tiêu, điểm tích với hạng xét theo
-   * điểm. Khung 12 tháng KẾT THÚC ở `until` (ngày hết hạn giữ hạng), vì lượt xét hạng ngày đó sẽ nhìn lại đúng khung ấy: đơn
-   * hôm nay còn trong khung trượt nhưng sẽ rơi ra trước `until` thì không được tính, nếu không khách mua đúng số báo vẫn bị hạ.
+   * điểm. Hạng chỉ bị hạ ở lượt tính lại hạng 03:15 giờ VN (loyalty.cron.ts) đầu tiên không sớm hơn `until` (ngày hết hạn giữ
+   * hạng), và lượt đó nhìn lại 12 tháng tính từ chính giờ chạy. Khung ở đây lấy đúng mốc ấy: đơn hôm nay còn trong khung trượt
+   * nhưng sẽ rơi ra trước lượt đó thì không được tính, nếu không khách mua đúng số báo vẫn bị hạ.
    */
   async tierKeepGap(
     userId: string,
     tier: { minSpending: number | null; minPoints: number },
     until: Date,
   ): Promise<{ spendingToKeep: number | null; pointsToKeep: number }> {
-    const since = new Date(until);
+    const since = firstTierRecalcAtOrAfter(until);
     since.setMonth(since.getMonth() - 12);
     const { spent12m, partialReturns } = await this.spending12m(userId, since);
     const tierPts = await this.tierPoints(userId, since, partialReturns);
@@ -754,13 +765,24 @@ export class LoyaltyService {
     };
   }
 
-  getPointsTransactions(userId: string) {
+  /**
+   * Lịch sử điểm của khách, mới nhất trước. Không tham số thì trả tối đa 100 dòng mới nhất (client chưa phân trang vẫn chạy); `before` + `beforeId` (createdAt và id
+   * của dòng cuối trang trước) lấy trang kế theo đúng thứ tự (createdAt, id) giảm dần nên nhiều dòng cùng mili giây không bị
+   * trùng hay sót.
+   */
+  getPointsTransactions(userId: string, page: { before?: Date; beforeId?: string; limit?: number } = {}) {
+    const take = Math.min(Math.max(Math.trunc(page.limit ?? POINTS_HISTORY_MAX_PAGE), 1), POINTS_HISTORY_MAX_PAGE);
+    const after: Prisma.PointsTransactionWhereInput = !page.before
+      ? {}
+      : page.beforeId
+        ? { OR: [{ createdAt: { lt: page.before } }, { createdAt: page.before, id: { lt: page.beforeId } }] }
+        : { createdAt: { lt: page.before } };
     return this.prisma.pointsTransaction.findMany({
       // ORDER_REVERSED delta 0 chỉ là dấu "đã xử lý" của reverseOrderPoints (khi không còn gì để thu hồi), không phải
       // biến động điểm: hiện nó thành dòng "Hoàn ngược điểm 0" trong lịch sử khách.
-      where: { userId, NOT: { delta: 0, reason: { startsWith: 'ORDER_REVERSED:' } } },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
+      where: { userId, NOT: { delta: 0, reason: { startsWith: 'ORDER_REVERSED:' } }, ...after },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take,
     });
   }
 
@@ -974,14 +996,22 @@ export class LoyaltyService {
       take: 100,
     });
     const couponIds = rows.flatMap((r) => (r.couponId ? [r.couponId] : []));
-    const coupons = couponIds.length
-      ? await this.prisma.coupon.findMany({ where: { id: { in: couponIds } }, select: { id: true, code: true } })
-      : [];
-    const codeById = new Map(coupons.map((c) => [c.id, c.code]));
+    // Một truy vấn mã và một truy vấn lượt dùng cho cả danh sách (không đọc từng lượt đổi một).
+    const [coupons, redeemed] = couponIds.length
+      ? await Promise.all([
+          this.prisma.coupon.findMany({ where: { id: { in: couponIds } }, select: { id: true, code: true, endAt: true, perUserLimit: true } }),
+          this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { userId, couponId: { in: couponIds } }, _count: { _all: true } }),
+        ])
+      : [[], []];
+    const couponById = new Map(coupons.map((c) => [c.id, c]));
+    const redeemedById = new Map(redeemed.map((g) => [g.couponId, g._count._all]));
     const claimPoint = await this.claimPointOf(this.prisma);
-    return rows.map((r) =>
-      toGiftRedemptionDTO(r, { claimPoint, couponCode: r.couponId ? (codeById.get(r.couponId) ?? null) : null }),
-    );
+    return rows.map((r) => {
+      const c = r.couponId ? couponById.get(r.couponId) : undefined;
+      // Cùng luật "đã dùng hết lượt" với getAvailableCoupons: perUserLimit <= 0 là không giới hạn nên không bao giờ coi là đã dùng.
+      const used = c ? c.perUserLimit > 0 && (redeemedById.get(c.id) ?? 0) >= c.perUserLimit : false;
+      return toGiftRedemptionDTO(r, { claimPoint, couponCode: c?.code ?? null, couponEndAt: c?.endAt ?? null, couponUsed: used });
+    });
   }
 
   private async claimPointOf(db: Pick<PrismaService, 'wastePoint'>): Promise<RewardCatalogDTO['claimPoint']> {
@@ -1148,7 +1178,7 @@ export class LoyaltyService {
         message: `Đổi thành công ${gift.name}!`,
         pointsSpent: gift.pointsCost,
         remainingPoints: after.pointsBalance,
-        redemption: toGiftRedemptionDTO(redemption, { claimPoint, couponCode: coupon?.code ?? null }),
+        redemption: toGiftRedemptionDTO(redemption, { claimPoint, couponCode: coupon?.code ?? null, couponEndAt: coupon?.endAt ?? null }),
         coupon: coupon
           ? {
               code: coupon.code,
@@ -1179,7 +1209,7 @@ export class LoyaltyService {
       message: `Đổi thành công ${row.giftName}!`,
       pointsSpent: row.pointsCost,
       remainingPoints: cur.pointsBalance,
-      redemption: toGiftRedemptionDTO(row, { claimPoint, couponCode: coupon?.code ?? null }),
+      redemption: toGiftRedemptionDTO(row, { claimPoint, couponCode: coupon?.code ?? null, couponEndAt: coupon?.endAt ?? null }),
       coupon: coupon
         ? {
             code: coupon.code,
@@ -1804,7 +1834,7 @@ export function voucherSpecOf(
 
 export function toGiftRedemptionDTO(
   r: WasteGiftRedemption,
-  extra: { claimPoint: RewardCatalogDTO['claimPoint']; couponCode: string | null },
+  extra: { claimPoint: RewardCatalogDTO['claimPoint']; couponCode: string | null; couponEndAt?: Date | null; couponUsed?: boolean },
 ): GiftRedemptionDTO {
   const ready = r.status === 'READY';
   return {
@@ -1822,6 +1852,8 @@ export function toGiftRedemptionDTO(
     cancelReason: r.cancelReason,
     refundedPoints: r.refundedPoints,
     couponCode: extra.couponCode,
+    couponEndAt: extra.couponEndAt?.toISOString() ?? null,
+    couponUsed: extra.couponUsed ?? false,
     createdAt: r.createdAt.toISOString(),
   };
 }

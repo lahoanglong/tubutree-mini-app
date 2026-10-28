@@ -6,13 +6,14 @@ import Link from 'next/link';
 import { ShoppingCart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { addToCart, formatVnd, getCart, getProductStock } from '@/lib/shop-client';
+import { addToCart, applyCoupon, formatVnd, getCart, getProductStock } from '@/lib/shop-client';
+import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ui, uiBar } from '@/lib/guest-ui';
 import { phoneSecondary } from '@/lib/phone-ui';
 import { CountBadge } from '@/components/mini/badge';
-import { defaultVariationFor, pickDefaultVariation, variationPricing } from '@/lib/flash-price';
+import { defaultVariationFor, pickDefaultVariation, runningFlash, variationPricing } from '@/lib/flash-price';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import dynamic from 'next/dynamic';
 import type { VariationSheetMode } from './variation-sheet';
@@ -21,6 +22,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { usePdpSelection } from './pdp-selection';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
+import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { actionErrorText } from '@/lib/error-text';
 
 // Bảng chỉ dùng ở khổ điện thoại khi khách bấm mua: tách khỏi First Load của trang sản phẩm.
@@ -44,6 +46,19 @@ function isPhoneWidth(): boolean {
 
 /** Còn từng này trở xuống thì nhắc "Chỉ còn N" để khách biết nên chốt sớm. */
 const LOW_STOCK_NOTICE = 5;
+
+/** Mã của nhóm mua chung (`GBUY-<nhóm>-<người>`), đúng dạng máy chủ cấp. */
+const GROUP_COUPON_CODE = /^GBUY-[A-Z0-9-]+$/;
+/** Thời gian giữ câu báo trên màn trước khi sang thanh toán: đủ đọc một câu ngắn (cùng mức với "Dùng ngay" ở thẻ mã). */
+const NOTICE_HOLD_MS = 1800;
+
+/** Gỡ `?ma=` khỏi mục lịch sử hiện tại sau khi đã thử áp: cùng cách với `?danh-gia=` ở khối đánh giá, không dựng lại trang. */
+function forgetCouponParam() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has('ma')) return;
+  url.searchParams.delete('ma');
+  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
 
 export default function AddToCart({
   slug,
@@ -91,7 +106,7 @@ export default function AddToCart({
 
   // Số món ở nút giỏ của thanh dính (như Mini App); cùng khoá và cùng GET /cart với giỏ ở thanh đầu.
   const cartCount = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' }).data?.itemCount ?? 0;
-  const flash = useActiveFlashSales();
+  const flash = runningFlash(useActiveFlashSales());
   const selected = variations.find((v) => v.id === selectedId);
   const selectedPricing = selected ? variationPricing(selected, flash) : null;
   const price = selectedPricing?.price ?? 0;
@@ -156,13 +171,33 @@ export default function AddToCart({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- một lần sau khi trang hiện
   }, []);
 
+  // Mã của nhóm mua chung đủ người (`?ma=` do nút "Mua ngay với mã" ở trang Mua chung đặt). Mã gắn riêng sản phẩm và có đơn tối thiểu nên
+  // chỉ áp được khi món đã nằm trong giỏ: thử một lần ngay sau lần thêm giỏ đầu tiên thành công, rồi gỡ `ma` khỏi URL để tải lại hay
+  // quay lại trang không áp lại một mã khách có thể đã bỏ chọn ở giỏ. Chỉ nhận mã nhóm (`GBUY-`): một đường dẫn soạn sẵn mang mã khác
+  // không được thay mã khách đang chọn. Lỗi không chặn việc mua, chỉ nói lý do; `hold` báo có điều khách cần đọc trước khi rời trang.
+  const groupCouponTried = useRef(false);
+  const applyGroupCoupon = async (cart: Awaited<ReturnType<typeof addToCart>>) => {
+    const code = new URLSearchParams(window.location.search).get('ma')?.trim().toUpperCase();
+    if (!code || !GROUP_COUPON_CODE.test(code) || groupCouponTried.current) return { cart, note: null, hold: false };
+    groupCouponTried.current = true;
+    forgetCouponParam();
+    try {
+      const next = await applyCoupon(code);
+      void qc.invalidateQueries({ queryKey: ['quote'] });
+      const outcome = couponUseOutcome(cart.couponCode, code, next);
+      return { cart: next, note: outcome.kind === 'ok' ? `Đã áp mã ${code}.` : outcome.text, hold: outcome.kind !== 'ok' };
+    } catch (e) {
+      return { cart, note: couponUseCopy.notApplied(actionErrorText(e)), hold: true };
+    }
+  };
+
   const add = async (variationId: string, quantity: number, buyNow = false) => {
     setBusy(true);
     setBuying(buyNow);
     setMsg(null);
     let leaving = false;
     try {
-      const cart = await addToCart(variationId, quantity);
+      const { cart, note, hold } = await applyGroupCoupon(await addToCart(variationId, quantity));
       // Badge giỏ ở header đọc cùng queryKey ['cart'] nhưng nằm trong layout nên không bao giờ
       // remount, và providers tắt refetchOnWindowFocus — không cập nhật thì khách thêm 3 món
       // vẫn thấy số cũ, tưởng chưa thêm được rồi thêm lại thành trùng số lượng.
@@ -174,10 +209,16 @@ export default function AddToCart({
         rememberCheckoutSelection(bought.length > 0 ? bought : null);
         // Không bỏ khoá `busy`: trang sắp chuyển đi, bấm thêm lúc này là cộng đôi số lượng vào giỏ.
         leaving = true;
+        if (hold && note) {
+          // Trang thanh toán không biết mã vừa áp hụt: giữ câu báo trên màn một lúc (như "Dùng ngay" ở thẻ mã) rồi mới sang.
+          setSuccess(false);
+          setMsg(note);
+          await new Promise((resolve) => window.setTimeout(resolve, NOTICE_HOLD_MS));
+        }
         router.push('/thanh-toan');
         return;
       }
-      setMsg('Đã thêm vào giỏ!');
+      setMsg(note ? `Đã thêm vào giỏ! ${note}` : 'Đã thêm vào giỏ!');
       setSuccess(true);
     } catch (e) {
       setMsg(actionErrorText(e));
@@ -320,29 +361,9 @@ export default function AddToCart({
         <p className="mt-3 text-sm font-medium text-warning-fg">Chỉ còn {selected!.stock} sản phẩm</p>
       )}
 
-      <div className="mt-4 flex items-center gap-3">
+      <div className="mt-4 flex items-center gap-3 max-md:justify-between">
         <span className="text-sm font-semibold text-stone-900 md:hidden">Số lượng</span>
-        <div className="flex items-center rounded-control border border-stone-450 bg-stone-0">
-          <button
-            type="button"
-            onClick={() => setQty((q) => Math.max(1, q - 1))}
-            className="h-11 w-11 text-lg text-stone-800"
-            aria-label="Giảm số lượng"
-          >
-            −
-          </button>
-          <span className="w-8 text-center text-stone-900" aria-live="polite">
-            {qty}
-          </span>
-          <button
-            type="button"
-            onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
-            className="h-11 w-11 text-lg text-stone-800"
-            aria-label="Tăng số lượng"
-          >
-            +
-          </button>
-        </div>
+        <QuantitySelector value={qty} max={maxQty} onChange={setQty} />
         {/* Từ md: nút thêm giỏ ngay cạnh số lượng. Dưới md hai nút nằm ở thanh dính đáy (bên dưới). */}
         <button type="button" onClick={onAdd} disabled={cannotBuy} className={`${ui.btnSecondary} hidden flex-1 md:inline-flex`}>
           {addLabel}

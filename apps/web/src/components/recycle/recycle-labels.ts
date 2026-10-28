@@ -9,11 +9,12 @@ import type {
   WasteOpeningHours,
   WasteRejectionReason,
   WasteRequestDetailDTO,
-  WasteRequestStatus,
   WasteRequestSummaryDTO,
   WasteShortfallReason,
 } from '@tubutree/shared-types';
 import { pointAddress } from '@tubutree/app-core/reward-rules';
+import { TIMELINE_STEPS, timelineFor } from '@tubutree/app-core/waste-timeline';
+import type { WasteTimeline } from '@tubutree/app-core/waste-timeline';
 import { formatCount } from '@/lib/checkout-points';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
@@ -38,18 +39,15 @@ export const METHOD_LABELS: Record<WasteMethod, string> = {
   PICKUP: 'Thu kèm đơn mua',
 };
 
+export { TIMELINE_STEPS, timelineFor };
+export type { WasteTimeline };
+
 export const METHOD_FLAG = { DROP_OFF: 'dropoff', MAIL_IN: 'mailin', PICKUP: 'pickup' } as const;
 export const METHOD_ORDER: readonly WasteMethod[] = ['DROP_OFF', 'MAIL_IN', 'PICKUP'];
 export const METHOD_LINE: Record<WasteMethod, string> = {
   DROP_OFF: 'Miễn phí, nhận điểm khi người ở điểm xác nhận',
   MAIL_IN: 'Tự gửi qua hãng bất kỳ và tự trả phí ship',
   PICKUP: 'Miễn phí, bưu tá lấy khi giao đơn Tubu kế tiếp',
-};
-
-export const TIMELINE_STEPS: Record<WasteMethod, readonly string[]> = {
-  MAIL_IN: ['Gửi kiện', 'Vận chuyển', 'Đã nhận ở kho', 'Cộng điểm'],
-  DROP_OFF: ['Đã tạo', 'Mang tới điểm', 'Điểm nhận đếm', 'Cộng điểm'],
-  PICKUP: ['Đã tạo', 'Gắn vào đơn', 'Chờ kho nhận', 'Cộng điểm'],
 };
 
 export const REJECTION_LABELS: Record<WasteRejectionReason, string> = {
@@ -148,21 +146,6 @@ export function requestStatusText(
 /** "Thùng carton cũ: 3 thùng": tên món đã mở đầu bằng danh từ đơn vị nên không đặt đơn vị trước tên. */
 export function formatLineQty(itemName: string, qty: number, unitLabel: string): string {
   return `${itemName}: ${qty} ${unitLabel}`;
-}
-
-export type WasteTimeline = { steps: readonly string[]; current: number };
-
-const CLOSED_STATUSES: readonly WasteRequestStatus[] = ['REJECTED', 'EXPIRED', 'CANCELLED', 'REVERSED'];
-
-export function timelineFor(r: { method: WasteMethod; status: WasteRequestStatus; orderCode: string | null }): WasteTimeline | null {
-  if (CLOSED_STATUSES.includes(r.status)) return null;
-  const steps = TIMELINE_STEPS[r.method];
-  if (r.status === 'COMPLETED') return { steps, current: 4 };
-  if (r.method === 'MAIL_IN') {
-    return { steps, current: r.status === 'IN_TRANSIT' ? 1 : r.status === 'RECEIVED' ? 2 : 0 };
-  }
-  if (r.method === 'DROP_OFF') return { steps, current: r.status === 'OPEN' ? 1 : 2 };
-  return { steps, current: r.status === 'OPEN' && !r.orderCode ? 1 : 2 };
 }
 
 const EXPIRED_LABELS: Partial<Record<string, string>> = {

@@ -17,6 +17,14 @@ export function parseMiniAppRoutes(source) {
   return paths;
 }
 
+// Chỉ dạng `element={<Navigate to="…" />}` đứng trực tiếp; element có điều kiện (cờ tính năng) có thể là trang thật nên bỏ qua.
+export function parseMiniAppRedirects(source) {
+  const redirects = [];
+  const re = /<Route\s+path="([^"]*)"\s+element=\{<Navigate\s+to="([^"?#]*)[^"]*"[^>]*\/>\}\s*\/>/g;
+  for (const m of source.matchAll(re)) redirects.push({ from: m[1], to: m[2] });
+  return redirects;
+}
+
 export function webPathToFileCandidates(webPath) {
   const pathname = webPath.split(/[?#]/)[0];
   const segments = pathname
@@ -27,7 +35,7 @@ export function webPathToFileCandidates(webPath) {
   return ['page.tsx', 'route.ts'].map((f) => `${dir}/${f}`);
 }
 
-export function checkParity({ miniappRoutes, map, webFileExists, fileHasSymbol, strict = false }) {
+export function checkParity({ miniappRoutes, miniappRedirects = [], map, webFileExists, fileHasSymbol, strict = false }) {
   const errors = [];
   const warnings = [];
   const pending = (msg) => (strict ? errors : warnings).push(msg);
@@ -68,6 +76,20 @@ export function checkParity({ miniappRoutes, map, webFileExists, fileHasSymbol, 
     if (!seen.has(route)) errors.push(`route Mini App ${route} không có dòng trong route-map.json`);
   }
 
+  // Mini App đã chuyển hướng X sang Y thì web của X phải là web của Y, không để web còn một trang riêng cho đường đã bỏ.
+  const byMiniapp = new Map(map.routes.flatMap((g) => g.items).map((item) => [item.miniapp, item]));
+  const webPathOf = (item) => (typeof item.web === 'string' ? item.web.split(/[?#]/)[0] : undefined);
+  for (const { from, to } of miniappRedirects) {
+    const fromItem = byMiniapp.get(from);
+    const toItem = byMiniapp.get(to);
+    if (!fromItem || !toItem) continue;
+    if (webPathOf(fromItem) !== webPathOf(toItem)) {
+      errors.push(
+        `route Mini App ${from} chuyển hướng sang ${to}: web của ${from} (${webPathOf(fromItem) ?? 'skip'}) phải là web của ${to} (${webPathOf(toItem) ?? 'skip'})`,
+      );
+    }
+  }
+
   for (const f of map.features) {
     const [miniFile, miniSymbol] = f.miniapp;
     if (!fileHasSymbol(miniFile, miniSymbol)) {
@@ -93,6 +115,7 @@ function main() {
 
   const { errors, warnings } = checkParity({
     miniappRoutes: parseMiniAppRoutes(read(MINIAPP_ROUTES_FILE)),
+    miniappRedirects: parseMiniAppRedirects(read(MINIAPP_ROUTES_FILE)),
     map: JSON.parse(read(ROUTE_MAP_FILE)),
     webFileExists: (p) => existsSync(abs(p)),
     fileHasSymbol: (file, symbol) => new RegExp(`\\b${symbol}\\b`).test(read(file)),

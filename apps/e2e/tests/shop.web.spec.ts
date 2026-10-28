@@ -15,8 +15,15 @@ const product = (n: number, over: Record<string, unknown> = {}) => ({
 });
 const pageOf = (data: unknown[], total: number, page = 1, limit = 24) => ({ data, meta: { page, limit, total } });
 
-/** Làm dữ liệu SSR hết tươi rồi kích tải lại khi có mạng trở lại; lặp tới khi mock nhận được lời gọi (có thể chạy trước lúc hydrate xong). Giữ 15 giây làm đệm cho máy CI chậm; chưa đo lại trên GitHub Actions sau khi web chạy bằng bản build, hạ về 5 giây khi CI ổn định. */
+/** Làm dữ liệu SSR hết tươi rồi kích tải lại khi có mạng trở lại; lặp tới khi mock nhận được lời gọi. Giữ 15 giây làm đệm cho máy CI chậm; chưa đo lại trên GitHub Actions sau khi web chạy bằng bản build, hạ về 5 giây khi CI ổn định. */
 async function refetchStale(page: Page, api: MockApi, method: string, pattern: string, minCalls = 1) {
+  // Chờ React hydrate tới phần tử cuối của <main>: query dựng sau lần đẩy đồng hồ lấy giờ đã đẩy làm mốc cho dữ liệu SSR nên vẫn tươi, không
+  // bao giờ tải lại (máy chậm: lưới gợi ý cuối Trang chủ giữ hàng thật của DB).
+  await page.waitForFunction(() => {
+    const all = document.querySelectorAll('main *');
+    const last = all[all.length - 1];
+    return !!last && Object.keys(last).some((k) => k.startsWith('__reactFiber$'));
+  }, undefined, { timeout: 15_000 });
   // Mỗi lần gọi đẩy đồng hồ thêm 10 phút: dữ liệu vừa dựng sau lần đẩy trước (đổi URL) cũng hết tươi.
   await page.evaluate(() => {
     const w = window as unknown as { __tubuClockOffset?: number };
@@ -186,7 +193,7 @@ function mockCustomer(api: MockApi) {
     pointsBalance: 60, pointsConvertedBalance: 0, walletBalance: 0,
   };
   api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user }));
-  api.get('/me/notifications', [{ id: 'n1', status: 'SENT' }, { id: 'n2', status: 'SENT' }]);
+  api.get('/me/notifications/unread-count', { count: 2 });
   api.get('/me/purchased-items', { items: [PURCHASED], nextCursor: null });
   api.get('/products/for-you', [product(9, { name: 'Gợi ý riêng' })]);
   api.get('/orders/active-count', { count: 0 });
@@ -654,6 +661,10 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     mockHomeEngagement(api, { checkedIn: true, expiringInDays: null });
     api.get('/brands', [{ brand: 'Tubu', count: 28 }, { brand: 'Mộc An', count: 2 }]);
     await page.goto('/');
+    // login() chỉ đặt cờ phiên trong localStorage (không có cookie) nên HTML đầu là bản khách vãng lai; khi biết có phiên, các khối dưới
+    // thẻ thành viên đổi sang khung chờ rồi dựng lại. Đo chip trước lúc đó thì chip bị gỡ khỏi trang giữa chừng.
+    await expect(page.getByText('Chào Nguyễn Văn An')).toBeVisible();
+    await expect(page.getByTestId('home-settling')).toHaveCount(0);
     const chips = [
       page.getByRole('region', { name: /Dải thương hiệu/ }).getByRole('button').first(),
       page.getByRole('region', { name: 'Nguồn gợi ý' }).getByRole('button', { name: 'Bán chạy', exact: true }),

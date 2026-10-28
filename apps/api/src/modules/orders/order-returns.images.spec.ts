@@ -6,7 +6,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 
 // R3-UI-1: danh sách yêu cầu trả hàng (khách, admin, gian hàng) không nhúng ảnh base64; ảnh tải riêng qua /returns/:id/images/:i.
-const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+const notifications = { notify: jest.fn(), notifySafe: jest.fn() } as unknown as NotificationsService;
 const HEAVY = `data:image/jpeg;base64,${Buffer.alloc(30_000, 7).toString('base64')}`;
 const HTTPS = 'https://res.cloudinary.com/demo/image/upload/v1/returns/a.jpg';
 const md5 = (s: string) => createHash('md5').update(s).digest('hex');

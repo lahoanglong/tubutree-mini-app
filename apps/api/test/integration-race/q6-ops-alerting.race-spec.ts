@@ -47,7 +47,7 @@ describe('q6 báo động vận hành (real Postgres)', () => {
       [fakeQueue('pancake-push'), fakeQueue('notifications')],
       sysConfig as never,
       gomdon as never,
-      { notify } as never,
+      { notify, notifySafe: notify } as never,
       fetchMock as never,
     );
     events = new OpsWebhookEventsService(prisma, fakeJobQueue as never, { ...fakeJobQueue, name: 'gomdon-events' } as never);
@@ -145,7 +145,7 @@ describe('q6 báo động vận hành (real Postgres)', () => {
     expect(enqueuedIds(pq)).not.toContain(pev.id);
     expect(enqueuedIds(gq)).not.toContain(gev.id);
 
-    const processor = new PancakeProcessor(prisma, { notify: jest.fn() } as never, { setStatus: jest.fn() } as never);
+    const processor = new PancakeProcessor(prisma, { notify: jest.fn(), notifySafe: jest.fn().mockResolvedValue(true) } as never, { setStatus: jest.fn() } as never);
     const handle = jest.spyOn(processor as unknown as { handle: () => Promise<string> }, 'handle').mockResolvedValue('OK');
     await processor.process({ data: { eventId: pev.id } } as never);
     expect(handle).not.toHaveBeenCalled();

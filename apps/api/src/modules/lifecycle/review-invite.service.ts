@@ -138,6 +138,8 @@ export class ReviewInviteService {
     const first = items[0]!;
     const data: Record<string, string> = {
       order_code: o.code,
+      // Nút "Viết đánh giá" mở thẳng form cho đúng lần mua; tin cũ không có trường này thì nút về chi tiết đơn.
+      order_id: o.id,
       product: items.length > 1 ? `${first.productName} và ${items.length - 1} sản phẩm khác` : first.productName,
     };
     if (first.productSlug) data.product_slug = first.productSlug;

@@ -56,6 +56,16 @@ describe('TierCard — bậc CTV theo doanh số đã chốt', () => {
     expect(mounted.container.textContent).not.toMatch(/bonus/i);
   });
 
+  it('điện thoại: dòng bậc hiện tại nền xanh nhạt viền xanh như Mini App, các bậc khác nền canvas', () => {
+    mounted = render(<TierCard dash={dash} tiers={tiers} />);
+    click(mounted.container.querySelector('button[aria-expanded]'));
+    const rows = Array.from(mounted.container.querySelectorAll('li'));
+    expect(rows[1]!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    expect(rows[1]!.className).toContain('max-md:border-[var(--color-action-secondary-border)]');
+    expect(rows[0]!.className).toContain('max-md:bg-[var(--color-bg-canvas)]');
+    expect(rows[0]!.className).not.toContain('action-secondary-bg');
+  });
+
   it('chưa tải được bảng bậc: mở ra không vẽ gì sai', () => {
     mounted = render(<TierCard dash={dash} tiers={undefined} />);
     click(mounted.container.querySelector('button[aria-expanded]'));

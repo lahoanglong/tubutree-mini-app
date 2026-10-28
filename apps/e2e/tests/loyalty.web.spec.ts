@@ -82,24 +82,28 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     await expect(page.getByText('1.800 Điểm Xanh')).toBeVisible();
     await expect(page.getByText('trong đó 119 điểm không hết hạn')).toBeVisible();
     await expect(page.getByText('Còn 2,5 triệu mua hàng để lên hạng Lộc Biếc')).toBeVisible();
-    await expect(page.getByText('Miễn phí giao hàng')).toBeVisible();
+    // Mã giảm giá nằm ở Ưu đãi: trang Hạng chỉ có một dòng dẫn tới đó, không còn khối danh sách mã.
+    await expect(page.getByRole('link', { name: /Ví mã \(1\)/ })).toHaveAttribute('href', '/uu-dai?section=coupons');
+    await expect(page.getByRole('region', { name: 'Mã giảm giá của tôi' })).toHaveCount(0);
+    await expect(page.getByText('Miễn phí giao hàng')).toHaveCount(0);
     await expect(page.getByText('Tích điểm từ đơn hàng', { exact: true })).toBeVisible();
   });
 
-  test('từ lg mã giảm giá và điểm danh nằm ở cột trái, trên lịch sử; không rơi xuống dưới', async ({ page, api }, testInfo) => {
+  test('từ lg dòng Ví mã nằm ở cột trái, trên lịch sử; không rơi xuống dưới', async ({ page, api }, testInfo) => {
     test.skip(testInfo.project.name !== 'Web Customer', 'Hai cột chỉ có ở máy tính');
     mockLoyalty(api, { done: false });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/tai-khoan/diem-xanh');
     const box = async (name: string) => (await page.getByRole('region', { name }).boundingBox())!;
-    await expect(page.getByRole('region', { name: 'Mã giảm giá của tôi' })).toBeVisible();
-    const coupons = await box('Mã giảm giá của tôi');
+    const walletLink = page.getByRole('link', { name: /Ví mã \(1\)/ });
+    await expect(walletLink).toBeVisible();
+    const wallet = (await walletLink.boundingBox())!;
     const history = await box('Lịch sử Điểm Xanh');
-    expect(coupons.y).toBeLessThan(history.y);
-    expect(coupons.y).toBeLessThan(900);
-    // Hai cột thật: cột phải (các hạng) nằm bên phải thẻ mã giảm giá.
+    expect(wallet.y).toBeLessThan(history.y);
+    expect(wallet.y).toBeLessThan(900);
+    // Hai cột thật: cột phải (các hạng) nằm bên phải dòng Ví mã.
     const tiers = await box('Các hạng');
-    expect(tiers.x).toBeGreaterThan(coupons.x + coupons.width - 1);
+    expect(tiers.x).toBeGreaterThan(wallet.x + wallet.width - 1);
   });
 
   test('từ lg cột phải cao hơn cột trái: thẻ trái vẫn cách nhau đúng 16px, không bị chia thêm chiều cao dư', async ({ page, api }, testInfo) => {
@@ -107,8 +111,8 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     mockLoyalty(api, { done: false }, { tall: true });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/tai-khoan/diem-xanh');
-    const coupons = page.getByRole('region', { name: 'Mã giảm giá của tôi' });
-    await expect(coupons).toBeVisible();
+    // Chưa có mã: dòng đầu là "Đổi quà" dẫn tới Kho quà.
+    await expect(page.getByRole('link', { name: /^Đổi quà/ })).toBeVisible();
     await expect(page.getByTestId('daily-check-in')).toBeVisible();
     // Chờ mọi khối tải xong (không còn lời gọi nào chạy) rồi đo cả bốn hộp trong MỘT lần đọc, để chiều cao không đổi giữa các lần đo.
     await expect(page.getByRole('region', { name: 'Lịch sử Điểm Xanh' })).toBeVisible();
@@ -120,8 +124,9 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
         return { y: b.top + window.scrollY, height: b.height };
       };
       const region = (name: string) => document.querySelector(`[role="region"][aria-label="${name}"], section[aria-label="${name}"]`);
+      const walletRow = Array.from(document.querySelectorAll('a')).find((a) => a.textContent?.startsWith('Đổi quà'))!.closest('ul');
       return {
-        c: r(region('Mã giảm giá của tôi')),
+        c: r(walletRow),
         d: r(document.querySelector('[data-testid="daily-check-in"]')),
         h: r(region('Lịch sử Điểm Xanh')),
         right: r(region('Các hạng')),
@@ -143,12 +148,19 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
   });
 
-  test('"Dùng ngay" mà máy chủ từ chối mã: thẻ mã hiện đúng lý do (role=alert)', async ({ page, api }) => {
+  test('Quà của tôi: "Dùng ngay" mà máy chủ từ chối mã thì dòng mã hiện đúng lý do (role=alert)', async ({ page, api }) => {
     mockLoyalty(api, { done: true });
+    api.get('/me/loyalty/rewards/mine', () => [
+      {
+        id: 'red-v1', giftId: 'reward-freeship', giftKind: 'VOUCHER', giftName: 'Miễn phí vận chuyển', pointsCost: 20000, status: 'FULFILLED', code: null,
+        claimExpiresAt: null, claimPoint: null, fulfilledAt: null, cancelledAt: null, cancelReason: null, refundedPoints: null,
+        couponCode: 'FREESHIP1', couponEndAt: '2099-12-31T05:00:00.000Z', couponUsed: false, createdAt: '2026-10-17T03:00:00.000Z',
+      },
+    ]);
     api.get('/cart', { items: [], itemCount: 2, subtotal: 150000, discount: 0, freeship: false, freeshipThreshold: 199000, couponCode: null });
     api.post('/cart/coupon', () => reply(400, { message: 'Đơn tối thiểu 199.000đ' }));
-    await page.goto('/tai-khoan/diem-xanh');
-    await page.getByRole('button', { name: 'Dùng mã FREESHIP1 ngay' }).click();
+    await page.goto('/kho-qua/cua-toi');
+    await page.locator('[data-redemption]').filter({ hasText: 'Mã FREESHIP1 · HSD 31/12' }).getByRole('button').click();
     await expect(page.getByRole('alert').filter({ hasText: 'Chưa chọn sẵn được mã: Đơn tối thiểu 199.000đ' })).toBeVisible();
     expect(api.callsTo('POST', '/cart/coupon')).toHaveLength(1);
   });
@@ -361,7 +373,7 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
     api.get('/me', () => USER);
     api.get('/config/public', { freeshipThreshold: 500000, cashbackHoldDays: 45, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
     // Trang chủ (đích chuyển hướng) tự gọi các API này; test chỉ kiểm địa chỉ.
-    api.allowUnmocked('GET /flash-sales/upcoming', 'GET /me/wishlist/ids', 'GET /products/for-you', 'GET /me/purchased-items');
+    api.allowUnmocked('GET /flash-sales/upcoming', 'GET /me/wishlist/ids', 'GET /products/for-you', 'GET /me/purchased-items', 'GET /me/new-customer-offer');
     await page.goto('/hoan-tien');
     await expect(page).toHaveURL(/\/$/);
   });

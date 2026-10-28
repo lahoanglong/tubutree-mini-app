@@ -11,17 +11,19 @@ import { EmptyState, ErrorState } from './empty-state';
  */
 export function SessionUnavailable({ variant }: { variant?: 'page' | 'inline' }) {
   const restore = useAuthStore((s) => s.restore);
-  return <ErrorState message={vi.errors.sessionUnavailable} onRetry={() => void restore()} variant={variant} />;
+  const error = useAuthStore((s) => s.error);
+  return <ErrorState message={error ?? vi.errors.sessionUnavailable} onRetry={() => void restore()} variant={variant} />;
 }
 
-/** Lời mời đăng nhập mặc định cho khách thật sự (đã đăng xuất / hết phiên). */
+/** Lời mời đăng nhập mặc định cho khách thật sự (đã đăng xuất / hết phiên). Tài khoản bị khoá thì thay lời mời bằng lời máy chủ. */
 export function GuestPrompt() {
   const login = useAuthStore((s) => s.login);
+  const error = useAuthStore((s) => s.error);
   return (
     <EmptyState
       art="sprout"
       heading={vi.auth.guestHeading}
-      body={vi.auth.loginHint}
+      body={error ?? vi.auth.loginHint}
       ctaLabel={vi.auth.loginCta}
       onCta={() => void login()}
     />

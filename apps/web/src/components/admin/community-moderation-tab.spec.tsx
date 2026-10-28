@@ -31,7 +31,7 @@ const REPORTS = [
   { id: 'r3', reporterId: 'u7', targetType: 'POST', targetId: 'gone', reason: 'Spam', status: 'OPEN', createdAt: '2026-10-27T05:00:00.000Z', target: null },
 ];
 
-function setup(routes: Parameters<typeof mockFetch>[0] = {}, props: { initialView?: 'pending' | 'reports' | 'published' | 'unanswered'; isAdmin?: boolean } = {}) {
+function setup(routes: Parameters<typeof mockFetch>[0] = {}, props: { initialView?: 'pending' | 'reports' | 'published' | 'unanswered' | 'events'; isAdmin?: boolean } = {}) {
   const api = mockFetch({
     '/feed/admin/pending': { body: PENDING },
     '/feed/admin/published': { body: PUBLISHED },
@@ -286,7 +286,7 @@ describe('CommunityModerationTab — bài đã đăng', () => {
 });
 
 describe('CommunityModerationTab — câu hỏi chưa ai trả lời', () => {
-  it('mở thẳng bằng initialView (từ thẻ "Việc cần xử lý"): hiện số giờ đã chờ và hướng dẫn trả lời', async () => {
+  it('mở thẳng bằng initialView (từ thẻ "Việc cần xử lý"): hiện số giờ đã chờ, ô trả lời ngay trong dòng và link mở bài trên web', async () => {
     const { r } = setup({}, { initialView: 'unanswered' });
     await flush();
 
@@ -294,8 +294,72 @@ describe('CommunityModerationTab — câu hỏi chưa ai trả lời', () => {
     expect(row.textContent).toContain('Cây khô lá');
     expect(row.textContent).toContain('Bình');
     expect(row.textContent).toContain('52 giờ');
-    expect(r.container.textContent).toContain('Trả lời trong ứng dụng');
-    expect(r.container.querySelector('[data-post="q1"] button')).toBeNull();
+    expect(r.container.textContent).toContain('Trả lời ngay tại đây hoặc mở bài trên web.');
+    expect(r.container.textContent).not.toContain('Trả lời trong ứng dụng');
+    expect(row.querySelector('textarea')).not.toBeNull();
+    const link = byText(row, 'a', 'Mở bài') as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe('/cong-dong/q1');
+  });
+
+  it('gửi trả lời gọi API bình luận đúng bài, làm mới danh sách và số trên "Việc cần xử lý": dòng biến mất', async () => {
+    let listCalls = 0;
+    const { api, r } = setup(
+      {
+        '/feed/admin/unanswered': () => ({ body: ++listCalls === 1 ? UNANSWERED : [] }),
+        '/feed/q1/comments': { body: { id: 'c1' } },
+        '/admin/ops/inbox': { body: { generatedAt: '2026-10-28T03:00:00.000Z', items: [{ key: 'communityUnanswered', count: 1 }] } },
+      },
+      { initialView: 'unanswered' },
+    );
+    await flush();
+    const inboxBefore = api.calls.filter((c) => c.url.includes('/admin/ops/inbox')).length;
+
+    typeInto(r.container.querySelector('[data-post="q1"] textarea'), '  Dạ bạn tưới ít lại, để chỗ mát nhé.  ');
+    click(byText(r.container.querySelector('[data-post="q1"]')!, 'button', 'Gửi trả lời'));
+    await flush();
+
+    expect(JSON.parse(String(posted(api, '/feed/q1/comments')!.init?.body))).toEqual({ body: 'Dạ bạn tưới ít lại, để chỗ mát nhé.' });
+    expect(api.calls.filter((c) => c.url.includes('/feed/admin/unanswered')).length).toBeGreaterThanOrEqual(2);
+    expect(api.calls.filter((c) => c.url.includes('/admin/ops/inbox')).length).toBeGreaterThan(inboxBefore);
+    expect(r.container.querySelector('[data-post="q1"]')).toBeNull();
+    expect(r.container.textContent).toContain('Không có câu hỏi nào đang chờ trả lời');
+  });
+
+  it('ô trả lời trống hoặc chỉ có khoảng trắng thì nút gửi khoá, không gọi API', async () => {
+    const { api, r } = setup({ '/feed/q1/comments': { body: { id: 'c1' } } }, { initialView: 'unanswered' });
+    await flush();
+    const send = byText(r.container.querySelector('[data-post="q1"]')!, 'button', 'Gửi trả lời') as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    typeInto(r.container.querySelector('[data-post="q1"] textarea'), '   ');
+    expect(send.disabled).toBe(true);
+    click(send);
+    await flush();
+    expect(posted(api, '/feed/q1/comments')).toBeUndefined();
+  });
+
+  it('gửi lỗi (500): báo ngay trên dòng, giữ nguyên nội dung đã gõ và không làm mới danh sách', async () => {
+    const { api, r } = setup({ '/feed/q1/comments': { status: 500, body: { message: 'Máy chủ bận' } } }, { initialView: 'unanswered' });
+    await flush();
+    typeInto(r.container.querySelector('[data-post="q1"] textarea'), 'Dạ để em xem');
+    click(byText(r.container.querySelector('[data-post="q1"]')!, 'button', 'Gửi trả lời'));
+    await flush();
+    expect(r.container.querySelector('[data-post="q1"] [role="alert"]')!.textContent).toContain('Máy chủ bận');
+    expect((r.container.querySelector('[data-post="q1"] textarea') as HTMLTextAreaElement).value).toBe('Dạ để em xem');
+    expect(api.calls.filter((c) => c.url.includes('/feed/admin/unanswered'))).toHaveLength(1);
+  });
+
+  it('bài đã bị gỡ trong lúc gõ (404): báo ở đầu tab và làm mới danh sách', async () => {
+    let listCalls = 0;
+    const { r } = setup(
+      { '/feed/admin/unanswered': () => ({ body: ++listCalls === 1 ? UNANSWERED : [] }), '/feed/q1/comments': { status: 404, body: { message: 'Bài viết không tồn tại.' } } },
+      { initialView: 'unanswered' },
+    );
+    await flush();
+    typeInto(r.container.querySelector('[data-post="q1"] textarea'), 'Dạ để em xem');
+    click(byText(r.container.querySelector('[data-post="q1"]')!, 'button', 'Gửi trả lời'));
+    await flush();
+    expect(r.container.querySelector('[data-post="q1"]')).toBeNull();
+    expect(r.container.querySelector('[role="alert"]')!.textContent).toContain('Bài viết không tồn tại');
   });
 
   it('rỗng: nói không có câu hỏi nào đang chờ; lỗi tải có Thử lại', async () => {
@@ -313,16 +377,23 @@ describe('CommunityModerationTab — câu hỏi chưa ai trả lời', () => {
 });
 
 describe('CommunityModerationTab — khung', () => {
-  it('bốn mục chuyển đổi được, mục đang xem có aria-pressed; có h2 làm tiêu đề', async () => {
-    const { r } = setup();
+  it('năm mục chuyển đổi được cho ADMIN, mục đang xem có aria-pressed; có h2 làm tiêu đề', async () => {
+    const { r } = setup({}, { isAdmin: true });
     await flush();
 
     expect(r.container.querySelector('h2')!.textContent).toBe('Cộng đồng');
-    const chips = ['Chờ duyệt', 'Báo cáo vi phạm', 'Đã đăng', 'Chưa trả lời'].map((t) => byText(r.container, 'button[aria-pressed]', t)!);
-    expect(chips.map((c) => c.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false']);
+    const chips = ['Chờ duyệt', 'Báo cáo vi phạm', 'Đã đăng', 'Chưa trả lời', 'Sự kiện'].map((t) => byText(r.container, 'button[aria-pressed]', t)!);
+    expect(chips.map((c) => c.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false', 'false']);
     click(chips[3]!);
     await flush();
-    expect(chips.map((c) => c.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'false', 'true']);
+    expect(chips.map((c) => c.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'false', 'true', 'false']);
+  });
+
+  it('nhân viên CSKH không có mục Sự kiện (API sự kiện chỉ cho ADMIN)', async () => {
+    const { r } = setup({}, { isAdmin: false });
+    await flush();
+    expect(byText(r.container, 'button[aria-pressed]', 'Sự kiện')).toBeNull();
+    expect(byText(r.container, 'button[aria-pressed]', 'Chưa trả lời')).not.toBeNull();
   });
 });
 
@@ -394,5 +465,205 @@ describe('CommunityModerationTab: báo cáo vi phạm (R-75)', () => {
     const { r } = setup({ '/feed/admin/reports': { body: [] } }, { initialView: 'reports' });
     await flush();
     expect(r.container.textContent).toContain('Chưa có báo cáo vi phạm nào đang mở');
+  });
+});
+
+describe('CommunityModerationTab: sự kiện cộng đồng', () => {
+  const EVENT = { id: 'e1', title: 'Thi ảnh ban công xanh', description: 'Khoe ban công đẹp nhất.', coverUrl: null, startAt: '2026-10-01T00:00:00.000Z', endAt: '2026-11-30T16:59:00.000Z', rewardPoints: 20_000, status: 'OPEN', winnerUserId: null, createdAt: '2026-10-01T00:00:00.000Z', winner: null };
+  const CLOSED = { ...EVENT, id: 'e0', title: 'Thi tỉa lá', status: 'CLOSED', winnerUserId: 'u7', winner: { id: 'u7', name: 'Hà', avatar: null } };
+  const PARTICIPANTS = [
+    { userId: 'u1', name: 'Lan', avatar: null, postId: 'p1', postTitle: 'Ban công tầng 5', postedAt: '2026-10-20T03:00:00.000Z', postCount: 2 },
+    { userId: 'u2', name: 'Minh', avatar: null, postId: 'p2', postTitle: 'Giàn mướp', postedAt: '2026-10-21T03:00:00.000Z', postCount: 1 },
+  ];
+  // Khoá cụ thể đứng trước khoá chung: mockFetch lấy khoá đầu tiên có trong URL.
+  const eventRoutes = (over: Parameters<typeof mockFetch>[0] = {}): Parameters<typeof mockFetch>[0] => ({
+    '/feed/admin/events/e1/participants': { body: PARTICIPANTS },
+    '/feed/events/e1/close': { body: { ok: true } },
+    '/feed/events/e1/winner': { body: { ok: true } },
+    '/feed/admin/events?status=CLOSED': { body: [CLOSED] },
+    '/feed/admin/events?status=OPEN': { body: [EVENT] },
+    '/feed/events': { body: { id: 'e9' } },
+    ...over,
+  });
+  const openEvents = async (over: Parameters<typeof mockFetch>[0] = {}) => {
+    const s = setup(eventRoutes(over), { initialView: 'events', isAdmin: true });
+    await flush();
+    return s;
+  };
+  const input = (r: Rendered, name: string) => r.container.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[name="${name}"]`);
+  const fillCreate = (r: Rendered, v: { title?: string; start?: string; end?: string; reward?: string; desc?: string }) => {
+    if (v.title !== undefined) typeInto(input(r, 'eventTitle'), v.title);
+    if (v.desc !== undefined) typeInto(input(r, 'eventDescription'), v.desc);
+    if (v.start !== undefined) typeInto(input(r, 'eventStart'), v.start);
+    if (v.end !== undefined) typeInto(input(r, 'eventEnd'), v.end);
+    if (v.reward !== undefined) typeInto(input(r, 'eventReward'), v.reward);
+  };
+  const createBtn = (r: Rendered) => byText(r.container.querySelector('form')!, 'button', 'Tạo sự kiện') as HTMLButtonElement;
+
+  it('liệt kê sự kiện đang mở với hạn, điểm thưởng; chuyển sang "Đã đóng" thấy người thắng', async () => {
+    const { r } = await openEvents();
+    const row = r.container.querySelector('[data-event="e1"]')!;
+    expect(row.textContent).toContain('Thi ảnh ban công xanh');
+    expect(row.textContent).toContain('Khoe ban công đẹp nhất.');
+    expect(row.textContent).toContain('23:59 30/11/2026');
+    expect(row.textContent).toContain('20.000');
+    expect(byText(row, 'button', 'Chọn người thắng')).not.toBeNull();
+    expect(byText(row, 'button', 'Đóng sự kiện')).not.toBeNull();
+
+    click(byText(r.container, 'button[aria-pressed]', 'Đã đóng'));
+    await flush();
+    const closed = r.container.querySelector('[data-event="e0"]')!;
+    expect(closed.textContent).toContain('Người thắng');
+    expect(closed.textContent).toContain('Hà');
+    expect(byText(closed, 'button', 'Đóng sự kiện')).toBeNull();
+  });
+
+  it('rỗng và lỗi tải', async () => {
+    const empty = await openEvents({ '/feed/admin/events?status=OPEN': { body: [] } });
+    expect(empty.r.container.textContent).toContain('Chưa có sự kiện nào đang mở');
+    empty.r.unmount();
+    mounted = [];
+    const failed = await openEvents({ '/feed/admin/events?status=OPEN': { status: 500, body: { message: 'x' } } });
+    expect(failed.r.container.querySelector('[role="alert"]')!.textContent).toContain('Không tải được');
+    expect(byText(failed.r.container, 'button', 'Thử lại')).not.toBeNull();
+  });
+
+  it('Đóng sự kiện: hộp xác nhận; huỷ thì không gọi, đồng ý thì POST close rồi làm mới danh sách', async () => {
+    const { api, r } = await openEvents();
+    click(byText(r.container.querySelector('[data-event="e1"]')!, 'button', 'Đóng sự kiện'));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Thi ảnh ban công xanh');
+    answerConfirm(false);
+    await flush();
+    expect(posted(api, '/feed/events/e1/close')).toBeUndefined();
+
+    click(byText(r.container.querySelector('[data-event="e1"]')!, 'button', 'Đóng sự kiện'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(posted(api, '/feed/events/e1/close')).toBeDefined();
+    expect(api.calls.filter((c) => c.url.includes('/feed/admin/events?status=OPEN')).length).toBeGreaterThanOrEqual(2);
+    expect(r.container.textContent).toContain('Đã đóng sự kiện');
+  });
+
+  it('Chọn người thắng: liệt kê người dự thi, chọn một người rồi xác nhận mới gửi userId; huỷ thì không gọi', async () => {
+    const { api, r } = await openEvents();
+    const row = () => r.container.querySelector('[data-event="e1"]')!;
+    click(byText(row(), 'button', 'Chọn người thắng'));
+    await flush();
+    expect(row().textContent).toContain('Ban công tầng 5');
+    expect(row().textContent).toContain('2 bài dự thi');
+    expect((byText(row(), 'button', 'Chọn một người ở trên') as HTMLButtonElement).disabled).toBe(true);
+
+    click(row().querySelector('[role="radio"]'));
+    const confirmBtn = byText(row(), 'button', 'Chốt Lan là người thắng') as HTMLButtonElement;
+    expect(confirmBtn.disabled).toBe(false);
+    click(confirmBtn);
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Lan');
+    expect(confirmDialog()!.textContent).toContain('20.000');
+    answerConfirm(false);
+    await flush();
+    expect(posted(api, '/feed/events/e1/winner')).toBeUndefined();
+
+    click(confirmBtn);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(JSON.parse(String(posted(api, '/feed/events/e1/winner')!.init?.body))).toEqual({ userId: 'u1' });
+  });
+
+  it.each([
+    ['API đã trả rewarded=true', { ok: true, rewarded: true }, 'cộng 20.000 Điểm Xanh', 'status'],
+    ['API báo rewarded=false', { ok: true, rewarded: false }, 'CHƯA cộng được Điểm Xanh', 'alert'],
+    ['API cũ chưa trả rewarded', { ok: true }, 'Đã chốt Lan là người thắng', 'status'],
+  ])('kết quả chọn người thắng khi %s', async (_name, body, expected, role) => {
+    const { r } = await openEvents({ '/feed/events/e1/winner': { body } });
+    click(byText(r.container.querySelector('[data-event="e1"]')!, 'button', 'Chọn người thắng'));
+    await flush();
+    click(r.container.querySelector('[data-event="e1"] [role="radio"]'));
+    click(byText(r.container.querySelector('[data-event="e1"]')!, 'button', 'Chốt Lan là người thắng'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const notice = r.container.querySelector(`[role="${role}"]`)!;
+    expect(notice.textContent).toContain(expected);
+  });
+
+  it('chọn người thắng lỗi (sự kiện đã đóng) hiện lời máy chủ, không báo thành công', async () => {
+    const { r } = await openEvents({ '/feed/events/e1/winner': { status: 400, body: { message: 'Sự kiện đã đóng hoặc đã chọn người thắng.' } } });
+    click(byText(r.container.querySelector('[data-event="e1"]')!, 'button', 'Chọn người thắng'));
+    await flush();
+    click(r.container.querySelector('[data-event="e1"] [role="radio"]'));
+    click(byText(r.container.querySelector('[data-event="e1"]')!, 'button', 'Chốt Lan là người thắng'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(r.container.querySelector('[role="alert"]')!.textContent).toContain('đã đóng hoặc đã chọn người thắng');
+    expect(r.container.textContent).not.toContain('Đã chốt Lan');
+  });
+
+  it('chưa có bài dự thi thì nói rõ và không cho chốt', async () => {
+    const { r } = await openEvents({ '/feed/admin/events/e1/participants': { body: [] } });
+    click(byText(r.container.querySelector('[data-event="e1"]')!, 'button', 'Chọn người thắng'));
+    await flush();
+    expect(r.container.querySelector('[data-event="e1"]')!.textContent).toContain('Chưa có bài dự thi nào được đăng');
+    expect(r.container.querySelector('[data-event="e1"] [role="radio"]')).toBeNull();
+  });
+
+  it('tạo sự kiện: gửi đúng thân, giờ nhập là giờ Việt Nam, bỏ trống mô tả và ảnh bìa thì không gửi; xong thì làm mới danh sách', async () => {
+    const { api, r } = await openEvents();
+    expect(createBtn(r).disabled).toBe(true);
+    fillCreate(r, { title: '  Thi ảnh rau mầm  ', start: '2026-11-01T08:00', end: '2026-11-30T23:59', reward: '30000' });
+    expect(createBtn(r).disabled).toBe(false);
+    click(createBtn(r));
+    await flush();
+
+    const create = api.calls.find((c) => c.init?.method === 'POST' && /\/feed\/events$/.test(c.url))!;
+    expect(JSON.parse(String(create.init?.body))).toEqual({
+      title: 'Thi ảnh rau mầm',
+      startAt: '2026-11-01T01:00:00.000Z',
+      endAt: '2026-11-30T16:59:00.000Z',
+      rewardPoints: 30_000,
+    });
+    expect(r.container.textContent).toContain('Đã tạo sự kiện');
+    expect(api.calls.filter((c) => c.url.includes('/feed/admin/events?status=OPEN')).length).toBeGreaterThanOrEqual(2);
+    expect((input(r, 'eventTitle') as HTMLInputElement).value).toBe('');
+  });
+
+  it('có mô tả và điểm thưởng để trống: gửi mô tả, thưởng 0', async () => {
+    const { api, r } = await openEvents();
+    fillCreate(r, { title: 'Sự kiện vui', desc: 'Ai cũng tham gia được', start: '2026-11-01T08:00', end: '2026-11-02T08:00' });
+    click(createBtn(r));
+    await flush();
+    const create = api.calls.find((c) => c.init?.method === 'POST' && /\/feed\/events$/.test(c.url))!;
+    expect(JSON.parse(String(create.init?.body))).toMatchObject({ description: 'Ai cũng tham gia được', rewardPoints: 0 });
+  });
+
+  it('thiếu tên, thiếu giờ, giờ kết thúc không sau giờ bắt đầu hoặc điểm thưởng không phải số nguyên thì khoá nút tạo', async () => {
+    const { api, r } = await openEvents();
+    fillCreate(r, { title: 'A', start: '2026-11-01T08:00' });
+    expect(createBtn(r).disabled).toBe(true);
+    fillCreate(r, { end: '2026-11-01T08:00' });
+    expect(createBtn(r).disabled).toBe(true);
+    expect(r.container.textContent).toContain('Giờ kết thúc phải sau giờ bắt đầu');
+    fillCreate(r, { end: '2026-11-02T08:00', reward: '-5' });
+    expect(createBtn(r).disabled).toBe(true);
+    fillCreate(r, { reward: '1.5' });
+    expect(createBtn(r).disabled).toBe(true);
+    fillCreate(r, { reward: '0' });
+    expect(createBtn(r).disabled).toBe(false);
+    fillCreate(r, { title: '   ' });
+    expect(createBtn(r).disabled).toBe(true);
+    expect(api.calls.some((c) => c.init?.method === 'POST')).toBe(false);
+  });
+
+  it('tạo lỗi (điểm thưởng ngoài khoảng): hiện lời máy chủ, giữ nguyên nội dung đã nhập', async () => {
+    const { r } = await openEvents({ '/feed/events': { status: 400, body: { message: 'Quà sự kiện phải từ 20.000 đến 50.000 Điểm Xanh, hoặc để 0 nếu sự kiện không có quà.' } } });
+    fillCreate(r, { title: 'Sự kiện', start: '2026-11-01T08:00', end: '2026-11-02T08:00', reward: '100' });
+    click(createBtn(r));
+    await flush();
+    expect(r.container.querySelector('form [role="alert"]')!.textContent).toContain('Quà sự kiện phải từ 20.000');
+    expect((input(r, 'eventTitle') as HTMLInputElement).value).toBe('Sự kiện');
   });
 });

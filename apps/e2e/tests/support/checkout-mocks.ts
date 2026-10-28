@@ -114,6 +114,8 @@ export function placedOrderFor(body: Record<string, unknown>): OrderDTO {
     status: bank ? 'PENDING_PAYMENT' : 'CONFIRMED',
     paymentMethod: bank ? 'BANK_TRANSFER' : 'COD',
     paymentStatus: 'UNPAID',
+    // Màn thành công chỉ hứa ngày giao khi Tubu giao; máy chủ trả cột này cho đơn vừa đặt.
+    fulfiller: 'TUBU',
     hasRecyclingPickup: typeof body.wasteRequestId === 'string',
     recyclingNote: null,
   });

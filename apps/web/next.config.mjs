@@ -83,7 +83,12 @@ const nextConfig = {
   // Link cũ/đường dẫn Mini App dán lên web đi tới route web tương ứng (307, Next giữ query của đường vào).
   async redirects() {
     // Danh mục sản phẩm đã chuyển từ "/" sang /san-pham: link cũ "/?q|category|brand" đi theo (xem catalog-redirects.mjs).
-    return [...buildCatalogRedirects(), ...buildMiniappRedirects(routeMap.routes)];
+    return [
+      ...buildCatalogRedirects(),
+      ...buildMiniappRedirects(routeMap.routes),
+      // Bảng xếp hạng cộng đồng đã bỏ cả ở Mini App; link web cũ đã chia sẻ đi về bảng tin, vĩnh viễn.
+      { source: '/cong-dong/xep-hang', destination: '/cong-dong', permanent: true },
+    ];
   },
   // API đã có `helmet()` (apps/api/src/main.ts) nhưng web (trang khách hàng/admin thấy
   // trực tiếp) trước giờ không có header bảo mật nào — Caddy chỉ reverse-proxy thuần,

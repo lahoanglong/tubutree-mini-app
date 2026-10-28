@@ -54,7 +54,7 @@ describe('Checkout tách đơn theo nơi giao dưới tải song song (real Post
         },
         {
           provide: NotificationsService,
-          useValue: { notify: jest.fn().mockResolvedValue(undefined) },
+          useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) },
         },
         {
           provide: PancakeOrderService,

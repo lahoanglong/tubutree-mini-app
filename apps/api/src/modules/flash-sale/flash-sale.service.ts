@@ -642,7 +642,7 @@ export class FlashSaleService {
           item: {
             include: {
               flashSale: { select: { isActive: true, startAt: true, endAt: true } },
-              variation: { include: { product: { select: { name: true } } } },
+              variation: { include: { product: { select: { name: true, slug: true } } } },
             },
           },
         },
@@ -664,7 +664,10 @@ export class FlashSaleService {
         if (claimed.count === 0) continue;
 
         try {
-          await this.notifications.notify(r.userId, 'FLASH_STARTING', { product: r.item.variation.product.name });
+          const { name, slug } = r.item.variation.product;
+          const data: Record<string, string> = { product: name };
+          if (slug) data.product_slug = slug;
+          await this.notifications.notify(r.userId, 'FLASH_STARTING', data);
           sent++;
         } catch (err) {
           // Claim đã ghi trước khi gửi: nuốt lỗi ở đây là mất luôn cơ hội giờ vàng của khách đó,

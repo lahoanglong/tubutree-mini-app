@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WasteRequestDetailDTO, WasteRequestLineDTO } from '@tubutree/shared-types';
 import { byText, flush, render, type Rendered } from '@/test-utils/dom';
@@ -16,6 +20,7 @@ const state = vi.hoisted(() => ({
   requestError: null as unknown,
   me: null as unknown,
   rewards: null as unknown,
+  meGate: null as Promise<unknown> | null,
   calls: [] as string[],
 }));
 
@@ -33,7 +38,7 @@ vi.mock('@/lib/core-http', () => ({
         if (state.requestError) throw state.requestError;
         return state.request;
       }
-      if (path === '/waste/me') return state.me;
+      if (path === '/waste/me') return state.meGate ?? state.me;
       if (path === '/me/loyalty/rewards') return state.rewards;
       throw new Error(`chưa mock ${path}`);
     },
@@ -73,6 +78,7 @@ beforeEach(() => {
   state.requestError = null;
   state.me = makeWasteMe({ balance: { pointsBalance: 9000, pointsConvertedBalance: 5000, redeemablePoints: 14_000 } });
   state.rewards = makeRewardCatalog({ redeemablePoints: 14_000 });
+  state.meGate = null;
   state.calls = [];
 });
 afterEach(() => {
@@ -101,6 +107,33 @@ describe('/doi-rac/xong/[id] (§4.7)', () => {
     const c = await mount();
     expect(c.textContent).toContain('Số dư mới 14.000 điểm');
     expect(c.textContent).toContain('Còn 6.000 điểm tới mã Miễn phí vận chuyển');
+  });
+
+  it('cache số dư cũ còn tươi: không hiện "Số dư mới" tới khi gọi lại xong, rồi chỉ hiện số mới', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 } } });
+    qc.setQueryData(WASTE_QUERY_KEYS.me, makeWasteMe({ balance: { pointsBalance: 1000, pointsConvertedBalance: 0, redeemablePoints: 1000 } }));
+    qc.setQueryData(WASTE_QUERY_KEYS.rewards, makeRewardCatalog({ redeemablePoints: 1000 }));
+    let resolveMe!: (v: unknown) => void;
+    state.meGate = new Promise((r) => (resolveMe = r));
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    mounted.push({ container, root, unmount: () => { act(() => root.unmount()); container.remove(); } });
+    act(() => {
+      root.render(
+        <QueryClientProvider client={qc}>
+          <RecycleDone id="req-1" />
+        </QueryClientProvider>,
+      );
+    });
+    await flush(10);
+    expect(container.textContent).toContain('Đã cộng 4.000 điểm');
+    expect(container.textContent).not.toContain('Số dư mới');
+    resolveMe(makeWasteMe({ balance: { pointsBalance: 9000, pointsConvertedBalance: 5000, redeemablePoints: 14_000 } }));
+    await flush(10);
+    expect(container.textContent).toContain('Số dư mới 14.000 điểm');
+    expect(container.textContent).not.toContain('Số dư mới 1.000 điểm');
+    expect(container.textContent).toContain('Còn 6.000 điểm tới mã Miễn phí vận chuyển');
   });
 
   it('giọt nước: chỉ khi dropsAwarded > 0, dùng biểu tượng không dùng emoji', async () => {

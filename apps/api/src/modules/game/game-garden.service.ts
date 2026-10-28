@@ -9,7 +9,6 @@ import { CommunityFeedService } from '../feed/community-feed.service';
 import {
   DEFAULT_TREE_TYPE,
   GARDEN_COUPON_PREFIX,
-  HARVEST_COUPON_CODE_PREFIXES,
   HARVEST_COUPON_DAILY_CAP_DEFAULT,
   HARVEST_COUPON_MONTHLY_CAP_DEFAULT,
   configInt,
@@ -17,6 +16,7 @@ import {
   ladderTarget,
   treeTargetLadder,
 } from './game.constants';
+import { countHarvestCoupons } from './harvest-coupon-count';
 import { isRealUser } from '../../common/real-user';
 import { startOfVnDay, startOfVnMonth } from '../../common/vn-time';
 
@@ -214,12 +214,9 @@ export class GameGardenService {
           // Đếm TRONG cùng transaction Serializable — DÙNG CHUNG trần với waterTree (lô nhà):
           // cả mã thu hoạch lô nhà (HARVEST) lẫn lô phụ (GARDEN) đều tính vào 1 trần/user/ngày, tránh
           // lách trần bằng cách tưới lô nhà + lô phụ song song trong cùng ngày.
-          const harvestCouponWhere = {
-            OR: HARVEST_COUPON_CODE_PREFIXES.map((prefix) => ({ code: { startsWith: prefix } })),
-            scopeMeta: { path: ['userId'], equals: userId },
-          };
-          let couponsToday = await db.coupon.count({ where: { ...harvestCouponWhere, startAt: { gte: dayStart } } });
-          let couponsMonth = await db.coupon.count({ where: { ...harvestCouponWhere, startAt: { gte: monthStart } } });
+          const existing = await countHarvestCoupons(db, userId, dayStart, monthStart);
+          let couponsToday = existing.day;
+          let couponsMonth = existing.month;
 
           // Lô bỏ lâu chỉ héo, không mất tiến độ.
           let p = plot.progress;

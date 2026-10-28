@@ -70,7 +70,7 @@ test.describe('Web khách: tài khoản', () => {
     api.get('/affiliate/me', { isAffiliate: true, canRegister: false, canOpenStorefront: true });
     await page.goto('/tai-khoan');
     await expect(page.getByRole('heading', { name: 'Công việc', level: 2 })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Quản trị nhân sự/ })).toHaveAttribute('href', '/admin');
+    await expect(page.getByRole('link', { name: /Quản trị nhân sự/ })).toHaveAttribute('href', '/admin?tab=staffRoster');
   });
 
   test('sửa hồ sơ: email sai bị chặn, email đúng gửi PATCH /me đúng thân', async ({ page, api }) => {
@@ -152,6 +152,7 @@ test.describe('Web khách: tài khoản', () => {
       { id: 'n1', templateCode: 'ORDER_CONFIRMED', payload: { body: 'Đơn TT001 đã được xác nhận', data: { order_code: 'TT001' } }, status: 'SENT', sentAt },
       { id: 'n2', templateCode: 'POINTS_EARNED', payload: { body: 'Bạn nhận thêm 50 điểm Xanh' }, status: 'SENT', sentAt },
     ]);
+    api.get('/me/notifications/unread-count', { count: 2 });
     api.post('/me/notifications/:id/read', { ok: true });
     api.post('/me/notifications/read-all', { ok: true, count: 2 });
     await page.goto('/tai-khoan/thong-bao');

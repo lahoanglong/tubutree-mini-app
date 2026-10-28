@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Star } from 'lucide-react';
@@ -16,6 +17,7 @@ import {
   EDIT_HIDDEN_NOTE,
   ELIGIBILITY_FAILED,
   REVIEW_ORDER_PARAM,
+  VIDEO_UPLOADING,
   fetchCanReview,
   fetchMyReview,
   fetchProductReviews,
@@ -29,7 +31,18 @@ import {
   type ReviewableOrder,
 } from '@/lib/reviews-client';
 import { EvidenceUpload } from '@/components/evidence-upload';
+import { pdpSectionTitle } from './pdp-sections';
+import { reviewVideoConfig } from './review-video-config';
 import { actionErrorText } from '@/lib/error-text';
+
+// Mã tải video (Cloudinary, đo độ dài) chỉ cần khi khách mở form đánh giá: tách khỏi First Load của trang sản phẩm.
+const ReviewVideoUpload = dynamic(() => import('./review-video-upload').then((m) => m.ReviewVideoUpload), { ssr: false });
+// Khối "chưa có đánh giá" (minh hoạ + nút của Mini App, ~7KB) chỉ hiện ở sản phẩm chưa có đánh giá và nằm dưới màn hình đầu: nạp lười.
+// Khung giữ chỗ cao bằng khối thật (đệm 16 + hình 96 + tiêu đề + 2 dòng mô tả) để trang không giật khi nó hiện.
+const EmptyState = dynamic(() => import('@/components/mini/empty-state').then((m) => m.EmptyState), {
+  ssr: false,
+  loading: () => <div aria-hidden="true" className="h-[206px]" />,
+});
 
 const PAGE_SIZE = 5;
 
@@ -72,7 +85,7 @@ function forgetOrderParam() {
 export function ProductReviewsFallback() {
   return (
     <section id="danh-gia" aria-labelledby="danh-gia-title" className="mt-8 scroll-mt-20">
-      <h2 id="danh-gia-title" className={ui.sectionTitle}>
+      <h2 id="danh-gia-title" className={pdpSectionTitle}>
         Đánh giá
       </h2>
       <p className="mt-2 text-sm text-stone-600">Đang tải đánh giá…</p>
@@ -135,7 +148,7 @@ export function ProductReviews({ slug }: { slug: string }) {
   return (
     <section id="danh-gia" aria-labelledby="danh-gia-title" className="mt-8 scroll-mt-20">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="danh-gia-title" className={ui.sectionTitle}>
+        <h2 id="danh-gia-title" className={pdpSectionTitle}>
           Đánh giá{data && data.count > 0 ? ` (${data.count})` : ''}
         </h2>
         {hydrated && phase === 'guest' && (
@@ -207,7 +220,7 @@ export function ProductReviews({ slug }: { slug: string }) {
           </button>
         </div>
       ) : !data || data.count === 0 ? (
-        <p className="mt-3 text-sm text-stone-600">Chưa có đánh giá. Hãy là người đầu tiên chia sẻ trải nghiệm.</p>
+        <EmptyState variant="inline" art="sprout" heading="Chưa có đánh giá" body="Hãy là người đầu tiên chia sẻ trải nghiệm." />
       ) : (
         <>
           <div className="mt-3 flex flex-wrap items-center gap-6">
@@ -393,8 +406,9 @@ function ReviewForm({
   const [rating, setRating] = useState(initial?.rating ?? 5);
   const [comment, setComment] = useState(initial?.comment ?? '');
   const [images, setImages] = useState<string[]>(initial?.images ?? []);
-  // Web chưa tải video lên được: sửa đánh giá có video thì gửi lại đúng video cũ để không mất.
-  const videoUrl = initial?.videoUrl ?? null;
+  const [videoUrl, setVideoUrl] = useState<string | null>(initial?.videoUrl ?? null);
+  // Đang tải video lên: gửi lúc này sẽ lưu đánh giá không kèm video (mất phần thưởng video, sửa lại cũng không được cộng thêm).
+  const [videoBusy, setVideoBusy] = useState(false);
 
   const save = useMutation({
     mutationFn: () =>
@@ -414,7 +428,13 @@ function ReviewForm({
   });
 
   const hasMedia = images.length > 0 || videoUrl !== null;
-  const hint = rewardHint({ isEdit, rewardAvailable, hasImages: images.length > 0, hasVideo: videoUrl !== null });
+  const hint = rewardHint({
+    isEdit,
+    rewardAvailable,
+    hasImages: images.length > 0,
+    hasVideo: videoUrl !== null,
+    canUploadVideo: reviewVideoConfig() !== null,
+  });
   const note = purchaseNote({ isEdit, purchaseCount, orderCode });
 
   return (
@@ -423,7 +443,7 @@ function ReviewForm({
       className={`mt-3 p-4 ${ui.card}`}
       onSubmit={(e) => {
         e.preventDefault();
-        save.mutate();
+        if (!videoBusy) save.mutate();
       }}
     >
       <h3 className="text-base font-semibold text-stone-900">{isEdit ? 'Sửa đánh giá' : 'Đánh giá sản phẩm'}</h3>
@@ -467,7 +487,7 @@ function ReviewForm({
           disabled={save.isPending}
         />
       </div>
-      {videoUrl && <p className="mt-2 text-sm text-stone-600">Video đã gửi kèm đánh giá này được giữ nguyên.</p>}
+      <ReviewVideoUpload value={videoUrl} onChange={setVideoUrl} onBusyChange={setVideoBusy} disabled={save.isPending} />
       <p className={`mt-3 text-sm ${!isEdit && rewardAvailable && hasMedia ? 'font-semibold text-success-fg' : 'text-stone-600'}`}>{hint}</p>
       {save.isError && (
         <p role="alert" className={`mt-2 ${ui.error}`}>
@@ -475,8 +495,8 @@ function ReviewForm({
         </p>
       )}
       <div className="mt-4 flex flex-wrap gap-2">
-        <button type="submit" className={ui.btnPrimary} disabled={save.isPending}>
-          {save.isPending ? 'Đang gửi…' : isEdit ? 'Lưu đánh giá' : 'Gửi đánh giá'}
+        <button type="submit" className={ui.btnPrimary} disabled={save.isPending || videoBusy}>
+          {save.isPending ? 'Đang gửi…' : videoBusy ? VIDEO_UPLOADING : isEdit ? 'Lưu đánh giá' : 'Gửi đánh giá'}
         </button>
         <button type="button" className={ui.btnSecondary} onClick={onCancel} disabled={save.isPending}>
           Huỷ

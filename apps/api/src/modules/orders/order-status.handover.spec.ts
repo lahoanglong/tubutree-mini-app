@@ -58,7 +58,7 @@ function make(order: Record<string, unknown>, hooks: Record<string, jest.Mock> =
     prisma as unknown as PrismaService,
     { creditOrderPoints: jest.fn(), reverseOrderPoints: jest.fn().mockResolvedValue(undefined) } as unknown as LoyaltyService,
     { reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined) } as unknown as AffiliateService,
-    { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService,
+    { notify: jest.fn(), notifySafe: jest.fn() } as unknown as NotificationsService,
     reversal as unknown as OrderReversalService,
     undefined,
     undefined,

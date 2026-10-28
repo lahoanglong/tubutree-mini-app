@@ -69,7 +69,7 @@ describe('Việc sau giao: chạy lại được, đúng một lần (real Postg
         DeliveredEffectsResyncCron,
         { provide: PricingService, useValue: { calcShippingFee: jest.fn().mockResolvedValue(0) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
         { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
         { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
       ],
@@ -113,7 +113,7 @@ describe('Việc sau giao: chạy lại được, đúng một lần (real Postg
       [queue('pancake-push')],
       sysConfig as never,
       { getConfig: async () => null, getHealth: () => null } as never,
-      { notify: jest.fn().mockResolvedValue(undefined) } as never,
+      { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } as never,
       jest.fn().mockResolvedValue({ ok: true, status: 200 }) as never,
     );
   });

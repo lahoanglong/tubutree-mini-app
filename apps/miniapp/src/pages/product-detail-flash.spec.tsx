@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchActiveFlashSales: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -36,6 +36,7 @@ vi.mock('../components/ui/cart-badge', () => ({ CartBadge: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import ProductDetailPage from './product-detail';
+import { syncServerClock } from '../utils/server-clock';
 
 const FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
 const product = {
@@ -74,11 +75,40 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
     expect(screen.getByText('Đã bán 40%')).toBeInTheDocument();
   });
 
-  it('bán quá suất: kẹp "Đã bán 100%"; quá giờ kết thúc: không hiện "Còn 0h 00m"', async () => {
-    mocks.fetchActiveFlashSales.mockResolvedValue([flash({ soldCount: 40, endAt: new Date(Date.now() - 60_000).toISOString() })]);
+  it('bán quá suất: kẹp "Đã bán 100%"', async () => {
+    mocks.fetchActiveFlashSales.mockResolvedValue([flash({ soldCount: 40 })]);
     renderPdp();
     expect(await screen.findByText('Đã bán 100%')).toBeInTheDocument();
+  });
+
+  it('suất đã quá giờ kết thúc (danh sách ở máy cũ): không dùng giá giờ vàng, không nhãn, không đếm ngược', async () => {
+    mocks.fetchActiveFlashSales.mockResolvedValue([flash({ endAt: new Date(Date.now() - 60_000).toISOString() })]);
+    renderPdp();
+    expect((await screen.findAllByText('100.000đ')).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('80.000đ')).toHaveLength(0);
+    expect(screen.queryByText('-20%')).toBeNull();
     expect(screen.queryByText(/Còn \d+h/)).toBeNull();
+    expect(screen.queryByText(/^Đã bán \d+%$/)).toBeNull();
+  });
+
+  describe('điện thoại lệch giờ so với máy chủ', () => {
+    afterEach(() => syncServerClock(new Date().toISOString()));
+
+    it('điện thoại nhanh 10 phút, suất còn 5 phút theo máy chủ: vẫn giá giờ vàng', async () => {
+      syncServerClock(new Date(Date.now() - 10 * 60_000).toISOString());
+      mocks.fetchActiveFlashSales.mockResolvedValue([flash({ endAt: new Date(Date.now() - 5 * 60_000).toISOString() })]);
+      renderPdp();
+      expect((await screen.findAllByText('80.000đ')).length).toBeGreaterThan(0);
+      expect(screen.getByText('-20%')).toBeInTheDocument();
+    });
+
+    it('điện thoại chậm 10 phút, suất đã hết 5 phút theo máy chủ: về giá thường', async () => {
+      syncServerClock(new Date(Date.now() + 10 * 60_000).toISOString());
+      mocks.fetchActiveFlashSales.mockResolvedValue([flash({ endAt: new Date(Date.now() + 5 * 60_000).toISOString() })]);
+      renderPdp();
+      expect((await screen.findAllByText('100.000đ')).length).toBeGreaterThan(0);
+      expect(screen.queryAllByText('80.000đ')).toHaveLength(0);
+    });
   });
 
   it('giờ vàng: giá gạch và % theo giá đang bán trước giờ vàng, khớp dải trang chủ (U1-B05)', async () => {

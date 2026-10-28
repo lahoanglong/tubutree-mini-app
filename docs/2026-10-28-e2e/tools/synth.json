@@ -1,0 +1,793 @@
+{
+ "counts": "P1 2, P2 28, P3 98 (tổng 128 mục E). Mục cũ: 41 mã R (31 mã \"Sau\" trừ R-116, cộng R-167..R-176) nằm trong 40 mục E; 0 mã đã xong hẳn (R-100, R-131, R-143 xong một phần, chỉ làm phần còn lại). Giao 16 gói: 120 mục. Việc của chủ: 6 (E-2, E-30, E-80, E-88, E-126, E-128). Bước tích hợp: 1 (E-120). Để sau có lý do: 1 (E-125).",
+ "packages": [
+  {
+   "key": "giohang",
+   "title": "Giỏ, thanh toán, người giới thiệu",
+   "items": [
+    "E-6",
+    "E-7",
+    "E-8",
+    "E-10",
+    "E-48",
+    "E-97",
+    "E-99"
+   ],
+   "areas": [
+    "apps/miniapp/src/pages/checkout.tsx",
+    "apps/miniapp/src/pages/cart.tsx",
+    "apps/miniapp/src/components/checkout/**",
+    "apps/miniapp/src/store/storefront-context.ts",
+    "apps/miniapp/src/pages/storefront-view.tsx",
+    "apps/miniapp/src/components/app.tsx",
+    "apps/web/src/app/thanh-toan/**",
+    "apps/web/src/app/gio-hang/**",
+    "apps/web/src/components/coupon-box.tsx",
+    "apps/web/src/components/referral-code-box.tsx",
+    "apps/web/src/components/checkout/**",
+    "apps/web/src/lib/storefront-context.ts",
+    "apps/web/src/components/storefront-tracker.tsx",
+    "packages/app-core/src/coupon-use.ts",
+    "packages/app-core/src/shipping-eta.ts"
+   ],
+   "money": true,
+   "migration": false,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/giohang.md",
+   "depends_on": []
+  },
+  {
+   "key": "muachung",
+   "title": "Mua chung, trang SP, video đánh giá, đồng hồ máy chủ",
+   "items": [
+    "E-9",
+    "E-11",
+    "E-33",
+    "E-44",
+    "E-81",
+    "E-96",
+    "E-100",
+    "E-116"
+   ],
+   "areas": [
+    "apps/miniapp/src/pages/product-detail.tsx",
+    "apps/miniapp/src/pages/group-buy.tsx",
+    "apps/miniapp/src/utils/group-buy-copy.ts",
+    "apps/miniapp/src/utils/server-clock.ts",
+    "apps/miniapp/src/components/image-upload.tsx",
+    "apps/web/src/app/san-pham/[slug]/**",
+    "apps/web/src/app/mua-chung/**",
+    "apps/web/src/components/add-to-cart.tsx",
+    "apps/web/src/lib/pdp-logic.ts",
+    "apps/web/src/lib/reviews-client.ts",
+    "packages/app-core/src/group-buy-copy.ts",
+    "packages/app-core/src/server-clock.ts",
+    "packages/app-core/src/api/groupbuy.ts",
+    "apps/api/src/modules/groupbuy/**"
+   ],
+   "money": true,
+   "migration": false,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/muachung.md",
+   "depends_on": []
+  },
+  {
+   "key": "thongbao",
+   "title": "Trung tâm thông báo hai nền",
+   "items": [
+    "E-4",
+    "E-5",
+    "E-32",
+    "E-71",
+    "E-81",
+    "E-83",
+    "E-84",
+    "E-87",
+    "E-89",
+    "E-90"
+   ],
+   "areas": [
+    "packages/app-core/src/notification-route.ts",
+    "packages/app-core/src/api/account.ts",
+    "packages/app-core/src/queries/account.ts",
+    "apps/miniapp/src/pages/notifications.tsx",
+    "apps/miniapp/src/pages/orders.tsx",
+    "apps/miniapp/src/components/orders/orders-tabs.ts",
+    "apps/miniapp/src/pages/community-events.tsx",
+    "apps/miniapp/src/services/account-api.ts",
+    "apps/web/src/components/account/notification-view.ts",
+    "apps/web/src/app/tai-khoan/thong-bao/**",
+    "apps/api/src/modules/notifications/notifications.controller.ts",
+    "apps/api/src/modules/notifications/notifications.module.ts",
+    "apps/api/src/modules/notifications/notification-feed.service.ts",
+    "apps/api/src/common/notify-admins.ts",
+    "apps/api/src/modules/support-chat/bridge-health.cron.ts",
+    "apps/api/src/modules/flash-sale/flash-sale.service.ts",
+    "apps/api/src/modules/lifecycle/review-invite.service.ts"
+   ],
+   "money": false,
+   "migration": false,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/thongbao.md",
+   "depends_on": []
+  },
+  {
+   "key": "canhan",
+   "title": "Cá nhân, Trang chủ, Vườn Xanh: lối vào và số đếm",
+   "items": [
+    "E-19",
+    "E-21",
+    "E-39",
+    "E-66",
+    "E-77",
+    "E-79",
+    "E-91",
+    "E-121",
+    "E-122",
+    "E-123",
+    "E-124"
+   ],
+   "areas": [
+    "apps/miniapp/src/pages/profile.tsx",
+    "apps/miniapp/src/pages/home.tsx",
+    "apps/miniapp/src/pages/game.tsx",
+    "apps/miniapp/src/pages/offers.tsx",
+    "apps/miniapp/src/components/home/home-settling.tsx",
+    "apps/miniapp/src/components/home/member-card.tsx",
+    "apps/web/src/app/tai-khoan/page.tsx",
+    "apps/web/src/components/account/account-menu.ts",
+    "apps/web/src/components/home/home-view.tsx",
+    "apps/web/src/components/home/use-home-settling.ts",
+    "apps/web/src/components/home/member-card.tsx",
+    "apps/web/src/components/header-bell.tsx",
+    "apps/web/src/app/vuon-xanh/page.tsx",
+    "apps/web/src/components/game/game-tabs.tsx",
+    "apps/web/src/app/uu-dai/page.tsx",
+    "packages/app-core/src/home-layout.ts",
+    "packages/app-core/src/features.ts",
+    "packages/app-core/src/game-newbie.ts",
+    "packages/app-core/src/api/order-counts.ts",
+    "packages/app-core/src/api/account.ts",
+    "packages/app-core/src/queries/account.ts",
+    "apps/api/src/modules/orders/orders.controller.ts",
+    "apps/api/src/modules/orders/orders.module.ts",
+    "apps/api/src/modules/orders/order-counts.service.ts",
+    "apps/api/prisma/reference-data/config-selection.ts"
+   ],
+   "money": false,
+   "migration": false,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/canhan.md",
+   "depends_on": [
+    "thongbao"
+   ]
+  },
+  {
+   "key": "api-tin",
+   "title": "Gửi tin không im lặng, lệch sổ, tin đơn hàng",
+   "items": [
+    "E-3",
+    "E-16",
+    "E-31",
+    "E-34",
+    "E-36",
+    "E-45",
+    "E-85",
+    "E-86"
+   ],
+   "areas": [
+    "apps/api/src/modules/notifications/notifications.service.ts",
+    "apps/api/src/modules/orders/order-status.service.ts",
+    "apps/api/src/modules/orders/orders.service.ts",
+    "apps/api/src/modules/orders/order-reversal.service.ts",
+    "apps/api/src/modules/orders/order-returns.service.ts",
+    "apps/api/src/modules/orders/customer-refunds.service.ts",
+    "apps/api/src/modules/orders/refund-queue.ts",
+    "apps/api/src/modules/subscriptions/**",
+    "apps/api/src/modules/loyalty/loyalty-expiry.service.ts",
+    "apps/api/src/modules/loyalty/tier-drop-notice.service.ts",
+    "apps/api/src/modules/lifecycle/lifecycle.service.ts",
+    "apps/api/src/modules/game/game-gift.service.ts",
+    "apps/api/src/modules/game/game-reminder.service.ts",
+    "apps/api/src/modules/integrations/pancake/pancake-order-body.ts",
+    "apps/api/src/modules/ops/ops.module.ts",
+    "apps/api/src/modules/ops/ledger-drift.cron.ts",
+    "apps/api/src/common/silent-notify-audit.spec.ts",
+    "packages/app-core/src/api/orders.ts",
+    "apps/miniapp/src/pages/order-detail.tsx",
+    "apps/miniapp/src/utils/order-status.ts",
+    "apps/web/src/app/tai-khoan/don-hang/[code]/**",
+    "apps/web/src/lib/order-view.ts"
+   ],
+   "money": true,
+   "migration": false,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/api-tin.md",
+   "depends_on": []
+  },
+  {
+   "key": "diem",
+   "title": "Điểm Xanh, hạng, Vườn, quà",
+   "items": [
+    "E-16",
+    "E-17",
+    "E-18",
+    "E-20",
+    "E-35",
+    "E-74",
+    "E-102",
+    "E-103",
+    "E-104",
+    "E-117",
+    "E-119"
+   ],
+   "areas": [
+    "apps/api/src/modules/loyalty/loyalty.service.ts",
+    "apps/api/src/modules/loyalty/loyalty.controller.ts",
+    "apps/api/src/modules/checkout/checkout.service.ts",
+    "apps/api/src/modules/coupons/coupons.service.ts",
+    "apps/api/src/modules/game/game.service.ts",
+    "apps/api/src/modules/game/game-garden.service.ts",
+    "apps/api/src/modules/game/game.controller.ts",
+    "apps/api/src/modules/feed/community-feed.service.ts",
+    "apps/api/src/modules/feed/community-reward.service.ts",
+    "apps/api/src/modules/storefront/storefront.controller.ts",
+    "apps/api/src/modules/merchant/merchant.controller.ts",
+    "apps/api/src/modules/merchant/merchant.service.ts",
+    "packages/app-core/src/api/loyalty.ts",
+    "apps/miniapp/src/pages/loyalty.tsx",
+    "apps/miniapp/src/pages/rewards-mine.tsx",
+    "apps/miniapp/src/pages/external-points.tsx",
+    "apps/miniapp/src/components/game/garden-hero.tsx",
+    "apps/web/src/app/tai-khoan/diem-xanh/**",
+    "apps/web/src/app/kho-qua/cua-toi/**",
+    "apps/web/src/components/game/garden-hero.tsx"
+   ],
+   "money": true,
+   "migration": false,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/diem.md",
+   "depends_on": []
+  },
+  {
+   "key": "ctv",
+   "title": "CTV, gian hàng, hoa hồng, nhãn hàng, đại lý",
+   "items": [
+    "E-11",
+    "E-43",
+    "E-46",
+    "E-47",
+    "E-49",
+    "E-73",
+    "E-108",
+    "E-109",
+    "E-110",
+    "E-111"
+   ],
+   "areas": [
+    "apps/api/src/modules/affiliate/**",
+    "apps/api/src/modules/storefront/storefront-quest.service.ts",
+    "packages/app-core/src/api/affiliate.ts",
+    "packages/app-core/src/api/storefront.ts",
+    "packages/design-tokens/**",
+    "apps/miniapp/src/i18n/vi.ts",
+    "apps/miniapp/src/pages/affiliate.tsx",
+    "apps/miniapp/src/pages/storefront-builder.tsx",
+    "apps/miniapp/src/pages/brand-owner*.tsx",
+    "apps/miniapp/src/pages/dealer*.tsx",
+    "apps/miniapp/src/pages/dealer-pricing.ts",
+    "apps/miniapp/src/services/storefront-api.ts",
+    "apps/miniapp/src/services/affiliate-api.ts",
+    "apps/miniapp/src/css/dealer-theme.css",
+    "apps/web/src/app/ctv/**",
+    "apps/web/src/app/chu-thuong-hieu/**",
+    "apps/web/src/app/dai-ly/**",
+    "apps/web/src/app/s/**",
+    "apps/web/src/components/brand-owner/**",
+    "apps/web/src/components/dealer/**",
+    "apps/web/src/components/affiliate/**"
+   ],
+   "money": true,
+   "migration": false,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/ctv.md",
+   "depends_on": []
+  },
+  {
+   "key": "doirac",
+   "title": "Đổi rác lấy quà: khách và quầy",
+   "items": [
+    "E-22",
+    "E-37",
+    "E-38",
+    "E-40",
+    "E-41",
+    "E-42",
+    "E-127"
+   ],
+   "areas": [
+    "apps/api/src/modules/waste-exchange/**",
+    "apps/api/prisma/seed.ts",
+    "apps/api/src/modules/notifications/notification-variables.ts",
+    "apps/api/prisma/migrations/20261029HHMMSS_waste_request_expiring_template/",
+    "packages/shared-types/src/waste.ts",
+    "packages/app-core/src/waste-timeline.ts",
+    "apps/miniapp/src/pages/recycle-request.tsx",
+    "apps/miniapp/src/pages/recycle-done.tsx",
+    "apps/miniapp/src/pages/recycle-desk.tsx",
+    "apps/miniapp/src/utils/waste-labels.ts",
+    "apps/web/src/components/recycle/**"
+   ],
+   "money": false,
+   "migration": true,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/doirac.md",
+   "depends_on": []
+  },
+  {
+   "key": "phien",
+   "title": "Phiên đăng nhập Mini, tài khoản khách, đăng xuất",
+   "items": [
+    "E-12",
+    "E-13",
+    "E-14",
+    "E-61",
+    "E-63",
+    "E-64"
+   ],
+   "areas": [
+    "apps/miniapp/src/store/auth.ts",
+    "apps/miniapp/src/services/api.ts",
+    "apps/miniapp/src/services/query-client.ts",
+    "apps/miniapp/src/components/ui/auth-gate.tsx",
+    "apps/miniapp/src/components/home/new-customer-gift.tsx",
+    "apps/miniapp/src/components/home/guest-link-card.tsx",
+    "apps/miniapp/src/components/coupon-claim-gate.tsx",
+    "apps/miniapp/src/components/game/guest-banner.tsx",
+    "apps/miniapp/src/pages/recycle.tsx",
+    "apps/miniapp/src/hooks/use-recycle-login.ts",
+    "apps/miniapp/src/components/waste-phone-needed.tsx",
+    "apps/miniapp/src/utils/guest-user.ts",
+    "apps/api/src/modules/auth/**",
+    "apps/api/src/modules/analytics/analytics.controller.ts",
+    "apps/api/src/common/real-user.ts"
+   ],
+   "money": true,
+   "migration": false,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/phien.md",
+   "depends_on": []
+  },
+  {
+   "key": "hotro",
+   "title": "Zalo OA, chat CSKH, trợ lý AI",
+   "items": [
+    "E-15",
+    "E-23",
+    "E-62",
+    "E-75",
+    "E-82",
+    "E-105",
+    "E-106"
+   ],
+   "areas": [
+    "apps/api/src/modules/integrations/zns/zalo-oa-token.*",
+    "apps/api/src/modules/integrations/zalo-oa/**",
+    "apps/api/src/modules/ops/ops-health.service.ts",
+    "apps/api/src/modules/support-chat/support-chat.service.ts",
+    "apps/miniapp/src/pages/ai-advisor.tsx",
+    "apps/miniapp/src/pages/support-chat.tsx",
+    "apps/miniapp/src/store/ai-advisor.ts",
+    "apps/web/src/app/tu-van/**",
+    "apps/web/src/app/ho-tro/chat/**",
+    "apps/web/src/components/support-chat/**",
+    "apps/web/src/lib/ai-advisor-store.ts",
+    "docs/GO-LIVE-KEYS.md"
+   ],
+   "money": false,
+   "migration": false,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/hotro.md",
+   "depends_on": []
+  },
+  {
+   "key": "admin-hopviec",
+   "title": "Hộp việc Hôm nay của quản trị",
+   "items": [
+    "E-1",
+    "E-24",
+    "E-25",
+    "E-26",
+    "E-28",
+    "E-52",
+    "E-55",
+    "E-56",
+    "E-59",
+    "E-60"
+   ],
+   "areas": [
+    "apps/api/prisma/schema.prisma",
+    "apps/api/prisma/migrations/20261029HHMMSS_dealer_credit_payment_report/",
+    "apps/api/src/modules/ops/ops-inbox.service.ts",
+    "apps/api/src/modules/admin/admin.service.ts",
+    "apps/api/src/modules/admin/admin-order-filter.ts",
+    "apps/api/src/modules/admin/admin-revenue.ts",
+    "apps/api/src/modules/dealer/**",
+    "apps/api/src/modules/external-points/external-points-attention.ts",
+    "apps/api/src/modules/users/**",
+    "apps/api/test/integration-race/",
+    "apps/web/src/app/admin/page.tsx",
+    "apps/web/src/lib/admin-client.ts",
+    "apps/web/src/lib/external-claims.ts",
+    "apps/web/src/components/admin/ops-inbox-tab.tsx",
+    "apps/web/src/components/admin/order-status-actions.tsx",
+    "apps/web/src/components/admin/pancake-attention.tsx",
+    "apps/web/src/components/admin/storefronts-tab.tsx",
+    "apps/web/src/components/admin/return-request-row.tsx",
+    "apps/web/src/components/admin/customer-refunds-tab.tsx",
+    "apps/web/src/components/admin/dealer-claims-tab.tsx",
+    "apps/web/src/components/admin/product-categories-tab.tsx",
+    "apps/web/src/components/admin/dealer-accounts-tab.tsx",
+    "apps/web/src/components/admin/dealer-credit-panel.tsx",
+    "apps/web/src/components/admin/reports-tab.tsx",
+    "apps/web/src/components/admin/reports-revenue-section.tsx",
+    "apps/web/src/components/admin/external-claims-tab.tsx",
+    "apps/web/src/components/admin/account-deletion-panel.tsx"
+   ],
+   "money": true,
+   "migration": true,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/admin-hopviec.md",
+   "depends_on": []
+  },
+  {
+   "key": "admin-don",
+   "title": "Đơn, đổi trả, ô ngày, câu đố trong quản trị",
+   "items": [
+    "E-29",
+    "E-51",
+    "E-53",
+    "E-54",
+    "E-58",
+    "E-70",
+    "E-76",
+    "E-118"
+   ],
+   "areas": [
+    "apps/web/src/app/admin/page.tsx",
+    "apps/web/src/lib/admin-client.ts",
+    "apps/web/src/components/admin/vn-date-input.tsx",
+    "apps/web/src/components/admin/claim-campaign-panel.tsx",
+    "apps/web/src/components/admin/season-admin.tsx",
+    "apps/web/src/components/admin/pos-credits-tab.tsx",
+    "apps/web/src/components/admin/payout-admin-tab.tsx",
+    "apps/web/src/components/admin/waste-point-detail.tsx",
+    "apps/web/src/components/admin/user-detail-drawer.tsx",
+    "apps/web/src/components/admin/order-extra-filters.tsx",
+    "apps/web/src/components/admin/order-status-actions.tsx",
+    "apps/web/src/components/admin/customer-refunds-tab.tsx",
+    "apps/web/src/components/admin/game-quiz-tab.tsx",
+    "apps/api/src/modules/admin/admin-order-filter.ts",
+    "apps/api/src/modules/admin/admin.controller.ts",
+    "apps/api/src/modules/admin/admin.module.ts",
+    "apps/api/src/modules/admin/admin-game-quiz.controller.ts",
+    "apps/api/src/modules/game/game-quiz.service.ts",
+    "apps/api/src/modules/orders/order-returns.service.ts",
+    "apps/api/src/modules/orders/customer-refunds.service.ts",
+    "packages/app-core/src/video-url.ts",
+    "apps/miniapp/src/utils/video-url.ts"
+   ],
+   "money": false,
+   "migration": false,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/admin-don.md",
+   "depends_on": [
+    "admin-hopviec",
+    "api-tin"
+   ]
+  },
+  {
+   "key": "admin-nhansu",
+   "title": "Nhân sự trên Mini, gian hàng đổi sau duyệt",
+   "items": [
+    "E-26",
+    "E-50",
+    "E-57",
+    "E-113"
+   ],
+   "areas": [
+    "apps/api/prisma/schema.prisma",
+    "apps/api/prisma/migrations/20261029HHMMSS_role_grant_staff_permissions/",
+    "apps/api/prisma/migrations/20261029HHMMSS_storefront_content_changed_at/",
+    "apps/api/src/modules/staff/rbac/**",
+    "apps/api/src/modules/staff/dto/**",
+    "apps/api/src/modules/storefront/storefront.service.ts",
+    "apps/api/src/modules/storefront/storefront-admin.*",
+    "packages/app-core/src/api/staff.ts",
+    "apps/miniapp/src/pages/admin.tsx",
+    "apps/miniapp/src/services/staff-api.ts",
+    "apps/web/src/components/admin/staff-roster-tab.tsx",
+    "apps/web/src/components/admin/storefronts-tab.tsx",
+    "apps/web/src/lib/admin-storefronts-client.ts"
+   ],
+   "money": false,
+   "migration": true,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/admin-nhansu.md",
+   "depends_on": [
+    "admin-hopviec"
+   ]
+  },
+  {
+   "key": "admin-congcu",
+   "title": "Công cụ quản trị: cộng đồng, lương, chat CSKH",
+   "items": [
+    "E-27",
+    "E-68",
+    "E-72",
+    "E-112"
+   ],
+   "areas": [
+    "apps/web/src/components/admin/community-moderation-tab.tsx",
+    "apps/web/src/components/admin/payroll-admin-tab.tsx",
+    "apps/web/src/components/admin/support-chat-tab.tsx",
+    "apps/web/src/components/admin/support-chat/**",
+    "packages/app-core/src/api/payroll.ts",
+    "packages/app-core/src/api/feed.ts"
+   ],
+   "money": true,
+   "migration": false,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/admin-congcu.md",
+   "depends_on": []
+  },
+  {
+   "key": "dondep",
+   "title": "Đồng bộ route hai nền, mã chết, e2e ổn định",
+   "items": [
+    "E-65",
+    "E-67",
+    "E-69",
+    "E-78",
+    "E-114"
+   ],
+   "areas": [
+    "packages/app-core/src/route-map.json",
+    "packages/app-core/src/route-map-parity.spec.ts",
+    "scripts/check-platform-parity.mjs",
+    "apps/web/next.config.mjs",
+    "apps/web/src/app/cong-dong/**",
+    "apps/web/src/app/layout.tsx",
+    "apps/web/src/app/providers.tsx",
+    "apps/web/src/components/home/earn-sheet.tsx",
+    "apps/miniapp/src/components/home/earn-sheet.tsx",
+    "packages/app-core/src/account-copy.ts",
+    "packages/app-core/src/academy-access.ts",
+    "packages/app-core/src/queries/feed.ts",
+    "packages/app-core/src/queries/payment.ts",
+    "packages/app-core/src/queries/reviews.ts",
+    "apps/miniapp/src/components/home/home-extras.tsx",
+    "apps/miniapp/src/components/home/home-section.tsx",
+    "apps/web/src/components/home/home-section.tsx",
+    "apps/miniapp/src/components/community/product-picker.tsx",
+    "apps/e2e/**"
+   ],
+   "money": false,
+   "migration": false,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/dondep.md",
+   "depends_on": []
+  },
+  {
+   "key": "giaodien",
+   "title": "Đánh bóng giao diện chung: thanh đáy, đăng nhập web, yêu thích, thẻ SP",
+   "items": [
+    "E-92",
+    "E-93",
+    "E-94",
+    "E-95",
+    "E-98",
+    "E-101",
+    "E-107",
+    "E-115"
+   ],
+   "areas": [
+    "apps/miniapp/src/components/home/suggest-feed.tsx",
+    "apps/miniapp/src/components/bottom-nav.tsx",
+    "apps/miniapp/src/components/support-hotline.tsx",
+    "apps/miniapp/src/pages/wishlist.tsx",
+    "apps/miniapp/src/components/product-card.tsx",
+    "apps/miniapp/src/components/ui/product-tile.tsx",
+    "apps/miniapp/src/css/tokens.css",
+    "apps/miniapp/src/css/zaui-bridge.css",
+    "apps/web/src/components/home/suggest-feed.tsx",
+    "apps/web/src/components/bottom-nav.tsx",
+    "apps/web/src/components/support-hotline.tsx",
+    "apps/web/src/app/dang-nhap/**",
+    "apps/web/src/app/tai-khoan/yeu-thich/**",
+    "apps/web/src/components/product-card.tsx",
+    "packages/app-core/src/api/catalog.ts",
+    "packages/app-core/src/product-badges.ts",
+    "apps/api/src/modules/catalog/**"
+   ],
+   "money": false,
+   "migration": false,
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/giaodien.md",
+   "depends_on": []
+  }
+ ],
+ "owner_decisions": [
+  {
+   "id": "E-6 (MUAHANG-01)",
+   "decision": "Chỉ hiện câu gợi ý 'Bạn có N mã dùng được · giảm đến X' ở giỏ và thanh toán; không tự áp mã.",
+   "reason": "Tự áp mã là đổi luồng thanh toán; câu gợi ý đảo ngược được và đủ để khách mới không quên mã chào mừng."
+  },
+  {
+   "id": "E-34 (MUAHANG-07)",
+   "decision": "Giữ ghi chú đơn định kỳ trong DB; chỉ đổi cách hiện (nhãn 'Đơn định kỳ', 'Ưu đãi đặt định kỳ').",
+   "reason": "Kho và Pancake đang đọc ghi chú đó."
+  },
+  {
+   "id": "E-38 (DOIRAC-02)",
+   "decision": "Chỉ làm phần (b): nhân viên cùng điểm xem yêu cầu đồng nghiệp vừa duyệt (24 giờ, chỉ đọc).",
+   "reason": "Phần (a) đổi cách xử lý tranh chấp quà; cờ đổi rác đang tắt."
+  },
+  {
+   "id": "E-22 (DOIRAC-03)",
+   "decision": "Thêm tin nhắc trong app 24–48 giờ trước hạn; chữ hết hạn MAIL_IN chỉ hướng khách nhắn CSKH kèm mã vận đơn, không hứa mở lại hay điểm.",
+   "reason": "Không đụng thể lệ; cờ waste.enabled tắt nên chưa khách thật nào nhận."
+  },
+  {
+   "id": "E-43 (CTV-02)",
+   "decision": "Chỉ báo kế toán bằng mẫu có sẵn OPS_REFUND_ALERT; không trừ Ví CTV.",
+   "reason": "Thu hồi tiền là chính sách của chủ."
+  },
+  {
+   "id": "E-46 (CTV-08)",
+   "decision": "Giữ lịch tự chuyển hoa hồng mỗi giờ và cách gửi tin; chỉ thêm phân trang lịch sử.",
+   "reason": "Đổi giờ chuyển tiền là vận hành tiền."
+  },
+  {
+   "id": "E-47 (CTV-09)",
+   "decision": "Nhiệm vụ 'Đơn hàng đầu tiên' chỉ bỏ hoa hồng REJECTED.",
+   "reason": "Đơn huỷ không phải đơn hàng; các luật khác là điều kiện thưởng."
+  },
+  {
+   "id": "E-50 (CTV-11)",
+   "decision": "Ghi contentChangedAt khi gian hàng đã duyệt đổi nội dung; admin có lọc 'Đổi sau duyệt' và nút 'Đã xem'; không bắt duyệt lại, không ẩn.",
+   "reason": "Cho admin soát mà không ảnh hưởng CTV; đảo ngược được."
+  },
+  {
+   "id": "E-62 (KYTHUAT-07)",
+   "decision": "Chỉ lọc sự kiện user_send_* và thêm cron xếp lại tin kẹt; không đổi cách xác thực webhook.",
+   "reason": "Cơ chế ký cần chủ xác nhận trên dashboard Zalo."
+  },
+  {
+   "id": "E-66 (DODANG-05)",
+   "decision": "Ẩn tab Cộng đồng ở Vườn Xanh web bằng cờ GAME_SOCIAL_ON_WEB = false; giữ mã.",
+   "reason": "Web 375 phải giống Mini; đổi cờ là bật lại."
+  },
+  {
+   "id": "E-71 (DODANG-11)",
+   "decision": "Tab Định kỳ trong Mini chỉ hiện với khách đã có gói ACTIVE hoặc PAUSED; không có lối tạo gói; giữ cờ SUBSCRIPTIONS_IN_MINIAPP.",
+   "reason": "Khách có gói không còn ngõ cụt; khách khác không thấy gì đổi."
+  },
+  {
+   "id": "E-74 (DODANG-14)",
+   "decision": "Chỉ xoá hai endpoint điểm danh cũ khi cả bản Mini đang chạy (9d0e95bd5) không gọi; giữ by-host/customDomain, chỉ ghi chú.",
+   "reason": "Tránh vỡ bản Mini đã phát hành."
+  },
+  {
+   "id": "E-76 (DODANG-16)",
+   "decision": "Màn câu đố chỉ xem, thêm, sửa; rewardPts 0; waterReward theo độ khó như seed (8/10/12); không xoá, không bật/tắt.",
+   "reason": "Không đổi kinh tế game; bảng không có cột isActive."
+  },
+  {
+   "id": "E-77 (DODANG-17)",
+   "decision": "Không nối và không xoá home.new_customer_layout; chỉ sửa câu mô tả và comment cờ Chặng Mùa.",
+   "reason": "Nối hay xoá là quyết định bố cục trang chủ."
+  },
+  {
+   "id": "E-87 (CSKH-13, R-112)",
+   "decision": "Đổi tiêu đề tin trong app theo loại; giữ emoji trong mẫu tin.",
+   "reason": "Sửa nội dung mẫu tin gửi khách thật là việc của chủ."
+  },
+  {
+   "id": "E-89 (CSKH-15, R-133)",
+   "decision": "Thẻ sự kiện Mini ghi 'Tham gia trên web Tubu Tree' (chữ có sẵn), điểm thành dòng phụ; không link ngoài, không dự thi trong Mini.",
+   "reason": "Giữ quyết định Mini chỉ đọc, không link ra ngoài."
+  },
+  {
+   "id": "E-101 (R-106)",
+   "decision": "Mini giới hạn khung 480px, căn giữa, bằng CSS toàn cục.",
+   "reason": "Mini chủ yếu mở ở khổ điện thoại; đảo ngược được."
+  },
+  {
+   "id": "E-103 (R-122)",
+   "decision": "Trang Hạng bỏ khối mã, thay một dòng 'Ví mã (n) ›' tới Ưu đãi; không có mã thì 'Đổi quà ›'.",
+   "reason": "Trang dài gần 4 màn, mã hiện ở 3 chỗ."
+  },
+  {
+   "id": "E-115 (R-153)",
+   "decision": "Nhãn 'Mới' = sản phẩm tạo trong 30 ngày.",
+   "reason": "Cách hiểu phổ biến, không đụng giá."
+  },
+  {
+   "id": "E-12 (KYTHUAT-01)",
+   "decision": "Không nâng trần đăng nhập 30 lượt/phút/IP; chỉ sửa cách app xử lý lỗi.",
+   "reason": "Cần đo trước khi đổi trần."
+  },
+  {
+   "id": "E-125 (DIEM-10)",
+   "decision": "Để sau, không làm đêm nay.",
+   "reason": "Cờ đơn sàn tắt; cùng kiểu khoá dùng ở 10 cron khác, nên làm một helper chung khi bật cờ."
+  }
+ ],
+ "owner_later": [
+  {
+   "id": "E-2 (DIEM-01)",
+   "why": "Luật điểm: khách vãng lai có được nhận điểm danh và thưởng nhiệm vụ 7 ngày không (P1, có thể nuôi điểm bằng nhiều máy giả)."
+  },
+  {
+   "id": "E-30 (CSKH-07)",
+   "why": "Đăng ký mẫu ZNS trả lời CSKH và đặt SUPPORT_CHAT_REPLY sang kênh ZNS; gửi tin cho khách thật, điều kiện bật chat (R-86)."
+  },
+  {
+   "id": "E-80 (CSKH-03)",
+   "why": "Có gửi tin lên hạng/hạ hạng thật không và câu chữ; là tin mới cho khách thật."
+  },
+  {
+   "id": "E-88 (CSKH-14)",
+   "why": "Đổi nội dung mẫu ORDER_CONFIRMED cho đơn chuyển khoản; có thể phải duyệt lại mẫu ZNS."
+  },
+  {
+   "id": "E-43 (CTV-02) phần thu hồi",
+   "why": "Chính sách thu hồi hoa hồng đã vào Ví khi đơn bị trả: trừ Ví, trừ kỳ sau, hay bỏ qua."
+  },
+  {
+   "id": "E-46 (CTV-08) phần lịch",
+   "why": "Chuyển hoa hồng mỗi sáng 8:00 thay mỗi giờ và gộp tin: vận hành tiền."
+  },
+  {
+   "id": "E-47 (CTV-09) phần còn lại",
+   "why": "Điều kiện thưởng nhiệm vụ đơn đầu: chỉ đơn đã giao, không đơn lên hộ, chỉ đơn qua gian hàng."
+  },
+  {
+   "id": "E-50 (CTV-11)",
+   "why": "Có bắt duyệt lại gian hàng khi đổi nội dung sau duyệt không."
+  },
+  {
+   "id": "E-38 (DOIRAC-02) phần (a)",
+   "why": "Quầy có hiện quà đã trao/đã huỷ khi tra mã không."
+  },
+  {
+   "id": "E-126 (DIEM-11)",
+   "why": "Quà đổi rác quá hạn nhận: tự huỷ và hoàn điểm hay vẫn cho nhận (luật điểm, thể lệ)."
+  },
+  {
+   "id": "E-128 (DOIRAC-09)",
+   "why": "Cách ghi phiên bản thể lệ khách đã đồng ý (chứng cứ pháp lý)."
+  },
+  {
+   "id": "E-62 (KYTHUAT-07) phần (a)",
+   "why": "Xác nhận cơ chế ký webhook Zalo OA trên dashboard (token tự đặt hay X-ZEvent-Signature)."
+  },
+  {
+   "id": "E-77 (DODANG-17)",
+   "why": "Nối hay xoá home.new_customer_layout; bật Chặng Mùa hay chưa."
+  },
+  {
+   "id": "E-6 (MUAHANG-01) phần tự áp",
+   "why": "Có tự áp mã tốt nhất ở thanh toán không (đổi luồng thanh toán)."
+  },
+  {
+   "id": "R-116, R-86, R-160, R-166",
+   "why": "Đã chờ chủ từ trước; lệnh đêm nay không làm."
+  },
+  {
+   "id": "PROD: CTV là tài khoản khách",
+   "why": "Đếm chỉ đọc trước khi deploy E-11 (chặn đăng ký mới, không đổi tài khoản cũ)."
+  },
+  {
+   "id": "PROD: webhook Pancake",
+   "why": "Kiểm trạng thái (từng 401) để biết tin trạng thái đơn có tới."
+  },
+  {
+   "id": "PROD: loyalty.tier_drop_zns_template_id",
+   "why": "Điền id mẫu ZNS nếu muốn báo trước hạ hạng qua Zalo."
+  },
+  {
+   "id": "PROD: Apache mod_remoteip",
+   "why": "Trần đăng nhập theo IP phụ thuộc IP thật của khách."
+  },
+  {
+   "id": "PROD: cờ aiAdvisorEnabled",
+   "why": "E-23 chỉ có tác dụng khi cờ bật."
+  }
+ ]
+}

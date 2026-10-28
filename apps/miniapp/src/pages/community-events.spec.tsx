@@ -103,11 +103,41 @@ describe('CommunityEventsPage — danh sách sự kiện', () => {
     expect(screen.getByText(/5 điểm/)).toBeInTheDocument();
   });
 
+  it('mỗi thẻ ghi cách tham gia ("Tham gia trên web Tubu Tree") ở dòng chính; điểm thưởng là dòng phụ, không đứng trước', async () => {
+    renderPage();
+    await screen.findByText('Sự kiện e1');
+    expect(screen.getAllByText('Tham gia trên web Tubu Tree')).toHaveLength(2);
+    const how = screen.getAllByText('Tham gia trên web Tubu Tree')[0]!;
+    const reward = screen.getByText(/5 điểm/);
+    expect(how.compareDocumentPosition(reward) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('chỉ đọc: danh sách sự kiện không có liên kết ra ngoài (thẻ a) và không có nút dự thi', async () => {
+    const { container } = renderPage();
+    await screen.findByText('Sự kiện e1');
+    expect(container.querySelectorAll('a')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /^(Dự thi|Đăng bài|Tham gia)/ })).toBeNull();
+    expect(container.textContent).not.toMatch(/https?:|tubutree\.(com|vn)/);
+  });
+
   it('sự kiện đã qua hạn có nhãn "Đã kết thúc"', async () => {
     mocks.listEvents.mockResolvedValue([EVENT('e1', { endAt: new Date(Date.now() - DAY).toISOString() }), EVENT('e2')]);
     renderPage();
     await screen.findByText('Sự kiện e1');
     expect(screen.getAllByText('Đã kết thúc')).toHaveLength(1);
+  });
+
+  it('sự kiện đã kết thúc không mời tham gia: chỉ còn nhãn "Đã kết thúc", sự kiện còn hạn vẫn có cách tham gia', async () => {
+    mocks.listEvents.mockResolvedValue([EVENT('e1', { endAt: new Date(Date.now() - DAY).toISOString() }), EVENT('e2')]);
+    renderPage();
+    await screen.findByText('Sự kiện e1');
+    expect(screen.getAllByText('Đã kết thúc')).toHaveLength(1);
+    expect(screen.getAllByText('Tham gia trên web Tubu Tree')).toHaveLength(1);
+
+    fireEvent.click(screen.getByText('Sự kiện e1'));
+    await screen.findByText('Bài dự thi');
+    expect(screen.queryByText('Tham gia trên web Tubu Tree')).toBeNull();
+    expect(screen.getByText('Đã kết thúc')).toBeInTheDocument();
   });
 
   it('không có sự kiện: hiện trạng thái trống', async () => {
@@ -158,12 +188,23 @@ describe('CommunityEventsPage — chi tiết sự kiện', () => {
     expect(screen.queryByTestId('composer')).toBeNull();
   });
 
-  it('chi tiết sự kiện: không hứa thưởng, chỉ nói tham gia trên web', async () => {
+  it('chi tiết sự kiện: dòng chính là cách tham gia trên web, điểm thưởng chỉ là dòng phụ', async () => {
     renderPage();
     await openEvent('Sự kiện e1');
     await screen.findByRole('button', { name: 'Bài p1' });
     expect(screen.getByText('Tham gia trên web Tubu Tree')).toBeInTheDocument();
     expect(screen.queryByText(/Thưởng/)).toBeNull();
+    const how = screen.getByText('Tham gia trên web Tubu Tree');
+    const reward = screen.getByText(/5 điểm/);
+    expect(how.compareDocumentPosition(reward) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('chỉ đọc: chi tiết sự kiện không có liên kết ra ngoài và không có nút dự thi', async () => {
+    const { container } = renderPage();
+    await openEvent('Sự kiện e1');
+    await screen.findByRole('button', { name: 'Bài p1' });
+    expect(container.querySelectorAll('a')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: /^(Dự thi|Đăng bài|Tham gia)/ })).toBeNull();
   });
 
   it('chưa có bài dự thi: hiện trạng thái trống', async () => {

@@ -92,61 +92,134 @@ export function VnDateInput({
   };
 
   return (
-    <span className="relative inline-flex items-center">
-      <input
-        type="text"
-        inputMode="numeric"
-        autoComplete="off"
-        placeholder="dd/mm/yyyy"
-        maxLength={10}
-        aria-label={ariaLabel}
-        aria-invalid={invalid || undefined}
-        value={text}
-        disabled={disabled}
-        onChange={(e) => edit(e.target.value)}
-        onBlur={() => setTouched(true)}
-        className={`${className ?? ''} w-36 pr-9 ${invalid ? 'border-danger-fg' : ''}`}
-      />
-      <button
-        type="button"
-        aria-label={ariaLabel ? `Chọn ngày: ${ariaLabel}` : 'Chọn ngày từ lịch'}
-        disabled={disabled}
-        onClick={() => {
-          try {
-            picker.current?.showPicker?.();
-          } catch {
-            picker.current?.focus();
-          }
-        }}
-        className="absolute right-0 inline-flex h-11 w-11 items-center justify-center rounded-control text-stone-600 hover:bg-stone-100 disabled:opacity-50 lg:right-1 lg:h-8 lg:w-8"
-      >
-        <CalendarDays aria-hidden="true" className="h-4 w-4" />
-      </button>
-      <input
-        ref={picker}
-        type="date"
-        tabIndex={-1}
-        aria-hidden="true"
-        value={value}
-        min={min}
-        max={max}
-        disabled={disabled}
-        onChange={(e) => {
-          setText(isoToVn(e.target.value));
-          onChange(e.target.value);
-        }}
-        className="pointer-events-none absolute bottom-0 right-0 h-0 w-0 opacity-0"
-      />
+    <span className="inline-flex flex-col items-start">
+      <span className="relative inline-flex items-center">
+        <input
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="dd/mm/yyyy"
+          maxLength={10}
+          aria-label={ariaLabel}
+          aria-invalid={invalid || undefined}
+          value={text}
+          disabled={disabled}
+          onChange={(e) => edit(e.target.value)}
+          onFocus={() => setTouched(false)}
+          onBlur={() => setTouched(true)}
+          className={`${className ?? ''} w-36 pr-9 ${invalid ? 'border-danger-fg' : ''}`}
+        />
+        <button
+          type="button"
+          aria-label={ariaLabel ? `Chọn ngày: ${ariaLabel}` : 'Chọn ngày từ lịch'}
+          disabled={disabled}
+          onClick={() => {
+            try {
+              picker.current?.showPicker?.();
+            } catch {
+              picker.current?.focus();
+            }
+          }}
+          className="absolute right-0 inline-flex h-11 w-11 items-center justify-center rounded-control text-stone-600 hover:bg-stone-100 disabled:opacity-50 lg:right-1 lg:h-8 lg:w-8"
+        >
+          <CalendarDays aria-hidden="true" className="h-4 w-4" />
+        </button>
+        <input
+          ref={picker}
+          type="date"
+          tabIndex={-1}
+          aria-hidden="true"
+          value={value}
+          min={min}
+          max={max}
+          disabled={disabled}
+          onChange={(e) => {
+            setText(isoToVn(e.target.value));
+            onChange(e.target.value);
+          }}
+          className="pointer-events-none absolute bottom-0 right-0 h-0 w-0 opacity-0"
+        />
+      </span>
       {pending && (
-        <span role="status" className="absolute left-0 top-full z-10 mt-0.5 w-max max-w-full rounded-control bg-stone-0 px-1 text-xs text-stone-500">
+        <span role="status" className="mt-0.5 max-w-[18rem] text-xs text-stone-500">
           {text.length === 10 ? 'Ngày không có thật, chưa áp dụng.' : 'Chưa áp dụng, gõ đủ ngày dd/mm/yyyy.'}
         </span>
       )}
       {invalid && (
-        <span role="alert" className="absolute left-0 top-full z-10 mt-0.5 w-max max-w-full rounded-control bg-stone-0 px-1 text-xs text-danger-fg">
+        <span role="alert" className="mt-0.5 max-w-[18rem] text-xs text-danger-fg">
           {outOfRange ? 'Ngày nằm ngoài khoảng cho phép.' : text.length === 10 ? 'Ngày không có thật, chưa áp dụng.' : 'Nhập ngày dạng dd/mm/yyyy, ví dụ 03/10/2026.'}
         </span>
       )}
+    </span>
+  );
+}
+
+const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+const QUARTER_MINUTES = ['00', '15', '30', '45'];
+
+function splitDateTime(v: string): { date: string; hh: string; mm: string } | null {
+  const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(v);
+  return m ? { date: m[1]!, hh: m[2]!, mm: m[3]! } : null;
+}
+
+/**
+ * Ngày giờ theo kiểu Việt: ô ngày dd/mm/yyyy + giờ 00-23 + phút 00/15/30/45 (ô `datetime-local` gốc hiện mm/dd và 12 giờ AM/PM).
+ * Giá trị vào/ra "yyyy-mm-ddTHH:mm" để cha vẫn `new Date(value)` như trước. Giá trị cũ có phút lẻ (20:07) vẫn hiện đúng phút đó.
+ * Chọn giờ trước khi có ngày thì giữ giờ chờ, ghép khi ngày đủ.
+ */
+export function VnDateTimeInput({
+  value,
+  onChange,
+  className,
+  ariaLabel,
+  disabled,
+  onPendingChange,
+}: {
+  value: string;
+  onChange: (local: string) => void;
+  className?: string;
+  ariaLabel?: string;
+  disabled?: boolean;
+  onPendingChange?: (pending: boolean) => void;
+}) {
+  const parsed = splitDateTime(value);
+  const [held, setHeld] = useState(() => (parsed ? { hh: parsed.hh, mm: parsed.mm } : { hh: '00', mm: '00' }));
+  // Cha đổi giá trị từ ngoài thì giờ chờ theo: xoá ngày rồi gõ lại vẫn ghép với giờ đang có, không rơi về 00:00.
+  const parsedHh = parsed?.hh;
+  const parsedMm = parsed?.mm;
+  useEffect(() => {
+    if (parsedHh === undefined || parsedMm === undefined) return;
+    setHeld((h) => (h.hh === parsedHh && h.mm === parsedMm ? h : { hh: parsedHh, mm: parsedMm }));
+  }, [parsedHh, parsedMm]);
+  const hh = parsed?.hh ?? held.hh;
+  const mm = parsed?.mm ?? held.mm;
+  const date = parsed?.date ?? '';
+  const minutes = QUARTER_MINUTES.includes(mm) ? QUARTER_MINUTES : [...QUARTER_MINUTES, mm].sort();
+  const label = (suffix: string) => (ariaLabel ? `${ariaLabel}: ${suffix}` : suffix);
+  const setTime = (nh: string, nm: string) => {
+    setHeld({ hh: nh, mm: nm });
+    if (date) onChange(`${date}T${nh}:${nm}`);
+  };
+  return (
+    <span className="inline-flex flex-wrap items-start gap-1">
+      <VnDateInput
+        value={date}
+        ariaLabel={label('ngày')}
+        className={className}
+        disabled={disabled}
+        onPendingChange={onPendingChange}
+        onChange={(iso) => onChange(iso ? `${iso}T${hh}:${mm}` : '')}
+      />
+      <select aria-label={label('giờ')} value={hh} disabled={disabled} onChange={(e) => setTime(e.target.value, mm)} className={className}>
+        {HOURS.map((h) => (
+          <option key={h} value={h}>{h}</option>
+        ))}
+      </select>
+      <select aria-label={label('phút')} value={mm} disabled={disabled} onChange={(e) => setTime(hh, e.target.value)} className={className}>
+        {minutes.map((m) => (
+          <option key={m} value={m}>{m}</option>
+        ))}
+      </select>
     </span>
   );
 }

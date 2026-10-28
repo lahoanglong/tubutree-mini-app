@@ -41,6 +41,8 @@ vi.mock('@tubutree/app-core/features', () => ({
     return state.seasonPass;
   },
   CASHBACK_ENABLED: false,
+  // Spec này kiểm tab Cộng đồng, nên bật cờ; trạng thái cờ tắt ở social-off.spec.tsx.
+  GAME_SOCIAL_ON_WEB: true,
 }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: state.push, replace: state.replace }),

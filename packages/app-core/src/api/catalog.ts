@@ -24,6 +24,8 @@ export interface ProductCard {
   reviewCount?: number;
   sold?: number;
   inStock: boolean;
+  /** Ngày tạo (ISO) để dán nhãn "Mới"; thiếu khi API cũ hoặc nguồn không trả → không nhãn. */
+  createdAt?: string;
 }
 
 export interface VariationDetail {

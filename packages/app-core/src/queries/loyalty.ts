@@ -9,13 +9,24 @@ import {
   getMyRedemptions,
   getNewCustomerOffer,
   getPointsTransactions,
+  getPointsTransactionsPage,
   getReferral,
+  nextPointsTxnCursor,
+  type PointsTxn,
+  type PointsTxnCursor,
 } from '../api/loyalty';
 import { WASTE_QUERY_KEYS } from '../api/waste';
 
 export const loyaltyQuery = (http: HttpClient) => ({ queryKey: ['loyalty'] as const, queryFn: () => getLoyalty(http) });
 export const couponsQuery = (http: HttpClient) => ({ queryKey: ['coupons'] as const, queryFn: () => getCoupons(http) });
 export const pointsTxnQuery = (http: HttpClient) => ({ queryKey: ['points-txn'] as const, queryFn: () => getPointsTransactions(http) });
+/** Khoá con của ['points-txn'] để invalidate làm mới cả hai. Dùng với useInfiniteQuery: initialPageParam và getNextPageParam lấy từ đây. */
+export const pointsTxnPagesQuery = (http: HttpClient) => ({
+  queryKey: ['points-txn', 'pages'] as const,
+  queryFn: ({ pageParam }: { pageParam: PointsTxnCursor | undefined }) => getPointsTransactionsPage(http, pageParam),
+  initialPageParam: undefined as PointsTxnCursor | undefined,
+  getNextPageParam: (last: PointsTxn[]) => nextPointsTxnCursor(last),
+});
 export const checkInQuery = (http: HttpClient) => ({ queryKey: ['loyalty-checkin'] as const, queryFn: () => getDailyCheckInStatus(http) });
 export const memberCardQuery = (http: HttpClient) => ({ queryKey: ['loyalty-member-card'] as const, queryFn: () => getMemberCard(http) });
 export const referralQuery = (http: HttpClient) => ({ queryKey: ['referral'] as const, queryFn: () => getReferral(http) });

@@ -38,7 +38,7 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
       grantReferralReward: jest.fn().mockResolvedValue(undefined),
       reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
     } as unknown as AffiliateService;
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     const reversal = new OrderReversalService(
       { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService,
       { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService,
@@ -204,11 +204,11 @@ describe('Pancake webhook: thanh toán + trạng thái cùng một sự kiện (
       prisma,
       loyalty,
       affiliate,
-      { notify } as unknown as NotificationsService,
+      { notify, notifySafe: notify } as unknown as NotificationsService,
       reversal,
       gomdonQueue as never,
     );
-    const proc = new PancakeProcessor(prisma, { notify } as unknown as NotificationsService, statusWithGomdon);
+    const proc = new PancakeProcessor(prisma, { notify, notifySafe: notify } as unknown as NotificationsService, statusWithGomdon);
     const order = await bankTransferOrder();
     await prisma.order.update({ where: { id: order.id }, data: { hasRecyclingPickup: true, gomdonStatus: 'AWAITING_PAYMENT' } });
     const ev = await prisma.pancakeWebhookEvent.create({

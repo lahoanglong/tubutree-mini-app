@@ -265,7 +265,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
 
   it('sau khi tắt: mua chung, giờ vàng sắp tới, các tin nhắc (giờ vàng, yêu thích, mua lại, mời đánh giá, giỏ bỏ quên), chip bài cộng đồng đều bỏ hàng đã tắt', async () => {
     const notify = jest.fn().mockResolvedValue(undefined);
-    const notifications = { notify } as never;
+    const notifications = { notify, notifySafe: notify } as never;
     const config = { get: async (_k: string, fallback: unknown) => fallback } as never;
     const sentTo = (uid: string, type: string) => notify.mock.calls.filter(([u, t]) => u === uid && t === type);
     const ago = (ms: number) => new Date(Date.now() - ms);

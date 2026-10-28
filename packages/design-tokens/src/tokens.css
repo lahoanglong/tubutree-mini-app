@@ -57,6 +57,11 @@
   --blue-600: #2E6391;
   --blue-700: #245075;
 
+  /* Bảng màu B2B của kênh đại lý (Mini App và web dùng chung): nguồn duy nhất của các mã này. */
+  --navy-50: #F4F6F9;
+  --navy-800: #2E3B5E;
+  --navy-900: #1F2A44;
+
   --p-space-0: 0px;
   --p-space-1: 2px;
   --p-space-2: 4px;
@@ -219,6 +224,16 @@
 
   --font-display: 'Fraunces', 'Georgia', serif;
   --font-ui: 'Inter', system-ui, sans-serif;
+}
+
+/* Theme dealer (B2B): màu nhận diện của kênh đại lý (/dai-ly, pages/dealer.tsx). Khai ở :root vì Sheet render qua
+ * portal ra body, ngoài khung của trang; chỉ trang đại lý tham chiếu các tên --color-dealer-*.
+ * Điểm nhấn trên nền ink dùng forest-300 (6,0:1): forest-400 chỉ 3,9:1, trượt AA cho chữ nhỏ. */
+:root {
+  --color-dealer-ink: var(--navy-900);
+  --color-dealer-ink-soft: var(--navy-800);
+  --color-dealer-bg: var(--navy-50);
+  --color-dealer-accent: var(--forest-300);
 }
 
 /* Dealer (B2B) theme — overrides ONLY semantic action colors, per spec §Theme. Not applied to

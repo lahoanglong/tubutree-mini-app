@@ -17,7 +17,7 @@ function setup(rows: unknown[], existing: unknown = null, claimedCount = 1) {
     reorderReminder: { findUnique, create, updateMany },
   } as unknown as PrismaService;
   const notify = jest.fn().mockResolvedValue(undefined);
-  const notifications = { notify } as unknown as NotificationsService;
+  const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
   return { svc: new LifecycleService(prisma, config, notifications), create, updateMany, notify, findUnique, queryRaw };
 }
 
@@ -202,7 +202,7 @@ describe('LifecycleService.notifyWishlistPriceDrop (§6.14.10)', () => {
       notificationLog: { findMany: logFindMany },
     } as unknown as PrismaService;
     const notify = jest.fn().mockResolvedValue(undefined);
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     const cfg = {
       get: async <T>(k: string, fb?: T): Promise<T> => (k in (opts.cfg ?? {}) ? (opts.cfg![k] as T) : (fb as T)),
     } as unknown as SystemConfigService;

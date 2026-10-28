@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ auth: { user: null as { fullName: string } | null, status: 'anonymous', initialized: true, sessionUnavailable: false }, cart: { itemCount: 0 }, notifications: [] as { status: string }[] }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('@tanstack/react-query', () => ({
-  useQuery: (o: { queryKey: unknown[] }) => ({ data: o.queryKey[0] === 'notifications' ? mocks.notifications : mocks.cart }),
+  useQuery: (o: { queryKey: unknown[] }) => ({
+    data: o.queryKey.join('/') === 'notifications/unread' ? { count: mocks.notifications.filter((n) => n.status !== 'READ').length } : mocks.cart,
+  }),
 }));
 vi.mock('@/lib/shop-client', () => ({ getCart: vi.fn() }));
 vi.mock('@/lib/route-map', async (orig) => ({ ...(await orig<object>()), isWebRouteReady: (p: string) => ['/', '/tai-khoan', '/vuon-xanh', '/mua-chung', '/tai-khoan/thong-bao'].includes(p) }));

@@ -1,13 +1,15 @@
+import { useRef } from 'react';
 import { Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Share2 } from 'lucide-react';
-import { groupMemberStatus, groupMissing, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
+import { groupMemberStatus, groupMissing, groupMissingLine, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
 import { getGroupBuy, listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { fetchActiveFlashSales } from '../services/shop-api';
 import { serverNow } from '../utils/server-clock';
 import { formatVnd } from '../utils/format';
 import { useAuthStore } from '../store/auth';
+import { isGuestUser } from '../utils/guest-user';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { Badge } from '../components/ui/badge';
@@ -35,7 +37,9 @@ export default function GroupBuyPage() {
   const { id: invitedId } = useParams<{ id: string }>();
   const authed = useAuthStore((s) => s.status) === 'authenticated';
   const login = useAuthStore((s) => s.login);
-  const referralCode = useAuthStore((s) => s.user?.referralCode);
+  const user = useAuthStore((s) => s.user);
+  const ensurePhone = useAuthStore((s) => s.ensurePhone);
+  const referralCode = user?.referralCode;
   const shareWithFallback = useShareWithFallback();
 
   const {
@@ -46,12 +50,13 @@ export default function GroupBuyPage() {
     refetch,
   } = useQuery({ queryKey: ['group-buy'], queryFn: listGroupBuys });
 
-  // Link /group-buy/:id (người trong nhóm gửi bạn): nhóm đó có thể không nằm trong 30 nhóm mới nhất của danh sách chung.
-  // API chi tiết cần đăng nhập nên khách chưa đăng nhập chỉ xem danh sách chung.
+  // Link /group-buy/:id (người trong nhóm gửi bạn): nhóm đó có thể không nằm trong 30 nhóm mới nhất của danh sách chung. API chi tiết
+  // công khai (khách thấy đúng nhóm rồi mới được mời đăng nhập; mã giảm chỉ trả cho thành viên), nhưng `joined`/`couponCode` theo
+  // người xem nên khoá gắn với người xem, như `groupBuyOneQuery` của app-core: đăng nhập xong thì tải lại.
   const invitedQ = useQuery({
-    queryKey: ['group-buy', 'one', invitedId],
+    queryKey: ['group-buy', 'one', invitedId, user?.id ?? 'guest'],
     queryFn: () => getGroupBuy(invitedId!),
-    enabled: Boolean(invitedId) && authed,
+    enabled: Boolean(invitedId),
     retry: false,
   });
   const invited = invitedQ.data;
@@ -70,6 +75,33 @@ export default function GroupBuyPage() {
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+
+  // Tài khoản khách (chưa có số điện thoại hay Zalo thật) bị máy chủ từ chối tham gia: liên kết trước, xong mới gửi. Khoá đồng bộ để
+  // chạm đúp không mở hai lần hộp xin số điện thoại.
+  const linking = useRef(false);
+  const join = async (id: string) => {
+    if (!authed) {
+      void login();
+      return;
+    }
+    if (user && isGuestUser(user)) {
+      if (linking.current) return;
+      linking.current = true;
+      let phone: string | null = null;
+      try {
+        phone = await ensurePhone();
+      } catch {
+        phone = null;
+      } finally {
+        linking.current = false;
+      }
+      if (!phone) {
+        openSnackbar({ text: 'Chưa liên kết được số điện thoại Zalo nên chưa tham gia được. Bạn bấm Tham gia và cho phép lại nhé.', type: 'warning' });
+        return;
+      }
+    }
+    joinM.mutate(id);
+  };
 
   const share = (g: GroupBuy) =>
     void shareWithFallback(
@@ -91,7 +123,9 @@ export default function GroupBuyPage() {
       authed={authed}
       invitedBanner={invitedBanner}
       onOpen={() => navigate(`/product/${g.product.slug}`)}
-      onJoin={() => (authed ? joinM.mutate(g.id) : void login())}
+      // Nhóm đủ người: trang sản phẩm áp mã của nhóm vào giỏ sau khi khách thêm giỏ hay mua ngay.
+      onBuy={() => navigate(`/product/${g.product.slug}`, { state: { variationId: g.variationId, applyCoupon: g.couponCode } })}
+      onJoin={() => void join(g.id)}
       onShare={() => share(g)}
       joining={joinM.isPending && joinM.variables === g.id}
     />
@@ -139,6 +173,7 @@ function GroupCard({
   authed,
   invitedBanner,
   onOpen,
+  onBuy,
   onJoin,
   onShare,
   joining,
@@ -147,6 +182,7 @@ function GroupCard({
   authed: boolean;
   invitedBanner: boolean;
   onOpen: () => void;
+  onBuy: () => void;
   onJoin: () => void;
   onShare: () => void;
   joining: boolean;
@@ -160,6 +196,7 @@ function GroupCard({
   const flash = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 }).data;
   const prices = groupPriceLabels(g, formatVnd, flash, serverNow());
   const inOpenGroup = member && isOpen;
+  const missingLine = groupMissingLine(g);
   return (
     <Card padding={12}>
       {invitedBanner && (
@@ -199,9 +236,17 @@ function GroupCard({
         <ProgressBar value={pct} max={100} ariaLabel={`${g.product.name}: tiến độ nhóm mua chung`} />
       </div>
       {g.status !== 'SUCCESS' && (
-        <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
-          {groupRewardLine(g, formatVnd)}
-        </Text>
+        <div style={{ marginTop: 6 }}>
+          {/* Người đã ở trong nhóm có dòng trạng thái riêng bên dưới ("cần thêm N người"), không lặp ý. */}
+          {isOpen && !inOpenGroup && missingLine && (
+            <Text variant="caption" tone="secondary" as="div" style={{ fontWeight: 600 }}>
+              {missingLine}
+            </Text>
+          )}
+          <Text variant="caption" tone="secondary" as="div">
+            {groupRewardLine(g, formatVnd)}
+          </Text>
+        </div>
       )}
       {g.status === 'SUCCESS' && member ? (
         <>
@@ -214,7 +259,7 @@ function GroupCard({
               {' '}· chọn trong “Chọn mã” ở giỏ hàng, dùng trong 30 ngày.
             </Text>
           )}
-          <Button fullWidth onPress={onOpen} style={{ marginTop: 10 }}>
+          <Button fullWidth onPress={onBuy} style={{ marginTop: 10 }}>
             {`Mua ngay với mã giảm ${g.discountPct}%`}
           </Button>
         </>

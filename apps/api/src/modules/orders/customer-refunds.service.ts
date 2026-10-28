@@ -10,6 +10,7 @@ import { ATTENTION_COD_RETURN_UNVERIFIED, removeAttentionReason } from '../integ
 import { formatVnDateTime } from '../../common/vn-time';
 import { maskPhone } from '../../common/mask-pii';
 import { toLocalPhone } from '../../common/phone';
+import { findSearchUserIds, normalizeAdminOrderSearch, orderCodeVariants, userPhoneClauses } from '../admin/admin-order-filter';
 
 /** Khoản khách thấy ở chi tiết đơn (không lộ cột nội bộ như completedBy). */
 export interface MyRefundView {
@@ -84,10 +85,32 @@ export class CustomerRefundsService {
     @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
-  async list(status: CustomerRefundStatus | 'OPEN' | undefined, page: number, limit: number, kind?: CustomerRefundKind) {
+  /**
+   * `search.q`: mã đơn chính xác, SĐT hoặc tên khách. Khớp cả chủ đơn, tài khoản nhận Ví và SĐT khách cuối (đơn CTV lên hộ chỉ có
+   * SĐT, không có tài khoản). Người xem bị che SĐT (`exactPhoneOnly`) chỉ tìm được bằng đủ số, như ô tìm đơn.
+   */
+  async list(
+    status: CustomerRefundStatus | 'OPEN' | undefined,
+    page: number,
+    limit: number,
+    kind?: CustomerRefundKind,
+    search: { q?: string; exactPhoneOnly?: boolean } = {},
+  ) {
+    const q = normalizeAdminOrderSearch(search.q);
+    const userIds = q ? ((await findSearchUserIds(this.prisma, q, search.exactPhoneOnly)) ?? []) : [];
     const where: Prisma.OrderCustomerRefundWhereInput = {
       ...(status === 'OPEN' ? { status: { in: [...OPEN_CUSTOMER_REFUND_STATUSES] } } : status ? { status } : {}),
       ...(kind ? { kind } : {}),
+      ...(q
+        ? {
+            OR: [
+              { orderCode: { in: orderCodeVariants(q) } },
+              { userId: { in: userIds } },
+              { customerUserId: { in: userIds } },
+              ...userPhoneClauses(q, search.exactPhoneOnly === true).map((c) => ({ phone: c.phone as Prisma.StringNullableFilter | string })),
+            ],
+          }
+        : {}),
     };
     const queue = status === 'OPEN' || status === 'PENDING' || status === 'UNVERIFIED';
     const [items, total] = await this.prisma.$transaction([
@@ -301,13 +324,12 @@ export class CustomerRefundsService {
     const done = await this.prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id } });
     if (done.userId) {
       await this.notifications
-        ?.notify(done.userId, 'REFUND_BANK_COMPLETED', {
+        ?.notifySafe(done.userId, 'REFUND_BANK_COMPLETED', {
           order_code: done.orderCode,
           amount: formatVnd(done.amount),
           bank: maskedBank(done),
           bank_ref: bankRef,
-        })
-        .catch(() => undefined);
+        }, undefined, `order=${done.orderCode}`);
     }
     return done;
   }
@@ -409,9 +431,7 @@ export class CustomerRefundsService {
     this.logger.log(`Admin ${adminId} xác nhận tiền trả dư ${amount}đ đơn ${row.orderCode} (khoản ${id}).`);
     // Khoản COD trả hàng chưa có mẫu tin riêng (mẫu "tiền dư" nói sai lý do): khách thấy khoản ở chi tiết đơn, Kế toán liên hệ khách.
     if (row.userId && !codReturn) {
-      await this.notifications
-        ?.notify(row.userId, 'REFUND_OVERPAYMENT', { order_code: row.orderCode, amount: formatVnd(amount) })
-        .catch(() => undefined);
+      await this.notifications?.notifySafe(row.userId, 'REFUND_OVERPAYMENT', { order_code: row.orderCode, amount: formatVnd(amount) }, undefined, `order=${row.orderCode}`);
     }
     return this.prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id } });
   }
@@ -542,9 +562,7 @@ export class CustomerRefundsService {
         return true;
       });
       if (!won) throw new BadRequestException(await this.customerLostReason(id));
-      await this.notifications
-        ?.notify(userId, 'REFUND_WALLET_CREDITED', { order_code: row.orderCode, amount: formatVnd(row.amount) })
-        .catch(() => undefined);
+      await this.notifications?.notifySafe(userId, 'REFUND_WALLET_CREDITED', { order_code: row.orderCode, amount: formatVnd(row.amount) }, undefined, `order=${row.orderCode}`);
     } else {
       const bank = normalizeBankDetails(input);
       const res = await this.prisma.orderCustomerRefund.updateMany({

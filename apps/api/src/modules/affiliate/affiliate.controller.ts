@@ -69,8 +69,8 @@ export class AffiliateController {
 
   // Ghi "chạm" giới thiệu để attribution sống affiliate.attribution_days ngày (fallback khi phiên mất).
   @Post('touch')
-  touch(@CurrentUser('sub') userId: string, @Body() dto: TouchDto) {
-    return this.affiliate.recordTouch(userId, dto);
+  touch(@CurrentUser('sub') userId: string, @Body() dto: TouchDto, @Headers('x-client-platform') clientPlatform?: string) {
+    return this.affiliate.recordTouch(userId, dto, undefined, clientPlatform === 'web' ? 'web' : 'miniapp');
   }
 
   @Get('me')
@@ -104,14 +104,15 @@ export class AffiliateController {
     return this.affiliate.dashboard(userId);
   }
 
+  // Không tham số: 100 hoặc 50 dòng mới nhất như trước, vẫn trả mảng (client cũ). Có `take`/`cursor` thì lật trang bằng id dòng cuối.
   @Get('commissions')
-  commissions(@CurrentUser('sub') userId: string) {
-    return this.affiliate.listCommissions(userId);
+  commissions(@CurrentUser('sub') userId: string, @Query() query: CursorPageQuery) {
+    return this.affiliate.listCommissions(userId, { take: clampTake(query.take, 100, 200), cursor: query.cursor });
   }
 
   @Get('payouts')
-  myPayouts(@CurrentUser('sub') userId: string) {
-    return this.affiliate.listMyPayouts(userId);
+  myPayouts(@CurrentUser('sub') userId: string, @Query() query: CursorPageQuery) {
+    return this.affiliate.listMyPayouts(userId, { take: clampTake(query.take, 50, 200), cursor: query.cursor });
   }
 
   // Chính sách Zalo 4.5 cấm rút tiền/trả thưởng: hoa hồng chỉ đi một đường, vào Ví Tubu 1:1 (controller và service cùng chặn method khác).

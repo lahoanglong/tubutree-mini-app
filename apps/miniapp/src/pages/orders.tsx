@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { fetchOrders } from '../services/shop-api';
@@ -16,12 +16,14 @@ import { Button } from '../components/ui/button';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { OrderCard } from '../components/orders/order-card';
-import { ORDERS_TABS, parseOrdersTab, type OrdersTabKey } from '../components/orders/orders-tabs';
+import { ordersTabs, parseOrdersTab, type OrdersTabKey } from '../components/orders/orders-tabs';
+import { useHasSubscription } from '../hooks/use-has-subscription';
 import { BestSellerRail } from '../components/home/best-seller-rail';
 import { PurchasedRail } from '../components/reorder/purchased-rail';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { orderReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
 import { SubscriptionsPanel } from '../components/subscriptions-panel';
+import { SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 
 const PAGE_LIMIT = 20;
 
@@ -33,11 +35,28 @@ export default function OrdersPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const phase = useAuthPhase();
-  const [tab, setTab] = useState<OrdersTabKey>(() => parseOrdersTab(location.search));
+  // Tab Định kỳ chỉ có khi khách đã có gói (đặt trên web): danh sách tab và tab mở sẵn theo ?tab= phải chờ biết điều đó.
+  const { hasSubscription, isLoading: subsLoading } = useHasSubscription(phase === 'authenticated');
+  // Huỷ gói cuối cùng ngay trong tab Định kỳ: giữ tab đến khi khách tự rời, nếu không màn nhảy về Tất cả mà không có lời xác nhận.
+  const [keepSubsTab, setKeepSubsTab] = useState(false);
+  useEffect(() => {
+    if (hasSubscription) setKeepSubsTab(true);
+  }, [hasSubscription]);
+  const tabs = ordersTabs(hasSubscription || keepSubsTab);
+  const [picked, setPicked] = useState<OrdersTabKey | null>(null);
+  const tab = picked && tabs.some((t) => t.key === picked) ? picked : parseOrdersTab(location.search, tabs);
+  const awaitingTabs = picked === null && subsLoading && new URLSearchParams(location.search).get('tab') === 'subscriptions';
   // State ổn định (không dựng target trong JSX) — ReorderSheet reset lựa chọn theo identity của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
-  const current = ORDERS_TABS.find((t) => t.key === tab) ?? ORDERS_TABS[0]!;
+  const current = tabs.find((t) => t.key === tab) ?? tabs[0]!;
   const isSubscriptions = tab === 'subscriptions';
+  // Danh sách gói không trả gói đã huỷ, nên gói cuối vừa huỷ làm danh sách rỗng. Màn rỗng của danh sách gói mời "Đặt định kỳ",
+  // mà Mini không có lối đó: dùng màn riêng chỉ đưa khách về đơn hàng.
+  const noMoreSubscriptions = isSubscriptions && !SUBSCRIPTIONS_IN_MINIAPP && !hasSubscription && keepSubsTab && !subsLoading;
+  const pickTab = (key: OrdersTabKey) => {
+    setPicked(key);
+    if (key !== 'subscriptions' && !hasSubscription) setKeepSubsTab(false);
+  };
 
   // Phân trang bằng useInfiniteQuery + "Xem thêm" (giữ fix cũ: >20 đơn vẫn xem được đơn cũ).
   // Key bắt đầu bằng ['orders'] để invalidateQueries({ queryKey: ['orders'] }) hiện có vẫn làm mới danh sách.
@@ -49,7 +68,7 @@ export default function OrdersPage() {
       const { page, limit, total } = lastPage.meta;
       return page * limit < total ? page + 1 : undefined;
     },
-    enabled: phase === 'authenticated' && !isSubscriptions,
+    enabled: phase === 'authenticated' && !isSubscriptions && !awaitingTabs,
   });
   const list = orders.data?.pages.flatMap((pg) => pg.data) ?? [];
 
@@ -73,17 +92,30 @@ export default function OrdersPage() {
       <AuthGate>
         <div style={{ padding: '8px 12px' }}>
           <SegmentedTabs
-            items={ORDERS_TABS.map((t) => ({ key: t.key, label: t.label }))}
+            items={tabs.map((t) => ({ key: t.key, label: t.label }))}
             value={tab}
             onChange={(key) => {
               haptic('light');
-              setTab(key as OrdersTabKey);
+              pickTab(key as OrdersTabKey);
             }}
             scroll
           />
         </div>
 
-        {isSubscriptions ? (
+        {awaitingTabs ? (
+          <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <LineItemSkeleton />
+            <LineItemSkeleton />
+          </div>
+        ) : noMoreSubscriptions ? (
+          <EmptyState
+            art="box"
+            heading="Bạn không còn gói định kỳ nào"
+            body="Các đơn đã đặt vẫn ở tab Tất cả."
+            ctaLabel="Xem đơn hàng"
+            onCta={() => pickTab('all')}
+          />
+        ) : isSubscriptions ? (
           <SubscriptionsPanel />
         ) : orders.isLoading ? (
           <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>

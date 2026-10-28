@@ -1225,3 +1225,29 @@ describe('CatalogService.list: giá thẻ lấy từ phân loại đại diện 
     expect(big.salePrice ?? big.basePrice).toBe(150_000);
   });
 });
+
+describe('CatalogService — thẻ SP có ngày tạo (nhãn "Mới")', () => {
+  const created = new Date('2026-10-20T03:00:00.000Z');
+
+  it('list(): mỗi thẻ có createdAt dạng ISO', async () => {
+    const row = { ...card('p1'), createdAt: created };
+    const prisma = {
+      product: { findMany: jest.fn().mockResolvedValue([row]), count: jest.fn().mockResolvedValue(1) },
+      $transaction: jest.fn().mockResolvedValue([[row], 1]),
+    } as unknown as PrismaService;
+    const out = await new CatalogService(prisma).list({ page: 1, limit: 10 });
+    expect(out.data[0]!.createdAt).toBe('2026-10-20T03:00:00.000Z');
+  });
+
+  it('related(): cùng shape thẻ nên cũng có createdAt', async () => {
+    const prisma = {
+      product: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'p0', brand: 'b' }),
+        findMany: jest.fn().mockResolvedValue([{ ...card('p1'), createdAt: created }]),
+      },
+    } as unknown as PrismaService;
+    const out = await new CatalogService(prisma).related('p0');
+    expect(out[0]!.createdAt).toBe('2026-10-20T03:00:00.000Z');
+  });
+});
+

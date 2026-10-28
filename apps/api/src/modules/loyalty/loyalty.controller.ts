@@ -7,6 +7,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { requireIdempotencyKey } from '../../common/idempotency-key';
 import { LoyaltyService } from './loyalty.service';
 import { PosCreditDto, PosCreditListQuery, ScanMemberDto } from './dto/loyalty-staff.dto';
+import { PointsTransactionsQuery } from './dto/points-transactions.dto';
 
 @Controller()
 export class LoyaltyController {
@@ -18,8 +19,12 @@ export class LoyaltyController {
   }
 
   @Get('me/points/transactions')
-  transactions(@CurrentUser('sub') userId: string) {
-    return this.loyalty.getPointsTransactions(userId);
+  transactions(@CurrentUser('sub') userId: string, @Query() q: PointsTransactionsQuery) {
+    return this.loyalty.getPointsTransactions(userId, {
+      before: q.before ? new Date(q.before) : undefined,
+      beforeId: q.beforeId,
+      limit: q.limit,
+    });
   }
 
   @Get('me/coupons')
@@ -63,12 +68,6 @@ export class LoyaltyController {
     @Headers('idempotency-key') rawKey: string | undefined,
   ) {
     return this.loyalty.redeemReward(userId, rewardId, requireIdempotencyKey(rawKey));
-  }
-
-  /** Trạng thái điểm danh 7 ngày (chỉ đọc). Điểm danh thật đi qua POST /me/daily-check-in để chuỗi chung và vé giữ lửa được cập nhật. */
-  @Get('me/loyalty/check-in')
-  checkInStatus(@CurrentUser('sub') userId: string) {
-    return this.loyalty.getDailyCheckInStatus(userId);
   }
 
   /** Thông tin Thẻ thành viên số (Digital Member Card). */

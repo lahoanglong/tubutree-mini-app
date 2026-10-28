@@ -6,7 +6,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatPoints } from '../../common/format-points';
-import { formatVnDate, vnDateKey } from '../../common/vn-time';
+import { formatVnDate, vnDateKey, vnDateParts } from '../../common/vn-time';
 import {
   MILESTONE_PREFIX,
   MILESTONE_REVOKE_PREFIX,
@@ -21,6 +21,10 @@ const BATCH = 500; // kích thước mỗi trang candidate.
 // Trần số trang — phòng vòng lặp vô tận nếu truy vấn sai (mirror LoyaltyService.RECALC_MAX_PAGES).
 // 500 × 2.000 = 1.000.000 user/lượt, đủ cho mọi quy mô thực tế.
 const MAX_PAGES = 2_000;
+/** Khoá dòng cron_runs của expirePoints: tên việc nền là `Lớp.phươngThức` khi @Cron không có `name` (spec khớp với tên thật). */
+export const EXPIRE_POINTS_JOB = 'LoyaltyExpiryService.expirePoints';
+// Lùi thêm quanh mốc lần chạy thành công trước để lô hết hạn sát mốc (lượt chạy trễ, lệch đồng hồ) không bị bỏ sót.
+const EXPIRY_SCAN_MARGIN_MS = 2 * DAY;
 
 /** Shape tối giản của PointsTransaction mà helper thuần cần. */
 export interface PointExpiryTxn {
@@ -364,6 +368,11 @@ export class LoyaltyExpiryService {
    * Cron 1h sáng: trừ điểm đã hết hạn. Ứng viên = user có ÍT NHẤT 1 lô (delta>0) đã tới hạn;
    * với mỗi user tính lại FIFO từ TOÀN BỘ sổ cái → chỉ trừ phần còn tồn trong lô hết hạn.
    *
+   * Chỉ xét lô hết hạn sau (mốc lần chạy thành công trước − 2 ngày): lô cũ hơn đã được các đêm trước xử lý, và lô đã trừ rồi
+   * vẫn là ứng viên mãi mãi nếu không chặn dưới. Lượt có log error (ERRORS) không đẩy mốc lên nên khách lỗi được thử lại đêm
+   * sau; chưa có mốc (hoặc đọc mốc lỗi) thì quét đủ như trước, và ngày 1 hằng tháng cũng quét đủ để khách lỗi kéo dài tự lành. Lô tạo
+   * ra với hạn đã nằm trước mốc (nhập số liệu cũ) chỉ được nhặt ở lượt quét đủ; mọi đường cấp điểm hiện tại đều đặt hạn ở tương lai.
+   *
    * Phân trang bằng keyset (`userId > cursor` + `orderBy: userId asc`) thay vì lấy đúng BATCH
    * candidate đầu tiên mỗi lần. Trước đây `distinct(userId)` + `take: BATCH` KHÔNG orderBy/cursor:
    * Postgres không đảm bảo cùng 500 user cũ ở đầu kết quả lặp lại y hệt mỗi đêm, nhưng trong thực
@@ -382,6 +391,7 @@ export class LoyaltyExpiryService {
   async expirePoints(): Promise<void> {
     try {
       const now = new Date();
+      const floor = await this.expiryScanFloor(now);
       let totalExpired = 0;
       let affected = 0;
       let cursor: string | undefined;
@@ -390,7 +400,7 @@ export class LoyaltyExpiryService {
           where: {
             lot: 'STANDARD',
             delta: { gt: 0 },
-            expiresAt: { lte: now },
+            expiresAt: floor ? { gt: floor, lte: now } : { lte: now },
             ...(cursor ? { userId: { gt: cursor } } : {}),
           },
           select: { userId: true },
@@ -402,7 +412,7 @@ export class LoyaltyExpiryService {
         cursor = candidates[candidates.length - 1]!.userId;
         for (const c of candidates) {
           const expired = await this.expireUser(c.userId, now).catch((e) => {
-            this.logger.warn(`expirePoints lỗi user=${c.userId}: ${(e as Error).message}`);
+            this.logger.error(`expirePoints lỗi user=${c.userId}: ${(e as Error).message}`);
             return 0;
           });
           if (expired > 0) {
@@ -415,6 +425,22 @@ export class LoyaltyExpiryService {
       if (affected) this.logger.log(`Điểm hết hạn: trừ ${totalExpired} điểm của ${affected} user.`);
     } catch (err) {
       this.logger.error(`expirePoints lỗi: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  /**
+   * Mốc dưới của ứng viên; undefined = quét đủ (chưa có lần thành công nào, không đọc được cron_runs, hoặc ngày 1 hằng tháng giờ VN).
+   * Quét đủ định kỳ là đường tự lành cho khách lỗi kéo dài mà lô hết hạn đã nằm trước mốc (mốc nhích qua trong lúc lỗi): không có nó
+   * khách đó không còn là ứng viên của lượt nào khác.
+   */
+  private async expiryScanFloor(now: Date): Promise<Date | undefined> {
+    if (vnDateParts(now).day === 1) return undefined;
+    try {
+      const run = await this.prisma.cronRun.findUnique({ where: { job: EXPIRE_POINTS_JOB }, select: { lastSuccessAt: true } });
+      return run?.lastSuccessAt ? new Date(run.lastSuccessAt.getTime() - EXPIRY_SCAN_MARGIN_MS) : undefined;
+    } catch (err) {
+      this.logger.warn(`expirePoints không đọc được mốc lần chạy trước, quét đủ: ${err instanceof Error ? err.message : err}`);
+      return undefined;
     }
   }
 
@@ -450,7 +476,7 @@ export class LoyaltyExpiryService {
     });
 
     if (!result.applied) {
-      this.logger.warn(
+      this.logger.error(
         `expirePoints bỏ qua user=${userId}: số dư < expiredNow=${result.expiredNow} (guard gte)`,
       );
       return 0;
@@ -529,11 +555,10 @@ export class LoyaltyExpiryService {
     if (recent) return false;
 
     await this.notifications
-      .notify(userId, 'POINTS_EXPIRING', {
+      .notifySafe(userId, 'POINTS_EXPIRING', {
         points: formatPoints(expiringSoon.amount),
         date: formatVnDate(expiringSoon.earliestExpiresAt),
-      })
-      .catch(() => undefined); // gửi lỗi không chặn lô (notify tự nuốt lỗi ZNS)
+      }); // gửi lỗi không chặn lô (notify tự nuốt lỗi ZNS)
     return true;
   }
 }

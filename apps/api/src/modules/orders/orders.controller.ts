@@ -4,6 +4,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OrderListQuery, RepurchaseDto } from './dto/orders.dto';
 import { CancelOrderDto, ChooseRefundDestinationDto, ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { OrdersService } from './orders.service';
+import { OrderCountsService } from './order-counts.service';
 import { OrderReturnsService } from './order-returns.service';
 import { CustomerRefundsService } from './customer-refunds.service';
 
@@ -17,6 +18,7 @@ export class OrdersController {
     private readonly orders: OrdersService,
     private readonly returns: OrderReturnsService,
     private readonly refunds: CustomerRefundsService,
+    private readonly counts: OrderCountsService,
   ) {}
 
   @Get()
@@ -29,6 +31,12 @@ export class OrdersController {
   @Get('active-count')
   activeCount(@CurrentUser('sub') userId: string) {
     return this.orders.activeCount(userId);
+  }
+
+  /** Số đơn theo từng tab trang Cá nhân/Đơn hàng. Cũng PHẢI đứng trước @Get(':code'), nếu không "status-counts" bị hiểu là mã đơn. */
+  @Get('status-counts')
+  statusCounts(@CurrentUser('sub') userId: string) {
+    return this.counts.statusCounts(userId);
   }
 
   @Get(':code')

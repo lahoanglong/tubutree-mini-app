@@ -10,8 +10,14 @@ describe('needsRefresh', () => {
   it('hạn không hợp lệ → cần refresh (an toàn)', () => {
     expect(needsRefresh('không-phải-ngày', NOW)).toBe(true);
   });
-  it('còn 2h (< ngưỡng 6h) → cần refresh', () => {
+  it('còn 2h (< ngưỡng) → cần refresh', () => {
     expect(needsRefresh(new Date(NOW.getTime() + 2 * H).toISOString(), NOW)).toBe(true);
+  });
+  it('còn 12h (hơn hai chu kỳ cron 6h chưa tới hạn) → cần refresh để còn lượt thử lại', () => {
+    expect(needsRefresh(new Date(NOW.getTime() + 12 * H).toISOString(), NOW)).toBe(true);
+  });
+  it('còn 14h (> ngưỡng 13h) → chưa cần', () => {
+    expect(needsRefresh(new Date(NOW.getTime() + 14 * H).toISOString(), NOW)).toBe(false);
   });
   it('còn 20h (> ngưỡng) → chưa cần', () => {
     expect(needsRefresh(new Date(NOW.getTime() + 20 * H).toISOString(), NOW)).toBe(false);

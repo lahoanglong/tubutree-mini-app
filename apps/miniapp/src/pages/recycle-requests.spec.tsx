@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   keySeq: 0,
   params: {} as Record<string, string>,
   location: { pathname: '/', search: '', state: null as unknown },
-  auth: { status: 'authenticated' as 'idle' | 'loading' | 'authenticated' | 'error' },
+  auth: { status: 'authenticated' as 'idle' | 'loading' | 'authenticated' | 'error', error: undefined as string | undefined },
   login: vi.fn(),
   ensurePhone: vi.fn(),
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } },
@@ -32,12 +32,10 @@ vi.mock('../services/api', () => ({
   getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   isNotFoundError: (e: unknown) => (e as { status?: number } | null)?.status === 404,
 }));
-vi.mock('../store/auth', () => ({
-  useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, login: mocks.login, ensurePhone: mocks.ensurePhone };
-    return sel ? sel(state) : state;
-  },
-}));
+vi.mock('../store/auth', () => {
+  const read = () => ({ status: mocks.auth.status, error: mocks.auth.error, login: mocks.login, ensurePhoneOrThrow: mocks.ensurePhone });
+  return { useAuthStore: Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(read()) : read()), { getState: read }) };
+});
 vi.mock('../utils/idempotency', () => ({ newIdempotencyKey: () => `key-${++mocks.keySeq}` }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publicConfig }));
 vi.mock('../services/waste-api', async (orig) => ({
@@ -68,6 +66,8 @@ const ROWS = [
 ];
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.auth.error = undefined;
+  mocks.login.mockReset();
   mocks.listWasteRequests.mockResolvedValue(ROWS);
   mocks.getWasteMe.mockResolvedValue(makeWasteMe());
 });
@@ -175,7 +175,9 @@ describe('/recycle/requests (§4.6, §16.1)', () => {
   });
   it('khách chưa đăng nhập: lời mời đăng nhập, không gọi API, không hiện màn lỗi', async () => {
     mocks.auth.status = 'idle';
-    mocks.login.mockResolvedValue(undefined);
+    mocks.login.mockImplementation(async () => {
+      mocks.auth.status = 'authenticated';
+    });
     mocks.ensurePhone.mockResolvedValue('0901234567');
     renderPage();
     expect(await screen.findByText('Đăng nhập để xem các yêu cầu đổi rác của bạn.')).toBeInTheDocument();

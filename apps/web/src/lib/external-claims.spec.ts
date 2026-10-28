@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { EVENT_ACTION_LABEL, adminClaimErrorText, approveNeedsNote, approveNoteError, noteContentLength, attachDialogMessage, claimActions, creditedOnClosedOrder, groupThousands, isIntroducer } from './external-claims';
+import { ATTENTION_PART_ORDER, EVENT_ACTION_LABEL, attentionPartView, firstAttentionPart, adminClaimErrorText, approveNeedsNote, approveNoteError, noteContentLength, attachDialogMessage, claimActions, creditedOnClosedOrder, groupThousands, isIntroducer } from './external-claims';
 
 const who = (over: Partial<Parameters<typeof claimActions>[1]> = {}) => ({ isAdmin: false, canAct: false, meId: 'x', ...over });
 const c = (over: Record<string, unknown> = {}) => ({ state: 'REVIEW' as const, userId: 'u1', reviewReason: null as string | null, ...over });
@@ -100,5 +100,25 @@ describe('độ dài ghi chú duyệt', () => {
     expect(approveNoteError('   ')).toBeNull();
     expect(approveNoteError('ok')).toBe('Ghi chú cần ít nhất 3 ký tự');
     expect(approveNoteError('Đã gọi')).toBeNull();
+  });
+});
+
+describe('các phần việc của thẻ Tích điểm đơn sàn', () => {
+  it('mở phần có việc đầu tiên theo thứ tự chờ duyệt, hoàn một phần, đã đóng, kẹt, lần gửi mã', () => {
+    expect(ATTENTION_PART_ORDER).toEqual(['review', 'partial', 'closed', 'stale', 'attempts']);
+    expect(firstAttentionPart({ review: 0, partial: 2, closed: 1, stale: 0, attempts: 5 })).toBe('partial');
+    expect(firstAttentionPart({ review: 3, partial: 2 })).toBe('review');
+    expect(firstAttentionPart({ review: 0, attempts: 4 })).toBe('attempts');
+  });
+  it('không có phần nào có việc (hoặc API cũ chưa trả parts) thì không chọn phần nào', () => {
+    expect(firstAttentionPart({ review: 0, partial: 0 })).toBeNull();
+    expect(firstAttentionPart(undefined)).toBeNull();
+  });
+  it('mỗi phần ứng với đúng bộ lọc của danh sách: chờ duyệt là trạng thái REVIEW, ba phần còn lại là bộ lọc chú ý, lần gửi mã chỉ cuộn', () => {
+    expect(attentionPartView('review')).toEqual({ state: 'REVIEW', attention: '' });
+    expect(attentionPartView('partial')).toEqual({ state: '', attention: 'partial_refund' });
+    expect(attentionPartView('closed')).toEqual({ state: '', attention: 'closed_credited' });
+    expect(attentionPartView('stale')).toEqual({ state: '', attention: 'stale' });
+    expect(attentionPartView('attempts')).toBeNull();
   });
 });

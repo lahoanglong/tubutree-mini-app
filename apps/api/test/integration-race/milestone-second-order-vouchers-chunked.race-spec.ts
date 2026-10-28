@@ -13,7 +13,7 @@ describe('VouchersService milestone + second-order chunked (real Postgres)', () 
   let prisma: PrismaService;
   let config: SystemConfigService;
   const notify = jest.fn().mockResolvedValue(undefined);
-  const notifications = { notify } as unknown as NotificationsService;
+  const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
 
   const DAY = 864e5;
   const ago = (days: number) => new Date(Date.now() - days * DAY);

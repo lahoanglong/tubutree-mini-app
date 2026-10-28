@@ -53,7 +53,7 @@ describe('Pending-payment expiry cron vs payment race (real Postgres)', () => {
       prisma,
       loyalty,
       affiliate,
-      { notify } as unknown as NotificationsService,
+      { notify, notifySafe: notify } as unknown as NotificationsService,
       reversal,
       undefined,
       new AnalyticsEventsService(prisma),

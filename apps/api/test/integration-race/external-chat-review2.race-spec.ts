@@ -27,7 +27,7 @@ describe('Điểm đơn chat sau review lượt 2 (real Postgres)', () => {
   const MAP = { marketplaceIds: { '-3': 'shopee' }, chatSources: ['ITCHAT|itacc|'] };
 
   const freshConfig = () => new SystemConfigService(prisma);
-  const deps = () => ({ config: freshConfig(), notifier: { notify } as never });
+  const deps = () => ({ config: freshConfig(), notifier: { notify, notifySafe: notify } as never });
   const pin = async (key: string, value: Prisma.InputJsonValue) => restore.push(await pinConfig(prisma, key, value));
 
   beforeAll(async () => {
@@ -107,7 +107,7 @@ describe('Điểm đơn chat sau review lượt 2 (real Postgres)', () => {
   const eventsOf = (claimId: string) => prisma.externalClaimEvent.findMany({ where: { claimId }, orderBy: { createdAt: 'asc' } });
   const releaseOpts = async () => ({ pendingDays: 14, expiryMonths: 12, chat: await loadChatConfig(freshConfig()) });
   const adminSvc = () =>
-    new ExternalClaimsAdminService(prisma, freshConfig(), { notify } as never, new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify } as never));
+    new ExternalClaimsAdminService(prisma, freshConfig(), { notify, notifySafe: notify } as never, new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify, notifySafe: notify } as never));
 
   describe('B1: SĐT xác minh đã cũ thì claim vẫn gắn thành viên, chờ kiểm', () => {
     it.each([

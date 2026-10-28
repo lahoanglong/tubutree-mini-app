@@ -92,7 +92,7 @@ describe('nhóm menu hub tài khoản', () => {
       (routeMap.routes as { items: { web?: string }[] }[]).flatMap((g) => g.items).flatMap((i) => (i.web ? [i.web.split('?')[0]!] : [])),
     );
     const m = buildAccountMenu(ctx({ role: 'ADMIN', aiEnabled: true, chatEnabled: true, ownedBrandName: 'Nhãn A' }));
-    for (const item of all(m)) expect(webPaths.has(item.to), item.to).toBe(true);
+    for (const item of all(m)) expect(webPaths.has(item.to.split('?')[0]!), item.to).toBe(true);
   });
 
   it('mục trỏ route còn pending thì ẩn; route xong thì hiện', () => {
@@ -139,7 +139,7 @@ describe('nhóm Công việc theo vai trò', () => {
   it('ADMIN: thêm Quản trị nhân sự', () => {
     const m = buildAccountMenu(ctx({ role: 'ADMIN' }));
     expect(labels(m, 'Công việc')).toEqual(['Ca làm & chấm công', 'Lương của tôi', 'Quản trị nhân sự']);
-    expect(all(m).find((i) => i.label === 'Quản trị nhân sự')!.to).toBe('/admin');
+    expect(all(m).find((i) => i.label === 'Quản trị nhân sự')!.to).toBe('/admin?tab=staffRoster');
   });
 
   it('khách thường hoặc vai trò lạ: không có nhóm Công việc', () => {
@@ -148,7 +148,7 @@ describe('nhóm Công việc theo vai trò', () => {
   });
 
   it('route nhân viên còn pending thì nhóm Công việc ẩn cả nhóm, nhưng /admin (đã xong) vẫn hiện cho ADMIN', () => {
-    const m = buildAccountMenu(ctx({ role: 'ADMIN', isReady: (p) => p === '/admin' }));
+    const m = buildAccountMenu(ctx({ role: 'ADMIN', isReady: (p) => p.split('?')[0] === '/admin' }));
     expect(labels(m, 'Công việc')).toEqual(['Quản trị nhân sự']);
     expect(m.some((g) => g.group === 'Công việc')).toBe(true);
     expect(buildAccountMenu(ctx({ role: 'STAFF', isReady: () => false })).some((g) => g.group === 'Công việc')).toBe(false);
@@ -161,7 +161,7 @@ describe('với route map thật (sau khi lane pro và recycle gộp)', () => {
   it('đại lý, chủ nhãn, nhân viên và Học viện có lối vào như Mini App (profile.tsx)', () => {
     const m = buildAccountMenu(ctx({ ...real, role: 'ADMIN', ownedBrandName: 'Nhãn A', ctvAccess: { isAffiliate: true } }));
     const to = all(m).map((i) => i.to);
-    expect(to).toEqual(expect.arrayContaining(['/ctv', '/dai-ly', '/chu-thuong-hieu', '/nhan-vien', '/nhan-vien/bang-luong', '/admin', '/hoc-vien']));
+    expect(to).toEqual(expect.arrayContaining(['/ctv', '/dai-ly', '/chu-thuong-hieu', '/nhan-vien', '/nhan-vien/bang-luong', '/admin?tab=staffRoster', '/hoc-vien']));
   });
 
   it('admin/nhân viên chưa có kết quả /affiliate/me (đang tải, lỗi, 401): mục Cộng tác viên ẩn, không đổi chữ', () => {
@@ -175,7 +175,7 @@ describe('với route map thật (sau khi lane pro và recycle gộp)', () => {
     expect(to).toContain('/dai-ly');
     expect(to).not.toContain('/chu-thuong-hieu');
     expect(to).not.toContain('/nhan-vien');
-    expect(to).not.toContain('/admin');
+    expect(to).not.toContain('/admin?tab=staffRoster');
   });
 });
 
@@ -193,5 +193,31 @@ describe('lối vào Hoàn tiền sàn ngoài theo cờ CASHBACK_ENABLED', () =>
 
   it('route /hoan-tien có thật trong route map (mục không bị ẩn khi bật cờ)', () => {
     expect(isWebRouteReady('/hoan-tien')).toBe(true);
+  });
+});
+
+describe('lối vào quầy Nhận hàng tại điểm (E-39)', () => {
+  const deskItem = (over: Partial<AccountMenuContext>) => all(buildAccountMenu(ctx(over))).find((i) => i.to === '/doi-rac/quay');
+
+  it('có điểm: hàng nằm ở nhóm Công việc, ghi tên điểm, trỏ /doi-rac/quay (kể cả đại lý không phải nhân viên)', () => {
+    const m = buildAccountMenu(ctx({ role: 'DEALER', deskPointNames: ['Đại lý An Phát', 'Kho Tubu HCMC'] }));
+    expect(labels(m, 'Công việc')).toEqual(['Nhận hàng tại điểm']);
+    expect(deskItem({ deskPointNames: ['Đại lý An Phát', 'Kho Tubu HCMC'] })).toMatchObject({ label: 'Nhận hàng tại điểm', hint: 'Đại lý An Phát, Kho Tubu HCMC' });
+  });
+
+  it('nhân viên: hàng đứng sau Ca làm và Lương, trước Quản trị', () => {
+    const m = buildAccountMenu(ctx({ role: 'ADMIN', deskPointNames: ['Kho Tubu HCMC'] }));
+    expect(labels(m, 'Công việc')).toEqual(['Ca làm & chấm công', 'Lương của tôi', 'Nhận hàng tại điểm', 'Quản trị nhân sự']);
+  });
+
+  it('không có điểm, danh sách rỗng hoặc chưa tải: không có hàng', () => {
+    expect(deskItem({ role: 'STAFF' })).toBeUndefined();
+    expect(deskItem({ role: 'STAFF', deskPointNames: [] })).toBeUndefined();
+  });
+
+  it('route /doi-rac/quay xong trong route map: hàng không bị ẩn; còn pending thì ẩn', () => {
+    expect(isWebRouteReady('/doi-rac/quay')).toBe(true);
+    expect(deskItem({ deskPointNames: ['Kho'], isReady: isWebRouteReady })).toBeDefined();
+    expect(deskItem({ deskPointNames: ['Kho'], isReady: (p) => p !== '/doi-rac/quay' })).toBeUndefined();
   });
 });

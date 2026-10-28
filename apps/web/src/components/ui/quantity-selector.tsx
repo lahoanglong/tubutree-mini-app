@@ -1,7 +1,7 @@
 'use client';
 
 import { Minus, Plus } from 'lucide-react';
-import { parseQtyInput } from '@tubutree/app-core/waste-copy';
+import { parseQtyInput } from '@tubutree/app-core/qty-input';
 
 interface QuantitySelectorProps {
   value: number;

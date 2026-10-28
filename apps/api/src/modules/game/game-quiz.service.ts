@@ -1,10 +1,55 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { QUIZ_WRONG_SEEDS_DEFAULT, configInt } from './game.constants';
 import { clampTankKeepingOverflow, ensureGameProfile, initialEcoImpact } from './game-profile';
 import { vnDateKey } from '../../common/vn-time';
+import { paginated } from '../../common/pagination';
+
+/** Nhóm câu đố mà Mini App và web có nhãn riêng (categoryLabel); nhóm lạ chỉ hiện nhãn "Thiên nhiên". */
+export const QUIZ_CATEGORIES = ['cay', 'nuoc', 'dat', 'khong_khi', 'dong_vat', 'tai_che', 'nang_luong', 'nature'] as const;
+export const QUIZ_DIFFICULTIES = [1, 2, 3] as const;
+/** Nước thưởng khi đáp đúng, theo độ khó, cùng bảng với seed-game-quiz.ts. Thưởng điểm (rewardPts) luôn 0. */
+export const QUIZ_WATER_BY_DIFFICULTY: Record<number, number> = { 1: 8, 2: 10, 3: 12 };
+const QUIZ_OPTIONS_MIN = 2;
+const QUIZ_OPTIONS_MAX = 4;
+
+export interface AdminQuizInput {
+  question: string;
+  options: string[];
+  correct: number;
+  category: string;
+  difficulty: number;
+  explanation?: string | null;
+}
+
+type QuizRow = { id: string; question: string; options: unknown; correct: number; category: string; difficulty: number; explanation: string | null; waterReward: number };
+
+const toAdminQuiz = (r: QuizRow) => ({
+  id: r.id,
+  question: r.question,
+  options: Array.isArray(r.options) ? r.options.map(String) : [],
+  correct: r.correct,
+  category: r.category,
+  difficulty: r.difficulty,
+  explanation: r.explanation,
+  waterReward: r.waterReward,
+});
+
+/** Luật chéo trường mà DTO không kiểm được: đáp án đúng phải trỏ vào một đáp án có thật, không trùng chữ giữa các đáp án. */
+function assertQuizShape(options: string[], correct: number) {
+  if (options.length < QUIZ_OPTIONS_MIN || options.length > QUIZ_OPTIONS_MAX) {
+    throw new BadRequestException(`Câu đố cần từ ${QUIZ_OPTIONS_MIN} đến ${QUIZ_OPTIONS_MAX} đáp án.`);
+  }
+  if (!Number.isInteger(correct) || correct < 0 || correct >= options.length) {
+    throw new BadRequestException('Đáp án đúng phải là một trong các đáp án đã nhập.');
+  }
+  if (new Set(options.map((o) => o.trim().toLowerCase())).size !== options.length) {
+    throw new BadRequestException('Các đáp án không được trùng nhau.');
+  }
+}
 
 @Injectable()
 export class GameQuizService {
@@ -123,5 +168,56 @@ export class GameQuizService {
       }
     }
     return { isCorrect, correct: quiz.correct, waterEarned, explanation: quiz.explanation ?? null };
+  }
+
+  /** Danh sách cho quản trị theo thứ tự id, cùng thứ tự vòng xoay hằng ngày của getTodayQuiz. */
+  async listForAdmin(page: number, limit: number) {
+    const [rows, total] = await Promise.all([
+      this.prisma.gameQuiz.findMany({ orderBy: { id: 'asc' }, skip: (page - 1) * limit, take: limit }),
+      this.prisma.gameQuiz.count(),
+    ]);
+    return paginated(rows.map(toAdminQuiz), page, limit, total);
+  }
+
+  /** Câu mới nằm chung bảng với câu seed nên vào vòng xoay hằng ngày của getTodayQuiz ngay khi lưu (có thể làm bộ câu hôm nay đổi). */
+  async createForAdmin(input: AdminQuizInput) {
+    assertQuizShape(input.options, input.correct);
+    const row = await this.prisma.gameQuiz.create({
+      data: {
+        id: `nq_${randomUUID().replace(/-/g, '').slice(0, 12)}`,
+        question: input.question,
+        options: input.options,
+        correct: input.correct,
+        category: input.category,
+        difficulty: input.difficulty,
+        explanation: input.explanation ?? null,
+        waterReward: QUIZ_WATER_BY_DIFFICULTY[input.difficulty] ?? QUIZ_WATER_BY_DIFFICULTY[1]!,
+        rewardPts: 0,
+      },
+    });
+    return toAdminQuiz(row);
+  }
+
+  async updateForAdmin(id: string, patch: Partial<AdminQuizInput>) {
+    const cur = await this.prisma.gameQuiz.findUnique({ where: { id } });
+    if (!cur) throw new NotFoundException('Không tìm thấy câu đố.');
+    const options = patch.options ?? toAdminQuiz(cur).options;
+    const correct = patch.correct ?? cur.correct;
+    assertQuizShape(options, correct);
+    const difficulty = patch.difficulty ?? cur.difficulty;
+    const row = await this.prisma.gameQuiz.update({
+      where: { id },
+      data: {
+        ...(patch.question !== undefined ? { question: patch.question } : {}),
+        ...(patch.options !== undefined ? { options: patch.options } : {}),
+        correct,
+        ...(patch.category !== undefined ? { category: patch.category } : {}),
+        difficulty,
+        ...(patch.explanation !== undefined ? { explanation: patch.explanation } : {}),
+        waterReward: QUIZ_WATER_BY_DIFFICULTY[difficulty] ?? cur.waterReward,
+        rewardPts: 0,
+      },
+    });
+    return toAdminQuiz(row);
   }
 }

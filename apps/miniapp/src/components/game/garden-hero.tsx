@@ -1,3 +1,4 @@
+import { treeTitle } from '@tubutree/app-core/tree-title';
 import type { GameProfile } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { formatNumber } from '../../utils/format';
@@ -44,7 +45,7 @@ export function GardenHero({
         </span>
       </div>
       <Heading variant="title-md" as="div" tone="inverse">
-        {eco?.treeType ?? 'Vườn của bạn'}
+        {eco ? treeTitle(eco.treeType) : 'Vườn của bạn'}
       </Heading>
       <div
         role="progressbar"

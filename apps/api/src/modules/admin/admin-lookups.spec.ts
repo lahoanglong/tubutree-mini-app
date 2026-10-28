@@ -295,12 +295,17 @@ describe('AdminService.getTodaySummary (R-74)', () => {
   it('đếm theo ngày giờ VN: mốc hôm nay 00:00 VN, hôm qua, và 7 ngày gồm hôm nay; mỗi truy vấn nhận đúng mốc', async () => {
     const queryRaw = jest
       .fn()
-      .mockResolvedValueOnce([{ orders_today: 3, orders_yesterday: 2, orders_week: 9, rev_today: 300n, rev_yesterday: 200n, rev_week: 900n }])
+      .mockResolvedValueOnce([{ orders_today: 3, orders_yesterday: 2, orders_week: 9, rev_today: 300n, rev_yesterday: 200n, rev_week: 900n, gmv_today: 450n, gmv_yesterday: 250n, gmv_week: 1200n }])
       .mockResolvedValueOnce([{ today: 4, yesterday: 1, week: 11 }]);
     const admin = mkAdmin({ $queryRaw: queryRaw });
     // 2026-10-28 02:00 UTC = 09:00 VN
     const res = await admin.getTodaySummary(new Date('2026-10-28T02:00:00Z'));
-    expect(res).toEqual({ orders: { today: 3, yesterday: 2, week: 9 }, revenue: { today: 300, yesterday: 200, week: 900 }, newUsers: { today: 4, yesterday: 1, week: 11 } });
+    expect(res).toEqual({
+      orders: { today: 3, yesterday: 2, week: 9 },
+      revenue: { today: 300, yesterday: 200, week: 900 },
+      gmv: { today: 450, yesterday: 250, week: 1200 },
+      newUsers: { today: 4, yesterday: 1, week: 11 },
+    });
     const dayStart = new Date('2026-10-27T17:00:00Z');
     expect(queryRaw.mock.calls[0]).toContainEqual(dayStart);
     expect(queryRaw.mock.calls[0]).toContainEqual(new Date('2026-10-21T17:00:00Z'));

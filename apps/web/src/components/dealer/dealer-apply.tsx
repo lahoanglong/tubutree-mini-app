@@ -19,7 +19,7 @@ import { applyPitch, pendingBody } from '@/lib/dealer-view';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { Field } from '@/components/ui/field';
-import { EvidenceUpload } from '@/components/evidence-upload';
+import { BrandImageField } from '@/components/brand-owner/brand-image-field';
 import { DealerShell, errText } from './dealer-shell';
 
 /** Hồ sơ đang chờ duyệt. Số giờ chỉ hiện khi cấu hình thật đã về. */
@@ -118,20 +118,8 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
           <Field label="Địa chỉ kinh doanh *">
             <input className={ui.field} value={form.address} onChange={set('address')} />
           </Field>
-          <EvidenceUpload
-            label="Ảnh CCCD mặt trước *"
-            hint="bắt buộc"
-            max={1}
-            value={form.cccdFrontUrl ? [form.cccdFrontUrl] : []}
-            onChange={(imgs) => setForm((f) => ({ ...f, cccdFrontUrl: imgs[0] ?? '' }))}
-          />
-          <EvidenceUpload
-            label="Ảnh CCCD mặt sau *"
-            hint="bắt buộc"
-            max={1}
-            value={form.cccdBackUrl ? [form.cccdBackUrl] : []}
-            onChange={(imgs) => setForm((f) => ({ ...f, cccdBackUrl: imgs[0] ?? '' }))}
-          />
+          <BrandImageField upload="inline" label="Ảnh CCCD mặt trước *" value={form.cccdFrontUrl} onChange={(url) => setForm((f) => ({ ...f, cccdFrontUrl: url }))} />
+          <BrandImageField upload="inline" label="Ảnh CCCD mặt sau *" value={form.cccdBackUrl} onChange={(url) => setForm((f) => ({ ...f, cccdBackUrl: url }))} />
           <div role="status" aria-live="polite">
             {done && <p className="text-sm font-medium text-success-fg">Đã gửi hồ sơ đăng ký đại lý!</p>}
           </div>

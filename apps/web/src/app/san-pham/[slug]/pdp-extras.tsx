@@ -17,7 +17,7 @@ import { useCartKey } from '@/lib/cart-key';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { soldPercent } from '@/lib/flash-display';
-import { cardPricing, variationPricing } from '@/lib/flash-price';
+import { cardPricing, runningFlash, variationPricing } from '@/lib/flash-price';
 import { pointsEarnPreview, pointsEarnText } from '@/lib/points-earn';
 import { loginHref } from '@/lib/return-to';
 import { couponLabel, freeshipLine, groupBuyPitch, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
@@ -50,7 +50,7 @@ function tierEarnFor(phase: string, tierId: string | null | undefined, loyalty: 
 
 /** Dòng "Nhận … Điểm Xanh" dưới giá, như `PointsEarnLine` của Mini App: giá phân loại đang chọn × số lượng. */
 export function PdpPointsEarn({ product }: { product: PointsEarnProduct }) {
-  const flash = useActiveFlashSales();
+  const flash = runningFlash(useActiveFlashSales());
   const selection = usePdpSelection();
   const phase = useAuthPhase();
   const config = usePublicConfig();
@@ -146,7 +146,7 @@ export function PdpCoupons({ productId }: { productId: string }) {
 
 /** Đếm ngược và tỉ lệ đã bán của đợt Giờ vàng gắn đúng phân loại đang chọn. Danh sách đợt tự làm mới mỗi 60 giây (`useActiveFlashSales`). */
 export function PdpFlashMeta() {
-  const flash = useActiveFlashSales();
+  const flash = runningFlash(useActiveFlashSales());
   const selectedId = usePdpSelection()?.selectedId;
   const item = flash.find((f) => f.variationId === selectedId);
   const left = useCountdown(item?.endAt ?? null);
