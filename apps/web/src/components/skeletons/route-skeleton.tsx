@@ -101,35 +101,3 @@ export function RouteSkeleton({ kind }: { kind?: SkeletonKind }) {
     </div>
   );
 }
-
-/** Khung chờ của lưới sản phẩm (Danh mục): ô tìm kiếm, dải lọc và lưới thẻ. */
-export function CatalogSkeleton() {
-  return (
-    <div role="status" aria-busy="true" className="flex flex-col gap-3">
-      <span className="sr-only">Đang tải…</span>
-      <Skeleton height={40} rounded="rounded-full" />
-      <div className="flex gap-2 overflow-hidden">
-        {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} width={72} height={32} rounded="rounded-full" />
-        ))}
-      </div>
-      <ProductGridSkeleton count={6} />
-    </div>
-  );
-}
-
-/** Khung chờ của chi tiết sản phẩm: ảnh vuông, tên, giá và nút mua. */
-export function ProductDetailSkeleton() {
-  return (
-    <div role="status" aria-busy="true" className="md:grid md:grid-cols-2 md:gap-8">
-      <span className="sr-only">Đang tải…</span>
-      <Skeleton height="auto" rounded="rounded-none" style={{ aspectRatio: '1 / 1' }} />
-      <div className="flex flex-col gap-3 p-4 md:p-0">
-        <Skeleton width="85%" height={22} />
-        <Skeleton width={140} height={26} />
-        <Skeleton width="60%" height={14} />
-        <Skeleton height={48} rounded="rounded-control" />
-      </div>
-    </div>
-  );
-}
