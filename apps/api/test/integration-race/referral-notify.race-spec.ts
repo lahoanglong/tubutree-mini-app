@@ -73,6 +73,7 @@ describe('Báo người mời về thưởng giới thiệu (real Postgres)', ()
           provide: AffiliateService,
           useValue: {
             reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
+            alertPaidCommissionOfReversedOrder: jest.fn().mockResolvedValue(undefined),
             lockCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
             grantReferralReward: jest.fn().mockResolvedValue(undefined),
           },

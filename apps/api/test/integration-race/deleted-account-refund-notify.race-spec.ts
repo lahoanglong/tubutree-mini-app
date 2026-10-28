@@ -39,6 +39,7 @@ describe('Hoàn tiền cho tài khoản đã xoá: khoản chờ chuyển tay + 
           provide: AffiliateService,
           useValue: {
             reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
+            alertPaidCommissionOfReversedOrder: jest.fn().mockResolvedValue(undefined),
             lockCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
             grantReferralReward: jest.fn().mockResolvedValue(undefined),
           },

@@ -52,6 +52,7 @@ describe('Duyệt trả một phần ‖ tx khác của cùng khách trên dòng
           provide: AffiliateService,
           useValue: {
             reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
+            alertPaidCommissionOfReversedOrder: jest.fn().mockResolvedValue(undefined),
             lockCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
             grantReferralReward: jest.fn().mockResolvedValue(undefined),
           },

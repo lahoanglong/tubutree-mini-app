@@ -90,6 +90,7 @@ describe('Gửi bù tin báo người mời về thưởng giới thiệu (real 
           provide: AffiliateService,
           useValue: {
             reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
+            alertPaidCommissionOfReversedOrder: jest.fn().mockResolvedValue(undefined),
             lockCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
             grantReferralReward: jest.fn().mockResolvedValue(undefined),
           },

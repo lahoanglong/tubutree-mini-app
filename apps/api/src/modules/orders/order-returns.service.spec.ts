@@ -363,11 +363,11 @@ describe('OrderReturnsService.review — trả một phần cắt hoa hồng th�
       }),
     } as unknown as PrismaService;
     const loyalty = { pointsExpiresAt: jest.fn().mockResolvedValue(null), reverseOrderPoints: jest.fn() };
-    const affiliate = { reverseCommissionsForOrder: jest.fn() };
+    const affiliate = { reverseCommissionsForOrder: jest.fn(), alertPaidCommissionOfReversedOrder: jest.fn().mockResolvedValue(undefined) };
     const svc = new OrderReturnsService(prisma, {} as never, {} as never, loyalty as never, affiliate as never, notifications);
     (svc as unknown as { flagPancakeReturn: unknown }).flagPancakeReturn = jest.fn().mockResolvedValue(undefined);
     (svc as unknown as { withContext: unknown }).withContext = jest.fn().mockResolvedValue({ id: 'r1' });
-    return { svc, affiliate };
+    return { svc, affiliate, order };
   }
   const reversedNotices = () => (notifications.notify as jest.Mock).mock.calls.filter((c) => c[1] === 'COMMISSION_REVERSED');
 
@@ -385,6 +385,13 @@ describe('OrderReturnsService.review — trả một phần cắt hoa hồng th�
     const { svc } = setupPartialApprove([]);
     await svc.review('a1', 'r1', { approve: true, shopFault: true });
     expect(reversedNotices()).toHaveLength(0);
+  });
+
+  it('trả một phần: báo kế toán nếu đơn có hoa hồng đã duyệt/đã chuyển, mỗi yêu cầu trả một lần', async () => {
+    const { svc, affiliate, order } = setupPartialApprove([]);
+    await svc.review('a1', 'r1', { approve: true, shopFault: true });
+    expect(affiliate.alertPaidCommissionOfReversedOrder).toHaveBeenCalledTimes(1);
+    expect(affiliate.alertPaidCommissionOfReversedOrder).toHaveBeenCalledWith(order.id, order.code, { returnRequestId: 'r1' });
   });
 });
 

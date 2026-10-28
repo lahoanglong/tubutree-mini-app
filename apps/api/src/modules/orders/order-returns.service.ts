@@ -495,6 +495,9 @@ export class OrderReturnsService {
         reversalFailure ??= err;
         this.logger.error(`Thu hồi hoa hồng của đơn ${order.code} sau khi duyệt trả cả đơn lỗi: ${err instanceof Error ? err.message : err}`);
       }
+    } else {
+      // Hoa hồng đã duyệt/đã vào Ví không cắt được trong commit; kế toán cần biết phần CTV đã nhận vượt phần còn lại của đơn.
+      await this.affiliate.alertPaidCommissionOfReversedOrder(order.id, order.code, { returnRequestId: id });
     }
     if (money?.to === 'BANK') {
       await announceBankRefund(

@@ -45,6 +45,7 @@ describe('trả một phần không thu điểm tích đã hết hạn (real Pos
           provide: AffiliateService,
           useValue: {
             reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
+            alertPaidCommissionOfReversedOrder: jest.fn().mockResolvedValue(undefined),
             lockCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
             grantReferralReward: jest.fn().mockResolvedValue(undefined),
           },
