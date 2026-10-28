@@ -17,6 +17,7 @@ import { ListRow } from '../components/ui/list-row';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
+import { WastePhoneNeeded, isWasteForbidden } from '../components/waste-phone-needed';
 import { formatDate } from '../utils/format';
 import { METHOD_LABELS, isRequestPaused, requestStatusText } from '../utils/waste-labels';
 
@@ -26,7 +27,7 @@ const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 export default function RecycleRequestsPage() {
   const navigate = useNavigate();
   const phase = useAuthPhase();
-  const [tab, setTab] = useState<'open' | 'closed'>('open');
+  const [picked, setTab] = useState<'open' | 'closed' | null>(null);
   const q = useQuery({ queryKey: WASTE_QUERY_KEYS.requests, queryFn: listWasteRequests, enabled: phase === 'authenticated' });
   const cfg = usePublicConfig();
   const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: phase === 'authenticated' });
@@ -52,6 +53,7 @@ export default function RecycleRequestsPage() {
       </Card>,
     );
   }
+  if (q.isError && isWasteForbidden(q.error)) return shell(<WastePhoneNeeded text="Cho Tubu số điện thoại để xem yêu cầu đổi rác của bạn." />);
   if (q.isError) return shell(<ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />);
   if (q.isPending || !q.data) return shell(<Skeleton height={120} />);
 
@@ -68,6 +70,8 @@ export default function RecycleRequestsPage() {
   }
   const openRows = rows.filter((r) => OPEN_STATUSES.includes(r.status));
   const closedRows = rows.filter((r) => !OPEN_STATUSES.includes(r.status));
+  // Chưa chọn tab nào mà "Đang xử lý" trống thì mở tab có yêu cầu, để khách không tưởng mất yêu cầu.
+  const tab = picked ?? (openRows.length === 0 && closedRows.length > 0 ? 'closed' : 'open');
   const shown = tab === 'open' ? openRows : closedRows;
 
   return shell(
@@ -80,6 +84,15 @@ export default function RecycleRequestsPage() {
           { key: 'closed', label: 'Đã đóng', count: closedRows.length },
         ]}
       />
+      {shown.length === 0 && (
+        <EmptyState
+          art="box"
+          variant="inline"
+          heading={tab === 'open' ? 'Không có yêu cầu đang xử lý' : 'Chưa có yêu cầu nào đã đóng'}
+          ctaLabel={tab === 'open' ? 'Xem yêu cầu đã đóng' : 'Xem yêu cầu đang xử lý'}
+          onCta={() => setTab(tab === 'open' ? 'closed' : 'open')}
+        />
+      )}
       <div style={{ ...COLUMN, gap: 8 }}>
         {shown.map((r) => {
           const paused =

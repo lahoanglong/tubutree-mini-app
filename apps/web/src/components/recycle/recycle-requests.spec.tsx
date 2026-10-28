@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 import { ApiError } from '@/lib/client-api';
+import { markSubmitted, takeSubmitted } from '@/lib/recycle-wizard';
 import { makeRequestSummary, makeWasteMe } from './recycle-fixtures';
 
 // Chép ý recycle-requests.spec.tsx (Mini App, §4.6, §16.1): hai tab có số đếm, điều hướng theo trạng thái, ngày giờ VN, rỗng.
@@ -81,6 +82,13 @@ afterEach(() => {
 });
 
 describe('/doi-rac/yeu-cau (§4.6, §16.1)', () => {
+  it('cờ "vừa gửi yêu cầu" bị xoá khi vào trang, để "Đổi thêm rác" vào bước 1', async () => {
+    markSubmitted();
+    state.me = makeWasteMe();
+    await mount();
+    expect(takeSubmitted()).toBe(false);
+  });
+
   it.each(['GUEST', 'NEED_PHONE'] as const)('eligibility %s: MiniAppOnlyNotice như ba trang đổi rác khác, không gọi /waste/requests (Q2)', async (eligibility) => {
     state.me = makeWasteMe({ eligibility, balance: null, monthUsage: null });
     const c = await mount();
@@ -95,6 +103,19 @@ describe('/doi-rac/yeu-cau (§4.6, §16.1)', () => {
     expect(c.textContent).toContain('không có quyền');
     expect(c.textContent).not.toContain('Forbidden');
     expect(byText(c, 'button', 'Thử lại')).toBeNull();
+  });
+
+  it('không có yêu cầu đang xử lý mà có yêu cầu đã đóng: mở thẳng tab Đã đóng; tab trống có chữ và nút sang tab kia', async () => {
+    state.rows = [ROWS[2]!];
+    const c = await mount();
+    expect(tab(c, 'Đã đóng')?.getAttribute('aria-selected')).toBe('true');
+    expect(link(c, '/doi-rac/xong/r-done')).not.toBeNull();
+    click(tab(c, 'Đang xử lý')!);
+    await flush(2);
+    expect(c.textContent).toContain('Không có yêu cầu đang xử lý');
+    click(byText(c, 'button', 'Xem yêu cầu đã đóng')!);
+    await flush(2);
+    expect(link(c, '/doi-rac/xong/r-done')).not.toBeNull();
   });
 
   it('hai tab có số đếm; mặc định Đang xử lý chỉ hiện yêu cầu chưa đóng', async () => {

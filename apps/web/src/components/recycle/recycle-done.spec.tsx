@@ -5,6 +5,7 @@ import { byText, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
 import { makeRewardCatalog } from '@/components/loyalty/reward-fixtures';
 import { makeRequestDetail, makeWasteMe } from './recycle-fixtures';
+import { markSubmitted, takeSubmitted } from '@/lib/recycle-wizard';
 
 // Chép ý recycle-done.spec.tsx (Mini App, §4.7): điểm vừa cộng, bảng đếm, số dư mới, tiến độ tới quà, giọt nước, tác động.
 
@@ -162,6 +163,12 @@ describe('/doi-rac/xong/[id] (§4.7)', () => {
     const c = await mount();
     expect(byText(c, 'a', 'Đổi quà ngay')?.getAttribute('href')).toBe('/kho-qua');
     expect(byText(c, 'a', 'Đổi thêm rác')?.getAttribute('href')).toBe('/doi-rac/tao');
+  });
+
+  it('cờ "vừa gửi yêu cầu" bị xoá, để "Đổi thêm rác" vào bước 1 chứ không bị đưa về /doi-rac', async () => {
+    markSubmitted();
+    await mount();
+    expect(takeSubmitted()).toBe(false);
   });
 
   it('404 hoặc lỗi tải: câu lỗi + "Thử lại"', async () => {

@@ -1,4 +1,5 @@
 import { pausedNote } from '@tubutree/app-core/waste-copy';
+import { wasteRequestRefetchMs } from '@tubutree/app-core/waste-request-poll';
 import { useEffect, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
@@ -44,7 +45,6 @@ const BLOCK: CSSProperties = {
 };
 const CELL: CSSProperties = { textAlign: 'left', padding: '8px 4px', verticalAlign: 'top' };
 
-const QR_POLL_MS = 5000;
 const POINT_PAUSED = 'Điểm nhận đang tạm ngừng, hãy chọn điểm khác';
 const POINT_QUOTA_FULL = 'Điểm này tạm hết hạn mức tháng này, hãy chọn điểm khác';
 
@@ -145,12 +145,12 @@ export default function RecycleRequestPage() {
   }, [phase, navigate]);
 
   const authed = phase === 'authenticated';
-  // Mở mã QR ở quầy thì hỏi lại trạng thái mỗi 5 giây để thấy ngay lúc nhân viên xác nhận; dừng khi đóng tấm mã hoặc yêu cầu không còn chờ.
+  // Còn chờ thì hỏi lại 15 giây một lần (5 giây khi đang mở mã QR) để thấy ngay lúc quầy xác nhận.
   const q = useQuery({
     queryKey: WASTE_QUERY_KEYS.request(id),
     queryFn: () => getWasteRequest(id),
     enabled: authed,
-    refetchInterval: (query) => (qrOpen && query.state.data?.status === 'OPEN' ? QR_POLL_MS : false),
+    refetchInterval: (query) => wasteRequestRefetchMs(query.state.data?.status, qrOpen),
   });
   const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: authed });
   const r: WasteRequestDetailDTO | undefined = q.data;

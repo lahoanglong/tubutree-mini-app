@@ -1,5 +1,6 @@
 'use client';
 
+import { wasteRequestRefetchMs } from '@tubutree/app-core/waste-request-poll';
 import { pausedNote } from '@tubutree/app-core/waste-copy';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -42,7 +43,6 @@ import {
   timelineFor,
 } from './recycle-labels';
 
-const QR_POLL_MS = 5000;
 const POINT_PAUSED = 'Điểm nhận đang tạm ngừng, hãy chọn điểm khác';
 const POINT_QUOTA_FULL = 'Điểm này tạm hết hạn mức tháng này, hãy chọn điểm khác';
 const BLOCK = `flex flex-col gap-2.5 p-4 ${skin.card}`;
@@ -131,11 +131,11 @@ export function RecycleRequestDetail({ id }: { id: string }) {
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
 
   const authed = phase === 'authenticated';
-  // Mở mã QR ở quầy thì hỏi lại trạng thái mỗi 5 giây để thấy ngay lúc nhân viên xác nhận; dừng khi đóng tấm mã hoặc yêu cầu không còn chờ.
+  // Còn chờ thì hỏi lại 15 giây một lần (5 giây khi đang mở mã QR) để thấy ngay lúc quầy xác nhận.
   const q = useQuery({
     ...wasteRequestQuery(coreHttp, id),
     enabled: authed,
-    refetchInterval: (query) => (qrOpen && query.state.data?.status === 'OPEN' ? QR_POLL_MS : false),
+    refetchInterval: (query) => wasteRequestRefetchMs(query.state.data?.status, qrOpen),
   });
   const liveStatus = q.data?.status;
   useEffect(() => {

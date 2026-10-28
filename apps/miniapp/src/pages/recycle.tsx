@@ -1,5 +1,4 @@
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
-import { History } from 'lucide-react';
 import { WAREHOUSE_ONLY_TEXT, timelineCaption, wasteGuestCopy } from '@tubutree/app-core/waste-copy';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
@@ -9,6 +8,7 @@ import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { useRecycleLogin } from '../hooks/use-recycle-login';
 import { WasteItemThumb } from '../components/waste-item-thumb';
+import { RecyclePageSkeleton } from '../components/recycle-page-skeleton';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -17,7 +17,6 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { ErrorState } from '../components/ui/empty-state';
-import { IconButton } from '../components/ui/icon-button';
 import { ListRow } from '../components/ui/list-row';
 import { PageHeader } from '../components/ui/page-header';
 import { ProgressBar } from '../components/ui/progress-bar';
@@ -124,7 +123,7 @@ function GuestOverview({ items, onRules }: { items: readonly WasteItemDTO[] | un
         <Heading variant="title-md" as="h2">
           {wasteGuestCopy.stepsTitle}
         </Heading>
-        <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <ol style={{ margin: 0, paddingLeft: 20, listStyle: 'decimal', display: 'flex', flexDirection: 'column', gap: 4 }}>
           {wasteGuestCopy.steps.map((t) => (
             <li key={t}>
               <Text variant="body-sm" as="span">
@@ -233,7 +232,13 @@ export default function RecyclePage() {
   const header = (
     <PageHeader
       title="Đổi rác lấy quà"
-      actions={showHistory ? <IconButton icon={History} label="Yêu cầu của tôi" onPress={() => navigate('/recycle/requests')} /> : undefined}
+      actions={
+        showHistory ? (
+          <Button variant="ghost" style={{ padding: '0 8px', whiteSpace: 'nowrap', flex: '0 0 auto' }} onPress={() => navigate('/recycle/requests')}>
+            Yêu cầu của tôi
+          </Button>
+        ) : undefined
+      }
     />
   );
   const shell = (content: React.ReactNode, bar?: React.ReactNode) => (
@@ -244,15 +249,7 @@ export default function RecyclePage() {
     </Page>
   );
 
-  if (phase === 'loading' || (phase === 'authenticated' && meQ.isPending)) {
-    return shell(
-      <>
-        <Skeleton height={140} radius="var(--radius-card)" />
-        <Skeleton height={80} radius="var(--radius-card)" />
-        <Skeleton height={80} radius="var(--radius-card)" />
-      </>,
-    );
-  }
+  if (phase === 'loading' || (phase === 'authenticated' && meQ.isPending)) return <RecyclePageSkeleton />;
   if (phase === 'unavailable') return shell(<SessionUnavailable />);
   if (phase === 'guest') {
     if (!cfg.waste.enabled) return shell(<NoticeCard text={PAUSED_TEXT} />);
@@ -265,6 +262,18 @@ export default function RecyclePage() {
   if (meQ.isError || !me) return shell(<ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />);
 
   const requestsBlock = <RequestsBlock me={me} onOpen={(id) => navigate(`/recycle/r/${id}`)} />;
+  const recent = me.recentCompleted;
+  const recentBlock =
+    recent && recent.pointsAwarded != null && recent.pointsAwarded > 0 ? (
+      <Card variant="outline">
+        <ListRow
+          title={`Vừa cộng ${formatPoints(recent.pointsAwarded)}`}
+          subtitle={`${recent.code} · ${METHOD_LABELS[recent.method]}`}
+          trailing="chevron"
+          onPress={() => navigate(`/recycle/done/${recent.id}`)}
+        />
+      </Card>
+    ) : null;
   // Kho vẫn mở quầy khi chương trình tạm dừng hoặc khách bị khoá (15.1), nên lối vào không phụ thuộc hai nhánh đó.
   const deskRow =
     me.deskPoints.length > 0 ? (
@@ -360,6 +369,8 @@ export default function RecyclePage() {
           )}
         </div>
       </Card>
+
+      {recentBlock}
 
       {requestsBlock}
 

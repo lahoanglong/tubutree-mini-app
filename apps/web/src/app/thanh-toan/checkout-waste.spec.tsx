@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { ApiError, NetworkError } from '@/lib/client-api';
+import { markSubmitted, takeSubmitted } from '@/lib/recycle-wizard';
 
 const ADDR = {
   id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Ba Đình', street: '1 Phố Huế',
@@ -126,6 +127,14 @@ describe('/thanh-toan — Thu kèm rác (đổi rác lấy quà, §12.2 bước 
     expect(link.getAttribute('href')).toBe('/doi-rac/tao');
     expect(link.textContent).toContain('Thu kèm rác');
     expect(waste(r)!.querySelector('input[type="checkbox"]')).toBeNull();
+  });
+
+  it('bấm "Thu kèm rác" xoá cờ vừa gửi, để màn tạo vào bước 1', async () => {
+    m.wasteMe.mockResolvedValue(ME({ openRequests: [] }));
+    const r = await mount();
+    markSubmitted();
+    click(waste(r)!.querySelector('a')!);
+    expect(takeSubmitted()).toBe(false);
   });
 
   it('chưa có yêu cầu và route tạo yêu cầu còn pending → không có dòng dẫn', async () => {

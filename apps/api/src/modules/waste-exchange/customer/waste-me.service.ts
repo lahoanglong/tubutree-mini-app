@@ -13,6 +13,9 @@ import { WASTE_OPEN_STATUSES } from '../waste.constants';
 import { CUSTOMER_VISIBLE_ITEMS_WHERE, toWasteItemDTO } from './waste-catalogue.service';
 import { toRequestSummary, WASTE_REQUEST_SUMMARY_INCLUDE } from './waste-request.mapper';
 
+/** Thẻ "Vừa cộng điểm" ở trang Đổi rác giữ lại ngần này ngày sau khi yêu cầu xong. */
+const RECENT_COMPLETED_DAYS = 7;
+
 @Injectable()
 export class WasteMeService {
   constructor(
@@ -80,6 +83,11 @@ export class WasteMeService {
       include: WASTE_REQUEST_SUMMARY_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
+    const recentRow = await this.prisma.wasteRequest.findFirst({
+      where: { userId, status: 'COMPLETED', completedAt: { gte: new Date(now.getTime() - RECENT_COMPLETED_DAYS * 86_400_000) } },
+      include: WASTE_REQUEST_SUMMARY_INCLUDE,
+      orderBy: { completedAt: 'desc' },
+    });
     const completed = await this.prisma.wasteRequest.findMany({
       where: { userId, status: 'COMPLETED' },
       select: { lines: { select: { receivedQty: true, gramsPerUnit: true } } },
@@ -108,6 +116,7 @@ export class WasteMeService {
       impactGrams,
       items,
       openRequests,
+      recentCompleted: recentRow ? toRequestSummary(recentRow) : null,
     };
   }
 
