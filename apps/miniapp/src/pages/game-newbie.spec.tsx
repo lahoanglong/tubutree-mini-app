@@ -237,7 +237,8 @@ describe('Vườn Xanh người mới — nút chính và không ngõ cụt', ()
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Kiếm thêm nước' }));
     expect(await screen.findByText('Chưa tải được việc kiếm nước.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    // Thẻ câu đố trong trang cũng có "Thử lại" cho cùng truy vấn.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Thử lại' })[0]!);
     expect(await screen.findByText('Làm câu đố (còn 2 câu)')).toBeInTheDocument();
     expect(mocks.api.getTodayQuiz).toHaveBeenCalledTimes(2);
   });

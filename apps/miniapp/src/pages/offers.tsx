@@ -1,3 +1,4 @@
+import { COUPONS_LOAD_ERROR_TITLE } from '@tubutree/app-core/loyalty-copy';
 import { useEffect, useRef } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
@@ -237,7 +238,7 @@ export default function OffersPage() {
             {couponsQ.isLoading ? (
               <Skeleton height={64} />
             ) : couponsQ.isError ? (
-              <ErrorState variant="inline" message={`Chưa tải được mã giảm giá: ${getLoadErrorMessage(couponsQ.error)}`} onRetry={() => void couponsQ.refetch()} />
+              <ErrorState variant="inline" title={COUPONS_LOAD_ERROR_TITLE} message={getLoadErrorMessage(couponsQ.error)} onRetry={() => void couponsQ.refetch()} />
             ) : coupons.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {coupons.map((c) => (

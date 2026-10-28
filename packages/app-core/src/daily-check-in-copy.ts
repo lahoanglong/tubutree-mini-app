@@ -12,7 +12,8 @@ export const checkInCopy = {
   tankFull: 'Bình nước đang đầy nên không cộng thêm giọt nước.',
   alreadyDone: 'Hôm nay bạn đã điểm danh rồi',
   retryMissing: 'Còn thiếu một phần, bấm điểm danh lại để nhận nốt',
-  loadError: (reason: string) => `Chưa tải được lịch điểm danh: ${reason}`,
+  /** Tiêu đề khối lỗi; thân chỉ ghi lý do để câu không lặp ý. */
+  loadErrorTitle: 'Chưa tải được lịch điểm danh',
   dayAria: (day: number, points: number, claimed: boolean) =>
     `Ngày ${day}: +${num(points)} Điểm Xanh${claimed ? ', đã nhận' : ''}`,
 } as const;

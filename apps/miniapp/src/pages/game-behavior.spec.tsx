@@ -1038,9 +1038,17 @@ describe('GamePage — quiz Sống Xanh', () => {
   const Q1 = { id: 'q1', question: 'Cây nào hấp thụ CO2?', options: ['Đá', 'Cây', 'Gạch', 'Sắt'], category: 'cay', difficulty: 1, waterReward: 20 };
   const Q2 = { id: 'q2', question: 'Nhựa phân huỷ bao lâu?', options: ['1 ngày', '450 năm'], category: 'tai_che', difficulty: 3, waterReward: 30 };
 
-  it('hết quiz hôm nay: hiện lời chúc hoàn thành', async () => {
+  it('chưa có câu nào hôm nay: báo câu mới vào ngày mai, không nói đã hoàn thành', async () => {
     renderPage();
-    expect(await screen.findByText(/Bạn đã hoàn thành câu đố hôm nay/)).toBeInTheDocument();
+    expect(await screen.findByText('Câu đố mới vào ngày mai')).toBeInTheDocument();
+    expect(screen.queryByText(/Bạn đã hoàn thành câu đố hôm nay/)).not.toBeInTheDocument();
+  });
+
+  it('tải câu đố lỗi: báo lỗi có "Thử lại", không nói đã hoàn thành', async () => {
+    mocks.api.getTodayQuiz.mockRejectedValue(new Error('boom'));
+    renderPage();
+    expect(await screen.findByText('Chưa tải được câu đố')).toBeInTheDocument();
+    expect(screen.queryByText(/Bạn đã hoàn thành câu đố hôm nay/)).not.toBeInTheDocument();
   });
 
   it('một câu: tiêu đề phân loại/độ khó, thưởng; chọn đáp án gọi answerQuiz(id, lựa chọn) và khoá mọi đáp án; chỉ làm mới hồ sơ + me', async () => {

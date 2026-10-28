@@ -8,7 +8,7 @@ import { rarityColor } from './game-utils';
 export function SpeciesCodex({ codex }: { codex: CodexEntry[] }) {
   return (
     <GameCard title={`Sổ tay loài cây (${codex.filter((c) => c.owned).length}/${codex.length})`} icon={BookOpen}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
         {codex.map((c: CodexEntry) => (
           <div
             key={c.id}

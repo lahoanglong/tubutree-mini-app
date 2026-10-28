@@ -22,6 +22,7 @@ import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { formatNumber, formatDate, formatMultiplier } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { COUPONS_LOAD_ERROR_TITLE } from '@tubutree/app-core/loyalty-copy';
 import { earnRuleLine, moneyShort, pointsToSpend, redeemRuleLine, tierThresholdLabel } from '../utils/loyalty-copy';
 import { copyText } from '../utils/clipboard';
 import { PageHeader } from '../components/ui/page-header';
@@ -279,7 +280,8 @@ export default function LoyaltyPage() {
             ) : couponsQ.isError ? (
               <ErrorState
                 variant="inline"
-                message={`Chưa tải được mã giảm giá: ${getLoadErrorMessage(couponsQ.error)}`}
+                title={COUPONS_LOAD_ERROR_TITLE}
+                message={getLoadErrorMessage(couponsQ.error)}
                 onRetry={() => void couponsQ.refetch()}
               />
             ) : couponsQ.data && couponsQ.data.length > 0 ? (

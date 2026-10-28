@@ -205,6 +205,13 @@ export const gameNewbieCopy = {
     board: 'Chưa tải được bảng xếp hạng. Kiểm tra mạng rồi thử lại.',
     retry: 'Thử lại',
   },
+  /** Thẻ câu đố có ba trạng thái khác nhau: đã làm xong, chưa có câu, tải lỗi. */
+  quiz: {
+    done: 'Bạn đã hoàn thành câu đố hôm nay 🎉',
+    empty: 'Câu đố mới vào ngày mai',
+    loadErrorTitle: 'Chưa tải được câu đố',
+    loadErrorBody: 'Kiểm tra mạng rồi thử lại.',
+  },
   seasonEmpty: {
     title: 'Chưa có mùa nào đang mở',
     body: 'Mùa mới sẽ sớm ra mắt. Trong lúc chờ, bạn vẫn điểm danh và tưới cây mỗi ngày như thường.',

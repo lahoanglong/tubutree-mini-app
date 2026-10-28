@@ -588,10 +588,18 @@ describe('Vườn Xanh: nhiệm vụ', () => {
 });
 
 describe('Vườn Xanh: quiz Sống Xanh', () => {
-  it('hết quiz: lời chúc hoàn thành', async () => {
+  it('chưa có câu nào: báo câu mới vào ngày mai, không nói đã hoàn thành', async () => {
     state.data['/game/quiz/today'] = [];
     const c = await mount();
-    expect(c.textContent).toContain('Bạn đã hoàn thành câu đố hôm nay 🎉');
+    expect(c.textContent).toContain('Câu đố mới vào ngày mai');
+    expect(c.textContent).not.toContain('Bạn đã hoàn thành câu đố hôm nay');
+  });
+
+  it('tải câu đố lỗi: báo lỗi có "Thử lại", không nói đã hoàn thành', async () => {
+    state.fail.set('/game/quiz/today', 5);
+    const c = await mount();
+    expect(c.textContent).toContain('Chưa tải được câu đố');
+    expect(c.textContent).not.toContain('Bạn đã hoàn thành câu đố hôm nay');
   });
 
   it('nhiều câu: nhãn phân loại, Câu n/N, trả lời gọi API đúng id và lựa chọn, khoá đáp án, Câu tiếp theo sang câu kế, câu cuối Hoàn thành', async () => {

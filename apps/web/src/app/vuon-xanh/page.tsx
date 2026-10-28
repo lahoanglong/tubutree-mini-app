@@ -248,6 +248,8 @@ function GameBody() {
               pending={answerM.isPending}
               onAnswer={(id, choice) => answerM.mutate({ id, choice })}
               onNext={nextQuiz}
+              loadError={quizQ.isError}
+              onRetry={() => void quizQ.refetch()}
             />
           </div>
 

@@ -1,5 +1,8 @@
 import type { CheckInStatusResponse, LoyaltyOverview, LoyaltyRates, MemberCardResponse } from './api/loyalty';
 
+/** Tiêu đề khối mã giảm giá khi lỗi tải; thân chỉ ghi lý do. */
+export const COUPONS_LOAD_ERROR_TITLE = 'Chưa tải được mã giảm giá';
+
 /** Số thập phân kiểu Việt, bỏ ",0": 1.2 → "1,2", 5 → "5". */
 export function decimalVi(n: number): string {
   return String(Math.round(n * 10) / 10).replace('.', ',');
