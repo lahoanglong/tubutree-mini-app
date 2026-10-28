@@ -152,6 +152,7 @@ test.describe('Web khách: tài khoản', () => {
       { id: 'n1', templateCode: 'ORDER_CONFIRMED', payload: { body: 'Đơn TT001 đã được xác nhận', data: { order_code: 'TT001' } }, status: 'SENT', sentAt },
       { id: 'n2', templateCode: 'POINTS_EARNED', payload: { body: 'Bạn nhận thêm 50 điểm Xanh' }, status: 'SENT', sentAt },
     ]);
+    api.get('/me/notifications/unread-count', { count: 2 });
     api.post('/me/notifications/:id/read', { ok: true });
     api.post('/me/notifications/read-all', { ok: true, count: 2 });
     await page.goto('/tai-khoan/thong-bao');

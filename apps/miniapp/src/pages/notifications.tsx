@@ -1,22 +1,31 @@
 import { useState, useEffect, useRef } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
-  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, Repeat, Undo2, PackageOpen, XCircle, UserPlus, Recycle, MessageCircle, type LucideIcon,
+  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, Repeat, Undo2, PackageOpen, XCircle, UserPlus, Recycle, MessageCircle, Star, Tag, Users, type LucideIcon,
 } from 'lucide-react';
 import {
-  getNotifications,
   markNotificationRead,
   markAllNotificationsRead,
   type NotificationDTO,
 } from '../services/account-api';
+import {
+  notificationAction as coreAction,
+  notificationNote as coreNote,
+  notificationOrderLink,
+  notificationTitle,
+} from '@tubutree/app-core/notification-route';
+import { nextNotificationCursor, notificationsInfiniteQuery, unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
+import { coreHttp } from '../services/core-http';
+import type { NotificationCursor } from '@tubutree/app-core/api/account';
 import { getLoadErrorMessage } from '../services/api';
 import { trackEvent } from '../services/analytics';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
+import { useHasSubscription } from '../hooks/use-has-subscription';
 import { AuthGate } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { vi } from '../i18n/vi';
@@ -34,121 +43,69 @@ import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
 import { pickReminderItem, reorderReminderAction } from '../components/reorder/reorder-reminder';
 
+/** Icon theo templateCode; tiêu đề và nút đi tiếp lấy chung với web ở app-core (`notification-route`). */
+function notificationIcon(code: string): LucideIcon {
+  if (code.startsWith('ORDER_CONFIRMED')) return CheckCircle2;
+  if (code.startsWith('ORDER_SHIPPING')) return Truck;
+  if (code.startsWith('ORDER_DELIVERED')) return PackageCheck;
+  if (code === 'RETURN_REQUESTED') return Undo2;
+  if (code.startsWith('RETURN_APPROVED')) return CheckCircle2;
+  if (code === 'RETURN_RECEIVED') return PackageOpen;
+  if (code === 'RETURN_REJECTED') return XCircle;
+  if (code.startsWith('ORDER') || code === 'MERCHANT_ORDER_CANCELLED_BY_SELLER') return Receipt;
+  if (code.startsWith('MERCHANT_')) return Store;
+  if (code.startsWith('INVOICE')) return FileText;
+  if (code.startsWith('REFUND_')) return Undo2;
+  if (code.startsWith('COMMISSION')) return Coins;
+  if (code.startsWith('CASHBACK')) return ShoppingBag;
+  if (code.startsWith('BIRTHDAY') || code.startsWith('VOUCHER') || code.endsWith('_VOUCHER')) return Gift;
+  if (code.startsWith('REFERRAL_')) return UserPlus;
+  if (code.startsWith('POINTS') || code === 'XU_CONVERTED' || code === 'TIER_DROP_NOTICE' || code.startsWith('EXTERNAL_POINTS_') || code.startsWith('CHAT_ORDER_POINTS_')) return Leaf;
+  if (code.startsWith('STOREFRONT')) return Store;
+  if (code.startsWith('REORDER_REMINDER')) return Repeat;
+  if (code === 'REVIEW_REQUEST') return Star;
+  if (code.startsWith('FLASH')) return Zap;
+  if (code === 'PRICE_DROP_ALERT') return Tag;
+  if (code === 'CART_ABANDONED') return ShoppingBag;
+  if (code.startsWith('GAME_')) return Leaf;
+  if (code.startsWith('GROUP_BUY_')) return Users;
+  if (code.startsWith('SUBSCRIPTION_')) return Repeat;
+  if (code.startsWith('COMMUNITY_')) return MessageCircle;
+  if (code.startsWith('DEALER')) return Store;
+  if (code.startsWith('WASTE') || code.startsWith('REFILL')) return Recycle;
+  if (code === 'SUPPORT_CHAT_REPLY') return MessageCircle;
+  if (code.startsWith('OPS_')) return TriangleAlert;
+  return Bell;
+}
+
 /** Icon + nhãn nhóm theo templateCode (§4.10). */
 export function notificationMeta(code: string): { Icon: LucideIcon; title: string } {
-  if (code.startsWith('ORDER_CONFIRMED')) return { Icon: CheckCircle2, title: 'Đơn đã xác nhận' };
-  if (code.startsWith('ORDER_SHIPPING')) return { Icon: Truck, title: 'Đang giao hàng' };
-  if (code.startsWith('ORDER_DELIVERED')) return { Icon: PackageCheck, title: 'Đã giao thành công' };
-  if (code === 'RETURN_REQUESTED') return { Icon: Undo2, title: 'Đã nhận yêu cầu đổi/trả' };
-  if (code.startsWith('RETURN_APPROVED')) return { Icon: CheckCircle2, title: 'Yêu cầu đổi/trả đã duyệt' };
-  if (code === 'RETURN_RECEIVED') return { Icon: PackageOpen, title: 'Tubu đã nhận lại hàng' };
-  if (code === 'RETURN_REJECTED') return { Icon: XCircle, title: 'Yêu cầu đổi/trả bị từ chối' };
-  if (code.startsWith('ORDER')) return { Icon: Receipt, title: 'Cập nhật đơn hàng' };
-  if (code.startsWith('INVOICE')) return { Icon: FileText, title: 'Hoá đơn điện tử' };
-  if (code.startsWith('COMMISSION')) return { Icon: Coins, title: 'Hoa hồng CTV' };
-  if (code.startsWith('CASHBACK')) return { Icon: ShoppingBag, title: 'Hoàn tiền' };
-  if (code.startsWith('BIRTHDAY') || code.startsWith('VOUCHER')) return { Icon: Gift, title: 'Ưu đãi cho bạn' };
-  if (code === 'REFERRAL_REWARD_PAID') return { Icon: UserPlus, title: 'Thưởng giới thiệu bạn bè' };
-  if (code === 'REFERRAL_MILESTONE_PAID') return { Icon: UserPlus, title: 'Thưởng mốc giới thiệu' };
-  if (code === 'REFERRAL_REWARD_REVOKED') return { Icon: UserPlus, title: 'Thu lại thưởng giới thiệu' };
-  if (code.startsWith('POINTS') || code === 'XU_CONVERTED') return { Icon: Leaf, title: 'Điểm Xanh' };
-  if (code.startsWith('STOREFRONT')) return { Icon: Store, title: 'Gian hàng của bạn' };
-  // REORDER_REMINDER (§6.14.7, LifecycleService.sendReorderReminders) — nhắc mua lại khi 1 SP đã
-  // qua ~chu kỳ tiêu dùng kể từ đơn DELIVERED gần nhất. Trước đây rơi về nhãn chung "Thông báo"
-  // (A1-01=A2-06=A3-02, cùng cụm lỗi với CTA thiếu ở dưới).
-  if (code.startsWith('REORDER_REMINDER')) return { Icon: Repeat, title: 'Nhắc mua lại' };
-  // Trong app mục này tên là "Ưu đãi giờ vàng" (vi.flashSale.sectionTitle) — thông báo gọi
-  // "Flash Sale" khiến khách vào app tìm mục không tồn tại.
-  if (code.startsWith('FLASH')) return { Icon: Zap, title: 'Ưu đãi giờ vàng' };
-  // DEALER_BONUS_PAID / DEALER_REWARD_CLAIM_* — thưởng doanh số & yêu cầu nhận thưởng đại lý.
-  if (code.startsWith('DEALER')) return { Icon: Store, title: 'Đại lý' };
-  if (code.startsWith('WASTE')) return { Icon: Recycle, title: 'Đổi rác lấy quà' };
-  if (code === 'SUPPORT_CHAT_REPLY') return { Icon: MessageCircle, title: 'Tubu Tree trả lời bạn' };
-  // OPS_* (vd OPS_GOMDON_ALERT) gửi tới tài khoản ADMIN; admin đăng nhập mini app vẫn thấy trong
-  // danh sách (listForUser không lọc theo mã) nên cần nhãn riêng thay vì "Thông báo" chung chung.
-  if (code.startsWith('OPS_')) return { Icon: TriangleAlert, title: 'Cảnh báo vận hành' };
-  return { Icon: Bell, title: 'Thông báo' };
+  return { Icon: notificationIcon(code), title: notificationTitle(code) };
 }
 
-/**
- * Có hiện nút "Xem chi tiết đơn hàng" không. Báo động OPS_* mang order_code của đơn KHÁCH KHÁC —
- * GET /orders/:code chỉ trả đơn của chính người xem (404 với admin), nên nút đó chỉ dẫn tới màn lỗi.
- */
-export function notificationOrderLink(templateCode: string, orderCode: unknown): boolean {
-  if (templateCode.startsWith('OPS_')) return false;
-  return templateCode.startsWith('ORDER') || !!orderCode;
-}
+export { notificationOrderLink };
 
-export type NotificationAction = { kind: 'reorder'; label: string } | { kind: 'link'; label: string; to: string };
+/** Câu thêm dưới nội dung tin (chỉ dẫn sang web khi Mini App không có màn tương ứng); null khi không cần. */
+export const notificationNote = (templateCode: string): string | null => coreNote(templateCode, 'miniapp');
 
-const enc = (v: string) => encodeURIComponent(v);
-
-/** Đường dẫn nội bộ an toàn: bắt đầu bằng "/" một lần (chặn "//host" và URL ngoài). */
-function internalRoute(v: unknown): string | null {
-  return typeof v === 'string' && v.startsWith('/') && !v.startsWith('//') ? v : null;
-}
-
-/** Tin chỉ gửi cho admin; việc xử lý nằm ở trang quản trị web, mini app không có màn tương ứng. */
-const ADMIN_ONLY_CODES = new Set(['DEALER_CREDIT_PAYMENT_REPORTED', 'DEALER_REWARD_CLAIM_NEW']);
+export type NotificationAction =
+  | { kind: 'reorder'; label: string }
+  | { kind: 'link'; label: string; to: string; state?: { reviewOrderId: string } };
 
 /**
  * Nút đi tiếp trong chi tiết thông báo, quyết định theo LOẠI tin (templateCode) và dữ liệu có cấu trúc
- * trong payload. Bản cũ dò từ khoá trong nội dung tin nên tin nói về sản phẩm bị dẫn nhầm sang Vườn Xanh,
- * còn tin giảm giá/cộng đồng không có nút.
+ * trong payload (luật chung với web ở app-core). `hasSubscription`: khách đã có gói định kỳ (đặt trên web), để tin gói có nút mở tab Định kỳ.
  */
-export function notificationAction(templateCode: string, data: Record<string, string> | undefined): NotificationAction | null {
-  const d = data ?? {};
-  if (templateCode.startsWith('OPS_') || ADMIN_ONLY_CODES.has(templateCode)) return null;
-  const orderCode = d.order_code ?? d.orderCode;
-  const productSlug = d.product_slug ?? d.productSlug;
-  const route = internalRoute(d.route);
-
-  if (templateCode.startsWith('REORDER_REMINDER')) return { kind: 'reorder', label: vi.reorder.reminderCta };
-  if (templateCode.startsWith('WASTE') || templateCode.startsWith('REFILL')) {
-    const requestId = d.request_id ?? d.requestId;
-    if (templateCode === 'WASTE_GIFT_CANCELLED') return { kind: 'link', label: 'Xem quà của tôi', to: '/rewards/mine' };
-    if (templateCode === 'WASTE_PERK_REVIEWED') return { kind: 'link', label: 'Mở màn nhận hàng', to: '/recycle/desk' };
-    if (templateCode === 'WASTE_POINTS_CREDITED' && requestId) return { kind: 'link', label: 'Xem kết quả', to: `/recycle/done/${enc(requestId)}` };
-    if (templateCode.startsWith('WASTE') && requestId) return { kind: 'link', label: 'Xem yêu cầu', to: `/recycle/r/${enc(requestId)}` };
-    return { kind: 'link', label: 'Mở Đổi rác lấy quà', to: '/recycle' };
-  }
-  if (notificationOrderLink(templateCode, orderCode)) {
-    return { kind: 'link', label: 'Xem chi tiết đơn hàng', to: orderCode ? `/order/${enc(orderCode)}` : '/orders' };
-  }
-  if (templateCode === 'SUPPORT_CHAT_REPLY') return { kind: 'link', label: 'Mở chat với Tubu Tree', to: '/chat' };
-  if (route) return { kind: 'link', label: 'Xem chi tiết', to: route };
-  if (templateCode.startsWith('FLASH')) {
-    // Không có slug thì về Trang chủ, nơi dải "Ưu đãi giờ vàng" đang hiển thị.
-    return { kind: 'link', label: 'Xem ưu đãi giờ vàng', to: productSlug ? `/product/${enc(productSlug)}` : '/' };
-  }
-  if (templateCode === 'PRICE_DROP_ALERT') {
-    return { kind: 'link', label: 'Xem sản phẩm', to: productSlug ? `/product/${enc(productSlug)}` : '/wishlist' };
-  }
-  if (templateCode.startsWith('COMMUNITY_')) {
-    const postId = d.post_id ?? d.postId;
-    return { kind: 'link', label: 'Xem trong Cộng đồng', to: postId ? `/feed/${enc(postId)}` : '/feed' };
-  }
-  if (templateCode.startsWith('GAME_')) return { kind: 'link', label: 'Đến Vườn Xanh', to: '/game' };
-  if (templateCode === 'CART_ABANDONED') return { kind: 'link', label: 'Xem giỏ hàng', to: '/cart' };
-  if (templateCode.endsWith('_VOUCHER') || templateCode.startsWith('VOUCHER')) {
-    return { kind: 'link', label: 'Xem mã giảm giá', to: '/loyalty' };
-  }
-  if (templateCode.startsWith('POINTS') || templateCode === 'XU_CONVERTED' || templateCode.startsWith('REFERRAL_')) {
-    return { kind: 'link', label: 'Xem Điểm Xanh', to: '/loyalty' };
-  }
-  if (templateCode.startsWith('CASHBACK')) return { kind: 'link', label: 'Xem Ví Tubu', to: '/wallet' };
-  if (templateCode.startsWith('SUBSCRIPTION')) {
-    // Mini App tạm không có màn định kỳ: /subscriptions sẽ rơi về tab Tất cả của Đơn hàng, nên không gắn nút.
-    return SUBSCRIPTIONS_IN_MINIAPP ? { kind: 'link', label: 'Xem gói định kỳ', to: '/subscriptions' } : null;
-  }
-  if (templateCode.startsWith('STOREFRONT')) return { kind: 'link', label: 'Thêm vào gian hàng', to: '/storefront' };
-  if (templateCode.startsWith('DEALER')) return { kind: 'link', label: 'Mở trang Đại lý', to: '/dealer' };
-  // Nhóm hết hạn không đủ người: về trang sản phẩm, nơi vừa mua được với giá thường vừa mở được nhóm mới.
-  if (templateCode === 'GROUP_BUY_FAILED' && productSlug) {
-    return { kind: 'link', label: 'Xem sản phẩm', to: `/product/${enc(productSlug)}` };
-  }
-  if (templateCode.startsWith('GROUP_BUY')) return { kind: 'link', label: 'Xem mua chung', to: '/group-buy' };
-  return null;
+export function notificationAction(
+  templateCode: string,
+  data: Record<string, string> | undefined,
+  opts: { hasSubscription?: boolean } = {},
+): NotificationAction | null {
+  const a = coreAction(templateCode, data, { platform: 'miniapp', hasSubscription: opts.hasSubscription || SUBSCRIPTIONS_IN_MINIAPP });
+  if (!a || a.kind === 'direct') return null;
+  if (a.kind === 'reorder') return { kind: 'reorder', label: vi.reorder.reminderCta };
+  if (a.kind === 'review') return { kind: 'link', label: a.label, to: `/product/${encodeURIComponent(a.productSlug)}`, state: { reviewOrderId: a.orderId } };
+  return a;
 }
 
 function relativeTime(iso: string): string {
@@ -184,8 +141,18 @@ export default function NotificationsPage() {
   // fetch ngay sẽ 401 và (retry:false cho 4xx) kẹt màn lỗi vĩnh viễn dù ~200ms sau đã có phiên.
   // Mọi trang /me/* khác đều đã gate như vậy; riêng đây bị sót.
   const phase = useAuthPhase();
-  const notifQ = useQuery({ queryKey: ['notifications'], queryFn: getNotifications, enabled: phase === 'authenticated' });
+  const notifQ = useInfiniteQuery({
+    ...notificationsInfiniteQuery(coreHttp),
+    initialPageParam: undefined as NotificationCursor | undefined,
+    getNextPageParam: (lastPage) => nextNotificationCursor(lastPage),
+    enabled: phase === 'authenticated',
+  });
+  const list = notifQ.data?.pages.flat();
+  // Đếm chưa đọc của cả hộp thư: tin chưa đọc có thể nằm ngoài các trang đã nạp.
+  const unreadQ = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: phase === 'authenticated' });
   selectedIdRef.current = selectedNotif?.id ?? null;
+  // Tin gói định kỳ chỉ có nút "Xem gói" khi khách đã có gói (đặt trên web): tra khi mở đúng loại tin đó.
+  const { hasSubscription } = useHasSubscription(phase === 'authenticated' && !!selectedNotif?.templateCode.startsWith('SUBSCRIPTION'));
 
   const readMut = useMutation({
     mutationFn: (id: string) => markNotificationRead(id),
@@ -199,7 +166,7 @@ export default function NotificationsPage() {
     mutationFn: () => markAllNotificationsRead(),
     onSettled: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
   });
-  const unreadCount = notifQ.data?.filter((n) => n.status !== 'READ').length ?? 0;
+  const unreadCount = unreadQ.data?.count ?? list?.filter((n) => n.status !== 'READ').length ?? 0;
 
   // Sync với popstate (nút back cứng / vuốt back của Zalo) để đóng detail overlay khi back
   useEffect(() => {
@@ -213,6 +180,16 @@ export default function NotificationsPage() {
       window.removeEventListener('popstate', handlePopState);
     };
   }, [selectedNotif]);
+
+  // Mở chi tiết đã đẩy một mục lịch sử (notifDetail) để nút back cứng đóng được lớp phủ. Đi tiếp thì thay đúng mục đó
+  // bằng màn đích, nếu không lùi từ màn đích phải qua thêm hai lần mới ra khỏi trang thông báo.
+  const goFromDetail = (to: string, state?: unknown) => {
+    const inDetail = Boolean(window.history.state?.notifDetail);
+    setSelectedNotif(null);
+    if (inDetail) navigate(to, { replace: true, state });
+    else if (state !== undefined) navigate(to, { state });
+    else navigate(to);
+  };
 
   const handleCloseDetail = () => {
     haptic('light');
@@ -241,9 +218,10 @@ export default function NotificationsPage() {
       // Khách đã đóng chi tiết / đổi sang thông báo khác / rời trang trong lúc tra cứu → không mở sheet hay điều hướng muộn.
       if (!mountedRef.current || selectedIdRef.current !== n.id) return;
       const action = reorderReminderAction(n.payload.data, item);
-      setSelectedNotif(null);
-      if (action.kind === 'sheet') setReorderTarget(itemReorderTarget(action.item));
-      else navigate(action.to);
+      if (action.kind === 'sheet') {
+        setSelectedNotif(null);
+        setReorderTarget(itemReorderTarget(action.item));
+      } else goFromDetail(action.to);
     } finally {
       // Luôn trả cờ bận (kể cả khi tracking/haptic ném lỗi) để CTA không chết vĩnh viễn.
       reminderBusyRef.current = false;
@@ -295,9 +273,9 @@ export default function NotificationsPage() {
           </div>
         ) : notifQ.isError && !notifQ.data ? (
           <ErrorState message={getLoadErrorMessage(notifQ.error)} onRetry={() => void notifQ.refetch()} />
-        ) : notifQ.data && notifQ.data.length > 0 ? (
+        ) : list && list.length > 0 ? (
           <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {notifQ.data.map((n) => {
+            {list.map((n) => {
               const m = notificationMeta(n.templateCode);
               const unread = n.status !== 'READ';
               return (
@@ -346,6 +324,25 @@ export default function NotificationsPage() {
                 </div>
               );
             })}
+            {notifQ.isFetchNextPageError && (
+              <div role="alert" style={{ textAlign: 'center' }}>
+                <Text variant="body-sm" tone="danger">
+                  Không tải thêm được thông báo. Vui lòng thử lại.
+                </Text>
+              </div>
+            )}
+            {notifQ.hasNextPage && (
+              <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 4 }}>
+                <DsButton
+                  variant="secondary"
+                  loading={notifQ.isFetchingNextPage}
+                  onPress={() => void notifQ.fetchNextPage()}
+                  style={{ minWidth: 160 }}
+                >
+                  Xem thêm
+                </DsButton>
+              </div>
+            )}
           </div>
         ) : (
           <EmptyState
@@ -397,7 +394,8 @@ export default function NotificationsPage() {
             {(() => {
               const m = notificationMeta(selectedNotif.templateCode);
               const bodyText = selectedNotif.payload.body || '';
-              const action = notificationAction(selectedNotif.templateCode, selectedNotif.payload.data);
+              const action = notificationAction(selectedNotif.templateCode, selectedNotif.payload.data, { hasSubscription });
+              const note = notificationNote(selectedNotif.templateCode);
 
               return (
                 <Card padding={16}>
@@ -421,6 +419,11 @@ export default function NotificationsPage() {
                     <Text variant="body-sm" as="div" style={{ lineHeight: 1.6, whiteSpace: 'pre-line' }}>
                       {bodyText}
                     </Text>
+                    {note && (
+                      <Text variant="body-sm" tone="secondary" as="div" style={{ lineHeight: 1.6 }}>
+                        {note}
+                      </Text>
+                    )}
 
                     {action?.kind === 'reorder' && (
                       <DsButton
@@ -439,8 +442,7 @@ export default function NotificationsPage() {
                         size="lg"
                         onPress={() => {
                           haptic('light');
-                          setSelectedNotif(null);
-                          navigate(action.to);
+                          goFromDetail(action.to, action.state);
                         }}
                         style={{ marginTop: 8 }}
                       >

@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
-import { markAllNotificationsRead, markNotificationRead, type NotificationDTO } from '@tubutree/app-core/api/account';
+import { markAllNotificationsRead, markNotificationRead, type NotificationCursor, type NotificationDTO } from '@tubutree/app-core/api/account';
 import { fetchPurchasedItems } from '@tubutree/app-core/api/orders';
-import { notificationsQuery } from '@tubutree/app-core/queries/account';
+import { nextNotificationCursor, notificationsInfiniteQuery, unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
 import { notificationAction, notificationMeta, relativeTime } from '@/components/account/notification-view';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
@@ -59,7 +59,15 @@ export default function NotificationsPage() {
     };
   }, []);
   selectedIdRef.current = selected?.id ?? null;
-  const notifQ = useQuery({ ...notificationsQuery(coreHttp), enabled: phase === 'authenticated' });
+  const notifQ = useInfiniteQuery({
+    ...notificationsInfiniteQuery(coreHttp),
+    initialPageParam: undefined as NotificationCursor | undefined,
+    getNextPageParam: (lastPage) => nextNotificationCursor(lastPage),
+    enabled: phase === 'authenticated',
+  });
+  const list = notifQ.data?.pages.flat();
+  // Đếm chưa đọc của cả hộp thư: tin chưa đọc có thể nằm ngoài các trang đã nạp.
+  const unreadQ = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: phase === 'authenticated' });
 
   // onSettled: đánh dấu đã đọc hỏng thì số chưa đọc sai mãi mà không có tín hiệu nào; nạp lại cả hai trường hợp, không báo lỗi vì là thao tác nền.
   const readMut = useMutation({
@@ -70,7 +78,7 @@ export default function NotificationsPage() {
     mutationFn: () => markAllNotificationsRead(coreHttp),
     onSettled: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
   });
-  const unreadCount = notifQ.data?.filter((n) => n.status !== 'READ').length ?? 0;
+  const unreadCount = unreadQ.data?.count ?? list?.filter((n) => n.status !== 'READ').length ?? 0;
 
   const onTap = (n: NotificationDTO) => {
     if (n.status !== 'READ') readMut.mutate(n.id);
@@ -143,7 +151,7 @@ export default function NotificationsPage() {
       </div>,
     );
   }
-  if (!notifQ.data || notifQ.data.length === 0) {
+  if (!list || list.length === 0) {
     return shell(<MiniEmptyState art="leaf" heading="Chưa có thông báo nào" body="Cập nhật đơn hàng và ưu đãi sẽ hiện ở đây." />);
   }
 
@@ -165,7 +173,7 @@ export default function NotificationsPage() {
         )}
       </div>
       <ul className="mt-4 grid gap-2">
-        {notifQ.data.map((n) => {
+        {list.map((n) => {
           const m = notificationMeta(n.templateCode);
           const unread = n.status !== 'READ';
           return (
@@ -193,6 +201,18 @@ export default function NotificationsPage() {
           );
         })}
       </ul>
+      {notifQ.isFetchNextPageError && (
+        <p role="alert" className={`mt-2 text-center ${ui.error}`}>
+          Không tải thêm được thông báo. Vui lòng thử lại.
+        </p>
+      )}
+      {notifQ.hasNextPage && (
+        <div className="mt-3 text-center">
+          <button type="button" disabled={notifQ.isFetchingNextPage} onClick={() => void notifQ.fetchNextPage()} className={`${ui.btnSecondary} min-w-40`}>
+            {notifQ.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm'}
+          </button>
+        </div>
+      )}
 
       <Sheet open={selected !== null} onClose={() => setSelected(null)} title="Chi tiết thông báo">
         {selected && <Detail n={selected} busy={reminderBusy} onNavigate={() => setSelected(null)} onReorder={(to) => void openReorderReminder(selected, to)} />}
