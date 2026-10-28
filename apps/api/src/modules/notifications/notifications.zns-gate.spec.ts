@@ -9,13 +9,13 @@ const AT_0200_VN = new Date('2026-10-20T19:00:00.000Z');
 const AT_1200_VN = new Date('2026-10-20T05:00:00.000Z');
 const HOUR = 3_600_000;
 
-function setup(opts: { templateCode: string; promoCountThisMonth?: number; config?: Record<string, unknown> }) {
+function setup(opts: { templateCode: string; promoCountThisMonth?: number; config?: Record<string, unknown>; template?: Record<string, unknown> | null }) {
   let seq = 0;
   const create = jest.fn().mockImplementation(async () => ({ id: `log-${++seq}` }));
   const count = jest.fn().mockResolvedValue(opts.promoCountThisMonth ?? 0);
   const prisma = {
     notificationTemplate: {
-      findUnique: jest.fn().mockResolvedValue({ code: opts.templateCode, channel: 'ZNS', bodyTemplate: 'x', zaloTemplateId: 'zt-1' }),
+      findUnique: jest.fn().mockResolvedValue(opts.template !== undefined ? opts.template : { code: opts.templateCode, channel: 'ZNS', bodyTemplate: 'x', zaloTemplateId: 'zt-1' }),
     },
     user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0900000000', notifyPromo: true, notifyGarden: true }) },
     notificationLog: { create, count, findFirst: jest.fn().mockResolvedValue(null), update: jest.fn() },
@@ -142,5 +142,25 @@ describe('NotificationsService: trần tin ZNS khuyến mãi/hậu mãi mỗi kh
     });
     await svc.notify('u1', 'WINBACK_VOUCHER', {});
     expect(channels()).toEqual(['INAPP']);
+  });
+});
+
+describe('NotificationsService.notify: opts.znsTemplateId (mã mẫu ZNS lấy từ cấu hình của nơi gọi)', () => {
+  beforeEach(() => jest.useFakeTimers().setSystemTime(AT_1200_VN));
+  afterEach(() => jest.useRealTimers());
+
+  it('mẫu chỉ có kênh INAPP: không có mã ZNS thì chỉ ghi tin trong app', async () => {
+    const { svc, add, channels } = setup({ templateCode: 'TIER_DROP_NOTICE', template: { code: 'TIER_DROP_NOTICE', channel: 'INAPP', bodyTemplate: 'x', zaloTemplateId: null } });
+    await svc.notify('u1', 'TIER_DROP_NOTICE', { tier: 'A' });
+    expect(channels()).toEqual(['INAPP']);
+    expect(add).not.toHaveBeenCalled();
+  });
+
+  it('mẫu chỉ có kênh INAPP nhưng nơi gọi truyền mã ZNS: ghi thêm tin ZNS và xếp job với mã đó', async () => {
+    const { svc, add, channels } = setup({ templateCode: 'TIER_DROP_NOTICE', template: { code: 'TIER_DROP_NOTICE', channel: 'INAPP', bodyTemplate: 'x', zaloTemplateId: null } });
+    await svc.notify('u1', 'TIER_DROP_NOTICE', { tier: 'A' }, { znsTemplateId: '998877' });
+    expect(channels()).toEqual(['INAPP', 'ZNS']);
+    expect(add).toHaveBeenCalledTimes(1);
+    expect((add.mock.calls[0] as unknown[][])[1]).toMatchObject({ templateId: '998877' });
   });
 });

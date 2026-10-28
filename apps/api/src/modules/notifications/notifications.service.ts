@@ -98,7 +98,7 @@ export class NotificationsService {
     userId: string,
     templateCode: string,
     data: Record<string, string>,
-    opts: { dedupeKey?: string; dedupeWithinMs?: number } = {},
+    opts: { dedupeKey?: string; dedupeWithinMs?: number; znsTemplateId?: string } = {},
   ): Promise<void> {
     const dedupeKey = opts.dedupeKey;
     const withinMs = opts.dedupeWithinMs != null && opts.dedupeWithinMs > 0 ? opts.dedupeWithinMs : null;
@@ -148,9 +148,11 @@ export class NotificationsService {
       props: { templateCode, channel: 'INAPP' },
     });
 
-    // ZNS nếu template là kênh ZNS + user có phone.
-    if (tpl?.channel === 'ZNS' && user?.phone && tpl.zaloTemplateId) {
-      await this.dispatchZns(userId, templateCode, user.phone, tpl.zaloTemplateId, data);
+    // ZNS nếu template là kênh ZNS + user có phone. `opts.znsTemplateId` (mã mẫu ZNS lấy từ cấu hình của nơi gọi) chỉ dùng khi
+    // mẫu chưa gắn mã ZNS riêng.
+    const znsTemplateId = (tpl?.channel === 'ZNS' && tpl.zaloTemplateId) || opts.znsTemplateId || null;
+    if (user?.phone && znsTemplateId) {
+      await this.dispatchZns(userId, templateCode, user.phone, znsTemplateId, data);
     }
   }
 

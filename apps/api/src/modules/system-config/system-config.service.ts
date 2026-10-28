@@ -213,6 +213,7 @@ export class SystemConfigService {
     // (bán kính chấm công âm, ô vườn mục tiêu âm, giới hạn quay vô hạn). Phía đọc không kẹp lại, nên chặn ngay lúc ghi.
     // config-numeric-ranges.spec.ts buộc mọi khoá số được seed phải có luật ở đây hoặc ở admin-config-rules.
     'loyalty.point_expiry_reminder_days': { min: 0, max: 90, note: 'số ngày báo trước điểm sắp hết hạn (0 = không nhắc)', integer: true },
+    'loyalty.tier_drop_notice_days': { min: 0, max: 365, note: 'báo khách trước khi hạ hạng khi hạn giữ hạng còn ≤ N ngày (0 = không báo)', integer: true },
     'loyalty.tier_grace_days': { min: 0, max: 365, note: 'số ngày giữ hạng khi rớt mốc (0 = rớt hạng ngay)', integer: true },
     'cashback.click_rate_limit_seconds': { min: 0, max: 3600, note: 'số giây giữa hai lần bấm cùng sàn (0 = không giới hạn)', integer: true },
     'cashback.reconcile_lookback_days': { min: 1, max: 365, note: 'số ngày kéo lại giao dịch đối soát', integer: true },

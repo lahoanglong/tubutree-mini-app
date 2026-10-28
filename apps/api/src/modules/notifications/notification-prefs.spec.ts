@@ -40,6 +40,7 @@ describe('Phân loại tin (C-022)', () => {
     'WINBACK_VOUCHER',
     'SECOND_ORDER_VOUCHER',
     'REORDER_REMINDER',
+    'TIER_DROP_NOTICE',
     'STOREFRONT_TRENDING_PRODUCTS',
   ])('%s là tin khuyến mãi', (code) => {
     expect(notificationCategory(code)).toBe('PROMO');
