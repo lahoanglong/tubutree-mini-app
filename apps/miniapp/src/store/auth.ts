@@ -122,8 +122,8 @@ async function tryZaloLogin(ref: string | undefined, firstTouch: Awaited<ReturnT
     await persistRefresh(res.refreshToken);
     return { kind: 'ok', res };
   } catch (err) {
+    // Khoá là kết luận chắc chắn, không phải lỗi tạm: kể cả khi đang đăng nhập sẵn cũng phải bỏ phiên và báo khách.
     if (isAccountBlocked(err)) {
-      if (keepSession) return { kind: 'stop' };
       await applyBlocked(err);
       return { kind: 'stop' };
     }
@@ -259,10 +259,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ user: res.user, status: 'authenticated' });
       } catch (err) {
         // Guest fallback fail = lỗi mạng/server/CORS (không phải "chưa đăng nhập") → set 'error' + câu tiếng Việt
-        // để UI báo đúng "mất kết nối, thử lại" thay vì 'idle' im lặng (mất ngữ cảnh). Chỉ khi chưa có phiên nào để giữ.
-        if (keepSession) return;
+        // để UI báo đúng "mất kết nối, thử lại" thay vì 'idle' im lặng (mất ngữ cảnh). Chỉ khi chưa có phiên nào để giữ; khoá thì luôn báo.
         if (isAccountBlocked(err)) await applyBlocked(err);
-        else set({ status: 'error', error: vi.errors.sessionUnavailable });
+        else if (!keepSession) set({ status: 'error', error: vi.errors.sessionUnavailable });
       }
     })();
     setAuthReady(done);
@@ -289,14 +288,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!current) return null;
     const phoneToken = await requestZaloPhoneToken();
     if (!phoneToken) return null;
-    const { code, accessToken } = await getZaloAccessToken();
+    // Zalo không khả dụng (ngoài Zalo, -1401) thì không liên kết được: coi như khách không cho phép, không phải lỗi máy chủ.
+    let creds: Awaited<ReturnType<typeof getZaloAccessToken>>;
+    try {
+      creds = await getZaloAccessToken();
+    } catch {
+      return null;
+    }
     // A7-01 (audit 2026-09): KHÔNG gọi loginZaloMiniApp() ở đây — đó là đăng nhập TỪ ĐẦU,
     // không biết phiên hiện tại là ai nên có thể âm thầm trả token của MỘT USER KHÁC (đúng
     // lỗi đang vá: khách bị đổi sang tài khoản Zalo khác đang đăng nhập trên máy, bỏ lại
     // giỏ/địa chỉ/điểm của phiên khách). ensurePhoneApi() gửi kèm access token CỦA PHIÊN
     // HIỆN TẠI (interceptor tự đính Authorization) — BE biết chính xác đang là ai và chỉ đổi
     // danh tính khi an toàn (nâng cấp tại chỗ hoặc gộp khách→Zalo), không bao giờ âm thầm.
-    const res = await ensurePhoneApi(code, accessToken, phoneToken);
+    const res = await ensurePhoneApi(creds.code, creds.accessToken, phoneToken);
     setAccessToken(res.accessToken);
     await persistRefresh(res.refreshToken);
     set({ user: res.user, status: 'authenticated' });

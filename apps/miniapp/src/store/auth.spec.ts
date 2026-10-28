@@ -479,6 +479,38 @@ describe('restore() — tài khoản bị khoá lúc có refresh token', () => {
     expect(useAuthStore.getState().status).toBe('authenticated');
     expect(useAuthStore.getState().user?.id).toBe('u-keep');
   });
+
+  it('đang đăng nhập mà tài khoản bị khoá giữa phiên (refresh + Zalo login đều ACCOUNT_BLOCKED) → về idle kèm lời khoá, không giữ user', async () => {
+    useAuthStore.setState({ user: loginResponse('u-keep', 'z1').user, status: 'authenticated', error: undefined });
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored' });
+    mockedRefresh.mockRejectedValue(blocked());
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockRejectedValue(blocked());
+
+    await useAuthStore.getState().restore();
+
+    expect(mockedLoginGuest).not.toHaveBeenCalled();
+    const s = useAuthStore.getState();
+    expect(s.status).toBe('idle');
+    expect(s.user).toBeNull();
+    expect(s.error).toContain('bị khoá');
+    expect(mockedRemoveStorage).toHaveBeenCalled();
+  });
+
+  it('đang đăng nhập, ngoài Zalo, tài khoản khách bị khoá giữa phiên (loginGuest ACCOUNT_BLOCKED) → về idle kèm lời khoá', async () => {
+    useAuthStore.setState({ user: loginResponse('g-keep').user, status: 'authenticated', error: undefined });
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored' });
+    mockedRefresh.mockRejectedValue(blocked());
+    mockedGetZaloAccessToken.mockRejectedValue(Object.assign(new Error('not in zalo'), { code: -1401 }));
+    mockedLoginGuest.mockRejectedValue(blocked());
+
+    await useAuthStore.getState().restore();
+
+    const s = useAuthStore.getState();
+    expect(s.status).toBe('idle');
+    expect(s.user).toBeNull();
+    expect(s.error).toContain('bị khoá');
+  });
 });
 
 describe('useAuthStore.ensurePhoneOrThrow — lỗi liên kết Zalo không bị nuốt (E-13)', () => {
@@ -502,6 +534,13 @@ describe('useAuthStore.ensurePhoneOrThrow — lỗi liên kết Zalo không bị
 
     await expect(useAuthStore.getState().ensurePhoneOrThrow()).resolves.toBeNull();
     expect(mockedRequestZaloPhoneToken).not.toHaveBeenCalled();
+    expect(mockedEnsurePhoneApi).not.toHaveBeenCalled();
+  });
+
+  it('Zalo không khả dụng (getZaloAccessToken ném -1401) → trả null như khi khách từ chối, không gọi API', async () => {
+    mockedGetZaloAccessToken.mockRejectedValue(Object.assign(new Error('app chua kich hoat'), { code: -1401 }));
+
+    await expect(useAuthStore.getState().ensurePhoneOrThrow()).resolves.toBeNull();
     expect(mockedEnsurePhoneApi).not.toHaveBeenCalled();
   });
 
