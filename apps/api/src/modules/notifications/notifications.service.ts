@@ -331,6 +331,9 @@ export class NotificationsService {
     const where = { id: job.notificationLogId };
     const current = await this.prisma.notificationLog.findUnique({ where, select: { status: true } });
     if (current?.status === 'SENT') return 'SENT';
+    // FAILED là trạng thái cuối (lượt thử lại hợp lệ đi qua RETRYING). Log FAILED mà job vẫn chạy là lần xếp hàng báo lỗi dù Redis đã nhận:
+    // khoá đã nhả để lượt sau gửi lại, nên gửi tiếp ở đây là gửi đôi.
+    if (current?.status === 'FAILED') return 'FAILED';
 
     const result = await this.zns.sendTemplate(job.phone, job.templateId, job.templateData, job.notificationLogId);
     if (result.ok) {

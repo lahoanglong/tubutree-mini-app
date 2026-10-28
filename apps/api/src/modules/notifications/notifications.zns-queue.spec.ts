@@ -90,6 +90,21 @@ describe('NotificationsService.deliverZns', () => {
     expect(await svc.deliverZns(JOB, false)).toBe('SENT');
     expect(sendTemplate).not.toHaveBeenCalled();
   });
+
+  // withQueueTimeout báo lỗi dù Redis đã nhận job: log bị đổi FAILED (và nhả khoá) nhưng job vẫn chạy. Gửi tiếp thì khách nhận đôi khi lượt
+  // gửi lại sau tạo log mới.
+  it('log đã FAILED (xếp hàng báo lỗi nhưng job vẫn vào hàng) → job chạy muộn không gửi ZNS', async () => {
+    const { svc, sendTemplate, update } = setup({ status: 'FAILED' });
+    expect(await svc.deliverZns(JOB, false)).toBe('FAILED');
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it.each(['PENDING', 'RETRYING'])('log %s → vẫn gửi (lượt đầu và lượt thử lại hợp lệ)', async (status) => {
+    const { svc, sendTemplate } = setup({ status });
+    expect(await svc.deliverZns(JOB, false)).toBe('SENT');
+    expect(sendTemplate).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('NotificationsService: tin báo trước hạ hạng gửi lại ZNS sau khi lần trước hỏng (retryZns)', () => {
