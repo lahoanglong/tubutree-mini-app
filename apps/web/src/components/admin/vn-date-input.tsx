@@ -185,9 +185,12 @@ export function VnDateTimeInput({
   const parsed = splitDateTime(value);
   const [held, setHeld] = useState(() => (parsed ? { hh: parsed.hh, mm: parsed.mm } : { hh: '00', mm: '00' }));
   // Cha đổi giá trị từ ngoài thì giờ chờ theo: xoá ngày rồi gõ lại vẫn ghép với giờ đang có, không rơi về 00:00.
+  const parsedHh = parsed?.hh;
+  const parsedMm = parsed?.mm;
   useEffect(() => {
-    if (parsed) setHeld((h) => (h.hh === parsed.hh && h.mm === parsed.mm ? h : { hh: parsed.hh, mm: parsed.mm }));
-  }, [parsed?.hh, parsed?.mm]);
+    if (parsedHh === undefined || parsedMm === undefined) return;
+    setHeld((h) => (h.hh === parsedHh && h.mm === parsedMm ? h : { hh: parsedHh, mm: parsedMm }));
+  }, [parsedHh, parsedMm]);
   const hh = parsed?.hh ?? held.hh;
   const mm = parsed?.mm ?? held.mm;
   const date = parsed?.date ?? '';
