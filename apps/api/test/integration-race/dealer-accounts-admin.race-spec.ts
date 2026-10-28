@@ -84,7 +84,9 @@ describe('DealerAccountsAdminService (real Postgres)', () => {
       const id = newTierId();
       const admin = await createUser(prisma, { role: 'ADMIN' });
       await svc.createTier(admin.id, { id, ...tierBody });
-      const limits = [1, 2, 3, 4, 5, 6].map((n) => n * 1_000_000);
+      // Không có hạn mức nào bằng giá trị đang lưu: lưu form không đổi gì thì trả thành công mà không ghi, nên sẽ thành người thắng thứ hai.
+      const limits = [1, 2, 3, 4, 6, 7].map((n) => n * 1_000_000);
+      expect(limits).not.toContain(tierBody.creditLimit);
       const results = await Promise.allSettled(limits.map((creditLimit, i) => svc.updateTier(`admin-${i}`, id, { ...tierBody, creditLimit }, tierBody)));
       const s = summarize(results);
       expect(s.fulfilled).toHaveLength(1);
