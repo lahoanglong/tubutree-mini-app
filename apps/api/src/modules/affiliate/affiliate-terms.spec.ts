@@ -1,9 +1,9 @@
 import 'reflect-metadata';
+import { BadRequestException } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { AffiliateService } from './affiliate.service';
+import { AFFILIATE_REAL_USER_REQUIRED_MSG, AffiliateService } from './affiliate.service';
 import { RegisterAffiliateDto } from './dto/register-affiliate.dto';
-import { REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { PricingService } from '../pricing/pricing.service';
@@ -119,7 +119,11 @@ describe('AffiliateService.register — ghi nhận đồng ý điều khoản CT
 describe('AffiliateService.register — khách vãng lai không thành CTV (CTV-03)', () => {
   it('tài khoản khách (zaloId guest_, chưa có SĐT) → 400, không ghi vai trò, không ghi điều khoản', async () => {
     const { svc, update } = makeService({ id: 'g1', role: 'CUSTOMER', referralCode: 'G1', phone: null, zaloId: 'guest_dev-1', metadata: null });
-    await expect(svc.register('g1', '2026-10')).rejects.toThrow(REAL_USER_REQUIRED_MSG);
+    const err = await svc.register('g1', '2026-10').catch((e: unknown) => e as Error);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as Error).message).toBe(AFFILIATE_REAL_USER_REQUIRED_MSG);
+    expect((err as Error).message).toContain('đăng ký CTV');
+    expect((err as Error).message).not.toContain('Ưu đãi');
     expect(update).not.toHaveBeenCalled();
   });
 

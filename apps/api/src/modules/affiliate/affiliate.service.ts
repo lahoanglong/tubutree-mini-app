@@ -15,7 +15,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { Env } from '../../config/env.validation';
 import { hashIp } from '../../common/ip-hash';
 import { notifyAdmins } from '../../common/notify-admins';
-import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
+import { isRealUser } from '../../common/real-user';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { PricingService } from '../pricing/pricing.service';
@@ -99,6 +99,9 @@ export const DEFAULT_PIT_WITHHOLD_PCT = 0.1;
 export const DEFAULT_PIT_WITHHOLD_THRESHOLD = 5_000_000;
 /** Chính sách Zalo 4.5 cấm rút tiền/trả thưởng: hoa hồng chỉ đi một đường, vào Ví Tubu 1:1. */
 export const WALLET_ONLY_MESSAGE = 'Hoa hồng chỉ chuyển vào Ví Tubu để mua hàng.';
+/** Đăng ký CTV không phải ưu đãi: câu chung của real-user.ts nói "Ưu đãi", sẽ lạc ngữ cảnh ở màn đăng ký. */
+export const AFFILIATE_REAL_USER_REQUIRED_MSG =
+  'Cần liên kết Zalo hoặc số điện thoại để đăng ký CTV. Bạn bấm Đăng ký lại và cho phép dùng số điện thoại nhé.';
 export const PIT_TAX_ID_REQUIRED = 'PIT_TAX_ID_REQUIRED';
 const PIT_MONTH_LOCK = 'affiliate.pit_month';
 /** MST cá nhân 10 số (hoặc 10-3 của MST phụ thuộc), hoặc số CCCD 12 số (dùng làm MST cá nhân từ 1/7/2025). */
@@ -135,7 +138,7 @@ export class AffiliateService {
       throw new BadRequestException('Tài khoản này không thể đăng ký CTV.');
     }
     // Khách theo deviceId tạo được vô hạn: hoa hồng và Ví chỉ dành cho tài khoản đã có Zalo thật hoặc SĐT.
-    if (!isRealUser(user)) throw new BadRequestException(REAL_USER_REQUIRED_MSG);
+    if (!isRealUser(user)) throw new BadRequestException(AFFILIATE_REAL_USER_REQUIRED_MSG);
     const data: Prisma.UserUpdateInput = {};
     if (user.role !== 'AFFILIATE') data.role = 'AFFILIATE';
     // Bằng chứng người dùng đã đồng ý điều khoản hoa hồng/thuế: ghi vào User.metadata (đã dùng cho
