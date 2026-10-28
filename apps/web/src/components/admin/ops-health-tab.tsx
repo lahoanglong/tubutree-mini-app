@@ -121,6 +121,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'LoyaltyExpiryService.expirePoints': 'Thu hồi điểm đã hết hạn',
   'LoyaltyExpiryService.remindExpiringPoints': 'Nhắc khách điểm sắp hết hạn',
   'LoyaltyCron.recalcTiers': 'Tính lại hạng thành viên',
+  'TierDropNoticeService.runDaily': 'Báo trước khi hạ hạng',
   'merchant.sla-reminder': 'Nhắc đối tác các đơn tự giao quá hạn (có báo khách)',
   'ops.health-alert': 'Kiểm tra sức khoẻ hệ thống và báo động',
   'orders.delivered-effects-resync': 'Chạy lại việc sau giao (cộng điểm, khoá hoa hồng, thưởng giới thiệu) cho đơn bị sót',
