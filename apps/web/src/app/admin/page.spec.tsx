@@ -3533,14 +3533,14 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(badge('Hôm nay')).toBeDefined();
   });
 
-  it('thẻ đơn chuyển khoản chờ xác nhận tiền mở tab Đơn hàng đã lọc "Chờ thanh toán" + "Chưa thanh toán", cũ nhất trước', async () => {
+  it('thẻ đơn chuyển khoản chờ xác nhận tiền mở tab Đơn hàng đúng hàng đợi (đơn lẻ chuyển khoản chưa trả), cũ nhất trước', async () => {
     const { container } = await mount();
     const card = container.querySelector('[data-inbox="bankTransferToConfirm"]')!;
     expect(card.textContent).toContain('còn 6 giờ trước khi tự huỷ');
     click(card);
     await flush();
     expect(window.location.search).toBe('?tab=orders');
-    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, 'PENDING_PAYMENT', undefined, undefined, 20, undefined, undefined, undefined, undefined, { payment: 'UNPAID', order: 'asc' });
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, 'PENDING_PAYMENT', undefined, undefined, 20, undefined, undefined, undefined, undefined, { queue: 'bank_transfer_to_confirm', order: 'asc' });
   });
 
   it('thẻ gian hàng chờ duyệt và sản phẩm thiếu ảnh mở đúng tab', async () => {

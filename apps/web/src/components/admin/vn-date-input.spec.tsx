@@ -25,6 +25,10 @@ describe('helper ngày dd/mm/yyyy', () => {
     expect(maskVnDate('03102026')).toBe('03/10/2026');
     expect(maskVnDate('03a10b20261234')).toBe('03/10/2026');
     expect(maskVnDate('1')).toBe('1');
+    expect(maskVnDate('3/10/2026')).toBe('03/10/2026');
+    expect(maskVnDate('3/')).toBe('03/');
+    expect(maskVnDate('3.1.2026')).toBe('03/01/2026');
+    expect(maskVnDate('03/1')).toBe('03/1');
   });
 });
 

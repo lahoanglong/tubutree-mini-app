@@ -9,8 +9,19 @@ export function isoToVn(iso: string): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
 }
 
-/** Gõ số liền nhau cũng được: "03102026" -> "03/10/2026". Bỏ ký tự lạ, tối đa 8 số. */
+/**
+ * Gõ số liền nhau cũng được ("03102026" -> "03/10/2026"), hoặc gõ có dấu ngăn mà không cần đệm số 0 ("3/10/2026" -> "03/10/2026").
+ * Bỏ ký tự lạ, tối đa 8 số.
+ */
 export function maskVnDate(raw: string): string {
+  const parts = raw.split(/\D+/);
+  if (parts.length > 1 && parts[0] !== '' && parts[0]!.length <= 2 && (parts[1] ?? '').length <= 2 && (parts[2] ?? '').length <= 4 && parts.length <= 3) {
+    const pad = (v: string) => (v.length === 1 ? `0${v}` : v);
+    const out = [pad(parts[0]!)];
+    if (parts.length > 1) out.push(parts.length > 2 ? pad(parts[1]!) : parts[1]!);
+    if (parts.length > 2) out.push(parts[2]!);
+    return out.join('/');
+  }
   const d = raw.replace(/\D/g, '').slice(0, 8);
   if (d.length <= 2) return d;
   if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
@@ -96,7 +107,7 @@ export function VnDateInput({
             picker.current?.focus();
           }
         }}
-        className="absolute right-1 inline-flex h-8 w-8 items-center justify-center rounded-control text-stone-600 hover:bg-stone-100 disabled:opacity-50"
+        className="absolute right-0 inline-flex h-11 w-11 items-center justify-center rounded-control text-stone-600 hover:bg-stone-100 disabled:opacity-50 lg:right-1 lg:h-8 lg:w-8"
       >
         <CalendarDays aria-hidden="true" className="h-4 w-4" />
       </button>
@@ -116,7 +127,7 @@ export function VnDateInput({
         className="pointer-events-none absolute bottom-0 right-0 h-0 w-0 opacity-0"
       />
       {invalid && (
-        <span role="alert" className="sr-only">
+        <span role="alert" className="absolute left-0 top-full z-10 mt-0.5 whitespace-nowrap rounded-control bg-stone-0 px-1 text-xs text-danger-fg">
           {outOfRange ? 'Ngày nằm ngoài khoảng cho phép.' : 'Nhập ngày dạng dd/mm/yyyy, ví dụ 03/10/2026.'}
         </span>
       )}

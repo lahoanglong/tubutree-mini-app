@@ -42,11 +42,13 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
   it('mặc định hiện mọi sản phẩm (không lọc sẵn), mục tên "Sản phẩm"; bật chip mới lọc chưa có danh mục; hiện danh mục đã gán bằng tên', async () => {
     const { m, container } = setup();
     await flush();
-    const list = m.calls.find((c) => c.url.includes('/admin/product-categories/products'))!;
+    const list = m.calls.find((c) => c.url.includes('/admin/product-categories/products') && !c.url.includes('uncategorized=1'))!;
     expect(list.url).not.toContain('uncategorized=1');
     expect(list.url).not.toContain('source=pancake');
     expect(container.querySelector('h2')!.textContent).toBe('Sản phẩm');
     expect(container.textContent).toContain('Giặt tẩy');
+    // Số cạnh chip lấy từ truy vấn riêng chỉ lọc "chưa có danh mục".
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Chưa có danh mục (2)')).toBe(true);
     click(byText(container, 'button', 'Chưa có danh mục'));
     await flush();
     const filtered = m.calls.filter((c) => c.url.includes('/admin/product-categories/products')).at(-1)!;
@@ -67,7 +69,7 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
     const chip = [...r.container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Đang bán, thiếu ảnh'))!;
     expect(chip.textContent).toBe('Đang bán, thiếu ảnh (7)');
     expect(chip.getAttribute('aria-pressed')).toBe('true');
-    expect(m.calls.find((c) => c.url.includes('/admin/product-categories/products'))!.url).toContain('missingImage=1');
+    expect(m.calls.some((c) => c.url.includes('/admin/product-categories/products') && c.url.includes('missingImage=1'))).toBe(true);
   });
 
   it('chọn tất cả → chọn danh mục → xác nhận → gửi đúng productIds, categoryId, mode', async () => {

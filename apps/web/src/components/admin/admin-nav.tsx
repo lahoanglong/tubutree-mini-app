@@ -9,6 +9,8 @@ export interface NavItem<K extends string> {
   label: string;
   /** Từ khoá thêm cho ô "Tìm mục" (VD "ảnh" tìm ra mục Sản phẩm). */
   keywords?: string;
+  /** Mục là tổng của các mục khác (VD "Hôm nay"): không cộng vào huy hiệu ở tên nhóm đang gập, kẻo một việc đếm hai lần. */
+  total?: boolean;
 }
 export interface NavGroup<K extends string> {
   label: string;
@@ -133,7 +135,7 @@ function NavList<K extends string>({
               <span className="flex min-w-0 items-center">
                 {g.label}
                 {/* Nhóm gập: số việc chờ của các mục đang ẩn hiện ngay ở tên nhóm, để không phải mở nhóm mới thấy. */}
-                {g.items.filter((i) => !items.includes(i)).map((i) => <Fragment key={i.k}>{badge?.(i.k)}</Fragment>)}
+                {g.items.filter((i) => !items.includes(i) && !i.total).map((i) => <Fragment key={i.k}>{badge?.(i.k)}</Fragment>)}
               </span>
               <ChevronDown aria-hidden="true" className={`h-4 w-4 shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`} />
             </button>

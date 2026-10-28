@@ -475,11 +475,14 @@ export type PancakeFilter = 'attention' | 'unsynced';
 export type OrderKind = 'retail' | 'ctv' | 'dealer' | 'ctv_assisted' | 'storefront';
 export type OrderPaymentFilter = 'UNPAID' | 'PAID' | 'REFUNDED' | 'FAILED';
 export type OrderListPlatform = 'miniapp' | 'web';
+/** Hàng đợi của hộp việc, đúng điều kiện của số đếm (không có ô chọn riêng trên bộ lọc). */
+export type OrderQueue = 'bank_transfer_to_confirm';
 /** Bộ lọc thêm của danh sách đơn (D1-17) cùng thứ tự theo ngày đặt; `storefront` là slug hoặc tên miền con. */
 export interface OrderListExtra {
   kind?: OrderKind;
   payment?: OrderPaymentFilter;
   platform?: OrderListPlatform;
+  queue?: OrderQueue;
   referrerUserId?: string;
   storefront?: string;
   order?: 'asc' | 'desc';

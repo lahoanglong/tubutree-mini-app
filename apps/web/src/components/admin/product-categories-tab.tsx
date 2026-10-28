@@ -31,6 +31,11 @@ export function ProductCategoriesTab({ initialMissingImage = false }: { initialM
   const [pancakeOnly, setPancakeOnly] = useState(false);
   const [missingImage, setMissingImage] = useState(initialMissingImage);
   const missingImageCount = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 }).data?.items.find((i) => i.key === 'productsMissingImage')?.count;
+  const uncategorizedCount = useQuery({
+    queryKey: [...LIST_KEY, 'uncategorized-count'],
+    queryFn: () => listCategoryProducts({ q: '', uncategorized: true, pancakeOnly: false, missingImage: false }),
+    staleTime: 60_000,
+  }).data?.total;
   const [editing, setEditing] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [categoryId, setCategoryId] = useState('');
@@ -114,7 +119,7 @@ export function ProductCategoriesTab({ initialMissingImage = false }: { initialM
           className={`${FIELD_XS} w-full sm:w-72`}
         />
         <button type="button" aria-pressed={uncategorized} onClick={() => setUncategorized((v) => !v)} className={chipClass(uncategorized)}>
-          Chưa có danh mục
+          Chưa có danh mục{uncategorizedCount !== undefined ? ` (${uncategorizedCount})` : ''}
         </button>
         <button type="button" aria-pressed={pancakeOnly} onClick={() => setPancakeOnly((v) => !v)} className={chipClass(pancakeOnly)}>
           Chỉ hàng Pancake

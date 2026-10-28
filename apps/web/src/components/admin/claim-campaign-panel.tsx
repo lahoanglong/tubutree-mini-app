@@ -65,7 +65,7 @@ const SRC_OPTIONS: { value: string; label: string }[] = [
  * Lô mã riêng: mỗi thẻ một mã, xuất CSV (code, url) cho nhà in. Mã chung: một mã cho cả đợt, giới hạn tổng lượt nhận.
  * Mọi mức tiền do chủ dự án nhập; tạo xong mới có mã chạy.
  */
-export function ClaimCampaignPanel() {
+export function ClaimCampaignPanel({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [mode, setMode] = useState<Mode>('batch');
@@ -189,8 +189,13 @@ export function ClaimCampaignPanel() {
       </div>
       {configQ.isSuccess && !base && (
         <Notice tone="warning" role="status">
-          Chưa đặt link Mini App. Vào Cài đặt, mục Cấu hình để điền (dạng https://zalo.me/s/&lt;mã app&gt;). Chưa điền thì link trong file CSV
+          Chưa đặt link Mini App. Điền ở mục Cấu hình (dạng https://zalo.me/s/&lt;mã app&gt;). Chưa điền thì link trong file CSV
           chưa đầy đủ, chưa in QR được.
+          {onOpenConfig && (
+            <button type="button" onClick={onOpenConfig} className={`${BTN_XS_SECONDARY} ml-2 align-middle`}>
+              Mở Cấu hình
+            </button>
+          )}
         </Notice>
       )}
 

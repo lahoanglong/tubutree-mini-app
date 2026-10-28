@@ -71,11 +71,15 @@ const INBOX_TAB: Partial<Record<InboxKey, string>> = {
   storefrontsPending: 'storefronts', productsMissingImage: 'productCategories',
 };
 
+const QUALITY_KEYS: ReadonlySet<InboxKey> = new Set<InboxKey>(['productsMissingImage']);
+
 /** Số việc chờ cạnh mục menu, lấy từ cùng truy vấn với trang "Hôm nay" (một request cho mọi mục). Mục `inbox` hiện tổng. */
-export function InboxBadge({ tab }: { tab: string }) {
-  const q = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 });
+export function InboxBadge({ tab, enabled = true }: { tab: string; enabled?: boolean }) {
+  // Route hộp việc chỉ mở cho vài nhóm nhân viên; vai trò khác không gọi để khỏi nhận 403 mỗi phút.
+  const q = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000, enabled });
   const items = (q.data?.items ?? []).filter((i) => i.key in INBOX_LABELS && !LEGACY_ONLY.has(i.key));
-  const n = items.filter((i) => tab === 'inbox' || INBOX_TAB[i.key] === tab).reduce((sum, i) => sum + i.count, 0);
+  // Hàng đợi chất lượng danh mục (hàng chục sản phẩm thiếu ảnh) hiện ở mục Sản phẩm, không cộng vào tổng để việc gấp trong ngày không bị chìm.
+  const n = items.filter((i) => (tab === 'inbox' ? !QUALITY_KEYS.has(i.key) : INBOX_TAB[i.key] === tab)).reduce((sum, i) => sum + i.count, 0);
   if (n <= 0) return null;
   return (
     <span data-inbox-badge={tab} className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-warning-bg px-1.5 text-[11px] font-semibold leading-5 text-warning-fg">

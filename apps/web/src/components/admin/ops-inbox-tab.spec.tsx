@@ -254,4 +254,31 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     const badges = [...r.container.querySelectorAll('[data-inbox-badge]')].map((b) => [b.getAttribute('data-inbox-badge'), b.textContent?.replace(/[^0-9]/g, '')]);
     expect(badges).toEqual([['community', '5'], ['orders', '1'], ['inbox', '6']]);
   });
+
+  it('tổng ở mục "inbox" không cộng hàng đợi chất lượng danh mục (SP thiếu ảnh); mục Sản phẩm vẫn hiện số đó', async () => {
+    stub([
+      { key: 'bankTransferToConfirm', count: 1 },
+      { key: 'storefrontsPending', count: 1 },
+      { key: 'productsMissingImage', count: 44 },
+    ]);
+    const r = render(
+      <>
+        <InboxBadge tab="inbox" />
+        <InboxBadge tab="productCategories" />
+      </>,
+    );
+    mounted.push(r);
+    await flush();
+    const badges = [...r.container.querySelectorAll('[data-inbox-badge]')].map((b) => [b.getAttribute('data-inbox-badge'), b.textContent?.replace(/[^0-9]/g, '')]);
+    expect(badges).toEqual([['inbox', '2'], ['productCategories', '44']]);
+  });
+
+  it('enabled=false thì không gọi hộp việc (nhân viên không có quyền hộp việc khỏi nhận 403 mỗi phút)', async () => {
+    stub([{ key: 'bankTransferToConfirm', count: 1 }]);
+    const r = render(<InboxBadge tab="orders" enabled={false} />);
+    mounted.push(r);
+    await flush();
+    expect(r.container.querySelector('[data-inbox-badge]')).toBeNull();
+    expect((fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.some((c) => String(c[0]).includes('/admin/ops/inbox'))).toBe(false);
+  });
 });

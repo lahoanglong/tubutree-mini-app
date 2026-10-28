@@ -86,6 +86,7 @@ import {
   type InboxKey,
   type StaffPermission,
   type AdminOrder,
+  getPosCreditEnabled,
 } from '@/lib/admin-client';
 import { RecyclingBadge, RecyclingPanel } from '@/components/admin/recycling-panel';
 import { ImageUrlField } from '@/components/admin/image-url-field';
@@ -226,7 +227,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     label: 'Hay dùng',
     quick: true,
     items: [
-      { k: 'inbox', label: 'Hôm nay' },
+      { k: 'inbox', label: 'Hôm nay', total: true },
       { k: 'orders', label: 'Đơn hàng' },
       { k: 'productCategories', label: 'Sản phẩm' },
       { k: 'users', label: 'Người dùng' },
@@ -417,6 +418,8 @@ export default function AdminPage() {
   const [consignmentSeed, setConsignmentSeed] = useState(0);
   const role = user?.role;
   // Nhân viên: nhóm việc đọc lại từ API (JwtStrategy đọc DB) — gán/gỡ nhóm có hiệu lực mà không cần đăng nhập lại.
+  // Cờ tích điểm tại quầy đang tắt thì không mời vào màn thu ngân; chưa biết (đang tải hoặc lỗi) thì vẫn hiện để nhân viên quầy không mất lối vào.
+  const posOffQ = useQuery({ queryKey: ['pos-credit-enabled'], queryFn: getPosCreditEnabled, staleTime: 60_000 });
   const accessQ = useQuery({
     queryKey: ['admin-ops-access'],
     queryFn: getOpsAccess,
@@ -495,7 +498,7 @@ export default function AdminPage() {
     if (k === 'bankTransferToConfirm') {
       setOrdersRecycling('');
       setOrdersPancake('');
-      setOrderSeed({ search: '', n: Date.now(), status: 'PENDING_PAYMENT', extra: { payment: 'UNPAID', order: 'asc' } });
+      setOrderSeed({ search: '', n: Date.now(), status: 'PENDING_PAYMENT', extra: { queue: 'bank_transfer_to_confirm', order: 'asc' } });
       setTabState('orders');
       return writeUrlState('orders', '');
     }
@@ -586,17 +589,19 @@ export default function AdminPage() {
       <div className={`${isAdmin ? 'hidden sm:flex' : 'flex'} items-center justify-between gap-2`}>
         <h1 className="hidden min-w-0 truncate font-display text-lg font-semibold text-stone-900 sm:block sm:text-xl">Quản trị Tubu Tree</h1>
         {/* Điện thoại: bỏ tiêu đề; quản trị viên vào màn thu ngân từ mục "Tích điểm tại quầy" trong menu, nhân viên quầy giữ nút này. */}
-        <Link href="/admin/pos" className={`${isAdmin ? 'hidden sm:inline-flex' : 'inline-flex'} min-h-[44px] shrink-0 items-center rounded-control border border-stone-450 bg-stone-0 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 sm:min-h-[36px]`}>
-          Màn thu ngân<span className="hidden sm:inline">&nbsp;(tích điểm tại quầy)</span>
-        </Link>
+        {posOffQ.data !== false && (
+          <Link href="/admin/pos" className={`${isAdmin ? 'hidden sm:inline-flex' : 'inline-flex'} min-h-[44px] shrink-0 items-center rounded-control border border-stone-450 bg-stone-0 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 sm:min-h-[36px]`}>
+            Màn thu ngân<span className="hidden sm:inline">&nbsp;(tích điểm tại quầy)</span>
+          </Link>
+        )}
       </div>
       <div className="mt-2 sm:mt-4 lg:flex lg:items-start lg:gap-6">
         <AdminNav
           groups={groups}
           active={active}
           onSelect={setTab}
-          summaryBadge={<InboxBadge tab="inbox" />}
-          badge={(k) => (k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : <InboxBadge tab={k} />)}
+          summaryBadge={<InboxBadge tab="inbox" enabled={allowed.has('inbox')} />}
+          badge={(k) => (k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : <InboxBadge tab={k} enabled={allowed.has('inbox')} />)}
         />
         <div className="mt-4 min-w-0 flex-1 lg:mt-0">
           <TabErrorBoundary key={active} tabLabel={TABS.find((t) => t.k === active)?.label ?? ''} onGoHome={!allowed.has('inbox') || active === 'inbox' ? undefined : () => setTab('inbox')}>
@@ -652,7 +657,7 @@ export default function AdminPage() {
           {active === 'staffRoster' && <StaffRosterTab meId={user?.id} />}
           {active === 'shiftApproval' && <ShiftApprovalTab />}
           {active === 'payroll' && <PayrollAdminTab />}
-          {active === 'coupons' && <CouponsTab />}
+          {active === 'coupons' && <CouponsTab onOpenConfig={allowed.has('config') ? () => setTab('config') : undefined} />}
           {active === 'brands' && <BrandsTab />}
           {active === 'storefronts' && <StorefrontsTab key={storefrontSeed} initialStatus={storefrontSeed > 0 ? 'PENDING_APPROVAL' : ''} />}
           {active === 'merchantProducts' && <MerchantProductsTab key={consignmentSeed} focusConsignment={consignmentSeed > 0} />}
@@ -2325,7 +2330,7 @@ function localDateIso(dayKey: string, endOfDay: boolean, fallbackMs: number): st
   return new Date(`${dayKey}T${endOfDay ? '23:59:59' : '00:00:00'}`).toISOString();
 }
 
-function CouponsTab() {
+function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
   const qc = useQueryClient();
   const [f, setF] = useState({
     code: '',
@@ -2382,7 +2387,7 @@ function CouponsTab() {
         </button>
       ))}
     </div>
-    {view === 'cards' && <ClaimCampaignPanel />}
+    {view === 'cards' && <ClaimCampaignPanel onOpenConfig={onOpenConfig} />}
     {view === 'create' && (
     <div className="max-w-md space-y-2" data-testid="coupon-create-form">
       <Field label="Mã giảm giá">

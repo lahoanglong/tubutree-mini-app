@@ -327,6 +327,12 @@ describe('CommunityModerationTab — khung', () => {
 });
 
 describe('CommunityModerationTab: báo cáo vi phạm (R-75)', () => {
+  it('chip lấy số thật từ hộp việc khi danh sách bị cắt ở 50 (hộp việc ghi 73)', async () => {
+    const { r } = setup({ '/admin/ops/inbox': { body: { generatedAt: '2026-10-28T03:00:00.000Z', items: [{ key: 'communityReports', count: 73 }] } } }, { initialView: 'reports', isAdmin: true });
+    await flush();
+    expect(byText(r.container, 'button[aria-pressed]', 'Báo cáo vi phạm (73)')).not.toBeNull();
+  });
+
   it('chip ghi số báo cáo đang mở; danh sách hiện loại, người đăng, trích nội dung và lý do báo cáo; nội dung đã xoá hẳn vẫn đóng được', async () => {
     const { r } = setup({}, { initialView: 'reports', isAdmin: true });
     await flush();

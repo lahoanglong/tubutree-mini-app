@@ -189,6 +189,18 @@ describe('AdminNav — gom nhóm, gập mở, tìm mục', () => {
     expect(head.querySelector('[data-badge]')?.textContent).toBe('3');
   });
 
+  it('mục đánh dấu total (VD "Hôm nay") không cộng huy hiệu vào tên nhóm gập, mục khác vẫn cộng', () => {
+    const groups: NavGroup<K>[] = [
+      { label: 'Đơn hàng', items: [{ k: 'orders', label: 'Đơn hàng' }] },
+      { label: 'Hay dùng', items: [{ k: 'reviews', label: 'Hôm nay', total: true }, { k: 'config', label: 'Cấu hình' }] },
+    ];
+    const r = render(<AdminNav groups={groups} active="orders" onSelect={() => {}} badge={(k) => <span data-badge={k}>1</span>} />);
+    mounted.push(r);
+    const head = heads(r.container)[1]!;
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    expect([...head.querySelectorAll('[data-badge]')].map((b) => b.getAttribute('data-badge'))).toEqual(['config']);
+  });
+
   it('điện thoại, ngăn kéo đóng: nút "Đổi mục" vẫn hiện huy hiệu của mọi mục', () => {
     const r = render(<AdminNav groups={GROUPS} active="orders" onSelect={() => {}} badge={(k) => (k === 'config' ? <span data-badge>3</span> : null)} />);
     mounted.push(r);

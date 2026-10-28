@@ -38,7 +38,7 @@ export function OrderExtraFilters({ value, onChange }: { value: OrderListExtra; 
   const [picked, setPicked] = useState<PickedItem | null>(null);
   const [storeInput, setStoreInput] = useState(value.storefront ?? '');
   const set = <K extends keyof OrderListExtra>(key: K, v: OrderListExtra[K] | '') => onChange(v ? { ...value, [key]: v } : without(value, key));
-  const hasFilter = !!(value.kind || value.payment || value.platform || value.referrerUserId || value.storefront);
+  const hasFilter = !!(value.kind || value.payment || value.platform || value.queue || value.referrerUserId || value.storefront);
   const kindHint = ORDER_KIND_OPTIONS.find((o) => o.k === value.kind)?.hint;
 
   const submitStore = (e: React.FormEvent) => {
@@ -111,6 +111,7 @@ export function OrderExtraFilters({ value, onChange }: { value: OrderListExtra; 
           </button>
         )}
       </div>
+      {value.queue && <p className="text-xs text-stone-500">Đang xem đơn lẻ chuyển khoản chưa nhận tiền, cũ nhất trước. Bấm Xoá bộ lọc để xem tất cả.</p>}
       {kindHint && <p className="text-xs text-stone-500">{kindHint}</p>}
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-[240px] flex-1">
