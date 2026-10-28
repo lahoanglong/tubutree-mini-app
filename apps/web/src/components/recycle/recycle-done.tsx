@@ -39,8 +39,9 @@ export function RecycleDone({ id }: { id: string }) {
   const path = `/doi-rac/yeu-cau/${id}`;
 
   const q = useQuery({ ...wasteRequestQuery(coreHttp, id), enabled: authed });
-  const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed });
-  const rewardsQ = useQuery({ ...rewardsQuery(coreHttp), enabled: authed });
+  // Quầy vừa cộng điểm: số dư lấy từ lần xem trước còn "tươi" trong bộ nhớ sẽ là số cũ, nên luôn gọi lại khi vào màn này.
+  const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed, refetchOnMount: 'always' });
+  const rewardsQ = useQuery({ ...rewardsQuery(coreHttp), enabled: authed, refetchOnMount: 'always' });
   const r = q.data;
   const notDone = !!r && r.status !== 'COMPLETED';
 
@@ -60,8 +61,8 @@ export function RecycleDone({ id }: { id: string }) {
 
   const awarded = r.pointsAwarded ?? 0;
   const short = r.lines.filter((l) => (l.receivedQty ?? 0) < l.unitsPerPoint);
-  const me = meQ.data;
-  const p = nextRewardProgress(rewardsQ.data);
+  const me = meQ.isSuccess && meQ.isFetchedAfterMount ? meQ.data : undefined;
+  const p = rewardsQ.isSuccess && rewardsQ.isFetchedAfterMount ? nextRewardProgress(rewardsQ.data) : null;
   const drops = r.dropsAwarded ?? 0;
   const impact = impactLine(r.impactGrams);
 
