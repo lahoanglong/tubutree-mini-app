@@ -1,0 +1,1642 @@
+{
+  "meta": {
+    "date": "2026-10-28T14:01:42.162Z",
+    "label": "integ",
+    "branch": "review/1028-integ",
+    "commit": "79d1bfaed",
+    "dirty": 0,
+    "lane": 5,
+    "runsPerMetric": 3,
+    "emulation": {
+      "web": "Moto G 360x640, Slow 4G 1,6 Mbps/150 ms, CPU x4",
+      "mini": "375x812, Slow 4G 1,6 Mbps/150 ms, CPU x4, gzip",
+      "api": "autocannon 10 kết nối",
+      "durationSec": 20
+    },
+    "loadAtStart": {
+      "loadAvg": "Load Avg: 19.67, 14.85, 14.09 ",
+      "cpu": "CPU usage: 88.95% user, 11.4% sys, 0.0% idle "
+    },
+    "node": "v22.23.3",
+    "loadAtEnd": {
+      "loadAvg": "Load Avg: 7.76, 9.15, 11.52 ",
+      "cpu": "CPU usage: 45.48% user, 14.80% sys, 39.71% idle "
+    }
+  },
+  "web": {
+    "home": {
+      "path": "/",
+      "persona": "returning",
+      "medians": {
+        "fcp": {
+          "median": 684,
+          "runs": [
+            684,
+            692,
+            684
+          ]
+        },
+        "lcp": {
+          "median": 3888,
+          "runs": [
+            3940,
+            3888,
+            3836
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "clsSession": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "tbt": {
+          "median": 0,
+          "runs": [
+            17,
+            0,
+            0
+          ]
+        },
+        "inp": {
+          "median": 32,
+          "runs": [
+            40,
+            32,
+            32
+          ]
+        },
+        "ttfb": {
+          "median": 9.3,
+          "runs": [
+            15.9,
+            9.3,
+            6.9
+          ]
+        },
+        "loadEvent": {
+          "median": 3040.9,
+          "runs": [
+            3100.8,
+            3040.9,
+            3019.2
+          ]
+        },
+        "requests": {
+          "median": 90,
+          "runs": [
+            90,
+            91,
+            90
+          ]
+        },
+        "apiRequests": {
+          "median": 19,
+          "runs": [
+            19,
+            20,
+            19
+          ]
+        },
+        "jsKB": {
+          "median": 374.891,
+          "runs": [
+            374.891,
+            374.891,
+            374.891
+          ]
+        },
+        "imgKB": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "totalKB": {
+          "median": 656.037,
+          "runs": [
+            656.037,
+            656.037,
+            656.037
+          ]
+        },
+        "longTaskCount": {
+          "median": 1,
+          "runs": [
+            2,
+            1,
+            1
+          ]
+        }
+      },
+      "lcpEl": "DIV.",
+      "clickLabel": "Mã của tôi",
+      "apiCalls": [
+        "/config/public",
+        "/flash-sales/active",
+        "/auth/refresh",
+        "/flash-sales/upcoming",
+        "/orders/active-count",
+        "/me/purchased-items",
+        "/me/daily-check-in",
+        "/cart",
+        "/me/notifications",
+        "/me/coupons",
+        "/orders",
+        "/me/loyalty",
+        "/me/wishlist/ids",
+        "/feed",
+        "/products/for-you"
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 17.60, 14.99, 14.18 ",
+          "cpu": "CPU usage: 59.20% user, 19.40% sys, 21.38% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 16.28, 14.79, 14.12 ",
+          "cpu": "CPU usage: 70.38% user, 16.74% sys, 12.86% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 15.00, 14.57, 14.05 ",
+          "cpu": "CPU usage: 55.73% user, 19.30% sys, 24.96% idle "
+        }
+      ]
+    },
+    "list": {
+      "path": "/san-pham",
+      "persona": "returning",
+      "medians": {
+        "fcp": {
+          "median": 596,
+          "runs": [
+            596,
+            596,
+            576
+          ]
+        },
+        "lcp": {
+          "median": 596,
+          "runs": [
+            596,
+            596,
+            576
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "clsSession": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "tbt": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "inp": {
+          "median": 16,
+          "runs": [
+            16,
+            16
+          ]
+        },
+        "ttfb": {
+          "median": 21.8,
+          "runs": [
+            72.8,
+            21.8,
+            11.7
+          ]
+        },
+        "loadEvent": {
+          "median": 2700,
+          "runs": [
+            2700,
+            2698.1,
+            2714.4
+          ]
+        },
+        "requests": {
+          "median": 79,
+          "runs": [
+            79,
+            79,
+            79
+          ]
+        },
+        "apiRequests": {
+          "median": 8,
+          "runs": [
+            8,
+            8,
+            8
+          ]
+        },
+        "jsKB": {
+          "median": 382.936,
+          "runs": [
+            382.936,
+            382.936,
+            382.936
+          ]
+        },
+        "imgKB": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "totalKB": {
+          "median": 634.766,
+          "runs": [
+            634.168,
+            634.766,
+            634.785
+          ]
+        },
+        "longTaskCount": {
+          "median": 1,
+          "runs": [
+            1,
+            1,
+            0
+          ]
+        }
+      },
+      "lcpEl": "H3.line-clamp-2 min-h-[2.5rem] text-sm font-medium max-md:min-h",
+      "clickLabel": "Bán chạy",
+      "apiCalls": [
+        "/config/public",
+        "/flash-sales/active",
+        "/auth/refresh",
+        "/orders/active-count",
+        "/me/wishlist/ids",
+        "/me/coupons",
+        "/cart",
+        "/me/daily-check-in"
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 14.24, 14.42, 14.00 ",
+          "cpu": "CPU usage: 60.53% user, 16.84% sys, 22.62% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 13.74, 14.30, 13.96 ",
+          "cpu": "CPU usage: 63.88% user, 19.44% sys, 16.66% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 13.63, 14.26, 13.95 ",
+          "cpu": "CPU usage: 20.4% user, 14.37% sys, 65.58% idle "
+        }
+      ]
+    },
+    "detail": {
+      "path": "/san-pham/mat-ong-rung-bhnong",
+      "persona": "new",
+      "medians": {
+        "fcp": {
+          "median": 572,
+          "runs": [
+            568,
+            572,
+            576
+          ]
+        },
+        "lcp": {
+          "median": 572,
+          "runs": [
+            568,
+            572,
+            576
+          ]
+        },
+        "cls": {
+          "median": 0.009,
+          "runs": [
+            0.009,
+            0.009,
+            0.009
+          ]
+        },
+        "clsSession": {
+          "median": 0.009,
+          "runs": [
+            0.009,
+            0.009,
+            0.009
+          ]
+        },
+        "tbt": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "inp": {
+          "median": 32,
+          "runs": [
+            24,
+            32,
+            32
+          ]
+        },
+        "ttfb": {
+          "median": 15.1,
+          "runs": [
+            18.1,
+            8,
+            15.1
+          ]
+        },
+        "loadEvent": {
+          "median": 2916.1,
+          "runs": [
+            2914.5,
+            2916.1,
+            2926.3
+          ]
+        },
+        "requests": {
+          "median": 55,
+          "runs": [
+            55,
+            55,
+            55
+          ]
+        },
+        "apiRequests": {
+          "median": 11,
+          "runs": [
+            11,
+            11,
+            11
+          ]
+        },
+        "jsKB": {
+          "median": 268.063,
+          "runs": [
+            268.063,
+            268.063,
+            268.063
+          ]
+        },
+        "imgKB": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "totalKB": {
+          "median": 501.229,
+          "runs": [
+            501.366,
+            501.229,
+            501.229
+          ]
+        },
+        "longTaskCount": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "lcpEl": "H1.font-display text-2xl font-semibold text-stone-900 max-md:fo",
+      "clickLabel": "Thêm vào giỏ",
+      "apiCalls": [
+        "/config/public",
+        "/flash-sales/active",
+        "/products/mat-ong-rung-bhnong",
+        "/products/mat-ong-rung-bhnong/reviews",
+        "/auth/refresh",
+        "/cart",
+        "/me/wishlist/ids",
+        "/me/coupons",
+        "/affiliate/me",
+        "/products/mat-ong-rung-bhnong/reviews/can-review",
+        "/cart/items"
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 11.92, 13.87, 13.82 ",
+          "cpu": "CPU usage: 12.79% user, 11.49% sys, 75.70% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 10.39, 13.48, 13.68 ",
+          "cpu": "CPU usage: 3.82% user, 8.55% sys, 87.61% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 9.25, 13.14, 13.55 ",
+          "cpu": "CPU usage: 29.52% user, 14.94% sys, 55.53% idle "
+        }
+      ]
+    },
+    "checkout": {
+      "path": "/thanh-toan",
+      "persona": "returning",
+      "medians": {
+        "fcp": {
+          "median": 552,
+          "runs": [
+            552,
+            552,
+            552
+          ]
+        },
+        "lcp": {
+          "median": 3224,
+          "runs": [
+            3220,
+            3240,
+            3224
+          ]
+        },
+        "cls": {
+          "median": 0.046,
+          "runs": [
+            0.046,
+            0.046,
+            0.046
+          ]
+        },
+        "clsSession": {
+          "median": 0.046,
+          "runs": [
+            0.046,
+            0.046,
+            0.046
+          ]
+        },
+        "tbt": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "inp": {
+          "median": 24,
+          "runs": [
+            24,
+            24,
+            40
+          ]
+        },
+        "ttfb": {
+          "median": 2.7,
+          "runs": [
+            4.6,
+            2.5,
+            2.7
+          ]
+        },
+        "loadEvent": {
+          "median": 2588.1,
+          "runs": [
+            2588.1,
+            2601.6,
+            2581.2
+          ]
+        },
+        "requests": {
+          "median": 51,
+          "runs": [
+            51,
+            51,
+            51
+          ]
+        },
+        "apiRequests": {
+          "median": 8,
+          "runs": [
+            8,
+            8,
+            8
+          ]
+        },
+        "jsKB": {
+          "median": 250.203,
+          "runs": [
+            250.203,
+            250.203,
+            250.203
+          ]
+        },
+        "imgKB": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "totalKB": {
+          "median": 464.434,
+          "runs": [
+            464.434,
+            464.434,
+            464.434
+          ]
+        },
+        "longTaskCount": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "lcpEl": "SPAN.block text-stone-600",
+      "clickLabel": "Mã giảm giá",
+      "apiCalls": [
+        "/config/public",
+        "/auth/refresh",
+        "/me/addresses",
+        "/me",
+        "/cart",
+        "/checkout/quote",
+        "/me/coupons",
+        "/checkout/coupon-previews"
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 9.15, 13.05, 13.52 ",
+          "cpu": "CPU usage: 4.54% user, 8.63% sys, 86.81% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 8.21, 12.72, 13.40 ",
+          "cpu": "CPU usage: 28.38% user, 13.90% sys, 57.70% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 7.48, 12.41, 13.28 ",
+          "cpu": "CPU usage: 3.73% user, 12.14% sys, 84.11% idle "
+        }
+      ]
+    }
+  },
+  "lighthouse": {
+    "home": {
+      "path": "/",
+      "score": 78,
+      "fcp": 1204.12,
+      "lcp": 5957.962,
+      "tbt": 0,
+      "cls": 0.005,
+      "si": 1204.12,
+      "tti": 5980.668,
+      "lcpEl": null,
+      "runs": [
+        {
+          "score": 78,
+          "fcp": 1204.6277,
+          "lcp": 5958.550824999998,
+          "tbt": 8,
+          "cls": 0.004967541909728887,
+          "si": 1204.6277,
+          "tti": 5980.935132499999
+        },
+        {
+          "score": 78,
+          "fcp": 1203.8882,
+          "lcp": 5948.329200000002,
+          "tbt": 0,
+          "cls": 0.004967541909728887,
+          "si": 1203.8882,
+          "tti": 5970.634790000002
+        },
+        {
+          "score": 78,
+          "fcp": 1204.1202,
+          "lcp": 5957.961599999999,
+          "tbt": 0,
+          "cls": 0.004967541909728887,
+          "si": 1204.1202,
+          "tti": 5980.667609999999
+        }
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 7.02, 12.15, 13.18 ",
+          "cpu": "CPU usage: 11.77% user, 13.84% sys, 74.38% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 6.85, 11.95, 13.09 ",
+          "cpu": "CPU usage: 14.90% user, 18.14% sys, 66.95% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 6.11, 11.62, 12.96 ",
+          "cpu": "CPU usage: 11.88% user, 14.86% sys, 73.24% idle "
+        }
+      ]
+    },
+    "list": {
+      "path": "/san-pham",
+      "score": 100,
+      "fcp": 1203.95,
+      "lcp": 1203.95,
+      "tbt": 0,
+      "cls": 0,
+      "si": 1203.95,
+      "tti": 1203.95,
+      "lcpEl": null,
+      "runs": [
+        {
+          "score": 100,
+          "fcp": 1203.9496,
+          "lcp": 1203.9496,
+          "tbt": 0,
+          "cls": 0.0002543650647638833,
+          "si": 1203.9496,
+          "tti": 1203.9496
+        },
+        {
+          "score": 100,
+          "fcp": 1205.9211,
+          "lcp": 1205.9211,
+          "tbt": 0,
+          "cls": 0.0002543650647638833,
+          "si": 1205.9211,
+          "tti": 1205.9211
+        },
+        {
+          "score": 100,
+          "fcp": 1203.6096,
+          "lcp": 1203.6096,
+          "tbt": 0,
+          "cls": 0.0002543650647638833,
+          "si": 1203.6096,
+          "tti": 1203.6096000000002
+        }
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 5.34, 11.18, 12.78 ",
+          "cpu": "CPU usage: 20.65% user, 16.40% sys, 62.93% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 4.75, 10.86, 12.65 ",
+          "cpu": "CPU usage: 18.46% user, 13.51% sys, 68.1% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 4.62, 10.64, 12.55 ",
+          "cpu": "CPU usage: 4.43% user, 8.17% sys, 87.38% idle "
+        }
+      ]
+    },
+    "detail": {
+      "path": "/san-pham/mat-ong-rung-bhnong",
+      "score": 82,
+      "fcp": 1203.881,
+      "lcp": 4834.563,
+      "tbt": 0,
+      "cls": 0.031,
+      "si": 1228.683,
+      "tti": 4849.673,
+      "lcpEl": null,
+      "runs": [
+        {
+          "score": 82,
+          "fcp": 1204.4136,
+          "lcp": 4834.562599999999,
+          "tbt": 0,
+          "cls": 0.03126501158096909,
+          "si": 1229.579234833713,
+          "tti": 4849.6729399999995
+        },
+        {
+          "score": 82,
+          "fcp": 1203.764,
+          "lcp": 4834.383,
+          "tbt": 0,
+          "cls": 0.03126501158096909,
+          "si": 1228.6833891442648,
+          "tti": 4849.2889
+        },
+        {
+          "score": 82,
+          "fcp": 1203.8805,
+          "lcp": 4834.851125000001,
+          "tbt": 0,
+          "cls": 0.03126501158096909,
+          "si": 1222.4421082962915,
+          "tti": 4849.754112500001
+        }
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 4.32, 10.28, 12.39 ",
+          "cpu": "CPU usage: 8.29% user, 7.80% sys, 83.90% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 4.19, 10.05, 12.28 ",
+          "cpu": "CPU usage: 27.19% user, 10.11% sys, 62.69% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 4.40, 9.90, 12.20 ",
+          "cpu": "CPU usage: 8.29% user, 9.2% sys, 82.68% idle "
+        }
+      ]
+    }
+  },
+  "mini": {
+    "home:returning": {
+      "path": "/",
+      "persona": "returning",
+      "medians": {
+        "fcp": {
+          "median": 1648,
+          "runs": [
+            1648,
+            1628,
+            1648
+          ]
+        },
+        "lcp": {
+          "median": 2620,
+          "runs": [
+            2620,
+            2596,
+            2620
+          ]
+        },
+        "firstProductCard": {
+          "median": 2593.2,
+          "runs": [
+            2593.2,
+            2578.2,
+            2603.8
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "tbt": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "loadEvent": {
+          "median": 1566.3,
+          "runs": [
+            1566.3,
+            1549.6,
+            1569
+          ]
+        },
+        "requests": {
+          "median": 62,
+          "runs": [
+            62,
+            62,
+            62
+          ]
+        },
+        "apiRequests": {
+          "median": 11,
+          "runs": [
+            11,
+            11,
+            11
+          ]
+        },
+        "jsRequests": {
+          "median": 43,
+          "runs": [
+            43,
+            43,
+            43
+          ]
+        },
+        "jsKB": {
+          "median": 330.343,
+          "runs": [
+            330.343,
+            330.343,
+            330.343
+          ]
+        },
+        "totalKB": {
+          "median": 493.338,
+          "runs": [
+            493.338,
+            493.338,
+            493.338
+          ]
+        },
+        "authEnd": {
+          "median": 1895.6,
+          "runs": [
+            1895.6,
+            1882,
+            1903.7
+          ]
+        },
+        "homeApiEnd": {
+          "median": 2175,
+          "runs": [
+            2175,
+            2161.1,
+            2181.7
+          ]
+        },
+        "homeMeApiEnd": {
+          "median": 2317.7,
+          "runs": [
+            2317.7,
+            2304.2,
+            2325.6
+          ]
+        },
+        "longTaskCount": {
+          "median": 1,
+          "runs": [
+            2,
+            1,
+            1
+          ]
+        }
+      },
+      "lcpEl": "DIV.",
+      "bodyHead": "7\n3\nBạn đang tìm gì hôm nay?\nChào Nguyễn Thị Quay Lại\n·  Lộc Biếc\n45.400 điểm ≈ 45.400đ\nĐiểm danh\nChờ chuyển khoản 120.0",
+      "apiCalls": [
+        "/auth/refresh",
+        "/me/coupons",
+        "/home",
+        "/me/daily-check-in",
+        "/cart",
+        "/home/me",
+        "/orders",
+        "/me/loyalty",
+        "/feed",
+        "/me/wishlist/ids"
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 4.09, 9.66, 12.09 ",
+          "cpu": "CPU usage: 50.0% user, 8.26% sys, 41.73% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 4.22, 9.50, 12.01 ",
+          "cpu": "CPU usage: 42.19% user, 9.12% sys, 48.68% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 4.52, 9.48, 11.98 ",
+          "cpu": "CPU usage: 40.7% user, 12.71% sys, 47.20% idle "
+        }
+      ]
+    },
+    "home:guest": {
+      "path": "/",
+      "persona": "guest",
+      "medians": {
+        "fcp": {
+          "median": 1640,
+          "runs": [
+            1644,
+            1636,
+            1640
+          ]
+        },
+        "lcp": {
+          "median": 3320,
+          "runs": [
+            3320,
+            3320,
+            3312
+          ]
+        },
+        "firstProductCard": {
+          "median": 3294.7,
+          "runs": [
+            3294.7,
+            3300.9,
+            3289.3
+          ]
+        },
+        "cls": {
+          "median": 0.066,
+          "runs": [
+            0.066,
+            0.066,
+            0.066
+          ]
+        },
+        "tbt": {
+          "median": 9,
+          "runs": [
+            8,
+            9,
+            11
+          ]
+        },
+        "loadEvent": {
+          "median": 1559.4,
+          "runs": [
+            1562,
+            1554.1,
+            1559.4
+          ]
+        },
+        "requests": {
+          "median": 60,
+          "runs": [
+            60,
+            60,
+            60
+          ]
+        },
+        "apiRequests": {
+          "median": 9,
+          "runs": [
+            9,
+            9,
+            9
+          ]
+        },
+        "jsRequests": {
+          "median": 43,
+          "runs": [
+            43,
+            43,
+            43
+          ]
+        },
+        "jsKB": {
+          "median": 330.343,
+          "runs": [
+            330.343,
+            330.343,
+            330.343
+          ]
+        },
+        "totalKB": {
+          "median": 493.338,
+          "runs": [
+            493.338,
+            493.338,
+            493.338
+          ]
+        },
+        "authEnd": {
+          "median": 3011.1,
+          "runs": [
+            3011.1,
+            3017.2,
+            3003.5
+          ]
+        },
+        "homeApiEnd": {
+          "median": 2124.5,
+          "runs": [
+            2124.8,
+            2110.1,
+            2124.5
+          ]
+        },
+        "homeMeApiEnd": {
+          "median": 3232.8,
+          "runs": [
+            3232.8,
+            3238.9,
+            3225.9
+          ]
+        },
+        "longTaskCount": {
+          "median": 2,
+          "runs": [
+            2,
+            2,
+            2
+          ]
+        }
+      },
+      "lcpEl": "SPAN.",
+      "bodyHead": "Bạn đang tìm gì hôm nay?\nQuà khách mới\nMã 30.000đ · cho đơn từ 199.000đ\nNhận quà\nĐơn hàng\nĐổi quà\nĐổi rác\nMua chung\nMã c",
+      "apiCalls": [
+        "/home",
+        "/auth/guest",
+        "/cart",
+        "/me/coupons",
+        "/me/daily-check-in",
+        "/home/me",
+        "/orders",
+        "/feed",
+        "/me/wishlist/ids"
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 4.91, 9.40, 11.92 ",
+          "cpu": "CPU usage: 46.99% user, 12.40% sys, 40.60% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 5.32, 9.41, 11.91 ",
+          "cpu": "CPU usage: 66.54% user, 15.27% sys, 18.18% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 6.20, 9.46, 11.90 ",
+          "cpu": "CPU usage: 50.69% user, 12.55% sys, 36.74% idle "
+        }
+      ]
+    },
+    "browse:returning": {
+      "path": "/browse",
+      "persona": "returning",
+      "medians": {
+        "fcp": {
+          "median": 1632,
+          "runs": [
+            1632,
+            1628,
+            1632
+          ]
+        },
+        "lcp": {
+          "median": 2480,
+          "runs": [
+            2480,
+            2476,
+            2480
+          ]
+        },
+        "firstProductCard": {
+          "median": 2460.6,
+          "runs": [
+            2466.2,
+            2460.6,
+            2460.2
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "tbt": {
+          "median": 1,
+          "runs": [
+            1,
+            4,
+            0
+          ]
+        },
+        "loadEvent": {
+          "median": 1555.9,
+          "runs": [
+            1555.9,
+            1553,
+            1556.4
+          ]
+        },
+        "requests": {
+          "median": 60,
+          "runs": [
+            60,
+            60,
+            60
+          ]
+        },
+        "apiRequests": {
+          "median": 10,
+          "runs": [
+            10,
+            10,
+            10
+          ]
+        },
+        "jsRequests": {
+          "median": 43,
+          "runs": [
+            43,
+            43,
+            43
+          ]
+        },
+        "jsKB": {
+          "median": 330.343,
+          "runs": [
+            330.343,
+            330.343,
+            330.343
+          ]
+        },
+        "totalKB": {
+          "median": 478.963,
+          "runs": [
+            478.963,
+            478.963,
+            478.963
+          ]
+        },
+        "authEnd": {
+          "median": 1831.9,
+          "runs": [
+            1831.4,
+            1831.9,
+            1842.8
+          ]
+        },
+        "longTaskCount": {
+          "median": 1,
+          "runs": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "lcpEl": "SPAN.",
+      "bodyHead": "Danh mục\n3\nDanh mục\nMỹ phẩm thiên nhiên\nTẩy rửa sinh học\nCho bé\nCho mẹ bầu\nChăm sóc cá nhân\nCà phê & Đồ uống\nNông sản & ",
+      "apiCalls": [
+        "/flash-sales/active",
+        "/auth/refresh",
+        "/orders/active-count",
+        "/me/coupons",
+        "/me/daily-check-in",
+        "/brands",
+        "/cart",
+        "/categories",
+        "/products",
+        "/me/wishlist/ids"
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 6.10, 9.38, 11.86 ",
+          "cpu": "CPU usage: 52.2% user, 13.12% sys, 34.84% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 6.77, 9.42, 11.84 ",
+          "cpu": "CPU usage: 48.45% user, 14.19% sys, 37.34% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 6.55, 9.33, 11.80 ",
+          "cpu": "CPU usage: 56.70% user, 16.47% sys, 26.81% idle "
+        }
+      ]
+    },
+    "browse:guest": {
+      "path": "/browse",
+      "persona": "guest",
+      "medians": {
+        "fcp": {
+          "median": 1628,
+          "runs": [
+            1624,
+            1628,
+            1640
+          ]
+        },
+        "lcp": {
+          "median": 2444,
+          "runs": [
+            2444,
+            2436,
+            2456
+          ]
+        },
+        "firstProductCard": {
+          "median": 2423.1,
+          "runs": [
+            2423.1,
+            2415.8,
+            2438.6
+          ]
+        },
+        "cls": {
+          "median": 0,
+          "runs": [
+            0,
+            0,
+            0
+          ]
+        },
+        "tbt": {
+          "median": 3,
+          "runs": [
+            3,
+            3,
+            4
+          ]
+        },
+        "loadEvent": {
+          "median": 1555.4,
+          "runs": [
+            1552.4,
+            1555.4,
+            1563
+          ]
+        },
+        "requests": {
+          "median": 60,
+          "runs": [
+            60,
+            60,
+            60
+          ]
+        },
+        "apiRequests": {
+          "median": 10,
+          "runs": [
+            10,
+            10,
+            10
+          ]
+        },
+        "jsRequests": {
+          "median": 43,
+          "runs": [
+            43,
+            43,
+            43
+          ]
+        },
+        "jsKB": {
+          "median": 330.343,
+          "runs": [
+            330.343,
+            330.343,
+            330.343
+          ]
+        },
+        "totalKB": {
+          "median": 478.963,
+          "runs": [
+            478.963,
+            478.963,
+            478.963
+          ]
+        },
+        "authEnd": {
+          "median": 2975.6,
+          "runs": [
+            2975.6,
+            2974.9,
+            2988.9
+          ]
+        },
+        "longTaskCount": {
+          "median": 1,
+          "runs": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "lcpEl": "SPAN.",
+      "bodyHead": "Danh mục\nDanh mục\nMỹ phẩm thiên nhiên\nTẩy rửa sinh học\nCho bé\nCho mẹ bầu\nChăm sóc cá nhân\nCà phê & Đồ uống\nNông sản & Th",
+      "apiCalls": [
+        "/flash-sales/active",
+        "/brands",
+        "/categories",
+        "/products",
+        "/auth/guest",
+        "/orders/active-count",
+        "/me/wishlist/ids",
+        "/cart",
+        "/me/coupons",
+        "/me/daily-check-in"
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 7.38, 9.42, 11.80 ",
+          "cpu": "CPU usage: 48.3% user, 14.10% sys, 37.85% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 7.11, 9.33, 11.75 ",
+          "cpu": "CPU usage: 53.36% user, 13.80% sys, 32.82% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 7.70, 9.38, 11.74 ",
+          "cpu": "CPU usage: 58.69% user, 16.60% sys, 24.70% idle "
+        }
+      ]
+    },
+    "product:returning": {
+      "path": "/product/mat-ong-rung-bhnong",
+      "persona": "returning",
+      "medians": {
+        "fcp": {
+          "median": 1624,
+          "runs": [
+            1628,
+            1624,
+            1616
+          ]
+        },
+        "lcp": {
+          "median": 2636,
+          "runs": [
+            2640,
+            2636,
+            2612
+          ]
+        },
+        "firstProductCard": {
+          "median": 2612.3,
+          "runs": [
+            2613.8,
+            2612.3,
+            2585.5
+          ]
+        },
+        "cls": {
+          "median": 0.007,
+          "runs": [
+            0.007,
+            0.007,
+            0.007
+          ]
+        },
+        "tbt": {
+          "median": 1,
+          "runs": [
+            1,
+            0,
+            1
+          ]
+        },
+        "loadEvent": {
+          "median": 1560.7,
+          "runs": [
+            1562,
+            1560.7,
+            1554
+          ]
+        },
+        "requests": {
+          "median": 61,
+          "runs": [
+            61,
+            61,
+            61
+          ]
+        },
+        "apiRequests": {
+          "median": 12,
+          "runs": [
+            12,
+            12,
+            12
+          ]
+        },
+        "jsRequests": {
+          "median": 43,
+          "runs": [
+            43,
+            43,
+            43
+          ]
+        },
+        "jsKB": {
+          "median": 330.343,
+          "runs": [
+            330.343,
+            330.343,
+            330.343
+          ]
+        },
+        "totalKB": {
+          "median": 460.018,
+          "runs": [
+            460.018,
+            460.018,
+            460.018
+          ]
+        },
+        "authEnd": {
+          "median": 1867.2,
+          "runs": [
+            1867.2,
+            1873.7,
+            1852.6
+          ]
+        },
+        "longTaskCount": {
+          "median": 1,
+          "runs": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "lcpEl": "H1.",
+      "bodyHead": "BH.Nong\nMật ong rừng nguyên chất BH.Nong\n195.000đ\n260.000đ\nNhận ~4.680 Điểm Xanh\n-25%\nCòn 2 ngày 17 giờ\nMật ong rừng tự ",
+      "apiCalls": [
+        "/flash-sales/active",
+        "/auth/refresh",
+        "/affiliate/me",
+        "/me/coupons",
+        "/products/mat-ong-rung-bhnong/reviews",
+        "/products/mat-ong-rung-bhnong",
+        "/cart",
+        "/config/public",
+        "/products/mat-ong-rung-bhnong/bought-together",
+        "/me/wishlist/ids",
+        "/products/mat-ong-rung-bhnong/reviews/can-review",
+        "/products/mat-ong-rung-bhnong/related"
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 7.49, 9.31, 11.71 ",
+          "cpu": "CPU usage: 54.8% user, 13.91% sys, 31.99% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 7.61, 9.30, 11.69 ",
+          "cpu": "CPU usage: 48.38% user, 14.59% sys, 37.1% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 7.59, 9.24, 11.64 ",
+          "cpu": "CPU usage: 53.63% user, 15.97% sys, 30.38% idle "
+        }
+      ]
+    },
+    "product:guest": {
+      "path": "/product/mat-ong-rung-bhnong",
+      "persona": "guest",
+      "medians": {
+        "fcp": {
+          "median": 1620,
+          "runs": [
+            1620,
+            1612,
+            1620
+          ]
+        },
+        "lcp": {
+          "median": 2584,
+          "runs": [
+            2584,
+            2584,
+            2564
+          ]
+        },
+        "firstProductCard": {
+          "median": 2554.4,
+          "runs": [
+            2570,
+            2554.4,
+            2550.5
+          ]
+        },
+        "cls": {
+          "median": 0.008,
+          "runs": [
+            0.008,
+            0.008,
+            0.008
+          ]
+        },
+        "tbt": {
+          "median": 0,
+          "runs": [
+            1,
+            0,
+            0
+          ]
+        },
+        "loadEvent": {
+          "median": 1554.6,
+          "runs": [
+            1555.6,
+            1553.7,
+            1554.6
+          ]
+        },
+        "requests": {
+          "median": 61,
+          "runs": [
+            61,
+            61,
+            61
+          ]
+        },
+        "apiRequests": {
+          "median": 12,
+          "runs": [
+            12,
+            12,
+            12
+          ]
+        },
+        "jsRequests": {
+          "median": 43,
+          "runs": [
+            43,
+            43,
+            43
+          ]
+        },
+        "jsKB": {
+          "median": 330.343,
+          "runs": [
+            330.343,
+            330.343,
+            330.343
+          ]
+        },
+        "totalKB": {
+          "median": 460.018,
+          "runs": [
+            460.018,
+            460.018,
+            460.018
+          ]
+        },
+        "authEnd": {
+          "median": 3040.6,
+          "runs": [
+            3032.7,
+            3040.7,
+            3040.6
+          ]
+        },
+        "longTaskCount": {
+          "median": 0,
+          "runs": [
+            1,
+            0,
+            0
+          ]
+        }
+      },
+      "lcpEl": "SPAN.zaui-text zaui-text-bold zaui-text-small",
+      "bodyHead": "BH.Nong\nMật ong rừng nguyên chất BH.Nong\n195.000đ\n260.000đ\nNhận ~3.900 Điểm Xanh\n-25%\nCòn 2 ngày 17 giờ\nMật ong rừng tự ",
+      "apiCalls": [
+        "/flash-sales/active",
+        "/config/public",
+        "/products/mat-ong-rung-bhnong",
+        "/products/mat-ong-rung-bhnong/bought-together",
+        "/products/mat-ong-rung-bhnong/related",
+        "/auth/guest",
+        "/products/mat-ong-rung-bhnong/reviews",
+        "/me/wishlist/ids",
+        "/affiliate/me",
+        "/products/mat-ong-rung-bhnong/reviews/can-review",
+        "/me/coupons",
+        "/cart"
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 7.87, 9.27, 11.64 ",
+          "cpu": "CPU usage: 45.6% user, 15.47% sys, 39.45% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 8.19, 9.29, 11.62 ",
+          "cpu": "CPU usage: 43.65% user, 13.94% sys, 42.39% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 8.18, 9.27, 11.59 ",
+          "cpu": "CPU usage: 38.81% user, 14.23% sys, 46.95% idle "
+        }
+      ]
+    }
+  }
+}

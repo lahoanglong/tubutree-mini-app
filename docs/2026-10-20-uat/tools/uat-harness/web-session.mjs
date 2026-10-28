@@ -18,17 +18,18 @@ const UA_IOS =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
 
 export async function openWeb(laneN, userKey, opts = {}) {
-  const { width = 390, path: startPath = '/', browser: engine = 'chromium', headless = true, waitMs = 90_000 } = opts;
-  if (![390, 1440].includes(Number(width))) throw new Error(`width phải là 390 hoặc 1440, nhận ${width}`);
+  const { width = 390, path: startPath = '/', browser: engine = 'chromium', headless = true, waitMs = 90_000, viewport = null } = opts;
+  // viewport: { width, height, deviceScaleFactor?, isMobile?, hasTouch? } thay cho width 390/1440 cố định; không truyền = như cũ.
+  if (!viewport && ![390, 1440].includes(Number(width))) throw new Error(`width phải là 390 hoặc 1440, nhận ${width}`);
   const L = lane(laneN);
   laneEnv(L);
   const guest = userKey === 'guest';
   const user = guest ? null : await findUser(L, userKey);
-  const mobile = Number(width) === 390;
+  const mobile = viewport ? Boolean(viewport.isMobile) : Number(width) === 390;
   const browser = await playwright()[engine].launch({ headless });
   const context = await browser.newContext({
-    viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 },
-    ...(mobile ? { deviceScaleFactor: 2, isMobile: engine === 'chromium', hasTouch: true, userAgent: UA_IOS } : {}),
+    viewport: viewport ? { width: viewport.width, height: viewport.height } : mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 },
+    ...(mobile ? { deviceScaleFactor: viewport?.deviceScaleFactor ?? 2, isMobile: engine === 'chromium', hasTouch: viewport?.hasTouch ?? true, userAgent: UA_IOS } : viewport?.deviceScaleFactor ? { deviceScaleFactor: viewport.deviceScaleFactor } : {}),
     locale: 'vi-VN',
     timezoneId: 'Asia/Ho_Chi_Minh',
   });
@@ -61,9 +62,20 @@ export async function openWeb(laneN, userKey, opts = {}) {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
+  const consoleErrors = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 300));
+  });
   // next dev dịch trang ở lần mở đầu: chờ lâu hơn Mini App.
-  await page.goto(`${L.webUrl}${startPath}`, { waitUntil: 'domcontentloaded', timeout: waitMs });
-  await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => undefined);
+  try {
+    await page.goto(`${L.webUrl}${startPath}`, { waitUntil: 'domcontentloaded', timeout: waitMs });
+    await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => undefined);
+  } catch (e) {
+    await context.close().catch(() => undefined);
+    await browser.close().catch(() => undefined);
+    await closePrisma();
+    throw e;
+  }
   return {
     lane: L,
     browser,
@@ -73,6 +85,7 @@ export async function openWeb(laneN, userKey, opts = {}) {
     requests,
     blocked,
     errors,
+    consoleErrors,
     goto: async (p) => {
       await page.goto(`${L.webUrl}${p}`, { waitUntil: 'domcontentloaded', timeout: waitMs });
       await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => undefined);

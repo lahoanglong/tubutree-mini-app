@@ -116,7 +116,9 @@ function autoPhone(id) {
 }
 
 export async function open(laneN, userKey, opts = {}) {
-  const { browser: engine = 'chromium', headless = true, path: startPath = '/', mockRefresh = false, phone = null, denyPhone = false, waitMs = 20_000 } = opts;
+  const { browser: engine = 'chromium', headless = true, path: startPath = '/', mockRefresh = false, phone = null, denyPhone = false, waitMs = 20_000, viewport = null } = opts;
+  // viewport: { width, height, deviceScaleFactor?, isMobile?, hasTouch? }; không truyền = 390x844 như cũ.
+  const vp = { ...VIEWPORT, deviceScaleFactor: 2, isMobile: true, hasTouch: true, ...(viewport ?? {}) };
   const L = lane(laneN);
   laneEnv(L);
   const guest = userKey === 'guest';
@@ -125,11 +127,11 @@ export async function open(laneN, userKey, opts = {}) {
   if (!['chromium', 'webkit'].includes(engine)) throw new Error(`browser phải là chromium|webkit, nhận ${engine}`);
   const browser = await pw[engine].launch({ headless });
   const context = await browser.newContext({
-    viewport: VIEWPORT,
-    deviceScaleFactor: 2,
-    isMobile: true,
-    hasTouch: true,
-    userAgent: UA_IOS,
+    viewport: { width: vp.width, height: vp.height },
+    deviceScaleFactor: vp.deviceScaleFactor,
+    isMobile: vp.isMobile,
+    hasTouch: vp.hasTouch,
+    ...(vp.isMobile ? { userAgent: UA_IOS } : {}),
     locale: 'vi-VN',
     timezoneId: 'Asia/Ho_Chi_Minh',
   });
@@ -204,13 +206,24 @@ export async function open(laneN, userKey, opts = {}) {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
+  const consoleErrors = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 300));
+  });
 
   const authDone = page
     .waitForResponse((r) => r.url().startsWith(`${L.apiUrl}/auth/`) && r.request().method() === 'POST' && r.status() < 300, { timeout: waitMs })
     .catch(() => null);
-  await page.goto(`${L.miniUrl}${startPath}`, { waitUntil: 'domcontentloaded', timeout: waitMs });
-  await authDone;
-  await page.waitForLoadState('networkidle', { timeout: waitMs }).catch(() => undefined);
+  try {
+    await page.goto(`${L.miniUrl}${startPath}`, { waitUntil: 'domcontentloaded', timeout: waitMs });
+    await authDone;
+    await page.waitForLoadState('networkidle', { timeout: waitMs }).catch(() => undefined);
+  } catch (e) {
+    await context.close().catch(() => undefined);
+    await browser.close().catch(() => undefined);
+    await closePrisma();
+    throw e;
+  }
 
   return {
     lane: L,
@@ -225,6 +238,7 @@ export async function open(laneN, userKey, opts = {}) {
     blocked,
     staticCdn,
     errors,
+    consoleErrors,
     zmpCalls: () => page.evaluate(() => window.__uatZmpCalls ?? []),
     setQr: (content) => page.evaluate((c) => (window.__UAT_ZMP__.qr = c), content),
     apiLog: (re) => requests.filter((r) => !re || re.test(`${r.method} ${r.path}`)),
