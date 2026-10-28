@@ -105,7 +105,7 @@ export class BridgeHealthCron {
     // Số thấp hơn lần đã báo nghĩa là cầu nối khởi động lại và đếm lại từ 0.
     if (h && h.outboxDropped !== undefined && dropped < (this.alerted.get('outbox')?.count ?? 0)) this.alerted.delete('outbox');
     if (chatOn && deaf) {
-      await this.alertOps('deaf', now, 0, 'Cầu nối Zalo báo đang kết nối nhưng không nhận được tin nào từ nhóm sau lần gửi gần nhất (hơn 5 phút): tin nhân viên trả lời có thể đang bị mất. Vào tab Chat CSKH bấm Kết nối lại.');
+      await this.alertOps('deaf', now, 0, 'Cầu nối Zalo báo đang kết nối nhưng không nhận được tin nào từ nhóm sau lần gửi gần nhất (hơn 5 phút): tin nhân viên trả lời có thể đang bị mất. Admin vào tab Chat CSKH bấm Kết nối lại.');
     }
     if (chatOn && dropped > 0) {
       await this.alertOps('outbox', now, dropped, `Cầu nối Zalo đã bỏ ${dropped} sự kiện chưa báo được lên hệ thống quá 24 giờ (tin nhân viên trả lời có thể đã mất). Kiểm tra khoá ZALO_BRIDGE_SECRET và log cầu nối rồi báo kỹ thuật.`);

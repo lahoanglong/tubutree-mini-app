@@ -168,6 +168,12 @@ describe('BridgeHealthCron', () => {
     expect(saved(prisma).update.deaf).toBe(true);
   });
 
+  it('lời dặn kết nối lại nói rõ là việc của Admin: nhân viên CSKH cũng nhận tin nhưng không có quyền kết nối', async () => {
+    const { cron, notifications } = setup({ health: deafHealth() });
+    await cron.everyMinute();
+    expect(opsCalls(notifications)[0][2].message).toContain('Admin vào tab Chat CSKH bấm Kết nối lại');
+  });
+
   it('cảnh báo điếc/bỏ tin cũng tới cả nhân viên CSKH', async () => {
     const { cron, prisma } = setup({ health: deafHealth() });
     await cron.everyMinute();

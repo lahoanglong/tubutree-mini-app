@@ -16,7 +16,7 @@ describe('notifyAdmins', () => {
   it('báo từng admin chưa khoá (tối đa 20) với template và dữ liệu của sự việc', async () => {
     const { ctx, findMany, notify } = setup({ admins: [{ id: 'a1' }, { id: 'a2' }] });
     await notifyAdmins(ctx, { template: 'T', subject: 's', data: () => ({ k: 'v' }) });
-    expect(findMany).toHaveBeenCalledWith({ where: { role: 'ADMIN', isBlocked: false }, select: { id: true }, take: 20 });
+    expect(findMany).toHaveBeenCalledWith({ where: { role: 'ADMIN', isBlocked: false }, select: { id: true }, orderBy: { role: 'desc' }, take: 20 });
     expect(notify).toHaveBeenCalledWith('a1', 'T', { k: 'v' });
     expect(notify).toHaveBeenCalledWith('a2', 'T', { k: 'v' });
   });
@@ -39,9 +39,18 @@ describe('notifyAdmins', () => {
     expect(findMany).toHaveBeenCalledWith({
       where: { isBlocked: false, OR: [{ role: 'ADMIN' }, { role: 'STAFF', staffPermissions: { has: 'CSKH' } }] },
       select: { id: true },
+      orderBy: { role: 'desc' },
       take: 20,
     });
     expect(notify).toHaveBeenCalledWith('cs1', 'T', { k: 'v' });
+  });
+
+  it("mọi nhóm sắp ADMIN trước STAFF (enum UserRole: STAFF đứng trước ADMIN nên phải `desc`), để mức trần 20 không cắt mất ADMIN", async () => {
+    for (const audience of [undefined, 'admins', 'admins+cskh'] as const) {
+      const { ctx, findMany } = setup();
+      await notifyAdmins(ctx, { template: 'T', subject: 's', audience, data: () => ({}) });
+      expect(findMany.mock.calls[0]![0]).toMatchObject({ orderBy: { role: 'desc' }, take: 20 });
+    }
   });
 
   it('data bất đồng bộ chạy song song với truy vấn admin', async () => {
