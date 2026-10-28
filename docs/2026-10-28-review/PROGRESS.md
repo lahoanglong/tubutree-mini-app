@@ -73,6 +73,7 @@ Quyền: tạo worktree/nhánh, sửa mã, test, commit, push nhánh của đợ
 | 22:35 | CI main f4ec472d7: CI xanh; Playwright đỏ 2 ca (cùng test `shop.web.spec.ts:652` chip 44px, hai project), 10 flaky nhóm `/san-pham` (B-130). Test 652 chập chờn từ lúc gộp khampha | xong |
 | 22:45 | Nguyên nhân 652: `login()` của spec chỉ đặt cờ phiên localStorage, không cookie, nên HTML đầu là bản khách vãng lai; màn chờ trang chủ thay khối dưới thẻ thành viên bằng khung chờ rồi dựng lại, chip bị gỡ giữa lúc đo. CPU chậm 6 lần: bản cũ đạt 1/6, bản sửa (chờ thẻ thành viên và hết `home-settling`) 12/12; cả file 75 passed. PR #69 (`review/1028-chip-e2e`, a1d36b938) ĐANG MỞ, chưa merge. Backlog R-178 (P3) cho trường hợp còn cờ mà mất cookie | xong |
 | 22:49 | PROD 30 phút sau deploy: 4 container healthy, 0 dòng lỗi trong log API, chỉ cảnh báo cũ về biến thể Pancake thiếu giá; đĩa trống 9,2G; cache ảnh 28K | xong |
+| 23:07 | CI #68 (chỉ tài liệu) đỏ ở test web `nhan-vien/page.spec.tsx`: `EmptyState` nạp bằng `next/dynamic` (trang chặn mới của đợt) chậm hơn các nhịp `flush()` trên máy CI. Thêm nạp sẵn ở 3 spec (cd5359ed7, vào PR #69); hạ `flush(1)` thì không nạp sẵn đỏ, có nạp sẵn xanh. Chạy lại `verify` của #68 | xong |
 
 ## Backlog cũ còn mở
 B-130 (CI e2e chập chờn), B-147 (nhãn Mới), B-148 (ngày giao dự kiến, việc chủ), B-149 (hai đồng hồ máy chủ), B-150 (chữ quyền lợi hạng), B-151 (múi giờ Mini App), B-152 (thanh toán web 375 lệch), B-153 (gian hàng CTV web thừa chi tiết), B-154 (xem trước mã giảm 50 mã), B-155 (đĩa VPS, việc deploy, chỉ ghi nhận).
