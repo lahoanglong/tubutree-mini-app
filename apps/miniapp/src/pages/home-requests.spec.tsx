@@ -86,6 +86,8 @@ describe('Trang chủ gộp request (C-037)', () => {
     // Lưới gợi ý cuối trang (trang 1) và xem trước Cộng đồng không nằm trong request gộp: hai request riêng, luôn có mặt.
     mocks.routes['/products'] = () => ({ data: PAGE([card('f2', 'Chỉ nổi bật')]) });
     mocks.routes['/feed'] = () => ({ data: { posts: [] } });
+    // Chuông chỉ đếm bằng một lời gọi nhỏ (cả hộp thư, không dừng ở 50 tin của khối gộp): request riêng của khách đã đăng nhập.
+    mocks.routes['/me/notifications/unread-count'] = () => ({ data: { count: 0 } });
     mocks.get.mockImplementation(async (url: string) => {
       const r = mocks.routes[url];
       if (!r) throw Object.assign(new Error(`404 ${url}`), { response: { status: 404 } });
@@ -95,7 +97,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     });
   });
 
-  it('đã đăng nhập: dữ liệu Home đến từ 2 request gộp (/home + /home/me) cộng lưới gợi ý và Cộng đồng, vẽ đủ khối', async () => {
+  it('đã đăng nhập: dữ liệu Home đến từ 2 request gộp (/home + /home/me) cộng lưới gợi ý, Cộng đồng và số tin chưa đọc, vẽ đủ khối', async () => {
     mocks.routes['/home'] = () => ({ data: PUBLIC_FEED });
     mocks.routes['/home/me'] = () => ({ data: ME_FEED });
     renderHome();
@@ -104,7 +106,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     expect(await screen.findByText(/^Mã 25\.000đ/)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
     // Trang đầu của lưới gợi ý (không page, limit 12) lấy từ khối gộp; số yêu cầu đổi rác đang mở cũng lấy từ /home/me (không gọi /waste/me).
-    expect(paths().sort()).toEqual(['/feed', '/home', '/home/me']);
+    expect(paths().sort()).toEqual(['/feed', '/home', '/home/me', '/me/notifications/unread-count']);
     expect(mocks.get.mock.calls.find(([u]) => u === '/home/me')?.[1]).toMatchObject({ params: { purchasedLimit: 10 } });
   });
 
@@ -138,7 +140,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByText(/^Mã 25\.000đ/)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/config/public', '/feed', '/home', '/home/me', '/me/new-customer-offer']);
+    expect(paths().sort()).toEqual(['/config/public', '/feed', '/home', '/home/me', '/me/new-customer-offer', '/me/notifications/unread-count']);
   });
 
   it('API cũ chưa có /home (404): lùi về từng request lẻ, trang vẫn đủ nội dung', async () => {
@@ -150,7 +152,6 @@ describe('Trang chủ gộp request (C-037)', () => {
     mocks.routes['/me/purchased-items'] = () => ({ data: { items: [], nextCursor: null } });
     mocks.routes['/orders/active-count'] = () => ({ data: { count: 0 } });
     mocks.routes['/me/subscriptions'] = () => ({ data: [] });
-    mocks.routes['/me/notifications'] = () => ({ data: [] });
     renderHome();
     expect(await screen.findByText('Gợi ý lẻ')).toBeInTheDocument();
     await waitFor(() => expect(paths()).toEqual(expect.arrayContaining(['/home', '/home/me', '/products', '/products/for-you', '/categories', '/brands'])));
@@ -163,7 +164,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByText('LẻBrand')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/brands', '/feed', '/home', '/home/me']);
+    expect(paths().sort()).toEqual(['/brands', '/feed', '/home', '/home/me', '/me/notifications/unread-count']);
   });
 
   it('kéo để làm mới: khối gộp được tải lại bằng request gộp, không bắn request lẻ', async () => {
