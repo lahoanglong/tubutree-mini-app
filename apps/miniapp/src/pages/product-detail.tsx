@@ -49,6 +49,7 @@ import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
+import { SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 import { getAffiliateMe } from '../services/affiliate-api';
 import { ContentKitSheet } from '../components/content-kit-sheet';
 import { CartBadge } from '../components/ui/cart-badge';
@@ -604,7 +605,7 @@ export default function ProductDetailPage() {
           </ScrollRow>
         )}
 
-        {selected && inStock && !retailOnly && (
+        {SUBSCRIPTIONS_IN_MINIAPP && selected && inStock && !retailOnly && (
           <Box
             role="button"
             {...rowKeyboardProps()}

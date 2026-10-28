@@ -1,5 +1,6 @@
 import { vi } from '../../i18n/vi';
 import type { OrderListFilter } from '../../services/shop-api';
+import { SUBSCRIPTIONS_IN_MINIAPP } from '../../utils/features';
 
 export type OrdersTabKey = 'all' | 'pending_payment' | 'processing' | 'shipping' | 'delivered' | 'closed' | 'subscriptions';
 
@@ -12,7 +13,7 @@ export interface OrdersTab {
 
 /** Tab trang Đơn hàng (spec 4a.2 + Ruling 1). "Đang xử lý" gồm Đang đóng gói, "Đã hủy/hoàn" gồm
  * Đã hoàn — hai trạng thái trước đây chỉ thấy ở "Tất cả" (A2-47). */
-export const ORDERS_TABS: readonly OrdersTab[] = [
+const ALL_ORDERS_TABS: readonly OrdersTab[] = [
   { key: 'all', label: vi.orders.tabAll, filter: {} },
   { key: 'pending_payment', label: vi.orderStatus.PENDING_PAYMENT!, filter: { status: 'PENDING_PAYMENT' } },
   { key: 'processing', label: vi.orders.tabProcessing, filter: { group: 'processing' } },
@@ -21,6 +22,10 @@ export const ORDERS_TABS: readonly OrdersTab[] = [
   { key: 'closed', label: vi.orders.tabClosed, filter: { group: 'closed' } },
   { key: 'subscriptions', label: vi.orders.tabSubscriptions },
 ];
+
+export const ORDERS_TABS: readonly OrdersTab[] = SUBSCRIPTIONS_IN_MINIAPP
+  ? ALL_ORDERS_TABS
+  : ALL_ORDERS_TABS.filter((t) => t.key !== 'subscriptions');
 
 export function parseOrdersTab(search: string): OrdersTabKey {
   const v = new URLSearchParams(search).get('tab');

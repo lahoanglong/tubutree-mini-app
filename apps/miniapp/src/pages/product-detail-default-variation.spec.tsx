@@ -212,3 +212,14 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
     expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
   });
 });
+
+describe('ProductDetailPage — giao định kỳ tạm ẩn ở Mini App (R-30)', () => {
+  it('không hiện dòng "Đặt định kỳ"', async () => {
+    mocks.authStatus = 'authenticated';
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    mocks.fetchProduct.mockResolvedValue(product);
+    renderPdp();
+    await screen.findAllByText('500g');
+    expect(screen.queryByText(/Đặt định kỳ/)).toBeNull();
+  });
+});
