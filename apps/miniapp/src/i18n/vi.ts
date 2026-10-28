@@ -606,6 +606,7 @@ export const vi = {
     webRefreshNote: 'Gian hàng cập nhật sau vài phút khi bạn đổi nội dung.',
     addCover: 'Thêm ảnh bìa',
     viewProducts: 'Xem sản phẩm',
+    moreAtTubu: 'Xem thêm ở Tubu Tree',
     emptyHeading: 'Gian hàng chưa có sản phẩm nào để xem',
     emptyBody: 'Chủ gian hàng đang bổ sung sản phẩm. Bạn xem thử các sản phẩm đang bán trên Tubu Tree nhé.',
     emptyOwnerBody: 'Gian hàng của bạn chưa có sản phẩm nào khách xem được. Thêm sản phẩm để khách có gì mà mua.',

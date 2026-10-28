@@ -11,7 +11,7 @@ vi.mock('./storefront-share', () => ({
     open ? <div data-testid="share">{`${slug}|${referralCode}`}</div> : null,
 }));
 
-import { StorefrontAction, StorefrontEmpty } from './storefront-owner';
+import { MoreAtTubuLink, StorefrontAction, StorefrontEmpty } from './storefront-owner';
 
 let mounted: Rendered | undefined;
 afterEach(() => {
@@ -30,12 +30,10 @@ describe('StorefrontAction', () => {
     expect(mounted.container.querySelector('button')!.className).toContain('max-md:w-full');
   });
 
-  it('khách ở điện thoại: nút Xem sản phẩm xanh đậm như Button mặc định của Mini App', () => {
+  it('khách không có thanh dính đáy: không nút nào kéo khách rời gian hàng', () => {
     state.ref = undefined;
     mounted = render(<StorefrontAction slug="an" title="An" referralCode="ctv123" />);
-    const link = mounted.container.querySelector('a')!;
-    expect(link.className).toContain('max-md:bg-forest-600');
-    expect(link.className).toContain('max-md:text-stone-0');
+    expect(mounted.container.firstElementChild).toBeNull();
   });
 
   it('chủ gian hàng: nút Chia sẻ gian hàng mở sheet kèm mã giới thiệu, không có "Thêm sản phẩm"', () => {
@@ -45,14 +43,19 @@ describe('StorefrontAction', () => {
     expect(document.body.textContent).toContain('an|ctv123');
   });
 
-  it('khách: Xem sản phẩm dẫn sang danh mục khi đã mở, chưa mở thì về trang chủ', () => {
+  it('khách: link phụ "Xem thêm ở Tubu Tree" dẫn sang danh mục khi đã mở, chưa mở thì về trang chủ; chủ không có link này', () => {
     state.ref = undefined;
-    mounted = render(<StorefrontAction slug="an" title="An" referralCode="ctv123" />);
+    mounted = render(<MoreAtTubuLink referralCode="ctv123" />);
+    expect(mounted.container.querySelector('a')?.textContent).toBe('Xem thêm ở Tubu Tree');
     expect(mounted.container.querySelector('a')?.getAttribute('href')).toBe('/san-pham');
     mounted.unmount();
     state.catalogReady = false;
-    mounted = render(<StorefrontAction slug="an" title="An" referralCode="ctv123" />);
+    mounted = render(<MoreAtTubuLink referralCode="ctv123" />);
     expect(mounted.container.querySelector('a')?.getAttribute('href')).toBe('/');
+    mounted.unmount();
+    state.ref = 'CTV123';
+    mounted = render(<MoreAtTubuLink referralCode="ctv123" />);
+    expect(mounted.container.querySelector('a')).toBeNull();
   });
 });
 

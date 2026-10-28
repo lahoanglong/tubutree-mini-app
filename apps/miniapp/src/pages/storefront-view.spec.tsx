@@ -120,11 +120,12 @@ describe('StorefrontViewPage — nhãn tin cậy, nút đáy và trạng thái r
     expect(await screen.findByText('Nhãn hàng trên Tubu Tree')).toBeInTheDocument();
   });
 
-  it('khách (không phải chủ): nút đáy là "Xem sản phẩm" dẫn tới /browse, không có nút chia sẻ', async () => {
+  it('khách (không phải chủ): không có nút dính đáy kéo ra danh mục; lối sang Tubu Tree là link phụ cuối trang, không có nút chia sẻ', async () => {
     mocks.getPublicStorefront.mockResolvedValue(storefront(withItems));
     renderPage('abcd1234');
-    fireEvent.click(await screen.findByRole('button', { name: 'Xem sản phẩm' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem thêm ở Tubu Tree' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/browse');
+    expect(screen.queryByRole('button', { name: 'Xem sản phẩm' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Chia sẻ gian hàng' })).not.toBeInTheDocument();
   });
 
@@ -144,7 +145,7 @@ describe('StorefrontViewPage — nhãn tin cậy, nút đáy và trạng thái r
     view.unmount();
     mocks.getPublicStorefront.mockResolvedValue(storefront({ isSample: false, ...withItems }));
     renderPage('abcd1234');
-    await screen.findByRole('button', { name: 'Xem sản phẩm' });
+    await screen.findByRole('button', { name: 'Xem thêm ở Tubu Tree' });
     expect(screen.queryByText('Gian hàng mẫu')).not.toBeInTheDocument();
   });
 
@@ -156,7 +157,7 @@ describe('StorefrontViewPage — nhãn tin cậy, nút đáy và trạng thái r
     view.unmount();
     mocks.getPublicStorefront.mockResolvedValue(storefront({ isSample: false, title: 'Shop An', ...withItems }));
     renderPage('abcd1234');
-    await screen.findByRole('button', { name: 'Xem sản phẩm' });
+    await screen.findByRole('button', { name: 'Xem thêm ở Tubu Tree' });
     expect(mocks.shareSheetProps).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Shop An' }));
   });
 
@@ -177,7 +178,7 @@ describe('StorefrontViewPage — nhãn tin cậy, nút đáy và trạng thái r
     useAuthStore.setState({ user: { id: 'u2', role: 'CUSTOMER', referralCode: 'ZZZZ9999' } as never });
     mocks.getPublicStorefront.mockResolvedValue(storefront(withItems));
     renderPage('abcd1234');
-    expect(await screen.findByRole('button', { name: 'Xem sản phẩm' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Xem thêm ở Tubu Tree' })).toBeInTheDocument();
   });
 
   it('chưa có sản phẩm khách thấy: trạng thái rỗng có nút "Xem sản phẩm" dẫn tới /browse (khách không gặp trang trắng)', async () => {

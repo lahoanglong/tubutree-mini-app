@@ -19,7 +19,7 @@ import { getReturnWindowDays, getStorefront, type ProductCard as ProductCardData
 import { SITE_URL } from '@/lib/site';
 import { StorefrontTracker } from '@/components/storefront-tracker';
 import { isPartnerStore } from '@/lib/partner-store';
-import { OpenStorefrontCta, StorefrontAction, StorefrontEmpty } from '@/components/affiliate/storefront-owner';
+import { MoreAtTubuLink, OpenStorefrontCta, StorefrontAction, StorefrontEmpty } from '@/components/affiliate/storefront-owner';
 import { storefrontBadgeLabel } from '@/lib/storefront-badge';
 import ProductCard from '@/components/product-card';
 import { safeHexColor } from '@/lib/safe-color';
@@ -289,6 +289,7 @@ export default async function StorefrontPage({
         </section>
       ))}
       {sf.type === 'CTV' && <OpenStorefrontCta referralCode={sf.referralCode} />}
+      {collections.length > 0 && <MoreAtTubuLink referralCode={sf.referralCode} />}
     </main>
   );
 }

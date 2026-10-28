@@ -109,11 +109,7 @@ export default function StorefrontViewPage() {
             <Button fullWidth icon={Share2} onPress={() => setShareOpen(true)}>
               {vi.storefront.shareStore}
             </Button>
-          ) : (
-            <Button fullWidth onPress={() => navigate('/browse')}>
-              {vi.storefront.viewProducts}
-            </Button>
-          )
+          ) : undefined
         }
       >
         {sf.isSample && (
@@ -163,6 +159,12 @@ export default function StorefrontViewPage() {
                 {OPEN_STOREFRONT_CTA}
               </Button>
             </Card>
+          </Box>
+        )}
+        {/* Không có nút dính đáy kéo khách rời gian hàng: lối sang danh mục chung chỉ là link phụ ở cuối trang. */}
+        {!isOwner && collections.length > 0 && (
+          <Box mt={4} px={4} style={{ textAlign: 'center' }}>
+            <Button variant="ghost" onPress={() => navigate('/browse')}>{vi.storefront.moreAtTubu}</Button>
           </Box>
         )}
       </StorePageShell>
