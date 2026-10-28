@@ -251,6 +251,23 @@ describe('CustomerRefundsTab — bộ lọc, phân trang, trạng thái', () => 
     expect(admin.container.textContent).not.toContain('Gõ đủ 10 số SĐT');
   });
 
+  it('nhân viên Kế toán kiêm CSKH (không phải admin nhưng thấy đủ SĐT): ô tìm không đòi đủ 10 số và câu rỗng không nhắc điều đó', async () => {
+    const api = mockFetch(LIST([]));
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<CustomerRefundsTab isAdmin={false} phoneMasked={false} />);
+    await flush();
+    const input = container.querySelector('input[aria-label="Tìm khoản hoàn theo mã đơn hoặc SĐT khách"]') as HTMLInputElement;
+    expect(input.placeholder).toBe('Mã đơn hoặc SĐT khách');
+    typeInto(input, '0912');
+    for (let i = 0; i < 40 && !container.textContent?.includes('Không có khoản hoàn nào khớp'); i += 1) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+    }
+    expect(container.textContent).toContain('Không có khoản hoàn nào khớp "0912".');
+    expect(container.textContent).not.toContain('Gõ đủ 10 số SĐT');
+  });
+
   it('thanh lọc: "Đang mở" đứng đầu và đang chọn, chip 44px; bấm "Đã chuyển" gọi status=COMPLETED trang 1', async () => {
     const api = mockFetch(LIST([]));
     vi.stubGlobal('fetch', vi.fn(api.fn));

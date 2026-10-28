@@ -108,7 +108,8 @@ export function CustomerRefundsPendingBadge() {
  * Khoản của khách có tài khoản: admin bấm "Bắt đầu chuyển khoản" (khoá nơi nhận, khách không rút về Ví được nữa) TRƯỚC khi
  * chuyển tiền bên ngoài, rồi xác nhận kèm mã giao dịch để sổ khớp. Màn này chỉ ghi sổ, không chuyển tiền thật.
  */
-export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; isAdmin?: boolean } = {}) {
+/** `phoneMasked`: máy chủ che SĐT (nhân viên không có CSKH/KHO, cùng luật seesFullOrderPhones) nên ô tìm chỉ khớp đủ 10 số. */
+export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmin }: { meId?: string; isAdmin?: boolean; phoneMasked?: boolean } = {}) {
   const [filter, setFilter] = useState<AdminCustomerRefundFilter>('OPEN');
   const [kind, setKind] = useState<AdminCustomerRefundKind | ''>('');
   const [page, setPage] = useState(1);
@@ -311,7 +312,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; is
           <input
             type="search"
             aria-label="Tìm khoản hoàn theo mã đơn hoặc SĐT khách"
-            placeholder={isAdmin ? 'Mã đơn hoặc SĐT khách' : 'Mã đơn hoặc đủ 10 số SĐT'}
+            placeholder={phoneMasked ? 'Mã đơn hoặc đủ 10 số SĐT' : 'Mã đơn hoặc SĐT khách'}
             maxLength={100}
             value={searchInput}
             onChange={(e) => {
@@ -411,7 +412,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; is
         ))}
         {q.data && !outOfRange && rows.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
-            {search ? `Không có khoản hoàn nào khớp "${search}". ${searchEmptyHint(search, { phoneMasked: !isAdmin }) ?? ''}`.trim() : CUSTOMER_REFUND_EMPTY[filter]}
+            {search ? `Không có khoản hoàn nào khớp "${search}". ${searchEmptyHint(search, { phoneMasked }) ?? ''}`.trim() : CUSTOMER_REFUND_EMPTY[filter]}
           </p>
         )}
       </div>
