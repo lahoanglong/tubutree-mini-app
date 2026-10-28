@@ -404,7 +404,7 @@ describe('thêm / sửa ca', () => {
 describe('đăng ký nhanh cả tuần', () => {
   it('hai ô giờ có nhãn "Bắt đầu"/"Kết thúc" mặc định 08:00 và 17:00', async () => {
     await mount();
-    await press('Đăng ký nhanh');
+    await press('Đăng ký ca');
     expect(labelled('Bắt đầu')?.value).toBe('08:00');
     expect(labelled('Kết thúc')?.value).toBe('17:00');
   });
@@ -412,7 +412,7 @@ describe('đăng ký nhanh cả tuần', () => {
   it('mặc định T2–T6 từ hôm nay; ngày đã qua bị khoá; gửi đúng các ngày với giờ 08:00–17:00', async () => {
     m.post['/staff/shifts'] = () => ({ created: 3 });
     await mount();
-    await press('Đăng ký nhanh');
+    await press('Đăng ký ca');
     expect(sheetTitle('Đăng ký nhanh cả tuần')).toBe(true);
     expect(btn('T2 09/03').disabled).toBe(true);
     expect(btn('T3 10/03').disabled).toBe(true);
@@ -428,7 +428,7 @@ describe('đăng ký nhanh cả tuần', () => {
 
   it('bỏ chọn một ngày thì số ngày giảm; bỏ hết thì không gửi được', async () => {
     await mount();
-    await press('Đăng ký nhanh');
+    await press('Đăng ký ca');
     click(btn('T6 13/03'));
     expect(btn('Gửi duyệt (2 ngày)').disabled).toBe(false);
     click(btn('T4 11/03'));
@@ -438,7 +438,7 @@ describe('đăng ký nhanh cả tuần', () => {
 
   it('chọn ca chuẩn thì ẩn ô giờ và gửi giờ + templateId của ca chuẩn; bấm lại bỏ chọn', async () => {
     await mount();
-    await press('Đăng ký nhanh');
+    await press('Đăng ký ca');
     click(btn('Ca chiều (13:00–17:00)'));
     expect(timeInputs()).toHaveLength(0);
     click(btn('T6 13/03'));
@@ -522,7 +522,7 @@ describe('truy cập', () => {
     expect(headingProblems(document.body)).toEqual([]);
     expect(unnamedControls(document.body)).toEqual([]);
     expect(smallTouchTargets(document.body)).toEqual([]);
-    for (const open of ['Đăng ký nhanh', /^Thêm ca T4/, /^Sửa ca /, /^Huỷ ca /]) {
+    for (const open of ['Đăng ký ca', /^Thêm ca T4/, /^Sửa ca /, /^Huỷ ca /]) {
       await press(open);
       expect(unnamedControls(document.body)).toEqual([]);
       expect(smallTouchTargets(document.body)).toEqual([]);

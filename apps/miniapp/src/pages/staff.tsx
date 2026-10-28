@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Input, Page, useSnackbar } from 'zmp-ui';
+import { Input, Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Copy, LogIn, LogOut, MapPin } from 'lucide-react';
 import {
@@ -26,7 +26,7 @@ import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import { ErrorState } from '../components/ui/empty-state';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Field } from '../components/ui/form';
 import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
@@ -60,13 +60,18 @@ const TIME_RE = /^\d{1,2}:\d{2}$/;
 
 export default function StaffPage() {
   const role = useAuthStore((s) => s.user?.role);
+  const navigate = useNavigate();
   if (role !== 'STAFF' && role !== 'ADMIN') {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title="Ca làm của tôi" />
-        <div style={{ padding: 24, textAlign: 'center' }}>
-          <Text tone="secondary">Trang dành cho nhân viên. Liên hệ quản trị để được cấp quyền.</Text>
-        </div>
+        <EmptyState
+          art="leaf"
+          heading="Trang dành cho nhân viên"
+          body="Tài khoản này chưa có quyền nhân viên. Liên hệ quản trị để được cấp quyền."
+          ctaLabel="Về Cá nhân"
+          onCta={() => navigate('/profile')}
+        />
       </Page>
     );
   }
@@ -228,7 +233,16 @@ function TodayCard() {
             Nghỉ giữa ca? Ra ca rồi vào ca lại khi quay lại.
           </Text>
         </>
-      ) : todayShifts.length === 0 ? (
+      ) : statusQ.isError ? (
+        <div>
+          <Text variant="body-sm" tone="secondary" as="div">
+            Không tải được trạng thái chấm công.
+          </Text>
+          <Button variant="secondary" style={{ marginTop: 8 }} onPress={() => void statusQ.refetch()}>
+            Thử lại
+          </Button>
+        </div>
+      ) : statusQ.isLoading ? null : todayShifts.length === 0 ? (
         <Text variant="body-sm" tone="secondary" as="div">
           Hôm nay bạn không có ca đã duyệt.
         </Text>
@@ -475,7 +489,7 @@ function StaffHub() {
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <Button icon={Plus} style={{ flex: '1 1 150px' }} onPress={openQuick}>
-            Đăng ký nhanh
+            Đăng ký ca
           </Button>
           <Button variant="secondary" icon={Copy} style={{ flex: '1 1 150px' }} loading={copyM.isPending} onPress={() => copyM.mutate()}>
             Chép tuần trước

@@ -157,7 +157,7 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
     it('không phải nhân viên: báo không có quyền, vẫn đúng một h1, không gọi API', () => {
       mocks.role = 'CUSTOMER';
       renderPage();
-      expect(screen.getByText('Trang dành cho nhân viên. Liên hệ quản trị để được cấp quyền.')).toBeInTheDocument();
+      expect(screen.getByText('Trang dành cho nhân viên')).toBeInTheDocument();
       expect(h1s()).toEqual(['Ca làm của tôi']);
       expect(mocks.getShifts).not.toHaveBeenCalled();
       expect(mocks.getAttendanceStatus).not.toHaveBeenCalled();
@@ -469,7 +469,7 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
   describe('đăng ký nhanh cả tuần', () => {
     it('hai ô giờ có tên truy cập phân biệt "Bắt đầu"/"Kết thúc", không rơi về tên mặc định "Giờ"', async () => {
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký nhanh' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký ca' }));
       expect(screen.getByLabelText('Bắt đầu')).toHaveValue('08:00');
       expect(screen.getByLabelText('Kết thúc')).toHaveValue('17:00');
       expect(screen.queryByLabelText('Giờ')).not.toBeInTheDocument();
@@ -478,7 +478,7 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
     it('mặc định T2–T6 từ hôm nay; ngày đã qua bị khoá; gửi đúng các ngày với giờ 08:00–17:00', async () => {
       mocks.createShifts.mockResolvedValue({ created: 3 });
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký nhanh' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký ca' }));
       expect(screen.getByRole('heading', { level: 2, name: 'Đăng ký nhanh cả tuần' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'T2 09/03' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'T3 10/03' })).toBeDisabled();
@@ -498,7 +498,7 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
 
     it('bỏ chọn một ngày thì số ngày giảm; bỏ hết thì không gửi được', async () => {
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký nhanh' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký ca' }));
       fireEvent.click(screen.getByRole('button', { name: 'T6 13/03' }));
       expect(screen.getByRole('button', { name: 'Gửi duyệt (2 ngày)' })).toBeEnabled();
       fireEvent.click(screen.getByRole('button', { name: 'T4 11/03' }));
@@ -508,7 +508,7 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
 
     it('chọn ca chuẩn thì ẩn ô giờ và gửi giờ + templateId của ca chuẩn', async () => {
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký nhanh' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký ca' }));
       fireEvent.click(screen.getByRole('button', { name: 'Ca chiều (13:00–17:00)' }));
       expect(timeInputs()).toHaveLength(0);
       fireEvent.click(screen.getByRole('button', { name: 'T6 13/03' }));

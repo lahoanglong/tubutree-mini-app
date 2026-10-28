@@ -173,7 +173,7 @@ export function StaffHub() {
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={openQuick} className={`${ui.btnPrimary} min-w-[10rem] flex-1`}>
           <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          Đăng ký nhanh
+          Đăng ký ca
         </button>
         <button type="button" disabled={copyM.isPending} onClick={() => { clear(); copyM.mutate(); }} className={`${skin.btnSecondary} min-w-[10rem] flex-1`}>
           <Copy className="mr-1.5 h-4 w-4" aria-hidden="true" />

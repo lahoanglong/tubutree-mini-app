@@ -122,7 +122,7 @@ describe('Lương của tôi theo DS v2 (C-076, C-114)', () => {
     mocks.role = 'CUSTOMER';
     mocks.getMyPayroll.mockClear();
     renderPage();
-    expect(screen.getByText('Trang dành cho nhân viên.')).toBeInTheDocument();
+    expect(screen.getByText('Trang dành cho nhân viên')).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Lương của tôi']);
     expect(mocks.getMyPayroll).not.toHaveBeenCalled();
   });
