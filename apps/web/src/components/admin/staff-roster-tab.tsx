@@ -12,6 +12,7 @@ import { BTN_LINK_DANGER, BTN_PRIMARY, chipClass, Field, INPUT_CLASS, Notice, To
 
 const PHONE_RE = /^0\d{8,10}$/;
 const ROLE_LABEL: Record<StaffRole, string> = { STAFF: 'Nhân viên', ADMIN: 'Quản trị' };
+const PERMISSIONS = Object.keys(STAFF_PERMISSION_SHORT) as StaffPermission[];
 
 /** Nhân sự: danh sách người có quyền, cấp quyền theo SĐT (STAFF hoặc ADMIN), thu hồi và huỷ lời mời chờ mở app. */
 export function StaffRosterTab({ meId }: { meId?: string } = {}) {
@@ -20,14 +21,17 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
   const staffQ = useQuery(adminStaffQuery(coreHttp));
   const [phone, setPhone] = useState('');
   const [role, setRole] = useState<StaffRole>('STAFF');
+  const [newPerms, setNewPerms] = useState<StaffPermission[]>([]);
   const [msg, setMsg] = useState<{ tone: 'success' | 'warning' | 'danger'; text: string } | null>(null);
   const refresh = () => void qc.invalidateQueries({ queryKey: ['admin-staff'] });
 
   const grantM = useMutation({
-    mutationFn: () => grantStaff(coreHttp, phone.trim(), role),
+    // Nhóm việc chỉ có nghĩa với nhân viên; không chọn nhóm nào thì không gửi khoá permissions (như trước).
+    mutationFn: () => grantStaff(coreHttp, phone.trim(), role, role === 'STAFF' && newPerms.length ? newPerms : undefined),
     onSuccess: (r) => {
       setMsg({ tone: 'success', text: r.applied ? 'Đã cấp quyền & áp ngay.' : 'Đã lưu quyền (sẽ áp khi họ mở app).' });
       setPhone('');
+      setNewPerms([]);
       refresh();
     },
     onError: (e) => setMsg({ tone: 'danger', text: errText(e) }),
@@ -120,6 +124,24 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
             </button>
           ))}
         </div>
+        {role === 'STAFF' && (
+          <div className="space-y-1">
+            <div role="group" aria-label="Nhóm việc cho người mới" className="flex flex-wrap gap-2">
+              {PERMISSIONS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  aria-pressed={newPerms.includes(p)}
+                  onClick={() => setNewPerms((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]))}
+                  className={chipClass(newPerms.includes(p))}
+                >
+                  {STAFF_PERMISSION_SHORT[p]}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-stone-500">Không chọn nhóm nào: chỉ dùng quầy thu ngân, Đổi rác và chấm công.</p>
+          </div>
+        )}
         <button type="submit" disabled={!PHONE_RE.test(phone.trim()) || grantM.isPending} className={BTN_PRIMARY}>
           Lưu quyền
         </button>
@@ -161,7 +183,15 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
                     </button>
                   )}
                 </div>
-                {m.role === 'STAFF' && <PermissionPicker key={`${m.id}:${(m.staffPermissions ?? []).join(',')}`} userId={m.id} current={(m.staffPermissions ?? []) as StaffPermission[]} onSaved={refresh} />}
+                {m.role === 'STAFF' && (
+                  <PermissionPicker
+                    key={`${m.id}:${(m.staffPermissions ?? []).join(',')}`}
+                    current={(m.staffPermissions ?? []) as StaffPermission[]}
+                    save={async (perms) => (await setStaffPermissions(m.id, perms)).changed}
+                    savedText="Đã lưu nhóm việc. Nhân viên thấy mục mới ở lần mở trang kế tiếp."
+                    onSaved={refresh}
+                  />
+                )}
                 {m.role === 'ADMIN' && <p className="text-xs text-stone-500">Quản trị thấy và làm được mọi việc.</p>}
               </li>
             ))}
@@ -172,19 +202,33 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
               <h3 className="text-sm font-semibold text-stone-900">Chờ mở app</h3>
               <ul className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                 {staffQ.data.pendingInvites.map((p) => (
-                  <li key={p.phone} className="flex items-center justify-between gap-2 rounded-card border border-stone-200 bg-stone-50 p-3 text-sm">
-                    <span>
-                      {p.phone} · {ROLE_LABEL[p.role]}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={`Huỷ lời mời · ${p.phone}`}
-                      disabled={revokeM.isPending}
-                      onClick={() => void askCancelInvite(p.phone)}
-                      className={BTN_LINK_DANGER}
-                    >
-                      Huỷ
-                    </button>
+                  <li key={p.phone} className="space-y-2 rounded-card border border-stone-200 bg-stone-50 p-3 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span>
+                        {p.phone} · {ROLE_LABEL[p.role]}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Huỷ lời mời · ${p.phone}`}
+                        disabled={revokeM.isPending}
+                        onClick={() => void askCancelInvite(p.phone)}
+                        className={BTN_LINK_DANGER}
+                      >
+                        Huỷ
+                      </button>
+                    </div>
+                    {p.role === 'STAFF' && (
+                      <PermissionPicker
+                        key={`${p.phone}:${(p.staffPermissions ?? []).join(',')}`}
+                        current={(p.staffPermissions ?? []) as StaffPermission[]}
+                        save={async (perms) => {
+                          await grantStaff(coreHttp, p.phone, 'STAFF', perms);
+                          return true;
+                        }}
+                        savedText="Đã lưu nhóm việc của lời mời. Họ nhận đúng nhóm này khi mở app lần đầu."
+                        onSaved={refresh}
+                      />
+                    )}
                   </li>
                 ))}
               </ul>
@@ -197,13 +241,24 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
 }
 
 /** Nhóm việc quyết định nhân viên thấy mục nào và gọi được việc nào; máy chủ kiểm lại từng lần gọi nên bỏ tick là mất quyền ngay. */
-function PermissionPicker({ userId, current, onSaved }: { userId: string; current: StaffPermission[]; onSaved: () => void }) {
+function PermissionPicker({
+  current,
+  save: persist,
+  savedText,
+  onSaved,
+}: {
+  current: StaffPermission[];
+  /** Lưu danh sách nhóm; trả về có thay đổi thật hay không. */
+  save: (perms: StaffPermission[]) => Promise<boolean>;
+  savedText: string;
+  onSaved: () => void;
+}) {
   const [perms, setPerms] = useState<StaffPermission[]>(current);
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const save = useMutation({
-    mutationFn: () => setStaffPermissions(userId, perms),
-    onSuccess: (r) => {
-      setMsg({ tone: 'success', text: r.changed ? 'Đã lưu nhóm việc. Nhân viên thấy mục mới ở lần mở trang kế tiếp.' : 'Không có gì thay đổi.' });
+    mutationFn: () => persist(perms),
+    onSuccess: (changed) => {
+      setMsg({ tone: 'success', text: changed ? savedText : 'Không có gì thay đổi.' });
       onSaved();
     },
     onError: (e) => setMsg({ tone: 'danger', text: errText(e) }),
@@ -213,7 +268,7 @@ function PermissionPicker({ userId, current, onSaved }: { userId: string; curren
     <fieldset className="space-y-1">
       <legend className="text-xs font-semibold text-stone-700">Nhóm việc</legend>
       <p className="text-xs text-stone-500">Không chọn nhóm nào: chỉ dùng quầy thu ngân, Đổi rác và chấm công.</p>
-      {(Object.keys(STAFF_PERMISSION_SHORT) as StaffPermission[]).map((p) => (
+      {PERMISSIONS.map((p) => (
         <label key={p} className="flex min-h-[44px] items-start gap-2 py-1 text-sm sm:min-h-[32px]">
           <input
             type="checkbox"

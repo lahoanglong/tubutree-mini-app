@@ -9,6 +9,7 @@ import {
   approveStorefront,
   getAdminStorefront,
   listAdminStorefronts,
+  markStorefrontContentSeen,
   reinstateStorefront,
   takeDownStorefront,
   type AdminStorefrontRow,
@@ -24,6 +25,8 @@ import { USER_ROLE_LABELS } from './users-list';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, Notice, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
 
 const REASON_MAX = 300;
+
+const CONTENT_CHANGED_TEXT = (at: string) => `Chủ đã đổi tên, lời giới thiệu hoặc ảnh sau khi duyệt (${formatDateTime(at)}). Xem lại rồi bấm "Đã xem".`;
 
 const errorText = (e: unknown) => (e instanceof ApiError || e instanceof Error ? e.message : 'Không thực hiện được, thử lại sau.');
 
@@ -47,6 +50,9 @@ function StatusBadges({ row }: { row: AdminStorefrontRow }) {
   );
 }
 
+/** Chủ đổi nội dung sau khi duyệt và chưa ai xem lại. Dấu còn sót trên gian hàng đã bỏ duyệt thì không tính. */
+const changedAfterApproval = (row: AdminStorefrontRow) => !!row.contentChangedAt && !!row.approvedAt;
+
 function ownerLine(row: AdminStorefrontRow): string {
   if (!row.owner) return 'Không có chủ';
   return [row.owner.fullName ?? 'Chưa đặt tên', row.owner.phone].filter(Boolean).join(' · ');
@@ -59,6 +65,7 @@ function ownerLine(row: AdminStorefrontRow): string {
 export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: StorefrontStatusFilter | '' } = {}) {
   const [status, setStatus] = useState<StorefrontStatusFilter | ''>(initialStatus);
   const pendingCount = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 }).data?.items.find((i) => i.key === 'storefrontsPending')?.count;
+  const [changedOnly, setChangedOnly] = useState(false);
   const [type, setType] = useState<StorefrontTypeFilter | ''>('');
   const [draft, setDraft] = useState('');
   const [q, setQ] = useState('');
@@ -75,13 +82,23 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
     onError: (e) => setQuickFailure(errorText(e)),
   });
 
+  const seen = useMutation({
+    mutationFn: (id: string) => markStorefrontContentSeen(id),
+    onSuccess: () => {
+      setQuickFailure(null);
+      return qc.invalidateQueries({ queryKey: ['admin-storefronts'] });
+    },
+    onError: (e) => setQuickFailure(errorText(e)),
+  });
+
   const list = useInfiniteQuery({
-    queryKey: ['admin-storefronts', status, type, q],
-    queryFn: ({ pageParam }) => listAdminStorefronts(pageParam, { status, type, q }),
+    queryKey: ['admin-storefronts', status, type, q, changedOnly],
+    queryFn: ({ pageParam }) => listAdminStorefronts(pageParam, { status, type, q, changedAfterApproval: changedOnly }),
     initialPageParam: 1,
     getNextPageParam: (last) => nextPageParam(last.meta),
   });
   const view = mergeQueuePages(list.data?.pages, false);
+  const changedCount = list.data?.pages[0]?.changedAfterApproval;
 
   return (
     <div>
@@ -94,11 +111,31 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
 
       <div role="group" aria-label="Lọc theo trạng thái" className="mt-3 flex flex-wrap gap-2">
         {STOREFRONT_STATUS_FILTERS.map((f) => (
-          <button key={f.k || 'all'} type="button" aria-pressed={status === f.k} onClick={() => setStatus(f.k)} className={chipClass(status === f.k)}>
+          <button
+            key={f.k || 'all'}
+            type="button"
+            aria-pressed={!changedOnly && status === f.k}
+            onClick={() => {
+              setChangedOnly(false);
+              setStatus(f.k);
+            }}
+            className={chipClass(!changedOnly && status === f.k)}
+          >
             {f.label}
             {f.k === 'PENDING_APPROVAL' && pendingCount !== undefined ? ` (${pendingCount})` : ''}
           </button>
         ))}
+        <button
+          type="button"
+          aria-pressed={changedOnly}
+          onClick={() => {
+            setChangedOnly(true);
+            setStatus('');
+          }}
+          className={chipClass(changedOnly)}
+        >
+          Đổi sau duyệt{changedCount !== undefined ? ` (${changedCount})` : ''}
+        </button>
       </div>
 
       <form
@@ -163,6 +200,14 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
             {(row.takenDownReason || row.hiddenReason) && (
               <p className="mt-2 break-words text-xs text-stone-600">{row.takenDownAt ? `Lý do gỡ: ${row.takenDownReason ?? '—'}` : row.hiddenReason}</p>
             )}
+            {changedAfterApproval(row) && (
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-card bg-warning-bg px-2 py-1.5">
+                <p className="min-w-0 break-words text-xs text-warning-fg">{CONTENT_CHANGED_TEXT(row.contentChangedAt!)}</p>
+                <button type="button" onClick={() => seen.mutate(row.id)} disabled={seen.isPending} className={BTN_XS_SECONDARY}>
+                  Đã xem
+                </button>
+              </div>
+            )}
           </article>
         ))}
       </div>
@@ -205,7 +250,8 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
   const takeDown = useMutation({ mutationFn: (reason: string) => takeDownStorefront(id, reason), onSuccess: refresh, onError });
   const reinstate = useMutation({ mutationFn: () => reinstateStorefront(id), onSuccess: refresh, onError });
   const approve = useMutation({ mutationFn: (approved: boolean) => approveStorefront(id, approved), onSuccess: refresh, onError });
-  const busy = takeDown.isPending || reinstate.isPending || approve.isPending;
+  const seen = useMutation({ mutationFn: () => markStorefrontContentSeen(id), onSuccess: refresh, onError });
+  const busy = takeDown.isPending || reinstate.isPending || approve.isPending || seen.isPending;
 
   const onTakeDown = async () => {
     if (!sf) return;
@@ -265,6 +311,14 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
             </Notice>
           ) : (
             sf.hiddenReason && <Notice tone="warning">{sf.hiddenReason}</Notice>
+          )}
+          {changedAfterApproval(sf) && (
+            <Notice tone="warning">
+              {CONTENT_CHANGED_TEXT(sf.contentChangedAt!)}{' '}
+              <button type="button" onClick={() => seen.mutate()} disabled={busy} className={BTN_XS_SECONDARY}>
+                Đã xem
+              </button>
+            </Notice>
           )}
 
           <div className="flex flex-wrap gap-2">

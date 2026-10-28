@@ -6,6 +6,7 @@ import { recordUserAdminEvent } from '../../../common/user-admin-events';
 import { maskPhone } from '../../../common/mask-pii';
 import { LAST_ADMIN_MESSAGE, assertAnotherActiveAdmin, lockAdminRoster } from '../../../common/admin-roster';
 import { throwIfLockBusy } from '../../../common/lock-busy';
+import { STAFF_PERMISSIONS, isStaffPermission, type StaffPermission } from '../../../common/staff-permissions';
 import { MerchantFulfilmentService } from '../../merchant/merchant-fulfilment.service';
 import { losesPartnerStore } from '../../merchant/partner-store';
 
@@ -16,6 +17,15 @@ const RANK: Record<UserRole, number> = {
   STAFF: 3,
   ADMIN: 4,
 };
+
+/** Nhóm việc theo thứ tự chuẩn của STAFF_PERMISSIONS, bỏ trùng; giá trị lạ ném 400 (DTO đã kiểm, đây là lớp phòng thủ cho nơi gọi khác). */
+function normalizePermissions(raw: readonly string[]): StaffPermission[] {
+  const unknown = raw.filter((p) => !isStaffPermission(p));
+  if (unknown.length) throw new BadRequestException(`Nhóm việc không hợp lệ: ${unknown.join(', ')}.`);
+  return STAFF_PERMISSIONS.filter((p) => raw.includes(p));
+}
+
+const samePermissions = (a: readonly string[], b: readonly string[]) => [...a].sort().join(',') === [...b].sort().join(',');
 
 /** PrismaService hoặc client trong 1 $transaction — cho phép gộp nhiều bước vào 1 tx atomically. */
 type Db = PrismaService | Prisma.TransactionClient;
@@ -37,7 +47,7 @@ export class RbacService {
     if (!user.phone) return user;
     const grants = await db.roleGrant.findMany({
       where: { phone: user.phone, revokedAt: null },
-      select: { role: true },
+      select: { role: true, staffPermissions: true },
     });
     if (grants.length === 0) return user;
     // role cao nhất trong grant (STAFF/ADMIN)
@@ -47,7 +57,13 @@ export class RbacService {
     );
     if (RANK[best] <= RANK[user.role]) return user; // không nâng / không hạ
     this.logger.warn(`applyGrants: nâng user ${user.id} (${maskPhone(user.phone)}) ${user.role} → ${best}`);
-    const updated = await db.user.update({ where: { id: user.id }, data: { role: best } });
+    // Nhóm việc của lời mời chỉ có nghĩa với STAFF. Lời mời không ghi nhóm thì để nguyên nhóm hiện có của user như trước.
+    const invitedPerms =
+      best === 'STAFF' ? normalizePermissions(grants.filter((g) => g.role === 'STAFF').flatMap((g) => g.staffPermissions ?? [])) : [];
+    const updated = await db.user.update({
+      where: { id: user.id },
+      data: { role: best, ...(invitedPerms.length ? { staffPermissions: invitedPerms } : {}) },
+    });
     await recordUserAdminEvent(db, {
       userId: user.id,
       kind: 'ROLE',
@@ -56,6 +72,16 @@ export class RbacService {
       reason: 'Áp quyền cấp theo SĐT',
       actorId,
     });
+    if (invitedPerms.length) {
+      await recordUserAdminEvent(db, {
+        userId: user.id,
+        kind: 'STAFF_PERMISSIONS',
+        from: (user.staffPermissions ?? []).join(','),
+        to: invitedPerms.join(','),
+        reason: 'Áp nhóm việc của lời mời',
+        actorId,
+      });
+    }
     return updated;
   }
 
@@ -63,9 +89,13 @@ export class RbacService {
    * Admin thêm quyền theo SĐT. Không tạo grant trùng (cùng phone+role còn hiệu lực).
    * Bọc trong $transaction: tạo grant + áp role ngay là 1 thao tác atomic — tránh trạng thái
    * nửa vời (grant đã tạo nhưng role chưa nâng, hoặc ngược lại) nếu 1 bước lỗi giữa chừng.
+   * `permissions` (chỉ với STAFF): nhóm việc của lời mời, chép sang user khi lời mời được áp. Không truyền = như cũ (không nhóm,
+   * không đụng nhóm đã lưu). Truyền lại cho lời mời đang chờ thì cập nhật nhóm của lời mời; người đã là STAFF mà admin chọn ít nhất
+   * một nhóm thì nhóm áp luôn, còn danh sách rỗng không xoá nhóm họ đang có.
    */
-  async addGrant(adminId: string, phone: string, role: 'STAFF' | 'ADMIN') {
+  async addGrant(adminId: string, phone: string, role: 'STAFF' | 'ADMIN', permissions?: readonly string[]) {
     const normalized = phone.trim();
+    const perms = role === 'STAFF' && permissions ? normalizePermissions(permissions) : [];
     return this.prisma.$transaction(async (tx) => {
       // Cùng luật với revokeGrant/setUserRole: không tự đổi quyền của chính mình. Thiếu chặn này, admin
       // vừa bị hạ quyền dùng access token cũ tự cấp lại ADMIN vĩnh viễn (ADMINOPS-1).
@@ -75,11 +105,14 @@ export class RbacService {
       }
       const existing = await tx.roleGrant.findFirst({
         where: { phone: normalized, role, revokedAt: null },
-        select: { id: true },
+        select: { id: true, staffPermissions: true },
       });
+      if (existing && role === 'STAFF' && permissions && !samePermissions(existing.staffPermissions ?? [], perms)) {
+        await tx.roleGrant.update({ where: { id: existing.id }, data: { staffPermissions: perms } });
+      }
       if (!existing) {
         try {
-          await tx.roleGrant.create({ data: { phone: normalized, role, grantedBy: adminId } });
+          await tx.roleGrant.create({ data: { phone: normalized, role, grantedBy: adminId, staffPermissions: perms } });
           this.logger.warn(`Admin ${adminId} cấp grant ${role} cho SĐT ${maskPhone(normalized)}`);
         } catch (err) {
           // findFirst rồi create trong 1 $transaction READ COMMITTED (mặc định) vẫn không atomic —
@@ -95,6 +128,18 @@ export class RbacService {
       if (user) {
         const updated = await this.applyGrants(user, tx, adminId);
         applied = updated.role !== user.role;
+        // applyGrants chỉ chép nhóm khi nâng vai trò; người đã là STAFF thì nhóm admin vừa chọn phải áp luôn kẻo bị bỏ qua âm thầm.
+        if (!applied && updated.role === 'STAFF' && role === 'STAFF' && perms.length && !samePermissions(updated.staffPermissions ?? [], perms)) {
+          await tx.user.update({ where: { id: user.id }, data: { staffPermissions: perms } });
+          await recordUserAdminEvent(tx, {
+            userId: user.id,
+            kind: 'STAFF_PERMISSIONS',
+            from: (updated.staffPermissions ?? []).join(','),
+            to: perms.join(','),
+            reason: 'Admin chọn nhóm việc khi thêm nhân sự',
+            actorId: adminId,
+          });
+        }
       }
       return { granted: role, applied };
     });
@@ -208,7 +253,7 @@ export class RbacService {
     const memberPhones = new Set(members.map((m) => m.phone).filter(Boolean) as string[]);
     const grants = await this.prisma.roleGrant.findMany({
       where: { revokedAt: null },
-      select: { phone: true, role: true, createdAt: true },
+      select: { phone: true, role: true, staffPermissions: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     });
     const pendingInvites = grants.filter((g) => !memberPhones.has(g.phone));

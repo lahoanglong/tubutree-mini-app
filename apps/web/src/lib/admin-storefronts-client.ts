@@ -38,6 +38,8 @@ export interface AdminStorefrontRow {
   publishedAt: string | null;
   approved: boolean;
   approvedAt: string | null;
+  /** Lần chủ đổi tên/lời giới thiệu/ảnh sau khi gian hàng được duyệt, chưa ai bấm "Đã xem". */
+  contentChangedAt: string | null;
   takenDownAt: string | null;
   takenDownReason: string | null;
   createdAt: string;
@@ -65,15 +67,19 @@ export interface AdminStorefrontDetail extends AdminStorefrontRow {
 
 export const STOREFRONT_PAGE_SIZE = 50;
 
+/** Kèm số gian hàng "đổi sau duyệt" trên toàn bộ (không theo bộ lọc) để hiện trên chip. */
+export type AdminStorefrontPage = Page<AdminStorefrontRow> & { changedAfterApproval?: number };
+
 export const listAdminStorefronts = (
   page: number,
-  filter: { status?: StorefrontStatusFilter | ''; type?: StorefrontTypeFilter | ''; q?: string },
+  filter: { status?: StorefrontStatusFilter | ''; type?: StorefrontTypeFilter | ''; q?: string; changedAfterApproval?: boolean },
 ) => {
   const sp = new URLSearchParams({ page: String(page), limit: String(STOREFRONT_PAGE_SIZE) });
   if (filter.status) sp.set('status', filter.status);
   if (filter.type) sp.set('type', filter.type);
   if (filter.q?.trim()) sp.set('q', filter.q.trim());
-  return apiFetch<Page<AdminStorefrontRow>>(`/admin/storefronts?${sp.toString()}`);
+  if (filter.changedAfterApproval) sp.set('changedAfterApproval', 'true');
+  return apiFetch<AdminStorefrontPage>(`/admin/storefronts?${sp.toString()}`);
 };
 
 export const getAdminStorefront = (id: string) => apiFetch<AdminStorefrontDetail>(`/admin/storefronts/${id}`);
@@ -85,3 +91,6 @@ export const reinstateStorefront = (id: string) => apiFetch<AdminStorefrontRow>(
 
 export const approveStorefront = (id: string, approved: boolean) =>
   apiFetch<AdminStorefrontRow>(`/admin/storefronts/${id}/approval`, { method: 'POST', body: { approved } });
+
+export const markStorefrontContentSeen = (id: string) =>
+  apiFetch<AdminStorefrontRow>(`/admin/storefronts/${id}/content-seen`, { method: 'POST' });

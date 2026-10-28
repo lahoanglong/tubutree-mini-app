@@ -20,7 +20,7 @@ afterEach(() => {
 
 const row = (over: Partial<AdminStorefrontRow> = {}): AdminStorefrontRow => ({
   id: 's1', slug: 'linh123', title: 'Shop của Linh', type: 'CTV', isPartner: false, isPublished: true, publishedAt: '2026-10-01T00:00:00.000Z',
-  approved: false, approvedAt: null, takenDownAt: null, takenDownReason: null, createdAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-10-02T00:00:00.000Z',
+  approved: false, approvedAt: null, contentChangedAt: null, takenDownAt: null, takenDownReason: null, createdAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-10-02T00:00:00.000Z',
   ownerUserId: 'u1', owner: { id: 'u1', fullName: 'Linh', phone: '0900000001', role: 'AFFILIATE', isBlocked: false },
   itemCount: 3, publicVisible: true, hiddenReason: null,
   ...over,
@@ -30,7 +30,7 @@ const detail = (over: Partial<AdminStorefrontDetail> = {}): AdminStorefrontDetai
   collections: [{ id: 'c1', title: 'Nổi bật', items: [{ id: 'i1', productId: 'p1', productName: 'Bình nước inox', productSlug: 'binh-nuoc', note: 'Dùng tốt', isHidden: false, isPinned: false }] }],
   ...over,
 });
-const page = (rows: AdminStorefrontRow[]) => ({ body: { data: rows, meta: { page: 1, limit: 50, total: rows.length } } });
+const page = (rows: AdminStorefrontRow[], changedAfterApproval = 0) => ({ body: { data: rows, meta: { page: 1, limit: 50, total: rows.length }, changedAfterApproval } });
 
 describe('StorefrontsTab (D3-02)', () => {
   it('liệt kê gian hàng với trạng thái, chủ và số sản phẩm; tiêu đề có tổng', async () => {
@@ -233,6 +233,85 @@ describe('StorefrontsTab (D3-02)', () => {
       click(byText(drawer, 'button', 'Duyệt gian hàng'));
       await flush();
       expect(drawer.querySelector('[role="alert"]')!.textContent).toContain('Không đủ quyền.');
+    });
+  });
+
+  describe('đổi sau duyệt (E-50)', () => {
+    const changed = (over: Partial<AdminStorefrontRow> = {}) =>
+      row({ id: 's9', title: 'Shop đổi tên', approved: true, approvedAt: '2026-10-01T00:00:00.000Z', contentChangedAt: '2026-10-20T03:30:00.000Z', ...over });
+
+    it('chip "Đổi sau duyệt (n)" lấy số từ API; bấm vào lọc changedAfterApproval và bỏ lọc trạng thái', async () => {
+      const api = mockFetch({ '/admin/storefronts?': page([changed()], 3) });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      const chip = byText(container, 'button', 'Đổi sau duyệt (3)')!;
+      expect(chip.getAttribute('aria-pressed')).toBe('false');
+      expect(api.calls.at(-1)!.url).not.toContain('changedAfterApproval');
+      click(chip);
+      await flush();
+      const url = api.calls.at(-1)!.url;
+      expect(url).toContain('changedAfterApproval=true');
+      expect(url).not.toContain('status=');
+      expect(byText(container, 'button', 'Đổi sau duyệt (3)')!.getAttribute('aria-pressed')).toBe('true');
+      click(byText(container, 'button', 'Chờ duyệt'));
+      await flush();
+      expect(api.calls.at(-1)!.url).not.toContain('changedAfterApproval');
+      expect(api.calls.at(-1)!.url).toContain('status=PENDING_APPROVAL');
+    });
+
+    it('thẻ gian hàng đã duyệt mà chủ đổi nội dung: có nhãn "Đổi sau duyệt" và nút "Đã xem"; thẻ khác thì không', async () => {
+      const api = mockFetch({ '/admin/storefronts?': page([changed(), row({ id: 's2', title: 'Shop yên', approved: true, approvedAt: '2026-10-01T00:00:00.000Z' })], 1) });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      const a = container.querySelector('article[aria-label="Shop đổi tên"]') as HTMLElement;
+      expect(a.textContent).toContain('Chủ đã đổi tên, lời giới thiệu hoặc ảnh sau khi duyệt');
+      expect(byText(a, 'button', 'Đã xem')).not.toBeNull();
+      const b = container.querySelector('article[aria-label="Shop yên"]') as HTMLElement;
+      expect(b.textContent).not.toContain('sau khi duyệt');
+      expect(byText(b, 'button', 'Đã xem')).toBeNull();
+    });
+
+    it('dấu cũ còn sót trên gian hàng đang chưa duyệt không hiện nhãn (chỉ tính sau khi đã duyệt)', async () => {
+      vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/storefronts?': page([changed({ approved: false, approvedAt: null })]) }).fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      expect(container.textContent).not.toContain('sau khi duyệt');
+      expect(byText(container, 'button', 'Đã xem')).toBeNull();
+    });
+
+    it('bấm "Đã xem" gửi POST content-seen, không đụng duyệt/đăng, rồi tải lại danh sách', async () => {
+      const api = mockFetch({ '/admin/storefronts/s9/content-seen': { body: row() }, '/admin/storefronts?': page([changed()], 1) });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      const listCalls = () => api.calls.filter((c) => c.url.includes('/admin/storefronts?')).length;
+      const before = listCalls();
+      click(byText(container, 'button', 'Đã xem'));
+      await flush();
+      const call = api.calls.find((c) => c.url.includes('/content-seen'))!;
+      expect(call.init?.method).toBe('POST');
+      expect(api.calls.some((c) => c.url.includes('/approval') || c.url.includes('/take-down'))).toBe(false);
+      expect(listCalls()).toBeGreaterThan(before);
+    });
+
+    it('ngăn chi tiết nhắc chủ đã đổi nội dung và có nút "Đã xem"', async () => {
+      const api = mockFetch({
+        '/admin/storefronts/s9/content-seen': { body: row() },
+        '/admin/storefronts/s9': { body: detail({ id: 's9', title: 'Shop đổi tên', approved: true, approvedAt: '2026-10-01T00:00:00.000Z', contentChangedAt: '2026-10-20T03:30:00.000Z' }) },
+        '/admin/storefronts?': page([changed()], 1),
+      });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      click(byText(container.querySelector('article[aria-label="Shop đổi tên"]') as HTMLElement, 'button', 'Xem'));
+      await flush();
+      const drawer = document.body.querySelector('[role="dialog"]') as HTMLElement;
+      expect(drawer.textContent).toContain('Chủ đã đổi tên, lời giới thiệu hoặc ảnh sau khi duyệt');
+      click(byText(drawer, 'button', 'Đã xem'));
+      await flush();
+      expect(api.calls.some((c) => c.url.endsWith('/admin/storefronts/s9/content-seen') && c.init?.method === 'POST')).toBe(true);
     });
   });
 });

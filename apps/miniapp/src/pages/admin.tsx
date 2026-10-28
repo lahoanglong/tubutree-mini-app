@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UserPlus, ShieldCheck, Check, X, Clock, Plus, MessagesSquare } from 'lucide-react';
-import { listStaff, grantStaff, revokeStaff, type StaffRole } from '../services/staff-api';
+import { listStaff, grantStaff, revokeStaff, getShiftsPendingCount, STAFF_PERMISSIONS, STAFF_PERMISSION_LABELS, type StaffPermission, type StaffRole } from '../services/staff-api';
 import {
   adminGetShifts,
   approveShift,
@@ -31,6 +31,8 @@ import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { Chip } from '../components/ui/chip';
+import { ConfirmSheet } from '../components/ui/confirm-sheet';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Field } from '../components/ui/form';
 import { KeyValueRow } from '../components/ui/key-value-row';
@@ -82,15 +84,21 @@ const TABS: { key: Tab; label: string }[] = [
 
 const SECTION_STYLE = { padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 12 } as const;
 
+const SHIFTS_PENDING_KEY = ['admin-shifts-pending'] as const;
+
 function AdminHub() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('staff');
+  // AdminHub chỉ dựng cho ADMIN (AdminPage chặn vai trò khác ở trên), nên người khác không bao giờ gọi API này.
+  const pendingQ = useQuery({ queryKey: SHIFTS_PENDING_KEY, queryFn: getShiftsPendingCount, staleTime: 60_000, retry: false });
+  const pending = pendingQ.data ?? 0;
+  const tabs = TABS.map((x) => (x.key === 'shifts' && pending > 0 ? { ...x, label: `${x.label} (${pending})` } : x));
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
       <PageHeader title="Quản trị nhân sự" />
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
         <div style={{ alignSelf: 'stretch' }}>
-          <SegmentedTabs scroll items={TABS} value={tab} onChange={(key) => setTab(key as Tab)} />
+          <SegmentedTabs scroll items={tabs} value={tab} onChange={(key) => setTab(key as Tab)} />
         </div>
         <Button variant="secondary" icon={MessagesSquare} onPress={() => navigate('/admin/community')}>
           {vi.community.moderation}
@@ -133,6 +141,7 @@ function PayrollSection() {
   const [proof, setProof] = useState('');
   const [note, setNote] = useState('');
   const [detailRow, setDetailRow] = useState<AdminPayrollRow | null>(null);
+  const [reopenRow, setReopenRow] = useState<AdminPayrollRow | null>(null);
 
   const rateM = useMutation({
     mutationFn: () => setRate(rateRow!.staff.id, Number(rateVal)),
@@ -263,10 +272,7 @@ function PayrollSection() {
                   aria-label={`Mở lại · ${name}`}
                   loading={reopening}
                   disabled={reopenM.isPending && !reopening}
-                  onPress={() => {
-                    if (!window.confirm(`Mở lại bảng lương T${ym.month}/${ym.year} của ${row.staff.fullName ?? 'NV'}? Cần chốt lại sau khi sửa.`)) return;
-                    reopenM.mutate(row);
-                  }}
+                  onPress={() => setReopenRow(row)}
                 >
                   Mở lại
                 </Button>
@@ -276,6 +282,19 @@ function PayrollSection() {
         );
       })}
       {payQ.data && payQ.data.length === 0 && <EmptyState art="box" heading="Chưa có nhân sự" />}
+
+      {/* Mở lại bảng lương: sửa số liệu đã chốt nên hỏi lại một bước */}
+      <ConfirmSheet
+        open={!!reopenRow}
+        title="Mở lại bảng lương?"
+        message={reopenRow ? `Mở lại bảng lương T${ym.month}/${ym.year} của ${reopenRow.staff.fullName ?? 'NV'}? Cần chốt lại sau khi sửa.` : undefined}
+        confirmLabel="Mở lại bảng lương"
+        onCancel={() => setReopenRow(null)}
+        onConfirm={() => {
+          if (reopenRow) reopenM.mutate(reopenRow);
+          setReopenRow(null);
+        }}
+      />
 
       {/* Sheet QR */}
       <BottomSheet open={!!qrRow} onClose={() => setQrRow(null)} title={`Chuyển lương ${qrRow?.staff.fullName ?? ''}`}>
@@ -474,6 +493,14 @@ function DetailSheet({
 }
 
 const PHONE_RE = /^0\d{8,10}$/;
+const NO_PERMISSIONS_TEXT = 'Chưa có nhóm việc (chỉ dùng quầy, Đổi rác, chấm công)';
+
+/** Nhãn nhóm việc theo thứ tự chuẩn; bỏ giá trị lạ (máy chủ có thể thêm nhóm mới trước khi app cập nhật). */
+function permissionsText(perms: readonly string[] | undefined): string {
+  const names = STAFF_PERMISSIONS.filter((p) => perms?.includes(p)).map((p) => STAFF_PERMISSION_LABELS[p]);
+  return names.length ? `Nhóm việc: ${names.join(', ')}` : NO_PERMISSIONS_TEXT;
+}
+
 const TIME_RE = /^\d{1,2}:\d{2}$/;
 
 function StaffSection() {
@@ -484,9 +511,13 @@ function StaffSection() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [phone, setPhone] = useState('');
   const [role, setRole] = useState<StaffRole>('STAFF');
+  const [perms, setPerms] = useState<StaffPermission[]>([]);
+  const [revokeTarget, setRevokeTarget] = useState<{ phone: string; who: string } | null>(null);
+  const [confirmAdmin, setConfirmAdmin] = useState(false);
 
   const grantM = useMutation({
-    mutationFn: () => grantStaff(phone.trim(), role),
+    // Nhóm việc chỉ có nghĩa với nhân viên; không chọn nhóm nào thì không gửi (như trước).
+    mutationFn: () => grantStaff(phone.trim(), role, role === 'STAFF' && perms.length ? STAFF_PERMISSIONS.filter((p) => perms.includes(p)) : undefined),
     onSuccess: (r) => {
       openSnackbar({
         text: r.applied ? 'Đã cấp quyền & áp ngay.' : 'Đã lưu quyền (sẽ áp khi họ mở app).',
@@ -494,6 +525,7 @@ function StaffSection() {
       });
       setSheetOpen(false);
       setPhone('');
+      setPerms([]);
       qc.invalidateQueries({ queryKey: ['admin-staff'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -515,10 +547,10 @@ function StaffSection() {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  // Cấp ADMIN là privilege-escalation rủi ro cao hơn hẳn cấp STAFF — thêm bước xác nhận phụ
-  // (mirror pattern window.confirm trong apps/web/src/app/admin/page.tsx's GrantRoleForm).
+  // Cấp ADMIN là nâng quyền toàn hệ thống, rủi ro hơn hẳn cấp STAFF nên hỏi thêm một bước (web admin làm cùng cách).
   const submitGrant = () => {
-    if (role === 'ADMIN' && !window.confirm(`Xác nhận cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`)) {
+    if (role === 'ADMIN') {
+      setConfirmAdmin(true);
       return;
     }
     grantM.mutate();
@@ -550,6 +582,11 @@ function StaffSection() {
                   <Text variant="caption" tone="secondary" as="div">
                     {m.phone ?? '—'} · {m.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
                   </Text>
+                  {m.role === 'STAFF' && (
+                    <Text variant="caption" tone="secondary" as="div">
+                      {permissionsText(m.staffPermissions)}
+                    </Text>
+                  )}
                 </div>
                 {m.id === meId && (
                   <Text variant="caption" tone="secondary">
@@ -558,23 +595,12 @@ function StaffSection() {
                 )}
                 {m.phone && m.id !== meId && (
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     aria-label={`Thu hồi · ${m.fullName ?? m.phone}`}
-                    style={{ color: 'var(--color-text-danger)' }}
+                    style={{ color: 'var(--color-text-danger)', border: '1px solid var(--color-text-danger)' }}
                     disabled={revokeM.isPending}
-                    onPress={() => {
-                      // Thao tác một chạm, không hoàn tác được từ trong app: hạ quyền nhầm một
-                      // quản trị viên thì chỉ người còn quyền mới cấp lại được. Cấp quyền ADMIN
-                      // đã hỏi lại ở submitGrant — thu hồi thì chưa.
-                      if (
-                        !window.confirm(
-                          `Thu hồi quyền của ${m.fullName ?? m.phone}? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.`,
-                        )
-                      ) {
-                        return;
-                      }
-                      revokeM.mutate(m.phone as string);
-                    }}
+                    // Hạ quyền nhầm một quản trị viên thì chỉ người còn quyền mới cấp lại được, nên hỏi lại trước khi gỡ.
+                    onPress={() => setRevokeTarget({ phone: m.phone as string, who: m.fullName ?? (m.phone as string) })}
                   >
                     Thu hồi
                   </Button>
@@ -595,9 +621,16 @@ function StaffSection() {
               {staffQ.data.pendingInvites.map((p) => (
                 <Card key={p.phone} variant="flat">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                    <Text variant="body-sm">
-                      {p.phone} · {p.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
-                    </Text>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Text variant="body-sm" as="div">
+                        {p.phone} · {p.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
+                      </Text>
+                      {p.role === 'STAFF' && (
+                        <Text variant="caption" tone="secondary" as="div">
+                          {permissionsText(p.staffPermissions)}
+                        </Text>
+                      )}
+                    </div>
                     <Button
                       variant="ghost"
                       aria-label={`Huỷ lời mời · ${p.phone}`}
@@ -615,7 +648,7 @@ function StaffSection() {
       )}
 
       <BottomSheet
-        open={sheetOpen}
+        open={sheetOpen && !confirmAdmin}
         onClose={() => setSheetOpen(false)}
         title="Thêm nhân sự theo SĐT"
         footer={
@@ -648,8 +681,55 @@ function StaffSection() {
               Quản trị
             </Button>
           </div>
+          {role === 'STAFF' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
+                Nhóm việc (không bắt buộc)
+              </Text>
+              <div role="group" aria-label="Nhóm việc" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {STAFF_PERMISSIONS.map((p) => (
+                  <Chip
+                    key={p}
+                    variant="choice"
+                    selected={perms.includes(p)}
+                    onPress={() => setPerms((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]))}
+                  >
+                    {STAFF_PERMISSION_LABELS[p]}
+                  </Chip>
+                ))}
+              </div>
+              <Text variant="caption" tone="secondary" as="div">
+                Không chọn nhóm nào: chỉ dùng quầy thu ngân, Đổi rác và chấm công.
+              </Text>
+            </div>
+          )}
         </div>
       </BottomSheet>
+
+      <ConfirmSheet
+        open={confirmAdmin}
+        title="Cấp quyền quản trị?"
+        message={`Xác nhận cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`}
+        confirmLabel="Cấp quyền quản trị"
+        tone="danger"
+        onCancel={() => setConfirmAdmin(false)}
+        onConfirm={() => {
+          setConfirmAdmin(false);
+          grantM.mutate();
+        }}
+      />
+      <ConfirmSheet
+        open={!!revokeTarget}
+        title="Thu hồi quyền?"
+        message={revokeTarget ? `Thu hồi quyền của ${revokeTarget.who}? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.` : undefined}
+        confirmLabel="Thu hồi"
+        tone="danger"
+        onCancel={() => setRevokeTarget(null)}
+        onConfirm={() => {
+          if (revokeTarget) revokeM.mutate(revokeTarget.phone);
+          setRevokeTarget(null);
+        }}
+      />
     </div>
   );
 }
@@ -665,7 +745,10 @@ function ShiftsSection() {
     queryKey: ['admin-shifts', mondayKey],
     queryFn: () => adminGetShifts(fromISO, toISO),
   });
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['admin-shifts', mondayKey] });
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: SHIFTS_PENDING_KEY });
+    return qc.invalidateQueries({ queryKey: ['admin-shifts', mondayKey] });
+  };
 
   const grouped = useMemo(() => {
     const map = new Map<string, { name: string; shifts: AdminShift[] }>();

@@ -1,4 +1,5 @@
-import { IsIn, IsString, Matches } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsIn, IsOptional, IsString, Matches } from 'class-validator';
+import { STAFF_PERMISSIONS, type StaffPermission } from '../../../common/staff-permissions';
 
 export class GrantRoleDto {
   @IsString()
@@ -7,4 +8,11 @@ export class GrantRoleDto {
 
   @IsIn(['STAFF', 'ADMIN'])
   role!: 'STAFF' | 'ADMIN';
+
+  /** Nhóm việc của nhân viên (bỏ qua với ADMIN). Không gửi = không đổi nhóm. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(STAFF_PERMISSIONS.length)
+  @IsIn(STAFF_PERMISSIONS, { each: true, message: 'Nhóm việc không hợp lệ.' })
+  permissions?: StaffPermission[];
 }
