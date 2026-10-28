@@ -99,7 +99,7 @@ export default function CheckoutPage() {
   const pickupReq = attachablePickup(wasteMeQ.data, pickupFlag);
   const [voucherSheetOpen, setVoucherSheetOpen] = useState(false);
   // Mã từ link chỉ khoá ô nhập khi máy chủ đã xác nhận là mã CTV; mã khách thường (nút chia sẻ sản phẩm) bị máy chủ bỏ qua nên
-  // không được hiện như "đang mua qua link giới thiệu". Chưa biết (null) vẫn gửi kèm đơn như trước, máy chủ tự bỏ mã không hợp lệ.
+  // không được hiện như "đang mua qua link giới thiệu". Chưa biết (null) vẫn gửi kèm đơn để máy chủ tự quyết: lỗi mạng lúc chạm không được làm CTV mất công.
   const linkedReferral = sfCtx.referralEligible === true ? sfCtx.referralCode : null;
   const orderLinkReferral = sfCtx.referralEligible === false ? null : sfCtx.referralCode;
   // Mã giới thiệu CTV khách tự nhập ở màn này (đã được server xác nhận) — khác mã đến từ link (sfCtx).

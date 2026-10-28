@@ -282,7 +282,7 @@ describe('/thanh-toan — mã giới thiệu CTV (R2-BUYERWEB-6)', () => {
     expect(m.placeOrder.mock.calls[0]![0].referralCode).toBeUndefined();
   });
 
-  it('mã từ link chưa biết có phải của CTV không (null): ô nhập mở cho khách, đơn vẫn gửi mã như trước để máy chủ quyết', async () => {
+  it('mã từ link chưa biết có phải của CTV không (null): ô nhập mở cho khách, đơn vẫn gửi mã để máy chủ quyết', async () => {
     m.ctx = { slug: null, referralCode: 'LINK01', kind: null, referralEligible: null };
     const r = await mount();
     expect(r.container.textContent).not.toContain('Bạn đang mua qua link giới thiệu');

@@ -46,8 +46,7 @@ export default function StorefrontViewPage() {
   const sf = q.data;
   useEffect(() => {
     if (!sf) return;
-    // Chỉ gian hàng CTV có mã giới thiệu và được ghi công; gian hàng đối tác/nhãn hàng giữ nguyên mã CTV khách đang có
-    // (trước đây mở một gian hàng đối tác là xoá mã và gửi slug của họ làm storefrontSlug của đơn).
+    // Chỉ gian hàng CTV có mã giới thiệu và được ghi công; gian hàng đối tác/nhãn hàng giữ nguyên mã CTV khách đang có.
     setSfContext(
       sf.type === 'CTV'
         ? { slug: sf.slug, referralCode: sf.referralCode ?? null, kind: 'ctv', referralEligible: true }

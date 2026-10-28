@@ -169,7 +169,7 @@ export default function CheckoutPage() {
   // khi khách đi qua một gian hàng khác (tức là đã rời trang này).
   const [sfCtx] = useState(() => getStorefrontContext());
   // Mã từ link chỉ khoá ô nhập khi máy chủ đã xác nhận là mã CTV; mã khách thường (nút chia sẻ sản phẩm) bị máy chủ bỏ qua nên
-  // không được hiện như "đang mua qua link giới thiệu". Chưa biết (null) vẫn gửi kèm đơn như trước, máy chủ tự bỏ mã không hợp lệ.
+  // không được hiện như "đang mua qua link giới thiệu". Chưa biết (null) vẫn gửi kèm đơn để máy chủ tự quyết: lỗi mạng lúc chạm không được làm CTV mất công.
   // Phản ứng theo thay đổi: chạm giới thiệu trả kết quả sau khi màn này đã mở thì ô mã đổi theo, không kẹt ở giá trị lúc mở trang.
   const linkReferral = useSyncExternalStore(subscribeStorefrontContext, () => getStorefrontContext().referralCode, () => null);
   const referralEligible = useSyncExternalStore(subscribeStorefrontContext, () => getStorefrontContext().referralEligible, () => null);
