@@ -100,23 +100,7 @@ export function reviewHref(slug: string, orderId?: string | null): string {
   return `/san-pham/${encodeURIComponent(slug)}${qs}#danh-gia`;
 }
 
-export const FIRST_REVIEW_ONLY = 'Lần đầu đánh giá sản phẩm này';
-export const REWARD_ALREADY_GIVEN =
-  'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, đánh giá lần mua này không cộng thêm điểm.';
-export const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.';
-
-/**
- * Câu về Điểm Xanh dưới form. Form không biết chắc khách đã nhận thưởng sản phẩm này chưa (máy chủ quyết định lúc tạo),
- * nên câu hứa điểm luôn nêu điều kiện "lần đầu"; can-review báo hết thưởng thì nói thẳng là không cộng thêm. Web chưa tải
- * video lên được nên không mời thêm video.
- */
-export function rewardHint(o: { isEdit: boolean; rewardAvailable: boolean; hasImages: boolean; hasVideo: boolean }): string {
-  if (o.isEdit) return EDIT_HINT;
-  if (!o.rewardAvailable) return REWARD_ALREADY_GIVEN;
-  if (o.hasVideo) return `${FIRST_REVIEW_ONLY}, đánh giá có video nhận +15.000 Điểm Xanh!`;
-  if (o.hasImages) return `${FIRST_REVIEW_ONLY}, bạn nhận +10.000 Điểm Xanh cho đánh giá có ảnh!`;
-  return `${FIRST_REVIEW_ONLY}: thêm ảnh +10.000 Điểm Xanh (chỉ chữ +5.000). Chỉ đánh giá được khi đã mua và nhận hàng.`;
-}
+export { EDIT_HINT, FIRST_REVIEW_ONLY, REWARD_ALREADY_GIVEN, VIDEO_UPLOADING, rewardHint } from '@tubutree/app-core/review-copy';
 
 /** Câu nói rõ đánh giá đang soạn thuộc lần mua nào; null khi chỉ mua một lần hoặc chưa biết đơn. */
 export function purchaseNote(o: { isEdit: boolean; purchaseCount: number; orderCode?: string | null }): string | null {

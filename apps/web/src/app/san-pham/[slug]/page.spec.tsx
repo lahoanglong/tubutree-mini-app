@@ -350,7 +350,7 @@ describe('/san-pham/[slug] — gian hàng tạm nghỉ hoặc đã ngừng bán 
 describe('/san-pham/[slug] — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', () => {
   const FLASH = {
     itemId: 'f1', variationId: 'v1', productSlug: 'dau-goi-bo-ket', flashPrice: 120000, retailPrice: 200000,
-    salePrice: 150000, soldCount: 1, quota: 10, endAt: '2026-10-14T16:00:00.000Z',
+    salePrice: 150000, soldCount: 1, quota: 10, endAt: '2099-10-14T16:00:00.000Z',
   };
 
   it('không có đợt Giờ vàng: giá đang bán như cũ, không nhãn', async () => {

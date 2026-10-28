@@ -124,3 +124,24 @@ describe('PdpRails', () => {
     expect(container.innerHTML).toBe('');
   });
 });
+
+describe('tiêu đề mục của trang sản phẩm khổ điện thoại giống Mini App (chữ không chân Inter, không serif)', () => {
+  const sans = (h: Element | null) => {
+    expect(h).not.toBeNull();
+    expect(h!.className).toContain('max-md:font-ui');
+    expect(h!.className).toContain('max-md:font-semibold');
+  };
+  it('Thành phần, Cam kết Tubu, Mô tả sản phẩm', () => {
+    sans(mount(<PdpIngredients ingredients={[{ name: 'Gừng' }]} />).container.querySelector('h2'));
+    sans(mount(<PdpPromises />).container.querySelector('h2'));
+    sans(mount(<PdpDescription text="Ngắn gọn" />).container.querySelector('h2'));
+  });
+  it('hai dải sản phẩm', async () => {
+    mocks.http.get.mockResolvedValue([]);
+    const { container } = mount(<PdpRails slug="dau-goi" brand="Xanh" initialRelated={[card(1)]} initialBoughtTogether={[card(2)]} />);
+    await flush();
+    const titles = Array.from(container.querySelectorAll('h2'));
+    expect(titles).toHaveLength(2);
+    titles.forEach((h) => sans(h));
+  });
+});

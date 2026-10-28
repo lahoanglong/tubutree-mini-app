@@ -8,7 +8,9 @@ import {
   fetchBoughtTogether,
   getCart,
   addToCart,
+  applyCoupon,
   fetchActiveFlashSales,
+  type CartSummary,
   type VariationDetail,
   type ProductCard as ProductCardData,
   type FlashSaleActiveItem,
@@ -43,7 +45,8 @@ import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
 import { serverNow } from '../utils/server-clock';
-import { cardPricing, defaultVariationFor, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
+import { cardPricing, defaultVariationFor, isFlashRunning, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
+import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -81,6 +84,15 @@ function merchantShippingLine(fee: number, freeShipFrom: number | null): string 
   return freeShipFrom != null ? `${base}, miễn phí cho đơn của gian hàng từ ${formatVnd(freeShipFrom)}` : base;
 }
 
+/**
+ * Danh sách Giờ vàng tải ở máy có thể cũ hơn mốc kết thúc của đợt (nhịp tải lại 5 đến 60 giây): trang chỉ dùng suất còn chạy theo giờ
+ * máy chủ, không đợi lần tải lại, để giá và nhãn Giờ vàng biến mất đúng lúc đợt hết.
+ */
+function runningFlash(list: readonly FlashSaleActiveItem[] | undefined): FlashSaleActiveItem[] {
+  const now = serverNow();
+  return (list ?? []).filter((f) => isFlashRunning(f, now));
+}
+
 /** Nhãn ngắn cho voucher hiển thị ở PDP. */
 function couponLabel(c: CouponDTO): string {
   if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
@@ -113,7 +125,9 @@ export default function ProductDetailPage() {
   // (lưới, gợi ý tìm, bài cộng đồng, deep link) mở phân loại mà thẻ đã ghi giá (`defaultVariationFor`). Chỉ khách bấm chọn mới
   // là `selectedId`. Trang hiện ngay với phân loại đại diện; khi danh sách Giờ vàng về thì chốt lại một lần, không đổi lại khi đợt hết giờ lúc khách đang xem.
   const location = useLocation();
-  const navState = location.state as { variationId?: string; pinnedVariationId?: string; listSource?: string; reviewOrderId?: string } | null;
+  const navState = location.state as
+    | { variationId?: string; pinnedVariationId?: string; listSource?: string; reviewOrderId?: string; applyCoupon?: string }
+    | null;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // Bảng đóng có hiệu ứng ~200ms nên nút xác nhận còn bấm được: khoá đồng bộ để bấm đúp không thêm giỏ hai lần hay gọi login hai lần.
   const confirming = useRef(false);
@@ -172,7 +186,7 @@ export default function ProductDetailPage() {
   const variations = product.data?.variations ?? [];
   // Memo theo (selectedId + danh sách variation) — tránh tạo ref mới mỗi render gây effect chạy dư.
   if (product.data && !flashQ.isPending && autoPick.current?.slug !== slug) {
-    const flashNow = flashQ.data ?? [];
+    const flashNow = runningFlash(flashQ.data);
     const entry =
       variations.find((v) => v.id === navState?.variationId && v.stock > 0 && variationPricing(v, flashNow).isFlash) ??
       variations.find((v) => v.id === navState?.pinnedVariationId && v.stock > 0);
@@ -186,7 +200,7 @@ export default function ProductDetailPage() {
   );
 
   // Flash sale đang chạy cho ĐÚNG phân loại đang chọn (BE re-resolve giá thật lúc thêm giỏ/checkout).
-  const flashItem = selected ? (flashQ.data ?? []).find((f) => f.variationId === selected.id) : undefined;
+  const flashItem = selected ? runningFlash(flashQ.data).find((f) => f.variationId === selected.id) : undefined;
   const flashLeft = useCountdown(flashItem?.endAt ?? null);
 
   // Đổi phân loại → kẹp lại số lượng theo tồn kho mới (chỉ phụ thuộc id/stock, không phải ref).
@@ -215,7 +229,7 @@ export default function ProductDetailPage() {
     const viewKey = `${product.data.id}:${selected.id}`;
     if (trackedViewKey.current === viewKey) return;
     trackedViewKey.current = viewKey;
-    const view = variationPricing(selected, flashQ.data ?? []);
+    const view = variationPricing(selected, runningFlash(flashQ.data));
     const viewPrice = view.price;
     void trackEvent('product_viewed', 'miniapp', {
       productId: product.data.id,
@@ -227,23 +241,53 @@ export default function ProductDetailPage() {
     });
   }, [product.isSuccess, product.data, selected, flashQ.data, flashQ.isPending]);
 
+  // Mã của nhóm mua chung đủ người (nút "Mua ngay với mã" ở trang Mua chung). Mã gắn riêng sản phẩm và có đơn tối thiểu nên chỉ áp được
+  // khi món đã nằm trong giỏ: thử một lần ngay sau lần thêm giỏ đầu tiên thành công. Lỗi không chặn việc mua, chỉ nói lý do để khách tự chọn mã ở giỏ.
+  const groupCoupon = navState?.applyCoupon?.trim().toUpperCase() || null;
+  const groupCouponTried = useRef(false);
+  const applyGroupCoupon = async (cart: CartSummary): Promise<{ cart: CartSummary; note: { text: string; ok: boolean } | null }> => {
+    if (!groupCoupon || groupCouponTried.current) return { cart, note: null };
+    groupCouponTried.current = true;
+    try {
+      const next = await applyCoupon(groupCoupon);
+      void queryClient.invalidateQueries({ queryKey: ['quote'] });
+      const outcome = couponUseOutcome(cart.couponCode, groupCoupon, next);
+      return { cart: next, note: outcome.kind === 'ok' ? { text: `Đã áp mã ${groupCoupon}`, ok: true } : { text: outcome.text, ok: outcome.kind === 'switched' } };
+    } catch (e) {
+      return { cart, note: { text: couponUseCopy.notApplied(getErrorMessage(e)), ok: false } };
+    }
+  };
+  // Đã thử áp thì gỡ mã khỏi state của mục lịch sử (như `reviewOrderId`): quay lại trang không áp lại một mã khách có thể đã bỏ chọn ở giỏ.
+  const dropGroupCouponState = () => {
+    const rest: Record<string, unknown> = { ...navState };
+    delete rest.applyCoupon;
+    navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: rest });
+  };
+
   const addMutation = useMutation({
-    mutationFn: (input: { variation: VariationDetail; qty: number }) =>
-      addToCart(input.variation.id, input.qty),
-    onSuccess: (updatedCart) => {
+    mutationFn: async (input: { variation: VariationDetail; qty: number }) =>
+      applyGroupCoupon(await addToCart(input.variation.id, input.qty)),
+    onSuccess: ({ cart: updatedCart, note }) => {
       queryClient.setQueryData(cartKey(), updatedCart);
       haptic('medium');
       setBadgeBounce(true);
-      openSnackbar({ text: vi.product.added, type: 'success', duration: 2000, position: 'top' });
+      if (note) dropGroupCouponState();
+      openSnackbar(
+        note
+          ? { text: `${vi.product.added} · ${note.text}`, type: note.ok ? 'success' : 'warning', duration: 3200, position: 'top' }
+          : { text: vi.product.added, type: 'success', duration: 2000, position: 'top' },
+      );
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
   // "Mua ngay": thêm vào giỏ rồi tới thẳng checkout (giảm 2 chạm so với thêm-giỏ→mở-giỏ→checkout).
   const buyNowMutation = useMutation({
-    mutationFn: (input: { variation: VariationDetail; qty: number }) =>
-      addToCart(input.variation.id, input.qty).then((updatedCart) => ({ updatedCart, variationId: input.variation.id })),
-    onSuccess: ({ updatedCart, variationId }, variables) => {
+    mutationFn: async (input: { variation: VariationDetail; qty: number }) => {
+      const { cart: updatedCart, note } = await applyGroupCoupon(await addToCart(input.variation.id, input.qty));
+      return { updatedCart, note, variationId: input.variation.id };
+    },
+    onSuccess: ({ updatedCart, note, variationId }, variables) => {
       queryClient.setQueryData(cartKey(), updatedCart);
       haptic('medium');
       // Chỉ chọn đúng dòng vừa "Mua ngay" — tránh charge nhầm các món khác đã có sẵn trong giỏ.
@@ -251,12 +295,19 @@ export default function ProductDetailPage() {
       // BE gộp theo variationId (increment atomic) — nếu variation này đã có sẵn trong giỏ,
       // dòng vừa chọn sẽ nhiều hơn `qty` vừa bấm "Mua ngay". Báo rõ để tránh hiểu lầm thanh
       // toán ít hơn/khác số lượng đã thấy trên PDP.
-      if (line && line.quantity > variables.qty) {
+      const mergeNote =
+        line && line.quantity > variables.qty
+          ? `Sản phẩm này đã có ${line.quantity - variables.qty} trong giỏ — thanh toán gộp ${line.quantity} sản phẩm`
+          : null;
+      if (note) dropGroupCouponState();
+      if (note) {
         openSnackbar({
-          text: `Sản phẩm này đã có ${line.quantity - variables.qty} trong giỏ — thanh toán gộp ${line.quantity} sản phẩm`,
-          type: 'info',
+          text: [mergeNote, note.text].filter(Boolean).join('. '),
+          type: note.ok ? 'info' : 'warning',
           duration: 3200,
         });
+      } else if (mergeNote) {
+        openSnackbar({ text: mergeNote, type: 'info', duration: 3200 });
       }
       // "Mua ngay" chỉ thanh toán đúng dòng vừa thêm; ghi nhớ để tải lại trang không tính cả giỏ.
       const itemIds = line ? [line.id] : null;
@@ -295,7 +346,7 @@ export default function ProductDetailPage() {
 
   const p = product.data;
   const pdpCoupons = (couponsQ.data ?? []).filter((c) => !c.products || c.products.some((x) => x.id === p?.id));
-  const flashList = flashQ.data ?? [];
+  const flashList = runningFlash(flashQ.data);
   const priceView = selected ? variationPricing(selected, flashList) : cardPricing(p, flashList, serverNow());
   const price = priceView.price;
   const originalPrice = priceView.compareAt;

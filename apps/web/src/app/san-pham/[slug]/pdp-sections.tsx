@@ -6,6 +6,10 @@ import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import type { ProductDetail } from '@/lib/api';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
+import { mini } from '@/components/order-mobile/mobile-ui';
+
+/** Tiêu đề mục: serif trên máy tính, trên điện thoại là SectionTitle không chân của Mini App. */
+export const pdpSectionTitle = `${ui.sectionTitle} ${mini.sectionTitle}`;
 
 const COLLAPSED_LINES_THRESHOLD = 220;
 
@@ -31,7 +35,7 @@ export function PdpIngredients({ ingredients }: { ingredients: ProductDetail['in
   if (!ingredients || ingredients.length === 0) return null;
   return (
     <section className="mt-8">
-      <h2 className={ui.sectionTitle}>Thành phần</h2>
+      <h2 className={pdpSectionTitle}>Thành phần</h2>
       <ul className="mt-3 flex flex-col gap-2.5">
         {ingredients.map((ing, i) => (
           <li key={i} className="flex gap-2.5">
@@ -56,7 +60,7 @@ export function PdpPromises({ children }: { children?: React.ReactNode }) {
   const promises = ['Hàng chính hãng — nguồn gốc rõ ràng', returnsPromise(returnWindowDays), 'Sản phẩm xanh, an lành cho cả nhà'].filter((t): t is string => t !== null);
   return (
     <section className="mt-8">
-      <h2 className={ui.sectionTitle}>Cam kết Tubu</h2>
+      <h2 className={pdpSectionTitle}>Cam kết Tubu</h2>
       <ul className="mt-2 flex flex-col gap-1.5">
         {promises.map((t) => (
           <li key={t} className="flex items-center gap-2 text-sm text-stone-700">
@@ -76,7 +80,7 @@ export function PdpDescription({ text }: { text: string }) {
   const isLong = text.length > COLLAPSED_LINES_THRESHOLD;
   return (
     <section className="mt-8">
-      <h2 className={ui.sectionTitle}>Mô tả sản phẩm</h2>
+      <h2 className={pdpSectionTitle}>Mô tả sản phẩm</h2>
       <p id="pdp-description" className={`mt-2 whitespace-pre-line break-words text-stone-700 ${isLong && !expanded ? 'line-clamp-4' : ''}`}>
         {text}
       </p>
