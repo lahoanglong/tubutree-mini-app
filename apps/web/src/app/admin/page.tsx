@@ -151,7 +151,8 @@ import {
 import { AnalyticsTab } from './analytics-tab';
 import { ReportsTab, reportSectionsFor } from '@/components/admin/reports-tab';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
-import { InboxBadge, OpsInboxTab } from '@/components/admin/ops-inbox-tab';
+import { InboxBadge, OpsInboxTab, type TodayStatKey } from '@/components/admin/ops-inbox-tab';
+import { vnTodayKey } from '@/lib/admin-reports';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
 import type { WasteSeed } from '@/components/admin/waste-tab';
 import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
@@ -415,10 +416,11 @@ export default function AdminPage() {
   const [tab, setTabState] = useState<Tab>(DEFAULT_TAB);
   const [ordersRecycling, setOrdersRecycling] = useState<RecyclingFilter | ''>('');
   const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
-  const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter; status?: string; extra?: OrderListExtra } | null>(null);
+  const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter; status?: string; extra?: OrderListExtra; from?: string; to?: string } | null>(null);
   const [productsSeed, setProductsSeed] = useState(0);
   const [storefrontSeed, setStorefrontSeed] = useState(0);
   const [deletionSeed, setDeletionSeed] = useState(0);
+  const [reportsSeed, setReportsSeed] = useState(0);
   const [communitySeed, setCommunitySeed] = useState<{ view: CommunityView; n: number } | null>(null);
   const [wasteSeed, setWasteSeed] = useState<WasteSeed | null>(null);
   const [returnsSeed, setReturnsSeed] = useState<{ filter: ReturnsFilter; n: number } | null>(null);
@@ -484,6 +486,22 @@ export default function AdminPage() {
     setConsignmentSeed(Date.now());
     setTabState('merchantProducts');
     writeUrlState('merchantProducts', '');
+  };
+  // Ba số bán hàng của trang Hôm nay: mỗi số mở màn chi tiết của chính nó, đúng ngày hôm nay (giờ VN).
+  const openStat = (stat: TodayStatKey) => {
+    if (stat === 'orders') {
+      const today = vnTodayKey();
+      setOrdersRecycling('');
+      setOrdersPancake('');
+      setOrderSeed({ search: '', n: Date.now(), from: today, to: today });
+      setTabState('orders');
+      return writeUrlState('orders', '');
+    }
+    if (stat === 'revenue') {
+      setReportsSeed(Date.now());
+      return setTab('reports');
+    }
+    return setTab('users');
   };
   const openInbox = (k: InboxKey) => {
     if (k === 'pancakeAttention') return openPancakeQueue();
@@ -563,6 +581,7 @@ export default function AdminPage() {
       externalPoints: 'externalClaims',
       supportChatUnforwarded: 'supportChat',
       zaloBridgeDown: 'supportChat',
+      shiftsPending: 'shiftApproval',
     };
     setTab(target[k]);
   };
@@ -618,8 +637,8 @@ export default function AdminPage() {
         />
         <div className="mt-4 min-w-0 flex-1 lg:mt-0">
           <TabErrorBoundary key={active} tabLabel={TABS.find((t) => t.k === active)?.label ?? ''} onGoHome={!allowed.has('inbox') || active === 'inbox' ? undefined : () => setTab('inbox')}>
-          {active === 'inbox' && <OpsInboxTab onOpen={openInbox} isAdmin={isAdmin} />}
-          {active === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} />}
+          {active === 'inbox' && <OpsInboxTab onOpen={openInbox} onOpenStat={openStat} isAdmin={isAdmin} />}
+          {active === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} onOpenOrder={openOrderByCode} />}
           {active === 'dealers' && <DealersTab />}
           {active === 'dealerClaims' && <DealerClaimsTab canReview={isAdmin} />}
           {active === 'dealerAccounts' && <DealerAccountsTab isAdmin={isAdmin} />}
@@ -640,6 +659,8 @@ export default function AdminPage() {
               initialInvoice={orderSeed?.invoice}
               initialStatus={orderSeed?.status}
               initialExtra={orderSeed?.extra}
+              initialFrom={orderSeed?.from}
+              initialTo={orderSeed?.to}
               isAdmin={isAdmin}
               canFinance={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KE_TOAN')}
               canWarehouse={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO')}
@@ -682,7 +703,7 @@ export default function AdminPage() {
           {active === 'quickReplies' && <QuickReplyTab />}
           {active === 'notificationTemplates' && <NotificationTemplatesTab canEditAll={isAdmin} />}
           {active === 'analytics' && <AnalyticsTab onOpenReports={allowed.has('reports') ? () => setTab('reports') : undefined} />}
-          {active === 'reports' && <ReportsTab sections={reportSectionsFor(isAdmin, accessQ.data?.staffPermissions ?? [])} />}
+          {active === 'reports' && <ReportsTab key={reportsSeed} initialPreset={reportsSeed > 0 ? 'today' : undefined} sections={reportSectionsFor(isAdmin, accessQ.data?.staffPermissions ?? [])} />}
           </TabErrorBoundary>
         </div>
       </div>
@@ -876,10 +897,12 @@ function DashboardTab({
   onSelectTab,
   onOpenRecyclingQueue,
   onOpenPancakeQueue,
+  onOpenOrder,
 }: {
   onSelectTab: (tab: Tab) => void;
   onOpenRecyclingQueue: () => void;
   onOpenPancakeQueue: () => void;
+  onOpenOrder: (code: string) => void;
 }) {
   const q = useQuery({ queryKey: ['admin-dashboard-stats'], queryFn: getDashboardStats });
   const recyclingQ = useQuery({ queryKey: ['admin-recycling-count'], queryFn: countRecyclingAttention });
@@ -1052,7 +1075,7 @@ function DashboardTab({
             stats.recentOrders.map((o) => (
               <li key={o.id} className="py-2.5">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="min-w-0 break-words font-semibold text-stone-800">{o.code}</span>
+                  <button type="button" onClick={() => onOpenOrder(o.code)} className="min-h-[44px] min-w-0 break-words text-left font-semibold text-forest-700 underline-offset-2 hover:underline">{o.code}</button>
                   <span className="shrink-0 font-semibold text-forest-700">{formatVnd(o.total)}</span>
                 </div>
                 <div className="mt-1 flex items-center justify-between gap-2 text-xs text-stone-500">
@@ -1086,7 +1109,9 @@ function DashboardTab({
               ) : (
                 stats.recentOrders.map((o) => (
                   <tr key={o.id} className="border-t border-stone-100 hover:bg-stone-50">
-                    <td className="px-3 py-2.5 font-semibold text-stone-800">{o.code}</td>
+                    <td className="px-3 py-2.5 font-semibold text-stone-800">
+                      <button type="button" onClick={() => onOpenOrder(o.code)} className="min-h-[44px] text-left font-semibold text-forest-700 underline-offset-2 hover:underline sm:min-h-0">{o.code}</button>
+                    </td>
                     <td className="px-3 py-2.5">
                       <div className="font-medium text-stone-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
                       {o.user?.phone && <div className="text-xs text-stone-500">{o.user.phone}</div>}
@@ -1141,6 +1166,8 @@ function OrdersTab({
   initialInvoice,
   initialStatus,
   initialExtra,
+  initialFrom,
+  initialTo,
 }: {
   recycling: RecyclingFilter | '';
   onRecyclingChange: (r: RecyclingFilter | '') => void;
@@ -1155,6 +1182,9 @@ function OrdersTab({
   initialInvoice?: InvoiceFilter;
   initialStatus?: string;
   initialExtra?: OrderListExtra;
+  /** Khoảng ngày đặt mở sẵn, 'YYYY-MM-DD' giờ VN (số "Đơn hôm nay" của trang Hôm nay). */
+  initialFrom?: string;
+  initialTo?: string;
 }) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState(initialStatus ?? '');
@@ -1162,8 +1192,8 @@ function OrdersTab({
   const [search, setSearch] = useState(initialSearch ?? '');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [invoice, setInvoice] = useState<InvoiceFilter | ''>(initialInvoice ?? '');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [from, setFrom] = useState(initialFrom ?? '');
+  const [to, setTo] = useState(initialTo ?? '');
   const [extra, setExtra] = useState<OrderListExtra>(initialExtra ?? {});
   const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [exporting, setExporting] = useState(false);

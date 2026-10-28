@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import AdminPage from './page';
+import { vnTodayKey } from '@/lib/admin-reports';
 import { click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, scrollRegionProblems, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 import { ADMIN_CONFIG_ROWS } from '@/test-utils/fixtures/admin-config-rows';
@@ -160,6 +161,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'dealerTransferToConfirm', count: 2, hoursLeft: 40 },
           { key: 'storefrontsPending', count: 2 },
           { key: 'accountDeletionPending', count: 1 },
+          { key: 'shiftsPending', count: 2 },
           { key: 'communityReports', count: 3 },
           { key: 'productsMissingImage', count: 4 },
         ],
@@ -3555,7 +3557,7 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
 
   it('ADMIN thấy số bán hàng hôm nay trên trang đầu; nhân viên không gọi API số bán', async () => {
     const admin = await mount();
-    expect(admin.container.querySelector('[role="group"][aria-label="Doanh thu hôm nay"]')!.textContent).toContain('1.500.000');
+    expect(admin.container.querySelector('[role="group"][aria-label="Đã thu từ đơn hôm nay"]')!.textContent).toContain('1.500.000');
     expect(mocks.todayCalls).toBe(1);
     admin.unmount();
     mounted = [];
@@ -3563,7 +3565,7 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
     mocks.access = { role: 'STAFF', staffPermissions: ['KE_TOAN'] };
     const staff = await mount();
-    expect(staff.container.querySelector('[role="group"][aria-label="Doanh thu hôm nay"]')).toBeNull();
+    expect(staff.container.querySelector('[role="group"][aria-label="Đã thu từ đơn hôm nay"]')).toBeNull();
     expect(mocks.todayCalls).toBe(0);
   });
 
@@ -3617,6 +3619,47 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     }
   });
 
+  it('số "Đơn hôm nay" mở tab Đơn hàng lọc đúng ngày hôm nay; "Khách mới hôm nay" mở tab Người dùng (E-56)', async () => {
+    const today = vnTodayKey();
+    const { container } = await mount();
+    const stat = (label: string) => container.querySelector<HTMLButtonElement>(`[role="group"][aria-label="${label}"] button`)!;
+    click(stat('Đơn hôm nay'));
+    await flush();
+    expect(window.location.search).toBe('?tab=orders');
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, undefined, undefined, undefined, 20, undefined, undefined, today, today, {});
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="Từ ngày"]')!.value).toBe(`${today.slice(8)}/${today.slice(5, 7)}/${today.slice(0, 4)}`);
+    click([...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].find((b) => navLabel(b) === 'Hôm nay')!);
+    await flush();
+    click(stat('Khách mới hôm nay'));
+    await flush();
+    expect(window.location.search).toBe('?tab=users');
+  });
+
+  it('số "Đã thu từ đơn hôm nay" mở tab Báo cáo ở mốc Hôm nay (E-56)', async () => {
+    const today = vnTodayKey();
+    const api = mockFetch({
+      '/admin/reports/revenue': { body: { range: { from: today, to: today, days: 1 }, basis: 'ngày đặt đơn, giờ Việt Nam', totals: { orders: 0, cancelled: 0, paidOrders: 0, gross: 0, partialRefund: 0, revenue: 0, gmv: 0, newUsers: 0 }, byDay: [], byChannel: [], byPlatform: [] } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    click(container.querySelector<HTMLButtonElement>('[role="group"][aria-label="Đã thu từ đơn hôm nay"] button')!);
+    await flush();
+    expect(window.location.search).toBe('?tab=reports');
+    expect([...container.querySelectorAll('button[aria-pressed="true"]')].map((b) => b.textContent)).toContain('Hôm nay');
+    expect(api.calls.some((c) => c.url.includes('/admin/reports/revenue') && c.url.includes(`from=${today}`) && c.url.includes(`to=${today}`))).toBe(true);
+  });
+
+  it('mã đơn ở "Đơn hàng mới nhất" của Tổng quan bấm được, mở tab Đơn hàng tìm đúng mã (E-56)', async () => {
+    window.history.replaceState(null, '', '/admin?tab=dashboard');
+    const { container } = await mount();
+    const link = container.querySelector<HTMLButtonElement>('ul[data-recent-orders-cards] button')!;
+    expect(link.textContent).toBe('TT0');
+    click(link);
+    await flush();
+    expect(window.location.search).toBe('?tab=orders');
+    expect(mocks.listOrders.mock.lastCall![2]).toBe('TT0');
+  });
+
   it('thẻ yêu cầu xoá tài khoản mở tab Người dùng và cuộn tới khối yêu cầu xoá', async () => {
     const scroll = vi.fn();
     Element.prototype.scrollIntoView = scroll;
@@ -3628,6 +3671,15 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(window.location.search).toBe('?tab=users');
     expect(container.querySelector('#account-deletions')).not.toBeNull();
     expect(scroll).toHaveBeenCalled();
+  });
+
+  it('thẻ ca nhân viên chờ duyệt mở tab Duyệt ca', async () => {
+    const api = mockFetch({ '/admin/shifts': { body: [] }, '/admin/shift-templates': { body: [] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    click(container.querySelector('[data-inbox="shiftsPending"]')!);
+    await flush();
+    expect(window.location.search).toBe('?tab=shiftApproval');
   });
 
   it('thẻ gian hàng chờ duyệt và sản phẩm thiếu ảnh mở đúng tab', async () => {

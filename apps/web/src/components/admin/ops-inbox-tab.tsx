@@ -45,6 +45,7 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   dealerTransferToConfirm: { title: 'Đơn đại lý trả trước chờ xác nhận tiền', hint: 'Kiểm tra tiền đại lý đã về chưa rồi bấm "Đã nhận tiền". Để quá hạn thì đơn tự huỷ' },
   storefrontsPending: { title: 'Gian hàng chờ duyệt', hint: 'CTV được hẹn duyệt trong 1 ngày làm việc' },
   accountDeletionPending: { title: 'Yêu cầu xoá tài khoản chờ xử lý', hint: 'Đã hứa khách xử lý trong 3 ngày làm việc' },
+  shiftsPending: { title: 'Ca nhân viên chờ duyệt', hint: 'Nhân viên đã đăng ký ca từ hôm nay trở đi, chưa ai duyệt' },
   communityReports: { title: 'Báo cáo vi phạm cộng đồng', hint: 'Khách báo bài hoặc bình luận, chưa ai xem' },
   productsMissingImage: { title: 'Sản phẩm đang bán thiếu ảnh', hint: 'Khách không thấy hình, khó chốt đơn' },
   externalPoints: { title: 'Tích điểm đơn sàn cần xử lý', hint: 'Yêu cầu cần duyệt, mã chưa ghép được đơn, đơn đã cộng điểm bị hoàn một phần hoặc đã đóng' },
@@ -70,7 +71,7 @@ const INBOX_TAB: Partial<Record<InboxKey, string>> = {
   externalPoints: 'externalClaims', supportChatUnforwarded: 'supportChat', zaloBridgeDown: 'supportChat',
   wasteToCount: 'waste', wasteUnmatched: 'waste', wasteBlockedPending: 'waste', wastePointsPending: 'waste', wastePerksPending: 'waste',
   wasteTransitOverdue: 'waste', wasteGiftOverdue: 'waste', wasteOrderMismatch: 'waste',
-  storefrontsPending: 'storefronts', productsMissingImage: 'productCategories', accountDeletionPending: 'users',
+  storefrontsPending: 'storefronts', productsMissingImage: 'productCategories', accountDeletionPending: 'users', shiftsPending: 'shiftApproval',
 };
 
 const QUALITY_KEYS: ReadonlySet<InboxKey> = new Set<InboxKey>(['productsMissingImage']);
@@ -92,8 +93,11 @@ export function InboxBadge({ tab, enabled = true }: { tab: string; enabled?: boo
   );
 }
 
+/** Số bán hàng trong ngày bấm được: mỗi số mở đúng màn xem chi tiết của nó. */
+export type TodayStatKey = 'orders' | 'revenue' | 'newUsers';
+
 /** Trang chủ quản trị "Hôm nay": số bán hàng trong ngày (chỉ ADMIN), rồi các việc đang chờ; hàng đợi rỗng gom một dòng. */
-export function OpsInboxTab({ onOpen: openTab, isAdmin = false }: { onOpen: (key: InboxKey) => void; isAdmin?: boolean }) {
+export function OpsInboxTab({ onOpen: openTab, onOpenStat, isAdmin = false }: { onOpen: (key: InboxKey) => void; onOpenStat?: (stat: TodayStatKey) => void; isAdmin?: boolean }) {
   const onOpen = (key: InboxKey) => {
     seedPayoutFilter(PAYOUT_FILTER[key] ?? null);
     seedDealerClaimFilter(CLAIM_FILTER[key] ?? null);
@@ -114,7 +118,7 @@ export function OpsInboxTab({ onOpen: openTab, isAdmin = false }: { onOpen: (key
         <h2 className="font-display text-lg font-semibold text-stone-900">Hôm nay</h2>
         <span className="text-xs text-stone-500">Cập nhật {formatDateTime(q.data.generatedAt)} · tự làm mới mỗi phút</span>
       </div>
-      {isAdmin && <TodayStats />}
+      {isAdmin && <TodayStats onOpenStat={onOpenStat} />}
       <h3 className="text-sm font-semibold text-stone-900">Việc đang chờ{open.length > 0 ? ` (${open.length})` : ''}</h3>
       {open.length === 0 && (
         <p className="flex items-center gap-2 rounded-card border border-success-fg bg-success-bg px-4 py-3 text-sm text-success-fg">
@@ -186,20 +190,35 @@ function vsYesterday(today: number, yesterday: number, fmt: (n: number) => strin
   return `${today > yesterday ? '+' : '−'}${fmt(Math.abs(today - yesterday))} so với hôm qua`;
 }
 
-function TodayStat({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: 'up' | 'down' | 'flat' }) {
+function TodayStat({ label, value, sub, note, tone, onPress }: { label: string; value: string; sub: string; note?: string; tone?: 'up' | 'down' | 'flat'; onPress?: () => void }) {
+  const body = (
+    <>
+      <span className="flex items-center justify-between gap-1 text-xs text-stone-600">
+        {label}
+        {onPress && <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-stone-500" />}
+      </span>
+      <span className="mt-0.5 block text-xl font-bold text-stone-900">{value}</span>
+      {note && <span className="mt-0.5 block text-[11px] font-medium text-stone-700">{note}</span>}
+      <span className={`mt-0.5 block text-[11px] ${tone === 'up' ? 'text-success-fg' : tone === 'down' ? 'text-danger-fg' : 'text-stone-500'}`}>{sub}</span>
+    </>
+  );
   return (
-    <div role="group" aria-label={label} className="rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
-      <div className="text-xs text-stone-600">{label}</div>
-      <div className="mt-0.5 text-xl font-bold text-stone-900">{value}</div>
-      <div className={`mt-0.5 text-[11px] ${tone === 'up' ? 'text-success-fg' : tone === 'down' ? 'text-danger-fg' : 'text-stone-500'}`}>{sub}</div>
+    <div role="group" aria-label={label} className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
+      {onPress ? (
+        <button type="button" onClick={onPress} className="block min-h-[44px] w-full rounded-card p-3 text-left hover:bg-stone-50">
+          {body}
+        </button>
+      ) : (
+        <div className="p-3">{body}</div>
+      )}
     </div>
   );
 }
 
 const toneOf = (a: number, b: number) => (a > b ? 'up' : a < b ? 'down' : 'flat');
 
-/** Bốn số của ngày: doanh thu đã thu, đơn, khách mới (tài khoản thật) và tỉ lệ khách mua lại trong 30 ngày (NS-1). Mỗi số lỗi thì chỉ nó vắng, không kéo sập cả trang. */
-function TodayStats() {
+/** Bốn số của ngày: tiền đã thu từ đơn hôm nay (kèm giá trị đơn đặt, vì COD chưa giao chưa phải tiền đã thu), đơn, khách mới (tài khoản thật) và tỉ lệ khách mua lại trong 30 ngày (NS-1). Mỗi số lỗi thì chỉ nó vắng, không kéo sập cả trang. */
+function TodayStats({ onOpenStat }: { onOpenStat?: (stat: TodayStatKey) => void }) {
   const today = useQuery({ queryKey: ['admin-today-summary'], queryFn: getTodaySummary, refetchInterval: 60_000 });
   const retention = useQuery({ queryKey: ['admin-analytics-retention'], queryFn: () => getRetentionDaily(30), staleTime: 5 * 60_000 });
   const t: TodaySummary | undefined = today.data;
@@ -210,9 +229,9 @@ function TodayStats() {
       {today.isError && <LoadError onRetry={() => void today.refetch()} retrying={today.isFetching}>Không tải được số bán hàng hôm nay.</LoadError>}
       {t && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <TodayStat label="Doanh thu hôm nay" value={formatVnd(t.revenue.today)} sub={`${vsYesterday(t.revenue.today, t.revenue.yesterday, formatVnd)} · 7 ngày ${formatVnd(t.revenue.week)}`} tone={toneOf(t.revenue.today, t.revenue.yesterday)} />
-          <TodayStat label="Đơn hôm nay" value={String(t.orders.today)} sub={`${vsYesterday(t.orders.today, t.orders.yesterday, String)} · 7 ngày ${t.orders.week}`} tone={toneOf(t.orders.today, t.orders.yesterday)} />
-          <TodayStat label="Khách mới hôm nay" value={String(t.newUsers.today)} sub={`7 ngày: ${t.newUsers.week} khách mới`} tone={toneOf(t.newUsers.today, t.newUsers.yesterday)} />
+          <TodayStat label="Đã thu từ đơn hôm nay" value={formatVnd(t.revenue.today)} note={t.gmv ? `Giá trị đơn đặt ${formatVnd(t.gmv.today)}` : undefined} sub={`${vsYesterday(t.revenue.today, t.revenue.yesterday, formatVnd)} · 7 ngày ${formatVnd(t.revenue.week)}`} tone={toneOf(t.revenue.today, t.revenue.yesterday)} onPress={onOpenStat && (() => onOpenStat('revenue'))} />
+          <TodayStat label="Đơn hôm nay" value={String(t.orders.today)} sub={`${vsYesterday(t.orders.today, t.orders.yesterday, String)} · 7 ngày ${t.orders.week}`} tone={toneOf(t.orders.today, t.orders.yesterday)} onPress={onOpenStat && (() => onOpenStat('orders'))} />
+          <TodayStat label="Khách mới hôm nay" value={String(t.newUsers.today)} sub={`7 ngày: ${t.newUsers.week} khách mới`} tone={toneOf(t.newUsers.today, t.newUsers.yesterday)} onPress={onOpenStat && (() => onOpenStat('newUsers'))} />
           <TodayStat
             label="Khách mua lại (30 ngày)"
             value={ns1?.pct == null ? '—' : `${ns1.pct.toFixed(1).replace(/\.0$/, '').replace('.', ',')}%`}

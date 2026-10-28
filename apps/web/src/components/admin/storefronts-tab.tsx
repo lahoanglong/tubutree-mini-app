@@ -15,7 +15,7 @@ import {
   type StorefrontStatusFilter,
   type StorefrontTypeFilter,
 } from '@/lib/admin-storefronts-client';
-import { getOpsInbox, mergeQueuePages, nextPageParam } from '@/lib/admin-client';
+import { getOpsInbox, invalidateInbox, mergeQueuePages, nextPageParam } from '@/lib/admin-client';
 import { ApiError } from '@/lib/client-api';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
@@ -69,6 +69,7 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
     mutationFn: (id: string) => approveStorefront(id, true),
     onSuccess: () => {
       setQuickFailure(null);
+      void invalidateInbox(qc);
       return qc.invalidateQueries({ queryKey: ['admin-storefronts'] });
     },
     onError: (e) => setQuickFailure(errorText(e)),
@@ -197,6 +198,7 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['admin-storefronts'] });
+    void invalidateInbox(qc);
     return qc.invalidateQueries({ queryKey: ['admin-storefront', id] });
   };
   const onError = (e: unknown) => setFailure(errorText(e));

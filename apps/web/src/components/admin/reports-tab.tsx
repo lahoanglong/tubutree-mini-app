@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { lastDaysRange, vnMonthRange } from '@/lib/admin-reports';
+import { addDaysKey, lastDaysRange, vnMonthRange, vnTodayKey } from '@/lib/admin-reports';
 import { ReportsRevenueSection } from './reports-revenue-section';
 import { ReportsSourcesSection } from './reports-sources-section';
 import { ReportsFinanceSection } from './reports-finance-section';
@@ -9,6 +9,8 @@ import { FIELD_CLASS, TOUCH_H, chipClass } from './ui';
 import { VnDateInput } from './vn-date-input';
 
 const PRESETS = [
+  { key: 'today', label: 'Hôm nay', range: () => ({ from: vnTodayKey(), to: vnTodayKey() }) },
+  { key: 'yesterday', label: 'Hôm qua', range: () => ({ from: addDaysKey(vnTodayKey(), -1), to: addDaysKey(vnTodayKey(), -1) }) },
   { key: '7', label: '7 ngày', range: () => lastDaysRange(7) },
   { key: '30', label: '30 ngày', range: () => lastDaysRange(30) },
   { key: '90', label: '90 ngày', range: () => lastDaysRange(90) },
@@ -28,10 +30,11 @@ export function reportSectionsFor(isAdmin: boolean, perms: readonly string[]): R
   return ALL_SECTIONS.filter((s) => (s === 'sources' ? perms.includes('MARKETING') : perms.includes('KE_TOAN')));
 }
 
-/** Báo cáo cho kế toán và marketing: một khoảng ngày (giờ Việt Nam) dùng chung cho mọi phần bên dưới. Mặc định 30 ngày gần nhất. */
-export function ReportsTab({ sections = ALL_SECTIONS }: { sections?: readonly ReportSection[] }) {
-  const [range, setRange] = useState(() => lastDaysRange(30));
-  const [preset, setPreset] = useState<string | null>('30');
+/** Báo cáo cho kế toán và marketing: một khoảng ngày (giờ Việt Nam) dùng chung cho mọi phần bên dưới. Mặc định 30 ngày gần nhất; `initialPreset` là mốc nhanh mở sẵn (số "Đã thu" ở trang Hôm nay mở mốc "Hôm nay"). */
+export function ReportsTab({ sections = ALL_SECTIONS, initialPreset }: { sections?: readonly ReportSection[]; initialPreset?: (typeof PRESETS)[number]['key'] }) {
+  const start = PRESETS.find((p) => p.key === initialPreset);
+  const [range, setRange] = useState(() => start?.range() ?? lastDaysRange(30));
+  const [preset, setPreset] = useState<string | null>(start?.key ?? '30');
   const pick = (p: (typeof PRESETS)[number]) => {
     setRange(p.range());
     setPreset(p.key);

@@ -182,6 +182,26 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
     expect(container.textContent).toContain('Không có khách mới nào trong khoảng ngày này');
   });
 
+  it('chọn nhanh "Hôm nay" và "Hôm qua" theo ngày giờ VN (E-56)', async () => {
+    const { container } = mount(<ReportsTab />);
+    await flush();
+    const chip = (t: string) => Array.from(container.querySelectorAll('button')).find((b) => b.textContent === t)!;
+    click(chip('Hôm nay'));
+    await flush();
+    expect(mocks.getRevenueReport).toHaveBeenLastCalledWith({ from: '2026-10-18', to: '2026-10-18' });
+    expect(chip('Hôm nay').getAttribute('aria-pressed')).toBe('true');
+    click(chip('Hôm qua'));
+    await flush();
+    expect(mocks.getRevenueReport).toHaveBeenLastCalledWith({ from: '2026-10-17', to: '2026-10-17' });
+  });
+
+  it('mở từ số "Đã thu" của trang Hôm nay: initialPreset=today gọi báo cáo đúng ngày hôm nay ngay lần đầu', async () => {
+    mount(<ReportsTab initialPreset="today" />);
+    await flush();
+    expect(mocks.getRevenueReport).toHaveBeenCalledTimes(1);
+    expect(mocks.getRevenueReport).toHaveBeenCalledWith({ from: '2026-10-18', to: '2026-10-18' });
+  });
+
   it('chọn nhanh "Tháng trước" cho kỳ kê khai thuế', async () => {
     const { container } = mount(<ReportsTab />);
     await flush();

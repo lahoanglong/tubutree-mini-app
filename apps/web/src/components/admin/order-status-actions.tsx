@@ -9,6 +9,7 @@ import {
   updateOrderStatus,
   DEALER_BANK_REF_MAX,
   type AdminOrder,
+  invalidateInbox,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { parseVndInput } from '@/lib/loyalty-pos';
@@ -151,6 +152,7 @@ export function OrderStatusActions({
     void qc.invalidateQueries({ queryKey: ['admin-orders'] });
     void qc.invalidateQueries({ queryKey: ['admin-dashboard-stats'] });
     void qc.invalidateQueries({ queryKey: ['admin-recycling-count'] });
+    void invalidateInbox(qc);
   };
 
   const statusMut = useMutation({

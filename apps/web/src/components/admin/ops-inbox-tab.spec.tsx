@@ -196,6 +196,23 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     expect(onOpen).toHaveBeenCalledWith('accountDeletionPending');
   });
 
+  it('thẻ ca nhân viên chờ duyệt mở đúng khoá và cộng vào huy hiệu mục Duyệt ca', async () => {
+    stub([{ key: 'shiftsPending', count: 3 }]);
+    const onOpen = vi.fn();
+    const r = render(<OpsInboxTab onOpen={onOpen} />);
+    mounted.push(r);
+    await flush();
+    const card = r.container.querySelector<HTMLButtonElement>('[data-inbox="shiftsPending"]')!;
+    expect(card.textContent).toContain('Ca nhân viên chờ duyệt');
+    expect(card.textContent).toContain('3');
+    click(card);
+    expect(onOpen).toHaveBeenCalledWith('shiftsPending');
+    const badge = render(<InboxBadge tab="shiftApproval" />);
+    mounted.push(badge);
+    await flush();
+    expect(badge.container.querySelector('[data-inbox-badge="shiftApproval"]')!.textContent).toContain('3');
+  });
+
   it('đơn chuyển khoản đã quá hạn ghi rõ sắp tự huỷ', async () => {
     stub([{ key: 'bankTransferToConfirm', count: 1, hoursLeft: 0 }]);
     const r = render(<OpsInboxTab onOpen={vi.fn()} />);
@@ -226,7 +243,7 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
   it('ADMIN thấy bốn số hôm nay (doanh thu, đơn, khách mới, khách mua lại 30 ngày); nhân viên không gọi API số bán', async () => {
     const api = stub([{ key: 'merchantOverdue', count: 1 }], {
       '/admin/dashboard/today': {
-        body: { orders: { today: 5, yesterday: 3, week: 20 }, revenue: { today: 1500000, yesterday: 2000000, week: 9000000 }, newUsers: { today: 2, yesterday: 2, week: 11 } },
+        body: { orders: { today: 5, yesterday: 3, week: 20 }, revenue: { today: 1500000, yesterday: 2000000, week: 9000000 }, gmv: { today: 2400000, yesterday: 2100000, week: 9800000 }, newUsers: { today: 2, yesterday: 2, week: 11 } },
       },
       '/admin/analytics/retention': {
         body: [{ date: '2026-10-27', newBuyers: 1, activeBuyers: 1, ordersCount: 1, ordersPerBuyerMtd: 1, dauProxyRefreshToken: 1, dauEventBased: null, ns1CohortSize: 10, ns1RepeatCount: 3 }],
@@ -237,8 +254,10 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     await flush();
     const stat = (label: string) => admin.container.querySelector(`[role="group"][aria-label="${label}"]`)!.textContent ?? '';
     expect(admin.container.querySelector('h2')!.textContent).toBe('Hôm nay');
-    expect(stat('Doanh thu hôm nay')).toContain('1.500.000');
-    expect(stat('Doanh thu hôm nay')).toContain('so với hôm qua');
+    expect(stat('Đã thu từ đơn hôm nay')).toContain('1.500.000');
+    expect(stat('Đã thu từ đơn hôm nay')).toContain('so với hôm qua');
+    expect(stat('Đã thu từ đơn hôm nay')).toContain('Giá trị đơn đặt 2.400.000');
+    expect(admin.container.querySelector('[role="group"][aria-label="Doanh thu hôm nay"]')).toBeNull();
     expect(stat('Đơn hôm nay')).toContain('5');
     expect(stat('Đơn hôm nay')).toContain('+2 so với hôm qua');
     expect(stat('Khách mới hôm nay')).toContain('7 ngày: 11');
@@ -251,7 +270,37 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     mounted.push(staff);
     await flush();
     expect(api.calls.some((c) => c.url.includes('/admin/dashboard/today'))).toBe(false);
-    expect(staff.container.querySelector('[role="group"][aria-label="Doanh thu hôm nay"]')).toBeNull();
+    expect(staff.container.querySelector('[role="group"][aria-label="Đã thu từ đơn hôm nay"]')).toBeNull();
+  });
+
+  it('API cũ chưa trả giá trị đơn đặt thì chỉ bỏ dòng phụ, số đã thu vẫn hiện', async () => {
+    stub([{ key: 'merchantOverdue', count: 1 }], {
+      '/admin/dashboard/today': { body: { orders: { today: 1, yesterday: 1, week: 1 }, revenue: { today: 100000, yesterday: 0, week: 100000 }, newUsers: { today: 0, yesterday: 0, week: 0 } } },
+      '/admin/analytics/retention': { body: [] },
+    });
+    const r = render(<OpsInboxTab onOpen={vi.fn()} isAdmin />);
+    mounted.push(r);
+    await flush();
+    const text = r.container.querySelector('[role="group"][aria-label="Đã thu từ đơn hôm nay"]')!.textContent ?? '';
+    expect(text).toContain('100.000');
+    expect(text).not.toContain('Giá trị đơn đặt');
+  });
+
+  it('ba số bán hàng bấm được và báo đúng số nào được bấm; số khách mua lại không bấm (E-56)', async () => {
+    stub([{ key: 'merchantOverdue', count: 1 }], {
+      '/admin/dashboard/today': { body: { orders: { today: 5, yesterday: 3, week: 20 }, revenue: { today: 100000, yesterday: 0, week: 100000 }, newUsers: { today: 2, yesterday: 2, week: 11 } } },
+      '/admin/analytics/retention': { body: [] },
+    });
+    const onOpenStat = vi.fn();
+    const r = render(<OpsInboxTab onOpen={vi.fn()} onOpenStat={onOpenStat} isAdmin />);
+    mounted.push(r);
+    await flush();
+    const press = (label: string) => r.container.querySelector<HTMLButtonElement>(`[role="group"][aria-label="${label}"] button`);
+    click(press('Đơn hôm nay')!);
+    click(press('Đã thu từ đơn hôm nay')!);
+    click(press('Khách mới hôm nay')!);
+    expect(onOpenStat.mock.calls.map((c) => c[0])).toEqual(['orders', 'revenue', 'newUsers']);
+    expect(press('Khách mua lại (30 ngày)')).toBeNull();
   });
 
   it('một số lỗi không kéo sập trang: số bán lỗi thì hiện thử lại, các thẻ việc vẫn hiện', async () => {
