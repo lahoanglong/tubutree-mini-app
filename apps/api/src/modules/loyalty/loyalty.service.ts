@@ -38,6 +38,9 @@ import { assertActiveStaff } from '../../common/staff-access';
 import { generateWasteCode } from '../waste-exchange/waste-codes';
 import { loadPointExpiryTxns, lotRecoverable, nextPointExpiry, orderLotKey } from './loyalty-expiry.service';
 
+/** Số dòng tối đa mỗi lần đọc lịch sử điểm (cũng là số dòng khi client cũ không gửi limit). */
+const POINTS_HISTORY_MAX_PAGE = 100;
+
 /**
  * Loyalty core (Build Spec §6.6). Phase 1 dùng cho vòng đời đơn:
  *  - creditOrderPoints khi DELIVERED
@@ -754,13 +757,24 @@ export class LoyaltyService {
     };
   }
 
-  getPointsTransactions(userId: string) {
+  /**
+   * Lịch sử điểm của khách, mới nhất trước. Không tham số thì trả 100 dòng đầu như bản cũ; `before` + `beforeId` (createdAt và id
+   * của dòng cuối trang trước) lấy trang kế theo đúng thứ tự (createdAt, id) giảm dần nên nhiều dòng cùng mili giây không bị
+   * trùng hay sót.
+   */
+  getPointsTransactions(userId: string, page: { before?: Date; beforeId?: string; limit?: number } = {}) {
+    const take = Math.min(Math.max(Math.trunc(page.limit ?? POINTS_HISTORY_MAX_PAGE), 1), POINTS_HISTORY_MAX_PAGE);
+    const after: Prisma.PointsTransactionWhereInput = !page.before
+      ? {}
+      : page.beforeId
+        ? { OR: [{ createdAt: { lt: page.before } }, { createdAt: page.before, id: { lt: page.beforeId } }] }
+        : { createdAt: { lt: page.before } };
     return this.prisma.pointsTransaction.findMany({
       // ORDER_REVERSED delta 0 chỉ là dấu "đã xử lý" của reverseOrderPoints (khi không còn gì để thu hồi), không phải
       // biến động điểm: hiện nó thành dòng "Hoàn ngược điểm 0" trong lịch sử khách.
-      where: { userId, NOT: { delta: 0, reason: { startsWith: 'ORDER_REVERSED:' } } },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
+      where: { userId, NOT: { delta: 0, reason: { startsWith: 'ORDER_REVERSED:' } }, ...after },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take,
     });
   }
 

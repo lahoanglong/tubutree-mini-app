@@ -7,6 +7,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { requireIdempotencyKey } from '../../common/idempotency-key';
 import { LoyaltyService } from './loyalty.service';
 import { PosCreditDto, PosCreditListQuery, ScanMemberDto } from './dto/loyalty-staff.dto';
+import { PointsTransactionsQuery } from './dto/points-transactions.dto';
 
 @Controller()
 export class LoyaltyController {
@@ -18,8 +19,12 @@ export class LoyaltyController {
   }
 
   @Get('me/points/transactions')
-  transactions(@CurrentUser('sub') userId: string) {
-    return this.loyalty.getPointsTransactions(userId);
+  transactions(@CurrentUser('sub') userId: string, @Query() q: PointsTransactionsQuery) {
+    return this.loyalty.getPointsTransactions(userId, {
+      before: q.before ? new Date(q.before) : undefined,
+      beforeId: q.beforeId,
+      limit: q.limit,
+    });
   }
 
   @Get('me/coupons')
