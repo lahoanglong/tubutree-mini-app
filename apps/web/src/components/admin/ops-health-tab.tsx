@@ -114,6 +114,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'PancakeSyncService.nightlyFullSync': 'Quét toàn bộ danh mục Pancake mỗi đêm',
   'payments.zalopay-reconcile': 'Đối chiếu thanh toán ZaloPay',
   'ZaloOaTokenCron.refresh': 'Làm mới khoá kết nối Zalo OA khi sắp hết hạn',
+  'zalo-oa.events-reconcile': 'Cứu tin khách nhắn vào Zalo OA bị kẹt',
   'LifecycleService.sendReorderReminders': 'Nhắc khách mua lại',
   'RemarketingService.sendCartAbandonReminders': 'Nhắc khách có giỏ hàng bỏ quên',
   'RemarketingService.sendVoucherExpiryReminders': 'Nhắc khách mã giảm giá sắp hết hạn',

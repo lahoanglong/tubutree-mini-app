@@ -1,5 +1,6 @@
 jest.mock('axios');
 import axios from 'axios';
+import { Logger } from '@nestjs/common';
 import { ZaloOaTokenService } from './zalo-oa-token.service';
 import { computeExpiresAt } from './zalo-oa-token.util';
 import type { PrismaService } from '../../../prisma/prisma.service';
@@ -20,17 +21,35 @@ function makeConfig(over: Record<string, string> = {}): ConfigService<Env, true>
   return { get: (k: string) => map[k] } as unknown as ConfigService<Env, true>;
 }
 
-function makePrisma(store: Record<string, string> = {}) {
+/**
+ * `failOn`: khoá mà lần ghi sẽ ném lỗi. Thao tác ghi chạy khi được await (như PrismaPromise), và `$transaction` hoàn lại
+ * toàn bộ khi một thao tác lỗi, nên ghi rời từng khoá sẽ để lại trạng thái dở dang còn ghi trong transaction thì không.
+ */
+function makePrisma(store: Record<string, string> = {}, failOn?: string) {
   const systemConfig = {
     findUnique: jest.fn(async ({ where: { key } }: { where: { key: string } }) =>
       key in store ? { value: store[key] } : null,
     ),
-    upsert: jest.fn(async ({ where: { key }, update, create }: { where: { key: string }; update: { value: string }; create: { value: string } }) => {
-      store[key] = update?.value ?? create?.value;
-      return {};
-    }),
+    upsert: jest.fn(({ where: { key }, update, create }: { where: { key: string }; update: { value: string }; create: { value: string } }) => ({
+      then(resolve: (v: unknown) => void, reject: (e: unknown) => void) {
+        if (key === failOn) return reject(new Error('DB ghi lỗi'));
+        store[key] = update?.value ?? create?.value;
+        return resolve({});
+      },
+    })),
   };
-  return { prisma: { systemConfig } as unknown as PrismaService, store, systemConfig };
+  const $transaction = jest.fn(async (ops: PromiseLike<unknown>[]) => {
+    const before = { ...store };
+    try {
+      for (const op of ops) await op;
+      return [];
+    } catch (e) {
+      for (const k of Object.keys(store)) delete store[k];
+      Object.assign(store, before);
+      throw e;
+    }
+  });
+  return { prisma: { systemConfig, $transaction } as unknown as PrismaService, store, systemConfig, $transaction };
 }
 
 const NOW = new Date('2026-06-26T00:00:00Z');
@@ -55,6 +74,31 @@ describe('ZaloOaTokenService.refresh', () => {
     expect(store['zalo.oa_token_expires_at']).toBe(computeExpiresAt(90000, NOW));
     // dùng refresh_token từ env cho lần bootstrap
     expect(post.mock.calls[0][1]).toContain('refresh_token=env-refresh');
+  });
+
+  it('ghi ba khoá trong một transaction, refresh token mới đứng đầu', async () => {
+    post.mockResolvedValue({ data: { access_token: 'new-acc', refresh_token: 'new-ref', expires_in: 90000 } });
+    const { prisma, $transaction, systemConfig } = makePrisma();
+    await new ZaloOaTokenService(prisma, makeConfig()).refresh(NOW);
+    expect($transaction).toHaveBeenCalledTimes(1);
+    expect(($transaction.mock.calls[0]![0] as unknown[]).length).toBe(3);
+    const keys = systemConfig.upsert.mock.calls.map((c) => c[0].where.key);
+    expect(keys).toEqual(['zalo.oa_refresh_token', 'zalo.oa_access_token', 'zalo.oa_token_expires_at']);
+  });
+
+  it('ghi lỗi giữa chừng → hoàn lại cả ba khoá, trả false và log 6 ký tự cuối của refresh token mới', async () => {
+    post.mockResolvedValue({ data: { access_token: 'new-acc', refresh_token: 'rotated-token-ABC123', expires_in: 90000 } });
+    const logError = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    try {
+      const { prisma, store } = makePrisma({ 'zalo.oa_access_token': 'old-acc', 'zalo.oa_refresh_token': 'old-ref' }, 'zalo.oa_token_expires_at');
+      expect(await new ZaloOaTokenService(prisma, makeConfig()).refresh(NOW)).toBe(false);
+      expect(store).toEqual({ 'zalo.oa_access_token': 'old-acc', 'zalo.oa_refresh_token': 'old-ref' });
+      const lines = logError.mock.calls.map((c) => String(c[0]));
+      expect(lines.some((l) => l.includes('ABC123'))).toBe(true);
+      expect(lines.join('\n')).not.toContain('rotated-token-ABC123');
+    } finally {
+      logError.mockRestore();
+    }
   });
 
   it('response thiếu token → false, không lưu', async () => {

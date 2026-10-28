@@ -427,6 +427,18 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     expect(buttonByName(c, 'Cách dùng sản phẩm')).toBeNull();
   });
 
+  it('dải câu hỏi nhanh: trong khung chat máy tính cùng nền khung (không băng trắng), nút không rộng quá max-w-sm; thanh dưới điện thoại giữ nền thanh nhập', async () => {
+    const c = mount();
+    await waitFor(() => expect(buttonByName(c, 'Đổi trả hàng')).not.toBeNull());
+    const inPane = c.querySelector('[data-chat-suggest] [role="group"]') as HTMLElement;
+    expect(inPane.style.background).toBe('transparent');
+    const chips = Array.from(inPane.querySelectorAll('button'));
+    expect(chips.length).toBeGreaterThan(0);
+    for (const chip of chips) expect(chip.style.maxWidth).toBe('24rem');
+    const mobile = c.querySelector('.md\\:hidden [role="group"]') as HTMLElement;
+    expect(mobile.style.background).toContain('--color-bg-surface');
+  });
+
   it('có đơn đang giao: thêm nút "Hỏi về đơn {mã}" và gửi kèm mã đơn', async () => {
     mocks.send.mockResolvedValue(msg({ id: 's1', clientMsgId: 'cid-1' }));
     mocks.orders.mockResolvedValue({ data: [{ code: 'TUBU99' }], meta: { page: 1, limit: 1, total: 1 } });
@@ -579,6 +591,14 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith({ ids: ['m1'] }));
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['support-chat-summary'] }));
     expect(c.textContent).toContain('Tubu Tree');
+  });
+
+  it('đánh dấu đã đọc xong thì làm mới cả chuông thông báo (chuông "Tubu Tree đã trả lời" hết số)', async () => {
+    mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'm1', sender: 'STAFF' })] }));
+    mount();
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith({ ids: ['m1'] }));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['notifications'] }));
   });
 
   describe('đánh dấu đã đọc theo hiển thị', () => {

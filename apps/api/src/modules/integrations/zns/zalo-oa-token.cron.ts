@@ -10,7 +10,7 @@ export class ZaloOaTokenCron {
   private readonly logger = new Logger(ZaloOaTokenCron.name);
   constructor(private readonly tokens: ZaloOaTokenService) {}
 
-  // Mỗi 6 giờ: chỉ refresh khi token sắp hết hạn (≤6h) — tránh xoay refresh_token vô ích.
+  // Mỗi 6 giờ: chỉ refresh khi token còn ≤13h (REFRESH_THRESHOLD_HOURS) — tránh xoay refresh_token vô ích, mà vẫn còn lượt thử lại.
   //
   // Toàn thân bọc try/catch: @Cron của @nestjs/schedule không tự bắt lỗi — một lần refresh lỗi
   // (network, Zalo trả lỗi...) ném ra ngoài là unhandledRejection, mà Node 20 mặc định crash cả
