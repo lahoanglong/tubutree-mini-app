@@ -1,3 +1,4 @@
+import { homeCopy } from '@tubutree/app-core/home-copy';
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
@@ -206,6 +207,9 @@ describe('/uu-dai — trang Ưu đãi', () => {
     const c = await mount();
     expect(c.textContent).toContain('Đăng nhập để xem ưu đãi');
     expect(c.querySelector('a[href^="/dang-nhap"]')).not.toBeNull();
+    expect(c.textContent).toContain(homeCopy.offers.rewardsTitle);
+    expect(c.textContent).toContain('Vườn Xanh');
+    expect(c.textContent).not.toContain(homeCopy.offers.myRewards);
     expect(state.calls.filter((p) => p !== '/config/public')).toEqual([]);
   });
 });

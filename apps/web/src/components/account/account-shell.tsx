@@ -11,6 +11,7 @@ import {
   Package,
   Settings,
   Sprout,
+  Tag,
   User,
   UserRound,
   Wallet,
@@ -41,6 +42,7 @@ const GROUPS: { group: string; items: ShellItem[] }[] = [
   {
     group: 'Điểm và quà',
     items: [
+      { to: '/uu-dai', label: 'Ưu đãi', icon: Tag },
       { to: '/tai-khoan/diem-xanh', label: 'Điểm Xanh và hạng', icon: Sprout },
       { to: '/tai-khoan/vi-tubu', label: 'Ví Tubu', icon: Wallet },
       { to: '/kho-qua', label: 'Kho quà', icon: Gift },
