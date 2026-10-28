@@ -270,28 +270,41 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect(mocks.listStaff).toHaveBeenCalledTimes(2);
     });
 
-    it('Thu hồi hỏi lại; đồng ý thì gọi API, từ chối thì không làm gì', async () => {
-      const confirm = confirmSpy().mockReturnValueOnce(false).mockReturnValueOnce(true);
+    it('Thu hồi mở tấm xác nhận (không dùng window.confirm); Huỷ thì không làm gì, đồng ý thì gọi API', async () => {
+      const confirm = confirmSpy();
       renderPage();
       await screen.findByText('Lan');
       fireEvent.click(screen.getByRole('button', { name: 'Thu hồi · Lan' }));
-      expect(confirm).toHaveBeenCalledWith('Thu hồi quyền của Lan? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.');
+      expect(screen.getByRole('heading', { level: 2, name: 'Thu hồi quyền?' })).toBeInTheDocument();
+      expect(screen.getByText('Thu hồi quyền của Lan? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
       expect(mocks.revokeStaff).not.toHaveBeenCalled();
+      expect(screen.queryByText('Thu hồi quyền?')).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Thu hồi · Lan' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Thu hồi' }));
       await waitFor(() => expect(mocks.revokeStaff).toHaveBeenCalledWith('0901234567'));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã thu hồi quyền.', type: 'success' }));
+      expect(screen.queryByText('Thu hồi quyền?')).not.toBeInTheDocument();
       // Người chưa có tên: hỏi bằng SĐT.
-      confirm.mockReturnValueOnce(false);
       fireEvent.click(screen.getByRole('button', { name: 'Thu hồi · 0912345678' }));
-      expect(confirm).toHaveBeenLastCalledWith('Thu hồi quyền của 0912345678? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.');
+      expect(screen.getByText('Thu hồi quyền của 0912345678? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.')).toBeInTheDocument();
+      expect(confirm).not.toHaveBeenCalled();
+    });
+
+    it('nút Thu hồi trên thẻ nhân sự có viền đỏ để nhìn ra việc nguy hiểm', async () => {
+      renderPage();
+      await screen.findByText('Lan');
+      const btn = screen.getByRole('button', { name: 'Thu hồi · Lan' });
+      expect(btn.style.border).toContain('var(--color-text-danger)');
+      expect(btn.style.color).toBe('var(--color-text-danger)');
     });
 
     it('Thu hồi mà gian hàng đối tác còn việc dở (storeBlocked): báo cảnh báo thay vì thành công trơn', async () => {
-      confirmSpy().mockReturnValue(true);
       mocks.revokeStaff.mockResolvedValueOnce({ revoked: 1, downgraded: true, storeBlocked: true });
       renderPage();
       await screen.findByText('Lan');
       fireEvent.click(screen.getByRole('button', { name: 'Thu hồi · Lan' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Thu hồi' }));
       await waitFor(() =>
         expect(mocks.openSnackbar).toHaveBeenCalledWith({
           text: 'Đã gỡ quyền, nhưng gian hàng đối tác của người này còn việc dở nên được giữ nguyên và họ có thể chưa dùng được Cổng người bán. Xử lý ở tab "Đơn đối tác & đối soát" trên web admin xong thì: gian hàng loại CTV tắt cờ đối tác; gian hàng loại MERCHANT không tắt bằng cờ được, hãy đặt lại vai trò cho người này. Hoặc đặt lại vai trò DEALER để giữ nguyên gian hàng.',
@@ -331,8 +344,8 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã lưu quyền (sẽ áp khi họ mở app).', type: 'success' }));
     });
 
-    it('cấp QUẢN TRỊ phải xác nhận thêm; từ chối thì không gọi API, đồng ý thì gửi vai trò ADMIN', async () => {
-      const confirm = confirmSpy().mockReturnValueOnce(false).mockReturnValueOnce(true);
+    it('cấp QUẢN TRỊ phải xác nhận thêm bằng tấm xác nhận; Huỷ thì không gọi API và giữ SĐT đã gõ, đồng ý thì gửi vai trò ADMIN', async () => {
+      const confirm = confirmSpy();
       renderPage();
       fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
       const staff = screen.getByRole('button', { name: 'Nhân viên' });
@@ -343,10 +356,16 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect(admin).toHaveAttribute('aria-pressed', 'true');
       fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901112223' } });
       fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
-      expect(confirm).toHaveBeenCalledWith('Xác nhận cấp quyền ADMIN (toàn quyền quản trị) cho SĐT 0901112223?');
+      expect(screen.getByRole('heading', { level: 2, name: 'Cấp quyền quản trị?' })).toBeInTheDocument();
+      expect(screen.getByText('Xác nhận cấp quyền ADMIN (toàn quyền quản trị) cho SĐT 0901112223?')).toBeInTheDocument();
       expect(mocks.grantStaff).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
+      expect(mocks.grantStaff).not.toHaveBeenCalled();
+      expect((screen.getByLabelText('Số điện thoại') as HTMLInputElement).value).toBe('0901112223');
       fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Cấp quyền quản trị' }));
       await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'ADMIN'));
+      expect(confirm).not.toHaveBeenCalled();
     });
 
     it('cấp quyền lỗi: báo lỗi máy chủ và giữ khung', async () => {
@@ -549,17 +568,20 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       await waitFor(() => expect(mocks.adminGetPayroll).toHaveBeenCalledTimes(2));
     });
 
-    it('Mở lại bảng lương hỏi lại; từ chối thì không gọi API, đồng ý thì gọi đúng nhân viên + tháng', async () => {
-      const confirm = confirmSpy().mockReturnValueOnce(false).mockReturnValueOnce(true);
+    it('Mở lại bảng lương mở tấm xác nhận; Huỷ thì không gọi API, đồng ý thì gọi đúng nhân viên + tháng', async () => {
+      const confirm = confirmSpy();
       await openPayroll();
       fireEvent.click(screen.getByRole('button', { name: 'Mở lại · Bình' }));
-      expect(confirm).toHaveBeenCalledWith('Mở lại bảng lương T3/2026 của Bình? Cần chốt lại sau khi sửa.');
+      expect(screen.getByText('Mở lại bảng lương T3/2026 của Bình? Cần chốt lại sau khi sửa.')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
       expect(mocks.reopenPayroll).not.toHaveBeenCalled();
       fireEvent.click(screen.getByRole('button', { name: 'Mở lại · Bình' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Mở lại bảng lương' }));
       await waitFor(() => expect(mocks.reopenPayroll).toHaveBeenCalledWith('u3', 2026, 3));
       await waitFor(() =>
         expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã mở lại bảng lương — sửa xong nhớ chốt lại.', type: 'success' }),
       );
+      expect(confirm).not.toHaveBeenCalled();
     });
 
     it('Đơn giá: nạp đơn giá hiện tại, chỉ lưu khi toàn chữ số, gửi số', async () => {

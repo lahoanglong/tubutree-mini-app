@@ -31,6 +31,7 @@ import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { ConfirmSheet } from '../components/ui/confirm-sheet';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Field } from '../components/ui/form';
 import { KeyValueRow } from '../components/ui/key-value-row';
@@ -133,6 +134,7 @@ function PayrollSection() {
   const [proof, setProof] = useState('');
   const [note, setNote] = useState('');
   const [detailRow, setDetailRow] = useState<AdminPayrollRow | null>(null);
+  const [reopenRow, setReopenRow] = useState<AdminPayrollRow | null>(null);
 
   const rateM = useMutation({
     mutationFn: () => setRate(rateRow!.staff.id, Number(rateVal)),
@@ -263,10 +265,7 @@ function PayrollSection() {
                   aria-label={`Mở lại · ${name}`}
                   loading={reopening}
                   disabled={reopenM.isPending && !reopening}
-                  onPress={() => {
-                    if (!window.confirm(`Mở lại bảng lương T${ym.month}/${ym.year} của ${row.staff.fullName ?? 'NV'}? Cần chốt lại sau khi sửa.`)) return;
-                    reopenM.mutate(row);
-                  }}
+                  onPress={() => setReopenRow(row)}
                 >
                   Mở lại
                 </Button>
@@ -276,6 +275,19 @@ function PayrollSection() {
         );
       })}
       {payQ.data && payQ.data.length === 0 && <EmptyState art="box" heading="Chưa có nhân sự" />}
+
+      {/* Mở lại bảng lương: sửa số liệu đã chốt nên hỏi lại một bước */}
+      <ConfirmSheet
+        open={!!reopenRow}
+        title="Mở lại bảng lương?"
+        message={reopenRow ? `Mở lại bảng lương T${ym.month}/${ym.year} của ${reopenRow.staff.fullName ?? 'NV'}? Cần chốt lại sau khi sửa.` : undefined}
+        confirmLabel="Mở lại bảng lương"
+        onCancel={() => setReopenRow(null)}
+        onConfirm={() => {
+          if (reopenRow) reopenM.mutate(reopenRow);
+          setReopenRow(null);
+        }}
+      />
 
       {/* Sheet QR */}
       <BottomSheet open={!!qrRow} onClose={() => setQrRow(null)} title={`Chuyển lương ${qrRow?.staff.fullName ?? ''}`}>
@@ -484,6 +496,8 @@ function StaffSection() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [phone, setPhone] = useState('');
   const [role, setRole] = useState<StaffRole>('STAFF');
+  const [revokeTarget, setRevokeTarget] = useState<{ phone: string; who: string } | null>(null);
+  const [confirmAdmin, setConfirmAdmin] = useState(false);
 
   const grantM = useMutation({
     mutationFn: () => grantStaff(phone.trim(), role),
@@ -515,10 +529,10 @@ function StaffSection() {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  // Cấp ADMIN là privilege-escalation rủi ro cao hơn hẳn cấp STAFF — thêm bước xác nhận phụ
-  // (mirror pattern window.confirm trong apps/web/src/app/admin/page.tsx's GrantRoleForm).
+  // Cấp ADMIN là nâng quyền toàn hệ thống, rủi ro hơn hẳn cấp STAFF nên hỏi thêm một bước (web admin làm cùng cách).
   const submitGrant = () => {
-    if (role === 'ADMIN' && !window.confirm(`Xác nhận cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`)) {
+    if (role === 'ADMIN') {
+      setConfirmAdmin(true);
       return;
     }
     grantM.mutate();
@@ -558,23 +572,12 @@ function StaffSection() {
                 )}
                 {m.phone && m.id !== meId && (
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     aria-label={`Thu hồi · ${m.fullName ?? m.phone}`}
-                    style={{ color: 'var(--color-text-danger)' }}
+                    style={{ color: 'var(--color-text-danger)', border: '1px solid var(--color-text-danger)' }}
                     disabled={revokeM.isPending}
-                    onPress={() => {
-                      // Thao tác một chạm, không hoàn tác được từ trong app: hạ quyền nhầm một
-                      // quản trị viên thì chỉ người còn quyền mới cấp lại được. Cấp quyền ADMIN
-                      // đã hỏi lại ở submitGrant — thu hồi thì chưa.
-                      if (
-                        !window.confirm(
-                          `Thu hồi quyền của ${m.fullName ?? m.phone}? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.`,
-                        )
-                      ) {
-                        return;
-                      }
-                      revokeM.mutate(m.phone as string);
-                    }}
+                    // Hạ quyền nhầm một quản trị viên thì chỉ người còn quyền mới cấp lại được, nên hỏi lại trước khi gỡ.
+                    onPress={() => setRevokeTarget({ phone: m.phone as string, who: m.fullName ?? (m.phone as string) })}
                   >
                     Thu hồi
                   </Button>
@@ -615,7 +618,7 @@ function StaffSection() {
       )}
 
       <BottomSheet
-        open={sheetOpen}
+        open={sheetOpen && !confirmAdmin}
         onClose={() => setSheetOpen(false)}
         title="Thêm nhân sự theo SĐT"
         footer={
@@ -650,6 +653,31 @@ function StaffSection() {
           </div>
         </div>
       </BottomSheet>
+
+      <ConfirmSheet
+        open={confirmAdmin}
+        title="Cấp quyền quản trị?"
+        message={`Xác nhận cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`}
+        confirmLabel="Cấp quyền quản trị"
+        tone="danger"
+        onCancel={() => setConfirmAdmin(false)}
+        onConfirm={() => {
+          setConfirmAdmin(false);
+          grantM.mutate();
+        }}
+      />
+      <ConfirmSheet
+        open={!!revokeTarget}
+        title="Thu hồi quyền?"
+        message={revokeTarget ? `Thu hồi quyền của ${revokeTarget.who}? Người này sẽ mất toàn bộ quyền nhân viên/quản trị.` : undefined}
+        confirmLabel="Thu hồi"
+        tone="danger"
+        onCancel={() => setRevokeTarget(null)}
+        onConfirm={() => {
+          if (revokeTarget) revokeM.mutate(revokeTarget.phone);
+          setRevokeTarget(null);
+        }}
+      />
     </div>
   );
 }
