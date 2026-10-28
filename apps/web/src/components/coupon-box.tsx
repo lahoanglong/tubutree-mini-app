@@ -19,6 +19,7 @@ import {
   isFreeshipRedundant,
   sortCouponsForCart,
 } from '@/lib/coupon-view';
+import { couponHint, couponHintText } from '@tubutree/app-core/coupon-use';
 import { autoCouponName } from '@/lib/coupon-name';
 import { cartKey } from '@/lib/cart-key';
 import { actionErrorText } from '@/lib/error-text';
@@ -127,6 +128,8 @@ export function CouponBox({
   const previews = new Map(
     (previewTrusted ? (previewsQ.data ?? []) : []).map((p) => [p.code.toUpperCase(), p]),
   );
+  // Dòng thu gọn nhắc khách đang có mã dùng được (chỉ gợi ý, không tự áp); dùng chính số xem trước đã hỏi ở trên.
+  const hint = !currentCode && previewTrusted ? couponHint(previewsQ.data) : null;
   const usable = (c: { code: string; minOrder: number | null }) => {
     const p = previews.get(c.code.toUpperCase());
     return p ? p.eligible : isCouponEligible(c, subtotal);
@@ -201,25 +204,25 @@ export function CouponBox({
             data-testid="coupon-change"
             className="flex min-h-11 w-full items-center justify-between gap-2 text-left md:hidden"
           >
-            <span className="inline-flex items-center gap-2.5">
+            <span className="inline-flex min-w-0 items-center gap-2.5">
               <span className="grid h-9 w-9 flex-none place-items-center rounded-control bg-[var(--clay-50)]">
                 <Ticket className="h-5 w-5 text-[color:var(--clay-700)]" aria-hidden="true" />
               </span>
-              <span className="flex flex-col text-sm font-semibold text-stone-900">
+              <span className="flex min-w-0 flex-col text-sm font-semibold text-stone-900">
                 Mã giảm giá
-                <span className="inline-flex items-center gap-2">
-                  <span className="rounded-control border border-dashed border-[var(--clay-500)] bg-[var(--clay-50)] px-1.5 py-0.5 text-caption font-bold text-[color:var(--clay-700)]">
+                <span className="inline-flex min-w-0 items-center gap-2">
+                  <span className="min-w-0 truncate rounded-control border border-dashed border-[var(--clay-500)] bg-[var(--clay-50)] px-1.5 py-0.5 text-caption font-bold text-[color:var(--clay-700)]">
                     {currentCode}
                   </span>
                   {appliedDiscount > 0 && (
-                    <span className="text-caption font-normal text-success-fg">
+                    <span className="shrink-0 whitespace-nowrap text-caption font-normal text-success-fg">
                       -{formatVnd(appliedDiscount)}
                     </span>
                   )}
                 </span>
               </span>
             </span>
-            <span className="inline-flex items-center gap-1 text-caption font-medium text-[color:var(--color-text-brand)]">
+            <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
               Thay đổi
               <ChevronRight
                 className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}
@@ -245,12 +248,18 @@ export function CouponBox({
             </span>
             <span className="flex flex-col">
               Mã giảm giá
-              <span className="text-caption font-normal text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">
-                Chọn hoặc nhập mã giảm giá
-              </span>
+              {hint ? (
+                <span className="text-caption font-normal text-forest-700 max-md:text-[color:var(--color-text-brand)]">
+                  {couponHintText(hint, formatVnd)}
+                </span>
+              ) : (
+                <span className="text-caption font-normal text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">
+                  Chọn hoặc nhập mã giảm giá
+                </span>
+              )}
             </span>
           </span>
-          <span className="inline-flex items-center gap-1 text-caption font-medium text-forest-700">
+          <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-caption font-medium text-forest-700">
             {actionLabel}
             <ChevronRight
               className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}

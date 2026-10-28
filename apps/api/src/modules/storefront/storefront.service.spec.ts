@@ -1090,6 +1090,54 @@ describe('StorefrontService.updateMine — xoá được ảnh/lời nhắn', ()
   });
 });
 
+describe('StorefrontService.updateMine — gian hàng đã duyệt đổi nội dung', () => {
+  const APPROVED_AT = new Date('2026-10-01T00:00:00Z');
+  const STORED = { title: 'Shop Linh', headerNote: 'Chào bạn', avatarUrl: 'https://res.cloudinary.com/x/a.jpg', coverUrl: null };
+  function mk(stored: Record<string, unknown>) {
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = {
+      storefront: { findFirst: jest.fn().mockResolvedValue({ id: 'sf1', ownerUserId: 'u1', subdomain: null, ...STORED, ...stored }), update },
+    } as unknown as PrismaService;
+    return { svc: new StorefrontService(prisma, config, affiliate), update };
+  }
+  const dataOf = (update: jest.Mock) => update.mock.calls[0][0].data as Record<string, unknown>;
+
+  it.each([
+    ['title', 'Shop Linh Xanh'],
+    ['headerNote', 'Giảm 10% hôm nay'],
+    ['avatarUrl', 'https://res.cloudinary.com/x/b.jpg'],
+    ['coverUrl', 'https://res.cloudinary.com/x/c.jpg'],
+  ])('đã duyệt, đổi %s → ghi contentChangedAt', async (field, value) => {
+    const { svc, update } = mk({ approvedAt: APPROVED_AT });
+    await svc.updateMine('u1', { [field]: value });
+    expect(dataOf(update)).toEqual({ [field]: value, contentChangedAt: expect.any(Date) });
+  });
+
+  it('chưa duyệt → đổi tên không đánh dấu', async () => {
+    const { svc, update } = mk({ approvedAt: null });
+    await svc.updateMine('u1', { title: 'Shop Linh Xanh', coverUrl: 'https://res.cloudinary.com/x/c.jpg' });
+    expect(dataOf(update)).not.toHaveProperty('contentChangedAt');
+  });
+
+  it('đã duyệt nhưng builder gửi lại đúng nội dung đang lưu → không đánh dấu', async () => {
+    const { svc, update } = mk({ approvedAt: APPROVED_AT });
+    await svc.updateMine('u1', { title: 'Shop Linh', headerNote: 'Chào bạn', avatarUrl: STORED.avatarUrl, coverUrl: '' });
+    expect(dataOf(update)).not.toHaveProperty('contentChangedAt');
+  });
+
+  it('đã duyệt, xoá ảnh bìa đang có → đánh dấu', async () => {
+    const { svc, update } = mk({ approvedAt: APPROVED_AT, coverUrl: 'https://res.cloudinary.com/x/c.jpg' });
+    await svc.updateMine('u1', { coverUrl: '' });
+    expect(dataOf(update)).toEqual({ coverUrl: null, contentChangedAt: expect.any(Date) });
+  });
+
+  it('đã duyệt, chỉ đổi giao diện hoặc ngân hàng → không đánh dấu', async () => {
+    const { svc, update } = mk({ approvedAt: APPROVED_AT });
+    await svc.updateMine('u1', { theme: 'leaf-orange', themeColor: '#2f7d4f', bankName: 'ACB' });
+    expect(dataOf(update)).toEqual({ theme: 'leaf-orange', themeColor: '#2f7d4f', bankName: 'ACB' });
+  });
+});
+
 describe('StorefrontService.getPublicByHost', () => {
   const mk = () => {
     const prisma = makePrisma();

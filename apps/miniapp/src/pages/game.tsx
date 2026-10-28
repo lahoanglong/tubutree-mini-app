@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { MISSION_PATHS } from '@tubutree/app-core/game-mission-paths';
 import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, type MissionTarget, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
 import { Page, useNavigate } from 'zmp-ui';
 import type { HarvestCouponTerms, HarvestSpecies } from '../services/game-api';
@@ -49,12 +50,6 @@ import { useGameData } from '../components/game/use-game-data';
 import { useWheelPrize } from '../components/game/use-wheel-prize';
 import { useGameActions, type HarvestMeta, type HarvestReward } from '../components/game/use-game-actions';
 import { SEASON_PASS_ENABLED } from '../utils/features';
-
-const MISSION_PATHS: Record<Exclude<MissionTarget, 'checkin'>, string> = {
-  catalog: '/browse',
-  'delivered-orders': '/orders?tab=delivered',
-  invite: '/wallet',
-};
 
 export default function GamePage() {
   const phase = useAuthPhase();
@@ -118,7 +113,7 @@ export default function GamePage() {
     checkInM.mutate(undefined, { onSuccess: () => action.withDew && dewM.mutate() });
   const goMission = (target: MissionTarget) => {
     if (target === 'checkin') goTab('today', GAME_CHECKIN_ANCHOR);
-    else navigate(MISSION_PATHS[target]);
+    else navigate(MISSION_PATHS.miniapp[target]);
   };
   const shareHarvest = () => {
     const t = vi.game.newbie.harvest;

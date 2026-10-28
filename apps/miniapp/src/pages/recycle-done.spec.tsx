@@ -49,6 +49,7 @@ vi.mock('../services/waste-api', async (orig) => ({
 vi.mock('../services/account-api', () => ({ getLoyaltyRewards: mocks.getLoyaltyRewards }));
 
 import RecycleDonePage from './recycle-done';
+import { WASTE_QUERY_KEYS } from '../services/waste-api';
 import { makeRequestDetail, makeWasteMe, makeRewardCatalog } from '../services/waste-test-fixtures';
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 
@@ -91,6 +92,41 @@ describe('/recycle/done/:id (§4.7)', () => {
     renderPage();
     expect(await screen.findByText('Số dư mới 14.000 điểm')).toBeInTheDocument();
     expect(await screen.findByText('Còn 6.000 điểm tới mã Miễn phí vận chuyển')).toBeInTheDocument();
+  });
+  it('cache số dư cũ còn tươi: không hiện "Số dư mới" tới khi gọi lại xong, rồi chỉ hiện số mới', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 } } });
+    qc.setQueryData(WASTE_QUERY_KEYS.me, makeWasteMe({ balance: { pointsBalance: 1000, pointsConvertedBalance: 0, redeemablePoints: 1000 } }));
+    qc.setQueryData(WASTE_QUERY_KEYS.rewards, makeRewardCatalog({ redeemablePoints: 1000 }));
+    let resolveMe!: (v: unknown) => void;
+    mocks.getWasteMe.mockReturnValue(new Promise((r) => (resolveMe = r)));
+    let resolveRewards!: (v: unknown) => void;
+    mocks.getLoyaltyRewards.mockReturnValue(new Promise((r) => (resolveRewards = r)));
+    render(
+      <QueryClientProvider client={qc}>
+        <RecycleDonePage />
+      </QueryClientProvider>,
+    );
+    await screen.findByText('Đã cộng 4.000 điểm');
+    expect(screen.queryByText(/Số dư mới/)).toBeNull();
+    expect(screen.queryByText(/tới mã/)).toBeNull();
+    resolveMe(makeWasteMe({ balance: { pointsBalance: 9000, pointsConvertedBalance: 5000, redeemablePoints: 14_000 } }));
+    resolveRewards(makeRewardCatalog({ redeemablePoints: 14_000 }));
+    expect(await screen.findByText('Số dư mới 14.000 điểm')).toBeInTheDocument();
+    expect(await screen.findByText('Còn 6.000 điểm tới mã Miễn phí vận chuyển')).toBeInTheDocument();
+    expect(screen.queryByText('Số dư mới 1.000 điểm')).toBeNull();
+  });
+  it('gọi số dư lỗi: không hiện số cũ trong cache', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 } } });
+    qc.setQueryData(WASTE_QUERY_KEYS.me, makeWasteMe({ balance: { pointsBalance: 1000, pointsConvertedBalance: 0, redeemablePoints: 1000 } }));
+    mocks.getWasteMe.mockRejectedValue(new Error('mạng lỗi'));
+    render(
+      <QueryClientProvider client={qc}>
+        <RecycleDonePage />
+      </QueryClientProvider>,
+    );
+    await screen.findByText('Đã cộng 4.000 điểm');
+    await waitFor(() => expect(mocks.getWasteMe).toHaveBeenCalled());
+    expect(screen.queryByText(/Số dư mới/)).toBeNull();
   });
   it('giọt nước: chỉ khi dropsAwarded > 0, dùng icon không dùng emoji', async () => {
     mocks.getWasteRequest.mockResolvedValue(DONE({ dropsAwarded: 3 }));

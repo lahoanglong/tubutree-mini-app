@@ -263,7 +263,7 @@ describe('GomdonAlertService race (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let alertService: GomdonAlertService;
-  const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+  const notifications = { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) };
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({

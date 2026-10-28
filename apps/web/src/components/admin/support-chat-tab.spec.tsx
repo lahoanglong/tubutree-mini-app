@@ -786,3 +786,100 @@ describe('SupportChatTab — hội thoại', () => {
     expect(made('DELETE', 'conversations/c1/block')).toHaveLength(1);
   });
 });
+
+describe('SupportChatTab: khổ hẹp (điện thoại)', () => {
+  const useScreen = (narrow: boolean) => {
+    window.matchMedia = ((query: string) => ({
+      matches: narrow,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+  };
+  afterEach(() => {
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  it('thẻ cầu nối thu thành một dòng trạng thái; bấm thì mở chi tiết, bấm lại thì thu', async () => {
+    useScreen(true);
+    stub();
+    const { container } = mount(<SupportChatTab isAdmin />);
+    await flush();
+
+    const head = byText(container, 'button[aria-expanded]', 'Cầu nối Zalo')!;
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    expect(head.textContent).toContain('Đang kết nối');
+    expect(byText(container, 'button', 'Đăng nhập Zalo')).toBeNull();
+    expect(container.querySelector('[role="switch"]')).toBeNull();
+    expect(container.querySelector('[data-conv="c1"]')).not.toBeNull();
+
+    click(head);
+    expect(head.getAttribute('aria-expanded')).toBe('true');
+    expect(byText(container, 'button', 'Đăng nhập Zalo')).not.toBeNull();
+    expect(container.querySelector('[role="switch"]')).not.toBeNull();
+
+    click(head);
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    expect(byText(container, 'button', 'Đăng nhập Zalo')).toBeNull();
+  });
+
+  it('cầu nối mất kết nối: dòng thu gọn vẫn báo đỏ trạng thái, chi tiết (băng cảnh báo) chỉ hiện khi mở', async () => {
+    useScreen(true);
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state: 'UNREACHABLE', enabled: true } }) });
+    const { container } = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect(byText(container, 'button[aria-expanded]', 'Cầu nối Zalo')!.textContent).toContain('Mất kết nối từ 10:05');
+    expect(container.querySelector('[data-bridge-down]')).toBeNull();
+    click(byText(container, 'button[aria-expanded]', 'Cầu nối Zalo'));
+    expect(container.querySelector('[data-bridge-down]')).not.toBeNull();
+  });
+
+  it('bấm hội thoại mở ngăn kéo toàn màn chứa tin và ô trả lời; đóng thì về danh sách', async () => {
+    useScreen(true);
+    stub();
+    const { container } = mount(<SupportChatTab isAdmin={false} />);
+    await flush();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+
+    click(container.querySelector('[data-conv="c1"]'));
+    await flush();
+    const drawer = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(drawer).not.toBeNull();
+    expect(drawer.querySelector('[data-msg="m1"]')).not.toBeNull();
+    expect(drawer.querySelector('textarea[name="reply"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('Chọn một hội thoại để xem tin.');
+    expect(container.querySelector('[data-msg="m1"]')).toBeNull();
+
+    click(drawer.querySelector('[aria-label="Đóng"]'));
+    await flush();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector('[data-conv="c1"]')).not.toBeNull();
+  });
+
+  it('trả lời từ ngăn kéo gửi đúng hội thoại', async () => {
+    useScreen(true);
+    stub();
+    const { container } = mount(<SupportChatTab isAdmin={false} />);
+    await flush();
+    click(container.querySelector('[data-conv="c1"]'));
+    await flush();
+    const drawer = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    typeInto(drawer.querySelector('textarea[name="reply"]'), 'Dạ em chào chị');
+    click(byText(drawer, 'button', 'Gửi trả lời'));
+    await flush();
+    expect(made('POST', 'conversations/c1/reply')[0]!.body).toEqual({ body: 'Dạ em chào chị' });
+  });
+
+  it('khổ máy tính giữ bố cục cũ: thẻ cầu nối đầy đủ, tin hiện cạnh danh sách, không có ngăn kéo', async () => {
+    useScreen(false);
+    stub();
+    const { container } = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect(container.querySelector('button[aria-expanded]')).toBeNull();
+    expect(byText(container, 'button', 'Đăng nhập Zalo')).not.toBeNull();
+    click(container.querySelector('[data-conv="c1"]'));
+    await flush();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.querySelector('[data-msg="m1"]')).not.toBeNull();
+  });
+});

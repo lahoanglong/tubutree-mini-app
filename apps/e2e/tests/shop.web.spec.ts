@@ -193,7 +193,7 @@ function mockCustomer(api: MockApi) {
     pointsBalance: 60, pointsConvertedBalance: 0, walletBalance: 0,
   };
   api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user }));
-  api.get('/me/notifications', [{ id: 'n1', status: 'SENT' }, { id: 'n2', status: 'SENT' }]);
+  api.get('/me/notifications/unread-count', { count: 2 });
   api.get('/me/purchased-items', { items: [PURCHASED], nextCursor: null });
   api.get('/products/for-you', [product(9, { name: 'Gợi ý riêng' })]);
   api.get('/orders/active-count', { count: 0 });

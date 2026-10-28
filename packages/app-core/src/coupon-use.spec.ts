@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { couponUseCopy, couponUseOutcome, couponUseTarget } from './coupon-use';
+import { couponHint, couponHintText, couponUseCopy, couponUseOutcome, couponUseTarget } from './coupon-use';
 
 describe('couponUseTarget', () => {
   it('giỏ có hàng → giỏ; giỏ trống hoặc chưa biết → sản phẩm', () => {
@@ -35,5 +35,41 @@ describe('couponUseOutcome', () => {
   });
   it('mã freeship 0đ giảm nhưng có freeship → không coi là chưa áp', () => {
     expect(couponUseOutcome(null, 'F', { couponCode: 'F', discount: 0, freeship: true, couponNotice: 'x' })).toEqual({ kind: 'ok' });
+  });
+});
+
+describe('couponHint', () => {
+  const p = (code: string, over: Record<string, unknown> = {}) => ({ code, eligible: true, discount: 0, ...over });
+  it('chưa có xem trước, rỗng hoặc không mã nào dùng được → null', () => {
+    expect(couponHint(undefined)).toBeNull();
+    expect(couponHint(null)).toBeNull();
+    expect(couponHint([])).toBeNull();
+    expect(couponHint([p('A', { eligible: false, reason: 'Chưa đủ đơn tối thiểu', discount: 50_000 })])).toBeNull();
+  });
+  it('một mã dùng được → đếm 1, tiết kiệm bằng giảm tiền hàng', () => {
+    expect(couponHint([p('WELCOME30', { discount: 30_000 })])).toEqual({ count: 1, maxSaving: 30_000 });
+  });
+  it('nhiều mã → đếm mã dùng được, lấy mức tiết kiệm lớn nhất (giảm hàng cộng miễn phí giao), bỏ mã không dùng được', () => {
+    expect(
+      couponHint([
+        p('A', { discount: 20_000 }),
+        p('B', { discount: 15_000, freeshipSaving: 10_000 }),
+        p('C', { discount: 0, freeshipSaving: 22_000 }),
+        p('D', { eligible: false, discount: 999_000 }),
+      ]),
+    ).toEqual({ count: 3, maxSaving: 25_000 });
+  });
+  it('mã freeship chưa biết phí giao (giỏ, chưa có địa chỉ) → vẫn đếm, tiết kiệm 0', () => {
+    expect(couponHint([p('SHIP')])).toEqual({ count: 1, maxSaving: 0 });
+  });
+});
+
+describe('couponHintText', () => {
+  const fmt = (n: number) => `${n}đ`;
+  it('có mức tiết kiệm → "Bạn có N mã dùng được · giảm đến X"', () => {
+    expect(couponHintText({ count: 2, maxSaving: 30_000 }, fmt)).toBe('Bạn có 2 mã dùng được · giảm đến 30000đ');
+  });
+  it('chưa biết mức tiết kiệm → chỉ nói số mã, không hứa số 0đ', () => {
+    expect(couponHintText({ count: 1, maxSaving: 0 }, fmt)).toBe('Bạn có 1 mã dùng được');
   });
 });

@@ -8,14 +8,17 @@ import type {
   WasteOpeningHours,
   WasteRejectionReason,
   WasteRequestDetailDTO,
-  WasteRequestStatus,
   WasteRequestSummaryDTO,
   WasteShortfallReason,
 } from '@tubutree/shared-types';
 import { pointAddress } from '@tubutree/app-core/reward-rules';
+import { TIMELINE_STEPS, timelineFor } from '@tubutree/app-core/waste-timeline';
+import type { WasteTimeline } from '@tubutree/app-core/waste-timeline';
 import { formatNumber, formatPoints, formatVnd } from './format';
 
 export { PREVIEW_DEBOUNCE_MS } from './use-debounced';
+export { TIMELINE_STEPS, timelineFor };
+export type { WasteTimeline };
 
 export const PAUSED_TEXT = 'Chương trình đang tạm dừng';
 
@@ -30,12 +33,6 @@ export const METHOD_LABELS: Record<WasteMethod, string> = {
   DROP_OFF: 'Mang tới điểm nhận',
   MAIL_IN: 'Gửi về kho Tubu HCM',
   PICKUP: 'Thu kèm đơn mua',
-};
-
-export const TIMELINE_STEPS: Record<WasteMethod, readonly string[]> = {
-  MAIL_IN: ['Gửi kiện', 'Vận chuyển', 'Đã nhận ở kho', 'Cộng điểm'],
-  DROP_OFF: ['Đã tạo', 'Mang tới điểm', 'Điểm nhận đếm', 'Cộng điểm'],
-  PICKUP: ['Đã tạo', 'Gắn vào đơn', 'Chờ kho nhận', 'Cộng điểm'],
 };
 
 export const REJECTION_LABELS: Record<WasteRejectionReason, string> = {
@@ -74,7 +71,6 @@ export const DESK_REJECTION_OPTIONS: { value: WasteRejectionReason; label: strin
   { value: 'OTHER', label: 'Khác' },
 ];
 
-export type WasteTimeline = { steps: readonly string[]; current: number };
 export type BlockContext = {
   items: readonly WasteItemDTO[];
   maxOpenRequests: number;
@@ -105,19 +101,6 @@ export function monthRemainingText(item: Pick<WasteItemDTO, 'monthlyCapQty' | 'u
 export function groupProgressText(qty: number, item: WasteItemDTO): string | null {
   if (qty <= 0 || item.unitsPerPoint <= 1) return null;
   return `thêm ${item.unitsPerPoint - (qty % item.unitsPerPoint)} ${item.unitLabel} nữa được +${formatPoints(item.pointsPerGroup)}`;
-}
-
-const CLOSED_STATUSES: readonly WasteRequestStatus[] = ['REJECTED', 'EXPIRED', 'CANCELLED', 'REVERSED'];
-
-export function timelineFor(r: { method: WasteMethod; status: WasteRequestStatus; orderCode: string | null }): WasteTimeline | null {
-  if (CLOSED_STATUSES.includes(r.status)) return null;
-  const steps = TIMELINE_STEPS[r.method];
-  if (r.status === 'COMPLETED') return { steps, current: 4 };
-  if (r.method === 'MAIL_IN') {
-    return { steps, current: r.status === 'IN_TRANSIT' ? 1 : r.status === 'RECEIVED' ? 2 : 0 };
-  }
-  if (r.method === 'DROP_OFF') return { steps, current: r.status === 'OPEN' ? 1 : 2 };
-  return { steps, current: r.status === 'OPEN' && !r.orderCode ? 1 : 2 };
 }
 
 const EXPIRED_LABELS: Partial<Record<string, string>> = {

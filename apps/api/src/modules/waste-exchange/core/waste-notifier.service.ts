@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { WasteCloseReason, WasteRejectionReason } from '@tubutree/shared-types';
+import type { WasteCloseReason, WasteMethod, WasteRejectionReason } from '@tubutree/shared-types';
 import { formatPoints } from '../../../common/format-points';
 import { formatVnDate } from '../../../common/vn-time';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -25,6 +25,18 @@ export const WASTE_EXPIRED_DETAIL_TEXT: Record<WasteCloseReason, string> = {
   LOST_AT_WAREHOUSE: 'kiện bị thất lạc tại kho Tubu, xin lỗi bạn. Bạn nhắn Tubu Tree để được hỗ trợ',
   SHIP_LOCKED: 'đường gửi kho và thu kèm đơn đang tạm dừng',
   ORDER_CANCELLED: 'đơn mua gắn kèm đã bị huỷ',
+};
+
+/**
+ * Khách MAIL_IN có thể đã gửi kiện mà chưa nhập mã vận đơn nên yêu cầu mới hết hạn giữ chỗ; câu này không hứa mở lại hay cộng điểm,
+ * chỉ chỉ cho khách đường nhắn CSKH.
+ */
+export const WASTE_MAIL_IN_HOLD_EXPIRED_TEXT = 'hết hạn giữ chỗ. Nếu bạn đã gửi kiện, hãy nhắn CSKH kèm mã vận đơn để được hỗ trợ';
+
+/** Việc khách cần làm trước hạn, điền vào mẫu WASTE_REQUEST_EXPIRING. PICKUP không có hạn giữ chỗ nên không nhắc. */
+export const WASTE_EXPIRING_NEXT_STEP: Record<'DROP_OFF' | 'MAIL_IN', string> = {
+  DROP_OFF: 'mang rác tới điểm nhận',
+  MAIL_IN: 'gửi kiện và nhập mã vận đơn',
 };
 
 /** Lý do admin gõ tay: mẫu thông báo đã tự thêm dấu chấm cuối câu. */
@@ -62,10 +74,22 @@ export class WasteNotifierService {
       .catch((e: unknown) => this.logger.warn(`notify WASTE_REQUEST_REJECTED failed: ${String(e)}`));
   }
 
-  async requestExpired(userId: string, req: RequestRef, closeReason: WasteCloseReason, closedAt: Date): Promise<void> {
+  async requestExpired(userId: string, req: RequestRef & { method?: WasteMethod }, closeReason: WasteCloseReason, closedAt: Date): Promise<void> {
+    const detail = closeReason === 'HOLD_EXPIRED' && req.method === 'MAIL_IN' ? WASTE_MAIL_IN_HOLD_EXPIRED_TEXT : WASTE_EXPIRED_DETAIL_TEXT[closeReason];
     await this.notifications
-      .notify(userId, 'WASTE_REQUEST_EXPIRED', { code: req.code, detail: WASTE_EXPIRED_DETAIL_TEXT[closeReason], request_id: req.id }, { dedupeKey: `waste:${req.id}:EXPIRED:${closedAt.toISOString()}` })
+      .notify(userId, 'WASTE_REQUEST_EXPIRED', { code: req.code, detail, request_id: req.id }, { dedupeKey: `waste:${req.id}:EXPIRED:${closedAt.toISOString()}` })
       .catch((e: unknown) => this.logger.warn(`notify WASTE_REQUEST_EXPIRED failed: ${String(e)}`));
+  }
+
+  async requestExpiring(userId: string, req: RequestRef, method: 'DROP_OFF' | 'MAIL_IN', expiresAt: Date): Promise<void> {
+    await this.notifications
+      .notify(
+        userId,
+        'WASTE_REQUEST_EXPIRING',
+        { code: req.code, until: formatVnDate(expiresAt), next_step: WASTE_EXPIRING_NEXT_STEP[method], request_id: req.id },
+        { dedupeKey: `waste:${req.id}:EXPIRING` },
+      )
+      .catch((e: unknown) => this.logger.warn(`notify WASTE_REQUEST_EXPIRING failed: ${String(e)}`));
   }
 
   async pickupStarted(userId: string, req: RequestRef, expiresAt: Date): Promise<void> {

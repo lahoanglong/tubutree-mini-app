@@ -56,7 +56,7 @@ describe('p6-promo-abuse: mã giảm giá, giờ vàng, nhiệm vụ (real Postg
         WalletService,
         CashbackService,
         OrderReversalService,
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
         {
           provide: GomdonOrderService,

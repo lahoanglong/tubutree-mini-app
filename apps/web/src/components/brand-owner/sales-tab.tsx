@@ -39,7 +39,7 @@ export function SalesTab() {
       <SegmentedTabs scroll items={SALES_PERIODS} value={period} onChange={(k) => setPeriod(k as BrandSalesPeriod)} label="Kỳ báo cáo" />
 
       {q.isLoading ? (
-        <div className="grid gap-2.5 lg:grid-cols-3">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-2.5 lg:grid-cols-3">
           <Skeleton height={84} rounded="rounded-card" />
           <Skeleton height={84} rounded="rounded-card" />
         </div>

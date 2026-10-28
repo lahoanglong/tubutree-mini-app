@@ -1,5 +1,6 @@
 import { LockOpen, ShowerHead, Sprout } from 'lucide-react';
 import { WATER_STEP, gameNewbieCopy, missingDrops } from '@tubutree/app-core/game-newbie';
+import { treeTitle } from '@tubutree/app-core/tree-title';
 import type { Garden } from '@tubutree/app-core/api/game';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ui } from '@/lib/guest-ui';
@@ -53,7 +54,7 @@ export function GardenPlots({
                   </span>
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-stone-900">
-                      Lô {p.slot} · {p.treeType}
+                      Lô {p.slot} · {treeTitle(p.treeType)}
                     </div>
                     <div className="text-caption text-stone-700">
                       {formatNumber(p.progress)}/{formatDrops(p.target)} · 🌳 {formatNumber(p.treesPlanted)}
@@ -72,7 +73,7 @@ export function GardenPlots({
                 </button>
               </div>
               <div className="mt-2">
-                <ProgressBar value={ppct} max={100} ariaLabel={`Lô ${p.slot}, ${p.treeType}: tiến độ lớn của cây`} />
+                <ProgressBar value={ppct} max={100} ariaLabel={`Lô ${p.slot}, ${treeTitle(p.treeType)}: tiến độ lớn của cây`} />
               </div>
             </div>
           );

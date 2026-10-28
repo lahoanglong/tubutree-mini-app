@@ -9,7 +9,18 @@ function isTransientError(error: unknown): boolean {
   return !status || status >= 500 || status === 408 || status === 429;
 }
 
-const CATALOG_KEYS = [['products'], ['for-you'], ['categories'], ['brands']] as const;
+/** Cache danh mục dùng chung mọi khách: không gắn với danh tính nên không cần làm mới khi đổi tài khoản. */
+export const CATALOG_KEYS = [['products'], ['for-you'], ['categories'], ['brands']] as const;
+
+let activeClient: QueryClient | null = null;
+
+/**
+ * QueryClient mà app đang chạy (bản tạo gần nhất). Client được dựng ở components/app.tsx nên store/auth.ts lấy nó qua đây
+ * để làm mới cache khi danh tính đổi; trước khi app dựng (hoặc trong test không dựng) thì trả null.
+ */
+export function getQueryClient(): QueryClient | null {
+  return activeClient;
+}
 
 function isOffline(): boolean {
   return typeof navigator !== 'undefined' && navigator.onLine === false;
@@ -56,5 +67,6 @@ export function createQueryClient(): QueryClient {
   });
   // Danh sách sản phẩm đổi chậm (đồng bộ Pancake ~15 phút): quay lại trong 60 giây thì dùng lại, không gọi lại cả sort=best_seller.
   for (const key of CATALOG_KEYS) client.setQueryDefaults(key, { staleTime: CATALOG_STALE_MS });
+  activeClient = client;
   return client;
 }

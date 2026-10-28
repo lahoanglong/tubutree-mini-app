@@ -16,7 +16,7 @@ import { followOA, getOaPromptState, hasOA, openOAChat, requestNotifyPermission,
 import { trackEvent } from '../services/analytics';
 import { useCardGiftNote } from '../services/card-gift-note';
 import { getSessionAttribution, type LaunchAttribution } from '../utils/entry-source';
-import { extractClaimCode } from '@tubutree/app-core/claim-code';
+import { extractClaimCode, normalizeClaimCode } from '@tubutree/app-core/claim-code';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
@@ -390,6 +390,8 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
   };
   const showOaInvite = oaState === 'ask' && result != null && (result.status === 'CLAIMED' || result.status === 'REVIEW');
   const showSupportOnReject = rejectedCode?.reject === 'ALREADY_CLAIMED';
+  // Mã từ QR hoặc mã gõ tay đã đúng dạng (cùng luật máy chủ) thì việc kế tiếp là Tích điểm: nút gửi thành nút chính.
+  const ready = scanned !== null || normalizeClaimCode(code) !== null;
 
   return (
     <div style={{ padding: 16 }}>
@@ -454,8 +456,8 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
         <div ref={submitWrap} style={{ marginTop: 12 }}>
           <Button
             fullWidth
-            size={scanned !== null ? 'lg' : undefined}
-            variant={scanned !== null ? 'primary' : 'secondary'}
+            size={ready ? 'lg' : undefined}
+            variant={ready ? 'primary' : 'secondary'}
             loading={submit.isPending}
             onPress={() => send(code, scanned !== null && scanned === code.trim() ? 'scan' : 'typed')}
           >
@@ -522,7 +524,7 @@ export default function ExternalPointsPage() {
       <>
         <ClaimForm fromCard={fromCard} channel={channel} initialCode={initialCode} codeParamRejected={codeParamRejected} />
         <PointsBoostStrip placement="scan" />
-        <div style={{ padding: '0 16px 32px' }}>
+        <div style={{ padding: '16px 16px 32px' }}>
           <Text variant="body-lg" as="h2" style={{ fontWeight: 600, marginBottom: 10 }}>{t.listTitle}</Text>
           <ClaimList />
         </div>

@@ -166,7 +166,8 @@ function ChatBody() {
       const ids = todo.slice(i, i + 100);
       for (const id of ids) reportedRef.current.add(id);
       void markSupportChatRead(ids)
-        .then(() => qc.invalidateQueries({ queryKey: supportChatSummaryQueryOptions().queryKey }))
+        // Chuông "Tubu Tree đã trả lời" cũng được máy chủ đánh dấu đã đọc: làm mới để chuông Trang chủ hết số.
+        .then(() => Promise.all([qc.invalidateQueries({ queryKey: supportChatSummaryQueryOptions().queryKey }), qc.invalidateQueries({ queryKey: ['notifications'] })]))
         .catch(() => {
           // Chưa báo được thì lần tải thread kế tiếp (dataUpdatedAt tăng sau mỗi lần tải thành công, kể cả dữ liệu y hệt) gửi lại.
           for (const id of ids) reportedRef.current.delete(id);

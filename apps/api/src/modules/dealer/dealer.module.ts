@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DealerService } from './dealer.service';
 import { DealerController } from './dealer.controller';
-import { DealerAdminController, DealerOrderAdminController, DealerCreditAdminController } from './dealer-admin.controller';
+import { DealerAdminController, DealerOrderAdminController, DealerCreditAdminController, DealerCreditReportAdminController } from './dealer-admin.controller';
 import { DealerAccountsAdminController, DealerTierAdminController } from './dealer-accounts-admin.controller';
 import { DealerAccountsAdminService } from './dealer-accounts-admin.service';
 import { DealerCron } from './dealer.cron';
@@ -16,6 +16,7 @@ import { PancakeModule } from '../integrations/pancake/pancake.module';
     DealerAdminController,
     DealerOrderAdminController,
     DealerCreditAdminController,
+    DealerCreditReportAdminController,
     DealerAccountsAdminController,
     DealerTierAdminController,
   ],

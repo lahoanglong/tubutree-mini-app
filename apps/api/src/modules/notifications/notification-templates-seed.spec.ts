@@ -196,6 +196,7 @@ describe('seed mẫu thông báo', () => {
       'WASTE_SHIP_LOCKED',
       'WASTE_GIFT_CANCELLED',
       'WASTE_PERK_REVIEWED',
+      'WASTE_REQUEST_EXPIRING',
     ];
 
     it.each(CODES)('%s: prod (chỉ chạy migration) có đúng lời tin như seed', (code) => {

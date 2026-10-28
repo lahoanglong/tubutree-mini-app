@@ -39,7 +39,9 @@ function build(order: Record<string, unknown> | null, over: { actor?: string; no
     orderCustomerRefund: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }) },
     gomdonAlert: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
   };
-  const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+  const notifyMock = jest.fn().mockResolvedValue(true);
+  // Service gửi tin qua notifySafe; hai tên dùng chung một mock để kiểm theo mã tin.
+  const notifications = { notify: notifyMock, notifySafe: notifyMock };
   const hooks = { afterLocalCancel: jest.fn().mockResolvedValue(undefined) };
   const loyalty = { reverseOrderPoints: jest.fn().mockResolvedValue(0), ...over.loyalty };
   const affiliate = { reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined), ...over.affiliate };
@@ -84,7 +86,7 @@ describe('OrderStatusService.resyncReversalEffects (Q19)', () => {
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
     expect(hooks.afterLocalCancel).toHaveBeenCalledWith('o1', undefined);
     expect(notifications.notify).toHaveBeenCalledTimes(1);
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', expect.objectContaining({ order_code: 'TUBU1' }));
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', expect.objectContaining({ order_code: 'TUBU1' }), undefined, expect.stringMatching(/^order=/));
     expect(markerWrites()).toEqual([[{ where: { id: 'o1', reversalEffectsAt: null }, data: { reversalEffectsAt: expect.any(Date) } }]]);
   });
 
@@ -154,7 +156,7 @@ describe('OrderStatusService.resyncReversalEffects (Q19)', () => {
     expect(loyalty.reverseOrderPoints).toHaveBeenCalledTimes(1);
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledTimes(1);
     expect(hooks.afterLocalCancel).not.toHaveBeenCalled();
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_RETURNED', expect.any(Object));
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_RETURNED', expect.any(Object), undefined, expect.stringMatching(/^order=/));
   });
 
   it('đơn gian hàng tự giao bị admin huỷ: báo chủ gian hàng (không báo khi chính gian hàng huỷ)', async () => {
@@ -162,12 +164,12 @@ describe('OrderStatusService.resyncReversalEffects (Q19)', () => {
     const byAdmin = build(makeOrder(merchantOrder), { actor: 'ADMIN' });
     byAdmin.prisma.order.findUnique.mockResolvedValue(merchantOrder);
     await byAdmin.svc.resyncReversalEffects('o1');
-    expect(byAdmin.notifications.notify).toHaveBeenCalledWith('owner1', 'MERCHANT_ORDER_CANCELLED', expect.objectContaining({ order_code: 'TUBU1' }));
+    expect(byAdmin.notifications.notify).toHaveBeenCalledWith('owner1', 'MERCHANT_ORDER_CANCELLED', expect.objectContaining({ order_code: 'TUBU1' }), undefined, expect.stringMatching(/^order=/));
 
     const bySeller = build(makeOrder(merchantOrder), { actor: 'MERCHANT' });
     bySeller.prisma.order.findUnique.mockResolvedValue(merchantOrder);
     await bySeller.svc.resyncReversalEffects('o1');
-    expect(bySeller.notifications.notify).not.toHaveBeenCalledWith('owner1', 'MERCHANT_ORDER_CANCELLED', expect.anything());
+    expect(bySeller.notifications.notify.mock.calls.filter((c) => c[0] === 'owner1' && c[1] === 'MERCHANT_ORDER_CANCELLED')).toHaveLength(0);
   });
 
   describe('khoản hoàn số tiền khách chuyển thiếu (đơn chuyển khoản huỷ khi Pancake báo đã nhận 100.000đ)', () => {
@@ -193,7 +195,7 @@ describe('OrderStatusService.resyncReversalEffects (Q19)', () => {
     it('tin huỷ đã đi thiếu dòng hoàn: cron ghi khoản hoàn và khoản hoàn tự báo khách đúng một lần', async () => {
       const { svc, notifications } = withUnderpayment(true);
       await expect(svc.resyncReversalEffects('o1')).resolves.toEqual({ outcome: 'DONE' });
-      expect(sentTo(notifications, 'REFUND_LATE_PAYMENT')).toEqual([['u1', 'REFUND_LATE_PAYMENT', expect.objectContaining({ order_code: 'TUBU1' })]]);
+      expect(sentTo(notifications, 'REFUND_LATE_PAYMENT')).toEqual([['u1', 'REFUND_LATE_PAYMENT', expect.objectContaining({ order_code: 'TUBU1' }), undefined, 'order=TUBU1']]);
       expect(sentTo(notifications, 'ORDER_CANCELLED')).toHaveLength(0);
     });
 

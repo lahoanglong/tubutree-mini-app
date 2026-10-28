@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Circle, Info, Plus, Trash2 } from 'lucide-react';
@@ -32,6 +32,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { phoneSecondary } from '@/lib/phone-ui';
+import { useStickyBarOffset } from '@/components/use-sticky-bar-offset';
 import { ErrorState } from '@/components/ui/error-state';
 import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
@@ -101,6 +102,24 @@ function Card({ children }: { children: React.ReactNode }) {
   return <section className={`${ui.card} p-4`}>{children}</section>;
 }
 
+/**
+ * Thanh nút đáy của các bước. Điện thoại: ghim vào đáy màn hình như StickyActionBar của Mini App, kể cả khi nội dung ngắn
+ * (nếu chỉ `sticky` thì thanh nằm ngay dưới nội dung, giữa trang). Từ md: dính đáy khung trang như trước.
+ */
+function BottomBar({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useStickyBarOffset(ref);
+  return (
+    <div
+      ref={ref}
+      data-sticky-bar
+      className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-stone-200 bg-stone-0 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] max-md:fixed max-md:inset-x-0 max-md:z-30 max-md:m-0 max-md:border-t-0 max-md:p-4 max-md:pb-[calc(16px+var(--safe-bottom))] max-md:shadow-[var(--elevation-3)]"
+    >
+      {children}
+    </div>
+  );
+}
+
 /** Thanh hành động dính đáy: Quay lại + nút chính, cùng kiểu thanh dưới của trình dựng. */
 function StepBar({
   onBack,
@@ -112,10 +131,7 @@ function StepBar({
   hint?: string;
 }) {
   return (
-    <div
-      className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-stone-200 bg-stone-0 px-4 py-3"
-      style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
-    >
+    <BottomBar>
       {hint && <p className="mb-2 text-xs text-stone-700">{hint}</p>}
       <div className="mx-auto flex max-w-5xl gap-2">
         {onBack && (
@@ -127,7 +143,7 @@ function StepBar({
           {next.label}
         </button>
       </div>
-    </div>
+    </BottomBar>
   );
 }
 
@@ -192,14 +208,11 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
 
       {gate === 'READY' && <StepBar next={{ label: SIGNUP_COPY.start, loading: startMut.isPending, onPress: () => startMut.mutate() }} />}
       {gate === 'NEEDS_CTV' && (
-        <div
-          className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-stone-200 bg-stone-0 px-4 py-3"
-          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
-        >
+        <BottomBar>
           <Link href="/ctv" className={`${ui.btnPrimary} w-full`}>
             {SIGNUP_COPY.registerCta}
           </Link>
-        </div>
+        </BottomBar>
       )}
     </>
   );

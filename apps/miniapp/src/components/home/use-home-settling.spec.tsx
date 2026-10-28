@@ -34,6 +34,20 @@ describe('useHomeSettling', () => {
     expect(result.current).toBe(true);
   });
 
+  it('phiên lỗi (không đăng nhập Zalo được): nhả ngay, không chờ 4,5 giây dù dữ liệu chưa về', () => {
+    type P = Props & { failed: boolean };
+    const { result, rerender } = renderHook(({ kind, pending, failed }: P) => useHomeSettling(kind, pending, failed), {
+      initialProps: { kind: 'unknown', pending: true, failed: false } as P,
+    });
+    expect(result.current).toBe(true);
+    act(() => {
+      vi.advanceTimersByTime(HOME_SETTLE_MAX_MS - 100);
+    });
+    expect(result.current).toBe(true);
+    rerender({ kind: 'new', pending: true, failed: true });
+    expect(result.current).toBe(false);
+  });
+
   it('mạng chậm: quá hạn thì nhả dù dữ liệu chưa về', () => {
     const { result } = renderHook(() => useHomeSettling('unknown', true));
     expect(result.current).toBe(true);

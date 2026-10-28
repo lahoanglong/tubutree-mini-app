@@ -46,8 +46,8 @@ function Editor() {
         <section aria-label="Chưa có nhãn" className="rounded-card border border-stone-200 bg-stone-0 p-8 text-center shadow-card">
           <h2 className="font-display text-base font-semibold text-stone-900">Quản lý nhãn hàng</h2>
           <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">Bạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn.</p>
-          <Link href={chatOn ? '/ho-tro/chat' : '/gioi-thieu'} className={`${ui.btnPrimary} mt-4`}>
-            Nhắn Tubu
+          <Link href="/ho-tro/chat" className={`${ui.btnPrimary} mt-4`}>
+            {chatOn ? 'Nhắn Tubu' : 'Liên hệ Tubu'}
           </Link>
         </section>
       );
@@ -58,7 +58,7 @@ function Editor() {
   const brand = q.data;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:items-start">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:items-start">
       <section aria-label="Thông tin nhãn đang quản lý" className="flex flex-col gap-2">
         <h2 className="font-display text-xl font-semibold text-stone-900">{brand.name}</h2>
         <div className="flex flex-wrap items-center gap-1.5">

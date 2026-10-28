@@ -480,6 +480,7 @@ export class MerchantService {
       updateData.subdomain = cleanSub;
     }
 
+    // Chưa dùng ở đường đọc: web chỉ xử lý subdomain, chưa ai phục vụ gian hàng theo customDomain. Vẫn lưu và kiểm trùng để tên miền không bị chiếm.
     if (dto.customDomain !== undefined) {
       if (dto.customDomain.trim() === '') {
         updateData.customDomain = null; // xoá tên miền riêng

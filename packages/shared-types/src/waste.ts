@@ -87,13 +87,14 @@ export interface LoyaltyPreviewDTO {
   rates: { earnPct: number; vndPerPoint: number; vndPerPointRedeem: number; maxRedeemPct: number };
   pointExpireMonths: number;
 }
-export interface GiftRedemptionDTO { id: string; giftId: string; giftKind: WasteGiftKind; giftName: string; pointsCost: number; status: WasteGiftRedemptionStatus; code: string | null; claimExpiresAt: string | null; claimPoint: { name: string; addressLine: string; communeName: string; provinceName: string; openingHours: WasteOpeningHours } | null; fulfilledAt: string | null; cancelledAt: string | null; cancelReason: string | null; refundedPoints: number | null; couponCode: string | null; createdAt: string }
+export interface GiftRedemptionDTO { id: string; giftId: string; giftKind: WasteGiftKind; giftName: string; pointsCost: number; status: WasteGiftRedemptionStatus; code: string | null; claimExpiresAt: string | null; claimPoint: { name: string; addressLine: string; communeName: string; provinceName: string; openingHours: WasteOpeningHours } | null; fulfilledAt: string | null; cancelledAt: string | null; cancelReason: string | null; refundedPoints: number | null; couponCode: string | null; /** Hạn và đã-dùng của mã giảm giá (lượt VOUCHER); optional để bản cũ vẫn type-check, API luôn gửi. */ couponEndAt?: string | null; couponUsed?: boolean; createdAt: string }
 export interface RedeemRewardResultDTO { success: true; message: string; pointsSpent: number; remainingPoints: number; redemption: GiftRedemptionDTO; coupon: { code: string; type: CouponType; value: number; minOrder: number | null; maxDiscount: number | null; endAt: string } | null }
 
 // desk
 export interface WasteDeskPointDTO { id: string; kind: WastePointKind; name: string; giftHandoverEnabled: boolean; myRole: WastePointStaffRole; quota: { limit: number; used: number; remaining: number } | null; perkText: string | null; perkPendingText: string | null; staffDailyCapRemaining: number }
 export interface WasteDeskLookupRequest { code: string }
-export interface WasteDeskRequestDTO { id: string; code: string; method: WasteMethod; status: WasteRequestStatus; pointId: string; customerName: string; customerPhone: string | null; estimatedPoints: number; lines: { itemId: string; itemName: string; unitLabel: string; unitsPerPoint: number; pointsPerGroup: number; declaredQty: number; receivedQty: number | null; hazardous: boolean }[] }
+// closedAt và warehouseOnly: API luôn gửi; để tùy chọn cho dữ liệu giả và bản cũ chưa có hai trường này (vắng = null / false).
+export interface WasteDeskRequestDTO { id: string; code: string; method: WasteMethod; status: WasteRequestStatus; pointId: string; customerName: string; customerPhone: string | null; estimatedPoints: number; closedAt?: string | null; lines: { itemId: string; itemName: string; unitLabel: string; unitsPerPoint: number; pointsPerGroup: number; declaredQty: number; receivedQty: number | null; hazardous: boolean; warehouseOnly?: boolean }[] }
 export interface WasteDeskGiftDTO { id: string; giftName: string; customerName: string; status: WasteGiftRedemptionStatus; claimExpiresAt: string | null }
 export type WasteDeskLookupDTO = { type: 'REQUEST'; request: WasteDeskRequestDTO } | { type: 'GIFT'; redemption: WasteDeskGiftDTO };
 export interface WasteMatchInput { parcelCode?: string; phoneMatchConfirmed?: boolean; parcelTracking?: string }

@@ -17,7 +17,7 @@ export function SupportHotline() {
   return (
     <p className="flex flex-wrap items-center justify-center gap-1 text-sm text-stone-600">
       <span>Cần hỗ trợ?</span>
-      <a href={`tel:${hotline.replace(/[^\d+]/g, '')}`} className="inline-flex min-h-11 items-center gap-1 px-2 font-semibold text-forest-700 underline">
+      <a href={`tel:${hotline.replace(/[^\d+]/g, '')}`} className="inline-flex min-h-11 items-center gap-1 whitespace-nowrap px-2 font-semibold text-forest-700 underline">
         <Phone className="h-4 w-4" aria-hidden="true" />
         {`Gọi ${formatPhoneDisplay(hotline)}`}
       </a>

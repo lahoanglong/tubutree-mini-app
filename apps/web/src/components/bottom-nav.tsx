@@ -20,6 +20,12 @@ const fetchActiveOrderCount = async () => {
   return typeof body?.count === 'number' ? body.count : 0;
 };
 
+/** Bấm lại tab đang mở thì cuộn mượt về đầu trang (như Mini App). Khách bật giảm chuyển động thì nhảy thẳng. */
+function scrollToTop() {
+  const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+}
+
 /**
  * Thanh đáy 5 mục cho điện thoại (từ md thì thanh đầu trang đảm nhiệm). Tab Ưu đãi có chấm đỏ khi chưa điểm danh hôm nay hoặc có mã
  * sắp hết hạn; tab Cá nhân mang huy hiệu số đơn đang xử lý. Chỉ hiện ở 5 route gốc; ẩn khi trang có `sticky-action-bar` (globals.css, theo lớp `has-sticky-bar` của <body>). Khối đệm cùng chiều cao giữ chân trang không bị che.
@@ -60,7 +66,12 @@ export default function BottomNav() {
               aria-label={count > 0 ? `${t.label}, ${count} đơn đang xử lý` : dot ? `${t.label}, có việc cần làm` : t.label}
               aria-current={active ? 'page' : undefined}
               data-center={t.center ? 'true' : undefined}
-              className={`relative flex min-h-11 min-w-0 flex-1 flex-col items-center gap-0.5 ${t.center ? 'justify-end pb-1.5' : 'justify-center'} ${active ? 'font-bold text-forest-700' : 'font-medium text-stone-500'}`}
+              onClick={(e) => {
+                if (!active) return;
+                e.preventDefault();
+                scrollToTop();
+              }}
+              className={`relative flex min-h-11 min-w-0 flex-1 flex-col items-center gap-[3px] ${t.center ? 'justify-end pb-1.5' : 'justify-center'} ${active ? 'font-bold text-forest-700' : 'font-medium text-stone-500'}`}
             >
               {t.center ? (
                 <span
@@ -82,7 +93,7 @@ export default function BottomNav() {
                   )}
                 </span>
               )}
-              <span className="text-xs">{t.label}</span>
+              <span className="text-caption">{t.label}</span>
             </Link>
           );
         })}

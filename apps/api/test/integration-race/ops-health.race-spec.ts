@@ -42,7 +42,7 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
       [fakeQueue('pancake-push'), fakeQueue('notifications')],
       sysConfig as never,
       undefined,
-      { notify } as never,
+      { notify, notifySafe: notify } as never,
       fetchMock as never,
     );
     const merchant = new MerchantFulfilmentService(prisma, undefined as never, undefined, sysConfig as never);
@@ -193,6 +193,8 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
       'bankTransferToConfirm',
       'customerRefunds',
       'dealerClaimsToPay',
+      'dealerCreditReported',
+      'dealerTransferToConfirm',
       'invoicePending',
       'merchantPayoutsPending',
       'merchantToSettle',

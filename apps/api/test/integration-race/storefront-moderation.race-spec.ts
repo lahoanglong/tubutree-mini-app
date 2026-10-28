@@ -50,7 +50,7 @@ describe('Kiểm duyệt gian hàng (real Postgres)', () => {
       },
     };
     svc = new StorefrontService(prisma, config, affiliate as never);
-    admin = new StorefrontAdminService(prisma, config, affiliate as never, { notify } as never);
+    admin = new StorefrontAdminService(prisma, config, affiliate as never, { notify, notifySafe: notify } as never);
   }
 
   beforeEach(async () => {

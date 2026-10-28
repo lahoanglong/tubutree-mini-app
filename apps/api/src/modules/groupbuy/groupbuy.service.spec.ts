@@ -277,7 +277,7 @@ describe('GroupBuyService.join', () => {
     expect(marked).toBeTruthy();
   });
 
-  it('D5-04: GROUP_BUY_SUCCESS mang tên sản phẩm, mã coupon của chính người nhận và hạn dùng (giờ VN)', async () => {
+  it('D5-04: GROUP_BUY_SUCCESS mang tên và slug sản phẩm (để nút trong tin mở đúng trang), mã coupon của chính người nhận và hạn dùng (giờ VN)', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-10-17T10:00:00.000Z'));
     try {
       const prisma = makePrisma();
@@ -293,6 +293,7 @@ describe('GroupBuyService.join', () => {
       expect(notify).toHaveBeenCalledWith('userZZZ', 'GROUP_BUY_SUCCESS', {
         discount: '15%',
         product: 'Nước rửa chén',
+        product_slug: 'nuoc-rua-chen',
         code: 'GBUY-GBABC-USERZZZ',
         expires: '16/11/2026',
       });
@@ -500,6 +501,21 @@ describe('GroupBuyService.reconcileSuccessfulGroups', () => {
     expect(prisma.coupon.create).toHaveBeenCalledTimes(2); // 2 thành viên
     const marked = (prisma.groupBuy.update as jest.Mock).mock.calls.find((c) => c[0]?.data?.couponsGrantedAt);
     expect(marked).toBeTruthy();
+  });
+
+  it('tra tên và slug sản phẩm lỗi: vẫn cấp mã và báo, tin không mang product_slug', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([group({ id: 'gbX', status: 'SUCCESS' })]);
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u0' }]);
+    (prisma.product as unknown as { findUnique: jest.Mock }).findUnique
+      .mockResolvedValueOnce({ name: 'X', slug: 'x', storefrontId: null })
+      .mockRejectedValueOnce(new Error('db'));
+    const notify = jest.fn().mockResolvedValue(undefined);
+    expect(await new GroupBuyService(prisma, makeConfig(), { notify } as never).reconcileSuccessfulGroups()).toBe(1);
+    expect(prisma.coupon.create).toHaveBeenCalledTimes(1);
+    const data = notify.mock.calls[0][2] as Record<string, unknown>;
+    expect(data).toMatchObject({ product: '' });
+    expect(data).not.toHaveProperty('product_slug');
   });
 
   it('không có nhóm cần reconcile → trả 0, không cấp coupon', async () => {

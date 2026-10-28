@@ -55,6 +55,16 @@ describe('design-tokens/tokens.css', () => {
     expect(css).toMatch(/--color-text-price-compare:\s*var\(--stone-500\)/);
   });
 
+  it('defines the dealer B2B palette once: navy primitives plus --color-dealer-* tokens at :root', () => {
+    expect(css).toMatch(/--navy-900:\s*#1F2A44/i);
+    expect(css).toMatch(/--navy-800:\s*#2E3B5E/i);
+    expect(css).toMatch(/--navy-50:\s*#F4F6F9/i);
+    expect(css).toMatch(/:root\s*\{[^}]*--color-dealer-ink:\s*var\(--navy-900\)/);
+    expect(css).toMatch(/--color-dealer-ink-soft:\s*var\(--navy-800\)/);
+    expect(css).toMatch(/--color-dealer-bg:\s*var\(--navy-50\)/);
+    expect(css).toMatch(/--color-dealer-accent:\s*var\(--forest-300\)/);
+  });
+
   it('keeps a dealer theme override block scoped to [data-theme="dealer"], touching only semantic layer', () => {
     expect(css).toMatch(/\[data-theme=['"]dealer['"]\]\s*\{/);
   });

@@ -13,12 +13,13 @@ import { RouteShell, RouteSkeleton, SilentBoundary } from './route-shell';
 import ErrorBoundary, { hashMessage } from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
-import { recordReferralTouch, reportLaunchLinkClick } from '../services/affiliate-api';
+import { reportLaunchLinkClick } from '../services/affiliate-api';
 import { hasPartnerLinkParams } from './onboarding-rules';
 import { readClaimParam, savePendingClaim } from '../services/coupon-claim';
 import { createQueryClient } from '../services/query-client';
 import { useScreenTracker } from '../hooks/use-screen-tracker';
 import { useFlashSalesPoller } from '../hooks/use-flash-sales-poller';
+import { useReferralTouch } from '../hooks/use-referral-touch';
 import { useSessionRecovery } from '../hooks/use-auth-phase';
 import { NavigationTypeProvider } from '../hooks/use-navigation-type';
 import { LivePathnameProvider } from '../hooks/use-live-pathname';
@@ -143,9 +144,6 @@ export default function MyApp() {
   const restore = useAuthStore((s) => s.restore);
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const setSfContext = useStorefrontContext((s) => s.setContext);
-  const sfReferralCode = useStorefrontContext((s) => s.referralCode);
-  const sfSlug = useStorefrontContext((s) => s.slug);
-  const sfKind = useStorefrontContext((s) => s.kind);
 
   useEffect(() => {
     void restore(); // silent login từ refresh token đã lưu
@@ -181,19 +179,7 @@ export default function MyApp() {
     });
   }, []);
 
-  // Attribution 3 ngày: khi đã đăng nhập + có ngữ cảnh giới thiệu (ref/slug từ link),
-  // ghi "chạm" server-side (fire-and-forget). Mọi đường vào (/, /s/:slug, /brand/:slug) đều
-  // set storefront-context nên 1 effect tập trung ở đây cover tất cả; upsert làm mới hạn.
-  useEffect(() => {
-    if (!authed) return;
-    const referralCode = sfReferralCode ?? sfSlug;
-    if (!referralCode) return;
-    void recordReferralTouch({
-      referralCode,
-      storefrontSlug: sfKind === 'ctv' ? (sfSlug ?? undefined) : undefined,
-      kind: sfKind,
-    }).catch(() => {});
-  }, [authed, sfReferralCode, sfSlug, sfKind]);
+  useReferralTouch(authed);
 
   useEffect(() => {
     const parse = (qs: string) => new URLSearchParams(qs);

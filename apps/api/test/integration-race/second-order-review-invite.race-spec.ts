@@ -19,7 +19,7 @@ describe('C-017 đơn thứ 2 + mời đánh giá (real Postgres)', () => {
   let prisma: PrismaService;
   let config: SystemConfigService;
   const notify = jest.fn().mockResolvedValue(undefined);
-  const notifications = { notify } as unknown as NotificationsService;
+  const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
 
   const DAY = 864e5;
   const ago = (days: number) => new Date(Date.now() - days * DAY);

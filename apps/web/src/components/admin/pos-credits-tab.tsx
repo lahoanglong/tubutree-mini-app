@@ -9,6 +9,7 @@ import { vnDayKey } from '@/lib/loyalty-pos';
 import { personLabel } from '@/lib/admin-pickers';
 import type { PickedItem } from './search-picker';
 import { UserPicker } from './user-picker';
+import { VnDateInput } from './vn-date-input';
 import { BTN_XS_SECONDARY, INPUT_CLASS, ScrollRegion, TOUCH_H, LoadError } from './ui';
 import { formatDateTime } from '@/lib/format-date';
 
@@ -52,7 +53,7 @@ export function PosCreditsTab() {
       <div className="flex flex-wrap items-end gap-3 rounded-card border border-stone-200 bg-stone-0 p-3">
         <label className="text-xs">
           <span className="font-medium text-stone-700">Ngày (giờ VN)</span>
-          <input type="date" className={`${INPUT_CLASS} mt-1 w-40`} value={day} onChange={(e) => setDay(e.target.value)} />
+          <VnDateInput ariaLabel="Ngày (giờ VN)" className={`${INPUT_CLASS} mt-1`} value={day} onChange={setDay} />
         </label>
         <div className="w-full text-xs sm:w-64">
           <span className="font-medium text-stone-700">Nhân viên</span>

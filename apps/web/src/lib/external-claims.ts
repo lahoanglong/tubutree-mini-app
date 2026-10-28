@@ -171,7 +171,33 @@ export function groupThousands(n: number): string {
 export const ATTENTION_FILTER_LABEL: Record<AdminExternalClaimAttentionFilter, string> = {
   closed_credited: 'Đã cộng mà đơn đã đóng',
   stale: 'Kẹt chờ quá lâu',
+  partial_refund: 'Đã cộng, đơn hoàn một phần',
 };
+
+/** Các phần cộng nên số trên thẻ "Tích điểm đơn sàn cần xử lý" của Hôm nay (khớp `parts` của API). */
+export type ExternalAttentionPart = 'review' | 'partial' | 'closed' | 'stale' | 'attempts';
+export const ATTENTION_PART_ORDER: ExternalAttentionPart[] = ['review', 'partial', 'closed', 'stale', 'attempts'];
+export const ATTENTION_PART_LABEL: Record<ExternalAttentionPart, string> = {
+  review: 'Chờ duyệt',
+  partial: ATTENTION_FILTER_LABEL.partial_refund,
+  closed: ATTENTION_FILTER_LABEL.closed_credited,
+  stale: ATTENTION_FILTER_LABEL.stale,
+  attempts: 'Lần gửi mã chưa ghép',
+};
+
+/** Phần có việc đầu tiên theo thứ tự trên; null khi không phần nào có việc hoặc API chưa trả `parts`. */
+export function firstAttentionPart(parts: Partial<Record<ExternalAttentionPart, number>> | undefined): ExternalAttentionPart | null {
+  return ATTENTION_PART_ORDER.find((p) => (parts?.[p] ?? 0) > 0) ?? null;
+}
+
+/** Bộ lọc danh sách của từng phần; "lần gửi mã" nằm ở khối riêng bên dưới nên chỉ cuộn tới đó (null). */
+export function attentionPartView(part: ExternalAttentionPart): { state: ExternalClaimState | ''; attention: AdminExternalClaimAttentionFilter | '' } | null {
+  if (part === 'review') return { state: 'REVIEW', attention: '' };
+  if (part === 'partial') return { state: '', attention: 'partial_refund' };
+  if (part === 'closed') return { state: '', attention: 'closed_credited' };
+  if (part === 'stale') return { state: '', attention: 'stale' };
+  return null;
+}
 
 export const ORDER_STATUS_LABEL: Record<string, string> = {
   OPEN: 'Chưa giao xong',

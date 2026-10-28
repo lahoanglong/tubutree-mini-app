@@ -466,13 +466,14 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       const findMany = jest.fn().mockResolvedValue([redemptionRow(), voucher, used, cancelled]);
       const prisma = {
         wasteGiftRedemption: { findMany },
-        coupon: { findMany: jest.fn().mockResolvedValue([{ id: 'cp1', code: 'REWARD-FRESHIP-ABCDEFGH' }]) },
+        coupon: { findMany: jest.fn().mockResolvedValue([{ id: 'cp1', code: 'REWARD-FRESHIP-ABCDEFGH', endAt: new Date('2026-11-16T00:00:00Z'), perUserLimit: 1 }]) },
+        couponRedemption: { groupBy: jest.fn().mockResolvedValue([]) },
         wastePoint: { findFirst: jest.fn().mockResolvedValue(WAREHOUSE) },
       } as unknown as PrismaService;
       const rows = await new LoyaltyService(prisma, makeConfig()).getMyRedemptions('u1');
       expect(findMany).toHaveBeenCalledWith({ where: { userId: 'u1' }, orderBy: { createdAt: 'desc' }, take: 100 });
-      expect(rows[0]).toEqual({ id: 'r1', giftId: 'g1', giftKind: 'GIFT', giftName: 'Túi vải Tubu', pointsCost: 30_000, status: 'READY', code: 'QG-ABCDEFGH', claimExpiresAt: '2026-12-16T00:00:00.000Z', claimPoint: WAREHOUSE, fulfilledAt: null, cancelledAt: null, cancelReason: null, refundedPoints: null, couponCode: null, createdAt: '2026-10-17T00:00:00.000Z' });
-      expect(rows[1]).toMatchObject({ id: 'r2', status: 'FULFILLED', code: null, claimPoint: null, couponCode: 'REWARD-FRESHIP-ABCDEFGH', fulfilledAt: '2026-10-16T00:00:00.000Z' });
+      expect(rows[0]).toEqual({ id: 'r1', giftId: 'g1', giftKind: 'GIFT', giftName: 'Túi vải Tubu', pointsCost: 30_000, status: 'READY', code: 'QG-ABCDEFGH', claimExpiresAt: '2026-12-16T00:00:00.000Z', claimPoint: WAREHOUSE, fulfilledAt: null, cancelledAt: null, cancelReason: null, refundedPoints: null, couponCode: null, couponEndAt: null, couponUsed: false, createdAt: '2026-10-17T00:00:00.000Z' });
+      expect(rows[1]).toMatchObject({ id: 'r2', status: 'FULFILLED', code: null, claimPoint: null, couponCode: 'REWARD-FRESHIP-ABCDEFGH', couponEndAt: '2026-11-16T00:00:00.000Z', couponUsed: false, fulfilledAt: '2026-10-16T00:00:00.000Z' });
       expect(rows[2]).toMatchObject({ id: 'r3', status: 'FULFILLED', code: null, claimPoint: null, fulfilledAt: '2026-10-15T00:00:00.000Z' });
       expect(rows[3]).toMatchObject({ id: 'r4', status: 'CANCELLED', code: null, claimPoint: null, cancelledAt: '2026-10-14T00:00:00.000Z', cancelReason: 'Hết hàng', refundedPoints: 0 });
     });
@@ -481,10 +482,51 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       const prisma = {
         wasteGiftRedemption: { findMany: jest.fn().mockResolvedValue([redemptionRow({ status: 'FULFILLED', giftKind: 'VOUCHER', code: null, couponId: 'gone', claimExpiresAt: null })]) },
         coupon: { findMany: jest.fn().mockResolvedValue([]) },
+        couponRedemption: { groupBy: jest.fn().mockResolvedValue([]) },
         wastePoint: { findFirst: jest.fn().mockResolvedValue(null) },
       } as unknown as PrismaService;
       const [row] = await new LoyaltyService(prisma, makeConfig()).getMyRedemptions('u1');
-      expect(row).toMatchObject({ couponCode: null, claimPoint: null });
+      expect(row).toMatchObject({ couponCode: null, couponEndAt: null, couponUsed: false, claimPoint: null });
+    });
+
+    it('getMyRedemptions: mã giảm giá còn hạn chưa dùng / đã dùng / hết hạn — kèm hạn và trạng thái đã dùng, tính trong MỘT lượt truy vấn cho cả danh sách', async () => {
+      const mk = (id: string, couponId: string) => redemptionRow({ id, giftId: 'reward-freeship', giftKind: 'VOUCHER', giftName: 'Miễn phí vận chuyển', status: 'FULFILLED', code: null, couponId, claimExpiresAt: null });
+      const groupBy = jest.fn().mockResolvedValue([{ couponId: 'used', _count: { _all: 1 } }]);
+      const couponFindMany = jest.fn().mockResolvedValue([
+        { id: 'fresh', code: 'REWARD-A', endAt: new Date('2026-12-01T00:00:00Z'), perUserLimit: 1 },
+        { id: 'used', code: 'REWARD-B', endAt: new Date('2026-12-02T00:00:00Z'), perUserLimit: 1 },
+        { id: 'old', code: 'REWARD-C', endAt: new Date('2026-09-01T00:00:00Z'), perUserLimit: 1 },
+      ]);
+      const prisma = {
+        wasteGiftRedemption: { findMany: jest.fn().mockResolvedValue([mk('a', 'fresh'), mk('b', 'used'), mk('c', 'old')]) },
+        coupon: { findMany: couponFindMany },
+        couponRedemption: { groupBy },
+        wastePoint: { findFirst: jest.fn().mockResolvedValue(null) },
+      } as unknown as PrismaService;
+
+      const rows = await new LoyaltyService(prisma, makeConfig()).getMyRedemptions('u1');
+
+      expect(rows.map((r) => [r.couponCode, r.couponEndAt, r.couponUsed])).toEqual([
+        ['REWARD-A', '2026-12-01T00:00:00.000Z', false],
+        ['REWARD-B', '2026-12-02T00:00:00.000Z', true],
+        ['REWARD-C', '2026-09-01T00:00:00.000Z', false],
+      ]);
+      // Không N+1: đúng một truy vấn mã và một truy vấn lượt dùng cho cả ba lượt đổi.
+      expect(couponFindMany).toHaveBeenCalledTimes(1);
+      expect(groupBy).toHaveBeenCalledTimes(1);
+      expect(groupBy).toHaveBeenCalledWith({ by: ['couponId'], where: { userId: 'u1', couponId: { in: ['fresh', 'used', 'old'] } }, _count: { _all: true } });
+    });
+
+    it('getMyRedemptions: không có lượt đổi mã giảm giá nào thì không truy vấn mã hay lượt dùng', async () => {
+      const prisma = {
+        wasteGiftRedemption: { findMany: jest.fn().mockResolvedValue([redemptionRow()]) },
+        coupon: { findMany: jest.fn() },
+        couponRedemption: { groupBy: jest.fn() },
+        wastePoint: { findFirst: jest.fn().mockResolvedValue(WAREHOUSE) },
+      } as unknown as PrismaService;
+      await new LoyaltyService(prisma, makeConfig()).getMyRedemptions('u1');
+      expect(prisma.coupon.findMany).not.toHaveBeenCalled();
+      expect(prisma.couponRedemption.groupBy).not.toHaveBeenCalled();
     });
 
     it('voucher freeship mô tả ĐÚNG hành vi checkout (miễn toàn bộ phí ship, không ghi "tối đa 25k")', () => {

@@ -51,7 +51,12 @@ const DETAIL: AdminUserDetail = {
   grants: [],
 };
 
-async function open(detail: AdminUserDetail = DETAIL, flags: WasteUserFlagsDTO = NO_FLAGS, isAdmin = true) {
+async function open(
+  detail: AdminUserDetail = DETAIL,
+  flags: WasteUserFlagsDTO = NO_FLAGS,
+  isAdmin = true,
+  nav: { onOpenOrder?: (code: string) => void; onOpenUserOrders?: (id: string, label: string) => void } = {},
+) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -59,7 +64,7 @@ async function open(detail: AdminUserDetail = DETAIL, flags: WasteUserFlagsDTO =
       return new Response(JSON.stringify(url.includes('/admin/waste/users/') ? flags : detail), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }),
   );
-  const r = render(<UserDetailDrawer userId="u1" isAdmin={isAdmin} onClose={() => undefined} />);
+  const r = render(<UserDetailDrawer userId="u1" isAdmin={isAdmin} onClose={() => undefined} {...nav} />);
   mounted.push(r);
   await flush();
   return document.body;
@@ -261,5 +266,31 @@ describe('UserDetailDrawer — Đổi rác (15.4)', () => {
     const body = await open(DETAIL, NO_FLAGS, false);
     expect(body.textContent).not.toContain('Xem yêu cầu đổi rác của khách');
     expect(calls.some((c) => c.url.includes('/admin/waste/users/'))).toBe(false);
+  });
+});
+
+describe('UserDetailDrawer — nối sang tab Đơn hàng', () => {
+  const WITH_ORDERS: AdminUserDetail = {
+    ...DETAIL,
+    orders: {
+      items: [{ id: 'o1', code: 'TT1', status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'PAID', total: 120000, createdAt: '2026-10-01T00:00:00.000Z', fulfiller: 'TUBU' }],
+      total: 25,
+    },
+  };
+
+  it('mã đơn là nút mở đúng đơn; "Xem tất cả 25 đơn" mở danh sách đơn của khách kèm tên', async () => {
+    const onOpenOrder = vi.fn();
+    const onOpenUserOrders = vi.fn();
+    const body = await open(WITH_ORDERS, NO_FLAGS, true, { onOpenOrder, onOpenUserOrders });
+    click([...body.querySelectorAll('button')].find((b) => b.textContent === 'TT1')!);
+    expect(onOpenOrder).toHaveBeenCalledWith('TT1');
+    click([...body.querySelectorAll('button')].find((b) => b.textContent === 'Xem tất cả 25 đơn')!);
+    expect(onOpenUserOrders).toHaveBeenCalledWith('u1', 'Nguyễn Văn An');
+  });
+
+  it('không truyền hàm nối: mã đơn chỉ là chữ và giữ câu hướng dẫn tìm theo SĐT', async () => {
+    const body = await open(WITH_ORDERS);
+    expect([...body.querySelectorAll('button')].some((b) => b.textContent === 'TT1')).toBe(false);
+    expect(body.textContent).toContain('tìm theo SĐT ở tab Đơn hàng để xem hết');
   });
 });

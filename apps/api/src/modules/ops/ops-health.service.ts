@@ -10,6 +10,7 @@ import { notifyAdmins } from '../../common/notify-admins';
 import { withQueueTimeout } from '../../jobs/queue-timeout';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { K_ACCESS as ZALO_OA_ACCESS_KEY, K_EXPIRES as ZALO_OA_EXPIRES_KEY } from '../integrations/zns/zalo-oa-token.service';
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
 import { hasGomdonCredentials } from '../integrations/gomdon/gomdon-config';
 import { PANCAKE_EVENT_STATUS, pancakeEventRef } from '../integrations/pancake/pancake-webhook-dedupe';
@@ -67,6 +68,8 @@ const DAY_MS = 24 * 3_600_000;
 /** Job lỗi trong 1 giờ: chỉ xem chừng này job lỗi mới nhất (BullMQ giữ tối đa 1000 job lỗi mỗi hàng đợi). */
 const FAILED_SCAN = 200;
 const WEBHOOK_TIMEOUT_MS = 5000;
+/** Token OA còn dưới chừng này mà chưa được làm mới: cron làm mới (ngưỡng 13 giờ, mỗi 6 giờ) đã lỡ ít nhất hai lượt. */
+const ZALO_TOKEN_WARN_MS = 3 * 3_600_000;
 
 const PANCAKE_STATUSES = Object.values(PANCAKE_EVENT_STATUS);
 const GOMDON_STATUSES = Object.values(GOMDON_EVENT_STATUS);
@@ -210,7 +213,7 @@ export class OpsHealthService {
 
   async snapshot(now = new Date()) {
     const t = await this.thresholds();
-    const [pancake, gomdon, queues, emailChannel, orders, webhookChannel, cronJobs] = await Promise.all([
+    const [pancake, gomdon, queues, emailChannel, orders, webhookChannel, cronJobs, zaloProblems] = await Promise.all([
       this.pancakeHealth(now, t),
       this.gomdonHealth(now, t),
       this.queueHealth(now),
@@ -218,6 +221,7 @@ export class OpsHealthService {
       this.orderHealth(now),
       this.webhookChannel(),
       this.cronJobs(),
+      this.zaloTokenProblems(now),
     ]);
     const problems = opsProblems(
       {
@@ -243,8 +247,40 @@ export class OpsHealthService {
         },
       },
       t,
-    );
+    ).concat(zaloProblems);
     return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, orders, alertChannels: { email: emailChannel, webhook: webhookChannel }, cronJobs, problems };
+  }
+
+  /**
+   * Hạn access token Zalo OA (SystemConfig, do ZaloOaTokenCron ghi): còn dưới 3 giờ hoặc đã quá hạn khi ZNS đã có token
+   * thì khách sắp (hoặc đang) không nhận được tin ZNS. Chưa cấu hình, hoặc chưa có mốc hạn (cron sẽ lấy mốc ở lượt đầu) thì
+   * không báo. Lỗi đọc DB không được làm hỏng cả màn sức khoẻ.
+   */
+  async zaloTokenProblems(now: Date): Promise<OpsProblem[]> {
+    try {
+      const [access, expires] = await Promise.all([
+        this.prisma.systemConfig.findUnique({ where: { key: ZALO_OA_ACCESS_KEY } }),
+        this.prisma.systemConfig.findUnique({ where: { key: ZALO_OA_EXPIRES_KEY } }),
+      ]);
+      const hasToken = (typeof access?.value === 'string' && access.value !== '') || Boolean(this.config.get('ZALO_OA_ACCESS_TOKEN', { infer: true }));
+      const expiresAt = typeof expires?.value === 'string' ? Date.parse(expires.value) : NaN;
+      if (!hasToken || Number.isNaN(expiresAt)) return [];
+      const left = expiresAt - now.getTime();
+      if (left >= ZALO_TOKEN_WARN_MS) return [];
+      const state =
+        left <= 0
+          ? `đã hết hạn lúc ${formatVnDateTime(new Date(expiresAt))}`
+          : `chỉ còn ${Math.floor(left / 3_600_000)} giờ ${Math.floor((left % 3_600_000) / 60_000)} phút mà chưa được làm mới`;
+      return [
+        {
+          key: 'zalo.oa_token',
+          message: `Token Zalo OA ${state} — tin ZNS và trả lời Zalo OA sẽ không gửi được; xem log "Zalo OA refresh" hoặc cấp lại token ở developers.zalo.me`,
+        },
+      ];
+    } catch (e) {
+      this.logger.warn(`Không đọc được hạn token Zalo OA: ${e instanceof Error ? e.message : String(e)}`);
+      return [];
+    }
   }
 
   private webhookUrl(): string {

@@ -53,3 +53,9 @@ describe('GameController.unlockPlot', () => {
     expect(await errorsFor({ currency: 'SEEDS', slot: 1.5 })).toEqual(['slot']);
   });
 });
+
+describe('GameController — điểm danh', () => {
+  it('không còn POST /game/check-in: điểm danh đi qua /me/daily-check-in để chuỗi và điểm xanh cập nhật cùng nhau', () => {
+    expect((GameController.prototype as unknown as Record<string, unknown>).checkIn).toBeUndefined();
+  });
+});

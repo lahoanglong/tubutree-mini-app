@@ -21,7 +21,7 @@ describe('isWebRouteReady', () => {
   it('mọi đích mà web rẽ nhánh theo isWebRouteReady đã mở', () => {
     const opened = [
       '/thanh-toan/chuyen-khoan/x', '/tai-khoan/don-hang/x', '/tai-khoan/don-hang', '/tai-khoan/don-hang?tab=subscriptions',
-      '/tai-khoan/thong-bao', '/cong-dong', '/cong-dong/xep-hang', '/cong-dong/su-kien', '/hoc-vien', '/tu-van', '/san-pham',
+      '/tai-khoan/thong-bao', '/cong-dong', '/cong-dong/su-kien', '/hoc-vien', '/tu-van', '/san-pham',
       '/vuon-xanh', '/kho-qua', '/ctv', '/ctv/gian-hang', '/dai-ly', '/nhan-vien', '/nhan-vien/bang-luong', '/chu-thuong-hieu',
       '/doi-rac', '/doi-rac/tao', '/doi-rac/yeu-cau/x',
     ];

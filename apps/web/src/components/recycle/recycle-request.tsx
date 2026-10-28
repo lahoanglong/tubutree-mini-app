@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteRequestDetailDTO } from '@tubutree/shared-types';
-import { WASTE_WRITE_INVALIDATE_KEYS, cancelWasteRequest, setWasteTracking } from '@tubutree/app-core/api/waste';
+import { WASTE_REDEEM_INVALIDATE_KEYS, WASTE_WRITE_INVALIDATE_KEYS, cancelWasteRequest, setWasteTracking } from '@tubutree/app-core/api/waste';
 import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { wasteMeQuery, wastePointsQuery, wasteRequestQuery } from '@tubutree/app-core/queries/waste';
 import { openingStatus, todayHoursText } from '@tubutree/app-core/waste-hours';
@@ -122,6 +122,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
   const phase = useAuthPhase();
   const cfg = usePublicConfig();
   const refresh = useRefreshAfterWrite();
+  const qc = useQueryClient();
   const path = `/doi-rac/yeu-cau/${id}`;
   const editPath = `${path}/sua`;
 
@@ -141,8 +142,10 @@ export function RecycleRequestDetail({ id }: { id: string }) {
   useEffect(() => {
     if (!qrOpen || !liveStatus || liveStatus === 'OPEN') return;
     setQrOpen(false);
+    // Quầy vừa cộng điểm: làm mới số dư và tiến tới quà trước khi sang màn kết quả, nếu không màn đó dùng lại số cũ còn tươi trong bộ nhớ.
+    for (const queryKey of WASTE_REDEEM_INVALIDATE_KEYS) void qc.invalidateQueries({ queryKey });
     if (liveStatus === 'COMPLETED') router.replace(`/doi-rac/xong/${id}`);
-  }, [qrOpen, liveStatus, id, router]);
+  }, [qrOpen, liveStatus, id, router, qc]);
   const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed });
   const r: WasteRequestDetailDTO | undefined = q.data;
   const pointsQ = useQuery({

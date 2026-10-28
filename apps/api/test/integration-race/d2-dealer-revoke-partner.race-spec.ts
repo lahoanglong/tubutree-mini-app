@@ -76,7 +76,7 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
         CashbackService,
         ComboService,
         FlashSaleService,
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
         { provide: GomdonOrderService, useValue: { isRecyclingEnabled: jest.fn().mockResolvedValue(false), enqueuePush: jest.fn() } },
         { provide: LifecycleService, useValue: { notifyWishlistPriceDrop: jest.fn().mockResolvedValue(undefined) } },
@@ -645,7 +645,7 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
       [false, false],
     ])(`duyệt hồ sơ đại lý đua với ẩn danh của cùng người nộp (có gian hàng: %s, duyệt đến trước: %s): không 40P01, cả hai xong (${ROUNDS} vòng)`, async (hasStore, approvalFirst) => {
       const none = {} as never;
-      const approver = new AdminService(prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined) } as never, none, none, rbac, none, none, merchant);
+      const approver = new AdminService(prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } as never, none, none, rbac, none, none, merchant);
       const tier = await prisma.dealerTier.create({ data: { id: `tier_${randCode(8)}`, name: 'Bậc IT', minOrderVolume: 0, discountRules: {} } });
       created.tierIds.push(tier.id);
       const warn = jest.spyOn(Logger.prototype, 'warn');
@@ -704,7 +704,7 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
     /** Người nộp CTV (gian hàng chưa đối tác, đã có địa chỉ) + hồ sơ PENDING + bậc đại lý; duyệt bằng AdminService riêng. */
     async function applicant() {
       const none = {} as never;
-      const approver = new AdminService(prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined) } as never, none, none, rbac, none, none, merchant);
+      const approver = new AdminService(prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } as never, none, none, rbac, none, none, merchant);
       const tier = await prisma.dealerTier.create({ data: { id: `tier_${randCode(8)}`, name: 'Bậc IT', minOrderVolume: 0, discountRules: {} } });
       created.tierIds.push(tier.id);
       const d = await deletable();
@@ -795,7 +795,7 @@ describe('Thu hồi vai trò đại lý tắt cờ đối tác (real Postgres)',
 
     it('duyệt hồ sơ của người nộp đã bị khoá / đã ẩn danh → từ chối, hồ sơ vẫn PENDING, vai trò không đổi', async () => {
       const none = {} as never;
-      const approver = new AdminService(prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined) } as never, none, none, rbac, none, none, merchant);
+      const approver = new AdminService(prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } as never, none, none, rbac, none, none, merchant);
       const tier = await prisma.dealerTier.create({ data: { id: `tier_${randCode(8)}`, name: 'Bậc IT', minOrderVolume: 0, discountRules: {} } });
       created.tierIds.push(tier.id);
       const d = await deletable();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupMemberStatus, groupMissing, groupPriceLabels, groupRewardLine } from './group-buy-copy';
+import { groupMemberStatus, groupMissing, groupMissingLine, groupPriceLabels, groupRewardLine } from './group-buy-copy';
 
 const fmt = (n: number) => `${n}đ`;
 
@@ -31,9 +31,14 @@ describe('group-buy-copy', () => {
     expect(groupPriceLabels(g, fmt, [slot], NOW)).toEqual({ group: 'Giá nhóm 102000đ', solo: 'Giờ vàng đang rẻ hơn: 90000đ', soloIsCheaper: true });
     expect(groupPriceLabels({ ...g, basePrice: 95000 }, fmt, undefined, NOW).solo).toBe('Giá hiện nay rẻ hơn: 95000đ');
   });
-  it('dòng mã nêu số người và đơn tối thiểu, mặc định theo giá nhóm', () => {
-    expect(groupRewardLine({ targetSize: 3, discountPct: 15, unitPrice: 102000, minOrder: 90000 }, fmt)).toBe('Đủ 3 người: mỗi người nhận mã giảm 15%, dùng cho đơn từ 90000đ');
-    expect(groupRewardLine({ targetSize: 3, discountPct: 15, unitPrice: 102000 }, fmt)).toContain('từ 102000đ');
+  it('dòng mã chỉ nói điều nhận được khi đủ nhóm: mức giảm và đơn tối thiểu (mặc định theo giá nhóm), không lẫn số người còn thiếu', () => {
+    expect(groupRewardLine({ discountPct: 15, unitPrice: 102000, minOrder: 90000 }, fmt)).toBe('Đủ nhóm: mỗi người nhận mã giảm 15% cho đơn từ 90000đ');
+    expect(groupRewardLine({ discountPct: 15, unitPrice: 102000 }, fmt)).toBe('Đủ nhóm: mỗi người nhận mã giảm 15% cho đơn từ 102000đ');
+  });
+  it('dòng còn thiếu là ý riêng; đủ người rồi thì không có dòng', () => {
+    expect(groupMissingLine({ targetSize: 5, currentSize: 2 })).toBe('Còn thiếu 3 người');
+    expect(groupMissingLine({ targetSize: 3, currentSize: 3 })).toBeNull();
+    expect(groupMissingLine({ targetSize: 3, currentSize: 4 })).toBeNull();
   });
   it('số người còn thiếu không âm và chữ trạng thái của thành viên', () => {
     expect(groupMissing({ targetSize: 3, currentSize: 1 })).toBe(2);

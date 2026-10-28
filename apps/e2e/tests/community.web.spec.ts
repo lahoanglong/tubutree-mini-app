@@ -1,7 +1,7 @@
 import { expect, reply, test, type MockApi } from './support/mock-api';
 
 /**
- * Web khách: bảng tin cộng đồng và bảng xếp hạng. Mọi lời gọi /api/** từ trình duyệt đi qua mock (fixture `api`).
+ * Web khách: bảng tin cộng đồng. Mọi lời gọi /api/** từ trình duyệt đi qua mock (fixture `api`).
  * Trang /cong-dong render server cho khách; trong e2e API thật không chạy nên server rơi về rỗng và trình duyệt tự tải qua mock.
  */
 
@@ -68,7 +68,7 @@ test.describe('Web khách: cộng đồng', () => {
     });
     await page.goto('/cong-dong');
     await expect(page.getByRole('link', { name: 'Mẹo của Lan Anh' })).toHaveAttribute('href', '/cong-dong/p1');
-    await expect(page.getByRole('link', { name: 'Bảng xếp hạng' })).toHaveAttribute('href', '/cong-dong/xep-hang');
+    await expect(page.getByRole('link', { name: 'Bảng xếp hạng' })).toHaveCount(0);
 
     const popular = api.waitForCall('GET', '/feed');
     await page.getByRole('button', { name: 'Nổi bật' }).click();
@@ -112,25 +112,13 @@ test.describe('Web khách: cộng đồng', () => {
     await expect(page.getByRole('status')).toContainText('Đã đăng bài');
   });
 
-  test('xếp hạng: huy chương ba hạng đầu, điểm uy tín; khách được mời đăng nhập', async ({ page, api }) => {
+  test('đường cũ /cong-dong/xep-hang chuyển về /cong-dong (Mini App đã bỏ bảng xếp hạng)', async ({ page, api }) => {
     mockSession(api);
-    api.get('/feed/leaderboard', [
-      { author: 'Lan Anh', avatar: null, reputation: 980, level: 4, levelName: 'Cổ thụ' },
-      { author: 'Minh Tâm', avatar: null, reputation: 640, level: 3, levelName: 'Cây trưởng thành' },
-      { author: 'Hà My', avatar: null, reputation: 410, level: 2, levelName: 'Cây non' },
-      { author: 'Quốc Bảo', avatar: null, reputation: 120, level: 2, levelName: 'Cây non' },
-    ]);
+    api.get('/config/public', {});
+    api.get('/feed', { posts: [POST('p1', 'Lan Anh')], nextCursor: null });
     await page.goto('/cong-dong/xep-hang');
-    await expect(page.getByRole('heading', { name: 'Bảng xếp hạng', level: 1 })).toBeVisible();
-    await expect(page.getByRole('img', { name: 'Huy chương vàng' })).toBeVisible();
-    await expect(page.getByText('#4')).toBeVisible();
-    await expect(page.getByText('980 điểm uy tín')).toBeVisible();
-  });
-
-  test('xếp hạng khi chưa đăng nhập: mời đăng nhập và quay lại đúng trang', async ({ page, api }) => {
-    api.post('/auth/refresh', () => reply(401, { message: 'no session' }));
-    await page.goto('/cong-dong/xep-hang');
-    await expect(page.getByRole('link', { name: /Đăng nhập với Zalo/ })).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent('/cong-dong/xep-hang')}`);
+    await expect(page).toHaveURL(/\/cong-dong$/);
+    await expect(page.getByRole('link', { name: 'Mẹo của Lan Anh' })).toBeVisible();
   });
 
   test('chi tiết bài: hiện bài và câu trả lời, thả tim, gửi trả lời, báo cáo bình luận', async ({ page, api }) => {

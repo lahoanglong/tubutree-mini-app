@@ -49,6 +49,15 @@ export function homeRenderOrder(kind: HomeKindState, settling: boolean): readonl
   return [...order.slice(0, hero + 1), 'settling'];
 }
 
+/**
+ * Thứ tự dựng khi máy chủ đã dựng bố cục khách mới (web: HTML đầu luôn là khách vãng lai) rồi khôi phục phiên mới cho biết đây là khách có tài khoản mà
+ * máy chưa nhớ loại. Giữ các khối đã vẽ (Giờ vàng, Bán chạy, Gợi ý...) thay vì thay hết bằng khung chờ: chỉ dải quà khách mới đổi thành khung giữ
+ * chỗ của thẻ thành viên (cùng chiều cao `HOME_HERO_HEIGHT`), khối riêng của khách cũ. Thứ tự khối là của khách mới, không xáo trộn.
+ */
+export function homeKeptOrder(kind: HomeKindState): readonly HomeBlockId[] {
+  return NEW.map((id) => (id === 'welcome' && kind !== 'new' ? 'member' : id));
+}
+
 /** Giữ khung chờ tối đa chừng này: mạng chậm hay API lỗi không được giữ trắng cả trang. */
 export const HOME_SETTLE_MAX_MS = 4500;
 
@@ -258,7 +267,7 @@ export interface MemberCardView {
   toGoLine: string | null;
 }
 
-const moneyShort = (n: number) => (n >= 1_000_000 ? `${decimalVi(n / 1_000_000)} triệu` : `${num(n)}đ`);
+export const moneyShort = (n: number) => (n >= 1_000_000 ? `${decimalVi(n / 1_000_000)} triệu` : `${num(n)}đ`);
 
 export function memberCardView(opts: {
   overview: LoyaltyOverview | undefined;
@@ -441,3 +450,14 @@ export function writeFlashHint(storage: MemoryStorage | null, hasFlash: boolean)
 
 /** Chiều cao khung chờ của khối Giờ vàng (tiêu đề + một hàng thẻ; đo thật: Mini 302px, web 298px). */
 export const FLASH_SKELETON_HEIGHT = 300;
+
+/**
+ * Chiều cao bốn ô của khung chờ chung Trang chủ (`HomeSettlingSkeleton`): một hàng lối tắt, một khối cỡ Giờ vàng, một hàng danh mục, rồi hai hàng thẻ
+ * hàng. Mini App và web dùng chung để khung chờ thay bằng khối thật không làm trang nhảy; đổi chiều cao khối thật thì sửa ở đây.
+ */
+export const HOME_SETTLING_HEIGHTS = {
+  shortcuts: 96,
+  flash: FLASH_SKELETON_HEIGHT - 16,
+  categories: 138,
+  products: 260,
+} as const;

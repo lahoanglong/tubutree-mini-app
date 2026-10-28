@@ -4,7 +4,8 @@ import { Suspense, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { MessagesSquare, Recycle } from 'lucide-react';
-import { SEASON_PASS_ENABLED } from '@tubutree/app-core/features';
+import { GAME_SOCIAL_ON_WEB, SEASON_PASS_ENABLED } from '@tubutree/app-core/features';
+import { MISSION_PATHS } from '@tubutree/app-core/game-mission-paths';
 import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, gameNewbieCopy, type MissionTarget, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
 import { checkInQuery, loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import type { AnswerResult, HarvestSpecies } from '@tubutree/app-core/api/game';
@@ -60,11 +61,6 @@ const TITLE = 'Vườn Xanh';
 const WASTE_PATH = '/doi-rac';
 const FEED_PATH = '/cong-dong';
 const POINTS_PATH = '/tai-khoan/diem-xanh';
-const MISSION_PATHS: Record<Exclude<MissionTarget, 'checkin'>, string> = {
-  catalog: '/san-pham',
-  'delivered-orders': '/tai-khoan/don-hang?tab=delivered',
-  invite: '/tai-khoan/vi-tubu',
-};
 
 const errText = loadErrorText;
 
@@ -80,7 +76,8 @@ function GameBody() {
   const { profileQ, quizQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, gardenQ, boardQ, seasonPass } = useGameData(true, {
     garden: tab === 'garden',
     community: tab === 'community',
-    friends: tab === 'community' || earn.open,
+    friends: GAME_SOCIAL_ON_WEB && (tab === 'community' || earn.open),
+    season: tab === 'community' || (!GAME_SOCIAL_ON_WEB && tab === 'garden'),
   });
   const { data: profile, isLoading, isError, error: profileError, refetch } = profileQ;
 
@@ -117,7 +114,7 @@ function GameBody() {
     checkInM.mutate(undefined, { onSuccess: () => action.withDew && dewM.mutate() });
   const goMission = (target: MissionTarget) => {
     if (target === 'checkin') goTab('today', GAME_CHECKIN_ANCHOR);
-    else router.push(MISSION_PATHS[target]);
+    else router.push(MISSION_PATHS.web[target]);
   };
   const shareToCommunity = () =>
     shareHarvestM.mutate(undefined, { onSuccess: () => setHarvest((h) => ({ ...h, shared: true })) });
@@ -150,6 +147,24 @@ function GameBody() {
   const plotsOpen = garden ? extraPlotsVisible(eco?.treesPlanted, garden.plots.some((p) => !p.isHome)) : false;
   const wasteLink = publicConfig.waste.enabled && isWebRouteReady(WASTE_PATH);
   const feedLink = isWebRouteReady(FEED_PATH);
+  // Mùa, Chặng Mùa và lối vào bảng tin: ở tab Cộng đồng khi tab đó bật, còn không thì cuối tab Vườn như Mini App.
+  const seasonBlocks = (
+    <>
+      {/* Banner mùa/sự kiện (Phase 4) */}
+      {season ? <SeasonBanner season={season} /> : season === null ? <SeasonEmpty /> : null}
+
+      {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
+      {SEASON_PASS_ENABLED && seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
+        <SeasonPass
+          pass={seasonPass}
+          claimPending={claimPassM.isPending}
+          claimVariables={claimPassM.variables}
+          onClaim={(tier, track) => claimPassM.mutate({ tier, track })}
+        />
+      )}
+    </>
+  );
+  const feedRow = feedLink && <GameLinkRow icon={MessagesSquare} title="Bảng tin cộng đồng" hint="Khoe thành tích xanh & cổ vũ nhau trồng cây" href={FEED_PATH} />;
   const harvestSpecies: HarvestSpecies | null = harvest.reward?.species ?? null;
   const closeHarvest = () => setHarvest((h) => ({ ...h, open: false }));
   // navigator.clipboard không có ở ngữ cảnh không bảo mật và vài WebView: ném đồng bộ, nên bọc try/catch chứ không chỉ .catch.
@@ -317,34 +332,33 @@ function GameBody() {
 
           {/* Mốc cộng đồng góp quỹ trồng cây (Phase 2) — hồ giọt nước toàn cộng đồng */}
           {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}
+
+          {!GAME_SOCIAL_ON_WEB && (
+            <>
+              {seasonBlocks}
+              {/* Bảng tin cộng đồng (§6.14.12): chỉ khi trang đã có trên web */}
+              {feedRow}
+            </>
+          )}
         </GameTabPanel>
 
-        <GameTabPanel tab="community" active={tab === 'community'}>
-          {/* Banner mùa/sự kiện (Phase 4) */}
-          {season ? <SeasonBanner season={season} /> : season === null ? <SeasonEmpty /> : null}
+        {GAME_SOCIAL_ON_WEB && (
+          <GameTabPanel tab="community" active={tab === 'community'}>
+            {seasonBlocks}
 
-          {/* Chặng Mùa (Season Pass) — ladder bậc XP theo điểm danh */}
-          {SEASON_PASS_ENABLED && seasonPass?.active && seasonPass.tiers && seasonPass.tiers.length > 0 && (
-            <SeasonPass
-              pass={seasonPass}
-              claimPending={claimPassM.isPending}
-              claimVariables={claimPassM.variables}
-              onClaim={(tier, track) => claimPassM.mutate({ tier, track })}
-            />
-          )}
+            {/* Tặng nước bạn bè (social) */}
+            {friends && friends.length > 0 && (
+              <FriendGifts friends={friends} giftPending={giftM.isPending} giftVariables={giftM.variables} onGift={(recipientId) => giftM.mutate(recipientId)} />
+            )}
 
-          {/* Tặng nước bạn bè (social) */}
-          {friends && friends.length > 0 && (
-            <FriendGifts friends={friends} giftPending={giftM.isPending} giftVariables={giftM.variables} onGift={(recipientId) => giftM.mutate(recipientId)} />
-          )}
+            <WeeklyLeaderboard board={board} failed={boardQ.isError} onRetry={() => void boardQ.refetch()} />
 
-          <WeeklyLeaderboard board={board} failed={boardQ.isError} onRetry={() => void boardQ.refetch()} />
+            {seasonBoard && seasonBoard.length > 0 && <SeasonLeaderboard rows={seasonBoard} />}
 
-          {seasonBoard && seasonBoard.length > 0 && <SeasonLeaderboard rows={seasonBoard} />}
-
-          {/* Bảng tin cộng đồng (§6.14.12): chỉ khi trang đã có trên web */}
-          {feedLink && <GameLinkRow icon={MessagesSquare} title="Bảng tin cộng đồng" hint="Khoe thành tích xanh & cổ vũ nhau trồng cây" href={FEED_PATH} />}
-        </GameTabPanel>
+            {/* Bảng tin cộng đồng (§6.14.12): chỉ khi trang đã có trên web */}
+            {feedRow}
+          </GameTabPanel>
+        )}
       </div>
 
       {/* Hộp kết quả vòng quay: ngoài khối tab để vẫn hiện khi khách đã đổi tab trong lúc quay. */}
@@ -366,7 +380,7 @@ function GameBody() {
         quiz={quizState}
         onRetryQuiz={() => void quizQ.refetch()}
         onGoQuiz={() => goTab('today', 'game-quiz')}
-        hasFriends={(friends?.length ?? 0) > 0}
+        hasFriends={GAME_SOCIAL_ON_WEB && (friends?.length ?? 0) > 0}
         onGoFriends={() => goTab('community')}
         error={earnError}
       />

@@ -66,6 +66,8 @@ export interface OrderDTO {
   pointsUsed: number;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
+  /** Nơi giao đơn: Tubu hay gian hàng đối tác tự giao (cột `fulfiller` của đơn). Dòng "Giao dự kiến" ở màn đặt xong đọc cột này. */
+  fulfiller?: 'TUBU' | 'MERCHANT';
   shippingAddress: ShippingAddressSnapshot;
   shippingPartner?: string | null;
   shippingCode?: string | null;

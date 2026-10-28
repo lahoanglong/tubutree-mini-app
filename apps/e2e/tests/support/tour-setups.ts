@@ -292,6 +292,7 @@ export const SETUPS: Record<string, (api: MockApi) => void> = {
   },
   '/recycle/requests': wasteCustomer,
   '/recycle/done/:id': wasteCustomer,
+  '/refill': wasteCustomer,
   '/recycle/desk': (api) => {
     mockDeskStaff(api, {
       points: [{ id: 'wp-q1', kind: 'PARTNER', name: 'Tạp hoá Cô Ba', giftHandoverEnabled: false, myRole: 'OWNER', quota: { limit: 100_000, used: 0, remaining: 100_000 }, perkText: null, perkPendingText: null, staffDailyCapRemaining: 1_000_000 }],

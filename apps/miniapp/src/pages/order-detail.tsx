@@ -54,6 +54,7 @@ import { ProductThumb } from '../components/ui/product-thumb';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { CancelReasonPicker } from '../components/orders/cancel-reason-picker';
 import { orderCopy } from '@tubutree/app-core/account-copy';
+import { customerOrderNote, isSubscriptionOrder, openProductSlug } from '@tubutree/app-core/api/orders';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { cancelReasonBody, type CancelReasonCode } from '@tubutree/app-core/cancel-reasons';
 import { SupportContact } from '../components/support-contact';
@@ -266,6 +267,8 @@ export default function OrderDetailPage() {
   const etaLabel = publicConfig.isLoaded ? orderDeliveryEtaLabel(publicConfig.shippingEta, o) : null;
   const timelineSteps = timelineStepsFor(o.paymentMethod);
   const discounts = discountRows(o);
+  // Sản phẩm đã gỡ thì trang sản phẩm trả 404: dòng vẫn hiện, chỉ không dẫn đi đâu.
+  const itemLinks = o.items.map((it) => ({ it, slug: openProductSlug(it) }));
   const returnDays = publicConfig.returnWindowDays ?? 7;
   const returnWindow = returnWindowState(o, returnDays);
   const refundMode = cancelRefundMode(o);
@@ -355,19 +358,19 @@ export default function OrderDetailPage() {
         <Text bold size="small" style={{ marginBottom: 8 }}>
           {vi.orders.products}
         </Text>
-        {o.items.map((it) => (
+        {itemLinks.map(({ it, slug }) => (
           <Box key={it.id} style={{ padding: '6px 0' }}>
             <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 12 }}>
               {/* Chạm vào món để mở lại trang sản phẩm (xem hướng dẫn dùng, mua riêng món này). */}
               <Box
                 flex
                 alignItems="center"
-                className={it.productSlug ? 'tubu-press' : undefined}
-                role={it.productSlug ? 'link' : undefined}
-                {...(it.productSlug ? rowKeyboardProps() : {})}
-                aria-label={it.productSlug ? `Xem sản phẩm ${it.productName}` : undefined}
-                onClick={it.productSlug ? () => navigate(`/product/${it.productSlug}`) : undefined}
-                style={{ gap: 12, flex: 1, minWidth: 0, minHeight: 48, cursor: it.productSlug ? 'pointer' : undefined }}
+                className={slug ? 'tubu-press' : undefined}
+                role={slug ? 'link' : undefined}
+                {...(slug ? rowKeyboardProps() : {})}
+                aria-label={slug ? `Xem sản phẩm ${it.productName}` : undefined}
+                onClick={slug ? () => navigate(`/product/${slug}`) : undefined}
+                style={{ gap: 12, flex: 1, minWidth: 0, minHeight: 48, cursor: slug ? 'pointer' : undefined }}
               >
                 <ProductThumb src={it.thumbnail} alt="" size={48} />
                 <Text size="small" style={{ flex: 1, minWidth: 0 }}>
@@ -393,7 +396,7 @@ export default function OrderDetailPage() {
                 (OrderItem không lưu slug). Nay snapshot productSlug nên dẫn thẳng được.
                 Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó; API cũ chưa trả
                 reviewable/reviewId thì vẫn hiện nút viết như trước. */}
-            {o.status === 'DELIVERED' && it.productSlug && (it.reviewId || it.reviewable !== false) && (
+            {o.status === 'DELIVERED' && slug && (it.reviewId || it.reviewable !== false) && (
               <Text
                 size="xSmall"
                 bold
@@ -403,7 +406,7 @@ export default function OrderDetailPage() {
                 style={{ color: 'var(--color-text-brand)', marginTop: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 onClick={() => {
                   haptic('light');
-                  navigate(`/product/${it.productSlug}`, { state: { reviewOrderId: o.id } });
+                  navigate(`/product/${slug}`, { state: { reviewOrderId: o.id } });
                 }}
               >
                 <Icon icon={Star} size="sm" tone="brand" />
@@ -664,15 +667,27 @@ export default function OrderDetailPage() {
         );
       })()}
 
-      {o.note && (
+      {customerOrderNote(o) ? (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Text bold size="small" style={{ marginBottom: 4 }}>
             {vi.orders.note}
           </Text>
           <Text size="small" style={{ color: 'var(--color-text-secondary)', whiteSpace: 'pre-line' }}>
-            {o.note}
+            {customerOrderNote(o)}
           </Text>
         </Box>
+      ) : (
+        // Ghi chú cố định của hệ thống không phải lời khách viết: thay bằng nhãn.
+        isSubscriptionOrder(o) && (
+          <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+            <Text bold size="small">
+              Đơn định kỳ
+            </Text>
+            <Text size="small" style={{ color: 'var(--color-text-secondary)' }}>
+              Đơn này tự đặt theo lịch bạn đã chọn.
+            </Text>
+          </Box>
+        )
       )}
 
       {/* Đổi/trả theo dòng (D3) — mỗi yêu cầu một khung trạng thái */}

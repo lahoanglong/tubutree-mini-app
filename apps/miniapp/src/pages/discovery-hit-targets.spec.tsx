@@ -38,9 +38,7 @@ import { ResultHeader } from '../components/catalog/result-header';
 import { SortChips } from '../components/catalog/sort-chips';
 import { SuggestList } from '../components/catalog/suggest-list';
 import { HomeBlockError } from '../components/home/home-block-error';
-import { HomeExtras } from '../components/home/home-extras';
 import { HomeHeader } from '../components/home/home-header';
-import { HomeSection } from '../components/home/home-section';
 import { SEGMENT_ENTRIES } from '../hooks/use-categories';
 import { RECENTLY_VIEWED_KEY } from '../utils/recently-viewed';
 import { parseSearchState } from '../utils/search-state';
@@ -92,15 +90,14 @@ describe('vùng chạm >= 44px — Trang chủ / Danh mục / Tìm kiếm', () =
     expect(undersized(container)).toEqual([]);
   });
 
-  it('khối SP: "Xem tất cả", thẻ SP, khối lỗi + "Thử lại"', () => {
+  it('khối SP: thẻ SP, khối lỗi + "Thử lại"', () => {
     const { container } = wrap(
       <>
-        <HomeSection title="Bán chạy" limit={6} seeAllTo="/browse" listSource="home" query={{ isLoading: false, isError: false, error: null, refetch: vi.fn(), data: { data: [P] } }} />
         <HomeBlockError title="Mua lại" onRetry={vi.fn()} />
         <CatalogGrid products={[P]} listSource="browse" />
       </>,
     );
-    expect(container.querySelectorAll(INTERACTIVE).length).toBeGreaterThanOrEqual(3);
+    expect(container.querySelectorAll(INTERACTIVE).length).toBeGreaterThanOrEqual(2);
     expect(undersized(container)).toEqual([]);
   });
 
@@ -158,17 +155,11 @@ describe('vùng chạm >= 44px — Trang chủ / Danh mục / Tìm kiếm', () =
     expect(undersized(container)).toEqual([]);
   });
 
-  it('"Đã xem gần đây" và khối phụ cuối Trang chủ (thẻ nhỏ, hero, chip thương hiệu, hàng liên kết)', async () => {
+  it('"Đã xem gần đây"', async () => {
     localStorage.setItem(RECENTLY_VIEWED_KEY, JSON.stringify([{ slug: 'p1', name: 'Xà phòng', thumbnail: null, viewedAt: 1 }]));
-    const { container } = wrap(
-      <>
-        <RecentlyViewedRail />
-        <HomeExtras />
-      </>,
-    );
-    await screen.findByRole('button', { name: 'Tubu' });
-    await screen.findByRole('button', { name: 'Hỏi trợ lý AI 24/7' });
-    expect(container.querySelectorAll(INTERACTIVE).length).toBeGreaterThanOrEqual(8);
+    const { container } = wrap(<RecentlyViewedRail />);
+    await screen.findByRole('button', { name: /Xà phòng/ });
+    expect(container.querySelectorAll(INTERACTIVE).length).toBeGreaterThanOrEqual(1);
     expect(undersized(container)).toEqual([]);
   });
 

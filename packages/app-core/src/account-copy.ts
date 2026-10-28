@@ -33,7 +33,4 @@ export const walletCopy = {
 };
 
 /** Học viện chỉ mở cho CTV, đại lý, nhân viên, quản trị (API 403 với khách thường), nên khách thường không thấy lối vào. */
-const ACADEMY_ROLES = new Set(['AFFILIATE', 'DEALER', 'STAFF', 'ADMIN']);
-export function canSeeAcademy(role: string | null | undefined): boolean {
-  return !!role && ACADEMY_ROLES.has(role);
-}
+export { canUseAcademy as canSeeAcademy } from './academy-access';

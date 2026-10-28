@@ -11,7 +11,7 @@ describe('StorefrontAdminController', () => {
   it('chỉ ADMIN, không nhóm việc STAFF nào mở được', () => {
     expect(Reflect.getMetadata(ROLES_KEY, StorefrontAdminController)).toEqual(['ADMIN']);
     expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, StorefrontAdminController)).toBeUndefined();
-    for (const name of ['list', 'detail', 'takeDown', 'reinstate', 'approval'] as const) {
+    for (const name of ['list', 'detail', 'takeDown', 'reinstate', 'approval', 'contentSeen'] as const) {
       expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, StorefrontAdminController.prototype[name])).toBeUndefined();
     }
   });
@@ -27,6 +27,7 @@ describe('StorefrontAdminController', () => {
     expect(route('takeDown')).toEqual(['POST', ':id/take-down']);
     expect(route('reinstate')).toEqual(['POST', ':id/reinstate']);
     expect(route('approval')).toEqual(['POST', ':id/approval']);
+    expect(route('contentSeen')).toEqual(['POST', ':id/content-seen']);
   });
 
   it('lý do gỡ đăng bắt buộc (chuỗi toàn khoảng trắng cũng bị từ chối) và tối đa 300 ký tự', async () => {
@@ -42,5 +43,13 @@ describe('StorefrontAdminController', () => {
     expect(await check({ status: 'TAKEN_DOWN', type: 'CTV', q: 'linh', page: '2' })).toBe(0);
     expect(await check({ status: 'HACKED' })).toBeGreaterThan(0);
     expect(await check({ type: 'ADMIN' })).toBeGreaterThan(0);
+  });
+
+  it('bộ lọc "đổi sau duyệt" nhận chuỗi true/false từ query và đổi thành boolean', async () => {
+    const parse = (changedAfterApproval: unknown) => plainToInstance(StorefrontAdminListQueryDto, { changedAfterApproval });
+    expect(parse('true').changedAfterApproval).toBe(true);
+    expect(parse('false').changedAfterApproval).toBe(false);
+    expect(await validate(parse('true'))).toHaveLength(0);
+    expect((await validate(parse('maybe'))).length).toBeGreaterThan(0);
   });
 });

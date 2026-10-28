@@ -77,7 +77,7 @@ describe('Sổ cái ví qua các luồng nghiệp vụ (real Postgres)', () => {
             getTierMultiplier: jest.fn().mockResolvedValue(1),
           },
         },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
         {
           provide: GomdonOrderService,

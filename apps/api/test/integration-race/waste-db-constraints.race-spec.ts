@@ -307,7 +307,7 @@ describe('seeded reference data after migrate deploy', () => {
       expect(typeof r.value).toBe(typeof def.default);
     }
   });
-  it('the ten waste notification templates exist after migrate deploy (prod never runs seed.ts)', async () => {
+  it('the eleven waste notification templates exist after migrate deploy (prod never runs seed.ts)', async () => {
     const rows = await prisma.notificationTemplate.findMany({ where: { code: { startsWith: 'WASTE_' } }, orderBy: { code: 'asc' } });
     expect(rows.map((r) => [r.code, r.id, r.channel])).toEqual([
       ['WASTE_GIFT_CANCELLED', 'nt-waste-gift-cancelled', 'INAPP'],
@@ -318,6 +318,7 @@ describe('seeded reference data after migrate deploy', () => {
       ['WASTE_POINTS_CREDITED', 'nt-waste-points-credited', 'INAPP'],
       ['WASTE_POINTS_REVERSED', 'nt-waste-points-reversed', 'INAPP'],
       ['WASTE_REQUEST_EXPIRED', 'nt-waste-request-expired', 'INAPP'],
+      ['WASTE_REQUEST_EXPIRING', 'nt-waste-request-expiring', 'INAPP'],
       ['WASTE_REQUEST_REJECTED', 'nt-waste-request-rejected', 'INAPP'],
       ['WASTE_SHIP_LOCKED', 'nt-waste-ship-locked', 'INAPP'],
     ]);

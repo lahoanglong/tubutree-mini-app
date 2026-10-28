@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   ensurePhone: vi.fn(),
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } },
   getMyRedemptions: vi.fn(),
+  useCoupon: vi.fn(),
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -40,6 +41,7 @@ vi.mock('../utils/idempotency', () => ({ newIdempotencyKey: () => `key-${++mocks
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publicConfig }));
 vi.mock('../services/account-api', () => ({ getMyRedemptions: mocks.getMyRedemptions }));
 vi.mock('../services/waste-api', async (orig) => ({ ...(await orig<object>()) }));
+vi.mock('../hooks/use-coupon-use', () => ({ useCouponUse: () => ({ copy: vi.fn(), use: mocks.useCoupon }) }));
 vi.mock('../components/qr-code', () => ({ QrCode: ({ value }: { value: string }) => <div data-testid="qr">{value}</div> }));
 
 import RewardsMinePage from './rewards-mine';
@@ -106,11 +108,41 @@ describe('/rewards/mine (§4.8)', () => {
     renderPage();
     expect(await screen.findByText('Đã nhận ngày 26/10/2026')).toBeInTheDocument();
   });
-  it('lượt mã giảm giá dẫn tới ví mã', async () => {
-    mocks.getMyRedemptions.mockResolvedValue([makeGiftRedemption({ giftKind: 'VOUCHER', giftName: 'Miễn phí vận chuyển', status: 'FULFILLED', code: null, couponCode: 'FREESHIP-ABC', claimPoint: null, fulfilledAt: '2026-10-17T03:00:00.000Z' })]);
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Miễn phí vận chuyển/ }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/loyalty');
+  describe('lượt mã giảm giá: hạn dùng và đã dùng chưa', () => {
+    const voucher = (over: Partial<Parameters<typeof makeGiftRedemption>[0]> = {}) =>
+      makeGiftRedemption({ giftKind: 'VOUCHER', giftName: 'Miễn phí vận chuyển', status: 'FULFILLED', code: null, couponCode: 'FREESHIP-ABC', claimPoint: null, fulfilledAt: '2026-10-17T03:00:00.000Z', ...over });
+
+    it('còn hạn, chưa dùng: "Mã X · HSD dd/mm", bấm là dùng mã như nút "Dùng ngay" (không đi trang khác)', async () => {
+      mocks.getMyRedemptions.mockResolvedValue([voucher({ couponEndAt: '2099-11-16T05:00:00.000Z', couponUsed: false })]);
+      renderPage();
+      expect(await screen.findByText('Mã FREESHIP-ABC · HSD 16/11')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Miễn phí vận chuyển/ }));
+      expect(mocks.useCoupon).toHaveBeenCalledWith('FREESHIP-ABC');
+      expect(mocks.navigate).not.toHaveBeenCalled();
+    });
+
+    it('đã dùng: "Mã X · Đã dùng", không bấm được', async () => {
+      mocks.getMyRedemptions.mockResolvedValue([voucher({ couponEndAt: '2099-11-16T05:00:00.000Z', couponUsed: true })]);
+      renderPage();
+      expect(await screen.findByText('Mã FREESHIP-ABC · Đã dùng')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Miễn phí vận chuyển/ })).toBeNull();
+      fireEvent.click(screen.getByText('Miễn phí vận chuyển'));
+      expect(mocks.useCoupon).not.toHaveBeenCalled();
+    });
+
+    it('hết hạn: "Mã X · Hết hạn", không bấm được', async () => {
+      mocks.getMyRedemptions.mockResolvedValue([voucher({ couponEndAt: '2020-01-01T00:00:00.000Z', couponUsed: false })]);
+      renderPage();
+      expect(await screen.findByText('Mã FREESHIP-ABC · Hết hạn')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Miễn phí vận chuyển/ })).toBeNull();
+    });
+
+    it('mã đã bị dọn khỏi hệ thống: báo đã dùng hoặc hết hạn, không bấm được', async () => {
+      mocks.getMyRedemptions.mockResolvedValue([voucher({ couponCode: null })]);
+      renderPage();
+      expect(await screen.findByText('Mã đã dùng hoặc hết hạn')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Miễn phí vận chuyển/ })).toBeNull();
+    });
   });
   it('rỗng → EmptyState dẫn về Kho quà', async () => {
     mocks.getMyRedemptions.mockResolvedValue([]);

@@ -7,11 +7,31 @@ import { MAX_IMAGE_BYTES, isUsableImageFile, readAndCompressImage } from '@/lib/
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 
+/** Tên ngắn đọc cho trình đọc màn hình: bỏ dấu * bắt buộc và chữ "Ảnh" đầu nhãn (đã có sẵn trong câu), giữ nguyên chữ viết tắt như CCCD. */
+function spokenSubject(label: string): string {
+  const subject = label.replace(/\s*\*\s*$/, '').replace(/^Ảnh\s+/i, '').trim();
+  const first = subject.split(' ')[0]!;
+  const acronym = first.length > 1 && first === first.toUpperCase() && first !== first.toLowerCase();
+  return acronym ? subject : subject.charAt(0).toLowerCase() + subject.slice(1);
+}
+
 /**
  * Ô tải ảnh logo/ảnh bìa, cùng cách `ImageUpload` của Mini App: ưu tiên Cloudinary, chưa cấu hình hoặc lỗi thì nén thành
- * data URL JPEG nhẹ (API nhận cả hai, trần 1,5 triệu ký tự).
+ * data URL JPEG nhẹ (API nhận cả hai, trần 1,5 triệu ký tự). `upload="inline"` bỏ qua Cloudinary, dành cho giấy tờ cá nhân
+ * (CCCD): preset Cloudinary không ký, không xoá được khi khách xoá tài khoản.
  */
-export function BrandImageField({ label, value, onChange }: { label: string; value: string; onChange: (url: string) => void }) {
+export function BrandImageField({
+  label,
+  value,
+  onChange,
+  upload = 'cloudinary',
+}: {
+  label: string;
+  value: string;
+  onChange: (url: string) => void;
+  upload?: 'cloudinary' | 'inline';
+}) {
+  const subject = spokenSubject(label);
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +50,7 @@ export function BrandImageField({ label, value, onChange }: { label: string; val
         return;
       }
       setBusy(true);
-      const secureUrl = await uploadToCloudinary(file);
+      const secureUrl = upload === 'inline' ? null : await uploadToCloudinary(file);
       onChange(secureUrl ?? (await readAndCompressImage(file)));
     } catch {
       setError('Tải ảnh thất bại. Hãy chọn lại tệp ảnh khác.');
@@ -43,12 +63,12 @@ export function BrandImageField({ label, value, onChange }: { label: string; val
   return (
     <div>
       <div className="mb-1 text-xs text-stone-600 max-md:text-[length:var(--type-label-size)] max-md:font-semibold max-md:leading-[var(--type-label-lh)] max-md:text-[color:var(--color-text-primary)]">{label}</div>
-      <input ref={inputRef} type="file" accept="image/*" hidden aria-label={`Chọn ảnh ${label.toLowerCase()}`} onChange={(e) => void onFile(e)} />
+      <input ref={inputRef} type="file" accept="image/*" hidden aria-label={`Chọn ảnh ${subject}`} onChange={(e) => void onFile(e)} />
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={busy}
-        aria-label={value ? `Đổi ảnh ${label.toLowerCase()}` : `Tải ảnh ${label.toLowerCase()} lên`}
+        aria-label={value ? `Đổi ảnh ${subject}` : `Tải ảnh ${subject} lên`}
         className="flex min-h-20 w-full items-center justify-center overflow-hidden rounded-control border-2 border-dashed border-stone-450 bg-stone-50 max-md:border-[1.5px] max-md:border-[color:var(--color-border-default)] max-md:bg-[color:var(--color-bg-canvas)] text-sm font-semibold text-forest-700 hover:bg-stone-100 disabled:opacity-60"
       >
         {busy ? (
@@ -58,7 +78,7 @@ export function BrandImageField({ label, value, onChange }: { label: string; val
           </span>
         ) : value ? (
           // eslint-disable-next-line @next/next/no-img-element -- URL Cloudinary hoặc data URL xem trước, domain không cố định
-          <img src={value} alt={`Ảnh ${label.toLowerCase()}`} className="max-h-44 w-full object-cover" />
+          <img src={value} alt={`Ảnh ${subject}`} className="max-h-44 w-full object-cover" />
         ) : (
           <span className="inline-flex items-center gap-1.5 p-4">
             <Camera className="h-4 w-4" aria-hidden="true" />

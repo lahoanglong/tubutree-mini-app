@@ -47,7 +47,9 @@ function setup(row: Record<string, unknown> | null = pending()) {
     },
     $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
   };
-  const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+  const notifyMock = jest.fn().mockResolvedValue(true);
+  // Service gửi tin qua notifySafe; hai tên dùng chung một mock để kiểm theo mã tin.
+  const notifications = { notify: notifyMock, notifySafe: notifyMock };
   const service = new CustomerRefundsService(prisma as never, notifications as never);
   return { service, prisma, tx, notifications };
 }
@@ -78,7 +80,7 @@ describe('CustomerRefundsService.markPaid (D2: admin chuyển khoản tay rồi 
       amount: '114.000đ',
       bank: 'Techcombank ••• 5678',
       bank_ref: 'FT123',
-    });
+    }, undefined, 'order=TB100');
   });
 
   it('khoản chưa khoá bằng "Bắt đầu chuyển khoản" → không cho xác nhận (khách còn đổi sang Ví được)', async () => {
@@ -190,7 +192,7 @@ describe('CustomerRefundsService.chooseDestination (khách chọn nơi nhận kh
       data: expect.objectContaining({ method: 'WALLET', status: 'COMPLETED' }),
     });
     expect(applyWalletDelta).toHaveBeenCalledWith(tx, expect.objectContaining({ userId: 'u1', delta: 114_000, refType: 'CUSTOMER_REFUND', refId: 'r1' }));
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_WALLET_CREDITED', { order_code: 'TB100', amount: '114.000đ' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_WALLET_CREDITED', { order_code: 'TB100', amount: '114.000đ' }, undefined, 'order=TB100');
   });
 
   it('admin vừa xác nhận đã chuyển (guard thua) → KHÔNG cộng Ví', async () => {
@@ -282,7 +284,7 @@ describe('CustomerRefundsService — khoản tiền dư Pancake chờ đối so�
         note: expect.stringContaining('Xác nhận tiền trả dư 114.000đ'),
       }),
     });
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', { order_code: 'TB100', amount: '114.000đ' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', { order_code: 'TB100', amount: '114.000đ' }, undefined, 'order=TB100');
   });
 
   it('sao kê chỉ có một phần → khoản còn đúng số thực nhận, phần còn lại ghi "đã bỏ qua" (Pancake báo lại không đẻ thêm)', async () => {
@@ -305,7 +307,7 @@ describe('CustomerRefundsService — khoản tiền dư Pancake chờ đối so�
       ],
       skipDuplicates: true,
     });
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', { order_code: 'TB100', amount: '50.000đ' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', { order_code: 'TB100', amount: '50.000đ' }, undefined, 'order=TB100');
   });
 
   it.each([0, -1, 114_001, 1.5])('số tiền xác nhận %p ngoài 1đ..số Pancake báo dư → từ chối', async (amount) => {
@@ -379,7 +381,7 @@ describe('CustomerRefundsService — khoản hoàn COD trả hàng chờ kế to
       data: expect.objectContaining({ actorId: 'a1', note: expect.stringContaining('COD') }),
     });
     expect(order.updateMany).toHaveBeenCalledWith({ where: { id: 'o1' }, data: { pancakeAttention: null, pancakeAttentionAt: null } });
-    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', expect.anything());
+    expect((notifications.notify as jest.Mock).mock.calls.filter((c) => c[0] === 'u1' && c[1] === 'REFUND_OVERPAYMENT')).toHaveLength(0);
     expect(applyWalletDelta).not.toHaveBeenCalled();
   });
 
@@ -486,6 +488,66 @@ describe('CustomerRefundsService.list — bộ lọc "Đang mở"', () => {
     expect(findMany.mock.calls[0][0].where).toEqual({ status: { in: ['UNVERIFIED', 'PENDING', 'PROCESSING'] }, kind: 'LATE_PAYMENT' });
     await service.list('COMPLETED', 1, 20);
     expect(findMany.mock.calls[1][0]).toMatchObject({ where: { status: 'COMPLETED' }, orderBy: { createdAt: 'desc' } });
+  });
+});
+
+// Ô tìm của tab Hoàn tiền: mã đơn chính xác hoặc SĐT/tên khách, không có ô tìm thì danh sách như cũ.
+describe('CustomerRefundsService.list — ô tìm theo mã đơn hoặc SĐT', () => {
+  function searchSetup(users: { id: string }[] = []) {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const userFindMany = jest.fn().mockResolvedValue(users);
+    const prisma = {
+      orderCustomerRefund: { findMany, count },
+      user: { findMany: userFindMany },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    };
+    return { service: new CustomerRefundsService(prisma as never), findMany, count, userFindMany };
+  }
+
+  it('không có q, q rỗng hoặc chỉ "#": điều kiện như cũ và không tra khách', async () => {
+    const { service, findMany, userFindMany } = searchSetup();
+    await service.list('OPEN', 1, 20);
+    await service.list('OPEN', 1, 20, undefined, { q: '   ' });
+    await service.list('OPEN', 1, 20, undefined, { q: '#' });
+    for (const call of findMany.mock.calls) expect(call[0].where).toEqual({ status: { in: ['UNVERIFIED', 'PENDING', 'PROCESSING'] } });
+    expect(userFindMany).not.toHaveBeenCalled();
+  });
+
+  it('mã đơn (kèm #, gõ thường) khớp đúng orderCode; số đếm cùng điều kiện', async () => {
+    const { service, findMany, count } = searchSetup();
+    await service.list('PENDING', 1, 20, undefined, { q: ' #tb100 ' });
+    const where = findMany.mock.calls[0][0].where as { status: string; OR: unknown[] };
+    expect(where.status).toBe('PENDING');
+    expect(where.OR).toContainEqual({ orderCode: { in: ['tb100', 'TB100'] } });
+    expect(count).toHaveBeenCalledWith({ where });
+  });
+
+  it('SĐT: khớp khách qua bảng users (chủ đơn, nơi nhận Ví) và cột phone của khách cuối', async () => {
+    const { service, findMany, userFindMany } = searchSetup([{ id: 'u9' }]);
+    await service.list('OPEN', 1, 20, undefined, { q: '0901234567' });
+    expect(userFindMany.mock.calls[0][0].where.OR).toContainEqual({ phone: { contains: '0901234567' } });
+    const or = (findMany.mock.calls[0][0].where as { OR: unknown[] }).OR;
+    expect(or).toContainEqual({ userId: { in: ['u9'] } });
+    expect(or).toContainEqual({ customerUserId: { in: ['u9'] } });
+    expect(or).toContainEqual({ phone: { contains: '0901234567' } });
+  });
+
+  it('người xem bị che SĐT chỉ tìm được bằng đủ số: chuỗi số ngắn không khớp SĐT nào', async () => {
+    const { service, findMany, userFindMany } = searchSetup([]);
+    await service.list('OPEN', 1, 20, undefined, { q: '0901', exactPhoneOnly: true });
+    expect(userFindMany.mock.calls[0]?.[0].where.OR.some((c: { phone?: unknown }) => 'phone' in c)).toBe(false);
+    const or = (findMany.mock.calls[0][0].where as { OR: { phone?: unknown }[] }).OR;
+    expect(or.some((c) => 'phone' in c)).toBe(false);
+    await service.list('OPEN', 1, 20, undefined, { q: '0901234567', exactPhoneOnly: true });
+    expect((findMany.mock.calls[1][0].where as { OR: unknown[] }).OR).toContainEqual({ phone: '0901234567' });
+  });
+
+  it('không khớp gì thì danh sách rỗng chứ không phải mọi khoản', async () => {
+    const { service, findMany } = searchSetup([]);
+    await service.list('OPEN', 1, 20, undefined, { q: 'khongco' });
+    const where = findMany.mock.calls[0][0].where as { OR: unknown[] };
+    expect(where.OR.length).toBeGreaterThan(0);
   });
 });
 

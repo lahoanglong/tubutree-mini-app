@@ -146,8 +146,17 @@ export const getAffiliateLinks = (http: HttpClient) =>
   http.get<AffiliateLink[]>('/affiliate/links');
 export const createAffiliateLink = (http: HttpClient, targetType: string, targetId?: string) =>
   http.post<AffiliateLink>('/affiliate/links', { targetType, targetId });
-export const getCommissions = (http: HttpClient) =>
-  http.get<Commission[]>('/affiliate/commissions');
+/** Lật trang bằng `cursor` = id dòng cuối của trang trước. Không tham số: máy chủ trả mảng mặc định như client cũ. */
+export interface AffiliatePageOpts {
+  take?: number;
+  cursor?: string;
+}
+const pageQuery = ({ take, cursor }: AffiliatePageOpts) => ({
+  ...(take ? { take } : {}),
+  ...(cursor ? { cursor } : {}),
+});
+export const getCommissions = (http: HttpClient, opts: AffiliatePageOpts = {}) =>
+  http.get<Commission[]>('/affiliate/commissions', { query: pageQuery(opts) });
 export interface PayoutResult {
   ok: boolean;
   method?: string;
@@ -156,7 +165,8 @@ export interface PayoutResult {
   payoutId?: string;
   status?: string;
 }
-export const getMyPayouts = (http: HttpClient) => http.get<AffiliatePayout[]>('/affiliate/payouts');
+export const getMyPayouts = (http: HttpClient, opts: AffiliatePageOpts = {}) =>
+  http.get<AffiliatePayout[]>('/affiliate/payouts', { query: pageQuery(opts) });
 /**
  * Chuyển toàn bộ hoa hồng khả dụng vào Ví Tubu (rút về ngân hàng/ZaloPay đã bỏ). Gửi lại cùng Idempotency-Key (chạm đúp, thử lại
  * sau lỗi mạng) không tạo lệnh thứ hai. `taxId`: MST/CCCD khai lần đầu khi lần chuyển bị khấu trừ thuế TNCN.

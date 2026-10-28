@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { PANCAKE_RESOLVE_NOTE_MAX, resolvePancakeAttention, type AdminOrder } from '@/lib/admin-client';
+import { invalidateInbox, PANCAKE_RESOLVE_NOTE_MAX, resolvePancakeAttention, type AdminOrder } from '@/lib/admin-client';
 import { formatDateTime } from '@/lib/format-date';
 import { BTN_XS_SECONDARY, FIELD_XS, ToneBadge, Field } from './ui';
 import { useConfirm } from './confirm-dialog';
@@ -38,6 +38,7 @@ export function PancakeAttentionPanel({ order }: { order: AdminOrder }) {
       setNote('');
       void qc.invalidateQueries({ queryKey: ['admin-orders'] });
       void qc.invalidateQueries({ queryKey: PANCAKE_ATTENTION_COUNT_KEY });
+      void invalidateInbox(qc);
     },
     onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Thao tác thất bại.' }),
     onSettled: () => {

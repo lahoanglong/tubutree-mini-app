@@ -25,7 +25,7 @@ describe('TierDropNoticeService race (real Postgres)', () => {
         AnalyticsEventsService,
         LoyaltyService,
         TierDropNoticeService,
-        { provide: NotificationsService, useValue: { notify } },
+        { provide: NotificationsService, useValue: { notify, notifySafe: notify } },
       ],
     }).compile();
     await moduleRef.init();

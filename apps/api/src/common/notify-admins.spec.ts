@@ -21,6 +21,44 @@ describe('notifyAdmins', () => {
     expect(notify).toHaveBeenCalledWith('a2', 'T', { k: 'v' });
   });
 
+  it('mặc định chỉ ADMIN: lời gọi cũ không truyền audience giữ nguyên bộ lọc', async () => {
+    const { ctx, findMany } = setup();
+    await notifyAdmins(ctx, { template: 'T', subject: 's', data: () => ({}) });
+    expect(findMany.mock.calls[0]![0].where).toEqual({ role: 'ADMIN', isBlocked: false });
+  });
+
+  it("audience 'admins' nói rõ cũng chỉ ADMIN", async () => {
+    const { ctx, findMany } = setup();
+    await notifyAdmins(ctx, { template: 'T', subject: 's', audience: 'admins', data: () => ({}) });
+    expect(findMany.mock.calls[0]![0].where).toEqual({ role: 'ADMIN', isBlocked: false });
+  });
+
+  it("audience 'admins+cskh': ADMIN hoặc STAFF có quyền CSKH, vẫn bỏ tài khoản bị khoá", async () => {
+    const { ctx, findMany, notify } = setup({ admins: [{ id: 'a1' }, { id: 'cs1' }] });
+    await notifyAdmins(ctx, { template: 'T', subject: 's', audience: 'admins+cskh', data: () => ({ k: 'v' }) });
+    expect(findMany).toHaveBeenCalledWith({
+      where: { isBlocked: false, OR: [{ role: 'ADMIN' }, { role: 'STAFF', staffPermissions: { has: 'CSKH' } }] },
+      select: { id: true },
+      orderBy: { role: 'desc' },
+      take: 20,
+    });
+    expect(notify).toHaveBeenCalledWith('cs1', 'T', { k: 'v' });
+  });
+
+  it("nhóm 'admins+cskh' sắp ADMIN trước STAFF (enum UserRole: STAFF đứng trước ADMIN nên phải `desc`), để mức trần 20 không cắt mất ADMIN", async () => {
+    const { ctx, findMany } = setup();
+    await notifyAdmins(ctx, { template: 'T', subject: 's', audience: 'admins+cskh', data: () => ({}) });
+    expect(findMany.mock.calls[0]![0]).toMatchObject({ orderBy: { role: 'desc' }, take: 20 });
+  });
+
+  it("nhóm 'admins' (mặc định) không thêm orderBy: truy vấn của các lời gọi cũ giữ nguyên", async () => {
+    for (const audience of [undefined, 'admins'] as const) {
+      const { ctx, findMany } = setup();
+      await notifyAdmins(ctx, { template: 'T', subject: 's', audience, data: () => ({}) });
+      expect(findMany.mock.calls[0]![0]).not.toHaveProperty('orderBy');
+    }
+  });
+
   it('data bất đồng bộ chạy song song với truy vấn admin', async () => {
     const order: string[] = [];
     const { ctx, findMany } = setup();

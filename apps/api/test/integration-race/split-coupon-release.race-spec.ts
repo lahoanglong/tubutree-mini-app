@@ -43,7 +43,7 @@ describe('Trả lượt dùng mã của lần đặt bị tách (real Postgres)'
         lockCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
         reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
       } as unknown as AffiliateService,
-      { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService,
+      { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } as unknown as NotificationsService,
       reversal,
       undefined,
       new AnalyticsEventsService(prisma),

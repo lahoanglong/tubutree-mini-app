@@ -34,11 +34,11 @@ const without = (v: OrderListExtra, key: keyof OrderListExtra): OrderListExtra =
  * Bộ lọc thêm của tab Đơn hàng (D1-17): loại đơn, tình trạng thanh toán, nền tảng, CTV hoặc gian hàng giới thiệu và thứ tự theo ngày
  * đặt. Cha giữ `value` (đúng tham số API) nên danh sách và nút "Xuất CSV" dùng chung một bộ lọc.
  */
-export function OrderExtraFilters({ value, onChange }: { value: OrderListExtra; onChange: (v: OrderListExtra) => void }) {
+export function OrderExtraFilters({ value, onChange, userLabel }: { value: OrderListExtra; onChange: (v: OrderListExtra) => void; userLabel?: string }) {
   const [picked, setPicked] = useState<PickedItem | null>(null);
   const [storeInput, setStoreInput] = useState(value.storefront ?? '');
   const set = <K extends keyof OrderListExtra>(key: K, v: OrderListExtra[K] | '') => onChange(v ? { ...value, [key]: v } : without(value, key));
-  const hasFilter = !!(value.kind || value.payment || value.platform || value.queue || value.referrerUserId || value.storefront);
+  const hasFilter = !!(value.kind || value.payment || value.platform || value.queue || value.referrerUserId || value.userId || value.storefront);
   const kindHint = ORDER_KIND_OPTIONS.find((o) => o.k === value.kind)?.hint;
 
   const submitStore = (e: React.FormEvent) => {
@@ -111,7 +111,12 @@ export function OrderExtraFilters({ value, onChange }: { value: OrderListExtra; 
           </button>
         )}
       </div>
-      {value.queue && <p className="text-xs text-stone-500">Đang xem đơn lẻ chuyển khoản chưa nhận tiền, cũ nhất trước. Bấm Xoá bộ lọc để xem tất cả.</p>}
+      {value.queue && (
+        <p className="text-xs text-stone-500">
+          {value.queue === 'dealer_transfer_to_confirm' ? 'Đang xem đơn đại lý trả trước chưa nhận tiền' : 'Đang xem đơn lẻ chuyển khoản chưa nhận tiền'}, cũ nhất trước. Bấm Xoá bộ lọc để xem tất cả.
+        </p>
+      )}
+      {value.userId && <p className="text-xs text-stone-500">Đang xem đơn của {userLabel || 'một khách'}. Bấm Xoá bộ lọc để xem tất cả.</p>}
       {kindHint && <p className="text-xs text-stone-500">{kindHint}</p>}
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-[240px] flex-1">

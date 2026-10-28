@@ -30,6 +30,10 @@ export class NotificationsProcessor extends WorkerHost {
     const attempts = job.opts.attempts ?? 1;
     const outcome = await this.notifications.deliverZns(job.data, job.attemptsMade + 1 >= attempts);
     if (outcome === 'SENT') return;
+    if (outcome === 'SKIPPED') {
+      this.logger.warn(`Bỏ qua job ZNS đến muộn của notificationLog ${job.data.notificationLogId}: log đã đóng và khoá đã nhả để gửi lại.`);
+      return;
+    }
     if (outcome === 'FAILED') {
       this.logger.error(`Gửi ZNS THẤT BẠI cho notificationLog ${job.data.notificationLogId} (xem cột error)`);
       return;

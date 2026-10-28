@@ -64,7 +64,7 @@ async function call(method, path, body, auth = true, extraHeaders = {}) {
   }
 
   r = await call('GET', '/game/profile'); log('Vườn Xanh profile', r.status === 200);
-  r = await call('POST', '/game/check-in', {}); log('điểm danh game', r.status < 400);
+  r = await call('POST', '/me/daily-check-in', {}); log('điểm danh game', r.status < 400);
   r = await call('GET', '/me/loyalty'); log('loyalty', r.status === 200, `hạng=${r.json?.tier?.name}`);
 
   const pass = results.filter(Boolean).length;

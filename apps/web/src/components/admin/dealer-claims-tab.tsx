@@ -10,6 +10,7 @@ import {
   reopenDealerRewardClaim,
   type AdminDealerRewardClaim,
   type DealerRewardClaimStatus,
+  invalidateInbox,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import {
@@ -150,11 +151,13 @@ export function ClaimRow({ claim: c, canReview = true }: { claim: AdminDealerRew
       setErr(null);
       setText('');
       void qc.invalidateQueries({ queryKey: ['admin-dealer-claims'] });
+      void invalidateInbox(qc);
     },
     onError: (e) => {
       setErr(e instanceof Error ? e.message : 'Thao tác thất bại.');
       // Trạng thái có thể vừa bị admin khác đổi — tải lại để thấy trạng thái thật.
       void qc.invalidateQueries({ queryKey: ['admin-dealer-claims'] });
+      void invalidateInbox(qc);
     },
   });
 

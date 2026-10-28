@@ -1,4 +1,5 @@
 import { test as base, expect, type Request, type Route } from '@playwright/test';
+import { waitForHydrationAfterGoto } from './hydrate';
 import { captureByPathname, installVisualMode, recordTourUnmocked } from './visual';
 import type { AuthUser, LoginResponse, OrderDTO, WasteMeDTO } from '@tubutree/shared-types';
 import type { MeProfile, NewCustomerOffer } from '../../../miniapp/src/services/account-api';
@@ -328,6 +329,11 @@ function corsHeaders(reqHeaders: Record<string, string>): Record<string, string>
  * /api/** và host ngoài vẫn được cài trước khi trang mở.
  */
 export const test = base.extend<{ api: MockApi; visualCapture: void }>({
+  // Web: page.goto trả về sau khi React đã gắn xong, để thao tác đầu tiên không bị nuốt (Mini App là SPA Vite, không có dấu này).
+  page: async ({ page }, use, testInfo) => {
+    if (testInfo.project.name.startsWith('Web ')) waitForHydrationAfterGoto(page);
+    await use(page);
+  },
   visualCapture: [
     async ({ page }, use, testInfo) => {
       const dir = process.env.VISUAL_DIR;
@@ -365,6 +371,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       api.fallback('GET', '/config/public', {});
       // Mini App gắn một nhịp tải lại danh sách Giờ vàng ở gốc app (useFlashSalesPoller): mọi trang đều gọi; mặc định không có suất nào.
       api.fallback('GET', '/flash-sales/active', []);
+      // Cá nhân, Trang chủ và chuông web chỉ đếm tin chưa đọc (không tải danh sách); mặc định không có tin nào.
+      api.fallback('GET', '/me/notifications/unread-count', { count: 0 });
       if (testInfo.project.name.startsWith('Web ')) shellDefaults(api);
       if (testInfo.project.name === 'Web Admin') adminShellDefaults(api);
       // Đăng ký TRƯỚC → ưu tiên THẤP NHẤT (Playwright chạy route đăng ký sau trước).
@@ -414,10 +422,13 @@ export function loyaltyDefaults(api: MockApi): void {
     rewards: [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, points: day, claimed: day === 1, isToday: day === 1 })),
   });
   api.fallback('GET', '/me/coupons', []);
+  api.fallback('POST', '/checkout/coupon-previews', { coupons: [] });
   api.fallback('GET', '/me/referral', { referralCode: 'E2EREF', successCount: 0, earnedPoints: 0, milestones: [], nextMilestone: null });
   api.fallback('GET', '/feed', { posts: [], nextCursor: null });
   api.fallback('GET', '/feed/public-preview', { posts: [] });
 }
+
+const ZERO_ORDER_COUNTS = { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0 };
 
 /**
  * Mặc định cho lời gọi của vỏ web (AppGates, huy hiệu đơn) chạy ở MỌI trang khi đã đăng nhập, kể cả /admin — Mini App cũng gọi
@@ -432,6 +443,9 @@ function shellDefaults(api: MockApi): void {
     id: 'e2e-shell-user', fullName: null, email: null, avatarUrl: null, dob: null, onboarded: true, segments: [],
   });
   api.fallback('GET', '/orders/active-count', { count: 0 });
+  api.fallback('GET', '/orders/status-counts', ZERO_ORDER_COUNTS);
+  // Menu tài khoản của nhân viên/đại lý hỏi điểm quầy để chỉ hiện "Nhận hàng tại điểm" khi có quầy; mặc định không có quầy nào.
+  api.fallback('GET', '/waste/desk/points', []);
   api.fallback('GET', '/me/subscriptions', []);
   // Chuông ở thanh đầu máy tính hỏi thông báo ở mọi trang khi đã đăng nhập.
   api.fallback('GET', '/me/notifications', []);
@@ -485,6 +499,10 @@ export function mockSession(api: MockApi, user: AuthUser): AuthUser {
   // Spec cần số khác thì đăng ký lại SAU (đăng ký sau thắng) — và phải đăng ký SAU mọi mock
   // '/orders/:code' vì pattern đó cũng khớp '/orders/active-count'.
   api.get('/orders/active-count', { count: 0 });
+  // Số đơn theo tab của trang Cá nhân (một lời gọi); mặc định không có đơn nào.
+  api.get('/orders/status-counts', ZERO_ORDER_COUNTS);
+  // Cá nhân của nhân viên/đại lý hỏi điểm quầy để chỉ hiện "Nhận hàng tại điểm" khi có quầy; mặc định không có quầy nào.
+  api.get('/waste/desk/points', []);
   // Kệ "Mua lại" (Home + tab Đơn hàng) — mặc định khách chưa mua gì.
   api.get('/me/purchased-items', { items: [], nextCursor: null });
   // Trang Danh mục/Tìm kiếm (dự án 4b) — mọi endpoint nó gọi, mặc định rỗng đúng shape để mở /browse

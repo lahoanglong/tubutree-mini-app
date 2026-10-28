@@ -101,4 +101,3 @@ describe('missionTarget', () => {
     expect(missionTarget('toString')).toBeNull();
   });
 });
-

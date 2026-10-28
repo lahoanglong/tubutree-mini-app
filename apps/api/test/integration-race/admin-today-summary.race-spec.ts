@@ -88,11 +88,34 @@ describe('Hôm nay khớp Báo cáo doanh thu (real Postgres)', () => {
     expect(today.orders).toEqual({ today: t.orders, yesterday: y.orders, week: w.orders });
     expect(today.revenue).toEqual({ today: t.revenue, yesterday: y.revenue, week: w.revenue });
     expect(today.newUsers).toEqual({ today: t.newUsers, yesterday: y.newUsers, week: w.newUsers });
+    // Giá trị đơn đặt (GMV) dùng đúng GMV_ORDER_SQL của báo cáo.
+    expect(today.gmv).toEqual({ today: t.gmv, yesterday: y.gmv, week: w.gmv });
 
     // Số cụ thể, để lệch cả hai bên cùng lúc cũng bị bắt.
     expect(today.orders).toEqual({ today: 5, yesterday: 1, week: 7 });
     expect(today.revenue).toEqual({ today: 1_000_000 - 200_000 + 70_000, yesterday: 200_000, week: 1_000_000 - 200_000 + 70_000 + 200_000 + 80_000 });
+    // GMV: đơn CONFIRMED/PACKED/SHIPPING/DELIVERED, tính cả COD chưa giao và không trừ hoàn một phần; huỷ/trả không tính.
+    // Hôm nay: giao 1.000.000 + COD giao 70.000 + COD CONFIRMED 45.000. Hôm qua 300.000. 7 ngày thêm 300.000 + 80.000.
+    expect(today.gmv).toEqual({ today: 1_000_000 + 70_000 + 45_000, yesterday: 300_000, week: 1_000_000 + 70_000 + 45_000 + 300_000 + 80_000 });
     // Hôm nay: người có SĐT và target; loại STAFF, ADMIN, khách cũ gắn nguồn muộn và dòng đã gộp. (buyer tạo ở ngày thật nên ngoài khoảng.)
     expect(today.newUsers).toEqual({ today: 2, yesterday: 1, week: 4 });
+  });
+
+  it('đơn COD vừa đặt hôm nay: tiền đã thu 0đ nhưng giá trị đơn đặt bằng tổng đơn, khớp Báo cáo cùng ngày', async () => {
+    // 2019-08-12 05:00Z = 12:00 giờ VN; khoảng ngày riêng để không lẫn dữ liệu của test trên.
+    const now = new Date('2019-08-12T05:00:00Z');
+    const T = new Date('2019-08-12T03:00:00Z');
+    const buyer = await mkUser();
+    await createOrder(prisma, { userId: buyer.id, source: 'checkout', platform: 'miniapp', createdAt: T, status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 250_000 });
+
+    const none = {} as never;
+    const admin = new AdminService(prisma, none, none, none, none, none, none, none, none, none);
+    const today = await admin.getTodaySummary(now);
+    const t = (await new AdminReportsService(prisma).revenueReport({ from: '2019-08-12', to: '2019-08-12' }, now)).totals;
+
+    expect(today.revenue.today).toBe(0);
+    expect(today.gmv.today).toBe(250_000);
+    expect(today.gmv.today).toBe(t.gmv);
+    expect(today.revenue.today).toBe(t.revenue);
   });
 });

@@ -606,6 +606,18 @@ export const vi = {
     publishNeedsProduct: 'Thêm ít nhất 1 sản phẩm để đăng gian hàng.',
     shareStore: 'Chia sẻ gian hàng',
     unpublish: 'Gỡ đăng',
+    unpublishStore: 'Gỡ đăng gian hàng',
+    moveUp: 'Đưa lên',
+    moveDown: 'Đưa xuống',
+    moreItemActions: 'Tuỳ chọn sản phẩm',
+    moreCollectionActions: 'Tuỳ chọn bộ sưu tập',
+    pinItem: 'Ghim lên đầu',
+    pinnedBadge: 'Đã ghim',
+    unpinItem: 'Bỏ ghim',
+    hideItem: 'Ẩn sản phẩm',
+    showItem: 'Hiện sản phẩm',
+    removeItem: 'Xoá khỏi bộ sưu tập',
+    claimQuest: (points: string) => `Nhận ${points}`,
     unpublishConfirm: 'Gỡ đăng gian hàng này?',
     unpublishHint: 'Khách mở link gian hàng sẽ không thấy gì cho tới khi bạn đăng lại.',
     unpublished: 'Đã gỡ đăng gian hàng',
@@ -717,6 +729,7 @@ export const vi = {
     ],
     agree: 'Tôi đã đọc và đồng ý với điều khoản hoa hồng & thuế của CTV Tubu Tree',
     mustAgree: 'Chọn ô đồng ý điều khoản để đăng ký',
+    needZalo: 'Cần liên kết Zalo để nhận hoa hồng. Bấm Đăng ký lại và chọn cho phép dùng số điện thoại nhé.',
   },
 
   dealerApply: {
@@ -739,7 +752,7 @@ export const vi = {
   },
 
   contentKit: {
-    entryLabel: 'Nội dung',
+    entryLabel: 'Bài đăng mẫu',
     sheetTitle: 'Nội dung bán hàng',
     loading: 'Đang tải nội dung…',
     captionsHeading: 'Bài mẫu (chạm để sao chép)',

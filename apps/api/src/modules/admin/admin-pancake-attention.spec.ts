@@ -29,11 +29,22 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
     expect(count).toHaveBeenCalledWith({ where: { pancakeAttentionAt: { not: null } } });
   });
 
-  it('"Đã xử lý" → xoá lý do + mốc (rời hàng đợi), chỉ khi đơn đang trong hàng đợi', async () => {
-    const order = { id: 'o1', code: 'TUBU1', pancakeAttention: 'Pancake báo ĐANG HOÀN', pancakeAttentionAt: new Date() };
+  it('"Đã xử lý" → xoá lý do + mốc (rời hàng đợi), chỉ khi đơn đang trong hàng đợi; ghi một dòng lịch sử đơn cùng trạng thái', async () => {
+    const order = { id: 'o1', code: 'TUBU1', status: 'SHIPPING', pancakeAttention: 'Pancake báo ĐANG HOÀN', pancakeAttentionAt: new Date() };
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
-    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany } };
+    const history = jest.fn().mockResolvedValue({});
+    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany }, orderStatusHistory: { create: history } };
     const res = await mkAdmin(prisma).resolvePancakeAttention('admin1', 'TUBU1', '  đã gọi khách  ');
+    expect(history).toHaveBeenCalledWith({
+      data: {
+        orderId: 'o1',
+        fromStatus: 'SHIPPING',
+        toStatus: 'SHIPPING',
+        actorType: 'ADMIN',
+        actorId: 'admin1',
+        note: 'Đã xử lý việc Pancake: Pancake báo ĐANG HOÀN — đã gọi khách',
+      },
+    });
     expect(updateMany).toHaveBeenCalledWith({
       where: { id: 'o1', pancakeAttentionAt: { not: null } },
       data: { pancakeAttention: null, pancakeAttentionAt: null },
@@ -41,11 +52,53 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
     expect(res).toEqual({ ok: true, message: expect.stringContaining('TUBU1') });
   });
 
+  it('"Đã xử lý" không ghi chú thì dòng lịch sử chỉ có lý do cũ; ghi lịch sử lỗi không làm hỏng việc đã đóng', async () => {
+    const order = { id: 'o1', code: 'TUBU1', status: 'CONFIRMED', pancakeAttention: 'Pancake báo đơn bị xoá', pancakeAttentionAt: new Date() };
+    const history = jest.fn().mockRejectedValue(new Error('db down'));
+    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany: jest.fn().mockResolvedValue({ count: 1 }) }, orderStatusHistory: { create: history } };
+    const admin = mkAdmin(prisma);
+    jest.spyOn((admin as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => undefined);
+    await expect(admin.resolvePancakeAttention('admin1', 'TUBU1')).resolves.toMatchObject({ ok: true });
+    expect(history.mock.calls[0][0].data.note).toBe('Đã xử lý việc Pancake: Pancake báo đơn bị xoá');
+  });
+
+  it.each(['CANCELLED', 'RETURNED'])(
+    'đơn %s chưa có mốc đảo sau huỷ/trả: vẫn đóng việc nhưng KHÔNG ghi dòng lịch sử cùng trạng thái (cron chạy lại lấy nhầm dòng đóng đơn)',
+    async (status) => {
+      const order = { id: 'o1', code: 'TUBU1', status, reversalEffectsAt: null, pancakeAttention: 'Pancake báo ĐANG HOÀN', pancakeAttentionAt: new Date() };
+      const history = jest.fn().mockResolvedValue({});
+      const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+      const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany }, orderStatusHistory: { create: history } };
+      const admin = mkAdmin(prisma);
+      jest.spyOn((admin as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => undefined);
+      await expect(admin.resolvePancakeAttention('admin1', 'TUBU1', 'đã gọi khách')).resolves.toMatchObject({ ok: true });
+      expect(updateMany).toHaveBeenCalled();
+      expect(history).not.toHaveBeenCalled();
+    },
+  );
+
+  it('đơn CANCELLED đã có mốc đảo sau huỷ/trả thì vẫn ghi dòng lịch sử như thường', async () => {
+    const order = { id: 'o1', code: 'TUBU1', status: 'CANCELLED', reversalEffectsAt: new Date(), pancakeAttention: 'Pancake báo đơn bị xoá', pancakeAttentionAt: new Date() };
+    const history = jest.fn().mockResolvedValue({});
+    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany: jest.fn().mockResolvedValue({ count: 1 }) }, orderStatusHistory: { create: history } };
+    await mkAdmin(prisma).resolvePancakeAttention('admin1', 'TUBU1');
+    expect(history).toHaveBeenCalledTimes(1);
+    expect(history.mock.calls[0][0].data).toMatchObject({ fromStatus: 'CANCELLED', toStatus: 'CANCELLED', actorType: 'ADMIN' });
+  });
+
+  it('đơn không còn trong hàng đợi (updateMany 0) thì không ghi lịch sử', async () => {
+    const order = { id: 'o1', code: 'TUBU1', status: 'CONFIRMED', pancakeAttention: 'x', pancakeAttentionAt: new Date() };
+    const history = jest.fn();
+    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany: jest.fn().mockResolvedValue({ count: 0 }) }, orderStatusHistory: { create: history } };
+    await expect(mkAdmin(prisma).resolvePancakeAttention('a', 'TUBU1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(history).not.toHaveBeenCalled();
+  });
+
   it('lý do COD trả hàng chưa thu: còn khoản chờ kế toán đối soát thì "Đã xử lý" bị chặn (nhân viên kho không đóng được việc hoàn tiền)', async () => {
     const order = { id: 'o1', code: 'TUBU1', pancakeAttention: ATTENTION_COD_RETURN_UNVERIFIED, pancakeAttentionAt: new Date() };
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const findFirst = jest.fn().mockResolvedValue({ id: 'r1' });
-    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany }, orderCustomerRefund: { findFirst } };
+    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany }, orderCustomerRefund: { findFirst }, orderStatusHistory: { create: jest.fn().mockResolvedValue({}) } };
     await expect(mkAdmin(prisma).resolvePancakeAttention('kho1', 'TUBU1')).rejects.toThrow('Hoàn tiền khách');
     expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { orderId: 'o1', kind: 'RETURN', refKey: 'cod-return-unverified', status: 'UNVERIFIED' } }));
     expect(updateMany).not.toHaveBeenCalled();

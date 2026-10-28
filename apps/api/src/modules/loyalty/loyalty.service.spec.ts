@@ -320,15 +320,70 @@ function reverseHarness(order: ReverseOrder, opts: { reversed?: unknown; deliver
  * test/integration-race/pf3-reverse-order-points.race-spec.ts.
  */
 describe('LoyaltyService.getPointsTransactions (lịch sử điểm của khách)', () => {
-  it('loại dòng ORDER_REVERSED delta 0, giữ mọi dòng khác (kể cả ORDER_REVERSED có số điểm), mới nhất trước, tối đa 100', async () => {
+  const NOT_ZERO_REVERSAL = { NOT: { delta: 0, reason: { startsWith: 'ORDER_REVERSED:' } } };
+
+  it('không tham số (client cũ): loại dòng ORDER_REVERSED delta 0, mới nhất trước, tối đa 100 dòng, trả mảng', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const prisma = { pointsTransaction: { findMany } } as unknown as PrismaService;
     await new LoyaltyService(prisma, makeConfig()).getPointsTransactions('u1');
     expect(findMany).toHaveBeenCalledWith({
-      where: { userId: 'u1', NOT: { delta: 0, reason: { startsWith: 'ORDER_REVERSED:' } } },
-      orderBy: { createdAt: 'desc' },
+      where: { userId: 'u1', ...NOT_ZERO_REVERSAL },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 100,
     });
+  });
+
+  it('trang kế: lấy dòng cũ hơn mốc (createdAt, id) theo đúng thứ tự sắp, limit bị chặn trong 1..100', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { pointsTransaction: { findMany } } as unknown as PrismaService;
+    const before = new Date('2026-10-20T03:00:00.123Z');
+    const svc = new LoyaltyService(prisma, makeConfig());
+
+    await svc.getPointsTransactions('u1', { before, beforeId: 'tx9', limit: 20 });
+    expect(findMany).toHaveBeenLastCalledWith({
+      where: { userId: 'u1', ...NOT_ZERO_REVERSAL, OR: [{ createdAt: { lt: before } }, { createdAt: before, id: { lt: 'tx9' } }] },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 20,
+    });
+
+    await svc.getPointsTransactions('u1', { before, limit: 5000 });
+    expect(findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 100, where: { userId: 'u1', ...NOT_ZERO_REVERSAL, createdAt: { lt: before } } }));
+    await svc.getPointsTransactions('u1', { limit: 0 });
+    expect(findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 1 }));
+  });
+
+  // Sổ giả lọc và sắp đúng như Postgres: ba trang liên tiếp theo mốc (createdAt, id) không trùng, không sót, kể cả cùng createdAt.
+  it('ba trang liên tiếp không trùng, không sót, ổn định khi nhiều dòng cùng createdAt', async () => {
+    const T = (s: number) => new Date(Date.UTC(2026, 9, 20, 3, 0, s));
+    const rows = [
+      ...Array.from({ length: 5 }, (_, i) => ({ id: `a${i}`, createdAt: T(10) })), // 5 dòng cùng một mili giây
+      ...Array.from({ length: 4 }, (_, i) => ({ id: `b${i}`, createdAt: T(9 - i) })),
+      { id: 'c0', createdAt: T(1) },
+    ];
+    const sorted = [...rows].sort((x, y) => y.createdAt.getTime() - x.createdAt.getTime() || (x.id < y.id ? 1 : -1));
+    type W = { OR?: { createdAt: Date | { lt: Date }; id?: { lt: string } }[]; createdAt?: { lt: Date } };
+    const findMany = jest.fn(async ({ where, take }: { where: W; take: number }) => {
+      const hit = sorted.filter((r) => {
+        if (where.OR) {
+          return where.OR.some((c) =>
+            c.id ? r.createdAt.getTime() === (c.createdAt as Date).getTime() && r.id < c.id.lt : r.createdAt < (c.createdAt as { lt: Date }).lt,
+          );
+        }
+        return true;
+      });
+      return hit.slice(0, take);
+    });
+    const svc = new LoyaltyService({ pointsTransaction: { findMany } } as unknown as PrismaService, makeConfig());
+
+    const seen: string[] = [];
+    let page = await svc.getPointsTransactions('u1', { limit: 4 });
+    for (let guard = 0; page.length > 0 && guard < 10; guard++) {
+      seen.push(...page.map((r) => r.id));
+      const last = page[page.length - 1]!;
+      page = await svc.getPointsTransactions('u1', { before: last.createdAt, beforeId: last.id, limit: 4 });
+    }
+    expect(seen).toEqual(sorted.map((r) => r.id));
+    expect(new Set(seen).size).toBe(rows.length);
   });
 });
 
@@ -988,6 +1043,55 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       expect(ov.spent12m).toBe(1_300_000);
     });
 
+    it('khung giữ hạng bắt đầu từ lượt xét 03:15 (giờ VN) đầu tiên sau hạn: đơn nằm giữa hai mốc không được tính', async () => {
+      // Hạn 17:00 giờ VN ngày 20/11; lượt xét hạ hạng chạy 03:15 sáng 21/11 nhìn lại từ 03:15 ngày 21/11 năm trước.
+      const until = new Date('2026-11-20T10:00:00.000Z');
+      const orders = [
+        { total: 1_000_000, createdAt: new Date('2025-11-20T15:00:00.000Z') }, // sau (until − 12 tháng), trước (03:15 − 12 tháng)
+        { total: 300_000, createdAt: new Date('2026-03-01T03:00:00.000Z') },
+      ];
+      const prisma = {
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0 }) },
+        membershipTier: { findMany: jest.fn().mockResolvedValue(GRACE_TIERS) },
+        order: {
+          aggregate: jest.fn(async ({ where }: { where: { createdAt: { gte: Date } } }) => ({
+            _sum: { total: orders.filter((o) => o.createdAt >= where.createdAt.gte).reduce((a, o) => a + o.total, 0) },
+          })),
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+        externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
+        pointsTransaction: fakeLedger([]),
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      const gap = await new LoyaltyService(prisma, makeConfig()).tierKeepGap('u1', GRACE_TIERS[1] as never, until);
+      expect(gap.spendingToKeep).toBe(1_200_000);
+    });
+
+    it('hạn đã qua 03:15 giờ VN của ngày đó thì lượt xét là 03:15 ngày hôm sau', async () => {
+      const calls: Date[] = [];
+      const prisma = {
+        order: {
+          aggregate: jest.fn(async ({ where }: { where: { createdAt: { gte: Date } } }) => {
+            calls.push(where.createdAt.gte);
+            return { _sum: { total: 0 } };
+          }),
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+        externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
+        pointsTransaction: fakeLedger([]),
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      const svc = new LoyaltyService(prisma, makeConfig());
+      // 02:00 giờ VN ngày 21/11 (19:00Z ngày 20): lượt 03:15 cùng ngày chưa tới → lượt đó là 03:15 ngày 21 (20:15Z ngày 20).
+      await svc.tierKeepGap('u1', GRACE_TIERS[1] as never, new Date('2026-11-20T19:00:00.000Z'));
+      // 04:00 giờ VN ngày 21/11 (21:00Z ngày 20): đã qua 03:15 → lượt kế là 03:15 ngày 22 (20:15Z ngày 21).
+      await svc.tierKeepGap('u1', GRACE_TIERS[1] as never, new Date('2026-11-20T21:00:00.000Z'));
+      expect(calls[0]!.toISOString()).toBe('2025-11-20T20:15:00.000Z');
+      expect(calls[1]!.toISOString()).toBe('2025-11-21T20:15:00.000Z');
+    });
+
     it('không có hạn, hoặc hạn đã qua, hoặc chưa có hạng: không trả tierGrace', async () => {
       const past = new Date(Date.now() - 864e5);
       expect((await new LoyaltyService(build({ tierId: 'loc', tier: GRACE_TIERS[1], tierGraceUntil: null }), makeConfig()).getOverview('u1')).tierGrace).toBeNull();
@@ -1369,6 +1473,29 @@ describe('LoyaltyService.recalcAllTiers (tránh N+1)', () => {
     const n = await new LoyaltyService(prisma, makeConfig()).recalcAllTiers();
     expect(n).toBe(3);
     expect(findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('lỗi từng khách ghi log ERROR (cron-run chỉ coi log error là ERRORS) và không chặn khách sau', async () => {
+    const prisma = {
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 'u1' }, { id: 'u2' }]) },
+      membershipTier: { findMany: jest.fn().mockResolvedValue([{ id: 'mam', sortOrder: 0, minPoints: 0, minSpending: null }]) },
+    } as unknown as PrismaService;
+    const svc = new LoyaltyService(prisma, makeConfig());
+    const recalc = jest
+      .spyOn(svc, 'recalcTier')
+      .mockRejectedValueOnce(new Error('db đứt'))
+      .mockResolvedValueOnce(undefined);
+    const logger = (svc as unknown as { logger: { error: jest.Mock; warn: jest.Mock } }).logger;
+    const error = jest.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    const n = await svc.recalcAllTiers();
+
+    expect(n).toBe(2);
+    expect(recalc).toHaveBeenCalledTimes(2);
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error.mock.calls[0]![0]).toContain('recalcTier lỗi user=u1');
+    expect(warn).not.toHaveBeenCalled();
   });
 
   // Nạp hạng muộn (deploy không cờ rồi chạy --with-business-defaults): khách có đơn giao trước đó còn tierId null và

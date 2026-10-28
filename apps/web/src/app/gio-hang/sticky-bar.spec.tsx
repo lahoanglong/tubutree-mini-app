@@ -7,6 +7,7 @@ import { recallCheckoutSelection } from '@/lib/checkout-selection';
 // D7 việc 4: giỏ hàng trên điện thoại có thanh dính đáy (tạm tính đã giảm + "Thanh toán (N)" như Mini App), checkbox ≥ 24px.
 
 const state = vi.hoisted(() => ({ cart: null as unknown }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => '/gio-hang' }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
@@ -47,9 +48,10 @@ afterEach(() => {
 });
 
 describe('/gio-hang — thanh dính đáy', () => {
-  it('hiện tạm tính đã giảm và liên kết "Thanh toán (số lượng)" sang /thanh-toan', async () => {
+  it('hiện tạm tính và liên kết "Thanh toán (số lượng)" sang /thanh-toan; chưa có giảm thì không ghi "đã giảm"', async () => {
     const c = await mount();
-    expect(bar(c)!.textContent).toContain('Tạm tính (đã giảm)300.000đ');
+    expect(bar(c)!.textContent).toContain('Tạm tính300.000đ');
+    expect(bar(c)!.textContent).not.toContain('đã giảm');
     const link = bar(c)!.querySelector<HTMLAnchorElement>('a[href="/thanh-toan"]')!;
     expect(link.textContent).toBe('Thanh toán (2)');
   });
@@ -58,6 +60,16 @@ describe('/gio-hang — thanh dính đáy', () => {
     state.cart = cartOf([line({})], { discount: 50000, couponCode: 'XANH50' });
     const c = await mount();
     expect(bar(c)!.textContent).toContain('Tạm tính (đã giảm)250.000đ');
+  });
+
+  it.each([
+    ['mã giảm giá', { discount: 50000, couponCode: 'XANH50' }, '250.000đ'],
+    ['giảm combo', { comboDiscount: 20000 }, '280.000đ'],
+    ['ưu đãi hạng thành viên', { tierDiscount: 10000 }, '290.000đ'],
+  ])('có %s: nhãn là "Tạm tính (đã giảm)"', async (_name, over, total) => {
+    state.cart = cartOf([line({})], over);
+    const c = await mount();
+    expect(bar(c)!.textContent).toContain(`Tạm tính (đã giảm)${total}`);
   });
 
   it('bấm trên thanh dính cũng nhớ phần giỏ đang chọn (toàn giỏ khi chọn hết)', async () => {

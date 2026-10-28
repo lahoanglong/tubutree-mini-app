@@ -183,6 +183,16 @@ describe('Controller + DTO — bộ lọc mới của GET /admin/orders (D1-17)'
     });
   });
 
+  it('userId của khách đi qua controller xuống listOrders, và bị 400 khi quá dài', async () => {
+    const admin = { listOrders: jest.fn().mockResolvedValue({ data: [] }) };
+    const ctl = new AdminController(admin as never, {} as never);
+    await ctl.orders(Object.assign(new ListOrdersQuery(), { page: 1, limit: 20, userId: 'u1' }), VIEWER);
+    expect(admin.listOrders.mock.calls[0]![10]).toMatchObject({ userId: 'u1' });
+    expect(await validate(plainToInstance(ListOrdersQuery, { userId: 'cuid123' }))).toHaveLength(0);
+    expect((await validate(plainToInstance(ListOrdersQuery, { userId: 'a'.repeat(65) }))).map((e) => e.property)).toEqual(['userId']);
+    expect(await validate(plainToInstance(ExportOrdersQuery, { userId: 'cuid123' }))).toHaveLength(0);
+  });
+
   it('giá trị lạ bị 400 (không lọt xuống Prisma): kind, payment, platform, order, id quá dài', async () => {
     const ok = await validate(
       plainToInstance(ListOrdersQuery, { kind: 'dealer', payment: 'REFUNDED', platform: 'web', order: 'desc', referrerUserId: 'abc', storefront: 'x' }),

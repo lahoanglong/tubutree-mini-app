@@ -39,6 +39,7 @@ vi.mock('../components/store-page-shell', () => ({
 }));
 
 import { useStorefrontContext } from '../store/storefront-context';
+import { cartStorefrontSlug } from '../services/cart-key';
 import { useAuthStore } from '../store/auth';
 import StorefrontViewPage from './storefront-view';
 
@@ -85,6 +86,52 @@ describe('StorefrontViewPage — mã giới thiệu lấy từ API, không suy t
     await waitFor(() => expect(useStorefrontContext.getState().slug).toBe('doi-tac'));
     expect(useStorefrontContext.getState().referralCode).toBeNull();
     expect(mocks.shareSheetProps).toHaveBeenCalledWith(expect.objectContaining({ referralCode: null }));
+  });
+});
+
+describe('StorefrontViewPage: ngữ cảnh ghi công theo loại gian hàng (E-48)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    useStorefrontContext.getState().clear();
+    useAuthStore.setState({ user: null });
+  });
+
+  it('gian hàng đối tác (MERCHANT): không xoá mã CTV đang có, không gắn slug gian hàng vào đơn', async () => {
+    useStorefrontContext.getState().setContext({ slug: 'an', referralCode: 'AN123', kind: 'ctv' });
+    mocks.getPublicStorefront.mockResolvedValue(storefront({ type: 'MERCHANT', slug: 'doi-tac', referralCode: null }));
+    renderPage('doi-tac');
+    await screen.findByText('Gian hàng Lan');
+    await waitFor(() => expect(useStorefrontContext.getState().slug).toBe('doi-tac'));
+    const ctx = useStorefrontContext.getState();
+    expect(ctx.referralCode).toBe('AN123');
+    expect(ctx.kind).not.toBe('ctv');
+    expect(cartStorefrontSlug()).toBeNull();
+  });
+
+  it('gian hàng đối tác: quay lại và "Tiếp tục mua sắm" vẫn về trang /s/ của gian hàng, không rẽ sang /brand/', async () => {
+    mocks.getPublicStorefront.mockResolvedValue(storefront({ type: 'MERCHANT', slug: 'doi-tac', referralCode: null }));
+    renderPage('doi-tac');
+    await waitFor(() => expect(useStorefrontContext.getState().slug).toBe('doi-tac'));
+    expect(useStorefrontContext.getState().kind).not.toBe('brand');
+  });
+
+  it('gian hàng nhãn hàng (BRAND): cũng không phải gian hàng CTV', async () => {
+    useStorefrontContext.getState().setContext({ referralCode: 'AN123', kind: 'ctv' });
+    mocks.getPublicStorefront.mockResolvedValue(storefront({ type: 'BRAND', slug: 'nhan-hang', referralCode: null }));
+    renderPage('nhan-hang');
+    await waitFor(() => expect(useStorefrontContext.getState().slug).toBe('nhan-hang'));
+    expect(useStorefrontContext.getState().referralCode).toBe('AN123');
+    expect(cartStorefrontSlug()).toBeNull();
+  });
+
+  it('gian hàng CTV: đặt mã của CTV, kind ctv (gắn slug vào đơn) và biết trước mã hợp lệ', async () => {
+    mocks.getPublicStorefront.mockResolvedValue(storefront({ type: 'CTV', slug: 'lan-shop', referralCode: 'ABCD1234' }));
+    renderPage('lan-shop');
+    await waitFor(() => expect(useStorefrontContext.getState().referralCode).toBe('ABCD1234'));
+    const ctx = useStorefrontContext.getState();
+    expect(ctx).toMatchObject({ slug: 'lan-shop', kind: 'ctv', referralEligible: true });
+    expect(cartStorefrontSlug()).toBe('lan-shop');
   });
 });
 

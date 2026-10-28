@@ -60,7 +60,7 @@ describe('Xem trước mã giảm giá = báo giá checkout (real Postgres)', ()
         CashbackService,
         OrderReversalService,
         { provide: LifecycleService, useValue: {} },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
         {
           provide: GomdonOrderService,

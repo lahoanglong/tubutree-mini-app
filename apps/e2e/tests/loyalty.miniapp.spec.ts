@@ -230,7 +230,8 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     mockLoyalty(api);
     await page.goto('/loyalty');
 
-    await page.getByText('Kho quà', { exact: true }).click({ timeout: 15_000 });
+    // Chưa có mã: dòng đầu trang Hạng là "Đổi quà" dẫn tới Kho quà.
+    await page.getByText('Đổi quà', { exact: true }).click({ timeout: 15_000 });
     await expect(page).toHaveURL(/\/rewards$/);
 
     const card = (name: string) => page.locator('[data-reward]').filter({ hasText: name });

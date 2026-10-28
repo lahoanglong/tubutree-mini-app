@@ -3,6 +3,7 @@ import { fakeHttp } from './fake-http';
 import {
   cancelOrder,
   chooseRefundDestination,
+  customerOrderNote,
   estimateReturn,
   fetchActiveOrderCount,
   fetchMyRefunds,
@@ -11,9 +12,12 @@ import {
   fetchOrders,
   fetchPurchasedItems,
   fetchRefundBank,
+  isSubscriptionOrder,
   normalizeRepurchaseResponse,
+  openProductSlug,
   repurchaseOrder,
   requestReturn,
+  SUBSCRIPTION_ORDER_NOTE,
 } from './orders';
 import type { CartSummary } from './cart';
 
@@ -97,5 +101,37 @@ describe('orders — hợp đồng gọi API', () => {
       { method: 'get', path: '/orders/me/refund-bank' },
       { method: 'post', path: '/orders/me/refunds/r1/destination', body: { refundMethod: 'WALLET' } },
     ]);
+  });
+});
+
+describe('openProductSlug — dòng đơn chỉ dẫn tới trang sản phẩm còn mở', () => {
+  it('còn bán (hoặc API cũ chưa trả cờ) → slug', () => {
+    expect(openProductSlug({ productSlug: 'tra-xanh', productPublic: true })).toBe('tra-xanh');
+    expect(openProductSlug({ productSlug: 'tra-xanh' })).toBe('tra-xanh');
+  });
+  it('sản phẩm đã gỡ → null dù đơn còn lưu slug', () => {
+    expect(openProductSlug({ productSlug: 'tra-xanh', productPublic: false })).toBeNull();
+  });
+  it('đơn cũ không có slug → null', () => {
+    expect(openProductSlug({ productSlug: null })).toBeNull();
+    expect(openProductSlug({})).toBeNull();
+  });
+});
+
+describe('customerOrderNote — ghi chú cố định của đơn định kỳ không hiện như lời khách', () => {
+  it('đơn định kỳ chỉ có ghi chú cố định → null', () => {
+    expect(isSubscriptionOrder({ source: 'subscription' })).toBe(true);
+    expect(customerOrderNote({ source: 'subscription', note: SUBSCRIPTION_ORDER_NOTE })).toBeNull();
+  });
+  it('đơn thường vẫn hiện ghi chú, kể cả khi trùng chữ', () => {
+    expect(customerOrderNote({ source: 'checkout', note: 'Giao giờ hành chính' })).toBe('Giao giờ hành chính');
+    expect(customerOrderNote({ source: 'checkout', note: SUBSCRIPTION_ORDER_NOTE })).toBe(SUBSCRIPTION_ORDER_NOTE);
+  });
+  it('đơn định kỳ có ghi chú khác (CSKH sửa) vẫn hiện', () => {
+    expect(customerOrderNote({ source: 'subscription', note: 'Giao sau 17h' })).toBe('Giao sau 17h');
+  });
+  it('không ghi chú → null', () => {
+    expect(customerOrderNote({ note: null })).toBeNull();
+    expect(customerOrderNote({})).toBeNull();
   });
 });

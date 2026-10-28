@@ -112,9 +112,7 @@ export class GameGiftService {
       await clampTankKeepingOverflow(this.prisma, recipientId, cap, amount);
     }
 
-    await this.notifications
-      .notify(recipientId, 'GAME_WATER_GIFT', { amount: String(amount) })
-      .catch(() => undefined);
+    await this.notifications.notifySafe(recipientId, 'GAME_WATER_GIFT', { amount: String(amount) });
 
     return { amount, recipientId };
   }

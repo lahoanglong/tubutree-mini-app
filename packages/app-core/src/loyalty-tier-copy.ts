@@ -6,6 +6,16 @@ import type { LoyaltyOverview } from './api/loyalty';
 export const COUPONS_LOAD_ERROR_TITLE = 'Chưa tải được mã giảm giá';
 
 /**
+ * Dòng mã giảm giá ở trang Hạng (trang Hạng chỉ có một dòng lối tắt, vì danh sách mã nằm ở Ưu đãi): có mã thì "Ví mã (n)" tới Ưu đãi mục mã;
+ * chưa có mã thì "Đổi quà" tới Kho quà; chưa biết số mã (đang tải lỗi) thì "Ví mã" không kèm số, để Ưu đãi tự báo lỗi và thử lại.
+ */
+export function couponShortcut(count: number | null): { title: string; sub: string; to: 'coupons' | 'rewards' } {
+  if (count === null) return { title: 'Ví mã', sub: 'Mã giảm giá bạn đang có', to: 'coupons' };
+  if (count > 0) return { title: `Ví mã (${count})`, sub: 'Mã giảm giá bạn đang có', to: 'coupons' };
+  return { title: 'Đổi quà', sub: 'Đổi Điểm Xanh lấy mã giảm giá và quà', to: 'rewards' };
+}
+
+/**
  * Thứ hạng (0 = thấp nhất) của một hạng trong danh sách đã sắp theo `sortOrder`. Biểu tượng và màu hạng tra theo thứ hạng này,
  * không theo tên, để đổi tên hạng trong admin không làm mất biểu tượng.
  */

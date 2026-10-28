@@ -33,14 +33,20 @@ export function soloPricing(g: PriceFields, flash?: readonly FlashPriceItem[], n
   return { price: c.price, isFlash: c.isFlash };
 }
 
-/** Dòng giải thích điều kiện nhận mã: nêu số người cần để đủ nhóm. */
-export function groupRewardLine(g: Pick<GroupBuy, 'targetSize' | 'discountPct' | 'unitPrice' | 'minOrder'>, formatVnd: (n: number) => string): string {
-  return `Đủ ${g.targetSize} người: mỗi người nhận mã giảm ${g.discountPct}%, dùng cho đơn từ ${formatVnd(g.minOrder ?? g.unitPrice)}`;
+/** Điều khách nhận được khi nhóm đủ người: mã giảm cho đơn sau, không phải giảm ngay. Số người còn thiếu là ý riêng (`groupMissingLine`). */
+export function groupRewardLine(g: Pick<GroupBuy, 'discountPct' | 'unitPrice' | 'minOrder'>, formatVnd: (n: number) => string): string {
+  return `Đủ nhóm: mỗi người nhận mã giảm ${g.discountPct}% cho đơn từ ${formatVnd(g.minOrder ?? g.unitPrice)}`;
 }
 
 /** Số người còn thiếu để đủ nhóm, không âm. */
 export function groupMissing(g: Pick<GroupBuy, 'targetSize' | 'currentSize'>): number {
   return Math.max(0, g.targetSize - g.currentSize);
+}
+
+/** Dòng "Còn thiếu N người"; null khi đã đủ người (không có gì để nói). */
+export function groupMissingLine(g: Pick<GroupBuy, 'targetSize' | 'currentSize'>): string | null {
+  const need = groupMissing(g);
+  return need > 0 ? `Còn thiếu ${need} người` : null;
 }
 
 /** Chữ trạng thái của người đã ở trong nhóm đang mở; nút chính lúc đó là "Mời bạn bè" nên không còn nút "Nhóm của bạn" bị mờ. */

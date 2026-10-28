@@ -1,6 +1,7 @@
 'use client';
 
 import { HAZARDOUS_DESK_NOTES } from '@tubutree/app-core/waste-copy';
+import { WAREHOUSE_ONLY_RETURN_NOTE, deskClosedText, deskDoneCopy, deskInitialLines, isPartnerWarehouseOnly } from '@tubutree/app-core/waste-desk';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
@@ -38,6 +39,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { WasteDeskPerk, WasteDeskReport } from './recycle-desk-perk';
+import { ScanCodeButton, useBarcodeScan } from './recycle-scan';
 import { DESK_REJECTION_OPTIONS, METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS, formatPoints } from './recycle-labels';
 
 const PATH = '/doi-rac/quay';
@@ -211,7 +213,11 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [done, setDone] = useState<DeskDone | null>(null);
 
+  const canScan = useBarcodeScan();
+
   const point = points.find((p) => p.id === pointId) ?? points[0]!;
+  // Bưu kiện về kho có thể tra khi đang chọn tab đối tác: luật nhận theo điểm của yêu cầu, không theo tab đang chọn.
+  const kindOfRequest = (req: WasteDeskRequestDTO) => (points.find((p) => p.id === req.pointId) ?? point).kind;
 
   const find = useMutation({
     mutationFn: (c: string) => deskLookup(coreHttp, c),
@@ -221,12 +227,9 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setGift(res.type === 'GIFT' ? res.redemption : null);
       setLookedUpCode(c);
       setDone(null);
-      setReceived(
-        res.type === 'REQUEST' && !isReadOnly(res.request)
-          ? Object.fromEntries(res.request.lines.map((l) => [l.itemId, l.declaredQty]))
-          : {},
-      );
-      setReasons({});
+      const initial = res.type === 'REQUEST' && !isReadOnly(res.request) ? deskInitialLines(res.request.lines, kindOfRequest(res.request)) : null;
+      setReceived(initial?.received ?? {});
+      setReasons(initial?.reasons ?? {});
     },
     onError: (e) => setNotice({ text: actErrText(e), ok: false }),
   });
@@ -319,16 +322,9 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       )}
       {points.length === 1 && <p className="text-sm text-stone-600 md:hidden">{point.name}</p>}
       <div className="grid gap-4 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] md:items-start">
-        <div className="flex flex-col gap-4 max-md:order-2">
-          {points.length === 1 && <p className="text-sm text-stone-600 max-md:hidden">{point.name}</p>}
-          <QuotaCard point={point} />
-          {point.kind === 'PARTNER' && (
-            <p className="text-sm text-stone-600">Tubu cộng điểm cho khách theo số bạn xác nhận. Điểm không do cửa hàng cộng.</p>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 md:col-start-2 md:row-start-1">
           <div className="flex flex-col gap-2.5">
+            {canScan && <ScanCodeButton disabled={find.isPending} onCode={(c) => { setCode(c); find.mutate(c); }} onFail={(text) => setNotice({ text, ok: false })} />}
             <Field label="Mã yêu cầu hoặc mã nhận quà">
               <input
                 value={code}
@@ -342,7 +338,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                 className={ui.field}
               />
             </Field>
-            <button type="button" className={`${ui.btnPrimary} w-full`} disabled={code.trim() === '' || find.isPending} onClick={search}>
+            <button type="button" className={`${canScan ? skin.btnSecondary : ui.btnPrimary} w-full`} disabled={code.trim() === '' || find.isPending} onClick={search}>
               Tra mã
             </button>
           </div>
@@ -352,11 +348,21 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
               {notice.text}
             </p>
           )}
+        </div>
 
+        <div className="flex flex-col gap-4 md:col-start-1 md:row-span-2 md:row-start-1">
+          {points.length === 1 && <p className="text-sm text-stone-600 max-md:hidden">{point.name}</p>}
+          <QuotaCard point={point} />
+          {point.kind === 'PARTNER' && (
+            <p className="text-sm text-stone-600">Tubu cộng điểm cho khách theo số bạn xác nhận. Điểm không do cửa hàng cộng.</p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-4 md:col-start-2 md:row-start-2">
           {done && (
             <section role="status" className={`${CARD} items-center text-center`}>
               <CheckCircle2 className="h-8 w-8 text-forest-600" aria-hidden="true" />
-              <h2 className="font-display text-lg font-semibold text-stone-900">{`Đã ghi nhận. Tubu sẽ cộng ${formatPoints(done.pointsAwarded)} cho khách`}</h2>
+              <h2 className="font-display text-lg font-semibold text-stone-900">{deskDoneCopy(done.pointsAwarded, formatPoints).heading}</h2>
               <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">{`Yêu cầu ${done.code} của ${done.customerName} đã xong`}</p>
               {done.remaining && <p className="text-sm text-stone-600">{`${done.remaining.label}: ${formatPoints(done.remaining.value)}`}</p>}
               <button
@@ -385,7 +391,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
 
               {readOnly && (
                 <p className={`text-base font-semibold ${request.status === 'COMPLETED' ? 'text-success-fg' : 'text-danger-fg'}`}>
-                  {request.status === 'COMPLETED' ? 'Đã xác nhận' : 'Đã từ chối'}
+                  {deskClosedText(request)}
                 </p>
               )}
 
@@ -398,6 +404,9 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                     <>
                       <p className="text-sm text-stone-600">{`Khách khai ${l.declaredQty} ${l.unitLabel}`}</p>
                       {l.hazardous && HAZARDOUS_DESK_NOTES.map((t) => <p key={t} className="text-sm text-danger-fg">{t}</p>)}
+                      {isPartnerWarehouseOnly(l, kindOfRequest(request)) ? (
+                        <p className="text-sm font-semibold text-danger-fg">{WAREHOUSE_ONLY_RETURN_NOTE}</p>
+                      ) : (
                         <>
                           <div className="flex items-center gap-3">
                             <QuantitySelector
@@ -433,6 +442,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                             </div>
                           )}
                         </>
+                      )}
                     </>
                   )}
                 </div>
@@ -459,7 +469,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                   </ConfirmBar>
                   <button
                     type="button"
-                    className={`${skin.btnSecondary} w-full`}
+                    className={`${skin.btnSecondary} w-full !text-danger-fg`}
                     onClick={() => {
                       reject.reset();
                       setRejectOpen(true);

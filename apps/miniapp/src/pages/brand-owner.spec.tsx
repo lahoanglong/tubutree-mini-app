@@ -225,7 +225,7 @@ describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
     oneH1();
   });
 
-  it('chưa được cấp nhãn: có nút Nhắn Tubu mở chat khi chat bật, mở OA khi chat tắt (B-87)', async () => {
+  it('chưa được cấp nhãn: nút Nhắn Tubu mở chat khi chat bật; chat tắt thì nút đổi thành Liên hệ Tubu và mở OA', async () => {
     mocks.getOwnedBrand.mockRejectedValue({ response: { status: 404 } });
     mocks.chatOn = true;
     const first = renderPage();
@@ -234,7 +234,8 @@ describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
     first.unmount();
     mocks.chatOn = false;
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Nhắn Tubu' }));
+    expect(screen.queryByRole('button', { name: 'Nhắn Tubu' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Liên hệ Tubu' }));
     expect(mocks.openOAChat).toHaveBeenCalled();
   });
 
@@ -311,6 +312,16 @@ describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Xoá khuyến mãi MUA 2 TẶNG 1' }));
     fireEvent.click(within(screen.getByTestId('sheet')).getByRole('button', { name: 'Xoá' }));
     await waitFor(() => expect(mocks.deleteOwnedPromotion).toHaveBeenCalledWith('p1'));
+  });
+
+  it('hai ô ngày khuyến mãi có nhãn nhìn thấy (chữ "Từ ngày", "Đến ngày"), không chỉ aria-label', async () => {
+    renderPage();
+    await screen.findByText('MUA 2 TẶNG 1');
+    const from = screen.getByLabelText('Từ ngày');
+    const to = screen.getByLabelText('Đến ngày');
+    expect(from.closest('label')?.textContent).toBe('Từ ngày');
+    expect(to.closest('label')?.textContent).toBe('Đến ngày');
+    expect(from.getAttribute('aria-label')).toBeNull();
   });
 
   it('ngày kết thúc trước ngày bắt đầu: báo lỗi và khoá nút thêm', async () => {

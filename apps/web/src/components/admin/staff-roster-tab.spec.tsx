@@ -20,7 +20,7 @@ const LIST = {
     { id: 'u1', phone: '0911111111', fullName: 'Lan', avatarUrl: null, role: 'STAFF', staffPermissions: ['KHO'], createdAt: '2026-10-01T00:00:00Z' },
     { id: 'u2', phone: '0922222222', fullName: null, avatarUrl: null, role: 'ADMIN', staffPermissions: [], createdAt: '2026-10-01T00:00:00Z' },
   ],
-  pendingInvites: [{ phone: '0933333333', role: 'STAFF', createdAt: '2026-10-02T00:00:00Z' }],
+  pendingInvites: [{ phone: '0933333333', role: 'STAFF', staffPermissions: ['KE_TOAN'], createdAt: '2026-10-02T00:00:00Z' }],
 };
 
 function stub(over: { list?: unknown; listStatus?: number; revoke?: unknown } = {}) {
@@ -101,15 +101,16 @@ describe('StaffRosterTab (Nhân sự)', () => {
     const api = stub();
     const { container } = mount(<StaffRosterTab />);
     await flush();
-    expect(container.querySelectorAll('fieldset')).toHaveLength(1);
+    const memberList = container.querySelector('ul')!;
+    expect(memberList.querySelectorAll('fieldset')).toHaveLength(1);
     expect(container.textContent).toContain('Quản trị thấy và làm được mọi việc.');
-    const boxes = [...container.querySelectorAll<HTMLInputElement>('fieldset input[type=checkbox]')];
+    const boxes = [...memberList.querySelectorAll<HTMLInputElement>('fieldset input[type=checkbox]')];
     expect(boxes.map((b) => b.checked)).toEqual([false, true, false, false]);
-    const save = byText(container, 'button', 'Lưu nhóm việc') as HTMLButtonElement;
+    const save = byText(memberList, 'button', 'Lưu nhóm việc') as HTMLButtonElement;
     expect(save.disabled).toBe(true);
     click(boxes[0]!);
-    expect((byText(container, 'button', 'Lưu nhóm việc') as HTMLButtonElement).disabled).toBe(false);
-    click(byText(container, 'button', 'Lưu nhóm việc'));
+    expect((byText(memberList, 'button', 'Lưu nhóm việc') as HTMLButtonElement).disabled).toBe(false);
+    click(byText(memberList, 'button', 'Lưu nhóm việc'));
     await flush();
     expect(JSON.parse(api.puts('/admin/users/u1/staff-permissions')[0]!.init!.body as string)).toEqual({ permissions: ['KHO', 'CSKH'] });
   });
@@ -165,5 +166,65 @@ describe('StaffRosterTab (Nhân sự)', () => {
     await flush();
     expect(b.container.querySelector('[role=alert]')).not.toBeNull();
     expect(b.container.textContent).toContain('Thử lại');
+  });
+
+  describe('nhóm việc cho người mới và lời mời chờ mở app', () => {
+    it('cấp STAFF: chọn nhóm bằng nút bấm, body có permissions theo thứ tự chọn; đổi sang Quản trị thì ẩn nhóm và không gửi', async () => {
+      const api = stub();
+      const { container } = mount(<StaffRosterTab />);
+      await flush();
+      const form = container.querySelector('form')!;
+      const group = form.querySelector('[role=group][aria-label="Nhóm việc cho người mới"]')!;
+      expect([...group.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Chăm sóc khách', 'Kho', 'Nội dung và khuyến mãi', 'Kế toán']);
+      typeInto(container.querySelector('input[type=tel]'), '0944444444');
+      click(byText(group, 'button', 'Kho'));
+      click(byText(group, 'button', 'Chăm sóc khách'));
+      expect(byText(group, 'button', 'Kho')!.getAttribute('aria-pressed')).toBe('true');
+      click(byText(container, 'button', 'Lưu quyền'));
+      await flush();
+      expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0944444444', role: 'STAFF', permissions: ['KHO', 'CSKH'] });
+      // Gửi xong thì chọn lại từ đầu, không kéo nhóm của người trước sang người sau.
+      expect([...form.querySelectorAll('[aria-label="Nhóm việc cho người mới"] button[aria-pressed=true]')]).toHaveLength(0);
+
+      typeInto(container.querySelector('input[type=tel]'), '0955555555');
+      click(byText(form, 'button', 'Quản trị'));
+      expect(form.querySelector('[aria-label="Nhóm việc cho người mới"]')).toBeNull();
+    });
+
+    it('đã chọn nhóm rồi đổi sang Quản trị: nhóm không đi theo lời cấp ADMIN', async () => {
+      const api = stub();
+      const { container } = mount(<StaffRosterTab />);
+      await flush();
+      typeInto(container.querySelector('input[type=tel]'), '0944444444');
+      click(byText(container.querySelector('form')!, 'button', 'Kho'));
+      click(byText(container.querySelector('form')!, 'button', 'Quản trị'));
+      click(byText(container, 'button', 'Lưu quyền'));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0944444444', role: 'ADMIN' });
+    });
+
+    it('lời mời chờ mở app hiện nhóm đã chọn và cho đổi: lưu gửi lại lời cấp cùng SĐT với nhóm mới', async () => {
+      const api = stub();
+      const { container } = mount(<StaffRosterTab />);
+      await flush();
+      const invites = container.querySelector('section[aria-label="Chờ mở app"]')!;
+      const boxes = [...invites.querySelectorAll<HTMLInputElement>('fieldset input[type=checkbox]')];
+      expect(boxes.map((b) => b.checked)).toEqual([false, false, false, true]);
+      click(boxes[1]!);
+      click(byText(invites, 'button', 'Lưu nhóm việc'));
+      await flush();
+      expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0933333333', role: 'STAFF', permissions: ['KE_TOAN', 'KHO'] });
+      expect(invites.textContent).toContain('Họ nhận đúng nhóm này khi mở app');
+    });
+
+    it('lời mời ADMIN không có ô chọn nhóm', async () => {
+      stub({ list: { members: [], pendingInvites: [{ phone: '0966666666', role: 'ADMIN', staffPermissions: [], createdAt: '2026-10-02T00:00:00Z' }] } });
+      const { container } = mount(<StaffRosterTab />);
+      await flush();
+      expect(container.querySelector('section[aria-label="Chờ mở app"] fieldset')).toBeNull();
+      expect(container.textContent).toContain('0966666666');
+    });
   });
 });

@@ -3,12 +3,13 @@ import { Prisma, type Order, type OrderItem, type ReturnRequest, type ReturnRequ
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { notifyAdmins } from '../../common/notify-admins';
+import { findSearchUserIds, normalizeAdminOrderSearch, orderCodeVariants } from '../admin/admin-order-filter';
 import { formatPoints } from '../../common/format-points';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { isMoneyBackable, OrderReversalService, type RefundOutcome } from './order-reversal.service';
+import { isMoneyBackable, OrderReversalService, type PartialReversalResult, type RefundOutcome } from './order-reversal.service';
 import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-notify';
 import { computeReturnShares, type AllocOrder, type ReturnShares } from './refund-allocation';
 import {
@@ -250,7 +251,7 @@ export class OrderReturnsService {
       }
       throw err;
     }
-    await this.notifications.notify(userId, 'RETURN_REQUESTED', { order_code: code }).catch(() => undefined);
+    await this.notifications.notifySafe(userId, 'RETURN_REQUESTED', { order_code: code }, undefined, `order=${code}`);
     const itemName = new Map(order.items.map((i) => [i.id, i.productName]));
     await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_RETURN_REQUESTED', {
       order_code: code,
@@ -297,9 +298,13 @@ export class OrderReturnsService {
 
   // ── Admin ──
 
-  async listForAdmin(status: string | undefined, page: number, limit: number, order?: 'asc' | 'desc') {
-    if (status === RETURNS_TO_RECEIVE) return this.listToReceive(page, limit, order ?? 'asc');
-    const where = status ? { status: status as never } : {};
+  async listForAdmin(status: string | undefined, page: number, limit: number, order?: 'asc' | 'desc', q?: string) {
+    const match = await this.searchMatch(q);
+    if (status === RETURNS_TO_RECEIVE) return this.listToReceive(page, limit, order ?? 'asc', match);
+    const where = {
+      ...(status ? { status: status as never } : {}),
+      ...(match ? { OR: [{ orderId: { in: match.orderIds } }, { userId: { in: match.userIds } }] } : {}),
+    };
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.returnRequest.findMany({
         where,
@@ -314,15 +319,33 @@ export class OrderReturnsService {
   }
 
   /**
+   * Ô tìm của admin: mã đơn chính xác, hoặc SĐT/tên khách (chỉ CSKH/KHO/ADMIN xem được danh sách này, đều thấy SĐT đủ nên không cần
+   * chặn tìm theo một phần SĐT). null = không có chuỗi tìm; mảng rỗng = không khớp ai, danh sách rỗng.
+   */
+  private async searchMatch(q?: string): Promise<{ orderIds: string[]; userIds: string[] } | null> {
+    const s = normalizeAdminOrderSearch(q);
+    if (!s) return null;
+    const [orders, userIds] = await Promise.all([
+      this.prisma.order.findMany({ where: { code: { in: orderCodeVariants(s) } }, select: { id: true } }),
+      findSearchUserIds(this.prisma, s),
+    ]);
+    return { orderIds: orders.map((o) => o.id), userIds: userIds ?? [] };
+  }
+
+  /**
    * Cùng tập với thẻ inbox returnsToReceive: hàng trả của đơn gian hàng tự giao về gian hàng, không về kho Tubu. Lọc đơn gian
    * hàng bằng NOT EXISTS trong SQL: đưa id đơn qua danh sách IN/NOT IN thì quá ~32k yêu cầu chờ là vượt giới hạn tham số bind.
    */
-  private async listToReceive(page: number, limit: number, order: 'asc' | 'desc') {
+  private async listToReceive(page: number, limit: number, order: 'asc' | 'desc', match: { orderIds: string[]; userIds: string[] } | null) {
+    const search = match
+      ? Prisma.sql`AND (rr."orderId" = ANY(${match.orderIds}::text[]) OR rr."userId" = ANY(${match.userIds}::text[]))`
+      : Prisma.empty;
     const from = Prisma.sql`
       FROM "return_requests" rr
       WHERE rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL
         AND EXISTS (SELECT 1 FROM "return_request_items" i WHERE i."returnRequestId" = rr."id")
-        AND NOT EXISTS (SELECT 1 FROM "orders" o WHERE o."id" = rr."orderId" AND o."fulfiller" = 'MERCHANT')`;
+        AND NOT EXISTS (SELECT 1 FROM "orders" o WHERE o."id" = rr."orderId" AND o."fulfiller" = 'MERCHANT')
+        ${search}`;
     const dir = order === 'desc' ? Prisma.sql`DESC` : Prisma.sql`ASC`;
     const { skip, take } = skipTake(page, limit);
     const [ids, counted] = await this.prisma.$transaction([
@@ -369,9 +392,7 @@ export class OrderReturnsService {
       });
       if (rejected.count === 0) throw new BadRequestException('Yêu cầu đã được xử lý.');
       const order = await this.prisma.order.findUnique({ where: { id: req.orderId }, select: { code: true } });
-      await this.notifications
-        .notify(req.userId, 'RETURN_REJECTED', { order_code: order?.code ?? '', reason: note })
-        .catch(() => undefined);
+      await this.notifications.notifySafe(req.userId, 'RETURN_REJECTED', { order_code: order?.code ?? '', reason: note }, undefined, `return=${id}`);
       return this.withContext(await this.prisma.returnRequest.findUniqueOrThrow({ where: { id }, include: { items: true } }));
     }
 
@@ -404,6 +425,7 @@ export class OrderReturnsService {
       let money: RefundOutcome | null;
       let pointsBack = shares.pointsUsedBack;
       let commissionCut = 0;
+      let commissionCutBy: PartialReversalResult['commissionCutBy'] = [];
       let referralNotices: ReferralNotice[];
       if (shares.isFull) {
         const flipped = await tx.order.updateMany({ where: { id: order.id, status: 'DELIVERED' }, data: { status: 'RETURNED' } });
@@ -425,6 +447,7 @@ export class OrderReturnsService {
         money = partial.refund;
         pointsBack = partial.pointsBack;
         commissionCut = partial.commissionCut;
+        commissionCutBy = partial.commissionCutBy;
         referralNotices = partial.referralNotices ?? [];
       }
 
@@ -446,11 +469,15 @@ export class OrderReturnsService {
           ...(destination.method === 'WALLET' && req.refundMethod === 'BANK' ? { refundMethod: 'WALLET' } : {}),
         },
       });
-      return { order, shares, money, pointsBack, referralNotices };
+      return { order, shares, money, pointsBack, referralNotices, commissionCutBy };
     });
 
     const { order, shares, money } = outcome;
     await sendReferralNotices({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, outcome.referralNotices);
+    // Trả cả đơn thì reverseCommissionsForOrder (dưới) tự báo CTV; trả một phần cắt hoa hồng ở trong commit nên báo ở đây.
+    for (const cut of outcome.commissionCutBy) {
+      await this.notifications.notifySafe(cut.affiliateUserId, 'COMMISSION_REVERSED', { amount: formatVnd(cut.amount) }, undefined, `return=${id}`);
+    }
     // Yêu cầu đã APPROVED và đơn đã RETURNED từ lúc commit nên duyệt lại báo "đã xử lý": lỗi đảo ở đây không được làm bỏ các bước sau,
     // chúng chạy hết rồi mới ném lỗi đầu tiên.
     let reversalFailure: unknown = null;
@@ -468,6 +495,9 @@ export class OrderReturnsService {
         reversalFailure ??= err;
         this.logger.error(`Thu hồi hoa hồng của đơn ${order.code} sau khi duyệt trả cả đơn lỗi: ${err instanceof Error ? err.message : err}`);
       }
+    } else {
+      // Hoa hồng đã duyệt/đã vào Ví không cắt được trong commit; kế toán cần biết phần CTV đã nhận vượt phần còn lại của đơn.
+      await this.affiliate.alertPaidCommissionOfReversedOrder(order.id, order.code, { returnRequestId: id });
     }
     if (money?.to === 'BANK') {
       await announceBankRefund(
@@ -489,11 +519,10 @@ export class OrderReturnsService {
       items: this.describeLines(order, shares),
     });
     await this.notifications
-      .notify(order.userId, 'RETURN_APPROVED_DETAIL', {
+      .notifySafe(order.userId, 'RETURN_APPROVED_DETAIL', {
         order_code: order.code,
         refund_note: refundNote(money, req, outcome.pointsBack),
-      })
-      .catch(() => undefined);
+      }, undefined, `order=${order.code}`);
     // Đảo điểm/hoa hồng lỗi đã ném ở dòng trên nên tới đây là đảo xong: lỗi thì đơn không có mốc và cron chạy lại. Trả một phần không
     // đổi trạng thái đơn nên cron không quét, không cần mốc.
     if (reversalFailure !== null) throw reversalFailure;
@@ -628,7 +657,7 @@ export class OrderReturnsService {
     this.logger.log(
       `${actor.kind === 'ADMIN' ? 'Admin' : 'Gian hàng'} ${actor.userId} nhận hàng trả yêu cầu ${id} (đơn ${order?.code}), cộng kho ${restocked} đơn vị.`,
     );
-    await this.notifications.notify(req.userId, 'RETURN_RECEIVED', { order_code: order?.code ?? '' }).catch(() => undefined);
+    await this.notifications.notifySafe(req.userId, 'RETURN_RECEIVED', { order_code: order?.code ?? '' }, undefined, `return=${id}`);
   }
 
   // ── Nội bộ ──

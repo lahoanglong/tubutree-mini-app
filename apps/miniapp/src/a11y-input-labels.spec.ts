@@ -12,7 +12,6 @@ import { describe, expect, it } from 'vitest';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FILES = [
   'components/affiliate/ctv-order-sheet.tsx',
-  'components/community/product-picker.tsx',
   'components/reviews-section.tsx',
   'components/avatar-crop-modal.tsx',
   'pages/storefront-builder.tsx',

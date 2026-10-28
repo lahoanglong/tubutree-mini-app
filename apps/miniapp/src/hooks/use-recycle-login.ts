@@ -8,11 +8,17 @@ export function useRecycleLogin() {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   const login = useAuthStore((s) => s.login);
-  const ensurePhone = useAuthStore((s) => s.ensurePhone);
+  const ensurePhoneOrThrow = useAuthStore((s) => s.ensurePhoneOrThrow);
   return async () => {
     try {
       await login();
-      await ensurePhone();
+      // Đăng nhập không thành (tài khoản bị khoá, lỗi mạng): nói lý do mà login() đã đặt, đừng mở sheet xin số điện thoại.
+      const session = useAuthStore.getState();
+      if (session.status !== 'authenticated') {
+        if (session.error) openSnackbar({ text: session.error, type: 'error' });
+        return;
+      }
+      await ensurePhoneOrThrow();
       await qc.invalidateQueries({ queryKey: ['waste'] });
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });

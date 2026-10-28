@@ -316,6 +316,11 @@ describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
     expect(desc).toMatch(/luôn hiện/);
   });
 
+  it('home.new_customer_layout: mô tả nói thẳng chưa client nào đọc cờ, để admin không đổi giá trị rồi chờ kết quả', () => {
+    const desc = EXTRA_CONFIGS.find((c) => c.key === 'home.new_customer_layout')!.description;
+    expect(desc).toMatch(/chưa client nào đọc/);
+  });
+
   it('dòng nạp không còn cờ createOnly lẫn chú thích nguồn (cột SystemConfig không có hai trường này)', () => {
     for (const row of selectReferenceConfigs(SYSTEM_CONFIGS).filter((r) => EXTRA_CONFIGS.some((e) => e.key === r.key))) {
       expect(row).not.toHaveProperty('fallbackSource');

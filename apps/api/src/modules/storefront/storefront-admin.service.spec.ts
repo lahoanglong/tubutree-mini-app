@@ -78,6 +78,32 @@ describe('StorefrontAdminService.list', () => {
     expect(JSON.stringify(search)).toContain('phone');
   });
 
+  it('lọc "đổi sau duyệt": chỉ gian hàng đã duyệt mà chủ đã đổi nội dung, và trả số lượng để làm chip', async () => {
+    const { svc, storefront } = setup({ storefront: { count: jest.fn().mockResolvedValueOnce(2).mockResolvedValueOnce(5) } });
+    const r = await svc.list({ page: 1, limit: 20, changedAfterApproval: true });
+    const expected = { approvedAt: { not: null }, contentChangedAt: { not: null } };
+    expect(storefront.findMany.mock.calls[0][0].where.AND).toContainEqual(expected);
+    expect(storefront.count.mock.calls[0][0].where.AND).toContainEqual(expected);
+    expect(r.meta.total).toBe(2);
+    expect(r.changedAfterApproval).toBe(5);
+  });
+
+  it('không lọc thì danh sách không bị thu hẹp, số "đổi sau duyệt" vẫn đếm trên toàn bộ gian hàng', async () => {
+    const { svc, storefront } = setup({ storefront: { count: jest.fn().mockResolvedValueOnce(9).mockResolvedValueOnce(3) } });
+    const r = await svc.list({ page: 1, limit: 20 });
+    expect(JSON.stringify(storefront.findMany.mock.calls[0][0].where)).not.toContain('contentChangedAt');
+    expect(storefront.count.mock.calls[1][0].where).toEqual({ approvedAt: { not: null }, contentChangedAt: { not: null } });
+    expect(r.changedAfterApproval).toBe(3);
+  });
+
+  it('dòng trả về có contentChangedAt để web hiện nhãn "Đổi sau duyệt"', async () => {
+    const at = new Date('2026-10-20T03:00:00Z');
+    const { svc, storefront } = setup({ storefront: { findMany: jest.fn().mockResolvedValue([row({ approvedAt: new Date('2026-10-01'), contentChangedAt: at })]) } });
+    const r = await svc.list({ page: 1, limit: 20 });
+    expect(r.data[0]).toMatchObject({ contentChangedAt: at });
+    expect(storefront.findMany.mock.calls[0][0].select.contentChangedAt).toBe(true);
+  });
+
   it('gian hàng đang đăng nhưng chủ bị khoá: publicVisible false kèm lý do để admin hiểu vì sao khách không thấy', async () => {
     const { svc } = setup({ storefront: { findMany: jest.fn().mockResolvedValue([row({ owner: { id: 'u1', fullName: 'Linh', phone: null, role: 'AFFILIATE', isBlocked: true } })]) } });
     const r = await svc.list({ page: 1, limit: 20 });
@@ -208,6 +234,33 @@ describe('StorefrontAdminService.setApproved', () => {
     expect(call.where).toEqual({ id: 's1', approvedAt: { not: null } });
     expect(call.data).toEqual({ approvedAt: null, approvedById: null });
     expect(notify).not.toHaveBeenCalled();
+  });
+});
+
+describe('StorefrontAdminService.markContentSeen', () => {
+  it('"Đã xem": xoá dấu đổi sau duyệt, không đụng duyệt/đăng, không báo chủ', async () => {
+    const { svc, storefront, notify } = setup();
+    await svc.markContentSeen('admin1', 's1');
+    const call = storefront.updateMany.mock.calls[0][0];
+    expect(call.where).toEqual({ id: 's1', contentChangedAt: { not: null } });
+    expect(call.data).toEqual({ contentChangedAt: null });
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('bấm lại khi không còn dấu (hoặc hai admin cùng bấm): trả gian hàng như cũ, không lỗi', async () => {
+    const { svc } = setup({ storefront: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) } });
+    await expect(svc.markContentSeen('admin2', 's1')).resolves.toMatchObject({ id: 's1' });
+  });
+
+  it('gian hàng không tồn tại → 404', async () => {
+    const { svc } = setup({ storefront: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), findUnique: jest.fn().mockResolvedValue(null) } });
+    await expect(svc.markContentSeen('admin1', 'nope')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('duyệt lại gian hàng thì dấu cũ cũng xoá (admin đã xem nội dung khi duyệt)', async () => {
+    const { svc, storefront } = setup();
+    await svc.setApproved('admin1', 's1', true);
+    expect(storefront.updateMany.mock.calls[0][0].data.contentChangedAt).toBeNull();
   });
 });
 

@@ -135,6 +135,13 @@ describe('buildAdminOrderWhere — loại đơn, thanh toán, nền tảng, ngư
     expect(buildAdminOrderWhere({ storefrontId: 's1' })).toEqual({ storefrontId: 's1' });
   });
 
+  it('userId lọc đơn của một khách (từ hồ sơ khách sang danh sách đơn), ghép AND với bộ lọc khác và không đụng referrerUserId', () => {
+    expect(buildAdminOrderWhere({ userId: 'u1' })).toEqual({ userId: 'u1' });
+    expect(buildAdminOrderWhere({ userId: 'u1', status: 'DELIVERED' })).toEqual({ AND: [{ status: 'DELIVERED' }, { userId: 'u1' }] });
+    expect(buildAdminOrderWhere({ userId: 'u1', referrerUserId: 'ctv-1' })).toEqual({ AND: [{ referrerUserId: 'ctv-1' }, { userId: 'u1' }] });
+    expect(buildAdminOrderWhere({ userId: '' })).toEqual({});
+  });
+
   it('ghép AND với bộ lọc sẵn có và không đè lên search (search có OR riêng)', () => {
     expect(buildAdminOrderWhere({ status: 'DELIVERED', payment: 'UNPAID', platform: 'miniapp', kind: 'dealer' })).toEqual({
       AND: [{ status: 'DELIVERED' }, { type: 'DEALER' }, { paymentStatus: 'UNPAID' }, { platform: 'miniapp' }],

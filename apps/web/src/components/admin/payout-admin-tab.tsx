@@ -15,6 +15,7 @@ import { formatVnd } from '@/lib/shop-client';
 import { PAYOUT_STATUS_LABEL, PAYOUT_STATUS_ORDER, payoutActions, rejectPayoutReasonError } from '@/lib/payout-admin';
 import { BTN_DANGER_OUTLINE, BTN_LINK, BTN_PRIMARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, Notice, ScrollRegion, TOUCH_H, ToneBadge, chipClass, LoadError, Field } from './ui';
 import { useConfirm } from './confirm-dialog';
+import { VnMonthInput } from './vn-date-input';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
 
@@ -147,13 +148,7 @@ function PitReportSection() {
     <section className="space-y-2">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <h3 className="text-base font-semibold text-stone-900">Khấu trừ thuế TNCN theo tháng</h3>
-        <input
-          type="month"
-          aria-label="Tháng báo cáo"
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-          className={`${FIELD_CLASS} ${TOUCH_H}`}
-        />
+        <VnMonthInput ariaLabel="Tháng báo cáo" value={month} onChange={setMonth} className={`${FIELD_CLASS} ${TOUCH_H}`} />
       </div>
       <Notice>
         Mọi lần chi hoa hồng cho CTV trong tháng (giờ Việt Nam), gộp theo người nhận, để kế toán kê khai thuế TNCN đã khấu trừ và

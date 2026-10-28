@@ -11,6 +11,8 @@ const state = vi.hoisted(() => ({
   calls: [] as string[],
   push: vi.fn(),
   search: '',
+  use: vi.fn(),
+  notice: null as { code: string; text: string; error: boolean } | null,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -20,6 +22,9 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/components/ui/qr-code', () => ({ QrCode: ({ value }: { value: string }) => <div data-testid="qr">{value}</div> }));
+vi.mock('@/lib/use-coupon-use', () => ({
+  useCouponUse: () => ({ copy: vi.fn(), use: state.use, notice: state.notice, cancel: vi.fn() }),
+}));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
 vi.mock('@/lib/core-http', () => ({
@@ -58,6 +63,8 @@ beforeEach(() => {
   state.calls = [];
   state.push.mockClear();
   state.search = '';
+  state.use.mockReset();
+  state.notice = null;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -128,14 +135,48 @@ describe('/kho-qua/cua-toi — Quà của tôi', () => {
     expect(names).toEqual(['Quà sẵn sàng', 'Quà mới', 'Quà cũ']);
   });
 
-  it('lượt mã giảm giá dẫn tới ví mã (Điểm Xanh)', async () => {
-    state.mine = [
-      makeGiftRedemption({ giftKind: 'VOUCHER', giftName: 'Miễn phí vận chuyển', status: 'FULFILLED', code: null, couponCode: 'FREESHIP-ABC', claimPoint: null }),
-    ];
-    const c = await mount();
-    const a = entry(c, 'Miễn phí vận chuyển').querySelector<HTMLAnchorElement>('a');
-    expect(a?.getAttribute('href')).toBe('/tai-khoan/diem-xanh');
-    expect(a?.textContent).toContain('Mã FREESHIP-ABC');
+  describe('lượt mã giảm giá', () => {
+    const voucher = (extra: Record<string, unknown> = {}) =>
+      makeGiftRedemption({ giftKind: 'VOUCHER', giftName: 'Miễn phí vận chuyển', status: 'FULFILLED', code: null, couponCode: 'FREESHIP-ABC', claimPoint: null, ...extra });
+
+    it('mã còn hạn: ghi hạn dùng, cả hàng là nút "Dùng ngay" và gọi dùng mã', async () => {
+      state.mine = [voucher({ couponEndAt: '2099-12-31T10:00:00.000Z', couponUsed: false })];
+      const c = await mount();
+      const row = entry(c, 'Miễn phí vận chuyển');
+      expect(row.textContent).toContain('Mã FREESHIP-ABC · HSD 31/12');
+      const btn = row.querySelector<HTMLButtonElement>('button')!;
+      expect(btn.textContent).toContain('Dùng ngay');
+      click(btn);
+      expect(state.use).toHaveBeenCalledWith('FREESHIP-ABC');
+    });
+
+    it('mã đã dùng: ghi "Đã dùng", không có nút', async () => {
+      state.mine = [voucher({ couponEndAt: '2099-12-31T10:00:00.000Z', couponUsed: true })];
+      const row = entry(await mount(), 'Miễn phí vận chuyển');
+      expect(row.textContent).toContain('Mã FREESHIP-ABC · Đã dùng');
+      expect(row.querySelector('button')).toBeNull();
+    });
+
+    it('mã hết hạn: ghi "Hết hạn", không có nút', async () => {
+      state.mine = [voucher({ couponEndAt: '2020-01-01T10:00:00.000Z', couponUsed: false })];
+      const row = entry(await mount(), 'Miễn phí vận chuyển');
+      expect(row.textContent).toContain('Mã FREESHIP-ABC · Hết hạn');
+      expect(row.querySelector('button')).toBeNull();
+    });
+
+    it('mã đã bị dọn khỏi hệ thống: nói rõ, không có nút', async () => {
+      state.mine = [voucher({ couponCode: null })];
+      const row = entry(await mount(), 'Miễn phí vận chuyển');
+      expect(row.textContent).toContain('Mã đã dùng hoặc hết hạn');
+      expect(row.querySelector('button')).toBeNull();
+    });
+
+    it('câu báo của mã nào hiện dưới mã đó', async () => {
+      state.mine = [voucher({ couponEndAt: '2099-12-31T10:00:00.000Z', couponUsed: false })];
+      state.notice = { code: 'FREESHIP-ABC', text: 'Giỏ hàng đang trống', error: true };
+      const row = entry(await mount(), 'Miễn phí vận chuyển');
+      expect(row.querySelector('[role="alert"]')?.textContent).toBe('Giỏ hàng đang trống');
+    });
   });
 
   it('rỗng → thông báo và lối về Kho quà', async () => {

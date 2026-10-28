@@ -45,7 +45,13 @@ export default function StorefrontViewPage() {
 
   const sf = q.data;
   useEffect(() => {
-    if (sf) setSfContext({ slug: sf.slug, referralCode: sf.referralCode ?? null, kind: 'ctv' });
+    if (!sf) return;
+    // Chỉ gian hàng CTV có mã giới thiệu và được ghi công; gian hàng đối tác/nhãn hàng giữ nguyên mã CTV khách đang có.
+    setSfContext(
+      sf.type === 'CTV'
+        ? { slug: sf.slug, referralCode: sf.referralCode ?? null, kind: 'ctv', referralEligible: true }
+        : { slug: sf.slug, kind: 'partner' },
+    );
   }, [sf, setSfContext]);
 
   if (q.isLoading) return <Page className="page"><Box p={4}><Skeleton style={{ height: 180, borderRadius: 16 }} /></Box></Page>;

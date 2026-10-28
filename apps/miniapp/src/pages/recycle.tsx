@@ -186,7 +186,7 @@ export default function RecyclePage() {
   const qc = useQueryClient();
   const phase = useAuthPhase();
   const cfg = usePublicConfig();
-  const ensurePhone = useAuthStore((s) => s.ensurePhone);
+  const ensurePhoneOrThrow = useAuthStore((s) => s.ensurePhoneOrThrow);
 
   const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: phase === 'authenticated' });
   const me = meQ.data;
@@ -200,7 +200,7 @@ export default function RecyclePage() {
   const guestLogin = useRecycleLogin();
   const sharePhone = async () => {
     try {
-      const phone = await ensurePhone();
+      const phone = await ensurePhoneOrThrow();
       if (phone) await qc.invalidateQueries({ queryKey: ['waste'] });
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });

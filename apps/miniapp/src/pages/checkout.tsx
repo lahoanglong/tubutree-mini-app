@@ -18,13 +18,15 @@ import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
+import { useCouponHint } from '../components/checkout/use-coupon-hint';
+import { couponHintText } from '@tubutree/app-core/coupon-use';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { ReferralCodeBox, effectiveReferralCode } from '../components/checkout/referral-code-box';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { formatVnd, formatPoints } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
-import { shippingEtaLabel } from '@tubutree/app-core/shipping-eta';
+import { checkoutEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { createOrderKeyRing } from '../utils/idempotency';
 import {
   checkoutPoints,
@@ -93,11 +95,13 @@ export default function CheckoutPage() {
   // Chỉ hiện "Thu kèm rác" khi cờ pickup đã bật thật từ server; chưa tải xong → ẩn, không hứa dịch vụ chưa chắc có.
   const publicConfig = usePublicConfig();
   const pickupFlag = publicConfig.isLoaded && publicConfig.waste.pickup === true;
-  // Cùng điều kiện với màn thành công: chưa có cấu hình thì không hứa ngày giao.
-  const etaLabel = publicConfig.isLoaded && publicConfig.shippingEta ? shippingEtaLabel(publicConfig.shippingEta) : null;
   const wasteMeQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: pickupFlag });
   const pickupReq = attachablePickup(wasteMeQ.data, pickupFlag);
   const [voucherSheetOpen, setVoucherSheetOpen] = useState(false);
+  // Mã từ link chỉ khoá ô nhập khi máy chủ đã xác nhận là mã CTV; mã khách thường (nút chia sẻ sản phẩm) bị máy chủ bỏ qua nên
+  // không được hiện như "đang mua qua link giới thiệu". Chưa biết (null) vẫn gửi kèm đơn để máy chủ tự quyết: lỗi mạng lúc chạm không được làm CTV mất công.
+  const linkedReferral = sfCtx.referralEligible === true ? sfCtx.referralCode : null;
+  const orderLinkReferral = sfCtx.referralEligible === false ? null : sfCtx.referralCode;
   // Mã giới thiệu CTV khách tự nhập ở màn này (đã được server xác nhận) — khác mã đến từ link (sfCtx).
   const [referralApplied, setReferralApplied] = useState<string | null>(null);
   const [summarySheetOpen, setSummarySheetOpen] = useState(false);
@@ -191,6 +195,16 @@ export default function CheckoutPage() {
     enabled: !!addressId && authed && cartReady && cartHasItems,
   });
 
+  const checkoutItems = itemIds
+    ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
+    : (cart.data?.items ?? []);
+  // Giỏ chưa có mã thì nhắc khách đang có mã dùng được (chỉ gợi ý, không tự áp); cùng tham số xem trước với VoucherSheet.
+  const couponHint = useCouponHint(
+    authed && !addresses.isLoading && cartHasItems && !!cart.data && !cart.data.couponCode,
+    checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined,
+    cartPreviewKey(checkoutItems),
+  );
+
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
   const partnerPoints = pointsCapState(quote.data, points.usable);
   const pointsUsable = points.usable > 0 && !partnerPoints.disabled;
@@ -255,7 +269,7 @@ export default function CheckoutPage() {
               email: invoice.email.trim(),
             }
           : undefined,
-        referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode),
+        referralCode: effectiveReferralCode(referralApplied, orderLinkReferral),
         storefrontSlug: ctvSlug,
         itemIds,
       };
@@ -446,9 +460,6 @@ export default function CheckoutPage() {
   // chặn bấm-2-lần khi `loading` bất kể `disabled`, và handler onPress cũng tự kiểm `submitting`
   // trước khi mutate — gộp lại `disabled` chỉ khiến spinner không hiện trong lúc đặt hàng (đúng
   // bug audit A4-01/A4-02/A4-04 mà lần migrate này phải sửa), không thêm được lớp bảo vệ nào mới.
-  const checkoutItems = itemIds
-    ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
-    : (cart.data?.items ?? []);
   const overStockLine = checkoutItems.find((it) => it.quantity > it.stock);
   const shownCartIssue = overStockLine ? vi.checkout.overStock(overStockLine.productName, overStockLine.stock) : cartIssue;
   const canPlace = !!addressId && quote.isSuccess && !quote.isFetching && !!invoiceValid && !overStockLine && (!!zeroNote || payment !== '');
@@ -472,6 +483,8 @@ export default function CheckoutPage() {
   const shipments = quote.data?.shipments ?? [];
   const split = shipments.length > 1 || shipments.some((sh) => sh.fulfiller.kind === 'MERCHANT');
   const splitNote = shipmentsNote(shipments);
+  // Cùng điều kiện với màn thành công: chưa có cấu hình thì không hứa ngày giao; giỏ chỉ có hàng gian hàng tự giao thì cũng không.
+  const etaLabel = publicConfig.isLoaded ? checkoutEtaLabel(publicConfig.shippingEta, shipments.map((sh) => sh.fulfiller.kind)) : null;
 
   const shownItems = itemIds
     ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
@@ -603,9 +616,9 @@ export default function CheckoutPage() {
           flex
           alignItems="center"
           justifyContent="space-between"
-          style={{ cursor: 'pointer', minHeight: 44 }}
+          style={{ cursor: 'pointer', minHeight: 44, gap: 8 }}
         >
-          <Box flex alignItems="center" style={{ gap: 10 }}>
+          <Box flex alignItems="center" style={{ gap: 10, minWidth: 0 }}>
             <Box
               style={{
                 width: 36,
@@ -619,12 +632,12 @@ export default function CheckoutPage() {
             >
               <Ticket size={20} color="var(--clay-700)" />
             </Box>
-            <Box>
+            <Box style={{ minWidth: 0 }}>
               <Text bold size="small" style={{ color: 'var(--color-text-primary)' }}>
                 Mã giảm giá
               </Text>
               {cart.data?.couponCode ? (
-                <Box flex alignItems="center" style={{ gap: 8, marginTop: 2 }}>
+                <Box flex alignItems="center" style={{ gap: 8, marginTop: 2, minWidth: 0 }}>
                   <span
                     style={{
                       background: 'var(--clay-50)',
@@ -634,16 +647,24 @@ export default function CheckoutPage() {
                       color: 'var(--clay-700)',
                       fontSize: 11,
                       fontWeight: 700,
+                      minWidth: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
                     }}
                   >
                     {cart.data.couponCode}
                   </span>
                   {quote.data && quote.data.discount > 0 && (
-                    <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
+                    <Text size="xSmall" style={{ color: 'var(--color-text-success)', flexShrink: 0, whiteSpace: 'nowrap' }}>
                       -{formatVnd(quote.data.discount)}
                     </Text>
                   )}
                 </Box>
+              ) : couponHint ? (
+                <Text size="xSmall" style={{ color: 'var(--color-text-brand)', marginTop: 2 }}>
+                  {couponHintText(couponHint, formatVnd)}
+                </Text>
               ) : (
                 <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                   Chọn hoặc nhập mã giảm giá
@@ -652,7 +673,7 @@ export default function CheckoutPage() {
             </Box>
           </Box>
 
-          <Box flex alignItems="center" style={{ gap: 4, color: 'var(--color-text-brand)' }}>
+          <Box flex alignItems="center" style={{ gap: 4, flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--color-text-brand)' }}>
             <Text size="xSmall" bold style={{ color: 'var(--color-text-brand)' }}>
               {cart.data?.couponCode ? 'Thay đổi' : 'Chọn mã'}
             </Text>
@@ -673,7 +694,7 @@ export default function CheckoutPage() {
 
       {/* Chỉ coi là mã gắn sẵn khi đúng là mã CTV: slug gian hàng nhãn/cửa hàng không phải mã giới thiệu và không được gửi kèm đơn. */}
       <ReferralCodeBox
-        linkedCode={sfCtx.referralCode}
+        linkedCode={linkedReferral}
         appliedCode={referralApplied}
         onApplied={chosen(setReferralApplied)}
       />

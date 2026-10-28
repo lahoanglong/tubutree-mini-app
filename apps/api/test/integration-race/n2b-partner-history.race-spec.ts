@@ -12,7 +12,7 @@ describe('Lịch sử cờ đối tác ghi cả lần bật (real Postgres)', ()
   beforeAll(async () => {
     h = await partnerHarness();
     const none = {} as never;
-    approver = new AdminService(h.prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined) } as never, none, none, h.rbac, none, none, h.fulfilment);
+    approver = new AdminService(h.prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } as never, none, none, h.rbac, none, none, h.fulfilment);
   });
   afterAll(async () => {
     await h?.cleanup();

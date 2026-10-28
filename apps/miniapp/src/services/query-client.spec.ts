@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpError } from './http';
 import { MutationObserver, QueryObserver, focusManager, onlineManager } from '@tanstack/react-query';
-import { createQueryClient } from './query-client';
+import { CATALOG_STALE_MS } from '@tubutree/app-core/catalog-stale';
+import { CATALOG_KEYS, createQueryClient, getQueryClient } from './query-client';
 import { getErrorMessage } from './api';
 import { vi as copy } from '../i18n/vi';
 
@@ -174,5 +175,19 @@ describe('getErrorMessage — không có phản hồi (R-85)', () => {
   });
   it('5xx vẫn nói máy chủ bận', () => {
     expect(getErrorMessage(new HttpError('x', 'ERR_BAD_RESPONSE', { status: 503, data: {} }))).toBe(copy.errors.server);
+  });
+});
+
+describe('getQueryClient — client đang chạy cho store/auth.ts', () => {
+  it('trả client được dựng gần nhất', () => {
+    const first = createQueryClient();
+    expect(getQueryClient()).toBe(first);
+    const second = createQueryClient();
+    expect(getQueryClient()).toBe(second);
+  });
+
+  it('CATALOG_KEYS là đúng nhóm khoá có staleTime danh mục (khoá không gắn danh tính khách)', () => {
+    const client = createQueryClient();
+    for (const key of CATALOG_KEYS) expect(client.getQueryDefaults(key).staleTime).toBe(CATALOG_STALE_MS);
   });
 });
