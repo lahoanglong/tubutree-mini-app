@@ -49,7 +49,7 @@ import { LineItemSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { ProductThumb } from '@/components/mini';
 
-// Phần dưới màn đầu (nhắc theo dõi OA, hoá đơn, đổi rác, chép mã vận đơn) tải sau để First Load của trang không tăng.
+// Phần dưới màn đầu (nhắc theo dõi OA, hoá đơn, đổi rác, chép mã vận đơn) tải sau để First Load của trang tăng ít nhất có thể.
 const FollowOaPrompt = dynamic(() => import('./order-extras').then((m) => m.FollowOaPrompt), { ssr: false });
 const OrderInvoice = dynamic(() => import('./order-extras').then((m) => m.OrderInvoice), { ssr: false });
 const OrderWasteLink = dynamic(() => import('./order-extras').then((m) => m.OrderWasteLink), { ssr: false });
