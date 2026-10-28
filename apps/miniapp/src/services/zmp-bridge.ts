@@ -13,6 +13,7 @@ import {
   getStorage,
   setStorage,
   scanQRCode,
+  saveImageToGallery,
 } from 'zmp-sdk/apis';
 import { copyText } from '../utils/clipboard';
 import { WEB_BASE_URL } from '../utils/web-base-url';
@@ -153,6 +154,11 @@ export async function scanCode(): Promise<ScanCodeResult> {
     const text = Array.isArray(raw) ? raw.join(' ') : String(raw ?? '');
     return isCancelMessage(text) ? { kind: 'cancelled' } : { kind: 'failed' };
   }
+}
+
+/** Lưu ảnh từ URL vào thư viện ảnh của máy (Zalo mobile từ bản 2.16). Ngoài Zalo hoặc bị từ chối thì reject. */
+export async function saveImageFromUrl(url: string): Promise<void> {
+  await withTimeout(saveImageToGallery({ imageUrl: url }), 30_000, 'saveImageToGallery');
 }
 
 /** Chỉ link thuộc Zalo mới được mở: chính sách Zalo cấm Mini App điều hướng ra trang ngoài. */

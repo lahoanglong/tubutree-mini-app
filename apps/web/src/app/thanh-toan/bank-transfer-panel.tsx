@@ -8,6 +8,7 @@ import { getBankQr, formatVnd, type OrderDTO } from '@/lib/shop-client';
 import { CopyButton } from '@/components/copy-button';
 import { ui } from '@/lib/guest-ui';
 import { formatDateTime } from '@/lib/format-date';
+import { BANK_QR_HINT, BANK_QR_SAVED, BANK_QR_SAVE_FAILED } from '@tubutree/app-core/bank-payment-copy';
 import { saveImage, type SaveImageResult } from '@/lib/download-image';
 import { useRemaining } from '@/lib/use-remaining';
 import { copyText } from '@/lib/copy-text';
@@ -178,7 +179,7 @@ export function BankTransferPanel({
       {showHeading && (
         <>
           <h2 className={`text-center ${ui.sectionTitle}`}>Quét QR để chuyển khoản</h2>
-          <p className="mt-1 text-center text-xs text-stone-600">Mở app ngân hàng / ví bất kỳ để quét mã bên dưới</p>
+          <p className="mt-1 text-center text-xs text-stone-600">{BANK_QR_HINT}</p>
         </>
       )}
 
@@ -202,7 +203,7 @@ export function BankTransferPanel({
           <button
             type="button"
             onClick={() => void handleSaveQr(data.qrImageUrl, data.orderCode)}
-            className={`${ui.btnSecondary} gap-2 max-md:hidden`}
+            className={`${ui.btnSecondary} gap-2`}
           >
             <Download className="h-4 w-4" aria-hidden="true" />
             Lưu mã QR
@@ -210,8 +211,8 @@ export function BankTransferPanel({
           {qrSaved && (
             <p role="status" data-testid="bank-qr-saved" className="text-xs text-stone-700">
               {qrSaved === 'saved'
-                ? 'Đã lưu ảnh QR vào máy.'
-                : 'Chưa lưu được. Bạn nhấn giữ vào ảnh QR để lưu, hoặc chụp màn hình nhé.'}
+                ? BANK_QR_SAVED
+                : BANK_QR_SAVE_FAILED}
             </p>
           )}
         </div>

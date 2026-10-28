@@ -1,6 +1,6 @@
 import { getStorage, setStorage } from 'zmp-sdk/apis';
 import { isHttpUrl, type PlatformBridge } from '@tubutree/app-core/bridge';
-import { callPhone, followOA, hasOA, openExternal, openOAChat, shareLink } from './zmp-bridge';
+import { callPhone, followOA, hasOA, openExternal, openOAChat, saveImageFromUrl, shareLink } from './zmp-bridge';
 
 const ZMP_USER_CANCEL = -2003;
 
@@ -15,6 +15,16 @@ export const platformBridge: PlatformBridge = {
       return 'shared';
     } catch (err) {
       return (err as { code?: number } | null)?.code === ZMP_USER_CANCEL ? 'cancelled' : 'failed';
+    }
+  },
+
+  async saveImage(url) {
+    if (!isHttpUrl(url)) return 'failed';
+    try {
+      await saveImageFromUrl(url);
+      return 'saved';
+    } catch {
+      return 'failed';
     }
   },
 

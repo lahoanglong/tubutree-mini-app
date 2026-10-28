@@ -19,6 +19,10 @@ import { PageHeader } from '../components/ui/page-header';
 import { SR_ONLY } from '../components/ui/sr-only';
 import { ErrorState } from '../components/ui/empty-state';
 import { SupportHotline } from '../components/support-hotline';
+import { StickyActionBar } from '../components/ui/sticky-action-bar';
+import { platformBridge } from '../services/platform-bridge';
+import { BANK_QR_HINT, BANK_QR_SAVED, BANK_QR_SAVE_FAILED } from '@tubutree/app-core/bank-payment-copy';
+import type { SaveImageResult } from '@tubutree/app-core/bridge';
 
 const PAGE_TITLE = 'Thanh toán chuyển khoản';
 // Trạng thái "đã thanh toán" không có PageHeader nên chữ tiêu đề là h1 duy nhất. `font: inherit` bỏ cỡ chữ/đậm mặc định
@@ -68,6 +72,7 @@ export default function BankPaymentPage() {
   const { openSnackbar } = useSnackbar();
 
   const qc = useQueryClient();
+  const [qrSaved, setQrSaved] = useState<SaveImageResult | null>(null);
   const { data, isLoading, refetch, isFetching, error } = useQuery({
     queryKey: ['bank-qr', code],
     queryFn: () => getBankQr(code!),
@@ -248,7 +253,7 @@ export default function BankPaymentPage() {
   return (
     // Không dùng class "page": PageHeader đã chừa chỗ nút Quay lại và vùng an toàn, thêm .page sẽ cộng đệm 48px lần hai và tách tiêu đề khỏi nút.
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 90 }}>
-      <PageHeader title="Quét QR để chuyển khoản" subtitle="Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới" />
+      <PageHeader title="Quét QR để chuyển khoản" subtitle={BANK_QR_HINT} />
 
       <Box p={2}>
         <Box p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', textAlign: 'center' }}>
@@ -257,9 +262,24 @@ export default function BankPaymentPage() {
             alt="VietQR"
             style={{ width: 240, height: 240, maxWidth: '70%', margin: '0 auto', display: 'block' }}
           />
-          <Text bold size="large" style={{ color: 'var(--color-text-success)', marginTop: 8 }}>
-            <Money amount={data.amount} />
-          </Text>
+          <Row hero label="Số tiền" value={<Money amount={data.amount} />} copyName="số tiền" onCopy={() => copy(String(data.amount), 'số tiền')} />
+          <Button
+            variant="secondary"
+            fullWidth
+            onPress={async () => {
+              setQrSaved(await platformBridge.saveImage(data.qrImageUrl, `tubu-qr-${data.orderCode}.png`));
+            }}
+            style={{ marginTop: 8 }}
+          >
+            Lưu mã QR
+          </Button>
+          {qrSaved && (
+            <div role="status" data-testid="bank-qr-saved" style={{ marginTop: 6 }}>
+              <Text size="small" style={{ color: 'var(--color-text-secondary)' }}>
+                {qrSaved === 'saved' ? BANK_QR_SAVED : BANK_QR_SAVE_FAILED}
+              </Text>
+            </div>
+          )}
           {!!data.paidSoFar && data.paidSoFar > 0 && (
             <div data-testid="paid-so-far" style={{ marginTop: 4 }}>
               <Text size="small" style={{ color: 'var(--color-status-warning-fg)' }}>
@@ -270,10 +290,9 @@ export default function BankPaymentPage() {
 
           {/* Thông tin chuyển khoản thủ công (phòng khi không quét được) */}
           <Box mt={2} style={{ textAlign: 'left' }}>
-            <Row label="Ngân hàng" value={data.bank.name} />
+            <Row stacked label="Ngân hàng" value={data.bank.name} />
             <Row label="Số tài khoản" value={data.bank.accountNo} copyName="số tài khoản" onCopy={() => copy(data.bank.accountNo, 'số tài khoản')} />
-            <Row label="Chủ tài khoản" value={data.bank.accountName} />
-            <Row label="Số tiền" value={<Money amount={data.amount} />} copyName="số tiền" onCopy={() => copy(String(data.amount), 'số tiền')} />
+            <Row stacked label="Chủ tài khoản" value={data.bank.accountName} />
             <Row
               label="Nội dung CK"
               value={data.memo}
@@ -317,13 +336,17 @@ export default function BankPaymentPage() {
             phía trên: giữ cả 2 sẽ làm spinner không bao giờ hiện đúng lúc khách đang chờ xác nhận
             thanh toán, ngay bước quan trọng nhất của luồng tiền. Button (Task 10) tự chặn bấm-2-lần
             khi loading, không cần disabled làm việc đó nữa. */}
-        <Button fullWidth loading={checking} onPress={handleCheckPayment} style={{ marginTop: 12 }}>
-          Tôi đã chuyển khoản — Kiểm tra
-        </Button>
         <Button fullWidth variant="secondary" onPress={() => navigate(`/order/${data.orderCode}`, { replace: true })} style={{ marginTop: 8 }}>
           Để sau / Xem đơn hàng
         </Button>
       </Box>
+      <StickyActionBar
+        primary={
+          <Button fullWidth size="lg" loading={checking} onPress={handleCheckPayment}>
+            Tôi đã chuyển khoản — Kiểm tra
+          </Button>
+        }
+      />
     </Page>
   );
 }
@@ -336,6 +359,8 @@ function Row({
   onCopy,
   copyName,
   highlight,
+  stacked,
+  hero,
 }: {
   label: string;
   value: ReactNode;
@@ -343,6 +368,10 @@ function Row({
   onCopy?: () => Promise<boolean>;
   copyName?: string;
   highlight?: boolean;
+  /** Nhãn một dòng, giá trị dưới nhãn: tên ngân hàng/chủ tài khoản dài không chen sát nhãn. */
+  stacked?: boolean;
+  /** Số tiền lớn ở giữa, chỉ còn nút chép bên cạnh. */
+  hero?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>();
@@ -358,10 +387,20 @@ function Row({
   };
 
   return (
-    <Box flex alignItems="center" justifyContent="space-between" style={{ padding: '6px 0', borderTop: '1px solid var(--color-border-subtle)' }}>
-      <Text size="small" style={{ color: 'var(--color-text-tertiary)' }}>{label}</Text>
-      <Box flex alignItems="center" style={{ gap: 6 }}>
-        <Text size="small" bold style={highlight ? { color: 'var(--color-text-success)' } : undefined}>{value}</Text>
+    <Box
+      flex
+      alignItems={stacked ? 'flex-start' : 'center'}
+      flexDirection={stacked ? 'column' : undefined}
+      justifyContent={hero ? 'center' : 'space-between'}
+      style={{ padding: '6px 0', borderTop: hero ? 'none' : '1px solid var(--color-border-subtle)', marginTop: hero ? 8 : 0 }}
+    >
+      {!hero && <Text size="small" style={{ color: 'var(--color-text-tertiary)' }}>{label}</Text>}
+      <Box flex alignItems="center" style={{ gap: 6, minWidth: 0 }}>
+        {hero ? (
+          <Text bold size="large" style={{ color: 'var(--color-text-success)' }}>{value}</Text>
+        ) : (
+          <Text size="small" bold style={highlight ? { color: 'var(--color-text-success)' } : undefined}>{value}</Text>
+        )}
         {onCopy && (
           <>
             {/* Nút giữ vùng chạm 44px nhưng lề âm để dòng không cao hơn 44px. */}

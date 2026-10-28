@@ -44,7 +44,7 @@ describe('/thanh-toan/chuyen-khoan — chữ như Mini App', () => {
     const c = await mount();
     expect(c.querySelectorAll('h1')).toHaveLength(1);
     expect(c.querySelector('h1')!.textContent).toBe('Quét QR để chuyển khoản');
-    expect(c.textContent).toContain('Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới');
+    expect(c.textContent).toContain('Lưu mã QR rồi mở app ngân hàng, chọn quét từ ảnh. Hoặc chép số tài khoản bên dưới.');
     expect(c.textContent!.match(/Quét QR để chuyển khoản/g)).toHaveLength(1);
   });
 
@@ -70,12 +70,12 @@ describe('/thanh-toan/chuyen-khoan — bố cục như Mini App ở điện tho�
     expect(c.querySelector('section')!.className).toMatch(/\bmax-md:contents\b/);
   });
 
-  it('số tiền màu xanh, không có nút Lưu mã QR ở điện thoại', async () => {
+  it('số tiền màu xanh, có nút Lưu mã QR ở điện thoại (R-8)', async () => {
     const c = await mount();
     const money = c.querySelector<HTMLElement>('[data-bank-card] p.font-bold')!;
     expect(money.className).toMatch(/\bmax-md:text-success-fg\b/);
     const save = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Lưu mã QR'))!;
-    expect(save.className).toMatch(/\bmax-md:hidden\b/);
+    expect(save.className).not.toMatch(/\bmax-md:hidden\b/);
   });
 
   it('các dòng thông tin có đường kẻ phía trên; sao chép chỉ là icon', async () => {

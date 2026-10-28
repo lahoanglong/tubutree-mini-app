@@ -32,6 +32,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 
 import BankPaymentPage from './bank-payment';
+import { platformBridge } from '../services/platform-bridge';
 
 const QR = {
   orderCode: 'TT001',
@@ -136,7 +137,7 @@ describe('Thanh toán chuyển khoản: header chừa chỗ cho nút Quay lại 
 
   it('tiêu đề và dòng hướng dẫn nằm chung khối đã chừa 48px bên trái, không chạy dưới nút Quay lại', async () => {
     renderPage();
-    const hint = await screen.findByText('Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới');
+    const hint = await screen.findByText('Lưu mã QR rồi mở app ngân hàng, chọn quét từ ảnh. Hoặc chép số tài khoản bên dưới.');
     const block = hint.parentElement as HTMLElement;
     expect(block.contains(screen.getByRole('heading', { level: 1 }))).toBe(true);
     expect(block.style.paddingLeft).toBe('48px');
@@ -585,5 +586,35 @@ describe('Thanh toán chuyển khoản: đã nhận một phần (U1-B04)', () =
     renderPage();
     await screen.findByText(/Giữ nguyên nội dung/);
     expect(screen.queryByTestId('paid-so-far')).toBeNull();
+  });
+});
+
+describe('Thanh toán chuyển khoản: lưu mã QR (R-8) và bố cục (R-96)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getBankQr.mockResolvedValue(QR);
+  });
+
+  it('bấm Lưu mã QR gọi cầu nối lưu ảnh với URL mã và báo đã lưu', async () => {
+    const save = vi.spyOn(platformBridge, 'saveImage').mockResolvedValue('saved');
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Lưu mã QR' }));
+    expect(await screen.findByText('Đã lưu ảnh QR vào máy.')).toBeInTheDocument();
+    expect(save).toHaveBeenCalledWith('https://example.test/qr.png', 'tubu-qr-TT001.png');
+  });
+
+  it('lưu không được: hướng dẫn nhấn giữ ảnh hoặc chụp màn hình', async () => {
+    vi.spyOn(platformBridge, 'saveImage').mockResolvedValue('failed');
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Lưu mã QR' }));
+    expect(await screen.findByText(/Chưa lưu được/)).toBeInTheDocument();
+  });
+
+  it('số tiền chỉ hiện một lần (kèm nút chép) và nút Kiểm tra nằm trên thanh dính đáy', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: 'Lưu mã QR' });
+    expect(screen.getAllByText(/120\.000/).length).toBe(1);
+    expect(screen.getByRole('button', { name: 'Sao chép số tiền' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('sticky-bar')).getByRole('button', { name: /Tôi đã chuyển khoản/ })).toBeInTheDocument();
   });
 });

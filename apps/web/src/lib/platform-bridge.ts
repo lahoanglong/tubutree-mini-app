@@ -1,3 +1,4 @@
+import { saveImage } from './download-image';
 import { isHttpUrl, type PlatformBridge, type ShareResult } from '@tubutree/app-core/bridge';
 
 const OA_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -29,6 +30,8 @@ export function createWebPlatformBridge(opts: { oaId?: string } = {}): PlatformB
   return {
     platform: 'web',
     capabilities: { verifiedPhone: false, zaloLocation: false, qrScan: false, zaloNotifyPermission: false },
+
+    saveImage: (url, filename) => saveImage(url, filename),
 
     async share({ title, text, path }): Promise<ShareResult> {
       const url = `${window.location.origin}${path}`;

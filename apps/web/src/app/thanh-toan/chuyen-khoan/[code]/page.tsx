@@ -1,5 +1,6 @@
 'use client';
 
+import { BANK_QR_HINT } from '@tubutree/app-core/bank-payment-copy';
 import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -91,7 +92,7 @@ export default function BankPaymentPage() {
       {showQr ? (
         <PageHeader
           title={TITLE}
-          subtitle="Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới"
+          subtitle={BANK_QR_HINT}
           subtitleClassName="md:text-sm"
           parentHref={detail}
         />

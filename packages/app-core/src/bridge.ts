@@ -8,6 +8,9 @@ export interface ShareInput {
   path: string;
 }
 
+/** Kết quả lưu ảnh về máy; `failed` thì nơi gọi báo khách tự lưu từ ảnh đang hiện (nhấn giữ hoặc chụp màn hình). */
+export type SaveImageResult = 'saved' | 'failed';
+
 export interface PlatformCapabilities {
   verifiedPhone: boolean;
   zaloLocation: boolean;
@@ -19,6 +22,8 @@ export interface PlatformBridge {
   platform: 'miniapp' | 'web';
   capabilities: PlatformCapabilities;
   share(input: ShareInput): Promise<ShareResult>;
+  /** Lưu ảnh (mã QR chuyển khoản) vào máy: Mini App vào thư viện ảnh, web tải file. */
+  saveImage(url: string, filename: string): Promise<SaveImageResult>;
   openExternal(url: string): void;
   callPhone(phone: string): void;
   oa: {
