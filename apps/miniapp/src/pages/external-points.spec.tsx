@@ -274,6 +274,19 @@ describe('Trang Tích điểm đơn sàn', () => {
     expect(screen.queryByRole('button', { name: 'Chia sẻ số điện thoại' })).toBeNull();
   });
 
+  it('gõ tay mã hợp lệ thì nút Tích điểm thành nút chính; trống hoặc chưa đủ mã thì vẫn là nút phụ', async () => {
+    renderPage();
+    const input = await screen.findByLabelText('Hoặc nhập mã vận đơn');
+    const submitBtn = () => screen.getByRole('button', { name: 'Tích điểm' });
+    expect(submitBtn().className).toMatch(/secondary/);
+    fireEvent.change(input, { target: { value: 'SPX12' } });
+    expect(submitBtn().className).toMatch(/secondary/);
+    fireEvent.change(input, { target: { value: 'spx-vn-123456789' } });
+    expect(submitBtn().className).not.toMatch(/secondary/);
+    fireEvent.change(input, { target: { value: '' } });
+    expect(submitBtn().className).toMatch(/secondary/);
+  });
+
   it('mã trống: nhắc nhập, không gọi API', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Tích điểm' }));
