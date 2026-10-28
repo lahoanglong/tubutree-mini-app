@@ -1,4 +1,4 @@
-import { expect, reply, test, type MockApi } from './support/mock-api';
+import { adminShellDefaults, expect, reply, test, type MockApi } from './support/mock-api';
 
 /**
  * Web: kênh đại lý /dai-ly,  ca làm /nhan-vien, bảng lương /nhan-vien/bang-luong, chủ thương hiệu /chu-thuong-hieu. Mọi lời gọi /api/** từ trình duyệt đi qua mock (fixture `api`); host phải là localhost
@@ -233,6 +233,8 @@ test.describe('Web admin nhân sự và lương', () => {
   const ADMIN = { ...USER, role: 'ADMIN', fullName: 'Quản trị' };
 
   test.beforeEach(async ({ page, api }) => {
+    // Spec chạy trong project khách nhưng mở /admin, nên tự mock khung quản trị.
+    adminShellDefaults(api);
     await page.addInitScript(() => {
       try {
         localStorage.setItem('tubu_web_session', '1');
