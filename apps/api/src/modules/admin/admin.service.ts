@@ -851,7 +851,8 @@ export class AdminService {
 
   /**
    * Số của trang "Hôm nay": cùng định nghĩa với trang Báo cáo doanh thu cho cùng khoảng ngày giờ VN (đếm mọi đơn, doanh thu =
-   * đơn đã thu trừ hoàn một phần đã duyệt, khách mới theo NEW_CUSTOMER_SQL). Hôm nay, hôm qua và 7 ngày gần nhất (gồm hôm nay).
+   * đơn đã thu trừ hoàn một phần đã duyệt, giá trị đơn đặt (gmv) theo GMV_ORDER_SQL, khách mới theo NEW_CUSTOMER_SQL). Hôm nay,
+   * hôm qua và 7 ngày gần nhất (gồm hôm nay). Đơn COD vừa đặt chưa giao thì có trong gmv mà chưa có trong doanh thu.
    */
   async getTodaySummary(now = new Date()) {
     const dayStart = startOfVnDay(now);
@@ -860,14 +861,27 @@ export class AdminService {
     const weekStart = new Date(dayStart.getTime() - 6 * 86_400_000);
     const [rows, users] = await Promise.all([
       this.prisma.$queryRaw<
-        { orders_today: number; orders_yesterday: number; orders_week: number; rev_today: bigint | null; rev_yesterday: bigint | null; rev_week: bigint | null }[]
+        {
+          orders_today: number;
+          orders_yesterday: number;
+          orders_week: number;
+          rev_today: bigint | null;
+          rev_yesterday: bigint | null;
+          rev_week: bigint | null;
+          gmv_today: bigint | null;
+          gmv_yesterday: bigint | null;
+          gmv_week: bigint | null;
+        }[]
       >`
         SELECT (COUNT(*) FILTER (WHERE o."createdAt" >= ${dayStart}))::int AS orders_today,
                (COUNT(*) FILTER (WHERE o."createdAt" >= ${yesterdayStart} AND o."createdAt" < ${dayStart}))::int AS orders_yesterday,
                COUNT(*)::int AS orders_week,
                COALESCE(SUM(o.total - COALESCE(pr.refund, 0)) FILTER (WHERE ${REVENUE_ORDER_SQL} AND o."createdAt" >= ${dayStart}), 0) AS rev_today,
                COALESCE(SUM(o.total - COALESCE(pr.refund, 0)) FILTER (WHERE ${REVENUE_ORDER_SQL} AND o."createdAt" >= ${yesterdayStart} AND o."createdAt" < ${dayStart}), 0) AS rev_yesterday,
-               COALESCE(SUM(o.total - COALESCE(pr.refund, 0)) FILTER (WHERE ${REVENUE_ORDER_SQL}), 0) AS rev_week
+               COALESCE(SUM(o.total - COALESCE(pr.refund, 0)) FILTER (WHERE ${REVENUE_ORDER_SQL}), 0) AS rev_week,
+               COALESCE(SUM(o.total) FILTER (WHERE ${GMV_ORDER_SQL} AND o."createdAt" >= ${dayStart}), 0) AS gmv_today,
+               COALESCE(SUM(o.total) FILTER (WHERE ${GMV_ORDER_SQL} AND o."createdAt" >= ${yesterdayStart} AND o."createdAt" < ${dayStart}), 0) AS gmv_yesterday,
+               COALESCE(SUM(o.total) FILTER (WHERE ${GMV_ORDER_SQL}), 0) AS gmv_week
           FROM orders o
           LEFT JOIN LATERAL (
             SELECT SUM(r."refundAmount" + r."shippingRefund") AS refund
@@ -887,6 +901,7 @@ export class AdminService {
     return {
       orders: { today: r?.orders_today ?? 0, yesterday: r?.orders_yesterday ?? 0, week: r?.orders_week ?? 0 },
       revenue: { today: Number(r?.rev_today ?? 0), yesterday: Number(r?.rev_yesterday ?? 0), week: Number(r?.rev_week ?? 0) },
+      gmv: { today: Number(r?.gmv_today ?? 0), yesterday: Number(r?.gmv_yesterday ?? 0), week: Number(r?.gmv_week ?? 0) },
       newUsers: { today: u?.today ?? 0, yesterday: u?.yesterday ?? 0, week: u?.week ?? 0 },
     };
   }

@@ -187,11 +187,12 @@ function vsYesterday(today: number, yesterday: number, fmt: (n: number) => strin
   return `${today > yesterday ? '+' : '−'}${fmt(Math.abs(today - yesterday))} so với hôm qua`;
 }
 
-function TodayStat({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: 'up' | 'down' | 'flat' }) {
+function TodayStat({ label, value, sub, note, tone }: { label: string; value: string; sub: string; note?: string; tone?: 'up' | 'down' | 'flat' }) {
   return (
     <div role="group" aria-label={label} className="rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
       <div className="text-xs text-stone-600">{label}</div>
       <div className="mt-0.5 text-xl font-bold text-stone-900">{value}</div>
+      {note && <div className="mt-0.5 text-[11px] font-medium text-stone-700">{note}</div>}
       <div className={`mt-0.5 text-[11px] ${tone === 'up' ? 'text-success-fg' : tone === 'down' ? 'text-danger-fg' : 'text-stone-500'}`}>{sub}</div>
     </div>
   );
@@ -199,7 +200,7 @@ function TodayStat({ label, value, sub, tone }: { label: string; value: string; 
 
 const toneOf = (a: number, b: number) => (a > b ? 'up' : a < b ? 'down' : 'flat');
 
-/** Bốn số của ngày: doanh thu đã thu, đơn, khách mới (tài khoản thật) và tỉ lệ khách mua lại trong 30 ngày (NS-1). Mỗi số lỗi thì chỉ nó vắng, không kéo sập cả trang. */
+/** Bốn số của ngày: tiền đã thu từ đơn hôm nay (kèm giá trị đơn đặt, vì COD chưa giao chưa phải tiền đã thu), đơn, khách mới (tài khoản thật) và tỉ lệ khách mua lại trong 30 ngày (NS-1). Mỗi số lỗi thì chỉ nó vắng, không kéo sập cả trang. */
 function TodayStats() {
   const today = useQuery({ queryKey: ['admin-today-summary'], queryFn: getTodaySummary, refetchInterval: 60_000 });
   const retention = useQuery({ queryKey: ['admin-analytics-retention'], queryFn: () => getRetentionDaily(30), staleTime: 5 * 60_000 });
@@ -211,7 +212,7 @@ function TodayStats() {
       {today.isError && <LoadError onRetry={() => void today.refetch()} retrying={today.isFetching}>Không tải được số bán hàng hôm nay.</LoadError>}
       {t && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <TodayStat label="Doanh thu hôm nay" value={formatVnd(t.revenue.today)} sub={`${vsYesterday(t.revenue.today, t.revenue.yesterday, formatVnd)} · 7 ngày ${formatVnd(t.revenue.week)}`} tone={toneOf(t.revenue.today, t.revenue.yesterday)} />
+          <TodayStat label="Đã thu từ đơn hôm nay" value={formatVnd(t.revenue.today)} note={t.gmv ? `Giá trị đơn đặt ${formatVnd(t.gmv.today)}` : undefined} sub={`${vsYesterday(t.revenue.today, t.revenue.yesterday, formatVnd)} · 7 ngày ${formatVnd(t.revenue.week)}`} tone={toneOf(t.revenue.today, t.revenue.yesterday)} />
           <TodayStat label="Đơn hôm nay" value={String(t.orders.today)} sub={`${vsYesterday(t.orders.today, t.orders.yesterday, String)} · 7 ngày ${t.orders.week}`} tone={toneOf(t.orders.today, t.orders.yesterday)} />
           <TodayStat label="Khách mới hôm nay" value={String(t.newUsers.today)} sub={`7 ngày: ${t.newUsers.week} khách mới`} tone={toneOf(t.newUsers.today, t.newUsers.yesterday)} />
           <TodayStat

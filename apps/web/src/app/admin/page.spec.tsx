@@ -3556,7 +3556,7 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
 
   it('ADMIN thấy số bán hàng hôm nay trên trang đầu; nhân viên không gọi API số bán', async () => {
     const admin = await mount();
-    expect(admin.container.querySelector('[role="group"][aria-label="Doanh thu hôm nay"]')!.textContent).toContain('1.500.000');
+    expect(admin.container.querySelector('[role="group"][aria-label="Đã thu từ đơn hôm nay"]')!.textContent).toContain('1.500.000');
     expect(mocks.todayCalls).toBe(1);
     admin.unmount();
     mounted = [];
@@ -3564,7 +3564,7 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
     mocks.access = { role: 'STAFF', staffPermissions: ['KE_TOAN'] };
     const staff = await mount();
-    expect(staff.container.querySelector('[role="group"][aria-label="Doanh thu hôm nay"]')).toBeNull();
+    expect(staff.container.querySelector('[role="group"][aria-label="Đã thu từ đơn hôm nay"]')).toBeNull();
     expect(mocks.todayCalls).toBe(0);
   });
 

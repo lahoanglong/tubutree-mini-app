@@ -456,10 +456,12 @@ export const setUserRole = (phone: string, role: UserRole, tierId?: string) => {
     { method: 'POST', body: { phone, role, ...(tier ? { tierId: tier } : {}) } },
   );
 };
-/** Số của trang "Hôm nay" (chỉ ADMIN): đơn, doanh thu đã thu, khách mới (tài khoản thật) theo ngày giờ VN. */
+/** Số của trang "Hôm nay" (chỉ ADMIN): đơn, tiền đã thu, giá trị đơn đặt, khách mới (tài khoản thật) theo ngày giờ VN. */
 export interface TodaySummary {
   orders: { today: number; yesterday: number; week: number };
   revenue: { today: number; yesterday: number; week: number };
+  /** Giá trị đơn đặt (đơn COD chưa giao cũng tính); thiếu khi API chưa cập nhật. */
+  gmv?: { today: number; yesterday: number; week: number };
   newUsers: { today: number; yesterday: number; week: number };
 }
 export const getTodaySummary = () => apiFetch<TodaySummary>('/admin/dashboard/today');
