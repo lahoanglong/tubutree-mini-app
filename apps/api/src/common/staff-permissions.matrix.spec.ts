@@ -241,6 +241,7 @@ const EXPECTED: Record<string, Access> = {
   'GET /admin/storefronts': ADMIN_ONLY,
   'GET /admin/storefronts/:id': ADMIN_ONLY,
   'POST /admin/storefronts/:id/approval': ADMIN_ONLY,
+  'POST /admin/storefronts/:id/content-seen': ADMIN_ONLY,
   'POST /admin/storefronts/:id/partner': ADMIN_ONLY,
   'POST /admin/storefronts/:id/reinstate': ADMIN_ONLY,
   'POST /admin/storefronts/:id/take-down': ADMIN_ONLY,
