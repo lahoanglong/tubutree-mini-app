@@ -959,6 +959,35 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       expect(ov.tierGrace).toEqual({ until: until.toISOString(), spendingToKeep: 400_000, pointsToKeep: 30_000 });
     });
 
+    it('số còn thiếu tính trên khung 12 tháng kết thúc ở ngày hết hạn: đơn sắp rơi khỏi khung không được tính', async () => {
+      const DAY = 864e5;
+      const until = new Date(Date.now() + 20 * DAY);
+      const orders = [
+        { total: 1_000_000, createdAt: new Date(Date.now() - 355 * DAY) }, // còn trong khung trượt từ hôm nay, nhưng rơi ra trước ngày hết hạn
+        { total: 300_000, createdAt: new Date(Date.now() - 100 * DAY) },
+      ];
+      const prisma = {
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: 'loc', tier: GRACE_TIERS[1], tierGraceUntil: until }) },
+        membershipTier: { findMany: jest.fn().mockResolvedValue(GRACE_TIERS) },
+        order: {
+          aggregate: jest.fn(async ({ where }: { where: { createdAt: { gte: Date } } }) => ({
+            _sum: { total: orders.filter((o) => o.createdAt >= where.createdAt.gte).reduce((a, o) => a + o.total, 0) },
+          })),
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+        externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
+        pointsTransaction: fakeLedger([]),
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      const svc = new LoyaltyService(prisma, makeConfig());
+      const gap = await svc.tierKeepGap('u1', GRACE_TIERS[1] as never, until);
+      expect(gap.spendingToKeep).toBe(1_200_000);
+      const ov = await svc.getOverview('u1');
+      expect(ov.tierGrace?.spendingToKeep).toBe(1_200_000);
+      expect(ov.spent12m).toBe(1_300_000);
+    });
+
     it('không có hạn, hoặc hạn đã qua, hoặc chưa có hạng: không trả tierGrace', async () => {
       const past = new Date(Date.now() - 864e5);
       expect((await new LoyaltyService(build({ tierId: 'loc', tier: GRACE_TIERS[1], tierGraceUntil: null }), makeConfig()).getOverview('u1')).tierGrace).toBeNull();

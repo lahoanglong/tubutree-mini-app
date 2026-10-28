@@ -638,11 +638,16 @@ export class LoyaltyService {
   }
 
   /**
-   * Còn thiếu bao nhiêu để GIỮ hạng `tier` (cùng số getOverview.tierGrace báo): tiền đơn giao thành công 12 tháng với hạng
-   * xét theo chi tiêu, điểm tích 12 tháng với hạng xét theo điểm.
+   * Còn thiếu bao nhiêu để GIỮ hạng `tier`: tiền đơn giao thành công với hạng xét theo chi tiêu, điểm tích với hạng xét theo
+   * điểm. Khung 12 tháng KẾT THÚC ở `until` (ngày hết hạn giữ hạng), vì lượt xét hạng ngày đó sẽ nhìn lại đúng khung ấy: đơn
+   * hôm nay còn trong khung trượt nhưng sẽ rơi ra trước `until` thì không được tính, nếu không khách mua đúng số báo vẫn bị hạ.
    */
-  async tierKeepGap(userId: string, tier: { minSpending: number | null; minPoints: number }): Promise<{ spendingToKeep: number | null; pointsToKeep: number }> {
-    const since = new Date();
+  async tierKeepGap(
+    userId: string,
+    tier: { minSpending: number | null; minPoints: number },
+    until: Date,
+  ): Promise<{ spendingToKeep: number | null; pointsToKeep: number }> {
+    const since = new Date(until);
     since.setMonth(since.getMonth() - 12);
     const { spent12m, partialReturns } = await this.spending12m(userId, since);
     const tierPts = await this.tierPoints(userId, since, partialReturns);
@@ -690,14 +695,8 @@ export class LoyaltyService {
     const expiring = user.pointsBalance > 0 ? nextPointExpiry(expiryTxns, new Date()) : null;
     // Đang trong hạn giữ hạng (đã đủ điều kiện rớt hạng nhưng chưa bị hạ): cho khách biết phải mua thêm bao nhiêu để giữ.
     const graceUntil = user.tierGraceUntil && user.tier && user.tierGraceUntil.getTime() > Date.now() ? user.tierGraceUntil : null;
-    const tierGrace =
-      graceUntil && user.tier
-        ? {
-            until: graceUntil.toISOString(),
-            spendingToKeep: user.tier.minSpending != null ? Math.max(0, user.tier.minSpending - spent12m) : null,
-            pointsToKeep: Math.max(0, user.tier.minPoints - tierPoints),
-          }
-        : null;
+    const keepGap = graceUntil && user.tier ? await this.tierKeepGap(userId, user.tier, graceUntil) : null;
+    const tierGrace = graceUntil && keepGap ? { until: graceUntil.toISOString(), ...keepGap } : null;
 
     return {
       /** Quy tắc tích/đổi để màn Điểm Xanh giải thích đúng theo cấu hình thay vì FE tự ghi con số. */
