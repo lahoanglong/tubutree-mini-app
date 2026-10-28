@@ -10,32 +10,35 @@ import {
   videoUploadCopy,
 } from '@tubutree/app-core/cloudinary-video';
 import { ui } from '@/lib/guest-ui';
-
-// Next chỉ nhúng biến NEXT_PUBLIC_* khi viết nguyên dạng `process.env.NEXT_PUBLIC_X`, nên không gom vào một hàm đọc theo tên.
-const cloudName = () => (process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ?? '').trim();
-const uploadPreset = () => (process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET ?? '').trim();
+import { reviewVideoConfig } from './review-video-config';
 
 /**
  * Video đánh giá: tải thẳng lên Cloudinary, cùng giới hạn và lời báo với Mini App. Máy chủ chỉ nhận video đã tải lên
  * Cloudinary (URL dán tay bị từ chối) nên bản build chưa cấu hình thì ẩn ô chọn; video đã gắn vào đánh giá đang sửa vẫn
- * được giữ để lưu lại không làm mất video.
+ * được giữ để lưu lại không làm mất video. `onBusyChange` báo form cha khi đang tải: video 50MB trên 4G mất cả phút, form phải
+ * chờ thay vì gửi đánh giá không kèm video (mất thưởng, sửa lại cũng không được cộng thêm).
  */
 export function ReviewVideoUpload({
   value,
   onChange,
+  onBusyChange,
   disabled = false,
 }: {
   value: string | null;
   onChange: (url: string | null) => void;
+  onBusyChange?: (busy: boolean) => void;
   disabled?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const changeBusy = (next: boolean) => {
+    setBusy(next);
+    onBusyChange?.(next);
+  };
 
-  const cloud = cloudName();
-  const preset = uploadPreset();
-  if (!cloud || !preset) {
+  const config = reviewVideoConfig();
+  if (!config) {
     return value ? <p className="mt-2 text-sm text-stone-600">Video đã gửi kèm đánh giá này được giữ nguyên.</p> : null;
   }
 
@@ -43,13 +46,13 @@ export function ReviewVideoUpload({
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
-    setBusy(true);
+    changeBusy(true);
     try {
-      onChange(await uploadCloudinaryVideo(file, { cloudName: cloud, uploadPreset: preset }, { readDuration: readVideoDuration }));
+      onChange(await uploadCloudinaryVideo(file, config, { readDuration: readVideoDuration }));
     } catch (err) {
       setError(err instanceof VideoUploadError ? err.message : videoUploadCopy.failed);
     } finally {
-      setBusy(false);
+      changeBusy(false);
       if (inputRef.current) inputRef.current.value = '';
     }
   };

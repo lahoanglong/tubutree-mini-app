@@ -6,11 +6,26 @@ export const REWARD_ALREADY_GIVEN =
   'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, đánh giá lần mua này không cộng thêm điểm.';
 export const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.';
 
-/** Câu về Điểm Xanh dưới form đánh giá. Số điểm chỉ để báo trước; máy chủ vẫn quyết định thưởng lúc tạo. */
-export function rewardHint(o: { isEdit: boolean; rewardAvailable: boolean; hasImages: boolean; hasVideo: boolean }): string {
+/** Chữ trên ô chọn video và nút gửi khi video đang tải lên; ở đây để form nạp được mà không kéo theo mã tải video. */
+export const VIDEO_UPLOADING = 'Đang tải video…';
+
+/**
+ * Câu về Điểm Xanh dưới form đánh giá. Số điểm chỉ để báo trước; máy chủ vẫn quyết định thưởng lúc tạo.
+ * `canUploadVideo` false (bản build chưa cấu hình Cloudinary, ô chọn video bị ẩn) thì không mời video: câu hứa phải làm được.
+ */
+export function rewardHint(o: {
+  isEdit: boolean;
+  rewardAvailable: boolean;
+  hasImages: boolean;
+  hasVideo: boolean;
+  canUploadVideo?: boolean;
+}): string {
   if (o.isEdit) return EDIT_HINT;
   if (!o.rewardAvailable) return REWARD_ALREADY_GIVEN;
   if (o.hasVideo) return `Tuyệt! ${FIRST_REVIEW_ONLY}, đánh giá có video nhận +15.000 Điểm Xanh!`;
-  if (o.hasImages) return `${FIRST_REVIEW_ONLY}, bạn nhận +10.000 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.000.`;
-  return `${FIRST_REVIEW_ONLY}: thêm video +15.000 / ảnh +10.000 Điểm Xanh (chỉ chữ +5.000). Chỉ đánh giá được khi đã mua và nhận hàng.`;
+  const videoOffer = o.canUploadVideo !== false;
+  if (o.hasImages) {
+    return `${FIRST_REVIEW_ONLY}, bạn nhận +10.000 Điểm Xanh cho đánh giá có ảnh!${videoOffer ? ' Thêm video để được +15.000.' : ''}`;
+  }
+  return `${FIRST_REVIEW_ONLY}: thêm ${videoOffer ? 'video +15.000 / ' : ''}ảnh +10.000 Điểm Xanh (chỉ chữ +5.000). Chỉ đánh giá được khi đã mua và nhận hàng.`;
 }

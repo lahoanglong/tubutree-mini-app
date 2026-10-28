@@ -3,6 +3,8 @@
  * video đã tải lên Cloudinary (URL dán tay bị từ chối), nên không có đường nào khác để đính video vào đánh giá.
  */
 
+import { VIDEO_UPLOADING } from './review-copy';
+
 export const REVIEW_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 export const REVIEW_VIDEO_MAX_SECONDS = 60;
 
@@ -14,7 +16,7 @@ export const videoUploadCopy = {
   tooLong: (maxSeconds: number) => `Video dài quá ${maxSeconds} giây. Hãy cắt ngắn lại rồi chọn lại nhé.`,
   failed: 'Tải video thất bại, thử lại.',
   pick: (maxSeconds: number) => `Quay/đăng video review (≤ ${maxSeconds}s)`,
-  uploading: 'Đang tải video…',
+  uploading: VIDEO_UPLOADING,
 } as const;
 
 /** Lỗi đã có lời báo cho khách trong `message`. */

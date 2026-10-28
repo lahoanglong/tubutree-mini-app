@@ -100,7 +100,7 @@ export function reviewHref(slug: string, orderId?: string | null): string {
   return `/san-pham/${encodeURIComponent(slug)}${qs}#danh-gia`;
 }
 
-export { EDIT_HINT, FIRST_REVIEW_ONLY, REWARD_ALREADY_GIVEN, rewardHint } from '@tubutree/app-core/review-copy';
+export { EDIT_HINT, FIRST_REVIEW_ONLY, REWARD_ALREADY_GIVEN, VIDEO_UPLOADING, rewardHint } from '@tubutree/app-core/review-copy';
 
 /** Câu nói rõ đánh giá đang soạn thuộc lần mua nào; null khi chỉ mua một lần hoặc chưa biết đơn. */
 export function purchaseNote(o: { isEdit: boolean; purchaseCount: number; orderCode?: string | null }): string | null {

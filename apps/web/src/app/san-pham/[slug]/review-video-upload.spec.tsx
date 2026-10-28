@@ -5,11 +5,12 @@ import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets } from '@/test-utils/a11y';
 import { ReviewVideoUpload } from './review-video-upload';
 
+const busyLog: boolean[] = [];
 function Harness({ initial = null }: { initial?: string | null }) {
   const [video, setVideo] = useState<string | null>(initial);
   return (
     <>
-      <ReviewVideoUpload value={video} onChange={setVideo} />
+      <ReviewVideoUpload value={video} onChange={setVideo} onBusyChange={(b) => busyLog.push(b)} />
       <output data-testid="value">{video ?? ''}</output>
     </>
   );
@@ -49,6 +50,7 @@ const mount = async (initial: string | null = null) => {
 
 const fetchMock = vi.fn();
 beforeEach(() => {
+  busyLog.length = 0;
   configure();
   fetchMock.mockReset().mockResolvedValue({ ok: true, json: async () => ({ secure_url: 'https://res.cloudinary.com/demo/v.mp4', duration: 20 }) });
   vi.stubGlobal('fetch', fetchMock);
@@ -73,6 +75,18 @@ describe('ReviewVideoUpload — tải video đánh giá lên Cloudinary như Min
     expect(body.get('upload_preset')).toBe('reviews');
     expect(value(c)).toBe('https://res.cloudinary.com/demo/v.mp4');
     expect(c.querySelector('video')?.getAttribute('src')).toBe('https://res.cloudinary.com/demo/v.mp4');
+  });
+
+  it('báo form cha đang tải rồi tải xong (kể cả khi lỗi) để form khoá nút Gửi trong lúc chờ', async () => {
+    const c = await mount();
+    pick(c, videoFile());
+    expect(busyLog).toEqual([true]);
+    await flush(4);
+    expect(busyLog).toEqual([true, false]);
+    fetchMock.mockResolvedValue({ ok: false, json: async () => ({}) });
+    pick(c, videoFile());
+    await flush(4);
+    expect(busyLog).toEqual([true, false, true, false]);
   });
 
   it('video quá 50MB: báo rõ khách cần làm gì và không tải lên', async () => {

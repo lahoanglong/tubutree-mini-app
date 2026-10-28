@@ -92,6 +92,17 @@ const mount = async () => {
 const button = (c: HTMLElement, text: string | RegExp) => byText(c, 'button', text);
 const buttonNamed = (c: HTMLElement, name: string) => c.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);
 const form = (c: HTMLElement) => c.querySelector('form');
+const configureVideo = () => {
+  vi.stubEnv('NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME', 'demo');
+  vi.stubEnv('NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET', 'reviews');
+};
+const pickVideo = (c: HTMLElement) => {
+  const input = c.querySelector<HTMLInputElement>('input[type="file"][accept="video/*"]')!;
+  Object.defineProperty(input, 'files', { value: [new File(['x'], 'v.mp4', { type: 'video/mp4' })], configurable: true });
+  act(() => {
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+};
 const star = (c: HTMLElement, n: number) => c.querySelector<HTMLButtonElement>(`[role="radiogroup"] button[aria-label="${n} sao"]`);
 
 beforeEach(() => {
@@ -140,6 +151,8 @@ describe('ProductReviews (web) — danh sách công khai', () => {
   it('chưa có đánh giá → lời mời viết đánh giá đầu tiên', async () => {
     mocks.list = { count: 0, average: 0, distribution: {}, items: [] };
     const c = await mount();
+    // Khối rỗng nạp lười (next/dynamic): chờ tới khi hiện.
+    for (let n = 0; n < 40 && !c.textContent!.includes('Chưa có đánh giá'); n++) await flush();
     expect(c.textContent).toContain('Chưa có đánh giá');
     expect(c.textContent).toContain('Hãy là người đầu tiên chia sẻ trải nghiệm.');
     expect(c.querySelector('svg[aria-hidden]')).not.toBeNull();
@@ -191,6 +204,7 @@ describe('ProductReviews (web) — mỗi lần mua một đánh giá', () => {
   });
 
   it('đánh giá đầu tiên: câu gợi ý nêu điều kiện lần đầu rồi mới nêu điểm; được cộng thì báo đúng số điểm', async () => {
+    configureVideo();
     mocks.elig = structuredClone(ELIG_NEW);
     mocks.saveResult = { id: 'a', updated: false, pointsEarned: 10 };
     const c = await mount();
@@ -214,24 +228,82 @@ describe('ProductReviews (web) — mỗi lần mua một đánh giá', () => {
   });
 
   it('tải video lên: gửi kèm videoUrl và câu thưởng đổi sang mức video (+15.000)', async () => {
-    vi.stubEnv('NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME', 'demo');
-    vi.stubEnv('NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET', 'reviews');
+    configureVideo();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ secure_url: 'https://res.cloudinary.com/demo/v.mp4', duration: 30 }) }));
     mocks.elig = structuredClone(ELIG_NEW);
     mocks.saveResult = { id: 'a', updated: false, pointsEarned: 15 };
     const c = await mount();
     click(button(c, 'Viết đánh giá'));
-    await flush();
-    const input = c.querySelector<HTMLInputElement>('input[type="file"][accept="video/*"]')!;
-    Object.defineProperty(input, 'files', { value: [new File(['x'], 'v.mp4', { type: 'video/mp4' })], configurable: true });
-    act(() => {
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await flush(6);
+    pickVideo(c);
     await flush(6);
     expect(form(c)!.textContent).toContain('Tuyệt! Lần đầu đánh giá sản phẩm này, đánh giá có video nhận +15.000 Điểm Xanh!');
     click(button(c, 'Gửi đánh giá'));
     await flush();
     expect(mocks.saved[0]!.body).toMatchObject({ videoUrl: 'https://res.cloudinary.com/demo/v.mp4', orderId: 'o1' });
+  });
+
+  it('bản build chưa cấu hình Cloudinary: không có ô chọn video và câu thưởng không mời video', async () => {
+    vi.stubEnv('NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME', '');
+    vi.stubEnv('NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET', '');
+    mocks.elig = structuredClone(ELIG_NEW);
+    const c = await mount();
+    click(button(c, 'Viết đánh giá'));
+    await flush(6);
+    expect(c.querySelector('input[type="file"][accept="video/*"]')).toBeNull();
+    expect(form(c)!.textContent).toContain('Lần đầu đánh giá sản phẩm này: thêm ảnh +10.000 Điểm Xanh (chỉ chữ +5.000).');
+    expect(form(c)!.textContent).not.toContain('video +15.000');
+    click(button(c, 'Ảnh đánh giá (0)'));
+    expect(form(c)!.textContent).toContain('bạn nhận +10.000 Điểm Xanh cho đánh giá có ảnh!');
+    expect(form(c)!.textContent).not.toContain('Thêm video');
+  });
+
+  it('đang tải video: nút Gửi khoá (bấm hay gửi form cũng không lưu); tải xong mới gửi và kèm videoUrl', async () => {
+    configureVideo();
+    let finishUpload!: (res: unknown) => void;
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise((resolve) => (finishUpload = resolve))));
+    mocks.elig = structuredClone(ELIG_NEW);
+    mocks.saveResult = { id: 'a', updated: false, pointsEarned: 15 };
+    const c = await mount();
+    click(button(c, 'Viết đánh giá'));
+    await flush(6);
+    pickVideo(c);
+    await flush(4);
+    const submit = form(c)!.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toBe('Đang tải video…');
+    click(submit);
+    act(() => {
+      form(c)!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    await flush();
+    expect(mocks.saved).toEqual([]);
+
+    finishUpload({ ok: true, json: async () => ({ secure_url: 'https://res.cloudinary.com/demo/v.mp4', duration: 30 }) });
+    await flush(6);
+    expect(submit.disabled).toBe(false);
+    expect(submit.textContent).toBe('Gửi đánh giá');
+    click(submit);
+    await flush();
+    expect(mocks.saved).toHaveLength(1);
+    expect(mocks.saved[0]!.body).toMatchObject({ videoUrl: 'https://res.cloudinary.com/demo/v.mp4', orderId: 'o1' });
+  });
+
+  it('tải video lỗi: nút Gửi mở lại để gửi đánh giá không video', async () => {
+    configureVideo();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
+    mocks.elig = structuredClone(ELIG_NEW);
+    const c = await mount();
+    click(button(c, 'Viết đánh giá'));
+    await flush(6);
+    pickVideo(c);
+    await flush(6);
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe('Tải video thất bại, thử lại.');
+    const submit = form(c)!.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    expect(submit.disabled).toBe(false);
+    click(submit);
+    await flush();
+    expect(mocks.saved[0]!.body).toMatchObject({ videoUrl: undefined, orderId: 'o1' });
   });
 
   it('nút "Sửa" của dòng mình: điền theo GET /reviews/:id, giữ ảnh và video cũ, lưu gửi đúng đơn của đánh giá đó', async () => {

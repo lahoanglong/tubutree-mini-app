@@ -219,15 +219,22 @@ export function ImageUpload({
 export function VideoUpload({
   value,
   onChange,
+  onBusyChange,
   maxSeconds = REVIEW_VIDEO_MAX_SECONDS,
 }: {
   value: string;
   onChange: (url: string) => void;
+  /** Báo form cha khi đang tải: video 50MB trên 4G mất cả phút, form phải chờ thay vì gửi đánh giá không kèm video. */
+  onBusyChange?: (busy: boolean) => void;
   maxSeconds?: number;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const changeUploading = (next: boolean) => {
+    setUploading(next);
+    onBusyChange?.(next);
+  };
 
   const pick = () => {
     haptic('light');
@@ -238,7 +245,7 @@ export function VideoUpload({
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
-    setUploading(true);
+    changeUploading(true);
     try {
       const url = await uploadCloudinaryVideo(file, { cloudName: CLOUD!, uploadPreset: PRESET! }, { maxSeconds, readDuration: readVideoDuration });
       haptic('medium');
@@ -246,7 +253,7 @@ export function VideoUpload({
     } catch (err) {
       setError(err instanceof VideoUploadError ? err.message : videoUploadCopy.failed);
     } finally {
-      setUploading(false);
+      changeUploading(false);
       if (inputRef.current) inputRef.current.value = '';
     }
   };

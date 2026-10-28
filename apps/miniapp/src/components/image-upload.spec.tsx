@@ -79,4 +79,19 @@ describe('VideoUpload — dùng chung hàm tải Cloudinary với web', () => {
     expect(await screen.findByText('Video dài quá 60 giây. Hãy cắt ngắn lại rồi chọn lại nhé.')).toBeTruthy();
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it('báo form cha đang tải rồi tải xong, kể cả khi lỗi, để khoá nút gửi trong lúc chờ', async () => {
+    let finish!: (res: unknown) => void;
+    const fetchMock = vi.fn().mockReturnValueOnce(new Promise((resolve) => (finish = resolve))).mockResolvedValue({ ok: false, json: async () => ({}) });
+    vi.stubGlobal('fetch', fetchMock);
+    const VideoUpload = await loadConfigured();
+    const busy: boolean[] = [];
+    const { container } = render(<VideoUpload value="" onChange={() => {}} onBusyChange={(b) => busy.push(b)} />);
+    pickFile(container, new File(['x'], 'v.mp4', { type: 'video/mp4' }));
+    await waitFor(() => expect(busy).toEqual([true]));
+    finish({ ok: true, json: async () => ({ secure_url: 'https://res.cloudinary.com/demo/v.mp4', duration: 12 }) });
+    await waitFor(() => expect(busy).toEqual([true, false]));
+    pickFile(container, new File(['x'], 'v2.mp4', { type: 'video/mp4' }));
+    await waitFor(() => expect(busy).toEqual([true, false, true, false]));
+  });
 });
