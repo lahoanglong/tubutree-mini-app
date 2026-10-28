@@ -786,15 +786,41 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
     expect(r.meta).toEqual({ page: 1, limit: 2, total: 4 });
     expect(findMany.mock.calls[0][0]).toEqual({
       where: { isActive: true, approvalStatus: 'APPROVED' },
-      select: {
-        id: true, soldApp: true, soldExternal: true, basePrice: true, salePrice: true,
-        variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
-      },
+      select: { id: true, soldApp: true, soldExternal: true },
     });
     expect(findMany.mock.calls[1][0]).toEqual({
       where: { AND: [{ isActive: true, approvalStatus: 'APPROVED' }, { id: { in: ['b', 'a'] } }] },
       include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
+  });
+
+  it('thứ hạng không đọc phân loại hay Giờ vàng, và được nhớ 60 giây: lần 2 chỉ còn câu lấy thẻ của trang', async () => {
+    const findMany = jest.fn().mockResolvedValueOnce(RANKED).mockResolvedValue([card('b'), card('a')]);
+    const flash = noFlash();
+    const prisma = { product: { findMany, count: jest.fn() }, flashSaleItem: flash } as unknown as PrismaService;
+    const svc = new CatalogService(prisma);
+    await svc.list({ page: 1, limit: 2, sort: 'best_seller' });
+    expect(flash.findMany).not.toHaveBeenCalled();
+    expect(findMany).toHaveBeenCalledTimes(2);
+    const again = await svc.list({ page: 1, limit: 2, sort: 'best_seller' });
+    expect(again.data.map((c) => c.id)).toEqual(['b', 'a']);
+    expect(again.meta.total).toBe(4);
+    expect(findMany).toHaveBeenCalledTimes(3);
+    await svc.list({ page: 1, limit: 2, sort: 'best_seller', brand: 'Khac' });
+    expect(findMany).toHaveBeenCalledTimes(5);
+  });
+
+  it('hết 60 giây thì xếp lại từ DB', async () => {
+    const findMany = jest.fn().mockResolvedValueOnce(RANKED).mockResolvedValue([card('b'), card('a')]);
+    const svc = new CatalogService({ product: { findMany, count: jest.fn() }, flashSaleItem: noFlash() } as unknown as PrismaService);
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValue(1_000_000);
+    await svc.list({ page: 1, limit: 2, sort: 'best_seller' });
+    now.mockReturnValue(1_000_000 + 61_000);
+    findMany.mockResolvedValueOnce([{ id: 'x', soldApp: 9, soldExternal: 9 }]).mockResolvedValue([card('x')]);
+    const r = await svc.list({ page: 1, limit: 2, sort: 'best_seller' });
+    expect(r.meta.total).toBe(1);
+    now.mockRestore();
   });
 
   it('trang 2 nối tiếp đúng thứ tự, không trùng trang 1', async () => {

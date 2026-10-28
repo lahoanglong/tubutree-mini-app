@@ -95,6 +95,8 @@ function standingOf(p: { id: string; basePrice: number; salePrice: number | null
 /** Danh mục kèm số SP đang bán — miniapp chỉ hiện danh mục có hàng (plan 4b Ruling 4). */
 export type CategoryWithCount = Category & { productCount: number };
 
+type PricedFields = { basePrice: number; salePrice: number | null; variations: CardVariation[] };
+
 @Injectable()
 export class CatalogService {
   private readonly logger = new Logger(CatalogService.name);
@@ -176,7 +178,8 @@ export class CatalogService {
    * "Bán chạy" = soldApp + soldExternal giảm dần, hoà thì id tăng dần (spec 5b.2, plan 4b Ruling 2).
    * Prisma không orderBy được theo biểu thức → xếp hạng ở đây: lấy vài cột nhỏ của MỌI SP khớp, sắp,
    * cắt trang, rồi lấy thẻ đầy đủ đúng các id của trang (giữ thứ tự). total = số SP khớp.
-   * Đủ nhanh với catalog hiện tại (vài trăm SP). Vượt ~5k SP → chuyển sang cột soldTotal có index.
+   * Không đọc phân loại, giá hay Giờ vàng (không cần cho thứ hạng) và danh sách id đã xếp được nhớ 60 giây (xem listRanked):
+   * một lần tải trang là 3 câu SQL, các lần sau trong 60 giây là 2. Vượt ~5k SP → chuyển sang cột soldTotal có index.
    */
   private listBestSellers(where: Prisma.ProductWhereInput, page: number, limit: number, price?: PriceBounds) {
     return this.listRanked<{ id: string; soldApp: number; soldExternal: number }>(
@@ -186,6 +189,8 @@ export class CatalogService {
       { id: true, soldApp: true, soldExternal: true },
       (x, y) => y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal),
       price,
+      undefined,
+      false,
     );
   }
 
@@ -208,6 +213,9 @@ export class CatalogService {
   /**
    * Nạp mọi SP khớp kèm giá phân loại, lọc khoảng giá và xếp thứ tự ở TS (giá thẻ là biểu thức nên Prisma không lọc/sắp được),
    * cắt trang rồi lấy thẻ đầy đủ đúng các id của trang. `total` là số SP còn lại sau khi lọc giá. `compare` rỗng thì giữ thứ tự `orderBy` của DB.
+   * `needsPrice` false (thứ hạng không phụ thuộc giá, vd Bán chạy) thì bỏ qua phân loại và Giờ vàng. Danh sách id đã xếp được nhớ
+   * RANK_TTL_MS theo bộ lọc: tải liên tiếp không quét lại cả catalog (per-instance, cùng hạn chế như brandsCache; hàng ẩn/gỡ vẫn bị
+   * loại vì thẻ của trang luôn đọc lại với `where`, chỉ `total` và thứ tự có thể cũ tới 60 giây).
    */
   private async listRanked<T extends { id: string }>(
     where: Prisma.ProductWhereInput,
@@ -217,25 +225,12 @@ export class CatalogService {
     compare: ((x: T & { basePrice: number; salePrice: number | null; variations: CardVariation[] }, y: T & { basePrice: number; salePrice: number | null; variations: CardVariation[] }, offers: ReadonlyMap<string, FlashOffer[]>) => number) | null,
     price?: PriceBounds,
     orderBy?: Prisma.ProductOrderByWithRelationInput[],
+    needsPrice = true,
   ) {
-    type Priced = T & { basePrice: number; salePrice: number | null; variations: CardVariation[] };
-    let ranked = (await this.prisma.product.findMany({
-      where,
-      ...(orderBy ? { orderBy } : {}),
-      select: { ...select, basePrice: true, salePrice: true, variations: { where: { isActive: true }, select: CARD_VARIATION_SELECT } },
-    })) as unknown as Priced[];
-    const offers = await this.activeFlashOffers();
-    if (price) ranked = ranked.filter((r) => inPriceRange(standingOf(r, offers), price));
-    if (compare) {
-      ranked.sort((x, y) => {
-        const diff = compare(x, y, offers);
-        if (diff !== 0) return diff;
-        return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
-      });
-    }
+    const rankedIds = await this.rankedIds<T>(where, select, compare, price, orderBy, needsPrice);
     const { skip, take } = skipTake(page, limit);
-    const pageIds = ranked.slice(skip, skip + take).map((r) => r.id);
-    if (pageIds.length === 0) return paginated([], page, limit, ranked.length);
+    const pageIds = rankedIds.slice(skip, skip + take);
+    if (pageIds.length === 0) return paginated([], page, limit, rankedIds.length);
     const rows = await this.prisma.product.findMany({
       where: { AND: [where, { id: { in: pageIds } }] },
       include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
@@ -245,7 +240,48 @@ export class CatalogService {
       .map((id) => byId.get(id))
       .filter((p): p is NonNullable<typeof p> => Boolean(p))
       .map((p) => this.toCard(p));
-    return paginated(items, page, limit, ranked.length);
+    return paginated(items, page, limit, rankedIds.length);
+  }
+
+  private readonly rankCache = new Map<string, { ids: string[]; expiresAt: number }>();
+  private readonly RANK_TTL_MS = 60_000;
+  private readonly RANK_MAX_KEYS = 100;
+
+  /** Id đã lọc giá và xếp thứ tự, mới nhất theo bộ lọc trong RANK_TTL_MS. */
+  private async rankedIds<T extends { id: string }>(
+    where: Prisma.ProductWhereInput,
+    select: Prisma.ProductSelect,
+    compare: ((x: T & PricedFields, y: T & PricedFields, offers: ReadonlyMap<string, FlashOffer[]>) => number) | null,
+    price: PriceBounds | undefined,
+    orderBy: Prisma.ProductOrderByWithRelationInput[] | undefined,
+    needsPrice: boolean,
+  ): Promise<string[]> {
+    const key = JSON.stringify({ where, select, price, orderBy, needsPrice });
+    const now = Date.now();
+    const hit = key.length <= 2000 ? this.rankCache.get(key) : undefined;
+    if (hit && hit.expiresAt > now) return hit.ids;
+    type Priced = T & PricedFields;
+    const priced = needsPrice || price;
+    let ranked = (await this.prisma.product.findMany({
+      where,
+      ...(orderBy ? { orderBy } : {}),
+      select: priced ? { ...select, basePrice: true, salePrice: true, variations: { where: { isActive: true }, select: CARD_VARIATION_SELECT } } : select,
+    })) as unknown as Priced[];
+    const offers = priced ? await this.activeFlashOffers() : new Map<string, FlashOffer[]>();
+    if (price) ranked = ranked.filter((r) => inPriceRange(standingOf(r, offers), price));
+    if (compare) {
+      ranked.sort((x, y) => {
+        const diff = compare(x, y, offers);
+        if (diff !== 0) return diff;
+        return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
+      });
+    }
+    const ids = ranked.map((r) => r.id);
+    if (key.length <= 2000) {
+      if (this.rankCache.size >= this.RANK_MAX_KEYS) this.rankCache.delete(this.rankCache.keys().next().value as string);
+      this.rankCache.set(key, { ids, expiresAt: now + this.RANK_TTL_MS });
+    }
+    return ids;
   }
 
   /** Suất Giờ vàng đang chạy gom theo sản phẩm: một truy vấn, cùng điều kiện và cùng luật "còn rẻ hơn" với dải Giờ vàng. */
