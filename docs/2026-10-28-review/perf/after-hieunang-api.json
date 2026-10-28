@@ -1,0 +1,790 @@
+{
+  "meta": {
+    "date": "2026-10-28T10:15:45.326Z",
+    "label": "hieunang-api",
+    "branch": "review/1028-hieunang",
+    "commit": "056eee7af",
+    "dirty": 0,
+    "lane": 5,
+    "runsPerMetric": 3,
+    "emulation": {
+      "web": "Moto G 360x640, Slow 4G 1,6 Mbps/150 ms, CPU x4",
+      "mini": "375x812, Slow 4G 1,6 Mbps/150 ms, CPU x4, gzip",
+      "api": "autocannon 10 kết nối",
+      "durationSec": 20
+    },
+    "loadAtStart": {
+      "loadAvg": "Load Avg: 6.29, 9.23, 14.35 ",
+      "cpu": "CPU usage: 4.22% user, 7.51% sys, 88.26% idle "
+    },
+    "node": "v22.23.3",
+    "loadAtEnd": {
+      "loadAvg": "Load Avg: 17.49, 13.02, 13.33 ",
+      "cpu": "CPU usage: 60.88% user, 16.41% sys, 22.69% idle "
+    }
+  },
+  "apiSql": {
+    "home": {
+      "path": "/home",
+      "first": {
+        "status": 200,
+        "sql": 19,
+        "sqlWithTx": 23,
+        "select": 19,
+        "write": 0
+      },
+      "sample": [
+        "SELECT \"public\".\"categories\".\"id\", \"public\".\"categories\".\"parentId\", \"public\".\"categories\".\"name\", \"public\".\"categories\".\"slug\", \"public\".\"categories\".\"image\", ",
+        "SELECT COUNT(*), \"public\".\"products\".\"brand\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"isActive\" = $1 AND \"public\".\"products\".\"approvalStatus\" = CAST",
+        "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"categoryIds\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"isActive\" = $1 AND \"public\".\"products\".\"",
+        "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"soldApp\", \"public\".\"products\".\"soldExternal\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"isActive",
+        "SELECT \"public\".\"brands\".\"id\", \"public\".\"brands\".\"name\", \"public\".\"brands\".\"slug\" FROM \"public\".\"brands\" WHERE (\"public\".\"brands\".\"isPublished\" = $1 AND \"public",
+        "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+        "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"produ",
+        "SELECT \"public\".\"flash_sale_items\".\"id\", \"public\".\"flash_sale_items\".\"flashSaleId\", \"public\".\"flash_sale_items\".\"variationId\", \"public\".\"flash_sale_items\".\"flas",
+        "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"produ",
+        "SELECT \"public\".\"flash_sales\".\"id\", \"public\".\"flash_sales\".\"endAt\" FROM \"public\".\"flash_sales\" WHERE \"public\".\"flash_sales\".\"id\" IN ($1) OFFSET $2",
+        "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam",
+        "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam",
+        "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"produ",
+        "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam",
+        "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+        "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"slug\", \"public\".\"products\".\"name\", \"public\".\"products\".\"thumbnail\", COALESCE(\"aggr_selection_0_Variation\".",
+        "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam",
+        "SELECT COUNT(*) FROM (SELECT \"public\".\"products\".\"id\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"isActive\" = $1 AND \"public\".\"products\".\"approvalStatu",
+        "SELECT COUNT(*) FROM (SELECT \"public\".\"products\".\"id\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"isActive\" = $1 AND \"public\".\"products\".\"approvalStatu"
+      ],
+      "second": {
+        "status": 200,
+        "sql": 0,
+        "sqlWithTx": 0,
+        "select": 0,
+        "write": 0
+      }
+    },
+    "products_list": {
+      "path": "/products?limit=12",
+      "first": {
+        "status": 200,
+        "sql": 3,
+        "sqlWithTx": 4,
+        "select": 3,
+        "write": 0
+      },
+      "sample": [
+        "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"produ",
+        "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam",
+        "SELECT COUNT(*) FROM (SELECT \"public\".\"products\".\"id\" FROM \"public\".\"products\" WHERE (\"public\".\"products\".\"isActive\" = $1 AND \"public\".\"products\".\"approvalStatu"
+      ],
+      "second": {
+        "status": 200,
+        "sql": 3,
+        "sqlWithTx": 4,
+        "select": 3,
+        "write": 0
+      }
+    },
+    "products_best_seller": {
+      "path": "/products?sort=best_seller&limit=12",
+      "first": {
+        "status": 200,
+        "sql": 1,
+        "sqlWithTx": 1,
+        "select": 1,
+        "write": 0
+      },
+      "sample": [
+        "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam"
+      ],
+      "second": {
+        "status": 200,
+        "sql": 1,
+        "sqlWithTx": 1,
+        "select": 1,
+        "write": 0
+      }
+    },
+    "product_detail": {
+      "path": "/products/mat-ong-rung-bhnong",
+      "first": {
+        "status": 200,
+        "sql": 3,
+        "sqlWithTx": 3,
+        "select": 3,
+        "write": 0
+      },
+      "sample": [
+        "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"name\", \"public\".\"variations\".\"attributes\", \"public\".\"variations\".\"retailP",
+        "SELECT \"public\".\"brands\".\"id\", \"public\".\"brands\".\"slug\", \"public\".\"brands\".\"isPublished\" FROM \"public\".\"brands\" WHERE \"public\".\"brands\".\"id\" IN ($1) OFFSET $2",
+        "SELECT \"public\".\"reviews\".\"id\", \"public\".\"reviews\".\"rating\", \"public\".\"reviews\".\"comment\", \"public\".\"reviews\".\"videoUrl\", \"public\".\"reviews\".\"isVerified\", \"publ"
+      ],
+      "second": {
+        "status": 200,
+        "sql": 4,
+        "sqlWithTx": 4,
+        "select": 4,
+        "write": 0
+      }
+    },
+    "config_public": {
+      "path": "/config/public",
+      "first": {
+        "status": 200,
+        "sql": 0,
+        "sqlWithTx": 0,
+        "select": 0,
+        "write": 0
+      },
+      "sample": [],
+      "second": {
+        "status": 200,
+        "sql": 0,
+        "sqlWithTx": 0,
+        "select": 0,
+        "write": 0
+      }
+    },
+    "home_me": {
+      "path": "/home/me?purchasedLimit=10",
+      "first": {
+        "status": 200,
+        "sql": 26,
+        "sqlWithTx": 28,
+        "select": 25,
+        "write": 0
+      },
+      "sample": [
+        "SELECT 1",
+        "SELECT 1",
+        "SELECT 1",
+        "SELECT 1",
+        "SELECT 1",
+        "SELECT 1",
+        "SELECT 1",
+        "SELECT 1",
+        "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"zaloId\" FROM \"public\".\"users\" WHERE (\"public\".\"users\".\"id\" = $1 AND 1=1) LIMIT $2 OFFS",
+        "SELECT \"public\".\"notification_logs\".\"id\", \"public\".\"notification_logs\".\"userId\", \"public\".\"notification_logs\".\"templateCode\", \"public\".\"notification_logs\".\"chan",
+        "SELECT COUNT(*) FROM (SELECT \"public\".\"waste_requests\".\"id\" FROM \"public\".\"waste_requests\" WHERE (\"public\".\"waste_requests\".\"userId\" = $1 AND \"public\".\"waste_re",
+        "SELECT \"public\".\"flash_sale_items\".\"id\", \"public\".\"flash_sale_items\".\"flashSaleId\", \"public\".\"flash_sale_items\".\"variationId\", \"public\".\"flash_sale_items\".\"flas",
+        "SELECT \"public\".\"order_items\".\"id\", \"public\".\"order_items\".\"variationId\" FROM \"public\".\"order_items\" LEFT JOIN \"public\".\"orders\" AS \"orderby_1\" ON (\"orderby_1\".",
+        "SELECT \"public\".\"subscriptions\".\"id\", \"public\".\"subscriptions\".\"userId\", \"public\".\"subscriptions\".\"variationId\", \"public\".\"subscriptions\".\"quantity\", \"public\".\"",
+        "SELECT COUNT(*) FROM (SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orders\".\"status\" IN (CAST($2::te",
+        " SELECT oi.\"variationId\" AS \"variationId\", COUNT(DISTINCT o.id)::int AS \"timesBought\", MAX(o.\"createdAt\") AS \"lastPurchasedAt\" FROM order_items oi JOIN orders o",
+        "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"productId\" FROM \"public\".\"variations\" WHERE \"public\".\"variations\".\"id\" IN ($1,$2) OFFSET $3",
+        "SELECT \"public\".\"orders\".\"id\", \"public\".\"orders\".\"code\", \"public\".\"orders\".\"idempotencyKey\", \"public\".\"orders\".\"pancakeOrderId\", \"public\".\"orders\".\"userId\", \"pu",
+        "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"name\", \"public\".\"variations\".\"retailPrice\", \"public\".\"variations\".\"salePrice\", \"public\".\"variations\".\"",
+        "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"categoryIds\" FROM \"public\".\"products\" WHERE \"public\".\"products\".\"id\" IN ($1) OFFSET $2",
+        "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"slug\", \"public\".\"products\".\"name\", \"public\".\"products\".\"brand\", \"public\".\"products\".\"thumbnail\", \"public\".",
+        "SELECT COUNT(*) FROM (SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orders\".\"status\" = CAST($2::text",
+        "SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orders\".\"status\" <> CAST($2::text AS \"public\".\"OrderSt",
+        "SELECT \"public\".\"brand_follows\".\"id\", \"public\".\"brand_follows\".\"brandId\" FROM \"public\".\"brand_follows\" WHERE \"public\".\"brand_follows\".\"userId\" = $1 OFFSET $2",
+        "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"produ",
+        "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam"
+      ],
+      "second": {
+        "status": 200,
+        "sql": 19,
+        "sqlWithTx": 20,
+        "select": 17,
+        "write": 0
+      }
+    },
+    "me": {
+      "path": "/me",
+      "first": {
+        "status": 200,
+        "sql": 1,
+        "sqlWithTx": 1,
+        "select": 1,
+        "write": 0
+      },
+      "sample": [
+        "SELECT \"public\".\"membership_tiers\".\"id\", \"public\".\"membership_tiers\".\"name\", \"public\".\"membership_tiers\".\"minPoints\", \"public\".\"membership_tiers\".\"minSpending\","
+      ],
+      "second": {
+        "status": 200,
+        "sql": 2,
+        "sqlWithTx": 2,
+        "select": 2,
+        "write": 0
+      }
+    },
+    "cart": {
+      "path": "/cart",
+      "first": {
+        "status": 200,
+        "sql": 17,
+        "sqlWithTx": 17,
+        "select": 17,
+        "write": 0
+      },
+      "sample": [
+        "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"role\"::text, \"public\".\"users\".\"isBlocked\" FROM \"public\".\"users\" WHERE (\"public\".\"users\".\"id\" = $1 AND 1=1) LIMIT",
+        "SELECT \"public\".\"storefronts\".\"id\", \"public\".\"storefronts\".\"ownerUserId\" FROM \"public\".\"storefronts\" WHERE (\"public\".\"storefronts\".\"isSample\" = $1 AND \"public\".",
+        "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+        "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+        "SELECT \"public\".\"storefronts\".\"id\", \"public\".\"storefronts\".\"slug\", \"public\".\"storefronts\".\"type\"::text, \"public\".\"storefronts\".\"ownerUserId\" FROM \"public\".\"stor",
+        "SELECT \"public\".\"carts\".\"id\", \"public\".\"carts\".\"userId\", \"public\".\"carts\".\"couponCode\", \"public\".\"carts\".\"updatedAt\", \"public\".\"carts\".\"abandonRemindedAt\" FROM ",
+        "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"tierId\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"zaloId\", COALESCE(\"aggr_selection_0_Order\".\"_aggr_count_ord",
+        "SELECT \"public\".\"cart_items\".\"id\", \"public\".\"cart_items\".\"cartId\", \"public\".\"cart_items\".\"variationId\", \"public\".\"cart_items\".\"quantity\" FROM \"public\".\"cart_ite",
+        "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"nam",
+        "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"produ",
+        "SELECT \"public\".\"flash_sale_items\".\"id\", \"public\".\"flash_sale_items\".\"flashSaleId\", \"public\".\"flash_sale_items\".\"variationId\", \"public\".\"flash_sale_items\".\"flas",
+        "SELECT \"public\".\"storefronts\".\"id\", \"public\".\"storefronts\".\"slug\", \"public\".\"storefronts\".\"type\"::text, \"public\".\"storefronts\".\"ownerUserId\" FROM \"public\".\"stor",
+        "SELECT \"public\".\"storefronts\".\"id\", \"public\".\"storefronts\".\"ownerUserId\" FROM \"public\".\"storefronts\" LEFT JOIN \"public\".\"users\" AS \"j1\" ON (\"j1\".\"id\") = (\"publi",
+        "SELECT \"public\".\"storefront_collections\".\"id\", \"public\".\"storefront_collections\".\"comboDiscountPct\", \"public\".\"storefront_collections\".\"storefrontId\" FROM \"publ",
+        "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi",
+        "SELECT \"public\".\"membership_tiers\".\"id\", \"public\".\"membership_tiers\".\"discountPct\" FROM \"public\".\"membership_tiers\" WHERE (\"public\".\"membership_tiers\".\"id\" = $1",
+        "SELECT \"public\".\"system_configs\".\"key\", \"public\".\"system_configs\".\"value\", \"public\".\"system_configs\".\"description\", \"public\".\"system_configs\".\"category\", \"publi"
+      ],
+      "second": {
+        "status": 200,
+        "sql": 13,
+        "sqlWithTx": 13,
+        "select": 13,
+        "write": 0
+      }
+    }
+  },
+  "apiLoad": {
+    "home": {
+      "path": "/home",
+      "note": "Mini App mở trang chủ (khách và returning)",
+      "p50": 0,
+      "p90": 1,
+      "p97_5": 2,
+      "p99": 2,
+      "avg": 0.39,
+      "max": 18,
+      "rps": 9607.9,
+      "non2xx": 0,
+      "errors": 0,
+      "runs": [
+        {
+          "p50": 0,
+          "p90": 1,
+          "p97_5": 1,
+          "p99": 2,
+          "avg": 0.3,
+          "max": 14,
+          "rps": 10207.5,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 204130
+        },
+        {
+          "p50": 0,
+          "p90": 1,
+          "p97_5": 2,
+          "p99": 2,
+          "avg": 0.39,
+          "max": 19,
+          "rps": 9607.9,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 192146
+        },
+        {
+          "p50": 1,
+          "p90": 1,
+          "p97_5": 2,
+          "p99": 3,
+          "avg": 0.65,
+          "max": 18,
+          "rps": 8337.8,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 166748
+        }
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 4.18, 8.32, 13.78 ",
+          "cpu": "CPU usage: 6.60% user, 8.88% sys, 84.51% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 3.93, 7.94, 13.48 ",
+          "cpu": "CPU usage: 7.38% user, 8.94% sys, 83.66% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 4.59, 7.84, 13.32 ",
+          "cpu": "CPU usage: 33.20% user, 8.89% sys, 57.90% idle "
+        }
+      ]
+    },
+    "products_list": {
+      "path": "/products?limit=12",
+      "p50": 3,
+      "p90": 4,
+      "p97_5": 5,
+      "p99": 5,
+      "avg": 2.89,
+      "max": 19,
+      "rps": 2954.3,
+      "non2xx": 0,
+      "errors": 0,
+      "runs": [
+        {
+          "p50": 3,
+          "p90": 4,
+          "p97_5": 4,
+          "p99": 5,
+          "avg": 2.89,
+          "max": 16,
+          "rps": 2954.3,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 59080
+        },
+        {
+          "p50": 2,
+          "p90": 4,
+          "p97_5": 5,
+          "p99": 5,
+          "avg": 2.61,
+          "max": 19,
+          "rps": 3163.9,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 63269
+        },
+        {
+          "p50": 3,
+          "p90": 5,
+          "p97_5": 6,
+          "p99": 8,
+          "avg": 3.32,
+          "max": 26,
+          "rps": 2599.85,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 51991
+        }
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 4.85, 7.70, 13.14 ",
+          "cpu": "CPU usage: 5.8% user, 8.54% sys, 86.37% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 5.46, 7.60, 12.94 ",
+          "cpu": "CPU usage: 38.79% user, 13.27% sys, 47.93% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 5.95, 7.59, 12.81 ",
+          "cpu": "CPU usage: 7.72% user, 8.16% sys, 84.10% idle "
+        }
+      ]
+    },
+    "products_best_seller": {
+      "path": "/products?sort=best_seller&limit=12",
+      "note": "kệ Bán chạy của trang chủ",
+      "p50": 5,
+      "p90": 6,
+      "p97_5": 8,
+      "p99": 9,
+      "avg": 4.93,
+      "max": 29,
+      "rps": 1843.3,
+      "non2xx": 0,
+      "errors": 0,
+      "runs": [
+        {
+          "p50": 5,
+          "p90": 7,
+          "p97_5": 8,
+          "p99": 9,
+          "avg": 5.38,
+          "max": 29,
+          "rps": 1701.55,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 34031
+        },
+        {
+          "p50": 4,
+          "p90": 6,
+          "p97_5": 7,
+          "p99": 8,
+          "avg": 4.53,
+          "max": 24,
+          "rps": 1987.75,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 39748
+        },
+        {
+          "p50": 5,
+          "p90": 6,
+          "p97_5": 8,
+          "p99": 10,
+          "avg": 4.93,
+          "max": 39,
+          "rps": 1843.3,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 36863
+        }
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 7.75, 7.88, 12.79 ",
+          "cpu": "CPU usage: 51.93% user, 35.59% sys, 12.46% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 10.31, 8.48, 12.87 ",
+          "cpu": "CPU usage: 25.14% user, 9.78% sys, 65.6% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 10.12, 8.56, 12.79 ",
+          "cpu": "CPU usage: 16.3% user, 8.61% sys, 75.35% idle "
+        }
+      ]
+    },
+    "product_detail": {
+      "path": "/products/mat-ong-rung-bhnong",
+      "p50": 2,
+      "p90": 3,
+      "p97_5": 4,
+      "p99": 6,
+      "avg": 2.09,
+      "max": 25,
+      "rps": 3858.55,
+      "non2xx": 0,
+      "errors": 0,
+      "runs": [
+        {
+          "p50": 1,
+          "p90": 2,
+          "p97_5": 3,
+          "p99": 3,
+          "avg": 1.53,
+          "max": 19,
+          "rps": 4877.4,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 97546
+        },
+        {
+          "p50": 2,
+          "p90": 3,
+          "p97_5": 4,
+          "p99": 6,
+          "avg": 2.09,
+          "max": 25,
+          "rps": 3858.55,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 77157
+        },
+        {
+          "p50": 3,
+          "p90": 5,
+          "p97_5": 7,
+          "p99": 10,
+          "avg": 3.64,
+          "max": 110,
+          "rps": 2418.81,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 48370
+        }
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 10.61, 8.83, 12.77 ",
+          "cpu": "CPU usage: 17.61% user, 9.31% sys, 73.7% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 10.33, 8.88, 12.70 ",
+          "cpu": "CPU usage: 16.66% user, 8.54% sys, 74.79% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 10.70, 9.05, 12.67 ",
+          "cpu": "CPU usage: 59.7% user, 14.30% sys, 26.61% idle "
+        }
+      ]
+    },
+    "config_public": {
+      "path": "/config/public",
+      "p50": 1,
+      "p90": 1,
+      "p97_5": 2,
+      "p99": 3,
+      "avg": 0.81,
+      "max": 24,
+      "rps": 8081.2,
+      "non2xx": 0,
+      "errors": 0,
+      "runs": [
+        {
+          "p50": 1,
+          "p90": 2,
+          "p97_5": 2,
+          "p99": 3,
+          "avg": 1.02,
+          "max": 24,
+          "rps": 7207.6,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 144139
+        },
+        {
+          "p50": 1,
+          "p90": 1,
+          "p97_5": 2,
+          "p99": 3,
+          "avg": 0.59,
+          "max": 20,
+          "rps": 9165.9,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 183303
+        },
+        {
+          "p50": 1,
+          "p90": 1,
+          "p97_5": 2,
+          "p99": 3,
+          "avg": 0.81,
+          "max": 46,
+          "rps": 8081.2,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 161617
+        }
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 11.91, 9.51, 12.73 ",
+          "cpu": "CPU usage: 56.40% user, 14.2% sys, 29.57% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 11.49, 9.58, 12.68 ",
+          "cpu": "CPU usage: 18.71% user, 9.77% sys, 71.51% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 10.55, 9.51, 12.58 ",
+          "cpu": "CPU usage: 6.43% user, 7.81% sys, 85.74% idle "
+        }
+      ]
+    },
+    "home_me": {
+      "path": "/home/me?purchasedLimit=10",
+      "note": "phần cá nhân của trang chủ (token returning)",
+      "p50": 13,
+      "p90": 17,
+      "p97_5": 22,
+      "p99": 25,
+      "avg": 13.51,
+      "max": 87,
+      "rps": 714.05,
+      "non2xx": 0,
+      "errors": 0,
+      "runs": [
+        {
+          "p50": 11,
+          "p90": 15,
+          "p97_5": 19,
+          "p99": 22,
+          "avg": 12.01,
+          "max": 88,
+          "rps": 799.85,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 15997
+        },
+        {
+          "p50": 13,
+          "p90": 17,
+          "p97_5": 22,
+          "p99": 25,
+          "avg": 13.51,
+          "max": 40,
+          "rps": 714.05,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 14281
+        },
+        {
+          "p50": 14,
+          "p90": 21,
+          "p97_5": 29,
+          "p99": 33,
+          "avg": 15.29,
+          "max": 87,
+          "rps": 633.55,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 12671
+        }
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 9.29, 9.29, 12.41 ",
+          "cpu": "CPU usage: 18.85% user, 7.78% sys, 73.36% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 10.75, 9.61, 12.46 ",
+          "cpu": "CPU usage: 56.26% user, 11.54% sys, 32.19% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 14.38, 10.47, 12.70 ",
+          "cpu": "CPU usage: 74.70% user, 12.50% sys, 12.79% idle "
+        }
+      ]
+    },
+    "me": {
+      "path": "/me",
+      "p50": 2,
+      "p90": 4,
+      "p97_5": 6,
+      "p99": 7,
+      "avg": 2.71,
+      "max": 28,
+      "rps": 3113.5,
+      "non2xx": 0,
+      "errors": 0,
+      "runs": [
+        {
+          "p50": 2,
+          "p90": 4,
+          "p97_5": 5,
+          "p99": 6,
+          "avg": 2.5,
+          "max": 28,
+          "rps": 3334.3,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 66673
+        },
+        {
+          "p50": 3,
+          "p90": 5,
+          "p97_5": 7,
+          "p99": 8,
+          "avg": 2.97,
+          "max": 22,
+          "rps": 2883.2,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 57654
+        },
+        {
+          "p50": 2,
+          "p90": 4,
+          "p97_5": 6,
+          "p99": 7,
+          "avg": 2.71,
+          "max": 33,
+          "rps": 3113.5,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 62259
+        }
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 14.91, 10.91, 12.79 ",
+          "cpu": "CPU usage: 50.96% user, 17.73% sys, 31.29% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 14.38, 11.05, 12.79 ",
+          "cpu": "CPU usage: 58.24% user, 13.18% sys, 28.57% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 14.50, 11.32, 12.84 ",
+          "cpu": "CPU usage: 63.89% user, 17.89% sys, 18.21% idle "
+        }
+      ]
+    },
+    "cart": {
+      "path": "/cart",
+      "p50": 22,
+      "p90": 32,
+      "p97_5": 43,
+      "p99": 51,
+      "avg": 23.78,
+      "max": 96,
+      "rps": 411.8,
+      "non2xx": 0,
+      "errors": 0,
+      "runs": [
+        {
+          "p50": 20,
+          "p90": 27,
+          "p97_5": 34,
+          "p99": 39,
+          "avg": 20.6,
+          "max": 70,
+          "rps": 473.65,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 9473
+        },
+        {
+          "p50": 23,
+          "p90": 34,
+          "p97_5": 43,
+          "p99": 51,
+          "avg": 24.9,
+          "max": 152,
+          "rps": 393.6,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 7872
+        },
+        {
+          "p50": 22,
+          "p90": 32,
+          "p97_5": 46,
+          "p99": 56,
+          "avg": 23.78,
+          "max": 96,
+          "rps": 411.8,
+          "non2xx": 0,
+          "errors": 0,
+          "timeouts": 0,
+          "total": 8236
+        }
+      ],
+      "loadBefore": [
+        {
+          "loadAvg": "Load Avg: 14.28, 11.49, 12.86 ",
+          "cpu": "CPU usage: 42.70% user, 13.71% sys, 43.57% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 15.59, 12.03, 13.02 ",
+          "cpu": "CPU usage: 77.99% user, 17.74% sys, 4.26% idle "
+        },
+        {
+          "loadAvg": "Load Avg: 16.41, 12.45, 13.14 ",
+          "cpu": "CPU usage: 75.19% user, 17.91% sys, 6.89% idle "
+        }
+      ]
+    }
+  }
+}
