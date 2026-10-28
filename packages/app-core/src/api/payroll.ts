@@ -99,3 +99,30 @@ export const markPaid = (
   staffId: string,
   body: { year: number; month: number; proofImageUrl: string; note?: string },
 ) => http.post<{ paid: boolean }>(`/admin/payroll/${staffId}/mark-paid`, body);
+
+export interface AdjustPayrollInput {
+  staffId: string;
+  /** Ngày công YYYY-MM-DD; tháng đã chốt/đã trả thì máy chủ từ chối. */
+  workDate: string;
+  /** Số nguyên VND khác 0, tối đa ±50 triệu: dương = trừ lương (phạt), âm = thưởng. */
+  amount: number;
+  /** Dấu vết kiểm toán, máy chủ yêu cầu từ 3 ký tự. */
+  reason: string;
+  /** Chỉ gửi sau khi máy chủ báo khoản giống hệt vừa ghi (409 PAYROLL_ADJUST_DUPLICATE) và admin xác nhận đây là khoản thứ hai. */
+  allowDuplicate?: boolean;
+}
+
+export const adjustPayroll = (http: HttpClient, body: AdjustPayrollInput) =>
+  http.post<{ adjusted: boolean }>('/admin/payroll/adjust', body);
+
+/** Tính lại tháng chưa chốt. `reprice` áp đơn giá hiện tại cho cả ngày đã tính: chỉ dùng khi đơn giá từng nhập sai. */
+export const recomputePayroll = (
+  http: HttpClient,
+  staffId: string,
+  year: number,
+  month: number,
+  opts: { reprice?: boolean } = {},
+) =>
+  http.post<PayrollMonth>(
+    `/admin/payroll/${staffId}/recompute?year=${year}&month=${month}${opts.reprice ? '&reprice=1' : ''}`,
+  );
