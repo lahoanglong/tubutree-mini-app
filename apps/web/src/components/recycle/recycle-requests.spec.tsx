@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 import { ApiError } from '@/lib/client-api';
+import { markSubmitted, takeSubmitted } from '@/lib/recycle-wizard';
 import { makeRequestSummary, makeWasteMe } from './recycle-fixtures';
 
 // Chép ý recycle-requests.spec.tsx (Mini App, §4.6, §16.1): hai tab có số đếm, điều hướng theo trạng thái, ngày giờ VN, rỗng.
@@ -81,6 +82,13 @@ afterEach(() => {
 });
 
 describe('/doi-rac/yeu-cau (§4.6, §16.1)', () => {
+  it('cờ "vừa gửi yêu cầu" bị xoá khi vào trang, để "Đổi thêm rác" vào bước 1', async () => {
+    markSubmitted();
+    state.me = makeWasteMe();
+    await mount();
+    expect(takeSubmitted()).toBe(false);
+  });
+
   it.each(['GUEST', 'NEED_PHONE'] as const)('eligibility %s: MiniAppOnlyNotice như ba trang đổi rác khác, không gọi /waste/requests (Q2)', async (eligibility) => {
     state.me = makeWasteMe({ eligibility, balance: null, monthUsage: null });
     const c = await mount();
