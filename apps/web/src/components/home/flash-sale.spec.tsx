@@ -113,20 +113,31 @@ describe('FlashSale dữ liệu dựng sẵn rỗng', () => {
   const withStorage = (hadFlash: boolean) => {
     try { localStorage.clear(); if (hadFlash) localStorage.setItem(FLASH_HINT_KEY, '1'); } catch { /* không có kho */ }
   };
-  it('máy nhớ lần trước có Giờ vàng, bản dựng sẵn rỗng, đang tải lại: vẽ khung giữ chỗ rồi hiện suất mới', async () => {
+  it('máy nhớ lần trước có Giờ vàng, bản dựng sẵn rỗng, lần tải lại cũng rỗng: hydrate không chèn khung giữ chỗ nào (HTML server không có khung)', async () => {
     withStorage(true);
-    let resolve!: (v: unknown) => void;
-    activeResult = () => new Promise((r) => { resolve = r; });
-    const c = await mount(
+    activeResult = async () => [];
+    const ui = () => (
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
         <FlashSale initial={[]} />
-      </QueryClientProvider>,
+      </QueryClientProvider>
     );
-    expect(c.querySelector('[data-testid="flash-sale-loading"]')).not.toBeNull();
-    resolve([active()]);
+    const html = renderToString(ui());
+    expect(html).toBe('');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const seen: boolean[] = [];
+    const watch = new MutationObserver(() => seen.push(container.querySelector('[data-testid="flash-sale-loading"]') !== null));
+    watch.observe(container, { childList: true, subtree: true });
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, ui());
+    });
     await flush(8);
-    expect(c.querySelector('[data-testid="flash-sale-loading"]')).toBeNull();
-    expect(c.textContent).toContain('Nước rửa chén');
+    watch.disconnect();
+    expect(seen).not.toContain(true);
+    expect(container.innerHTML).toBe('');
+    act(() => root.unmount());
+    container.remove();
   });
   it('chưa nhớ Giờ vàng: không vẽ khung giữ chỗ', async () => {
     withStorage(false);

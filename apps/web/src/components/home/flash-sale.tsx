@@ -99,8 +99,6 @@ export function FlashSale({ initial }: { initial?: FlashSaleActiveItem[] }) {
   }, [settledWithFlash]);
 
   if (q.isLoading) return hadFlash ? <FlashSkeleton /> : null;
-  // Bản dựng sẵn rỗng (hết suất lúc dựng trang) mà lần trước có Giờ vàng: lần tải lại ngay sau đó có thể mang suất mới về, giữ chỗ để khối không chen vào.
-  if (items.length === 0 && hadFlash && q.isFetching && !q.isError) return <FlashSkeleton />;
   if (items.length === 0) {
     return q.isError ? <HomeBlockError title={flashSaleText.sectionName} error={q.error} onRetry={q.refetch} retrying={q.isFetching} /> : null;
   }
