@@ -3554,6 +3554,23 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(mocks.listOrders).toHaveBeenLastCalledWith(1, 'PENDING_PAYMENT', undefined, undefined, 20, undefined, undefined, undefined, undefined, { queue: 'bank_transfer_to_confirm', order: 'asc' });
   });
 
+  it('390px: vào hàng đợi chuyển khoản từ thẻ Hôm nay thì ngoài ngăn kéo vẫn có dòng giải thích và nút xem tất cả', async () => {
+    const mm = vi.fn().mockImplementation((q: string) => ({ matches: q.includes('max-width'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    window.matchMedia = mm as unknown as typeof window.matchMedia;
+    try {
+      const { container } = await mount();
+      click(container.querySelector('[data-inbox="bankTransferToConfirm"]')!);
+      await flush();
+      expect(container.textContent).toContain('Đang xem đơn lẻ chuyển khoản chưa nhận tiền');
+      click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem tất cả đơn')!);
+      await flush();
+      expect(container.textContent).not.toContain('Đang xem đơn lẻ chuyển khoản chưa nhận tiền');
+      expect(mocks.listOrders.mock.lastCall![9]).toEqual({ order: 'asc' });
+    } finally {
+      delete (window as { matchMedia?: unknown }).matchMedia;
+    }
+  });
+
   it('thẻ gian hàng chờ duyệt và sản phẩm thiếu ảnh mở đúng tab', async () => {
     const api = mockFetch({ '/admin/storefronts': { body: { data: [], meta: { total: 0, page: 1, limit: 20 } } }, '/admin/product-categories/products': { body: { items: [], total: 0, nextCursor: null } }, '/admin/pancake/categories': { body: [] }, '/categories': { body: [] } });
     vi.stubGlobal('fetch', vi.fn(api.fn));

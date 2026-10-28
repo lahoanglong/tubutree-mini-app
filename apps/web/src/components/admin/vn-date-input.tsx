@@ -14,6 +14,8 @@ export function isoToVn(iso: string): string {
  * Bỏ ký tự lạ, tối đa 8 số.
  */
 export function maskVnDate(raw: string): string {
+  const iso = /^\s*(\d{4})-(\d{1,2})-(\d{1,2})\s*$/.exec(raw);
+  if (iso) return `${iso[3]!.padStart(2, '0')}/${iso[2]!.padStart(2, '0')}/${iso[1]}`;
   const parts = raw.split(/\D+/);
   if (parts.length > 1 && parts[0] !== '' && parts[0]!.length <= 2 && (parts[1] ?? '').length <= 2 && (parts[2] ?? '').length <= 4 && parts.length <= 3) {
     const pad = (v: string) => (v.length === 1 ? `0${v}` : v);
@@ -70,6 +72,8 @@ export function VnDateInput({
   const iso = vnToIso(text);
   const outOfRange = !!iso && ((!!min && iso < min) || (!!max && iso > max));
   const invalid = touched && text !== '' && (iso === null || outOfRange);
+  // Đang gõ dở: cha vẫn giữ ngày cũ nên nói rõ bộ lọc chưa đổi.
+  const pending = !invalid && text !== '' && iso === null;
 
   const edit = (raw: string) => {
     const next = maskVnDate(raw);
@@ -126,6 +130,11 @@ export function VnDateInput({
         }}
         className="pointer-events-none absolute bottom-0 right-0 h-0 w-0 opacity-0"
       />
+      {pending && (
+        <span role="status" className="absolute left-0 top-full z-10 mt-0.5 whitespace-nowrap rounded-control bg-stone-0 px-1 text-xs text-stone-500">
+          Chưa áp dụng, gõ đủ ngày dd/mm/yyyy.
+        </span>
+      )}
       {invalid && (
         <span role="alert" className="absolute left-0 top-full z-10 mt-0.5 whitespace-nowrap rounded-control bg-stone-0 px-1 text-xs text-danger-fg">
           {outOfRange ? 'Ngày nằm ngoài khoảng cho phép.' : 'Nhập ngày dạng dd/mm/yyyy, ví dụ 03/10/2026.'}

@@ -1512,6 +1512,22 @@ function OrdersTab({
           {queueEl}
         </>
       )}
+      {narrow && extra.queue && (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
+          Đang xem đơn lẻ chuyển khoản chưa nhận tiền, cũ nhất trước.
+          <button
+            type="button"
+            onClick={() => {
+              const { queue: _queue, ...rest } = extra;
+              resetPaging();
+              setExtra(rest);
+            }}
+            className={BTN_SMALL}
+          >
+            Xem tất cả đơn
+          </button>
+        </p>
+      )}
 
       {/* Orders Table */}
       {q.isError && (
