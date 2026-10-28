@@ -49,23 +49,25 @@ export class LedgerDriftCron {
     const [pointsRows, wallet] = await Promise.all([findPointsLotDrift(this.prisma), findWalletLedgerDrift(this.prisma)]);
     const points = diffPointsBalances(pointsRows);
     const pointsUsers = new Set(points.corrections.map((c) => c.userId)).size;
-    const parts: string[] = [];
+    const adminParts: string[] = [];
 
     if (pointsUsers > 0) {
-      const line = `Điểm Xanh: ${pointsUsers} khách lệch số dư so với sổ điểm (tổng lệch ${formatPoints(points.totalAbsDrift)} điểm). Chạy pnpm --filter @tubutree/api reconcile:points để xem chi tiết.`;
-      this.logger.error(`Lệch sổ cái. ${line}`);
-      parts.push(line);
+      const line = `Điểm Xanh: ${pointsUsers} khách lệch số dư so với sổ điểm (tổng lệch ${formatPoints(points.totalAbsDrift)} điểm).`;
+      this.logger.error(`Lệch sổ cái. ${line} Chạy pnpm --filter @tubutree/api reconcile:points để xem chi tiết.`);
+      adminParts.push(line);
     }
     if (wallet.affectedCount > 0) {
-      const line = `Ví Tubu: ${wallet.affectedCount} khách lệch số dư so với sổ ví (tổng lệch ${formatVndText(wallet.totalAbsDrift)}). Chạy pnpm --filter @tubutree/api reconcile:wallet để xem chi tiết; Ví không tự sửa.`;
-      this.logger.error(`Lệch sổ cái. ${line}`);
-      parts.push(line);
+      const line = `Ví Tubu: ${wallet.affectedCount} khách lệch số dư so với sổ ví (tổng lệch ${formatVndText(wallet.totalAbsDrift)}).`;
+      this.logger.error(`Lệch sổ cái. ${line} Chạy pnpm --filter @tubutree/api reconcile:wallet để xem chi tiết; Ví không tự sửa.`);
+      adminParts.push(line);
     }
-    if (parts.length === 0) return;
+    if (adminParts.length === 0) return;
+    // Admin đọc tin trong app, không chạy được lệnh dev: tên lệnh chỉ nằm ở log lỗi cho người trực.
+    const summary = `${adminParts.join(' ')} Báo đội kỹ thuật đối soát${wallet.affectedCount > 0 ? '; Ví không tự sửa' : ''}.`;
 
     await notifyAdmins(
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
-      { template: 'OPS_HEALTH_ALERT', subject: 'lệch sổ điểm/Ví', data: () => ({ title: 'Sổ cái lệch số dư', summary: parts.join(' ') }) },
+      { template: 'OPS_HEALTH_ALERT', subject: 'lệch sổ điểm/Ví', data: () => ({ title: 'Sổ cái lệch số dư', summary }) },
     ).catch((e: unknown) => this.logger.warn(`Báo admin lệch sổ lỗi: ${e instanceof Error ? e.message : e}`));
   }
 }

@@ -1190,8 +1190,7 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
       expect(range.lte.getTime()).toBeLessThanOrEqual(after);
     });
 
-    // Lỗi từng khách chỉ ghi ở mức warn (bản trước) vẫn được tính là lần chạy thành công: khách lỗi kéo dài có lô hết hạn trước mốc sẽ không
-    // bao giờ được nhặt lại nếu cron không quét đủ định kỳ.
+    // Khách lỗi kéo dài có lô hết hạn trước mốc sẽ không bao giờ được nhặt lại nếu cron không quét đủ định kỳ.
     it.each([
       ['01:00 sáng ngày 1 giờ VN', '2026-07-31T18:00:00.000Z'],
       ['đầu ngày 1 giờ VN (00:00)', '2026-07-31T17:00:00.000Z'],

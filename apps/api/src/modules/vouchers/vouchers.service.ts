@@ -194,7 +194,7 @@ export class VouchersService {
    *
    * Toàn thân bọc try/catch: @Cron không tự bắt lỗi — findMany lỗi giữa lúc phân trang ném ra
    * ngoài là unhandledRejection, Node 20 mặc định crash cả process. Lỗi cấp/notify từng user đã
-   * được `grant()` tự cô lập (P2002 nuốt, notify `.catch(() => undefined)`).
+   * được `grant()` tự cô lập (P2002 nuốt, tin gửi qua notifySafe: lỗi được log và báo Sentry, không ném).
    */
   @Cron(CronExpression.EVERY_HOUR, { timeZone: CRON_TZ })
   @TrackCron()

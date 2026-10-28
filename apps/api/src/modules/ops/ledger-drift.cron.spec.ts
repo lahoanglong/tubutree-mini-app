@@ -65,17 +65,20 @@ describe('LedgerDriftCron: kiểm lệch sổ điểm/Ví mỗi đêm', () => {
     expect(line).toContain('Điểm Xanh');
     expect(line).toContain('2');
     expect(line).not.toMatch(/u1|u2/);
+    expect(line).toContain('reconcile:points');
     expect(notify).toHaveBeenCalledTimes(1);
     const [adminId, template, data] = notify.mock.calls[0] as [string, string, { title: string; summary: string }];
     expect(adminId).toBe('admin-1');
     expect(template).toBe('OPS_HEALTH_ALERT');
     expect(data.title).toEqual(expect.any(String));
-    expect(data.summary).toContain('reconcile:points');
+    expect(data.summary).toContain('Điểm Xanh: 2 khách lệch');
+    expect(data.summary).toContain('đội kỹ thuật');
+    expect(data.summary).not.toMatch(/pnpm|reconcile/);
     expect(data.summary).not.toMatch(/u1|u2/);
     error.mockRestore();
   });
 
-  it('lệch Ví: log error và báo admin một lần, nhắc lệnh tra nguyên nhân (Ví không tự sửa)', async () => {
+  it('lệch Ví: log error nhắc lệnh tra nguyên nhân, báo admin một lần bằng câu không kỹ thuật (Ví không tự sửa)', async () => {
     walletDrift.mockResolvedValue({
       drifts: [{ userId: 'w1', walletBalance: 5000, ledgerSum: 3000, entries: 2, drift: 2000 }],
       affectedCount: 1,
@@ -88,8 +91,11 @@ describe('LedgerDriftCron: kiểm lệch sổ điểm/Ví mỗi đêm', () => {
     expect(error).toHaveBeenCalledTimes(1);
     expect(String(error.mock.calls[0]![0])).toContain('Ví');
     expect(String(error.mock.calls[0]![0])).not.toContain('w1');
+    expect(String(error.mock.calls[0]![0])).toContain('reconcile:wallet');
     expect(notify).toHaveBeenCalledTimes(1);
-    expect((notify.mock.calls[0] as unknown[])[2]).toMatchObject({ summary: expect.stringContaining('reconcile:wallet') });
+    const summary = ((notify.mock.calls[0] as unknown[])[2] as { summary: string }).summary;
+    expect(summary).toContain('Ví không tự sửa');
+    expect(summary).not.toMatch(/pnpm|reconcile/);
     error.mockRestore();
   });
 
@@ -106,8 +112,9 @@ describe('LedgerDriftCron: kiểm lệch sổ điểm/Ví mỗi đêm', () => {
     await cron.handleCron();
     expect(notify).toHaveBeenCalledTimes(1);
     const summary = ((notify.mock.calls[0] as unknown[])[2] as { summary: string }).summary;
-    expect(summary).toContain('reconcile:points');
-    expect(summary).toContain('reconcile:wallet');
+    expect(summary).toContain('Điểm Xanh');
+    expect(summary).toContain('Ví Tubu');
+    expect(summary).not.toMatch(/pnpm|reconcile/);
     error.mockRestore();
   });
 

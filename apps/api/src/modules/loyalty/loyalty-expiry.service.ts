@@ -430,8 +430,8 @@ export class LoyaltyExpiryService {
 
   /**
    * Mốc dưới của ứng viên; undefined = quét đủ (chưa có lần thành công nào, không đọc được cron_runs, hoặc ngày 1 hằng tháng giờ VN).
-   * Quét đủ định kỳ là đường tự lành: khách lỗi kéo dài mà lô hết hạn đã nằm trước mốc (lượt trước chỉ ghi warn nên vẫn tính thành công,
-   * hoặc mốc đã nhích qua trong lúc lỗi) không còn là ứng viên của lượt nào khác.
+   * Quét đủ định kỳ là đường tự lành cho khách lỗi kéo dài mà lô hết hạn đã nằm trước mốc (mốc nhích qua trong lúc lỗi): không có nó
+   * khách đó không còn là ứng viên của lượt nào khác.
    */
   private async expiryScanFloor(now: Date): Promise<Date | undefined> {
     if (vnDateParts(now).day === 1) return undefined;

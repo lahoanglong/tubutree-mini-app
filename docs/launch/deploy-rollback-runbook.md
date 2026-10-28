@@ -430,6 +430,17 @@ Nhận biết: kết quả INCOMPLETE của đơn mang câu `Cộng nước thư
 
 Đơn đã giao rồi bị trả hoặc huỷ: nước được đảo cùng lúc với Điểm Xanh (`reverseClosedOrderEffects`, chạy lại bởi `ReversalEffectsResyncCron`, idempotent theo dòng sổ `ORDER_REVERSED` cùng `refId`). Đã cộng thì trừ khỏi hồ sơ tối đa bằng số dư (không xuống dưới 0, nước đã tiêu thì không đòi lại) và ghi dòng âm đúng bằng phần thu hồi được (mang `createdAt` của dòng cộng): chỉ phần thu hồi được mới trả lại vào trần tuần, phần đã tiêu vẫn tính vào trần; thu hồi 0 vẫn ghi dòng delta 0. Còn chờ thì huỷ đơn chờ. Nhiều kiện cùng `checkoutGroup` chỉ đảo khi mọi kiện đã trả hoặc huỷ. Đảo lỗi thì đơn chưa có mốc `reversalEffectsAt` và cron thử lại; không có nút chạy tay riêng cho phần đảo: chờ cron (5 phút một lượt, cửa sổ 14 ngày).
 
+### 1.11 Đo mức lệch sổ nền trước khi bật cron lệch sổ
+
+Bản này có cron `ops.ledger-drift` (04:30 giờ VN, chỉ đọc): mỗi đêm so số dư Điểm Xanh từng lô và Ví Tubu với sổ cái, có lệch thì ghi log lỗi và gửi tin `OPS_HEALTH_ALERT` cho mọi admin. Nếu PROD đã có lệch từ trước thì admin nhận tin báo lại mỗi đêm sau deploy, nên đo mức lệch nền trước:
+
+```bash
+$DC run --rm --no-deps -T api pnpm run reconcile:points
+$DC run --rm --no-deps -T api pnpm run reconcile:wallet
+```
+
+Cả hai chỉ đọc (`reconcile:points` không kèm `--apply`; `reconcile:wallet` không có chế độ sửa). Ghi lại số khách lệch: Điểm ______, Ví ______. Có lệch thì tra nguyên nhân và xử lý trước, hoặc báo admin biết trước là tin lệch sổ đêm đầu đã được chờ; Ví không tự sửa, lệch Ví phải ghi dòng ADJUST sau khi tra nguyên nhân.
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.
