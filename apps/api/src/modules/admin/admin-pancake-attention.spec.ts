@@ -62,6 +62,30 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
     expect(history.mock.calls[0][0].data.note).toBe('Đã xử lý việc Pancake: Pancake báo đơn bị xoá');
   });
 
+  it.each(['CANCELLED', 'RETURNED'])(
+    'đơn %s chưa có mốc đảo sau huỷ/trả: vẫn đóng việc nhưng KHÔNG ghi dòng lịch sử cùng trạng thái (cron chạy lại lấy nhầm dòng đóng đơn)',
+    async (status) => {
+      const order = { id: 'o1', code: 'TUBU1', status, reversalEffectsAt: null, pancakeAttention: 'Pancake báo ĐANG HOÀN', pancakeAttentionAt: new Date() };
+      const history = jest.fn().mockResolvedValue({});
+      const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+      const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany }, orderStatusHistory: { create: history } };
+      const admin = mkAdmin(prisma);
+      jest.spyOn((admin as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => undefined);
+      await expect(admin.resolvePancakeAttention('admin1', 'TUBU1', 'đã gọi khách')).resolves.toMatchObject({ ok: true });
+      expect(updateMany).toHaveBeenCalled();
+      expect(history).not.toHaveBeenCalled();
+    },
+  );
+
+  it('đơn CANCELLED đã có mốc đảo sau huỷ/trả thì vẫn ghi dòng lịch sử như thường', async () => {
+    const order = { id: 'o1', code: 'TUBU1', status: 'CANCELLED', reversalEffectsAt: new Date(), pancakeAttention: 'Pancake báo đơn bị xoá', pancakeAttentionAt: new Date() };
+    const history = jest.fn().mockResolvedValue({});
+    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany: jest.fn().mockResolvedValue({ count: 1 }) }, orderStatusHistory: { create: history } };
+    await mkAdmin(prisma).resolvePancakeAttention('admin1', 'TUBU1');
+    expect(history).toHaveBeenCalledTimes(1);
+    expect(history.mock.calls[0][0].data).toMatchObject({ fromStatus: 'CANCELLED', toStatus: 'CANCELLED', actorType: 'ADMIN' });
+  });
+
   it('đơn không còn trong hàng đợi (updateMany 0) thì không ghi lịch sử', async () => {
     const order = { id: 'o1', code: 'TUBU1', status: 'CONFIRMED', pancakeAttention: 'x', pancakeAttentionAt: new Date() };
     const history = jest.fn();

@@ -1254,7 +1254,7 @@ export class AdminService {
   private async resolveOrderRef(idOrCode: string) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
-      select: { id: true, code: true, status: true, gomdonStatus: true, gomdonPartnerCode: true },
+      select: { id: true, code: true, status: true, reversalEffectsAt: true, gomdonStatus: true, gomdonPartnerCode: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     return order;
@@ -1264,7 +1264,19 @@ export class AdminService {
    * Vết "Đã xử lý" trong lịch sử đơn (cùng trạng thái, khách không thấy: dòng giờ hành trình bỏ dòng cùng trạng thái). Việc đã đóng
    * xong, nên ghi vết lỗi chỉ cảnh báo chứ không làm hỏng thao tác.
    */
-  private async logHandledInHistory(adminId: string, order: { id: string; code: string; status: OrderStatus }, what: string, note?: string) {
+  private async logHandledInHistory(
+    adminId: string,
+    order: { id: string; code: string; status: OrderStatus; reversalEffectsAt?: Date | null },
+    what: string,
+    note?: string,
+  ) {
+    // Đơn đã huỷ/trả mà phần đảo sau commit chưa xong: cron chạy lại (resyncReversalEffects) lấy dòng lịch sử MỚI NHẤT có toStatus = trạng
+    // thái đơn làm "dòng đóng đơn" để biết ai đóng và gửi tin từ lúc nào. Một dòng cùng trạng thái của admin chen vào sẽ làm cron gửi
+    // lại tin huỷ/trả, nhầm người huỷ, hoặc xếp huỷ Pancake lần nữa — nên chưa ghi, chỉ để lại log.
+    if ((order.status === 'CANCELLED' || order.status === 'RETURNED') && !order.reversalEffectsAt) {
+      this.logger.warn(`Đơn ${order.code} ${order.status} chưa xong phần đảo sau huỷ/trả: không ghi dòng "đã xử lý" vào lịch sử để cron chạy lại không nhầm dòng đóng đơn.`);
+      return;
+    }
     try {
       await this.prisma.orderStatusHistory.create({
         data: {
@@ -1355,7 +1367,7 @@ export class AdminService {
   async resolvePancakeAttention(adminId: string, idOrCode: string, note?: string) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
-      select: { id: true, code: true, status: true, pancakeAttention: true },
+      select: { id: true, code: true, status: true, reversalEffectsAt: true, pancakeAttention: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     // Việc hoàn tiền COD trả hàng do Kế toán quyết ở mục "Hoàn tiền khách" (để lại vết trong lịch sử đơn); nhân viên kho bấm
