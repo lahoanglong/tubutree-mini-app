@@ -34,7 +34,7 @@ vi.mock('../services/api', () => ({
 }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, login: mocks.login, ensurePhone: mocks.ensurePhone };
+    const state = { status: mocks.auth.status, login: mocks.login, ensurePhoneOrThrow: mocks.ensurePhone };
     return sel ? sel(state) : state;
   },
 }));

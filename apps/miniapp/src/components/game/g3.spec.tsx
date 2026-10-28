@@ -12,11 +12,12 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: vi.fn() }),
 }));
 vi.mock('../../store/auth', () => ({
-  useAuthStore: (sel: (s: unknown) => unknown) => sel({ user: mocks.user, ensurePhone: mocks.ensurePhone }),
+  useAuthStore: (sel: (s: unknown) => unknown) => sel({ user: mocks.user, ensurePhoneOrThrow: mocks.ensurePhone }),
 }));
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GuestBanner } from './guest-banner';
+import { HttpError } from '../../services/http';
 import { OrderWaterCard } from './order-water-card';
 import { HarvestCelebration } from './harvest-celebration';
 import { GardenHero } from './garden-hero';
@@ -50,7 +51,7 @@ describe('GuestBanner (B-79)', () => {
       </QueryClientProvider>,
     );
   };
-  it('tài khoản khách: báo chơi thử, nút Đăng nhập Zalo gọi ensurePhone', () => {
+  it('tài khoản khách: báo chơi thử, nút Đăng nhập Zalo gọi ensurePhoneOrThrow', () => {
     mocks.user = { id: 'u', zaloId: 'guest_abc', phone: null };
     wrap();
     expect(screen.getByTestId('guest-banner')).toHaveTextContent('đang chơi thử');
@@ -131,5 +132,17 @@ describe('G3 lượt 2', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập Zalo' }));
     expect(await screen.findByTestId('guest-banner')).toHaveTextContent(/chưa|không/i);
+  });
+  it('máy chủ từ chối (409 SĐT đã gắn tài khoản khác): banner nói đúng lời máy chủ, không câu chung', async () => {
+    mocks.user = { id: 'u', zaloId: 'guest_abc', phone: null };
+    mocks.ensurePhone.mockRejectedValueOnce(new HttpError('conflict', undefined, { status: 409, data: { message: 'Số điện thoại này đã gắn với tài khoản Zalo khác.' } }));
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <GuestBanner />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập Zalo' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Số điện thoại này đã gắn với tài khoản Zalo khác.');
   });
 });

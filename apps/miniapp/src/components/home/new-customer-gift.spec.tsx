@@ -21,12 +21,13 @@ vi.mock('../../store/auth', () => ({
     sel({
       status: mocks.status,
       user: { id: mocks.userId, phone: mocks.guest ? null : '0901234567', zaloId: mocks.guest ? 'guest_1' : 'z1' },
-      ensurePhone: mocks.ensurePhone,
+      ensurePhoneOrThrow: mocks.ensurePhone,
     }),
 }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { NewCustomerGift } from './new-customer-gift';
+import { HttpError } from '../../services/http';
 
 // Số cố ý KHÁC mọi mặc định trong mã: nếu khối còn viết cứng 30.000đ/199.000đ/10.000đ/12% thì test đỏ.
 const CONFIG = {
@@ -183,7 +184,7 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(mocks.getNewCustomerOffer).not.toHaveBeenCalled();
   });
 
-  it('tài khoản khách Mini App (chưa liên kết Zalo): hứa mã theo cấu hình, không gọi API khách, nút liên kết Zalo gọi ensurePhone', async () => {
+  it('tài khoản khách Mini App (chưa liên kết Zalo): hứa mã theo cấu hình, không gọi API khách, nút liên kết Zalo gọi ensurePhoneOrThrow', async () => {
     mocks.guest = true;
     mocks.ensurePhone.mockResolvedValue('0901234567');
     renderGift();
@@ -193,6 +194,18 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(mocks.getNewCustomerOffer).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Nhận quà bằng Zalo' }));
     expect(mocks.ensurePhone).toHaveBeenCalled();
+  });
+
+  it('liên kết Zalo bị máy chủ từ chối (409): hiện lời máy chủ; khách từ chối sheet (null) thì hiện câu chung', async () => {
+    mocks.guest = true;
+    mocks.ensurePhone.mockRejectedValueOnce(new HttpError('conflict', undefined, { status: 409, data: { message: 'Số điện thoại này đã gắn với tài khoản Zalo khác.' } }));
+    renderGift();
+    await section();
+    await userEvent.click(screen.getByRole('button', { name: 'Nhận quà bằng Zalo' }));
+    expect(await screen.findByText('Số điện thoại này đã gắn với tài khoản Zalo khác.')).toBeInTheDocument();
+    mocks.ensurePhone.mockResolvedValueOnce(null);
+    await userEvent.click(screen.getByRole('button', { name: 'Nhận quà bằng Zalo' }));
+    expect(await screen.findByText('Chưa liên kết được Zalo. Bạn thử lại sau nhé.')).toBeInTheDocument();
   });
 
   it('tài khoản khách đã có đơn: không hứa quà chào mừng (khối ẩn hẳn)', async () => {

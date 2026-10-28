@@ -34,7 +34,7 @@ vi.mock('../services/api', () => ({
 }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, login: mocks.login, ensurePhone: mocks.ensurePhone };
+    const state = { status: mocks.auth.status, login: mocks.login, ensurePhoneOrThrow: mocks.ensurePhone };
     return sel ? sel(state) : state;
   },
 }));
@@ -349,6 +349,14 @@ describe('/recycle thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập để đổi rác' }));
     await waitFor(() => expect(mocks.ensurePhone).toHaveBeenCalled());
     expect(mocks.login.mock.invocationCallOrder[0]!).toBeLessThan(mocks.ensurePhone.mock.invocationCallOrder[0]!);
+  });
+  it('khách vãng lai: máy chủ từ chối liên kết (409) → thông báo nói lời máy chủ', async () => {
+    mocks.auth.status = 'idle';
+    mocks.login.mockResolvedValue(undefined);
+    mocks.ensurePhone.mockRejectedValue(new Error('Số điện thoại này đã gắn với tài khoản Zalo khác.'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đăng nhập để đổi rác' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Số điện thoại này đã gắn với tài khoản Zalo khác.', type: 'error' }));
   });
   it('phiên lỗi mạng → SessionUnavailable, không vẽ trang trống', async () => {
     mocks.auth.status = 'error';

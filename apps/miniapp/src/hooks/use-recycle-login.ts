@@ -8,11 +8,11 @@ export function useRecycleLogin() {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   const login = useAuthStore((s) => s.login);
-  const ensurePhone = useAuthStore((s) => s.ensurePhone);
+  const ensurePhoneOrThrow = useAuthStore((s) => s.ensurePhoneOrThrow);
   return async () => {
     try {
       await login();
-      await ensurePhone();
+      await ensurePhoneOrThrow();
       await qc.invalidateQueries({ queryKey: ['waste'] });
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });

@@ -14,10 +14,10 @@ export const isWasteForbidden = (e: unknown): boolean => isHttpError(e) && e.res
 export function WastePhoneNeeded({ text }: { text: string }) {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
-  const ensurePhone = useAuthStore((s) => s.ensurePhone);
+  const ensurePhoneOrThrow = useAuthStore((s) => s.ensurePhoneOrThrow);
   const share = async () => {
     try {
-      if (await ensurePhone()) await qc.invalidateQueries({ queryKey: ['waste'] });
+      if (await ensurePhoneOrThrow()) await qc.invalidateQueries({ queryKey: ['waste'] });
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     }

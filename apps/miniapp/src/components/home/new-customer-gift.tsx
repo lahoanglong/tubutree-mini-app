@@ -5,6 +5,7 @@ import { CalendarClock, ChevronDown, ChevronUp, Gift, Leaf, Ticket, Truck, type 
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { HOME_HERO_HEIGHT } from '@tubutree/app-core/home-layout';
 import { getNewCustomerOffer, type NewCustomerOffer } from '../../services/account-api';
+import { getErrorMessage } from '../../services/api';
 import { fetchOrders, getPublicConfig, type PublicConfig } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
 import { isGuestUser } from '../../utils/guest-user';
@@ -73,12 +74,13 @@ export function NewCustomerGift() {
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const userId = useAuthStore((s) => s.user?.id);
   const user = useAuthStore((s) => s.user);
-  const ensurePhone = useAuthStore((s) => s.ensurePhone);
+  const ensurePhoneOrThrow = useAuthStore((s) => s.ensurePhoneOrThrow);
   // Tài khoản khách (vào bằng thiết bị, chưa liên kết Zalo): máy chủ cố ý trả isNewCustomer=false để không hứa quà nó không phát.
   // Đây lại là nhóm cần mồi nhất, nên vẫn hiện lợi ích và mời liên kết Zalo để nhận quà; quà chỉ vào ví sau khi liên kết.
   const guestAccount = authed && user ? isGuestUser(user) : false;
   const [expanded, setExpanded] = useState(false);
   const [linking, setLinking] = useState<'idle' | 'busy' | 'failed'>('idle');
+  const [linkFailure, setLinkFailure] = useState<string>(homeCopy.guestGift.failed);
   // Cùng queryKey/hàm với usePublicConfig → một cache; cần trạng thái lỗi riêng để ẩn khối thay vì hiện giá trị dự phòng.
   const cfgQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
   const offerQ = useQuery({
@@ -114,9 +116,11 @@ export function NewCustomerGift() {
   const linkZalo = async () => {
     setLinking('busy');
     try {
-      const phone = await ensurePhone();
+      const phone = await ensurePhoneOrThrow();
+      setLinkFailure(homeCopy.guestGift.failed);
       setLinking(phone ? 'idle' : 'failed');
-    } catch {
+    } catch (err) {
+      setLinkFailure(getErrorMessage(err));
       setLinking('failed');
     }
   };
@@ -180,7 +184,7 @@ export function NewCustomerGift() {
         </div>
         {linking === 'failed' && (
           <Text variant="caption" tone="danger" as="p" style={{ margin: 0, padding: '0 16px 8px' }}>
-            {homeCopy.guestGift.failed}
+            {linkFailure}
           </Text>
         )}
         {expanded && (
