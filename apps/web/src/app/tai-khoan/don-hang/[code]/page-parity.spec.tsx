@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 
 // Phần chi tiết đơn của Mini App (order-detail.tsx) mà trang web cần có đủ: mốc thời gian, dòng Điểm Xanh, đặt trước,
@@ -82,6 +82,11 @@ const ORDER = {
   shippingAddress: { recipient: 'An', phone: '0912345678', street: '1 Xuân Thuỷ', ward: 'Cầu Giấy', province: 'Hà Nội' },
   items: [{ id: 'i1', productName: 'Dầu gội', variationName: '500ml', unitPrice: 150000, quantity: 2, total: 300000 }],
 };
+
+// Nút Chép mã, hoá đơn, phiếu thu rác và lời mời OA nạp bằng next/dynamic; lần nạp đầu phải biên dịch, trên máy CI chậm lâu hơn các nhịp flush() của mount.
+beforeAll(async () => {
+  await Promise.all([import('./copy-shipping-code'), import('./order-extras')]);
+});
 
 let mounted: Rendered[] = [];
 const mount = async () => {
