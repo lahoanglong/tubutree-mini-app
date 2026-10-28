@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import React, { useEffect, useId, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Banknote, Check, ChevronDown, ChevronUp, Download, Recycle, Store, TreePine, Trophy } from 'lucide-react';
@@ -152,7 +153,7 @@ import { ReportsTab, reportSectionsFor } from '@/components/admin/reports-tab';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { InboxBadge, OpsInboxTab } from '@/components/admin/ops-inbox-tab';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
-import { WasteTab, type WasteSeed } from '@/components/admin/waste-tab';
+import type { WasteSeed } from '@/components/admin/waste-tab';
 import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
 import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-tab';
 import { CommissionRatesTab } from '@/components/admin/commission-rates-tab';
@@ -161,7 +162,7 @@ import { EngagementTab } from '@/components/admin/engagement-tab';
 import { SupportChatTab } from '@/components/admin/support-chat-tab';
 import { ExternalOrdersTab } from '@/components/admin/external-orders-tab';
 import { ExternalClaimsTab } from '@/components/admin/external-claims-tab';
-import { CommunityModerationTab, type CommunityView } from '@/components/admin/community-moderation-tab';
+import type { CommunityView } from '@/components/admin/community-moderation-tab';
 import { AttendanceTab } from '@/components/admin/attendance-tab';
 import { StaffRosterTab } from '@/components/admin/staff-roster-tab';
 import { ShiftApprovalTab } from '@/components/admin/shift-approval-tab';
@@ -218,6 +219,11 @@ type Tab =
   | 'subscriptions'
   | 'analytics'
   | 'reports';
+// Hai tab nặng, không phải trang vào mặc định: tách khỏi gói đầu của /admin để trang mở nhanh hơn.
+const tabLoading = () => <p className="text-sm text-stone-500">Đang tải…</p>;
+const WasteTab = dynamic(() => import('@/components/admin/waste-tab').then((m) => m.WasteTab), { loading: tabLoading });
+const CommunityModerationTab = dynamic(() => import('@/components/admin/community-moderation-tab').then((m) => m.CommunityModerationTab), { loading: tabLoading });
+
 /**
  * Mục quản trị theo nhóm việc (ADMINOPS-13): trước đây là một dải 24 tab cuộn ngang. Khoá `k` giữ nguyên để link cũ
  * (`/admin?tab=orders&pancake=attention`...) vẫn mở đúng chỗ.

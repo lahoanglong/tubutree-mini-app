@@ -6,6 +6,16 @@ import { click, flush, mockFetch, render, selectValue, typeInto, type Rendered }
 import { headingProblems, scrollRegionProblems, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 import { ADMIN_CONFIG_ROWS } from '@/test-utils/fixtures/admin-config-rows';
 
+/** Tab tải lười (next/dynamic) hiện sau vài lượt chờ: đợi tới khi điều kiện đúng thay vì đoán số lượt flush. */
+async function waitFor(cond: () => boolean, timeoutMs = 5000) {
+  const end = Date.now() + timeoutMs;
+  while (!cond() && Date.now() < end) {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+  }
+}
+
 const mocks = vi.hoisted(() => ({
   auth: { user: { role: 'ADMIN' } as { role: string } | null, status: 'authenticated', initialized: true },
   recycling: 0,
@@ -445,6 +455,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     mocks.config = [{ key: 'waste.enabled', value: 'false', description: 'Bật đổi rác', category: 'waste' }];
     window.history.replaceState(null, '', '/admin?tab=waste');
     const { container } = await mount();
+    await waitFor(() => [...container.querySelectorAll('h2')].some((h) => h.textContent === 'Đổi rác lấy quà'));
     const btn = [...container.querySelectorAll('nav[aria-label="Mục quản trị"] button:not([aria-expanded])')].find((b) => navLabel(b) === 'Đổi rác')!;
     expect(btn.getAttribute('aria-current')).toBe('page');
     expect([...container.querySelectorAll('h2')].some((h) => h.textContent === 'Đổi rác lấy quà')).toBe(true);
@@ -2911,7 +2922,7 @@ describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần x
     expect(card.textContent).toContain('Bài cộng đồng chờ duyệt');
 
     click(card);
-    await flush();
+    await waitFor(() => (container.textContent ?? '').includes('Ban công'));
 
     expect(window.location.search).toBe('?tab=community');
     expect(activeChip(container)).toBe('Chờ duyệt');
