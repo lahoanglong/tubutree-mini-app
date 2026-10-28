@@ -59,7 +59,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: Brows
     ? { urlKey: serializeSearchState(state).toString(), page: catalog, startPage }
     : null;
   return (
-    <main className={`${PAGE_WIDE} py-6 max-md:pb-0 max-md:pt-3 md:py-8`}>
+    <main className={`${PAGE_WIDE} py-6 max-md:pb-0 max-md:pt-0 md:py-8`}>
       <BrowseView initial={initial} brands={brands} categories={categories} />
     </main>
   );

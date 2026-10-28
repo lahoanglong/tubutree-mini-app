@@ -8,6 +8,7 @@ import { ChevronRight, Leaf, Search, X } from 'lucide-react';
 import type { CatalogPage, CategoryDTO, ProductCard as ProductCardData, ProductSuggestion } from '@tubutree/app-core/api/catalog';
 import { brandsQuery, browseQuery, categoriesQuery } from '@tubutree/app-core/queries/catalog';
 import { browseText } from '@/lib/browse-text';
+import { Heading } from '@/components/mini/text';
 import { categoryEntries, segmentLabel, type CategoryEntry } from '@/lib/browse-categories';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
@@ -241,7 +242,9 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
           />
           <div className="min-w-0">
           {filterHeading && (
-            <h2 className="mb-1 font-display text-2xl font-semibold text-stone-900 [overflow-wrap:anywhere] md:hidden">{filterHeading}</h2>
+            <Heading variant="title-lg" as="h2" className="mb-1 [overflow-wrap:anywhere] md:hidden">
+              {filterHeading}
+            </Heading>
           )}
           {activeCategory && (
             <div role="group" aria-label={browseText.categoryChips} className="scroll-x -mx-4 mb-1 flex gap-2 px-4 py-1 md:hidden">

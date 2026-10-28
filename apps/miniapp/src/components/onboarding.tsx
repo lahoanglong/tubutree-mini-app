@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ONBOARDING_SURVEY_ENABLED } from './onboarding-flag';
 import { useLocation, useSnackbar } from 'zmp-ui';
 import { getStorage, setStorage } from 'zmp-sdk/apis';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -83,11 +84,7 @@ async function readSnoozedUntil(): Promise<number | null> {
   }
 }
 
-/**
- * Khảo sát chào mừng đang TẮT: lớp phủ che kín Trang chủ lần mở đầu, 9 chạm mà câu trả lời chưa được dùng ở đâu. Bật lại (`enabled`) khi câu
- * trả lời đã dùng cho "Gợi ý cho bạn"; khi đó phải là thẻ nhỏ trong trang, không phủ màn.
- */
-export const ONBOARDING_SURVEY_ENABLED = false;
+export { ONBOARDING_SURVEY_ENABLED };
 
 export function OnboardingGate({ enabled = ONBOARDING_SURVEY_ENABLED }: { enabled?: boolean } = {}) {
   return enabled ? <OnboardingGateInner /> : null;

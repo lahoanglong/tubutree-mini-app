@@ -6,7 +6,7 @@ import { getStorage } from 'zmp-sdk/apis';
 import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
 import BackButton from './back-button';
-import { OnboardingGate } from './onboarding';
+import { ONBOARDING_SURVEY_ENABLED } from './onboarding-flag';
 import { CouponClaimGate } from './coupon-claim-gate';
 import { OpenAppRouter } from './open-app-router';
 import { MainLandmark } from './ui/main-landmark';
@@ -43,6 +43,8 @@ function applySavedFontScale(): void {
 }
 
 // Code-split: Home eager (first paint), các trang khác lazy để giữ initial bundle nhỏ (§13.4).
+// Khảo sát đang tắt: mã của nó nằm ngoài gói khởi động và chỉ tải khi bật cờ.
+const OnboardingGate = lazy(() => import('./onboarding').then((m) => ({ default: m.OnboardingGate })));
 const BrowsePage = lazy(() => import('../pages/browse'));
 const ProductDetailPage = lazy(() => import('../pages/product-detail'));
 const CartPage = lazy(() => import('../pages/cart'));
@@ -264,7 +266,11 @@ export default function MyApp() {
               </LivePathnameProvider>
               <BottomNav />
               <BackButton />
-              <OnboardingGate />
+              {ONBOARDING_SURVEY_ENABLED && (
+                <Suspense fallback={null}>
+                  <OnboardingGate />
+                </Suspense>
+              )}
               <CouponClaimGate />
               <OpenAppRouter />
             </ZMPRouter>

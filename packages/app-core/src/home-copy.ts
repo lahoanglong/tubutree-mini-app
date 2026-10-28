@@ -11,13 +11,11 @@ export const homeCopy = {
     checkIn: 'Điểm danh',
     checkedIn: 'Đã điểm danh',
     checkInLoading: 'Điểm danh',
-    /** Lời chào ở dòng thẻ gọn: thêm chữ "Điểm Xanh" cho số điểm. */
-    pointsCaption: 'Điểm Xanh',
     rewards: 'Đổi quà',
     topTier: 'Bạn đang ở hạng cao nhất',
     tierFailed: 'Chưa tải được hạng và điểm',
     /** Mất kết nối lúc khôi phục phiên của khách cũ (web): giữ khung thẻ, báo rõ và cho thử lại. */
-    offline: 'Không kết nối được · Chưa tải được điểm của bạn',
+    offline: 'Chưa tải được điểm của bạn',
     retry: 'Thử lại',
     /** Chữ vô hình giữ đúng chiều cao dòng tiến độ lúc dữ liệu hạng chưa về. */
     progressSpacer: 'Còn 000 điểm lên hạng kế',

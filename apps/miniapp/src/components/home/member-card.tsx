@@ -73,12 +73,13 @@ export function MemberCard() {
           style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 4, padding: 0, border: 'none', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', minHeight: 44 }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
-            <Text variant="body-sm" tone="inverse" as="div" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {card.tierName ? `${greeting} · ` : greeting}
+            <Text variant="body-sm" tone="inverse" as="div" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', minWidth: 0, whiteSpace: 'nowrap' }}>
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{greeting}</span>
               {card.tierName && (
-                <>
+                <span style={{ flex: '0 0 auto' }}>
+                  {' · '}
                   <Icon icon={Leaf} size="sm" tone="inverse" style={{ verticalAlign: '-3px', display: 'inline' }} /> {card.tierName}
-                </>
+                </span>
               )}
             </Text>
             {loyaltyFailed ? (
