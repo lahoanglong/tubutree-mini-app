@@ -25,6 +25,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'authenticated' }),
 }));
+vi.mock('../services/account-api', () => ({ getWallet: vi.fn().mockResolvedValue({ walletBalance: 75_000 }) }));
 vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -74,6 +75,9 @@ import {
   requestPayout,
 } from '../services/affiliate-api';
 
+/** Dữ liệu từng tab chỉ tải khi mở tab đó. */
+const openTab = (name: string) => fireEvent.click(screen.getByRole('tab', { name }));
+
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(<QueryClientProvider client={qc}><AffiliatePage /></QueryClientProvider>);
@@ -86,23 +90,50 @@ describe('Dashboard CTV — chia sẻ mã giới thiệu (C-067)', () => {
     mocks.copyText.mockResolvedValue(true);
   });
 
-  it('shareLink reject: sao chép lời mời kèm liên kết có mã và báo snackbar, không im lặng', async () => {
+  it('lối tắt Chia sẻ mở bảng chia sẻ có QR, Zalo, sao chép link và lời đăng, link là link Mini App', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ link và mã giới thiệu/ }));
+    expect(await screen.findByText('Chia sẻ mã giới thiệu')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Sao chép link/ }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
+    expect(mocks.copyText).toHaveBeenCalledWith('https://zalo.me/s/2070857098114207963/?ref=TUBU88');
+  });
+
+  it('shareLink reject: sao chép link kèm mã và báo snackbar, không im lặng', async () => {
     mocks.shareLink.mockRejectedValue(new Error('zalo từ chối'));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ link và mã giới thiệu/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ qua Zalo/ }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
     expect(mocks.copyText).toHaveBeenCalledWith(expect.stringContaining('/?ref=TUBU88'));
-    expect(mocks.copyText).toHaveBeenCalledWith(expect.stringContaining('dùng mã TUBU88'));
     expect((mocks.openSnackbar.mock.calls[0]![0] as { text: string }).text).toMatch(/Chưa chia sẻ được qua Zalo/);
   });
 
   it('chia sẻ được thì không báo gì thêm', async () => {
     mocks.shareLink.mockResolvedValue(undefined);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ link và mã giới thiệu/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ qua Zalo/ }));
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
     expect(mocks.shareLink.mock.calls[0]![0].path).toBe('/?ref=TUBU88');
     expect(mocks.openSnackbar).not.toHaveBeenCalled();
+  });
+
+  it('tab Chia sẻ: nút trong thẻ mã là "Sao chép mã" và chép đúng mã', async () => {
+    renderPage();
+    await screen.findByRole('tab', { name: 'Chia sẻ' });
+    openTab('Chia sẻ');
+    fireEvent.click(await screen.findByRole('button', { name: 'Sao chép mã' }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('TUBU88'));
+  });
+
+  it('tab Chia sẻ: sao chép link đã tạo dùng link Mini App kèm mã và mã link', async () => {
+    vi.mocked(getAffiliateLinks).mockResolvedValue([{ id: 'l1', targetType: 'HOMEPAGE', shortCode: 'abc', clicks: 3 }] as Awaited<ReturnType<typeof getAffiliateLinks>>);
+    renderPage();
+    await screen.findByRole('tab', { name: 'Chia sẻ' });
+    openTab('Chia sẻ');
+    fireEvent.click(await screen.findByRole('button', { name: 'Sao chép' }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('https://zalo.me/s/2070857098114207963/?ref=TUBU88&l=abc'));
   });
 });
 
@@ -115,7 +146,7 @@ describe('Dashboard CTV — lối vào Học viện chỉ hiện khi có khoá h
   it('chưa có khoá nào: không có nút Học viện', async () => {
     mocks.fetchCourses.mockResolvedValue([]);
     renderPage();
-    await screen.findByText('Mã giới thiệu của bạn');
+    await screen.findByRole('button', { name: /Lên đơn hộ khách/ });
     await waitFor(() => expect(mocks.fetchCourses).toHaveBeenCalled());
     expect(screen.queryByRole('button', { name: 'Học viện CTV' })).not.toBeInTheDocument();
   });
@@ -195,13 +226,13 @@ describe('Dashboard CTV — lối tắt Lên đơn hộ ở đầu trang (C-064)
     mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
   });
 
-  it('nút Lên đơn hộ khách nằm trước nút Chuyển vào Ví và trước lịch sử hoa hồng, đủ cao 44px', async () => {
+  it('nút Lên đơn hộ khách nằm trước nút Chuyển vào Ví và trước các tab, đủ cao 44px', async () => {
     renderPage();
     const entry = await screen.findByRole('button', { name: /Lên đơn hộ khách/ });
     const withdraw = screen.getByRole('button', { name: 'Chuyển vào Ví Tubu' });
-    const history = screen.getByText('Lịch sử hoa hồng');
+    const tabs = screen.getByRole('tablist');
     expect(entry.compareDocumentPosition(withdraw) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(entry.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(entry.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(parseInt(entry.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
   });
 
@@ -286,18 +317,21 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
     ] as Awaited<ReturnType<typeof getCommissions>>);
   });
 
-  it('thẻ hoa hồng tháng, số đang chờ, số có thể chuyển vào Ví và từng dòng lịch sử đúng số và đúng nhãn trạng thái', async () => {
+  it('thẻ đầu trang (số dùng được, đang chờ, tạm tính tháng) và từng dòng lịch sử đúng số và đúng nhãn trạng thái', async () => {
     renderPage();
-    expect(await screen.findByText('125.000đ')).toBeInTheDocument();
-    expect(screen.getByText('15.000đ')).toBeInTheDocument();
-    expect(screen.getByText('30.000đ')).toBeInTheDocument();
-    expect(screen.getByText('200.000đ')).toBeInTheDocument();
+    // Số to là tiền dùng được ngay; hoa hồng đang chờ và số tạm tính là dòng phụ.
+    expect(await screen.findByText('200.000đ')).toBeInTheDocument();
+    expect(screen.getAllByText('Có thể chuyển vào Ví')).toHaveLength(1);
+    expect(screen.getByText(/Đang chờ: 30\.000đ/)).toBeInTheDocument();
+    expect(screen.getByText('Tạm tính tháng này')).toBeInTheDocument();
+    expect(screen.getByText('125.000đ')).toBeInTheDocument();
+    openTab('Hoa hồng');
     expect(await screen.findByText('+25.000đ')).toBeInTheDocument();
     expect(screen.getByText('Đơn 500.000đ ·', { exact: false })).toBeInTheDocument();
     for (const label of ['Đang chờ · đơn chưa giao', 'Đang chờ · đang giữ', 'Đã trả', 'Từ chối']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    expect(screen.getAllByText('Có thể chuyển vào Ví')).toHaveLength(2);
+    expect(screen.getAllByText('Có thể chuyển vào Ví').length).toBeGreaterThanOrEqual(1);
   });
 
   it('dòng hoa hồng kèm mã đơn và trạng thái đơn; khoản nằm trong lệnh rút cũ hiện "Lệnh rút cũ đang xử lý", không phải "Đã trả" (SELLER-10)', async () => {
@@ -305,6 +339,8 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
       { id: 'c1', amount: 25_000, orderTotal: 500_000, status: 'APPROVED', withdrawing: true, orderCode: 'TB123', orderStatus: 'DELIVERED', createdAt: '2026-10-01T03:00:00.000Z' },
     ] as Awaited<ReturnType<typeof getCommissions>>);
     renderPage();
+    await screen.findByRole('tab', { name: 'Hoa hồng' });
+    openTab('Hoa hồng');
     expect(await screen.findByText('Lệnh rút cũ đang xử lý')).toBeInTheDocument();
     expect(screen.getByText('Đơn TB123 ·', { exact: false })).toBeInTheDocument();
     expect(screen.getByText('Giao thành công')).toBeInTheDocument();
@@ -317,6 +353,8 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
       { id: 'p2', amount: 60_000, grossAmount: 60_000, taxWithheld: 0, fee: 0, method: 'BANK', status: 'REJECTED', rejectionReason: 'Thiếu số tài khoản', bankRef: null, requestedAt: '2026-10-03T03:00:00.000Z', reviewedAt: '2026-10-04T03:00:00.000Z', paidAt: null },
     ]);
     renderPage();
+    await screen.findByRole('tab', { name: 'Hoa hồng' });
+    openTab('Hoa hồng');
     expect(await screen.findByRole('heading', { level: 2, name: 'Lịch sử chuyển vào Ví' })).toBeInTheDocument();
     expect(await screen.findByText('Đã chuyển')).toBeInTheDocument();
     expect(screen.getByText('Mã giao dịch: FT2610')).toBeInTheDocument();
@@ -330,6 +368,8 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
       { id: 'p1', amount: 750_000, grossAmount: 1_000_000, taxWithheld: 0, taxRefunded: 250_000, fee: 0, method: 'WALLET_BALANCE', status: 'PAID', rejectionReason: null, bankRef: null, requestedAt: '2026-10-09T03:00:00.000Z', reviewedAt: null, paidAt: '2026-10-09T03:00:00.000Z' },
     ]);
     renderPage();
+    await screen.findByRole('tab', { name: 'Hoa hồng' });
+    openTab('Hoa hồng');
     expect(await screen.findByText('Đã chuyển')).toBeInTheDocument();
     expect(screen.getByText(/đã hoàn 250\.000đ thuế giữ dư vào Ví/)).toBeInTheDocument();
     expect(screen.queryByText(/đã khấu trừ thuế TNCN 0đ/)).toBeNull();
@@ -341,6 +381,8 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
       totals: { grossAmount: 3_000_000, taxWithheld: 300_000, netAmount: 2_700_000 },
     });
     renderPage();
+    await screen.findByRole('tab', { name: 'Hoa hồng' });
+    openTab('Hoa hồng');
     expect(await screen.findByText('Năm 2026: thu nhập hoa hồng 3.000.000đ · đã khấu trừ thuế TNCN 300.000đ')).toBeInTheDocument();
     expect(screen.getByText(/chứng từ khấu trừ thuế TNCN/)).toBeInTheDocument();
   });
@@ -531,6 +573,7 @@ describe('Dashboard CTV — thưởng mốc là Điểm Xanh (PD-3)', () => {
   it('mỗi mốc hiện thưởng bằng điểm, mốc đã nhận ghi "Đã cộng vào Điểm Xanh", không còn chữ xu', async () => {
     renderPage();
     expect(await screen.findByText('+200 điểm')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả 2 mốc' }));
     expect(screen.getByText('+50 điểm')).toBeInTheDocument();
     expect(screen.getByText('Đã cộng vào Điểm Xanh')).toBeInTheDocument();
     expect(screen.queryByText(/xu\b/i)).toBeNull();
@@ -615,7 +658,7 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
   });
 
-  it('bốn lối tắt ngay dưới thẻ hoa hồng, trước hai ô số liệu, bậc, thưởng mốc và mã giới thiệu', async () => {
+  it('bốn lối tắt ngay dưới thẻ hoa hồng, trước các tab, bậc, thưởng mốc và mã giới thiệu', async () => {
     vi.mocked(getCtvMilestones).mockResolvedValue({
       monthKey: '2026-10', currentRevenue: 0, pendingRevenue: 0, holdDays: 20, previousMonth: null,
       milestones: [{ id: 'M1', title: 'Mốc 3 triệu', threshold: 3_000_000, rewardPoints: 50, description: '', achieved: false, claimed: false, canClaim: false, progressPct: 0 }],
@@ -624,11 +667,13 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     const group = await screen.findByRole('group', { name: 'Lối tắt của CTV' });
     const names = Array.from(group.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'));
     expect(names).toEqual(['Chia sẻ link và mã giới thiệu', 'Gian hàng của tôi', 'Lên đơn hộ khách', 'Chuyển vào Ví Tubu']);
-    expect(before(screen.getByText('Hoa hồng tháng này'), group)).toBe(true);
-    expect(before(group, await screen.findByText('200.000đ'))).toBe(true);
+    expect(before(screen.getByText('Có thể chuyển vào Ví'), group)).toBe(true);
+    expect(before(await screen.findByRole('tablist'), await screen.findByRole('button', { name: /Bảng 5 bậc CTV/ }))).toBe(true);
+    expect(before(group, screen.getByRole('tablist'))).toBe(true);
     expect(before(group, await screen.findByRole('button', { name: /Bảng 5 bậc CTV/ }))).toBe(true);
     expect(before(group, await screen.findByText('Thưởng mốc doanh số tháng'))).toBe(true);
-    expect(before(group, screen.getByRole('heading', { level: 2, name: 'Mã giới thiệu của bạn' }))).toBe(true);
+    openTab('Chia sẻ');
+    expect(before(group, await screen.findByRole('heading', { level: 2, name: 'Mã giới thiệu của bạn' }))).toBe(true);
   });
 
   it('đại lý (chưa lên đơn hộ được) chỉ có ba lối tắt', async () => {
@@ -664,35 +709,78 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     expect(await screen.findByRole('button', { name: 'Gian hàng của tôi' })).toBeInTheDocument();
   });
 
-  it('Chia sẻ mở chia sẻ link kèm mã; Gian hàng đi tới trình dựng gian hàng', async () => {
+  it('Chia sẻ mở bảng chia sẻ link kèm mã; Gian hàng đi tới trình dựng gian hàng', async () => {
     mocks.shareLink.mockResolvedValue(undefined);
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ link và mã giới thiệu' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ qua Zalo/ }));
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
     expect(mocks.shareLink.mock.calls[0]![0].path).toBe('/?ref=TUBU88');
     fireEvent.click(screen.getByRole('button', { name: 'Gian hàng của tôi' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/storefront');
   });
 
-  it('Chuyển vào Ví khoá khi chưa có hoa hồng chuyển được, mở form khi có', async () => {
+  it('Chuyển vào Ví luôn bấm được: chưa có số chuyển được thì mở hộp nói vì sao và số đang chờ, không có form chuyển', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 9_520, pendingCommission: 9_520, withdrawableCommission: 0,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' });
+    expect(btn).toBeEnabled();
+    await screen.findByText(/Đang chờ: 9\.520đ ·/);
+    fireEvent.click(btn);
+    expect(await screen.findByText('Hoa hồng vào Ví khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 9.520đ.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /vào Ví$/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Đã hiểu' }));
+    expect(screen.queryByText(/Hoa hồng vào Ví khi đơn đã giao/)).toBeNull();
+  });
+
+  it('dòng "Số dư Ví" ngay dưới lối tắt, chạm là sang Ví', async () => {
+    renderPage();
+    const row = await screen.findByRole('button', { name: /Số dư Ví/ });
+    await waitFor(() => expect(row).toHaveTextContent('75.000đ'));
+    fireEvent.click(row);
+    expect(mocks.navigate).toHaveBeenCalledWith('/wallet');
+  });
+
+  it('CTV mới chưa có đơn: thẻ "Việc đầu tiên" có ba việc; có đơn rồi thì không hiện', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue({
       todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0,
       totalClicks: 0, totalConversions: 0, monthRevenue: 0,
       tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    mocks.fetchCourses.mockResolvedValue([{ id: 'c1', title: 'Bắt đầu' }]);
+    const { unmount } = renderPage();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Việc đầu tiên' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Học khoá đầu tiên/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Chia sẻ mã giới thiệu/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Mở gian hàng của bạn/ })).toBeInTheDocument();
+    unmount();
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0,
+      totalClicks: 2, totalConversions: 1, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
     renderPage();
-    expect(await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' })).toBeDisabled();
+    await screen.findByRole('tab', { name: 'Tổng quan' });
+    await waitFor(() => expect(screen.getByText('2')).toBeInTheDocument());
+    expect(screen.queryByRole('heading', { level: 2, name: 'Việc đầu tiên' })).toBeNull();
   });
 
-  it('hai ô Đang chờ và Có thể chuyển vào Ví cùng một kiểu thẻ (cùng nền và bóng), chỉ khác màu số', async () => {
+  it('mở trang chỉ gọi dữ liệu của tab Tổng quan; hoa hồng và link chỉ tải khi mở tab của chúng', async () => {
     renderPage();
-    await screen.findByText('200.000đ');
-    const cardOf = (value: string) => screen.getByText(value).closest<HTMLElement>('[style*="--elevation-1"]')!;
-    const pending = cardOf('30.000đ');
-    const withdrawable = cardOf('200.000đ');
-    expect(pending).not.toBe(withdrawable);
-    expect(pending.style.background).toBe(withdrawable.style.background);
-    expect(pending.style.boxShadow).toBe(withdrawable.style.boxShadow);
+    await screen.findByRole('tab', { name: 'Hoa hồng' });
+    await waitFor(() => expect(getCtvMilestones).toHaveBeenCalled());
+    expect(getCommissions).not.toHaveBeenCalled();
+    expect(getMyPayouts).not.toHaveBeenCalled();
+    expect(getAffiliateLinks).not.toHaveBeenCalled();
+    openTab('Hoa hồng');
+    await waitFor(() => expect(getCommissions).toHaveBeenCalledTimes(1));
+    expect(getAffiliateLinks).not.toHaveBeenCalled();
+    openTab('Chia sẻ');
+    await waitFor(() => expect(getAffiliateLinks).toHaveBeenCalledTimes(1));
   });
 
   it('thưởng mốc: đang tải có khung chờ, lỗi tải có nút Thử lại gọi lại API', async () => {
@@ -712,6 +800,8 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
       { id: 'L1', shortCode: 'abc123', targetType: 'HOMEPAGE', targetId: null, clicks: 1, conversions: 0, revenue: 0, createdAt: '2026-10-20T00:00:00Z' },
     ]);
     renderPage();
+    await screen.findByRole('tab', { name: 'Chia sẻ' });
+    openTab('Chia sẻ');
     expect(await screen.findByText('1 lượt bấm')).toBeInTheDocument();
     expect(screen.queryByText(/\d+ đơn/)).toBeNull();
   });

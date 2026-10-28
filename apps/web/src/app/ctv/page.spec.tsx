@@ -23,8 +23,16 @@ const state = vi.hoisted(() => ({
   registerGate: null as null | Promise<unknown>,
   routeReady: { gianHang: true },
   courses: [{ id: 'c1' }] as unknown[],
+  tab: undefined as string | undefined,
 }));
 
+vi.mock('@/components/ui/segmented-tabs', async (importOriginal) => {
+  const React = await import('react');
+  return {
+    ...(await importOriginal<typeof import('@/components/ui/segmented-tabs')>()),
+    useTabParam: (_keys: readonly string[], fallback: string) => React.useState(state.tab ?? fallback),
+  };
+});
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn(), user: { id: 'ctv1' } }) }));
 vi.mock('@/lib/platform-bridge', () => ({ platformBridge: { share: (...a: unknown[]) => state.share(...a) } }));
@@ -48,6 +56,7 @@ vi.mock('@/lib/core-http', () => ({
       if (path === '/affiliate/analytics/storefronts') return { storefronts: state.storefronts };
       if (path === '/affiliate/analytics/products') return state.products;
       if (path === '/config/public') return {};
+      if (path === '/me/wallet') return { walletBalance: 50_000 };
       return state.tax;
     },
     post: async (path: string, body?: unknown) => {
@@ -97,6 +106,7 @@ beforeEach(() => {
   state.registerGate = null;
   state.routeReady.gianHang = true;
   state.courses = [{ id: 'c1' }];
+  state.tab = undefined;
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t: string) => void state.copied.push(t) } });
   state.copied = [];
 });
@@ -138,7 +148,7 @@ describe('/ctv — cổng vào theo phiên', () => {
     state.fail.clear();
     click(byText(container, 'button', 'Thử lại'));
     await flush();
-    expect(container.textContent).toContain('Hoa hồng tháng này');
+    expect(container.textContent).toContain('Có thể chuyển vào Ví');
   });
 
   it('đúng một h1 ở trạng thái đăng ký và bảng điều khiển', async () => {
@@ -181,7 +191,7 @@ describe('/ctv — đăng ký CTV (điều khoản hoa hồng & thuế)', () => 
     click(byText(container, 'button', 'Đăng ký miễn phí ngay'));
     await flush();
     expect(posts()).toEqual([{ method: 'post', path: '/affiliate/register', body: { termsVersion: '2026-10' } }]);
-    expect(container.textContent).toContain('Hoa hồng tháng này');
+    expect(container.textContent).toContain('Có thể chuyển vào Ví');
   });
 
   it('bấm đăng ký hai lần trong lúc đang gửi: chỉ một POST', async () => {
@@ -220,12 +230,58 @@ describe('/ctv — bảng điều khiển', () => {
     expect(t).toContain('Còn 20.000đ nằm trong lệnh rút ngân hàng cũ');
   });
 
-  it('lỗi tải dashboard: không hiện 0đ giả, thẻ số liệu hiện — và có Thử lại', async () => {
+  it('số to là "Có thể chuyển vào Ví"; hoa hồng đang chờ là dòng phụ và số tạm tính tháng nằm riêng', async () => {
+    const { container } = mount();
+    await flush();
+    const hero = container.querySelector('section[aria-label="Hoa hồng có thể chuyển vào Ví"]')!;
+    expect(hero.textContent).toContain('Có thể chuyển vào Ví80.000đ');
+    expect(hero.textContent).toContain('Đang chờ: 30.000đ');
+    expect(hero.textContent).toContain('125.000đTạm tính tháng này');
+    expect(hero.textContent).not.toContain('Hôm nay');
+  });
+
+  it('dòng "Số dư Ví" dẫn sang Ví Tubu', async () => {
+    const { container } = mount();
+    await flush();
+    const row = container.querySelector('a[href="/tai-khoan/vi-tubu"]')!;
+    expect(row.textContent).toContain('Số dư Ví: 50.000đ');
+  });
+
+  it('CTV mới chưa có đơn: thẻ "Việc đầu tiên" có ba việc; có đơn rồi thì ẩn', async () => {
+    state.dash = { ...DASH, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0, totalConversions: 0 };
+    const a = mount();
+    await flush();
+    const card = a.container.querySelector('section[aria-label="Việc đầu tiên"]')!;
+    expect(card.textContent).toContain('1. Chia sẻ mã giới thiệu');
+    expect(card.textContent).toContain('2. Mở gian hàng của bạn');
+    expect(card.textContent).toContain('3. Học khoá đầu tiên');
+    a.unmount();
+    state.dash = DASH;
+    const b = mount();
+    await flush();
+    expect(b.container.querySelector('section[aria-label="Việc đầu tiên"]')).toBeNull();
+  });
+
+  it('mở trang chỉ gọi dữ liệu tab Tổng quan; hoa hồng và link chỉ tải khi mở tab của chúng', async () => {
+    const { container } = mount();
+    await flush();
+    const got = () => state.calls.filter((c) => c.method === 'get').map((c) => c.path);
+    expect(got()).not.toContain('/affiliate/commissions');
+    expect(got()).not.toContain('/affiliate/links');
+    click(byText(container, '[role="tab"]', 'Hoa hồng'));
+    await flush();
+    expect(got()).toContain('/affiliate/commissions');
+    expect(got()).not.toContain('/affiliate/links');
+    click(byText(container, '[role="tab"]', 'Chia sẻ'));
+    await flush();
+    expect(got()).toContain('/affiliate/links');
+  });
+
+  it('lỗi tải dashboard: không hiện 0đ giả và có Thử lại', async () => {
     state.fail.add('/affiliate/dashboard');
     const { container } = mount();
     await flush();
-    expect(container.textContent).not.toContain('Hoa hồng tháng này');
-    expect(container.textContent).toContain('—');
+    expect(container.textContent).not.toContain('Đang chờ:');
     expect(byText(container, 'button', 'Thử lại')).not.toBeNull();
   });
 
@@ -253,11 +309,20 @@ describe('/ctv — bảng điều khiển', () => {
     expect(container.querySelector('a[href="/ctv/gian-hang"]')).toBeNull();
   });
 
-  it('Chuyển vào Ví khoá khi chưa có hoa hồng chuyển được', async () => {
+  it('Chuyển vào Ví luôn bấm được: chưa có số chuyển được thì hộp nói vì sao và số đang chờ', async () => {
     state.dash = { ...DASH, withdrawableCommission: 0 };
     const { container } = mount();
     await flush();
-    expect((byText(container, '[role="group"] button', 'Chuyển vào Ví') as HTMLButtonElement).disabled).toBe(true);
+    const btn = byText(container, '[role="group"] button', 'Chuyển vào Ví') as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+    click(btn);
+    await flush();
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.textContent).toContain('Hoa hồng vào Ví khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 30.000đ.');
+    expect(byText(dialog as HTMLElement, 'button', 'vào Ví')).toBeNull();
+    click(byText(dialog as HTMLElement, 'button', 'Đã hiểu'));
+    await flush();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it('Chuyển vào Ví mở sheet "Chuyển hoa hồng vào Ví" với số chuyển được của dashboard, không có lựa chọn ngân hàng', async () => {
@@ -272,6 +337,7 @@ describe('/ctv — bảng điều khiển', () => {
   });
 
   it('chuyển xong: đóng sheet, báo đã chuyển, tải lại dashboard, lịch sử chuyển và bảng kê thuế', async () => {
+    state.tab = 'commission';
     const { container } = mount();
     await flush();
     click(byText(container, '[role="group"] button', 'Chuyển vào Ví'));
@@ -299,21 +365,35 @@ describe('/ctv — bảng điều khiển', () => {
     expect(posts()).toEqual([]);
   });
 
-  it('Chia sẻ qua bridge với đường dẫn có mã; chép link thì báo đã chép; thất bại thì báo gửi mã thủ công', async () => {
+  it('Chia sẻ mở bảng chia sẻ; nút Chia sẻ trong bảng gọi bridge với đường dẫn có mã; chép link thì báo đã chép; thất bại thì báo gửi mã thủ công', async () => {
     const { container } = mount();
     await flush();
+    click(byText(container, '[role="group"] button', 'Chia sẻ'));
+    await flush();
+    const dialog = () => document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog().textContent).toContain('Chia sẻ mã giới thiệu');
     state.share = vi.fn(async () => 'copied');
-    click(byText(container, '[role="group"] button', 'Chia sẻ'));
+    click(byText(dialog(), 'button', 'Chia sẻ'));
     await flush();
-    expect(state.share).toHaveBeenCalledWith(expect.objectContaining({ path: '/?ref=TUBU88', text: expect.stringContaining('dùng mã TUBU88') }));
-    expect(container.textContent).toContain('Đã chép liên kết giới thiệu');
+    expect(state.share).toHaveBeenCalledWith(expect.objectContaining({ path: '/?ref=TUBU88', text: expect.stringContaining('TUBU88') }));
+    expect(dialog().textContent).toContain('Đã sao chép');
     state.share = vi.fn(async () => 'failed');
-    click(byText(container, '[role="group"] button', 'Chia sẻ'));
+    click(byText(dialog(), 'button', 'Chia sẻ'));
     await flush();
-    expect(container.textContent).toContain('Bạn gửi mã TUBU88 cho bạn bè nhé');
+    expect(dialog().textContent).toContain('Chưa chia sẻ được');
+  });
+
+  it('tab Chia sẻ: nút trong thẻ mã là "Sao chép mã" và chép đúng mã', async () => {
+    state.tab = 'share';
+    const { container } = mount();
+    await flush();
+    click(byText(container, 'button', 'Sao chép mã'));
+    await flush();
+    expect(state.copied).toEqual(['TUBU88']);
   });
 
   it('danh sách link: rỗng có lời mời; có link thì sao chép đúng URL kèm ref và l', async () => {
+    state.tab = 'share';
     const empty = mount();
     await flush();
     expect(empty.container.textContent).toContain('Chưa có link');
@@ -324,12 +404,13 @@ describe('/ctv — bảng điều khiển', () => {
     expect(full.container.textContent).toContain('3 lượt bấm');
     expect(full.container.textContent).not.toContain('3 lượt bấm ·');
     expect(full.container.textContent).toContain('Lượt bấm');
-    click(byText(full.container, 'button', 'Sao chép'));
+    click(Array.from(full.container.querySelectorAll('button')).find((b) => b.textContent === 'Sao chép'));
     await flush();
     expect(state.copied[0]).toMatch(/\/\?ref=TUBU88&l=abc123$/);
   });
 
   it('+ Tạo link: POST /affiliate/links {targetType: HOMEPAGE} đúng một lần dù bấm hai lần', async () => {
+    state.tab = 'share';
     const { container } = mount();
     await flush();
     const btn = byText(container, 'button', '+ Tạo link');
@@ -340,6 +421,7 @@ describe('/ctv — bảng điều khiển', () => {
   });
 
   it('lịch sử hoa hồng: số, mã đơn, trạng thái đơn và nhãn như Mini App; khoản trong lệnh rút cũ không bị ghi "Đã trả"', async () => {
+    state.tab = 'commission';
     state.commissions = [
       { id: 'c1', orderId: 'o1', orderCode: 'TB1', orderTotal: 500_000, rate: '0.1', amount: 50_000, status: 'APPROVED', createdAt: '2026-10-02T03:00:00Z', orderStatus: 'DELIVERED' },
       { id: 'c2', orderId: 'o2', orderTotal: 100_000, rate: '0.1', amount: 10_000, status: 'APPROVED', createdAt: '2026-10-03T03:00:00Z', withdrawing: true },
@@ -357,6 +439,7 @@ describe('/ctv — bảng điều khiển', () => {
   });
 
   it('lịch sử hoa hồng: rỗng có lời mời, lỗi tải có Thử lại', async () => {
+    state.tab = 'commission';
     const a = mount();
     await flush();
     expect(a.container.textContent).toContain('Chưa có hoa hồng');
@@ -367,6 +450,7 @@ describe('/ctv — bảng điều khiển', () => {
   });
 
   it('lịch sử chuyển vào Ví: trạng thái, phương thức, thuế đã khấu trừ, lý do từ chối, mã giao dịch; năm có khấu trừ thì có tổng thuế', async () => {
+    state.tab = 'commission';
     state.payouts = [
       { id: 'p1', amount: 90_000, grossAmount: 100_000, taxWithheld: 10_000, fee: 0, method: 'BANK', status: 'PAID', rejectionReason: null, bankRef: 'FT123', requestedAt: '2026-10-01T03:00:00Z', reviewedAt: null, paidAt: null },
       { id: 'p2', amount: 50_000, grossAmount: 50_000, taxWithheld: 0, fee: 0, method: 'WALLET_BALANCE', status: 'REJECTED', rejectionReason: 'Sai tài khoản', bankRef: null, requestedAt: '2026-10-02T03:00:00Z', reviewedAt: null, paidAt: null },
@@ -386,6 +470,7 @@ describe('/ctv — bảng điều khiển', () => {
   });
 
   it('lệnh được hoàn thuế giữ dư (Q2b): hiện số đã hoàn vào Ví như Mini App', async () => {
+    state.tab = 'commission';
     state.payouts = [
       { id: 'p1', amount: 750_000, grossAmount: 1_000_000, taxWithheld: 0, taxRefunded: 250_000, fee: 0, method: 'BANK', status: 'PAID', rejectionReason: null, bankRef: null, requestedAt: '2026-10-01T03:00:00Z', reviewedAt: null, paidAt: null },
     ];
@@ -398,6 +483,7 @@ describe('/ctv — bảng điều khiển', () => {
   });
 
   it('lịch sử chuyển rỗng: "Chưa có lần chuyển nào."', async () => {
+    state.tab = 'commission';
     const { container } = mount();
     await flush();
     expect(container.textContent).toContain('Chưa có lần chuyển nào.');
@@ -467,10 +553,11 @@ describe('/ctv — bậc, thưởng mốc, phân tích', () => {
     const { container } = mount();
     await flush();
     expect(container.textContent).toContain('mất mạng');
-    expect(container.textContent).toContain('Hoa hồng tháng này');
+    expect(container.textContent).toContain('Có thể chuyển vào Ví');
   });
 
   it('theo gian hàng: dòng có tên, số đơn, doanh số và hoa hồng; rỗng có lời mời; lỗi có Thử lại', async () => {
+    state.tab = 'commission';
     const empty = mount();
     await flush();
     expect(empty.container.textContent).toContain('Chưa có đơn từ gian hàng nào');
@@ -487,6 +574,7 @@ describe('/ctv — bậc, thưởng mốc, phân tích', () => {
   });
 
   it('theo sản phẩm: tối đa 10 dòng, rỗng có lời mời', async () => {
+    state.tab = 'commission';
     const empty = mount();
     await flush();
     expect(empty.container.textContent).toContain('Chưa có hoa hồng theo sản phẩm');

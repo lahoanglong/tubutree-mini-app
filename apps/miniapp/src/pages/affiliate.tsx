@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Input, Page, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
+import { Input, Page, Sheet, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchCourses } from '../services/academy-api';
 import {
@@ -23,7 +23,10 @@ import {
   type PayoutStatus,
 } from '../services/affiliate-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
-import { useShareWithFallback } from '../components/share-sheet';
+import { ShareSheet } from '../components/share-sheet';
+import { SegmentedTabs } from '../components/ui/segmented-tabs';
+import { CTV_TAB_KEYS, CTV_TABS, ctvHeadline, hasFirstOrder, transferBlockedText, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
+import { getWallet } from '../services/account-api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { formatDate, formatVnd } from '../utils/format';
@@ -46,11 +49,11 @@ import { CtvOrderSheet } from '../components/affiliate/ctv-order-sheet';
 import { CtvShortcuts } from '../components/affiliate/ctv-shortcuts';
 import { MilestoneRewards } from '../components/affiliate/milestone-rewards';
 import { progressPct, tierRewardLabel } from '../components/affiliate/milestone-copy';
-import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, GraduationCap, Wallet, ChevronDown, ChevronUp } from 'lucide-react';
+import { Handshake, BadgePercent, Link2, Landmark, TrendingUp, Receipt, Store, GraduationCap, Wallet, ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
 import { vi } from '../i18n/vi';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { copyText } from '../utils/clipboard';
-import { WEB_BASE_URL } from '../utils/web-base-url';
+import { miniAppLink } from '../utils/miniapp-link';
 
 const PAGE_TITLE = 'Cộng tác viên';
 
@@ -150,6 +153,8 @@ function RegisterGate() {
       haptic('medium');
       openSnackbar({ text: 'Chào mừng CTV Tubu Tree! 🎉', type: 'success' });
       void qc.invalidateQueries({ queryKey: ['affiliate-me'] });
+      // Vai trò vừa đổi: tải lại Học viện (lần tải trước khi còn là khách bị từ chối và không thử lại).
+      void qc.invalidateQueries({ queryKey: ['academy-courses'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -266,20 +271,26 @@ function Dashboard() {
   const qc = useQueryClient();
   const meQ = useQuery({ queryKey: ['affiliate-me'], queryFn: getAffiliateMe });
   const dashQ = useQuery({ queryKey: ['affiliate-dashboard'], queryFn: getAffiliateDashboard });
-  const linksQ = useQuery({ queryKey: ['affiliate-links'], queryFn: getAffiliateLinks });
-  const commQ = useQuery({ queryKey: ['affiliate-commissions'], queryFn: getCommissions });
-  const payoutsQ = useQuery({ queryKey: ['affiliate-payouts'], queryFn: getMyPayouts });
-  const taxQ = useQuery({ queryKey: ['affiliate-tax-statement'], queryFn: () => getTaxStatement() });
-  const sfQ = useQuery({ queryKey: ['affiliate-sf-analytics'], queryFn: getStorefrontAnalytics });
-  const pbQ = useQuery({ queryKey: ['affiliate-product-breakdown'], queryFn: getProductBreakdown });
-  const ctvTiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers });
-  const milestonesQ = useQuery({ queryKey: ['affiliate-milestones'], queryFn: getCtvMilestones });
+  // Mỗi tab chỉ tải dữ liệu của tab đó: mở trang CTV không còn gọi cả 15 request.
+  // Mở từ Ví thì vào thẳng tab Hoa hồng (?tab=commission); đổi tab sau đó chỉ giữ trong trang.
+  const { search } = useLocation();
+  const [tab, setTab] = useState<CtvTabKey>(() => CTV_TAB_KEYS.find((k) => k === new URLSearchParams(search).get('tab')) ?? 'overview');
+  const linksQ = useQuery({ queryKey: ['affiliate-links'], queryFn: getAffiliateLinks, enabled: tab === 'share' });
+  const commQ = useQuery({ queryKey: ['affiliate-commissions'], queryFn: getCommissions, enabled: tab === 'commission' });
+  const payoutsQ = useQuery({ queryKey: ['affiliate-payouts'], queryFn: getMyPayouts, enabled: tab === 'commission' });
+  const taxQ = useQuery({ queryKey: ['affiliate-tax-statement'], queryFn: () => getTaxStatement(), enabled: tab === 'commission' });
+  const sfQ = useQuery({ queryKey: ['affiliate-sf-analytics'], queryFn: getStorefrontAnalytics, enabled: tab === 'commission' });
+  const pbQ = useQuery({ queryKey: ['affiliate-product-breakdown'], queryFn: getProductBreakdown, enabled: tab === 'commission' });
+  const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet });
+  const ctvTiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers, enabled: tab === 'overview' });
+  const milestonesQ = useQuery({ queryKey: ['affiliate-milestones'], queryFn: getCtvMilestones, enabled: tab === 'overview' });
   // Lối vào Học viện chỉ hiện khi đã có khoá để học: vào mà thấy trống thì CTV mới tưởng sản phẩm chưa xong.
   const academyQ = useQuery({ queryKey: ['academy-courses'], queryFn: fetchCourses, retry: false });
   const hasCourses = (academyQ.data?.length ?? 0) > 0;
   const [showAllTiers, setShowAllTiers] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [ctvOrdering, setCtvOrdering] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const createLink = useMutation({
     mutationFn: () => createAffiliateLink('HOMEPAGE'),
@@ -294,21 +305,31 @@ function Dashboard() {
   const d = dashQ.data;
   const referral = meQ.data?.referralCode ?? '';
 
-  const shareWithFallback = useShareWithFallback();
-  const shareReferral = () => {
+  const head = ctvHeadline(d);
+  const copyReferral = () => {
     haptic('light');
-    const description = `Mua sắm sản phẩm thiên nhiên cùng mình, dùng mã ${referral} nhé!`;
-    void shareWithFallback(
-      { title: 'Tubu Tree — Sống xanh An Lành', description, path: `/?ref=${referral}` },
-      `${description} ${WEB_BASE_URL}/?ref=${referral}`,
+    void copyText(referral).then((ok) =>
+      openSnackbar(
+        ok
+          ? { text: 'Đã sao chép mã giới thiệu', type: 'success' }
+          : { text: 'Không sao chép được — hãy chọn và chép thủ công.', type: 'error' },
+      ),
     );
   };
+  const captions = [
+    `Mình đang dùng sản phẩm sống xanh của Tubu Tree, ưng lắm! Mua qua mã ${referral} nhé 🌿`,
+    `Sống xanh an lành cùng Tubu Tree 🌱 Nhập mã ${referral} khi mua để ủng hộ mình nha!`,
+    `Đồ thiên nhiên, lành cho da & nhẹ với đất. Săn deal Tubu Tree với mã ${referral} 💚`,
+  ];
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
-      <PageHeader title={PAGE_TITLE} />
+      {/* Giữ tiêu đề khi cuộn: trang CTV dài, mất chữ "Cộng tác viên" là mất chỗ đang đứng. */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+        <PageHeader title={PAGE_TITLE} />
+      </div>
 
-      {/* Hoa hồng tháng nổi bật */}
+      {/* Số to là tiền dùng được ngay; hoa hồng đang chờ và số tạm tính tháng là dòng phụ. */}
       <div style={{ padding: 16 }}>
         {dashQ.isError ? (
           // KHÔNG fallback 0đ khi lỗi tải — hiển thị nhầm "0đ" gây hiểu lầm CTV chưa có hoa hồng.
@@ -323,7 +344,7 @@ function Dashboard() {
             }}
           >
             <Text variant="body-sm" tone="inverse" as="div" style={{ opacity: 0.85 }}>
-              Hoa hồng tháng này
+              Có thể chuyển vào Ví
             </Text>
             <Text
               variant="price-xl"
@@ -336,10 +357,13 @@ function Dashboard() {
                 fontFamily: 'var(--font-display)',
               }}
             >
-              {formatVnd(d?.monthCommission ?? 0)}
+              {formatVnd(head.big)}
             </Text>
-            <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
-              <MiniStat label="Hôm nay" value={formatVnd(d?.todayCommission ?? 0)} />
+            <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.9, marginTop: 4 }}>
+              Đang chờ: {formatVnd(head.pending)} · đơn chưa giao hoặc đang trong thời gian đổi/trả
+            </Text>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', marginTop: 12 }}>
+              <MiniStat label="Tạm tính tháng này" value={formatVnd(head.monthEstimate)} />
               <MiniStat label="Lượt bấm" value={String(d?.totalClicks ?? 0)} />
               <MiniStat label="Chuyển đổi" value={String(d?.totalConversions ?? 0)} />
             </div>
@@ -351,7 +375,7 @@ function Dashboard() {
       <div style={BLOCK_GAP}>
         <CtvShortcuts
           items={[
-            { key: 'share', label: 'Chia sẻ', ariaLabel: 'Chia sẻ link và mã giới thiệu', icon: Link2, onPress: shareReferral },
+            { key: 'share', label: 'Chia sẻ', ariaLabel: 'Chia sẻ link và mã giới thiệu', icon: Link2, onPress: () => { haptic('light'); setSharing(true); } },
             ...(meQ.data?.canOpenStorefront !== false
               ? [{ key: 'store', label: 'Gian hàng', ariaLabel: 'Gian hàng của tôi', icon: Store, onPress: () => navigate('/storefront') }]
               : []),
@@ -374,27 +398,42 @@ function Dashboard() {
               label: 'Chuyển vào Ví',
               ariaLabel: 'Chuyển vào Ví Tubu',
               icon: Wallet,
-              // Khi dashQ lỗi: cho phép mở form để BE tự validate số dư (CTV không bị kẹt
-              // do dashboard lỗi tạm thời mà không chuyển được commission đã APPROVED).
-              disabled: !dashQ.isError && (d?.withdrawableCommission ?? 0) <= 0,
+              // Luôn bấm được: ô mờ không nói lý do làm CTV tưởng bị chặn. Chưa có số dư thì sheet giải thích khi nào tiền vào Ví.
               onPress: () => setTransferring(true),
             },
           ]}
         />
       </div>
 
-      {/* Khi dashQ lỗi: hiển thị "—" thay vì giá trị giả, để form chuyển tự query số dư riêng. */}
-      <div style={{ ...BLOCK_GAP, display: 'flex', gap: 10 }}>
-        <KpiCard
-          label="Đang chờ"
-          hint="đơn chưa giao hoặc đang giữ"
-          value={dashQ.isError ? '—' : formatVnd(d?.pendingCommission ?? 0)}
-        />
-        <KpiCard
-          label="Có thể chuyển vào Ví"
-          value={dashQ.isError ? '—' : formatVnd(d?.withdrawableCommission ?? 0)}
-          highlight
-        />
+      {/* Lối sang Ví ngay trong trang CTV: trước đây chỉ vào được Ví từ Cá nhân. */}
+      <div style={BLOCK_GAP}>
+        <button
+          type="button"
+          className="tubu-press"
+          onClick={() => navigate('/wallet')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            width: '100%',
+            minHeight: 48,
+            boxSizing: 'border-box',
+            padding: '10px 16px',
+            border: 'none',
+            borderRadius: 'var(--radius-card)',
+            background: 'var(--color-bg-surface)',
+            boxShadow: 'var(--elevation-1)',
+            font: 'inherit',
+            textAlign: 'left',
+            cursor: 'pointer',
+          }}
+        >
+          <Icon icon={Wallet} size="md" tone="brand" />
+          <Text variant="body-sm" as="span" style={{ flex: 1 }}>
+            Số dư Ví: <b>{walletQ.data ? formatVnd(walletQ.data.walletBalance) : '—'}</b>
+          </Text>
+          <Icon icon={ChevronRight} size="sm" tone="muted" />
+        </button>
       </div>
       {(d?.withdrawingCommission ?? 0) > 0 && (
         <Text variant="caption" tone="secondary" as="p" style={{ ...BLOCK_GAP, marginTop: -4 }}>
@@ -402,6 +441,61 @@ function Dashboard() {
         </Text>
       )}
 
+      <div style={BLOCK_GAP}>
+        <SegmentedTabs items={[...CTV_TABS]} value={tab} onChange={(k) => setTab(k as CtvTabKey)} />
+      </div>
+
+      {tab === 'overview' && d && !hasFirstOrder(d) && (
+        <Card padding={16} style={BLOCK_GAP}>
+          <Heading variant="title-sm" as="h2">
+            Việc đầu tiên
+          </Heading>
+          <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2, marginBottom: 4 }}>
+            Làm lần lượt để có đơn đầu tiên. Thẻ này tự ẩn khi bạn có đơn.
+          </Text>
+          {[
+            { key: 'share', label: 'Chia sẻ mã giới thiệu', icon: Link2, onPress: () => setSharing(true) },
+            ...(meQ.data?.canOpenStorefront !== false
+              ? [{ key: 'store', label: 'Mở gian hàng của bạn', icon: Store, onPress: () => navigate('/storefront') }]
+              : []),
+            ...(hasCourses ? [{ key: 'learn', label: 'Học khoá đầu tiên', icon: GraduationCap, onPress: () => navigate('/academy') }] : []),
+          ].map((step, i) => (
+            <button
+              key={step.key}
+              type="button"
+              className="tubu-press"
+              onClick={() => {
+                haptic('light');
+                step.onPress();
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                width: '100%',
+                minHeight: 48,
+                boxSizing: 'border-box',
+                padding: '8px 0',
+                background: 'none',
+                border: 'none',
+                borderTop: '1px solid var(--color-border-subtle)',
+                font: 'inherit',
+                textAlign: 'left',
+                cursor: 'pointer',
+              }}
+            >
+              <Icon icon={step.icon} size="md" tone="brand" />
+              <Text variant="body-sm" as="span" style={{ flex: 1, fontWeight: 600 }}>
+                {i + 1}. {step.label}
+              </Text>
+              <Icon icon={ChevronRight} size="sm" tone="muted" />
+            </button>
+          ))}
+        </Card>
+      )}
+
+      {tab === 'overview' && (
+        <>
       {/* Bậc doanh số tháng (§6.8.2) & Danh sách 5 bậc CTV */}
       {d?.tier && (
         <Card padding={16} style={BLOCK_GAP}>
@@ -529,6 +623,11 @@ function Dashboard() {
         </div>
       )}
 
+        </>
+      )}
+
+      {tab === 'share' && (
+        <>
       {/* Mã giới thiệu + chia sẻ */}
       <Section title="Mã giới thiệu của bạn">
         <div
@@ -545,18 +644,14 @@ function Dashboard() {
           <Text variant="price-lg" tone="brand" style={{ letterSpacing: 1 }}>
             {referral}
           </Text>
-          <Button onPress={shareReferral}>Chia sẻ</Button>
+          <Button onPress={copyReferral}>Sao chép mã</Button>
         </div>
 
         {/* Caption gợi ý (§6.8.4) — chạm để copy */}
         <Text variant="caption" as="div" style={{ ...BOLD, marginTop: 12, marginBottom: 6 }}>
           Lời đăng gợi ý (chạm để sao chép)
         </Text>
-        {[
-          `Mình đang dùng sản phẩm sống xanh của Tubu Tree, ưng lắm! Mua qua mã ${referral} nhé 🌿`,
-          `Sống xanh an lành cùng Tubu Tree 🌱 Nhập mã ${referral} khi mua để ủng hộ mình nha!`,
-          `Đồ thiên nhiên, lành cho da & nhẹ với đất. Săn deal Tubu Tree với mã ${referral} 💚`,
-        ].map((cap, i) => (
+        {captions.map((cap, i) => (
           <button
             key={i}
             type="button"
@@ -631,7 +726,7 @@ function Dashboard() {
                 <Button
                   variant="ghost"
                   onPress={() => {
-                    void copyText(`${WEB_BASE_URL}/?ref=${referral}&l=${l.shortCode}`).then((ok) =>
+                    void copyText(miniAppLink(`/?ref=${referral}&l=${l.shortCode}`)).then((ok) =>
                       openSnackbar(
                         ok
                           ? { text: 'Đã sao chép link', type: 'success' }
@@ -657,6 +752,11 @@ function Dashboard() {
         )}
       </Section>
 
+        </>
+      )}
+
+      {tab === 'commission' && (
+        <>
       {/* Lịch sử hoa hồng */}
       <Section title="Lịch sử hoa hồng">
         {commQ.isError ? (
@@ -826,11 +926,24 @@ function Dashboard() {
         )}
       </Section>
 
+        </>
+      )}
+
       <div style={{ height: 24 }} />
 
       <BottomSheet open={transferring} onClose={() => setTransferring(false)} title="Chuyển hoa hồng vào Ví">
         {/* Mount khi mở để form lấy ĐÚNG max hiện tại (tránh kẹt amount="0" nếu data về sau lần mount đầu). */}
-        {transferring && (
+        {transferring && !dashQ.isError && head.big <= 0 && (
+          <div>
+            <Text variant="body-sm" as="p" style={{ margin: 0 }}>
+              {transferBlockedText(formatVnd(head.pending))}
+            </Text>
+            <Button fullWidth variant="secondary" onPress={() => setTransferring(false)} style={{ marginTop: 16 }}>
+              Đã hiểu
+            </Button>
+          </div>
+        )}
+        {transferring && (dashQ.isError || head.big > 0) && (
           <TransferForm
             max={d?.withdrawableCommission ?? 0}
             taxPreview={d?.withdrawTaxPreview}
@@ -852,6 +965,16 @@ function Dashboard() {
           />
         )}
       </BottomSheet>
+
+      <ShareSheet
+        visible={sharing}
+        onClose={() => setSharing(false)}
+        basePath="/"
+        title="Tubu Tree — Sống xanh An Lành"
+        heading="Chia sẻ mã giới thiệu"
+        referralCode={referral}
+        captions={captions}
+      />
 
       <Sheet visible={ctvOrdering} onClose={() => setCtvOrdering(false)} autoHeight>
         {/* Mount khi mở để reset state form mỗi lần lên đơn mới. */}
@@ -1031,34 +1154,6 @@ function MiniStat({ label, value }: { label: string; value: string }) {
         {label}
       </Text>
     </div>
-  );
-}
-
-function KpiCard({
-  label,
-  value,
-  highlight,
-  hint,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-  hint?: string;
-}) {
-  return (
-    <Card style={{ flex: 1 }}>
-      <Text variant="price-md" tone={highlight ? 'brand' : 'primary'} as="div">
-        {value}
-      </Text>
-      <Text variant="caption" tone="tertiary" as="div">
-        {label}
-      </Text>
-      {hint && (
-        <Text variant="label" tone="tertiary" as="div" style={{ fontWeight: 400 }}>
-          {hint}
-        </Text>
-      )}
-    </Card>
   );
 }
 

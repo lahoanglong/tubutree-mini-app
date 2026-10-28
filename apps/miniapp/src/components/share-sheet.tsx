@@ -9,7 +9,7 @@ import { shareLink } from '../services/zmp-bridge';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
-import { WEB_BASE_URL } from '../utils/web-base-url';
+import { miniAppLink } from '../utils/miniapp-link';
 
 type ShareParams = Parameters<typeof shareLink>[0];
 
@@ -47,6 +47,8 @@ export function ShareSheet({
   onClose,
   slug,
   title,
+  heading,
+  basePath,
   referralCode,
   thumbnail,
   pathPrefix = 's',
@@ -54,8 +56,13 @@ export function ShareSheet({
 }: {
   visible: boolean;
   onClose: () => void;
-  slug: string;
+  /** Bắt buộc khi không truyền `basePath`. */
+  slug?: string;
   title: string;
+  /** Tiêu đề bảng; mặc định "Chia sẻ gian hàng". */
+  heading?: string;
+  /** Đường dẫn Mini App chia sẻ thẳng (vd '/' cho trang chủ kèm mã giới thiệu), thay cho `/${pathPrefix}/${slug}`. */
+  basePath?: string;
   referralCode?: string | null;
   thumbnail?: string;
   /** 's' cho gian hàng CTV (/s/:slug), 'brand' cho trang nhãn (/brand/:slug). */
@@ -65,12 +72,13 @@ export function ShareSheet({
 }) {
   const { openSnackbar } = useSnackbar();
   const shareWithFallback = useShareWithFallback();
-  const path = `/${pathPrefix}/${slug}`;
+  const path = basePath ?? `/${pathPrefix}/${slug}`;
   // Mã giới thiệu PHẢI đi kèm ở CẢ 2 lối chia sẻ. Trước đây chỉ `url` (nút Sao chép link) có
   // `?ref=`, còn nút "Chia sẻ qua Zalo" gửi `path` trần → khách mở từ Zalo mua hàng thì CTV
   // KHÔNG được tính hoa hồng, mà không có dấu hiệu nào cho thấy điều đó.
   const sharePath = referralCode ? `${path}?ref=${referralCode}` : path;
-  const url = `${WEB_BASE_URL}${sharePath}`;
+  // Link Mini App (không phải web): người nhận trong Zalo ở lại Mini App, không phải đăng nhập lại.
+  const url = miniAppLink(sharePath);
   const captions = (
     captionsProp ?? [
       `Mình tuyển vài món sống xanh đang dùng, ghé xem nha 🌿 ${url}`,
@@ -87,7 +95,7 @@ export function ShareSheet({
     );
   };
   return (
-    <BottomSheet open={visible} onClose={onClose} title={vi.storefront.shareTitle}>
+    <BottomSheet open={visible} onClose={onClose} title={heading ?? vi.storefront.shareTitle}>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}><QrCode value={url} /></div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
         <Button

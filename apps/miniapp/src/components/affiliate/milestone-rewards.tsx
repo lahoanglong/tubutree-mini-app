@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { nextMilestoneRows } from '@tubutree/app-core/ctv-dashboard';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'zmp-ui';
 import { Check, Trophy } from 'lucide-react';
@@ -42,6 +43,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   const [failures, setFailures] = useState<ClaimFailure[]>([]);
+  const [showAll, setShowAll] = useState(false);
 
   const prev = data.previousMonth;
   const targets = [...(prev ? toTargets(prev.milestones, prev.monthKey) : []), ...toTargets(data.milestones, data.monthKey)];
@@ -211,7 +213,28 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
           {prev.milestones.map((m) => renderRow(m, prev.monthKey, prev.revenue))}
         </div>
       )}
-      <div>{data.milestones.map((m) => renderRow(m, data.monthKey, data.currentRevenue))}</div>
+      <div>{(showAll ? data.milestones : nextMilestoneRows(data.milestones)).map((m) => renderRow(m, data.monthKey, data.currentRevenue))}</div>
+      {data.milestones.length > nextMilestoneRows(data.milestones).length && (
+        <button
+          type="button"
+          className="tubu-press"
+          aria-expanded={showAll}
+          onClick={() => setShowAll((v) => !v)}
+          style={{
+            width: '100%',
+            minHeight: 44,
+            marginTop: 4,
+            border: 'none',
+            background: 'none',
+            font: 'inherit',
+            cursor: 'pointer',
+          }}
+        >
+          <Text variant="body-sm" tone="brand" style={BOLD}>
+            {showAll ? 'Thu gọn' : `Xem tất cả ${data.milestones.length} mốc`}
+          </Text>
+        </button>
+      )}
     </Card>
   );
 }

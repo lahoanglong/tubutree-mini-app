@@ -3,7 +3,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BadgePercent, GraduationCap, Handshake, Landmark, Link2, Receipt, Store, TrendingUp, Wallet } from 'lucide-react';
+import { BadgePercent, ChevronRight, GraduationCap, Handshake, Landmark, Link2, Receipt, Store, TrendingUp, Wallet } from 'lucide-react';
 import { createAffiliateLink, registerAffiliate, type AffiliatePayout, type Commission } from '@tubutree/app-core/api/affiliate';
 import {
   affiliateCommissionsQuery,
@@ -18,6 +18,8 @@ import {
   affiliateTaxStatementQuery,
 } from '@tubutree/app-core/queries/affiliate';
 import { academyCoursesQuery } from '@tubutree/app-core/queries/academy';
+import { walletQuery } from '@tubutree/app-core/queries/wallet';
+import { CTV_TAB_KEYS, CTV_TABS, ctvHeadline, hasFirstOrder, transferBlockedText } from '@tubutree/app-core/ctv-dashboard';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
@@ -30,6 +32,8 @@ import { ui } from '@/lib/guest-ui';
 import { phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { Badge } from '@/components/ui/badge';
+import { Sheet } from '@/components/ui/sheet';
+import { SegmentedTabs, useTabParam } from '@/components/ui/segmented-tabs';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CtvShortcuts, type CtvShortcut } from '@/components/affiliate/ctv-shortcuts';
@@ -37,6 +41,7 @@ import { MilestoneRewards } from '@/components/affiliate/milestone-rewards';
 import { TierCard } from '@/components/affiliate/tier-card';
 import { CtvOrderSheet } from '@/components/affiliate/ctv-order-sheet';
 import { TransferSheet } from '@/components/affiliate/transfer-sheet';
+import { StorefrontShareSheet } from '@/components/affiliate/storefront-share';
 import {
   COMMISSION_META,
   COMMISSION_ORDER_STATUS,
@@ -152,6 +157,9 @@ function RegisterGate() {
     onSuccess: () => {
       setNotice({ text: 'Chào mừng CTV Tubu Tree! 🎉', error: false });
       void qc.invalidateQueries({ queryKey: affiliateMeQuery(coreHttp).queryKey });
+      // Vai trò vừa đổi: tải lại Học viện (lần tải trước khi còn là khách bị từ chối và không thử lại), và về đầu trang.
+      void qc.invalidateQueries({ queryKey: academyCoursesQuery(coreHttp).queryKey });
+      window.scrollTo({ top: 0 });
     },
     onError: (e) => setNotice({ text: actErrText(e), error: true }),
     onSettled: () => {
@@ -243,16 +251,6 @@ function SectionSkeleton() {
   );
 }
 
-function Kpi({ label, value, hint, highlight }: { label: string; value: string; hint?: string; highlight?: boolean }) {
-  return (
-    <div className={`${ui.card} ${phoneFlatCard} flex-1 p-4`}>
-      <div className={`text-lg font-bold tabular-nums ${highlight ? 'text-forest-700' : 'text-stone-900'}`}>{value}</div>
-      <div className="text-xs text-stone-700">{label}</div>
-      {hint && <div className="text-xs text-stone-600">{hint}</div>}
-    </div>
-  );
-}
-
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -313,14 +311,17 @@ function Dashboard() {
   const qc = useQueryClient();
   const meQ = useQuery(affiliateMeQuery(coreHttp));
   const dashQ = useQuery(affiliateDashboardQuery(coreHttp));
-  const linksQ = useQuery(affiliateLinksQuery(coreHttp));
-  const commQ = useQuery(affiliateCommissionsQuery(coreHttp));
-  const payoutsQ = useQuery(affiliatePayoutsQuery(coreHttp));
-  const taxQ = useQuery(affiliateTaxStatementQuery(coreHttp));
-  const sfQ = useQuery(affiliateStorefrontAnalyticsQuery(coreHttp));
-  const pbQ = useQuery(affiliateProductBreakdownQuery(coreHttp));
-  const tiersQ = useQuery(affiliateCtvTiersQuery(coreHttp));
-  const milestonesQ = useQuery(affiliateMilestonesQuery(coreHttp));
+  // Mỗi tab chỉ tải dữ liệu của tab đó: mở trang CTV không còn gọi cả 15 request.
+  const [tab, setTab] = useTabParam(CTV_TAB_KEYS, 'overview');
+  const linksQ = useQuery({ ...affiliateLinksQuery(coreHttp), enabled: tab === 'share' });
+  const commQ = useQuery({ ...affiliateCommissionsQuery(coreHttp), enabled: tab === 'commission' });
+  const payoutsQ = useQuery({ ...affiliatePayoutsQuery(coreHttp), enabled: tab === 'commission' });
+  const taxQ = useQuery({ ...affiliateTaxStatementQuery(coreHttp), enabled: tab === 'commission' });
+  const sfQ = useQuery({ ...affiliateStorefrontAnalyticsQuery(coreHttp), enabled: tab === 'commission' });
+  const pbQ = useQuery({ ...affiliateProductBreakdownQuery(coreHttp), enabled: tab === 'commission' });
+  const tiersQ = useQuery({ ...affiliateCtvTiersQuery(coreHttp), enabled: tab === 'overview' });
+  const milestonesQ = useQuery({ ...affiliateMilestonesQuery(coreHttp), enabled: tab === 'overview' });
+  const walletQ = useQuery(walletQuery(coreHttp));
   // Lối vào Học viện chỉ hiện khi đã có khoá để học: vào mà thấy trống thì CTV mới tưởng sản phẩm chưa xong.
   const academyQ = useQuery({ ...academyCoursesQuery(coreHttp), retry: false });
   const hasCourses = (academyQ.data?.length ?? 0) > 0;
@@ -328,6 +329,7 @@ function Dashboard() {
   const linkBusy = useRef(false);
   const [transferring, setTransferring] = useState(false);
   const [ctvOrdering, setCtvOrdering] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const createLink = useMutation({
     mutationFn: () => createAffiliateLink(coreHttp, 'HOMEPAGE'),
@@ -351,13 +353,15 @@ function Dashboard() {
   const me = meQ.data;
   const referral = me?.referralCode ?? '';
 
-  const shareReferral = async () => {
-    setNotice(null);
-    const text = `Mua sắm sản phẩm thiên nhiên cùng mình, dùng mã ${referral} nhé!`;
-    const result = await platformBridge.share({ title: 'Tubu Tree — Sống xanh An Lành', text, path: `/?ref=${referral}` });
-    if (result === 'copied') setNotice({ text: 'Đã chép liên kết giới thiệu', error: false });
-    else if (result === 'failed') setNotice({ text: `Chưa chia sẻ được. Bạn gửi mã ${referral} cho bạn bè nhé.`, error: true });
-  };
+  const head = ctvHeadline(d);
+  const firstSteps: Array<{ key: string; label: string; Icon: typeof Link2; onPress?: () => void; href?: string }> = [
+    { key: 'share', label: 'Chia sẻ mã giới thiệu', Icon: Link2, onPress: () => setSharing(true) },
+    ...(me?.canOpenStorefront !== false && isWebRouteReady('/ctv/gian-hang')
+      ? [{ key: 'store', label: 'Mở gian hàng của bạn', Icon: Store, href: '/ctv/gian-hang' }]
+      : []),
+    ...(hasCourses && isWebRouteReady('/hoc-vien') ? [{ key: 'learn', label: 'Học khoá đầu tiên', Icon: GraduationCap, href: '/hoc-vien' }] : []),
+  ];
+  const copyReferral = () => void copy(referral, 'Đã sao chép mã giới thiệu', 'Không sao chép được — hãy chọn và chép thủ công.');
 
   const copy = async (text: string, okText: string, failText: string) => {
     const ok = await copyToClipboard(text);
@@ -367,7 +371,7 @@ function Dashboard() {
   // Đại lý không có lối tắt Lên đơn hộ (API từ chối) và chỉ có Gian hàng khi còn gian hàng CTV (trình dựng trả 400 nếu không);
   // link Gian hàng chỉ hiện khi trang web của nó đã làm xong.
   const shortcuts: CtvShortcut[] = [
-    { key: 'share', label: 'Chia sẻ', ariaLabel: 'Chia sẻ link và mã giới thiệu', icon: Link2, onPress: () => void shareReferral() },
+    { key: 'share', label: 'Chia sẻ', ariaLabel: 'Chia sẻ link và mã giới thiệu', icon: Link2, onPress: () => setSharing(true) },
     ...(me?.canOpenStorefront !== false && isWebRouteReady('/ctv/gian-hang')
       ? [{ key: 'store', label: 'Gian hàng', ariaLabel: 'Gian hàng của tôi', icon: Store, href: '/ctv/gian-hang' }]
       : []),
@@ -379,8 +383,7 @@ function Dashboard() {
       label: 'Chuyển vào Ví',
       ariaLabel: 'Chuyển vào Ví Tubu',
       icon: Wallet,
-      // Khi dashboard lỗi vẫn cho bấm để máy chủ tự kiểm số dư, CTV không bị kẹt vì lỗi tạm thời.
-      disabled: !dashQ.isError && (d?.withdrawableCommission ?? 0) <= 0,
+      // Luôn bấm được: ô mờ không nói lý do làm CTV tưởng bị chặn. Chưa có số dư thì sheet giải thích khi nào tiền vào Ví.
       onPress: () => setTransferring(true),
     },
   ];
@@ -406,35 +409,76 @@ function Dashboard() {
       <div role="status" aria-live="polite">
         {notice && <p className={`mb-3 text-sm ${notice.error ? 'text-danger-fg' : 'font-medium text-success-fg'}`}>{notice.text}</p>}
       </div>
-      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
-        <div className="space-y-4">
-          {dashQ.isError ? (
-            // Không đưa "0đ" khi lỗi tải: CTV sẽ tưởng mình chưa có hoa hồng.
-            <ErrorState message={errText(dashQ.error)} onRetry={() => void dashQ.refetch()} />
-          ) : (
-            <section aria-label="Hoa hồng tháng này" className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-stone-0 shadow-card">
-              <div className="text-sm">Hoa hồng tháng này</div>
-              <div className="mt-1 font-display text-3xl font-bold tabular-nums">{formatVnd(d?.monthCommission ?? 0)}</div>
-              <div className="mt-3 flex gap-4">
-                <MiniStat label="Hôm nay" value={formatVnd(d?.todayCommission ?? 0)} />
-                <MiniStat label="Lượt bấm" value={String(d?.totalClicks ?? 0)} />
-                <MiniStat label="Chuyển đổi" value={String(d?.totalConversions ?? 0)} />
-              </div>
-            </section>
-          )}
+      <div className="mx-auto max-w-2xl space-y-4">
+        {dashQ.isError ? (
+          // Không đưa "0đ" khi lỗi tải: CTV sẽ tưởng mình chưa có hoa hồng.
+          <ErrorState message={errText(dashQ.error)} onRetry={() => void dashQ.refetch()} />
+        ) : (
+          <section aria-label="Hoa hồng có thể chuyển vào Ví" className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-stone-0 shadow-card">
+            {/* Số to là tiền dùng được ngay; hoa hồng đang chờ và số tạm tính tháng là dòng phụ. */}
+            <div className="text-sm">Có thể chuyển vào Ví</div>
+            <div className="mt-1 font-display text-3xl font-bold tabular-nums">{formatVnd(head.big)}</div>
+            <div className="mt-1 text-xs">Đang chờ: {formatVnd(head.pending)} · đơn chưa giao hoặc đang trong thời gian đổi/trả</div>
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+              <MiniStat label="Tạm tính tháng này" value={formatVnd(head.monthEstimate)} />
+              <MiniStat label="Lượt bấm" value={String(d?.totalClicks ?? 0)} />
+              <MiniStat label="Chuyển đổi" value={String(d?.totalConversions ?? 0)} />
+            </div>
+          </section>
+        )}
 
-          <CtvShortcuts items={shortcuts} />
+        <CtvShortcuts items={shortcuts} />
 
-          <div className="flex gap-2.5">
-            <Kpi label="Đang chờ" hint="đơn chưa giao hoặc đang giữ" value={dashQ.isError ? '—' : formatVnd(d?.pendingCommission ?? 0)} />
-            <Kpi label="Có thể chuyển vào Ví" value={dashQ.isError ? '—' : formatVnd(d?.withdrawableCommission ?? 0)} highlight />
-          </div>
-          {(d?.withdrawingCommission ?? 0) > 0 && (
-            <p className="text-xs text-stone-700">
-              Còn {formatVnd(d!.withdrawingCommission!)} nằm trong lệnh rút ngân hàng cũ, đang chờ Tubu Tree xử lý.
-            </p>
-          )}
+        <Link href="/tai-khoan/vi-tubu" className={`${ui.card} ${phoneFlatCard} flex min-h-12 items-center gap-2.5 px-4 py-2.5`}>
+          <Wallet className="h-5 w-5 text-forest-600" aria-hidden="true" />
+          <span className="flex-1 text-sm text-stone-900">
+            Số dư Ví: <b className="tabular-nums">{walletQ.data ? formatVnd(walletQ.data.walletBalance) : '—'}</b>
+          </span>
+          <ChevronRight className="h-4 w-4 text-stone-500" aria-hidden="true" />
+        </Link>
+        {(d?.withdrawingCommission ?? 0) > 0 && (
+          <p className="text-xs text-stone-700">
+            Còn {formatVnd(d!.withdrawingCommission!)} nằm trong lệnh rút ngân hàng cũ, đang chờ Tubu Tree xử lý.
+          </p>
+        )}
 
+        <SegmentedTabs items={[...CTV_TABS]} value={tab} onChange={setTab} label="Mục của trang cộng tác viên" />
+
+        {tab === 'overview' && (
+          <>
+            {d && !hasFirstOrder(d) && (
+              <section aria-label="Việc đầu tiên" className={`${ui.card} ${phoneFlatCard} p-4`}>
+                <h2 className={ui.sectionTitle}>Việc đầu tiên</h2>
+                <p className="mb-1 mt-0.5 text-xs text-stone-700">Làm lần lượt để có đơn đầu tiên. Thẻ này tự ẩn khi bạn có đơn.</p>
+                <ul>
+                  {firstSteps.map((step, i) => {
+                    const cls = 'flex min-h-12 w-full items-center gap-2.5 border-t border-stone-200 py-2 text-left';
+                    const inner = (
+                      <>
+                        <step.Icon className="h-5 w-5 text-forest-600" aria-hidden="true" />
+                        <span className="flex-1 text-sm font-semibold text-stone-900">
+                          {i + 1}. {step.label}
+                        </span>
+                        <ChevronRight className="h-4 w-4 text-stone-500" aria-hidden="true" />
+                      </>
+                    );
+                    return (
+                      <li key={step.key}>
+                        {step.href ? (
+                          <Link href={step.href} className={cls}>
+                            {inner}
+                          </Link>
+                        ) : (
+                          <button type="button" onClick={step.onPress} className={cls}>
+                            {inner}
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
           {d?.tier && <TierCard dash={d} tiers={tiersQ.data} />}
 
           {milestonesQ.isError ? (
@@ -459,11 +503,16 @@ function Dashboard() {
             </div>
           )}
 
+          </>
+        )}
+
+        {tab === 'share' && (
+          <>
           <Section title="Mã giới thiệu của bạn">
             <div className="flex items-center justify-between gap-2 rounded-control bg-forest-50 p-3">
               <span className="font-display text-xl font-semibold tracking-wide text-forest-700">{referral}</span>
-              <button type="button" onClick={() => void shareReferral()} className={ui.btnPrimary}>
-                Chia sẻ
+              <button type="button" onClick={copyReferral} className={ui.btnPrimary}>
+                Sao chép mã
               </button>
             </div>
             <div className="mb-1.5 mt-3 text-xs font-semibold text-stone-900">Lời đăng gợi ý (chạm để sao chép)</div>
@@ -481,9 +530,6 @@ function Dashboard() {
               ))}
             </ul>
           </Section>
-        </div>
-
-        <div className="space-y-4">
           <Section
             title="Link chia sẻ"
             action={
@@ -524,6 +570,11 @@ function Dashboard() {
             )}
           </Section>
 
+          </>
+        )}
+
+        {tab === 'commission' && (
+          <>
           <Section title="Lịch sử hoa hồng">
             {commQ.isError ? (
               // Tránh "Chưa có hoa hồng" khi thực tế là API lỗi.
@@ -622,11 +673,27 @@ function Dashboard() {
               </div>
             )}
           </Section>
-        </div>
+          </>
+        )}
       </div>
       <CtvOrderSheet open={ctvOrdering} onClose={() => setCtvOrdering(false)} />
+      <StorefrontShareSheet
+        open={sharing}
+        onClose={() => setSharing(false)}
+        home
+        title="Tubu Tree — Sống xanh An Lành"
+        heading="Chia sẻ mã giới thiệu"
+        referralCode={referral}
+        captions={captions}
+      />
+      <Sheet open={transferring && !dashQ.isError && head.big <= 0} onClose={() => setTransferring(false)} title="Chuyển hoa hồng vào Ví">
+        <p className="text-sm text-stone-800">{transferBlockedText(formatVnd(head.pending))}</p>
+        <button type="button" onClick={() => setTransferring(false)} className={`${ui.btnSecondary} mt-4 w-full`}>
+          Đã hiểu
+        </button>
+      </Sheet>
       <TransferSheet
-        open={transferring}
+        open={transferring && (dashQ.isError || head.big > 0)}
         onClose={() => setTransferring(false)}
         max={d?.withdrawableCommission ?? 0}
         knownMax={!dashQ.isError}
