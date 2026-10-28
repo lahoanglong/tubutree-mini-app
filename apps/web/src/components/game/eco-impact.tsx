@@ -1,5 +1,6 @@
 import { Check, Droplets, Earth, Sprout, TreePine, Trees, type LucideIcon } from 'lucide-react';
 import type { Forest, GameProfile } from '@tubutree/app-core/api/game';
+import { GENERIC_TREE_TITLE, treeTitle } from '@tubutree/app-core/tree-title';
 import { Badge } from '@/components/ui/badge';
 import { formatNumber } from './format';
 import { GameCard } from './game-card';
@@ -33,7 +34,7 @@ export function EcoImpact({
               <div key={t.certificateCode} className="flex items-center justify-between gap-2 rounded-control bg-stone-50 px-3 py-2">
                 <div>
                   <div className="text-caption font-semibold tracking-wide text-forest-700">{t.certificateCode}</div>
-                  <div className="text-caption text-stone-600">{t.treeType}</div>
+                  {treeTitle(t.treeType) !== GENERIC_TREE_TITLE && <div className="text-caption text-stone-600">{treeTitle(t.treeType)}</div>}
                 </div>
                 {t.status === 'PLANTED' ? (
                   <Badge tone="success" size="sm" icon={Check}>
