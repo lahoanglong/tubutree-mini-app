@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import Link from 'next/link';
-import { useMutation } from '@tanstack/react-query';
+import { useIsMutating, useMutation } from '@tanstack/react-query';
 import { useStickyBarOffset } from '@/components/use-sticky-bar-offset';
 import { ChevronRight, Sparkles } from 'lucide-react';
 import { aiChat, type AiChatTurn, type AiProduct } from '@tubutree/app-core/api/ai';
@@ -36,6 +36,9 @@ const SORRY = 'Xin lỗi, mình chưa trả lời được lúc này 🌿';
 // khiến MỌI tin nhắn sau đó bị 400 và tính năng hỏng hẳn cho tới khi reload. Cắt còn cửa sổ gần nhất.
 const MAX_HISTORY_TURNS = 20;
 
+// Mutation sống ở QueryClient chứ không ở trang: khách rời trang lúc trợ lý đang soạn rồi quay lại vẫn phải thấy "đang soạn" và bị chặn gửi chồng.
+const CHAT_MUTATION_KEY = ['ai-advisor-chat'] as const;
+
 const errText = loadErrorText;
 
 const toHistory = (list: readonly AdvisorMessage[]): AiChatTurn[] =>
@@ -63,6 +66,7 @@ function Advisor({ userId }: { userId: string }) {
   useStickyBarOffset(barRef);
 
   const chatM = useMutation({
+    mutationKey: CHAT_MUTATION_KEY,
     mutationFn: ({ text, history }: { text: string; history: AiChatTurn[] }) => aiChat(coreHttp, text, history),
     // Ghi vào store (không phải state của trang): trả lời đến sau khi khách đã rời trang vẫn còn khi quay lại.
     onSuccess: (r) => {
@@ -74,16 +78,18 @@ function Advisor({ userId }: { userId: string }) {
     },
   });
 
+  const pending = useIsMutating({ mutationKey: CHAT_MUTATION_KEY }) > 0;
+
   // Tin mới (của bạn, trả lời, hay trạng thái "đang soạn") phải hiện trong tầm nhìn mà khách không phải tự kéo xuống.
   useEffect(() => {
     if (messages.length === 0) return;
     const reduceMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     endRef.current?.scrollIntoView?.({ block: 'end', behavior: reduceMotion ? 'auto' : 'smooth' });
-  }, [messages.length, chatM.isPending]);
+  }, [messages.length, pending]);
 
   const send = (text: string) => {
     const t = text.trim();
-    if (!t || chatM.isPending) return;
+    if (!t || pending) return;
     appendAdvisorMessage(userId, { role: 'user', content: t });
     setDraft('');
     chatM.mutate({ text: t, history: toHistory(messages) });
@@ -92,7 +98,7 @@ function Advisor({ userId }: { userId: string }) {
   // Gửi lại đúng câu hỏi vừa lỗi: bỏ tin xin lỗi, giữ tin của khách (không nhân đôi), lịch sử là các lượt trước câu đó.
   const retry = (failedIndex: number) => {
     const question = messages[failedIndex - 1];
-    if (chatM.isPending || question?.role !== 'user') return;
+    if (pending || question?.role !== 'user') return;
     truncateAdvisorMessages(userId, failedIndex);
     chatM.mutate({ text: question.content, history: toHistory(messages.slice(0, failedIndex - 1)) });
   };
@@ -133,7 +139,7 @@ function Advisor({ userId }: { userId: string }) {
             >
               {m.content}
             </div>
-            {m.failed && i === messages.length - 1 && !chatM.isPending && (
+            {m.failed && i === messages.length - 1 && !pending && (
               <div className="mt-1.5">
                 <button type="button" className={miniBtnSecondary} onClick={() => retry(i)}>
                   Thử lại
@@ -150,7 +156,7 @@ function Advisor({ userId }: { userId: string }) {
           </div>
         ))}
 
-        {chatM.isPending && (
+        {pending && (
           <div role="status" className="text-xs text-stone-600">
             Trợ lý đang soạn…
           </div>
@@ -172,7 +178,7 @@ function Advisor({ userId }: { userId: string }) {
           maxLength={500}
         />
         {/* Không gộp isPending vào disabled: nút báo đang bận bằng aria-busy, bấm lại thì send() tự chặn. */}
-        <button type="button" className={`${ui.btnPrimary} max-md:px-8`} disabled={!draft.trim()} aria-busy={chatM.isPending} onClick={() => send(draft)}>
+        <button type="button" className={`${ui.btnPrimary} max-md:px-8`} disabled={!draft.trim()} aria-busy={pending} onClick={() => send(draft)}>
           Gửi
         </button>
       </div>
