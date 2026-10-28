@@ -657,8 +657,8 @@ describe('CouponsService.previewMany', () => {
     const codes = Array.from({ length: 55 }, (_, i) => `M${String(i).padStart(2, '0')}`);
     // id ngược thứ tự ví: nếu còn chọn theo id thì 5 mã cuối ví sẽ chiếm chỗ.
     const rows = codes.map((code, i) => coupon({ id: `c${99 - i}`, code, isActive: true, scope: 'PUBLIC' }));
-    const findMany = jest.fn().mockImplementation(({ where }: { where: { code: { in: string[] } } }) =>
-      Promise.resolve(rows.filter((r) => where.code.in.includes(r.code as string))),
+    const findMany = jest.fn().mockImplementation(({ where }: { where: { code: { in: string[] }; scope?: string } }) =>
+      Promise.resolve(rows.filter((r) => where.code.in.includes(r.code as string) && (where.scope == null || r.scope === where.scope))),
     );
     const prisma = {
       coupon: { findMany },
@@ -667,5 +667,47 @@ describe('CouponsService.previewMany', () => {
     } as unknown as PrismaService;
     const out = await new CouponsService(prisma).previewMany(codes, 'u1', 100000);
     expect([...out.keys()]).toEqual(codes.slice(0, 50));
+  });
+
+  describe('ví hơn 50 mã: mã riêng của khách được xét trước mã công khai', () => {
+    const publicCodes = Array.from({ length: 60 }, (_, i) => `PUB${String(i).padStart(2, '0')}`);
+    const build = (rows: Record<string, unknown>[]) => {
+      const matches = (r: Record<string, unknown>, where: { code: { in: string[] }; scope?: string; scopeMeta?: { path: string[]; equals: string } }) =>
+        where.code.in.includes(r.code as string) &&
+        (where.scope == null || r.scope === where.scope) &&
+        (where.scopeMeta == null || (r.scopeMeta as Record<string, string> | null)?.[where.scopeMeta.path[0]!] === where.scopeMeta.equals);
+      const findMany = jest.fn().mockImplementation(({ where }: { where: Parameters<typeof matches>[1] }) => Promise.resolve(rows.filter((r) => matches(r, where))));
+      const prisma = {
+        coupon: { findMany },
+        user: { findUnique: jest.fn().mockResolvedValue(REAL_USER) },
+        couponRedemption: { groupBy: jest.fn().mockResolvedValue([]) },
+      } as unknown as PrismaService;
+      return { findMany, svc: new CouponsService(prisma) };
+    };
+    const pub = () => publicCodes.map((code, i) => coupon({ id: `c${String(i).padStart(3, '0')}`, code, isActive: true, scope: 'PUBLIC' }));
+    const own = (code: string) => coupon({ id: 'c999', code, isActive: true, scope: 'USER_GROUP', scopeMeta: { userId: 'u1' } });
+
+    it('60 mã công khai + 1 mã riêng id lớn: mã riêng nằm trong 50 mã xét, thứ tự ví giữ nguyên', async () => {
+      const { svc } = build([...pub(), own('VUON-GIFT')]);
+      const out = await svc.previewMany([...publicCodes, 'VUON-GIFT'], 'u1', 100000);
+      const keys = [...out.keys()];
+      expect(keys).toHaveLength(50);
+      expect(keys).toContain('VUON-GIFT');
+      expect(keys.slice(0, 49)).toEqual(publicCodes.slice(0, 49));
+      expect(keys[49]).toBe('VUON-GIFT');
+    });
+
+    it('mã riêng của người khác không chen lên trước', async () => {
+      const other = coupon({ id: 'c999', code: 'OTHER', isActive: true, scope: 'USER_GROUP', scopeMeta: { userId: 'u2' } });
+      const { svc } = build([...pub(), other]);
+      const out = await svc.previewMany([...publicCodes, 'OTHER'], 'u1', 100000);
+      expect([...out.keys()]).toEqual(publicCodes.slice(0, 50));
+    });
+
+    it('ví không quá 50 mã: không thêm truy vấn nào', async () => {
+      const { svc, findMany } = build([...pub().slice(0, 3), own('VUON-GIFT')]);
+      await svc.previewMany([...publicCodes.slice(0, 3), 'VUON-GIFT'], 'u1', 100000);
+      expect(findMany).toHaveBeenCalledTimes(1);
+    });
   });
 });
