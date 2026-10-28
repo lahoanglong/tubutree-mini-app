@@ -2616,11 +2616,11 @@ function ConfigTab({ onOpenSupportChat }: { onOpenSupportChat?: () => void }) {
 /**
  * Ô ngày trả "2026-09-30". `new Date("2026-09-30")` được JS hiểu theo UTC, tức
  * 07:00 sáng giờ VN — voucher "đến hết 30/9" chết từ 7h sáng 30/9, còn voucher "từ 1/10" không
- * dùng được suốt 7 tiếng đầu ngày. Ghép giờ địa phương trước khi dựng Date để mốc đúng ý admin.
+ * dùng được suốt 7 tiếng đầu ngày. Ghép giờ kèm +07:00 để mốc theo giờ VN, kể cả khi máy admin đặt múi giờ khác.
  */
 function localDateIso(dayKey: string, endOfDay: boolean, fallbackMs: number): string {
   if (!dayKey) return new Date(fallbackMs).toISOString();
-  return new Date(`${dayKey}T${endOfDay ? '23:59:59' : '00:00:00'}`).toISOString();
+  return new Date(`${dayKey}T${endOfDay ? '23:59:59' : '00:00:00'}+07:00`).toISOString();
 }
 
 function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {

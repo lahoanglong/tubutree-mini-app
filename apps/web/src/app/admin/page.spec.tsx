@@ -1257,6 +1257,20 @@ describe('admin/page — tab Voucher', () => {
     expect(create.disabled).toBe(false);
   });
 
+  it('Tạo voucher gửi mốc đầu/cuối ngày theo giờ VN, không theo múi giờ máy admin', async () => {
+    const { container } = await openCoupons();
+    typeInto(container.querySelector('input[placeholder^="Mã"]'), 'GIOVN');
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá bắt đầu từ ngày"]'), '01/11/2026');
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '30/11/2026');
+    await flush();
+    mocks.createCoupon.mockResolvedValueOnce({});
+    act(() => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá')!.click());
+    await flush();
+    expect(mocks.createCoupon).toHaveBeenCalledWith(
+      expect.objectContaining({ startAt: '2026-10-31T17:00:00.000Z', endAt: '2026-11-30T16:59:59.000Z' }),
+    );
+  });
+
   it('ADMINOPS-7: ô Mã tự đổi chữ HOA và bỏ khoảng trắng (khách luôn gửi mã dạng HOA)', async () => {
     const { container } = await openCoupons();
     const codeInput = container.querySelector<HTMLInputElement>('input[placeholder^="Mã"]')!;

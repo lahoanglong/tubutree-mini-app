@@ -616,9 +616,9 @@ export default function CheckoutPage() {
           flex
           alignItems="center"
           justifyContent="space-between"
-          style={{ cursor: 'pointer', minHeight: 44 }}
+          style={{ cursor: 'pointer', minHeight: 44, gap: 8 }}
         >
-          <Box flex alignItems="center" style={{ gap: 10 }}>
+          <Box flex alignItems="center" style={{ gap: 10, minWidth: 0 }}>
             <Box
               style={{
                 width: 36,
@@ -632,12 +632,12 @@ export default function CheckoutPage() {
             >
               <Ticket size={20} color="var(--clay-700)" />
             </Box>
-            <Box>
+            <Box style={{ minWidth: 0 }}>
               <Text bold size="small" style={{ color: 'var(--color-text-primary)' }}>
                 Mã giảm giá
               </Text>
               {cart.data?.couponCode ? (
-                <Box flex alignItems="center" style={{ gap: 8, marginTop: 2 }}>
+                <Box flex alignItems="center" style={{ gap: 8, marginTop: 2, minWidth: 0 }}>
                   <span
                     style={{
                       background: 'var(--clay-50)',
@@ -647,12 +647,16 @@ export default function CheckoutPage() {
                       color: 'var(--clay-700)',
                       fontSize: 11,
                       fontWeight: 700,
+                      minWidth: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
                     }}
                   >
                     {cart.data.couponCode}
                   </span>
                   {quote.data && quote.data.discount > 0 && (
-                    <Text size="xSmall" style={{ color: 'var(--color-text-success)' }}>
+                    <Text size="xSmall" style={{ color: 'var(--color-text-success)', flexShrink: 0, whiteSpace: 'nowrap' }}>
                       -{formatVnd(quote.data.discount)}
                     </Text>
                   )}

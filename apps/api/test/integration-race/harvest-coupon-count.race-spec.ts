@@ -107,6 +107,8 @@ describe('countHarvestCoupons (real Postgres)', () => {
           throw err;
         },
       );
+    // reltuples do ANALYZE ghi không theo transaction nên vẫn còn số 2000 mã đã rollback; đo lại để spec sau không thấy thống kê lệch.
+    await db.$executeRaw`ANALYZE "coupons"`;
     expect(plan).toContain('coupons_user_group_userId_idx');
     expect(plan).not.toMatch(/Seq Scan on coupons/);
   });
