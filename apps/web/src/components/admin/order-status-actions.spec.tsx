@@ -166,7 +166,21 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     answerConfirm(true);
     await flush();
     expect(onPaid).toHaveBeenCalledTimes(1);
-    expect(onPaid).toHaveBeenCalledWith('Đã xác nhận nhận tiền đơn TB-300.');
+    expect(onPaid).toHaveBeenCalledWith('Đã xác nhận nhận tiền đơn TB-300.', false);
+  });
+
+  it('máy chủ báo alreadyPaid thì onPaid nhận cờ true cùng câu của máy chủ', async () => {
+    const onPaid = vi.fn();
+    const api = mockFetch({
+      '/confirm-payment': { body: { ok: true, alreadyPaid: true, message: 'Đơn TB-300 đã được ghi nhận thanh toán trước đó.', order: {} } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<OrderStatusActions order={order()} onPaid={onPaid} />);
+    click(byText(container, 'button', 'Đã nhận tiền'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(onPaid).toHaveBeenCalledWith('Đơn TB-300 đã được ghi nhận thanh toán trước đó.', true);
   });
 
   it('"Đã nhận tiền" bấm dồn → chỉ 1 request', async () => {

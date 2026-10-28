@@ -701,7 +701,7 @@ export default function AdminPage() {
           {active === 'supportChat' && <SupportChatTab isAdmin={isAdmin} />}
           {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} isAdmin={isAdmin} />}
           {active === 'payouts' && <PayoutAdminTab canReview={isAdmin} />}
-          {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} isAdmin={isAdmin} />}
+          {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} isAdmin={isAdmin} phoneMasked={!(isAdmin || (accessQ.data?.staffPermissions ?? []).some((p) => p === 'CSKH' || p === 'KHO'))} />}
           {active === 'orders' && (
             <OrdersTab
               key={orderSeed?.n ?? 0}
@@ -1260,7 +1260,7 @@ function OrdersTab({
   const [userLabel, setUserLabel] = useState(initialUserLabel ?? '');
   const [profileId, setProfileId] = useState<string | null>(null);
   // Dòng báo sau khi xác nhận tiền: đơn vừa ghi nhận rời hàng đợi nên câu báo trong chi tiết đơn biến mất cùng nó.
-  const [paidNote, setPaidNote] = useState<{ code: string; remaining: number | null } | null>(null);
+  const [paidNote, setPaidNote] = useState<PaidNoteState | null>(null);
   const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [exporting, setExporting] = useState(false);
   // Điện thoại: chi tiết đơn mở trong ngăn kéo thay vì chen vào giữa bảng đang cuộn ngang.
@@ -1416,15 +1416,18 @@ function OrdersTab({
     { id: 'queue-dealer', label: `Đại lý chờ tiền${inboxCount('dealerTransferToConfirm') !== undefined ? ` (${inboxCount('dealerTransferToConfirm')})` : ''}`, on: extra.queue === 'dealer_transfer_to_confirm', flip: () => toggleQueue('dealer_transfer_to_confirm') },
   ];
   // Xác nhận tiền xong đơn rời hàng đợi: giữ câu báo trên danh sách, và trên điện thoại mở luôn đơn kế tiếp thay vì đóng ngăn kéo.
-  const onPaid = (o: AdminOrder) => {
+  const onPaid = (o: AdminOrder, message: string, alreadyPaid: boolean) => {
     const list = q.data?.data ?? [];
     const at = list.findIndex((x) => (x.id || x.code) === (o.id || o.code));
     const total = q.data?.meta.total;
-    setPaidNote({ code: o.code, remaining: extra.queue && total !== undefined ? Math.max(0, total - 1) : null });
+    const note: PaidNoteState = { code: o.code, remaining: extra.queue && total !== undefined ? Math.max(0, total - 1) : null, ...(alreadyPaid ? { message } : {}) };
     if (narrow && extra.queue) {
       const next = list[at + 1] ?? (at > 0 ? list[at - 1] : undefined);
-      setExpandedId(next ? next.id || next.code : null);
+      const nextId = next ? next.id || next.code : null;
+      setExpandedId(nextId);
+      if (nextId) note.openedNextId = nextId;
     }
+    setPaidNote(note);
   };
   // Từ hồ sơ khách sang danh sách đơn: bỏ mọi bộ lọc cũ để đơn cần xem không bị ẩn.
   const showOrders = (next: { search?: string; userId?: string; label?: string }) => {
@@ -1708,17 +1711,7 @@ function OrdersTab({
           </button>
         </p>
       )}
-      {paidNote && (
-        <p role="status" className="flex flex-wrap items-center gap-2 rounded-control bg-success-bg px-3 py-2 text-sm text-success-fg">
-          <span>
-            Đã ghi nhận đơn {paidNote.code}.
-            {paidNote.remaining === null ? '' : paidNote.remaining === 0 ? ' Không còn đơn chờ.' : ` Còn ${paidNote.remaining} đơn chờ.`}
-          </span>
-          <button type="button" onClick={() => setPaidNote(null)} className={BTN_SMALL}>
-            Ẩn
-          </button>
-        </p>
-      )}
+      {paidNote && <PaidNote note={paidNote} onDismiss={() => setPaidNote(null)} />}
 
       {/* Orders Table */}
       {q.isError && (
@@ -1871,7 +1864,7 @@ function OrdersTab({
                       {isExpanded && !narrow && (
                         <tr className="border-t border-stone-100 bg-stone-50">
                           <td colSpan={7} className="px-4 py-3">
-                            <OrderDetailBody o={o} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} onPaid={() => onPaid(o)} onOpenProfile={canViewProfile && o.user?.id ? () => setProfileId(o.user!.id) : undefined} />
+                            <OrderDetailBody o={o} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} onPaid={(message, alreadyPaid) => onPaid(o, message, alreadyPaid)} onOpenProfile={canViewProfile && o.user?.id ? () => setProfileId(o.user!.id) : undefined} />
                           </td>
                         </tr>
                       )}
@@ -1905,6 +1898,7 @@ function OrdersTab({
 
       {narrow && expandedOrder && (
         <SideDrawer key={expandedOrder.id || expandedOrder.code} title={`Đơn ${expandedOrder.code}`} onClose={() => setExpandedId(null)}>
+          {paidNote?.openedNextId === (expandedOrder.id || expandedOrder.code) && <PaidNote note={paidNote} suffix=" Đang mở đơn kế tiếp." className="mb-3" />}
           <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
             <OrderStatusBadge status={expandedOrder.status} />
             <span className="font-semibold text-forest-700">{formatVnd(expandedOrder.total)}</span>
@@ -1912,7 +1906,7 @@ function OrdersTab({
               {PAYMENT_METHOD_LABELS[expandedOrder.paymentMethod] ?? expandedOrder.paymentMethod} · {formatDateTime(expandedOrder.createdAt)}
             </span>
           </div>
-          <OrderDetailBody o={expandedOrder} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} onPaid={() => onPaid(expandedOrder)} onOpenProfile={canViewProfile && expandedOrder.user?.id ? () => setProfileId(expandedOrder.user!.id) : undefined} />
+          <OrderDetailBody o={expandedOrder} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} onPaid={(message, alreadyPaid) => onPaid(expandedOrder, message, alreadyPaid)} onOpenProfile={canViewProfile && expandedOrder.user?.id ? () => setProfileId(expandedOrder.user!.id) : undefined} />
         </SideDrawer>
       )}
 
@@ -1998,6 +1992,32 @@ function OrderRecipientLine({ order: o }: { order: AdminOrder }) {
   );
 }
 
+interface PaidNoteState {
+  code: string;
+  remaining: number | null;
+  /** Câu của máy chủ khi đơn đã được người khác ghi nhận trước: không nói như chính mình vừa ghi nhận. */
+  message?: string;
+  /** Điện thoại, đang làm hàng đợi: id đơn ngăn kéo vừa nhảy sang, để ngăn kéo đó nhắc kết quả đơn trước. */
+  openedNextId?: string;
+}
+
+function PaidNote({ note, onDismiss, suffix = '', className = '' }: { note: PaidNoteState; onDismiss?: () => void; suffix?: string; className?: string }) {
+  return (
+    <p role="status" className={`flex flex-wrap items-center gap-2 rounded-control bg-success-bg px-3 py-2 text-sm text-success-fg ${className}`}>
+      <span>
+        {note.message ?? `Đã ghi nhận đơn ${note.code}.`}
+        {note.remaining === null ? '' : note.remaining === 0 ? ' Không còn đơn chờ.' : ` Còn ${note.remaining} đơn chờ.`}
+        {suffix}
+      </span>
+      {onDismiss && (
+        <button type="button" onClick={onDismiss} className={BTN_SMALL}>
+          Ẩn
+        </button>
+      )}
+    </p>
+  );
+}
+
 /** Chi tiết + thao tác một đơn — mở rộng trong bảng trên máy tính, trong ngăn kéo trên điện thoại. */
 function OrderDetailBody({
   o,
@@ -2012,7 +2032,7 @@ function OrderDetailBody({
   canFinance: boolean;
   canWarehouse: boolean;
   /** Xác nhận tiền xong: danh sách giữ câu báo và (điện thoại, đang làm hàng đợi) mở đơn kế tiếp. */
-  onPaid?: () => void;
+  onPaid?: (message: string, alreadyPaid: boolean) => void;
   /** Có thì dòng "Khách" có nút "Xem hồ sơ" (chỉ ADMIN và nhân viên CSKH được xem hồ sơ khách). */
   onOpenProfile?: () => void;
 }) {
@@ -2078,7 +2098,7 @@ function OrderDetailBody({
       {canFinance && <DealerCreditPanel order={o} />}
 
       {/* Nút trạng thái + "Đã nhận tiền" theo allowedTransitions/canConfirmPayment của API (C-024). */}
-      <OrderStatusActions order={o} canConfirmPayment={canFinance} canResync={isAdmin} canRecordLate={isAdmin} onPaid={onPaid ? () => onPaid() : undefined} />
+      <OrderStatusActions order={o} canConfirmPayment={canFinance} canResync={isAdmin} canRecordLate={isAdmin} onPaid={onPaid} />
 
       <OrderStatusHistory order={o} />
     </div>

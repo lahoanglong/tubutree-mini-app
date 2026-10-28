@@ -2523,6 +2523,18 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
     expect(mocks.refundsCalls).toBeGreaterThan(0);
   });
 
+  it('ô tìm Hoàn tiền khách: KE_TOAN riêng bị che SĐT nên đòi đủ 10 số; KE_TOAN kiêm CSKH thấy đủ SĐT nên không đòi (cùng luật máy chủ)', async () => {
+    const placeholder = (c: HTMLElement) => (c.querySelector('input[aria-label="Tìm khoản hoàn theo mã đơn hoặc SĐT khách"]') as HTMLInputElement).placeholder;
+    window.history.replaceState(null, '', '/admin?tab=customerRefunds');
+    asStaff(['KE_TOAN']);
+    const masked = await mount();
+    expect(placeholder(masked.container)).toBe('Mã đơn hoặc đủ 10 số SĐT');
+    masked.unmount();
+    asStaff(['KE_TOAN', 'CSKH']);
+    const full = await mount();
+    expect(placeholder(full.container)).toBe('Mã đơn hoặc SĐT khách');
+  });
+
   it('ô tìm mục của nhân viên KE_TOAN: mục không có quyền không bao giờ hiện, gõ tên mục đó ra "Không có mục nào khớp"', async () => {
     asStaff(['KE_TOAN']);
     const { container } = await mount();
@@ -3994,7 +4006,27 @@ describe('admin/page — đơn hàng: bộ lọc theo link, hồ sơ khách, xá
     dialog = document.body.querySelector('[role="dialog"]')!;
     expect(dialog.textContent).toContain('Đơn TB11');
     expect(dialog.textContent).not.toContain('Đã xác nhận nhận tiền đơn TB10');
+    expect(dialog.textContent).toContain('Đã ghi nhận đơn TB10');
+    expect(dialog.textContent).toContain('Còn 59 đơn chờ.');
     expect(container.textContent).toContain('Đã ghi nhận đơn TB10');
+  });
+
+  it('máy chủ báo alreadyPaid (người khác xác nhận trước): dòng báo hiện đúng câu của máy chủ, không nói như chính mình vừa ghi nhận', async () => {
+    const already = 'Đơn TB10 đã được ghi nhận thanh toán trước đó.';
+    const api = mockFetch({ '/confirm-payment': { body: { ok: true, alreadyPaid: true, message: already, order: {} } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    mocks.orders = [orderOf('TB10'), orderOf('TB11')];
+    window.history.replaceState(null, '', '/admin?tab=orders&status=PENDING_PAYMENT&queue=bank_transfer_to_confirm');
+    const { container } = await mount();
+    click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa')!);
+    await flush();
+    click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Đã nhận tiền')!);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const note = [...container.querySelectorAll('[role="status"]')].find((e) => e.textContent?.includes('Còn 59 đơn chờ.'))!;
+    expect(note.textContent).toContain(already);
+    expect(note.textContent).not.toContain('Đã ghi nhận đơn TB10.');
   });
 });
 
