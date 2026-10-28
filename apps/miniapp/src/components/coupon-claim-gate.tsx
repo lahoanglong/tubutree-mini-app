@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift } from 'lucide-react';
-import type { AuthUser } from '@tubutree/shared-types';
 import { useAuthStore } from '../store/auth';
 import { useCartCount } from '../hooks/use-cart-count';
 import { getErrorMessage, isOutcomeUnknown } from '../services/api';
