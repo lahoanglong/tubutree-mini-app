@@ -430,6 +430,12 @@ Nhận biết: kết quả INCOMPLETE của đơn mang câu `Cộng nước thư
 
 Đơn đã giao rồi bị trả hoặc huỷ: nước được đảo cùng lúc với Điểm Xanh (`reverseClosedOrderEffects`, chạy lại bởi `ReversalEffectsResyncCron`, idempotent theo dòng sổ `ORDER_REVERSED` cùng `refId`). Đã cộng thì trừ khỏi hồ sơ tối đa bằng số dư (không xuống dưới 0, nước đã tiêu thì không đòi lại) và ghi dòng âm đúng bằng phần thu hồi được (mang `createdAt` của dòng cộng): chỉ phần thu hồi được mới trả lại vào trần tuần, phần đã tiêu vẫn tính vào trần; thu hồi 0 vẫn ghi dòng delta 0. Còn chờ thì huỷ đơn chờ. Nhiều kiện cùng `checkoutGroup` chỉ đảo khi mọi kiện đã trả hoặc huỷ. Đảo lỗi thì đơn chưa có mốc `reversalEffectsAt` và cron thử lại; không có nút chạy tay riêng cho phần đảo: chờ cron (5 phút một lượt, cửa sổ 14 ngày).
 
+### 1.11 Hai route điểm danh cũ đã xoá: bản Mini App phải từ V21 trở lên
+
+API không còn `POST /game/check-in`, `GET /me/loyalty/check-in` và `POST /me/loyalty/check-in`; điểm danh chỉ đi qua `GET`/`POST /me/daily-check-in`. Bản Mini App từ `0a43f0b0` (V21, đã có commit `694b67636` "một nút điểm danh") không gọi các route cũ. Bản V19, V20 (`4eea3135` trở về trước) vẫn gọi, và nút điểm danh sẽ báo 404.
+
+Trước khi deploy API có thay đổi này: xác nhận bản Mini App đang chạy cho khách trên Zalo (bản Live, không phải bản Testing) là V21 trở lên. Nếu Live còn V19 hoặc V20 thì chưa deploy, hoặc đẩy bản Mini App mới lên Live trước. `POST /me/loyalty/check-in` đã xoá từ `5c1d47a2f` (deploy 2026-10-28) với cùng giả định này.
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.
