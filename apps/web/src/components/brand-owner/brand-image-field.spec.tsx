@@ -43,6 +43,29 @@ describe('BrandImageField — diện mạo Mini App ở điện thoại', () => 
   });
 });
 
+describe('BrandImageField — tên cho trình đọc màn hình', () => {
+  it('nhãn đã có chữ "Ảnh" và dấu * bắt buộc: không lặp chữ, giữ chữ viết tắt CCCD', () => {
+    const r = render(<BrandImageField label="Ảnh CCCD mặt trước *" value="" onChange={() => undefined} />);
+    mounted.push(r);
+    expect(r.container.querySelector('input[type="file"]')?.getAttribute('aria-label')).toBe('Chọn ảnh CCCD mặt trước');
+    expect(r.container.querySelector('button[aria-label="Tải ảnh CCCD mặt trước lên"]')).not.toBeNull();
+    expect(r.container.textContent).toContain('Ảnh CCCD mặt trước *');
+  });
+
+  it('đã có ảnh: nút Đổi ảnh và alt cũng không lặp chữ', () => {
+    const r = render(<BrandImageField label="Ảnh bìa" value="data:image/jpeg;base64,A" onChange={() => undefined} />);
+    mounted.push(r);
+    expect(r.container.querySelector('button[aria-label="Đổi ảnh bìa"]')).not.toBeNull();
+    expect(r.container.querySelector('img')?.getAttribute('alt')).toBe('Ảnh bìa');
+  });
+
+  it('nhãn không bắt đầu bằng "Ảnh" như Logo vẫn đọc "Tải ảnh logo lên"', () => {
+    const r = render(<BrandImageField label="Logo" value="" onChange={() => undefined} />);
+    mounted.push(r);
+    expect(r.container.querySelector('button[aria-label="Tải ảnh logo lên"]')).not.toBeNull();
+  });
+});
+
 describe('BrandImageField — nơi lưu ảnh', () => {
   it('mặc định: ưu tiên Cloudinary, dùng đường dẫn Cloudinary trả về', async () => {
     const onChange = vi.fn();
