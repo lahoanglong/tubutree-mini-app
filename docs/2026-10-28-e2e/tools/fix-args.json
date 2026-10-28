@@ -1,0 +1,172 @@
+{
+ "base": "376ad7055",
+ "packages": [
+  {
+   "key": "giohang",
+   "title": "Giỏ, thanh toán, người giới thiệu",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/giohang.md",
+   "money": true,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 0
+  },
+  {
+   "key": "muachung",
+   "title": "Mua chung, trang SP, video đánh giá, đồng hồ máy chủ",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/muachung.md",
+   "money": true,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 1
+  },
+  {
+   "key": "thongbao",
+   "title": "Trung tâm thông báo hai nền",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/thongbao.md",
+   "money": false,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 2
+  },
+  {
+   "key": "canhan",
+   "title": "Cá nhân, Trang chủ, Vườn Xanh: lối vào và số đếm",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/canhan.md",
+   "money": false,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [
+    "thongbao"
+   ],
+   "slot": 3
+  },
+  {
+   "key": "api-tin",
+   "title": "Gửi tin không im lặng, lệch sổ, tin đơn hàng",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/api-tin.md",
+   "money": true,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 4
+  },
+  {
+   "key": "diem",
+   "title": "Điểm Xanh, hạng, Vườn, quà",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/diem.md",
+   "money": true,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 5
+  },
+  {
+   "key": "ctv",
+   "title": "CTV, gian hàng, hoa hồng, nhãn hàng, đại lý",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/ctv.md",
+   "money": true,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 6
+  },
+  {
+   "key": "doirac",
+   "title": "Đổi rác lấy quà: khách và quầy",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/doirac.md",
+   "money": false,
+   "migration": true,
+   "migration_ts": "20261029010000",
+   "depends_on": [],
+   "slot": 7
+  },
+  {
+   "key": "phien",
+   "title": "Phiên đăng nhập Mini, tài khoản khách, đăng xuất",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/phien.md",
+   "money": true,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 8
+  },
+  {
+   "key": "hotro",
+   "title": "Zalo OA, chat CSKH, trợ lý AI",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/hotro.md",
+   "money": false,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 9
+  },
+  {
+   "key": "admin-hopviec",
+   "title": "Hộp việc Hôm nay của quản trị",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/admin-hopviec.md",
+   "money": true,
+   "migration": true,
+   "migration_ts": "20261029020000",
+   "depends_on": [],
+   "slot": 10
+  },
+  {
+   "key": "admin-don",
+   "title": "Đơn, đổi trả, ô ngày, câu đố trong quản trị",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/admin-don.md",
+   "money": false,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [
+    "admin-hopviec",
+    "api-tin"
+   ],
+   "slot": 11
+  },
+  {
+   "key": "admin-nhansu",
+   "title": "Nhân sự trên Mini, gian hàng đổi sau duyệt",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/admin-nhansu.md",
+   "money": false,
+   "migration": true,
+   "migration_ts": "20261029030000",
+   "depends_on": [
+    "admin-hopviec"
+   ],
+   "slot": 12
+  },
+  {
+   "key": "admin-congcu",
+   "title": "Công cụ quản trị: cộng đồng, lương, chat CSKH",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/admin-congcu.md",
+   "money": true,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 13
+  },
+  {
+   "key": "dondep",
+   "title": "Đồng bộ route hai nền, mã chết, e2e ổn định",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/dondep.md",
+   "money": false,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 14
+  },
+  {
+   "key": "giaodien",
+   "title": "Đánh bóng giao diện chung: thanh đáy, đăng nhập web, yêu thích, thẻ SP",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-28-e2e/goi/giaodien.md",
+   "money": false,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 15
+  }
+ ]
+}
