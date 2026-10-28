@@ -3,7 +3,7 @@ import { dropOffDayLimitText, itemQtyMax } from '@tubutree/app-core/waste-copy';
 import { sameProvince } from '@tubutree/app-core/waste-province';
 import { isMethodLocked, orderWasteMethods, WASTE_METHODS_BASE } from '@tubutree/app-core/waste-method-order';
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   WasteCreateRequest,
   WasteLineInput,
@@ -306,9 +306,11 @@ export default function RecycleNewPage() {
         queryKey: [...WASTE_QUERY_KEYS.all, 'preview', body],
         queryFn: () => previewWaste(body),
         enabled: step === 'method' && body.lines.length > 0,
+        placeholderData: keepPreviousData,
       };
     }),
   });
+  const previewFailed = enabledMethods.filter((_, i) => previewQueries[i]?.isError);
   const previews: Partial<Record<WasteMethod, MethodPreview>> = {};
   enabledMethods.forEach((m, i) => {
     previews[m] = { data: previewQueries[i]?.data };
@@ -481,6 +483,7 @@ export default function RecycleNewPage() {
     enabledMethods,
     Object.fromEntries(enabledMethods.map((m) => [m, previews[m]?.data])),
     noPointInProvince,
+    previewFailed,
   );
   const nearestKm = (draft.nearby ?? []).reduce<number | null>(
     (min, pt) => (pt.distanceKm == null ? min : min == null ? pt.distanceKm : Math.min(min, pt.distanceKm)),

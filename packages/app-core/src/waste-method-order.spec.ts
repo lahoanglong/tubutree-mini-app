@@ -21,4 +21,7 @@ describe('orderWasteMethods', () => {
   it('chỉ giữ các cách đang bật', () => {
     expect(orderWasteMethods(['MAIL_IN', 'DROP_OFF'], { DROP_OFF: pv(), MAIL_IN: pv() }, false)).toEqual(['DROP_OFF', 'MAIL_IN']);
   });
+  it('xem trước lỗi vẫn tính là đã có kết quả, thẻ khoá khác vẫn xuống cuối', () => {
+    expect(orderWasteMethods(ALL, { DROP_OFF: pv('BELOW_MIN'), PICKUP: undefined, MAIL_IN: pv() }, false, ['PICKUP'])).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF']);
+  });
 });
