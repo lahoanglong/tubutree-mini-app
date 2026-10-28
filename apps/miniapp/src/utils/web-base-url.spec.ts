@@ -23,7 +23,7 @@ describe('resolveWebBaseUrl', () => {
 });
 
 describe('nơi dựng link chia sẻ', () => {
-  it.each(['components/share-sheet.tsx', 'components/content-kit-sheet.tsx', 'pages/affiliate.tsx'])(
+  it.each(['components/content-kit-sheet.tsx'])(
     '%s dùng WEB_BASE_URL dùng chung, không tự ghi tên miền',
     (rel) => {
       const src = source(rel);

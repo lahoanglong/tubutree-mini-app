@@ -123,7 +123,7 @@ describe('ShareSheet — khung sheet và caption gợi ý (DS v2)', () => {
 
   it('không truyền caption: có đủ 3 caption mặc định, đều kèm liên kết có mã', () => {
     renderSheet();
-    const captionButtons = screen.getAllByRole('button', { name: /app\.tubutree\.com\/s\/an-lanh\?ref=CTV123/ });
+    const captionButtons = screen.getAllByRole('button', { name: /zalo\.me\/s\/\d+\/s\/an-lanh\?ref=CTV123/ });
     expect(captionButtons).toHaveLength(3);
   });
 
