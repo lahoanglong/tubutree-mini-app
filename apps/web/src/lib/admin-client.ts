@@ -1771,7 +1771,14 @@ export type InboxKey =
   | 'productsMissingImage';
 export interface OpsInbox {
   generatedAt: string;
-  items: { key: InboxKey; count: number; /** Hai thẻ chuyển khoản chờ tiền: giờ còn lại của đơn chờ lâu nhất trước khi tự huỷ. */ hoursLeft?: number }[];
+  items: {
+    key: InboxKey;
+    count: number;
+    /** Hai thẻ chuyển khoản chờ tiền: giờ còn lại của đơn chờ lâu nhất trước khi tự huỷ. */
+    hoursLeft?: number;
+    /** Mốc của việc chờ lâu nhất trong thẻ (ISO); thẻ không có cột thời gian rõ thì không trả. */
+    oldestAt?: string;
+  }[];
 }
 export const getOpsInbox = () => apiFetch<OpsInbox>('/admin/ops/inbox');
 export const OPS_INBOX_QUERY_KEY = ['admin-ops-inbox'] as const;
