@@ -93,6 +93,40 @@ describe('RbacService.applyGrants', () => {
   });
 });
 
+describe('RbacService.applyGrants: nhóm việc của lời mời', () => {
+  it('lời mời STAFF có nhóm → user đăng nhập lần đầu nhận đúng nhóm và có dòng sổ', async () => {
+    const prisma = makePrisma({
+      roleGrant: { findMany: jest.fn().mockResolvedValue([{ role: 'STAFF', staffPermissions: ['KHO', 'CSKH'] }]) },
+      user: { update: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF' })) },
+    });
+    await new RbacService(prisma).applyGrants(mkUser());
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'u1' }, data: { role: 'STAFF', staffPermissions: ['CSKH', 'KHO'] } }),
+    );
+    expect(prisma.userAdminEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 'u1', kind: 'STAFF_PERMISSIONS', fromValue: '', toValue: 'CSKH,KHO' }),
+    });
+  });
+
+  it('lời mời STAFF không có nhóm → như cũ: chỉ đổi vai trò, không đụng nhóm', async () => {
+    const prisma = makePrisma({
+      roleGrant: { findMany: jest.fn().mockResolvedValue([{ role: 'STAFF', staffPermissions: [] }]) },
+      user: { update: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF' })) },
+    });
+    await new RbacService(prisma).applyGrants(mkUser());
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'STAFF' } }));
+  });
+
+  it('lời mời ADMIN (dù có ghi nhóm) → nâng ADMIN, không chép nhóm', async () => {
+    const prisma = makePrisma({
+      roleGrant: { findMany: jest.fn().mockResolvedValue([{ role: 'ADMIN', staffPermissions: ['KHO'] }]) },
+      user: { update: jest.fn().mockResolvedValue(mkUser({ role: 'ADMIN' })) },
+    });
+    await new RbacService(prisma).applyGrants(mkUser());
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: { role: 'ADMIN' } }));
+  });
+});
+
 describe('RbacService.addGrant', () => {
   it('tạo grant + áp ngay nếu user đã tồn tại (role thấp hơn)', async () => {
     const prisma = makePrisma({
@@ -398,5 +432,105 @@ describe('RbacService.addGrant — không tự cấp quyền cho chính mình', 
     );
     expect(prisma.roleGrant.create).not.toHaveBeenCalled();
     expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('RbacService.addGrant: nhóm việc', () => {
+  const noUser = { findUnique: jest.fn().mockResolvedValue(null) };
+
+  it('lưu nhóm trên lời mời theo thứ tự chuẩn, bỏ trùng', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'g1' });
+    const prisma = makePrisma({ roleGrant: { findFirst: jest.fn().mockResolvedValue(null), create }, user: noUser });
+    await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF', ['KHO', 'CSKH', 'KHO']);
+    expect(create).toHaveBeenCalledWith({
+      data: { phone: '0900000001', role: 'STAFF', grantedBy: 'admin1', staffPermissions: ['CSKH', 'KHO'] },
+    });
+  });
+
+  it('không truyền nhóm → lời mời lưu danh sách rỗng như cũ', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'g1' });
+    const prisma = makePrisma({ roleGrant: { findFirst: jest.fn().mockResolvedValue(null), create }, user: noUser });
+    await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF');
+    expect(create).toHaveBeenCalledWith({ data: { phone: '0900000001', role: 'STAFF', grantedBy: 'admin1', staffPermissions: [] } });
+  });
+
+  it('lời mời ADMIN không lưu nhóm (quản trị đã có mọi quyền)', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'g1' });
+    const prisma = makePrisma({ roleGrant: { findFirst: jest.fn().mockResolvedValue(null), create }, user: noUser });
+    await new RbacService(prisma).addGrant('admin1', '0900000001', 'ADMIN', ['KHO']);
+    expect(create).toHaveBeenCalledWith({ data: { phone: '0900000001', role: 'ADMIN', grantedBy: 'admin1', staffPermissions: [] } });
+  });
+
+  it('nhóm không hợp lệ → 400, không tạo gì', async () => {
+    const create = jest.fn();
+    const prisma = makePrisma({ roleGrant: { findFirst: jest.fn(), create }, user: noUser });
+    await expect(new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF', ['KHO', 'ROOT'])).rejects.toBeInstanceOf(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('lời mời STAFF đã có, gửi lại với nhóm khác → cập nhật nhóm của lời mời, không tạo trùng', async () => {
+    const update = jest.fn().mockResolvedValue({});
+    const create = jest.fn();
+    const prisma = makePrisma({
+      roleGrant: { findFirst: jest.fn().mockResolvedValue({ id: 'g1', staffPermissions: ['KHO'] }), create, update },
+      user: noUser,
+    });
+    await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF', ['KE_TOAN']);
+    expect(create).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({ where: { id: 'g1' }, data: { staffPermissions: ['KE_TOAN'] } });
+  });
+
+  it('lời mời đã có, gửi lại không kèm nhóm → giữ nguyên nhóm đã lưu', async () => {
+    const update = jest.fn();
+    const prisma = makePrisma({
+      roleGrant: { findFirst: jest.fn().mockResolvedValue({ id: 'g1', staffPermissions: ['KHO'] }), create: jest.fn(), update },
+      user: noUser,
+    });
+    await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('người này đã là STAFF, admin chọn nhóm → nhóm áp ngay và có dòng sổ', async () => {
+    const userUpdate = jest.fn().mockResolvedValue({});
+    const prisma = makePrisma({
+      roleGrant: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'g1' }),
+        findMany: jest.fn().mockResolvedValue([{ role: 'STAFF', staffPermissions: ['CSKH'] }]),
+      },
+      user: { findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF', staffPermissions: ['KHO'] } as Partial<User>)), update: userUpdate },
+    });
+    await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF', ['CSKH']);
+    expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { staffPermissions: ['CSKH'] } });
+    expect(prisma.userAdminEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 'u1', kind: 'STAFF_PERMISSIONS', fromValue: 'KHO', toValue: 'CSKH', actorId: 'admin1' }),
+    });
+  });
+
+  it('người này đã là STAFF, admin không chọn nhóm → nhóm hiện có không bị xoá', async () => {
+    const userUpdate = jest.fn();
+    const prisma = makePrisma({
+      roleGrant: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'g1' }),
+        findMany: jest.fn().mockResolvedValue([{ role: 'STAFF', staffPermissions: [] }]),
+      },
+      user: { findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF', staffPermissions: ['KHO'] } as Partial<User>)), update: userUpdate },
+    });
+    await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF', []);
+    expect(userUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('RbacService.listStaff', () => {
+  it('lời mời chờ kèm nhóm việc đã chọn', async () => {
+    const grantsFindMany = jest.fn().mockResolvedValue([{ phone: '0900000009', role: 'STAFF', staffPermissions: ['KHO'], createdAt: new Date('2026-01-01') }]);
+    const prisma = makePrisma({
+      roleGrant: { findMany: grantsFindMany },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    const out = await new RbacService(prisma).listStaff();
+    expect(grantsFindMany).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({ staffPermissions: true }) }));
+    expect(out.pendingInvites).toEqual([expect.objectContaining({ phone: '0900000009', staffPermissions: ['KHO'] })]);
   });
 });
