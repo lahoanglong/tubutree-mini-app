@@ -72,6 +72,7 @@ import {
   MERCHANT_PRODUCT_EDIT_STALE,
   PENDING_MERCHANT_PRODUCT_WHERE,
 } from '../merchant/merchant-product-review';
+import { startOfVnDay } from '../../common/vn-time';
 import { maskPhone, maskPhoneKeepLast3, maskVnPhonesInText } from '../../common/mask-pii';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
 import {
@@ -186,6 +187,13 @@ function canAdminRecordLatePayment(o: { type: string; paymentMethod: string; pay
     (o.status === 'CANCELLED' || o.status === 'RETURNED')
   );
 }
+
+/**
+ * Phiên khách vãng lai: mỗi thiết bị chưa đăng nhập tự tạo một user `guest_<deviceId>` không SĐT (AuthService.loginAsGuest).
+ * Nâng cấp lên tài khoản thật thì zaloId đổi hoặc có SĐT nên rời nhóm này. Không xoá, chỉ tách khỏi số "người dùng".
+ */
+export const GUEST_USER_WHERE: Prisma.UserWhereInput = { role: 'CUSTOMER', phone: null, zaloId: { startsWith: 'guest_' } };
+const REAL_USER_WHERE: Prisma.UserWhereInput = { NOT: GUEST_USER_WHERE };
 
 /** Ô tìm người dùng: SĐT (cả +84/84), tên có hoặc không dấu, hoặc đúng id. `%`/`_` khớp đúng nghĩa đen. */
 export function adminUserSearchWhere(search?: string): Prisma.UserWhereInput | undefined {
@@ -367,9 +375,10 @@ export class AdminService {
   }
 
   // ── Users & orders ──
-  async listUsers(page: number, limit: number, search?: string) {
-    const where = adminUserSearchWhere(search);
-    const [items, total] = await this.prisma.$transaction([
+  async listUsers(page: number, limit: number, search?: string, includeGuests = false) {
+    const searchWhere = adminUserSearchWhere(search);
+    const where: Prisma.UserWhereInput | undefined = includeGuests ? searchWhere : searchWhere ? { AND: [REAL_USER_WHERE, searchWhere] } : REAL_USER_WHERE;
+    const [items, total, guestCount] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -381,8 +390,9 @@ export class AdminService {
         },
       }),
       this.prisma.user.count({ where }),
+      this.prisma.user.count({ where: searchWhere ? { AND: [GUEST_USER_WHERE, searchWhere] } : GUEST_USER_WHERE }),
     ]);
-    return paginated(items, page, limit, total);
+    return { ...paginated(items, page, limit, total), guestCount };
   }
 
   // ── Tra cứu cho ô chọn (thay nhập ID thô) + màn duyệt đánh giá / gói định kỳ (C-092) ──
@@ -742,6 +752,7 @@ export class AdminService {
       refundRows,
       dealerDebtRows,
       totalUsers,
+      guestUsers,
       totalAffiliates,
       totalProducts,
       plantedTreesCount,
@@ -782,7 +793,8 @@ export class AdminService {
         SELECT SUM(balance) AS outstanding
         FROM (SELECT SUM(delta) AS balance FROM dealer_credit_ledgers GROUP BY "userId") b
         WHERE balance > 0`,
-      this.prisma.user.count(),
+      this.prisma.user.count({ where: REAL_USER_WHERE }),
+      this.prisma.user.count({ where: GUEST_USER_WHERE }),
       this.prisma.user.count({ where: { role: 'AFFILIATE' } }),
       this.prisma.product.count(),
       this.prisma.plantedTree.count(),
@@ -818,10 +830,43 @@ export class AdminService {
       returnRefundTotal: Number(refunds?.all_refunds ?? 0),
       dealerDebtOutstanding: Number(dealerDebtRows[0]?.outstanding ?? 0),
       totalUsers,
+      guestUsers,
       totalAffiliates,
       totalProducts,
       plantedTreesCount,
       recentOrders,
+    };
+  }
+
+  /**
+   * Số của trang "Hôm nay": đơn, doanh thu (cùng định nghĩa "đã thu" với tổng quan) và khách mới (tài khoản thật,
+   * không tính phiên khách vãng lai) trong ngày giờ VN và 7 ngày gần nhất (gồm hôm nay), kèm hôm qua để so.
+   */
+  async getTodaySummary(now = new Date()) {
+    const dayStart = startOfVnDay(now);
+    const yesterdayStart = new Date(dayStart.getTime() - 86_400_000);
+    const weekStart = new Date(dayStart.getTime() - 6 * 86_400_000);
+    const [rows, newToday, newYesterday, newWeek] = await Promise.all([
+      this.prisma.$queryRaw<
+        { orders_today: number; orders_yesterday: number; orders_week: number; rev_today: bigint | null; rev_yesterday: bigint | null; rev_week: bigint | null }[]
+      >`
+        SELECT (COUNT(*) FILTER (WHERE o."createdAt" >= ${dayStart}))::int AS orders_today,
+               (COUNT(*) FILTER (WHERE o."createdAt" >= ${yesterdayStart} AND o."createdAt" < ${dayStart}))::int AS orders_yesterday,
+               COUNT(*)::int AS orders_week,
+               SUM(o.total) FILTER (WHERE ${REVENUE_ORDER_SQL} AND o."createdAt" >= ${dayStart}) AS rev_today,
+               SUM(o.total) FILTER (WHERE ${REVENUE_ORDER_SQL} AND o."createdAt" >= ${yesterdayStart} AND o."createdAt" < ${dayStart}) AS rev_yesterday,
+               SUM(o.total) FILTER (WHERE ${REVENUE_ORDER_SQL}) AS rev_week
+          FROM orders o
+         WHERE o."createdAt" >= ${weekStart} AND o.status <> 'CANCELLED'`,
+      this.prisma.user.count({ where: { AND: [REAL_USER_WHERE, { createdAt: { gte: dayStart } }] } }),
+      this.prisma.user.count({ where: { AND: [REAL_USER_WHERE, { createdAt: { gte: yesterdayStart, lt: dayStart } }] } }),
+      this.prisma.user.count({ where: { AND: [REAL_USER_WHERE, { createdAt: { gte: weekStart } }] } }),
+    ]);
+    const r = rows[0];
+    return {
+      orders: { today: r?.orders_today ?? 0, yesterday: r?.orders_yesterday ?? 0, week: r?.orders_week ?? 0 },
+      revenue: { today: Number(r?.rev_today ?? 0), yesterday: Number(r?.rev_yesterday ?? 0), week: Number(r?.rev_week ?? 0) },
+      newUsers: { today: newToday, yesterday: newYesterday, week: newWeek },
     };
   }
 

@@ -347,6 +347,8 @@ export class ExportUsersQuery {
 export class ListUsersQuery extends PaginationQuery {
   /** SĐT (chứa), tên (chứa, không phân biệt hoa thường) hoặc id đúng — cho ô chọn khách. */
   @IsOptional() @IsString() @MaxLength(100) search?: string;
+  /** `guests=1`: hiện cả phiên khách vãng lai (mặc định chỉ tài khoản thật). */
+  @IsOptional() @Transform(({ value }) => value === '1' || value === 'true' || value === true) @IsBoolean() guests?: boolean;
 }
 
 export class ProductSearchQuery {
@@ -421,6 +423,11 @@ export class AdminController {
     return this.admin.getDashboardStats();
   }
 
+  @Get('dashboard/today')
+  dashboardToday() {
+    return this.admin.getTodaySummary();
+  }
+
   @Get('dealer-applications')
   dealerApps(@Query() q: DealerAppsQuery) {
     return this.admin.listDealerApplications(q.status, q.page, q.limit, q.order);
@@ -434,7 +441,7 @@ export class AdminController {
   @AllowStaff('CSKH')
   @Get('users')
   users(@Query() q: ListUsersQuery) {
-    return this.admin.listUsers(q.page, q.limit, q.search);
+    return this.admin.listUsers(q.page, q.limit, q.search, q.guests === true);
   }
 
   /** Ô chọn sản phẩm/biến thể (Flash Sale, Content Kit) thay cho nhập Variation/Product ID. */

@@ -9,6 +9,7 @@ import { CONSIGNMENT_PENDING_LINK_WHERE } from '../merchant/merchant-pancake-lin
 import { buildAdminOrderWhere, pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
 import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
 import { countUnansweredQuestions, DEFAULT_UNANSWERED_ALERT_HOURS, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from '../feed/community-unanswered';
+import { readPendingPaymentTtlHours } from '../orders/pending-payment-ttl';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { externalPointsAttentionCount } from '../external-points/external-points-attention';
 import { bridgeIsDown, unforwardedWhere } from '../support-chat/support-chat-health';
@@ -54,7 +55,19 @@ export type InboxKey =
   | 'wastePerksPending'
   | 'wasteTransitOverdue'
   | 'wasteGiftOverdue'
-  | 'wasteOrderMismatch';
+  | 'wasteOrderMismatch'
+  | 'bankTransferToConfirm'
+  | 'storefrontsPending'
+  | 'communityReports'
+  | 'productsMissingImage';
+
+const BANK_TRANSFER_TO_CONFIRM_WHERE = {
+  type: 'RETAIL',
+  status: 'PENDING_PAYMENT',
+  paymentStatus: 'UNPAID',
+  paymentMethod: 'BANK_TRANSFER',
+} as const;
+const STOREFRONT_PENDING_APPROVAL_WHERE = { isPublished: true, takenDownAt: null, type: 'CTV', isPartner: false, approvedAt: null } as const;
 
 /** Ai thấy việc này ngoài ADMIN: nhóm việc của nhân viên, hoặc 'STAFF' = mọi nhân viên (route vốn mở cho STAFF). */
 type Audience = readonly StaffPermission[] | 'STAFF' | 'ADMIN';
@@ -100,6 +113,11 @@ export class OpsInboxService {
           return row?.n ?? 0;
         },
       },
+      // Đơn chuyển khoản chờ kế toán bấm "Đã nhận tiền": quá hạn chờ thanh toán thì cron tự huỷ (pending-payment-expiry.cron), nên là việc gấp.
+      { key: 'bankTransferToConfirm', audience: ['KE_TOAN'], count: () => p.order.count({ where: BANK_TRANSFER_TO_CONFIRM_WHERE }) },
+      // Cùng điều kiện với chip "Chờ duyệt" của tab Gian hàng (StorefrontAdminService.listWhere).
+      { key: 'storefrontsPending', audience: 'ADMIN', count: () => p.storefront.count({ where: STOREFRONT_PENDING_APPROVAL_WHERE }) },
+      { key: 'productsMissingImage', audience: 'ADMIN', count: () => p.product.count({ where: { isActive: true, images: { isEmpty: true } } }) },
       { key: 'merchantOverdue', audience: 'ADMIN', count: () => this.merchant.countOverdue(now) },
       { key: 'merchantProducts', audience: 'ADMIN', count: () => p.product.count({ where: PENDING_MERCHANT_PRODUCT_WHERE }) },
       { key: 'consignmentPending', audience: 'ADMIN', count: () => p.merchantPancakeLink.count({ where: CONSIGNMENT_PENDING_LINK_WHERE }) },
@@ -113,6 +131,7 @@ export class OpsInboxService {
       // ADMIN đã duyệt, đang chờ kế toán chuyển tiền và bấm "Đã chi" (duyệt chỉ ADMIN, chi do kế toán nên hai khoá tách nhau).
       { key: 'payoutsToPay', audience: ['KE_TOAN'], count: () => p.payout.count({ where: { status: 'APPROVED' } }) },
       // Cộng đồng: bài khách vừa đăng và câu hỏi chờ lâu là việc của người kiểm duyệt (cùng danh sách @AllowStaff ở CommunityFeedController).
+      { key: 'communityReports', audience: COMMUNITY_MODERATORS, count: () => p.communityReport.count({ where: { status: 'OPEN' } }) },
       { key: 'communityPending', audience: COMMUNITY_MODERATORS, count: () => p.feedPost.count({ where: { status: 'PENDING' } }) },
       {
         key: 'communityUnanswered',
@@ -152,7 +171,15 @@ export class OpsInboxService {
     return (await this.config?.get<number>('waste.in_transit_review_days', 30)) ?? 30;
   }
 
-  async counts(viewer: InboxViewer, now = new Date()): Promise<{ generatedAt: string; items: { key: InboxKey; count: number }[] }> {
+  /** Số giờ còn lại của đơn chuyển khoản chờ lâu nhất trước khi cron tự huỷ (0 = đã quá hạn, chờ lượt cron kế). */
+  private async bankTransferHoursLeft(now: Date): Promise<number | undefined> {
+    const oldest = await this.prisma.order.findFirst({ where: BANK_TRANSFER_TO_CONFIRM_WHERE, orderBy: { createdAt: 'asc' }, select: { createdAt: true } });
+    if (!oldest || !this.config) return undefined;
+    const ttl = await readPendingPaymentTtlHours(this.config);
+    return Math.max(0, Math.ceil((oldest.createdAt.getTime() + ttl * 3_600_000 - now.getTime()) / 3_600_000));
+  }
+
+  async counts(viewer: InboxViewer, now = new Date()): Promise<{ generatedAt: string; items: { key: InboxKey; count: number; hoursLeft?: number }[] }> {
     const perms = viewer.staffPermissions ?? [];
     const visible = this.defs(now).filter(
       (d) =>
@@ -160,6 +187,11 @@ export class OpsInboxService {
         (viewer.role === 'STAFF' && (d.audience === 'STAFF' || (Array.isArray(d.audience) && d.audience.some((a) => perms.includes(a))))),
     );
     const counts = await Promise.all(visible.map((d) => d.count()));
-    return { generatedAt: now.toISOString(), items: visible.map((d, i) => ({ key: d.key, count: counts[i] ?? 0 })) };
+    const bankIdx = visible.findIndex((d) => d.key === 'bankTransferToConfirm');
+    const hoursLeft = bankIdx >= 0 && (counts[bankIdx] ?? 0) > 0 ? await this.bankTransferHoursLeft(now) : undefined;
+    return {
+      generatedAt: now.toISOString(),
+      items: visible.map((d, i) => ({ key: d.key, count: counts[i] ?? 0, ...(i === bankIdx && hoursLeft !== undefined ? { hoursLeft } : {}) })),
+    };
   }
 }
