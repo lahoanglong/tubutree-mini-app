@@ -339,6 +339,7 @@ export const vi = {
     cancelYes: 'Huỷ đơn',
     cancelled: 'Đã huỷ đơn cho bạn',
     products: 'Sản phẩm',
+    note: 'Ghi chú',
     paymentLabel: 'Thanh toán',
     timeline: 'Hành trình đơn hàng',
     repurchase: 'Mua lại đơn này',

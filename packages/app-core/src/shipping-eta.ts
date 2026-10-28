@@ -15,3 +15,25 @@ export function shippingEtaLabel(eta: ShippingEta, now: Date = new Date()): stri
   };
   return eta.minDays === eta.maxDays ? fmt(eta.minDays) : `${fmt(eta.minDays)} – ${fmt(eta.maxDays)}`;
 }
+
+const ETA_STATUSES = new Set(['CONFIRMED', 'PACKED', 'SHIPPING']);
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+/**
+ * Ngày giao dự kiến của một đơn đang xử lý: giờ xác nhận (không có thì giờ đặt) cộng khoảng ngày cấu hình, tính theo ngày
+ * Việt Nam (UTC+7 quanh năm). null khi chưa cấu hình, đơn chưa xác nhận hoặc đã xong: không bịa ngày.
+ */
+export function orderDeliveryEtaLabel(
+  eta: ShippingEta | null | undefined,
+  order: { status: string; createdAt: string; statusTimes?: Partial<Record<string, string>> | null },
+): string | null {
+  if (!eta || !ETA_STATUSES.has(order.status)) return null;
+  const base = new Date(order.statusTimes?.CONFIRMED ?? order.createdAt);
+  if (Number.isNaN(base.getTime())) return null;
+  const vnDay = new Date(base.getTime() + VN_OFFSET_MS);
+  const fmt = (days: number) => {
+    const d = new Date(Date.UTC(vnDay.getUTCFullYear(), vnDay.getUTCMonth(), vnDay.getUTCDate() + days));
+    return `${pad2(d.getUTCDate())}/${pad2(d.getUTCMonth() + 1)}`;
+  };
+  return eta.minDays === eta.maxDays ? fmt(eta.minDays) : `${fmt(eta.minDays)} – ${fmt(eta.maxDays)}`;
+}

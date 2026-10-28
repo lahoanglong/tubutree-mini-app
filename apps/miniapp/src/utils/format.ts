@@ -31,25 +31,30 @@ export function formatDrops(n: number | null | undefined): string {
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
-function toValidDate(v: string | number | Date | null | undefined): Date | null {
+// Việt Nam là UTC+7 quanh năm: cộng cố định 7 giờ rồi đọc bằng getUTC*, nên giờ hiện ra giống web dù máy khách đặt múi giờ nào.
+const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+function toVnClock(v: string | number | Date | null | undefined): Date | null {
   if (v == null || v === '') return null;
-  const d = v instanceof Date ? v : new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d;
+  const ms = (v instanceof Date ? v : new Date(v)).getTime();
+  return Number.isNaN(ms) ? null : new Date(ms + VN_OFFSET_MS);
 }
 
+const dayPart = (c: Date) => `${pad2(c.getUTCDate())}/${pad2(c.getUTCMonth() + 1)}/${c.getUTCFullYear()}`;
+
 /**
- * Ngày dd/MM/yyyy theo giờ máy. Tự ghép thay vì toLocaleDateString('vi-VN'): định dạng đó đổi theo
+ * Ngày dd/MM/yyyy theo giờ Việt Nam. Tự ghép thay vì toLocaleDateString('vi-VN'): định dạng đó đổi theo
  * phiên bản ICU của webview (Node 24 trả "15-10"), nên cùng một ngày có thể hiện hai dáng.
  */
 export function formatDate(v: string | number | Date | null | undefined): string {
-  const d = toValidDate(v);
-  return d ? `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}` : '—';
+  const c = toVnClock(v);
+  return c ? dayPart(c) : '—';
 }
 
-/** Giờ + ngày: "07:04 05/10/2026" (bỏ giây). Rỗng/hỏng → "—". */
+/** Giờ + ngày: "07:04 05/10/2026" (bỏ giây), giờ Việt Nam. Rỗng/hỏng → "—". */
 export function formatDateTime(v: string | number | Date | null | undefined): string {
-  const d = toValidDate(v);
-  return d ? `${pad2(d.getHours())}:${pad2(d.getMinutes())} ${formatDate(d)}` : '—';
+  const c = toVnClock(v);
+  return c ? `${pad2(c.getUTCHours())}:${pad2(c.getUTCMinutes())} ${dayPart(c)}` : '—';
 }
 
 // Bản sao của formatSold ở apps/web/src/lib/api.ts. Chưa gom vào packages/shared-types (nay chỉ có kiểu, enum, hằng);
