@@ -17,7 +17,7 @@ import {
 } from '../waste-exchange/core/waste-queue-filters';
 
 const build = (
-  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean; supportUnforwarded?: number; deletions?: number; shifts?: number; bridge?: { state: string; since: Date }; bridgeUrl?: string } = {},
+  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean; supportUnforwarded?: number; deletions?: number; shifts?: number; creditReports?: number; bridge?: { state: string; since: Date }; bridgeUrl?: string } = {},
 ) => {
   const zero = { count: jest.fn().mockResolvedValue(0) };
   const orderCount = jest.fn((args?: { where?: { paymentMethod?: string } }) => Promise.resolve(args?.where?.paymentMethod === 'BANK_TRANSFER' ? 0 : (over.invoices ?? 0)));
@@ -66,6 +66,7 @@ const build = (
     supportBridgeStatus: { findUnique: bridgeFind },
     accountDeletionRequest: { count: jest.fn().mockResolvedValue(over.deletions ?? 0) },
     shift: { count: jest.fn().mockResolvedValue(over.shifts ?? 0) },
+    dealerCreditPaymentReport: { count: jest.fn().mockResolvedValue(over.creditReports ?? 0) },
     $queryRaw: queryRaw,
   } as unknown as PrismaService;
   const merchant = {
@@ -300,7 +301,7 @@ describe('OpsInboxService — mỗi nhóm việc chỉ thấy hàng đợi mình
   });
 
   it('KE_TOAN: hoàn tiền khách, thưởng đại lý đã duyệt chờ chi, VAT chờ xuất, gian hàng chờ lập phiếu, phiếu đối soát chờ chuyển, rút tiền đã duyệt chờ chi — không thấy rút tiền chờ DUYỆT (việc của ADMIN)', async () => {
-    expect(await keysFor(['KE_TOAN'])).toEqual(['bankTransferToConfirm', 'customerRefunds', 'dealerClaimsToPay', 'dealerTransferToConfirm', 'invoicePending', 'merchantPayoutsPending', 'merchantToSettle', 'payoutsToPay', 'wasteToCount', 'wasteUnmatched']);
+    expect(await keysFor(['KE_TOAN'])).toEqual(['bankTransferToConfirm', 'customerRefunds', 'dealerClaimsToPay', 'dealerCreditReported', 'dealerTransferToConfirm', 'invoicePending', 'merchantPayoutsPending', 'merchantToSettle', 'payoutsToPay', 'wasteToCount', 'wasteUnmatched']);
   });
 
   it('CSKH, KHO và nhân viên chưa có nhóm giữ nguyên hàng đợi như trước', async () => {
@@ -321,7 +322,7 @@ describe('OpsInboxService — đổi rác (spec 13.2)', () => {
 
     expect(keys(res)).toEqual([
       'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'returnsPending', 'returnsToReceive', 'bankTransferToConfirm', 'dealerTransferToConfirm', 'storefrontsPending', 'accountDeletionPending', 'shiftsPending', 'productsMissingImage', 'merchantOverdue', 'merchantProducts',
-      'consignmentPending', 'merchantToSettle', 'merchantPayoutsPending', 'dealerApplications', 'dealerClaims', 'dealerClaimsToPay', 'payouts', 'payoutsToPay', 'communityReports', 'communityPending',
+      'consignmentPending', 'merchantToSettle', 'merchantPayoutsPending', 'dealerApplications', 'dealerClaims', 'dealerClaimsToPay', 'dealerCreditReported', 'payouts', 'payoutsToPay', 'communityReports', 'communityPending',
       'communityUnanswered', 'invoicePending', 'externalPoints', 'supportChatUnforwarded', 'zaloBridgeDown', 'wasteToCount', 'wasteUnmatched', 'wasteBlockedPending', 'wastePointsPending', 'wastePerksPending',
       'wasteTransitOverdue', 'wasteGiftOverdue', 'wasteOrderMismatch',
     ]);
@@ -532,6 +533,16 @@ describe('OpsInboxService: hàng đợi đã có ở tab nhưng từng thiếu t
     for (const perm of ['KE_TOAN', 'CSKH', 'KHO']) {
       expect(find(await b.svc.counts({ role: 'STAFF', staffPermissions: [perm] }, lateNow), 'shiftsPending')).toBeUndefined();
     }
+  });
+
+  it('dealerCreditReported: đếm báo cáo chuyển khoản trả nợ của đại lý còn REPORTED; KE_TOAN và ADMIN thấy, CSKH không', async () => {
+    const b = build({ creditReports: 2 });
+    const prisma = (b.svc as unknown as { prisma: Record<string, any> }).prisma;
+
+    expect(find(await b.svc.counts({ role: 'ADMIN' }, now), 'dealerCreditReported')).toEqual({ key: 'dealerCreditReported', count: 2 });
+    expect(prisma.dealerCreditPaymentReport.count).toHaveBeenCalledWith({ where: { status: 'REPORTED' } });
+    expect(find(await b.svc.counts({ role: 'STAFF', staffPermissions: ['KE_TOAN'] }, now), 'dealerCreditReported')?.count).toBe(2);
+    expect(find(await b.svc.counts({ role: 'STAFF', staffPermissions: ['CSKH', 'KHO'] }, now), 'dealerCreditReported')).toBeUndefined();
   });
 
   it('storefrontsPending: cờ storefront.require_approval tắt thì không có hàng đợi duyệt (gian hàng đã hiện công khai), không truy vấn', async () => {

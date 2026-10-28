@@ -682,17 +682,36 @@ export interface RecordDealerCreditPaymentResult {
  */
 export const recordDealerCreditPayment = (
   userId: string,
-  input: { amount: number; bankRef?: string; note?: string },
+  input: { amount: number; bankRef?: string; note?: string; /** Báo cáo chuyển khoản của đại lý mà khoản này xử lý; đóng báo cáo cùng lúc ghi sổ. */ reportId?: string },
   idempotencyKey?: string,
 ) => {
   const bankRef = input.bankRef?.trim().slice(0, DEALER_BANK_REF_MAX) || undefined;
   const note = input.note?.trim().slice(0, DEALER_PAYMENT_NOTE_MAX) || undefined;
   return apiFetch<RecordDealerCreditPaymentResult>(`/admin/dealers/${encodeURIComponent(userId)}/credit-payment`, {
     method: 'POST',
-    body: { amount: input.amount, ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}) },
+    body: { amount: input.amount, ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}), ...(input.reportId ? { reportId: input.reportId } : {}) },
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
   });
 };
+
+/** Đại lý bấm "Báo đã chuyển khoản" trả nợ; kế toán đối chiếu sao kê rồi Ghi nhận (kèm reportId) hoặc đánh dấu Không thấy tiền. */
+export interface DealerCreditReport {
+  id: string;
+  userId: string;
+  amount: number;
+  note: string | null;
+  status: 'REPORTED' | 'RECORDED' | 'DISMISSED';
+  createdAt: string;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  resolveNote: string | null;
+  dealer: { id: string; fullName: string | null; phone: string | null };
+}
+export const DEALER_CREDIT_REPORTS_QUERY_KEY = ['admin-dealer-credit-reports'] as const;
+/** Mặc định chỉ báo cáo chưa xử lý, cũ nhất trước. */
+export const listDealerCreditReports = () => apiFetch<DealerCreditReport[]>('/admin/dealer-credit-reports');
+export const dismissDealerCreditReport = (id: string, reason: string) =>
+  apiFetch<{ ok: true; alreadyProcessed: boolean }>(`/admin/dealer-credit-reports/${encodeURIComponent(id)}/dismiss`, { method: 'POST', body: { reason: reason.trim() } });
 export interface GomdonIntegrationStatus {
   baseUrlSet: boolean;
   credentialsSet: boolean;
@@ -1726,6 +1745,7 @@ export type InboxKey =
   | 'dealerApplications'
   | 'dealerClaims'
   | 'dealerClaimsToPay'
+  | 'dealerCreditReported'
   | 'payouts'
   | 'payoutsToPay'
   | 'wasteToCount'

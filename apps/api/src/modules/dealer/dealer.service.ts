@@ -510,8 +510,8 @@ export class DealerService {
    * A5-09 (docs/audit-2026-09/05-ctv-dealer-staff.md): trước đây đại lý tự bấm "Báo đã CK" là TRỪ
    * NỢ NGAY LẬP TỨC (creditPayment cũ) — KHÔNG có xác nhận ngân hàng thật, và không chặn số tiền
    * báo vượt dư nợ hiện tại. Một đại lý có thể tự xoá nợ vô hạn lần bằng chính lời tự khai của
-   * mình. Hành động này giờ CHỈ CÒN LÀ THÔNG BÁO cho admin — không đụng DealerCreditLedger ở đâu
-   * cả. Sổ công nợ CHỈ giảm qua adminRecordCreditPayment (admin tự kiểm tra sao kê ngân hàng rồi
+   * mình. Hành động này giờ CHỈ CÒN LÀ LỜI BÁO (một dòng DealerCreditPaymentReport + thông báo admin) — không đụng
+   * DealerCreditLedger ở đâu cả. Sổ công nợ CHỈ giảm qua adminRecordCreditPayment (admin tự kiểm tra sao kê ngân hàng rồi
    * xác nhận, có trần theo dư nợ TẠI LÚC DUYỆT — xem method đó).
    */
   async reportCreditPayment(userId: string, amount: number, note?: string) {
@@ -526,6 +526,8 @@ export class DealerService {
     if (amount > balance) {
       throw new BadRequestException(`Số tiền báo (${vnd(amount)}) vượt dư nợ hiện tại của bạn (${vnd(balance)}).`);
     }
+    // Lưu trước khi báo: tin báo admin có thể trôi hoặc lỗi, dòng này là việc kế toán còn phải đối chiếu (hộp việc dealerCreditReported).
+    await this.prisma.dealerCreditPaymentReport.create({ data: { userId, amount, note: note?.trim() || null } });
     await notifyAdmins(
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
       {
@@ -567,7 +569,7 @@ export class DealerService {
     adminId: string,
     dealerUserId: string,
     amount: number,
-    opts: { note?: string; bankRef?: string; idempotencyKey?: string; byStaff?: boolean } = {},
+    opts: { note?: string; bankRef?: string; idempotencyKey?: string; byStaff?: boolean; reportId?: string } = {},
   ) {
     if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException('Số tiền không hợp lệ.');
     const dealer = await this.prisma.user.findUnique({
@@ -576,22 +578,49 @@ export class DealerService {
     });
     if (!dealer || dealer.role !== 'DEALER') throw new NotFoundException('Không tìm thấy đại lý.');
 
-    const key = opts.idempotencyKey?.trim() || undefined;
+    // Ghi nhận từ một báo cáo của đại lý mà người gọi không gửi khoá: lấy chính báo cáo làm khoá, để unique
+    // (userId, refType, refId) chặn trừ nợ hai lần cho cùng một báo cáo.
+    const reportId = opts.reportId?.trim() || undefined;
+    const key = opts.idempotencyKey?.trim() || (reportId ? `report:${reportId}` : undefined);
     if (key) {
       const existing = await this.prisma.dealerCreditLedger.findFirst({
         where: { userId: dealerUserId, refType: 'PAYMENT', refId: key },
       });
       if (existing) {
         if (existing.delta !== -amount) {
-          throw new BadRequestException('Idempotency-Key đã được sử dụng với số tiền khác, vui lòng thử lại.');
+          throw new BadRequestException(
+            opts.idempotencyKey?.trim()
+              ? 'Idempotency-Key đã được sử dụng với số tiền khác, vui lòng thử lại.'
+              : 'Báo cáo này đã được ghi nhận với số tiền khác trước đó.',
+          );
         }
         return this.creditLedger(dealerUserId);
       }
     }
 
+    let replay = false;
     try {
       await this.prisma.$transaction(
         async (tx) => {
+          if (reportId) {
+            // Đóng báo cáo trong cùng transaction với dòng sổ: ghi nhận xong mà báo cáo vẫn mở thì hộp việc đếm thừa, còn
+            // báo cáo đóng mà sổ không ghi thì mất khoản. Chỉ đóng khi còn REPORTED nên hai lần bấm chỉ trừ một lần.
+            const closed = await tx.dealerCreditPaymentReport.updateMany({
+              where: { id: reportId, userId: dealerUserId, status: 'REPORTED' },
+              data: { status: 'RECORDED', resolvedBy: adminId, resolvedAt: new Date(), resolveNote: `Đã ghi nhận ${vnd(amount)}` },
+            });
+            if (closed.count === 0) {
+              const report = await tx.dealerCreditPaymentReport.findFirst({ where: { id: reportId, userId: dealerUserId }, select: { status: true } });
+              if (!report) throw new NotFoundException('Không tìm thấy báo cáo chuyển khoản của đại lý này.');
+              if (report.status === 'RECORDED') {
+                replay = true;
+                return;
+              }
+              throw new BadRequestException(
+                'Báo cáo này đã được đánh dấu không thấy tiền. Nếu tiền đã về, ghi nhận thủ công ở khối công nợ, không kèm báo cáo.',
+              );
+            }
+          }
           // Re-check TRONG transaction Serializable — dư nợ có thể đã đổi kể từ lúc admin xem màn
           // hình (đơn CREDIT mới / khoản báo khác vừa được duyệt). 2 admin duyệt đồng thời cho
           // cùng đại lý sẽ khiến 1 bên serialization-fail (P2034) thay vì cùng qua check.
@@ -633,6 +662,8 @@ export class DealerService {
       throw err;
     }
 
+    if (replay) return this.creditLedger(dealerUserId);
+
     this.logger.warn(
       `Admin ${adminId} xác nhận đại lý ${dealerUserId} đã trả nợ ${vnd(amount)}` +
         (opts.bankRef ? ` (mã GD ${opts.bankRef})` : '') +
@@ -644,6 +675,33 @@ export class DealerService {
         .catch((e) => this.logger.warn(`notify DEALER_CREDIT_PAYMENT_CONFIRMED lỗi (${dealerUserId}): ${(e as Error).message}`));
     }
     return this.creditLedger(dealerUserId);
+  }
+
+  /** Báo cáo chuyển khoản trả nợ của đại lý cho kế toán đối chiếu: mặc định chỉ dòng chưa xử lý, cũ nhất trước (việc gấp nhất lên đầu). */
+  async listCreditPaymentReports(status: 'REPORTED' | 'ALL' = 'REPORTED') {
+    const rows = await this.prisma.dealerCreditPaymentReport.findMany({
+      where: status === 'ALL' ? {} : { status: 'REPORTED' },
+      orderBy: { createdAt: status === 'ALL' ? 'desc' : 'asc' },
+      take: 100,
+    });
+    const ids = [...new Set(rows.map((r) => r.userId))];
+    const users = ids.length > 0 ? await this.prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, fullName: true, phone: true } }) : [];
+    const byId = new Map(users.map((u) => [u.id, u]));
+    return rows.map((r) => ({ ...r, dealer: byId.get(r.userId) ?? { id: r.userId, fullName: null, phone: null } }));
+  }
+
+  /** Kế toán không thấy tiền về: đóng báo cáo kèm lý do (bắt buộc) để đại lý và kế toán sau còn đọc được. Không đụng sổ công nợ. */
+  async dismissCreditPaymentReport(adminId: string, reportId: string, reason: string): Promise<{ ok: true; alreadyProcessed: boolean }> {
+    const resolveNote = reason?.trim();
+    if (!resolveNote) throw new BadRequestException('Ghi lý do không thấy tiền để người sau còn đối chiếu.');
+    const closed = await this.prisma.dealerCreditPaymentReport.updateMany({
+      where: { id: reportId, status: 'REPORTED' },
+      data: { status: 'DISMISSED', resolvedBy: adminId, resolvedAt: new Date(), resolveNote },
+    });
+    if (closed.count > 0) return { ok: true, alreadyProcessed: false };
+    const existing = await this.prisma.dealerCreditPaymentReport.findUnique({ where: { id: reportId }, select: { status: true } });
+    if (!existing) throw new NotFoundException('Không tìm thấy báo cáo chuyển khoản.');
+    return { ok: true, alreadyProcessed: true };
   }
 
   /** Chênh lệch giờ VN (UTC+7) so với UTC — mốc quý/năm tính theo giờ tường VN, độc lập TZ máy chủ. */

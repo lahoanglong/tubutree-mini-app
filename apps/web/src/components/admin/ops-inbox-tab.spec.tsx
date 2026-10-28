@@ -213,6 +213,23 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     expect(badge.container.querySelector('[data-inbox-badge="shiftApproval"]')!.textContent).toContain('3');
   });
 
+  it('thẻ đại lý báo đã chuyển khoản trả nợ mở đúng khoá và cộng vào huy hiệu mục Đại lý & công nợ', async () => {
+    stub([{ key: 'dealerCreditReported', count: 2 }]);
+    const onOpen = vi.fn();
+    const r = render(<OpsInboxTab onOpen={onOpen} />);
+    mounted.push(r);
+    await flush();
+    const card = r.container.querySelector<HTMLButtonElement>('[data-inbox="dealerCreditReported"]')!;
+    expect(card.textContent).toContain('Đại lý báo đã chuyển khoản trả nợ');
+    expect(card.textContent).toContain('Ghi nhận');
+    click(card);
+    expect(onOpen).toHaveBeenCalledWith('dealerCreditReported');
+    const badge = render(<InboxBadge tab="dealerAccounts" />);
+    mounted.push(badge);
+    await flush();
+    expect(badge.container.querySelector('[data-inbox-badge="dealerAccounts"]')!.textContent).toContain('2');
+  });
+
   it('đơn chuyển khoản đã quá hạn ghi rõ sắp tự huỷ', async () => {
     stub([{ key: 'bankTransferToConfirm', count: 1, hoursLeft: 0 }]);
     const r = render(<OpsInboxTab onOpen={vi.fn()} />);

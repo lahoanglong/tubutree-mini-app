@@ -576,6 +576,7 @@ export default function AdminPage() {
       dealerApplications: 'dealers',
       dealerClaims: 'dealerClaims',
       dealerClaimsToPay: 'dealerClaims',
+      dealerCreditReported: 'dealerAccounts',
       payouts: 'payouts',
       payoutsToPay: 'payouts',
       externalPoints: 'externalClaims',
