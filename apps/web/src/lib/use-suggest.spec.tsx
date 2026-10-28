@@ -72,10 +72,11 @@ describe('useSuggest', () => {
     expect(result.products).toEqual([]);
   });
 
-  it('lỗi mạng: im lặng, không có gợi ý', async () => {
+  it('lỗi mạng: không có gợi ý và báo isError để màn hiện "Không tải được gợi ý"', async () => {
     mocks.get.mockRejectedValue(new Error('down'));
     show('nuoc');
     await advance(SUGGEST_DEBOUNCE_MS + 100);
     expect(result.products).toEqual([]);
+    expect(result.isError).toBe(true);
   });
 });

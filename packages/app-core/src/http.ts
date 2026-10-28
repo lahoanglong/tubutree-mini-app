@@ -3,6 +3,8 @@ export type Query = Record<string, string | number | boolean | null | undefined>
 export interface RequestOptions {
   query?: Query;
   headers?: Record<string, string>;
+  /** Endpoint công khai chạy ở trình duyệt: không gửi Authorization (khỏi preflight CORS và khỏi luồng refresh khi 401) và không cache. */
+  anonymous?: boolean;
 }
 
 export interface HttpClient {

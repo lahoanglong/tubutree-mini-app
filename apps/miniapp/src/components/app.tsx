@@ -6,7 +6,7 @@ import { getStorage } from 'zmp-sdk/apis';
 import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
 import BackButton from './back-button';
-import { OnboardingGate } from './onboarding';
+import { ONBOARDING_SURVEY_ENABLED } from './onboarding-flag';
 import { OpenAppRouter } from './open-app-router';
 import { MainLandmark } from './ui/main-landmark';
 import { RouteShell, RouteSkeleton, SilentBoundary } from './route-shell';
@@ -52,6 +52,8 @@ const OPENED_FROM_PARTNER_LINK =
 const CouponClaimGate = lazy(() => import('./coupon-claim-gate').then((m) => ({ default: m.CouponClaimGate })));
 
 // Code-split: Home eager (first paint), các trang khác lazy để giữ initial bundle nhỏ (§13.4).
+// Khảo sát đang tắt: mã của nó nằm ngoài gói khởi động và chỉ tải khi bật cờ (chỗ vẽ bên dưới cũng theo cờ).
+const OnboardingGate = lazy(() => import('./onboarding').then((m) => ({ default: m.OnboardingGate })));
 const loadBrowse = () => import('../pages/browse');
 const BrowsePage = lazy(loadBrowse);
 const loadProductDetail = () => import('../pages/product-detail');
@@ -283,9 +285,13 @@ export default function MyApp() {
               </LivePathnameProvider>
               <BottomNav />
               <BackButton />
-              <SilentBoundary>
-                <OnboardingGate openedFromPartnerLink={OPENED_FROM_PARTNER_LINK} />
-              </SilentBoundary>
+              {ONBOARDING_SURVEY_ENABLED && (
+                <SilentBoundary>
+                  <Suspense fallback={null}>
+                    <OnboardingGate openedFromPartnerLink={OPENED_FROM_PARTNER_LINK} />
+                  </Suspense>
+                </SilentBoundary>
+              )}
               <SilentBoundary>
                 <Suspense fallback={null}>
                   <CouponClaimGate />

@@ -15,17 +15,23 @@ export const SUGGEST_MIN_CHARS = 2;
 export const isSuggestable = (s: string) => foldVietnamese(s).length >= SUGGEST_MIN_CHARS;
 
 /**
- * Gợi ý sản phẩm khi gõ: debounce 250ms, từ 2 ký tự; lỗi thì im lặng (chỉ là gợi ý).
+ * Gợi ý sản phẩm khi gõ: debounce 250ms, từ 2 ký tự; lỗi thì báo "Không tải được gợi ý" kèm Thử lại (không nuốt lỗi), lịch sử tìm vẫn hiện.
  * Query key theo từ khoá đã debounce nên phản hồi muộn của từ khoá cũ chỉ vào cache của chính nó. Cổng "đủ dài" xét cả
  * từ khoá hiện tại (chưa debounce): xoá xuống dưới 2 ký tự thì ẩn gợi ý ngay. Danh sách đang hiện giữ trong ref, ghi đồng
  * bộ lúc render: về rỗng ngay khi cổng đóng, nên mở lại cổng luôn bắt đầu từ rỗng.
  */
-export function useSuggest(draft: string): { products: ProductSuggestion[]; isFetching: boolean } {
+export function useSuggest(draft: string): { products: ProductSuggestion[]; isFetching: boolean; isError: boolean; refetch: () => void } {
   const term = useDebounced(draft.trim(), SUGGEST_DEBOUNCE_MS);
   const enabled = isSuggestable(term) && isSuggestable(draft);
   const q = useQuery({ ...suggestQuery(coreHttp, term), enabled, staleTime: 30_000, retry: false });
   const lastShown = useRef<ProductSuggestion[]>([]);
   if (!enabled) lastShown.current = [];
   else if (q.data) lastShown.current = q.data;
-  return { products: enabled ? (q.data ?? lastShown.current) : [], isFetching: enabled && q.isFetching };
+  // Lỗi chỉ báo khi chưa có gì để hiện: gợi ý cũ của từ khoá trước vẫn dùng được hơn một dòng lỗi.
+  return {
+    products: enabled ? (q.data ?? lastShown.current) : [],
+    isFetching: enabled && q.isFetching,
+    isError: enabled && q.isError && !q.data,
+    refetch: () => void q.refetch(),
+  };
 }

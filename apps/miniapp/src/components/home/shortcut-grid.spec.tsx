@@ -21,7 +21,7 @@ vi.mock('./earn-sheet', () => ({ EarnSheet: ({ open }: { open: boolean }) => (op
 
 import { ShortcutGrid } from './shortcut-grid';
 
-describe('ShortcutGrid — 8 lối tắt', () => {
+describe('ShortcutGrid — một hàng lối tắt', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.cfg = { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true } };
@@ -31,6 +31,14 @@ describe('ShortcutGrid — 8 lối tắt', () => {
   it('cờ bật hết: đủ 8 lối tắt', () => {
     render(<ShortcutGrid />);
     expect(screen.getAllByRole('button')).toHaveLength(8);
+  });
+
+  it('mở đầu bằng Đơn hàng, không có Vườn Xanh (đã là tab giữa)', () => {
+    render(<ShortcutGrid />);
+    expect(screen.getAllByRole('button')[0]).toHaveAccessibleName(/Đơn hàng/);
+    expect(screen.queryByRole('button', { name: /Vườn Xanh/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Đơn hàng/ }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/orders');
   });
 
   it('cờ Đổi rác và Tích điểm đơn sàn tắt: bỏ 2 mục, hàng dồn lại còn 6', () => {

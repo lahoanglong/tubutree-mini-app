@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, CheckCircle2, Clock, Zap } from 'lucide-react';
@@ -13,7 +13,11 @@ import { formatVnd } from '@/lib/format-vnd';
 import { productHref } from '@/lib/product-href';
 import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
+import { loadActiveFlashSales } from '@/lib/use-flash-sales';
 import { serverNow } from '@tubutree/app-core/server-clock';
+import { FLASH_SKELETON_HEIGHT, readFlashHint, writeFlashHint } from '@tubutree/app-core/home-layout';
+import { browserStorage } from '@/lib/recently-viewed';
+import { Skeleton } from '@/components/mini';
 import { Badge } from '@/components/ui/badge';
 import { Badge as MiniBadge } from '@/components/mini/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
@@ -44,9 +48,28 @@ function Thumb({ src, name, pct }: { src: string | null; name: string; pct: numb
   );
 }
 
+const subscribeNothing = () => () => {};
+
+function FlashSkeleton() {
+  return (
+    <div data-testid="flash-sale-loading" aria-hidden="true" className="py-2">
+      <Skeleton height={FLASH_SKELETON_HEIGHT - 16} radius="var(--radius-card)" />
+    </div>
+  );
+}
+
 /** Ưu đãi giờ vàng — flash sale thật từ backend. Countdown êm đến mốc kết thúc sớm nhất. */
-export function FlashSale() {
-  const q = useBlockQuery(useQuery({ ...flashActiveQuery(coreHttp), staleTime: 30_000, refetchInterval: 60_000 }));
+export function FlashSale({ initial }: { initial?: FlashSaleActiveItem[] }) {
+  // initialDataUpdatedAt 0: dữ liệu dựng sẵn chỉ để HTML đầu có khối, trình duyệt vẫn hỏi lại ngay (giá và số suất còn là của lúc dựng trang).
+  const q = useBlockQuery(
+    useQuery({
+      queryKey: flashActiveQuery(coreHttp).queryKey,
+      queryFn: loadActiveFlashSales,
+      staleTime: 30_000,
+      refetchInterval: 60_000,
+      ...(initial ? { initialData: initial, initialDataUpdatedAt: 0 } : {}),
+    }),
+  );
   const items = q.data ?? [];
 
   // Chỉ tính suất còn giờ: suất sớm nhất có thể đã hết mà danh sách chưa kịp tải lại (poll 60s) trong khi các suất khác còn chạy.
@@ -60,11 +83,22 @@ export function FlashSale() {
   }, [items, expiredTick]);
 
   const timeLeft = useCountdown(soonestEndAt);
+  const [afterMount, setAfterMount] = useState(false);
+  useEffect(() => setAfterMount(true), []);
   useEffect(() => {
     if (soonestEndAt && timeLeft === '') setExpiredTick((n) => n + 1);
   }, [soonestEndAt, timeLeft]);
 
-  if (q.isLoading) return null;
+  // Lần mở trước có Giờ vàng thì giữ chỗ lúc tải (khối nằm sát màn đầu, chen vào sẽ đẩy cả trang); chưa nhớ thì chờ im lặng.
+  // Đọc bằng useSyncExternalStore: HTML server không có kho nên bản server là "chưa nhớ", sau hydrate mới đọc thật.
+  const hadFlash = useSyncExternalStore(subscribeNothing, () => readFlashHint(browserStorage()), () => false);
+  // Đang tải lại thì chưa chốt: dữ liệu dựng sẵn có thể cũ, ghi "không có" lúc này sẽ xoá dấu nhớ trước khi biết kết quả thật.
+  const settledWithFlash = q.data !== undefined && !q.isLoading && !q.isFetching ? soonestEndAt !== null : null;
+  useEffect(() => {
+    if (settledWithFlash !== null) writeFlashHint(browserStorage(), settledWithFlash);
+  }, [settledWithFlash]);
+
+  if (q.isLoading) return hadFlash ? <FlashSkeleton /> : null;
   if (items.length === 0) {
     return q.isError ? <HomeBlockError title={flashSaleText.sectionName} error={q.error} onRetry={q.refetch} retrying={q.isFetching} /> : null;
   }
@@ -76,14 +110,22 @@ export function FlashSale() {
           <Zap className="h-4 w-4" aria-hidden="true" />
           {flashSaleText.sectionTitle}
         </h2>
-        {/* Hết giờ mà danh sách chưa kịp tải lại (poll 60s): không hiện đồng hồ về 0. */}
-        {timeLeft && (
-          <span role="timer" aria-label={flashSaleText.endsIn(timeLeft)}>
-            <Badge tone="promo" icon={Clock}>
-              {flashSaleText.endsIn(timeLeft)}
-            </Badge>
-          </span>
-        )}
+        {/* Khung đồng hồ luôn có trong cây: HTML ISR cũ có thể được trả sau giờ hết suất (hoặc đồng hồ máy khách chạy trước máy chủ),
+            khi đó máy chủ vẽ đồng hồ mà trình duyệt tính ra rỗng; khác cấu trúc phần tử thì hydrate hỏng. Hết giờ thì ẩn, không hiện về 0.
+            React không sửa thuộc tính/chữ lệch khi hydrate, nên sau mount đổi key để vẽ lại đúng theo giờ trình duyệt. */}
+        <span
+          key={afterMount ? 'live' : 'ssr'}
+          role="timer"
+          suppressHydrationWarning
+          aria-label={timeLeft ? flashSaleText.endsIn(timeLeft) : undefined}
+          aria-hidden={timeLeft ? undefined : true}
+          className={timeLeft ? undefined : 'invisible'}
+        >
+          <Badge tone="promo" icon={Clock}>
+            {/* Chữ phút lệch giữa HTML ISR và trình duyệt là bình thường, chỉ che đúng phần tử chứa chữ. */}
+            <span suppressHydrationWarning>{timeLeft ? flashSaleText.endsIn(timeLeft) : ''}</span>
+          </Badge>
+        </span>
       </div>
       <ScrollRail className={RAIL}>
         {items.map((item: FlashSaleActiveItem) => {

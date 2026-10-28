@@ -19,7 +19,7 @@ export interface FlashSaleActiveItem {
   serverNow?: string;
 }
 export const fetchActiveFlashSales = async (http: HttpClient) => {
-  const items = await http.get<FlashSaleActiveItem[]>('/flash-sales/active');
+  const items = await http.get<FlashSaleActiveItem[]>('/flash-sales/active', { anonymous: true });
   syncServerClock(items?.[0]?.serverNow);
   return items;
 };

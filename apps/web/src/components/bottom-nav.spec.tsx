@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   ready: (_p: string): boolean => false,
   query: vi.fn(),
 }));
-vi.mock('next/navigation', () => ({ usePathname: () => mocks.pathname }));
+vi.mock('next/navigation', () => ({ usePathname: () => mocks.pathname, useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: mocks.status }) }));
 vi.mock('@/lib/route-map', async (orig) => ({ ...(await orig<object>()), isWebRouteReady: (p: string) => mocks.ready(p) }));
 const offers = vi.hoisted(() => ({ dot: null as string | null, enabled: [] as boolean[] }));

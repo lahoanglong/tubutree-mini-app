@@ -275,7 +275,7 @@ test.describe('Web khách: tài khoản', () => {
     await expect(sheet.getByRole('link', { name: 'Đăng nhập với Zalo' })).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent('/tai-khoan')}`);
   });
 
-  test('onboarding: khách chưa làm quiz ở Trang chủ đi hết các bước và gửi đúng đáp án', async ({ page, api }) => {
+  test('onboarding: khảo sát chào mừng đang tắt, khách chưa làm quiz mở Trang chủ không bị phủ màn', async ({ page, api }) => {
     api.post('/auth/refresh', () => ({
       accessToken: 'e2e-token',
       user: { id: 'u1', fullName: 'An', avatarUrl: null, role: 'CUSTOMER', pointsBalance: 0, walletBalance: 0, referralCode: 'AN123' },
@@ -289,21 +289,8 @@ test.describe('Web khách: tài khoản', () => {
       'GET /me/wishlist/ids');
     await page.goto('/');
 
-    const quiz = page.getByRole('dialog', { name: 'Chào mừng đến Tubu Tree' });
-    await expect(quiz.getByRole('heading', { name: 'Chào mừng đến Tubu Tree!' })).toBeVisible();
-    await quiz.getByRole('button', { name: 'Bắt đầu' }).click();
-    await quiz.getByRole('checkbox', { name: 'Chăm sóc da' }).click();
-    await quiz.getByRole('button', { name: 'Tiếp tục' }).click();
-    await quiz.getByRole('radio', { name: 'Nhạy cảm' }).click();
-    await quiz.getByRole('button', { name: 'Tiếp tục' }).click();
-    await quiz.getByRole('checkbox', { name: 'Gia đình' }).click();
-    await quiz.getByRole('button', { name: 'Tiếp tục' }).click();
-    await quiz.getByRole('radio', { name: 'Giá tốt' }).click();
-    const sent = api.waitForCall('POST', '/me/onboarding');
-    await quiz.getByRole('button', { name: 'Hoàn tất' }).click();
-    expect((await sent).body).toEqual({ segments: ['skincare', 'sensitive_skin', 'family', 'price'] });
-    await expect(quiz.getByRole('heading', { name: 'Tuyệt vời!' })).toBeVisible();
-    await quiz.getByRole('button', { name: 'Khám phá ngay' }).click();
-    await expect(quiz).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1 })).toBeAttached();
+    await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Chào mừng đến Tubu Tree' })).toHaveCount(0);
   });
 });

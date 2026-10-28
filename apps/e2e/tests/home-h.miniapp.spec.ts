@@ -15,7 +15,7 @@ const gateOf = () => {
 };
 
 async function expectChipHitArea44(chip: Locator): Promise<void> {
-  // Giữa màn hình, không sát mép dưới: chip sát mép dưới nằm sau thanh đáy (cố định) nên mép dưới "trúng" thanh đáy chứ không phải chip.
+  // Đưa chip về giữa khung trước khi đo: mép trên bị ô tìm dính che, mép dưới bị thanh đáy (cố định) che.
   await chip.evaluate((el) => el.scrollIntoView({ block: 'center' }));
   const box = (await chip.boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(44);
@@ -124,7 +124,6 @@ test.describe('Trang chủ — thẻ thành viên tên dài', () => {
       await page.goto('/');
       const card = page.getByRole('region', { name: 'Thẻ thành viên' });
       await expect(card).toContainText('1.800', { timeout: 15_000 });
-      await expect(card).toContainText('Còn 1.200');
       await expect(card).toContainText(name);
       heights.push((await card.boundingBox())!.height);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);

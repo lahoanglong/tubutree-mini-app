@@ -13,6 +13,7 @@ async function call<T>(method: Method, path: string, body: unknown, opts?: Reque
     method,
     ...(body !== undefined ? { body } : {}),
     ...(opts?.headers ? { headers: opts.headers } : {}),
+    ...(opts?.anonymous ? { auth: false, cache: 'no-store' as const } : {}),
   });
 }
 

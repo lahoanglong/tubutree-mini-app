@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ONBOARDING_SURVEY_ENABLED } from './onboarding-flag';
 import { useLocation, useSnackbar } from 'zmp-ui';
 import { getStorage, setStorage } from 'zmp-sdk/apis';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -79,8 +80,17 @@ async function readSnoozedUntil(): Promise<number | null> {
   }
 }
 
+export { ONBOARDING_SURVEY_ENABLED };
+
 /** `openedFromPartnerLink` do entry (app.tsx) tính lúc mở app: module này tải lazy, tính ở đây thì có thể đã sau khi khách đổi màn. */
-export function OnboardingGate({ openedFromPartnerLink = false }: { openedFromPartnerLink?: boolean }) {
+export function OnboardingGate({
+  enabled = ONBOARDING_SURVEY_ENABLED,
+  openedFromPartnerLink = false,
+}: { enabled?: boolean; openedFromPartnerLink?: boolean } = {}) {
+  return enabled ? <OnboardingGateInner openedFromPartnerLink={openedFromPartnerLink} /> : null;
+}
+
+function OnboardingGateInner({ openedFromPartnerLink }: { openedFromPartnerLink: boolean }) {
   const { status } = useAuthStore();
   const location = useLocation();
   const [dismissed, setDismissed] = useState(false);

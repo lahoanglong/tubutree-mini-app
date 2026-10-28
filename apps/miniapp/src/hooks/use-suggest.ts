@@ -11,7 +11,7 @@ export const SUGGEST_MIN_CHARS = 2;
 export const isSuggestable = (s: string) => foldVietnamese(s).length >= SUGGEST_MIN_CHARS;
 
 /**
- * Gợi ý SP khi gõ (spec 5b.2): debounce 250ms, từ 2 ký tự; lỗi → im lặng (chỉ là gợi ý).
+ * Gợi ý SP khi gõ (spec 5b.2): debounce 250ms, từ 2 ký tự; lỗi → báo "Không tải được gợi ý" kèm Thử lại (không nuốt lỗi), lịch sử tìm vẫn hiện.
  * - Query key theo từ khoá đã debounce → phản hồi về muộn của từ khoá cũ chỉ vào cache của chính nó,
  *   không bao giờ ghi đè kết quả của từ khoá mới.
  * - Cổng "đủ dài" xét cả từ khoá hiện tại (chưa debounce): xoá bớt xuống dưới 2 ký tự thì ẩn gợi ý
@@ -21,7 +21,7 @@ export const isSuggestable = (s: string) => foldVietnamese(s).length >= SUGGEST_
  *   dữ liệu thật của từ khoá hiện tại. Nhờ vậy mở lại cổng (xoá xuống <2 ký tự rồi gõ từ khoá mới) luôn
  *   bắt đầu từ rỗng, kể cả khi render lại nhiều lần lúc request còn đang bay.
  */
-export function useSuggest(draft: string): { products: ProductSuggestion[]; isFetching: boolean } {
+export function useSuggest(draft: string): { products: ProductSuggestion[]; isFetching: boolean; isError: boolean; refetch: () => void } {
   const term = useDebounced(draft.trim(), SUGGEST_DEBOUNCE_MS);
   const enabled = isSuggestable(term) && isSuggestable(draft);
   const q = useQuery({
@@ -34,5 +34,11 @@ export function useSuggest(draft: string): { products: ProductSuggestion[]; isFe
   const lastShown = useRef<ProductSuggestion[]>([]);
   if (!enabled) lastShown.current = [];
   else if (q.data) lastShown.current = q.data;
-  return { products: enabled ? q.data ?? lastShown.current : [], isFetching: enabled && q.isFetching };
+  // Lỗi chỉ báo khi chưa có gì để hiện: gợi ý cũ của từ khoá trước vẫn dùng được hơn một dòng lỗi.
+  return {
+    products: enabled ? q.data ?? lastShown.current : [],
+    isFetching: enabled && q.isFetching,
+    isError: enabled && q.isError && !q.data,
+    refetch: () => void q.refetch(),
+  };
 }
