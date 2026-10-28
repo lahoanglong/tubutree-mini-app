@@ -132,7 +132,8 @@ export class AuthService {
    */
   private async adoptLegacyGuest(deviceId: string, guestKey: string): Promise<User | null> {
     const legacyKey = legacyGuestZaloId(deviceId);
-    if (isHashedGuestKey(legacyKey)) return null;
+    // deviceId có `_merged_` làm khoá thô trùng khoá của một dòng khách đã gộp: dòng đó không còn là của thiết bị nào.
+    if (isHashedGuestKey(legacyKey) || legacyKey.includes('_merged_')) return null;
     const legacy = await this.prisma.user.findUnique({ where: { zaloId: legacyKey } });
     if (!legacy) return null;
     try {
@@ -496,7 +497,8 @@ export class AuthService {
                 "firstTouchSource", "firstTouchCampaign", "firstTouchAt"
           FROM "users" WHERE "id" = ${guest.id} FOR UPDATE`;
       const g = lockedGuest[0];
-      if (!g || g.zaloId !== guest.zaloId || g.zaloId?.includes('_merged_')) {
+      // Còn là khách? Khoá có thể đã đổi từ guest_<deviceId> sang dạng băm (adoptLegacyGuest) mà dòng vẫn cần được gộp.
+      if (!g || !g.zaloId?.startsWith('guest_') || g.zaloId.includes('_merged_')) {
         return tx.user.findUniqueOrThrow({ where: { id: target.id } });
       }
       // Target bị khoá hoặc vừa bị xoá (ẩn danh hoá) sau lúc tra ở ngoài: không đổ tiền/đơn của khách vào tài khoản chết.
@@ -765,7 +767,7 @@ export class AuthService {
       await tx.user.update({
         where: { id: gid },
         data: {
-          zaloId: `${guest.zaloId}_merged_${Date.now()}`,
+          zaloId: `${g.zaloId}_merged_${Date.now()}`,
           mergedIntoId: tid,
           // Refresh token vừa xoay trước lúc gộp còn trong khoảng ân hạn: chốt mốc để refresh() không cấp lại phiên cho khách.
           sessionsRevokedAt: new Date(),
