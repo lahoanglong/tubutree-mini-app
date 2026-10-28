@@ -12,6 +12,12 @@ export function useRecycleLogin() {
   return async () => {
     try {
       await login();
+      // Đăng nhập không thành (tài khoản bị khoá, lỗi mạng): nói lý do mà login() đã đặt, đừng mở sheet xin số điện thoại.
+      const session = useAuthStore.getState();
+      if (session.status !== 'authenticated') {
+        if (session.error) openSnackbar({ text: session.error, type: 'error' });
+        return;
+      }
       await ensurePhoneOrThrow();
       await qc.invalidateQueries({ queryKey: ['waste'] });
     } catch (e) {

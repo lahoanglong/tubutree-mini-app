@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   keySeq: 0,
   params: {} as Record<string, string>,
   location: { pathname: '/', search: '', state: null as unknown },
-  auth: { status: 'authenticated' as 'idle' | 'loading' | 'authenticated' | 'error' },
+  auth: { status: 'authenticated' as 'idle' | 'loading' | 'authenticated' | 'error', error: undefined as string | undefined },
   login: vi.fn(),
   ensurePhone: vi.fn(),
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } },
@@ -32,12 +32,10 @@ vi.mock('../services/api', () => ({
   getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   isNotFoundError: (e: unknown) => (e as { status?: number } | null)?.status === 404,
 }));
-vi.mock('../store/auth', () => ({
-  useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, login: mocks.login, ensurePhoneOrThrow: mocks.ensurePhone };
-    return sel ? sel(state) : state;
-  },
-}));
+vi.mock('../store/auth', () => {
+  const read = () => ({ status: mocks.auth.status, error: mocks.auth.error, login: mocks.login, ensurePhoneOrThrow: mocks.ensurePhone });
+  return { useAuthStore: Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(read()) : read()), { getState: read }) };
+});
 vi.mock('../utils/idempotency', () => ({ newIdempotencyKey: () => `key-${++mocks.keySeq}` }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publicConfig }));
 vi.mock('../services/waste-api', async (orig) => ({ ...(await orig<object>()), getWasteMe: mocks.getWasteMe, getWasteCatalogue: mocks.getWasteCatalogue }));
@@ -61,6 +59,8 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.status = 'authenticated';
+  mocks.auth.error = undefined;
+  mocks.login.mockReset();
   mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: false };
   mocks.getWasteMe.mockResolvedValue(makeWasteMe({ balance: { pointsBalance: 9000, pointsConvertedBalance: 5000, redeemablePoints: 14_000 } }));
   mocks.getLoyaltyRewards.mockResolvedValue(makeRewardCatalog({ redeemablePoints: 14_000 }));
@@ -336,7 +336,9 @@ describe('/recycle thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
   });
   it('khách vãng lai + chương trình bật: thấy món, mức điểm, các bước, link Thể lệ; nút đăng nhập gọi login rồi ensurePhone', async () => {
     mocks.auth.status = 'idle';
-    mocks.login.mockResolvedValue(undefined);
+    mocks.login.mockImplementation(async () => {
+      mocks.auth.status = 'authenticated';
+    });
     mocks.ensurePhone.mockResolvedValue('0901234567');
     renderPage();
     expect(await screen.findByText('Thùng carton')).toBeInTheDocument();
@@ -352,11 +354,24 @@ describe('/recycle thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
   });
   it('khách vãng lai: máy chủ từ chối liên kết (409) → thông báo nói lời máy chủ', async () => {
     mocks.auth.status = 'idle';
-    mocks.login.mockResolvedValue(undefined);
+    mocks.login.mockImplementation(async () => {
+      mocks.auth.status = 'authenticated';
+    });
     mocks.ensurePhone.mockRejectedValue(new Error('Số điện thoại này đã gắn với tài khoản Zalo khác.'));
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Đăng nhập để đổi rác' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Số điện thoại này đã gắn với tài khoản Zalo khác.', type: 'error' }));
+  });
+  it('khách vãng lai bị khoá: login() đặt idle kèm lời khoá → hiện lời khoá, không mở sheet xin số điện thoại', async () => {
+    mocks.auth.status = 'idle';
+    mocks.login.mockImplementation(async () => {
+      mocks.auth.status = 'idle';
+      mocks.auth.error = 'Tài khoản đã bị khoá. Bạn liên hệ CSKH Tubu Tree để được hỗ trợ.';
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đăng nhập để đổi rác' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá. Bạn liên hệ CSKH Tubu Tree để được hỗ trợ.', type: 'error' }));
+    expect(mocks.ensurePhone).not.toHaveBeenCalled();
   });
   it('phiên lỗi mạng → SessionUnavailable, không vẽ trang trống', async () => {
     mocks.auth.status = 'error';

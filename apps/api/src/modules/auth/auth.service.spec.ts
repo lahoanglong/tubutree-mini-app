@@ -1081,7 +1081,9 @@ describe('AuthService — chặn user bị khoá (isBlocked) lấy token', () =>
     const jwt = { signAsync: jest.fn().mockResolvedValue('jwt') } as unknown as JwtService;
     const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
     const svc = new AuthService(prisma, jwt, config, {} as unknown as ZaloService, mkRbac());
-    await expect(svc.loginAsGuest('dev1')).rejects.toThrow('bị khoá');
+    await expect(svc.loginAsGuest('dev1')).rejects.toMatchObject({
+      response: { code: 'ACCOUNT_BLOCKED', message: expect.stringContaining('liên hệ CSKH Tubu Tree') },
+    });
     expect(create).not.toHaveBeenCalled();
     expect((prisma.refreshToken.create as jest.Mock)).not.toHaveBeenCalled();
   });

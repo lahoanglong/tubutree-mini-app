@@ -978,7 +978,7 @@ export class AuthService {
     // nếu chỉ chặn ở refresh(), user bị khoá có thể đăng nhập lại để lấy token mới, bỏ qua
     // hoàn toàn việc khoá. Access token đang có bị JwtStrategy chặn qua SessionStateService.
     if (user.isBlocked) {
-      throw new UnauthorizedException({ statusCode: 401, error: 'Unauthorized', code: 'ACCOUNT_BLOCKED', message: 'Tài khoản đã bị khoá.' });
+      throw new UnauthorizedException({ statusCode: 401, error: 'Unauthorized', code: 'ACCOUNT_BLOCKED', message: 'Tài khoản đã bị khoá. Bạn liên hệ CSKH Tubu Tree để được hỗ trợ.' });
     }
     // Khách đã gộp không còn là danh tính: refresh token cũ của khách không được đổi ra phiên mới (phải đăng nhập lại để
     // nhận token của tài khoản đích; mergedSessionTokens cấp token cho đích, không qua dòng khách).
