@@ -22,12 +22,12 @@ import {
   configInt,
   harvestCouponMinOrder,
   HARVEST_COUPON_PREFIX,
-  HARVEST_COUPON_CODE_PREFIXES,
   ladderTarget,
   spinVoucherMinOrder,
   streak7Seeds,
   treeTargetLadder,
 } from './game.constants';
+import { countHarvestCoupons } from './harvest-coupon-count';
 import { countReferralSuccesses, readReferralSuccessRows, referralSuccessesSince } from '../wallet/referral-reward';
 import { ensureGameProfile, initialEcoImpact, sproutAlreadyRewarded } from './game-profile';
 import { isRealUser } from '../../common/real-user';
@@ -380,12 +380,9 @@ export class GameService {
           // DÙNG CHUNG trần với waterPlot (lô phụ, game-garden.service.ts): đếm mã 'HARVEST' (lô nhà) lẫn
           // 'GARDEN' (lô phụ) trong CÙNG 1 trần/user/ngày và /tháng — nếu không, user có thể lách trần bằng cách
           // tưới lô nhà + lô phụ song song. Mã 'GAME' của vòng quay/nhiệm vụ không thuộc trần này.
-          const harvestCouponWhere = {
-            OR: HARVEST_COUPON_CODE_PREFIXES.map((prefix) => ({ code: { startsWith: prefix } })),
-            scopeMeta: { path: ['userId'], equals: userId },
-          };
-          let couponsToday = await tx.coupon.count({ where: { ...harvestCouponWhere, startAt: { gte: dayStart } } });
-          let couponsMonth = await tx.coupon.count({ where: { ...harvestCouponWhere, startAt: { gte: monthStart } } });
+          const existing = await countHarvestCoupons(tx, userId, dayStart, monthStart);
+          let couponsToday = existing.day;
+          let couponsMonth = existing.month;
 
           eco = this.eco(profile.ecoImpact, ladder);
           if (drops === 0 && eco.progress < eco.target) throw new BadRequestException('Cây chưa đủ nước để thu hoạch.');
