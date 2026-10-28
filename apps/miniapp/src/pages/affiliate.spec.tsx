@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   copyText: vi.fn(),
   getAffiliateMe: vi.fn(),
   registerAffiliate: vi.fn(),
+  restore: vi.fn(() => Promise.resolve()),
   fetchCourses: vi.fn(),
 }));
 vi.mock('../services/academy-api', () => ({ fetchCourses: mocks.fetchCourses }));
@@ -23,7 +24,9 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../store/auth', () => ({
-  useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'authenticated' }),
+  useAuthStore: Object.assign((sel: (s: { status: string }) => unknown) => sel({ status: 'authenticated' }), {
+    getState: () => ({ restore: mocks.restore }),
+  }),
 }));
 vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
@@ -165,6 +168,7 @@ describe('Đăng ký CTV — đồng ý điều khoản hoa hồng & thuế (C-1
     fireEvent.click(btn);
     await waitFor(() => expect(mocks.registerAffiliate).toHaveBeenCalledTimes(1));
     expect(mocks.registerAffiliate).toHaveBeenCalledWith('2026-10');
+    await waitFor(() => expect(mocks.restore).toHaveBeenCalledTimes(1));
   });
 
   it('đang gửi đăng ký: nút hiện spinner (không bị disabled), bấm lại không gửi lần 2', async () => {
