@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Leaf, ExternalLink, Star } from 'lucide-react';
@@ -41,14 +42,18 @@ import { OrderActions } from './order-actions';
 import { OrderRefunds } from './order-refunds';
 import { returnedByLine, showsPaymentDeadline, showsRefundPanel } from '@/lib/refund-rules';
 import { OrderTimeline } from './order-timeline';
-import { FollowOaPrompt, OrderInvoice, OrderWasteLink } from './order-extras';
-import { CopyShippingCode } from './copy-shipping-code';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
 import { LineItemSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { ProductThumb } from '@/components/mini';
+
+// Phần dưới màn đầu (nhắc theo dõi OA, hoá đơn, đổi rác, chép mã vận đơn) tải sau để First Load của trang không tăng.
+const FollowOaPrompt = dynamic(() => import('./order-extras').then((m) => m.FollowOaPrompt), { ssr: false });
+const OrderInvoice = dynamic(() => import('./order-extras').then((m) => m.OrderInvoice), { ssr: false });
+const OrderWasteLink = dynamic(() => import('./order-extras').then((m) => m.OrderWasteLink), { ssr: false });
+const CopyShippingCode = dynamic(() => import('./copy-shipping-code').then((m) => m.CopyShippingCode), { ssr: false });
 
 /** STATUS_COLOR của Mini App (utils/order-status.ts): dải trạng thái đầu trang chi tiết đơn. */
 const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
