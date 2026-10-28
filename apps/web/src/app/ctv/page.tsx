@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BadgePercent, ChevronRight, GraduationCap, Handshake, Landmark, Link2, Receipt, Store, TrendingUp, Wallet } from 'lucide-react';
 import { createAffiliateLink, registerAffiliate, type AffiliatePayout, type Commission } from '@tubutree/app-core/api/affiliate';
@@ -39,9 +40,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { CtvShortcuts, type CtvShortcut } from '@/components/affiliate/ctv-shortcuts';
 import { MilestoneRewards } from '@/components/affiliate/milestone-rewards';
 import { TierCard } from '@/components/affiliate/tier-card';
-import { CtvOrderSheet } from '@/components/affiliate/ctv-order-sheet';
-import { TransferSheet } from '@/components/affiliate/transfer-sheet';
-import { StorefrontShareSheet } from '@/components/affiliate/storefront-share';
 import {
   COMMISSION_META,
   COMMISSION_ORDER_STATUS,
@@ -81,6 +79,11 @@ function Shell({ children, narrow = false }: { children: ReactNode; narrow?: boo
     </main>
   );
 }
+
+// Bảng chia sẻ chỉ cần khi bấm Chia sẻ: tách khỏi lượt tải đầu để First Load của trang không tăng.
+const CtvOrderSheet = dynamic(() => import('@/components/affiliate/ctv-order-sheet').then((m) => m.CtvOrderSheet), { ssr: false });
+const TransferSheet = dynamic(() => import('@/components/affiliate/transfer-sheet').then((m) => m.TransferSheet), { ssr: false });
+const StorefrontShareSheet = dynamic(() => import('@/components/affiliate/storefront-share').then((m) => m.StorefrontShareSheet), { ssr: false });
 
 export default function CtvPage() {
   const phase = useAuthPhase();
