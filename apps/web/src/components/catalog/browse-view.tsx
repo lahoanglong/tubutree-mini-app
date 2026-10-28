@@ -25,6 +25,7 @@ import { BrowsePager } from './browse-pager';
 import { PhoneCartButton } from '@/components/phone-cart-button';
 import { phoneBrandText } from '@/lib/phone-ui';
 import { CategoryGrid } from './category-grid';
+import { Chip } from './chip';
 import { FilterSheet } from './filter-sheet';
 import { FilterSidebar } from './filter-sidebar';
 import { RecentlyViewedRail } from './recently-viewed-rail';
@@ -147,6 +148,8 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   const categoryName = state.category ? categoriesQ.data?.find((c) => c.id === state.category)?.name : undefined;
   const chips = activeFilterChips(state, { categoryName, segmentName: state.segment ? segmentLabel(state.segment) : undefined });
   const noResults = !products.isLoading && !products.isError && list.length === 0;
+  const filterHeading = state.q ? null : (categoryName ?? (state.segment ? segmentLabel(state.segment) : null) ?? (state.brands.length === 1 ? state.brands[0] : null));
+  const activeCategory = state.category ? { kind: 'category' as const, key: state.category } : state.segment ? { kind: 'segment' as const, key: state.segment } : null;
   // Trang nhãn hàng (/brand/:slug) chỉ có khi nhãn đã công khai; đây là liên kết duy nhất dẫn tới nó từ danh mục.
   const brandSlug = state.brands.length === 1 ? (brandsQ.data?.find((b) => b.brand === state.brands[0])?.slug ?? null) : null;
 
@@ -159,7 +162,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
           e.preventDefault();
           commit(draft);
         }}
-        className="flex items-center gap-2 pb-2 lg:max-w-2xl"
+        className="flex items-center gap-2 pb-2 max-md:sticky max-md:top-0 max-md:z-20 max-md:-mx-4 max-md:bg-[var(--color-bg-canvas)] max-md:px-4 max-md:pt-3 lg:max-w-2xl"
       >
         <div className="relative min-w-0 flex-1">
           <label htmlFor="browse-q" className="sr-only">
@@ -238,6 +241,18 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
             }}
           />
           <div className="min-w-0">
+          {filterHeading && (
+            <h2 className="mb-1 text-xl font-semibold text-[var(--color-text-primary)] [overflow-wrap:anywhere] md:hidden">{filterHeading}</h2>
+          )}
+          {activeCategory && (
+            <div role="group" aria-label={browseText.categoryChips} className="scroll-x -mx-4 mb-1 flex gap-2 px-4 py-1 md:hidden">
+              {entries.map((e) => (
+                <Chip key={`${e.kind}:${e.key}`} selected={e.kind === activeCategory.kind && e.key === activeCategory.key} onPress={() => pickCategory(e)}>
+                  {e.label}
+                </Chip>
+              ))}
+            </div>
+          )}
           {/* Từ lg danh mục nằm ở cột lọc bên trái nên lưới ô danh mục ẩn đi. */}
           {root && (
             <div className="lg:hidden">

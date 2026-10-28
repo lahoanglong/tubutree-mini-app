@@ -98,7 +98,7 @@ describe('BrowseView — danh sách và trạng thái URL', () => {
   it('chưa có truy vấn: lưới danh mục (bỏ danh mục trống) + danh sách sản phẩm; vào thẳng /san-pham không gọi gợi ý', async () => {
     const { container } = mount();
     await flush();
-    expect(container.querySelector('h1')!.textContent).toBe('Khám phá');
+    expect(container.querySelector('h1')!.textContent).toBe('Danh mục');
     expect(buttonByName(container, 'Dầu gội')).not.toBeNull();
     expect(container.textContent).not.toContain('Danh mục trống');
     expect(container.textContent).toContain('Sản phẩm 1');

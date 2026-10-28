@@ -16,7 +16,8 @@ export function formatVndShort(amount: number): string {
 }
 
 export const browseText = {
-  title: 'Khám phá',
+  title: 'Danh mục',
+  categoryChips: 'Đổi danh mục',
   searchPlaceholder: 'Tìm sản phẩm...',
   searchLabel: 'Tìm sản phẩm',
   clearSearch: 'Xoá từ khoá',
