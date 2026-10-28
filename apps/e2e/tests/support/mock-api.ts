@@ -1,4 +1,5 @@
 import { test as base, expect, type Request, type Route } from '@playwright/test';
+import { waitForHydrationAfterGoto } from './hydrate';
 import { captureByPathname, installVisualMode, recordTourUnmocked } from './visual';
 import type { AuthUser, LoginResponse, OrderDTO, WasteMeDTO } from '@tubutree/shared-types';
 import type { MeProfile, NewCustomerOffer } from '../../../miniapp/src/services/account-api';
@@ -328,6 +329,11 @@ function corsHeaders(reqHeaders: Record<string, string>): Record<string, string>
  * /api/** và host ngoài vẫn được cài trước khi trang mở.
  */
 export const test = base.extend<{ api: MockApi; visualCapture: void }>({
+  // Web: page.goto trả về sau khi React đã gắn xong, để thao tác đầu tiên không bị nuốt (Mini App là SPA Vite, không có dấu này).
+  page: async ({ page }, use, testInfo) => {
+    if (testInfo.project.name.startsWith('Web ')) waitForHydrationAfterGoto(page);
+    await use(page);
+  },
   visualCapture: [
     async ({ page }, use, testInfo) => {
       const dir = process.env.VISUAL_DIR;
