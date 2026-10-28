@@ -159,4 +159,39 @@ describe('ProductTile', () => {
       expect(css).toMatch(/\.tubu-tile-link:focus-visible::after\s*\{[^}]*outline:/);
     });
   });
+
+  describe('nhãn "Mới" (tạo trong 30 ngày gần nhất)', () => {
+    const daysAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString();
+
+    it('tạo 5 ngày trước → có nhãn "Mới"', () => {
+      renderTile(<ProductTile product={{ ...PRODUCT, createdAt: daysAgo(5) }} variant="grid" onPress={() => {}} />);
+      expect(screen.getByText('Mới')).toBeInTheDocument();
+    });
+
+    it('tạo 31 ngày trước → không nhãn', () => {
+      renderTile(<ProductTile product={{ ...PRODUCT, createdAt: daysAgo(31) }} variant="grid" onPress={() => {}} />);
+      expect(screen.queryByText('Mới')).toBeNull();
+    });
+
+    it('thiếu createdAt (API cũ) → không nhãn, không đoán theo tiêu chí khác', () => {
+      renderTile(<ProductTile product={{ ...PRODUCT, reviewCount: 0, sold: 0 }} variant="grid" onPress={() => {}} />);
+      expect(screen.queryByText('Mới')).toBeNull();
+    });
+
+    it('hết hàng → không nhãn (lớp phủ hết hàng đã chiếm ảnh); thẻ dạng dòng 64px cũng không', () => {
+      const recent = { ...PRODUCT, createdAt: daysAgo(2) };
+      const out = renderTile(<ProductTile product={{ ...recent, inStock: false }} variant="grid" onPress={() => {}} />);
+      expect(screen.queryByText('Mới')).toBeNull();
+      out.unmount();
+      renderTile(<ProductTile product={recent} variant="line" onPress={() => {}} />);
+      expect(screen.queryByText('Mới')).toBeNull();
+    });
+
+    it('cùng nhãn giảm giá: hai nhãn xếp dọc ở góc ảnh, không chồng nhau', () => {
+      renderTile(<ProductTile product={{ ...PRODUCT, createdAt: daysAgo(2) }} badge={<span>-20%</span>} variant="grid" onPress={() => {}} />);
+      const stack = screen.getByText('-20%').parentElement as HTMLElement;
+      expect(stack).toContainElement(screen.getByText('Mới'));
+      expect(stack).toHaveStyle({ display: 'flex', flexDirection: 'column' });
+    });
+  });
 });

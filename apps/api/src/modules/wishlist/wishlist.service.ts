@@ -43,6 +43,7 @@ export class WishlistService {
         ratingAvg: p.ratingAvg,
         reviewCount: p.reviewCount,
         sold: (p.soldExternal ?? 0) + (p.soldApp ?? 0),
+        createdAt: p.createdAt?.toISOString(),
       }));
   }
 

@@ -95,6 +95,15 @@ describe('ProductTile', () => {
     expect(mount(<ProductTile product={{ ...P, reviewCount: 0, sold: 0 }} onPress={() => {}} />).container.textContent).not.toContain('Mới');
   });
 
+  it('nhãn "Mới" chỉ khi tạo trong 30 ngày gần nhất; thiếu ngày tạo, hết hàng hay quá 30 ngày thì không', () => {
+    const daysAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString();
+    const text = (over: Partial<ProductTileProduct>) => mount(<ProductTile product={{ ...P, ...over }} onPress={() => {}} />).container.textContent!;
+    expect(text({ createdAt: daysAgo(5) })).toContain('Mới');
+    expect(text({ createdAt: daysAgo(31) })).not.toContain('Mới');
+    expect(text({})).not.toContain('Mới');
+    expect(text({ createdAt: daysAgo(5), inStock: false })).not.toContain('Mới');
+  });
+
   it('giá sale hiện kèm giá gốc; priceOverride (giờ vàng) thắng', () => {
     expect(mount(<ProductTile product={{ ...P, salePrice: 90000 }} onPress={() => {}} />).container.textContent).toContain('90.000đ100.000đ');
     expect(mount(<ProductTile product={P} priceOverride={{ price: 70000 }} onPress={() => {}} />).container.textContent).toContain('70.000đ100.000đ');

@@ -178,3 +178,37 @@ describe('ProductCard — kiểu Mini App ở điện thoại', () => {
     expect(ph.textContent).toBe('Fuwa3e');
   });
 });
+
+// "Mới" = tạo trong 30 ngày gần nhất; thiếu ngày tạo (API cũ) thì không nhãn.
+describe('ProductCard — nhãn "Mới"', () => {
+  const daysAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString();
+  const box = (p: Record<string, unknown>) => {
+    const el = document.createElement('div');
+    el.innerHTML = renderToStaticMarkup(<ProductCard product={p as never} />);
+    return el;
+  };
+
+  it('tạo 5 ngày trước → nhãn "Mới" trên ảnh', () => {
+    const badge = box({ ...PRODUCT, createdAt: daysAgo(5) }).querySelector('[data-testid="card-new-badge"]');
+    expect(badge?.textContent).toBe('Mới');
+  });
+
+  it('tạo 31 ngày trước hoặc thiếu ngày tạo → không nhãn', () => {
+    expect(box({ ...PRODUCT, createdAt: daysAgo(31) }).querySelector('[data-testid="card-new-badge"]')).toBeNull();
+    expect(box(PRODUCT).querySelector('[data-testid="card-new-badge"]')).toBeNull();
+  });
+
+  it('hết hàng → không nhãn "Mới" (lớp phủ hết hàng đã chiếm ảnh)', () => {
+    expect(box({ ...PRODUCT, inStock: false, createdAt: daysAgo(1) }).querySelector('[data-testid="card-new-badge"]')).toBeNull();
+  });
+
+  it('cùng nhãn giảm giá: hai nhãn xếp dọc trong một khung ở góc ảnh, không chồng nhau', () => {
+    const el = box({ ...PRODUCT, salePrice: 100000, createdAt: daysAgo(5) });
+    const badge = el.querySelector('[data-testid="card-new-badge"]')!;
+    const stack = badge.parentElement!;
+    expect(stack.className).toContain('flex-col');
+    expect(stack.textContent).toContain('-17%');
+    expect(stack.textContent).toContain('Mới');
+  });
+});
+

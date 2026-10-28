@@ -1,3 +1,4 @@
+import { isNewProduct, NEW_PRODUCT_LABEL } from '@tubutree/app-core/product-badges';
 import { type ProductCard as P, formatSold } from '@/lib/api';
 import { CardSaleBadge, ProductPriceRow } from '@/components/flash-price';
 import { WishlistHeart } from '@/components/catalog/wishlist-heart';
@@ -20,6 +21,7 @@ export default function ProductCard({ product, priority = false }: { product: P;
   const soldOut = product.inStock === false;
   const reviewed = (product.reviewCount ?? 0) > 0;
   const sold = formatSold(product.sold);
+  const isNew = isNewProduct(product.createdAt);
 
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-card bg-stone-0 shadow-[var(--elevation-1)] md:border md:border-stone-200 md:shadow-card md:transition-all md:duration-300 md:hover:-translate-y-1 md:hover:border-forest-600/40 md:hover:shadow-raised">
@@ -41,12 +43,22 @@ export default function ProductCard({ product, priority = false }: { product: P;
             </div>
           )}
 
-          {/* Nhãn giảm giá; giá Giờ vàng được gắn nhãn riêng (giá hiển thị khớp giỏ và đơn). */}
+          {/* Nhãn giảm giá; giá Giờ vàng được gắn nhãn riêng (giá hiển thị khớp giỏ và đơn). "Mới" xếp dưới nhãn giảm giá, không chồng lên. */}
           {!soldOut && (
-            <CardSaleBadge
-              product={product}
-              className="absolute left-2.5 top-2.5 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-900 shadow-card max-md:[&:not([data-flash])]:bg-promo-bg max-md:[&:not([data-flash])]:text-promo-fg max-md:[&:not([data-flash])]:shadow-none"
-            />
+            <div className="absolute left-2.5 top-2.5 flex flex-col items-start gap-1">
+              <CardSaleBadge
+                product={product}
+                className="rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-900 shadow-card max-md:[&:not([data-flash])]:bg-promo-bg max-md:[&:not([data-flash])]:text-promo-fg max-md:[&:not([data-flash])]:shadow-none"
+              />
+              {isNew && (
+                <span
+                  data-testid="card-new-badge"
+                  className="rounded-full bg-[var(--color-action-secondary-bg)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--color-action-secondary-fg)]"
+                >
+                  {NEW_PRODUCT_LABEL}
+                </span>
+              )}
+            </div>
           )}
 
           {/* Máy tính: nhãn nằm trên ảnh; điện thoại có hàng chấm màu + nhãn bên dưới ảnh như Mini App. */}
