@@ -1,5 +1,5 @@
 import { Droplets, ShowerHead, TreePine } from 'lucide-react';
-import { primaryWaterAction, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
+import { gameMoreCopy, primaryWaterAction, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
 import type { GameProfile } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { Button } from '../ui/button';
@@ -48,7 +48,7 @@ export function TreeActions({
   const label =
     action.kind === 'claim'
       ? action.pointsOnly
-        ? t.claimPoints
+        ? gameMoreCopy.claimPoints
         : action.first
         ? t.claimFirst(action.gain)
         : t.claim(action.gain)

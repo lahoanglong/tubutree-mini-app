@@ -1,5 +1,5 @@
 import { Brain, Lightbulb } from 'lucide-react';
-import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
+import { gameMoreCopy } from '@tubutree/app-core/game-newbie';
 import type { AnswerResult, QuizItem } from '@tubutree/app-core/api/game';
 import { ui } from '@/lib/guest-ui';
 import { ErrorState } from '@/components/ui/error-state';
@@ -33,7 +33,7 @@ export function QuizCard({
   loadError?: boolean;
   onRetry?: () => void;
 }) {
-  const t = gameNewbieCopy.quiz;
+  const t = gameMoreCopy.quiz;
   const shownReveal = currentQuiz && reveal && reveal.quizId === currentQuiz.id ? reveal : null;
   return (
     <GameCard title="Câu đố Sống Xanh hôm nay" icon={Brain}>

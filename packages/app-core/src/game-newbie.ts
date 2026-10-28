@@ -112,7 +112,6 @@ export const gameNewbieCopy = {
   treeWilted: 'Cây đang héo, tưới để cây xanh lại.',
   primary: {
     claim: (gain: number | null) => (gain == null ? 'Nhận nước hôm nay' : `Nhận nước hôm nay (+${drops(gain)})`),
-    claimPoints: 'Nhận Điểm Xanh hôm nay',
     claimFirst: (gain: number | null) => (gain == null ? 'Điểm danh nhận nước' : `Điểm danh nhận ${drops(gain)}`),
     water: (d: number) => `Tưới hết (${drops(d)})`,
     harvest: 'Thu hoạch cây',
@@ -146,8 +145,6 @@ export const gameNewbieCopy = {
     failed: 'Chưa đăng nhập được Zalo. Bạn thử lại nhé.',
   },
   short: (missing: number) => `Còn thiếu ${drops(missing)}`,
-  /** Nút vé giữ lửa khi chưa đủ nước: nói rõ thiếu để làm gì. */
-  freezeShort: (missing: number) => `Giữ chuỗi (cần thêm ${drops(missing)})`,
   earn: {
     title: 'Kiếm nước',
     have: (have: number) => `Bạn đang có ${drops(have)}`,
@@ -198,8 +195,6 @@ export const gameNewbieCopy = {
           ? `Lần đầu nhận +${drops(daily + first)}, các ngày sau +${drops(daily)}, kèm Điểm Xanh`
           : `Nhận +${drops(daily)} và Điểm Xanh mỗi ngày`,
     dew: (v: number | null) => (v == null ? 'Hứng giọt sương' : `Hứng giọt sương (+${drops(v)})`),
-    freezeHint: (dew: number | null) =>
-      `Vé giữ lửa giúp chuỗi không đứt khi bạn lỡ 1 ngày. Giọt sương sáng tặng ${dew == null ? '💧' : drops(dew)} mỗi ngày.`,
     dayReward: (v: number) => `+${n(v)}`,
   },
   fund: {
@@ -219,13 +214,6 @@ export const gameNewbieCopy = {
     board: 'Chưa tải được bảng xếp hạng. Kiểm tra mạng rồi thử lại.',
     retry: 'Thử lại',
   },
-  /** Thẻ câu đố có ba trạng thái khác nhau: đã làm xong, chưa có câu, tải lỗi. */
-  quiz: {
-    done: 'Bạn đã hoàn thành câu đố hôm nay 🎉',
-    empty: 'Câu đố mới vào ngày mai',
-    loadErrorTitle: 'Chưa tải được câu đố',
-    loadErrorBody: 'Kiểm tra mạng rồi thử lại.',
-  },
   seasonEmpty: {
     title: 'Chưa có mùa nào đang mở',
     body: 'Mùa mới sẽ sớm ra mắt. Trong lúc chờ, bạn vẫn điểm danh và tưới cây mỗi ngày như thường.',
@@ -235,8 +223,6 @@ export const gameNewbieCopy = {
     feedHintReadOnly: 'Xem mẹo sống xanh từ mọi người',
   },
   missions: {
-    showAll: (total: number) => `Xem tất cả (${total})`,
-    showLess: 'Thu gọn',
     doNow: 'Làm ngay',
     doNowFor: (title: string) => `Làm ngay: ${title}`,
     progressLabel: (title: string, progress: number, goal: number) => `${title}: ${progress}/${goal}`,
@@ -301,3 +287,24 @@ export function missionTarget(code: string, kind?: string | null): MissionTarget
 
 /** Mã khối điểm danh trong trang game, đích cuộn của nhiệm vụ "Chăm chỉ 7 ngày". */
 export const GAME_CHECKIN_ANCHOR = 'game-checkin';
+
+/**
+ * Chữ riêng của trang Vườn Xanh, tách khỏi `gameNewbieCopy` vì Mini App nạp cả `gameNewbieCopy` vào gói đầu (qua i18n/vi.ts);
+ * thêm vào đó thì mọi trang đều tải chữ mà chỉ Vườn dùng.
+ */
+export const gameMoreCopy = {
+  claimPoints: 'Nhận Điểm Xanh hôm nay',
+  /** Nút vé giữ lửa khi chưa đủ nước: nói rõ thiếu để làm gì. */
+  freezeShort: (missing: number) => `Giữ chuỗi (cần thêm ${drops(missing)})`,
+  freezeHint: (dew: number | null) =>
+    `Vé giữ lửa giúp chuỗi không đứt khi bạn lỡ 1 ngày. Giọt sương sáng tặng ${dew == null ? '💧' : drops(dew)} mỗi ngày.`,
+  /** Thẻ câu đố có ba trạng thái khác nhau: đã làm xong, chưa có câu, tải lỗi. */
+  quiz: {
+    done: 'Bạn đã hoàn thành câu đố hôm nay 🎉',
+    empty: 'Câu đố mới vào ngày mai',
+    loadErrorTitle: 'Chưa tải được câu đố',
+    loadErrorBody: 'Kiểm tra mạng rồi thử lại.',
+  },
+  missionsShowAll: (total: number) => `Xem tất cả (${total})`,
+  missionsShowLess: 'Thu gọn',
+};

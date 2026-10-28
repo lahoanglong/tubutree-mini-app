@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Check, Target } from 'lucide-react';
 import type { MissionItem } from '@tubutree/app-core/api/game';
-import { collapseMissions, gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
+import { collapseMissions, gameMoreCopy, gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ui } from '@/lib/guest-ui';
 import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
@@ -87,7 +87,7 @@ export function MissionsCard({
       )}
       {(collapsible || showAll) && missions && missions.length > 0 && (
         <button type="button" onClick={() => setShowAll((v) => !v)} className={`${miniBtnSecondary} mt-1 w-full`}>
-          {showAll ? gameNewbieCopy.missions.showLess : gameNewbieCopy.missions.showAll(missions.length)}
+          {showAll ? gameMoreCopy.missionsShowLess : gameMoreCopy.missionsShowAll(missions.length)}
         </button>
       )}
     </GameCard>

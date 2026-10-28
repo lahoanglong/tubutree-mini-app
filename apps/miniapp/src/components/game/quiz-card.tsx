@@ -1,5 +1,5 @@
 import { Brain, Lightbulb } from 'lucide-react';
-import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
+import { gameMoreCopy } from '@tubutree/app-core/game-newbie';
 import type { AnswerResult, QuizItem } from '../../services/game-api';
 import { formatDrops } from '../../utils/format';
 import { Button } from '../ui/button';
@@ -34,7 +34,7 @@ export function QuizCard({
   loadError?: boolean;
   onRetry?: () => void;
 }) {
-  const t = gameNewbieCopy.quiz;
+  const t = gameMoreCopy.quiz;
   return (
     <GameCard title="Câu đố Sống Xanh hôm nay" icon={Brain}>
       {currentQuiz ? (

@@ -1,5 +1,5 @@
 import { Droplets, Flame, Snowflake } from 'lucide-react';
-import { STREAK_3_SEEDS, gameNewbieCopy, missingDrops } from '@tubutree/app-core/game-newbie';
+import { STREAK_3_SEEDS, gameMoreCopy, gameNewbieCopy, missingDrops } from '@tubutree/app-core/game-newbie';
 import type { GameProfile } from '@tubutree/app-core/api/game';
 import { ui } from '@/lib/guest-ui';
 import { miniBtnSecondary, miniCard, miniSectionTitle } from '@/components/loyalty/mini-surface';
@@ -75,14 +75,14 @@ export function CheckInStreak({
             onClick={() => (freezeShort > 0 ? onNeedWater(freezeShort) : onBuyFreeze())}
             className={`${miniBtnSecondary} flex-none`}
           >
-            {freezeShort > 0 ? gameNewbieCopy.freezeShort(freezeShort) : `Mua (${formatDrops(freezeCost)})`}
+            {freezeShort > 0 ? gameMoreCopy.freezeShort(freezeShort) : `Mua (${formatDrops(freezeCost)})`}
           </button>
         </div>
         <button type="button" disabled={dewCollectedToday || dewPending} onClick={onCollectDew} className={`${miniBtnSecondary} mt-2 w-full gap-1.5`}>
           <Droplets className="h-4 w-4" aria-hidden="true" />
           {dewCollectedToday ? 'Đã hứng sương' : t.dew(profile?.dewSeeds ?? null)}
         </button>
-        <p className="mt-2 text-caption text-stone-600">{t.freezeHint(profile?.dewSeeds ?? null)}</p>
+        <p className="mt-2 text-caption text-stone-600">{gameMoreCopy.freezeHint(profile?.dewSeeds ?? null)}</p>
       </div>
     </section>
   );

@@ -1,5 +1,5 @@
 import { Droplets, Flame, Snowflake } from 'lucide-react';
-import { STREAK_3_SEEDS, missingDrops } from '@tubutree/app-core/game-newbie';
+import { STREAK_3_SEEDS, gameMoreCopy, missingDrops } from '@tubutree/app-core/game-newbie';
 import type { GameProfile } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { formatDrops } from '../../utils/format';
@@ -97,7 +97,7 @@ export function CheckInStreak({
             onPress={() => (freezeShort > 0 ? onNeedWater(freezeShort) : onBuyFreeze())}
             style={{ flexShrink: 0 }}
           >
-            {freezeShort > 0 ? vi.game.newbie.freezeShort(freezeShort) : `Mua (${formatDrops(freezeCost)})`}
+            {freezeShort > 0 ? gameMoreCopy.freezeShort(freezeShort) : `Mua (${formatDrops(freezeCost)})`}
           </Button>
         </div>
         <Button
@@ -112,7 +112,7 @@ export function CheckInStreak({
           {dewCollectedToday ? 'Đã hứng sương' : t.dew(profile?.dewSeeds ?? null)}
         </Button>
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
-          {t.freezeHint(profile?.dewSeeds ?? null)}
+          {gameMoreCopy.freezeHint(profile?.dewSeeds ?? null)}
         </Text>
       </div>
     </Card>

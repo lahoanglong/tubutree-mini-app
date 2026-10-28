@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Check, Target } from 'lucide-react';
-import { collapseMissions, gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
+import { collapseMissions, gameMoreCopy, gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
 import type { MissionItem } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { formatNumber } from '../../utils/format';
@@ -110,7 +110,7 @@ export function MissionsCard({
       )}
       {(collapsible || showAll) && missions && missions.length > 0 && (
         <Button fullWidth variant="ghost" onPress={() => setShowAll((v) => !v)} style={{ marginTop: 4 }}>
-          {showAll ? gameNewbieCopy.missions.showLess : gameNewbieCopy.missions.showAll(missions.length)}
+          {showAll ? gameMoreCopy.missionsShowLess : gameMoreCopy.missionsShowAll(missions.length)}
         </Button>
       )}
     </GameCard>
