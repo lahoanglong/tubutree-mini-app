@@ -354,11 +354,11 @@ describe('/doi-rac/yeu-cau/[id]: Thu kèm đơn mua (§4.5b, §15.6)', () => {
     expect(c.textContent).not.toContain('Chờ gắn vào đơn');
   });
 
-  it('đã gắn đơn: "Đã gắn vào đơn TUBU123", timeline ở "Chờ kho nhận"', async () => {
+  it('đã gắn đơn: "Đã gắn vào đơn TUBU123", timeline ở "Kho nhận, đếm"', async () => {
     state.request = PICKUP({ orderCode: 'TUBU123', orderId: 'ord-1', editable: false });
     const c = await mount();
     expect(c.textContent).toContain('Đã gắn vào đơn TUBU123');
-    expect(c.querySelector('[data-step="Chờ kho nhận"]')?.getAttribute('aria-current')).toBe('step');
+    expect(c.querySelector('[data-step="Kho nhận, đếm"]')?.getAttribute('aria-current')).toBe('step');
   });
 });
 

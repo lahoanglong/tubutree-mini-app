@@ -300,11 +300,11 @@ describe('/recycle/r/:id — Thu kèm đơn mua (§4.5b, §15.6)', () => {
     expect(screen.getByText('Đang tạm dừng')).toBeInTheDocument();
     expect(screen.queryByText('Chờ gắn vào đơn')).toBeNull();
   });
-  it('đã gắn đơn: "Đã gắn vào đơn TUBU123", timeline ở "Chờ kho nhận"', async () => {
+  it('đã gắn đơn: "Đã gắn vào đơn TUBU123", timeline ở "Kho nhận, đếm"', async () => {
     mocks.getWasteRequest.mockResolvedValue(PICKUP({ orderCode: 'TUBU123', orderId: 'ord-1', editable: false }));
     renderPage();
     expect(await screen.findByText('Đã gắn vào đơn TUBU123')).toBeInTheDocument();
-    expect(within(screen.getByRole('list', { name: 'Tiến độ yêu cầu' })).getByText('Chờ kho nhận').closest('li')).toHaveAttribute('aria-current', 'step');
+    expect(within(screen.getByRole('list', { name: 'Tiến độ yêu cầu' })).getByText('Kho nhận, đếm').closest('li')).toHaveAttribute('aria-current', 'step');
   });
 });
 
