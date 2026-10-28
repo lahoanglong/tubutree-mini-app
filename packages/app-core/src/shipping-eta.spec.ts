@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { orderDeliveryEtaLabel, shippingEtaLabel } from './shipping-eta';
+import { checkoutEtaLabel, orderDeliveryEtaLabel, placedOrderKinds, shippingEtaLabel } from './shipping-eta';
 
 describe('shippingEtaLabel', () => {
   const now = new Date(2026, 8, 30, 12, 0, 0);
@@ -73,5 +73,42 @@ describe('orderDeliveryEtaLabel', () => {
   });
   it('mốc thời gian hỏng thì ẩn', () => {
     expect(orderDeliveryEtaLabel(eta, { status: 'CONFIRMED', createdAt: 'x' }, now)).toBeNull();
+  });
+});
+
+describe('checkoutEtaLabel', () => {
+  const eta = { minDays: 2, maxDays: 4 };
+  const now = new Date(2026, 8, 30, 12, 0, 0);
+  it('chỉ hàng Tubu giao → khoảng ngày như cũ', () => {
+    expect(checkoutEtaLabel(eta, ['TUBU'], now)).toBe('02/10 – 04/10');
+    expect(checkoutEtaLabel(eta, ['TUBU', 'TUBU'], now)).toBe('02/10 – 04/10');
+  });
+  it('chỉ gian hàng tự giao → null (không hứa ngày thay họ)', () => {
+    expect(checkoutEtaLabel(eta, ['MERCHANT'], now)).toBeNull();
+    expect(checkoutEtaLabel(eta, ['MERCHANT', 'MERCHANT'], now)).toBeNull();
+  });
+  it('trộn → thêm hậu tố nói ngày chỉ cho hàng Tubu Tree', () => {
+    expect(checkoutEtaLabel(eta, ['TUBU', 'MERCHANT'], now)).toBe('02/10 – 04/10 (hàng Tubu Tree)');
+    expect(checkoutEtaLabel(eta, ['MERCHANT', 'TUBU'], now)).toBe('02/10 – 04/10 (hàng Tubu Tree)');
+  });
+  it('chưa cấu hình ngày, hoặc không biết nơi giao nào → null', () => {
+    expect(checkoutEtaLabel(null, ['TUBU'], now)).toBeNull();
+    expect(checkoutEtaLabel(undefined, ['TUBU'], now)).toBeNull();
+    expect(checkoutEtaLabel(eta, [], now)).toBeNull();
+    expect(checkoutEtaLabel(eta, [undefined, null], now)).toBeNull();
+  });
+});
+
+describe('placedOrderKinds', () => {
+  it('lần đặt bị tách → nơi giao của từng đơn con', () => {
+    expect(placedOrderKinds({ fulfiller: 'TUBU', splitOrders: [{ fulfiller: 'TUBU' }, { fulfiller: 'MERCHANT' }] })).toEqual(['TUBU', 'MERCHANT']);
+  });
+  it('đơn đơn lẻ → nơi giao của chính đơn (cột fulfiller máy chủ trả)', () => {
+    expect(placedOrderKinds({ fulfiller: 'MERCHANT' })).toEqual(['MERCHANT']);
+    expect(placedOrderKinds({ fulfiller: 'TUBU', splitOrders: [] })).toEqual(['TUBU']);
+  });
+  it('không có thông tin nơi giao → rỗng (checkoutEtaLabel không hứa ngày)', () => {
+    expect(placedOrderKinds({})).toEqual([]);
+    expect(placedOrderKinds({ fulfiller: null })).toEqual([]);
   });
 });
