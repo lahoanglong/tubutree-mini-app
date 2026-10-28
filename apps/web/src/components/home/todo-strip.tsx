@@ -57,13 +57,8 @@ function TodoSkeleton({ rows }: { rows: number }) {
   );
 }
 
-/**
- * "Việc cần làm" ở Trang chủ (bản web của `todo-strip.tsx` ở Mini App): đơn chờ chuyển khoản (giờ hết hạn, nút Thanh toán ngay) rồi
- * tới đơn đang giao và đơn đang chuẩn bị (COD vừa đặt), tối đa hai dòng. Chỉ hiện khi có việc. Danh sách đơn chỉ tải khi số đơn đang xử lý (cùng query với thanh đáy)
- * lớn hơn 0; chưa đăng nhập, không có việc hay lỗi thì ẩn. Khung chờ chỉ hiện khi lần mở trước của tài khoản này có việc (nhớ số dòng).
- */
-export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
-  const router = useRouter();
+/** Dữ liệu của "Việc cần làm"; Trang chủ dùng riêng `loading` để biết khối đã chốt chưa (cùng query nên không thêm request). */
+export function useHomeTodoQueries() {
   const authed = useAuthPhase() === 'authenticated';
   const count = useQuery({ ...activeOrderCountQuery(coreHttp), enabled: authed, staleTime: 30_000, retry: false });
   const enabled = authed && (count.data ?? 0) > 0;
@@ -88,12 +83,23 @@ export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
     staleTime: 30_000,
     retry: false,
   });
+  const loading = authed && (count.isPending || (enabled && (pending.isLoading || shipping.isLoading || processing.isLoading)));
+  return { authed, count, enabled, pending, shipping, processing, loading };
+}
+
+/**
+ * "Việc cần làm" ở Trang chủ (bản web của `todo-strip.tsx` ở Mini App): đơn chờ chuyển khoản (giờ hết hạn, nút Thanh toán ngay) rồi
+ * tới đơn đang giao và đơn đang chuẩn bị (COD vừa đặt), tối đa hai dòng. Chỉ hiện khi có việc. Danh sách đơn chỉ tải khi số đơn đang xử lý (cùng query với thanh đáy)
+ * lớn hơn 0; chưa đăng nhập, không có việc hay lỗi thì ẩn. Khung chờ chỉ hiện khi lần mở trước của tài khoản này có việc (nhớ số dòng).
+ */
+export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
+  const router = useRouter();
+  const { authed, count, enabled, pending, shipping, processing, loading } = useHomeTodoQueries();
   const userId = useAuth().user?.id;
   const rememberedRows = useMemo(() => (authed ? readTodoRows(browserStorage(), userId) : 0), [authed, userId]);
   // Số dòng của lần mở trước (bất kể tài khoản) cho khung chờ lúc khôi phục phiên; lần hydrate đầu dùng gợi ý của bản server.
   const prebuilt = useContext(HomeRestoreHintContext);
   const lastRows = useSyncExternalStore(subscribeStorageEvent, () => readLastTodoRows(browserStorage()), () => prebuilt?.rows ?? 0);
-  const loading = authed && (count.isPending || (enabled && (pending.isLoading || shipping.isLoading || processing.isLoading)));
   const payOrder = pending.data?.data[0];
   const shipOrder = shipping.data?.data[0];
   const shipTotal = shipping.data?.meta.total ?? 0;

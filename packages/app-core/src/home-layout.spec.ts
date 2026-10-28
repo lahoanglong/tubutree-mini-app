@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
-  visibleHomeShortcuts,
+  visibleHomeShortcuts, homeRenderOrder, homeSettling,
 } from './home-layout';
 import type { LoyaltyOverview } from './api/loyalty';
 
@@ -239,5 +239,25 @@ describe('dropForeignHomeHints', () => {
   it('không có kho hoặc chưa biết tài khoản: không làm gì', () => {
     expect(dropForeignHomeHints(null, 'A')).toBe(false);
     expect(dropForeignHomeHints(store({ [HOME_KIND_KEY]: kind('A') }), null)).toBe(false);
+  });
+});
+
+describe('homeRenderOrder / homeSettling', () => {
+  it('không giữ chỗ thì đúng thứ tự khối', () => {
+    for (const k of ['returning', 'new', 'unknown'] as const) expect(homeRenderOrder(k, false)).toEqual(homeBlockOrder(k));
+  });
+  it('đang giữ chỗ: chỉ còn tìm kiếm, thẻ thành viên và một khung chờ chung', () => {
+    expect(homeRenderOrder('unknown', true)).toEqual(['search', 'member', 'settling']);
+    expect(homeRenderOrder('returning', true)).toEqual(['search', 'member', 'settling']);
+  });
+  it('khách mới đang giữ chỗ (dải quà thay thẻ thành viên) cũng gọn về một khung chờ', () => {
+    expect(homeRenderOrder('new', true)).toEqual(['search', 'welcome', 'settling']);
+  });
+  it('chỉ giữ khi lần mở đầu chưa biết loại khách, tới khi biết loại và dữ liệu đã về', () => {
+    expect(homeSettling({ startedUnknown: true, kind: 'unknown', dataPending: false })).toBe(true);
+    expect(homeSettling({ startedUnknown: true, kind: 'returning', dataPending: true })).toBe(true);
+    expect(homeSettling({ startedUnknown: true, kind: 'new', dataPending: false })).toBe(false);
+    expect(homeSettling({ startedUnknown: false, kind: 'returning', dataPending: true })).toBe(false);
+    expect(homeSettling({ startedUnknown: false, kind: 'unknown', dataPending: true })).toBe(false);
   });
 });

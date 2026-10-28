@@ -35,6 +35,32 @@ export function homeBlockOrder(kind: HomeKindState): readonly HomeBlockId[] {
   return kind === 'returning' ? RETURNING : kind === 'new' ? NEW : UNKNOWN;
 }
 
+/** Khoảng trống giữ chỗ cho mọi khối dưới thẻ thành viên trong lúc loại khách và dữ liệu quyết định chúng chưa về. */
+export type HomeRenderBlock = HomeBlockId | 'settling';
+
+/**
+ * Thứ tự dựng thật. Khi `settling`, mọi khối dưới thẻ thành viên được thay bằng MỘT khung chờ và chỉ hiện cùng lúc khi dữ liệu đã chốt:
+ * dựng từng khối ngay khi dữ liệu của nó về thì khối nào chen vào cũng đẩy các khối đã vẽ xuống (loại khách đổi, Giờ vàng, Mua lại, Việc cần làm).
+ */
+export function homeRenderOrder(kind: HomeKindState, settling: boolean): readonly HomeRenderBlock[] {
+  const order = homeBlockOrder(kind);
+  if (!settling) return order;
+  const hero = order.findIndex((id) => id === 'member' || id === 'welcome');
+  return [...order.slice(0, hero + 1), 'settling'];
+}
+
+/** Giữ khung chờ tối đa chừng này: mạng chậm hay API lỗi không được giữ trắng cả trang. */
+export const HOME_SETTLE_MAX_MS = 4500;
+
+/**
+ * Còn phải giữ khung chờ không. Chỉ lần mở mà ngay khung hình đầu chưa biết loại khách (`startedUnknown`: khách mới vào, đổi máy) mới giữ;
+ * máy đã nhớ loại khách dựng đúng ngay bằng khung chờ theo từng khối. Giữ tới khi biết loại khách VÀ dữ liệu quyết định hình dạng
+ * (`dataPending` = Việc cần làm, Giờ vàng, Danh mục, Bán chạy còn tải) đã về.
+ */
+export function homeSettling(opts: { startedUnknown: boolean; kind: HomeKindState; dataPending: boolean }): boolean {
+  return opts.startedUnknown && (opts.kind === 'unknown' || opts.dataPending);
+}
+
 /**
  * Loại khách để chọn thứ tự khối. Chưa đăng nhập hẳn là khách mới. Đang khôi phục phiên (`authPending`) chưa biết là ai: dùng loại đã nhớ của
  * tài khoản dùng gần nhất trên máy (`stored`); chưa nhớ thì "chưa biết" khi `unknownWhenUnremembered` (cả Mini và web đều truyền true,

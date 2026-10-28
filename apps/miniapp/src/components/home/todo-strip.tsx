@@ -62,13 +62,8 @@ function TodoSkeleton({ rows }: { rows: number }) {
   );
 }
 
-/**
- * "Việc cần làm" ở Trang chủ: đơn chờ chuyển khoản (có giờ hết hạn, nút Thanh toán ngay) rồi tới đơn đang giao, tối đa hai dòng.
- * Chỉ hiện khi có việc. Danh sách đơn chỉ tải khi số đơn đang xử lý (cùng query với thanh đáy) lớn hơn 0; khách chưa đăng
- * nhập, không có việc hay lỗi → ẩn. Khung chờ chỉ hiện khi lần mở trước của tài khoản này có việc (nhớ số dòng), để khối không hiện khung rồi sụp mất.
- */
-export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
-  const navigate = useNavigate();
+/** Dữ liệu của "Việc cần làm"; Trang chủ dùng riêng `loading` để biết khối đã chốt chưa (cùng query nên không thêm request). */
+export function useHomeTodoQueries() {
   const authed = useAuthStore((s) => s.status === 'authenticated');
   // Cùng khoá và hàm tải với useActiveOrderCount (thanh đáy) để dùng chung dữ liệu, nhưng cần cả trạng thái đã tải xong hay chưa.
   const countQ = useQuery({ queryKey: ACTIVE_ORDER_COUNT_KEY, queryFn: fetchActiveOrderCount, enabled: authed, staleTime: 30_000, retry: false });
@@ -94,9 +89,20 @@ export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
     staleTime: 30_000,
     retry: false,
   });
+  const loading = authed && (countQ.isPending || (enabled && (pending.isLoading || shipping.isLoading || processing.isLoading)));
+  return { authed, countQ, enabled, pending, shipping, processing, loading };
+}
+
+/**
+ * "Việc cần làm" ở Trang chủ: đơn chờ chuyển khoản (có giờ hết hạn, nút Thanh toán ngay) rồi tới đơn đang giao, tối đa hai dòng.
+ * Chỉ hiện khi có việc. Danh sách đơn chỉ tải khi số đơn đang xử lý (cùng query với thanh đáy) lớn hơn 0; khách chưa đăng
+ * nhập, không có việc hay lỗi → ẩn. Khung chờ chỉ hiện khi lần mở trước của tài khoản này có việc (nhớ số dòng), để khối không hiện khung rồi sụp mất.
+ */
+export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
+  const navigate = useNavigate();
+  const { authed, countQ, enabled, pending, shipping, processing, loading } = useHomeTodoQueries();
   const userId = useAuthStore((s) => s.user?.id);
   const rememberedRows = useMemo(() => (authed ? readTodoRows(browserStorage(), userId) : 0), [authed, userId]);
-  const loading = authed && (countQ.isPending || (enabled && (pending.isLoading || shipping.isLoading || processing.isLoading)));
   const payOrder = pending.data?.data[0];
   const shipOrder = shipping.data?.data[0];
   const shipTotal = shipping.data?.meta.total ?? 0;

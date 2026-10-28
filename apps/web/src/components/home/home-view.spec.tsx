@@ -17,6 +17,7 @@ vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => !routeState.
 
 import HomeView from './home-view';
 import { homeBlockOrder } from './home-blocks';
+import { homeRenderOrder } from '@tubutree/app-core/home-layout';
 import { HOME_KIND_KEY } from './use-home-customer-kind';
 
 const CONFIG = {
@@ -120,7 +121,7 @@ describe('HomeView — thứ tự khối (9 khối, một lưới gợi ý)', ()
     mocks.phase = 'loading';
     mocks.restoring = true;
     const c = await mount();
-    expect(blockOrder(c)).toEqual([...homeBlockOrder('unknown')]);
+    expect(blockOrder(c)).toEqual([...homeRenderOrder('unknown', true)]);
     expect(region(c, 'Bán chạy')).toBeNull();
     expect(region(c, 'Quà khách mới')).toBeNull();
   });

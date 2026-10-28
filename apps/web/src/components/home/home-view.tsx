@@ -11,6 +11,8 @@ import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
 import { notificationsQuery } from '@tubutree/app-core/queries/account';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
+import { flashActiveQuery, flashUpcomingQuery } from '@tubutree/app-core/queries/flash-sale';
+import { homeRenderOrder, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
 import { categoryEntries } from '@/lib/browse-categories';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
@@ -26,7 +28,7 @@ import { BrandJourney } from './brand-journey';
 import { CategoryRow } from './category-row';
 import { CommunityPreview } from './community-preview';
 import { FlashSale, UpcomingFlashSales } from './flash-sale';
-import { homeBlockOrder, refreshHomeQueries, type HomeBlockId } from './home-blocks';
+import { refreshHomeQueries } from './home-blocks';
 import { HomeBlockErrorSuppressed } from './home-block-error';
 import { HomeHeader } from './home-header';
 import { HomePageError } from './home-page-error';
@@ -34,7 +36,10 @@ import { MemberCard, MemberCardSkeleton, MemberCardUnavailable } from './member-
 import { NewCustomerGift } from './new-customer-gift';
 import { ShortcutGrid } from './shortcut-grid';
 import { SuggestFeed } from './suggest-feed';
-import { TodoStrip } from './todo-strip';
+import { TodoStrip, useHomeTodoQueries } from './todo-strip';
+import { HomeSettlingSkeleton } from './home-settling';
+import { useHomeSettling } from './use-home-settling';
+import { loadActiveFlashSales } from '@/lib/use-flash-sales';
 import { useBlockQuery } from './use-block-query';
 import { useHomeCustomerKind } from './use-home-customer-kind';
 
@@ -91,11 +96,27 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   // Cùng khoá với kệ Bán chạy của khách mới: ở đây chỉ để biết API sập hẳn (dải lỗi cấp trang), không thêm request.
   const bestSellers = useBlockQuery(useQuery({ ...homeBestSellerQuery(coreHttp), ...withInitial(initial.bestSellers), enabled: kind === 'new' }));
   const categories = useQuery({ ...categoriesQuery(coreHttp), staleTime: STALE, retry: false, ...(initial.categories ? { initialData: initial.categories } : {}) });
+
+  // Lần mở đầu chưa biết loại khách: các khối dưới thẻ thành viên chờ dữ liệu quyết định hình dạng của chúng rồi hiện cùng lúc, nên tải sớm các
+  // query mà khối nào cũng sẽ dùng (cùng khoá, không thêm request).
+  const flash = useQuery({
+    queryKey: flashActiveQuery(coreHttp).queryKey,
+    queryFn: loadActiveFlashSales,
+    staleTime: 30_000,
+    ...(initial.flash ? { initialData: initial.flash, initialDataUpdatedAt: 0 } : {}),
+  });
+  const upcoming = useQuery({ ...flashUpcomingQuery(coreHttp), enabled: authed, staleTime: 30_000 });
+  const todo = useHomeTodoQueries();
+  const settling = useHomeSettling(
+    kind,
+    todo.loading || flash.isLoading || (authed && upcoming.isLoading) || categories.isLoading,
+  );
   const entries = useMemo(() => categoryEntries(categories.data), [categories.data]);
   // Chỉ tính khi khách đang THẤY kệ Bán chạy (khách mới); khách cũ không nhận dải lỗi vì kệ họ không thấy.
   const pageDown = kind === 'new' && bestSellers.isError && bestSellers.data === undefined;
 
-  const blocks: Record<HomeBlockId, ReactNode> = {
+  const blocks: Record<HomeRenderBlock, ReactNode> = {
+    settling: <HomeSettlingSkeleton />,
     search: <SearchRow />,
     member:
       kind === 'returning' && unavailable ? (
@@ -131,7 +152,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     suggest: <SuggestFeed initial={initial.suggest} />,
   };
 
-  const order = homeBlockOrder(kind);
+  const order = homeRenderOrder(kind, settling);
   const nodes: ReactNode[] = [];
   for (let i = 0; i < order.length; i++) {
     const id = order[i]!;

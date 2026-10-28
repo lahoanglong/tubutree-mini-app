@@ -23,6 +23,7 @@ vi.mock('../services/shop-api', () => ({
   fetchCategories: mocks.fetchCategories,
   fetchPurchasedItems: mocks.fetchPurchasedItems,
   fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
+  fetchUpcomingFlashSales: vi.fn().mockResolvedValue([]),
   getCart: vi.fn(),
 }));
 vi.mock('../services/account-api', () => ({ getNotifications: mocks.getNotifications }));
@@ -36,7 +37,7 @@ vi.mock('../components/home/member-card', () => ({
   MemberCard: () => <section aria-label="Thẻ thành viên" />,
   MemberCardSkeleton: () => <div data-testid="member-card-loading" />,
 }));
-vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null }));
+vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false }) }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => <section aria-label="Lối tắt" /> }));
 vi.mock('../components/home/brand-journey', () => ({ BrandJourney: () => null }));
 vi.mock('../components/home/community-preview', () => ({ CommunityPreview: () => null }));
@@ -54,6 +55,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import HomePage from './home';
 import { homeBlockOrder } from '../components/home/home-blocks';
+import { homeRenderOrder } from '@tubutree/app-core/home-layout';
 import { HOME_KIND_KEY } from '../hooks/use-home-customer-kind';
 
 const card = (id: string, name: string) => ({
@@ -78,7 +80,8 @@ const settled = (qc: QueryClient, key: unknown[]) => {
 };
 const RETURNING = [...homeBlockOrder('returning')];
 const NEW = [...homeBlockOrder('new')];
-const UNKNOWN = [...homeBlockOrder('unknown')];
+// Chưa biết loại khách thì mọi khối dưới thẻ thành viên là MỘT khung chờ chung, chỉ hiện cùng lúc khi dữ liệu đã chốt.
+const UNKNOWN = [...homeRenderOrder('unknown', true)];
 
 describe('HomePage (phương án A, 9 khối)', () => {
   beforeEach(() => {
@@ -275,6 +278,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
       renderHome();
       expect(blockOrder()).toEqual(UNKNOWN);
       expect(screen.getByTestId('member-card-loading')).toBeInTheDocument();
+      expect(screen.getByTestId('home-settling')).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Bán chạy' })).toBeNull();
       await act(async () => {
         d.resolve({ items: [{ variationId: 'v1' }], nextCursor: null });
