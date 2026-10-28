@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardPricing, variationPricing, type FlashItem } from './flash-price';
+import { cardPricing, runningFlash, variationPricing, type FlashItem } from './flash-price';
 
 const flash = (over: Partial<FlashItem> = {}): FlashItem => ({
   itemId: 'f1',
@@ -70,5 +70,19 @@ describe('variationPricing (giá từng phân loại ở trang chi tiết)', () 
   it('giá biên: giá bán 0 hoặc NaN không gạch, không phần trăm', () => {
     expect(variationPricing({ ...variation, salePrice: 0 }, [])).toMatchObject({ hasSale: false, salePct: 0 });
     expect(variationPricing({ ...variation, retailPrice: NaN, salePrice: null }, [])).toMatchObject({ hasSale: false, salePct: 0 });
+  });
+});
+
+describe('runningFlash: trang sản phẩm chỉ dùng suất Giờ vàng còn chạy', () => {
+  const NOW = Date.parse('2026-10-28T10:00:00.000Z');
+  const item = (id: string, endAt?: string) => ({ id, ...(endAt ? { endAt } : {}) });
+
+  it('bỏ suất đã quá hạn hoặc đúng mốc kết thúc, giữ suất còn hạn', () => {
+    const list = [item('hết', '2026-10-28T09:59:59.000Z'), item('đúng mốc', '2026-10-28T10:00:00.000Z'), item('còn', '2026-10-28T10:00:01.000Z')];
+    expect(runningFlash(list, NOW).map((f) => f.id)).toEqual(['còn']);
+  });
+
+  it('suất không có hạn hoặc hạn không đọc được thì coi như còn chạy (máy chủ tính lại giá lúc thêm giỏ)', () => {
+    expect(runningFlash([item('a'), item('b', 'không phải ngày')], NOW).map((f) => f.id)).toEqual(['a', 'b']);
   });
 });

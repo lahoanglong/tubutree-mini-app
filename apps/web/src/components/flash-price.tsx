@@ -1,11 +1,10 @@
 'use client';
 
 import { Zap } from 'lucide-react';
-import { cardPricing, variationPricing } from '@/lib/flash-price';
+import { cardPricing, runningFlash, variationPricing } from '@/lib/flash-price';
 import { usePdpSelection } from './pdp-selection';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { formatVnd } from '@/lib/api';
-import { runningFlash } from '@/lib/pdp-logic';
 
 type PricedProduct = { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string; pinnedVariationId?: string };
 
