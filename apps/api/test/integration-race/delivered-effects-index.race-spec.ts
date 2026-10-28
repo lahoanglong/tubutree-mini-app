@@ -47,7 +47,7 @@ describe('Index việc sau giao được câu Prisma thật dùng (real Postgres
       [queue('pancake-push')],
       { get: async <T,>(_key: string, fallback: T) => fallback } as never,
       { getConfig: async () => null, getHealth: () => null } as never,
-      { notify: jest.fn().mockResolvedValue(undefined) } as never,
+      { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } as never,
       jest.fn().mockResolvedValue({ ok: true, status: 200 }) as never,
     );
     const orderStatus = { resyncDeliveredEffects: jest.fn().mockResolvedValue({ outcome: 'ALREADY_DONE' }) };

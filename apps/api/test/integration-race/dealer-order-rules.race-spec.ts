@@ -34,7 +34,7 @@ describe('DealerService.placeOrder luật đơn sỉ (real Postgres)', () => {
       providers: [
         SystemConfigService,
         DealerService,
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();

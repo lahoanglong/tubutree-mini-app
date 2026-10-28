@@ -60,7 +60,7 @@ describe('R5 tiền: trả hai lần, khoá người chuyển khoản, chuyển 
       grantReferralReward: jest.fn().mockResolvedValue(undefined),
       reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
     } as unknown as AffiliateService;
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     const reversal = new OrderReversalService(
       { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService,
       { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService,

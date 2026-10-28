@@ -29,9 +29,9 @@ describe('PublicImageService (real Postgres)', () => {
     await warmPool(prisma);
     svc = moduleRef.get(PublicImageService);
     const none = {} as never;
-    const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } as unknown as NotificationsService;
     admin = new AdminService(prisma, none, none, none, notifications, none, none, none, none, none);
-    merchant = new MerchantService(prisma, {} as OrderStatusService, { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService);
+    merchant = new MerchantService(prisma, {} as OrderStatusService, { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } as unknown as NotificationsService);
   });
 
   afterAll(async () => {

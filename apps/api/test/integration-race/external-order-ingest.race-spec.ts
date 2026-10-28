@@ -22,7 +22,7 @@ describe('Nạp đơn ngoài app: song song cùng đơn Pancake (real Postgres)'
     await warmPool(prisma);
     processor = new PancakeProcessor(
       prisma,
-      { notify: jest.fn() } as unknown as NotificationsService,
+      { notify: jest.fn(), notifySafe: jest.fn().mockResolvedValue(true) } as unknown as NotificationsService,
       { setStatus: jest.fn() } as unknown as OrderStatusService,
     );
   });

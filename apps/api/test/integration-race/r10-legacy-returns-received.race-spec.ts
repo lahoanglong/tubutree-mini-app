@@ -128,7 +128,7 @@ describe('Yêu cầu trả hàng cũ trước P5 không kẹt "Chờ nhận hàn
               grantReferralReward: jest.fn().mockResolvedValue(undefined),
             },
           },
-          { provide: NotificationsService, useValue: { notify } },
+          { provide: NotificationsService, useValue: { notify, notifySafe: notify } },
           { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
           { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
         ],

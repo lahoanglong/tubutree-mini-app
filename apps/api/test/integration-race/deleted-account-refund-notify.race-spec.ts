@@ -43,7 +43,7 @@ describe('Hoàn tiền cho tài khoản đã xoá: khoản chờ chuyển tay + 
             grantReferralReward: jest.fn().mockResolvedValue(undefined),
           },
         },
-        { provide: NotificationsService, useValue: { notify } },
+        { provide: NotificationsService, useValue: { notify, notifySafe: notify } },
         { provide: CartService, useValue: {} },
         { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
         { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },

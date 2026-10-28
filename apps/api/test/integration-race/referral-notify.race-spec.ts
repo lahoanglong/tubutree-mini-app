@@ -47,6 +47,8 @@ describe('Báo người mời về thưởng giới thiệu (real Postgres)', ()
   const notifier = {
     notify: (...args: Parameters<NotificationsService['notify']>) =>
       failNotify ? Promise.reject(new Error('notify down')) : real.notify(...args),
+    // Giống NotificationsService.notifySafe: lỗi gửi không ném ra, nhưng vẫn đi qua cờ failNotify của notify.
+    notifySafe: (...args: Parameters<NotificationsService['notify']>) => notifier.notify(...args).then(() => true, () => false),
   };
   const CONFIG_KEYS = [
     'returns.window_days',

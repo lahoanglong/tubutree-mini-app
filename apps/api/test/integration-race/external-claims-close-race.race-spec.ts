@@ -56,7 +56,7 @@ describe('Cron cộng điểm đơn ngoài so với webhook huỷ/hoàn song son
       const { user, order, claim } = await setup();
       const closeAndApply = async () => {
         await prisma.externalOrder.update({ where: { id: order.id }, data: { status, pancakeStatus: status === 'RETURNED' ? 5 : 6, closedAt: new Date() } });
-        await applyStatusToClaim(prisma, { notify }, config, order.pancakeOrderId);
+        await applyStatusToClaim(prisma, { notify, notifySafe: notify }, config, order.pancakeOrderId);
       };
       const delay = i % 3 === 0 ? 0 : i % 3;
       await Promise.all([

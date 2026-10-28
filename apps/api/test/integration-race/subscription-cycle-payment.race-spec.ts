@@ -46,7 +46,7 @@ describe('Gói định kỳ: đơn đầu, thanh toán, sửa gói (real Postgre
           },
         },
         { provide: LoyaltyService, useValue: { getTierMultiplier: jest.fn().mockResolvedValue(1) } },
-        { provide: NotificationsService, useValue: { notify } },
+        { provide: NotificationsService, useValue: { notify, notifySafe: notify } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();

@@ -33,7 +33,7 @@ describe('Voucher chào mừng lúc đăng ký song song với cron (real Postgr
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
       imports: [PrismaModule],
-      providers: [SystemConfigService, VouchersService, { provide: NotificationsService, useValue: { notify } }],
+      providers: [SystemConfigService, VouchersService, { provide: NotificationsService, useValue: { notify, notifySafe: notify } }],
     }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);

@@ -43,7 +43,7 @@ describe('Đối soát Tubu giao hộ — các chốt sau review (real Postgres)
             grantReferralReward: jest.fn().mockResolvedValue(undefined),
           },
         },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
         { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
         { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
       ],

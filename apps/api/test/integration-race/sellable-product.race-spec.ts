@@ -73,7 +73,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
             getTierMultiplier: jest.fn().mockResolvedValue(1),
           },
         },
-        { provide: NotificationsService, useValue: { notify } },
+        { provide: NotificationsService, useValue: { notify, notifySafe: notify } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
         {
           provide: GomdonOrderService,

@@ -24,7 +24,7 @@ describe('milestoneVouchers: điều kiện đơn được tính (real Postgres)
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
       imports: [PrismaModule],
-      providers: [SystemConfigService, VouchersService, { provide: NotificationsService, useValue: { notify: async () => undefined } }],
+      providers: [SystemConfigService, VouchersService, { provide: NotificationsService, useValue: { notify: async () => undefined, notifySafe: jest.fn().mockResolvedValue(true) } }],
     }).compile();
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);

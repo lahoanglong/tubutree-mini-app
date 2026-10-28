@@ -38,7 +38,7 @@ describe('Đơn trả cho người đặt không kèm cột nội bộ (real Pos
         DealerService,
         { provide: RewardPointsService, useValue: {} },
         { provide: PricingService, useValue: { calcShippingFee: jest.fn().mockResolvedValue(0) } },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
         { provide: FlashSaleService, useValue: { resolveEffective: jest.fn().mockResolvedValue(new Map()), consumeQuota: jest.fn() } },
       ],

@@ -33,7 +33,7 @@ describe('Pancake webhook dedupe + cứu sự kiện kẹt (real Postgres)', () 
     await warmPool(prisma);
     processor = new PancakeProcessor(
       prisma,
-      { notify: jest.fn() } as unknown as NotificationsService,
+      { notify: jest.fn(), notifySafe: jest.fn().mockResolvedValue(true) } as unknown as NotificationsService,
       { setStatus: jest.fn() } as unknown as OrderStatusService,
     );
   });

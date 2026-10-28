@@ -28,7 +28,7 @@ describe('Dealer reward threshold / volume above Int32 (real Postgres)', () => {
         SystemConfigService,
         DealerService,
         BrandService,
-        { provide: NotificationsService, useValue: { notify } },
+        { provide: NotificationsService, useValue: { notify, notifySafe: notify } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();
