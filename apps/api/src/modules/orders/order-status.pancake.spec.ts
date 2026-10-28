@@ -37,6 +37,7 @@ function make(order: Record<string, unknown>, hooks: Record<string, jest.Mock> =
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
+    notificationLog: { findFirst: jest.fn().mockResolvedValue(null) },
     gomdonAlert: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
     $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),

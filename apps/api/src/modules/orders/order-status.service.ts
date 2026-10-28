@@ -673,7 +673,21 @@ export class OrderStatusService {
    * Tin "Đã giao" gửi từ hai chỗ: lần giao (khi việc sau giao còn dở) và lúc việc sau giao xong (lần giao hoặc lượt chạy lại). Cùng
    * khoá nên đơn chỉ nhận một tin; lần giao mà cộng điểm ném thì chưa có tin nào, lượt chạy lại gửi khi xong thay vì mất hẳn.
    */
-  private sendDeliveredNotice(order: Pick<Order, 'code' | 'userId' | 'pointsEarned'>): Promise<boolean> {
+  private async sendDeliveredNotice(order: Pick<Order, 'code' | 'userId' | 'pointsEarned'>): Promise<boolean> {
+    // Tin "Đã giao" của đơn giao trước khi có khoá chống gửi đôi không mang khoá nên khoá không chặn được: tìm theo mã đơn để đơn đang
+    // chờ làm nốt việc sau giao lúc chuyển bản không bị báo "Đã giao" lần hai.
+    let alreadySent = false;
+    try {
+      const row = await this.prisma.notificationLog.findFirst({
+        where: { userId: order.userId, channel: 'INAPP', templateCode: 'ORDER_DELIVERED', payload: { path: ['data', 'order_code'], equals: order.code } },
+        select: { id: true },
+      });
+      alreadySent = row !== null;
+    } catch (err) {
+      // Không đọc được thì cứ gửi: khoá chống gửi đôi của NotificationsService vẫn chặn trùng với tin cùng khoá.
+      this.logger.warn(`Không kiểm được tin "Đã giao" cũ của đơn ${order.code}, gửi theo khoá chống gửi đôi: ${err instanceof Error ? err.message : err}`);
+    }
+    if (alreadySent) return true;
     // Điểm Xanh chỉ được cộng khi đơn có pointsEarned > 0 (đơn XU cũ, đơn CTV lên hộ thì không): lời tin chỉ nhắc điểm khi thật sự có, qua {{points_note}}.
     const data: Record<string, string> = { order_code: order.code };
     if (order.pointsEarned > 0) data.points_note = ` Bạn được cộng ${formatPoints(order.pointsEarned)} Điểm Xanh.`;

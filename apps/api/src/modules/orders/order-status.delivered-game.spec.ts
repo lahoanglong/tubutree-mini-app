@@ -13,6 +13,7 @@ function make(grant?: jest.Mock) {
       findFirst: jest.fn().mockResolvedValue({ id: 'o1', code: 'TUBU1', userId: 'u1', pointsEarned: 0, status: 'DELIVERED', deliveredEffectsAt: null }),
       updateMany,
     },
+    notificationLog: { findFirst: jest.fn().mockResolvedValue(null) },
   };
   const loyalty = { creditOrderPoints: jest.fn().mockResolvedValue(true) };
   const affiliate = { lockCommissionsForOrder: jest.fn().mockResolvedValue(2), grantReferralReward: jest.fn().mockResolvedValue(undefined) };
