@@ -15,8 +15,6 @@ import * as groupbuy from './groupbuy';
 import * as home from './home';
 import * as loyalty from './loyalty';
 import * as orders from './orders';
-import * as payment from './payment';
-import * as reviews from './reviews';
 import * as subs from './subscriptions';
 import * as wallet from './wallet';
 import * as waste from './waste';
@@ -55,9 +53,6 @@ const cases: Case[] = [
   ['myRefunds', (h) => orders.myRefundsQuery(h, 'o1'), ['my-refunds', 'o1'], '/orders/me/refunds'],
   ['refundBank', (h) => orders.refundBankQuery(h), ['refund-bank'], '/orders/me/refund-bank'],
   ['returnEstimate', (h) => orders.returnEstimateQuery(h, 'T1', [], 'DEFECTIVE'), ['return-estimate', 'T1', [], 'DEFECTIVE'], '/orders/T1/return-estimate'],
-  ['reviews', (h) => reviews.reviewsQuery(h, 'sp'), ['reviews', 'sp'], '/products/sp/reviews'],
-  ['canReview', (h) => reviews.canReviewQuery(h, 'sp'), ['can-review', 'sp'], '/products/sp/reviews/can-review'],
-  ['myReview', (h) => reviews.myReviewQuery(h, 'r1'), ['my-review', 'r1'], '/reviews/r1'],
   ['flashActive', (h) => flash.flashActiveQuery(h), ['flash-sales', 'active'], '/flash-sales/active'],
   ['flashUpcoming', (h) => flash.flashUpcomingQuery(h), ['flash-sales', 'upcoming'], '/flash-sales/upcoming'],
   ['publicConfig', (h) => config.publicConfigQuery(h), ['public-config'], '/config/public'],
@@ -67,7 +62,6 @@ const cases: Case[] = [
   ['brandFollow', (h) => brand.brandFollowQuery(h, 'tubu'), ['brand-follow', 'tubu'], '/brand/tubu/follow-state'],
   ['brandShareToEarn', (h) => brand.brandShareToEarnQuery(h, 'tubu'), ['brand-ste', 'tubu'], '/brand/tubu/share-to-earn'],
   ['subscriptions', (h) => subs.subscriptionsQuery(h), ['subscriptions'], '/me/subscriptions'],
-  ['bankQr', (h) => payment.bankQrQuery(h, 'T1'), ['bank-qr', 'T1'], '/payments/bank-qr/T1'],
   ['geoProvinces', (h) => geo.provincesQuery(h), ['geo-provinces'], '/geo/provinces'],
   ['wishlist', (h) => wishlist.wishlistQuery(h), ['wishlist'], '/me/wishlist'],
   ['wishlistIds', (h) => wishlist.wishlistIdsQuery(h), ['wishlist-ids'], '/me/wishlist/ids'],

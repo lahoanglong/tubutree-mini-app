@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   checkParity,
+  parseMiniAppRedirects,
   parseMiniAppRoutes,
   webPathToFileCandidates,
 } from '../../../scripts/check-platform-parity.mjs';
@@ -33,6 +34,22 @@ const base = () => ({
 describe('parseMiniAppRoutes', () => {
   it('đọc mọi path của <Route>, bỏ dấu *', () => {
     expect(parseMiniAppRoutes(APP_TSX)).toEqual(['/', '/product/:slug', '/subscriptions']);
+  });
+});
+
+describe('parseMiniAppRedirects', () => {
+  it('lấy cặp từ-đến của <Route> có element là <Navigate> trực tiếp', () => {
+    expect(parseMiniAppRedirects(APP_TSX)).toEqual([{ from: '/subscriptions', to: '/orders' }]);
+  });
+
+  it('bỏ query của đích, nhận cả to viết trước các thuộc tính khác', () => {
+    const src = `<Route path="/subscriptions" element={<Navigate to="/orders?tab=subscriptions" replace />} />`;
+    expect(parseMiniAppRedirects(src)).toEqual([{ from: '/subscriptions', to: '/orders' }]);
+  });
+
+  it('bỏ qua Navigate có điều kiện', () => {
+    const src = `<Route path="/cashback" element={FLAG ? <RouteShell><CashbackPage /></RouteShell> : <Navigate to="/" replace />} />`;
+    expect(parseMiniAppRedirects(src)).toEqual([]);
   });
 });
 
@@ -144,5 +161,42 @@ describe('checkParity', () => {
     });
     const r = checkParity({ ...b, fileHasSymbol: () => false });
     expect(r.errors.join('\n')).toMatch(/gate.*Mini App/);
+  });
+});
+
+describe('checkParity route Mini App chuyển hướng', () => {
+  const redirectBase = () => {
+    const b = base();
+    b.map.routes[0]!.items.push({ miniapp: '/old', web: '/', private: false });
+    return { ...b, miniappRoutes: ['/', '/browse', '/old'], miniappRedirects: [{ from: '/old', to: '/' }] };
+  };
+
+  it('xanh khi web của dòng chuyển hướng bằng web của dòng đích', () => {
+    expect(checkParity(redirectBase()).errors).toEqual([]);
+  });
+
+  it('đỏ khi web của dòng chuyển hướng khác web của dòng đích', () => {
+    const b = redirectBase();
+    b.map.routes[0]!.items[2] = { miniapp: '/old', web: '/san-pham', private: false, pending: true };
+    expect(checkParity(b).errors.join('\n')).toMatch(/\/old.*chuyển hướng.*\/.*\/san-pham/);
+  });
+
+  it('đỏ khi dòng chuyển hướng là skip mà đích có web', () => {
+    const b = redirectBase();
+    b.map.routes[0]!.items[2] = { miniapp: '/old', skip: 'không làm' } as never;
+    expect(checkParity(b).errors.join('\n')).toMatch(/\/old.*chuyển hướng/);
+  });
+
+  it('so đường dẫn web đã bỏ query ở cả hai dòng', () => {
+    const b = redirectBase();
+    b.map.routes[0]!.items[1] = { miniapp: '/browse', web: '/san-pham', private: false, pending: true };
+    b.map.routes[0]!.items[2] = { miniapp: '/old', web: '/san-pham?tab=a', private: false, pending: true };
+    expect(checkParity({ ...b, miniappRedirects: [{ from: '/old', to: '/browse' }] }).errors).toEqual([]);
+  });
+
+  it('không kiểm khi không khai miniappRedirects (Navigate có điều kiện đã bị parse bỏ)', () => {
+    const b = redirectBase();
+    b.map.routes[0]!.items[2] = { miniapp: '/old', web: '/san-pham', private: false, pending: true };
+    expect(checkParity({ ...b, miniappRedirects: [] }).errors).toEqual([]);
   });
 });

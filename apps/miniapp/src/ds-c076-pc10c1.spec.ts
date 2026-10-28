@@ -12,7 +12,6 @@ import { fileURLToPath } from 'node:url';
 const FILES = [
   'src/pages/wallet.tsx',
   'src/pages/cashback.tsx',
-  'src/components/community/product-picker.tsx',
   'src/components/community/post-card.tsx',
   'src/pages/feed.tsx',
   'src/pages/post-detail.tsx',

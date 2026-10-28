@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   post: vi.fn(),
   search: '',
   replace: vi.fn(),
-  ready: new Set<string>(['/cong-dong/xep-hang']),
+  ready: new Set<string>(),
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
@@ -105,7 +105,7 @@ beforeEach(() => {
   mocks.auth.sessionUnavailable = false;
   mocks.search = '';
   mocks.replace.mockReset();
-  mocks.ready = new Set(['/cong-dong/xep-hang']);
+  mocks.ready = new Set();
   config = { communityPublicPreview: false };
   feedImpl = () => ({ posts: [POST('p1', 'Lan Anh'), POST('p2', 'Minh Tâm')], nextCursor: null });
   previewImpl = () => ({ posts: [] });
@@ -206,9 +206,11 @@ describe('FeedView — đã đăng nhập', () => {
     expect(lastFeedArgs()).toMatchObject({ q: undefined });
   });
 
-  it('liên kết Bảng xếp hạng; Sự kiện ẩn khi route chưa xong, hiện khi xong; nút Đăng bài mở khung soạn', async () => {
+  it('không có nút Xếp hạng (Mini App đã bỏ); Sự kiện ẩn khi route chưa xong, hiện khi xong; nút Đăng bài mở khung soạn', async () => {
+    mocks.ready.add('/cong-dong/xep-hang');
     const { container } = await mount();
-    expect(container.querySelector('a[aria-label="Bảng xếp hạng"]')?.getAttribute('href')).toBe('/cong-dong/xep-hang');
+    expect(container.querySelector('a[aria-label="Bảng xếp hạng"]')).toBeNull();
+    expect(byText(container, 'a', 'Xếp hạng')).toBeFalsy();
     expect(container.querySelector('a[aria-label="Sự kiện"]')).toBeNull();
     expect(container.querySelector('[data-testid="composer"]')).toBeNull();
     click(exact(container, 'button', 'Đăng bài'));
@@ -411,19 +413,14 @@ describe('FeedView — xem trước công khai khi chưa đăng nhập (cờ com
 });
 
 describe('/cong-dong — giao diện điện thoại như Mini App', () => {
-  it('hai nút Xếp hạng và Sự kiện có chữ nhìn thấy, không icon; tên truy cập nút xếp hạng vẫn là "Bảng xếp hạng" (D6-05)', async () => {
+  it('nút Sự kiện có chữ nhìn thấy, không icon, viền chữ nhật (D6-05)', async () => {
     mocks.ready.add('/cong-dong/su-kien');
     const { container } = await mount();
-    const rank = container.querySelector('a[aria-label="Bảng xếp hạng"]')!;
-    expect(rank.textContent?.trim()).toBe('Xếp hạng');
-    expect(rank.querySelector('svg')).toBeNull();
     const events = container.querySelector('a[aria-label="Sự kiện"]')!;
     expect(events.textContent?.trim()).toBe('Sự kiện');
     expect(events.querySelector('svg')).toBeNull();
-    for (const a of [rank, events]) {
-      expect(a.className).toContain('border');
-      expect(a.className).not.toContain('rounded-full');
-    }
+    expect(events.className).toContain('border');
+    expect(events.className).not.toContain('rounded-full');
   });
 
   it('đã đăng nhập: không có câu phụ đề dưới tiêu đề để bài đầu lên sớm hơn (D6-05)', async () => {
