@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+const dl = vi.hoisted(() => ({ saveImage: vi.fn() }));
+vi.mock('./download-image', () => dl);
+
 import { createWebPlatformBridge } from './platform-bridge';
 
 type G = Record<string, unknown>;
@@ -24,6 +27,20 @@ describe('platform-bridge (web)', () => {
     const b = createWebPlatformBridge({ oaId: '' });
     expect(b.platform).toBe('web');
     expect(b.capabilities).toEqual({ verifiedPhone: false, zaloLocation: false, qrScan: false, zaloNotifyPermission: false });
+  });
+
+  describe('saveImage', () => {
+    it('chuyển cho download-image với url và tên file, trả saved', async () => {
+      dl.saveImage.mockResolvedValue('saved');
+      const r = await createWebPlatformBridge({ oaId: '' }).saveImage('https://img.vietqr.io/x.png', 'tubu-qr-A1.png');
+      expect(r).toBe('saved');
+      expect(dl.saveImage).toHaveBeenCalledWith('https://img.vietqr.io/x.png', 'tubu-qr-A1.png');
+    });
+
+    it('không tải được thì trả failed', async () => {
+      dl.saveImage.mockResolvedValue('failed');
+      expect(await createWebPlatformBridge({ oaId: '' }).saveImage('https://img.vietqr.io/x.png', 'a.png')).toBe('failed');
+    });
   });
 
   describe('share', () => {
