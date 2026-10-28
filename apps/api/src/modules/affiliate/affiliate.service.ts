@@ -1157,14 +1157,16 @@ export class AffiliateService {
         .join('; ');
       this.logger.warn(`Đơn ${orderCode} bị trả/huỷ nhưng ${message}: cần kế toán xử lý.`);
       const dedupeKey = `commission-paid-order-reversed:${orderId}`;
+      const alertMessage = `${message}, cần kế toán xử lý`;
       const notifications = this.notifications;
+      // notifyAdmins không có tuỳ chọn chống gửi lặp; bọc lại để mỗi quản trị viên chỉ nhận một tin cho mỗi đơn.
       await notifyAdmins(
         {
           prisma: this.prisma,
-          notifications: notifications && { notify: (userId, code, data) => notifications.notify(userId, code, data, { dedupeKey }) },
+          notifications: notifications && { notify: (userId) => notifications.notify(userId, 'OPS_REFUND_ALERT', { order_code: orderCode, message: alertMessage }, { dedupeKey }) },
           logger: this.logger,
         },
-        { template: 'OPS_REFUND_ALERT', subject: `hoa hồng đã duyệt/chuyển của đơn ${orderCode} bị trả`, data: () => ({ order_code: orderCode, message: `${message}, cần kế toán xử lý` }) },
+        { template: 'OPS_REFUND_ALERT', subject: `hoa hồng đã duyệt/chuyển của đơn ${orderCode} bị trả`, data: () => ({ order_code: orderCode, message: alertMessage }) },
       );
     } catch (e) {
       this.logger.warn(`Báo kế toán hoa hồng đơn ${orderCode} lỗi: ${(e as Error).message}`);
