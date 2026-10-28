@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { MessagesSquare, Recycle } from 'lucide-react';
 import { SEASON_PASS_ENABLED } from '@tubutree/app-core/features';
-import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, gameNewbieCopy, type MissionTarget, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
+import { GAME_CHECKIN_ANCHOR, MISSION_PATHS, extraPlotsVisible, gameNewbieCopy, type MissionTarget, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
 import { checkInQuery, loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import type { AnswerResult, HarvestSpecies } from '@tubutree/app-core/api/game';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -60,11 +60,6 @@ const TITLE = 'Vườn Xanh';
 const WASTE_PATH = '/doi-rac';
 const FEED_PATH = '/cong-dong';
 const POINTS_PATH = '/tai-khoan/diem-xanh';
-const MISSION_PATHS: Record<Exclude<MissionTarget, 'checkin'>, string> = {
-  catalog: '/san-pham',
-  'delivered-orders': '/tai-khoan/don-hang?tab=delivered',
-  invite: '/tai-khoan/vi-tubu',
-};
 
 const errText = loadErrorText;
 
@@ -117,7 +112,7 @@ function GameBody() {
     checkInM.mutate(undefined, { onSuccess: () => action.withDew && dewM.mutate() });
   const goMission = (target: MissionTarget) => {
     if (target === 'checkin') goTab('today', GAME_CHECKIN_ANCHOR);
-    else router.push(MISSION_PATHS[target]);
+    else router.push(MISSION_PATHS.web[target]);
   };
   const shareToCommunity = () =>
     shareHarvestM.mutate(undefined, { onSuccess: () => setHarvest((h) => ({ ...h, shared: true })) });

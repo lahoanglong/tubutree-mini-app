@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Copy, CreditCard, Leaf, MessageCircle, Package, PackageCheck, Pencil, Repeat, Truck, type LucideIcon } from 'lucide-react';
-import { fetchOrders } from '@tubutree/app-core/api/orders';
+import { orderStatusCountsQuery, type OrderStatusKey } from '@tubutree/app-core/api/order-counts';
 import { orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
+import { ORDER_STATUS_ROW, PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/home-layout';
 import { notificationsQuery } from '@tubutree/app-core/queries/account';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
@@ -16,6 +17,7 @@ import { ownedBrandProfileQuery, ownsBrandQuery } from '@tubutree/app-core/queri
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { subscriptionsQuery } from '@tubutree/app-core/queries/subscriptions';
 import { supportChatSummaryQuery } from '@tubutree/app-core/queries/support-chat';
+import { deskPointsQuery } from '@tubutree/app-core/queries/waste';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -26,7 +28,6 @@ import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ProfileAvatar } from '@/components/account/profile-avatar';
 import { buildAccountMenu, type AccountMenuItem } from '@/components/account/account-menu';
-import { ORDERS_TABS } from '@/components/orders/orders-tabs';
 import { Button, Card, Heading, Text } from '@/components/mini';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { OrdersSection } from './orders-section';
@@ -41,7 +42,6 @@ const ORDER_ROW_ICON: Record<string, LucideIcon> = {
   subscriptions: Repeat,
 };
 
-const ORDER_ROW_TARGETS = ORDER_STATUS_ROW.filter((r) => r.counted && r.key !== 'subscriptions');
 const ROW =
   'flex min-h-11 w-full items-center gap-[10px] px-3 py-3 text-left transition hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600';
 
@@ -88,7 +88,7 @@ function Stat({ label, value, href }: { label: string; value: string; href: stri
  * Trang Cá nhân, bản web của `pages/profile.tsx` ở Mini App: hồ sơ, ba số (Điểm Xanh, Ví, Mã giảm giá), hàng trạng thái đơn mở danh sách
  * đã lọc, mã giới thiệu, rồi ba nhóm Kiếm tiền cùng Tubu / Tài khoản / Hỗ trợ. Dưới md giống Mini App; từ md giữ khung giữa trang và khối đơn có ô tìm.
  */
-export default function AccountPage() {
+function AccountContent() {
   const { user } = useAuth();
   const phase = useAuthPhase();
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
@@ -99,17 +99,14 @@ export default function AccountPage() {
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
   const notifQ = useQuery({ ...notificationsQuery(coreHttp), enabled: authed });
   const referralQ = useQuery({ ...referralQuery(coreHttp), enabled: authed });
+  const referralRef = useRef<HTMLElement>(null);
+  const wantsReferral = useSearchParams()?.get('section') === PROFILE_REFERRAL_SECTION;
+  const referralReady = referralQ.isSuccess || referralQ.isError;
+  useEffect(() => {
+    if (wantsReferral && referralReady) referralRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [wantsReferral, referralReady]);
   const subsQ = useQuery({ ...subscriptionsQuery(coreHttp), enabled: authed });
-  const orderCounts = useQueries({
-    queries: ORDER_ROW_TARGETS.map((r) => {
-      const filter = ORDERS_TABS.find((t) => t.key === r.key)?.filter ?? {};
-      return {
-        queryKey: ['orders', 'count', r.key],
-        queryFn: () => fetchOrders(coreHttp, filter, 1, 1).then((res) => res.meta.total),
-        enabled: authed,
-      };
-    }),
-  });
+  const orderCountsQ = useQuery({ ...orderStatusCountsQuery(coreHttp), enabled: authed });
   const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: authed });
   const chatEnabled = cfgQ.data?.chat?.enabled === true;
   const chatSummaryQ = useQuery({ ...supportChatSummaryQuery(coreHttp), enabled: authed && chatEnabled });
@@ -123,6 +120,9 @@ export default function AccountPage() {
     staleTime: 5 * 60_000,
   });
   const dealerQ = useQuery({ ...dealerMeQuery(coreHttp), enabled: authed, retry: false });
+  // Điểm nhận hàng chỉ có ở nhân viên/admin (kho) và điểm đối tác của đại lý; khách thường không bị gọi thêm API.
+  const mayHaveDesk = user?.role === 'STAFF' || user?.role === 'ADMIN' || (user?.role === 'DEALER' && cfgQ.data?.waste?.enabled === true);
+  const deskQ = useQuery({ ...deskPointsQuery(coreHttp), enabled: authed && mayHaveDesk, staleTime: 5 * 60_000, retry: false });
   // Chỉ vai không rõ quyền CTV (đại lý, nhân viên, admin) mới cần hỏi; CTV và khách thường suy được từ vai trò.
   const needsCtvProbe = authed && !!user?.role && user.role !== 'CUSTOMER' && user.role !== 'AFFILIATE';
   const ctvAccessQ = useQuery({ ...affiliateMeQuery(coreHttp), enabled: needsCtvProbe, retry: false });
@@ -172,19 +172,19 @@ export default function AccountPage() {
     dealer: dealerQ.data,
     ctvAccess: ctvAccessQ.data,
     ownedBrandName: ownsBrandQ.data === false ? undefined : ownedBrandQ.data?.name,
+    deskPointNames: deskQ.data?.map((p) => p.name),
     isReady: isWebRouteReady,
   });
 
-  const countsFailed = orderCounts.some((q) => q.isError) || (subsQ.isError && !subsQ.data);
+  const countsFailed = orderCountsQ.isError || (subsQ.isError && !subsQ.data);
   const reloadCounts = () => {
-    orderCounts.forEach((q) => void q.refetch());
+    void orderCountsQ.refetch();
     void subsQ.refetch();
   };
 
   const countFor = (key: string): number | null => {
     if (key === 'subscriptions') return subsQ.data ? subsQ.data.filter((x) => x.status === 'ACTIVE' || x.status === 'PAUSED').length : null;
-    const i = ORDER_ROW_TARGETS.findIndex((r) => r.key === key);
-    return i >= 0 ? (orderCounts[i]?.data ?? null) : null;
+    return orderCountsQ.data?.[key as OrderStatusKey] ?? null;
   };
 
   const copyReferral = async () => {
@@ -346,7 +346,7 @@ export default function AccountPage() {
         </section>
 
         {code && (
-          <section aria-label={homeCopy.profile.referralTitle} className="px-4 pt-3">
+          <section id={PROFILE_REFERRAL_SECTION} ref={referralRef} aria-label={homeCopy.profile.referralTitle} className="px-4 pt-3">
             <Card padding={12}>
               <Heading variant="title-sm" as="h2">
                 {homeCopy.profile.referralTitle}
@@ -416,5 +416,21 @@ export default function AccountPage() {
         <div className="h-4" />
       </div>
     </main>
+  );
+}
+
+// Trang đọc useSearchParams (?section=referral): build tĩnh bắt buộc có Suspense bao ngoài.
+export default function AccountPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className={`${PAGE_WIDE} py-20 text-center`}>
+          <h1 className="sr-only">Cá nhân</h1>
+          <AuthLoading />
+        </main>
+      }
+    >
+      <AccountContent />
+    </Suspense>
   );
 }

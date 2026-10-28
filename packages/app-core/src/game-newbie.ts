@@ -3,6 +3,8 @@
  * và web cùng đọc file này nên chữ và luật không lệch nhau.
  */
 
+import { PROFILE_REFERRAL_SECTION } from './home-layout';
+
 /** Lượng nước của một lần tưới lô phụ; nút chính "Tưới hết" gửi toàn bộ số giọt đang có. */
 export const WATER_STEP = 20;
 
@@ -229,6 +231,23 @@ export function missionTarget(code: string, kind?: string | null): MissionTarget
   if (Object.prototype.hasOwnProperty.call(MISSION_TARGETS, code)) return MISSION_TARGETS[code]!;
   return kind && Object.prototype.hasOwnProperty.call(KIND_TARGETS, kind) ? KIND_TARGETS[kind]! : null;
 }
+
+/**
+ * Đường dẫn nút "Làm ngay" của từng đích, mỗi nền một bảng (cùng đích, khác đường dẫn). "Mời bạn" mở khối mã giới thiệu ở Cá nhân, nơi
+ * khách thật sự sao chép và chia sẻ mã; Ví chỉ hiện số dư.
+ */
+export const MISSION_PATHS = {
+  miniapp: {
+    catalog: '/browse',
+    'delivered-orders': '/orders?tab=delivered',
+    invite: `/profile?section=${PROFILE_REFERRAL_SECTION}`,
+  },
+  web: {
+    catalog: '/san-pham',
+    'delivered-orders': '/tai-khoan/don-hang?tab=delivered',
+    invite: `/tai-khoan?section=${PROFILE_REFERRAL_SECTION}`,
+  },
+} as const satisfies Record<'miniapp' | 'web', Record<Exclude<MissionTarget, 'checkin'>, string>>;
 
 /** Mã khối điểm danh trong trang game, đích cuộn của nhiệm vụ "Chăm chỉ 7 ngày". */
 export const GAME_CHECKIN_ANCHOR = 'game-checkin';

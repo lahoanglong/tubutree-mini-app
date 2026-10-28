@@ -195,3 +195,29 @@ describe('lối vào Hoàn tiền sàn ngoài theo cờ CASHBACK_ENABLED', () =>
     expect(isWebRouteReady('/hoan-tien')).toBe(true);
   });
 });
+
+describe('lối vào quầy Nhận hàng tại điểm (E-39)', () => {
+  const deskItem = (over: Partial<AccountMenuContext>) => all(buildAccountMenu(ctx(over))).find((i) => i.to === '/doi-rac/quay');
+
+  it('có điểm: hàng nằm ở nhóm Công việc, ghi tên điểm, trỏ /doi-rac/quay (kể cả đại lý không phải nhân viên)', () => {
+    const m = buildAccountMenu(ctx({ role: 'DEALER', deskPointNames: ['Đại lý An Phát', 'Kho Tubu HCMC'] }));
+    expect(labels(m, 'Công việc')).toEqual(['Nhận hàng tại điểm']);
+    expect(deskItem({ deskPointNames: ['Đại lý An Phát', 'Kho Tubu HCMC'] })).toMatchObject({ label: 'Nhận hàng tại điểm', hint: 'Đại lý An Phát, Kho Tubu HCMC' });
+  });
+
+  it('nhân viên: hàng đứng sau Ca làm và Lương, trước Quản trị', () => {
+    const m = buildAccountMenu(ctx({ role: 'ADMIN', deskPointNames: ['Kho Tubu HCMC'] }));
+    expect(labels(m, 'Công việc')).toEqual(['Ca làm & chấm công', 'Lương của tôi', 'Nhận hàng tại điểm', 'Quản trị nhân sự']);
+  });
+
+  it('không có điểm, danh sách rỗng hoặc chưa tải: không có hàng', () => {
+    expect(deskItem({ role: 'STAFF' })).toBeUndefined();
+    expect(deskItem({ role: 'STAFF', deskPointNames: [] })).toBeUndefined();
+  });
+
+  it('route /doi-rac/quay xong trong route map: hàng không bị ẩn; còn pending thì ẩn', () => {
+    expect(isWebRouteReady('/doi-rac/quay')).toBe(true);
+    expect(deskItem({ deskPointNames: ['Kho'], isReady: isWebRouteReady })).toBeDefined();
+    expect(deskItem({ deskPointNames: ['Kho'], isReady: (p) => p !== '/doi-rac/quay' })).toBeUndefined();
+  });
+});

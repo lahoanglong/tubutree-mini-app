@@ -601,7 +601,7 @@ describe('Vườn Xanh: nhiệm vụ', () => {
     click(goButtons[1]!);
     expect(state.push).toHaveBeenLastCalledWith('/tai-khoan/don-hang?tab=delivered');
     click(goButtons[2]!);
-    expect(state.push).toHaveBeenLastCalledWith('/tai-khoan/vi-tubu');
+    expect(state.push).toHaveBeenLastCalledWith('/tai-khoan?section=referral');
     expect(c.querySelector('[role="progressbar"][aria-label="Viết đánh giá: 0/3"]')).not.toBeNull();
   });
 

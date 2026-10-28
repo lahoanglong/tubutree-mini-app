@@ -16,7 +16,9 @@ const mocks = vi.hoisted(() => ({
   getPublicConfig: vi.fn(async () => ({})),
   chatSummary: vi.fn(),
   guest: false,
-  fetchOrders: vi.fn(),
+  orderCounts: vi.fn(),
+  search: '',
+  deskPoints: vi.fn(),
   getReferral: vi.fn(),
   getSubscriptions: vi.fn(),
   shareLink: vi.fn(),
@@ -35,7 +37,11 @@ vi.mock('../utils/features', () => ({
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getPublicConfig: mocks.getPublicConfig,
-  fetchOrders: mocks.fetchOrders,
+}));
+vi.mock('../services/order-counts-api', () => ({ fetchOrderStatusCounts: mocks.orderCounts }));
+vi.mock('../services/waste-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getDeskPoints: mocks.deskPoints,
 }));
 vi.mock('../services/zmp-bridge', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -47,6 +53,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   Avatar: () => <span />,
   useNavigate: () => mocks.navigate,
+  useLocation: () => ({ search: mocks.search }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/support-chat-api', () => ({
@@ -90,10 +97,9 @@ function renderPage() {
 const REFERRAL = { referralCode: 'LAN1', successCount: 0, earnedPoints: 0, minOrderAmount: 200_000, windowDays: 30 };
 function arrangeDefaults() {
   mocks.guest = false;
-  mocks.fetchOrders.mockImplementation(async (filter: { status?: string; group?: string }) => ({
-    data: [],
-    meta: { page: 1, limit: 1, total: filter.status === 'PENDING_PAYMENT' ? 2 : filter.status === 'SHIPPING' ? 1 : 0 },
-  }));
+  mocks.orderCounts.mockResolvedValue({ pending_payment: 2, processing: 0, shipping: 1, delivered: 0, closed: 0 });
+  mocks.deskPoints.mockResolvedValue([]);
+  mocks.search = '';
   mocks.getReferral.mockResolvedValue(REFERRAL);
   mocks.getSubscriptions.mockResolvedValue([{ status: 'ACTIVE' }, { status: 'CANCELLED' }]);
 }
@@ -305,7 +311,7 @@ describe('Hàng trạng thái đơn ở đầu trang Cá nhân', () => {
   });
 
   it('đếm đơn lỗi → ô vẫn bấm được, hiện dấu chấm thay vì số bịa', async () => {
-    mocks.fetchOrders.mockRejectedValue(new Error('boom'));
+    mocks.orderCounts.mockRejectedValue(new Error('boom'));
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Đang giao' }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/orders?tab=shipping');
@@ -471,12 +477,12 @@ describe('Cá nhân: hàng đơn, chat ở đầu trang, Học viện theo vai, 
   it('Mini App tắt giao định kỳ: lưới 4 cột, Thử lại số đơn không gọi danh sách định kỳ', async () => {
     mocks.subscriptions = false;
     try {
-      mocks.fetchOrders.mockRejectedValue(new Error('boom'));
+      mocks.orderCounts.mockRejectedValue(new Error('boom'));
       renderPage();
       expect(await screen.findByText('Không tải được số đơn.')).toBeInTheDocument();
       const cell = screen.getByRole('button', { name: 'Đã giao' });
       expect((cell.parentElement as HTMLElement).style.gridTemplateColumns).toBe('repeat(4, minmax(0, 1fr))');
-      mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 1, total: 3 } });
+      mocks.orderCounts.mockResolvedValue({ pending_payment: 3, processing: 3, shipping: 3, delivered: 3, closed: 3 });
       fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
       await waitFor(() => expect(screen.queryByText('Không tải được số đơn.')).toBeNull());
       expect(mocks.getSubscriptions).not.toHaveBeenCalled();
@@ -486,13 +492,13 @@ describe('Cá nhân: hàng đơn, chat ở đầu trang, Học viện theo vai, 
   });
 
   it('đếm đơn lỗi: có dòng báo và nút Thử lại tải lại số đơn', async () => {
-    mocks.fetchOrders.mockRejectedValue(new Error('boom'));
+    mocks.orderCounts.mockRejectedValue(new Error('boom'));
     renderPage();
     expect(await screen.findByText('Không tải được số đơn.')).toBeInTheDocument();
-    const before = mocks.fetchOrders.mock.calls.length;
-    mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 1, total: 3 } });
+    const before = mocks.orderCounts.mock.calls.length;
+    mocks.orderCounts.mockResolvedValue({ pending_payment: 3, processing: 3, shipping: 3, delivered: 3, closed: 3 });
     fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
-    await waitFor(() => expect(mocks.fetchOrders.mock.calls.length).toBeGreaterThan(before));
+    await waitFor(() => expect(mocks.orderCounts.mock.calls.length).toBeGreaterThan(before));
     await waitFor(() => expect(screen.queryByText('Không tải được số đơn.')).toBeNull());
   });
 
@@ -525,5 +531,103 @@ describe('Cá nhân: hàng đơn, chat ở đầu trang, Học viện theo vai, 
     renderPage();
     await screen.findByText('Câu chuyện thương hiệu');
     expect(screen.queryByRole('button', { name: 'Đăng xuất' })).toBeNull();
+  });
+});
+
+describe('Số đếm đơn một lời gọi (E-91)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    arrangeDefaults();
+    mocks.authStatus = 'authenticated';
+    mocks.notifications = [];
+    mocks.role = 'CUSTOMER';
+    mocks.getPublicConfig.mockImplementation(async () => ({}));
+  });
+
+  it('một lời gọi đếm cho cả ba ô đơn, không còn mỗi ô một lời gọi danh sách', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: 'Chờ thanh toán, 2 đơn' });
+    expect(screen.getByRole('button', { name: 'Đang giao, 1 đơn' })).toBeInTheDocument();
+    expect(mocks.orderCounts).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Lối vào khối mã giới thiệu (E-21)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    arrangeDefaults();
+    mocks.authStatus = 'authenticated';
+    mocks.notifications = [];
+    mocks.role = 'CUSTOMER';
+    mocks.getPublicConfig.mockImplementation(async () => ({}));
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('?section=referral cuộn tới khối mã giới thiệu khi dữ liệu mời bạn đã về', async () => {
+    mocks.search = '?section=referral';
+    renderPage();
+    await screen.findByText(/có đơn thứ hai từ 200\.000đ trong 30 ngày/);
+    await waitFor(() => expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled());
+    const target = (window.HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mock.contexts[0] as HTMLElement;
+    expect(target.id).toBe('referral');
+  });
+
+  it('không có ?section=referral thì không cuộn', async () => {
+    renderPage();
+    await screen.findByText(/có đơn thứ hai từ 200\.000đ trong 30 ngày/);
+    expect(window.HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
+describe('Lối vào quầy Nhận hàng tại điểm (E-39)', () => {
+  const POINTS = [{ id: 'p1', name: 'Kho Tubu HCMC', kind: 'WAREHOUSE' }, { id: 'p2', name: 'Đại lý An Phát', kind: 'PARTNER' }];
+  beforeEach(() => {
+    vi.clearAllMocks();
+    arrangeDefaults();
+    mocks.authStatus = 'authenticated';
+    mocks.notifications = [];
+    mocks.role = 'CUSTOMER';
+    mocks.getPublicConfig.mockImplementation(async () => ({}));
+  });
+
+  it('nhân viên có điểm: hiện hàng, ghi tên điểm, mở /recycle/desk', async () => {
+    mocks.role = 'STAFF';
+    mocks.deskPoints.mockResolvedValue(POINTS);
+    renderPage();
+    expect(await screen.findByText('Kho Tubu HCMC, Đại lý An Phát')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Nhận hàng tại điểm'));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/desk');
+  });
+
+  it('nhân viên không có điểm nào: không có hàng', async () => {
+    mocks.role = 'STAFF';
+    renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    await waitFor(() => expect(mocks.deskPoints).toHaveBeenCalled());
+    expect(screen.queryByText('Nhận hàng tại điểm')).toBeNull();
+  });
+
+  it('đại lý có điểm đối tác: hiện hàng; chương trình đổi rác tắt thì không hỏi điểm', async () => {
+    mocks.role = 'DEALER';
+    mocks.deskPoints.mockResolvedValue([POINTS[1]]);
+    mocks.getPublicConfig.mockResolvedValue({ waste: { enabled: true } });
+    const { unmount } = renderPage();
+    expect(await screen.findByText('Nhận hàng tại điểm')).toBeInTheDocument();
+    unmount();
+    mocks.deskPoints.mockClear();
+    mocks.getPublicConfig.mockResolvedValue({ waste: { enabled: false } });
+    renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    await waitFor(() => expect(screen.queryByText('Nhận hàng tại điểm')).toBeNull());
+    expect(mocks.deskPoints).not.toHaveBeenCalled();
+  });
+
+  it('khách thường không phát sinh lời gọi điểm nhận hàng', async () => {
+    mocks.deskPoints.mockResolvedValue(POINTS);
+    renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    await waitFor(() => expect(mocks.orderCounts).toHaveBeenCalled());
+    expect(mocks.deskPoints).not.toHaveBeenCalled();
+    expect(screen.queryByText('Nhận hàng tại điểm')).toBeNull();
   });
 });
