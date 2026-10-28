@@ -761,7 +761,7 @@ export default function CheckoutPage() {
               </Text>
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                 {pointsUsable
-                  ? pointsOfferText(points.usable, quote.data, usePoints && quote.data ? quote.data : null)
+                  ? pointsOfferText(points.usable, quote.data, usePoints && quote.data ? quote.data : null, publicConfig.loyalty?.vndPerPointRedeem)
                   : (points.label ?? vi.checkout.pointsNone)}
               </Text>
               {points.usable > 0 && partnerPoints.capNote && (

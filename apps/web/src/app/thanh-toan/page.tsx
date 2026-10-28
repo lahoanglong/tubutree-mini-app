@@ -764,8 +764,8 @@ export default function CheckoutPage() {
                 <span className="block font-semibold max-md:text-stone-900">Điểm Xanh</span>
                 <span className="block text-caption max-md:text-stone-600">
                   {partnerPoints.disabled
-                    ? `Bạn có ${formatCount(usablePoints)} điểm`
-                    : pointsOfferText(usablePoints, quote, usePoints && quote ? quote : null)}
+                    ? `Dùng được ${formatCount(usablePoints)} điểm`
+                    : pointsOfferText(usablePoints, quote, usePoints && quote ? quote : null, configQ.data?.loyalty?.vndPerPointRedeem)}
                 </span>
               </span>
             </label>
