@@ -18,6 +18,17 @@ export const platformBridge: PlatformBridge = {
     }
   },
 
+  async saveImage(url) {
+    if (!isHttpUrl(url)) return 'failed';
+    try {
+      const { saveImageFromUrl } = await import('./zmp-save-image');
+      await saveImageFromUrl(url);
+      return 'saved';
+    } catch {
+      return 'failed';
+    }
+  },
+
   openExternal(url) {
     if (!isHttpUrl(url)) return;
     void openExternal(url).catch(() => {});

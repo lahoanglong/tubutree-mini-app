@@ -27,6 +27,7 @@ vi.mock('../utils/features', () => ({
     return mocks.cashback;
   },
   SEASON_PASS_ENABLED: false,
+  SUBSCRIPTIONS_IN_MINIAPP: true,
 }));
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),

@@ -10,13 +10,13 @@ const zmp = vi.hoisted(() => ({
 }));
 vi.mock('./zmp-bridge', () => zmp);
 
-const sdk = vi.hoisted(() => ({ getStorage: vi.fn(), setStorage: vi.fn() }));
+const sdk = vi.hoisted(() => ({ getStorage: vi.fn(), setStorage: vi.fn(), saveImageToGallery: vi.fn() }));
 vi.mock('zmp-sdk/apis', () => sdk);
 
 import { platformBridge } from './platform-bridge';
 
 beforeEach(() => {
-  for (const f of [zmp.shareLink, zmp.openExternal, zmp.callPhone, zmp.openOAChat, zmp.followOA, sdk.getStorage, sdk.setStorage]) f.mockReset();
+  for (const f of [zmp.shareLink, zmp.openExternal, zmp.callPhone, zmp.openOAChat, zmp.followOA, sdk.getStorage, sdk.setStorage, sdk.saveImageToGallery]) f.mockReset();
   zmp.shareLink.mockResolvedValue(undefined);
   zmp.openExternal.mockResolvedValue(undefined);
   zmp.callPhone.mockResolvedValue(undefined);
@@ -64,6 +64,17 @@ describe('platform-bridge (Mini App)', () => {
   it.each(['javascript:alert(1)', 'data:text/html,x', 'not a url'])('openExternal không chuyển URL ngoài http(s) cho zmp: %s', (url) => {
     platformBridge.openExternal(url);
     expect(zmp.openExternal).not.toHaveBeenCalled();
+  });
+
+  it('saveImage lưu ảnh vào thư viện máy: saved, SDK lỗi: failed, URL không phải http(s): failed không gọi SDK', async () => {
+    sdk.saveImageToGallery.mockResolvedValue(undefined);
+    expect(await platformBridge.saveImage('https://img.vietqr.io/x.png', 'qr.png')).toBe('saved');
+    expect(sdk.saveImageToGallery).toHaveBeenCalledWith({ imageUrl: 'https://img.vietqr.io/x.png' });
+    sdk.saveImageToGallery.mockRejectedValue(new Error('denied'));
+    expect(await platformBridge.saveImage('https://img.vietqr.io/x.png', 'qr.png')).toBe('failed');
+    sdk.saveImageToGallery.mockClear();
+    expect(await platformBridge.saveImage('javascript:1', 'qr.png')).toBe('failed');
+    expect(sdk.saveImageToGallery).not.toHaveBeenCalled();
   });
 
   it('oa.openChat và follow chuyển cho zmp-bridge', async () => {

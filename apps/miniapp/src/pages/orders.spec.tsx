@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getSubscriptions: vi.fn(), search: '', getNewCustomerOffer: vi.fn(),
   getPublicConfig: vi.fn().mockResolvedValue({ subscribeDiscountPct: 0.12 }),
 }));
+vi.mock('../utils/features', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), SUBSCRIPTIONS_IN_MINIAPP: true }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,

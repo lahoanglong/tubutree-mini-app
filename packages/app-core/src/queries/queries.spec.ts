@@ -61,7 +61,7 @@ const cases: Case[] = [
   ['flashActive', (h) => flash.flashActiveQuery(h), ['flash-sales', 'active'], '/flash-sales/active'],
   ['flashUpcoming', (h) => flash.flashUpcomingQuery(h), ['flash-sales', 'upcoming'], '/flash-sales/upcoming'],
   ['publicConfig', (h) => config.publicConfigQuery(h), ['public-config'], '/config/public'],
-  ['groupBuyList', (h) => groupbuy.groupBuyListQuery(h), ['group-buy'], '/group-buy'],
+  ['groupBuyList', (h) => groupbuy.groupBuyListQuery(h), ['group-buy', 'list', 'guest'], '/group-buy'],
   ['groupBuyOne', (h) => groupbuy.groupBuyOneQuery(h, 'g1'), ['group-buy', 'one', 'g1'], '/group-buy/g1'],
   ['publicBrand', (h) => brand.publicBrandQuery(h, 'tubu'), ['public-brand', 'tubu'], '/brand/public/tubu'],
   ['brandFollow', (h) => brand.brandFollowQuery(h, 'tubu'), ['brand-follow', 'tubu'], '/brand/tubu/follow-state'],
@@ -182,5 +182,14 @@ describe('makeFlashRefetchInterval (B-132)', () => {
 
   it('suất không có endAt hợp lệ: nhịp 60 giây', () => {
     expect(poll({ state: { data: [{}, { endAt: 'abc' }] } })).toBe(60_000);
+  });
+});
+
+describe('groupBuyListQuery gắn với người xem (R-25)', () => {
+  it('khách và thành viên có khoá khác nhau, nên đăng nhập xong không dùng lại danh sách của khách', async () => {
+    const { groupBuyListQuery } = await import('./groupbuy');
+    const http = {} as never;
+    expect(groupBuyListQuery(http, 'guest').queryKey).not.toEqual(groupBuyListQuery(http, 'u1').queryKey);
+    expect(groupBuyListQuery(http, 'u1').queryKey).toEqual(['group-buy', 'list', 'u1']);
   });
 });

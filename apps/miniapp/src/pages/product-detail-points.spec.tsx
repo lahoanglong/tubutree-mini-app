@@ -76,20 +76,20 @@ describe('ProductDetailPage — dòng Điểm Xanh sẽ nhận (D2-07c)', () => 
 
   it('khách chưa đăng nhập: số điểm và giá trị quy đổi theo tỉ lệ trong config công khai (250.000đ × 2% = 5.000 điểm)', async () => {
     renderPdp();
-    expect(await screen.findByText('Nhận tối đa 5.000 Điểm Xanh (≈5.000đ) khi đơn giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận ~5.000 Điểm Xanh')).toBeInTheDocument();
   });
 
   it('số theo tỉ lệ admin đặt, không theo số cứng: 1,5% và 0,5đ/điểm', async () => {
     mocks.config = { isLoaded: true, loyalty: { earnPct: 1.5, vndPerPoint: 67, vndPerPointRedeem: 0.5 } };
     renderPdp();
-    expect(await screen.findByText('Nhận tối đa 3.750 Điểm Xanh (≈1.875đ) khi đơn giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận ~3.750 Điểm Xanh')).toBeInTheDocument();
   });
 
   it('API cũ chưa trả mốc điểm: chỉ nói chung, không có con số', async () => {
     mocks.config = { isLoaded: true };
     renderPdp();
     expect(await screen.findByText('Nhận Điểm Xanh khi đơn giao thành công')).toBeInTheDocument();
-    expect(screen.queryByText(/Nhận tối đa/)).toBeNull();
+    expect(screen.queryByText(/Nhận ~/)).toBeNull();
   });
 
   const TIERS = { tierMultipliers: { MAM_XANH: 1, LOC_BIEC: 1.2, DAI_THU: 1.25 }, tierNames: { MAM_XANH: 'Mầm Xanh', LOC_BIEC: 'Lộc Biếc', DAI_THU: 'Đại Thụ' } };
@@ -102,7 +102,7 @@ describe('ProductDetailPage — dòng Điểm Xanh sẽ nhận (D2-07c)', () => 
     mocks.auth.status = 'authenticated';
     mocks.auth.user = { tierId: 'LOC_BIEC' };
     renderPdp();
-    expect(await screen.findByText('Nhận tối đa 6.000 Điểm Xanh · hạng Lộc Biếc ×1,2 (≈6.000đ) khi đơn giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận ~6.000 Điểm Xanh')).toBeInTheDocument();
   });
 
   it('hệ số lẻ hai số: ×1,25 và số điểm theo cùng công thức server (250.000đ × 2% × 1,25 = 6.250)', async () => {
@@ -110,7 +110,7 @@ describe('ProductDetailPage — dòng Điểm Xanh sẽ nhận (D2-07c)', () => 
     mocks.auth.status = 'authenticated';
     mocks.auth.user = { tierId: 'DAI_THU' };
     renderPdp();
-    expect(await screen.findByText('Nhận tối đa 6.250 Điểm Xanh · hạng Đại Thụ ×1,25 (≈6.250đ) khi đơn giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận ~6.250 Điểm Xanh')).toBeInTheDocument();
   });
 
   it('hạng Mầm Xanh (hệ số 1): số gốc, không giải thích', async () => {
@@ -118,7 +118,7 @@ describe('ProductDetailPage — dòng Điểm Xanh sẽ nhận (D2-07c)', () => 
     mocks.auth.status = 'authenticated';
     mocks.auth.user = { tierId: 'MAM_XANH' };
     renderPdp();
-    expect(await screen.findByText('Nhận tối đa 5.000 Điểm Xanh (≈5.000đ) khi đơn giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận ~5.000 Điểm Xanh')).toBeInTheDocument();
   });
 
   it('tài khoản có hạng nhưng config chưa có bảng hạng (API cũ) hoặc phiên cũ thiếu tierId: nói chung, không đoán', async () => {
@@ -140,7 +140,7 @@ describe('ProductDetailPage — dòng Điểm Xanh sẽ nhận (D2-07c)', () => 
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     qc.setQueryData(['loyalty'], { tier: { id: 'MAM_XANH', name: 'Mầm Xanh', multiplier: 1.2, perks: null } });
     renderPdp(qc);
-    expect(await screen.findByText('Nhận tối đa 5.000 Điểm Xanh (≈5.000đ) khi đơn giao thành công')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận ~5.000 Điểm Xanh')).toBeInTheDocument();
   });
 
   it('đang kiểm tra phiên đăng nhập: chưa hứa số nào', async () => {
@@ -168,13 +168,13 @@ describe('ProductDetailPage — dòng Điểm Xanh sẽ nhận (D2-07c)', () => 
     it('state { pinnedVariationId } mở đúng phân loại đã mua dù đắt hơn: giá trang (qua dòng điểm) khớp giá thẻ 250.000đ', async () => {
       mocks.fetchProduct.mockResolvedValue(twoVariations());
       renderPdp(undefined, { pinnedVariationId: 'v2' });
-      expect(await screen.findByText('Nhận tối đa 5.000 Điểm Xanh (≈5.000đ) khi đơn giao thành công')).toBeInTheDocument();
+      expect(await screen.findByText('Nhận ~5.000 Điểm Xanh')).toBeInTheDocument();
     });
 
     it('state { variationId } khi phân loại đó không có Giờ vàng thì KHÔNG đủ để mở nó (đó là lý do kệ phải dùng pinnedVariationId)', async () => {
       mocks.fetchProduct.mockResolvedValue(twoVariations());
       renderPdp(undefined, { variationId: 'v2' });
-      expect(await screen.findByText('Nhận tối đa 2.000 Điểm Xanh (≈2.000đ) khi đơn giao thành công')).toBeInTheDocument();
+      expect(await screen.findByText('Nhận ~2.000 Điểm Xanh')).toBeInTheDocument();
     });
   });
 });

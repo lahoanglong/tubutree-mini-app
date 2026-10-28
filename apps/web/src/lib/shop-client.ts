@@ -165,6 +165,8 @@ export interface PublicConfig {
   waste?: { enabled: boolean; dropoff: boolean; mailin: boolean; pickup: boolean };
   /** Khoảng ngày giao dự kiến; null/thiếu khi chủ shop chưa cấu hình (hoặc API cũ) thì ẩn dòng "Giao dự kiến". */
   shippingEta?: { minDays: number; maxDays: number } | null;
+  /** Tỉ giá quy đổi điểm khi trả đơn (đ/điểm); thiếu thì coi như 1. */
+  loyalty?: { vndPerPointRedeem?: number };
 }
 export const getPublicConfig = () => apiFetch<PublicConfig>('/config/public', { auth: false });
 

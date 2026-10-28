@@ -24,6 +24,7 @@ import { withReferral } from '../utils/share-link';
 import { ReviewsSection, Stars } from '../components/reviews-section';
 import { WishlistHeart } from '../components/wishlist-heart';
 import { SubscribeSheet } from '../components/subscribe-sheet';
+import { VariationSheet, type VariationSheetMode } from '../components/variation-sheet';
 import { fetchReviews } from '../services/shop-api';
 import { tilePricing } from '../components/catalog/catalog-pricing';
 import { trackEvent } from '../services/analytics';
@@ -44,9 +45,11 @@ import { useCountdown } from '../hooks/use-countdown';
 import { serverNow } from '../utils/server-clock';
 import { cardPricing, defaultVariationFor, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
+import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
+import { SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 import { getAffiliateMe } from '../services/affiliate-api';
 import { ContentKitSheet } from '../components/content-kit-sheet';
 import { CartBadge } from '../components/ui/cart-badge';
@@ -56,7 +59,6 @@ import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { SectionTitle } from '../components/ui/section-title';
 import { PriceTag } from '../components/ui/price-tag';
 import { PointsEarnLine } from '../components/product/points-earn-line';
-import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
 import { Badge } from '../components/ui/badge';
 import { Icon } from '../components/ui/icon';
 import { ProductTile } from '../components/ui/product-tile';
@@ -112,10 +114,13 @@ export default function ProductDetailPage() {
   const location = useLocation();
   const navState = location.state as { variationId?: string; pinnedVariationId?: string; listSource?: string; reviewOrderId?: string } | null;
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Bảng đóng có hiệu ứng ~200ms nên nút xác nhận còn bấm được: khoá đồng bộ để bấm đúp không thêm giỏ hai lần hay gọi login hai lần.
+  const confirming = useRef(false);
   const autoPick = useRef<{ slug: string; id: string | null } | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [badgeBounce, setBadgeBounce] = useState(false);
   const [showSubscribe, setShowSubscribe] = useState(false);
+  const [sheetMode, setSheetMode] = useState<VariationSheetMode | null>(null);
   const [showContentKit, setShowContentKit] = useState(false);
   // "Bộ nội dung bán hàng" trước đây CHỈ mở được từ trình dựng gian hàng, tức CTV phải thêm
   // sản phẩm vào gian hàng mới lấy được bài mẫu — trong khi lúc cần là lúc đang xem sản phẩm
@@ -228,7 +233,7 @@ export default function ProductDetailPage() {
       queryClient.setQueryData(cartKey(), updatedCart);
       haptic('medium');
       setBadgeBounce(true);
-      openSnackbar({ text: vi.product.added, type: 'success', duration: 2000 });
+      openSnackbar({ text: vi.product.added, type: 'success', duration: 2000, position: 'top' });
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -309,7 +314,30 @@ export default function ProductDetailPage() {
   const fromStore = merchant ?? unavailable;
   const retailOnly = isRetailOnly(p);
 
+  const confirmVariation = async (variation: VariationDetail, qty: number) => {
+    if (!sheetMode || confirming.current || addMutation.isPending || buyNowMutation.isPending) return;
+    confirming.current = true;
+    try {
+      if (status !== 'authenticated') {
+        await login();
+        if (useAuthStore.getState().status !== 'authenticated') return;
+      }
+      const mode = sheetMode;
+      setSheetMode(null);
+      setSelectedId(variation.id);
+      setQuantity(qty);
+      if (mode === 'buy') buyNowMutation.mutate({ variation, qty });
+      else addMutation.mutate({ variation, qty });
+    } finally {
+      confirming.current = false;
+    }
+  };
+
   const handleAdd = async () => {
+    if (needsVariationPicker(variations)) {
+      setSheetMode('add');
+      return;
+    }
     if (status !== 'authenticated') {
       await login();
       if (useAuthStore.getState().status !== 'authenticated') return;
@@ -322,6 +350,10 @@ export default function ProductDetailPage() {
   };
 
   const handleBuyNow = async () => {
+    if (needsVariationPicker(variations)) {
+      setSheetMode('buy');
+      return;
+    }
     if (status !== 'authenticated') {
       await login();
       if (useAuthStore.getState().status !== 'authenticated') return;
@@ -416,7 +448,6 @@ export default function ProductDetailPage() {
         </Box>
 
         <PointsEarnLine goods={price * quantity} authStatus={status} tierId={user?.tierId} />
-        <PointsBoostStrip placement="product" />
 
         {/* Giờ vàng cho phân loại đang chọn — badge % + đếm ngược êm + đã bán bao nhiêu%. */}
         {flashItem && priceView.isFlash && (
@@ -580,7 +611,7 @@ export default function ProductDetailPage() {
           </ScrollRow>
         )}
 
-        {selected && inStock && !retailOnly && (
+        {SUBSCRIPTIONS_IN_MINIAPP && selected && inStock && !retailOnly && (
           <Box
             role="button"
             {...rowKeyboardProps()}
@@ -823,6 +854,22 @@ export default function ProductDetailPage() {
           onClose={() => setShowSubscribe(false)}
           variationId={selected.id}
           quantity={quantity}
+        />
+      )}
+
+      {needsVariationPicker(variations) && (
+        <VariationSheet
+          open={sheetMode !== null}
+          onClose={() => setSheetMode(null)}
+          mode={sheetMode ?? 'add'}
+          productName={p.name}
+          thumbnail={p.thumbnail}
+          variations={variations}
+          flash={flashList}
+          initialId={selected?.id ?? null}
+          initialQty={quantity}
+          busy={addMutation.isPending || buyNowMutation.isPending}
+          onConfirm={(v, qty) => confirmVariation(v as VariationDetail, qty)}
         />
       )}
 
