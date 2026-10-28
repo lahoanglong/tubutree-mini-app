@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import { Input, Page, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchCourses } from '../services/academy-api';
-import { useAuthStore } from '../store/auth';
 import {
   getAffiliateMe,
   registerAffiliate,
@@ -151,8 +150,6 @@ function RegisterGate() {
       haptic('medium');
       openSnackbar({ text: 'Chào mừng CTV Tubu Tree! 🎉', type: 'success' });
       void qc.invalidateQueries({ queryKey: ['affiliate-me'] });
-      // Vai trò trong phiên còn là khách thường: nạp lại để Học viện không chặn người vừa thành CTV.
-      void useAuthStore.getState().restore();
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
