@@ -180,8 +180,10 @@ test.describe('Admin: lương', () => {
     await expect(page.getByRole('status').filter({ hasText: 'Đã ghi khoản phạt 50.000đ' })).toBeVisible();
     expect(api.callsTo('POST', '/admin/payroll/adjust')[0]!.body).toMatchObject({ staffId: 's1', amount: 50_000, reason: 'Đi trễ ca sáng' });
 
+    // Ghi khoản xong tự tính lại đúng một lần; huỷ hộp "Tính lại tháng" thì không thêm lần nào.
+    expect(api.callsTo('POST', '/admin/payroll/:id/recompute')).toHaveLength(1);
     await page.getByRole('button', { name: 'Tính lại tháng · Lan' }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Huỷ' }).click();
-    expect(api.callsTo('POST', '/admin/payroll/:id/recompute')).toHaveLength(0);
+    expect(api.callsTo('POST', '/admin/payroll/:id/recompute')).toHaveLength(1);
   });
 });

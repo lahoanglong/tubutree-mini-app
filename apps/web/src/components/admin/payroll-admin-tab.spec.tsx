@@ -6,7 +6,7 @@ vi.mock('@/lib/export-csv', () => ({ downloadCsvFile: (csv: string, name: string
 
 import { PayrollAdminTab } from './payroll-admin-tab';
 import { answerConfirm, byText, click, confirmDialog, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
-import { currentVnYearMonth, vnDateKey } from '@/lib/week';
+import { currentVnYearMonth, shiftYearMonth, vnDateKey } from '@/lib/week';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -214,7 +214,11 @@ describe('PayrollAdminTab: thưởng/phạt và tính lại tháng', () => {
         return json(rows);
       }),
     );
-    return { posts: (part: string) => calls.filter((c) => c.method === 'POST' && c.url.includes(part)) };
+    return {
+      posts: (part: string) => calls.filter((c) => c.method === 'POST' && c.url.includes(part)),
+      /** Thứ tự các lệnh ghi và các lần tải danh sách lương, để kiểm "ghi xong thì tính lại rồi mới tải lại". */
+      timeline: () => calls.filter((c) => c.method === 'POST' || /\/admin\/payroll\?/.test(c.url)).map((c) => `${c.method} ${c.url.replace(/^.*\/admin\/payroll/, '/admin/payroll')}`),
+    };
   }
   const today = vnDateKey(new Date());
   const sheet = () => document.querySelector<HTMLElement>('[role=dialog]')!;
@@ -353,7 +357,61 @@ describe('PayrollAdminTab: thưởng/phạt và tính lại tháng', () => {
     await flush();
     expect(sheet().querySelector('[role=alert]')!.textContent).toContain('mở lại tháng trước');
     expect(api.posts('/admin/payroll/adjust')).toHaveLength(1);
+    expect(api.posts('/recompute')).toHaveLength(0);
     expect(confirmDialog()).toBeNull();
+  });
+
+  describe('tháng trước (cron chưa tính lại bảng tháng)', () => {
+    const prev = shiftYearMonth(year, month, -1);
+    const prevLast = `${prev.year}-${String(prev.month).padStart(2, '0')}-${String(new Date(Date.UTC(prev.year, prev.month, 0)).getUTCDate()).padStart(2, '0')}`;
+    const goPrev = async (container: HTMLElement) => {
+      click(container.querySelector('[aria-label="Tháng trước"]'));
+      await flush();
+    };
+
+    it('ghi khoản xong thì đúng 1 POST adjust, kế đó 1 POST recompute của tháng đang xem (không reprice), rồi mới tải lại danh sách', async () => {
+      const api = stubAdjust([row('1', 'Lan', 'OPEN')], () => ({ body: { adjusted: true, ...mon('OPEN') } }));
+      const { container } = mount(<PayrollAdminTab />);
+      await flush();
+      await goPrev(container);
+      await openAdjust(container);
+      expect(sheet().textContent).toContain(`lương tháng ${prev.month}/${prev.year}`);
+      fill('Phạt', '500000', 'Đi trễ');
+      click(adjustBtn());
+      await flush();
+      expect(confirmDialog()!.textContent).toContain(`Lương tháng ${prev.month}/${prev.year} của Lan sẽ giảm 500.000đ`);
+      const before = api.timeline().length;
+      answerConfirm(true);
+      await flush();
+      const after = api.timeline().slice(before);
+      expect(after).toEqual([
+        'POST /admin/payroll/adjust',
+        `POST /admin/payroll/1/recompute?year=${prev.year}&month=${prev.month}`,
+        `GET /admin/payroll?year=${prev.year}&month=${prev.month}`,
+      ]);
+      expect(api.posts('/admin/payroll/adjust')[0]!.body).toEqual({ staffId: '1', workDate: prevLast, amount: 500_000, reason: 'Đi trễ' });
+      expect(container.textContent).toContain('Đã ghi khoản phạt 500.000đ');
+    });
+
+    it('bước tính lại lỗi: khoản vẫn được báo là đã ghi, chỉ đường bấm "Tính lại tháng", và không gửi lại khoản', async () => {
+      const api = stubAdjust([row('1', 'Lan', 'OPEN')], (url) =>
+        url.includes('/recompute') ? { status: 500, body: { message: 'Máy chủ bận' } } : { body: { adjusted: true } },
+      );
+      const { container } = mount(<PayrollAdminTab />);
+      await flush();
+      await goPrev(container);
+      await openAdjust(container);
+      fill('Phạt', '500000', 'Đi trễ');
+      click(adjustBtn());
+      await flush();
+      answerConfirm(true);
+      await flush();
+      expect(api.posts('/admin/payroll/adjust')).toHaveLength(1);
+      expect(api.posts('/recompute')).toHaveLength(1);
+      expect(container.textContent).toContain('Đã ghi khoản phạt 500.000đ');
+      expect(container.textContent).toContain('bấm Tính lại tháng');
+      expect(document.querySelector('[role=dialog]')).toBeNull();
+    });
   });
 
   it('tính lại tháng: huỷ hộp xác nhận thì không gọi API; đồng ý thì POST recompute kèm năm/tháng, không áp lại đơn giá', async () => {

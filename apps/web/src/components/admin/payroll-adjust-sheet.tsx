@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { adjustPayroll, type AdminPayrollRow } from '@tubutree/app-core/api/payroll';
+import { adjustPayroll, recomputePayroll, type AdminPayrollRow } from '@tubutree/app-core/api/payroll';
 import { ApiError } from '@/lib/client-api';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/error-text';
@@ -68,21 +68,31 @@ export function PayrollAdjustSheet({
   const label = kind === 'bonus' ? 'thưởng' : 'phạt';
 
   const send = useMutation({
-    mutationFn: (allowDuplicate: boolean) =>
-      adjustPayroll(coreHttp, {
+    mutationFn: async (allowDuplicate: boolean) => {
+      await adjustPayroll(coreHttp, {
         staffId: row.staff.id,
         workDate: day,
         amount: kind === 'bonus' ? -amount : amount,
         reason: reasonText,
         ...(allowDuplicate ? { allowDuplicate: true } : {}),
-      }),
+      });
+      // Máy chủ chỉ tính lại bảng lương THÁNG khi mở đúng tháng hiện tại; tháng trước vẫn hiện số cũ (kể cả trong QR và ô "Số tiền" khi ghi đã trả)
+      // tới đêm sau. Khoản đã ghi rồi nên lỗi ở bước này không được biến thành lỗi ghi khoản (admin sẽ ghi lại và phạt hai lần).
+      try {
+        await recomputePayroll(coreHttp, row.staff.id, year, month);
+        return true;
+      } catch {
+        return false;
+      }
+    },
   });
 
   const submit = async (allowDuplicate: boolean) => {
     setErr(null);
     try {
-      await send.mutateAsync(allowDuplicate);
-      onDone(`Đã ghi khoản ${label} ${formatVnd(amount)} cho ${name} (ngày ${dmy(day)}).`);
+      const recomputed = await send.mutateAsync(allowDuplicate);
+      const done = `Đã ghi khoản ${label} ${formatVnd(amount)} cho ${name} (ngày ${dmy(day)}).`;
+      onDone(recomputed ? done : `${done} Chưa cập nhật được số lương trên dòng: bấm Tính lại tháng để cập nhật số.`);
       onClose();
     } catch (e) {
       if (e instanceof ApiError && e.status === 409 && e.code === DUPLICATE_CODE) {
@@ -153,7 +163,7 @@ export function PayrollAdjustSheet({
               </button>
             </div>
             <p className="mt-1 text-[11px] text-stone-500">
-              Phạt trừ vào lương tháng này, thưởng cộng thêm vào.
+              {`Phạt trừ vào lương tháng ${month}/${year}, thưởng cộng thêm vào.`}
             </p>
           </div>
           <Field
