@@ -156,6 +156,8 @@ export interface AdminOrderFilter {
   queue?: OrderQueue;
   /** Id CTV / người giới thiệu (Order.referrerUserId). */
   referrerUserId?: string;
+  /** Id khách đặt đơn (Order.userId): "Xem tất cả đơn" từ hồ sơ khách. */
+  userId?: string;
   /** Id gian hàng được ghi công (Order.storefrontId); web gửi slug, AdminService.adminOrderWhere đổi sang id. */
   storefrontId?: string;
   /** Khoảng ngày đặt theo giờ VN, 'YYYY-MM-DD', tính cả hai đầu. */
@@ -183,6 +185,7 @@ export interface OrderListExtra {
   platform?: OrderListPlatform;
   queue?: OrderQueue;
   referrerUserId?: string;
+  userId?: string;
   storefront?: string;
   order?: 'asc' | 'desc';
 }
@@ -323,6 +326,7 @@ export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInpu
   if (f.queue === 'bank_transfer_to_confirm') and.push(BANK_TRANSFER_TO_CONFIRM_WHERE);
   else if (f.queue === 'dealer_transfer_to_confirm') and.push(DEALER_TRANSFER_TO_CONFIRM_WHERE);
   if (f.referrerUserId) and.push({ referrerUserId: f.referrerUserId });
+  if (f.userId) and.push({ userId: f.userId });
   if (f.storefrontId) and.push({ storefrontId: f.storefrontId });
   if (and.length === 0) return {};
   return and.length === 1 ? and[0]! : { AND: and };
