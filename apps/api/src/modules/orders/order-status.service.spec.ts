@@ -157,7 +157,7 @@ describe('OrderStatusService', () => {
     prisma.order.findFirst.mockResolvedValue(order);
     mockTx();
     await service.setStatus('o1', 'CANCELLED' as never, { actorType: 'MERCHANT', note: 'Hết hàng' });
-    expect(notifications.notify).not.toHaveBeenCalledWith('shop-owner', 'MERCHANT_ORDER_CANCELLED', expect.anything());
+    expect((notifications.notify as jest.Mock).mock.calls.filter((c) => c[0] === 'shop-owner' && c[1] === 'MERCHANT_ORDER_CANCELLED')).toHaveLength(0);
   });
 
   it.each([

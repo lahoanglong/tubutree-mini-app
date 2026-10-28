@@ -252,6 +252,8 @@ describe('Gói định kỳ: đơn đầu, thanh toán, sửa gói (real Postgre
         u.id,
         'SUBSCRIPTION_ORDER_AWAITING_PAYMENT',
         expect.objectContaining({ order_code: order.code }),
+        undefined,
+        `order=${order.code}`,
       );
     });
   });
@@ -312,6 +314,8 @@ describe('Gói định kỳ: đơn đầu, thanh toán, sửa gói (real Postgre
         u.id,
         'SUBSCRIPTION_PAUSED',
         expect.objectContaining({ reason: expect.stringContaining('Ví Tubu') }),
+        undefined,
+        expect.stringMatching(/^sub=/),
       );
     });
 

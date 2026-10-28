@@ -386,7 +386,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     orderFindFirst.mockResolvedValueOnce(order).mockResolvedValueOnce(order).mockResolvedValue({ ...order, status: 'CANCELLED' });
     orderUpdateMany.mockResolvedValue({ count: 0 });
     await proc.onPaymentReconcile(paidPayload);
-    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
+    expect((notifications.notify as jest.Mock).mock.calls.filter((c) => c[0] === 'u1' && c[1] === 'ORDER_CONFIRMED')).toHaveLength(0);
     expect(analytics.record).not.toHaveBeenCalled();
     expect(lateRefunds(prisma)).toEqual([expect.objectContaining({ kind: 'LATE_PAYMENT', amount: 100000, userId: 'u1' })]);
   });
@@ -424,7 +424,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     ]);
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', { order_code: 'TUBU1', amount: '100.000đ' }, undefined, 'order=TUBU1');
     expect(notifications.notify).toHaveBeenCalledWith('admin1', 'OPS_REFUND_ALERT', expect.objectContaining({ order_code: 'TUBU1' }));
-    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
+    expect((notifications.notify as jest.Mock).mock.calls.filter((c) => c[0] === 'u1' && c[1] === 'ORDER_CONFIRMED')).toHaveLength(0);
     expect(attentionFlags(orderUpdateMany)).toEqual([]);
   });
 
@@ -516,7 +516,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     expect(lateRefunds(prisma)).toEqual([
       expect.objectContaining({ kind: 'OVERPAYMENT', amount: 114000, refKey: 'PANCAKE:paid:228000', method: 'MANUAL_TRANSFER', status: 'UNVERIFIED' }),
     ]);
-    expect(notifications.notify).not.toHaveBeenCalledWith('u1', expect.anything(), expect.anything());
+    expect((notifications.notify as jest.Mock).mock.calls.filter((c) => c[0] === 'u1')).toHaveLength(0);
     expect(notifications.notify).toHaveBeenCalledWith(
       'admin1',
       'OPS_REFUND_ALERT',
@@ -571,7 +571,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     });
     await proc.onPaymentReconcile({ id: 'p1', prepaid: 114000, bank_payment: 36000 });
     expect(lateRefunds(prisma)).toEqual([expect.objectContaining({ kind: 'OVERPAYMENT', amount: 36000, status: 'UNVERIFIED' })]);
-    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', expect.anything());
+    expect((notifications.notify as jest.Mock).mock.calls.filter((c) => c[0] === 'u1' && c[1] === 'REFUND_OVERPAYMENT')).toHaveLength(0);
   });
 
   it('đơn không phải BANK_TRANSFER → bỏ qua', async () => {

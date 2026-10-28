@@ -227,8 +227,8 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
       bankAccountName: 'NGUYEN VAN A',
     });
     // R2-BUYERMINI-9: một lần duyệt chỉ một tin cho khách — tin duyệt đã nói số tiền và tài khoản.
-    expect(notify).toHaveBeenCalledWith(user.id, 'RETURN_APPROVED_DETAIL', expect.objectContaining({ refund_note: expect.stringContaining('Techcombank ••• 5678') }));
-    expect(notify).not.toHaveBeenCalledWith(user.id, 'REFUND_BANK_REQUESTED', expect.anything());
+    expect(notify).toHaveBeenCalledWith(user.id, 'RETURN_APPROVED_DETAIL', expect.objectContaining({ refund_note: expect.stringContaining('Techcombank ••• 5678') }), undefined, expect.stringMatching(/^order=/));
+    expect(notify.mock.calls.filter((c) => c[0] === user.id && c[1] === 'REFUND_BANK_REQUESTED')).toHaveLength(0);
 
     await refunds.claim(adminUser.id, row.id);
     await refunds.markPaid(adminUser.id, row.id, { bankRef: 'FT26101400001' });
@@ -260,8 +260,8 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
     expect(notify).toHaveBeenCalledWith(user.id, 'ORDER_CANCELLED', {
       order_code: order.code,
       refund_note: expect.stringContaining('chuyển khoản 114.000đ về VCB ••• 3456'),
-    });
-    expect(notify).not.toHaveBeenCalledWith(user.id, 'REFUND_BANK_REQUESTED', expect.anything());
+    }, undefined, `order=${order.code}`);
+    expect(notify.mock.calls.filter((c) => c[0] === user.id && c[1] === 'REFUND_BANK_REQUESTED')).toHaveLength(0);
   });
 
   it('BUYERMINI-7/MONEY-6: tiền về muộn cho đơn đã huỷ — webhook gửi lại đồng thời 3 lần → đúng 1 yêu cầu hoàn, báo khách 1 lần', async () => {

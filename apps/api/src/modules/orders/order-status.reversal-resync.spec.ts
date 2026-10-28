@@ -169,7 +169,7 @@ describe('OrderStatusService.resyncReversalEffects (Q19)', () => {
     const bySeller = build(makeOrder(merchantOrder), { actor: 'MERCHANT' });
     bySeller.prisma.order.findUnique.mockResolvedValue(merchantOrder);
     await bySeller.svc.resyncReversalEffects('o1');
-    expect(bySeller.notifications.notify).not.toHaveBeenCalledWith('owner1', 'MERCHANT_ORDER_CANCELLED', expect.anything());
+    expect(bySeller.notifications.notify.mock.calls.filter((c) => c[0] === 'owner1' && c[1] === 'MERCHANT_ORDER_CANCELLED')).toHaveLength(0);
   });
 
   describe('khoản hoàn số tiền khách chuyển thiếu (đơn chuyển khoản huỷ khi Pancake báo đã nhận 100.000đ)', () => {

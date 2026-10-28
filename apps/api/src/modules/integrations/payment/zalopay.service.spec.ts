@@ -192,7 +192,7 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
     });
     expect(notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', { order_code: 'TUBU1', amount: '250.000đ' }, undefined, 'order=TUBU1');
     expect(notify).toHaveBeenCalledWith('admin1', 'OPS_REFUND_ALERT', expect.objectContaining({ order_code: 'TUBU1' }));
-    expect(notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
+    expect(notify.mock.calls.filter((c) => c[0] === 'u1' && c[1] === 'ORDER_CONFIRMED')).toHaveLength(0);
   });
 
   // Đơn đã nhận tiền qua callback trước (PAID), sau đó huỷ/trả và đã hoàn (REFUNDED): ZaloPay gửi lại CÙNG
@@ -249,7 +249,7 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
       skipDuplicates: true,
     });
     expect(notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', expect.anything(), undefined, 'order=TUBU1');
-    expect(notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
+    expect(notify.mock.calls.filter((c) => c[0] === 'u1' && c[1] === 'ORDER_CONFIRMED')).toHaveLength(0);
   });
 
   it('guard thua vì đơn đã PAID (callback trùng) → không tạo yêu cầu hoàn', async () => {
@@ -576,7 +576,7 @@ describe('ZalopayService — callback thiếu/sai kiểu số tiền', () => {
       expect.objectContaining({ data: expect.objectContaining({ pancakeAttention: expect.stringContaining('không khớp 285.000đ') }) }),
     );
     expect(notify).toHaveBeenCalledWith('admin1', 'OPS_PAYMENT_ALERT', expect.objectContaining({ order_code: 'TUBU1' }));
-    expect(notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
+    expect(notify.mock.calls.filter((c) => c[0] === 'u1' && c[1] === 'ORDER_CONFIRMED')).toHaveLength(0);
     expect(attemptUpdateMany).toHaveBeenCalledWith({ where: { id: 'a1', resolvedAt: null }, data: { resolvedAt: expect.any(Date) } });
   });
 

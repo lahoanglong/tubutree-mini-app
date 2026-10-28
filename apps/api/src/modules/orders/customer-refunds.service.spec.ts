@@ -381,7 +381,7 @@ describe('CustomerRefundsService — khoản hoàn COD trả hàng chờ kế to
       data: expect.objectContaining({ actorId: 'a1', note: expect.stringContaining('COD') }),
     });
     expect(order.updateMany).toHaveBeenCalledWith({ where: { id: 'o1' }, data: { pancakeAttention: null, pancakeAttentionAt: null } });
-    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', expect.anything());
+    expect((notifications.notify as jest.Mock).mock.calls.filter((c) => c[0] === 'u1' && c[1] === 'REFUND_OVERPAYMENT')).toHaveLength(0);
     expect(applyWalletDelta).not.toHaveBeenCalled();
   });
 
