@@ -29,6 +29,8 @@ import {
   type ReviewableOrder,
 } from '@/lib/reviews-client';
 import { EvidenceUpload } from '@/components/evidence-upload';
+import { EmptyState } from '@/components/mini/empty-state';
+import { pdpSectionTitle } from './pdp-sections';
 import { ReviewVideoUpload } from './review-video-upload';
 import { actionErrorText } from '@/lib/error-text';
 
@@ -73,7 +75,7 @@ function forgetOrderParam() {
 export function ProductReviewsFallback() {
   return (
     <section id="danh-gia" aria-labelledby="danh-gia-title" className="mt-8 scroll-mt-20">
-      <h2 id="danh-gia-title" className={ui.sectionTitle}>
+      <h2 id="danh-gia-title" className={pdpSectionTitle}>
         Đánh giá
       </h2>
       <p className="mt-2 text-sm text-stone-600">Đang tải đánh giá…</p>
@@ -136,7 +138,7 @@ export function ProductReviews({ slug }: { slug: string }) {
   return (
     <section id="danh-gia" aria-labelledby="danh-gia-title" className="mt-8 scroll-mt-20">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="danh-gia-title" className={ui.sectionTitle}>
+        <h2 id="danh-gia-title" className={pdpSectionTitle}>
           Đánh giá{data && data.count > 0 ? ` (${data.count})` : ''}
         </h2>
         {hydrated && phase === 'guest' && (
@@ -208,7 +210,7 @@ export function ProductReviews({ slug }: { slug: string }) {
           </button>
         </div>
       ) : !data || data.count === 0 ? (
-        <p className="mt-3 text-sm text-stone-600">Chưa có đánh giá. Hãy là người đầu tiên chia sẻ trải nghiệm.</p>
+        <EmptyState variant="inline" art="sprout" heading="Chưa có đánh giá" body="Hãy là người đầu tiên chia sẻ trải nghiệm." />
       ) : (
         <>
           <div className="mt-3 flex flex-wrap items-center gap-6">

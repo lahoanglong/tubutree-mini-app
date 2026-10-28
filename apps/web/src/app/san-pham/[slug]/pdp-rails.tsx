@@ -7,7 +7,7 @@ import { boughtTogetherQuery, relatedQuery } from '@tubutree/app-core/queries/ca
 import ProductCard from '@/components/product-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { coreHttp } from '@/lib/core-http';
-import { ui } from '@/lib/guest-ui';
+import { pdpSectionTitle } from './pdp-sections';
 import { ScrollRail } from '@/components/scroll-rail';
 
 const FIVE_MIN = 5 * 60_000;
@@ -29,7 +29,7 @@ function Rail({ title, icon, products, loading }: { title: string; icon?: boolea
   if (!products || products.length === 0) return null;
   return (
     <section className="mt-8">
-      <h2 className={`${ui.sectionTitle} flex items-center gap-1.5`}>
+      <h2 className={`${pdpSectionTitle} flex items-center gap-1.5`}>
         {icon && <ShoppingCart className="h-5 w-5" aria-hidden="true" />}
         {title}
       </h2>

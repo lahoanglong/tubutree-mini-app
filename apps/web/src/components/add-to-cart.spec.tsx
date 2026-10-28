@@ -133,6 +133,26 @@ describe('AddToCart — quay lại sau đăng nhập', () => {
   });
 });
 
+describe('AddToCart — ô số lượng như Mini App', () => {
+  it('hai nút vuông riêng (không gộp trong một khung), ở mức tối thiểu nút giảm chỉ aria-disabled, nhãn và ô số cách nhau trên điện thoại', async () => {
+    const { container } = mount();
+    await flush();
+    const minus = container.querySelector<HTMLButtonElement>('button[aria-label="Giảm số lượng"]')!;
+    const plus = container.querySelector<HTMLButtonElement>('button[aria-label="Tăng số lượng"]')!;
+    expect(minus.getAttribute('aria-disabled')).toBe('true');
+    expect(plus.getAttribute('aria-disabled')).toBe('false');
+    for (const b of [minus, plus]) expect(b.className).toContain('border');
+    expect(minus.parentElement).toBe(plus.parentElement);
+    expect(minus.parentElement!.className).not.toContain('border');
+    expect(minus.parentElement!.parentElement!.className).toContain('max-md:justify-between');
+    click(minus);
+    expect(container.querySelector('[aria-live="polite"]')!.textContent).toBe('1');
+    click(plus);
+    expect(container.querySelector('[aria-live="polite"]')!.textContent).toBe('2');
+    expect(minus.getAttribute('aria-disabled')).toBe('false');
+  });
+});
+
 describe('AddToCart — áp mã mua chung từ ?ma= (E-9)', () => {
   const CODE = 'GBUY-ABCD1234-WXYZ5678';
   const openedFrom = (search: string) => window.history.replaceState(null, '', `/san-pham/dau-goi${search}`);

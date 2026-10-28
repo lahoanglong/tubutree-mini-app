@@ -22,6 +22,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { usePdpSelection } from './pdp-selection';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
+import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { actionErrorText } from '@/lib/error-text';
 import { runningFlash } from '@/lib/pdp-logic';
 
@@ -339,29 +340,9 @@ export default function AddToCart({
         <p className="mt-3 text-sm font-medium text-warning-fg">Chỉ còn {selected!.stock} sản phẩm</p>
       )}
 
-      <div className="mt-4 flex items-center gap-3">
+      <div className="mt-4 flex items-center gap-3 max-md:justify-between">
         <span className="text-sm font-semibold text-stone-900 md:hidden">Số lượng</span>
-        <div className="flex items-center rounded-control border border-stone-450 bg-stone-0">
-          <button
-            type="button"
-            onClick={() => setQty((q) => Math.max(1, q - 1))}
-            className="h-11 w-11 text-lg text-stone-800"
-            aria-label="Giảm số lượng"
-          >
-            −
-          </button>
-          <span className="w-8 text-center text-stone-900" aria-live="polite">
-            {qty}
-          </span>
-          <button
-            type="button"
-            onClick={() => setQty((q) => Math.min(maxQty, q + 1))}
-            className="h-11 w-11 text-lg text-stone-800"
-            aria-label="Tăng số lượng"
-          >
-            +
-          </button>
-        </div>
+        <QuantitySelector value={qty} max={maxQty} onChange={setQty} />
         {/* Từ md: nút thêm giỏ ngay cạnh số lượng. Dưới md hai nút nằm ở thanh dính đáy (bên dưới). */}
         <button type="button" onClick={onAdd} disabled={cannotBuy} className={`${ui.btnSecondary} hidden flex-1 md:inline-flex`}>
           {addLabel}

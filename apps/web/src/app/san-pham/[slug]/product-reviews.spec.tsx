@@ -140,7 +140,10 @@ describe('ProductReviews (web) — danh sách công khai', () => {
   it('chưa có đánh giá → lời mời viết đánh giá đầu tiên', async () => {
     mocks.list = { count: 0, average: 0, distribution: {}, items: [] };
     const c = await mount();
-    expect(c.textContent).toContain('Chưa có đánh giá. Hãy là người đầu tiên chia sẻ trải nghiệm.');
+    expect(c.textContent).toContain('Chưa có đánh giá');
+    expect(c.textContent).toContain('Hãy là người đầu tiên chia sẻ trải nghiệm.');
+    expect(c.querySelector('svg[aria-hidden]')).not.toBeNull();
+    expect(c.querySelector('h2')!.className).toContain('max-md:font-ui');
   });
 
   it('khách chưa đăng nhập: không hỏi can-review, mời đăng nhập và quay lại đúng đơn đang mở', async () => {
