@@ -183,13 +183,14 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
     );
 
     const cskh = await inbox.counts({ role: 'STAFF', staffPermissions: ['CSKH'] });
-    expect(cskh.items.map((i) => i.key).sort()).toEqual(['communityPending', 'communityUnanswered', 'externalPoints', 'returnsPending', 'supportChatUnforwarded', 'wasteToCount', 'wasteUnmatched']);
+    expect(cskh.items.map((i) => i.key).sort()).toEqual(['communityPending', 'communityReports', 'communityUnanswered', 'externalPoints', 'returnsPending', 'supportChatUnforwarded', 'wasteToCount', 'wasteUnmatched']);
     const kho = await inbox.counts({ role: 'STAFF', staffPermissions: ['KHO'] });
     expect(kho.items.map((i) => i.key).sort()).toEqual(['gomdonAttention', 'pancakeAttention', 'pancakeUnsynced', 'returnsToReceive', 'wasteToCount', 'wasteUnmatched']);
     const marketing = await inbox.counts({ role: 'STAFF', staffPermissions: ['MARKETING'] });
-    expect(marketing.items.map((i) => i.key).sort()).toEqual(['communityPending', 'communityUnanswered', 'wasteToCount', 'wasteUnmatched']);
+    expect(marketing.items.map((i) => i.key).sort()).toEqual(['communityPending', 'communityReports', 'communityUnanswered', 'wasteToCount', 'wasteUnmatched']);
     const keToan = await inbox.counts({ role: 'STAFF', staffPermissions: ['KE_TOAN'] });
     expect(keToan.items.map((i) => i.key).sort()).toEqual([
+      'bankTransferToConfirm',
       'customerRefunds',
       'dealerClaimsToPay',
       'invoicePending',
