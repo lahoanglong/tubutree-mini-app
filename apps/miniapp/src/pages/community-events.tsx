@@ -48,12 +48,15 @@ function CardSkeletons({ height, gap }: { height: number; gap: number }) {
  * tiết. Mini App chỉ đọc: khách dự thi trên web nên không có nút hay liên kết.
  */
 function EventMeta({ event }: { event: CommunityEvent }) {
+  const ended = isEventEnded(event);
   return (
     <div style={{ marginTop: 8 }}>
-      <Text variant="caption" tone="brand" as="div" style={{ fontWeight: 600 }}>
-        {vi.community.eventJoinOnWeb}
-      </Text>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
+      {!ended && (
+        <Text variant="caption" tone="brand" as="div" style={{ fontWeight: 600 }}>
+          {vi.community.eventJoinOnWeb}
+        </Text>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: ended ? 0 : 4, flexWrap: 'wrap' }}>
         <Text variant="caption" tone="tertiary">
           {vi.community.eventEnds}: {formatDate(event.endAt)}
         </Text>
@@ -63,7 +66,7 @@ function EventMeta({ event }: { event: CommunityEvent }) {
             {formatPoints(event.rewardPoints)}
           </Text>
         )}
-        {isEventEnded(event) && (
+        {ended && (
           <Badge tone="neutral" size="sm">
             {vi.community.eventEnded}
           </Badge>

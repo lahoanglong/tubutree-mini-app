@@ -127,6 +127,19 @@ describe('CommunityEventsPage — danh sách sự kiện', () => {
     expect(screen.getAllByText('Đã kết thúc')).toHaveLength(1);
   });
 
+  it('sự kiện đã kết thúc không mời tham gia: chỉ còn nhãn "Đã kết thúc", sự kiện còn hạn vẫn có cách tham gia', async () => {
+    mocks.listEvents.mockResolvedValue([EVENT('e1', { endAt: new Date(Date.now() - DAY).toISOString() }), EVENT('e2')]);
+    renderPage();
+    await screen.findByText('Sự kiện e1');
+    expect(screen.getAllByText('Đã kết thúc')).toHaveLength(1);
+    expect(screen.getAllByText('Tham gia trên web Tubu Tree')).toHaveLength(1);
+
+    fireEvent.click(screen.getByText('Sự kiện e1'));
+    await screen.findByText('Bài dự thi');
+    expect(screen.queryByText('Tham gia trên web Tubu Tree')).toBeNull();
+    expect(screen.getByText('Đã kết thúc')).toBeInTheDocument();
+  });
+
   it('không có sự kiện: hiện trạng thái trống', async () => {
     mocks.listEvents.mockResolvedValue([]);
     renderPage();
