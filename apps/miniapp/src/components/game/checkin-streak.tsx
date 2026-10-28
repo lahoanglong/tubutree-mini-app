@@ -1,4 +1,4 @@
-import { Check, Droplets, Flame, Snowflake } from 'lucide-react';
+import { Droplets, Flame, Snowflake } from 'lucide-react';
 import { STREAK_3_SEEDS, missingDrops } from '@tubutree/app-core/game-newbie';
 import type { GameProfile } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
@@ -12,9 +12,6 @@ import { isSameVNDay } from './game-utils';
 // 💧 và 🎁 trong ô ngày là phần thưởng của chuỗi (nội dung game), còn lại là icon Lucide.
 export function CheckInStreak({
   profile,
-  allDone,
-  onCheckIn,
-  checkInPending,
   onBuyFreeze,
   freezePending,
   onCollectDew,
@@ -22,10 +19,6 @@ export function CheckInStreak({
   onNeedWater,
 }: {
   profile: GameProfile | undefined;
-  /** Cả Điểm Xanh và giọt nước đã xong hôm nay (trạng thái gộp); quyết định nút. Dòng giọt nước vẫn theo `lastCheckInAt`. */
-  allDone: boolean;
-  onCheckIn: () => void;
-  checkInPending: boolean;
   onBuyFreeze: () => void;
   freezePending: boolean;
   onCollectDew: () => void;
@@ -43,7 +36,6 @@ export function CheckInStreak({
     day === 7 ? (profile?.streak7Seeds ?? null) : day === 3 ? STREAK_3_SEEDS : null;
   return (
     <Card padding={16}>
-      {/* flexWrap: màn hẹp (320/375) thì nút xuống hàng riêng thay vì ép tiêu đề gãy hai dòng cạnh nút. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ minWidth: 0 }}>
           <Heading variant="title-sm" as="h2" style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
@@ -54,18 +46,6 @@ export function CheckInStreak({
             {t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}
           </Text>
         </div>
-        {/* flexShrink 0: cạnh tiêu đề dài, nhãn nút bị rút gọn thành "Điểm d…" nếu để nút co lại. */}
-        {/* Nút phụ: nút chính của tab Hôm nay là nút trên cây, nút này chỉ lặp lại việc điểm danh. */}
-        <Button
-          variant="secondary"
-          icon={allDone ? Check : undefined}
-          disabled={allDone || checkInPending}
-          loading={checkInPending}
-          onPress={() => onCheckIn()}
-          style={{ flexShrink: 0 }}
-        >
-          {allDone ? 'Đã điểm danh' : 'Điểm danh'}
-        </Button>
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
         {Array.from({ length: 7 }, (_, i) => {
@@ -117,7 +97,7 @@ export function CheckInStreak({
             onPress={() => (freezeShort > 0 ? onNeedWater(freezeShort) : onBuyFreeze())}
             style={{ flexShrink: 0 }}
           >
-            {freezeShort > 0 ? vi.game.newbie.short(freezeShort) : `Mua (${formatDrops(freezeCost)})`}
+            {freezeShort > 0 ? vi.game.newbie.freezeShort(freezeShort) : `Mua (${formatDrops(freezeCost)})`}
           </Button>
         </div>
         <Button
@@ -132,7 +112,7 @@ export function CheckInStreak({
           {dewCollectedToday ? 'Đã hứng sương' : t.dew(profile?.dewSeeds ?? null)}
         </Button>
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
-          Vé giữ lửa giúp chuỗi không đứt khi bạn lỡ 1 ngày. Giọt sương sáng tặng 💧 mỗi ngày.
+          {t.freezeHint(profile?.dewSeeds ?? null)}
         </Text>
       </div>
     </Card>

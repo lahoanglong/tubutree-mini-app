@@ -294,12 +294,24 @@ describe('GamePage — vườn và lối tắt', () => {
   });
 });
 
+// Vườn chỉ còn một nút điểm danh: nút chính trên cây (nhận nước hôm nay, hoặc nhận nốt Điểm Xanh khi chỉ còn phần đó).
+const CLAIM_NAME = /^(Điểm danh nhận|Nhận nước hôm nay|Nhận Điểm Xanh hôm nay)/;
+const findClaim = () => screen.findByRole('button', { name: CLAIM_NAME });
+const HALF = { checkedInToday: false, pointsDone: false, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 1000, todayWater: 0, rewards: [] };
+const POINTS_ONLY = { points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: null, alreadyDone: false, pending: [] };
+
 describe('GamePage — điểm danh chuỗi (Vườn)', () => {
-  it('chưa điểm danh: nút "Điểm danh" bật; chạm lúc đang gửi không gọi lần 2, báo thành công, làm mới đủ khoá', async () => {
+  it('không còn nút "Điểm danh" thứ hai trong thẻ chuỗi', async () => {
+    renderPage();
+    await findClaim();
+    expect(screen.queryByRole('button', { name: /^(Đã )?[Đđ]iểm danh$/ })).not.toBeInTheDocument();
+  });
+
+  it('chưa điểm danh: nút chính bật; chạm lúc đang gửi không gọi lần 2, báo thành công, làm mới đủ khoá', async () => {
     const gate = pending<unknown>();
     mocks.api.checkIn.mockReturnValue(gate.promise);
     const { invalidated } = renderPage();
-    const btn = await screen.findByRole('button', { name: 'Điểm danh' });
+    const btn = await findClaim();
     expect(btn).toBeEnabled();
     fireEvent.click(btn);
     await waitFor(() => expect(btn).toBeDisabled());
@@ -309,7 +321,7 @@ describe('GamePage — điểm danh chuỗi (Vườn)', () => {
       gate.resolve({ points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 1000, totalPoints: 2000, message: '' }, water: { seedsEarned: 10, streakDays: 3, totalSeeds: 1_260, streakFrozeUsed: true, bonusNote: 'Thưởng ngày 3' }, alreadyDone: false, pending: [] });
     });
     await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '+1.000 Điểm Xanh · +10 giọt nước · đã dùng vé giữ lửa · Thưởng ngày 3', type: 'success' }),
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '+1.000 Điểm Xanh · +10 giọt nước (Thưởng ngày 3) · đã dùng vé giữ lửa', type: 'success' }),
     );
     const keys = invalidated();
     expect(keys).toContainEqual(['game']);
@@ -320,74 +332,67 @@ describe('GamePage — điểm danh chuỗi (Vườn)', () => {
     expect(keys).not.toContainEqual(['coins']);
   });
 
-  it('đã điểm danh hôm nay: nút "Đã điểm danh" tắt, bấm không gọi API', async () => {
+  it('đã điểm danh cả hai phần: không còn nút nhận, bấm nút chính không gọi checkIn', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: todayIso() });
+    mocks.getDailyCheckInStatus.mockResolvedValue({ checkedInToday: true, pointsDone: true, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 0, todayWater: 0, rewards: [] });
     renderPage();
-    const btn = await screen.findByRole('button', { name: 'Đã điểm danh' });
-    expect(btn).toBeDisabled();
-    fireEvent.click(btn);
+    await screen.findByRole('button', { name: /^Tưới hết/ });
+    expect(screen.queryByRole('button', { name: CLAIM_NAME })).not.toBeInTheDocument();
     expect(mocks.api.checkIn).not.toHaveBeenCalled();
   });
 
-  it('đã nhận giọt nước nhưng Điểm Xanh còn thiếu (trạng thái gộp chưa xong): nút vẫn bật, bấm gọi checkIn để nhận nốt', async () => {
+  it('đã nhận giọt nước nhưng Điểm Xanh còn thiếu (trạng thái gộp chưa xong): nút chính nhận nốt, bấm gọi checkIn', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: todayIso() });
-    mocks.getDailyCheckInStatus.mockResolvedValue({ checkedInToday: false, pointsDone: false, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 1000, todayWater: 0, rewards: [] });
-    mocks.api.checkIn.mockResolvedValue({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: null, alreadyDone: false, pending: [] });
+    mocks.getDailyCheckInStatus.mockResolvedValue(HALF);
+    mocks.api.checkIn.mockResolvedValue(POINTS_ONLY);
     renderPage();
-    const btn = await screen.findByRole('button', { name: 'Điểm danh' });
+    const btn = await screen.findByRole('button', { name: 'Nhận Điểm Xanh hôm nay' });
     expect(btn).toBeEnabled();
     fireEvent.click(btn);
     await waitFor(() => expect(mocks.api.checkIn).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '+1.000 Điểm Xanh', type: 'success' }));
+    expect(mocks.api.collectDew).not.toHaveBeenCalled();
   });
 
-  it('lấy trạng thái gộp lỗi: nút vẫn bật dù lastCheckInAt là hôm nay (không suy từ phần nước)', async () => {
+  it('lấy trạng thái gộp lỗi: không chặn việc tưới, nút chính vẫn theo hồ sơ giọt nước', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: todayIso() });
     mocks.getDailyCheckInStatus.mockRejectedValue(new Error('mạng lỗi'));
     renderPage();
-    expect(await screen.findByRole('button', { name: 'Điểm danh' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: /^Tưới hết/ })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: CLAIM_NAME })).not.toBeInTheDocument();
   });
 
-  it('bấm xong cả hai phần: nút tắt ngay, không bật lại trong lúc chờ lấy lại trạng thái', async () => {
+  it('bấm xong cả hai phần: nút nhận biến mất ngay, không bật lại trong lúc chờ lấy lại trạng thái', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: todayIso() });
-    const half = { checkedInToday: false, pointsDone: false, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 1000, todayWater: 0, rewards: [] };
-    mocks.getDailyCheckInStatus.mockResolvedValueOnce(half).mockImplementation(() => new Promise(() => undefined));
-    mocks.api.checkIn.mockResolvedValue({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: null, alreadyDone: false, pending: [] });
+    mocks.getDailyCheckInStatus.mockResolvedValueOnce(HALF).mockImplementation(() => new Promise(() => undefined));
+    mocks.api.checkIn.mockResolvedValue(POINTS_ONLY);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Điểm danh' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhận Điểm Xanh hôm nay' }));
     await waitFor(() => expect(mocks.api.checkIn).toHaveBeenCalledTimes(1));
-    expect(await screen.findByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
+    await waitFor(() => expect(screen.queryByRole('button', { name: CLAIM_NAME })).not.toBeInTheDocument());
   });
 
-  it('còn thiếu một phần (pending): nút vẫn bật để bấm lại', async () => {
+  it('còn thiếu một phần (pending): nút nhận nốt vẫn bật để bấm lại', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: todayIso() });
-    const half = { checkedInToday: false, pointsDone: false, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 1000, todayWater: 0, rewards: [] };
-    mocks.getDailyCheckInStatus.mockResolvedValueOnce(half).mockImplementation(() => new Promise(() => undefined));
+    mocks.getDailyCheckInStatus.mockResolvedValueOnce(HALF).mockImplementation(() => new Promise(() => undefined));
     mocks.api.checkIn.mockResolvedValue({ points: null, water: null, alreadyDone: false, pending: ['points'] });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Điểm danh' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhận Điểm Xanh hôm nay' }));
     await waitFor(() => expect(mocks.api.checkIn).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
-    expect(screen.getByRole('button', { name: 'Điểm danh' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Nhận Điểm Xanh hôm nay' })).toBeEnabled();
   });
 
-  it('cả hai phần xong theo trạng thái gộp: "Đã điểm danh" tắt', async () => {
-    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: todayIso() });
-    mocks.getDailyCheckInStatus.mockResolvedValue({ checkedInToday: true, pointsDone: true, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 0, todayWater: 0, rewards: [] });
-    renderPage();
-    expect(await screen.findByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
-  });
-
-  it('điểm danh từ hôm kia: nút lại bật (khoá theo ngày giờ VN, không theo "đã từng")', async () => {
+  it('điểm danh từ hôm kia: nút nhận lại bật (khoá theo ngày giờ VN, không theo "đã từng")', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: twoDaysAgoIso() });
     renderPage();
-    expect(await screen.findByRole('button', { name: 'Điểm danh' })).toBeEnabled();
+    expect(await findClaim()).toBeEnabled();
   });
 
   it('lỗi điểm danh: báo lỗi, không làm mới cache, nút bật lại', async () => {
     mocks.api.checkIn.mockRejectedValue(new Error('boom'));
     const { invalidated } = renderPage();
-    const btn = await screen.findByRole('button', { name: 'Điểm danh' });
+    const btn = await findClaim();
     fireEvent.click(btn);
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     expect(invalidated()).not.toContainEqual(['game']);

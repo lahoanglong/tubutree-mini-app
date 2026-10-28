@@ -11,6 +11,11 @@ describe('primaryWaterAction', () => {
     expect(primaryWaterAction(BASE)).toEqual({ kind: 'claim', first: false, withDew: true, gain: 30 });
     expect(primaryWaterAction({ ...BASE, dewToday: true })).toEqual({ kind: 'claim', first: false, withDew: false, gain: 15 });
   });
+  it('xong nước nhưng Điểm Xanh còn thiếu: nút chính nhận nốt (không còn nút điểm danh thứ hai)', () => {
+    expect(primaryWaterAction({ ...BASE, checkedInToday: true, pointsPending: true, totalSeeds: 65 })).toEqual({ kind: 'claim', first: false, withDew: false, gain: null, pointsOnly: true });
+    expect(primaryWaterAction({ ...BASE, checkedInToday: true, pointsPending: false, totalSeeds: 65 })).toEqual({ kind: 'water', drops: 65 });
+    expect(primaryWaterAction({ ...BASE, harvestReady: true, checkedInToday: true, pointsPending: true })).toEqual({ kind: 'harvest' });
+  });
   it('bình đầy: gain null (không hứa +N💧); gần đầy: cắt theo chỗ trống; bình còn rộng: giữ nguyên', () => {
     expect(primaryWaterAction({ ...BASE, totalSeeds: 500, tankCapacity: 500 })).toMatchObject({ kind: 'claim', gain: null });
     expect(primaryWaterAction({ ...BASE, totalSeeds: 495, tankCapacity: 500 })).toMatchObject({ kind: 'claim', gain: 5 });

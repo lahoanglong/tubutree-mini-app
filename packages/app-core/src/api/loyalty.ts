@@ -137,7 +137,7 @@ export interface CheckInStatusResponse {
   /** Từng phần đã xong hôm nay chưa. Optional: API cũ (chỉ Điểm Xanh) chưa trả. */
   pointsDone?: boolean;
   waterDone?: boolean;
-  /** Giọt nước của lần điểm danh kế tiếp (chưa tính quà lần đầu và thưởng mốc chuỗi); 0 khi phần nước đã xong hôm nay. */
+  /** Giọt nước của lần điểm danh kế tiếp (gồm quà lần đầu, chưa tính thưởng mốc chuỗi); 0 khi phần nước đã xong hôm nay. */
   todayWater?: number;
   /** Bình nước đã đầy (totalSeeds >= sức chứa): phần nước hôm nay sẽ không cộng thêm. Optional: API cũ chưa trả thì không hiện chữ bình đầy. */
   tankFull?: boolean;
@@ -160,6 +160,8 @@ export interface WaterCheckInPart {
   totalSeeds: number;
   streakFrozeUsed: boolean;
   bonusNote: string;
+  /** Các khoản thưởng ĐÃ NẰM TRONG `seedsEarned` (quà lần đầu, mốc chuỗi). Optional: API cũ chưa trả. */
+  bonuses?: Array<{ seeds: number; label: string }>;
 }
 
 /**

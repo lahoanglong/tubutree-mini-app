@@ -132,8 +132,8 @@ function GameBody() {
 
   const eco = profile?.ecoImpact;
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
-  // Gộp điểm + nước: tải lỗi thì để nút bật (POST idempotent, đã xong sẽ báo "đã điểm danh rồi"), đừng suy từ lastCheckInAt vì nó chỉ là phần nước.
-  const checkInDone = checkInStatusQ.data ? checkInStatusQ.data.checkedInToday : checkInStatusQ.isError ? false : checkedInToday;
+  // Gộp điểm + nước: nút chính chỉ chuyển sang "Nhận Điểm Xanh" khi trạng thái gộp báo thật sự còn thiếu (lastCheckInAt chỉ là phần nước).
+  const pointsPending = checkInStatusQ.data ? !checkInStatusQ.data.checkedInToday : false;
   const dewToday = isSameVNDay(profile?.lastDewAt ?? null);
   const dailyGain = profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
   const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
@@ -203,6 +203,7 @@ function GameBody() {
 
           <TreeActions
             profile={profile}
+            pointsPending={pointsPending}
             pending={waterM.isPending || checkInM.isPending || dewM.isPending}
             onClaim={claimDaily}
             onWater={(drops) => waterM.mutate(drops)}
@@ -217,9 +218,6 @@ function GameBody() {
           <div id={GAME_CHECKIN_ANCHOR}>
           <CheckInStreak
             profile={profile}
-            allDone={checkInDone}
-            onCheckIn={() => checkInM.mutate()}
-            checkInPending={checkInM.isPending}
             onBuyFreeze={() => freezeM.mutate()}
             freezePending={freezeM.isPending}
             onCollectDew={() => dewM.mutate()}

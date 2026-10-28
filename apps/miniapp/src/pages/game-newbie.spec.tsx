@@ -185,7 +185,7 @@ describe('Vườn Xanh người mới — nút chính và không ngõ cụt', ()
     const STUCK = { ...DRY, totalSeeds: 0, streakRepairable: true, brokenStreakDays: 5, streakFreezeCost: 40, streakRepairCost: 50 };
     const cases: { label: string; tab: 'Hôm nay' | 'Vườn'; name: RegExp | string; api: () => ReturnType<typeof vi.fn>; need: string }[] = [
       { label: 'nút chính', tab: 'Hôm nay', name: 'Kiếm thêm nước', api: () => mocks.api.waterTree, need: 'Bạn đang có 0💧' },
-      { label: 'vé giữ lửa', tab: 'Hôm nay', name: 'Còn thiếu 40💧', api: () => mocks.api.buyStreakFreeze, need: 'Bạn cần thêm 40💧 nữa.' },
+      { label: 'vé giữ lửa', tab: 'Hôm nay', name: 'Giữ chuỗi (cần thêm 40💧)', api: () => mocks.api.buyStreakFreeze, need: 'Bạn cần thêm 40💧 nữa.' },
       { label: 'hồi sinh chuỗi', tab: 'Hôm nay', name: 'Còn thiếu 50💧', api: () => mocks.api.repairStreak, need: 'Bạn cần thêm 50💧 nữa.' },
       { label: 'tưới lô phụ', tab: 'Vườn', name: 'Tưới', api: () => mocks.api.waterPlot, need: 'Bạn cần thêm 20💧 nữa.' },
       { label: 'mở lô', tab: 'Vườn', name: 'Còn thiếu 100💧', api: () => mocks.api.unlockPlot, need: 'Bạn cần thêm 100💧 nữa.' },
@@ -221,7 +221,7 @@ describe('Vườn Xanh người mới — nút chính và không ngõ cụt', ()
     mocks.api.getFriends.mockResolvedValue([{ id: 'f1', nickname: 'Lan', canGift: true }]);
     renderPage();
     // Hôm nay chưa nhận nước nên nút chính là "Nhận nước"; mở sheet từ vé giữ lửa (thiếu nước).
-    fireEvent.click(await screen.findByRole('button', { name: 'Còn thiếu 37💧' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Giữ chuỗi (cần thêm 37💧)' }));
     await screen.findByRole('heading', { name: 'Kiếm nước' });
     const checkin = rowOf('Điểm danh hôm nay');
     expect(checkin.getByText('+15💧')).toBeInTheDocument();
@@ -246,7 +246,7 @@ describe('Vườn Xanh người mới — nút chính và không ngõ cụt', ()
     mocks.api.getGameProfile.mockResolvedValue({ ...NEW_PLAYER, firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), totalSeeds: 0 });
     mocks.api.checkIn.mockRejectedValue(new Error('Hôm nay bạn đã điểm danh rồi'));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Còn thiếu 40💧' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Giữ chuỗi (cần thêm 40💧)' }));
     await screen.findByRole('heading', { name: 'Kiếm nước' });
     fireEvent.click(rowOf('Điểm danh hôm nay').getByRole('button', { name: 'Điểm danh' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Có chút trục trặc, thử lại nhé');

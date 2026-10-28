@@ -163,7 +163,7 @@ describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt',
 
   const cases: { label: string; tab?: string; name: string; path: string; need: string }[] = [
     { label: 'nút chính', name: 'Kiếm thêm nước', path: '/game/tree/water', need: 'Bạn đang có 0💧' },
-    { label: 'vé giữ lửa', name: 'Còn thiếu 40💧', path: '/game/streak-freeze/buy', need: 'Bạn cần thêm 40💧 nữa.' },
+    { label: 'vé giữ lửa', name: 'Giữ chuỗi (cần thêm 40💧)', path: '/game/streak-freeze/buy', need: 'Bạn cần thêm 40💧 nữa.' },
     { label: 'hồi sinh chuỗi', name: 'Còn thiếu 50💧', path: '/game/streak/repair', need: 'Bạn cần thêm 50💧 nữa.' },
     { label: 'tưới lô phụ', tab: 'Vườn', name: 'Tưới', path: '/game/garden/plot/pa/water', need: 'Bạn cần thêm 20💧 nữa.' },
     { label: 'mở lô', tab: 'Vườn', name: 'Còn thiếu 100💧', path: '/game/garden/unlock', need: 'Bạn cần thêm 100💧 nữa.' },
@@ -187,7 +187,7 @@ describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt',
     state.data['/game/profile'] = P({ firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), totalSeeds: 3 });
     state.data['/game/friends'] = [{ id: 'f1', nickname: 'Lan', giftedToday: false }];
     const c = await mount();
-    click(btn(c, 'Còn thiếu 37💧'));
+    click(btn(c, 'Giữ chuỗi (cần thêm 37💧)'));
     await flush(4);
     const d = dialog()!;
     expect(d.textContent).toContain('Điểm danh hôm nay');
@@ -228,7 +228,7 @@ describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt',
       throw new Error('Hôm nay bạn đã điểm danh rồi');
     };
     const c = await mount();
-    click(btn(c, 'Còn thiếu 40💧'));
+    click(btn(c, 'Giữ chuỗi (cần thêm 40💧)'));
     await flush(4);
     click(btn(dialog()!, 'Điểm danh'));
     await flush(6);

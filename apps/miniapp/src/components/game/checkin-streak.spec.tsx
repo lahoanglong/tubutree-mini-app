@@ -8,13 +8,10 @@ import { CheckInStreak } from './checkin-streak';
 
 const PROFILE = { streakDays: 12, totalSeeds: 500, streakFreezes: 1, lastDewAt: null, lastCheckInAt: null } as unknown as GameProfile;
 
-function renderStreak(profile: GameProfile = PROFILE, allDone = false) {
+function renderStreak(profile: GameProfile = PROFILE) {
   return render(
     <CheckInStreak
       profile={profile}
-      allDone={allDone}
-      onCheckIn={() => {}}
-      checkInPending={false}
       onBuyFreeze={() => {}}
       freezePending={false}
       onCollectDew={() => {}}
@@ -24,20 +21,20 @@ function renderStreak(profile: GameProfile = PROFILE, allDone = false) {
   );
 }
 
-describe('CheckInStreak — nút trong hàng chật', () => {
-  it('"Điểm danh" và "Mua" không co lại cạnh tiêu đề dài: nhãn không bị cắt thành "Điểm d…"', () => {
+describe('CheckInStreak', () => {
+  it('không có nút "Điểm danh" thứ hai: nút điểm danh duy nhất của Vườn nằm trên cây', () => {
     renderStreak();
-    expect(screen.getByRole('button', { name: 'Điểm danh' }).style.flexShrink).toBe('0');
+    expect(screen.queryByRole('button', { name: /^(Đã )?[Đđ]iểm danh$/ })).not.toBeInTheDocument();
+  });
+
+  it('"Mua" không co lại trong hàng chật', () => {
+    renderStreak();
     expect(screen.getByRole('button', { name: /^Mua/ }).style.flexShrink).toBe('0');
   });
 
-  it('đã điểm danh hôm nay: nút "Đã điểm danh" cũng giữ nguyên bề rộng', () => {
-    renderStreak({ ...PROFILE, lastCheckInAt: new Date().toISOString() }, true);
-    expect(screen.getByRole('button', { name: 'Đã điểm danh' }).style.flexShrink).toBe('0');
-  });
-
-  it('xong giọt nước nhưng Điểm Xanh còn thiếu (trạng thái gộp chưa xong): nút vẫn bấm được để nhận nốt, không bị khoá', () => {
-    renderStreak({ ...PROFILE, lastCheckInAt: new Date().toISOString() }, false);
-    expect(screen.getByRole('button', { name: 'Điểm danh' })).toBeEnabled();
+  it('thiếu nước mua vé: nút nói rõ việc, và câu giọt sương có số', () => {
+    renderStreak({ ...PROFILE, totalSeeds: 0, streakFreezeCost: 80, dewSeeds: 15 } as unknown as GameProfile);
+    expect(screen.getByRole('button', { name: 'Giữ chuỗi (cần thêm 80💧)' })).toBeInTheDocument();
+    expect(screen.getByText(/Giọt sương sáng tặng 15💧 mỗi ngày/)).toBeInTheDocument();
   });
 });

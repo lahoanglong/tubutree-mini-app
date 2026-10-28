@@ -17,6 +17,8 @@ export interface PrimaryWaterInput {
   /** Cây đã đủ nước (hồ sơ cũ tưới vượt đích): nút chính là thu hoạch, không cần thêm giọt nào. */
   harvestReady?: boolean;
   checkedInToday: boolean;
+  /** Điểm danh gộp chưa xong dù phần nước đã xong (Điểm Xanh còn thiếu): nút chính nhận nốt, vì Vườn không còn nút điểm danh thứ hai. */
+  pointsPending?: boolean;
   dewToday: boolean;
   dailyLoginSeeds?: number;
   dewSeeds?: number;
@@ -28,7 +30,7 @@ export interface PrimaryWaterInput {
 export type PrimaryWaterAction =
   | { kind: 'harvest' }
   /** Chưa nhận nước hôm nay. `first`: lần điểm danh đầu (chỉ điểm danh, sương để bước 3). `withDew`: gộp luôn hứng sương. */
-  | { kind: 'claim'; first: boolean; withDew: boolean; gain: number | null }
+  | { kind: 'claim'; first: boolean; withDew: boolean; gain: number | null; pointsOnly?: boolean }
   | { kind: 'water'; drops: number }
   | { kind: 'earn' };
 
@@ -36,6 +38,7 @@ export type PrimaryWaterAction =
 export function primaryWaterAction(p: PrimaryWaterInput): PrimaryWaterAction {
   const seeds = Math.max(0, Math.floor(Number.isFinite(p.totalSeeds) ? p.totalSeeds : 0));
   if (p.harvestReady) return { kind: 'harvest' };
+  if (p.checkedInToday && p.pointsPending) return { kind: 'claim', first: false, withDew: false, gain: null, pointsOnly: true };
   if (!p.checkedInToday) {
     const bonus = p.firstCheckinBonus ?? 0;
     const first = bonus > 0;
@@ -95,6 +98,7 @@ export const gameNewbieCopy = {
   treeWilted: 'Cây đang héo, tưới để cây xanh lại.',
   primary: {
     claim: (gain: number | null) => (gain == null ? 'Nhận nước hôm nay' : `Nhận nước hôm nay (+${drops(gain)})`),
+    claimPoints: 'Nhận Điểm Xanh hôm nay',
     claimFirst: (gain: number | null) => (gain == null ? 'Điểm danh nhận nước' : `Điểm danh nhận ${drops(gain)}`),
     water: (d: number) => `Tưới hết (${drops(d)})`,
     harvest: 'Thu hoạch cây',
@@ -128,6 +132,8 @@ export const gameNewbieCopy = {
     failed: 'Chưa đăng nhập được Zalo. Bạn thử lại nhé.',
   },
   short: (missing: number) => `Còn thiếu ${drops(missing)}`,
+  /** Nút vé giữ lửa khi chưa đủ nước: nói rõ thiếu để làm gì. */
+  freezeShort: (missing: number) => `Giữ chuỗi (cần thêm ${drops(missing)})`,
   earn: {
     title: 'Kiếm nước',
     have: (have: number) => `Bạn đang có ${drops(have)}`,
@@ -178,6 +184,8 @@ export const gameNewbieCopy = {
           ? `Lần đầu nhận +${drops(daily + first)}, các ngày sau +${drops(daily)}, kèm Điểm Xanh`
           : `Nhận +${drops(daily)} và Điểm Xanh mỗi ngày`,
     dew: (v: number | null) => (v == null ? 'Hứng giọt sương' : `Hứng giọt sương (+${drops(v)})`),
+    freezeHint: (dew: number | null) =>
+      `Vé giữ lửa giúp chuỗi không đứt khi bạn lỡ 1 ngày. Giọt sương sáng tặng ${dew == null ? '💧' : drops(dew)} mỗi ngày.`,
     dayReward: (v: number) => `+${n(v)}`,
   },
   fund: {

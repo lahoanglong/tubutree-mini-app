@@ -44,7 +44,7 @@ export class GameEconomyService {
     for (let attempt = 0; attempt < GameEconomyService.STREAK_CAS_ATTEMPTS; attempt++) {
       const done = await this.tryCheckIn(userId);
       if (done) {
-        const { p, seeds, streakDays, streakFrozeUsed, bonusNote } = done;
+        const { p, seeds, streakDays, streakFrozeUsed, bonusNote, bonuses } = done;
         // Task 9: sự kiện engagement — best-effort (không transaction bao quanh checkIn).
         await this.analytics.recordBestEffort({
           eventName: 'engagement_action',
@@ -66,7 +66,7 @@ export class GameEconomyService {
         const seedsEarned = Math.max(0, Math.min(seeds, totalSeeds - p.totalSeeds));
         // Bình đầy cắt phần tràn: chỉ khi toàn bộ số định cộng vào bình mới được khoe thưởng, kẻo báo "+5 💧" mà bình không tăng.
         const credited = seedsEarned >= seeds;
-        return { seedsEarned, pointsEarned: 0, streakDays, totalSeeds, streakFrozeUsed, bonusNote: credited ? bonusNote : '' };
+        return { seedsEarned, pointsEarned: 0, streakDays, totalSeeds, streakFrozeUsed, bonusNote: credited ? bonusNote : '', bonuses: credited ? bonuses : [] };
       }
     }
     throw new BadRequestException('Điểm danh chưa xong, bạn thử lại nhé 🌿');
@@ -126,13 +126,17 @@ export class GameEconomyService {
     const loginSeeds = await configInt(this.config, 'game.daily_login_seeds', DAILY_LOGIN_SEEDS_DEFAULT);
     let seeds = loginSeeds;
     const notes: string[] = [];
+    // Các khoản này đã nằm trong `seeds` (tổng cộng vào bình): màn hình phải ghi "gồm", không cộng dồn lần hai.
+    const bonuses: Array<{ seeds: number; label: string }> = [];
     if (streakDays % 7 === 0) {
       const bonus = await streak7Seeds(this.config);
       seeds += bonus;
       notes.push(`+${bonus} 💧 chuỗi 7 ngày!`);
+      bonuses.push({ seeds: bonus, label: 'chuỗi 7 ngày' });
     } else if (streakDays % 3 === 0) {
       seeds += 5;
       notes.push('+5 💧 chuỗi 3 ngày!');
+      bonuses.push({ seeds: 5, label: 'chuỗi 3 ngày' });
     }
     // Quà lần điểm danh đầu: chỉ một lần, vì điều kiện ghi bên dưới (lastCheckInAt null hoặc trước hôm nay) chỉ cho một
     // request thắng, request song song còn lại ghi hụt rồi gặp "đã điểm danh hôm nay".
@@ -141,6 +145,7 @@ export class GameEconomyService {
       if (first > 0) {
         seeds += first;
         notes.push(`+${first} 💧 quà điểm danh đầu tiên!`);
+        bonuses.push({ seeds: first, label: 'quà điểm danh đầu tiên' });
       }
     } else if (gapDays !== null) {
       const gapNeeded = await configInt(this.config, 'game.comeback_gap_days', COMEBACK_GAP_DAYS_DEFAULT);
@@ -148,6 +153,7 @@ export class GameEconomyService {
       if (gapDays >= gapNeeded && comeback > 0) {
         seeds += comeback;
         notes.unshift(`Chào mừng bạn quay lại! +${comeback} 💧`);
+        bonuses.unshift({ seeds: comeback, label: 'quà quay lại' });
       }
     }
     const bonusNote = notes.join(' ');
@@ -178,7 +184,7 @@ export class GameEconomyService {
       },
     });
     if (res.count === 0) return null;
-    return { p, seeds, streakDays, streakFrozeUsed, bonusNote };
+    return { p, seeds, streakDays, streakFrozeUsed, bonusNote, bonuses };
   }
 
   async collectDew(userId: string) {

@@ -107,6 +107,23 @@ describe('GameEconomyService.checkIn', () => {
   });
 });
 
+describe('GameEconomyService.checkIn — khoản thưởng nằm trong tổng', () => {
+  it('lần đầu: seedsEarned là tổng (10 + 50) và bonuses ghi riêng khoản 50 để màn không cộng dồn lần hai', async () => {
+    const p = prisma(prof({ lastCheckInAt: null, streakDays: 0, totalSeeds: 0 }));
+    (p.gameProfile.findUnique as jest.Mock).mockResolvedValueOnce(prof({ lastCheckInAt: null, streakDays: 0, totalSeeds: 0 })).mockResolvedValue({ totalSeeds: 60 });
+    const r = await new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 10, 'game.first_checkin_bonus': 50 }), sp(), analytics).checkIn('u1');
+    expect(r.seedsEarned).toBe(60);
+    expect(r.bonuses).toEqual([{ seeds: 50, label: 'quà điểm danh đầu tiên' }]);
+  });
+
+  it('bình đầy cắt phần tràn: không khoe khoản thưởng', async () => {
+    const p = prisma(prof({ lastCheckInAt: null, streakDays: 0, totalSeeds: 495 }));
+    (p.gameProfile.findUnique as jest.Mock).mockResolvedValueOnce(prof({ lastCheckInAt: null, streakDays: 0, totalSeeds: 495 })).mockResolvedValue({ totalSeeds: 500 });
+    const r = await new GameEconomyService(p, cfg({ 'game.first_checkin_bonus': 50 }), sp(), analytics).checkIn('u1');
+    expect(r.bonuses).toEqual([]);
+  });
+});
+
 describe('GameEconomyService.checkIn — Task 9 analytics (engagement_action)', () => {
   it('điểm danh thành công → recordBestEffort đúng eventName/action/streakDays (KHÔNG có tx, checkIn không transaction)', async () => {
     const p = prisma(prof({ streakDays: 4, lastCheckInAt: new Date(Date.now() - DAY) }));

@@ -7,11 +7,12 @@ import { isSameVNDay } from './game-utils';
 
 const t = vi.game.newbie.primary;
 
-export function primaryActionOf(profile: GameProfile | undefined): PrimaryWaterAction {
+export function primaryActionOf(profile: GameProfile | undefined, pointsPending?: boolean): PrimaryWaterAction {
   return primaryWaterAction({
     totalSeeds: profile?.totalSeeds ?? 0,
     harvestReady: profile?.harvestReady,
     checkedInToday: isSameVNDay(profile?.lastCheckInAt ?? null),
+    pointsPending,
     dewToday: isSameVNDay(profile?.lastDewAt ?? null),
     dailyLoginSeeds: profile?.dailyLoginSeeds,
     dewSeeds: profile?.dewSeeds,
@@ -26,6 +27,7 @@ export function primaryActionOf(profile: GameProfile | undefined): PrimaryWaterA
  */
 export function TreeActions({
   profile,
+  pointsPending,
   pending,
   onClaim,
   onWater,
@@ -33,6 +35,8 @@ export function TreeActions({
   onEarn,
 }: {
   profile: GameProfile | undefined;
+  /** Trạng thái điểm danh gộp báo còn phần Điểm Xanh chưa nhận (chỉ true khi đã tải được trạng thái đó). */
+  pointsPending?: boolean;
   pending: boolean;
   onClaim: (action: Extract<PrimaryWaterAction, { kind: 'claim' }>) => void;
   onWater: (drops: number) => void;
@@ -40,10 +44,12 @@ export function TreeActions({
   onHarvest: () => void;
   onEarn: () => void;
 }) {
-  const action = primaryActionOf(profile);
+  const action = primaryActionOf(profile, pointsPending);
   const label =
     action.kind === 'claim'
-      ? action.first
+      ? action.pointsOnly
+        ? t.claimPoints
+        : action.first
         ? t.claimFirst(action.gain)
         : t.claim(action.gain)
       : action.kind === 'water'

@@ -28,6 +28,15 @@ export function checkInTodayLine(s: Pick<CheckInStatusResponse, 'todayPoints' | 
   return `Hôm nay nhận ${parts.join(' · ')}${tankFull ? `. ${checkInCopy.tankFull}` : ''}`;
 }
 
+/** Số giọt nước đã là TỔNG gồm các khoản thưởng; ghi chúng trong ngoặc để khách không cộng dồn lần hai. */
+function waterIncludes(w: NonNullable<CheckInResult['water']>): string {
+  if (w.bonuses) {
+    const items = w.bonuses.filter((b) => b.seeds > 0).map((b) => `${num(b.seeds)} ${b.label}`);
+    return items.length > 0 ? ` (gồm ${items.join(', ')})` : '';
+  }
+  return w.bonusNote ? ` (${w.bonusNote.replace(/!\s*$/, '')})` : '';
+}
+
 /**
  * Câu báo sau khi bấm điểm danh: "+1.000 Điểm Xanh · +10 giọt nước". Ghép theo phần THỰC SỰ cộng ở lần gọi này;
  * bên đã xong từ trước thì không nhắc lại. Còn phần thiếu do lỗi thì nhắc bấm lại.
@@ -35,9 +44,8 @@ export function checkInTodayLine(s: Pick<CheckInStatusResponse, 'todayPoints' | 
 export function checkInSuccessText(r: CheckInResult): string {
   const parts: string[] = [];
   if (r.points && r.points.pointsEarned > 0) parts.push(`+${num(r.points.pointsEarned)} Điểm Xanh`);
-  if (r.water && r.water.seedsEarned > 0) parts.push(`+${num(r.water.seedsEarned)} giọt nước`);
+  if (r.water && r.water.seedsEarned > 0) parts.push(`+${num(r.water.seedsEarned)} giọt nước${waterIncludes(r.water)}`);
   if (r.water?.streakFrozeUsed) parts.push('đã dùng vé giữ lửa');
-  if (r.water && r.water.seedsEarned > 0 && r.water.bonusNote) parts.push(r.water.bonusNote);
   let text: string;
   if (parts.length > 0) text = parts.join(' · ');
   else if (r.points || r.water) text = 'Điểm danh thành công!';
