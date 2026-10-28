@@ -28,8 +28,13 @@ export interface AdminNotice {
 /** Số admin tối đa được báo một lần, đủ cho vận hành mà không quét cả bảng user. */
 const MAX_ADMINS = 20;
 
-/** Enum UserRole khai báo STAFF trước ADMIN, nên `desc` đặt ADMIN lên đầu: nếu vượt MAX_ADMINS thì nhân viên bị cắt, không phải ADMIN. */
-const ADMIN_FIRST = { role: 'desc' } as const;
+/**
+ * Chỉ nhóm lẫn vai trò mới cần thứ tự. Enum UserRole khai báo STAFF trước ADMIN nên `desc` đặt ADMIN lên đầu: nếu vượt MAX_ADMINS thì
+ * nhân viên bị cắt, không phải ADMIN. Nhóm `admins` toàn ADMIN, giữ nguyên truy vấn cũ.
+ */
+const AUDIENCE_ORDER: Partial<Record<AdminAudience, Prisma.UserOrderByWithRelationInput>> = {
+  'admins+cskh': { role: 'desc' },
+};
 
 const AUDIENCE_WHERE: Record<AdminAudience, Prisma.UserWhereInput> = {
   admins: { role: 'ADMIN', isBlocked: false },
@@ -47,8 +52,10 @@ export async function notifyAdmins(ctx: NotifyAdminsContext, notice: AdminNotice
     logger.warn(`NotificationsService chưa wiring — không báo được admin ${notice.subject}.`);
     return;
   }
+  const audience = notice.audience ?? 'admins';
+  const orderBy = AUDIENCE_ORDER[audience];
   const [admins, data] = await Promise.all([
-    prisma.user.findMany({ where: AUDIENCE_WHERE[notice.audience ?? 'admins'], select: { id: true }, orderBy: ADMIN_FIRST, take: MAX_ADMINS }),
+    prisma.user.findMany({ where: AUDIENCE_WHERE[audience], select: { id: true }, ...(orderBy ? { orderBy } : {}), take: MAX_ADMINS }),
     (async () => notice.data())(),
   ]);
   if (admins.length === 0) {
