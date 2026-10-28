@@ -36,18 +36,17 @@ export function homeBlockOrder(kind: HomeKindState): readonly HomeBlockId[] {
 }
 
 /**
- * Loại khách để chọn thứ tự khối. Đang khôi phục phiên (`authPending`) chưa biết là ai: dùng loại đã nhớ của tài khoản dùng gần nhất
- * trên máy (`stored`); chưa nhớ thì là khách mới.
- * Khách chưa đăng nhập hẳn luôn là mới; đang khôi phục phiên mà máy chưa nhớ gì (máy mới, chưa từng đăng nhập) cũng dựng bố cục khách mới ngay thay vì chờ,
- * trừ khi biết chắc có một phiên cũ (`unknownWhenUnremembered`, web có cờ phiên) thì mới là "chưa biết". Có số liệu đã mua (kể cả cũ, sau một lần tải lại lỗi) thì theo số liệu. Chưa có thì theo loại đã
- * nhớ của chính tài khoản này, kể cả khi tải lỗi: khách cũ không bị đẩy về bố cục khách mới vì một lần API chập chờn. Chưa nhớ gì:
- * đang tải là "chưa biết", lỗi là khách mới.
+ * Loại khách để chọn thứ tự khối. Chưa đăng nhập hẳn là khách mới. Đang khôi phục phiên (`authPending`) chưa biết là ai: dùng loại đã nhớ của
+ * tài khoản dùng gần nhất trên máy (`stored`); chưa nhớ thì "chưa biết" khi `unknownWhenUnremembered` (cả Mini và web đều truyền true,
+ * để thẻ thành viên giữ chỗ thay vì dựng bố cục khách mới rồi đổi), còn không là khách mới. Đã đăng nhập: có số liệu đã mua (kể cả cũ, sau một
+ * lần tải lại lỗi) thì theo số liệu, chưa có thì theo loại đã nhớ của chính tài khoản này, kể cả khi tải lỗi: khách cũ không bị đẩy về
+ * bố cục khách mới vì một lần API chập chờn. Chưa nhớ gì: đang tải là "chưa biết", lỗi là khách mới.
  */
 export function resolveHomeKind(opts: {
   authed: boolean;
   /** Đang khôi phục phiên (chưa biết đăng nhập hay chưa). */
   authPending?: boolean;
-  /** Đang khôi phục phiên và máy chưa nhớ loại: true = "chưa biết" (có phiên cũ thật, vd web có cờ phiên), mặc định = khách mới. */
+  /** Đang khôi phục phiên và máy chưa nhớ loại: true = "chưa biết" (giữ chỗ thẻ thành viên), mặc định = khách mới. */
   unknownWhenUnremembered?: boolean;
   /** Loại đã nhớ: của chính tài khoản khi đã đăng nhập, của tài khoản dùng gần nhất khi đang khôi phục phiên. */
   stored: HomeCustomerKind | null;

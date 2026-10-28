@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { renderToString } from 'react-dom/server';
+import { hydrateRoot } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets } from '@/test-utils/a11y';
@@ -45,6 +48,35 @@ afterEach(() => {
   mounted?.unmount();
   mounted = null;
   vi.useRealTimers();
+});
+
+describe('FlashSale hydrate', () => {
+  it('suất còn dưới 24 giờ: HTML dựng trước đồng hồ trình duyệt 75 giây thì chữ "Còn Xh YYm" lệch vẫn không làm hỏng hydrate', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-28T10:00:50Z'));
+    const items = [active({ endAt: '2026-10-28T12:16:00Z' })];
+    const ui = () => (
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <FlashSale initial={items as never} />
+      </QueryClientProvider>
+    );
+    const html = renderToString(ui());
+    expect(html).toContain('2h 16m');
+    vi.setSystemTime(new Date('2026-10-28T10:02:05Z'));
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.appendChild(container);
+    const errors: unknown[] = [];
+    const consoleError = vi.spyOn(console, 'error').mockImplementation((...a) => void errors.push(a));
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, ui(), { onRecoverableError: (e) => void errors.push(e) });
+    });
+    consoleError.mockRestore();
+    expect(errors).toEqual([]);
+    act(() => root.unmount());
+    container.remove();
+  });
 });
 
 describe('FlashSale', () => {

@@ -111,7 +111,8 @@ export function FlashSale({ initial }: { initial?: FlashSaleActiveItem[] }) {
         {timeLeft && (
           <span role="timer" suppressHydrationWarning aria-label={flashSaleText.endsIn(timeLeft)}>
             <Badge tone="promo" icon={Clock}>
-              {flashSaleText.endsIn(timeLeft)}
+              {/* HTML ISR dựng trước lúc hydrate tới 60s: chữ phút lệch là bình thường, chỉ che đúng phần tử chứa chữ. */}
+              <span suppressHydrationWarning>{flashSaleText.endsIn(timeLeft)}</span>
             </Badge>
           </span>
         )}

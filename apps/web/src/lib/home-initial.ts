@@ -37,5 +37,7 @@ export async function loadHomeInitial(): Promise<HomeInitial> {
     // Next lấy hạn làm mới của trang từ hạn nhỏ nhất của các lệnh fetch trong lần dựng đó; lần dựng lại ở runtime có đủ dữ liệu trả hạn về 5 phút.
     await createServerHttp({ revalidate: BUILD_GAP_REVALIDATE_S }).get('/config/public').catch(() => undefined);
   }
-  return { bestSellers, suggest, categories, brands, publicConfig, flash };
+  // Hết giờ rồi thì không đưa vào HTML: lần tải ngay sau đó sẽ không còn, khối biến mất và trang nhảy.
+  const liveFlash = flash?.filter((it) => new Date(it.endAt).getTime() > Date.now());
+  return { bestSellers, suggest, categories, brands, publicConfig, flash: liveFlash };
 }
