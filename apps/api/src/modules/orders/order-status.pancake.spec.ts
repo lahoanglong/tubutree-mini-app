@@ -43,7 +43,9 @@ function make(order: Record<string, unknown>, hooks: Record<string, jest.Mock> =
     /** Dấu "vận chuyển đã báo … — đẩy tay sau khi nhận tiền" (flagDroppedStatus). */
     $executeRaw: jest.fn().mockResolvedValue(1),
   };
-  const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+  const notifyMock = jest.fn().mockResolvedValue(true);
+  // Service gửi tin qua notifySafe; hai tên dùng chung một mock để kiểm theo mã tin.
+  const notifications = { notify: notifyMock, notifySafe: notifyMock };
   const pancakeHooks = {
     precheckCancel: jest.fn().mockResolvedValue({ kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' }),
     afterLocalCancel: jest.fn().mockResolvedValue(undefined),

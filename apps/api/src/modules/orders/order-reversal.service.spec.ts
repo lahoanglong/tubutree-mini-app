@@ -1056,7 +1056,7 @@ describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền
       commission: {
         findMany: jest.fn(async ({ where }: { where: { status: { in: string[] } } }) =>
           where.status.in.includes(row.status)
-            ? [{ id: 'c1', amount: row.amount, commissionableTotal: row.commissionableTotal, lineAmounts: row.lineAmounts }]
+            ? [{ id: 'c1', affiliateUserId: 'ctv1', amount: row.amount, commissionableTotal: row.commissionableTotal, lineAmounts: row.lineAmounts }]
             : [],
         ),
         updateMany: jest.fn(
@@ -1112,6 +1112,15 @@ describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền
       where: { id: 'c1', amount: 14_750, commissionableTotal: 195_000, status: { in: ['PENDING', 'LOCKED'] } },
       data: { amount: { decrement: 3_333 }, commissionableTotal: { decrement: 33_333 } },
     });
+  });
+
+  it('trả về CTV nào bị cắt bao nhiêu (commissionCutBy) để báo CTV sau commit; không cắt thì danh sách rỗng', async () => {
+    const cut = await partial(commissionTx(newRow()), { i1: 1 }, {});
+    expect(cut.commissionCutBy).toEqual([{ affiliateUserId: 'ctv1', amount: 3_333 }]);
+    const none = await partial(commissionTx(newRow()), { i3: 1 }, {});
+    expect(none.commissionCutBy).toEqual([]);
+    const settled = await partial(commissionTx(newRow({ status: 'APPROVED' })), { i1: 1 }, {});
+    expect(settled.commissionCutBy).toEqual([]);
   });
 
   it('chỉ đọc commission PENDING/LOCKED: đã duyệt/đã chi thì không đụng gì (giống lần đảo cả đơn)', async () => {

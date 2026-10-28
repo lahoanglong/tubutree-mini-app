@@ -487,11 +487,10 @@ export class OrdersService {
     }
     const pointsBack = ((reversed as ReversalResult | null)?.pointsRefunded ?? 0) + standardPointsBack;
     await this.notifications
-      .notify(userId, 'ORDER_CANCELLED', {
+      .notifySafe(userId, 'ORDER_CANCELLED', {
         order_code: code,
         refund_note: refundNote(refund, bank, pointsBack) + receivedRefundNote(receivedBack, !!order.placedForCustomer),
-      })
-      .catch(() => undefined);
+      });
     await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_ORDER_CANCELLED', {
       order_code: code,
       reason: 'Khách huỷ đơn',

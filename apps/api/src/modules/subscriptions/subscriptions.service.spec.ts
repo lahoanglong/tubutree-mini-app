@@ -261,7 +261,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     } as unknown as PricingService;
     const ly = { getTierMultiplier: jest.fn().mockResolvedValue(1) } as unknown as LoyaltyService;
     const notify = jest.fn().mockResolvedValue(undefined);
-    const nt = { notify } as unknown as NotificationsService;
+    const nt = { notify, notifySafe: notify } as unknown as NotificationsService;
     const enqueuePush = jest.fn().mockResolvedValue(undefined);
     const pancake = { enqueuePush } as unknown as PancakeOrderService;
     const analytics = makeAnalytics();

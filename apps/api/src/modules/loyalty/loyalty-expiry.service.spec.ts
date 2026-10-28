@@ -1175,7 +1175,7 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
       pointsTransaction: { findMany },
       notificationLog: { findFirst: notifFindFirst },
     } as unknown as PrismaService;
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     const svc = new LoyaltyExpiryService(prisma, config, notifications);
     return { svc, findMany, notifFindFirst, notify };
   }

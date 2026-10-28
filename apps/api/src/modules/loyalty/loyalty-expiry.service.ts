@@ -529,11 +529,10 @@ export class LoyaltyExpiryService {
     if (recent) return false;
 
     await this.notifications
-      .notify(userId, 'POINTS_EXPIRING', {
+      .notifySafe(userId, 'POINTS_EXPIRING', {
         points: formatPoints(expiringSoon.amount),
         date: formatVnDate(expiringSoon.earliestExpiresAt),
-      })
-      .catch(() => undefined); // gửi lỗi không chặn lô (notify tự nuốt lỗi ZNS)
+      }); // gửi lỗi không chặn lô (notify tự nuốt lỗi ZNS)
     return true;
   }
 }

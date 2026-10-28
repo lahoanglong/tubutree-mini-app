@@ -29,7 +29,9 @@ const loyalty = {
   pointsExpiresAt: jest.fn().mockResolvedValue(POINTS_EXPIRES_AT),
 } as unknown as LoyaltyService;
 const cart = {} as unknown as CartService;
-const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+const notifyMock = jest.fn().mockResolvedValue(true);
+// Service gửi tin qua notifySafe; hai tên dùng chung một mock để kiểm theo mã tin.
+const notifications = { notify: notifyMock, notifySafe: notifyMock } as unknown as NotificationsService;
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
 const flash = { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService;
 const affiliate = { reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined) } as unknown as AffiliateService;
