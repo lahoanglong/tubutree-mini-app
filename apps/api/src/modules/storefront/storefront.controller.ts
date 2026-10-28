@@ -77,7 +77,7 @@ export class StorefrontController {
   ) {}
 
   @Post() create(@CurrentUser('sub') uid: string) { return this.svc.getOrCreateMine(uid); }
-  @Get('me') me(@CurrentUser('sub') uid: string) { return this.svc.getMine(uid); }
+  @Get('me') me(@CurrentUser('sub') uid: string) { return this.svc.getMineOrNull(uid); }
   @Patch('me') update(@CurrentUser('sub') uid: string, @Body() dto: UpdateStorefrontDto) { return this.svc.updateMine(uid, dto); }
   @Post('me/publish') publish(@CurrentUser('sub') uid: string, @Body() dto: PublishDto) { return this.svc.publishMine(uid, dto.isPublished); }
 

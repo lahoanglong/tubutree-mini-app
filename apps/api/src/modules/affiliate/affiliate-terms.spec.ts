@@ -9,10 +9,11 @@ import type { PricingService } from '../pricing/pricing.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import type { RewardPointsService } from '../wallet/reward-points.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import type { SessionStateService } from '../auth/session-state.service';
 
 const noop = {} as never;
 
-function makeService(user: Record<string, unknown>) {
+function makeService(user: Record<string, unknown>, sessionState?: SessionStateService) {
   const update = jest.fn().mockResolvedValue({});
   const prisma = {
     user: { findUniqueOrThrow: jest.fn().mockResolvedValue(user), update },
@@ -24,6 +25,10 @@ function makeService(user: Record<string, unknown>) {
     noop as PancakeOrderService,
     noop as RewardPointsService,
     noop as AnalyticsEventsService,
+    undefined,
+    undefined,
+    undefined,
+    sessionState,
   );
   return { svc, update };
 }
@@ -44,6 +49,20 @@ describe('AffiliateService.register — ghi nhận đồng ý điều khoản CT
     const at = Date.parse(data.metadata.affiliateTerms.acceptedAt);
     expect(at).toBeGreaterThanOrEqual(before);
     expect(at).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('đổi vai trò lên AFFILIATE thì xoá bản nhớ phiên, để route CTV (Học viện) không còn thấy vai trò cũ', async () => {
+    const invalidate = jest.fn();
+    const { svc } = makeService({ id: 'u1', role: 'CUSTOMER', referralCode: 'TUBU1', metadata: null }, { invalidate } as unknown as SessionStateService);
+    await svc.register('u1', '2026-10');
+    expect(invalidate).toHaveBeenCalledWith('u1');
+  });
+
+  it('đã là AFFILIATE (không đổi vai trò) thì không cần xoá bản nhớ', async () => {
+    const invalidate = jest.fn();
+    const { svc } = makeService({ id: 'u1', role: 'AFFILIATE', referralCode: 'TUBU1', metadata: null }, { invalidate } as unknown as SessionStateService);
+    await svc.register('u1', '2026-10');
+    expect(invalidate).not.toHaveBeenCalled();
   });
 
   it('metadata đang rỗng (null) vẫn lưu được', async () => {

@@ -65,6 +65,7 @@ import { loadPublicVisibility } from '../storefront/public-visibility';
 import type { PublicVisibilityOptions } from '../storefront/storefront-visibility';
 import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
 import { TrackCron } from '../../common/cron-run/track-cron';
+import { SessionStateService } from '../auth/session-state.service';
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -121,6 +122,8 @@ export class AffiliateService {
     @Optional() private readonly flashSale?: FlashSaleService,
     // @Optional: ConfigModule là global nên app thật luôn có; test dựng trực tiếp không truyền thì hashIp dùng khoá dev.
     @Optional() private readonly env?: ConfigService<Env, true>,
+    // @Optional cùng lý do; SessionStateModule là @Global.
+    @Optional() private readonly sessionState?: SessionStateService,
   ) {}
 
   async register(userId: string, termsVersion?: string) {
@@ -147,6 +150,8 @@ export class AffiliateService {
     if (Object.keys(data).length > 0) {
       await this.prisma.user.update({ where: { id: userId }, data });
     }
+    // Vai trò vừa đổi: bỏ bản nhớ 5 giây của phiên, không thì các route CTV (Học viện...) còn thấy vai trò cũ và trả 403.
+    if (data.role) this.sessionState?.invalidate(userId);
     return { ok: true, referralCode: user.referralCode };
   }
 
