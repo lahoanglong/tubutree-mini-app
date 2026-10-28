@@ -3,7 +3,7 @@ import { Page, useNavigate } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { fetchActiveFlashSales, fetchProducts, fetchUpcomingFlashSales } from '../services/shop-api';
-import { getNotifications } from '../services/account-api';
+import { coreHttp } from '../services/core-http';
 import { useAuthStore } from '../store/auth';
 import { useCategories } from '../hooks/use-categories';
 import { useHomeCustomerKind } from '../hooks/use-home-customer-kind';
@@ -29,6 +29,7 @@ import { useBlockQuery } from '../components/home/use-block-query';
 import { useHomeFeed } from '../components/home/use-home-feed';
 import { refreshHomeQueries } from '../components/home/home-blocks';
 import { homeRenderOrder, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
+import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
 import { Icon } from '../components/ui/icon';
 import { Text } from '../components/ui/text';
 import { vi } from '../i18n/vi';
@@ -48,10 +49,9 @@ export default function HomePage() {
   const restoring = useAuthStore((s) => s.status === 'loading');
   const sessionFailed = useAuthStore((s) => s.status === 'error');
   const userId = useAuthStore((s) => s.user?.id);
-  // Chuông ở đây trước đây trơ, không báo gì — trong khi voucher sinh nhật, nhắc giỏ, hoa hồng
-  // duyệt đều nằm trong Thông báo. Dùng chung queryKey với trang Thông báo (P1-8 audit mạch lạc).
-  const unreadCount =
-    useQuery({ queryKey: ['notifications'], queryFn: getNotifications, enabled: authed }).data?.filter((n) => n.status !== 'READ').length ?? 0;
+  // Voucher sinh nhật, nhắc giỏ, hoa hồng duyệt đều nằm trong Thông báo nên chuông phải báo. Đếm cả hộp thư (không dừng ở 50 tin đầu), chung
+  // queryKey với Cá nhân và trang Thông báo, và không tải danh sách tin chỉ để đếm.
+  const unreadCount = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: authed }).data?.count ?? 0;
 
   // Cùng query key với PurchasedRail → không thêm request; chỉ để biết khách cũ hay mới. Trong lúc tải dùng loại đã nhớ
   // của tài khoản này để thứ tự khối không đổi sau khung hình đầu (useHomeCustomerKind).
