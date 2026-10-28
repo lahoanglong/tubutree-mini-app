@@ -13,6 +13,7 @@ import {
 import { useConfirm } from './confirm-dialog';
 import { BTN_PRIMARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, INPUT_CLASS, Notice, LoadError, ToneBadge } from './ui';
 import { SeasonAdmin } from './season-admin';
+import { GameQuizAdmin } from './game-quiz-tab';
 
 const REWARD_POINTS_MAX = 500_000;
 const CHECKIN_NOTE = 'Nhiệm vụ điểm danh: nếu khách dùng vé giữ lửa hay hồi sinh chuỗi thì nhiệm vụ đếm lại từ ngày đó (khách chỉ thấy dòng này trên thẻ nhiệm vụ khi đã dùng vé giữ lửa hay hồi sinh sau ngày bắt đầu nhiệm vụ).';
@@ -38,6 +39,8 @@ export function EngagementTab() {
       </section>
 
       <SeasonAdmin />
+
+      <GameQuizAdmin />
 
       <Notice tone="info">Quà đổi Điểm Xanh nay quản lý ở tab Đổi rác, mục Quà.</Notice>
     </div>
