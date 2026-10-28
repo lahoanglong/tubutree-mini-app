@@ -198,6 +198,29 @@ describe('CustomerRefundsTab — bộ lọc, phân trang, trạng thái', () => 
     expect(api.calls.at(-1)!.url).not.toContain('kind=');
   });
 
+  it('ô tìm theo mã đơn hoặc SĐT: gửi q đã cắt khoảng trắng sau nhịp gõ, về trang 1; xoá ô thì bỏ q', async () => {
+    const api = mockFetch(LIST([refund()]));
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const input = container.querySelector('input[aria-label="Tìm khoản hoàn theo mã đơn hoặc SĐT khách"]');
+    typeInto(input, '  0912345678 ');
+    const waitUntil = async (cond: () => boolean) => {
+      for (let i = 0; i < 40 && !cond(); i += 1) {
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 20));
+        });
+      }
+    };
+    await waitUntil(() => api.calls.some((c) => c.url.includes('q=0912345678')));
+    const last = api.calls.at(-1)!.url;
+    expect(last).toContain('q=0912345678');
+    expect(last).toContain('page=1');
+    typeInto(input, '');
+    await waitUntil(() => !api.calls.at(-1)!.url.includes('q='));
+    expect(api.calls.at(-1)!.url).not.toContain('q=');
+  });
+
   it('thanh lọc: "Đang mở" đứng đầu và đang chọn, chip 44px; bấm "Đã chuyển" gọi status=COMPLETED trang 1', async () => {
     const api = mockFetch(LIST([]));
     vi.stubGlobal('fetch', vi.fn(api.fn));
