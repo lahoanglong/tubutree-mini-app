@@ -49,6 +49,7 @@ vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.conf
 vi.mock('../components/image-upload', () => ({ ImageUpload: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { useAuthStore } from '../store/auth';
 import DealerPage from './dealer';
 
 const row = (over: Partial<Record<string, unknown>> = {}) => ({
@@ -268,6 +269,31 @@ describe('DealerPage — tab, mẫu đơn, đặt nhanh', () => {
     expect(await screen.findByText('Dư nợ hiện tại')).toBeInTheDocument();
   });
 
+  it('dòng bảng giá: phân loại ở dòng riêng, đậm, tách khỏi tên sản phẩm', async () => {
+    renderPage();
+    const variation = await screen.findByText('500ml');
+    expect(variation.textContent).toBe('500ml');
+    expect(variation.style.fontWeight).toBe('700');
+    expect(screen.getByText('Nước rửa chén').style.webkitLineClamp).toBe('2');
+  });
+
+  it('bảng giá rỗng khi chưa tìm gì: nói chưa có hàng giá sỉ cho bậc, không nói "không tìm thấy"', async () => {
+    mocks.getPricelist.mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByText('Chưa có hàng giá sỉ cho bậc của bạn')).toBeInTheDocument();
+    expect(screen.queryByText('Không tìm thấy sản phẩm')).toBeNull();
+  });
+
+  it('tab Đơn hàng rỗng có nút "Đặt đơn sỉ" đưa về Bảng giá; đổi tab ghi ?tab= lên URL', async () => {
+    renderPage();
+    await screen.findByText(/tồn 9/);
+    openTab('Đơn hàng');
+    expect(mocks.navigate).toHaveBeenCalledWith('/dealer?tab=orders', { replace: true });
+    fireEvent.click(await screen.findByRole('button', { name: 'Đặt đơn sỉ' }));
+    expect(screen.getByRole('tab', { name: 'Bảng giá' })).toHaveAttribute('aria-selected', 'true');
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/dealer', { replace: true });
+  });
+
   it('mẫu đơn: chạm tên nạp lại số lượng, nút xoá gọi deleteTemplate đúng id', async () => {
     mocks.getTemplates.mockResolvedValue([{ id: 'tp1', name: 'Đơn tháng', items: [{ variationId: 'v1', quantity: 2 }] }]);
     mocks.deleteTemplate.mockResolvedValue({ ok: true });
@@ -323,7 +349,7 @@ describe('DealerPage — tab, mẫu đơn, đặt nhanh', () => {
   it('ô tìm kiếm lọc theo SKU và báo trống khi không có kết quả', async () => {
     renderPage();
     await screen.findByText(/tồn 9/);
-    fireEvent.change(screen.getByPlaceholderText('Tìm theo tên / SKU / thương hiệu'), { target: { value: 'khong-co-san-pham-nay' } });
+    fireEvent.change(screen.getByPlaceholderText('Tìm tên, SKU'), { target: { value: 'khong-co-san-pham-nay' } });
     expect(await screen.findByText(/Không tìm thấy sản phẩm/)).toBeInTheDocument();
   });
 });
@@ -367,7 +393,7 @@ describe('DealerPage — đơn hàng, công nợ, báo cáo', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/order/TUBU9');
   });
 
-  it('công nợ: Báo đã CK gửi đúng số tiền + ghi chú, chặn số tiền vượt dư nợ, sổ rỗng có trạng thái rỗng', async () => {
+  it('công nợ: Báo đã chuyển khoản gửi đúng số tiền + ghi chú, chặn số tiền vượt dư nợ, sổ rỗng có trạng thái rỗng', async () => {
     mocks.getCreditLedger.mockResolvedValue({ balance: 3_000_000, entries: [] });
     mocks.payCredit.mockResolvedValue({ ok: true });
     renderPage();
@@ -376,7 +402,7 @@ describe('DealerPage — đơn hàng, công nợ, báo cáo', () => {
     expect(await screen.findByText('3.000.000đ')).toBeInTheDocument();
     expect(screen.getByText(/Chưa có giao dịch công nợ/)).toBeInTheDocument();
     const amount = screen.getByPlaceholderText('Số tiền đã chuyển');
-    const pay = screen.getByRole('button', { name: 'Báo đã CK' });
+    const pay = screen.getByRole('button', { name: 'Báo đã chuyển khoản' });
     fireEvent.change(amount, { target: { value: '4000000' } });
     expect(pay).toBeDisabled();
     expect(screen.getByText('Số tiền vượt dư nợ hiện tại (3.000.000đ).')).toBeInTheDocument();
@@ -586,6 +612,17 @@ describe('DealerPage — điều kiện, nhãn, gian hàng đối tác (B-86, B-
     for (const name of ['Tên doanh nghiệp / cửa hàng *', 'Mã số thuế', 'Người đại diện *', 'Số điện thoại *', 'Địa chỉ kinh doanh *']) {
       expect(screen.getByLabelText(name)).toBeInTheDocument();
     }
+  });
+
+  it('form đăng ký điền sẵn Người đại diện và Số điện thoại từ tài khoản, ô khác để trống', async () => {
+    useAuthStore.setState({ user: { id: 'u1', role: 'CUSTOMER', fullName: 'Lan Nguyễn', phone: '0901234567' } as never });
+    mocks.getDealerMe.mockResolvedValue({ isDealer: false, status: 'NONE' });
+    renderPage();
+    await screen.findByTestId('dealer-conditions');
+    expect(screen.getByLabelText('Người đại diện *')).toHaveValue('Lan Nguyễn');
+    expect(screen.getByLabelText('Số điện thoại *')).toHaveValue('0901234567');
+    expect(screen.getByLabelText('Tên doanh nghiệp / cửa hàng *')).toHaveValue('');
+    useAuthStore.setState({ user: null });
   });
 
   it('hub đại lý có ghi chú quản lý gian hàng đối tác trên web, không có đường dẫn', async () => {

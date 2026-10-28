@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Hourglass, Store } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { applyDealer, type DealerApplyInput } from '@tubutree/app-core/api/dealer';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { coreHttp } from '@/lib/core-http';
 import { usePublicConfig } from '@/lib/use-public-config';
+import { useAuth } from '@/lib/auth-context';
 import {
   DEALER_BENEFITS,
   DEALER_BENEFITS_TITLE,
@@ -51,6 +52,14 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
   });
 
   const set = (k: keyof DealerApplyInput) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Điền sẵn tên và SĐT đã có trong tài khoản để khách không gõ lại; ô nào khách đã gõ thì giữ nguyên. Phiên chưa có SĐT thì bỏ trống.
+  const { user } = useAuth();
+  const accountName = user?.fullName?.trim() ?? '';
+  const accountPhone = (user as { phone?: string | null } | null)?.phone?.trim() ?? '';
+  useEffect(() => {
+    setForm((f) => ({ ...f, ownerName: f.ownerName || accountName, phone: f.phone || accountPhone }));
+  }, [accountName, accountPhone]);
   const valid = Boolean(
     form.businessName.trim() && form.ownerName.trim() && form.phone.trim() && form.address.trim() && form.cccdFrontUrl.trim() && form.cccdBackUrl.trim(),
   );
