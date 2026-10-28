@@ -57,6 +57,7 @@ export function Chip({
         minHeight: size === 'md' ? 44 : 32,
         minWidth: 44,
         flexShrink: 0,
+        maxWidth: '100%',
         borderRadius: 'var(--radius-pill)',
         whiteSpace: 'nowrap',
         boxSizing: 'border-box',

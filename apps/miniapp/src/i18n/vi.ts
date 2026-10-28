@@ -417,7 +417,9 @@ export const vi = {
   } as Record<string, string>,
 
   browse: {
-    title: 'Khám phá',
+    title: 'Danh mục',
+    categoryChips: 'Đổi danh mục',
+    viewBrand: (brand: string) => `Xem trang nhãn hàng ${brand}`,
     searchPlaceholder: 'Tìm sản phẩm...',
     searchLabel: 'Tìm sản phẩm',
     clearSearch: 'Xoá từ khoá',

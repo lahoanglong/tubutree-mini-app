@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
+import { ChevronRight } from 'lucide-react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { fetchActiveFlashSales, fetchBrands, fetchCatalog, type ProductCard, type ProductSuggestion } from '../services/shop-api';
 import { getLoadErrorMessage } from '../services/api';
@@ -7,6 +8,7 @@ import { trackFilterApplied, trackSearchPerformed, trackSearchResultClicked } fr
 import { CartButton } from '../components/cart-button';
 import { PullToRefresh } from '../components/pull-to-refresh';
 import { CatalogGrid, CatalogGridSkeleton } from '../components/catalog/catalog-grid';
+import { CategoryChips } from '../components/catalog/category-chips';
 import { CategoryGrid } from '../components/catalog/category-grid';
 import { FilterSheet } from '../components/catalog/filter-sheet';
 import { RecentlyViewedRail } from '../components/catalog/recently-viewed-rail';
@@ -15,7 +17,7 @@ import { SortChips } from '../components/catalog/sort-chips';
 import { SuggestList } from '../components/catalog/suggest-list';
 import { Button } from '../components/ui/button';
 import { SR_ONLY } from '../components/ui/sr-only';
-import { Text } from '../components/ui/text';
+import { Heading, Text } from '../components/ui/text';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { SearchField } from '../components/ui/search-field';
 import { segmentLabel, useCategories, type CategoryEntry } from '../hooks/use-categories';
@@ -32,6 +34,18 @@ import {
 } from '../utils/search-state';
 
 const PAGE_LIMIT = 30;
+
+// Ô tìm dính đầu trang khi cuộn (dưới vùng an toàn): khách đang xem lưới sâu vẫn tìm hoặc mở giỏ được mà không phải cuộn ngược lên.
+const STICKY_SEARCH: CSSProperties = {
+  position: 'sticky',
+  top: 'var(--safe-top)',
+  zIndex: 20,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '12px 16px 8px',
+  background: 'var(--color-bg-canvas)',
+};
 
 /**
  * Trang Danh mục / Tìm kiếm (spec 5b.2) — DS v2. Toàn bộ trạng thái (q, sắp xếp, lọc, danh mục,
@@ -148,13 +162,18 @@ export default function BrowsePage() {
   const categoryName = state.category ? categories.categories.find((c) => c.id === state.category)?.name : undefined;
   const chips = activeFilterChips(state, { categoryName, segmentName: state.segment ? segmentLabel(state.segment) : undefined });
   const noResults = !products.isLoading && !products.isError && list.length === 0;
+  // Đã chọn danh mục, phân khúc hoặc đúng một nhãn thì nói rõ đang xem gì; nhãn công khai có thêm lối sang trang nhãn.
+  const singleBrand = state.brands.length === 1 ? state.brands[0]! : null;
+  const brandSlug = singleBrand ? (brands.data?.find((b) => b.brand === singleBrand)?.slug ?? null) : null;
+  const filterHeading = state.q ? null : categoryName ?? (state.segment ? segmentLabel(state.segment) : null) ?? singleBrand;
+  const activeCategory = state.category ? { kind: 'category' as const, key: state.category } : state.segment ? { kind: 'segment' as const, key: state.segment } : null;
 
   return (
     <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
       <PullToRefresh onRefresh={() => Promise.all([products.refetch(), brands.refetch()])} />
       <div ref={anchorRef} />
       <h1 style={SR_ONLY}>{vi.browse.title}</h1>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px 8px' }}>
+      <div style={STICKY_SEARCH}>
         <SearchField
           ref={inputRef}
           value={draft}
@@ -202,6 +221,27 @@ export default function BrowsePage() {
         />
       ) : (
         <>
+          {filterHeading && (
+            <div style={{ padding: '4px 16px 0' }}>
+              <Heading variant="title-lg" as="h2" style={{ overflowWrap: 'anywhere' }}>
+                {filterHeading}
+              </Heading>
+              {brandSlug && (
+                <button
+                  type="button"
+                  className="tubu-press"
+                  onClick={() => navigate(`/brand/${encodeURIComponent(brandSlug)}`)}
+                  style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center', gap: 4, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  <Text variant="label" tone="brand">
+                    {vi.browse.viewBrand(singleBrand!)}
+                  </Text>
+                  <ChevronRight size={16} aria-hidden style={{ color: 'var(--color-text-brand)' }} />
+                </button>
+              )}
+            </div>
+          )}
+          {activeCategory && <CategoryChips entries={categories.entries} active={activeCategory} onSelect={pickCategory} />}
           {root && (
             <CategoryGrid
               entries={categories.entries}
