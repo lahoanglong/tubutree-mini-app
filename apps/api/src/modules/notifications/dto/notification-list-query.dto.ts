@@ -2,7 +2,7 @@ import { Type } from 'class-transformer';
 import { IsDefined, IsInt, IsISO8601, IsOptional, IsString, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 import { NOTIFICATION_PAGE_MAX } from '../notification-feed.service';
 
-/** Query của `GET /me/notifications`: bỏ trống toàn bộ thì trả 50 tin mới nhất như trước. */
+/** Query của `GET /me/notifications`: bỏ trống toàn bộ thì trả 50 tin mới nhất (client đã phát hành không gửi tham số nào). */
 export class NotificationListQuery {
   /** Có `beforeId` thì bắt buộc có mốc này: id chỉ phân định các tin cùng `sentAt`. */
   @ValidateIf((o: NotificationListQuery) => o.before !== undefined || o.beforeId !== undefined)

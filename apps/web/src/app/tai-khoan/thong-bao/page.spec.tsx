@@ -45,6 +45,8 @@ const mount = async () => {
   await flush(6);
   return r;
 };
+// Trang còn gọi `/me/notifications/unread-count`; các ca đếm lần nạp danh sách chỉ tính đường dẫn danh sách.
+const listCalls = () => mocks.get.mock.calls.filter(([p]) => p === '/me/notifications');
 const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
 const rowOf = (c: HTMLElement, text: string) => byText(c, 'button', text) as HTMLElement;
 const openRow = async (c: HTMLElement, text: string) => {
@@ -119,7 +121,7 @@ describe('/tai-khoan/thong-bao: khung trang', () => {
     const { container } = await mount();
     click(byText(container, 'button', 'Thử lại'));
     await flush(6);
-    expect(mocks.get.mock.calls.filter(([p]) => !String(p).includes('/config/'))).toHaveLength(2);
+    expect(listCalls()).toHaveLength(2);
     expect(container.textContent).toContain('Bạn nhận thêm 50 điểm Xanh');
   });
 
@@ -164,7 +166,8 @@ describe('/tai-khoan/thong-bao: chi tiết', () => {
   it('đánh dấu đã đọc xong thì nạp lại danh sách', async () => {
     const { container } = await mount();
     await openRow(container, 'Đơn TT001 đã được xác nhận');
-    expect(mocks.get).toHaveBeenCalledTimes(2);
+    expect(listCalls()).toHaveLength(2);
+    expect(mocks.get.mock.calls.filter(([p]) => p === '/me/notifications/unread-count')).toHaveLength(2);
   });
 
   it('chạm tin đã đọc: không gọi đánh dấu đã đọc', async () => {
@@ -333,7 +336,7 @@ describe('/tai-khoan/thong-bao: Đọc tất cả', () => {
     await flush(6);
     expect(mocks.post).toHaveBeenCalledTimes(1);
     expect(mocks.post).toHaveBeenCalledWith('/me/notifications/read-all');
-    expect(mocks.get).toHaveBeenCalledTimes(2);
+    expect(listCalls()).toHaveLength(2);
   });
 
   it('không còn tin chưa đọc hoặc danh sách trống: ẩn nút', async () => {
@@ -355,13 +358,16 @@ describe('/tai-khoan/thong-bao: E-84 tải thêm tin', () => {
 
   it('trang đầu xin 20 tin; đủ 20 thì có "Xem thêm", bấm nạp trang 2 theo con trỏ của tin cuối, hết thì ẩn nút', async () => {
     const first = rows(0, 20);
-    mocks.get.mockResolvedValueOnce(first).mockResolvedValueOnce(rows(20, 5));
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/me/notifications/unread-count') return { count: 0 };
+      return listCalls().length === 1 ? first : rows(20, 5);
+    });
     const { container } = await mount();
-    expect(mocks.get).toHaveBeenNthCalledWith(1, '/me/notifications', { query: { limit: 20 } });
+    expect(listCalls()[0]).toEqual(['/me/notifications', { query: { limit: 20 } }]);
     expect(container.textContent).toContain('Tin số 0');
     click(byText(container, 'button', 'Xem thêm'));
     await flush(6);
-    expect(mocks.get).toHaveBeenNthCalledWith(2, '/me/notifications', { query: { before: first[19]!.sentAt, beforeId: 'p19', limit: 20 } });
+    expect(listCalls()[1]).toEqual(['/me/notifications', { query: { before: first[19]!.sentAt, beforeId: 'p19', limit: 20 } }]);
     expect(container.textContent).toContain('Tin số 24');
     expect(container.textContent).toContain('Tin số 0');
     expect(byText(container, 'button', 'Xem thêm')).toBeNull();
@@ -421,5 +427,53 @@ describe('/tai-khoan/thong-bao: nút theo loại tin (E-4, E-5, E-32, E-81, E-90
   it('cảnh báo cầu nối Zalo: "Mở Chat CSKH" tới tab Chat CSKH của trang quản trị', async () => {
     const { link } = await linkOf(tin('OPS_ZALO_BRIDGE_DOWN', 'Cầu nối Zalo mất kết nối'), 'Mở Chat CSKH');
     expect(link?.getAttribute('href')).toBe('/admin?tab=supportChat');
+  });
+});
+
+describe('/tai-khoan/thong-bao: đếm chưa đọc của cả hộp thư và lỗi "Xem thêm"', () => {
+  const rows = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `p${i}`, templateCode: 'POINTS_EARNED', payload: { body: `Tin số ${i}` }, status: 'READ',
+      sentAt: new Date(Date.UTC(2026, 9, 28, 3, 0, 0) - i * 1000).toISOString(),
+    }));
+  const route = (count: number | null, extra?: (path: string) => unknown) =>
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/me/notifications/unread-count') {
+        if (count === null) throw new Error('chưa có');
+        return { count };
+      }
+      return extra?.(path) ?? rows(20);
+    });
+
+  it('20 tin trang đầu đều đã đọc nhưng máy chủ báo còn 3 tin chưa đọc: vẫn có "Đọc tất cả", bấm thì gọi đọc hết', async () => {
+    route(3);
+    const { container } = await mount();
+    click(byText(container, 'button', 'Đọc tất cả'));
+    await flush(6);
+    expect(mocks.post).toHaveBeenCalledWith('/me/notifications/read-all');
+  });
+
+  it('máy chủ báo 0 chưa đọc: ẩn nút', async () => {
+    route(0);
+    const { container } = await mount();
+    expect(container.textContent).toContain('Tin số 0');
+    expect(byText(container, 'button', 'Đọc tất cả')).toBeNull();
+  });
+
+  it('"Xem thêm" lỗi: báo bằng role=alert, giữ danh sách và nút để thử lại', async () => {
+    let listCalls = 0;
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/me/notifications/unread-count') return { count: 0 };
+      listCalls += 1;
+      if (listCalls === 1) return rows(20);
+      throw new Error('mạng');
+    });
+    const { container } = await mount();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    click(byText(container, 'button', 'Xem thêm'));
+    await flush(6);
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Không tải thêm được thông báo. Vui lòng thử lại.');
+    expect(container.textContent).toContain('Tin số 0');
+    expect(byText(container, 'button', 'Xem thêm')).not.toBeNull();
   });
 });

@@ -18,7 +18,7 @@ export class NotificationsController {
     private readonly feed: NotificationFeedService,
   ) {}
 
-  /** Trả MẢNG như bản cũ; không tham số thì vẫn là 50 tin mới nhất. */
+  /** Trả mảng (không bọc trang) vì bản Mini App và web đã phát hành đọc thẳng mảng; không tham số thì là 50 tin mới nhất. */
   @Get()
   list(@CurrentUser('sub') userId: string, @Query() q: NotificationListQuery) {
     return this.feed.list(userId, q);

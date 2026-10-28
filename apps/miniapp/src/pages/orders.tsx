@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { fetchOrders } from '../services/shop-api';
@@ -36,7 +36,10 @@ export default function OrdersPage() {
   const phase = useAuthPhase();
   // Tab Định kỳ chỉ có khi khách đã có gói (đặt trên web): danh sách tab và tab mở sẵn theo ?tab= phải chờ biết điều đó.
   const { hasSubscription, isLoading: subsLoading } = useHasSubscription(phase === 'authenticated');
-  const tabs = ordersTabs(hasSubscription);
+  // Huỷ gói cuối cùng ngay trong tab Định kỳ: giữ tab đến khi khách rời trang, nếu không màn nhảy về Tất cả mà không có lời xác nhận.
+  const everHadSubscription = useRef(false);
+  if (hasSubscription) everHadSubscription.current = true;
+  const tabs = ordersTabs(hasSubscription || everHadSubscription.current);
   const [picked, setPicked] = useState<OrdersTabKey | null>(null);
   const tab = picked && tabs.some((t) => t.key === picked) ? picked : parseOrdersTab(location.search, tabs);
   const awaitingTabs = picked === null && subsLoading && new URLSearchParams(location.search).get('tab') === 'subscriptions';

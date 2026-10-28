@@ -310,6 +310,7 @@ function mockPdp(api: MockApi): void {
 function mockReminder(api: MockApi, purchased: MockHandler, data: Record<string, string> = REMINDER.payload.data as Record<string, string>): void {
   mockBuyFlowSession(api);
   api.get('/me/notifications', [{ ...REMINDER, payload: { ...REMINDER.payload, data } }]);
+  api.get('/me/notifications/unread-count', { count: 1 });
   api.post('/me/notifications/:id/read', { ok: true });
   api.post('/events', { accepted: 1 });
   api.get('/me/purchased-items', purchased);

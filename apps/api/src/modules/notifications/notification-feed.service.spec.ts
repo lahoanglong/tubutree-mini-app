@@ -56,7 +56,7 @@ const seed = (): Row[] =>
   }));
 
 describe('NotificationFeedService.list', () => {
-  it('không tham số: đúng 50 tin mới nhất như bản cũ (take 50, chỉ tin INAPP của chính khách)', async () => {
+  it('không tham số: đúng 50 tin mới nhất (take 50, chỉ tin INAPP của chính khách)', async () => {
     const rows = [...seed(), { id: 'z-zns', userId: 'u1', channel: 'ZNS', status: 'SENT', sentAt: at('2027-01-01T00:00:00.000Z') }, { id: 'z-u2', userId: 'u2', channel: 'INAPP', status: 'SENT', sentAt: at('2027-01-01T00:00:00.000Z') }];
     const { prisma, findMany } = fakePrisma(rows);
     const page = await new NotificationFeedService(prisma).list('u1', {});

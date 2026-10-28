@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   getNotifications: vi.fn(),
+  getUnreadCount: vi.fn(),
   markNotificationRead: vi.fn(),
   markAllNotificationsRead: vi.fn(),
   trackEvent: vi.fn(),
@@ -20,7 +21,13 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 // Trang đọc danh sách qua coreHttp của app-core (cùng hợp đồng với web): getNotifications nhận query của lời gọi.
 vi.mock('../services/core-http', () => ({
-  coreHttp: { get: (path: string, opts?: { query?: Record<string, unknown> }) => (path === '/me/notifications' ? mocks.getNotifications(opts?.query) : Promise.reject(new Error(`không mock ${path}`))) },
+  coreHttp: {
+    get: (path: string, opts?: { query?: Record<string, unknown> }) => {
+      if (path === '/me/notifications') return mocks.getNotifications(opts?.query);
+      if (path === '/me/notifications/unread-count') return mocks.getUnreadCount() ?? Promise.reject(new Error('chưa mock đếm chưa đọc'));
+      return Promise.reject(new Error(`không mock ${path}`));
+    },
+  },
 }));
 vi.mock('../services/account-api', () => ({
   markNotificationRead: mocks.markNotificationRead,
@@ -372,5 +379,47 @@ describe('E-84: tải thêm tin', () => {
     renderPage();
     await screen.findByText('Tin số 0');
     expect(screen.queryByRole('button', { name: 'Xem thêm' })).toBeNull();
+  });
+});
+
+describe('Đếm chưa đọc của cả hộp thư và lỗi "Xem thêm"', () => {
+  const rows = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `p${i}`, templateCode: 'POINTS_EARNED', payload: { body: `Tin số ${i}` }, status: 'READ' as const, sentAt: new Date(Date.UTC(2026, 9, 28, 3, 0, 0) - i * 1000).toISOString(),
+    }));
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getUnreadCount.mockReset();
+    mocks.authStatus = 'authenticated';
+    mocks.markAllNotificationsRead.mockResolvedValue({ ok: true, count: 3 });
+  });
+
+  it('20 tin trang đầu đều đã đọc nhưng máy chủ báo còn 3 tin chưa đọc: vẫn có "Đọc tất cả", bấm thì gọi đọc hết', async () => {
+    mocks.getNotifications.mockResolvedValue(rows(20));
+    mocks.getUnreadCount.mockResolvedValue({ count: 3 });
+    renderPage();
+    await screen.findByText('Tin số 0');
+    fireEvent.click(await screen.findByRole('button', { name: 'Đọc tất cả' }));
+    await waitFor(() => expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(1));
+  });
+
+  it('máy chủ báo 0 chưa đọc: ẩn nút', async () => {
+    mocks.getNotifications.mockResolvedValue(rows(20));
+    mocks.getUnreadCount.mockResolvedValue({ count: 0 });
+    renderPage();
+    await screen.findByText('Tin số 0');
+    await waitFor(() => expect(mocks.getUnreadCount).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Đọc tất cả' })).toBeNull();
+  });
+
+  it('"Xem thêm" lỗi: báo bằng role=alert, giữ danh sách và nút để thử lại', async () => {
+    mocks.getNotifications.mockResolvedValueOnce(rows(20)).mockRejectedValueOnce(new Error('mạng'));
+    renderPage();
+    await screen.findByText('Tin số 0');
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem thêm' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Không tải thêm được thông báo. Vui lòng thử lại.');
+    expect(screen.getByText('Tin số 0')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Xem thêm' })).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -43,7 +43,7 @@ const SUB = (status: string) => ({
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={qc}><OrdersPage /></QueryClientProvider>);
+  return { qc, ...render(<QueryClientProvider client={qc}><OrdersPage /></QueryClientProvider>) };
 }
 const tabNames = () => screen.getAllByRole('tab').map((t) => t.textContent);
 
@@ -97,5 +97,30 @@ describe('OrdersPage: tab Định kỳ chỉ cho khách đã có gói (cờ Mini
     renderPage();
     await waitFor(() => expect(mocks.fetchOrders).toHaveBeenCalledWith({}, 1, 20));
     expect(screen.getByRole('tab', { name: 'Tất cả' })).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+describe('OrdersPage: huỷ gói cuối cùng khi đang xem tab Định kỳ', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.search = '';
+    mocks.fetchOrders.mockResolvedValue(PAGE);
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: false });
+  });
+
+  it('giữ tab Định kỳ và đang đứng ở đó, không nhảy về Tất cả', async () => {
+    mocks.getSubscriptions.mockResolvedValue([SUB('ACTIVE')]);
+    const { qc } = renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Định kỳ' }));
+    expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
+
+    mocks.getSubscriptions.mockResolvedValue([SUB('CANCELLED')]);
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ['subscriptions'] });
+    });
+    expect(await screen.findByText('Đã huỷ')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Định kỳ' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('Nước rửa chén')).toBeInTheDocument();
   });
 });

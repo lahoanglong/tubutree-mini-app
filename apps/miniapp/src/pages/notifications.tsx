@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
   ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, Repeat, Undo2, PackageOpen, XCircle, UserPlus, Recycle, MessageCircle, Star, Tag, Users, type LucideIcon,
@@ -16,7 +16,7 @@ import {
   notificationOrderLink,
   notificationTitle,
 } from '@tubutree/app-core/notification-route';
-import { nextNotificationCursor, notificationsInfiniteQuery } from '@tubutree/app-core/queries/account';
+import { nextNotificationCursor, notificationsInfiniteQuery, unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
 import { coreHttp } from '../services/core-http';
 import type { NotificationCursor } from '@tubutree/app-core/api/account';
 import { getLoadErrorMessage } from '../services/api';
@@ -148,6 +148,8 @@ export default function NotificationsPage() {
     enabled: phase === 'authenticated',
   });
   const list = notifQ.data?.pages.flat();
+  // Đếm chưa đọc của cả hộp thư: tin chưa đọc có thể nằm ngoài các trang đã nạp.
+  const unreadQ = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: phase === 'authenticated' });
   selectedIdRef.current = selectedNotif?.id ?? null;
   // Tin gói định kỳ chỉ có nút "Xem gói" khi khách đã có gói (đặt trên web): tra khi mở đúng loại tin đó.
   const { hasSubscription } = useHasSubscription(phase === 'authenticated' && !!selectedNotif?.templateCode.startsWith('SUBSCRIPTION'));
@@ -164,7 +166,7 @@ export default function NotificationsPage() {
     mutationFn: () => markAllNotificationsRead(),
     onSettled: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
   });
-  const unreadCount = list?.filter((n) => n.status !== 'READ').length ?? 0;
+  const unreadCount = unreadQ.data?.count ?? list?.filter((n) => n.status !== 'READ').length ?? 0;
 
   // Sync với popstate (nút back cứng / vuốt back của Zalo) để đóng detail overlay khi back
   useEffect(() => {
@@ -322,6 +324,13 @@ export default function NotificationsPage() {
                 </div>
               );
             })}
+            {notifQ.isFetchNextPageError && (
+              <div role="alert" style={{ textAlign: 'center' }}>
+                <Text variant="body-sm" tone="danger">
+                  Không tải thêm được thông báo. Vui lòng thử lại.
+                </Text>
+              </div>
+            )}
             {notifQ.hasNextPage && (
               <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 4 }}>
                 <DsButton
