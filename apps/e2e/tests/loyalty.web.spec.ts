@@ -330,27 +330,11 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
     expect(api.callsTo('GET', '/me/loyalty/rewards')).toHaveLength(0);
   });
 
-  test('Hoàn tiền: chọn sàn, POST /cashback/click đúng merchantId rồi mở link đối tác ở tab mới', async ({ page, api, context }) => {
+  test('Hoàn tiền: cờ tắt thì mở thẳng /hoan-tien về trang chủ như Mini App', async ({ page, api }) => {
     api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
     api.get('/me', () => USER);
-    api.get('/config/public', { freeshipThreshold: 500000, cashbackHoldDays: 45, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
-    api.get('/cashback/merchants', CASHBACK_MERCHANTS);
-    api.get('/cashback/transactions', []);
-    api.get('/me/wallet', { walletBalance: 0, cashbackPending: 123_000, commissionApproved: 0, commissionPending: 0 });
-    api.post('/cashback/click', () => ({ deeplink: 'https://example.com/aff/abc' }));
-    await context.route('https://example.com/**', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<title>Sàn</title>' }));
     await page.goto('/hoan-tien');
-    await expect(page.getByText('123.000đ')).toBeVisible();
-    await page.getByRole('button', { name: /Shopee/ }).click();
-    const dialog = page.getByRole('dialog', { name: 'Shopee' });
-    await expect(dialog.getByText('Sàn xác nhận đơn → hoàn tiền vào Ví Tubu (sau 45 ngày)')).toBeVisible();
-    const popupPromise = context.waitForEvent('page');
-    await dialog.getByRole('button', { name: 'Mua sắm & nhận hoàn tiền' }).click();
-    const popup = await popupPromise;
-    await popup.waitForURL('https://example.com/aff/abc');
-    expect(popup.url()).toBe('https://example.com/aff/abc');
-    expect(await popup.evaluate(() => window.opener)).toBeNull();
-    expect(api.callsTo('POST', '/cashback/click')[0]!.body).toEqual({ merchantId: 'm1' });
+    await expect(page).toHaveURL(/\/$/);
   });
 });
 
