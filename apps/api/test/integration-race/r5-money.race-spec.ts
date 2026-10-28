@@ -251,7 +251,7 @@ describe('R5 tiền: trả hai lần, khoá người chuyển khoản, chuyển 
       notify.mockClear();
 
       await refunds.verifyOverpayment(admin.id, row!.id, { note: 'Sao kê có 2 lần chuyển 90.000đ' });
-      expect(sent('REFUND_OVERPAYMENT')).toEqual([[user.id, 'REFUND_OVERPAYMENT', { order_code: order.code, amount: '90.000đ' }]]);
+      expect(sent('REFUND_OVERPAYMENT')).toEqual([[user.id, 'REFUND_OVERPAYMENT', { order_code: order.code, amount: '90.000đ' }, undefined, `order=${order.code}`]]);
       expect(await refunds.listMine(user.id, order.id)).toEqual([
         expect.objectContaining({ kind: 'OVERPAYMENT', amount: 90_000, status: 'PENDING', canChooseDestination: true }),
       ]);
