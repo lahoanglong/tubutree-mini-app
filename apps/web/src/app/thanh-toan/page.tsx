@@ -52,7 +52,9 @@ import { ReferralCodeBox } from '@/components/referral-code-box';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { OrderSuccess } from '@/components/checkout/order-success';
 import { BankTransferPanel } from './bank-transfer-panel';
+import { CheckoutSkeleton } from './checkout-skeleton';
 import { InvoiceSection } from './invoice-section';
+import { ErrorState } from '@/components/ui/error-state';
 import { EMPTY_INVOICE, loadSavedInvoice, saveInvoice } from '@/lib/saved-invoice';
 import { fulfillerLabel, shipmentsNote } from '@/lib/shipments';
 import { useCartKey } from '@/lib/cart-key';
@@ -112,6 +114,7 @@ export default function CheckoutPage() {
   // Đếm số lần khách tự đổi lựa chọn. Không so các trường của body: phương thức thanh toán, yêu cầu thu rác, điểm dùng
   // được tính lại từ dữ liệu máy chủ (ví tụt, yêu cầu rác gắn mã đơn) ngay khi nạp lại sau đơn đã tạo, không phải khách đổi ý.
   const choiceRev = useRef(0);
+  const bootedRef = useRef(false);
   // Bản sao của cờ đóng băng trong state: giỏ nguyên vẹn nạp lại thành rỗng thì form (và nút Đặt hàng) biến mất, màn giỏ trống phải còn lối gửi lại.
   const [maybePlaced, setMaybePlaced] = useState(false);
   const chosen = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => {
@@ -415,6 +418,27 @@ export default function CheckoutPage() {
     );
   }
 
+  // Chưa đủ giỏ, địa chỉ và báo giá đầu tiên thì giữ chỗ từng khối bằng khung chờ: các khối hiện dần làm trang nhảy ngay lúc khách sắp bấm.
+  // Chốt một lần: đổi điểm/mã giảm tính lại báo giá không được dựng lại khung chờ.
+  const firstQuotePending = !!addrQ.data?.length && !cartQ.isError && (addressId === null || quoteQ.isPending);
+  const bootReady = !cartQ.isPending && !addrQ.isPending && !firstQuotePending;
+  if (bootReady) bootedRef.current = true;
+  if (!bootedRef.current) {
+    return (
+      <Shell>
+        <CheckoutSkeleton />
+      </Shell>
+    );
+  }
+  // Giỏ không tải được: lỗi cả trang kèm Thử lại như Mini App, không dựng form với "Tạm tính 0đ" và nút Đặt hàng xám không lý do.
+  if (cartQ.isError && !cartQ.data) {
+    return (
+      <Shell>
+        <ErrorState message="Không tải được giỏ hàng." onRetry={() => void cartQ.refetch()} />
+      </Shell>
+    );
+  }
+
   const cart = cartQ.data;
   const priceChanged = place.error instanceof Error && place.error.message === PRICE_CHANGED;
   const placeErrorMessage = place.error instanceof Error && !priceChanged ? (place.error instanceof NetworkError ? place.error.message : actionErrorText(place.error)) : null;
@@ -437,7 +461,17 @@ export default function CheckoutPage() {
     !addressId || !quote || quoteStale || place.isPending || !invoiceValid || !!overStock || (!zeroNote && payment === '');
   const totalText = quote ? formatVnd(quote.total) : addressId ? '…' : 'Chưa tính';
   // Lời báo đặt lỗi/giỏ cần sửa nằm cuối khung tóm tắt; thanh dính đáy nhắc lại để khách không phải cuộn xuống mới biết vì sao.
-  const barHint = cartIssue ?? (priceChanged ? 'Giá ưu đãi đã thay đổi. Vui lòng xem lại giỏ hàng trước khi đặt.' : place.isError ? (placeErrorMessage ?? 'Đặt hàng thất bại.') : null);
+  const barHint =
+    cartIssue ??
+    (priceChanged
+      ? 'Giá ưu đãi đã thay đổi. Vui lòng xem lại giỏ hàng trước khi đặt.'
+      : place.isError
+        ? (placeErrorMessage ?? 'Đặt hàng thất bại.')
+        : !addressId
+          ? 'Chọn địa chỉ giao hàng để đặt hàng.'
+          : quoteQ.isError
+            ? 'Chưa tính được tổng tiền. Bấm Thử lại ở phần tóm tắt rồi đặt hàng.'
+            : null);
 
   return (
     <Shell>
