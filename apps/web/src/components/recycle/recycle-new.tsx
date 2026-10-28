@@ -27,6 +27,7 @@ import {
   wasteStepCopy,
   writeLastPointId,
 } from '@tubutree/app-core/waste-copy';
+import { sameProvince } from '@tubutree/app-core/waste-province';
 import { friendlyActionError as actErrText, friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -37,6 +38,8 @@ import {
   EMPTY_DRAFT,
   clearDraft,
   clearWizardStorage,
+  markSubmitted,
+  takeSubmitted,
   loadDraft,
   markResume,
   peekResume,
@@ -49,7 +52,7 @@ import {
 } from '@/lib/recycle-wizard';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
-import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { ErrorState } from '@/components/ui/error-state';
@@ -57,7 +60,6 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WasteItemStep } from './waste-item-step';
 import {
-  LOGIN_TEXT,
   METHOD_LABELS,
   METHOD_LINE,
   PREVIEW_DEBOUNCE_MS,
@@ -152,9 +154,17 @@ export function RecycleNew() {
     },
     [],
   );
+  // Khách vãng lai về trang Đổi rác (có giới thiệu và nút đăng nhập) như Mini App, không đứng ở cổng dưới tiêu đề "Bước 1/2".
   useEffect(() => {
-    if (phase === 'guest') clearWizardStorage();
-  }, [phase]);
+    if (phase === 'guest') {
+      clearWizardStorage();
+      router.replace('/doi-rac');
+    }
+  }, [phase, router]);
+  useEffect(() => {
+    if (step === 'items' && takeSubmitted()) router.replace('/doi-rac');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     if (ready && !submitted.current) saveDraft(draft);
   }, [draft, ready]);
@@ -285,6 +295,7 @@ export function RecycleNew() {
       if (r.method === 'DROP_OFF' && draft.pointId) writeLastPointId(browserStore(), draft.pointId);
       submitted.current = true;
       clearWizardStorage();
+      markSubmitted();
       await Promise.all(WASTE_WRITE_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
       router.replace(`/doi-rac/yeu-cau/${r.id}`);
     },
@@ -308,7 +319,7 @@ export function RecycleNew() {
 
   if (phase === 'loading') return shell(<AuthLoading />);
   if (phase === 'unavailable') return shell(<SessionUnavailable />);
-  if (phase === 'guest') return shell(<LoginRequired message={LOGIN_TEXT} returnTo={WIZARD_PATH} />);
+  if (phase === 'guest') return shell(skeleton);
   if (meQ.isError) return shell(<ErrorState message={errText(meQ.error)} onRetry={() => void meQ.refetch()} />);
   if (!me || leave || !ready || missingDraft) return shell(skeleton);
   // Chưa có SĐT đã xác minh thì web không xin được (chỉ Zalo xin được): chỉ chỉ đường sang Mini App, không có đường lách (Q2).
@@ -362,8 +373,11 @@ export function RecycleNew() {
 
   const mailPreview = previews.MAIL_IN;
   const province = mailPreview?.feeEstimate?.provinceCode ?? draft.provinceCode;
-  const noPointInProvince = province != null && pointsQ.data !== undefined && !pointsQ.data.some((pt) => pt.provinceCode === province);
-  const order = (noPointInProvince ? MAIL_FIRST_ORDER : BASE_ORDER).filter((m) => enabledMethods.includes(m));
+  const noPointInProvince = province != null && pointsQ.data !== undefined && !pointsQ.data.some((pt) => sameProvince(pt.provinceCode, province));
+  // Thẻ đang khoá (chưa đủ điểm tối thiểu) luôn xếp cuối: lựa chọn dùng được phải nằm trên.
+  const order = (noPointInProvince ? MAIL_FIRST_ORDER : BASE_ORDER)
+    .filter((m) => enabledMethods.includes(m))
+    .sort((a, b) => Number(isLocked(previews[a])) - Number(isLocked(previews[b])));
   const showShipLocked = !!me.shipLockedAt && ((cfg.waste.mailin && me.laneFlags.mailin) || (cfg.waste.pickup && me.laneFlags.pickup));
   const ctxFor = (pv: WastePreviewDTO | undefined, method?: WasteMethod): BlockContext => ({
     items: me.items,

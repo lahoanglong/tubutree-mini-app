@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { dropOffDayLimitText, itemQtyMax } from '@tubutree/app-core/waste-copy';
+import { sameProvince } from '@tubutree/app-core/waste-province';
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
@@ -478,8 +479,11 @@ export default function RecycleNewPage() {
 
   const mailPreview = previews.MAIL_IN?.data;
   const province = mailPreview?.feeEstimate?.provinceCode ?? draft.provinceCode;
-  const noPointInProvince = province != null && pointsQ.data !== undefined && !pointsQ.data.some((pt) => pt.provinceCode === province);
-  const order = (noPointInProvince ? MAIL_FIRST_ORDER : BASE_ORDER).filter((m) => enabledMethods.includes(m));
+  const noPointInProvince = province != null && pointsQ.data !== undefined && !pointsQ.data.some((pt) => sameProvince(pt.provinceCode, province));
+  // Thẻ đang khoá (chưa đủ điểm tối thiểu) luôn xếp cuối: lựa chọn dùng được phải nằm trên.
+  const order = (noPointInProvince ? MAIL_FIRST_ORDER : BASE_ORDER)
+    .filter((m) => enabledMethods.includes(m))
+    .sort((a, b) => Number(isLocked(previews[a]?.data)) - Number(isLocked(previews[b]?.data)));
   const nearestKm = (draft.nearby ?? []).reduce<number | null>(
     (min, pt) => (pt.distanceKm == null ? min : min == null ? pt.distanceKm : Math.min(min, pt.distanceKm)),
     null,

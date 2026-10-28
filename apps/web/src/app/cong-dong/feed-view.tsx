@@ -39,7 +39,7 @@ function Chip({ selected, onClick, icon: Icon, label, children, pressed = true }
       aria-label={label}
       aria-pressed={pressed ? selected : undefined}
       onClick={onClick}
-      className={`tubu-hit-44 inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium max-md:min-h-9 ${
+      className={`tubu-hit-44 inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium ${
         selected
           ? 'border-forest-600 bg-forest-600 text-stone-0'
           : 'border-stone-450 bg-stone-0 text-stone-800 hover:bg-stone-50 max-md:border-transparent max-md:bg-stone-100 max-md:text-stone-600'
@@ -78,6 +78,7 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
   const [composing, setComposing] = useState(false);
   const [notice, setNotice] = useState<string | null>(params.get('deleted') === '1' ? 'Đã xoá bài' : null);
   const [q, setQ] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [unanswered, setUnanswered] = useState(false);
   const [tag, setTag] = useState<string | undefined>(urlTag);
   const [tagName, setTagName] = useState<string | undefined>(urlTagName);
@@ -194,6 +195,15 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
             <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Đăng bài
           </button>
+          <button
+            type="button"
+            aria-label="Mở ô tìm kiếm"
+            aria-expanded={searchOpen || q !== ''}
+            onClick={() => setSearchOpen((v) => !v)}
+            className="inline-flex h-11 min-h-11 w-11 flex-none items-center justify-center rounded-full text-stone-700 hover:bg-stone-50 md:hidden"
+          >
+            <Search className="h-5 w-5" aria-hidden="true" />
+          </button>
         </div>
 
         {notice && (
@@ -202,7 +212,7 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
           </p>
         )}
 
-        <form role="search" aria-label="Tìm kiếm" onSubmit={(e) => e.preventDefault()} className="relative">
+        <form role="search" aria-label="Tìm kiếm" onSubmit={(e) => e.preventDefault()} className={`relative ${searchOpen || q ? '' : 'max-md:hidden'}`}>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
           <input
             type="search"
@@ -219,26 +229,29 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
           )}
         </form>
 
-        <div role="group" aria-label="Chọn danh mục" className="flex gap-2 overflow-x-auto max-md:-mx-3 max-md:px-3 max-md:py-1 md:flex-wrap">
-          <Chip selected={!category} onClick={() => setCategory(undefined)}>
-            Tất cả
-          </Chip>
-          {cats.data?.map((c) => (
-            <Chip key={c.id} selected={category === c.slug} onClick={() => setCategory(c.slug)}>
-              {`${c.icon ?? ''} ${c.name}`.trim()}
+        {/* Điện thoại: danh mục và sắp xếp nằm chung một hàng cuộn ngang để bài đầu lên sớm hơn. */}
+        <div className="flex flex-col gap-3 max-md:-mx-3 max-md:flex-row max-md:items-center max-md:gap-2 max-md:overflow-x-auto max-md:px-3 max-md:py-1">
+          <div role="group" aria-label="Chọn danh mục" className="flex gap-2 overflow-x-auto max-md:shrink-0 max-md:overflow-visible md:flex-wrap">
+            <Chip selected={!category} onClick={() => setCategory(undefined)}>
+              Tất cả
             </Chip>
-          ))}
-        </div>
+            {cats.data?.map((c) => (
+              <Chip key={c.id} selected={category === c.slug} onClick={() => setCategory(c.slug)}>
+                {`${c.icon ?? ''} ${c.name}`.trim()}
+              </Chip>
+            ))}
+          </div>
 
-        <div role="group" aria-label="Sắp xếp" className="flex gap-2 overflow-x-auto max-md:-mx-3 max-md:px-3 max-md:py-1 md:flex-wrap">
-          {SORTS.map((s) => (
-            <Chip key={s.key} selected={sort === s.key} onClick={() => setSort(s.key)}>
-              {s.label}
+          <div role="group" aria-label="Sắp xếp" className="flex gap-2 overflow-x-auto max-md:shrink-0 max-md:overflow-visible md:flex-wrap">
+            {SORTS.map((s) => (
+              <Chip key={s.key} selected={sort === s.key} onClick={() => setSort(s.key)}>
+                {s.label}
+              </Chip>
+            ))}
+            <Chip icon={HelpCircle} selected={unanswered} onClick={() => setUnanswered((v) => !v)}>
+              Chưa trả lời
             </Chip>
-          ))}
-          <Chip icon={HelpCircle} selected={unanswered} onClick={() => setUnanswered((v) => !v)}>
-            Chưa trả lời
-          </Chip>
+          </div>
         </div>
 
         {tag && (

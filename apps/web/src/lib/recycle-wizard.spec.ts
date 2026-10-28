@@ -15,6 +15,9 @@ import {
   saveReturn,
   takeReturn,
   toLineInputs,
+  markSubmitted,
+  takeSubmitted,
+  clearSubmitted,
 } from './recycle-wizard';
 
 const DRAFT = { ...EMPTY_DRAFT, lines: { 'item-carton': 3 }, method: 'DROP_OFF' as const, pointId: 'pt-1' };
@@ -81,5 +84,23 @@ describe('cờ tiếp tục wizard và dọn khoá', () => {
     expect(loadPointsNav()).toBeNull();
     expect(takeReturn()).toBeNull();
     expect(peekResume()).toBe(false);
+  });
+});
+
+describe('cờ "vừa gửi yêu cầu" (Quay lại từ trang yêu cầu không về form trống)', () => {
+  it('đọc một lần rồi mất; chưa đánh dấu thì không có', () => {
+    expect(takeSubmitted()).toBe(false);
+    markSubmitted();
+    expect(takeSubmitted()).toBe(true);
+    expect(takeSubmitted()).toBe(false);
+  });
+  it('về trang Đổi rác (clearSubmitted) thì lần vào mới không bị đưa về', () => {
+    markSubmitted();
+    clearSubmitted();
+    expect(takeSubmitted()).toBe(false);
+  });
+  it('quá 30 phút thì bỏ', () => {
+    window.sessionStorage.setItem('tubu_recycle_submitted', JSON.stringify(Date.now() - 31 * 60_000));
+    expect(takeSubmitted()).toBe(false);
   });
 });

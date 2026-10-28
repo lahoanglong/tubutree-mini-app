@@ -18,6 +18,8 @@ const DRAFT_KEY = 'tubu_recycle_draft';
 const NAV_KEY = 'tubu_recycle_points_nav';
 const RETURN_KEY = 'tubu_recycle_points_return';
 const RESUME_KEY = 'tubu_recycle_resume';
+const SUBMITTED_KEY = 'tubu_recycle_submitted';
+const SUBMITTED_TTL_MS = 30 * 60_000;
 const METHODS: readonly string[] = ['DROP_OFF', 'MAIL_IN', 'PICKUP'];
 
 const codeUnitCompare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -95,6 +97,17 @@ export function takeResume(): boolean {
   const on = peekResume();
   remove(RESUME_KEY);
   return on;
+}
+/**
+ * Đã gửi yêu cầu xong: bấm Quay lại từ trang yêu cầu rơi về bước 1 với form trống (mục lịch sử của bước 1 không thay được), nên
+ * bước 1 đọc cờ này để đưa khách về trang Đổi rác như Mini App. Trang Đổi rác xoá cờ để lần vào mới có chủ ý không bị đưa về.
+ */
+export const markSubmitted = (): void => write(SUBMITTED_KEY, Date.now());
+export const clearSubmitted = (): void => remove(SUBMITTED_KEY);
+export function takeSubmitted(): boolean {
+  const at = read(SUBMITTED_KEY);
+  remove(SUBMITTED_KEY);
+  return typeof at === 'number' && Date.now() - at < SUBMITTED_TTL_MS;
 }
 export const clearPointsNav = (): void => remove(NAV_KEY);
 export function clearWizardStorage(): void {

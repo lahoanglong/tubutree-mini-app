@@ -13,7 +13,7 @@ export function QuickReplies({ items, onPick }: { items: QuickReply[]; onPick: (
           type="button"
           onClick={() => onPick(q)}
           style={{
-            minHeight: 36,
+            minHeight: 44,
             padding: '6px 12px',
             borderRadius: 'var(--radius-pill)',
             border: '1px solid var(--color-border-subtle)',

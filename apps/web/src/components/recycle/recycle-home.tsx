@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
@@ -14,9 +15,11 @@ import { coreHttp } from '@/lib/core-http';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { pointsSummary } from '@/lib/checkout-points';
 import { loginHref } from '@/lib/return-to';
+import { clearSubmitted } from '@/lib/recycle-wizard';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
+import { StickyActionBar } from '@/components/sticky-action-bar';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
@@ -55,8 +58,9 @@ function Shell({ children, showHistory = false }: { children: ReactNode; showHis
         title="Đổi rác lấy quà"
         actions={
           showHistory ? (
-            <Link href="/doi-rac/yeu-cau" aria-label="Yêu cầu của tôi" className="inline-flex min-h-11 w-11 items-center justify-center rounded-control text-stone-800 hover:bg-stone-50 md:border md:border-stone-450 md:bg-stone-0">
-              <History className="h-5 w-5" aria-hidden="true" />
+            <Link href="/doi-rac/yeu-cau" className="inline-flex min-h-11 items-center gap-1.5 rounded-control px-3 text-sm font-semibold text-forest-700 hover:bg-stone-50 md:border md:border-stone-450 md:bg-stone-0">
+              <History className="h-4 w-4" aria-hidden="true" />
+              Yêu cầu của tôi
             </Link>
           ) : undefined
         }
@@ -123,14 +127,21 @@ function GuestOverview({ items }: { items: readonly WasteItemDTO[] | undefined }
   );
 }
 
+/** Điện thoại: thanh dính đáy như Mini App; từ md trở lên là thẻ nằm cuối trang. */
 function GuestLogin() {
-  return (
-    <div className={`space-y-3 p-4 ${skin.card}`}>
-      <p className="text-sm text-stone-700">{wasteGuestCopy.whyPhone}</p>
-      <Link href={loginHref('/doi-rac')} className={`${ui.btnPrimary} w-full sm:w-auto`}>
+  const body = (
+    <div className="flex items-center gap-3 max-md:flex-col max-md:items-stretch max-md:gap-2">
+      <p className="min-w-0 flex-1 text-sm text-stone-700">{wasteGuestCopy.whyPhone}</p>
+      <Link href={loginHref('/doi-rac')} className={`${ui.btnPrimary} flex-none max-md:w-full`}>
         {wasteGuestCopy.loginButton}
       </Link>
     </div>
+  );
+  return (
+    <>
+      <div className={`hidden p-4 md:block ${skin.card}`}>{body}</div>
+      <StickyActionBar label="Đăng nhập để đổi rác">{body}</StickyActionBar>
+    </>
   );
 }
 
@@ -177,6 +188,7 @@ function RequestsBlock({ me }: { me: WasteMeDTO }) {
 
 export function RecycleHome() {
   const phase = useAuthPhase();
+  useEffect(() => clearSubmitted(), []);
   const cfg = usePublicConfig();
 
   const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: phase === 'authenticated' });
@@ -223,6 +235,13 @@ export function RecycleHome() {
   if (meQ.isError || !me) return <Shell><ErrorState message={errText(meQ.error)} onRetry={() => void meQ.refetch()} /></Shell>;
 
   const openRequests = <RequestsBlock me={me} />;
+  const recent = me.recentCompleted;
+  const recentBlock =
+    recent && recent.pointsAwarded != null && recent.pointsAwarded > 0 ? (
+      <div className={skin.card}>
+        <RecycleLinkRow href={`/doi-rac/xong/${recent.id}`} title={`Vừa cộng ${formatPoints(recent.pointsAwarded)}`} subtitle={`${recent.code} · ${METHOD_LABELS[recent.method]}`} />
+      </div>
+    ) : null;
   // Kho vẫn mở quầy khi chương trình tạm dừng hoặc khách bị khoá (15.1), nên lối vào không phụ thuộc hai nhánh đó.
   const deskRow =
     me.deskPoints.length > 0 ? (
@@ -298,6 +317,8 @@ export function RecycleHome() {
           </Link>
         )}
       </div>
+
+      {recentBlock}
 
       {openRequests}
 

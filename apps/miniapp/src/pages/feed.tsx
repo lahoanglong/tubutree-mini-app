@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { HelpCircle, Hash, MessageCircle, X } from 'lucide-react';
+import { HelpCircle, Hash, MessageCircle, Search, X } from 'lucide-react';
 import { getFeed, getFeedPublicPreview, getCategories, type FeedSort } from '../services/feed-api';
 import { getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -13,6 +13,7 @@ import { PullToRefresh } from '../components/pull-to-refresh';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
+import { IconButton } from '../components/ui/icon-button';
 import { Chip } from '../components/ui/chip';
 import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
@@ -38,6 +39,7 @@ export default function FeedPage() {
   const [category, setCategory] = useState<string | undefined>(undefined);
   const [sort, setSort] = useState<FeedSort>('new');
   const [q, setQ] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [unanswered, setUnanswered] = useState(false);
   const initialTag = useMemo(
     () => new URLSearchParams(location.search).get('tag') ?? undefined,
@@ -145,48 +147,50 @@ export default function FeedPage() {
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 80 }}>
       <PullToRefresh onRefresh={() => feed.refetch()} />
 
-      <PageHeader title={vi.community.title} />
+      <PageHeader
+        title={vi.community.title}
+        actions={
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            {hasOA && (
+              <IconButton
+                icon={MessageCircle}
+                label={vi.community.askTubu}
+                onPress={() => {
+                  haptic('light');
+                  void openOAChat(vi.community.askTubuMessage);
+                }}
+              />
+            )}
+            <IconButton icon={Search} label={vi.community.search} onPress={() => setSearchOpen((v) => !v)} />
+          </div>
+        }
+      />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px 4px', background: 'var(--color-bg-surface)' }}>
-        <Button
-          variant="secondary"
-          style={{ flex: '0 0 auto', minWidth: 44, padding: '0 14px' }}
+      {(searchOpen || q) && (
+        <div style={{ padding: '0 12px 4px', background: 'var(--color-bg-surface)' }}>
+          <SearchField
+            value={q}
+            onChange={setQ}
+            onSubmit={setQ}
+            label={vi.community.search}
+            clearLabel={vi.browse.clearSearch}
+            placeholder={vi.community.searchPlaceholder}
+          />
+        </div>
+      )}
+
+      <ScrollRow
+        label={vi.community.pickCategory}
+        style={{ display: 'flex', gap: 8, padding: '4px 12px 6px', background: 'var(--color-bg-surface)', minWidth: 0, maxWidth: '100%' }}
+      >
+        <Chip
           onPress={() => {
             haptic('light');
             navigate('/feed/events');
           }}
         >
           {vi.community.events}
-        </Button>
-        {hasOA && (
-          <Button
-            icon={MessageCircle}
-            style={{ flex: '1 1 0', minWidth: 44, padding: '0 8px' }}
-            onPress={() => {
-              haptic('light');
-              void openOAChat(vi.community.askTubuMessage);
-            }}
-          >
-            {vi.community.askTubu}
-          </Button>
-        )}
-      </div>
-
-      <div style={{ padding: '0 12px 4px', background: 'var(--color-bg-surface)' }}>
-        <SearchField
-          value={q}
-          onChange={setQ}
-          onSubmit={setQ}
-          label={vi.community.search}
-          clearLabel={vi.browse.clearSearch}
-          placeholder={vi.community.searchPlaceholder}
-        />
-      </div>
-
-      <ScrollRow
-        label={vi.community.pickCategory}
-        style={{ display: 'flex', gap: 8, padding: '4px 12px', background: 'var(--color-bg-surface)', minWidth: 0, maxWidth: '100%' }}
-      >
+        </Chip>
         <Chip selected={!category} onPress={() => setCategory(undefined)}>
           {vi.community.tabAll}
         </Chip>
@@ -195,12 +199,6 @@ export default function FeedPage() {
             {`${c.icon ?? ''} ${c.name}`.trim()}
           </Chip>
         ))}
-      </ScrollRow>
-
-      <ScrollRow
-        label={vi.browse.sortGroup}
-        style={{ display: 'flex', gap: 8, padding: '4px 12px 6px', background: 'var(--color-bg-surface)', minWidth: 0, maxWidth: '100%' }}
-      >
         {SORTS.map((s) => (
           <Chip key={s.key} selected={sort === s.key} onPress={() => setSort(s.key)}>
             {s.label}

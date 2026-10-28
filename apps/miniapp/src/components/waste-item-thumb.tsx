@@ -18,7 +18,7 @@ export function WasteItemThumb({ item, size = 48 }: { item: { code: string; imag
         height: size,
         flex: '0 0 auto',
         borderRadius: 'var(--radius-media)',
-        background: 'var(--color-bg-subtle)',
+        background: 'var(--stone-100)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

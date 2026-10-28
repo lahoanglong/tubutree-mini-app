@@ -193,6 +193,7 @@ describe('FeedPage — hành vi giữ nguyên khi chuyển DS v2', () => {
   it('gõ vào ô tìm kiếm gửi q', async () => {
     renderPage();
     await screen.findByText('Lan Anh');
+    fireEvent.click(screen.getByRole('button', { name: 'Tìm kiếm' }));
     fireEvent.change(screen.getByPlaceholderText('Tìm câu hỏi, mẹo, bài viết…'), { target: { value: 'sen đá' } });
     await waitFor(() => expect(lastFeedArgs()).toMatchObject({ q: 'sen đá' }));
   });
@@ -302,6 +303,8 @@ describe('FeedPage — tiêu đề, vùng chạm, biểu tượng (C-076, C-113,
   it('ô tìm kiếm là form role=search có nút xoá khi đã gõ', async () => {
     renderPage();
     await screen.findByText('Lan Anh');
+    expect(screen.queryByRole('search')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Tìm kiếm' }));
     expect(screen.getByRole('search')).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText('Tìm câu hỏi, mẹo, bài viết…'), { target: { value: 'abc' } });
     expect(screen.getByRole('button', { name: 'Xoá từ khoá' })).toBeInTheDocument();

@@ -36,7 +36,7 @@ function Shell({ children }: { children: ReactNode }) {
 
 export function RecycleRequests() {
   const phase = useAuthPhase();
-  const [tab, setTab] = useState<'open' | 'closed'>('open');
+  const [picked, setTab] = useState<'open' | 'closed' | null>(null);
   const cfg = usePublicConfig();
   const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: phase === 'authenticated' });
   const me = meQ.data;
@@ -83,6 +83,8 @@ export function RecycleRequests() {
   }
   const openRows = rows.filter((r) => OPEN_STATUSES.includes(r.status));
   const closedRows = rows.filter((r) => !OPEN_STATUSES.includes(r.status));
+  // Chưa chọn tab nào mà "Đang xử lý" trống thì mở tab có yêu cầu, để khách không tưởng mất yêu cầu.
+  const tab = picked ?? (openRows.length === 0 && closedRows.length > 0 ? 'closed' : 'open');
   const shown = tab === 'open' ? openRows : closedRows;
 
   return (
@@ -96,6 +98,14 @@ export function RecycleRequests() {
           { key: 'closed', label: 'Đã đóng', count: closedRows.length },
         ]}
       />
+      {shown.length === 0 && (
+        <div className={`flex flex-col items-center gap-3 p-6 text-center ${skin.card}`}>
+          <p className="text-base font-semibold text-stone-900">{tab === 'open' ? 'Không có yêu cầu đang xử lý' : 'Chưa có yêu cầu nào đã đóng'}</p>
+          <button type="button" onClick={() => setTab(tab === 'open' ? 'closed' : 'open')} className={ui.btnSecondary}>
+            {tab === 'open' ? 'Xem yêu cầu đã đóng' : 'Xem yêu cầu đang xử lý'}
+          </button>
+        </div>
+      )}
       <div className={`divide-y divide-stone-200 ${skin.plain} max-md:divide-y-0`}>
         {shown.map((r) => {
           const paused =

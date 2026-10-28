@@ -49,11 +49,11 @@ export function RecyclePoints() {
     setReady(true);
   }, []);
   useEffect(() => {
-    if (ready && !nav && phase !== 'loading' && phase !== 'guest') router.replace('/doi-rac/tao');
-  }, [ready, nav, phase, router]);
+    if (ready && !nav) router.replace('/doi-rac/tao');
+  }, [ready, nav, router]);
 
-  const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed });
-  const pointsQ = useQuery({ ...wastePointsQuery(coreHttp, null), enabled: authed });
+  const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed && !!nav });
+  const pointsQ = useQuery({ ...wastePointsQuery(coreHttp, null), enabled: authed && !!nav });
   const me = meQ.data;
   const points = pointsQ.data;
   const leave = me !== undefined && (!me.programmeEnabled || me.blocked);
@@ -87,6 +87,7 @@ export function RecyclePoints() {
     </>
   );
 
+  if (ready && !nav) return shell(skeleton);
   if (phase === 'loading') return shell(<AuthLoading />);
   if (phase === 'unavailable') return shell(<SessionUnavailable />);
   if (phase === 'guest') return shell(<LoginRequired message={LOGIN_TEXT} returnTo="/doi-rac/tao" />);

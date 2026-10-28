@@ -4,11 +4,11 @@ const NOW = new Date('2026-10-17T03:00:00.000Z');
 const SNAP = { enabled: true, mailinMinPoints: 15_000, pickupMinPoints: 10_000, maxOpenRequests: 3, customerMonthlyCapPoints: 60_000, mailinMaxWeightKg: 20, mailinMaxEdgeCm: 50, rulesText: '' };
 const ITEM = { id: 'carton', code: 'CARTON', name: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1_000, dropsPerUnit: 2, dailyCapQty: 20, monthlyCapQty: 60, status: 'ACTIVE', prepInstructions: null, imageUrl: null, gramsPerUnit: 300, hazardous: false, sortOrder: 1 };
 const WH_DESK = [{ pointId: 'wh', name: 'Kho Tubu', kind: 'WAREHOUSE' }];
-function setup(user: unknown, o: { snap?: Partial<typeof SNAP>; completed?: unknown[]; desk?: unknown[] } = {}) {
+function setup(user: unknown, o: { snap?: Partial<typeof SNAP>; completed?: unknown[]; desk?: unknown[]; recent?: unknown } = {}) {
   const prisma = {
     user: { findUnique: jest.fn().mockResolvedValue(user) },
     wasteItem: { findMany: jest.fn().mockResolvedValue([ITEM]) },
-    wasteRequest: { findMany: jest.fn().mockImplementation(({ where }: { where: { status: unknown } }) => Promise.resolve(where.status === 'COMPLETED' ? (o.completed ?? []) : [])) },
+    wasteRequest: { findFirst: jest.fn().mockResolvedValue(o.recent ?? null), findMany: jest.fn().mockImplementation(({ where }: { where: { status: unknown } }) => Promise.resolve(where.status === 'COMPLETED' ? (o.completed ?? []) : [])) },
   };
   const deps = {
     config: { snapshot: jest.fn().mockResolvedValue({ ...SNAP, ...o.snap }) },
@@ -32,6 +32,22 @@ describe('WasteMeService.openCount', () => {
     await expect(svc.openCount('u1')).resolves.toEqual({ count: 2 });
     expect(count).toHaveBeenCalledWith({ where: { userId: 'u1', status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] } } });
     expect(prisma.wasteRequest.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('WasteMeService.me recentCompleted', () => {
+  it('lấy yêu cầu xong gần nhất trong 7 ngày để Trang Đổi rác còn hiện "Vừa cộng điểm"; không có thì null', async () => {
+    const none = setup(base);
+    await expect(none.svc.me('u1')).resolves.toMatchObject({ recentCompleted: null });
+    const where = (none.prisma.wasteRequest.findFirst.mock.calls[0] as [{ where: Record<string, unknown>; orderBy: unknown }])[0];
+    expect(where.where).toEqual({ userId: 'u1', status: 'COMPLETED', completedAt: { gte: new Date('2026-10-10T03:00:00.000Z') } });
+    expect(where.orderBy).toEqual({ completedAt: 'desc' });
+  });
+  it('trả bản tóm tắt khi có', async () => {
+    const row = { id: 'r1', code: 'TUBU1', method: 'DROP_OFF', status: 'COMPLETED', closeReason: null, createdAt: new Date('2026-10-16T00:00:00Z'), expiresAt: null, estimatedPoints: 1000, pointsAwarded: 1000, point: { name: 'Kho Tubu' }, order: null, lines: [] };
+    const { svc } = setup(base, { recent: row });
+    const me = await svc.me('u1');
+    expect(me.recentCompleted).toMatchObject({ id: 'r1', status: 'COMPLETED', pointsAwarded: 1000 });
   });
 });
 

@@ -18,6 +18,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Text } from '../components/ui/text';
 import { wasteStepCopy, warehouseOnlyPointsNote } from '@tubutree/app-core/waste-copy';
+import { WastePhoneNeeded, isWasteForbidden } from '../components/waste-phone-needed';
 import { WastePointPicker } from '../components/waste-point-picker';
 import { METHOD_LABELS } from '../utils/waste-labels';
 import type { WastePointsNavState, WastePointsReturnState } from './recycle-new';
@@ -121,6 +122,7 @@ export default function RecyclePointsPage() {
   if (phase === 'unavailable') return shell(<SessionUnavailable />);
   if (!nav) return shell(skeleton);
   const loadError = (phase === 'authenticated' && meQ.isError && meQ.error) || (pointsQ.isError && pointsQ.error);
+  if (loadError && isWasteForbidden(loadError)) return shell(<WastePhoneNeeded text="Cho Tubu số điện thoại để chọn điểm nhận." />);
   if (loadError) {
     return shell(
       <ErrorState

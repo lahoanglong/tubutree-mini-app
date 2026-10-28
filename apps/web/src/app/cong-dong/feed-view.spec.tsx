@@ -439,15 +439,27 @@ describe('/cong-dong — giao diện điện thoại như Mini App', () => {
     expect(band.contains(container.querySelector('[aria-label="Sắp xếp"]'))).toBe(true);
   });
 
-  it('hai hàng chip khớp lề 12px của dải trắng (không tràn ngang) và có đệm dọc 4px chứa vùng chạm', async () => {
+  it('danh mục và sắp xếp chung một hàng cuộn ngang, khớp lề 12px của dải trắng và có đệm dọc 4px chứa vùng chạm', async () => {
     const { container } = await mount();
-    for (const label of ['Chọn danh mục', 'Sắp xếp']) {
-      const row = container.querySelector(`[aria-label="${label}"]`)!;
-      expect(row.className).toContain('max-md:-mx-3');
-      expect(row.className).toContain('max-md:px-3');
-      expect(row.className).toContain('max-md:py-1');
-      expect(row.className).not.toMatch(/(^|\s)-mx-4(\s|$)/);
-    }
+    const cats = container.querySelector('[aria-label="Chọn danh mục"]')!;
+    const sorts = container.querySelector('[aria-label="Sắp xếp"]')!;
+    const row = cats.parentElement!;
+    expect(sorts.parentElement).toBe(row);
+    for (const cls of ['max-md:-mx-3', 'max-md:px-3', 'max-md:py-1', 'max-md:flex-row', 'max-md:overflow-x-auto']) expect(row.className).toContain(cls);
+    expect(row.className).not.toMatch(/(^|\s)-mx-4(\s|$)/);
+  });
+
+  it('điện thoại: ô tìm ẩn, bấm biểu tượng kính lúp thì hiện; đang có từ khoá thì luôn hiện', async () => {
+    const { container } = await mount();
+    const form = searchInput(container).closest('form')!;
+    expect(form.className).toContain('max-md:hidden');
+    const toggle = container.querySelector('button[aria-label="Mở ô tìm kiếm"]') as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    await act(async () => {
+      toggle.click();
+    });
+    expect(form.className).not.toContain('max-md:hidden');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
   });
 
   it('chip chưa chọn nền be không viền, ô tìm bo tròn như viên thuốc', async () => {
