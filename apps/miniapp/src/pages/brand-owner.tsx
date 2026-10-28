@@ -69,7 +69,7 @@ export default function BrandOwnerPage() {
               art="sprout"
               heading="Quản lý nhãn hàng"
               body="Bạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn."
-              ctaLabel={canMessage ? 'Nhắn Tubu' : undefined}
+              ctaLabel={canMessage ? (chatOn ? 'Nhắn Tubu' : 'Liên hệ Tubu') : undefined}
               onCta={canMessage ? messageTubu : undefined}
             />
           </div>
@@ -162,7 +162,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
   };
 
   const dateInputStyle = {
-    flex: 1,
+    minWidth: 0,
     minHeight: 44,
     padding: 8,
     borderRadius: 'var(--radius-control)',
@@ -266,21 +266,25 @@ function Editor({ brand }: { brand: OwnedBrand }) {
                 Có mã thì khách chạm để sao chép ngay trên trang nhãn. Mã giảm giá phải do Tubu tạo sẵn, công khai
                 và còn hạn — mã không có trong hệ thống sẽ bị từ chối khi lưu. Để trống ô này khi sửa để gỡ mã.
               </Text>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input
-                  type="date"
-                  aria-label="Từ ngày"
-                  value={promo.startAt}
-                  onChange={(e) => setPromo({ ...promo, startAt: e.target.value })}
-                  style={dateInputStyle}
-                />
-                <input
-                  type="date"
-                  aria-label="Đến ngày"
-                  value={promo.endAt}
-                  onChange={(e) => setPromo({ ...promo, endAt: e.target.value })}
-                  style={dateInputStyle}
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 6 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <Text variant="caption" tone="secondary" as="span">Từ ngày</Text>
+                  <input
+                    type="date"
+                    value={promo.startAt}
+                    onChange={(e) => setPromo({ ...promo, startAt: e.target.value })}
+                    style={dateInputStyle}
+                  />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <Text variant="caption" tone="secondary" as="span">Đến ngày</Text>
+                  <input
+                    type="date"
+                    value={promo.endAt}
+                    onChange={(e) => setPromo({ ...promo, endAt: e.target.value })}
+                    style={dateInputStyle}
+                  />
+                </label>
               </div>
               {dateRangeInvalid && (
                 <Text variant="caption" tone="danger" as="div">Ngày kết thúc phải sau ngày bắt đầu.</Text>
