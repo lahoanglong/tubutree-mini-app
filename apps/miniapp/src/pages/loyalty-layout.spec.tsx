@@ -133,7 +133,7 @@ describe('LoyaltyPage — dòng mã giảm giá ngay dưới thẻ hạng', () =
   });
 });
 
-describe('LoyaltyPage — thuật ngữ Q-26 và số có dấu nghìn (C-074, C-083)', () => {
+describe('LoyaltyPage — thuật ngữ thống nhất và số có dấu nghìn', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getLoyalty.mockResolvedValue(LOYALTY);
@@ -166,7 +166,7 @@ describe('LoyaltyPage — thuật ngữ Q-26 và số có dấu nghìn (C-074, C
   });
 });
 
-describe('LoyaltyPage — một <h1> mỗi trang (C-114)', () => {
+describe('LoyaltyPage — một <h1> mỗi trang', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getLoyalty.mockResolvedValue(LOYALTY);

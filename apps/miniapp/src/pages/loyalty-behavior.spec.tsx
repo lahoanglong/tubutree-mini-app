@@ -4,10 +4,9 @@ import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * Đặc tả hành vi trang Hạng thành viên & Điểm Xanh (C-076, PC-10a): nút điểm danh, nút đổi quà,
- * hộp xác nhận, thẻ thành viên, chúc mừng lên hạng. Viết TRƯỚC khi di cư sang DS v2 để chứng minh
- * việc đổi Button/Modal không đổi điều kiện bật/tắt nút, số lần gọi API và con số hiển thị.
- * Chỉ truy vấn theo role/chữ (không theo class/cấu trúc) để chạy được trên cả bản cũ lẫn bản mới.
+ * Đặc tả hành vi trang Hạng thành viên & Điểm Xanh: nút điểm danh, nút đổi quà, hộp xác nhận, thẻ thành viên,
+ * chúc mừng lên hạng. Giữ điều kiện bật/tắt nút, số lần gọi API và con số hiển thị.
+ * Chỉ truy vấn theo role/chữ (không theo class/cấu trúc) để đổi giao diện mà test vẫn đứng.
  */
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
