@@ -3,7 +3,7 @@
  * cách đổi cờ ở đây, không phải dựng lại.
  */
 
-/** Chặng Mùa: mùa duy nhất đã hết hạn 31/08 và chưa có công cụ tạo mùa. */
+/** Chặng Mùa: tắt chờ chủ quyết; công cụ tạo mùa đã có ở admin. */
 export const SEASON_PASS_ENABLED = false;
 
 /** Giao định kỳ trong Mini App: chủ chốt tạm ẩn đợt đầu (28/10). Chỉ ẩn lối vào ở Mini App, web giữ nguyên. */
