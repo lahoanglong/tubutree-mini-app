@@ -9,6 +9,7 @@ import { foldVietnamese, includesFolded } from '../../utils/vn-fold';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { PriceTag } from '../ui/price-tag';
+import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 import { ProductThumb } from '../ui/product-thumb';
 
@@ -22,6 +23,9 @@ export interface SuggestListProps {
   /** Đợt Giờ vàng đang chạy, để giá gợi ý khớp thẻ sản phẩm. */
   flashSales?: FlashSaleActiveItem[];
   loading: boolean;
+  /** Gợi ý sản phẩm tải lỗi (không phải rỗng): báo và cho thử lại, lịch sử tìm vẫn hiện. */
+  error?: boolean;
+  onRetry?: () => void;
   onPickKeyword: (term: string) => void;
   onPickCategory: (entry: CategoryEntry) => void;
   onPickProduct: (product: ProductSuggestion, index: number) => void;
@@ -38,14 +42,16 @@ const ELLIPSIS: CSSProperties = { display: 'block', overflow: 'hidden', textOver
  * nên chỉ được render dạng text của React (không bao giờ HTML).
  * Không có gì để hiện (chưa gõ + chưa có lịch sử) → không vẽ khung rỗng.
  */
-export function SuggestList({ draft, recent, categories, products, flashSales = [], loading, onPickKeyword, onPickCategory, onPickProduct, onClearRecent }: SuggestListProps) {
+export function SuggestList({ draft, recent, categories, products, flashSales = [], loading, error = false, onRetry, onPickKeyword, onPickCategory, onPickProduct, onClearRecent }: SuggestListProps) {
   const term = draft.trim();
   const recentShown = term ? recent.filter((r) => includesFolded(r, term)).slice(0, SUGGEST_LIMITS.recent) : recent;
   const categoriesShown = term ? categories.filter((c) => includesFolded(c.label, term)).slice(0, SUGGEST_LIMITS.categories) : [];
   const productsShown = term ? products : []; // chưa gõ gì thì chỉ có lịch sử, kể cả khi caller còn giữ kết quả cũ
   // Cùng cổng "đủ dài" với useSuggest (đã bỏ dấu), nên "́" lẻ / khoảng trắng không tính là ký tự.
   const longEnough = foldVietnamese(term).length >= SUGGEST_MIN_CHARS;
-  const nothing = longEnough && !loading && recentShown.length === 0 && categoriesShown.length === 0 && productsShown.length === 0;
+  const failed = longEnough && error && !loading && productsShown.length === 0;
+  const waiting = longEnough && loading && productsShown.length === 0;
+  const nothing = longEnough && !loading && !failed && recentShown.length === 0 && categoriesShown.length === 0 && productsShown.length === 0;
 
   if (!term && recentShown.length === 0) return null;
 
@@ -91,6 +97,23 @@ export function SuggestList({ draft, recent, categories, products, flashSales = 
             </SuggestRow>
           ))}
         </Group>
+      )}
+      {waiting && (
+        <div data-testid="suggest-loading" aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 0' }}>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} height={40} />
+          ))}
+        </div>
+      )}
+      {failed && (
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 0' }}>
+          <Text variant="body-sm" tone="secondary" as="span" style={{ minWidth: 0 }}>
+            {vi.browse.suggest.failed}
+          </Text>
+          <Button variant="secondary" onPress={() => onRetry?.()} style={{ minWidth: 0, flex: '0 0 auto' }}>
+            {vi.common.retry}
+          </Button>
+        </div>
       )}
       {nothing && (
         <Text variant="body-sm" tone="tertiary" as="p" style={{ padding: '12px 0' }}>

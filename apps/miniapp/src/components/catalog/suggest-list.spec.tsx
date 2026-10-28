@@ -103,14 +103,25 @@ describe('SuggestList', () => {
     expect(label).toHaveStyle({ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' });
   });
 
-  it('không có gợi ý nào (≥2 ký tự) nhưng đang tải → chưa hiện câu "Chưa có gợi ý"', () => {
+  it('không có gợi ý nào (≥2 ký tự) nhưng đang tải → 3 dòng khung chờ, chưa hiện câu "Chưa có gợi ý"', () => {
     renderList({ draft: 'zzz', recent: [], loading: true });
     expect(screen.queryByText(/Chưa có gợi ý/)).toBeNull();
+    expect(screen.getByTestId('suggest-loading').children).toHaveLength(3);
   });
 
-  it('không có gợi ý, đã tải xong → câu hướng dẫn', () => {
+  it('không có gợi ý, đã tải xong → câu hướng dẫn nhắc dòng "Tìm" có thật', () => {
     renderList({ draft: 'zzz', recent: [] });
-    expect(screen.getByText('Chưa có gợi ý — nhấn Tìm để xem kết quả')).toBeInTheDocument();
+    expect(screen.getByText(/Chưa có gợi ý/)).toHaveTextContent('Enter');
+    expect(screen.getByRole('button', { name: 'Tìm “zzz”' })).toBeInTheDocument();
+  });
+
+  it('tải lỗi (500, mất mạng) → "Không tải được gợi ý" + Thử lại, không giả vờ là rỗng; lịch sử tìm vẫn hiện', () => {
+    const p = renderList({ draft: 'nu', recent: ['nước rửa'], error: true, onRetry: vi.fn() });
+    expect(screen.getByRole('alert')).toHaveTextContent('Không tải được gợi ý');
+    expect(screen.queryByText(/Chưa có gợi ý/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'nước rửa' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    expect(p.onRetry).toHaveBeenCalledTimes(1);
   });
 
   it('mới gõ 1 ký tự → chưa có câu "Chưa có gợi ý" (chưa đủ 2 ký tự để gợi ý)', () => {

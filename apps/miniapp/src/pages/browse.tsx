@@ -190,6 +190,8 @@ export default function BrowsePage() {
           products={suggest.products}
           flashSales={flashQ.data}
           loading={suggest.isFetching}
+          error={suggest.isError}
+          onRetry={suggest.refetch}
           onPickKeyword={commit}
           onPickCategory={pickCategory}
           onPickProduct={pickSuggestion}

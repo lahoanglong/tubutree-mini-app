@@ -165,7 +165,7 @@ describe('useSuggest', () => {
     expect(result.current.products).toEqual([Q]);
   });
 
-  it('API lỗi → products rỗng, không ném', async () => {
+  it('API lỗi → products rỗng, không ném, nhưng báo isError để màn hiện "Không tải được gợi ý" và Thử lại gọi lại API', async () => {
     mocks.suggestProducts.mockRejectedValue(new Error('500'));
     const { result } = renderHook(() => useSuggest('nuoc'), { wrapper });
     await advance(SUGGEST_DEBOUNCE_MS);
@@ -173,6 +173,15 @@ describe('useSuggest', () => {
     expect(mocks.suggestProducts).toHaveBeenCalledTimes(1);
     expect(result.current.isFetching).toBe(false);
     expect(result.current.products).toEqual([]);
+    expect(result.current.isError).toBe(true);
+    mocks.suggestProducts.mockResolvedValue([P]);
+    await act(async () => {
+      result.current.refetch();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.suggestProducts).toHaveBeenCalledTimes(2);
+    expect(result.current.isError).toBe(false);
+    expect(result.current.products).toEqual([P]);
   });
 
   it('unmount khi đang chờ debounce → không gọi API', async () => {

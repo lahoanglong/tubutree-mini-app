@@ -9,6 +9,7 @@ import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { SUGGEST_MIN_CHARS } from '@/lib/use-suggest';
 import { foldVietnamese, includesFolded } from '@/lib/vn-fold';
 import { ui } from '@/lib/guest-ui';
+import { Skeleton } from '@/components/mini';
 
 export const SUGGEST_LIMITS = { recent: 3, categories: 4 } as const;
 
@@ -25,6 +26,8 @@ export function SuggestList({
   categories,
   products,
   loading,
+  error = false,
+  onRetry,
   onPickKeyword,
   onPickCategory,
   onPickProduct,
@@ -35,6 +38,9 @@ export function SuggestList({
   categories: CategoryEntry[];
   products: ProductSuggestion[];
   loading: boolean;
+  /** Gợi ý sản phẩm tải lỗi (không phải rỗng): báo và cho thử lại, lịch sử tìm vẫn hiện. */
+  error?: boolean;
+  onRetry?: () => void;
   onPickKeyword: (term: string) => void;
   onPickCategory: (entry: CategoryEntry) => void;
   onPickProduct: (product: ProductSuggestion, index: number) => void;
@@ -46,7 +52,9 @@ export function SuggestList({
   const categoriesShown = term ? categories.filter((c) => includesFolded(c.label, term)).slice(0, SUGGEST_LIMITS.categories) : [];
   const productsShown = term ? products : [];
   const longEnough = foldVietnamese(term).length >= SUGGEST_MIN_CHARS;
-  const nothing = longEnough && !loading && recentShown.length === 0 && categoriesShown.length === 0 && productsShown.length === 0;
+  const failed = longEnough && error && !loading && productsShown.length === 0;
+  const waiting = longEnough && loading && productsShown.length === 0;
+  const nothing = longEnough && !loading && !failed && recentShown.length === 0 && categoriesShown.length === 0 && productsShown.length === 0;
 
   if (!term && recentShown.length === 0) return null;
 
@@ -92,6 +100,21 @@ export function SuggestList({
             </SuggestRow>
           ))}
         </Group>
+      )}
+      {waiting && (
+        <div data-testid="suggest-loading" aria-hidden="true" className="flex flex-col gap-3 py-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} height={40} />
+          ))}
+        </div>
+      )}
+      {failed && (
+        <div role="alert" className="flex items-center justify-between gap-3 py-2">
+          <p className="min-w-0 text-sm text-stone-700">{browseText.suggest.failed}</p>
+          <button type="button" onClick={() => onRetry?.()} className={`${ui.btnSecondary} flex-none`}>
+            {browseText.retry}
+          </button>
+        </div>
       )}
       {nothing && <p className="py-3 text-sm text-stone-600">{browseText.suggest.none}</p>}
     </section>

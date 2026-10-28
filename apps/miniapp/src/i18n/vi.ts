@@ -478,7 +478,8 @@ export const vi = {
       categories: 'Danh mục',
       products: 'Sản phẩm',
       searchFor: (q: string) => `Tìm “${q}”`,
-      none: 'Chưa có gợi ý — nhấn Tìm để xem kết quả',
+      none: 'Chưa có gợi ý. Chạm dòng “Tìm” ở trên hoặc nhấn Enter để xem kết quả.',
+      failed: 'Không tải được gợi ý',
     },
   },
 
