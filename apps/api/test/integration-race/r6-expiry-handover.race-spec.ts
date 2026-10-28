@@ -46,7 +46,7 @@ describe('Cron hết hạn thanh toán gặp đơn đã bàn giao vận chuyển
         grantReferralReward: jest.fn().mockResolvedValue(undefined),
         reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
       } as unknown as AffiliateService,
-      { notify } as unknown as NotificationsService,
+      { notify, notifySafe: notify } as unknown as NotificationsService,
       new OrderReversalService(
         { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService,
         { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService,

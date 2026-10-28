@@ -51,7 +51,7 @@ describe('Merchant fulfilment races (real Postgres)', () => {
       { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService,
       { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService,
     );
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     orderStatus = new OrderStatusService(
       prisma,
       loyalty,
@@ -277,7 +277,7 @@ describe('Merchant fulfilment races (real Postgres)', () => {
       pancakeLinkCode: pancakeVariationId,
     });
     const none = {} as never;
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     const admin = new AdminService(prisma, none, none, none, notifications, none, none, none, none, none);
     await admin.reviewMerchantProduct('admin-it', p.id, true, undefined, true, undefined, {
       pancakeCode: pancakeVariationId,

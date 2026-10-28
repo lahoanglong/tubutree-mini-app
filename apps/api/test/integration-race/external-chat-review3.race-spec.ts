@@ -27,7 +27,7 @@ describe('Điểm đơn chat sau review lượt 3 (real Postgres)', () => {
   const MAP = { marketplaceIds: { '-3': 'shopee' }, chatSources: ['ITCHAT|itacc|'] };
 
   const freshConfig = () => new SystemConfigService(prisma);
-  const deps = () => ({ config: freshConfig(), notifier: { notify } as never });
+  const deps = () => ({ config: freshConfig(), notifier: { notify, notifySafe: notify } as never });
   const pin = async (key: string, value: Prisma.InputJsonValue) => restore.push(await pinConfig(prisma, key, value));
 
   beforeAll(async () => {
@@ -107,7 +107,7 @@ describe('Điểm đơn chat sau review lượt 3 (real Postgres)', () => {
   const eventsOf = (claimId: string) => prisma.externalClaimEvent.findMany({ where: { claimId }, orderBy: { createdAt: 'asc' } });
   const releaseOpts = async () => ({ pendingDays: 14, expiryMonths: 12, chat: await loadChatConfig(freshConfig()) });
   const adminSvc = () =>
-    new ExternalClaimsAdminService(prisma, freshConfig(), { notify } as never, new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify } as never));
+    new ExternalClaimsAdminService(prisma, freshConfig(), { notify, notifySafe: notify } as never, new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify, notifySafe: notify } as never));
 
   describe('L1: điểm đã chốt ở lần kiểm gần nhất là điểm được cộng, không quay vòng REVIEW', () => {
     it('R5: hạng tăng x2 sau khi claim qua kiểm: cộng đúng điểm đã kiểm, không vào REVIEW', async () => {

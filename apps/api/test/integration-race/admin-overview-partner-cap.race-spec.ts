@@ -22,7 +22,7 @@ describe('adminOverview không cắt gian hàng đối tác ở cuối danh sác
         SystemConfigService,
         MerchantFulfilmentService,
         { provide: OrderStatusService, useValue: {} },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
       ],
     }).compile();
     await moduleRef.init();

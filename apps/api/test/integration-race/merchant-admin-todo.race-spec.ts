@@ -25,7 +25,7 @@ describe('Việc cần xử lý với đối tác (real Postgres)', () => {
     await setConfig(prisma, 'merchant.settlement_hold_days', 7);
     await setConfig(prisma, 'merchant.commission_pct', 0.15);
     await setConfig(prisma, 'merchant.consignment_settle_from', '2000-01-01T00:00:00Z');
-    const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } as unknown as NotificationsService;
     fulfilment = new MerchantFulfilmentService(prisma, undefined as never, notifications, new SystemConfigService(prisma));
     inbox = new OpsInboxService(prisma, fulfilment);
     const none = {} as never;

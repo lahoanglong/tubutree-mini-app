@@ -76,7 +76,7 @@ describe('Đơn đã huỷ rồi mới có tiền → vào hàng hoàn tiền, k
       grantReferralReward: jest.fn().mockResolvedValue(undefined),
       reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
     } as unknown as AffiliateService;
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     const reversal = new OrderReversalService(
       { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService,
       { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService,

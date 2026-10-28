@@ -67,7 +67,7 @@ describe('Đồng bộ huỷ đơn Tubu ↔ Pancake: lệch kết cục, Gomdon,
         },
         { provide: CartService, useValue: {} },
         { provide: AffiliateService, useValue: affiliate },
-        { provide: NotificationsService, useValue: { notify } },
+        { provide: NotificationsService, useValue: { notify, notifySafe: notify } },
         { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
         { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
       ],
@@ -77,7 +77,7 @@ describe('Đồng bộ huỷ đơn Tubu ↔ Pancake: lệch kết cục, Gomdon,
     await warmPool(prisma);
     orders = app.get(OrdersService);
     status = app.get(OrderStatusService);
-    processor = new PancakeProcessor(prisma, { notify } as unknown as NotificationsService, status);
+    processor = new PancakeProcessor(prisma, { notify, notifySafe: notify } as unknown as NotificationsService, status);
     await createUser(prisma, { role: 'ADMIN' });
   });
 

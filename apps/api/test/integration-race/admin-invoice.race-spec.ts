@@ -22,7 +22,7 @@ describe('AdminService.issueOrderInvoice (real Postgres)', () => {
       {} as never,
       {} as never,
       {} as never,
-      { notify } as never,
+      { notify, notifySafe: notify } as never,
       {} as never,
       {} as never,
       {} as never,

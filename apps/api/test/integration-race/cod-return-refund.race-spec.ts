@@ -43,7 +43,7 @@ describe('COD delivered → admin duyệt hoàn tiền (real Postgres)', () => {
           lockCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
           grantReferralReward: jest.fn().mockResolvedValue(undefined),
         } },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
         { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
         { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
         // Không liên quan tới tiền của lần duyệt trả hàng này — stub tối thiểu.

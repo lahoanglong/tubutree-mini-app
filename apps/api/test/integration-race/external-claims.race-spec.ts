@@ -28,8 +28,8 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
   const lookup = { lookupAndIngest: jest.fn(async () => false) };
 
   const freshConfig = () => new SystemConfigService(prisma);
-  const freshService = () => new ExternalClaimService(prisma, freshConfig(), lookup as never, { notify } as never);
-  const admin = (svc = freshService()) => new ExternalClaimsAdminService(prisma, freshConfig(), { notify } as never, svc);
+  const freshService = () => new ExternalClaimService(prisma, freshConfig(), lookup as never, { notify, notifySafe: notify } as never);
+  const admin = (svc = freshService()) => new ExternalClaimsAdminService(prisma, freshConfig(), { notify, notifySafe: notify } as never, svc);
 
   async function pin(key: string, value: string | number | boolean) {
     restore.push(await pinConfig(prisma, key, value));
@@ -170,8 +170,8 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     const { claim } = await pendingClaim(user.id);
     const config = freshConfig();
     const runs = await Promise.allSettled([
-      releaseDueClaims(prisma, config, { notify }),
-      releaseDueClaims(prisma, freshConfig(), { notify }),
+      releaseDueClaims(prisma, config, { notify, notifySafe: notify }),
+      releaseDueClaims(prisma, freshConfig(), { notify, notifySafe: notify }),
       ...Array.from({ length: 6 }, () => releaseClaim(prisma, claim.id, { pendingDays: 14, expiryMonths: 12 })),
     ]);
     expect(summarize(runs).rejected).toHaveLength(0);
@@ -193,7 +193,7 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     const young = await pendingClaim(user.id, { deliveredDaysAgo: 13 });
     const returning = await pendingClaim(user.id);
     await prisma.externalOrder.update({ where: { id: returning.order.id }, data: { status: 'RETURNING', pancakeStatus: 4 } });
-    await releaseDueClaims(prisma, freshConfig(), { notify });
+    await releaseDueClaims(prisma, freshConfig(), { notify, notifySafe: notify });
     expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: young.claim.id } })).toMatchObject({ state: 'PENDING' });
     expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: returning.claim.id } })).toMatchObject({ state: 'PENDING' });
     expect(await ledger(user.id, 'MARKETPLACE_ORDER')).toHaveLength(0);
@@ -205,7 +205,7 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     await prisma.externalOrder.update({ where: { id: a.order.id }, data: { goodsValue: 150_000 } });
     const b = await pendingClaim(user.id);
     await prisma.externalOrder.update({ where: { id: b.order.id }, data: { goodsValue: null } });
-    await releaseDueClaims(prisma, freshConfig(), { notify });
+    await releaseDueClaims(prisma, freshConfig(), { notify, notifySafe: notify });
     expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: a.claim.id } })).toMatchObject({ state: 'CREDITED', points: 1_500 });
     expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: b.claim.id } })).toMatchObject({ state: 'REVIEW' });
     expect(await balanceOf(user.id)).toBe(1_500);
@@ -221,7 +221,7 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     }
     const markReturned = (orderId: string, status: 'RETURNED' | 'CANCELLED' = 'RETURNED') =>
       prisma.externalOrder.update({ where: { id: orderId }, data: { status, pancakeStatus: status === 'RETURNED' ? 5 : 6, closedAt: new Date() } });
-    const apply = (pid: string) => applyStatusToClaim(prisma, { notify }, freshConfig(), pid);
+    const apply = (pid: string) => applyStatusToClaim(prisma, { notify, notifySafe: notify }, freshConfig(), pid);
 
     it('đủ số dư: thu hồi đủ, claim REVERSED, năm lần áp song song chỉ ghi MỘT dòng đảo', async () => {
       const { user, order, claim } = await credited();
@@ -254,7 +254,7 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
       const { user, order, claim } = await credited();
       await prisma.$executeRaw`
         UPDATE "points_transactions" SET "createdAt" = "createdAt" - interval '13 months', "expiresAt" = "expiresAt" - interval '13 months' WHERE "userId" = ${user.id}`;
-      const expiry = new LoyaltyExpiryService(prisma, freshConfig(), { notify } as never);
+      const expiry = new LoyaltyExpiryService(prisma, freshConfig(), { notify, notifySafe: notify } as never);
       await expiry.expirePoints();
       expect(await balanceOf(user.id)).toBe(0);
       await markReturned(order.id);
@@ -276,7 +276,7 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
       expect(await balanceOf(user.id)).toBe(1_000);
       await prisma.$executeRaw`
         UPDATE "points_transactions" SET "createdAt" = "createdAt" - interval '13 months', "expiresAt" = "expiresAt" - interval '13 months' WHERE "userId" = ${user.id}`;
-      const expiry = new LoyaltyExpiryService(prisma, freshConfig(), { notify } as never);
+      const expiry = new LoyaltyExpiryService(prisma, freshConfig(), { notify, notifySafe: notify } as never);
       await expiry.expirePoints();
       expect(await ledger(user.id, 'POINTS_EXPIRED')).toHaveLength(0);
       expect(await balanceOf(user.id)).toBe(1_000);
@@ -310,11 +310,11 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     });
     await prisma.externalOrder.update({ where: { id: order.id }, data: { status: 'CANCELLED', pancakeStatus: 6 } });
     const config = freshConfig();
-    await Promise.all(Array.from({ length: 4 }, () => applyStatusToClaim(prisma, { notify }, config, order.pancakeOrderId)));
+    await Promise.all(Array.from({ length: 4 }, () => applyStatusToClaim(prisma, { notify, notifySafe: notify }, config, order.pancakeOrderId)));
     expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: claim.id } })).toMatchObject({ state: 'VOIDED', decidedById: null });
     expect(notify.mock.calls.filter((c) => (c as unknown[])[1] === 'EXTERNAL_POINTS_VOIDED')).toHaveLength(1);
     await prisma.externalOrder.update({ where: { id: order.id }, data: { status: 'DELIVERED', pancakeStatus: 3, deliveredAt: new Date() } });
-    await applyStatusToClaim(prisma, { notify }, config, order.pancakeOrderId);
+    await applyStatusToClaim(prisma, { notify, notifySafe: notify }, config, order.pancakeOrderId);
     expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: claim.id } })).toMatchObject({ state: 'REVIEW' });
   });
 
@@ -353,7 +353,7 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     await expect(adm.approve(second.claimId!, 'staff1')).rejects.toMatchObject({ response: { code: 'SAME_INTRODUCER' } });
     await adm.approve(second.claimId!, 'staff2');
     expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: second.claimId! } })).toMatchObject({ userId: c.id, state: 'PENDING', voidReason: null });
-    await releaseDueClaims(prisma, freshConfig(), { notify });
+    await releaseDueClaims(prisma, freshConfig(), { notify, notifySafe: notify });
     const { claim } = await pendingClaim(a.id);
     await releaseClaim(prisma, claim.id, { pendingDays: 14, expiryMonths: 12 });
     await expect(adm.voidClaim(claim.id, 'staff1', 'x', false)).rejects.toMatchObject({ status: 409 });
@@ -378,7 +378,7 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
   });
 
   it('(j) webhook Pancake đổi trạng thái: processor nối vào claim (giao thì đồng bộ mốc cộng, huỷ thì VOIDED)', async () => {
-    const processor = new PancakeProcessor(prisma, { notify } as never, { setStatus: jest.fn() } as unknown as OrderStatusService, undefined, freshConfig());
+    const processor = new PancakeProcessor(prisma, { notify, notifySafe: notify } as never, { setStatus: jest.fn() } as unknown as OrderStatusService, undefined, freshConfig());
     const user = await mkUser();
     const pid = `EXTCL${randCode(10)}`;
     const code = `IT${randCode(10)}`;

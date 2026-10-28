@@ -38,7 +38,7 @@ describe('Đối soát + sao kê Ví Tubu (real Postgres)', () => {
         WalletService,
         CashbackService,
         { provide: PricingService, useValue: {} },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
         { provide: CashbackProviderRegistry, useValue: { all: () => [] } },
       ],

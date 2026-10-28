@@ -55,7 +55,7 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
         CashbackService,
         OrderReversalService,
         { provide: LifecycleService, useValue: {} },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
         {
           provide: GomdonOrderService,

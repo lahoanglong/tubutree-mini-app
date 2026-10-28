@@ -28,7 +28,7 @@ describe('Điểm đơn chat sau review lượt 1 (real Postgres)', () => {
   const MAP = { marketplaceIds: { '-3': 'shopee' }, chatSources: ['ITCHAT|itacc|'] };
 
   const freshConfig = () => new SystemConfigService(prisma);
-  const deps = () => ({ config: freshConfig(), notifier: { notify } as never });
+  const deps = () => ({ config: freshConfig(), notifier: { notify, notifySafe: notify } as never });
   const pin = async (key: string, value: Prisma.InputJsonValue) => restore.push(await pinConfig(prisma, key, value));
 
   beforeAll(async () => {
@@ -108,7 +108,7 @@ describe('Điểm đơn chat sau review lượt 1 (real Postgres)', () => {
   const eventsOf = (claimId: string) => prisma.externalClaimEvent.findMany({ where: { claimId }, orderBy: { createdAt: 'asc' } });
   const releaseOpts = async () => ({ pendingDays: 14, expiryMonths: 12, chat: await loadChatConfig(freshConfig()) });
   const adminSvc = () =>
-    new ExternalClaimsAdminService(prisma, freshConfig(), { notify } as never, new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify } as never));
+    new ExternalClaimsAdminService(prisma, freshConfig(), { notify, notifySafe: notify } as never, new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify, notifySafe: notify } as never));
 
   describe('C1 và C2: liên kết phải kiểm lại ngưỡng, nhân viên và trần tháng', () => {
     it('C1: tiền hàng đổi từ 1.000.000 lên 100.000.000 trước khi khách liên kết: REVIEW, không cộng thẳng', async () => {
@@ -333,7 +333,7 @@ describe('Điểm đơn chat sau review lượt 1 (real Postgres)', () => {
       await ingest(payload({ id: b, phone: user.phone!, goods: 300_000, deliveredDaysAgo: 20 }));
       await prisma.externalOrder.update({ where: { id: oa.id }, data: { phone: null } });
       await prisma.externalPointsClaim.updateMany({ where: { externalOrderId: oa.id }, data: { orderPhone: null } });
-      const r = await releaseDueClaims(prisma, freshConfig(), { notify } as never);
+      const r = await releaseDueClaims(prisma, freshConfig(), { notify, notifySafe: notify } as never);
       expect(r.credited).toBeGreaterThanOrEqual(2);
       expect(await balanceOf(user.id)).toBe(16_000);
     });

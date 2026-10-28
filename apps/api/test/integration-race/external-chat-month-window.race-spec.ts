@@ -22,7 +22,7 @@ describe('Trần tháng có cận trên theo tháng tạo claim (real Postgres)'
   const MAP = { marketplaceIds: { '-3': 'shopee' }, chatSources: ['ITCHAT|itacc|'] };
 
   const freshConfig = () => new SystemConfigService(prisma);
-  const deps = () => ({ config: freshConfig(), notifier: { notify } as never });
+  const deps = () => ({ config: freshConfig(), notifier: { notify, notifySafe: notify } as never });
   const pin = async (key: string, value: Prisma.InputJsonValue) => restore.push(await pinConfig(prisma, key, value));
 
   beforeAll(async () => {
@@ -98,7 +98,7 @@ describe('Trần tháng có cận trên theo tháng tạo claim (real Postgres)'
   }
   const claimOf = (id: string) => prisma.externalPointsClaim.findFirst({ where: { externalOrder: { pancakeOrderId: id } } });
   const adminSvc = () =>
-    new ExternalClaimsAdminService(prisma, freshConfig(), { notify } as never, new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify } as never));
+    new ExternalClaimsAdminService(prisma, freshConfig(), { notify, notifySafe: notify } as never, new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify, notifySafe: notify } as never));
 
   it('duyệt claim REVIEW tạo từ tháng trước: claim đầy trần tháng NÀY không được tính vào trần tháng của nó', async () => {
     await pin('loyalty.chat_order_monthly_points_cap', 100_000);
@@ -120,7 +120,7 @@ describe('Trần tháng có cận trên theo tháng tạo claim (real Postgres)'
   });
 
   const PAST = () => new Date(Date.now() - 45 * DAY);
-  const claimSvc = () => new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify } as never);
+  const claimSvc = () => new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify, notifySafe: notify } as never);
   async function mkScanOrder(over: Record<string, unknown> = {}) {
     const code = `IT${randCode(10)}`;
     const now = new Date();
@@ -165,7 +165,7 @@ describe('Trần tháng có cận trên theo tháng tạo claim (real Postgres)'
       await prisma.externalPointsClaim.update({ where: { id: r.claimId! }, data: { createdAt: PAST() } });
       await fillerScan(user.id, 20_000);
       await prisma.externalOrder.update({ where: { id: o.id }, data: { goodsValue: 1_000_000, status: 'DELIVERED', pancakeStatus: 3, deliveredAt: new Date(Date.now() - 20 * DAY) } });
-      await releaseDueClaims(prisma, freshConfig(), { notify });
+      await releaseDueClaims(prisma, freshConfig(), { notify, notifySafe: notify });
       expect(await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: r.claimId! } })).toMatchObject({ state: 'CREDITED', points: 10_000 });
     });
 

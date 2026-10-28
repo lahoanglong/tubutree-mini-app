@@ -33,7 +33,7 @@ describe('Tiền khách cuối của đơn CTV lên hộ: về muộn / dư / th
   let orderStatus: OrderStatusService;
   let refunds: CustomerRefundsService;
   const notify = jest.fn().mockResolvedValue(undefined);
-  const ctx = () => ({ prisma, notifications: { notify }, logger: { warn: jest.fn(), log: jest.fn() } });
+  const ctx = () => ({ prisma, notifications: { notify, notifySafe: notify }, logger: { warn: jest.fn(), log: jest.fn() } });
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -49,7 +49,7 @@ describe('Tiền khách cuối của đơn CTV lên hộ: về muộn / dư / th
       grantReferralReward: jest.fn().mockResolvedValue(undefined),
       reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
     } as unknown as AffiliateService;
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     const reversal = new OrderReversalService(
       { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService,
       { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService,

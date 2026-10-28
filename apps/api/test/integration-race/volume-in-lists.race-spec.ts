@@ -44,7 +44,7 @@ describe('Danh sách IN vượt giới hạn bind (real Postgres)', () => {
         OrderReturnsService,
         { provide: OrderReversalService, useValue: {} },
         { provide: AffiliateService, useValue: {} },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
       ],
     }).compile();
     await moduleRef.init();

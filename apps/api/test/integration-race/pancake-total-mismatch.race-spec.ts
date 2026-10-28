@@ -33,7 +33,7 @@ describe('Pancake webhook: lệch tổng tiền (real Postgres)', () => {
       grantReferralReward: jest.fn(),
       reverseCommissionsForOrder: jest.fn(),
     } as unknown as AffiliateService;
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     const reversal = new OrderReversalService(
       { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService,
       { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService,
@@ -162,7 +162,7 @@ describe('Pancake webhook: lệch tổng tiền (real Postgres)', () => {
 
     await setConfig(prisma, 'pancake.total_mismatch_check', false);
     try {
-      const off = new PancakeProcessor(prisma, { notify } as unknown as NotificationsService, orderStatus, undefined, new SystemConfigService(prisma));
+      const off = new PancakeProcessor(prisma, { notify, notifySafe: notify } as unknown as NotificationsService, orderStatus, undefined, new SystemConfigService(prisma));
       const order = await seed();
       const ev = await prisma.pancakeWebhookEvent.create({ data: { eventType: 'order.updated', rawPayload: payload(order, EDITED) as object, status: 'PENDING' } });
       await off.process({ data: { eventId: ev.id } } as Job<{ eventId: string }>);
@@ -170,7 +170,7 @@ describe('Pancake webhook: lệch tổng tiền (real Postgres)', () => {
       expect((await reload(order.id)).pancakeAttention).toBeNull();
 
       await setConfig(prisma, 'pancake.total_mismatch_check', true);
-      const on = new PancakeProcessor(prisma, { notify } as unknown as NotificationsService, orderStatus, undefined, new SystemConfigService(prisma));
+      const on = new PancakeProcessor(prisma, { notify, notifySafe: notify } as unknown as NotificationsService, orderStatus, undefined, new SystemConfigService(prisma));
       const ev2 = await prisma.pancakeWebhookEvent.create({ data: { eventType: 'order.updated', rawPayload: payload(order, EDITED) as object, status: 'PENDING' } });
       await on.process({ data: { eventId: ev2.id } } as Job<{ eventId: string }>);
       expect((await reload(order.id)).pancakeAttention).toContain(ATTENTION_TOTAL_MISMATCH);
