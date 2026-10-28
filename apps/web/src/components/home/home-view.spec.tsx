@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { StrictMode, act, type ReactElement } from 'react';
+import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
@@ -17,7 +19,8 @@ vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => !routeState.
 
 import HomeView from './home-view';
 import { homeBlockOrder } from './home-blocks';
-import { homeRenderOrder } from '@tubutree/app-core/home-layout';
+import { HOME_SETTLE_MAX_MS, homeKeptOrder, homeRenderOrder } from '@tubutree/app-core/home-layout';
+import { resetFlashSales } from '@/lib/use-flash-sales';
 import { HOME_KIND_KEY } from './use-home-customer-kind';
 
 const CONFIG = {
@@ -45,6 +48,7 @@ const region = (c: HTMLElement, name: string) => c.querySelector(`section[aria-l
 
 beforeEach(() => {
   localStorage.clear();
+  resetFlashSales();
   routeState.pending = new Set();
   mocks.phase = 'authenticated';
   mocks.restoring = false;
@@ -279,5 +283,186 @@ describe('HomeView — dữ liệu server tải sẵn', () => {
     expect(c.textContent).toContain('Gợi ý từ server');
     expect(productCalls()).toEqual([]);
     expect(calls('/categories')).toHaveLength(0);
+  });
+});
+
+// Giữ một cây React sống qua nhiều lần đổi trạng thái phiên (khung hình đầu giống HTML server, rồi mới khôi phục phiên): harness `render` không có rerender.
+function mountLive(make: () => ReactElement = () => <HomeView />, opts: { strict?: boolean } = {}) {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const client = newTestClient();
+  const tree = () => {
+    // Phần tử mới mỗi lần: cùng một đối tượng phần tử thì React bỏ qua lần vẽ lại và không đọc lại trạng thái phiên.
+    const inner = <QueryClientProvider client={client}>{make()}</QueryClientProvider>;
+    return opts.strict ? <StrictMode>{inner}</StrictMode> : inner;
+  };
+  act(() => root.render(tree()));
+  return {
+    container,
+    again: () => act(() => root.render(tree())),
+    unmount: () => {
+      act(() => root.unmount());
+      container.remove();
+    },
+  };
+}
+const deferred = <T,>() => {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
+
+describe('HomeView — khung chờ chung khi khôi phục phiên (web: khung hình đầu là khách vãng lai)', () => {
+  let live: ReturnType<typeof mountLive> | null = null;
+  afterEach(() => {
+    live?.unmount();
+    live = null;
+  });
+
+  it('khung hình đầu là khách mới rồi mới biết có phiên chưa nhớ loại: giữ nội dung đã dựng (Bán chạy, Gợi ý), chỉ dải quà đổi thành khung giữ chỗ thẻ thành viên', async () => {
+    mocks.phase = 'guest';
+    live = mountLive();
+    await flush(10);
+    expect(blockOrder(live.container)).toEqual([...homeBlockOrder('new')]);
+    expect(region(live.container, 'Bán chạy')!.textContent).toContain('Bán chạy nhất');
+
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    live.again();
+    await flush(10);
+    expect(blockOrder(live.container)).toEqual([...homeKeptOrder('unknown')]);
+    expect(blockOrder(live.container)).not.toContain('settling');
+    expect(region(live.container, 'Bán chạy')!.textContent).toContain('Bán chạy nhất');
+    expect(region(live.container, 'Gợi ý cho bạn')).not.toBeNull();
+    expect(region(live.container, 'Quà khách mới')).toBeNull();
+    expect(live.container.querySelector('[data-testid="member-card-loading"]')).not.toBeNull();
+  });
+
+  it('phiên khôi phục xong là khách cũ: tới đúng thứ tự khách cũ (Bán chạy nhường chỗ cho Mua lại), không qua khung chờ chung', async () => {
+    mocks.phase = 'guest';
+    live = mountLive();
+    await flush(10);
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    live.again();
+    await flush(10);
+    routes['/me/purchased-items'] = () => ({ items: [{ variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' }], nextCursor: null });
+    mocks.phase = 'authenticated';
+    mocks.restoring = false;
+    live.again();
+    await flush(12);
+    expect(blockOrder(live.container)).toEqual([...homeBlockOrder('returning')]);
+    expect(region(live.container, 'Bán chạy')).toBeNull();
+  });
+
+  it('khung hình đầu đã chưa biết loại khách (máy mới có cờ phiên): vẫn là một khung chờ chung như cũ, không dựng khối khách mới', async () => {
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    live = mountLive();
+    await flush(10);
+    expect(blockOrder(live.container)).toEqual([...homeRenderOrder('unknown', true)]);
+    expect(region(live.container, 'Bán chạy')).toBeNull();
+  });
+
+  it('phiên lỗi (mất mạng, API tạm lỗi): nhả ngay khung chờ, hiện bố cục khách mới mặc định dù Danh mục chưa về', async () => {
+    routes['/categories'] = () => new Promise(() => undefined);
+    mocks.phase = 'guest';
+    live = mountLive();
+    await flush(10);
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    live.again();
+    await flush(10);
+    expect(blockOrder(live.container)).toEqual([...homeKeptOrder('unknown')]);
+
+    mocks.phase = 'unavailable';
+    mocks.restoring = false;
+    live.again();
+    await flush(10);
+    expect(blockOrder(live.container)).toEqual([...homeBlockOrder('new')]);
+    expect(region(live.container, 'Bán chạy')!.textContent).toContain('Bán chạy nhất');
+    expect(live.container.querySelector('[data-testid="member-card-loading"]')).toBeNull();
+  });
+
+  it('đang giữ khung chờ chung từ khung hình đầu (máy có cờ phiên, chưa nhớ loại) rồi phiên lỗi: nhả ngay dù dữ liệu chưa về, không chờ 4,5 giây', async () => {
+    routes['/categories'] = () => new Promise(() => undefined);
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    live = mountLive();
+    await flush(10);
+    expect(blockOrder(live.container)).toEqual([...homeRenderOrder('unknown', true)]);
+
+    mocks.phase = 'unavailable';
+    mocks.restoring = false;
+    live.again();
+    await flush(10);
+    expect(blockOrder(live.container)).toEqual([...homeBlockOrder('new')]);
+  });
+
+  it('mở lần đầu mà phiên đã lỗi và máy chưa nhớ loại khách: bố cục khách mới ngay, không chờ khung chờ chung', async () => {
+    routes['/categories'] = () => new Promise(() => undefined);
+    mocks.phase = 'unavailable';
+    mocks.restoring = false;
+    live = mountLive();
+    await flush(10);
+    expect(blockOrder(live.container)).toEqual([...homeBlockOrder('new')]);
+    expect(blockOrder(live.container)).not.toContain('settling');
+  });
+});
+
+describe('HomeView — khung chờ chung ở cấp trang: truy vấn quyết định lỗi, hẹn giờ 4,5 giây', () => {
+  let live: ReturnType<typeof mountLive> | null = null;
+  afterEach(() => {
+    live?.unmount();
+    live = null;
+    vi.useRealTimers();
+  });
+
+  it('Giờ vàng (truy vấn quyết định) lỗi lúc đang giữ khung chờ: thả khung chờ, khối Giờ vàng hiện lỗi kèm "Thử lại", bấm Thử lại tải lại đúng khối đó', async () => {
+    const purchased = deferred<unknown>();
+    const flash = deferred<unknown>();
+    routes['/me/purchased-items'] = () => purchased.promise;
+    routes['/flash-sales/active'] = () => flash.promise;
+    live = mountLive();
+    await flush(10);
+    expect(blockOrder(live.container)).toEqual([...homeRenderOrder('unknown', true)]);
+
+    purchased.resolve({ items: [{ variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' }], nextCursor: null });
+    await flush(10);
+    expect(blockOrder(live.container)).toEqual([...homeRenderOrder('returning', true)]);
+
+    flash.reject(new ApiError('Máy chủ đang bận', 503));
+    await flush(10);
+    expect(blockOrder(live.container)).toEqual([...homeBlockOrder('returning')]);
+    const err = live.container.querySelector('[data-testid="home-block-error"]');
+    expect(err).not.toBeNull();
+    const before = calls('/flash-sales/active').length;
+    routes['/flash-sales/active'] = () => [];
+    click(byText(err as HTMLElement, 'button', 'Thử lại'));
+    await flush(10);
+    expect(calls('/flash-sales/active').length).toBeGreaterThan(before);
+    expect(live.container.querySelector('[data-testid="home-block-error"]')).toBeNull();
+  });
+
+  it('hẹn giờ 4,5 giây (StrictMode, giờ giả): mạng chậm, chưa biết loại khách và dữ liệu chưa về thì nhả đúng lúc, không sớm hơn', async () => {
+    vi.useFakeTimers();
+    routes['/me/purchased-items'] = () => new Promise(() => undefined);
+    routes['/flash-sales/active'] = () => new Promise(() => undefined);
+    live = mountLive(() => <HomeView />, { strict: true });
+    const tick = async (ms: number) => {
+      await act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
+      for (let i = 0; i < 4; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    };
+    await tick(0);
+    expect(blockOrder(live.container)).toEqual([...homeRenderOrder('unknown', true)]);
+    await tick(HOME_SETTLE_MAX_MS - 100);
+    expect(blockOrder(live.container)).toEqual([...homeRenderOrder('unknown', true)]);
+    await tick(200);
+    expect(blockOrder(live.container)).toEqual([...homeBlockOrder('unknown')]);
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
-  visibleHomeShortcuts, homeRenderOrder, homeSettling,
+  visibleHomeShortcuts, homeRenderOrder, homeKeptOrder, homeSettling,
 } from './home-layout';
 import type { LoyaltyOverview } from './api/loyalty';
 
@@ -272,6 +272,17 @@ describe('homeRenderOrder / homeSettling', () => {
   });
   it('khách mới đang giữ chỗ (dải quà thay thẻ thành viên) cũng gọn về một khung chờ', () => {
     expect(homeRenderOrder('new', true)).toEqual(['search', 'welcome', 'settling']);
+  });
+  it('giữ nội dung khách mới đã dựng: thứ tự khách mới, chỉ dải quà đổi thành khung giữ chỗ thẻ thành viên, Bán chạy và Gợi ý còn nguyên', () => {
+    const kept = homeKeptOrder('unknown');
+    expect(kept).toEqual(homeBlockOrder('new').map((id) => (id === 'welcome' ? 'member' : id)));
+    expect(kept).toContain('bestSellers');
+    expect(kept.at(-1)).toBe('suggest');
+    expect(kept).not.toContain('purchased');
+    expect(homeKeptOrder('returning')).toEqual(kept);
+  });
+  it('giữ nội dung đã dựng mà đã biết là khách mới: đúng bố cục khách mới, giữ dải quà', () => {
+    expect(homeKeptOrder('new')).toEqual(homeBlockOrder('new'));
   });
   it('chỉ giữ khi lần mở đầu chưa biết loại khách, tới khi biết loại và dữ liệu đã về', () => {
     expect(homeSettling({ startedUnknown: true, kind: 'unknown', dataPending: false })).toBe(true);

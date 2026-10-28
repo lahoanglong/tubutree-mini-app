@@ -46,6 +46,7 @@ export default function HomePage() {
   useHomeFeed();
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const restoring = useAuthStore((s) => s.status === 'loading');
+  const sessionFailed = useAuthStore((s) => s.status === 'error');
   const userId = useAuthStore((s) => s.user?.id);
   // Chuông ở đây trước đây trơ, không báo gì — trong khi voucher sinh nhật, nhắc giỏ, hoa hồng
   // duyệt đều nằm trong Thông báo. Dùng chung queryKey với trang Thông báo (P1-8 audit mạch lạc).
@@ -75,6 +76,7 @@ export default function HomePage() {
   const settling = useHomeSettling(
     kind,
     todo.loading || flash.isLoading || (authed && upcoming.isLoading) || categories.isLoading,
+    sessionFailed,
   );
 
   // API sập hẳn: chỉ tính khi khách đang THẤY kệ Bán chạy (khách mới) mà kệ lỗi và chưa có gì để hiện → một dải lỗi cấp trang thay

@@ -50,6 +50,15 @@ export function homeRenderOrder(kind: HomeKindState, settling: boolean): readonl
   return [...order.slice(0, hero + 1), 'settling'];
 }
 
+/**
+ * Thứ tự dựng khi máy chủ đã dựng bố cục khách mới (web: HTML đầu luôn là khách vãng lai) rồi khôi phục phiên mới cho biết đây là khách có tài khoản mà
+ * máy chưa nhớ loại. Giữ các khối đã vẽ (Giờ vàng, Bán chạy, Gợi ý...) thay vì thay hết bằng khung chờ: chỉ dải quà khách mới đổi thành khung giữ
+ * chỗ của thẻ thành viên (cùng chiều cao `HOME_HERO_HEIGHT`), khối riêng của khách cũ. Thứ tự khối là của khách mới, không xáo trộn.
+ */
+export function homeKeptOrder(kind: HomeKindState): readonly HomeBlockId[] {
+  return NEW.map((id) => (id === 'welcome' && kind !== 'new' ? 'member' : id));
+}
+
 /** Giữ khung chờ tối đa chừng này: mạng chậm hay API lỗi không được giữ trắng cả trang. */
 export const HOME_SETTLE_MAX_MS = 4500;
 

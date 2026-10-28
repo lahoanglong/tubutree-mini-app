@@ -12,7 +12,7 @@ import { notificationsQuery } from '@tubutree/app-core/queries/account';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
 import { flashActiveQuery, flashUpcomingQuery } from '@tubutree/app-core/queries/flash-sale';
-import { homeRenderOrder, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
+import { homeKeptOrder, homeRenderOrder, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
 import { categoryEntries } from '@/lib/browse-categories';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
@@ -38,7 +38,7 @@ import { ShortcutGrid } from './shortcut-grid';
 import { SuggestFeed } from './suggest-feed';
 import { TodoStrip, useHomeTodoQueries } from './todo-strip';
 import { HomeSettlingSkeleton } from './home-settling';
-import { useHomeSettling } from './use-home-settling';
+import { useHomeSettling, useStartedAsNew } from './use-home-settling';
 import { loadActiveFlashSales } from '@/lib/use-flash-sales';
 import { useBlockQuery } from './use-block-query';
 import { useHomeCustomerKind } from './use-home-customer-kind';
@@ -91,7 +91,11 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   // Cùng query key với PurchasedRail → không thêm request; chỉ để biết khách cũ hay mới. Trong lúc tải dùng loại đã nhớ
   // của tài khoản này để thứ tự khối không đổi sau khung hình đầu (useHomeCustomerKind).
   const purchasedRaw = usePurchasedItems(PURCHASED_RAIL_LIMIT);
-  const kind = useHomeCustomerKind(authed, userId, purchasedRaw, restoring || unavailable);
+  const resolvedKind = useHomeCustomerKind(authed, userId, purchasedRaw, restoring || unavailable);
+  // Phiên lỗi mà máy chưa nhớ loại khách: không còn gì để chờ, dùng bố cục khách mới mặc định (Mini App cũng rơi về khách mới khi phiên lỗi).
+  const kind = unavailable && resolvedKind === 'unknown' ? 'new' : resolvedKind;
+  // Khung hình đầu là khách mới (HTML server): nội dung đã dựng đó ở lại khi sau đó mới biết còn phải chờ loại khách.
+  const startedNew = useStartedAsNew(kind);
 
   // Cùng khoá với kệ Bán chạy của khách mới: ở đây chỉ để biết API sập hẳn (dải lỗi cấp trang), không thêm request.
   const bestSellers = useBlockQuery(useQuery({ ...homeBestSellerQuery(coreHttp), ...withInitial(initial.bestSellers), enabled: kind === 'new' }));
@@ -110,6 +114,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const settling = useHomeSettling(
     kind,
     todo.loading || flash.isLoading || (authed && upcoming.isLoading) || categories.isLoading,
+    unavailable,
   );
   const entries = useMemo(() => categoryEntries(categories.data), [categories.data]);
   // Chỉ tính khi khách đang THẤY kệ Bán chạy (khách mới); khách cũ không nhận dải lỗi vì kệ họ không thấy.
@@ -121,7 +126,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     member:
       kind === 'returning' && unavailable ? (
         <MemberCardUnavailable onRetry={() => void retrySession()} />
-      ) : unavailable && kind === 'unknown' ? null : kind === 'unknown' || (kind === 'returning' && restoring) ? (
+      ) : kind === 'unknown' || (kind === 'returning' && restoring) ? (
         <MemberCardSkeleton />
       ) : kind === 'returning' ? (
         <MemberCard />
@@ -152,7 +157,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     suggest: <SuggestFeed initial={initial.suggest} />,
   };
 
-  const order = homeRenderOrder(kind, settling);
+  const order = settling && startedNew ? homeKeptOrder(kind) : homeRenderOrder(kind, settling);
   const nodes: ReactNode[] = [];
   for (let i = 0; i < order.length; i++) {
     const id = order[i]!;
