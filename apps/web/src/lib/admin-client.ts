@@ -1778,6 +1778,8 @@ export interface OpsInbox {
     hoursLeft?: number;
     /** Mốc của việc chờ lâu nhất trong thẻ (ISO); thẻ không có cột thời gian rõ thì không trả. */
     oldestAt?: string;
+    /** Thẻ gồm nhiều phần (Tích điểm đơn sàn): số của từng phần, cộng lại bằng `count`. */
+    parts?: Partial<Record<'review' | 'partial' | 'closed' | 'stale' | 'attempts', number>>;
   }[];
 }
 export const getOpsInbox = () => apiFetch<OpsInbox>('/admin/ops/inbox');

@@ -1,16 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approveExternalClaim,
   attachExternalClaimAttempt,
   getConfig,
   getExternalClaim,
+  getOpsInbox,
   keepExternalClaimPoints,
   listExternalClaimAttempts,
   listExternalClaims,
   nextPageParam,
+  OPS_INBOX_QUERY_KEY,
   rejectExternalClaimAttempt,
   reverseExternalClaim,
   voidExternalClaim,
@@ -21,6 +23,9 @@ import {
 } from '@/lib/admin-client';
 import {
   ATTENTION_FILTER_LABEL,
+  ATTENTION_PART_LABEL,
+  ATTENTION_PART_ORDER,
+  attentionPartView,
   EVENT_ACTION_LABEL,
   attachDialogMessage,
   ORDER_STATUS_LABEL,
@@ -37,6 +42,7 @@ import {
   CLAIM_STATE_TONE,
   claimActions,
   type ClaimActor,
+  type ExternalAttentionPart,
   groupThousands,
 } from '@/lib/external-claims';
 import { configValue } from '@/lib/admin-config-forms';
@@ -48,14 +54,38 @@ import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, DlRow, 
 
 type Who = ClaimActor;
 
+/** Phần của thẻ Hôm nay cần mở sẵn; `n` đổi mỗi lần bấm thẻ để màn dựng lại với bộ lọc mới. */
+export interface ExternalClaimsSeed {
+  part: ExternalAttentionPart;
+  n: number;
+}
+
 /**
  * Điểm Xanh cho đơn sàn khách tự nhập mã vận đơn. CSKH duyệt claim cần kiểm, huỷ (có lý do, có thể mở lại mã) và xử lý lần gửi
  * mã chưa ghép được; chỉ ADMIN đảo điểm đã cộng. KE_TOAN chỉ xem. SĐT luôn che.
  */
-export function ExternalClaimsTab({ isAdmin, canAct, meId }: Who) {
-  const [state, setState] = useState<ExternalClaimState | ''>('REVIEW');
+export function ExternalClaimsTab({ isAdmin, canAct, meId, seed }: Who & { seed?: ExternalClaimsSeed | null }) {
+  const seeded = seed ? attentionPartView(seed.part) : null;
+  const [state, setState] = useState<ExternalClaimState | ''>(seeded ? seeded.state : 'REVIEW');
   const [typed, setTyped] = useState('');
-  const [attention, setAttention] = useState<AdminExternalClaimAttentionFilter | ''>('');
+  const [attention, setAttention] = useState<AdminExternalClaimAttentionFilter | ''>(seeded ? seeded.attention : '');
+  const attemptsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (seed?.part === 'attempts') attemptsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [seed]);
+  // Cùng khoá với thẻ Hôm nay nên dùng chung bộ nhớ đệm; chỉ CSKH và ADMIN có thẻ này.
+  const inbox = useQuery({ queryKey: OPS_INBOX_QUERY_KEY, queryFn: getOpsInbox, refetchInterval: 60_000, retry: false, enabled: isAdmin || canAct });
+  const parts = inbox.data?.items.find((i) => i.key === 'externalPoints')?.parts;
+  const openPart = (part: ExternalAttentionPart) => {
+    const view = attentionPartView(part);
+    if (!view) return attemptsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    setState(view.state);
+    setAttention(view.attention);
+  };
+  const partActive = (part: ExternalAttentionPart) => {
+    const view = attentionPartView(part);
+    return view ? view.state === state && view.attention === attention : false;
+  };
   const q = useDebounced(typed.trim(), 300);
   const claims = useInfiniteQuery({
     queryKey: ['admin-external-claims', state, q, attention],
@@ -82,6 +112,16 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId }: Who) {
         Không ai xử lý được yêu cầu của chính mình, và người gắn đơn hoặc đưa yêu cầu vào chờ duyệt không tự duyệt được.
         {!canAct && ' Bạn chỉ có quyền xem.'}
       </Notice>
+      {parts && ATTENTION_PART_ORDER.some((p) => (parts[p] ?? 0) > 0) && (
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Việc cần xử lý">
+          <span className="text-xs font-medium text-stone-600">Cần xử lý:</span>
+          {ATTENTION_PART_ORDER.filter((p) => (parts[p] ?? 0) > 0).map((p) => (
+            <button key={p} type="button" data-attention-part={p} aria-pressed={partActive(p)} onClick={() => openPart(p)} className={chipClass(partActive(p))}>
+              {ATTENTION_PART_LABEL[p]} ({parts[p]})
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Lọc theo trạng thái">
           {[...CLAIM_STATE_ORDER, ''].map((s) => (
@@ -133,7 +173,9 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId }: Who) {
           </button>
         </div>
       )}
-      <AttemptsSection who={who} />
+      <div ref={attemptsRef}>
+        <AttemptsSection who={who} />
+      </div>
     </div>
   );
 }

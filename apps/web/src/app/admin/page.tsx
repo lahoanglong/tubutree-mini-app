@@ -85,10 +85,13 @@ import {
   downloadUsersCsv,
   getOpsAccess,
   type InboxKey,
+  type OpsInbox,
+  OPS_INBOX_QUERY_KEY,
   type StaffPermission,
   type AdminOrder,
   getPosCreditEnabled,
 } from '@/lib/admin-client';
+import { firstAttentionPart } from '@/lib/external-claims';
 import { RecyclingBadge, RecyclingPanel } from '@/components/admin/recycling-panel';
 import { ImageUrlField } from '@/components/admin/image-url-field';
 import {
@@ -162,7 +165,7 @@ import { ProductCategoriesTab } from '@/components/admin/product-categories-tab'
 import { EngagementTab } from '@/components/admin/engagement-tab';
 import { SupportChatTab } from '@/components/admin/support-chat-tab';
 import { ExternalOrdersTab } from '@/components/admin/external-orders-tab';
-import { ExternalClaimsTab } from '@/components/admin/external-claims-tab';
+import { ExternalClaimsTab, type ExternalClaimsSeed } from '@/components/admin/external-claims-tab';
 import type { CommunityView } from '@/components/admin/community-moderation-tab';
 import { AttendanceTab } from '@/components/admin/attendance-tab';
 import { StaffRosterTab } from '@/components/admin/staff-roster-tab';
@@ -413,6 +416,7 @@ function writeUrlState(tab: Tab, recycling: RecyclingFilter | '', pancake: Panca
 
 export default function AdminPage() {
   const { user, status, initialized } = useAuth();
+  const qc = useQueryClient();
   const [tab, setTabState] = useState<Tab>(DEFAULT_TAB);
   const [ordersRecycling, setOrdersRecycling] = useState<RecyclingFilter | ''>('');
   const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
@@ -421,6 +425,7 @@ export default function AdminPage() {
   const [storefrontSeed, setStorefrontSeed] = useState(0);
   const [deletionSeed, setDeletionSeed] = useState(0);
   const [reportsSeed, setReportsSeed] = useState(0);
+  const [externalSeed, setExternalSeed] = useState<ExternalClaimsSeed | null>(null);
   const [communitySeed, setCommunitySeed] = useState<{ view: CommunityView; n: number } | null>(null);
   const [wasteSeed, setWasteSeed] = useState<WasteSeed | null>(null);
   const [returnsSeed, setReturnsSeed] = useState<{ filter: ReturnsFilter; n: number } | null>(null);
@@ -454,6 +459,7 @@ export default function AdminPage() {
 
   const setTab = (t: Tab) => {
     setConsignmentSeed(0);
+    setExternalSeed(null);
     setTabState(t);
     writeUrlState(t, t === 'orders' ? ordersRecycling : '', t === 'orders' ? ordersPancake : '');
   };
@@ -504,6 +510,12 @@ export default function AdminPage() {
     return setTab('users');
   };
   const openInbox = (k: InboxKey) => {
+    if (k === 'externalPoints') {
+      // Thẻ cộng nhiều phần: mở phần có việc đầu tiên (đọc từ số liệu thẻ vừa hiển thị); không biết thì giữ mặc định "Chờ duyệt".
+      const parts = qc.getQueryData<OpsInbox>(OPS_INBOX_QUERY_KEY)?.items.find((i) => i.key === 'externalPoints')?.parts;
+      setTab('externalClaims');
+      return setExternalSeed({ part: firstAttentionPart(parts) ?? 'review', n: Date.now() });
+    }
     if (k === 'pancakeAttention') return openPancakeQueue();
     if (k === 'consignmentPending') return openConsignmentConfirm();
     if (k === 'pancakeUnsynced') return openUnsyncedQueue();
@@ -563,6 +575,7 @@ export default function AdminPage() {
         | 'dealerTransferToConfirm'
         | 'storefrontsPending'
         | 'accountDeletionPending'
+        | 'externalPoints'
         | 'productsMissingImage'
         | WasteInboxKey
       >,
@@ -579,7 +592,6 @@ export default function AdminPage() {
       dealerCreditReported: 'dealerAccounts',
       payouts: 'payouts',
       payoutsToPay: 'payouts',
-      externalPoints: 'externalClaims',
       supportChatUnforwarded: 'supportChat',
       zaloBridgeDown: 'supportChat',
       shiftsPending: 'shiftApproval',
@@ -648,7 +660,7 @@ export default function AdminPage() {
           {active === 'productCategories' && <ProductCategoriesTab key={productsSeed} initialMissingImage={productsSeed > 0} />}
           {active === 'engagement' && <EngagementTab />}
           {active === 'externalOrders' && <ExternalOrdersTab isAdmin={isAdmin} />}
-          {active === 'externalClaims' && <ExternalClaimsTab isAdmin={isAdmin} meId={user?.id} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}
+          {active === 'externalClaims' && <ExternalClaimsTab key={externalSeed?.n ?? 0} seed={externalSeed} isAdmin={isAdmin} meId={user?.id} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}
           {active === 'supportChat' && <SupportChatTab isAdmin={isAdmin} />}
           {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} isAdmin={isAdmin} />}
           {active === 'payouts' && <PayoutAdminTab canReview={isAdmin} />}

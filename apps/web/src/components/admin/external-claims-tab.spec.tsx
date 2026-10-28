@@ -274,12 +274,82 @@ describe('ExternalClaimsTab', () => {
     const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
     await flush();
     const select = r.container.querySelector<HTMLSelectElement>('select[aria-label="Lọc việc cần chú ý"]')!;
-    expect([...select.options].map((o) => o.textContent)).toEqual(['Mọi yêu cầu', 'Đã cộng mà đơn đã đóng', 'Kẹt chờ quá lâu']);
+    expect([...select.options].map((o) => o.textContent)).toEqual(['Mọi yêu cầu', 'Đã cộng mà đơn đã đóng', 'Kẹt chờ quá lâu', 'Đã cộng, đơn hoàn một phần']);
     selectValue(select, 'closed_credited');
     await flush();
     const last = m.calls.filter((c) => c.url.includes('/admin/external-claims?')).at(-1)!;
     expect(last.url).toContain('attention=closed_credited');
     expect(last.url).not.toContain('state=');
+  });
+
+  describe('các phần việc của thẻ Hôm nay (parts)', () => {
+    const inboxWith = (parts: Record<string, number>) => ({
+      '/admin/ops/inbox': { body: { generatedAt: '2026-10-28T03:00:00.000Z', items: [{ key: 'externalPoints', count: Object.values(parts).reduce((a, b) => a + b, 0), parts }] } },
+    });
+    const stubWithInbox = (parts: Record<string, number> | null) => {
+      const base = stub({ claims: [] });
+      const inbox = mockFetch(parts ? inboxWith(parts) : {});
+      vi.stubGlobal('fetch', vi.fn((u: string, i?: RequestInit) => (u.includes('/admin/ops/inbox') ? inbox.fn(u, i) : base.fn(u, i))));
+      return base;
+    };
+    const lastClaimsUrl = (m: { calls: { url: string }[] }) => m.calls.filter((c) => c.url.includes('/admin/external-claims?')).at(-1)!.url;
+    const chips = (root: ParentNode) => [...root.querySelectorAll<HTMLButtonElement>('[data-attention-part]')];
+
+    it('hiện chip kèm số cho phần có việc, ẩn phần bằng 0; không gọi hộp việc khi chỉ có quyền xem', async () => {
+      stubWithInbox({ review: 0, attempts: 3, partial: 2, closed: 1, stale: 0 });
+      const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+      await flush();
+      expect(chips(r.container).map((c) => c.textContent)).toEqual(['Đã cộng, đơn hoàn một phần (2)', 'Đã cộng mà đơn đã đóng (1)', 'Lần gửi mã chưa ghép (3)']);
+      r.unmount();
+      mounted = [];
+      const m = stubWithInbox({ review: 4 });
+      const viewer = mount(<ExternalClaimsTab isAdmin={false} canAct={false} meId="kt1" />);
+      await flush();
+      expect(chips(viewer.container)).toHaveLength(0);
+      expect(m.calls.some((c) => c.url.includes('/admin/ops/inbox'))).toBe(false);
+    });
+
+    it('hộp việc lỗi hoặc API cũ chưa có parts thì không hiện hàng chip, danh sách vẫn dùng được', async () => {
+      stubWithInbox(null);
+      const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+      await flush();
+      expect(chips(r.container)).toHaveLength(0);
+      expect(r.container.textContent).toContain('Không có yêu cầu nào khớp.');
+    });
+
+    it('bấm chip hoàn một phần gửi attention=partial_refund và bỏ lọc trạng thái; chip chờ duyệt về state=REVIEW', async () => {
+      const m = stubWithInbox({ review: 2, partial: 2 });
+      const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+      await flush();
+      click(chips(r.container).find((c) => c.dataset.attentionPart === 'partial')!);
+      await flush();
+      expect(lastClaimsUrl(m)).toContain('attention=partial_refund');
+      expect(lastClaimsUrl(m)).not.toContain('state=');
+      expect(chips(r.container).find((c) => c.dataset.attentionPart === 'partial')!.getAttribute('aria-pressed')).toBe('true');
+      click(chips(r.container).find((c) => c.dataset.attentionPart === 'review')!);
+      await flush();
+      expect(lastClaimsUrl(m)).toContain('state=REVIEW');
+      expect(lastClaimsUrl(m)).not.toContain('attention=');
+    });
+
+    it('seed mở thẳng phần được chọn: hoàn một phần gửi attention=partial_refund ngay lần tải đầu, không tải trạng thái REVIEW trước', async () => {
+      const m = stubWithInbox({ review: 0, partial: 2 });
+      mount(<ExternalClaimsTab isAdmin canAct meId="ad1" seed={{ part: 'partial', n: 1 }} />);
+      await flush();
+      const urls = m.calls.filter((c) => c.url.includes('/admin/external-claims?')).map((c) => c.url);
+      expect(urls[0]).toContain('attention=partial_refund');
+      expect(urls.some((u) => u.includes('state=REVIEW'))).toBe(false);
+    });
+
+    it('seed lần gửi mã: giữ danh sách mặc định và cuộn tới khối lần gửi mã', async () => {
+      const scroll = vi.fn();
+      Element.prototype.scrollIntoView = scroll;
+      const m = stubWithInbox({ attempts: 3 });
+      mount(<ExternalClaimsTab isAdmin canAct meId="ad1" seed={{ part: 'attempts', n: 1 }} />);
+      await flush();
+      expect(lastClaimsUrl(m)).toContain('state=REVIEW');
+      expect(scroll).toHaveBeenCalled();
+    });
   });
 
   it('hộp thoại Gắn đơn nói đúng luật; hộp thoại huỷ có nút Đóng thay cho Huỷ', async () => {
