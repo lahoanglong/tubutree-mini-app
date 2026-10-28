@@ -419,6 +419,8 @@ export function loyaltyDefaults(api: MockApi): void {
   api.fallback('GET', '/feed/public-preview', { posts: [] });
 }
 
+const ZERO_ORDER_COUNTS = { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0 };
+
 /**
  * Mặc định cho lời gọi của vỏ web (AppGates, huy hiệu đơn) chạy ở MỌI trang khi đã đăng nhập, kể cả /admin — Mini App cũng gọi
  * đúng ba endpoint này (CouponClaimGate/useCartCount, OnboardingGate, BottomNav). Dùng fallback: spec đã mock thì thắng.
@@ -432,6 +434,7 @@ function shellDefaults(api: MockApi): void {
     id: 'e2e-shell-user', fullName: null, email: null, avatarUrl: null, dob: null, onboarded: true, segments: [],
   });
   api.fallback('GET', '/orders/active-count', { count: 0 });
+  api.fallback('GET', '/orders/status-counts', ZERO_ORDER_COUNTS);
   api.fallback('GET', '/me/subscriptions', []);
   // Chuông ở thanh đầu máy tính hỏi thông báo ở mọi trang khi đã đăng nhập.
   api.fallback('GET', '/me/notifications', []);
@@ -485,6 +488,8 @@ export function mockSession(api: MockApi, user: AuthUser): AuthUser {
   // Spec cần số khác thì đăng ký lại SAU (đăng ký sau thắng) — và phải đăng ký SAU mọi mock
   // '/orders/:code' vì pattern đó cũng khớp '/orders/active-count'.
   api.get('/orders/active-count', { count: 0 });
+  // Số đơn theo tab của trang Cá nhân (một lời gọi); mặc định không có đơn nào.
+  api.get('/orders/status-counts', ZERO_ORDER_COUNTS);
   // Kệ "Mua lại" (Home + tab Đơn hàng) — mặc định khách chưa mua gì.
   api.get('/me/purchased-items', { items: [], nextCursor: null });
   // Trang Danh mục/Tìm kiếm (dự án 4b) — mọi endpoint nó gọi, mặc định rỗng đúng shape để mở /browse
