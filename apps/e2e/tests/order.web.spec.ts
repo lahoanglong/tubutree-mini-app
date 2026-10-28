@@ -35,6 +35,7 @@ function mockBuyer(api: MockApi, opts: { pickup?: boolean } = {}) {
   api.get('/me/coupons', []);
   api.get('/config/public', {
     freeshipThreshold: 500000,
+    support: { hotline: '0984606774', email: 'tubutree@gmail.com' },
     waste: { enabled: true, dropoff: true, mailin: true, pickup: opts.pickup === true },
   });
   api.get('/waste/me', { blocked: false, shipLockedAt: null, openRequests: [PICKUP] });
