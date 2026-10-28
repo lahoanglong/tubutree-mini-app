@@ -5,7 +5,7 @@ import { flush, render, type Rendered } from '@/test-utils/dom';
 // Màn VietQR ở điện thoại phải là Mini App (apps/miniapp/src/pages/bank-payment.tsx): tiêu đề trang, thẻ QR, các dòng kẻ,
 // nút sao chép chỉ icon, lời nhắc có icon, các nút ngoài thẻ. jsdom không có media query nên kiểm bằng lớp `max-md:`/`md:`.
 
-const mocks = vi.hoisted(() => ({ deadline: '2099-01-01T00:00:00.000Z' as string | null, qr: 'ok' as 'ok' | 'error' | 'pending' }));
+const mocks = vi.hoisted(() => ({ saveImage: vi.fn(), deadline: '2099-01-01T00:00:00.000Z' as string | null, qr: 'ok' as 'ok' | 'error' | 'pending' }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
 vi.mock('next/navigation', () => ({ useParams: () => ({ code: 'TB-9' }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -21,6 +21,8 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   },
 }));
 
+vi.mock('@/lib/platform-bridge', () => ({ platformBridge: { saveImage: (...a: unknown[]) => mocks.saveImage(...a) } }));
+
 import BankPaymentPage from './chuyen-khoan/[code]/page';
 
 let mounted: Rendered[] = [];
@@ -33,6 +35,7 @@ const mount = async () => {
 beforeEach(() => {
   mocks.deadline = '2099-01-01T00:00:00.000Z';
   mocks.qr = 'ok';
+  mocks.saveImage.mockReset().mockResolvedValue('saved');
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -141,5 +144,51 @@ describe('/thanh-toan/chuyen-khoan — sao chép ở điện thoại', () => {
     await flush(4);
     expect(c.textContent).toContain('Đã sao chép số tài khoản');
     expect(c.querySelector('[role="alert"]')).toBeNull();
+  });
+});
+
+describe('/thanh-toan/chuyen-khoan — bố cục điện thoại như Mini App (R-8)', () => {
+  it('số tiền to kèm nút chép icon; dòng "Số tiền" chỉ còn từ md', async () => {
+    const c = await mount();
+    const hero = c.querySelector<HTMLElement>('[data-bank-card] p.font-bold')!;
+    const copy = hero.parentElement!.querySelector<HTMLElement>('button[aria-label="Sao chép số tiền"]')!;
+    expect(copy.className).toMatch(/\bmd:hidden\b/);
+    const rows = Array.from(c.querySelectorAll<HTMLElement>('[data-bank-row]'));
+    const amountRow = rows.find((r) => r.textContent?.startsWith('Số tiền'))!;
+    expect(amountRow.className).toMatch(/\bmax-md:hidden\b/);
+  });
+
+  it('Ngân hàng và Chủ tài khoản xếp dọc ở điện thoại, Số tài khoản vẫn nằm ngang', async () => {
+    const c = await mount();
+    const rows = Array.from(c.querySelectorAll<HTMLElement>('[data-bank-row]'));
+    const by = (label: string) => rows.find((r) => r.textContent?.startsWith(label))!;
+    expect(by('Ngân hàng').className).toMatch(/\bmax-md:flex-col\b/);
+    expect(by('Chủ tài khoản').className).toMatch(/\bmax-md:flex-col\b/);
+    expect(by('Số tài khoản').className).not.toMatch(/max-md:flex-col/);
+  });
+
+  it('nút Lưu mã QR rộng hết thẻ; nút Kiểm tra dính đáy ở điện thoại, nút trong trang chỉ từ md', async () => {
+    const c = await mount();
+    const save = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Lưu mã QR'))!;
+    expect(save.className).toMatch(/\bmax-md:w-full\b/);
+    const bar = c.querySelector('[data-testid="sticky-bar"]')!;
+    expect(bar.querySelector('button')!.textContent).toBe('Tôi đã chuyển khoản — Kiểm tra');
+    const inline = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Tôi đã chuyển khoản — Kiểm tra' && !bar.contains(b))!;
+    expect(inline.className).toMatch(/\bmax-md:hidden\b/);
+  });
+
+  it('Lưu mã QR đi qua cầu nối nền tảng và chặn bấm đúp khi đang lưu', async () => {
+    let done: (v: 'saved') => void = () => {};
+    mocks.saveImage.mockReturnValue(new Promise((r) => (done = r)));
+    const c = await mount();
+    const save = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Lưu mã QR'))! as HTMLButtonElement;
+    save.click();
+    save.click();
+    await flush(2);
+    expect(mocks.saveImage).toHaveBeenCalledTimes(1);
+    expect(mocks.saveImage).toHaveBeenCalledWith('https://img.vietqr.io/x.png', 'tubu-qr-TB-9.png');
+    done('saved');
+    await flush(2);
+    expect(c.querySelector('[data-testid="bank-qr-saved"]')).not.toBeNull();
   });
 });

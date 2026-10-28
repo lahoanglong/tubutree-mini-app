@@ -65,6 +65,7 @@ export default function BankPaymentPage() {
           onState={setPanelState}
           showHeading={false}
           orderHref={detail}
+          stickyCheck
           paidFooter={
             <div className="mt-4 flex flex-col gap-2">
               <Link href={detail} onClick={refreshOrders} className={ui.btnPrimary}>
