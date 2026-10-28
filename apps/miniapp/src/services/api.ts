@@ -24,8 +24,8 @@ export function apiMediaUrl(src: string): string {
 let accessToken: string | null = null;
 let onUnauthorized: (() => Promise<string | null>) | null = null;
 /**
- * Phiên đang được khôi phục lúc mở app. Mọi request (trừ chính /auth/*) chờ nó xong rồi mới
- * gửi, để KHÔNG bay đi khi chưa có access token.
+ * Phiên đang được khôi phục lúc mở app. Mọi request (trừ lệnh đăng nhập/refresh công khai, xem isAnonAuthCall)
+ * chờ nó xong rồi mới gửi, để KHÔNG bay đi khi chưa có access token.
  *
  * Vì sao cần: mở app từ push/deeplink thì trang đích fetch ngay, trong khi restore() còn đang
  * chạy → request đi không kèm Authorization → 401. React Query đặt `retry: false` cho 4xx nên
