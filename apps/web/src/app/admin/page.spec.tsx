@@ -3708,6 +3708,43 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(scroll).toHaveBeenCalled();
   });
 
+  it('mở khối xoá tài khoản từ thẻ xong, lần sau vào Người dùng từ số "Khách mới hôm nay" thì không tự cuộn xuống khối đó', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const api = mockFetch({ '/admin/account-deletion-requests': { body: [] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    click(container.querySelector('[data-inbox="accountDeletionPending"]')!);
+    await flush();
+    expect(scroll).toHaveBeenCalled();
+
+    click([...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].find((b) => navLabel(b) === 'Hôm nay')!);
+    await flush();
+    scroll.mockClear();
+    click(container.querySelector<HTMLButtonElement>('[role="group"][aria-label="Khách mới hôm nay"] button')!);
+    await flush();
+    expect(window.location.search).toBe('?tab=users');
+    expect(scroll).not.toHaveBeenCalled();
+  });
+
+  it('bấm "Đã thu" mở Báo cáo ở mốc Hôm nay, nhưng lần sau vào Báo cáo từ thanh tab thì lại là 30 ngày mặc định', async () => {
+    const api = mockFetch({
+      '/admin/reports/revenue': { body: { range: { from: '2026-10-01', to: '2026-10-28', days: 28 }, basis: 'ngày đặt đơn, giờ Việt Nam', totals: { orders: 0, cancelled: 0, paidOrders: 0, gross: 0, partialRefund: 0, revenue: 0, gmv: 0, newUsers: 0 }, byDay: [], byChannel: [], byPlatform: [] } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    const pressed = () => [...container.querySelectorAll('[aria-label="Chọn nhanh khoảng ngày"] button[aria-pressed="true"]')].map((b) => b.textContent);
+    click(container.querySelector<HTMLButtonElement>('[role="group"][aria-label="Đã thu từ đơn hôm nay"] button')!);
+    await flush();
+    expect(pressed()).toEqual(['Hôm nay']);
+
+    click([...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].find((b) => navLabel(b) === 'Hôm nay')!);
+    await flush();
+    click([...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].find((b) => navLabel(b) === 'Báo cáo')!);
+    await flush();
+    expect(pressed()).toEqual(['30 ngày']);
+  });
+
   it('thẻ ca nhân viên chờ duyệt mở tab Duyệt ca', async () => {
     const api = mockFetch({ '/admin/shifts': { body: [] }, '/admin/shift-templates': { body: [] } });
     vi.stubGlobal('fetch', vi.fn(api.fn));

@@ -460,6 +460,8 @@ export default function AdminPage() {
   const setTab = (t: Tab) => {
     setConsignmentSeed(0);
     setExternalSeed(null);
+    setDeletionSeed(0);
+    setReportsSeed(0);
     setTabState(t);
     writeUrlState(t, t === 'orders' ? ordersRecycling : '', t === 'orders' ? ordersPancake : '');
   };
@@ -504,8 +506,8 @@ export default function AdminPage() {
       return writeUrlState('orders', '');
     }
     if (stat === 'revenue') {
-      setReportsSeed(Date.now());
-      return setTab('reports');
+      setTab('reports');
+      return setReportsSeed(Date.now());
     }
     return setTab('users');
   };
@@ -540,8 +542,8 @@ export default function AdminPage() {
       return writeUrlState('orders', '');
     }
     if (k === 'accountDeletionPending') {
-      setDeletionSeed(Date.now());
-      return setTab('users');
+      setTab('users');
+      return setDeletionSeed(Date.now());
     }
     if (k === 'storefrontsPending') {
       setStorefrontSeed(Date.now());
