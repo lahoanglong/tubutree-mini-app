@@ -245,4 +245,11 @@ describe('/recycle/points — món chỉ kho nhận (B-36)', () => {
     expect(screen.getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
     expect(screen.queryByText(/Cho Tubu số điện thoại/)).toBeNull();
   });
+  it('danh sách điểm trả 403 lúc thông tin khách chưa về: chưa đòi số điện thoại, hiện khung chờ', async () => {
+    mocks.getWastePoints.mockRejectedValue(new HttpError('Chương trình đang tạm dừng', 'PROGRAMME_OFF', { status: 403, data: null } as never));
+    mocks.getWasteMe.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText(/Cho Tubu số điện thoại/)).toBeNull();
+  });
 });
