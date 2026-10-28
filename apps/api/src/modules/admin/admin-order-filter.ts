@@ -126,12 +126,19 @@ export type OrderListPlatform = (typeof ORDER_LIST_PLATFORMS)[number];
 
 /**
  * Hàng đợi "Đơn chuyển khoản chờ xác nhận tiền" ở hộp việc: đúng bộ điều kiện của số đếm (đơn lẻ chuyển khoản chưa trả), để bấm vào
- * thẻ ra đúng bấy nhiêu đơn, không lẫn đơn ZaloPay, VNPay, ví hay đơn đại lý chưa trả.
+ * thẻ ra đúng bấy nhiêu đơn, không lẫn đơn ZaloPay, VNPay, ví hay đơn đại lý chưa trả. Đơn đại lý "Trả trước" có hàng đợi riêng vì
+ * hạn tự huỷ khác (TTL đại lý) và người xác nhận tiền là kế toán đại lý.
  */
-export const ORDER_QUEUES = ['bank_transfer_to_confirm'] as const;
+export const ORDER_QUEUES = ['bank_transfer_to_confirm', 'dealer_transfer_to_confirm'] as const;
 export type OrderQueue = (typeof ORDER_QUEUES)[number];
 export const BANK_TRANSFER_TO_CONFIRM_WHERE = {
   type: 'RETAIL',
+  status: 'PENDING_PAYMENT',
+  paymentStatus: 'UNPAID',
+  paymentMethod: 'BANK_TRANSFER',
+} as const;
+export const DEALER_TRANSFER_TO_CONFIRM_WHERE = {
+  type: 'DEALER',
   status: 'PENDING_PAYMENT',
   paymentStatus: 'UNPAID',
   paymentMethod: 'BANK_TRANSFER',
@@ -314,6 +321,7 @@ export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInpu
   if (f.payment) and.push({ paymentStatus: f.payment });
   if (f.platform) and.push({ platform: f.platform });
   if (f.queue === 'bank_transfer_to_confirm') and.push(BANK_TRANSFER_TO_CONFIRM_WHERE);
+  else if (f.queue === 'dealer_transfer_to_confirm') and.push(DEALER_TRANSFER_TO_CONFIRM_WHERE);
   if (f.referrerUserId) and.push({ referrerUserId: f.referrerUserId });
   if (f.storefrontId) and.push({ storefrontId: f.storefrontId });
   if (and.length === 0) return {};

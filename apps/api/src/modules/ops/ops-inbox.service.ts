@@ -6,10 +6,10 @@ import { COMMUNITY_MODERATORS, type StaffPermission } from '../../common/staff-p
 import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
 import { PENDING_MERCHANT_PRODUCT_WHERE } from '../merchant/merchant-product-review';
 import { CONSIGNMENT_PENDING_LINK_WHERE } from '../merchant/merchant-pancake-link';
-import { BANK_TRANSFER_TO_CONFIRM_WHERE, buildAdminOrderWhere, pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
+import { BANK_TRANSFER_TO_CONFIRM_WHERE, buildAdminOrderWhere, DEALER_TRANSFER_TO_CONFIRM_WHERE, pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
 import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
 import { countUnansweredQuestions, DEFAULT_UNANSWERED_ALERT_HOURS, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from '../feed/community-unanswered';
-import { readPendingPaymentTtlHours } from '../orders/pending-payment-ttl';
+import { readDealerPendingPaymentTtlHours, readPendingPaymentTtlHours } from '../orders/pending-payment-ttl';
 import { isStorefrontApprovalRequired, STOREFRONT_PENDING_APPROVAL_WHERE } from '../storefront/storefront-config';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { externalPointsAttentionCount } from '../external-points/external-points-attention';
@@ -58,7 +58,9 @@ export type InboxKey =
   | 'wasteGiftOverdue'
   | 'wasteOrderMismatch'
   | 'bankTransferToConfirm'
+  | 'dealerTransferToConfirm'
   | 'storefrontsPending'
+  | 'accountDeletionPending'
   | 'communityReports'
   | 'productsMissingImage';
 
@@ -68,6 +70,14 @@ type Audience = readonly StaffPermission[] | 'STAFF' | 'ADMIN';
 export interface InboxViewer {
   role: string;
   staffPermissions?: string[];
+}
+
+interface InboxDef {
+  key: InboxKey;
+  audience: Audience;
+  count: () => Promise<number>;
+  /** Giờ còn lại trước khi hệ thống tự huỷ việc này; chỉ hỏi khi `count` > 0. */
+  hoursLeft?: () => Promise<number | undefined>;
 }
 
 /**
@@ -85,7 +95,7 @@ export class OpsInboxService {
     @Optional() private readonly env?: ConfigService<Env, true>,
   ) {}
 
-  private defs(now: Date): { key: InboxKey; audience: Audience; count: () => Promise<number> }[] {
+  private defs(now: Date): InboxDef[] {
     const p = this.prisma;
     return [
       { key: 'pancakeAttention', audience: ['KHO'], count: () => p.order.count({ where: { pancakeAttentionAt: { not: null } } }) },
@@ -107,9 +117,23 @@ export class OpsInboxService {
         },
       },
       // Đơn chuyển khoản chờ kế toán bấm "Đã nhận tiền": quá hạn chờ thanh toán thì cron tự huỷ (pending-payment-expiry.cron), nên là việc gấp.
-      { key: 'bankTransferToConfirm', audience: ['KE_TOAN'], count: () => p.order.count({ where: BANK_TRANSFER_TO_CONFIRM_WHERE }) },
+      {
+        key: 'bankTransferToConfirm',
+        audience: ['KE_TOAN'],
+        count: () => p.order.count({ where: BANK_TRANSFER_TO_CONFIRM_WHERE }),
+        hoursLeft: () => this.transferHoursLeft(BANK_TRANSFER_TO_CONFIRM_WHERE, readPendingPaymentTtlHours, now),
+      },
+      // Đơn đại lý "Trả trước" chờ kế toán xác nhận tiền: cùng cron tự huỷ nhưng TTL của đại lý (mặc định 72 giờ).
+      {
+        key: 'dealerTransferToConfirm',
+        audience: ['KE_TOAN'],
+        count: () => p.order.count({ where: DEALER_TRANSFER_TO_CONFIRM_WHERE }),
+        hoursLeft: () => this.transferHoursLeft(DEALER_TRANSFER_TO_CONFIRM_WHERE, readDealerPendingPaymentTtlHours, now),
+      },
       // Cùng điều kiện với chip "Chờ duyệt" của tab Gian hàng (StorefrontAdminService.listWhere).
       { key: 'storefrontsPending', audience: 'ADMIN', count: async () => ((this.config ? await isStorefrontApprovalRequired(this.config) : true) ? p.storefront.count({ where: STOREFRONT_PENDING_APPROVAL_WHERE }) : 0) },
+      // Khách được hứa xử lý trong 3 ngày làm việc (UsersService.requestDeletion); chỉ ADMIN xử lý được (AdminAccountDeletionController).
+      { key: 'accountDeletionPending', audience: 'ADMIN', count: () => p.accountDeletionRequest.count({ where: { status: 'PENDING' } }) },
       { key: 'productsMissingImage', audience: 'ADMIN', count: () => p.product.count({ where: { isActive: true, images: { isEmpty: true } } }) },
       { key: 'merchantOverdue', audience: 'ADMIN', count: () => this.merchant.countOverdue(now) },
       { key: 'merchantProducts', audience: 'ADMIN', count: () => p.product.count({ where: PENDING_MERCHANT_PRODUCT_WHERE }) },
@@ -165,10 +189,14 @@ export class OpsInboxService {
   }
 
   /** Số giờ còn lại của đơn chuyển khoản chờ lâu nhất trước khi cron tự huỷ (0 = đã quá hạn, chờ lượt cron kế). Đơn đã bàn giao vận chuyển không bao giờ bị cron huỷ nên không tính. */
-  private async bankTransferHoursLeft(now: Date): Promise<number | undefined> {
-    const oldest = await this.prisma.order.findFirst({ where: { ...BANK_TRANSFER_TO_CONFIRM_WHERE, autoCancelBlockedAt: null }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } });
+  private async transferHoursLeft(
+    where: typeof BANK_TRANSFER_TO_CONFIRM_WHERE | typeof DEALER_TRANSFER_TO_CONFIRM_WHERE,
+    readTtl: (config: SystemConfigService) => Promise<number>,
+    now: Date,
+  ): Promise<number | undefined> {
+    const oldest = await this.prisma.order.findFirst({ where: { ...where, autoCancelBlockedAt: null }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } });
     if (!oldest || !this.config) return undefined;
-    const ttl = await readPendingPaymentTtlHours(this.config);
+    const ttl = await readTtl(this.config);
     return Math.max(0, Math.ceil((oldest.createdAt.getTime() + ttl * 3_600_000 - now.getTime()) / 3_600_000));
   }
 
@@ -180,11 +208,10 @@ export class OpsInboxService {
         (viewer.role === 'STAFF' && (d.audience === 'STAFF' || (Array.isArray(d.audience) && d.audience.some((a) => perms.includes(a))))),
     );
     const counts = await Promise.all(visible.map((d) => d.count()));
-    const bankIdx = visible.findIndex((d) => d.key === 'bankTransferToConfirm');
-    const hoursLeft = bankIdx >= 0 && (counts[bankIdx] ?? 0) > 0 ? await this.bankTransferHoursLeft(now) : undefined;
+    const hoursLeft = await Promise.all(visible.map((d, i) => ((counts[i] ?? 0) > 0 ? d.hoursLeft?.() : undefined)));
     return {
       generatedAt: now.toISOString(),
-      items: visible.map((d, i) => ({ key: d.key, count: counts[i] ?? 0, ...(i === bankIdx && hoursLeft !== undefined ? { hoursLeft } : {}) })),
+      items: visible.map((d, i) => ({ key: d.key, count: counts[i] ?? 0, ...(hoursLeft[i] !== undefined ? { hoursLeft: hoursLeft[i] } : {}) })),
     };
   }
 }

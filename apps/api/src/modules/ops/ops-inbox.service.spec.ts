@@ -17,7 +17,7 @@ import {
 } from '../waste-exchange/core/waste-queue-filters';
 
 const build = (
-  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean; supportUnforwarded?: number; bridge?: { state: string; since: Date }; bridgeUrl?: string } = {},
+  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean; supportUnforwarded?: number; deletions?: number; bridge?: { state: string; since: Date }; bridgeUrl?: string } = {},
 ) => {
   const zero = { count: jest.fn().mockResolvedValue(0) };
   const orderCount = jest.fn((args?: { where?: { paymentMethod?: string } }) => Promise.resolve(args?.where?.paymentMethod === 'BANK_TRANSFER' ? 0 : (over.invoices ?? 0)));
@@ -64,6 +64,7 @@ const build = (
     externalClaimAttempt: { count: extAttemptCount },
     supportConversation: { count: supportConvCount },
     supportBridgeStatus: { findUnique: bridgeFind },
+    accountDeletionRequest: { count: jest.fn().mockResolvedValue(over.deletions ?? 0) },
     $queryRaw: queryRaw,
   } as unknown as PrismaService;
   const merchant = {
@@ -298,7 +299,7 @@ describe('OpsInboxService — mỗi nhóm việc chỉ thấy hàng đợi mình
   });
 
   it('KE_TOAN: hoàn tiền khách, thưởng đại lý đã duyệt chờ chi, VAT chờ xuất, gian hàng chờ lập phiếu, phiếu đối soát chờ chuyển, rút tiền đã duyệt chờ chi — không thấy rút tiền chờ DUYỆT (việc của ADMIN)', async () => {
-    expect(await keysFor(['KE_TOAN'])).toEqual(['bankTransferToConfirm', 'customerRefunds', 'dealerClaimsToPay', 'invoicePending', 'merchantPayoutsPending', 'merchantToSettle', 'payoutsToPay', 'wasteToCount', 'wasteUnmatched']);
+    expect(await keysFor(['KE_TOAN'])).toEqual(['bankTransferToConfirm', 'customerRefunds', 'dealerClaimsToPay', 'dealerTransferToConfirm', 'invoicePending', 'merchantPayoutsPending', 'merchantToSettle', 'payoutsToPay', 'wasteToCount', 'wasteUnmatched']);
   });
 
   it('CSKH, KHO và nhân viên chưa có nhóm giữ nguyên hàng đợi như trước', async () => {
@@ -318,7 +319,7 @@ describe('OpsInboxService — đổi rác (spec 13.2)', () => {
     const res = await svc.counts({ role: 'ADMIN' }, now);
 
     expect(keys(res)).toEqual([
-      'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'returnsPending', 'returnsToReceive', 'bankTransferToConfirm', 'storefrontsPending', 'productsMissingImage', 'merchantOverdue', 'merchantProducts',
+      'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'returnsPending', 'returnsToReceive', 'bankTransferToConfirm', 'dealerTransferToConfirm', 'storefrontsPending', 'accountDeletionPending', 'productsMissingImage', 'merchantOverdue', 'merchantProducts',
       'consignmentPending', 'merchantToSettle', 'merchantPayoutsPending', 'dealerApplications', 'dealerClaims', 'dealerClaimsToPay', 'payouts', 'payoutsToPay', 'communityReports', 'communityPending',
       'communityUnanswered', 'invoicePending', 'externalPoints', 'supportChatUnforwarded', 'zaloBridgeDown', 'wasteToCount', 'wasteUnmatched', 'wasteBlockedPending', 'wastePointsPending', 'wastePerksPending',
       'wasteTransitOverdue', 'wasteGiftOverdue', 'wasteOrderMismatch',
@@ -442,11 +443,16 @@ describe('OpsInboxService: hàng đợi đã có ở tab nhưng từng thiếu t
   const now = new Date('2026-10-28T03:00:00Z');
   const find = (res: { items: { key: string; count: number; hoursLeft?: number }[] }, key: string) => res.items.find((i) => i.key === key);
 
-  const withMocks = (over: { bank?: number; oldest?: Date | null; stores?: number; reports?: number; noImage?: number }) => {
-    const base = build({ config: { 'orders.pending_payment_ttl_hours': 24 } });
+  const withMocks = (over: { bank?: number; oldest?: Date | null; dealerBank?: number; dealerOldest?: Date | null; stores?: number; reports?: number; noImage?: number }) => {
+    const base = build({ config: { 'orders.pending_payment_ttl_hours': 24, 'orders.dealer_pending_payment_ttl_hours': 72 } });
     const prisma = (base.svc as unknown as { prisma: Record<string, any> }).prisma;
-    prisma.order.count.mockImplementation((a?: { where?: { paymentMethod?: string } }) => Promise.resolve(a?.where?.paymentMethod === 'BANK_TRANSFER' ? (over.bank ?? 0) : 0));
-    prisma.order.findFirst.mockResolvedValue(over.oldest === undefined || over.oldest === null ? null : { createdAt: over.oldest });
+    prisma.order.count.mockImplementation((a?: { where?: { paymentMethod?: string; type?: string } }) =>
+      Promise.resolve(a?.where?.paymentMethod === 'BANK_TRANSFER' ? (a.where.type === 'DEALER' ? (over.dealerBank ?? 0) : (over.bank ?? 0)) : 0),
+    );
+    prisma.order.findFirst.mockImplementation((a?: { where?: { type?: string } }) => {
+      const at = a?.where?.type === 'DEALER' ? over.dealerOldest : over.oldest;
+      return Promise.resolve(at ? { createdAt: at } : null);
+    });
     prisma.storefront.count.mockResolvedValue(over.stores ?? 0);
     prisma.communityReport.count.mockResolvedValue(over.reports ?? 0);
     prisma.product.count.mockImplementation((a?: { where?: { images?: unknown } }) => Promise.resolve(a?.where?.images ? (over.noImage ?? 0) : 0));
@@ -477,6 +483,41 @@ describe('OpsInboxService: hàng đợi đã có ở tab nhưng từng thiếu t
     expect(find(late, 'bankTransferToConfirm')?.hoursLeft).toBe(0);
     const none = await withMocks({ bank: 0 }).svc.counts({ role: 'ADMIN' }, now);
     expect(find(none, 'bankTransferToConfirm')).toEqual({ key: 'bankTransferToConfirm', count: 0 });
+  });
+
+  it('dealerTransferToConfirm: chỉ đếm đơn đại lý chuyển khoản chưa trả; giờ còn lại theo TTL đại lý (72 giờ), không theo TTL đơn lẻ', async () => {
+    const { svc, prisma } = withMocks({ dealerBank: 3, dealerOldest: new Date('2026-10-26T06:00:00Z'), bank: 1, oldest: new Date('2026-10-27T10:00:00Z') });
+
+    const res = await svc.counts({ role: 'ADMIN' }, now);
+
+    expect(prisma.order.count).toHaveBeenCalledWith({ where: { type: 'DEALER', status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID', paymentMethod: 'BANK_TRANSFER' } });
+    // 26/10 06:00 + 72h = 29/10 06:00; bây giờ 28/10 03:00 → còn 27 giờ.
+    expect(find(res, 'dealerTransferToConfirm')).toEqual({ key: 'dealerTransferToConfirm', count: 3, hoursLeft: 27 });
+    expect(find(res, 'bankTransferToConfirm')).toEqual({ key: 'bankTransferToConfirm', count: 1, hoursLeft: 7 });
+    expect(prisma.order.findFirst.mock.calls.map((c: any[]) => c[0].where)).toContainEqual({ type: 'DEALER', status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID', paymentMethod: 'BANK_TRANSFER', autoCancelBlockedAt: null });
+  });
+
+  it('dealerTransferToConfirm: KE_TOAN và ADMIN thấy, KHO và CSKH không; không có đơn thì không có hoursLeft', async () => {
+    const { svc, prisma } = withMocks({ dealerBank: 2, dealerOldest: new Date('2026-10-28T00:00:00Z') });
+
+    expect(find(await svc.counts({ role: 'STAFF', staffPermissions: ['KE_TOAN'] }, now), 'dealerTransferToConfirm')?.count).toBe(2);
+    expect(find(await svc.counts({ role: 'STAFF', staffPermissions: ['KHO', 'CSKH'] }, now), 'dealerTransferToConfirm')).toBeUndefined();
+    const none = await withMocks({ dealerBank: 0 }).svc.counts({ role: 'ADMIN' }, now);
+    expect(find(none, 'dealerTransferToConfirm')).toEqual({ key: 'dealerTransferToConfirm', count: 0 });
+    expect(prisma.order.count).toHaveBeenCalled();
+  });
+
+  it('accountDeletionPending: đếm yêu cầu xoá tài khoản PENDING; chỉ ADMIN thấy, kế toán và CSKH không', async () => {
+    const { svc, prisma } = (() => {
+      const b = build({ deletions: 3 });
+      return { svc: b.svc, prisma: (b.svc as unknown as { prisma: Record<string, any> }).prisma };
+    })();
+
+    expect(find(await svc.counts({ role: 'ADMIN' }, now), 'accountDeletionPending')).toEqual({ key: 'accountDeletionPending', count: 3 });
+    expect(prisma.accountDeletionRequest.count).toHaveBeenCalledWith({ where: { status: 'PENDING' } });
+    for (const perm of ['KE_TOAN', 'CSKH', 'KHO', 'MARKETING']) {
+      expect(find(await svc.counts({ role: 'STAFF', staffPermissions: [perm] }, now), 'accountDeletionPending')).toBeUndefined();
+    }
   });
 
   it('storefrontsPending: cờ storefront.require_approval tắt thì không có hàng đợi duyệt (gian hàng đã hiện công khai), không truy vấn', async () => {

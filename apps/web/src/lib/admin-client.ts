@@ -476,7 +476,7 @@ export type OrderKind = 'retail' | 'ctv' | 'dealer' | 'ctv_assisted' | 'storefro
 export type OrderPaymentFilter = 'UNPAID' | 'PAID' | 'REFUNDED' | 'FAILED';
 export type OrderListPlatform = 'miniapp' | 'web';
 /** Hàng đợi của hộp việc, đúng điều kiện của số đếm (không có ô chọn riêng trên bộ lọc). */
-export type OrderQueue = 'bank_transfer_to_confirm';
+export type OrderQueue = 'bank_transfer_to_confirm' | 'dealer_transfer_to_confirm';
 /** Bộ lọc thêm của danh sách đơn (D1-17) cùng thứ tự theo ngày đặt; `storefront` là slug hoặc tên miền con. */
 export interface OrderListExtra {
   kind?: OrderKind;
@@ -1740,12 +1740,14 @@ export type InboxKey =
   | 'supportChatUnforwarded'
   | 'zaloBridgeDown'
   | 'bankTransferToConfirm'
+  | 'dealerTransferToConfirm'
   | 'storefrontsPending'
+  | 'accountDeletionPending'
   | 'communityReports'
   | 'productsMissingImage';
 export interface OpsInbox {
   generatedAt: string;
-  items: { key: InboxKey; count: number; /** Chỉ `bankTransferToConfirm`: giờ còn lại của đơn chờ lâu nhất trước khi tự huỷ. */ hoursLeft?: number }[];
+  items: { key: InboxKey; count: number; /** Hai thẻ chuyển khoản chờ tiền: giờ còn lại của đơn chờ lâu nhất trước khi tự huỷ. */ hoursLeft?: number }[];
 }
 export const getOpsInbox = () => apiFetch<OpsInbox>('/admin/ops/inbox');
 
