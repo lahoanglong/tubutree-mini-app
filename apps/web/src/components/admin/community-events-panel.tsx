@@ -12,6 +12,7 @@ import {
   type CreateEventInput,
 } from '@tubutree/app-core/api/feed';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
+import { formatNumber } from '@/components/game/format';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/error-text';
 import { formatDateTime } from '@/lib/format-date';
@@ -25,7 +26,7 @@ type Status = 'OPEN' | 'CLOSED';
 type Msg = { tone: 'success' | 'warning' | 'danger'; text: string };
 
 const EVENTS_KEY = ['admin-community-events'];
-const points = (n: number) => `${n.toLocaleString('vi-VN')} Điểm Xanh`;
+const points = (n: number) => `${formatNumber(n)} Điểm Xanh`;
 /** Ô datetime-local là giờ Việt Nam, không theo múi giờ của máy đang mở trang. */
 const vnIso = (local: string) => {
   const [day = '', time = ''] = local.split('T');
@@ -260,7 +261,7 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
   const valid = title.trim().length > 0 && !!startAt && !!endAt && orderOk && rewardOk;
   const rewardHint =
     config?.loyalty && config.community
-      ? `1 điểm = ${formatVnd(config.loyalty.vndPerPointRedeem)}, tối đa ${config.community.eventRewardMaxPoints.toLocaleString('vi-VN')} điểm. Để 0 nếu không có quà.`
+      ? `1 điểm = ${formatVnd(config.loyalty.vndPerPointRedeem)}, tối đa ${formatNumber(config.community.eventRewardMaxPoints)} điểm. Để 0 nếu không có quà.`
       : 'Điểm Xanh thưởng cho người thắng sự kiện. Để 0 nếu không có quà.';
 
   return (
