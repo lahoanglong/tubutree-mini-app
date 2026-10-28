@@ -121,6 +121,26 @@ describe('CouponList — xem, tắt, gia hạn mã (ADMINOPS-8)', () => {
     expect(r.container.textContent).toContain('Đã đổi hạn mã SUMMER10 đến hết 05/01/2027.');
   });
 
+  it('ô ngày gõ dở thì "Lưu hạn" khoá, không gửi PATCH', async () => {
+    const api = mockFetch({
+      '/admin/coupons/c1': { body: coupon() },
+      '/admin/coupons': { body: { data: [coupon()], meta: { page: 1, limit: 20, total: 1 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<CouponList />);
+    mounted.push(r);
+    await flush();
+    const field = r.container.querySelector<HTMLInputElement>('input[inputmode="numeric"]')!;
+    typeInto(field, '05/01/2027');
+    await flush();
+    const save = byText(r.container, 'button', 'Lưu hạn') as HTMLButtonElement;
+    expect(save.disabled).toBe(false);
+    typeInto(field, '05/01/202');
+    await flush();
+    expect(save.disabled).toBe(true);
+    expect(api.calls.some((c) => c.init?.method === 'PATCH')).toBe(false);
+  });
+
   it('gõ ngày dở dang không gửi gì: chỉ gửi một lần, với ngày cuối cùng, khi bấm "Lưu hạn"', async () => {
     const api = mockFetch({
       '/admin/coupons/c1': { body: coupon({ endAt: '2027-01-05T16:59:59.000Z' }) },

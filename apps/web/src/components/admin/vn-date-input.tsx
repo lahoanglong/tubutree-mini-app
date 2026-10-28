@@ -53,9 +53,12 @@ export function VnDateInput({
   disabled,
   className,
   ariaLabel,
+  onPendingChange,
 }: {
   value: string;
   onChange: (iso: string) => void;
+  /** true khi ô đang gõ dở hoặc có ngày không có thật: cha đang giữ ngày cũ nên nên khoá nút lưu/tạo. */
+  onPendingChange?: (pending: boolean) => void;
   min?: string;
   max?: string;
   disabled?: boolean;
@@ -74,6 +77,10 @@ export function VnDateInput({
   const invalid = touched && text !== '' && (iso === null || outOfRange);
   // Đang gõ dở: cha vẫn giữ ngày cũ nên nói rõ bộ lọc chưa đổi.
   const pending = !invalid && text !== '' && iso === null;
+  const incomplete = text !== '' && iso === null;
+  useEffect(() => {
+    onPendingChange?.(incomplete);
+  }, [incomplete, onPendingChange]);
 
   const edit = (raw: string) => {
     const next = maskVnDate(raw);
@@ -132,7 +139,7 @@ export function VnDateInput({
       />
       {pending && (
         <span role="status" className="absolute left-0 top-full z-10 mt-0.5 whitespace-nowrap rounded-control bg-stone-0 px-1 text-xs text-stone-500">
-          Chưa áp dụng, gõ đủ ngày dd/mm/yyyy.
+          {text.length === 10 ? 'Ngày không có thật, chưa áp dụng.' : 'Chưa áp dụng, gõ đủ ngày dd/mm/yyyy.'}
         </span>
       )}
       {invalid && (

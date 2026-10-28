@@ -59,7 +59,7 @@ function SourcesBody({ report, by }: { report: SourceReport; by: SourceReportBy 
   return (
     <>
       <Notice>
-        Khách mới = tài khoản tạo trong khoảng ngày (không tính quản trị/nhân viên, và khách cũ được gắn nguồn lúc gộp khách). Đơn là đơn còn hiệu
+        Khách mới = tài khoản tạo trong khoảng ngày (không tính quản trị/nhân viên, không tính khách vãng lai chưa đăng nhập, và khách cũ được gắn nguồn lúc gộp khách). Đơn là đơn còn hiệu
         lực (đã xác nhận trở đi, không huỷ/trả). Có đơn đầu = đặt trong {d} ngày sau khi tạo tài khoản; có đơn 2 = đặt đơn thứ hai trong {d} ngày sau đơn
         đầu; doanh thu tính {d} ngày đầu theo cùng định nghĩa với Tổng quan chỉ số (đã thu, trừ hoàn một phần). &quot;Không rõ&quot; là tài khoản chưa ghi nguồn. Theo đợt thẻ: link in trên thẻ có card=&lt;đợt&gt; được ghi thành chiến dịch card-&lt;đợt&gt;; &quot;Không thuộc chiến dịch nào&quot; là khách vào không qua link có đợt.
       </Notice>

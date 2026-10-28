@@ -1699,9 +1699,12 @@ export const downloadOrdersCsv = (f: OrderExportFilter) => {
   const qs = orderFilterParams(f).toString();
   return apiDownload(`/admin/orders/export${qs ? `?${qs}` : ''}`, `don-hang-${todayKey()}.csv`);
 };
-export const downloadUsersCsv = (search?: string) => {
-  const qs = search?.trim() ? `?search=${encodeURIComponent(search.trim())}` : '';
-  return apiDownload(`/admin/users/export${qs}`, `nguoi-dung-${todayKey()}.csv`);
+export const downloadUsersCsv = (search?: string, guests = false) => {
+  const params = new URLSearchParams();
+  if (search?.trim()) params.set('search', search.trim());
+  if (guests) params.set('guests', '1');
+  const qs = params.toString();
+  return apiDownload(`/admin/users/export${qs ? `?${qs}` : ''}`, `nguoi-dung-${todayKey()}.csv`);
 };
 
 // ── Việc cần xử lý + sức khoẻ vận hành (ADMINOPS-13, PLATFORM-5) ──

@@ -1215,6 +1215,24 @@ describe('admin/page — tab Voucher', () => {
     expect(bad.className).toContain('text-danger-fg');
   });
 
+  it('Tạo voucher khoá khi ô ngày đang gõ dở, không tạo mã với ngày cũ hay hạn mặc định', async () => {
+    const { container } = await openCoupons();
+    typeInto(container.querySelector('input[placeholder^="Mã"]'), 'HETHAN');
+    const end = container.querySelector<HTMLInputElement>('input[aria-label="Mã giảm giá hết hạn ngày"]')!;
+    typeInto(end, '31/12/2026');
+    await flush();
+    typeInto(end, '15/11/202');
+    await flush();
+    const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá')!;
+    expect(create.disabled).toBe(true);
+    act(() => create.click());
+    await flush();
+    expect(mocks.createCoupon).not.toHaveBeenCalled();
+    typeInto(end, '15/11/2026');
+    await flush();
+    expect(create.disabled).toBe(false);
+  });
+
   it('ADMINOPS-7: ô Mã tự đổi chữ HOA và bỏ khoảng trắng (khách luôn gửi mã dạng HOA)', async () => {
     const { container } = await openCoupons();
     const codeInput = container.querySelector<HTMLInputElement>('input[placeholder^="Mã"]')!;
@@ -2781,7 +2799,7 @@ describe('admin/page — chi tiết người dùng (ADMINOPS-11)', () => {
     const { container } = await mount();
     click([...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Xuất CSV người dùng'))!);
     await flush();
-    expect(mocks.downloadUsers).toHaveBeenCalledWith(undefined);
+    expect(mocks.downloadUsers).toHaveBeenCalledWith(undefined, false);
     expect(container.textContent).toContain('mọi người dùng khớp tìm kiếm');
   });
 });
@@ -3562,7 +3580,7 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
       click(container.querySelector('[data-inbox="bankTransferToConfirm"]')!);
       await flush();
       expect(container.textContent).toContain('Đang xem đơn lẻ chuyển khoản chưa nhận tiền');
-      click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem tất cả đơn')!);
+      click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Bỏ lọc chuyển khoản')!);
       await flush();
       expect(container.textContent).not.toContain('Đang xem đơn lẻ chuyển khoản chưa nhận tiền');
       expect(mocks.listOrders.mock.lastCall![9]).toEqual({ order: 'asc' });
@@ -3598,6 +3616,17 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     click(chip);
     await flush();
     expect(mocks.listUsersArgs.at(-1)).toEqual([1, undefined, true]);
+    mocks.guestCount = 0;
+  });
+
+  it('tab Người dùng: bật chip khách vãng lai thì file CSV tải cùng tập với danh sách (guests)', async () => {
+    window.history.replaceState(null, '', '/admin?tab=users');
+    const { container } = await mount();
+    click([...container.querySelectorAll('button[aria-pressed]')].find((b) => b.textContent === 'Hiện cả khách vãng lai (7)')!);
+    await flush();
+    click([...container.querySelectorAll('button')].find((b) => b.textContent?.includes('Xuất CSV người dùng'))!);
+    await flush();
+    expect(mocks.downloadUsers).toHaveBeenLastCalledWith(undefined, true);
     mocks.guestCount = 0;
   });
 

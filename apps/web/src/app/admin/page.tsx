@@ -1524,7 +1524,7 @@ function OrdersTab({
             }}
             className={BTN_SMALL}
           >
-            Xem tất cả đơn
+            Bỏ lọc chuyển khoản
           </button>
         </p>
       )}
@@ -1947,7 +1947,7 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
     setMsg(null);
     setExporting(true);
     try {
-      const r = await downloadUsersCsv(search || undefined);
+      const r = await downloadUsersCsv(search || undefined, guests);
       setMsg({ ok: true, text: `Đã tải ${r.filename} — mọi người dùng khớp tìm kiếm, không chỉ trang đang xem.` });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không xuất được CSV.' });
@@ -2368,6 +2368,8 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
   });
   const [msg, setMsg] = useState<string | null>(null);
   const num = (v: string) => (v.trim() === '' ? undefined : Number(v));
+  const [startPending, setStartPending] = useState(false);
+  const [endPending, setEndPending] = useState(false);
   const create = useMutation({
     mutationFn: () =>
       createCoupon({
@@ -2464,16 +2466,16 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
       <div className="flex gap-2">
         <div className="min-w-0 flex-1">
           <Field label="Bắt đầu từ ngày">
-            <VnDateInput ariaLabel="Mã giảm giá bắt đầu từ ngày" value={f.startAt} onChange={(v) => setF({ ...f, startAt: v })} className={field} />
+            <VnDateInput ariaLabel="Mã giảm giá bắt đầu từ ngày" value={f.startAt} onChange={(v) => setF({ ...f, startAt: v })} onPendingChange={setStartPending} className={field} />
           </Field>
         </div>
         <div className="min-w-0 flex-1">
           <Field label="Hết hạn ngày">
-            <VnDateInput ariaLabel="Mã giảm giá hết hạn ngày" value={f.endAt} min={f.startAt || undefined} onChange={(v) => setF({ ...f, endAt: v })} className={field} />
+            <VnDateInput ariaLabel="Mã giảm giá hết hạn ngày" value={f.endAt} min={f.startAt || undefined} onChange={(v) => setF({ ...f, endAt: v })} onPendingChange={setEndPending} className={field} />
           </Field>
         </div>
       </div>
-      <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
+      <button onClick={() => create.mutate()} disabled={!f.code || startPending || endPending} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
     )}

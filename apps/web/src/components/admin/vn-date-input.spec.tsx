@@ -74,6 +74,32 @@ describe('VnDateInput', () => {
     expect(field(r.container).getAttribute('aria-invalid')).toBe('true');
   });
 
+  it('onPendingChange báo true khi đang gõ dở hoặc ngày không có thật, false khi đủ ngày hợp lệ hoặc rỗng; dòng nhắc nói đúng lý do', async () => {
+    const onPending = vi.fn();
+    function H() {
+      const [v, setV] = useState('2026-12-31');
+      return <VnDateInput value={v} ariaLabel="Từ ngày" onChange={setV} onPendingChange={onPending} />;
+    }
+    const r = render(<H />);
+    mounted.push(r);
+    await flush();
+    expect(onPending).toHaveBeenLastCalledWith(false);
+    typeInto(field(r.container), '15/11/202');
+    await flush();
+    expect(onPending).toHaveBeenLastCalledWith(true);
+    expect(r.container.textContent).toContain('Chưa áp dụng, gõ đủ ngày');
+    typeInto(field(r.container), '31/02/2026');
+    await flush();
+    expect(onPending).toHaveBeenLastCalledWith(true);
+    expect(r.container.textContent).toContain('Ngày không có thật');
+    typeInto(field(r.container), '15/11/2026');
+    await flush();
+    expect(onPending).toHaveBeenLastCalledWith(false);
+    typeInto(field(r.container), '');
+    await flush();
+    expect(onPending).toHaveBeenLastCalledWith(false);
+  });
+
   it('xoá hết thì báo rỗng; cha đặt lại giá trị thì ô chữ theo', async () => {
     const onValue = vi.fn();
     const r = render(<Harness onValue={onValue} />);
