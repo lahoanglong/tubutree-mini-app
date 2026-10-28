@@ -260,3 +260,51 @@ describe('NotificationsService.notify — gộp tin theo cửa sổ thời gian 
     expect(transaction).not.toHaveBeenCalled();
   });
 });
+
+describe('NotificationsService.notify — ZNS thử lại riêng khi tin trong app đã lưu (retryZns)', () => {
+  function build(opts: { inAppSeen: boolean; znsSeen: boolean }) {
+    const findFirst = jest.fn(async ({ where }: { where: { channel: string } }) =>
+      where.channel === 'INAPP' ? (opts.inAppSeen ? { id: 'in-app' } : null) : opts.znsSeen ? { id: 'zns' } : null,
+    );
+    const create = jest.fn().mockResolvedValue({ id: 'log-1' });
+    const tx = { $executeRaw: jest.fn().mockResolvedValue(1), notificationLog: { findFirst, create } };
+    const { prisma } = makePrisma({
+      notificationTemplate: { findUnique: jest.fn().mockResolvedValue({ code: 'C', channel: 'INAPP', bodyTemplate: 'x', zaloTemplateId: null }) },
+      notificationLog: { create, findFirst, findMany: jest.fn(), updateMany: jest.fn() },
+      $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
+    });
+    const sendTemplate = jest.fn().mockResolvedValue({ ok: true });
+    const svc = new NotificationsService(prisma, { sendTemplate } as unknown as ZnsClient, makeAnalytics());
+    return { svc, create, sendTemplate };
+  }
+  const opts = { dedupeKey: 'tier-drop:x', znsTemplateId: '123', retryZns: true };
+
+  it('tin trong app đã có, ZNS chưa có log: không lưu thêm tin trong app, gửi ZNS kèm khoá', async () => {
+    const { svc, create, sendTemplate } = build({ inAppSeen: true, znsSeen: false });
+    await svc.notify('u1', 'C', { a: 'b' }, opts);
+    expect(sendTemplate).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][0].data).toMatchObject({ channel: 'ZNS', payload: { data: { a: 'b' }, dedupeKey: 'tier-drop:x' } });
+  });
+
+  it('cả tin trong app lẫn ZNS đã có: không làm gì', async () => {
+    const { svc, create, sendTemplate } = build({ inAppSeen: true, znsSeen: true });
+    await svc.notify('u1', 'C', {}, opts);
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('không bật retryZns: tin trong app đã có thì dừng hẳn như cũ, không gửi ZNS', async () => {
+    const { svc, create, sendTemplate } = build({ inAppSeen: true, znsSeen: false });
+    await svc.notify('u1', 'C', {}, { dedupeKey: 'tier-drop:x', znsTemplateId: '123' });
+    expect(sendTemplate).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('lần đầu (chưa có gì): lưu tin trong app rồi gửi ZNS, cả hai kèm khoá', async () => {
+    const { svc, create, sendTemplate } = build({ inAppSeen: false, znsSeen: false });
+    await svc.notify('u1', 'C', {}, opts);
+    expect(create.mock.calls.map((c) => c[0].data.channel)).toEqual(['INAPP', 'ZNS']);
+    expect(sendTemplate).toHaveBeenCalledTimes(1);
+  });
+});

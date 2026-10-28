@@ -238,6 +238,8 @@ model User {
   tierId                 String?
   tier                   MembershipTier? @relation(fields: [tierId], references: [id])
   tierGraceUntil         DateTime? // §6.6: thời hạn ân hạn trước khi rớt hạng (null = không treo rớt)
+  /// Hạn giữ hạng (tierGraceUntil) mà khách ĐÃ được báo trước khi hạ hạng; kỳ giữ hạng mới có hạn khác nên được báo lại.
+  tierDropNoticeFor      DateTime?
   referralCode           String          @unique
   referredById           String?
   /// Dòng khách đã gộp → tài khoản đích (auth.service mergeGuestInto). Mã giới thiệu cũ của khách quy về người đích
@@ -1217,9 +1219,9 @@ model XuPointsConversion {
 }
 
 /// Điểm danh hằng ngày nhận Điểm Xanh ở trang Hạng thành viên (loyalty.service.ts dailyCheckIn).
-/// TÁCH HẲN khỏi điểm danh Vườn Xanh (GameProfile.lastCheckInAt/streakDays do
-/// game-economy.service.ts quản, có vé giữ lửa + hồi sinh chuỗi): trước đây loyalty dùng chung
-/// 2 cột đó → điểm danh bên này chặn bên kia trong ngày và vòng 7 ngày ghi đè chuỗi game.
+/// Bảng này chỉ ghi lần nhận ĐIỂM trong ngày (chốt chặn không nhận hai lần); ngày 1..7 và chuỗi là MỘT chuỗi chung
+/// với Vườn Xanh (GameProfile.lastCheckInAt/streakDays/streakFreezes do game-economy.service.ts giữ: vé giữ lửa, hồi sinh).
+/// `cycleDay`/`streakDays` ở đây chỉ là ảnh chụp lúc nhận. Dòng cũ (chuỗi Điểm Xanh riêng) giữ nguyên làm lịch sử.
 /// Unique (userId, dayKey) là chốt chặn cứng: 2 request song song cùng ngày thì request thứ hai
 /// ăn P2002 TRƯỚC khi kịp cộng điểm.
 model LoyaltyCheckIn {

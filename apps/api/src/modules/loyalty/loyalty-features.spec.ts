@@ -85,6 +85,7 @@ function makeFakeDb(users: Row[], opts: { advisoryLock?: boolean; lockedRows?: L
     gifts: new Map<string, GiftRow>((opts.gifts ?? SEEDED_GIFTS).map((g) => [g.id as string, { ...g }])),
     redemptions: [] as Row[],
     gameProfileTouched: false,
+    gameProfile: null as Row | null,
   };
   const lock = new Mutex();
   /** Khoá dòng users (SELECT … FOR UPDATE) — giữ tới hết transaction, như Postgres. */
@@ -139,7 +140,7 @@ function makeFakeDb(users: Row[], opts: { advisoryLock?: boolean; lockedRows?: L
         findFirst: async ({ where }: any) => {
           await tick();
           const rows = db.checkIns
-            .filter((r) => r.userId === where.userId)
+            .filter((r) => r.userId === where.userId && (where.dayKey === undefined || r.dayKey === where.dayKey))
             .sort((a, b) => (a.dayKey < b.dayKey ? 1 : -1));
           return rows[0] ? { ...rows[0] } : null;
         },
@@ -225,10 +226,21 @@ function makeFakeDb(users: Row[], opts: { advisoryLock?: boolean; lockedRows?: L
           return { ...row };
         },
       },
-      // Bất kỳ truy cập nào vào gameProfile là LỖI: điểm danh loyalty phải tách hẳn khỏi Vườn Xanh.
-      get gameProfile(): never {
-        db.gameProfileTouched = true;
-        throw new Error('loyalty KHÔNG được đụng game_profiles');
+      // Điểm Xanh chỉ ĐỌC chuỗi chung ở hồ sơ Vườn; mọi lệnh ghi vào gameProfile là LỖI (chuỗi do điểm danh nước giữ).
+      gameProfile: {
+        findUnique: async () => db.gameProfile,
+        update: async () => {
+          db.gameProfileTouched = true;
+          throw new Error('loyalty KHÔNG được ghi game_profiles');
+        },
+        updateMany: async () => {
+          db.gameProfileTouched = true;
+          throw new Error('loyalty KHÔNG được ghi game_profiles');
+        },
+        upsert: async () => {
+          db.gameProfileTouched = true;
+          throw new Error('loyalty KHÔNG được ghi game_profiles');
+        },
       },
       $executeRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
         if (!ctx) throw new Error('advisory lock / UPDATE waste_gifts gọi ngoài transaction');
@@ -800,41 +812,40 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
 
   // ───────────────────────────── Daily check-in ─────────────────────────────
   describe('Điểm danh hằng ngày (tách riêng khỏi Vườn Xanh)', () => {
-    function statusPrisma(last: Row | null) {
+    /** `today` = dòng điểm danh Điểm Xanh hôm nay; `profile` = hồ sơ Vườn (chuỗi chung). */
+    function statusPrisma(today: Row | null, profile: Row | null = null) {
       return {
-        loyaltyCheckIn: { findFirst: jest.fn().mockResolvedValue(last) },
-        get gameProfile(): never {
-          throw new Error('loyalty KHÔNG được đụng game_profiles');
-        },
+        loyaltyCheckIn: { findFirst: jest.fn().mockResolvedValue(today) },
+        gameProfile: { findUnique: jest.fn().mockResolvedValue(profile) },
       } as unknown as PrismaService;
     }
+    const lastAt = (daysAgo: number) => new Date(Date.now() - daysAgo * DAY);
 
     it('mặc định điểm danh là bảng BẢO THỦ (≈8 điểm/tuần), không phải 190 điểm/tuần', () => {
       expect(DEFAULT_CHECKIN_POINTS).toHaveLength(7);
       expect(DEFAULT_CHECKIN_POINTS.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(10_000);
     });
 
-    it('status: CHƯA điểm danh, hôm qua là N3 → hôm nay là N4; N1–N3 đã nhận; phần thưởng hiển thị = phần thưởng sẽ nhận', async () => {
-      const yesterday = vnDay(new Date(Date.now() - DAY));
+    it('status: chuỗi chung hôm qua là 3 → hôm nay là N4; N1–N3 đã nhận; phần thưởng hiển thị = phần thưởng sẽ nhận', async () => {
       const cfg = makeConfig({ 'loyalty.checkin_points': [1, 2, 3, 4, 5, 6, 7] });
       const status = await new LoyaltyService(
-        statusPrisma({ userId: 'u1', dayKey: yesterday, cycleDay: 3, streakDays: 3 }),
+        statusPrisma(null, { lastCheckInAt: lastAt(1), streakDays: 3, streakFreezes: 0 }),
         cfg,
       ).getDailyCheckInStatus('u1');
 
       expect(status.checkedInToday).toBe(false);
       expect(status.streakDays).toBe(3);
       expect(status.currentCycleDay).toBe(4);
+      expect(status.streakDay).toBe(4);
       expect(status.todayPoints).toBe(4);
       expect(status.rewards.map((r) => r.claimed)).toEqual([true, true, true, false, false, false, false]);
       expect(status.rewards.findIndex((r) => r.isToday)).toBe(3);
       expect(status.rewards.map((r) => r.points)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     });
 
-    it('status: hôm qua là N7 → vòng mới, hôm nay là N1, chưa ô nào "đã nhận"', async () => {
-      const yesterday = vnDay(new Date(Date.now() - DAY));
+    it('status: chuỗi hôm qua là 14 (ngày 7 của vòng 2) → vòng mới, hôm nay là N1, chưa ô nào "đã nhận"', async () => {
       const status = await new LoyaltyService(
-        statusPrisma({ userId: 'u1', dayKey: yesterday, cycleDay: 7, streakDays: 14 }),
+        statusPrisma(null, { lastCheckInAt: lastAt(1), streakDays: 14, streakFreezes: 0 }),
         makeConfig(),
       ).getDailyCheckInStatus('u1');
       expect(status.currentCycleDay).toBe(1);
@@ -844,10 +855,9 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(status.todayPoints).toBe(DEFAULT_CHECKIN_POINTS[0]);
     });
 
-    it('status: chuỗi đứt (lần cuối 3 ngày trước) → streak 0, hôm nay là N1', async () => {
-      const old = vnDay(new Date(Date.now() - 3 * DAY));
+    it('status: lỡ 2 ngày (cách 3 ngày) → streak 0, hôm nay là N1, vé giữ lửa không cứu được', async () => {
       const status = await new LoyaltyService(
-        statusPrisma({ userId: 'u1', dayKey: old, cycleDay: 5, streakDays: 5 }),
+        statusPrisma(null, { lastCheckInAt: lastAt(3), streakDays: 5, streakFreezes: 2 }),
         makeConfig(),
       ).getDailyCheckInStatus('u1');
       expect(status.streakDays).toBe(0);
@@ -855,10 +865,25 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(status.rewards.every((r) => !r.claimed)).toBe(true);
     });
 
-    it('status: ĐÃ điểm danh hôm nay (N3) → N1–N3 đã nhận, ô hôm nay là N3', async () => {
+    it('status: lỡ đúng 1 ngày và có vé giữ lửa → chuỗi giữ nguyên, hôm nay là ngày kế tiếp; không vé thì về N1', async () => {
+      const withFreeze = await new LoyaltyService(
+        statusPrisma(null, { lastCheckInAt: lastAt(2), streakDays: 4, streakFreezes: 1 }),
+        makeConfig(),
+      ).getDailyCheckInStatus('u1');
+      expect(withFreeze.streakDays).toBe(4);
+      expect(withFreeze.currentCycleDay).toBe(5);
+      const noFreeze = await new LoyaltyService(
+        statusPrisma(null, { lastCheckInAt: lastAt(2), streakDays: 4, streakFreezes: 0 }),
+        makeConfig(),
+      ).getDailyCheckInStatus('u1');
+      expect(noFreeze.streakDays).toBe(0);
+      expect(noFreeze.currentCycleDay).toBe(1);
+    });
+
+    it('status: ĐÃ điểm danh hôm nay (chuỗi 3) → N1–N3 đã nhận, ô hôm nay là N3', async () => {
       const today = vnDay(new Date());
       const status = await new LoyaltyService(
-        statusPrisma({ userId: 'u1', dayKey: today, cycleDay: 3, streakDays: 3 }),
+        statusPrisma({ userId: 'u1', dayKey: today, cycleDay: 3, streakDays: 3 }, { lastCheckInAt: new Date(), streakDays: 3, streakFreezes: 0 }),
         makeConfig(),
       ).getDailyCheckInStatus('u1');
       expect(status.checkedInToday).toBe(true);
@@ -867,18 +892,37 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(status.rewards[2]!.isToday).toBe(true);
     });
 
+    it('ngày chuyển đổi: Điểm Xanh đã nhận hôm nay theo chuỗi cũ (N5), chuỗi nước ở ngày 2 → hiện ngày 2, không nhận thêm', async () => {
+      const today = vnDay(new Date());
+      const prisma = statusPrisma(
+        { userId: 'u1', dayKey: today, cycleDay: 5, streakDays: 5, points: 9 },
+        { lastCheckInAt: lastAt(1), streakDays: 1, streakFreezes: 0 },
+      );
+      const status = await new LoyaltyService(prisma, makeConfig()).getDailyCheckInStatus('u1');
+      expect(status.checkedInToday).toBe(true);
+      expect(status.currentCycleDay).toBe(2);
+      await expect(new LoyaltyService(prisma, makeConfig()).dailyCheckIn('u1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('status: khách chưa có hồ sơ Vườn → ngày 1, chuỗi 0', async () => {
+      const status = await new LoyaltyService(statusPrisma(null, null), makeConfig()).getDailyCheckInStatus('u1');
+      expect(status.currentCycleDay).toBe(1);
+      expect(status.streakDays).toBe(0);
+    });
+
     it('config loyalty.checkin_points sai kiểu/âm/quá lớn → dùng bảng mặc định', async () => {
       for (const bad of [[1, 2], 'abc', [1, 1, 1, 1, 1, 1, -5], [1, 1, 1, 1, 1, 1, 100_001], [1, 1, 1, 1.5, 1, 1, 1]]) {
-        const status = await new LoyaltyService(statusPrisma(null), makeConfig({ 'loyalty.checkin_points': bad }))
+        const status = await new LoyaltyService(statusPrisma(null, null), makeConfig({ 'loyalty.checkin_points': bad }))
           .getDailyCheckInStatus('u1');
         expect(status.rewards.map((r) => r.points)).toEqual(DEFAULT_CHECKIN_POINTS);
       }
     });
 
-    it('dailyCheckIn: ghi loyalty_check_ins riêng, ledger CHECKIN có refId=ngày VN + expiresAt, KHÔNG đụng gameProfile', async () => {
+    it('dailyCheckIn: ngày theo chuỗi chung của Vườn; ghi loyalty_check_ins riêng, ledger CHECKIN có refId=ngày VN + expiresAt, KHÔNG ghi gameProfile', async () => {
       const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 5, referralCode: 'AAAA1111' }]);
       const yesterday = vnDay(new Date(Date.now() - DAY));
       db.checkIns.push({ id: 'ci-old', userId: 'u1', dayKey: yesterday, cycleDay: 3, streakDays: 10, points: 1 });
+      db.gameProfile = { lastCheckInAt: new Date(Date.now() - DAY), streakDays: 10, streakFreezes: 0 };
       const cfg = makeConfig({ 'loyalty.checkin_points': [1, 2, 3, 4, 5, 6, 7], 'loyalty.point_expire_months': 12 });
 
       const res = await new LoyaltyService(prisma, cfg).dailyCheckIn('u1');
@@ -923,6 +967,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
       jest.setSystemTime(new Date('2026-09-26T16:00:00Z')); // 23:00 ngày 26/09 giờ VN
       await svc.dailyCheckIn('u1');
+      db.gameProfile = { lastCheckInAt: new Date('2026-09-26T16:00:00Z'), streakDays: 1, streakFreezes: 0 }; // điểm danh nước cùng lượt
       jest.setSystemTime(new Date('2026-09-26T17:30:00Z')); // 00:30 ngày 27/09 giờ VN
       const second = await svc.dailyCheckIn('u1');
       expect(db.checkIns.map((c) => c.dayKey)).toEqual(['2026-09-26', '2026-09-27']);

@@ -1,4 +1,5 @@
-import { Page, useNavigate } from 'zmp-ui';
+import { Page, useLocation, useNavigate } from 'zmp-ui';
+import { NEW_COUPON_BADGE, NEW_COUPON_PARAM, sortRedemptions } from '@tubutree/app-core/reward-rules';
 import { useQuery } from '@tanstack/react-query';
 import { Ticket } from 'lucide-react';
 import type { GiftRedemption } from '../services/account-api';
@@ -20,13 +21,6 @@ import { pointAddress } from '../utils/waste-labels';
 import { openingHoursText } from './rewards';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
-
-function byReadyThenNewest(a: GiftRedemption, b: GiftRedemption): number {
-  const ar = a.status === 'READY' ? 0 : 1;
-  const br = b.status === 'READY' ? 0 : 1;
-  if (ar !== br) return ar - br;
-  return b.createdAt.localeCompare(a.createdAt);
-}
 
 function RedemptionStatus({ r }: { r: GiftRedemption }) {
   if (r.status === 'READY' && r.code) {
@@ -62,7 +56,7 @@ function RedemptionStatus({ r }: { r: GiftRedemption }) {
   return null;
 }
 
-function RedemptionEntry({ r }: { r: GiftRedemption }) {
+function RedemptionEntry({ r, isNew }: { r: GiftRedemption; isNew?: boolean }) {
   const navigate = useNavigate();
   if (r.giftKind === 'VOUCHER') {
     return (
@@ -70,7 +64,7 @@ function RedemptionEntry({ r }: { r: GiftRedemption }) {
         <Card variant="outline" padding={0}>
           <ListRow
             icon={<Icon icon={Ticket} tone="brand" />}
-            title={r.giftName}
+            title={isNew ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>{r.giftName}<Badge tone="brand">{NEW_COUPON_BADGE}</Badge></span> : r.giftName}
             subtitle={r.couponCode ? `Mã ${r.couponCode}` : ''}
             trailing="chevron"
             onPress={() => navigate('/loyalty')}
@@ -98,6 +92,8 @@ function RedemptionEntry({ r }: { r: GiftRedemption }) {
 function RewardsMineBody() {
   const navigate = useNavigate();
   const q = useQuery({ queryKey: WASTE_QUERY_KEYS.rewardsMine, queryFn: getMyRedemptions });
+  const location = useLocation();
+  const newCode = new URLSearchParams(location.search).get(NEW_COUPON_PARAM);
 
   if (q.isError) return <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />;
   if (!q.data) return <div style={{ padding: 16 }}><Skeleton height={120} /></div>;
@@ -107,8 +103,8 @@ function RewardsMineBody() {
 
   return (
     <div style={{ ...COLUMN, padding: 16, paddingBottom: 48, gap: 12 }}>
-      {[...q.data].sort(byReadyThenNewest).map((r) => (
-        <RedemptionEntry key={r.id} r={r} />
+      {sortRedemptions(q.data, newCode).map((r) => (
+        <RedemptionEntry key={r.id} r={r} isNew={!!newCode && r.couponCode === newCode} />
       ))}
     </div>
   );

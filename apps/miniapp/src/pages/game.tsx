@@ -151,10 +151,12 @@ export default function GamePage() {
 
   const eco = profile?.ecoImpact;
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
-  // Gộp điểm + nước: tải lỗi thì để nút bật (POST idempotent, đã xong sẽ báo "đã điểm danh rồi"), đừng suy từ lastCheckInAt vì nó chỉ là phần nước.
-  const checkInDone = checkInStatusQ.data ? checkInStatusQ.data.checkedInToday : checkInStatusQ.isError ? false : checkedInToday;
+  // Gộp điểm + nước: nút chính chỉ chuyển sang "Nhận Điểm Xanh" khi trạng thái gộp báo còn thiếu (lastCheckInAt chỉ là phần nước); số nước hôm nay lấy từ đó (todayWater), chưa có thì suy từ hồ sơ.
   const dewToday = isSameVNDay(profile?.lastDewAt ?? null);
-  const dailyGain = profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
+  const status = checkInStatusQ.data;
+  const pointsPending = status ? !status.checkedInToday : false;
+  const checkInSeeds = status && !status.waterDone ? status.todayWater : undefined;
+  const dailyGain = checkInSeeds !== undefined ? (checkInSeeds > 0 ? checkInSeeds : null) : profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
   const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
   const quizState: EarnQuizState = quiz
     ? { status: 'ready', left: quiz.filter((q) => !answeredIds.has(q.id)).length }
@@ -213,6 +215,8 @@ export default function GamePage() {
 
           <TreeActions
             profile={profile}
+            pointsPending={pointsPending}
+            checkInSeeds={checkInSeeds}
             pending={waterM.isPending || checkInM.isPending || dewM.isPending}
             onClaim={claimDaily}
             onWater={(drops) => waterM.mutate(drops)}
@@ -225,10 +229,10 @@ export default function GamePage() {
           {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
           <div id={GAME_CHECKIN_ANCHOR}>
           <CheckInStreak
-            allDone={checkInDone}
             profile={profile}
-            onCheckIn={() => checkInM.mutate()}
-            checkInPending={checkInM.isPending}
+            status={status}
+            statusError={checkInStatusQ.isError}
+            onRetryStatus={() => void checkInStatusQ.refetch()}
             onBuyFreeze={() => freezeM.mutate()}
             freezePending={freezeM.isPending}
             onCollectDew={() => dewM.mutate()}
@@ -255,6 +259,9 @@ export default function GamePage() {
               pending={answerM.isPending}
               onAnswer={(id, choice) => answerM.mutate({ id, choice })}
               onNext={nextQuiz}
+              loadError={quizQ.isError}
+              onRetry={() => void quizQ.refetch()}
+              answeredToday={profile?.quizAnsweredToday}
             />
           </div>
 

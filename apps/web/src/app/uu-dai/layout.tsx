@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
+import { AccountShell } from '@/components/account/account-shell';
 
 export const metadata: Metadata = { title: 'Ưu đãi — Tubu Tree', robots: { index: false, follow: false } };
 
 export default function OffersLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return <AccountShell>{children}</AccountShell>;
 }

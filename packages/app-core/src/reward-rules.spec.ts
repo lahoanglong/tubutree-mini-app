@@ -8,6 +8,7 @@ import {
   lockedPointsNote,
   openingHoursText,
   orderRewards,
+  sortRedemptions,
   pointAddress,
   rewardCardState,
   warehouseConfirmText,
@@ -98,10 +99,20 @@ describe('quà miễn phí giao hàng và hạng đã có quyền lợi này (B-
     expect(freeShipCovered(freeship(99_000), undefined)).toBe(false);
   });
 
-  it('orderRewards: quà thừa xuống cuối, còn lại giữ thứ tự sortOrder', () => {
-    const list = [{ id: 'a', ...freeship(99_000, 1) }, { id: 'b', ...freeship(49_000, 2) }, { id: 'c', kind: 'VOUCHER' as const, voucher: null, sortOrder: 3 }];
+  it('orderRewards: quà thừa xuống cuối nhóm, còn lại giữ thứ tự sortOrder', () => {
+    const ok = { canRedeem: true, soldOut: false };
+    const list = [{ id: 'a', ...ok, ...freeship(99_000, 1) }, { id: 'b', ...ok, ...freeship(49_000, 2) }, { id: 'c', ...ok, kind: 'VOUCHER' as const, voucher: null, sortOrder: 3 }];
     expect(orderRewards(list, { tierFreeShip: locBiec }).map((r) => r.id)).toEqual(['b', 'c', 'a']);
     expect(orderRewards(list, {}).map((r) => r.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('orderRewards: quà đủ điểm lên trước, quà chưa đủ điểm hoặc hết hàng xuống sau, vẫn theo sortOrder trong từng nhóm', () => {
+    const v = (id: string, sortOrder: number, canRedeem: boolean, soldOut = false) => ({ id, kind: 'VOUCHER' as const, voucher: null, sortOrder, canRedeem, soldOut });
+    const list = [v('a', 1, false), v('b', 2, false), v('c', 3, false), v('freeship', 4, true), v('hết', 5, true, true)];
+    expect(orderRewards(list, {}).map((r) => r.id)).toEqual(['freeship', 'a', 'b', 'c', 'hết']);
+    // Món duy nhất đủ điểm là freeship thừa với hạng: vẫn nằm đầu vì nó là món duy nhất đổi được.
+    const covered = [v('a', 1, false), { id: 'fs', ...freeship(99_000, 4), canRedeem: true, soldOut: false }];
+    expect(orderRewards(covered, { tierFreeShip: locBiec }).map((r) => r.id)).toEqual(['fs', 'a']);
   });
 
   it('quà thừa với hạng vẫn đổi được (ngưỡng mã tính cả hàng đối tác); chỉ thêm ghi chú kèm ngưỡng hạng cho đơn Tubu', () => {
@@ -130,5 +141,17 @@ describe('quà nhận tại kho (B-60)', () => {
     const point = { name: 'Kho Tubu', addressLine: '99 Nguyễn Văn Linh', communeName: 'Phường Tân Phong', provinceName: 'TP.HCM' };
     expect(warehouseConfirmText(point)).toBe('Quà này chỉ nhận tại kho TP.HCM, không giao tận nhà: Kho Tubu, 99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM. Bạn vẫn muốn đổi?');
     expect(warehouseConfirmText(null)).toBe('Quà này chỉ nhận tại kho TP.HCM, không giao tận nhà: kho Tubu TP.HCM. Bạn vẫn muốn đổi?');
+  });
+});
+
+describe('sortRedemptions', () => {
+  const r = (id: string, status: string, createdAt: string, couponCode: string | null = null) => ({ id, status, createdAt, couponCode });
+  const list = [r('old', 'FULFILLED', '2026-10-01'), r('new', 'FULFILLED', '2026-10-05', 'REWARD-X'), r('mid', 'FULFILLED', '2026-10-09'), r('ready', 'READY', '2026-09-01')];
+  it('chờ nhận trước, rồi mới nhất trước', () => {
+    expect(sortRedemptions(list).map((x) => x.id)).toEqual(['ready', 'mid', 'new', 'old']);
+  });
+  it('mã vừa đổi lên đầu nhóm còn lại', () => {
+    expect(sortRedemptions(list, 'REWARD-X').map((x) => x.id)).toEqual(['ready', 'new', 'mid', 'old']);
+    expect(sortRedemptions(list, 'KHÔNG-CÓ').map((x) => x.id)).toEqual(['ready', 'mid', 'new', 'old']);
   });
 });

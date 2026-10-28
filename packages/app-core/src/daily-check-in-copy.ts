@@ -5,14 +5,15 @@ const num = (n: number): string => ((Number.isFinite(n) ? n : 0) + 0).toLocaleSt
 /** Chữ của khối điểm danh dùng chung cho Mini App và web (trang Điểm Xanh, Ưu đãi, Vườn Xanh). */
 export const checkInCopy = {
   title: 'Điểm danh mỗi ngày',
-  /** Vị trí trong vòng 7 ngày của Điểm Xanh. Không dùng chữ "chuỗi": Vườn Xanh có chuỗi nước riêng và hai số có thể khác nhau. */
+  /** Vị trí trong lịch 7 ngày: một chuỗi chung cho Điểm Xanh và giọt nước ở Vườn Xanh. */
   cycleDay: (day: number) => `Ngày ${day}/7`,
-  rule: 'Một lần bấm nhận cả Điểm Xanh và giọt nước. Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng.',
+  rule: 'Một lần bấm nhận cả Điểm Xanh và giọt nước. Mỗi ngày 1 lần (giờ Việt Nam). Lỡ 1 ngày mà có vé giữ lửa thì chuỗi được giữ, không thì lịch 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng.',
   /** Phần nước còn thiếu nhưng bình đã đầy: không hứa giọt nước mà bình không chứa được. */
   tankFull: 'Bình nước đang đầy nên không cộng thêm giọt nước.',
   alreadyDone: 'Hôm nay bạn đã điểm danh rồi',
   retryMissing: 'Còn thiếu một phần, bấm điểm danh lại để nhận nốt',
-  loadError: (reason: string) => `Chưa tải được lịch điểm danh: ${reason}`,
+  /** Tiêu đề khối lỗi; thân chỉ ghi lý do để câu không lặp ý. */
+  loadErrorTitle: 'Chưa tải được lịch điểm danh',
   dayAria: (day: number, points: number, claimed: boolean) =>
     `Ngày ${day}: +${num(points)} Điểm Xanh${claimed ? ', đã nhận' : ''}`,
 } as const;
@@ -28,6 +29,15 @@ export function checkInTodayLine(s: Pick<CheckInStatusResponse, 'todayPoints' | 
   return `Hôm nay nhận ${parts.join(' · ')}${tankFull ? `. ${checkInCopy.tankFull}` : ''}`;
 }
 
+/** Số giọt nước đã là TỔNG gồm các khoản thưởng; ghi chúng trong ngoặc để khách không cộng dồn lần hai. */
+function waterIncludes(w: NonNullable<CheckInResult['water']>): string {
+  if (w.bonuses) {
+    const items = w.bonuses.filter((b) => b.seeds > 0).map((b) => `${num(b.seeds)} ${b.label}`);
+    return items.length > 0 ? ` (gồm ${items.join(', ')})` : '';
+  }
+  return w.bonusNote ? ` (${w.bonusNote.replace(/!\s*$/, '')})` : '';
+}
+
 /**
  * Câu báo sau khi bấm điểm danh: "+1.000 Điểm Xanh · +10 giọt nước". Ghép theo phần THỰC SỰ cộng ở lần gọi này;
  * bên đã xong từ trước thì không nhắc lại. Còn phần thiếu do lỗi thì nhắc bấm lại.
@@ -35,9 +45,8 @@ export function checkInTodayLine(s: Pick<CheckInStatusResponse, 'todayPoints' | 
 export function checkInSuccessText(r: CheckInResult): string {
   const parts: string[] = [];
   if (r.points && r.points.pointsEarned > 0) parts.push(`+${num(r.points.pointsEarned)} Điểm Xanh`);
-  if (r.water && r.water.seedsEarned > 0) parts.push(`+${num(r.water.seedsEarned)} giọt nước`);
+  if (r.water && r.water.seedsEarned > 0) parts.push(`+${num(r.water.seedsEarned)} giọt nước${waterIncludes(r.water)}`);
   if (r.water?.streakFrozeUsed) parts.push('đã dùng vé giữ lửa');
-  if (r.water && r.water.seedsEarned > 0 && r.water.bonusNote) parts.push(r.water.bonusNote);
   let text: string;
   if (parts.length > 0) text = parts.join(' · ');
   else if (r.points || r.water) text = 'Điểm danh thành công!';

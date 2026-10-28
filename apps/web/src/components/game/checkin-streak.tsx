@@ -1,6 +1,9 @@
-import { Check, Droplets, Flame, Snowflake } from 'lucide-react';
+import { Droplets, Flame, Snowflake } from 'lucide-react';
 import { STREAK_3_SEEDS, gameNewbieCopy, missingDrops } from '@tubutree/app-core/game-newbie';
+import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import type { GameProfile } from '@tubutree/app-core/api/game';
+import type { CheckInStatusResponse } from '@tubutree/app-core/api/loyalty';
+import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { ui } from '@/lib/guest-ui';
 import { miniBtnSecondary, miniCard, miniSectionTitle } from '@/components/loyalty/mini-surface';
 import { formatDrops } from './format';
@@ -9,9 +12,9 @@ import { isSameVNDay } from './game-utils';
 // 💧 và 🎁 trong ô ngày là phần thưởng của chuỗi (nội dung game), còn lại là icon Lucide.
 export function CheckInStreak({
   profile,
-  allDone,
-  onCheckIn,
-  checkInPending,
+  status,
+  statusError,
+  onRetryStatus,
   onBuyFreeze,
   freezePending,
   onCollectDew,
@@ -19,10 +22,11 @@ export function CheckInStreak({
   onNeedWater,
 }: {
   profile: GameProfile | undefined;
-  /** Cả Điểm Xanh và giọt nước đã xong hôm nay (trạng thái gộp); quyết định nút. Dòng giọt nước vẫn theo `lastCheckInAt`. */
-  allDone: boolean;
-  onCheckIn: () => void;
-  checkInPending: boolean;
+  /** Lịch điểm danh chung (cùng nguồn với Ưu đãi và Hạng); chưa có thì dựng tạm từ hồ sơ Vườn. */
+  status?: CheckInStatusResponse;
+  /** Lịch chung tải lỗi: một dòng + Thử lại (nút chính vẫn theo hồ sơ giọt nước nên không chặn việc tưới). */
+  statusError?: boolean;
+  onRetryStatus?: () => void;
   onBuyFreeze: () => void;
   freezePending: boolean;
   onCollectDew: () => void;
@@ -30,7 +34,7 @@ export function CheckInStreak({
   /** Thiếu nước cho vé giữ lửa: mở sheet "Kiếm nước" với số giọt còn thiếu. */
   onNeedWater: (missing: number) => void;
 }) {
-  const streakDays = profile?.streakDays ?? 0;
+  const streakDays = status?.streakDays ?? profile?.streakDays ?? 0;
   const dewCollectedToday = isSameVNDay(profile?.lastDewAt ?? null);
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
   const t = gameNewbieCopy.checkin;
@@ -39,7 +43,6 @@ export function CheckInStreak({
   const dayReward = (day: number): number | null => (day === 7 ? (profile?.streak7Seeds ?? null) : day === 3 ? STREAK_3_SEEDS : null);
   return (
     <section className={`p-4 ${miniCard}`}>
-      {/* flex-wrap: màn hẹp (320/375) thì nút xuống hàng riêng thay vì ép tiêu đề gãy hai dòng cạnh nút, như Mini App. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h2 className={`flex items-center gap-1.5 whitespace-nowrap ${ui.sectionTitle} ${miniSectionTitle}`}>
@@ -48,22 +51,18 @@ export function CheckInStreak({
           </h2>
           <p className="text-caption text-stone-600">{t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}</p>
         </div>
-        <button type="button" disabled={allDone || checkInPending} onClick={onCheckIn} className={`${miniBtnSecondary} flex-none gap-1`}>
-          {allDone && <Check className="h-4 w-4" aria-hidden="true" />}
-          {allDone ? 'Đã điểm danh' : 'Điểm danh'}
-        </button>
       </div>
       <div className="mt-3 flex gap-1.5">
         {Array.from({ length: 7 }, (_, i) => {
           const day = i + 1;
-          const done = streakDays % 7 === 0 && streakDays > 0 ? true : day <= streakDays % 7;
+          const done = status ? (status.rewards[i]?.claimed ?? false) : streakDays % 7 === 0 && streakDays > 0 ? true : day <= streakDays % 7;
           const bonus = day === 3 || day === 7;
           const reward = dayReward(day);
           return (
             <div key={day} className="flex-1 text-center">
               <div
                 data-testid="streak-cell"
-                className={`flex h-10 items-center justify-center rounded-control text-sm ${done ? 'bg-forest-600 text-stone-0' : 'bg-stone-100 text-stone-600'}`}
+                className={`flex h-8 items-center justify-center rounded-control text-sm ${done ? 'bg-forest-600 text-stone-0' : 'bg-stone-100 text-stone-600'}`}
               >
                 {done ? '💧' : bonus ? '🎁' : day}
               </div>
@@ -72,6 +71,14 @@ export function CheckInStreak({
           );
         })}
       </div>
+      {statusError && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="min-w-0 text-caption text-danger-fg">{checkInCopy.loadErrorTitle}</span>
+          <button type="button" onClick={() => onRetryStatus?.()} className={`${miniBtnSecondary} flex-none`}>
+            Thử lại
+          </button>
+        </div>
+      )}
       <p className="mt-2 text-caption text-stone-600">{t.bonusNote(STREAK_3_SEEDS, profile?.streak7Seeds ?? null)}</p>
 
       {/* Vé giữ lửa (streak-freeze) + giọt sương sáng (dew) */}
@@ -87,14 +94,14 @@ export function CheckInStreak({
             onClick={() => (freezeShort > 0 ? onNeedWater(freezeShort) : onBuyFreeze())}
             className={`${miniBtnSecondary} flex-none`}
           >
-            {freezeShort > 0 ? gameNewbieCopy.short(freezeShort) : `Mua (${formatDrops(freezeCost)})`}
+            {freezeShort > 0 ? gameMoreCopy.freezeShort(freezeShort) : `Mua (${formatDrops(freezeCost)})`}
           </button>
         </div>
         <button type="button" disabled={dewCollectedToday || dewPending} onClick={onCollectDew} className={`${miniBtnSecondary} mt-2 w-full gap-1.5`}>
           <Droplets className="h-4 w-4" aria-hidden="true" />
           {dewCollectedToday ? 'Đã hứng sương' : t.dew(profile?.dewSeeds ?? null)}
         </button>
-        <p className="mt-2 text-caption text-stone-600">Vé giữ lửa giúp chuỗi không đứt khi bạn lỡ 1 ngày. Giọt sương sáng tặng 💧 mỗi ngày.</p>
+        <p className="mt-2 text-caption text-stone-600">{gameMoreCopy.freezeHint(profile?.dewSeeds ?? null)}</p>
       </div>
     </section>
   );

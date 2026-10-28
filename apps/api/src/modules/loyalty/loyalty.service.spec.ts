@@ -937,6 +937,65 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     expect(ov.nextTier).toMatchObject({ id: 'loc', minSpending: 1_500_000, spendingToGo: 900_000 });
   });
 
+  describe('getOverview: hạn giữ hạng (tierGraceUntil)', () => {
+    const GRACE_TIERS = [
+      { id: 'mam', name: 'Mầm Xanh', sortOrder: 0, minPoints: 0, minSpending: null, pointMultiplier: 1 },
+      { id: 'loc', name: 'Lộc Biếc', sortOrder: 1, minPoints: 30_000, minSpending: 1_500_000, pointMultiplier: 1.2 },
+    ];
+    const build = (user: Record<string, unknown>) =>
+      ({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, ...user }) },
+        membershipTier: { findMany: jest.fn().mockResolvedValue(GRACE_TIERS) },
+        order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 1_100_000 } }), findMany: jest.fn().mockResolvedValue([]) },
+        returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+        externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
+        pointsTransaction: fakeLedger([]),
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      }) as unknown as PrismaService;
+
+    it('đang trong hạn giữ hạng: trả ngày hết hạn và số tiền mua còn thiếu để giữ hạng hiện tại', async () => {
+      const until = new Date(Date.now() + 10 * 864e5);
+      const ov = await new LoyaltyService(build({ tierId: 'loc', tier: GRACE_TIERS[1], tierGraceUntil: until }), makeConfig()).getOverview('u1');
+      expect(ov.tierGrace).toEqual({ until: until.toISOString(), spendingToKeep: 400_000, pointsToKeep: 30_000 });
+    });
+
+    it('số còn thiếu tính trên khung 12 tháng kết thúc ở ngày hết hạn: đơn sắp rơi khỏi khung không được tính', async () => {
+      const DAY = 864e5;
+      const until = new Date(Date.now() + 20 * DAY);
+      const orders = [
+        { total: 1_000_000, createdAt: new Date(Date.now() - 355 * DAY) }, // còn trong khung trượt từ hôm nay, nhưng rơi ra trước ngày hết hạn
+        { total: 300_000, createdAt: new Date(Date.now() - 100 * DAY) },
+      ];
+      const prisma = {
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: 'loc', tier: GRACE_TIERS[1], tierGraceUntil: until }) },
+        membershipTier: { findMany: jest.fn().mockResolvedValue(GRACE_TIERS) },
+        order: {
+          aggregate: jest.fn(async ({ where }: { where: { createdAt: { gte: Date } } }) => ({
+            _sum: { total: orders.filter((o) => o.createdAt >= where.createdAt.gte).reduce((a, o) => a + o.total, 0) },
+          })),
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+        externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
+        pointsTransaction: fakeLedger([]),
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      const svc = new LoyaltyService(prisma, makeConfig());
+      const gap = await svc.tierKeepGap('u1', GRACE_TIERS[1] as never, until);
+      expect(gap.spendingToKeep).toBe(1_200_000);
+      const ov = await svc.getOverview('u1');
+      expect(ov.tierGrace?.spendingToKeep).toBe(1_200_000);
+      expect(ov.spent12m).toBe(1_300_000);
+    });
+
+    it('không có hạn, hoặc hạn đã qua, hoặc chưa có hạng: không trả tierGrace', async () => {
+      const past = new Date(Date.now() - 864e5);
+      expect((await new LoyaltyService(build({ tierId: 'loc', tier: GRACE_TIERS[1], tierGraceUntil: null }), makeConfig()).getOverview('u1')).tierGrace).toBeNull();
+      expect((await new LoyaltyService(build({ tierId: 'loc', tier: GRACE_TIERS[1], tierGraceUntil: past }), makeConfig()).getOverview('u1')).tierGrace).toBeNull();
+      expect((await new LoyaltyService(build({ tierId: null, tier: null, tierGraceUntil: new Date(Date.now() + 864e5) }), makeConfig()).getOverview('u1')).tierGrace).toBeNull();
+    });
+  });
+
   // ENGAGE-21: trang Điểm Xanh phải giải thích được cách tích/đổi điểm từ chính SystemConfig, không hardcode ở FE.
   it('getOverview: trả tỷ lệ tích/đổi điểm từ SystemConfig và mốc chi tiêu của từng hạng', async () => {
     const values: Record<string, number> = {
@@ -1352,6 +1411,7 @@ describe('LoyaltyService.dailyCheckIn — Task 9 analytics (engagement_action)',
     };
     const prisma = {
       loyaltyCheckIn: { findFirst: jest.fn().mockResolvedValue(null) },
+      gameProfile: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
     } as unknown as PrismaService;
     const analytics = makeAnalytics();
@@ -1374,6 +1434,7 @@ describe('LoyaltyService.dailyCheckIn — Task 9 analytics (engagement_action)',
     const analytics = makeAnalytics();
     const prisma = {
       loyaltyCheckIn: { findFirst: jest.fn() },
+      gameProfile: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn(),
     } as unknown as PrismaService;
     const svc = new LoyaltyService(prisma, makeConfig(), analytics as unknown as AnalyticsEventsService);
@@ -1393,6 +1454,7 @@ describe('LoyaltyService.dailyCheckIn — Task 9 analytics (engagement_action)',
     };
     const prisma = {
       loyaltyCheckIn: { findFirst: jest.fn().mockResolvedValue(null) },
+      gameProfile: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
     } as unknown as PrismaService;
     const svc = new LoyaltyService(prisma, makeConfig()); // KHÔNG truyền analytics — @Optional()

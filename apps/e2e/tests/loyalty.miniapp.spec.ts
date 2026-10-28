@@ -27,6 +27,7 @@ interface LoyaltyState {
   points: number;
   checkedInToday: boolean;
   coupons: CouponDTO[];
+  redemptions: RedeemRewardResultDTO['redemption'][];
   /** Điểm từ đơn mới giao còn trong hạn đổi/trả — backend chưa cho đổi quà (loyalty.service lockedOrderPoints). */
   locked?: { points: number; until: string };
 }
@@ -104,7 +105,7 @@ function mockLoyalty(
   api: MockApi,
   opts: { posCreditEnabled?: boolean; locked?: LoyaltyState['locked'] } = {},
 ): LoyaltyState {
-  const s: LoyaltyState = { points: 60, checkedInToday: false, coupons: [], locked: opts.locked };
+  const s: LoyaltyState = { points: 60, checkedInToday: false, coupons: [], redemptions: [], locked: opts.locked };
   mockSession(api, makeUser({ id: 'user-loyal', fullName: 'Lê Thành Viên', referralCode: 'E2EREF', pointsBalance: 60 }));
   // Analytics tracker (services/analytics.ts) xả lô khi ẩn app / mỗi 10s: spec chạy chậm sẽ chạm POST /events.
   api.post('/events', { accepted: 1 });
@@ -114,6 +115,7 @@ function mockLoyalty(
   api.get('/me/coupons', () => s.coupons);
   api.get('/me/points/transactions', []);
   api.get('/me/loyalty/rewards', () => catalog(s));
+  api.get('/me/loyalty/rewards/mine', () => s.redemptions);
   api.get('/me/daily-check-in', () => checkInStatus(s));
   api.post('/me/daily-check-in', async () => {
     // Giữ response 400ms: cú chạm thứ 2 của double-tap rơi đúng lúc request đang bay — đó là
@@ -176,6 +178,7 @@ function mockLoyalty(
       },
       coupon,
     };
+    s.redemptions = [...s.redemptions, res.redemption];
     return res;
   });
   const card: MemberCardResponse = {
@@ -243,9 +246,10 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
 
     await expect(page.getByText('Mã LOYAL50K-E2E1 đã vào ví mã giảm giá')).toBeVisible({ timeout: 5_000 });
     await page.getByRole('button', { name: 'Xem ví mã' }).click();
-    await expect(page).toHaveURL(/\/loyalty$/);
-    await expect(page.getByText('Mã LOYAL50K-E2E1 · đơn từ 300.000đ')).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText('Tích điểm ×1 · 10 điểm Xanh')).toBeVisible();
+    await expect(page).toHaveURL(/\/rewards\/mine\?new=LOYAL50K-E2E1$/);
+    const row = page.locator('[data-redemption]').filter({ hasText: 'Voucher Giảm 50.000đ' });
+    await expect(row.getByText('Mã LOYAL50K-E2E1')).toBeVisible({ timeout: 5_000 });
+    await expect(row.getByText('Mới', { exact: true })).toBeVisible();
     expect(api.callsTo('POST', '/me/loyalty/rewards/:id/redeem')).toHaveLength(1);
   });
 

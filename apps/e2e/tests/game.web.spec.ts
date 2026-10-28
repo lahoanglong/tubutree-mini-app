@@ -129,11 +129,14 @@ test.describe('Web khách: Vườn Xanh', () => {
   });
 
   test('điểm danh: bấm đúp chỉ gửi một POST, báo kết quả và nút chuyển "Đã điểm danh"', async ({ page, api }) => {
-    mockGame(api, { checkedIn: false });
+    const state = { checkedIn: false };
+    mockGame(api, state);
+    api.get('/game/profile', () => profile({ lastCheckInAt: state.checkedIn ? new Date().toISOString() : null, lastDewAt: new Date().toISOString() }));
     await page.goto('/vuon-xanh');
-    await page.getByRole('button', { name: 'Điểm danh', exact: true }).dblclick();
+    const claim = page.getByRole('button', { name: /^(Nhận nước hôm nay|Điểm danh nhận)/ });
+    await claim.dblclick();
     await expect(page.getByRole('status').getByText('+10 giọt nước')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Đã điểm danh', exact: true })).toBeDisabled();
+    await expect(claim).toHaveCount(0);
     expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
   });
 

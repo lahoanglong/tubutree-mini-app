@@ -1,3 +1,4 @@
+import { homeCopy } from '@tubutree/app-core/home-copy';
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
@@ -191,7 +192,7 @@ describe('/uu-dai — trang Ưu đãi', () => {
   it('Mã giảm giá lỗi: thông báo có lý do và nút Thử lại', async () => {
     state.fail.add('/me/coupons');
     const c = await mount();
-    expect(region(c, 'Mã giảm giá của tôi')!.textContent).toContain('Chưa tải được mã giảm giá: Máy chủ đang bận');
+    expect(region(c, 'Mã giảm giá của tôi')!.textContent).toContain('Chưa tải được mã giảm giáMáy chủ đang bận');
     expect(byText(region(c, 'Mã giảm giá của tôi')!, 'button', 'Thử lại')).not.toBeNull();
   });
 
@@ -206,6 +207,10 @@ describe('/uu-dai — trang Ưu đãi', () => {
     const c = await mount();
     expect(c.textContent).toContain('Đăng nhập để xem ưu đãi');
     expect(c.querySelector('a[href^="/dang-nhap"]')).not.toBeNull();
+    // Giống Mini App: khách chỉ thấy lời mời đăng nhập, không có lối tắt.
+    expect(c.textContent).not.toContain(homeCopy.offers.rewardsTitle);
+    expect(c.textContent).not.toContain('Vườn Xanh');
+    expect(c.textContent).not.toContain(homeCopy.offers.myRewards);
     expect(state.calls.filter((p) => p !== '/config/public')).toEqual([]);
   });
 });

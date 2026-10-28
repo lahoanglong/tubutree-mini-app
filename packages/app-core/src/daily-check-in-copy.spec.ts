@@ -22,7 +22,12 @@ describe('checkInSuccessText', () => {
   });
   it('kèm vé giữ lửa và ghi chú mốc chuỗi', () => {
     const t = checkInSuccessText(res({ water: { ...water, streakFrozeUsed: true, bonusNote: '+5 💧 chuỗi 3 ngày!' } }));
-    expect(t).toBe('+1.000 Điểm Xanh · +10 giọt nước · đã dùng vé giữ lửa · +5 💧 chuỗi 3 ngày!');
+    expect(t).toBe('+1.000 Điểm Xanh · +10 giọt nước (+5 💧 chuỗi 3 ngày) · đã dùng vé giữ lửa');
+  });
+  it('quà lần đầu nằm trong tổng: ghi tổng trước, khoản thưởng trong ngoặc (không hiểu thành 110)', () => {
+    const t = checkInSuccessText(res({ points: null, water: { ...water, seedsEarned: 60, bonuses: [{ seeds: 50, label: 'quà điểm danh đầu tiên' }], bonusNote: '+50 💧 quà điểm danh đầu tiên!' } }));
+    expect(t).toBe('+60 giọt nước (gồm 50 quà điểm danh đầu tiên)');
+    expect(t).not.toContain('110');
   });
   it('đã xong cả hai: báo đã điểm danh, không lỗi', () => {
     expect(checkInSuccessText(res({ points: null, water: null, alreadyDone: true }))).toBe('Hôm nay bạn đã điểm danh rồi');

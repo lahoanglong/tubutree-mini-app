@@ -26,6 +26,8 @@ export interface GameProfile {
   dewSeeds?: number;
   streak7Seeds?: number;
   quizWrongSeeds?: number;
+  /** Số câu đố đã làm hôm nay (giờ VN): phân biệt "đã làm xong" với "chưa có câu" khi danh sách câu rỗng. */
+  quizAnsweredToday?: number;
   /** 💧 quà một lần của lần điểm danh đầu tiên; 0 khi đã điểm danh. */
   firstCheckinBonus?: number;
   /** 💧 cần để thu hoạch cây đang trồng, và cây kế tiếp sau khi thu hoạch (thang game.tree_target_ladder). */

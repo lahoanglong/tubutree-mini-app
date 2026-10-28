@@ -1,5 +1,6 @@
 'use client';
 
+import { COUPONS_LOAD_ERROR_TITLE } from '@tubutree/app-core/loyalty-tier-copy';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -131,7 +132,12 @@ function OffersContent() {
   let body: React.ReactNode;
   if (phase === 'loading') body = <AuthLoading />;
   else if (phase === 'unavailable') body = <SessionUnavailable />;
-  else if (!authed) body = <LoginRequired message={`${homeCopy.offers.loginTitle}. ${homeCopy.offers.loginBody}`} returnTo="/uu-dai" />;
+  else if (!authed)
+    body = (
+      <div className="flex flex-col gap-3 md:max-w-xl">
+        <LoginRequired message={`${homeCopy.offers.loginTitle}. ${homeCopy.offers.loginBody}`} returnTo="/uu-dai" />
+      </div>
+    );
   else
     body = (
       <div className="flex flex-col gap-3 md:max-w-xl">
@@ -262,7 +268,7 @@ function OffersContent() {
           {couponsQ.isLoading ? (
             <Skeleton height={64} />
           ) : couponsQ.isError ? (
-            <ErrorState variant="inline" message={`Chưa tải được mã giảm giá: ${errText(couponsQ.error)}`} onRetry={() => void couponsQ.refetch()} />
+            <ErrorState variant="inline" title={COUPONS_LOAD_ERROR_TITLE} message={errText(couponsQ.error)} onRetry={() => void couponsQ.refetch()} />
           ) : coupons.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {coupons.map((c) => (

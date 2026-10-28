@@ -1,6 +1,8 @@
 import { Brain, Lightbulb } from 'lucide-react';
+import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import type { AnswerResult, QuizItem } from '@tubutree/app-core/api/game';
 import { ui } from '@/lib/guest-ui';
+import { ErrorState } from '@/components/ui/error-state';
 import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { formatDrops } from './format';
 import { GameCard } from './game-card';
@@ -17,6 +19,9 @@ export function QuizCard({
   pending,
   onAnswer,
   onNext,
+  loadError,
+  onRetry,
+  answeredToday,
 }: {
   quiz: QuizItem[] | undefined;
   currentQuiz: QuizItem | undefined;
@@ -25,7 +30,13 @@ export function QuizCard({
   pending: boolean;
   onAnswer: (quizId: string, choice: number) => void;
   onNext: () => void;
+  /** Tải câu đố lỗi: khác với "chưa có câu" và "đã làm xong". */
+  loadError?: boolean;
+  onRetry?: () => void;
+  /** Số câu đã làm hôm nay (từ hồ sơ): danh sách câu rỗng mà đã làm ít nhất một câu = đã hoàn thành. */
+  answeredToday?: number;
 }) {
+  const t = gameMoreCopy.quiz;
   const shownReveal = currentQuiz && reveal && reveal.quizId === currentQuiz.id ? reveal : null;
   return (
     <GameCard title="Câu đố Sống Xanh hôm nay" icon={Brain}>
@@ -56,8 +67,14 @@ export function QuizCard({
             </div>
           )}
         </>
+      ) : loadError && quiz === undefined ? (
+        <ErrorState variant="inline" title={t.loadErrorTitle} message={t.loadErrorBody} onRetry={() => onRetry?.()} />
+      ) : quiz === undefined ? (
+        <p role="status" className="text-sm text-stone-600">
+          {t.loading}
+        </p>
       ) : (
-        <p className="text-sm text-stone-600">Bạn đã hoàn thành câu đố hôm nay 🎉</p>
+        <p className="text-sm text-stone-600">{quiz.length > 0 || (answeredToday ?? 0) > 0 ? t.done : t.empty}</p>
       )}
     </GameCard>
   );

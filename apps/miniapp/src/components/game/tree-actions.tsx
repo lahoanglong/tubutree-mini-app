@@ -1,5 +1,6 @@
 import { Droplets, ShowerHead, TreePine } from 'lucide-react';
-import { primaryWaterAction, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
+import { primaryWaterAction, type PrimaryWaterAction } from '@tubutree/app-core/game-primary-action';
+import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import type { GameProfile } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { Button } from '../ui/button';
@@ -7,15 +8,17 @@ import { isSameVNDay } from './game-utils';
 
 const t = vi.game.newbie.primary;
 
-export function primaryActionOf(profile: GameProfile | undefined): PrimaryWaterAction {
+export function primaryActionOf(profile: GameProfile | undefined, pointsPending?: boolean, checkInSeeds?: number): PrimaryWaterAction {
   return primaryWaterAction({
     totalSeeds: profile?.totalSeeds ?? 0,
     harvestReady: profile?.harvestReady,
     checkedInToday: isSameVNDay(profile?.lastCheckInAt ?? null),
+    pointsPending,
     dewToday: isSameVNDay(profile?.lastDewAt ?? null),
     dailyLoginSeeds: profile?.dailyLoginSeeds,
     dewSeeds: profile?.dewSeeds,
     firstCheckinBonus: profile?.firstCheckinBonus,
+    checkInSeeds,
     tankCapacity: profile?.tankCapacity,
   });
 }
@@ -26,6 +29,8 @@ export function primaryActionOf(profile: GameProfile | undefined): PrimaryWaterA
  */
 export function TreeActions({
   profile,
+  pointsPending,
+  checkInSeeds,
   pending,
   onClaim,
   onWater,
@@ -33,6 +38,10 @@ export function TreeActions({
   onEarn,
 }: {
   profile: GameProfile | undefined;
+  /** Trạng thái điểm danh gộp báo còn phần Điểm Xanh chưa nhận (chỉ true khi đã tải được trạng thái đó). */
+  pointsPending?: boolean;
+  /** `todayWater` của trạng thái điểm danh gộp (xem PrimaryWaterInput.checkInSeeds); chưa tải được thì bỏ trống. */
+  checkInSeeds?: number;
   pending: boolean;
   onClaim: (action: Extract<PrimaryWaterAction, { kind: 'claim' }>) => void;
   onWater: (drops: number) => void;
@@ -40,10 +49,12 @@ export function TreeActions({
   onHarvest: () => void;
   onEarn: () => void;
 }) {
-  const action = primaryActionOf(profile);
+  const action = primaryActionOf(profile, pointsPending, checkInSeeds);
   const label =
     action.kind === 'claim'
-      ? action.first
+      ? action.pointsOnly
+        ? gameMoreCopy.claimPoints
+        : action.first
         ? t.claimFirst(action.gain)
         : t.claim(action.gain)
       : action.kind === 'water'

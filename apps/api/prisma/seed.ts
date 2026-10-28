@@ -29,6 +29,8 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'loyalty.point_expire_months', value: 12, category: 'loyalty', description: 'Điểm hết hạn sau 12 tháng' },
   { key: 'loyalty.point_expiry_reminder_days', value: 7, category: 'loyalty', description: 'Nhắc trước khi điểm hết hạn (số ngày)' },
   { key: 'loyalty.tier_grace_days', value: 30, category: 'loyalty', description: 'Grace period giữ hạng khi rớt' },
+  { key: 'loyalty.tier_drop_notice_days', value: 14, category: 'loyalty', description: 'Báo khách trước khi hạ hạng (số ngày còn lại của hạn giữ hạng; 0 = không báo)', createOnly: true },
+  { key: 'loyalty.tier_drop_zns_template_id', value: '', category: 'loyalty', description: 'Mã mẫu ZNS báo trước khi hạ hạng (biến tier, date, need); để trống = chỉ báo trong app', createOnly: true },
   // Điểm danh hằng ngày + tích điểm tại quầy (POS) — loyalty.service. createOnly: admin chỉnh rồi thì seed không reset.
   { key: 'loyalty.checkin_points', value: [1000, 1000, 1000, 1000, 1000, 1000, 2000], category: 'loyalty', description: 'Điểm Xanh điểm danh theo ngày 1..7 của vòng 7 ngày', createOnly: true },
   { key: 'loyalty.pos_credit_enabled', value: false, category: 'loyalty', description: 'Bật tích điểm tại quầy (POS) do nhân viên nhập', createOnly: true },
@@ -868,6 +870,7 @@ export const NOTIFICATION_TEMPLATES = [
   { id: 'nt-cart-abandon', code: 'CART_ABANDONED', channel: 'INAPP', bodyTemplate: '🛒 Bạn còn {{item_count}} món trong giỏ (có {{product}})! Hoàn tất đơn ngay trước khi hết hàng nhé.' },
   { id: 'nt-voucher-expiring', code: 'VOUCHER_EXPIRING', channel: 'INAPP', bodyTemplate: '⏰ Voucher {{code}} của bạn sắp hết hạn ({{expires}}). Dùng ngay kẻo lỡ nhé!' },
   { id: 'nt-flash-starting', code: 'FLASH_STARTING', channel: 'INAPP', bodyTemplate: '⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé.' },
+  { id: 'nt-tier-drop-notice', code: 'TIER_DROP_NOTICE', channel: 'INAPP', bodyTemplate: '⚠️ Hạng {{tier}} của bạn được giữ đến {{date}}. {{need}} trước ngày đó để giữ hạng nhé 🌿' },
   { id: 'nt-points-expiring', code: 'POINTS_EXPIRING', channel: 'INAPP', bodyTemplate: '⏳ Bạn có {{points}} Điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿' },
   { id: 'nt-storefront-trending', code: 'STOREFRONT_TRENDING_PRODUCTS', channel: 'INAPP', bodyTemplate: '✨ Có {{count}} sản phẩm nổi bật (như {{sample}}) bạn chưa thêm vào gian hàng — thêm ngay để không bỏ lỡ khách quan tâm!' },
   // C-029: CTV biết kết quả công việc — đơn mới từ link của mình, hoa hồng được duyệt, lệnh rút đã chi.

@@ -223,7 +223,7 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
     await loadGardenTab();
     const today = within(tabPanel('Hôm nay'));
     expect(today.getByRole('button', { name: 'Nhận nước hôm nay' })).toBeInTheDocument();
-    expect(today.getByRole('button', { name: 'Điểm danh' })).toBeInTheDocument();
+    expect(today.getByText(/^Chuỗi \d+ ngày$/)).toBeInTheDocument();
     expect(today.getByRole('heading', { name: 'Nhiệm vụ' })).toBeInTheDocument();
     expect(today.getByRole('heading', { name: 'Câu đố Sống Xanh hôm nay' })).toBeInTheDocument();
     expect(today.getByTestId('wheel')).toBeInTheDocument();
@@ -243,13 +243,13 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
 });
 
 describe('GamePage — hành động chính nằm đầu trang (C-082)', () => {
-  it('trong tab Hôm nay: thẻ vườn → tab → nút chính → điểm danh → nhiệm vụ → quiz', async () => {
+  it('trong tab Hôm nay: thẻ vườn → tab → nút chính → thẻ chuỗi → nhiệm vụ → quiz', async () => {
     const { container } = renderPage();
     await screen.findByRole('tab', { name: 'Hôm nay' });
     const hero = screen.getByText('Sồi');
     const tabList = screen.getByRole('tablist');
     const water = screen.getByRole('button', { name: 'Nhận nước hôm nay' });
-    const checkIn = screen.getByRole('button', { name: 'Điểm danh' });
+    const checkIn = screen.getByText(/^Chuỗi \d+ ngày$/);
     const missions = screen.getByRole('heading', { name: 'Nhiệm vụ' });
     const quiz = screen.getByRole('heading', { name: 'Câu đố Sống Xanh hôm nay' });
     const order = [hero, tabList, water, checkIn, missions, quiz];
@@ -259,10 +259,10 @@ describe('GamePage — hành động chính nằm đầu trang (C-082)', () => {
     expect(container.querySelectorAll('[role="tabpanel"]')).toHaveLength(2);
   });
 
-  it('chỉ có một nút "Điểm danh" trên trang Vườn, kèm dòng nói rõ nhận giọt nước và Điểm Xanh', async () => {
+  it('chỉ có một nút điểm danh trên trang Vườn (nút chính trên cây), kèm dòng nói rõ nhận giọt nước và Điểm Xanh', async () => {
     renderPage();
     await screen.findByRole('tab', { name: 'Hôm nay' });
-    expect(screen.getAllByRole('button', { name: /Điểm danh/ })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /(Điểm danh|Nhận nước hôm nay)/ })).toHaveLength(1);
     expect(screen.getByText('Nhận giọt nước và Điểm Xanh mỗi ngày')).toBeInTheDocument();
   });
 
