@@ -60,6 +60,7 @@ export type InboxKey =
   | 'bankTransferToConfirm'
   | 'dealerTransferToConfirm'
   | 'storefrontsPending'
+  | 'accountDeletionPending'
   | 'communityReports'
   | 'productsMissingImage';
 
@@ -131,6 +132,8 @@ export class OpsInboxService {
       },
       // Cùng điều kiện với chip "Chờ duyệt" của tab Gian hàng (StorefrontAdminService.listWhere).
       { key: 'storefrontsPending', audience: 'ADMIN', count: async () => ((this.config ? await isStorefrontApprovalRequired(this.config) : true) ? p.storefront.count({ where: STOREFRONT_PENDING_APPROVAL_WHERE }) : 0) },
+      // Khách được hứa xử lý trong 3 ngày làm việc (UsersService.requestDeletion); chỉ ADMIN xử lý được (AdminAccountDeletionController).
+      { key: 'accountDeletionPending', audience: 'ADMIN', count: () => p.accountDeletionRequest.count({ where: { status: 'PENDING' } }) },
       { key: 'productsMissingImage', audience: 'ADMIN', count: () => p.product.count({ where: { isActive: true, images: { isEmpty: true } } }) },
       { key: 'merchantOverdue', audience: 'ADMIN', count: () => this.merchant.countOverdue(now) },
       { key: 'merchantProducts', audience: 'ADMIN', count: () => p.product.count({ where: PENDING_MERCHANT_PRODUCT_WHERE }) },

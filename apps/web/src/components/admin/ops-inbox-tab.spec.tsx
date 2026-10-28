@@ -183,6 +183,19 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     expect(INBOX_LABELS.dealerTransferToConfirm.title).toBe('Đơn đại lý trả trước chờ xác nhận tiền');
   });
 
+  it('thẻ yêu cầu xoá tài khoản chờ xử lý nhắc hạn 3 ngày làm việc và mở đúng khoá', async () => {
+    stub([{ key: 'accountDeletionPending', count: 2 }]);
+    const onOpen = vi.fn();
+    const r = render(<OpsInboxTab onOpen={onOpen} />);
+    mounted.push(r);
+    await flush();
+    const card = r.container.querySelector<HTMLButtonElement>('[data-inbox="accountDeletionPending"]')!;
+    expect(card.textContent).toContain('Yêu cầu xoá tài khoản chờ xử lý');
+    expect(card.textContent).toContain('Đã hứa khách xử lý trong 3 ngày làm việc');
+    click(card);
+    expect(onOpen).toHaveBeenCalledWith('accountDeletionPending');
+  });
+
   it('đơn chuyển khoản đã quá hạn ghi rõ sắp tự huỷ', async () => {
     stub([{ key: 'bankTransferToConfirm', count: 1, hoursLeft: 0 }]);
     const r = render(<OpsInboxTab onOpen={vi.fn()} />);

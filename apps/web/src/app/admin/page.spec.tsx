@@ -159,6 +159,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'bankTransferToConfirm', count: 1, hoursLeft: 6 },
           { key: 'dealerTransferToConfirm', count: 2, hoursLeft: 40 },
           { key: 'storefrontsPending', count: 2 },
+          { key: 'accountDeletionPending', count: 1 },
           { key: 'communityReports', count: 3 },
           { key: 'productsMissingImage', count: 4 },
         ],
@@ -3614,6 +3615,19 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     } finally {
       delete (window as { matchMedia?: unknown }).matchMedia;
     }
+  });
+
+  it('thẻ yêu cầu xoá tài khoản mở tab Người dùng và cuộn tới khối yêu cầu xoá', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const api = mockFetch({ '/admin/account-deletion-requests': { body: [] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    click(container.querySelector('[data-inbox="accountDeletionPending"]')!);
+    await flush();
+    expect(window.location.search).toBe('?tab=users');
+    expect(container.querySelector('#account-deletions')).not.toBeNull();
+    expect(scroll).toHaveBeenCalled();
   });
 
   it('thẻ gian hàng chờ duyệt và sản phẩm thiếu ảnh mở đúng tab', async () => {

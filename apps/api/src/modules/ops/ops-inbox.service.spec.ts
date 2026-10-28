@@ -17,7 +17,7 @@ import {
 } from '../waste-exchange/core/waste-queue-filters';
 
 const build = (
-  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean; supportUnforwarded?: number; bridge?: { state: string; since: Date }; bridgeUrl?: string } = {},
+  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean; supportUnforwarded?: number; deletions?: number; bridge?: { state: string; since: Date }; bridgeUrl?: string } = {},
 ) => {
   const zero = { count: jest.fn().mockResolvedValue(0) };
   const orderCount = jest.fn((args?: { where?: { paymentMethod?: string } }) => Promise.resolve(args?.where?.paymentMethod === 'BANK_TRANSFER' ? 0 : (over.invoices ?? 0)));
@@ -64,6 +64,7 @@ const build = (
     externalClaimAttempt: { count: extAttemptCount },
     supportConversation: { count: supportConvCount },
     supportBridgeStatus: { findUnique: bridgeFind },
+    accountDeletionRequest: { count: jest.fn().mockResolvedValue(over.deletions ?? 0) },
     $queryRaw: queryRaw,
   } as unknown as PrismaService;
   const merchant = {
@@ -318,7 +319,7 @@ describe('OpsInboxService — đổi rác (spec 13.2)', () => {
     const res = await svc.counts({ role: 'ADMIN' }, now);
 
     expect(keys(res)).toEqual([
-      'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'returnsPending', 'returnsToReceive', 'bankTransferToConfirm', 'dealerTransferToConfirm', 'storefrontsPending', 'productsMissingImage', 'merchantOverdue', 'merchantProducts',
+      'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'returnsPending', 'returnsToReceive', 'bankTransferToConfirm', 'dealerTransferToConfirm', 'storefrontsPending', 'accountDeletionPending', 'productsMissingImage', 'merchantOverdue', 'merchantProducts',
       'consignmentPending', 'merchantToSettle', 'merchantPayoutsPending', 'dealerApplications', 'dealerClaims', 'dealerClaimsToPay', 'payouts', 'payoutsToPay', 'communityReports', 'communityPending',
       'communityUnanswered', 'invoicePending', 'externalPoints', 'supportChatUnforwarded', 'zaloBridgeDown', 'wasteToCount', 'wasteUnmatched', 'wasteBlockedPending', 'wastePointsPending', 'wastePerksPending',
       'wasteTransitOverdue', 'wasteGiftOverdue', 'wasteOrderMismatch',
@@ -504,6 +505,19 @@ describe('OpsInboxService: hàng đợi đã có ở tab nhưng từng thiếu t
     const none = await withMocks({ dealerBank: 0 }).svc.counts({ role: 'ADMIN' }, now);
     expect(find(none, 'dealerTransferToConfirm')).toEqual({ key: 'dealerTransferToConfirm', count: 0 });
     expect(prisma.order.count).toHaveBeenCalled();
+  });
+
+  it('accountDeletionPending: đếm yêu cầu xoá tài khoản PENDING; chỉ ADMIN thấy, kế toán và CSKH không', async () => {
+    const { svc, prisma } = (() => {
+      const b = build({ deletions: 3 });
+      return { svc: b.svc, prisma: (b.svc as unknown as { prisma: Record<string, any> }).prisma };
+    })();
+
+    expect(find(await svc.counts({ role: 'ADMIN' }, now), 'accountDeletionPending')).toEqual({ key: 'accountDeletionPending', count: 3 });
+    expect(prisma.accountDeletionRequest.count).toHaveBeenCalledWith({ where: { status: 'PENDING' } });
+    for (const perm of ['KE_TOAN', 'CSKH', 'KHO', 'MARKETING']) {
+      expect(find(await svc.counts({ role: 'STAFF', staffPermissions: [perm] }, now), 'accountDeletionPending')).toBeUndefined();
+    }
   });
 
   it('storefrontsPending: cờ storefront.require_approval tắt thì không có hàng đợi duyệt (gian hàng đã hiện công khai), không truy vấn', async () => {

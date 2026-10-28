@@ -1742,6 +1742,7 @@ export type InboxKey =
   | 'bankTransferToConfirm'
   | 'dealerTransferToConfirm'
   | 'storefrontsPending'
+  | 'accountDeletionPending'
   | 'communityReports'
   | 'productsMissingImage';
 export interface OpsInbox {

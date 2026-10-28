@@ -44,6 +44,7 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   bankTransferToConfirm: { title: 'Đơn chuyển khoản chờ xác nhận tiền', hint: 'Kiểm tra tiền đã về chưa rồi bấm "Đã nhận tiền". Để quá hạn thì đơn tự huỷ' },
   dealerTransferToConfirm: { title: 'Đơn đại lý trả trước chờ xác nhận tiền', hint: 'Kiểm tra tiền đại lý đã về chưa rồi bấm "Đã nhận tiền". Để quá hạn thì đơn tự huỷ' },
   storefrontsPending: { title: 'Gian hàng chờ duyệt', hint: 'CTV được hẹn duyệt trong 1 ngày làm việc' },
+  accountDeletionPending: { title: 'Yêu cầu xoá tài khoản chờ xử lý', hint: 'Đã hứa khách xử lý trong 3 ngày làm việc' },
   communityReports: { title: 'Báo cáo vi phạm cộng đồng', hint: 'Khách báo bài hoặc bình luận, chưa ai xem' },
   productsMissingImage: { title: 'Sản phẩm đang bán thiếu ảnh', hint: 'Khách không thấy hình, khó chốt đơn' },
   externalPoints: { title: 'Tích điểm đơn sàn cần xử lý', hint: 'Yêu cầu cần duyệt, mã chưa ghép được đơn, đơn đã cộng điểm bị hoàn một phần hoặc đã đóng' },
@@ -69,7 +70,7 @@ const INBOX_TAB: Partial<Record<InboxKey, string>> = {
   externalPoints: 'externalClaims', supportChatUnforwarded: 'supportChat', zaloBridgeDown: 'supportChat',
   wasteToCount: 'waste', wasteUnmatched: 'waste', wasteBlockedPending: 'waste', wastePointsPending: 'waste', wastePerksPending: 'waste',
   wasteTransitOverdue: 'waste', wasteGiftOverdue: 'waste', wasteOrderMismatch: 'waste',
-  storefrontsPending: 'storefronts', productsMissingImage: 'productCategories',
+  storefrontsPending: 'storefronts', productsMissingImage: 'productCategories', accountDeletionPending: 'users',
 };
 
 const QUALITY_KEYS: ReadonlySet<InboxKey> = new Set<InboxKey>(['productsMissingImage']);

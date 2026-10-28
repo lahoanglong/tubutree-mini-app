@@ -418,6 +418,7 @@ export default function AdminPage() {
   const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter; status?: string; extra?: OrderListExtra } | null>(null);
   const [productsSeed, setProductsSeed] = useState(0);
   const [storefrontSeed, setStorefrontSeed] = useState(0);
+  const [deletionSeed, setDeletionSeed] = useState(0);
   const [communitySeed, setCommunitySeed] = useState<{ view: CommunityView; n: number } | null>(null);
   const [wasteSeed, setWasteSeed] = useState<WasteSeed | null>(null);
   const [returnsSeed, setReturnsSeed] = useState<{ filter: ReturnsFilter; n: number } | null>(null);
@@ -508,6 +509,10 @@ export default function AdminPage() {
       setTabState('orders');
       return writeUrlState('orders', '');
     }
+    if (k === 'accountDeletionPending') {
+      setDeletionSeed(Date.now());
+      return setTab('users');
+    }
     if (k === 'storefrontsPending') {
       setStorefrontSeed(Date.now());
       return setTab('storefronts');
@@ -539,6 +544,7 @@ export default function AdminPage() {
         | 'bankTransferToConfirm'
         | 'dealerTransferToConfirm'
         | 'storefrontsPending'
+        | 'accountDeletionPending'
         | 'productsMissingImage'
         | WasteInboxKey
       >,
@@ -654,7 +660,7 @@ export default function AdminPage() {
           {active === 'cashback' && <CashbackTab />}
           {active === 'posCredits' && <PosCreditsTab />}
           {active === 'users' && <UsersTab isAdmin={isAdmin} />}
-          {active === 'users' && isAdmin && <AccountDeletionPanel />}
+          {active === 'users' && isAdmin && <AccountDeletionPanel seed={deletionSeed} />}
           {active === 'reviews' && <ReviewsTab />}
           {active === 'subscriptions' && <SubscriptionsTab />}
           {active === 'waste' && <WasteTab key={wasteSeed?.n ?? 0} isAdmin={isAdmin} seed={wasteSeed} />}
