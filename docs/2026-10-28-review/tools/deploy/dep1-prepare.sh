@@ -50,6 +50,7 @@ $DC run --rm --no-deps -T --user "$(stat -c %u:%g /var/backups/tubutree)" -v /va
 echo "go-live pre-deploy exit $?"
 set -e
 grep -E 'FAIL|WARN' .golive-pre.txt | sed 's/^/  /' | head -30
-$DC run --rm --no-deps -T api pnpm exec prisma migrate status </dev/null 2>&1 | tr -d '\r' | grep -E '^[0-9]{14}_' | tee .pending-migrations | wc -l
+# migrate status thoát 1 khi còn migration chờ áp, nên không để pipefail dừng script ở đây.
+{ $DC run --rm --no-deps -T api pnpm exec prisma migrate status </dev/null 2>&1 || true; } | tr -d '\r' | { grep -E '^[0-9]{14}_' || true; } | tee .pending-migrations | wc -l
 df -h / | tail -1
 echo "== $(date '+%H:%M:%S') xong bước 1–4"
