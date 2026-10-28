@@ -815,7 +815,7 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
   } as Awaited<ReturnType<typeof getAffiliateDashboard>>;
 
   it('dashboard về trước Ví: hero giữ khung chờ, không vẽ "Có thể chuyển vào Ví 0đ" rồi đổi; Ví về mới hiện số dư', async () => {
-    let release!: (v: { walletBalance: number }) => void;
+    let release!: (v: Awaited<ReturnType<typeof getWallet>>) => void;
     vi.mocked(getWallet).mockReturnValueOnce(new Promise((r) => (release = r)) as ReturnType<typeof getWallet>);
     vi.mocked(getAffiliateDashboard).mockResolvedValue(ZERO_DASH);
     renderPage();
@@ -823,7 +823,7 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' });
     expect(await screen.findByRole('status', { name: 'Đang tải hoa hồng' })).toBeInTheDocument();
     expect(screen.queryByText('Có thể chuyển vào Ví')).toBeNull();
-    release({ walletBalance: 5_400_000 });
+    release({ walletBalance: 5_400_000 } as Awaited<ReturnType<typeof getWallet>>);
     expect(await screen.findByText('Số dư Ví Tubu')).toBeInTheDocument();
     expect(screen.queryByRole('status', { name: 'Đang tải hoa hồng' })).toBeNull();
   });
