@@ -319,6 +319,8 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     const c = await mount();
     expect(btn(c, /^Tưới hết/).disabled).toBe(false);
     expect(btn(c, POINTS)).toBeFalsy();
+    expect(c.textContent).toContain('Chưa tải được lịch điểm danh');
+    expect(btn(c, /Thử lại/)).toBeTruthy();
   });
 
   it('bấm xong cả hai phần: nút nhận biến mất ngay, không bật lại trong lúc chờ lấy lại trạng thái', async () => {
@@ -373,6 +375,27 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     expect(c.textContent).toContain('Chuỗi 2 ngày');
     const cells = Array.from(c.querySelectorAll('[data-testid="streak-cell"]')).map((x) => x.textContent);
     expect(cells).toEqual(['💧', '💧', '🎁', '4', '5', '6', '🎁']);
+  });
+
+  it('lịch theo trạng thái chung (cùng nguồn với Ưu đãi): đã nhận 3 ngày thì 3 ô đầy, hôm qua chuỗi 7 sang vòng mới thì 0 ô', async () => {
+    const rewards = (through: number) => Array.from({ length: 7 }, (_, i) => ({ day: i + 1, points: 1000, claimed: i + 1 <= through, isToday: i + 1 === through + 1 }));
+    state.data['/game/profile'] = PROFILE({ streakDays: 7 });
+    state.data['/me/daily-check-in'] = { checkedInToday: false, pointsDone: false, waterDone: false, streakDays: 3, streakDay: 4, currentCycleDay: 4, todayPoints: 1000, todayWater: 15, rewards: rewards(3) };
+    let c = await mount();
+    expect(c.textContent).toContain('Chuỗi 3 ngày');
+    expect(Array.from(c.querySelectorAll('[data-testid="streak-cell"]')).filter((x) => x.textContent === '💧')).toHaveLength(3);
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    state.data['/me/daily-check-in'] = { checkedInToday: false, pointsDone: false, waterDone: false, streakDays: 7, streakDay: 1, currentCycleDay: 1, todayPoints: 1000, todayWater: 10, rewards: rewards(0) };
+    c = await mount();
+    expect(Array.from(c.querySelectorAll('[data-testid="streak-cell"]')).filter((x) => x.textContent === '💧')).toHaveLength(0);
+  });
+
+  it('nút chính hiện số nước từ trạng thái chung (ngày 3: 15 + sương 15 = 30), cùng số với Ưu đãi', async () => {
+    state.data['/game/profile'] = PROFILE({ lastCheckInAt: new Date(Date.now() - 864e5).toISOString(), streakDays: 2, dailyLoginSeeds: 10, dewSeeds: 15 });
+    state.data['/me/daily-check-in'] = { checkedInToday: false, pointsDone: false, waterDone: false, streakDays: 2, streakDay: 3, currentCycleDay: 3, todayPoints: 1000, todayWater: 15, rewards: [] };
+    const c = await mount();
+    expect(c.textContent).toContain('Nhận nước hôm nay (+30💧)');
   });
 
   it('chuỗi chẵn bội 7: đủ 7 ô đã xong', async () => {
@@ -590,6 +613,21 @@ describe('Vườn Xanh: nhiệm vụ', () => {
 });
 
 describe('Vườn Xanh: quiz Sống Xanh', () => {
+  it('đang tải câu đố: khung chờ, không nói "câu mới vào ngày mai"', async () => {
+    state.hang.add('/game/quiz/today');
+    const c = await mount();
+    expect(c.textContent).toContain('Đang tải câu đố…');
+    expect(c.textContent).not.toContain('Câu đố mới vào ngày mai');
+  });
+
+  it('không còn câu chưa làm mà hồ sơ nói đã làm 5 câu hôm nay: "Bạn đã hoàn thành"', async () => {
+    state.data['/game/quiz/today'] = [];
+    state.data['/game/profile'] = PROFILE({ quizAnsweredToday: 5 });
+    const c = await mount();
+    expect(c.textContent).toContain('Bạn đã hoàn thành câu đố hôm nay');
+    expect(c.textContent).not.toContain('Câu đố mới vào ngày mai');
+  });
+
   it('chưa có câu nào: báo câu mới vào ngày mai, không nói đã hoàn thành', async () => {
     state.data['/game/quiz/today'] = [];
     const c = await mount();

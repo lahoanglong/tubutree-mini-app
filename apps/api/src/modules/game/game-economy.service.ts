@@ -5,17 +5,8 @@ import { SeasonPassService } from './season-pass.service';
 import { clampTankKeepingOverflow, ensureGameProfile } from './game-profile';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { vnDateKey } from '../../common/vn-time';
-import {
-  COMEBACK_GAP_DAYS_DEFAULT,
-  COMEBACK_SEEDS_DEFAULT,
-  DAILY_LOGIN_SEEDS_DEFAULT,
-  DEW_SEEDS_DEFAULT,
-  FIRST_CHECKIN_BONUS_DEFAULT,
-  configInt,
-  streak7Seeds,
-} from './game.constants';
-
-const DAY = 864e5;
+import { DEW_SEEDS_DEFAULT, configInt } from './game.constants';
+import { planCheckInSeeds, projectCheckIn } from './checkin-streak';
 
 @Injectable()
 export class GameEconomyService {
@@ -83,79 +74,24 @@ export class GameEconomyService {
       throw new BadRequestException('Hôm nay bạn đã điểm danh rồi 🌿');
     }
 
-    // Compute exact day gap using UTC+7 dayKey strings to avoid DST drift
-    const gapDays = p.lastCheckInAt
-      ? Math.round((Date.parse(today) - Date.parse(vnDateKey(p.lastCheckInAt))) / DAY)
-      : null;
-
-    // gapDays === 1 → consecutive (yesterday)
-    // gapDays === 2 → exactly one missed day → freeze-eligible
-    // gapDays > 2   → multiple missed days → reset, no freeze consumed
-
-    let streakDays: number;
-    let streakFreezes = p.streakFreezes;
-    let streakFrozeUsed = false;
-    if (gapDays === 1) {
-      streakDays = p.streakDays + 1;
-    } else if (gapDays === 2 && p.streakFreezes > 0) {
-      // lỡ đúng 1 ngày và có vé giữ lửa → tiêu 1 vé, giữ chuỗi
-      streakDays = p.streakDays + 1;
-      streakFreezes = p.streakFreezes - 1;
-      streakFrozeUsed = true;
-    } else {
-      streakDays = 1;
-    }
+    const proj = projectCheckIn(p, today);
+    const { gapDays, streakDays, usesFreeze: streakFrozeUsed } = proj;
+    const streakFreezes = streakFrozeUsed ? p.streakFreezes - 1 : p.streakFreezes;
 
     // §streak-repair: ghi nhận chuỗi vừa mất (để cho phép hồi sinh), hoặc xoá record cũ khi chuỗi được giữ.
     let brokenStreakDays = p.brokenStreakDays;
     let brokenStreakAt = p.brokenStreakAt;
-    if (gapDays === 1) {
+    if (gapDays === 1 || streakFrozeUsed) {
       brokenStreakDays = 0;
-      brokenStreakAt = null; // chuỗi tiếp tục → xoá record cũ (nếu có)
-    } else if (gapDays === 2 && p.streakFreezes > 0) {
-      brokenStreakDays = 0;
-      brokenStreakAt = null; // vé giữ lửa cứu → xoá record
-    } else {
-      // reset: nếu vừa mất một chuỗi thực sự (>1) thì ghi lại để cho hồi sinh
-      if (p.streakDays > 1) {
-        brokenStreakDays = p.streakDays;
-        brokenStreakAt = new Date();
-      }
+      brokenStreakAt = null; // chuỗi tiếp tục (hoặc vé giữ lửa cứu) → xoá record cũ (nếu có)
+    } else if (p.streakDays > 1) {
+      // reset: vừa mất một chuỗi thực sự (>1) thì ghi lại để cho hồi sinh
+      brokenStreakDays = p.streakDays;
+      brokenStreakAt = new Date();
     }
 
-    const loginSeeds = await configInt(this.config, 'game.daily_login_seeds', DAILY_LOGIN_SEEDS_DEFAULT);
-    let seeds = loginSeeds;
-    const notes: string[] = [];
-    // Các khoản này đã nằm trong `seeds` (tổng cộng vào bình): màn hình phải ghi "gồm", không cộng dồn lần hai.
-    const bonuses: Array<{ seeds: number; label: string }> = [];
-    if (streakDays % 7 === 0) {
-      const bonus = await streak7Seeds(this.config);
-      seeds += bonus;
-      notes.push(`+${bonus} 💧 chuỗi 7 ngày!`);
-      bonuses.push({ seeds: bonus, label: 'chuỗi 7 ngày' });
-    } else if (streakDays % 3 === 0) {
-      seeds += 5;
-      notes.push('+5 💧 chuỗi 3 ngày!');
-      bonuses.push({ seeds: 5, label: 'chuỗi 3 ngày' });
-    }
-    // Quà lần điểm danh đầu: chỉ một lần, vì điều kiện ghi bên dưới (lastCheckInAt null hoặc trước hôm nay) chỉ cho một
-    // request thắng, request song song còn lại ghi hụt rồi gặp "đã điểm danh hôm nay".
-    if (p.lastCheckInAt === null) {
-      const first = await configInt(this.config, 'game.first_checkin_bonus', FIRST_CHECKIN_BONUS_DEFAULT);
-      if (first > 0) {
-        seeds += first;
-        notes.push(`+${first} 💧 quà điểm danh đầu tiên!`);
-        bonuses.push({ seeds: first, label: 'quà điểm danh đầu tiên' });
-      }
-    } else if (gapDays !== null) {
-      const gapNeeded = await configInt(this.config, 'game.comeback_gap_days', COMEBACK_GAP_DAYS_DEFAULT);
-      const comeback = await configInt(this.config, 'game.comeback_seeds', COMEBACK_SEEDS_DEFAULT);
-      if (gapDays >= gapNeeded && comeback > 0) {
-        seeds += comeback;
-        notes.unshift(`Chào mừng bạn quay lại! +${comeback} 💧`);
-        bonuses.unshift({ seeds: comeback, label: 'quà quay lại' });
-      }
-    }
+    const plan = await planCheckInSeeds(this.config, { first: p.lastCheckInAt === null, gapDays, streakDays });
+    const { seeds, notes, bonuses } = plan;
     const bonusNote = notes.join(' ');
     // Idempotent write: only one concurrent call wins (race-safe backstop).
     // totalSeeds ghi ATOMIC bằng increment (không phải absolute value đọc-ngoài-tx) — chống

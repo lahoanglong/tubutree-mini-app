@@ -1382,6 +1382,7 @@ describe('LoyaltyService.dailyCheckIn — Task 9 analytics (engagement_action)',
     };
     const prisma = {
       loyaltyCheckIn: { findFirst: jest.fn().mockResolvedValue(null) },
+      gameProfile: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
     } as unknown as PrismaService;
     const analytics = makeAnalytics();
@@ -1404,6 +1405,7 @@ describe('LoyaltyService.dailyCheckIn — Task 9 analytics (engagement_action)',
     const analytics = makeAnalytics();
     const prisma = {
       loyaltyCheckIn: { findFirst: jest.fn() },
+      gameProfile: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn(),
     } as unknown as PrismaService;
     const svc = new LoyaltyService(prisma, makeConfig(), analytics as unknown as AnalyticsEventsService);
@@ -1423,6 +1425,7 @@ describe('LoyaltyService.dailyCheckIn — Task 9 analytics (engagement_action)',
     };
     const prisma = {
       loyaltyCheckIn: { findFirst: jest.fn().mockResolvedValue(null) },
+      gameProfile: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)),
     } as unknown as PrismaService;
     const svc = new LoyaltyService(prisma, makeConfig()); // KHÔNG truyền analytics — @Optional()

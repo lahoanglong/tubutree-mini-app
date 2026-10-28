@@ -352,12 +352,17 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     expect(orphans.map((p) => p.refId)).toEqual([]);
   }
 
+  /** Chuỗi điểm danh là MỘT chuỗi chung ở hồ sơ Vườn của khách (Điểm Xanh chỉ đọc ngày từ đó): dựng chuỗi hôm qua = ngày 1. */
+  const seedChain = (userId: string) =>
+    prisma.gameProfile.create({ data: { userId, lastCheckInAt: new Date(Date.now() - 86_400_000), streakDays: 1 } });
+
   it('merge: guest checked in today, target last checked in yesterday -> target can check in today and keeps its streak', async () => {
     const { guest, target } = await guestAndTarget({ pointsBalance: 10 }, { pointsBalance: 10 });
     const today = vnDay(0);
     const yesterday = vnDay(-1);
     await checkIn(guest.id, today, 10);
     await checkIn(target.id, yesterday, 10);
+    await seedChain(target.id);
 
     zaloIdForNextCall = target.zaloId!;
     await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
@@ -382,6 +387,7 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     const yesterday = vnDay(-1);
     await checkIn(guest.id, yesterday, 10);
     await checkIn(target.id, yesterday, 10);
+    await seedChain(target.id);
 
     zaloIdForNextCall = target.zaloId!;
     await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
@@ -398,6 +404,7 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     const yesterday = vnDay(-1);
     await checkIn(guest.id, older, 10);
     await checkIn(target.id, yesterday, 10);
+    await seedChain(target.id);
 
     zaloIdForNextCall = target.zaloId!;
     await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');

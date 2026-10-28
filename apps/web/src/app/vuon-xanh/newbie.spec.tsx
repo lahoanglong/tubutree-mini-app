@@ -125,6 +125,7 @@ beforeEach(() => {
     '/game/season': null,
     '/game/garden': { plots: [HOME], maxPlots: 4, nextUnlock: { slot: 2, seedCost: 100 } },
     '/me/loyalty': { pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 },
+    '/me/daily-check-in': { checkedInToday: true, pointsDone: true, waterDone: true, streakDays: 0, streakDay: 1, currentCycleDay: 1, todayPoints: 0, todayWater: 0, rewards: [] },
   };
 });
 afterEach(() => {

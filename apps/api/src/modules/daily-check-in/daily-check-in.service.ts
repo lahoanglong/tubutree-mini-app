@@ -1,10 +1,9 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { vnDateKey } from '../../common/vn-time';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { GameEconomyService } from '../game/game-economy.service';
-import { DAILY_LOGIN_SEEDS_DEFAULT, FIRST_CHECKIN_BONUS_DEFAULT, configInt } from '../game/game.constants';
+import { planCheckInSeeds, projectCheckIn } from '../game/checkin-streak';
 
 type PointsResult = Awaited<ReturnType<LoyaltyService['dailyCheckIn']>>;
 type WaterResult = Awaited<ReturnType<GameEconomyService['checkIn']>>;
@@ -35,9 +34,13 @@ export class DailyCheckInService {
     private readonly economy: GameEconomyService,
   ) {}
 
-  private async waterToday(userId: string): Promise<{ done: boolean; totalSeeds: number; first: boolean }> {
-    const p = await this.prisma.gameProfile.findUnique({ where: { userId }, select: { lastCheckInAt: true, totalSeeds: true } });
-    return { done: !!p?.lastCheckInAt && vnDateKey(p.lastCheckInAt) === vnDateKey(), totalSeeds: p?.totalSeeds ?? 0, first: !p?.lastCheckInAt };
+  private async waterToday(userId: string) {
+    const p = await this.prisma.gameProfile.findUnique({
+      where: { userId },
+      select: { lastCheckInAt: true, totalSeeds: true, streakDays: true, streakFreezes: true },
+    });
+    const proj = projectCheckIn(p);
+    return { done: proj.doneToday, totalSeeds: p?.totalSeeds ?? 0, first: !p?.lastCheckInAt, proj };
   }
 
   private async waterDoneToday(userId: string): Promise<boolean> {
@@ -91,19 +94,21 @@ export class DailyCheckInService {
   }
 
   /**
-   * Trạng thái gộp: `checkedInToday` = cả hai phần đã xong hôm nay. Dải 7 ngày và chuỗi là của Điểm Xanh.
+   * Trạng thái gộp: `checkedInToday` = cả hai phần đã xong hôm nay. Dải 7 ngày (`streakDay`) và chuỗi là MỘT chuỗi chung của hồ sơ Vườn: Điểm Xanh chỉ đọc ngày của chuỗi đó.
    * Phần đã xong trả 0 ở `todayPoints`/`todayWater` để màn hình không hứa lại phần thưởng đã nhận.
    */
   async status(userId: string) {
-    const [pointsStatus, water, dailySeeds, firstBonus, tankCap] = await Promise.all([
+    const [pointsStatus, water, tankCap] = await Promise.all([
       this.loyalty.getDailyCheckInStatus(userId),
       this.waterToday(userId),
-      configInt(this.config, 'game.daily_login_seeds', DAILY_LOGIN_SEEDS_DEFAULT),
-      configInt(this.config, 'game.first_checkin_bonus', FIRST_CHECKIN_BONUS_DEFAULT),
       this.config.get<number>('game.tank_capacity', 500),
     ]);
     const waterDone = water.done;
-    const seeds = dailySeeds + (water.first ? firstBonus : 0);
+    const { seeds } = await planCheckInSeeds(this.config, {
+      first: water.first,
+      gapDays: water.proj.gapDays,
+      streakDays: water.proj.streakDays,
+    });
     const pointsDone = pointsStatus.checkedInToday;
     return {
       ...pointsStatus,
@@ -112,8 +117,8 @@ export class DailyCheckInService {
       waterDone,
       todayPoints: pointsDone ? 0 : pointsStatus.todayPoints,
       /**
-       * Giọt nước khách THỰC SỰ nhận ở lần điểm danh kế tiếp: bình đầy thì phần tràn bị cắt (cùng luật với economy.checkIn,
-       * áp cho cả phần thưởng mốc/quà lần đầu nên không hứa quá). Gồm quà lần điểm danh đầu tiên, chưa tính thưởng mốc chuỗi. 0 khi đã xong hoặc bình đầy.
+       * Giọt nước khách THỰC SỰ nhận ở lần điểm danh kế tiếp: bình đầy thì phần tràn bị cắt (cùng luật với economy.checkIn).
+       * Gồm thưởng mốc chuỗi 3/7 ngày, quà lần đầu và quà quay lại: cùng một nguồn với số toast sau khi bấm. 0 khi đã xong hoặc bình đầy.
        */
       tankFull: water.totalSeeds >= tankCap,
       todayWater: waterDone ? 0 : Math.max(0, Math.min(seeds, tankCap - water.totalSeeds)),

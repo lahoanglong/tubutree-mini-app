@@ -154,7 +154,10 @@ export default function GamePage() {
   // Gộp điểm + nước: nút chính chỉ chuyển sang "Nhận Điểm Xanh" khi trạng thái gộp báo thật sự còn thiếu (lastCheckInAt chỉ là phần nước).
   const pointsPending = checkInStatusQ.data ? !checkInStatusQ.data.checkedInToday : false;
   const dewToday = isSameVNDay(profile?.lastDewAt ?? null);
-  const dailyGain = profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
+  // Nước của lần điểm danh hôm nay lấy từ trạng thái gộp (đã gồm thưởng mốc, quà lần đầu, quà quay lại, cắt theo bình); chưa có thì suy từ hồ sơ.
+  const status = checkInStatusQ.data;
+  const checkInSeeds = status && !status.waterDone ? status.todayWater : undefined;
+  const dailyGain = checkInSeeds ? checkInSeeds : profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
   const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
   const quizState: EarnQuizState = quiz
     ? { status: 'ready', left: quiz.filter((q) => !answeredIds.has(q.id)).length }
@@ -214,6 +217,7 @@ export default function GamePage() {
           <TreeActions
             profile={profile}
             pointsPending={pointsPending}
+            checkInSeeds={checkInSeeds}
             pending={waterM.isPending || checkInM.isPending || dewM.isPending}
             onClaim={claimDaily}
             onWater={(drops) => waterM.mutate(drops)}
@@ -227,6 +231,9 @@ export default function GamePage() {
           <div id={GAME_CHECKIN_ANCHOR}>
           <CheckInStreak
             profile={profile}
+            status={checkInStatusQ.data}
+            statusError={checkInStatusQ.isError}
+            onRetryStatus={() => void checkInStatusQ.refetch()}
             onBuyFreeze={() => freezeM.mutate()}
             freezePending={freezeM.isPending}
             onCollectDew={() => dewM.mutate()}
@@ -255,6 +262,7 @@ export default function GamePage() {
               onNext={nextQuiz}
               loadError={quizQ.isError}
               onRetry={() => void quizQ.refetch()}
+              answeredToday={profile?.quizAnsweredToday}
             />
           </div>
 

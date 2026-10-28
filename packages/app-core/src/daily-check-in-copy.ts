@@ -5,9 +5,9 @@ const num = (n: number): string => ((Number.isFinite(n) ? n : 0) + 0).toLocaleSt
 /** Chữ của khối điểm danh dùng chung cho Mini App và web (trang Điểm Xanh, Ưu đãi, Vườn Xanh). */
 export const checkInCopy = {
   title: 'Điểm danh mỗi ngày',
-  /** Vị trí trong vòng 7 ngày của Điểm Xanh. Không dùng chữ "chuỗi": Vườn Xanh có chuỗi nước riêng và hai số có thể khác nhau. */
+  /** Vị trí trong lịch 7 ngày: một chuỗi chung cho Điểm Xanh và giọt nước ở Vườn Xanh. */
   cycleDay: (day: number) => `Ngày ${day}/7`,
-  rule: 'Một lần bấm nhận cả Điểm Xanh và giọt nước. Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng.',
+  rule: 'Một lần bấm nhận cả Điểm Xanh và giọt nước. Mỗi ngày 1 lần (giờ Việt Nam). Lỡ 1 ngày mà có vé giữ lửa thì chuỗi được giữ, không thì lịch 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng.',
   /** Phần nước còn thiếu nhưng bình đã đầy: không hứa giọt nước mà bình không chứa được. */
   tankFull: 'Bình nước đang đầy nên không cộng thêm giọt nước.',
   alreadyDone: 'Hôm nay bạn đã điểm danh rồi',

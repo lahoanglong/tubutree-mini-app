@@ -360,6 +360,10 @@ describe('GamePage — điểm danh chuỗi (Vườn)', () => {
     renderPage();
     expect(await screen.findByRole('button', { name: /^Tưới hết/ })).toBeEnabled();
     expect(screen.queryByRole('button', { name: CLAIM_NAME })).not.toBeInTheDocument();
+    expect(await screen.findByText('Chưa tải được lịch điểm danh')).toBeInTheDocument();
+    mocks.getDailyCheckInStatus.mockResolvedValue(HALF);
+    fireEvent.click(screen.getAllByRole('button', { name: /Thử lại/ }).at(-1)!);
+    expect(await screen.findByRole('button', { name: 'Nhận Điểm Xanh hôm nay' })).toBeEnabled();
   });
 
   it('bấm xong cả hai phần: nút nhận biến mất ngay, không bật lại trong lúc chờ lấy lại trạng thái', async () => {
@@ -1042,6 +1046,21 @@ describe('GamePage — quiz Sống Xanh', () => {
     renderPage();
     expect(await screen.findByText('Câu đố mới vào ngày mai')).toBeInTheDocument();
     expect(screen.queryByText(/Bạn đã hoàn thành câu đố hôm nay/)).not.toBeInTheDocument();
+  });
+
+  it('đang tải câu đố: khung chờ, không báo "câu đố mới vào ngày mai" hay "đã hoàn thành"', async () => {
+    mocks.api.getTodayQuiz.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+    expect(await screen.findByText('Đang tải câu đố…')).toBeInTheDocument();
+    expect(screen.queryByText('Câu đố mới vào ngày mai')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Bạn đã hoàn thành câu đố hôm nay/)).not.toBeInTheDocument();
+  });
+
+  it('danh sách câu rỗng nhưng hồ sơ nói đã làm 5 câu hôm nay: hiện "Bạn đã hoàn thành" (API chỉ trả câu chưa làm)', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, quizAnsweredToday: 5 });
+    renderPage();
+    expect(await screen.findByText(/Bạn đã hoàn thành câu đố hôm nay/)).toBeInTheDocument();
+    expect(screen.queryByText('Câu đố mới vào ngày mai')).not.toBeInTheDocument();
   });
 
   it('tải câu đố lỗi: báo lỗi có "Thử lại", không nói đã hoàn thành', async () => {

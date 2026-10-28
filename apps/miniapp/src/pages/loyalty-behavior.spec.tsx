@@ -253,7 +253,7 @@ describe('LoyaltyPage — điểm danh Điểm Xanh', () => {
     mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
     renderPage();
     await screen.findByRole('button', { name: 'Điểm danh' });
-    const note = screen.getByText(/lỡ 1 ngày thì vòng 7 ngày bắt đầu lại/);
+    const note = screen.getByText(/không thì lịch 7 ngày bắt đầu lại/);
     expect(note.textContent).toContain('Một lần bấm nhận cả Điểm Xanh và giọt nước');
     expect(note.textContent).not.toContain('điểm danh riêng');
   });
@@ -359,7 +359,7 @@ describe('LoyaltyPage — hạn giữ hạng, lịch sử, biểu tượng hạn
   it('đang trong hạn giữ hạng: một dòng nói phải mua thêm bao nhiêu và đến ngày nào', async () => {
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, tierGrace: { until: '2026-11-07T10:00:00.000Z', spendingToKeep: 400_000, pointsToKeep: 0 } });
     renderPage();
-    expect(await screen.findByText('Giữ hạng Mầm Xanh: mua thêm 400.000đ trước 07/11/2026')).toBeInTheDocument();
+    expect(await screen.findByText('Giữ hạng Mầm Xanh: đơn giao thành công thêm 400.000đ trước 07/11/2026')).toBeInTheDocument();
   });
 
   it('không có hạn giữ hạng: không có dòng đó', async () => {

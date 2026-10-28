@@ -22,6 +22,15 @@ describe('primaryWaterAction', () => {
     expect(primaryWaterAction({ ...BASE, totalSeeds: 0, tankCapacity: 500 })).toMatchObject({ kind: 'claim', gain: 30 });
     expect(primaryWaterAction({ ...BASE, totalSeeds: 700, tankCapacity: 500 })).toMatchObject({ kind: 'claim', gain: null });
   });
+  it('checkInSeeds (todayWater của trạng thái gộp) thay số suy từ hồ sơ: ngày 3 = 15 (+15 sương), ngày 7 = 30, quà đầu đã nằm sẵn trong số', () => {
+    expect(primaryWaterAction({ ...BASE, checkInSeeds: 15 })).toMatchObject({ kind: 'claim', withDew: true, gain: 30 });
+    expect(primaryWaterAction({ ...BASE, checkInSeeds: 30, dewToday: true })).toMatchObject({ kind: 'claim', withDew: false, gain: 30 });
+    expect(primaryWaterAction({ ...BASE, checkInSeeds: 65, firstCheckinBonus: 50 })).toMatchObject({ kind: 'claim', first: true, gain: 65 });
+  });
+  it('checkInSeeds khi bình gần đầy: số API đã cắt theo chỗ trống, không vượt chỗ trống khi gộp sương; bình đầy thì không hứa', () => {
+    expect(primaryWaterAction({ ...BASE, totalSeeds: 495, tankCapacity: 500, checkInSeeds: 5 })).toMatchObject({ kind: 'claim', gain: 5 });
+    expect(primaryWaterAction({ ...BASE, totalSeeds: 500, tankCapacity: 500, checkInSeeds: 0 })).toMatchObject({ kind: 'claim', gain: null });
+  });
   it('API cũ không có số: gain null', () => {
     expect(primaryWaterAction({ ...BASE, dailyLoginSeeds: undefined })).toMatchObject({ kind: 'claim', gain: null });
   });

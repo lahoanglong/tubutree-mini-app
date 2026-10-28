@@ -2,6 +2,8 @@ import { Droplets, Flame, Snowflake } from 'lucide-react';
 import { STREAK_3_SEEDS, gameNewbieCopy, missingDrops } from '@tubutree/app-core/game-newbie';
 import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import type { GameProfile } from '@tubutree/app-core/api/game';
+import type { CheckInStatusResponse } from '@tubutree/app-core/api/loyalty';
+import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { ui } from '@/lib/guest-ui';
 import { miniBtnSecondary, miniCard, miniSectionTitle } from '@/components/loyalty/mini-surface';
 import { formatDrops } from './format';
@@ -10,6 +12,9 @@ import { isSameVNDay } from './game-utils';
 // 💧 và 🎁 trong ô ngày là phần thưởng của chuỗi (nội dung game), còn lại là icon Lucide.
 export function CheckInStreak({
   profile,
+  status,
+  statusError,
+  onRetryStatus,
   onBuyFreeze,
   freezePending,
   onCollectDew,
@@ -17,6 +22,11 @@ export function CheckInStreak({
   onNeedWater,
 }: {
   profile: GameProfile | undefined;
+  /** Lịch điểm danh chung (cùng nguồn với Ưu đãi và Hạng); chưa có thì dựng tạm từ hồ sơ Vườn. */
+  status?: CheckInStatusResponse;
+  /** Lịch chung tải lỗi: một dòng + Thử lại (nút chính vẫn theo hồ sơ giọt nước nên không chặn việc tưới). */
+  statusError?: boolean;
+  onRetryStatus?: () => void;
   onBuyFreeze: () => void;
   freezePending: boolean;
   onCollectDew: () => void;
@@ -24,7 +34,7 @@ export function CheckInStreak({
   /** Thiếu nước cho vé giữ lửa: mở sheet "Kiếm nước" với số giọt còn thiếu. */
   onNeedWater: (missing: number) => void;
 }) {
-  const streakDays = profile?.streakDays ?? 0;
+  const streakDays = status?.streakDays ?? profile?.streakDays ?? 0;
   const dewCollectedToday = isSameVNDay(profile?.lastDewAt ?? null);
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
   const t = gameNewbieCopy.checkin;
@@ -45,7 +55,7 @@ export function CheckInStreak({
       <div className="mt-3 flex gap-1.5">
         {Array.from({ length: 7 }, (_, i) => {
           const day = i + 1;
-          const done = streakDays % 7 === 0 && streakDays > 0 ? true : day <= streakDays % 7;
+          const done = status ? (status.rewards[i]?.claimed ?? false) : streakDays % 7 === 0 && streakDays > 0 ? true : day <= streakDays % 7;
           const bonus = day === 3 || day === 7;
           const reward = dayReward(day);
           return (
@@ -61,6 +71,14 @@ export function CheckInStreak({
           );
         })}
       </div>
+      {statusError && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="min-w-0 text-caption text-danger-fg">{checkInCopy.loadErrorTitle}</span>
+          <button type="button" onClick={() => onRetryStatus?.()} className={`${miniBtnSecondary} flex-none`}>
+            Thử lại
+          </button>
+        </div>
+      )}
       <p className="mt-2 text-caption text-stone-600">{t.bonusNote(STREAK_3_SEEDS, profile?.streak7Seeds ?? null)}</p>
 
       {/* Vé giữ lửa (streak-freeze) + giọt sương sáng (dew) */}

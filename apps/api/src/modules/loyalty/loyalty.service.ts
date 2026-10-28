@@ -24,6 +24,7 @@ import { hasPriorOrder } from '../../common/first-order';
 import { couponProductIds } from '../coupons/coupons.service';
 import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import { voucherCode } from '../vouchers/voucher-code';
+import { projectCheckIn, streakCycleDay } from '../game/checkin-streak';
 import { decideTier } from './tier-policy';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths, pointsExpiryFrom } from './points-expiry-date';
 import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
@@ -636,6 +637,21 @@ export class LoyaltyService {
     return parts.join('; ');
   }
 
+  /**
+   * Còn thiếu bao nhiêu để GIỮ hạng `tier` (cùng số getOverview.tierGrace báo): tiền đơn giao thành công 12 tháng với hạng
+   * xét theo chi tiêu, điểm tích 12 tháng với hạng xét theo điểm.
+   */
+  async tierKeepGap(userId: string, tier: { minSpending: number | null; minPoints: number }): Promise<{ spendingToKeep: number | null; pointsToKeep: number }> {
+    const since = new Date();
+    since.setMonth(since.getMonth() - 12);
+    const { spent12m, partialReturns } = await this.spending12m(userId, since);
+    const tierPts = await this.tierPoints(userId, since, partialReturns);
+    return {
+      spendingToKeep: tier.minSpending != null ? Math.max(0, tier.minSpending - spent12m) : null,
+      pointsToKeep: Math.max(0, tier.minPoints - tierPts),
+    };
+  }
+
   /** Multiplier điểm của hạng hiện tại (1 nếu chưa có hạng). */
   async getTierMultiplier(tierId?: string | null): Promise<number> {
     if (!tierId) return 1;
@@ -1232,47 +1248,40 @@ export class LoyaltyService {
   }
 
   /**
-   * Ngày trong vòng 7 ngày + chuỗi của LẦN ĐIỂM DANH KẾ TIẾP. Dùng chung cho status và
-   * dailyCheckIn để ô "hôm nay" hiển thị luôn đúng là ô sẽ được trả thưởng (bản WIP lệch 1 ngày:
-   * hiển thị N3 +20 nhưng bấm lại trả N4 +25; N7 🎁 nhưng trả N1).
+   * Ngày 1..7 của Điểm Xanh = ngày của chuỗi điểm danh chung (hồ sơ Vườn: lastCheckInAt/streakDays/streakFreezes). Dùng chung
+   * cho status và dailyCheckIn để ô "hôm nay" luôn đúng là ô sẽ được trả thưởng, dù Điểm Xanh hay giọt nước bấm trước.
    */
-  private nextCheckIn(
-    last: { dayKey: string; cycleDay: number; streakDays: number } | null,
-    now: Date,
-  ): { cycleDay: number; streakDays: number } {
-    const yesterday = vnDateKey(new Date(now.getTime() - DAY_MS));
-    if (last && last.dayKey === yesterday) {
-      return { cycleDay: (last.cycleDay % 7) + 1, streakDays: last.streakDays + 1 };
-    }
-    return { cycleDay: 1, streakDays: 1 };
+  private async sharedStreak(userId: string, now: Date) {
+    const profile = await this.prisma.gameProfile.findUnique({
+      where: { userId },
+      select: { lastCheckInAt: true, streakDays: true, streakFreezes: true },
+    });
+    const proj = projectCheckIn(profile, vnDateKey(now));
+    return { ...proj, cycleDay: streakCycleDay(proj.streakDays) };
   }
 
-  private lastCheckIn(userId: string) {
-    return this.prisma.loyaltyCheckIn.findFirst({ where: { userId }, orderBy: { dayKey: 'desc' } });
+  private todayCheckIn(userId: string, today: string) {
+    return this.prisma.loyaltyCheckIn.findFirst({ where: { userId, dayKey: today } });
   }
 
-  /** Trạng thái điểm danh chuỗi 7 ngày (chỉ ĐỌC; không đụng game_profiles). */
+  /** Trạng thái điểm danh chuỗi 7 ngày (chỉ ĐỌC). `streakDay` = ngày 1..7 của chuỗi chung. */
   async getDailyCheckInStatus(userId: string) {
     const now = new Date();
     const today = vnDateKey(now);
-    const [table, last] = await Promise.all([this.getCheckInPointsTable(), this.lastCheckIn(userId)]);
-    const checkedInToday = last?.dayKey === today;
-
-    let currentCycleDay: number;
-    let streakDays: number;
-    if (last && checkedInToday) {
-      currentCycleDay = Math.min(7, Math.max(1, last.cycleDay));
-      streakDays = last.streakDays;
-    } else {
-      const next = this.nextCheckIn(last, now);
-      currentCycleDay = next.cycleDay;
-      streakDays = next.streakDays - 1; // chuỗi còn sống = chuỗi hôm qua; đứt = 0
-    }
+    const [table, doneRow, streak] = await Promise.all([
+      this.getCheckInPointsTable(),
+      this.todayCheckIn(userId, today),
+      this.sharedStreak(userId, now),
+    ]);
+    const checkedInToday = !!doneRow;
+    // Điểm danh Điểm Xanh hôm nay đã xong nhưng nước chưa: ngày hôm nay vẫn là ngày của chuỗi nước kế tiếp.
+    const currentCycleDay = streak.cycleDay;
 
     return {
       checkedInToday,
-      streakDays,
+      streakDays: streak.aliveStreak,
       currentCycleDay,
+      streakDay: currentCycleDay,
       /** Điểm của ô hôm nay: đã nhận (nếu đã điểm danh) hoặc sẽ nhận khi bấm. */
       todayPoints: table[currentCycleDay - 1] ?? 0,
       rewards: table.map((points, idx) => ({
@@ -1298,12 +1307,12 @@ export class LoyaltyService {
   async dailyCheckIn(userId: string) {
     const now = new Date();
     const today = vnDateKey(now);
-    const last = await this.lastCheckIn(userId);
-    if (last?.dayKey === today) {
+    if (await this.todayCheckIn(userId, today)) {
       throw new BadRequestException(CHECKIN_ALREADY_MESSAGE);
     }
 
-    const { cycleDay, streakDays } = this.nextCheckIn(last, now);
+    const streak = await this.sharedStreak(userId, now);
+    const { cycleDay, streakDays } = streak;
     const table = await this.getCheckInPointsTable();
     const points = table[cycleDay - 1] ?? 0;
     const expiresAt = await this.pointsExpiresAt(now);

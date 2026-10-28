@@ -128,13 +128,15 @@ export interface CheckInReward {
   isToday: boolean;
 }
 
-/** GET /me/daily-check-in: trạng thái điểm danh gộp (Điểm Xanh + giọt nước) và dải 7 ngày của Điểm Xanh. */
+/** GET /me/daily-check-in: trạng thái điểm danh gộp (Điểm Xanh + giọt nước) và dải 7 ngày dùng chung với chuỗi của Vườn Xanh. */
 export interface CheckInStatusResponse {
   /** true khi cả hai phần (Điểm Xanh và giọt nước) đã xong hôm nay. */
   checkedInToday: boolean;
-  /** Chuỗi ngày liên tiếp tới hôm qua (chưa điểm danh) hoặc tới hôm nay (đã điểm danh); đứt = 0. */
+  /** Chuỗi ngày liên tiếp tới hôm qua (chưa điểm danh) hoặc tới hôm nay (đã điểm danh); đứt = 0. Cùng số với chuỗi của Vườn Xanh. */
   streakDays: number;
-  /** Ô 1..7 của hôm nay: ô SẼ được trả khi bấm (chưa điểm danh) hoặc ô vừa nhận (đã điểm danh). */
+  /** Ngày 1..7 của hôm nay trong MỘT chuỗi chung của Điểm Xanh và giọt nước: ô SẼ được trả khi bấm hoặc ô vừa nhận. Optional: API cũ chưa trả (dùng `currentCycleDay`). */
+  streakDay?: number;
+  /** Như `streakDay` (tên cũ, giữ cho client cũ). */
   currentCycleDay: number;
   /** Điểm của ô hôm nay; 0 khi phần Điểm Xanh đã xong hôm nay. Optional: API cũ chưa trả. */
   todayPoints?: number;
@@ -142,7 +144,7 @@ export interface CheckInStatusResponse {
   /** Từng phần đã xong hôm nay chưa. Optional: API cũ (chỉ Điểm Xanh) chưa trả. */
   pointsDone?: boolean;
   waterDone?: boolean;
-  /** Giọt nước của lần điểm danh kế tiếp (gồm quà lần đầu, chưa tính thưởng mốc chuỗi); 0 khi phần nước đã xong hôm nay. */
+  /** Giọt nước THỰC SỰ nhận ở lần điểm danh kế tiếp (gồm thưởng mốc chuỗi 3/7 ngày, quà lần đầu, quà quay lại; cắt theo chỗ trống của bình); 0 khi phần nước đã xong hôm nay. */
   todayWater?: number;
   /** Bình nước đã đầy (totalSeeds >= sức chứa): phần nước hôm nay sẽ không cộng thêm. Optional: API cũ chưa trả thì không hiện chữ bình đầy. */
   tankFull?: boolean;

@@ -4,7 +4,7 @@ import { DailyCheckInService } from './daily-check-in.service';
 const POINTS_RESULT = { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: 'ok' };
 const WATER_RESULT = { seedsEarned: 15, pointsEarned: 0, streakDays: 1, totalSeeds: 15, streakFrozeUsed: false, bonusNote: '' };
 
-function build(opts: { pointsDone?: boolean; waterDone?: boolean; waterCheckThrows?: boolean; totalSeeds?: number; tankCap?: number; neverCheckedIn?: boolean } = {}) {
+function build(opts: { pointsDone?: boolean; waterDone?: boolean; waterCheckThrows?: boolean; totalSeeds?: number; tankCap?: number; neverCheckedIn?: boolean; lastDaysAgo?: number; streakDays?: number; streakFreezes?: number } = {}) {
   const state = { pointsDone: !!opts.pointsDone, waterDone: !!opts.waterDone };
   const loyalty = {
     getDailyCheckInStatus: jest.fn(async () => ({ checkedInToday: state.pointsDone, streakDays: 0, currentCycleDay: 1, todayPoints: 1000, rewards: [] })),
@@ -19,8 +19,16 @@ function build(opts: { pointsDone?: boolean; waterDone?: boolean; waterCheckThro
       return WATER_RESULT;
     }),
   };
+  const profile = (lastCheckInAt: Date | null) => ({ lastCheckInAt, totalSeeds: opts.totalSeeds ?? 0, streakDays: opts.streakDays ?? 0, streakFreezes: opts.streakFreezes ?? 0 });
   const prisma = {
-    gameProfile: { findUnique: jest.fn(async () => (opts.waterCheckThrows ? Promise.reject(new Error('db down')) : opts.neverCheckedIn && !state.waterDone ? { lastCheckInAt: null, totalSeeds: opts.totalSeeds ?? 0 } : state.waterDone ? { lastCheckInAt: new Date(), totalSeeds: opts.totalSeeds ?? 0 } : { lastCheckInAt: new Date(Date.now() - 3 * 864e5), totalSeeds: opts.totalSeeds ?? 0 })) },
+    gameProfile: {
+      findUnique: jest.fn(async () => {
+        if (opts.waterCheckThrows) return Promise.reject(new Error('db down'));
+        if (opts.neverCheckedIn && !state.waterDone) return profile(null);
+        if (state.waterDone) return profile(new Date());
+        return profile(new Date(Date.now() - (opts.lastDaysAgo ?? 3) * 864e5));
+      }),
+    },
   };
   const config = { get: jest.fn(async (key: string, def: unknown) => (key === 'game.tank_capacity' && opts.tankCap != null ? opts.tankCap : def)) };
   const svc = new DailyCheckInService(prisma as never, config as never, loyalty as never, economy as never);
@@ -161,5 +169,24 @@ describe('DailyCheckInService.status', () => {
   it('giữ nguyên dải 7 ngày của Điểm Xanh', async () => {
     const s = await build().svc.status('u1');
     expect(s).toMatchObject({ currentCycleDay: 1, todayPoints: 1000, rewards: [] });
+  });
+
+  describe('todayWater cùng một nguồn với số nước thật sẽ cộng (R-10)', () => {
+    it('ngày 3 của chuỗi (hôm qua là ngày 2): gồm +5 chuỗi 3 ngày', async () => {
+      expect(await build({ lastDaysAgo: 1, streakDays: 2 }).svc.status('u1')).toMatchObject({ todayWater: 15 });
+    });
+
+    it('ngày 7 của chuỗi: gồm thưởng chuỗi 7 ngày (mặc định 20)', async () => {
+      expect(await build({ lastDaysAgo: 1, streakDays: 6 }).svc.status('u1')).toMatchObject({ todayWater: 30 });
+    });
+
+    it('quay lại sau nhiều ngày: gồm quà quay lại, chuỗi về ngày 1', async () => {
+      const s = await build({ lastDaysAgo: 10, streakDays: 5 }).svc.status('u1');
+      expect(s).toMatchObject({ waterDone: false, todayWater: 70 });
+    });
+
+    it('ngày 3 mà bình gần đầy: chỉ phần còn chứa được', async () => {
+      expect((await build({ lastDaysAgo: 1, streakDays: 2, totalSeeds: 495, tankCap: 500 }).svc.status('u1')).todayWater).toBe(5);
+    });
   });
 });
