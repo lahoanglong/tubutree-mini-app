@@ -13,12 +13,14 @@ import { useCartKey } from '@/lib/cart-key';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { useShellPathname } from '@/lib/shell-pathname';
 import { readyDesktopNav } from '@/lib/web-nav';
+import { useWasteVisible } from '@/lib/use-waste-visible';
 import tubuLogo from '@/assets/tubu-logo.png';
 
 export default function SiteHeader() {
   const { user, status } = useAuth();
   const sessionDown = useAuthPhase() === 'unavailable';
   const pathname = useShellPathname();
+  const wasteVisible = useWasteVisible();
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: status === 'authenticated' });
   const count = cartQ.data?.itemCount ?? 0;
 
@@ -87,7 +89,7 @@ export default function SiteHeader() {
       {/* Máy tính: các mục gốc và chức năng chương trình (mục chưa làm xong bị ẩn). Trang chủ là logo, Cá nhân là nút tài khoản nên không lặp. */}
       <nav aria-label="Mục chính" data-desktop-nav className="border-t border-stone-100">
         <ul className={`${PAGE_WIDE} flex h-11 items-center gap-1 overflow-x-auto text-sm`}>
-          {readyDesktopNav().map((t) => {
+          {readyDesktopNav({ wasteVisible }).map((t) => {
             const active = pathname === t.path || pathname.startsWith(`${t.path}/`);
             return (
               <li key={t.path} className="flex-none">

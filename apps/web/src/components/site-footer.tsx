@@ -7,6 +7,7 @@ import tubuLogo from '@/assets/tubu-logo.png';
 import { LEGAL_PAGES, LEGAL_SLUGS } from '@/lib/legal';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { isWebRouteReady } from '@/lib/route-map';
+import { FooterProgramLinks } from '@/components/footer-program-links';
 
 const LINK =
   'inline-flex min-h-11 items-center gap-2 text-sm font-medium text-forest-700 transition-colors hover:text-forest-800 hover:underline';
@@ -25,14 +26,6 @@ const DISCOVER_LINKS = [
   { to: '/cong-dong', label: 'Cộng đồng' },
   { to: '/cau-chuyen', label: 'Câu chuyện thương hiệu' },
   { to: '/gioi-thieu', label: 'Về Tubu Tree' },
-];
-const PROGRAM_LINKS = [
-  { to: '/vuon-xanh', label: 'Vườn Xanh' },
-  { to: '/doi-rac', label: 'Đổi rác lấy quà' },
-  { to: '/kho-qua', label: 'Kho quà' },
-  { to: '/ctv', label: 'Cộng tác viên' },
-  { to: '/dai-ly', label: 'Đại lý' },
-  { to: '/hoc-vien', label: 'Học viện' },
 ];
 
 function LinkColumn({ title, links }: { title: string; links: { to: string; label: string }[] }) {
@@ -92,7 +85,7 @@ export default async function SiteFooter() {
         </div>
 
         <LinkColumn title="Khám phá" links={DISCOVER_LINKS} />
-        <LinkColumn title="Chương trình" links={PROGRAM_LINKS} />
+        <FooterProgramLinks />
 
         <div>
           <h2 className="text-sm font-semibold text-stone-900">Hỗ trợ khách hàng</h2>

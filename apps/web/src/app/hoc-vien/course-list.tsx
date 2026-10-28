@@ -8,6 +8,8 @@ import { academyCoursesQuery } from '@tubutree/app-core/queries/academy';
 import { safeMediaUrl } from '@/components/community/post-parts';
 import { ErrorState } from '@/components/ui/error-state';
 import { ProgressBar } from '@/components/ui/progress-bar';
+import { canUseAcademy } from '@tubutree/app-core/academy-access';
+import { useAuth } from '@/lib/auth-context';
 import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { Skeleton } from '@/components/ui/skeleton';
 import { coreHttp } from '@/lib/core-http';
@@ -66,6 +68,12 @@ export function CtvOnlyNotice() {
 }
 
 function Courses() {
+  // Vai trò khách thường biết trước từ phiên: không gọi API chỉ để nhận 403.
+  const role = useAuth().user?.role;
+  return canUseAcademy(role) ? <CoursesLoaded /> : <CtvOnlyNotice />;
+}
+
+function CoursesLoaded() {
   // 403 (khách thường) không đổi khi thử lại; lỗi khác đã có nút Thử lại, nên không tự thử lại ngầm.
   const q = useQuery({ ...academyCoursesQuery(coreHttp), retry: false });
   if (q.isLoading) {

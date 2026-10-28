@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   completeLesson: vi.fn(),
   haptic: vi.fn(),
   params: {} as { courseId?: string },
+  role: 'AFFILIATE',
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -23,6 +24,9 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useParams: () => mocks.params,
   useLocation: () => ({ pathname: '/academy', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
+}));
+vi.mock('../store/auth', () => ({
+  useAuthStore: (sel: (s: { status: string; user: { role: string } }) => unknown) => sel({ status: 'authenticated', user: { role: mocks.role } }),
 }));
 vi.mock('../services/academy-api', () => ({
   fetchCourses: mocks.fetchCourses,
@@ -75,10 +79,22 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.role = 'AFFILIATE';
   mocks.params = {};
   mocks.fetchCourses.mockResolvedValue([COURSE('a'), COURSE('b', { completedCount: 3, isCompleted: true })]);
   mocks.fetchCourse.mockResolvedValue(DETAIL());
   mocks.completeLesson.mockResolvedValue({ ok: true });
+});
+
+describe('AcademyPage — khách thường', () => {
+  it('không gọi API, hiện cổng dành cho CTV với nút sang đăng ký', async () => {
+    mocks.role = 'CUSTOMER';
+    renderPage();
+    expect(await screen.findByText(viText.academy.ctvOnlyTitle)).toBeInTheDocument();
+    expect(mocks.fetchCourses).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: viText.academy.ctvOnlyCta }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/affiliate');
+  });
 });
 
 describe('AcademyPage — danh sách khoá học, hành vi giữ nguyên khi chuyển DS v2', () => {

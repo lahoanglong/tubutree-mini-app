@@ -44,6 +44,13 @@ afterEach(() => {
 });
 
 describe('/hoc-vien — danh sách khoá học', () => {
+  it('khách thường (CUSTOMER): hiện cổng CTV, không gọi API', async () => {
+    mocks.auth.user = { id: 'u2', role: 'CUSTOMER' };
+    const { container } = await mount();
+    expect(container.textContent).toContain('Học viện CTV dành cho cộng tác viên');
+    expect(mocks.get).not.toHaveBeenCalled();
+  });
+
   it('khách: cổng đăng nhập mang returnTo, không tải khoá học', async () => {
     mocks.auth.status = 'idle';
     mocks.auth.user = null;
