@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { MapPin, Plus } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -10,10 +11,12 @@ import { ui } from '@/lib/guest-ui';
 import { AddressForm } from '@/components/address-form';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { mini } from '@/components/order-mobile/mobile-ui';
-import { EmptyState as MiniEmptyState } from '@/components/mini/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { actionErrorText } from '@/lib/error-text';
+
+// Chỉ sổ địa chỉ rỗng mới cần màn trống: không kéo nó vào bundle đầu của trang.
+const MiniEmptyState = dynamic(() => import('@/components/mini/empty-state').then((m) => m.EmptyState), { ssr: false });
 
 /** ActionLink của Mini App: chữ 14px/600 xanh (Xóa đỏ), không gạch chân. */
 const LINK_MINI = 'min-w-11 justify-center max-md:text-sm max-md:no-underline max-md:text-[color:var(--color-text-brand)]';
