@@ -190,7 +190,13 @@ describe('signupConditionRows', () => {
     const rows = signupConditionRows('NEEDS_CTV', null, true);
     expect(rows.map((r) => r.state)).toEqual(['todo', 'todo', 'todo', 'info']);
     expect(rows[0]!.hint).toBe('Đăng ký ở nút bên dưới.');
+    expect(rows[1]!.hint).toBeUndefined();
     expect(rows[2]!.hint).toBe('Bạn chọn ở bước 3.');
+  });
+
+  it('mỗi dòng đạt/chưa đạt có chữ cho trình đọc màn hình; dòng thông tin thì không', () => {
+    expect(signupConditionRows('NEEDS_CTV', null, true).map((r) => r.statusLabel)).toEqual(['Chưa đạt', 'Chưa đạt', 'Chưa đạt', undefined]);
+    expect(signupConditionRows('READY', one, false).map((r) => r.statusLabel)).toEqual(['Đã đạt', 'Đã đạt', 'Đã đạt']);
   });
 
   it('CTV có gian hàng trống: đạt hai dòng đầu, chưa có sản phẩm', () => {
@@ -204,6 +210,6 @@ describe('signupConditionRows', () => {
   });
 
   it('tài khoản không làm CTV được: dòng CTV chưa đạt và không hứa lối đăng ký', () => {
-    expect(signupConditionRows('CANNOT_BE_CTV', null, false)[0]).toEqual({ text: SIGNUP_COPY.conditions[0], state: 'todo' });
+    expect(signupConditionRows('CANNOT_BE_CTV', null, false)[0]).toEqual({ text: SIGNUP_COPY.conditions[0], state: 'todo', statusLabel: 'Chưa đạt' });
   });
 });

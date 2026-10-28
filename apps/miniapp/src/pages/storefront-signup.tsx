@@ -35,6 +35,7 @@ import { Icon } from '../components/ui/icon';
 import { PriceTag } from '../components/ui/price-tag';
 import { ProgressBar } from '../components/ui/progress-bar';
 import { Skeleton } from '../components/ui/skeleton';
+import { SR_ONLY } from '../components/ui/sr-only';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Heading, Text } from '../components/ui/text';
 import { ImageUpload } from '../components/image-upload';
@@ -125,7 +126,10 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
             <li key={c.text} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
               <Icon icon={c.state === 'done' ? Check : c.state === 'info' ? Info : Circle} size="sm" tone={c.state === 'done' ? 'brand' : 'muted'} style={{ marginTop: 2, flexShrink: 0 }} />
               <div>
-                <Text variant="body-sm">{c.text}</Text>
+                <Text variant="body-sm">
+                  {c.statusLabel && <span style={SR_ONLY}>{c.statusLabel}: </span>}
+                  {c.text}
+                </Text>
                 {c.hint && <Text variant="caption" tone="tertiary" as="div">{c.hint}</Text>}
               </div>
             </li>

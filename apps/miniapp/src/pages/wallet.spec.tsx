@@ -226,6 +226,36 @@ describe('WalletPage — điều hướng', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/affiliate');
   });
 
+  it('"Hoa hồng đang chờ" cùng câu với trang CTV, có tiền chờ thì chạm mở tab Hoa hồng; bằng 0 thì không bấm được (R-60)', async () => {
+    stubLoaded();
+    renderPage();
+    expect(await screen.findByText('đơn chưa giao hoặc trong thời gian đổi/trả')).toBeInTheDocument();
+    expect(screen.queryByText('Hoa hồng chờ duyệt')).toBeNull();
+    fireEvent.click(screen.getByText('Hoa hồng đang chờ'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/affiliate?tab=commission');
+    mocks.navigate.mockClear();
+  });
+
+  it('hoa hồng đang chờ = 0 → thẻ không bấm được, không có gợi ý "Xem chi tiết"', async () => {
+    stubLoaded({ ...WALLET, commissionPending: 0 });
+    renderPage();
+    await screen.findByText('Hoa hồng đang chờ');
+    expect(screen.queryByText(/Xem chi tiết/)).toBeNull();
+    fireEvent.click(screen.getByText('Hoa hồng đang chờ'));
+    expect(mocks.navigate).not.toHaveBeenCalledWith('/affiliate?tab=commission');
+  });
+
+  it('hạng dài không đẩy vỡ thẻ Điểm Xanh: nhãn hạng bị cắt bằng dấu ba chấm trong khung của thẻ (R-139)', async () => {
+    const longTier = 'Đại Thụ Xanh Thượng Hạng Vĩnh Cửu Của Rừng Già';
+    stubLoaded();
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 48_000, tier: { name: longTier } });
+    renderPage();
+    const badge = await screen.findByText(longTier);
+    expect(badge.style.overflow).toBe('hidden');
+    expect(badge.style.textOverflow).toBe('ellipsis');
+    expect(badge.style.maxWidth).toBe('100%');
+  });
+
   it('hoa hồng đã duyệt = 0 → thẻ không bấm được, không có gợi ý "Chuyển vào Ví"', async () => {
     stubLoaded({ ...WALLET, commissionApproved: 0 });
     renderPage();

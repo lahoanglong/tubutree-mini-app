@@ -144,6 +144,36 @@ describe('/tai-khoan/vi-tubu — thẻ số dư và nguồn tiền', () => {
     expect(c.textContent).toContain('Hoa hồng có thể chuyển vào Ví');
   });
 
+  it('"Hoa hồng đang chờ" cùng câu với trang CTV; có tiền chờ thì thẻ dẫn sang tab Hoa hồng; bằng 0 hoặc /ctv chưa có thì không là link (R-60)', async () => {
+    let c = await mount();
+    expect(c.textContent).toContain('Hoa hồng đang chờ');
+    expect(c.textContent).toContain('đơn chưa giao hoặc trong thời gian đổi/trả');
+    expect(c.textContent).not.toContain('Hoa hồng chờ duyệt');
+    const a = c.querySelector<HTMLAnchorElement>('a[href="/ctv?tab=commission"]');
+    expect(a).not.toBeNull();
+    expect(a!.textContent).toContain('Xem chi tiết →');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    state.wallet = { ...WALLET, commissionPending: 0 };
+    c = await mount();
+    expect(c.querySelector('a[href="/ctv?tab=commission"]')).toBeNull();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    state.wallet = WALLET;
+    state.ctvReady = false;
+    c = await mount();
+    expect(c.querySelector('a[href="/ctv?tab=commission"]')).toBeNull();
+  });
+
+  it('hạng dài: nhãn hạng được cắt (truncate, max-w-full) để không đẩy vỡ thẻ Điểm Xanh (R-139)', async () => {
+    const longTier = 'Đại Thụ Xanh Thượng Hạng Vĩnh Cửu Của Rừng Già';
+    state.loyalty = { pointsBalance: 100, tier: { name: longTier } };
+    const c = await mount();
+    const badge = Array.from(c.querySelectorAll('span')).filter((s) => s.textContent === longTier).pop()!;
+    expect(badge.className).toContain('truncate');
+    expect(badge.className).toContain('max-w-full');
+  });
+
   it('hoa hồng đã duyệt > 0: thẻ dẫn sang /ctv kèm "Chuyển vào Ví →"; bằng 0 thì không bấm được, không gợi ý', async () => {
     let c = await mount();
     const a = c.querySelector<HTMLAnchorElement>('a[href="/ctv"]');

@@ -170,7 +170,7 @@ export default function WalletPage() {
                 hint={w.commissionPending > 0 ? 'Xem chi tiết →' : undefined}
                 onClick={w.commissionPending > 0 ? () => navigate('/affiliate?tab=commission') : undefined}
               />
-              {/* Hoa hồng APPROVED KHÔNG tự vào Ví: CTV bấm "Chuyển vào Ví" ở trang Cộng tác viên. */}
+              {/* Hoa hồng APPROVED còn ở đây là phần chưa tự vào Ví (cờ tự chuyển tắt, thiếu MST hoặc lỗi): CTV bấm "Chuyển vào Ví" ở trang Cộng tác viên. */}
               <SourceCard
                 label="Hoa hồng có thể chuyển vào Ví"
                 value={w.commissionApproved}

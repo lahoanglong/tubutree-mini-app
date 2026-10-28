@@ -154,7 +154,7 @@ export default function WalletPage() {
                 hint={ctvPendingLinkable ? 'Xem chi tiết →' : undefined}
                 href={ctvPendingLinkable ? '/ctv?tab=commission' : undefined}
               />
-              {/* Hoa hồng đã duyệt KHÔNG tự vào Ví: phải bấm "Chuyển vào Ví" ở trang Cộng tác viên, nên thẻ chỉ dẫn khi có tiền. */}
+              {/* Hoa hồng đã duyệt còn ở đây là phần chưa tự vào Ví (cờ tự chuyển tắt, thiếu MST hoặc lỗi): bấm "Chuyển vào Ví" ở trang Cộng tác viên, nên thẻ chỉ dẫn khi có tiền. */}
               <SourceCard
                 label="Hoa hồng có thể chuyển vào Ví"
                 value={w.commissionApproved}

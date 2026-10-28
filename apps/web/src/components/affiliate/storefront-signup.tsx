@@ -161,6 +161,7 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
               <li key={c.text} className="flex items-start gap-2 text-sm text-stone-900">
                 <MarkIcon className={`mt-0.5 h-4 w-4 shrink-0 ${c.state === 'done' ? 'text-forest-700' : 'text-stone-500'}`} aria-hidden="true" />
                 <span>
+                  {c.statusLabel && <span className="sr-only">{c.statusLabel}: </span>}
                   {c.text}
                   {c.hint && <span className="block text-xs text-stone-600">{c.hint}</span>}
                 </span>
