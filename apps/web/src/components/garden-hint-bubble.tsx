@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { markGardenHintSeen, shouldShowGardenHint } from './garden-hint';
 
 /** Bóng nổi trên thanh tab nên che nội dung phía sau; tự tắt sau ngần này để không cản khách đang xem trang. */
@@ -17,6 +18,7 @@ const overlayOpen = () => typeof document !== 'undefined' && document.querySelec
  */
 export function GardenHintBubble({ onGardenTab }: { onGardenTab: boolean }) {
   const [open, setOpen] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (onGardenTab) {
@@ -56,7 +58,10 @@ export function GardenHintBubble({ onGardenTab }: { onGardenTab: boolean }) {
   return (
     <div
       role="status"
-      onClick={() => setOpen(false)}
+      onClick={() => {
+        setOpen(false);
+        router.push('/vuon-xanh');
+      }}
       className="tubu-press"
       style={{
         position: 'absolute',
@@ -80,6 +85,10 @@ export function GardenHintBubble({ onGardenTab }: { onGardenTab: boolean }) {
     >
       <Link
         href="/vuon-xanh"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen(false);
+        }}
         style={{ fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-inverse)', textDecoration: 'none' }}
       >
         Trồng cây mỗi ngày, nhận quà thật

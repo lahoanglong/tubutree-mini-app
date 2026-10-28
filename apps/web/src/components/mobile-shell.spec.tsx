@@ -186,6 +186,24 @@ describe('GardenHintBubble', () => {
     expect(link.getAttribute('href')).toBe('/vuon-xanh');
     click(a.container.querySelector('[role="status"]'));
     expect(a.container.querySelector('[role="status"]')).toBeNull();
+    expect(mocks.push).toHaveBeenCalledWith('/vuon-xanh');
+  });
+
+  it('bấm vào phần đệm của bóng (không trúng chữ) cũng mở Vườn Xanh, giống Mini App', async () => {
+    mocks.push.mockClear();
+    const a = mount(<GardenHintBubble onGardenTab={false} />);
+    await settle();
+    click(a.container.querySelector('[role="status"]'));
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+    expect(mocks.push).toHaveBeenCalledWith('/vuon-xanh');
+  });
+
+  it('bấm đúng chữ không đẩy trang hai lần (Link tự điều hướng)', async () => {
+    mocks.push.mockClear();
+    const a = mount(<GardenHintBubble onGardenTab={false} />);
+    await settle();
+    click(a.container.querySelector('[role="status"] a'));
+    expect(mocks.push).not.toHaveBeenCalled();
   });
 
   it('cao ít nhất 44px để chạm tắt được (D6-16)', async () => {

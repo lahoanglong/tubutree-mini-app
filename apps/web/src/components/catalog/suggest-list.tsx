@@ -9,7 +9,7 @@ import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { SUGGEST_MIN_CHARS } from '@/lib/use-suggest';
 import { foldVietnamese, includesFolded } from '@/lib/vn-fold';
 import { ui } from '@/lib/guest-ui';
-import { Skeleton } from '@/components/mini';
+import { Skeleton } from '@/components/mini/skeleton';
 
 export const SUGGEST_LIMITS = { recent: 3, categories: 4 } as const;
 
