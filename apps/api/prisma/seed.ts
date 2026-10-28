@@ -1049,7 +1049,7 @@ async function main() {
 
   console.log('🌱 Seeding sample Coupons...');
   const COUPONS: Prisma.CouponCreateInput[] = [
-    { code: 'WELCOME30', type: 'AMOUNT', value: 30000, minOrder: 199000, startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'), perUserLimit: 1, scope: 'PUBLIC' },
+    { code: 'WELCOME30', type: 'AMOUNT', value: 30000, minOrder: 199000, startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'), perUserLimit: 1, scope: 'PUBLIC', newCustomerOnly: true },
     { code: 'FREESHIP', type: 'FREESHIP', value: 0, minOrder: 99000, startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'), perUserLimit: 3, scope: 'PUBLIC' },
     { code: 'XANH10', type: 'PERCENT', value: 10, minOrder: 250000, maxDiscount: 50000, startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'), perUserLimit: 2, scope: 'PUBLIC' },
   ];
