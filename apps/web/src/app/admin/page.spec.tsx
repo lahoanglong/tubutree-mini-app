@@ -231,7 +231,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
       ],
       meta: { total: 45, page: 1, limit: 20 },
     }),
-    listReturnRequests: async (...args: unknown[]) => (mocks.returnsArgs.push(args), {
+    listReturnRequests: async (...args: unknown[]) => (mocks.returnsArgs.push(args), args[4] === 'Nguyễn' ? { data: [], meta: { total: 0, page: 1, limit: 20 } } : {
       data: ['REQUESTED', 'APPROVED', 'REJECTED'].map((status, i) => ({
         id: `r${i}`,
         orderId: `o${i}`,
@@ -4054,5 +4054,13 @@ describe('admin/page — ô ngày giờ và ghi chú link video', () => {
     typeInto(container.querySelector('input[aria-label="Tìm yêu cầu đổi/trả theo mã đơn hoặc SĐT khách"]'), '  0944444444 ');
     await waitFor(() => mocks.returnsArgs.some((a) => a[4] === '0944444444'));
     expect(mocks.returnsArgs.at(-1)![4]).toBe('0944444444');
+  });
+
+  it('tab Đổi/Trả: tìm tên không ra gì thì câu rỗng nói rõ nguyên nhân hay gặp, không chỉ "không khớp"', async () => {
+    window.history.replaceState(null, '', '/admin?tab=returns');
+    const { container } = await mount();
+    typeInto(container.querySelector('input[aria-label="Tìm yêu cầu đổi/trả theo mã đơn hoặc SĐT khách"]'), 'Nguyễn');
+    await waitFor(() => container.textContent?.includes('Không có yêu cầu đổi/trả nào khớp "Nguyễn".') === true);
+    expect(container.textContent).toContain('Nếu tên quá phổ biến, gõ họ tên đầy đủ hơn.');
   });
 });

@@ -132,6 +132,7 @@ import { CouponList } from '@/components/admin/coupon-list';
 import { InvoiceFilterChips } from '@/components/admin/invoice-filter-chips';
 import { VnDateInput, VnDateTimeInput, datePresets } from '@/components/admin/vn-date-input';
 import { OrderExtraFilters } from '@/components/admin/order-extra-filters';
+import { searchEmptyHint } from '@/components/admin/search-empty-hint';
 import { OrderInvoicePanel, OrderReferralPanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
 import { DealerTierSelect } from '@/components/admin/dealer-tier-select';
 import { ProductPicker, useVariationLabels } from '@/components/admin/product-picker';
@@ -2161,7 +2162,7 @@ function ReturnsTab({
         {q.isError && <LoadError message="Không tải được danh sách yêu cầu đổi/trả." onRetry={() => void q.refetch()} />}
         {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách yêu cầu…</p>}
         {view.items.map((r) => <ReturnRow key={r.id} item={r} canReview={canReview} canReceive={canReceive} />)}
-        {q.data && view.items.length === 0 && <Empty>{search ? `Không có yêu cầu đổi/trả nào khớp "${search}".` : 'Không có yêu cầu đổi/trả nào.'}</Empty>}
+        {q.data && view.items.length === 0 && <Empty>{search ? `Không có yêu cầu đổi/trả nào khớp "${search}". ${searchEmptyHint(search, { phoneMasked: false }) ?? ''}`.trim() : 'Không có yêu cầu đổi/trả nào.'}</Empty>}
       </div>
       <LoadMoreButton
         hasMore={view.hasMore}

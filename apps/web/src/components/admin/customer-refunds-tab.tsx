@@ -42,6 +42,7 @@ import { CustomerRefundPaidDialog, type MarkPaidOutcome } from './customer-refun
 import { useConfirm } from './confirm-dialog';
 import { formatDateTime } from '@/lib/format-date';
 import { useDebounced } from '@/lib/use-debounced';
+import { searchEmptyHint } from './search-empty-hint';
 
 const PAGE_SIZE = 20;
 
@@ -310,7 +311,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; is
           <input
             type="search"
             aria-label="Tìm khoản hoàn theo mã đơn hoặc SĐT khách"
-            placeholder="Mã đơn hoặc SĐT khách"
+            placeholder={isAdmin ? 'Mã đơn hoặc SĐT khách' : 'Mã đơn hoặc đủ 10 số SĐT'}
             maxLength={100}
             value={searchInput}
             onChange={(e) => {
@@ -410,7 +411,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; is
         ))}
         {q.data && !outOfRange && rows.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
-            {search ? `Không có khoản hoàn nào khớp "${search}".` : CUSTOMER_REFUND_EMPTY[filter]}
+            {search ? `Không có khoản hoàn nào khớp "${search}". ${searchEmptyHint(search, { phoneMasked: !isAdmin }) ?? ''}`.trim() : CUSTOMER_REFUND_EMPTY[filter]}
           </p>
         )}
       </div>
