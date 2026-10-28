@@ -4,7 +4,6 @@ import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { History } from 'lucide-react';
 import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
 import { wasteCatalogueQuery, wasteMeQuery } from '@tubutree/app-core/queries/waste';
 import { WAREHOUSE_ONLY_TEXT, timelineCaption, wasteGuestCopy } from '@tubutree/app-core/waste-copy';
@@ -58,8 +57,7 @@ function Shell({ children, showHistory = false }: { children: ReactNode; showHis
         title="Đổi rác lấy quà"
         actions={
           showHistory ? (
-            <Link href="/doi-rac/yeu-cau" className="inline-flex min-h-11 items-center gap-1.5 rounded-control px-3 text-sm font-semibold text-forest-700 hover:bg-stone-50 md:border md:border-stone-450 md:bg-stone-0">
-              <History className="h-4 w-4" aria-hidden="true" />
+            <Link href="/doi-rac/yeu-cau" className="inline-flex min-h-11 flex-none items-center whitespace-nowrap rounded-control px-2 text-sm font-semibold text-forest-700 hover:bg-stone-50 md:border md:border-stone-450 md:bg-stone-0 md:px-3">
               Yêu cầu của tôi
             </Link>
           ) : undefined

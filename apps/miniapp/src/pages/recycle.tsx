@@ -1,5 +1,4 @@
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
-import { History } from 'lucide-react';
 import { WAREHOUSE_ONLY_TEXT, timelineCaption, wasteGuestCopy } from '@tubutree/app-core/waste-copy';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
@@ -235,7 +234,7 @@ export default function RecyclePage() {
       title="Đổi rác lấy quà"
       actions={
         showHistory ? (
-          <Button variant="ghost" icon={History} onPress={() => navigate('/recycle/requests')}>
+          <Button variant="ghost" style={{ padding: '0 8px', whiteSpace: 'nowrap', flex: '0 0 auto' }} onPress={() => navigate('/recycle/requests')}>
             Yêu cầu của tôi
           </Button>
         ) : undefined

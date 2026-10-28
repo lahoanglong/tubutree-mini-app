@@ -173,14 +173,14 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
     setNotice(null);
     setComposing(true);
   };
-  const linkBtn = `${ui.btnSecondary} flex-none px-3.5`;
+  const linkBtn = `${ui.btnSecondary} flex-none whitespace-nowrap px-3.5 max-md:px-3`;
 
   return (
     <FeedShell>
       <CommunityChannels {...(initialConfig ? { initialConfig } : {})} />
 
       <div className="flex flex-col gap-3 max-md:-mx-4 max-md:gap-2 max-md:bg-stone-0 max-md:px-3 max-md:pb-1 md:contents">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 max-md:gap-1.5">
           {isWebRouteReady('/cong-dong/xep-hang') && (
             <Link href="/cong-dong/xep-hang" aria-label="Bảng xếp hạng" className={linkBtn}>
               Xếp hạng
@@ -191,7 +191,7 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
               Sự kiện
             </Link>
           )}
-          <button type="button" onClick={openComposer} className={`${ui.btnPrimary} max-md:flex-1 md:ml-auto`}>
+          <button type="button" onClick={openComposer} className={`${ui.btnPrimary} whitespace-nowrap max-md:flex-1 max-md:px-3 md:ml-auto`}>
             <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Đăng bài
           </button>

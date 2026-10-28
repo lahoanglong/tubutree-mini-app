@@ -392,12 +392,12 @@ describe('/doi-rac thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
 });
 
 describe('/doi-rac — diện mạo Mini App ở điện thoại', () => {
-  it('nút lịch sử không chồng px-5 với px-0 nên icon History hiện đủ; thẻ điểm không viền; hàng Kho quà trơn trên nền trang', async () => {
+  it('nút lịch sử là chữ gọn không xuống dòng; thẻ điểm không viền; hàng Kho quà trơn trên nền trang', async () => {
     const c = await mount();
     const history = link(c, '/doi-rac/yeu-cau') as HTMLAnchorElement;
     expect(history.textContent).toContain('Yêu cầu của tôi');
     expect(history.className).not.toContain('px-5');
-    expect(history.querySelector('svg')).not.toBeNull();
+    expect(history.className).toContain('whitespace-nowrap');
     const pointsCard = byText(c, 'p', 'Điểm Xanh của bạn')!.parentElement!;
     expect(pointsCard.className).toContain('max-md:border-transparent');
     const rows = link(c, '/kho-qua')!.parentElement!;
