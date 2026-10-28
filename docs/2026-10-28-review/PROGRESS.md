@@ -58,7 +58,12 @@ Quyền: tạo worktree/nhánh, sửa mã, test, commit, push nhánh của đợ
 | 21:13 | Báo cáo GĐ4 đăng: https://claude.ai/artifact/BAptEQ6qkPB2iABaL2byxi. Điền số và link vào `pr/*.md`. Backlog thêm R-173..R-177 | |
 | 21:13 | Tiếp: commit tài liệu, push 9 nhánh, mở PR theo thứ tự merge, cập nhật báo cáo với link PR, hỏi chủ (điểm dừng 2) | xong |
 | 21:17 | Đã push 9 nhánh (không force), mở PR #59 docs, #60 doirac, #61 khampha, #62 muahang, #63 taikhoan, #64 diemxanh, #65 ctv, #66 quantri, #67 hieunang; cả 9 gộp được vào main. Báo cáo bản 2 có link PR. CI đang chạy | xong |
-| 21:17 | Tiếp: chờ CI, hỏi chủ (điểm dừng 2): merge PR nào, có deploy không, giữ hay bỏ màn chờ trang chủ (R-177) | đang chạy |
+| 21:17 | Tiếp: chờ CI, hỏi chủ (điểm dừng 2): merge PR nào, có deploy không, giữ hay bỏ màn chờ trang chủ (R-177) | xong |
+| 21:40 | Chủ: "merge và deploy hết đi". Hiểu là merge cả 9 PR (giữ màn chờ trang chủ, R-177), deploy Vietnix theo runbook mục 5, đẩy Mini App Testing như các đợt trước; #39 vẫn giữ | xong |
+| 21:45 | CI: #62 và #63 đỏ ở `verify`, một test web `bank-transfer-panel.spec.tsx` "Lưu mã QR". Nguyên nhân: nút lưu nạp `download-image` bằng `import()` động, lần nạp đầu trên máy CI chậm lâu hơn 5 nhịp `flush()`. Thí nghiệm: hạ chờ còn `flush(1)` thì không nạp sẵn đỏ, có nạp sẵn xanh. Sửa test bằng `beforeAll` nạp sẵn (ff62b7e7a ở muahang, gộp sang taikhoan 2e7bd0135), push, CI chạy lại | xong |
+| 21:49 | Merge #59 (296d4bd4a), #60 (fdb53f207), #61 (d96c5b7b3). #62–#67 vẫn gộp được | xong |
+| 21:52 | PROD đọc trước deploy: 1 đơn, 3 user, 236 migration; 0 hoa hồng CTV; 0 khách có hạn giữ hạng trong 14 ngày; WELCOME30 đang `newCustomerOnly=false`. Đĩa VPS trống 9,9G. Script deploy ở `tools/deploy/` (dep1 chuẩn bị + build + kiểm sharp, dep2 cửa sổ ngừng, dep3 kiểm sau) | xong |
+| 21:53 | Tiếp: chờ CI #62, #63 → merge #62–#67 → so cây main với integ → deploy → Mini App Testing | đang chạy |
 
 ## Backlog cũ còn mở
 B-130 (CI e2e chập chờn), B-147 (nhãn Mới), B-148 (ngày giao dự kiến, việc chủ), B-149 (hai đồng hồ máy chủ), B-150 (chữ quyền lợi hạng), B-151 (múi giờ Mini App), B-152 (thanh toán web 375 lệch), B-153 (gian hàng CTV web thừa chi tiết), B-154 (xem trước mã giảm 50 mã), B-155 (đĩa VPS, việc deploy, chỉ ghi nhận).
