@@ -72,6 +72,8 @@ export default function OffersPage() {
   const card = user
     ? memberCardView({ overview: loyaltyQ.data, pointsTotal: pointsSummary(loyaltyQ.data ?? user).total, vndPerPointRedeem: cfg.loyalty?.vndPerPointRedeem })
     : null;
+  // Trong hạn giữ hạng dòng dưới thẻ nói chuyện giữ hạng, nên thanh tiến độ lên hạng kế không vẽ (tránh bị đọc thành tiến độ giữ hạng).
+  const showProgress = !!loyaltyQ.data && !card?.inGrace;
   const coupons = couponsQ.data ?? [];
   useMarkExpiringSeen(couponsQ.data);
   const wasteEnabled = cfg.isLoaded && cfg.waste.enabled;
@@ -150,13 +152,13 @@ export default function OffersPage() {
               </button>
               <div style={{ marginTop: 10 }}>
                 <div
-                  role={loyaltyQ.data ? 'progressbar' : undefined}
-                  aria-label={loyaltyQ.data ? 'Tiến độ lên hạng kế' : undefined}
-                  aria-valuemin={loyaltyQ.data ? 0 : undefined}
-                  aria-valuemax={loyaltyQ.data ? 100 : undefined}
-                  aria-valuenow={loyaltyQ.data && card ? card.progressPct : undefined}
-                  aria-hidden={loyaltyQ.data ? undefined : true}
-                  style={{ height: 6, borderRadius: 'var(--radius-pill)', background: 'color-mix(in srgb, var(--color-text-inverse) 28%, transparent)', overflow: 'hidden' }}
+                  role={showProgress ? 'progressbar' : undefined}
+                  aria-label={showProgress ? 'Tiến độ lên hạng kế' : undefined}
+                  aria-valuemin={showProgress ? 0 : undefined}
+                  aria-valuemax={showProgress ? 100 : undefined}
+                  aria-valuenow={showProgress && card ? card.progressPct : undefined}
+                  aria-hidden={showProgress ? undefined : true}
+                  style={{ height: 6, borderRadius: 'var(--radius-pill)', background: 'color-mix(in srgb, var(--color-text-inverse) 28%, transparent)', overflow: 'hidden', visibility: card?.inGrace ? 'hidden' : undefined }}
                 >
                   <div style={{ height: '100%', width: `${loyaltyQ.data && card ? card.progressPct : 0}%`, background: 'var(--color-text-inverse)', borderRadius: 'var(--radius-pill)' }} />
                 </div>

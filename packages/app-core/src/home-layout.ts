@@ -269,6 +269,8 @@ export interface MemberCardView {
    * ("Giữ hạng Lộc Biếc: ... trước 07/11/2026"), vì mất hạng gấp hơn lên hạng.
    */
   toGoLine: string | null;
+  /** Đang trong hạn giữ hạng: thanh tiến độ lên hạng kế không còn đúng nghĩa (dòng bên dưới nói chuyện giữ hạng), nơi vẽ thanh nên ẩn. */
+  inGrace: boolean;
 }
 
 const moneyShort = (n: number) => (n >= 1_000_000 ? `${decimalVi(n / 1_000_000)} triệu` : `${num(n)}đ`);
@@ -303,6 +305,7 @@ export function memberCardView(opts: {
     valueLabel: vndPerPointRedeem && vndPerPointRedeem > 0 ? `≈ ${num(Math.round(pointsTotal * vndPerPointRedeem))}đ` : null,
     progressPct: overview ? tierProgressPercent(overview) : 0,
     toGoLine,
+    inGrace: graceLine != null,
   };
 }
 

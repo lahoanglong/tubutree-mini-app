@@ -164,6 +164,22 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     expect(screen.queryByText('Chưa tải được hạng và điểm')).toBeNull();
   });
 
+  it('đang trong hạn giữ hạng: dòng giữ hạng, không vẽ thanh tiến độ lên hạng kế', async () => {
+    mocks.getLoyalty.mockResolvedValue({
+      pointsBalance: 100, pointsConvertedBalance: 20, tier: { name: 'Lộc Biếc' }, nextTier: null,
+      tierGrace: { until: '2026-11-07T00:00:00.000Z', spendingToKeep: 400_000, pointsToKeep: 30_000 },
+    });
+    renderPage();
+    expect(await screen.findByText(/Giữ hạng Lộc Biếc: đơn giao thành công thêm 400.000đ trước 07\/11\/2026/)).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+  });
+
+  it('không trong hạn giữ hạng: vẫn có thanh tiến độ lên hạng kế', async () => {
+    renderPage();
+    await screen.findByText('Mầm Xanh');
+    expect(await screen.findByRole('progressbar', { name: 'Tiến độ lên hạng kế' })).toBeInTheDocument();
+  });
+
   it('mã sắp hết hạn có nhãn "Sắp hết hạn"; mã còn xa thì không', async () => {
     const soon = new Date(Date.now() + 2 * 86_400_000).toISOString();
     mocks.getCoupons.mockResolvedValue([{ ...COUPON, code: 'SOON', endAt: soon }, COUPON]);

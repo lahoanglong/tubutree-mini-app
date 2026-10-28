@@ -191,6 +191,7 @@ describe('memberCardView', () => {
       vndPerPointRedeem: 1,
     });
     expect(v.toGoLine).toBe('Giữ hạng Lộc Biếc: đơn giao thành công thêm 400.000đ trước 07/11/2026');
+    expect(v.inGrace).toBe(true);
   });
   it('giữ hạng tính theo điểm khi hạng không xét tiền mua', () => {
     const v = memberCardView({
@@ -203,6 +204,10 @@ describe('memberCardView', () => {
   it('không có hạn giữ hạng: vẫn là dòng lên hạng', () => {
     const v = memberCardView({ overview: { ...overview, tierGrace: null } as LoyaltyOverview, pointsTotal: 45_400, vndPerPointRedeem: 1 });
     expect(v.toGoLine).toBe('Còn 18,3 triệu mua hàng lên Đại Thụ');
+    expect(v.inGrace).toBe(false);
+  });
+  it('chưa có tổng quan thì không ở trong hạn giữ hạng', () => {
+    expect(memberCardView({ overview: undefined, pointsTotal: 0, vndPerPointRedeem: undefined }).inGrace).toBe(false);
   });
 });
 
