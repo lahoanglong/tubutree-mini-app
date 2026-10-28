@@ -11,6 +11,7 @@ type Call = { method: string; path: string; body?: unknown; query?: Record<strin
 
 const m = vi.hoisted(() => ({
   phase: 'authenticated' as string,
+  push: vi.fn(),
   role: 'STAFF' as string | null,
   calls: [] as Call[],
   payroll: null as null | ((q: Record<string, unknown>) => unknown),
@@ -20,6 +21,7 @@ const m = vi.hoisted(() => ({
   put: null as null | (() => unknown),
 }));
 
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: m.push }) }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => m.phase }));
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => ({ retrySession: vi.fn(), user: m.role ? { role: m.role } : null }),
@@ -132,7 +134,8 @@ describe('khung trang /nhan-vien/bang-luong', () => {
     m.role = 'CUSTOMER';
     m.calls = [];
     await mount();
-    expect(text()).toContain('Trang dành cho nhân viên.');
+    expect(text()).toContain('Trang dành cho nhân viên');
+    expect(text()).toContain('Liên hệ quản trị để được cấp quyền.');
     expect(h1s()).toEqual(['Lương của tôi']);
     expect(m.calls).toEqual([]);
   });

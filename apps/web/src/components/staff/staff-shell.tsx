@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -10,6 +11,7 @@ import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import BackLink from '@/components/back-link';
 import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/mini/empty-state';
 import { loadErrorText } from '@/lib/error-text';
 
 /** Khung chung của màn nhân sự: mỗi nhánh render có đúng một h1. */
@@ -34,17 +36,16 @@ export const errText = loadErrorText;
 export function StaffGate({
   title,
   loginMessage,
-  deniedMessage,
   returnTo,
   children,
 }: {
   title: string;
   loginMessage: string;
-  deniedMessage: string;
   returnTo: string;
   children: React.ReactNode;
 }) {
   const phase = useAuthPhase();
+  const router = useRouter();
   const { user } = useAuth();
   const role = user?.role;
 
@@ -72,12 +73,13 @@ export function StaffGate({
   if (role !== 'STAFF' && role !== 'ADMIN') {
     return (
       <StaffShell title={title}>
-        <div className="py-10 text-center">
-          <p className="text-stone-700">{deniedMessage}</p>
-          <Link href="/tai-khoan" className={`${ui.btnPrimary} mt-4`}>
-            Về Cá nhân
-          </Link>
-        </div>
+        <EmptyState
+          art="leaf"
+          heading="Trang dành cho nhân viên"
+          body="Tài khoản này chưa có quyền nhân viên. Liên hệ quản trị để được cấp quyền."
+          ctaLabel="Về Cá nhân"
+          onCta={() => router.push('/tai-khoan')}
+        />
       </StaffShell>
     );
   }

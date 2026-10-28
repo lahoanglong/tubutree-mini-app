@@ -175,9 +175,9 @@ export function StaffHub() {
           <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
           Đăng ký ca
         </button>
-        <button type="button" disabled={copyM.isPending} onClick={() => { clear(); copyM.mutate(); }} className={`${skin.btnSecondary} min-w-[10rem] flex-1`}>
+        <button type="button" aria-label="Chép tuần trước" disabled={copyM.isPending} onClick={() => { clear(); copyM.mutate(); }} className={`${skin.btnSecondary} min-w-[10rem] flex-1`}>
           <Copy className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          Chép tuần trước
+          Chép tuần
         </button>
       </div>
 
@@ -190,11 +190,18 @@ export function StaffHub() {
             const dayName = `${dowLabel(dk)} ${shortDayLabel(dk)}`;
             const shifts = byDay[dk] ?? [];
             return (
-              <section key={dk} className={`p-3 ${skin.card}`}>
+              <section key={dk} className={`p-3 ${skin.card}${dk === todayKey ? ' border border-forest-600' : ''}`}>
                 <div className="mb-1 flex items-center justify-between gap-2">
-                  <h2 className={skin.cardTitle}>
-                    {dowLabel(dk)} · {shortDayLabel(dk)}
-                  </h2>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <h2 className={skin.cardTitle}>
+                      {dowLabel(dk)} · {shortDayLabel(dk)}
+                    </h2>
+                    {dk === todayKey && (
+                      <Badge tone="brand" size="sm">
+                        Hôm nay
+                      </Badge>
+                    )}
+                  </div>
                   {dk >= todayKey && (
                     <button type="button" aria-label={`Thêm ca ${dayName}`} onClick={() => openAdd(dk)} className={`${rowBtn} text-forest-600`}>
                       <Plus className="mr-1 h-4 w-4" aria-hidden="true" />

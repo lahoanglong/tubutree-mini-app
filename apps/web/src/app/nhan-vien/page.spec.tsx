@@ -10,6 +10,7 @@ type Call = { method: string; path: string; body?: unknown; query?: Record<strin
 
 const m = vi.hoisted(() => ({
   phase: 'authenticated' as string,
+  push: vi.fn(),
   role: 'STAFF' as string | null,
   calls: [] as Call[],
   data: {} as Record<string, unknown>,
@@ -18,6 +19,7 @@ const m = vi.hoisted(() => ({
   post: {} as Record<string, () => unknown>,
 }));
 
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: m.push }) }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => m.phase }));
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => ({ retrySession: vi.fn(), user: m.role ? { role: m.role } : null }),
@@ -173,9 +175,18 @@ describe('khung trang /nhan-vien', () => {
   it('không phải nhân viên: báo không có quyền, vẫn đúng một h1, không gọi API', async () => {
     m.role = 'CUSTOMER';
     await mount();
-    expect(text()).toContain('Trang dành cho nhân viên. Liên hệ quản trị để được cấp quyền.');
+    expect(text()).toContain('Trang dành cho nhân viên');
+    expect(text()).toContain('Tài khoản này chưa có quyền nhân viên. Liên hệ quản trị để được cấp quyền.');
     expect(h1s()).toEqual(['Ca làm của tôi']);
     expect(m.calls).toEqual([]);
+  });
+
+  it('không phải nhân viên: nút "Về Cá nhân" đưa về /tai-khoan (giống Mini App)', async () => {
+    m.role = 'CUSTOMER';
+    m.push.mockClear();
+    const container = await mount();
+    click(byText(container, 'button', 'Về Cá nhân'));
+    expect(m.push).toHaveBeenCalledWith('/tai-khoan');
   });
 
   it('ADMIN cũng vào được trang nhân viên', async () => {
@@ -258,6 +269,19 @@ describe('lịch tuần', () => {
     }
     expect(allBtn(/^Thêm ca /)).toHaveLength(5);
     expect(text().split('Chưa đăng ký ca.').length - 1).toBe(3);
+  });
+
+  it('thẻ ngày hôm nay (T4 · 11/03) có nhãn "Hôm nay" và viền nổi; các ngày khác thì không', async () => {
+    await mount();
+    const sections = Array.from(document.querySelectorAll('section')).filter((s) => /^(T\d|CN) · /.test(s.querySelector('h2')?.textContent ?? ''));
+    const dayOf = (label: string) => sections.find((s) => s.querySelector('h2')!.textContent === label)!;
+    const today = dayOf('T4 · 11/03');
+    expect(today.textContent).toContain('Hôm nay');
+    expect(today.className).toContain('border-forest-600');
+    const other = dayOf('T5 · 12/03');
+    expect(other.textContent).not.toContain('Hôm nay');
+    expect(other.className).not.toContain('border-forest-600');
+    expect(sections.filter((s) => s.textContent!.includes('Hôm nay'))).toHaveLength(1);
   });
 
   it('mỗi ngày là h2; hai nút chuyển tuần có tên và đổi đúng tuần truy vấn', async () => {

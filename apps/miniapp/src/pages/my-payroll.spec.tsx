@@ -9,13 +9,14 @@ const mocks = vi.hoisted(() => ({
   updateBank: vi.fn(),
   getHistory: vi.fn(),
   openSnackbar: vi.fn(),
+  navigate: vi.fn(),
   role: 'STAFF' as string,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) => (visible ? <div>{children}</div> : null),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mocks.navigate,
   useLocation: () => ({ pathname: '/my-payroll', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
@@ -125,6 +126,8 @@ describe('Lương của tôi theo DS v2 (C-076, C-114)', () => {
     expect(screen.getByText('Trang dành cho nhân viên')).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Lương của tôi']);
     expect(mocks.getMyPayroll).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Về Cá nhân' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/profile');
   });
 
   it('hiện thực nhận, giờ công, đơn giá, lương gộp, phạt, trạng thái đúng như số máy chủ trả về', async () => {

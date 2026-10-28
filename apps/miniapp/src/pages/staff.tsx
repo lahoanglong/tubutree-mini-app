@@ -505,11 +505,18 @@ function StaffHub() {
           dayKeys.map((dk) => {
             const dayName = `${dowLabel(dk)} ${shortDayLabel(dk)}`;
             return (
-              <Card key={dk}>
+              <Card key={dk} style={dk === todayKey ? { border: '1.5px solid var(--color-action-primary-bg)' } : undefined}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <Heading variant="title-sm" as="h2">
-                    {dowLabel(dk)} · {shortDayLabel(dk)}
-                  </Heading>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
+                    <Heading variant="title-sm" as="h2">
+                      {dowLabel(dk)} · {shortDayLabel(dk)}
+                    </Heading>
+                    {dk === todayKey && (
+                      <Badge tone="brand" size="sm">
+                        Hôm nay
+                      </Badge>
+                    )}
+                  </div>
                   {dk >= todayKey && (
                     <Button variant="ghost" icon={Plus} aria-label={`Thêm ca ${dayName}`} onPress={() => openAdd(dk)}>
                       Thêm
