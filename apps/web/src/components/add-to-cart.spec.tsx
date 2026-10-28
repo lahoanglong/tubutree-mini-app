@@ -577,3 +577,46 @@ describe('AddToCart — Mua ngay', () => {
     });
   });
 });
+
+describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () => {
+  const realMatchMedia = window.matchMedia;
+  beforeEach(() => {
+    window.matchMedia = ((q: string) => ({ matches: q.includes('max-width: 767px'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as never;
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+  });
+  afterEach(() => {
+    window.matchMedia = realMatchMedia;
+  });
+  const sheet = () => document.body.querySelector('[role="dialog"]') as HTMLElement | null;
+
+  it('Thêm vào giỏ mở bảng chọn, chọn 500ml rồi xác nhận mới thêm giỏ', async () => {
+    const { container } = mount();
+    await flush();
+    click(addButton(container));
+    await flush();
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+    expect(sheet()).not.toBeNull();
+    click(byText(sheet()!, 'button', '500ml'));
+    click(byText(sheet()!, 'button', /^Thêm vào giỏ · /));
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v2', 1);
+  });
+
+  it('Mua ngay mở bảng chọn với nhãn Mua ngay', async () => {
+    const { container } = mount();
+    await flush();
+    click(byText(container, 'button', /^Mua ngay/));
+    await flush();
+    expect(byText(sheet()!, 'button', /^Mua ngay · /)).toBeTruthy();
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+  });
+
+  it('sản phẩm 1 phân loại thêm thẳng, không bảng chọn', async () => {
+    const { container } = mount([VARIATIONS[0]!]);
+    await flush();
+    click(addButton(container));
+    await flush();
+    expect(sheet()).toBeNull();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1);
+  });
+});

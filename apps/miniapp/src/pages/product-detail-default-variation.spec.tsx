@@ -67,7 +67,7 @@ function renderPdp(state?: { variationId?: string; pinnedVariationId?: string })
   );
 }
 
-const chip = (name: string) => screen.getByText(name).closest('[role="button"]') as HTMLElement;
+const chip = (name: string) => screen.getAllByText(name)[0]!.closest('[role="button"]') as HTMLElement;
 
 describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với thẻ (đại diện 500g 150.000đ, 1kg 300.000đ)', () => {
   beforeEach(() => {
@@ -149,11 +149,40 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
     renderPdp();
     await screen.findByText('500g');
     fireEvent.click(await screen.findByRole('button', { name: /Thêm vào giỏ/ }));
+    const confirm = await screen.findAllByRole('button', { name: /Thêm vào giỏ · / });
+    fireEvent.click(confirm[confirm.length - 1]!);
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v-500', 1));
     release([flash('v-1kg', 100_000, 300_000)]);
     await new Promise((r) => setTimeout(r, 30));
     expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
     expect(chip('1kg')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('R-6: từ 2 phân loại, Thêm vào giỏ mở bảng chọn, chọn 1kg rồi xác nhận mới thêm giỏ', async () => {
+    mocks.authStatus = 'authenticated';
+    mocks.addToCart.mockResolvedValue({ items: [], itemCount: 1 });
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    renderPdp();
+    await screen.findByText('500g');
+    fireEvent.click(await screen.findByRole('button', { name: /Thêm vào giỏ/ }));
+    const group = await screen.findByRole('group', { name: 'Phân loại' });
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+    fireEvent.click(group.querySelectorAll('[role="button"]')[0]!);
+    const confirm = await screen.findAllByRole('button', { name: /Thêm vào giỏ · / });
+    fireEvent.click(confirm[confirm.length - 1]!);
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v-1kg', 1));
+  });
+
+  it('R-6: sản phẩm 1 phân loại thêm thẳng, không mở bảng chọn', async () => {
+    mocks.authStatus = 'authenticated';
+    mocks.addToCart.mockResolvedValue({ items: [], itemCount: 1 });
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    mocks.fetchProduct.mockResolvedValue({ ...product, variations: [product.variations[0]!] });
+    renderPdp();
+    await screen.findByText('Gạo ST25');
+    fireEvent.click(await screen.findByRole('button', { name: /Thêm vào giỏ/ }));
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v-1kg', 1));
+    expect(screen.queryByRole('group', { name: 'Phân loại' })).toBeNull();
   });
 
   it('khách đã tự chọn trước khi Giờ vàng về: không bị đổi lại', async () => {

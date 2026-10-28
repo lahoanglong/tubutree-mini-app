@@ -24,6 +24,7 @@ import { withReferral } from '../utils/share-link';
 import { ReviewsSection, Stars } from '../components/reviews-section';
 import { WishlistHeart } from '../components/wishlist-heart';
 import { SubscribeSheet } from '../components/subscribe-sheet';
+import { VariationSheet, type VariationSheetMode } from '../components/variation-sheet';
 import { fetchReviews } from '../services/shop-api';
 import { tilePricing } from '../components/catalog/catalog-pricing';
 import { trackEvent } from '../services/analytics';
@@ -44,6 +45,7 @@ import { useCountdown } from '../hooks/use-countdown';
 import { serverNow } from '../utils/server-clock';
 import { cardPricing, defaultVariationFor, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
+import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
@@ -116,6 +118,7 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [badgeBounce, setBadgeBounce] = useState(false);
   const [showSubscribe, setShowSubscribe] = useState(false);
+  const [sheetMode, setSheetMode] = useState<VariationSheetMode | null>(null);
   const [showContentKit, setShowContentKit] = useState(false);
   // "Bộ nội dung bán hàng" trước đây CHỈ mở được từ trình dựng gian hàng, tức CTV phải thêm
   // sản phẩm vào gian hàng mới lấy được bài mẫu — trong khi lúc cần là lúc đang xem sản phẩm
@@ -228,7 +231,7 @@ export default function ProductDetailPage() {
       queryClient.setQueryData(cartKey(), updatedCart);
       haptic('medium');
       setBadgeBounce(true);
-      openSnackbar({ text: vi.product.added, type: 'success', duration: 2000 });
+      openSnackbar({ text: vi.product.added, type: 'success', duration: 2000, position: 'top' });
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -309,7 +312,24 @@ export default function ProductDetailPage() {
   const fromStore = merchant ?? unavailable;
   const retailOnly = isRetailOnly(p);
 
+  const confirmVariation = async (variation: VariationDetail, qty: number) => {
+    if (status !== 'authenticated') {
+      await login();
+      if (useAuthStore.getState().status !== 'authenticated') return;
+    }
+    const mode = sheetMode;
+    setSheetMode(null);
+    setSelectedId(variation.id);
+    setQuantity(qty);
+    if (mode === 'buy') buyNowMutation.mutate({ variation, qty });
+    else addMutation.mutate({ variation, qty });
+  };
+
   const handleAdd = async () => {
+    if (needsVariationPicker(variations)) {
+      setSheetMode('add');
+      return;
+    }
     if (status !== 'authenticated') {
       await login();
       if (useAuthStore.getState().status !== 'authenticated') return;
@@ -322,6 +342,10 @@ export default function ProductDetailPage() {
   };
 
   const handleBuyNow = async () => {
+    if (needsVariationPicker(variations)) {
+      setSheetMode('buy');
+      return;
+    }
     if (status !== 'authenticated') {
       await login();
       if (useAuthStore.getState().status !== 'authenticated') return;
@@ -823,6 +847,22 @@ export default function ProductDetailPage() {
           onClose={() => setShowSubscribe(false)}
           variationId={selected.id}
           quantity={quantity}
+        />
+      )}
+
+      {needsVariationPicker(variations) && (
+        <VariationSheet
+          open={sheetMode !== null}
+          onClose={() => setSheetMode(null)}
+          mode={sheetMode ?? 'add'}
+          productName={p.name}
+          thumbnail={p.thumbnail}
+          variations={variations}
+          flash={flashList}
+          initialId={selected?.id ?? null}
+          initialQty={quantity}
+          busy={false}
+          onConfirm={(v, qty) => void confirmVariation(v as VariationDetail, qty)}
         />
       )}
 

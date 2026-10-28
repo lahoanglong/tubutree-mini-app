@@ -13,6 +13,8 @@ import { ui, uiBar } from '@/lib/guest-ui';
 import { phoneSecondary } from '@/lib/phone-ui';
 import { CountBadge } from '@/components/mini/badge';
 import { defaultVariationFor, pickDefaultVariation, variationPricing } from '@/lib/flash-price';
+import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
+import { VariationSheet, type VariationSheetMode } from './variation-sheet';
 import { useActiveFlashSales, useFlashSalesLoaded } from '@/lib/use-flash-sales';
 import { formatDateTime } from '@/lib/format-date';
 import { usePdpSelection } from './pdp-selection';
@@ -28,6 +30,14 @@ interface Variation {
   stock: number;
 }
 
+function isPhoneWidth(): boolean {
+  try {
+    return window.matchMedia('(max-width: 767px)').matches;
+  } catch {
+    return false;
+  }
+}
+
 /** Còn từng này trở xuống thì nhắc "Chỉ còn N" để khách biết nên chốt sớm. */
 const LOW_STOCK_NOTICE = 5;
 
@@ -35,8 +45,12 @@ export default function AddToCart({
   slug,
   variations: isrVariations,
   blockedReason = null,
+  productName = '',
+  thumbnail = null,
 }: {
   slug: string;
+  productName?: string;
+  thumbnail?: string | null;
   variations: Variation[];
   /** Gian hàng tạm nghỉ/ngừng bán (R3-MERCHANT-3): khách xem được trang nhưng chưa mua được. */
   blockedReason?: string | null;
@@ -68,6 +82,7 @@ export default function AddToCart({
   const [msg, setMsg] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const userPicked = useRef(false);
+  const [sheetMode, setSheetMode] = useState<VariationSheetMode | null>(null);
 
   // Số món ở nút giỏ của thanh dính (như Mini App); cùng khoá và cùng GET /cart với giỏ ở thanh đầu.
   const cartCount = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' }).data?.itemCount ?? 0;
@@ -169,8 +184,13 @@ export default function AddToCart({
   }, [phase]);
 
   // Thêm giỏ và Mua ngay chung cửa kiểm tra phiên: chưa đăng nhập thì nhớ món + ý định rồi sang đăng nhập, quay lại làm nốt.
-  const submit = async (buyNow: boolean) => {
+  const submit = async (buyNow: boolean, chosen?: { id: string; quantity: number }) => {
     if (phase === 'loading' || blockedReason) return;
+    // Điện thoại: từ 2 phân loại thì hỏi chọn trong bảng như Mini App. Máy tính đã có ô chọn ngay cạnh nút.
+    if (!chosen && needsVariationPicker(variations) && isPhoneWidth()) {
+      setSheetMode(buyNow ? 'buy' : 'add');
+      return;
+    }
     if (phase === 'unavailable') {
       setSuccess(false);
       setMsg(
@@ -179,14 +199,24 @@ export default function AddToCart({
       return;
     }
     if (phase === 'guest') {
-      if (selected && available) rememberPendingAdd({ variationId: selected.id, quantity: qty, ...(buyNow ? { buyNow: true } : {}) });
+      const pick = chosen ?? (selected && available ? { id: selected.id, quantity: qty } : null);
+      if (pick) rememberPendingAdd({ variationId: pick.id, quantity: pick.quantity, ...(buyNow ? { buyNow: true } : {}) });
       router.push(loginHref(`/san-pham/${encodeURIComponent(slug)}`));
       return;
     }
-    if (!selected || !available) return;
+    const target = chosen ? variations.find((v) => v.id === chosen.id) : selected;
+    if (!target || target.stock <= 0) return;
     // Bấm mua là đã chọn: Giờ vàng hay tồn kho về muộn không được đổi phân loại dưới tay khách.
     userPicked.current = true;
-    await add(selected.id, Math.min(qty, maxQty), buyNow);
+    await add(target.id, Math.min(chosen?.quantity ?? qty, Math.max(target.stock, 1)), buyNow);
+  };
+  const confirmVariation = (id: string, quantity: number) => {
+    const mode = sheetMode;
+    setSheetMode(null);
+    userPicked.current = true;
+    setSelectedId(id);
+    setQty(quantity);
+    void submit(mode === 'buy', { id, quantity });
   };
   const onAdd = () => submit(false);
   const onBuyNow = () => submit(true);
@@ -296,6 +326,21 @@ export default function AddToCart({
       </button>
 
       {status && <div className="mt-3 hidden md:block">{status}</div>}
+
+      {needsVariationPicker(variations) && (
+        <VariationSheet
+          open={sheetMode !== null}
+          onClose={() => setSheetMode(null)}
+          mode={sheetMode ?? 'add'}
+          productName={productName}
+          thumbnail={thumbnail}
+          variations={variations}
+          flash={flash}
+          initialId={selectedId}
+          initialQty={qty}
+          onConfirm={(v, quantity) => confirmVariation(v.id, quantity)}
+        />
+      )}
 
       <StickyActionBar label="Mua hàng">
         {status && <div className="mb-2">{status}</div>}

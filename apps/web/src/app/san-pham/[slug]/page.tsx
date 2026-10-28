@@ -170,7 +170,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           {!retailOnly && <PdpSubscribeRow slug={product.slug} variations={product.variations} />}
 
           {product.variations.length > 0 && (
-            <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} />
+            <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} />
           )}
 
           {!retailOnly && <PdpGroupBuyRow productId={product.id} slug={product.slug} />}
