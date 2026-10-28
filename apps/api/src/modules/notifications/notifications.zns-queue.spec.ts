@@ -6,11 +6,11 @@ import type { AnalyticsEventsService } from '../analytics/analytics-events.servi
 const ZNS_TEMPLATE = { code: 'ORDER_CONFIRMED', channel: 'ZNS', bodyTemplate: 'x', zaloTemplateId: 'zt-1' };
 const JOB = { notificationLogId: 'log-2', phone: '0900000000', templateId: 'zt-1', templateData: {} };
 
-function setup(opts: { queueAdd?: jest.Mock; sendTemplate?: jest.Mock; status?: string } = {}) {
+function setup(opts: { queueAdd?: jest.Mock; sendTemplate?: jest.Mock; status?: string; payload?: unknown } = {}) {
   let seq = 0;
   const create = jest.fn().mockImplementation(async () => ({ id: `log-${++seq}` }));
   const update = jest.fn().mockResolvedValue({});
-  const findUnique = jest.fn().mockResolvedValue({ status: opts.status ?? 'PENDING' });
+  const findUnique = jest.fn().mockResolvedValue({ status: opts.status ?? 'PENDING', payload: opts.payload ?? { data: {} } });
   const prisma = {
     notificationTemplate: { findUnique: jest.fn().mockResolvedValue(ZNS_TEMPLATE) },
     user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0900000000' }) },
@@ -91,13 +91,29 @@ describe('NotificationsService.deliverZns', () => {
     expect(sendTemplate).not.toHaveBeenCalled();
   });
 
-  // withQueueTimeout báo lỗi dù Redis đã nhận job: log bị đổi FAILED (và nhả khoá) nhưng job vẫn chạy. Gửi tiếp thì khách nhận đôi khi lượt
-  // gửi lại sau tạo log mới.
-  it('log đã FAILED (xếp hàng báo lỗi nhưng job vẫn vào hàng) → job chạy muộn không gửi ZNS', async () => {
-    const { svc, sendTemplate, update } = setup({ status: 'FAILED' });
-    expect(await svc.deliverZns(JOB, false)).toBe('FAILED');
+  // withQueueTimeout báo lỗi dù Redis đã nhận job. Log retryZns đã nhả khoá (lượt gửi lại sau tạo log mới) nên job muộn gửi tiếp là gửi đôi.
+  it('log FAILED đã nhả khoá chống trùng (xếp hàng báo lỗi nhưng job vẫn vào hàng) → job chạy muộn không gửi ZNS', async () => {
+    const { svc, sendTemplate, update } = setup({
+      status: 'FAILED',
+      payload: { data: {}, dedupeKey: 'tier-drop:2026-11-10:failed:log-2' },
+    });
+    expect(await svc.deliverZns(JOB, false)).toBe('SKIPPED');
     expect(sendTemplate).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
+  });
+
+  // Tin thường (không retryZns) không mang khoá để nhả và không có đường gửi lại nào khác ngoài job này.
+  it('log FAILED vì xếp hàng quá hạn nhưng không có khoá để nhả (tin thường) → job chạy muộn vẫn gửi và log thành SENT', async () => {
+    const { svc, sendTemplate, update } = setup({ status: 'FAILED', payload: { data: {} } });
+    expect(await svc.deliverZns(JOB, false)).toBe('SENT');
+    expect(sendTemplate).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith({ where: { id: 'log-2' }, data: { status: 'SENT', error: null } });
+  });
+
+  it('log FAILED mang khoá của log khác (không phải khoá đã nhả của chính nó) → vẫn gửi', async () => {
+    const { svc, sendTemplate } = setup({ status: 'FAILED', payload: { data: {}, dedupeKey: 'tier-drop:2026-11-10:failed:log-9' } });
+    expect(await svc.deliverZns(JOB, false)).toBe('SENT');
+    expect(sendTemplate).toHaveBeenCalledTimes(1);
   });
 
   it.each(['PENDING', 'RETRYING'])('log %s → vẫn gửi (lượt đầu và lượt thử lại hợp lệ)', async (status) => {

@@ -43,6 +43,14 @@ const DEFAULT_QUIET_END_HOUR = 8;
 const DEFAULT_PROMO_MONTHLY_CAP = 2;
 const HOUR_MS = 3_600_000;
 
+const releasedZnsDedupeKey = (dedupeKey: string, logId: string) => `${dedupeKey}:failed:${logId}`;
+
+/** Log ZNS đã đóng vì không xếp được hàng đợi và đã nhả khoá chống trùng (xem dispatchZns). */
+function isReleasedZnsLog(payload: unknown, logId: string): boolean {
+  const key = (payload as { dedupeKey?: unknown } | null)?.dedupeKey;
+  return typeof key === 'string' && key.endsWith(`:failed:${logId}`);
+}
+
 /**
  * Số mili giây phải chờ để ZNS rời khỏi giờ yên tĩnh (giờ VN, từ `startHour` tới trước `endHour`, qua nửa đêm được);
  * 0 khi đang trong giờ gửi hoặc khi hai mốc bằng nhau (tắt giờ yên tĩnh).
@@ -65,8 +73,11 @@ interface PromoCap {
   to: Date;
 }
 
-/** Kết cục một lần xử lý job ZNS: RETRY = lỗi tạm thời còn lượt thử lại, processor phải ném lỗi để BullMQ xếp lịch. */
-export type ZnsDeliveryOutcome = 'SENT' | 'RETRY' | 'FAILED';
+/**
+ * Kết cục một lần xử lý job ZNS: RETRY = lỗi tạm thời còn lượt thử lại, processor phải ném lỗi để BullMQ xếp lịch;
+ * SKIPPED = job đến muộn sau khi log đã bị đóng và khoá chống trùng đã nhả, không gọi Zalo.
+ */
+export type ZnsDeliveryOutcome = 'SENT' | 'RETRY' | 'FAILED' | 'SKIPPED';
 
 /**
  * Gửi thông báo theo template code (Build Spec §4.10, §11).
@@ -272,7 +283,7 @@ export class NotificationsService {
           status: 'FAILED',
           error: reason,
           // Nhả khoá để lượt gửi lại sau (retryZns) tạo log mới thay vì coi là đã gửi.
-          ...(dedupeKey ? { payload: { data, dedupeKey: `${dedupeKey}:failed:${log.id}` } } : {}),
+          ...(dedupeKey ? { payload: { data, dedupeKey: releasedZnsDedupeKey(dedupeKey, log.id) } } : {}),
         },
       });
       // Chỉ nơi gọi dùng retryZns (đã tự nhận phần việc) mới cần biết để nhả phần việc của nó; tin thường thì lỗi này không ném ra ngoài.
@@ -329,11 +340,11 @@ export class NotificationsService {
    */
   async deliverZns(job: ZnsSendJobData, finalAttempt: boolean): Promise<ZnsDeliveryOutcome> {
     const where = { id: job.notificationLogId };
-    const current = await this.prisma.notificationLog.findUnique({ where, select: { status: true } });
+    const current = await this.prisma.notificationLog.findUnique({ where, select: { status: true, payload: true } });
     if (current?.status === 'SENT') return 'SENT';
-    // FAILED là trạng thái cuối (lượt thử lại hợp lệ đi qua RETRYING). Log FAILED mà job vẫn chạy là lần xếp hàng báo lỗi dù Redis đã nhận:
-    // khoá đã nhả để lượt sau gửi lại, nên gửi tiếp ở đây là gửi đôi.
-    if (current?.status === 'FAILED') return 'FAILED';
+    // Log bị đóng vì xếp hàng báo lỗi (dù Redis vẫn nhận job) đã nhả khoá để lượt retryZns sau tạo log mới: gửi tiếp ở đây là gửi đôi.
+    // Tin thường không có khoá để nhả và không ai gửi lại, nên job đến muộn vẫn phải gửi.
+    if (current?.status === 'FAILED' && isReleasedZnsLog(current.payload, job.notificationLogId)) return 'SKIPPED';
 
     const result = await this.zns.sendTemplate(job.phone, job.templateId, job.templateData, job.notificationLogId);
     if (result.ok) {
