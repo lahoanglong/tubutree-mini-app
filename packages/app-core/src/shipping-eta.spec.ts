@@ -43,7 +43,7 @@ describe('orderDeliveryEtaLabel', () => {
   it('ngày muộn nhất đã qua theo ngày VN thì ẩn; đúng hôm nay vẫn hiện', () => {
     const old = order('SHIPPING', { createdAt: '2026-10-15T03:00:00.000Z' });
     expect(orderDeliveryEtaLabel(eta, old, now)).toBeNull();
-    expect(orderDeliveryEtaLabel(eta, order('SHIPPING', { createdAt: '2026-10-24T03:00:00.000Z' }), now)).toBe('26/10 – 28/10');
+    expect(orderDeliveryEtaLabel(eta, order('SHIPPING', { createdAt: '2026-10-24T03:00:00.000Z' }), now)).toBe('28/10');
     expect(orderDeliveryEtaLabel(eta, order('SHIPPING', { createdAt: '2026-10-24T03:00:00.000Z' }), new Date('2026-10-28T17:30:00.000Z'))).toBeNull();
   });
   it('đơn có món đặt trước thì ẩn', () => {
@@ -53,6 +53,14 @@ describe('orderDeliveryEtaLabel', () => {
   it('đơn của gian hàng đối tác thì ẩn', () => {
     expect(orderDeliveryEtaLabel(eta, order('CONFIRMED', { fulfilment: { kind: 'MERCHANT' } }), now)).toBeNull();
     expect(orderDeliveryEtaLabel(eta, order('CONFIRMED', { fulfilment: { kind: 'TUBU' } }), now)).toBe('30/10 – 01/11');
+  });
+  it('đơn Tubu xử lý tay thì ẩn', () => {
+    expect(orderDeliveryEtaLabel(eta, order('CONFIRMED', { manualHandling: true }), now)).toBeNull();
+    expect(orderDeliveryEtaLabel(eta, order('CONFIRMED', { manualHandling: false }), now)).toBe('30/10 – 01/11');
+  });
+  it('ngày sớm nhất không lùi về quá khứ: kẹp về hôm nay (giờ VN)', () => {
+    const late = order('CONFIRMED', { createdAt: '2026-10-25T03:00:00.000Z' });
+    expect(orderDeliveryEtaLabel(eta, late, now)).toBe('28/10 – 29/10');
   });
   it('cấu hình trống thì ẩn, không bịa ngày', () => {
     expect(orderDeliveryEtaLabel(null, order('CONFIRMED'), now)).toBeNull();

@@ -479,6 +479,13 @@ describe('/tai-khoan/don-hang/[code] — đánh giá theo từng dòng của đ�
 });
 
 describe('/tai-khoan/don-hang/[code] — ngày giao dự kiến, ảnh món, ghi chú, khung chờ (R-9, R-35, R-107, R-108)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-28T03:00:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   const shipping = (extra: Record<string, unknown> = {}) => ({
     ...ORDER,
     status: 'SHIPPING',

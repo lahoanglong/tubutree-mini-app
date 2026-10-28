@@ -22,7 +22,7 @@ const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 /**
  * Ngày giao dự kiến của một đơn đang xử lý: giờ đặt (cùng gốc với màn thanh toán) cộng khoảng ngày cấu hình, tính theo
  * ngày Việt Nam (UTC+7 quanh năm). null khi chưa cấu hình, đơn chưa xác nhận hoặc đã xong, đơn có món đặt trước (chưa biết
- * hàng về lúc nào), đơn của gian hàng đối tác (họ tự giao, khoảng ngày của Tubu không áp dụng) hoặc ngày muộn nhất đã qua:
+ * hàng về lúc nào), đơn của gian hàng đối tác (họ tự giao, khoảng ngày của Tubu không áp dụng), đơn Tubu đang xử lý tay (ngày chỉ là đoán) hoặc ngày muộn nhất đã qua; ngày sớm nhất không lùi về trước hôm nay:
  * không bịa ngày.
  */
 export function orderDeliveryEtaLabel(
@@ -32,11 +32,12 @@ export function orderDeliveryEtaLabel(
     createdAt: string;
     items?: { backorderedQty?: number | null }[] | null;
     fulfilment?: { kind: string } | null;
+    manualHandling?: boolean | null;
   },
   now: Date = new Date(),
 ): string | null {
   if (!eta || !ETA_STATUSES.has(order.status)) return null;
-  if (order.fulfilment?.kind === 'MERCHANT') return null;
+  if (order.manualHandling || order.fulfilment?.kind === 'MERCHANT') return null;
   if (order.items?.some((it) => (it.backorderedQty ?? 0) > 0)) return null;
   const base = new Date(order.createdAt);
   if (Number.isNaN(base.getTime())) return null;
@@ -46,8 +47,9 @@ export function orderDeliveryEtaLabel(
   const todayUtc = Date.UTC(nowVn.getUTCFullYear(), nowVn.getUTCMonth(), nowVn.getUTCDate());
   if (dayUtc(eta.maxDays) < todayUtc) return null;
   const fmt = (days: number) => {
-    const d = new Date(dayUtc(days));
+    const d = new Date(Math.max(dayUtc(days), todayUtc));
     return `${pad2(d.getUTCDate())}/${pad2(d.getUTCMonth() + 1)}`;
   };
-  return eta.minDays === eta.maxDays ? fmt(eta.minDays) : `${fmt(eta.minDays)} – ${fmt(eta.maxDays)}`;
+  const [from, to] = [fmt(eta.minDays), fmt(eta.maxDays)];
+  return from === to ? from : `${from} – ${to}`;
 }

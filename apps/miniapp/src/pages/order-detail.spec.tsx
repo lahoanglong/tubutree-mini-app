@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { HttpError } from '../services/http';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -740,8 +740,13 @@ describe('OrderDetailPage — không mở trang ngoài (Zalo 4.1)', () => {
 describe('OrderDetailPage — ngày giao dự kiến, ảnh món, ghi chú (R-9, R-107, R-108)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-28T03:00:00Z'));
     mocks.fetchMyReturns.mockResolvedValue([]);
     mocks.getPublicConfig.mockResolvedValue({ shippingEta: { minDays: 2, maxDays: 4 }, waste: {} });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
   const processing = (extra: Record<string, unknown> = {}) => ({
     ...ORDER,
