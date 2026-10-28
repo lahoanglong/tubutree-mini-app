@@ -1,0 +1,161 @@
+<title>Review sản phẩm Tubu Tree</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Literata:opsz,wght@7..72,600;7..72,700&display=swap">
+<style>
+/* Bố cục: dải đầu màu lá đậm; dưới là mục lục dính bên trái + cột đọc 880px; ảnh trải lưới. */
+:root {
+  --bg: #f3f6f2; --surface: #ffffff; --ink: #17221b; --muted: #56655b; --line: #dbe3d8;
+  --accent: #1f5a3d; --accent-ink: #ffffff; --accent-soft: #e2eee5; --code-bg: #ecf1ea;
+  --p0: #b42318; --p0-bg: #fde7e4; --p1: #9a5a06; --p1-bg: #fcefd8; --p2: #2c5a86; --p2-bg: #e4edf7; --p3: #56655b; --p3-bg: #eaeee8;
+  --ok: #1f6b45; --ok-bg: #dff0e5;
+  --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-display: "Literata", Georgia, "Times New Roman", serif;
+  --f-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1411; --surface: #151d18; --ink: #e3eae4; --muted: #9aaa9f; --line: #27322b;
+  --accent: #82c9a0; --accent-ink: #0e1411; --accent-soft: #1b2c22; --code-bg: #1b241e;
+  --p0: #ff8b7b; --p0-bg: #3a1613; --p1: #f0b45a; --p1-bg: #33250f; --p2: #8fb9e6; --p2-bg: #142538; --p3: #a9b5ac; --p3-bg: #212923;
+  --ok: #82c9a0; --ok-bg: #18301f; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #0e1411; --surface: #151d18; --ink: #e3eae4; --muted: #9aaa9f; --line: #27322b;
+  --accent: #82c9a0; --accent-ink: #0e1411; --accent-soft: #1b2c22; --code-bg: #1b241e;
+  --p0: #ff8b7b; --p0-bg: #3a1613; --p1: #f0b45a; --p1-bg: #33250f; --p2: #8fb9e6; --p2-bg: #142538; --p3: #a9b5ac; --p3-bg: #212923;
+  --ok: #82c9a0; --ok-bg: #18301f; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--ink); font: 15px/1.6 var(--f-body); }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.band { background: var(--accent); color: var(--accent-ink); }
+.band-in, .wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.band-in { max-width: 1180px; margin: 0 auto; padding-block: 36px 32px; }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+h1 { font: 700 clamp(28px, 4.4vw, 42px)/1.15 var(--f-display); margin: 6px 0 10px; text-wrap: balance; }
+.band p { margin: 0; max-width: 62ch; opacity: .92; }
+.stats { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 18px; font-size: 14px; }
+.stats b { font: 700 22px/1 var(--f-display); margin-right: 6px; }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 64px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 40px; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); align-self: start; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: none; }
+nav.toc a { display: block; padding: 6px 10px; border-radius: 6px; text-decoration: none; color: var(--muted); font-size: 13.5px; line-height: 1.35; }
+nav.toc a:hover { background: var(--accent-soft); color: var(--ink); }
+nav.toc .label { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 10px 8px; }
+main { min-width: 0; max-width: 880px; }
+section { padding-top: 8px; margin-bottom: 44px; scroll-margin-top: 16px; }
+h2 { font: 700 26px/1.25 var(--f-display); margin: 0 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line); text-wrap: balance; }
+h3 { font: 600 19px/1.3 var(--f-display); margin: 26px 0 10px; text-wrap: balance; }
+h4 { font-size: 15.5px; margin: 22px 0 8px; }
+h5, h6 { font-size: 14.5px; margin: 18px 0 6px; }
+p, li { max-width: 72ch; }
+ul, ol { padding-left: 22px; }
+li { margin: 3px 0; }
+code { font: 12.5px/1.4 var(--f-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { font: 12.5px/1.45 var(--f-mono); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin: 0; width: max-content; min-width: 100%; box-sizing: border-box; }
+blockquote { margin: 12px 0; padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 6px 6px 0; }
+.scroll { overflow-x: auto; margin: 12px 0; -webkit-overflow-scrolling: touch; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 11px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); font-weight: 600; background: var(--bg); }
+tbody tr:last-child td { border-bottom: 0; }
+table.guide { min-width: 860px; }
+.lead { color: var(--muted); }
+.note { background: var(--p1-bg); border-radius: 8px; padding: 12px 14px; }
+
+.sev { display: inline-block; font: 700 11.5px/1 var(--f-body); padding: 4px 7px; border-radius: 999px; letter-spacing: .02em; }
+.sev.p0 { color: var(--p0); background: var(--p0-bg); }
+.sev.p1 { color: var(--p1); background: var(--p1-bg); }
+.sev.p2 { color: var(--p2); background: var(--p2-bg); }
+.sev.p3 { color: var(--p3); background: var(--p3-bg); }
+.legend { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.mono { font-family: var(--f-mono); font-size: 12.5px; white-space: nowrap; }
+table.backlog { min-width: 680px; font-variant-numeric: tabular-nums; }
+table.backlog .desc { color: var(--muted); margin-top: 2px; }
+table.backlog .orig { font: 11.5px/1.4 var(--f-mono); color: var(--muted); margin-top: 4px; }
+tr[data-status="done"] td:last-child { color: var(--ok); font-weight: 600; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.chip { font: 500 13px/1 var(--f-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 9px 13px; cursor: pointer; min-height: 36px; }
+.chip b { font-weight: 700; margin-left: 4px; }
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; margin-top: 14px; }
+.gallery .wide { grid-column: span 2; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+figcaption { font-size: 13px; color: var(--muted); line-height: 1.45; }
+figcaption .ids { display: block; font: 11.5px var(--f-mono); margin-top: 3px; }
+button.zoom { all: unset; cursor: zoom-in; display: block; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--surface); }
+button.zoom:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.zoom img { display: block; width: 100%; height: auto; max-height: 560px; object-fit: cover; object-position: top; }
+.ba { margin: 22px 0 30px; }
+.ba-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; align-items: start; }
+.ba figure { position: relative; }
+.tag { align-self: flex-start; font: 700 11.5px/1 var(--f-body); padding: 5px 8px; border-radius: 999px; letter-spacing: .03em; }
+.tag.before { color: var(--p0); background: var(--p0-bg); }
+.tag.after { color: var(--ok); background: var(--ok-bg); }
+
+dialog#lb { border: 0; padding: 0; background: transparent; max-width: min(96vw, 1200px); max-height: 94vh; }
+dialog#lb::backdrop { background: rgba(8, 12, 10, .82); }
+dialog#lb img { display: block; max-width: 100%; max-height: 90vh; width: auto; border-radius: 6px; }
+dialog#lb button { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); right: calc(env(safe-area-inset-right, 0px) + 12px); font: 600 14px var(--f-body); padding: 10px 14px; border-radius: 999px; border: 0; background: #ffffff; color: #17221b; cursor: pointer; }
+
+@media (max-width: 900px) {
+  .wrap { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  nav.toc { position: static; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 6px; }
+  nav.toc ol { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .gallery .wide { grid-column: auto; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<header class="band">
+  <div class="band-in">
+    <div class="eyebrow">Review sản phẩm và trải nghiệm · 25/10/2026</div>
+    <h1>Tubu Tree trước khi mở cho đông khách</h1>
+    <p>Đánh giá Mini App Zalo, web ở 4 khổ màn hình và trang quản trị. Đọc PROD chỉ để xem, không ghi gì. Ảnh chụp trên máy thử với dữ liệu mẫu.</p>
+    <div class="stats">
+      <span><b>{{TOTAL}}</b>việc sau khi gộp trùng</span>
+      <span><b>{{P0}}</b>việc chặn ra mắt</span>
+      <span><b>5</b>việc chặn ra mắt đã có bản sửa</span>
+      <span><b>949</b>ảnh chụp màn hình</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="toc" aria-label="Mục lục">
+    <div class="label">Mục lục</div>
+    <ol>{{TOC}}</ol>
+  </nav>
+  <main>{{BODY}}</main>
+</div>
+
+<dialog id="lb" aria-label="Ảnh phóng to">
+  <button type="button" id="lb-close">Đóng</button>
+  <img id="lb-img" alt="">
+</dialog>
+
+<script>
+(function () {
+  var lb = document.getElementById('lb'), img = document.getElementById('lb-img');
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('button.zoom');
+    if (b) { img.src = b.getAttribute('data-src'); if (lb.showModal) lb.showModal(); return; }
+    if (e.target === lb || e.target.id === 'lb-close' || e.target === img) { lb.close(); }
+  });
+  var chips = document.querySelectorAll('.filters .chip');
+  var rows = document.querySelectorAll('table.backlog tbody tr');
+  chips.forEach(function (c) {
+    c.addEventListener('click', function () {
+      chips.forEach(function (x) { x.classList.toggle('on', x === c); });
+      var f = c.getAttribute('data-f');
+      rows.forEach(function (r) {
+        var show = f === 'all' || r.getAttribute('data-lvl') === f || r.getAttribute('data-status') === f;
+        r.hidden = !show;
+      });
+    });
+  });
+})();
+</script>

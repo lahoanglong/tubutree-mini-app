@@ -1,0 +1,1287 @@
+{
+  "builtAt": "2026-10-28T01:14:46.958Z",
+  "lane": 5,
+  "params": {
+    "groupBuyId": "cmvrf8j95000kxu8szo29ahzq",
+    "postId": "cmvrf8j9q000oxu8sl1iriisc",
+    "eventId": "cmvrf8jaq0014xu8sv7kbjft6",
+    "courseId": "cmvrf8jax0015xu8sgd6pf37c",
+    "wastePointId": "cmvrf8khs001hxu8sceqikm19",
+    "wasteDoneId": "cmvrf8kij001mxu8s09lvxhb4",
+    "wasteRequestId": "cmvrf8wf4003cxu8s85y751hh",
+    "bankOrderCode": "TUBU2026102819544",
+    "orderCode": "TUBU2026102553697"
+  },
+  "routes": [
+    {
+      "key": "home",
+      "lane": "shop",
+      "mini": "/",
+      "web": "/",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "browse",
+      "lane": "shop",
+      "mini": "/browse",
+      "web": "/san-pham",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "product-slug",
+      "lane": "shop",
+      "mini": "/product/nuoc-rua-chen-fuwa3e",
+      "web": "/san-pham/nuoc-rua-chen-fuwa3e",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "wishlist",
+      "lane": "shop",
+      "mini": "/wishlist",
+      "web": "/tai-khoan/yeu-thich",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "group-buy",
+      "lane": "shop",
+      "mini": "/group-buy",
+      "web": "/mua-chung",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "group-buy-id",
+      "lane": "shop",
+      "mini": "/group-buy/cmvrf8j95000kxu8szo29ahzq",
+      "web": "/mua-chung/cmvrf8j95000kxu8szo29ahzq",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "brand-slug",
+      "lane": "shop",
+      "mini": "/brand/fuwa3e",
+      "web": "/brand/fuwa3e",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "brand-story",
+      "lane": "shop",
+      "mini": "/brand-story",
+      "web": "/cau-chuyen",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "cart",
+      "lane": "order",
+      "mini": "/cart",
+      "web": "/gio-hang",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "checkout",
+      "lane": "order",
+      "mini": "/checkout",
+      "web": "/thanh-toan",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "bank-payment-code",
+      "lane": "order",
+      "mini": "/bank-payment/TUBU2026102819544",
+      "web": "/thanh-toan/chuyen-khoan/TUBU2026102819544",
+      "miniPersonas": [
+        "returning"
+      ],
+      "webPersonas": [
+        "returning"
+      ],
+      "private": true
+    },
+    {
+      "key": "orders",
+      "lane": "order",
+      "mini": "/orders",
+      "web": "/tai-khoan/don-hang",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "subscriptions",
+      "lane": "order",
+      "mini": "/subscriptions",
+      "web": "/tai-khoan/don-hang?tab=subscriptions",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "order-code",
+      "lane": "order",
+      "mini": "/order/TUBU2026102553697",
+      "web": "/tai-khoan/don-hang/TUBU2026102553697",
+      "miniPersonas": [
+        "returning"
+      ],
+      "webPersonas": [
+        "returning"
+      ],
+      "private": true
+    },
+    {
+      "key": "addresses",
+      "lane": "order",
+      "mini": "/addresses",
+      "web": "/tai-khoan/dia-chi",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "about",
+      "lane": "account",
+      "mini": "/about",
+      "web": "/gioi-thieu",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "profile",
+      "lane": "account",
+      "mini": "/profile",
+      "web": "/tai-khoan",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "edit-profile",
+      "lane": "account",
+      "mini": "/edit-profile",
+      "web": "/tai-khoan/ho-so",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "settings",
+      "lane": "account",
+      "mini": "/settings",
+      "web": "/tai-khoan/cai-dat",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "notifications",
+      "lane": "account",
+      "mini": "/notifications",
+      "web": "/tai-khoan/thong-bao",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "chat",
+      "lane": "account",
+      "mini": "/chat",
+      "web": "/ho-tro/chat",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "loyalty",
+      "lane": "loyalty",
+      "mini": "/loyalty",
+      "web": "/tai-khoan/diem-xanh",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "offers",
+      "lane": "loyalty",
+      "mini": "/offers",
+      "web": "/uu-dai",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "wallet",
+      "lane": "loyalty",
+      "mini": "/wallet",
+      "web": "/tai-khoan/vi-tubu",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "rewards",
+      "lane": "loyalty",
+      "mini": "/rewards",
+      "web": "/kho-qua",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "rewards-mine",
+      "lane": "loyalty",
+      "mini": "/rewards/mine",
+      "web": "/kho-qua/cua-toi",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "cashback",
+      "lane": "loyalty",
+      "mini": "/cashback",
+      "web": "/hoan-tien",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "game",
+      "lane": "game",
+      "mini": "/game",
+      "web": "/vuon-xanh",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "ai-advisor",
+      "lane": "game",
+      "mini": "/ai-advisor",
+      "web": "/tu-van",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "feed",
+      "lane": "community",
+      "mini": "/feed",
+      "web": "/cong-dong",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "feed-leaderboard",
+      "lane": "community",
+      "mini": "/feed/leaderboard",
+      "web": "/cong-dong/xep-hang",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "feed-events",
+      "lane": "community",
+      "mini": "/feed/events",
+      "web": "/cong-dong/su-kien",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "feed-id",
+      "lane": "community",
+      "mini": "/feed/cmvrf8j9q000oxu8sl1iriisc",
+      "web": "/cong-dong/cmvrf8j9q000oxu8sl1iriisc",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "academy",
+      "lane": "community",
+      "mini": "/academy",
+      "web": "/hoc-vien",
+      "miniPersonas": [
+        "returning",
+        "ctv"
+      ],
+      "webPersonas": [
+        "returning",
+        "ctv"
+      ],
+      "private": true
+    },
+    {
+      "key": "academy-courseid",
+      "lane": "community",
+      "mini": "/academy/cmvrf8jax0015xu8sgd6pf37c",
+      "web": "/hoc-vien/cmvrf8jax0015xu8sgd6pf37c",
+      "miniPersonas": [
+        "returning",
+        "ctv"
+      ],
+      "webPersonas": [
+        "returning",
+        "ctv"
+      ],
+      "private": true
+    },
+    {
+      "key": "s-slug",
+      "lane": "affiliate",
+      "mini": "/s/uatctv",
+      "web": "/s/uatctv",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "affiliate",
+      "lane": "affiliate",
+      "mini": "/affiliate",
+      "web": "/ctv",
+      "miniPersonas": [
+        "returning",
+        "ctv"
+      ],
+      "webPersonas": [
+        "returning",
+        "ctv"
+      ],
+      "private": true
+    },
+    {
+      "key": "storefront",
+      "lane": "affiliate",
+      "mini": "/storefront",
+      "web": "/ctv/gian-hang",
+      "miniPersonas": [
+        "returning",
+        "ctv"
+      ],
+      "webPersonas": [
+        "returning",
+        "ctv"
+      ],
+      "private": true
+    },
+    {
+      "key": "dealer",
+      "lane": "pro",
+      "mini": "/dealer",
+      "web": "/dai-ly",
+      "miniPersonas": [
+        "returning",
+        "dealer"
+      ],
+      "webPersonas": [
+        "returning",
+        "dealer"
+      ],
+      "private": true
+    },
+    {
+      "key": "staff",
+      "lane": "pro",
+      "mini": "/staff",
+      "web": "/nhan-vien",
+      "miniPersonas": [
+        "returning",
+        "staff"
+      ],
+      "webPersonas": [
+        "returning",
+        "staff"
+      ],
+      "private": true
+    },
+    {
+      "key": "my-payroll",
+      "lane": "pro",
+      "mini": "/my-payroll",
+      "web": "/nhan-vien/bang-luong",
+      "miniPersonas": [
+        "returning",
+        "staff"
+      ],
+      "webPersonas": [
+        "returning",
+        "staff"
+      ],
+      "private": true
+    },
+    {
+      "key": "brand-owner",
+      "lane": "pro",
+      "mini": "/brand-owner",
+      "web": "/chu-thuong-hieu",
+      "miniPersonas": [
+        "returning",
+        "brand"
+      ],
+      "webPersonas": [
+        "returning",
+        "brand"
+      ],
+      "private": true
+    },
+    {
+      "key": "admin",
+      "lane": "pro",
+      "mini": "/admin",
+      "web": "/admin",
+      "miniPersonas": [
+        "returning",
+        "admin"
+      ],
+      "webPersonas": [
+        "returning",
+        "admin"
+      ],
+      "private": true
+    },
+    {
+      "key": "admin-community",
+      "lane": "pro",
+      "mini": "/admin/community",
+      "web": "/admin?tab=community",
+      "miniPersonas": [
+        "returning",
+        "admin"
+      ],
+      "webPersonas": [
+        "returning",
+        "admin"
+      ],
+      "private": true
+    },
+    {
+      "key": "recycle",
+      "lane": "recycle",
+      "mini": "/recycle",
+      "web": "/doi-rac",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "recycle-rules",
+      "lane": "recycle",
+      "mini": "/recycle/rules",
+      "web": "/doi-rac/quy-dinh",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": false
+    },
+    {
+      "key": "recycle-new",
+      "lane": "recycle",
+      "mini": "/recycle/new",
+      "web": "/doi-rac/tao",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "recycle-points",
+      "lane": "recycle",
+      "mini": "/recycle/points",
+      "web": "/doi-rac/diem-nhan",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "recycle-r-id",
+      "lane": "recycle",
+      "mini": "/recycle/r/cmvrf8wf4003cxu8s85y751hh",
+      "web": "/doi-rac/yeu-cau/cmvrf8wf4003cxu8s85y751hh",
+      "miniPersonas": [
+        "returning"
+      ],
+      "webPersonas": [
+        "returning"
+      ],
+      "private": true
+    },
+    {
+      "key": "recycle-r-id-edit",
+      "lane": "recycle",
+      "mini": "/recycle/r/cmvrf8wf4003cxu8s85y751hh/edit",
+      "web": "/doi-rac/yeu-cau/cmvrf8wf4003cxu8s85y751hh/sua",
+      "miniPersonas": [
+        "returning"
+      ],
+      "webPersonas": [
+        "returning"
+      ],
+      "private": true
+    },
+    {
+      "key": "recycle-requests",
+      "lane": "recycle",
+      "mini": "/recycle/requests",
+      "web": "/doi-rac/yeu-cau",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "recycle-done-id",
+      "lane": "recycle",
+      "mini": "/recycle/done/cmvrf8kij001mxu8s09lvxhb4",
+      "web": "/doi-rac/xong/cmvrf8kij001mxu8s09lvxhb4",
+      "miniPersonas": [
+        "returning"
+      ],
+      "webPersonas": [
+        "returning"
+      ],
+      "private": true
+    },
+    {
+      "key": "recycle-desk",
+      "lane": "recycle",
+      "mini": "/recycle/desk",
+      "web": "/doi-rac/quay",
+      "miniPersonas": [
+        "returning",
+        "staff"
+      ],
+      "webPersonas": [
+        "returning",
+        "staff"
+      ],
+      "private": true
+    },
+    {
+      "key": "points-scan",
+      "lane": "skip",
+      "mini": "/points/scan",
+      "web": null,
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [],
+      "note": "route-map ghi skip (Q2), nhưng Mini App có route này nên vẫn chụp phía Mini App"
+    },
+    {
+      "key": "browse-category",
+      "lane": "shop",
+      "mini": "/browse?category=cat-cleaning",
+      "web": "/san-pham?category=cat-cleaning",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "extra": true
+    },
+    {
+      "key": "browse-brand",
+      "lane": "shop",
+      "mini": "/browse?brand=Fuwa3e",
+      "web": "/san-pham?brand=Fuwa3e",
+      "miniPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "new",
+        "guest"
+      ],
+      "extra": true
+    },
+    {
+      "key": "browse-search",
+      "lane": "shop",
+      "mini": "/browse?focus=search&q=nuoc",
+      "web": "/san-pham?q=nuoc",
+      "miniPersonas": [
+        "returning"
+      ],
+      "webPersonas": [
+        "returning"
+      ],
+      "extra": true
+    },
+    {
+      "key": "404",
+      "lane": "core",
+      "mini": "/khong-co-trang-nay",
+      "web": "/khong-co-trang-nay",
+      "miniPersonas": [
+        "returning",
+        "guest"
+      ],
+      "webPersonas": [
+        "returning",
+        "guest"
+      ],
+      "extra": true
+    },
+    {
+      "key": "dang-nhap",
+      "lane": "account",
+      "mini": null,
+      "web": "/dang-nhap",
+      "miniPersonas": [],
+      "webPersonas": [
+        "guest",
+        "returning"
+      ],
+      "extra": true
+    },
+    {
+      "key": "chinh-sach-dieu-khoan",
+      "lane": "account",
+      "mini": null,
+      "web": "/chinh-sach/dieu-khoan",
+      "miniPersonas": [],
+      "webPersonas": [
+        "guest"
+      ],
+      "extra": true
+    },
+    {
+      "key": "chinh-sach-bao-mat",
+      "lane": "account",
+      "mini": null,
+      "web": "/chinh-sach/bao-mat",
+      "miniPersonas": [],
+      "webPersonas": [
+        "guest"
+      ],
+      "extra": true
+    },
+    {
+      "key": "chinh-sach-doi-tra",
+      "lane": "account",
+      "mini": null,
+      "web": "/chinh-sach/doi-tra",
+      "miniPersonas": [],
+      "webPersonas": [
+        "guest"
+      ],
+      "extra": true
+    },
+    {
+      "key": "chinh-sach-van-chuyen",
+      "lane": "account",
+      "mini": null,
+      "web": "/chinh-sach/van-chuyen",
+      "miniPersonas": [],
+      "webPersonas": [
+        "guest"
+      ],
+      "extra": true
+    },
+    {
+      "key": "merchant",
+      "lane": "pro",
+      "mini": null,
+      "web": "/merchant",
+      "miniPersonas": [],
+      "webPersonas": [
+        "returning"
+      ],
+      "extra": true
+    }
+  ],
+  "admin": [
+    {
+      "key": "tab-inbox",
+      "path": "/admin?tab=inbox"
+    },
+    {
+      "key": "tab-dashboard",
+      "path": "/admin?tab=dashboard"
+    },
+    {
+      "key": "tab-analytics",
+      "path": "/admin?tab=analytics"
+    },
+    {
+      "key": "tab-reports",
+      "path": "/admin?tab=reports"
+    },
+    {
+      "key": "tab-orders",
+      "path": "/admin?tab=orders"
+    },
+    {
+      "key": "tab-externalOrders",
+      "path": "/admin?tab=externalOrders"
+    },
+    {
+      "key": "tab-externalClaims",
+      "path": "/admin?tab=externalClaims"
+    },
+    {
+      "key": "tab-merchantFulfilment",
+      "path": "/admin?tab=merchantFulfilment"
+    },
+    {
+      "key": "tab-returns",
+      "path": "/admin?tab=returns"
+    },
+    {
+      "key": "tab-customerRefunds",
+      "path": "/admin?tab=customerRefunds"
+    },
+    {
+      "key": "tab-cashback",
+      "path": "/admin?tab=cashback"
+    },
+    {
+      "key": "tab-dealers",
+      "path": "/admin?tab=dealers"
+    },
+    {
+      "key": "tab-dealerClaims",
+      "path": "/admin?tab=dealerClaims"
+    },
+    {
+      "key": "tab-dealerAccounts",
+      "path": "/admin?tab=dealerAccounts"
+    },
+    {
+      "key": "tab-dealerPrices",
+      "path": "/admin?tab=dealerPrices"
+    },
+    {
+      "key": "tab-commissionRates",
+      "path": "/admin?tab=commissionRates"
+    },
+    {
+      "key": "tab-productCategories",
+      "path": "/admin?tab=productCategories"
+    },
+    {
+      "key": "tab-payouts",
+      "path": "/admin?tab=payouts"
+    },
+    {
+      "key": "tab-merchantProducts",
+      "path": "/admin?tab=merchantProducts"
+    },
+    {
+      "key": "tab-storefronts",
+      "path": "/admin?tab=storefronts"
+    },
+    {
+      "key": "tab-brands",
+      "path": "/admin?tab=brands"
+    },
+    {
+      "key": "tab-users",
+      "path": "/admin?tab=users"
+    },
+    {
+      "key": "tab-reviews",
+      "path": "/admin?tab=reviews"
+    },
+    {
+      "key": "tab-community",
+      "path": "/admin?tab=community"
+    },
+    {
+      "key": "tab-supportChat",
+      "path": "/admin?tab=supportChat"
+    },
+    {
+      "key": "tab-subscriptions",
+      "path": "/admin?tab=subscriptions"
+    },
+    {
+      "key": "tab-posCredits",
+      "path": "/admin?tab=posCredits"
+    },
+    {
+      "key": "tab-waste",
+      "path": "/admin?tab=waste"
+    },
+    {
+      "key": "tab-coupons",
+      "path": "/admin?tab=coupons"
+    },
+    {
+      "key": "tab-flashSales",
+      "path": "/admin?tab=flashSales"
+    },
+    {
+      "key": "tab-engagement",
+      "path": "/admin?tab=engagement"
+    },
+    {
+      "key": "tab-faqs",
+      "path": "/admin?tab=faqs"
+    },
+    {
+      "key": "tab-contentKit",
+      "path": "/admin?tab=contentKit"
+    },
+    {
+      "key": "tab-academy",
+      "path": "/admin?tab=academy"
+    },
+    {
+      "key": "tab-quickReplies",
+      "path": "/admin?tab=quickReplies"
+    },
+    {
+      "key": "tab-notificationTemplates",
+      "path": "/admin?tab=notificationTemplates"
+    },
+    {
+      "key": "tab-staffRoster",
+      "path": "/admin?tab=staffRoster"
+    },
+    {
+      "key": "tab-shiftApproval",
+      "path": "/admin?tab=shiftApproval"
+    },
+    {
+      "key": "tab-payroll",
+      "path": "/admin?tab=payroll"
+    },
+    {
+      "key": "tab-attendance",
+      "path": "/admin?tab=attendance"
+    },
+    {
+      "key": "tab-config",
+      "path": "/admin?tab=config"
+    },
+    {
+      "key": "tab-opsHealth",
+      "path": "/admin?tab=opsHealth"
+    },
+    {
+      "key": "pos",
+      "path": "/admin/pos"
+    }
+  ],
+  "adminDaily": [
+    "tab-inbox",
+    "tab-dashboard",
+    "tab-orders",
+    "tab-merchantProducts",
+    "tab-productCategories",
+    "tab-users",
+    "tab-waste",
+    "tab-supportChat",
+    "tab-coupons",
+    "tab-dealers",
+    "tab-storefronts"
+  ],
+  "pairs": [
+    "home",
+    "browse",
+    "product-slug",
+    "wishlist",
+    "group-buy",
+    "group-buy-id",
+    "brand-slug",
+    "brand-story",
+    "cart",
+    "checkout",
+    "bank-payment-code",
+    "orders",
+    "subscriptions",
+    "order-code",
+    "addresses",
+    "about",
+    "profile",
+    "edit-profile",
+    "settings",
+    "notifications",
+    "chat",
+    "loyalty",
+    "offers",
+    "wallet",
+    "rewards",
+    "rewards-mine",
+    "cashback",
+    "game",
+    "ai-advisor",
+    "feed",
+    "feed-leaderboard",
+    "feed-events",
+    "feed-id",
+    "academy",
+    "academy-courseid",
+    "s-slug",
+    "affiliate",
+    "storefront",
+    "dealer",
+    "staff",
+    "my-payroll",
+    "brand-owner",
+    "admin",
+    "admin-community",
+    "recycle",
+    "recycle-rules",
+    "recycle-new",
+    "recycle-points",
+    "recycle-r-id",
+    "recycle-r-id-edit",
+    "recycle-requests",
+    "recycle-done-id",
+    "recycle-desk",
+    "404"
+  ],
+  "skips": [
+    {
+      "key": "refill",
+      "app": "miniapp",
+      "path": "/refill",
+      "skip": "Mini App đã gỡ Refill, /refill chỉ còn chuyển sang /recycle; web không làm /doi-vo"
+    },
+    {
+      "key": "khoi-phuc",
+      "app": "web",
+      "path": "/khoi-phuc/[hint]",
+      "skip": "trang nội bộ: middleware viết lại / cho khách có cookie phiên, không có link vào"
+    },
+    {
+      "key": "product-redirect",
+      "app": "web",
+      "path": "/product/[slug]",
+      "skip": "route handler 307 sang /san-pham/[slug], không có giao diện riêng"
+    },
+    {
+      "key": "dang-nhap-callback",
+      "app": "web",
+      "path": "/dang-nhap/callback",
+      "skip": "đích OAuth, không có nội dung riêng và không có link vào"
+    }
+  ]
+}
