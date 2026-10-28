@@ -122,10 +122,20 @@ export function isPublicGet(method: string, url: string): boolean {
   return PUBLIC_GET_PATHS.some((re) => re.test(path));
 }
 
+const ANON_AUTH_PATH = /^\/auth\/(zalo-mini-app|guest|zalo-oauth|refresh|logout)$/;
+
+/**
+ * Lệnh /auth/* tạo hoặc đổi phiên mà không cần phiên (công khai). /auth/ensure-phone và /auth/me cần JWT nên KHÔNG thuộc
+ * nhóm này: access token hết hạn thì phải được refresh và gửi lại như mọi lệnh khác.
+ */
+export function isAnonAuthCall(url: string): boolean {
+  return ANON_AUTH_PATH.test(url.split('?')[0]!.replace(/\/+$/, ''));
+}
+
 /** Gắn phiên vào request ngay trước khi gửi (chạy lại ở mỗi lần gửi lại). */
 async function prepare(req: PendingRequest): Promise<void> {
-  // Chính các lệnh /auth/* KHÔNG được chờ authReady — chúng là thứ tạo ra nó (deadlock).
-  if (authReady && !req.url.includes('/auth/') && !isPublicGet(req.method, req.url)) {
+  // Chính các lệnh đăng nhập/refresh KHÔNG được chờ authReady — chúng là thứ tạo ra nó (deadlock).
+  if (authReady && !isAnonAuthCall(req.url) && !isPublicGet(req.method, req.url)) {
     const pending = authReady;
     await Promise.race([
       pending.catch(() => undefined),
@@ -159,10 +169,9 @@ async function execute<T>(req: PendingRequest): Promise<HttpResponse<T>> {
         return execute<T>(req);
       }
     }
-    // KHÔNG refresh cho chính endpoint /auth/* — nếu /auth/refresh trả 401, gọi lại
+    // KHÔNG refresh cho các lệnh đăng nhập/refresh — nếu /auth/refresh trả 401, gọi lại
     // refresh sẽ await chính promise đang chờ nó → deadlock tới khi timeout 15s.
-    const isAuthCall = req.url.includes('/auth/');
-    if (status === 401 && !req.retried && onUnauthorized && !isAuthCall) {
+    if (status === 401 && !req.retried && onUnauthorized && !isAnonAuthCall(req.url)) {
       req.retried = true;
       refreshInFlight ??= onUnauthorized().finally(() => {
         refreshInFlight = null;
