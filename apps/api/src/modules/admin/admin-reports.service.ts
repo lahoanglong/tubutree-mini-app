@@ -97,7 +97,7 @@ export class AdminReportsService {
    * doanh thu với KPI: admin-revenue.ts). `by=campaign` nhóm theo chiến dịch chạm đầu (User.firstTouchCampaign, vd card-2611) thay cho nguồn. "Đơn" là đơn còn hiệu lực (đã xác nhận trở đi, không huỷ/trả, không còn chờ thanh toán);
    * các đơn cùng checkoutGroup (một lần thanh toán tách theo nơi giao) tính là một lần mua, còn doanh thu vẫn cộng từng đơn.
    *
-   * "Khách mới" theo NEW_CUSTOMER_SQL (không tính tài khoản ADMIN/STAFF, dòng khách vãng lai đã gộp, khách cũ được gắn nguồn lúc gộp;
+   * "Khách mới" theo NEW_CUSTOMER_SQL (không tính tài khoản ADMIN/STAFF, phiên khách vãng lai guest_ chưa đăng nhập kể cả khi đã đặt đơn, dòng khách vãng lai đã gộp, khách cũ được gắn nguồn lúc gộp;
    * xem impl/source.md mục 3), cùng định nghĩa với thẻ "Khách mới" của revenueReport. Khách chưa có nguồn (tài khoản trước khi có cột) vào "Không rõ".
    */
   async sourceReport(q: { from?: string; to?: string; by?: 'source' | 'campaign' }, now = new Date()) {

@@ -35,12 +35,14 @@ import { CatalogService } from '../catalog/catalog.service';
 import {
   ADMIN_ORDER_STATUSES,
   ORDER_KINDS,
+  ORDER_QUEUES,
   ORDER_LIST_PLATFORMS,
   ORDER_PAYMENT_STATUSES,
   PANCAKE_FILTERS,
   type InvoiceFilter,
   type OrderKind,
   type OrderListPlatform,
+  type OrderQueue,
   type OrderPaymentFilter,
   type PancakeFilter,
   type RecyclingFilter,
@@ -316,6 +318,7 @@ export class ListOrdersQuery extends PaginationQuery {
   @IsOptional() @IsIn([...ORDER_KINDS]) kind?: OrderKind;
   @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
   @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
+  @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
   /** Id CTV / người giới thiệu (chọn từ ô tìm khách). */
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
   /** Slug hoặc subdomain của gian hàng được ghi công. */
@@ -336,17 +339,22 @@ export class ExportOrdersQuery {
   @IsOptional() @IsIn([...ORDER_KINDS]) kind?: OrderKind;
   @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
   @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
+  @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
   @IsOptional() @IsString() @MaxLength(100) storefront?: string;
 }
 
 export class ExportUsersQuery {
   @IsOptional() @IsString() @MaxLength(100) search?: string;
+  /** `guests=1`: xuất cả phiên khách vãng lai (mặc định chỉ tài khoản thật, như danh sách). */
+  @IsOptional() @Transform(({ value }) => value === '1' || value === 'true' || value === true) @IsBoolean() guests?: boolean;
 }
 
 export class ListUsersQuery extends PaginationQuery {
   /** SĐT (chứa), tên (chứa, không phân biệt hoa thường) hoặc id đúng — cho ô chọn khách. */
   @IsOptional() @IsString() @MaxLength(100) search?: string;
+  /** `guests=1`: hiện cả phiên khách vãng lai (mặc định chỉ tài khoản thật). */
+  @IsOptional() @Transform(({ value }) => value === '1' || value === 'true' || value === true) @IsBoolean() guests?: boolean;
 }
 
 export class ProductSearchQuery {
@@ -421,6 +429,11 @@ export class AdminController {
     return this.admin.getDashboardStats();
   }
 
+  @Get('dashboard/today')
+  dashboardToday() {
+    return this.admin.getTodaySummary();
+  }
+
   @Get('dealer-applications')
   dealerApps(@Query() q: DealerAppsQuery) {
     return this.admin.listDealerApplications(q.status, q.page, q.limit, q.order);
@@ -434,7 +447,7 @@ export class AdminController {
   @AllowStaff('CSKH')
   @Get('users')
   users(@Query() q: ListUsersQuery) {
-    return this.admin.listUsers(q.page, q.limit, q.search);
+    return this.admin.listUsers(q.page, q.limit, q.search, q.guests === true);
   }
 
   /** Ô chọn sản phẩm/biến thể (Flash Sale, Content Kit) thay cho nhập Variation/Product ID. */
@@ -477,11 +490,12 @@ export class AdminController {
   @AllowStaff('CSKH', 'KHO', 'KE_TOAN')
   @Get('orders')
   orders(@Query() q: ListOrdersQuery, @CurrentUser() viewer: JwtPayload) {
-    const { kind, payment, platform, referrerUserId, storefront, order } = q;
+    const { kind, payment, platform, queue, referrerUserId, storefront, order } = q;
     return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake, q.from, q.to, viewer, {
       kind,
       payment,
       platform,
+      queue,
       referrerUserId,
       storefront,
       order,
@@ -500,7 +514,7 @@ export class AdminController {
 
   @Get('users/export')
   async exportUsers(@Query() q: ExportUsersQuery, @Res() res: Response) {
-    await streamCsv(res, `nguoi-dung-${vnDateKey()}.csv`, this.admin.userCsv(q.search));
+    await streamCsv(res, `nguoi-dung-${vnDateKey()}.csv`, this.admin.userCsv(q.search, q.guests === true));
   }
 
   /** "Đã xử lý" — đơn rời hàng đợi "Cần xử lý Pancake" (lý do + ghi chú ghi vào log kèm admin). */

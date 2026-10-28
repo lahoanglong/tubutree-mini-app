@@ -189,7 +189,9 @@ export interface DashboardStats {
   shippingOrders: number;
   deliveredOrders: number;
   cancelledOrders: number;
+  /** Chỉ tài khoản thật; phiên khách vãng lai đếm riêng ở `guestUsers` (API cũ chưa trả thì vắng). */
   totalUsers: number;
+  guestUsers?: number;
   totalAffiliates: number;
   totalProducts: number;
   plantedTreesCount: number;
@@ -430,10 +432,11 @@ export const importSoldExternal = (csv: string) =>
   });
 
 /** search: SĐT (chứa), tên (không phân biệt hoa thường) hoặc đúng id. */
-export const listUsers = (page = 1, search?: string) => {
+export const listUsers = (page = 1, search?: string, includeGuests = false) => {
   const q = new URLSearchParams({ page: String(page), limit: '20' });
   if (search?.trim()) q.set('search', search.trim());
-  return apiFetch<Page<AdminUser>>(`/admin/users?${q.toString()}`);
+  if (includeGuests) q.set('guests', '1');
+  return apiFetch<Page<AdminUser> & { guestCount?: number }>(`/admin/users?${q.toString()}`);
 };
 type BlockState = { id: string; isBlocked: boolean; blockedAt: string | null; blockedReason: string | null };
 /** Khoá ngay: thu hồi mọi phiên đăng nhập, access token đang có bị từ chối trong vài giây. */
@@ -453,6 +456,13 @@ export const setUserRole = (phone: string, role: UserRole, tierId?: string) => {
     { method: 'POST', body: { phone, role, ...(tier ? { tierId: tier } : {}) } },
   );
 };
+/** Số của trang "Hôm nay" (chỉ ADMIN): đơn, doanh thu đã thu, khách mới (tài khoản thật) theo ngày giờ VN. */
+export interface TodaySummary {
+  orders: { today: number; yesterday: number; week: number };
+  revenue: { today: number; yesterday: number; week: number };
+  newUsers: { today: number; yesterday: number; week: number };
+}
+export const getTodaySummary = () => apiFetch<TodaySummary>('/admin/dashboard/today');
 export const getDashboardStats = () =>
   apiFetch<DashboardStats>('/admin/dashboard/stats');
 /** attention = hàng đợi "Cần xử lý thu gom"; all = mọi đơn có chọn thu gom tái chế. */
@@ -465,11 +475,14 @@ export type PancakeFilter = 'attention' | 'unsynced';
 export type OrderKind = 'retail' | 'ctv' | 'dealer' | 'ctv_assisted' | 'storefront';
 export type OrderPaymentFilter = 'UNPAID' | 'PAID' | 'REFUNDED' | 'FAILED';
 export type OrderListPlatform = 'miniapp' | 'web';
+/** Hàng đợi của hộp việc, đúng điều kiện của số đếm (không có ô chọn riêng trên bộ lọc). */
+export type OrderQueue = 'bank_transfer_to_confirm';
 /** Bộ lọc thêm của danh sách đơn (D1-17) cùng thứ tự theo ngày đặt; `storefront` là slug hoặc tên miền con. */
 export interface OrderListExtra {
   kind?: OrderKind;
   payment?: OrderPaymentFilter;
   platform?: OrderListPlatform;
+  queue?: OrderQueue;
   referrerUserId?: string;
   storefront?: string;
   order?: 'asc' | 'desc';
@@ -1686,9 +1699,12 @@ export const downloadOrdersCsv = (f: OrderExportFilter) => {
   const qs = orderFilterParams(f).toString();
   return apiDownload(`/admin/orders/export${qs ? `?${qs}` : ''}`, `don-hang-${todayKey()}.csv`);
 };
-export const downloadUsersCsv = (search?: string) => {
-  const qs = search?.trim() ? `?search=${encodeURIComponent(search.trim())}` : '';
-  return apiDownload(`/admin/users/export${qs}`, `nguoi-dung-${todayKey()}.csv`);
+export const downloadUsersCsv = (search?: string, guests = false) => {
+  const params = new URLSearchParams();
+  if (search?.trim()) params.set('search', search.trim());
+  if (guests) params.set('guests', '1');
+  const qs = params.toString();
+  return apiDownload(`/admin/users/export${qs ? `?${qs}` : ''}`, `nguoi-dung-${todayKey()}.csv`);
 };
 
 // ── Việc cần xử lý + sức khoẻ vận hành (ADMINOPS-13, PLATFORM-5) ──
@@ -1722,10 +1738,14 @@ export type InboxKey =
   | 'invoicePending'
   | 'externalPoints'
   | 'supportChatUnforwarded'
-  | 'zaloBridgeDown';
+  | 'zaloBridgeDown'
+  | 'bankTransferToConfirm'
+  | 'storefrontsPending'
+  | 'communityReports'
+  | 'productsMissingImage';
 export interface OpsInbox {
   generatedAt: string;
-  items: { key: InboxKey; count: number }[];
+  items: { key: InboxKey; count: number; /** Chỉ `bankTransferToConfirm`: giờ còn lại của đơn chờ lâu nhất trước khi tự huỷ. */ hoursLeft?: number }[];
 }
 export const getOpsInbox = () => apiFetch<OpsInbox>('/admin/ops/inbox');
 

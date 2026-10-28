@@ -41,6 +41,7 @@ import {
 } from './admin-order-filter';
 import { orderCsvChunks, userCsvChunks } from './admin-export';
 import { GMV_ORDER_SQL, REVENUE_ORDER_SQL } from './admin-revenue';
+import { NEW_CUSTOMER_SQL } from './admin-source-report';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { isDeadConfigKey } from '../system-config/dead-config-keys';
 import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from './admin-config-rules';
@@ -72,6 +73,7 @@ import {
   MERCHANT_PRODUCT_EDIT_STALE,
   PENDING_MERCHANT_PRODUCT_WHERE,
 } from '../merchant/merchant-product-review';
+import { startOfVnDay } from '../../common/vn-time';
 import { maskPhone, maskPhoneKeepLast3, maskVnPhonesInText } from '../../common/mask-pii';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
 import {
@@ -185,6 +187,23 @@ function canAdminRecordLatePayment(o: { type: string; paymentMethod: string; pay
     o.paymentStatus === 'UNPAID' &&
     (o.status === 'CANCELLED' || o.status === 'RETURNED')
   );
+}
+
+/**
+ * Phiên khách vãng lai: mỗi thiết bị chưa đăng nhập tự tạo một user `guest_<deviceId>` không SĐT (AuthService.loginAsGuest).
+ * Nâng cấp lên tài khoản thật thì zaloId đổi hoặc có SĐT nên rời nhóm này. Không xoá, chỉ tách khỏi số "người dùng".
+ */
+export const GUEST_USER_WHERE: Prisma.UserWhereInput = { role: 'CUSTOMER', phone: null, zaloId: { startsWith: 'guest_' } };
+// Bù đúng của GUEST_USER_WHERE; viết rõ từng nhánh vì NOT(... zaloId LIKE ...) trên zaloId NULL ra NULL và làm tài khoản đã ẩn danh biến mất.
+export const REAL_USER_WHERE: Prisma.UserWhereInput = {
+  OR: [{ role: { not: 'CUSTOMER' } }, { phone: { not: null } }, { zaloId: null }, { NOT: { zaloId: { startsWith: 'guest_' } } }],
+};
+
+/** Tập người dùng của danh sách và file xuất: mặc định chỉ tài khoản thật, `includeGuests` thêm phiên khách vãng lai. */
+export function adminUserListWhere(search?: string, includeGuests = false): Prisma.UserWhereInput | undefined {
+  const searchWhere = adminUserSearchWhere(search);
+  if (includeGuests) return searchWhere;
+  return searchWhere ? { AND: [REAL_USER_WHERE, searchWhere] } : REAL_USER_WHERE;
 }
 
 /** Ô tìm người dùng: SĐT (cả +84/84), tên có hoặc không dấu, hoặc đúng id. `%`/`_` khớp đúng nghĩa đen. */
@@ -367,9 +386,10 @@ export class AdminService {
   }
 
   // ── Users & orders ──
-  async listUsers(page: number, limit: number, search?: string) {
-    const where = adminUserSearchWhere(search);
-    const [items, total] = await this.prisma.$transaction([
+  async listUsers(page: number, limit: number, search?: string, includeGuests = false) {
+    const searchWhere = adminUserSearchWhere(search);
+    const where = adminUserListWhere(search, includeGuests);
+    const [items, total, guestCount] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -381,8 +401,9 @@ export class AdminService {
         },
       }),
       this.prisma.user.count({ where }),
+      this.prisma.user.count({ where: searchWhere ? { AND: [GUEST_USER_WHERE, searchWhere] } : GUEST_USER_WHERE }),
     ]);
-    return paginated(items, page, limit, total);
+    return { ...paginated(items, page, limit, total), guestCount };
   }
 
   // ── Tra cứu cho ô chọn (thay nhập ID thô) + màn duyệt đánh giá / gói định kỳ (C-092) ──
@@ -742,6 +763,7 @@ export class AdminService {
       refundRows,
       dealerDebtRows,
       totalUsers,
+      guestUsers,
       totalAffiliates,
       totalProducts,
       plantedTreesCount,
@@ -782,7 +804,8 @@ export class AdminService {
         SELECT SUM(balance) AS outstanding
         FROM (SELECT SUM(delta) AS balance FROM dealer_credit_ledgers GROUP BY "userId") b
         WHERE balance > 0`,
-      this.prisma.user.count(),
+      this.prisma.user.count({ where: REAL_USER_WHERE }),
+      this.prisma.user.count({ where: GUEST_USER_WHERE }),
       this.prisma.user.count({ where: { role: 'AFFILIATE' } }),
       this.prisma.product.count(),
       this.prisma.plantedTree.count(),
@@ -818,10 +841,53 @@ export class AdminService {
       returnRefundTotal: Number(refunds?.all_refunds ?? 0),
       dealerDebtOutstanding: Number(dealerDebtRows[0]?.outstanding ?? 0),
       totalUsers,
+      guestUsers,
       totalAffiliates,
       totalProducts,
       plantedTreesCount,
       recentOrders,
+    };
+  }
+
+  /**
+   * Số của trang "Hôm nay": cùng định nghĩa với trang Báo cáo doanh thu cho cùng khoảng ngày giờ VN (đếm mọi đơn, doanh thu =
+   * đơn đã thu trừ hoàn một phần đã duyệt, khách mới theo NEW_CUSTOMER_SQL). Hôm nay, hôm qua và 7 ngày gần nhất (gồm hôm nay).
+   */
+  async getTodaySummary(now = new Date()) {
+    const dayStart = startOfVnDay(now);
+    const dayEnd = new Date(dayStart.getTime() + 86_400_000);
+    const yesterdayStart = new Date(dayStart.getTime() - 86_400_000);
+    const weekStart = new Date(dayStart.getTime() - 6 * 86_400_000);
+    const [rows, users] = await Promise.all([
+      this.prisma.$queryRaw<
+        { orders_today: number; orders_yesterday: number; orders_week: number; rev_today: bigint | null; rev_yesterday: bigint | null; rev_week: bigint | null }[]
+      >`
+        SELECT (COUNT(*) FILTER (WHERE o."createdAt" >= ${dayStart}))::int AS orders_today,
+               (COUNT(*) FILTER (WHERE o."createdAt" >= ${yesterdayStart} AND o."createdAt" < ${dayStart}))::int AS orders_yesterday,
+               COUNT(*)::int AS orders_week,
+               COALESCE(SUM(o.total - COALESCE(pr.refund, 0)) FILTER (WHERE ${REVENUE_ORDER_SQL} AND o."createdAt" >= ${dayStart}), 0) AS rev_today,
+               COALESCE(SUM(o.total - COALESCE(pr.refund, 0)) FILTER (WHERE ${REVENUE_ORDER_SQL} AND o."createdAt" >= ${yesterdayStart} AND o."createdAt" < ${dayStart}), 0) AS rev_yesterday,
+               COALESCE(SUM(o.total - COALESCE(pr.refund, 0)) FILTER (WHERE ${REVENUE_ORDER_SQL}), 0) AS rev_week
+          FROM orders o
+          LEFT JOIN LATERAL (
+            SELECT SUM(r."refundAmount" + r."shippingRefund") AS refund
+              FROM return_requests r
+             WHERE r."orderId" = o.id AND r.status = 'APPROVED'
+          ) pr ON true
+         WHERE o."createdAt" >= ${weekStart} AND o."createdAt" < ${dayEnd}`,
+      this.prisma.$queryRaw<{ today: number; yesterday: number; week: number }[]>`
+        SELECT (COUNT(*) FILTER (WHERE u."createdAt" >= ${dayStart}))::int AS today,
+               (COUNT(*) FILTER (WHERE u."createdAt" >= ${yesterdayStart} AND u."createdAt" < ${dayStart}))::int AS yesterday,
+               COUNT(*)::int AS week
+          FROM users u
+         WHERE u."createdAt" >= ${weekStart} AND u."createdAt" < ${dayEnd} AND ${NEW_CUSTOMER_SQL}`,
+    ]);
+    const r = rows[0];
+    const u = users[0];
+    return {
+      orders: { today: r?.orders_today ?? 0, yesterday: r?.orders_yesterday ?? 0, week: r?.orders_week ?? 0 },
+      revenue: { today: Number(r?.rev_today ?? 0), yesterday: Number(r?.rev_yesterday ?? 0), week: Number(r?.rev_week ?? 0) },
+      newUsers: { today: u?.today ?? 0, yesterday: u?.yesterday ?? 0, week: u?.week ?? 0 },
     };
   }
 
@@ -861,8 +927,8 @@ export class AdminService {
     return orderCsvChunks(this.prisma, await this.adminOrderWhere(f, { exactPhoneOnly: opts.maskPhones }), opts);
   }
 
-  userCsv(search?: string): AsyncGenerator<string> {
-    return userCsvChunks(this.prisma, adminUserSearchWhere(search));
+  userCsv(search?: string, includeGuests = false): AsyncGenerator<string> {
+    return userCsvChunks(this.prisma, adminUserListWhere(search, includeGuests));
   }
 
   /** Điều kiện lọc đơn admin dùng chung cho danh sách và file xuất CSV — cùng một tập đơn. */

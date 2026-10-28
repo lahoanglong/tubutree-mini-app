@@ -5,7 +5,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { paginated, skipTake } from '../../common/pagination';
-import { isStorefrontApprovalRequired } from './storefront-config';
+import { isStorefrontApprovalRequired, STOREFRONT_PENDING_APPROVAL_WHERE } from './storefront-config';
 import { isStorefrontApproved, ownerHiddenReason, type PublicVisibilityOptions } from './storefront-visibility';
 
 export type StorefrontStatusFilter = 'PUBLISHED' | 'DRAFT' | 'TAKEN_DOWN' | 'PENDING_APPROVAL';
@@ -187,7 +187,7 @@ export class StorefrontAdminService {
     if (q.status === 'PUBLISHED') and.push({ isPublished: true, takenDownAt: null });
     else if (q.status === 'DRAFT') and.push({ isPublished: false, takenDownAt: null });
     else if (q.status === 'TAKEN_DOWN') and.push({ takenDownAt: { not: null } });
-    else if (q.status === 'PENDING_APPROVAL') and.push({ isPublished: true, takenDownAt: null, type: 'CTV', isPartner: false, approvedAt: null });
+    else if (q.status === 'PENDING_APPROVAL') and.push(STOREFRONT_PENDING_APPROVAL_WHERE);
     if (q.type) and.push({ type: q.type });
     const term = q.q?.trim();
     if (term) {

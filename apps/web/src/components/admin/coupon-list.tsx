@@ -6,6 +6,7 @@ import { listCoupons, updateCoupon, type AdminCoupon, type CouponStatusFilter } 
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
+import { VnDateInput } from './vn-date-input';
 import { BTN_SMALL, BTN_XS_SECONDARY, FIELD_CLASS, FIELD_XS, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
 
 const PAGE_SIZE = 20;
@@ -45,26 +46,20 @@ function EndDateForm({
   onCommit: (c: AdminCoupon, dayKey: string, onDone: () => void) => void;
 }) {
   const [day, setDay] = useState('');
+  const [partial, setPartial] = useState(false);
   return (
     <form
       className="flex flex-wrap items-center gap-1 text-xs text-stone-600"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!pending) onCommit(c, day, () => setDay(''));
+        if (!pending && !partial) onCommit(c, day, () => setDay(''));
       }}
     >
       <label className="flex items-center gap-1">
         Đổi hạn đến
-        <input
-          type="date"
-          aria-label={`Đổi ngày hết hạn mã ${c.code}`}
-          className={FIELD_XS}
-          value={day}
-          disabled={pending}
-          onChange={(e) => setDay(e.target.value)}
-        />
+        <VnDateInput ariaLabel={`Đổi ngày hết hạn mã ${c.code}`} className={FIELD_XS} value={day} disabled={pending} onChange={setDay} onPendingChange={setPartial} />
       </label>
-      <button type="submit" className={BTN_XS_SECONDARY} disabled={pending || !day}>
+      <button type="submit" className={BTN_XS_SECONDARY} disabled={pending || partial || !day}>
         Lưu hạn
       </button>
     </form>

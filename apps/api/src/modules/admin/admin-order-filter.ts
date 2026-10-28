@@ -124,6 +124,19 @@ export type OrderPaymentFilter = (typeof ORDER_PAYMENT_STATUSES)[number];
 export const ORDER_LIST_PLATFORMS = ['miniapp', 'web'] as const;
 export type OrderListPlatform = (typeof ORDER_LIST_PLATFORMS)[number];
 
+/**
+ * Hàng đợi "Đơn chuyển khoản chờ xác nhận tiền" ở hộp việc: đúng bộ điều kiện của số đếm (đơn lẻ chuyển khoản chưa trả), để bấm vào
+ * thẻ ra đúng bấy nhiêu đơn, không lẫn đơn ZaloPay, VNPay, ví hay đơn đại lý chưa trả.
+ */
+export const ORDER_QUEUES = ['bank_transfer_to_confirm'] as const;
+export type OrderQueue = (typeof ORDER_QUEUES)[number];
+export const BANK_TRANSFER_TO_CONFIRM_WHERE = {
+  type: 'RETAIL',
+  status: 'PENDING_PAYMENT',
+  paymentStatus: 'UNPAID',
+  paymentMethod: 'BANK_TRANSFER',
+} as const;
+
 export interface AdminOrderFilter {
   status?: string;
   search?: string;
@@ -133,6 +146,7 @@ export interface AdminOrderFilter {
   kind?: OrderKind;
   payment?: OrderPaymentFilter;
   platform?: OrderListPlatform;
+  queue?: OrderQueue;
   /** Id CTV / người giới thiệu (Order.referrerUserId). */
   referrerUserId?: string;
   /** Id gian hàng được ghi công (Order.storefrontId); web gửi slug, AdminService.adminOrderWhere đổi sang id. */
@@ -160,6 +174,7 @@ export interface OrderListExtra {
   kind?: OrderKind;
   payment?: OrderPaymentFilter;
   platform?: OrderListPlatform;
+  queue?: OrderQueue;
   referrerUserId?: string;
   storefront?: string;
   order?: 'asc' | 'desc';
@@ -298,6 +313,7 @@ export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInpu
   if (f.kind) and.push(ORDER_KIND_WHERE[f.kind]);
   if (f.payment) and.push({ paymentStatus: f.payment });
   if (f.platform) and.push({ platform: f.platform });
+  if (f.queue === 'bank_transfer_to_confirm') and.push(BANK_TRANSFER_TO_CONFIRM_WHERE);
   if (f.referrerUserId) and.push({ referrerUserId: f.referrerUserId });
   if (f.storefrontId) and.push({ storefrontId: f.storefrontId });
   if (and.length === 0) return {};

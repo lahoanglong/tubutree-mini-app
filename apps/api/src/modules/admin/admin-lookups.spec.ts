@@ -3,7 +3,7 @@ import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { AdminService } from './admin.service';
+import { AdminService, GUEST_USER_WHERE, REAL_USER_WHERE } from './admin.service';
 import {
   AdminController,
   ListReviewsQuery,
@@ -108,12 +108,26 @@ describe('AdminService.lookupVariations — nhãn cho Variation ID đã lưu', (
 });
 
 describe('AdminService.listUsers — tìm khách theo SĐT/tên/id', () => {
-  it('không search → hành vi cũ (không where)', async () => {
+  it('không search → mặc định chỉ tài khoản thật (bỏ phiên khách vãng lai), kèm số khách vãng lai riêng; guests=1 → không lọc', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
-    const count = jest.fn().mockResolvedValue(0);
-    await mkAdmin({ user: { findMany, count }, $transaction: tx }).listUsers(1, 20);
-    expect(findMany.mock.calls[0]![0].where).toBeUndefined();
-    expect(count).toHaveBeenCalledWith({ where: undefined });
+    const count = jest.fn().mockResolvedValueOnce(5).mockResolvedValueOnce(2);
+    const res = await mkAdmin({ user: { findMany, count }, $transaction: tx }).listUsers(1, 20);
+    expect(findMany.mock.calls[0]![0].where).toEqual(REAL_USER_WHERE);
+    expect(count).toHaveBeenNthCalledWith(1, { where: REAL_USER_WHERE });
+    expect(count).toHaveBeenNthCalledWith(2, { where: GUEST_USER_WHERE });
+    expect(res).toMatchObject({ guestCount: 2, meta: { total: 5 } });
+    const all = jest.fn().mockResolvedValue(0);
+    await mkAdmin({ user: { findMany, count: all }, $transaction: tx }).listUsers(1, 20, undefined, true);
+    expect(findMany.mock.calls[1]![0].where).toBeUndefined();
+  });
+
+  it('file xuất người dùng cùng tập với danh sách: mặc định bỏ khách vãng lai, guests=1 mới xuất đủ', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const svc = mkAdmin({ user: { findMany } });
+    for await (const _ of svc.userCsv()) void _;
+    expect(findMany.mock.calls[0]![0].where).toEqual(REAL_USER_WHERE);
+    for await (const _ of svc.userCsv(undefined, true)) void _;
+    expect(findMany.mock.calls[1]![0].where).toBeUndefined();
   });
 
   it('có search → lọc OR theo SĐT chứa, tên chứa (không phân biệt hoa thường), tên không dấu, id đúng; count dùng cùng where', async () => {
@@ -121,14 +135,15 @@ describe('AdminService.listUsers — tìm khách theo SĐT/tên/id', () => {
     const count = jest.fn().mockResolvedValue(0);
     await mkAdmin({ user: { findMany, count }, $transaction: tx }).listUsers(1, 8, '  0901 ');
     const where = findMany.mock.calls[0]![0].where;
-    expect(where).toEqual({
+    const searchWhere = {
       OR: [
         { phone: { contains: '0901' } },
         { fullName: { contains: '0901', mode: 'insensitive' } },
         { fullNameSearch: { contains: '0901' } },
         { id: '0901' },
       ],
-    });
+    };
+    expect(where).toEqual({ AND: [REAL_USER_WHERE, searchWhere] });
     expect(count).toHaveBeenCalledWith({ where });
   });
 
@@ -137,9 +152,9 @@ describe('AdminService.listUsers — tìm khách theo SĐT/tên/id', () => {
     const count = jest.fn().mockResolvedValue(0);
     const admin = mkAdmin({ user: { findMany, count }, $transaction: tx });
     await admin.listUsers(1, 8, '+84 901 234 567');
-    expect(findMany.mock.calls[0]![0].where.OR).toEqual(expect.arrayContaining([{ phone: { contains: '0901234567' } }]));
+    expect(findMany.mock.calls[0]![0].where.AND[1].OR).toEqual(expect.arrayContaining([{ phone: { contains: '0901234567' } }]));
     await admin.listUsers(1, 8, 'Khách MỘT');
-    expect(findMany.mock.calls[1]![0].where.OR).toEqual(expect.arrayContaining([{ fullNameSearch: { contains: 'khach mot' } }]));
+    expect(findMany.mock.calls[1]![0].where.AND[1].OR).toEqual(expect.arrayContaining([{ fullNameSearch: { contains: 'khach mot' } }]));
   });
 });
 
@@ -261,7 +276,7 @@ describe('AdminController — route + DTO của các endpoint tra cứu', () => 
     await ctl.subscriptions(Object.assign(new ListSubscriptionsQuery(), { page: 1, limit: 20, status: 'PAUSED' }));
     expect(admin.listSubscriptions).toHaveBeenCalledWith(1, 20, 'PAUSED');
     await ctl.users(Object.assign(new ListUsersQuery(), { page: 1, limit: 8, search: '090' }));
-    expect(admin.listUsers).toHaveBeenCalledWith(1, 8, '090');
+    expect(admin.listUsers).toHaveBeenCalledWith(1, 8, '090', false);
   });
 
   it('DTO: visibility/rating/status hợp lệ, giá trị lạ bị chặn; ids/q giới hạn độ dài', async () => {
@@ -273,5 +288,22 @@ describe('AdminController — route + DTO của các endpoint tra cứu', () => 
     expect((await validate(plainToInstance(ProductSearchQuery, { q: 'x'.repeat(101) }))).some((e) => e.property === 'q')).toBe(true);
     expect((await validate(plainToInstance(VariationLookupQuery, { ids: 'x'.repeat(3001) }))).some((e) => e.property === 'ids')).toBe(true);
     expect((await validate(plainToInstance(ListUsersQuery, { search: 'x'.repeat(101) }))).some((e) => e.property === 'search')).toBe(true);
+  });
+});
+
+describe('AdminService.getTodaySummary (R-74)', () => {
+  it('đếm theo ngày giờ VN: mốc hôm nay 00:00 VN, hôm qua, và 7 ngày gồm hôm nay; mỗi truy vấn nhận đúng mốc', async () => {
+    const queryRaw = jest
+      .fn()
+      .mockResolvedValueOnce([{ orders_today: 3, orders_yesterday: 2, orders_week: 9, rev_today: 300n, rev_yesterday: 200n, rev_week: 900n }])
+      .mockResolvedValueOnce([{ today: 4, yesterday: 1, week: 11 }]);
+    const admin = mkAdmin({ $queryRaw: queryRaw });
+    // 2026-10-28 02:00 UTC = 09:00 VN
+    const res = await admin.getTodaySummary(new Date('2026-10-28T02:00:00Z'));
+    expect(res).toEqual({ orders: { today: 3, yesterday: 2, week: 9 }, revenue: { today: 300, yesterday: 200, week: 900 }, newUsers: { today: 4, yesterday: 1, week: 11 } });
+    const dayStart = new Date('2026-10-27T17:00:00Z');
+    expect(queryRaw.mock.calls[0]).toContainEqual(dayStart);
+    expect(queryRaw.mock.calls[0]).toContainEqual(new Date('2026-10-21T17:00:00Z'));
+    expect(queryRaw.mock.calls[1]).toContainEqual(dayStart);
   });
 });

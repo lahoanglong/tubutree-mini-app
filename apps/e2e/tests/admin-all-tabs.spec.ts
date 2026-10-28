@@ -19,13 +19,16 @@ const runnable = process.env.E2E_SCOPE === 'web' && GATE_DB.test(dbUrl) && secre
 const SCREENS = process.env.A1_SCREENS_DIR;
 
 /** Mục menu ADMIN phải thấy: đếm thẳng từ NAV_GROUPS trong mã trang (trang Next không export được), để thêm hay bớt mục mà test không biết thì đỏ. */
+/** Huy hiệu số việc chờ nằm trong nút menu (chữ ẩn ", 44 việc đang chờ"): bỏ đi để còn đúng tên mục. */
+const navText = (raw: string) => raw.replace(/\s*,\s*(?:\d+\+?)\s*việc đang chờ\s*$/, '').trim();
+
 function navLabelsFromSource(): string[] {
   const src = fs.readFileSync(path.resolve(__dirname, '../../web/src/app/admin/page.tsx'), 'utf8');
   const start = src.indexOf('const NAV_GROUPS');
   const end = src.indexOf('const TABS = NAV_GROUPS', start);
   expect(start).toBeGreaterThan(-1);
   expect(end).toBeGreaterThan(start);
-  return [...src.slice(start, end).matchAll(/\{ k: '[A-Za-z]+', label: '([^']+)' \}/g)].map((m) => m[1]!);
+  return [...src.slice(start, end).matchAll(/\{ k: '[A-Za-z]+', label: '([^']+)'(?:, (?:keywords|total): [^}]+)? \}/g)].map((m) => m[1]!);
 }
 
 /** Phản hồi 4xx/5xx của /api/admin/* được chấp nhận khi mở tab. Mỗi dòng phải có lý do; để trống = mọi lỗi đều làm test đỏ. */
@@ -78,7 +81,9 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
     });
     await page.addInitScript(() => localStorage.setItem('tubu_web_session', '1'));
     await page.goto(url);
-    await expect(page.getByRole('heading', { name: 'Quản trị Tubu Tree' })).toBeVisible();
+    // Điện thoại (dưới 640px) bỏ tiêu đề cho quản trị viên; đợi nút mở menu thay cho tiêu đề.
+    if ((page.viewportSize()?.width ?? 1280) >= 640) await expect(page.getByRole('heading', { name: 'Quản trị Tubu Tree' })).toBeVisible();
+    else await expect(page.getByRole('button', { name: /Đổi mục|Chọn mục/ })).toBeVisible();
   }
 
   test('không mục nào hiện màn lỗi hoặc ném TypeError', async ({ page }) => {
@@ -106,11 +111,11 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
     const labels = await nav.locator('button:not([aria-expanded])').allInnerTexts();
     const expectedLabels = navLabelsFromSource();
     expect(expectedLabels.length).toBeGreaterThan(30);
-    expect(labels.map((l) => l.trim()).sort()).toEqual([...expectedLabels].sort());
+    expect(labels.map(navText).sort()).toEqual([...expectedLabels].sort());
 
     const failures: string[] = [];
     for (const raw of labels) {
-      const label = raw.trim();
+      const label = navText(raw);
       pageErrors.length = 0;
       consoleErrors.length = 0;
       apiErrors.length = 0;
@@ -141,7 +146,8 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
     for (const label of labels) {
       await page.getByRole('button', { name: /Đổi mục/ }).click();
       const drawer = page.getByRole('dialog', { name: 'Mục quản trị' });
-      await drawer.getByRole('searchbox', { name: 'Tìm mục quản trị' }).fill(label);
+      // Tìm mục bỏ qua nhóm lối tắt "Hay dùng", nơi duy nhất có "Hôm nay": mục đó bấm thẳng, không tìm.
+      if (label !== 'Hôm nay') await drawer.getByRole('searchbox', { name: 'Tìm mục quản trị' }).fill(label);
       // Nút đầu nhóm (aria-expanded) có thể trùng tên mục ("Đổi rác" và "Đổi rác và game"), nên chỉ lấy nút mục.
       await drawer.locator('button:not([aria-expanded])').filter({ hasText: new RegExp(`^\\s*${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`) }).first().click();
       await page.waitForLoadState('networkidle').catch(() => {});
@@ -237,7 +243,7 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
     await expect(page.getByRole('heading', { name: 'Quản trị Tubu Tree' })).toBeVisible();
     await err.getByRole('button', { name: 'Về Việc cần xử lý' }).click();
     await expect(err).toHaveCount(0);
-    await expect(page.getByRole('navigation', { name: 'Mục quản trị' }).locator('[aria-current="page"]')).toHaveText(/Việc cần xử lý/);
+    await expect(page.getByRole('navigation', { name: 'Mục quản trị' }).locator('[aria-current="page"]')).toHaveText(/Hôm nay/);
   });
 
   test('ảnh chụp (chỉ khi có A1_SCREENS_DIR)', async ({ page }) => {
