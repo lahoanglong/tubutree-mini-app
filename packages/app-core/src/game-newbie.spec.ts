@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { extraPlotsVisible, gameNewbieCopy, missingDrops, missionTarget, primaryWaterAction, tutorialState } from './game-newbie';
+import { extraPlotsVisible, gameNewbieCopy, missingDrops, missionTarget, tutorialState } from './game-newbie';
+import { primaryWaterAction } from './game-primary-action';
 
 const BASE = { totalSeeds: 0, checkedInToday: false, dewToday: false, dailyLoginSeeds: 15, dewSeeds: 15, firstCheckinBonus: 0 };
 
