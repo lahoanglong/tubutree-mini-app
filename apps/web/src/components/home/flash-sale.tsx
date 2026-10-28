@@ -59,8 +59,17 @@ function FlashSkeleton() {
 }
 
 /** Ưu đãi giờ vàng — flash sale thật từ backend. Countdown êm đến mốc kết thúc sớm nhất. */
-export function FlashSale() {
-  const q = useBlockQuery(useQuery({ queryKey: flashActiveQuery(coreHttp).queryKey, queryFn: loadActiveFlashSales, staleTime: 30_000, refetchInterval: 60_000 }));
+export function FlashSale({ initial }: { initial?: FlashSaleActiveItem[] }) {
+  // initialDataUpdatedAt 0: dữ liệu dựng sẵn chỉ để HTML đầu có khối, trình duyệt vẫn hỏi lại ngay (giá và số suất còn là của lúc dựng trang).
+  const q = useBlockQuery(
+    useQuery({
+      queryKey: flashActiveQuery(coreHttp).queryKey,
+      queryFn: loadActiveFlashSales,
+      staleTime: 30_000,
+      refetchInterval: 60_000,
+      ...(initial ? { initialData: initial, initialDataUpdatedAt: 0 } : {}),
+    }),
+  );
   const items = q.data ?? [];
 
   // Chỉ tính suất còn giờ: suất sớm nhất có thể đã hết mà danh sách chưa kịp tải lại (poll 60s) trong khi các suất khác còn chạy.
@@ -100,7 +109,7 @@ export function FlashSale() {
         </h2>
         {/* Hết giờ mà danh sách chưa kịp tải lại (poll 60s): không hiện đồng hồ về 0. */}
         {timeLeft && (
-          <span role="timer" aria-label={flashSaleText.endsIn(timeLeft)}>
+          <span role="timer" suppressHydrationWarning aria-label={flashSaleText.endsIn(timeLeft)}>
             <Badge tone="promo" icon={Clock}>
               {flashSaleText.endsIn(timeLeft)}
             </Badge>

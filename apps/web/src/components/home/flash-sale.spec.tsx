@@ -131,6 +131,7 @@ describe('FlashSale', () => {
     expect(c.textContent).not.toMatch(/-\d+%|-0%/);
     expect(c.querySelector('.line-through')).toBeNull();
     mounted!.unmount();
+    resetFlashSales();
     activeResult = async () => [active({ flashPrice: 70000, retailPrice: 100000, salePrice: 80000 })];
     c = await mount(<FlashSale />);
     expect(c.textContent).toContain('-13%');
@@ -238,5 +239,15 @@ describe('FlashSale — khổ máy tính', () => {
     activeResult = async () => [{ ...active(), thumbnail: null }];
     const c = await mount(<FlashSale />);
     expect(c.querySelector('[data-testid="product-image-fallback"]')).not.toBeNull();
+  });
+});
+
+describe('FlashSale — dữ liệu dựng sẵn từ máy chủ', () => {
+  it('có suất trong HTML đầu: vẽ khối ngay ở lần render đầu, không qua khung chờ hay khoảng trống', () => {
+    mocks.get.mockReturnValue(new Promise(() => {}));
+    const r = render(<FlashSale initial={[active() as never]} />);
+    mounted = r;
+    expect(r.container.querySelector('section')?.textContent).toContain('Nước rửa chén');
+    expect(r.container.querySelector('[data-testid="flash-sale-loading"]')).toBeNull();
   });
 });

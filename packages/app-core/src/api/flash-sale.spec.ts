@@ -11,7 +11,7 @@ describe('flash-sale — hợp đồng gọi API', () => {
     await setFlashReminder(http, 'it1');
     await cancelFlashReminder(http, 'it1');
     expect(calls).toEqual([
-      { method: 'get', path: '/flash-sales/active' },
+      { method: 'get', path: '/flash-sales/active', opts: { anonymous: true } },
       { method: 'get', path: '/flash-sales/upcoming' },
       { method: 'post', path: '/flash-sales/items/it1/remind' },
       { method: 'delete', path: '/flash-sales/items/it1/remind' },

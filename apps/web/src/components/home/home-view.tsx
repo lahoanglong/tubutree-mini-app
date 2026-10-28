@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import type { CategoryDTO, PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
+import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
 import { notificationsQuery } from '@tubutree/app-core/queries/account';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
@@ -46,6 +47,8 @@ export interface HomeInitial {
   brands?: { brand: string; count: number; slug?: string | null }[];
   /** Cấu hình công khai: khối "Quà khách mới" của khách vãng lai có ngay trong HTML server (không hiện sau hydrate làm Danh mục nhảy). */
   publicConfig?: PublicConfig;
+  /** Suất Giờ vàng đang chạy lúc dựng trang: có trong HTML đầu nên khối không chen vào sau hydrate làm cả trang nhảy. */
+  flash?: FlashSaleActiveItem[];
 }
 
 const STALE = 60_000;
@@ -109,7 +112,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     purchased: <PurchasedRail restoring={restoring} />,
     flash: (
       <>
-        <FlashSale />
+        <FlashSale initial={initial.flash} />
         <UpcomingFlashSales />
       </>
     ),

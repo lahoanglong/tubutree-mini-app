@@ -13,6 +13,7 @@ import type { FlashItem } from '@/lib/flash-price';
  * là hiện giá thường — giỏ và đơn vẫn tính đúng giá phía máy chủ.
  */
 const REFRESH_MS = 60_000;
+const REUSE_MS = 10_000;
 const NONE: readonly FlashItem[] = [];
 
 let items: readonly FlashItem[] = NONE;
@@ -49,6 +50,8 @@ function load(): Promise<void> {
  * Lỗi được ném lại để khối Trang chủ giữ trạng thái lỗi riêng.
  */
 export async function loadActiveFlashSales(): Promise<FlashSaleActiveItem[]> {
+  // Nhịp hỏi lại của khối Trang chủ và nhịp của kho này không trùng nhau: dữ liệu vừa tải dưới ngần này giây thì dùng lại.
+  if (!inflight && !failure && fetchedAt > 0 && Date.now() - fetchedAt < REUSE_MS) return [...items] as unknown as FlashSaleActiveItem[];
   void load();
   await inflight;
   if (failure) throw failure;
