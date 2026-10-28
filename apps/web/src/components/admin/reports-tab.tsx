@@ -6,6 +6,7 @@ import { ReportsRevenueSection } from './reports-revenue-section';
 import { ReportsSourcesSection } from './reports-sources-section';
 import { ReportsFinanceSection } from './reports-finance-section';
 import { FIELD_CLASS, TOUCH_H, chipClass } from './ui';
+import { VnDateInput } from './vn-date-input';
 
 const PRESETS = [
   { key: '7', label: '7 ngày', range: () => lastDaysRange(7) },
@@ -54,11 +55,11 @@ export function ReportsTab({ sections = ALL_SECTIONS }: { sections?: readonly Re
           </div>
           <label className="text-xs text-stone-600">
             Từ ngày
-            <input type="date" value={range.from} max={range.to} onChange={(e) => edit({ from: e.target.value })} className={`${FIELD_CLASS} ${TOUCH_H} mt-1 block`} />
+            <VnDateInput ariaLabel="Từ ngày" value={range.from} max={range.to} onChange={(v) => edit({ from: v })} className={`${FIELD_CLASS} ${TOUCH_H} mt-1`} />
           </label>
           <label className="text-xs text-stone-600">
             Đến ngày
-            <input type="date" value={range.to} min={range.from} onChange={(e) => edit({ to: e.target.value })} className={`${FIELD_CLASS} ${TOUCH_H} mt-1 block`} />
+            <VnDateInput ariaLabel="Đến ngày" value={range.to} min={range.from} onChange={(v) => edit({ to: v })} className={`${FIELD_CLASS} ${TOUCH_H} mt-1`} />
           </label>
         </div>
       </div>

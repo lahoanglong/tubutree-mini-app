@@ -18,7 +18,6 @@ import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { BTN_PRIMARY, BTN_XS_SECONDARY, FIELD_CLASS, Field, Notice, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
 
-const MINIAPP_BASE_URL_KEY = 'app.miniapp_base_url';
 const BATCH_MAX = 2000;
 type CouponType = 'PERCENT' | 'AMOUNT' | 'FREESHIP';
 type Mode = 'batch' | 'shared';
@@ -190,8 +189,8 @@ export function ClaimCampaignPanel() {
       </div>
       {configQ.isSuccess && !base && (
         <Notice tone="warning" role="status">
-          Chưa đặt link Mini App (khoá {MINIAPP_BASE_URL_KEY} ở tab Cấu hình, vd https://zalo.me/s/&lt;appId&gt;). Link trong file CSV
-          sẽ là đường dẫn tương đối, chưa in QR được.
+          Chưa đặt link Mini App. Vào Cài đặt, mục Cấu hình để điền (dạng https://zalo.me/s/&lt;mã app&gt;). Chưa điền thì link trong file CSV
+          chưa đầy đủ, chưa in QR được.
         </Notice>
       )}
 

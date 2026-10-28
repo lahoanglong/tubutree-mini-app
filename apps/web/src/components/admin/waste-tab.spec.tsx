@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { byText, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { expectNoBannedCopy, wasteMetrics, wasteOverview } from '@/test-utils/fixtures/waste-admin';
 import type { WasteOverviewDTO } from '@tubutree/shared-types';
 import { WasteTab } from './waste-tab';
@@ -69,10 +69,10 @@ const chips = (c: HTMLElement) => Array.from(c.querySelectorAll('[role="group"][
 const metric = (c: HTMLElement, k: string) => c.querySelector(`[data-metric="${k}"]`)?.textContent ?? '';
 
 describe('WasteTab', () => {
-  it('ADMIN: năm chip trong role="group", mặc định Hàng nhận, bấm chip đổi mục', async () => {
+  it('ADMIN: năm chip trong role="group", mặc định Yêu cầu (việc hằng ngày; cấu hình món ở chip Hàng nhận), bấm chip đổi mục', async () => {
     const { c } = await mount(<WasteTab isAdmin />);
     expect(chips(c).map((b) => b.textContent)).toEqual(['Hàng nhận', 'Điểm nhận', 'Yêu cầu', 'Quà', 'Cấu hình chung']);
-    expect(byText(c, 'button', 'Hàng nhận')!.getAttribute('aria-pressed')).toBe('true');
+    expect(byText(c, 'button', 'Yêu cầu')!.getAttribute('aria-pressed')).toBe('true');
     click(byText(c, 'button', 'Quà'));
     expect(c.querySelector('[data-waste-section]')!.getAttribute('data-waste-section')).toBe('gifts');
     expect(chips(c).filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent)).toEqual(['Quà']);
@@ -117,7 +117,7 @@ describe('WasteTab', () => {
     expect(metric(c, 'requestsCreated')).toContain('17');
     expect(metric(c, 'completeHours')).toContain('26 giờ / 70 giờ');
     expect(metric(c, 'carrierCostVnd')).toContain('64.000đ');
-    expect(c.textContent).toContain('Tháng 10/2026');
+    expect(c.textContent).toContain('Tháng này (10/2026)');
   });
 
   it('ADMIN: các số còn lại của 17.2: lý do từ chối, thực nhận so với khai, hạn mức đại lý, khối lượng, đơn mua', async () => {
@@ -140,7 +140,8 @@ describe('WasteTab', () => {
 
   it('ADMIN: tải CSV theo tháng', async () => {
     const { c, api } = await mount(<WasteTab isAdmin />);
-    typeInto(c.querySelector('input[type="month"]'), '2026-09');
+    selectValue(c.querySelector('select[aria-label="Tháng xuất CSV: tháng"]'), '09');
+    selectValue(c.querySelector('select[aria-label="Tháng xuất CSV: năm"]'), '2026');
     click(byText(c, 'button', 'Tải CSV'));
     await flush();
     const call = api.calls.find((x) => x.url.includes('/admin/waste/reports/monthly'))!;
@@ -217,7 +218,7 @@ describe('WasteTab', () => {
     window.history.replaceState(null, '', '/admin?tab=waste&wasteUser=' + encodeURIComponent('u1&x=<b>'));
     const a = await mount(<WasteTab isAdmin />);
     expect(a.api.calls.some((x) => x.url.includes('userId='))).toBe(false);
-    expect(byText(a.c, 'button', 'Hàng nhận')!.getAttribute('aria-pressed')).toBe('true');
+    expect(byText(a.c, 'button', 'Yêu cầu')!.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('STAFF: chỉ Yêu cầu và Quà, không gọi số liệu tháng (16.2)', async () => {

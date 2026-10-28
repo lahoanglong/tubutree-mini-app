@@ -1150,14 +1150,27 @@ describe('admin/page — tab Cấu hình', () => {
 });
 
 describe('admin/page — tab Voucher', () => {
+  // R-71: mở tab ra là danh sách "Mã đã tạo"; form tạo mã nằm sau chip "Tạo mã mới".
   const openCoupons = async () => {
     window.history.replaceState(null, '', '/admin?tab=coupons');
-    return mount();
+    const r = await mount();
+    click([...r.container.querySelectorAll('[role="group"][aria-label="Mục mã giảm giá"] button')].find((b) => b.textContent === 'Tạo mã mới')!);
+    await flush();
+    return r;
   };
+
+  it('R-71: mở tab ra là danh sách mã đã tạo, form tạo mã và thẻ hộp hàng sàn nằm sau chip', async () => {
+    window.history.replaceState(null, '', '/admin?tab=coupons');
+    const { container } = await mount();
+    const chips = [...container.querySelectorAll('[role="group"][aria-label="Mục mã giảm giá"] button')];
+    expect(chips.map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([['Mã đã tạo', 'true'], ['Tạo mã mới', 'false'], ['Thẻ hộp hàng sàn', 'false']]);
+    expect(container.querySelector('[data-testid="coupon-create-form"]')).toBeNull();
+    expect(container.textContent).not.toContain('Thẻ hộp hàng sàn (mã ẩn)');
+  });
 
   it('ô nhập cao 44px ở điện thoại với viền đủ tương phản, co được trong hàng flex để không tràn ngang', async () => {
     const { container } = await openCoupons();
-    const inputs = [...container.querySelector('[data-testid="coupon-create-form"]')!.querySelectorAll('input, select')];
+    const inputs = [...container.querySelector('[data-testid="coupon-create-form"]')!.querySelectorAll('input:not([aria-hidden]), select')];
     expect(inputs).toHaveLength(9);
     for (const el of inputs) {
       expect(el.className).toContain('min-h-[44px]');
@@ -3399,6 +3412,8 @@ describe('admin/page — UAT ui-admin-2', () => {
     it('voucher: mỗi ô số có nhãn "Đơn tối thiểu (đ)", "Giảm tối đa (đ)", "Tổng lượt dùng", "Lượt / khách", "Giá trị"', async () => {
       window.history.replaceState(null, '', '/admin?tab=coupons');
       const { container } = await mount();
+      click([...container.querySelectorAll('[role="group"][aria-label="Mục mã giảm giá"] button')].find((b) => b.textContent === 'Tạo mã mới')!);
+      await flush();
       const form = container.querySelector('[data-testid="coupon-create-form"]')!;
       for (const t of ['Mã giảm giá', 'Giá trị', 'Đơn tối thiểu (đ)', 'Giảm tối đa (đ)', 'Tổng lượt dùng', 'Lượt / khách', 'Bắt đầu từ ngày', 'Hết hạn ngày']) {
         const l = labelOf(form, t);

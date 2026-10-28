@@ -18,6 +18,7 @@ import {
 } from '@/lib/waste-labels';
 import { BTN_SECONDARY, chipClass, FIELD_XS, Notice, ToneBadge, LoadError } from './ui';
 import { WasteConfigCard } from './waste-config-card';
+import { VnMonthInput } from './vn-date-input';
 import { WasteGiftsSection } from './waste-gifts-section';
 import { WasteItemsSection } from './waste-items-section';
 import { WastePointsSection } from './waste-points-section';
@@ -42,7 +43,7 @@ export function WasteTab({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed
   const sections = isAdmin ? WASTE_ADMIN_SECTIONS : WASTE_STAFF_SECTIONS;
   const [wasteUserId] = useState<string | null>(() => readWasteUser(isAdmin));
   const [section, setSection] = useState<WasteSection>(() =>
-    wasteUserId ? 'requests' : seed && sections.includes(seed.section) ? seed.section : isAdmin ? 'items' : 'requests',
+    wasteUserId ? 'requests' : seed && sections.includes(seed.section) ? seed.section : 'requests',
   );
   const overview = useQuery({ queryKey: ['admin-waste-overview'], queryFn: getWasteOverview, enabled: isAdmin });
   const config = useQuery({ queryKey: ['admin-config', 'waste'], queryFn: () => getConfig('waste'), enabled: isAdmin });
@@ -161,9 +162,9 @@ function MonthStrip({ data }: { data: WasteOverviewDTO }) {
   return (
     <section className="space-y-3" aria-label="Số liệu tháng">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-display text-base font-semibold text-stone-900">{titleOfMonth(data.month)} so với {titleOfMonth(data.previousMonth)}</h3>
+        <h3 className="font-display text-base font-semibold text-stone-900">Tháng này ({titleOfMonth(data.month).replace(/^Tháng /, '')})</h3>
         <div className="flex flex-wrap items-center gap-2">
-          <input type="month" aria-label="Tháng xuất CSV" className={FIELD_XS} value={month} onChange={(e) => setMonth(e.target.value)} />
+          <VnMonthInput ariaLabel="Tháng xuất CSV" className={FIELD_XS} value={month} onChange={setMonth} />
           <button type="button" className={`${BTN_SECONDARY} inline-flex items-center gap-1`} disabled={busy || !month} onClick={download}>
             <Download size={14} aria-hidden="true" />
             Tải CSV
@@ -175,7 +176,7 @@ function MonthStrip({ data }: { data: WasteOverviewDTO }) {
         <StripTile label="Yêu cầu tạo mới" value={formatCount(created)} />
         <StripTile label="Hoàn tất" value={formatCount(cur.requestsByStatus.COMPLETED)} />
         <StripTile label="Điểm đã cộng" value={formatCount(cur.pointsIssued)} />
-        <StripTile label="Điểm phải trả danh nghĩa" value={formatCount(net)} />
+        <StripTile label="Điểm đã hứa cộng" value={formatCount(net)} />
         <StripTile label="Hết hạn" value={formatCount(cur.expiredCount)} />
         <StripTile label="Phí ship đã nhập" value={formatVnd(cur.carrierCostVnd)} />
       </dl>
@@ -243,7 +244,7 @@ function MonthDetails({ data }: { data: WasteOverviewDTO }) {
         <Scalar k="completeHours" label="Giờ tới hoàn tất (trung vị / P90)" current={hours(cur)} previous={hours(prev)} />
         <Scalar k="pointsIssued" label="Điểm đã cộng" current={formatCount(cur.pointsIssued)} previous={formatCount(prev.pointsIssued)} />
         <Scalar k="pointsReversed" label="Điểm đã thu hồi" current={formatCount(cur.pointsReversed)} previous={formatCount(prev.pointsReversed)} />
-        <Scalar k="pointsNet" label="Điểm phải trả danh nghĩa" current={formatCount(net)} previous={formatCount(prevNet)} />
+        <Scalar k="pointsNet" label="Điểm đã hứa cộng" current={formatCount(net)} previous={formatCount(prevNet)} />
         <Scalar k="expiredCount" label="Hết hạn" current={formatCount(cur.expiredCount)} previous={formatCount(prev.expiredCount)} />
         <Scalar k="pickupCount" label="Thu kèm đơn" current={formatCount(cur.pickupCount)} previous={formatCount(prev.pickupCount)} />
         <Scalar k="carrierCostVnd" label="Phí ship đã nhập" current={formatVnd(cur.carrierCostVnd)} previous={formatVnd(prev.carrierCostVnd)} />

@@ -2364,9 +2364,25 @@ function CouponsTab() {
     onError: (e) => setMsg(e instanceof Error ? e.message : 'Lỗi'),
   });
   const field = `${INPUT_CLASS} ${TOUCH_H}`;
+  // Việc hằng ngày (xem mã nào đang chạy, gia hạn, tắt) lên đầu; tạo mã và lô thẻ hộp hàng sàn là việc hiếm nên nằm sau chip.
+  const [view, setView] = useState<'list' | 'create' | 'cards'>('list');
   return (
-    <div className="space-y-6">
-    <ClaimCampaignPanel />
+    <div className="space-y-4">
+    <div role="group" aria-label="Mục mã giảm giá" className="flex flex-wrap gap-2">
+      {(
+        [
+          { k: 'list', label: 'Mã đã tạo' },
+          { k: 'create', label: 'Tạo mã mới' },
+          { k: 'cards', label: 'Thẻ hộp hàng sàn' },
+        ] as const
+      ).map((c) => (
+        <button key={c.k} type="button" aria-pressed={view === c.k} onClick={() => setView(c.k)} className={chipClass(view === c.k)}>
+          {c.label}
+        </button>
+      ))}
+    </div>
+    {view === 'cards' && <ClaimCampaignPanel />}
+    {view === 'create' && (
     <div className="max-w-md space-y-2" data-testid="coupon-create-form">
       <Field label="Mã giảm giá">
         <input
@@ -2420,19 +2436,20 @@ function CouponsTab() {
       <div className="flex gap-2">
         <div className="min-w-0 flex-1">
           <Field label="Bắt đầu từ ngày">
-            <input type="date" aria-label="Mã giảm giá bắt đầu từ ngày" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
+            <VnDateInput ariaLabel="Mã giảm giá bắt đầu từ ngày" value={f.startAt} onChange={(v) => setF({ ...f, startAt: v })} className={field} />
           </Field>
         </div>
         <div className="min-w-0 flex-1">
           <Field label="Hết hạn ngày">
-            <input type="date" aria-label="Mã giảm giá hết hạn ngày" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
+            <VnDateInput ariaLabel="Mã giảm giá hết hạn ngày" value={f.endAt} min={f.startAt || undefined} onChange={(v) => setF({ ...f, endAt: v })} className={field} />
           </Field>
         </div>
       </div>
       <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
-    <CouponList />
+    )}
+    {view === 'list' && <CouponList />}
     </div>
   );
 }
