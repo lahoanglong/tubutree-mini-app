@@ -21,3 +21,17 @@ export const gameMoreCopy = {
   missionsShowAll: (total: number) => `Xem tất cả (${total})`,
   missionsShowLess: 'Thu gọn',
 };
+
+/** Số nhiệm vụ chưa xong hiện sẵn ở tab Hôm nay; phần còn lại nằm sau "Xem tất cả". */
+export const MISSIONS_COLLAPSED = 3;
+
+/**
+ * Thu gọn thẻ nhiệm vụ: chỉ các việc chưa nhận thưởng, tối đa `MISSIONS_COLLAPSED`. Chưa có việc nào dang dở
+ * thì giữ nguyên cả danh sách (không có gì để giấu). `collapsible` = có phần bị giấu, cần nút "Xem tất cả".
+ */
+export function collapseMissions<T extends { claimed?: boolean }>(missions: T[], showAll: boolean): { items: T[]; collapsible: boolean } {
+  const open = missions.filter((m) => !m.claimed);
+  if (open.length === 0) return { items: missions, collapsible: false };
+  const compact = open.slice(0, MISSIONS_COLLAPSED);
+  return { items: showAll ? missions : compact, collapsible: compact.length < missions.length };
+}
