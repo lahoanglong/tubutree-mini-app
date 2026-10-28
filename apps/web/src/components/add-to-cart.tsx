@@ -97,7 +97,13 @@ export default function AddToCart({
   const maxQty = Math.max(selected?.stock ?? 1, 1);
 
   // Đổi phân loại → reset số lượng về 1 thay vì giữ số lượng cũ (có thể vượt tồn kho mới).
+  // Chọn từ bảng phân loại thì giữ số lượng khách vừa chọn trong bảng.
+  const keepQtyOnce = useRef(false);
   useEffect(() => {
+    if (keepQtyOnce.current) {
+      keepQtyOnce.current = false;
+      return;
+    }
     setQty(1);
   }, [selectedId, setQty]);
 
@@ -210,13 +216,20 @@ export default function AddToCart({
     userPicked.current = true;
     await add(target.id, Math.min(chosen?.quantity ?? qty, Math.max(target.stock, 1)), buyNow);
   };
+  const confirming = useRef(false);
   const confirmVariation = (id: string, quantity: number) => {
     const mode = sheetMode;
+    // Bảng đóng có hiệu ứng nên nút còn bấm được lần nữa: chặn bấm đúp thêm giỏ hai lần.
+    if (!mode || busy || confirming.current) return;
+    confirming.current = true;
     setSheetMode(null);
     userPicked.current = true;
+    if (id !== selectedId) keepQtyOnce.current = true;
     setSelectedId(id);
     setQty(quantity);
-    void submit(mode === 'buy', { id, quantity });
+    void submit(mode === 'buy', { id, quantity }).finally(() => {
+      confirming.current = false;
+    });
   };
   const onAdd = () => submit(false);
   const onBuyNow = () => submit(true);

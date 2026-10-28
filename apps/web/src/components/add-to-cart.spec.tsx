@@ -602,6 +602,32 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
     expect(mocks.addToCart).toHaveBeenCalledWith('v2', 1);
   });
 
+  it('bấm đúp nút xác nhận trong bảng chỉ thêm giỏ một lần', async () => {
+    const { container } = mount();
+    await flush();
+    click(addButton(container));
+    await flush();
+    const confirm = byText(sheet()!, 'button', /^Thêm vào giỏ · /);
+    click(confirm);
+    click(confirm);
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+  });
+
+  it('thêm 3 món từ bảng ở phân loại khác: trang và thanh dính giữ số lượng 3, không về 1', async () => {
+    const { container } = mount();
+    await flush();
+    click(addButton(container));
+    await flush();
+    click(byText(sheet()!, 'button', '500ml'));
+    click(sheet()!.querySelector('button[aria-label="Tăng số lượng"]'));
+    click(sheet()!.querySelector('button[aria-label="Tăng số lượng"]'));
+    click(byText(sheet()!, 'button', /^Thêm vào giỏ · /));
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v2', 3);
+    expect(container.textContent).toContain('900.000đ');
+  });
+
   it('Mua ngay mở bảng chọn với nhãn Mua ngay', async () => {
     const { container } = mount();
     await flush();
