@@ -41,7 +41,7 @@ describe('TierDropNoticeService.sendNotices', () => {
     const until = inDays(10, 12 * 3600_000); // 12:00 VN ngày 07/11
     const { svc, notify, rows } = build([{ id: 'u1', tierGraceUntil: until, tierDropNoticeFor: null, tier: TIER }]);
     expect(await svc.sendNotices(NOW)).toBe(1);
-    expect(notify).toHaveBeenCalledWith('u1', 'TIER_DROP_NOTICE', { tier: 'Lộc Biếc', date: '07/11/2026', need: 'Mua thêm 400.000đ đơn giao thành công' }, {});
+    expect(notify).toHaveBeenCalledWith('u1', 'TIER_DROP_NOTICE', { tier: 'Lộc Biếc', date: '07/11/2026', need: 'Mua thêm 400.000đ đơn giao thành công' }, { dedupeKey: `tier-drop:${until.toISOString()}` });
     expect(rows.get('u1')!.tierDropNoticeFor).toEqual(until);
   });
 

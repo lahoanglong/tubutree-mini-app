@@ -40,7 +40,6 @@ describe('Phân loại tin (C-022)', () => {
     'WINBACK_VOUCHER',
     'SECOND_ORDER_VOUCHER',
     'REORDER_REMINDER',
-    'TIER_DROP_NOTICE',
     'STOREFRONT_TRENDING_PRODUCTS',
   ])('%s là tin khuyến mãi', (code) => {
     expect(notificationCategory(code)).toBe('PROMO');
@@ -71,6 +70,8 @@ describe('Phân loại tin (C-022)', () => {
     'REVIEW_REQUEST',
     // Thông báo kiểm duyệt về bài của chính khách: khách phải được biết bài đã bị ẩn.
     'COMMUNITY_POST_HIDDEN',
+    // Báo trước hạ hạng là tin dịch vụ về tài khoản: tắt Khuyến mãi vẫn phải nhận.
+    'TIER_DROP_NOTICE',
   ])('%s là tin giao dịch, luôn gửi', (code) => {
     expect(notificationCategory(code)).toBe('TRANSACTIONAL');
   });
@@ -117,6 +118,12 @@ describe('NotificationsService.notify tôn trọng tuỳ chọn của khách (C-
   it('đã tắt khuyến mãi nhưng tự bấm "Nhắc tôi" giờ vàng → vẫn nhận nhắc', async () => {
     const { svc, create } = setup(optedOut);
     await svc.notify('u1', 'FLASH_STARTING', { product: 'A' });
+    expect(create).toHaveBeenCalled();
+  });
+
+  it('đã tắt khuyến mãi vẫn nhận tin báo trước hạ hạng', async () => {
+    const { svc, create } = setup(optedOut);
+    await svc.notify('u1', 'TIER_DROP_NOTICE', { tier: 'A', date: '01/01/2027', need: 'x' });
     expect(create).toHaveBeenCalled();
   });
 

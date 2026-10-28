@@ -129,7 +129,8 @@ export class TierDropNoticeService {
         userId,
         TIER_DROP_NOTICE_CODE,
         { tier: tier.name, date: `${p2(day)}/${p2(month)}/${year}`, need },
-        { ...(znsTemplateId ? { znsTemplateId } : {}) },
+        // dedupeKey: tin trong app đã lưu mà bước ZNS lỗi thì đêm sau thử lại không được lưu thêm một tin nữa.
+        { dedupeKey: `tier-drop:${until.toISOString()}`, ...(znsTemplateId ? { znsTemplateId } : {}) },
       );
     } catch (err) {
       // Chưa gửi được thì trả phần việc lại để đêm sau thử tiếp.
