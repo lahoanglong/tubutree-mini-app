@@ -1,5 +1,6 @@
 import type { GameProfile } from '@tubutree/app-core/api/game';
 import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
+import { treeTitle } from '@tubutree/app-core/tree-title';
 import { formatNumber } from './format';
 import { WaterTank } from './water-tank';
 
@@ -34,7 +35,7 @@ export function GardenHero({
           <span className={wilted ? undefined : 'tubu-sway'}>{stage}</span>
         </span>
       </div>
-      <div className="font-display text-lg font-semibold text-stone-0">{eco?.treeType ?? 'Vườn của bạn'}</div>
+      <div className="font-display text-lg font-semibold text-stone-0">{eco ? treeTitle(eco.treeType) : 'Vườn của bạn'}</div>
       <div
         role="progressbar"
         aria-label="Tiến độ cây"

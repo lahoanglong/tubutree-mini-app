@@ -91,6 +91,18 @@ describe('GardenHero (B-107)', () => {
     expect(screen.queryByText(/400/)).toBeNull();
     expect(screen.getByText(/thu hoạch ngay/i)).toBeInTheDocument();
   });
+  it('tên thẻ: có loài thì hiện loài; loài mặc định hay trống thì "Cây của bạn"; chưa có dữ liệu vườn thì "Vườn của bạn"', () => {
+    const eco = (treeType: string) => ({ progress: 10, target: 60, treeType, treesPlanted: 0 });
+    const { rerender } = render(<GardenHero eco={eco('Sồi')} totalSeeds={10} streakDays={1} />);
+    expect(screen.getByText('Sồi')).toBeInTheDocument();
+    rerender(<GardenHero eco={eco('Cây Dứa Fuwa3e')} totalSeeds={10} streakDays={1} />);
+    expect(screen.queryByText(/Fuwa3e/)).toBeNull();
+    expect(screen.getByText('Cây của bạn')).toBeInTheDocument();
+    rerender(<GardenHero eco={eco('')} totalSeeds={10} streakDays={1} />);
+    expect(screen.getByText('Cây của bạn')).toBeInTheDocument();
+    rerender(<GardenHero eco={undefined} totalSeeds={undefined} streakDays={undefined} />);
+    expect(screen.getByText('Vườn của bạn')).toBeInTheDocument();
+  });
 });
 
 describe('G3 lượt 2', () => {
