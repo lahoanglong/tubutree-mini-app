@@ -138,7 +138,7 @@ function GameBody() {
   // Nước của lần điểm danh hôm nay lấy từ trạng thái gộp (đã gồm thưởng mốc, quà lần đầu, quà quay lại, cắt theo bình); chưa có thì suy từ hồ sơ.
   const status = checkInStatusQ.data;
   const checkInSeeds = status && !status.waterDone ? status.todayWater : undefined;
-  const dailyGain = checkInSeeds ? checkInSeeds : profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
+  const dailyGain = checkInSeeds !== undefined ? (checkInSeeds > 0 ? checkInSeeds : null) : profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
   const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
   const quizState: EarnQuizState = quiz
     ? { status: 'ready', left: quiz.filter((q) => !answeredIds.has(q.id)).length }

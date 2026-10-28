@@ -231,6 +231,15 @@ describe('Vườn Xanh người mới — nút chính và không ngõ cụt', ()
     await waitFor(() => expect(mocks.api.checkIn).toHaveBeenCalledTimes(1));
   });
 
+  it('sheet: máy chủ báo hôm nay nhận 0 giọt (bình đầy) thì dòng điểm danh không hứa số khác', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...NEW_PLAYER, firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), totalSeeds: 3 });
+    mocks.getDailyCheckInStatus.mockResolvedValue({ checkedInToday: false, pointsDone: false, waterDone: false, tankFull: true, streakDays: 1, currentCycleDay: 2, todayPoints: 1000, todayWater: 0, rewards: [] });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /^Giữ chuỗi/ }));
+    await screen.findByRole('heading', { name: 'Kiếm nước' });
+    expect(rowOf('Điểm danh hôm nay').queryByText(/^\+\d+💧$/)).not.toBeInTheDocument();
+  });
+
   it('sheet: câu đố đang tải hiện trạng thái đang tải; tải lỗi hiện thông báo và "Thử lại" tải lại câu đố', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...DRY, totalSeeds: 0 });
     mocks.api.getTodayQuiz.mockRejectedValueOnce(new Error('boom')).mockResolvedValue(QUIZ);

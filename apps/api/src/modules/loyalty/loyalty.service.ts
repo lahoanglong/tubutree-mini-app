@@ -1296,8 +1296,8 @@ export class LoyaltyService {
   /**
    * Điểm danh nhận Điểm Xanh — tối đa 1 lần/user/ngày giờ VN.
    *
-   * Trạng thái nằm ở bảng RIÊNG loyalty_check_ins (không dùng GameProfile như bản WIP — xem doc
-   * model LoyaltyCheckIn). Thứ tự trong transaction là chốt chặn race: INSERT dòng điểm danh
+   * Ngày thưởng đọc từ chuỗi chung của hồ sơ Vườn (sharedStreak), còn chốt chặn trùng ngày nằm ở bảng RIÊNG
+   * loyalty_check_ins (xem doc model LoyaltyCheckIn); chuỗi chỉ được cập nhật khi giọt nước điểm danh. Thứ tự trong transaction là chốt chặn race: INSERT dòng điểm danh
    * (unique userId+dayKey) TRƯỚC, rồi mới ghi ledger + cộng số dư. 10 request song song → 1 cái
    * insert được, 9 cái ăn P2002 và bị rollback trước khi cộng điểm. Dòng ledger còn có partial
    * unique (userId, refId=dayKey) WHERE refType='CHECKIN' làm lớp phòng thủ thứ hai.

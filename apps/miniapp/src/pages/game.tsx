@@ -156,7 +156,7 @@ export default function GamePage() {
   const status = checkInStatusQ.data;
   const pointsPending = status ? !status.checkedInToday : false;
   const checkInSeeds = status && !status.waterDone ? status.todayWater : undefined;
-  const dailyGain = checkInSeeds ? checkInSeeds : profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
+  const dailyGain = checkInSeeds !== undefined ? (checkInSeeds > 0 ? checkInSeeds : null) : profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
   const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
   const quizState: EarnQuizState = quiz
     ? { status: 'ready', left: quiz.filter((q) => !answeredIds.has(q.id)).length }

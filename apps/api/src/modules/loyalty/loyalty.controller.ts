@@ -65,17 +65,10 @@ export class LoyaltyController {
     return this.loyalty.redeemReward(userId, rewardId, requireIdempotencyKey(rawKey));
   }
 
-  /** Trạng thái điểm danh 7 ngày. */
+  /** Trạng thái điểm danh 7 ngày (chỉ đọc). Điểm danh thật đi qua POST /me/daily-check-in để chuỗi chung và vé giữ lửa được cập nhật. */
   @Get('me/loyalty/check-in')
   checkInStatus(@CurrentUser('sub') userId: string) {
     return this.loyalty.getDailyCheckInStatus(userId);
-  }
-
-  /** Điểm danh nhận Điểm Xanh hàng ngày (1 lần/ngày giờ VN, unique DB). */
-  @Post('me/loyalty/check-in')
-  @Throttle({ default: { ttl: 60_000, limit: 10 } })
-  checkIn(@CurrentUser('sub') userId: string) {
-    return this.loyalty.dailyCheckIn(userId);
   }
 
   /** Thông tin Thẻ thành viên số (Digital Member Card). */
