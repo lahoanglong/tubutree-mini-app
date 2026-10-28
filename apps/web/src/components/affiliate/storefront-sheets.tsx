@@ -19,6 +19,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { isPartnerStore } from '@/lib/partner-store';
 import { ui } from '@/lib/guest-ui';
+import { phoneSecondary } from '@/lib/phone-ui';
 import { Badge } from '@/components/ui/badge';
 import { EmptyStateInline } from './storefront-inline';
 import { ErrorState } from '@/components/ui/error-state';
@@ -447,7 +448,7 @@ export function NewCollectionForm({ onCreate, pending }: { onCreate: (dto: { tit
   };
 
   return (
-    <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+    <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none">
       <div className="flex items-start gap-2">
         <input
           className={`${ui.field} flex-1`}
@@ -457,7 +458,7 @@ export function NewCollectionForm({ onCreate, pending }: { onCreate: (dto: { tit
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
-        <button type="button" className={ui.btnSecondary} disabled={!title.trim() || pending} onClick={submit}>
+        <button type="button" className={`${ui.btnSecondary} ${phoneSecondary}`} disabled={!title.trim() || pending} onClick={submit}>
           <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
           Tạo bộ sưu tập
         </button>
