@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WasteRequestDetailDTO } from '@tubutree/shared-types';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
@@ -359,6 +360,28 @@ describe('/doi-rac/yeu-cau/[id]: Thu kèm đơn mua (§4.5b, §15.6)', () => {
     const c = await mount();
     expect(c.textContent).toContain('Đã gắn vào đơn TUBU123');
     expect(c.querySelector('[data-step="Kho nhận, đếm"]')?.getAttribute('aria-current')).toBe('step');
+  });
+});
+
+describe('/doi-rac/yeu-cau/[id]: quầy duyệt khi đang mở mã QR', () => {
+  it('thấy COMPLETED thì làm mới số dư (nhóm waste) rồi sang /doi-rac/xong/:id, không để màn kết quả dùng số cũ', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const c = await mount();
+      click(button(c, 'Xem mã QR'));
+      await flush(2);
+      const meCalls = () => state.calls.filter((x) => x.method === 'GET' && x.path === '/waste/me').length;
+      const before = meCalls();
+      state.request = makeRequestDetail({ status: 'COMPLETED', pointsAwarded: 5000, editable: false, cancellable: false });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5100);
+      });
+      await flush(4);
+      expect(replaceMock).toHaveBeenCalledWith('/doi-rac/xong/req-1');
+      expect(meCalls()).toBeGreaterThan(before);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

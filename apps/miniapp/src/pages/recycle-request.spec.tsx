@@ -434,6 +434,25 @@ describe('/recycle/r/:id — theo dõi (B-83)', () => {
       vi.useRealTimers();
     }
   });
+  it('quầy duyệt (OPEN sang COMPLETED) thì làm mới nhóm waste và điểm thưởng trước khi sang màn kết quả, để số dư không còn là số cũ', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { qc, invalidate } = renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Xem mã QR' }));
+      await screen.findByRole('dialog');
+      expect(mocks.invalidate).not.toHaveBeenCalled();
+      mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ status: 'COMPLETED', pointsAwarded: 5000 }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5100);
+      });
+      await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/recycle/done/req-1', { replace: true }));
+      expect(mocks.invalidate).toHaveBeenCalledWith(qc);
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['loyalty-rewards'] });
+      expect(mocks.invalidate.mock.invocationCallOrder[0]!).toBeLessThan(mocks.navigate.mock.invocationCallOrder.at(-1)!);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it('chưa mở mã QR thì không hỏi lại theo chu kỳ', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
