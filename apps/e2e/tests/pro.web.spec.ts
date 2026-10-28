@@ -110,7 +110,8 @@ test.describe('Web nhân viên', () => {
     mockStaff(api, 'CUSTOMER');
     await page.goto('/nhan-vien');
     await expect(page.getByRole('heading', { name: 'Ca làm của tôi', level: 1 })).toBeVisible();
-    await expect(page.getByText('Trang dành cho nhân viên. Liên hệ quản trị để được cấp quyền.')).toBeVisible();
+    await expect(page.getByText('Trang dành cho nhân viên', { exact: true })).toBeVisible();
+    await expect(page.getByText('Tài khoản này chưa có quyền nhân viên. Liên hệ quản trị để được cấp quyền.')).toBeVisible();
   });
 
   test('thêm ca theo ca chuẩn gửi đúng body; chấm công chỉ dẫn mở trên Zalo', async ({ page, api }) => {

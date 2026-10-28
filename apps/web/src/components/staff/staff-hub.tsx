@@ -190,7 +190,7 @@ export function StaffHub() {
             const dayName = `${dowLabel(dk)} ${shortDayLabel(dk)}`;
             const shifts = byDay[dk] ?? [];
             return (
-              <section key={dk} className={`p-3 ${skin.card}${dk === todayKey ? ' border border-forest-600' : ''}`}>
+              <section key={dk} className={`p-3 ${skin.card}${dk === todayKey ? ' border-forest-600 max-md:!border-forest-600' : ''}`}>
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <h2 className={skin.cardTitle}>
