@@ -157,7 +157,9 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     suggest: <SuggestFeed initial={initial.suggest} />,
   };
 
-  const order = settling && startedNew ? homeKeptOrder(kind) : homeRenderOrder(kind, settling);
+  // Giữ nội dung đã dựng cả khi hẹn giờ đã nhả khung chờ mà loại khách vẫn "chưa biết" (mạng chậm): bố cục "chưa biết" bỏ Bán chạy và dải quà,
+  // tới lúc biết là khách mới sẽ dựng lại, nội dung đã vẽ biến mất rồi hiện lại.
+  const order = startedNew && (settling || kind === 'unknown') ? homeKeptOrder(kind) : homeRenderOrder(kind, settling);
   const nodes: ReactNode[] = [];
   for (let i = 0; i < order.length; i++) {
     const id = order[i]!;

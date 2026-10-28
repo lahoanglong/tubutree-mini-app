@@ -471,4 +471,38 @@ describe('HomeView — khung chờ chung ở cấp trang: truy vấn quyết đ�
     await tick(200);
     expect(blockOrder(live.container)).toEqual([...homeBlockOrder('unknown')]);
   });
+
+  it('khung hình đầu là khách mới, mạng chậm quá 4,5 giây mà vẫn chưa biết loại khách: nội dung đã dựng (Bán chạy, Gợi ý) không biến mất rồi hiện lại', async () => {
+    vi.useFakeTimers();
+    mocks.phase = 'guest';
+    live = mountLive(() => <HomeView />, { strict: true });
+    const tick = async (ms: number) => {
+      await act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
+      for (let i = 0; i < 4; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+    };
+    await tick(0);
+    expect(blockOrder(live.container)).toEqual([...homeBlockOrder('new')]);
+    expect(region(live.container, 'Bán chạy')).not.toBeNull();
+
+    routes['/me/purchased-items'] = () => new Promise(() => undefined);
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    live.again();
+    await tick(HOME_SETTLE_MAX_MS - 100);
+    expect(blockOrder(live.container)).toEqual([...homeKeptOrder('unknown')]);
+
+    // Hẹn giờ nhả khung chờ: loại khách vẫn "chưa biết" nhưng khối đã dựng ở lại.
+    await tick(200);
+    expect(blockOrder(live.container)).toEqual([...homeKeptOrder('unknown')]);
+    expect(region(live.container, 'Bán chạy')!.textContent).toContain('Bán chạy nhất');
+    expect(region(live.container, 'Gợi ý cho bạn')).not.toBeNull();
+
+    routes['/me/purchased-items'] = () => ({ items: [], nextCursor: null });
+    mocks.phase = 'authenticated';
+    mocks.restoring = false;
+    live.again();
+    await tick(50);
+    expect(blockOrder(live.container)).toEqual([...homeBlockOrder('new')]);
+    expect(region(live.container, 'Bán chạy')!.textContent).toContain('Bán chạy nhất');
+  });
 });
