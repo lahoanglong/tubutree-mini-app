@@ -66,6 +66,9 @@ describe('Hôm nay khớp Báo cáo doanh thu (real Postgres)', () => {
     await mkUser({ createdAt: T, role: 'STAFF' });
     await mkUser({ createdAt: T, role: 'ADMIN' });
     await mkUser({ createdAt: Y });
+    // Phiên khách vãng lai (guest_, không SĐT) không phải tài khoản thật: cả Hôm nay lẫn Báo cáo đều không đếm.
+    await mkUser({ createdAt: T, zaloId: `guest_it_${Date.now()}_t` });
+    await mkUser({ createdAt: Y, zaloId: `guest_it_${Date.now()}_y` });
     await mkUser({ createdAt: W });
     await mkUser({ createdAt: T, firstTouchAt: new Date(T.getTime() + 5 * 864e5), firstTouchSource: 'shopee' });
     await mkUser({ createdAt: OLD });

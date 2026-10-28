@@ -346,6 +346,8 @@ export class ExportOrdersQuery {
 
 export class ExportUsersQuery {
   @IsOptional() @IsString() @MaxLength(100) search?: string;
+  /** `guests=1`: xuất cả phiên khách vãng lai (mặc định chỉ tài khoản thật, như danh sách). */
+  @IsOptional() @Transform(({ value }) => value === '1' || value === 'true' || value === true) @IsBoolean() guests?: boolean;
 }
 
 export class ListUsersQuery extends PaginationQuery {
@@ -512,7 +514,7 @@ export class AdminController {
 
   @Get('users/export')
   async exportUsers(@Query() q: ExportUsersQuery, @Res() res: Response) {
-    await streamCsv(res, `nguoi-dung-${vnDateKey()}.csv`, this.admin.userCsv(q.search));
+    await streamCsv(res, `nguoi-dung-${vnDateKey()}.csv`, this.admin.userCsv(q.search, q.guests === true));
   }
 
   /** "Đã xử lý" — đơn rời hàng đợi "Cần xử lý Pancake" (lý do + ghi chú ghi vào log kèm admin). */

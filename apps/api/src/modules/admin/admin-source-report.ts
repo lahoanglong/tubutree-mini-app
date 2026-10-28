@@ -6,11 +6,12 @@ import { Prisma } from '@prisma/client';
 
 /**
  * Thế nào là "khách mới" (bí danh bảng `u`), dùng chung cho bảng nguồn × tuần và thẻ "Khách mới" của KPI doanh thu để hai nơi khớp nhau:
- * không tính tài khoản nội bộ, dòng khách vãng lai đã gộp vào tài khoản khác (mergedIntoId), và khách cũ được gắn nguồn lúc gộp
+ * không tính tài khoản nội bộ, phiên khách vãng lai (`guest_`, không SĐT), dòng khách vãng lai đã gộp vào tài khoản khác (mergedIntoId), và khách cũ được gắn nguồn lúc gộp
  * (chạm đầu muộn hơn ngày tạo hơn một ngày; xem impl/source.md mục 3).
  */
 export const NEW_CUSTOMER_SQL = Prisma.sql`u.role NOT IN ('ADMIN', 'STAFF')
   AND u."mergedIntoId" IS NULL
+  AND NOT (u.role = 'CUSTOMER' AND u.phone IS NULL AND COALESCE(left(u."zaloId", 6), '') = 'guest_')
   AND (u."firstTouchAt" IS NULL OR u."firstTouchAt" <= u."createdAt" + interval '1 day')`;
 
 /** Khoảng theo dõi sau khi tạo tài khoản (đơn đầu, doanh thu) và sau đơn đầu (đơn hai). Là định nghĩa của báo cáo, không phải tham số kinh doanh. */

@@ -199,6 +199,13 @@ export const REAL_USER_WHERE: Prisma.UserWhereInput = {
   OR: [{ role: { not: 'CUSTOMER' } }, { phone: { not: null } }, { zaloId: null }, { NOT: { zaloId: { startsWith: 'guest_' } } }],
 };
 
+/** Tập người dùng của danh sách và file xuất: mặc định chỉ tài khoản thật, `includeGuests` thêm phiên khách vãng lai. */
+export function adminUserListWhere(search?: string, includeGuests = false): Prisma.UserWhereInput | undefined {
+  const searchWhere = adminUserSearchWhere(search);
+  if (includeGuests) return searchWhere;
+  return searchWhere ? { AND: [REAL_USER_WHERE, searchWhere] } : REAL_USER_WHERE;
+}
+
 /** Ô tìm người dùng: SĐT (cả +84/84), tên có hoặc không dấu, hoặc đúng id. `%`/`_` khớp đúng nghĩa đen. */
 export function adminUserSearchWhere(search?: string): Prisma.UserWhereInput | undefined {
   const s = search?.trim();
@@ -381,7 +388,7 @@ export class AdminService {
   // ── Users & orders ──
   async listUsers(page: number, limit: number, search?: string, includeGuests = false) {
     const searchWhere = adminUserSearchWhere(search);
-    const where: Prisma.UserWhereInput | undefined = includeGuests ? searchWhere : searchWhere ? { AND: [REAL_USER_WHERE, searchWhere] } : REAL_USER_WHERE;
+    const where = adminUserListWhere(search, includeGuests);
     const [items, total, guestCount] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         where,
@@ -920,8 +927,8 @@ export class AdminService {
     return orderCsvChunks(this.prisma, await this.adminOrderWhere(f, { exactPhoneOnly: opts.maskPhones }), opts);
   }
 
-  userCsv(search?: string): AsyncGenerator<string> {
-    return userCsvChunks(this.prisma, adminUserSearchWhere(search));
+  userCsv(search?: string, includeGuests = false): AsyncGenerator<string> {
+    return userCsvChunks(this.prisma, adminUserListWhere(search, includeGuests));
   }
 
   /** Điều kiện lọc đơn admin dùng chung cho danh sách và file xuất CSV — cùng một tập đơn. */

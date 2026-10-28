@@ -121,6 +121,15 @@ describe('AdminService.listUsers — tìm khách theo SĐT/tên/id', () => {
     expect(findMany.mock.calls[1]![0].where).toBeUndefined();
   });
 
+  it('file xuất người dùng cùng tập với danh sách: mặc định bỏ khách vãng lai, guests=1 mới xuất đủ', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const svc = mkAdmin({ user: { findMany } });
+    for await (const _ of svc.userCsv()) void _;
+    expect(findMany.mock.calls[0]![0].where).toEqual(REAL_USER_WHERE);
+    for await (const _ of svc.userCsv(undefined, true)) void _;
+    expect(findMany.mock.calls[1]![0].where).toBeUndefined();
+  });
+
   it('có search → lọc OR theo SĐT chứa, tên chứa (không phân biệt hoa thường), tên không dấu, id đúng; count dùng cùng where', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const count = jest.fn().mockResolvedValue(0);
