@@ -1371,6 +1371,29 @@ describe('LoyaltyService.recalcAllTiers (tránh N+1)', () => {
     expect(findMany).toHaveBeenCalledTimes(1);
   });
 
+  it('lỗi từng khách ghi log ERROR (cron-run chỉ coi log error là ERRORS) và không chặn khách sau', async () => {
+    const prisma = {
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 'u1' }, { id: 'u2' }]) },
+      membershipTier: { findMany: jest.fn().mockResolvedValue([{ id: 'mam', sortOrder: 0, minPoints: 0, minSpending: null }]) },
+    } as unknown as PrismaService;
+    const svc = new LoyaltyService(prisma, makeConfig());
+    const recalc = jest
+      .spyOn(svc, 'recalcTier')
+      .mockRejectedValueOnce(new Error('db đứt'))
+      .mockResolvedValueOnce(undefined);
+    const logger = (svc as unknown as { logger: { error: jest.Mock; warn: jest.Mock } }).logger;
+    const error = jest.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    const n = await svc.recalcAllTiers();
+
+    expect(n).toBe(2);
+    expect(recalc).toHaveBeenCalledTimes(2);
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error.mock.calls[0]![0]).toContain('recalcTier lỗi user=u1');
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   // Nạp hạng muộn (deploy không cờ rồi chạy --with-business-defaults): khách có đơn giao trước đó còn tierId null và
   // recalcTier chỉ chạy ở đơn giao kế tiếp, nên quét đêm là đường duy nhất cứu họ.
   it('quét cả khách chưa có hạng nhưng đã có đơn DELIVERED, không quét khách chưa mua', async () => {

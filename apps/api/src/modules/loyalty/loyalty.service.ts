@@ -439,7 +439,7 @@ export class LoyaltyService {
       if (users.length === 0) break;
       cursor = users[users.length - 1]!.id;
       for (const u of users) {
-        await this.recalcTier(u.id, tiers).catch((e) => this.logger.warn(`recalcTier lỗi user=${u.id}: ${(e as Error).message}`));
+        await this.recalcTier(u.id, tiers).catch((e) => this.logger.error(`recalcTier lỗi user=${u.id}: ${(e as Error).message}`));
         processed++;
       }
       if (users.length < LoyaltyService.RECALC_PAGE) break;
