@@ -20,3 +20,35 @@ describe('ảnh thay thế thống nhất (B-23)', () => {
     expect(container.querySelector('[data-testid="product-image-fallback"]')).not.toBeNull();
   });
 });
+
+describe('ảnh đổi cỡ (R-5)', () => {
+  const PANCAKE = 'https://content.pancake.vn/2-26/s800x800/a.jpg';
+
+  it('ảnh Pancake đi qua /img với srcset 1x/2x và có width/height giữ chỗ', () => {
+    const { container } = render(<div style={{ position: 'relative' }}><ProductImage src={PANCAKE} brand="Tubu" /></div>);
+    const img = container.querySelector('img')!;
+    expect(img.getAttribute('src')).toContain('/img?w=320&u=');
+    expect(img.getAttribute('srcset')).toMatch(/w=320.* 1x, .*w=640.* 2x$/);
+    expect(img.getAttribute('width')).toBe('170');
+    expect(img.getAttribute('height')).toBe('170');
+  });
+
+  it('bản đổi cỡ lỗi thì thử ảnh gốc một lần, gốc cũng lỗi mới rơi về hình lá', () => {
+    const { container } = render(<div style={{ position: 'relative' }}><ProductImage src={PANCAKE} brand="Tubu" /></div>);
+    fireEvent.error(container.querySelector('img')!);
+    const retry = container.querySelector('img')!;
+    expect(retry.getAttribute('src')).toBe(PANCAKE);
+    expect(retry.getAttribute('srcset')).toBeNull();
+    fireEvent.error(retry);
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('[data-testid="product-image-fallback"]')).not.toBeNull();
+  });
+
+  it('host lạ dùng nguyên ảnh gốc, ô nhỏ 64px dùng bản 160 không srcset', () => {
+    const other = render(<div style={{ position: 'relative' }}><ProductImage src="https://img.test/a.jpg" brand="Tubu" /></div>).container.querySelector('img')!;
+    expect(other.getAttribute('src')).toBe('https://img.test/a.jpg');
+    const thumb = render(<ProductThumb src={PANCAKE} alt="SP" size={64} />).container.querySelector('img')!;
+    expect(thumb.getAttribute('src')).toContain('w=160');
+    expect(thumb.getAttribute('srcset')).toBeNull();
+  });
+});

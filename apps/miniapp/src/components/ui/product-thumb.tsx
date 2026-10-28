@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { LeafGlyph } from './product-image';
+import { useSizedImage } from '../../utils/image-src';
 
 export interface ProductThumbProps {
   src?: string | null;
@@ -14,7 +15,8 @@ export interface ProductThumbProps {
 export function ProductThumb({ src, alt, size = 64 }: ProductThumbProps) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [src]);
-  const showImage = Boolean(src) && !failed;
+  const { img, fallBack } = useSizedImage(src, size);
+  const showImage = Boolean(img) && !failed;
   return (
     <div
       style={{
@@ -31,10 +33,14 @@ export function ProductThumb({ src, alt, size = 64 }: ProductThumbProps) {
     >
       {showImage ? (
         <img
-          src={src ?? undefined}
+          src={img?.src}
+          srcSet={img?.srcSet}
           alt={alt}
+          width={size}
+          height={size}
           loading="lazy"
-          onError={() => setFailed(true)}
+          decoding="async"
+          onError={() => fallBack() || setFailed(true)}
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
       ) : (

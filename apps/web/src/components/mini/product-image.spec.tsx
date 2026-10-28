@@ -58,3 +58,28 @@ describe('ảnh thay thế thống nhất (B-23)', () => {
     });
   });
 });
+
+describe('ảnh đổi cỡ (R-5)', () => {
+  const PANCAKE = 'https://content.pancake.vn/2-26/s800x800/a.jpg';
+
+  it('ảnh Pancake đi qua /img với srcset 1x/2x', () => {
+    const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src={PANCAKE} brand="Tubu" /></div>);
+    const img = container.querySelector('img')!;
+    expect(img.getAttribute('src')).toContain('/img?w=320&u=');
+    expect(img.getAttribute('srcset')).toMatch(/w=320.* 1x, .*w=640.* 2x$/);
+  });
+
+  it('bản đổi cỡ lỗi thì thử ảnh gốc một lần, gốc cũng lỗi mới rơi về hình lá', () => {
+    const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src={PANCAKE} brand="Tubu" /></div>);
+    act(() => {
+      container.querySelector('img')!.dispatchEvent(new Event('error'));
+    });
+    const retry = container.querySelector('img')!;
+    expect(retry.getAttribute('src')).toBe(PANCAKE);
+    act(() => {
+      retry.dispatchEvent(new Event('error'));
+    });
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('[data-testid="product-image-fallback"]')).not.toBeNull();
+  });
+});

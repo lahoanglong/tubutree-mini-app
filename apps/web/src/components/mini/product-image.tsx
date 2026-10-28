@@ -3,6 +3,7 @@
 // Nguồn: apps/miniapp/src/components/ui/product-image.tsx
 import { useEffect, useRef, useState } from 'react';
 import { brandAccent } from './brand-accent';
+import { useSizedImage } from '@/lib/image-src';
 
 /**
  * Ô thay thế khi sản phẩm chưa có ảnh (hay gặp với hàng Pancake chưa có thumbnail) hoặc ảnh tải lỗi: nền ngả màu nhãn,
@@ -48,7 +49,10 @@ export function ProductImageFallback({ brand }: { brand: string }) {
   );
 }
 
-/** Ảnh thẻ sản phẩm: có ảnh thì vẽ ảnh (tải lỗi thì rơi về ô thay thế), không có thì ô thay thế. Cha phải `position: relative`. */
+/** Bề rộng thẻ sản phẩm lưới 2 cột ở khổ điện thoại (CSS px); chọn bản ảnh đổi cỡ 1x/2x theo số này. */
+export const CARD_IMAGE_WIDTH = 170;
+
+/** Ảnh thẻ sản phẩm: có ảnh thì vẽ bản đổi cỡ đúng bề rộng (srcset 1x/2x) (tải lỗi thì rơi về ô thay thế), không có thì ô thay thế. Cha phải `position: relative`. */
 export function ProductImage({
   src,
   brand,
@@ -56,6 +60,7 @@ export function ProductImage({
   className,
   priority = false,
   size,
+  width = CARD_IMAGE_WIDTH,
 }: {
   src?: string | null;
   brand: string;
@@ -63,28 +68,33 @@ export function ProductImage({
   className?: string;
   priority?: boolean;
   size?: number;
+  /** Bề rộng hiển thị (CSS px) để chọn bản ảnh đổi cỡ 1x/2x. */
+  width?: number;
 }) {
   const [failed, setFailed] = useState(false);
   const ref = useRef<HTMLImageElement>(null);
   useEffect(() => setFailed(false), [src]);
+  const { img, fallBack } = useSizedImage(src, width);
   // Ảnh HTML dựng sẵn có thể đã lỗi trước khi React hydrate; sự kiện lỗi đó không phát lại nên `onError` không chạy.
   useEffect(() => {
-    const img = ref.current;
-    if (img && img.complete && img.naturalWidth === 0) setFailed(true);
+    const el = ref.current;
+    if (el && el.complete && el.naturalWidth === 0 && !fallBack()) setFailed(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
-  if (!src || failed) return <ProductImageFallback brand={brand} />;
+  if (!img || failed) return <ProductImageFallback brand={brand} />;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       ref={ref}
-      src={src}
+      src={img.src}
+      srcSet={img.srcSet}
       alt={alt}
-      width={size}
-      height={size}
+      width={size ?? width}
+      height={size ?? width}
       loading={priority ? 'eager' : 'lazy'}
       fetchPriority={priority ? 'high' : undefined}
       decoding="async"
-      onError={() => setFailed(true)}
+      onError={() => fallBack() || setFailed(true)}
       className={className}
       style={className ? undefined : { width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
     />

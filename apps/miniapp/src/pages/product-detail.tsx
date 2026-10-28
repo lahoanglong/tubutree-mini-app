@@ -65,6 +65,7 @@ import { ScrollRow } from '../components/ui/scroll-row';
 import { useScrollHints } from '../components/ui/use-scroll-hints';
 import { cartKey, useCartKey } from '../services/cart-key';
 import { LeafGlyph } from '../components/ui/product-image';
+import { useSizedImage } from '../utils/image-src';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
@@ -970,18 +971,22 @@ const BUY_NOW_LINE: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
+/** Bề rộng ảnh chi tiết ở khổ điện thoại (CSS px): chọn bản đổi cỡ 640 (1x) và 960 (2x). */
+const GALLERY_IMAGE_WIDTH = 480;
+
 /** Một ảnh của carousel: tải lỗi thì rơi về hình lá chung, giữ nguyên ô vuông và vị trí cuộn. */
 export function GallerySlide({ src, alt, eager }: { src: string; alt: string; eager: boolean }) {
   const [failed, setFailed] = useState(false);
+  const { img, fallBack } = useSizedImage(src, GALLERY_IMAGE_WIDTH);
   const frame = { width: '100%', aspectRatio: '1 / 1', flex: '0 0 100%', scrollSnapAlign: 'center', display: 'block' } as const;
-  if (failed) {
+  if (failed || !img) {
     return (
       <div data-testid="gallery-fallback" style={{ ...frame, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-subtle)' }}>
         <LeafGlyph size={72} />
       </div>
     );
   }
-  return <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} onError={() => setFailed(true)} style={{ ...frame, objectFit: 'cover' }} />;
+  return <img src={img.src} srcSet={img.srcSet} alt={alt} width={GALLERY_IMAGE_WIDTH} height={GALLERY_IMAGE_WIDTH} loading={eager ? 'eager' : 'lazy'} decoding={eager ? 'auto' : 'async'} onError={() => fallBack() || setFailed(true)} style={{ ...frame, objectFit: 'cover' }} />;
 }
 
 /** Carousel ảnh scroll-snap + dots — không cần lib ngoài. */
