@@ -148,6 +148,8 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
   test('Trang Đơn hàng: kệ Mua lại + 6 tab (Định kỳ tạm ẩn, R-30); "Đang xử lý" gửi group=processing', async ({ page, api }) => {
     mockBuyFlowSession(api);
     mockOrdersTab(api);
+    // Tab Định kỳ chỉ hiện cho khách đã có gói; ca này là khách chưa có gói.
+    api.get('/me/subscriptions', []);
     await page.goto('/orders');
 
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
@@ -176,6 +178,8 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
   test('/subscriptions (link cũ) → /orders?tab=subscriptions, Định kỳ tạm ẩn nên về tab Tất cả', async ({ page, api }) => {
     mockBuyFlowSession(api);
     mockOrdersTab(api);
+    // Tab Định kỳ chỉ hiện cho khách đã có gói; ca này là khách chưa có gói.
+    api.get('/me/subscriptions', []);
     await page.goto('/subscriptions');
     await expect(page).toHaveURL(/\/orders\?tab=subscriptions$/, { timeout: 15_000 });
     await expect(page.getByRole('tab', { name: 'Tất cả' })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
@@ -232,6 +236,8 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
   test('/subscriptions là redirect thay thế (replace): không vòng lặp, nút Back về trang trước, không về /subscriptions', async ({ page, api }) => {
     mockBuyFlowSession(api);
     mockOrdersTab(api);
+    // Tab Định kỳ chỉ hiện cho khách đã có gói; ca này là khách chưa có gói.
+    api.get('/me/subscriptions', []);
     await page.goto('/');
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
 
