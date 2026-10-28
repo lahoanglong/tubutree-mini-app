@@ -154,7 +154,7 @@ describe('ImageResizeService', () => {
     const own = { get: jest.fn(async () => ({ mime: 'image/png', data: png, versionOk: false })) };
     const { svc } = make(own as never);
     for (let i = 0; i < 30; i++) await expect(svc.get(`/public-image/product/p1/0?v=bad${i}`, 320, 'webp')).rejects.toBeInstanceOf(NotFoundException);
-    await expect(svc.get('/public-image/product/p1/0?v=bad-last', 320, 'webp')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(svc.get('/public-image/product/p1/0?v=badlast', 320, 'webp')).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(own.get).toHaveBeenCalledTimes(30);
   });
 
