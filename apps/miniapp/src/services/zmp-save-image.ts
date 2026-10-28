@@ -5,8 +5,15 @@ import { saveImageToGallery } from 'zmp-sdk/apis';
  * Tách file riêng và nạp lười: chỉ màn chuyển khoản dùng, không nằm trong gói đầu.
  */
 export async function saveImageFromUrl(url: string): Promise<void> {
-  await Promise.race([
-    saveImageToGallery({ imageUrl: url }),
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('saveImageToGallery timeout')), 30_000)),
-  ]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      saveImageToGallery({ imageUrl: url }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('saveImageToGallery timeout')), 30_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }

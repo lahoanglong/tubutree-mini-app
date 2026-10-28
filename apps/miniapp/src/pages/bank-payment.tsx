@@ -252,7 +252,7 @@ export default function BankPaymentPage() {
   // ── Chờ thanh toán: hiển thị VietQR ──
   return (
     // Không dùng class "page": PageHeader đã chừa chỗ nút Quay lại và vùng an toàn, thêm .page sẽ cộng đệm 48px lần hai và tách tiêu đề khỏi nút.
-    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 90 }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(96px + var(--safe-bottom))' }}>
       <PageHeader title="Quét QR để chuyển khoản" subtitle={BANK_QR_HINT} />
 
       <Box p={2}>
@@ -332,16 +332,13 @@ export default function BankPaymentPage() {
           <Text size="small">Đang chờ thanh toán… tự cập nhật khi nhận được tiền</Text>
         </Box>
 
-        {/* loading+disabled tách khỏi cùng 1 biến `checking` — cùng lý do đã ghi ở nút "Thử lại"
-            phía trên: giữ cả 2 sẽ làm spinner không bao giờ hiện đúng lúc khách đang chờ xác nhận
-            thanh toán, ngay bước quan trọng nhất của luồng tiền. Button (Task 10) tự chặn bấm-2-lần
-            khi loading, không cần disabled làm việc đó nữa. */}
         <Button fullWidth variant="secondary" onPress={() => navigate(`/order/${data.orderCode}`, { replace: true })} style={{ marginTop: 8 }}>
           Để sau / Xem đơn hàng
         </Button>
       </Box>
       <StickyActionBar
         primary={
+          // loading tách khỏi disabled: spinner phải hiện đúng lúc khách chờ xác nhận tiền; Button tự chặn bấm hai lần khi loading.
           <Button fullWidth size="lg" loading={checking} onPress={handleCheckPayment}>
             Tôi đã chuyển khoản — Kiểm tra
           </Button>
