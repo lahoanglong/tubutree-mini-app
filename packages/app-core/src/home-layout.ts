@@ -461,3 +461,14 @@ export function writeFlashHint(storage: MemoryStorage | null, hasFlash: boolean)
 
 /** Chiều cao khung chờ của khối Giờ vàng (tiêu đề + một hàng thẻ; đo thật: Mini 302px, web 298px). */
 export const FLASH_SKELETON_HEIGHT = 300;
+
+/**
+ * Chiều cao bốn ô của khung chờ chung Trang chủ (`HomeSettlingSkeleton`): một hàng lối tắt, một khối cỡ Giờ vàng, một hàng danh mục, rồi hai hàng thẻ
+ * hàng. Mini App và web dùng chung để khung chờ thay bằng khối thật không làm trang nhảy; đổi chiều cao khối thật thì sửa ở đây.
+ */
+export const HOME_SETTLING_HEIGHTS = {
+  shortcuts: 96,
+  flash: FLASH_SKELETON_HEIGHT - 16,
+  categories: 138,
+  products: 260,
+} as const;
