@@ -441,6 +441,12 @@ $DC run --rm --no-deps -T api pnpm run reconcile:wallet
 
 Cả hai chỉ đọc (`reconcile:points` không kèm `--apply`; `reconcile:wallet` không có chế độ sửa). Ghi lại số khách lệch: Điểm ______, Ví ______. Có lệch thì tra nguyên nhân và xử lý trước, hoặc báo admin biết trước là tin lệch sổ đêm đầu đã được chờ; Ví không tự sửa, lệch Ví phải ghi dòng ADJUST sau khi tra nguyên nhân.
 
+### 1.12 Hai route điểm danh cũ đã xoá: bản Mini App phải từ V21 trở lên
+
+API không còn `POST /game/check-in`, `GET /me/loyalty/check-in` và `POST /me/loyalty/check-in`; điểm danh chỉ đi qua `GET`/`POST /me/daily-check-in`. Bản Mini App từ `0a43f0b0` (V21, đã có commit `694b67636` "một nút điểm danh") không gọi các route cũ. Bản V19, V20 (`4eea3135` trở về trước) vẫn gọi, và nút điểm danh sẽ báo 404.
+
+Trước khi deploy API có thay đổi này: xác nhận bản Mini App đang chạy cho khách trên Zalo (bản Live, không phải bản Testing) là V21 trở lên. Nếu Live còn V19 hoặc V20 thì chưa deploy, hoặc đẩy bản Mini App mới lên Live trước. `POST /me/loyalty/check-in` đã xoá từ `5c1d47a2f` (deploy 2026-10-28) với cùng giả định này.
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.

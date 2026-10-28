@@ -87,7 +87,7 @@ export interface LoyaltyPreviewDTO {
   rates: { earnPct: number; vndPerPoint: number; vndPerPointRedeem: number; maxRedeemPct: number };
   pointExpireMonths: number;
 }
-export interface GiftRedemptionDTO { id: string; giftId: string; giftKind: WasteGiftKind; giftName: string; pointsCost: number; status: WasteGiftRedemptionStatus; code: string | null; claimExpiresAt: string | null; claimPoint: { name: string; addressLine: string; communeName: string; provinceName: string; openingHours: WasteOpeningHours } | null; fulfilledAt: string | null; cancelledAt: string | null; cancelReason: string | null; refundedPoints: number | null; couponCode: string | null; createdAt: string }
+export interface GiftRedemptionDTO { id: string; giftId: string; giftKind: WasteGiftKind; giftName: string; pointsCost: number; status: WasteGiftRedemptionStatus; code: string | null; claimExpiresAt: string | null; claimPoint: { name: string; addressLine: string; communeName: string; provinceName: string; openingHours: WasteOpeningHours } | null; fulfilledAt: string | null; cancelledAt: string | null; cancelReason: string | null; refundedPoints: number | null; couponCode: string | null; /** Hạn và đã-dùng của mã giảm giá (lượt VOUCHER); optional để bản cũ vẫn type-check, API luôn gửi. */ couponEndAt?: string | null; couponUsed?: boolean; createdAt: string }
 export interface RedeemRewardResultDTO { success: true; message: string; pointsSpent: number; remainingPoints: number; redemption: GiftRedemptionDTO; coupon: { code: string; type: CouponType; value: number; minOrder: number | null; maxDiscount: number | null; endAt: string } | null }
 
 // desk

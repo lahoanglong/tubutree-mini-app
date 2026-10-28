@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RewardPointsService } from '../wallet/reward-points.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -124,12 +125,24 @@ export class CommunityRewardService {
     return granted ? points : 0;
   }
 
+  /** Hạn điểm thưởng sự kiện: caller đọc TRƯỚC khi mở tx rồi truyền vào rewardEventWinner. */
+  expiresAt(): Promise<Date> {
+    return this.rewards.expiresAt();
+  }
+
   /**
    * Thưởng người thắng sự kiện cộng đồng (Pha 4), `points` = CommunityEvent.rewardPoints.
-   * Idempotent qua reason (partial unique index refType='COMMUNITY').
+   * Idempotent qua reason (partial unique index refType='COMMUNITY'). Chạy trong `tx` của caller (cùng giao dịch
+   * với việc đóng sự kiện), lỗi thì ném để caller rollback. Trả true chỉ khi điểm thật sự vào sổ.
    */
-  async rewardEventWinner(userId: string, eventId: string, points: number): Promise<void> {
-    if (!(points > 0)) return;
-    await this.rewards.grant(userId, points, `COMMUNITY_EVENT_WIN:${eventId}:${userId}`, 'COMMUNITY', eventId);
+  async rewardEventWinner(
+    userId: string,
+    eventId: string,
+    points: number,
+    tx?: Prisma.TransactionClient,
+    expiresAt?: Date,
+  ): Promise<boolean> {
+    if (!(points > 0)) return false;
+    return this.rewards.grant(userId, points, `COMMUNITY_EVENT_WIN:${eventId}:${userId}`, 'COMMUNITY', eventId, tx, expiresAt);
   }
 }

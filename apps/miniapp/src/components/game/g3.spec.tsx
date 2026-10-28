@@ -20,6 +20,7 @@ import { GuestBanner } from './guest-banner';
 import { OrderWaterCard } from './order-water-card';
 import { HarvestCelebration } from './harvest-celebration';
 import { GardenHero } from './garden-hero';
+import { GardenPlots } from './garden-plots';
 import { WaterTank } from './water-tank';
 import { SeasonEmpty } from './season-banner';
 
@@ -90,6 +91,33 @@ describe('GardenHero (B-107)', () => {
     render(<GardenHero eco={{ progress: 400, target: 60, treeType: 'Sồi', treesPlanted: 1 }} totalSeeds={10} streakDays={1} harvestReady />);
     expect(screen.queryByText(/400/)).toBeNull();
     expect(screen.getByText(/thu hoạch ngay/i)).toBeInTheDocument();
+  });
+  it('tên thẻ: có loài thì hiện loài; loài mặc định hay trống thì "Cây của bạn"; chưa có dữ liệu vườn thì "Vườn của bạn"', () => {
+    const eco = (treeType: string) => ({ progress: 10, target: 60, treeType, treesPlanted: 0 });
+    const { rerender } = render(<GardenHero eco={eco('Sồi')} totalSeeds={10} streakDays={1} />);
+    expect(screen.getByText('Sồi')).toBeInTheDocument();
+    rerender(<GardenHero eco={eco('Cây Dứa Fuwa3e')} totalSeeds={10} streakDays={1} />);
+    expect(screen.queryByText(/Fuwa3e/)).toBeNull();
+    expect(screen.getByText('Cây của bạn')).toBeInTheDocument();
+    rerender(<GardenHero eco={eco('')} totalSeeds={10} streakDays={1} />);
+    expect(screen.getByText('Cây của bạn')).toBeInTheDocument();
+    rerender(<GardenHero eco={undefined} totalSeeds={undefined} streakDays={undefined} />);
+    expect(screen.getByText('Vườn của bạn')).toBeInTheDocument();
+  });
+});
+
+describe('GardenPlots: tên loài trên từng lô', () => {
+  const plot = (slot: number, treeType: string) => ({ id: `p${slot}`, slot, isHome: false, treeType, speciesId: null, progress: 5, target: 60, treeStage: 1, treesPlanted: 0, treeHealth: 'HEALTHY' as const });
+  it('có loài thì hiện loài; loài mặc định của máy chủ hay trống thì "Cây của bạn", cả chữ lẫn tên đọc của thanh tiến độ', () => {
+    const garden = { plots: [plot(2, 'Sồi'), plot(3, 'Cây Dứa Fuwa3e'), plot(4, '')], maxPlots: 5, nextUnlock: null };
+    const { container } = render(
+      <GardenPlots garden={garden} totalSeeds={100} onNeedWater={vi.fn()} waterPlotPending={false} waterPlotVariables={undefined} onWaterPlot={vi.fn()} unlockPending={false} onUnlock={vi.fn()} />,
+    );
+    expect(screen.getByText('Lô 2 · Sồi')).toBeInTheDocument();
+    expect(screen.getByText('Lô 3 · Cây của bạn')).toBeInTheDocument();
+    expect(screen.getByText('Lô 4 · Cây của bạn')).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/Fuwa3e/);
+    expect(screen.getByLabelText('Lô 3, Cây của bạn: tiến độ lớn của cây')).toBeInTheDocument();
   });
 });
 
