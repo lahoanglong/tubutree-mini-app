@@ -988,14 +988,22 @@ export class LoyaltyService {
       take: 100,
     });
     const couponIds = rows.flatMap((r) => (r.couponId ? [r.couponId] : []));
-    const coupons = couponIds.length
-      ? await this.prisma.coupon.findMany({ where: { id: { in: couponIds } }, select: { id: true, code: true } })
-      : [];
-    const codeById = new Map(coupons.map((c) => [c.id, c.code]));
+    // Một truy vấn mã và một truy vấn lượt dùng cho cả danh sách (không đọc từng lượt đổi một).
+    const [coupons, redeemed] = couponIds.length
+      ? await Promise.all([
+          this.prisma.coupon.findMany({ where: { id: { in: couponIds } }, select: { id: true, code: true, endAt: true, perUserLimit: true } }),
+          this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { userId, couponId: { in: couponIds } }, _count: { _all: true } }),
+        ])
+      : [[], []];
+    const couponById = new Map(coupons.map((c) => [c.id, c]));
+    const redeemedById = new Map(redeemed.map((g) => [g.couponId, g._count._all]));
     const claimPoint = await this.claimPointOf(this.prisma);
-    return rows.map((r) =>
-      toGiftRedemptionDTO(r, { claimPoint, couponCode: r.couponId ? (codeById.get(r.couponId) ?? null) : null }),
-    );
+    return rows.map((r) => {
+      const c = r.couponId ? couponById.get(r.couponId) : undefined;
+      // Cùng luật "đã dùng hết lượt" với getAvailableCoupons: perUserLimit <= 0 là không giới hạn nên không bao giờ coi là đã dùng.
+      const used = c ? c.perUserLimit > 0 && (redeemedById.get(c.id) ?? 0) >= c.perUserLimit : false;
+      return toGiftRedemptionDTO(r, { claimPoint, couponCode: c?.code ?? null, couponEndAt: c?.endAt ?? null, couponUsed: used });
+    });
   }
 
   private async claimPointOf(db: Pick<PrismaService, 'wastePoint'>): Promise<RewardCatalogDTO['claimPoint']> {
@@ -1162,7 +1170,7 @@ export class LoyaltyService {
         message: `Đổi thành công ${gift.name}!`,
         pointsSpent: gift.pointsCost,
         remainingPoints: after.pointsBalance,
-        redemption: toGiftRedemptionDTO(redemption, { claimPoint, couponCode: coupon?.code ?? null }),
+        redemption: toGiftRedemptionDTO(redemption, { claimPoint, couponCode: coupon?.code ?? null, couponEndAt: coupon?.endAt ?? null }),
         coupon: coupon
           ? {
               code: coupon.code,
@@ -1193,7 +1201,7 @@ export class LoyaltyService {
       message: `Đổi thành công ${row.giftName}!`,
       pointsSpent: row.pointsCost,
       remainingPoints: cur.pointsBalance,
-      redemption: toGiftRedemptionDTO(row, { claimPoint, couponCode: coupon?.code ?? null }),
+      redemption: toGiftRedemptionDTO(row, { claimPoint, couponCode: coupon?.code ?? null, couponEndAt: coupon?.endAt ?? null }),
       coupon: coupon
         ? {
             code: coupon.code,
@@ -1818,7 +1826,7 @@ export function voucherSpecOf(
 
 export function toGiftRedemptionDTO(
   r: WasteGiftRedemption,
-  extra: { claimPoint: RewardCatalogDTO['claimPoint']; couponCode: string | null },
+  extra: { claimPoint: RewardCatalogDTO['claimPoint']; couponCode: string | null; couponEndAt?: Date | null; couponUsed?: boolean },
 ): GiftRedemptionDTO {
   const ready = r.status === 'READY';
   return {
@@ -1836,6 +1844,8 @@ export function toGiftRedemptionDTO(
     cancelReason: r.cancelReason,
     refundedPoints: r.refundedPoints,
     couponCode: extra.couponCode,
+    couponEndAt: extra.couponEndAt?.toISOString() ?? null,
+    couponUsed: extra.couponUsed ?? false,
     createdAt: r.createdAt.toISOString(),
   };
 }

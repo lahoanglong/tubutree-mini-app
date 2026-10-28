@@ -1,17 +1,19 @@
 'use client';
 
-import Link from 'next/link';
 import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, Ticket } from 'lucide-react';
+import { Ticket } from 'lucide-react';
 import type { GiftRedemptionDTO } from '@tubutree/shared-types';
 import { myRedemptionsQuery } from '@tubutree/app-core/queries/loyalty';
 import { NEW_COUPON_BADGE, NEW_COUPON_PARAM, sortRedemptions } from '@tubutree/app-core/reward-rules';
+import { redemptionCouponLine } from '@tubutree/app-core/redemption-coupon';
+import { couponUseCopy } from '@tubutree/app-core/coupon-use';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { formatDate } from '@/lib/format-date';
+import { useCouponUse } from '@/lib/use-coupon-use';
 import { EmptyState } from '@/components/mini/empty-state';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ClaimPointInfo } from '@/components/loyalty/claim-point';
@@ -54,24 +56,44 @@ function RedemptionStatus({ r }: { r: GiftRedemptionDTO }) {
   return null;
 }
 
+function VoucherEntry({ r, isNew }: { r: GiftRedemptionDTO; isNew?: boolean }) {
+  const { use, notice } = useCouponUse();
+  const line = redemptionCouponLine(r);
+  const code = r.couponCode;
+  const body = (
+    <>
+      <Ticket className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5 text-sm font-semibold text-stone-900">
+          {r.giftName}
+          {isNew && <Badge tone="brand">{NEW_COUPON_BADGE}</Badge>}
+        </span>
+        <span className="block text-xs text-stone-700">{line.text}</span>
+      </span>
+    </>
+  );
+  // Chỉ mã còn hạn và chưa dùng mới bấm được, giống nút "Dùng ngay" ở Kho quà; mã đã dùng hay hết hạn chỉ để xem.
+  return (
+    <div data-redemption>
+      {line.usable && code ? (
+        <button type="button" onClick={() => void use(code)} className={`flex min-h-11 w-full items-center gap-3 p-4 text-left hover:bg-stone-50 ${miniOutline}`}>
+          {body}
+          <span className="flex-none text-caption font-semibold text-forest-700">{couponUseCopy.use}</span>
+        </button>
+      ) : (
+        <div className={`flex min-h-11 items-center gap-3 p-4 ${miniOutline}`}>{body}</div>
+      )}
+      {notice && notice.code === code && (
+        <p role={notice.error ? 'alert' : 'status'} className={`mt-1.5 text-caption ${notice.error ? 'text-danger-fg' : 'text-stone-700'}`}>
+          {notice.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function RedemptionEntry({ r, isNew }: { r: GiftRedemptionDTO; isNew?: boolean }) {
-  if (r.giftKind === 'VOUCHER') {
-    return (
-      <div data-redemption>
-        <Link href="/tai-khoan/diem-xanh" className={`flex min-h-11 items-center gap-3 p-4 hover:bg-stone-50 ${miniOutline}`}>
-          <Ticket className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
-          <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-1.5 text-sm font-semibold text-stone-900">
-              {r.giftName}
-              {isNew && <Badge tone="brand">{NEW_COUPON_BADGE}</Badge>}
-            </span>
-            {r.couponCode && <span className="block text-xs text-stone-700">{`Mã ${r.couponCode}`}</span>}
-          </span>
-          <ChevronRight className="h-4 w-4 flex-none text-stone-500" aria-hidden="true" />
-        </Link>
-      </div>
-    );
-  }
+  if (r.giftKind === 'VOUCHER') return <VoucherEntry r={r} isNew={isNew} />;
   return (
     <div data-redemption className={`space-y-2 p-4 ${miniOutline}`}>
       <div className="flex items-center justify-between gap-2">
