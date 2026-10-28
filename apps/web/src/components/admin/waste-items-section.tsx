@@ -208,7 +208,8 @@ export function WasteItemsSection() {
               <th className={TH}>Quy đổi</th>
               <th className={TH}>Trần ngày (mang tới điểm)</th>
               <th className={TH}>Trần tháng</th>
-              <th className={TH}>Giọt nước · gram mỗi đơn vị</th>
+              <th className={TH}>Giọt nước mỗi đơn vị</th>
+              <th className={TH}>Gram mỗi đơn vị</th>
               <th className={TH}>Trạng thái</th>
               <th className={TH}>Sửa</th>
             </tr>
@@ -228,14 +229,12 @@ export function WasteItemsSection() {
                 </td>
                 <td className={TD}>
                   <div className="font-medium">{i.name}</div>
-                  <div className="font-mono text-xs text-stone-500">{i.code}</div>
                 </td>
                 <td className={TD}>{conversion(i.unitsPerPoint, i.unitLabel, i.pointsPerGroup)}</td>
                 <td className={TD}>{i.dailyCapQty === null ? DASH : formatCount(i.dailyCapQty)}</td>
                 <td className={TD}>{i.monthlyCapQty === null ? DASH : formatCount(i.monthlyCapQty)}</td>
-                <td className={`${TD} whitespace-nowrap`}>
-                  {formatCount(i.dropsPerUnit)} · {i.gramsPerUnit === null ? DASH : `${formatCount(i.gramsPerUnit)} g`}
-                </td>
+                <td className={TD}>{formatCount(i.dropsPerUnit)}</td>
+                <td className={TD}>{i.gramsPerUnit === null ? DASH : `${formatCount(i.gramsPerUnit)} g`}</td>
                 <td className={`${TD} whitespace-nowrap`}>
                   <select
                     aria-label={`Trạng thái ${i.name}`}

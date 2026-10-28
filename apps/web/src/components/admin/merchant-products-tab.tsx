@@ -178,11 +178,11 @@ function LinkedMerchantProducts({ focusConsignment, listSettled }: { focusConsig
   return (
     <section ref={section} tabIndex={-1} className="mt-8 scroll-mt-4 outline-none" aria-label="Sản phẩm đối tác đang liên kết mã Pancake">
       <h2 className="text-base font-semibold text-stone-900">
-        {filter === 'PENDING' ? 'Liên kết chờ xác nhận hàng ký gửi' : 'Đang liên kết mã Pancake'} ({q.data?.meta.total ?? 0})
+        {filter === 'PENDING' ? 'Hàng ký gửi chờ xác nhận' : 'Đang liên kết mã Pancake'} ({q.data?.meta.total ?? 0})
       </h2>
       <p className="mt-1 text-xs text-stone-500">
-        Sản phẩm đối tác &quot;Tubu giao hộ&quot; đang giữ biến thể Pancake. Gỡ liên kết trả biến thể về sản phẩm gốc và tắt bán sản phẩm đối tác.
-        Liên kết nhận lại hàng Tubu đang bán chỉ vào đối soát sau khi bạn xác nhận đó là hàng ký gửi.
+        Sản phẩm đối tác &quot;Tubu giao hộ&quot; đang dùng chung mã hàng trong kho Tubu. Gỡ liên kết thì mã hàng trả về sản phẩm gốc và sản phẩm đối tác ngừng bán.
+        Liên kết nhận lại hàng Tubu đang bán chỉ được tính tiền cho đối tác sau khi bạn xác nhận đó là hàng ký gửi.
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         <button type="button" aria-pressed={filter === 'ALL'} onClick={() => setFilter('ALL')} className={chipClass(filter === 'ALL')}>

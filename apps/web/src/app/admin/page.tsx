@@ -688,6 +688,7 @@ function DealersTab() {
 
   return (
     <div>
+      <h2 className="mb-2 text-base font-semibold text-stone-900">Hồ sơ đại lý</h2>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <select
           aria-label="Lọc hồ sơ đại lý theo trạng thái"
@@ -710,7 +711,7 @@ function DealersTab() {
         {q.isError && <LoadError message="Không tải được danh sách hồ sơ đại lý." onRetry={() => void q.refetch()} />}
         {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách hồ sơ…</p>}
         {view.items.map((a) => <DealerRow key={a.id} app={a} />)}
-        {q.data && view.items.length === 0 && <Empty>Không có hồ sơ.</Empty>}
+        {q.data && view.items.length === 0 && <Empty>{pending ? 'Chưa có hồ sơ nào chờ duyệt. Hồ sơ xuất hiện khi khách gửi đơn đăng ký làm đại lý trong ứng dụng.' : 'Không có hồ sơ ở trạng thái này.'}</Empty>}
       </div>
       <LoadMoreButton
         hasMore={view.hasMore}
