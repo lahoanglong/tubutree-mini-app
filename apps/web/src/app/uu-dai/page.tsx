@@ -136,23 +136,6 @@ function OffersContent() {
     body = (
       <div className="flex flex-col gap-3 md:max-w-xl">
         <LoginRequired message={`${homeCopy.offers.loginTitle}. ${homeCopy.offers.loginBody}`} returnTo="/uu-dai" />
-        <section aria-label={homeCopy.offers.rewardsTitle}>
-          <Card variant="outline" padding={0} style={{ overflow: 'hidden' }}>
-            {shortcuts
-              .filter((s) => s.show && !s.miniAppOnly && s.to !== '/kho-qua/cua-toi' && s.to !== '/doi-rac')
-              .map((s, i) => (
-                <ListRow
-                  key={s.to}
-                  icon={<IconTile icon={s.icon} />}
-                  title={s.title}
-                  subtitle={s.subtitle}
-                  trailing="chevron"
-                  onPress={() => router.push(s.to)}
-                  style={{ padding: 12, borderTop: i === 0 ? 'none' : '1px solid var(--color-border-subtle)' }}
-                />
-              ))}
-          </Card>
-        </section>
       </div>
     );
   else

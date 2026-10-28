@@ -339,7 +339,7 @@ describe('/tai-khoan/diem-xanh — hạn giữ hạng, biểu tượng theo th�
   it('đang trong hạn giữ hạng: một dòng nói phải mua thêm bao nhiêu và đến ngày nào', async () => {
     state.loyalty = { ...state.loyalty, tierGrace: { until: '2026-11-07T10:00:00.000Z', spendingToKeep: 400_000, pointsToKeep: 0 } };
     const c = await mount();
-    expect(c.textContent).toContain('Giữ hạng Mầm Xanh: mua thêm 400.000đ trước 07/11/2026');
+    expect(c.textContent).toContain('Giữ hạng Mầm Xanh: đơn giao thành công thêm 400.000đ trước 07/11/2026');
   });
 
   it('không có hạn giữ hạng: không có dòng đó', async () => {

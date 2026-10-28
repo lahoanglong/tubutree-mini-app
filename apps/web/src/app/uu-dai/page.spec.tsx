@@ -207,8 +207,9 @@ describe('/uu-dai — trang Ưu đãi', () => {
     const c = await mount();
     expect(c.textContent).toContain('Đăng nhập để xem ưu đãi');
     expect(c.querySelector('a[href^="/dang-nhap"]')).not.toBeNull();
-    expect(c.textContent).toContain(homeCopy.offers.rewardsTitle);
-    expect(c.textContent).toContain('Vườn Xanh');
+    // Giống Mini App: khách chỉ thấy lời mời đăng nhập, không có lối tắt.
+    expect(c.textContent).not.toContain(homeCopy.offers.rewardsTitle);
+    expect(c.textContent).not.toContain('Vườn Xanh');
     expect(c.textContent).not.toContain(homeCopy.offers.myRewards);
     expect(state.calls.filter((p) => p !== '/config/public')).toEqual([]);
   });

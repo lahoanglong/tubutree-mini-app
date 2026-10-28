@@ -67,10 +67,10 @@ describe('tierRank', () => {
 describe('tierGraceLine', () => {
   const fmt = { money: (n: number) => `${n / 1000}k`, points: (n: number) => String(n), date: (iso: string) => iso.slice(0, 10) };
   it('có mốc chi tiêu: nói số tiền mua còn thiếu và ngày hết hạn', () => {
-    expect(tierGraceLine({ until: '2026-11-07T00:00:00.000Z', spendingToKeep: 400_000, pointsToKeep: 30_000 }, 'Lộc Biếc', fmt)).toBe('Giữ hạng Lộc Biếc: mua thêm 400k trước 2026-11-07');
+    expect(tierGraceLine({ until: '2026-11-07T00:00:00.000Z', spendingToKeep: 400_000, pointsToKeep: 30_000 }, 'Lộc Biếc', fmt)).toBe('Giữ hạng Lộc Biếc: đơn giao thành công thêm 400k trước 2026-11-07');
   });
   it('hạng không có mốc chi tiêu: nói số điểm', () => {
-    expect(tierGraceLine({ until: '2026-11-07T00:00:00.000Z', spendingToKeep: null, pointsToKeep: 120 }, 'Lộc Biếc', fmt)).toBe('Giữ hạng Lộc Biếc: tích thêm 120 điểm từ mua hàng trước 2026-11-07');
+    expect(tierGraceLine({ until: '2026-11-07T00:00:00.000Z', spendingToKeep: null, pointsToKeep: 120 }, 'Lộc Biếc', fmt)).toBe('Giữ hạng Lộc Biếc: tích thêm 120 điểm từ đơn giao thành công trước 2026-11-07');
   });
   it('đã đủ điều kiện hoặc không có hạn thì không ghi số', () => {
     expect(tierGraceLine({ until: '2026-11-07T00:00:00.000Z', spendingToKeep: 0, pointsToKeep: 0 }, 'Lộc Biếc', fmt)).toBe('Bạn đang đủ điều kiện giữ hạng Lộc Biếc');
