@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { dropOffDayLimitText, itemQtyMax } from '@tubutree/app-core/waste-copy';
 import { sameProvince } from '@tubutree/app-core/waste-province';
+import { isMethodLocked, orderWasteMethods, WASTE_METHODS_BASE } from '@tubutree/app-core/waste-method-order';
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
@@ -93,8 +94,6 @@ const EMPTY_DRAFT: WasteWizardDraft = { lines: {}, method: null, pointId: null, 
 // Keyed per wizard session (sid), not by quantities, so a later fresh entry with the same quantities is not mistaken for it.
 const submittedSids = new Set<string>();
 
-const BASE_ORDER: readonly WasteMethod[] = ['DROP_OFF', 'PICKUP', 'MAIL_IN'];
-const MAIL_FIRST_ORDER: readonly WasteMethod[] = ['MAIL_IN', 'PICKUP', 'DROP_OFF'];
 const METHOD_LINE: Record<WasteMethod, string> = {
   DROP_OFF: 'Miễn phí, nhận điểm khi người ở điểm xác nhận',
   MAIL_IN: 'Tự gửi qua hãng bất kỳ và tự trả phí ship',
@@ -215,9 +214,7 @@ export function WasteItemStep({ items, lines, onChange, allowance, dayCap = true
 
 type MethodPreview = { data: WastePreviewDTO | undefined };
 
-function isLocked(preview: WastePreviewDTO | undefined): boolean {
-  return preview?.blocks.some((b) => b.code !== 'NEED_PROVINCE') ?? false;
-}
+const isLocked = isMethodLocked;
 
 const STEP1_CAP_BLOCKS: readonly string[] = ['ITEM_MONTH_CAP', 'POINTS_MONTH_CAP', 'ITEM_DAY_CAP'];
 
@@ -290,7 +287,7 @@ export default function RecycleNewPage() {
   const enabledMethods = useMemo(() => {
     if (!me) return [];
     const shipOk = !me.shipLockedAt;
-    return BASE_ORDER.filter((m) => {
+    return WASTE_METHODS_BASE.filter((m) => {
       if (m === 'DROP_OFF') return cfg.waste.dropoff && me.laneFlags.dropoff;
       if (m === 'MAIL_IN') return cfg.waste.mailin && me.laneFlags.mailin && shipOk;
       return cfg.waste.pickup && me.laneFlags.pickup && shipOk;
@@ -480,10 +477,11 @@ export default function RecycleNewPage() {
   const mailPreview = previews.MAIL_IN?.data;
   const province = mailPreview?.feeEstimate?.provinceCode ?? draft.provinceCode;
   const noPointInProvince = province != null && pointsQ.data !== undefined && !pointsQ.data.some((pt) => sameProvince(pt.provinceCode, province));
-  // Thẻ đang khoá (chưa đủ điểm tối thiểu) luôn xếp cuối: lựa chọn dùng được phải nằm trên.
-  const order = (noPointInProvince ? MAIL_FIRST_ORDER : BASE_ORDER)
-    .filter((m) => enabledMethods.includes(m))
-    .sort((a, b) => Number(isLocked(previews[a]?.data)) - Number(isLocked(previews[b]?.data)));
+  const order = orderWasteMethods(
+    enabledMethods,
+    Object.fromEntries(enabledMethods.map((m) => [m, previews[m]?.data])),
+    noPointInProvince,
+  );
   const nearestKm = (draft.nearby ?? []).reduce<number | null>(
     (min, pt) => (pt.distanceKm == null ? min : min == null ? pt.distanceKm : Math.min(min, pt.distanceKm)),
     null,

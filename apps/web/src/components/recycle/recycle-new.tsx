@@ -28,6 +28,7 @@ import {
   writeLastPointId,
 } from '@tubutree/app-core/waste-copy';
 import { sameProvince } from '@tubutree/app-core/waste-province';
+import { isMethodLocked, orderWasteMethods, WASTE_METHODS_BASE } from '@tubutree/app-core/waste-method-order';
 import { friendlyActionError as actErrText, friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -73,8 +74,6 @@ import {
   type BlockContext,
 } from './recycle-labels';
 
-const BASE_ORDER: readonly WasteMethod[] = ['DROP_OFF', 'PICKUP', 'MAIL_IN'];
-const MAIL_FIRST_ORDER: readonly WasteMethod[] = ['MAIL_IN', 'PICKUP', 'DROP_OFF'];
 const browserStore = () => (typeof window === 'undefined' ? undefined : window.localStorage);
 const PACKAGING_TEXT = 'Tôi đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn';
 const POSTAGE_TEXT = 'Tôi đã trả đủ cước gửi, kho từ chối kiện còn cước phải trả khi nhận';
@@ -83,9 +82,7 @@ const STEP1_CAP_BLOCKS: readonly string[] = ['ITEM_MONTH_CAP', 'POINTS_MONTH_CAP
 const WIZARD_PATH = '/doi-rac/tao';
 const METHOD_STEP_PATH = `${WIZARD_PATH}?step=method`;
 
-function isLocked(preview: WastePreviewDTO | undefined): boolean {
-  return preview?.blocks.some((b) => b.code !== 'NEED_PROVINCE') ?? false;
-}
+const isLocked = isMethodLocked;
 
 function Check({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
   return (
@@ -231,7 +228,7 @@ export function RecycleNew() {
   const enabledMethods = useMemo(() => {
     if (!me) return [];
     const shipOk = !me.shipLockedAt;
-    return BASE_ORDER.filter((m) => {
+    return WASTE_METHODS_BASE.filter((m) => {
       if (m === 'DROP_OFF') return cfg.waste.dropoff && me.laneFlags.dropoff;
       if (m === 'MAIL_IN') return cfg.waste.mailin && me.laneFlags.mailin && shipOk;
       return cfg.waste.pickup && me.laneFlags.pickup && shipOk;
@@ -374,10 +371,7 @@ export function RecycleNew() {
   const mailPreview = previews.MAIL_IN;
   const province = mailPreview?.feeEstimate?.provinceCode ?? draft.provinceCode;
   const noPointInProvince = province != null && pointsQ.data !== undefined && !pointsQ.data.some((pt) => sameProvince(pt.provinceCode, province));
-  // Thẻ đang khoá (chưa đủ điểm tối thiểu) luôn xếp cuối: lựa chọn dùng được phải nằm trên.
-  const order = (noPointInProvince ? MAIL_FIRST_ORDER : BASE_ORDER)
-    .filter((m) => enabledMethods.includes(m))
-    .sort((a, b) => Number(isLocked(previews[a])) - Number(isLocked(previews[b])));
+  const order = orderWasteMethods(enabledMethods, previews, noPointInProvince);
   const showShipLocked = !!me.shipLockedAt && ((cfg.waste.mailin && me.laneFlags.mailin) || (cfg.waste.pickup && me.laneFlags.pickup));
   const ctxFor = (pv: WastePreviewDTO | undefined, method?: WasteMethod): BlockContext => ({
     items: me.items,

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { App, ZMPRouter, AnimationRoutes, SnackbarProvider, Box, Spinner } from 'zmp-ui';
+import { App, ZMPRouter, AnimationRoutes, SnackbarProvider } from 'zmp-ui';
 import { Navigate, Route } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { getStorage } from 'zmp-sdk/apis';
@@ -99,11 +99,14 @@ const queryClient = createQueryClient();
 // user vừa đăng xuất cho user kế tiếp trên cùng thiết bị dùng chung (VD tablet chấm công).
 setLogoutCleanup(() => queryClient.clear());
 
+// Khung chờ dạng trang (không spinner toàn màn): khung hình đầu của mọi màn tải chunk đã có khối chờ thay vì màn trắng.
 function RouteFallback() {
   return (
-    <Box flex justifyContent="center" alignItems="center" style={{ minHeight: '60vh' }}>
-      <Spinner />
-    </Box>
+    <div aria-hidden style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16, minHeight: '60vh' }}>
+      <div className="tubu-skeleton" style={{ height: 120, borderRadius: 'var(--radius-card)' }} />
+      <div className="tubu-skeleton" style={{ height: 80, borderRadius: 'var(--radius-card)' }} />
+      <div className="tubu-skeleton" style={{ height: 80, borderRadius: 'var(--radius-card)' }} />
+    </div>
   );
 }
 
