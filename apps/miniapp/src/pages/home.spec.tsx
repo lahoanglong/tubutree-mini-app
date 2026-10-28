@@ -163,7 +163,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(JSON.parse(localStorage.getItem(HOME_KIND_KEY) ?? 'null')).toEqual({ userId: 'u1', kind: 'returning' });
   });
 
-  it('đang khôi phục phiên (status loading) + đã nhớ khách cũ: bố cục khách cũ, không Bán chạy; chưa nhớ gì (máy mới) thì dựng ngay bố cục khách mới, không chờ', async () => {
+  it('đang khôi phục phiên (status loading) + đã nhớ khách cũ: bố cục khách cũ, không Bán chạy; chưa nhớ gì (máy mới hoặc khách cũ đổi máy) thì giữ chỗ thẻ thành viên chờ biết loại, không hứa quà khách mới', async () => {
     localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
     mocks.auth.status = 'loading';
     mocks.auth.user = null;
@@ -173,7 +173,8 @@ describe('HomePage (phương án A, 9 khối)', () => {
     first.unmount();
     localStorage.clear();
     renderHome();
-    expect(blockOrder()).toEqual(NEW);
+    expect(blockOrder()).toEqual(UNKNOWN);
+    expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
   });
 
   it('khách cũ không nhận dải lỗi cấp trang dù kệ Bán chạy (khách cũ không thấy) lỗi: kệ này không được tải', async () => {

@@ -48,7 +48,7 @@ function writeStoredHomeKind(userId: string, kind: HomeCustomerKind): void {
  * Trong lúc `purchased-items` còn tải, dùng loại đã nhớ lần trước của CHÍNH tài khoản này (nếu có) để khách cũ
  * thấy đúng thứ tự ngay từ khung hình đầu — nếu không, "Dành cho bạn" nhảy từ khối 7 lên khối 5 lúc dữ liệu về
  * và đẩy "Bán chạy" xuống cả một khối lưới. Truy vấn xong → loại thật, được ghi lại cho lần mở sau.
- * Khách chưa đăng nhập luôn là "new", không đọc/ghi gì; đang khôi phục phiên thì không bao giờ là "new". Lỗi tải: vẫn giữ loại đã nhớ (khách cũ không bị đẩy về bố cục khách mới
+ * Khách chưa đăng nhập luôn là "new", không đọc/ghi gì; đang khôi phục phiên thì không bao giờ là "new" (Mini luôn qua bước khôi phục, và khách cũ đổi máy cũng chưa nhớ gì). Lỗi tải: vẫn giữ loại đã nhớ (khách cũ không bị đẩy về bố cục khách mới
  * vì một lần API chập chờn) và không ghi đè giá trị đã nhớ. Chưa nhớ gì và đang tải: "unknown" (xem `resolveHomeKind`).
  */
 export function useHomeCustomerKind(
@@ -64,5 +64,5 @@ export function useHomeCustomerKind(
     if (authed && userId && settledKind) writeStoredHomeKind(userId, settledKind);
   }, [authed, userId, settledKind]);
 
-  return resolveHomeKind({ authed, authPending, stored, purchasedCount: purchased.data?.items.length, pending: purchased.isPending });
+  return resolveHomeKind({ authed, authPending, unknownWhenUnremembered: true, stored, purchasedCount: purchased.data?.items.length, pending: purchased.isPending });
 }
