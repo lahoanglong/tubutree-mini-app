@@ -145,7 +145,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page.getByRole('heading', { name: 'Đơn hàng' })).toBeVisible({ timeout: 15_000 });
   });
 
-  test('Trang Đơn hàng: kệ Mua lại + 7 tab (có Định kỳ); "Đang xử lý" gửi group=processing; "Định kỳ" hiện lịch', async ({ page, api }) => {
+  test('Trang Đơn hàng: kệ Mua lại + 6 tab (Định kỳ tạm ẩn, R-30); "Đang xử lý" gửi group=processing', async ({ page, api }) => {
     mockBuyFlowSession(api);
     mockOrdersTab(api);
     await page.goto('/orders');
@@ -153,9 +153,10 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` })).toBeVisible();
     const tabs = page.getByRole('tablist');
-    for (const t of ['Tất cả', 'Chờ thanh toán', 'Đang xử lý', 'Đang giao', 'Đã giao', 'Đã huỷ/hoàn', 'Định kỳ']) {
+    for (const t of ['Tất cả', 'Chờ thanh toán', 'Đang xử lý', 'Đang giao', 'Đã giao', 'Đã huỷ/hoàn']) {
       await expect(tabs.getByRole('tab', { name: t, exact: true })).toBeVisible();
     }
+    await expect(tabs.getByRole('tab', { name: 'Định kỳ' })).toHaveCount(0);
 
     const filtered = api.waitForCall('GET', '/orders');
     await tabs.getByRole('tab', { name: 'Đang xử lý' }).click();
@@ -170,17 +171,15 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await tabs.getByRole('tab', { name: 'Đã giao' }).click();
     expect((await delivered).query.get('status')).toBe('DELIVERED');
     await expect(page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` })).toBeVisible();
-
-    await tabs.getByRole('tab', { name: 'Định kỳ' }).click();
-    await expect(page.getByText('Nước Xả Vải Tubu')).toBeVisible({ timeout: 15_000 });
   });
 
-  test('/subscriptions (link cũ) → /orders?tab=subscriptions, tab Định kỳ đang chọn', async ({ page, api }) => {
+  test('/subscriptions (link cũ) → /orders?tab=subscriptions, Định kỳ tạm ẩn nên về tab Tất cả', async ({ page, api }) => {
     mockBuyFlowSession(api);
     mockOrdersTab(api);
     await page.goto('/subscriptions');
     await expect(page).toHaveURL(/\/orders\?tab=subscriptions$/, { timeout: 15_000 });
-    await expect(page.getByRole('tab', { name: 'Định kỳ' })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
+    await expect(page.getByRole('tab', { name: 'Tất cả' })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
+    await expect(page.getByRole('tab', { name: 'Định kỳ' })).toHaveCount(0);
   });
 
   test('Thẻ đơn: ảnh SP đầu, "3 món"; "Mua lại" → sheet khoá dòng hết hàng, chỉ gửi dòng còn hàng → /cart', async ({ page, api }) => {
@@ -243,11 +242,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
     await expect(page).toHaveURL(/\/orders\?tab=subscriptions$/, { timeout: 10_000 });
-    await expect(page.getByRole('tab', { name: 'Định kỳ' })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
-    // Trang chủ còn mount trong lúc chuyển cảnh (zmp-ui giữ trang cũ trong TransitionGroup) và dải "kỳ định kỳ kế tiếp"
-    // của nó cũng in tên này → chỉ tìm TRONG trang chứa tab "Định kỳ" (trang Đơn hàng), không tìm trên toàn tài liệu.
-    const ordersPage = page.locator('.zaui-page', { has: page.getByRole('tab', { name: 'Định kỳ' }) });
-    await expect(ordersPage.getByText('Nước Xả Vải Tubu')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('tab', { name: 'Tất cả' })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
 
     // Redirect là replace: lịch sử chỉ thêm ĐÚNG 1 mục (pushState của chính test), không thêm mục cho /orders.
     expect(await page.evaluate(() => history.length)).toBe(historyBefore + 1);
@@ -431,7 +426,7 @@ test.describe('Buy-flow 4a — nhắc mua lại, đặt hàng thành công, bố
     });
   }
 
-  test('Đặt hàng thành công (DS v2): mã đơn sao chép được, tổng, điểm, giao dự kiến, 3 bước, gợi ý định kỳ; không lá rơi', async ({ page, api }) => {
+  test('Đặt hàng thành công (DS v2): mã đơn sao chép được, tổng, điểm, giao dự kiến, 3 bước; không gợi ý định kỳ (tạm ẩn, R-30); không lá rơi', async ({ page, api }) => {
     mockCheckout(api);
     api.get('/config/public', publicConfig({ shippingEta: { minDays: 2, maxDays: 4 } }));
     await page.goto('/checkout');
@@ -443,12 +438,12 @@ test.describe('Buy-flow 4a — nhắc mua lại, đặt hàng thành công, bố
     await expect(page.getByText(ORDER_CODE_COD)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sao chép mã đơn' })).toBeVisible();
     await expect(page.getByText('149.000đ').first()).toBeVisible();
-    await expect(page.getByText('+14 điểm')).toBeVisible();
+    await expect(page.getByText('+14 điểm, về khi đơn giao xong')).toBeVisible();
     await expect(page.getByText('Giao dự kiến')).toBeVisible();
     for (const s of ['Xác nhận đơn', 'Đóng gói', 'Giao hàng']) {
       await expect(page.getByText(s, { exact: true })).toBeVisible();
     }
-    await expect(page.getByRole('button', { name: 'Đặt định kỳ' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Đặt định kỳ' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Theo dõi đơn' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Tiếp tục mua sắm' })).toBeVisible();
     await expect(page.locator('.tubu-leaf')).toHaveCount(0);
@@ -504,7 +499,7 @@ test.describe('Buy-flow 4a — nhắc mua lại, đặt hàng thành công, bố
       await expect(placeBtn).toBeEnabled({ timeout: 15_000 });
       await placeBtn.click();
       await expect(page.getByRole('heading', { name: 'Cảm ơn bạn đã chọn Tubu' })).toBeVisible({ timeout: 10_000 });
-      for (const name of ['Theo dõi đơn', 'Tiếp tục mua sắm', 'Đặt định kỳ', 'Sao chép mã đơn']) {
+      for (const name of ['Theo dõi đơn', 'Tiếp tục mua sắm', 'Sao chép mã đơn']) {
         const b = await page.getByRole('button', { name }).boundingBox();
         expect(b, name).not.toBeNull();
         expect(b!.x, `${name} tràn trái`).toBeGreaterThanOrEqual(0);
