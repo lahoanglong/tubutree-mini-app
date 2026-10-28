@@ -151,11 +151,10 @@ export default function GamePage() {
 
   const eco = profile?.ecoImpact;
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
-  // Gộp điểm + nước: nút chính chỉ chuyển sang "Nhận Điểm Xanh" khi trạng thái gộp báo thật sự còn thiếu (lastCheckInAt chỉ là phần nước).
-  const pointsPending = checkInStatusQ.data ? !checkInStatusQ.data.checkedInToday : false;
+  // Gộp điểm + nước: nút chính chỉ chuyển sang "Nhận Điểm Xanh" khi trạng thái gộp báo còn thiếu (lastCheckInAt chỉ là phần nước); số nước hôm nay lấy từ đó (todayWater), chưa có thì suy từ hồ sơ.
   const dewToday = isSameVNDay(profile?.lastDewAt ?? null);
-  // Nước của lần điểm danh hôm nay lấy từ trạng thái gộp (đã gồm thưởng mốc, quà lần đầu, quà quay lại, cắt theo bình); chưa có thì suy từ hồ sơ.
   const status = checkInStatusQ.data;
+  const pointsPending = status ? !status.checkedInToday : false;
   const checkInSeeds = status && !status.waterDone ? status.todayWater : undefined;
   const dailyGain = checkInSeeds ? checkInSeeds : profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
   const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
@@ -231,7 +230,7 @@ export default function GamePage() {
           <div id={GAME_CHECKIN_ANCHOR}>
           <CheckInStreak
             profile={profile}
-            status={checkInStatusQ.data}
+            status={status}
             statusError={checkInStatusQ.isError}
             onRetryStatus={() => void checkInStatusQ.refetch()}
             onBuyFreeze={() => freezeM.mutate()}
