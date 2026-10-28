@@ -2,7 +2,9 @@
 
 // Nguồn: apps/miniapp/src/components/ui/product-tile.tsx
 import { useId, type CSSProperties, type ReactNode } from 'react';
+import { isNewProduct, NEW_PRODUCT_LABEL } from '@tubutree/app-core/product-badges';
 import { formatSold } from '@/lib/api';
+import { Badge } from './badge';
 import { brandAccent } from './brand-accent';
 import { PriceTag } from './price-tag';
 import { ProductImage } from './product-image';
@@ -22,6 +24,8 @@ export interface ProductTileProduct {
   reviewCount?: number;
   ratingAvg?: number;
   sold?: number;
+  /** Ngày tạo (ISO): tạo trong 30 ngày gần nhất thì thẻ có nhãn "Mới". Thiếu thì không nhãn. */
+  createdAt?: string;
 }
 
 /** Chiều cao tối thiểu ô tên (2 dòng) — skeleton của CatalogGrid dựng từ cùng hằng số này. */
@@ -79,6 +83,8 @@ export function ProductTile({
   const hasSale = price < p.basePrice;
   const compareAt = priceOverride?.compareAt !== undefined ? priceOverride.compareAt : hasSale ? p.basePrice : undefined;
   const isLine = variant === 'line' || variant === 'list';
+  // Hết hàng đã có lớp phủ trên ảnh, thẻ dạng dòng chỉ có ảnh 64px: không chồng thêm nhãn.
+  const showNew = !isLine && p.inStock !== false && isNewProduct(p.createdAt);
   // Tên truy cập = tên sản phẩm; giá (và giá gốc gạch) là mô tả truy cập của thẻ.
   const priceId = useId();
 
@@ -107,7 +113,16 @@ export function ProductTile({
         }}
       >
         <ProductImage src={p.thumbnail} brand={p.brand} />
-        {badge && <div style={{ position: 'absolute', top: 8, left: 8 }}>{badge}</div>}
+        {(badge || showNew) && (
+          <div style={{ position: 'absolute', top: 8, left: 8, ...(showNew ? { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 } : null) }}>
+            {badge}
+            {showNew && (
+              <Badge tone="brand" size="sm">
+                {NEW_PRODUCT_LABEL}
+              </Badge>
+            )}
+          </div>
+        )}
         {p.inStock === false && (
           <div
             style={{

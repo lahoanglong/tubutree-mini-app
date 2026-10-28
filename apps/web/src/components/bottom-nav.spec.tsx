@@ -134,6 +134,25 @@ describe('BottomNav (điện thoại)', () => {
     expect(offers.enabled.at(-1)).toBe(false);
   });
 
+  it('nhãn tab dùng cỡ chữ phụ của token như Mini App (13px), không phải text-xs 12px; khoảng cách icon-nhãn 3px', () => {
+    mocks.ready = () => true;
+    const out = render('/');
+    const labels = ['Trang chủ', 'Danh mục', 'Vườn Xanh', 'Ưu đãi', 'Cá nhân'];
+    for (const l of labels) expect(out, l).toContain(`<span class="text-caption">${l}</span>`);
+    expect(out).not.toContain('text-xs');
+    expect(out.match(/gap-\[3px\]/g)).toHaveLength(5);
+  });
+
+  it('tab giữa cùng đường chân chữ với các tab khác: cùng cỡ chữ và cùng khoảng cách, chỉ đẩy lên bằng đệm đáy 6px', () => {
+    mocks.ready = () => true;
+    const out = render('/');
+    const center = /<a[^>]*data-center="true"[^>]*class="([^"]*)"|<a[^>]*class="([^"]*)"[^>]*data-center="true"/.exec(out);
+    const cls = (center?.[1] ?? center?.[2])!;
+    expect(cls).toContain('justify-end');
+    expect(cls).toContain('pb-1.5');
+    expect(cls).toContain('gap-[3px]');
+  });
+
   it('globals.css ẩn thanh khi có sticky-action-bar', () => {
     const css = readFileSync(fileURLToPath(new URL('../app/globals.css', import.meta.url)), 'utf8');
     expect(css).toMatch(/body\.has-sticky-bar\s+\[data-bottom-nav\]\s*\{[^}]*display:\s*none/);

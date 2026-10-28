@@ -10,6 +10,17 @@ import { CountBadge } from './ui/cart-badge';
 import { GardenHintBubble } from './garden-hint-bubble';
 
 /**
+ * Cuộn trang đang mở về đầu. Vùng cuộn của Mini App là `.zaui-page` (không phải cửa sổ); lúc chuyển cảnh lớp trang cũ còn nằm
+ * trước lớp mới trong DOM nên lấy lớp cuối. Khách bật giảm chuyển động thì nhảy thẳng, không cuộn mượt.
+ */
+function scrollPageToTop() {
+  const pages = document.querySelectorAll<HTMLElement>('.zaui-page');
+  const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const options: ScrollToOptions = { top: 0, behavior: reduce ? 'auto' : 'smooth' };
+  (pages[pages.length - 1] ?? window).scrollTo(options);
+}
+
+/**
  * Tab bar 5 tab (phương án A): Trang chủ · Danh mục · Vườn Xanh (nút tròn nổi giữa) · Ưu đãi
  * (chấm đỏ khi chưa điểm danh hoặc có mã sắp hết hạn) · Cá nhân (badge đơn đang xử lý). Dữ liệu tab lấy từ nav-config.ts. Ẩn ở trang con.
  */
@@ -22,8 +33,11 @@ export default function BottomNav() {
   if (!isRoot) return null;
 
   const go = (t: NavTab) => {
-    if (pathname === t.path) return;
     haptic('light');
+    if (pathname === t.path) {
+      scrollPageToTop();
+      return;
+    }
     navigate(t.path);
   };
 

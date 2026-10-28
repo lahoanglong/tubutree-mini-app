@@ -13,6 +13,7 @@ import { coreHttp } from '@/lib/core-http';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { GRID_PRODUCTS } from '@/lib/product-grid';
 import { loadErrorText } from '@/lib/error-text';
+import { useWishlistQuickAdd } from './quick-add';
 
 const TITLE = 'Sản phẩm yêu thích';
 
@@ -29,6 +30,7 @@ export default function WishlistPage() {
   const phase = useAuthPhase();
   // Chờ đăng nhập xong mới gọi: khách chưa đăng nhập gọi /me/wishlist sẽ ra 401 và hiện lỗi thay vì trạng thái rỗng.
   const wishQ = useQuery({ ...wishlistQuery(coreHttp), enabled: phase === 'authenticated' });
+  const { buttonFor, feedback } = useWishlistQuickAdd();
 
   if (phase === 'loading') {
     return (
@@ -65,9 +67,10 @@ export default function WishlistPage() {
           </h2>
           <div className={GRID_PRODUCTS}>
             {wishQ.data.map((p) => (
-              <ProductCard key={p.id} product={p} />
+              <ProductCard key={p.id} product={p} quickAdd={buttonFor(p)} />
             ))}
           </div>
+          {feedback}
         </section>
       ) : (
         <EmptyState

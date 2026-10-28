@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'zmp-ui';
 import { Zap } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -12,7 +12,7 @@ import { ProductTile, type ProductTileProduct } from './ui/product-tile';
 const FLASH_BADGE_STYLE: CSSProperties = { background: 'var(--color-flash-solid-bg)', color: 'var(--color-flash-solid-fg)' };
 
 /** Thẻ SP của danh sách yêu thích: cùng ProductTile + quy tắc giá với lưới Trang chủ/Danh mục. */
-export default function ProductCard({ product }: { product: ProductTileProduct }) {
+export default function ProductCard({ product, imageOverlay }: { product: ProductTileProduct; imageOverlay?: ReactNode }) {
   const navigate = useNavigate();
   // Giá giờ vàng phải hiện ở ĐÂY nữa, không chỉ ở dải "Ưu đãi giờ vàng": trước đây trang chủ
   // hiện SP X giá flash 99.000đ ở dải trên, rồi chính SP X giá 165.000đ ở lưới bên dưới —
@@ -30,6 +30,7 @@ export default function ProductCard({ product }: { product: ProductTileProduct }
       product={product}
       variant="grid"
       priceOverride={{ price: pricing.price, compareAt: pricing.compareAt }}
+      imageOverlay={imageOverlay}
       badge={
         // Hết hàng: lớp phủ của ProductTile trong suốt 72% — không để badge % lộ ra bên dưới.
         pricing.salePct > 0 && product.inStock !== false ? (
