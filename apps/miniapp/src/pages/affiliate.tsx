@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, Sheet, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchCourses } from '../services/academy-api';
@@ -56,6 +56,18 @@ import { copyText } from '../utils/clipboard';
 import { miniAppLink } from '../utils/miniapp-link';
 
 const PAGE_TITLE = 'Cộng tác viên';
+
+const ROW_BUTTON: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  width: '100%',
+  boxSizing: 'border-box',
+  border: 'none',
+  font: 'inherit',
+  textAlign: 'left',
+  cursor: 'pointer',
+};
 
 const HERO_GRADIENT = 'linear-gradient(135deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))';
 const BLOCK_GAP = { margin: '0 16px 12px' } as const;
@@ -308,15 +320,11 @@ function Dashboard() {
   const head = ctvHeadline(d);
   const autoTransfer = isAutoWalletTransfer(d?.autoWalletTransfer);
   const hero = ctvHeroAmount(head.big, autoTransfer, walletQ.data?.walletBalance, walletQ.isLoading);
+  const copyWithToast = (text: string, okText: string, failText = 'Không sao chép được — hãy chọn và chép thủ công.') =>
+    void copyText(text).then((ok) => openSnackbar(ok ? { text: okText, type: 'success' } : { text: failText, type: 'error' }));
   const copyReferral = () => {
     haptic('light');
-    void copyText(referral).then((ok) =>
-      openSnackbar(
-        ok
-          ? { text: 'Đã sao chép mã giới thiệu', type: 'success' }
-          : { text: 'Không sao chép được — hãy chọn và chép thủ công.', type: 'error' },
-      ),
-    );
+    copyWithToast(referral, 'Đã sao chép mã giới thiệu');
   };
   const captions = [
     `Mình đang dùng sản phẩm sống xanh của Tubu Tree, ưng lắm! Mua qua mã ${referral} nhé 🌿`,
@@ -424,20 +432,12 @@ function Dashboard() {
           className="tubu-press"
           onClick={() => navigate('/wallet')}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            width: '100%',
+            ...ROW_BUTTON,
             minHeight: 48,
-            boxSizing: 'border-box',
             padding: '10px 16px',
-            border: 'none',
             borderRadius: 'var(--radius-card)',
             background: 'var(--color-bg-surface)',
             boxShadow: 'var(--elevation-1)',
-            font: 'inherit',
-            textAlign: 'left',
-            cursor: 'pointer',
           }}
         >
           <Icon icon={Wallet} size="md" tone="brand" />
@@ -487,19 +487,11 @@ function Dashboard() {
                 step.onPress();
               }}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                width: '100%',
+                ...ROW_BUTTON,
                 minHeight: 48,
-                boxSizing: 'border-box',
                 padding: '8px 0',
                 background: 'none',
-                border: 'none',
                 borderTop: '1px solid var(--color-border-subtle)',
-                font: 'inherit',
-                textAlign: 'left',
-                cursor: 'pointer',
               }}
             >
               <Icon icon={step.icon} size="md" tone="brand" />
@@ -551,21 +543,13 @@ function Dashboard() {
               setShowAllTiers(!showAllTiers);
             }}
             style={{
-              display: 'flex',
-              alignItems: 'center',
+              ...ROW_BUTTON,
               justifyContent: 'space-between',
-              gap: 10,
-              width: '100%',
               minHeight: 44,
-              boxSizing: 'border-box',
               padding: '12px 0',
               marginTop: 12,
               background: 'none',
-              border: 'none',
               borderTop: '1px solid var(--color-border-subtle)',
-              font: 'inherit',
-              textAlign: 'left',
-              cursor: 'pointer',
             }}
           >
             <Text variant="body-sm" style={{ fontWeight: 600 }}>
@@ -675,13 +659,7 @@ function Dashboard() {
             type="button"
             className="tubu-press"
             onClick={() => {
-              void copyText(cap).then((ok) =>
-                openSnackbar(
-                  ok
-                    ? { text: 'Đã sao chép lời đăng', type: 'success' }
-                    : { text: 'Không sao chép được — hãy chọn và chép thủ công.', type: 'error' },
-                ),
-              );
+              copyWithToast(cap, 'Đã sao chép lời đăng');
             }}
             style={{
               display: 'block',
@@ -744,13 +722,7 @@ function Dashboard() {
                 <Button
                   variant="ghost"
                   onPress={() => {
-                    void copyText(miniAppLink(`/?ref=${referral}&l=${l.shortCode}`)).then((ok) =>
-                      openSnackbar(
-                        ok
-                          ? { text: 'Đã sao chép link', type: 'success' }
-                          : { text: 'Không sao chép được — hãy chép link thủ công.', type: 'error' },
-                      ),
-                    );
+                    copyWithToast(miniAppLink(`/?ref=${referral}&l=${l.shortCode}`), 'Đã sao chép link', 'Không sao chép được — hãy chép link thủ công.');
                   }}
                 >
                   Sao chép
