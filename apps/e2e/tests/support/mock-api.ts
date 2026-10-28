@@ -435,6 +435,8 @@ function shellDefaults(api: MockApi): void {
   });
   api.fallback('GET', '/orders/active-count', { count: 0 });
   api.fallback('GET', '/orders/status-counts', ZERO_ORDER_COUNTS);
+  // Menu tài khoản của nhân viên/đại lý hỏi điểm quầy để chỉ hiện "Nhận hàng tại điểm" khi có quầy; mặc định không có quầy nào.
+  api.fallback('GET', '/waste/desk/points', []);
   api.fallback('GET', '/me/subscriptions', []);
   // Chuông ở thanh đầu máy tính hỏi thông báo ở mọi trang khi đã đăng nhập.
   api.fallback('GET', '/me/notifications', []);
@@ -490,6 +492,8 @@ export function mockSession(api: MockApi, user: AuthUser): AuthUser {
   api.get('/orders/active-count', { count: 0 });
   // Số đơn theo tab của trang Cá nhân (một lời gọi); mặc định không có đơn nào.
   api.get('/orders/status-counts', ZERO_ORDER_COUNTS);
+  // Cá nhân của nhân viên/đại lý hỏi điểm quầy để chỉ hiện "Nhận hàng tại điểm" khi có quầy; mặc định không có quầy nào.
+  api.get('/waste/desk/points', []);
   // Kệ "Mua lại" (Home + tab Đơn hàng) — mặc định khách chưa mua gì.
   api.get('/me/purchased-items', { items: [], nextCursor: null });
   // Trang Danh mục/Tìm kiếm (dự án 4b) — mọi endpoint nó gọi, mặc định rỗng đúng shape để mở /browse
