@@ -6,6 +6,7 @@ import { adminEditSession } from '@tubutree/app-core/api/attendance';
 import {
   finalizePayroll,
   markPaid,
+  recomputePayroll,
   reopenPayroll,
   setRate,
   type AdminPayrollRow,
@@ -13,6 +14,7 @@ import {
 } from '@tubutree/app-core/api/payroll';
 import { adminPayrollDetailQuery, adminPayrollQuery } from '@tubutree/app-core/queries/payroll';
 import { coreHttp } from '@/lib/core-http';
+import { actionErrorText } from '@/lib/error-text';
 import { downloadCsvFile } from '@/lib/export-csv';
 import { formatVnd } from '@/lib/format-vnd';
 import { addDaysKey, currentVnYearMonth, dowLabel, isoToVnHHMM, shiftYearMonth, shortDayLabel, vnDateKey, vnDateTimeISO } from '@/lib/week';
@@ -20,6 +22,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { EvidenceUpload } from '@/components/evidence-upload';
 import { errText, PeriodNav } from '@/components/staff/staff-shell';
 import { useConfirm } from './confirm-dialog';
+import { PayrollAdjustSheet } from './payroll-adjust-sheet';
 import { payrollCsv } from './payroll-csv';
 import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
 
@@ -41,6 +44,7 @@ export function PayrollAdminTab() {
   const [proof, setProof] = useState('');
   const [note, setNote] = useState('');
   const [detailRow, setDetailRow] = useState<AdminPayrollRow | null>(null);
+  const [adjustRow, setAdjustRow] = useState<AdminPayrollRow | null>(null);
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['admin-payroll', ym.year, ym.month] });
   const ok = (text: string) => setMsg({ tone: 'success', text });
   const fail = (e: unknown) => setMsg({ tone: 'danger', text: errText(e) });
@@ -81,6 +85,24 @@ export function PayrollAdminTab() {
     },
     onError: fail,
   });
+
+  const recomputeM = useMutation({
+    mutationFn: (r: AdminPayrollRow) => recomputePayroll(coreHttp, r.staff.id, ym.year, ym.month),
+    onSuccess: (_d, r) => {
+      ok(`Đã tính lại bảng lương T${ym.month}/${ym.year} của ${r.staff.fullName ?? r.staff.phone ?? 'NV'}.`);
+      invalidate();
+    },
+    onError: (e) => setMsg({ tone: 'danger', text: actionErrorText(e) }),
+  });
+
+  const askRecompute = async (r: AdminPayrollRow) => {
+    const go = await confirm({
+      title: 'Tính lại bảng lương tháng này?',
+      message: `Tính lại giờ công và tiền phạt tự động của ${r.staff.fullName ?? r.staff.phone ?? 'NV'} trong T${ym.month}/${ym.year} theo dữ liệu chấm công hiện có. Đơn giá của những ngày đã tính được giữ nguyên.`,
+      confirmLabel: 'Tính lại',
+    });
+    if (go) recomputeM.mutate(r);
+  };
 
   const askFinalize = async (r: AdminPayrollRow) => {
     const go = await confirm({
@@ -145,6 +167,7 @@ export function PayrollAdminTab() {
           // Chỉ dòng đang chạy có trạng thái bận; dòng khác khoá để không chốt/mở lại hai nhân viên cùng lúc.
           const finalizing = finalizeM.isPending && finalizeM.variables?.staff.id === row.staff.id;
           const reopening = reopenM.isPending && reopenM.variables?.staff.id === row.staff.id;
+          const recomputing = recomputeM.isPending && recomputeM.variables?.staff.id === row.staff.id;
           return (
             <section key={row.staff.id} aria-label={name} className="rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
               <div className="flex items-center justify-between gap-2">
@@ -174,6 +197,22 @@ export function PayrollAdminTab() {
                 >
                   Đơn giá
                 </button>
+                {row.month.status === 'OPEN' && (
+                  <>
+                    <button type="button" aria-label={`Thưởng/phạt · ${name}`} onClick={() => setAdjustRow(row)} className={BTN_XS_SECONDARY}>
+                      Thưởng/phạt
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Tính lại tháng · ${name}`}
+                      disabled={recomputeM.isPending}
+                      onClick={() => void askRecompute(row)}
+                      className={BTN_XS_SECONDARY}
+                    >
+                      {recomputing ? 'Đang tính…' : 'Tính lại tháng'}
+                    </button>
+                  </>
+                )}
                 {(row.qrImageUrl || row.profile?.qrImageUrl) && (
                   <button type="button" aria-label={`QR chuyển · ${name}`} onClick={() => setQrRow(row)} className={BTN_XS_SECONDARY}>
                     QR chuyển
@@ -210,6 +249,7 @@ export function PayrollAdminTab() {
                   </button>
                 )}
               </div>
+              {row.month.status !== 'OPEN' && <p className="mt-1.5 text-xs text-stone-500">Mở lại bảng lương trước khi thưởng/phạt hoặc tính lại tháng.</p>}
             </section>
           );
         })}
@@ -267,6 +307,18 @@ export function PayrollAdminTab() {
           </Field>
         </div>
       </Sheet>
+
+      <PayrollAdjustSheet
+        row={adjustRow}
+        year={ym.year}
+        month={ym.month}
+        onClose={() => setAdjustRow(null)}
+        onDone={(text) => {
+          ok(text);
+          invalidate();
+          void qc.invalidateQueries({ queryKey: ['admin-payroll-detail'] });
+        }}
+      />
 
       <DetailSheet row={detailRow} year={ym.year} month={ym.month} onClose={() => setDetailRow(null)} onChanged={invalidate} />
     </div>

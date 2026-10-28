@@ -5,8 +5,8 @@ const downloads: { csv: string; name: string }[] = [];
 vi.mock('@/lib/export-csv', () => ({ downloadCsvFile: (csv: string, name: string) => downloads.push({ csv, name }) }));
 
 import { PayrollAdminTab } from './payroll-admin-tab';
-import { answerConfirm, byText, click, confirmDialog, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
-import { currentVnYearMonth } from '@/lib/week';
+import { answerConfirm, byText, click, confirmDialog, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
+import { currentVnYearMonth, vnDateKey } from '@/lib/week';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -193,5 +193,187 @@ describe('PayrollAdminTab (Lương)', () => {
     await flush();
     expect(container.querySelector('[role=alert]')).not.toBeNull();
     expect(container.textContent).toContain('Thử lại');
+  });
+});
+
+describe('PayrollAdminTab: thưởng/phạt và tính lại tháng', () => {
+  type Reply = { status?: number; body: unknown };
+  function stubAdjust(rows: unknown[], onPost: (url: string, body: Record<string, unknown> | undefined) => Reply = () => ({ body: { adjusted: true } })) {
+    const calls: { url: string; method: string; body?: Record<string, unknown> }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method ?? 'GET';
+        const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : undefined;
+        calls.push({ url, method, body });
+        const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { 'Content-Type': 'application/json' } });
+        if (method === 'POST') {
+          const r = onPost(url, body);
+          return json(r.body, r.status ?? 200);
+        }
+        return json(rows);
+      }),
+    );
+    return { posts: (part: string) => calls.filter((c) => c.method === 'POST' && c.url.includes(part)) };
+  }
+  const today = vnDateKey(new Date());
+  const sheet = () => document.querySelector<HTMLElement>('[role=dialog]')!;
+  const adjustBtn = () => sheet().querySelector<HTMLButtonElement>('[data-adjust-submit]')!;
+  const fill = (kind: 'Phạt' | 'Thưởng' | null, amount: string, reason: string) => {
+    if (kind) click(byText(sheet(), 'button[aria-pressed]', kind));
+    typeInto(sheet().querySelector('input[inputmode=numeric]'), amount);
+    typeInto(sheet().querySelector('textarea'), reason);
+  };
+
+  it('chỉ dòng đang tính (OPEN) có "Thưởng/phạt" và "Tính lại tháng"; tháng đã chốt/đã trả thì ẩn và chỉ đường mở lại', async () => {
+    stubAdjust([row('1', 'Lan', 'OPEN'), row('2', 'Mai', 'FINALIZED'), row('3', 'Hoa', 'PAID')]);
+    const { container } = mount(<PayrollAdminTab />);
+    await flush();
+    expect(container.querySelector('[aria-label="Thưởng/phạt · Lan"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Tính lại tháng · Lan"]')).not.toBeNull();
+    for (const n of ['Mai', 'Hoa']) {
+      expect(container.querySelector(`[aria-label="Thưởng/phạt · ${n}"]`)).toBeNull();
+      expect(container.querySelector(`[aria-label="Tính lại tháng · ${n}"]`)).toBeNull();
+    }
+    expect(container.querySelector('section[aria-label="Mai"]')!.textContent).toContain('Mở lại bảng lương trước khi thưởng/phạt');
+  });
+
+  it('chưa chọn loại, số tiền không hợp lệ hoặc thiếu lý do thì nút ghi bị khoá và không gọi API', async () => {
+    const api = stubAdjust([row('1', 'Lan', 'OPEN')]);
+    const { container } = mount(<PayrollAdminTab />);
+    await flush();
+    click(container.querySelector('[aria-label="Thưởng/phạt · Lan"]'));
+    await flush();
+    expect(adjustBtn().disabled).toBe(true);
+    fill(null, '50000', 'Đi trễ');
+    expect(adjustBtn().disabled).toBe(true);
+    click(byText(sheet(), 'button[aria-pressed]', 'Phạt'));
+    expect(adjustBtn().disabled).toBe(false);
+    for (const bad of ['0', '-5', '1000.5', '50000001', '']) {
+      typeInto(sheet().querySelector('input[inputmode=numeric]'), bad);
+      expect(adjustBtn().disabled).toBe(true);
+    }
+    typeInto(sheet().querySelector('input[inputmode=numeric]'), '50000');
+    typeInto(sheet().querySelector('textarea'), '  ab ');
+    expect(adjustBtn().disabled).toBe(true);
+    typeInto(sheet().querySelector('textarea'), '   ');
+    expect(adjustBtn().disabled).toBe(true);
+    expect(api.posts('/admin/payroll/adjust')).toHaveLength(0);
+  });
+
+  it('phạt: hộp xác nhận nhắc số tiền, người nhận, ngày; huỷ thì không gọi; đồng ý gửi số dương (trừ lương) kèm ngày hôm nay', async () => {
+    const api = stubAdjust([row('1', 'Lan', 'OPEN')]);
+    const { container } = mount(<PayrollAdminTab />);
+    await flush();
+    click(container.querySelector('[aria-label="Thưởng/phạt · Lan"]'));
+    await flush();
+    fill('Phạt', '50000', 'Đi trễ');
+    click(adjustBtn());
+    await flush();
+    const text = confirmDialog()!.textContent ?? '';
+    expect(text).toContain('Phạt');
+    expect(text).toContain('50.000đ');
+    expect(text).toContain('Lan');
+    expect(text).toContain('Đi trễ');
+    answerConfirm(false);
+    await flush();
+    expect(api.posts('/admin/payroll/adjust')).toHaveLength(0);
+
+    click(adjustBtn());
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const posts = api.posts('/admin/payroll/adjust');
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.body).toEqual({ staffId: '1', workDate: today, amount: 50_000, reason: 'Đi trễ' });
+    expect(container.textContent).toContain('Đã ghi khoản phạt 50.000đ');
+    expect(document.querySelector('[role=dialog]')).toBeNull();
+  });
+
+  it('thưởng gửi số âm; đổi ngày công trong tháng được; lý do được cắt khoảng trắng đầu cuối', async () => {
+    const api = stubAdjust([row('1', 'Lan', 'OPEN')]);
+    const { container } = mount(<PayrollAdminTab />);
+    await flush();
+    click(container.querySelector('[aria-label="Thưởng/phạt · Lan"]'));
+    await flush();
+    const first = `${year}-${String(month).padStart(2, '0')}-01`;
+    selectValue(sheet().querySelector('select'), first);
+    fill('Thưởng', '100000', '  Ca tối đông khách  ');
+    click(adjustBtn());
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.posts('/admin/payroll/adjust')[0]!.body).toEqual({ staffId: '1', workDate: first, amount: -100_000, reason: 'Ca tối đông khách' });
+    expect(container.textContent).toContain('Đã ghi khoản thưởng 100.000đ');
+  });
+
+  it('máy chủ báo khoản giống hệt vừa ghi (409): hỏi lại, chỉ gửi allowDuplicate khi admin xác nhận đây là khoản thứ hai', async () => {
+    const api = stubAdjust([row('1', 'Lan', 'OPEN')], (_url, body) =>
+      body?.allowDuplicate
+        ? { body: { adjusted: true } }
+        : { status: 409, body: { statusCode: 409, code: 'PAYROLL_ADJUST_DUPLICATE', message: 'Đã có khoản trừ 50.000đ giống hệt vừa ghi lúc 10:00 — lần gửi này CHƯA được ghi.' } },
+    );
+    const { container } = mount(<PayrollAdminTab />);
+    await flush();
+    click(container.querySelector('[aria-label="Thưởng/phạt · Lan"]'));
+    await flush();
+    fill('Phạt', '50000', 'Đi trễ');
+    click(adjustBtn());
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.posts('/admin/payroll/adjust')).toHaveLength(1);
+    expect(confirmDialog()!.textContent).toContain('CHƯA được ghi');
+    answerConfirm(false);
+    await flush();
+    expect(api.posts('/admin/payroll/adjust')).toHaveLength(1);
+
+    click(adjustBtn());
+    await flush();
+    answerConfirm(true);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const posts = api.posts('/admin/payroll/adjust');
+    expect(posts).toHaveLength(3);
+    expect(posts[2]!.body).toEqual({ staffId: '1', workDate: today, amount: 50_000, reason: 'Đi trễ', allowDuplicate: true });
+  });
+
+  it('lỗi khác từ máy chủ hiện ngay trong hộp, không đóng hộp và không tự gửi lại', async () => {
+    const api = stubAdjust([row('1', 'Lan', 'OPEN')], () => ({ status: 400, body: { message: 'Tháng lương đã chốt/đã trả — mở lại tháng trước khi điều chỉnh.' } }));
+    const { container } = mount(<PayrollAdminTab />);
+    await flush();
+    click(container.querySelector('[aria-label="Thưởng/phạt · Lan"]'));
+    await flush();
+    fill('Phạt', '50000', 'Đi trễ');
+    click(adjustBtn());
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(sheet().querySelector('[role=alert]')!.textContent).toContain('mở lại tháng trước');
+    expect(api.posts('/admin/payroll/adjust')).toHaveLength(1);
+    expect(confirmDialog()).toBeNull();
+  });
+
+  it('tính lại tháng: huỷ hộp xác nhận thì không gọi API; đồng ý thì POST recompute kèm năm/tháng, không áp lại đơn giá', async () => {
+    const api = stubAdjust([row('1', 'Lan', 'OPEN')], () => ({ body: mon('OPEN') }));
+    const { container } = mount(<PayrollAdminTab />);
+    await flush();
+    click(container.querySelector('[aria-label="Tính lại tháng · Lan"]'));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Lan');
+    answerConfirm(false);
+    await flush();
+    expect(api.posts('/recompute')).toHaveLength(0);
+
+    click(container.querySelector('[aria-label="Tính lại tháng · Lan"]'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const posts = api.posts('/recompute');
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.url).toContain(`/admin/payroll/1/recompute?year=${year}&month=${month}`);
+    expect(posts[0]!.url).not.toContain('reprice');
+    expect(container.textContent).toContain('Đã tính lại');
   });
 });
