@@ -507,7 +507,7 @@ describe('Trợ lý AI: tiêu đề chừa chỗ nút lùi', () => {
   });
 });
 
-describe('Trợ lý AI: giữ hội thoại khi khách xem sản phẩm rồi quay lại (E-23)', () => {
+describe('Trợ lý AI: giữ hội thoại khi khách xem sản phẩm rồi quay lại', () => {
   it('gửi câu, có trả lời, gỡ trang rồi dựng lại: tin còn, không hiện lại phần chào', async () => {
     state.chat = () => REPLY('Mình gợi ý loại này', [PRODUCT('a')]);
     const first = await mount();

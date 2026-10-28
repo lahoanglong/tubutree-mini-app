@@ -411,7 +411,7 @@ describe('Công tắc tắt AI', () => {
   });
 });
 
-describe('AiAdvisorPage — giữ hội thoại khi khách xem sản phẩm rồi quay lại (E-23)', () => {
+describe('AiAdvisorPage — giữ hội thoại khi khách xem sản phẩm rồi quay lại', () => {
   const setUser = (user: { id: string } | null) => act(() => (useAuthStore as unknown as { setState: (s: unknown) => void }).setState({ user }));
 
   it('gửi câu, có trả lời, gỡ trang rồi dựng lại: tin còn, không hiện lại phần chào', async () => {
