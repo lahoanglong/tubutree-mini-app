@@ -16,6 +16,7 @@ import { trackEvent } from '../services/analytics';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
+import { SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 import { AuthGate } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { vi } from '../i18n/vi';
@@ -136,7 +137,10 @@ export function notificationAction(templateCode: string, data: Record<string, st
     return { kind: 'link', label: 'Xem Điểm Xanh', to: '/loyalty' };
   }
   if (templateCode.startsWith('CASHBACK')) return { kind: 'link', label: 'Xem Ví Tubu', to: '/wallet' };
-  if (templateCode.startsWith('SUBSCRIPTION')) return { kind: 'link', label: 'Xem gói định kỳ', to: '/subscriptions' };
+  if (templateCode.startsWith('SUBSCRIPTION')) {
+    // Mini App tạm không có màn định kỳ: /subscriptions sẽ rơi về tab Tất cả của Đơn hàng, nên không gắn nút.
+    return SUBSCRIPTIONS_IN_MINIAPP ? { kind: 'link', label: 'Xem gói định kỳ', to: '/subscriptions' } : null;
+  }
   if (templateCode.startsWith('STOREFRONT')) return { kind: 'link', label: 'Thêm vào gian hàng', to: '/storefront' };
   if (templateCode.startsWith('DEALER')) return { kind: 'link', label: 'Mở trang Đại lý', to: '/dealer' };
   // Nhóm hết hạn không đủ người: về trang sản phẩm, nơi vừa mua được với giá thường vừa mở được nhóm mới.

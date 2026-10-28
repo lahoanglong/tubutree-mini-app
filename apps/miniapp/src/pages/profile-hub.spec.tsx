@@ -466,6 +466,23 @@ describe('Cá nhân: hàng đơn, chat ở đầu trang, Học viện theo vai, 
     expect(screen.queryByText('·')).toBeNull();
   });
 
+  it('Mini App tắt giao định kỳ: lưới 4 cột, Thử lại số đơn không gọi danh sách định kỳ', async () => {
+    mocks.subscriptions = false;
+    try {
+      mocks.fetchOrders.mockRejectedValue(new Error('boom'));
+      renderPage();
+      expect(await screen.findByText('Không tải được số đơn.')).toBeInTheDocument();
+      const cell = screen.getByRole('button', { name: 'Đã giao' });
+      expect((cell.parentElement as HTMLElement).style.gridTemplateColumns).toBe('repeat(4, minmax(0, 1fr))');
+      mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 1, total: 3 } });
+      fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+      await waitFor(() => expect(screen.queryByText('Không tải được số đơn.')).toBeNull());
+      expect(mocks.getSubscriptions).not.toHaveBeenCalled();
+    } finally {
+      mocks.subscriptions = true;
+    }
+  });
+
   it('đếm đơn lỗi: có dòng báo và nút Thử lại tải lại số đơn', async () => {
     mocks.fetchOrders.mockRejectedValue(new Error('boom'));
     renderPage();

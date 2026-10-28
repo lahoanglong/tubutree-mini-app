@@ -227,10 +227,11 @@ export default function ProfilePage() {
     );
   };
 
-  const countsFailed = orderCounts.some((q) => q.isError) || (subsQ.isError && !subsQ.data);
+  const countsFailed = orderCounts.some((q) => q.isError) || (SUBSCRIPTIONS_IN_MINIAPP && subsQ.isError && !subsQ.data);
   const reloadCounts = () => {
     orderCounts.forEach((q) => void q.refetch());
-    void subsQ.refetch();
+    // refetch() vẫn gọi API khi query đang tắt (enabled: false), nên phải tự kiểm cờ.
+    if (SUBSCRIPTIONS_IN_MINIAPP) void subsQ.refetch();
   };
 
   const countFor = (key: string): number | null => {
