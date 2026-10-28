@@ -351,7 +351,7 @@ describe('AffiliateService.reverseCommissionsForOrder (guard đối xứng cho l
 describe('AffiliateService.reverseCommissionsForOrder: hoa hồng đã duyệt/đã chuyển mà đơn bị trả → báo kế toán (không trừ Ví)', () => {
   const order = { id: 'o1', code: 'TUBU1', userId: 'buyer', referrerUserId: 'ctv', placedForCustomer: false };
 
-  function setup(commissions: Array<{ status: string; amount: number; affiliateUserId?: string; user?: unknown }>) {
+  function setup(commissions: Array<{ status: string; amount: number; affiliateUserId?: string; user?: unknown; lineAmounts?: Record<string, number> | null }>) {
     const updateMany = jest.fn().mockResolvedValue({ count: 0 });
     const userUpdate = jest.fn();
     const prisma = {
@@ -426,6 +426,60 @@ describe('AffiliateService.reverseCommissionsForOrder: hoa hồng đã duyệt/�
     expect(updateMany).not.toHaveBeenCalled();
     expect(userUpdate).not.toHaveBeenCalled();
     expect(ledger).not.toHaveBeenCalled();
+  });
+
+  describe('trả một phần: chỉ báo khi dòng bị trả thật sự có phần trong hoa hồng đã duyệt/đã chuyển', () => {
+    const partial = (lines: { orderItemId: string; quantity: number }[]) => ({ returnRequestId: 'rr1', returnedLines: lines });
+
+    it('dòng bị trả không có trong lineAmounts (mức % bằng 0): không báo', async () => {
+      const { svc, notify } = setup([{ status: 'PAID', amount: 45_000, lineAmounts: { i1: 45_000 } }]);
+      await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', partial([{ orderItemId: 'i2', quantity: 1 }]));
+      expect(alerts(notify)).toHaveLength(0);
+    });
+
+    it('dòng bị trả có mức % nhưng hoa hồng làm tròn về 0: không báo', async () => {
+      const { svc, notify } = setup([{ status: 'APPROVED', amount: 45_000, lineAmounts: { i1: 45_000, i2: 0 } }]);
+      await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', partial([{ orderItemId: 'i2', quantity: 1 }]));
+      expect(alerts(notify)).toHaveLength(0);
+    });
+
+    it('dòng bị trả có hoa hồng đã chuyển: báo, và vẫn báo khi chỉ một trong các dòng bị trả có hoa hồng', async () => {
+      const { svc, notify, delivered } = setup([{ status: 'PAID', amount: 45_000, lineAmounts: { i1: 45_000 } }]);
+      await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', partial([{ orderItemId: 'i2', quantity: 1 }, { orderItemId: 'i1', quantity: 1 }]));
+      expect(delivered).toEqual(['adm1', 'adm2']);
+      expect((alerts(notify)[0][2] as { message: string }).message).toContain('đã chuyển vào Ví');
+    });
+
+    it('dòng bị trả số lượng 0 không tính là đụng hoa hồng', async () => {
+      const { svc, notify } = setup([{ status: 'PAID', amount: 45_000, lineAmounts: { i1: 45_000 } }]);
+      await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', partial([{ orderItemId: 'i1', quantity: 0 }]));
+      expect(alerts(notify)).toHaveLength(0);
+    });
+
+    it('hoa hồng cũ chưa lưu lineAmounts: không biết dòng nào có hoa hồng nên vẫn báo', async () => {
+      const { svc, delivered } = setup([{ status: 'PAID', amount: 45_000, lineAmounts: null }]);
+      await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', partial([{ orderItemId: 'i2', quantity: 1 }]));
+      expect(delivered).toEqual(['adm1', 'adm2']);
+    });
+
+    it('chỉ nêu trong tin những hoa hồng có đụng tới dòng bị trả; không ghi Ví hay trạng thái', async () => {
+      const { svc, notify, updateMany, userUpdate } = setup([
+        { status: 'PAID', amount: 45_000, lineAmounts: { i1: 45_000 }, user: { fullName: 'Linh', referralCode: 'LINH' } },
+        { status: 'APPROVED', amount: 9_000, lineAmounts: { i9: 9_000 }, user: { fullName: 'Mai', referralCode: 'MAI' } },
+      ]);
+      await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', partial([{ orderItemId: 'i1', quantity: 1 }]));
+      const message = (alerts(notify)[0][2] as { message: string }).message;
+      expect(message).toContain('Linh');
+      expect(message).not.toContain('Mai');
+      expect(updateMany).not.toHaveBeenCalled();
+      expect(userUpdate).not.toHaveBeenCalled();
+    });
+
+    it('đường trả cả đơn/huỷ không truyền dòng: giữ nguyên, báo mọi hoa hồng đã duyệt/đã chuyển', async () => {
+      const { svc, delivered } = setup([{ status: 'PAID', amount: 45_000, lineAmounts: { i1: 45_000 } }]);
+      await svc.reverseCommissionsForOrder('o1');
+      expect(delivered).toEqual(['adm1', 'adm2']);
+    });
   });
 
   it('chỉ có hoa hồng PENDING/LOCKED (đảo được): không báo kế toán', async () => {

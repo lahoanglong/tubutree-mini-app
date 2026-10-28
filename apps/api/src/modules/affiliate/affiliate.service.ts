@@ -54,7 +54,7 @@ import {
 } from './ctv-milestones';
 import { CRON_TZ } from '../../common/cron-tz';
 import { VN_OFFSET_MS, vnDateKey } from '../../common/vn-time';
-import { paidLineTotals } from './commission-base';
+import { commissionCoversLines, paidLineTotals } from './commission-base';
 import { consignmentLinkedSql } from '../merchant/consignment-link-sql';
 import { forBuyer } from '../orders/buyer-order-fields';
 import { totalChangedError, totalChangedMessage } from '../checkout/total-changed';
@@ -1147,14 +1147,21 @@ export class AffiliateService {
    * Hoa hồng đã duyệt hoặc đã chuyển vào Ví thì không còn đảo được ở đây (chỉ dòng chưa duyệt đổi thành REJECTED), mà đơn đã bị
    * trả/huỷ: tiền CTV đã nhận không có nguồn. Việc thu hồi là quyết định của chủ nên chỉ báo kế toán. Đường trả cả đơn/huỷ
    * gọi qua reverseCommissionsForOrder (dedupeKey theo đơn vì setStatus được gọi lại khi một bước đảo khác lỗi); đường trả một
-   * phần không đảo hoa hồng nên gọi thẳng, truyền `returnRequestId` để mỗi yêu cầu trả được báo một lần.
+   * phần không đảo hoa hồng nên gọi thẳng, truyền `returnRequestId` để mỗi yêu cầu trả được báo một lần, và `returnedLines` để chỉ
+   * báo khi dòng bị trả có phần trong hoa hồng đã chi (trả dòng không có hoa hồng thì kế toán không có gì để xử lý).
    */
-  async alertPaidCommissionOfReversedOrder(orderId: string, orderCode: string, opts: { returnRequestId?: string } = {}): Promise<void> {
+  async alertPaidCommissionOfReversedOrder(
+    orderId: string,
+    orderCode: string,
+    opts: { returnRequestId?: string; returnedLines?: { orderItemId: string; quantity: number }[] } = {},
+  ): Promise<void> {
     try {
-      const paid = await this.prisma.commission.findMany({
+      const rows = await this.prisma.commission.findMany({
         where: { orderId, status: { in: ['APPROVED', 'PAID'] } },
-        select: { amount: true, status: true, user: { select: { fullName: true, referralCode: true } } },
+        select: { amount: true, status: true, lineAmounts: true, user: { select: { fullName: true, referralCode: true } } },
       });
+      const lines = opts.returnedLines;
+      const paid = lines ? rows.filter((c) => commissionCoversLines(c.lineAmounts, lines)) : rows;
       if (paid.length === 0) return;
       const message = paid
         .map((c) => `hoa hồng CTV ${c.user.fullName ?? c.user.referralCode} ${vnd(c.amount)} đã ${c.status === 'PAID' ? 'chuyển vào Ví' : 'duyệt'}`)

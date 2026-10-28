@@ -497,7 +497,7 @@ export class OrderReturnsService {
       }
     } else {
       // Hoa hồng đã duyệt/đã vào Ví không cắt được trong commit; kế toán cần biết phần CTV đã nhận vượt phần còn lại của đơn.
-      await this.affiliate.alertPaidCommissionOfReversedOrder(order.id, order.code, { returnRequestId: id });
+      await this.affiliate.alertPaidCommissionOfReversedOrder(order.id, order.code, { returnRequestId: id, returnedLines: shares.lines });
     }
     if (money?.to === 'BANK') {
       await announceBankRefund(

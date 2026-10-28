@@ -345,7 +345,7 @@ describe('OrderReturnsService.review — duyệt trả cả đơn, lỗi đảo 
 });
 
 describe('OrderReturnsService.review — trả một phần cắt hoa hồng thì báo CTV', () => {
-  function setupPartialApprove(commissionCutBy: { affiliateUserId: string; amount: number }[]) {
+  function setupPartialApprove(commissionCutBy: { affiliateUserId: string; amount: number }[], lines: { orderItemId: string; quantity: number; refundAmount: number }[] = []) {
     const order = deliveredOrder({ pancakeOrderId: 'pk1', fulfiller: 'TUBU', fulfillerStorefront: null });
     const prisma = {
       returnRequest: {
@@ -355,7 +355,7 @@ describe('OrderReturnsService.review — trả một phần cắt hoa hồng th�
       order: { findUnique: jest.fn().mockResolvedValue(null), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       $transaction: jest.fn().mockResolvedValue({
         order,
-        shares: { isFull: false, lines: [] },
+        shares: { isFull: false, lines },
         money: { to: 'WALLET', amount: 90_000 },
         pointsBack: 0,
         referralNotices: [],
@@ -388,10 +388,11 @@ describe('OrderReturnsService.review — trả một phần cắt hoa hồng th�
   });
 
   it('trả một phần: báo kế toán nếu đơn có hoa hồng đã duyệt/đã chuyển, mỗi yêu cầu trả một lần', async () => {
-    const { svc, affiliate, order } = setupPartialApprove([]);
+    const lines = [{ orderItemId: 'i1', quantity: 2, refundAmount: 50_000 }];
+    const { svc, affiliate, order } = setupPartialApprove([], lines);
     await svc.review('a1', 'r1', { approve: true, shopFault: true });
     expect(affiliate.alertPaidCommissionOfReversedOrder).toHaveBeenCalledTimes(1);
-    expect(affiliate.alertPaidCommissionOfReversedOrder).toHaveBeenCalledWith(order.id, order.code, { returnRequestId: 'r1' });
+    expect(affiliate.alertPaidCommissionOfReversedOrder).toHaveBeenCalledWith(order.id, order.code, { returnRequestId: 'r1', returnedLines: lines });
   });
 });
 
