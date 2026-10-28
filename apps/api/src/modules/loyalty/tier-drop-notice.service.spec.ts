@@ -41,7 +41,7 @@ describe('TierDropNoticeService.sendNotices', () => {
     const until = inDays(10, 12 * 3600_000); // 12:00 VN ngày 07/11
     const { svc, notify, rows } = build([{ id: 'u1', tierGraceUntil: until, tierDropNoticeFor: null, tier: TIER }]);
     expect(await svc.sendNotices(NOW)).toBe(1);
-    expect(notify).toHaveBeenCalledWith('u1', 'TIER_DROP_NOTICE', { tier: 'Lộc Biếc', date: '07/11/2026', need: 'Mua thêm 400.000đ đơn giao thành công' }, { dedupeKey: `tier-drop:${until.toISOString()}` });
+    expect(notify).toHaveBeenCalledWith('u1', 'TIER_DROP_NOTICE', { tier: 'Lộc Biếc', date: '07/11/2026', need: 'Mua thêm 400.000đ đơn giao thành công' }, { dedupeKey: `tier-drop:${until.toISOString()}`, retryZns: true });
     expect(rows.get('u1')!.tierDropNoticeFor).toEqual(until);
   });
 
@@ -103,11 +103,11 @@ describe('TierDropNoticeService.sendNotices', () => {
     const u: U = { id: 'u1', tierGraceUntil: inDays(5), tierDropNoticeFor: null, tier: TIER };
     const withZns = build([u], { cfg: { 'loyalty.tier_drop_zns_template_id': '123456' } });
     await withZns.svc.sendNotices(NOW);
-    expect(withZns.notify.mock.calls[0]![3]).toEqual({ dedupeKey: expect.stringMatching(/^tier-drop:/), znsTemplateId: '123456' });
+    expect(withZns.notify.mock.calls[0]![3]).toEqual({ dedupeKey: expect.stringMatching(/^tier-drop:/), retryZns: true, znsTemplateId: '123456' });
     for (const bad of ['', '  ', 'abc']) {
       const b = build([{ ...u }], { cfg: { 'loyalty.tier_drop_zns_template_id': bad } });
       await b.svc.sendNotices(NOW);
-      expect(b.notify.mock.calls[0]![3]).toEqual({ dedupeKey: expect.stringMatching(/^tier-drop:/) });
+      expect(b.notify.mock.calls[0]![3]).toEqual({ dedupeKey: expect.stringMatching(/^tier-drop:/), retryZns: true });
     }
   });
 

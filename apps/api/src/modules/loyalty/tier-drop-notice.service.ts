@@ -104,7 +104,7 @@ export class TierDropNoticeService {
     previous: Date | null,
     znsTemplateId: string | undefined,
   ): Promise<boolean> {
-    const gap = await this.loyalty.tierKeepGap(userId, tier);
+    const gap = await this.loyalty.tierKeepGap(userId, tier, until);
     const need =
       gap.spendingToKeep != null
         ? gap.spendingToKeep > 0
@@ -129,8 +129,8 @@ export class TierDropNoticeService {
         userId,
         TIER_DROP_NOTICE_CODE,
         { tier: tier.name, date: `${p2(day)}/${p2(month)}/${year}`, need },
-        // dedupeKey: tin trong app đã lưu mà bước ZNS lỗi thì đêm sau thử lại không được lưu thêm một tin nữa.
-        { dedupeKey: `tier-drop:${until.toISOString()}`, ...(znsTemplateId ? { znsTemplateId } : {}) },
+        // dedupeKey + retryZns: tin trong app đã lưu mà bước ZNS lỗi thì đêm sau chỉ gửi nốt ZNS, không lưu thêm tin trong app.
+        { dedupeKey: `tier-drop:${until.toISOString()}`, retryZns: true, ...(znsTemplateId ? { znsTemplateId } : {}) },
       );
     } catch (err) {
       // Chưa gửi được thì trả phần việc lại để đêm sau thử tiếp.
