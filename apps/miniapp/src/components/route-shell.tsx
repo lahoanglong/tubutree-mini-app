@@ -53,7 +53,7 @@ interface BoundaryProps {
  * Lỗi render của MỘT màn không làm sập cả app: thanh đáy và các màn khác vẫn dùng được. Đổi route (resetKey) hoặc bấm
  * Thử lại thì dựng lại màn; tải lại cả app chỉ là lưới cuối của ErrorBoundary ngoài cùng.
  */
-const CHUNK_ERROR = /dynamically imported module|Importing a module script failed|Loading chunk|Loading CSS chunk|error loading dynamically/i;
+const CHUNK_ERROR = /dynamically imported module|Importing a module script failed|Loading chunk|Loading CSS chunk|Unable to preload CSS|error loading dynamically/i;
 
 class RouteBoundary extends Component<BoundaryProps, { failedKey: string | null; chunk: boolean }> {
   override state = { failedKey: null as string | null, chunk: false };

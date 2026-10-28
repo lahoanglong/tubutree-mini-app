@@ -54,6 +54,19 @@ describe('RouteShell (R-84, R-79)', () => {
       vi.unstubAllGlobals();
     });
   });
+
+  it('lỗi tải file CSS của màn (Vite: Unable to preload CSS) cũng tải lại app', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...window.location, reload });
+    const Broken = lazy(() => Promise.reject(new Error('Unable to preload CSS for /assets/dealer-abc.css')));
+    wrap(<RouteShell><Broken /></RouteShell>);
+    return screen.findByRole('button', { name: copy.common.retry }).then((btn) => {
+      fireEvent.click(btn);
+      expect(reload).toHaveBeenCalledTimes(1);
+      vi.unstubAllGlobals();
+    });
+  });
 });
 
 describe('SilentBoundary', () => {

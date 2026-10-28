@@ -13,6 +13,7 @@ import ErrorBoundary, { hashMessage } from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
 import { recordReferralTouch, reportLaunchLinkClick } from '../services/affiliate-api';
+import { readClaimParam, savePendingClaim } from '../services/coupon-claim';
 import { createQueryClient } from '../services/query-client';
 import { useScreenTracker } from '../hooks/use-screen-tracker';
 import { useFlashSalesPoller } from '../hooks/use-flash-sales-poller';
@@ -140,6 +141,9 @@ export default function MyApp() {
     void restore(); // silent login từ refresh token đã lưu
     applySavedFontScale();
     prefetchShoppingRoutes();
+    // Mã `?claim=` từ thẻ QR lưu ngay ở entry: chunk của cổng nhận mã tải chậm/lỗi hay khách chuyển màn trước khi nó lên thì mã vẫn còn.
+    const claim = readClaimParam(window.location.search, window.location.hash);
+    if (claim) void savePendingClaim(claim);
   }, [restore]);
   useLegacyNotifyPrefsSync(authed);
   // Mở app lúc mất mạng: phiên ở trạng thái lỗi thì tự khôi phục khi có mạng/quay lại app, không chờ khách bấm Thử lại.
