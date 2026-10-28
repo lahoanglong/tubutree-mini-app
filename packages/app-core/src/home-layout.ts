@@ -55,7 +55,8 @@ export const HOME_SETTLE_MAX_MS = 4500;
 /**
  * Còn phải giữ khung chờ không. Chỉ lần mở mà ngay khung hình đầu chưa biết loại khách (`startedUnknown`: khách mới vào, đổi máy) mới giữ;
  * máy đã nhớ loại khách dựng đúng ngay bằng khung chờ theo từng khối. Giữ tới khi biết loại khách VÀ dữ liệu quyết định hình dạng
- * (`dataPending` = Việc cần làm, Giờ vàng, Danh mục, Bán chạy còn tải) đã về.
+ * (`dataPending` = Việc cần làm, Giờ vàng, Danh mục còn tải) đã về. Bán chạy không chờ: khối có khung chờ cao đúng thẻ thật, và tải sớm
+ * thì thêm một lời gọi `/products` cho khách cũ.
  */
 export function homeSettling(opts: { startedUnknown: boolean; kind: HomeKindState; dataPending: boolean }): boolean {
   return opts.startedUnknown && (opts.kind === 'unknown' || opts.dataPending);
