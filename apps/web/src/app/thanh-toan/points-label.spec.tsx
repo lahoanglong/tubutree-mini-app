@@ -6,7 +6,7 @@ import { click, flush, render, type Rendered } from '@/test-utils/dom';
 // số dư: khách 500 điểm thường, hàng 100.000đ, trần 20% → trừ 20 điểm chứ không phải 500.
 
 const SUBTOTAL = 100000;
-const calls = vi.hoisted(() => ({ pointsToUse: [] as number[], extra: {} as Record<string, unknown>, used: 20 }));
+const calls = vi.hoisted(() => ({ pointsToUse: [] as number[], extra: { pointsMax: 10_000 } as Record<string, unknown>, used: 20 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated' }) }));
@@ -41,7 +41,7 @@ afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
   calls.pointsToUse = [];
-  calls.extra = {};
+  calls.extra = { pointsMax: 10_000 };
   calls.used = 20;
 });
 

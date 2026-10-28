@@ -5,7 +5,7 @@ const VND_PER_POINT = 1;
 
 /**
  * Dòng phụ của ô Điểm Xanh ở màn thanh toán: "Dùng 1.200 điểm, giảm 1.200đ". Đã bật thì lấy số thật báo giá trừ
- * (`applied`); chưa bật thì ước theo số dùng được, kẹp theo trần của đơn (`pointsMax`) khi báo giá đã có.
+ * (`applied`); chưa bật thì ước theo số dùng được, kẹp theo trần của đơn (`pointsMax`); chưa có trần thì chỉ ghi số điểm đang có.
  */
 export function pointsOfferText(
   usable: number,
@@ -13,7 +13,8 @@ export function pointsOfferText(
   applied?: { pointsUsed: number; pointsDiscount: number } | null,
 ): string {
   if (applied) return `Dùng ${formatVnNumber(applied.pointsUsed)} điểm, giảm ${formatVnNumber(applied.pointsDiscount)}đ`;
-  const cap = Number.isFinite(quote?.pointsMax) ? Math.max(0, quote!.pointsMax as number) : usable;
-  const points = Math.max(0, Math.min(usable, cap));
+  // Chưa có trần của đơn (chưa có địa chỉ, báo giá lỗi): số tiền giảm thật có thể thấp hơn số dư nhiều, không hứa số tiền.
+  if (!Number.isFinite(quote?.pointsMax)) return `Bạn có ${formatVnNumber(Math.max(0, usable))} điểm`;
+  const points = Math.max(0, Math.min(usable, Math.max(0, quote!.pointsMax as number)));
   return `Dùng ${formatVnNumber(points)} điểm, giảm ${formatVnNumber(points * VND_PER_POINT)}đ`;
 }

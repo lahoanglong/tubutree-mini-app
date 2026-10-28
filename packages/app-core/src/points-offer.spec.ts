@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { pointsOfferText } from './points-offer';
 
 describe('pointsOfferText', () => {
-  it('chưa bật: ước theo số dùng được', () => {
-    expect(pointsOfferText(1200, undefined)).toBe('Dùng 1.200 điểm, giảm 1.200đ');
+  it('chưa có báo giá: chỉ nói số điểm đang có, không hứa số tiền giảm', () => {
+    expect(pointsOfferText(1200, undefined)).toBe('Bạn có 1.200 điểm');
+    expect(pointsOfferText(50000, {})).toBe('Bạn có 50.000 điểm');
+  });
+  it('chưa bật, có trần của đơn: ước theo số dùng được', () => {
+    expect(pointsOfferText(1200, { pointsMax: 5000 })).toBe('Dùng 1.200 điểm, giảm 1.200đ');
   });
   it('chưa bật: kẹp theo trần của đơn', () => {
     expect(pointsOfferText(5000, { pointsMax: 800 })).toBe('Dùng 800 điểm, giảm 800đ');

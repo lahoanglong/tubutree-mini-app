@@ -100,7 +100,7 @@ const CART = {
 };
 const QUOTE = {
   subtotal: 50_000, discount: 0, comboDiscount: 0, tierDiscount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 20_000,
-  total: 70_000, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0, lockedPoints: 0, items: [],
+  total: 70_000, pointsEarned: 0, pointsBalance: 0, pointsMax: 1_000_000, redeemablePoints: 0, lockedPoints: 0, items: [],
 };
 
 function renderPage() {
