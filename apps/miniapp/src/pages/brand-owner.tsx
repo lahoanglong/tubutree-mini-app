@@ -63,7 +63,7 @@ export default function BrandOwnerPage() {
     const status = (q.error as { response?: { status?: number } })?.response?.status;
     return (
       <OwnerShell>
-        {status === 404 ? (
+        {q.isSuccess || status === 404 ? (
           <div style={{ padding: 24 }}>
             <EmptyState
               art="sprout"

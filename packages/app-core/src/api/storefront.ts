@@ -113,7 +113,8 @@ export const applyStorefrontTemplate = (http: HttpClient, categoryId: string) =>
   );
 
 export const createStorefront = (http: HttpClient) => http.post<StorefrontEdit>('/storefront');
-export const getMyStorefront = (http: HttpClient) => http.get<StorefrontEdit>('/storefront/me');
+/** null khi khách chưa có gian hàng (máy chủ trả 200 rỗng, không 404). */
+export const getMyStorefront = (http: HttpClient) => http.get<StorefrontEdit | null>('/storefront/me');
 export const getPublicStorefront = (http: HttpClient, slug: string) =>
   http.get<Storefront>(`/storefront/public/${slug}`);
 export const updateStorefront = (

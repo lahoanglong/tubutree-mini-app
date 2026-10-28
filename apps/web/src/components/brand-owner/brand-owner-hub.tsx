@@ -41,7 +41,7 @@ function Editor() {
     );
   }
   if (!q.data) {
-    if (errorStatus(q.error) === 404) {
+    if (q.isSuccess || errorStatus(q.error) === 404) {
       return (
         <section aria-label="Chưa có nhãn" className="rounded-card border border-stone-200 bg-stone-0 p-8 text-center shadow-card">
           <h2 className="font-display text-base font-semibold text-stone-900">Quản lý nhãn hàng</h2>
