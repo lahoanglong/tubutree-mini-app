@@ -1,30 +1,5 @@
 import type { CheckInStatusResponse, LoyaltyOverview, LoyaltyRates, MemberCardResponse } from './api/loyalty';
 
-/** Tiêu đề khối mã giảm giá khi lỗi tải; thân chỉ ghi lý do. */
-export const COUPONS_LOAD_ERROR_TITLE = 'Chưa tải được mã giảm giá';
-
-/**
- * Thứ hạng (0 = thấp nhất) của một hạng trong danh sách đã sắp theo `sortOrder`. Biểu tượng và màu hạng tra theo thứ hạng này,
- * không theo tên, để đổi tên hạng trong admin không làm mất biểu tượng.
- */
-export function tierRank(tiers: readonly { id: string; name?: string }[], ref: { id?: string | null; name?: string | null }): number {
-  const i = tiers.findIndex((t) => (ref.id != null ? t.id === ref.id : ref.name != null && t.name === ref.name));
-  return i < 0 ? 0 : i;
-}
-
-/** Dòng báo hạn giữ hạng ("Giữ hạng Lộc Biếc: mua thêm 400.000đ trước 07/11/2026"); null khi hạng đang ổn. */
-export function tierGraceLine(
-  grace: LoyaltyOverview['tierGrace'],
-  tierName: string,
-  fmt: { money: (n: number) => string; points: (n: number) => string; date: (iso: string) => string },
-): string | null {
-  if (!grace) return null;
-  const left = grace.spendingToKeep != null ? grace.spendingToKeep : grace.pointsToKeep;
-  if (left <= 0) return `Bạn đang đủ điều kiện giữ hạng ${tierName}`;
-  const need = grace.spendingToKeep != null ? `mua thêm ${fmt.money(left)}` : `tích thêm ${fmt.points(left)} điểm từ mua hàng`;
-  return `Giữ hạng ${tierName}: ${need} trước ${fmt.date(grace.until)}`;
-}
-
 /** Số thập phân kiểu Việt, bỏ ",0": 1.2 → "1,2", 5 → "5". */
 export function decimalVi(n: number): string {
   return String(Math.round(n * 10) / 10).replace('.', ',');

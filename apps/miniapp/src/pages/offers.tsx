@@ -1,4 +1,4 @@
-import { COUPONS_LOAD_ERROR_TITLE } from '@tubutree/app-core/loyalty-copy';
+import { COUPONS_LOAD_ERROR_TITLE } from '@tubutree/app-core/loyalty-tier-copy';
 import { useEffect, useRef } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';

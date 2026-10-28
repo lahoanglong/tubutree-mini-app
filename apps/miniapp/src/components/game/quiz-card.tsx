@@ -1,5 +1,6 @@
 import { Brain, Lightbulb } from 'lucide-react';
-import { gameMoreCopy } from '@tubutree/app-core/game-newbie';
+import {  } from '@tubutree/app-core/game-newbie';
+import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import type { AnswerResult, QuizItem } from '../../services/game-api';
 import { formatDrops } from '../../utils/format';
 import { Button } from '../ui/button';

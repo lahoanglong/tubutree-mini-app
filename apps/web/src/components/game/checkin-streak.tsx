@@ -1,5 +1,6 @@
 import { Droplets, Flame, Snowflake } from 'lucide-react';
-import { STREAK_3_SEEDS, gameMoreCopy, gameNewbieCopy, missingDrops } from '@tubutree/app-core/game-newbie';
+import { STREAK_3_SEEDS, gameNewbieCopy, missingDrops } from '@tubutree/app-core/game-newbie';
+import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import type { GameProfile } from '@tubutree/app-core/api/game';
 import { ui } from '@/lib/guest-ui';
 import { miniBtnSecondary, miniCard, miniSectionTitle } from '@/components/loyalty/mini-surface';

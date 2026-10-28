@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { LoyaltyOverview } from './api/loyalty';
-import { checkInView, earnPctOf, earnRuleLine, memberCardHint, percentLabel, pointsToSpend, tierGraceLine, tierProgressPercent, tierRank } from './loyalty-copy';
+import { checkInView, earnPctOf, earnRuleLine, memberCardHint, percentLabel, pointsToSpend, tierProgressPercent } from './loyalty-copy';
+import { tierGraceLine, tierRank } from './loyalty-tier-copy';
 
 const RATES = { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1000, maxRedeemPct: 0.5 };
 

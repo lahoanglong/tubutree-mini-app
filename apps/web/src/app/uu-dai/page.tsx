@@ -1,6 +1,6 @@
 'use client';
 
-import { COUPONS_LOAD_ERROR_TITLE } from '@tubutree/app-core/loyalty-copy';
+import { COUPONS_LOAD_ERROR_TITLE } from '@tubutree/app-core/loyalty-tier-copy';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';

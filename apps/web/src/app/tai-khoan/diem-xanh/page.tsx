@@ -42,7 +42,7 @@ import { QrCode } from '@/components/ui/qr-code';
 import { miniBtnSecondary, miniCard, miniSectionTitle, miniSurface } from '@/components/loyalty/mini-surface';
 import { LedgerShell, SignedAmount } from '../ledger-shell';
 import { loadErrorText } from '@/lib/error-text';
-import { tierGraceLine, tierRank } from '@tubutree/app-core/loyalty-copy';
+import { tierGraceLine, tierRank } from '@tubutree/app-core/loyalty-tier-copy';
 import { tierPerkLabel } from '@tubutree/app-core/number-format';
 
 const TITLE = 'Hạng thành viên & Điểm Xanh';

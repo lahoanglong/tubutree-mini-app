@@ -1,5 +1,6 @@
 import { Droplets, ShowerHead, TreePine } from 'lucide-react';
-import { gameMoreCopy, gameNewbieCopy, primaryWaterAction, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
+import { gameNewbieCopy, primaryWaterAction, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
+import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import type { GameProfile } from '@tubutree/app-core/api/game';
 import { ui } from '@/lib/guest-ui';
 import { isSameVNDay } from './game-utils';

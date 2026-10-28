@@ -22,7 +22,7 @@ import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { formatNumber, formatDate, formatMultiplier } from '../utils/format';
 import { haptic } from '../utils/haptic';
-import { COUPONS_LOAD_ERROR_TITLE, tierGraceLine, tierRank } from '@tubutree/app-core/loyalty-copy';
+import { COUPONS_LOAD_ERROR_TITLE, tierGraceLine, tierRank } from '@tubutree/app-core/loyalty-tier-copy';
 import { earnRuleLine, moneyShort, pointsToSpend, redeemRuleLine, tierThresholdLabel } from '../utils/loyalty-copy';
 import { copyText } from '../utils/clipboard';
 import { PageHeader } from '../components/ui/page-header';

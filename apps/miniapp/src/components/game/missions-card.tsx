@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check, Target } from 'lucide-react';
-import { collapseMissions, gameMoreCopy, gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
+import { collapseMissions, gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
+import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import type { MissionItem } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { formatNumber } from '../../utils/format';

@@ -1,5 +1,6 @@
 import { Droplets, Flame, Snowflake } from 'lucide-react';
-import { STREAK_3_SEEDS, gameMoreCopy, missingDrops } from '@tubutree/app-core/game-newbie';
+import { STREAK_3_SEEDS, missingDrops } from '@tubutree/app-core/game-newbie';
+import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import type { GameProfile } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { formatDrops } from '../../utils/format';

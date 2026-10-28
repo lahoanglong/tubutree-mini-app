@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Check, Target } from 'lucide-react';
 import type { MissionItem } from '@tubutree/app-core/api/game';
-import { collapseMissions, gameMoreCopy, gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
+import { collapseMissions, gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
+import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ui } from '@/lib/guest-ui';
 import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
