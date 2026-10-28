@@ -190,7 +190,7 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
       data: [expect.objectContaining({ orderId: 'o1', kind: 'LATE_PAYMENT', refKey: 'ZALOPAY:250101_TUBU1', amount: 250000, userId: 'u1' })],
       skipDuplicates: true,
     });
-    expect(notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', { order_code: 'TUBU1', amount: '250.000đ' });
+    expect(notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', { order_code: 'TUBU1', amount: '250.000đ' }, undefined, 'order=TUBU1');
     expect(notify).toHaveBeenCalledWith('admin1', 'OPS_REFUND_ALERT', expect.objectContaining({ order_code: 'TUBU1' }));
     expect(notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
   });
@@ -248,7 +248,7 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
       data: [expect.objectContaining({ kind: 'LATE_PAYMENT', amount: 250000, refKey: 'ZALOPAY:250101_TUBU1' })],
       skipDuplicates: true,
     });
-    expect(notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', expect.anything());
+    expect(notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', expect.anything(), undefined, 'order=TUBU1');
     expect(notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
   });
 

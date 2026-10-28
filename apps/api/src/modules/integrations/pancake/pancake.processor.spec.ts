@@ -70,6 +70,7 @@ function setup(
       update: jest.fn().mockResolvedValue({}),
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
+    notificationLog: { findFirst: jest.fn().mockResolvedValue(null) },
     externalOrder: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     orderCustomerRefund,
     returnRequest: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
@@ -421,7 +422,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
         method: 'MANUAL_TRANSFER', status: 'PENDING', userId: 'u1',
       }),
     ]);
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', { order_code: 'TUBU1', amount: '100.000đ' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', { order_code: 'TUBU1', amount: '100.000đ' }, undefined, 'order=TUBU1');
     expect(notifications.notify).toHaveBeenCalledWith('admin1', 'OPS_REFUND_ALERT', expect.objectContaining({ order_code: 'TUBU1' }));
     expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
     expect(attentionFlags(orderUpdateMany)).toEqual([]);
@@ -451,7 +452,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       _sum: { amount: true },
     });
     expect(lateRefunds(prisma)).toEqual([expect.objectContaining({ refKey: 'PANCAKE:paid:236000', amount: 118000 })]);
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', { order_code: 'TUBU1', amount: '118.000đ' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', { order_code: 'TUBU1', amount: '118.000đ' }, undefined, 'order=TUBU1');
   });
 
   it('đơn đã huỷ: Pancake báo lại cùng số (hoặc số nhỏ hơn) đã ghi → không tạo khoản, không báo', async () => {
