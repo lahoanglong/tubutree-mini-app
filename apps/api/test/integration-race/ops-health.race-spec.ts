@@ -193,6 +193,7 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
       'bankTransferToConfirm',
       'customerRefunds',
       'dealerClaimsToPay',
+      'dealerCreditReported',
       'dealerTransferToConfirm',
       'invoicePending',
       'merchantPayoutsPending',

@@ -162,6 +162,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'storefrontsPending', count: 2 },
           { key: 'accountDeletionPending', count: 1 },
           { key: 'shiftsPending', count: 2 },
+          { key: 'dealerCreditReported', count: 1 },
           { key: 'communityReports', count: 3 },
           { key: 'productsMissingImage', count: 4 },
         ],
@@ -3699,6 +3700,21 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     click(container.querySelector('[data-inbox="shiftsPending"]')!);
     await flush();
     expect(window.location.search).toBe('?tab=shiftApproval');
+  });
+
+  it('thẻ đại lý báo đã chuyển khoản mở tab Đại lý & công nợ', async () => {
+    const api = mockFetch({
+      '/admin/dealer-credit-reports': { body: [] },
+      '/admin/dealers/accounts': { body: { data: [], meta: { page: 1, limit: 20, total: 0 }, month: '2026-10', summary: { totalDebt: 0, debtors: 0 } } },
+      '/admin/dealer-tiers/manage': { body: { tiers: [], maxDiscountPct: 45, dealersWithoutTier: 0 } },
+      '/admin/dealer-tiers/history': { body: [] },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    click(container.querySelector('[data-inbox="dealerCreditReported"]')!);
+    await flush();
+    expect(window.location.search).toBe('?tab=dealerAccounts');
+    expect(api.calls.some((c) => c.url.includes('/admin/dealer-credit-reports'))).toBe(true);
   });
 
   it('thẻ gian hàng chờ duyệt và sản phẩm thiếu ảnh mở đúng tab', async () => {

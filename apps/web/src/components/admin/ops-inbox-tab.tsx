@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, CircleCheck } from 'lucide-react';
-import { getOpsInbox, getRetentionDaily, getTodaySummary, type AdminPayoutStatus, type DealerRewardClaimStatus, type InboxKey, type TodaySummary } from '@/lib/admin-client';
+import { getOpsInbox, getRetentionDaily, getTodaySummary, type AdminPayoutStatus, type DealerRewardClaimStatus, type InboxKey, type OpsInbox, type TodaySummary } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { summarizeNs1 } from './ns1-card';
 import { formatDateTime } from '@/lib/format-date';
@@ -26,6 +26,7 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   dealerApplications: { title: 'Hồ sơ đại lý chờ duyệt', hint: 'Đăng ký đại lý mới' },
   dealerClaims: { title: 'Thưởng đại lý chờ duyệt', hint: 'Đại lý đã đạt mốc, chờ xác nhận' },
   dealerClaimsToPay: { title: 'Thưởng đại lý chờ chi', hint: 'Admin đã duyệt, chờ kế toán trao thưởng và bấm "Đã chi"' },
+  dealerCreditReported: { title: 'Đại lý báo đã chuyển khoản trả nợ', hint: 'Đối chiếu sao kê rồi bấm "Ghi nhận", hoặc "Không thấy tiền" kèm lý do' },
   payouts: { title: 'Lệnh rút ngân hàng cũ chờ duyệt', hint: 'Lệnh tạo trước khi bỏ rút tiền' },
   payoutsToPay: { title: 'Lệnh rút ngân hàng cũ chờ chi', hint: 'Admin đã duyệt, chờ kế toán chuyển khoản và bấm "Đã chi"' },
   wasteToCount: { title: 'Kiện đổi rác chờ đếm', hint: 'Kiện gửi kho hoặc thu kèm đơn đã nhận, chưa đếm' },
@@ -66,7 +67,7 @@ const INBOX_TAB: Partial<Record<InboxKey, string>> = {
   returnsPending: 'returns', returnsToReceive: 'returns',
   merchantOverdue: 'merchantFulfilment', merchantToSettle: 'merchantFulfilment', merchantPayoutsPending: 'merchantFulfilment',
   merchantProducts: 'merchantProducts', consignmentPending: 'merchantProducts',
-  dealerApplications: 'dealers', dealerClaims: 'dealerClaims', dealerClaimsToPay: 'dealerClaims', payouts: 'payouts', payoutsToPay: 'payouts',
+  dealerApplications: 'dealers', dealerClaims: 'dealerClaims', dealerClaimsToPay: 'dealerClaims', dealerCreditReported: 'dealerAccounts', payouts: 'payouts', payoutsToPay: 'payouts',
   communityPending: 'community', communityUnanswered: 'community', communityReports: 'community',
   externalPoints: 'externalClaims', supportChatUnforwarded: 'supportChat', zaloBridgeDown: 'supportChat',
   wasteToCount: 'waste', wasteUnmatched: 'waste', wasteBlockedPending: 'waste', wastePointsPending: 'waste', wastePerksPending: 'waste',
@@ -109,7 +110,7 @@ export function OpsInboxTab({ onOpen: openTab, onOpenStat, isAdmin = false }: { 
   if (q.isError || !q.data) return <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách việc cần xử lý.</LoadError>;
   // API mới hơn web (đang triển khai dở) có thể trả khoá web chưa biết: bỏ qua thay vì làm sập cả trang chủ.
   const items = q.data.items.filter((i) => i.key in INBOX_LABELS);
-  const open = items.filter((i) => i.count > 0);
+  const open = items.filter((i) => i.count > 0).sort(byUrgency);
   // Rút ngân hàng đã bỏ: hai thẻ lệnh rút cũ chỉ hiện khi còn lệnh đang mở, không nằm trong danh sách "Đang trống".
   const done = items.filter((i) => i.count === 0 && !LEGACY_ONLY.has(i.key));
   return (
@@ -130,7 +131,7 @@ export function OpsInboxTab({ onOpen: openTab, onOpenStat, isAdmin = false }: { 
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {open.map((i) => (
             <li key={i.key}>
-              <InboxCard k={i.key} count={i.count} hoursLeft={i.hoursLeft} onOpen={onOpen} />
+              <InboxCard k={i.key} count={i.count} hoursLeft={i.hoursLeft} oldestAgeHours={ageHours(i.oldestAt, q.data.generatedAt)} onOpen={onOpen} />
             </li>
           ))}
         </ul>
@@ -243,7 +244,42 @@ function TodayStats({ onOpenStat }: { onOpenStat?: (stat: TodayStatKey) => void 
   );
 }
 
-function InboxCard({ k, count, hoursLeft, onOpen }: { k: InboxKey; count: number; hoursLeft?: number; onOpen: (key: InboxKey) => void }) {
+/** Việc sắp bị tự huỷ lên đầu (ít giờ nhất trước), rồi việc chờ lâu nhất; còn lại giữ thứ tự API (sort ổn định). */
+function byUrgency(a: OpsInbox['items'][number], b: OpsInbox['items'][number]) {
+  const ha = a.hoursLeft ?? Infinity;
+  const hb = b.hoursLeft ?? Infinity;
+  if (ha !== hb) return ha - hb;
+  const oa = a.oldestAt ? Date.parse(a.oldestAt) : Infinity;
+  const ob = b.oldestAt ? Date.parse(b.oldestAt) : Infinity;
+  if (Number.isNaN(oa) || Number.isNaN(ob) || oa === ob) return 0;
+  return oa - ob;
+}
+
+function ageHours(oldestAt: string | undefined, generatedAt: string): number | undefined {
+  if (!oldestAt) return undefined;
+  const ms = Date.parse(generatedAt) - Date.parse(oldestAt);
+  return Number.isNaN(ms) ? undefined : Math.max(0, Math.floor(ms / 3_600_000));
+}
+
+function ageLabel(hours: number): string {
+  if (hours < 1) return 'dưới 1 giờ';
+  if (hours < 48) return `${hours} giờ`;
+  return `${Math.floor(hours / 24)} ngày`;
+}
+
+function InboxCard({
+  k,
+  count,
+  hoursLeft,
+  oldestAgeHours,
+  onOpen,
+}: {
+  k: InboxKey;
+  count: number;
+  hoursLeft?: number;
+  oldestAgeHours?: number;
+  onOpen: (key: InboxKey) => void;
+}) {
   const l = INBOX_LABELS[k];
   const urgent = hoursLeft !== undefined;
   return (
@@ -262,6 +298,7 @@ function InboxCard({ k, count, hoursLeft, onOpen }: { k: InboxKey; count: number
             {hoursLeft === 0 ? 'Đơn cũ nhất đã quá hạn, sắp tự huỷ' : `Đơn cũ nhất còn ${hoursLeft} giờ trước khi tự huỷ`}
           </span>
         )}
+        {oldestAgeHours !== undefined && <span className="mt-0.5 block text-xs text-stone-600">Cũ nhất: {ageLabel(oldestAgeHours)}</span>}
       </span>
       <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-stone-500" />
     </button>

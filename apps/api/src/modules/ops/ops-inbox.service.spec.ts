@@ -17,7 +17,7 @@ import {
 } from '../waste-exchange/core/waste-queue-filters';
 
 const build = (
-  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean; supportUnforwarded?: number; deletions?: number; shifts?: number; bridge?: { state: string; since: Date }; bridgeUrl?: string } = {},
+  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean; supportUnforwarded?: number; deletions?: number; shifts?: number; creditReports?: number; stores?: number; returnsPending?: number; storeOldest?: Date; returnsOldest?: Date; deletionsOldest?: Date; shiftsOldest?: Date; creditOldest?: Date; bridge?: { state: string; since: Date }; bridgeUrl?: string } = {},
 ) => {
   const zero = { count: jest.fn().mockResolvedValue(0) };
   const orderCount = jest.fn((args?: { where?: { paymentMethod?: string } }) => Promise.resolve(args?.where?.paymentMethod === 'BANK_TRANSFER' ? 0 : (over.invoices ?? 0)));
@@ -46,11 +46,11 @@ const build = (
   const prisma = {
     product: { count: productCount },
     order: { count: orderCount, findFirst: jest.fn().mockResolvedValue(null) },
-    storefront: { count: jest.fn().mockResolvedValue(0) },
+    storefront: { count: jest.fn().mockResolvedValue(over.stores ?? 0), findFirst: jest.fn().mockResolvedValue(over.storeOldest ? { publishedAt: over.storeOldest, createdAt: new Date('2026-01-01T00:00:00Z') } : null) },
     communityReport: { count: jest.fn().mockResolvedValue(0) },
     feedPost: { count: postCount },
     orderCustomerRefund: { count: refundCount },
-    returnRequest: zero,
+    returnRequest: { count: jest.fn().mockResolvedValue(over.returnsPending ?? 0), findFirst: jest.fn().mockResolvedValue(over.returnsOldest ? { createdAt: over.returnsOldest } : null) },
     dealerApplication: zero,
     dealerRewardClaim: { count: dealerClaimCount },
     payout: { count: withdrawalCount },
@@ -64,8 +64,9 @@ const build = (
     externalClaimAttempt: { count: extAttemptCount },
     supportConversation: { count: supportConvCount },
     supportBridgeStatus: { findUnique: bridgeFind },
-    accountDeletionRequest: { count: jest.fn().mockResolvedValue(over.deletions ?? 0) },
-    shift: { count: jest.fn().mockResolvedValue(over.shifts ?? 0) },
+    accountDeletionRequest: { count: jest.fn().mockResolvedValue(over.deletions ?? 0), findFirst: jest.fn().mockResolvedValue(over.deletionsOldest ? { createdAt: over.deletionsOldest } : null) },
+    shift: { count: jest.fn().mockResolvedValue(over.shifts ?? 0), findFirst: jest.fn().mockResolvedValue(over.shiftsOldest ? { createdAt: over.shiftsOldest } : null) },
+    dealerCreditPaymentReport: { count: jest.fn().mockResolvedValue(over.creditReports ?? 0), findFirst: jest.fn().mockResolvedValue(over.creditOldest ? { createdAt: over.creditOldest } : null) },
     $queryRaw: queryRaw,
   } as unknown as PrismaService;
   const merchant = {
@@ -300,7 +301,7 @@ describe('OpsInboxService — mỗi nhóm việc chỉ thấy hàng đợi mình
   });
 
   it('KE_TOAN: hoàn tiền khách, thưởng đại lý đã duyệt chờ chi, VAT chờ xuất, gian hàng chờ lập phiếu, phiếu đối soát chờ chuyển, rút tiền đã duyệt chờ chi — không thấy rút tiền chờ DUYỆT (việc của ADMIN)', async () => {
-    expect(await keysFor(['KE_TOAN'])).toEqual(['bankTransferToConfirm', 'customerRefunds', 'dealerClaimsToPay', 'dealerTransferToConfirm', 'invoicePending', 'merchantPayoutsPending', 'merchantToSettle', 'payoutsToPay', 'wasteToCount', 'wasteUnmatched']);
+    expect(await keysFor(['KE_TOAN'])).toEqual(['bankTransferToConfirm', 'customerRefunds', 'dealerClaimsToPay', 'dealerCreditReported', 'dealerTransferToConfirm', 'invoicePending', 'merchantPayoutsPending', 'merchantToSettle', 'payoutsToPay', 'wasteToCount', 'wasteUnmatched']);
   });
 
   it('CSKH, KHO và nhân viên chưa có nhóm giữ nguyên hàng đợi như trước', async () => {
@@ -321,7 +322,7 @@ describe('OpsInboxService — đổi rác (spec 13.2)', () => {
 
     expect(keys(res)).toEqual([
       'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'returnsPending', 'returnsToReceive', 'bankTransferToConfirm', 'dealerTransferToConfirm', 'storefrontsPending', 'accountDeletionPending', 'shiftsPending', 'productsMissingImage', 'merchantOverdue', 'merchantProducts',
-      'consignmentPending', 'merchantToSettle', 'merchantPayoutsPending', 'dealerApplications', 'dealerClaims', 'dealerClaimsToPay', 'payouts', 'payoutsToPay', 'communityReports', 'communityPending',
+      'consignmentPending', 'merchantToSettle', 'merchantPayoutsPending', 'dealerApplications', 'dealerClaims', 'dealerClaimsToPay', 'dealerCreditReported', 'payouts', 'payoutsToPay', 'communityReports', 'communityPending',
       'communityUnanswered', 'invoicePending', 'externalPoints', 'supportChatUnforwarded', 'zaloBridgeDown', 'wasteToCount', 'wasteUnmatched', 'wasteBlockedPending', 'wastePointsPending', 'wastePerksPending',
       'wasteTransitOverdue', 'wasteGiftOverdue', 'wasteOrderMismatch',
     ]);
@@ -465,7 +466,7 @@ describe('OpsInboxService: hàng đợi đã có ở tab nhưng từng thiếu t
 
     const res = await svc.counts({ role: 'ADMIN' }, now);
 
-    expect(find(res, 'bankTransferToConfirm')).toEqual({ key: 'bankTransferToConfirm', count: 2, hoursLeft: 7 });
+    expect(find(res, 'bankTransferToConfirm')).toEqual({ key: 'bankTransferToConfirm', count: 2, hoursLeft: 7, oldestAt: '2026-10-27T10:00:00.000Z' });
     expect(prisma.order.count).toHaveBeenCalledWith({ where: { type: 'RETAIL', status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID', paymentMethod: 'BANK_TRANSFER' } });
     const kt = await svc.counts({ role: 'STAFF', staffPermissions: ['KE_TOAN'] }, now);
     expect(find(kt, 'bankTransferToConfirm')?.count).toBe(2);
@@ -493,8 +494,8 @@ describe('OpsInboxService: hàng đợi đã có ở tab nhưng từng thiếu t
 
     expect(prisma.order.count).toHaveBeenCalledWith({ where: { type: 'DEALER', status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID', paymentMethod: 'BANK_TRANSFER' } });
     // 26/10 06:00 + 72h = 29/10 06:00; bây giờ 28/10 03:00 → còn 27 giờ.
-    expect(find(res, 'dealerTransferToConfirm')).toEqual({ key: 'dealerTransferToConfirm', count: 3, hoursLeft: 27 });
-    expect(find(res, 'bankTransferToConfirm')).toEqual({ key: 'bankTransferToConfirm', count: 1, hoursLeft: 7 });
+    expect(find(res, 'dealerTransferToConfirm')).toEqual({ key: 'dealerTransferToConfirm', count: 3, hoursLeft: 27, oldestAt: '2026-10-26T06:00:00.000Z' });
+    expect(find(res, 'bankTransferToConfirm')).toEqual({ key: 'bankTransferToConfirm', count: 1, hoursLeft: 7, oldestAt: '2026-10-27T10:00:00.000Z' });
     expect(prisma.order.findFirst.mock.calls.map((c: any[]) => c[0].where)).toContainEqual({ type: 'DEALER', status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID', paymentMethod: 'BANK_TRANSFER', autoCancelBlockedAt: null });
   });
 
@@ -532,6 +533,49 @@ describe('OpsInboxService: hàng đợi đã có ở tab nhưng từng thiếu t
     for (const perm of ['KE_TOAN', 'CSKH', 'KHO']) {
       expect(find(await b.svc.counts({ role: 'STAFF', staffPermissions: [perm] }, lateNow), 'shiftsPending')).toBeUndefined();
     }
+  });
+
+  it('dealerCreditReported: đếm báo cáo chuyển khoản trả nợ của đại lý còn REPORTED; KE_TOAN và ADMIN thấy, CSKH không', async () => {
+    const b = build({ creditReports: 2 });
+    const prisma = (b.svc as unknown as { prisma: Record<string, any> }).prisma;
+
+    expect(find(await b.svc.counts({ role: 'ADMIN' }, now), 'dealerCreditReported')).toEqual({ key: 'dealerCreditReported', count: 2 });
+    expect(prisma.dealerCreditPaymentReport.count).toHaveBeenCalledWith({ where: { status: 'REPORTED' } });
+    expect(find(await b.svc.counts({ role: 'STAFF', staffPermissions: ['KE_TOAN'] }, now), 'dealerCreditReported')?.count).toBe(2);
+    expect(find(await b.svc.counts({ role: 'STAFF', staffPermissions: ['CSKH', 'KHO'] }, now), 'dealerCreditReported')).toBeUndefined();
+  });
+
+  it('oldestAt (E-55): thẻ có việc trả mốc của việc cũ nhất, mỗi thẻ một findFirst sắp theo cột thời gian; thẻ rỗng không tốn truy vấn', async () => {
+    const b = build({
+      stores: 2, storeOldest: new Date('2026-10-26T01:00:00Z'),
+      returnsPending: 3, returnsOldest: new Date('2026-10-25T02:00:00Z'),
+      deletions: 1, deletionsOldest: new Date('2026-10-24T03:00:00Z'),
+      shifts: 4, shiftsOldest: new Date('2026-10-27T04:00:00Z'),
+      creditReports: 5, creditOldest: new Date('2026-10-28T01:00:00Z'),
+    });
+    const prisma = (b.svc as unknown as { prisma: Record<string, any> }).prisma;
+
+    const res = await b.svc.counts({ role: 'ADMIN' }, now);
+
+    const at = (k: string) => (find(res, k) as { oldestAt?: string } | undefined)?.oldestAt;
+    expect(at('storefrontsPending')).toBe('2026-10-26T01:00:00.000Z');
+    expect(at('returnsPending')).toBe('2026-10-25T02:00:00.000Z');
+    expect(at('accountDeletionPending')).toBe('2026-10-24T03:00:00.000Z');
+    expect(at('shiftsPending')).toBe('2026-10-27T04:00:00.000Z');
+    expect(at('dealerCreditReported')).toBe('2026-10-28T01:00:00.000Z');
+    expect(prisma.returnRequest.findFirst).toHaveBeenCalledWith({ where: { status: 'REQUESTED' }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } });
+    expect(prisma.dealerCreditPaymentReport.findFirst).toHaveBeenCalledWith({ where: { status: 'REPORTED' }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } });
+    expect(prisma.accountDeletionRequest.findFirst).toHaveBeenCalledWith({ where: { status: 'PENDING' }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } });
+    // Hàng đợi rỗng: không có oldestAt và không gọi findFirst.
+    expect(at('wasteToCount')).toBeUndefined();
+    expect(prisma.order.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('oldestAt: thẻ không có việc thì không truy vấn việc cũ nhất', async () => {
+    const b = build();
+    const prisma = (b.svc as unknown as { prisma: Record<string, any> }).prisma;
+    await b.svc.counts({ role: 'ADMIN' }, now);
+    for (const t of ['storefront', 'returnRequest', 'accountDeletionRequest', 'shift', 'dealerCreditPaymentReport']) expect(prisma[t].findFirst).not.toHaveBeenCalled();
   });
 
   it('storefrontsPending: cờ storefront.require_approval tắt thì không có hàng đợi duyệt (gian hàng đã hiện công khai), không truy vấn', async () => {

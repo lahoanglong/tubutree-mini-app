@@ -1982,6 +1982,31 @@ model DealerCreditLedger {
   @@map("dealer_credit_ledgers")
 }
 
+/// Đại lý bấm "Báo đã chuyển khoản" trả nợ (DealerService.reportCreditPayment). Chỉ là lời báo: sổ công nợ chỉ giảm khi kế toán
+/// ghi nhận (adminRecordCreditPayment kèm reportId đóng báo cáo này trong cùng transaction), nên dòng này giữ việc chưa xử lý
+/// cho kế toán thay vì một tin nhắn trôi.
+model DealerCreditPaymentReport {
+  id          String                          @id @default(cuid())
+  userId      String
+  amount      Int
+  note        String?
+  status      DealerCreditPaymentReportStatus @default(REPORTED)
+  createdAt   DateTime                        @default(now())
+  resolvedBy  String?
+  resolvedAt  DateTime?
+  resolveNote String?
+
+  @@index([status, createdAt])
+  @@index([userId, status])
+  @@map("dealer_credit_payment_reports")
+}
+
+enum DealerCreditPaymentReportStatus {
+  REPORTED
+  RECORDED
+  DISMISSED
+}
+
 /// Bản chụp bảng bậc thưởng quý lúc tính thưởng quý đó lần đầu (khoá "Q3/2026", cùng refId của QUARTER_BONUS). Trả bù và thu hồi
 /// của quý dùng bản này để admin đổi bậc cho quý mới không làm lệch quý cũ. Tạo một lần, không sửa.
 model DealerQuarterBonusTier {

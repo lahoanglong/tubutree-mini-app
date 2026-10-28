@@ -5,8 +5,9 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { Prisma } from '@prisma/client';
 import { DealerService } from './dealer.service';
-import { DealerCreditAdminController, RecordDealerCreditPaymentDto } from './dealer-admin.controller';
+import { DealerCreditAdminController, DealerCreditReportAdminController, DismissCreditReportDto, RecordDealerCreditPaymentDto } from './dealer-admin.controller';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
+import { STAFF_PERMISSIONS_KEY } from '../../common/staff-permissions';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
@@ -30,8 +31,10 @@ describe('DealerService.reportCreditPayment (đại lý báo — KHÔNG được
     admins?: { id: string }[];
   } = {}) {
     const ledgerCreate = jest.fn();
+    const reportCreate = jest.fn().mockResolvedValue({ id: 'rp1' });
     const notify = jest.fn().mockResolvedValue(undefined);
     const prisma: Record<string, unknown> = {
+      dealerCreditPaymentReport: { create: reportCreate },
       user: {
         findUniqueOrThrow: jest.fn().mockResolvedValue(opts.user ?? { id: 'd1', role: 'DEALER', metadata: null }),
         findUnique: jest.fn().mockResolvedValue({ fullName: 'Cty A', phone: '0900000000' }),
@@ -46,8 +49,31 @@ describe('DealerService.reportCreditPayment (đại lý báo — KHÔNG được
     };
     const notifications = { notify };
     const svc = new DealerService(prisma as unknown as PrismaService, makeConfig(), notifications as never);
-    return { svc, prisma, ledgerCreate, notify };
+    return { svc, prisma, ledgerCreate, notify, reportCreate };
   }
+
+  it('lưu một dòng báo cáo REPORTED (đại lý, số tiền, ghi chú) rồi mới báo admin; số vượt dư nợ thì không lưu', async () => {
+    const { svc, reportCreate, notify } = build({ entries: [{ delta: 200_000 }] });
+    const order: string[] = [];
+    reportCreate.mockImplementation(async () => (order.push('create'), { id: 'rp1' }));
+    notify.mockImplementation(async () => void order.push('notify'));
+
+    await svc.reportCreditPayment('d1', 50_000, '  CK lúc 9h ');
+
+    expect(reportCreate).toHaveBeenCalledWith({ data: { userId: 'd1', amount: 50_000, note: 'CK lúc 9h' } });
+    expect(order).toEqual(['create', 'notify']);
+
+    const over = build({ entries: [{ delta: 30_000 }] });
+    await expect(over.svc.reportCreditPayment('d1', 50_000)).rejects.toBeInstanceOf(BadRequestException);
+    expect(over.reportCreate).not.toHaveBeenCalled();
+  });
+
+  it('không ghi chú thì note là null; báo admin lỗi không làm mất dòng báo cáo đã lưu', async () => {
+    const { svc, reportCreate, notify } = build({ entries: [{ delta: 200_000 }] });
+    notify.mockRejectedValue(new Error('zns down'));
+    await expect(svc.reportCreditPayment('d1', 50_000)).resolves.toMatchObject({ ok: true });
+    expect(reportCreate).toHaveBeenCalledWith({ data: { userId: 'd1', amount: 50_000, note: null } });
+  });
 
   it('chặn user không phải DEALER — KHÔNG báo admin, KHÔNG đụng ledger', async () => {
     const { svc, ledgerCreate, notify } = build({ user: { id: 'u1', role: 'CUSTOMER', metadata: null } });
@@ -91,6 +117,7 @@ describe('DealerService.reportCreditPayment (đại lý báo — KHÔNG được
 
   it('NotificationsService chưa wiring (dựng tay không truyền) → không throw', async () => {
     const prisma = {
+      dealerCreditPaymentReport: { create: jest.fn().mockResolvedValue({ id: 'rp1' }) },
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
       dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
       dealerCreditLedger: {
@@ -108,6 +135,9 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     dealer?: { id: string; role: string; fullName?: string | null; phone?: string | null } | null;
     debt?: number;
     existingClaim?: { delta: number } | null;
+    /** false: dòng báo cáo không còn REPORTED nên updateMany không đóng được dòng nào. */
+    reportClosed?: boolean;
+    report?: { status: string } | null;
   } = {}) {
     const dealer =
       opts.dealer === undefined ? { id: 'd1', role: 'DEALER', fullName: 'Cty A', phone: '0900000000' } : opts.dealer;
@@ -116,7 +146,10 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     const aggregate = jest.fn().mockResolvedValue({ _sum: { delta: debt } });
     const findFirst = jest.fn().mockResolvedValue(opts.existingClaim === undefined ? null : opts.existingClaim);
     const notify = jest.fn().mockResolvedValue(undefined);
+    const reportUpdateMany = jest.fn().mockResolvedValue({ count: opts.reportClosed === false ? 0 : 1 });
+    const reportFindFirst = jest.fn().mockResolvedValue(opts.report === undefined ? null : opts.report);
     const prisma: Record<string, unknown> = {
+      dealerCreditPaymentReport: { updateMany: reportUpdateMany, findFirst: reportFindFirst },
       user: { findUnique: jest.fn().mockResolvedValue(dealer) },
       dealerCreditLedger: {
         findFirst,
@@ -128,8 +161,53 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     prisma.$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
     const notifications = { notify };
     const svc = new DealerService(prisma as unknown as PrismaService, makeConfig(), notifications as never);
-    return { svc, prisma, ledgerCreate, aggregate, findFirst, notify };
+    return { svc, prisma, ledgerCreate, aggregate, findFirst, notify, reportUpdateMany, reportFindFirst };
   }
+
+  it('ghi nhận kèm reportId: đóng báo cáo REPORTED thành RECORDED trong cùng transaction với dòng PAYMENT; sổ ghi refId theo báo cáo', async () => {
+    const { svc, ledgerCreate, reportUpdateMany, prisma } = build({ debt: 500_000 });
+
+    await svc.adminRecordCreditPayment('kt1', 'd1', 200_000, { reportId: 'rp1', byStaff: true });
+
+    expect((prisma as unknown as { $transaction: jest.Mock }).$transaction).toHaveBeenCalledTimes(1);
+    expect(reportUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'rp1', userId: 'd1', status: 'REPORTED' },
+      data: expect.objectContaining({ status: 'RECORDED', resolvedBy: 'kt1', resolvedAt: expect.any(Date) }),
+    });
+    expect(ledgerCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: 'd1', delta: -200_000, refType: 'PAYMENT', refId: 'report:rp1' }) });
+  });
+
+  it('reportId và Idempotency-Key cùng có: refId là khoá của người gọi, báo cáo vẫn được đóng', async () => {
+    const { svc, ledgerCreate, reportUpdateMany } = build({ debt: 500_000 });
+    await svc.adminRecordCreditPayment('admin1', 'd1', 100_000, { reportId: 'rp1', idempotencyKey: 'FT99' });
+    expect(ledgerCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ refId: 'FT99' }) });
+    expect(reportUpdateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('báo cáo đã RECORDED (bấm lại, hoặc kế toán khác vừa ghi nhận): không trừ nợ lần nữa, không báo đại lý, trả sổ hiện tại', async () => {
+    const { svc, ledgerCreate, notify } = build({ debt: 500_000, reportClosed: false, report: { status: 'RECORDED' } });
+    const res = await svc.adminRecordCreditPayment('admin1', 'd1', 200_000, { reportId: 'rp1', idempotencyKey: 'FT100' });
+    expect(ledgerCreate).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ balance: expect.any(Number) });
+  });
+
+  it('báo cáo đã bị đánh dấu "không thấy tiền" → BadRequest, không trừ nợ; báo cáo của đại lý khác hoặc không có → NotFound', async () => {
+    const dismissed = build({ reportClosed: false, report: { status: 'DISMISSED' } });
+    await expect(dismissed.svc.adminRecordCreditPayment('admin1', 'd1', 50_000, { reportId: 'rp1' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(dismissed.ledgerCreate).not.toHaveBeenCalled();
+    const missing = build({ reportClosed: false, report: null });
+    await expect(missing.svc.adminRecordCreditPayment('admin1', 'd1', 50_000, { reportId: 'rp9' })).rejects.toBeInstanceOf(NotFoundException);
+    expect(missing.ledgerCreate).not.toHaveBeenCalled();
+  });
+
+  it('không có reportId: luồng ghi nhận cũ không đụng bảng báo cáo', async () => {
+    const { svc, ledgerCreate, reportUpdateMany, reportFindFirst } = build({ debt: 500_000 });
+    await svc.adminRecordCreditPayment('admin1', 'd1', 100_000);
+    expect(reportUpdateMany).not.toHaveBeenCalled();
+    expect(reportFindFirst).not.toHaveBeenCalled();
+    expect(ledgerCreate).toHaveBeenCalledWith({ data: expect.not.objectContaining({ refId: expect.anything() }) });
+  });
 
   it('Kế toán ghi nhận (byStaff): ghi chú sổ công nợ ghi nhãn "Kế toán" + id; ADMIN vẫn là "Admin"', async () => {
     const kt = build({ debt: 500_000 });
@@ -286,6 +364,7 @@ describe('DealerService.reportCreditPayment — báo admin (đặc tả notifyAd
     };
     const prisma = {
       user,
+      dealerCreditPaymentReport: { create: jest.fn().mockResolvedValue({ id: 'rp1' }) },
       dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
       dealerCreditLedger: {
         findMany: jest.fn().mockResolvedValue([{ delta: 200_000 }]),
@@ -362,5 +441,73 @@ describe('DealerService.reportCreditPayment — báo admin (đặc tả notifyAd
     user.findMany.mockRejectedValue(new Error('db down'));
     await expect(svc.reportCreditPayment('d1', 50_000)).resolves.toMatchObject({ ok: true });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('db down'));
+  });
+});
+
+
+describe('DealerService.dismissCreditPaymentReport / listCreditPaymentReports', () => {
+  const build = (over: { count?: number; report?: { status: string } | null; rows?: unknown[] } = {}) => {
+    const updateMany = jest.fn().mockResolvedValue({ count: over.count ?? 1 });
+    const findUnique = jest.fn().mockResolvedValue(over.report === undefined ? null : over.report);
+    const findMany = jest.fn().mockResolvedValue(over.rows ?? []);
+    const prisma = { dealerCreditPaymentReport: { updateMany, findUnique, findMany }, user: { findMany: jest.fn().mockResolvedValue([{ id: 'd1', fullName: 'Cty A', phone: '0900000000' }]) } };
+    const svc = new DealerService(prisma as unknown as PrismaService, makeConfig());
+    return { svc, updateMany, findUnique, findMany };
+  };
+
+  it('"Không thấy tiền": chỉ đóng báo cáo còn REPORTED thành DISMISSED, ghi người xử lý và lý do', async () => {
+    const { svc, updateMany } = build();
+    await expect(svc.dismissCreditPaymentReport('kt1', 'rp1', '  Chưa thấy trên sao kê  ')).resolves.toEqual({ ok: true, alreadyProcessed: false });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'rp1', status: 'REPORTED' },
+      data: { status: 'DISMISSED', resolvedBy: 'kt1', resolvedAt: expect.any(Date), resolveNote: 'Chưa thấy trên sao kê' },
+    });
+  });
+
+  it('bắt buộc có lý do; báo cáo đã xử lý rồi thì trả alreadyProcessed, không đổi gì; không có thì NotFound', async () => {
+    await expect(build().svc.dismissCreditPaymentReport('kt1', 'rp1', '   ')).rejects.toBeInstanceOf(BadRequestException);
+    const done = build({ count: 0, report: { status: 'RECORDED' } });
+    await expect(done.svc.dismissCreditPaymentReport('kt1', 'rp1', 'x lý do')).resolves.toEqual({ ok: true, alreadyProcessed: true });
+    await expect(build({ count: 0, report: null }).svc.dismissCreditPaymentReport('kt1', 'rp9', 'x lý do')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('danh sách: mặc định chỉ REPORTED, cũ nhất trước, kèm tên và SĐT đại lý', async () => {
+    const rows = [{ id: 'rp1', userId: 'd1', amount: 50_000, note: null, status: 'REPORTED', createdAt: new Date('2026-10-28T03:00:00Z'), resolvedBy: null, resolvedAt: null, resolveNote: null }];
+    const { svc, findMany } = build({ rows });
+    const res = await svc.listCreditPaymentReports();
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { status: 'REPORTED' }, orderBy: { createdAt: 'asc' } }));
+    expect(res).toEqual([expect.objectContaining({ id: 'rp1', amount: 50_000, dealer: { id: 'd1', fullName: 'Cty A', phone: '0900000000' } })]);
+  });
+});
+
+describe('DealerCreditReportAdminController (admin/dealer-credit-reports)', () => {
+  it('ADMIN và nhân viên KE_TOAN mở cả hai route; đúng đường dẫn và method', () => {
+    expect(Reflect.getMetadata(ROLES_KEY, DealerCreditReportAdminController)).toEqual(['ADMIN']);
+    expect(Reflect.getMetadata(PATH_METADATA, DealerCreditReportAdminController)).toBe('admin/dealer-credit-reports');
+    const proto = DealerCreditReportAdminController.prototype as unknown as Record<string, object>;
+    expect(Reflect.getMetadata(METHOD_METADATA, proto.list!)).toBe(RequestMethod.GET);
+    expect(Reflect.getMetadata(METHOD_METADATA, proto.dismiss!)).toBe(RequestMethod.POST);
+    expect(Reflect.getMetadata(PATH_METADATA, proto.dismiss!)).toBe(':id/dismiss');
+    expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, proto.list!)).toEqual(['KE_TOAN']);
+    expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, proto.dismiss!)).toEqual(['KE_TOAN']);
+  });
+
+  it('chuyển trạng thái lọc và lý do xuống service; mặc định chỉ báo cáo chưa xử lý', async () => {
+    const svc = { listCreditPaymentReports: jest.fn().mockResolvedValue([]), dismissCreditPaymentReport: jest.fn().mockResolvedValue({ ok: true }) };
+    const ctl = new DealerCreditReportAdminController(svc as never);
+    await ctl.list({});
+    await ctl.list({ status: 'ALL' });
+    expect(svc.listCreditPaymentReports.mock.calls).toEqual([['REPORTED'], ['ALL']]);
+    await ctl.dismiss('kt1', 'rp1', { reason: 'Chưa thấy tiền' });
+    expect(svc.dismissCreditPaymentReport).toHaveBeenCalledWith('kt1', 'rp1', 'Chưa thấy tiền');
+  });
+
+  it('lý do bắt buộc; ghi nhận nhận thêm reportId tuỳ chọn và chuyển xuống service', async () => {
+    expect((await validate(plainToInstance(DismissCreditReportDto, {}))).map((e) => e.property)).toContain('reason');
+    expect(await validate(plainToInstance(DismissCreditReportDto, { reason: 'Chưa thấy tiền' }))).toHaveLength(0);
+    expect(await validate(plainToInstance(RecordDealerCreditPaymentDto, { amount: 5, reportId: 'rp1' }))).toHaveLength(0);
+    const svc = { adminRecordCreditPayment: jest.fn().mockResolvedValue({ balance: 0, entries: [] }) };
+    await new DealerCreditAdminController(svc as never).recordPayment('kt1', 'STAFF', 'd1', { amount: 5, reportId: 'rp1' });
+    expect(svc.adminRecordCreditPayment).toHaveBeenCalledWith('kt1', 'd1', 5, expect.objectContaining({ reportId: 'rp1', byStaff: true }));
   });
 });

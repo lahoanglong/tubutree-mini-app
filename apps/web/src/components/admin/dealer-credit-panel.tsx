@@ -26,17 +26,23 @@ import { BTN_WARNING, FIELD_XS, LoadError, Field } from './ui';
 export function DealerCreditPanel({
   order,
   defaultOpen = false,
+  defaultAmount,
+  reportId,
   onPaid,
 }: {
   order: Pick<AdminOrder, 'type' | 'user'>;
   /** Mở sẵn khi chính thao tác mở panel đã nằm ngoài (nút "Ghi nhận thanh toán" ở tab Đại lý). */
   defaultOpen?: boolean;
+  /** Số tiền điền sẵn vào ô (số đại lý báo); kế toán vẫn sửa được nếu sao kê khác. */
+  defaultAmount?: number;
+  /** Ghi nhận cho một báo cáo chuyển khoản của đại lý: gửi kèm để báo cáo đóng cùng lúc ghi sổ. */
+  reportId?: string;
   /** Gọi sau khi ghi giảm nợ thành công, để nơi chứa panel (danh sách đại lý) tải lại số liệu của nó. */
   onPaid?: () => void;
 }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(defaultOpen);
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(defaultAmount ? String(defaultAmount) : '');
   const [bankRef, setBankRef] = useState('');
   const [note, setNote] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -56,7 +62,7 @@ export function DealerCreditPanel({
     mutationFn: () => {
       const amt = Math.trunc(Number(amount));
       const key = bankRef.trim() || undefined; // mã giao dịch làm idempotency-key nếu có
-      return recordDealerCreditPayment(userId as string, { amount: amt, bankRef, note }, key);
+      return recordDealerCreditPayment(userId as string, { amount: amt, bankRef, note, ...(reportId ? { reportId } : {}) }, key);
     },
     onSuccess: (r) => {
       setMsg({ ok: true, text: `Đã ghi giảm công nợ. Dư nợ còn lại: ${formatVnd(r.balance)}.` });

@@ -209,13 +209,42 @@ describe('AdminService.retryGomdonPush / cancelGomdonWaybill — gọi thẳng G
 });
 
 describe('AdminService.markGomdonHandled — "Đã xử lý tay"', () => {
-  const order = { id: 'o1', code: 'TB-9', gomdonStatus: 'FAILED', gomdonPartnerCode: null };
+  const order = { id: 'o1', code: 'TB-9', status: 'CONFIRMED', gomdonStatus: 'FAILED', gomdonPartnerCode: null };
   const ok = { result: 'MANUAL_HANDLED' as const, previousStatus: 'FAILED', message: 'Đã đánh dấu "Đã xử lý tay".' };
+
+  it('ghi một dòng lịch sử đơn cùng trạng thái, kèm trạng thái vận đơn trước và ghi chú của admin', async () => {
+    const history = jest.fn().mockResolvedValue({});
+    const admin = mkAdmin(
+      { order: { findFirst: jest.fn().mockResolvedValue(order) }, orderStatusHistory: { create: history } },
+      { gomdonOrder: { markHandled: jest.fn().mockResolvedValue(ok) } as Partial<GomdonOrderService> },
+    );
+    await admin.markGomdonHandled('admin-1', 'TB-9', '  đã tạo vận đơn GHN tay  ');
+    expect(history).toHaveBeenCalledWith({
+      data: {
+        orderId: 'o1',
+        fromStatus: 'CONFIRMED',
+        toStatus: 'CONFIRMED',
+        actorType: 'ADMIN',
+        actorId: 'admin-1',
+        note: 'Đã xử lý việc thu gom: FAILED — đã tạo vận đơn GHN tay',
+      },
+    });
+  });
+
+  it('service từ chối thì không ghi lịch sử', async () => {
+    const history = jest.fn();
+    const admin = mkAdmin(
+      { order: { findFirst: jest.fn().mockResolvedValue(order) }, orderStatusHistory: { create: history } },
+      { gomdonOrder: { markHandled: jest.fn().mockRejectedValue(new BadRequestException('x')) } as Partial<GomdonOrderService> },
+    );
+    await expect(admin.markGomdonHandled('admin-1', 'TB-9')).rejects.toBeInstanceOf(BadRequestException);
+    expect(history).not.toHaveBeenCalled();
+  });
 
   it('tìm đơn theo id HOẶC mã, gọi GomdonOrderService.markHandled theo id thật, ghi vết admin + ghi chú, trả kết quả', async () => {
     const markHandled = jest.fn().mockResolvedValue(ok);
     const findFirst = jest.fn().mockResolvedValue(order);
-    const admin = mkAdmin({ order: { findFirst } }, { gomdonOrder: { markHandled } as Partial<GomdonOrderService> });
+    const admin = mkAdmin({ order: { findFirst }, orderStatusHistory: { create: jest.fn().mockResolvedValue({}) } }, { gomdonOrder: { markHandled } as Partial<GomdonOrderService> });
     const warn = jest.spyOn((admin as unknown as { logger: { warn: (m: string) => void } }).logger, 'warn').mockImplementation(() => undefined);
     await expect(admin.markGomdonHandled('admin-1', 'TB-9', '  đã tạo vận đơn GHN tay  ')).resolves.toEqual(ok);
     expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { OR: [{ id: 'TB-9' }, { code: 'TB-9' }] } }));

@@ -42,6 +42,7 @@ export type InboxKey =
   | 'dealerApplications'
   | 'dealerClaims'
   | 'dealerClaimsToPay'
+  | 'dealerCreditReported'
   | 'payouts'
   | 'payoutsToPay'
   | 'communityPending'
@@ -74,12 +75,17 @@ export interface InboxViewer {
   staffPermissions?: string[];
 }
 
+/** Ca chờ duyệt còn ý nghĩa: ngày làm việc từ hôm nay (giờ VN) trở đi. workDate là cột DATE lưu 00:00Z của ngày VN. */
+const PENDING_SHIFT_WHERE = (now: Date) => ({ status: 'PENDING' as const, workDate: { gte: new Date(vnDateKey(now)) } });
+
 interface InboxDef {
   key: InboxKey;
   audience: Audience;
   count: () => Promise<number>;
   /** Giờ còn lại trước khi hệ thống tự huỷ việc này; chỉ hỏi khi `count` > 0. */
   hoursLeft?: () => Promise<number | undefined>;
+  /** Mốc của việc chờ lâu nhất (một findFirst sắp theo cột thời gian); chỉ hỏi khi `count` > 0. */
+  oldest?: () => Promise<Date | null | undefined>;
 }
 
 /**
@@ -104,7 +110,12 @@ export class OpsInboxService {
       { key: 'pancakeUnsynced', audience: ['KHO'], count: () => p.order.count({ where: pancakeUnsyncedWhere(now) }) },
       { key: 'gomdonAttention', audience: ['KHO'], count: () => p.order.count({ where: recyclingAttentionWhere() }) },
       { key: 'customerRefunds', audience: ['KE_TOAN'], count: () => p.orderCustomerRefund.count({ where: { status: { in: [...OPEN_CUSTOMER_REFUND_STATUSES] } } }) },
-      { key: 'returnsPending', audience: ['CSKH'], count: () => p.returnRequest.count({ where: { status: 'REQUESTED' } }) },
+      {
+        key: 'returnsPending',
+        audience: ['CSKH'],
+        count: () => p.returnRequest.count({ where: { status: 'REQUESTED' } }),
+        oldest: async () => (await p.returnRequest.findFirst({ where: { status: 'REQUESTED' }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } }))?.createdAt,
+      },
       {
         key: 'returnsToReceive',
         audience: ['KHO'],
@@ -124,6 +135,7 @@ export class OpsInboxService {
         audience: ['KE_TOAN'],
         count: () => p.order.count({ where: BANK_TRANSFER_TO_CONFIRM_WHERE }),
         hoursLeft: () => this.transferHoursLeft(BANK_TRANSFER_TO_CONFIRM_WHERE, readPendingPaymentTtlHours, now),
+        oldest: async () => (await p.order.findFirst({ where: BANK_TRANSFER_TO_CONFIRM_WHERE, orderBy: { createdAt: 'asc' }, select: { createdAt: true } }))?.createdAt,
       },
       // Đơn đại lý "Trả trước" chờ kế toán xác nhận tiền: cùng cron tự huỷ nhưng TTL của đại lý (mặc định 72 giờ).
       {
@@ -131,13 +143,33 @@ export class OpsInboxService {
         audience: ['KE_TOAN'],
         count: () => p.order.count({ where: DEALER_TRANSFER_TO_CONFIRM_WHERE }),
         hoursLeft: () => this.transferHoursLeft(DEALER_TRANSFER_TO_CONFIRM_WHERE, readDealerPendingPaymentTtlHours, now),
+        oldest: async () => (await p.order.findFirst({ where: DEALER_TRANSFER_TO_CONFIRM_WHERE, orderBy: { createdAt: 'asc' }, select: { createdAt: true } }))?.createdAt,
       },
       // Cùng điều kiện với chip "Chờ duyệt" của tab Gian hàng (StorefrontAdminService.listWhere).
-      { key: 'storefrontsPending', audience: 'ADMIN', count: async () => ((this.config ? await isStorefrontApprovalRequired(this.config) : true) ? p.storefront.count({ where: STOREFRONT_PENDING_APPROVAL_WHERE }) : 0) },
+      {
+        key: 'storefrontsPending',
+        audience: 'ADMIN',
+        count: async () => ((this.config ? await isStorefrontApprovalRequired(this.config) : true) ? p.storefront.count({ where: STOREFRONT_PENDING_APPROVAL_WHERE }) : 0),
+        // Chờ duyệt tính từ lúc đăng; storefronts không có index trên publishedAt nhưng bảng nhỏ và lọc isPublished trước.
+        oldest: async () => {
+          const row = await p.storefront.findFirst({ where: STOREFRONT_PENDING_APPROVAL_WHERE, orderBy: { publishedAt: 'asc' }, select: { publishedAt: true, createdAt: true } });
+          return row ? (row.publishedAt ?? row.createdAt) : null;
+        },
+      },
       // Khách được hứa xử lý trong 3 ngày làm việc (UsersService.requestDeletion); chỉ ADMIN xử lý được (AdminAccountDeletionController).
-      { key: 'accountDeletionPending', audience: 'ADMIN', count: () => p.accountDeletionRequest.count({ where: { status: 'PENDING' } }) },
+      {
+        key: 'accountDeletionPending',
+        audience: 'ADMIN',
+        count: () => p.accountDeletionRequest.count({ where: { status: 'PENDING' } }),
+        oldest: async () => (await p.accountDeletionRequest.findFirst({ where: { status: 'PENDING' }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } }))?.createdAt,
+      },
       // Ca nhân viên đăng ký chờ duyệt (ShiftApprovalTab): ca đã qua ngày làm việc thì không còn gì để duyệt. workDate là cột DATE lưu 00:00Z của ngày VN.
-      { key: 'shiftsPending', audience: 'ADMIN', count: () => p.shift.count({ where: { status: 'PENDING', workDate: { gte: new Date(vnDateKey(now)) } } }) },
+      {
+        key: 'shiftsPending',
+        audience: 'ADMIN',
+        count: () => p.shift.count({ where: PENDING_SHIFT_WHERE(now) }),
+        oldest: async () => (await p.shift.findFirst({ where: PENDING_SHIFT_WHERE(now), orderBy: { createdAt: 'asc' }, select: { createdAt: true } }))?.createdAt,
+      },
       { key: 'productsMissingImage', audience: 'ADMIN', count: () => p.product.count({ where: { isActive: true, images: { isEmpty: true } } }) },
       { key: 'merchantOverdue', audience: 'ADMIN', count: () => this.merchant.countOverdue(now) },
       { key: 'merchantProducts', audience: 'ADMIN', count: () => p.product.count({ where: PENDING_MERCHANT_PRODUCT_WHERE }) },
@@ -148,6 +180,13 @@ export class OpsInboxService {
       { key: 'dealerClaims', audience: 'ADMIN', count: () => p.dealerRewardClaim.count({ where: { status: 'PENDING' } }) },
       // ADMIN đã duyệt, đang chờ kế toán chi và bấm "Đã chi" (DealerAdminController.markPaid mở cho KE_TOAN; duyệt vẫn chỉ ADMIN).
       { key: 'dealerClaimsToPay', audience: ['KE_TOAN'], count: () => p.dealerRewardClaim.count({ where: { status: 'APPROVED' } }) },
+      // Đại lý báo đã chuyển khoản trả nợ, kế toán chưa ghi nhận hay đánh dấu không thấy tiền (tin báo admin không tới nhân viên kế toán).
+      {
+        key: 'dealerCreditReported',
+        audience: ['KE_TOAN'],
+        count: () => p.dealerCreditPaymentReport.count({ where: { status: 'REPORTED' } }),
+        oldest: async () => (await p.dealerCreditPaymentReport.findFirst({ where: { status: 'REPORTED' }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } }))?.createdAt,
+      },
       { key: 'payouts', audience: 'ADMIN', count: () => p.payout.count({ where: { status: 'REQUESTED' } }) },
       // ADMIN đã duyệt, đang chờ kế toán chuyển tiền và bấm "Đã chi" (duyệt chỉ ADMIN, chi do kế toán nên hai khoá tách nhau).
       { key: 'payoutsToPay', audience: ['KE_TOAN'], count: () => p.payout.count({ where: { status: 'APPROVED' } }) },
@@ -204,7 +243,7 @@ export class OpsInboxService {
     return Math.max(0, Math.ceil((oldest.createdAt.getTime() + ttl * 3_600_000 - now.getTime()) / 3_600_000));
   }
 
-  async counts(viewer: InboxViewer, now = new Date()): Promise<{ generatedAt: string; items: { key: InboxKey; count: number; hoursLeft?: number }[] }> {
+  async counts(viewer: InboxViewer, now = new Date()): Promise<{ generatedAt: string; items: { key: InboxKey; count: number; hoursLeft?: number; oldestAt?: string }[] }> {
     const perms = viewer.staffPermissions ?? [];
     const visible = this.defs(now).filter(
       (d) =>
@@ -212,10 +251,18 @@ export class OpsInboxService {
         (viewer.role === 'STAFF' && (d.audience === 'STAFF' || (Array.isArray(d.audience) && d.audience.some((a) => perms.includes(a))))),
     );
     const counts = await Promise.all(visible.map((d) => d.count()));
-    const hoursLeft = await Promise.all(visible.map((d, i) => ((counts[i] ?? 0) > 0 ? d.hoursLeft?.() : undefined)));
+    const [hoursLeft, oldest] = await Promise.all([
+      Promise.all(visible.map((d, i) => ((counts[i] ?? 0) > 0 ? d.hoursLeft?.() : undefined))),
+      Promise.all(visible.map((d, i) => ((counts[i] ?? 0) > 0 ? d.oldest?.() : undefined))),
+    ]);
     return {
       generatedAt: now.toISOString(),
-      items: visible.map((d, i) => ({ key: d.key, count: counts[i] ?? 0, ...(hoursLeft[i] !== undefined ? { hoursLeft: hoursLeft[i] } : {}) })),
+      items: visible.map((d, i) => ({
+        key: d.key,
+        count: counts[i] ?? 0,
+        ...(hoursLeft[i] !== undefined ? { hoursLeft: hoursLeft[i] } : {}),
+        ...(oldest[i] ? { oldestAt: oldest[i]!.toISOString() } : {}),
+      })),
     };
   }
 }

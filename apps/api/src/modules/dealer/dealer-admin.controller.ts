@@ -93,6 +93,8 @@ export class RecordDealerCreditPaymentDto {
   /** Mã giao dịch ngân hàng (vd FT26270…) — lưu vào ghi chú sổ công nợ để đối soát. */
   @IsOptional() @IsString() @MaxLength(100) bankRef?: string;
   @IsOptional() @IsString() @MaxLength(500) note?: string;
+  /** Báo cáo chuyển khoản của đại lý mà khoản này xử lý; đóng báo cáo cùng lúc ghi sổ (DealerCreditPaymentReport). */
+  @IsOptional() @IsString() @MaxLength(64) reportId?: string;
 }
 
 /**
@@ -127,6 +129,38 @@ export class DealerCreditAdminController {
       bankRef: dto.bankRef,
       idempotencyKey,
       byStaff: role !== 'ADMIN',
+      reportId: dto.reportId,
     });
+  }
+}
+
+export class ListCreditReportsQuery {
+  @IsOptional() @IsIn(['REPORTED', 'ALL']) status?: 'REPORTED' | 'ALL';
+}
+
+export class DismissCreditReportDto {
+  /** Bắt buộc: "Không thấy tiền" mà không ghi vì sao thì người sau không đối chiếu được. */
+  @IsString() @IsNotEmpty() @MaxLength(500) reason!: string;
+}
+
+/**
+ * Báo cáo "đã chuyển khoản trả nợ" của đại lý: kế toán và ADMIN xem việc chưa xử lý và đóng báo cáo "không thấy tiền". Ghi nhận
+ * tiền về (đóng báo cáo thành RECORDED) đi qua POST admin/dealers/:userId/credit-payment kèm reportId, không có đường ghi tiền thứ hai.
+ */
+@Roles('ADMIN')
+@Controller('admin/dealer-credit-reports')
+export class DealerCreditReportAdminController {
+  constructor(private readonly dealer: DealerService) {}
+
+  @AllowStaff('KE_TOAN')
+  @Get()
+  list(@Query() q: ListCreditReportsQuery) {
+    return this.dealer.listCreditPaymentReports(q.status ?? 'REPORTED');
+  }
+
+  @AllowStaff('KE_TOAN')
+  @Post(':id/dismiss')
+  dismiss(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: DismissCreditReportDto) {
+    return this.dealer.dismissCreditPaymentReport(adminId, id, dto.reason);
   }
 }

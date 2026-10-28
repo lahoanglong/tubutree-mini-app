@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { DealerAccountsTab } from './dealer-accounts-tab';
-import { answerConfirm, byText, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import type { DealerAccountRow, DealerAccountsPage, DealerTiersView } from '@/lib/dealer-accounts-client';
 
 /** `<dl>` hợp lệ: con trực tiếp chỉ là `<div>` gói `dt`/`dd` (axe `definition-list`). */
@@ -58,8 +58,16 @@ const TIERS: DealerTiersView = {
   dealersWithoutTier: 1,
 };
 
-function stub(accounts: DealerAccountsPage | ((url: string) => DealerAccountsPage) = page(ROWS)) {
+const REPORT = {
+  id: 'rp1', userId: 'u1', amount: 1_500_000, note: 'CK VCB 9h', status: 'REPORTED' as const, createdAt: '2026-10-28T02:00:00.000Z',
+  resolvedBy: null, resolvedAt: null, resolveNote: null, dealer: { id: 'u1', fullName: 'Đại lý Hoa', phone: '0911222333' },
+};
+
+function stub(accounts: DealerAccountsPage | ((url: string) => DealerAccountsPage) = page(ROWS), reports: unknown[] = []) {
   const rest = mockFetch({
+    '/admin/dealer-credit-reports/rp1/dismiss': { body: { ok: true, alreadyProcessed: false } },
+    '/admin/dealer-credit-reports': { body: reports },
+    '/admin/ops/inbox': { body: { generatedAt: '2026-10-28T03:00:00.000Z', items: [] } },
     '/admin/dealer-tiers/manage': { body: TIERS },
     '/admin/dealer-tiers/history': { body: [] },
     '/credit-ledger': { body: { balance: 4_000_000, entries: [] } },
@@ -76,6 +84,75 @@ function stub(accounts: DealerAccountsPage | ((url: string) => DealerAccountsPag
   return { calls };
 }
 const accountCalls = (api: ReturnType<typeof stub>) => api.calls.filter((c) => c.url.includes('/admin/dealers/accounts'));
+
+describe('DealerAccountsTab — đại lý báo đã chuyển khoản (E-25)', () => {
+  it('có báo cáo: khối "Đại lý báo đã chuyển (n)" nêu đại lý, số tiền, ghi chú; không có báo cáo thì không hiện khối', async () => {
+    const none = mount(<DealerAccountsTab />);
+    stub();
+    await flush();
+    expect(none.container.querySelector('[data-dealer-credit-reports]')).toBeNull();
+    none.unmount();
+    mounted = [];
+
+    stub(page(ROWS), [REPORT, { ...REPORT, id: 'rp2', userId: 'u-over', amount: 200_000, note: null, dealer: { id: 'u-over', fullName: null, phone: '0900111222' } }]);
+    const { container } = mount(<DealerAccountsTab />);
+    await flush();
+    const block = container.querySelector<HTMLElement>('[data-dealer-credit-reports]')!;
+    expect(block.querySelector('h2')!.textContent).toBe('Đại lý báo đã chuyển (2)');
+    const rows = block.querySelectorAll('[data-dealer-credit-report]');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.textContent).toContain('Đại lý Hoa');
+    expect(rows[0]!.textContent).toContain('1.500.000');
+    expect(rows[0]!.textContent).toContain('CK VCB 9h');
+    expect(rows[1]!.textContent).toContain('0900111222');
+  });
+
+  it('"Ghi nhận" mở khối công nợ với số tiền điền sẵn; xác nhận gửi kèm reportId qua đúng luồng ghi nhận cũ, rồi tải lại danh sách báo cáo', async () => {
+    const api = stub(page(ROWS), [REPORT]);
+    const { container } = mount(<DealerAccountsTab />);
+    await flush();
+    const block = container.querySelector<HTMLElement>('[data-dealer-credit-reports]')!;
+    click(byText(block, 'button', 'Ghi nhận'));
+    await flush();
+    const amount = block.querySelector<HTMLInputElement>('input[aria-label="Số tiền đã nhận (đ)"]')!;
+    expect(amount.value).toBe('1500000');
+    click(byText(block, 'button', 'Xác nhận đã nhận, giảm nợ'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+
+    const post = api.calls.find((c) => c.url.includes('/admin/dealers/u1/credit-payment'))!;
+    expect(post.init?.method).toBe('POST');
+    expect(JSON.parse(String(post.init?.body))).toEqual({ amount: 1_500_000, reportId: 'rp1' });
+    expect(api.calls.filter((c) => c.url.includes('/admin/dealer-credit-reports') && !c.url.includes('dismiss')).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('"Không thấy tiền" bắt buộc nhập lý do rồi mới gửi POST dismiss; huỷ hộp thoại thì không gửi gì', async () => {
+    const api = stub(page(ROWS), [REPORT]);
+    const { container } = mount(<DealerAccountsTab />);
+    await flush();
+    const dismissCalls = () => api.calls.filter((c) => c.url.includes('/dismiss'));
+
+    click(byText(container, 'button', 'Không thấy tiền'));
+    await flush();
+    answerConfirm(false);
+    await flush();
+    expect(dismissCalls()).toHaveLength(0);
+
+    click(byText(container, 'button', 'Không thấy tiền'));
+    await flush();
+    const accept = confirmDialog()!.querySelector<HTMLButtonElement>('[data-confirm="accept"]')!;
+    expect(accept.disabled).toBe(true);
+    typeInto(confirmDialog()!.querySelector('input, textarea'), 'Chưa thấy trên sao kê');
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(dismissCalls()).toHaveLength(1);
+    expect(dismissCalls()[0]!.init?.method).toBe('POST');
+    expect(JSON.parse(String(dismissCalls()[0]!.init?.body))).toEqual({ reason: 'Chưa thấy trên sao kê' });
+    expect(container.textContent).toContain('không thấy tiền. Sổ công nợ không đổi');
+  });
+});
 
 describe('DealerAccountsTab — danh sách đại lý đã duyệt (D1-06)', () => {
   it('hiện bậc, dư nợ / hạn mức, doanh số tháng, tổng nợ; đại lý vượt hạn mức có nhãn', async () => {
@@ -201,6 +278,7 @@ describe('DealerAccountsTab — danh sách đại lý đã duyệt (D1-06)', () 
     let fail = true;
     const api = mockFetch({
       '/admin/dealers/accounts': () => (fail ? { status: 500, body: { message: 'boom' } } : { body: page(ROWS) }),
+      '/admin/dealer-credit-reports': { body: [] },
       '/admin/dealer-tiers/manage': { body: TIERS },
       '/admin/dealer-tiers/history': { body: [] },
     });

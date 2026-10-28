@@ -135,7 +135,7 @@ describe('OpsInboxTab — việc với đối tác (R4-ADMIN-7)', () => {
 });
 
 describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
-  const stub = (items: { key: string; count: number; hoursLeft?: number }[], extra: Record<string, { status?: number; body: unknown }> = {}) => {
+  const stub = (items: { key: string; count: number; hoursLeft?: number; oldestAt?: string }[], extra: Record<string, { status?: number; body: unknown }> = {}) => {
     const api = mockFetch({
       '/admin/ops/inbox': { body: { generatedAt: '2026-10-28T03:00:00.000Z', items } },
       ...extra,
@@ -213,12 +213,67 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     expect(badge.container.querySelector('[data-inbox-badge="shiftApproval"]')!.textContent).toContain('3');
   });
 
+  it('thẻ đại lý báo đã chuyển khoản trả nợ mở đúng khoá và cộng vào huy hiệu mục Đại lý & công nợ', async () => {
+    stub([{ key: 'dealerCreditReported', count: 2 }]);
+    const onOpen = vi.fn();
+    const r = render(<OpsInboxTab onOpen={onOpen} />);
+    mounted.push(r);
+    await flush();
+    const card = r.container.querySelector<HTMLButtonElement>('[data-inbox="dealerCreditReported"]')!;
+    expect(card.textContent).toContain('Đại lý báo đã chuyển khoản trả nợ');
+    expect(card.textContent).toContain('Ghi nhận');
+    click(card);
+    expect(onOpen).toHaveBeenCalledWith('dealerCreditReported');
+    const badge = render(<InboxBadge tab="dealerAccounts" />);
+    mounted.push(badge);
+    await flush();
+    expect(badge.container.querySelector('[data-inbox-badge="dealerAccounts"]')!.textContent).toContain('2');
+  });
+
   it('đơn chuyển khoản đã quá hạn ghi rõ sắp tự huỷ', async () => {
     stub([{ key: 'bankTransferToConfirm', count: 1, hoursLeft: 0 }]);
     const r = render(<OpsInboxTab onOpen={vi.fn()} />);
     mounted.push(r);
     await flush();
     expect(r.container.querySelector('[data-inbox="bankTransferToConfirm"]')!.textContent).toContain('đã quá hạn');
+  });
+
+  it('thẻ mở xếp theo giờ còn lại tăng dần, rồi việc chờ lâu nhất; mỗi thẻ ghi "Cũ nhất" (mốc tính từ lúc API trả số)', async () => {
+    const ago = (h: number) => new Date(Date.parse('2026-10-28T03:00:00.000Z') - h * 3_600_000).toISOString();
+    stub([
+      { key: 'storefrontsPending', count: 1, oldestAt: ago(48 * 2) },
+      { key: 'returnsPending', count: 2, oldestAt: ago(3) },
+      { key: 'communityReports', count: 4 },
+      { key: 'accountDeletionPending', count: 1, oldestAt: ago(24 * 5) },
+      { key: 'bankTransferToConfirm', count: 1, hoursLeft: 20, oldestAt: ago(4) },
+      { key: 'dealerTransferToConfirm', count: 1, hoursLeft: 7, oldestAt: ago(65) },
+    ]);
+    const r = render(<OpsInboxTab onOpen={vi.fn()} />);
+    mounted.push(r);
+    await flush();
+    const order = Array.from(r.container.querySelectorAll('[data-inbox]')).map((e) => e.getAttribute('data-inbox'));
+    expect(order).toEqual([
+      'dealerTransferToConfirm',
+      'bankTransferToConfirm',
+      'accountDeletionPending',
+      'storefrontsPending',
+      'returnsPending',
+      'communityReports',
+    ]);
+    const text = (k: string) => r.container.querySelector(`[data-inbox="${k}"]`)!.textContent;
+    expect(text('accountDeletionPending')).toContain('Cũ nhất: 5 ngày');
+    expect(text('storefrontsPending')).toContain('Cũ nhất: 4 ngày');
+    expect(text('returnsPending')).toContain('Cũ nhất: 3 giờ');
+    expect(text('dealerTransferToConfirm')).toContain('Cũ nhất: 2 ngày');
+    expect(text('communityReports')).not.toContain('Cũ nhất');
+  });
+
+  it('việc vừa tạo dưới một giờ ghi "Cũ nhất: dưới 1 giờ"', async () => {
+    stub([{ key: 'returnsPending', count: 1, oldestAt: '2026-10-28T02:30:00.000Z' }]);
+    const r = render(<OpsInboxTab onOpen={vi.fn()} />);
+    mounted.push(r);
+    await flush();
+    expect(r.container.querySelector('[data-inbox="returnsPending"]')!.textContent).toContain('Cũ nhất: dưới 1 giờ');
   });
 
   it('hàng đợi rỗng gom một dòng "N hàng đợi đang trống", bấm mới mở danh sách chip', async () => {
