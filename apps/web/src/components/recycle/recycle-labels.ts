@@ -161,8 +161,10 @@ const CANCELLED_REASONS: Partial<Record<string, string>> = {
   SHIP_LOCKED: 'Đường kho đang tạm dừng',
 };
 
+const MAIL_IN_HOLD_EXPIRED_HINT = 'Nếu bạn đã gửi kiện, hãy nhắn CSKH kèm mã vận đơn để được hỗ trợ';
+
 export function closedLabel(
-  r: Pick<WasteRequestDetailDTO, 'status' | 'closeReason' | 'rejectionReason' | 'rejectionNote' | 'reversedPoints' | 'reversalReason'>,
+  r: Pick<WasteRequestDetailDTO, 'status' | 'closeReason' | 'rejectionReason' | 'rejectionNote' | 'reversedPoints' | 'reversalReason'> & { method?: WasteMethod },
 ): { label: string; reason: string | null } | null {
   switch (r.status) {
     case 'REJECTED': {
@@ -172,7 +174,11 @@ export function closedLabel(
       return { label: 'Bị từ chối', reason };
     }
     case 'EXPIRED':
-      return { label: (r.closeReason && EXPIRED_LABELS[r.closeReason]) || 'Đã hết hạn', reason: null };
+      // Tin báo hết hạn của đường gửi kiện đã nói khách nhắn CSKH; màn mà tin dẫn tới phải còn lối đi đó.
+      return {
+        label: (r.closeReason && EXPIRED_LABELS[r.closeReason]) || 'Đã hết hạn',
+        reason: r.method === 'MAIL_IN' && r.closeReason === 'HOLD_EXPIRED' ? MAIL_IN_HOLD_EXPIRED_HINT : null,
+      };
     case 'CANCELLED':
       return { label: 'Đã huỷ', reason: r.closeReason === null ? 'Bạn đã huỷ yêu cầu này' : (CANCELLED_REASONS[r.closeReason] ?? null) };
     case 'REVERSED':
