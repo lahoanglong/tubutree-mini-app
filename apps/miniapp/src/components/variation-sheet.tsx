@@ -54,7 +54,7 @@ export function VariationSheet({
   initialId: string | null;
   initialQty: number;
   busy: boolean;
-  onConfirm: (variation: VariationOption, qty: number) => void;
+  onConfirm: (variation: VariationOption, qty: number) => void | Promise<void>;
 }) {
   const [id, setId] = useState<string | null>(null);
   const [qty, setQty] = useState(1);

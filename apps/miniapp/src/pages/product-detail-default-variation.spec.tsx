@@ -173,6 +173,23 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v-1kg', 1));
   });
 
+  it('R-6: bấm đúp nút xác nhận trong bảng chỉ thêm giỏ một lần', async () => {
+    mocks.authStatus = 'authenticated';
+    mocks.addToCart.mockResolvedValue({ items: [], itemCount: 1 });
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    renderPdp();
+    await screen.findByText('500g');
+    fireEvent.click(await screen.findByRole('button', { name: /Thêm vào giỏ/ }));
+    await screen.findByRole('group', { name: 'Phân loại' });
+    const confirm = await screen.findAllByRole('button', { name: /Thêm vào giỏ · / });
+    const btn = confirm[confirm.length - 1]!;
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+  });
+
   it('R-6: sản phẩm 1 phân loại thêm thẳng, không mở bảng chọn', async () => {
     mocks.authStatus = 'authenticated';
     mocks.addToCart.mockResolvedValue({ items: [], itemCount: 1 });

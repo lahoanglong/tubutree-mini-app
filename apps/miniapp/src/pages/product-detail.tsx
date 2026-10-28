@@ -114,6 +114,8 @@ export default function ProductDetailPage() {
   const location = useLocation();
   const navState = location.state as { variationId?: string; pinnedVariationId?: string; listSource?: string; reviewOrderId?: string } | null;
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Bảng đóng có hiệu ứng ~200ms nên nút xác nhận còn bấm được: khoá đồng bộ để bấm đúp không thêm giỏ hai lần hay gọi login hai lần.
+  const confirming = useRef(false);
   const autoPick = useRef<{ slug: string; id: string | null } | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [badgeBounce, setBadgeBounce] = useState(false);
@@ -313,16 +315,22 @@ export default function ProductDetailPage() {
   const retailOnly = isRetailOnly(p);
 
   const confirmVariation = async (variation: VariationDetail, qty: number) => {
-    if (status !== 'authenticated') {
-      await login();
-      if (useAuthStore.getState().status !== 'authenticated') return;
+    if (!sheetMode || confirming.current || addMutation.isPending || buyNowMutation.isPending) return;
+    confirming.current = true;
+    try {
+      if (status !== 'authenticated') {
+        await login();
+        if (useAuthStore.getState().status !== 'authenticated') return;
+      }
+      const mode = sheetMode;
+      setSheetMode(null);
+      setSelectedId(variation.id);
+      setQuantity(qty);
+      if (mode === 'buy') buyNowMutation.mutate({ variation, qty });
+      else addMutation.mutate({ variation, qty });
+    } finally {
+      confirming.current = false;
     }
-    const mode = sheetMode;
-    setSheetMode(null);
-    setSelectedId(variation.id);
-    setQuantity(qty);
-    if (mode === 'buy') buyNowMutation.mutate({ variation, qty });
-    else addMutation.mutate({ variation, qty });
   };
 
   const handleAdd = async () => {
@@ -860,8 +868,8 @@ export default function ProductDetailPage() {
           flash={flashList}
           initialId={selected?.id ?? null}
           initialQty={quantity}
-          busy={false}
-          onConfirm={(v, qty) => void confirmVariation(v as VariationDetail, qty)}
+          busy={addMutation.isPending || buyNowMutation.isPending}
+          onConfirm={(v, qty) => confirmVariation(v as VariationDetail, qty)}
         />
       )}
 
