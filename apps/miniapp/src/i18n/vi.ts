@@ -24,7 +24,7 @@ export const vi = {
 
   errors: {
     offline: 'Có vẻ mất mạng. Kiểm tra kết nối rồi thử lại nhé.',
-    network: 'Chưa tải được nội dung, thử lại nhé.',
+    network: 'Chưa kết nối được tới Tubu Tree. Kiểm tra mạng rồi thử lại nhé.',
     timeout: 'Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại rồi thử lại nhé.',
     loadTimeout: 'Tải chậm quá, thử lại nhé.',
     server: 'Máy chủ đang bận, thử lại nhé.',

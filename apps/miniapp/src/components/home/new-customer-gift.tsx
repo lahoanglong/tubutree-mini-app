@@ -7,7 +7,7 @@ import { HOME_HERO_HEIGHT } from '@tubutree/app-core/home-layout';
 import { getNewCustomerOffer, type NewCustomerOffer } from '../../services/account-api';
 import { fetchOrders, getPublicConfig, type PublicConfig } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
-import { isGuestUser } from '../coupon-claim-gate';
+import { isGuestUser } from '../../utils/guest-user';
 import { vi } from '../../i18n/vi';
 import { formatDate, formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';

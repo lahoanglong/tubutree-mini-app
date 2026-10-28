@@ -151,3 +151,28 @@ describe('createQueryClient — truy vấn lúc mất mạng (R5-BUYER-1)', () =
     expect(retry(0, networkError())).toBe(true);
   });
 });
+
+describe('createQueryClient — staleTime danh sách sản phẩm (R-80)', () => {
+  it('products, for-you, categories, brands tươi 60 giây; khoá khác giữ 10 giây', () => {
+    const client = createQueryClient();
+    const stale = (key: unknown[]) => client.defaultQueryOptions({ queryKey: key }).staleTime;
+    expect(stale(['products', 'home-best-seller'])).toBe(60_000);
+    expect(stale(['products', 'browse', 'x'])).toBe(60_000);
+    expect(stale(['for-you'])).toBe(60_000);
+    expect(stale(['categories'])).toBe(60_000);
+    expect(stale(['brands'])).toBe(60_000);
+    expect(stale(['cart'])).toBe(10_000);
+  });
+});
+
+describe('getErrorMessage — không có phản hồi (R-85)', () => {
+  it('đang online mà không có phản hồi: câu trung tính, không đổ lỗi cho máy chủ', () => {
+    vi.stubGlobal('navigator', { onLine: true });
+    const msg = getErrorMessage(new HttpError('Network Error', 'ERR_NETWORK'));
+    expect(msg).toBe(copy.errors.network);
+    expect(msg).not.toContain('Máy chủ');
+  });
+  it('5xx vẫn nói máy chủ bận', () => {
+    expect(getErrorMessage(new HttpError('x', 'ERR_BAD_RESPONSE', { status: 503, data: {} }))).toBe(copy.errors.server);
+  });
+});

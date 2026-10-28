@@ -15,7 +15,7 @@ const gateOf = () => {
 };
 
 async function expectChipHitArea44(chip: Locator): Promise<void> {
-  // Ô tìm dính đầu trang che mép trên khung nhìn, nên đưa chip về giữa khung trước khi đo.
+  // Đưa chip về giữa khung trước khi đo: mép trên bị ô tìm dính che, mép dưới bị thanh đáy (cố định) che.
   await chip.evaluate((el) => el.scrollIntoView({ block: 'center' }));
   const box = (await chip.boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(44);

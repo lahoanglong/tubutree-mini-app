@@ -53,6 +53,11 @@ export const envSchema = z.object({
   SENTRY_DSN: z.union([z.literal(''), z.string().url()]).default(''),
   SENTRY_ENVIRONMENT: z.string().default(''), // rỗng = NODE_ENV
   SENTRY_RELEASE: z.string().default(''), // image chưa mang git sha, đặt tay nếu muốn gắn bản phát hành
+  // Endpoint /img đổi cỡ ảnh sản phẩm. Thư mục cache (rỗng = thư mục tạm của container), trần dung lượng (MB), host ảnh thêm ngoài
+  // Pancake/Cloudinary (cách nhau bằng dấu phẩy; nguồn vẫn phải là ảnh đang có trong sản phẩm/nhãn).
+  IMAGE_CACHE_DIR: z.string().default(''),
+  IMAGE_CACHE_MAX_MB: z.preprocess((v) => (v === '' ? undefined : v), z.coerce.number().int().positive().max(10_240).default(512)),
+  IMAGE_RESIZE_EXTRA_HOSTS: z.string().default(''),
   // Pancake POS
   PANCAKE_BASE_URL: z.string().default('https://pos.pages.fm/api/v1'),
   PANCAKE_API_KEY: z.string().default(''),

@@ -41,11 +41,13 @@ export async function firstOrderFreeShipFrom(
   config: Pick<SystemConfigService, 'get'> | undefined,
   prisma: Pick<PrismaService, 'user' | 'order'>,
   userId: string,
+  /** Khách đã đọc sẵn ở nơi gọi (giỏ đã nạp user cùng lúc): không đọc lại. */
+  knownUser?: { phone: string | null; zaloId: string | null; hasPriorOrder?: boolean },
 ): Promise<number | null> {
   if (!config || (await config.get<boolean>(FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_ENABLED_DEFAULT)) !== true) return null;
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+  const user = knownUser ?? (await prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } }));
   if (!isRealUser(user)) return null;
-  if (await hasPriorOrder(prisma, userId)) return null;
+  if (knownUser?.hasPriorOrder ?? (await hasPriorOrder(prisma, userId))) return null;
   const min: unknown = await config.get<number>(FIRST_ORDER_FREESHIP_MIN_KEY, FIRST_ORDER_FREESHIP_MIN_DEFAULT);
   return typeof min === 'number' && Number.isFinite(min) && min >= 0 ? min : null;
 }

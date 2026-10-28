@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect } from 'react';
-import { App, ZMPRouter, AnimationRoutes, SnackbarProvider, Box, Spinner } from 'zmp-ui';
+import { lazy, Suspense, useEffect, type ComponentType } from 'react';
+import { App, ZMPRouter, AnimationRoutes, SnackbarProvider } from 'zmp-ui';
 import { Navigate, Route } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { getStorage } from 'zmp-sdk/apis';
@@ -7,13 +7,15 @@ import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
 import BackButton from './back-button';
 import { ONBOARDING_SURVEY_ENABLED } from './onboarding-flag';
-import { CouponClaimGate } from './coupon-claim-gate';
 import { OpenAppRouter } from './open-app-router';
 import { MainLandmark } from './ui/main-landmark';
+import { RouteShell, RouteSkeleton, SilentBoundary } from './route-shell';
 import ErrorBoundary, { hashMessage } from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
 import { recordReferralTouch, reportLaunchLinkClick } from '../services/affiliate-api';
+import { hasPartnerLinkParams } from './onboarding-rules';
+import { readClaimParam, savePendingClaim } from '../services/coupon-claim';
 import { createQueryClient } from '../services/query-client';
 import { useScreenTracker } from '../hooks/use-screen-tracker';
 import { useFlashSalesPoller } from '../hooks/use-flash-sales-poller';
@@ -42,15 +44,26 @@ function applySavedFontScale(): void {
   });
 }
 
+// Đọc một lần lúc mở app: khách vào bằng link CTV/gian hàng thì cả phiên không bị quiz chặn.
+const OPENED_FROM_PARTNER_LINK =
+  typeof window !== 'undefined' && hasPartnerLinkParams(window.location.search, window.location.hash);
+
+// Mã `?claim=` đã lưu ở entry (useEffect bên dưới) nên chunk này tải chậm hay lỗi cũng không mất mã.
+const CouponClaimGate = lazy(() => import('./coupon-claim-gate').then((m) => ({ default: m.CouponClaimGate })));
+
 // Code-split: Home eager (first paint), các trang khác lazy để giữ initial bundle nhỏ (§13.4).
-// Khảo sát đang tắt: mã của nó nằm ngoài gói khởi động và chỉ tải khi bật cờ.
-const OnboardingGate = ONBOARDING_SURVEY_ENABLED
+// Khảo sát đang tắt: cờ là hằng nên nhánh import bị bỏ lúc build, bản build không có chunk khảo sát.
+const OnboardingGate: ComponentType<{ openedFromPartnerLink?: boolean }> = ONBOARDING_SURVEY_ENABLED
   ? lazy(() => import('./onboarding').then((m) => ({ default: m.OnboardingGate })))
   : () => null;
-const BrowsePage = lazy(() => import('../pages/browse'));
-const ProductDetailPage = lazy(() => import('../pages/product-detail'));
-const CartPage = lazy(() => import('../pages/cart'));
-const CheckoutPage = lazy(() => import('../pages/checkout'));
+const loadBrowse = () => import('../pages/browse');
+const BrowsePage = lazy(loadBrowse);
+const loadProductDetail = () => import('../pages/product-detail');
+const ProductDetailPage = lazy(loadProductDetail);
+const loadCart = () => import('../pages/cart');
+const CartPage = lazy(loadCart);
+const loadCheckout = () => import('../pages/checkout');
+const CheckoutPage = lazy(loadCheckout);
 const BankPaymentPage = lazy(() => import('../pages/bank-payment'));
 const OrdersPage = lazy(() => import('../pages/orders'));
 const OrderDetailPage = lazy(() => import('../pages/order-detail'));
@@ -98,18 +111,20 @@ const StaffPage = lazy(() => import('../pages/staff'));
 const MyPayrollPage = lazy(() => import('../pages/my-payroll'));
 const NotFoundPage = lazy(() => import('../pages/not-found'));
 
+/** Trang chủ rảnh thì tải sẵn mã các màn trên luồng mua hàng, để bấm thẻ SP không phải chờ tải mã. Lỗi mạng bỏ qua: lúc bấm sẽ tải lại. */
+function prefetchShoppingRoutes(): void {
+  const run = () => {
+    for (const load of [loadBrowse, loadProductDetail, loadCart, loadCheckout]) void load().catch(() => {});
+  };
+  const idle = (window as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+  if (idle) idle.call(window, run, { timeout: 4000 });
+  else setTimeout(run, 2000);
+}
+
 const queryClient = createQueryClient();
 // Xoá sạch cache (ví, lương, hoa hồng...) khi logout — tránh lộ dữ liệu tài chính của
 // user vừa đăng xuất cho user kế tiếp trên cùng thiết bị dùng chung (VD tablet chấm công).
 setLogoutCleanup(() => queryClient.clear());
-
-function RouteFallback() {
-  return (
-    <Box flex justifyContent="center" alignItems="center" style={{ minHeight: '60vh' }}>
-      <Spinner />
-    </Box>
-  );
-}
 
 /** Phát `screen_viewed` mỗi khi route đổi. Phải render BÊN TRONG `<ZMPRouter>` vì
  * `useScreenTracker()` dùng `useLocation()`, cần Router context — không gọi được ở `MyApp`. */
@@ -135,6 +150,10 @@ export default function MyApp() {
   useEffect(() => {
     void restore(); // silent login từ refresh token đã lưu
     applySavedFontScale();
+    prefetchShoppingRoutes();
+    // Mã `?claim=` từ thẻ QR lưu ngay ở entry: chunk của cổng nhận mã tải chậm/lỗi hay khách chuyển màn trước khi nó lên thì mã vẫn còn.
+    const claim = readClaimParam(window.location.search, window.location.hash);
+    if (claim) void savePendingClaim(claim);
   }, [restore]);
   useLegacyNotifyPrefsSync(authed);
   // Mở app lúc mất mạng: phiên ở trạng thái lỗi thì tự khôi phục khi có mạng/quay lại app, không chờ khách bấm Thử lại.
@@ -200,67 +219,67 @@ export default function MyApp() {
               <LivePathnameProvider>
               <NavigationTypeProvider>
                 <MainLandmark>
-                <Suspense fallback={<RouteFallback />}>
+                <Suspense fallback={<RouteSkeleton />}>
                   <AnimationRoutes>
-                    <Route path="/" element={<HomePage />} />
-                    <Route path="/browse" element={<BrowsePage />} />
-                    <Route path="/product/:slug" element={<ProductDetailPage />} />
-                    <Route path="/cart" element={<CartPage />} />
-                    <Route path="/checkout" element={<CheckoutPage />} />
-                    <Route path="/bank-payment/:code" element={<BankPaymentPage />} />
-                    <Route path="/orders" element={<OrdersPage />} />
-                    <Route path="/order/:code" element={<OrderDetailPage />} />
-                    <Route path="/game" element={<GamePage />} />
-                    <Route path="/feed" element={<FeedPage />} />
+                    <Route path="/" element={<RouteShell><HomePage /></RouteShell>} />
+                    <Route path="/browse" element={<RouteShell skeleton="grid"><BrowsePage /></RouteShell>} />
+                    <Route path="/product/:slug" element={<RouteShell skeleton="detail"><ProductDetailPage /></RouteShell>} />
+                    <Route path="/cart" element={<RouteShell><CartPage /></RouteShell>} />
+                    <Route path="/checkout" element={<RouteShell><CheckoutPage /></RouteShell>} />
+                    <Route path="/bank-payment/:code" element={<RouteShell><BankPaymentPage /></RouteShell>} />
+                    <Route path="/orders" element={<RouteShell><OrdersPage /></RouteShell>} />
+                    <Route path="/order/:code" element={<RouteShell><OrderDetailPage /></RouteShell>} />
+                    <Route path="/game" element={<RouteShell><GamePage /></RouteShell>} />
+                    <Route path="/feed" element={<RouteShell><FeedPage /></RouteShell>} />
                     <Route path="/feed/leaderboard" element={<Navigate to="/feed" replace />} />
-                    <Route path="/feed/events" element={<CommunityEventsPage />} />
-                    <Route path="/feed/:id" element={<PostDetailPage />} />
-                    <Route path="/ai-advisor" element={<AiAdvisorPage />} />
-                    <Route path="/group-buy" element={<GroupBuyPage />} />
-                    <Route path="/group-buy/:id" element={<GroupBuyPage />} />
+                    <Route path="/feed/events" element={<RouteShell><CommunityEventsPage /></RouteShell>} />
+                    <Route path="/feed/:id" element={<RouteShell><PostDetailPage /></RouteShell>} />
+                    <Route path="/ai-advisor" element={<RouteShell><AiAdvisorPage /></RouteShell>} />
+                    <Route path="/group-buy" element={<RouteShell><GroupBuyPage /></RouteShell>} />
+                    <Route path="/group-buy/:id" element={<RouteShell><GroupBuyPage /></RouteShell>} />
                     <Route path="/refill" element={<Navigate to="/recycle" replace />} />
-                    <Route path="/recycle" element={<RecyclePage />} />
-                    <Route path="/recycle/rules" element={<RecycleRulesPage />} />
-                    <Route path="/recycle/new" element={<RecycleNewPage />} />
-                    <Route path="/recycle/points" element={<RecyclePointsPage />} />
-                    <Route path="/recycle/r/:id" element={<RecycleRequestPage />} />
-                    <Route path="/recycle/r/:id/edit" element={<RecycleEditPage />} />
-                    <Route path="/recycle/requests" element={<RecycleRequestsPage />} />
-                    <Route path="/recycle/done/:id" element={<RecycleDonePage />} />
-                    <Route path="/recycle/desk" element={<RecycleDeskPage />} />
-                    <Route path="/rewards" element={<RewardsPage />} />
-                    <Route path="/rewards/mine" element={<RewardsMinePage />} />
-                    <Route path="/profile" element={<ProfilePage />} />
-                    <Route path="/loyalty" element={<LoyaltyPage />} />
-                    <Route path="/offers" element={<OffersPage />} />
-                    <Route path="/wallet" element={<WalletPage />} />
-                    <Route path="/points/scan" element={<ExternalPointsPage />} />
-                    <Route path="/addresses" element={<AddressesPage />} />
-                    <Route path="/notifications" element={<NotificationsPage />} />
-                    <Route path="/affiliate" element={<AffiliatePage />} />
-                    <Route path="/academy" element={<AcademyPage />} />
+                    <Route path="/recycle" element={<RouteShell><RecyclePage /></RouteShell>} />
+                    <Route path="/recycle/rules" element={<RouteShell><RecycleRulesPage /></RouteShell>} />
+                    <Route path="/recycle/new" element={<RouteShell><RecycleNewPage /></RouteShell>} />
+                    <Route path="/recycle/points" element={<RouteShell><RecyclePointsPage /></RouteShell>} />
+                    <Route path="/recycle/r/:id" element={<RouteShell><RecycleRequestPage /></RouteShell>} />
+                    <Route path="/recycle/r/:id/edit" element={<RouteShell><RecycleEditPage /></RouteShell>} />
+                    <Route path="/recycle/requests" element={<RouteShell><RecycleRequestsPage /></RouteShell>} />
+                    <Route path="/recycle/done/:id" element={<RouteShell><RecycleDonePage /></RouteShell>} />
+                    <Route path="/recycle/desk" element={<RouteShell><RecycleDeskPage /></RouteShell>} />
+                    <Route path="/rewards" element={<RouteShell><RewardsPage /></RouteShell>} />
+                    <Route path="/rewards/mine" element={<RouteShell><RewardsMinePage /></RouteShell>} />
+                    <Route path="/profile" element={<RouteShell><ProfilePage /></RouteShell>} />
+                    <Route path="/loyalty" element={<RouteShell><LoyaltyPage /></RouteShell>} />
+                    <Route path="/offers" element={<RouteShell><OffersPage /></RouteShell>} />
+                    <Route path="/wallet" element={<RouteShell><WalletPage /></RouteShell>} />
+                    <Route path="/points/scan" element={<RouteShell><ExternalPointsPage /></RouteShell>} />
+                    <Route path="/addresses" element={<RouteShell><AddressesPage /></RouteShell>} />
+                    <Route path="/notifications" element={<RouteShell><NotificationsPage /></RouteShell>} />
+                    <Route path="/affiliate" element={<RouteShell><AffiliatePage /></RouteShell>} />
+                    <Route path="/academy" element={<RouteShell><AcademyPage /></RouteShell>} />
                     {/* Khoá học có URL riêng: nút back của Zalo quay về danh sách thay vì thoát
                         hẳn Học viện, và CTV gửi được link thẳng tới một khoá cho đội của mình. */}
-                    <Route path="/academy/:courseId" element={<AcademyPage />} />
-                    <Route path="/cashback" element={CASHBACK_ENABLED ? <CashbackPage /> : <Navigate to="/" replace />} />
-                    <Route path="/dealer" element={<DealerPage />} />
-                    <Route path="/about" element={<AboutPage />} />
-                    <Route path="/wishlist" element={<WishlistPage />} />
-                    <Route path="/chat" element={<SupportChatPage />} />
-                    <Route path="/edit-profile" element={<EditProfilePage />} />
-                    <Route path="/settings" element={<SettingsPage />} />
-                    <Route path="/brand-story" element={<BrandStoryPage />} />
+                    <Route path="/academy/:courseId" element={<RouteShell><AcademyPage /></RouteShell>} />
+                    <Route path="/cashback" element={CASHBACK_ENABLED ? <RouteShell><CashbackPage /></RouteShell> : <Navigate to="/" replace />} />
+                    <Route path="/dealer" element={<RouteShell><DealerPage /></RouteShell>} />
+                    <Route path="/about" element={<RouteShell><AboutPage /></RouteShell>} />
+                    <Route path="/wishlist" element={<RouteShell><WishlistPage /></RouteShell>} />
+                    <Route path="/chat" element={<RouteShell><SupportChatPage /></RouteShell>} />
+                    <Route path="/edit-profile" element={<RouteShell><EditProfilePage /></RouteShell>} />
+                    <Route path="/settings" element={<RouteShell><SettingsPage /></RouteShell>} />
+                    <Route path="/brand-story" element={<RouteShell><BrandStoryPage /></RouteShell>} />
                     {/* "Đặt định kỳ" nay là tab "Định kỳ" của trang Đơn hàng (spec 4a.2) — giữ route cũ cho link đã lưu. */}
                     <Route path="/subscriptions" element={<Navigate to="/orders?tab=subscriptions" replace />} />
-                    <Route path="/storefront" element={<StorefrontBuilderPage />} />
-                    <Route path="/s/:slug" element={<StorefrontViewPage />} />
-                    <Route path="/brand/:slug" element={<BrandViewPage />} />
-                    <Route path="/brand-owner" element={<BrandOwnerPage />} />
-                    <Route path="/admin" element={<AdminPage />} />
-                    <Route path="/admin/community" element={<CommunityModerationPage />} />
-                    <Route path="/staff" element={<StaffPage />} />
-                    <Route path="/my-payroll" element={<MyPayrollPage />} />
-                    <Route path="*" element={<NotFoundPage />} />
+                    <Route path="/storefront" element={<RouteShell><StorefrontBuilderPage /></RouteShell>} />
+                    <Route path="/s/:slug" element={<RouteShell><StorefrontViewPage /></RouteShell>} />
+                    <Route path="/brand/:slug" element={<RouteShell><BrandViewPage /></RouteShell>} />
+                    <Route path="/brand-owner" element={<RouteShell><BrandOwnerPage /></RouteShell>} />
+                    <Route path="/admin" element={<RouteShell><AdminPage /></RouteShell>} />
+                    <Route path="/admin/community" element={<RouteShell><CommunityModerationPage /></RouteShell>} />
+                    <Route path="/staff" element={<RouteShell><StaffPage /></RouteShell>} />
+                    <Route path="/my-payroll" element={<RouteShell><MyPayrollPage /></RouteShell>} />
+                    <Route path="*" element={<RouteShell><NotFoundPage /></RouteShell>} />
                   </AnimationRoutes>
                 </Suspense>
                 </MainLandmark>
@@ -269,11 +288,17 @@ export default function MyApp() {
               <BottomNav />
               <BackButton />
               {ONBOARDING_SURVEY_ENABLED && (
-                <Suspense fallback={null}>
-                  <OnboardingGate />
-                </Suspense>
+                <SilentBoundary>
+                  <Suspense fallback={null}>
+                    <OnboardingGate openedFromPartnerLink={OPENED_FROM_PARTNER_LINK} />
+                  </Suspense>
+                </SilentBoundary>
               )}
-              <CouponClaimGate />
+              <SilentBoundary>
+                <Suspense fallback={null}>
+                  <CouponClaimGate />
+                </Suspense>
+              </SilentBoundary>
               <OpenAppRouter />
             </ZMPRouter>
           </SnackbarProvider>
