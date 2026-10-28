@@ -113,7 +113,13 @@ function ReportRow({ report: r, onDone }: { report: DealerCreditReport; onDone: 
           defaultOpen
           defaultAmount={r.amount}
           reportId={r.id}
-          onPaid={() => onDone(`Đã ghi nhận ${formatVnd(r.amount)} của ${who}. Báo cáo đã đóng.`)}
+          onPaid={({ amount, balance, reportClosed }) =>
+            onDone(
+              reportClosed === false
+                ? `Mã giao dịch này đã được ghi nhận trước đó, sổ công nợ của ${who} không đổi. Báo cáo ${formatVnd(r.amount)} vẫn mở: nếu trùng khoản đã ghi, đóng bằng "Không thấy tiền" kèm lý do.`
+                : `Đã ghi nhận ${formatVnd(amount)} của ${who}. Báo cáo đã đóng. Dư nợ còn lại ${formatVnd(balance)}.`,
+            )
+          }
         />
       )}
       {dialog}

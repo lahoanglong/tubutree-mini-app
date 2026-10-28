@@ -209,6 +209,26 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     expect(ledgerCreate).toHaveBeenCalledWith({ data: expect.not.objectContaining({ refId: expect.anything() }) });
   });
 
+  it('ghi nhận kèm reportId xong thì báo reportClosed: true; không kèm reportId thì kết quả không có trường này', async () => {
+    const withReport = build({ debt: 500_000 });
+    await expect(withReport.svc.adminRecordCreditPayment('admin1', 'd1', 100_000, { reportId: 'rp1' })).resolves.toMatchObject({ reportClosed: true });
+    const plain = build({ debt: 500_000 });
+    expect(await plain.svc.adminRecordCreditPayment('admin1', 'd1', 100_000)).not.toHaveProperty('reportClosed');
+  });
+
+  it('mã GD (Idempotency-Key) đã có trong sổ từ lần ghi khác, cùng số tiền, kèm reportId mà báo cáo vẫn REPORTED: không trừ nợ, báo reportClosed: false để màn hình không nói báo cáo đã đóng', async () => {
+    const { svc, ledgerCreate, reportUpdateMany } = build({ existingClaim: { delta: -150_000 }, report: { status: 'REPORTED' } });
+    const res = await svc.adminRecordCreditPayment('kt1', 'd1', 150_000, { reportId: 'rp1', idempotencyKey: 'FT777', byStaff: true });
+    expect(ledgerCreate).not.toHaveBeenCalled();
+    expect(reportUpdateMany).not.toHaveBeenCalled();
+    expect(res).toMatchObject({ balance: expect.any(Number), reportClosed: false });
+  });
+
+  it('khoá trùng mà báo cáo đã RECORDED (bấm đúp lần ghi nhận của chính báo cáo này): reportClosed: true', async () => {
+    const { svc } = build({ existingClaim: { delta: -150_000 }, report: { status: 'RECORDED' } });
+    await expect(svc.adminRecordCreditPayment('kt1', 'd1', 150_000, { reportId: 'rp1' })).resolves.toMatchObject({ reportClosed: true });
+  });
+
   it('Kế toán ghi nhận (byStaff): ghi chú sổ công nợ ghi nhãn "Kế toán" + id; ADMIN vẫn là "Admin"', async () => {
     const kt = build({ debt: 500_000 });
     await kt.svc.adminRecordCreditPayment('kt1', 'd1', 100_000, { byStaff: true });

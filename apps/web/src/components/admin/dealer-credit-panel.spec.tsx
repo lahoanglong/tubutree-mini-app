@@ -148,6 +148,24 @@ describe('DealerCreditPanel — trạng thái dư nợ', () => {
     answerConfirm(true);
     await flush();
     expect(onPaid).toHaveBeenCalledTimes(1);
+    // Số tiền kế toán thực nhập (không phải số điền sẵn) và dư nợ còn lại đi kèm, để nơi chứa panel báo đúng.
+    expect(onPaid).toHaveBeenCalledWith({ amount: 2_000_000, balance: 1_000_000, reportClosed: undefined });
+  });
+
+  it('kèm reportId mà API báo reportClosed: false (mã GD đã ghi từ lần khác): khối không nói "đã ghi giảm công nợ" và báo lại cho nơi chứa', async () => {
+    const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY }, '/credit-payment': { body: { balance: 3_000_000, reportClosed: false } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const onPaid = vi.fn();
+    const { container } = mount(<DealerCreditPanel order={dealerOrder()} defaultOpen defaultAmount={1_500_000} reportId="rp1" onPaid={onPaid} />);
+    await flush();
+    typeInto(container.querySelector('input[type="text"]'), 'FT777');
+    click(byText(container, 'button', 'Xác nhận đã nhận, giảm nợ'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(onPaid).toHaveBeenCalledWith({ amount: 1_500_000, balance: 3_000_000, reportClosed: false });
+    expect(container.textContent).toContain('Mã giao dịch này đã có trong sổ');
+    expect(container.textContent).not.toContain('Đã ghi giảm công nợ');
   });
 
   it('defaultOpen: mở sẵn và tải sổ ngay (dùng trong tab Đại lý, nút "Ghi nhận thanh toán" đã là thao tác mở)', async () => {

@@ -127,6 +127,24 @@ describe('Báo cáo chuyển khoản trả nợ của đại lý (real Postgres)
     expect((await prisma.dealerCreditPaymentReport.findFirstOrThrow({ where: { userId: d.id } })).status).toBe('REPORTED');
   });
 
+  it('mã GD đã ghi từ khoản khác: ghi nhận kèm báo cáo không trừ lần hai, báo reportClosed: false và báo cáo vẫn mở; đổi mã GD thì đóng được', async () => {
+    const d = await dealerWithDebt();
+    const key = `FT-DUP-${randCode(6)}`;
+    await dealer.adminRecordCreditPayment('admin-1', d.id, 150_000, { bankRef: key, idempotencyKey: key });
+    await dealer.reportCreditPayment(d.id, 150_000);
+    const report = await prisma.dealerCreditPaymentReport.findFirstOrThrow({ where: { userId: d.id } });
+
+    const dup = await dealer.adminRecordCreditPayment('kt-1', d.id, 150_000, { reportId: report.id, bankRef: key, idempotencyKey: key, byStaff: true });
+
+    expect(dup).toMatchObject({ balance: 350_000, reportClosed: false });
+    expect(await payments(d.id)).toHaveLength(1);
+    expect((await prisma.dealerCreditPaymentReport.findUniqueOrThrow({ where: { id: report.id } })).status).toBe('REPORTED');
+
+    const ok = await dealer.adminRecordCreditPayment('kt-1', d.id, 150_000, { reportId: report.id, idempotencyKey: `FT-NEW-${randCode(6)}`, byStaff: true });
+    expect(ok).toMatchObject({ balance: 200_000, reportClosed: true });
+    expect((await prisma.dealerCreditPaymentReport.findUniqueOrThrow({ where: { id: report.id } })).status).toBe('RECORDED');
+  });
+
   it('báo cáo của đại lý này không đóng được bằng ghi nhận cho đại lý khác', async () => {
     const a = await dealerWithDebt();
     const b = await dealerWithDebt();

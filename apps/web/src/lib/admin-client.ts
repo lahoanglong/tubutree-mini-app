@@ -675,6 +675,8 @@ export const getDealerCreditLedger = (userId: string) =>
 
 export interface RecordDealerCreditPaymentResult {
   balance: number;
+  /** Chỉ có khi gửi kèm reportId: false là mã giao dịch đã có trong sổ từ lần ghi khác nên báo cáo này vẫn chưa đóng. */
+  reportClosed?: boolean;
 }
 /**
  * POST /admin/dealers/:userId/credit-payment — GHI GIẢM sổ công nợ, trần theo dư nợ TẠI LÚC DUYỆT

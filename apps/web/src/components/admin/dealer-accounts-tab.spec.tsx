@@ -63,7 +63,7 @@ const REPORT = {
   resolvedBy: null, resolvedAt: null, resolveNote: null, dealer: { id: 'u1', fullName: 'Đại lý Hoa', phone: '0911222333' },
 };
 
-function stub(accounts: DealerAccountsPage | ((url: string) => DealerAccountsPage) = page(ROWS), reports: unknown[] = []) {
+function stub(accounts: DealerAccountsPage | ((url: string) => DealerAccountsPage) = page(ROWS), reports: unknown[] = [], payment: unknown = { balance: 2_000_000, entries: [] }) {
   const rest = mockFetch({
     '/admin/dealer-credit-reports/rp1/dismiss': { body: { ok: true, alreadyProcessed: false } },
     '/admin/dealer-credit-reports': { body: reports },
@@ -71,7 +71,7 @@ function stub(accounts: DealerAccountsPage | ((url: string) => DealerAccountsPag
     '/admin/dealer-tiers/manage': { body: TIERS },
     '/admin/dealer-tiers/history': { body: [] },
     '/credit-ledger': { body: { balance: 4_000_000, entries: [] } },
-    '/credit-payment': { body: { balance: 2_000_000, entries: [] } },
+    '/credit-payment': { body: payment },
   });
   const calls: { url: string; init?: RequestInit }[] = [];
   const fn = async (url: string, init?: RequestInit) => {
@@ -125,6 +125,49 @@ describe('DealerAccountsTab — đại lý báo đã chuyển khoản (E-25)', (
     expect(post.init?.method).toBe('POST');
     expect(JSON.parse(String(post.init?.body))).toEqual({ amount: 1_500_000, reportId: 'rp1' });
     expect(api.calls.filter((c) => c.url.includes('/admin/dealer-credit-reports') && !c.url.includes('dismiss')).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('kế toán sửa số tiền theo sao kê: thông báo nêu số đã ghi nhận (không phải số đại lý báo) và dư nợ còn lại', async () => {
+    const api = stub(page(ROWS), [REPORT], { balance: 2_500_000, entries: [], reportClosed: true });
+    const { container } = mount(<DealerAccountsTab />);
+    await flush();
+    const block = container.querySelector<HTMLElement>('[data-dealer-credit-reports]')!;
+    click(byText(block, 'button', 'Ghi nhận'));
+    await flush();
+    typeInto(block.querySelector('input[aria-label="Số tiền đã nhận (đ)"]'), '1000000');
+    click(byText(block, 'button', 'Xác nhận đã nhận, giảm nợ'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+
+    const post = api.calls.find((c) => c.url.includes('/admin/dealers/u1/credit-payment'))!;
+    expect(JSON.parse(String(post.init?.body))).toEqual({ amount: 1_000_000, reportId: 'rp1' });
+    const flash = container.querySelector<HTMLElement>('[data-dealer-credit-reports] [role="status"]')!;
+    expect(flash.textContent).toContain('1.000.000');
+    expect(flash.textContent).not.toContain('1.500.000');
+    expect(flash.textContent).toContain('Báo cáo đã đóng');
+    expect(flash.textContent).toContain('Dư nợ còn lại 2.500.000');
+  });
+
+  it('mã GD đã ghi từ lần khác (API trả reportClosed: false): thông báo nói báo cáo vẫn mở và cách đóng, không nói "Báo cáo đã đóng"', async () => {
+    stub(page(ROWS), [REPORT], { balance: 4_000_000, entries: [], reportClosed: false });
+    const { container } = mount(<DealerAccountsTab />);
+    await flush();
+    const block = container.querySelector<HTMLElement>('[data-dealer-credit-reports]')!;
+    click(byText(block, 'button', 'Ghi nhận'));
+    await flush();
+    typeInto(block.querySelector('input[type="text"]'), 'FT777');
+    click(byText(block, 'button', 'Xác nhận đã nhận, giảm nợ'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+
+    const flash = container.querySelector<HTMLElement>('[data-dealer-credit-reports] [role="status"]')!;
+    expect(flash.textContent).toContain('đã được ghi nhận trước đó');
+    expect(flash.textContent).toContain('vẫn mở');
+    expect(flash.textContent).toContain('Không thấy tiền');
+    expect(flash.textContent).not.toContain('Báo cáo đã đóng');
+    expect(block.querySelectorAll('[data-dealer-credit-report]')).toHaveLength(1);
   });
 
   it('"Không thấy tiền" bắt buộc nhập lý do rồi mới gửi POST dismiss; huỷ hộp thoại thì không gửi gì', async () => {

@@ -594,7 +594,7 @@ export class DealerService {
               : 'Báo cáo này đã được ghi nhận với số tiền khác trước đó.',
           );
         }
-        return this.creditLedger(dealerUserId);
+        return this.creditLedgerWithReport(dealerUserId, reportId);
       }
     }
 
@@ -657,12 +657,12 @@ export class DealerService {
       // Race 2 request cùng key: kẻ thua ăn P2002 trên unique (userId,refType,refId) → coi như
       // replay của cùng 1 lần xác nhận, trả kết quả hiện tại thay vì lỗi 500.
       if (key && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        return this.creditLedger(dealerUserId);
+        return this.creditLedgerWithReport(dealerUserId, reportId);
       }
       throw err;
     }
 
-    if (replay) return this.creditLedger(dealerUserId);
+    if (replay) return this.creditLedgerWithReport(dealerUserId, reportId);
 
     this.logger.warn(
       `Admin ${adminId} xác nhận đại lý ${dealerUserId} đã trả nợ ${vnd(amount)}` +
@@ -674,7 +674,19 @@ export class DealerService {
         .notify(dealerUserId, 'DEALER_CREDIT_PAYMENT_CONFIRMED', { amount: amount.toLocaleString('vi-VN') })
         .catch((e) => this.logger.warn(`notify DEALER_CREDIT_PAYMENT_CONFIRMED lỗi (${dealerUserId}): ${(e as Error).message}`));
     }
-    return this.creditLedger(dealerUserId);
+    const ledger = await this.creditLedger(dealerUserId);
+    return reportId ? { ...ledger, reportClosed: true } : ledger;
+  }
+
+  /**
+   * Sổ công nợ kèm `reportClosed` khi người gọi gắn báo cáo. Đường "đã ghi trước đó" (mã GD trùng một khoản khác) không đóng báo
+   * cáo, nên báo thật trạng thái để màn hình không nói "báo cáo đã đóng" khi dòng báo cáo vẫn nằm trong danh sách.
+   */
+  private async creditLedgerWithReport(userId: string, reportId?: string) {
+    const ledger = await this.creditLedger(userId);
+    if (!reportId) return ledger;
+    const report = await this.prisma.dealerCreditPaymentReport.findFirst({ where: { id: reportId, userId }, select: { status: true } });
+    return { ...ledger, reportClosed: report?.status === 'RECORDED' };
   }
 
   /** Báo cáo chuyển khoản trả nợ của đại lý cho kế toán đối chiếu: mặc định chỉ dòng chưa xử lý, cũ nhất trước (việc gấp nhất lên đầu). */

@@ -37,8 +37,8 @@ export function DealerCreditPanel({
   defaultAmount?: number;
   /** Ghi nhận cho một báo cáo chuyển khoản của đại lý: gửi kèm để báo cáo đóng cùng lúc ghi sổ. */
   reportId?: string;
-  /** Gọi sau khi ghi giảm nợ thành công, để nơi chứa panel (danh sách đại lý) tải lại số liệu của nó. */
-  onPaid?: () => void;
+  /** Gọi sau khi ghi nhận thành công, để nơi chứa panel (danh sách đại lý) tải lại số liệu và báo đúng số kế toán đã nhập. */
+  onPaid?: (result: { amount: number; balance: number; reportClosed?: boolean }) => void;
 }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(defaultOpen);
@@ -62,15 +62,21 @@ export function DealerCreditPanel({
     mutationFn: () => {
       const amt = Math.trunc(Number(amount));
       const key = bankRef.trim() || undefined; // mã giao dịch làm idempotency-key nếu có
-      return recordDealerCreditPayment(userId as string, { amount: amt, bankRef, note, ...(reportId ? { reportId } : {}) }, key);
+      return recordDealerCreditPayment(userId as string, { amount: amt, bankRef, note, ...(reportId ? { reportId } : {}) }, key).then((r) => ({ ...r, amount: amt }));
     },
     onSuccess: (r) => {
-      setMsg({ ok: true, text: `Đã ghi giảm công nợ. Dư nợ còn lại: ${formatVnd(r.balance)}.` });
+      setMsg({
+        ok: true,
+        text:
+          r.reportClosed === false
+            ? `Mã giao dịch này đã có trong sổ từ lần ghi trước nên không ghi thêm. Dư nợ hiện tại: ${formatVnd(r.balance)}.`
+            : `Đã ghi giảm công nợ. Dư nợ còn lại: ${formatVnd(r.balance)}.`,
+      });
       setAmount('');
       setBankRef('');
       setNote('');
       void qc.invalidateQueries({ queryKey: ['dealer-credit-ledger', userId] });
-      onPaid?.();
+      onPaid?.({ amount: r.amount, balance: r.balance, reportClosed: r.reportClosed });
     },
     onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Xác nhận thất bại.' }),
     onSettled: () => {
