@@ -14,7 +14,6 @@ vi.mock('next/navigation', () => ({
   },
 }));
 vi.mock('@/components/catalog/browse-view', () => ({
-  PAGE_LIMIT: 24,
   default: (props: unknown) => {
     mocks.view(props);
     return <div data-testid="browse-view" />;

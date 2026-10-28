@@ -13,7 +13,7 @@ import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { clearRecentSearches, pushRecentSearch, readRecentSearches } from '@/lib/recent-searches';
 import {
-  CLEAR_SEARCH_PATCH, activeFilterChips, activeFilterCount, isBrowseRoot, toCatalogQuery, type FilterDraft,
+  CLEAR_SEARCH_PATCH, PAGE_LIMIT, activeFilterChips, activeFilterCount, isBrowseRoot, toCatalogQuery, type FilterDraft,
 } from '@/lib/search-state';
 import { useBrowseState } from '@/lib/use-browse-state';
 import { useSuggest } from '@/lib/use-suggest';
@@ -34,7 +34,6 @@ import { SortChips } from './sort-chips';
 import { SuggestList } from './suggest-list';
 import { loadErrorText } from '@/lib/error-text';
 
-export const PAGE_LIMIT = 24;
 
 /** Danh sách đã tải phía server cho đúng URL ban đầu: hiện ngay (và cho crawler) rồi React Query tiếp quản. */
 export interface BrowseInitial {

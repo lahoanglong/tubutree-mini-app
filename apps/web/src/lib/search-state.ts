@@ -101,6 +101,8 @@ export function serializeSearchState(s: SearchState): URLSearchParams {
 
 /** Trang danh mục trên web: cùng bộ tham số với Mini App, đặt dưới /san-pham. */
 export const BROWSE_PATH = '/san-pham';
+/** Số sản phẩm mỗi trang Danh mục. Đặt ở module không 'use client': trang máy chủ import từ file client chỉ nhận một hàm giữ chỗ, không phải số. */
+export const PAGE_LIMIT = 24;
 
 export function browseHref(s: SearchState): string {
   const qs = serializeSearchState(s).toString();

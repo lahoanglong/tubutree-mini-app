@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { fetchBrands, fetchCatalog, fetchCategories } from '@tubutree/app-core/api/catalog';
-import BrowseView, { PAGE_LIMIT, type BrowseInitial } from '@/components/catalog/browse-view';
+import BrowseView, { type BrowseInitial } from '@/components/catalog/browse-view';
 import { firstParam, normalizeSearchQuery, parsePage } from '@/lib/catalog-filter';
 import { createServerHttp } from '@/lib/core-http-server';
 import { browseMetadata, browseNoindex } from '@/lib/home-seo';
-import { BROWSE_PATH, parseSearchState, serializeSearchState, toCatalogQuery } from '@/lib/search-state';
+import { BROWSE_PATH, PAGE_LIMIT, parseSearchState, serializeSearchState, toCatalogQuery } from '@/lib/search-state';
 import { PAGE_WIDE } from '@/lib/page-frame';
 
 export const revalidate = 300;
