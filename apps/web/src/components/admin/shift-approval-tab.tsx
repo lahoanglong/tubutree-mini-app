@@ -11,6 +11,7 @@ import {
   type AdminShift,
 } from '@tubutree/app-core/api/shifts';
 import { adminShiftsQuery, adminShiftTemplatesQuery } from '@tubutree/app-core/queries/shifts';
+import { invalidateInbox } from '@/lib/admin-client';
 import { coreHttp } from '@/lib/core-http';
 import { addDaysKey, dowLabel, hhmmToMin, isoToVnHHMM, keyToUtcMidnightISO, mondayKeyOf, minToHHMM, shortDayLabel, vnDateTimeISO } from '@/lib/week';
 import { Sheet } from '@/components/ui/sheet';
@@ -43,7 +44,10 @@ export function ShiftApprovalTab() {
   const [adjStart, setAdjStart] = useState('08:00');
   const [adjEnd, setAdjEnd] = useState('12:00');
   const [tplOpen, setTplOpen] = useState(false);
-  const invalidate = () => void qc.invalidateQueries({ queryKey: ['admin-shifts', mondayKey] });
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: ['admin-shifts', mondayKey] });
+    void invalidateInbox(qc);
+  };
   const fail = (e: unknown) => setMsg({ tone: 'danger', text: errText(e) });
 
   const grouped = useMemo(() => {

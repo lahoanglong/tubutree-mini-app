@@ -1,5 +1,6 @@
 'use client';
 
+import type { QueryClient } from '@tanstack/react-query';
 import { apiDownload, apiFetch } from './client-api';
 import type { GomdonAlertView } from './recycling';
 import type {
@@ -1753,6 +1754,9 @@ export interface OpsInbox {
   items: { key: InboxKey; count: number; /** Hai thẻ chuyển khoản chờ tiền: giờ còn lại của đơn chờ lâu nhất trước khi tự huỷ. */ hoursLeft?: number }[];
 }
 export const getOpsInbox = () => apiFetch<OpsInbox>('/admin/ops/inbox');
+export const OPS_INBOX_QUERY_KEY = ['admin-ops-inbox'] as const;
+/** Số trên thẻ Hôm nay và huy hiệu menu tự làm mới mỗi phút; gọi sau khi xử lý xong một việc để số giảm ngay thay vì đứng im tới phút sau. */
+export const invalidateInbox = (qc: QueryClient) => qc.invalidateQueries({ queryKey: OPS_INBOX_QUERY_KEY });
 
 // ── Chat CSKH qua cầu nối Zalo ──
 export interface SupportBridgeStatus {

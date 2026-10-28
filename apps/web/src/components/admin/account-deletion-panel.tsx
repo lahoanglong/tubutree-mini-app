@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { invalidateInbox } from '@/lib/admin-client';
 import { apiFetch } from '@/lib/client-api';
 import { formatVnd } from '@/lib/shop-client';
 import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge, chipClass, Field } from './ui';
@@ -125,10 +126,12 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
       setErr(null);
       setNote('');
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
+      void invalidateInbox(qc);
     },
     onError: (e) => {
       setErr(e instanceof Error ? e.message : 'Thao tác thất bại.');
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
+      void invalidateInbox(qc);
     },
   });
 

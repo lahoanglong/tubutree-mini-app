@@ -10,7 +10,7 @@ import {
   listPancakeCategories,
   type CategoryProduct,
 } from '@/lib/product-categories';
-import { getOpsInbox } from '@/lib/admin-client';
+import { getOpsInbox, invalidateInbox } from '@/lib/admin-client';
 import { ProductEditDrawer } from './product-edit-drawer';
 import { useConfirm } from './confirm-dialog';
 import { useDebounced } from './search-picker';
@@ -236,6 +236,7 @@ export function ProductCategoriesTab({ initialMissingImage = false }: { initialM
           onSaved={() => {
             void qc.invalidateQueries({ queryKey: LIST_KEY });
             void qc.invalidateQueries({ queryKey: ['admin-category-options'] });
+            void invalidateInbox(qc);
           }}
         />
       )}
