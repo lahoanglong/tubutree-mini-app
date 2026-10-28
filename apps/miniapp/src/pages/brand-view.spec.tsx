@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  authStatus: 'authenticated' as string,
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
   getPublicBrand: vi.fn(),
@@ -36,7 +37,7 @@ vi.mock('../services/shop-api', async (importOriginal) => ({
 }));
 vi.mock('../services/dealer-api', () => ({ getDealerMe: mocks.getDealerMe }));
 vi.mock('../store/auth', () => ({
-  useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'guest' }),
+  useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.authStatus }),
 }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
@@ -69,6 +70,7 @@ function renderPage() {
 describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
     mocks.getPublicBrand.mockResolvedValue(BRAND);
     mocks.getBrandShareToEarn.mockResolvedValue({ eligible: false });
     mocks.getBrandFollowState.mockResolvedValue({ following: false, followerCount: 12 });
@@ -234,6 +236,7 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
 describe('BrandViewPage — cấu trúc và vùng chạm (C-076, C-114)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
     mocks.getPublicBrand.mockResolvedValue(BRAND);
     mocks.getBrandShareToEarn.mockResolvedValue({ eligible: false });
     mocks.getBrandFollowState.mockResolvedValue({ following: false, followerCount: 12 });
@@ -255,6 +258,17 @@ describe('BrandViewPage — cấu trúc và vùng chạm (C-076, C-114)', () => 
     fireEvent.click(retry);
     await screen.findByRole('heading', { level: 1, name: 'Sachi' });
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  });
+
+  it('nhãn không có (404): báo "Không tìm thấy nhãn hàng", nút sang Danh mục, không Thử lại, không hỏi theo dõi/chia sẻ', async () => {
+    mocks.getPublicBrand.mockRejectedValue({ isHttpError: true, response: { status: 404 } });
+    renderPage();
+    expect(await screen.findByText('Không tìm thấy nhãn hàng')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /thử lại/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem Danh mục' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/browse', { replace: true });
+    expect(mocks.getBrandFollowState).not.toHaveBeenCalled();
+    expect(mocks.getBrandShareToEarn).not.toHaveBeenCalled();
   });
 
   it('trang đã tải có đúng một h1 là tên nhãn', async () => {
@@ -307,6 +321,7 @@ describe('BrandViewPage — cấu trúc và vùng chạm (C-076, C-114)', () => 
 describe('BrandViewPage — hàng chứng nhận cuộn ngang focus được (axe scrollable-region-focusable)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
     mocks.getPublicBrand.mockResolvedValue(BRAND);
     mocks.getBrandShareToEarn.mockResolvedValue({ eligible: false });
     mocks.getBrandFollowState.mockResolvedValue({ following: false, followerCount: 12 });

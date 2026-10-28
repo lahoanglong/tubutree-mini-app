@@ -3,12 +3,46 @@
 import { useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { LeafGlyph } from '@/components/mini/product-image';
+import { useSizedImage } from '@/lib/image-src';
+
+/** Bề rộng ảnh chính (CSS px) ở khổ máy tính: chọn bản đổi cỡ 640 (1x) và 960 (2x). */
+const MAIN_IMAGE_WIDTH = 600;
 
 // Điện thoại: ảnh tràn mép, vuông, không viền như Gallery của Mini App; từ md là khung bo góc.
 const FRAME =
   'relative aspect-square overflow-hidden rounded-sheet border border-stone-200 bg-forest-50 shadow-card max-md:rounded-none max-md:border-0 max-md:bg-[var(--color-bg-subtle)] max-md:shadow-none';
 const ARROW =
   'absolute top-1/2 z-10 flex h-11 w-11 min-h-11 -translate-y-1/2 items-center justify-center rounded-full bg-stone-0/90 text-stone-900 shadow-card transition hover:bg-stone-0 disabled:hidden max-md:hidden';
+
+/** Ảnh chính của một slide: bản đổi cỡ 1x/2x, lỗi thì thử ảnh gốc một lần rồi báo hỏng để rơi về hình lá. */
+function SlideImage({ src, alt, eager, onBroken }: { src: string; alt: string; eager: boolean; onBroken: () => void }) {
+  const { img, fallBack } = useSizedImage(src, MAIN_IMAGE_WIDTH);
+  if (!img) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={img.src}
+      srcSet={img.srcSet}
+      alt={alt}
+      className="h-full w-full object-contain"
+      width={800}
+      height={800}
+      loading={eager ? 'eager' : 'lazy'}
+      fetchPriority={eager ? 'high' : undefined}
+      decoding="async"
+      onError={() => fallBack() || onBroken()}
+    />
+  );
+}
+
+function ThumbImage({ src, onBroken }: { src: string; onBroken: () => void }) {
+  const { img, fallBack } = useSizedImage(src, 56);
+  if (!img) return null;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={img.src} alt="" className="h-full w-full object-cover" width={56} height={56} loading="lazy" decoding="async" onError={() => fallBack() || onBroken()} />
+  );
+}
 
 /**
  * Thư viện ảnh sản phẩm: vuốt ngang trên điện thoại (cuộn bám mép), mũi tên và dải ảnh nhỏ cho chuột/bàn phím.
@@ -71,17 +105,11 @@ export default function ProductGallery({ images, name }: { images: string[]; nam
               {broken.has(i) ? (
                 <LeafGlyph size={80} />
               ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <SlideImage
                   src={src}
                   alt={count > 1 ? `${name} — ảnh ${i + 1}` : name}
-                  className="h-full w-full object-contain"
-                  width={800}
-                  height={800}
-                  loading={i === 0 ? 'eager' : 'lazy'}
-                  fetchPriority={i === 0 ? 'high' : undefined}
-                  decoding="async"
-                  onError={() => markBroken(i)}
+                  eager={i === 0}
+                  onBroken={() => markBroken(i)}
                 />
               )}
             </div>
@@ -130,8 +158,7 @@ export default function ProductGallery({ images, name }: { images: string[]; nam
                 {broken.has(i) ? (
                   <LeafGlyph size={24} />
                 ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={src} alt="" className="h-full w-full object-cover" width={56} height={56} loading="lazy" decoding="async" onError={() => markBroken(i)} />
+                  <ThumbImage src={src} onBroken={() => markBroken(i)} />
                 )}
               </button>
             </li>

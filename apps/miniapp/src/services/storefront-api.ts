@@ -63,7 +63,7 @@ export const applyStorefrontTemplate = (categoryId: string) =>
   api.post('/storefront/me/apply-template', { categoryId }).then((r) => r.data as { collectionId: string; title: string; itemCount: number });
 
 export const createStorefront = () => api.post('/storefront').then((r) => r.data as StorefrontEdit);
-export const getMyStorefront = () => api.get('/storefront/me').then((r) => r.data as StorefrontEdit);
+export const getMyStorefront = () => api.get('/storefront/me').then((r) => (r.data || null) as StorefrontEdit | null);
 export const getPublicStorefront = (slug: string) => api.get(`/storefront/public/${slug}`).then((r) => r.data as Storefront);
 export const updateStorefront = (
   dto: Partial<

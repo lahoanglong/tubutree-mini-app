@@ -116,6 +116,42 @@ export function signupGate(me: { isAffiliate?: boolean; canRegister?: boolean; c
   return 'CANNOT_BE_CTV';
 }
 
+export interface SignupConditionRow {
+  text: string;
+  /** done: đã đạt (dấu tích). todo: chưa đạt (vòng tròn rỗng, kèm lối làm). info: chỉ để biết, không phải việc của chủ. */
+  state: 'done' | 'todo' | 'info';
+  hint?: string;
+  /** Chữ cho trình đọc màn hình: dấu tích/vòng tròn là hình ẩn nên đạt hay chưa phải nói bằng lời. Dòng thông tin thì không có. */
+  statusLabel?: 'Đã đạt' | 'Chưa đạt';
+}
+
+/**
+ * Bốn dòng "Điều kiện mở gian hàng" theo trạng thái thật của người xem, thay vì luôn ✓: chưa là CTV hay chưa có sản phẩm thì dòng
+ * đó chưa đạt và nói làm ở đâu. Dòng "cần Tubu duyệt" chỉ là thông tin.
+ */
+export function signupConditionRows(
+  gate: SignupGate,
+  sf: { collections: { items: unknown[] }[] } | null | undefined,
+  showReview: boolean,
+): SignupConditionRow[] {
+  const ctvDone = gate === 'READY';
+  const productCount = sf?.collections.reduce((n, c) => n + c.items.length, 0) ?? 0;
+  const [isCtv, terms, product] = SIGNUP_COPY.conditions;
+  const ctvHint = gate === 'CANNOT_BE_CTV' ? undefined : 'Đăng ký ở nút bên dưới.';
+  return [
+    // Hai dòng đầu cùng một việc (đăng ký CTV kèm đồng ý điều khoản): gợi ý chỉ nói một lần, ở dòng đầu.
+    { text: isCtv, state: ctvDone ? 'done' : 'todo', statusLabel: ctvDone ? 'Đã đạt' : 'Chưa đạt', ...(ctvDone ? {} : { hint: ctvHint }) },
+    { text: terms, state: ctvDone ? 'done' : 'todo', statusLabel: ctvDone ? 'Đã đạt' : 'Chưa đạt' },
+    {
+      text: product,
+      state: productCount > 0 ? 'done' : 'todo',
+      statusLabel: productCount > 0 ? 'Đã đạt' : 'Chưa đạt',
+      ...(productCount > 0 ? {} : { hint: 'Bạn chọn ở bước 3.' }),
+    },
+    ...(showReview ? [{ text: SIGNUP_COPY.reviewCondition, state: 'info' as const }] : []),
+  ];
+}
+
 /** Gian hàng này còn phải qua Tubu duyệt trước khi khách thấy? API trả `needsApproval`; API cũ thì suy từ `approved` (chưa duyệt = cần). */
 export function storefrontNeedsReview(sf: { needsApproval?: boolean; approved?: boolean }): boolean {
   return sf.needsApproval ?? sf.approved !== true;

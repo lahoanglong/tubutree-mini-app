@@ -10,7 +10,7 @@ import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
 import { couponsQuery } from '@tubutree/app-core/queries/loyalty';
 import { Badge } from '@/components/ui/badge';
 import { usePdpSelection } from '@/components/pdp-selection';
-import { tierEarnNote, tierEarnOf } from '@tubutree/app-core/points-earn-tier';
+import { tierEarnOf } from '@tubutree/app-core/points-earn-tier';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useCartKey } from '@/lib/cart-key';
@@ -63,7 +63,7 @@ export function PdpPointsEarn({ product }: { product: PointsEarnProduct }) {
   return (
     <p data-testid="pdp-points-earn" className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-[var(--color-text-brand)]">
       <Leaf className="h-[15px] w-[15px] shrink-0" aria-hidden="true" />
-      <span>{preview === 'generic' ? pointsEarnText.generic : pointsEarnText.line(preview.points, preview.valueVnd, tierEarnNote(tier))}</span>
+      <span>{preview === 'generic' ? pointsEarnText.generic : pointsEarnText.line(preview.points)}</span>
     </p>
   );
 }

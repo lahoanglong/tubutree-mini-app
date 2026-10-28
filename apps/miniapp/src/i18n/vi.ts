@@ -24,7 +24,7 @@ export const vi = {
 
   errors: {
     offline: 'Có vẻ mất mạng. Kiểm tra kết nối rồi thử lại nhé.',
-    network: 'Chưa tải được nội dung, thử lại nhé.',
+    network: 'Chưa kết nối được tới Tubu Tree. Kiểm tra mạng rồi thử lại nhé.',
     timeout: 'Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại rồi thử lại nhé.',
     loadTimeout: 'Tải chậm quá, thử lại nhé.',
     server: 'Máy chủ đang bận, thử lại nhé.',
@@ -93,6 +93,9 @@ export const vi = {
       voucherPercent: (pct: number) => `Mã giảm giá chào mừng ${pct}%`,
       voucherFreeship: 'Mã miễn phí giao hàng chào mừng',
       voucherMinOrder: (min: string) => `Cho đơn từ ${min}`,
+      voucherShort: (what: string) => `Mã ${what}`,
+      expand: 'Xem quyền lợi',
+      collapse: 'Thu gọn',
       voucherExpires: (date: string) => `Dùng đến ${date}`,
       cta: 'Chọn sản phẩm',
       benefitsTitle: 'Mua trực tiếp tại Tubu Tree',
@@ -143,9 +146,8 @@ export const vi = {
     viewCart: 'Xem giỏ hàng',
     chatWithShop: 'Chat với Tubu Tree',
     chatAbout: (name: string) => `Mình muốn hỏi về sản phẩm: ${name}`,
-    // "Tối đa": giảm giá/mã/điểm dùng ở bước thanh toán làm giá trị hàng tính điểm thấp đi, số này là trước các khoản đó.
-    pointsEarn: (points: number, valueVnd: number, tierNote?: string | null) =>
-      `Nhận tối đa ${formatNumber(points)} Điểm Xanh${tierNote ? ` · ${tierNote}` : ''} (≈${formatVnd(valueVnd)}) khi đơn giao thành công`,
+    // "~" vì giảm giá/mã/điểm dùng ở bước thanh toán làm giá trị hàng tính điểm thấp đi, số này là trước các khoản đó.
+    pointsEarn: (points: number) => `Nhận ~${formatNumber(points)} Điểm Xanh`,
     pointsEarnGeneric: 'Nhận Điểm Xanh khi đơn giao thành công',
   },
 
@@ -298,7 +300,7 @@ export const vi = {
     total: 'Tổng thanh toán',
     pointsLabel: 'Điểm Xanh sẽ nhận',
     pointsValue: (n: number) => `+${formatNumber(n)} điểm`,
-    pointsComing: (n: number) => `${formatNumber(n)} Điểm Xanh sẽ về tay khi đơn giao thành công`,
+    pointsValueWhen: (n: number) => `+${formatNumber(n)} điểm, về khi đơn giao xong`,
     etaLabel: 'Giao dự kiến',
     nextTitle: 'Tiếp theo',
     steps: [
@@ -339,6 +341,7 @@ export const vi = {
     cancelYes: 'Huỷ đơn',
     cancelled: 'Đã huỷ đơn cho bạn',
     products: 'Sản phẩm',
+    note: 'Ghi chú',
     paymentLabel: 'Thanh toán',
     timeline: 'Hành trình đơn hàng',
     repurchase: 'Mua lại đơn này',
@@ -414,7 +417,9 @@ export const vi = {
   } as Record<string, string>,
 
   browse: {
-    title: 'Khám phá',
+    title: 'Danh mục',
+    categoryChips: 'Đổi danh mục',
+    viewBrand: (brand: string) => `Xem trang nhãn hàng ${brand}`,
     searchPlaceholder: 'Tìm sản phẩm...',
     searchLabel: 'Tìm sản phẩm',
     clearSearch: 'Xoá từ khoá',
@@ -475,7 +480,8 @@ export const vi = {
       categories: 'Danh mục',
       products: 'Sản phẩm',
       searchFor: (q: string) => `Tìm “${q}”`,
-      none: 'Chưa có gợi ý — nhấn Tìm để xem kết quả',
+      none: 'Chưa có gợi ý. Chạm dòng “Tìm” ở trên để xem kết quả.',
+      failed: 'Không tải được gợi ý',
     },
   },
 
@@ -606,6 +612,7 @@ export const vi = {
     webRefreshNote: 'Gian hàng cập nhật sau vài phút khi bạn đổi nội dung.',
     addCover: 'Thêm ảnh bìa',
     viewProducts: 'Xem sản phẩm',
+    moreAtTubu: 'Xem thêm ở Tubu Tree',
     emptyHeading: 'Gian hàng chưa có sản phẩm nào để xem',
     emptyBody: 'Chủ gian hàng đang bổ sung sản phẩm. Bạn xem thử các sản phẩm đang bán trên Tubu Tree nhé.',
     emptyOwnerBody: 'Gian hàng của bạn chưa có sản phẩm nào khách xem được. Thêm sản phẩm để khách có gì mà mua.',

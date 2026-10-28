@@ -39,6 +39,7 @@ Bạn dùng: web **Quản trị** (`app.tubutree.com/admin`), Mini App (**Cá nh
 | Số ngày khách được đổi/trả (mặc định 7) | `returns.window_days` |
 | Giờ chờ thanh toán chuyển khoản trước khi tự huỷ (mặc định 24) | `orders.pending_payment_ttl_hours` |
 | Số ngày giữ hoa hồng CTV (mặc định 10), ngưỡng khấu trừ thuế TNCN theo tổng tháng (mặc định 5.000.000đ) | `affiliate.hold_days`, `affiliate.pit_withhold_threshold` |
+| Hoa hồng CTV đã duyệt tự vào Ví Tubu sau mỗi lượt duyệt (mặc định bật; tắt thì CTV tự bấm Chuyển vào Ví) | `affiliate.auto_wallet_transfer_enabled` |
 | Số ngày giữ tiền đối tác trước đối soát (mặc định 7) | `merchant.settlement_hold_days` |
 | Hotline hiển thị cho khách | `support.hotline` |
 | Giờ trực hiển thị cho khách (cũng là giờ chat, dạng `{"start":"08:00","end":"21:00"}`) | `chat.hours` |

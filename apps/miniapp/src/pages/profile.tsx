@@ -1,14 +1,16 @@
 import { ctvMenuEntry } from '@tubutree/app-core/storefront-signup';
-import { Avatar, Page, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import {
-  Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Pencil, Bell, Store, Settings, Info, ChevronRight, Copy, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, BadgeDollarSign, type LucideIcon,
+  Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Pencil, Bell, Store, Settings, Info, ChevronRight, Copy, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, BadgeDollarSign, CreditCard, Package, Truck, PackageCheck, Repeat, type LucideIcon,
 } from 'lucide-react';
+import { canSeeAcademy, orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { CASHBACK_ENABLED } from '../utils/features';
+import { CASHBACK_ENABLED, SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
 import { useAuthStore } from '../store/auth';
 import { getCoupons, getLoyalty, getNotifications, getReferral, getWallet } from '../services/account-api';
+import { ProfileAvatar } from '../components/account/profile-avatar';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -36,7 +38,7 @@ import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
 import { pointsSummary } from '../utils/points-lots';
-import { WEB_BASE_URL } from '../utils/web-base-url';
+import { miniAppLink } from '../utils/miniapp-link';
 
 interface MenuItem {
   Icon: LucideIcon;
@@ -77,13 +79,21 @@ export const MENU: { group: string; items: MenuItem[] }[] = [
   },
 ];
 
+const ORDER_ROW_ICON: Record<string, LucideIcon> = {
+  pending_payment: CreditCard,
+  processing: Package,
+  shipping: Truck,
+  delivered: PackageCheck,
+  subscriptions: Repeat,
+};
+
 const ORDER_ROW_TARGETS = ORDER_STATUS_ROW.filter((r) => r.counted && r.key !== 'subscriptions');
 
 export default function ProfilePage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
   const shareWithFallback = useShareWithFallback();
-  const { user, status, logout } = useAuthStore();
+  const { user, status } = useAuthStore();
   const phase = useAuthPhase();
   const authed = status === 'authenticated';
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
@@ -92,7 +102,9 @@ export default function ProfilePage() {
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const referralQ = useQuery({ queryKey: ['referral'], queryFn: getReferral, enabled: authed });
-  const subsQ = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions, enabled: authed });
+  // Mini App tạm không bán giao định kỳ nên hàng đơn bỏ ô Định kỳ khi cờ tắt; web vẫn có ô này.
+  const orderRow = SUBSCRIPTIONS_IN_MINIAPP ? ORDER_STATUS_ROW : ORDER_STATUS_ROW.filter((r) => r.key !== 'subscriptions');
+  const subsQ = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions, enabled: authed && SUBSCRIPTIONS_IN_MINIAPP });
   const orderCounts = useQueries({
     queries: ORDER_ROW_TARGETS.map((r) => {
       const filter = ORDERS_TABS.find((t) => t.key === r.key)?.filter ?? {};
@@ -135,7 +147,7 @@ export default function ProfilePage() {
   const baseMenu = MENU.map((s) => ({
     ...s,
     items: s.items
-      .filter((it) => (aiEnabled || it.to !== '/ai-advisor') && (chatEnabled || it.to !== '/chat'))
+      .filter((it) => (aiEnabled || it.to !== '/ai-advisor') && (chatEnabled || it.to !== '/chat') && (canSeeAcademy(user?.role) || it.to !== '/academy'))
       .map((it) => {
         if (it.to === '/dealer') return dealerItem;
         if (it.to === '/affiliate') return ctvEntry ? { ...it, label: ctvEntry.label, hint: ctvEntry.hint } : null;
@@ -211,8 +223,15 @@ export default function ProfilePage() {
     haptic('light');
     void shareWithFallback(
       { title: 'Tubu Tree — Trồng cây, nhận quà', description: `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé!`, path: `/?ref=${code}` },
-      `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé: ${WEB_BASE_URL}/?ref=${code}`,
+      `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé: ${miniAppLink(`/?ref=${code}`)}`,
     );
+  };
+
+  const countsFailed = orderCounts.some((q) => q.isError) || (SUBSCRIPTIONS_IN_MINIAPP && subsQ.isError && !subsQ.data);
+  const reloadCounts = () => {
+    orderCounts.forEach((q) => void q.refetch());
+    // refetch() vẫn gọi API khi query đang tắt (enabled: false), nên phải tự kiểm cờ.
+    if (SUBSCRIPTIONS_IN_MINIAPP) void subsQ.refetch();
   };
 
   const countFor = (key: string): number | null => {
@@ -230,8 +249,26 @@ export default function ProfilePage() {
           background: 'linear-gradient(135deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))',
           color: 'var(--color-text-inverse)',
           padding: '16px 16px 28px',
+          position: 'relative',
         }}
       >
+        {chatEnabled && (
+          <button
+            type="button"
+            aria-label={chatUnread ? 'Chat với Tubu Tree, có tin mới' : 'Chat với Tubu Tree'}
+            className="tubu-press"
+            onClick={() => {
+              haptic('light');
+              navigate('/chat');
+            }}
+            style={{ position: 'absolute', top: 8, right: 8, width: 44, height: 44, border: 'none', borderRadius: 'var(--radius-pill)', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+          >
+            <Icon icon={MessageCircle} size="lg" tone="inverse" />
+            {chatUnread && (
+              <span data-testid="profile-chat-dot" aria-hidden style={{ position: 'absolute', top: 8, right: 8, width: 10, height: 10, borderRadius: 'var(--radius-pill)', background: 'var(--color-action-danger-bg)', border: '1.5px solid var(--color-action-primary-bg)' }} />
+            )}
+          </button>
+        )}
         <div
           role="button"
           {...rowKeyboardProps()}
@@ -240,9 +277,9 @@ export default function ProfilePage() {
             haptic('light');
             navigate('/edit-profile');
           }}
-          style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 44 }}
+          style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 44, paddingRight: chatEnabled ? 44 : 0 }}
         >
-          <Avatar size={56} src={user.avatarUrl ?? undefined} />
+          <ProfileAvatar size={56} name={user.fullName} src={user.avatarUrl} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <Heading variant="title-md" as="div" tone="inverse" style={{ lineHeight: 1.2 }}>
               {user.fullName ?? 'Khách Tubu'}
@@ -277,6 +314,7 @@ export default function ProfilePage() {
               onClick={() => {
                 haptic('light');
                 void loyaltyQ.refetch();
+                reloadCounts();
               }}
               style={{ minHeight: 44, margin: '-12px -6px', padding: '0 6px', border: 'none', background: 'transparent', color: 'var(--color-text-inverse)', fontFamily: 'inherit', fontSize: 'var(--type-caption-size)', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
             >
@@ -286,7 +324,7 @@ export default function ProfilePage() {
         )}
       </div>
 
-      <div style={{ padding: '0 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: -20 }}>
+      <div style={{ padding: '0 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: -20, position: 'relative' }}>
         <Stat label={homeCopy.profile.statPoints} value={formatPoints(pointsTotal)} onClick={() => navigate('/loyalty')} />
         <Stat label={homeCopy.profile.statWallet} value={formatVnd(walletQ.data?.walletBalance ?? user.walletBalance)} onClick={() => navigate('/wallet', { state: { from: '/profile' } })} />
         <Stat label={homeCopy.profile.statCoupons} value={couponsQ.data ? homeCopy.profile.couponsCount(couponsQ.data.length) : '—'} onClick={() => navigate('/offers?section=coupons')} />
@@ -316,8 +354,8 @@ export default function ProfilePage() {
               <Icon icon={ChevronRight} size="sm" tone="brand" />
             </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 4 }}>
-            {ORDER_STATUS_ROW.map((r) => {
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${orderRow.length}, minmax(0, 1fr))`, gap: 4 }}>
+            {orderRow.map((r) => {
               const n = r.counted ? countFor(r.key) : null;
               return (
                 <button
@@ -329,18 +367,37 @@ export default function ProfilePage() {
                     haptic('light');
                     navigate(`/orders?tab=${r.key}`);
                   }}
-                  style={{ position: 'relative', minHeight: 56, padding: '4px 0', border: 'none', background: 'none', fontFamily: 'inherit', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}
+                  style={{ minHeight: 64, padding: '4px 0', border: 'none', background: 'none', fontFamily: 'inherit', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 6 }}
                 >
-                  <Text variant="price-md" as="div" tone={n ? 'brand' : 'tertiary'} style={{ fontVariantNumeric: 'tabular-nums' }}>
-                    {n ?? '·'}
-                  </Text>
-                  <Text variant="caption" tone="secondary" as="div" style={{ textAlign: 'center', lineHeight: 1.2 }}>
-                    {r.label}
+                  <span style={{ position: 'relative', display: 'inline-flex', marginTop: 4 }}>
+                    <Icon icon={ORDER_ROW_ICON[r.key] ?? Package} size="lg" tone="brand" />
+                    {n != null && n > 0 && (
+                      <span
+                        data-testid="order-count-badge"
+                        aria-hidden
+                        style={{ position: 'absolute', top: -6, right: -10, minWidth: 16, height: 16, padding: '0 4px', boxSizing: 'border-box', borderRadius: 'var(--radius-pill)', background: 'var(--color-action-primary-bg)', color: 'var(--color-action-primary-fg)', fontSize: 12, fontWeight: 700, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontVariantNumeric: 'tabular-nums' }}
+                      >
+                        {n > 99 ? '99+' : n}
+                      </span>
+                    )}
+                  </span>
+                  <Text variant="caption" tone="secondary" as="div" style={{ textAlign: 'center', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+                    {orderRowLabel(r.key, r.label)}
                   </Text>
                 </button>
               );
             })}
           </div>
+          {countsFailed && (
+            <div role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 4 }}>
+              <Text variant="caption" tone="secondary">
+                {profileCopy.ordersFailed}
+              </Text>
+              <Button variant="ghost" size="md" onPress={reloadCounts}>
+                {homeCopy.member.retry}
+              </Button>
+            </div>
+          )}
         </Card>
       </section>
 
@@ -426,12 +483,6 @@ export default function ProfilePage() {
           </Card>
         </div>
       ))}
-
-      <div style={{ padding: 16 }}>
-        <Button fullWidth variant="secondary" onPress={() => void logout()}>
-          Đăng xuất
-        </Button>
-      </div>
     </Page>
   );
 }

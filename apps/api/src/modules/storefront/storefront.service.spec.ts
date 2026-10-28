@@ -176,6 +176,15 @@ describe('StorefrontService.getMine', () => {
     const svc = new StorefrontService(prisma, config, affiliate);
     await expect(svc.getMine('u1')).rejects.toThrow();
   });
+
+  it('getMineOrNull: chưa có gian hàng thì null, lỗi khác vẫn ném', async () => {
+    const prisma = makePrisma();
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValueOnce(null);
+    const svc = new StorefrontService(prisma, config, affiliate);
+    await expect(svc.getMineOrNull('u1')).resolves.toBeNull();
+    (prisma.storefront.findFirst as jest.Mock).mockRejectedValueOnce(new Error('db down'));
+    await expect(svc.getMineOrNull('u1')).rejects.toThrow('db down');
+  });
 });
 
 describe('StorefrontService.updateMine/publishMine', () => {

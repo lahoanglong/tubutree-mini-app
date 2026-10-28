@@ -205,6 +205,14 @@ describe('đăng ký gian hàng 4 bước (404 = chưa có gian hàng)', () => {
     expect(hasBtn('Bắt đầu mở gian hàng')).toBe(true);
   });
 
+  it('điều kiện đạt/chưa đạt có chữ cho trình đọc màn hình (dấu tích là hình ẩn)', async () => {
+    const { container } = mount();
+    await flush();
+    const marks = Array.from(container.querySelectorAll('li .sr-only')).map((e) => e.textContent);
+    expect(marks.length).toBeGreaterThanOrEqual(3);
+    expect(marks.slice(0, 2)).toEqual(['Đã đạt: ', 'Đã đạt: ']);
+  });
+
   it('bấm Bắt đầu: tạo gian hàng rồi sang bước thông tin', async () => {
     mount();
     await flush();

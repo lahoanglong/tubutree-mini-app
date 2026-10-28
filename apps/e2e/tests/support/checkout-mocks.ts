@@ -66,6 +66,7 @@ export const CHECKOUT_QUOTE: CheckoutQuote = {
   comboDiscount: 0,
   pointsUsed: 0,
   pointsDiscount: 0,
+  pointsMax: 1000,
   shippingFee: 19000,
   total: 149000,
   pointsEarned: 14,

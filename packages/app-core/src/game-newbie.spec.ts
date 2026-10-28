@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { extraPlotsVisible, gameNewbieCopy, missingDrops, missionTarget, primaryWaterAction, tutorialState } from './game-newbie';
+import { extraPlotsVisible, gameNewbieCopy, missingDrops, missionTarget, tutorialState } from './game-newbie';
+import { primaryWaterAction } from './game-primary-action';
 
 const BASE = { totalSeeds: 0, checkedInToday: false, dewToday: false, dailyLoginSeeds: 15, dewSeeds: 15, firstCheckinBonus: 0 };
 
@@ -11,11 +12,25 @@ describe('primaryWaterAction', () => {
     expect(primaryWaterAction(BASE)).toEqual({ kind: 'claim', first: false, withDew: true, gain: 30 });
     expect(primaryWaterAction({ ...BASE, dewToday: true })).toEqual({ kind: 'claim', first: false, withDew: false, gain: 15 });
   });
+  it('xong nước nhưng Điểm Xanh còn thiếu: nút chính nhận nốt (không còn nút điểm danh thứ hai)', () => {
+    expect(primaryWaterAction({ ...BASE, checkedInToday: true, pointsPending: true, totalSeeds: 65 })).toEqual({ kind: 'claim', first: false, withDew: false, gain: null, pointsOnly: true });
+    expect(primaryWaterAction({ ...BASE, checkedInToday: true, pointsPending: false, totalSeeds: 65 })).toEqual({ kind: 'water', drops: 65 });
+    expect(primaryWaterAction({ ...BASE, harvestReady: true, checkedInToday: true, pointsPending: true })).toEqual({ kind: 'harvest' });
+  });
   it('bình đầy: gain null (không hứa +N💧); gần đầy: cắt theo chỗ trống; bình còn rộng: giữ nguyên', () => {
     expect(primaryWaterAction({ ...BASE, totalSeeds: 500, tankCapacity: 500 })).toMatchObject({ kind: 'claim', gain: null });
     expect(primaryWaterAction({ ...BASE, totalSeeds: 495, tankCapacity: 500 })).toMatchObject({ kind: 'claim', gain: 5 });
     expect(primaryWaterAction({ ...BASE, totalSeeds: 0, tankCapacity: 500 })).toMatchObject({ kind: 'claim', gain: 30 });
     expect(primaryWaterAction({ ...BASE, totalSeeds: 700, tankCapacity: 500 })).toMatchObject({ kind: 'claim', gain: null });
+  });
+  it('checkInSeeds (todayWater của trạng thái gộp) thay số suy từ hồ sơ: ngày 3 = 15 (+15 sương), ngày 7 = 30, quà đầu đã nằm sẵn trong số', () => {
+    expect(primaryWaterAction({ ...BASE, checkInSeeds: 15 })).toMatchObject({ kind: 'claim', withDew: true, gain: 30 });
+    expect(primaryWaterAction({ ...BASE, checkInSeeds: 30, dewToday: true })).toMatchObject({ kind: 'claim', withDew: false, gain: 30 });
+    expect(primaryWaterAction({ ...BASE, checkInSeeds: 65, firstCheckinBonus: 50 })).toMatchObject({ kind: 'claim', first: true, gain: 65 });
+  });
+  it('checkInSeeds khi bình gần đầy: số API đã cắt theo chỗ trống, không vượt chỗ trống khi gộp sương; bình đầy thì không hứa', () => {
+    expect(primaryWaterAction({ ...BASE, totalSeeds: 495, tankCapacity: 500, checkInSeeds: 5 })).toMatchObject({ kind: 'claim', gain: 5 });
+    expect(primaryWaterAction({ ...BASE, totalSeeds: 500, tankCapacity: 500, checkInSeeds: 0 })).toMatchObject({ kind: 'claim', gain: null });
   });
   it('API cũ không có số: gain null', () => {
     expect(primaryWaterAction({ ...BASE, dailyLoginSeeds: undefined })).toMatchObject({ kind: 'claim', gain: null });
@@ -86,3 +101,4 @@ describe('missionTarget', () => {
     expect(missionTarget('toString')).toBeNull();
   });
 });
+

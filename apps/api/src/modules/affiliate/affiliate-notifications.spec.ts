@@ -11,14 +11,18 @@ import type { RewardPointsService } from '../wallet/reward-points.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 
-const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
 const noop = {} as never;
+
+// Cờ tự chuyển vào Ví tắt: các ca dưới đây kiểm đường thông báo "đã duyệt" như trước khi có tự chuyển (ca tự chuyển ở affiliate-auto-wallet.spec.ts).
+const configAutoOff = {
+  get: async <T>(k: string, fb?: T): Promise<T> => (k === 'affiliate.auto_wallet_transfer_enabled' ? false : fb) as T,
+} as unknown as SystemConfigService;
 
 function build(prismaParts: Record<string, unknown>, withNotifications = true) {
   const notify = jest.fn().mockResolvedValue(undefined);
   const svc = new AffiliateService(
     prismaParts as unknown as PrismaService,
-    config,
+    configAutoOff,
     noop as PricingService,
     noop as PancakeOrderService,
     noop as RewardPointsService,

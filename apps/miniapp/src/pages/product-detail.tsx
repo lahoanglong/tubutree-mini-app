@@ -19,11 +19,12 @@ import { createGroupBuy } from '../services/groupbuy-api';
 import { groupBuyPitch } from '../utils/group-buy-copy';
 import { useAuthStore } from '../store/auth';
 import { useShareWithFallback } from '../components/share-sheet';
-import { WEB_BASE_URL } from '../utils/web-base-url';
+import { miniAppLink } from '../utils/miniapp-link';
 import { withReferral } from '../utils/share-link';
 import { ReviewsSection, Stars } from '../components/reviews-section';
 import { WishlistHeart } from '../components/wishlist-heart';
 import { SubscribeSheet } from '../components/subscribe-sheet';
+import { VariationSheet, type VariationSheetMode } from '../components/variation-sheet';
 import { fetchReviews } from '../services/shop-api';
 import { tilePricing } from '../components/catalog/catalog-pricing';
 import { trackEvent } from '../services/analytics';
@@ -44,9 +45,11 @@ import { useCountdown } from '../hooks/use-countdown';
 import { serverNow } from '../utils/server-clock';
 import { cardPricing, defaultVariationFor, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
+import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
+import { SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 import { getAffiliateMe } from '../services/affiliate-api';
 import { ContentKitSheet } from '../components/content-kit-sheet';
 import { CartBadge } from '../components/ui/cart-badge';
@@ -56,7 +59,6 @@ import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { SectionTitle } from '../components/ui/section-title';
 import { PriceTag } from '../components/ui/price-tag';
 import { PointsEarnLine } from '../components/product/points-earn-line';
-import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
 import { Badge } from '../components/ui/badge';
 import { Icon } from '../components/ui/icon';
 import { ProductTile } from '../components/ui/product-tile';
@@ -65,6 +67,7 @@ import { ScrollRow } from '../components/ui/scroll-row';
 import { useScrollHints } from '../components/ui/use-scroll-hints';
 import { cartKey, useCartKey } from '../services/cart-key';
 import { LeafGlyph } from '../components/ui/product-image';
+import { useSizedImage } from '../utils/image-src';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
@@ -112,10 +115,13 @@ export default function ProductDetailPage() {
   const location = useLocation();
   const navState = location.state as { variationId?: string; pinnedVariationId?: string; listSource?: string; reviewOrderId?: string } | null;
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Bảng đóng có hiệu ứng ~200ms nên nút xác nhận còn bấm được: khoá đồng bộ để bấm đúp không thêm giỏ hai lần hay gọi login hai lần.
+  const confirming = useRef(false);
   const autoPick = useRef<{ slug: string; id: string | null } | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [badgeBounce, setBadgeBounce] = useState(false);
   const [showSubscribe, setShowSubscribe] = useState(false);
+  const [sheetMode, setSheetMode] = useState<VariationSheetMode | null>(null);
   const [showContentKit, setShowContentKit] = useState(false);
   // "Bộ nội dung bán hàng" trước đây CHỈ mở được từ trình dựng gian hàng, tức CTV phải thêm
   // sản phẩm vào gian hàng mới lấy được bài mẫu — trong khi lúc cần là lúc đang xem sản phẩm
@@ -228,7 +234,7 @@ export default function ProductDetailPage() {
       queryClient.setQueryData(cartKey(), updatedCart);
       haptic('medium');
       setBadgeBounce(true);
-      openSnackbar({ text: vi.product.added, type: 'success', duration: 2000 });
+      openSnackbar({ text: vi.product.added, type: 'success', duration: 2000, position: 'top' });
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -309,7 +315,30 @@ export default function ProductDetailPage() {
   const fromStore = merchant ?? unavailable;
   const retailOnly = isRetailOnly(p);
 
+  const confirmVariation = async (variation: VariationDetail, qty: number) => {
+    if (!sheetMode || confirming.current || addMutation.isPending || buyNowMutation.isPending) return;
+    confirming.current = true;
+    try {
+      if (status !== 'authenticated') {
+        await login();
+        if (useAuthStore.getState().status !== 'authenticated') return;
+      }
+      const mode = sheetMode;
+      setSheetMode(null);
+      setSelectedId(variation.id);
+      setQuantity(qty);
+      if (mode === 'buy') buyNowMutation.mutate({ variation, qty });
+      else addMutation.mutate({ variation, qty });
+    } finally {
+      confirming.current = false;
+    }
+  };
+
   const handleAdd = async () => {
+    if (needsVariationPicker(variations)) {
+      setSheetMode('add');
+      return;
+    }
     if (status !== 'authenticated') {
       await login();
       if (useAuthStore.getState().status !== 'authenticated') return;
@@ -322,6 +351,10 @@ export default function ProductDetailPage() {
   };
 
   const handleBuyNow = async () => {
+    if (needsVariationPicker(variations)) {
+      setSheetMode('buy');
+      return;
+    }
     if (status !== 'authenticated') {
       await login();
       if (useAuthStore.getState().status !== 'authenticated') return;
@@ -342,7 +375,7 @@ export default function ProductDetailPage() {
         thumbnail: p.thumbnail ?? undefined,
         path: withReferral(`/product/${p.slug}`, code),
       },
-      withReferral(`${WEB_BASE_URL}/san-pham/${p.slug}`, code),
+      withReferral(miniAppLink(`/product/${p.slug}`), code),
     );
   };
 
@@ -416,7 +449,6 @@ export default function ProductDetailPage() {
         </Box>
 
         <PointsEarnLine goods={price * quantity} authStatus={status} tierId={user?.tierId} />
-        <PointsBoostStrip placement="product" />
 
         {/* Giờ vàng cho phân loại đang chọn — badge % + đếm ngược êm + đã bán bao nhiêu%. */}
         {flashItem && priceView.isFlash && (
@@ -580,7 +612,7 @@ export default function ProductDetailPage() {
           </ScrollRow>
         )}
 
-        {selected && inStock && !retailOnly && (
+        {SUBSCRIPTIONS_IN_MINIAPP && selected && inStock && !retailOnly && (
           <Box
             role="button"
             {...rowKeyboardProps()}
@@ -826,6 +858,22 @@ export default function ProductDetailPage() {
         />
       )}
 
+      {needsVariationPicker(variations) && (
+        <VariationSheet
+          open={sheetMode !== null}
+          onClose={() => setSheetMode(null)}
+          mode={sheetMode ?? 'add'}
+          productName={p.name}
+          thumbnail={p.thumbnail}
+          variations={variations}
+          flash={flashList}
+          initialId={selected?.id ?? null}
+          initialQty={quantity}
+          busy={addMutation.isPending || buyNowMutation.isPending}
+          onConfirm={(v, qty) => confirmVariation(v as VariationDetail, qty)}
+        />
+      )}
+
       {slug && (
         <ContentKitSheet
           visible={showContentKit}
@@ -970,18 +1018,22 @@ const BUY_NOW_LINE: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
+/** Bề rộng ảnh chi tiết ở khổ điện thoại (CSS px): chọn bản đổi cỡ 640 (1x) và 960 (2x). */
+const GALLERY_IMAGE_WIDTH = 480;
+
 /** Một ảnh của carousel: tải lỗi thì rơi về hình lá chung, giữ nguyên ô vuông và vị trí cuộn. */
 export function GallerySlide({ src, alt, eager }: { src: string; alt: string; eager: boolean }) {
   const [failed, setFailed] = useState(false);
+  const { img, fallBack } = useSizedImage(src, GALLERY_IMAGE_WIDTH);
   const frame = { width: '100%', aspectRatio: '1 / 1', flex: '0 0 100%', scrollSnapAlign: 'center', display: 'block' } as const;
-  if (failed) {
+  if (failed || !img) {
     return (
       <div data-testid="gallery-fallback" style={{ ...frame, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-subtle)' }}>
         <LeafGlyph size={72} />
       </div>
     );
   }
-  return <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} onError={() => setFailed(true)} style={{ ...frame, objectFit: 'cover' }} />;
+  return <img src={img.src} srcSet={img.srcSet} alt={alt} width={GALLERY_IMAGE_WIDTH} height={GALLERY_IMAGE_WIDTH} loading={eager ? 'eager' : 'lazy'} decoding={eager ? 'auto' : 'async'} onError={() => fallBack() || setFailed(true)} style={{ ...frame, objectFit: 'cover' }} />;
 }
 
 /** Carousel ảnh scroll-snap + dots — không cần lib ngoài. */

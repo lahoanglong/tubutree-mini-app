@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shippingEtaLabel } from './shipping-eta';
+import { orderDeliveryEtaLabel, shippingEtaLabel } from './shipping-eta';
 
 describe('shippingEtaLabel', () => {
   const now = new Date(2026, 8, 30, 12, 0, 0);
@@ -20,5 +20,58 @@ describe('shippingEtaLabel', () => {
     const jan31 = new Date(2026, 0, 31, 12, 0, 0);
     expect(shippingEtaLabel({ minDays: 1, maxDays: 1 }, jan31)).toBe('01/02');
     expect(shippingEtaLabel({ minDays: 1, maxDays: 30 }, jan31)).toBe('01/02 – 02/03');
+  });
+});
+
+describe('orderDeliveryEtaLabel', () => {
+  const eta = { minDays: 2, maxDays: 4 };
+  const order = (status: string, extra: Record<string, unknown> = {}) => ({
+    status,
+    createdAt: '2026-10-28T01:39:00.000Z',
+    ...extra,
+  });
+  const now = new Date('2026-10-28T03:00:00.000Z');
+  it('tính từ giờ đặt (cùng gốc màn thanh toán), không từ giờ xác nhận', () => {
+    expect(
+      orderDeliveryEtaLabel(eta, order('SHIPPING', { statusTimes: { CONFIRMED: '2026-10-28T18:00:00.000Z' } }), now),
+    ).toBe('30/10 – 01/11');
+  });
+  it('đặt 23:00 giờ VN vẫn tính theo ngày VN', () => {
+    expect(orderDeliveryEtaLabel(eta, order('CONFIRMED', { createdAt: '2026-10-27T16:30:00.000Z' }), now)).toBe('29/10 – 31/10');
+    expect(orderDeliveryEtaLabel(eta, order('CONFIRMED', { createdAt: '2026-10-27T17:30:00.000Z' }), now)).toBe('30/10 – 01/11');
+  });
+  it('ngày muộn nhất đã qua theo ngày VN thì ẩn; đúng hôm nay vẫn hiện', () => {
+    const old = order('SHIPPING', { createdAt: '2026-10-15T03:00:00.000Z' });
+    expect(orderDeliveryEtaLabel(eta, old, now)).toBeNull();
+    expect(orderDeliveryEtaLabel(eta, order('SHIPPING', { createdAt: '2026-10-24T03:00:00.000Z' }), now)).toBe('28/10');
+    expect(orderDeliveryEtaLabel(eta, order('SHIPPING', { createdAt: '2026-10-24T03:00:00.000Z' }), new Date('2026-10-28T17:30:00.000Z'))).toBeNull();
+  });
+  it('đơn có món đặt trước thì ẩn', () => {
+    expect(orderDeliveryEtaLabel(eta, order('CONFIRMED', { items: [{ backorderedQty: 0 }, { backorderedQty: 2 }] }), now)).toBeNull();
+    expect(orderDeliveryEtaLabel(eta, order('CONFIRMED', { items: [{ backorderedQty: 0 }] }), now)).toBe('30/10 – 01/11');
+  });
+  it('đơn của gian hàng đối tác thì ẩn', () => {
+    expect(orderDeliveryEtaLabel(eta, order('CONFIRMED', { fulfilment: { kind: 'MERCHANT' } }), now)).toBeNull();
+    expect(orderDeliveryEtaLabel(eta, order('CONFIRMED', { fulfilment: { kind: 'TUBU' } }), now)).toBe('30/10 – 01/11');
+  });
+  it('đơn Tubu xử lý tay thì ẩn', () => {
+    expect(orderDeliveryEtaLabel(eta, order('CONFIRMED', { manualHandling: true }), now)).toBeNull();
+    expect(orderDeliveryEtaLabel(eta, order('CONFIRMED', { manualHandling: false }), now)).toBe('30/10 – 01/11');
+  });
+  it('ngày sớm nhất không lùi về quá khứ: kẹp về hôm nay (giờ VN)', () => {
+    const late = order('CONFIRMED', { createdAt: '2026-10-25T03:00:00.000Z' });
+    expect(orderDeliveryEtaLabel(eta, late, now)).toBe('28/10 – 29/10');
+  });
+  it('cấu hình trống thì ẩn, không bịa ngày', () => {
+    expect(orderDeliveryEtaLabel(null, order('CONFIRMED'), now)).toBeNull();
+    expect(orderDeliveryEtaLabel(undefined, order('CONFIRMED'), now)).toBeNull();
+  });
+  it('chưa xác nhận hoặc đã xong thì ẩn', () => {
+    for (const s of ['PENDING_PAYMENT', 'DELIVERED', 'CANCELLED', 'RETURNED']) {
+      expect(orderDeliveryEtaLabel(eta, order(s), now)).toBeNull();
+    }
+  });
+  it('mốc thời gian hỏng thì ẩn', () => {
+    expect(orderDeliveryEtaLabel(eta, { status: 'CONFIRMED', createdAt: 'x' }, now)).toBeNull();
   });
 });

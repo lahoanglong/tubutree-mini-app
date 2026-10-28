@@ -15,13 +15,13 @@ import {
   type StorefrontStatusFilter,
   type StorefrontTypeFilter,
 } from '@/lib/admin-storefronts-client';
-import { mergeQueuePages, nextPageParam } from '@/lib/admin-client';
+import { getOpsInbox, mergeQueuePages, nextPageParam } from '@/lib/admin-client';
 import { ApiError } from '@/lib/client-api';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { SideDrawer } from './side-drawer';
 import { USER_ROLE_LABELS } from './users-list';
-import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, Notice, ToneBadge, chipClass, LoadError } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, Notice, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
 
 const REASON_MAX = 300;
 
@@ -56,8 +56,9 @@ function ownerLine(row: AdminStorefrontRow): string {
  * Tab "Gian hàng" (D3-02): kiểm duyệt gian hàng CTV/đối tác/nhãn hàng. Danh sách có lọc trạng thái, loại và tìm theo tên, mã hoặc
  * chủ; bấm "Xem" mở chi tiết với nút duyệt, gỡ đăng kèm lý do (chủ nhận thông báo) và đăng lại.
  */
-export function StorefrontsTab() {
-  const [status, setStatus] = useState<StorefrontStatusFilter | ''>('');
+export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: StorefrontStatusFilter | '' } = {}) {
+  const [status, setStatus] = useState<StorefrontStatusFilter | ''>(initialStatus);
+  const pendingCount = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 }).data?.items.find((i) => i.key === 'storefrontsPending')?.count;
   const [type, setType] = useState<StorefrontTypeFilter | ''>('');
   const [draft, setDraft] = useState('');
   const [q, setQ] = useState('');
@@ -94,6 +95,7 @@ export function StorefrontsTab() {
         {STOREFRONT_STATUS_FILTERS.map((f) => (
           <button key={f.k || 'all'} type="button" aria-pressed={status === f.k} onClick={() => setStatus(f.k)} className={chipClass(status === f.k)}>
             {f.label}
+            {f.k === 'PENDING_APPROVAL' && pendingCount !== undefined ? ` (${pendingCount})` : ''}
           </button>
         ))}
       </div>
@@ -105,7 +107,7 @@ export function StorefrontsTab() {
           setQ(draft);
         }}
       >
-        <select aria-label="Loại gian hàng" value={type} onChange={(e) => setType(e.target.value as StorefrontTypeFilter | '')} className={FIELD_CLASS}>
+        <select aria-label="Loại gian hàng" value={type} onChange={(e) => setType(e.target.value as StorefrontTypeFilter | '')} className={`${FIELD_CLASS} ${TOUCH_H}`}>
           <option value="">Mọi loại</option>
           {(Object.keys(STOREFRONT_TYPE_LABELS) as StorefrontTypeFilter[]).map((t) => (
             <option key={t} value={t}>
@@ -119,7 +121,7 @@ export function StorefrontsTab() {
           placeholder="Tên gian hàng, mã, tên hoặc SĐT chủ"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          className={`${FIELD_CLASS} min-w-0 flex-1 sm:max-w-sm`}
+          className={`${FIELD_CLASS} ${TOUCH_H} min-w-0 flex-1 sm:max-w-sm`}
         />
         <button type="submit" className={BTN_SECONDARY}>
           Tìm
@@ -139,7 +141,7 @@ export function StorefrontsTab() {
               <div className="min-w-0">
                 <h3 className="break-words text-sm font-semibold text-stone-900">{row.title}</h3>
                 <p className="mt-0.5 break-all text-xs text-stone-500">
-                  /s/{row.slug} · {STOREFRONT_TYPE_LABELS[row.type]} · {row.itemCount} sản phẩm
+                  {STOREFRONT_TYPE_LABELS[row.type]} · {row.itemCount} sản phẩm
                 </p>
                 <p className="mt-0.5 text-xs text-stone-600">Chủ: {ownerLine(row)}</p>
               </div>

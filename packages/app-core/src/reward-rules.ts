@@ -93,10 +93,17 @@ export function rewardFreeShipNote(
   return t && freeShipCovered(r, t) ? freeShipCoveredNote(t.tierName, t.freeFrom, formatMoney) : null;
 }
 
-/** Thứ tự hiển thị trong một mục: theo sortOrder, quà đã có sẵn quyền lợi hạng xuống cuối (giữ nguyên thứ tự còn lại). */
-export function orderRewards<T extends Pick<RewardItemDTO, 'kind' | 'voucher' | 'sortOrder'>>(rewards: readonly T[], c: Pick<RewardCatalogDTO, 'tierFreeShip'>): T[] {
+/** Dòng nhắc ở hộp xác nhận đổi quà freeship thừa với hạng: chỉ cảnh báo, không khoá nút Đổi. */
+export const freeShipConfirmText = (note: string): string => `${note}. Bạn vẫn muốn đổi mã này?`;
+
+/**
+ * Thứ tự hiển thị trong một mục: quà đổi được (đủ điểm, còn hàng) lên trước, quà chưa đủ điểm hoặc đã hết xuống sau; trong từng
+ * nhóm quà đã có sẵn quyền lợi hạng xuống cuối, rồi theo sortOrder. Không ẩn hay khoá quà nào.
+ */
+export function orderRewards<T extends Pick<RewardItemDTO, 'kind' | 'voucher' | 'sortOrder' | 'canRedeem' | 'soldOut'>>(rewards: readonly T[], c: Pick<RewardCatalogDTO, 'tierFreeShip'>): T[] {
+  const group = (r: T) => (r.canRedeem && !r.soldOut ? 0 : 1);
   const covered = (r: T) => (freeShipCovered(r, c.tierFreeShip) ? 1 : 0);
-  return [...rewards].sort((a, b) => covered(a) - covered(b) || a.sortOrder - b.sortOrder);
+  return [...rewards].sort((a, b) => group(a) - group(b) || covered(a) - covered(b) || a.sortOrder - b.sortOrder);
 }
 
 export type RewardCardState =
@@ -139,3 +146,22 @@ export function warehouseConfirmText(point: PickupPoint | null | undefined): str
 }
 
 export const WAREHOUSE_PICKUP_DONE = 'Mang mã này tới kho Tubu TP.HCM để nhận quà';
+
+/** Đầu Kho quà gọn: luật nằm sau nút "Thể lệ"; số dư 0 thì có thẻ chỉ cách kiếm điểm thay vì cả loạt "Cần thêm…". */
+export const rewardsGuideCopy = {
+  rulesButton: 'Thể lệ',
+  rulesTitle: 'Thể lệ đổi quà',
+  earnTitle: 'Cách kiếm Điểm Xanh',
+  earnItems: ['Mua hàng: điểm cộng sau khi đơn giao thành công', 'Điểm danh mỗi ngày ở tab Ưu đãi', 'Chăm cây và làm nhiệm vụ ở Vườn Xanh'],
+  earnCta: 'Xem cách kiếm điểm',
+} as const;
+
+/** Tham số `?new=<mã>` khi "Xem ví mã" mở Quà của tôi: mã vừa đổi được làm nổi lên đầu và có nhãn "Mới". */
+export const NEW_COUPON_PARAM = 'new';
+export const NEW_COUPON_BADGE = 'Mới';
+
+/** Chờ nhận trước, mã vừa đổi lên đầu nhóm còn lại, rồi mới nhất trước. */
+export function sortRedemptions<T extends { status: string; createdAt: string; couponCode?: string | null }>(list: readonly T[], newCode?: string | null): T[] {
+  const rank = (r: T) => (r.status === 'READY' ? 0 : newCode && r.couponCode === newCode ? 1 : 2);
+  return [...list].sort((a, b) => rank(a) - rank(b) || b.createdAt.localeCompare(a.createdAt));
+}

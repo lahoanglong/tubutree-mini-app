@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Input, Page, useSnackbar } from 'zmp-ui';
+import { Input, Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Landmark, ChevronDown } from 'lucide-react';
 import { getMyPayroll, updateBank, type PayrollStatus, type PayrollDay, type StaffProfile } from '../services/payroll-api';
@@ -42,13 +42,18 @@ const fmtH = (min: number) => `${Math.floor(min / 60)}h${String(min % 60).padSta
 
 export default function MyPayrollPage() {
   const role = useAuthStore((s) => s.user?.role);
+  const navigate = useNavigate();
   if (role !== 'STAFF' && role !== 'ADMIN') {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title="Lương của tôi" />
-        <div style={{ padding: 24, textAlign: 'center' }}>
-          <Text tone="secondary">Trang dành cho nhân viên.</Text>
-        </div>
+        <EmptyState
+          art="leaf"
+          heading="Trang dành cho nhân viên"
+          body="Tài khoản này chưa có quyền nhân viên. Liên hệ quản trị để được cấp quyền."
+          ctaLabel="Về Cá nhân"
+          onCta={() => navigate('/profile')}
+        />
       </Page>
     );
   }

@@ -17,6 +17,7 @@ import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { OrderCard } from '../components/orders/order-card';
 import { ORDERS_TABS, parseOrdersTab, type OrdersTabKey } from '../components/orders/orders-tabs';
+import { BestSellerRail } from '../components/home/best-seller-rail';
 import { PurchasedRail } from '../components/reorder/purchased-rail';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { orderReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
@@ -94,13 +95,16 @@ export default function OrdersPage() {
           <ErrorState message={getLoadErrorMessage(orders.error)} onRetry={() => void orders.refetch()} />
         ) : list.length === 0 ? (
           tab === 'all' ? (
-            <EmptyState
-              art="box"
-              heading={vi.orders.emptyHeading}
-              body={emptyBody}
-              ctaLabel={vi.orders.emptyCta}
-              onCta={() => navigate('/browse')}
-            />
+            <>
+              <EmptyState
+                art="box"
+                heading={vi.orders.emptyHeading}
+                body={emptyBody}
+                ctaLabel={vi.orders.emptyCta}
+                onCta={() => navigate('/browse')}
+              />
+              <BestSellerRail />
+            </>
           ) : (
             <EmptyState variant="inline" art="box" heading={vi.orders.emptyTabHeading} />
           )

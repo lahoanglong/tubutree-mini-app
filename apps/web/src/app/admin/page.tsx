@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import React, { useEffect, useId, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Banknote, Check, ChevronDown, ChevronUp, Download, Recycle, Store, TreePine, Trophy } from 'lucide-react';
@@ -70,6 +71,7 @@ import {
   type AdminLesson,
   type AcademyLessonContentType,
   type AdminQuickReply,
+  countInvoicePending,
   countRecyclingAttention,
   countPancakeAttention,
   listDealerRewardClaims,
@@ -85,6 +87,7 @@ import {
   type InboxKey,
   type StaffPermission,
   type AdminOrder,
+  getPosCreditEnabled,
 } from '@/lib/admin-client';
 import { RecyclingBadge, RecyclingPanel } from '@/components/admin/recycling-panel';
 import { ImageUrlField } from '@/components/admin/image-url-field';
@@ -120,6 +123,7 @@ import { AccountDeletionPanel } from '@/components/admin/account-deletion-panel'
 import { useConfirm } from '@/components/admin/confirm-dialog';
 import { CouponList } from '@/components/admin/coupon-list';
 import { InvoiceFilterChips } from '@/components/admin/invoice-filter-chips';
+import { VnDateInput, datePresets } from '@/components/admin/vn-date-input';
 import { OrderExtraFilters } from '@/components/admin/order-extra-filters';
 import { OrderInvoicePanel, OrderReferralPanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
 import { DealerTierSelect } from '@/components/admin/dealer-tier-select';
@@ -136,6 +140,7 @@ import {
   BTN_PRIMARY,
   BTN_SECONDARY,
   BTN_SMALL,
+  chipClass,
   FIELD_CLASS,
   Field,
   INPUT_CLASS,
@@ -146,9 +151,9 @@ import {
 import { AnalyticsTab } from './analytics-tab';
 import { ReportsTab, reportSectionsFor } from '@/components/admin/reports-tab';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
-import { OpsInboxTab } from '@/components/admin/ops-inbox-tab';
+import { InboxBadge, OpsInboxTab } from '@/components/admin/ops-inbox-tab';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
-import { WasteTab, type WasteSeed } from '@/components/admin/waste-tab';
+import type { WasteSeed } from '@/components/admin/waste-tab';
 import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
 import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-tab';
 import { CommissionRatesTab } from '@/components/admin/commission-rates-tab';
@@ -157,7 +162,7 @@ import { EngagementTab } from '@/components/admin/engagement-tab';
 import { SupportChatTab } from '@/components/admin/support-chat-tab';
 import { ExternalOrdersTab } from '@/components/admin/external-orders-tab';
 import { ExternalClaimsTab } from '@/components/admin/external-claims-tab';
-import { CommunityModerationTab, type CommunityView } from '@/components/admin/community-moderation-tab';
+import type { CommunityView } from '@/components/admin/community-moderation-tab';
 import { AttendanceTab } from '@/components/admin/attendance-tab';
 import { StaffRosterTab } from '@/components/admin/staff-roster-tab';
 import { ShiftApprovalTab } from '@/components/admin/shift-approval-tab';
@@ -214,15 +219,36 @@ type Tab =
   | 'subscriptions'
   | 'analytics'
   | 'reports';
+// Hai tab nặng, không phải trang vào mặc định: tách khỏi gói đầu của /admin để trang mở nhanh hơn.
+const tabLoading = () => <p className="text-sm text-stone-500">Đang tải…</p>;
+const WasteTab = dynamic(() => import('@/components/admin/waste-tab').then((m) => m.WasteTab), { loading: tabLoading });
+const CommunityModerationTab = dynamic(() => import('@/components/admin/community-moderation-tab').then((m) => m.CommunityModerationTab), { loading: tabLoading });
+
 /**
  * Mục quản trị theo nhóm việc (ADMINOPS-13): trước đây là một dải 24 tab cuộn ngang. Khoá `k` giữ nguyên để link cũ
  * (`/admin?tab=orders&pancake=attention`...) vẫn mở đúng chỗ.
  */
 const NAV_GROUPS: NavGroup<Tab>[] = [
   {
+    label: 'Hay dùng',
+    quick: true,
+    items: [
+      { k: 'inbox', label: 'Hôm nay', total: true },
+      { k: 'orders', label: 'Đơn hàng' },
+      { k: 'productCategories', label: 'Sản phẩm' },
+      { k: 'users', label: 'Người dùng' },
+      { k: 'supportChat', label: 'Chat CSKH' },
+      { k: 'community', label: 'Cộng đồng' },
+      { k: 'coupons', label: 'Mã giảm giá' },
+      { k: 'waste', label: 'Đổi rác' },
+      { k: 'storefronts', label: 'Gian hàng' },
+      { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
+      { k: 'dealers', label: 'Đại lý' },
+    ],
+  },
+  {
     label: 'Tổng quan',
     items: [
-      { k: 'inbox', label: 'Việc cần xử lý' },
       { k: 'dashboard', label: 'Tổng quan chỉ số' },
       { k: 'analytics', label: 'Giữ chân khách & chỉ số chính' },
       { k: 'reports', label: 'Báo cáo' },
@@ -231,13 +257,13 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
   {
     label: 'Bán hàng',
     items: [
+      { k: 'productCategories', label: 'Sản phẩm', keywords: 'ảnh mô tả sửa sản phẩm danh mục ẩn hiện nổi bật' },
       { k: 'orders', label: 'Đơn hàng' },
       { k: 'externalOrders', label: 'Đơn ngoài app' },
       { k: 'returns', label: 'Đổi / Trả' },
       { k: 'customerRefunds', label: 'Hoàn tiền khách' },
       ...(CASHBACK_ENABLED ? [{ k: 'cashback' as const, label: 'Hoàn tiền sàn ngoài' }] : []),
       { k: 'subscriptions', label: 'Gói định kỳ' },
-      { k: 'productCategories', label: 'Danh mục sản phẩm' },
     ],
   },
   {
@@ -389,13 +415,17 @@ export default function AdminPage() {
   const [tab, setTabState] = useState<Tab>(DEFAULT_TAB);
   const [ordersRecycling, setOrdersRecycling] = useState<RecyclingFilter | ''>('');
   const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
-  const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter } | null>(null);
+  const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter; status?: string; extra?: OrderListExtra } | null>(null);
+  const [productsSeed, setProductsSeed] = useState(0);
+  const [storefrontSeed, setStorefrontSeed] = useState(0);
   const [communitySeed, setCommunitySeed] = useState<{ view: CommunityView; n: number } | null>(null);
   const [wasteSeed, setWasteSeed] = useState<WasteSeed | null>(null);
   const [returnsSeed, setReturnsSeed] = useState<{ filter: ReturnsFilter; n: number } | null>(null);
   const [consignmentSeed, setConsignmentSeed] = useState(0);
   const role = user?.role;
   // Nhân viên: nhóm việc đọc lại từ API (JwtStrategy đọc DB) — gán/gỡ nhóm có hiệu lực mà không cần đăng nhập lại.
+  // Cờ tích điểm tại quầy đang tắt thì không mời vào màn thu ngân; chưa biết (đang tải hoặc lỗi) thì vẫn hiện để nhân viên quầy không mất lối vào.
+  const posOffQ = useQuery({ queryKey: ['pos-credit-enabled'], queryFn: getPosCreditEnabled, staleTime: 60_000 });
   const accessQ = useQuery({
     queryKey: ['admin-ops-access'],
     queryFn: getOpsAccess,
@@ -463,13 +493,28 @@ export default function AdminPage() {
       setReturnsSeed({ filter: k === 'returnsToReceive' ? 'TO_RECEIVE' : 'REQUESTED', n: Date.now() });
       return setTab('returns');
     }
-    if (k === 'communityPending' || k === 'communityUnanswered') {
-      setCommunitySeed({ view: k === 'communityUnanswered' ? 'unanswered' : 'pending', n: Date.now() });
+    if (k === 'communityPending' || k === 'communityUnanswered' || k === 'communityReports') {
+      setCommunitySeed({ view: k === 'communityUnanswered' ? 'unanswered' : k === 'communityReports' ? 'reports' : 'pending', n: Date.now() });
       return setTab('community');
     }
     if (isWasteInboxKey(k)) {
       setWasteSeed({ ...WASTE_INBOX_SEEDS[k], n: Date.now() });
       return setTab('waste');
+    }
+    if (k === 'bankTransferToConfirm') {
+      setOrdersRecycling('');
+      setOrdersPancake('');
+      setOrderSeed({ search: '', n: Date.now(), status: 'PENDING_PAYMENT', extra: { queue: 'bank_transfer_to_confirm', order: 'asc' } });
+      setTabState('orders');
+      return writeUrlState('orders', '');
+    }
+    if (k === 'storefrontsPending') {
+      setStorefrontSeed(Date.now());
+      return setTab('storefronts');
+    }
+    if (k === 'productsMissingImage') {
+      setProductsSeed(Date.now());
+      return setTab('productCategories');
     }
     if (k === 'invoicePending') {
       setOrdersRecycling('');
@@ -489,7 +534,11 @@ export default function AdminPage() {
         | 'consignmentPending'
         | 'communityPending'
         | 'communityUnanswered'
+        | 'communityReports'
         | 'invoicePending'
+        | 'bankTransferToConfirm'
+        | 'storefrontsPending'
+        | 'productsMissingImage'
         | WasteInboxKey
       >,
       Tab
@@ -543,29 +592,33 @@ export default function AdminPage() {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-3 sm:py-6">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="min-w-0 truncate font-display text-lg font-semibold text-stone-900 sm:text-xl">Quản trị Tubu Tree</h1>
-        <Link href="/admin/pos" className="inline-flex min-h-[44px] shrink-0 items-center rounded-control border border-stone-450 bg-stone-0 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 sm:min-h-[36px]">
-          Màn thu ngân<span className="hidden sm:inline">&nbsp;(tích điểm tại quầy)</span>
-        </Link>
+      <div className={`${isAdmin ? 'hidden sm:flex' : 'flex'} items-center justify-between gap-2`}>
+        <h1 className="hidden min-w-0 truncate font-display text-lg font-semibold text-stone-900 sm:block sm:text-xl">Quản trị Tubu Tree</h1>
+        {/* Điện thoại: bỏ tiêu đề; quản trị viên vào màn thu ngân từ mục "Tích điểm tại quầy" trong menu, nhân viên quầy giữ nút này. */}
+        {posOffQ.data !== false && (
+          <Link href="/admin/pos" className={`${isAdmin ? 'hidden sm:inline-flex' : 'inline-flex'} min-h-[44px] shrink-0 items-center rounded-control border border-stone-450 bg-stone-0 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 sm:min-h-[36px]`}>
+            Màn thu ngân<span className="hidden sm:inline">&nbsp;(tích điểm tại quầy)</span>
+          </Link>
+        )}
       </div>
       <div className="mt-2 sm:mt-4 lg:flex lg:items-start lg:gap-6">
         <AdminNav
           groups={groups}
           active={active}
           onSelect={setTab}
-          badge={(k) => (k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : null)}
+          summaryBadge={<InboxBadge tab="inbox" enabled={allowed.has('inbox')} />}
+          badge={(k) => (k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : <InboxBadge tab={k} enabled={allowed.has('inbox')} />)}
         />
         <div className="mt-4 min-w-0 flex-1 lg:mt-0">
           <TabErrorBoundary key={active} tabLabel={TABS.find((t) => t.k === active)?.label ?? ''} onGoHome={!allowed.has('inbox') || active === 'inbox' ? undefined : () => setTab('inbox')}>
-          {active === 'inbox' && <OpsInboxTab onOpen={openInbox} />}
+          {active === 'inbox' && <OpsInboxTab onOpen={openInbox} isAdmin={isAdmin} />}
           {active === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} />}
           {active === 'dealers' && <DealersTab />}
           {active === 'dealerClaims' && <DealerClaimsTab canReview={isAdmin} />}
           {active === 'dealerAccounts' && <DealerAccountsTab isAdmin={isAdmin} />}
           {active === 'dealerPrices' && <DealerPriceHistoryTab />}
           {active === 'commissionRates' && <CommissionRatesTab />}
-          {active === 'productCategories' && <ProductCategoriesTab />}
+          {active === 'productCategories' && <ProductCategoriesTab key={productsSeed} initialMissingImage={productsSeed > 0} />}
           {active === 'engagement' && <EngagementTab />}
           {active === 'externalOrders' && <ExternalOrdersTab isAdmin={isAdmin} />}
           {active === 'externalClaims' && <ExternalClaimsTab isAdmin={isAdmin} meId={user?.id} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}
@@ -578,6 +631,8 @@ export default function AdminPage() {
               key={orderSeed?.n ?? 0}
               initialSearch={orderSeed?.search}
               initialInvoice={orderSeed?.invoice}
+              initialStatus={orderSeed?.status}
+              initialExtra={orderSeed?.extra}
               isAdmin={isAdmin}
               canFinance={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KE_TOAN')}
               canWarehouse={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO')}
@@ -608,9 +663,9 @@ export default function AdminPage() {
           {active === 'staffRoster' && <StaffRosterTab meId={user?.id} />}
           {active === 'shiftApproval' && <ShiftApprovalTab />}
           {active === 'payroll' && <PayrollAdminTab />}
-          {active === 'coupons' && <CouponsTab />}
+          {active === 'coupons' && <CouponsTab onOpenConfig={allowed.has('config') ? () => setTab('config') : undefined} />}
           {active === 'brands' && <BrandsTab />}
-          {active === 'storefronts' && <StorefrontsTab />}
+          {active === 'storefronts' && <StorefrontsTab key={storefrontSeed} initialStatus={storefrontSeed > 0 ? 'PENDING_APPROVAL' : ''} />}
           {active === 'merchantProducts' && <MerchantProductsTab key={consignmentSeed} focusConsignment={consignmentSeed > 0} />}
           {active === 'merchantFulfilment' && <MerchantFulfilmentTab onOpenConsignmentConfirm={openConsignmentConfirm} isAdmin={isAdmin} />}
           {active === 'flashSales' && <FlashSalesTab />}
@@ -644,6 +699,7 @@ function DealersTab() {
 
   return (
     <div>
+      <h2 className="mb-2 text-base font-semibold text-stone-900">Hồ sơ đại lý</h2>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <select
           aria-label="Lọc hồ sơ đại lý theo trạng thái"
@@ -666,7 +722,7 @@ function DealersTab() {
         {q.isError && <LoadError message="Không tải được danh sách hồ sơ đại lý." onRetry={() => void q.refetch()} />}
         {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách hồ sơ…</p>}
         {view.items.map((a) => <DealerRow key={a.id} app={a} />)}
-        {q.data && view.items.length === 0 && <Empty>Không có hồ sơ.</Empty>}
+        {q.data && view.items.length === 0 && <Empty>{pending ? 'Chưa có hồ sơ nào chờ duyệt. Hồ sơ xuất hiện khi khách gửi đơn đăng ký làm đại lý trong ứng dụng.' : 'Không có hồ sơ ở trạng thái này.'}</Empty>}
       </div>
       <LoadMoreButton
         hasMore={view.hasMore}
@@ -952,6 +1008,7 @@ function DashboardTab({
           <div className="mt-1 text-xs text-stone-600">
             Trong đó: <span className="font-semibold text-forest-700">{stats.totalAffiliates}</span> cộng tác viên (CTV)
           </div>
+          {stats.guestUsers !== undefined && <div className="mt-0.5 text-xs text-stone-500">Chưa tính {stats.guestUsers} lượt khách vãng lai (chưa đăng nhập)</div>}
         </div>
 
         {/* Sản phẩm & Quỹ trồng cây */}
@@ -1048,6 +1105,17 @@ function DashboardTab({
   );
 }
 
+const ORDER_STATUS_CHIPS: { k: string; label: string }[] = [
+  { k: '', label: 'Tất cả' },
+  { k: 'PENDING_PAYMENT', label: 'Chờ thanh toán' },
+  { k: 'CONFIRMED', label: 'Đã xác nhận' },
+  { k: 'PACKED', label: 'Đã đóng gói' },
+  { k: 'SHIPPING', label: 'Đang giao' },
+  { k: 'DELIVERED', label: 'Đã giao' },
+  { k: 'CANCELLED', label: 'Đã huỷ' },
+  { k: 'RETURNED', label: 'Đã trả' },
+];
+
 const RECYCLING_FILTERS: { k: RecyclingFilter | ''; label: string }[] = [
   { k: '', label: 'Mọi đơn' },
   { k: 'all', label: 'Có thu gom' },
@@ -1064,6 +1132,8 @@ function OrdersTab({
   canWarehouse = true,
   initialSearch,
   initialInvoice,
+  initialStatus,
+  initialExtra,
 }: {
   recycling: RecyclingFilter | '';
   onRecyclingChange: (r: RecyclingFilter | '') => void;
@@ -1076,16 +1146,18 @@ function OrdersTab({
   canWarehouse?: boolean;
   initialSearch?: string;
   initialInvoice?: InvoiceFilter;
+  initialStatus?: string;
+  initialExtra?: OrderListExtra;
 }) {
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(initialStatus ?? '');
   const [searchInput, setSearchInput] = useState(initialSearch ?? '');
   const [search, setSearch] = useState(initialSearch ?? '');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [invoice, setInvoice] = useState<InvoiceFilter | ''>(initialInvoice ?? '');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [extra, setExtra] = useState<OrderListExtra>({});
+  const [extra, setExtra] = useState<OrderListExtra>(initialExtra ?? {});
   const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [exporting, setExporting] = useState(false);
   // Điện thoại: chi tiết đơn mở trong ngăn kéo thay vì chen vào giữa bảng đang cuộn ngang.
@@ -1147,129 +1219,107 @@ function OrdersTab({
   };
 
   const totalPages = q.data ? Math.ceil(q.data.meta.total / q.data.meta.limit) : 1;
+  const [filterOpen, setFilterOpen] = useState(false);
+  const invoicePendingQ = useQuery({ queryKey: ['admin-invoice-pending-count'], queryFn: countInvoicePending, enabled: narrow });
+  const activeFilterCount =
+    (from || to ? 1 : 0) + Object.keys(orderExtraFilters(extra)).length + (recycling ? 1 : 0) + (pancake ? 1 : 0) + (invoice ? 1 : 0);
+  const setRange = (f: string, t: string) => {
+    setFrom(f);
+    setTo(t);
+    setPage(1);
+  };
 
-  return (
-    <div className="space-y-4">
-      {/* Search, Filter, and Export bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
-        <form onSubmit={handleSearchSubmit} className="flex min-w-[260px] flex-1 items-center gap-2">
-          <input
-            type="text"
-            aria-label="Tìm đơn theo mã đơn, mã vận đơn, mã Pancake, SĐT, tên khách hoặc tên người nhận"
-            placeholder={narrow ? 'Mã đơn, SĐT, tên…' : 'Tìm mã đơn, vận đơn, SĐT, tên khách hoặc người nhận…'}
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className={`${FIELD_CLASS} ${TOUCH_H} flex-1`}
-          />
-          <button
-            type="submit"
-            className={`${BTN_PRIMARY} whitespace-nowrap`}
-          >
-            Tìm kiếm
+  const dateRow = (
+    <div className="flex w-full flex-wrap items-center gap-2 text-xs text-stone-600">
+      <label className="flex items-center gap-1.5">
+        Từ ngày
+        <VnDateInput
+          ariaLabel="Từ ngày"
+          value={from}
+          max={to || undefined}
+          onChange={(v) => {
+            setFrom(v);
+            setPage(1);
+          }}
+          className={`${FIELD_CLASS} ${TOUCH_H}`}
+        />
+      </label>
+      <label className="flex items-center gap-1.5">
+        đến
+        <VnDateInput
+          ariaLabel="Đến ngày"
+          value={to}
+          min={from || undefined}
+          onChange={(v) => {
+            setTo(v);
+            setPage(1);
+          }}
+          className={`${FIELD_CLASS} ${TOUCH_H}`}
+        />
+      </label>
+      <span className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Chọn nhanh khoảng ngày">
+        {datePresets().map((d) => (
+          <button key={d.key} type="button" aria-pressed={from === d.from && to === d.to} onClick={() => setRange(d.from, d.to)} className={chipClass(from === d.from && to === d.to)}>
+            {d.label}
           </button>
-          {search && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchInput('');
-                setSearch('');
-                setPage(1);
-              }}
-              className={`${BTN_SECONDARY} whitespace-nowrap`}
-            >
-              Xoá lọc
-            </button>
-          )}
-        </form>
+        ))}
+      </span>
+      {(from || to) && (
+        <button type="button" onClick={() => setRange('', '')} className={BTN_SMALL}>
+          Bỏ lọc ngày
+        </button>
+      )}
+      {badRange && <span className="text-danger-fg">Ngày bắt đầu phải trước ngày kết thúc.</span>}
+    </div>
+  );
 
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            aria-label="Lọc đơn theo trạng thái"
-            value={status}
-            onChange={(e) => handleStatusChange(e.target.value)}
-            className={`${FIELD_CLASS} ${TOUCH_H}`}
+  const extraFiltersEl = (
+    <OrderExtraFilters
+      value={extra}
+      onChange={(v) => {
+        setPage(1);
+        setExpandedId(null);
+        setExtra(v);
+      }}
+    />
+  );
+
+  const resetPaging = () => {
+    setPage(1);
+    setExpandedId(null);
+  };
+  const queueEl = narrow ? (
+    // Điện thoại: một nhóm "Cần xử lý" thay cho ba hàng chip mỗi hàng một "Mọi đơn"; bấm chip đang bật để tắt.
+    <div role="group" aria-label="Cần xử lý" className="space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-600">Cần xử lý</h3>
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            { id: 'rec-attention', label: `Cần xử lý thu gom${attentionQ.data !== undefined ? ` (${attentionQ.data})` : ''}`, on: recycling === 'attention', flip: () => onRecyclingChange(recycling === 'attention' ? '' : 'attention') },
+            { id: 'rec-all', label: 'Có thu gom', on: recycling === 'all', flip: () => onRecyclingChange(recycling === 'all' ? '' : 'all') },
+            { id: 'pk-attention', label: `Cần xử lý Pancake${pancakeQ.data !== undefined ? ` (${pancakeQ.data})` : ''}`, on: pancake === 'attention', flip: () => onPancakeChange(pancake === 'attention' ? '' : 'attention') },
+            { id: 'pk-unsynced', label: 'Chưa lên Pancake', on: pancake === 'unsynced', flip: () => onPancakeChange(pancake === 'unsynced' ? '' : 'unsynced') },
+            { id: 'vat-pending', label: `VAT chờ xuất${invoicePendingQ.data !== undefined ? ` (${invoicePendingQ.data})` : ''}`, on: invoice === 'pending', flip: () => setInvoice(invoice === 'pending' ? '' : 'pending') },
+            { id: 'vat-issued', label: 'VAT đã xuất', on: invoice === 'issued', flip: () => setInvoice(invoice === 'issued' ? '' : 'issued') },
+          ] as const
+        ).map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            aria-pressed={c.on}
+            onClick={() => {
+              resetPaging();
+              c.flip();
+            }}
+            className={chipClass(c.on)}
           >
-            <option value="">Tất cả trạng thái</option>
-            <option value="PENDING_PAYMENT">Chờ thanh toán</option>
-            <option value="CONFIRMED">Đã xác nhận</option>
-            <option value="PACKED">Đã đóng gói</option>
-            <option value="SHIPPING">Đang vận chuyển</option>
-            <option value="DELIVERED">Đã giao hàng</option>
-            <option value="CANCELLED">Đã huỷ</option>
-            <option value="RETURNED">Đã trả hàng</option>
-          </select>
-
-          {canFinance && (
-            <button
-              type="button"
-              onClick={() => void exportAll()}
-              disabled={exporting || badRange || !q.data || q.data.meta.total === 0}
-              className={`${BTN_SECONDARY} flex items-center gap-1.5 whitespace-nowrap`}
-              title="Xuất mọi đơn khớp bộ lọc ra file CSV cho Excel / kế toán"
-            >
-              <Download aria-hidden="true" className="h-4 w-4 shrink-0" />
-              {exporting ? 'Đang xuất…' : 'Xuất CSV (Excel)'}
-            </button>
-          )}
-        </div>
-        <div className="flex w-full flex-wrap items-center gap-2 text-xs text-stone-600">
-          <label className="flex items-center gap-1.5">
-            Từ ngày
-            <input
-              type="date"
-              value={from}
-              max={to || undefined}
-              onChange={(e) => {
-                setFrom(e.target.value);
-                setPage(1);
-              }}
-              className={`${FIELD_CLASS} ${TOUCH_H}`}
-            />
-          </label>
-          <label className="flex items-center gap-1.5">
-            đến
-            <input
-              type="date"
-              value={to}
-              min={from || undefined}
-              onChange={(e) => {
-                setTo(e.target.value);
-                setPage(1);
-              }}
-              className={`${FIELD_CLASS} ${TOUCH_H}`}
-            />
-          </label>
-          {(from || to) && (
-            <button
-              type="button"
-              onClick={() => {
-                setFrom('');
-                setTo('');
-                setPage(1);
-              }}
-              className={BTN_SMALL}
-            >
-              Bỏ lọc ngày
-            </button>
-          )}
-          {badRange && <span className="text-danger-fg">Ngày bắt đầu phải trước ngày kết thúc.</span>}
-        </div>
-        {exportMsg && (
-          <p role="status" className={`w-full text-xs ${exportMsg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
-            {exportMsg.text}
-          </p>
-        )}
+            {c.label}
+          </button>
+        ))}
       </div>
-
-      <OrderExtraFilters
-        value={extra}
-        onChange={(v) => {
-          setPage(1);
-          setExpandedId(null);
-          setExtra(v);
-        }}
-      />
-
+    </div>
+  ) : (
+    <>
       {/* Bộ lọc đơn thu kèm Gomdon */}
       <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Lọc đơn thu kèm Gomdon">
         {RECYCLING_FILTERS.map((f) => {
@@ -1366,6 +1416,118 @@ function OrdersTab({
           setInvoice(v);
         }}
       />
+    </>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Search, Filter, and Export bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
+        <form onSubmit={handleSearchSubmit} className="flex min-w-[260px] flex-1 items-center gap-2">
+          <input
+            type="text"
+            aria-label="Tìm đơn theo mã đơn, mã vận đơn, mã Pancake, SĐT, tên khách hoặc tên người nhận"
+            placeholder={narrow ? 'Mã đơn, SĐT, tên…' : 'Tìm mã đơn, vận đơn, SĐT, tên khách hoặc người nhận…'}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className={`${FIELD_CLASS} ${TOUCH_H} flex-1`}
+          />
+          <button
+            type="submit"
+            className={`${BTN_PRIMARY} whitespace-nowrap`}
+          >
+            Tìm kiếm
+          </button>
+          {search && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchInput('');
+                setSearch('');
+                setPage(1);
+              }}
+              className={`${BTN_SECONDARY} whitespace-nowrap`}
+            >
+              Xoá lọc
+            </button>
+          )}
+        </form>
+
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+          {narrow ? (
+            <div role="group" aria-label="Lọc đơn theo trạng thái" className="-mx-1 flex w-full gap-2 overflow-x-auto px-1 pb-1">
+              {ORDER_STATUS_CHIPS.map((c) => (
+                <button key={c.k || 'all'} type="button" aria-pressed={status === c.k} onClick={() => handleStatusChange(c.k)} className={`${chipClass(status === c.k)} shrink-0`}>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <select
+              aria-label="Lọc đơn theo trạng thái"
+              value={status}
+              onChange={(e) => handleStatusChange(e.target.value)}
+              className={`${FIELD_CLASS} ${TOUCH_H}`}
+            >
+              <option value="">Tất cả trạng thái</option>
+              <option value="PENDING_PAYMENT">Chờ thanh toán</option>
+              <option value="CONFIRMED">Đã xác nhận</option>
+              <option value="PACKED">Đã đóng gói</option>
+              <option value="SHIPPING">Đang vận chuyển</option>
+              <option value="DELIVERED">Đã giao hàng</option>
+              <option value="CANCELLED">Đã huỷ</option>
+              <option value="RETURNED">Đã trả hàng</option>
+            </select>
+          )}
+
+          {narrow && (
+            <button type="button" aria-haspopup="dialog" onClick={() => setFilterOpen(true)} className={`${BTN_SECONDARY} whitespace-nowrap`}>
+              Lọc{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+            </button>
+          )}
+          {canFinance && (
+            <button
+              type="button"
+              onClick={() => void exportAll()}
+              disabled={exporting || badRange || !q.data || q.data.meta.total === 0}
+              className={`${BTN_SECONDARY} flex items-center gap-1.5 whitespace-nowrap`}
+              title="Xuất mọi đơn khớp bộ lọc ra file CSV cho Excel / kế toán"
+            >
+              <Download aria-hidden="true" className="h-4 w-4 shrink-0" />
+              {exporting ? 'Đang xuất…' : 'Xuất CSV (Excel)'}
+            </button>
+          )}
+        </div>
+        {!narrow && dateRow}
+        {exportMsg && (
+          <p role="status" className={`w-full text-xs ${exportMsg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
+            {exportMsg.text}
+          </p>
+        )}
+      </div>
+
+      {!narrow && (
+        <>
+          {extraFiltersEl}
+          {queueEl}
+        </>
+      )}
+      {narrow && extra.queue && (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
+          Đang xem đơn lẻ chuyển khoản chưa nhận tiền, cũ nhất trước.
+          <button
+            type="button"
+            onClick={() => {
+              const { queue: _queue, ...rest } = extra;
+              resetPaging();
+              setExtra(rest);
+            }}
+            className={BTN_SMALL}
+          >
+            Bỏ lọc chuyển khoản
+          </button>
+        </p>
+      )}
 
       {/* Orders Table */}
       {q.isError && (
@@ -1376,7 +1538,43 @@ function OrdersTab({
       )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách đơn hàng…</p>}
 
-      {q.data && (
+      {q.data && narrow && (
+        // Điện thoại: mỗi đơn một thẻ (mã, tiền, trạng thái, khách, ngày) như "Đơn hàng mới nhất" ở Tổng quan; bảng 3 cột cuộn ngang cắt mất cột Tổng tiền.
+        <ul aria-label="Danh sách đơn hàng" data-orders-cards className="divide-y divide-stone-100 rounded-card border border-stone-200 bg-stone-0 shadow-card">
+          {q.data.data.length === 0 ? (
+            <li className="py-8 text-center text-sm text-stone-500">Không tìm thấy đơn hàng nào phù hợp.</li>
+          ) : (
+            q.data.data.map((o) => (
+              <li key={o.id || o.code}>
+                <button type="button" aria-haspopup="dialog" onClick={() => setExpandedId(o.id || o.code)} className="block min-h-[44px] w-full px-3 py-3 text-left">
+                  <span className="flex items-start justify-between gap-2">
+                    <span className="min-w-0 break-words font-semibold text-forest-700">{o.code}</span>
+                    <span className="shrink-0 font-semibold text-forest-700">{formatVnd(o.total)}</span>
+                  </span>
+                  <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <OrderStatusBadge status={o.status} />
+                    {o.fulfiller === 'MERCHANT' && <ToneBadge tone="info">Gian hàng tự giao</ToneBadge>}
+                    <RecyclingBadge order={o} />
+                    <PancakeAttentionBadge order={o} />
+                    <PancakeSyncBadge order={o} />
+                  </span>
+                  <span className="mt-1 block text-xs text-stone-600">
+                    {o.user?.fullName ?? 'Khách lẻ'}
+                    {o.user?.phone ? ` · ${o.user.phone}` : ''}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-stone-500">
+                    {formatDate(o.createdAt)} · {PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}
+                  </span>
+                  {o.paymentStatus && <PaymentStatusShort order={o} />}
+                  <OrderRecipientLine order={o} />
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+
+      {q.data && !narrow && (
         <ScrollRegion label="Danh sách đơn hàng" className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
           <table className="w-full text-left text-sm">
             <thead className="bg-stone-50 text-xs text-stone-500">
@@ -1493,6 +1691,25 @@ function OrdersTab({
             </tbody>
           </table>
         </ScrollRegion>
+      )}
+
+      {narrow && filterOpen && (
+        <SideDrawer title="Lọc đơn hàng" onClose={() => setFilterOpen(false)}>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-600">Ngày đặt</h3>
+              {dateRow}
+            </div>
+            {queueEl}
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-600">Loại đơn, thanh toán, nguồn</h3>
+              {extraFiltersEl}
+            </div>
+            <button type="button" onClick={() => setFilterOpen(false)} className={`${BTN_PRIMARY} w-full`}>
+              Xem {q.data ? `${q.data.meta.total} ` : ''}đơn
+            </button>
+          </div>
+        </SideDrawer>
       )}
 
       {narrow && expandedOrder && (
@@ -1717,7 +1934,8 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const q = useQuery({ queryKey: ['admin-users', page, search], queryFn: () => listUsers(page, search || undefined) });
+  const [guests, setGuests] = useState(false);
+  const q = useQuery({ queryKey: ['admin-users', page, search, guests], queryFn: () => listUsers(page, search || undefined, guests) });
   const totalPages = q.data ? Math.ceil(q.data.meta.total / q.data.meta.limit) : 1;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -1729,7 +1947,7 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
     setMsg(null);
     setExporting(true);
     try {
-      const r = await downloadUsersCsv(search || undefined);
+      const r = await downloadUsersCsv(search || undefined, guests);
       setMsg({ ok: true, text: `Đã tải ${r.filename} — mọi người dùng khớp tìm kiếm, không chỉ trang đang xem.` });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không xuất được CSV.' });
@@ -1800,7 +2018,12 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
           </button>
         )}
       </div>
-      {isAdmin && <GrantRoleForm onDone={() => q.refetch()} />}
+      {isAdmin && (
+        <details className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
+          <summary className="flex min-h-[44px] cursor-pointer items-center px-4 text-sm font-medium text-forest-800">Cấp hoặc đổi vai trò theo SĐT</summary>
+          <GrantRoleForm onDone={() => q.refetch()} />
+        </details>
+      )}
       <form
         role="search"
         aria-label="Tìm người dùng"
@@ -1837,6 +2060,14 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
           </button>
         )}
       </form>
+      {q.data?.guestCount !== undefined && (q.data.guestCount > 0 || guests) && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
+          <button type="button" aria-pressed={guests} onClick={() => { setGuests((v) => !v); setPage(1); }} className={chipClass(guests)}>
+            Hiện cả khách vãng lai ({q.data.guestCount})
+          </button>
+          <span>Khách vãng lai là lượt mở app chưa đăng nhập, không có SĐT; không tính vào số người dùng.</span>
+        </div>
+      )}
       {msg && (
         <p role="status" className={`text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>
       )}
@@ -2121,7 +2352,7 @@ function localDateIso(dayKey: string, endOfDay: boolean, fallbackMs: number): st
   return new Date(`${dayKey}T${endOfDay ? '23:59:59' : '00:00:00'}`).toISOString();
 }
 
-function CouponsTab() {
+function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
   const qc = useQueryClient();
   const [f, setF] = useState({
     code: '',
@@ -2137,6 +2368,8 @@ function CouponsTab() {
   });
   const [msg, setMsg] = useState<string | null>(null);
   const num = (v: string) => (v.trim() === '' ? undefined : Number(v));
+  const [startPending, setStartPending] = useState(false);
+  const [endPending, setEndPending] = useState(false);
   const create = useMutation({
     mutationFn: () =>
       createCoupon({
@@ -2161,9 +2394,25 @@ function CouponsTab() {
     onError: (e) => setMsg(e instanceof Error ? e.message : 'Lỗi'),
   });
   const field = `${INPUT_CLASS} ${TOUCH_H}`;
+  // Việc hằng ngày (xem mã nào đang chạy, gia hạn, tắt) lên đầu; tạo mã và lô thẻ hộp hàng sàn là việc hiếm nên nằm sau chip.
+  const [view, setView] = useState<'list' | 'create' | 'cards'>('list');
   return (
-    <div className="space-y-6">
-    <ClaimCampaignPanel />
+    <div className="space-y-4">
+    <div role="group" aria-label="Mục mã giảm giá" className="flex flex-wrap gap-2">
+      {(
+        [
+          { k: 'list', label: 'Mã đã tạo' },
+          { k: 'create', label: 'Tạo mã mới' },
+          { k: 'cards', label: 'Thẻ hộp hàng sàn' },
+        ] as const
+      ).map((c) => (
+        <button key={c.k} type="button" aria-pressed={view === c.k} onClick={() => setView(c.k)} className={chipClass(view === c.k)}>
+          {c.label}
+        </button>
+      ))}
+    </div>
+    {view === 'cards' && <ClaimCampaignPanel onOpenConfig={onOpenConfig} />}
+    {view === 'create' && (
     <div className="max-w-md space-y-2" data-testid="coupon-create-form">
       <Field label="Mã giảm giá">
         <input
@@ -2217,19 +2466,20 @@ function CouponsTab() {
       <div className="flex gap-2">
         <div className="min-w-0 flex-1">
           <Field label="Bắt đầu từ ngày">
-            <input type="date" aria-label="Mã giảm giá bắt đầu từ ngày" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
+            <VnDateInput ariaLabel="Mã giảm giá bắt đầu từ ngày" value={f.startAt} onChange={(v) => setF({ ...f, startAt: v })} onPendingChange={setStartPending} className={field} />
           </Field>
         </div>
         <div className="min-w-0 flex-1">
           <Field label="Hết hạn ngày">
-            <input type="date" aria-label="Mã giảm giá hết hạn ngày" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
+            <VnDateInput ariaLabel="Mã giảm giá hết hạn ngày" value={f.endAt} min={f.startAt || undefined} onChange={(v) => setF({ ...f, endAt: v })} onPendingChange={setEndPending} className={field} />
           </Field>
         </div>
       </div>
-      <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
+      <button onClick={() => create.mutate()} disabled={!f.code || startPending || endPending || (!!f.endAt && !!f.startAt && f.endAt < f.startAt)} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
-    <CouponList />
+    )}
+    {view === 'list' && <CouponList />}
     </div>
   );
 }

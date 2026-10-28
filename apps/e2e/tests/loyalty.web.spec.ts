@@ -1,4 +1,5 @@
 import { expect, reply, test, type MockApi } from './support/mock-api';
+import { CASHBACK_ENABLED } from '../../../packages/app-core/src/features';
 
 /**
  * Web khách: Điểm Xanh và hạng thành viên (/tai-khoan/diem-xanh). Mọi lời gọi /api/** đi qua mock (fixture `api`).
@@ -331,6 +332,7 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
   });
 
   test('Hoàn tiền: chọn sàn, POST /cashback/click đúng merchantId rồi mở link đối tác ở tab mới', async ({ page, api, context }) => {
+    test.skip(!CASHBACK_ENABLED, 'Lối vào hoàn tiền đang tắt (CASHBACK_ENABLED): /hoan-tien về trang chủ. Bật cờ thì test này chạy lại.');
     api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
     api.get('/me', () => USER);
     api.get('/config/public', { freeshipThreshold: 500000, cashbackHoldDays: 45, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
@@ -351,6 +353,17 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
     expect(popup.url()).toBe('https://example.com/aff/abc');
     expect(await popup.evaluate(() => window.opener)).toBeNull();
     expect(api.callsTo('POST', '/cashback/click')[0]!.body).toEqual({ merchantId: 'm1' });
+  });
+
+  test('Hoàn tiền: cờ tắt thì mở thẳng /hoan-tien về trang chủ như Mini App', async ({ page, api }) => {
+    test.skip(CASHBACK_ENABLED, 'Cờ bật: lối vào mở lại, xem test chọn sàn ở trên.');
+    api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
+    api.get('/me', () => USER);
+    api.get('/config/public', { freeshipThreshold: 500000, cashbackHoldDays: 45, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
+    // Trang chủ (đích chuyển hướng) tự gọi các API này; test chỉ kiểm địa chỉ.
+    api.allowUnmocked('GET /flash-sales/upcoming', 'GET /me/wishlist/ids', 'GET /products/for-you', 'GET /me/purchased-items');
+    await page.goto('/hoan-tien');
+    await expect(page).toHaveURL(/\/$/);
   });
 });
 

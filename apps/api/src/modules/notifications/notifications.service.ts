@@ -93,21 +93,28 @@ export class NotificationsService {
    * cũng chỉ một lần thắng. `dedupeWithinMs`: khoá chỉ chặn khi tin trước còn trong chừng này mili giây (gộp tin lặp theo
    * thời gian, vd "bài của bạn có người thích" tối đa một tin mỗi giờ). Chỉ số dương mới là cửa sổ hợp lệ; bỏ trống, 0, âm
    * hay NaN đều chặn vĩnh viễn như trước (không bao giờ hiểu nhầm thành "không chặn").
+   * `retryZns` (cần `dedupeKey`): khoá được tính riêng cho kênh ZNS. Tin trong app đã lưu mà bước ZNS lỗi thì lần gọi lại chỉ
+   * gửi nốt ZNS (không lưu thêm tin trong app); log ZNS mang cùng khoá nên đã gửi thì không gửi lại. Chỉ dành cho nơi gọi
+   * đã tự tuần tự hoá các lượt (vd cron có bước nhận phần việc), vì lượt song song đều thấy "chưa có log ZNS".
    */
   async notify(
     userId: string,
     templateCode: string,
     data: Record<string, string>,
-    opts: { dedupeKey?: string; dedupeWithinMs?: number } = {},
+    opts: { dedupeKey?: string; dedupeWithinMs?: number; znsTemplateId?: string; retryZns?: boolean } = {},
   ): Promise<void> {
     const dedupeKey = opts.dedupeKey;
     const withinMs = opts.dedupeWithinMs != null && opts.dedupeWithinMs > 0 ? opts.dedupeWithinMs : null;
     // Đọc nhanh ngoài transaction: bài viral có hàng trăm lượt tương tác/phút mà chỉ một tin được ghi, nên các lượt còn lại
     // phải rời đi sau đúng một truy vấn thay vì mỗi lượt giữ một kết nối chờ khoá advisory. Kiểm lại trong transaction bên
     // dưới vẫn là cổng quyết định khi hai lượt cùng thấy "chưa có tin".
+    let znsOnly = false;
     if (dedupeKey && (await this.prisma.notificationLog.findFirst({ where: this.dedupeWhere(userId, dedupeKey, withinMs), select: { id: true } }))) {
-      this.logger.debug(`Bỏ qua ${templateCode} cho ${userId}: đã gửi tin cho sự kiện này.`);
-      return;
+      if (!opts.retryZns || (await this.prisma.notificationLog.findFirst({ where: this.dedupeWhere(userId, dedupeKey, withinMs, 'ZNS'), select: { id: true } }))) {
+        this.logger.debug(`Bỏ qua ${templateCode} cho ${userId}: đã gửi tin cho sự kiện này.`);
+        return;
+      }
+      znsOnly = true;
     }
     const tpl = await this.prisma.notificationTemplate.findUnique({ where: { code: templateCode } });
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -124,7 +131,9 @@ export class NotificationsService {
       this.logger.warn(`Thiếu NotificationTemplate "${templateCode}" — đã gửi nội dung mặc định.`);
     }
     const body = tpl ? this.render(tpl.bodyTemplate, data) : MISSING_TEMPLATE_BODY;
-    const inAppLog = dedupeKey
+    const inAppLog = znsOnly
+      ? null
+      : dedupeKey
       ? await this.prisma.$transaction(async (tx) => {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`notify:${userId}:${dedupeKey}`}))`;
           const seen = await tx.notificationLog.findFirst({ where: this.dedupeWhere(userId, dedupeKey, withinMs), select: { id: true } });
@@ -136,28 +145,32 @@ export class NotificationsService {
       : await this.prisma.notificationLog.create({
           data: { userId, templateCode, channel: 'INAPP', payload: { body, data }, status: 'SENT' },
         });
-    if (!inAppLog) {
+    if (!inAppLog && !znsOnly) {
       this.logger.debug(`Bỏ qua ${templateCode} cho ${userId}: đã gửi tin cho sự kiện này.`);
       return;
     }
-    await this.analytics.recordBestEffort({
-      eventName: 'notification_sent',
-      userId,
-      platform: 'system',
-      notificationId: inAppLog.id,
-      props: { templateCode, channel: 'INAPP' },
-    });
+    if (inAppLog) {
+      await this.analytics.recordBestEffort({
+        eventName: 'notification_sent',
+        userId,
+        platform: 'system',
+        notificationId: inAppLog.id,
+        props: { templateCode, channel: 'INAPP' },
+      });
+    }
 
-    // ZNS nếu template là kênh ZNS + user có phone.
-    if (tpl?.channel === 'ZNS' && user?.phone && tpl.zaloTemplateId) {
-      await this.dispatchZns(userId, templateCode, user.phone, tpl.zaloTemplateId, data);
+    // ZNS nếu template là kênh ZNS + user có phone. `opts.znsTemplateId` (mã mẫu ZNS lấy từ cấu hình của nơi gọi) chỉ dùng khi
+    // mẫu chưa gắn mã ZNS riêng.
+    const znsTemplateId = (tpl?.channel === 'ZNS' && tpl.zaloTemplateId) || opts.znsTemplateId || null;
+    if (user?.phone && znsTemplateId) {
+      await this.dispatchZns(userId, templateCode, user.phone, znsTemplateId, data, opts.retryZns ? dedupeKey : undefined);
     }
   }
 
-  private dedupeWhere(userId: string, dedupeKey: string, withinMs: number | null) {
+  private dedupeWhere(userId: string, dedupeKey: string, withinMs: number | null, channel: 'INAPP' | 'ZNS' = 'INAPP') {
     return {
       userId,
-      channel: 'INAPP' as const,
+      channel,
       payload: { path: ['dedupeKey'], equals: dedupeKey },
       ...(withinMs != null ? { sentAt: { gte: new Date(Date.now() - withinMs) } } : {}),
     };
@@ -174,6 +187,7 @@ export class NotificationsService {
     phone: string,
     templateId: string,
     data: Record<string, string>,
+    dedupeKey?: string,
   ): Promise<void> {
     const queue = this.notificationsQueue;
     // Đọc cấu hình giờ yên tĩnh TRƯỚC khi ghi log: lỗi DB ở đây không để lại log PENDING không có job (kẹt mãi, và tin
@@ -195,7 +209,7 @@ export class NotificationsService {
       userId,
       templateCode,
       channel: 'ZNS',
-      payload: { data },
+      payload: dedupeKey ? { data, dedupeKey } : { data },
       status: !result ? 'PENDING' : result.ok ? 'SENT' : 'FAILED',
       error: result && !result.ok ? znsFailureText(result) : null,
       // Trần đếm theo sentAt: tin khuyến mãi bị trễ ghi mốc tới tay khách để rơi đúng tháng.

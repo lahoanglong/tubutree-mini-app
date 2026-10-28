@@ -140,8 +140,8 @@ describe('/tai-khoan/ho-so — các ô nhập', () => {
     expect(mocks.get).toHaveBeenCalledWith('/me');
     expect(field(container, 'Họ và tên').value).toBe('Lan');
     expect(field(container, 'Email').value).toBe('lan@tubu.vn');
-    expect(field(container, 'Ngày sinh').value).toBe('1990-05-01');
-    expect(field(container, 'Ngày sinh').type).toBe('date');
+    expect(field(container, 'Ngày sinh').value).toBe('01/05/1990');
+    expect(field(container, 'Ngày sinh').type).toBe('text');
     expect(container.textContent).toContain('0912 345 678');
     expect(container.querySelector('input[type="tel"]')).toBeNull();
     expect(unlabeledFields(container)).toEqual([]);
@@ -321,13 +321,14 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
 describe('/tai-khoan/ho-so — ảnh đại diện', () => {
   const NO_CLOUD_NOTE = 'Tạm thời chưa đổi được ảnh đại diện.';
 
-  it('chưa cấu hình dịch vụ ảnh: không có nút đổi ảnh và ô chọn tệp, thay bằng dòng giải thích', async () => {
+  it('chưa cấu hình dịch vụ ảnh: không có nút đổi ảnh, ô chọn tệp, câu báo thiếu chức năng; avatar là chữ cái đầu', async () => {
     mocks.cloudinary = false;
     const { container } = await mount();
     expect(container.querySelector('input[type="file"]')).toBeNull();
     expect(byText(container, 'button', 'ảnh đại diện')).toBeNull();
-    expect(container.textContent).toContain(NO_CLOUD_NOTE);
+    expect(container.textContent).not.toContain(NO_CLOUD_NOTE);
     expect(container.textContent).not.toContain('Chạm để chọn & cắt ảnh đại diện');
+    expect(container.querySelector('[data-testid="profile-avatar-initial"]')!.textContent).toBe('L');
   });
 
   it('đã cấu hình: nút đổi ảnh cao >= 44px, không có dòng giải thích', async () => {

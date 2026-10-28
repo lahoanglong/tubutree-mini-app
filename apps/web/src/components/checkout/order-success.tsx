@@ -30,6 +30,7 @@ const t = {
   total: 'Tổng thanh toán',
   pointsLabel: 'Điểm Xanh sẽ nhận',
   pointsValue: (n: number) => `+${formatCount(n)} điểm`,
+  pointsValueWhen: (n: number) => `+${formatCount(n)} điểm, về khi đơn giao xong`,
   pointsComing: (n: number) => `${formatCount(n)} Điểm Xanh sẽ về tay khi đơn giao thành công`,
   etaLabel: 'Giao dự kiến',
   nextTitle: 'Tiếp theo',
@@ -220,12 +221,7 @@ function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned
             </Text>
           )}
           {pointsEarned > 0 && (
-            <>
-              <KeyValueRow label={t.pointsLabel} value={t.pointsValue(pointsEarned)} tone="success" />
-              <Text variant="caption" tone="tertiary" as="div">
-                {t.pointsComing(pointsEarned)}
-              </Text>
-            </>
+            <KeyValueRow label={t.pointsLabel} value={t.pointsValueWhen(pointsEarned)} tone="success" />
           )}
           {etaLabel && <KeyValueRow label={t.etaLabel} value={etaLabel} />}
         </div>

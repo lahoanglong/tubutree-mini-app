@@ -40,10 +40,16 @@ export const WEB_PROGRAM_LINKS: readonly { path: string; label: string }[] = [
   { path: '/cong-dong', label: 'Cộng đồng' },
 ];
 
-export const readyProgramLinks = () => WEB_PROGRAM_LINKS.filter((l) => isWebRouteReady(l.path));
+export interface ProgramLinkOptions {
+  /** Chương trình Đổi rác đang bật, hoặc khách còn yêu cầu đang mở khi đã tạm dừng. Chưa biết (cấu hình chưa tải) thì false. */
+  wasteVisible: boolean;
+}
+
+export const readyProgramLinks = ({ wasteVisible }: ProgramLinkOptions) =>
+  WEB_PROGRAM_LINKS.filter((l) => isWebRouteReady(l.path) && (l.path !== '/doi-rac' || wasteVisible));
 
 /** Hàng điều hướng của thanh đầu máy tính: không lặp "Trang chủ" (logo) và "Cá nhân" (nút tài khoản). */
-export const readyDesktopNav = (): { path: string; label: string }[] => [
+export const readyDesktopNav = (opts: ProgramLinkOptions): { path: string; label: string }[] => [
   ...readyNavTabs().filter((t) => t.id !== 'home' && t.id !== 'profile'),
-  ...readyProgramLinks(),
+  ...readyProgramLinks(opts),
 ];

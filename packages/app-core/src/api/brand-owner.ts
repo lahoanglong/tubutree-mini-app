@@ -25,7 +25,8 @@ export interface OwnedBrand {
   promotions: OwnedPromotion[];
 }
 
-export const getOwnedBrand = (http: HttpClient) => http.get<OwnedBrand>('/brand/owner/me');
+/** null khi tài khoản chưa sở hữu nhãn nào (máy chủ trả 200 rỗng, không 404). */
+export const getOwnedBrand = (http: HttpClient) => http.get<OwnedBrand | null>('/brand/owner/me');
 export const updateOwnedBrand = (http: HttpClient, dto: Partial<Pick<OwnedBrand, 'logoUrl' | 'coverUrl' | 'tagline' | 'story' | 'origin'>>) =>
   http.patch<OwnedBrand>('/brand/owner/me', dto);
 export const createOwnedPromotion = (http: HttpClient, dto: { title: string; subtitle?: string; couponCode?: string; startAt: string; endAt: string }) =>

@@ -95,6 +95,8 @@ describe('/rewards Kho quà (§4.8)', () => {
     renderPage();
     expect(await screen.findByText('35.000 điểm')).toBeInTheDocument();
     expect(screen.getByText('Đổi quà dùng được 30.000 điểm')).toBeInTheDocument();
+    expect(screen.queryByText(/Điểm không hết hạn chỉ dùng/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Thể lệ/ }));
     expect(screen.getByText('Điểm không hết hạn chỉ dùng khi thanh toán và góp quỹ trồng cây, không dùng để đổi mã giảm giá hay quà.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Quà của tôi/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/rewards/mine');
@@ -103,10 +105,18 @@ describe('/rewards Kho quà (§4.8)', () => {
     mocks.publicConfig.loyalty = { maxRedeemPct: 0.2, pointExpireMonths: 12 };
     try {
       renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: /Thể lệ/ }));
       expect(await screen.findByText('Điểm Xanh thường dùng tối đa 20% giá trị hàng Tubu trong đơn, không trừ vào phí ship. Điểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.')).toBeInTheDocument();
     } finally {
       mocks.publicConfig.loyalty = undefined;
     }
+  });
+  it('số dư 0: có thẻ "Cách kiếm Điểm Xanh" dẫn tới trang Điểm Xanh; có điểm thì không', async () => {
+    mocks.getLoyaltyRewards.mockResolvedValue(makeRewardCatalog({ pointsBalance: 0, pointsConvertedBalance: 0, lockedPoints: 0, redeemablePoints: 0, rewards: [makeRewardItem({ canRedeem: false })] }));
+    renderPage();
+    expect(await screen.findByRole('heading', { name: 'Cách kiếm Điểm Xanh' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem cách kiếm điểm' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/loyalty');
   });
   it('không lặp số dư: dòng "Đổi quà dùng được" chỉ hiện khi khác tổng', async () => {
     mocks.getLoyaltyRewards.mockResolvedValue(makeRewardCatalog({ pointsBalance: 42_000, pointsConvertedBalance: 0, lockedPoints: 0, redeemablePoints: 42_000 }));
@@ -278,6 +288,10 @@ describe('/rewards Kho quà (§4.8)', () => {
     expect(within(free).getByRole('button', { name: 'Đổi' })).toBeEnabled();
     expect(within(free).queryByText('Phổ biến')).toBeNull();
     expect(within(card('Giảm 50.000đ')).getByRole('button', { name: 'Đổi' })).toBeEnabled();
+    fireEvent.click(within(free).getByRole('button', { name: 'Đổi' }));
+    const sheet = await screen.findByRole('dialog');
+    expect(within(sheet).getByText('Hạng Lộc Biếc đã được miễn phí giao hàng cho đơn Tubu từ 99.000đ. Bạn vẫn muốn đổi mã này?')).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: 'Xác nhận đổi' })).toBeEnabled();
   });
   it('hạng chưa freeship tới ngưỡng của mã: quà freeship vẫn đổi được như cũ', async () => {
     mocks.getLoyaltyRewards.mockResolvedValue(makeRewardCatalog({ tierFreeShip: { tierName: 'Mầm Xanh', freeFrom: 199_000 } }));

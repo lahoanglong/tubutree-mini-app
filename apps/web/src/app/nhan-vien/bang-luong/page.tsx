@@ -12,7 +12,6 @@ export default function MyPayrollPage() {
     <StaffGate
       title="Lương của tôi"
       loginMessage="Đăng nhập để xem lương của bạn."
-      deniedMessage="Trang dành cho nhân viên."
       returnTo="/nhan-vien/bang-luong"
     >
       <PayrollHub />

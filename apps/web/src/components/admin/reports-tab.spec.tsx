@@ -69,8 +69,9 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
   it('mặc định 30 ngày gần nhất theo giờ VN và gọi API với đúng khoảng đó', async () => {
     const { container } = mount(<ReportsTab />);
     await flush();
-    const [from, to] = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="date"]'));
-    expect([from!.value, to!.value]).toEqual(['2026-09-19', '2026-10-18']);
+    const from = container.querySelector<HTMLInputElement>('input[aria-label="Từ ngày"]')!;
+    const to = container.querySelector<HTMLInputElement>('input[aria-label="Đến ngày"]')!;
+    expect([from.value, to.value]).toEqual(['19/09/2026', '18/10/2026']);
     expect(mocks.getRevenueReport).toHaveBeenCalledWith({ from: '2026-09-19', to: '2026-10-18' });
   });
 
@@ -89,12 +90,12 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
   it('đổi khoảng ngày thì tải lại; khoảng quá 366 ngày báo lỗi và không gọi API', async () => {
     const { container } = mount(<ReportsTab />);
     await flush();
-    const from = container.querySelector<HTMLInputElement>('input[type="date"]')!;
-    typeInto(from, '2026-10-01');
+    const from = container.querySelector<HTMLInputElement>('input[aria-label="Từ ngày"]')!;
+    typeInto(from, '01102026');
     await flush();
     expect(mocks.getRevenueReport).toHaveBeenLastCalledWith({ from: '2026-10-01', to: '2026-10-18' });
     mocks.getRevenueReport.mockClear();
-    typeInto(from, '2024-01-01');
+    typeInto(from, '01012024');
     await flush();
     expect(container.textContent).toContain('tối đa 366 ngày');
     expect(mocks.getRevenueReport).not.toHaveBeenCalled();
@@ -167,7 +168,7 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
     const { container } = mount(<ReportsTab />);
     await flush();
     mocks.getSourceReport.mockClear();
-    typeInto(container.querySelector<HTMLInputElement>('input[type="date"]'), '2026-01-01');
+    typeInto(container.querySelector<HTMLInputElement>('input[aria-label="Từ ngày"]'), '01012026');
     await flush();
     expect(container.textContent).toContain('tối đa 180 ngày');
     expect(mocks.getSourceReport).not.toHaveBeenCalled();
@@ -233,7 +234,7 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
       click(btn(container, 'Xuất CSV thuế TNCN'));
       await flush();
       expect(container.textContent).toContain('Bạn không có quyền.');
-      typeInto(container.querySelector<HTMLInputElement>('input[type="date"]'), '2024-01-01');
+      typeInto(container.querySelector<HTMLInputElement>('input[aria-label="Từ ngày"]'), '01012024');
       await flush();
       expect(btn(container, 'Xuất CSV thuế TNCN').disabled).toBe(true);
       expect(btn(container, 'Xuất CSV hoàn tiền').disabled).toBe(true);

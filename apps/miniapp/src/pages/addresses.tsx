@@ -119,7 +119,7 @@ export default function AddressesPage() {
 
             <Button
               fullWidth
-              variant="secondary"
+              variant={addrQ.data?.length === 0 ? 'primary' : 'secondary'}
               icon={Plus}
               style={{ marginTop: 6 }}
               onPress={() => {

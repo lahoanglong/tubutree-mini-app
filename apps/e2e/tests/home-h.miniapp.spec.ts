@@ -15,6 +15,8 @@ const gateOf = () => {
 };
 
 async function expectChipHitArea44(chip: Locator): Promise<void> {
+  // Đưa chip về giữa khung trước khi đo: mép trên bị ô tìm dính che, mép dưới bị thanh đáy (cố định) che.
+  await chip.evaluate((el) => el.scrollIntoView({ block: 'center' }));
   const box = (await chip.boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(44);
   const hit = await chip.evaluate(
@@ -122,7 +124,6 @@ test.describe('Trang chủ — thẻ thành viên tên dài', () => {
       await page.goto('/');
       const card = page.getByRole('region', { name: 'Thẻ thành viên' });
       await expect(card).toContainText('1.800', { timeout: 15_000 });
-      await expect(card).toContainText('Còn 1.200');
       await expect(card).toContainText(name);
       heights.push((await card.boundingBox())!.height);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
@@ -229,9 +230,9 @@ test.describe('Đổi rác tạm dừng nhưng còn yêu cầu đang mở', () =
   });
 });
 
-test.describe('Kệ Mua lại: nhãn Định kỳ đủ chữ, thẻ cao như nhau', () => {
+test.describe('Kệ Mua lại: Định kỳ tạm ẩn ở Mini App, thẻ cao như nhau', () => {
   for (const width of [375, 320]) {
-    test(`${width}px: "Định kỳ -17%" không bị cắt; tên ngắn và tên dài cho thẻ cao bằng nhau (≤ 1px)`, async ({ page, api }) => {
+    test(`${width}px: không có nút Định kỳ (cờ tắt), vẫn có Mua lại; tên ngắn và tên dài cho thẻ cao bằng nhau (≤ 1px)`, async ({ page, api }) => {
       await page.setViewportSize({ width, height: 812 });
       const heights: number[] = [];
       for (const name of ['An', 'Nước Rửa Chén Sinh Học Tubu Hương Chanh Gừng Loại Đậm Đặc 500ml Chai Lớn']) {
@@ -241,13 +242,8 @@ test.describe('Kệ Mua lại: nhãn Định kỳ đủ chữ, thẻ cao như nh
         await page.goto('/');
         const card = page.getByRole('region', { name: 'Mua lại' });
         await expect(card).toBeVisible({ timeout: 15_000 });
-        const subscribe = card.getByRole('button', { name: 'Định kỳ -17%' });
-        await expect(subscribe).toBeVisible();
-        const clipped = await subscribe.evaluate((el) => {
-          const label = el.querySelector('.zaui-btn-container > span') as HTMLElement | null;
-          return label ? label.scrollWidth > label.clientWidth : true;
-        });
-        expect(clipped, `nhãn Định kỳ bị cắt ở ${width}px`).toBe(false);
+        await expect(card.getByRole('button', { name: /Định kỳ/ })).toHaveCount(0);
+        await expect(card.getByRole('button', { name: 'Mua lại' }).first()).toBeVisible();
         heights.push((await card.boundingBox())!.height);
       }
       expect(Math.abs(heights[1]! - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên dài ${heights[1]}px`).toBeLessThanOrEqual(1);

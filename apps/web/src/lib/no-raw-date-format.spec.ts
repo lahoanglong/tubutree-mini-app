@@ -41,7 +41,6 @@ const DATE_API_EXCEPTIONS: Record<string, string> = {
 const NUMBER_TO_LOCALE_STRING: Record<string, { count: number; why: string }> = {
   'app/tai-khoan/page.tsx': { count: 1, why: 'points.total (tổng Điểm Xanh)' },
   'app/tai-khoan/orders-section.tsx': { count: 2, why: 'số đơn đang hiển thị / tổng số đơn' },
-  'app/thanh-toan/page.tsx': { count: 2, why: 'quote.pointsUsed, usablePoints (Điểm Xanh)' },
   'components/game/format.ts': { count: 1, why: 'formatNumber: số giọt nước, điểm và cây của Vườn Xanh' },
   'components/admin/engagement-tab.tsx': { count: 2, why: 'REWARD_POINTS_MAX: cận trên của ô điểm thưởng nhiệm vụ (sửa và thêm mới)' },
   'components/admin/pos-credits-tab.tsx': { count: 1, why: 'sum.points (điểm đã tích)' },

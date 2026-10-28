@@ -102,12 +102,12 @@ describe('UAT GOMDON-11: đơn COD đã giao không hiện "Chưa thanh toán"',
     expect(orderPaymentStatusLabel({ status: 'DELIVERED', paymentMethod: 'COD' })).toBe('');
   });
 
-  it('admin (ô gọn trong danh sách): COD đã giao → "Đã thu COD", PAID → "Đã TT", trạng thái khác ghi tiếng Việt', () => {
+  it('admin (ô gọn trong danh sách): COD đã giao → "Đã thu COD", PAID → "Đã thanh toán", trạng thái khác ghi tiếng Việt', () => {
     expect(orderPaymentStatusShort({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('Đã thu COD');
-    expect(orderPaymentStatusShort({ status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('Chưa TT');
-    expect(orderPaymentStatusShort({ status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' })).toBe('Đã TT');
+    expect(orderPaymentStatusShort({ status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID' })).toBe('Chưa thanh toán');
+    expect(orderPaymentStatusShort({ status: 'DELIVERED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' })).toBe('Đã thanh toán');
     expect(orderPaymentStatusShort({ status: 'RETURNED', paymentMethod: 'COD', paymentStatus: 'REFUNDED' })).toBe('Đã hoàn tiền');
-    expect(orderPaymentStatusShort({ status: 'CANCELLED', paymentMethod: 'ZALOPAY', paymentStatus: 'FAILED' })).toBe('TT lỗi');
+    expect(orderPaymentStatusShort({ status: 'CANCELLED', paymentMethod: 'ZALOPAY', paymentStatus: 'FAILED' })).toBe('Thanh toán lỗi');
   });
 });
 
@@ -133,10 +133,10 @@ describe('R6-ADMIN-2 — đơn huỷ có khoản tiền về muộn đang chờ 
   });
 
   it('khoản đã xong, chờ đối soát hoặc đơn không có khoản nào thì giữ nhãn cũ', () => {
-    expect(orderPaymentStatusShort(lateOrder, [{ kind: 'LATE_PAYMENT', method: 'MANUAL_TRANSFER', status: 'COMPLETED' }])).toBe('Chưa TT');
-    expect(orderPaymentStatusShort(lateOrder, [{ kind: 'LATE_PAYMENT', method: 'MANUAL_TRANSFER', status: 'UNVERIFIED' }])).toBe('Chưa TT');
-    expect(orderPaymentStatusShort(lateOrder, [{ kind: 'CANCEL', method: 'MANUAL_TRANSFER', status: 'PENDING' }])).toBe('Chưa TT');
-    expect(orderPaymentStatusShort(lateOrder, [])).toBe('Chưa TT');
+    expect(orderPaymentStatusShort(lateOrder, [{ kind: 'LATE_PAYMENT', method: 'MANUAL_TRANSFER', status: 'COMPLETED' }])).toBe('Chưa thanh toán');
+    expect(orderPaymentStatusShort(lateOrder, [{ kind: 'LATE_PAYMENT', method: 'MANUAL_TRANSFER', status: 'UNVERIFIED' }])).toBe('Chưa thanh toán');
+    expect(orderPaymentStatusShort(lateOrder, [{ kind: 'CANCEL', method: 'MANUAL_TRANSFER', status: 'PENDING' }])).toBe('Chưa thanh toán');
+    expect(orderPaymentStatusShort(lateOrder, [])).toBe('Chưa thanh toán');
   });
 });
 

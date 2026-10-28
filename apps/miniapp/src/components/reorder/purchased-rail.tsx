@@ -11,6 +11,7 @@ import { fetchActiveFlashSales, type PurchasedItem } from '../../services/shop-a
 import { serverNow } from '../../utils/server-clock';
 import { haptic } from '../../utils/haptic';
 import { SubscribeSheet } from '../subscribe-sheet';
+import { SUBSCRIPTIONS_IN_MINIAPP } from '../../utils/features';
 import { isEndpointMissing } from '../home/home-blocks';
 import { useBlockQuery } from '../home/use-block-query';
 import { Badge } from '../ui/badge';
@@ -197,7 +198,7 @@ function CompactRebuyCard({
 }) {
   const available = item.inStock !== false && item.stock > 0;
   // Chỉ mời "Định kỳ" khi API xác nhận hàng không chỉ bán lẻ; API cũ chưa trả `retailOnly` thì không mời (máy chủ có thể từ chối).
-  const subscribable = item.retailOnly === false;
+  const subscribable = SUBSCRIPTIONS_IN_MINIAPP && item.retailOnly === false;
   return (
     <Card variant="raised" padding={12}>
       <button

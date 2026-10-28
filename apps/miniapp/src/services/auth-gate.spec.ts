@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { stubFetch, type FetchCall } from '../test/fetch-stub';
-import { api, setAccessToken, setAuthReady } from './api';
+import { api, isPublicGet, setAccessToken, setAuthReady } from './api';
 
 // Interceptor của api.ts dynamic-import '../store/auth' để lấy getDeviceId() (X-Device-Id header).
 // Mock ở đây để tránh interceptor thật kéo theo zmp-sdk/apis thật (module đó đọc `window` ngay lúc
@@ -74,7 +74,7 @@ describe('request chờ phiên khôi phục xong mới gửi', () => {
   it('phiên khôi phục THẤT BẠI vẫn nhả request (không treo vì promise reject)', async () => {
     const cap = captureFetch();
     setAuthReady(Promise.reject(new Error('mất mạng')));
-    await api.get('/products');
+    await api.get('/cart');
     expect(cap.calls()).toBe(1);
   });
 
@@ -83,5 +83,41 @@ describe('request chờ phiên khôi phục xong mới gửi', () => {
     setAccessToken('token-cu');
     await api.get('/cart');
     expect(cap.seen()?.headers.get('Authorization')).toBe('Bearer token-cu');
+  });
+});
+
+describe('GET công khai không chờ phiên (R-78)', () => {
+  afterEach(() => {
+    setAuthReady(null);
+    vi.unstubAllGlobals();
+  });
+
+  it('/products, chi tiết SP, danh mục, thương hiệu, flash-sale, config công khai đi ngay khi phiên còn treo', async () => {
+    const cap = captureFetch();
+    setAuthReady(new Promise<void>(() => {}));
+    for (const url of ['/products', '/products/binh-xit', '/products/binh-xit/related', '/categories', '/brands', '/flash-sales/active', '/config/public']) {
+      await api.get(url);
+    }
+    expect(cap.calls()).toBe(7);
+  });
+
+  it('endpoint theo người dùng và mọi lệnh ghi vẫn chờ phiên', async () => {
+    const cap = captureFetch();
+    setAuthReady(new Promise<void>(() => {}));
+    api.get('/products/for-you').catch(() => {});
+    api.get('/cart').catch(() => {});
+    api.post('/products', {}).catch(() => {});
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(cap.calls()).toBe(0);
+  });
+
+  it('isPublicGet', () => {
+    expect(isPublicGet('GET', '/products?limit=12')).toBe(true);
+    expect(isPublicGet('get', '/categories/')).toBe(true);
+    expect(isPublicGet('GET', '/products/for-you')).toBe(false);
+    expect(isPublicGet('GET', '/products/a/b/c')).toBe(false);
+    expect(isPublicGet('POST', '/products')).toBe(false);
+    expect(isPublicGet('GET', '/flash-sales/active/extra')).toBe(false);
   });
 });

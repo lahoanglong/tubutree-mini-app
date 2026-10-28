@@ -37,8 +37,8 @@ export function ResultHeader({ total, isLoading, chips, filterCount, filtersIgno
         <div role="group" aria-label={vi.browse.activeFilters} className="scroll-x" style={{ gap: 8, padding: '6px 0' }}>
           {chips.map((c) => (
             <Chip key={c.key} selected ariaLabel={vi.browse.removeFilter(c.label)} onPress={() => onPatch(c.patch)}>
-              {c.label}
-              <Icon icon={X} size="sm" tone="inverse" />
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.label}</span>
+              <Icon icon={X} size="sm" tone="inverse" style={{ flexShrink: 0 }} />
             </Chip>
           ))}
         </div>

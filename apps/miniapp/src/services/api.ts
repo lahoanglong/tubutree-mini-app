@@ -103,10 +103,29 @@ const loadAuthModule = () => import('../store/auth');
 let authModulePromise: ReturnType<typeof loadAuthModule> | null = null;
 const authModule = () => (authModulePromise ??= loadAuthModule());
 
+/**
+ * GET công khai của API (@Public, cùng nội dung cho mọi người): không cần chờ phiên. Thẻ SP và chi tiết SP hiện ngay khi mở
+ * link, phần cá nhân hoá (/products/for-you, giỏ, điểm...) vẫn chờ phiên như cũ.
+ */
+const PUBLIC_GET_PATHS = [
+  /^\/products$/,
+  /^\/products\/(?!for-you(?:\/|$))[^/]+(?:\/related|\/bought-together)?$/,
+  /^\/categories$/,
+  /^\/brands$/,
+  /^\/flash-sales\/active$/,
+  /^\/config\/public$/,
+];
+
+export function isPublicGet(method: string, url: string): boolean {
+  if (method.toUpperCase() !== 'GET') return false;
+  const path = url.split('?')[0]!.replace(/\/+$/, '');
+  return PUBLIC_GET_PATHS.some((re) => re.test(path));
+}
+
 /** Gắn phiên vào request ngay trước khi gửi (chạy lại ở mỗi lần gửi lại). */
 async function prepare(req: PendingRequest): Promise<void> {
   // Chính các lệnh /auth/* KHÔNG được chờ authReady — chúng là thứ tạo ra nó (deadlock).
-  if (authReady && !req.url.includes('/auth/')) {
+  if (authReady && !req.url.includes('/auth/') && !isPublicGet(req.method, req.url)) {
     const pending = authReady;
     await Promise.race([
       pending.catch(() => undefined),
@@ -213,11 +232,11 @@ function errorMessage(error: unknown, timeoutMessage: string): string {
     // Message backend 4xx là nghiệp vụ (viết sẵn tiếng Việt) — hiển thị thẳng; lời tiếng Anh của framework thì câu chung.
     if (backendMsg && error.response && error.response.status < 500) return businessMsg ?? vi.errors.generic;
     if (error.code === 'ECONNABORTED') return timeoutMessage;
-    // Không có response: phân biệt MẤT MẠNG thật (navigator.onLine=false) với server/CORS không
-    // phản hồi (vẫn có mạng) — tránh báo "mất mạng" sai khi thực chất là lỗi máy chủ.
+    // Không có response: máy báo offline thì nói mất mạng; còn lại (sóng yếu, wifi không ra mạng) dùng câu trung tính,
+    // không đổ lỗi cho máy chủ. Chỉ 5xx mới nói máy chủ bận.
     if (!error.response) {
       const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-      return offline ? vi.errors.offline : vi.errors.server;
+      return offline ? vi.errors.offline : vi.errors.network;
     }
     return vi.errors.server;
   }

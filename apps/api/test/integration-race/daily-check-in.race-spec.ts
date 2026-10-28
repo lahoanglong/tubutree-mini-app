@@ -106,4 +106,88 @@ describe('DailyCheckInService race (real Postgres)', () => {
     expect(after).toEqual(before);
     expect((await svc.status(user.id)).checkedInToday).toBe(true);
   });
+
+  describe('MỘT chuỗi chung: ngày của Điểm Xanh = ngày của chuỗi nước', () => {
+    const DAYMS = 864e5;
+    // Bảng điểm mặc định (SystemConfigService cache cấu hình nên không đổi giữa các ca): ngày 1..6 = 1.000, ngày 7 = 2.000.
+
+    const seedStreak = (userId: string, daysAgo: number, streakDays: number, streakFreezes = 0) =>
+      prisma.gameProfile.upsert({
+        where: { userId },
+        create: { userId, lastCheckInAt: new Date(Date.now() - daysAgo * DAYMS), streakDays, streakFreezes, totalSeeds: 0 },
+        update: { lastCheckInAt: new Date(Date.now() - daysAgo * DAYMS), streakDays, streakFreezes, totalSeeds: 0 },
+      });
+
+    it('hôm qua chuỗi 2 → hôm nay ngày 3: Điểm Xanh theo ngày 3, nước gồm +5 chuỗi 3 ngày; status hứa đúng số sẽ nhận', async () => {
+      const user = await createUser(prisma, { pointsBalance: 0 });
+      await seedStreak(user.id, 1, 2);
+      const before = await svc.status(user.id);
+      expect(before).toMatchObject({ currentCycleDay: 3, streakDay: 3, streakDays: 2, todayPoints: 1000, todayWater: DAILY_WATER + 5 });
+      const r = await svc.run(user.id);
+      expect(r.points).toMatchObject({ cycleDay: 3, streakDays: 3, pointsEarned: 1000 });
+      expect(r.water).toMatchObject({ streakDays: 3, seedsEarned: DAILY_WATER + 5 });
+      const after = await svc.status(user.id);
+      expect(after).toMatchObject({ checkedInToday: true, currentCycleDay: 3, streakDays: 3 });
+    });
+
+    it('5 lời gọi song song cùng ngày: một dòng điểm theo ngày của chuỗi nước, một lần cộng nước', async () => {
+      const user = await createUser(prisma, { pointsBalance: 0 });
+      await seedStreak(user.id, 1, 5);
+      const results = await Promise.allSettled(Array.from({ length: 5 }, () => svc.run(user.id)));
+      for (const r of results) expect(r.status).toBe('fulfilled');
+      const t = await tally(user.id);
+      expect(t.pointsRows).toHaveLength(1);
+      expect(t.pointsRows[0]!.delta).toBe(1000);
+      expect(t.pointsRows[0]!.reason).toBe('DAILY_CHECKIN:DAY_6');
+      expect(t.seeds).toBe(DAILY_WATER + 5); // ngày 6 của chuỗi là mốc 3 ngày
+      const profile = await prisma.gameProfile.findUniqueOrThrow({ where: { userId: user.id } });
+      expect(profile.streakDays).toBe(6);
+    });
+
+    it('lỡ đúng 1 ngày có vé giữ lửa: chuỗi chung được giữ cho cả hai, vé trừ một', async () => {
+      const user = await createUser(prisma, { pointsBalance: 0 });
+      await seedStreak(user.id, 2, 3, 1);
+      const r = await svc.run(user.id);
+      expect(r.water).toMatchObject({ streakDays: 4, streakFrozeUsed: true });
+      expect(r.points).toMatchObject({ cycleDay: 4, streakDays: 4, pointsEarned: 1000 });
+      const profile = await prisma.gameProfile.findUniqueOrThrow({ where: { userId: user.id } });
+      expect(profile.streakFreezes).toBe(0);
+    });
+
+    it('lỡ ngày không có vé: cả hai về ngày 1', async () => {
+      const user = await createUser(prisma, { pointsBalance: 0 });
+      await seedStreak(user.id, 2, 6, 0);
+      const r = await svc.run(user.id);
+      expect(r.water).toMatchObject({ streakDays: 1 });
+      expect(r.points).toMatchObject({ cycleDay: 1, pointsEarned: 1000 });
+    });
+
+    it('chuỗi 7 rồi sang vòng mới: ngày 7 nhận 2.000 + thưởng mốc nước, hôm sau là ngày 1', async () => {
+      const user = await createUser(prisma, { pointsBalance: 0 });
+      await seedStreak(user.id, 1, 6);
+      const d7 = await svc.run(user.id);
+      expect(d7.points).toMatchObject({ cycleDay: 7, pointsEarned: 2000 });
+      expect(d7.water!.seedsEarned).toBeGreaterThan(DAILY_WATER);
+      // Dời "hôm nay" thành hôm qua để mô phỏng ngày kế tiếp.
+      await prisma.gameProfile.update({ where: { userId: user.id }, data: { lastCheckInAt: new Date(Date.now() - DAYMS) } });
+      await prisma.loyaltyCheckIn.deleteMany({ where: { userId: user.id } });
+      await prisma.pointsTransaction.deleteMany({ where: { userId: user.id, refType: 'CHECKIN' } });
+      const d8 = await svc.run(user.id);
+      expect(d8.points).toMatchObject({ cycleDay: 1, streakDays: 8, pointsEarned: 1000 });
+    });
+
+    it('ngày chuyển đổi: Điểm Xanh đã nhận hôm nay theo chuỗi cũ, nước chưa → chỉ cộng nước, không nhận Điểm Xanh lần hai', async () => {
+      const user = await createUser(prisma, { pointsBalance: 0 });
+      await seedStreak(user.id, 1, 1);
+      // Dòng điểm danh Điểm Xanh của chuỗi cũ (đang ở ngày 5) đã nhận hôm nay.
+      await prisma.loyaltyCheckIn.create({ data: { userId: user.id, dayKey: new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10), cycleDay: 5, streakDays: 5, points: 5000 } });
+      const r = await svc.run(user.id);
+      expect(r.points).toBeNull();
+      expect(r.water).toMatchObject({ streakDays: 2 });
+      const status = await svc.status(user.id);
+      expect(status).toMatchObject({ checkedInToday: true, currentCycleDay: 2 });
+      const t = await tally(user.id);
+      expect(t.pointsRows).toHaveLength(0);
+    });
+  });
 });

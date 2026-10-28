@@ -202,12 +202,12 @@ export const orderPaymentStatusLabel = (o: PaymentView, refunds?: readonly Refun
 };
 
 /** Ô gọn trong danh sách đơn admin. */
-const PAYMENT_STATUS_SHORT: Record<string, string> = { UNPAID: 'Chưa TT', REFUNDED: 'Đã hoàn tiền', FAILED: 'TT lỗi' };
+const PAYMENT_STATUS_SHORT: Record<string, string> = { UNPAID: 'Chưa thanh toán', REFUNDED: 'Đã hoàn tiền', FAILED: 'Thanh toán lỗi' };
 
 export function orderPaymentStatusShort(o: PaymentView, refunds?: readonly RefundFacts[] | null): string {
   if (codCollected(o)) return 'Đã thu COD';
   if (isRefundInProgress(o, refunds)) return 'Đang hoàn tiền';
-  if (o.paymentStatus === 'PAID') return 'Đã TT';
+  if (o.paymentStatus === 'PAID') return 'Đã thanh toán';
   return (o.paymentStatus && PAYMENT_STATUS_SHORT[o.paymentStatus]) ?? o.paymentStatus ?? '';
 }
 

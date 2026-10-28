@@ -45,6 +45,16 @@ export interface CommunityUnansweredQuestion {
   waitingHours: number;
 }
 
+/** GET /feed/admin/reports: báo cáo vi phạm đang mở (bài hoặc bình luận), cũ nhất trước. `target` null = nội dung đã bị xoá hẳn. */
+export interface CommunityReport {
+  id: string;
+  targetType: 'POST' | 'COMMENT' | string;
+  targetId: string;
+  reason: string;
+  createdAt: string;
+  target: { kind: 'POST' | 'COMMENT'; author: string; title: string | null; excerpt: string; alreadyHandled: boolean; postId: string } | null;
+}
+
 const enc = encodeURIComponent;
 
 export const listCommunityPending = () => apiFetch<CommunityPendingPost[]>('/feed/admin/pending');
@@ -60,3 +70,8 @@ export const hideCommunityPost = (id: string, reason?: string) =>
   apiFetch<{ ok: boolean }>(`/feed/admin/${enc(id)}/hide`, { method: 'POST', body: reason ? { reason } : {} });
 export const pinCommunityPost = (id: string, pinned: boolean) =>
   apiFetch<{ ok: boolean }>(`/feed/admin/${enc(id)}/pin`, { method: 'POST', body: { pinned } });
+
+export const listCommunityReports = () => apiFetch<CommunityReport[]>('/feed/admin/reports');
+export const resolveCommunityReport = (id: string) => apiFetch<{ ok: boolean }>(`/feed/admin/reports/${enc(id)}/resolve`, { method: 'POST' });
+/** Bình luận bị báo cáo: chỉ chủ bình luận hoặc ADMIN gỡ được. */
+export const removeCommunityComment = (commentId: string) => apiFetch<{ ok: boolean }>(`/feed/comments/${enc(commentId)}`, { method: 'DELETE' });

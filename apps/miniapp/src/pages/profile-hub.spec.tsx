@@ -21,12 +21,16 @@ const mocks = vi.hoisted(() => ({
   getSubscriptions: vi.fn(),
   shareLink: vi.fn(),
   cashback: false,
+  subscriptions: true,
 }));
 vi.mock('../utils/features', () => ({
   get CASHBACK_ENABLED() {
     return mocks.cashback;
   },
   SEASON_PASS_ENABLED: false,
+  get SUBSCRIPTIONS_IN_MINIAPP() {
+    return mocks.subscriptions;
+  },
 }));
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -76,6 +80,7 @@ vi.mock('../store/auth', () => {
 });
 
 import ProfilePage from './profile';
+import { miniAppLink } from '../utils/miniapp-link';
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -276,6 +281,19 @@ describe('Hàng trạng thái đơn ở đầu trang Cá nhân', () => {
     expect(await screen.findByRole('button', { name: 'Định kỳ, 1 đơn' })).toBeInTheDocument();
   });
 
+  it('Mini App tắt giao định kỳ: 4 ô, không có ô Định kỳ và không gọi danh sách định kỳ', async () => {
+    mocks.subscriptions = false;
+    try {
+      renderPage();
+      expect(await screen.findByRole('button', { name: 'Chờ thanh toán, 2 đơn' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Đã giao' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Định kỳ/ })).not.toBeInTheDocument();
+      expect(mocks.getSubscriptions).not.toHaveBeenCalled();
+    } finally {
+      mocks.subscriptions = true;
+    }
+  });
+
   it('bấm ô mở danh sách đơn đã lọc; "Xem tất cả" mở /orders', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Chờ thanh toán, 2 đơn' }));
@@ -333,7 +351,8 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ' }));
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledWith(expect.objectContaining({ path: '/?ref=LAN1' })));
-    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith(expect.stringContaining('/?ref=LAN1')));
+    // R-67: link chép là link Mini App, không phải link web.
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith(expect.stringContaining(miniAppLink('/?ref=LAN1'))));
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', text: expect.stringContaining('đã sao chép liên kết') })),
     );
@@ -429,5 +448,82 @@ describe('Lối vào "Chat với Tubu Tree" ở hub Cá nhân', () => {
     mocks.chatSummary.mockResolvedValue({ unreadCount: 3 });
     renderPage();
     expect(await screen.findByTestId('chat-unread-dot')).toBeInTheDocument();
+  });
+});
+
+describe('Cá nhân: hàng đơn, chat ở đầu trang, Học viện theo vai, không Đăng xuất (R-33, R-34, R-53, R-111)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    arrangeDefaults();
+    mocks.authStatus = 'authenticated';
+    mocks.notifications = [];
+    mocks.role = 'CUSTOMER';
+    mocks.getPublicConfig.mockImplementation(async () => ({}));
+  });
+
+  it('số đơn là chấm ở góc biểu tượng, chỉ hiện khi lớn hơn 0; không còn dấu "·"', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: 'Chờ thanh toán, 2 đơn' });
+    await waitFor(() => expect(screen.getAllByTestId('order-count-badge').map((b) => b.textContent)).toEqual(['2', '1', '1']));
+    expect(screen.queryByText('·')).toBeNull();
+  });
+
+  it('Mini App tắt giao định kỳ: lưới 4 cột, Thử lại số đơn không gọi danh sách định kỳ', async () => {
+    mocks.subscriptions = false;
+    try {
+      mocks.fetchOrders.mockRejectedValue(new Error('boom'));
+      renderPage();
+      expect(await screen.findByText('Không tải được số đơn.')).toBeInTheDocument();
+      const cell = screen.getByRole('button', { name: 'Đã giao' });
+      expect((cell.parentElement as HTMLElement).style.gridTemplateColumns).toBe('repeat(4, minmax(0, 1fr))');
+      mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 1, total: 3 } });
+      fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+      await waitFor(() => expect(screen.queryByText('Không tải được số đơn.')).toBeNull());
+      expect(mocks.getSubscriptions).not.toHaveBeenCalled();
+    } finally {
+      mocks.subscriptions = true;
+    }
+  });
+
+  it('đếm đơn lỗi: có dòng báo và nút Thử lại tải lại số đơn', async () => {
+    mocks.fetchOrders.mockRejectedValue(new Error('boom'));
+    renderPage();
+    expect(await screen.findByText('Không tải được số đơn.')).toBeInTheDocument();
+    const before = mocks.fetchOrders.mock.calls.length;
+    mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 1, total: 3 } });
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    await waitFor(() => expect(mocks.fetchOrders.mock.calls.length).toBeGreaterThan(before));
+    await waitFor(() => expect(screen.queryByText('Không tải được số đơn.')).toBeNull());
+  });
+
+  it('chat bật: biểu tượng chat ở đầu trang mở /chat, có chấm khi có tin chưa đọc; chat tắt thì không có', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ chat: { enabled: true, hours: { start: '08:00', end: '21:00' } } });
+    mocks.chatSummary.mockResolvedValue({ unreadCount: 2 });
+    const { unmount } = renderPage();
+    const btn = await screen.findByRole('button', { name: 'Chat với Tubu Tree, có tin mới' });
+    expect(await screen.findByTestId('profile-chat-dot')).toBeInTheDocument();
+    fireEvent.click(btn);
+    expect(mocks.navigate).toHaveBeenCalledWith('/chat');
+    unmount();
+    mocks.getPublicConfig.mockResolvedValue({});
+    renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    expect(screen.queryByRole('button', { name: /^Chat với Tubu Tree/ })).toBeNull();
+  });
+
+  it('Học viện chỉ hiện cho CTV, đại lý, nhân viên, quản trị; khách thường không thấy', async () => {
+    const { unmount } = renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    expect(screen.queryByText('Học viện Tubu')).toBeNull();
+    unmount();
+    mocks.role = 'AFFILIATE';
+    renderPage();
+    expect(await screen.findByText('Học viện Tubu')).toBeInTheDocument();
+  });
+
+  it('không còn nút Đăng xuất ở cuối trang Cá nhân', async () => {
+    renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    expect(screen.queryByRole('button', { name: 'Đăng xuất' })).toBeNull();
   });
 });

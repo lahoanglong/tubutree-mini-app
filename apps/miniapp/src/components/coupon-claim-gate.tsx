@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift } from 'lucide-react';
-import type { AuthUser } from '@tubutree/shared-types';
 import { useAuthStore } from '../store/auth';
 import { useCartCount } from '../hooks/use-cart-count';
 import { getErrorMessage, isOutcomeUnknown } from '../services/api';
@@ -19,10 +18,13 @@ import {
 } from '../services/coupon-claim';
 import { setCardGiftNote } from '../services/card-gift-note';
 import { formatDate } from '../utils/format';
+import { isGuestUser } from '../utils/guest-user';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { Icon } from './ui/icon';
 import { Text } from './ui/text';
+
+export { isGuestUser };
 
 type Phase =
   | { kind: 'closed' }
@@ -30,12 +32,6 @@ type Phase =
   | { kind: 'needLogin'; loginFailed?: boolean }
   | { kind: 'done'; coupon: ClaimedCoupon }
   | { kind: 'failed'; message: string; retryable: boolean };
-
-/** Cùng luật "khách thật" của máy chủ (common/real-user.ts): có SĐT, hoặc zaloId Zalo thật (không phải guest_). */
-export function isGuestUser(u: Pick<AuthUser, 'phone' | 'zaloId'>): boolean {
-  if (u.phone) return false;
-  return !u.zaloId || u.zaloId.startsWith('guest_');
-}
 
 const isRateLimited = (err: unknown) => isHttpError(err) && err.response?.status === 429;
 const needsZaloLogin = (message: string) => /đăng nhập Zalo/i.test(message);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { brandAccent } from '../../utils/brands';
+import { useSizedImage } from '../../utils/image-src';
 
 /**
  * Ô thay thế khi sản phẩm chưa có ảnh (hay gặp với hàng Pancake chưa có thumbnail) hoặc ảnh tải lỗi: nền ngả màu nhãn,
@@ -45,10 +46,29 @@ export function ProductImageFallback({ brand }: { brand: string }) {
   );
 }
 
-/** Ảnh thẻ sản phẩm: có ảnh thì vẽ ảnh (tải lỗi thì rơi về ô thay thế), không có thì ô thay thế. Cha phải `position: relative`. */
-export function ProductImage({ src, brand }: { src?: string | null; brand: string }) {
+/** Bề rộng thẻ sản phẩm lưới 2 cột ở khổ điện thoại (CSS px); chọn bản ảnh đổi cỡ 1x/2x theo số này. */
+export const CARD_IMAGE_WIDTH = 170;
+
+/**
+ * Ảnh thẻ sản phẩm: có ảnh thì vẽ bản đổi cỡ đúng bề rộng (srcset 1x/2x; ảnh tải lỗi thì rơi về ô thay thế), không có thì ô thay thế.
+ * Cha phải `position: relative`; ô vuông của cha giữ chỗ nên ảnh về không làm nhảy bố cục.
+ */
+export function ProductImage({ src, brand, width = CARD_IMAGE_WIDTH }: { src?: string | null; brand: string; width?: number }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [src]);
-  if (!src || failed) return <ProductImageFallback brand={brand} />;
-  return <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />;
+  const { img, fallBack } = useSizedImage(src, width);
+  if (!img || failed) return <ProductImageFallback brand={brand} />;
+  return (
+    <img
+      src={img.src}
+      srcSet={img.srcSet}
+      alt=""
+      width={width}
+      height={width}
+      loading="lazy"
+      decoding="async"
+      onError={() => fallBack() || setFailed(true)}
+      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+    />
+  );
 }

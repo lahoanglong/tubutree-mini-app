@@ -518,14 +518,13 @@ export class BrandService {
     return brand;
   }
 
-  /** Nhãn mà user đang sở hữu (+ promotions) cho màn quản lý — 1 query (include) thay vì 2 round-trip. */
+  /** Nhãn mà user đang sở hữu (+ promotions) cho màn quản lý — 1 query (include) thay vì 2 round-trip. Chưa sở hữu nhãn nào thì null (200), không 404, để màn không ghi lỗi đỏ ở console. */
   async getOwnedBrand(userId: string) {
     const brand = await this.prisma.brand.findFirst({
       where: { ownerUserId: userId },
       orderBy: { createdAt: 'asc' },
       include: { promotions: { orderBy: { sortOrder: 'asc' } } },
     });
-    if (!brand) throw new NotFoundException('Bạn chưa được cấp quyền quản lý nhãn nào.');
     return brand;
   }
 

@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { ChevronRight, Copy, Leaf, Pencil, User } from 'lucide-react';
+import { ChevronRight, Copy, CreditCard, Leaf, MessageCircle, Package, PackageCheck, Pencil, Repeat, Truck, type LucideIcon } from 'lucide-react';
 import { fetchOrders } from '@tubutree/app-core/api/orders';
+import { orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
 import { notificationsQuery } from '@tubutree/app-core/queries/account';
@@ -23,6 +24,7 @@ import { formatVnd, getMe } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { ProfileAvatar } from '@/components/account/profile-avatar';
 import { buildAccountMenu, type AccountMenuItem } from '@/components/account/account-menu';
 import { ORDERS_TABS } from '@/components/orders/orders-tabs';
 import { Button, Card, Heading, Text } from '@/components/mini';
@@ -30,6 +32,14 @@ import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { OrdersSection } from './orders-section';
 import BackLink from '@/components/back-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
+
+const ORDER_ROW_ICON: Record<string, LucideIcon> = {
+  pending_payment: CreditCard,
+  processing: Package,
+  shipping: Truck,
+  delivered: PackageCheck,
+  subscriptions: Repeat,
+};
 
 const ORDER_ROW_TARGETS = ORDER_STATUS_ROW.filter((r) => r.counted && r.key !== 'subscriptions');
 const ROW =
@@ -79,7 +89,7 @@ function Stat({ label, value, href }: { label: string; value: string; href: stri
  * đã lọc, mã giới thiệu, rồi ba nhóm Kiếm tiền cùng Tubu / Tài khoản / Hỗ trợ. Dưới md giống Mini App; từ md giữ khung giữa trang và khối đơn có ô tìm.
  */
 export default function AccountPage() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const phase = useAuthPhase();
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const authed = phase === 'authenticated';
@@ -165,6 +175,12 @@ export default function AccountPage() {
     isReady: isWebRouteReady,
   });
 
+  const countsFailed = orderCounts.some((q) => q.isError) || (subsQ.isError && !subsQ.data);
+  const reloadCounts = () => {
+    orderCounts.forEach((q) => void q.refetch());
+    void subsQ.refetch();
+  };
+
   const countFor = (key: string): number | null => {
     if (key === 'subscriptions') return subsQ.data ? subsQ.data.filter((x) => x.status === 'ACTIVE' || x.status === 'PAUSED').length : null;
     const i = ORDER_ROW_TARGETS.findIndex((r) => r.key === key);
@@ -210,16 +226,21 @@ export default function AccountPage() {
       <h1 className="sr-only">Cá nhân</h1>
 
       <div className="md:mx-auto md:mt-3 md:max-w-2xl lg:mx-0">
-        <div className="bg-[linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))] p-4 pb-7 text-[color:var(--color-text-inverse)] md:rounded-card">
-          <Link href="/tai-khoan/ho-so" className="tubu-press flex min-h-11 items-center gap-3 rounded-control focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-0">
-            {user.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- URL Cloudinary, domain không cố định
-              <img src={user.avatarUrl} alt="" className="h-14 w-14 flex-none rounded-full bg-forest-700 object-cover" />
-            ) : (
-              <span className="flex h-14 w-14 flex-none items-center justify-center rounded-full bg-forest-700 text-forest-100">
-                <User className="h-7 w-7" aria-hidden="true" />
-              </span>
-            )}
+        <div className="relative bg-[linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))] p-4 pb-7 text-[color:var(--color-text-inverse)] md:rounded-card">
+          {chatEnabled && (
+            <Link
+              href="/ho-tro/chat"
+              aria-label={chatUnread ? 'Chat với Tubu Tree, có tin mới' : 'Chat với Tubu Tree'}
+              className="tubu-press absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-0"
+            >
+              <MessageCircle className="h-6 w-6" aria-hidden="true" />
+              {chatUnread && (
+                <span data-testid="profile-chat-dot" aria-hidden="true" className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-[1.5px] border-[var(--color-action-primary-bg)] bg-[var(--color-action-danger-bg)]" />
+              )}
+            </Link>
+          )}
+          <Link href="/tai-khoan/ho-so" className={`tubu-press flex min-h-11 items-center gap-3 rounded-control focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-0 ${chatEnabled ? 'pr-11' : ''}`}>
+            <ProfileAvatar size={56} name={fullName} src={user.avatarUrl} />
             <span className="min-w-0 flex-1">
               <Heading variant="title-md" as="span" tone="inverse" style={{ display: 'block', lineHeight: 1.2 }}>
                 {fullName ?? 'Khách Tubu'}
@@ -246,7 +267,10 @@ export default function AccountPage() {
               <span className="text-caption">{homeCopy.member.tierFailed}</span>
               <button
                 type="button"
-                onClick={() => void loyaltyQ.refetch()}
+                onClick={() => {
+                  void loyaltyQ.refetch();
+                  reloadCounts();
+                }}
                 className="tubu-press -my-3 -mx-1.5 min-h-11 px-1.5 text-caption font-bold underline"
               >
                 {homeCopy.member.retry}
@@ -281,23 +305,43 @@ export default function AccountPage() {
             <div className="grid grid-cols-5 gap-1">
               {ORDER_STATUS_ROW.map((r) => {
                 const n = r.counted ? countFor(r.key) : null;
+                const RowIcon = ORDER_ROW_ICON[r.key] ?? Package;
                 return (
                   <Link
                     key={r.key}
                     href={`/tai-khoan/don-hang?tab=${r.key}`}
                     aria-label={homeCopy.profile.orderStatusLabel(r.label, n ?? 0)}
-                    className="tubu-press flex min-h-14 flex-col items-center justify-center gap-0.5 py-1"
+                    className="tubu-press flex min-h-16 flex-col items-center justify-start gap-1.5 py-1"
                   >
-                    <Text variant="price-md" as="div" tone={n ? 'brand' : 'tertiary'} style={{ fontVariantNumeric: 'tabular-nums' }}>
-                      {n ?? '·'}
-                    </Text>
-                    <Text variant="caption" tone="secondary" as="div" style={{ textAlign: 'center', lineHeight: 1.2 }}>
-                      {r.label}
+                    <span className="relative mt-1 inline-flex">
+                      <RowIcon className="h-6 w-6 text-[color:var(--color-text-brand)]" strokeWidth={1.75} aria-hidden="true" />
+                      {n != null && n > 0 && (
+                        <span
+                          data-testid="order-count-badge"
+                          aria-hidden="true"
+                          className="absolute -right-2.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-action-primary-bg)] px-1 text-xs font-bold leading-none tabular-nums text-[color:var(--color-action-primary-fg)]"
+                        >
+                          {n > 99 ? '99+' : n}
+                        </span>
+                      )}
+                    </span>
+                    <Text variant="caption" tone="secondary" as="div" style={{ textAlign: 'center', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+                      {orderRowLabel(r.key, r.label)}
                     </Text>
                   </Link>
                 );
               })}
             </div>
+            {countsFailed && (
+              <div role="alert" className="mt-1 flex items-center justify-between gap-2">
+                <Text variant="caption" tone="secondary">
+                  {profileCopy.ordersFailed}
+                </Text>
+                <Button variant="ghost" onPress={reloadCounts}>
+                  {homeCopy.member.retry}
+                </Button>
+              </div>
+            )}
           </Card>
         </section>
 
@@ -369,11 +413,7 @@ export default function AccountPage() {
           <OrdersSection />
         </div>
 
-        <div className="p-4">
-          <Button fullWidth variant="secondary" onPress={() => void logout()}>
-            Đăng xuất
-          </Button>
-        </div>
+        <div className="h-4" />
       </div>
     </main>
   );

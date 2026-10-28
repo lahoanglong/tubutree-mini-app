@@ -356,6 +356,7 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
       ],
     ],
     // Cờ gian hàng: chuỗi "false" hay số 0 mà lọt vào thì đọc ra tắt âm thầm, nên chỉ nhận boolean ngay lúc ghi.
+    ['affiliate.auto_wallet_transfer_enabled', true, ['true', 'false', 1, 0, null, {}]],
     ['storefront.require_approval', true, ['true', 'false', 1, 0, null, {}]],
     ['storefront.subdomain_enabled', false, ['true', 'false', 1, 0, null, []]],
   ] as const)('%s: nhận giá trị hợp lệ, từ chối giá trị sai', async (key, fine, badValues) => {
@@ -770,5 +771,45 @@ describe('SystemConfigService.set — khoá nhịp chơi người mới của V�
       await expect(m.svc.set('game.tree_target_ladder', bad as number[], 'admin1')).rejects.toBeInstanceOf(BadRequestException);
       expect(m.tx.systemConfig.upsert).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe('SystemConfigService.set waste.enabled', () => {
+  const rulesFindUnique = (rules: unknown) =>
+    jest.fn().mockImplementation(async ({ where }: { where: { key: string } }) => {
+      if (where.key === 'waste.rules_text') return rules === undefined ? null : { value: rules };
+      return { value: false };
+    });
+
+  it('không cho bật khi thể lệ rỗng, trống chữ hoặc chưa có dòng', async () => {
+    for (const rules of ['', '   \n', undefined]) {
+      const { prisma, upsert } = makePrisma({ findUnique: rulesFindUnique(rules) });
+      const service = new SystemConfigService(prisma);
+      await expect(service.set('waste.enabled', true, 'admin1')).rejects.toThrow(/thể lệ/);
+      expect(upsert).not.toHaveBeenCalled();
+    }
+  });
+
+  it('bật được khi đã có thể lệ; tắt luôn được dù thể lệ rỗng', async () => {
+    const ok = makePrisma({ findUnique: rulesFindUnique('Thể lệ chương trình') });
+    await new SystemConfigService(ok.prisma).set('waste.enabled', true, 'admin1');
+    expect(ok.upsert).toHaveBeenCalledTimes(1);
+    const off = makePrisma({ findUnique: rulesFindUnique('') });
+    await new SystemConfigService(off.prisma).set('waste.enabled', false, 'admin1');
+    expect(off.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('không cho xoá trắng thể lệ khi Đổi rác đang bật; tắt rồi hoặc sửa thành chữ khác thì được', async () => {
+    const on = (rules: string) =>
+      jest.fn().mockImplementation(async ({ where }: { where: { key: string } }) => ({ value: where.key === 'waste.enabled' ? true : rules }));
+    const blocked = makePrisma({ findUnique: on('Thể lệ cũ') });
+    await expect(new SystemConfigService(blocked.prisma).set('waste.rules_text', '  ', 'admin1')).rejects.toThrow(/thể lệ/);
+    expect(blocked.upsert).not.toHaveBeenCalled();
+    const edit = makePrisma({ findUnique: on('Thể lệ cũ') });
+    await new SystemConfigService(edit.prisma).set('waste.rules_text', 'Thể lệ mới', 'admin1');
+    expect(edit.upsert).toHaveBeenCalledTimes(1);
+    const off = makePrisma({ findUnique: rulesFindUnique('Thể lệ cũ') });
+    await new SystemConfigService(off.prisma).set('waste.rules_text', '', 'admin1');
+    expect(off.upsert).toHaveBeenCalledTimes(1);
   });
 });

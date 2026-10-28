@@ -32,7 +32,7 @@ import { countReferralSuccesses, readReferralSuccessRows, referralSuccessesSince
 import { ensureGameProfile, initialEcoImpact, sproutAlreadyRewarded } from './game-profile';
 import { isRealUser } from '../../common/real-user';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
-import { startOfVnDay, startOfVnMonth, vnDaysBetween } from '../../common/vn-time';
+import { startOfVnDay, startOfVnMonth, vnDateKey, vnDaysBetween } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
 import { formatPoints } from '../../common/format-points';
 import { missionKindOf } from '../../common/mission-kinds';
@@ -127,6 +127,7 @@ export class GameService {
       firstCheckinBonusConfig,
       ladder,
       orderWater,
+      quizAnsweredToday,
     ] = await Promise.all([
       this.config.get<number>('game.streak_freeze_cost', 80),
       this.config.get<number>('game.tree_points_price', 50_000),
@@ -139,6 +140,7 @@ export class GameService {
       configInt(this.config, 'game.first_checkin_bonus', FIRST_CHECKIN_BONUS_DEFAULT),
       treeTargetLadder(this.config),
       this.orderWater?.summary(userId, claimedNow) ?? Promise.resolve(null),
+      this.prisma.gameQuizAttempt.count({ where: { userId, dayKey: vnDateKey() } }),
     ]);
     const eco = this.eco(profile.ecoImpact, ladder);
     const streakRepairable =
@@ -165,6 +167,8 @@ export class GameService {
       streak7Seeds: streak7SeedsValue,
       firstCheckinBonus: profile.lastCheckInAt === null ? firstCheckinBonusConfig : 0,
       quizWrongSeeds,
+      // getTodayQuiz bỏ các câu đã làm nên danh sách rỗng không nói được "đã làm xong" hay "chưa có câu": số câu đã làm hôm nay nói được.
+      quizAnsweredToday,
       currentTreeTarget: eco.target,
       nextTreeTarget: ladderTarget(ladder, eco.treesPlanted + 1),
       orderWater,

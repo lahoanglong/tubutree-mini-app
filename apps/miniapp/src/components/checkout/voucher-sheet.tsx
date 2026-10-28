@@ -159,7 +159,7 @@ export function VoucherSheet({
             <div style={{ flex: 1 }}>
               <Input
                 aria-label="Nhập mã giảm giá khác"
-                placeholder="Ví dụ: WELCOME, TUBUSALE..."
+                placeholder="Nhập mã"
                 value={customCode}
                 onChange={(e) => setCustomCode(e.target.value)}
                 onKeyDown={(e) => {
@@ -304,18 +304,20 @@ export function VoucherSheet({
                           disabled={applyMut.isPending}
                           loading={removeMut.isPending}
                           onPress={() => removeMut.mutate()}
+                          aria-label={`Bỏ dùng mã ${coupon.code}`}
                           style={{ minWidth: 0 }}
                         >
-                          Bỏ dùng
+                          Bỏ
                         </Button>
                       ) : (
                         <Button
                           disabled={notEligible || removeMut.isPending || (applyMut.isPending && !applyingThis)}
                           loading={applyingThis}
                           onPress={() => applyMut.mutate(coupon.code)}
+                          aria-label={`${belowMin ? 'Chưa đủ điều kiện dùng' : 'Dùng'} mã ${coupon.code}`}
                           style={{ minWidth: 0 }}
                         >
-                          {wrongProducts || serverBlocked ? 'Không áp dụng' : belowMin ? 'Chưa đủ' : shipAlreadyFree ? 'Không cần dùng' : 'Dùng mã'}
+                          {belowMin ? 'Chưa đủ' : 'Dùng'}
                         </Button>
                       )}
                     </div>

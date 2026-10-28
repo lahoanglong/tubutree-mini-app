@@ -53,17 +53,27 @@ export function StorefrontShareSheet({
   slug,
   title,
   referralCode,
+  heading,
+  home,
+  captions: captionsProp,
 }: {
   open: boolean;
   onClose: () => void;
-  slug: string;
+  /** Bắt buộc khi không chia sẻ trang chủ (`home`). */
+  slug?: string;
   title: string;
   referralCode?: string | null;
+  /** Tiêu đề bảng; mặc định "Chia sẻ gian hàng". */
+  heading?: string;
+  /** Chia sẻ trang chủ kèm mã giới thiệu (CTV chia sẻ mã) thay cho một gian hàng. */
+  home?: boolean;
+  /** Lời đăng gợi ý riêng; link được nối thêm nếu lời chưa có. */
+  captions?: string[];
 }) {
   const [note, setNote] = useState<Note>(null);
-  const path = `/s/${slug}${referralCode ? `?ref=${referralCode}` : ''}`;
-  const url = storefrontShareUrl(SITE_URL, slug, referralCode);
-  const captions = shareCaptions(url);
+  const path = home ? `/${referralCode ? `?ref=${referralCode}` : ''}` : `/s/${slug}${referralCode ? `?ref=${referralCode}` : ''}`;
+  const url = home ? `${SITE_URL}${path}` : storefrontShareUrl(SITE_URL, slug ?? '', referralCode);
+  const captions = captionsProp ? captionsProp.map((c) => (c.includes(url) ? c : `${c} ${url}`)) : shareCaptions(url);
 
   const copy = async (text: string) => {
     const ok = await copyText(text);
@@ -77,7 +87,7 @@ export function StorefrontShareSheet({
   };
 
   return (
-    <Sheet open={open} onClose={onClose} title="Chia sẻ gian hàng">
+    <Sheet open={open} onClose={onClose} title={heading ?? 'Chia sẻ gian hàng'}>
       <div className="mb-3 flex justify-center">
         <QrCode value={url} />
       </div>

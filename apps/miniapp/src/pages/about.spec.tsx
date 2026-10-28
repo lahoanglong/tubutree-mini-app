@@ -291,10 +291,10 @@ describe('Trang Về Tubu Tree — DS v2 (C-076, C-114)', () => {
     expect(screen.getByRole('button', { name: 'Gửi yêu cầu xoá' })).toBeDisabled();
   });
 
-  it('nút Đăng xuất gọi logout', async () => {
+  it('không còn nút Đăng xuất ở trang Về Tubu Tree (chỉ có ở Cài đặt)', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đăng xuất' }));
-    expect(mocks.logout).toHaveBeenCalledTimes(1);
+    await screen.findByRole('button', { name: 'Xoá tài khoản' });
+    expect(screen.queryByRole('button', { name: 'Đăng xuất' })).toBeNull();
   });
 
   it('đang tải FAQ: chưa hiện bản dự phòng (tránh nháy sang nội dung khác)', async () => {

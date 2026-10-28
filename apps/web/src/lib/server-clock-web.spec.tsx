@@ -35,7 +35,7 @@ describe('Đồng hồ máy chủ cho giờ vàng và hạn chuyển khoản', (
   afterEach(() => vi.useRealTimers());
 
   it('điện thoại nhanh 10 phút, suất còn 8 phút theo máy chủ: useCountdown vẫn hiện "0h 08m"', async () => {
-    mocks.apiFetch.mockResolvedValue([item(endAtServerPlus(8))]);
+    mocks.get.mockResolvedValue([item(endAtServerPlus(8))]);
     await getActiveFlashSales();
     expect(renderHook(() => useCountdown(endAtServerPlus(8))).result.current).toBe('0h 08m');
   });
@@ -43,7 +43,7 @@ describe('Đồng hồ máy chủ cho giờ vàng và hạn chuyển khoản', (
   it('điện thoại chậm 10 phút, suất đã hết theo máy chủ: không còn đếm', async () => {
     vi.setSystemTime(new Date(SERVER_NOW.getTime() - 10 * 60_000));
     const endAt = new Date(SERVER_NOW.getTime() - 5 * 60_000).toISOString();
-    mocks.apiFetch.mockResolvedValue([item(endAt)]);
+    mocks.get.mockResolvedValue([item(endAt)]);
     await getActiveFlashSales();
     expect(renderHook(() => useCountdown(endAt)).result.current).toBe('');
   });
@@ -57,7 +57,7 @@ describe('Đồng hồ máy chủ cho giờ vàng và hạn chuyển khoản', (
 
   it('API cũ không trả serverNow: giữ đồng hồ máy như trước', async () => {
     const { serverNow: _omit, ...legacy } = item(new Date(PHONE_NOW.getTime() + 8 * 60_000).toISOString());
-    mocks.apiFetch.mockResolvedValue([legacy]);
+    mocks.get.mockResolvedValue([legacy]);
     await getActiveFlashSales();
     expect(renderHook(() => useCountdown(legacy.endAt)).result.current).toBe('0h 08m');
   });

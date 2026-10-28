@@ -178,7 +178,7 @@ describe('api trên fetch: phản hồi', () => {
     vi.stubGlobal('navigator', { onLine: false });
     expect(getErrorMessage(err)).toBe(copy.errors.offline);
     vi.stubGlobal('navigator', { onLine: true });
-    expect(getErrorMessage(err)).toBe(copy.errors.server);
+    expect(getErrorMessage(err)).toBe(copy.errors.network);
   });
 });
 

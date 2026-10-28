@@ -532,8 +532,8 @@ export class AuthService {
       await tx.subscription.updateMany({ where: { userId: gid }, data: { userId: tid } });
       await tx.payout.updateMany({ where: { userId: gid }, data: { userId: tid } });
 
-      // 4) Điểm danh. Chuỗi tính từ dòng loyalty_check_ins có dayKey lớn nhất, nên chỉ chuyển
-      //    ngày CŨ HƠN lần điểm danh gần nhất của target (target chưa từng điểm danh thì chuyển
+      // 4) Điểm danh. Chuỗi hiển thị lấy từ hồ sơ Vườn của target (không đổi ở bước này); dòng loyalty_check_ins chỉ là
+      //    sổ chốt chặn trùng ngày. Giữ nguyên luật cũ: chỉ chuyển ngày CŨ HƠN lần điểm danh gần nhất của target (target chưa từng điểm danh thì chuyển
       //    hết) — target không thừa hưởng chuỗi của khách. Ngày trùng/mới hơn ở lại khách (dayKey
       //    phải giữ định dạng ngày, không gắn tiền tố MERGED được).
       const movedCheckInDays = (

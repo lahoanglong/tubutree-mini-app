@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Trophy } from 'lucide-react';
+import { nextMilestoneRows } from '@tubutree/app-core/ctv-dashboard';
 import { claimCtvMilestone, type CtvMilestoneItem, type CtvMilestonesResponse } from '@tubutree/app-core/api/affiliate';
 import { affiliateMilestonesQuery } from '@tubutree/app-core/queries/affiliate';
 import { loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
@@ -43,6 +44,7 @@ const toTargets = (items: CtvMilestoneItem[], month: string): ClaimTarget[] =>
  */
 export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
   const qc = useQueryClient();
+  const [showAll, setShowAll] = useState(false);
   const [failures, setFailures] = useState<ClaimFailure[]>([]);
   const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'warn' | 'error' } | null>(null);
 
@@ -187,7 +189,12 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
           <ul>{prev.milestones.map((m) => renderRow(m, prev.monthKey, prev.revenue))}</ul>
         </div>
       )}
-      <ul>{data.milestones.map((m) => renderRow(m, data.monthKey, data.currentRevenue))}</ul>
+      <ul>{(showAll ? data.milestones : nextMilestoneRows(data.milestones)).map((m) => renderRow(m, data.monthKey, data.currentRevenue))}</ul>
+      {data.milestones.length > nextMilestoneRows(data.milestones).length && (
+        <button type="button" aria-expanded={showAll} onClick={() => setShowAll((v) => !v)} className="mt-1 min-h-11 w-full text-sm font-semibold text-forest-700">
+          {showAll ? 'Thu gọn' : `Xem tất cả ${data.milestones.length} mốc`}
+        </button>
+      )}
     </section>
   );
 }

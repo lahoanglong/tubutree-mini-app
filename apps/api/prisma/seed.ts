@@ -29,6 +29,8 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'loyalty.point_expire_months', value: 12, category: 'loyalty', description: 'Điểm hết hạn sau 12 tháng' },
   { key: 'loyalty.point_expiry_reminder_days', value: 7, category: 'loyalty', description: 'Nhắc trước khi điểm hết hạn (số ngày)' },
   { key: 'loyalty.tier_grace_days', value: 30, category: 'loyalty', description: 'Grace period giữ hạng khi rớt' },
+  { key: 'loyalty.tier_drop_notice_days', value: 14, category: 'loyalty', description: 'Báo khách trước khi hạ hạng (số ngày còn lại của hạn giữ hạng; 0 = không báo)', createOnly: true },
+  { key: 'loyalty.tier_drop_zns_template_id', value: '', category: 'loyalty', description: 'Mã mẫu ZNS báo trước khi hạ hạng (biến tier, date, need); để trống = chỉ báo trong app', createOnly: true },
   // Điểm danh hằng ngày + tích điểm tại quầy (POS) — loyalty.service. createOnly: admin chỉnh rồi thì seed không reset.
   { key: 'loyalty.checkin_points', value: [1000, 1000, 1000, 1000, 1000, 1000, 2000], category: 'loyalty', description: 'Điểm Xanh điểm danh theo ngày 1..7 của vòng 7 ngày', createOnly: true },
   { key: 'loyalty.pos_credit_enabled', value: false, category: 'loyalty', description: 'Bật tích điểm tại quầy (POS) do nhân viên nhập', createOnly: true },
@@ -868,12 +870,15 @@ export const NOTIFICATION_TEMPLATES = [
   { id: 'nt-cart-abandon', code: 'CART_ABANDONED', channel: 'INAPP', bodyTemplate: '🛒 Bạn còn {{item_count}} món trong giỏ (có {{product}})! Hoàn tất đơn ngay trước khi hết hàng nhé.' },
   { id: 'nt-voucher-expiring', code: 'VOUCHER_EXPIRING', channel: 'INAPP', bodyTemplate: '⏰ Voucher {{code}} của bạn sắp hết hạn ({{expires}}). Dùng ngay kẻo lỡ nhé!' },
   { id: 'nt-flash-starting', code: 'FLASH_STARTING', channel: 'INAPP', bodyTemplate: '⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé.' },
+  { id: 'nt-tier-drop-notice', code: 'TIER_DROP_NOTICE', channel: 'INAPP', bodyTemplate: '⚠️ Hạng {{tier}} của bạn được giữ đến {{date}}. {{need}} trước ngày đó để giữ hạng nhé 🌿' },
   { id: 'nt-points-expiring', code: 'POINTS_EXPIRING', channel: 'INAPP', bodyTemplate: '⏳ Bạn có {{points}} Điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿' },
   { id: 'nt-storefront-trending', code: 'STOREFRONT_TRENDING_PRODUCTS', channel: 'INAPP', bodyTemplate: '✨ Có {{count}} sản phẩm nổi bật (như {{sample}}) bạn chưa thêm vào gian hàng — thêm ngay để không bỏ lỡ khách quan tâm!' },
   // C-029: CTV biết kết quả công việc — đơn mới từ link của mình, hoa hồng được duyệt, lệnh rút đã chi.
   // Không dùng {{order_code}} ở COMMISSION_NEW: đó là đơn của khách, app sẽ hiện nút "Xem đơn" mà CTV không xem được.
   { id: 'nt-ctv-commission-new', code: 'COMMISSION_NEW', channel: 'INAPP', bodyTemplate: '💰 Có đơn mới từ link của bạn! Hoa hồng dự kiến {{amount}}. Khoản này được chốt sau khi khách nhận hàng và hết thời gian đổi/trả.', createOnly: true },
-  { id: 'nt-ctv-commission-approved', code: 'COMMISSION_APPROVED', channel: 'INAPP', bodyTemplate: '✅ {{count}} khoản hoa hồng (tổng {{amount}}) đã được duyệt. Bạn có thể chuyển vào Ví Tubu ngay trong mục CTV.', createOnly: true },
+  { id: 'nt-ctv-commission-approved', code: 'COMMISSION_APPROVED', channel: 'INAPP', bodyTemplate: '✅ {{count}} khoản hoa hồng (tổng {{amount}}) đã được duyệt. Khoản này chưa tự vào Ví, bạn chuyển vào Ví Tubu ngay trong mục CTV nhé.', createOnly: true },
+  { id: 'nt-ctv-wallet-credited', code: 'COMMISSION_WALLET_CREDITED', channel: 'INAPP', bodyTemplate: '💰 Đã cộng {{amount}} hoa hồng vào Ví Tubu{{tax_note}}. Bạn dùng được ngay khi thanh toán đơn hàng.', createOnly: true },
+  { id: 'nt-ctv-wallet-tax-only', code: 'COMMISSION_WALLET_TAX_ONLY', channel: 'INAPP', bodyTemplate: '💰 Đã xử lý {{amount}} hoa hồng của bạn: toàn bộ được khấu trừ thuế TNCN ({{tax}}) nên chưa có tiền cộng vào Ví Tubu.', createOnly: true },
   { id: 'nt-ctv-payout-paid', code: 'COMMISSION_PAYOUT_PAID', channel: 'INAPP', bodyTemplate: '🏦 Lệnh rút {{amount}} của bạn đã được chuyển khoản{{ref}}. Kiểm tra tài khoản ngân hàng nhé!', createOnly: true },
   // Gói p8-seller: rút hoa hồng (SELLER-10), đối tác tự giao (D4), duyệt hồ sơ/sản phẩm (SELLER-12). Cùng nội dung với migration p8_seller_config_templates.
   { id: 'nt-ctv-payout-approved', code: 'COMMISSION_PAYOUT_APPROVED', channel: 'INAPP', bodyTemplate: 'Lệnh rút {{amount}} của bạn đã được duyệt, Tubu Tree sẽ chuyển khoản trong thời gian sớm nhất.', createOnly: true },
@@ -1049,7 +1054,7 @@ async function main() {
 
   console.log('🌱 Seeding sample Coupons...');
   const COUPONS: Prisma.CouponCreateInput[] = [
-    { code: 'WELCOME30', type: 'AMOUNT', value: 30000, minOrder: 199000, startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'), perUserLimit: 1, scope: 'PUBLIC' },
+    { code: 'WELCOME30', type: 'AMOUNT', value: 30000, minOrder: 199000, startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'), perUserLimit: 1, scope: 'PUBLIC', newCustomerOnly: true },
     { code: 'FREESHIP', type: 'FREESHIP', value: 0, minOrder: 99000, startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'), perUserLimit: 3, scope: 'PUBLIC' },
     { code: 'XANH10', type: 'PERCENT', value: 10, minOrder: 250000, maxDiscount: 50000, startAt: new Date('2026-01-01'), endAt: new Date('2027-01-01'), perUserLimit: 2, scope: 'PUBLIC' },
   ];

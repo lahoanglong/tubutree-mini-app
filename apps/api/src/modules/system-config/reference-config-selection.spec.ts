@@ -21,6 +21,7 @@ const keysOf = (rows: readonly { key: string }[]) => rows.map((r) => r.key);
 
 const APPROVED_LOADED_KEYS = [
     'affiliate.attribution_days',
+    'affiliate.auto_wallet_transfer_enabled',
     'affiliate.commission_eligible_roles',
     'affiliate.default_rate_pct',
     'affiliate.hold_days',
@@ -140,6 +141,8 @@ const APPROVED_LOADED_KEYS = [
     'loyalty.pos_max_order_total',
     'loyalty.pos_member_daily_points_cap',
     'loyalty.pos_staff_daily_points_cap',
+    'loyalty.tier_drop_notice_days',
+    'loyalty.tier_drop_zns_template_id',
     'loyalty.tier_grace_days',
     'loyalty.vnd_per_point_redeem',
     'merchant.commission_pct',

@@ -78,7 +78,7 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
     renderPage();
     expect(await screen.findByLabelText('Họ và tên')).toHaveValue('Lan');
     expect(screen.getByLabelText('Email')).toHaveValue('lan@tubu.vn');
-    expect(screen.getByLabelText('Ngày sinh')).toHaveValue('1990-05-01');
+    expect(screen.getByLabelText('Ngày sinh')).toHaveValue('01/05/1990');
   });
 
   it('không dùng emoji làm icon; lời nhắn sinh nhật vẫn còn', async () => {
@@ -214,7 +214,7 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
 
     it('ngày sinh đã lưu: không hiện dòng "Ngày đã chọn" (chỉ hiện với ngày vừa chọn chưa lưu)', async () => {
       renderPage();
-      expect(await screen.findByLabelText('Ngày sinh')).toHaveValue('1990-05-01');
+      expect(await screen.findByLabelText('Ngày sinh')).toHaveValue('01/05/1990');
       expect(screen.queryByText(/Ngày đã chọn/)).toBeNull();
     });
 
@@ -282,15 +282,15 @@ describe('Ảnh đại diện: không báo thành công khi ảnh không đượ
     fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận cắt' }));
   };
 
-  it('chưa cấu hình dịch vụ ảnh: không có nút đổi ảnh, thay bằng dòng giải thích, không có lời mời chạm để chọn', async () => {
+  it('chưa cấu hình dịch vụ ảnh: không có nút đổi ảnh, không câu báo thiếu chức năng, không có lời mời chạm để chọn', async () => {
     mocks.cloudinary = false;
     const { container } = renderPage();
     await screen.findByLabelText('Họ và tên');
     expect(screen.queryByRole('button', { name: /ảnh đại diện/i })).toBeNull();
     expect(container.querySelector('input[type="file"]')).toBeNull();
-    expect(screen.getByText(NO_CLOUD_NOTE)).toBeInTheDocument();
+    expect(screen.queryByText(NO_CLOUD_NOTE)).toBeNull();
     expect(screen.queryByText(/Chạm để chọn & cắt ảnh đại diện/)).toBeNull();
-    expect(screen.getByTestId('avatar')).toBeInTheDocument();
+    expect(screen.getByTestId('profile-avatar-initial')).toHaveTextContent('L');
   });
 
   it('đã cấu hình: nút đổi ảnh dùng được, không có dòng giải thích', async () => {

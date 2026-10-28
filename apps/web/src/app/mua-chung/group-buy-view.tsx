@@ -61,7 +61,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
     setNote({ text: 'Đã mở nhóm mua chung! Rủ bạn bè tham gia nhé 🛒', error: false });
   }, []);
 
-  const listQ = useQuery(groupBuyListQuery(coreHttp));
+  const listQ = useQuery(groupBuyListQuery(coreHttp, authed ? (user?.id ?? 'user') : 'guest'));
   // Nhóm được mời có thể không nằm trong 30 nhóm mới nhất của danh sách chung.
   const invitedQ = useQuery({ ...groupBuyOneQuery(coreHttp, invitedId ?? ''), enabled: Boolean(invitedId) && authed, retry: false });
   const invited = invitedQ.data;
@@ -198,18 +198,14 @@ function GroupCard({
   return (
     <article className={`${ui.card} flex flex-col p-3 max-md:border-0 max-md:shadow-[var(--elevation-1)]`}>
       {invitedBanner && <p className="mb-1.5 text-xs font-semibold text-forest-700 max-md:text-[length:var(--type-caption-size)]">Bạn được mời vào nhóm này</p>}
-      <div className="flex gap-3">
-        <Link
-          href={productHref}
-          aria-label={g.product.name}
-          className="inline-flex shrink-0 self-start"
-        >
-          <ProductThumb src={g.product.thumbnail} alt={g.product.name} size={56} />
-        </Link>
+      <Link href={productHref} className="flex min-h-14 gap-3">
+        <span className="inline-flex shrink-0 self-start">
+          <ProductThumb src={g.product.thumbnail} alt="" size={56} />
+        </span>
         <div className="min-w-0 flex-1">
-          <Link href={productHref} className="block truncate text-sm font-semibold text-stone-900 hover:underline max-md:text-[length:var(--type-body-sm-size)]">
+          <span className="block truncate text-sm font-semibold text-stone-900 max-md:text-[length:var(--type-body-sm-size)]">
             {g.product.name}
-          </Link>
+          </span>
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-sm font-semibold text-forest-700 max-md:text-[length:var(--type-body-sm-size)]">{prices.group}</span>
             <Badge tone="promo" size="sm">
@@ -221,7 +217,7 @@ function GroupCard({
             {g.currentSize}/{g.targetSize} người · {g.status === 'SUCCESS' ? 'đã đủ nhóm' : timeLeft(g.expiresAt)}
           </p>
         </div>
-      </div>
+      </Link>
       <div className="mt-2">
         <ProgressBar value={g.currentSize} max={g.targetSize} ariaLabel={`${g.product.name}: tiến độ nhóm mua chung`} />
       </div>

@@ -85,7 +85,7 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     await expect(page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ })).toBeEnabled({ timeout: 15_000 });
 
     // 50 điểm thường + 50 điểm quy đổi = 100 điểm đề nghị dùng; phần quy đổi nói rõ không hết hạn.
-    await expect(page.getByText('Bạn đang có 100 điểm')).toBeVisible();
+    await expect(page.getByText('Dùng 100 điểm, giảm 100đ')).toBeVisible();
     await expect(page.getByText('trong đó 50 điểm không hết hạn, trả tới 100% giá trị hàng')).toBeVisible();
   });
 
@@ -103,7 +103,7 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     await page.locator('[role="checkbox"]').filter({ hasText: 'trong đó 50 điểm không hết hạn' }).click();
     expect((await quoted).body).toMatchObject({ addressId: CHECKOUT_ADDRESS.id, pointsToUse: 100 });
 
-    await expect(page.getByText('Dùng 76 điểm — giảm 76.000đ')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Dùng 76 điểm, giảm 76.000đ')).toBeVisible({ timeout: 10_000 });
     const placeBtn = page.getByRole('button', { name: /Đặt hàng · 73\.000đ/ });
     await expect(placeBtn).toBeEnabled();
 

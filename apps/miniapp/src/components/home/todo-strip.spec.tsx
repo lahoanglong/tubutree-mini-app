@@ -42,17 +42,41 @@ describe('TodoStrip — Việc cần làm', () => {
 
   it('có đơn chờ thanh toán: nút "Thanh toán ngay" mở trang chuyển khoản; có đơn đang giao: dòng mở chi tiết đơn', async () => {
     renderStrip();
-    const pay = await screen.findByRole('button', { name: /Thanh toán ngay/ });
+    const pay = await screen.findByRole('button', { name: /Thanh toán ngay đơn TUBU1/ });
     fireEvent.click(pay);
     expect(mocks.navigate).toHaveBeenCalledWith('/bank-payment/TUBU1');
     fireEvent.click(await screen.findByText(/TUBU2/));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/order/TUBU2');
   });
 
+  it('đơn COD vừa đặt (Đã xác nhận, Đang đóng gói) hiện dòng "đang chuẩn bị": một đơn mở chi tiết, nhiều đơn mở tab Đang xử lý', async () => {
+    const prep = { code: 'TUBU3', total: 90000, status: 'CONFIRMED' };
+    mocks.fetchOrders.mockImplementation(async (f: { status?: string; group?: string }) =>
+      f.group === 'processing' ? page([prep]) : page([]),
+    );
+    const first = renderStrip();
+    fireEvent.click(await screen.findByText('Đơn TUBU3 đang chuẩn bị'));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/order/TUBU3');
+    first.unmount();
+    mocks.fetchOrders.mockImplementation(async (f: { group?: string }) => (f.group === 'processing' ? { data: [prep], meta: { page: 1, limit: 1, total: 2 } } : page([])));
+    renderStrip();
+    fireEvent.click(await screen.findByText('2 đơn đang chuẩn bị'));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/orders?tab=processing');
+  });
+
+  it('đủ ba loại đơn thì chỉ hai dòng (chờ thanh toán, đang giao): khối vẫn gọn', async () => {
+    mocks.fetchOrders.mockImplementation(async (f: { status?: string; group?: string }) =>
+      page(f.status === 'PENDING_PAYMENT' ? [pendingOrder] : f.status === 'SHIPPING' ? [shippingOrder] : f.group === 'processing' ? [{ code: 'TUBU3', total: 1, status: 'CONFIRMED' }] : []),
+    );
+    renderStrip();
+    await screen.findByText(/TUBU2/);
+    expect(screen.queryByText(/TUBU3/)).toBeNull();
+  });
+
   it('không có việc (hai danh sách rỗng) → ẩn hẳn', async () => {
     mocks.fetchOrders.mockResolvedValue(page([]));
     const { container } = renderStrip();
-    await waitFor(() => expect(mocks.fetchOrders).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.fetchOrders).toHaveBeenCalledTimes(3));
     await waitFor(() => expect(container).toBeEmptyDOMElement());
   });
 

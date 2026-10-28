@@ -200,23 +200,24 @@ export function WasteItemsSection() {
       {items.isError && <LoadError onRetry={() => void items.refetch()} retrying={items.isFetching}>Không tải được danh sách món.</LoadError>}
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
       <ScrollRegion label="Bảng món nhận">
-        <table className="w-full min-w-[820px] border-collapse">
-          <thead>
+        <table className="w-full border-collapse max-sm:block sm:min-w-[820px]">
+          <thead className="max-sm:hidden">
             <tr className="border-b border-stone-200">
               <th className={TH}>Thứ tự</th>
               <th className={TH}>Món</th>
               <th className={TH}>Quy đổi</th>
               <th className={TH}>Trần ngày (mang tới điểm)</th>
               <th className={TH}>Trần tháng</th>
-              <th className={TH}>Giọt nước · gram mỗi đơn vị</th>
+              <th className={TH}>Giọt nước mỗi đơn vị</th>
+              <th className={TH}>Gram mỗi đơn vị</th>
               <th className={TH}>Trạng thái</th>
               <th className={TH}>Sửa</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="max-sm:block max-sm:space-y-2">
             {sorted.map((i, idx) => (
-              <tr key={i.id} data-item={i.id} className="border-b border-stone-100">
-                <td className={TD}>
+              <tr key={i.id} data-item={i.id} className="border-b border-stone-100 max-sm:flex max-sm:flex-wrap max-sm:items-center max-sm:gap-x-3 max-sm:gap-y-1 max-sm:rounded-control max-sm:border max-sm:border-stone-200 max-sm:p-3">
+                <td className={`${TD} max-sm:order-5 max-sm:ml-auto max-sm:p-0`}>
                   <div className="flex gap-1">
                     <button type="button" className={BTN_XS_SECONDARY} aria-label={`Đưa ${i.name} lên`} disabled={idx === 0 || reorder.isPending || panel?.id === i.id} onClick={() => move(idx, -1)}>
                       <ChevronUp size={14} aria-hidden="true" />
@@ -226,17 +227,15 @@ export function WasteItemsSection() {
                     </button>
                   </div>
                 </td>
-                <td className={TD}>
+                <td className={`${TD} max-sm:order-1 max-sm:w-full max-sm:p-0`}>
                   <div className="font-medium">{i.name}</div>
-                  <div className="font-mono text-xs text-stone-500">{i.code}</div>
                 </td>
-                <td className={TD}>{conversion(i.unitsPerPoint, i.unitLabel, i.pointsPerGroup)}</td>
-                <td className={TD}>{i.dailyCapQty === null ? DASH : formatCount(i.dailyCapQty)}</td>
-                <td className={TD}>{i.monthlyCapQty === null ? DASH : formatCount(i.monthlyCapQty)}</td>
-                <td className={`${TD} whitespace-nowrap`}>
-                  {formatCount(i.dropsPerUnit)} · {i.gramsPerUnit === null ? DASH : `${formatCount(i.gramsPerUnit)} g`}
-                </td>
-                <td className={`${TD} whitespace-nowrap`}>
+                <td className={`${TD} max-sm:order-2 max-sm:w-full max-sm:p-0 max-sm:text-stone-600`}>{conversion(i.unitsPerPoint, i.unitLabel, i.pointsPerGroup)}</td>
+                <td className={`${TD} max-sm:hidden`}>{i.dailyCapQty === null ? DASH : formatCount(i.dailyCapQty)}</td>
+                <td className={`${TD} max-sm:hidden`}>{i.monthlyCapQty === null ? DASH : formatCount(i.monthlyCapQty)}</td>
+                <td className={`${TD} max-sm:hidden`}>{formatCount(i.dropsPerUnit)}</td>
+                <td className={`${TD} max-sm:hidden`}>{i.gramsPerUnit === null ? DASH : `${formatCount(i.gramsPerUnit)} g`}</td>
+                <td className={`${TD} whitespace-nowrap max-sm:order-3 max-sm:p-0`}>
                   <select
                     aria-label={`Trạng thái ${i.name}`}
                     className={FIELD_XS}
@@ -253,7 +252,7 @@ export function WasteItemsSection() {
                     ))}
                   </select>
                 </td>
-                <td className={`${TD} whitespace-nowrap`}>
+                <td className={`${TD} whitespace-nowrap max-sm:order-4 max-sm:p-0`}>
                   <button type="button" className={BTN_XS_SECONDARY} onClick={() => setPanel({ id: i.id, form: toForm(i) })}>Sửa</button>
                 </td>
               </tr>

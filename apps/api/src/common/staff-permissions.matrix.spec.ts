@@ -81,6 +81,7 @@ const EXPECTED: Record<string, Access> = {
   'POST /admin/customer-refunds/:id/release': [KE_TOAN],
   'POST /admin/customer-refunds/:id/verify': [KE_TOAN],
   'GET /admin/dashboard/stats': ADMIN_ONLY,
+  'GET /admin/dashboard/today': ADMIN_ONLY,
   'GET /admin/dealer-applications': ADMIN_ONLY,
   'POST /admin/dealer-applications/:id/review': ADMIN_ONLY,
   'POST /admin/dealer-orders/:id/confirm-payment': [KE_TOAN],

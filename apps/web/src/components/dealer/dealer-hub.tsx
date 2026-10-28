@@ -31,11 +31,11 @@ function HubBody() {
     <DealerShell title="Kênh đại lý">
       <section aria-label="Tổng quan đại lý" className="rounded-card bg-stone-900 p-4 text-stone-0 max-md:bg-[var(--color-dealer-ink)]">
         <div className="flex items-center justify-between gap-2">
-          <div>
+          <div className="min-w-0">
             <div className="text-xs text-stone-100">Bậc đại lý</div>
             <div className="font-display text-lg font-semibold">{me?.tier?.name ?? 'Đang gán bậc'}</div>
           </div>
-          <div className="text-right">
+          <div className="shrink-0 text-right">
             <div className="text-xs text-stone-100">Công nợ hiện tại</div>
             <div className="font-display text-lg font-semibold tabular-nums">{formatVnd(me?.currentDebt ?? 0)}</div>
           </div>
@@ -59,7 +59,7 @@ function HubBody() {
 
       <div className="mt-3">
         {tab === 'price' && <PriceTab creditLimit={me?.tier?.creditLimit ?? 0} debt={me?.currentDebt ?? 0} rules={me?.orderRules} />}
-        {tab === 'orders' && <OrdersTab />}
+        {tab === 'orders' && <OrdersTab onOrderFirst={() => setTab('price')} />}
         {tab === 'credit' && <CreditTab />}
         {tab === 'report' && <ReportTab />}
       </div>

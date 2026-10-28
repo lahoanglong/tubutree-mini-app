@@ -66,11 +66,12 @@ describe('AppGates', () => {
     expect(gates.post).toHaveBeenCalledWith('/coupons/claim', { code: 'SHOPEE-AB12CD34' });
   });
 
-  it('khách chưa làm quiz ở Trang chủ: AppGates hiện lời chào', async () => {
+  it('khách chưa làm quiz ở Trang chủ: khảo sát đang tắt nên không phủ màn chào', async () => {
     gates.auth.status = 'authenticated';
     gates.get.mockResolvedValue({ onboarded: false });
     mounted = render(<AppGates />);
     await flush(8);
-    expect(document.body.textContent).toContain('Chào mừng đến Tubu Tree!');
+    expect(document.body.textContent).not.toContain('Chào mừng đến Tubu Tree!');
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 });

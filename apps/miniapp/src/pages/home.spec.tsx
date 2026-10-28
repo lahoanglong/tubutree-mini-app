@@ -23,6 +23,7 @@ vi.mock('../services/shop-api', () => ({
   fetchCategories: mocks.fetchCategories,
   fetchPurchasedItems: mocks.fetchPurchasedItems,
   fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
+  fetchUpcomingFlashSales: vi.fn().mockResolvedValue([]),
   getCart: vi.fn(),
 }));
 vi.mock('../services/account-api', () => ({ getNotifications: mocks.getNotifications }));
@@ -36,7 +37,7 @@ vi.mock('../components/home/member-card', () => ({
   MemberCard: () => <section aria-label="Thẻ thành viên" />,
   MemberCardSkeleton: () => <div data-testid="member-card-loading" />,
 }));
-vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null }));
+vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false }) }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => <section aria-label="Lối tắt" /> }));
 vi.mock('../components/home/brand-journey', () => ({ BrandJourney: () => null }));
 vi.mock('../components/home/community-preview', () => ({ CommunityPreview: () => null }));
@@ -54,6 +55,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import HomePage from './home';
 import { homeBlockOrder } from '../components/home/home-blocks';
+import { homeRenderOrder } from '@tubutree/app-core/home-layout';
 import { HOME_KIND_KEY } from '../hooks/use-home-customer-kind';
 
 const card = (id: string, name: string) => ({
@@ -78,7 +80,8 @@ const settled = (qc: QueryClient, key: unknown[]) => {
 };
 const RETURNING = [...homeBlockOrder('returning')];
 const NEW = [...homeBlockOrder('new')];
-const UNKNOWN = [...homeBlockOrder('unknown')];
+// Chưa biết loại khách thì mọi khối dưới thẻ thành viên là MỘT khung chờ chung, chỉ hiện cùng lúc khi dữ liệu đã chốt.
+const UNKNOWN = [...homeRenderOrder('unknown', true)];
 
 describe('HomePage (phương án A, 9 khối)', () => {
   beforeEach(() => {
@@ -163,7 +166,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(JSON.parse(localStorage.getItem(HOME_KIND_KEY) ?? 'null')).toEqual({ userId: 'u1', kind: 'returning' });
   });
 
-  it('đang khôi phục phiên (status loading) + đã nhớ khách cũ: bố cục khách cũ, không Bán chạy; chưa nhớ thì bố cục "chưa biết"', async () => {
+  it('đang khôi phục phiên (status loading) + đã nhớ khách cũ: bố cục khách cũ, không Bán chạy; chưa nhớ gì (máy mới hoặc khách cũ đổi máy) thì giữ chỗ thẻ thành viên chờ biết loại, không hứa quà khách mới', async () => {
     localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
     mocks.auth.status = 'loading';
     mocks.auth.user = null;
@@ -173,7 +176,8 @@ describe('HomePage (phương án A, 9 khối)', () => {
     first.unmount();
     localStorage.clear();
     renderHome();
-    expect(blockOrder()).toEqual([...homeBlockOrder('unknown')]);
+    expect(blockOrder()).toEqual(UNKNOWN);
+    expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
   });
 
   it('khách cũ không nhận dải lỗi cấp trang dù kệ Bán chạy (khách cũ không thấy) lỗi: kệ này không được tải', async () => {
@@ -268,12 +272,13 @@ describe('HomePage (phương án A, 9 khối)', () => {
       expect([...seen]).toEqual([RETURNING.join('>')]);
     });
 
-    it('(b) lần đầu (chưa nhớ gì): "unknown" (giữ chỗ thẻ thành viên, chưa có Mua lại/Quà/Bán chạy) khi đang tải, đổi sang "returning" khi có hàng, và nhớ lại', async () => {
+    it('(b) lần đầu (chưa nhớ gì), đã đăng nhập: "unknown" (giữ chỗ thẻ thành viên, chưa có Mua lại/Quà/Bán chạy) khi đang tải, đổi sang "returning" khi có hàng, và nhớ lại', async () => {
       const d = deferred<{ items: object[]; nextCursor: null }>();
       mocks.fetchPurchasedItems.mockReturnValue(d.promise);
       renderHome();
       expect(blockOrder()).toEqual(UNKNOWN);
       expect(screen.getByTestId('member-card-loading')).toBeInTheDocument();
+      expect(screen.getByTestId('home-settling')).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Bán chạy' })).toBeNull();
       await act(async () => {
         d.resolve({ items: [{ variationId: 'v1' }], nextCursor: null });

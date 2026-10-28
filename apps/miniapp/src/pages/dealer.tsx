@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
+import { Input, Page, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
 import {
   Store,
   Hourglass,
@@ -40,6 +40,7 @@ import {
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { formatDate, formatRatePct, formatVnd } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
@@ -148,6 +149,13 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
 
   const set = (k: keyof DealerApplyInput) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Điền sẵn tên và SĐT đã có trong tài khoản để khách không gõ lại; ô nào khách đã gõ thì giữ nguyên.
+  const account = useAuthStore((s) => s.user);
+  useEffect(() => {
+    if (!account) return;
+    setForm((f) => ({ ...f, ownerName: f.ownerName || account.fullName?.trim() || '', phone: f.phone || account.phone?.trim() || '' }));
+  }, [account]);
 
   const valid =
     form.businessName.trim() &&
@@ -272,7 +280,14 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 function DealerHub() {
-  const [tab, setTab] = useState<Tab>('price');
+  // Giữ tab trên URL như web (?tab=): mở một đơn rồi quay lại thì về đúng tab đang xem, không về Bảng giá.
+  const navigate = useNavigate();
+  const { search } = useLocation();
+  const [tab, setTabState] = useState<Tab>(() => TABS.find((t) => t.key === new URLSearchParams(search).get('tab'))?.key ?? 'price');
+  const setTab = (next: Tab) => {
+    setTabState(next);
+    navigate(next === 'price' ? '/dealer' : `/dealer?tab=${next}`, { replace: true });
+  };
   const meQ = useQuery({ queryKey: ['dealer-me'], queryFn: getDealerMe });
   const me = meQ.data;
 
@@ -282,7 +297,7 @@ function DealerHub() {
       <div style={{ padding: 16 }}>
         <div style={{ padding: 16, background: INK, borderRadius: 'var(--radius-card)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.7 }}>
                 Bậc đại lý
               </Text>
@@ -290,7 +305,7 @@ function DealerHub() {
                 {me?.tier?.name ?? 'Đang gán bậc'}
               </Heading>
             </div>
-            <div style={{ textAlign: 'right' }}>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.7 }}>
                 Công nợ hiện tại
               </Text>
@@ -319,7 +334,7 @@ function DealerHub() {
       </div>
 
       {tab === 'price' && <PriceAndOrder creditLimit={me?.tier?.creditLimit ?? 0} debt={me?.currentDebt ?? 0} rules={me?.orderRules} />}
-      {tab === 'orders' && <DealerOrders />}
+      {tab === 'orders' && <DealerOrders onOrderFirst={() => setTab('price')} />}
       {tab === 'credit' && <DealerCredit />}
       {tab === 'report' && <DealerReport />}
     </DealerShell>
@@ -482,7 +497,7 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
           onSubmit={() => undefined}
           label="Tìm sản phẩm"
           clearLabel="Xoá từ khoá"
-          placeholder="Tìm theo tên / SKU / thương hiệu"
+          placeholder="Tìm tên, SKU"
         />
         <Button
           variant="secondary"
@@ -610,7 +625,11 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
             />
           ))
         ) : (
-          <EmptyState variant="inline" art="search" heading="Không tìm thấy sản phẩm" />
+          <EmptyState
+            variant="inline"
+            art="search"
+            heading={search.trim() ? 'Không tìm thấy sản phẩm' : 'Chưa có hàng giá sỉ cho bậc của bạn'}
+          />
         )}
       </Card>
 
@@ -709,13 +728,19 @@ function PriceRow({
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Tên cho hai dòng, phân loại ở dòng riêng ngay trên SKU: hai phân loại của cùng một món không còn trông giống hệt nhau. */}
         <Text
           variant="body-sm"
           as="div"
-          style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+          style={{ fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
         >
-          {row.product} · {row.variation}
+          {row.product}
         </Text>
+        {row.variation && (
+          <Text variant="caption" as="div" style={{ fontWeight: 700 }}>
+            {row.variation}
+          </Text>
+        )}
         <Text variant="caption" tone="tertiary" as="div">
           {row.sku} · {row.stock > 0 ? `tồn ${row.stock}` : vi.dealerOrder.outOfStockPreorder}
         </Text>
@@ -747,7 +772,7 @@ function PriceRow({
   );
 }
 
-function DealerOrders() {
+function DealerOrders({ onOrderFirst }: { onOrderFirst: () => void }) {
   const navigate = useNavigate();
   const ordersQ = useQuery({ queryKey: ['dealer-orders'], queryFn: getDealerOrders });
   return (
@@ -824,7 +849,7 @@ function DealerOrders() {
           })}
         </div>
       ) : (
-        <EmptyState art="box" heading="Chưa có đơn đại lý nào" />
+        <EmptyState art="box" heading="Chưa có đơn đại lý nào" ctaLabel="Đặt đơn sỉ" onCta={onOrderFirst} />
       )}
     </div>
   );
@@ -900,7 +925,7 @@ function DealerCredit() {
             onPress={() => pay.mutate()}
             style={{ flex: '0 0 auto', ...inkButton(payDisabled) }}
           >
-            Báo đã CK
+            Báo đã chuyển khoản
           </Button>
         </div>
         {Number(amount) > balance && (
@@ -912,7 +937,7 @@ function DealerCredit() {
           </div>
         )}
         <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 6 }}>
-          "Báo đã CK" chỉ gửi thông báo cho Tubu Tree — dư nợ chỉ giảm sau khi admin kiểm tra sao kê
+          "Báo đã chuyển khoản" chỉ gửi thông báo cho Tubu Tree — dư nợ chỉ giảm sau khi admin kiểm tra sao kê
           ngân hàng và xác nhận.
         </Text>
       </Card>

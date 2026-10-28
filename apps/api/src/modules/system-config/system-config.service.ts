@@ -11,6 +11,7 @@ import { COMMISSION_ELIGIBLE_ROLES_KEY, eligibleRolesProblem } from '../affiliat
 import { PANCAKE_CATEGORY_MAP_KEY, categoryMapProblem } from '../integrations/pancake/pancake-category-map';
 import { AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT, sanitizeDefaultRate } from '../affiliate/commission-rate';
 import { AFFILIATE_MAX_RATE_KEY, DEFAULT_AFFILIATE_MAX_RATE_PCT, sanitizeMaxRate } from '../affiliate/commission-rate-csv';
+import { AFFILIATE_AUTO_WALLET_TRANSFER_KEY } from '../affiliate/affiliate-auto-transfer-config';
 import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } from '../storefront/storefront-config';
 import { DEALER_BONUS_TIERS_KEY, dealerBonusTiersProblem } from './dealer-bonus-tiers-rule';
 import { WASTE_JSON_RULES, WASTE_RANGES } from '../waste-exchange/waste-config.keys';
@@ -213,6 +214,7 @@ export class SystemConfigService {
     // (bán kính chấm công âm, ô vườn mục tiêu âm, giới hạn quay vô hạn). Phía đọc không kẹp lại, nên chặn ngay lúc ghi.
     // config-numeric-ranges.spec.ts buộc mọi khoá số được seed phải có luật ở đây hoặc ở admin-config-rules.
     'loyalty.point_expiry_reminder_days': { min: 0, max: 90, note: 'số ngày báo trước điểm sắp hết hạn (0 = không nhắc)', integer: true },
+    'loyalty.tier_drop_notice_days': { min: 0, max: 365, note: 'báo khách trước khi hạ hạng khi hạn giữ hạng còn ≤ N ngày (0 = không báo)', integer: true },
     'loyalty.tier_grace_days': { min: 0, max: 365, note: 'số ngày giữ hạng khi rớt mốc (0 = rớt hạng ngay)', integer: true },
     'cashback.click_rate_limit_seconds': { min: 0, max: 3600, note: 'số giây giữa hai lần bấm cùng sàn (0 = không giới hạn)', integer: true },
     'cashback.reconcile_lookback_days': { min: 1, max: 365, note: 'số ngày kéo lại giao dịch đối soát', integer: true },
@@ -287,6 +289,8 @@ export class SystemConfigService {
     'dealer.block_credit_when_overdue': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     [DEALER_BONUS_TIERS_KEY]: dealerBonusTiersProblem,
     // Cờ gian hàng: chuỗi "false" là truthy ở chỗ đọc lỏng, nên chỉ nhận đúng boolean.
+    // Cờ tự chuyển hoa hồng vào Ví: chuỗi "false" là truthy ở chỗ đọc lỏng, nên chỉ nhận đúng boolean (đây là đường ghi tiền).
+    [AFFILIATE_AUTO_WALLET_TRANSFER_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     [STOREFRONT_REQUIRE_APPROVAL_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     [STOREFRONT_SUBDOMAIN_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     'payment.bank_bin': (value) =>
@@ -483,6 +487,21 @@ export class SystemConfigService {
     }
   }
 
+  /** Khách phải tick "Tôi đồng ý với Thể lệ" ở bước 2, nên không bật chương trình khi thể lệ còn trống. */
+  private async assertWasteRulesPublished(key: string, value: unknown): Promise<void> {
+    if (key === 'waste.rules_text') {
+      if (typeof value === 'string' && value.trim() === '' && (await this.get<unknown>('waste.enabled', false)) === true) {
+        throw new BadRequestException('Chưa xoá được thể lệ (waste.rules_text) khi Đổi rác đang bật: khách phải tick đồng ý với một thể lệ có chữ. Tắt waste.enabled trước, hoặc sửa thể lệ thay vì xoá trắng.');
+      }
+      return;
+    }
+    if (key !== 'waste.enabled' || value !== true) return;
+    const rules = await this.get<unknown>('waste.rules_text', '');
+    if (typeof rules !== 'string' || rules.trim() === '') {
+      throw new BadRequestException('Chưa bật được Đổi rác: thể lệ (waste.rules_text) còn trống. Nhập thể lệ ở Quản trị, Cấu hình, nhóm waste, rồi bật lại.');
+    }
+  }
+
   async set(key: string, value: object | string | number | boolean | null, changedBy: string): Promise<void> {
     const unset = value === null && SystemConfigService.NULLABLE_KEYS.has(key);
     if ((value === null && !unset) || value === undefined) {
@@ -491,6 +510,7 @@ export class SystemConfigService {
     if (!unset) {
       this.assertInRange(key, value);
       await this.assertRateCapsConsistent(key, value);
+      await this.assertWasteRulesPublished(key, value);
     }
     const stored = unset ? Prisma.JsonNull : (value as object);
     const dotIndex = key.indexOf('.');

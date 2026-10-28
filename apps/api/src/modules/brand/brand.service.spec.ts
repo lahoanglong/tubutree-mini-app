@@ -392,10 +392,10 @@ describe('BrandService follow nhãn', () => {
 });
 
 describe('BrandService brand-owner tự quản', () => {
-  it('getOwnedBrand: NotFound nếu user không sở hữu nhãn', async () => {
+  it('getOwnedBrand: trả null (không 404) nếu user không sở hữu nhãn', async () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue(null);
-    await expect(new BrandService(prisma, brandConfig).getOwnedBrand('u1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(new BrandService(prisma, brandConfig).getOwnedBrand('u1')).resolves.toBeNull();
   });
 
   it('getOwnedBrand: trả nhãn + promotions (1 query include, orderBy tất định)', async () => {
@@ -403,8 +403,8 @@ describe('BrandService brand-owner tự quản', () => {
     // Refactor: promotions lấy qua include trên brand.findFirst (không còn findMany riêng).
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', name: 'N', ownerUserId: 'u1', promotions: [{ id: 'p1' }] });
     const out = await new BrandService(prisma, brandConfig).getOwnedBrand('u1');
-    expect(out.id).toBe('b1');
-    expect(out.promotions).toHaveLength(1);
+    expect(out?.id).toBe('b1');
+    expect(out?.promotions).toHaveLength(1);
     // Tất định: orderBy createdAt asc (chống non-deterministic khi 1 user sở hữu >1 nhãn).
     expect(prisma.brand.findFirst).toHaveBeenCalledWith(expect.objectContaining({ orderBy: { createdAt: 'asc' } }));
   });

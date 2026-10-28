@@ -10,7 +10,7 @@ vi.mock('@/lib/core-http-server', () => ({ createServerHttp: () => ({ get: mocks
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: vi.fn().mockResolvedValue([]) } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'loading', useAuthRestoring: () => false }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: null }) }));
-vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
+vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/use-flash-sales')>()), useActiveFlashSales: () => [] }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import { homeCopy } from '@tubutree/app-core/home-copy';
@@ -86,8 +86,7 @@ describe('HomePage — server render phần công khai', () => {
   it('khách vãng lai (chưa có cờ phiên): HTML đầu đã có khối Quà khách mới với số lấy từ cấu hình công khai, để Danh mục không nhảy sau hydrate', async () => {
     const out = await render();
     expect(out).toContain('Quà khách mới');
-    expect(out).toContain('Đặt định kỳ giảm 17% mỗi đơn');
-    expect(out).toContain('350.000');
+    expect(out).toContain('Miễn phí giao hàng cho đơn từ 350.000đ');
     expect(out.indexOf('Quà khách mới')).toBeLessThan(out.indexOf('Danh mục'));
   });
 

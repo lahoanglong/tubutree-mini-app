@@ -17,13 +17,14 @@ const mocks = vi.hoisted(() => ({
   copyWeek: vi.fn(),
   cancelShift: vi.fn(),
   openSnackbar: vi.fn(),
+  navigate: vi.fn(),
   role: 'STAFF' as string,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) => (visible ? <div>{children}</div> : null),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mocks.navigate,
   useLocation: () => ({ pathname: '/staff', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
@@ -157,10 +158,17 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
     it('không phải nhân viên: báo không có quyền, vẫn đúng một h1, không gọi API', () => {
       mocks.role = 'CUSTOMER';
       renderPage();
-      expect(screen.getByText('Trang dành cho nhân viên. Liên hệ quản trị để được cấp quyền.')).toBeInTheDocument();
+      expect(screen.getByText('Trang dành cho nhân viên')).toBeInTheDocument();
       expect(h1s()).toEqual(['Ca làm của tôi']);
       expect(mocks.getShifts).not.toHaveBeenCalled();
       expect(mocks.getAttendanceStatus).not.toHaveBeenCalled();
+    });
+
+    it('không phải nhân viên: nút "Về Cá nhân" mở /profile', () => {
+      mocks.role = 'CUSTOMER';
+      renderPage();
+      fireEvent.click(screen.getByRole('button', { name: 'Về Cá nhân' }));
+      expect(mocks.navigate).toHaveBeenCalledWith('/profile');
     });
 
     it('lỗi tải ca: có nút Thử lại gọi lại API', async () => {
@@ -174,6 +182,24 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
   });
 
   describe('thẻ "Chấm công hôm nay"', () => {
+    it('đang tải trạng thái chấm công: KHÔNG báo "không có ca đã duyệt" (chưa biết), không có nút Vào ca', async () => {
+      mocks.getAttendanceStatus.mockReturnValue(new Promise(() => undefined));
+      renderPage();
+      await screen.findByText('T2 · 09/03');
+      expect(screen.queryByText('Hôm nay bạn không có ca đã duyệt.')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Vào ca' })).not.toBeInTheDocument();
+    });
+
+    it('trạng thái chấm công lỗi: báo không tải được và Thử lại gọi lại; không nói "không có ca"', async () => {
+      mocks.getAttendanceStatus.mockRejectedValueOnce(new Error('Mất kết nối')).mockResolvedValue({ shifts: [], openSession: null });
+      renderPage();
+      expect(await screen.findByText('Không tải được trạng thái chấm công.')).toBeInTheDocument();
+      expect(screen.queryByText('Hôm nay bạn không có ca đã duyệt.')).not.toBeInTheDocument();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Thử lại' })[0]!);
+      await waitFor(() => expect(mocks.getAttendanceStatus).toHaveBeenCalledTimes(2));
+      expect(await screen.findByText('Hôm nay bạn không có ca đã duyệt.')).toBeInTheDocument();
+    });
+
     it('hôm nay không có ca đã duyệt thì báo và không có nút Checkin', async () => {
       renderPage();
       expect(await screen.findByText('Hôm nay bạn không có ca đã duyệt.')).toBeInTheDocument();
@@ -329,6 +355,19 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       expect(screen.getAllByText('Chưa đăng ký ca.')).toHaveLength(3);
     });
 
+    it('thẻ ngày hôm nay (T4 · 11/03) có nhãn "Hôm nay" và viền nổi; ngày khác thì không', async () => {
+      renderPage();
+      await screen.findByText('T2 · 09/03');
+      const card = (label: string) => screen.getByRole('heading', { level: 2, name: label }).parentElement!.parentElement!.parentElement!.parentElement!;
+      const today = card('T4 · 11/03');
+      expect(today).toHaveTextContent('Hôm nay');
+      expect(today.style.border).toContain('1.5px solid');
+      const other = card('T5 · 12/03');
+      expect(other).not.toHaveTextContent('Hôm nay');
+      expect(other.style.border).toBe('');
+      expect(screen.getAllByText('Hôm nay')).toHaveLength(1);
+    });
+
     it('mỗi ngày là một heading h2; hai nút chuyển tuần có tên, cao >= 44px và đổi đúng tuần truy vấn', async () => {
       renderPage();
       await screen.findByText('T2 · 09/03');
@@ -469,7 +508,7 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
   describe('đăng ký nhanh cả tuần', () => {
     it('hai ô giờ có tên truy cập phân biệt "Bắt đầu"/"Kết thúc", không rơi về tên mặc định "Giờ"', async () => {
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký nhanh' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký ca' }));
       expect(screen.getByLabelText('Bắt đầu')).toHaveValue('08:00');
       expect(screen.getByLabelText('Kết thúc')).toHaveValue('17:00');
       expect(screen.queryByLabelText('Giờ')).not.toBeInTheDocument();
@@ -478,7 +517,7 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
     it('mặc định T2–T6 từ hôm nay; ngày đã qua bị khoá; gửi đúng các ngày với giờ 08:00–17:00', async () => {
       mocks.createShifts.mockResolvedValue({ created: 3 });
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký nhanh' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký ca' }));
       expect(screen.getByRole('heading', { level: 2, name: 'Đăng ký nhanh cả tuần' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'T2 09/03' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'T3 10/03' })).toBeDisabled();
@@ -498,7 +537,7 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
 
     it('bỏ chọn một ngày thì số ngày giảm; bỏ hết thì không gửi được', async () => {
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký nhanh' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký ca' }));
       fireEvent.click(screen.getByRole('button', { name: 'T6 13/03' }));
       expect(screen.getByRole('button', { name: 'Gửi duyệt (2 ngày)' })).toBeEnabled();
       fireEvent.click(screen.getByRole('button', { name: 'T4 11/03' }));
@@ -508,7 +547,7 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
 
     it('chọn ca chuẩn thì ẩn ô giờ và gửi giờ + templateId của ca chuẩn', async () => {
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký nhanh' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký ca' }));
       fireEvent.click(screen.getByRole('button', { name: 'Ca chiều (13:00–17:00)' }));
       expect(timeInputs()).toHaveLength(0);
       fireEvent.click(screen.getByRole('button', { name: 'T6 13/03' }));

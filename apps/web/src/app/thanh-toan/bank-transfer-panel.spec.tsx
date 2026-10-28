@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll, beforeEach } from 'vitest';
 import { BankTransferPanel } from './bank-transfer-panel';
 import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
 import type { OrderDTO } from '@/lib/shop-client';
@@ -10,8 +10,13 @@ import type { OrderDTO } from '@/lib/shop-client';
 // nào trả tiền cho đơn đã đặt. BankTransferPanel là khối hiện đầy đủ thông tin đó ngay trên màn
 // thành công, mirror apps/miniapp/src/pages/bank-payment.tsx (cùng contract GET /payments/bank-qr/:code).
 
+// "Lưu mã QR" nạp mô-đun này bằng import() động; lần nạp đầu phải biên dịch, trên máy CI chậm lâu hơn vài nhịp flush().
+beforeAll(async () => {
+  await import('@/lib/download-image');
+});
+
 let mounted: Rendered[] = [];
-const mount = (ui: Parameters<typeof render>[0]) => {
+const mount =(ui: Parameters<typeof render>[0]) => {
   const r = render(ui);
   mounted.push(r);
   return r;

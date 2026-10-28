@@ -12,9 +12,9 @@ const POST = (id: string, author: string, over: Record<string, unknown> = {}) =>
   likeCount: 1, commentCount: 0, liked: false, bestCommentId: null, isOwner: false, ...over,
 });
 
-function mockSession(api: MockApi) {
-  api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: { id: 'u1', fullName: 'Lan', role: 'CUSTOMER', onboarded: true, segments: [] } }));
-  api.get('/me', () => ({ id: 'u1', fullName: 'Lan', role: 'CUSTOMER', onboarded: true, segments: [] }));
+function mockSession(api: MockApi, role = 'CUSTOMER') {
+  api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: { id: 'u1', fullName: 'Lan', role, onboarded: true, segments: [] } }));
+  api.get('/me', () => ({ id: 'u1', fullName: 'Lan', role, onboarded: true, segments: [] }));
   api.get('/feed/categories', [{ id: 'c1', slug: 'bep', name: 'Nhà bếp', icon: null }]);
   api.get('/flash-sales/active', []);
 }
@@ -218,7 +218,7 @@ test.describe('Web khách: cộng đồng', () => {
   });
 
   test('học viện: danh sách khoá, mở khoá, đánh dấu đã học gửi đúng bài', async ({ page, api }) => {
-    mockSession(api);
+    mockSession(api, 'AFFILIATE');
     api.get('/academy/courses', [{ id: 'c1', title: 'Khoá bán hàng', description: 'Học cách chốt đơn', coverUrl: null, sortOrder: 1, isPublished: true, lessonCount: 2, completedCount: 0, isCompleted: false }]);
     api.get('/academy/courses/c1', {
       id: 'c1', title: 'Khoá bán hàng', description: 'Học cách chốt đơn', coverUrl: null, isPublished: true, completedLessonIds: [],

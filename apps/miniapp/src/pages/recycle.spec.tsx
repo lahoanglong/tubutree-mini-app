@@ -77,6 +77,14 @@ describe('/recycle trang vào (§4.1)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Đổi rác ngay' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/recycle/new');
   });
+  it('yêu cầu vừa xong trong 7 ngày: thẻ "Vừa cộng X điểm" mở trang kết quả', async () => {
+    mocks.getWasteMe.mockResolvedValue(
+      makeWasteMe({ balance: { pointsBalance: 9000, pointsConvertedBalance: 5000, redeemablePoints: 14_000 }, recentCompleted: makeRequestSummary({ id: 'r-9', status: 'COMPLETED', pointsAwarded: 2500 }) }),
+    );
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Vừa cộng 2\.500 điểm/ }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/recycle/done/r-9');
+  });
   it('tiến độ tới quà kế tiếp theo redeemablePoints của máy chủ + tương đương đơn vị món', async () => {
     renderPage();
     expect(await screen.findByText('Còn 6.000 điểm tới mã Miễn phí vận chuyển')).toBeInTheDocument();

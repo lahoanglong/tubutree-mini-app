@@ -101,6 +101,16 @@ export class StorefrontService {
     }
   }
 
+  /** Chưa có gian hàng là trạng thái bình thường của khách mới: trả null (200) thay vì 404 để màn không ghi lỗi đỏ ở console. */
+  async getMineOrNull(userId: string) {
+    try {
+      return await this.getMine(userId);
+    } catch (err) {
+      if (err instanceof NotFoundException) return null;
+      throw err;
+    }
+  }
+
   async getMine(userId: string) {
     const sf = await this.prisma.storefront.findFirst({
       where: { ownerUserId: userId, type: 'CTV' },

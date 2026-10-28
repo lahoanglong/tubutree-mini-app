@@ -7,10 +7,10 @@ import {
 } from '../services/brand-api';
 import { useStorefrontContext } from '../store/storefront-context';
 import { useAuthStore } from '../store/auth';
-import { getLoadErrorMessage } from '../services/api';
+import { getLoadErrorMessage, isNotFoundError } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
-import { ErrorState } from '../components/ui/empty-state';
+import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { ShareSheet } from '../components/share-sheet';
 import { getDealerMe } from '../services/dealer-api';
 import { BadgePercent, Check, Leaf, MapPin, Plus, Share2, Sparkles, Store } from 'lucide-react';
@@ -50,7 +50,9 @@ export default function BrandViewPage() {
     if (slug) setSfContext({ slug, kind: 'brand' });
   }, [slug, setSfContext]);
   // Trạng thái theo dõi (cần đăng nhập; lỗi/401 coi như chưa theo dõi).
-  const followQ = useQuery({ queryKey: ['brand-follow', slug], queryFn: () => getBrandFollowState(slug), retry: false });
+  // Chỉ hỏi sau khi nhãn đã tải xong và khách đã đăng nhập: nhãn không có thì không bắn thêm request 404/401.
+  const brandLoaded = !!q.data;
+  const followQ = useQuery({ queryKey: ['brand-follow', slug], queryFn: () => getBrandFollowState(slug), retry: false, enabled: authed && brandLoaded });
   const followMut = useMutation({
     mutationFn: () => (followQ.data?.following ? unfollowBrand(slug) : followBrand(slug)),
     onSuccess: (r) => {
@@ -69,6 +71,7 @@ export default function BrandViewPage() {
     queryFn: () => getBrandShareToEarn(slug),
     retry: false,
     staleTime: 60_000,
+    enabled: authed && brandLoaded,
   });
   const ste = steQ.data;
   const eligible = ste?.eligible === true;
@@ -92,7 +95,17 @@ export default function BrandViewPage() {
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={PAGE_TITLE} />
         <div style={{ padding: 24 }}>
-          <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+          {isNotFoundError(q.error) ? (
+            <EmptyState
+              art="search"
+              heading="Không tìm thấy nhãn hàng"
+              body="Nhãn này chưa được công khai hoặc liên kết đã cũ. Xem các nhãn khác trong Danh mục nhé."
+              ctaLabel="Xem Danh mục"
+              onCta={() => navigate('/browse', { replace: true })}
+            />
+          ) : (
+            <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+          )}
         </div>
       </Page>
     );

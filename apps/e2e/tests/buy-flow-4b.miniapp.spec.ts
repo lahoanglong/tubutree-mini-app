@@ -53,7 +53,7 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     await waitHomeSettled(page, api);
 
     const blocks = await visibleBlocks(page);
-    const order = ['search', 'shortcuts', 'categories', 'bestSellers', 'suggest'];
+    const order = ['search', 'shortcuts', 'bestSellers', 'categories', 'suggest'];
     expect(blocks.filter((b) => order.includes(b))).toEqual(order);
     expect(blocks).not.toContain('member');
     await expect(page.getByRole('region', { name: 'Mua lại' })).toHaveCount(0);

@@ -12,7 +12,7 @@ describe('homeBlockOrder (nguồn ở app-core, web chỉ re-export)', () => {
 
   it('khách mới: Quà khách mới thay thẻ thành viên, không có Mua lại', () => {
     expect(homeBlockOrder('new')).toEqual([
-      'search', 'todo', 'welcome', 'shortcuts', 'flash', 'categories', 'bestSellers', 'journey', 'community', 'suggest',
+      'search', 'welcome', 'todo', 'shortcuts', 'flash', 'bestSellers', 'categories', 'journey', 'community', 'suggest',
     ]);
   });
 

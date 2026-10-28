@@ -11,6 +11,7 @@ import {
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
+import { SessionUnavailable } from '../components/ui/auth-gate';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Icon } from '../components/ui/icon';
@@ -20,6 +21,9 @@ import { ProgressBar } from '../components/ui/progress-bar';
 import { Heading, Text } from '../components/ui/text';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
+import { canUseAcademy } from '@tubutree/app-core/academy-access';
+import { useAuthStore } from '../store/auth';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { isDirectVideoUrl } from '../utils/video-url';
 import { isHttpError } from '../services/http';
 
@@ -60,16 +64,22 @@ export default function AcademyPage() {
 }
 
 function CourseList({ onOpen, onBackToCtv }: { onOpen: (id: string) => void; onBackToCtv: () => void }) {
-  const q = useQuery({ queryKey: ['academy-courses'], queryFn: fetchCourses });
+  // Vai trò khách thường biết trước từ phiên: không gọi API chỉ để nhận 403.
+  const allowed = useAuthStore((s) => canUseAcademy(s.user?.role));
+  const phase = useAuthPhase();
+  const q = useQuery({ queryKey: ['academy-courses'], queryFn: fetchCourses, enabled: allowed });
+  const waitingForRole = !allowed && phase === 'loading';
 
   return (
     <div style={{ padding: 16 }}>
-      {q.isLoading ? (
+      {waitingForRole || (allowed && q.isLoading) ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Skeleton height={92} radius="var(--radius-card)" />
           <Skeleton height={92} radius="var(--radius-card)" />
         </div>
-      ) : q.isError && isForbidden(q.error) ? (
+      ) : !allowed && phase === 'unavailable' ? (
+        <SessionUnavailable variant="inline" />
+      ) : !allowed || (q.isError && isForbidden(q.error)) ? (
         <CtvOnlyNotice />
       ) : q.isError ? (
         <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />

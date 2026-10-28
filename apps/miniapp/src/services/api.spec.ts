@@ -65,10 +65,10 @@ describe('getErrorMessage', () => {
     expect(getErrorMessage(err)).toBe(viCopy.errors.offline);
   });
 
-  it('không có response nhưng vẫn có mạng (CORS/server không phản hồi) → copy server, KHÔNG báo mất mạng sai', () => {
+  it('không có response nhưng vẫn có mạng (sóng yếu, CORS/máy chủ không phản hồi) → câu trung tính, KHÔNG báo mất mạng sai và không đổ lỗi cho máy chủ', () => {
     vitestVi.stubGlobal('navigator', { onLine: true });
     const err = httpError({ response: undefined });
-    expect(getErrorMessage(err)).toBe(viCopy.errors.server);
+    expect(getErrorMessage(err)).toBe(viCopy.errors.network);
   });
 
   it('lỗi không phải HttpError (vd throw string/Error thường) → copy generic', () => {

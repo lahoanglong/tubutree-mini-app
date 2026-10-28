@@ -175,7 +175,7 @@ const CASES: Case[] = [
     setup: () => mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: new Date().toISOString() }),
     targets: byName(/Tưới hết/),
   },
-  { label: 'điểm danh', api: () => mocks.api.checkIn, targets: byName('Điểm danh') },
+  { label: 'điểm danh', api: () => mocks.api.checkIn, targets: byName(/^(Điểm danh nhận|Nhận nước hôm nay)/) },
   { label: 'hứng giọt sương', api: () => mocks.api.collectDew, targets: byName('Hứng giọt sương') },
   { label: 'mua vé giữ lửa', api: () => mocks.api.buyStreakFreeze, targets: byName('Mua (80💧)') },
   { label: 'hồi sinh chuỗi', api: () => mocks.api.repairStreak, targets: byName('Hồi sinh (300💧)') },
@@ -268,7 +268,7 @@ describe('GamePage — nhả khoá để bấm lại được', () => {
   it('lỗi mạng: nhả khoá, bấm lại gọi API lần hai', async () => {
     mocks.api.checkIn.mockRejectedValueOnce(new Error('boom'));
     renderPage();
-    const btn = await screen.findByRole('button', { name: 'Điểm danh' });
+    const btn = await screen.findByRole('button', { name: /^(Điểm danh nhận|Nhận nước hôm nay)/ });
     await tapTogether(btn, btn);
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     await waitFor(() => expect(mocks.api.checkIn).toHaveBeenCalledTimes(1));

@@ -1,4 +1,4 @@
-import { expect, reply, test, type MockApi } from './support/mock-api';
+import { adminShellDefaults, expect, reply, test, type MockApi } from './support/mock-api';
 
 /**
  * Web: kênh đại lý /dai-ly,  ca làm /nhan-vien, bảng lương /nhan-vien/bang-luong, chủ thương hiệu /chu-thuong-hieu. Mọi lời gọi /api/** từ trình duyệt đi qua mock (fixture `api`); host phải là localhost
@@ -76,7 +76,7 @@ test.describe('Web đại lý', () => {
     await page.goto('/dai-ly?tab=credit');
     await page.getByLabel('Số tiền đã chuyển').fill('1000000');
     const paid = api.waitForCall('POST', '/dealer/credit-payment');
-    await page.getByRole('button', { name: 'Báo đã CK' }).click();
+    await page.getByRole('button', { name: 'Báo đã chuyển khoản' }).click();
     const call = await paid;
     expect(call.body).toEqual({ amount: 1_000_000, note: 'Báo đã chuyển khoản' });
     expect(call.headers['idempotency-key']).toBeTruthy();
@@ -110,7 +110,8 @@ test.describe('Web nhân viên', () => {
     mockStaff(api, 'CUSTOMER');
     await page.goto('/nhan-vien');
     await expect(page.getByRole('heading', { name: 'Ca làm của tôi', level: 1 })).toBeVisible();
-    await expect(page.getByText('Trang dành cho nhân viên. Liên hệ quản trị để được cấp quyền.')).toBeVisible();
+    await expect(page.getByText('Trang dành cho nhân viên', { exact: true })).toBeVisible();
+    await expect(page.getByText('Tài khoản này chưa có quyền nhân viên. Liên hệ quản trị để được cấp quyền.')).toBeVisible();
   });
 
   test('thêm ca theo ca chuẩn gửi đúng body; chấm công chỉ dẫn mở trên Zalo', async ({ page, api }) => {
@@ -233,6 +234,8 @@ test.describe('Web admin nhân sự và lương', () => {
   const ADMIN = { ...USER, role: 'ADMIN', fullName: 'Quản trị' };
 
   test.beforeEach(async ({ page, api }) => {
+    // Spec chạy trong project khách nhưng mở /admin, nên tự mock khung quản trị.
+    adminShellDefaults(api);
     await page.addInitScript(() => {
       try {
         localStorage.setItem('tubu_web_session', '1');

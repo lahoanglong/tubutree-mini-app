@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -10,6 +12,9 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import BackLink from '@/components/back-link';
 import { PageHeader } from '@/components/ui/page-header';
 import { loadErrorText } from '@/lib/error-text';
+
+// Chỉ nhánh bị từ chối quyền mới vẽ: nhân viên thật không phải tải minh hoạ này.
+const EmptyState = dynamic(() => import('@/components/mini/empty-state').then((m) => m.EmptyState));
 
 /** Khung chung của màn nhân sự: mỗi nhánh render có đúng một h1. */
 export function StaffShell({ title, children }: { title: string; children: React.ReactNode }) {
@@ -33,17 +38,16 @@ export const errText = loadErrorText;
 export function StaffGate({
   title,
   loginMessage,
-  deniedMessage,
   returnTo,
   children,
 }: {
   title: string;
   loginMessage: string;
-  deniedMessage: string;
   returnTo: string;
   children: React.ReactNode;
 }) {
   const phase = useAuthPhase();
+  const router = useRouter();
   const { user } = useAuth();
   const role = user?.role;
 
@@ -71,7 +75,13 @@ export function StaffGate({
   if (role !== 'STAFF' && role !== 'ADMIN') {
     return (
       <StaffShell title={title}>
-        <p className="py-10 text-center text-stone-700">{deniedMessage}</p>
+        <EmptyState
+          art="leaf"
+          heading="Trang dành cho nhân viên"
+          body="Tài khoản này chưa có quyền nhân viên. Liên hệ quản trị để được cấp quyền."
+          ctaLabel="Về Cá nhân"
+          onCta={() => router.push('/tai-khoan')}
+        />
       </StaffShell>
     );
   }

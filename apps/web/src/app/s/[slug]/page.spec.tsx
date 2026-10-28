@@ -289,11 +289,11 @@ describe('trang gian hàng — khổ 640-767px vẫn là bố cục điện tho�
     expect(img.className).not.toMatch(/(^|\s)sm:h-/);
   });
 
-  it('không có bộ sưu tập: vẫn chừa 90px đệm đáy và vẫn có thanh dính ở điện thoại như Mini App', async () => {
+  it('không có bộ sưu tập: vẫn chừa 90px đệm đáy cho chủ gian hàng; khách không có thanh dính đáy kéo họ rời gian hàng', async () => {
     mocks.sf = { ...SF, collections: [] };
     const box = await html();
     expect(box.querySelector('main')!.className).toContain('max-md:pb-[calc(90px+var(--safe-bottom))]');
-    expect(box.querySelector('[data-testid="storefront-header"] .max-md\\:fixed')).not.toBeNull();
+    expect(box.querySelector('[data-testid="storefront-header"] .max-md\\:fixed')).toBeNull();
   });
 
   it('không className nào ghép max-md:<thuộc tính> với sm:<cùng thuộc tính> (sm: thắng ở 640-767px)', async () => {
@@ -310,12 +310,14 @@ describe('trang gian hàng — khổ 640-767px vẫn là bố cục điện tho�
 });
 
 describe('trang gian hàng — nút chính cùng hàng với khối tên ở máy tính (D7-35)', () => {
-  it('StorefrontAction nằm trong hàng chứa tên, không còn hàng riêng bên dưới avatar', async () => {
+  it('không còn hàng riêng bên dưới avatar; khách không có nút đẩy ra danh mục ở đầu trang, chỉ có link phụ cuối trang', async () => {
     const box = await html();
     const row = box.querySelector('h1')!.closest('div.md\\:justify-between')!;
-    expect(row.querySelector('a[href="/san-pham"]')).not.toBeNull();
+    expect(row.querySelector('a[href="/san-pham"]')).toBeNull();
     const card = box.querySelector('[data-testid="storefront-header"]')!;
     expect(card.querySelector(':scope > div.justify-end')).toBeNull();
+    const more = Array.from(box.querySelectorAll('a')).find((a) => a.textContent === 'Xem thêm ở Tubu Tree');
+    expect(more?.getAttribute('href')).toBe('/san-pham');
   });
 });
 

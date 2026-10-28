@@ -3,7 +3,9 @@
 import type { CancelReasonBody } from '@tubutree/app-core/cancel-reasons';
 
 import { syncServerClock } from '@tubutree/app-core/server-clock';
+import { fetchActiveFlashSales } from '@tubutree/app-core/api/flash-sale';
 import { apiFetch } from './client-api';
+import { coreHttp } from './core-http';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from './refund-rules';
 import type { FlashItem } from './flash-price';
 import { cartStorefrontSlug } from './cart-key';
@@ -165,6 +167,8 @@ export interface PublicConfig {
   waste?: { enabled: boolean; dropoff: boolean; mailin: boolean; pickup: boolean };
   /** Khoảng ngày giao dự kiến; null/thiếu khi chủ shop chưa cấu hình (hoặc API cũ) thì ẩn dòng "Giao dự kiến". */
   shippingEta?: { minDays: number; maxDays: number } | null;
+  /** Tỉ giá quy đổi điểm khi trả đơn (đ/điểm); thiếu thì coi như 1. */
+  loyalty?: { vndPerPointRedeem?: number };
 }
 export const getPublicConfig = () => apiFetch<PublicConfig>('/config/public', { auth: false });
 
@@ -185,9 +189,7 @@ export async function getProductStock(slug: string): Promise<Record<string, numb
  * HTML; trình duyệt hỏi lại cái này để giá hiển thị khớp giá giỏ và đơn.
  */
 export async function getActiveFlashSales(): Promise<FlashItem[]> {
-  const items = await apiFetch<FlashItem[]>('/flash-sales/active', { auth: false, cache: 'no-store' });
-  syncServerClock(Array.isArray(items) ? items[0]?.serverNow : undefined);
-  return items;
+  return fetchActiveFlashSales(coreHttp);
 }
 
 // Cart
