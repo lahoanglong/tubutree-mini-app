@@ -16,8 +16,10 @@ const mocks = vi.hoisted(() => ({
   },
   search: new URLSearchParams(),
   replace: vi.fn(),
+  config: vi.fn(),
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
+vi.mock('@/lib/core-http', () => ({ coreHttp: { get: (...a: unknown[]) => mocks.config(...a) } }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: mocks.replace }),
   useSearchParams: () => mocks.search,
@@ -28,6 +30,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
 }));
 
 import LoginPage from './page';
+import { LoginSkeleton } from './login-skeleton';
 import CallbackPage from './callback/page';
 
 let mounted: Rendered[] = [];
@@ -45,6 +48,7 @@ beforeEach(() => {
   mocks.auth.handleCallback.mockReset().mockResolvedValue(undefined);
   mocks.search = new URLSearchParams();
   mocks.replace.mockReset();
+  mocks.config.mockReset().mockResolvedValue({});
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
 });
 afterEach(() => {
@@ -123,6 +127,53 @@ describe('/dang-nhap — bản build thiếu NEXT_PUBLIC_ZALO_APP_ID (BUYERWEB-4
     await flush();
     expect((byText(container, 'button', 'Đăng nhập với Zalo') as HTMLButtonElement).disabled).toBe(false);
     expect(container.textContent).not.toContain('tạm ngưng');
+  });
+});
+
+describe('/dang-nhap — mặt tiền trang', () => {
+  it('có logo thương hiệu kèm chữ thay thế, đúng một main và một h1', async () => {
+    const { container } = mount(<LoginPage />);
+    await flush();
+    const logo = container.querySelector('main img');
+    expect(logo).not.toBeNull();
+    expect(logo!.getAttribute('alt')).toBe('Tubu Tree');
+    expect(container.querySelectorAll('main')).toHaveLength(1);
+    expect(container.querySelectorAll('h1')).toHaveLength(1);
+  });
+
+  it('nói lợi ích khi cấu hình công khai có mã chào mừng, con số lấy từ cấu hình', async () => {
+    mocks.config.mockResolvedValue({ newCustomer: { welcomeVoucher: { amount: 70000, minOrder: 199000 } } });
+    const { container } = mount(<LoginPage />);
+    await flush();
+    const benefit = container.querySelector('[data-testid="login-benefit"]');
+    expect(benefit).not.toBeNull();
+    expect(benefit!.textContent).toContain('70.000đ');
+    expect(benefit!.textContent).toContain('199.000đ');
+  });
+
+  it.each([
+    ['cấu hình không có phần khách mới', {}],
+    ['mã chào mừng bằng 0', { newCustomer: { welcomeVoucher: { amount: 0, minOrder: 0 } } }],
+  ])('không hiện dòng lợi ích khi %s', async (_name, cfg) => {
+    mocks.config.mockResolvedValue(cfg);
+    const { container } = mount(<LoginPage />);
+    await flush();
+    expect(container.querySelector('[data-testid="login-benefit"]')).toBeNull();
+  });
+
+  it('không hiện dòng lợi ích và vẫn đăng nhập được khi tải cấu hình lỗi', async () => {
+    mocks.config.mockRejectedValue(new Error('offline'));
+    const { container } = mount(<LoginPage />);
+    await flush();
+    expect(container.querySelector('[data-testid="login-benefit"]')).toBeNull();
+    expect((byText(container, 'button', 'Đăng nhập với Zalo') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('khung chờ là skeleton đang bận, không còn chữ "Đang tải…"', () => {
+    const { container } = mount(<LoginSkeleton />);
+    expect(container.querySelectorAll('[data-skeleton]').length).toBeGreaterThan(2);
+    expect(container.querySelector('main')?.getAttribute('aria-busy')).toBe('true');
+    expect(container.textContent).not.toContain('Đang tải');
   });
 });
 

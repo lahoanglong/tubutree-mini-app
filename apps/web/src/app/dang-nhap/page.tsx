@@ -4,7 +4,12 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Trees } from 'lucide-react';
+import Image from 'next/image';
+import { publicConfigQuery } from '@tubutree/app-core/queries/config';
+import { homeText } from '@/lib/home-text';
+import { coreHttp } from '@/lib/core-http';
+import { formatVnd } from '@/lib/format-vnd';
+import tubuLogo from '@/assets/tubu-logo.png';
 import { useAuth } from '@/lib/auth-context';
 import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
 import { loginFailureMessage } from '@/lib/login-errors';
@@ -13,6 +18,7 @@ import { ui } from '@/lib/guest-ui';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { miniAppLink } from '@/lib/zalo-mini-app';
 import { QrCode } from '@/components/ui/qr-code';
+import { LoginSkeleton } from './login-skeleton';
 
 function LoginInner() {
   const router = useRouter();
@@ -30,6 +36,13 @@ function LoginInner() {
     enabled: unavailable,
   });
   const support = supportQ.data ?? DEFAULT_SUPPORT;
+  // Cùng cache với Trang chủ; lỗi hay thiếu số thì không hứa gì (không có số dự phòng), nút đăng nhập vẫn dùng bình thường.
+  const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000, retry: false });
+  const welcome = cfgQ.data?.newCustomer?.welcomeVoucher;
+  const benefit =
+    welcome && welcome.amount > 0
+      ? `${homeText.newGift.title}: ${homeText.newGift.voucherAmount(formatVnd(welcome.amount))}${welcome.minOrder > 0 ? `, ${homeText.newGift.voucherMinOrder(formatVnd(welcome.minOrder)).toLowerCase()}` : ''}.`
+      : null;
   const miniAppUrl = miniAppLink(returnTo);
 
   useEffect(() => {
@@ -52,13 +65,16 @@ function LoginInner() {
 
   return (
     <main className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-6 py-10 text-center">
-      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-sheet bg-forest-50 text-forest-700 shadow-card ring-8 ring-forest-50/50">
-        <Trees className="h-10 w-10" aria-hidden="true" />
-      </div>
-      <h1 className="mt-5 font-display text-2xl font-semibold text-forest-800">Tubu Tree</h1>
+      <Image src={tubuLogo} alt="Tubu Tree" width={160} height={58} priority className="h-[58px] w-[160px] object-contain" />
+      <h1 className="mt-5 font-display text-2xl font-semibold text-forest-800">Đăng nhập</h1>
       <p className="mt-2 text-stone-700">
         Đăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.
       </p>
+      {benefit && (
+        <p data-testid="login-benefit" className="mt-3 rounded-control bg-forest-50 px-3 py-2 text-sm font-medium text-forest-800">
+          {benefit}
+        </p>
+      )}
 
       {unavailable ? (
         <>
@@ -116,7 +132,7 @@ function LoginInner() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="p-10 text-center text-stone-600">Đang tải…</div>}>
+    <Suspense fallback={<LoginSkeleton />}>
       <LoginInner />
     </Suspense>
   );
