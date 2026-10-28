@@ -61,7 +61,7 @@ describe('OpsInboxTab — việc với đối tác (R4-ADMIN-7)', () => {
       expect.arrayContaining(['wasteToCount', 'wasteUnmatched', 'wasteBlockedPending', 'wastePointsPending', 'wastePerksPending', 'wasteTransitOverdue', 'wasteGiftOverdue', 'wasteOrderMismatch']),
     );
     expect(Object.keys(INBOX_LABELS)).not.toContain('refillPending');
-    expect(Object.keys(INBOX_LABELS).filter((k) => /alert/i.test(k))).toEqual([]);
+    expect(Object.keys(INBOX_LABELS).filter((k) => /^alert|Alert/.test(k))).toEqual([]);
     stubInbox([
       { key: 'wasteToCount', count: 3 },
       { key: 'wasteGiftOverdue', count: 1 },
@@ -164,6 +164,23 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     expect(card('productsMissingImage').textContent).toContain('Sản phẩm đang bán thiếu ảnh');
     for (const k of ['bankTransferToConfirm', 'storefrontsPending', 'communityReports', 'productsMissingImage']) click(card(k));
     expect(onOpen.mock.calls.map((c) => c[0])).toEqual(['bankTransferToConfirm', 'storefrontsPending', 'communityReports', 'productsMissingImage']);
+  });
+
+  it('thẻ đơn đại lý trả trước chờ xác nhận tiền ghi số giờ còn lại và mở đúng khoá', async () => {
+    stub([
+      { key: 'dealerTransferToConfirm', count: 2, hoursLeft: 27 },
+      { key: 'bankTransferToConfirm', count: 1, hoursLeft: 7 },
+    ]);
+    const onOpen = vi.fn();
+    const r = render(<OpsInboxTab onOpen={onOpen} />);
+    mounted.push(r);
+    await flush();
+    const card = r.container.querySelector<HTMLButtonElement>('[data-inbox="dealerTransferToConfirm"]')!;
+    expect(card.textContent).toContain('Đơn đại lý trả trước chờ xác nhận tiền');
+    expect(card.textContent).toContain('còn 27 giờ trước khi tự huỷ');
+    click(card);
+    expect(onOpen).toHaveBeenCalledWith('dealerTransferToConfirm');
+    expect(INBOX_LABELS.dealerTransferToConfirm.title).toBe('Đơn đại lý trả trước chờ xác nhận tiền');
   });
 
   it('đơn chuyển khoản đã quá hạn ghi rõ sắp tự huỷ', async () => {

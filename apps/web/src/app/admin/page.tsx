@@ -501,10 +501,10 @@ export default function AdminPage() {
       setWasteSeed({ ...WASTE_INBOX_SEEDS[k], n: Date.now() });
       return setTab('waste');
     }
-    if (k === 'bankTransferToConfirm') {
+    if (k === 'bankTransferToConfirm' || k === 'dealerTransferToConfirm') {
       setOrdersRecycling('');
       setOrdersPancake('');
-      setOrderSeed({ search: '', n: Date.now(), status: 'PENDING_PAYMENT', extra: { queue: 'bank_transfer_to_confirm', order: 'asc' } });
+      setOrderSeed({ search: '', n: Date.now(), status: 'PENDING_PAYMENT', extra: { queue: k === 'bankTransferToConfirm' ? 'bank_transfer_to_confirm' : 'dealer_transfer_to_confirm', order: 'asc' } });
       setTabState('orders');
       return writeUrlState('orders', '');
     }
@@ -537,6 +537,7 @@ export default function AdminPage() {
         | 'communityReports'
         | 'invoicePending'
         | 'bankTransferToConfirm'
+        | 'dealerTransferToConfirm'
         | 'storefrontsPending'
         | 'productsMissingImage'
         | WasteInboxKey
@@ -1514,7 +1515,7 @@ function OrdersTab({
       )}
       {narrow && extra.queue && (
         <p className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
-          Đang xem đơn lẻ chuyển khoản chưa nhận tiền, cũ nhất trước.
+          {extra.queue === 'dealer_transfer_to_confirm' ? 'Đang xem đơn đại lý trả trước chưa nhận tiền, cũ nhất trước.' : 'Đang xem đơn lẻ chuyển khoản chưa nhận tiền, cũ nhất trước.'}
           <button
             type="button"
             onClick={() => {

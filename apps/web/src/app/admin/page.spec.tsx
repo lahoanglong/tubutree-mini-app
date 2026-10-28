@@ -157,6 +157,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'supportChatUnforwarded', count: 2 },
           { key: 'zaloBridgeDown', count: 1 },
           { key: 'bankTransferToConfirm', count: 1, hoursLeft: 6 },
+          { key: 'dealerTransferToConfirm', count: 2, hoursLeft: 40 },
           { key: 'storefrontsPending', count: 2 },
           { key: 'communityReports', count: 3 },
           { key: 'productsMissingImage', count: 4 },
@@ -3574,7 +3575,7 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(badge('Cộng đồng')).toContain('7');
     expect(badge('Gian hàng')).toContain('2');
     expect(badge('Sản phẩm')).toContain('4');
-    expect(badge('Đơn hàng')).toContain('5');
+    expect(badge('Đơn hàng')).toContain('7');
     expect(badge('Hôm nay')).toBeDefined();
   });
 
@@ -3586,6 +3587,16 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     await flush();
     expect(window.location.search).toBe('?tab=orders');
     expect(mocks.listOrders).toHaveBeenLastCalledWith(1, 'PENDING_PAYMENT', undefined, undefined, 20, undefined, undefined, undefined, undefined, { queue: 'bank_transfer_to_confirm', order: 'asc' });
+  });
+
+  it('thẻ đơn đại lý trả trước chờ tiền mở tab Đơn hàng đúng hàng đợi đại lý, cũ nhất trước', async () => {
+    const { container } = await mount();
+    const card = container.querySelector('[data-inbox="dealerTransferToConfirm"]')!;
+    expect(card.textContent).toContain('còn 40 giờ trước khi tự huỷ');
+    click(card);
+    await flush();
+    expect(window.location.search).toBe('?tab=orders');
+    expect(mocks.listOrders).toHaveBeenLastCalledWith(1, 'PENDING_PAYMENT', undefined, undefined, 20, undefined, undefined, undefined, undefined, { queue: 'dealer_transfer_to_confirm', order: 'asc' });
   });
 
   it('390px: vào hàng đợi chuyển khoản từ thẻ Hôm nay thì ngoài ngăn kéo vẫn có dòng giải thích và nút xem tất cả', async () => {

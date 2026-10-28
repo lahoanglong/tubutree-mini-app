@@ -42,6 +42,7 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   supportChatUnforwarded: { title: 'Chat CSKH: tin chưa chuyển được vào Zalo', hint: 'Tin khách chuyển lỗi, không rõ kết quả hoặc chờ quá lâu' },
   zaloBridgeDown: { title: 'Cầu nối Zalo mất kết nối', hint: 'Cầu nối không ở trạng thái đang kết nối quá 10 phút, tin khách chưa vào nhóm Zalo' },
   bankTransferToConfirm: { title: 'Đơn chuyển khoản chờ xác nhận tiền', hint: 'Kiểm tra tiền đã về chưa rồi bấm "Đã nhận tiền". Để quá hạn thì đơn tự huỷ' },
+  dealerTransferToConfirm: { title: 'Đơn đại lý trả trước chờ xác nhận tiền', hint: 'Kiểm tra tiền đại lý đã về chưa rồi bấm "Đã nhận tiền". Để quá hạn thì đơn tự huỷ' },
   storefrontsPending: { title: 'Gian hàng chờ duyệt', hint: 'CTV được hẹn duyệt trong 1 ngày làm việc' },
   communityReports: { title: 'Báo cáo vi phạm cộng đồng', hint: 'Khách báo bài hoặc bình luận, chưa ai xem' },
   productsMissingImage: { title: 'Sản phẩm đang bán thiếu ảnh', hint: 'Khách không thấy hình, khó chốt đơn' },
@@ -59,7 +60,7 @@ const CLAIM_FILTER: Partial<Record<InboxKey, DealerRewardClaimStatus>> = { deale
  * `customerRefunds` đã có huy hiệu riêng nên không nằm ở đây.
  */
 const INBOX_TAB: Partial<Record<InboxKey, string>> = {
-  pancakeAttention: 'orders', pancakeUnsynced: 'orders', gomdonAttention: 'orders', invoicePending: 'orders', bankTransferToConfirm: 'orders',
+  pancakeAttention: 'orders', pancakeUnsynced: 'orders', gomdonAttention: 'orders', invoicePending: 'orders', bankTransferToConfirm: 'orders', dealerTransferToConfirm: 'orders',
   returnsPending: 'returns', returnsToReceive: 'returns',
   merchantOverdue: 'merchantFulfilment', merchantToSettle: 'merchantFulfilment', merchantPayoutsPending: 'merchantFulfilment',
   merchantProducts: 'merchantProducts', consignmentPending: 'merchantProducts',
@@ -224,7 +225,7 @@ function TodayStats() {
 
 function InboxCard({ k, count, hoursLeft, onOpen }: { k: InboxKey; count: number; hoursLeft?: number; onOpen: (key: InboxKey) => void }) {
   const l = INBOX_LABELS[k];
-  const urgent = k === 'bankTransferToConfirm' && hoursLeft !== undefined;
+  const urgent = hoursLeft !== undefined;
   return (
     <button
       type="button"
