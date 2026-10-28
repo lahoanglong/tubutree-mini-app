@@ -130,7 +130,7 @@ describe('CartService guard tồn kho', () => {
     const prisma = {
       cart: {
         upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({
+        findUnique: jest.fn().mockResolvedValue({
           id: 'c1',
           couponCode: null,
           items: [
@@ -164,13 +164,13 @@ describe('CartService guard tồn kho', () => {
     const row = {
       id: 'c1',
       couponCode: null,
-      user: { tierId: 'LOC_BIEC' },
+      user: { tierId: 'LOC_BIEC', phone: '0900000001', zaloId: 'z1' },
       items: [
         { id: 'ci-a', variationId: 'a', quantity: 2, variation: { isActive: true, productId: 'p-a', salePrice: null, retailPrice: 10000, stock: 5, name: 'a', product: { isActive: true, approvalStatus: 'APPROVED', name: 'SP a', slug: 'a', thumbnail: null } } },
       ],
     };
     const prisma = {
-      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUniqueOrThrow: jest.fn().mockResolvedValue(row) },
+      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique: jest.fn().mockResolvedValue(row) },
       user: { findUnique: jest.fn().mockResolvedValue({ phone: '0900000001', zaloId: 'z1' }) },
       order: { findFirst: jest.fn().mockResolvedValue(null) },
       membershipTier: { findUnique: jest.fn().mockResolvedValue({ discountPct: 0.05 }) },
@@ -178,11 +178,14 @@ describe('CartService guard tồn kho', () => {
     const svc = new CartService(prisma, coupons, onConfig, flash, analytics, combo);
 
     const full = await svc.getCart('u1', null);
+    // Khách đã nạp cùng giỏ (một lần), không đọc lại riêng để xét freeship đơn đầu.
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(prisma.cart.upsert).not.toHaveBeenCalled();
     expect(prisma.order.findFirst).toHaveBeenCalledTimes(1);
     expect(prisma.membershipTier.findUnique).toHaveBeenCalledTimes(1);
     jest.clearAllMocks();
     (prisma.cart.upsert as jest.Mock).mockResolvedValue({ id: 'c1' });
-    (prisma.cart.findUniqueOrThrow as jest.Mock).mockResolvedValue(row);
+    (prisma.cart.findUnique as jest.Mock).mockResolvedValue(row);
 
     const { tierDiscount: _t, freeshipThreshold: _f, ...fullForCheckout } = full;
     const forCheckout = await svc.getCartForCheckout('u1');
@@ -192,6 +195,39 @@ describe('CartService guard tồn kho', () => {
     expect(forCheckout).toEqual(fullForCheckout);
   });
 
+  it('getCart: số đơn đã mua đọc cùng câu đọc khách (_count), không có câu đọc đơn riêng (R-82)', async () => {
+    const cfg = {
+      get: async <T>(k: string, fb?: T): Promise<T> => (k === 'shipping.first_order_free_enabled' ? true : k === 'shipping.first_order_free_min_subtotal' ? 99000 : k === 'shipping.free_threshold' ? 200000 : fb) as T,
+    } as unknown as SystemConfigService;
+    const cartRow = (orders: number) => ({ id: 'c1', couponCode: null, items: [], user: { tierId: null, phone: '0912345678', zaloId: 'z1', _count: { orders } } });
+    const prisma = {
+      cart: { upsert: jest.fn(), findUnique: jest.fn().mockResolvedValue(cartRow(0)) },
+      membershipTier: { findUnique: jest.fn() },
+      user: { findUnique: jest.fn() },
+      order: { findFirst: jest.fn() },
+    } as unknown as PrismaService;
+    const svc = new CartService(prisma, coupons, cfg, flash, analytics, combo);
+    expect((await svc.getCart('u1', null)).freeshipThreshold).toBe(99000);
+    (prisma.cart.findUnique as jest.Mock).mockResolvedValue(cartRow(2));
+    expect((await svc.getCart('u1', null)).freeshipThreshold).toBe(200000);
+    expect(prisma.order.findFirst).not.toHaveBeenCalled();
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('getCart: khách chưa có giỏ → giỏ rỗng, GET không tạo giỏ (R-82)', async () => {
+    const offConfig = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
+    const prisma = {
+      cart: { upsert: jest.fn(), create: jest.fn(), findUnique: jest.fn().mockResolvedValue(null) },
+      user: { findUnique: jest.fn().mockResolvedValue({ tierId: null, phone: null, zaloId: null }) },
+      membershipTier: { findUnique: jest.fn() },
+    } as unknown as PrismaService;
+    const svc = new CartService(prisma, coupons, offConfig, flash, analytics, combo);
+    const c = await svc.getCart('u1', null);
+    expect(c).toMatchObject({ items: [], subtotal: 0, itemCount: 0, couponCode: null });
+    expect(prisma.cart.upsert).not.toHaveBeenCalled();
+    expect(prisma.cart.create).not.toHaveBeenCalled();
+  });
+
   it('getCart: ngưỡng freeship theo hạng của khách, cùng ngưỡng checkout dùng (R2-ENGAGE-16)', async () => {
     const tierConfig = {
       get: async <T>(k: string, fb?: T): Promise<T> =>
@@ -199,12 +235,12 @@ describe('CartService guard tồn kho', () => {
     } as unknown as SystemConfigService;
     const cartRow = (tierId: string | null) => ({ id: 'c1', couponCode: null, items: [], user: { tierId } });
     const prisma = {
-      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUniqueOrThrow: jest.fn().mockResolvedValue(cartRow('LOC_BIEC')) },
+      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique: jest.fn().mockResolvedValue(cartRow('LOC_BIEC')) },
       membershipTier: { findUnique: jest.fn().mockResolvedValue(null) },
     } as unknown as PrismaService;
     const svc = new CartService(prisma, coupons, tierConfig, flash, analytics, combo);
     expect((await svc.getCart('u1')).freeshipThreshold).toBe(99000);
-    (prisma.cart.findUniqueOrThrow as jest.Mock).mockResolvedValue(cartRow(null));
+    (prisma.cart.findUnique as jest.Mock).mockResolvedValue(cartRow(null));
     expect((await svc.getCart('u1')).freeshipThreshold).toBe(200000);
   });
 
@@ -216,7 +252,7 @@ describe('CartService guard tồn kho', () => {
     };
     const cfg = { get: async <T>(k: string, fb?: T): Promise<T> => (k in values ? values[k] : fb) as T } as unknown as SystemConfigService;
     const prisma = {
-      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items: [], user: { tierId: null } }) },
+      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique: jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items: [], user: { tierId: null, phone: '0912345678', zaloId: 'z1' } }) },
       membershipTier: { findUnique: jest.fn().mockResolvedValue(null) },
       user: { findUnique: jest.fn().mockResolvedValue({ phone: '0912345678', zaloId: 'z1' }) },
       order: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -260,7 +296,7 @@ describe('CartService guard tồn kho', () => {
     const prisma = {
       cart: {
         upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'c1', items: [], couponCode: null }),
+        findUnique: jest.fn().mockResolvedValue({ id: 'c1', items: [], couponCode: null }),
       },
       variation: {
         findUnique: jest
@@ -330,7 +366,7 @@ describe('CartService guard tồn kho', () => {
       const prisma = {
         cart: {
           upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-          findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'c1', couponCode: 'SAVE', items: [line('a', 33_333)], user: { tierId } }),
+          findUnique: jest.fn().mockResolvedValue({ id: 'c1', couponCode: 'SAVE', items: [line('a', 33_333)], user: { tierId } }),
         },
         membershipTier: { findUnique: jest.fn().mockResolvedValue(discountPct === null ? null : { discountPct }) },
       } as unknown as PrismaService;
@@ -358,7 +394,7 @@ describe('CartService guard tồn kho', () => {
     const prisma = {
       cart: {
         upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'c1', items: [], couponCode: null }),
+        findUnique: jest.fn().mockResolvedValue({ id: 'c1', items: [], couponCode: null }),
       },
       variation: {
         findUnique: jest
@@ -408,7 +444,7 @@ describe('CartService guard tồn kho', () => {
     const prisma = {
       cart: {
         upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'c1', items: [], couponCode: null }),
+        findUnique: jest.fn().mockResolvedValue({ id: 'c1', items: [], couponCode: null }),
       },
       cartItem: {
         findUnique: jest.fn().mockResolvedValue({ id: 'it1', cartId: 'c1', variation: { stock: 5 } }),
@@ -427,7 +463,7 @@ describe('CartService guard tồn kho', () => {
     const prisma = {
       cart: {
         upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({
+        findUnique: jest.fn().mockResolvedValue({
           id: 'c1',
           couponCode: 'SALE',
           items: [
@@ -483,7 +519,7 @@ describe('CartService guard tồn kho', () => {
     const prisma = {
       cart: {
         upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({
+        findUnique: jest.fn().mockResolvedValue({
           id: 'c1',
           couponCode: null,
           items: [
@@ -524,7 +560,7 @@ describe('CartService guard tồn kho', () => {
       const prisma = {
         cart: {
           upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-          findUniqueOrThrow: jest.fn().mockResolvedValue({
+          findUnique: jest.fn().mockResolvedValue({
             id: 'c1',
             couponCode: null,
             items: [
@@ -581,7 +617,7 @@ describe('CartService guard tồn kho', () => {
     const prisma = {
       cart: {
         upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({
+        findUnique: jest.fn().mockResolvedValue({
           id: 'c1',
           couponCode: null,
           items: [
@@ -621,7 +657,7 @@ describe('CartService guard tồn kho', () => {
       ({
         cart: {
           upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-          findUniqueOrThrow: jest.fn().mockResolvedValue({
+          findUnique: jest.fn().mockResolvedValue({
             id: 'c1',
             couponCode: null,
             items: [
@@ -663,7 +699,7 @@ describe('CartService guard tồn kho', () => {
     const flashCart = (couponCode: string | null) => ({
       cart: {
         upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({
+        findUnique: jest.fn().mockResolvedValue({
           id: 'c1',
           couponCode,
           items: [
@@ -722,7 +758,7 @@ describe('CartService guard tồn kho', () => {
         ({
           cart: {
             upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-            findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items }),
+            findUnique: jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items }),
             update: jest.fn().mockResolvedValue({}),
           },
         }) as any;
@@ -802,7 +838,7 @@ describe('CartService guard tồn kho', () => {
     const prisma = {
       cart: {
         upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({
+        findUnique: jest.fn().mockResolvedValue({
           id: 'c1',
           couponCode: 'SALE',
           items: [
@@ -845,7 +881,7 @@ describe('CartService guard tồn kho', () => {
       ({
         cart: {
           upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-          findUniqueOrThrow: jest.fn().mockResolvedValue({
+          findUnique: jest.fn().mockResolvedValue({
             id: 'c1',
             couponCode,
             items: [
@@ -894,7 +930,7 @@ describe('CartService guard tồn kho', () => {
       const prisma = {
         cart: {
           upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-          findUniqueOrThrow: jest.fn().mockResolvedValue({
+          findUnique: jest.fn().mockResolvedValue({
             id: 'c1',
             couponCode: 'BDAY50K',
             items: [
@@ -938,7 +974,7 @@ describe('CartService guard tồn kho', () => {
     const prisma = {
       cart: {
         upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({
+        findUnique: jest.fn().mockResolvedValue({
           id: 'c1',
           couponCode: 'SALE',
           items: [
@@ -969,7 +1005,7 @@ describe('CartService guard tồn kho', () => {
     const prisma = {
       cart: {
         upsert: jest.fn().mockResolvedValue({ id: 'c1' }),
-        findUniqueOrThrow: jest.fn().mockResolvedValue({
+        findUnique: jest.fn().mockResolvedValue({
           id: 'c1',
           couponCode: 'SALE',
           items: [

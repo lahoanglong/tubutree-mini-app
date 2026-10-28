@@ -10,6 +10,7 @@ const PRODUCT_SLUG = 'mat-ong-rung-bhnong';
 export const API_ENDPOINTS = [
   { key: 'home', path: '/home', note: 'Mini App mở trang chủ (khách và returning)' },
   { key: 'products_list', path: '/products?limit=12' },
+  { key: 'products_best_seller', path: '/products?sort=best_seller&limit=12', note: 'kệ Bán chạy của trang chủ' },
   { key: 'product_detail', path: `/products/${PRODUCT_SLUG}` },
   { key: 'config_public', path: '/config/public' },
   { key: 'home_me', path: '/home/me?purchasedLimit=10', auth: 'returning', note: 'phần cá nhân của trang chủ (token returning)' },

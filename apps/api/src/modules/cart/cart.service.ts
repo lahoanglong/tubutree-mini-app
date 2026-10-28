@@ -13,6 +13,7 @@ import { resolvePublishedStorefront } from '../storefront/resolve-storefront';
 import { loadPublicVisibility } from '../storefront/public-visibility';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { resolveAttribution } from '../checkout/attribution';
+import { COUNTED_ORDER_WHERE } from '../../common/first-order';
 import { AddItemDto } from './dto/cart.dto';
 import { isSellableVariation, productDiscontinuedError } from './sellable';
 import { isPartnerOwnedVariation } from './partner-goods';
@@ -107,11 +108,11 @@ export class CartService {
 
   private async priceCart(userId: string, storefrontSlug: string | undefined, itemIds?: string[], forCheckout = false) {
     const selection = itemIds && itemIds.length > 0 ? new Set(itemIds) : null;
-    const cartId = await this.ensureCart(userId);
-    const cart = await this.prisma.cart.findUniqueOrThrow({
-      where: { id: cartId },
+    // Đọc giỏ bằng một lần findUnique theo userId: GET không tạo giỏ (khách chưa có giỏ thì giỏ rỗng), giỏ chỉ được tạo khi ghi.
+    const found = await this.prisma.cart.findUnique({
+      where: { userId },
       include: {
-        user: forCheckout ? false : { select: { tierId: true } },
+        user: forCheckout ? false : { select: { tierId: true, phone: true, zaloId: true, _count: { select: { orders: { where: COUNTED_ORDER_WHERE } } } } },
         items: {
           include: {
             variation: {
@@ -136,6 +137,17 @@ export class CartService {
         },
       },
     });
+    const cart =
+      found ??
+      ({
+        id: '',
+        couponCode: null,
+        items: [],
+        user: forCheckout
+          ? null
+          : await this.prisma.user.findUnique({ where: { id: userId }, select: { tierId: true, phone: true, zaloId: true, _count: { select: { orders: { where: COUNTED_ORDER_WHERE } } } } }),
+      } as unknown as NonNullable<typeof found>);
+    const cartId = cart.id;
 
     // Q-14: dòng SP đã ngừng bán/chưa duyệt vẫn giữ trong DB (SP mở bán lại thì tự hiện lại) nhưng
     // không được tính tiền hay đặt — tách riêng để FE báo "đã ngừng bán" và cho khách xoá.
@@ -271,12 +283,13 @@ export class CartService {
     let freeshipThreshold = 0;
     if (!forCheckout) {
       // Giảm theo hạng đặt SAU combo và mã, trên phần còn lại, đúng thứ tự và cách làm tròn của checkout (combo → mã → hạng).
-      const tierId = (cart as { user?: { tierId: string | null } | null }).user?.tierId;
+      const cartUser = (cart as { user?: { tierId: string | null; phone: string | null; zaloId: string | null; _count?: { orders: number } } | null }).user ?? null;
+      const tierId = cartUser?.tierId;
       tierDiscount = calcTierDiscount(Math.max(0, couponBase - discount), await tierDiscountPctOf(this.prisma, tierId));
 
       // Ngưỡng freeship theo hạng của khách — cùng ngưỡng checkout tính phí giao kho Tubu — để FE hiển thị tiến độ.
       const tierThreshold = await freeShipThreshold(this.config, tierId);
-      const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
+      const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId, cartUser ? { phone: cartUser.phone, zaloId: cartUser.zaloId, hasPriorOrder: cartUser._count ? cartUser._count.orders > 0 : undefined } : undefined);
       freeshipThreshold = firstOrderFrom != null ? Math.min(tierThreshold, firstOrderFrom) : tierThreshold;
     }
 
