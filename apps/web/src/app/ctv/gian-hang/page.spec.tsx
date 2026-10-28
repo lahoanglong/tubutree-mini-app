@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   kit: null as unknown,
   me: { isAffiliate: true, canRegister: true, canOpenStorefront: true } as unknown,
   fail: new Set<string>(),
+  hold: new Set<string>(),
   calls: [] as Call[],
   share: vi.fn(),
   copied: [] as string[],
@@ -33,6 +34,7 @@ function httpError(status: number, message = 'lỗi máy chủ') {
 vi.mock('@/lib/core-http', () => {
   const run = async (method: string, path: string, body?: unknown, opts?: { query?: unknown }) => {
     state.calls.push({ method, path, body, query: opts?.query });
+    if (state.hold.has(`${method} ${path}`)) return new Promise(() => {});
     if (state.fail.has(`${method} ${path}`)) throw httpError(500, 'mất mạng');
     if (method === 'get') {
       if (path === '/storefront/me') {
@@ -104,6 +106,18 @@ const hasBtn = (name: string) => {
     return false;
   }
 };
+const openItemMenu = async () => {
+  click(btn('Tuỳ chọn sản phẩm'));
+  await flush();
+};
+const openCollectionMenu = async () => {
+  click(btn('Tuỳ chọn bộ sưu tập'));
+  await flush();
+};
+const openConfig = async () => {
+  click(btn('Cài đặt'));
+  await flush();
+};
 const dialog = () => document.body.querySelector<HTMLElement>('[role="dialog"]');
 const inputByLabel = (label: string, root: ParentNode = document.body) => root.querySelector<HTMLInputElement>(`[aria-label="${label}"]`);
 const text = () => document.body.textContent ?? '';
@@ -121,6 +135,7 @@ beforeEach(() => {
   ];
   state.kit = { productName: 'Trà xanh', images: [], captions: ['Xem /product/tra-xanh?ref=A nhé'], usps: ['Thơm'], faqs: [{ q: 'Dùng sao?', a: 'Pha nước nóng' }], videoUrls: ['https://v.example/1'], shareLink: '/product/tra-xanh?ref=A' };
   state.fail = new Set();
+  state.hold = new Set();
   state.calls = [];
   state.share = vi.fn(async () => 'shared');
   state.copied = [];
@@ -338,6 +353,13 @@ describe('gian hàng chờ duyệt (B-40)', () => {
     click(btn('Xem trước'));
     await flush();
     expect(dialog()?.querySelector('[data-testid="storefront-preview"]')).not.toBeNull();
+  });
+
+  it('Huỷ gửi duyệt nằm trong Cài đặt, không còn ở trang chính', async () => {
+    mount();
+    await flush();
+    expect(hasBtn('Huỷ gửi duyệt')).toBe(false);
+    await openConfig();
     expect(hasBtn('Huỷ gửi duyệt')).toBe(true);
   });
 });
@@ -387,8 +409,10 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
   it('ghim và ẩn gọi đúng API', async () => {
     mount();
     await flush();
+    await openItemMenu();
     click(btn('Ghim lên đầu'));
     await flush();
+    await openItemMenu();
     click(btn('Ẩn sản phẩm'));
     await flush();
     expect(writes().map((c) => [c.method, c.path, c.body])).toEqual([
@@ -400,12 +424,14 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
   it('xoá sản phẩm phải qua bước xác nhận; Huỷ thì không gọi API', async () => {
     mount();
     await flush();
+    await openItemMenu();
     click(btn('Xoá khỏi bộ sưu tập'));
     await flush();
     expect(dialog()?.textContent).toContain('Xoá sản phẩm này khỏi gian hàng?');
     click(btn('Huỷ', dialog()!));
     await flush();
     expect(writes()).toEqual([]);
+    await openItemMenu();
     click(btn('Xoá khỏi bộ sưu tập'));
     await flush();
     click(btn('Xoá', dialog()!));
@@ -417,33 +443,46 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
     state.sf = storefront({ collections: [{ id: 'c1', title: 'A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [item({ isPinned: true, isHidden: true })] }] });
     mount();
     await flush();
+    await openItemMenu();
     expect(hasBtn('Bỏ ghim')).toBe(true);
     expect(hasBtn('Hiện sản phẩm')).toBe(true);
     expect(hasBtn('Ghim lên đầu')).toBe(false);
   });
 
-  it('nút biểu tượng cao và rộng >= 44px', async () => {
+  it('nút biểu tượng ở hàng sản phẩm và bộ sưu tập cao và rộng >= 44px, có chữ đọc được', async () => {
     mount();
     await flush();
-    for (const n of ['Ghim lên đầu', 'Ẩn sản phẩm', 'Xoá khỏi bộ sưu tập', 'Sửa bộ sưu tập', 'Xoá bộ sưu tập']) {
+    for (const n of ['Đưa lên', 'Đưa xuống', 'Tuỳ chọn sản phẩm', 'Tuỳ chọn bộ sưu tập']) {
       expect(btn(n).className).toMatch(/h-11/);
       expect(btn(n).className).toMatch(/w-11/);
     }
+  });
+
+  it('các thao tác ẩn sau ⋯ đều có chữ, thao tác xoá đứng cuối', async () => {
+    mount();
+    await flush();
+    await openItemMenu();
+    const labels = Array.from(dialog()!.querySelectorAll('button'))
+      .map((b) => b.textContent?.trim())
+      .filter(Boolean);
+    expect(labels.slice(-3)).toEqual(['Ghim lên đầu', 'Ẩn sản phẩm', 'Xoá khỏi bộ sưu tập']);
   });
 
   it('lỗi ghim: báo lỗi trên trang', async () => {
     state.fail.add('patch /storefront/me/items/i1');
     mount();
     await flush();
+    await openItemMenu();
     click(btn('Ghim lên đầu'));
     await flush();
     expect(text()).toContain('mất mạng');
   });
 
-  it('"Nội dung" mở bộ nội dung bán hàng của đúng sản phẩm, link đổi sang trang sản phẩm web', async () => {
+  it('"Bài đăng mẫu" mở bộ nội dung bán hàng của đúng sản phẩm, link đổi sang trang sản phẩm web', async () => {
     mount();
     await flush();
-    click(btn('Nội dung'));
+    expect(hasBtn('Nội dung')).toBe(false);
+    click(btn('Bài đăng mẫu'));
     await flush();
     expect(calls('get', '/affiliate/content-kit/tra-xanh')).toHaveLength(1);
     expect(dialog()?.textContent).toContain('Bài mẫu (chạm để sao chép)');
@@ -460,7 +499,7 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
     state.fail.add('get /affiliate/content-kit/tra-xanh');
     mount();
     await flush();
-    click(btn('Nội dung'));
+    click(btn('Bài đăng mẫu'));
     await flush();
     expect(dialog()?.textContent).toContain('mất mạng');
     expect(hasBtn('Thử lại')).toBe(true);
@@ -520,6 +559,7 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
     state.sf = storefront({ collections: [{ id: 'c1', title: 'Combo A', kind: 'COMBO', layout: 'CAROUSEL', comboDiscountPct: 12, sortOrder: 0, items: [item()] }] });
     mount();
     await flush();
+    await openCollectionMenu();
     click(btn('Sửa bộ sưu tập'));
     await flush();
     expect(dialog()?.querySelectorAll('select').length).toBe(0);
@@ -535,12 +575,14 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
   it('xoá bộ sưu tập phải xác nhận; Huỷ thì không gọi API', async () => {
     mount();
     await flush();
+    await openCollectionMenu();
     click(btn('Xoá bộ sưu tập'));
     await flush();
     expect(dialog()?.textContent).toContain('Xoá bộ sưu tập này?');
     click(btn('Huỷ', dialog()!));
     await flush();
     expect(writes()).toEqual([]);
+    await openCollectionMenu();
     click(btn('Xoá bộ sưu tập'));
     await flush();
     click(btn('Xoá bộ sưu tập', dialog()!));
@@ -665,7 +707,8 @@ describe('đăng gian hàng và xem trước', () => {
     mount();
     await flush();
     expect(hasBtn('Chia sẻ gian hàng')).toBe(false);
-    expect(hasBtn('Gỡ đăng')).toBe(false);
+    await openConfig();
+    expect(hasBtn('Gỡ đăng gian hàng')).toBe(false);
     expect(text()).not.toContain('Gian hàng cập nhật sau vài phút');
   });
 
@@ -673,13 +716,16 @@ describe('đăng gian hàng và xem trước', () => {
     state.sf = storefront({ isPublished: true });
     mount();
     await flush();
-    click(btn('Gỡ đăng'));
+    expect(hasBtn('Gỡ đăng gian hàng')).toBe(false);
+    await openConfig();
+    click(btn('Gỡ đăng gian hàng'));
     await flush();
     expect(dialog()?.textContent).toContain('Gỡ đăng gian hàng này?');
     click(btn('Huỷ', dialog()!));
     await flush();
     expect(writes()).toEqual([]);
-    click(btn('Gỡ đăng'));
+    await openConfig();
+    click(btn('Gỡ đăng gian hàng'));
     await flush();
     click(btn('Gỡ đăng', dialog()!));
     await flush();
@@ -990,7 +1036,7 @@ describe('thống kê và hành trình gian hàng', () => {
   it('nhiệm vụ đã đạt: nút nhận thưởng gọi claim và báo số điểm', async () => {
     mount();
     await flush();
-    click(btn('+2 điểm'));
+    click(btn('Nhận 2 điểm'));
     await flush();
     expect(writes().map((c) => [c.method, c.path])).toEqual([['post', '/storefront/me/quests/Q1/claim']]);
     expect(text()).toContain('+2 điểm 🎉');
@@ -1001,7 +1047,7 @@ describe('thống kê và hành trình gian hàng', () => {
     mount();
     await flush();
     expect(document.querySelectorAll('[aria-label="Hành trình gian hàng"] button')).toHaveLength(1);
-    click(btn('+2 điểm'));
+    click(btn('Nhận 2 điểm'));
     await flush();
     expect(text()).toContain('mất mạng');
   });
@@ -1019,11 +1065,11 @@ describe('không vỡ ở màn hẹp', () => {
 
 // Kiểu Mini App ở điện thoại (pages/storefront-builder.tsx): nút phụ nền nhạt không viền, ảnh bìa gradient, không nhãn bố cục, thẻ phẳng.
 describe('kiểu Mini App ở điện thoại', () => {
-  it('Sửa hồ sơ / Cài đặt nền xanh nhạt không viền; Gỡ đăng cũng vậy khi đã đăng', async () => {
+  it('Sửa hồ sơ / Cài đặt nền xanh nhạt không viền', async () => {
     state.sf = storefront({ isPublished: true });
     mount();
     await flush();
-    for (const name of ['Sửa hồ sơ', 'Cài đặt', 'Gỡ đăng']) {
+    for (const name of ['Sửa hồ sơ', 'Cài đặt']) {
       expect(btn(name).className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
       expect(btn(name).className).toContain('max-md:border-0');
     }
@@ -1043,16 +1089,108 @@ describe('kiểu Mini App ở điện thoại', () => {
     expect(style).toContain('url("https://cdn.example/c.jpg%22);background:red;(%22")');
   });
 
-  it('chip bố cục không hiện ở điện thoại; "Nội dung" xanh đậm không gạch chân; thanh dưới nền nhạt, không xuống dòng', async () => {
+  it('chip bố cục không hiện ở điện thoại; "Bài đăng mẫu" xanh đậm không gạch chân; thanh dưới nền nhạt, không xuống dòng', async () => {
     state.sf = storefront({ isPublished: true });
     mount();
     await flush();
     const layout = Array.from(document.querySelectorAll('span')).find((s) => s.textContent === 'Lưới');
     if (layout) expect(layout.className).toContain('max-md:hidden');
-    const content = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Nội dung');
+    const content = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Bài đăng mẫu');
     if (content) expect(content.className).toContain('max-md:no-underline');
     const preview = document.querySelector<HTMLElement>('a[href^="/s/"]')!;
     expect(preview.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
     expect(btn('Chia sẻ gian hàng').className).toContain('max-md:whitespace-nowrap');
+  });
+});
+
+describe('sắp xếp bằng nút lên/xuống', () => {
+  const col = (id: string, title: string, items: unknown[]) => ({ id, title, kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items });
+  const food = (id: string, name: string, over: Record<string, unknown> = {}) => item({ id, productId: `p-${id}`, product: { ...PRODUCT, id: `p-${id}`, name }, ...over });
+  const setThree = (over: Record<string, unknown> = {}) => {
+    state.sf = storefront({
+      collections: [
+        col('c1', 'Bộ một', [food('i1', 'Món một', over), food('i2', 'Món hai'), food('i3', 'Món ba')]),
+        col('c2', 'Bộ hai', []),
+      ],
+    });
+  };
+  const names = () =>
+    Array.from(document.querySelectorAll('div'))
+      .filter((d) => d.children.length === 0 && /^Món (một|hai|ba)$/.test(d.textContent ?? ''))
+      .map((d) => d.textContent);
+  const titles = () => Array.from(document.querySelectorAll('h2, h3')).map((h) => h.textContent).filter((t) => t === 'Bộ một' || t === 'Bộ hai');
+  const arrows = (name: 'Đưa lên' | 'Đưa xuống') => Array.from(document.querySelectorAll<HTMLButtonElement>(`button[aria-label="${name}"]`));
+
+  it('"Đưa lên" ở món thứ hai gửi đúng thứ tự mới và danh sách đổi ngay, trước khi máy chủ trả lời', async () => {
+    setThree();
+    state.hold.add('post /storefront/me/collections/c1/items/reorder');
+    mount();
+    await flush();
+    expect(names()).toEqual(['Món một', 'Món hai', 'Món ba']);
+    // Nút thứ tự: bộ một, ba món, bộ hai.
+    click(arrows('Đưa lên')[2]!);
+    await flush();
+    expect(writes().map((c) => [c.path, c.body])).toEqual([['/storefront/me/collections/c1/items/reorder', { orderedIds: ['i2', 'i1', 'i3'] }]]);
+    expect(names()).toEqual(['Món hai', 'Món một', 'Món ba']);
+  });
+
+  it('máy chủ từ chối: danh sách về thứ tự cũ và có báo lỗi', async () => {
+    setThree();
+    state.fail.add('post /storefront/me/collections/c1/items/reorder');
+    mount();
+    await flush();
+    click(arrows('Đưa xuống')[1]!);
+    await flush();
+    expect(text()).toContain('mất mạng');
+    expect(names()).toEqual(['Món một', 'Món hai', 'Món ba']);
+  });
+
+  it('nút ở đầu danh sách không có "Đưa lên", ở cuối không có "Đưa xuống" (khoá)', async () => {
+    setThree();
+    mount();
+    await flush();
+    expect(arrows('Đưa lên')[1]!.disabled).toBe(true);
+    expect(arrows('Đưa lên')[2]!.disabled).toBe(false);
+    expect(arrows('Đưa xuống')[3]!.disabled).toBe(true);
+    expect(arrows('Đưa xuống')[2]!.disabled).toBe(false);
+  });
+
+  it('món ghim luôn nằm trên: món thường đầu tiên không đưa lên qua món ghim', async () => {
+    setThree({ isPinned: true });
+    mount();
+    await flush();
+    expect(arrows('Đưa lên')[2]!.disabled).toBe(true);
+    expect(arrows('Đưa xuống')[1]!.disabled).toBe(true);
+    expect(arrows('Đưa lên')[3]!.disabled).toBe(false);
+  });
+
+  it('bộ sưu tập cũng sắp xếp được: "Đưa xuống" ở bộ đầu gửi thứ tự bộ mới', async () => {
+    setThree();
+    state.hold.add('post /storefront/me/collections/reorder');
+    mount();
+    await flush();
+    click(arrows('Đưa xuống')[0]!);
+    await flush();
+    expect(writes().map((c) => [c.path, c.body])).toEqual([['/storefront/me/collections/reorder', { orderedIds: ['c2', 'c1'] }]]);
+    expect(titles()).toEqual(['Bộ hai', 'Bộ một']);
+  });
+});
+
+describe('Hành trình gian hàng đứng đầu khi chưa nhận đủ', () => {
+  const before = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const quest = () => document.querySelector('[aria-label="Hành trình gian hàng"]')!;
+  const stats = () => Array.from(document.querySelectorAll('h2')).find((h) => h.textContent === 'Thống kê 30 ngày')!;
+  const collection = () => Array.from(document.querySelectorAll('h2, h3')).find((h) => h.textContent === 'Bộ sưu tập A')!;
+
+  it('chưa đủ 5/5: đứng trước bộ sưu tập; nhận đủ rồi: xuống sau Thống kê', async () => {
+    const a = mount();
+    await flush();
+    expect(before(quest(), collection())).toBe(true);
+    a.unmount();
+    state.quests = { ...QUESTS, level: 5, levelMax: 5, quests: QUESTS.quests.map((q) => ({ ...q, claimed: true })) };
+    mount();
+    await flush();
+    expect(before(stats(), quest())).toBe(true);
+    expect(before(collection(), quest())).toBe(true);
   });
 });

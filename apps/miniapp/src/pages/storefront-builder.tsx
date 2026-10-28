@@ -4,14 +4,17 @@ import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Pin, Eye, EyeOff, Trash2, Target, Settings, Pencil, MessageSquarePlus, UserRoundCog, TrendingUp, Plus, Check, Share2, ImagePlus,
+  ChevronUp, ChevronDown, Ellipsis,
   type LucideIcon,
 } from 'lucide-react';
 import {
   getMyStorefront, publishStorefront, updateStorefront,
   createCollection, updateCollection, deleteCollection, updateItem, removeItem, pickerProducts,
+  reorderCollections, reorderItems,
   getQuests, claimQuest, getStorefrontStats,
-  type StorefrontEdit, type PickerProduct,
+  type StorefrontEdit, type PickerProduct, type QuestList,
 } from '../services/storefront-api';
+import { moveInList, withReorderedCollections, withReorderedItems, type MoveDirection } from '@tubutree/app-core/storefront-order';
 import { STOREFRONT_REVIEW_PROMISE, shouldStartSignupWizard, storefrontPublishCopy,
   storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
@@ -95,20 +98,52 @@ export default function StorefrontBuilderPage() {
 
 /** Nút chỉ-icon trong hàng/thẻ: vùng chạm 44px và cho chỉnh tông icon (IconButton của DS chưa có `tone`). */
 function RowIconButton({
-  icon, label, tone = 'muted', onPress,
-}: { icon: LucideIcon; label: string; tone?: NonNullable<IconProps['tone']>; onPress: () => void }) {
+  icon, label, tone = 'muted', disabled, onPress,
+}: { icon: LucideIcon; label: string; tone?: NonNullable<IconProps['tone']>; disabled?: boolean; onPress: () => void }) {
   return (
     <button
       type="button"
       aria-label={label}
+      disabled={disabled}
       className="tubu-press touch-target"
       onClick={onPress}
-      style={{ minWidth: 44, minHeight: 44, flexShrink: 0, border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 'var(--radius-pill)' }}
+      style={{
+        minWidth: 44, minHeight: 44, flexShrink: 0, border: 'none', background: 'transparent', borderRadius: 'var(--radius-pill)',
+        cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1,
+      }}
     >
       <Icon icon={icon} size="sm" tone={tone} />
     </button>
   );
 }
+
+interface MenuAction { key: string; label: string; icon: LucideIcon; danger?: boolean; onPress: () => void }
+
+/** Menu "⋯": mỗi thao tác là một hàng có chữ, thao tác không hoàn tác đứng cuối và có màu cảnh báo. */
+function ActionMenu({ open, title, actions, onClose }: { open: boolean; title: string; actions: MenuAction[]; onClose: () => void }) {
+  return (
+    <BottomSheet open={open} onClose={onClose} title={title}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {actions.map((a) => (
+          <Button
+            key={a.key}
+            fullWidth
+            variant={a.danger ? 'danger' : 'secondary'}
+            icon={a.icon}
+            onPress={() => {
+              onClose();
+              a.onPress();
+            }}
+          >
+            {a.label}
+          </Button>
+        ))}
+      </div>
+    </BottomSheet>
+  );
+}
+
+const samePinGroup = (a: { isPinned: boolean }, b: { isPinned: boolean }) => a.isPinned === b.isPinned;
 
 function Builder({ sf }: { sf: StorefrontEdit }) {
   const qc = useQueryClient();
@@ -121,8 +156,13 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [confirmUnpublish, setConfirmUnpublish] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [itemMenuId, setItemMenuId] = useState<string | null>(null);
+  const [colMenuId, setColMenuId] = useState<string | null>(null);
   const view = storefrontStatusView(sf);
   const publishCopy = storefrontPublishCopy(sf);
+  // Hành trình gian hàng đứng đầu trang cho tới khi nhận đủ thưởng: ở cuối trang thì CTV mới không thấy.
+  const questsQ = useQuery({ queryKey: ['storefront-quests'], queryFn: getQuests });
+  const questsOpen = !!questsQ.data && questsQ.data.level < questsQ.data.levelMax;
   // Nhiệm vụ "Viết lý do cho 3 sản phẩm" đọc StorefrontItem.note, nhưng builder
   // chưa từng có ô nhập note — CTV không thể hoàn thành dù thanh tiến trình vẫn hiện (P0-5).
   const [notingItem, setNotingItem] = useState<{ id: string; note: string } | null>(null);
@@ -161,6 +201,8 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   });
   // API từ chối đăng gian hàng chưa có sản phẩm; chặn ngay ở nút để CTV biết cần làm gì thay vì nhận lỗi.
   const itemCount = sf.collections.reduce((n, c) => n + c.items.length, 0);
+  const menuItem = sf.collections.flatMap((c) => c.items).find((i) => i.id === itemMenuId) ?? null;
+  const menuCol = sf.collections.find((c) => c.id === colMenuId) ?? null;
   // Tạo bộ sưu tập phải có TÊN do CTV đặt: trước đây mọi bộ đều tên "Bộ sưu tập mới" và
   // không sửa/xoá được (dù API đã có sẵn) — bấm nhầm 2-3 lần là gian hàng công khai có 3 mục
   // trùng tên vĩnh viễn (P1-6 audit mạch lạc CTV).
@@ -207,6 +249,43 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  // Cập nhật lạc quan: thứ tự mới hiện ngay, máy chủ từ chối thì trả về đúng thứ tự cũ.
+  const optimisticOrder = {
+    onMutate: async (update: (old: StorefrontEdit) => StorefrontEdit) => {
+      await qc.cancelQueries({ queryKey: ['my-storefront'] });
+      const previous = qc.getQueryData<StorefrontEdit | null>(['my-storefront']);
+      qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) => (old ? update(old) : old));
+      return { previous };
+    },
+    onError: (e: unknown, _v: unknown, ctx: { previous: StorefrontEdit | null | undefined } | undefined) => {
+      qc.setQueryData(['my-storefront'], ctx?.previous);
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    },
+    onSuccess: () => void refresh(),
+  };
+  const moveColMut = useMutation({
+    mutationFn: (v: { ids: string[]; update: (old: StorefrontEdit) => StorefrontEdit }) => reorderCollections(v.ids),
+    ...optimisticOrder,
+    onMutate: (v) => optimisticOrder.onMutate(v.update),
+  });
+  const moveItemMut = useMutation({
+    mutationFn: (v: { collectionId: string; ids: string[]; update: (old: StorefrontEdit) => StorefrontEdit }) => reorderItems(v.collectionId, v.ids),
+    ...optimisticOrder,
+    onMutate: (v) => optimisticOrder.onMutate(v.update),
+  });
+  const moveCollection = (id: string, dir: MoveDirection) => {
+    const next = moveInList(sf.collections, id, dir);
+    if (!next) return;
+    const ids = next.map((c) => c.id);
+    moveColMut.mutate({ ids, update: (old) => withReorderedCollections(old, ids) });
+  };
+  const moveItem = (collectionId: string, itemId: string, dir: MoveDirection) => {
+    const col = sf.collections.find((c) => c.id === collectionId);
+    const next = col && moveInList(col.items, itemId, dir, samePinGroup);
+    if (!next) return;
+    const ids = next.map((i) => i.id);
+    moveItemMut.mutate({ collectionId, ids, update: (old) => withReorderedItems(old, collectionId, ids) });
+  };
   const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<string | null>(null);
   const delItemMut = useMutation({
     mutationFn: removeItem,
@@ -247,12 +326,9 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
             {vi.storefront.settings}
           </Button>
         </div>
-        {sf.isPublished && (
-          <Button variant="secondary" icon={EyeOff} fullWidth style={{ marginTop: 8 }} onPress={() => setConfirmUnpublish(true)}>
-            {view.code === 'PENDING_APPROVAL' ? vi.storefront.withdrawSubmit : vi.storefront.unpublish}
-          </Button>
-        )}
       </div>
+
+      {questsOpen && questsQ.data && <QuestSection data={questsQ.data} />}
 
       {/* Hồ sơ gian hàng — đúng thứ khách nhìn thấy đầu tiên, và là điều kiện của nhiệm vụ
           "Hoàn thiện hồ sơ gian hàng". */}
@@ -310,8 +386,9 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         <Card key={col.id} style={CARD_MARGIN}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
             <Heading variant="title-sm" as="h2" style={{ flex: 1, minWidth: 0 }}>{col.title}</Heading>
-            <RowIconButton icon={Pencil} label={vi.storefront.renameCollection} onPress={() => setRenaming({ id: col.id, title: col.title })} />
-            <RowIconButton icon={Trash2} tone="danger" label={vi.storefront.deleteCollection} onPress={() => setConfirmDeleteCol(col.id)} />
+            <RowIconButton icon={ChevronUp} label={vi.storefront.moveUp} disabled={!moveInList(sf.collections, col.id, 'up')} onPress={() => moveCollection(col.id, 'up')} />
+            <RowIconButton icon={ChevronDown} label={vi.storefront.moveDown} disabled={!moveInList(sf.collections, col.id, 'down')} onPress={() => moveCollection(col.id, 'down')} />
+            <RowIconButton icon={Ellipsis} label={vi.storefront.moreCollectionActions} onPress={() => setColMenuId(col.id)} />
           </div>
           {col.items.map((it) => {
             const prod = it.product ?? productMap.get(it.productId);
@@ -331,19 +408,9 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
                       </Badge>
                     )}
                   </div>
-                  <RowIconButton
-                    icon={Pin}
-                    tone={it.isPinned ? 'brand' : 'muted'}
-                    label={it.isPinned ? 'Bỏ ghim' : 'Ghim lên đầu'}
-                    onPress={() => itemMut.mutate({ id: it.id, dto: { isPinned: !it.isPinned } })}
-                  />
-                  <RowIconButton
-                    icon={it.isHidden ? EyeOff : Eye}
-                    tone={it.isHidden ? 'muted' : 'brand'}
-                    label={it.isHidden ? 'Hiện sản phẩm' : 'Ẩn sản phẩm'}
-                    onPress={() => itemMut.mutate({ id: it.id, dto: { isHidden: !it.isHidden } })}
-                  />
-                  <RowIconButton icon={Trash2} tone="danger" label="Xoá khỏi bộ sưu tập" onPress={() => setConfirmDeleteItemId(it.id)} />
+                  <RowIconButton icon={ChevronUp} label={vi.storefront.moveUp} disabled={!moveInList(col.items, it.id, 'up', samePinGroup)} onPress={() => moveItem(col.id, it.id, 'up')} />
+                  <RowIconButton icon={ChevronDown} label={vi.storefront.moveDown} disabled={!moveInList(col.items, it.id, 'down', samePinGroup)} onPress={() => moveItem(col.id, it.id, 'down')} />
+                  <RowIconButton icon={Ellipsis} label={vi.storefront.moreItemActions} onPress={() => setItemMenuId(it.id)} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <button
@@ -395,7 +462,35 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       </div>
 
       <StatsSection />
-      <QuestSection />
+      {!questsOpen && questsQ.data && <QuestSection data={questsQ.data} />}
+
+      <ActionMenu
+        open={!!menuItem}
+        title={menuItem?.product?.name ?? 'Sản phẩm'}
+        onClose={() => setItemMenuId(null)}
+        actions={
+          menuItem
+            ? [
+                { key: 'pin', label: menuItem.isPinned ? vi.storefront.unpinItem : vi.storefront.pinItem, icon: Pin, onPress: () => itemMut.mutate({ id: menuItem.id, dto: { isPinned: !menuItem.isPinned } }) },
+                { key: 'hide', label: menuItem.isHidden ? vi.storefront.showItem : vi.storefront.hideItem, icon: menuItem.isHidden ? Eye : EyeOff, onPress: () => itemMut.mutate({ id: menuItem.id, dto: { isHidden: !menuItem.isHidden } }) },
+                { key: 'remove', label: vi.storefront.removeItem, icon: Trash2, danger: true, onPress: () => setConfirmDeleteItemId(menuItem.id) },
+              ]
+            : []
+        }
+      />
+      <ActionMenu
+        open={!!menuCol}
+        title={menuCol?.title ?? vi.storefront.title}
+        onClose={() => setColMenuId(null)}
+        actions={
+          menuCol
+            ? [
+                { key: 'rename', label: vi.storefront.renameCollection, icon: Pencil, onPress: () => setRenaming({ id: menuCol.id, title: menuCol.title }) },
+                { key: 'delete', label: vi.storefront.deleteCollection, icon: Trash2, danger: true, onPress: () => setConfirmDeleteCol(menuCol.id) },
+              ]
+            : []
+        }
+      />
 
       <StickyActionBar
         summary={!sf.isPublished && itemCount === 0 ? <Text variant="caption" tone="secondary" as="div">{vi.storefront.publishNeedsProduct}</Text> : undefined}
@@ -501,7 +596,13 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       </BottomSheet>
 
       <BottomSheet open={configOpen} onClose={() => setConfigOpen(false)} title={CONFIG_TITLE}>
-        <MerchantConfigSheet sf={sf} onSaved={() => void refresh()} onClose={() => setConfigOpen(false)} />
+        <MerchantConfigSheet
+          sf={sf}
+          onSaved={() => void refresh()}
+          onClose={() => setConfigOpen(false)}
+          unpublishLabel={sf.isPublished ? (view.code === 'PENDING_APPROVAL' ? vi.storefront.withdrawSubmit : vi.storefront.unpublishStore) : null}
+          onUnpublish={() => { setConfigOpen(false); setConfirmUnpublish(true); }}
+        />
       </BottomSheet>
 
       <BottomSheet open={profileOpen} onClose={() => setProfileOpen(false)} title={vi.storefront.profileTitle} description={vi.storefront.profileHint}>
@@ -631,10 +732,9 @@ function StatLine({ name, value }: { name: string; value: string }) {
 }
 
 /** Section "Hành trình gian hàng" — chuỗi nhiệm vụ early-win thưởng Điểm Xanh. */
-function QuestSection() {
+function QuestSection({ data }: { data: QuestList }) {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
-  const questsQ = useQuery({ queryKey: ['storefront-quests'], queryFn: getQuests });
   const claimMut = useMutation({
     mutationFn: (code: string) => claimQuest(code),
     onSuccess: (r) => {
@@ -644,9 +744,6 @@ function QuestSection() {
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
-
-  const data = questsQ.data;
-  if (!data) return null;
 
   return (
     <Card style={CARD_MARGIN}>
@@ -681,7 +778,7 @@ function QuestSection() {
                   disabled={claimMut.isPending && claimMut.variables !== q.code}
                   onPress={() => claimMut.mutate(q.code)}
                 >
-                  +{formatPoints(q.rewardPoints)}
+                  {vi.storefront.claimQuest(formatPoints(q.rewardPoints))}
                 </Button>
               ) : (
                 <Text variant="caption" tone="tertiary" style={{ whiteSpace: 'nowrap' }}>{q.progress}/{q.goal}</Text>
@@ -799,10 +896,15 @@ function MerchantConfigSheet({
   sf,
   onClose,
   onSaved,
+  unpublishLabel,
+  onUnpublish,
 }: {
   sf: StorefrontEdit;
   onClose: () => void;
   onSaved: () => void;
+  /** Có chữ thì gian hàng đang đăng/chờ duyệt: hiện nút gỡ đăng ở cuối cài đặt (không còn nằm ngoài trang chính). */
+  unpublishLabel: string | null;
+  onUnpublish: () => void;
 }) {
   const { openSnackbar } = useSnackbar();
   const [form, setForm] = useState({
@@ -943,6 +1045,15 @@ function MerchantConfigSheet({
         <Button fullWidth style={{ marginTop: 12 }} loading={saveMut.isPending} onPress={() => saveMut.mutate()}>
           Lưu cấu hình gian hàng
         </Button>
+
+        {unpublishLabel && (
+          <div style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 12 }}>
+            <Text variant="caption" tone="secondary" as="p" style={{ margin: '0 0 8px' }}>{vi.storefront.unpublishHint}</Text>
+            <Button fullWidth variant="secondary" icon={EyeOff} onPress={onUnpublish}>
+              {unpublishLabel}
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

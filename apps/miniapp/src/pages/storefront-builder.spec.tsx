@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   addItem: vi.fn(),
   updateItem: vi.fn(),
   removeItem: vi.fn(),
+  reorderCollections: vi.fn(),
+  reorderItems: vi.fn(),
   pickerProducts: vi.fn(),
   getQuests: vi.fn(),
   claimQuest: vi.fn(),
@@ -69,6 +71,17 @@ const storefront = (over: Record<string, unknown> = {}) => ({
   ],
   ...over,
 });
+const twoItems = () => [
+  item({ id: 'i1', product: { ...product, id: 'p1', name: 'Món một' } }),
+  item({ id: 'i2', productId: 'p2', product: { ...product, id: 'p2', name: 'Món hai' } }),
+  item({ id: 'i3', productId: 'p3', product: { ...product, id: 'p3', name: 'Món ba' } }),
+];
+const twoCollections = (items = twoItems()) => storefront({
+  collections: [
+    { id: 'c1', title: 'Bộ một', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items },
+    { id: 'c2', title: 'Bộ hai', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 1, items: [] },
+  ],
+});
 const quests = {
   level: 1, levelMax: 5, totalEarnedPoints: 4,
   quests: [
@@ -103,7 +116,7 @@ beforeEach(() => {
   mocks.applyStorefrontTemplate.mockResolvedValue({ collectionId: 'c9', title: 'Mẫu', itemCount: 8 });
   for (const fn of [
     mocks.updateStorefront, mocks.publishStorefront, mocks.createCollection, mocks.updateCollection,
-    mocks.deleteCollection, mocks.addItem, mocks.updateItem, mocks.removeItem, mocks.claimQuest,
+    mocks.deleteCollection, mocks.addItem, mocks.updateItem, mocks.removeItem, mocks.claimQuest, mocks.reorderCollections, mocks.reorderItems,
   ]) fn.mockResolvedValue({});
   mocks.claimQuest.mockResolvedValue({ claimed: true, code: 'Q1', rewardPoints: 2, pointsBalance: 12 });
 });
@@ -192,14 +205,17 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
     expect(badge.style.maxWidth).toBe('100%');
   });
 
-  it('ghim, ẩn, xoá sản phẩm gọi đúng API (xoá phải qua bước xác nhận)', async () => {
+  it('ghim, ẩn, xoá sản phẩm gọi đúng API qua menu "⋯" (xoá phải qua bước xác nhận)', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Ghim lên đầu' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn sản phẩm' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Ghim lên đầu' }));
     await waitFor(() => expect(mocks.updateItem).toHaveBeenCalledWith('i1', { isPinned: true }));
-    fireEvent.click(screen.getByRole('button', { name: 'Ẩn sản phẩm' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn sản phẩm' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Ẩn sản phẩm' }));
     await waitFor(() => expect(mocks.updateItem).toHaveBeenCalledWith('i1', { isHidden: true }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Xoá khỏi bộ sưu tập' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn sản phẩm' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá khỏi bộ sưu tập' }));
     expect(mocks.removeItem).not.toHaveBeenCalled();
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByText('Xoá sản phẩm này khỏi gian hàng?')).toBeInTheDocument();
@@ -208,22 +224,35 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
     expect(mocks.removeItem.mock.calls[0]![0]).toBe('i1');
   });
 
-  it('sản phẩm đã ghim/đã ẩn đổi nhãn nút để hoàn tác', async () => {
+  it('menu "⋯" của sản phẩm có đúng ba mục có chữ, mục xoá đứng cuối; ghim/ẩn/xoá không còn là nút riêng ngoài hàng', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn sản phẩm' }));
+    const sheet = await screen.findByTestId('sheet');
+    expect(within(sheet).getAllByRole('button').map((b) => b.textContent).filter(Boolean)).toEqual(['Ghim lên đầu', 'Ẩn sản phẩm', 'Xoá khỏi bộ sưu tập']);
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Ghim lên đầu' }));
+    expect(screen.queryByRole('button', { name: 'Ghim lên đầu' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Ẩn sản phẩm' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Xoá khỏi bộ sưu tập' })).toBeNull();
+  });
+
+  it('sản phẩm đã ghim/đã ẩn đổi nhãn mục menu để hoàn tác', async () => {
     mocks.getMyStorefront.mockResolvedValue(
       storefront({ collections: [{ id: 'c1', title: 'A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [item({ isPinned: true, isHidden: true })] }] }),
     );
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Bỏ ghim' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn sản phẩm' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Bỏ ghim' }));
     await waitFor(() => expect(mocks.updateItem).toHaveBeenCalledWith('i1', { isPinned: false }));
-    fireEvent.click(screen.getByRole('button', { name: 'Hiện sản phẩm' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn sản phẩm' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Hiện sản phẩm' }));
     await waitFor(() => expect(mocks.updateItem).toHaveBeenCalledWith('i1', { isHidden: false }));
   });
 
-  it('nút biểu tượng (ghim, ẩn, xoá, đổi tên, xoá bộ sưu tập) cao và rộng >= 44px', async () => {
+  it('nút biểu tượng (đưa lên/xuống, menu ⋯ của sản phẩm và của bộ sưu tập) cao và rộng >= 44px', async () => {
     renderPage();
     await screen.findByText('Bộ sưu tập A');
-    for (const name of ['Ghim lên đầu', 'Ẩn sản phẩm', 'Xoá khỏi bộ sưu tập', 'Đổi tên bộ sưu tập', 'Xoá bộ sưu tập']) {
-      const btn = screen.getByRole('button', { name });
+    for (const name of ['Đưa lên', 'Đưa xuống', 'Tuỳ chọn sản phẩm', 'Tuỳ chọn bộ sưu tập']) {
+      const btn = screen.getAllByRole('button', { name })[0]!;
       const box = btn.className.includes('touch-target')
         ? { w: 44, h: 44 }
         : { w: parseFloat(btn.style.minWidth), h: parseFloat(btn.style.minHeight) };
@@ -232,9 +261,10 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
     }
   });
 
-  it('"Nội dung" mở bộ nội dung bán hàng của đúng sản phẩm', async () => {
+  it('"Bài đăng mẫu" mở bộ nội dung bán hàng của đúng sản phẩm (không còn nút tên "Nội dung")', async () => {
     renderPage();
-    fireEvent.click(await screen.findByText('Nội dung'));
+    expect(screen.queryByText('Nội dung')).toBeNull();
+    fireEvent.click(await screen.findByText('Bài đăng mẫu'));
     expect(await screen.findByTestId('content-kit')).toHaveTextContent('tra-xanh');
   });
 
@@ -271,7 +301,8 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
 
   it('đổi tên bộ sưu tập: sheet có tiêu đề, Lưu gửi tên mới', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Đổi tên bộ sưu tập' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn bộ sưu tập' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Đổi tên bộ sưu tập' }));
     const sheet = await screen.findByTestId('sheet');
     const input = within(sheet).getByDisplayValue('Bộ sưu tập A');
     fireEvent.change(input, { target: { value: ' Bộ B ' } });
@@ -281,12 +312,14 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
 
   it('xoá bộ sưu tập phải xác nhận; Huỷ thì không gọi API', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Xoá bộ sưu tập' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn bộ sưu tập' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá bộ sưu tập' }));
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByText('Xoá bộ sưu tập này?')).toBeInTheDocument();
     fireEvent.click(within(sheet).getByRole('button', { name: 'Huỷ' }));
     expect(mocks.deleteCollection).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Xoá bộ sưu tập' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn bộ sưu tập' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá bộ sưu tập' }));
     const sheet2 = await screen.findByTestId('sheet');
     fireEvent.click(within(sheet2).getByRole('button', { name: 'Xoá bộ sưu tập' }));
     await waitFor(() => expect(mocks.deleteCollection).toHaveBeenCalledWith('c1'));
@@ -386,12 +419,17 @@ describe('Chia sẻ, gỡ đăng và gian hàng đang bị ẩn (D3-08, D3-02)',
   it('gỡ đăng phải xác nhận; Huỷ thì không gọi API, xác nhận gọi publishStorefront(false) rồi báo đã gỡ', async () => {
     mocks.getMyStorefront.mockResolvedValue(published());
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Gỡ đăng' }));
+    // Gỡ đăng nằm trong Cài đặt, không còn là nút nổi ngoài trang chính.
+    await screen.findByRole('button', { name: 'Cài đặt' });
+    expect(screen.queryByRole('button', { name: /Gỡ đăng/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Cài đặt' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Gỡ đăng gian hàng' }));
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByText('Gỡ đăng gian hàng này?')).toBeInTheDocument();
     fireEvent.click(within(sheet).getByRole('button', { name: 'Huỷ' }));
     expect(mocks.publishStorefront).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Gỡ đăng' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cài đặt' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Gỡ đăng gian hàng' }));
     const again = await screen.findByTestId('sheet');
     fireEvent.click(within(again).getByRole('button', { name: 'Gỡ đăng' }));
     await waitFor(() => expect(mocks.publishStorefront).toHaveBeenCalledWith(false));
@@ -469,10 +507,13 @@ describe('Trạng thái chờ duyệt (B-40)', () => {
     expect(await screen.findByTestId('storefront-preview')).toBeInTheDocument();
   });
 
-  it('chờ duyệt: nút rút lại gửi duyệt thay cho "Gỡ đăng"', async () => {
+  it('chờ duyệt: trong Cài đặt có nút rút lại gửi duyệt thay cho "Gỡ đăng gian hàng"', async () => {
     mocks.getMyStorefront.mockResolvedValue(pending());
     renderPage();
-    expect(await screen.findByRole('button', { name: 'Huỷ gửi duyệt' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
+    const sheet = await screen.findByTestId('sheet');
+    expect(within(sheet).getByRole('button', { name: 'Huỷ gửi duyệt' })).toBeInTheDocument();
+    expect(within(sheet).queryByRole('button', { name: 'Gỡ đăng gian hàng' })).toBeNull();
   });
 
   it('đã được duyệt (LIVE): nhãn "Đang hiển thị" và chia sẻ được', async () => {
@@ -686,7 +727,83 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
   });
 });
 
+describe('Sắp xếp sản phẩm và bộ sưu tập (nút lên/xuống)', () => {
+  const names = () => screen.getAllByText(/^Món (một|hai|ba)$/).map((e) => e.textContent);
+  const upButtons = () => screen.getAllByRole('button', { name: 'Đưa lên' });
+  const downButtons = () => screen.getAllByRole('button', { name: 'Đưa xuống' });
+
+  it('bấm "Đưa lên" ở món thứ hai gửi đúng thứ tự mới, danh sách đổi ngay (trước khi máy chủ trả lời)', async () => {
+    mocks.getMyStorefront.mockResolvedValue(twoCollections());
+    mocks.reorderItems.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    await screen.findByText('Món một');
+    expect(names()).toEqual(['Món một', 'Món hai', 'Món ba']);
+    // Hai nút đầu thuộc bộ sưu tập "Bộ một", ba nút sau là của ba món.
+    fireEvent.click(upButtons()[2]!);
+    await waitFor(() => expect(mocks.reorderItems).toHaveBeenCalledWith('c1', ['i2', 'i1', 'i3']));
+    expect(names()).toEqual(['Món hai', 'Món một', 'Món ba']);
+  });
+
+  it('bấm "Đưa xuống" gửi thứ tự mới; món đầu không có "Đưa lên", món cuối không có "Đưa xuống" (nút khoá)', async () => {
+    mocks.getMyStorefront.mockResolvedValue(twoCollections());
+    renderPage();
+    await screen.findByText('Món một');
+    expect(upButtons()[1]).toBeDisabled();
+    expect(downButtons()[3]).toBeDisabled();
+    fireEvent.click(downButtons()[1]!);
+    await waitFor(() => expect(mocks.reorderItems).toHaveBeenCalledWith('c1', ['i2', 'i1', 'i3']));
+  });
+
+  it('máy chủ từ chối: danh sách về thứ tự cũ, có báo lỗi, không tải lại cả gian hàng', async () => {
+    mocks.getMyStorefront.mockResolvedValue(twoCollections());
+    mocks.reorderItems.mockRejectedValue(new Error('Mạng yếu'));
+    renderPage();
+    await screen.findByText('Món một');
+    fireEvent.click(upButtons()[2]!);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: expect.any(String), type: 'error' }));
+    expect(names()).toEqual(['Món một', 'Món hai', 'Món ba']);
+    expect(mocks.getMyStorefront).toHaveBeenCalledTimes(1);
+  });
+
+  it('món ghim luôn nằm trên: món thường đầu tiên không đưa lên được qua món ghim', async () => {
+    mocks.getMyStorefront.mockResolvedValue(twoCollections([
+      item({ id: 'i1', isPinned: true, product: { ...product, id: 'p1', name: 'Món một' } }),
+      item({ id: 'i2', productId: 'p2', product: { ...product, id: 'p2', name: 'Món hai' } }),
+    ]));
+    renderPage();
+    await screen.findByText('Món một');
+    // Thứ tự nút: bộ một, món một (ghim), món hai, bộ hai. Món hai không đưa lên qua món ghim, món ghim không đưa xuống qua món thường.
+    expect(upButtons()[2]).toBeDisabled();
+    expect(downButtons()[1]).toBeDisabled();
+  });
+
+  it('bộ sưu tập cũng sắp xếp được: "Đưa xuống" ở bộ đầu gửi thứ tự bộ mới', async () => {
+    mocks.getMyStorefront.mockResolvedValue(twoCollections());
+    mocks.reorderCollections.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    await screen.findByText('Bộ một');
+    fireEvent.click(downButtons()[0]!);
+    await waitFor(() => expect(mocks.reorderCollections).toHaveBeenCalledWith(['c2', 'c1']));
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent).filter((t) => t === 'Bộ một' || t === 'Bộ hai')).toEqual(['Bộ hai', 'Bộ một']);
+  });
+});
+
 describe('Thống kê và Hành trình gian hàng', () => {
+  it('Hành trình gian hàng đứng trước hồ sơ và bộ sưu tập khi chưa nhận đủ; nhận đủ rồi thì xuống cuối, sau Thống kê', async () => {
+    renderPage();
+    const quest = await screen.findByText('Hành trình gian hàng');
+    const collection = screen.getByText('Bộ sưu tập A');
+    expect(quest.compareDocumentPosition(collection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    cleanup();
+    mocks.getQuests.mockResolvedValue({ ...quests, level: 5, levelMax: 5, quests: quests.quests.map((q) => ({ ...q, claimed: true })) });
+    renderPage();
+    const doneQuest = await screen.findByText('Hành trình gian hàng');
+    const statsTitle = screen.getByText('Thống kê 30 ngày');
+    expect(statsTitle.compareDocumentPosition(doneQuest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText('Bộ sưu tập A').compareDocumentPosition(doneQuest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+
   it('thống kê 30 ngày hiện đơn, doanh thu, hoa hồng và top sản phẩm', async () => {
     renderPage();
     expect(await screen.findByText('Thống kê 30 ngày')).toBeInTheDocument();
@@ -740,9 +857,16 @@ describe('Thống kê và Hành trình gian hàng', () => {
     expect(document.body.textContent).not.toMatch(/[✓✔]/);
   });
 
+  it('nút nhận thưởng nói rõ việc bấm là nhận điểm: "Nhận 1.000 điểm", không còn "+1.000 điểm"', async () => {
+    mocks.getQuests.mockResolvedValue({ ...quests, quests: [{ ...quests.quests[0]!, rewardPoints: 1000 }] });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Nhận 1.000 điểm' })).toBeInTheDocument();
+    expect(screen.queryByText('+1.000 điểm')).toBeNull();
+  });
+
   it('nhiệm vụ đã đạt: nút nhận thưởng gọi claimQuest và báo số Điểm Xanh', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /\+2 điểm/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhận 2 điểm' }));
     await waitFor(() => expect(mocks.claimQuest).toHaveBeenCalledWith('Q1'));
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '+2 điểm 🎉', type: 'success' }),
@@ -759,8 +883,8 @@ describe('Thống kê và Hành trình gian hàng', () => {
     });
     mocks.claimQuest.mockReturnValue(new Promise(() => {}));
     renderPage();
-    const first = await screen.findByRole('button', { name: /\+2 điểm/ });
-    const second = screen.getByRole('button', { name: /\+5 điểm/ });
+    const first = await screen.findByRole('button', { name: 'Nhận 2 điểm' });
+    const second = screen.getByRole('button', { name: 'Nhận 5 điểm' });
     fireEvent.click(first);
     await waitFor(() => expect(first).toHaveAttribute('aria-busy', 'true'));
     expect(second).toBeDisabled();

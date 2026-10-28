@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Target, TrendingUp } from 'lucide-react';
-import { claimQuest } from '@tubutree/app-core/api/storefront';
+import { claimQuest, type QuestList } from '@tubutree/app-core/api/storefront';
 import { storefrontQuestsQuery, storefrontStatsQuery } from '@tubutree/app-core/queries/storefront';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
@@ -56,9 +56,8 @@ export function StatsSection() {
 }
 
 /** "Hành trình gian hàng": chuỗi nhiệm vụ early-win thưởng Điểm Xanh; nhận thưởng từng nhiệm vụ đã đạt. */
-export function QuestSection({ onNotice }: { onNotice: Notify }) {
+export function QuestSection({ data, onNotice }: { data: QuestList; onNotice: Notify }) {
   const qc = useQueryClient();
-  const questsQ = useQuery(storefrontQuestsQuery(coreHttp));
   const claimMut = useMutation({
     mutationFn: (code: string) => claimQuest(coreHttp, code),
     onSuccess: (r) => {
@@ -67,9 +66,6 @@ export function QuestSection({ onNotice }: { onNotice: Notify }) {
     },
     onError: (e) => onNotice(actErrText(e), true),
   });
-  const data = questsQ.data;
-  if (!data) return null;
-
   return (
     <section aria-label="Hành trình gian hàng" className={`${ui.card} ${phoneFlatCard} p-4`}>
       <div className="mb-1 flex items-center justify-between">
@@ -103,7 +99,7 @@ export function QuestSection({ onNotice }: { onNotice: Notify }) {
                 disabled={claimMut.isPending}
                 onClick={() => claimMut.mutate(q.code)}
               >
-                {claimMut.isPending && claimMut.variables === q.code ? 'Đang nhận…' : `+${formatCount(q.rewardPoints)} điểm`}
+                {claimMut.isPending && claimMut.variables === q.code ? 'Đang nhận…' : `Nhận ${formatCount(q.rewardPoints)} điểm`}
               </button>
             ) : (
               <span className="whitespace-nowrap text-xs text-stone-600">

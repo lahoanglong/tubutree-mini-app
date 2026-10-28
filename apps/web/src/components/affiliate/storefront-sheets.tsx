@@ -235,15 +235,42 @@ function ProfileForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: ()
 }
 
 /** Cấu hình gian hàng: tên, subdomain (khi cờ bật), màu chủ đề, và với gian hàng tự giao thì kho + hotline (SĐT kho). */
-export function ConfigSheet({ open, sf, onClose, onSaved }: { open: boolean; sf: StorefrontEdit; onClose: () => void; onSaved: Notify }) {
+export function ConfigSheet({
+  open,
+  sf,
+  onClose,
+  onSaved,
+  unpublishLabel,
+  onUnpublish,
+}: {
+  open: boolean;
+  sf: StorefrontEdit;
+  onClose: () => void;
+  onSaved: Notify;
+  /** Có chữ thì gian hàng đang đăng/chờ duyệt: hiện nút gỡ đăng ở cuối cấu hình (không còn nằm ngoài trang chính). */
+  unpublishLabel: string | null;
+  onUnpublish: () => void;
+}) {
   return (
     <Sheet open={open} onClose={onClose} title="Cấu hình gian hàng">
-      {open && <ConfigForm sf={sf} onClose={onClose} onSaved={onSaved} />}
+      {open && <ConfigForm sf={sf} onClose={onClose} onSaved={onSaved} unpublishLabel={unpublishLabel} onUnpublish={onUnpublish} />}
     </Sheet>
   );
 }
 
-function ConfigForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: () => void; onSaved: Notify }) {
+function ConfigForm({
+  sf,
+  onClose,
+  onSaved,
+  unpublishLabel,
+  onUnpublish,
+}: {
+  sf: StorefrontEdit;
+  onClose: () => void;
+  onSaved: Notify;
+  unpublishLabel: string | null;
+  onUnpublish: () => void;
+}) {
   const [form, setForm] = useState({
     title: sf.title ?? '',
     subdomain: sf.subdomain ?? '',
@@ -356,6 +383,13 @@ function ConfigForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: () 
       <button type="button" className={`${ui.btnPrimary} mt-2 w-full`} disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
         {saveMut.isPending ? 'Đang lưu…' : 'Lưu cấu hình gian hàng'}
       </button>
+      {unpublishLabel && (
+        <div className="border-t border-stone-200 pt-3">
+          <button type="button" className={`${ui.btnSecondary} w-full`} onClick={onUnpublish}>
+            {unpublishLabel}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -161,6 +161,12 @@ export const updateCollection = (
 export const deleteCollection = (http: HttpClient, id: string) =>
   http.delete(`/storefront/me/collections/${id}`);
 
+/** `orderedIds` = toàn bộ id bộ sưu tập theo thứ tự mới; id thiếu được nối cuối, id lạ bị bỏ. */
+export const reorderCollections = (http: HttpClient, orderedIds: string[]) =>
+  http.post<{ ok: boolean }>('/storefront/me/collections/reorder', { orderedIds });
+export const reorderItems = (http: HttpClient, collectionId: string, orderedIds: string[]) =>
+  http.post<{ ok: boolean }>(`/storefront/me/collections/${collectionId}/items/reorder`, { orderedIds });
+
 export const addItem = (
   http: HttpClient,
   collectionId: string,
