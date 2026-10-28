@@ -249,6 +249,8 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+  // Trong onSuccess/onError, lần đang chạy vẫn được đếm.
+  const hasOtherReorderPending = () => qc.isMutating({ mutationKey: STOREFRONT_REORDER_MUTATION.mutationKey }) > 1;
   // Cập nhật lạc quan: thứ tự mới hiện ngay, máy chủ từ chối thì trả về đúng thứ tự cũ.
   const optimisticOrder = {
     onMutate: async (update: (old: StorefrontEdit) => StorefrontEdit) => {
@@ -257,13 +259,15 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) => (old ? update(old) : old));
       return { previous };
     },
+    // Mỗi lần lỗi chỉ trả về ảnh chụp lúc bấm (có thể đã là thứ tự lạc quan của lần trước), nên lần cuối phải tải lại từ máy chủ.
     onError: (e: unknown, _v: unknown, ctx: { previous: StorefrontEdit | null | undefined } | undefined) => {
       qc.setQueryData(['my-storefront'], ctx?.previous);
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!hasOtherReorderPending()) void refresh();
     },
     // Còn lần đổi chỗ khác đang chờ thì để nó xong rồi mới tải lại, kẻo dữ liệu cũ đè lên thứ tự mới hơn đang hiện.
     onSuccess: () => {
-      if (qc.isMutating({ mutationKey: STOREFRONT_REORDER_MUTATION.mutationKey }) <= 1) void refresh();
+      if (!hasOtherReorderPending()) void refresh();
     },
   };
   const moveColMut = useMutation({
@@ -912,7 +916,7 @@ function MerchantConfigSheet({
   sf: StorefrontEdit;
   onClose: () => void;
   onSaved: () => void;
-  /** Có chữ thì gian hàng đang đăng/chờ duyệt: hiện nút gỡ đăng ở cuối cài đặt (không còn nằm ngoài trang chính). */
+  /** Có chữ thì gian hàng đang đăng/chờ duyệt: hiện nút gỡ đăng ở cuối cài đặt. */
   unpublishLabel: string | null;
   onUnpublish: () => void;
 }) {

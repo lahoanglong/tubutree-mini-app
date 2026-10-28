@@ -724,6 +724,7 @@ describe('đăng gian hàng và xem trước', () => {
     expect(hasBtn('Chia sẻ gian hàng')).toBe(false);
     await openConfig();
     expect(hasBtn('Gỡ đăng gian hàng')).toBe(false);
+    expect(text()).not.toContain('Khách mở link gian hàng sẽ không thấy gì');
     expect(text()).not.toContain('Gian hàng cập nhật sau vài phút');
   });
 
@@ -733,6 +734,8 @@ describe('đăng gian hàng và xem trước', () => {
     await flush();
     expect(hasBtn('Gỡ đăng gian hàng')).toBe(false);
     await openConfig();
+    expect(text()).toContain('Khách mở link gian hàng sẽ không thấy gì cho tới khi bạn đăng lại.');
+    expect(btn('Gỡ đăng gian hàng').querySelector('svg')).not.toBeNull();
     click(btn('Gỡ đăng gian hàng'));
     await flush();
     expect(dialog()?.textContent).toContain('Gỡ đăng gian hàng này?');
@@ -1175,7 +1178,7 @@ describe('sắp xếp bằng nút lên/xuống', () => {
     expect(names()).toEqual(['Món hai', 'Món ba', 'Món một']);
   });
 
-  it('máy chủ từ chối: danh sách về thứ tự cũ và có báo lỗi', async () => {
+  it('máy chủ từ chối: danh sách về thứ tự cũ, có báo lỗi, rồi tải lại để khớp máy chủ', async () => {
     setThree();
     state.fail.add('post /storefront/me/collections/c1/items/reorder');
     mount();
@@ -1183,6 +1186,28 @@ describe('sắp xếp bằng nút lên/xuống', () => {
     click(arrows('Đưa xuống')[1]!);
     await flush();
     expect(text()).toContain('mất mạng');
+    expect(names()).toEqual(['Món một', 'Món hai', 'Món ba']);
+    await flush();
+    expect(calls('get', '/storefront/me')).toHaveLength(2);
+  });
+
+  it('bấm hai lần liên tiếp và cả hai đều lỗi: cuối cùng tải lại gian hàng, màn khớp thứ tự trên máy chủ', async () => {
+    setThree();
+    let release!: () => void;
+    state.gates.set('post /storefront/me/collections/c1/items/reorder', new Promise<void>((resolve) => { release = resolve; }));
+    state.fail.add('post /storefront/me/collections/c1/items/reorder');
+    mount();
+    await flush();
+    click(arrows('Đưa lên')[2]!);
+    await flush();
+    click(arrows('Đưa lên')[3]!);
+    await flush();
+    expect(names()).toEqual(['Món hai', 'Món ba', 'Món một']);
+    release();
+    await flush();
+    await flush();
+    expect(writes()).toHaveLength(2);
+    expect(calls('get', '/storefront/me')).toHaveLength(2);
     expect(names()).toEqual(['Món một', 'Món hai', 'Món ba']);
   });
 

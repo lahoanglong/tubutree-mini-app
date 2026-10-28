@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { EyeOff, Plus } from 'lucide-react';
 import {
   addItem,
   applyStorefrontTemplate,
@@ -248,7 +248,7 @@ export function ConfigSheet({
   sf: StorefrontEdit;
   onClose: () => void;
   onSaved: Notify;
-  /** Có chữ thì gian hàng đang đăng/chờ duyệt: hiện nút gỡ đăng ở cuối cấu hình (không còn nằm ngoài trang chính). */
+  /** Có chữ thì gian hàng đang đăng/chờ duyệt: hiện nút gỡ đăng ở cuối cấu hình. */
   unpublishLabel: string | null;
   onUnpublish: () => void;
 }) {
@@ -386,7 +386,9 @@ function ConfigForm({
       </button>
       {unpublishLabel && (
         <div className="border-t border-stone-200 pt-3">
+          <p className="mb-2 text-xs text-stone-600">Khách mở link gian hàng sẽ không thấy gì cho tới khi bạn đăng lại.</p>
           <button type="button" className={`${ui.btnSecondary} w-full`} onClick={onUnpublish}>
+            <EyeOff className="mr-1 h-4 w-4" aria-hidden="true" />
             {unpublishLabel}
           </button>
         </div>

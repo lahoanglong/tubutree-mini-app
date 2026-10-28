@@ -787,7 +787,7 @@ describe('Sắp xếp sản phẩm và bộ sưu tập (nút lên/xuống)', () 
     expect(names()).toEqual(['Món hai', 'Món ba', 'Món một']);
   });
 
-  it('máy chủ từ chối: danh sách về thứ tự cũ, có báo lỗi, không tải lại cả gian hàng', async () => {
+  it('máy chủ từ chối: danh sách về thứ tự cũ, có báo lỗi, rồi tải lại để khớp máy chủ', async () => {
     mocks.getMyStorefront.mockResolvedValue(twoCollections());
     mocks.reorderItems.mockRejectedValue(new Error('Mạng yếu'));
     renderPage();
@@ -795,7 +795,25 @@ describe('Sắp xếp sản phẩm và bộ sưu tập (nút lên/xuống)', () 
     fireEvent.click(upButtons()[2]!);
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: expect.any(String), type: 'error' }));
     expect(names()).toEqual(['Món một', 'Món hai', 'Món ba']);
-    expect(mocks.getMyStorefront).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mocks.getMyStorefront).toHaveBeenCalledTimes(2));
+  });
+
+  it('bấm hai lần liên tiếp và cả hai đều lỗi: cuối cùng tải lại gian hàng, màn khớp thứ tự trên máy chủ', async () => {
+    mocks.getMyStorefront.mockResolvedValue(twoCollections());
+    let failFirst!: (e: Error) => void;
+    mocks.reorderItems
+      .mockReturnValueOnce(new Promise((_, reject) => { failFirst = reject; }))
+      .mockRejectedValueOnce(new Error('Mạng yếu'));
+    renderPage();
+    await screen.findByText('Món một');
+    fireEvent.click(upButtons()[2]!);
+    await waitFor(() => expect(mocks.reorderItems).toHaveBeenCalledTimes(1));
+    fireEvent.click(upButtons()[3]!);
+    await waitFor(() => expect(names()).toEqual(['Món hai', 'Món ba', 'Món một']));
+    failFirst(new Error('Mạng yếu'));
+    await waitFor(() => expect(mocks.reorderItems).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.getMyStorefront).toHaveBeenCalledTimes(2));
+    expect(names()).toEqual(['Món một', 'Món hai', 'Món ba']);
   });
 
   it('món ghim luôn nằm trên: món thường đầu tiên không đưa lên được qua món ghim', async () => {

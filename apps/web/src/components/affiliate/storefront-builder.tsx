@@ -206,6 +206,8 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
     },
     onError: fail,
   });
+  // Trong onSuccess/onError, lần đang chạy vẫn được đếm.
+  const hasOtherReorderPending = () => qc.isMutating({ mutationKey: STOREFRONT_REORDER_MUTATION.mutationKey }) > 1;
   // Cập nhật lạc quan: thứ tự mới hiện ngay, máy chủ từ chối thì trả về đúng thứ tự cũ.
   const optimisticOrder = {
     onMutate: async (update: (old: StorefrontEdit) => StorefrontEdit) => {
@@ -214,13 +216,15 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
       qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) => (old ? update(old) : old));
       return { previous };
     },
+    // Mỗi lần lỗi chỉ trả về ảnh chụp lúc bấm (có thể đã là thứ tự lạc quan của lần trước), nên lần cuối phải tải lại từ máy chủ.
     onError: (e: unknown, _v: unknown, ctx: { previous: StorefrontEdit | null | undefined } | undefined) => {
       qc.setQueryData(['my-storefront'], ctx?.previous);
       fail(e);
+      if (!hasOtherReorderPending()) void refresh();
     },
     // Còn lần đổi chỗ khác đang chờ thì để nó xong rồi mới tải lại, kẻo dữ liệu cũ đè lên thứ tự mới hơn đang hiện.
     onSuccess: () => {
-      if (qc.isMutating({ mutationKey: STOREFRONT_REORDER_MUTATION.mutationKey }) <= 1) void refresh();
+      if (!hasOtherReorderPending()) void refresh();
     },
   };
   const moveColMut = useMutation({
