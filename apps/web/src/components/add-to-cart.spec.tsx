@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   getProductStock: vi.fn(),
   getActiveFlashSales: vi.fn(),
   getCart: vi.fn(),
-  sheetProps: null as null | { onConfirm: (v: { id: string }, qty: number) => void },
+  sheetProps: null as null | { onConfirm: (v: never, qty: number) => void },
 }));
 // Bọc bảng thật để lấy được onConfirm: hai lần gọi liền nhau chưa kịp render lại, chỉ khoá `confirming` chặn được lần hai.
 vi.mock('./variation-sheet', async (importOriginal) => {
@@ -624,8 +624,8 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
     click(addButton(container));
     await sheetReady();
     const confirm = mocks.sheetProps!.onConfirm;
-    confirm({ id: 'v2' }, 1);
-    confirm({ id: 'v2' }, 1);
+    confirm({ id: 'v2' } as never, 1);
+    confirm({ id: 'v2' } as never, 1);
     await flush();
     expect(mocks.addToCart).toHaveBeenCalledTimes(1);
   });
