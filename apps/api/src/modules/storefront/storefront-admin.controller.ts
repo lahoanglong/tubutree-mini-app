@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
+import { Transform } from 'class-transformer';
 import { IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Trim } from '../../common/decorators/trim.decorator';
@@ -6,10 +7,14 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationQuery } from '../../common/pagination';
 import { StorefrontAdminService } from './storefront-admin.service';
 
+/** Query string luôn là chuỗi: 'true'/'false' → boolean, giá trị khác để IsBoolean từ chối. */
+const toBool = ({ value }: { value: unknown }): unknown => (value === 'true' ? true : value === 'false' ? false : value);
+
 export class StorefrontAdminListQueryDto extends PaginationQuery {
   @IsOptional() @IsIn(['PUBLISHED', 'DRAFT', 'TAKEN_DOWN', 'PENDING_APPROVAL']) status?: 'PUBLISHED' | 'DRAFT' | 'TAKEN_DOWN' | 'PENDING_APPROVAL';
   @IsOptional() @IsIn(['CTV', 'BRAND', 'MERCHANT']) type?: 'CTV' | 'BRAND' | 'MERCHANT';
   @IsOptional() @IsString() @MaxLength(100) q?: string;
+  @IsOptional() @Transform(toBool) @IsBoolean() changedAfterApproval?: boolean;
 }
 
 export class TakeDownStorefrontDto {
@@ -56,5 +61,12 @@ export class StorefrontAdminController {
   @HttpCode(HttpStatus.OK)
   approval(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ApproveStorefrontDto) {
     return this.admin.setApproved(adminId, id, dto.approved);
+  }
+
+  /** "Đã xem" nội dung chủ đổi sau khi duyệt. */
+  @Post(':id/content-seen')
+  @HttpCode(HttpStatus.OK)
+  contentSeen(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
+    return this.admin.markContentSeen(adminId, id);
   }
 }

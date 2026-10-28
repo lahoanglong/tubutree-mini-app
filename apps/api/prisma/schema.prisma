@@ -677,6 +677,9 @@ model Storefront {
   /// (không đọc cột này): đối tác đã qua bước duyệt đại lý, nhãn hàng do admin tạo.
   approvedAt          DateTime?
   approvedById        String?
+  /// Lần gần nhất chủ đổi tên/lời giới thiệu/ảnh khi gian hàng đã được duyệt, chưa ai xem lại. Chỉ để admin lọc; không đổi hiển thị
+  /// cho khách và không bắt duyệt lại. NULL = không có gì chờ xem.
+  contentChangedAt    DateTime?
   /// Admin gỡ đăng vì vi phạm: chủ không đăng lại được cho tới khi admin đăng lại. NULL = không bị gỡ. Giữ `publishedAt` nguyên để
   /// "Đăng lại" khôi phục đúng trạng thái trước khi gỡ.
   takenDownAt         DateTime?
