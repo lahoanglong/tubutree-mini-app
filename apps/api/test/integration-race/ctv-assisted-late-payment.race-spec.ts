@@ -299,7 +299,7 @@ describe('Tiền khách cuối của đơn CTV lên hộ: về muộn / dư / th
 
     const row = await prisma.orderCustomerRefund.findFirstOrThrow({ where: { orderId: order.id } });
     expect(row).toMatchObject({ userId: buyer.id, kind: 'LATE_PAYMENT', method: 'MANUAL_TRANSFER', status: 'PENDING', phone: null });
-    expect(notify).toHaveBeenCalledWith(buyer.id, 'REFUND_LATE_PAYMENT', expect.objectContaining({ order_code: order.code }));
+    expect(notify).toHaveBeenCalledWith(buyer.id, 'REFUND_LATE_PAYMENT', expect.objectContaining({ order_code: order.code }), undefined, `order=${order.code}`);
     expect(await refunds.listMine(buyer.id)).toEqual([expect.objectContaining({ id: row.id, canChooseDestination: true })]);
     await refunds.chooseDestination(buyer.id, row.id, { refundMethod: 'WALLET' });
     expect(await walletOf(buyer.id)).toBe(150_000);

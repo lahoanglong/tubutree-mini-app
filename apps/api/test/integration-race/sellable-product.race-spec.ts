@@ -401,7 +401,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
       expect(after.status).toBe('PAUSED');
       expect(await prisma.order.count({ where: { subscriptionId: sub.id } })).toBe(0);
       expect(await stockOf(v.id)).toBe(50);
-      expect(notify).toHaveBeenCalledWith(u.id, 'SUBSCRIPTION_PAUSED', expect.anything());
+      expect(notify).toHaveBeenCalledWith(u.id, 'SUBSCRIPTION_PAUSED', expect.anything(), undefined, expect.stringMatching(/^sub=/));
     });
   });
 

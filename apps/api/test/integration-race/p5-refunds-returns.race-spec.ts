@@ -233,7 +233,7 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
     await refunds.claim(adminUser.id, row.id);
     await refunds.markPaid(adminUser.id, row.id, { bankRef: 'FT26101400001' });
     expect(await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({ status: 'COMPLETED', bankRef: 'FT26101400001' });
-    expect(notify).toHaveBeenCalledWith(user.id, 'REFUND_BANK_COMPLETED', expect.objectContaining({ bank_ref: 'FT26101400001' }));
+    expect(notify).toHaveBeenCalledWith(user.id, 'REFUND_BANK_COMPLETED', expect.objectContaining({ bank_ref: 'FT26101400001' }), undefined, expect.stringMatching(/^order=/));
   });
 
   it('BUYERMINI-9: khách huỷ đơn chuyển khoản đã trả và chọn ngân hàng → đơn REFUNDED, khoản CANCEL chờ chuyển, Ví không đổi', async () => {
