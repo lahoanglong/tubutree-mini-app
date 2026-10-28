@@ -396,11 +396,12 @@ function Dashboard() {
   const transferDone = (message: string) => {
     setTransferring(false);
     setNotice({ text: message, error: false });
-    for (const q of [affiliateDashboardQuery, affiliateCommissionsQuery, affiliatePayoutsQuery, affiliateTaxStatementQuery, affiliateMeQuery]) {
+    for (const q of [affiliateCommissionsQuery, affiliatePayoutsQuery, affiliateTaxStatementQuery, affiliateMeQuery]) {
       void qc.invalidateQueries({ queryKey: q(coreHttp).queryKey });
     }
-    // Chuyển vào Ví Tubu cộng thẳng vào ví: số dư đang cache ở trang Ví đã cũ.
-    invalidateBalances(qc);
+    // Chuyển vào Ví Tubu cộng thẳng vào ví: số dư đang cache ở trang Ví đã cũ. Dashboard làm mới SAU Ví: về trước thì
+    // số to đã đổi sang số dư Ví cũ rồi mới nhảy lần nữa.
+    void invalidateBalances(qc).then(() => qc.invalidateQueries({ queryKey: affiliateDashboardQuery(coreHttp).queryKey }));
   };
 
   const captions = [

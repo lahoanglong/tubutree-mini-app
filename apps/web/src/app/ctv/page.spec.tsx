@@ -455,6 +455,22 @@ describe('/ctv — bảng điều khiển', () => {
     expect(before('/affiliate/payouts')).toBeGreaterThan(payoutsBefore);
   });
 
+  it('sau khi chuyển vào Ví: số to không nhảy qua số dư Ví cũ, đợi Ví mới về rồi mới đổi sang số dư mới', async () => {
+    const { container } = mount();
+    await flush();
+    click(byText(container, '[role="group"] button', 'Chuyển vào Ví'));
+    await flush();
+    let release!: () => void;
+    state.walletGate = new Promise<void>((r) => (release = r));
+    state.dash = { ...DASH, withdrawableCommission: 0 };
+    click(byText(document.body, '[role="dialog"] button', 'vào Ví'));
+    await flush();
+    expect(container.textContent).not.toContain('Số dư Ví Tubu');
+    release();
+    await flush();
+    expect(container.textContent).toContain('Số dư Ví Tubu');
+  });
+
   it('Lên đơn hộ mở sheet "Lên đơn hộ khách", chưa gọi API nào khi chưa điền gì', async () => {
     const { container } = mount();
     await flush();

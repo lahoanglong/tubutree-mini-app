@@ -828,6 +828,28 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     expect(screen.queryByRole('status', { name: 'Đang tải hoa hồng' })).toBeNull();
   });
 
+  it('sau khi chuyển vào Ví: số to không nhảy qua số dư Ví cũ, đợi Ví mới về rồi mới đổi sang số dư mới', async () => {
+    let release!: (v: Awaited<ReturnType<typeof getWallet>>) => void;
+    vi.mocked(getWallet)
+      .mockResolvedValueOnce({ walletBalance: 50_000 } as Awaited<ReturnType<typeof getWallet>>)
+      .mockReturnValueOnce(new Promise((r) => (release = r)) as ReturnType<typeof getWallet>);
+    vi.mocked(getAffiliateDashboard)
+      .mockResolvedValueOnce({ ...ZERO_DASH, withdrawableCommission: 120_000 })
+      .mockResolvedValue(ZERO_DASH);
+    vi.mocked(requestPayout).mockResolvedValue({ note: 'Đã chuyển hoa hồng vào Ví Tubu.' } as Awaited<ReturnType<typeof requestPayout>>);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' });
+    await waitFor(() => expect(screen.getByText('Có thể chuyển vào Ví')).toBeInTheDocument());
+    fireEvent.click(btn);
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhận 120.000đ vào Ví' }));
+    await waitFor(() => expect(getWallet).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText('Số dư Ví Tubu')).toBeNull();
+    release({ walletBalance: 170_000 } as Awaited<ReturnType<typeof getWallet>>);
+    expect(await screen.findByText('Số dư Ví Tubu')).toBeInTheDocument();
+    expect(screen.getByText('170.000đ')).toBeInTheDocument();
+  });
+
   it('số to là số dư Ví: số dư chỉ hiện một lần, dòng lối sang Ví không lặp số', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue(ZERO_DASH);
     renderPage();

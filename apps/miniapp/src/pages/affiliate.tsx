@@ -978,14 +978,14 @@ function Dashboard() {
             knownMax={!dashQ.isError}
             onDone={() => {
               setTransferring(false);
-              void qc.invalidateQueries({ queryKey: ['affiliate-dashboard'] });
               void qc.invalidateQueries({ queryKey: ['affiliate-commissions'] });
               void qc.invalidateQueries({ queryKey: ['affiliate-payouts'] });
               void qc.invalidateQueries({ queryKey: ['affiliate-tax-statement'] });
               void qc.invalidateQueries({ queryKey: ['affiliate-me'] });
               // Chuyển vào Ví cộng thẳng vào Ví Tubu — invalidate để trang Ví không
               // hiển thị số dư cũ (cache stale) nếu user chuyển sang đó ngay sau khi chuyển.
-              void qc.invalidateQueries({ queryKey: ['wallet'] });
+              // Dashboard làm mới SAU Ví: nếu về trước, số to đã đổi sang số dư Ví cũ rồi mới nhảy lần nữa.
+              void qc.invalidateQueries({ queryKey: ['wallet'] }).then(() => qc.invalidateQueries({ queryKey: ['affiliate-dashboard'] }));
             }}
           />
         )}
