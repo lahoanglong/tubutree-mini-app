@@ -9,7 +9,6 @@ import {
   getComments,
   getFeed,
   getFeedPublicPreview,
-  getLeaderboard,
   getPost,
   listEvents,
 } from '../api/feed';
@@ -59,10 +58,6 @@ export const eventPostsQuery = (http: HttpClient, eventId: string | undefined) =
   queryKey: ['community', 'event-posts', eventId] as const,
   queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
     eventPosts(http, eventId!, pageParam),
-});
-export const communityLeaderboardQuery = (http: HttpClient) => ({
-  queryKey: ['community', 'leaderboard'] as const,
-  queryFn: () => getLeaderboard(http),
 });
 export const adminPendingPostsQuery = (http: HttpClient) => ({
   queryKey: ['admin-community-pending'] as const,
