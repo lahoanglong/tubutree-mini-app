@@ -25,7 +25,6 @@ import { useLegacyNotifyPrefsSync } from '../pages/settings-legacy-sync';
 
 import { applyFontScale } from '../utils/font-scale';
 import { CASHBACK_ENABLED } from '../utils/features';
-import { RecyclePageSkeleton } from './recycle-page-skeleton';
 
 const FONT_PX: Record<string, string> = { small: '15px', normal: '16px', large: '18px' };
 /** Áp cỡ chữ đã lưu (Cài đặt) ngay khi mở app để giữ a11y qua các phiên. */
@@ -216,14 +215,7 @@ export default function MyApp() {
                     <Route path="/group-buy" element={<GroupBuyPage />} />
                     <Route path="/group-buy/:id" element={<GroupBuyPage />} />
                     <Route path="/refill" element={<Navigate to="/recycle" replace />} />
-                    <Route
-                      path="/recycle"
-                      element={
-                        <Suspense fallback={<RecyclePageSkeleton />}>
-                          <RecyclePage />
-                        </Suspense>
-                      }
-                    />
+                    <Route path="/recycle" element={<RecyclePage />} />
                     <Route path="/recycle/rules" element={<RecycleRulesPage />} />
                     <Route path="/recycle/new" element={<RecycleNewPage />} />
                     <Route path="/recycle/points" element={<RecyclePointsPage />} />
