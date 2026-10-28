@@ -73,9 +73,37 @@ describe('ZaloOaWebhookController.handle (verify token tĩnh)', () => {
     expect(create).toHaveBeenCalled();
   });
 
-  it('event không có sender.id (vd follow/unfollow) → bỏ qua êm, không lưu/enqueue', async () => {
+  it('sự kiện OA tự gửi (oa_send_text, sender là chính OA) → 200, không lưu, không enqueue', async () => {
     const { ctrl, create, add } = makeController(SECRET);
-    const r = await ctrl.handle({ event_name: 'follow' }, SECRET);
+    const r = await ctrl.handle({ ...body, event_name: 'oa_send_text', sender: { id: 'oa-id' } }, SECRET);
+    expect(r).toEqual({ received: true });
+    expect(create).not.toHaveBeenCalled();
+    expect(add).not.toHaveBeenCalled();
+  });
+
+  it('thiếu event_name hoặc không phải tin khách gửi (follow, user_submit_info) → 200, không lưu', async () => {
+    const { ctrl, create, add } = makeController(SECRET);
+    for (const ev of [undefined, '', 'follow', 'user_submit_info', 'oa_send_image']) {
+      await expect(ctrl.handle({ ...body, event_name: ev }, SECRET)).resolves.toEqual({ received: true });
+    }
+    expect(create).not.toHaveBeenCalled();
+    expect(add).not.toHaveBeenCalled();
+  });
+
+  it('mọi loại tin khách gửi (user_send_image, user_send_sticker...) vẫn được lưu', async () => {
+    const { ctrl, create } = makeController(SECRET);
+    for (const ev of ['user_send_text', 'user_send_image', 'user_send_sticker']) await ctrl.handle({ ...body, event_name: ev, message: { msg_id: ev } }, SECRET);
+    expect(create).toHaveBeenCalledTimes(3);
+  });
+
+  it('sự kiện lạ vẫn bị 401 nếu token sai (lọc sau khi xác thực)', async () => {
+    const { ctrl } = makeController(SECRET);
+    await expect(ctrl.handle({ ...body, event_name: 'oa_send_text' }, 'sai-token')).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('tin khách gửi nhưng thiếu sender.id → bỏ qua êm, không lưu/enqueue', async () => {
+    const { ctrl, create, add } = makeController(SECRET);
+    const r = await ctrl.handle({ event_name: 'user_send_text' }, SECRET);
     expect(r).toEqual({ received: true });
     expect(create).not.toHaveBeenCalled();
     expect(add).not.toHaveBeenCalled();

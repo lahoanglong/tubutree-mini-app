@@ -20,6 +20,8 @@ import type { Env } from '../../../config/env.validation';
 import { QUEUE_ZALO_OA_EVENTS } from '../../../jobs/queues';
 import { withQueueTimeout } from '../../../jobs/queue-timeout';
 
+const USER_SEND_PREFIX = 'user_send_';
+
 interface ZaloOaWebhookBody {
   event_name?: string;
   sender?: { id?: string };
@@ -64,8 +66,12 @@ export class ZaloOaWebhookController {
       throw new UnauthorizedException('Token webhook không hợp lệ.');
     }
 
+    // Chỉ tin khách gửi vào OA (user_send_text/image/...): sự kiện OA tự gửi (oa_send_*) mang sender là chính OA nên nếu lưu
+    // sẽ bị worker khớp từ khoá và "trả lời" lại OA. Trả 200 để Zalo không gửi lại.
+    if (typeof body.event_name !== 'string' || !body.event_name.startsWith(USER_SEND_PREFIX)) return { received: true };
+
     const zaloUserId = body.sender?.id;
-    if (!zaloUserId) return { received: true }; // event không phải tin nhắn của user (vd follow/unfollow) → bỏ qua êm
+    if (!zaloUserId) return { received: true }; // tin khách không có người gửi → bỏ qua êm
 
     // msgId dedup: Zalo có thể gửi lại cùng 1 tin (retry/at-least-once) → unique index chặn
     // tạo trùng row + enqueue trùng job (nếu không, "tin đầu tiên" có thể bị coi là 2 tin
