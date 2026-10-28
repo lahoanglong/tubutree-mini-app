@@ -16,6 +16,9 @@ import { serverNow } from '../utils/server-clock';
 import { vi } from '../i18n/vi';
 import { useCountdown } from '../hooks/use-countdown';
 import { useAuthStore } from '../store/auth';
+import { browserStorage } from '../utils/recently-viewed';
+import { FLASH_SKELETON_HEIGHT, readFlashHint, writeFlashHint } from '@tubutree/app-core/home-layout';
+import { Skeleton } from './ui/skeleton';
 import { HomeBlockError } from './home/home-block-error';
 import { useBlockQuery } from './home/use-block-query';
 import { flashDisplay } from './catalog/catalog-pricing';
@@ -59,6 +62,14 @@ const VARIATION_LINE_STYLE: CSSProperties = { display: 'block', overflow: 'hidde
 
 const CARD_ROW_STYLE: CSSProperties = { gap: 12, padding: '0 16px' };
 
+function FlashSkeleton() {
+  return (
+    <div data-testid="flash-sale-loading" aria-hidden="true" style={{ marginTop: 16, padding: '0 16px' }}>
+      <Skeleton height={FLASH_SKELETON_HEIGHT - 16} radius="var(--radius-card)" />
+    </div>
+  );
+}
+
 /**
  * Ưu đãi giờ vàng — flash sale thật từ backend. Countdown êm đến mốc kết thúc sớm nhất.
  */
@@ -89,7 +100,14 @@ export function FlashSale() {
     if (soonestEndAt && timeLeft === '') setExpiredTick((n) => n + 1);
   }, [soonestEndAt, timeLeft]);
 
-  if (q.isLoading) return null;
+  // Lần mở trước có Giờ vàng thì giữ chỗ lúc tải (khối nằm sát màn đầu, chen vào sẽ đẩy cả trang); chưa nhớ thì chờ im lặng.
+  const [hadFlash] = useState(() => readFlashHint(browserStorage()));
+  const settledWithFlash = q.data !== undefined && !q.isLoading ? soonestEndAt !== null : null;
+  useEffect(() => {
+    if (settledWithFlash !== null) writeFlashHint(browserStorage(), settledWithFlash);
+  }, [settledWithFlash]);
+
+  if (q.isLoading) return hadFlash ? <FlashSkeleton /> : null;
   if (items.length === 0) {
     return q.isError ? (
       <HomeBlockError title={vi.flashSale.sectionName} error={q.error} onRetry={q.refetch} retrying={q.isFetching} />

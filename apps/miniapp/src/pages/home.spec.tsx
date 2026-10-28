@@ -163,7 +163,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(JSON.parse(localStorage.getItem(HOME_KIND_KEY) ?? 'null')).toEqual({ userId: 'u1', kind: 'returning' });
   });
 
-  it('đang khôi phục phiên (status loading) + đã nhớ khách cũ: bố cục khách cũ, không Bán chạy; chưa nhớ thì bố cục "chưa biết"', async () => {
+  it('đang khôi phục phiên (status loading) + đã nhớ khách cũ: bố cục khách cũ, không Bán chạy; chưa nhớ gì (máy mới) thì dựng ngay bố cục khách mới, không chờ', async () => {
     localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
     mocks.auth.status = 'loading';
     mocks.auth.user = null;
@@ -173,7 +173,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     first.unmount();
     localStorage.clear();
     renderHome();
-    expect(blockOrder()).toEqual([...homeBlockOrder('unknown')]);
+    expect(blockOrder()).toEqual(NEW);
   });
 
   it('khách cũ không nhận dải lỗi cấp trang dù kệ Bán chạy (khách cũ không thấy) lỗi: kệ này không được tải', async () => {
@@ -268,7 +268,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
       expect([...seen]).toEqual([RETURNING.join('>')]);
     });
 
-    it('(b) lần đầu (chưa nhớ gì): "unknown" (giữ chỗ thẻ thành viên, chưa có Mua lại/Quà/Bán chạy) khi đang tải, đổi sang "returning" khi có hàng, và nhớ lại', async () => {
+    it('(b) lần đầu (chưa nhớ gì), đã đăng nhập: "unknown" (giữ chỗ thẻ thành viên, chưa có Mua lại/Quà/Bán chạy) khi đang tải, đổi sang "returning" khi có hàng, và nhớ lại', async () => {
       const d = deferred<{ items: object[]; nextCursor: null }>();
       mocks.fetchPurchasedItems.mockReturnValue(d.promise);
       renderHome();

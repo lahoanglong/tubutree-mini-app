@@ -11,25 +11,32 @@ export const homeCopy = {
     checkIn: 'Điểm danh',
     checkedIn: 'Đã điểm danh',
     checkInLoading: 'Điểm danh',
+    /** Lời chào ở dòng thẻ gọn: thêm chữ "Điểm Xanh" cho số điểm. */
+    pointsCaption: 'Điểm Xanh',
     rewards: 'Đổi quà',
     topTier: 'Bạn đang ở hạng cao nhất',
     tierFailed: 'Chưa tải được hạng và điểm',
+    /** Mất kết nối lúc khôi phục phiên của khách cũ (web): giữ khung thẻ, báo rõ và cho thử lại. */
+    offline: 'Không kết nối được · Chưa tải được điểm của bạn',
     retry: 'Thử lại',
     /** Chữ vô hình giữ đúng chiều cao dòng tiến độ lúc dữ liệu hạng chưa về. */
     progressSpacer: 'Còn 000 điểm lên hạng kế',
   },
   todo: {
     title: 'Việc cần làm',
-    payTitle: (amount: string) => `Đơn ${amount} chờ chuyển khoản`,
+    payTitle: (amount: string) => `Chờ chuyển khoản ${amount}`,
     payOverdue: 'Đã quá hạn chuyển khoản',
-    payNow: 'Thanh toán ngay',
+    payNow: 'Thanh toán',
     payNowLabel: (code: string) => `Thanh toán ngay đơn ${code}`,
     openOrder: (code: string) => `Mở đơn ${code}`,
     shipping: (code: string) => `Đơn ${code} đang giao`,
     shippingMany: (n: number) => `${n} đơn đang giao`,
     shippingHint: 'Chạm để theo dõi đơn',
+    preparing: (code: string) => `Đơn ${code} đang chuẩn bị`,
+    preparingMany: (n: number) => `${n} đơn đang chuẩn bị`,
+    preparingHint: 'Chạm để xem đơn',
   },
-  shortcuts: { title: 'Lối tắt' },
+  shortcuts: { title: 'Lối tắt', rail: 'Lối tắt, vuốt ngang để xem thêm' },
   reorder: { buy: 'Mua lại', subscribe: (pct: number) => `Định kỳ -${pct}%`, seeAll: 'Xem đơn hàng' },
   categories: { title: 'Danh mục', rail: 'Danh mục, vuốt ngang để xem thêm' },
   journey: {
@@ -52,7 +59,10 @@ export const homeCopy = {
   bestSellers: { title: 'Bán chạy', seeAll: 'Xem tất cả' },
   guestGift: {
     cta: 'Nhận quà bằng Zalo',
+    ctaShort: 'Nhận quà',
     ctaHint: 'Liên kết Zalo để nhận mã và giữ điểm',
+    /** Bản web: khách chưa đăng nhập nhận mã sau khi đăng nhập. */
+    webCtaHint: 'Đăng nhập để nhận mã và giữ điểm',
     linking: 'Đang liên kết…',
     failed: 'Chưa liên kết được Zalo. Bạn thử lại sau nhé.',
   },

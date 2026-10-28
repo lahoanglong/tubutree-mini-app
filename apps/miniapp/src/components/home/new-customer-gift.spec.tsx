@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -52,6 +52,12 @@ function renderGift() {
   );
 }
 const section = () => screen.findByRole('region', { name: 'Quà khách mới' });
+/** Dải gọn chỉ hiện tóm tắt; chi tiết (mã, hạn, 3 lợi ích) mở bằng "Xem quyền lợi". */
+const expanded = async () => {
+  const region = await section();
+  await userEvent.click(within(region).getByRole('button', { name: /Xem quyền lợi/ }));
+  return region;
+};
 
 describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b)', () => {
   beforeEach(() => {
@@ -63,9 +69,17 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     mocks.getNewCustomerOffer.mockResolvedValue(OFFER);
   });
 
-  it('khách chưa có đơn + có voucher: hiện voucher (mức, đơn tối thiểu, hạn) và 3 lợi ích mua trực tiếp, số đọc từ cấu hình', async () => {
+  it('dải gọn: tóm tắt mã chào mừng trên một dòng, chưa mở chi tiết', async () => {
     renderGift();
     const region = await section();
+    expect(region).toHaveTextContent('Mã 25.000đ · cho đơn từ 150.000đ');
+    expect(region).not.toHaveTextContent('Dùng đến');
+    expect(region).not.toHaveTextContent('Đặt định kỳ giảm 17% mỗi đơn');
+  });
+
+  it('khách chưa có đơn + có voucher: hiện voucher (mức, đơn tối thiểu, hạn) và 3 lợi ích mua trực tiếp, số đọc từ cấu hình', async () => {
+    renderGift();
+    const region = await expanded();
     expect(region).toHaveTextContent('Mã giảm giá chào mừng 25.000đ');
     expect(region).toHaveTextContent('Cho đơn từ 150.000đ');
     expect(region).toHaveTextContent('Dùng đến 17/11/2026');
@@ -78,30 +92,30 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
   it('freeship đơn đầu bật → lợi ích giao hàng nói đơn đầu (kèm ngưỡng nếu có), thay cho ngưỡng freeship thường', async () => {
     mocks.getPublicConfig.mockResolvedValue({ ...CONFIG, newCustomer: { ...CONFIG.newCustomer, firstOrderFreeShip: { enabled: true, minSubtotal: 0 } } });
     const { unmount } = renderGift();
-    expect(await section()).toHaveTextContent('Miễn phí giao hàng cho đơn đầu tiên');
+    expect(await expanded()).toHaveTextContent('Miễn phí giao hàng cho đơn đầu tiên');
     expect(screen.queryByText(/đơn từ 350\.000đ/)).toBeNull();
     unmount();
 
     mocks.getPublicConfig.mockResolvedValue({ ...CONFIG, newCustomer: { ...CONFIG.newCustomer, firstOrderFreeShip: { enabled: true, minSubtotal: 99_000 } } });
     renderGift();
-    expect(await section()).toHaveTextContent('Miễn phí giao hàng cho đơn đầu tiên từ 99.000đ');
+    expect(await expanded()).toHaveTextContent('Miễn phí giao hàng cho đơn đầu tiên từ 99.000đ');
   });
 
   it('voucher phần trăm và miễn phí giao: tên mã không lặp chữ "giảm"', async () => {
     mocks.getNewCustomerOffer.mockResolvedValue({ ...OFFER, welcomeVoucher: { ...VOUCHER, type: 'PERCENT', value: 12 } });
     const { unmount } = renderGift();
-    expect(await section()).toHaveTextContent('Mã giảm giá chào mừng 12%');
+    expect(await expanded()).toHaveTextContent('Mã giảm giá chào mừng 12%');
     expect(await section()).not.toHaveTextContent(/giảm giá chào mừng giảm/);
     unmount();
     mocks.getNewCustomerOffer.mockResolvedValue({ ...OFFER, welcomeVoucher: { ...VOUCHER, type: 'FREESHIP', value: 0 } });
     renderGift();
-    expect(await section()).toHaveTextContent('Mã miễn phí giao hàng chào mừng');
+    expect(await expanded()).toHaveTextContent('Mã miễn phí giao hàng chào mừng');
   });
 
   it('voucher không có đơn tối thiểu → không in "Cho đơn từ 0đ"', async () => {
     mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: true, welcomeVoucher: { ...VOUCHER, minOrder: null } });
     renderGift();
-    const region = await section();
+    const region = await expanded();
     expect(region).toHaveTextContent('Mã giảm giá chào mừng 25.000đ');
     expect(region).not.toHaveTextContent('Cho đơn từ');
   });
@@ -109,7 +123,7 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
   it('khách mới nhưng chưa có voucher (cron chưa chạy, khách vãng lai, đã dùng): chỉ còn 3 lợi ích, không có dòng voucher', async () => {
     mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: true, welcomeVoucher: null });
     renderGift();
-    const region = await section();
+    const region = await expanded();
     expect(region).not.toHaveTextContent('Mã giảm giá chào mừng');
     expect(region).toHaveTextContent('Đặt định kỳ giảm 17% mỗi đơn');
   });
@@ -118,43 +132,43 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: false, welcomeVoucher: null });
     const { container } = renderGift();
     await waitFor(() => expect(mocks.getNewCustomerOffer).toHaveBeenCalled());
-    expect(container).toBeEmptyDOMElement();
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
   });
 
-  it('đang tải ưu đãi: không vẽ gì, kể cả khung chờ (chưa biết có phải khách mới thì chưa chiếm chỗ, để trang không nhảy với khách đã có đơn)', async () => {
+  it('đang tải ưu đãi: giữ chỗ bằng khung chờ cao bằng dải thật, không hiện số suy đoán', async () => {
     mocks.getNewCustomerOffer.mockReturnValue(new Promise(() => {}));
-    const { container } = renderGift();
+    renderGift();
     await waitFor(() => expect(mocks.getNewCustomerOffer).toHaveBeenCalled());
-    expect(container).toBeEmptyDOMElement();
-    expect(screen.queryByTestId('new-customer-gift-loading')).toBeNull();
+    expect(screen.getByTestId('new-customer-gift-loading')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
   });
 
-  it('cấu hình công khai đang tải: cũng không vẽ khung chờ', async () => {
+  it('cấu hình công khai đang tải: cũng giữ chỗ bằng khung chờ', async () => {
     mocks.getPublicConfig.mockReturnValue(new Promise(() => {}));
-    const { container } = renderGift();
+    renderGift();
     await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByTestId('new-customer-gift-loading')).toBeInTheDocument();
   });
 
   it('lỗi tải ưu đãi của khách → ẩn khối (khối quảng bá phụ, không đáng một thẻ lỗi), không bịa số', async () => {
     mocks.getNewCustomerOffer.mockRejectedValue(new Error('boom'));
     const { container } = renderGift();
     await waitFor(() => expect(mocks.getNewCustomerOffer).toHaveBeenCalled());
-    expect(container).toBeEmptyDOMElement();
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
   });
 
   it('cấu hình công khai lỗi → ẩn khối thay vì hiện số mặc định', async () => {
     mocks.getPublicConfig.mockRejectedValue(new Error('boom'));
     const { container } = renderGift();
     await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
-    expect(container).toBeEmptyDOMElement();
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
   });
 
   it('API cũ chưa trả loyalty/newCustomer → lợi ích thiếu số bị bỏ, không bịa', async () => {
     const { loyalty: _l, newCustomer: _n, ...old } = CONFIG;
     mocks.getPublicConfig.mockResolvedValue(old);
     renderGift();
-    const region = await section();
+    const region = await expanded();
     expect(region).not.toHaveTextContent('Điểm Xanh');
     expect(region).toHaveTextContent('Miễn phí giao hàng cho đơn từ 350.000đ');
     expect(region).toHaveTextContent('Đặt định kỳ giảm 17% mỗi đơn');
@@ -163,7 +177,7 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
   it('chưa đăng nhập: không gọi API khách, vẫn hiện 3 lợi ích (không có voucher)', async () => {
     mocks.status = 'idle';
     renderGift();
-    const region = await section();
+    const region = await expanded();
     expect(region).toHaveTextContent('Đặt định kỳ giảm 17% mỗi đơn');
     expect(region).not.toHaveTextContent('Mã giảm giá chào mừng');
     expect(mocks.getNewCustomerOffer).not.toHaveBeenCalled();
@@ -173,7 +187,7 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     mocks.guest = true;
     mocks.ensurePhone.mockResolvedValue('0901234567');
     renderGift();
-    const region = await section();
+    const region = await expanded();
     expect(region).toHaveTextContent('Mã giảm giá chào mừng 25.000đ');
     expect(region).toHaveTextContent('Liên kết Zalo để nhận mã và giữ điểm');
     expect(mocks.getNewCustomerOffer).not.toHaveBeenCalled();
@@ -190,12 +204,13 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
   });
 
-  it('tài khoản khách: chưa biết có đơn hay không thì chưa hứa gì', async () => {
+  it('tài khoản khách: chưa biết có đơn hay không thì chưa hứa gì (chỉ khung chờ)', async () => {
     mocks.guest = true;
     mocks.fetchOrders.mockReturnValue(new Promise(() => {}));
-    const { container } = renderGift();
+    renderGift();
     await waitFor(() => expect(mocks.fetchOrders).toHaveBeenCalled());
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByTestId('new-customer-gift-loading')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
   });
 
   it('nút "Chọn sản phẩm" mở trang mua sắm', async () => {

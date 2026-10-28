@@ -199,7 +199,7 @@ export function PurchasedRail({ restoring = false }: { restoring?: boolean }) {
         </div>
       )}
       {items.length === 0 ? null : items.length <= COMPACT_MAX_ITEMS ? (
-        <div className="flex flex-col gap-2.5 md:max-w-xl">
+        <div className="flex flex-col gap-2.5 md:grid md:grid-cols-2 md:gap-4">
           {items.map((p) => (
             <CompactRebuyCard key={p.variationId} item={p} onRebuy={() => setTarget(itemReorderTarget(p))} onSubscribe={() => setSubscribeFor(p)} />
           ))}

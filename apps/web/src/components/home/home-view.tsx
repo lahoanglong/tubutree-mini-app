@@ -29,7 +29,7 @@ import { homeBlockOrder, refreshHomeQueries, type HomeBlockId } from './home-blo
 import { HomeBlockErrorSuppressed } from './home-block-error';
 import { HomeHeader } from './home-header';
 import { HomePageError } from './home-page-error';
-import { MemberCard, MemberCardSkeleton } from './member-card';
+import { MemberCard, MemberCardSkeleton, MemberCardUnavailable } from './member-card';
 import { NewCustomerGift } from './new-customer-gift';
 import { ShortcutGrid } from './shortcut-grid';
 import { SuggestFeed } from './suggest-feed';
@@ -52,9 +52,10 @@ const STALE = 60_000;
 const withInitial = <T,>(data: T | undefined) => (data !== undefined ? { initialData: data, staleTime: STALE } : {});
 
 /**
- * Trang chủ web, cùng thứ tự khối và hành vi với pages/home.tsx của Mini App (phương án A, 9 khối). Khách cũ: thẻ thành viên (Điểm danh,
- * Đổi quà) → Việc cần làm → 8 lối tắt → Mua lại → Giờ vàng → Danh mục một hàng → Hành trình nguyên liệu → Cộng đồng → MỘT lưới gợi ý
- * cuộn vô tận. Khách mới/vãng lai: "Quà khách mới" thay thẻ thành viên, không có Mua lại, thêm kệ Bán chạy. Thứ tự khối ở app-core
+ * Trang chủ web, cùng thứ tự khối và hành vi với pages/home.tsx của Mini App (màn đầu gọn, món hàng lên đầu). Ô tìm dính đầu trang. Khách cũ:
+ * thẻ thành viên một dòng (Điểm danh) → Việc cần làm → một hàng lối tắt → Mua lại → Giờ vàng → Danh mục một hàng → Hành trình nguyên liệu →
+ * Cộng đồng → MỘT lưới gợi ý cuộn vô tận. Khách mới/vãng lai: dải "Quà khách mới" thay thẻ thành viên, không có Mua lại, Giờ vàng và Bán chạy
+ * đứng trước Danh mục. Từ md thẻ thành viên và Việc cần làm nằm cạnh nhau, các hàng dùng hết bề ngang. Thứ tự khối ở app-core
  * (`homeBlockOrder`). Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ, độc lập từng khối; Bán chạy lỗi hẳn thì một dải lỗi cấp trang.
  */
 export default function HomeView({ initial = {}, restoreHint = null }: { initial?: HomeInitial; /** Bản dựng sẵn cho khách đã có cookie phiên: HTML đầu mang khung chờ của loại khách này. */ restoreHint?: HomeRestoreHint | null }) {
@@ -68,9 +69,13 @@ export default function HomeView({ initial = {}, restoreHint = null }: { initial
 function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const qc = useQueryClient();
   const router = useRouter();
-  const authed = useAuthPhase() === 'authenticated';
+  const phase = useAuthPhase();
+  const authed = phase === 'authenticated';
   const restoring = useAuthRestoring();
-  const userId = useAuth().user?.id;
+  const { retrySession, user } = useAuth();
+  const userId = user?.id;
+  // Cờ phiên còn mà mất mạng hay API tạm lỗi lúc khôi phục: khách KHÔNG phải khách vãng lai, giữ loại khách đã nhớ để trang không tụt về bố cục khách mới.
+  const unavailable = phase === 'unavailable';
 
   // Chuông ở đây dùng chung queryKey ['notifications'] với trang Thông báo.
   const unreadCount = useQuery({ ...notificationsQuery(coreHttp), enabled: authed }).data?.filter((n) => n.status !== 'READ').length ?? 0;
@@ -78,7 +83,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   // Cùng query key với PurchasedRail → không thêm request; chỉ để biết khách cũ hay mới. Trong lúc tải dùng loại đã nhớ
   // của tài khoản này để thứ tự khối không đổi sau khung hình đầu (useHomeCustomerKind).
   const purchasedRaw = usePurchasedItems(PURCHASED_RAIL_LIMIT);
-  const kind = useHomeCustomerKind(authed, userId, purchasedRaw, restoring);
+  const kind = useHomeCustomerKind(authed, userId, purchasedRaw, restoring || unavailable);
 
   // Cùng khoá với kệ Bán chạy của khách mới: ở đây chỉ để biết API sập hẳn (dải lỗi cấp trang), không thêm request.
   const bestSellers = useBlockQuery(useQuery({ ...homeBestSellerQuery(coreHttp), ...withInitial(initial.bestSellers), enabled: kind === 'new' }));
@@ -89,7 +94,14 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
 
   const blocks: Record<HomeBlockId, ReactNode> = {
     search: <SearchRow />,
-    member: kind === 'unknown' || (kind === 'returning' && restoring) ? <MemberCardSkeleton /> : kind === 'returning' ? <MemberCard /> : null,
+    member:
+      kind === 'returning' && unavailable ? (
+        <MemberCardUnavailable onRetry={() => void retrySession()} />
+      ) : unavailable && kind === 'unknown' ? null : kind === 'unknown' || (kind === 'returning' && restoring) ? (
+        <MemberCardSkeleton />
+      ) : kind === 'returning' ? (
+        <MemberCard />
+      ) : null,
     todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <NewCustomerGift initialConfig={initial.publicConfig} /> : null,
@@ -116,22 +128,45 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     suggest: <SuggestFeed initial={initial.suggest} />,
   };
 
+  const order = homeBlockOrder(kind);
+  const nodes: ReactNode[] = [];
+  for (let i = 0; i < order.length; i++) {
+    const id = order[i]!;
+    // Từ md thẻ thành viên (hoặc dải quà) và Việc cần làm đứng cạnh nhau để dùng hết bề ngang; khối rỗng tự ẩn khỏi hàng.
+    if ((id === 'member' || id === 'welcome') && order[i + 1] === 'todo') {
+      nodes.push(
+        <div key={id} className="md:flex md:gap-4 md:[&>div:empty]:hidden md:[&>div]:min-w-0 md:[&>div]:flex-1">
+          <div data-home-block={id}>{blocks[id]}</div>
+          <div data-home-block="todo">{blocks.todo}</div>
+        </div>,
+      );
+      i++;
+      continue;
+    }
+    nodes.push(
+      <Fragment key={id}>
+        <div data-home-block={id} className={id === 'search' ? STICKY_SEARCH : undefined}>
+          {blocks[id]}
+        </div>
+        {pageDown && id === 'search' && (
+          <div data-home-block="pageError">
+            <HomePageError error={bestSellers.error} retrying={bestSellers.isFetching} onRetry={() => refreshHomeQueries(qc)} />
+          </div>
+        )}
+      </Fragment>,
+    );
+  }
+
   return (
     <HomeBlockErrorSuppressed.Provider value={pageDown}>
       <HomeHeader unreadCount={unreadCount} />
-      {homeBlockOrder(kind).map((id) => (
-        <Fragment key={id}>
-          <div data-home-block={id}>{blocks[id]}</div>
-          {pageDown && id === 'search' && (
-            <div data-home-block="pageError">
-              <HomePageError error={bestSellers.error} retrying={bestSellers.isFetching} onRetry={() => refreshHomeQueries(qc)} />
-            </div>
-          )}
-        </Fragment>
-      ))}
+      {nodes}
     </HomeBlockErrorSuppressed.Provider>
   );
 }
+
+// Dính đầu trang khi cuộn ở điện thoại; từ md thanh đầu website đã có ô tìm nên trả về bình thường.
+const STICKY_SEARCH = 'sticky top-0 z-20 -mx-4 bg-[var(--color-bg-canvas)] px-4 md:static md:mx-0 md:bg-transparent md:px-0';
 
 /**
  * Ô tìm ở Trang chủ chỉ là vỏ: mở thẳng bàn phím ở ô thật bên /san-pham (?focus=search). Chỉ ở điện thoại: từ md thanh đầu website
@@ -139,7 +174,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
  */
 function SearchRow() {
   return (
-    <div className="flex items-center gap-2 pb-3 md:hidden">
+    <div className="flex items-center gap-2 pb-2 md:hidden">
       <Link
         href="/san-pham?focus=search"
         aria-label={homeText.searchPlaceholder}

@@ -15,16 +15,21 @@ export type HomeBlockId =
   | 'community' | 'suggest';
 
 // "Việc cần làm" có ở cả hai thứ tự: khách chưa có đơn đã giao vẫn có thể đang giữ một đơn chờ chuyển khoản, và khối tự rỗng khi không có việc.
+// Màn đầu gọn: thẻ thành viên (hoặc dải quà) một dòng, một hàng lối tắt, rồi tới món hàng. Thẻ thành viên và dải quà cao bằng nhau
+// (`HOME_HERO_HEIGHT`) nên đổi loại khách không làm các khối dưới nhảy. Danh mục xuống sau món hàng để món hàng nằm trong màn đầu.
 const RETURNING: readonly HomeBlockId[] = [
   'search', 'member', 'todo', 'shortcuts', 'purchased', 'flash', 'categories', 'journey', 'community', 'suggest',
 ];
 const NEW: readonly HomeBlockId[] = [
-  'search', 'todo', 'welcome', 'shortcuts', 'flash', 'categories', 'bestSellers', 'journey', 'community', 'suggest',
+  'search', 'welcome', 'todo', 'shortcuts', 'flash', 'bestSellers', 'categories', 'journey', 'community', 'suggest',
 ];
 
 // Chưa biết loại khách: giữ chỗ thẻ thành viên (khối `member` hiện khung chờ) và bỏ các khối chỉ một loại có (Mua lại, Quà khách mới,
 // Bán chạy), để phần đầu trang không đổi hình dạng khi loại khách được xác định.
 const UNKNOWN: readonly HomeBlockId[] = ['search', 'member', 'todo', 'shortcuts', 'flash', 'categories', 'journey', 'community', 'suggest'];
+
+/** Chiều cao cố định của thẻ thành viên và dải quà khách mới (không tính đệm dưới): hai khối thay chỗ nhau không làm trang nhảy. */
+export const HOME_HERO_HEIGHT = 64;
 
 export function homeBlockOrder(kind: HomeKindState): readonly HomeBlockId[] {
   return kind === 'returning' ? RETURNING : kind === 'new' ? NEW : UNKNOWN;
@@ -32,8 +37,9 @@ export function homeBlockOrder(kind: HomeKindState): readonly HomeBlockId[] {
 
 /**
  * Loại khách để chọn thứ tự khối. Đang khôi phục phiên (`authPending`) chưa biết là ai: dùng loại đã nhớ của tài khoản dùng gần nhất
- * trên máy (`stored`), chưa nhớ thì "chưa biết"; không bao giờ dựng bố cục khách mới ở bước này (Danh mục sẽ bị đẩy cả một khối khi phiên về).
- * Khách chưa đăng nhập hẳn luôn là mới. Có số liệu đã mua (kể cả cũ, sau một lần tải lại lỗi) thì theo số liệu. Chưa có thì theo loại đã
+ * trên máy (`stored`); chưa nhớ thì là khách mới.
+ * Khách chưa đăng nhập hẳn luôn là mới; đang khôi phục phiên mà máy chưa nhớ gì (máy mới, chưa từng đăng nhập) cũng dựng bố cục khách mới ngay thay vì chờ,
+ * trừ khi biết chắc có một phiên cũ (`unknownWhenUnremembered`, web có cờ phiên) thì mới là "chưa biết". Có số liệu đã mua (kể cả cũ, sau một lần tải lại lỗi) thì theo số liệu. Chưa có thì theo loại đã
  * nhớ của chính tài khoản này, kể cả khi tải lỗi: khách cũ không bị đẩy về bố cục khách mới vì một lần API chập chờn. Chưa nhớ gì:
  * đang tải là "chưa biết", lỗi là khách mới.
  */
@@ -41,13 +47,15 @@ export function resolveHomeKind(opts: {
   authed: boolean;
   /** Đang khôi phục phiên (chưa biết đăng nhập hay chưa). */
   authPending?: boolean;
+  /** Đang khôi phục phiên và máy chưa nhớ loại: true = "chưa biết" (có phiên cũ thật, vd web có cờ phiên), mặc định = khách mới. */
+  unknownWhenUnremembered?: boolean;
   /** Loại đã nhớ: của chính tài khoản khi đã đăng nhập, của tài khoản dùng gần nhất khi đang khôi phục phiên. */
   stored: HomeCustomerKind | null;
   /** Số sản phẩm đã mua trong dữ liệu đang có; undefined = chưa có dữ liệu. */
   purchasedCount: number | undefined;
   pending: boolean;
 }): HomeKindState {
-  if (opts.authPending && !opts.authed) return opts.stored ?? 'unknown';
+  if (opts.authPending && !opts.authed) return opts.stored ?? (opts.unknownWhenUnremembered ? 'unknown' : 'new');
   if (!opts.authed) return 'new';
   if (opts.purchasedCount !== undefined) return customerKind(opts.purchasedCount);
   if (opts.stored) return opts.stored;
@@ -59,9 +67,9 @@ export function customerKind(purchasedCount: number | undefined): HomeCustomerKi
   return (purchasedCount ?? 0) > 0 ? 'returning' : 'new';
 }
 
-// ---- 8 lối tắt ----
+// ---- Lối tắt ----
 
-export type HomeShortcutId = 'rewards' | 'garden' | 'recycle' | 'groupBuy' | 'coupons' | 'claim' | 'earn' | 'community';
+export type HomeShortcutId = 'orders' | 'rewards' | 'recycle' | 'groupBuy' | 'coupons' | 'claim' | 'earn' | 'community';
 export type ShortcutTint = 'forest' | 'sage' | 'clay' | 'amber' | 'sky' | 'rose';
 
 export interface HomeShortcutSpec {
@@ -84,8 +92,8 @@ export interface HomeFlags {
 export const RECYCLE_REQUESTS_LABEL = 'Yêu cầu của tôi';
 
 export const HOME_SHORTCUTS: readonly HomeShortcutSpec[] = [
+  { id: 'orders', label: 'Đơn hàng', ariaLabel: 'Đơn hàng của tôi', tint: 'forest' },
   { id: 'rewards', label: 'Đổi quà', ariaLabel: 'Đổi quà bằng Điểm Xanh', tint: 'clay' },
-  { id: 'garden', label: 'Vườn Xanh', ariaLabel: 'Vườn Xanh, chăm cây nhận quà', tint: 'forest' },
   { id: 'recycle', label: 'Đổi rác', ariaLabel: 'Đổi rác lấy quà', tint: 'sage', flag: 'waste' },
   { id: 'groupBuy', label: 'Mua chung', ariaLabel: 'Mua chung giá tốt', tint: 'amber' },
   { id: 'coupons', label: 'Mã của tôi', ariaLabel: 'Mã của tôi, mã giảm giá của bạn', tint: 'rose' },
@@ -95,7 +103,7 @@ export const HOME_SHORTCUTS: readonly HomeShortcutSpec[] = [
 ];
 
 /**
- * Mục có cờ tắt bị bỏ, hàng tự dồn. Riêng Đổi rác: chương trình tạm dừng mà khách còn yêu cầu đang mở thì vẫn hiện,
+ * Một hàng cuộn ngang, không có Vườn Xanh (đã là tab giữa của thanh đáy). Mục có cờ tắt bị bỏ, hàng tự dồn. Riêng Đổi rác: chương trình tạm dừng mà khách còn yêu cầu đang mở thì vẫn hiện,
  * đổi nhãn thành "Yêu cầu của tôi" để khách còn vào theo dõi, không hứa tính năng đang tạm dừng.
  */
 export function visibleHomeShortcuts(flags: HomeFlags): HomeShortcutSpec[] {
@@ -383,3 +391,27 @@ export function dropForeignHomeHints(storage: RemovableStorage | null, userId: s
 
 /** Chiều cao khung chờ của "Việc cần làm" cho số dòng đã nhớ: mỗi dòng 60px cộng phần đệm của thẻ. */
 export const todoSkeletonHeight = (rows: number): number => rows * 60 + 18;
+
+/** Khoá nhớ "lần mở trước có Giờ vàng" để dựng khung chờ đúng chỗ; chỉ ghi '1' hoặc '0'. */
+export const FLASH_HINT_KEY = 'tubu_home_flash';
+
+/** Lần mở trước có suất Giờ vàng đang chạy không. Chưa nhớ hay không có kho → false (chờ im lặng, không giữ chỗ). */
+export function readFlashHint(storage: MemoryStorage | null): boolean {
+  if (!storage) return false;
+  try {
+    return storage.getItem(FLASH_HINT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function writeFlashHint(storage: MemoryStorage | null, hasFlash: boolean): void {
+  try {
+    storage?.setItem(FLASH_HINT_KEY, hasFlash ? '1' : '0');
+  } catch {
+    /* kho bị chặn: lần sau không giữ chỗ, khối vẫn đúng */
+  }
+}
+
+/** Chiều cao khung chờ của khối Giờ vàng (tiêu đề + một hàng thẻ). */
+export const FLASH_SKELETON_HEIGHT = 288;

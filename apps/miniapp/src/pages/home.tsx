@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
@@ -32,9 +32,9 @@ import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 
 /**
- * Trang chủ (phương án A, 9 khối). Khách cũ: thẻ thành viên (Điểm danh, Đổi quà) → Việc cần làm → 8 lối tắt → Mua lại → Giờ vàng
- * → Danh mục một hàng → Hành trình nguyên liệu → Cộng đồng (chỉ đọc) → MỘT lưới gợi ý cuộn vô tận. Khách mới/vãng lai: "Quà khách
- * mới" thay thẻ thành viên, không có Mua lại, thêm kệ Bán chạy. Thứ tự khối ở app-core (`homeBlockOrder`), dùng chung với web.
+ * Trang chủ (màn đầu gọn, món hàng lên đầu). Ô tìm dính đầu trang. Khách cũ: thẻ thành viên một dòng (Điểm danh) → Việc cần làm → một hàng
+ * lối tắt → Mua lại → Giờ vàng → Danh mục một hàng → Hành trình nguyên liệu → Cộng đồng (chỉ đọc) → MỘT lưới gợi ý cuộn vô tận. Khách mới/vãng
+ * lại: dải "Quà khách mới" thay thẻ thành viên, không có Mua lại, Giờ vàng và Bán chạy đứng trước Danh mục. Thứ tự khối ở app-core (`homeBlockOrder`), dùng chung với web.
  * Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ (C-084), độc lập từng khối; kéo để làm mới vẫn dùng được.
  */
 export default function HomePage() {
@@ -108,7 +108,9 @@ export default function HomePage() {
       <HomeBlockErrorSuppressed.Provider value={pageDown}>
         {homeBlockOrder(kind).map((id) => (
           <Fragment key={id}>
-            <div data-home-block={id}>{blocks[id]}</div>
+            <div data-home-block={id} style={id === 'search' ? STICKY_SEARCH : undefined}>
+              {blocks[id]}
+            </div>
             {pageDown && id === 'search' && (
               <div data-home-block="pageError">
                 <HomePageError
@@ -125,11 +127,14 @@ export default function HomePage() {
   );
 }
 
+// Dính đầu trang khi cuộn (đứng thẳng dưới vùng an toàn); phải là con trực tiếp của trang cuộn nên áp lên chính khối bọc, không phải bên trong.
+const STICKY_SEARCH: CSSProperties = { position: 'sticky', top: 'var(--safe-top)', zIndex: 20, background: 'var(--color-bg-canvas)' };
+
 /** Ô tìm ở Trang chủ chỉ là vỏ: mở thẳng bàn phím ở ô thật bên /browse (?focus=search). */
 function SearchShell() {
   const navigate = useNavigate();
   return (
-    <div style={{ padding: '0 16px 12px' }}>
+    <div style={{ padding: '0 16px 8px' }}>
       <button
         type="button"
         aria-label={vi.home.searchPlaceholder}

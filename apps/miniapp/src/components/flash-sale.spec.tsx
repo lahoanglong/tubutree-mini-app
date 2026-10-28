@@ -22,6 +22,7 @@ vi.mock('../services/shop-api', () => ({
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.status }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { FLASH_HINT_KEY } from '@tubutree/app-core/home-layout';
 import { FlashSale, UpcomingFlashSales } from './flash-sale';
 
 function renderFlash() {
@@ -99,11 +100,32 @@ describe('FlashSale — tải lại sau lỗi (React Query v5 đưa query lỗi 
     expect(screen.queryByRole('button', { name: /Thử lại/ })).toBeNull();
   });
 
-  it('lần tải ĐẦU vẫn không vẽ gì (không khung chờ, không khối lỗi) cho tới khi có kết quả', async () => {
+  it('lần tải ĐẦU chưa từng thấy Giờ vàng: không vẽ gì (không khung chờ, không khối lỗi) cho tới khi có kết quả', async () => {
+    localStorage.clear();
     mocks.fetchActive.mockReturnValue(new Promise(() => {}));
     const { container } = renderFlash();
     await waitFor(() => expect(mocks.fetchActive).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('lần mở trước có Giờ vàng: giữ chỗ bằng khung chờ để khối bên dưới không bị đẩy xuống', async () => {
+    localStorage.setItem(FLASH_HINT_KEY, '1');
+    mocks.fetchActive.mockReturnValue(new Promise(() => {}));
+    renderFlash();
+    await waitFor(() => expect(mocks.fetchActive).toHaveBeenCalled());
+    expect(screen.getByTestId('flash-sale-loading')).toBeInTheDocument();
+  });
+
+  it('nhớ lại có hay không Giờ vàng cho lần mở sau', async () => {
+    localStorage.clear();
+    mocks.fetchActive.mockResolvedValue([ITEM]);
+    const { unmount } = renderFlash();
+    await screen.findByRole('heading', { level: 2 });
+    await waitFor(() => expect(localStorage.getItem(FLASH_HINT_KEY)).toBe('1'));
+    unmount();
+    mocks.fetchActive.mockResolvedValue([]);
+    renderFlash();
+    await waitFor(() => expect(localStorage.getItem(FLASH_HINT_KEY)).toBe('0'));
   });
 });
 

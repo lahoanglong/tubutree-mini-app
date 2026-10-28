@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
-import { AlertTriangle, Truck } from 'lucide-react';
+import { AlertTriangle, PackageCheck, Truck } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { readLastTodoRows, readTodoRows, todoSkeletonHeight, writeTodoRows } from '@tubutree/app-core/home-layout';
 import { ACTIVE_ORDER_COUNT_KEY } from '../../hooks/use-active-order-count';
@@ -87,14 +87,30 @@ export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
     staleTime: 30_000,
     retry: false,
   });
+  const processing = useQuery({
+    queryKey: ['orders', 'home-processing'],
+    queryFn: () => fetchOrders({ group: 'processing' }, 1, 1),
+    enabled,
+    staleTime: 30_000,
+    retry: false,
+  });
   const userId = useAuthStore((s) => s.user?.id);
   const rememberedRows = useMemo(() => (authed ? readTodoRows(browserStorage(), userId) : 0), [authed, userId]);
-  const loading = authed && (countQ.isPending || (enabled && (pending.isLoading || shipping.isLoading)));
+  const loading = authed && (countQ.isPending || (enabled && (pending.isLoading || shipping.isLoading || processing.isLoading)));
   const payOrder = pending.data?.data[0];
   const shipOrder = shipping.data?.data[0];
   const shipTotal = shipping.data?.meta.total ?? 0;
-  const rows = (payOrder ? 1 : 0) + (shipOrder ? 1 : 0);
-  const settled = authed && (enabled ? !pending.isLoading && !shipping.isLoading && !pending.isError && !shipping.isError : countQ.isSuccess);
+  const prepOrder = processing.data?.data[0];
+  const prepTotal = processing.data?.meta.total ?? 0;
+  // Tối đa hai dòng để khối gọn: đơn chờ thanh toán, đơn đang giao, rồi đơn đang chuẩn bị theo thứ tự đó.
+  const showShip = Boolean(shipOrder);
+  const showPrep = Boolean(prepOrder) && (payOrder ? 1 : 0) + (shipOrder ? 1 : 0) < 2;
+  const rows = (payOrder ? 1 : 0) + (showShip ? 1 : 0) + (showPrep ? 1 : 0);
+  const settled =
+    authed &&
+    (enabled
+      ? !pending.isLoading && !shipping.isLoading && !processing.isLoading && !pending.isError && !shipping.isError && !processing.isError
+      : countQ.isSuccess);
   useEffect(() => {
     if (settled && userId) writeTodoRows(browserStorage(), userId, rows);
   }, [settled, userId, rows]);
@@ -108,13 +124,13 @@ export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
   if (loading) {
     return rememberedRows > 0 ? <TodoSkeleton rows={rememberedRows} /> : null;
   }
-  if (!payOrder && !shipOrder) return null;
+  if (rows === 0) return null;
 
   return (
     <section aria-label={homeCopy.todo.title} style={{ padding: SECTION_PAD }}>
       <Card variant="outline" padding={8}>
         {payOrder && <PendingPaymentRow order={payOrder} />}
-        {shipOrder && (
+        {showShip && shipOrder && (
           <ListRow
             icon={<Icon icon={Truck} tone="brand" />}
             title={shipTotal > 1 ? homeCopy.todo.shippingMany(shipTotal) : homeCopy.todo.shipping(shipOrder.code)}
@@ -122,6 +138,16 @@ export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
             trailing="chevron"
             onPress={() => navigate(shipTotal > 1 ? '/orders?tab=shipping' : `/order/${encodeURIComponent(shipOrder.code)}`)}
             style={{ padding: ROW_PADDING, borderTop: payOrder ? '1px solid var(--color-border-subtle)' : undefined }}
+          />
+        )}
+        {showPrep && prepOrder && (
+          <ListRow
+            icon={<Icon icon={PackageCheck} tone="brand" />}
+            title={prepTotal > 1 ? homeCopy.todo.preparingMany(prepTotal) : homeCopy.todo.preparing(prepOrder.code)}
+            subtitle={homeCopy.todo.preparingHint}
+            trailing="chevron"
+            onPress={() => navigate(prepTotal > 1 ? '/orders?tab=processing' : `/order/${encodeURIComponent(prepOrder.code)}`)}
+            style={{ padding: ROW_PADDING, borderTop: payOrder || showShip ? '1px solid var(--color-border-subtle)' : undefined }}
           />
         )}
       </Card>

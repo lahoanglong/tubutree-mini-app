@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, CheckCircle2, Clock, Zap } from 'lucide-react';
@@ -14,6 +14,9 @@ import { productHref } from '@/lib/product-href';
 import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
 import { serverNow } from '@tubutree/app-core/server-clock';
+import { FLASH_SKELETON_HEIGHT, readFlashHint, writeFlashHint } from '@tubutree/app-core/home-layout';
+import { browserStorage } from '@/lib/recently-viewed';
+import { Skeleton } from '@/components/mini';
 import { Badge } from '@/components/ui/badge';
 import { Badge as MiniBadge } from '@/components/mini/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
@@ -44,6 +47,16 @@ function Thumb({ src, name, pct }: { src: string | null; name: string; pct: numb
   );
 }
 
+const subscribeNothing = () => () => {};
+
+function FlashSkeleton() {
+  return (
+    <div data-testid="flash-sale-loading" aria-hidden="true" className="py-2">
+      <Skeleton height={FLASH_SKELETON_HEIGHT - 16} radius="var(--radius-card)" />
+    </div>
+  );
+}
+
 /** Ưu đãi giờ vàng — flash sale thật từ backend. Countdown êm đến mốc kết thúc sớm nhất. */
 export function FlashSale() {
   const q = useBlockQuery(useQuery({ ...flashActiveQuery(coreHttp), staleTime: 30_000, refetchInterval: 60_000 }));
@@ -64,7 +77,15 @@ export function FlashSale() {
     if (soonestEndAt && timeLeft === '') setExpiredTick((n) => n + 1);
   }, [soonestEndAt, timeLeft]);
 
-  if (q.isLoading) return null;
+  // Lần mở trước có Giờ vàng thì giữ chỗ lúc tải (khối nằm sát màn đầu, chen vào sẽ đẩy cả trang); chưa nhớ thì chờ im lặng.
+  // Đọc bằng useSyncExternalStore: HTML server không có kho nên bản server là "chưa nhớ", sau hydrate mới đọc thật.
+  const hadFlash = useSyncExternalStore(subscribeNothing, () => readFlashHint(browserStorage()), () => false);
+  const settledWithFlash = q.data !== undefined && !q.isLoading ? soonestEndAt !== null : null;
+  useEffect(() => {
+    if (settledWithFlash !== null) writeFlashHint(browserStorage(), settledWithFlash);
+  }, [settledWithFlash]);
+
+  if (q.isLoading) return hadFlash ? <FlashSkeleton /> : null;
   if (items.length === 0) {
     return q.isError ? <HomeBlockError title={flashSaleText.sectionName} error={q.error} onRetry={q.refetch} retrying={q.isFetching} /> : null;
   }

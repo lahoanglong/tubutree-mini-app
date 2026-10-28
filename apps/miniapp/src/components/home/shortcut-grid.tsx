@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'zmp-ui';
-import { Gift, HeartHandshake, MessagesSquare, Recycle, ScanLine, Sprout, Ticket, Users, type LucideIcon } from 'lucide-react';
+import { Gift, HeartHandshake, MessagesSquare, Package, Recycle, ScanLine, Ticket, Users, type LucideIcon } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { SHORTCUT_TINT_VARS, visibleHomeShortcuts, type HomeShortcutId } from '@tubutree/app-core/home-layout';
 import { usePublicConfig } from '../../hooks/use-public-config';
@@ -8,12 +8,13 @@ import { useRecycleOpenRequests } from '../../hooks/use-recycle-open-requests';
 import { useAuthStore } from '../../store/auth';
 import { haptic } from '../../utils/haptic';
 import { Icon } from '../ui/icon';
+import { ScrollRow } from '../ui/scroll-row';
 import { Text } from '../ui/text';
 import { EarnSheet } from './earn-sheet';
 
 const VISUALS: Record<HomeShortcutId, { Icon: LucideIcon; to: string | null }> = {
+  orders: { Icon: Package, to: '/orders' },
   rewards: { Icon: Gift, to: '/rewards' },
-  garden: { Icon: Sprout, to: '/game' },
   recycle: { Icon: Recycle, to: '/recycle' },
   groupBuy: { Icon: Users, to: '/group-buy' },
   coupons: { Icon: Ticket, to: '/offers?section=coupons' },
@@ -22,9 +23,12 @@ const VISUALS: Record<HomeShortcutId, { Icon: LucideIcon; to: string | null }> =
   community: { Icon: MessagesSquare, to: '/feed' },
 };
 
+const ITEM_WIDTH = 76;
+const CIRCLE = 44;
+
 /**
- * 8 lối tắt hai hàng ở Trang chủ (như lưới dịch vụ của Shopee/MoMo): biểu tượng tròn màu nhạt, nhãn ngắn.
- * Mục có cờ tắt (Đổi rác, Tích điểm đơn sàn) bị ẩn và hàng tự dồn.
+ * Lối tắt MỘT hàng cuộn ngang ở Trang chủ (Đơn hàng, Đổi quà, Đổi rác, Mua chung, Mã của tôi, Kiếm tiền, Cộng đồng...): biểu tượng
+ * tròn màu nhạt, nhãn ngắn. Không có ô trùng thanh đáy (Vườn Xanh). Mục có cờ tắt (Đổi rác, Tích điểm đơn sàn) bị ẩn và hàng tự dồn.
  */
 export function ShortcutGrid() {
   const navigate = useNavigate();
@@ -38,8 +42,8 @@ export function ShortcutGrid() {
     claimEnabled: cfg.isLoaded && cfg.loyalty?.marketplaceClaimEnabled === true,
   });
   return (
-    <section aria-label={homeCopy.shortcuts.title} style={{ padding: '4px 8px 12px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', rowGap: 8 }}>
+    <section aria-label={homeCopy.shortcuts.title} style={{ padding: '0 0 12px' }}>
+      <ScrollRow label={homeCopy.shortcuts.rail} style={{ gap: 4, padding: '4px 12px' }}>
         {items.map((s) => {
           const v = VISUALS[s.id];
           const tint = SHORTCUT_TINT_VARS[s.tint];
@@ -55,10 +59,11 @@ export function ShortcutGrid() {
                 else setEarnOpen(true);
               }}
               style={{
+                flex: `0 0 ${ITEM_WIDTH}px`,
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: 6,
+                gap: 4,
                 minHeight: 44,
                 padding: '4px 2px',
                 border: 'none',
@@ -69,7 +74,7 @@ export function ShortcutGrid() {
             >
               <span
                 aria-hidden
-                style={{ width: 48, height: 48, borderRadius: 'var(--radius-pill)', background: tint.bg, color: tint.fg, display: 'grid', placeItems: 'center' }}
+                style={{ width: CIRCLE, height: CIRCLE, borderRadius: 'var(--radius-pill)', background: tint.bg, color: tint.fg, display: 'grid', placeItems: 'center' }}
               >
                 <Icon icon={v.Icon} size="md" tone="current" />
               </span>
@@ -82,7 +87,7 @@ export function ShortcutGrid() {
             </button>
           );
         })}
-      </div>
+      </ScrollRow>
       <EarnSheet open={earnOpen} onClose={() => setEarnOpen(false)} />
     </section>
   );

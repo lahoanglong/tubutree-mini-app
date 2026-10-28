@@ -87,5 +87,6 @@ export function useHomeCustomerKind(
     if (authed && userId && settledKind) writeStoredHomeKind(userId, settledKind);
   }, [authed, userId, settledKind]);
 
-  return resolveHomeKind({ authed, authPending, stored, purchasedCount: purchased.data?.items.length, pending: purchased.isPending });
+  // Web chỉ "đang khôi phục" khi còn cờ phiên (khách vãng lai không bao giờ): có phiên cũ mà chưa nhớ loại thì là "chưa biết", không đoán là khách mới.
+  return resolveHomeKind({ authed, authPending, unknownWhenUnremembered: true, stored, purchasedCount: purchased.data?.items.length, pending: purchased.isPending });
 }
