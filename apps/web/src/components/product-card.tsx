@@ -54,7 +54,7 @@ export default function ProductCard({ product, priority = false, quickAdd }: { p
               {isNew && (
                 <span
                   data-testid="card-new-badge"
-                  className="rounded-full bg-[var(--color-action-secondary-bg)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--color-action-secondary-fg)]"
+                  className="rounded-full bg-[var(--color-action-secondary-bg)] px-1.5 py-0.5 text-xs font-semibold text-[var(--color-action-secondary-fg)]"
                 >
                   {NEW_PRODUCT_LABEL}
                 </span>
