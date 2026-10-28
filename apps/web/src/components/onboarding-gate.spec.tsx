@@ -35,7 +35,7 @@ import { ONBOARDING_SNOOZE_KEY, ONBOARDING_SNOOZE_MS } from './account/onboardin
 
 let mounted: Rendered | null = null;
 const mount = async () => {
-  mounted = render(<OnboardingGate />);
+  mounted = render(<OnboardingGate enabled />);
   await flush(8);
   return document.body;
 };
@@ -59,6 +59,14 @@ beforeEach(() => {
 afterEach(() => {
   mounted?.unmount();
   mounted = null;
+});
+
+describe('OnboardingGate: khảo sát đang tắt', () => {
+  it('mặc định không vẽ gì (không phủ màn chào lúc mở trang)', async () => {
+    mounted = render(<OnboardingGate />);
+    await flush(8);
+    expect(dialog()).toBeNull();
+  });
 });
 
 describe('OnboardingGate: khi nào hiện', () => {

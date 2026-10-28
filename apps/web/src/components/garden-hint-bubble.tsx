@@ -1,14 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { markGardenHintSeen, shouldShowGardenHint } from './garden-hint';
 
 /** Bóng nổi trên thanh tab nên che nội dung phía sau; tự tắt sau ngần này để không cản khách đang xem trang. */
-export const GARDEN_HINT_AUTO_HIDE_MS = 8000;
+export const GARDEN_HINT_AUTO_HIDE_MS = 5000;
+/** Chờ trang vẽ xong rồi mới hiện, để bóng không đè lên lúc khách đang nhìn màn đầu hay một lớp phủ đang mở. */
+export const GARDEN_HINT_DELAY_MS = 1500;
+
+const overlayOpen = () => typeof document !== 'undefined' && document.querySelector('[role="dialog"][aria-modal="true"]') !== null;
 
 /**
  * Bóng gợi ý trỏ vào tab Vườn Xanh, chỉ hiện một lần trên mỗi máy (như `garden-hint-bubble.tsx` của Mini App). Đánh dấu "đã xem"
- * ngay lúc hiện để đóng trang giữa chừng cũng không bị nhắc lại. Tắt khi bấm bóng hoặc khi khách mở tab Vườn Xanh.
+ * ngay lúc hiện để đóng trang giữa chừng cũng không bị nhắc lại. Bấm bóng thì mở Vườn Xanh; tự tắt sau vài giây hoặc khi khách cuộn trang.
  */
 export function GardenHintBubble({ onGardenTab }: { onGardenTab: boolean }) {
   const [open, setOpen] = useState(false);
@@ -19,11 +24,27 @@ export function GardenHintBubble({ onGardenTab }: { onGardenTab: boolean }) {
       setOpen(false);
       return;
     }
-    if (shouldShowGardenHint()) {
+    if (!shouldShowGardenHint()) return;
+    // Chỉ hiện và đánh dấu "đã xem" khi không có lớp phủ nào đang mở: nếu có, lần mở sau mới thử lại.
+    const id = setTimeout(() => {
+      if (overlayOpen()) return;
       markGardenHintSeen();
       setOpen(true);
-    }
+    }, GARDEN_HINT_DELAY_MS);
+    return () => clearTimeout(id);
   }, [onGardenTab]);
+
+  // Khách bắt đầu cuộn là đang đọc trang: gỡ bóng ngay để không che nội dung.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    document.addEventListener('scroll', close, { capture: true, passive: true });
+    document.addEventListener('touchmove', close, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener('scroll', close, { capture: true });
+      document.removeEventListener('touchmove', close, { capture: true });
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -40,7 +61,7 @@ export function GardenHintBubble({ onGardenTab }: { onGardenTab: boolean }) {
       style={{
         position: 'absolute',
         left: '50%',
-        bottom: 'calc(100% + 34px)',
+        bottom: 'calc(100% + 26px)',
         transform: 'translateX(-50%)',
         width: 'max-content',
         maxWidth: 'min(260px, calc(100vw - 32px))',
@@ -57,9 +78,12 @@ export function GardenHintBubble({ onGardenTab }: { onGardenTab: boolean }) {
         textAlign: 'center',
       }}
     >
-      <span style={{ fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-inverse)' }}>
+      <Link
+        href="/vuon-xanh"
+        style={{ fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-inverse)', textDecoration: 'none' }}
+      >
         Trồng cây mỗi ngày, nhận quà thật
-      </span>
+      </Link>
       <span
         aria-hidden
         style={{

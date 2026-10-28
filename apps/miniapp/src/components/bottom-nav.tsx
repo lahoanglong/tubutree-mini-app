@@ -45,7 +45,7 @@ export default function BottomNav() {
         zIndex: 100,
       }}
     >
-      <GardenHintBubble onGardenTab={pathname === '/game'} />
+      <GardenHintBubble onGardenTab={pathname === '/game'} onOpenGarden={() => navigate('/game')} />
       {NAV_TABS.map((t) => {
         const active = pathname === t.path;
         const count = t.badge === 'active-orders' ? activeOrders : 0;

@@ -57,8 +57,17 @@ describe('Luật hiện quiz onboarding (C-018)', () => {
 
 function renderGate() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}><OnboardingGate /></QueryClientProvider>);
+  return render(<QueryClientProvider client={qc}><OnboardingGate enabled /></QueryClientProvider>);
 }
+
+describe('OnboardingGate — khảo sát đang tắt', () => {
+  it('mặc định không vẽ gì, không gọi API (không phủ màn chào lúc mở app)', () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { container } = render(<QueryClientProvider client={qc}><OnboardingGate /></QueryClientProvider>);
+    expect(container).toBeEmptyDOMElement();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+});
 
 describe('OnboardingGate (C-018)', () => {
   beforeEach(() => {

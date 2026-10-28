@@ -28,7 +28,7 @@ import BackLink from './back-link';
 import BackButton from './mini/back-button';
 import { PageHeader } from './ui/page-header';
 import { HomeHeader } from './home/home-header';
-import { GardenHintBubble } from './garden-hint-bubble';
+import { GARDEN_HINT_AUTO_HIDE_MS, GARDEN_HINT_DELAY_MS, GardenHintBubble } from './garden-hint-bubble';
 import { GARDEN_HINT_KEY } from './garden-hint';
 
 let mounted: Rendered[] = [];
@@ -162,30 +162,49 @@ describe('HomeHeader (đầu Trang chủ ở điện thoại)', () => {
 });
 
 describe('GardenHintBubble', () => {
-  it('hiện một lần: đánh dấu đã xem ngay, lần sau không hiện lại', async () => {
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, GARDEN_HINT_DELAY_MS + 50));
+    });
+  };
+
+  it('hiện một lần: đánh dấu đã xem lúc hiện, lần sau không hiện lại', async () => {
     const a = mount(<GardenHintBubble onGardenTab={false} />);
-    await flush();
+    expect(a.container.querySelector('[role="status"]')).toBeNull();
+    await settle();
     expect(a.container.querySelector('[role="status"]')!.textContent).toContain('Trồng cây mỗi ngày, nhận quà thật');
     expect(localStorage.getItem(GARDEN_HINT_KEY)).toBe('1');
     const b = mount(<GardenHintBubble onGardenTab={false} />);
-    await flush();
+    await settle();
     expect(b.container.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('bấm vào bóng mở Vườn Xanh (liên kết thật) và tắt bóng', async () => {
+    const a = mount(<GardenHintBubble onGardenTab={false} />);
+    await settle();
+    const link = a.container.querySelector('[role="status"] a')!;
+    expect(link.getAttribute('href')).toBe('/vuon-xanh');
+    click(a.container.querySelector('[role="status"]'));
+    expect(a.container.querySelector('[role="status"]')).toBeNull();
   });
 
   it('cao ít nhất 44px để chạm tắt được (D6-16)', async () => {
     const a = mount(<GardenHintBubble onGardenTab={false} />);
-    await flush();
+    await settle();
     const bubble = a.container.querySelector<HTMLElement>('[role="status"]')!;
     expect(Number.parseFloat(bubble.style.minHeight)).toBeGreaterThanOrEqual(44);
   });
 
-  it('tự tắt sau 8 giây để không che nội dung phía sau thanh tab (D6-16)', async () => {
+  it('tự tắt sau 5 giây để không che nội dung phía sau thanh tab (D6-16)', async () => {
     vi.useFakeTimers();
     try {
       const a = mount(<GardenHintBubble onGardenTab={false} />);
+      act(() => {
+        vi.advanceTimersByTime(GARDEN_HINT_DELAY_MS + 10);
+      });
       expect(a.container.querySelector('[role="status"]')).not.toBeNull();
       act(() => {
-        vi.advanceTimersByTime(7_999);
+        vi.advanceTimersByTime(GARDEN_HINT_AUTO_HIDE_MS - 1);
       });
       expect(a.container.querySelector('[role="status"]')).not.toBeNull();
       act(() => {
@@ -195,6 +214,28 @@ describe('GardenHintBubble', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('khách cuộn trang thì bóng tắt ngay', async () => {
+    const a = mount(<GardenHintBubble onGardenTab={false} />);
+    await settle();
+    expect(a.container.querySelector('[role="status"]')).not.toBeNull();
+    act(() => {
+      document.dispatchEvent(new Event('scroll'));
+    });
+    expect(a.container.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('có lớp phủ đang mở thì chưa hiện và chưa đánh dấu đã xem', async () => {
+    const overlay = document.createElement('div');
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    document.body.appendChild(overlay);
+    const a = mount(<GardenHintBubble onGardenTab={false} />);
+    await settle();
+    expect(a.container.querySelector('[role="status"]')).toBeNull();
+    expect(localStorage.getItem(GARDEN_HINT_KEY)).toBeNull();
+    overlay.remove();
   });
 
   it('đang ở tab Vườn Xanh thì không hiện và đánh dấu đã xem', async () => {

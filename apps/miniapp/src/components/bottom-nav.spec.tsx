@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act, render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ navigate: vi.fn(), pathname: '/', count: 0, dot: null as null | 'check-in' | 'coupon-expiring' }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -12,6 +12,12 @@ vi.mock('../hooks/use-offers-dot', () => ({ useOffersDot: (enabled: boolean) => 
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import BottomNav from './bottom-nav';
+import { GARDEN_HINT_DELAY_MS } from './garden-hint-bubble';
+
+const settle = () =>
+  act(() => {
+    vi.advanceTimersByTime(GARDEN_HINT_DELAY_MS + 10);
+  });
 
 describe('BottomNav', () => {
   beforeEach(() => {
@@ -82,26 +88,34 @@ describe('BottomNav', () => {
 
   describe('bóng gợi ý Vườn Xanh', () => {
     const HINT = 'Trồng cây mỗi ngày, nhận quà thật';
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
 
-    it('lần mở đầu hiện, bấm vào bóng thì tắt; mở lại app không hiện nữa', () => {
+    it('lần mở đầu hiện, bấm vào bóng thì mở Vườn Xanh và tắt; mở lại app không hiện nữa', () => {
       const first = render(<BottomNav />);
+      settle();
       fireEvent.click(screen.getByText(HINT));
+      expect(mocks.navigate).toHaveBeenCalledWith('/game');
       expect(screen.queryByText(HINT)).toBeNull();
       first.unmount();
       render(<BottomNav />);
+      settle();
       expect(screen.queryByText(HINT)).toBeNull();
     });
 
     it('đã hiện một lần thì không hiện lại dù khách chưa bấm đóng', () => {
       const first = render(<BottomNav />);
+      settle();
       expect(screen.getByText(HINT)).toBeInTheDocument();
       first.unmount();
       render(<BottomNav />);
+      settle();
       expect(screen.queryByText(HINT)).toBeNull();
     });
 
     it('mở tab Vườn Xanh thì bóng tắt', () => {
       const { rerender } = render(<BottomNav />);
+      settle();
       expect(screen.getByText(HINT)).toBeInTheDocument();
       mocks.pathname = '/game';
       rerender(<BottomNav />);
