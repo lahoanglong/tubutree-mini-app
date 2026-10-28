@@ -21,7 +21,7 @@ const BATCH = 500; // kích thước mỗi trang candidate.
 // Trần số trang — phòng vòng lặp vô tận nếu truy vấn sai (mirror LoyaltyService.RECALC_MAX_PAGES).
 // 500 × 2.000 = 1.000.000 user/lượt, đủ cho mọi quy mô thực tế.
 const MAX_PAGES = 2_000;
-/** Khoá dòng cron_runs của expirePoints: @TrackCron() đặt tên `Lớp.phươngThức` khi @Cron không có `name` (spec khớp với tên thật). */
+/** Khoá dòng cron_runs của expirePoints: tên việc nền là `Lớp.phươngThức` khi @Cron không có `name` (spec khớp với tên thật). */
 export const EXPIRE_POINTS_JOB = 'LoyaltyExpiryService.expirePoints';
 // Lùi thêm quanh mốc lần chạy thành công trước để lô hết hạn sát mốc (lượt chạy trễ, lệch đồng hồ) không bị bỏ sót.
 const EXPIRY_SCAN_MARGIN_MS = 2 * DAY;
