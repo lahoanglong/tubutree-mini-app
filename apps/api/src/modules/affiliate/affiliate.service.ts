@@ -1142,10 +1142,11 @@ export class AffiliateService {
 
   /**
    * Hoa hồng đã duyệt hoặc đã chuyển vào Ví thì không còn đảo được ở đây (chỉ dòng chưa duyệt đổi thành REJECTED), mà đơn đã bị
-   * trả/huỷ: tiền CTV đã nhận không có nguồn. Việc thu hồi là quyết định của chủ nên chỉ báo kế toán; dedupeKey theo đơn vì
-   * setStatus được gọi lại khi một bước đảo khác lỗi.
+   * trả/huỷ: tiền CTV đã nhận không có nguồn. Việc thu hồi là quyết định của chủ nên chỉ báo kế toán. Đường trả cả đơn/huỷ
+   * gọi qua reverseCommissionsForOrder (dedupeKey theo đơn vì setStatus được gọi lại khi một bước đảo khác lỗi); đường trả một
+   * phần không đảo hoa hồng nên gọi thẳng, truyền `returnRequestId` để mỗi yêu cầu trả được báo một lần.
    */
-  private async alertPaidCommissionOfReversedOrder(orderId: string, orderCode: string): Promise<void> {
+  async alertPaidCommissionOfReversedOrder(orderId: string, orderCode: string, opts: { returnRequestId?: string } = {}): Promise<void> {
     try {
       const paid = await this.prisma.commission.findMany({
         where: { orderId, status: { in: ['APPROVED', 'PAID'] } },
@@ -1155,11 +1156,12 @@ export class AffiliateService {
       const message = paid
         .map((c) => `hoa hồng CTV ${c.user.fullName ?? c.user.referralCode} ${vnd(c.amount)} đã ${c.status === 'PAID' ? 'chuyển vào Ví' : 'duyệt'}`)
         .join('; ');
-      this.logger.warn(`Đơn ${orderCode} bị trả/huỷ nhưng ${message}: cần kế toán xử lý.`);
-      const dedupeKey = `commission-paid-order-reversed:${orderId}`;
-      const alertMessage = `${message}, cần kế toán xử lý`;
+      const partial = !!opts.returnRequestId;
+      this.logger.warn(`Đơn ${orderCode} bị ${partial ? 'trả một phần' : 'trả/huỷ'} nhưng ${message}: cần kế toán xử lý.`);
+      const dedupeKey = `commission-paid-order-reversed:${orderId}${opts.returnRequestId ? `:${opts.returnRequestId}` : ''}`;
+      const alertMessage = `${partial ? 'đơn trả một phần, ' : ''}${message}, cần kế toán xử lý`;
       const notifications = this.notifications;
-      // notifyAdmins không có tuỳ chọn chống gửi lặp; bọc lại để mỗi quản trị viên chỉ nhận một tin cho mỗi đơn.
+      // notifyAdmins không có tuỳ chọn chống gửi lặp; bọc lại để mỗi quản trị viên chỉ nhận một tin cho mỗi đơn (hoặc mỗi yêu cầu trả).
       await notifyAdmins(
         {
           prisma: this.prisma,

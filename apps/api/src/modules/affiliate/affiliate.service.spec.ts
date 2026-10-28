@@ -411,6 +411,23 @@ describe('AffiliateService.reverseCommissionsForOrder: hoa hồng đã duyệt/�
     expect(delivered).toEqual(['adm1', 'adm2']);
   });
 
+  it('đường trả một phần gọi thẳng cảnh báo: báo "trả một phần", khoá chống lặp theo yêu cầu trả; hai yêu cầu khác nhau đều được báo, cùng yêu cầu thì không lặp', async () => {
+    const { svc, notify, delivered, updateMany, userUpdate } = setup([{ status: 'PAID', amount: 45_000 }]);
+    await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', { returnRequestId: 'rr1' });
+    const first = alerts(notify);
+    expect(first.map(([uid]) => uid)).toEqual(['adm1', 'adm2']);
+    expect((first[0][2] as { message: string }).message).toContain('trả một phần');
+    expect((first[0][2] as { message: string }).message).toContain('đã chuyển vào Ví');
+    expect(first[0][3]).toEqual({ dedupeKey: 'commission-paid-order-reversed:o1:rr1' });
+    await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', { returnRequestId: 'rr1' });
+    expect(delivered).toEqual(['adm1', 'adm2']);
+    await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', { returnRequestId: 'rr2' });
+    expect(delivered).toEqual(['adm1', 'adm2', 'adm1', 'adm2']);
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(ledger).not.toHaveBeenCalled();
+  });
+
   it('chỉ có hoa hồng PENDING/LOCKED (đảo được): không báo kế toán', async () => {
     const { svc, notify, updateMany } = setup([{ status: 'PENDING', amount: 12_000 }, { status: 'LOCKED', amount: 3_000 }]);
     await svc.reverseCommissionsForOrder('o1');
