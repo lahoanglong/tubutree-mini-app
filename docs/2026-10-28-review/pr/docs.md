@@ -25,7 +25,7 @@ Trước khi mở cho khách, cần một lượt review toàn bộ Mini App, we
 ## Thứ tự merge
 PR này merge trước. Tám nhánh gói tách từ commit `1384ff380` của nhánh này, nên trước khi PR này vào main, diff của từng PR gói sẽ có thêm `docs/2026-10-28-review/`.
 
-Sau đó merge theo thứ tự: 1 doirac → 2 khampha → 3 muahang → 4 taikhoan → 5 diemxanh → 6 ctv → 7 quantri → 8 hieunang.
+Sau đó merge theo thứ tự: 1 doirac #60 → 2 khampha #61 → 3 muahang #62 → 4 taikhoan #63 (đã gộp muahang, phải sau #62) → 5 diemxanh #64 → 6 ctv #65 → 7 quantri #66 → 8 hieunang #67 (đã gộp khampha, phải sau #61).
 
 ## Cách kiểm
 - Đọc `20-backlog.md` mục "Sau đợt 28/10" để biết mục nào xong, mục nào còn.
