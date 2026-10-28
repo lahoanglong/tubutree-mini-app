@@ -3993,6 +3993,7 @@ describe('admin/page — đơn hàng: bộ lọc theo link, hồ sơ khách, xá
     await flush();
     dialog = document.body.querySelector('[role="dialog"]')!;
     expect(dialog.textContent).toContain('Đơn TB11');
+    expect(dialog.textContent).not.toContain('Đã xác nhận nhận tiền đơn TB10');
     expect(container.textContent).toContain('Đã ghi nhận đơn TB10');
   });
 });

@@ -1903,7 +1903,7 @@ function OrdersTab({
       )}
 
       {narrow && expandedOrder && (
-        <SideDrawer title={`Đơn ${expandedOrder.code}`} onClose={() => setExpandedId(null)}>
+        <SideDrawer key={expandedOrder.id || expandedOrder.code} title={`Đơn ${expandedOrder.code}`} onClose={() => setExpandedId(null)}>
           <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
             <OrderStatusBadge status={expandedOrder.status} />
             <span className="font-semibold text-forest-700">{formatVnd(expandedOrder.total)}</span>
