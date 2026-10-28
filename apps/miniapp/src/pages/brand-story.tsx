@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { MapPin } from 'lucide-react';
 import { haptic } from '../utils/haptic';
-import { BRAND_ORIGINS, PIN_CIRCLE, PIN_GAP, type BrandOrigin } from '../utils/brand-origins';
+import { BRAND_ORIGINS, PIN_CIRCLE, type BrandOrigin } from '../utils/brand-origins';
 import { brandBrowsePath } from '../utils/brands';
 import { vi } from '../i18n/vi';
 import { PageHeader } from '../components/ui/page-header';
@@ -390,6 +390,22 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
         {/* 8 ghim thương hiệu nổi trên bản đồ. Chỉ là lối tắt bằng hình trùng với 8 ô lưới bên dưới (cùng mở sheet), nên
             ẩn khỏi trình đọc màn hình và thứ tự Tab: ở cụm Lâm Đồng/Mekong các hộp 44px chồng lên nhau không thể tách
             (axe target-size, WCAG 2.5.8), còn chức năng vẫn đủ qua các ô lưới, là nút thật cao ≥135px. Chạm vẫn dùng được. */}
+        {/* Đường dẫn từ ghim (đúng mảnh tỉnh) ra nhãn tên ở khoảng trống: ghim sát nhau (Lâm Đồng) vẫn không đè chữ. */}
+        <svg aria-hidden viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 3, pointerEvents: 'none' }}>
+          {BRAND_ORIGINS.map((loc) => (
+            <line
+              key={loc.id}
+              x1={parseFloat(loc.pin.left)}
+              y1={parseFloat(loc.pin.top)}
+              x2={parseFloat(loc.label.left)}
+              y2={parseFloat(loc.label.top)}
+              stroke="var(--color-brandmap-led)"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+        </svg>
         {BRAND_ORIGINS.map((loc) => (
           <button
             key={loc.id}
@@ -397,23 +413,20 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
             aria-hidden="true"
             tabIndex={-1}
             data-testid={`brand-pin-${loc.id}`}
-            className="tubu-press"
             onClick={() => onPick(loc)}
             style={{
               position: 'absolute',
               top: loc.pin.top,
               left: loc.pin.left,
               transform: 'translate(-50%, -50%)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 2,
-              zIndex: 4,
+              zIndex: 5,
               minWidth: 44,
               minHeight: 44,
               padding: 0,
               background: 'none',
               border: 'none',
+              display: 'grid',
+              placeItems: 'center',
               cursor: 'pointer',
             }}
           >
@@ -427,36 +440,43 @@ function IngredientMap({ onPick }: { onPick: (loc: BrandOrigin) => void }) {
                 background: loc.gradient,
                 display: 'grid',
                 placeItems: 'center',
-                fontSize: 15,
+                fontSize: 12,
                 boxShadow: 'var(--elevation-2)',
                 border: '2px solid var(--color-bg-surface)',
               }}
             >
               {loc.emoji}
             </span>
-            <Text
-              variant="caption"
-              style={{
-                background: 'var(--color-brandmap-wood-900)',
-                color: 'var(--color-brandmap-led)',
-                padding: '2px 7px',
-                borderRadius: 'var(--radius-pill)',
-                fontSize: 9.5,
-                fontWeight: 700,
-                whiteSpace: 'nowrap',
-                boxShadow: 'var(--elevation-1)',
-                border: '1px solid var(--color-brandmap-wood-400)',
-                // Nhãn lệch sang bên để cụm ghim Lâm Đồng/Mekong không đè nhau (vị trí kiểm ở brand-origins.spec.ts).
-                ...(loc.labelSide && {
-                  position: 'absolute',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  ...(loc.labelSide === 'left' ? { right: `calc(50% + ${PIN_CIRCLE / 2 + PIN_GAP}px)` } : { left: `calc(50% + ${PIN_CIRCLE / 2 + PIN_GAP}px)` }),
-                }),
-              }}
-            >
-              {loc.brand}
-            </Text>
+          </button>
+        ))}
+        {BRAND_ORIGINS.map((loc) => (
+          <button
+            key={loc.id}
+            type="button"
+            aria-hidden="true"
+            tabIndex={-1}
+            data-testid={`brand-pin-label-${loc.id}`}
+            onClick={() => onPick(loc)}
+            style={{
+              position: 'absolute',
+              top: loc.label.top,
+              left: loc.label.left,
+              transform: 'translate(-50%, -50%)',
+              zIndex: 4,
+              padding: '2px 7px',
+              borderRadius: 'var(--radius-pill)',
+              background: 'var(--color-brandmap-wood-900)',
+              color: 'var(--color-brandmap-led)',
+              fontFamily: 'inherit',
+              fontSize: 9.5,
+              fontWeight: 700,
+              whiteSpace: 'nowrap',
+              boxShadow: 'var(--elevation-1)',
+              border: '1px solid var(--color-brandmap-wood-400)',
+              cursor: 'pointer',
+            }}
+          >
+            {loc.brand}
           </button>
         ))}
       </div>
