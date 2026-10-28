@@ -41,7 +41,7 @@ describe('platform-bridge (web)', () => {
       dl.saveImage.mockResolvedValue('failed');
       expect(await createWebPlatformBridge({ oaId: '' }).saveImage('https://img.vietqr.io/x.png', 'a.png')).toBe('failed');
     });
-    it('nạp mô-đun download-image hỏng hoặc saveImage ném lỗi thì trả failed, không văng lỗi', async () => {
+    it('saveImage của download-image ném lỗi (vd ChunkLoadError) thì trả failed, không văng lỗi', async () => {
       dl.saveImage.mockRejectedValue(new Error('ChunkLoadError'));
       expect(await createWebPlatformBridge({ oaId: '' }).saveImage('https://img.vietqr.io/x.png', 'a.png')).toBe('failed');
     });
