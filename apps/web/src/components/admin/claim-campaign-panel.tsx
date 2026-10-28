@@ -16,6 +16,7 @@ import { downloadCsvFile, generateClaimCodesCsv } from '@/lib/export-csv';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
+import { VnDateInput } from './vn-date-input';
 import { BTN_PRIMARY, BTN_XS_SECONDARY, FIELD_CLASS, Field, Notice, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
 
 const BATCH_MAX = 2000;
@@ -25,7 +26,7 @@ type Mode = 'batch' | 'shared';
 /** Hạn thẻ hộp hàng sàn khi để trống ngày: luật đã chốt 60 ngày, vì thẻ còn nằm trong kho và trong hộp trước khi tới tay khách. */
 const CLAIM_CARD_DEFAULT_DAYS = 60;
 
-/** Ngày của `<input type="date">` là ngày giờ VN: ghép giờ địa phương để "đến hết 31/12" không hết hạn lúc 7h sáng. */
+/** Ngày chọn trên ô ngày là ngày giờ VN: ghép giờ địa phương để "đến hết 31/12" không hết hạn lúc 7h sáng. */
 function localDayIso(dayKey: string, endOfDay: boolean, fallbackMs: number): string {
   if (!dayKey) return new Date(fallbackMs).toISOString();
   return new Date(`${dayKey}T${endOfDay ? '23:59:59' : '00:00:00'}`).toISOString();
@@ -86,6 +87,9 @@ export function ClaimCampaignPanel({ onOpenConfig }: { onOpenConfig?: () => void
     linkCard: '',
   });
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [startPending, setStartPending] = useState(false);
+  const [endPending, setEndPending] = useState(false);
+  const datePending = startPending || endPending;
   const num = (v: string) => (v.trim() === '' ? undefined : Number(v));
 
   const configQ = useQuery({ queryKey: ['admin-coupon-claim-url-base'], queryFn: getCouponClaimUrlBase });
@@ -174,9 +178,9 @@ export function ClaimCampaignPanel({ onOpenConfig }: { onOpenConfig?: () => void
 
   const valueMissing = f.type !== 'FREESHIP' && !(Number(f.value) > 0);
   const quantity = Number(f.quantity);
-  const batchReady = /^[A-Z0-9]{2,16}$/.test(f.prefix) && Number.isInteger(quantity) && quantity >= 1 && quantity <= BATCH_MAX && !valueMissing && cardOk;
+  const batchReady = /^[A-Z0-9]{2,16}$/.test(f.prefix) && Number.isInteger(quantity) && quantity >= 1 && quantity <= BATCH_MAX && !valueMissing && cardOk && !datePending;
   const claimLimit = Number(f.claimLimit);
-  const sharedReady = /^[A-Z0-9_-]{3,40}$/.test(f.code) && Number.isInteger(claimLimit) && claimLimit >= 1 && !valueMissing && cardOk;
+  const sharedReady = /^[A-Z0-9_-]{3,40}$/.test(f.code) && Number.isInteger(claimLimit) && claimLimit >= 1 && !valueMissing && cardOk && !datePending;
   const field = `${FIELD_CLASS} ${TOUCH_H} w-full`;
 
   return (
@@ -299,10 +303,10 @@ export function ClaimCampaignPanel({ onOpenConfig }: { onOpenConfig?: () => void
           </Field>
         )}
         <Field label="Bắt đầu từ ngày" hint="Bỏ trống = từ hôm nay.">
-          <input type="date" aria-label="Thẻ bắt đầu từ ngày" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
+          <VnDateInput ariaLabel="Thẻ bắt đầu từ ngày" value={f.startAt} onChange={(v) => setF({ ...f, startAt: v })} onPendingChange={setStartPending} className={field} />
         </Field>
         <Field label="Hết hạn ngày" hint={`Bỏ trống = ${CLAIM_CARD_DEFAULT_DAYS} ngày. Nên tính cả thời gian thẻ nằm trong kho.`}>
-          <input type="date" aria-label="Thẻ hết hạn ngày" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
+          <VnDateInput ariaLabel="Thẻ hết hạn ngày" value={f.endAt} min={f.startAt || undefined} onChange={(v) => setF({ ...f, endAt: v })} onPendingChange={setEndPending} className={field} />
         </Field>
         <Field label="Quét thẻ mở trang" hint="Tích điểm đơn sàn nếu thẻ in mã quà kèm lời mời tích điểm.">
           <select aria-label="Trang mở khi quét" value={f.linkPage} onChange={(e) => setF({ ...f, linkPage: e.target.value as 'home' | 'scan' })} className={field}>

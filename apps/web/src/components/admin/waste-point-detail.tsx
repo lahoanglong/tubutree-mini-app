@@ -16,9 +16,10 @@ import { ApiError } from '@/lib/client-api';
 import { formatCount } from '@/lib/checkout-points';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_SECONDARY, FIELD_CLASS, Field, INPUT_CLASS, Notice, ScrollRegion, ToneBadge, LoadError } from './ui';
+import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_SECONDARY, FIELD_CLASS, Field, INPUT_CLASS, Notice, ScrollRegion, TOUCH_H, ToneBadge, LoadError } from './ui';
 import type { PickedItem } from './search-picker';
 import { UserPicker } from './user-picker';
+import { VnMonthInput } from './vn-date-input';
 
 const MAX_STAFF = 5;
 const ROLE_LABELS: Record<WastePointStaffRole, string> = { OWNER: 'Chủ điểm', STAFF: 'Nhân viên' };
@@ -287,7 +288,7 @@ export function WastePointDetail({
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-stone-900">Số lượng trong tháng</h3>
         <Field label="Tháng">
-          <input type="month" className={`${INPUT_CLASS} max-w-[200px]`} value={month} onChange={(e) => setMonth(e.target.value)} />
+          <VnMonthInput ariaLabel="Tháng số lượng" className={`${FIELD_CLASS} ${TOUCH_H}`} value={month} onChange={setMonth} />
         </Field>
         {report.isError && <LoadError onRetry={() => void report.refetch()} retrying={report.isFetching}>Không tải được số lượng trong tháng.</LoadError>}
         {report.data && (
