@@ -48,6 +48,7 @@ const MAX_CONCURRENT_JOBS = 4;
 /** Hàng đợi chờ xử lý tối đa: đầy thì 503 để RAM (mỗi việc giữ tới 8 MB nguồn) không phình theo số URL khác nhau. */
 const MAX_QUEUED_JOBS = 32;
 const REGISTRY_TTL_MS = 5 * 60 * 1000;
+const REGISTRY_MISS_RELOAD_MS = 30_000;
 /** Ảnh của chính API sai ?v= hoặc không có: mỗi lần vẫn tốn một lần đọc DB và một chỗ trong hàng đợi, nên giới hạn theo phút. */
 const OWN_MISSES_PER_MIN = 30;
 const MAX_MISS_TRACKED = 5000;
@@ -74,6 +75,7 @@ export class ImageResizeService {
   private cacheBytes: number | null = null;
   private registry = new Set<string>();
   private registryUntil = 0;
+  private registryLoadedAt = 0;
   private registryLoad: Promise<void> | null = null;
   private readonly ownMisses = new Map<string, { start: number; count: number }>();
 
@@ -114,7 +116,14 @@ export class ImageResizeService {
    * SQL), dùng chung cho mọi request và làm mới mỗi 5 phút; tra một URL là tra trong bộ nhớ, không chạm DB.
    */
   private async isRegistered(raw: string): Promise<boolean> {
-    if (Date.now() >= this.registryUntil) {
+    await this.refreshRegistry(Date.now() >= this.registryUntil);
+    // Ảnh vừa thêm/đổi trong ≤5 phút chưa có trong danh sách: nạp lại một lần, cách nhau ít nhất 30 giây để URL lạ không kéo DB.
+    if (!this.registry.has(raw) && Date.now() - this.registryLoadedAt >= REGISTRY_MISS_RELOAD_MS) await this.refreshRegistry(true);
+    return this.registry.has(raw);
+  }
+
+  private async refreshRegistry(due: boolean): Promise<void> {
+    if (due) {
       this.registryLoad ??= this.loadRegistry().finally(() => {
         this.registryLoad = null;
       });
@@ -124,9 +133,9 @@ export class ImageResizeService {
         if (this.registryUntil === 0) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
         this.log.warn(`Không làm mới được danh sách ảnh: ${(e as Error).message}`);
         this.registryUntil = Date.now() + 30_000;
+        this.registryLoadedAt = Date.now();
       }
     }
-    return this.registry.has(raw);
   }
 
   private async loadRegistry(): Promise<void> {
@@ -140,6 +149,7 @@ export class ImageResizeService {
       UNION ALL SELECT "imageUrl" FROM "waste_gifts" WHERE left("imageUrl", 8) = 'https://'`);
     this.registry = new Set(rows.map((r) => r.u));
     this.registryUntil = Date.now() + REGISTRY_TTL_MS;
+    this.registryLoadedAt = Date.now();
   }
 
   /** Đếm theo IP: chỉ IP hay gửi sai ?v= bị chặn, khách khác (và ảnh hợp lệ của IP khác) không bị ảnh hưởng. */

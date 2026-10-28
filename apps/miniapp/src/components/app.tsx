@@ -6,6 +6,7 @@ import { getStorage } from 'zmp-sdk/apis';
 import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
 import BackButton from './back-button';
+import { OnboardingGate } from './onboarding';
 import { OpenAppRouter } from './open-app-router';
 import { MainLandmark } from './ui/main-landmark';
 import { RouteShell, RouteSkeleton, SilentBoundary } from './route-shell';
@@ -47,7 +48,7 @@ function applySavedFontScale(): void {
 const OPENED_FROM_PARTNER_LINK =
   typeof window !== 'undefined' && hasPartnerLinkParams(window.location.search, window.location.hash);
 
-const OnboardingGate = lazy(() => import('./onboarding').then((m) => ({ default: m.OnboardingGate })));
+// Mã `?claim=` đã lưu ở entry (useEffect bên dưới) nên chunk này tải chậm hay lỗi cũng không mất mã.
 const CouponClaimGate = lazy(() => import('./coupon-claim-gate').then((m) => ({ default: m.CouponClaimGate })));
 
 // Code-split: Home eager (first paint), các trang khác lazy để giữ initial bundle nhỏ (§13.4).
@@ -282,11 +283,8 @@ export default function MyApp() {
               </LivePathnameProvider>
               <BottomNav />
               <BackButton />
-              {/* Hai cổng này không cần cho khung hình đầu: tải sau để entry nhẹ hơn. */}
               <SilentBoundary>
-                <Suspense fallback={null}>
-                  <OnboardingGate openedFromPartnerLink={OPENED_FROM_PARTNER_LINK} />
-                </Suspense>
+                <OnboardingGate openedFromPartnerLink={OPENED_FROM_PARTNER_LINK} />
               </SilentBoundary>
               <SilentBoundary>
                 <Suspense fallback={null}>

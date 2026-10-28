@@ -144,6 +144,25 @@ describe('ImageResizeService', () => {
     expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
   });
 
+  it('ảnh vừa thêm vào sản phẩm: URL chưa có trong danh sách thì nạp lại một lần sau 30 giây, không nạp lại mỗi request', async () => {
+    const rows: string[][] = [[], ['https://content.pancake.vn/a.jpg']];
+    let call = 0;
+    const prisma = { $queryRaw: jest.fn(async () => (rows[Math.min(call++, 1)] ?? []).map((u) => ({ u }))) };
+    const { svc } = make(ownImages(png), prisma as never);
+    const now = jest.spyOn(Date, 'now');
+    const t0 = 1_000_000;
+    now.mockReturnValue(t0);
+    await expect(svc.get('https://content.pancake.vn/a.jpg', 320, 'webp')).rejects.toBeInstanceOf(NotFoundException);
+    now.mockReturnValue(t0 + 10_000);
+    await expect(svc.get('https://content.pancake.vn/a.jpg', 320, 'webp')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    now.mockReturnValue(t0 + 31_000);
+    fakeHttps({ status: 200, headers: { 'content-type': 'image/png' }, body: png });
+    await expect(svc.get('https://content.pancake.vn/a.jpg', 320, 'webp')).resolves.toBeDefined();
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+    now.mockRestore();
+  });
+
   it('không nạp được danh sách ảnh lần đầu thì 503, có danh sách cũ rồi thì dùng tiếp', async () => {
     const prisma = { $queryRaw: jest.fn().mockRejectedValueOnce(new Error('db down')) };
     const { svc } = make(ownImages(png), prisma as never);
