@@ -1488,8 +1488,8 @@ export class CommunityFeedService {
   }
 
   /**
-   * Chọn người thắng sự kiện (admin) — đóng sự kiện + thưởng Điểm Xanh. Thưởng NON-FATAL:
-   * lỗi thưởng (vd trùng idempotency) không chặn việc chốt người thắng.
+   * Chọn người thắng sự kiện (admin) — đóng sự kiện + thưởng Điểm Xanh trong cùng một giao dịch: cộng điểm lỗi thì
+   * sự kiện vẫn OPEN (không có người thắng chưa được thưởng). `rewarded` = điểm thật sự đã vào sổ.
    *
    * Money-critical: CHỈ chốt được khi sự kiện còn OPEN. Vì reason thưởng nhúng userId
    * (COMMUNITY_EVENT_WIN:<eventId>:<userId>), gọi pickWinner 2 lần với 2 userId KHÁC nhau
@@ -1513,25 +1513,24 @@ export class CommunityFeedService {
       select: { id: true },
     });
     if (!entry) throw new BadRequestException('Người này chưa có bài dự thi nào được đăng trong sự kiện, không thể chọn làm người thắng.');
-    const { count } = await this.prisma.communityEvent.updateMany({
-      where: { id: eventId, status: 'OPEN' },
-      data: { winnerUserId: userId, status: 'CLOSED' },
+    // Hạn điểm đọc TRƯỚC tx (đọc config trong tx xin thêm một kết nối pool); đóng sự kiện và cộng thưởng cùng một tx để
+    // cộng lỗi thì sự kiện vẫn OPEN, quản trị chọn lại được thay vì người thắng mất thưởng.
+    const expiresAt = event.rewardPoints > 0 ? await this.reward.expiresAt() : undefined;
+    const rewarded = await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.communityEvent.updateMany({
+        where: { id: eventId, status: 'OPEN' },
+        data: { winnerUserId: userId, status: 'CLOSED' },
+      });
+      if (count !== 1) throw new BadRequestException('Sự kiện đã đóng hoặc đã chọn người thắng.');
+      return this.reward.rewardEventWinner(userId, eventId, event.rewardPoints, tx, expiresAt);
     });
-    if (count !== 1) throw new BadRequestException('Sự kiện đã đóng hoặc đã chọn người thắng.');
-    let rewarded = true;
-    try {
-      await this.reward.rewardEventWinner(userId, eventId, event.rewardPoints);
-    } catch (err) {
-      rewarded = false;
-      this.logger.warn(`rewardEventWinner failed for event ${eventId}/user ${userId}: ${(err as Error).message}`);
-    }
-    // Người thắng phải biết mình trúng (trước đây chỉ cộng điểm im lặng); lỗi thông báo không đảo việc đã chốt.
+    // Người thắng phải biết mình trúng (trước đây chỉ cộng điểm im lặng); báo SAU commit, lỗi thông báo không đảo việc đã chốt.
     await this.notifications
       ?.notify(userId, 'COMMUNITY_EVENT_WINNER', {
         title: event.title,
-        reward: rewarded && event.rewardPoints > 0 ? ` Bạn được thưởng ${formatPoints(event.rewardPoints)} Điểm Xanh.` : '',
+        reward: rewarded ? ` Bạn được thưởng ${formatPoints(event.rewardPoints)} Điểm Xanh.` : '',
       })
       .catch((e: unknown) => this.logger.warn(`Không báo được người thắng sự kiện ${eventId}/${userId}: ${(e as Error).message}`));
-    return { ok: true };
+    return { ok: true, rewarded };
   }
 }

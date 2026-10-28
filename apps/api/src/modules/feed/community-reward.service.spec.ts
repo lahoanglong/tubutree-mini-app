@@ -139,13 +139,28 @@ describe('CommunityRewardService.rewardEventWinner', () => {
   it('điểm > 0 → thưởng qua grant reason COMMUNITY_EVENT_WIN:<eventId>:<userId>, refType COMMUNITY', async () => {
     const d = deps();
     await make(d).rewardEventWinner('u1', 'ev1', 5);
-    expect(d.rewards.grant).toHaveBeenCalledWith('u1', 5, 'COMMUNITY_EVENT_WIN:ev1:u1', 'COMMUNITY', 'ev1');
+    expect(d.rewards.grant).toHaveBeenCalledWith('u1', 5, 'COMMUNITY_EVENT_WIN:ev1:u1', 'COMMUNITY', 'ev1', undefined, undefined);
+  });
+
+  it('nhận tx + hạn điểm của caller và chuyển thẳng cho grant; trả đúng kết quả grant', async () => {
+    const d = deps();
+    d.rewards.grant.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    const tx = {} as never;
+    await expect(make(d).rewardEventWinner('u1', 'ev1', 5, tx, EXP)).resolves.toBe(true);
+    expect(d.rewards.grant).toHaveBeenCalledWith('u1', 5, 'COMMUNITY_EVENT_WIN:ev1:u1', 'COMMUNITY', 'ev1', tx, EXP);
+    await expect(make(d).rewardEventWinner('u1', 'ev1', 5, tx, EXP)).resolves.toBe(false);
+  });
+
+  it('grant ném lỗi → rewardEventWinner ném theo (để tx của caller rollback)', async () => {
+    const d = deps();
+    d.rewards.grant.mockRejectedValueOnce(new Error('db đứt'));
+    await expect(make(d).rewardEventWinner('u1', 'ev1', 5, {} as never, EXP)).rejects.toThrow('db đứt');
   });
 
   it('điểm <= 0 → KHÔNG thưởng', async () => {
     const d = deps();
-    await make(d).rewardEventWinner('u1', 'ev1', 0);
-    await make(d).rewardEventWinner('u1', 'ev1', -100);
+    await expect(make(d).rewardEventWinner('u1', 'ev1', 0)).resolves.toBe(false);
+    await expect(make(d).rewardEventWinner('u1', 'ev1', -100)).resolves.toBe(false);
     expect(d.rewards.grant).not.toHaveBeenCalled();
   });
 });
