@@ -248,6 +248,7 @@ function RewardsBody() {
         {c.redeemablePoints !== total && (
           <Text variant="body-sm" tone="secondary" as="div">{`Đổi quà dùng được ${formatPoints(c.redeemablePoints)}`}</Text>
         )}
+        {lockedNote && <Text variant="caption" tone="tertiary" as="div">{lockedNote}</Text>}
       </div>
       {total === 0 && (
         <Card variant="outline">
@@ -263,7 +264,6 @@ function RewardsBody() {
       <BottomSheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={rewardsGuideCopy.rulesTitle}>
         <div style={{ ...COLUMN, gap: 8 }}>
           {rulesNote && <Text variant="body-sm" tone="secondary" as="div">{rulesNote}</Text>}
-          {lockedNote && <Text variant="body-sm" tone="secondary" as="div">{lockedNote}</Text>}
           {c.pointsConvertedBalance > 0 && (
             <Text variant="body-sm" tone="secondary" as="div">
               Điểm không hết hạn chỉ dùng khi thanh toán và góp quỹ trồng cây, không dùng để đổi mã giảm giá hay quà.

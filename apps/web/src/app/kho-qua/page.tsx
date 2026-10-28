@@ -276,6 +276,7 @@ function RewardsBody() {
           </button>
         </div>
         {c.redeemablePoints !== total && <p className="text-sm text-stone-700">{`Đổi quà dùng được ${points(c.redeemablePoints)}`}</p>}
+        {lockedNote && <p className="text-sm text-stone-700">{lockedNote}</p>}
       </div>
       {total === 0 && (
         <section className={`space-y-2 p-4 ${ui.card}`}>
@@ -293,7 +294,6 @@ function RewardsBody() {
       <Sheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={rewardsGuideCopy.rulesTitle}>
         <div className="space-y-2">
           {rulesNote && <p className="text-sm text-stone-700">{rulesNote}</p>}
-          {lockedNote && <p className="text-sm text-stone-700">{lockedNote}</p>}
           {c.pointsConvertedBalance > 0 && (
             <p className="text-sm text-stone-700">Điểm không hết hạn chỉ dùng khi thanh toán và góp quỹ trồng cây, không dùng để đổi mã giảm giá hay quà.</p>
           )}
