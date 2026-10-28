@@ -1168,6 +1168,9 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
 
   describe('chỉ quét lô hết hạn từ mốc lần chạy thành công trước', () => {
     const LAST_OK = new Date('2026-07-04T01:00:04.000Z');
+    // Ngày 1 hằng tháng (giờ VN) cron quét đủ: giữ đồng hồ ở giữa tháng để các ca dưới không đổi nghĩa theo ngày chạy test.
+    beforeEach(() => jest.useFakeTimers({ now: new Date('2026-07-05T01:00:00.000Z') }));
+    afterEach(() => jest.useRealTimers());
 
     it('có mốc: ứng viên là lô có expiresAt trong (mốc - 2 ngày, now]', async () => {
       const { svc, findMany, cronRunFindUnique } = setup({
@@ -1185,6 +1188,29 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
       expect(range.gt).toEqual(new Date(LAST_OK.getTime() - 2 * DAY));
       expect(range.lte.getTime()).toBeGreaterThanOrEqual(before);
       expect(range.lte.getTime()).toBeLessThanOrEqual(after);
+    });
+
+    // Lỗi từng khách chỉ ghi ở mức warn (bản trước) vẫn được tính là lần chạy thành công: khách lỗi kéo dài có lô hết hạn trước mốc sẽ không
+    // bao giờ được nhặt lại nếu cron không quét đủ định kỳ.
+    it.each([
+      ['01:00 sáng ngày 1 giờ VN', '2026-07-31T18:00:00.000Z'],
+      ['đầu ngày 1 giờ VN (00:00)', '2026-07-31T17:00:00.000Z'],
+      ['cuối ngày 1 giờ VN (23:59)', '2026-08-01T16:59:00.000Z'],
+    ])('ngày 1 hằng tháng (%s): quét đủ dù có mốc, để khách lỗi kéo dài được thử lại', async (_label, now) => {
+      jest.setSystemTime(new Date(now));
+      const { svc, findMany } = setup({ candidates: [], userTxns: [], updateCount: 1, lastSuccessAt: LAST_OK });
+      await svc.expirePoints();
+      expect(Object.keys(findMany.mock.calls[0][0].where.expiresAt)).toEqual(['lte']);
+    });
+
+    it.each([
+      ['23:59 ngày cuối tháng giờ VN', '2026-07-31T16:59:00.000Z'],
+      ['00:00 ngày 2 giờ VN', '2026-08-01T17:00:00.000Z'],
+    ])('không phải ngày 1 (%s): vẫn chặn dưới theo mốc', async (_label, now) => {
+      jest.setSystemTime(new Date(now));
+      const { svc, findMany } = setup({ candidates: [], userTxns: [], updateCount: 1, lastSuccessAt: LAST_OK });
+      await svc.expirePoints();
+      expect(Object.keys(findMany.mock.calls[0][0].where.expiresAt)).toEqual(['gt', 'lte']);
     });
 
     it('chưa có mốc (lần đầu): quét đủ như cũ, không có chặn dưới', async () => {

@@ -6,7 +6,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatPoints } from '../../common/format-points';
-import { formatVnDate, vnDateKey } from '../../common/vn-time';
+import { formatVnDate, vnDateKey, vnDateParts } from '../../common/vn-time';
 import {
   MILESTONE_PREFIX,
   MILESTONE_REVOKE_PREFIX,
@@ -370,8 +370,8 @@ export class LoyaltyExpiryService {
    *
    * Chỉ xét lô hết hạn sau (mốc lần chạy thành công trước − 2 ngày): lô cũ hơn đã được các đêm trước xử lý, và lô đã trừ rồi
    * vẫn là ứng viên mãi mãi nếu không chặn dưới. Lượt có log error (ERRORS) không đẩy mốc lên nên khách lỗi được thử lại đêm
-   * sau; chưa có mốc (hoặc đọc mốc lỗi) thì quét đủ như trước. Lô tạo ra với hạn đã nằm trước mốc (nhập số liệu cũ) không
-   * còn được cron này nhặt; mọi đường cấp điểm hiện tại đều đặt hạn ở tương lai.
+   * sau; chưa có mốc (hoặc đọc mốc lỗi) thì quét đủ như trước, và ngày 1 hằng tháng cũng quét đủ để khách lỗi kéo dài tự lành. Lô tạo
+   * ra với hạn đã nằm trước mốc (nhập số liệu cũ) chỉ được nhặt ở lượt quét đủ; mọi đường cấp điểm hiện tại đều đặt hạn ở tương lai.
    *
    * Phân trang bằng keyset (`userId > cursor` + `orderBy: userId asc`) thay vì lấy đúng BATCH
    * candidate đầu tiên mỗi lần. Trước đây `distinct(userId)` + `take: BATCH` KHÔNG orderBy/cursor:
@@ -391,7 +391,7 @@ export class LoyaltyExpiryService {
   async expirePoints(): Promise<void> {
     try {
       const now = new Date();
-      const floor = await this.expiryScanFloor();
+      const floor = await this.expiryScanFloor(now);
       let totalExpired = 0;
       let affected = 0;
       let cursor: string | undefined;
@@ -428,8 +428,13 @@ export class LoyaltyExpiryService {
     }
   }
 
-  /** Mốc dưới của ứng viên; undefined = quét đủ (chưa có lần thành công nào, hoặc không đọc được cron_runs). */
-  private async expiryScanFloor(): Promise<Date | undefined> {
+  /**
+   * Mốc dưới của ứng viên; undefined = quét đủ (chưa có lần thành công nào, không đọc được cron_runs, hoặc ngày 1 hằng tháng giờ VN).
+   * Quét đủ định kỳ là đường tự lành: khách lỗi kéo dài mà lô hết hạn đã nằm trước mốc (lượt trước chỉ ghi warn nên vẫn tính thành công,
+   * hoặc mốc đã nhích qua trong lúc lỗi) không còn là ứng viên của lượt nào khác.
+   */
+  private async expiryScanFloor(now: Date): Promise<Date | undefined> {
+    if (vnDateParts(now).day === 1) return undefined;
     try {
       const run = await this.prisma.cronRun.findUnique({ where: { job: EXPIRE_POINTS_JOB }, select: { lastSuccessAt: true } });
       return run?.lastSuccessAt ? new Date(run.lastSuccessAt.getTime() - EXPIRY_SCAN_MARGIN_MS) : undefined;
