@@ -95,7 +95,7 @@ describe('ProductDetailPage — áp mã mua chung sau khi thêm giỏ (E-9)', ()
     renderPdp();
     fireEvent.click(await addBtn());
     await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledWith(CODE));
-    expect(mocks.addToCart.mock.invocationCallOrder[0]).toBeLessThan(mocks.applyCoupon.mock.invocationCallOrder[0]);
+    expect(mocks.addToCart.mock.invocationCallOrder[0]!).toBeLessThan(mocks.applyCoupon.mock.invocationCallOrder[0]!);
     await waitFor(() => expect(snackbars().some((s) => s.type === 'success' && s.text.includes(`Đã áp mã ${CODE}`))).toBe(true));
   });
 
@@ -105,7 +105,7 @@ describe('ProductDetailPage — áp mã mua chung sau khi thêm giỏ (E-9)', ()
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/checkout', { state: { itemIds: ['line1'] } }));
     expect(mocks.applyCoupon).toHaveBeenCalledWith(CODE);
     const checkoutAt = mocks.navigate.mock.calls.findIndex((c) => c[0] === '/checkout');
-    expect(mocks.applyCoupon.mock.invocationCallOrder[0]).toBeLessThan(mocks.navigate.mock.invocationCallOrder[checkoutAt]);
+    expect(mocks.applyCoupon.mock.invocationCallOrder[0]!).toBeLessThan(mocks.navigate.mock.invocationCallOrder[checkoutAt]!);
   });
 
   it('áp mã lỗi: món vẫn vào giỏ, toast nói lời máy chủ, không chặn mua ngay', async () => {

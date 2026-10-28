@@ -154,7 +154,7 @@ describe('AddToCart — áp mã mua chung từ ?ma= (E-9)', () => {
     await flush();
     expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1);
     expect(mocks.applyCoupon).toHaveBeenCalledWith(CODE);
-    expect(mocks.addToCart.mock.invocationCallOrder[0]).toBeLessThan(mocks.applyCoupon.mock.invocationCallOrder[0]);
+    expect(mocks.addToCart.mock.invocationCallOrder[0]!).toBeLessThan(mocks.applyCoupon.mock.invocationCallOrder[0]!);
     expect(container.textContent).toContain('Đã thêm vào giỏ!');
     expect(container.textContent).toContain(`Đã áp mã ${CODE}`);
   });
@@ -167,7 +167,7 @@ describe('AddToCart — áp mã mua chung từ ?ma= (E-9)', () => {
     await flush();
     expect(mocks.applyCoupon).toHaveBeenCalledWith(CODE);
     expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
-    expect(mocks.applyCoupon.mock.invocationCallOrder[0]).toBeLessThan(mocks.push.mock.invocationCallOrder[0]);
+    expect(mocks.applyCoupon.mock.invocationCallOrder[0]!).toBeLessThan(mocks.push.mock.invocationCallOrder[0]!);
   });
 
   it('áp mã lỗi: món vẫn vào giỏ, nói lý do của máy chủ; mua ngay vẫn sang thanh toán', async () => {
