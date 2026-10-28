@@ -3,7 +3,7 @@ import type { KeyboardEvent } from 'react';
 import { Page, Input, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation } from '@tanstack/react-query';
 import { usePublicConfig } from '../hooks/use-public-config';
-import { aiChat, type AiChatTurn, type AiProduct } from '../services/ai-api';
+import { aiChat, type AiChatTurn } from '../services/ai-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { Sparkles } from 'lucide-react';
@@ -15,14 +15,7 @@ import { ListRow } from '../components/ui/list-row';
 import { PageHeader } from '../components/ui/page-header';
 import { Heading, Text } from '../components/ui/text';
 import { ProductThumb } from '../components/ui/product-thumb';
-
-interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  products?: AiProduct[];
-  /** Tin xin lỗi do lần gọi trước thất bại: không đưa vào lịch sử khi thử lại, và là chỗ gắn nút "Thử lại". */
-  failed?: boolean;
-}
+import { useAiAdvisorStore, type AdvisorMessage } from '../store/ai-advisor';
 
 const SUGGESTIONS = [
   'Nước rửa chén nào an toàn cho bé?',
@@ -38,23 +31,24 @@ const MAX_HISTORY_TURNS = 20;
 export default function AiAdvisorPage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const messages = useAiAdvisorStore((s) => s.messages);
   const [draft, setDraft] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const cfg = usePublicConfig();
   const aiOff = cfg.isLoaded && cfg.aiAdvisorEnabled !== true;
 
-  const toHistory = (list: ChatMessage[]): AiChatTurn[] =>
+  const toHistory = (list: AdvisorMessage[]): AiChatTurn[] =>
     list.slice(-MAX_HISTORY_TURNS).map((m) => ({ role: m.role, content: m.content }));
 
   const chatM = useMutation({
     mutationFn: ({ text, history }: { text: string; history: AiChatTurn[] }) => aiChat(text, history),
+    // Ghi vào store (không phải state của trang): trả lời đến sau khi khách đã rời trang vẫn còn khi quay lại.
     onSuccess: (r) => {
-      setMessages((prev) => [...prev, { role: 'assistant', content: r.reply, products: r.products }]);
+      useAiAdvisorStore.getState().append({ role: 'assistant', content: r.reply, products: r.products });
     },
     onError: (e: unknown) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      setMessages((prev) => [...prev, { role: 'assistant', content: 'Xin lỗi, mình chưa trả lời được lúc này 🌿', failed: true }]);
+      useAiAdvisorStore.getState().append({ role: 'assistant', content: 'Xin lỗi, mình chưa trả lời được lúc này 🌿', failed: true });
     },
   });
 
@@ -68,7 +62,7 @@ export default function AiAdvisorPage() {
   const send = (text: string) => {
     const t = text.trim();
     if (!t || chatM.isPending) return;
-    setMessages((prev) => [...prev, { role: 'user', content: t }]);
+    useAiAdvisorStore.getState().append({ role: 'user', content: t });
     setDraft('');
     chatM.mutate({ text: t, history: toHistory(messages) });
   };
@@ -77,7 +71,7 @@ export default function AiAdvisorPage() {
   const retry = (failedIndex: number) => {
     const question = messages[failedIndex - 1];
     if (chatM.isPending || question?.role !== 'user') return;
-    setMessages(messages.slice(0, failedIndex));
+    useAiAdvisorStore.getState().truncate(failedIndex);
     chatM.mutate({ text: question.content, history: toHistory(messages.slice(0, failedIndex - 1)) });
   };
 

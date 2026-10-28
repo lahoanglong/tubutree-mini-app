@@ -8,6 +8,7 @@ type Reply = { reply: string; products: unknown[] };
 
 const state = vi.hoisted(() => ({
   phase: 'authenticated' as string,
+  user: { id: 'u1' } as { id: string } | null,
   replace: vi.fn(),
   retrySession: vi.fn(),
   config: { aiAdvisorEnabled: true } as Record<string, unknown> | null,
@@ -16,7 +17,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
-vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: state.retrySession }) }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: state.retrySession, user: state.user }) }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: state.replace, push: vi.fn() }),
   usePathname: () => '/tu-van',
@@ -39,6 +40,7 @@ vi.mock('@/lib/core-http', () => ({
 }));
 
 import AdvisorPage from './page';
+import { clearAdvisorMessages } from '@/lib/ai-advisor-store';
 
 const PRODUCT = (id: string, over: Record<string, unknown> = {}) => ({
   id,
@@ -76,7 +78,9 @@ const key = (el: Element, init: KeyboardEventInit & { keyCode?: number }) => {
 };
 
 beforeEach(() => {
+  clearAdvisorMessages();
   state.phase = 'authenticated';
+  state.user = { id: 'u1' };
   state.config = { aiAdvisorEnabled: true };
   state.calls = [];
   state.replace.mockReset();
@@ -118,6 +122,15 @@ describe('Trợ lý AI: trạng thái trang', () => {
     expect(c.querySelector('a[href="/ho-tro/chat"]')?.textContent).toContain('Chat với Tubu');
     expect(c.querySelector('a[href="/"]')?.textContent).toContain('Về Trang chủ');
     expect(c.querySelector('a[href^="tel:"]')).toBeNull();
+  });
+
+  it('nút phụ "Về Trang chủ" dùng kiểu nút phụ của Mini App ở điện thoại (nền xanh nhạt, không viền), không phải nút viền trắng', async () => {
+    state.config = { aiAdvisorEnabled: false, chat: { enabled: true }, support: { hotline: '0984 606 774' } };
+    const c = await mount();
+    const home = c.querySelector('a[href="/"]') as HTMLElement;
+    expect(home.className).toContain('max-md:bg-forest-50');
+    expect(home.className).toContain('max-md:border-transparent');
+    expect(home.className).toContain('max-md:text-forest-700');
   });
 
   it('server báo tắt AI: không còn dòng phụ "Tư vấn ... 24/7" ở tiêu đề', async () => {
@@ -491,5 +504,73 @@ describe('Trợ lý AI: tiêu đề chừa chỗ nút lùi', () => {
     const c = await mount();
     expect(c.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(true);
     expect(c.querySelector('h1')!.parentElement!.className).toContain('max-md:pl-12');
+  });
+});
+
+describe('Trợ lý AI: giữ hội thoại khi khách xem sản phẩm rồi quay lại (E-23)', () => {
+  it('gửi câu, có trả lời, gỡ trang rồi dựng lại: tin còn, không hiện lại phần chào', async () => {
+    state.chat = () => REPLY('Mình gợi ý loại này', [PRODUCT('a')]);
+    const first = await mount();
+    await ask(first, 'Có nước rửa chén không?');
+    expect(first.textContent).toContain('Nước rửa chén a');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+
+    const again = await mount();
+    expect(again.textContent).toContain('Có nước rửa chén không?');
+    expect(again.textContent).toContain('Mình gợi ý loại này');
+    expect(again.textContent).toContain('Nước rửa chén a');
+    expect(again.textContent).not.toContain('Chào bạn! Mình là Trợ lý Tubu');
+  });
+
+  it('câu hỏi tiếp sau khi quay lại vẫn kèm lịch sử của lần trước', async () => {
+    const first = await mount();
+    await ask(first, 'Câu hỏi 1');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+
+    const again = await mount();
+    await ask(again, 'Câu hỏi 2');
+    expect(state.calls[1]!.body.history).toEqual([
+      { role: 'user', content: 'Câu hỏi 1' },
+      { role: 'assistant', content: 'Mình gợi ý bạn thử loại này' },
+    ]);
+  });
+
+  it('đăng xuất thì hội thoại rỗng: đăng nhập lại thấy phần chào', async () => {
+    const first = await mount();
+    await ask(first, 'Câu hỏi riêng tư');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+
+    state.phase = 'guest';
+    await mount();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+
+    state.phase = 'authenticated';
+    const again = await mount();
+    expect(again.textContent).not.toContain('Câu hỏi riêng tư');
+    expect(again.textContent).toContain('Chào bạn! Mình là Trợ lý Tubu');
+  });
+
+  it('tài khoản khác đăng nhập trên cùng tab (đăng xuất lúc trang không mở): không thấy hội thoại cũ', async () => {
+    const first = await mount();
+    await ask(first, 'Câu hỏi của u1');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+
+    state.user = { id: 'u2' };
+    const other = await mount();
+    expect(other.textContent).not.toContain('Câu hỏi của u1');
+    expect(other.textContent).toContain('Chào bạn! Mình là Trợ lý Tubu');
+  });
+
+  it('không ghi xuống localStorage/sessionStorage', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const c = await mount();
+    await ask(c, 'Không lưu máy');
+    expect(setItem).not.toHaveBeenCalled();
+    setItem.mockRestore();
   });
 });

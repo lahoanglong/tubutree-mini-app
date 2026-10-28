@@ -7,6 +7,8 @@ import { useMutation } from '@tanstack/react-query';
 import { useStickyBarOffset } from '@/components/use-sticky-bar-offset';
 import { ChevronRight, Sparkles } from 'lucide-react';
 import { aiChat, type AiChatTurn, type AiProduct } from '@tubutree/app-core/api/ai';
+import { appendAdvisorMessage, clearAdvisorMessages, truncateAdvisorMessages, useAdvisorMessages, type AdvisorMessage } from '@/lib/ai-advisor-store';
+import { useAuth } from '@/lib/auth-context';
 import { coreHttp } from '@/lib/core-http';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { formatVnd } from '@/lib/format-vnd';
@@ -20,14 +22,6 @@ import { miniBtnSecondary, miniOutline } from '@/components/loyalty/mini-surface
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { ProductThumb } from '@/components/mini';
 import { loadErrorText } from '@/lib/error-text';
-
-interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  products?: AiProduct[];
-  /** Tin xin lỗi do lần gọi trước thất bại: không đưa vào lịch sử khi thử lại, và là chỗ gắn nút "Thử lại". */
-  failed?: boolean;
-}
 
 const SUGGESTIONS = [
   'Nước rửa chén nào an toàn cho bé?',
@@ -44,7 +38,7 @@ const MAX_HISTORY_TURNS = 20;
 
 const errText = loadErrorText;
 
-const toHistory = (list: ChatMessage[]): AiChatTurn[] =>
+const toHistory = (list: readonly AdvisorMessage[]): AiChatTurn[] =>
   list.slice(-MAX_HISTORY_TURNS).map((m) => ({ role: m.role, content: m.content }));
 
 function ProductRow({ p }: { p: AiProduct }) {
@@ -60,9 +54,9 @@ function ProductRow({ p }: { p: AiProduct }) {
   );
 }
 
-function Advisor() {
+function Advisor({ userId }: { userId: string }) {
   const { notice, notify } = useGameNotice();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const messages = useAdvisorMessages(userId);
   const [draft, setDraft] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -70,12 +64,13 @@ function Advisor() {
 
   const chatM = useMutation({
     mutationFn: ({ text, history }: { text: string; history: AiChatTurn[] }) => aiChat(coreHttp, text, history),
+    // Ghi vào store (không phải state của trang): trả lời đến sau khi khách đã rời trang vẫn còn khi quay lại.
     onSuccess: (r) => {
-      setMessages((prev) => [...prev, { role: 'assistant', content: r.reply, products: r.products }]);
+      appendAdvisorMessage(userId, { role: 'assistant', content: r.reply, products: r.products });
     },
     onError: (e: unknown) => {
       notify(errText(e), 'error');
-      setMessages((prev) => [...prev, { role: 'assistant', content: SORRY, failed: true }]);
+      appendAdvisorMessage(userId, { role: 'assistant', content: SORRY, failed: true });
     },
   });
 
@@ -89,7 +84,7 @@ function Advisor() {
   const send = (text: string) => {
     const t = text.trim();
     if (!t || chatM.isPending) return;
-    setMessages((prev) => [...prev, { role: 'user', content: t }]);
+    appendAdvisorMessage(userId, { role: 'user', content: t });
     setDraft('');
     chatM.mutate({ text: t, history: toHistory(messages) });
   };
@@ -98,7 +93,7 @@ function Advisor() {
   const retry = (failedIndex: number) => {
     const question = messages[failedIndex - 1];
     if (chatM.isPending || question?.role !== 'user') return;
-    setMessages(messages.slice(0, failedIndex));
+    truncateAdvisorMessages(userId, failedIndex);
     chatM.mutate({ text: question.content, history: toHistory(messages.slice(0, failedIndex - 1)) });
   };
 
@@ -188,7 +183,12 @@ function Advisor() {
 
 export default function AdvisorPage() {
   const phase = useAuthPhase();
+  const { user } = useAuth();
   const cfg = usePublicConfig();
+  // Đã đăng xuất (biết chắc là khách) thì xoá hội thoại; 'loading'/'unavailable' chỉ là chưa rõ nên giữ.
+  useEffect(() => {
+    if (phase === 'guest') clearAdvisorMessages();
+  }, [phase]);
   // Link cũ/đã lưu tới trang khi AI bị tắt: nói rõ trợ lý đang nghỉ thay vì để khách gõ rồi nhận lỗi hay bị đẩy đi không một lời.
   const aiOff = cfg.isLoaded && cfg.aiAdvisorEnabled !== true;
 
@@ -203,7 +203,7 @@ export default function AdvisorPage() {
             {phase === 'loading' && <AuthLoading />}
             {phase === 'unavailable' && <SessionUnavailable />}
             {phase === 'guest' && <LoginRequired message="Đăng nhập để hỏi Trợ lý AI" returnTo="/tu-van" />}
-            {phase === 'authenticated' && <Advisor />}
+            {phase === 'authenticated' && <Advisor userId={user?.id ?? ''} />}
           </>
         )}
       </div>

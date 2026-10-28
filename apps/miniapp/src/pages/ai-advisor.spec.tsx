@@ -29,9 +29,15 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/ai-api', () => ({ aiChat: mocks.aiChat }));
+vi.mock('../store/auth', async () => {
+  const { create } = await import('zustand');
+  return { useAuthStore: create(() => ({ user: { id: 'u1' } as { id: string } | null })) };
+});
 vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
 
 import AiAdvisorPage from './ai-advisor';
+import { MAX_ADVISOR_MESSAGES, useAiAdvisorStore } from '../store/ai-advisor';
+import { useAuthStore } from '../store/auth';
 
 const PRODUCT = (id: string, over: Partial<AiProduct> = {}): AiProduct => ({
   id,
@@ -66,6 +72,8 @@ async function ask(text: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useAiAdvisorStore.getState().clear();
+  (useAuthStore as unknown as { setState: (s: unknown) => void }).setState({ user: { id: 'u1' } });
   mocks.aiChat.mockResolvedValue(REPLY());
   mocks.getPublicConfig.mockResolvedValue({ aiAdvisorEnabled: true });
 });
@@ -400,5 +408,94 @@ describe('Công tắc tắt AI', () => {
     await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
     await act(async () => {});
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('AiAdvisorPage — giữ hội thoại khi khách xem sản phẩm rồi quay lại (E-23)', () => {
+  const setUser = (user: { id: string } | null) => act(() => (useAuthStore as unknown as { setState: (s: unknown) => void }).setState({ user }));
+
+  it('gửi câu, có trả lời, gỡ trang rồi dựng lại: tin còn, không hiện lại phần chào', async () => {
+    mocks.aiChat.mockResolvedValue(REPLY('Mình gợi ý loại này', [PRODUCT('a')]));
+    const first = renderPage();
+    await ask('Có nước rửa chén không?');
+    await screen.findByText('Nước rửa chén a');
+    first.unmount();
+
+    renderPage();
+    expect(screen.getByText('Có nước rửa chén không?')).toBeInTheDocument();
+    expect(screen.getByText('Mình gợi ý loại này')).toBeInTheDocument();
+    expect(screen.getByText('Nước rửa chén a')).toBeInTheDocument();
+    expect(screen.queryByText('Chào bạn! Mình là Trợ lý Tubu')).not.toBeInTheDocument();
+  });
+
+  it('câu hỏi tiếp sau khi quay lại vẫn kèm lịch sử của lần trước', async () => {
+    const first = renderPage();
+    await ask('Câu hỏi 1');
+    await screen.findByText('Mình gợi ý bạn thử loại này');
+    first.unmount();
+
+    renderPage();
+    await ask('Câu hỏi 2');
+    await waitFor(() => expect(mocks.aiChat).toHaveBeenCalledTimes(2));
+    expect(mocks.aiChat.mock.calls[1]![1]).toEqual([
+      { role: 'user', content: 'Câu hỏi 1' },
+      { role: 'assistant', content: 'Mình gợi ý bạn thử loại này' },
+    ]);
+  });
+
+  it('khách rời trang lúc trợ lý đang soạn: câu trả lời đến sau vẫn được giữ cho lần quay lại', async () => {
+    let answer: (v: ReturnType<typeof REPLY>) => void = () => {};
+    mocks.aiChat.mockReturnValue(new Promise((r) => (answer = r)));
+    const first = renderPage();
+    await ask('Câu hỏi chậm');
+    await screen.findByText('Trợ lý đang soạn…');
+    first.unmount();
+    await act(async () => answer(REPLY('Trả lời đến muộn')));
+
+    renderPage();
+    expect(screen.getByText('Câu hỏi chậm')).toBeInTheDocument();
+    expect(screen.getByText('Trả lời đến muộn')).toBeInTheDocument();
+  });
+
+  it('đăng xuất thì hội thoại rỗng, quay lại thấy phần chào', async () => {
+    const first = renderPage();
+    await ask('Câu hỏi riêng tư');
+    await screen.findByText('Mình gợi ý bạn thử loại này');
+    first.unmount();
+
+    setUser(null);
+    expect(useAiAdvisorStore.getState().messages).toEqual([]);
+    setUser({ id: 'u1' });
+    renderPage();
+    expect(screen.queryByText('Câu hỏi riêng tư')).not.toBeInTheDocument();
+    expect(screen.getByText('Chào bạn! Mình là Trợ lý Tubu')).toBeInTheDocument();
+  });
+
+  it('đổi sang tài khoản khác thì hội thoại rỗng; chưa đăng nhập rồi đăng nhập thì giữ', async () => {
+    setUser(null);
+    useAiAdvisorStore.getState().append({ role: 'user', content: 'Gõ lúc chưa đăng nhập' });
+    setUser({ id: 'u1' });
+    expect(useAiAdvisorStore.getState().messages).toHaveLength(1);
+
+    setUser({ id: 'u2' });
+    expect(useAiAdvisorStore.getState().messages).toEqual([]);
+  });
+
+  it(`chỉ giữ ${MAX_ADVISOR_MESSAGES} tin gần nhất`, () => {
+    const { append } = useAiAdvisorStore.getState();
+    for (let i = 1; i <= MAX_ADVISOR_MESSAGES + 5; i++) append({ role: 'user', content: `tin ${i}` });
+    const list = useAiAdvisorStore.getState().messages;
+    expect(list).toHaveLength(MAX_ADVISOR_MESSAGES);
+    expect(list[0]!.content).toBe('tin 6');
+    expect(list.at(-1)!.content).toBe(`tin ${MAX_ADVISOR_MESSAGES + 5}`);
+  });
+
+  it('không ghi xuống localStorage/sessionStorage', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    renderPage();
+    await ask('Không lưu máy');
+    await screen.findByText('Mình gợi ý bạn thử loại này');
+    expect(setItem).not.toHaveBeenCalled();
+    setItem.mockRestore();
   });
 });
