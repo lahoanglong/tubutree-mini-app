@@ -333,6 +333,7 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
   test('Hoàn tiền: cờ tắt thì mở thẳng /hoan-tien về trang chủ như Mini App', async ({ page, api }) => {
     api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
     api.get('/me', () => USER);
+    api.get('/config/public', { freeshipThreshold: 500000, cashbackHoldDays: 45, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
     await page.goto('/hoan-tien');
     await expect(page).toHaveURL(/\/$/);
   });
