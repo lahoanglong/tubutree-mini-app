@@ -1,5 +1,9 @@
+import { Logger } from '@nestjs/common';
+import { CronAwareLogger } from '../../common/cron-run/cron-aware-logger';
+import { setCronRunSink, type CronRunReport } from '../../common/cron-run/track-cron';
 import {
   computePointExpiry,
+  EXPIRE_POINTS_JOB,
   loadPointExpiryTxns,
   LoyaltyExpiryService,
   externalLotKey,
@@ -1001,6 +1005,8 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     updateCount: number;
     /** Sổ user đọc lại SAU khi khoá dòng user (mặc định = userTxns, tức không ai chen vào giữa). */
     txnsAfterLock?: PointExpiryTxn[];
+    /** Mốc lần chạy thành công trước ở cron_runs (mặc định chưa có dòng nào = quét đủ). */
+    lastSuccessAt?: Date | null;
   }) {
     const findMany = jest
       .fn()
@@ -1023,13 +1029,15 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
       pointsTransaction: { findMany: txFindMany, create: txCreate },
     };
     const $transaction = jest.fn(async (cb: (t: typeof txObj) => Promise<unknown>) => cb(txObj));
+    const cronRunFindUnique = jest.fn().mockResolvedValue(opts.lastSuccessAt ? { lastSuccessAt: opts.lastSuccessAt } : null);
     const prisma = {
       pointsTransaction: { findMany },
+      cronRun: { findUnique: cronRunFindUnique },
       $transaction,
     } as unknown as PrismaService;
-    const notifications = { notify: jest.fn() } as unknown as NotificationsService;
+    const notifications = { notify: jest.fn(), notifySafe: jest.fn() } as unknown as NotificationsService;
     const svc = new LoyaltyExpiryService(prisma, config, notifications);
-    return { svc, findMany, txUpdateMany, txCreate, txFindMany, txQueryRaw, order, $transaction };
+    return { svc, prisma, findMany, txUpdateMany, txCreate, txFindMany, txQueryRaw, order, $transaction, cronRunFindUnique };
   }
 
   it('user có expiredNow>0 → decrement có guard gte + tạo POINTS_EXPIRED txn (cặp atomic)', async () => {
@@ -1157,6 +1165,147 @@ describe('LoyaltyExpiryService.expirePoints (cron)', () => {
     await svc.expirePoints();
     expect($transaction).not.toHaveBeenCalled();
   });
+
+  describe('chỉ quét lô hết hạn từ mốc lần chạy thành công trước', () => {
+    const LAST_OK = new Date('2026-07-04T01:00:04.000Z');
+
+    it('có mốc: ứng viên là lô có expiresAt trong (mốc - 2 ngày, now]', async () => {
+      const { svc, findMany, cronRunFindUnique } = setup({
+        candidates: [],
+        userTxns: [],
+        updateCount: 1,
+        lastSuccessAt: LAST_OK,
+      });
+      const before = Date.now();
+      await svc.expirePoints();
+      const after = Date.now();
+
+      expect(cronRunFindUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { job: EXPIRE_POINTS_JOB } }));
+      const range = findMany.mock.calls[0][0].where.expiresAt as { gt: Date; lte: Date };
+      expect(range.gt).toEqual(new Date(LAST_OK.getTime() - 2 * DAY));
+      expect(range.lte.getTime()).toBeGreaterThanOrEqual(before);
+      expect(range.lte.getTime()).toBeLessThanOrEqual(after);
+    });
+
+    it('chưa có mốc (lần đầu): quét đủ như cũ, không có chặn dưới', async () => {
+      const { svc, findMany } = setup({ candidates: [], userTxns: [], updateCount: 1 });
+      await svc.expirePoints();
+      const range = findMany.mock.calls[0][0].where.expiresAt as Record<string, unknown>;
+      expect(Object.keys(range)).toEqual(['lte']);
+    });
+
+    it('dòng cron_runs có mốc rỗng (chưa từng thành công): quét đủ', async () => {
+      const { svc, findMany, cronRunFindUnique } = setup({ candidates: [], userTxns: [], updateCount: 1 });
+      cronRunFindUnique.mockResolvedValue({ lastSuccessAt: null });
+      await svc.expirePoints();
+      expect(Object.keys(findMany.mock.calls[0][0].where.expiresAt)).toEqual(['lte']);
+    });
+
+    it('đọc mốc lỗi: quét đủ và vẫn trừ điểm, không ném ra ngoài @Cron', async () => {
+      const { svc, findMany, cronRunFindUnique, txCreate } = setup({
+        candidates: [{ userId: 'u1' }],
+        userTxns: [tx('a', 100, '2025-01-01', '2026-01-01')],
+        updateCount: 1,
+        lastSuccessAt: LAST_OK,
+      });
+      cronRunFindUnique.mockRejectedValue(new Error('cron_runs down'));
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      await expect(svc.expirePoints()).resolves.toBeUndefined();
+      expect(Object.keys(findMany.mock.calls[0][0].where.expiresAt)).toEqual(['lte']);
+      expect(txCreate).toHaveBeenCalledTimes(1);
+      warn.mockRestore();
+    });
+
+    it('khách đã xử lý hết hạn từ lâu không bị tải lại sổ; khách có lô mới hết hạn vẫn bị trừ', async () => {
+      const oldLot = { userId: 'old', delta: 100, lot: 'STANDARD', expiresAt: new Date('2026-05-01T00:00:00.000Z') };
+      const freshLot = { userId: 'fresh', delta: 70, lot: 'STANDARD', expiresAt: new Date('2026-07-04T12:00:00.000Z') };
+      const loaded: string[] = [];
+      const findMany = jest.fn(async (args: { where: { userId?: unknown; expiresAt?: { gt?: Date; lte: Date } } }) => {
+        const { where } = args;
+        if (typeof where.userId === 'string') {
+          loaded.push(where.userId);
+          return where.userId === 'fresh' ? [tx('f', 70, '2026-01-01', '2026-07-04T12:00:00.000Z')] : [tx('o', 100, '2025-05-01', '2026-05-01')];
+        }
+        return [oldLot, freshLot]
+          .filter((l) => (!where.expiresAt?.gt || l.expiresAt > where.expiresAt.gt) && l.expiresAt <= where.expiresAt!.lte)
+          .map((l) => ({ userId: l.userId }));
+      });
+      const txObj = {
+        $queryRaw: jest.fn().mockResolvedValue([]),
+        user: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        pointsTransaction: { findMany: jest.fn().mockResolvedValue([tx('f', 70, '2026-01-01', '2026-07-04T12:00:00.000Z')]), create: jest.fn().mockResolvedValue({}) },
+      };
+      const prisma = {
+        pointsTransaction: { findMany },
+        cronRun: { findUnique: jest.fn().mockResolvedValue({ lastSuccessAt: LAST_OK }) },
+        $transaction: jest.fn(async (cb: (t: typeof txObj) => Promise<unknown>) => cb(txObj)),
+      } as unknown as PrismaService;
+      const svc = new LoyaltyExpiryService(prisma, config, { notify: jest.fn(), notifySafe: jest.fn() } as unknown as NotificationsService);
+      jest.useFakeTimers().setSystemTime(new Date('2026-07-05T01:00:00.000Z'));
+      try {
+        await svc.expirePoints();
+      } finally {
+        jest.useRealTimers();
+      }
+
+      expect(loaded).toEqual(['fresh']);
+      expect(txObj.user.updateMany).toHaveBeenCalledWith({ where: { id: 'fresh', pointsBalance: { gte: 70 } }, data: { pointsBalance: { decrement: 70 } } });
+    });
+
+    it('khoá cron_runs trùng đúng tên job mà @TrackCron ghi cho expirePoints', async () => {
+      const reports: CronRunReport[] = [];
+      setCronRunSink({ record: (r) => void reports.push(r) });
+      try {
+        const { svc } = setup({ candidates: [], userTxns: [], updateCount: 1 });
+        await svc.expirePoints();
+      } finally {
+        setCronRunSink(undefined);
+      }
+      expect(reports[0]?.job).toBe(EXPIRE_POINTS_JOB);
+    });
+  });
+
+  describe('lỗi từng khách được ghi ở mức error để cron_runs thành ERRORS', () => {
+    async function runRecorded(svc: LoyaltyExpiryService): Promise<CronRunReport[]> {
+      const reports: CronRunReport[] = [];
+      setCronRunSink({ record: (r) => void reports.push(r) });
+      const write = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      Logger.overrideLogger(new CronAwareLogger());
+      try {
+        await svc.expirePoints();
+      } finally {
+        Logger.overrideLogger(['error']);
+        write.mockRestore();
+        setCronRunSink(undefined);
+      }
+      return reports;
+    }
+
+    it('expireUser ném: log error theo khách, lượt chạy là ERRORS', async () => {
+      const { svc, $transaction } = setup({
+        candidates: [{ userId: 'u1' }],
+        userTxns: [tx('a', 100, '2025-01-01', '2026-01-01')],
+        updateCount: 1,
+      });
+      $transaction.mockRejectedValue(new Error('deadlock detected'));
+      const error = jest.spyOn(Logger.prototype, 'error');
+      const reports = await runRecorded(svc);
+      expect(reports[0]).toMatchObject({ job: EXPIRE_POINTS_JOB, outcome: 'ERRORS', errorLine: expect.stringContaining('u1') });
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('deadlock detected'));
+      error.mockRestore();
+    });
+
+    it('guard gte chặn (số dư < điểm hết hạn): log error, lượt chạy là ERRORS, không tạo dòng sổ', async () => {
+      const { svc, txCreate } = setup({
+        candidates: [{ userId: 'u1' }],
+        userTxns: [tx('a', 100, '2025-01-01', '2026-01-01')],
+        updateCount: 0,
+      });
+      const reports = await runRecorded(svc);
+      expect(reports[0]).toMatchObject({ outcome: 'ERRORS', errorLine: expect.stringContaining('u1') });
+      expect(txCreate).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
@@ -1175,7 +1324,7 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
       pointsTransaction: { findMany },
       notificationLog: { findFirst: notifFindFirst },
     } as unknown as PrismaService;
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     const svc = new LoyaltyExpiryService(prisma, config, notifications);
     return { svc, findMany, notifFindFirst, notify };
   }

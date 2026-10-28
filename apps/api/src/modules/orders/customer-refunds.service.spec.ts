@@ -47,7 +47,9 @@ function setup(row: Record<string, unknown> | null = pending()) {
     },
     $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
   };
-  const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+  const notifyMock = jest.fn().mockResolvedValue(true);
+  // Service gửi tin qua notifySafe; hai tên dùng chung một mock để kiểm theo mã tin.
+  const notifications = { notify: notifyMock, notifySafe: notifyMock };
   const service = new CustomerRefundsService(prisma as never, notifications as never);
   return { service, prisma, tx, notifications };
 }

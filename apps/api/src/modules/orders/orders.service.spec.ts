@@ -29,7 +29,9 @@ const loyalty = {
   pointsExpiresAt: jest.fn().mockResolvedValue(POINTS_EXPIRES_AT),
 } as unknown as LoyaltyService;
 const cart = {} as unknown as CartService;
-const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+const notifyMock = jest.fn().mockResolvedValue(true);
+// Service gửi tin qua notifySafe; hai tên dùng chung một mock để kiểm theo mã tin.
+const notifications = { notify: notifyMock, notifySafe: notifyMock } as unknown as NotificationsService;
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
 const flash = { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService;
 const affiliate = { reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined) } as unknown as AffiliateService;
@@ -875,6 +877,24 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
     const { svc } = makeMediaService([{ ...baseOrder, items: [line('i1', 'v1')] }], [v('v1', vOver, pOver)]);
     const res = await svc.list('u1', {}, 1, 20);
     expect(res.data[0]!.items[0]!.available).toBe(false);
+  });
+
+  it.each([
+    ['sản phẩm đang bán', {}, {}, true],
+    ['chỉ variation tắt (trang sản phẩm vẫn mở được)', { isActive: false }, {}, true],
+    ['sản phẩm tắt', {}, { isActive: false }, false],
+    ['sản phẩm chưa duyệt', {}, { approvalStatus: 'PENDING_REVIEW' }, false],
+    ['sản phẩm bị từ chối', {}, { approvalStatus: 'REJECTED' }, false],
+  ])('productPublic theo trang sản phẩm công khai: %s', async (_label, vOver, pOver, expected) => {
+    const { svc } = makeMediaService([{ ...baseOrder, items: [line('i1', 'v1')] }], [v('v1', vOver, pOver)]);
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(res.data[0]!.items[0]!.productPublic).toBe(expected);
+  });
+
+  it('variation đã bị xoá → productPublic false (không dẫn khách tới trang 404)', async () => {
+    const { svc } = makeMediaService([{ ...baseOrder, items: [line('i1', 'gone')] }], []);
+    const res = await svc.list('u1', {}, 1, 20);
+    expect(res.data[0]!.items[0]!.productPublic).toBe(false);
   });
 
   it('variation đã bị xoá → thumbnail null, stock 0, available false, currentPrice null', async () => {

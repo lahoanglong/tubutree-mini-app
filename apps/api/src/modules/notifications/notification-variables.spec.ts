@@ -100,9 +100,10 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
     'modules/feed/community-feed.service.ts|template': { reason: 'Hàm gửi báo tác giả nhận mã (thích/bình luận) và hàm tạo dữ liệu bất đồng bộ làm tham số; chỗ gọi truyền chuỗi và thunk.', codes: ['COMMUNITY_POST_LIKED', 'COMMUNITY_POST_COMMENTED'] },
     'modules/integrations/gomdon/gomdon-alert.service.ts|template': { reason: 'Tham số template của alert() (mặc định OPS_GOMDON_ALERT hoặc OPS_PANCAKE_ALERT), dữ liệu { order_code, message } ngay tại chỗ.', codes: ['OPS_GOMDON_ALERT', 'OPS_PANCAKE_ALERT'] },
     'modules/merchant/merchant-fulfilment.service.ts|template': { reason: 'Hàm bọc notifyOwner chuyển tiếp mã và dữ liệu của người gọi; chỗ gọi notifyOwner được dò (NOTIFY_CALLS).' },
+    'modules/notifications/notifications.service.ts|templateCode': { reason: 'notifySafe (phương thức) chuyển tiếp mã và dữ liệu của người gọi xuống notify(); chỗ gọi notifySafe được dò (NOTIFY_CALLS).' },
     'modules/ops/cron-run.service.ts|template': { reason: 'Bộ chuyển tiếp cho notifyAdmins; chỗ gọi notifyAdmins được dò theo dạng { template, data }.' },
     'modules/orders/merchant-order-notify.ts|template': { reason: 'Hàm bọc notifyMerchantOwner chuyển tiếp mã và dữ liệu của người gọi; chỗ gọi hàm đó được dò (NOTIFY_CALLS).' },
-    'modules/orders/order-status.service.ts|opts.notifyEvent ?? `ORDER_${targetStatus}`': { reason: 'Mã theo trạng thái đơn (ORDER_<trạng thái>) hoặc mã người gọi chỉ định; dữ liệu là biến cục bộ notifyData cùng khoá cho mọi mã.', codes: ['ORDER_CONFIRMED', 'ORDER_PACKED', 'ORDER_SHIPPING', 'ORDER_DELIVERED', 'ORDER_CANCELLED', 'ORDER_RETURNED'] },
+    'modules/orders/order-status.service.ts|opts.notifyEvent ?? `ORDER_${targetStatus}`': { reason: 'Mã theo trạng thái đơn (ORDER_<trạng thái>) hoặc mã người gọi chỉ định; dữ liệu là biến cục bộ notifyData cùng khoá cho mọi mã.', codes: ['ORDER_CONFIRMED', 'ORDER_PACKED', 'ORDER_SHIPPING', 'ORDER_CANCELLED', 'ORDER_RETURNED'] },
     'modules/orders/order-status.service.ts|`ORDER_${order.status}`': { reason: 'Mã theo trạng thái đơn đã đóng (huỷ hoặc trả); dữ liệu là object literal tại chỗ.', codes: ['ORDER_CANCELLED', 'ORDER_RETURNED'] },
     'modules/storefront/storefront-admin.service.ts|template': { reason: 'Hàm bọc notifyOwner chuyển tiếp mã và dữ liệu của người gọi; chỗ gọi notifyOwner được dò (NOTIFY_CALLS).' },
     'modules/wallet/referral-notify.ts|templateCode': { reason: 'Mã và dữ liệu do referralNoticeMessage trả về; các object { templateCode, data } trong hàm đó được dò theo dạng { templateCode, data }.' },
@@ -124,12 +125,9 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
     MERCHANT_PRODUCT_EDIT_APPROVED: ['reason'],
     CHAT_ORDER_POINTS_CREDITED: ['code'],
     COMMUNITY_EXPERT_REPLIED: ['author'],
-    ORDER_CONFIRMED: ['points_note', 'refund_note'],
-    ORDER_PACKED: ['points_note', 'refund_note'],
-    ORDER_SHIPPING: ['points_note', 'refund_note'],
-    ORDER_DELIVERED: ['refund_note'],
-    ORDER_CANCELLED: ['points_note'],
-    ORDER_RETURNED: ['points_note'],
+    ORDER_CONFIRMED: ['refund_note'],
+    ORDER_PACKED: ['refund_note'],
+    ORDER_SHIPPING: ['refund_note'],
   };
 
   function sourceFiles(dir: string, out: string[] = []): string[] {
@@ -273,7 +271,8 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
         if (ts.isCallExpression(n)) {
           const c = n.expression;
           const name = ts.isPropertyAccessExpression(c) ? c.name.text : ts.isIdentifier(c) ? c.text : null;
-          const at = name ? NOTIFY_CALLS[name] : undefined;
+          // `notifySafe` có hai dạng: hàm tự do notifySafe(n, user, MÃ, data) (mã ở vị trí 2) và phương thức NotificationsService.notifySafe(user, MÃ, data) (mã ở vị trí 1).
+          const at = name === 'notifySafe' && ts.isPropertyAccessExpression(c) ? 1 : name ? NOTIFY_CALLS[name] : undefined;
           const fixed = name ? FIXED_CODE_CALLS[name] : undefined;
           if (at !== undefined && n.arguments.length > at + 1) record(n.arguments[at], n.arguments[at + 1], n);
           else if (fixed && n.arguments.length > fixed.dataAt) {

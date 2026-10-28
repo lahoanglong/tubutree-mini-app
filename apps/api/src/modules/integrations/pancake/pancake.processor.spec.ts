@@ -78,7 +78,8 @@ function setup(
     $executeRaw: jest.fn().mockResolvedValue(1),
     $transaction,
   } as unknown as PrismaService;
-  const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+  const notify = jest.fn().mockResolvedValue(undefined);
+  const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
   const loyalty = {
     creditOrderPoints: jest.fn().mockResolvedValue(undefined),
     reverseOrderPoints: jest.fn().mockResolvedValue(undefined),
@@ -172,7 +173,7 @@ describe('PancakeProcessor.onStatusUpdated', () => {
     expect(loyalty.creditOrderPoints).toHaveBeenCalledWith('o1');
     expect(affiliate.lockCommissionsForOrder).toHaveBeenCalledWith('o1');
     expect(affiliate.grantReferralReward).toHaveBeenCalledWith('o1');
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', { order_code: 'TUBU1' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', { order_code: 'TUBU1' }, { dedupeKey: 'order-delivered:TUBU1' }, 'order=TUBU1');
   });
 
   it('trạng thái không đổi → no-op (idempotent, không credit lại)', async () => {
@@ -342,7 +343,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
       where: { id: 'o1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT' },
       data: { paymentStatus: 'PAID', status: 'CONFIRMED', paidAt: expect.any(Date) },
     });
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' }, undefined, 'order=TUBU1');
     expect(analytics.record).toHaveBeenCalledTimes(1);
     expect(analytics.record).toHaveBeenCalledWith(
       expect.anything(),
@@ -398,7 +399,7 @@ describe('PancakeProcessor.onPaymentReconcile', () => {
     expect(statusFlips(orderUpdateMany)).toEqual([
       { where: { id: 'o1', paymentStatus: 'UNPAID', status: 'CONFIRMED' }, data: { paymentStatus: 'PAID', paidAt: expect.any(Date) } },
     ]);
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' }, undefined, 'order=TUBU1');
     expect(analytics.record).toHaveBeenCalledTimes(1);
   });
 

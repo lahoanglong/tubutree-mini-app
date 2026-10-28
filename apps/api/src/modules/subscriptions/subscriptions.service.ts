@@ -705,7 +705,7 @@ export class SubscriptionsService {
       }
       retry = `Lịch vẫn giữ nhưng kỳ này không giao, kỳ kế tiếp ngày ${formatVnDate(nextCycleAt)}.`;
     }
-    if (retry) await this.notifications.notify(sub.userId, 'SUBSCRIPTION_ORDER_FAILED', { reason, retry }).catch(() => undefined);
+    if (retry) await this.notifications.notifySafe(sub.userId, 'SUBSCRIPTION_ORDER_FAILED', { reason, retry });
     await this.analytics.recordBestEffort({
       eventName: 'subscription_changed',
       userId: sub.userId,
@@ -798,6 +798,8 @@ export class SubscriptionsService {
         paymentStatus: paid ? 'PAID' : 'UNPAID',
         paidAt: paid ? new Date() : null,
         shippingAddress: address,
+        // Kho/Pancake đọc chữ này, nên giữ nguyên giá trị lưu. App-core (SUBSCRIPTION_ORDER_NOTE) nhận ra đơn định kỳ bằng đúng chữ này
+        // để hiện nhãn "Đơn định kỳ" thay vì ghi chú tiếng Anh; đổi chữ ở đây thì phải đổi cả bên đó.
         note: 'Đơn đặt định kỳ (Subscribe & Save)',
         source: 'subscription',
         platform: 'system',
@@ -886,22 +888,21 @@ export class SubscriptionsService {
     if (order.status === 'PENDING_PAYMENT') {
       const hours = await this.pendingPaymentTtlHours();
       await this.notifications
-        .notify(userId, 'SUBSCRIPTION_ORDER_AWAITING_PAYMENT', {
+        .notifySafe(userId, 'SUBSCRIPTION_ORDER_AWAITING_PAYMENT', {
           order_code: order.code,
           amount: order.total.toLocaleString('vi-VN'),
           hours: String(hours),
-        })
-        .catch(() => undefined);
+        });
       return;
     }
-    await this.notifications.notify(userId, 'SUBSCRIPTION_ORDER', { order_code: order.code }).catch(() => undefined);
+    await this.notifications.notifySafe(userId, 'SUBSCRIPTION_ORDER', { order_code: order.code });
   }
 
   /** Không sinh đơn được vì lý do không tự hết (SP ngừng bán, địa chỉ hỏng, ví thiếu): tạm dừng + báo khách. */
   private async pauseSubscription(sub: { id: string; userId: string }, reason: string, reasonCode: string): Promise<void> {
     // Chỉ lật gói còn ACTIVE: khách vừa huỷ thì giữ CANCELLED.
     await this.prisma.subscription.updateMany({ where: { id: sub.id, status: 'ACTIVE' }, data: { status: 'PAUSED' } });
-    await this.notifications.notify(sub.userId, 'SUBSCRIPTION_PAUSED', { reason }).catch(() => undefined);
+    await this.notifications.notifySafe(sub.userId, 'SUBSCRIPTION_PAUSED', { reason });
     await this.analytics.recordBestEffort({
       eventName: 'subscription_changed',
       userId: sub.userId,

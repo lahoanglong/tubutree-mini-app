@@ -28,6 +28,7 @@ import { ACTIVE_ORDER_STATUSES, ORDER_STATUS_GROUPS, type OrderStatusGroup } fro
 import { returnPointsTaken } from './return-ledger';
 import { markReversalEffectsDone } from './reversal-effects';
 import { foldVietnamese } from '../catalog/search-text';
+import { isPublicProduct } from '../catalog/public-product';
 import { orderLineReviews, type OrderLineReview } from '../reviews/review-eligibility';
 import { publicProductThumb } from '../../common/public-image';
 
@@ -47,6 +48,8 @@ export interface OrderItemMedia {
   thumbnail: string | null;
   stock: number;
   available: boolean;
+  /** Trang sản phẩm còn mở công khai (đang bán và đã duyệt): false thì nút "Viết đánh giá" / liên kết sản phẩm sẽ dẫn tới 404. */
+  productPublic: boolean;
   currentPrice: number | null;
 }
 export type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
@@ -91,7 +94,7 @@ export type OrderView = Omit<OrderWithItems, 'items' | BuyerHiddenOrderField> & 
   manualHandling: boolean;
 };
 
-const MISSING_MEDIA: OrderItemMedia = { thumbnail: null, stock: 0, available: false, currentPrice: null };
+const MISSING_MEDIA: OrderItemMedia = { thumbnail: null, stock: 0, available: false, productPublic: false, currentPrice: null };
 
 export type RepurchaseAddSource = 'repurchase' | 'reorder_notification';
 export type RepurchaseSkipReason = 'OUT_OF_STOCK' | 'INACTIVE' | 'NOT_APPROVED' | 'EXCEEDS_STOCK';
@@ -350,7 +353,8 @@ export class OrdersService {
       return {
         thumbnail: publicProductThumb(v.product),
         stock: v.stock,
-        available: v.isActive && v.product.isActive && v.product.approvalStatus === 'APPROVED' && v.stock > 0,
+        available: v.isActive && isPublicProduct(v.product) && v.stock > 0,
+        productPublic: isPublicProduct(v.product),
         currentPrice: v.salePrice ?? v.retailPrice,
       };
     };
@@ -487,11 +491,10 @@ export class OrdersService {
     }
     const pointsBack = ((reversed as ReversalResult | null)?.pointsRefunded ?? 0) + standardPointsBack;
     await this.notifications
-      .notify(userId, 'ORDER_CANCELLED', {
+      .notifySafe(userId, 'ORDER_CANCELLED', {
         order_code: code,
         refund_note: refundNote(refund, bank, pointsBack) + receivedRefundNote(receivedBack, !!order.placedForCustomer),
-      })
-      .catch(() => undefined);
+      });
     await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_ORDER_CANCELLED', {
       order_code: code,
       reason: 'Khách huỷ đơn',

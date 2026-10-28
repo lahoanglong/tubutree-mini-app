@@ -1,7 +1,11 @@
+import { Logger } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
+import { captureServerError } from '../../config/sentry';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { ZnsClient } from '../integrations/zns/zns.client';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
+
+jest.mock('../../config/sentry', () => ({ ...jest.requireActual('../../config/sentry'), captureServerError: jest.fn() }));
 
 function makePrisma(over: Record<string, unknown> = {}) {
   // create trả về id khác nhau mỗi lần gọi để test phân biệt được log INAPP vs log ZNS
@@ -306,5 +310,54 @@ describe('NotificationsService.notify — ZNS thử lại riêng khi tin trong a
     await svc.notify('u1', 'C', {}, opts);
     expect(create.mock.calls.map((c) => c[0].data.channel)).toEqual(['INAPP', 'ZNS']);
     expect(sendTemplate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('NotificationsService.notifySafe', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  function build(over: Record<string, unknown> = {}) {
+    const { prisma, create } = makePrisma(over);
+    const svc = new NotificationsService(prisma, { sendTemplate: jest.fn() } as unknown as ZnsClient, makeAnalytics());
+    return { svc, create };
+  }
+
+  it('gửi bình thường → trả true, ghi một log INAPP, không log lỗi, không báo Sentry', async () => {
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    (captureServerError as jest.Mock).mockClear();
+    const { svc, create } = build();
+    await expect(svc.notifySafe('u1', 'ORDER_CONFIRMED', { order_code: 'T1' })).resolves.toBe(true);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(error).not.toHaveBeenCalled();
+    expect(captureServerError).not.toHaveBeenCalled();
+  });
+
+  it('chuyển nguyên opts cho notify (dedupeKey chặn lần hai, vẫn trả true)', async () => {
+    const { svc } = build();
+    const notify = jest.spyOn(svc, 'notify').mockResolvedValue(undefined);
+    await svc.notifySafe('u1', 'ORDER_DELIVERED', { order_code: 'T1' }, { dedupeKey: 'order-delivered:T1' });
+    expect(notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', { order_code: 'T1' }, { dedupeKey: 'order-delivered:T1' });
+  });
+
+  it('notify ném (DB lỗi) → không ném, log error có mã mẫu + userId + ngữ cảnh, báo Sentry, trả false', async () => {
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    (captureServerError as jest.Mock).mockClear();
+    const boom = new Error('connection pool timeout');
+    const { svc } = build({ notificationTemplate: { findUnique: jest.fn().mockRejectedValue(boom) } });
+    await expect(svc.notifySafe('u1', 'REFUND_COMPLETED', { order_code: 'T1' }, undefined, 'order=T1')).resolves.toBe(false);
+    expect(error).toHaveBeenCalledTimes(1);
+    const line = String(error.mock.calls[0]![0]);
+    expect(line).toContain('REFUND_COMPLETED');
+    expect(line).toContain('u1');
+    expect(line).toContain('order=T1');
+    expect(line).toContain('connection pool timeout');
+    expect(captureServerError).toHaveBeenCalledWith(boom);
+  });
+
+  it('lỗi không phải Error vẫn không ném', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    const { svc } = build();
+    jest.spyOn(svc, 'notify').mockRejectedValue('chuỗi lạ');
+    await expect(svc.notifySafe('u1', 'X', {})).resolves.toBe(false);
   });
 });

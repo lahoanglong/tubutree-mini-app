@@ -74,11 +74,10 @@ export class GameReminderService {
     })) {
       for (const p of batch) {
         await this.notifications
-          .notify(p.userId, 'GAME_CHECKIN_REMINDER', {
+          .notifySafe(p.userId, 'GAME_CHECKIN_REMINDER', {
             streak: String(p.streakDays ?? 0),
             freezes: String(p.streakFreezes ?? 0),
-          })
-          .catch(() => undefined);
+          });
         sent++;
       }
     }
@@ -135,7 +134,7 @@ export class GameReminderService {
     })) {
       for (const p of batch) {
         if (recentlyReminded.has(p.userId)) continue;
-        await this.notifications.notify(p.userId, 'GAME_TREE_THIRSTY', {}).catch(() => undefined);
+        await this.notifications.notifySafe(p.userId, 'GAME_TREE_THIRSTY', {});
         sent++;
       }
     }

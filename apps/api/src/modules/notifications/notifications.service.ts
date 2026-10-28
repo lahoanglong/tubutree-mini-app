@@ -12,6 +12,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { startOfNextVnMonth, startOfVnMonth, VN_OFFSET_MS } from '../../common/vn-time';
 import { isAllowedByPrefs, type NotificationPrefs } from './notification-categories';
 import { MARKETING_TEMPLATE_CODES } from './notification-templates-admin.service';
+import { captureServerError } from '../../config/sentry';
 
 /** Nội dung dùng khi template chưa được seed — tuyệt đối không in mã code ra cho khách. */
 const MISSING_TEMPLATE_BODY = 'Tubu Tree có cập nhật mới cho bạn. Mở mục liên quan trong app để xem chi tiết nhé 🌿';
@@ -167,11 +168,38 @@ export class NotificationsService {
     }
   }
 
+  /**
+   * Dùng ở nơi tin là việc phụ của một thao tác đã xong (đơn đã xác nhận, đã hoàn tiền...): lỗi gửi không được làm hỏng thao tác
+   * đó, nhưng cũng không được mất dấu — ghi log error (mã tin, khách, ngữ cảnh) và báo Sentry. Trả false khi lỗi để nơi gọi
+   * biết mà nhả phần việc đã nhận (nếu có). `context` là nhãn ngắn kiểu `order=<mã>`, không đưa dữ liệu cá nhân vào.
+   */
+  async notifySafe(
+    userId: string,
+    templateCode: string,
+    data: Record<string, string>,
+    opts?: { dedupeKey?: string; dedupeWithinMs?: number; znsTemplateId?: string; retryZns?: boolean },
+    context?: string,
+  ): Promise<boolean> {
+    try {
+      await this.notify(userId, templateCode, data, opts);
+      return true;
+    } catch (err) {
+      this.logger.error(
+        `Gửi tin ${templateCode} cho ${userId}${context ? ` (${context})` : ''} lỗi: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      captureServerError(err);
+      return false;
+    }
+  }
+
   private dedupeWhere(userId: string, dedupeKey: string, withinMs: number | null, channel: 'INAPP' | 'ZNS' = 'INAPP') {
     return {
       userId,
       channel,
       payload: { path: ['dedupeKey'], equals: dedupeKey },
+      // Log ZNS đã FAILED (không xếp được hàng đợi, Zalo từ chối hết lượt) không được chặn lượt gửi lại: chỉ log đang chờ, đang thử lại
+      // hay đã gửi mới tính là "đã gửi ZNS cho sự kiện này".
+      ...(channel === 'ZNS' ? { status: { in: ['PENDING', 'RETRYING', 'SENT'] } } : {}),
       ...(withinMs != null ? { sentAt: { gte: new Date(Date.now() - withinMs) } } : {}),
     };
   }
@@ -238,7 +266,17 @@ export class NotificationsService {
     } catch (err) {
       const reason = `Không xếp được hàng đợi gửi ZNS: ${err instanceof Error ? err.message : String(err)}`;
       this.logger.error(`${reason} (log ${log.id})`);
-      await this.prisma.notificationLog.update({ where: { id: log.id }, data: { status: 'FAILED', error: reason } });
+      await this.prisma.notificationLog.update({
+        where: { id: log.id },
+        data: {
+          status: 'FAILED',
+          error: reason,
+          // Nhả khoá để lượt gửi lại sau (retryZns) tạo log mới thay vì coi là đã gửi.
+          ...(dedupeKey ? { payload: { data, dedupeKey: `${dedupeKey}:failed:${log.id}` } } : {}),
+        },
+      });
+      // Chỉ nơi gọi dùng retryZns (đã tự nhận phần việc) mới cần biết để nhả phần việc của nó; tin thường thì lỗi này không ném ra ngoài.
+      if (dedupeKey) throw err;
     }
   }
 

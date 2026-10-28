@@ -45,7 +45,7 @@ function setup(opts: { recordedAmount?: number | null } = {}) {
     $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
   };
   const notify = jest.fn().mockResolvedValue(undefined);
-  const ctx = { prisma, notifications: { notify }, logger: { warn: jest.fn(), log: jest.fn() } };
+  const ctx = { prisma, notifications: { notify, notifySafe: notify }, logger: { warn: jest.fn(), log: jest.fn() } };
   const createdRow = () => tx.orderCustomerRefund.createMany.mock.calls[0]![0].data[0] as Record<string, unknown>;
   const notifiedTo = (userId: string) => notify.mock.calls.filter(([id]) => id === userId).map(([, code]) => code as string);
   const adminMessage = () => (notify.mock.calls.find(([id, code]) => id === 'adm1' && code === 'OPS_REFUND_ALERT')![2] as { message: string }).message;
