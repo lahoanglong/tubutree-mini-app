@@ -22,7 +22,9 @@ const mocks = vi.hoisted(() => ({
   calls: [] as string[],
   notReady: new Set<string>(),
   meName: 'Nguyễn An' as string | null,
+  search: '',
 }));
+vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(mocks.search) }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => !mocks.notReady.has(p) }));
 vi.mock('@/lib/core-http', () => ({
@@ -47,14 +49,14 @@ import { ApiError } from '@/lib/client-api';
 const defaults = (): Record<string, () => unknown> => ({
   '/me/loyalty': () => ({ tier: { name: 'Hạt Giống' }, pointsBalance: 1800, pointsConvertedBalance: 0 }),
   '/me/coupons': () => [{ id: 'c1' }, { id: 'c2' }],
-  '/me/notifications': () => [{ id: 'n1', status: 'SENT' }, { id: 'n2', status: 'READ' }, { id: 'n3', status: 'FAILED' }],
+  '/me/notifications/unread-count': () => ({ count: 2 }),
   '/config/public': () => ({ aiAdvisorEnabled: false, loyalty: { marketplaceClaimEnabled: false } }),
   '/brand/owner/me': () => {
     throw new ApiError('Không tìm thấy', 404);
   },
   '/dealer/me': () => ({ status: 'NONE', isDealer: false }),
   '/auth/me': () => ({ id: 'u1' }),
-  '/orders': () => ({ data: [], meta: { page: 1, limit: 1, total: 0 } }),
+  '/orders/status-counts': () => ({ pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0 }),
   '/me/subscriptions': () => [],
 });
 
@@ -77,6 +79,7 @@ beforeEach(() => {
   mocks.calls = [];
   mocks.notReady = new Set();
   mocks.meName = 'Nguyễn An';
+  mocks.search = '';
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -232,6 +235,12 @@ describe('hub /tai-khoan — menu theo nhóm', () => {
     expect(row.getAttribute('aria-label')).toContain('2 chưa đọc');
   });
 
+  it('đếm tin chưa đọc bằng một lời gọi unread-count, không tải danh sách tin', async () => {
+    await mount();
+    expect(mocks.calls.filter((p) => p === '/me/notifications/unread-count')).toHaveLength(1);
+    expect(mocks.calls).not.toContain('/me/notifications');
+  });
+
   it('mọi mục menu cao >= 44px và có tên truy cập', async () => {
     const c = await mount();
     expect(smallTouchTargets(c)).toEqual([]);
@@ -254,13 +263,13 @@ describe('hub /tai-khoan — mục theo vai trò và cờ', () => {
     const c = await mount();
     expect(link(c, '/nhan-vien')).not.toBeNull();
     expect(link(c, '/nhan-vien/bang-luong')).not.toBeNull();
-    expect(link(c, '/admin')).toBeNull();
+    expect(link(c, '/admin?tab=staffRoster')).toBeNull();
   });
 
   it('ADMIN thấy thêm Quản trị', async () => {
     mocks.auth.user = { ...mocks.auth.user, role: 'ADMIN' };
     const c = await mount();
-    expect(link(c, '/admin')).not.toBeNull();
+    expect(link(c, '/admin?tab=staffRoster')).not.toBeNull();
     expect(link(c, '/nhan-vien')).not.toBeNull();
   });
 
@@ -409,12 +418,18 @@ describe('hub /tai-khoan — đăng xuất và trạng thái phiên', () => {
 
 describe('hub /tai-khoan — hàng đơn, chat ở đầu trang, avatar chữ cái đầu (R-33, R-34, R-110)', () => {
   it('số đơn là chấm ở góc biểu tượng, chỉ hiện khi lớn hơn 0; không còn dấu "·"', async () => {
-    mocks.routes['/orders'] = () => ({ data: [], meta: { page: 1, limit: 1, total: 3 } });
+    mocks.routes['/orders/status-counts'] = () => ({ pending_payment: 3, processing: 3, shipping: 3, delivered: 3, closed: 3 });
     mocks.routes['/me/subscriptions'] = () => [{ status: 'ACTIVE' }];
     const c = await mount();
     const row = c.querySelector('section[aria-label="Đơn của tôi"]')!;
     expect(Array.from(row.querySelectorAll('[data-testid="order-count-badge"]')).map((b) => b.textContent)).toEqual(['3', '3', '3', '1']);
     expect(row.textContent).not.toContain('·');
+  });
+
+  it('một lời gọi đếm cho cả ba ô đơn, không còn mỗi ô một lời gọi danh sách (E-91)', async () => {
+    await mount();
+    expect(mocks.calls.filter((p) => p === '/orders/status-counts')).toHaveLength(1);
+    expect(mocks.calls).not.toContain('/orders');
   });
 
   it('không có đơn: không chấm số', async () => {
@@ -423,12 +438,12 @@ describe('hub /tai-khoan — hàng đơn, chat ở đầu trang, avatar chữ c�
   });
 
   it('đếm đơn lỗi: có dòng báo và nút Thử lại tải lại số đơn', async () => {
-    mocks.routes['/orders'] = () => {
+    mocks.routes['/orders/status-counts'] = () => {
       throw new Error('boom');
     };
     const c = await mount();
     expect(c.textContent).toContain('Không tải được số đơn.');
-    mocks.routes['/orders'] = () => ({ data: [], meta: { page: 1, limit: 1, total: 2 } });
+    mocks.routes['/orders/status-counts'] = () => ({ pending_payment: 2, processing: 2, shipping: 2, delivered: 2, closed: 2 });
     click(byText(c, 'button', 'Thử lại'));
     await flush(8);
     expect(c.textContent).not.toContain('Không tải được số đơn.');
@@ -456,5 +471,66 @@ describe('hub /tai-khoan — hàng đơn, chat ở đầu trang, avatar chữ c�
     expect(link(await mount(), '/hoc-vien')).toBeNull();
     mocks.auth.user = { ...mocks.auth.user, role: 'AFFILIATE' };
     expect(link(await mount(), '/hoc-vien')).not.toBeNull();
+  });
+});
+
+describe('hub /tai-khoan — lối vào khối mã giới thiệu (E-21)', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('?section=referral cuộn tới khối mã giới thiệu khi dữ liệu mời bạn đã về', async () => {
+    mocks.search = 'section=referral';
+    mocks.routes['/me/referral'] = () => ({ referralCode: 'AN1', successCount: 0, earnedPoints: 0 });
+    const c = await mount();
+    expect(c.querySelector('section#referral')).not.toBeNull();
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect((Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mock.contexts[0]).toBe(c.querySelector('section#referral'));
+  });
+
+  it('không có ?section=referral thì không cuộn', async () => {
+    mocks.routes['/me/referral'] = () => ({ referralCode: 'AN1', successCount: 0, earnedPoints: 0 });
+    await mount();
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+});
+
+describe('hub /tai-khoan — lối vào quầy Nhận hàng tại điểm (E-39)', () => {
+  const POINTS = [{ id: 'p1', name: 'Kho Tubu HCMC', kind: 'WAREHOUSE' }, { id: 'p2', name: 'Đại lý An Phát', kind: 'PARTNER' }];
+  const deskCalls = () => mocks.calls.filter((p) => p === '/waste/desk/points');
+
+  it('nhân viên có điểm: hiện hàng ở nhóm Công việc, ghi tên điểm, trỏ /doi-rac/quay', async () => {
+    mocks.auth.user = { ...mocks.auth.user, role: 'STAFF' };
+    mocks.routes['/waste/desk/points'] = () => POINTS;
+    const c = await mount();
+    const row = link(c, '/doi-rac/quay')!;
+    expect(row.textContent).toContain('Nhận hàng tại điểm');
+    expect(row.textContent).toContain('Kho Tubu HCMC, Đại lý An Phát');
+  });
+
+  it('nhân viên không có điểm nào: không có hàng', async () => {
+    mocks.auth.user = { ...mocks.auth.user, role: 'STAFF' };
+    mocks.routes['/waste/desk/points'] = () => [];
+    const c = await mount();
+    expect(deskCalls()).toHaveLength(1);
+    expect(link(c, '/doi-rac/quay')).toBeNull();
+  });
+
+  it('đại lý có điểm đối tác: hiện hàng khi chương trình bật; chương trình tắt thì không hỏi điểm', async () => {
+    mocks.auth.user = { ...mocks.auth.user, role: 'DEALER' };
+    mocks.routes['/waste/desk/points'] = () => [POINTS[1]];
+    mocks.routes['/config/public'] = () => ({ waste: { enabled: true } });
+    expect(link(await mount(), '/doi-rac/quay')).not.toBeNull();
+    mocks.calls = [];
+    mocks.routes['/config/public'] = () => ({ waste: { enabled: false } });
+    expect(link(await mount(), '/doi-rac/quay')).toBeNull();
+    expect(deskCalls()).toHaveLength(0);
+  });
+
+  it('khách thường không phát sinh lời gọi điểm nhận hàng', async () => {
+    mocks.routes['/waste/desk/points'] = () => POINTS;
+    const c = await mount();
+    expect(deskCalls()).toHaveLength(0);
+    expect(link(c, '/doi-rac/quay')).toBeNull();
   });
 });

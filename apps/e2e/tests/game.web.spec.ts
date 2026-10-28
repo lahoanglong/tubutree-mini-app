@@ -1,4 +1,7 @@
+import { GAME_SOCIAL_ON_WEB } from '../../../packages/app-core/src/features';
 import { expect, reply, replyEmptyBody, test, type MockApi } from './support/mock-api';
+
+const SOCIAL_OFF = 'Tab Cộng đồng của web đang tắt (GAME_SOCIAL_ON_WEB), bật cờ thì ca này chạy lại';
 
 /**
  * Web khách: Vườn Xanh (/vuon-xanh), tab Hôm nay. Mọi lời gọi /api/** đi qua mock (fixture `api`).
@@ -119,13 +122,17 @@ test.describe('Web khách: Vườn Xanh', () => {
     const before = opened.length;
     await page.getByRole('tab', { name: 'Vườn' }).click();
     await page.waitForLoadState('networkidle');
-    await page.getByRole('tab', { name: 'Cộng đồng' }).click();
-    await expect(page).toHaveURL(/tab=community/);
+    if (GAME_SOCIAL_ON_WEB) {
+      await page.getByRole('tab', { name: 'Cộng đồng' }).click();
+      await expect(page).toHaveURL(/tab=community/);
+    } else {
+      await expect(page.getByRole('tab', { name: 'Cộng đồng' })).toHaveCount(0);
+    }
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(800);
     const added = api.calls.slice(before).map((c) => `${c.method} ${c.path}`);
     console.log(`WEB_GAME_CALLS_TABS +${added.length}\n${added.join('\n')}`);
-    expect(added.filter((c) => tabOnly.test(c)).length).toBeGreaterThanOrEqual(7);
+    expect(added.filter((c) => tabOnly.test(c)).length).toBeGreaterThanOrEqual(GAME_SOCIAL_ON_WEB ? 7 : 4);
   });
 
   test('điểm danh: bấm đúp chỉ gửi một POST, báo kết quả và nút chuyển "Đã điểm danh"', async ({ page, api }) => {
@@ -212,11 +219,13 @@ test.describe('Web khách: Vườn Xanh', () => {
   test('không có mùa nào chạy: thân rỗng từ server vẫn hiện màn "chưa có mùa"', async ({ page, api }) => {
     mockGame(api, { checkedIn: false });
     api.get('/game/season', () => replyEmptyBody());
-    await page.goto('/vuon-xanh?tab=community');
+    // Cộng đồng tắt thì khối Mùa nằm cuối tab Vườn, như Mini App.
+    await page.goto(`/vuon-xanh?tab=${GAME_SOCIAL_ON_WEB ? 'community' : 'garden'}`);
     await expect(page.getByTestId('season-empty')).toBeVisible();
   });
 
   test('API bảng xếp hạng lỗi: tab Cộng đồng báo lỗi có nút Thử lại', async ({ page, api }) => {
+    test.skip(!GAME_SOCIAL_ON_WEB, SOCIAL_OFF);
     mockGame(api, { checkedIn: false });
     let failing = true;
     api.get('/game/leaderboard', () => (failing ? reply(500, { message: 'lỗi' }) : [{ rank: 1, nickname: 'Nhất', streak: 30, treesPlanted: 9 }]));
@@ -228,6 +237,7 @@ test.describe('Web khách: Vườn Xanh', () => {
   });
 
   test('tab Cộng đồng: xếp hạng, tặng nước gọi đúng bạn một lần, bạn đã tặng hôm nay bị khoá', async ({ page, api }) => {
+    test.skip(!GAME_SOCIAL_ON_WEB, SOCIAL_OFF);
     mockGame(api, { checkedIn: false });
     await page.goto('/vuon-xanh?tab=community');
     await expect(page.getByRole('heading', { name: 'Chuỗi điểm danh dài nhất' })).toBeVisible();

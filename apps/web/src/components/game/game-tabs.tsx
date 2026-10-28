@@ -1,12 +1,16 @@
 import type { ReactNode } from 'react';
+import { GAME_SOCIAL_ON_WEB } from '@tubutree/app-core/features';
 
-export const GAME_TABS = [
+const ALL_GAME_TABS = [
   { key: 'today', label: 'Hôm nay' },
   { key: 'garden', label: 'Vườn' },
   { key: 'community', label: 'Cộng đồng' },
 ] as const;
 
-export type GameTabKey = (typeof GAME_TABS)[number]['key'];
+export type GameTabKey = (typeof ALL_GAME_TABS)[number]['key'];
+
+/** Tab hiện ra: Cộng đồng chỉ khi `GAME_SOCIAL_ON_WEB` bật (Mini App không có tab này). */
+export const GAME_TABS: readonly (typeof ALL_GAME_TABS)[number][] = ALL_GAME_TABS.filter((t) => t.key !== 'community' || GAME_SOCIAL_ON_WEB);
 
 export const GAME_TAB_KEYS: readonly string[] = GAME_TABS.map((t) => t.key);
 
@@ -18,7 +22,7 @@ export const GAME_TAB_KEYS: readonly string[] = GAME_TABS.map((t) => t.key);
  * chừa hố trắng; `columns` xếp thẻ thành hai cột đều không hố (thẻ không bị cắt giữa chừng). Dưới lg luôn là một cột như Mini App.
  */
 export function GameTabPanel({ tab, active, children, layout = 'columns' }: { tab: GameTabKey; active: boolean; children: ReactNode; layout?: 'split' | 'columns' }) {
-  const label = GAME_TABS.find((t) => t.key === tab)?.label;
+  const label = ALL_GAME_TABS.find((t) => t.key === tab)?.label;
   const wide =
     layout === 'split'
       ? 'lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start'

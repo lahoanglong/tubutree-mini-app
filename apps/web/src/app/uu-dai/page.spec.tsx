@@ -126,6 +126,19 @@ describe('/uu-dai — trang Ưu đãi', () => {
     expect(unnamedControls(c)).toEqual([]);
   });
 
+  it('đang trong hạn giữ hạng: dòng giữ hạng, không vẽ thanh tiến độ lên hạng kế', async () => {
+    state.loyalty = { ...(state.loyalty as object), tierGrace: { until: '2026-11-07T00:00:00.000Z', spendingToKeep: 400_000, pointsToKeep: 30_000 } };
+    const c = await mount();
+    const card = region(c, 'Điểm Xanh của bạn')!;
+    expect(card.textContent).toContain('Giữ hạng Mầm Xanh: đơn giao thành công thêm 400.000đ trước 07/11/2026');
+    expect(card.querySelector('[role="progressbar"]')).toBeNull();
+  });
+
+  it('không trong hạn giữ hạng: vẫn có thanh tiến độ lên hạng kế', async () => {
+    const c = await mount();
+    expect(region(c, 'Điểm Xanh của bạn')!.querySelector('[role="progressbar"][aria-label="Tiến độ lên hạng kế"]')).not.toBeNull();
+  });
+
   it('thẻ Điểm Xanh mở trang hạng và lịch sử điểm', async () => {
     const c = await mount();
     await flush(6);

@@ -70,7 +70,7 @@ test.describe('Web khách: tài khoản', () => {
     api.get('/affiliate/me', { isAffiliate: true, canRegister: false, canOpenStorefront: true });
     await page.goto('/tai-khoan');
     await expect(page.getByRole('heading', { name: 'Công việc', level: 2 })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Quản trị nhân sự/ })).toHaveAttribute('href', '/admin');
+    await expect(page.getByRole('link', { name: /Quản trị nhân sự/ })).toHaveAttribute('href', '/admin?tab=staffRoster');
   });
 
   test('sửa hồ sơ: email sai bị chặn, email đúng gửi PATCH /me đúng thân', async ({ page, api }) => {

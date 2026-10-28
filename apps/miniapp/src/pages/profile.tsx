@@ -1,15 +1,19 @@
 import { ctvMenuEntry } from '@tubutree/app-core/storefront-signup';
-import { Page, useNavigate, useSnackbar } from 'zmp-ui';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
+import { useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
-  Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Pencil, Bell, Store, Settings, Info, ChevronRight, Copy, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, BadgeDollarSign, CreditCard, Package, Truck, PackageCheck, Repeat, type LucideIcon,
+  Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Pencil, Bell, Store, Settings, Info, ChevronRight, Copy, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, BadgeDollarSign, CreditCard, Package, Truck, PackageCheck, Recycle, Repeat, type LucideIcon,
 } from 'lucide-react';
 import { canSeeAcademy, orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { CASHBACK_ENABLED, SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
+import { ORDER_STATUS_COUNTS_KEY } from '@tubutree/app-core/api/order-counts';
+import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
 import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
+import { DESK_ENTRY_LABEL, PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
 import { useAuthStore } from '../store/auth';
-import { getCoupons, getLoyalty, getNotifications, getReferral, getWallet } from '../services/account-api';
+import { getCoupons, getLoyalty, getReferral, getWallet } from '../services/account-api';
 import { ProfileAvatar } from '../components/account/profile-avatar';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -25,11 +29,12 @@ import { SR_ONLY } from '../components/ui/sr-only';
 import { Heading, Text } from '../components/ui/text';
 import { GuestLinkCard } from '../components/home/guest-link-card';
 import { useShareWithFallback } from '../components/share-sheet';
-import { ORDERS_TABS } from '../components/orders/orders-tabs';
 import { getOwnedBrand, getOwnsBrand } from '../services/brand-owner-api';
 import { isNotFoundError } from '../services/api';
 import { getDealerMe } from '../services/dealer-api';
-import { fetchOrders } from '../services/shop-api';
+import { getDeskPoints, WASTE_QUERY_KEYS } from '../services/waste-api';
+import { fetchOrderStatusCounts } from '../services/order-counts-api';
+import { coreHttp } from '../services/core-http';
 import { getSubscriptions } from '../services/subscriptions-api';
 import { getAffiliateMe } from '../services/affiliate-api';
 import { supportChatSummaryQueryOptions } from '../services/support-chat-api';
@@ -87,34 +92,29 @@ const ORDER_ROW_ICON: Record<string, LucideIcon> = {
   subscriptions: Repeat,
 };
 
-const ORDER_ROW_TARGETS = ORDER_STATUS_ROW.filter((r) => r.counted && r.key !== 'subscriptions');
-
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { openSnackbar } = useSnackbar();
   const shareWithFallback = useShareWithFallback();
   const { user, status } = useAuthStore();
   const phase = useAuthPhase();
   const authed = status === 'authenticated';
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
-  const notifQ = useQuery({ queryKey: ['notifications'], queryFn: getNotifications, enabled: authed });
-  const unreadCount = notifQ.data?.filter((n) => n.status !== 'READ').length ?? 0;
+  const unreadCount = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: authed }).data?.count ?? 0;
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const referralQ = useQuery({ queryKey: ['referral'], queryFn: getReferral, enabled: authed });
+  const referralRef = useRef<HTMLElement>(null);
+  const wantsReferral = new URLSearchParams(location.search).get('section') === PROFILE_REFERRAL_SECTION;
+  const referralReady = referralQ.isSuccess || referralQ.isError;
+  useEffect(() => {
+    if (wantsReferral && referralReady) referralRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [wantsReferral, referralReady]);
   // Mini App tạm không bán giao định kỳ nên hàng đơn bỏ ô Định kỳ khi cờ tắt; web vẫn có ô này.
   const orderRow = SUBSCRIPTIONS_IN_MINIAPP ? ORDER_STATUS_ROW : ORDER_STATUS_ROW.filter((r) => r.key !== 'subscriptions');
   const subsQ = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions, enabled: authed && SUBSCRIPTIONS_IN_MINIAPP });
-  const orderCounts = useQueries({
-    queries: ORDER_ROW_TARGETS.map((r) => {
-      const filter = ORDERS_TABS.find((t) => t.key === r.key)?.filter ?? {};
-      return {
-        queryKey: ['orders', 'count', r.key],
-        queryFn: () => fetchOrders(filter, 1, 1).then((res) => res.meta.total),
-        enabled: authed,
-      };
-    }),
-  });
+  const orderCountsQ = useQuery({ queryKey: ORDER_STATUS_COUNTS_KEY, queryFn: fetchOrderStatusCounts, enabled: authed });
 
   const ownsBrandQ = useQuery({ queryKey: ['auth-me', 'owns-brand'], queryFn: getOwnsBrand, enabled: authed, retry: false });
   const ownedBrandQ = useQuery({
@@ -141,6 +141,11 @@ export default function ProfilePage() {
   const chatEnabled = cfg.chat?.enabled === true;
   const chatSummaryQ = useQuery({ ...supportChatSummaryQueryOptions(), enabled: authed && chatEnabled });
   const chatUnread = chatEnabled && (chatSummaryQ.data?.unreadCount ?? 0) > 0;
+  // Chỉ hỏi vai thường vận hành quầy (nhân viên/admin kho, đại lý có điểm đối tác) để khách thường không bị gọi thêm API. Nhân viên điểm đối tác
+  // mang vai CUSTOMER (admin thêm qua màn điểm) chưa có hàng này ở đây; họ vào quầy bằng màn Đổi rác. Cần API trả cờ nhẹ mới phủ được nhóm đó.
+  const isStaffOrAdmin = user?.role === 'STAFF' || user?.role === 'ADMIN';
+  const mayHaveDesk = isStaffOrAdmin || (user?.role === 'DEALER' && cfg.waste.enabled);
+  const deskQ = useQuery({ queryKey: WASTE_QUERY_KEYS.desk, queryFn: getDeskPoints, enabled: authed && mayHaveDesk, staleTime: 5 * 60_000, retry: false });
   const ownedBrand = ownsBrandQ.data === false ? null : ownedBrandQ.data;
   const ctvEntry = ctvMenuEntry(user?.role, ctvAccessQ.data);
 
@@ -163,11 +168,13 @@ export default function ProfilePage() {
       ? { ...s, items: [...s.items, { Icon: Store, label: 'Quản lý nhãn hàng', to: '/brand-owner', hint: ownedBrand.name }] }
       : s,
   );
-  const isStaffOrAdmin = user?.role === 'STAFF' || user?.role === 'ADMIN';
   const workItems: MenuItem[] = [];
   if (isStaffOrAdmin) {
     workItems.push({ Icon: CalendarClock, label: 'Ca làm & chấm công', to: '/staff', hint: 'Đăng ký ca, chấm công' });
     workItems.push({ Icon: Wallet, label: 'Lương của tôi', to: '/my-payroll', hint: 'Xem lương & thông tin nhận' });
+  }
+  if (deskQ.data && deskQ.data.length > 0) {
+    workItems.push({ Icon: Recycle, label: DESK_ENTRY_LABEL, to: '/recycle/desk', hint: deskQ.data.map((p) => p.name).join(', ') });
   }
   if (user?.role === 'ADMIN') {
     workItems.push({ Icon: ShieldCheck, label: 'Quản trị nhân sự', to: '/admin', hint: 'Cấp quyền, duyệt ca, lương' });
@@ -227,17 +234,16 @@ export default function ProfilePage() {
     );
   };
 
-  const countsFailed = orderCounts.some((q) => q.isError) || (SUBSCRIPTIONS_IN_MINIAPP && subsQ.isError && !subsQ.data);
+  const countsFailed = orderCountsQ.isError || (SUBSCRIPTIONS_IN_MINIAPP && subsQ.isError && !subsQ.data);
   const reloadCounts = () => {
-    orderCounts.forEach((q) => void q.refetch());
+    void orderCountsQ.refetch();
     // refetch() vẫn gọi API khi query đang tắt (enabled: false), nên phải tự kiểm cờ.
     if (SUBSCRIPTIONS_IN_MINIAPP) void subsQ.refetch();
   };
 
   const countFor = (key: string): number | null => {
     if (key === 'subscriptions') return subsQ.data ? subsQ.data.filter((x) => x.status === 'ACTIVE' || x.status === 'PAUSED').length : null;
-    const i = ORDER_ROW_TARGETS.findIndex((r) => r.key === key);
-    return i >= 0 ? (orderCounts[i]?.data ?? null) : null;
+    return orderCountsQ.data?.[key as keyof NonNullable<typeof orderCountsQ.data>] ?? null;
   };
 
   return (
@@ -402,7 +408,7 @@ export default function ProfilePage() {
       </section>
 
       {code && (
-        <section aria-label={homeCopy.profile.referralTitle} style={{ padding: '12px 16px 0' }}>
+        <section id={PROFILE_REFERRAL_SECTION} ref={referralRef} aria-label={homeCopy.profile.referralTitle} style={{ padding: '12px 16px 0' }}>
           <Card padding={12}>
             <Heading variant="title-sm" as="h2">
               {homeCopy.profile.referralTitle}
