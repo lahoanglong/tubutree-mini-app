@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   me: { isAffiliate: true, canRegister: true, canOpenStorefront: true } as unknown,
   fail: new Set<string>(),
   hold: new Set<string>(),
+  gates: new Map<string, Promise<void>>(),
   calls: [] as Call[],
   share: vi.fn(),
   copied: [] as string[],
@@ -35,6 +36,8 @@ vi.mock('@/lib/core-http', () => {
   const run = async (method: string, path: string, body?: unknown, opts?: { query?: unknown }) => {
     state.calls.push({ method, path, body, query: opts?.query });
     if (state.hold.has(`${method} ${path}`)) return new Promise(() => {});
+    const gate = state.gates.get(`${method} ${path}`);
+    if (gate) await gate;
     if (state.fail.has(`${method} ${path}`)) throw httpError(500, 'mất mạng');
     if (method === 'get') {
       if (path === '/storefront/me') {
@@ -136,6 +139,7 @@ beforeEach(() => {
   state.kit = { productName: 'Trà xanh', images: [], captions: ['Xem /product/tra-xanh?ref=A nhé'], usps: ['Thơm'], faqs: [{ q: 'Dùng sao?', a: 'Pha nước nóng' }], videoUrls: ['https://v.example/1'], shareLink: '/product/tra-xanh?ref=A' };
   state.fail = new Set();
   state.hold = new Set();
+  state.gates = new Map();
   state.calls = [];
   state.share = vi.fn(async () => 'shared');
   state.copied = [];
@@ -382,6 +386,17 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
     await flush();
     expect(text()).toContain('Khách không thấy: Sản phẩm chưa được duyệt');
     expect(text().match(/Khách không thấy/g)).toHaveLength(1);
+  });
+
+  it('món đã ghim có nhãn "Đã ghim" ngay trên hàng (ghim nằm trong menu "⋯"); món thường không có', async () => {
+    state.sf = storefront({
+      collections: [{ id: 'c1', title: 'A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [item({ id: 'i1', isPinned: true }), item({ id: 'i2', product: { ...PRODUCT, name: 'Xà phòng' } })] }],
+    });
+    mount();
+    await flush();
+    expect(text().match(/Đã ghim/g)).toHaveLength(1);
+    const badge = Array.from(document.querySelectorAll('span')).find((s) => s.textContent === 'Đã ghim')!;
+    expect(badge.closest('.border-b')!.textContent).toContain('Trà xanh');
   });
 
   it('nhãn "Khách không thấy" được xuống dòng, không tràn khung 375px', async () => {
@@ -1132,6 +1147,32 @@ describe('sắp xếp bằng nút lên/xuống', () => {
     await flush();
     expect(writes().map((c) => [c.path, c.body])).toEqual([['/storefront/me/collections/c1/items/reorder', { orderedIds: ['i2', 'i1', 'i3'] }]]);
     expect(names()).toEqual(['Món hai', 'Món một', 'Món ba']);
+  });
+
+  it('bấm liên tiếp hai lần: yêu cầu thứ hai chỉ gửi khi yêu cầu thứ nhất xong, đã gồm bước đầu, và chỉ tải lại gian hàng một lần ở cuối', async () => {
+    setThree();
+    let release!: () => void;
+    state.gates.set('post /storefront/me/collections/c1/items/reorder', new Promise<void>((resolve) => { release = resolve; }));
+    mount();
+    await flush();
+    click(arrows('Đưa lên')[2]!);
+    await flush();
+    click(arrows('Đưa lên')[3]!);
+    await flush();
+    expect(names()).toEqual(['Món hai', 'Món ba', 'Món một']);
+    expect(writes().map((c) => c.body)).toEqual([{ orderedIds: ['i2', 'i1', 'i3'] }]);
+    state.sf = storefront({
+      collections: [
+        col('c1', 'Bộ một', [food('i2', 'Món hai'), food('i3', 'Món ba'), food('i1', 'Món một')]),
+        col('c2', 'Bộ hai', []),
+      ],
+    });
+    release();
+    await flush();
+    await flush();
+    expect(writes().map((c) => c.body)).toEqual([{ orderedIds: ['i2', 'i1', 'i3'] }, { orderedIds: ['i2', 'i3', 'i1'] }]);
+    expect(calls('get', '/storefront/me')).toHaveLength(2);
+    expect(names()).toEqual(['Món hai', 'Món ba', 'Món một']);
   });
 
   it('máy chủ từ chối: danh sách về thứ tự cũ và có báo lỗi', async () => {

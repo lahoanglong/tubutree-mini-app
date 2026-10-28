@@ -235,6 +235,18 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
     expect(screen.queryByRole('button', { name: 'Xoá khỏi bộ sưu tập' })).toBeNull();
   });
 
+  it('món đã ghim có nhãn "Đã ghim" ngay trên hàng (ghim nằm trong menu "⋯" nên không còn dấu nào khác); món thường không có', async () => {
+    mocks.getMyStorefront.mockResolvedValue(twoCollections([
+      item({ id: 'i1', isPinned: true, product: { ...product, id: 'p1', name: 'Món một' } }),
+      item({ id: 'i2', productId: 'p2', product: { ...product, id: 'p2', name: 'Món hai' } }),
+    ]));
+    renderPage();
+    await screen.findByText('Món một');
+    expect(screen.getAllByText('Đã ghim')).toHaveLength(1);
+    const row = screen.getByText('Món một').closest('div')!.parentElement!;
+    expect(within(row).getByText('Đã ghim')).toBeInTheDocument();
+  });
+
   it('sản phẩm đã ghim/đã ẩn đổi nhãn mục menu để hoàn tác', async () => {
     mocks.getMyStorefront.mockResolvedValue(
       storefront({ collections: [{ id: 'c1', title: 'A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [item({ isPinned: true, isHidden: true })] }] }),
@@ -752,6 +764,27 @@ describe('Sắp xếp sản phẩm và bộ sưu tập (nút lên/xuống)', () 
     expect(downButtons()[3]).toBeDisabled();
     fireEvent.click(downButtons()[1]!);
     await waitFor(() => expect(mocks.reorderItems).toHaveBeenCalledWith('c1', ['i2', 'i1', 'i3']));
+  });
+
+  it('bấm liên tiếp hai lần: yêu cầu thứ hai chỉ gửi khi yêu cầu thứ nhất xong, đã gồm bước đầu, và chỉ tải lại gian hàng một lần ở cuối', async () => {
+    mocks.getMyStorefront.mockResolvedValue(twoCollections());
+    let finishFirst!: () => void;
+    mocks.reorderItems.mockReturnValueOnce(new Promise((resolve) => { finishFirst = () => resolve({}); }));
+    renderPage();
+    await screen.findByText('Món một');
+    fireEvent.click(upButtons()[2]!);
+    await waitFor(() => expect(mocks.reorderItems).toHaveBeenCalledTimes(1));
+    expect(names()).toEqual(['Món hai', 'Món một', 'Món ba']);
+    fireEvent.click(upButtons()[3]!);
+    await waitFor(() => expect(names()).toEqual(['Món hai', 'Món ba', 'Món một']));
+    expect(mocks.reorderItems).toHaveBeenCalledTimes(1);
+    const [one, two, three] = twoItems();
+    mocks.getMyStorefront.mockResolvedValue(twoCollections([two!, three!, one!]));
+    finishFirst();
+    await waitFor(() => expect(mocks.reorderItems).toHaveBeenCalledTimes(2));
+    expect(mocks.reorderItems.mock.calls.map((c) => c[1])).toEqual([['i2', 'i1', 'i3'], ['i2', 'i3', 'i1']]);
+    await waitFor(() => expect(mocks.getMyStorefront).toHaveBeenCalledTimes(2));
+    expect(names()).toEqual(['Món hai', 'Món ba', 'Món một']);
   });
 
   it('máy chủ từ chối: danh sách về thứ tự cũ, có báo lỗi, không tải lại cả gian hàng', async () => {

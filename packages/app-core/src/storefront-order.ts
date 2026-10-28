@@ -1,6 +1,12 @@
 export type MoveDirection = 'up' | 'down';
 
 /**
+ * Mọi lần đổi thứ tự (bộ sưu tập và món) chạy lần lượt: mỗi yêu cầu mang cả thứ tự đầy đủ, nên hai yêu cầu bay song song
+ * có thể đến máy chủ ngược chiều và làm mất bước sau. `scope` của TanStack Query xếp chúng vào một hàng.
+ */
+export const STOREFRONT_REORDER_MUTATION = { mutationKey: ['storefront-reorder'], scope: { id: 'storefront-reorder' } } as const;
+
+/**
  * Đổi chỗ phần tử `id` với hàng xóm. Trả mảng mới, hoặc null khi không đổi được: đã ở rìa, không có trong danh sách, hay hàng
  * xóm khác nhóm (`sameGroup`). Món ghim của gian hàng luôn nằm trên món thường nên chỉ đổi chỗ trong cùng nhóm mới thấy tác dụng.
  */

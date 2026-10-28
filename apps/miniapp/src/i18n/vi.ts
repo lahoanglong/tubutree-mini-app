@@ -612,6 +612,7 @@ export const vi = {
     moreItemActions: 'Tuỳ chọn sản phẩm',
     moreCollectionActions: 'Tuỳ chọn bộ sưu tập',
     pinItem: 'Ghim lên đầu',
+    pinnedBadge: 'Đã ghim',
     unpinItem: 'Bỏ ghim',
     hideItem: 'Ẩn sản phẩm',
     showItem: 'Hiện sản phẩm',

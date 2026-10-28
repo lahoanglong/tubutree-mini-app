@@ -14,7 +14,7 @@ import {
   getQuests, claimQuest, getStorefrontStats,
   type StorefrontEdit, type PickerProduct, type QuestList,
 } from '../services/storefront-api';
-import { moveInList, withReorderedCollections, withReorderedItems, type MoveDirection } from '@tubutree/app-core/storefront-order';
+import { STOREFRONT_REORDER_MUTATION, moveInList, withReorderedCollections, withReorderedItems, type MoveDirection } from '@tubutree/app-core/storefront-order';
 import { STOREFRONT_REVIEW_PROMISE, shouldStartSignupWizard, storefrontPublishCopy,
   storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
@@ -261,14 +261,19 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       qc.setQueryData(['my-storefront'], ctx?.previous);
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
-    onSuccess: () => void refresh(),
+    // Còn lần đổi chỗ khác đang chờ thì để nó xong rồi mới tải lại, kẻo dữ liệu cũ đè lên thứ tự mới hơn đang hiện.
+    onSuccess: () => {
+      if (qc.isMutating({ mutationKey: STOREFRONT_REORDER_MUTATION.mutationKey }) <= 1) void refresh();
+    },
   };
   const moveColMut = useMutation({
+    ...STOREFRONT_REORDER_MUTATION,
     mutationFn: (v: { ids: string[]; update: (old: StorefrontEdit) => StorefrontEdit }) => reorderCollections(v.ids),
     ...optimisticOrder,
     onMutate: (v) => optimisticOrder.onMutate(v.update),
   });
   const moveItemMut = useMutation({
+    ...STOREFRONT_REORDER_MUTATION,
     mutationFn: (v: { collectionId: string; ids: string[]; update: (old: StorefrontEdit) => StorefrontEdit }) => reorderItems(v.collectionId, v.ids),
     ...optimisticOrder,
     onMutate: (v) => optimisticOrder.onMutate(v.update),
@@ -402,10 +407,15 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <Text variant="body-sm" as="div" tone={it.isHidden || it.hiddenReason ? 'tertiary' : 'primary'}>{name}</Text>
                     <PriceTag value={price} size="sm" />
-                    {it.hiddenReason && (
-                      <Badge tone="warning" size="sm" style={{ marginTop: 2, maxWidth: '100%', whiteSpace: 'normal' }}>
-                        Khách không thấy: {it.hiddenReason}
-                      </Badge>
+                    {(it.isPinned || it.hiddenReason) && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                        {it.isPinned && <Badge tone="brand" size="sm" icon={Pin}>{vi.storefront.pinnedBadge}</Badge>}
+                        {it.hiddenReason && (
+                          <Badge tone="warning" size="sm" style={{ maxWidth: '100%', whiteSpace: 'normal' }}>
+                            Khách không thấy: {it.hiddenReason}
+                          </Badge>
+                        )}
+                      </div>
                     )}
                   </div>
                   <RowIconButton icon={ChevronUp} label={vi.storefront.moveUp} disabled={!moveInList(col.items, it.id, 'up', samePinGroup)} onPress={() => moveItem(col.id, it.id, 'up')} />

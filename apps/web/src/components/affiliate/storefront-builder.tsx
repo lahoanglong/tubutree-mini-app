@@ -15,7 +15,7 @@ import {
   type PickerProduct,
   type StorefrontEdit,
 } from '@tubutree/app-core/api/storefront';
-import { moveInList, withReorderedCollections, withReorderedItems, type MoveDirection } from '@tubutree/app-core/storefront-order';
+import { STOREFRONT_REORDER_MUTATION, moveInList, withReorderedCollections, withReorderedItems, type MoveDirection } from '@tubutree/app-core/storefront-order';
 import { STOREFRONT_REVIEW_PROMISE, storefrontPublishCopy, storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
 import { pickerQuery, storefrontQuestsQuery } from '@tubutree/app-core/queries/storefront';
 import { coreHttp } from '@/lib/core-http';
@@ -218,14 +218,19 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
       qc.setQueryData(['my-storefront'], ctx?.previous);
       fail(e);
     },
-    onSuccess: () => void refresh(),
+    // Còn lần đổi chỗ khác đang chờ thì để nó xong rồi mới tải lại, kẻo dữ liệu cũ đè lên thứ tự mới hơn đang hiện.
+    onSuccess: () => {
+      if (qc.isMutating({ mutationKey: STOREFRONT_REORDER_MUTATION.mutationKey }) <= 1) void refresh();
+    },
   };
   const moveColMut = useMutation({
+    ...STOREFRONT_REORDER_MUTATION,
     mutationFn: (v: { ids: string[]; update: (old: StorefrontEdit) => StorefrontEdit }) => reorderCollections(coreHttp, v.ids),
     ...optimisticOrder,
     onMutate: (v) => optimisticOrder.onMutate(v.update),
   });
   const moveItemMut = useMutation({
+    ...STOREFRONT_REORDER_MUTATION,
     mutationFn: (v: { collectionId: string; ids: string[]; update: (old: StorefrontEdit) => StorefrontEdit }) => reorderItems(coreHttp, v.collectionId, v.ids),
     ...optimisticOrder,
     onMutate: (v) => optimisticOrder.onMutate(v.update),
@@ -362,10 +367,19 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
                         <div className="min-w-0 flex-1">
                           <div className={`text-sm ${it.isHidden || it.hiddenReason ? 'text-stone-500' : 'text-stone-900'}`}>{name}</div>
                           <div className="text-sm font-semibold tabular-nums text-stone-900">{formatVnd(price)}</div>
-                          {it.hiddenReason && (
-                            <Badge tone="warning" size="sm" className="mt-0.5 max-w-full !whitespace-normal">
-                              Khách không thấy: {it.hiddenReason}
-                            </Badge>
+                          {(it.isPinned || it.hiddenReason) && (
+                            <div className="mt-0.5 flex flex-wrap gap-1">
+                              {it.isPinned && (
+                                <Badge tone="brand" size="sm" icon={Pin}>
+                                  Đã ghim
+                                </Badge>
+                              )}
+                              {it.hiddenReason && (
+                                <Badge tone="warning" size="sm" className="max-w-full !whitespace-normal">
+                                  Khách không thấy: {it.hiddenReason}
+                                </Badge>
+                              )}
+                            </div>
                           )}
                         </div>
                         <IconButton icon={ChevronUp} label="Đưa lên" disabled={!moveInList(col.items, it.id, 'up', samePinGroup)} onPress={() => moveItem(col.id, it.id, 'up')} />
