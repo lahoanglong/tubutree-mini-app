@@ -241,7 +241,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
           />
           <div className="min-w-0">
           {filterHeading && (
-            <h2 className="mb-1 text-xl font-semibold text-[var(--color-text-primary)] [overflow-wrap:anywhere] md:hidden">{filterHeading}</h2>
+            <h2 className="mb-1 font-display text-2xl font-semibold text-stone-900 [overflow-wrap:anywhere] md:hidden">{filterHeading}</h2>
           )}
           {activeCategory && (
             <div role="group" aria-label={browseText.categoryChips} className="scroll-x -mx-4 mb-1 flex gap-2 px-4 py-1 md:hidden">

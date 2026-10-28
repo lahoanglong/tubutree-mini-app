@@ -413,5 +413,5 @@ export function writeFlashHint(storage: MemoryStorage | null, hasFlash: boolean)
   }
 }
 
-/** Chiều cao khung chờ của khối Giờ vàng (tiêu đề + một hàng thẻ). */
-export const FLASH_SKELETON_HEIGHT = 288;
+/** Chiều cao khung chờ của khối Giờ vàng (tiêu đề + một hàng thẻ; đo thật: Mini 302px, web 298px). */
+export const FLASH_SKELETON_HEIGHT = 300;
