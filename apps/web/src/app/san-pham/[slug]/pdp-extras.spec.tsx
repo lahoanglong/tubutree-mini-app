@@ -360,31 +360,31 @@ describe('PdpPointsEarn — nối giá, số lượng, hệ số hạng vào l�
   it('khách vãng lai (hệ số 1): 289.000đ x 2 ra 115 Điểm Xanh, quy 11.500đ', async () => {
     mocks.phase = 'guest';
     await mountEarn({ qty: 2 });
-    expect(line()).toBe('Nhận tối đa 115 Điểm Xanh (≈11.500đ) khi đơn giao thành công');
+    expect(line()).toBe('Nhận ~115 Điểm Xanh');
   });
 
   it('Giờ vàng rẻ hơn: tính theo giá flash, không theo giá lẻ', async () => {
     mocks.phase = 'guest';
     mocks.flash = [{ variationId: 'v2', flashPrice: 200000 }];
     await mountEarn();
-    expect(line()).toBe('Nhận tối đa 40 Điểm Xanh (≈4.000đ) khi đơn giao thành công');
+    expect(line()).toBe('Nhận ~40 Điểm Xanh');
   });
 
   it('đã đăng nhập, hạng Lộc Biếc ×1,5 trong bảng config: nhân hệ số và nói rõ hạng, không cần cache loyalty', async () => {
     mocks.user = { tierId: 't2' };
     await mountEarn({ qty: 2 });
-    expect(line()).toBe('Nhận tối đa 173 Điểm Xanh · hạng Lộc Biếc ×1,5 (≈17.300đ) khi đơn giao thành công');
+    expect(line()).toBe('Nhận ~173 Điểm Xanh');
   });
 
   it('hạng Mầm Xanh (hệ số 1) hoặc chưa có hạng: số gốc, không có giải thích', async () => {
     mocks.user = { tierId: 't1' };
     await mountEarn({ qty: 2 });
-    expect(line()).toBe('Nhận tối đa 115 Điểm Xanh (≈11.500đ) khi đơn giao thành công');
+    expect(line()).toBe('Nhận ~115 Điểm Xanh');
     mounted.forEach((m) => m.unmount());
     mounted = [];
     mocks.user = { tierId: null };
     await mountEarn({ qty: 2 });
-    expect(line()).toBe('Nhận tối đa 115 Điểm Xanh (≈11.500đ) khi đơn giao thành công');
+    expect(line()).toBe('Nhận ~115 Điểm Xanh');
   });
 
   it('đã đăng nhập nhưng chưa biết hạng (phiên cũ, hạng lạ), hoặc đang khôi phục phiên: nói chung, không đoán số', async () => {

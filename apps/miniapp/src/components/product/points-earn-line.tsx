@@ -1,7 +1,7 @@
 import { Box, Text } from 'zmp-ui';
 import { Leaf } from 'lucide-react';
 import { usePublicConfig } from '../../hooks/use-public-config';
-import { tierEarnNote, tierEarnOf } from '@tubutree/app-core/points-earn-tier';
+import { tierEarnOf } from '@tubutree/app-core/points-earn-tier';
 import { pointsEarnPreview } from '../../utils/points-earn';
 import { vi } from '../../i18n/vi';
 
@@ -26,7 +26,7 @@ export function PointsEarnLine({ goods, authStatus, tierId }: { goods: number; a
     <Box flex alignItems="center" style={{ gap: 6, marginTop: 6 }}>
       <Leaf size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden style={{ flexShrink: 0 }} />
       <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
-        {preview === 'generic' ? vi.product.pointsEarnGeneric : vi.product.pointsEarn(preview.points, preview.valueVnd, tierEarnNote(tier))}
+        {preview === 'generic' ? vi.product.pointsEarnGeneric : vi.product.pointsEarn(preview.points)}
       </Text>
     </Box>
   );

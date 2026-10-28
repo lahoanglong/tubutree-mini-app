@@ -1,5 +1,4 @@
 import type { LoyaltyRates } from '@tubutree/app-core/api/loyalty';
-import { formatVnd } from './format-vnd';
 
 /**
  * Điểm Xanh tích cho một kiện hàng: bản chép của pointsForGoods ở apps/api/src/modules/pricing/points-earn.ts (hàm server dùng khi
@@ -34,7 +33,6 @@ const numberFormat = new Intl.NumberFormat('vi-VN');
 
 /** Chữ giữ y như `vi.product.pointsEarn*` của Mini App. "Tối đa": giảm giá, mã, điểm dùng ở thanh toán làm giá trị hàng tính điểm thấp đi. */
 export const pointsEarnText = {
-  line: (points: number, valueVnd: number, tierNote?: string | null) =>
-    `Nhận tối đa ${numberFormat.format(points)} Điểm Xanh${tierNote ? ` · ${tierNote}` : ''} (≈${formatVnd(valueVnd)}) khi đơn giao thành công`,
+  line: (points: number) => `Nhận ~${numberFormat.format(points)} Điểm Xanh`,
   generic: 'Nhận Điểm Xanh khi đơn giao thành công',
 };
