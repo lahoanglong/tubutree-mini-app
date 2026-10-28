@@ -363,8 +363,11 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       api.fallback('GET', '/waste/me/open-count', { count: 0 });
       // Mini App gắn một nhịp tải lại danh sách Giờ vàng ở gốc app (useFlashSalesPoller): mọi trang đều gọi; mặc định không có suất nào.
       api.fallback('GET', '/flash-sales/active', []);
-      if (testInfo.project.name.startsWith('Web ')) shellDefaults(api);
-      if (testInfo.project.name === 'Web Admin') adminShellDefaults(api);
+      if (testInfo.project.name.startsWith('Web ')) {
+        shellDefaults(api);
+        // Spec của project khách (vd pro.web.spec) cũng mở /admin nên khung quản trị cần mock ở mọi project web.
+        adminShellDefaults(api);
+      }
       // Đăng ký TRƯỚC → ưu tiên THẤP NHẤT (Playwright chạy route đăng ký sau trước).
       await page.route(
         (url) => !LOCAL_HOSTS.has(url.hostname),
