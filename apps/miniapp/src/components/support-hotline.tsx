@@ -30,6 +30,7 @@ function HotlineLine() {
       <Button
         variant="ghost"
         icon={Phone}
+        style={{ whiteSpace: 'nowrap' }}
         onPress={() => {
           haptic('light');
           void callPhone(hotline);
