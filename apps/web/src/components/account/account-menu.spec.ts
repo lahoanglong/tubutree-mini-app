@@ -92,7 +92,7 @@ describe('nhóm menu hub tài khoản', () => {
       (routeMap.routes as { items: { web?: string }[] }[]).flatMap((g) => g.items).flatMap((i) => (i.web ? [i.web.split('?')[0]!] : [])),
     );
     const m = buildAccountMenu(ctx({ role: 'ADMIN', aiEnabled: true, chatEnabled: true, ownedBrandName: 'Nhãn A' }));
-    for (const item of all(m)) expect(webPaths.has(item.to), item.to).toBe(true);
+    for (const item of all(m)) expect(webPaths.has(item.to.split('?')[0]!), item.to).toBe(true);
   });
 
   it('mục trỏ route còn pending thì ẩn; route xong thì hiện', () => {
@@ -139,7 +139,7 @@ describe('nhóm Công việc theo vai trò', () => {
   it('ADMIN: thêm Quản trị nhân sự', () => {
     const m = buildAccountMenu(ctx({ role: 'ADMIN' }));
     expect(labels(m, 'Công việc')).toEqual(['Ca làm & chấm công', 'Lương của tôi', 'Quản trị nhân sự']);
-    expect(all(m).find((i) => i.label === 'Quản trị nhân sự')!.to).toBe('/admin');
+    expect(all(m).find((i) => i.label === 'Quản trị nhân sự')!.to).toBe('/admin?tab=staffRoster');
   });
 
   it('khách thường hoặc vai trò lạ: không có nhóm Công việc', () => {
@@ -148,7 +148,7 @@ describe('nhóm Công việc theo vai trò', () => {
   });
 
   it('route nhân viên còn pending thì nhóm Công việc ẩn cả nhóm, nhưng /admin (đã xong) vẫn hiện cho ADMIN', () => {
-    const m = buildAccountMenu(ctx({ role: 'ADMIN', isReady: (p) => p === '/admin' }));
+    const m = buildAccountMenu(ctx({ role: 'ADMIN', isReady: (p) => p.split('?')[0] === '/admin' }));
     expect(labels(m, 'Công việc')).toEqual(['Quản trị nhân sự']);
     expect(m.some((g) => g.group === 'Công việc')).toBe(true);
     expect(buildAccountMenu(ctx({ role: 'STAFF', isReady: () => false })).some((g) => g.group === 'Công việc')).toBe(false);
@@ -161,7 +161,7 @@ describe('với route map thật (sau khi lane pro và recycle gộp)', () => {
   it('đại lý, chủ nhãn, nhân viên và Học viện có lối vào như Mini App (profile.tsx)', () => {
     const m = buildAccountMenu(ctx({ ...real, role: 'ADMIN', ownedBrandName: 'Nhãn A', ctvAccess: { isAffiliate: true } }));
     const to = all(m).map((i) => i.to);
-    expect(to).toEqual(expect.arrayContaining(['/ctv', '/dai-ly', '/chu-thuong-hieu', '/nhan-vien', '/nhan-vien/bang-luong', '/admin', '/hoc-vien']));
+    expect(to).toEqual(expect.arrayContaining(['/ctv', '/dai-ly', '/chu-thuong-hieu', '/nhan-vien', '/nhan-vien/bang-luong', '/admin?tab=staffRoster', '/hoc-vien']));
   });
 
   it('admin/nhân viên chưa có kết quả /affiliate/me (đang tải, lỗi, 401): mục Cộng tác viên ẩn, không đổi chữ', () => {
@@ -175,7 +175,7 @@ describe('với route map thật (sau khi lane pro và recycle gộp)', () => {
     expect(to).toContain('/dai-ly');
     expect(to).not.toContain('/chu-thuong-hieu');
     expect(to).not.toContain('/nhan-vien');
-    expect(to).not.toContain('/admin');
+    expect(to).not.toContain('/admin?tab=staffRoster');
   });
 });
 

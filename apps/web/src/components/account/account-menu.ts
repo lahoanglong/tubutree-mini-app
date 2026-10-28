@@ -79,7 +79,7 @@ export function buildAccountMenu(c: AccountMenuContext): AccountMenuGroup[] {
           { icon: Wallet, label: 'Lương của tôi', to: '/nhan-vien/bang-luong', hint: 'Xem lương & thông tin nhận' },
         ]
       : []),
-    ...(c.role === 'ADMIN' ? [{ icon: ShieldCheck, label: 'Quản trị nhân sự', to: '/admin', hint: 'Cấp quyền, duyệt ca, lương' }] : []),
+    ...(c.role === 'ADMIN' ? [{ icon: ShieldCheck, label: 'Quản trị nhân sự', to: '/admin?tab=staffRoster', hint: 'Cấp quyền, duyệt ca, lương' }] : []),
   ];
   if (work.length > 0) groups.push({ group: homeCopy.profile.groupWork, items: work });
 
