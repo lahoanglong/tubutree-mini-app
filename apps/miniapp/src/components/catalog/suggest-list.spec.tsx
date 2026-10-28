@@ -111,7 +111,7 @@ describe('SuggestList', () => {
 
   it('không có gợi ý, đã tải xong → câu hướng dẫn nhắc dòng "Tìm" có thật', () => {
     renderList({ draft: 'zzz', recent: [] });
-    expect(screen.getByText(/Chưa có gợi ý/)).toHaveTextContent('Enter');
+    expect(screen.getByText(/Chưa có gợi ý/)).toHaveTextContent('Tìm');
     expect(screen.getByRole('button', { name: 'Tìm “zzz”' })).toBeInTheDocument();
   });
 
