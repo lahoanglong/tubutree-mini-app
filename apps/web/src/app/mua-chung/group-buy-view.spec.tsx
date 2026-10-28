@@ -117,7 +117,7 @@ describe('/mua-chung — danh sách nhóm', () => {
     const article = c.querySelector('article')!;
     expect(article.className).toContain('max-md:border-0');
     expect(article.className).toContain('max-md:shadow-[var(--elevation-1)]');
-    expect(c.querySelector('article a.font-semibold')!.className).toContain('max-md:text-[length:var(--type-body-sm-size)]');
+    expect(c.querySelector('article a span.font-semibold')!.className).toContain('max-md:text-[length:var(--type-body-sm-size)]');
     const grid = c.querySelector('article')?.parentElement;
     expect(grid?.className).toContain('grid-cols-[minmax(0,1fr)]');
   });
@@ -403,9 +403,12 @@ describe('/mua-chung — cấu trúc và trợ năng', () => {
     expect(r.container.querySelectorAll('h1')).toHaveLength(1);
   });
 
-  it('không có ảnh sản phẩm: ô thay thế vẫn là liên kết có tên là tên sản phẩm', async () => {
+  it('R-103: ảnh và tên gộp một liên kết cao từ 44px (min-h-14), không có ảnh thì vẫn một liên kết có tên sản phẩm', async () => {
     mocks.list = [GROUP('n', { product: { name: 'Không ảnh', slug: 'khong-anh', thumbnail: null } })];
     const c = await mount();
-    expect(c.querySelector('a[href="/san-pham/khong-anh"][aria-label="Không ảnh"]')).not.toBeNull();
+    const links = c.querySelectorAll('a[href="/san-pham/khong-anh"]');
+    expect(links).toHaveLength(1);
+    expect(links[0]!.className).toContain('min-h-14');
+    expect(links[0]!.textContent).toContain('Không ảnh');
   });
 });
