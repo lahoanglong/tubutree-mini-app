@@ -10,12 +10,13 @@ import { ui } from '@/lib/guest-ui';
 import { AddressForm } from '@/components/address-form';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { mini } from '@/components/order-mobile/mobile-ui';
+import { EmptyState as MiniEmptyState } from '@/components/mini/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { actionErrorText } from '@/lib/error-text';
 
 /** ActionLink của Mini App: chữ 14px/600 xanh (Xóa đỏ), không gạch chân. */
-const LINK_MINI = 'max-md:text-sm max-md:no-underline max-md:text-[color:var(--color-text-brand)]';
+const LINK_MINI = 'min-w-11 justify-center max-md:text-sm max-md:no-underline max-md:text-[color:var(--color-text-brand)]';
 
 const NOTICE_MS = 4000;
 
@@ -126,12 +127,7 @@ export default function AddressBookPage() {
       )}
 
       {addrQ.isSuccess && addresses.length === 0 && !adding && (
-        <div className="py-10 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">
-            <MapPin className="h-8 w-8 stroke-[1.5]" aria-hidden="true" />
-          </div>
-          <p className="mx-auto mt-4 max-w-sm text-stone-700">Bạn chưa lưu địa chỉ nào. Thêm địa chỉ để thanh toán nhanh hơn.</p>
-        </div>
+        <MiniEmptyState art="leaf" heading="Bạn chưa có địa chỉ giao hàng nào" />
       )}
 
       {addresses.length > 0 && (
@@ -237,7 +233,7 @@ export default function AddressBookPage() {
                           setConfirmId(a.id);
                         }}
                         aria-label={`Xoá địa chỉ của ${a.recipient}`}
-                        className={`${ui.btnText} text-danger-fg max-md:no-underline max-md:text-sm max-md:text-[color:var(--color-text-danger)]`}
+                        className={`${ui.btnText} min-w-11 justify-center text-danger-fg max-md:no-underline max-md:text-sm max-md:text-[color:var(--color-text-danger)]`}
                       >
                         Xoá
                       </button>
@@ -272,7 +268,7 @@ export default function AddressBookPage() {
                 setEditingId(null);
                 setAdding(true);
               }}
-              className={`${ui.btnPrimary} w-full gap-2 sm:w-auto max-md:border-transparent max-md:bg-[var(--color-action-secondary-bg)] max-md:text-[color:var(--color-action-secondary-fg)] max-md:shadow-none max-md:hover:bg-[var(--color-action-secondary-bg-pressed)]`}
+              className={`${ui.btnPrimary} w-full gap-2 sm:w-auto ${addresses.length > 0 ? 'max-md:border-transparent max-md:bg-[var(--color-action-secondary-bg)] max-md:text-[color:var(--color-action-secondary-fg)] max-md:shadow-none max-md:hover:bg-[var(--color-action-secondary-bg-pressed)]' : ''}`}
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
               Thêm địa chỉ mới

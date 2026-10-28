@@ -1,10 +1,12 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ordersListQuery } from '@tubutree/app-core/queries/orders';
 import { newCustomerOfferQuery } from '@tubutree/app-core/queries/loyalty';
+import { EmptyState as MiniEmptyState } from '@/components/mini/empty-state';
+import { BestSellerRail } from '@/components/home/best-seller-rail';
 import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedTabs, useTabParam } from '@/components/ui/segmented-tabs';
 import { ErrorState } from '@/components/ui/error-state';
@@ -31,6 +33,7 @@ const PAGE_LIMIT = 20;
  * (chỉ tab "Tất cả"). Tab đang chọn nằm ở `?tab=`. Hub `/tai-khoan` vẫn có khối OrdersSection riêng (có ô tìm).
  */
 function OrdersPageBody() {
+  const router = useRouter();
   const phase = useAuthPhase();
   const { user } = useAuth();
   const [tab, setTab] = useTabParam(ORDERS_TAB_KEYS, 'all');
@@ -94,15 +97,12 @@ function OrdersPageBody() {
           </div>
         ) : list.length === 0 ? (
           tab === 'all' ? (
-            <section aria-label="Bạn chưa có đơn nào" className={`mt-3 p-8 text-center ${ui.card}`}>
-              <h2 className="font-display text-base font-semibold text-stone-900">Bạn chưa có đơn nào</h2>
-              {emptyBody && <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">{emptyBody}</p>}
-              <Link href="/san-pham" className={`${ui.btnPrimary} mt-4`}>
-                Bắt đầu mua
-              </Link>
-            </section>
+            <>
+              <MiniEmptyState art="box" heading="Bạn chưa có đơn nào" body={emptyBody} ctaLabel="Bắt đầu mua" onCta={() => router.push('/san-pham')} />
+              <BestSellerRail />
+            </>
           ) : (
-            <p className={`mt-3 p-6 text-center text-sm text-stone-600 ${ui.card}`}>Không có đơn nào ở mục này</p>
+            <MiniEmptyState variant="inline" art="box" heading="Không có đơn nào ở mục này" />
           )
         ) : (
           <>

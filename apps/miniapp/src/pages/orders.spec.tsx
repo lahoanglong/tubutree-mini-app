@@ -31,6 +31,7 @@ vi.mock('../services/subscriptions-api', () => ({
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'authenticated' }) }));
 vi.mock('../services/buy-flow-events', () => ({ trackReorderClicked: vi.fn(), trackReorderCompleted: vi.fn() }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../components/home/best-seller-rail', () => ({ BestSellerRail: () => <div data-testid="best-seller-rail" /> }));
 
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 import OrdersPage from './orders';
@@ -217,6 +218,18 @@ describe('OrdersPage — đơn hàng trống chỉ nhắc voucher chào mừng k
     expect(await screen.findByText('Bạn chưa có đơn nào')).toBeInTheDocument();
     await waitFor(() => expect(mocks.getNewCustomerOffer).toHaveBeenCalled());
     expect(screen.queryByText(/mã giảm giá chào mừng/)).toBeNull();
+  });
+
+  it('đơn rỗng ở tab Tất cả: có hàng sản phẩm bán chạy dưới nút Bắt đầu mua; có đơn thì không có', async () => {
+    mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: false, welcomeVoucher: null });
+    const { unmount } = renderPage();
+    await screen.findByText('Bạn chưa có đơn nào');
+    expect(screen.getByTestId('best-seller-rail')).toBeInTheDocument();
+    unmount();
+    mocks.fetchOrders.mockResolvedValue(PAGE);
+    renderPage();
+    await screen.findByText(/TUBU-777/);
+    expect(screen.queryByTestId('best-seller-rail')).toBeNull();
   });
 
   it('khách đã có đơn: không gọi API ưu đãi khách mới', async () => {
