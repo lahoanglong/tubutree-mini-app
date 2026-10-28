@@ -488,11 +488,11 @@ function StaffHub() {
         />
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <Button icon={Plus} style={{ flex: '1 1 150px' }} onPress={openQuick}>
+          <Button icon={Plus} style={{ flex: '0 0 auto' }} onPress={openQuick}>
             Đăng ký ca
           </Button>
-          <Button variant="secondary" icon={Copy} style={{ flex: '1 1 150px' }} loading={copyM.isPending} onPress={() => copyM.mutate()}>
-            Chép tuần trước
+          <Button variant="secondary" icon={Copy} aria-label="Chép tuần trước" style={{ flex: '1 1 0', minWidth: 0 }} loading={copyM.isPending} onPress={() => copyM.mutate()}>
+            Chép tuần
           </Button>
         </div>
 

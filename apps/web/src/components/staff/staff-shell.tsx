@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -71,7 +72,12 @@ export function StaffGate({
   if (role !== 'STAFF' && role !== 'ADMIN') {
     return (
       <StaffShell title={title}>
-        <p className="py-10 text-center text-stone-700">{deniedMessage}</p>
+        <div className="py-10 text-center">
+          <p className="text-stone-700">{deniedMessage}</p>
+          <Link href="/tai-khoan" className={`${ui.btnPrimary} mt-4`}>
+            Về Cá nhân
+          </Link>
+        </div>
       </StaffShell>
     );
   }
