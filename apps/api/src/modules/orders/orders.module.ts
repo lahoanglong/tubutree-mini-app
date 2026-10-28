@@ -3,6 +3,7 @@ import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { OrderReversalService } from './order-reversal.service';
 import { OrderStatusService } from './order-status.service';
+import { OrderCountsService } from './order-counts.service';
 import { PurchasedItemsService } from './purchased-items.service';
 import { PendingPaymentExpiryCron } from './pending-payment-expiry.cron';
 import { DeliveredEffectsResyncCron } from './delivered-effects-resync.cron';
@@ -26,6 +27,7 @@ import { WastePickupModule } from '../waste-exchange/pickup/waste-pickup.module'
     OrdersService,
     OrderReversalService,
     OrderStatusService,
+    OrderCountsService,
     PurchasedItemsService,
     CustomerRefundsService,
     OrderReturnsService,
