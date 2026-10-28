@@ -218,6 +218,12 @@ describe('PayrollAdminTab: thưởng/phạt và tính lại tháng', () => {
   }
   const today = vnDateKey(new Date());
   const sheet = () => document.querySelector<HTMLElement>('[role=dialog]')!;
+  // Khung thưởng/phạt nạp lười: lần mở đầu tiên đợi mô-đun về.
+  const openAdjust = async (container: HTMLElement) => {
+    click(container.querySelector('[aria-label="Thưởng/phạt · Lan"]'));
+    for (let i = 0; i < 20 && !document.querySelector('[role=dialog]'); i++) await flush(1);
+    await flush();
+  };
   const adjustBtn = () => sheet().querySelector<HTMLButtonElement>('[data-adjust-submit]')!;
   const fill = (kind: 'Phạt' | 'Thưởng' | null, amount: string, reason: string) => {
     if (kind) click(byText(sheet(), 'button[aria-pressed]', kind));
@@ -242,8 +248,7 @@ describe('PayrollAdminTab: thưởng/phạt và tính lại tháng', () => {
     const api = stubAdjust([row('1', 'Lan', 'OPEN')]);
     const { container } = mount(<PayrollAdminTab />);
     await flush();
-    click(container.querySelector('[aria-label="Thưởng/phạt · Lan"]'));
-    await flush();
+    await openAdjust(container);
     expect(adjustBtn().disabled).toBe(true);
     fill(null, '50000', 'Đi trễ');
     expect(adjustBtn().disabled).toBe(true);
@@ -265,8 +270,7 @@ describe('PayrollAdminTab: thưởng/phạt và tính lại tháng', () => {
     const api = stubAdjust([row('1', 'Lan', 'OPEN')]);
     const { container } = mount(<PayrollAdminTab />);
     await flush();
-    click(container.querySelector('[aria-label="Thưởng/phạt · Lan"]'));
-    await flush();
+    await openAdjust(container);
     fill('Phạt', '50000', 'Đi trễ');
     click(adjustBtn());
     await flush();
@@ -294,8 +298,7 @@ describe('PayrollAdminTab: thưởng/phạt và tính lại tháng', () => {
     const api = stubAdjust([row('1', 'Lan', 'OPEN')]);
     const { container } = mount(<PayrollAdminTab />);
     await flush();
-    click(container.querySelector('[aria-label="Thưởng/phạt · Lan"]'));
-    await flush();
+    await openAdjust(container);
     const first = `${year}-${String(month).padStart(2, '0')}-01`;
     selectValue(sheet().querySelector('select'), first);
     fill('Thưởng', '100000', '  Ca tối đông khách  ');
@@ -315,8 +318,7 @@ describe('PayrollAdminTab: thưởng/phạt và tính lại tháng', () => {
     );
     const { container } = mount(<PayrollAdminTab />);
     await flush();
-    click(container.querySelector('[aria-label="Thưởng/phạt · Lan"]'));
-    await flush();
+    await openAdjust(container);
     fill('Phạt', '50000', 'Đi trễ');
     click(adjustBtn());
     await flush();
@@ -343,8 +345,7 @@ describe('PayrollAdminTab: thưởng/phạt và tính lại tháng', () => {
     const api = stubAdjust([row('1', 'Lan', 'OPEN')], () => ({ status: 400, body: { message: 'Tháng lương đã chốt/đã trả — mở lại tháng trước khi điều chỉnh.' } }));
     const { container } = mount(<PayrollAdminTab />);
     await flush();
-    click(container.querySelector('[aria-label="Thưởng/phạt · Lan"]'));
-    await flush();
+    await openAdjust(container);
     fill('Phạt', '50000', 'Đi trễ');
     click(adjustBtn());
     await flush();

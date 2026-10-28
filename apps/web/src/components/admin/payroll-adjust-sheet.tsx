@@ -47,31 +47,6 @@ export function PayrollAdjustSheet({
   onClose,
   onDone,
 }: {
-  row: AdminPayrollRow | null;
-  year: number;
-  month: number;
-  onClose: () => void;
-  onDone: (text: string) => void;
-}) {
-  return row ? (
-    <AdjustForm
-      key={`${row.staff.id}-${year}-${month}`}
-      row={row}
-      year={year}
-      month={month}
-      onClose={onClose}
-      onDone={onDone}
-    />
-  ) : null;
-}
-
-function AdjustForm({
-  row,
-  year,
-  month,
-  onClose,
-  onDone,
-}: {
   row: AdminPayrollRow;
   year: number;
   month: number;

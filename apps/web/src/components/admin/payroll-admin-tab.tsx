@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminEditSession } from '@tubutree/app-core/api/attendance';
@@ -22,9 +23,11 @@ import { Sheet } from '@/components/ui/sheet';
 import { EvidenceUpload } from '@/components/evidence-upload';
 import { errText, PeriodNav } from '@/components/staff/staff-shell';
 import { useConfirm } from './confirm-dialog';
-import { PayrollAdjustSheet } from './payroll-adjust-sheet';
 import { payrollCsv } from './payroll-csv';
 import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
+
+// Chỉ nạp khi bấm "Thưởng/phạt": giữ gói đầu của /admin nhẹ.
+const PayrollAdjustSheet = dynamic(() => import('./payroll-adjust-sheet').then((m) => m.PayrollAdjustSheet));
 
 const PAY_STATUS: Record<PayrollStatus, string> = { OPEN: 'Đang tính', FINALIZED: 'Đã chốt', PAID: 'Đã trả' };
 const fmtHM = (min: number) => `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`;
@@ -308,17 +311,19 @@ export function PayrollAdminTab() {
         </div>
       </Sheet>
 
-      <PayrollAdjustSheet
-        row={adjustRow}
-        year={ym.year}
-        month={ym.month}
-        onClose={() => setAdjustRow(null)}
-        onDone={(text) => {
-          ok(text);
-          invalidate();
-          void qc.invalidateQueries({ queryKey: ['admin-payroll-detail'] });
-        }}
-      />
+      {adjustRow && (
+        <PayrollAdjustSheet
+          row={adjustRow}
+          year={ym.year}
+          month={ym.month}
+          onClose={() => setAdjustRow(null)}
+          onDone={(text) => {
+            ok(text);
+            invalidate();
+            void qc.invalidateQueries({ queryKey: ['admin-payroll-detail'] });
+          }}
+        />
+      )}
 
       <DetailSheet row={detailRow} year={ym.year} month={ym.month} onClose={() => setDetailRow(null)} onChanged={invalidate} />
     </div>
