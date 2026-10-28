@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   listStaff: vi.fn(),
   grantStaff: vi.fn(),
   revokeStaff: vi.fn(),
+  getShiftsPendingCount: vi.fn(),
   adminGetShifts: vi.fn(),
   approveShift: vi.fn(),
   rejectShift: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock('../services/staff-api', async (importOriginal) => ({
   listStaff: mocks.listStaff,
   grantStaff: mocks.grantStaff,
   revokeStaff: mocks.revokeStaff,
+  getShiftsPendingCount: mocks.getShiftsPendingCount,
 }));
 vi.mock('../services/shifts-api', () => ({
   adminGetShifts: mocks.adminGetShifts,
@@ -189,6 +191,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
     mocks.listStaff.mockResolvedValue({ members: MEMBERS, pendingInvites: INVITES });
     mocks.grantStaff.mockResolvedValue({ granted: 'STAFF', applied: true });
     mocks.revokeStaff.mockResolvedValue({ revoked: 1, downgraded: false });
+    mocks.getShiftsPendingCount.mockResolvedValue(0);
     mocks.adminGetShifts.mockResolvedValue(SHIFTS);
     mocks.approveShift.mockResolvedValue({ approved: true });
     mocks.rejectShift.mockResolvedValue({ rejected: true });
@@ -433,6 +436,48 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'SĐT không tồn tại', type: 'error' }));
       expect((screen.getByLabelText('Số điện thoại') as HTMLInputElement).value).toBe('0901112223');
+    });
+  });
+
+  describe('số ca chờ duyệt trên thẻ "Duyệt ca" (E-26)', () => {
+    it('có 3 ca chờ → nhãn "Duyệt ca (3)"; hai thẻ kia không đổi', async () => {
+      mocks.getShiftsPendingCount.mockResolvedValue(3);
+      renderPage();
+      expect(await screen.findByRole('tab', { name: 'Duyệt ca (3)' })).toBeInTheDocument();
+      expect(screen.getAllByRole('tab').map((x) => x.textContent)).toEqual(['Nhân sự', 'Duyệt ca (3)', 'Lương']);
+      expect(mocks.getShiftsPendingCount).toHaveBeenCalledTimes(1);
+    });
+
+    it('không có ca chờ → nhãn trơn "Duyệt ca", không thêm "(0)"', async () => {
+      renderPage();
+      await screen.findByText('Lan');
+      await waitFor(() => expect(mocks.getShiftsPendingCount).toHaveBeenCalled());
+      expect(screen.getByRole('tab', { name: 'Duyệt ca' })).toBeInTheDocument();
+    });
+
+    it('lấy số lỗi thì thẻ vẫn là "Duyệt ca", trang không vỡ', async () => {
+      mocks.getShiftsPendingCount.mockRejectedValue(new Error('Mất kết nối'));
+      renderPage();
+      await screen.findByText('Lan');
+      await waitFor(() => expect(mocks.getShiftsPendingCount).toHaveBeenCalled());
+      expect(screen.getByRole('tab', { name: 'Duyệt ca' })).toBeInTheDocument();
+    });
+
+    it('không phải ADMIN thì không gọi lấy số ca chờ', () => {
+      mocks.role = 'STAFF';
+      renderPage();
+      expect(mocks.getShiftsPendingCount).not.toHaveBeenCalled();
+    });
+
+    it('duyệt xong một ca thì số trên thẻ tải lại ngay', async () => {
+      mocks.getShiftsPendingCount.mockResolvedValueOnce(2).mockResolvedValue(1);
+      renderPage();
+      await screen.findByRole('tab', { name: 'Duyệt ca (2)' });
+      goTab('Duyệt ca (2)');
+      await screen.findByText('09/03 – 15/03');
+      await screen.findAllByText('Chờ duyệt');
+      fireEvent.click(screen.getByRole('button', { name: 'Duyệt ca Lan T3 10/03' }));
+      expect(await screen.findByRole('tab', { name: 'Duyệt ca (1)' })).toBeInTheDocument();
     });
   });
 

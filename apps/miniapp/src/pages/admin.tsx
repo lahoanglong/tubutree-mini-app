@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UserPlus, ShieldCheck, Check, X, Clock, Plus, MessagesSquare } from 'lucide-react';
-import { listStaff, grantStaff, revokeStaff, STAFF_PERMISSIONS, STAFF_PERMISSION_LABELS, type StaffPermission, type StaffRole } from '../services/staff-api';
+import { listStaff, grantStaff, revokeStaff, getShiftsPendingCount, STAFF_PERMISSIONS, STAFF_PERMISSION_LABELS, type StaffPermission, type StaffRole } from '../services/staff-api';
 import {
   adminGetShifts,
   approveShift,
@@ -84,15 +84,21 @@ const TABS: { key: Tab; label: string }[] = [
 
 const SECTION_STYLE = { padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 12 } as const;
 
+const SHIFTS_PENDING_KEY = ['admin-shifts-pending'] as const;
+
 function AdminHub() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('staff');
+  // AdminHub chỉ dựng cho ADMIN (AdminPage chặn vai trò khác ở trên), nên người khác không bao giờ gọi API này.
+  const pendingQ = useQuery({ queryKey: SHIFTS_PENDING_KEY, queryFn: getShiftsPendingCount, staleTime: 60_000, retry: false });
+  const pending = pendingQ.data ?? 0;
+  const tabs = TABS.map((x) => (x.key === 'shifts' && pending > 0 ? { ...x, label: `${x.label} (${pending})` } : x));
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
       <PageHeader title="Quản trị nhân sự" />
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
         <div style={{ alignSelf: 'stretch' }}>
-          <SegmentedTabs scroll items={TABS} value={tab} onChange={(key) => setTab(key as Tab)} />
+          <SegmentedTabs scroll items={tabs} value={tab} onChange={(key) => setTab(key as Tab)} />
         </div>
         <Button variant="secondary" icon={MessagesSquare} onPress={() => navigate('/admin/community')}>
           {vi.community.moderation}
@@ -739,7 +745,10 @@ function ShiftsSection() {
     queryKey: ['admin-shifts', mondayKey],
     queryFn: () => adminGetShifts(fromISO, toISO),
   });
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['admin-shifts', mondayKey] });
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: SHIFTS_PENDING_KEY });
+    return qc.invalidateQueries({ queryKey: ['admin-shifts', mondayKey] });
+  };
 
   const grouped = useMemo(() => {
     const map = new Map<string, { name: string; shifts: AdminShift[] }>();

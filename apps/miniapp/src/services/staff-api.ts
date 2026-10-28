@@ -44,3 +44,12 @@ export const revokeStaff = (phone: string) =>
   api
     .post<{ revoked: number; downgraded: boolean; storeBlocked?: boolean }>('/admin/staff/revoke', { phone })
     .then((r) => r.data);
+
+/**
+ * Số ca nhân viên chờ duyệt từ hôm nay (cùng con số thẻ "Ca nhân viên chờ duyệt" ở Việc cần xử lý trên web admin). Dùng hộp việc có sẵn
+ * thay vì kéo cả danh sách ca; chỉ ADMIN gọi được.
+ */
+export const getShiftsPendingCount = () =>
+  api
+    .get<{ items: { key: string; count: number }[] }>('/admin/ops/inbox')
+    .then((r) => r.data.items.find((i) => i.key === 'shiftsPending')?.count ?? 0);
