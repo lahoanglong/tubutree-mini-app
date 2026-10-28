@@ -64,7 +64,6 @@ export function VariationSheet({
     const start = pickerStartId(variations, initialId);
     setId(start);
     setQty(clampPickerQty(variations.find((v) => v.id === start), initialQty));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- chốt lựa chọn một lần mỗi lần mở bảng
   }, [open]);
 
   const selected = variations.find((v) => v.id === id);
