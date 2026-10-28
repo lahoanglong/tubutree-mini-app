@@ -73,7 +73,6 @@ import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Heading, Text } from '../components/ui/text';
 import { DEALER_MAX_QTY, preorderQty, realDiscountPct } from './dealer-pricing';
-import '../css/dealer-theme.css';
 
 const INK = 'var(--color-dealer-ink)';
 
