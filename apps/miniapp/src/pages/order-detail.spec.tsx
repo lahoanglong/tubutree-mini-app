@@ -195,7 +195,7 @@ describe('OrderDetailPage — đánh giá theo từng dòng của đơn (R8)', (
   });
 });
 
-describe('OrderDetailPage — sản phẩm đã gỡ không dẫn tới trang 404 (E-31)', () => {
+describe('OrderDetailPage — sản phẩm đã gỡ không dẫn tới trang 404', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.fetchMyReturns.mockResolvedValue([]);
@@ -217,7 +217,7 @@ describe('OrderDetailPage — sản phẩm đã gỡ không dẫn tới trang 40
   });
 });
 
-describe('OrderDetailPage — đơn đặt định kỳ không hiện ghi chú tiếng Anh như lời khách (E-34)', () => {
+describe('OrderDetailPage — đơn đặt định kỳ không hiện ghi chú tiếng Anh như lời khách', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.fetchMyReturns.mockResolvedValue([]);

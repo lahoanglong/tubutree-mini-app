@@ -13,7 +13,6 @@ import { findWalletLedgerDrift } from '../wallet/wallet-reconcile';
 /**
  * Mỗi đêm so số dư Điểm Xanh (từng lô) và Ví Tubu của mọi khách với sổ cái của chúng. Chỉ ĐỌC và báo: lệch điểm sửa bằng
  * `reconcile:points`, lệch Ví phải tra nguyên nhân rồi ghi dòng ADJUST (đặt thẳng số dư = tổng sổ có thể xoá tiền của khách).
- * Trước đây hai bộ đối soát chỉ chạy tay nên lệch có thể nằm im hàng tuần.
  *
  * Log chỉ ghi SỐ khách lệch, không id hay số dư riêng của ai; danh sách chi tiết lấy bằng lệnh reconcile.
  */

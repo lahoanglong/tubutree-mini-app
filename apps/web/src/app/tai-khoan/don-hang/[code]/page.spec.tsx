@@ -493,7 +493,7 @@ describe('/tai-khoan/don-hang/[code] — đánh giá theo từng dòng của đ�
   });
 });
 
-describe('/tai-khoan/don-hang/[code] — đơn đặt định kỳ không hiện ghi chú tiếng Anh như lời khách (E-34)', () => {
+describe('/tai-khoan/don-hang/[code] — đơn đặt định kỳ không hiện ghi chú tiếng Anh như lời khách', () => {
   const subscription = (over: Record<string, unknown> = {}) => ({
     ...structuredClone(ORDER),
     source: 'subscription',
