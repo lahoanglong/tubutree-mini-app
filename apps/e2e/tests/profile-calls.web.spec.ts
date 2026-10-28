@@ -49,36 +49,74 @@ test.describe('Web khách khổ 375: số lời gọi API và dịch chuyển b�
 
     const count = (re: RegExp) => calls.filter((c) => re.test(c)).length;
     expect(count(/^GET \/orders\/status-counts/)).toBe(1);
-    expect(count(/^GET \/orders\?/)).toBe(0);
+    // Ba lời gọi đếm theo bộ lọc (status=/group=) đã gộp; danh sách đơn của khối máy tính (hiện từ md) vẫn tải ở mọi khổ.
+    expect(count(/^GET \/orders\?(status|group)=/)).toBe(0);
     expect(count(/^GET \/me\/notifications\/unread-count/)).toBe(1);
     expect(count(/^GET \/me\/notifications(\?|$)/)).toBe(0);
     expect(count(/^GET \/waste\/desk\/points/)).toBe(0);
   });
 
-  test('Trang chủ: khách cũ trên máy mới, phiên về chậm; in tổng dịch chuyển bố cục (CLS)', async ({ page, api }) => {
-    api.post('/auth/refresh', async () => {
-      await new Promise((r) => setTimeout(r, 900));
-      return { accessToken: 'e2e-token', user: me() };
+  // Khung hình đầu là khách vãng lai (HTML server), phiên khôi phục về sau 900 ms. Khách mới có phiên: bố cục giữ nguyên nên không dịch chuyển;
+  // khách cũ trên máy chưa nhớ loại khách: kệ Bán chạy của khách mới nhường chỗ Mua lại nên có một lần dịch chuyển nhỏ.
+  for (const returning of [false, true]) {
+    test(`Trang chủ: ${returning ? 'khách cũ' : 'khách mới có phiên'} trên máy mới, phiên về chậm; in tổng dịch chuyển bố cục (CLS)`, async ({ page, api }) => {
+      api.post('/auth/refresh', async () => {
+        await new Promise((r) => setTimeout(r, 900));
+        return { accessToken: 'e2e-token', user: me() };
+      });
+      api.get('/me', () => me());
+      const item = { variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' };
+      api.get('/me/purchased-items', async () => {
+        await new Promise((r) => setTimeout(r, 300));
+        return { items: returning ? [item] : [], nextCursor: null };
+      });
+      api.get('/config/public', {
+        freeshipThreshold: 350_000,
+        subscribeDiscountPct: 0.17,
+        affiliateWalletMultiplier: 1,
+        cashbackHoldDays: 30,
+        waste: { enabled: false, dropoff: false, mailin: false, pickup: false },
+        newCustomer: { welcomeVoucher: { amount: 25_000, minOrder: 150_000 }, firstOrderFreeShip: { enabled: false, minSubtotal: 0 } },
+        loyalty: { vndPerPoint: 20_000, vndPerPointRedeem: 1_000 },
+      });
+      api.get('/me/new-customer-offer', {
+        isNewCustomer: true,
+        welcomeVoucher: { code: 'WELCOME-U1', type: 'AMOUNT', value: 25_000, minOrder: 150_000, endAt: '2026-11-17T10:00:00.000Z' },
+      });
+      api.allowUnmocked('POST /events', 'GET /products/for-you', 'GET /me/wishlist/ids', 'GET /flash-sales/upcoming', 'GET /orders/active-count', 'GET /me/orders/active', 'GET /products', 'GET /categories', 'GET /brands', 'GET /me/subscriptions', 'GET /orders');
+      await page.addInitScript(() => {
+        const w = window as unknown as { __cls: number; __shifts: string[] };
+        w.__cls = 0;
+        w.__shifts = [];
+        new PerformanceObserver((list) => {
+          for (const e of list.getEntries() as unknown as { hadRecentInput: boolean; value: number; startTime: number; sources?: { node?: Node; previousRect: DOMRect; currentRect: DOMRect }[] }[]) {
+            if (e.hadRecentInput) continue;
+            w.__cls += e.value;
+            const where = (e.sources ?? []).map((x) => {
+              const el = x.node instanceof Element ? x.node : x.node?.parentElement;
+              return `${el?.getAttribute('data-home-block') ?? el?.closest('[data-home-block]')?.getAttribute('data-home-block') ?? el?.nodeName} y${Math.round(x.previousRect.y)}->${Math.round(x.currentRect.y)}`;
+            });
+            w.__shifts.push(`${e.value.toFixed(4)} @${Math.round(e.startTime)}ms ${where.join(' | ')}`);
+          }
+        }).observe({ type: 'layout-shift', buffered: true });
+      });
+      const crashed: string[] = [];
+      page.on('pageerror', (e) => crashed.push(e.message));
+      page.on('console', (m) => {
+        if (m.type() === 'error' && /TypeError|Error:/.test(m.text())) crashed.push(m.text());
+      });
+      await page.goto('/');
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(6000);
+      const { cls, shifts } = await page.evaluate(() => {
+        const w = window as unknown as { __cls: number; __shifts: string[] };
+        return { cls: w.__cls, shifts: w.__shifts };
+      });
+      expect(crashed).toEqual([]);
+      // Trang không rơi vào khung lỗi: số đo chỉ có nghĩa khi Trang chủ dựng đủ.
+      await expect(page.getByText('Có chút trục trặc')).toHaveCount(0);
+      console.log(`HOME_CLS_WEB ${returning ? 'returning' : 'new'} ${cls.toFixed(4)}\n${shifts.join('\n')}`);
+      expect(cls).toBeLessThan(returning ? 0.1 : 0.01);
     });
-    api.get('/me', () => me());
-    const item = { variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' };
-    api.get('/me/purchased-items', async () => {
-      await new Promise((r) => setTimeout(r, 300));
-      return { items: [item], nextCursor: null };
-    });
-    api.allowUnmocked('POST /events', 'GET /me/new-customer-offer', 'GET /products/for-you', 'GET /me/wishlist/ids', 'GET /flash-sales/upcoming', 'GET /orders/active-count', 'GET /me/orders/active', 'GET /products', 'GET /categories', 'GET /brands', 'GET /me/subscriptions', 'GET /orders');
-    await page.addInitScript(() => {
-      const w = window as unknown as { __cls: number };
-      w.__cls = 0;
-      new PerformanceObserver((list) => {
-        for (const e of list.getEntries() as unknown as { hadRecentInput: boolean; value: number }[]) if (!e.hadRecentInput) w.__cls += e.value;
-      }).observe({ type: 'layout-shift', buffered: true });
-    });
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(6000);
-    const cls = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);
-    console.log(`HOME_CLS_WEB ${cls.toFixed(4)}`);
-    expect(cls).toBeLessThan(0.1);
-  });
+  }
 });
