@@ -120,12 +120,22 @@ export function BankTransferPanel({
     }
   };
 
+  const checkResultText =
+    checkResult === 'error'
+      ? checkError
+      : checkResult === 'failed'
+        ? 'Giao dịch không thành công hoặc đã được hoàn lại. Vui lòng liên hệ bộ phận hỗ trợ.'
+        : 'Chưa thấy tiền về. Ngân hàng thường xử lý trong 30 giây đến 1 phút sau khi chuyển.';
+
   const handleSaveQr = async (url: string, orderCode: string) => {
     if (savingQrNow.current) return;
     savingQrNow.current = true;
     setSavingQr(true);
     try {
       setQrSaved(await platformBridge.saveImage(url, `tubu-qr-${orderCode}.png`));
+    } catch {
+      // saveImage tự bắt lỗi của nó; đây là lúc nạp mô-đun lưu ảnh hỏng (mất chunk, mạng chập chờn).
+      setQrSaved('failed');
     } finally {
       savingQrNow.current = false;
       setSavingQr(false);
@@ -312,17 +322,19 @@ export function BankTransferPanel({
         <p
           role="status"
           data-testid="bank-check-result"
-          className={`mt-2 text-center text-xs ${checkResult === 'error' || checkResult === 'failed' ? 'text-danger-fg' : 'text-stone-700'}`}
+          className={`${checkResultClass(checkResult)} mt-2 text-center text-xs ${stickyCheck ? 'max-md:hidden' : ''}`}
         >
-          {checkResult === 'error'
-            ? checkError
-            : checkResult === 'failed'
-              ? 'Giao dịch không thành công hoặc đã được hoàn lại. Vui lòng liên hệ bộ phận hỗ trợ.'
-              : 'Chưa thấy tiền về. Ngân hàng thường xử lý trong 30 giây đến 1 phút sau khi chuyển.'}
+          {checkResultText}
         </p>
       )}
       {stickyCheck && (
         <StickyActionBar label="Kiểm tra thanh toán">
+          {/* Nút dính đáy: lời báo trong trang sẽ nằm dưới mép màn, nên hiện ngay trên nút (như snackbar trên đầu của Mini App). */}
+          {checkResult && (
+            <p role="status" data-testid="bank-check-result-sticky" className={`${checkResultClass(checkResult)} mb-2 text-center text-sm`}>
+              {checkResultText}
+            </p>
+          )}
           <button type="button" onClick={() => void handleCheck()} disabled={checking} className={`${ui.btnPrimary} w-full`}>
             {checking ? 'Đang kiểm tra…' : 'Tôi đã chuyển khoản — Kiểm tra'}
           </button>
@@ -331,6 +343,8 @@ export function BankTransferPanel({
     </section>
   );
 }
+
+const checkResultClass = (r: 'unpaid' | 'failed' | 'error') => (r === 'error' || r === 'failed' ? 'text-danger-fg' : 'text-stone-700');
 
 const NETWORK_CHECK_MESSAGE = 'Không kết nối được tới Tubu Tree. Bạn kiểm tra mạng rồi bấm lại nhé.';
 

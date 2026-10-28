@@ -68,6 +68,15 @@ export function checkoutPointsOffer(
 }
 
 /**
+ * Nhãn ô Điểm Xanh khi ô bị khoá (đơn không dùng được điểm): ghi số dư, không hứa "dùng được" ngay cạnh câu "chưa dùng được".
+ * Cùng chữ với checkoutPoints().label của Mini App.
+ */
+export function lockedPointsLabel(quote: { pointsBalance: number; pointsConvertedBalance?: number } | undefined, offer: CheckoutPointsOffer): string {
+  const total = quote ? pointsSummary(quote).total : offer.usable;
+  return offer.lockNote ? `Dùng được ${group(offer.usable)}/${group(total)} điểm` : `Bạn đang có ${group(offer.usable)} điểm`;
+}
+
+/**
  * Dòng điểm quy đổi dưới ô Điểm Xanh. Lô quy đổi trả tới 100% giá trị hàng, nhưng đơn bị trần (giỏ có hàng của gian hàng đối
  * tác, hoặc trần theo giá trị hàng thấp hơn số dùng được) thì không hứa câu đó, chỉ nói phần không hết hạn — cùng luật Mini App.
  */

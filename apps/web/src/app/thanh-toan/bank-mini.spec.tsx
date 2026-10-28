@@ -5,7 +5,7 @@ import { flush, render, type Rendered } from '@/test-utils/dom';
 // Màn VietQR ở điện thoại phải là Mini App (apps/miniapp/src/pages/bank-payment.tsx): tiêu đề trang, thẻ QR, các dòng kẻ,
 // nút sao chép chỉ icon, lời nhắc có icon, các nút ngoài thẻ. jsdom không có media query nên kiểm bằng lớp `max-md:`/`md:`.
 
-const mocks = vi.hoisted(() => ({ saveImage: vi.fn(), deadline: '2099-01-01T00:00:00.000Z' as string | null, qr: 'ok' as 'ok' | 'error' | 'pending' }));
+const mocks = vi.hoisted(() => ({ saveImage: vi.fn(), deadline: '2099-01-01T00:00:00.000Z' as string | null, qr: 'ok' as 'ok' | 'error' | 'pending', status: 'UNPAID' as string, failRefetch: false, calls: 0 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
 vi.mock('next/navigation', () => ({ useParams: () => ({ code: 'TB-9' }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -13,8 +13,10 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getBankQr: async (code: string) => {
     if (mocks.qr === 'error') throw new Error('x');
     if (mocks.qr === 'pending') return new Promise<never>(() => {});
+    mocks.calls += 1;
+    if (mocks.failRefetch && mocks.calls > 1) throw new TypeError('Failed to fetch');
     return {
-    orderCode: code, amount: 330000, paymentStatus: 'UNPAID', paymentDeadline: mocks.deadline,
+    orderCode: code, amount: 330000, paymentStatus: mocks.status, paymentDeadline: mocks.deadline,
     bank: { bin: '970407', name: 'Techcombank', accountNo: '9984606774', accountName: 'CONG TY TUBU TREE' },
     memo: code, qrString: 'x', qrImageUrl: 'https://img.vietqr.io/x.png',
     };
@@ -35,6 +37,9 @@ const mount = async () => {
 beforeEach(() => {
   mocks.deadline = '2099-01-01T00:00:00.000Z';
   mocks.qr = 'ok';
+  mocks.status = 'UNPAID';
+  mocks.failRefetch = false;
+  mocks.calls = 0;
   mocks.saveImage.mockReset().mockResolvedValue('saved');
 });
 afterEach(() => {
@@ -190,5 +195,33 @@ describe('/thanh-toan/chuyen-khoan — bố cục điện thoại như Mini App 
     done('saved');
     await flush(2);
     expect(c.querySelector('[data-testid="bank-qr-saved"]')).not.toBeNull();
+  });
+
+  // Nút Kiểm tra dính đáy: lời báo nằm trong dòng chảy sẽ ở dưới mép màn, nên phải hiện ngay trong thanh dính.
+  it('bấm Kiểm tra khi chưa thấy tiền: lời báo hiện trong thanh dính đáy, ngay trên nút', async () => {
+    const c = await mount();
+    const bar = c.querySelector('[data-testid="sticky-bar"]')!;
+    bar.querySelector('button')!.click();
+    await flush(6);
+    expect(bar.querySelector('[data-testid="bank-check-result-sticky"]')?.textContent).toContain('Chưa thấy tiền về');
+  });
+
+  it('bấm Kiểm tra gặp lỗi mạng: lỗi hiện trong thanh dính đáy', async () => {
+    const c = await mount();
+    mocks.failRefetch = true;
+    const bar = c.querySelector('[data-testid="sticky-bar"]')!;
+    bar.querySelector('button')!.click();
+    await flush(6);
+    expect(bar.querySelector('[data-testid="bank-check-result-sticky"]')?.textContent).toMatch(/không kết nối|kiểm tra mạng/i);
+  });
+
+  it('cầu nối lưu ảnh reject (mất chunk): báo chưa lưu được, không rơi thành lỗi chưa bắt', async () => {
+    mocks.saveImage.mockRejectedValue(new Error('chunk lost'));
+    const c = await mount();
+    const save = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Lưu mã QR'))! as HTMLButtonElement;
+    save.click();
+    await flush(4);
+    expect(c.querySelector('[data-testid="bank-qr-saved"]')?.textContent).toContain('Chưa lưu được');
+    expect(save.disabled).toBe(false);
   });
 });

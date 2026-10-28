@@ -97,6 +97,27 @@ describe('/thanh-toan — nhãn dùng Điểm Xanh', () => {
     expect(box.closest('label')!.textContent).toContain('Dùng 12 điểm, giảm 12.000đ');
   });
 
+  it('trần 0 mà không có câu đối tác: ô khoá ghi số dư như Mini ("Bạn đang có"), không lặp "Dùng được" cạnh câu chưa dùng được', async () => {
+    calls.extra = { pointsMax: 0, pointsPartnerNote: null };
+    const r = render(<CheckoutPage />);
+    mounted.push(r);
+    await flush(8);
+    const label = [...r.container.querySelectorAll('label')].find((l) => l.querySelector('input[type="checkbox"]') && /Điểm Xanh/.test(l.textContent ?? ''))!;
+    expect(label.querySelector<HTMLInputElement>('input')!.disabled).toBe(true);
+    expect(label.textContent).toContain('Bạn đang có 500 điểm');
+    expect(label.textContent).not.toContain('Dùng được');
+    expect(r.container.textContent).toContain('Đơn này chưa dùng được Điểm Xanh');
+  });
+
+  it('trần 0 và một phần điểm còn bị giữ: ghi "Dùng được X/Y điểm" như Mini', async () => {
+    calls.extra = { pointsMax: 0, pointsPartnerNote: null, redeemablePoints: 300 };
+    const r = render(<CheckoutPage />);
+    mounted.push(r);
+    await flush(8);
+    const label = [...r.container.querySelectorAll('label')].find((l) => l.querySelector('input[type="checkbox"]') && /Điểm Xanh/.test(l.textContent ?? ''))!;
+    expect(label.textContent).toContain('Dùng được 300/500 điểm');
+  });
+
   it('Q8 S7: giỏ chỉ hàng của gian hàng đối tác → ô Điểm Xanh bị tắt, kèm câu giải thích', async () => {
     calls.extra = { pointsMax: 0, pointsPartnerNote: NOTE };
     const r = render(<CheckoutPage />);

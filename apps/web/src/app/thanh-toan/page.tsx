@@ -28,7 +28,7 @@ import {
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { shippingEtaLabel } from '@tubutree/app-core/shipping-eta';
-import { checkoutPointsOffer, convertedPointsLine, formatCount, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
+import { checkoutPointsOffer, convertedPointsLine, formatCount, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
   ORDER_NOTE_MAX,
   effectiveReferralCode,
@@ -764,7 +764,7 @@ export default function CheckoutPage() {
                 <span className="block font-semibold max-md:text-stone-900">Điểm Xanh</span>
                 <span className="block text-caption max-md:text-stone-600">
                   {partnerPoints.disabled
-                    ? `Dùng được ${formatCount(usablePoints)} điểm`
+                    ? lockedPointsLabel(quote, pointsOffer)
                     : pointsOfferText(usablePoints, quote, usePoints && quote ? quote : null, configQ.data?.loyalty?.vndPerPointRedeem)}
                 </span>
               </span>
