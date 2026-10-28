@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WasteDeskRequestDTO } from '@tubutree/shared-types';
 import { byText, click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { WAREHOUSE_DESK, makeDeskPoint, makeDeskRequest } from './recycle-fixtures';
 
 // Chép ý recycle-desk.spec.tsx (Mini App, §4.10, §8, §15.3, §15.5): vào màn, tra mã, đếm, xác nhận, từ chối, trao quà.
@@ -203,10 +204,12 @@ describe('/doi-rac/quay: vào màn (§16.1, §4.10)', () => {
     expect(before(input, quota) && before(quota, card) && before(card, perk) && before(perk, report)).toBe(true);
     expect(byText(c.querySelector('[data-testid="sticky-bar"]')!, 'button', 'Xác nhận đã nhận')).not.toBeNull();
   });
-  it('nút "Từ chối cả yêu cầu" dùng màu cảnh báo như nút trong khung từ chối', async () => {
+  it('nút "Từ chối cả yêu cầu" giống Mini: nền nút phụ, chữ màu cảnh báo', async () => {
     const c = await mount();
     await lookUp(c);
-    expect(button(c, 'Từ chối cả yêu cầu')!.className).toContain('text-danger-fg');
+    const cls = button(c, 'Từ chối cả yêu cầu')!.className;
+    expect(cls).toContain(skin.btnSecondary);
+    expect(cls).toContain('!text-danger-fg');
   });
   it('đại lý không giới hạn hạn mức tháng', async () => {
     state.points = [makeDeskPoint({ quota: null })];

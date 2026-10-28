@@ -469,7 +469,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                   </ConfirmBar>
                   <button
                     type="button"
-                    className={DANGER_BTN}
+                    className={`${skin.btnSecondary} w-full !text-danger-fg`}
                     onClick={() => {
                       reject.reset();
                       setRejectOpen(true);
