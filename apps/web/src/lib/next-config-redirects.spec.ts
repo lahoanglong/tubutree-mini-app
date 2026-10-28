@@ -15,9 +15,10 @@ describe('next.config redirects()', () => {
     expect(list).toContainEqual({ source: '/cong-dong/xep-hang', destination: '/cong-dong', permanent: true });
   });
 
-  it('đường Mini App /feed/leaderboard đi cùng đích với bản chuyển hướng của Mini App', async () => {
+  it('đường Mini App /feed/leaderboard và /refill đi cùng đích với bản chuyển hướng của Mini App', async () => {
     const list = await nextConfig.redirects!();
     expect(list).toContainEqual({ source: '/feed/leaderboard', destination: '/cong-dong', permanent: false });
+    expect(list).toContainEqual({ source: '/refill', destination: '/doi-rac', permanent: false });
   });
 });
 

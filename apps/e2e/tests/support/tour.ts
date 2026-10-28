@@ -83,6 +83,7 @@ export const TOUR: Record<string, Omit<TourEntry, 'key'>> = {
   '/recycle/requests': { name: 'Yêu cầu đổi rác của tôi', miniapp: '/recycle/requests', web: '/doi-rac/yeu-cau', role: 'CUSTOMER' },
   '/recycle/done/:id': { name: 'Đổi rác hoàn tất', miniapp: '/recycle/done/wr-done-1', web: '/doi-rac/xong/wr-done-1', role: 'CUSTOMER' },
   '/recycle/desk': { name: 'Quầy nhận rác', miniapp: '/recycle/desk', web: '/doi-rac/quay', role: 'STAFF' },
+  '/refill': { name: 'Refill cũ (chuyển sang Đổi rác)', miniapp: '/refill', web: '/doi-rac', role: 'CUSTOMER' },
 };
 
 export function tourEntries(): TourEntry[] {
