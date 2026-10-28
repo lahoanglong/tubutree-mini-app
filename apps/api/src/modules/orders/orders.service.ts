@@ -347,9 +347,18 @@ export class OrdersService {
         })
       : [];
     const byId = new Map(variations.map((v) => [v.id, v]));
-    const media = (variationId: string): OrderItemMedia => {
+    // Biến thể có thể bị xoá hẳn (gắn mã Pancake xoá biến thể tạm của sản phẩm đối tác) trong khi sản phẩm vẫn đang bán: dòng đơn chỉ còn
+    // slug đã lưu, tra sản phẩm theo đó để khách không mất nút "Viết đánh giá" của một sản phẩm còn mở.
+    const orphanSlugs = [...new Set(orders.flatMap((o) => o.items.flatMap((it) => (!byId.has(it.variationId) && it.productSlug ? [it.productSlug] : []))))];
+    const publicBySlug = new Map(
+      (orphanSlugs.length
+        ? await this.prisma.product.findMany({ where: { slug: { in: orphanSlugs } }, select: { slug: true, isActive: true, approvalStatus: true } })
+        : []
+      ).map((p) => [p.slug, isPublicProduct(p)]),
+    );
+    const media = (variationId: string, productSlug: string | null): OrderItemMedia => {
       const v = byId.get(variationId);
-      if (!v) return MISSING_MEDIA;
+      if (!v) return { ...MISSING_MEDIA, productPublic: productSlug ? (publicBySlug.get(productSlug) ?? false) : false };
       return {
         thumbnail: publicProductThumb(v.product),
         stock: v.stock,
@@ -360,7 +369,7 @@ export class OrdersService {
     };
     return orders.map((o) => ({
       ...forBuyer(o),
-      items: o.items.map((it) => ({ ...it, ...media(it.variationId) })),
+      items: o.items.map((it) => ({ ...it, ...media(it.variationId, it.productSlug) })),
       canCancel: customerCancelBlock(o, viewerId) === null,
       manualHandling: isManualHandling(o),
       paymentDeadline: deadlines.get(o.id) ?? null,
@@ -494,7 +503,7 @@ export class OrdersService {
       .notifySafe(userId, 'ORDER_CANCELLED', {
         order_code: code,
         refund_note: refundNote(refund, bank, pointsBack) + receivedRefundNote(receivedBack, !!order.placedForCustomer),
-      });
+      }, undefined, `order=${code}`);
     await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_ORDER_CANCELLED', {
       order_code: code,
       reason: 'Khách huỷ đơn',
