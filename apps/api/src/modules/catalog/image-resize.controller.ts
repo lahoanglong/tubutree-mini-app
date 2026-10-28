@@ -1,6 +1,6 @@
-import { Controller, Get, Headers, Query, Res, StreamableFile } from '@nestjs/common';
+import { Controller, Get, Headers, Query, Req, Res, StreamableFile } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import { ImageResizeService } from './image-resize.service';
 import { negotiateFormat } from './image-resize';
@@ -22,6 +22,7 @@ export class ImageResizeController {
     @Query('w') widthRaw: unknown,
     @Headers('accept') accept: string | undefined,
     @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const width = Number(widthRaw);
@@ -37,7 +38,7 @@ export class ImageResizeController {
       res.status(304).set({ ...headers, ETag: `"${key}"` });
       return;
     }
-    const out = await this.images.get(source, width, format);
+    const out = await this.images.get(source, width, format, req.ip ?? '');
     res.set({ ...headers, ETag: out.etag });
     return new StreamableFile(out.data, { type: out.mime });
   }

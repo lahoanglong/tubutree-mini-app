@@ -50,6 +50,7 @@ const MAX_QUEUED_JOBS = 32;
 const REGISTRY_TTL_MS = 5 * 60 * 1000;
 /** Ảnh của chính API sai ?v= hoặc không có: mỗi lần vẫn tốn một lần đọc DB và một chỗ trong hàng đợi, nên giới hạn theo phút. */
 const OWN_MISSES_PER_MIN = 30;
+const MAX_MISS_TRACKED = 5000;
 const PRUNE_MIN_GAP_WHEN_FULL_MS = 10 * 1000;
 /** Dọn tới 80% trần để còn chỗ ghi ảnh mới, không dừng ghi ngay sát trần. */
 const PRUNE_LOW_WATER = 0.8;
@@ -74,8 +75,7 @@ export class ImageResizeService {
   private registry = new Set<string>();
   private registryUntil = 0;
   private registryLoad: Promise<void> | null = null;
-  private ownMissWindowStart = 0;
-  private ownMissCount = 0;
+  private readonly ownMisses = new Map<string, { start: number; count: number }>();
 
   constructor(
     private readonly own: PublicImageService,
@@ -91,7 +91,7 @@ export class ImageResizeService {
     return remote ? cacheKey(remote.toString(), width, format) : null;
   }
 
-  async get(source: unknown, width: number, format: ResizeFormat): Promise<ResizedImage> {
+  async get(source: unknown, width: number, format: ResizeFormat, client = ''): Promise<ResizedImage> {
     if (!isAllowedWidth(width)) throw new BadRequestException('Bề rộng ảnh không được hỗ trợ.');
     const key = this.keyFor(source, width, format);
     if (!key) throw new BadRequestException('Nguồn ảnh không được hỗ trợ.');
@@ -102,7 +102,7 @@ export class ImageResizeService {
     if (!parseOwnImagePath(source) && !(await this.isRegistered(source as string))) throw new NotFoundException('Không tìm thấy ảnh.');
     let job = this.inFlight.get(key);
     if (!job) {
-      job = this.produce(source as string, key, width, format).finally(() => this.inFlight.delete(key));
+      job = this.produce(source as string, key, width, format, client).finally(() => this.inFlight.delete(key));
       this.inFlight.set(key, job);
     }
     return job;
@@ -142,21 +142,31 @@ export class ImageResizeService {
     this.registryUntil = Date.now() + REGISTRY_TTL_MS;
   }
 
-  private ownMissLimited(): boolean {
-    const now = Date.now();
-    if (now - this.ownMissWindowStart > 60_000) {
-      this.ownMissWindowStart = now;
-      this.ownMissCount = 0;
-    }
-    return this.ownMissCount >= OWN_MISSES_PER_MIN;
+  /** Đếm theo IP: chỉ IP hay gửi sai ?v= bị chặn, khách khác (và ảnh hợp lệ của IP khác) không bị ảnh hưởng. */
+  private ownMissLimited(client: string): boolean {
+    const e = this.ownMisses.get(client);
+    return !!e && Date.now() - e.start <= 60_000 && e.count >= OWN_MISSES_PER_MIN;
   }
 
-  private async produce(source: string, key: string, width: number, format: ResizeFormat): Promise<ResizedImage> {
-    if (parseOwnImagePath(source) && this.ownMissLimited()) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
+  private noteOwnMiss(client: string): void {
+    const now = Date.now();
+    const e = this.ownMisses.get(client);
+    if (e && now - e.start <= 60_000) e.count += 1;
+    else {
+      if (this.ownMisses.size >= MAX_MISS_TRACKED) {
+        for (const [k, v] of this.ownMisses) if (now - v.start > 60_000) this.ownMisses.delete(k);
+        if (this.ownMisses.size >= MAX_MISS_TRACKED) this.ownMisses.clear();
+      }
+      this.ownMisses.set(client, { start: now, count: 1 });
+    }
+  }
+
+  private async produce(source: string, key: string, width: number, format: ResizeFormat, client: string): Promise<ResizedImage> {
+    if (parseOwnImagePath(source) && this.ownMissLimited(client)) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
     const release = await this.acquire();
     let data: Buffer;
     try {
-      const input = await this.loadSource(source);
+      const input = await this.loadSource(source, client);
       const pipeline = sharp(input, { limitInputPixels: MAX_SOURCE_PIXELS, failOn: 'error' }).rotate().resize({ width, withoutEnlargement: true });
       data = await (format === 'webp' ? pipeline.webp({ quality: 78 }) : pipeline.jpeg({ quality: 80, mozjpeg: true })).toBuffer();
     } catch (e) {
@@ -169,12 +179,12 @@ export class ImageResizeService {
     return { data, mime: format === 'webp' ? 'image/webp' : 'image/jpeg', etag: `"${key}"` };
   }
 
-  private async loadSource(source: string): Promise<Buffer> {
+  private async loadSource(source: string, client: string): Promise<Buffer> {
     const own = parseOwnImagePath(source);
     if (own) {
       const found = await this.own.get(own.kind, own.id, own.slot, own.version).catch(() => null);
       if (!found || !found.versionOk) {
-        this.ownMissCount += 1;
+        this.noteOwnMiss(client);
         throw new NotFoundException('Không tìm thấy ảnh.');
       }
       return found.data;
@@ -262,7 +272,7 @@ export class ImageResizeService {
     if ((this.cacheBytes ?? 0) + data.length > this.maxBytes) {
       if (Date.now() - this.lastPrune > PRUNE_MIN_GAP_WHEN_FULL_MS) {
         this.lastPrune = Date.now();
-        await this.prune().catch(() => undefined);
+        await this.prune(true).catch(() => undefined);
       }
       if ((this.cacheBytes ?? 0) + data.length > this.maxBytes) return;
     }
@@ -282,8 +292,8 @@ export class ImageResizeService {
     }
   }
 
-  /** Xoá file quá tuổi, rồi xoá file cũ nhất cho tới khi dưới 80% trần dung lượng (khi đã vượt trần). */
-  async prune(): Promise<{ removed: number; bytes: number }> {
+  /** Xoá file quá tuổi, rồi xoá file cũ nhất cho tới khi dưới 80% trần dung lượng (khi đã vượt trần hoặc không còn chỗ cho file mới). */
+  async prune(lowWater = false): Promise<{ removed: number; bytes: number }> {
     const files: { path: string; size: number; mtime: number }[] = [];
     let shards: string[] = [];
     try {
@@ -314,7 +324,7 @@ export class ImageResizeService {
     let removed = 0;
     let total = files.reduce((s, f) => s + f.size, 0);
     // Vượt trần thì dọn xuống mức thấp; chưa vượt thì chỉ xoá file quá tuổi.
-    const target = total > this.maxBytes ? this.maxBytes * PRUNE_LOW_WATER : this.maxBytes;
+    const target = lowWater || total > this.maxBytes ? this.maxBytes * PRUNE_LOW_WATER : this.maxBytes;
     files.sort((a, b) => a.mtime - b.mtime);
     for (const f of files) {
       if (now - f.mtime <= CACHE_MAX_AGE_MS && total <= target) break;

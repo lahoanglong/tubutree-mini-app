@@ -150,12 +150,26 @@ describe('ImageResizeService', () => {
     await expect(svc.get('https://content.pancake.vn/a.jpg', 320, 'webp')).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
-  it('ảnh của chính API sai ?v= liên tục: quá 30 lần mỗi phút thì 503, không tốn thêm lượt đọc DB', async () => {
+  it('một IP gửi sai ?v= quá 30 lần mỗi phút thì bị 503, không tốn thêm lượt đọc DB', async () => {
     const own = { get: jest.fn(async () => ({ mime: 'image/png', data: png, versionOk: false })) };
     const { svc } = make(own as never);
-    for (let i = 0; i < 30; i++) await expect(svc.get(`/public-image/product/p1/0?v=bad${i}`, 320, 'webp')).rejects.toBeInstanceOf(NotFoundException);
-    await expect(svc.get('/public-image/product/p1/0?v=badlast', 320, 'webp')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    for (let i = 0; i < 30; i++) await expect(svc.get(`/public-image/product/p1/0?v=bad${i}`, 320, 'webp', '1.1.1.1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.get('/public-image/product/p1/0?v=badlast', 320, 'webp', '1.1.1.1')).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(own.get).toHaveBeenCalledTimes(30);
+  });
+
+  it('IP khác vẫn xem được ảnh hợp lệ khi một IP đã bị chặn vì sai ?v=', async () => {
+    const own = { get: jest.fn(async (_k: string, id: string) => ({ mime: 'image/png', data: png, versionOk: id !== 'bad' })) };
+    const { svc } = make(own as never);
+    for (let i = 0; i < 30; i++) await expect(svc.get(`/public-image/product/bad/0?v=x${i}`, 320, 'webp', '1.1.1.1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.get('/public-image/product/bad/0?v=y', 320, 'webp', '1.1.1.1')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    const ok = await svc.get('/public-image/product/good/0?v=ok', 320, 'webp', '2.2.2.2');
+    expect(ok.data.length).toBeGreaterThan(0);
+  });
+
+  it('ảnh hợp lệ không bao giờ tính vào hạn mức sai ?v=', async () => {
+    const { svc } = make();
+    for (let i = 0; i < 40; i++) await svc.get(`/public-image/product/g${i}/0?v=ok`, 160, 'webp', '3.3.3.3');
   });
 
   it('ảnh của chính API sai phiên bản (?v=) thì 404, không ghi cache', async () => {
@@ -214,6 +228,26 @@ describe('ImageResizeService', () => {
     const res = await svc.prune();
     expect(res.removed).toBe(2);
     expect(readdirSync(sub)).toEqual(['b']);
+  });
+
+  it('writeCache: ảnh mới không vừa trần thì dọn xuống 80% rồi ghi (đúng đường get)', async () => {
+    process.env.IMAGE_CACHE_MAX_MB = '1';
+    const sub = join(dir, 'cc');
+    require('node:fs').mkdirSync(sub);
+    for (let i = 0; i < 4; i++) {
+      const f = join(sub, `f${i}`);
+      writeFileSync(f, Buffer.alloc(262_140));
+      utimesSync(f, new Date(Date.now() - (10 - i) * 1000), new Date(Date.now() - (10 - i) * 1000));
+    }
+    const { svc } = make();
+    const out = await svc.get('/public-image/product/w1/0', 960, 'jpeg');
+    const names = readdirSync(sub);
+    expect(names).not.toContain('f0');
+    expect(names).toContain('f3');
+    const all = readdirSync(dir).flatMap((d) => readdirSync(join(dir, d)).map((n) => join(dir, d, n)));
+    const total = all.reduce((s, f) => s + require('node:fs').statSync(f).size, 0);
+    expect(all.some((f) => f.endsWith(out.etag.slice(1, -1)))).toBe(true);
+    expect(total).toBeLessThanOrEqual(1024 * 1024);
   });
 
   it('prune: khi vượt trần dọn xuống còn tối đa 80% trần', async () => {
