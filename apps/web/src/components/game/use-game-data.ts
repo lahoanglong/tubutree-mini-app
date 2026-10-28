@@ -23,8 +23,10 @@ import { coreHttp } from '@/lib/core-http';
  * theo tiền tố nên đổi tên khoá phải đổi cả hai nơi. Bảng xếp hạng và mùa là dữ liệu công khai nên chạy cả khi chưa đăng
  * nhập; phần còn lại cần phiên. Chặng Mùa chỉ gọi API khi cờ SEASON_PASS_ENABLED bật. Dữ liệu của tab Vườn và tab Cộng đồng
  * chỉ tải khi mở tab đó (mở game chỉ cần hồ sơ, câu đố, nhiệm vụ); truy vấn tắt vẫn trả dữ liệu đã có trong cache.
+ * `season` (mùa và Chặng Mùa) mặc định đi theo tab Cộng đồng; khi tab đó ẩn thì mùa nằm ở tab Vườn như Mini App nên trang truyền riêng.
  */
-export function useGameData(authed: boolean, tabs: { garden: boolean; community: boolean; friends: boolean }) {
+export function useGameData(authed: boolean, tabs: { garden: boolean; community: boolean; friends: boolean; season?: boolean }) {
+  const seasonTab = tabs.season ?? tabs.community;
   const profileQ = useQuery({ ...gameProfileQuery(coreHttp), enabled: authed });
   const quizQ = useQuery({ ...gameQuizQuery(coreHttp), enabled: authed });
   const quiz = quizQ.data;
@@ -34,12 +36,12 @@ export function useGameData(authed: boolean, tabs: { garden: boolean; community:
   const board = boardQ.data;
   const { data: community } = useQuery({ ...gameCommunityQuery(coreHttp), enabled: authed && tabs.garden });
   const { data: codex } = useQuery({ ...gameCollectionQuery(coreHttp), enabled: authed && tabs.garden });
-  const { data: season } = useQuery({ ...gameSeasonQuery(coreHttp), enabled: tabs.community });
+  const { data: season } = useQuery({ ...gameSeasonQuery(coreHttp), enabled: seasonTab });
   const { data: seasonBoard } = useQuery({ ...gameSeasonBoardQuery(coreHttp), enabled: tabs.community });
   const { data: friends } = useQuery({ ...gameFriendsQuery(coreHttp), enabled: authed && tabs.friends });
   const gardenQ = useQuery({ ...gameGardenQuery(coreHttp), enabled: authed && tabs.garden });
   const garden = gardenQ.data;
-  const { data: seasonPass } = useQuery({ ...gameSeasonPassQuery(coreHttp), enabled: authed && tabs.community && SEASON_PASS_ENABLED });
+  const { data: seasonPass } = useQuery({ ...gameSeasonPassQuery(coreHttp), enabled: authed && seasonTab && SEASON_PASS_ENABLED });
 
   return { profileQ, quizQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, gardenQ, boardQ, seasonPass };
 }

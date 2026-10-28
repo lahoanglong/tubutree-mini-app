@@ -6,6 +6,12 @@
 /** Chặng Mùa: tắt chờ chủ quyết; công cụ tạo mùa đã có ở admin. */
 export const SEASON_PASS_ENABLED = false;
 
+/**
+ * Vườn Xanh trên web còn tab Cộng đồng (tặng nước bạn bè, bảng xếp hạng người chơi) mà Mini App đã bỏ theo chính sách Zalo 4.6. Web khổ điện thoại
+ * phải giống Mini App nên tab ẩn; mã giữ nguyên, đổi sang true là tab hiện lại như cũ.
+ */
+export const GAME_SOCIAL_ON_WEB = false;
+
 /** Giao định kỳ trong Mini App: chủ chốt tạm ẩn đợt đầu (28/10). Chỉ ẩn lối vào ở Mini App, web giữ nguyên. */
 export const SUBSCRIPTIONS_IN_MINIAPP = false;
 

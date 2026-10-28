@@ -27,6 +27,8 @@ vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: state.retrySession }) }));
 vi.mock('@/lib/idempotency-key', () => ({ newIdempotencyKey: () => `key-${++state.keySeq}` }));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: () => state.wasteReady }));
+// Spec này kiểm cả tab Cộng đồng, nên bật cờ; trạng thái cờ tắt ở social-off.spec.tsx.
+vi.mock('@tubutree/app-core/features', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), GAME_SOCIAL_ON_WEB: true }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: state.push, replace: state.replace }),
   usePathname: () => '/vuon-xanh',
