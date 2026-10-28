@@ -69,7 +69,8 @@ export function useReorder(source: ReorderSource, opts: UseReorderOptions = {}):
       haptic('medium');
       const type = summary.hasProblems ? 'warning' : 'success';
       if (opts.navigateToCart) {
-        openSnackbar({ text: summary.message, type });
+        // Giỏ đã hiện món vừa thêm; chỉ báo khi có món bị bỏ, và ở đầu màn để không che nút Thanh toán.
+        if (summary.hasProblems) openSnackbar({ text: summary.message, type, position: 'top' });
         navigate('/cart');
         return;
       }

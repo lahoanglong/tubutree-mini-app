@@ -89,6 +89,16 @@ describe('useReorder', () => {
     expect(mocks.trackReorderCompleted).toHaveBeenCalledWith({ source: 'order_detail', added: 1, skipped: 1 });
   });
 
+  it('R-26: thêm đủ và navigateToCart → sang /cart, không snackbar che nút Thanh toán', async () => {
+    mocks.repurchaseOrder.mockResolvedValue({ cart: CART, legacy: false, results: [{ orderItemId: 'a', status: 'added', addedQuantity: 1 }] });
+    const { result } = setup('order_detail', { navigateToCart: true });
+    await act(async () => {
+      await result.current.submit(ORDER, [{ key: 'a', variationId: 'v-a', quantity: 1 }]);
+    });
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+  });
+
   it('không thêm được món nào → snackbar lỗi, không chuyển trang dù navigateToCart', async () => {
     mocks.repurchaseOrder.mockResolvedValue({
       cart: CART, legacy: false, results: [{ orderItemId: 'a', status: 'skipped', reason: 'INACTIVE', addedQuantity: 0 }],
