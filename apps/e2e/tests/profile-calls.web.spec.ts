@@ -7,9 +7,8 @@ import { expect, test } from './support/mock-api';
 
 test.describe('Web khách khổ 375: số lời gọi API và dịch chuyển bố cục', () => {
   test.use({ viewport: { width: 375, height: 812 } });
-  test.skip(({}, testInfo) => testInfo.project.name !== 'Web Customer Mobile', 'chỉ đo ở khổ điện thoại');
-
   test.beforeEach(async ({ page }) => {
+    test.skip(test.info().project.name !== 'Web Customer Mobile', 'chỉ đo ở khổ điện thoại');
     await page.addInitScript(() => {
       try {
         localStorage.setItem('tubu_web_session', '1');
