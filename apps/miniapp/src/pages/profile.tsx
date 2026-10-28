@@ -141,7 +141,8 @@ export default function ProfilePage() {
   const chatEnabled = cfg.chat?.enabled === true;
   const chatSummaryQ = useQuery({ ...supportChatSummaryQueryOptions(), enabled: authed && chatEnabled });
   const chatUnread = chatEnabled && (chatSummaryQ.data?.unreadCount ?? 0) > 0;
-  // Điểm nhận hàng chỉ có ở nhân viên/admin (kho) và điểm đối tác của đại lý; khách thường không bị gọi thêm API.
+  // Chỉ hỏi vai thường vận hành quầy (nhân viên/admin kho, đại lý có điểm đối tác) để khách thường không bị gọi thêm API. Nhân viên điểm đối tác
+  // mang vai CUSTOMER (admin thêm qua màn điểm) chưa có hàng này ở đây; họ vào quầy bằng màn Đổi rác. Cần API trả cờ nhẹ mới phủ được nhóm đó.
   const isStaffOrAdmin = user?.role === 'STAFF' || user?.role === 'ADMIN';
   const mayHaveDesk = isStaffOrAdmin || (user?.role === 'DEALER' && cfg.waste.enabled);
   const deskQ = useQuery({ queryKey: WASTE_QUERY_KEYS.desk, queryFn: getDeskPoints, enabled: authed && mayHaveDesk, staleTime: 5 * 60_000, retry: false });

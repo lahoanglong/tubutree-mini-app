@@ -121,7 +121,8 @@ function AccountContent() {
     staleTime: 5 * 60_000,
   });
   const dealerQ = useQuery({ ...dealerMeQuery(coreHttp), enabled: authed, retry: false });
-  // Điểm nhận hàng chỉ có ở nhân viên/admin (kho) và điểm đối tác của đại lý; khách thường không bị gọi thêm API.
+  // Chỉ hỏi vai thường vận hành quầy (nhân viên/admin kho, đại lý có điểm đối tác) để khách thường không bị gọi thêm API. Nhân viên điểm đối tác
+  // mang vai CUSTOMER (admin thêm qua màn điểm) chưa có hàng này ở đây; họ vào quầy bằng màn Đổi rác. Cần API trả cờ nhẹ mới phủ được nhóm đó.
   const mayHaveDesk = user?.role === 'STAFF' || user?.role === 'ADMIN' || (user?.role === 'DEALER' && cfgQ.data?.waste?.enabled === true);
   const deskQ = useQuery({ ...deskPointsQuery(coreHttp), enabled: authed && mayHaveDesk, staleTime: 5 * 60_000, retry: false });
   // Chỉ vai không rõ quyền CTV (đại lý, nhân viên, admin) mới cần hỏi; CTV và khách thường suy được từ vai trò.
