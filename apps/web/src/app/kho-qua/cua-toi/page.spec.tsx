@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: state.push }),
   useSearchParams: () => new URLSearchParams(state.search),
+  usePathname: () => '/kho-qua/cua-toi',
 }));
 
 vi.mock('@/components/ui/qr-code', () => ({ QrCode: ({ value }: { value: string }) => <div data-testid="qr">{value}</div> }));
