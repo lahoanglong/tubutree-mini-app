@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({ status: 'authenticated', touch: vi.fn() }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: mocks.status }) }));
 vi.mock('@/lib/shop-client', () => ({ recordReferralTouch: mocks.touch }));
 
-import { clearPendingRef, clearStorefrontContext, getStorefrontContext, PENDING_REF_TTL_DAYS, readPendingRef } from '@/lib/storefront-context';
+import { clearPendingRef, clearStorefrontContext, getStorefrontContext, PENDING_REF_TTL_DAYS, readPendingRefs } from '@/lib/storefront-context';
 import { ReferralCapture, StorefrontTracker } from './storefront-tracker';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -128,7 +128,7 @@ describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chư
     await m.rerender();
     expect(mocks.touch).toHaveBeenCalledTimes(1);
     expect(mocks.touch).toHaveBeenCalledWith({ referralCode: 'ABC', kind: 'ctv' });
-    expect(readPendingRef()).toBeNull();
+    expect(readPendingRefs()).toEqual([]);
     await m.unmount();
   });
 
@@ -148,7 +148,7 @@ describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chư
     mocks.status = 'authenticated';
     await m.rerender();
     expect(mocks.touch).toHaveBeenCalledTimes(1);
-    expect(readPendingRef()).toBeNull();
+    expect(readPendingRefs()).toEqual([]);
     await m.unmount();
   });
 
@@ -159,7 +159,7 @@ describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chư
     mocks.status = 'authenticated';
     await m.rerender();
     expect(mocks.touch).toHaveBeenCalledTimes(1);
-    expect(readPendingRef()).toMatchObject({ referralCode: 'ABC' });
+    expect(readPendingRefs()).toMatchObject([{ referralCode: 'ABC' }]);
     await m.unmount();
   });
 
@@ -171,7 +171,63 @@ describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chư
     mocks.status = 'authenticated';
     await m.rerender();
     expect(mocks.touch).not.toHaveBeenCalled();
-    expect(readPendingRef()).toBeNull();
+    expect(readPendingRefs()).toEqual([]);
+    await m.unmount();
+  });
+
+  /** Mở link trong cùng một tab (sessionStorage còn nguyên: nguồn trong phiên là link mở sau cùng). */
+  async function openLinkInSameTab(url: string) {
+    window.history.replaceState({}, '', url);
+    const m = await mountKept();
+    await m.unmount();
+    window.history.replaceState({}, '', '/');
+  }
+
+  const touchByCode = (okCodes: string[]) =>
+    mocks.touch.mockImplementation(async (dto: { referralCode: string }) => ({ ok: okCodes.includes(dto.referralCode) }));
+
+  it('link CTV rồi link mã khách thường (đóng tab giữa hai lần): đăng nhập chạm cả hai, CTV trước, mã khách thường sau cùng', async () => {
+    touchByCode(['an-shop']);
+    await openLinkThenCloseTab('/?s=an-shop');
+    await openLinkThenCloseTab('/?ref=KHACH01');
+    expect(readPendingRefs()).toHaveLength(2);
+    const m = await mountKept();
+    mocks.status = 'authenticated';
+    await m.rerender();
+    expect(mocks.touch.mock.calls.map(([dto]) => dto)).toEqual([
+      { referralCode: 'an-shop', storefrontSlug: 'an-shop', kind: 'ctv' },
+      { referralCode: 'KHACH01', kind: 'ctv' },
+    ]);
+    expect(readPendingRefs()).toEqual([]);
+    await m.unmount();
+  });
+
+  it('cùng một tab: link CTV rồi link mã khách thường (nguồn trong phiên chỉ còn mã khách thường), đăng nhập vẫn chạm cả hai theo thứ tự', async () => {
+    touchByCode(['an-shop']);
+    await openLinkInSameTab('/?s=an-shop');
+    await openLinkInSameTab('/?ref=KHACH01');
+    expect(getStorefrontContext()).toMatchObject({ referralCode: 'KHACH01', slug: null });
+    const m = await mountKept();
+    mocks.status = 'authenticated';
+    await m.rerender();
+    expect(mocks.touch.mock.calls.map(([dto]) => dto.referralCode)).toEqual(['an-shop', 'KHACH01']);
+    expect(getStorefrontContext().referralEligible).toBe(false);
+    expect(readPendingRefs()).toEqual([]);
+    await m.unmount();
+  });
+
+  it('một lần chạm bù gặp lỗi mạng: giữ cả danh sách bản chờ để lần sau chạm lại', async () => {
+    mocks.touch.mockImplementation(async (dto: { referralCode: string }) => {
+      if (dto.referralCode === 'an-shop') throw new Error('offline');
+      return { ok: true };
+    });
+    await openLinkThenCloseTab('/?s=an-shop');
+    await openLinkThenCloseTab('/?ref=ABC');
+    const m = await mountKept();
+    mocks.status = 'authenticated';
+    await m.rerender();
+    expect(mocks.touch).toHaveBeenCalledTimes(2);
+    expect(readPendingRefs().map((p) => p.referralCode ?? p.slug)).toEqual(['an-shop', 'ABC']);
     await m.unmount();
   });
 
@@ -183,7 +239,7 @@ describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chư
     await m.rerender();
     expect(mocks.touch).toHaveBeenCalledTimes(1);
     expect(mocks.touch).toHaveBeenCalledWith({ referralCode: 'ABC', kind: 'ctv' });
-    expect(readPendingRef()).toBeNull();
+    expect(readPendingRefs()).toEqual([]);
     await m.unmount();
   });
 
@@ -252,6 +308,25 @@ describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã c�
     await m.unmount();
   });
 
+  it('StorefrontTracker: chạm bù cả link CTV mở trước khi chưa đăng nhập, trước nguồn đang dùng trong phiên', async () => {
+    mocks.status = 'anonymous';
+    mocks.touch.mockReset().mockImplementation(async (dto: { referralCode: string }) => ({ ok: dto.referralCode === 'ANHA' }));
+    for (const url of ['/?ref=ANHA', '/?ref=KHACH01']) {
+      window.history.replaceState({}, '', url);
+      const m = await mountKept();
+      await m.unmount();
+    }
+    window.history.replaceState({}, '', '/');
+    mocks.status = 'authenticated';
+    const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+    expect(mocks.touch.mock.calls.map(([dto]) => dto)).toEqual([
+      { referralCode: 'ANHA', kind: 'ctv' },
+      { referralCode: 'KHACH01', storefrontSlug: 'doi-tac', kind: 'brand' },
+    ]);
+    expect(readPendingRefs()).toEqual([]);
+    await t.unmount();
+  });
+
   it('StorefrontTracker với gian hàng đối tác: không ghi bản chờ, không đổi mã đang có', async () => {
     mocks.touch.mockResolvedValue({ ok: true });
     window.history.replaceState({}, '', '/?ref=CTV0001');
@@ -259,7 +334,7 @@ describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã c�
     clearPendingRef();
     const m = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
     expect(getStorefrontContext()).toMatchObject({ slug: 'doi-tac', referralCode: 'CTV0001', kind: 'MERCHANT', referralEligible: true });
-    expect(readPendingRef()).toBeNull();
+    expect(readPendingRefs()).toEqual([]);
     await m.unmount();
   });
 });

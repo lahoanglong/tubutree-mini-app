@@ -6,7 +6,8 @@ import {
   confirmReferralTouch,
   ctvSlugFor,
   getStorefrontContext,
-  readPendingRef,
+  PENDING_REF_MAX,
+  readPendingRefs,
   rememberEntryLink,
   rememberStorefront,
   rememberReferral,
@@ -137,43 +138,73 @@ describe('bản chờ nguồn giới thiệu trong localStorage (E-8)', () => {
     localStorage.clear();
   });
 
-  it('link ?ref= ghi bản chờ {referralCode, slug, kind, savedAt}; ?s= ghi gian hàng CTV', () => {
+  it('link ?ref= ghi bản chờ {referralCode, slug, kind, savedAt}; ?s= ghi gian hàng CTV, cũ trước mới sau', () => {
     rememberEntryLink(null, 'abc');
-    expect(readPendingRef()).toMatchObject({ referralCode: 'ABC', slug: null, kind: null });
-    expect(typeof JSON.parse(localStorage.getItem(KEY)!).savedAt).toBe('number');
+    expect(readPendingRefs()).toMatchObject([{ referralCode: 'ABC', slug: null, kind: null }]);
+    const stored = JSON.parse(localStorage.getItem(KEY)!);
+    expect(Array.isArray(stored)).toBe(true);
+    expect(typeof stored[0].savedAt).toBe('number');
     rememberEntryLink('an-shop', null);
-    expect(readPendingRef()).toMatchObject({ referralCode: null, slug: 'an-shop', kind: 'CTV' });
+    expect(readPendingRefs()).toMatchObject([
+      { referralCode: 'ABC', slug: null, kind: null },
+      { referralCode: null, slug: 'an-shop', kind: 'CTV' },
+    ]);
   });
 
   it('gian hàng CTV ghi bản chờ; gian hàng nhãn/đối tác thì không (không phải nguồn giới thiệu)', () => {
     rememberStorefront('abc123', 'CTV', 'abc123');
-    expect(readPendingRef()).toMatchObject({ referralCode: 'ABC123', slug: 'abc123', kind: 'CTV' });
+    expect(readPendingRefs()).toMatchObject([{ referralCode: 'ABC123', slug: 'abc123', kind: 'CTV' }]);
     localStorage.clear();
     rememberStorefront('visante', 'BRAND');
-    expect(readPendingRef()).toBeNull();
+    expect(readPendingRefs()).toEqual([]);
   });
 
-  it(`bản chờ quá ${PENDING_REF_TTL_DAYS} ngày coi như không có và bị dọn`, () => {
-    rememberEntryLink(null, 'abc');
-    const now = Date.now();
-    expect(readPendingRef(now + (PENDING_REF_TTL_DAYS - 1) * DAY)).not.toBeNull();
-    expect(readPendingRef(now + (PENDING_REF_TTL_DAYS + 1) * DAY)).toBeNull();
+  it('link ?ref= thuần (vd mã khách thường ở nút chia sẻ) không đè bản chờ của link CTV mở trước đó', () => {
+    rememberEntryLink('an-shop', null);
+    rememberEntryLink(null, 'KHACH01');
+    expect(readPendingRefs().map((p) => p.referralCode ?? p.slug)).toEqual(['an-shop', 'KHACH01']);
+  });
+
+  it(`giữ tối đa ${PENDING_REF_MAX} bản chờ, bản cũ nhất rơi trước`, () => {
+    for (const code of ['A1', 'B2', 'C3', 'D4']) rememberEntryLink(null, code);
+    expect(readPendingRefs().map((p) => p.referralCode)).toEqual(['B2', 'C3', 'D4']);
+  });
+
+  it('mở lại đúng nguồn đã có thì dời lên mới nhất, không nhân đôi', () => {
+    rememberEntryLink(null, 'A1');
+    rememberEntryLink(null, 'B2');
+    rememberEntryLink(null, 'a1');
+    expect(readPendingRefs().map((p) => p.referralCode)).toEqual(['B2', 'A1']);
+  });
+
+  it(`từng bản chờ quá ${PENDING_REF_TTL_DAYS} ngày coi như không có và bị dọn; bản còn hạn giữ lại`, () => {
+    const t0 = Date.now();
+    localStorage.setItem(
+      KEY,
+      JSON.stringify([
+        { referralCode: 'CU', slug: null, kind: null, savedAt: t0 - (PENDING_REF_TTL_DAYS + 1) * DAY },
+        { referralCode: 'MOI', slug: null, kind: null, savedAt: t0 - DAY },
+      ]),
+    );
+    expect(readPendingRefs(t0).map((p) => p.referralCode)).toEqual(['MOI']);
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toHaveLength(1);
+    expect(readPendingRefs(t0 + PENDING_REF_TTL_DAYS * DAY)).toEqual([]);
     expect(localStorage.getItem(KEY)).toBeNull();
   });
 
-  it('dữ liệu hỏng hoặc thiếu trường → null, không ném lỗi', () => {
+  it('dữ liệu hỏng hoặc thiếu trường → rỗng, không ném lỗi', () => {
     localStorage.setItem(KEY, '{nope');
-    expect(readPendingRef()).toBeNull();
+    expect(readPendingRefs()).toEqual([]);
     localStorage.setItem(KEY, JSON.stringify({ referralCode: 'A' }));
-    expect(readPendingRef()).toBeNull();
-    localStorage.setItem(KEY, JSON.stringify({ referralCode: null, slug: null, kind: null, savedAt: Date.now() }));
-    expect(readPendingRef()).toBeNull();
+    expect(readPendingRefs()).toEqual([]);
+    localStorage.setItem(KEY, JSON.stringify([{ referralCode: 'A' }, { referralCode: null, slug: null, kind: null, savedAt: Date.now() }]));
+    expect(readPendingRefs()).toEqual([]);
   });
 
   it('clearPendingRef xoá bản chờ', () => {
     rememberEntryLink(null, 'abc');
     clearPendingRef();
-    expect(readPendingRef()).toBeNull();
+    expect(readPendingRefs()).toEqual([]);
   });
 
   it('localStorage ném lỗi (chế độ riêng tư, hết quota) → vẫn nhớ được trong phiên, không vỡ', () => {
@@ -185,7 +216,7 @@ describe('bản chờ nguồn giới thiệu trong localStorage (E-8)', () => {
     try {
       expect(() => rememberEntryLink(null, 'abc')).not.toThrow();
       expect(getStorefrontContext().referralCode).toBe('ABC');
-      expect(readPendingRef()).toBeNull();
+      expect(readPendingRefs()).toEqual([]);
       expect(() => clearPendingRef()).not.toThrow();
     } finally {
       Object.defineProperty(window, 'localStorage', real);

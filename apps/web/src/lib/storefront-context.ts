@@ -9,13 +9,19 @@
  *    khách trả giá cao hơn mức gian hàng đang quảng cáo.
  *
  * Dùng sessionStorage (sống theo tab) — attribution dài hạn đã có "chạm giới thiệu" phía server
- * giữ 3 ngày. Khách chưa đăng nhập thì chưa chạm được, nên nguồn từ link còn được ghi một "bản chờ" ở localStorage để lần
+ * giữ 3 ngày. Khách chưa đăng nhập thì chưa chạm được, nên nguồn từ link còn được ghi vào "bản chờ" ở localStorage để lần
  * đăng nhập sau (kể cả tab mới) chạm bù.
  */
 const KEY = 'tubu_web_storefront';
 const PENDING_KEY = 'tubu_web_ref_pending';
-/** Bản chờ nguồn giới thiệu chỉ có giá trị trong chừng này ngày kể từ lúc khách mở link. */
+/**
+ * Bản chờ nguồn giới thiệu chỉ có giá trị trong chừng này ngày kể từ lúc khách mở link. Chạm bù xảy ra lúc đăng nhập nên hạn ghi
+ * công phía máy chủ (affiliate.attribution_days) tính từ lúc đó: khách đăng nhập ngày thứ 6 thì nguồn sống tới ~13 ngày kể từ lúc
+ * bấm link, và có thể đè một chạm mới hơn đã ghi từ Mini App.
+ */
 export const PENDING_REF_TTL_DAYS = 7;
+/** Số link gần nhất được giữ chờ: đủ để một link mã khách thường mở sau không làm mất link CTV mở trước. */
+export const PENDING_REF_MAX = 3;
 
 export interface StorefrontContext {
   slug: string | null;
@@ -153,33 +159,49 @@ export interface PendingRef {
   savedAt: number;
 }
 
-/** Chỉ giữ link mở gần nhất: khách mở link CTV khác thì nguồn mới thay nguồn cũ (last-touch như máy chủ). */
-function savePendingRef(ref: Omit<PendingRef, 'savedAt'>): void {
-  if (typeof window === 'undefined' || (!ref.referralCode && !ref.slug)) return;
+const samePendingSource = (a: Pick<PendingRef, 'referralCode' | 'slug'>, b: Pick<PendingRef, 'referralCode' | 'slug'>) =>
+  norm(a.referralCode) === norm(b.referralCode) && norm(a.slug) === norm(b.slug);
+
+function writePendingRefs(list: PendingRef[]): void {
   try {
-    localStorage.setItem(PENDING_KEY, JSON.stringify({ ...ref, savedAt: Date.now() } satisfies PendingRef));
+    if (list.length === 0) localStorage.removeItem(PENDING_KEY);
+    else localStorage.setItem(PENDING_KEY, JSON.stringify(list));
   } catch {
     /* private mode / hết quota — mất bản chờ chấp nhận được, sessionStorage vẫn giữ nguồn trong tab */
   }
 }
 
-/** Bản chờ còn trong hạn, hoặc null (không có, hỏng, hết hạn — hết hạn thì dọn luôn). */
-export function readPendingRef(now: number = Date.now()): PendingRef | null {
-  if (typeof window === 'undefined') return null;
+/**
+ * Nhớ link vừa mở ở cuối danh sách (mới nhất), tối đa PENDING_REF_MAX link. Chạm bù lúc đăng nhập đi từ cũ đến mới để máy chủ
+ * chọn như last-touch: mã khách thường bị máy chủ bỏ qua, nên link CTV mở trước đó vẫn được ghi công.
+ */
+function savePendingRef(ref: Omit<PendingRef, 'savedAt'>): void {
+  if (typeof window === 'undefined' || (!ref.referralCode && !ref.slug)) return;
+  const now = Date.now();
+  const kept = readPendingRefs(now).filter((p) => !samePendingSource(p, ref));
+  writePendingRefs([...kept, { ...ref, savedAt: now }].slice(-PENDING_REF_MAX));
+}
+
+/** Các bản chờ còn trong hạn, cũ nhất trước (rỗng nếu không có hoặc hỏng; bản hết hạn bị dọn luôn). */
+export function readPendingRefs(now: number = Date.now()): PendingRef[] {
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(PENDING_KEY);
-    if (!raw) return null;
-    const p = JSON.parse(raw) as Partial<PendingRef> | null;
-    const referralCode = typeof p?.referralCode === 'string' && p.referralCode ? p.referralCode : null;
-    const slug = typeof p?.slug === 'string' && p.slug ? p.slug : null;
-    if (typeof p?.savedAt !== 'number' || (!referralCode && !slug)) return null;
-    if (now - p.savedAt > PENDING_REF_TTL_DAYS * 24 * 60 * 60 * 1000) {
-      clearPendingRef();
-      return null;
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const all: PendingRef[] = [];
+    for (const p of parsed as Array<Partial<PendingRef> | null>) {
+      const referralCode = typeof p?.referralCode === 'string' && p.referralCode ? p.referralCode : null;
+      const slug = typeof p?.slug === 'string' && p.slug ? p.slug : null;
+      if (typeof p?.savedAt !== 'number' || (!referralCode && !slug)) continue;
+      all.push({ referralCode, slug, kind: typeof p.kind === 'string' ? p.kind : null, savedAt: p.savedAt });
     }
-    return { referralCode, slug, kind: typeof p.kind === 'string' ? p.kind : null, savedAt: p.savedAt };
+    const alive = all.filter((p) => now - p.savedAt <= PENDING_REF_TTL_DAYS * 24 * 60 * 60 * 1000).sort((a, b) => a.savedAt - b.savedAt);
+    if (alive.length !== parsed.length) writePendingRefs(alive);
+    return alive;
   } catch {
-    return null;
+    return [];
   }
 }
 
