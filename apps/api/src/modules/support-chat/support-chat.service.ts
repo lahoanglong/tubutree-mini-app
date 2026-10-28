@@ -226,6 +226,14 @@ export class SupportChatService {
       where: { id: conv.id, OR: [{ customerReadAt: null }, { customerReadAt: { lt: now } }] },
       data: { customerReadAt: now },
     });
+    // Chuông "Tubu Tree đã trả lời" chỉ để dẫn khách vào chat: đã mở chat xem rồi thì chuông không còn báo tin mới. Chuông gửi
+    // sau `now` (tin mới tới trong lúc này) giữ nguyên. Phụ, nên lỗi ở đây không làm hỏng việc đã đánh dấu đọc ở trên.
+    await this.prisma.notificationLog
+      .updateMany({
+        where: { userId, channel: 'INAPP', templateCode: 'SUPPORT_CHAT_REPLY', status: { not: 'READ' }, sentAt: { lte: now } },
+        data: { status: 'READ' },
+      })
+      .catch((err: unknown) => this.logger.warn(`Không đánh dấu đã đọc chuông trả lời CSKH của ${userId}: ${err instanceof Error ? err.message : err}`));
     return { ok: true };
   }
 
