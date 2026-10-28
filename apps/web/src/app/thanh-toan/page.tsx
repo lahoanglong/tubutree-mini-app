@@ -26,6 +26,7 @@ import {
   type OrderDTO,
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
+import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { shippingEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { checkoutPointsOffer, convertedPointsLine, formatCount, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
@@ -427,7 +428,10 @@ export default function CheckoutPage() {
     { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
     { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
     { k: 'WALLET', label: `Ví Tubu (${formatVnd(walletBalance)})` },
-  ].map((m) => ({ ...m, hint: quote ? paymentUnavailableReason(m.k, quote, walletBalance) : null }));
+  ]
+    // Ví chỉ trả được cả đơn: số dư 0đ thì khách không làm gì được với dòng này.
+    .filter((m) => m.k !== 'WALLET' || walletBalance > 0)
+    .map((m) => ({ ...m, hint: quote ? paymentUnavailableReason(m.k, quote, walletBalance) : null }));
   const paymentNote = quote && !zeroNote && payment === '' ? paymentMissingNote(quote, walletBalance) : null;
   const placeDisabled =
     !addressId || !quote || quoteStale || place.isPending || !invoiceValid || !!overStock || (!zeroNote && payment === '');
@@ -722,10 +726,13 @@ export default function CheckoutPage() {
                 <CheckMark />
               </span>
               {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
-              <span className="text-forest-800">
-                {usePoints && quote
-                  ? `Dùng ${quote.pointsUsed.toLocaleString('vi-VN')} Điểm Xanh — giảm ${formatVnd(quote.pointsDiscount)}`
-                  : `Bạn có ${usablePoints.toLocaleString('vi-VN')} Điểm Xanh`}
+              <span className="min-w-0 text-forest-800">
+                <span className="block font-semibold max-md:text-stone-900">Điểm Xanh</span>
+                <span className="block text-caption max-md:text-stone-600">
+                  {partnerPoints.disabled
+                    ? `Bạn có ${formatCount(usablePoints)} điểm`
+                    : pointsOfferText(usablePoints, quote, usePoints && quote ? quote : null)}
+                </span>
               </span>
             </label>
           )}

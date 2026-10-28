@@ -48,19 +48,19 @@ afterEach(() => {
 const NOTE = 'Điểm Xanh chỉ dùng cho hàng của Tubu, không dùng cho hàng của gian hàng đối tác';
 
 describe('/thanh-toan — nhãn dùng Điểm Xanh', () => {
-  it('chưa tick: "Bạn có 500 Điểm Xanh"; tick xong: đúng 20 điểm thật trừ, không còn ghi 500', async () => {
+  it('chưa tick: "Dùng 500 điểm, giảm 500đ"; tick xong: đúng 20 điểm thật trừ, không còn ghi 500', async () => {
     const r = render(<CheckoutPage />);
     mounted.push(r);
     await flush(8);
     const pointsLabel = () =>
       [...r.container.querySelectorAll('label')].find((l) => l.querySelector('input[type="checkbox"]') && /Điểm Xanh/.test(l.textContent ?? ''))!;
     const label = () => pointsLabel().textContent ?? '';
-    expect(label()).toContain('Bạn có 500 Điểm Xanh');
+    expect(label()).toContain('Dùng 500 điểm, giảm 500đ');
 
     click(pointsLabel().querySelector<HTMLInputElement>('input')!);
     await flush(8);
     expect(calls.pointsToUse).toContain(500);
-    expect(label()).toContain('Dùng 20 Điểm Xanh — giảm 20.000đ');
+    expect(label()).toContain('Dùng 20 điểm, giảm 20.000đ');
     expect(label()).not.toContain('500');
   });
 
@@ -69,7 +69,7 @@ describe('/thanh-toan — nhãn dùng Điểm Xanh', () => {
     const r = render(<CheckoutPage />);
     mounted.push(r);
     await flush(8);
-    expect(r.container.textContent).toContain('Bạn có 500 Điểm Xanh');
+    expect(r.container.textContent).toContain('Dùng 20 điểm, giảm 20đ');
     expect(r.container.textContent).toContain('Đơn này dùng tối đa 20 Điểm Xanh, tính theo giá trị hàng của đơn');
   });
 
@@ -78,7 +78,7 @@ describe('/thanh-toan — nhãn dùng Điểm Xanh', () => {
     const r = render(<CheckoutPage />);
     mounted.push(r);
     await flush(8);
-    expect(r.container.textContent).toContain('Bạn có 500 Điểm Xanh');
+    expect(r.container.textContent).toContain('Dùng 500 điểm, giảm 500đ');
     expect(r.container.textContent).not.toContain('Đơn này dùng tối đa');
   });
 
@@ -94,7 +94,7 @@ describe('/thanh-toan — nhãn dùng Điểm Xanh', () => {
     expect(box.disabled).toBe(false);
     click(box);
     await flush(8);
-    expect(box.closest('label')!.textContent).toContain('Dùng 12 Điểm Xanh — giảm 12.000đ');
+    expect(box.closest('label')!.textContent).toContain('Dùng 12 điểm, giảm 12.000đ');
   });
 
   it('Q8 S7: giỏ chỉ hàng của gian hàng đối tác → ô Điểm Xanh bị tắt, kèm câu giải thích', async () => {

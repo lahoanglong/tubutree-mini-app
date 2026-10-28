@@ -129,10 +129,11 @@ describe('/thanh-toan — Ví Tubu (R2-BUYERWEB-2)', () => {
     expect(radio(r, 'Ví Tubu')!.disabled).toBe(false);
   });
 
-  it('chưa lấy được số dư (mất mạng) vẫn hiện Ví Tubu, không crash', async () => {
+  it('R-28: số dư 0đ (kể cả chưa lấy được số dư) ẩn dòng Ví Tubu, không crash', async () => {
     m.wallet = 0;
     const r = await mount();
-    expect(radio(r, 'Ví Tubu')).toBeDefined();
+    expect(radio(r, 'Ví Tubu')).toBeUndefined();
+    expect(r.container.textContent).not.toContain('Số dư chưa đủ');
   });
 });
 
@@ -348,7 +349,7 @@ describe('/thanh-toan — COD theo từng đơn, báo giá quyết định phư�
   });
 
   it('COD và chuyển khoản đều khoá, Ví thiếu: không chọn gì, nút Đặt hàng khoá, nói rõ chưa có cách thanh toán', async () => {
-    m.wallet = 0;
+    m.wallet = 1000;
     m.quote.mockResolvedValue(quote(BOTH_BLOCKED));
     const r = await mount();
     for (const label of ['Thanh toán khi nhận hàng', 'Chuyển khoản ngân hàng', 'Ví Tubu']) {
