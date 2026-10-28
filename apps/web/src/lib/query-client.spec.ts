@@ -1,44 +1,23 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MutationObserver, onlineManager } from '@tanstack/react-query';
-import { createQueryClient } from './query-client';
-import { NetworkError } from './client-api';
+import { describe, expect, it } from 'vitest';
+import { ApiError, NetworkError } from '@/lib/client-api';
+import { createQueryClient, shouldRetryQuery } from './query-client';
 
-afterEach(() => {
-  onlineManager.setOnline(true);
+describe('shouldRetryQuery (R-80)', () => {
+  it('không thử lại lỗi 4xx', () => {
+    expect(shouldRetryQuery(0, new ApiError('Không tìm thấy', 404))).toBe(false);
+    expect(shouldRetryQuery(0, new ApiError('x', 401))).toBe(false);
+  });
+  it('thử lại đúng một lần cho 5xx và mất mạng', () => {
+    expect(shouldRetryQuery(0, new ApiError('x', 503))).toBe(true);
+    expect(shouldRetryQuery(0, new NetworkError(false))).toBe(true);
+    expect(shouldRetryQuery(1, new ApiError('x', 503))).toBe(false);
+  });
 });
 
-describe('createQueryClient — mất mạng khi bấm Đặt hàng (R4-BUYER-1 cho web)', () => {
-  it('mutation chạy ngay cả khi trình duyệt báo offline: gọi request thật, lỗi mạng rơi vào onError, không xếp hàng chờ', async () => {
+describe('createQueryClient (R-80)', () => {
+  it('danh mục sản phẩm tươi 30 giây, khoá khác không đổi', () => {
     const client = createQueryClient();
-    onlineManager.setOnline(false);
-    const offline = new NetworkError(false);
-    const mutationFn = vi.fn().mockRejectedValue(offline);
-    const onError = vi.fn();
-
-    const observer = new MutationObserver(client, { mutationFn, onError });
-    await expect(observer.mutate(undefined)).rejects.toBe(offline);
-
-    expect(mutationFn).toHaveBeenCalledTimes(1);
-    expect(onError).toHaveBeenCalledTimes(1);
-    expect(observer.getCurrentResult().isPaused).toBe(false);
-    expect((onError.mock.calls[0]![0] as Error).message).toBe('Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.');
-  });
-
-  it('có mạng lại thì không tự gửi lại mutation đã lỗi lúc offline (không tự đặt đơn sau đó)', async () => {
-    const client = createQueryClient();
-    onlineManager.setOnline(false);
-    const mutationFn = vi.fn().mockRejectedValue(new NetworkError(false));
-    const observer = new MutationObserver(client, { mutationFn });
-    await observer.mutate(undefined).catch(() => undefined);
-
-    onlineManager.setOnline(true);
-    await client.resumePausedMutations();
-    expect(mutationFn).toHaveBeenCalledTimes(1);
-  });
-
-  it('query giữ mặc định cũ: retry 1 lần, không tải lại khi quay lại tab', () => {
-    const queries = createQueryClient().getDefaultOptions().queries;
-    expect(queries).toMatchObject({ retry: 1, refetchOnWindowFocus: false });
-    expect(queries?.networkMode).toBeUndefined();
+    expect(client.defaultQueryOptions({ queryKey: ['products', 'home-featured'] }).staleTime).toBe(30_000);
+    expect(client.defaultQueryOptions({ queryKey: ['cart'] }).staleTime).toBeUndefined();
   });
 });

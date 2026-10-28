@@ -17,7 +17,7 @@ describe('loadErrorText (khớp getErrorMessage của Mini App)', () => {
     expect(loadErrorText(new Error('x'))).toBe('Có chút trục trặc, thử lại nhé');
   });
   it('không có phản hồi nhưng máy còn mạng (máy chủ/CORS không đáp): máy chủ bận; thật sự mất mạng: câu mất mạng', () => {
-    expect(loadErrorText(new NetworkError(false))).toBe('Máy chủ đang bận, thử lại nhé.');
+    expect(loadErrorText(new NetworkError(false))).toBe('Chưa kết nối được tới Tubu Tree. Kiểm tra mạng rồi thử lại nhé.');
     const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
     expect(loadErrorText(new NetworkError(false))).toBe('Có vẻ mất mạng. Kiểm tra kết nối rồi thử lại nhé.');
     online.mockRestore();
