@@ -8,7 +8,7 @@ import { Search } from 'lucide-react';
 import type { CategoryDTO, PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
-import { notificationsQuery } from '@tubutree/app-core/queries/account';
+import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
 import { flashActiveQuery, flashUpcomingQuery } from '@tubutree/app-core/queries/flash-sale';
@@ -85,8 +85,8 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   // Cờ phiên còn mà mất mạng hay API tạm lỗi lúc khôi phục: khách KHÔNG phải khách vãng lai, giữ loại khách đã nhớ để trang không tụt về bố cục khách mới.
   const unavailable = phase === 'unavailable';
 
-  // Chuông ở đây dùng chung queryKey ['notifications'] với trang Thông báo.
-  const unreadCount = useQuery({ ...notificationsQuery(coreHttp), enabled: authed }).data?.filter((n) => n.status !== 'READ').length ?? 0;
+  // Chuông ở đây dùng chung queryKey ['notifications', 'unread'] với trang Thông báo và chuông thanh đầu: chỉ đếm, không tải danh sách tin.
+  const unreadCount = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: authed }).data?.count ?? 0;
 
   // Cùng query key với PurchasedRail → không thêm request; chỉ để biết khách cũ hay mới. Trong lúc tải dùng loại đã nhớ
   // của tài khoản này để thứ tự khối không đổi sau khung hình đầu (useHomeCustomerKind).

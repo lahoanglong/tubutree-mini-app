@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   restore: vi.fn(),
   authStatus: 'authenticated' as 'authenticated' | 'idle' | 'error' | 'loading',
   notifications: [] as { status: string }[],
+  coreGet: vi.fn(),
   role: 'CUSTOMER',
   affiliateMe: { isAffiliate: false, canRegister: false } as { isAffiliate: boolean; canRegister: boolean },
   getPublicConfig: vi.fn(async () => ({})),
@@ -38,6 +39,16 @@ vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getPublicConfig: mocks.getPublicConfig,
 }));
+// Số tin chưa đọc đi qua coreHttp (cùng khoá ['notifications', 'unread'] với trang Thông báo); mọi đường khác ở đây là lời gọi lạ.
+vi.mock('../services/core-http', () => ({
+  coreHttp: {
+    get: (path: string) => {
+      mocks.coreGet(path);
+      if (path === '/me/notifications/unread-count') return Promise.resolve({ count: mocks.notifications.filter((n) => n.status !== 'READ').length });
+      return Promise.reject(new Error(`không mock ${path}`));
+    },
+  },
+}));
 vi.mock('../services/order-counts-api', () => ({ fetchOrderStatusCounts: mocks.orderCounts }));
 vi.mock('../services/waste-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -61,7 +72,6 @@ vi.mock('../services/support-chat-api', () => ({
 }));
 vi.mock('../services/account-api', () => ({
   getLoyalty: vi.fn().mockResolvedValue({ pointsBalance: 120, pointsConvertedBalance: 30, tier: { name: 'Mầm Xanh' } }),
-  getNotifications: vi.fn(async () => mocks.notifications),
   getWallet: vi.fn().mockResolvedValue({ walletBalance: 50000 }),
   getCoupons: vi.fn().mockResolvedValue([{ code: 'A' }, { code: 'B' }]),
   getReferral: mocks.getReferral,
@@ -231,6 +241,15 @@ describe('Hub Cá nhân theo DS v2 (C-076, C-114)', () => {
     await waitFor(() => expect(row).toHaveTextContent('2'));
     fireEvent.click(row);
     expect(mocks.navigate).toHaveBeenCalledWith('/notifications');
+  });
+
+  it('đếm tin chưa đọc bằng một lời gọi unread-count, không tải danh sách tin', async () => {
+    mocks.notifications = [{ status: 'UNREAD' }];
+    renderPage();
+    await waitFor(() => expect(screen.getByRole('button', { name: /Thông báo/ })).toHaveTextContent('1'));
+    const paths = mocks.coreGet.mock.calls.map(([p]) => p);
+    expect(paths.filter((p) => p === '/me/notifications/unread-count')).toHaveLength(1);
+    expect(paths).not.toContain('/me/notifications');
   });
 
   it('ô Ví Tubu mang state.from để nút quay lại về hub; ô Mã giảm giá mở tab Ưu đãi ở phần mã', async () => {

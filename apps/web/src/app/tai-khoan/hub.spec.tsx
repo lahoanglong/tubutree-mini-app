@@ -49,7 +49,7 @@ import { ApiError } from '@/lib/client-api';
 const defaults = (): Record<string, () => unknown> => ({
   '/me/loyalty': () => ({ tier: { name: 'Hạt Giống' }, pointsBalance: 1800, pointsConvertedBalance: 0 }),
   '/me/coupons': () => [{ id: 'c1' }, { id: 'c2' }],
-  '/me/notifications': () => [{ id: 'n1', status: 'SENT' }, { id: 'n2', status: 'READ' }, { id: 'n3', status: 'FAILED' }],
+  '/me/notifications/unread-count': () => ({ count: 2 }),
   '/config/public': () => ({ aiAdvisorEnabled: false, loyalty: { marketplaceClaimEnabled: false } }),
   '/brand/owner/me': () => {
     throw new ApiError('Không tìm thấy', 404);
@@ -233,6 +233,12 @@ describe('hub /tai-khoan — menu theo nhóm', () => {
     expect(row.textContent).toContain('Thông báo');
     expect(row.textContent).toContain('2');
     expect(row.getAttribute('aria-label')).toContain('2 chưa đọc');
+  });
+
+  it('đếm tin chưa đọc bằng một lời gọi unread-count, không tải danh sách tin', async () => {
+    await mount();
+    expect(mocks.calls.filter((p) => p === '/me/notifications/unread-count')).toHaveLength(1);
+    expect(mocks.calls).not.toContain('/me/notifications');
   });
 
   it('mọi mục menu cao >= 44px và có tên truy cập', async () => {

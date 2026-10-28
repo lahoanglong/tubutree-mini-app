@@ -15,7 +15,6 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../services/account-api', () => ({
   getLoyalty: vi.fn().mockResolvedValue({ pointsBalance: 1, pointsConvertedBalance: 0, tier: { name: 'Mầm Xanh' } }),
-  getNotifications: vi.fn().mockResolvedValue([]),
   getWallet: vi.fn().mockResolvedValue({ walletBalance: 0 }),
   getCoupons: vi.fn().mockResolvedValue([]),
   getReferral: vi.fn().mockResolvedValue({ referralCode: 'LAN1', minOrderAmount: 200000, windowDays: 30 }),
@@ -23,6 +22,9 @@ vi.mock('../services/account-api', () => ({
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getPublicConfig: vi.fn().mockResolvedValue({}),
+}));
+vi.mock('../services/core-http', () => ({
+  coreHttp: { get: (path: string) => (path === '/me/notifications/unread-count' ? Promise.resolve({ count: 0 }) : Promise.reject(new Error(`không mock ${path}`))) },
 }));
 vi.mock('../services/order-counts-api', () => ({ fetchOrderStatusCounts: vi.fn().mockResolvedValue({ pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0 }) }));
 vi.mock('../services/subscriptions-api', () => ({ getSubscriptions: vi.fn().mockResolvedValue([]) }));

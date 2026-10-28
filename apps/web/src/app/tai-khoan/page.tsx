@@ -10,7 +10,7 @@ import { orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
 import { PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
-import { notificationsQuery } from '@tubutree/app-core/queries/account';
+import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
 import { couponsQuery, loyaltyQuery, referralQuery } from '@tubutree/app-core/queries/loyalty';
@@ -98,7 +98,7 @@ function AccountContent() {
   const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: authed, refetchOnWindowFocus: true });
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed });
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
-  const notifQ = useQuery({ ...notificationsQuery(coreHttp), enabled: authed });
+  const unreadQ = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: authed });
   const referralQ = useQuery({ ...referralQuery(coreHttp), enabled: authed });
   const referralRef = useRef<HTMLElement>(null);
   const wantsReferral = useSearchParams()?.get('section') === PROFILE_REFERRAL_SECTION;
@@ -160,7 +160,7 @@ function AccountContent() {
   const fullName = meQ.data?.fullName !== undefined ? meQ.data.fullName : user.fullName;
   const tierName = loyaltyQ.data?.tier?.name ?? null;
   const tierFailed = loyaltyQ.isError && !loyaltyQ.data;
-  const unread = notifQ.data?.filter((n) => n.status !== 'READ').length ?? 0;
+  const unread = unreadQ.data?.count ?? 0;
   const referral = referralQ.data;
   const code = referral?.referralCode ?? user.referralCode;
   const minOrder = referral?.minOrderAmount ? formatVnd(referral.minOrderAmount) : null;
