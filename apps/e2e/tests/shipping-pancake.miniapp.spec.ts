@@ -83,7 +83,7 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
     await expect(page.getByText(/quá hạn đơn sẽ tự huỷ/)).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Huỷ đơn' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Thanh toán ngay' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Bỏ lọc chuyển khoản' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Xem tất cả đơn' })).toBeVisible();
     expect(api.callsTo('POST', '/orders/:code/cancel')).toHaveLength(0);
     await page.screenshot({ path: testInfo.outputPath('order-handed-over-unpaid.png'), fullPage: true });
   });

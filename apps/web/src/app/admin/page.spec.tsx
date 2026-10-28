@@ -1233,6 +1233,22 @@ describe('admin/page — tab Voucher', () => {
     expect(create.disabled).toBe(false);
   });
 
+  it('Tạo voucher khoá khi Hết hạn sớm hơn Bắt đầu, mở lại khi sửa đúng thứ tự', async () => {
+    const { container } = await openCoupons();
+    typeInto(container.querySelector('input[placeholder^="Mã"]'), 'NGUOC');
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá bắt đầu từ ngày"]'), '20/11/2026');
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '10/11/2026');
+    await flush();
+    const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá')!;
+    expect(create.disabled).toBe(true);
+    act(() => create.click());
+    await flush();
+    expect(mocks.createCoupon).not.toHaveBeenCalled();
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '25/11/2026');
+    await flush();
+    expect(create.disabled).toBe(false);
+  });
+
   it('ADMINOPS-7: ô Mã tự đổi chữ HOA và bỏ khoảng trắng (khách luôn gửi mã dạng HOA)', async () => {
     const { container } = await openCoupons();
     const codeInput = container.querySelector<HTMLInputElement>('input[placeholder^="Mã"]')!;

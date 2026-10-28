@@ -144,7 +144,7 @@ export function VnDateInput({
       )}
       {invalid && (
         <span role="alert" className="absolute left-0 top-full z-10 mt-0.5 whitespace-nowrap rounded-control bg-stone-0 px-1 text-xs text-danger-fg">
-          {outOfRange ? 'Ngày nằm ngoài khoảng cho phép.' : 'Nhập ngày dạng dd/mm/yyyy, ví dụ 03/10/2026.'}
+          {outOfRange ? 'Ngày nằm ngoài khoảng cho phép.' : text.length === 10 ? 'Ngày không có thật, chưa áp dụng.' : 'Nhập ngày dạng dd/mm/yyyy, ví dụ 03/10/2026.'}
         </span>
       )}
     </span>

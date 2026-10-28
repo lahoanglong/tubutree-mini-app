@@ -100,6 +100,19 @@ describe('VnDateInput', () => {
     expect(onPending).toHaveBeenLastCalledWith(false);
   });
 
+  it('sau khi rời ô, ngày đủ dạng mà không có thật vẫn báo "Ngày không có thật", không bảo sai dạng', async () => {
+    const r = render(<VnDateInput value="" ariaLabel="Từ ngày" onChange={() => {}} />);
+    mounted.push(r);
+    typeInto(field(r.container), '31/02/2026');
+    act(() => field(r.container).dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    await flush();
+    expect(r.container.textContent).toContain('Ngày không có thật');
+    expect(r.container.textContent).not.toContain('Nhập ngày dạng dd/mm/yyyy');
+    typeInto(field(r.container), '15/1');
+    await flush();
+    expect(r.container.textContent).toContain('Nhập ngày dạng dd/mm/yyyy');
+  });
+
   it('xoá hết thì báo rỗng; cha đặt lại giá trị thì ô chữ theo', async () => {
     const onValue = vi.fn();
     const r = render(<Harness onValue={onValue} />);

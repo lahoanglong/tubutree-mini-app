@@ -2475,7 +2475,7 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
           </Field>
         </div>
       </div>
-      <button onClick={() => create.mutate()} disabled={!f.code || startPending || endPending} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
+      <button onClick={() => create.mutate()} disabled={!f.code || startPending || endPending || (!!f.endAt && !!f.startAt && f.endAt < f.startAt)} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
     )}
