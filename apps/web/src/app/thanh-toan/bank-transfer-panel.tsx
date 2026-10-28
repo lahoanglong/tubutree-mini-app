@@ -209,10 +209,10 @@ export function BankTransferPanel({
           <img
             src={data.qrImageUrl}
             alt="VietQR"
-            className="h-56 w-56 rounded-card border border-stone-200 bg-stone-0 object-contain max-md:h-60 max-md:w-60 max-md:max-w-[70%] max-md:rounded-none max-md:border-[var(--color-border-subtle)]"
+            className="h-56 w-56 rounded-card border border-stone-200 bg-stone-0 object-contain max-md:h-60 max-md:w-60 max-md:max-w-[70%] max-md:rounded-none max-md:border-0"
           />
           <div className="flex items-center justify-center gap-1.5 max-md:mt-2 max-md:py-1.5">
-            <p className="text-xl font-bold text-stone-900 max-md:text-lg max-md:text-success-fg">{formatVnd(data.amount)}</p>
+            <p className="text-xl font-bold text-stone-900 max-md:text-lg max-md:font-semibold max-md:text-success-fg">{formatVnd(data.amount)}</p>
             <span className="md:hidden">
               <CopyControls text={String(data.amount)} name="số tiền" iconOnly />
             </span>
@@ -228,7 +228,7 @@ export function BankTransferPanel({
             disabled={savingQr}
             className={`${ui.btnSecondary} ${mini.secondary} gap-2 max-md:mt-2 max-md:w-full`}
           >
-            <Download className="h-4 w-4" aria-hidden="true" />
+            <Download className="h-4 w-4 max-md:hidden" aria-hidden="true" />
             Lưu mã QR
           </button>
           {qrSaved && (
