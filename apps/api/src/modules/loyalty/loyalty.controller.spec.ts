@@ -33,15 +33,16 @@ describe('LoyaltyController — route nhân viên (POS)', () => {
     expect(Reflect.getMetadata(ROLES_KEY, h)).toBeUndefined();
   });
 
-  it('route khách (trạng thái điểm danh/đổi quà) KHÔNG giới hạn role', () => {
-    expect(Reflect.getMetadata(ROLES_KEY, LoyaltyController.prototype.checkInStatus)).toBeUndefined();
+  it('route khách (đổi quà) KHÔNG giới hạn role', () => {
     expect(Reflect.getMetadata(ROLES_KEY, LoyaltyController.prototype.redeemReward)).toBeUndefined();
   });
 });
 
 describe('LoyaltyController — điểm danh', () => {
-  it('không còn POST /me/loyalty/check-in: điểm danh thật đi qua /me/daily-check-in để chuỗi chung được cập nhật', () => {
-    expect((LoyaltyController.prototype as unknown as Record<string, unknown>).checkIn).toBeUndefined();
+  it('không còn POST/GET /me/loyalty/check-in: điểm danh và trạng thái đều đi qua /me/daily-check-in để chuỗi chung được cập nhật', () => {
+    const proto = LoyaltyController.prototype as unknown as Record<string, unknown>;
+    expect(proto.checkIn).toBeUndefined();
+    expect(proto.checkInStatus).toBeUndefined();
   });
 });
 
@@ -58,7 +59,7 @@ describe('LoyaltyController.preview — xem trước cho khách chưa đăng nh�
   });
 
   it('các route /me/loyalty/* còn lại KHÔNG công khai', () => {
-    for (const m of ['overview', 'rewards', 'myRedemptions', 'redeemReward', 'checkInStatus'] as const) {
+    for (const m of ['overview', 'rewards', 'myRedemptions', 'redeemReward'] as const) {
       expect(Reflect.getMetadata(IS_PUBLIC_KEY, LoyaltyController.prototype[m])).toBeUndefined();
     }
   });

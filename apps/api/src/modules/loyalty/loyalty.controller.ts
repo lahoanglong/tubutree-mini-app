@@ -70,12 +70,6 @@ export class LoyaltyController {
     return this.loyalty.redeemReward(userId, rewardId, requireIdempotencyKey(rawKey));
   }
 
-  /** Trạng thái điểm danh 7 ngày (chỉ đọc). Điểm danh thật đi qua POST /me/daily-check-in để chuỗi chung và vé giữ lửa được cập nhật. */
-  @Get('me/loyalty/check-in')
-  checkInStatus(@CurrentUser('sub') userId: string) {
-    return this.loyalty.getDailyCheckInStatus(userId);
-  }
-
   /** Thông tin Thẻ thành viên số (Digital Member Card). */
   @Get('me/loyalty/member-card')
   memberCard(@CurrentUser('sub') userId: string) {

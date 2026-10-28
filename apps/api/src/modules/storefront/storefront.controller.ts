@@ -100,6 +100,7 @@ export class StorefrontController {
 
   // Không đọc người gọi nên cache chung được; `publicView` là thứ web SSR/ISR và miniapp gọi ở mọi lượt mở trang gian hàng.
   @Public() @PublicCache('CATALOG') @Get('public/:slug') publicView(@Param('slug') slug: string) { return this.svc.getPublicBySlug(slug); }
+  // Chưa dùng: web chỉ xử lý subdomain (middleware.ts), chưa có đường dẫn tên miền riêng nào gọi route này. Giữ cùng cột customDomain.
   @Public() @PublicCache('CATALOG') @Get('by-host') byHost(@Query('host') host: string) { return this.svc.getPublicByHost(host); }
 
   /**
