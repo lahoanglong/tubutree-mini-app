@@ -15,7 +15,7 @@ const state = vi.hoisted(() => ({
   wasteRequests: [] as unknown[],
   fail: new Set<string>(),
   readyRoutes: new Set<string>(),
-  calls: [] as { method: string; path: string; body?: unknown; headers?: Record<string, string> }[],
+  calls: [] as { method: string; path: string; body?: unknown; headers?: Record<string, string>; query?: Record<string, unknown> }[],
   checkInPost: null as null | (() => Promise<unknown>),
   push: vi.fn(),
   cartCount: 0,
@@ -35,11 +35,16 @@ vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => state.readyRoutes.has(p) }));
 vi.mock('@/lib/core-http', () => {
-  const table: Record<string, () => unknown> = {
+  // Máy chủ giả của lịch sử điểm: trả đúng trang theo beforeId/limit như API thật (dòng đã sắp mới nhất trước).
+  const txnPage = (q?: { beforeId?: string; limit?: number }) => {
+    const start = q?.beforeId ? state.txns.findIndex((r) => r.id === q.beforeId) + 1 : 0;
+    return state.txns.slice(start, start + (q?.limit ?? 100));
+  };
+  const table: Record<string, (q?: { beforeId?: string; limit?: number }) => unknown> = {
     '/loyalty/preview': () => state.preview,
     '/me/loyalty': () => state.loyalty,
     '/me/coupons': () => state.coupons,
-    '/me/points/transactions': () => state.txns,
+    '/me/points/transactions': txnPage,
     '/me/daily-check-in': () => state.checkIn,
     '/me/loyalty/member-card': () => state.card,
     '/config/public': () => state.config,
@@ -47,10 +52,10 @@ vi.mock('@/lib/core-http', () => {
   };
   return {
     coreHttp: {
-      get: async (path: string) => {
-        state.calls.push({ method: 'get', path });
+      get: async (path: string, opts?: { query?: { beforeId?: string; limit?: number } }) => {
+        state.calls.push({ method: 'get', path, query: opts?.query });
         if (state.fail.has(path)) throw new Error('Máy chủ đang bận');
-        return table[path]!();
+        return table[path]!(opts?.query);
       },
       post: async (path: string, body?: unknown, opts?: { headers?: Record<string, string> }) => {
         state.calls.push({ method: 'post', path, body, headers: opts?.headers });
@@ -200,48 +205,55 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
   });
 });
 
-describe('/tai-khoan/diem-xanh — mã giảm giá của tôi', () => {
-  it('nằm ngay dưới thẻ hạng, trước điểm danh; hiện số mã, nhãn, điều kiện và hạn dd/MM/yyyy', async () => {
-    state.coupons = [
-      { code: 'FREESHIP1', type: 'FREESHIP', value: 0, minOrder: 199000, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' },
-      { code: 'PCT10', type: 'PERCENT', value: 10, minOrder: null, maxDiscount: 50000, endAt: '2026-11-01T05:00:00Z' },
-      { code: 'PCT5', type: 'PERCENT', value: 5, minOrder: null, maxDiscount: null, endAt: '2026-11-01T05:00:00Z' },
-      { code: 'AMT', type: 'AMOUNT', value: 30000, minOrder: null, maxDiscount: null, endAt: '2026-11-01T05:00:00Z' },
-    ];
+describe('/tai-khoan/diem-xanh — một dòng mã giảm giá thay cho danh sách mã', () => {
+  const COUPONS = [
+    { code: 'FREESHIP1', type: 'FREESHIP', value: 0, minOrder: 199000, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' },
+    { code: 'PCT10', type: 'PERCENT', value: 10, minOrder: null, maxDiscount: 50000, endAt: '2026-11-01T05:00:00Z' },
+  ];
+
+  it('có mã: "Ví mã (n)" tới Ưu đãi mục mã, nằm ngay dưới thẻ hạng và trước điểm danh; không liệt kê từng mã', async () => {
+    state.coupons = COUPONS;
+    state.readyRoutes = new Set(['/uu-dai', '/kho-qua']);
     const c = await mount();
+    const link = c.querySelector('a[href="/uu-dai?section=coupons"]')!;
+    expect(link.textContent).toContain('Ví mã (2)');
     const heads = Array.from(c.querySelectorAll('h2')).map((h) => h.textContent);
-    expect(heads.indexOf('Mã giảm giá của tôi')).toBeGreaterThan(-1);
-    expect(heads.indexOf('Mã giảm giá của tôi')).toBeLessThan(heads.indexOf('Điểm danh mỗi ngày'));
-    expect(heads.indexOf('Điểm danh mỗi ngày')).toBeLessThan(heads.indexOf('Các hạng'));
-    expect(c.textContent).toContain('4 mã');
-    expect(c.textContent).toContain('Miễn phí giao hàng');
-    expect(c.textContent).toContain('đơn từ 199.000đ');
-    expect(c.textContent).toContain('HSD 31/12/2026');
-    expect(c.textContent).toContain('Giảm 10% (tối đa 50.000đ)');
-    expect(c.textContent).toContain('Giảm 5%');
-    expect(c.textContent).not.toContain('Giảm 5% (tối đa');
-    expect(c.textContent).toContain('Giảm 30.000đ');
+    expect(heads).not.toContain('Mã giảm giá của tôi');
+    for (const later of ['Điểm danh mỗi ngày', 'Các hạng', 'Lịch sử Điểm Xanh']) {
+      const h = Array.from(c.querySelectorAll('h2')).find((x) => x.textContent === later)!;
+      expect(link.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING, later).toBeTruthy();
+    }
+    const tier = c.querySelector('section[aria-label="Hạng thành viên"]')!;
+    expect(tier.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    for (const gone of ['Miễn phí giao hàng', 'HSD', 'Giảm 10%', 'FREESHIP1']) expect(c.textContent).not.toContain(gone);
+    // Kho quà vẫn là một dòng riêng khi dòng trên là Ví mã.
+    expect(c.querySelector('a[href="/kho-qua"]')?.textContent).toContain('Kho quà');
   });
 
-  it('mã tự cấp hiện tên thân thiện, không lộ mã thô', async () => {
-    state.coupons = [{ code: 'MILESTONE1000000-2026-10-u1abc', type: 'AMOUNT', value: 50000, minOrder: null, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' }];
+  it('chưa có mã: "Đổi quà" tới Kho quà, không lặp thêm dòng "Kho quà"', async () => {
+    state.readyRoutes = new Set(['/uu-dai', '/kho-qua']);
     const c = await mount();
-    expect(c.textContent).toContain('Quà mốc chi tiêu 1 triệu');
-    expect(c.textContent).not.toContain('MILESTONE1000000-2026-10-u1abc');
+    const links = c.querySelectorAll('a[href="/kho-qua"]');
+    expect(links).toHaveLength(1);
+    expect(links[0]!.textContent).toContain('Đổi quà');
+    expect(c.querySelector('a[href^="/uu-dai"]')).toBeNull();
+    expect(c.textContent).not.toContain('Ví mã');
   });
 
-  it('chưa có mã: câu trống chỉ cách có mã; lỗi tải: báo lỗi và Thử lại, không giả vờ "chưa có mã"', async () => {
-    const c = await mount();
-    expect(c.textContent).toContain('Chưa có mã giảm giá khả dụng');
+  it('không tải được mã: "Ví mã" không kèm số, không giả vờ "chưa có mã"', async () => {
     state.fail.add('/me/coupons');
-    const failed = await mount();
-    expect(failed.textContent).toContain('Chưa tải được mã giảm giá: Máy chủ đang bận');
-    expect(failed.textContent).not.toContain('Chưa có mã giảm giá khả dụng');
-    state.fail.clear();
-    state.calls = [];
-    click(byText(failed, 'button', 'Thử lại'));
-    await flush();
-    expect(state.calls.some((x) => x.path === '/me/coupons')).toBe(true);
+    state.readyRoutes = new Set(['/uu-dai', '/kho-qua']);
+    const c = await mount();
+    const link = c.querySelector('a[href="/uu-dai?section=coupons"]')!;
+    expect(link.textContent).toContain('Ví mã');
+    expect(link.textContent).not.toContain('Ví mã (');
+    expect(c.textContent).not.toContain('Đổi quà');
+  });
+
+  it('route đích chưa sẵn sàng thì không hiện dòng', async () => {
+    state.coupons = COUPONS;
+    const c = await mount();
+    expect(c.querySelector('a[href^="/uu-dai"]')).toBeNull();
   });
 });
 
@@ -364,40 +376,6 @@ describe('/tai-khoan/diem-xanh — hạn giữ hạng, biểu tượng theo th�
   });
 });
 
-describe('/tai-khoan/diem-xanh — thẻ mã giảm giá dùng được ngay', () => {
-  const COUPON = { code: 'TUBU10', type: 'AMOUNT', value: 10000, minOrder: 99000, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' };
-
-  it('"Sao chép" chép đúng mã và báo "Đã sao chép mã"', async () => {
-    state.coupons = [COUPON];
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    const c = await mount();
-    click(c.querySelector('button[aria-label="Sao chép mã TUBU10"]'));
-    await flush(4);
-    expect(writeText).toHaveBeenCalledWith('TUBU10');
-    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã sao chép mã');
-  });
-
-  it('"Dùng ngay" khi giỏ có hàng: chọn sẵn mã rồi tới giỏ', async () => {
-    state.coupons = [COUPON];
-    state.cartCount = 2;
-    const c = await mount();
-    click(c.querySelector('button[aria-label="Dùng mã TUBU10 ngay"]'));
-    await flush(4);
-    expect(state.applied).toEqual(['TUBU10']);
-    expect(state.push).toHaveBeenLastCalledWith('/gio-hang');
-  });
-
-  it('"Dùng ngay" khi giỏ trống: tới sản phẩm, không áp mã', async () => {
-    state.coupons = [COUPON];
-    const c = await mount();
-    click(c.querySelector('button[aria-label="Dùng mã TUBU10 ngay"]'));
-    await flush(4);
-    expect(state.applied).toEqual([]);
-    expect(state.push).toHaveBeenLastCalledWith('/san-pham');
-  });
-});
-
 describe('/tai-khoan/diem-xanh — lối tắt', () => {
   it('route web chưa làm (pending) thì không hiện lối tắt; chỉ còn lối mua sắm', async () => {
     const c = await mount();
@@ -406,12 +384,12 @@ describe('/tai-khoan/diem-xanh — lối tắt', () => {
     expect(c.querySelector('a[href="/kho-qua"]')).toBeNull();
   });
 
-  it('route đã sẵn sàng: Vườn Xanh, Đổi rác lấy quà (theo waste.enabled), Kho quà', async () => {
+  it('route đã sẵn sàng: Vườn Xanh, Đổi rác lấy quà (theo waste.enabled), Đổi quà (chưa có mã) tới Kho quà', async () => {
     state.readyRoutes = new Set(['/vuon-xanh', '/doi-rac', '/kho-qua']);
     const c = await mount();
     expect(c.querySelector('a[href="/vuon-xanh"]')?.textContent).toContain('Vườn Xanh');
     expect(c.querySelector('a[href="/doi-rac"]')?.textContent).toContain('Đổi rác lấy quà');
-    expect(c.querySelector('a[href="/kho-qua"]')?.textContent).toContain('Kho quà');
+    expect(c.querySelector('a[href="/kho-qua"]')?.textContent).toContain('Đổi quà');
     state.config = { waste: { enabled: false } };
     const off = await mount();
     expect(off.querySelectorAll('a[href="/doi-rac"]')).toHaveLength(0);
@@ -456,23 +434,45 @@ describe('/tai-khoan/diem-xanh — lịch sử Điểm Xanh', () => {
     expect(c.textContent).not.toContain('WEIRD_INTERNAL_CODE');
   });
 
-  it('hiện 20 giao dịch gần nhất, "Xem thêm" mở thêm 20 dòng cho tới hết', async () => {
-    state.txns = Array.from({ length: 45 }, (_, i) => ({ id: `n${i}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }));
+  it('hiện 20 giao dịch gần nhất, "Xem thêm" tải trang kế từ máy chủ (cả dòng cũ hơn 100) cho tới hết', async () => {
+    state.txns = Array.from({ length: 145 }, (_, i) => ({
+      id: `n${String(i).padStart(3, '0')}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: new Date(Date.UTC(2026, 9, 10, 5, 0, 0) - i * 1000).toISOString(),
+    }));
     const c = await mount();
     const rows = () => c.querySelectorAll('section[aria-label="Lịch sử Điểm Xanh"] li').length;
     expect(rows()).toBe(20);
     expect(c.textContent).not.toContain('Hiển thị tối đa');
-    click(byText(c, 'button', 'Xem thêm (25)')!);
-    expect(rows()).toBe(40);
-    click(byText(c, 'button', 'Xem thêm (5)')!);
-    expect(rows()).toBe(45);
+    for (const shown of [40, 60, 80, 100, 120, 140, 145]) {
+      click(byText(c, 'button', 'Xem thêm')!);
+      await flush(3);
+      expect(rows()).toBe(shown);
+    }
+    expect(byText(c, 'button', /^Xem thêm/)).toBeFalsy();
+    // Mỗi trang gửi mốc của dòng cuối trang trước.
+    const txnCalls = state.calls.filter((x) => x.path === '/me/points/transactions');
+    expect(txnCalls[0]!.query).toMatchObject({ limit: 20 });
+    expect(txnCalls[1]!.query).toMatchObject({ limit: 20, beforeId: 'n019', before: state.txns[19]!.createdAt });
+  });
+
+  it('ít hơn một trang (dưới 20 dòng) thì không có nút Xem thêm', async () => {
+    state.txns = Array.from({ length: 19 }, (_, i) => ({ id: `n${i}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }));
+    const c = await mount();
     expect(byText(c, 'button', /^Xem thêm/)).toBeFalsy();
   });
 
-  it('đủ 20 dòng trở xuống thì không có nút Xem thêm', async () => {
-    state.txns = Array.from({ length: 20 }, (_, i) => ({ id: `n${i}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }));
+  it('tải trang kế lỗi: giữ các dòng đã có, nút đổi thành "thử lại" và bấm lại tải được', async () => {
+    state.txns = Array.from({ length: 30 }, (_, i) => ({ id: `n${String(i).padStart(2, '0')}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: new Date(Date.UTC(2026, 9, 10, 5) - i * 1000).toISOString() }));
     const c = await mount();
-    expect(byText(c, 'button', /^Xem thêm/)).toBeFalsy();
+    const rows = () => c.querySelectorAll('section[aria-label="Lịch sử Điểm Xanh"] li').length;
+    state.fail.add('/me/points/transactions');
+    click(byText(c, 'button', 'Xem thêm')!);
+    await flush(3);
+    expect(rows()).toBe(20);
+    expect(byText(c, 'button', 'Chưa tải được, bấm để thử lại')).toBeTruthy();
+    state.fail.clear();
+    click(byText(c, 'button', 'Chưa tải được, bấm để thử lại')!);
+    await flush(3);
+    expect(rows()).toBe(30);
   });
 
   it('chưa có giao dịch: câu báo trống; tải lỗi: báo lỗi và Thử lại', async () => {
@@ -684,7 +684,7 @@ describe('/tai-khoan/diem-xanh — giao diện điện thoại như Mini App', (
 describe('/tai-khoan/diem-xanh — tiêu đề khối như Mini App', () => {
   it('tiêu đề các khối cỡ title-sm ở điện thoại; thẻ hạng chữ lớn như medallion', async () => {
     const c = await mount();
-    for (const name of ['Các hạng', 'Lịch sử Điểm Xanh', 'Mã giảm giá của tôi']) {
+    for (const name of ['Các hạng', 'Lịch sử Điểm Xanh']) {
       const h = Array.from(c.querySelectorAll('h2')).find((x) => x.textContent === name)!;
       expect(h.className, name).toContain('max-md:text-[length:var(--type-title-sm-size)]');
     }

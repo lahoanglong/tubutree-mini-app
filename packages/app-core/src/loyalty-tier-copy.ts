@@ -26,3 +26,13 @@ export function tierGraceLine(
   const need = grace.spendingToKeep != null ? `đơn giao thành công thêm ${fmt.money(left)}` : `tích thêm ${fmt.points(left)} điểm từ đơn giao thành công`;
   return `Giữ hạng ${tierName}: ${need} trước ${fmt.date(grace.until)}`;
 }
+
+/**
+ * Dòng mã giảm giá ở trang Hạng (thay cho khối danh sách mã, vì mã đã có ở Ưu đãi): có mã thì "Ví mã (n)" tới Ưu đãi mục mã;
+ * chưa có mã thì "Đổi quà" tới Kho quà; chưa biết số mã (đang tải lỗi) thì "Ví mã" không kèm số, để Ưu đãi tự báo lỗi và thử lại.
+ */
+export function couponShortcut(count: number | null): { title: string; sub: string; to: 'coupons' | 'rewards' } {
+  if (count === null) return { title: 'Ví mã', sub: 'Mã giảm giá bạn đang có', to: 'coupons' };
+  if (count > 0) return { title: `Ví mã (${count})`, sub: 'Mã giảm giá bạn đang có', to: 'coupons' };
+  return { title: 'Đổi quà', sub: 'Đổi Điểm Xanh lấy mã giảm giá và quà', to: 'rewards' };
+}
