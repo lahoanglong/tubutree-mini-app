@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createAdminMission,
@@ -13,7 +14,11 @@ import {
 import { useConfirm } from './confirm-dialog';
 import { BTN_PRIMARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, INPUT_CLASS, Notice, LoadError, ToneBadge } from './ui';
 import { SeasonAdmin } from './season-admin';
-import { GameQuizAdmin } from './game-quiz-tab';
+
+// Tab Nhiệm vụ nằm trong First Load của /admin; màn Câu đố ít dùng nên nạp khi tab mở.
+const GameQuizAdmin = dynamic(() => import('./game-quiz-tab').then((m) => m.GameQuizAdmin), {
+  loading: () => <p className="text-sm text-stone-500">Đang tải…</p>,
+});
 
 const REWARD_POINTS_MAX = 500_000;
 const CHECKIN_NOTE = 'Nhiệm vụ điểm danh: nếu khách dùng vé giữ lửa hay hồi sinh chuỗi thì nhiệm vụ đếm lại từ ngày đó (khách chỉ thấy dòng này trên thẻ nhiệm vụ khi đã dùng vé giữ lửa hay hồi sinh sau ngày bắt đầu nhiệm vụ).';
