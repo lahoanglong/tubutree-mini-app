@@ -9,7 +9,7 @@ vi.mock('@/lib/shop-client', () => ({ recordReferralTouch: mocks.touch }));
 
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { clearPendingRef, clearStorefrontContext, getStorefrontContext, PENDING_REF_TTL_DAYS, readPendingRefs } from '@/lib/storefront-context';
-import { ReferralCapture, StorefrontTracker } from './storefront-tracker';
+import { ReferralCapture, resetCtvTouched, StorefrontTracker } from './storefront-tracker';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -24,6 +24,7 @@ async function mount() {
 
 describe('ReferralCapture ghi nguồn gian hàng ?s= như Mini App', () => {
   beforeEach(() => {
+    resetCtvTouched();
     mocks.status = 'authenticated';
     mocks.touch.mockReset().mockResolvedValue({ ok: true });
     clearStorefrontContext();
@@ -98,6 +99,7 @@ async function mountKept(node: React.ReactElement = <ReferralCapture />) {
 describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chưa đăng nhập', () => {
   const DAY = 24 * 60 * 60 * 1000;
   beforeEach(() => {
+    resetCtvTouched();
     mocks.status = 'anonymous';
     mocks.touch.mockReset().mockResolvedValue({ ok: true });
     sessionStorage.clear();
@@ -302,6 +304,7 @@ describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chư
 
 describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã có phải của CTV không', () => {
   beforeEach(() => {
+    resetCtvTouched();
     mocks.status = 'authenticated';
     mocks.touch.mockReset();
     sessionStorage.clear();
@@ -368,5 +371,27 @@ describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã c�
     expect(getStorefrontContext()).toMatchObject({ slug: 'doi-tac', referralCode: 'CTV0001', kind: 'MERCHANT', referralEligible: true });
     expect(readPendingRefs()).toEqual([]);
     await m.unmount();
+  });
+  it('đã ghi công mã CTV rồi mở gian hàng đối tác (cùng mã): không chạm lại kiểu brand, kẻo máy chủ xoá slug gian hàng CTV khỏi chạm', async () => {
+    mocks.touch.mockResolvedValue({ ok: true });
+    window.history.replaceState({}, '', '/?s=an-shop&ref=AN123');
+    await mount();
+    expect(mocks.touch).toHaveBeenCalledTimes(1);
+    mocks.touch.mockClear();
+    const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+    expect(mocks.touch).not.toHaveBeenCalled();
+    await t.unmount();
+  });
+
+  it('gian hàng đối tác mà mã chưa từng được ghi công như CTV: vẫn chạm kiểu brand', async () => {
+    mocks.touch.mockResolvedValue({ ok: true });
+    window.history.replaceState({}, '', '/?ref=KHAC99');
+    mocks.status = 'anonymous';
+    await mount();
+    window.history.replaceState({}, '', '/');
+    mocks.status = 'authenticated';
+    const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+    expect(mocks.touch).toHaveBeenCalledWith({ referralCode: 'KHAC99', storefrontSlug: 'doi-tac', kind: 'brand' });
+    await t.unmount();
   });
 });

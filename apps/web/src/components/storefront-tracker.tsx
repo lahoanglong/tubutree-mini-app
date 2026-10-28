@@ -40,6 +40,18 @@ function touchFromPending(p: PendingRef): TouchDto | null {
 const sameTouch = (a: TouchDto, b: TouchDto) => a.referralCode.toUpperCase() === b.referralCode.toUpperCase();
 
 /**
+ * Mã đã được ghi công qua gian hàng CTV (chạm kiểu ctv, ok:true) trong lần mở trang này. Mở gian hàng đối tác/nhãn sau đó không chạm
+ * lại cùng mã kiểu brand: máy chủ upsert cả dòng chạm và sẽ xoá slug gian hàng CTV khỏi nó (đơn sau không còn gắn gian hàng CTV, combo,
+ * storefrontSlug) dù hoa hồng không đổi.
+ */
+let ctvTouched: string | null = null;
+
+/** Chỉ cho test: quên mã đã chạm giữa các ca. */
+export function resetCtvTouched(): void {
+  ctvTouched = null;
+}
+
+/**
  * Máy chủ đã nhận và từ chối (4xx trừ 401, 429): gửi lại y hệt cũng bị từ chối, giữ bản chờ chỉ làm nó kẹt và chạm lại mỗi lần tải trang.
  * Mất mạng, 5xx, 401 (phiên vừa hết hạn) và 429 thì lần sau có thể khác nên vẫn thử lại.
  */
@@ -63,9 +75,10 @@ async function replayTouches(session: TouchDto | null): Promise<void> {
       if (!isPermanentRejection(e)) delivered = false;
     }
   }
-  if (session) {
+  if (session && !(session.kind === 'brand' && session.referralCode.toUpperCase() === ctvTouched)) {
     try {
-      await touchAndConfirm(session);
+      const res = await touchAndConfirm(session);
+      if (res?.ok && session.kind === 'ctv') ctvTouched = session.referralCode.toUpperCase();
     } catch (e) {
       if (!isPermanentRejection(e)) delivered = false;
     }
