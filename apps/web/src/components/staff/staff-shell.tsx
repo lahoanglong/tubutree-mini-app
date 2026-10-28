@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
@@ -11,8 +11,10 @@ import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import BackLink from '@/components/back-link';
 import { PageHeader } from '@/components/ui/page-header';
-import { EmptyState } from '@/components/mini/empty-state';
 import { loadErrorText } from '@/lib/error-text';
+
+// Chỉ nhánh bị từ chối quyền mới vẽ: nhân viên thật không phải tải minh hoạ này.
+const EmptyState = dynamic(() => import('@/components/mini/empty-state').then((m) => m.EmptyState));
 
 /** Khung chung của màn nhân sự: mỗi nhánh render có đúng một h1. */
 export function StaffShell({ title, children }: { title: string; children: React.ReactNode }) {
