@@ -6,7 +6,8 @@ Chủ nhắn sáng 29/10: "continue làm tiếp cho xong", sau khi PR #70 (đợ
 - 135 P3 mà reviewer Opus nêu ở 16 gói đợt 28/10 (gồm cả mục đã sửa ở lượt sau: worker kiểm lại từng mục).
 - 4 mục làm dở (canhan 1, ctv 1, doirac 2).
 - 6 mục "Còn lại" trong báo cáo cuối: tiêu đề đổi rác web khách, báo kế toán khi dòng trả không có hoa hồng, Mini 429 báo "Mất kết nối", menu admin sáng hai chỗ, "7 ngày: N khách mới" màu đỏ, chữ "không tìm thấy" hai nền.
-- Không làm: các mục chờ chủ ở `docs/2026-10-28-e2e/21-quyet-dinh.md` mục B; hàng mạng xã hội ở Cộng đồng web 375 (cần chủ xác nhận, giữ nguyên).
+- Chủ chốt 06:5x (`docs/2026-10-28-e2e/21-quyet-dinh.md` mục D): E-2 chặn điểm khách vãng lai (gói `e2-diem-khach`); E-43 trừ thẳng Ví CTV, Ví được âm chỉ với dòng thu hồi (gói `e43-vi-ctv`, migration `20261029040000`); deploy main lên Vietnix sau khi PR đợt P3 merge (không đẩy Mini App); giữ link mạng xã hội Cộng đồng web cả hai khổ.
+- Không làm: các mục chờ chủ còn lại ở mục B của file quyết định.
 
 ## Cách chạy
 - Nhánh gộp `review/e2e-p3-2026-10-29` từ main 815fa3c1e (đã gồm #69). Worktree `.claude/worktrees/e2e`.
@@ -19,3 +20,5 @@ Chủ nhắn sáng 29/10: "continue làm tiếp cho xong", sau khi PR #70 (đợ
 |---|---|---|
 | 05:41 | PR #70 merge (6f5897078). Dọn 16 worktree + nhánh gói, lane 6 | xong |
 | 06:52 | Gom 139 P3/mục dở + 6 mục báo cáo vào 8 gói, dựng nhánh gộp từ main 815fa3c1e | xong |
+| 06:55 | Workflow `wf_8043b683-fb8` chạy 8 gói P3 (slot 0–7) | đang chạy |
+| 06:58 | Chủ chốt E-2, E-43, deploy, link Cộng đồng. Thêm 2 gói e2-diem-khach (slot 8), e43-vi-ctv (slot 9) | |
