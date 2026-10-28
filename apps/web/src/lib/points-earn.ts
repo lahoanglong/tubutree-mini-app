@@ -31,7 +31,7 @@ export function pointsEarnPreview(
 
 const numberFormat = new Intl.NumberFormat('vi-VN');
 
-/** Chữ giữ y như `vi.product.pointsEarn*` của Mini App. "Tối đa": giảm giá, mã, điểm dùng ở thanh toán làm giá trị hàng tính điểm thấp đi. */
+/** Chữ giữ y như `vi.product.pointsEarn*` của Mini App. "~" vì giảm giá, mã, điểm dùng ở thanh toán làm giá trị hàng tính điểm thấp đi. */
 export const pointsEarnText = {
   line: (points: number) => `Nhận ~${numberFormat.format(points)} Điểm Xanh`,
   generic: 'Nhận Điểm Xanh khi đơn giao thành công',

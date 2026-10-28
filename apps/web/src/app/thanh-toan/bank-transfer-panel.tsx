@@ -179,7 +179,7 @@ export function BankTransferPanel({
       {showHeading && (
         <>
           <h2 className={`text-center ${ui.sectionTitle}`}>Quét QR để chuyển khoản</h2>
-          <p className="mt-1 text-center text-xs text-stone-600">{BANK_QR_HINT}</p>
+          <p className="mt-1 text-center text-xs text-stone-600 md:hidden">{BANK_QR_HINT}</p>
         </>
       )}
 
