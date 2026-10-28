@@ -29,6 +29,14 @@ describe('parseRemoteSource (chống SSRF)', () => {
     expect(parseRemoteSource(['https://content.pancake.vn/a.jpg'])).toBeNull();
   });
 
+  it('Cloudinary: chỉ nhận /<cloud>/image/upload/, bỏ query; image/fetch bị loại', () => {
+    expect(parseRemoteSource('https://res.cloudinary.com/demo/image/fetch/https://evil.example/x.jpg')).toBeNull();
+    expect(parseRemoteSource('https://res.cloudinary.com/demo/image/url/https://evil.example/x.jpg')).toBeNull();
+    expect(parseRemoteSource('https://res.cloudinary.com/demo/video/upload/x.mp4')).toBeNull();
+    expect(parseRemoteSource('https://res.cloudinary.com/x.jpg')).toBeNull();
+    expect(parseRemoteSource('https://res.cloudinary.com/demo/image/upload/v1/x.png?a=1&b=2#h')?.toString()).toBe('https://res.cloudinary.com/demo/image/upload/v1/x.png');
+  });
+
   it('host thêm qua danh sách cấu hình', () => {
     expect(parseRemoteSource('https://img.tubutree.com/a.jpg')).toBeNull();
     expect(parseRemoteSource('https://img.tubutree.com/a.jpg', ['img.tubutree.com'])?.hostname).toBe('img.tubutree.com');
@@ -36,7 +44,7 @@ describe('parseRemoteSource (chống SSRF)', () => {
 });
 
 describe('isPrivateAddress', () => {
-  it.each(['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0', '::1', '::', 'fd00::1', 'fe80::1', '::ffff:127.0.0.1', 'khong-phai-ip'])(
+  it.each(['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.255', '192.168.1.1', '169.254.169.254', '100.64.0.1', '0.0.0.0', '::1', '::', 'fd00::1', 'fe80::1', '::ffff:127.0.0.1', '64:ff9b::7f00:1', '2002:7f00:1::1', 'khong-phai-ip'])(
     '%s là nội bộ',
     (a) => expect(isPrivateAddress(a)).toBe(true),
   );

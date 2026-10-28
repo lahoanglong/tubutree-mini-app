@@ -256,9 +256,11 @@ export class CatalogService {
     orderBy: Prisma.ProductOrderByWithRelationInput[] | undefined,
     needsPrice: boolean,
   ): Promise<string[]> {
-    const key = JSON.stringify({ where, select, price, orderBy, needsPrice });
+    // Thứ hạng phụ thuộc giá (xếp giá, lọc giá) đổi ngay khi Giờ vàng bắt đầu/hết hoặc giá sửa nên không nhớ.
+    const cacheable = !needsPrice && !price;
+    const key = cacheable ? JSON.stringify({ where, select, price, orderBy, needsPrice }) : '';
     const now = Date.now();
-    const hit = key.length <= 2000 ? this.rankCache.get(key) : undefined;
+    const hit = cacheable && key.length <= 2000 ? this.rankCache.get(key) : undefined;
     if (hit && hit.expiresAt > now) return hit.ids;
     type Priced = T & PricedFields;
     const priced = needsPrice || price;
@@ -277,7 +279,7 @@ export class CatalogService {
       });
     }
     const ids = ranked.map((r) => r.id);
-    if (key.length <= 2000) {
+    if (cacheable && key.length <= 2000) {
       if (this.rankCache.size >= this.RANK_MAX_KEYS) this.rankCache.delete(this.rankCache.keys().next().value as string);
       this.rankCache.set(key, { ids, expiresAt: now + this.RANK_TTL_MS });
     }

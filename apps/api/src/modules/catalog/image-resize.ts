@@ -9,8 +9,9 @@ export const RESIZE_WIDTHS: readonly number[] = [160, 320, 640, 960];
 export const PANCAKE_IMAGE_HOSTS: readonly string[] = ['content.pancake.vn'];
 
 export const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
-export const MAX_SOURCE_PIXELS = 40_000_000;
+export const MAX_SOURCE_PIXELS = 16_000_000;
 export const FETCH_TIMEOUT_MS = 6_000;
+export const FETCH_TOTAL_MS = 10_000;
 const MAX_URL_LENGTH = 1_000;
 
 export type ResizeFormat = 'webp' | 'jpeg';
@@ -34,7 +35,14 @@ export function parseRemoteSource(raw: unknown, hosts: readonly string[] = allow
   if (url.protocol !== 'https:' || url.username || url.password || url.port) return null;
   const host = url.hostname.toLowerCase();
   if (isIP(host) !== 0 || host.startsWith('[')) return null;
-  return hosts.includes(host) ? url : null;
+  if (!hosts.includes(host)) return null;
+  if (host === 'res.cloudinary.com') {
+    // Chỉ ảnh đã tải lên (`/<cloud>/image/upload/...`): loại `image/fetch`, `image/url`... vốn bắt Cloudinary đi lấy URL tuỳ ý rồi trả qua API của mình.
+    if (!/^\/[A-Za-z0-9_-]+\/image\/upload\//.test(url.pathname)) return null;
+    url.search = '';
+  }
+  url.hash = '';
+  return url;
 }
 
 /** Nguồn là ảnh của chính API (`/public-image/<loại>/<id>/<ô>`): đọc thẳng từ DB, không tải qua mạng. */
@@ -58,7 +66,7 @@ export function isPrivateAddress(address: string): boolean {
     const lower = address.toLowerCase();
     const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(lower);
     if (mapped) return isPrivateAddress(mapped[1]!);
-    return lower === '::' || lower === '::1' || /^f[cd]/.test(lower) || /^fe[89ab]/.test(lower) || lower.startsWith('ff');
+    return lower === '::' || lower === '::1' || lower.startsWith('64:ff9b:') || lower.startsWith('2002:') || /^f[cd]/.test(lower) || /^fe[89ab]/.test(lower) || lower.startsWith('ff');
   }
   return true;
 }

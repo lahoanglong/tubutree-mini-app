@@ -36,8 +36,11 @@ ENV TZ=Asia/Ho_Chi_Minh
 COPY --from=builder /app ./
 
 WORKDIR /app/apps/api
-# API không ghi file nào lúc chạy (ảnh upload đi thẳng Cloudinary, log ra stdout, Prisma engine nằm sẵn trong node_modules),
-# nên cây /app để root sở hữu, chỉ đọc được với node. Thêm đường ghi file thì chown thư mục đó ở đây, đừng chạy root.
+# API chỉ ghi file vào cache ảnh đổi cỡ (IMAGE_CACHE_DIR, mặc định thư mục tạm /tmp, node ghi được; mất khi dựng lại container, tự tạo
+# lại dần). Ảnh upload đi thẳng Cloudinary, log ra stdout, Prisma engine nằm sẵn trong node_modules, nên cây /app để root sở hữu, chỉ đọc
+# được với node. Thêm đường ghi file khác thì chown thư mục đó ở đây, đừng chạy root.
+# sharp (đổi cỡ ảnh): `pnpm install --frozen-lockfile` ở stage builder (alpine) lấy @img/sharp-linuxmusl-x64 và libvips-linuxmusl-x64 có sẵn
+# trong pnpm-lock.yaml; cả cây /app (kèm node_modules) được chép sang đây nên không cần cài thêm gói hệ thống.
 USER node
 EXPOSE 3001
 

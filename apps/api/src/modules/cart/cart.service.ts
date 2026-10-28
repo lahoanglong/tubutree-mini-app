@@ -531,7 +531,7 @@ export class CartService {
       // Combo chỉ áp khi giỏ đủ bộ sản phẩm của nó: mua một phần giỏ ("Mua ngay", bỏ chọn món) phần hàng tính mã có thể CAO hơn cả giỏ.
       // Mã chỉ hụt đơn tối thiểu vì combo (trước combo vẫn đạt) thì giữ lại, giỏ báo giảm 0đ kèm lời báo như mã đang giữ.
       if (err instanceof CouponMinOrderError && combo.total > 0 && (await this.meetsMinOrderBeforeCombo(normalized, userId, cart.items))) {
-        await this.prisma.cart.update({ where: { userId }, data: { couponCode: normalized } });
+        await this.prisma.cart.upsert({ where: { userId }, update: { couponCode: normalized }, create: { userId, couponCode: normalized } });
         return this.priceCart(userId, slug);
       }
       if (err instanceof CouponMinOrderError && (await this.meetsMinOrderWithFlash(normalized, userId, cart, combo.total > 0))) {
@@ -547,7 +547,7 @@ export class CartService {
       }
       throw err;
     }
-    await this.prisma.cart.update({ where: { userId }, data: { couponCode: normalized } });
+    await this.prisma.cart.upsert({ where: { userId }, update: { couponCode: normalized }, create: { userId, couponCode: normalized } });
     return this.priceCart(userId, slug);
   }
 

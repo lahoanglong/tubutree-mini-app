@@ -810,6 +810,16 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
     expect(findMany).toHaveBeenCalledTimes(5);
   });
 
+  it('xếp theo giá hoặc lọc giá không dùng bộ nhớ 60 giây (giá và Giờ vàng đổi là thấy ngay)', async () => {
+    const row = { id: 'a', basePrice: 100_000, salePrice: null, variations: [] };
+    const findMany = jest.fn().mockResolvedValue([row]);
+    const prisma = { product: { findMany, count: jest.fn() }, flashSaleItem: noFlash() } as unknown as PrismaService;
+    const svc = new CatalogService(prisma);
+    await svc.list({ page: 1, limit: 2, sort: 'price_asc' });
+    await svc.list({ page: 1, limit: 2, sort: 'price_asc' });
+    expect(findMany).toHaveBeenCalledTimes(4);
+  });
+
   it('hết 60 giây thì xếp lại từ DB', async () => {
     const findMany = jest.fn().mockResolvedValueOnce(RANKED).mockResolvedValue([card('b'), card('a')]);
     const svc = new CatalogService({ product: { findMany, count: jest.fn() }, flashSaleItem: noFlash() } as unknown as PrismaService);

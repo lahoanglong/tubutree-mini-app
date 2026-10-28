@@ -1,4 +1,4 @@
-import { BadGatewayException, BadRequestException, NotFoundException, PayloadTooLargeException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, NotFoundException, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
 import { EventEmitter } from 'node:events';
 import { mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,6 +11,7 @@ const lookupMock = jest.fn();
 jest.mock('node:dns', () => ({ lookup: (...args: unknown[]) => lookupMock(...args) }));
 
 import { ImageResizeService } from './image-resize.service';
+import { MAX_SOURCE_BYTES } from './image-resize';
 
 let dir: string;
 let png: Buffer;
@@ -30,7 +31,11 @@ afterEach(() => {
 });
 
 const ownImages = (data: Buffer | null) => ({ get: jest.fn(async () => (data ? { mime: 'image/png', data, versionOk: true } : Promise.reject(new NotFoundException()))) });
-const make = (own = ownImages(png)) => ({ svc: new ImageResizeService(own as never), own });
+const prismaWith = (registered: boolean) => ({
+  product: { findFirst: jest.fn(async () => (registered ? { id: 'p' } : null)) },
+  brand: { findFirst: jest.fn(async () => null) },
+});
+const make = (own = ownImages(png), prisma = prismaWith(true)) => ({ svc: new ImageResizeService(own as never, prisma as never), own, prisma });
 
 /** Phản hồi giả của https.request: gọi callback với res rồi phát dữ liệu. */
 function fakeHttps(res: { status: number; headers?: Record<string, string>; body?: Buffer }) {
@@ -123,6 +128,55 @@ describe('ImageResizeService', () => {
     const ok = await run([{ address: '10.0.0.5', family: 4 }, { address: '8.8.8.8', family: 4 }]);
     expect(ok[0]).toBeNull();
     expect(ok[1]).toEqual([{ address: '8.8.8.8', family: 4 }]);
+  });
+
+  it('nguồn đúng host nhưng không có trong sản phẩm/nhãn thì 404, không chạm mạng (không thành proxy mở)', async () => {
+    const { svc, prisma } = make(ownImages(png), prismaWith(false));
+    await expect(svc.get('https://content.pancake.vn/someone-else.jpg', 320, 'webp')).rejects.toBeInstanceOf(NotFoundException);
+    expect(requestMock).not.toHaveBeenCalled();
+    expect(readdirSync(dir).length).toBe(0);
+    await expect(svc.get('https://content.pancake.vn/someone-else.jpg', 320, 'webp')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.product.findFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it('tra nguồn lạ quá 30 lần mỗi phút thì 503', async () => {
+    const { svc } = make(ownImages(png), prismaWith(false));
+    for (let i = 0; i < 30; i++) await expect(svc.get(`https://content.pancake.vn/x${i}.jpg`, 320, 'webp')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.get('https://content.pancake.vn/x-last.jpg', 320, 'webp')).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('ảnh của chính API sai phiên bản (?v=) thì 404, không ghi cache', async () => {
+    const own = { get: jest.fn(async () => ({ mime: 'image/png', data: png, versionOk: false })) };
+    await expect(make(own).svc.get('/public-image/product/p1/0?v=stale', 320, 'webp')).rejects.toBeInstanceOf(NotFoundException);
+    expect(readdirSync(dir).length).toBe(0);
+  });
+
+  it('ảnh nén cực mạnh vượt giới hạn điểm ảnh (decompression bomb) bị từ chối', async () => {
+    const bomb = await sharp({ create: { width: 5000, height: 5000, channels: 3, background: '#000' } }).png({ compressionLevel: 9 }).toBuffer();
+    expect(bomb.length).toBeLessThan(MAX_SOURCE_BYTES);
+    fakeHttps({ status: 200, headers: { 'content-type': 'image/png' }, body: bomb });
+    await expect(make().svc.get('https://content.pancake.vn/bomb.png', 320, 'webp')).rejects.toBeInstanceOf(BadGatewayException);
+  });
+
+  it('hàng đợi đầy thì 503, không tải thêm ảnh nguồn', async () => {
+    let unblock: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (unblock = r));
+    const own = { get: jest.fn(async () => { await gate; return { mime: 'image/png', data: png, versionOk: true }; }) };
+    const { svc } = make(own as never);
+    const calls = Array.from({ length: 4 + 32 }, (_, i) => svc.get(`/public-image/product/q${i}/0`, 160, 'webp'));
+    await new Promise((r) => setTimeout(r, 20));
+    await expect(svc.get('/public-image/product/over/0', 160, 'webp')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    unblock();
+    await Promise.all(calls);
+  });
+
+  it('trần dung lượng cache: không ghi khi vượt trần, vẫn trả ảnh', async () => {
+    process.env.IMAGE_CACHE_MAX_MB = '0.00001';
+    const { svc } = make();
+    const a = await svc.get('/public-image/product/c1/0', 960, 'jpeg');
+    expect(a.data.length).toBeGreaterThan(0);
+    const files = readdirSync(dir).flatMap((d) => readdirSync(join(dir, d)));
+    expect(files.length).toBe(0);
   });
 
   it('ảnh của chính API không có thì 404, không ghi cache', async () => {

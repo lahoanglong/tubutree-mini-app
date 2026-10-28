@@ -649,7 +649,7 @@ describe('CartService guard tồn kho', () => {
     expect(validateAndCompute).toHaveBeenCalledWith('SAVE', 'u1', 100000, [{ productId: 'p2', total: 100000 }]);
     expect(validateAndCompute).not.toHaveBeenCalledWith('SAVE', 'u1', 180000, expect.anything());
     // Lưu mã đã chuẩn hoá (ADMINOPS-7) — giỏ/đơn luôn mang đúng Coupon.code.
-    expect(prisma.cart.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { couponCode: 'SAVE' } });
+    expect(prisma.cart.upsert).toHaveBeenCalledWith({ where: { userId: 'u1' }, update: { couponCode: 'SAVE' }, create: { userId: 'u1', couponCode: 'SAVE' } });
   });
 
   describe('D2-03: gõ mã thẻ hộp hàng (mã CLAIM) ở giỏ', () => {
@@ -682,7 +682,7 @@ describe('CartService guard tồn kho', () => {
       );
       expect(claimHiddenForCart).toHaveBeenCalledWith('u1', 'SHOPEE-AB12');
       expect(order.slice(0, 2)).toEqual(['claim', 'validate']);
-      expect(prisma.cart.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { couponCode: 'SHOPEE-AB12' } });
+      expect(prisma.cart.upsert).toHaveBeenCalledWith({ where: { userId: 'u1' }, update: { couponCode: 'SHOPEE-AB12' }, create: { userId: 'u1', couponCode: 'SHOPEE-AB12' } });
     });
 
     it('nhận mã bị từ chối (thẻ đã có người nhận, khách cũ...) → báo đúng lý do, không lưu mã vào giỏ', async () => {

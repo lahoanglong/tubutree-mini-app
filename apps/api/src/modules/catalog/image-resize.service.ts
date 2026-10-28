@@ -1,4 +1,4 @@
-import { BadRequestException, BadGatewayException, Injectable, Logger, NotFoundException, PayloadTooLargeException } from '@nestjs/common';
+import { HttpException, BadRequestException, BadGatewayException, Injectable, Logger, NotFoundException, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
 import { lookup as dnsLookup } from 'node:dns';
 import type { LookupFunction } from 'node:net';
 import { createHash } from 'node:crypto';
@@ -7,9 +7,11 @@ import { request as httpsRequest } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import { PrismaService } from '../../prisma/prisma.service';
 import { PublicImageService } from './public-image.service';
 import {
   FETCH_TIMEOUT_MS,
+  FETCH_TOTAL_MS,
   MAX_SOURCE_BYTES,
   MAX_SOURCE_PIXELS,
   cacheKey,
@@ -42,6 +44,14 @@ const safeLookup: LookupFunction = (hostname, options, callback) => {
 };
 
 const MAX_CONCURRENT_JOBS = 4;
+/** Hàng đợi chờ xử lý tối đa: đầy thì 503 để RAM (mỗi việc giữ tới 8 MB nguồn) không phình theo số URL khác nhau. */
+const MAX_QUEUED_JOBS = 32;
+const REGISTRY_TTL_MS = 5 * 60 * 1000;
+const REGISTRY_MISS_TTL_MS = 60 * 1000;
+const REGISTRY_MAX_ENTRIES = 2_000;
+/** Số lần tra DB cho nguồn lạ mỗi phút: URL không có trong DB bị từ chối nhưng mỗi lần vẫn tốn một lần quét. */
+const REGISTRY_MISS_LOOKUPS_PER_MIN = 30;
+const PRUNE_MIN_GAP_WHEN_FULL_MS = 10 * 1000;
 const DEFAULT_CACHE_MAX_MB = 512;
 const CACHE_MAX_AGE_MS = 14 * 24 * 3600 * 1000;
 const PRUNE_EVERY_MS = 10 * 60 * 1000;
@@ -59,8 +69,15 @@ export class ImageResizeService {
   private active = 0;
   private readonly waiters: (() => void)[] = [];
   private lastPrune = 0;
+  private cacheBytes: number | null = null;
+  private readonly registry = new Map<string, { ok: boolean; until: number }>();
+  private missWindowStart = 0;
+  private missCount = 0;
 
-  constructor(private readonly own: PublicImageService) {}
+  constructor(
+    private readonly own: PublicImageService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   /** Khoá cache (cũng là ETag) cho cặp nguồn + bề rộng + định dạng; null khi tham số không hợp lệ. Không chạm mạng hay đĩa. */
   keyFor(source: unknown, width: number, format: ResizeFormat): string | null {
@@ -79,6 +96,7 @@ export class ImageResizeService {
     const etag = `"${key}"`;
     const hit = await this.readCache(key);
     if (hit) return { data: hit, mime, etag };
+    if (!parseOwnImagePath(source) && !(await this.isRegistered(source as string))) throw new NotFoundException('Không tìm thấy ảnh.');
     let job = this.inFlight.get(key);
     if (!job) {
       job = this.produce(source as string, key, width, format).finally(() => this.inFlight.delete(key));
@@ -87,14 +105,42 @@ export class ImageResizeService {
     return job;
   }
 
+  /**
+   * Chỉ đổi cỡ ảnh đang nằm trong sản phẩm hoặc nhãn: host Pancake/Cloudinary chung của mọi cửa hàng, kiểm host thôi sẽ biến
+   * endpoint thành proxy ảnh cho bất kỳ ai. Khớp nguyên văn chuỗi `u` với dữ liệu, nhớ kết quả ít phút.
+   */
+  private async isRegistered(raw: string): Promise<boolean> {
+    const now = Date.now();
+    const known = this.registry.get(raw);
+    if (known && known.until > now) return known.ok;
+    if (now - this.missWindowStart > 60_000) {
+      this.missWindowStart = now;
+      this.missCount = 0;
+    }
+    if (this.missCount >= REGISTRY_MISS_LOOKUPS_PER_MIN) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
+    const ok = await this.lookupRegistered(raw);
+    if (!ok) this.missCount += 1;
+    if (this.registry.size >= REGISTRY_MAX_ENTRIES) this.registry.clear();
+    this.registry.set(raw, { ok, until: now + (ok ? REGISTRY_TTL_MS : REGISTRY_MISS_TTL_MS) });
+    return ok;
+  }
+
+  private async lookupRegistered(raw: string): Promise<boolean> {
+    const product = await this.prisma.product.findFirst({ where: { OR: [{ images: { has: raw } }, { thumbnail: raw }] }, select: { id: true } });
+    if (product) return true;
+    const brand = await this.prisma.brand.findFirst({ where: { OR: [{ logoUrl: raw }, { coverUrl: raw }, { storyImages: { has: raw } }] }, select: { id: true } });
+    return brand !== null;
+  }
+
   private async produce(source: string, key: string, width: number, format: ResizeFormat): Promise<ResizedImage> {
-    const input = await this.loadSource(source);
     const release = await this.acquire();
     let data: Buffer;
     try {
+      const input = await this.loadSource(source);
       const pipeline = sharp(input, { limitInputPixels: MAX_SOURCE_PIXELS, failOn: 'error' }).rotate().resize({ width, withoutEnlargement: true });
       data = await (format === 'webp' ? pipeline.webp({ quality: 78 }) : pipeline.jpeg({ quality: 80, mozjpeg: true })).toBuffer();
-    } catch {
+    } catch (e) {
+      if (e instanceof HttpException) throw e;
       throw new BadGatewayException('Không xử lý được ảnh nguồn.');
     } finally {
       release();
@@ -107,7 +153,7 @@ export class ImageResizeService {
     const own = parseOwnImagePath(source);
     if (own) {
       const found = await this.own.get(own.kind, own.id, own.slot, own.version).catch(() => null);
-      if (!found) throw new NotFoundException('Không tìm thấy ảnh.');
+      if (!found || !found.versionOk) throw new NotFoundException('Không tìm thấy ảnh.');
       return found.data;
     }
     const url = parseRemoteSource(source);
@@ -124,6 +170,7 @@ export class ImageResizeService {
           method: 'GET',
           headers: { Accept: 'image/*', 'User-Agent': 'TubuTree-ImageResize/1' },
           timeout: FETCH_TIMEOUT_MS,
+          signal: AbortSignal.timeout(FETCH_TOTAL_MS),
           lookup: safeLookup,
         },
         (res) => {
@@ -170,6 +217,7 @@ export class ImageResizeService {
       };
     };
     if (this.active < MAX_CONCURRENT_JOBS) return Promise.resolve(take());
+    if (this.waiters.length >= MAX_QUEUED_JOBS) return Promise.reject(new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.'));
     return new Promise((resolve) => this.waiters.push(() => resolve(take())));
   }
 
@@ -187,11 +235,20 @@ export class ImageResizeService {
 
   private async writeCache(key: string, data: Buffer): Promise<void> {
     const file = this.pathFor(key);
+    if (this.cacheBytes === null) await this.prune();
+    if ((this.cacheBytes ?? 0) + data.length > this.maxBytes) {
+      if (Date.now() - this.lastPrune > PRUNE_MIN_GAP_WHEN_FULL_MS) {
+        this.lastPrune = Date.now();
+        await this.prune().catch(() => undefined);
+      }
+      if ((this.cacheBytes ?? 0) + data.length > this.maxBytes) return;
+    }
     try {
       await fs.mkdir(join(this.dir, key.slice(0, 2)), { recursive: true });
       const tmp = `${file}.${createHash('md5').update(String(Math.random())).digest('hex').slice(0, 8)}.tmp`;
       await fs.writeFile(tmp, data);
       await fs.rename(tmp, file);
+      this.cacheBytes = (this.cacheBytes ?? 0) + data.length;
     } catch (e) {
       this.log.warn(`Không ghi được cache ảnh: ${(e as Error).message}`);
       return;
@@ -209,6 +266,7 @@ export class ImageResizeService {
     try {
       shards = await fs.readdir(this.dir);
     } catch {
+      this.cacheBytes = 0;
       return { removed: 0, bytes: 0 };
     }
     for (const shard of shards) {
@@ -239,6 +297,7 @@ export class ImageResizeService {
       total -= f.size;
       removed += 1;
     }
+    this.cacheBytes = total;
     return { removed, bytes: total };
   }
 }
