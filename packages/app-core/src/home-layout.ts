@@ -1,6 +1,6 @@
 import type { CheckInStatusResponse, CouponDTO, LoyaltyOverview } from './api/loyalty';
 import { decimalVi, tierProgressPercent } from './loyalty-copy';
-import { tierGraceLine } from './loyalty-tier-copy';
+import { tierGraceLine } from './tier-grace-line';
 
 /**
  * Bố cục Trang chủ, thanh đáy, Ưu đãi và hàng trạng thái đơn của trang Cá nhân. Một nguồn cho Mini App và web khổ điện thoại:
@@ -127,9 +127,6 @@ export interface HomeFlags {
 
 export const RECYCLE_REQUESTS_LABEL = 'Yêu cầu của tôi';
 
-/** Hàng lối vào quầy nhận hàng ở Cá nhân (Mini) và menu tài khoản (web), cùng chữ với hàng trong màn Đổi rác. */
-export const DESK_ENTRY_LABEL = 'Nhận hàng tại điểm';
-
 export const HOME_SHORTCUTS: readonly HomeShortcutSpec[] = [
   { id: 'orders', label: 'Đơn hàng', ariaLabel: 'Đơn hàng của tôi', tint: 'forest' },
   { id: 'rewards', label: 'Đổi quà', ariaLabel: 'Đổi quà bằng Điểm Xanh', tint: 'clay' },
@@ -247,9 +244,6 @@ export interface OrderStatusSpec {
   /** Có số đếm trên biểu tượng. "Đã giao" là lịch sử nên không đếm. */
   counted: boolean;
 }
-
-/** Giá trị `?section=` mở trang Cá nhân và cuộn tới khối mã giới thiệu (Vườn Xanh dẫn nhiệm vụ "Mời bạn" tới đây). */
-export const PROFILE_REFERRAL_SECTION = 'referral';
 
 /** Khoá trùng `OrdersTabKey` để mở trang đơn đã lọc bằng `?tab=`. */
 export const ORDER_STATUS_ROW: readonly OrderStatusSpec[] = [

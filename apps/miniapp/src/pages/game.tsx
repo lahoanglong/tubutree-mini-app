@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { GAME_CHECKIN_ANCHOR, MISSION_PATHS, extraPlotsVisible, type MissionTarget, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
+import { MISSION_PATHS } from '@tubutree/app-core/game-mission-paths';
+import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, type MissionTarget, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
 import { Page, useNavigate } from 'zmp-ui';
 import type { HarvestCouponTerms, HarvestSpecies } from '../services/game-api';
 import { useAuthStore } from '../store/auth';

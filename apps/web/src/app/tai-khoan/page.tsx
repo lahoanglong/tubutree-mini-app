@@ -8,7 +8,8 @@ import { ChevronRight, Copy, CreditCard, Leaf, MessageCircle, Package, PackageCh
 import { orderStatusCountsQuery, type OrderStatusKey } from '@tubutree/app-core/api/order-counts';
 import { orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { ORDER_STATUS_ROW, PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/home-layout';
+import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
+import { PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
 import { notificationsQuery } from '@tubutree/app-core/queries/account';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';

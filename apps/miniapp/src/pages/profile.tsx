@@ -9,7 +9,8 @@ import { canSeeAcademy, orderRowLabel, profileCopy } from '@tubutree/app-core/ac
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { CASHBACK_ENABLED, SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 import { ORDER_STATUS_COUNTS_KEY } from '@tubutree/app-core/api/order-counts';
-import { DESK_ENTRY_LABEL, ORDER_STATUS_ROW, PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/home-layout';
+import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
+import { DESK_ENTRY_LABEL, PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
 import { useAuthStore } from '../store/auth';
 import { getCoupons, getLoyalty, getNotifications, getReferral, getWallet } from '../services/account-api';
 import { ProfileAvatar } from '../components/account/profile-avatar';

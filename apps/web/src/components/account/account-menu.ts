@@ -3,7 +3,7 @@ import { BadgeDollarSign, BookOpen, Bell, CalendarClock, GraduationCap, Heart, I
 import type { DealerMe } from '@tubutree/app-core/api/dealer';
 import { canSeeAcademy } from '@tubutree/app-core/account-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { DESK_ENTRY_LABEL } from '@tubutree/app-core/home-layout';
+import { DESK_ENTRY_LABEL } from '@tubutree/app-core/profile-sections';
 
 export interface AccountMenuItem {
   icon: LucideIcon;
