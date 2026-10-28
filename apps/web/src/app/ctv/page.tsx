@@ -20,7 +20,7 @@ import {
 } from '@tubutree/app-core/queries/affiliate';
 import { academyCoursesQuery } from '@tubutree/app-core/queries/academy';
 import { walletQuery } from '@tubutree/app-core/queries/wallet';
-import { COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, isAutoWalletTransfer, transferBlockedText, transferHeroNote } from '@tubutree/app-core/ctv-dashboard';
+import { COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, transferBlockedText, transferHeroNote } from '@tubutree/app-core/ctv-dashboard';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
@@ -358,7 +358,7 @@ function Dashboard() {
 
   const head = ctvHeadline(d);
   const autoTransfer = isAutoWalletTransfer(d?.autoWalletTransfer);
-  const hero = ctvHeroAmount(head.big, autoTransfer, walletQ.data?.walletBalance);
+  const hero = ctvHeroAmount(head.big, autoTransfer, walletQ.data?.walletBalance, walletQ.isLoading);
   const firstSteps: Array<{ key: string; label: string; Icon: typeof Link2; onPress?: () => void; href?: string }> = [
     { key: 'share', label: 'Chia sẻ mã giới thiệu', Icon: Link2, onPress: () => setSharing(true) },
     ...(me?.canOpenStorefront !== false && isWebRouteReady('/ctv/gian-hang')
@@ -418,12 +418,12 @@ function Dashboard() {
         {dashQ.isError ? (
           // Không đưa "0đ" khi lỗi tải: CTV sẽ tưởng mình chưa có hoa hồng.
           <ErrorState message={errText(dashQ.error)} onRetry={() => void dashQ.refetch()} />
-        ) : dashQ.isLoading ? (
+        ) : dashQ.isLoading || hero.waiting ? (
           <div role="status" aria-label="Đang tải hoa hồng">
             <Skeleton height={148} />
           </div>
         ) : (
-          <section aria-label="Hoa hồng có thể chuyển vào Ví" className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-stone-0 shadow-card">
+          <section aria-label={heroShowsWalletBalance(hero) ? hero.label : 'Hoa hồng có thể chuyển vào Ví'} className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-stone-0 shadow-card">
             {/* Số to là tiền dùng được ngay; hoa hồng đang chờ và số tạm tính tháng là dòng phụ. */}
             <div className="text-sm">{hero.label}</div>
             <div className="mt-1 font-display text-3xl font-bold tabular-nums">{formatVnd(hero.amount)}</div>
@@ -442,7 +442,13 @@ function Dashboard() {
         <Link href="/tai-khoan/vi-tubu" className={`${ui.card} ${phoneFlatCard} flex min-h-12 items-center gap-2.5 px-4 py-2.5`}>
           <Wallet className="h-5 w-5 text-forest-600" aria-hidden="true" />
           <span className="flex-1 text-sm text-stone-900">
-            Số dư Ví: <b className="tabular-nums">{walletQ.data ? formatVnd(walletQ.data.walletBalance) : '—'}</b>
+            {heroShowsWalletBalance(hero) ? (
+              <b>Xem Ví Tubu</b>
+            ) : (
+              <>
+                Số dư Ví: <b className="tabular-nums">{walletQ.data ? formatVnd(walletQ.data.walletBalance) : '—'}</b>
+              </>
+            )}
           </span>
           <ChevronRight className="h-4 w-4 text-stone-500" aria-hidden="true" />
         </Link>

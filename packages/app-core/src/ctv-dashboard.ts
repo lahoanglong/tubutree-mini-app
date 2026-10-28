@@ -36,11 +36,25 @@ export function isAutoWalletTransfer(flag: boolean | undefined): boolean {
 
 /**
  * Số to của hero. Tự chuyển bật thì hoa hồng đã duyệt vào Ví ngay nên "có thể chuyển" gần như luôn 0đ: lúc đó số to là số dư Ví
- * (tiền dùng được ngay). Chưa biết số dư thì giữ số chuyển được để không nhảy chữ.
+ * (tiền dùng được ngay). Dashboard về trước Ví thì chưa biết số nào sẽ là số to: `waiting` = true, màn giữ khung chờ để số to
+ * không đổi nhãn và số khi Ví về. Ví lỗi (không còn tải, không có số dư) thì giữ số chuyển được.
  */
-export function ctvHeroAmount(transferable: number, auto: boolean, walletBalance: number | undefined): { label: string; amount: number } {
-  if (auto && transferable <= 0 && walletBalance !== undefined) return { label: 'Số dư Ví Tubu', amount: walletBalance };
-  return { label: 'Có thể chuyển vào Ví', amount: transferable };
+export function ctvHeroAmount(
+  transferable: number,
+  auto: boolean,
+  walletBalance: number | undefined,
+  walletLoading = false,
+): { label: string; amount: number; waiting: boolean } {
+  if (auto && transferable <= 0) {
+    if (walletBalance !== undefined) return { label: 'Số dư Ví Tubu', amount: walletBalance, waiting: false };
+    if (walletLoading) return { label: 'Số dư Ví Tubu', amount: 0, waiting: true };
+  }
+  return { label: 'Có thể chuyển vào Ví', amount: transferable, waiting: false };
+}
+
+/** Hero đang hiện số dư Ví thì dòng "Số dư Ví" bên dưới trùng số: màn bỏ số ở dòng đó. */
+export function heroShowsWalletBalance(hero: { label: string; waiting: boolean }): boolean {
+  return !hero.waiting && hero.label === 'Số dư Ví Tubu';
 }
 
 /** Lời cho ô "Chuyển vào Ví" khi chưa có số dư: nói vì sao và khi nào có. `pendingText` đã định dạng tiền. */

@@ -63,6 +63,7 @@ vi.mock('../hooks/use-public-config', () => ({
 }));
 
 import AffiliatePage from './affiliate';
+import { getWallet } from '../services/account-api';
 import {
   claimCtvMilestone,
   getAffiliateDashboard,
@@ -805,6 +806,36 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
       tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
     await waitFor(() => expect(document.querySelector('[aria-busy="true"]')).toBeNull());
+  });
+
+  const ZERO_DASH = {
+    todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0, autoWalletTransfer: true,
+    totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+    tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+  } as Awaited<ReturnType<typeof getAffiliateDashboard>>;
+
+  it('dashboard về trước Ví: hero giữ khung chờ, không vẽ "Có thể chuyển vào Ví 0đ" rồi đổi; Ví về mới hiện số dư', async () => {
+    let release!: (v: { walletBalance: number }) => void;
+    vi.mocked(getWallet).mockReturnValueOnce(new Promise((r) => (release = r)) as ReturnType<typeof getWallet>);
+    vi.mocked(getAffiliateDashboard).mockResolvedValue(ZERO_DASH);
+    renderPage();
+    await waitFor(() => expect(getAffiliateDashboard).toHaveBeenCalled());
+    await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' });
+    expect(await screen.findByRole('status', { name: 'Đang tải hoa hồng' })).toBeInTheDocument();
+    expect(screen.queryByText('Có thể chuyển vào Ví')).toBeNull();
+    release({ walletBalance: 5_400_000 });
+    expect(await screen.findByText('Số dư Ví Tubu')).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Đang tải hoa hồng' })).toBeNull();
+  });
+
+  it('số to là số dư Ví: số dư chỉ hiện một lần, dòng lối sang Ví không lặp số', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue(ZERO_DASH);
+    renderPage();
+    expect(await screen.findByText('Số dư Ví Tubu')).toBeInTheDocument();
+    expect(screen.getAllByText('75.000đ')).toHaveLength(1);
+    expect(screen.queryByText(/Số dư Ví:/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem Ví Tubu' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/wallet');
   });
 
   it('dòng "Số dư Ví" ngay dưới lối tắt, chạm là sang Ví', async () => {

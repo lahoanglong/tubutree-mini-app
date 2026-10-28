@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
   copied: [] as string[],
   registerGate: null as null | Promise<unknown>,
   dashGate: null as null | Promise<unknown>,
+  walletGate: null as null | Promise<unknown>,
   routeReady: { gianHang: true },
   courses: [{ id: 'c1' }] as unknown[],
   tab: undefined as string | undefined,
@@ -60,7 +61,10 @@ vi.mock('@/lib/core-http', () => ({
       if (path === '/affiliate/analytics/storefronts') return { storefronts: state.storefronts };
       if (path === '/affiliate/analytics/products') return state.products;
       if (path === '/config/public') return {};
-      if (path === '/me/wallet') return { walletBalance: 50_000 };
+      if (path === '/me/wallet') {
+        await state.walletGate;
+        return { walletBalance: 50_000 };
+      }
       return state.tax;
     },
     post: async (path: string, body?: unknown) => {
@@ -110,6 +114,7 @@ beforeEach(() => {
   state.share = vi.fn(async () => 'shared');
   state.registerGate = null;
   state.dashGate = null;
+  state.walletGate = null;
   state.routeReady.gianHang = true;
   state.courses = [{ id: 'c1' }];
   state.tab = undefined;
@@ -364,6 +369,34 @@ describe('/ctv — bảng điều khiển', () => {
     await flush();
     expect(container.querySelector('[aria-label="Đang tải hoa hồng"]')).toBeNull();
     expect(container.textContent).toContain('Đang chờ: 30.000đ');
+  });
+
+  it('dashboard về trước Ví: hero giữ khung chờ, không vẽ "Có thể chuyển vào Ví 0đ" rồi đổi; Ví về mới hiện số dư', async () => {
+    let release!: () => void;
+    state.walletGate = new Promise<void>((r) => (release = r));
+    state.dash = { ...DASH, withdrawableCommission: 0 };
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('[role="status"][aria-label="Đang tải hoa hồng"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('Có thể chuyển vào Ví 0');
+    expect(container.textContent).not.toContain('Số dư Ví Tubu');
+    release();
+    await flush();
+    expect(container.querySelector('[aria-label="Đang tải hoa hồng"]')).toBeNull();
+    expect(container.textContent).toContain('Số dư Ví Tubu');
+  });
+
+  it('số to là số dư Ví: số dư chỉ hiện một lần, aria-label của hero theo nhãn đang hiện, dòng lối sang Ví không lặp số', async () => {
+    state.dash = { ...DASH, withdrawableCommission: 0 };
+    const { container } = mount();
+    await flush();
+    const hero = container.querySelector('section[aria-label="Số dư Ví Tubu"]')!;
+    expect(hero).not.toBeNull();
+    expect(container.querySelector('section[aria-label="Hoa hồng có thể chuyển vào Ví"]')).toBeNull();
+    expect(container.textContent!.split('50.000đ').length - 1).toBe(1);
+    const row = container.querySelector('a[href="/tai-khoan/vi-tubu"]')!;
+    expect(row.textContent).toContain('Xem Ví Tubu');
+    expect(row.textContent).not.toContain('50.000đ');
   });
 
   it('tự chuyển bật và không còn gì chờ chuyển: số to là số dư Ví; API cũ thiếu cờ thì giữ "Có thể chuyển vào Ví"', async () => {
