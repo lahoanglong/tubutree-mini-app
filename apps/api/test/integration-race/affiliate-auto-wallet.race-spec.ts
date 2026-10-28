@@ -316,6 +316,43 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
     expect(s.payouts.map((p) => [p.grossAmount, p.taxWithheld, p.amount]).sort()).toEqual([[100_000, 100_000, 0], [4_900_000, 0, 4_900_000]]);
     const logs = await prisma.notificationLog.findMany({ where: { userId: u.id } });
     expect(logs.filter((l) => l.templateCode === CTV_NOTIFICATION.AUTO_WALLET_TAX_ONLY)).toHaveLength(1);
+  });
+
+  it('cron duyệt (approveDueCommissions) khoản LOCKED đã qua hold: CTV đã tự cộng không nhận tin APPROVED; CTV không tự cộng được (thiếu MST) vẫn nhận', async () => {
+    const auto = await ctv({ personalTaxId: MST });
+    const manual = await ctv();
+    await commissionFor(auto.id, 80_000, 'LOCKED');
+    await commissionFor(manual.id, 5_500_000, 'LOCKED');
+
+    await affiliate.approveDueCommissions();
+
+    const sa = await state(auto.id);
+    expect(sa.balance).toBe(80_000);
+    expect(sa.commissions.map((c) => c.status)).toEqual(['PAID']);
+    const autoLogs = await prisma.notificationLog.findMany({ where: { userId: auto.id } });
+    expect(autoLogs.filter((l) => l.templateCode === CTV_NOTIFICATION.AUTO_WALLET)).toHaveLength(1);
+    expect(autoLogs.some((l) => l.templateCode === CTV_NOTIFICATION.APPROVED)).toBe(false);
+
+    const sm = await state(manual.id);
+    expect(sm.balance).toBe(0);
+    expect(sm.commissions.map((c) => c.status)).toEqual(['APPROVED']);
+    const manualLogs = await prisma.notificationLog.findMany({ where: { userId: manual.id } });
+    expect(manualLogs.filter((l) => l.templateCode === CTV_NOTIFICATION.APPROVED)).toHaveLength(1);
+  });
+
+  it('cron duyệt khoản LOCKED mà thuế truy thu ăn hết: CTV nhận đúng một tin "đã khấu trừ", không nhận tin APPROVED', async () => {
+    const u = await ctv({ personalTaxId: MST });
+    await commissionFor(u.id, 4_900_000);
+    await affiliate.autoTransferApprovedToWallet();
+    await commissionFor(u.id, 100_000, 'LOCKED');
+
+    await affiliate.approveDueCommissions();
+
+    const s = await state(u.id);
+    expect(s.balance).toBe(4_900_000);
+    expect(s.commissions.every((c) => c.status === 'PAID')).toBe(true);
+    const logs = await prisma.notificationLog.findMany({ where: { userId: u.id } });
+    expect(logs.filter((l) => l.templateCode === CTV_NOTIFICATION.AUTO_WALLET_TAX_ONLY)).toHaveLength(1);
     expect(logs.some((l) => l.templateCode === CTV_NOTIFICATION.APPROVED)).toBe(false);
   });
 });
