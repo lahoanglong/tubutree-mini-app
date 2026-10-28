@@ -31,7 +31,13 @@ export function createWebPlatformBridge(opts: { oaId?: string } = {}): PlatformB
     capabilities: { verifiedPhone: false, zaloLocation: false, qrScan: false, zaloNotifyPermission: false },
 
     // Nạp lười: chỉ màn chuyển khoản cần, không nằm trong gói đầu của mọi trang.
-    saveImage: async (url, filename) => (await import('./download-image')).saveImage(url, filename),
+    saveImage: async (url, filename) => {
+      try {
+        return await (await import('./download-image')).saveImage(url, filename);
+      } catch {
+        return 'failed';
+      }
+    },
 
     async share({ title, text, path }): Promise<ShareResult> {
       const url = `${window.location.origin}${path}`;

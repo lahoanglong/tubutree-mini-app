@@ -215,6 +215,15 @@ describe('/thanh-toan/chuyen-khoan — bố cục điện thoại như Mini App 
     expect(bar.querySelector('[data-testid="bank-check-result-sticky"]')?.textContent).toMatch(/không kết nối|kiểm tra mạng/i);
   });
 
+  it('bấm Kiểm tra khi giao dịch thất bại: lời báo hiện trong thanh dính đáy', async () => {
+    const c = await mount();
+    mocks.status = 'FAILED';
+    const bar = c.querySelector('[data-testid="sticky-bar"]')!;
+    bar.querySelector('button')!.click();
+    await flush(6);
+    expect(bar.querySelector('[data-testid="bank-check-result-sticky"]')?.textContent).toContain('không thành công');
+  });
+
   it('cầu nối lưu ảnh reject (mất chunk): báo chưa lưu được, không rơi thành lỗi chưa bắt', async () => {
     mocks.saveImage.mockRejectedValue(new Error('chunk lost'));
     const c = await mount();
