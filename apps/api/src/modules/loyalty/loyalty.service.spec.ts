@@ -1043,6 +1043,55 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       expect(ov.spent12m).toBe(1_300_000);
     });
 
+    it('khung giữ hạng bắt đầu từ lượt xét 03:15 (giờ VN) đầu tiên sau hạn: đơn nằm giữa hai mốc không được tính', async () => {
+      // Hạn 17:00 giờ VN ngày 20/11; lượt xét hạ hạng chạy 03:15 sáng 21/11 nhìn lại từ 03:15 ngày 21/11 năm trước.
+      const until = new Date('2026-11-20T10:00:00.000Z');
+      const orders = [
+        { total: 1_000_000, createdAt: new Date('2025-11-20T15:00:00.000Z') }, // sau (until − 12 tháng), trước (03:15 − 12 tháng)
+        { total: 300_000, createdAt: new Date('2026-03-01T03:00:00.000Z') },
+      ];
+      const prisma = {
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0 }) },
+        membershipTier: { findMany: jest.fn().mockResolvedValue(GRACE_TIERS) },
+        order: {
+          aggregate: jest.fn(async ({ where }: { where: { createdAt: { gte: Date } } }) => ({
+            _sum: { total: orders.filter((o) => o.createdAt >= where.createdAt.gte).reduce((a, o) => a + o.total, 0) },
+          })),
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+        externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
+        pointsTransaction: fakeLedger([]),
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      const gap = await new LoyaltyService(prisma, makeConfig()).tierKeepGap('u1', GRACE_TIERS[1] as never, until);
+      expect(gap.spendingToKeep).toBe(1_200_000);
+    });
+
+    it('hạn đã qua 03:15 giờ VN của ngày đó thì lượt xét là 03:15 ngày hôm sau', async () => {
+      const calls: Date[] = [];
+      const prisma = {
+        order: {
+          aggregate: jest.fn(async ({ where }: { where: { createdAt: { gte: Date } } }) => {
+            calls.push(where.createdAt.gte);
+            return { _sum: { total: 0 } };
+          }),
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+        externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
+        pointsTransaction: fakeLedger([]),
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      const svc = new LoyaltyService(prisma, makeConfig());
+      // 02:00 giờ VN ngày 21/11 (19:00Z ngày 20): lượt 03:15 cùng ngày chưa tới → lượt đó là 03:15 ngày 21 (20:15Z ngày 20).
+      await svc.tierKeepGap('u1', GRACE_TIERS[1] as never, new Date('2026-11-20T19:00:00.000Z'));
+      // 04:00 giờ VN ngày 21/11 (21:00Z ngày 20): đã qua 03:15 → lượt kế là 03:15 ngày 22 (20:15Z ngày 21).
+      await svc.tierKeepGap('u1', GRACE_TIERS[1] as never, new Date('2026-11-20T21:00:00.000Z'));
+      expect(calls[0]!.toISOString()).toBe('2025-11-20T20:15:00.000Z');
+      expect(calls[1]!.toISOString()).toBe('2025-11-21T20:15:00.000Z');
+    });
+
     it('không có hạn, hoặc hạn đã qua, hoặc chưa có hạng: không trả tierGrace', async () => {
       const past = new Date(Date.now() - 864e5);
       expect((await new LoyaltyService(build({ tierId: 'loc', tier: GRACE_TIERS[1], tierGraceUntil: null }), makeConfig()).getOverview('u1')).tierGrace).toBeNull();

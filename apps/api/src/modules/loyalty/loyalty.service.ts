@@ -17,7 +17,7 @@ import { NO_PARTIAL_RETURNS, partialReturnTotals } from '../orders/return-ledger
 import { remainingPointsBack } from '../orders/refund-allocation';
 import { OWN_RETAIL_SPEND_WHERE } from '../orders/own-retail-spend';
 import { parseVnPhoneStrict } from '../../common/phone';
-import { vnDateKey } from '../../common/vn-time';
+import { VN_OFFSET_MS, vnDateKey, vnDateParts } from '../../common/vn-time';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible, requiresRealUser } from '../coupons/coupon-scope';
 import { hasPriorOrder } from '../../common/first-order';
@@ -40,6 +40,13 @@ import { loadPointExpiryTxns, lotRecoverable, nextPointExpiry, orderLotKey } fro
 
 /** Số dòng tối đa mỗi lần đọc lịch sử điểm (cũng là số dòng khi client cũ không gửi limit). */
 const POINTS_HISTORY_MAX_PAGE = 100;
+
+/** Lượt tính lại hạng 03:15 giờ VN đầu tiên không sớm hơn `t` (cùng giờ với `@Cron('0 15 3 * * *')` ở loyalty.cron.ts). */
+function firstTierRecalcAtOrAfter(t: Date): Date {
+  const { year, month, day } = vnDateParts(t);
+  const sameDay = new Date(Date.UTC(year, month - 1, day, 3, 15) - VN_OFFSET_MS);
+  return sameDay.getTime() >= t.getTime() ? sameDay : new Date(sameDay.getTime() + 86_400_000);
+}
 
 /**
  * Loyalty core (Build Spec §6.6). Phase 1 dùng cho vòng đời đơn:
@@ -642,15 +649,16 @@ export class LoyaltyService {
 
   /**
    * Còn thiếu bao nhiêu để GIỮ hạng `tier`: tiền đơn giao thành công với hạng xét theo chi tiêu, điểm tích với hạng xét theo
-   * điểm. Khung 12 tháng KẾT THÚC ở `until` (ngày hết hạn giữ hạng), vì lượt xét hạng ngày đó sẽ nhìn lại đúng khung ấy: đơn
-   * hôm nay còn trong khung trượt nhưng sẽ rơi ra trước `until` thì không được tính, nếu không khách mua đúng số báo vẫn bị hạ.
+   * điểm. Hạng chỉ bị hạ ở lượt tính lại hạng 03:15 giờ VN (loyalty.cron.ts) đầu tiên không sớm hơn `until` (ngày hết hạn giữ
+   * hạng), và lượt đó nhìn lại 12 tháng tính từ chính giờ chạy. Khung ở đây lấy đúng mốc ấy: đơn hôm nay còn trong khung trượt
+   * nhưng sẽ rơi ra trước lượt đó thì không được tính, nếu không khách mua đúng số báo vẫn bị hạ.
    */
   async tierKeepGap(
     userId: string,
     tier: { minSpending: number | null; minPoints: number },
     until: Date,
   ): Promise<{ spendingToKeep: number | null; pointsToKeep: number }> {
-    const since = new Date(until);
+    const since = firstTierRecalcAtOrAfter(until);
     since.setMonth(since.getMonth() - 12);
     const { spent12m, partialReturns } = await this.spending12m(userId, since);
     const tierPts = await this.tierPoints(userId, since, partialReturns);
