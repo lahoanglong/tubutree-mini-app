@@ -34,6 +34,8 @@ test('giỏ trống ở 375px: kệ gợi ý sát lề 16px như Mini App', asyn
   api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: 0 });
   api.get('/products', { data: [1, 2, 3, 4].map(product), meta: { page: 1, limit: 4, total: 4 } });
 
+  // Minh hoạ trồi lên khi xuất hiện (tubu-rise): tắt chuyển động để đo vị trí cuối, không đo giữa lúc đang trồi.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/gio-hang');
   await expect(page.getByText('Giỏ còn trống đấy')).toBeVisible({ timeout: 30_000 });
