@@ -447,6 +447,24 @@ API không còn `POST /game/check-in`, `GET /me/loyalty/check-in` và `POST /me/
 
 Trước khi deploy API có thay đổi này: xác nhận bản Mini App đang chạy cho khách trên Zalo (bản Live, không phải bản Testing) là V21 trở lên. Nếu Live còn V19 hoặc V20 thì chưa deploy, hoặc đẩy bản Mini App mới lên Live trước. `POST /me/loyalty/check-in` đã xoá từ `5c1d47a2f` (deploy 2026-10-28) với cùng giả định này.
 
+### 1.13 Bản đợt 29/10: quay image (7.2) không còn sạch sau khi khách đã dùng bản mới
+
+Bốn migration của bản này (`20261029010000`, `20261029020000`, `20261029030000`, `20261029030100`) chỉ thêm bảng, cột và mẫu tin, nên image cũ vẫn chạy được trên schema mới. Nhưng dữ liệu ghi bởi API mới làm 7.2 để lại hậu quả. Đọc hết mục này trước khi chọn 7.2:
+
+1. **Tài khoản khách vãng lai bị tách.** API mới lưu khoá khách là băm của thiết bị (`guest_h_<sha256>`), và lần đăng nhập đầu của mỗi khách vãng lai đổi khoá cũ `guest_<deviceId>` sang khoá băm. Băm là một chiều, không đổi ngược được. Nếu quay image cũ: khách vãng lai đã mở app trong lúc chạy bản mới sẽ được image cũ tạo tài khoản MỚI rỗng (mất điểm, giỏ, địa chỉ, đơn trên màn hình). Khi deploy lại bản mới, khách về tài khoản cũ, còn tài khoản tạm lúc quay lại bị bỏ lại. Khách đăng nhập Zalo không bị ảnh hưởng. Đã quay image thì sau khi deploy lại, lấy danh sách tài khoản tạm để gộp tay (đơn đặt trong lúc quay lại nằm ở đó):
+
+   ```bash
+   psqlq -c "SELECT u.id, u.\"zaloId\", u.\"createdAt\", count(o.id) AS don FROM users u LEFT JOIN orders o ON o.\"userId\" = u.id WHERE u.\"zaloId\" LIKE 'guest\_%' AND u.\"zaloId\" NOT LIKE 'guest\_h\_%' AND u.\"createdAt\" >= '<giờ bắt đầu quay lại, UTC>' GROUP BY u.id ORDER BY u.\"createdAt\""
+   ```
+
+2. **Mini App bản mới cần API bản này.** Mini App bản mới gọi `GET /orders/status-counts` (đếm đơn ở Cá nhân) và `GET /me/notifications/unread-count` (chuông). API cũ không có hai route này: Cá nhân báo lỗi đếm đơn và chuông về 0. Chỉ đẩy Mini App bản mới lên Testing/Live sau khi API bản này đã chạy ổn. Mini App bản mới đã Live thì không quay API xuống dưới bản này; sửa tiến bằng hotfix.
+
+3. **Báo cáo chuyển khoản trả nợ của đại lý.** API mới lưu mỗi lần đại lý báo đã chuyển khoản (`dealer_credit_payment_reports`, thẻ việc ở Hôm nay) và đóng báo cáo khi kế toán ghi nhận. Image cũ vẫn ghi nhận trả nợ nhưng không đóng báo cáo. Sau khi deploy lại, các báo cáo có ngày trong khoảng quay lại vẫn hiện là chờ xử lý: đối chiếu sổ công nợ của đại lý trước khi bấm Ghi nhận, để không ghi một khoản hai lần.
+
+4. **Cron hết hạn điểm báo lỗi khi sổ điểm lệch.** Bản này nâng hai log của `expirePoints` (khách lỗi khi trừ điểm hết hạn; số dư nhỏ hơn số điểm cần trừ) từ cảnh báo lên lỗi. Nếu mục 1.11 đo thấy lệch Điểm Xanh, cron hết hạn điểm sẽ báo lỗi mỗi đêm cho tới khi chạy `reconcile:points --apply` cho các khách đó. Không sai điểm, chỉ là tin báo lặp.
+
+Kết luận: sau khi bản này đã nhận khách, ưu tiên sửa tiến. Chỉ dùng 7.2 khi lỗi nặng hơn các hậu quả trên, và làm thêm bước 1 và 3 sau khi deploy lại.
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.
@@ -972,6 +990,8 @@ $DC logs --tail 20 api | grep -E 'P3009|migrate|No pending'
 Kỳ vọng: `api=healthy`, log có "No pending migrations to apply" và không có `P3009`. Điều kiện: CHƯA chạy `up -d` thay container ở bước 8 và 9 của mục 5 (nếu rồi thì container API đã là bản mới: dùng 7.2 hoặc 7.3 theo bảng 7.0, không dùng đường này).
 
 ### 7.2 Chỉ quay image (giữ DB đã migrate, giữ dữ liệu phát sinh)
+
+Bản đợt 29/10 trở đi: đọc mục 1.13 trước (quay image tách tài khoản khách vãng lai và làm Mini App bản mới lỗi đếm đơn).
 
 Chỉ đúng khi image cũ khớp schema sau migrate (mục 7.0). Hai điều kiện BẮT BUỘC (nếu không thoả, sang 7.3):
 
