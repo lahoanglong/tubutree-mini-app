@@ -798,6 +798,8 @@ export class SubscriptionsService {
         paymentStatus: paid ? 'PAID' : 'UNPAID',
         paidAt: paid ? new Date() : null,
         shippingAddress: address,
+        // Kho/Pancake đọc chữ này, nên giữ nguyên giá trị lưu. App-core (SUBSCRIPTION_ORDER_NOTE) nhận ra đơn định kỳ bằng đúng chữ này
+        // để hiện nhãn "Đơn định kỳ" thay vì ghi chú tiếng Anh; đổi chữ ở đây thì phải đổi cả bên đó.
         note: 'Đơn đặt định kỳ (Subscribe & Save)',
         source: 'subscription',
         platform: 'system',

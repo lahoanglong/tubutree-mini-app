@@ -476,6 +476,58 @@ describe('/tai-khoan/don-hang/[code] — đánh giá theo từng dòng của đ�
     const { container } = await mount();
     expect(reviewLinks(container)).toEqual([]);
   });
+
+  it('sản phẩm đã gỡ (productPublic=false) → không nút đánh giá và dòng sản phẩm không là liên kết (tránh trang 404)', async () => {
+    mocks.order = delivered({ reviewId: null, reviewable: true, productPublic: false });
+    const { container } = await mount();
+    expect(reviewLinks(container)).toEqual([]);
+    expect(container.querySelector('a[href^="/san-pham/"]')).toBeNull();
+    expect(container.textContent).toContain('Dầu gội bồ kết');
+  });
+
+  it('productPublic=true hoặc API cũ chưa trả cờ → vẫn có lối vào đánh giá và liên kết sản phẩm', async () => {
+    mocks.order = delivered({ reviewId: null, reviewable: true, productPublic: true });
+    const { container } = await mount();
+    expect(reviewLinks(container)).toHaveLength(1);
+    expect(container.querySelector('a[href="/san-pham/dau-goi-bo-ket"]')).not.toBeNull();
+  });
+});
+
+describe('/tai-khoan/don-hang/[code] — đơn đặt định kỳ không hiện ghi chú tiếng Anh như lời khách (E-34)', () => {
+  const subscription = (over: Record<string, unknown> = {}) => ({
+    ...structuredClone(ORDER),
+    source: 'subscription',
+    note: 'Đơn đặt định kỳ (Subscribe & Save)',
+    status: 'CONFIRMED',
+    paymentMethod: 'COD',
+    couponDiscount: 0,
+    couponCode: null,
+    discount: 12000,
+    ...over,
+  });
+
+  it('thay khối "Ghi chú" bằng nhãn "Đơn định kỳ"; chữ Subscribe & Save không xuất hiện', async () => {
+    mocks.order = subscription();
+    const { container } = await mount();
+    const titles = Array.from(container.querySelectorAll('h2')).map((e) => e.textContent);
+    expect(titles).toContain('Đơn định kỳ');
+    expect(titles).not.toContain('Ghi chú');
+    expect(container.textContent).not.toContain('Subscribe');
+  });
+
+  it('dòng giảm giá là "Ưu đãi đặt định kỳ", số tiền giữ nguyên', async () => {
+    mocks.order = subscription();
+    const { container } = await mount();
+    expect(container.textContent).toContain('Ưu đãi đặt định kỳ');
+    expect(container.textContent).toContain('12.000đ');
+  });
+
+  it('đơn định kỳ mà ghi chú là lời khác (CSKH sửa) vẫn hiện khối Ghi chú', async () => {
+    mocks.order = subscription({ note: 'Giao sau 17h' });
+    const { container } = await mount();
+    expect(Array.from(container.querySelectorAll('h2')).map((e) => e.textContent)).toContain('Ghi chú');
+    expect(container.textContent).toContain('Giao sau 17h');
+  });
 });
 
 describe('/tai-khoan/don-hang/[code] — ngày giao dự kiến, ảnh món, ghi chú, khung chờ (R-9, R-35, R-107, R-108)', () => {

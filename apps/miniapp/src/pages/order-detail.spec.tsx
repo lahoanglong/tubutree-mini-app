@@ -195,6 +195,63 @@ describe('OrderDetailPage — đánh giá theo từng dòng của đơn (R8)', (
   });
 });
 
+describe('OrderDetailPage — sản phẩm đã gỡ không dẫn tới trang 404 (E-31)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+
+  it('productPublic=false → không nút đánh giá, dòng món không là liên kết, tên món vẫn hiện', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, items: [{ ...ORDER.items[0], reviewId: null, reviewable: true, productPublic: false }] });
+    renderPage();
+    expect((await screen.findAllByText(/Xà bông thảo mộc/)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Viết đánh giá|Sửa đánh giá/)).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Xem sản phẩm Xà bông thảo mộc' })).toBeNull();
+  });
+
+  it('productPublic=true → vẫn có nút đánh giá và liên kết món', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, items: [{ ...ORDER.items[0], reviewId: null, reviewable: true, productPublic: true }] });
+    renderPage();
+    expect(await screen.findByText('Viết đánh giá')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Xem sản phẩm Xà bông thảo mộc' })).toBeInTheDocument();
+  });
+});
+
+describe('OrderDetailPage — đơn đặt định kỳ không hiện ghi chú tiếng Anh như lời khách (E-34)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+  const subscription = (extra: Record<string, unknown> = {}) => ({
+    ...ORDER,
+    source: 'subscription',
+    note: 'Đơn đặt định kỳ (Subscribe & Save)',
+    discount: 12_000,
+    ...extra,
+  });
+
+  it('thay khối "Ghi chú" bằng nhãn "Đơn định kỳ"; không còn chữ Subscribe & Save', async () => {
+    mocks.fetchOrder.mockResolvedValue(subscription());
+    renderPage();
+    expect(await screen.findByText('Đơn định kỳ')).toBeInTheDocument();
+    expect(screen.queryByText('Ghi chú')).toBeNull();
+    expect(screen.queryByText(/Subscribe/)).toBeNull();
+  });
+
+  it('dòng giảm giá là "Ưu đãi đặt định kỳ"', async () => {
+    mocks.fetchOrder.mockResolvedValue(subscription());
+    renderPage();
+    expect(await screen.findByText('Ưu đãi đặt định kỳ')).toBeInTheDocument();
+  });
+
+  it('ghi chú khác (CSKH sửa) của đơn định kỳ vẫn hiện như ghi chú', async () => {
+    mocks.fetchOrder.mockResolvedValue(subscription({ note: 'Giao sau 17h' }));
+    renderPage();
+    expect(await screen.findByText('Giao sau 17h')).toBeInTheDocument();
+    expect(screen.getByText('Ghi chú')).toBeInTheDocument();
+  });
+});
+
 describe('OrderDetailPage — lịch sử vận chuyển bằng tiếng Việt (C-120)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
