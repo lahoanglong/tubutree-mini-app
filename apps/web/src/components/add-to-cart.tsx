@@ -14,13 +14,17 @@ import { phoneSecondary } from '@/lib/phone-ui';
 import { CountBadge } from '@/components/mini/badge';
 import { defaultVariationFor, pickDefaultVariation, variationPricing } from '@/lib/flash-price';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
-import { VariationSheet, type VariationSheetMode } from './variation-sheet';
+import dynamic from 'next/dynamic';
+import type { VariationSheetMode } from './variation-sheet';
 import { useActiveFlashSales, useFlashSalesLoaded } from '@/lib/use-flash-sales';
 import { formatDateTime } from '@/lib/format-date';
 import { usePdpSelection } from './pdp-selection';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
 import { actionErrorText } from '@/lib/error-text';
+
+// Bảng chỉ dùng ở khổ điện thoại khi khách bấm mua: tách khỏi First Load của trang sản phẩm.
+const VariationSheet = dynamic(() => import('./variation-sheet').then((m) => m.VariationSheet), { ssr: false });
 
 interface Variation {
   id: string;
@@ -83,6 +87,7 @@ export default function AddToCart({
   const [success, setSuccess] = useState(false);
   const userPicked = useRef(false);
   const [sheetMode, setSheetMode] = useState<VariationSheetMode | null>(null);
+  const [sheetOpened, setSheetOpened] = useState(false);
 
   // Số món ở nút giỏ của thanh dính (như Mini App); cùng khoá và cùng GET /cart với giỏ ở thanh đầu.
   const cartCount = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' }).data?.itemCount ?? 0;
@@ -194,6 +199,7 @@ export default function AddToCart({
     if (phase === 'loading' || blockedReason) return;
     // Điện thoại: từ 2 phân loại thì hỏi chọn trong bảng như Mini App. Máy tính đã có ô chọn ngay cạnh nút.
     if (!chosen && needsVariationPicker(variations) && isPhoneWidth()) {
+      setSheetOpened(true);
       setSheetMode(buyNow ? 'buy' : 'add');
       return;
     }
@@ -340,7 +346,7 @@ export default function AddToCart({
 
       {status && <div className="mt-3 hidden md:block">{status}</div>}
 
-      {needsVariationPicker(variations) && (
+      {needsVariationPicker(variations) && sheetOpened && (
         <VariationSheet
           open={sheetMode !== null}
           onClose={() => setSheetMode(null)}

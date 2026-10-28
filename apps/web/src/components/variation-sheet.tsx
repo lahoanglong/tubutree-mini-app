@@ -5,7 +5,12 @@ import { useEffect, useState } from 'react';
 import { clampPickerQty, pickerStartId, pickerStockText, pickerView } from '@tubutree/app-core/variation-picker';
 import type { FlashPriceItem } from '@tubutree/app-core/flash-price';
 import { formatVnd } from '@/lib/shop-client';
-import { BottomSheet, Button, PriceTag, ProductThumb, QuantitySelector, Text } from '@/components/mini';
+import { BottomSheet } from '@/components/mini/bottom-sheet';
+import { Button } from '@/components/mini/button';
+import { PriceTag } from '@/components/mini/price-tag';
+import { ProductThumb } from '@/components/mini/product-thumb';
+import { QuantitySelector } from '@/components/mini/quantity-selector';
+import { Text } from '@/components/mini/text';
 
 export interface VariationOption {
   id: string;

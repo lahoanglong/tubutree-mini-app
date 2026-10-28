@@ -588,12 +588,16 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
     window.matchMedia = realMatchMedia;
   });
   const sheet = () => document.body.querySelector('[role="dialog"]') as HTMLElement | null;
+  // Bảng nạp lười (next/dynamic): chờ tới khi hiện.
+  const sheetReady = async () => {
+    for (let n = 0; n < 40 && !sheet(); n++) await flush();
+  };
 
   it('Thêm vào giỏ mở bảng chọn, chọn 500ml rồi xác nhận mới thêm giỏ', async () => {
     const { container } = mount();
     await flush();
     click(addButton(container));
-    await flush();
+    await sheetReady();
     expect(mocks.addToCart).not.toHaveBeenCalled();
     expect(sheet()).not.toBeNull();
     click(byText(sheet()!, 'button', '500ml'));
@@ -606,7 +610,7 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
     const { container } = mount();
     await flush();
     click(addButton(container));
-    await flush();
+    await sheetReady();
     const confirm = byText(sheet()!, 'button', /^Thêm vào giỏ · /);
     click(confirm);
     click(confirm);
@@ -618,7 +622,7 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
     const { container } = mount();
     await flush();
     click(addButton(container));
-    await flush();
+    await sheetReady();
     click(byText(sheet()!, 'button', '500ml'));
     click(sheet()!.querySelector('button[aria-label="Tăng số lượng"]'));
     click(sheet()!.querySelector('button[aria-label="Tăng số lượng"]'));
@@ -632,7 +636,7 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
     const { container } = mount();
     await flush();
     click(byText(container, 'button', /^Mua ngay/));
-    await flush();
+    await sheetReady();
     expect(byText(sheet()!, 'button', /^Mua ngay · /)).toBeTruthy();
     expect(mocks.addToCart).not.toHaveBeenCalled();
   });
