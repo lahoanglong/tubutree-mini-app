@@ -81,7 +81,7 @@ describe('ZaloOaTokenService.refresh', () => {
     const { prisma, $transaction, systemConfig } = makePrisma();
     await new ZaloOaTokenService(prisma, makeConfig()).refresh(NOW);
     expect($transaction).toHaveBeenCalledTimes(1);
-    expect(($transaction.mock.calls[0][0] as unknown[]).length).toBe(3);
+    expect(($transaction.mock.calls[0]![0] as unknown[]).length).toBe(3);
     const keys = systemConfig.upsert.mock.calls.map((c) => c[0].where.key);
     expect(keys).toEqual(['zalo.oa_refresh_token', 'zalo.oa_access_token', 'zalo.oa_token_expires_at']);
   });

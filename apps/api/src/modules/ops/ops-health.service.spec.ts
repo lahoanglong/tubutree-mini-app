@@ -182,15 +182,15 @@ describe('OpsHealthService.zaloTokenProblems (hạn token Zalo OA)', () => {
     const { svc } = build({ ...configured, 'zalo.oa_token_expires_at': iso(2 * H) });
     const out = await svc.zaloTokenProblems(NOW);
     expect(out).toHaveLength(1);
-    expect(out[0].key).toBe('zalo.oa_token');
-    expect(out[0].message).toContain('2 giờ');
+    expect(out[0]!.key).toBe('zalo.oa_token');
+    expect(out[0]!.message).toContain('2 giờ');
   });
 
   it('đã quá hạn → cảnh báo nói rõ đã hết hạn', async () => {
     const { svc } = build({ ...configured, 'zalo.oa_token_expires_at': iso(-1 * H) });
     const out = await svc.zaloTokenProblems(NOW);
     expect(out).toHaveLength(1);
-    expect(out[0].message).toContain('đã hết hạn');
+    expect(out[0]!.message).toContain('đã hết hạn');
   });
 
   it('token trong env (chưa từng làm mới) cũng tính là đã cấu hình', async () => {
