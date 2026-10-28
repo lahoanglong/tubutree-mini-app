@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/', useRouter: () => ({ push: mocks.push }) }));
 vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
 

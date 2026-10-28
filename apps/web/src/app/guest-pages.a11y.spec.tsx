@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/',
   useRouter: () => ({ push: vi.fn(), replace: mocks.replace }),
   useSearchParams: () => mocks.search,
   notFound: () => {

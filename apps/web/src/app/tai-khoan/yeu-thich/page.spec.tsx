@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined }) }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/', useRouter: () => ({ push: () => undefined }) }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 
 import WishlistPage from './page';

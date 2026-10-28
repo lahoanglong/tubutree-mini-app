@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
 vi.mock('next/navigation', () => ({
+  usePathname: () => '/',
   useRouter: () => ({ push: () => undefined }),
   useSearchParams: () => new URLSearchParams(mocks.search),
 }));

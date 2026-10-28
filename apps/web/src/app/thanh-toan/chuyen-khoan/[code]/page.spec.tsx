@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   qr: { paymentStatus: 'UNPAID' as string, calls: [] as string[], fail: false },
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
-vi.mock('next/navigation', () => ({ useParams: () => mocks.params, useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/', useParams: () => mocks.params, useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getBankQr: async (code: string) => {

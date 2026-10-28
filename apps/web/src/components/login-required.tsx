@@ -6,7 +6,7 @@ import { LogIn, WifiOff } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { loginHref } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
-import { LineItemSkeleton, Skeleton } from '@/components/ui/skeleton';
+import { RouteSkeleton } from '@/components/skeletons/route-skeleton';
 
 /** Khối "cần đăng nhập" dùng chung cho giỏ hàng, thanh toán, tài khoản, chi tiết đơn. */
 export function LoginRequired({ message, returnTo }: { message: string; returnTo: string }) {
@@ -24,16 +24,9 @@ export function LoginRequired({ message, returnTo }: { message: string; returnTo
   );
 }
 
-/** Đang khôi phục phiên đăng nhập — ngắn, chỉ ở lần mở trang đầu. */
+/** Đang khôi phục phiên đăng nhập — ngắn, chỉ ở lần mở trang đầu. Khung chờ theo hình trang đang mở (xem RouteSkeleton). */
 export function AuthLoading() {
-  return (
-    <div role="status" aria-busy="true" className="flex flex-col gap-3 py-4">
-      <span className="sr-only">Đang tải…</span>
-      <Skeleton height={44} rounded="rounded-card" />
-      <LineItemSkeleton />
-      <LineItemSkeleton />
-    </div>
-  );
+  return <RouteSkeleton />;
 }
 
 /**
