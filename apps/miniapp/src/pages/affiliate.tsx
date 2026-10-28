@@ -106,6 +106,25 @@ function payoutTax(gross: number, pit: { pct: number; threshold: number } | unde
   return Math.round(gross * Math.min(pit.pct, 1));
 }
 
+/** Khung chờ đúng hình trang CTV: thẻ hoa hồng, bốn lối tắt, hai ô số liệu. */
+function CtvDashboardSkeleton() {
+  return (
+    <div data-testid="ctv-skeleton" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Skeleton height={160} radius="var(--radius-card)" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} height={98} radius="var(--radius-card)" />
+        ))}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+        {[0, 1].map((i) => (
+          <Skeleton key={i} height={98} radius="var(--radius-card)" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AffiliatePage() {
   // /affiliate/me cần auth — fetch trước khi restore() xong sẽ 401 và kẹt vĩnh viễn
   // (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (cùng bug đã fix ở wallet.tsx).
@@ -113,12 +132,7 @@ export default function AffiliatePage() {
   const meQ = useQuery({ queryKey: ['affiliate-me'], queryFn: getAffiliateMe, enabled: phase === 'authenticated' });
 
   if (phase !== 'authenticated' || meQ.isLoading) {
-    const skeleton = (
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Skeleton height={120} radius="var(--radius-card)" />
-        <Skeleton height={80} radius="var(--radius-card)" />
-      </div>
-    );
+    const skeleton = <CtvDashboardSkeleton />;
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={PAGE_TITLE} />

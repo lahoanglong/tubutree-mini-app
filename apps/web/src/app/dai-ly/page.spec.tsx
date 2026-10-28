@@ -26,10 +26,10 @@ const m = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => m.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn(), user: { role: 'DEALER' } }) }));
-vi.mock('@/components/evidence-upload', () => ({
-  EvidenceUpload: ({ label, value, onChange }: { label: string; value: string[]; onChange: (v: string[]) => void }) => (
-    <button type="button" className="min-h-11" onClick={() => onChange(['data:image/jpeg;base64,AAAA'])}>
-      {value.length ? `Đã chọn ${label}` : `Chọn ${label}`}
+vi.mock('@/components/brand-owner/brand-image-field', () => ({
+  BrandImageField: ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
+    <button type="button" className="min-h-11" onClick={() => onChange('data:image/jpeg;base64,AAAA')}>
+      {value ? `Đã chọn ${label}` : `Chọn ${label}`}
     </button>
   ),
 }));

@@ -1194,3 +1194,52 @@ describe('Hành trình gian hàng đứng đầu khi chưa nhận đủ', () => 
     expect(before(collection(), quest())).toBe(true);
   });
 });
+
+describe('kiểu Mini App ở điện thoại: nút thêm sản phẩm, ô số liệu, thanh đáy bước 1', () => {
+  it('"Thêm sản phẩm" là nút phụ nền xanh nhạt không viền như Mini App', async () => {
+    mount();
+    await flush();
+    const add = btn('Thêm sản phẩm');
+    expect(add.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    expect(add.className).toContain('max-md:border-0');
+  });
+
+  it('ô số liệu thống kê dùng nền nhạt của Mini App (bg-subtle), không phải nền be', async () => {
+    mount();
+    await flush();
+    const tile = Array.from(document.querySelectorAll('div')).find((d) => d.className.includes('bg-stone-100') && d.textContent?.endsWith('Đơn 30 ngày'));
+    expect(tile?.className).toContain('max-md:bg-[var(--color-bg-subtle)]');
+  });
+
+  it('bước 1: thanh nút đáy ghim vào đáy màn hình ở điện thoại và chừa chỗ cuối trang', async () => {
+    state.sfStatus = 404;
+    mount();
+    await flush();
+    const bar = document.querySelector<HTMLElement>('[data-sticky-bar]')!;
+    expect(bar.textContent).toContain('Bắt đầu mở gian hàng');
+    expect(bar.className).toContain('max-md:fixed');
+    expect(bar.className).toContain('max-md:inset-x-0');
+    expect(bar.className).toContain('max-md:pb-[calc(16px+var(--safe-bottom))]');
+    expect(document.body.classList.contains('has-sticky-bar')).toBe(true);
+  });
+
+  it('bước 1 khi chưa là CTV: lối đăng ký cũng nằm trong thanh đáy ghim', async () => {
+    state.sfStatus = 404;
+    state.me = { isAffiliate: false, canRegister: true };
+    mount();
+    await flush();
+    const bar = document.querySelector<HTMLElement>('[data-sticky-bar]')!;
+    expect(bar.querySelector('a[href="/ctv"]')).not.toBeNull();
+    expect(bar.className).toContain('max-md:fixed');
+    state.me = { isAffiliate: true, canRegister: true, canOpenStorefront: true };
+  });
+
+  it('rời trang thì gỡ chỗ chừa đáy khỏi body', async () => {
+    state.sfStatus = 404;
+    const r = mount();
+    await flush();
+    r.unmount();
+    mounted.pop();
+    expect(document.body.classList.contains('has-sticky-bar')).toBe(false);
+  });
+});

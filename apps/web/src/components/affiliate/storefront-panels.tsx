@@ -16,7 +16,7 @@ import { actErrText, type Notify } from './storefront-sheets';
 
 function StatBox({ value, label, brand }: { value: string; label: string; brand?: boolean }) {
   return (
-    <div className="min-w-0 flex-1 rounded-control bg-stone-100 p-2.5 text-center">
+    <div className="min-w-0 flex-1 rounded-control bg-stone-100 p-2.5 text-center max-md:bg-[var(--color-bg-subtle)]">
       <div className={`break-words text-base font-bold tabular-nums ${brand ? 'text-forest-700' : 'text-stone-900'}`}>{value}</div>
       <div className="text-xs text-stone-600">{label}</div>
     </div>

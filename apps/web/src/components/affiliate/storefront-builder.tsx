@@ -391,7 +391,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
                   );
                 })}
               </div>
-              <button type="button" className={`${ui.btnSecondary} mt-2`} onClick={() => setPickerCol(col.id)}>
+              <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} mt-2`} onClick={() => setPickerCol(col.id)}>
                 <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
                 Thêm sản phẩm
               </button>

@@ -54,7 +54,7 @@ export function TierCard({ dash, tiers }: { dash: Pick<AffiliateDashboard, 'tier
               <li
                 key={t.name}
                 aria-current={current || undefined}
-                className={`flex items-center justify-between rounded-control border p-2 ${current ? 'border-forest-600 bg-forest-50' : 'border-transparent bg-stone-50'}`}
+                className={`flex items-center justify-between rounded-control border p-2 ${current ? 'border-forest-600 bg-forest-50 max-md:border-[var(--color-action-secondary-border)] max-md:bg-[var(--color-action-secondary-bg)]' : 'border-transparent bg-stone-50 max-md:bg-[var(--color-bg-canvas)]'}`}
               >
                 <div className="flex items-center gap-1.5">
                   <span aria-hidden="true">{t.emoji}</span>

@@ -751,3 +751,51 @@ describe('/ctv — bậc, thưởng mốc, phân tích', () => {
     expect(section.textContent).not.toContain('SP 12');
   });
 });
+
+describe('/ctv — kiểu Mini App ở điện thoại (trạng thái rỗng, mã giới thiệu, điều khoản)', () => {
+  it('đang khôi phục phiên: khung chờ có đủ thẻ hoa hồng, 4 lối tắt, 2 ô số liệu', async () => {
+    state.phase = 'loading';
+    const { container } = mount();
+    await flush();
+    expect(container.querySelectorAll('[data-testid="ctv-skeleton"] [data-skeleton]')).toHaveLength(7);
+    state.phase = 'authenticated';
+  });
+
+  it('điều khoản đăng ký không có chấm đầu dòng, thụt lề 18px như Mini App', async () => {
+    state.me = { isAffiliate: false, referralCode: '', walletBalance: 0 };
+    const { container } = mount();
+    await flush();
+    const list = container.querySelector('section[aria-label="Điều khoản hoa hồng & thuế"] ul')!;
+    expect(list.className).not.toContain('list-disc');
+    expect(list.className).toContain('pl-[18px]');
+  });
+
+  it('mã giới thiệu: chữ Inter đậm 20px cách chữ 1px, màu thương hiệu như Mini App', async () => {
+    state.me = { isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 };
+    state.tab = 'share';
+    const { container } = mount();
+    await flush();
+    const code = Array.from(container.querySelectorAll('span')).find((s) => s.textContent === 'TUBU88')!;
+    expect(code.className).toContain('max-md:font-ui');
+    expect(code.className).toContain('max-md:font-bold');
+    expect(code.className).toContain('max-md:tracking-[1px]');
+    expect(code.className).toContain('max-md:text-[length:var(--type-price-lg-size)]');
+  });
+
+  it('trạng thái rỗng có hình minh hoạ như Mini App: link (lá), hoa hồng (mầm), theo sản phẩm (giỏ)', async () => {
+    state.me = { isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 };
+    state.tab = 'share';
+    const a = mount();
+    await flush();
+    const linkEmpty = Array.from(a.container.querySelectorAll('section')).find((s) => s.getAttribute('aria-label') === 'Link chia sẻ')!;
+    expect(linkEmpty.textContent).toContain('Chưa có link');
+    expect(linkEmpty.querySelector('svg[aria-hidden]')).not.toBeNull();
+    a.unmount();
+    state.tab = 'commission';
+    const b = mount();
+    await flush();
+    const commissionEmpty = Array.from(b.container.querySelectorAll('section')).find((s) => s.getAttribute('aria-label') === 'Lịch sử hoa hồng')!;
+    expect(commissionEmpty.textContent).toContain('Chưa có hoa hồng');
+    expect(commissionEmpty.querySelector('svg[aria-hidden]')).not.toBeNull();
+  });
+});

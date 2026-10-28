@@ -330,6 +330,18 @@ describe('Trang CTV — đúng một h1 ở mọi trạng thái (C-114)', () => 
     expect(h1s().map((h) => h.textContent)).toEqual(['Cộng tác viên']);
   });
 
+  it('đang tải: khung chờ đúng hình trang CTV (thẻ hoa hồng, 4 lối tắt, 2 ô số liệu)', () => {
+    mocks.getAffiliateMe.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    const frame = screen.getByTestId('ctv-skeleton');
+    const blocks = Array.from(frame.querySelectorAll<HTMLElement>('.tubu-skeleton'));
+    expect(blocks.map((b) => b.style.height)).toEqual(['160px', '98px', '98px', '98px', '98px', '98px', '98px']);
+    expect(Array.from(frame.querySelectorAll<HTMLElement>(':scope > div')).slice(1).map((g) => g.style.gridTemplateColumns)).toEqual([
+      'repeat(4, minmax(0, 1fr))',
+      'repeat(2, minmax(0, 1fr))',
+    ]);
+  });
+
   it('lỗi tải: có h1 và nút Thử lại gọi lại API', async () => {
     mocks.getAffiliateMe.mockRejectedValueOnce(new Error('mạng lỗi'));
     mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
