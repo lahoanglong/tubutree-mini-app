@@ -22,6 +22,8 @@ const PENDING_KEY = 'tubu_web_ref_pending';
 export const PENDING_REF_TTL_DAYS = 7;
 /** Số link gần nhất được giữ chờ: đủ để một link mã khách thường mở sau không làm mất link CTV mở trước. */
 export const PENDING_REF_MAX = 3;
+/** Độ dài tối đa máy chủ nhận cho mã giới thiệu và slug khi chạm (TouchDto): dài hơn thì lần nào cũng bị từ chối nên không đáng giữ chờ. */
+const MAX_TOUCH_FIELD_LENGTH = 64;
 
 export interface StorefrontContext {
   slug: string | null;
@@ -177,6 +179,7 @@ function writePendingRefs(list: PendingRef[]): void {
  */
 function savePendingRef(ref: Omit<PendingRef, 'savedAt'>): void {
   if (typeof window === 'undefined' || (!ref.referralCode && !ref.slug)) return;
+  if ((ref.referralCode?.length ?? 0) > MAX_TOUCH_FIELD_LENGTH || (ref.slug?.length ?? 0) > MAX_TOUCH_FIELD_LENGTH) return;
   const now = Date.now();
   const kept = readPendingRefs(now).filter((p) => !samePendingSource(p, ref));
   writePendingRefs([...kept, { ...ref, savedAt: now }].slice(-PENDING_REF_MAX));

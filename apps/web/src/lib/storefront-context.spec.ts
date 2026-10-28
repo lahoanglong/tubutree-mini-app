@@ -88,7 +88,7 @@ describe('ctvSlugFor — chỉ gian hàng CTV mới gắn vào đơn', () => {
   });
 });
 
-describe('referralEligible: mã giới thiệu có thật sự là của CTV (E-7)', () => {
+describe('referralEligible: mã giới thiệu có thật sự là của CTV', () => {
   beforeEach(() => sessionStorage.clear());
 
   it('mở link ?ref= chưa biết (null); chạm giới thiệu ok:false → false, ok:true → true', () => {
@@ -130,7 +130,7 @@ describe('referralEligible: mã giới thiệu có thật sự là của CTV (E-
   });
 });
 
-describe('bản chờ nguồn giới thiệu trong localStorage (E-8)', () => {
+describe('bản chờ nguồn giới thiệu trong localStorage', () => {
   const KEY = 'tubu_web_ref_pending';
   const DAY = 24 * 60 * 60 * 1000;
   beforeEach(() => {
@@ -163,6 +163,16 @@ describe('bản chờ nguồn giới thiệu trong localStorage (E-8)', () => {
     rememberEntryLink('an-shop', null);
     rememberEntryLink(null, 'KHACH01');
     expect(readPendingRefs().map((p) => p.referralCode ?? p.slug)).toEqual(['an-shop', 'KHACH01']);
+  });
+
+  it('mã hoặc slug dài hơn 64 ký tự (máy chủ luôn từ chối) không ghi bản chờ, bản đang có giữ nguyên', () => {
+    rememberEntryLink(null, 'ABC');
+    rememberEntryLink(null, 'X'.repeat(65));
+    rememberEntryLink('s'.repeat(65), null);
+    rememberEntryLink('s'.repeat(65), 'DAI');
+    expect(readPendingRefs().map((p) => p.referralCode)).toEqual(['ABC']);
+    rememberEntryLink(null, 'Y'.repeat(64));
+    expect(readPendingRefs()).toHaveLength(2);
   });
 
   it(`giữ tối đa ${PENDING_REF_MAX} bản chờ, bản cũ nhất rơi trước`, () => {

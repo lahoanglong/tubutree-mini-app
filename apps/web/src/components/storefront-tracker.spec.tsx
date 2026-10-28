@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({ status: 'authenticated', touch: vi.fn() }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: mocks.status }) }));
 vi.mock('@/lib/shop-client', () => ({ recordReferralTouch: mocks.touch }));
 
+import { ApiError, NetworkError } from '@/lib/client-api';
 import { clearPendingRef, clearStorefrontContext, getStorefrontContext, PENDING_REF_TTL_DAYS, readPendingRefs } from '@/lib/storefront-context';
 import { ReferralCapture, StorefrontTracker } from './storefront-tracker';
 
@@ -94,7 +95,7 @@ async function mountKept(node: React.ReactElement = <ReferralCapture />) {
   };
 }
 
-describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chưa đăng nhập (E-8)', () => {
+describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chưa đăng nhập', () => {
   const DAY = 24 * 60 * 60 * 1000;
   beforeEach(() => {
     mocks.status = 'anonymous';
@@ -154,6 +155,37 @@ describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chư
 
   it('lỗi mạng khi chạm bù: giữ bản chờ để lần sau thử lại (trong hạn 7 ngày)', async () => {
     mocks.touch.mockRejectedValue(new Error('offline'));
+    await openLinkThenCloseTab('/?ref=ABC');
+    const m = await mountKept();
+    mocks.status = 'authenticated';
+    await m.rerender();
+    expect(mocks.touch).toHaveBeenCalledTimes(1);
+    expect(readPendingRefs()).toMatchObject([{ referralCode: 'ABC' }]);
+    await m.unmount();
+  });
+
+  it.each([
+    ['400 (mã sai dạng: gửi lại y hệt cũng bị từ chối)', new ApiError('Mã quá dài', 400)],
+    ['404', new ApiError('Không thấy', 404)],
+  ])('chạm bù bị máy chủ từ chối %s: bỏ bản chờ, không kẹt nhiều ngày', async (_label, err) => {
+    mocks.touch.mockRejectedValue(err);
+    await openLinkThenCloseTab('/?ref=ABC');
+    const m = await mountKept();
+    mocks.status = 'authenticated';
+    await m.rerender();
+    expect(mocks.touch).toHaveBeenCalledTimes(1);
+    expect(readPendingRefs()).toEqual([]);
+    await m.unmount();
+  });
+
+  it.each([
+    ['mất mạng', () => new NetworkError(false)],
+    ['hết thời gian chờ', () => new NetworkError(true)],
+    ['máy chủ lỗi 500', () => new ApiError('Lỗi', 500)],
+    ['phiên hết hạn 401', () => new ApiError('Hết phiên', 401)],
+    ['quá nhiều yêu cầu 429', () => new ApiError('Chậm lại', 429)],
+  ])('chạm bù gặp %s: giữ bản chờ để lần sau thử lại', async (_label, makeErr) => {
+    mocks.touch.mockRejectedValue(makeErr());
     await openLinkThenCloseTab('/?ref=ABC');
     const m = await mountKept();
     mocks.status = 'authenticated';
@@ -268,7 +300,7 @@ describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chư
   });
 });
 
-describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã có phải của CTV không (E-7)', () => {
+describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã có phải của CTV không', () => {
   beforeEach(() => {
     mocks.status = 'authenticated';
     mocks.touch.mockReset();
