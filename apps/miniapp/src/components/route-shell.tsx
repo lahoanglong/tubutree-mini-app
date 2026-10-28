@@ -53,11 +53,13 @@ interface BoundaryProps {
  * Lỗi render của MỘT màn không làm sập cả app: thanh đáy và các màn khác vẫn dùng được. Đổi route (resetKey) hoặc bấm
  * Thử lại thì dựng lại màn; tải lại cả app chỉ là lưới cuối của ErrorBoundary ngoài cùng.
  */
-class RouteBoundary extends Component<BoundaryProps, { failedKey: string | null }> {
-  override state = { failedKey: null as string | null };
+const CHUNK_ERROR = /dynamically imported module|Importing a module script failed|Loading chunk|Loading CSS chunk|error loading dynamically/i;
 
-  static getDerivedStateFromError(): { failedKey: string } {
-    return { failedKey: '*' };
+class RouteBoundary extends Component<BoundaryProps, { failedKey: string | null; chunk: boolean }> {
+  override state = { failedKey: null as string | null, chunk: false };
+
+  static getDerivedStateFromError(error: unknown): { failedKey: string; chunk: boolean } {
+    return { failedKey: '*', chunk: CHUNK_ERROR.test(error instanceof Error ? `${error.name} ${error.message}` : String(error)) };
   }
 
   override componentDidCatch(error: Error): void {
@@ -72,13 +74,14 @@ class RouteBoundary extends Component<BoundaryProps, { failedKey: string | null 
 
   override componentDidUpdate(prev: BoundaryProps): void {
     if (this.state.failedKey !== null && (prev.attempt !== this.props.attempt || prev.resetKey !== this.props.resetKey)) {
-      this.setState({ failedKey: null });
+      this.setState({ failedKey: null, chunk: false });
     }
   }
 
   override render(): ReactNode {
     if (this.state.failedKey !== null) {
-      return <ErrorState message={vi.errors.generic} onRetry={this.props.onRetry} />;
+      // React.lazy giữ lời hứa tải mã đã hỏng: dựng lại màn không bao giờ tải lại được, chỉ tải lại app mới lấy lại mã.
+      return <ErrorState message={vi.errors.generic} onRetry={this.state.chunk ? () => window.location.reload() : this.props.onRetry} />;
     }
     return this.props.children;
   }
@@ -100,3 +103,20 @@ export function RouteShell({ children, skeleton = 'list' }: { children: ReactNod
   );
 }
 
+
+/** Thành phần phụ tải sau (cổng chào, nhận mã): lỗi của nó, kể cả không tải được mã, không được làm sập màn đang xem. */
+export class SilentBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  override componentDidCatch(error: Error): void {
+    console.error('[SilentBoundary] Lỗi thành phần phụ:', error);
+  }
+
+  override render(): ReactNode {
+    return this.state.failed ? null : this.props.children;
+  }
+}

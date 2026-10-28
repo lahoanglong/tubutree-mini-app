@@ -8,7 +8,7 @@ import BottomNav from './bottom-nav';
 import BackButton from './back-button';
 import { OpenAppRouter } from './open-app-router';
 import { MainLandmark } from './ui/main-landmark';
-import { RouteShell, RouteSkeleton } from './route-shell';
+import { RouteShell, RouteSkeleton, SilentBoundary } from './route-shell';
 import ErrorBoundary, { hashMessage } from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
@@ -274,10 +274,12 @@ export default function MyApp() {
               <BottomNav />
               <BackButton />
               {/* Hai cổng này không cần cho khung hình đầu: tải sau để entry nhẹ hơn. */}
-              <Suspense fallback={null}>
-                <OnboardingGate />
-                <CouponClaimGate />
-              </Suspense>
+              <SilentBoundary>
+                <Suspense fallback={null}>
+                  <OnboardingGate />
+                  <CouponClaimGate />
+                </Suspense>
+              </SilentBoundary>
               <OpenAppRouter />
             </ZMPRouter>
           </SnackbarProvider>
