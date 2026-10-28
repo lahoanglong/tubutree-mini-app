@@ -122,7 +122,7 @@ export default function RecyclePointsPage() {
   if (phase === 'unavailable') return shell(<SessionUnavailable />);
   if (!nav) return shell(skeleton);
   const loadError = (phase === 'authenticated' && meQ.isError && meQ.error) || (pointsQ.isError && pointsQ.error);
-  if (loadError && isWasteForbidden(loadError)) return shell(<WastePhoneNeeded text="Cho Tubu số điện thoại để chọn điểm nhận." />);
+  if (loadError && isWasteForbidden(loadError) && (!me || me.eligibility !== 'OK')) return shell(<WastePhoneNeeded text="Cho Tubu số điện thoại để chọn điểm nhận." />);
   if (loadError) {
     return shell(
       <ErrorState

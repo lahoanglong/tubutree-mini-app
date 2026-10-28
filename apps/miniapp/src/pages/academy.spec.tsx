@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   haptic: vi.fn(),
   params: {} as { courseId?: string },
   role: 'AFFILIATE',
+  status: 'authenticated',
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -26,7 +27,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../store/auth', () => ({
-  useAuthStore: (sel: (s: { status: string; user: { role: string } }) => unknown) => sel({ status: 'authenticated', user: { role: mocks.role } }),
+  useAuthStore: (sel: (s: { status: string; user: { role: string }; restore: () => void }) => unknown) => sel({ status: mocks.status, user: { role: mocks.role }, restore: vi.fn() }),
 }));
 vi.mock('../services/academy-api', () => ({
   fetchCourses: mocks.fetchCourses,
@@ -80,6 +81,7 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.role = 'AFFILIATE';
+  mocks.status = 'authenticated';
   mocks.params = {};
   mocks.fetchCourses.mockResolvedValue([COURSE('a'), COURSE('b', { completedCount: 3, isCompleted: true })]);
   mocks.fetchCourse.mockResolvedValue(DETAIL());
@@ -94,6 +96,14 @@ describe('AcademyPage — khách thường', () => {
     expect(mocks.fetchCourses).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: viText.academy.ctvOnlyCta }));
     expect(mocks.navigate).toHaveBeenCalledWith('/affiliate');
+  });
+
+  it('mất mạng lúc khôi phục phiên: báo mất kết nối kèm Thử lại, không treo khung chờ', async () => {
+    mocks.role = 'CUSTOMER';
+    mocks.status = 'error';
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+    expect(mocks.fetchCourses).not.toHaveBeenCalled();
   });
 });
 

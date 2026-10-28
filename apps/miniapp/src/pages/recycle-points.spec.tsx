@@ -60,6 +60,7 @@ vi.mock('../services/zmp-bridge', () => ({
 import RecyclePointsPage, { filterPointsByText } from './recycle-points';
 import type { WastePointsNavState, WastePointsReturnState, WasteWizardDraft } from './recycle-new';
 import { ITEM_CARTON, ITEM_MILK, makeWasteMe, makeWastePoint } from '../services/waste-test-fixtures';
+import { HttpError } from '../services/http';
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 
 function renderPage() {
@@ -236,5 +237,12 @@ describe('/recycle/points — món chỉ kho nhận (B-36)', () => {
     renderPage();
     expect(await screen.findByText(/Vỏ hộp sữa chỉ kho TP\.HCM nhận, mà kho chưa nhận được lúc này. Hiện chưa có điểm nào nhận món này/)).toBeInTheDocument();
     expect(screen.queryByText(/chọn kho Tubu/)).toBeNull();
+  });
+  it('khách đã có số nhưng danh sách điểm trả 403 (chương trình tắt hay bị khoá): hiện lời máy chủ kèm Thử lại, không đòi số điện thoại', async () => {
+    mocks.getWastePoints.mockRejectedValue(new HttpError('Chương trình đang tạm dừng', 'PROGRAMME_OFF', { status: 403, data: null } as never));
+    renderPage();
+    expect(await screen.findByText('Chương trình đang tạm dừng')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+    expect(screen.queryByText(/Cho Tubu số điện thoại/)).toBeNull();
   });
 });

@@ -11,6 +11,7 @@ import {
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
+import { SessionUnavailable } from '../components/ui/auth-gate';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Icon } from '../components/ui/icon';
@@ -67,7 +68,7 @@ function CourseList({ onOpen, onBackToCtv }: { onOpen: (id: string) => void; onB
   const allowed = useAuthStore((s) => canUseAcademy(s.user?.role));
   const phase = useAuthPhase();
   const q = useQuery({ queryKey: ['academy-courses'], queryFn: fetchCourses, enabled: allowed });
-  const waitingForRole = !allowed && (phase === 'loading' || phase === 'unavailable');
+  const waitingForRole = !allowed && phase === 'loading';
 
   return (
     <div style={{ padding: 16 }}>
@@ -76,6 +77,8 @@ function CourseList({ onOpen, onBackToCtv }: { onOpen: (id: string) => void; onB
           <Skeleton height={92} radius="var(--radius-card)" />
           <Skeleton height={92} radius="var(--radius-card)" />
         </div>
+      ) : !allowed && phase === 'unavailable' ? (
+        <SessionUnavailable variant="inline" />
       ) : !allowed || (q.isError && isForbidden(q.error)) ? (
         <CtvOnlyNotice />
       ) : q.isError ? (
