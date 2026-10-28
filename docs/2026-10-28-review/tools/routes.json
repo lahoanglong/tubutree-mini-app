@@ -1,15 +1,15 @@
 {
-  "builtAt": "2026-10-28T06:46:05.882Z",
-  "lane": 6,
+  "builtAt": "2026-10-28T01:14:46.958Z",
+  "lane": 5,
   "params": {
-    "groupBuyId": "cmvrr3f2i000k13ynt2dmf69l",
-    "postId": "cmvrr3f3n000o13yn8z6bq1en",
-    "eventId": "cmvrr3f5g001313yngmvegw4j",
-    "courseId": "cmvrr3f5t001413ynndnqib7b",
-    "wastePointId": "cmvrf8ppg001hisl05yb59mbw",
-    "wasteDoneId": null,
-    "wasteRequestId": "cmvrr3h66002w13ynq8geqb7l",
-    "bankOrderCode": "TUBU2026102810309",
+    "groupBuyId": "cmvrf8j95000kxu8szo29ahzq",
+    "postId": "cmvrf8j9q000oxu8sl1iriisc",
+    "eventId": "cmvrf8jaq0014xu8sv7kbjft6",
+    "courseId": "cmvrf8jax0015xu8sgd6pf37c",
+    "wastePointId": "cmvrf8khs001hxu8sceqikm19",
+    "wasteDoneId": "cmvrf8kij001mxu8s09lvxhb4",
+    "wasteRequestId": "cmvrf8wf4003cxu8s85y751hh",
+    "bankOrderCode": "TUBU2026102819544",
     "orderCode": "TUBU2026102553697"
   },
   "routes": [
@@ -101,8 +101,8 @@
     {
       "key": "group-buy-id",
       "lane": "shop",
-      "mini": "/group-buy/cmvrr3f2i000k13ynt2dmf69l",
-      "web": "/mua-chung/cmvrr3f2i000k13ynt2dmf69l",
+      "mini": "/group-buy/cmvrf8j95000kxu8szo29ahzq",
+      "web": "/mua-chung/cmvrf8j95000kxu8szo29ahzq",
       "miniPersonas": [
         "returning",
         "new",
@@ -186,8 +186,8 @@
     {
       "key": "bank-payment-code",
       "lane": "order",
-      "mini": "/bank-payment/TUBU2026102810309",
-      "web": "/thanh-toan/chuyen-khoan/TUBU2026102810309",
+      "mini": "/bank-payment/TUBU2026102819544",
+      "web": "/thanh-toan/chuyen-khoan/TUBU2026102819544",
       "miniPersonas": [
         "returning"
       ],
@@ -552,8 +552,8 @@
     {
       "key": "feed-id",
       "lane": "community",
-      "mini": "/feed/cmvrr3f3n000o13yn8z6bq1en",
-      "web": "/cong-dong/cmvrr3f3n000o13yn8z6bq1en",
+      "mini": "/feed/cmvrf8j9q000oxu8sl1iriisc",
+      "web": "/cong-dong/cmvrf8j9q000oxu8sl1iriisc",
       "miniPersonas": [
         "returning",
         "new",
@@ -584,8 +584,8 @@
     {
       "key": "academy-courseid",
       "lane": "community",
-      "mini": "/academy/cmvrr3f5t001413ynndnqib7b",
-      "web": "/hoc-vien/cmvrr3f5t001413ynndnqib7b",
+      "mini": "/academy/cmvrf8jax0015xu8sgd6pf37c",
+      "web": "/hoc-vien/cmvrf8jax0015xu8sgd6pf37c",
       "miniPersonas": [
         "returning",
         "ctv"
@@ -804,8 +804,8 @@
     {
       "key": "recycle-r-id",
       "lane": "recycle",
-      "mini": "/recycle/r/cmvrr3h66002w13ynq8geqb7l",
-      "web": "/doi-rac/yeu-cau/cmvrr3h66002w13ynq8geqb7l",
+      "mini": "/recycle/r/cmvrf8wf4003cxu8s85y751hh",
+      "web": "/doi-rac/yeu-cau/cmvrf8wf4003cxu8s85y751hh",
       "miniPersonas": [
         "returning"
       ],
@@ -817,8 +817,8 @@
     {
       "key": "recycle-r-id-edit",
       "lane": "recycle",
-      "mini": "/recycle/r/cmvrr3h66002w13ynq8geqb7l/edit",
-      "web": "/doi-rac/yeu-cau/cmvrr3h66002w13ynq8geqb7l/sua",
+      "mini": "/recycle/r/cmvrf8wf4003cxu8s85y751hh/edit",
+      "web": "/doi-rac/yeu-cau/cmvrf8wf4003cxu8s85y751hh/sua",
       "miniPersonas": [
         "returning"
       ],
@@ -841,6 +841,19 @@
         "returning",
         "new",
         "guest"
+      ],
+      "private": true
+    },
+    {
+      "key": "recycle-done-id",
+      "lane": "recycle",
+      "mini": "/recycle/done/cmvrf8kij001mxu8s09lvxhb4",
+      "web": "/doi-rac/xong/cmvrf8kij001mxu8s09lvxhb4",
+      "miniPersonas": [
+        "returning"
+      ],
+      "webPersonas": [
+        "returning"
       ],
       "private": true
     },
@@ -1241,16 +1254,11 @@
     "recycle-r-id",
     "recycle-r-id-edit",
     "recycle-requests",
+    "recycle-done-id",
     "recycle-desk",
     "404"
   ],
   "skips": [
-    {
-      "key": "recycle-done-id",
-      "app": "both",
-      "path": "/recycle/done/:id | /doi-rac/xong/:id",
-      "skip": "không có dữ liệu cho tham số động trong DB lane 4 và không tạo được qua API"
-    },
     {
       "key": "refill",
       "app": "miniapp",
