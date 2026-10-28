@@ -56,7 +56,9 @@ Quyền: tạo worktree/nhánh, sửa mã, test, commit, push nhánh của đợ
 | 21:01 | Đang chạy: đo integ lần cuối (build lại web, Mini) và dò CLS 6 ca trên integ | xong |
 | 21:13 | Đo integ `79d1bfaed` (tải 19,7 lúc đo): CLS Trang chủ web khách cũ 0,416 → 0,000, Mini khách cũ 0,456 → 0,000, Mini khách vãng lai 0,828 → 0,066; thanh toán web 0,313 → 0,046; `/san-pham` LCP 3,0 → 0,6 s. home-probe 6 ca đều < 0,1. Cái giá: thẻ SP đầu ở Mini khách vãng lai 2,2 → 3,3 s, khách cũ máy mới 2,3 → 2,6 s (R-177, hỏi chủ). Lighthouse Trang chủ 94 → 78 do LCP là bóng gợi ý trên dữ liệu không ảnh | |
 | 21:13 | Báo cáo GĐ4 đăng: https://claude.ai/artifact/BAptEQ6qkPB2iABaL2byxi. Điền số và link vào `pr/*.md`. Backlog thêm R-173..R-177 | |
-| 21:13 | Tiếp: commit tài liệu, push 9 nhánh, mở PR theo thứ tự merge, cập nhật báo cáo với link PR, hỏi chủ (điểm dừng 2) | đang chạy |
+| 21:13 | Tiếp: commit tài liệu, push 9 nhánh, mở PR theo thứ tự merge, cập nhật báo cáo với link PR, hỏi chủ (điểm dừng 2) | xong |
+| 21:17 | Đã push 9 nhánh (không force), mở PR #59 docs, #60 doirac, #61 khampha, #62 muahang, #63 taikhoan, #64 diemxanh, #65 ctv, #66 quantri, #67 hieunang; cả 9 gộp được vào main. Báo cáo bản 2 có link PR. CI đang chạy | xong |
+| 21:17 | Tiếp: chờ CI, hỏi chủ (điểm dừng 2): merge PR nào, có deploy không, giữ hay bỏ màn chờ trang chủ (R-177) | đang chạy |
 
 ## Backlog cũ còn mở
 B-130 (CI e2e chập chờn), B-147 (nhãn Mới), B-148 (ngày giao dự kiến, việc chủ), B-149 (hai đồng hồ máy chủ), B-150 (chữ quyền lợi hạng), B-151 (múi giờ Mini App), B-152 (thanh toán web 375 lệch), B-153 (gian hàng CTV web thừa chi tiết), B-154 (xem trước mã giảm 50 mã), B-155 (đĩa VPS, việc deploy, chỉ ghi nhận).
