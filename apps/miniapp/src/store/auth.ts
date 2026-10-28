@@ -3,7 +3,9 @@ import { newDeviceId } from '../utils/idempotency';
 import { setStorage, getStorage, removeStorage } from 'zmp-sdk/apis';
 import type { AuthUser, LoginResponse } from '@tubutree/shared-types';
 import {
+  api,
   ensurePhoneApi,
+  getErrorMessage,
   loginGuest,
   loginZaloMiniApp,
   refreshTokens,
@@ -17,9 +19,14 @@ import { vi } from '../i18n/vi';
 import { clearHomeHints, dropForeignHomeHints } from '@tubutree/app-core/home-layout';
 import { browserStorage } from '../utils/recently-viewed';
 import { isHttpError } from '../services/http';
+import { isGuestUser } from '../utils/guest-user';
+import { CATALOG_KEYS, getQueryClient } from '../services/query-client';
+import { errorCode } from '@tubutree/app-core/api/error-status';
 
 const REFRESH_KEY = 'tubu_refresh_token';
 const DEVICE_KEY = 'tubu_device_id';
+/** Thông tin hoá đơn khách nhập ở checkout (pages/checkout.tsx); máy dùng chung không được để người sau thấy. */
+const INVOICE_KEY = 'tubu_invoice';
 
 /** ID thiết bị ổn định cho đăng nhập khách (tạo 1 lần, lưu ZMP storage). */
 export async function getDeviceId(): Promise<string> {
@@ -44,8 +51,10 @@ interface AuthState {
   /** Đăng nhập ngầm (không xin SĐT) — dùng khi mở app. */
   login: () => Promise<void>;
   restore: () => Promise<void>;
-  /** Xin + đính SĐT vào tài khoản (gọi đúng lúc cần: checkout). Trả phone hoặc null. */
+  /** Xin + đính SĐT vào tài khoản (gọi đúng lúc cần: checkout). Trả phone hoặc null, lỗi nào cũng thành null. */
   ensurePhone: () => Promise<string | null>;
+  /** Như ensurePhone nhưng lỗi API (409 SĐT đã gắn tài khoản khác, mất mạng, 5xx) được ném để nút liên kết nói đúng lý do. Khách từ chối sheet thì vẫn trả null. */
+  ensurePhoneOrThrow: () => Promise<string | null>;
   logout: () => Promise<void>;
 }
 
@@ -69,6 +78,62 @@ async function clearRefresh(): Promise<void> {
  */
 function isRefreshRejected(err: unknown): boolean {
   return isHttpError(err) && (err.response?.status === 401 || err.response?.status === 403);
+}
+
+/** Máy chủ trả lời "tài khoản đã bị khoá" (401 ACCOUNT_BLOCKED) ở đăng nhập hoặc refresh. */
+function isAccountBlocked(err: unknown): boolean {
+  return isHttpError(err) && err.response?.status === 401 && errorCode(err) === 'ACCOUNT_BLOCKED';
+}
+
+/**
+ * Lỗi tạm của lời gọi phiên: không tới được máy chủ, quá thời gian, 429, 5xx. Chưa nói được khách là ai, nên không được
+ * đẩy họ sang tài khoản Khách (mất điểm, giỏ, đơn đang hiện); app giữ phiên cũ và thử lại (hooks/use-auth-phase.ts).
+ */
+function isTransientSessionError(err: unknown): boolean {
+  if (!isHttpError(err)) return false;
+  const status = err.response?.status;
+  return !status || status === 408 || status === 429 || status >= 500;
+}
+
+/** Tài khoản bị khoá: bỏ phiên trên máy và đưa lời máy chủ ra cho khách đọc (hiện ở lời mời đăng nhập, components/ui/auth-gate.tsx). */
+async function applyBlocked(err: unknown): Promise<void> {
+  setAccessToken(null);
+  await clearRefresh();
+  useAuthStore.setState({ user: null, status: 'idle', error: getErrorMessage(err) });
+}
+
+type ZaloAttempt = { kind: 'ok'; res: LoginResponse } | { kind: 'guest' } | { kind: 'stop' };
+
+/**
+ * Đăng nhập Zalo ngầm cho login() và restore(). Chỉ khi Zalo KHÔNG khả dụng trên máy (SDK lỗi, -1401, ngoài Zalo) mới trả
+ * 'guest' để rơi xuống tài khoản Khách. Máy chủ đã trả lời lỗi tạm hoặc khoá thì 'stop' (trạng thái đã đặt xong): đăng nhập
+ * khách lúc đó sẽ lặng lẽ đổi khách quen sang tài khoản Khách trống. `keepSession` = đang đăng nhập sẵn, không hạ xuống lỗi.
+ */
+async function tryZaloLogin(ref: string | undefined, firstTouch: Awaited<ReturnType<typeof loadFirstTouch>>, keepSession: boolean): Promise<ZaloAttempt> {
+  let creds: Awaited<ReturnType<typeof getZaloAccessToken>>;
+  try {
+    creds = await getZaloAccessToken();
+  } catch {
+    return { kind: 'guest' };
+  }
+  try {
+    const res = await loginZaloMiniApp(creds.code, creds.accessToken, undefined, ref, firstTouch);
+    setAccessToken(res.accessToken);
+    await persistRefresh(res.refreshToken);
+    return { kind: 'ok', res };
+  } catch (err) {
+    if (isAccountBlocked(err)) {
+      if (keepSession) return { kind: 'stop' };
+      await applyBlocked(err);
+      return { kind: 'stop' };
+    }
+    if (isTransientSessionError(err)) {
+      if (!keepSession) useAuthStore.setState({ status: 'error', error: vi.errors.sessionUnavailable });
+      return { kind: 'stop' };
+    }
+    // 4xx khác (Zalo từ chối access token...): vào bằng khách như trước.
+    return { kind: 'guest' };
+  }
 }
 
 /**
@@ -120,24 +185,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ status: 'loading', error: undefined });
     const ref = getLaunchReferral();
     const firstTouch = await loadFirstTouch();
-    try {
-      const { code, accessToken } = await getZaloAccessToken();
-      const res = await loginZaloMiniApp(code, accessToken, undefined, ref, firstTouch);
-      setAccessToken(res.accessToken);
-      await persistRefresh(res.refreshToken);
-      set({ user: res.user, status: 'authenticated' });
+    const zalo = await tryZaloLogin(ref, firstTouch, false);
+    if (zalo.kind === 'ok') {
+      set({ user: zalo.res.user, status: 'authenticated' });
       return;
-    } catch {
-      /* Zalo chưa khả dụng → fallback guest bên dưới */
     }
+    if (zalo.kind === 'stop') return;
     // Fallback khách (Zalo chưa khả dụng) — app vẫn dùng được đầy đủ.
     try {
       const res = await loginGuest(await getDeviceId(), ref, firstTouch);
       setAccessToken(res.accessToken);
       await persistRefresh(res.refreshToken);
       set({ user: res.user, status: 'authenticated' });
-    } catch {
-      set({ status: 'error', error: vi.errors.sessionUnavailable });
+    } catch (err) {
+      if (isAccountBlocked(err)) await applyBlocked(err);
+      else set({ status: 'error', error: vi.errors.sessionUnavailable });
     }
   },
 
@@ -170,21 +232,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           return;
         }
       } catch (err) {
-        if (isRefreshRejected(err)) await clearRefresh();
+        if (isRefreshRejected(err)) {
+          await clearRefresh();
+        } else if (isTransientSessionError(err)) {
+          // Máy còn refresh token nhưng chưa hỏi được máy chủ: đăng nhập lại từ đầu sẽ đổi khách quen sang tài khoản khác
+          // (hoặc Khách). Giữ token, báo mất kết nối; useSessionRecovery gọi restore() lại.
+          if (!keepSession) set({ status: 'error', error: vi.errors.sessionUnavailable });
+          return;
+        }
       }
       // Chưa có phiên hợp lệ → đăng nhập ngầm bằng Zalo (im lặng, không sheet SĐT).
       const ref = getLaunchReferral();
       const firstTouch = await loadFirstTouch();
-      try {
-        const { code, accessToken } = await getZaloAccessToken();
-        const res = await loginZaloMiniApp(code, accessToken, undefined, ref, firstTouch);
-        setAccessToken(res.accessToken);
-        await persistRefresh(res.refreshToken);
-        set({ user: res.user, status: 'authenticated' });
+      const zalo = await tryZaloLogin(ref, firstTouch, keepSession);
+      if (zalo.kind === 'ok') {
+        set({ user: zalo.res.user, status: 'authenticated' });
         return;
-      } catch {
-        /* Zalo chưa khả dụng → fallback guest bên dưới */
       }
+      if (zalo.kind === 'stop') return;
       // Zalo login chưa khả dụng (vd app chưa kích hoạt -1401) → đăng nhập KHÁCH theo
       // deviceId để app vẫn chạy đầy đủ (giỏ/vườn/tài khoản/mua hàng).
       try {
@@ -192,10 +257,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         setAccessToken(res.accessToken);
         await persistRefresh(res.refreshToken);
         set({ user: res.user, status: 'authenticated' });
-      } catch {
+      } catch (err) {
         // Guest fallback fail = lỗi mạng/server/CORS (không phải "chưa đăng nhập") → set 'error' + câu tiếng Việt
         // để UI báo đúng "mất kết nối, thử lại" thay vì 'idle' im lặng (mất ngữ cảnh). Chỉ khi chưa có phiên nào để giữ.
-        if (!keepSession) set({ status: 'error', error: vi.errors.sessionUnavailable });
+        if (keepSession) return;
+        if (isAccountBlocked(err)) await applyBlocked(err);
+        else set({ status: 'error', error: vi.errors.sessionUnavailable });
       }
     })();
     setAuthReady(done);
@@ -208,38 +275,57 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // Xin SĐT (sheet native) rồi đính vào tài khoản hiện tại.
   ensurePhone: async (): Promise<string | null> => {
-    const current = get().user;
-    if (current?.phone) return current.phone;
-    const phoneToken = await requestZaloPhoneToken();
-    if (!phoneToken) return null;
     try {
-      const { code, accessToken } = await getZaloAccessToken();
-      // A7-01 (audit 2026-09): KHÔNG gọi loginZaloMiniApp() ở đây — đó là đăng nhập TỪ ĐẦU,
-      // không biết phiên hiện tại là ai nên có thể âm thầm trả token của MỘT USER KHÁC (đúng
-      // lỗi đang vá: khách bị đổi sang tài khoản Zalo khác đang đăng nhập trên máy, bỏ lại
-      // giỏ/địa chỉ/điểm của phiên khách). ensurePhoneApi() gửi kèm access token CỦA PHIÊN
-      // HIỆN TẠI (interceptor tự đính Authorization) — BE biết chính xác đang là ai và chỉ đổi
-      // danh tính khi an toàn (nâng cấp tại chỗ hoặc gộp khách→Zalo), không bao giờ âm thầm.
-      const res = await ensurePhoneApi(code, accessToken, phoneToken);
-      setAccessToken(res.accessToken);
-      await persistRefresh(res.refreshToken);
-      set({ user: res.user, status: 'authenticated' });
-      return res.user.phone ?? null;
+      return await get().ensurePhoneOrThrow();
     } catch {
       return null;
     }
   },
 
+  ensurePhoneOrThrow: async (): Promise<string | null> => {
+    const current = get().user;
+    if (current?.phone) return current.phone;
+    // Chưa có phiên (đăng nhập lỗi/đang khoá): không mở sheet xin SĐT cho một lời gọi chắc chắn bị từ chối.
+    if (!current) return null;
+    const phoneToken = await requestZaloPhoneToken();
+    if (!phoneToken) return null;
+    const { code, accessToken } = await getZaloAccessToken();
+    // A7-01 (audit 2026-09): KHÔNG gọi loginZaloMiniApp() ở đây — đó là đăng nhập TỪ ĐẦU,
+    // không biết phiên hiện tại là ai nên có thể âm thầm trả token của MỘT USER KHÁC (đúng
+    // lỗi đang vá: khách bị đổi sang tài khoản Zalo khác đang đăng nhập trên máy, bỏ lại
+    // giỏ/địa chỉ/điểm của phiên khách). ensurePhoneApi() gửi kèm access token CỦA PHIÊN
+    // HIỆN TẠI (interceptor tự đính Authorization) — BE biết chính xác đang là ai và chỉ đổi
+    // danh tính khi an toàn (nâng cấp tại chỗ hoặc gộp khách→Zalo), không bao giờ âm thầm.
+    const res = await ensurePhoneApi(code, accessToken, phoneToken);
+    setAccessToken(res.accessToken);
+    await persistRefresh(res.refreshToken);
+    set({ user: res.user, status: 'authenticated' });
+    return res.user.phone ?? null;
+  },
+
   logout: async () => {
+    // Đọc trước khi xoá: sau đó không còn token để thu hồi trên máy chủ.
+    const refreshToken = await readRefresh().catch(() => null);
     setAccessToken(null);
     await clearRefresh();
-    set({ user: null, status: 'idle' });
+    set({ user: null, status: 'idle', error: undefined });
     clearHomeHints(browserStorage());
+    try {
+      browserStorage()?.removeItem(INVOICE_KEY);
+    } catch {
+      /* storage bị chặn: không có gì để xoá */
+    }
     // Xoá sạch cache React Query (ví, lương, hoa hồng...) — không để lộ dữ liệu tài
     // chính của user vừa đăng xuất cho user kế tiếp trên cùng thiết bị dùng chung
     // (VD tablet chấm công cửa hàng). Đăng ký qua setLogoutCleanup() ở app.tsx để
     // tránh import vòng (store/auth.ts <-> components/app.tsx).
     onLogoutCleanup?.();
+    // Không chờ: đăng xuất trên máy không phụ thuộc mạng. Token còn sống trên máy chủ chỉ là lỗi dọn dẹp, tự hết hạn.
+    if (refreshToken) {
+      void api.post('/auth/logout', { refreshToken }).catch((err: unknown) => {
+        console.warn('[auth] Chưa thu hồi được refresh token trên máy chủ:', err);
+      });
+    }
   },
 }));
 
@@ -248,6 +334,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 useAuthStore.subscribe((s, prev) => {
   const id = s.user?.id;
   if (id && id !== prev.user?.id) dropForeignHomeHints(browserStorage(), id);
+  // Khách liên kết Zalo và được gộp sang tài khoản khác (id đổi) hoặc nâng lên Zalo tại chỗ (cùng id, hết là khách) ngay trong
+  // phiên: điểm, giỏ, đơn, vườn trong cache vẫn là của tài khoản Khách. Lần đăng nhập đầu (chưa có user trước) và đăng xuất
+  // (user về null; app.tsx đã clear cache) không cần.
+  if (prev.user?.id && s.user && (s.user.id !== prev.user.id || (isGuestUser(prev.user) && !isGuestUser(s.user)))) {
+    void getQueryClient()?.invalidateQueries({ predicate: (q) => !CATALOG_KEYS.some((k) => q.queryKey[0] === k[0]) });
+  }
 });
 
 let onLogoutCleanup: (() => void) | null = null;
@@ -268,7 +360,7 @@ setUnauthorizedHandler(async () => {
   } catch (err) {
     if (isRefreshRejected(err)) {
       await clearRefresh();
-      useAuthStore.setState({ user: null, status: 'idle' });
+      useAuthStore.setState({ user: null, status: 'idle', error: isAccountBlocked(err) ? getErrorMessage(err) : undefined });
     } else {
       // Mạng/5xx: chưa biết phiên còn hay không. 'error' (như restore()) để useSessionRecovery tự thử lại, thay vì mời đăng nhập.
       useAuthStore.setState({ status: 'error', error: vi.errors.sessionUnavailable });
