@@ -667,7 +667,7 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     const group = await screen.findByRole('group', { name: 'Lối tắt của CTV' });
     const names = Array.from(group.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'));
     expect(names).toEqual(['Chia sẻ link và mã giới thiệu', 'Gian hàng của tôi', 'Lên đơn hộ khách', 'Chuyển vào Ví Tubu']);
-    expect(before(screen.getByText('Có thể chuyển vào Ví'), group)).toBe(true);
+    expect(before(await screen.findByText('Có thể chuyển vào Ví'), group)).toBe(true);
     expect(before(await screen.findByRole('tablist'), await screen.findByRole('button', { name: /Bảng 5 bậc CTV/ }))).toBe(true);
     expect(before(group, screen.getByRole('tablist'))).toBe(true);
     expect(before(group, await screen.findByRole('button', { name: /Bảng 5 bậc CTV/ }))).toBe(true);
@@ -723,6 +723,7 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
   it('Chuyển vào Ví luôn bấm được: chưa có số chuyển được thì mở hộp nói vì sao và số đang chờ, không có form chuyển', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue({
       todayCommission: 0, monthCommission: 9_520, pendingCommission: 9_520, withdrawableCommission: 0,
+      autoWalletTransfer: true,
       totalClicks: 0, totalConversions: 0, monthRevenue: 0,
       tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
@@ -753,11 +754,38 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
   it('còn hoa hồng có thể chuyển: dưới số to có dòng nói đây là phần chưa tự vào Ví được; hết thì không có dòng đó', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue({
       todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 50_000,
+      autoWalletTransfer: true,
       totalClicks: 0, totalConversions: 0, monthRevenue: 0,
       tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
     renderPage();
     expect(await screen.findByText(/Phần này chưa tự vào Ví được/)).toBeInTheDocument();
+  });
+
+  it('dashboard đang tải: hero là khung chờ, không hiện "Đang chờ: 0đ"; về rồi mới hiện số', async () => {
+    let release!: (v: Awaited<ReturnType<typeof getAffiliateDashboard>>) => void;
+    vi.mocked(getAffiliateDashboard).mockReturnValue(new Promise((r) => (release = r)));
+    renderPage();
+    await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' });
+    expect(screen.getByRole('status', { name: 'Đang tải hoa hồng' })).toBeInTheDocument();
+    expect(screen.queryByText(/Đang chờ:/)).toBeNull();
+    release({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 30_000, withdrawableCommission: 0,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    expect(await screen.findByText(/Đang chờ: 30\.000đ/)).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Đang tải hoa hồng' })).toBeNull();
+  });
+
+  it('tự chuyển bật và không còn gì chờ chuyển: số to là số dư Ví', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0, autoWalletTransfer: true,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    expect(await screen.findByText('Số dư Ví Tubu')).toBeInTheDocument();
   });
 
   it('bấm Chuyển vào Ví khi dashboard còn đang tải: hộp hiện khung chờ, không nói "Đang chờ: 0đ" rồi đổi', async () => {

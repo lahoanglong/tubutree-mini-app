@@ -25,7 +25,7 @@ import {
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { ShareSheet } from '../components/share-sheet';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
-import { COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, hasFirstOrder, isAutoWalletTransfer, transferBlockedText, transferHeroNote, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
+import { COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, isAutoWalletTransfer, transferBlockedText, transferHeroNote, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
 import { getWallet } from '../services/account-api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -307,6 +307,7 @@ function Dashboard() {
 
   const head = ctvHeadline(d);
   const autoTransfer = isAutoWalletTransfer(d?.autoWalletTransfer);
+  const hero = ctvHeroAmount(head.big, autoTransfer, walletQ.data?.walletBalance);
   const copyReferral = () => {
     haptic('light');
     void copyText(referral).then((ok) =>
@@ -335,6 +336,11 @@ function Dashboard() {
         {dashQ.isError ? (
           // KHÔNG fallback 0đ khi lỗi tải — hiển thị nhầm "0đ" gây hiểu lầm CTV chưa có hoa hồng.
           <ErrorState message={getLoadErrorMessage(dashQ.error)} onRetry={() => void dashQ.refetch()} />
+        ) : dashQ.isLoading ? (
+          // Chưa có số liệu: đừng hiện "0đ" rồi đổi số khi dữ liệu về.
+          <div role="status" aria-label="Đang tải hoa hồng">
+            <Skeleton height={148} radius="var(--radius-card)" />
+          </div>
         ) : (
           <div
             style={{
@@ -345,7 +351,7 @@ function Dashboard() {
             }}
           >
             <Text variant="body-sm" tone="inverse" as="div" style={{ opacity: 0.85 }}>
-              Có thể chuyển vào Ví
+              {hero.label}
             </Text>
             <Text
               variant="price-xl"
@@ -358,7 +364,7 @@ function Dashboard() {
                 fontFamily: 'var(--font-display)',
               }}
             >
-              {formatVnd(head.big)}
+              {formatVnd(hero.amount)}
             </Text>
             <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.9, marginTop: 4 }}>
               Đang chờ: {formatVnd(head.pending)} · {COMMISSION_PENDING_NOTE}

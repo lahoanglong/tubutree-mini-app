@@ -19,7 +19,7 @@ import {
 } from '@tubutree/app-core/queries/affiliate';
 import { academyCoursesQuery } from '@tubutree/app-core/queries/academy';
 import { walletQuery } from '@tubutree/app-core/queries/wallet';
-import { COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, hasFirstOrder, isAutoWalletTransfer, transferBlockedText, transferHeroNote } from '@tubutree/app-core/ctv-dashboard';
+import { COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, isAutoWalletTransfer, transferBlockedText, transferHeroNote } from '@tubutree/app-core/ctv-dashboard';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
@@ -355,6 +355,7 @@ function Dashboard() {
 
   const head = ctvHeadline(d);
   const autoTransfer = isAutoWalletTransfer(d?.autoWalletTransfer);
+  const hero = ctvHeroAmount(head.big, autoTransfer, walletQ.data?.walletBalance);
   const firstSteps: Array<{ key: string; label: string; Icon: typeof Link2; onPress?: () => void; href?: string }> = [
     { key: 'share', label: 'Chia sẻ mã giới thiệu', Icon: Link2, onPress: () => setSharing(true) },
     ...(me?.canOpenStorefront !== false && isWebRouteReady('/ctv/gian-hang')
@@ -414,11 +415,15 @@ function Dashboard() {
         {dashQ.isError ? (
           // Không đưa "0đ" khi lỗi tải: CTV sẽ tưởng mình chưa có hoa hồng.
           <ErrorState message={errText(dashQ.error)} onRetry={() => void dashQ.refetch()} />
+        ) : dashQ.isLoading ? (
+          <div role="status" aria-label="Đang tải hoa hồng">
+            <Skeleton height={148} />
+          </div>
         ) : (
           <section aria-label="Hoa hồng có thể chuyển vào Ví" className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-stone-0 shadow-card">
             {/* Số to là tiền dùng được ngay; hoa hồng đang chờ và số tạm tính tháng là dòng phụ. */}
-            <div className="text-sm">Có thể chuyển vào Ví</div>
-            <div className="mt-1 font-display text-3xl font-bold tabular-nums">{formatVnd(head.big)}</div>
+            <div className="text-sm">{hero.label}</div>
+            <div className="mt-1 font-display text-3xl font-bold tabular-nums">{formatVnd(hero.amount)}</div>
             <div className="mt-1 text-xs">Đang chờ: {formatVnd(head.pending)} · {COMMISSION_PENDING_NOTE}</div>
             {head.big > 0 && <div className="mt-1 text-xs">{transferHeroNote(autoTransfer)}</div>}
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">

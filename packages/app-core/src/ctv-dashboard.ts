@@ -27,10 +27,20 @@ export function ctvHeadline(d: DashboardMoney | undefined): { big: number; pendi
 }
 
 /**
- * Cờ `autoWalletTransfer` của dashboard: chỉ đúng `false` mới là tắt, API cũ chưa trả trường này thì coi như bật (mặc định của máy chủ).
+ * Cờ `autoWalletTransfer` của dashboard: chỉ đúng `true` mới là bật. API cũ (rollback) chưa trả trường này thì coi như tắt,
+ * để màn không hứa "tự vào Ví" khi máy chủ không làm.
  */
 export function isAutoWalletTransfer(flag: boolean | undefined): boolean {
-  return flag !== false;
+  return flag === true;
+}
+
+/**
+ * Số to của hero. Tự chuyển bật thì hoa hồng đã duyệt vào Ví ngay nên "có thể chuyển" gần như luôn 0đ: lúc đó số to là số dư Ví
+ * (tiền dùng được ngay). Chưa biết số dư thì giữ số chuyển được để không nhảy chữ.
+ */
+export function ctvHeroAmount(transferable: number, auto: boolean, walletBalance: number | undefined): { label: string; amount: number } {
+  if (auto && transferable <= 0 && walletBalance !== undefined) return { label: 'Số dư Ví Tubu', amount: walletBalance };
+  return { label: 'Có thể chuyển vào Ví', amount: transferable };
 }
 
 /** Lời cho ô "Chuyển vào Ví" khi chưa có số dư: nói vì sao và khi nào có. `pendingText` đã định dạng tiền. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CTV_TAB_KEYS, ctvHeadline, hasFirstOrder, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote } from './ctv-dashboard';
+import { CTV_TAB_KEYS, ctvHeadline, ctvHeroAmount, hasFirstOrder, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote } from './ctv-dashboard';
 
 const ZERO = { monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0, totalConversions: 0 };
 
@@ -43,7 +43,7 @@ describe('transferHeroNote và isAutoWalletTransfer', () => {
   it('chỉ đúng false mới là tắt; API cũ chưa trả trường này coi như bật', () => {
     expect(isAutoWalletTransfer(false)).toBe(false);
     expect(isAutoWalletTransfer(true)).toBe(true);
-    expect(isAutoWalletTransfer(undefined)).toBe(true);
+    expect(isAutoWalletTransfer(undefined)).toBe(false);
   });
 });
 
@@ -74,5 +74,18 @@ describe('nextMilestoneRows', () => {
   });
   it('danh sách rỗng', () => {
     expect(nextMilestoneRows([])).toEqual([]);
+  });
+});
+
+describe('ctvHeroAmount', () => {
+  it('có tiền chuyển được → số to là tiền chuyển được', () => {
+    expect(ctvHeroAmount(120000, true, 50000)).toEqual({ label: 'Có thể chuyển vào Ví', amount: 120000 });
+  });
+  it('tự chuyển bật và không còn gì chờ chuyển → số to là số dư Ví (tiền dùng được ngay)', () => {
+    expect(ctvHeroAmount(0, true, 5400000)).toEqual({ label: 'Số dư Ví Tubu', amount: 5400000 });
+  });
+  it('chưa biết số dư Ví hoặc tự chuyển tắt → giữ nhãn chuyển được', () => {
+    expect(ctvHeroAmount(0, true, undefined)).toEqual({ label: 'Có thể chuyển vào Ví', amount: 0 });
+    expect(ctvHeroAmount(0, false, 5400000)).toEqual({ label: 'Có thể chuyển vào Ví', amount: 0 });
   });
 });

@@ -90,6 +90,7 @@ const DASH = {
   totalClicks: 4,
   totalConversions: 1,
   monthRevenue: 0,
+  autoWalletTransfer: true,
   tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
 };
 
@@ -350,6 +351,32 @@ describe('/ctv — bảng điều khiển', () => {
     const b = mount();
     await flush();
     expect(b.container.textContent).not.toContain('Phần này chưa tự vào Ví');
+  });
+
+  it('dashboard đang tải: hero là khung chờ, không hiện "0đ" hay "Đang chờ: 0đ"; về rồi mới hiện số', async () => {
+    let release!: () => void;
+    state.dashGate = new Promise<void>((r) => (release = r));
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('[role="status"][aria-label="Đang tải hoa hồng"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('Đang chờ:');
+    release();
+    await flush();
+    expect(container.querySelector('[aria-label="Đang tải hoa hồng"]')).toBeNull();
+    expect(container.textContent).toContain('Đang chờ: 30.000đ');
+  });
+
+  it('tự chuyển bật và không còn gì chờ chuyển: số to là số dư Ví; API cũ thiếu cờ thì giữ "Có thể chuyển vào Ví"', async () => {
+    state.dash = { ...DASH, withdrawableCommission: 0 };
+    const a = mount();
+    await flush();
+    expect(a.container.textContent).toContain('Số dư Ví Tubu');
+    a.unmount();
+    state.dash = { ...DASH, withdrawableCommission: 0, autoWalletTransfer: undefined };
+    const b = mount();
+    await flush();
+    expect(b.container.textContent).not.toContain('Số dư Ví Tubu');
+    expect(b.container.textContent).toContain('Có thể chuyển vào Ví');
   });
 
   it('bấm Chuyển vào Ví khi dashboard còn đang tải: hộp hiện khung chờ, không nói "Đang chờ: 0đ" rồi đổi', async () => {
