@@ -321,7 +321,7 @@ export default function ProfilePage() {
         )}
       </div>
 
-      <div style={{ padding: '0 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: -20 }}>
+      <div style={{ padding: '0 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: -20, position: 'relative' }}>
         <Stat label={homeCopy.profile.statPoints} value={formatPoints(pointsTotal)} onClick={() => navigate('/loyalty')} />
         <Stat label={homeCopy.profile.statWallet} value={formatVnd(walletQ.data?.walletBalance ?? user.walletBalance)} onClick={() => navigate('/wallet', { state: { from: '/profile' } })} />
         <Stat label={homeCopy.profile.statCoupons} value={couponsQ.data ? homeCopy.profile.couponsCount(couponsQ.data.length) : '—'} onClick={() => navigate('/offers?section=coupons')} />

@@ -13,8 +13,7 @@ export const orderCopy = {
 
 /** Nhãn ngắn cho hàng trạng thái đơn ở Cá nhân: 5 ô trên màn 375px chỉ vừa một dòng; phần đọc cho trình đọc màn hình vẫn dùng nhãn đầy đủ. */
 const ORDER_ROW_SHORT: Record<string, string> = {
-  pending_payment: 'Chờ trả tiền',
-  processing: 'Đang xử lý',
+  pending_payment: 'Chờ trả',
 };
 export function orderRowLabel(key: string, fullLabel: string): string {
   return ORDER_ROW_SHORT[key] ?? fullLabel;

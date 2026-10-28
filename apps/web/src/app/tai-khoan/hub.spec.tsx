@@ -192,7 +192,7 @@ describe('hub /tai-khoan — ba số và hàng trạng thái đơn', () => {
       '/tai-khoan/don-hang?tab=delivered',
       '/tai-khoan/don-hang?tab=subscriptions',
     ]);
-    expect(row.textContent).toContain('Chờ trả tiền');
+    expect(row.textContent).toContain('Chờ trả');
     expect(row.textContent).toContain('Định kỳ');
   });
 });

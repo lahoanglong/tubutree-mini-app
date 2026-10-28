@@ -127,7 +127,9 @@ export default function AddressBookPage() {
       )}
 
       {addrQ.isSuccess && addresses.length === 0 && !adding && (
-        <MiniEmptyState art="leaf" heading="Bạn chưa có địa chỉ giao hàng nào" />
+        <div className="max-md:-mx-4">
+          <MiniEmptyState art="leaf" heading="Bạn chưa có địa chỉ giao hàng nào" />
+        </div>
       )}
 
       {addresses.length > 0 && (

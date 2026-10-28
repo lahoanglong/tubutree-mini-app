@@ -170,7 +170,6 @@ export default function EditProfilePage() {
       style={{
         border: '3px solid var(--color-bg-surface)',
         boxShadow: 'var(--elevation-2)',
-        background: 'var(--color-bg-subtle)',
       }}
     />
   );
