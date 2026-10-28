@@ -50,6 +50,7 @@ describe('Pickup attach at checkout ‖ two-step ship lock ‖ expiry cron (real
   let cart: CartService;
   let shipLock: WasteShipLockService;
   let expiry: WasteExpiryCron;
+  const notifier = { shipLocked: jest.fn().mockResolvedValue(undefined), requestExpired: jest.fn().mockResolvedValue(undefined), requestExpiring: jest.fn().mockResolvedValue(undefined) };
   let warehouse: Awaited<ReturnType<typeof createWarehouse>>;
   let item: Awaited<ReturnType<typeof createWasteItem>>;
   let savedConfig: { key: string; value: unknown }[] = [];
@@ -86,7 +87,7 @@ describe('Pickup attach at checkout ‖ two-step ship lock ‖ expiry cron (real
         WasteShipLockService,
         WasteConfigService,
         WasteExpiryCron,
-        { provide: WasteNotifierService, useValue: { shipLocked: jest.fn().mockResolvedValue(undefined), requestExpired: jest.fn().mockResolvedValue(undefined) } },
+        { provide: WasteNotifierService, useValue: notifier },
       ],
     }).compile();
     await moduleRef.init();
@@ -263,6 +264,25 @@ describe('Pickup attach at checkout ‖ two-step ship lock ‖ expiry cron (real
     await expiry.run(new Date(Date.now() + 2 * DAY + 60_000));
     expect(await prisma.wasteRequest.findUniqueOrThrow({ where: { id: req.id } })).toMatchObject({ status: 'OPEN', expiresAt: null, closeReason: null });
     expect(await prisma.wasteEvent.count({ where: { requestId: req.id, kind: 'REQUEST_EXPIRED' } })).toBe(0);
+  });
+
+  it('reminder sweep picks only OPEN DROP_OFF and MAIL_IN without order or tracking, 24 to 48 hours before expiry', async () => {
+    const { u } = await customer();
+    const HOUR = 3_600_000;
+    const make = (method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP', hours: number, extra: { orderId?: string } = {}) =>
+      createWasteRequest(prisma, { userId: u.id, method, status: 'OPEN', pointId: warehouse.id, lines: [{ itemId: item.id, declaredQty: 12 }], expiresAt: new Date(Date.now() + hours * HOUR), ...extra });
+    const dropOff = await make('DROP_OFF', 30);
+    const mailIn = await make('MAIL_IN', 40);
+    const tooSoon = await make('DROP_OFF', 10);
+    const tooFar = await make('DROP_OFF', 60);
+    const pickup = await make('PICKUP', 30);
+    const withTracking = await make('MAIL_IN', 30);
+    await prisma.wasteRequest.update({ where: { id: withTracking.id }, data: { trackingCode: `IT${randCode(8)}` } });
+    notifier.requestExpiring.mockClear();
+    await expiry.run(new Date());
+    const reminded = notifier.requestExpiring.mock.calls.filter(([userId]: [string]) => userId === u.id).map(([, req, method]: [string, { id: string }, string]) => [req.id, method]);
+    expect(reminded.sort()).toEqual([[dropOff.id, 'DROP_OFF'], [mailIn.id, 'MAIL_IN']].sort());
+    for (const r of [tooSoon, tooFar, pickup, withTracking]) expect(reminded.map(([id]) => id)).not.toContain(r.id);
   });
 
   it('checkout attach then expiry cron', async () => {
