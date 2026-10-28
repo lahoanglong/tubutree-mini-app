@@ -297,7 +297,7 @@ export const vi = {
     total: 'Tổng thanh toán',
     pointsLabel: 'Điểm Xanh sẽ nhận',
     pointsValue: (n: number) => `+${formatNumber(n)} điểm`,
-    pointsComing: (n: number) => `${formatNumber(n)} Điểm Xanh sẽ về tay khi đơn giao thành công`,
+    pointsValueWhen: (n: number) => `+${formatNumber(n)} điểm, về khi đơn giao xong`,
     etaLabel: 'Giao dự kiến',
     nextTitle: 'Tiếp theo',
     steps: [

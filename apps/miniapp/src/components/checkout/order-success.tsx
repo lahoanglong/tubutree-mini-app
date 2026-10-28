@@ -156,12 +156,7 @@ export function OrderSuccess({
             </Text>
           )}
           {pointsEarned > 0 && (
-            <>
-              <KeyValueRow label={vi.success.pointsLabel} value={vi.success.pointsValue(pointsEarned)} tone="success" />
-              <Text variant="caption" tone="tertiary" as="div">
-                {vi.success.pointsComing(pointsEarned)}
-              </Text>
-            </>
+            <KeyValueRow label={vi.success.pointsLabel} value={vi.success.pointsValueWhen(pointsEarned)} tone="success" />
           )}
           {eta && <KeyValueRow label={vi.success.etaLabel} value={eta} />}
         </div>

@@ -54,7 +54,7 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     expect(screen.getByText('TUBU-COD-12345')).toBeInTheDocument();
     expect(screen.getByText('149.000đ')).toBeInTheDocument();
     expect(screen.getByText('Chuẩn bị tiền mặt khi nhận hàng')).toBeInTheDocument();
-    expect(screen.getByText('+14 điểm')).toBeInTheDocument();
+    expect(screen.getByText('+14 điểm, về khi đơn giao xong')).toBeInTheDocument();
     for (const s of ['Xác nhận đơn', 'Đóng gói', 'Giao hàng']) expect(screen.getByText(s)).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
     expect(container.querySelector('.tubu-leaf')).toBeNull();
@@ -223,8 +223,7 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
       ],
     } as unknown as OrderDTO;
     renderSuccess({ order });
-    expect(screen.getByText('+26 điểm')).toBeInTheDocument();
-    expect(screen.getByText('26 Điểm Xanh sẽ về tay khi đơn giao thành công')).toBeInTheDocument();
+    expect(screen.getByText('+26 điểm, về khi đơn giao xong')).toBeInTheDocument();
   });
 
   it('lần đặt bị tách: khối Mã đơn hàng ở đầu liệt kê đủ mọi mã, nút sao chép chép cả danh sách, không chỉ mã đơn đầu (R5-BUYER-5)', async () => {
