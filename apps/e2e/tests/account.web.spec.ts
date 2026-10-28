@@ -84,7 +84,7 @@ test.describe('Web khách: tài khoản', () => {
     const phone = page.getByText('0912 345 678');
     if (narrow) await expect(phone).toBeHidden();
     else await expect(phone).toBeVisible();
-    await expect(page.getByText('Tạm thời chưa đổi được ảnh đại diện')).toBeVisible();
+    await expect(page.getByText('Tạm thời chưa đổi được ảnh đại diện')).toHaveCount(0);
 
     const email = page.getByLabel('Email');
     await email.fill('khong-hop-le');
