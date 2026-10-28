@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   updateCartItem: vi.fn(),
   voucherProps: [] as Record<string, unknown>[],
   fetchProducts: vi.fn(),
+  getCouponPreviews: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -28,6 +29,7 @@ vi.mock('../services/shop-api', () => ({
   updateCartItem: mocks.updateCartItem,
   addToCart: vi.fn(),
   fetchProducts: mocks.fetchProducts,
+  getCouponPreviews: mocks.getCouponPreviews,
   fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
@@ -205,8 +207,8 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
       await screen.findByText('Cobote bột giặt');
       expect(screen.getByText('Mua thêm 125.000đ để được miễn phí giao hàng')).toBeInTheDocument();
       expect(screen.queryByText('Bạn được miễn phí giao hàng 🌿')).toBeNull();
-      expect(screen.getByText('Tạm tính (đã giảm)').parentElement).toHaveTextContent('75.000đ');
-      expect(screen.getByText('Tạm tính (đã giảm)').parentElement).not.toHaveTextContent('233.000đ');
+      expect(screen.getByText('Tạm tính').parentElement).toHaveTextContent('75.000đ');
+      expect(screen.getByText('Tạm tính').parentElement).not.toHaveTextContent('233.000đ');
     });
 
     it('thanh dưới nêu đúng dòng hết hàng và cách gỡ (bỏ chọn hoặc xoá), không bảo giảm số lượng', async () => {
@@ -617,5 +619,77 @@ describe('CartPage — thành tiền dòng khi SL > 1 (D6-10)', () => {
     name.focus();
     await userEvent.keyboard('{Enter}');
     expect(mocks.navigate).toHaveBeenCalledWith('/product/xb-kb');
+  });
+});
+
+describe('CartPage: nhãn tổng chỉ ghi "(đã giảm)" khi có giảm', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCouponPreviews.mockResolvedValue([]);
+  });
+
+  it('không áp mã, không combo, không giảm hạng → "Tạm tính", không có "(đã giảm)"', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    renderPage();
+    expect(await screen.findByText('Tạm tính')).toBeInTheDocument();
+    expect(screen.queryByText(/đã giảm/)).toBeNull();
+  });
+
+  it.each([
+    ['mã giảm', { couponCode: 'XANH10', discount: 2_000 }],
+    ['combo', { comboDiscount: 5_000 }],
+    ['hạng thành viên', { tierDiscount: 1_000 }],
+  ])('có giảm từ %s → "Tạm tính (đã giảm)"', async (_name, over) => {
+    mocks.getCart.mockResolvedValue(summary(over));
+    renderPage();
+    expect(await screen.findByText('Tạm tính (đã giảm)')).toBeInTheDocument();
+  });
+});
+
+describe('CartPage: gợi ý mã dùng được ở dòng "Mã giảm giá" (chỉ gợi ý, không tự áp)', () => {
+  const preview = (code: string, over: object = {}) => ({ code, eligible: true, discount: 0, ...over });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useStorefrontContext.getState().clear();
+  });
+
+  it('giỏ chưa có mã, có mã dùng được → "Bạn có N mã dùng được · giảm đến X", hỏi đúng tham số, không gọi áp mã', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    mocks.getCouponPreviews.mockResolvedValue([
+      preview('WELCOME30', { discount: 30_000 }),
+      preview('TUBU10', { discount: 5_000 }),
+      preview('BIG', { eligible: false, reason: 'Cần đơn tối thiểu 500.000đ', discount: 100_000 }),
+    ]);
+    renderPage();
+    expect(await screen.findByText('Bạn có 2 mã dùng được · giảm đến 30.000đ')).toBeInTheDocument();
+    expect(screen.queryByText('Chọn hoặc nhập mã giảm giá')).toBeNull();
+    expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(1);
+    expect(mocks.getCouponPreviews).toHaveBeenCalledWith({ storefrontSlug: undefined, itemIds: undefined });
+  });
+
+  it('không mã nào dùng được, danh sách rỗng hoặc máy chủ lỗi → giữ câu cũ', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    mocks.getCouponPreviews.mockResolvedValue([preview('BIG', { eligible: false, reason: 'x', discount: 9 })]);
+    const first = renderPage();
+    await waitFor(() => expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('Chọn hoặc nhập mã giảm giá')).toBeInTheDocument();
+    expect(screen.queryByText(/mã dùng được/)).toBeNull();
+    first.unmount();
+    mocks.getCouponPreviews.mockRejectedValue(new Error('API cũ'));
+    renderPage();
+    await waitFor(() => expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Chọn hoặc nhập mã giảm giá')).toBeInTheDocument();
+  });
+
+  it('giỏ đã có mã → không hỏi xem trước, chip mã như cũ', async () => {
+    mocks.getCart.mockResolvedValue(summary({ couponCode: 'XANH10', discount: 2_000 }));
+    mocks.getCouponPreviews.mockResolvedValue([preview('WELCOME30', { discount: 30_000 })]);
+    renderPage();
+    expect(await screen.findByText('XANH10')).toBeInTheDocument();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 450));
+    });
+    expect(mocks.getCouponPreviews).not.toHaveBeenCalled();
+    expect(screen.queryByText(/mã dùng được/)).toBeNull();
   });
 });

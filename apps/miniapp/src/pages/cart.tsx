@@ -28,6 +28,8 @@ import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../utils/use-debounced';
 import { recompute } from '../utils/cart-rules';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
+import { useCouponHint } from '../components/checkout/use-coupon-hint';
+import { couponHintText } from '@tubutree/app-core/coupon-use';
 import { useStorefrontContext } from '../store/storefront-context';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
 import { PageHeader } from '../components/ui/page-header';
@@ -543,6 +545,9 @@ function CouponBlock({
   const sfCtx = useStorefrontContext();
   // Cùng gian hàng checkout gửi (combo) để số giảm của từng mã đúng số thanh toán sẽ trừ.
   const ctvSlug = sfCtx.kind === 'ctv' ? (sfCtx.slug ?? undefined) : undefined;
+  const previewParams = previewSelection ? { storefrontSlug: ctvSlug, itemIds: previewSelection.itemIds } : undefined;
+  // Chỉ gợi ý khi giỏ chưa có mã: không tự áp, khách vẫn chọn ở tấm chọn mã.
+  const hint = useCouponHint(!summary.couponCode, previewParams, previewSelection?.key ?? '');
 
   return (
     <>
@@ -605,6 +610,10 @@ function CouponBlock({
                   </Text>
                 )}
               </Box>
+            ) : hint ? (
+              <Text size="xSmall" style={{ color: 'var(--color-text-brand)', marginTop: 2 }}>
+                {couponHintText(hint, formatVnd)}
+              </Text>
             ) : (
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                 Chọn hoặc nhập mã giảm giá
@@ -630,7 +639,7 @@ function CouponBlock({
         // đã bỏ chọn bớt món (BE re-check khi apply nên không lọt số tiền, nhưng UI gây hiểu lầm).
         subtotal={selectedSubtotal}
         productIds={selectedProductIds}
-        previewParams={previewSelection ? { storefrontSlug: ctvSlug, itemIds: previewSelection.itemIds } : undefined}
+        previewParams={previewParams}
         previewKey={previewSelection?.key}
       />
     </>
@@ -735,9 +744,9 @@ function StickySummary({
           )}
           {/* Con số này ĐÃ trừ giảm giá và CHƯA gồm ship, trong khi "Tạm tính" ở màn Thanh toán
               là tiền hàng gộp chưa trừ gì — cùng một nhãn, hai số khác nhau, khách tưởng bị đội
-              giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn. */}
+              giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn, nhưng chỉ khi thật sự có giảm. */}
           <KeyValueRow
-            label={vi.cart.subtotalAfterDiscount}
+            label={comboDiscount + discount + tierDiscount > 0 ? vi.cart.subtotalAfterDiscount : vi.cart.subtotal}
             value={formatVnd(Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount))}
             emphasis
           />
