@@ -88,6 +88,8 @@ const EXPECTED: Record<string, Access> = {
   'GET /admin/dealer-prices/history': ADMIN_ONLY,
   'POST /admin/dealer-prices/import': ADMIN_ONLY,
   'POST /admin/dealer-prices/import/preview': ADMIN_ONLY,
+  'GET /admin/dealer-credit-reports': [KE_TOAN],
+  'POST /admin/dealer-credit-reports/:id/dismiss': [KE_TOAN],
   'GET /admin/dealer-reward-claims': [KE_TOAN],
   'POST /admin/dealer-reward-claims/:id/approve': ADMIN_ONLY,
   'POST /admin/dealer-reward-claims/:id/mark-paid': [KE_TOAN],
