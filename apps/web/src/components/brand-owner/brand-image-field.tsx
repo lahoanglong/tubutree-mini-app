@@ -9,9 +9,20 @@ import { skin } from '@/components/pro-shared/mini-skin';
 
 /**
  * Ô tải ảnh logo/ảnh bìa, cùng cách `ImageUpload` của Mini App: ưu tiên Cloudinary, chưa cấu hình hoặc lỗi thì nén thành
- * data URL JPEG nhẹ (API nhận cả hai, trần 1,5 triệu ký tự).
+ * data URL JPEG nhẹ (API nhận cả hai, trần 1,5 triệu ký tự). `upload="inline"` bỏ qua Cloudinary, dành cho giấy tờ cá nhân
+ * (CCCD): preset Cloudinary không ký, không xoá được khi khách xoá tài khoản.
  */
-export function BrandImageField({ label, value, onChange }: { label: string; value: string; onChange: (url: string) => void }) {
+export function BrandImageField({
+  label,
+  value,
+  onChange,
+  upload = 'cloudinary',
+}: {
+  label: string;
+  value: string;
+  onChange: (url: string) => void;
+  upload?: 'cloudinary' | 'inline';
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +41,7 @@ export function BrandImageField({ label, value, onChange }: { label: string; val
         return;
       }
       setBusy(true);
-      const secureUrl = await uploadToCloudinary(file);
+      const secureUrl = upload === 'inline' ? null : await uploadToCloudinary(file);
       onChange(secureUrl ?? (await readAndCompressImage(file)));
     } catch {
       setError('Tải ảnh thất bại. Hãy chọn lại tệp ảnh khác.');

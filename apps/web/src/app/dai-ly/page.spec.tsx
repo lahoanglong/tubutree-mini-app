@@ -27,8 +27,8 @@ const m = vi.hoisted(() => ({
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => m.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn(), user: { role: 'DEALER' } }) }));
 vi.mock('@/components/brand-owner/brand-image-field', () => ({
-  BrandImageField: ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
-    <button type="button" className="min-h-11" onClick={() => onChange('data:image/jpeg;base64,AAAA')}>
+  BrandImageField: ({ label, value, onChange, upload }: { label: string; value: string; onChange: (v: string) => void; upload?: string }) => (
+    <button type="button" className="min-h-11" data-upload={upload ?? 'cloudinary'} onClick={() => onChange('data:image/jpeg;base64,AAAA')}>
       {value ? `Đã chọn ${label}` : `Chọn ${label}`}
     </button>
   ),
@@ -244,6 +244,9 @@ describe('/dai-ly — đăng ký đại lý', () => {
     expect(button('Gửi hồ sơ đăng ký').disabled).toBe(true);
     fillText(c);
     expect(button('Gửi hồ sơ đăng ký').disabled).toBe(true);
+    // Ảnh CCCD là giấy tờ cá nhân: chỉ nén nhúng vào hồ sơ, không đưa lên dịch vụ ảnh công khai.
+    expect(button('Chọn Ảnh CCCD mặt trước *').dataset.upload).toBe('inline');
+    expect(button('Chọn Ảnh CCCD mặt sau *').dataset.upload).toBe('inline');
     click(button('Chọn Ảnh CCCD mặt trước *'));
     expect(button('Gửi hồ sơ đăng ký').disabled).toBe(true);
     click(button('Chọn Ảnh CCCD mặt sau *'));

@@ -118,8 +118,8 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
           <Field label="Địa chỉ kinh doanh *">
             <input className={ui.field} value={form.address} onChange={set('address')} />
           </Field>
-          <BrandImageField label="Ảnh CCCD mặt trước *" value={form.cccdFrontUrl} onChange={(url) => setForm((f) => ({ ...f, cccdFrontUrl: url }))} />
-          <BrandImageField label="Ảnh CCCD mặt sau *" value={form.cccdBackUrl} onChange={(url) => setForm((f) => ({ ...f, cccdBackUrl: url }))} />
+          <BrandImageField upload="inline" label="Ảnh CCCD mặt trước *" value={form.cccdFrontUrl} onChange={(url) => setForm((f) => ({ ...f, cccdFrontUrl: url }))} />
+          <BrandImageField upload="inline" label="Ảnh CCCD mặt sau *" value={form.cccdBackUrl} onChange={(url) => setForm((f) => ({ ...f, cccdBackUrl: url }))} />
           <div role="status" aria-live="polite">
             {done && <p className="text-sm font-medium text-success-fg">Đã gửi hồ sơ đăng ký đại lý!</p>}
           </div>
