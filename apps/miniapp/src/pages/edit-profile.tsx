@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Avatar, Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
+import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { Camera, Gift, Loader2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatDobDisplay, profileCopy } from '@tubutree/app-core/account-copy';
@@ -8,6 +8,7 @@ import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
 import { isCloudinaryConfigured, readAndCompressImage, uploadToCloudinary } from '../components/image-upload';
+import { ProfileAvatar } from '../components/account/profile-avatar';
 import { AvatarCropModal } from '../components/avatar-crop-modal';
 import { Button } from '../components/ui/button';
 import { ErrorState } from '../components/ui/empty-state';
@@ -162,9 +163,10 @@ export default function EditProfilePage() {
   });
 
   const avatarFigure = (
-    <Avatar
+    <ProfileAvatar
       size={88}
-      src={avatarPreview ?? avatarUrl ?? undefined}
+      name={fullName}
+      src={avatarPreview ?? avatarUrl}
       style={{
         border: '3px solid var(--color-bg-surface)',
         boxShadow: 'var(--elevation-2)',
@@ -241,12 +243,7 @@ export default function EditProfilePage() {
                 </button>
               </>
             ) : (
-              <>
-                {avatarFigure}
-                <Text variant="caption" tone="tertiary" style={{ marginTop: 8, textAlign: 'center' }}>
-                  {profileCopy.avatarNoStorage}
-                </Text>
-              </>
+              avatarFigure
             )}
           </div>
 
@@ -268,8 +265,7 @@ export default function EditProfilePage() {
           <div>
             <Field label="Ngày sinh">
               <input
-                type="date"
-                value={dob}
+                {...(meQ.data?.dob ? { type: 'text', value: formatDobDisplay(meQ.data.dob) || dob } : { type: 'date', lang: 'vi', value: dob })}
                 readOnly={Boolean(meQ.data?.dob) || confirmingDob}
                 onChange={(e) => {
                   setDob(e.target.value);

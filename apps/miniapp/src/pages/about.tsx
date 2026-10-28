@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, TreePine } from 'lucide-react';
-import { useAuthStore } from '../store/auth';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { haptic } from '../utils/haptic';
 import { formatPhoneDisplay } from '../utils/phone';
@@ -51,7 +50,7 @@ function HotlineButton({ phone }: { phone: string }) {
       onClick={() => void callPhone(phone)}
       style={{
         minHeight: 44,
-        padding: '0 0 0 12px',
+        padding: 0,
         border: 'none',
         background: 'none',
         font: 'inherit',
@@ -67,7 +66,6 @@ function HotlineButton({ phone }: { phone: string }) {
 
 export default function AboutPage() {
   const { openSnackbar } = useSnackbar();
-  const { logout } = useAuthStore();
   const [open, setOpen] = useState<number | null>(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [forfeitAgreed, setForfeitAgreed] = useState(false);
@@ -229,6 +227,7 @@ export default function AboutPage() {
               label={r.label}
               value={r.label === 'Hotline' ? <HotlineButton phone={r.value} /> : r.value}
               style={{
+                alignItems: 'center',
                 padding: '10px 0',
                 borderBottom: i < supportRows.length - 1 ? '1px solid var(--color-border-subtle)' : 'none',
               }}
@@ -318,11 +317,7 @@ export default function AboutPage() {
         )}
       </div>
 
-      <div style={{ padding: 16 }}>
-        <Button fullWidth variant="secondary" onPress={() => void logout()}>
-          Đăng xuất
-        </Button>
-      </div>
+      <div style={{ height: 16 }} />
     </Page>
   );
 }

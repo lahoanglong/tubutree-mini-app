@@ -431,3 +431,63 @@ describe('Lối vào "Chat với Tubu Tree" ở hub Cá nhân', () => {
     expect(await screen.findByTestId('chat-unread-dot')).toBeInTheDocument();
   });
 });
+
+describe('Cá nhân: hàng đơn, chat ở đầu trang, Học viện theo vai, không Đăng xuất (R-33, R-34, R-53, R-111)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    arrangeDefaults();
+    mocks.authStatus = 'authenticated';
+    mocks.notifications = [];
+    mocks.role = 'CUSTOMER';
+    mocks.getPublicConfig.mockImplementation(async () => ({}));
+  });
+
+  it('số đơn là chấm ở góc biểu tượng, chỉ hiện khi lớn hơn 0; không còn dấu "·"', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: 'Chờ thanh toán, 2 đơn' });
+    await waitFor(() => expect(screen.getAllByTestId('order-count-badge').map((b) => b.textContent)).toEqual(['2', '1', '1']));
+    expect(screen.queryByText('·')).toBeNull();
+  });
+
+  it('đếm đơn lỗi: có dòng báo và nút Thử lại tải lại số đơn', async () => {
+    mocks.fetchOrders.mockRejectedValue(new Error('boom'));
+    renderPage();
+    expect(await screen.findByText('Không tải được số đơn.')).toBeInTheDocument();
+    const before = mocks.fetchOrders.mock.calls.length;
+    mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 1, total: 3 } });
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    await waitFor(() => expect(mocks.fetchOrders.mock.calls.length).toBeGreaterThan(before));
+    await waitFor(() => expect(screen.queryByText('Không tải được số đơn.')).toBeNull());
+  });
+
+  it('chat bật: biểu tượng chat ở đầu trang mở /chat, có chấm khi có tin chưa đọc; chat tắt thì không có', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ chat: { enabled: true, hours: { start: '08:00', end: '21:00' } } });
+    mocks.chatSummary.mockResolvedValue({ unreadCount: 2 });
+    const { unmount } = renderPage();
+    const btn = await screen.findByRole('button', { name: 'Chat với Tubu Tree, có tin mới' });
+    expect(await screen.findByTestId('profile-chat-dot')).toBeInTheDocument();
+    fireEvent.click(btn);
+    expect(mocks.navigate).toHaveBeenCalledWith('/chat');
+    unmount();
+    mocks.getPublicConfig.mockResolvedValue({});
+    renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    expect(screen.queryByRole('button', { name: /^Chat với Tubu Tree/ })).toBeNull();
+  });
+
+  it('Học viện chỉ hiện cho CTV, đại lý, nhân viên, quản trị; khách thường không thấy', async () => {
+    const { unmount } = renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    expect(screen.queryByText('Học viện Tubu')).toBeNull();
+    unmount();
+    mocks.role = 'AFFILIATE';
+    renderPage();
+    expect(await screen.findByText('Học viện Tubu')).toBeInTheDocument();
+  });
+
+  it('không còn nút Đăng xuất ở cuối trang Cá nhân', async () => {
+    renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    expect(screen.queryByRole('button', { name: 'Đăng xuất' })).toBeNull();
+  });
+});

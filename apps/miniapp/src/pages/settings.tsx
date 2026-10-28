@@ -10,6 +10,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Text } from '../components/ui/text';
 import { useAuthStore } from '../store/auth';
+import { isGuestUser } from '../components/coupon-claim-gate';
 import { haptic } from '../utils/haptic';
 import { hasOA, followOA, requestNotifyPermission, getOaPromptState, setOaPromptState } from '../services/zmp-bridge';
 import { applyFontScale } from '../utils/font-scale';
@@ -43,7 +44,9 @@ export default function SettingsPage() {
   // useSnackbar của zmp-ui trả hàm mới mỗi lần render; đưa vào dep của effect sẽ lặp tải vô hạn.
   const openSnackbarRef = useRef(openSnackbar);
   openSnackbarRef.current = openSnackbar;
-  const { logout } = useAuthStore();
+  const { logout, user } = useAuthStore();
+  // Tài khoản khách tạm không có mật khẩu hay Zalo để đăng nhập lại, đăng xuất là mất đơn và điểm.
+  const canLogout = !!user && !isGuestUser(user);
   const [local, setLocal] = useState<LocalPrefs>(DEFAULT_LOCAL);
   const [notify, setNotify] = useState<NotifyPrefs | null>(null);
   const [saving, setSaving] = useState(false);
@@ -166,11 +169,13 @@ export default function SettingsPage() {
         <LinkRow label="Sổ địa chỉ" onClick={() => navigate('/addresses')} last />
       </Section>
 
-      <div style={{ padding: 16 }}>
-        <Button fullWidth variant="secondary" onPress={() => void logout()}>
-          Đăng xuất
-        </Button>
-      </div>
+      {canLogout && (
+        <div style={{ padding: 16 }}>
+          <Button fullWidth variant="secondary" onPress={() => void logout()}>
+            Đăng xuất
+          </Button>
+        </div>
+      )}
     </Page>
   );
 }

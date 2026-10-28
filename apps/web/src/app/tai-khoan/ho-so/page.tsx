@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Camera, Gift, Loader2, User } from 'lucide-react';
+import { Camera, Gift, Loader2 } from 'lucide-react';
 import { formatDobDisplay, profileCopy } from '@tubutree/app-core/account-copy';
 import { updateMe } from '@tubutree/app-core/api/account';
 import { meQuery } from '@tubutree/app-core/queries/account';
 import { AvatarCropSheet } from '@/components/account/avatar-crop-sheet';
+import { ProfileAvatar } from '@/components/account/profile-avatar';
 import { isCloudinaryConfigured, uploadToCloudinary } from '@/components/account/cloudinary-upload';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
@@ -193,13 +194,13 @@ export default function EditProfilePage() {
   }
 
   const shownAvatar = avatarPreview ?? avatarUrl;
-  const avatarFigure = shownAvatar ? (
-    // eslint-disable-next-line @next/next/no-img-element -- URL Cloudinary hoặc data URL xem trước, domain không cố định
-    <img src={shownAvatar} alt="" className="h-22 w-22 rounded-full border-[3px] border-stone-0 bg-stone-100 object-cover shadow-raised" style={{ width: 88, height: 88 }} />
-  ) : (
-    <span className="flex items-center justify-center rounded-full border-[3px] border-stone-0 bg-stone-100 text-stone-500 shadow-raised max-md:bg-[var(--color-bg-subtle)]" style={{ width: 88, height: 88 }}>
-      <User className="h-10 w-10 max-md:hidden" aria-hidden="true" />
-    </span>
+  const avatarFigure = (
+    <ProfileAvatar
+      size={88}
+      name={fullName}
+      src={shownAvatar}
+      className="border-[3px] border-stone-0 shadow-raised"
+    />
   );
   const phoneText = formatPhoneDisplay(me?.phone);
 
@@ -230,10 +231,7 @@ export default function EditProfilePage() {
             </button>
           </>
         ) : (
-          <>
-            {avatarFigure}
-            <p className="mt-2 text-center text-xs text-stone-600">{profileCopy.avatarNoStorage}</p>
-          </>
+          avatarFigure
         )}
         {avatarMsg && (
           <p role={avatarMsg.kind === 'error' ? 'alert' : 'status'} className={`mt-2 text-center text-sm ${avatarMsg.kind === 'error' ? 'text-danger-fg' : 'text-success-fg'}`}>
@@ -261,7 +259,7 @@ export default function EditProfilePage() {
 
       <div>
         <Field label="Ngày sinh">
-          <input type="date" value={dob} readOnly={Boolean(me?.dob) || confirmingDob} autoComplete="bday" onChange={(e) => {
+          <input {...(me?.dob ? { type: 'text', value: formatDobDisplay(me.dob) || dob } : { type: 'date', lang: 'vi', value: dob })} readOnly={Boolean(me?.dob) || confirmingDob} autoComplete="bday" onChange={(e) => {
               setDob(e.target.value);
               setConfirmingDob(false);
             }} className={`${ui.field} ${FIELD_MINI}`} />

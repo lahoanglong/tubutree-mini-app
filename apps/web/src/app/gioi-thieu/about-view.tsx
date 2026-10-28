@@ -19,7 +19,6 @@ import { faqsQuery, publicConfigQuery, supportContactQuery } from '@tubutree/app
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { fallbackFaq } from '@/lib/faq-fallback';
@@ -236,7 +235,6 @@ function SupportSection({ initialSupport }: { initialSupport?: SupportContact })
 
 /** Ghi nhận yêu cầu xoá THẬT (không xoá ngay: CSKH xác minh và xử lý), cùng endpoint với Mini App. */
 function AccountSection() {
-  const { logout } = useAuth();
   const [confirming, setConfirming] = useState(false);
   const qc = useQueryClient();
   const [agreed, setAgreed] = useState(false);
@@ -314,9 +312,6 @@ function AccountSection() {
           Xoá tài khoản
         </button>
       )}
-      <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} w-full ${mini.secondary}`}>
-        Đăng xuất
-      </button>
     </div>
   );
 }

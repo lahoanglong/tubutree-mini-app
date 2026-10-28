@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   fetchNotifyPrefs: vi.fn(),
   saveNotifyPrefs: vi.fn(),
   stored: undefined as string | undefined,
+  user: { phone: '0900000000', zaloId: 'z123' } as { phone: string | null; zaloId: string | null },
   storageReads: 0,
   setStorage: vi.fn(),
   applyFontScale: vi.fn(),
@@ -39,7 +40,7 @@ vi.mock('./settings-notify-prefs', async (importOriginal) => ({
   fetchNotifyPrefs: mocks.fetchNotifyPrefs,
   saveNotifyPrefs: mocks.saveNotifyPrefs,
 }));
-vi.mock('../store/auth', () => ({ useAuthStore: () => ({ logout: mocks.logout }) }));
+vi.mock('../store/auth', () => ({ useAuthStore: () => ({ logout: mocks.logout, user: mocks.user }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/font-scale', () => ({ applyFontScale: mocks.applyFontScale }));
 vi.mock('../services/zmp-bridge', () => ({
@@ -60,6 +61,7 @@ describe('Cài đặt thông báo lưu trên server (C-022)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.stored = undefined;
+    mocks.user = { phone: '0900000000', zaloId: 'z123' };
     mocks.storageReads = 0;
     mocks.fetchNotifyPrefs.mockResolvedValue({ notifyPromo: true, notifyGarden: true });
     mocks.saveNotifyPrefs.mockImplementation(async (patch: object) => ({ notifyPromo: true, notifyGarden: true, ...patch }));
@@ -151,6 +153,7 @@ describe('Hàng điều hướng ở Cài đặt (C-078)', () => {
 
 describe('Cài đặt theo DS v2 (C-076, C-114)', () => {
   beforeEach(() => {
+    mocks.user = { phone: '0900000000', zaloId: 'z123' };
     vi.clearAllMocks();
     mocks.stored = undefined;
     mocks.hasOA = false;
@@ -200,6 +203,12 @@ describe('Cài đặt theo DS v2 (C-076, C-114)', () => {
     await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-checked', 'true'));
     fireEvent.keyDown(promoSwitch(), { key: ' ' });
     await waitFor(() => expect(mocks.saveNotifyPrefs).toHaveBeenCalledWith({ notifyPromo: false }));
+  });
+
+  it('tài khoản khách tạm (chưa có SĐT, chưa liên kết Zalo): không có nút Đăng xuất', () => {
+    mocks.user = { phone: null, zaloId: 'guest_abc' };
+    render(<SettingsPage />);
+    expect(screen.queryByRole('button', { name: 'Đăng xuất' })).toBeNull();
   });
 
   it('hàng Chỉnh sửa hồ sơ, Sổ địa chỉ điều hướng; Đăng xuất gọi logout', async () => {

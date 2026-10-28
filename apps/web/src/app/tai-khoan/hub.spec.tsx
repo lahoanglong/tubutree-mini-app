@@ -54,6 +54,8 @@ const defaults = (): Record<string, () => unknown> => ({
   },
   '/dealer/me': () => ({ status: 'NONE', isDealer: false }),
   '/auth/me': () => ({ id: 'u1' }),
+  '/orders': () => ({ data: [], meta: { page: 1, limit: 1, total: 0 } }),
+  '/me/subscriptions': () => [],
 });
 
 let mounted: Rendered[] = [];
@@ -63,6 +65,8 @@ const mount = async () => {
   await flush(8);
   return r.container;
 };
+/** Dòng "Chat với Tubu Tree" trong menu (đầu trang có thêm biểu tượng chat cùng đích). */
+const chatRow = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLAnchorElement>('a[href="/ho-tro/chat"]')).find((a) => (a.textContent ?? '').includes('Chat với'));
 const link = (c: HTMLElement, href: string) => c.querySelector<HTMLAnchorElement>(`a[href="${href}"]`);
 const headings2 = (c: HTMLElement) => Array.from(c.querySelectorAll('h2')).map((h) => h.textContent);
 
@@ -188,7 +192,7 @@ describe('hub /tai-khoan — ba số và hàng trạng thái đơn', () => {
       '/tai-khoan/don-hang?tab=delivered',
       '/tai-khoan/don-hang?tab=subscriptions',
     ]);
-    expect(row.textContent).toContain('Chờ thanh toán');
+    expect(row.textContent).toContain('Chờ trả tiền');
     expect(row.textContent).toContain('Định kỳ');
   });
 });
@@ -272,11 +276,11 @@ describe('hub /tai-khoan — mục theo vai trò và cờ', () => {
     mocks.routes['/config/public'] = () => ({ chat: { enabled: true, hours: { start: '08:00', end: '21:00' } } });
     mocks.routes['/me/support-chat/summary'] = () => ({ unreadCount: 0 });
     const quiet = await mount();
-    expect(link(quiet, '/ho-tro/chat')!.textContent).toContain('Chat với Tubu Tree');
+    expect(chatRow(quiet)!.textContent).toContain('Chat với Tubu Tree');
     expect(quiet.querySelector('[data-testid="chat-unread-dot"]')).toBeNull();
     mocks.routes['/me/support-chat/summary'] = () => ({ unreadCount: 2 });
     const unread = await mount();
-    const row = link(unread, '/ho-tro/chat')!;
+    const row = chatRow(unread)!;
     expect(row.querySelector('[data-testid="chat-unread-dot"]')).not.toBeNull();
     expect(row.getAttribute('aria-label')).toBe('Chat với Tubu Tree, có tin mới');
   });
@@ -389,10 +393,9 @@ describe('hub /tai-khoan — đại lý và chủ nhãn', () => {
 });
 
 describe('hub /tai-khoan — đăng xuất và trạng thái phiên', () => {
-  it('nút Đăng xuất gọi logout', async () => {
+  it('không còn nút Đăng xuất ở trang Cá nhân (chỉ có ở Cài đặt)', async () => {
     const c = await mount();
-    click(byText(c, 'button', 'Đăng xuất'));
-    expect(mocks.auth.logout).toHaveBeenCalledTimes(1);
+    expect(byText(c, 'button', 'Đăng xuất')).toBeNull();
   });
 
   it('khách chưa đăng nhập không gọi API riêng tư', async () => {
@@ -401,5 +404,57 @@ describe('hub /tai-khoan — đăng xuất và trạng thái phiên', () => {
     mocks.auth.status = 'authenticated';
     expect(c.textContent).toContain('Đăng nhập để xem tích điểm');
     expect(mocks.calls).toEqual([]);
+  });
+});
+
+describe('hub /tai-khoan — hàng đơn, chat ở đầu trang, avatar chữ cái đầu (R-33, R-34, R-110)', () => {
+  it('số đơn là chấm ở góc biểu tượng, chỉ hiện khi lớn hơn 0; không còn dấu "·"', async () => {
+    mocks.routes['/orders'] = () => ({ data: [], meta: { page: 1, limit: 1, total: 3 } });
+    mocks.routes['/me/subscriptions'] = () => [{ status: 'ACTIVE' }];
+    const c = await mount();
+    const row = c.querySelector('section[aria-label="Đơn của tôi"]')!;
+    expect(Array.from(row.querySelectorAll('[data-testid="order-count-badge"]')).map((b) => b.textContent)).toEqual(['3', '3', '3', '1']);
+    expect(row.textContent).not.toContain('·');
+  });
+
+  it('không có đơn: không chấm số', async () => {
+    const c = await mount();
+    expect(c.querySelector('[data-testid="order-count-badge"]')).toBeNull();
+  });
+
+  it('đếm đơn lỗi: có dòng báo và nút Thử lại tải lại số đơn', async () => {
+    mocks.routes['/orders'] = () => {
+      throw new Error('boom');
+    };
+    const c = await mount();
+    expect(c.textContent).toContain('Không tải được số đơn.');
+    mocks.routes['/orders'] = () => ({ data: [], meta: { page: 1, limit: 1, total: 2 } });
+    click(byText(c, 'button', 'Thử lại'));
+    await flush(8);
+    expect(c.textContent).not.toContain('Không tải được số đơn.');
+    expect(c.querySelector('[data-testid="order-count-badge"]')).not.toBeNull();
+  });
+
+  it('chat bật: biểu tượng chat ở đầu trang dẫn tới /ho-tro/chat, có chấm khi có tin chưa đọc; chat tắt thì không có', async () => {
+    mocks.routes['/config/public'] = () => ({ chat: { enabled: true, hours: { start: '08:00', end: '21:00' } } });
+    mocks.routes['/me/support-chat/summary'] = () => ({ unreadCount: 2 });
+    const c = await mount();
+    const icon = c.querySelector<HTMLAnchorElement>('a[aria-label="Chat với Tubu Tree, có tin mới"]')!;
+    expect(icon.getAttribute('href')).toBe('/ho-tro/chat');
+    expect(icon.querySelector('[data-testid="profile-chat-dot"]')).not.toBeNull();
+    mocks.routes['/config/public'] = () => ({});
+    const off = await mount();
+    expect(off.querySelector('a[aria-label^="Chat với Tubu Tree"]')).toBeNull();
+  });
+
+  it('chưa có ảnh: vòng chữ cái đầu của tên', async () => {
+    const c = await mount();
+    expect(c.querySelector('[data-testid="profile-avatar-initial"]')!.textContent).toBe('N');
+  });
+
+  it('khách thường không thấy Học viện; CTV thấy', async () => {
+    expect(link(await mount(), '/hoc-vien')).toBeNull();
+    mocks.auth.user = { ...mocks.auth.user, role: 'AFFILIATE' };
+    expect(link(await mount(), '/hoc-vien')).not.toBeNull();
   });
 });
