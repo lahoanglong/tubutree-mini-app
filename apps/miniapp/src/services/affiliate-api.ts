@@ -34,6 +34,8 @@ export interface AffiliateDashboard {
   monthCommission: number;
   pendingCommission: number;
   withdrawableCommission: number;
+  /** Hoa hồng đã duyệt có tự vào Ví không; thiếu khi API cũ, coi như bật. */
+  autoWalletTransfer?: boolean;
   /** Thuế TNCN bị khấu trừ nếu chuyển hết số khả dụng ngay bây giờ (cộng dồn tháng VN); thiếu khi API cũ. */
   withdrawTaxPreview?: number;
   /** Đã duyệt nhưng nằm trong lệnh rút ngân hàng cũ chưa chuyển tiền (chỉ còn dữ liệu trước khi bỏ rút); thiếu khi API cũ. */

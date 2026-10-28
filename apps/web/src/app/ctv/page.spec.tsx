@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   share: vi.fn(),
   copied: [] as string[],
   registerGate: null as null | Promise<unknown>,
+  dashGate: null as null | Promise<unknown>,
   routeReady: { gianHang: true },
   courses: [{ id: 'c1' }] as unknown[],
   tab: undefined as string | undefined,
@@ -46,7 +47,10 @@ vi.mock('@/lib/core-http', () => ({
       state.calls.push({ method: 'get', path });
       if (state.fail.has(path)) throw new Error('mất mạng');
       if (path === '/affiliate/me') return state.me;
-      if (path === '/affiliate/dashboard') return state.dash;
+      if (path === '/affiliate/dashboard') {
+        await state.dashGate;
+        return state.dash;
+      }
       if (path === '/affiliate/links') return state.links;
       if (path === '/affiliate/commissions') return state.commissions;
       if (path === '/affiliate/payouts') return state.payouts;
@@ -104,6 +108,7 @@ beforeEach(() => {
   state.calls = [];
   state.share = vi.fn(async () => 'shared');
   state.registerGate = null;
+  state.dashGate = null;
   state.routeReady.gianHang = true;
   state.courses = [{ id: 'c1' }];
   state.tab = undefined;
@@ -318,11 +323,47 @@ describe('/ctv — bảng điều khiển', () => {
     click(btn);
     await flush();
     const dialog = document.querySelector('[role="dialog"]');
-    expect(dialog?.textContent).toContain('Hoa hồng vào Ví khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 30.000đ.');
+    expect(dialog?.textContent).toContain('Hoa hồng tự vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 30.000đ.');
     expect(byText(dialog as HTMLElement, 'button', 'vào Ví')).toBeNull();
     click(byText(dialog as HTMLElement, 'button', 'Đã hiểu'));
     await flush();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('cờ tự chuyển tắt: hộp không hứa tự vào Ví', async () => {
+    state.dash = { ...DASH, withdrawableCommission: 0, autoWalletTransfer: false };
+    const { container } = mount();
+    await flush();
+    click(byText(container, '[role="group"] button', 'Chuyển vào Ví'));
+    await flush();
+    const text = document.querySelector('[role="dialog"]')?.textContent ?? '';
+    expect(text).toContain('Hoa hồng chuyển được vào Ví Tubu khi đơn đã giao');
+    expect(text).not.toContain('tự vào');
+  });
+
+  it('còn hoa hồng có thể chuyển: dưới số to có dòng nói đây là phần chưa tự vào Ví, bấm tay; hết thì không có dòng đó', async () => {
+    const a = mount();
+    await flush();
+    expect(a.container.textContent).toContain('Phần này chưa tự vào Ví được');
+    a.unmount();
+    state.dash = { ...DASH, withdrawableCommission: 0 };
+    const b = mount();
+    await flush();
+    expect(b.container.textContent).not.toContain('Phần này chưa tự vào Ví');
+  });
+
+  it('bấm Chuyển vào Ví khi dashboard còn đang tải: hộp hiện khung chờ, không nói "Đang chờ: 0đ" rồi đổi', async () => {
+    let release!: () => void;
+    state.dashGate = new Promise<void>((r) => (release = r));
+    const { container } = mount();
+    await flush();
+    click(byText(container, '[role="group"] button', 'Chuyển vào Ví'));
+    await flush();
+    const dialog = document.querySelector('[role="dialog"]');
+    expect(dialog?.getAttribute('aria-busy') ?? dialog?.querySelector('[aria-busy="true"]')?.getAttribute('aria-busy')).toBe('true');
+    expect(dialog?.textContent).not.toContain('Đang chờ');
+    release();
+    await flush();
   });
 
   it('Chuyển vào Ví mở sheet "Chuyển hoa hồng vào Ví" với số chuyển được của dashboard, không có lựa chọn ngân hàng', async () => {

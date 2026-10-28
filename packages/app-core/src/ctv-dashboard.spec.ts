@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CTV_TAB_KEYS, ctvHeadline, hasFirstOrder, nextMilestoneRows, transferBlockedText } from './ctv-dashboard';
+import { CTV_TAB_KEYS, ctvHeadline, hasFirstOrder, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote } from './ctv-dashboard';
 
 const ZERO = { monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0, totalConversions: 0 };
 
@@ -25,8 +25,25 @@ describe('ctvHeadline', () => {
 });
 
 describe('transferBlockedText', () => {
-  it('nói khi nào tiền vào Ví và kèm số đang chờ', () => {
-    expect(transferBlockedText('9.520đ')).toBe('Hoa hồng vào Ví khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 9.520đ.');
+  it('tự chuyển bật (mặc định): nói hoa hồng tự vào Ví khi nào, kèm số đang chờ', () => {
+    expect(transferBlockedText('9.520đ')).toBe('Hoa hồng tự vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 9.520đ.');
+  });
+  it('tự chuyển tắt: không hứa tự vào Ví, chỉ nói khi nào chuyển được', () => {
+    const t = transferBlockedText('9.520đ', false);
+    expect(t).toBe('Hoa hồng chuyển được vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 9.520đ.');
+    expect(t).not.toMatch(/tự vào/);
+  });
+});
+
+describe('transferHeroNote và isAutoWalletTransfer', () => {
+  it('tự chuyển bật: phần còn lại là phần chưa tự vào Ví được, dặn bấm tay; tắt: dặn bấm để chuyển', () => {
+    expect(transferHeroNote(true)).toContain('chưa tự vào Ví được');
+    expect(transferHeroNote(false)).toBe('Bấm Chuyển vào Ví để chuyển phần này vào Ví Tubu.');
+  });
+  it('chỉ đúng false mới là tắt; API cũ chưa trả trường này coi như bật', () => {
+    expect(isAutoWalletTransfer(false)).toBe(false);
+    expect(isAutoWalletTransfer(true)).toBe(true);
+    expect(isAutoWalletTransfer(undefined)).toBe(true);
   });
 });
 

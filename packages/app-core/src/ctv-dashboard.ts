@@ -26,9 +26,25 @@ export function ctvHeadline(d: DashboardMoney | undefined): { big: number; pendi
   return { big: d?.withdrawableCommission ?? 0, pending: d?.pendingCommission ?? 0, monthEstimate: d?.monthCommission ?? 0 };
 }
 
+/**
+ * Cờ `autoWalletTransfer` của dashboard: chỉ đúng `false` mới là tắt, API cũ chưa trả trường này thì coi như bật (mặc định của máy chủ).
+ */
+export function isAutoWalletTransfer(flag: boolean | undefined): boolean {
+  return flag !== false;
+}
+
 /** Lời cho ô "Chuyển vào Ví" khi chưa có số dư: nói vì sao và khi nào có. `pendingText` đã định dạng tiền. */
-export function transferBlockedText(pendingText: string): string {
-  return `Hoa hồng vào Ví khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: ${pendingText}.`;
+export function transferBlockedText(pendingText: string, auto = true): string {
+  return auto
+    ? `Hoa hồng tự vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: ${pendingText}.`
+    : `Hoa hồng chuyển được vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: ${pendingText}.`;
+}
+
+/** Dòng dưới số to khi còn hoa hồng "có thể chuyển": với tự chuyển bật thì đây là phần chưa tự vào Ví được, CTV bấm tay. */
+export function transferHeroNote(auto = true): string {
+  return auto
+    ? 'Phần này chưa tự vào Ví được (thường do cần mã số thuế). Bấm Chuyển vào Ví để nhận ngay.'
+    : 'Bấm Chuyển vào Ví để chuyển phần này vào Ví Tubu.';
 }
 
 /** Thẻ "Việc đầu tiên" chỉ hiện cho CTV chưa có đơn nào: có chuyển đổi hoặc bất kỳ khoản hoa hồng nào là đã có đơn đầu. */

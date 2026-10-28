@@ -25,7 +25,7 @@ import {
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { ShareSheet } from '../components/share-sheet';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
-import { COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, hasFirstOrder, transferBlockedText, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
+import { COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, hasFirstOrder, isAutoWalletTransfer, transferBlockedText, transferHeroNote, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
 import { getWallet } from '../services/account-api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -306,6 +306,7 @@ function Dashboard() {
   const referral = meQ.data?.referralCode ?? '';
 
   const head = ctvHeadline(d);
+  const autoTransfer = isAutoWalletTransfer(d?.autoWalletTransfer);
   const copyReferral = () => {
     haptic('light');
     void copyText(referral).then((ok) =>
@@ -362,6 +363,11 @@ function Dashboard() {
             <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.9, marginTop: 4 }}>
               Đang chờ: {formatVnd(head.pending)} · {COMMISSION_PENDING_NOTE}
             </Text>
+            {head.big > 0 && (
+              <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.9, marginTop: 4 }}>
+                {transferHeroNote(autoTransfer)}
+              </Text>
+            )}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', marginTop: 12 }}>
               <MiniStat label="Tạm tính tháng này" value={formatVnd(head.monthEstimate)} />
               <MiniStat label="Lượt bấm" value={String(d?.totalClicks ?? 0)} />
@@ -933,17 +939,24 @@ function Dashboard() {
 
       <BottomSheet open={transferring} onClose={() => setTransferring(false)} title="Chuyển hoa hồng vào Ví">
         {/* Mount khi mở để form lấy ĐÚNG max hiện tại (tránh kẹt amount="0" nếu data về sau lần mount đầu). */}
-        {transferring && !dashQ.isError && head.big <= 0 && (
+        {transferring && dashQ.isLoading && (
+          // Chưa có số liệu: đừng nói "Đang chờ: 0đ" rồi đổi sang form khi dữ liệu về.
+          <div aria-busy="true">
+            <Skeleton height={16} />
+            <Skeleton height={16} width="60%" style={{ marginTop: 8 }} />
+          </div>
+        )}
+        {transferring && !dashQ.isError && !dashQ.isLoading && head.big <= 0 && (
           <div>
             <Text variant="body-sm" as="p" style={{ margin: 0 }}>
-              {transferBlockedText(formatVnd(head.pending))}
+              {transferBlockedText(formatVnd(head.pending), autoTransfer)}
             </Text>
             <Button fullWidth variant="secondary" onPress={() => setTransferring(false)} style={{ marginTop: 16 }}>
               Đã hiểu
             </Button>
           </div>
         )}
-        {transferring && (dashQ.isError || head.big > 0) && (
+        {transferring && !dashQ.isLoading && (dashQ.isError || head.big > 0) && (
           <TransferForm
             max={d?.withdrawableCommission ?? 0}
             taxPreview={d?.withdrawTaxPreview}

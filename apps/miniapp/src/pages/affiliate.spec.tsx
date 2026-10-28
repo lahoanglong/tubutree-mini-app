@@ -731,10 +731,52 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     expect(btn).toBeEnabled();
     await screen.findByText(/Đang chờ: 9\.520đ ·/);
     fireEvent.click(btn);
-    expect(await screen.findByText('Hoa hồng vào Ví khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 9.520đ.')).toBeInTheDocument();
+    expect(await screen.findByText('Hoa hồng tự vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 9.520đ.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /vào Ví$/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Đã hiểu' }));
-    expect(screen.queryByText(/Hoa hồng vào Ví khi đơn đã giao/)).toBeNull();
+    expect(screen.queryByText(/Hoa hồng tự vào Ví Tubu khi đơn đã giao/)).toBeNull();
+  });
+
+  it('cờ tự chuyển tắt: hộp không hứa tự vào Ví', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 9_520, pendingCommission: 9_520, withdrawableCommission: 0, autoWalletTransfer: false,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' });
+    await screen.findByText(/Đang chờ: 9\.520đ ·/);
+    fireEvent.click(btn);
+    expect(await screen.findByText('Hoa hồng chuyển được vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 9.520đ.')).toBeInTheDocument();
+  });
+
+  it('còn hoa hồng có thể chuyển: dưới số to có dòng nói đây là phần chưa tự vào Ví được; hết thì không có dòng đó', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 50_000,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    expect(await screen.findByText(/Phần này chưa tự vào Ví được/)).toBeInTheDocument();
+  });
+
+  it('bấm Chuyển vào Ví khi dashboard còn đang tải: hộp hiện khung chờ, không nói "Đang chờ: 0đ" rồi đổi', async () => {
+    let release!: (v: Awaited<ReturnType<typeof getAffiliateDashboard>>) => void;
+    vi.mocked(getAffiliateDashboard).mockReturnValue(new Promise((r) => (release = r)));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' }));
+    expect(await screen.findByRole('heading', { level: 2, name: 'Chuyển hoa hồng vào Ví' })).toBeInTheDocument();
+    const busy = document.querySelector('[aria-busy="true"]');
+    expect(busy).not.toBeNull();
+    // Trong hộp (không tính thẻ hoa hồng phía sau) không có câu "Đang chờ".
+    expect(busy!.parentElement!.textContent).not.toContain('Đang chờ');
+    expect(screen.queryByText(/Hoa hồng tự vào Ví Tubu khi đơn/)).toBeNull();
+    release({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    await waitFor(() => expect(document.querySelector('[aria-busy="true"]')).toBeNull());
   });
 
   it('dòng "Số dư Ví" ngay dưới lối tắt, chạm là sang Ví', async () => {
