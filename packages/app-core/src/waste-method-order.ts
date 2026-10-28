@@ -21,5 +21,7 @@ export function orderWasteMethods(
 ): WasteMethod[] {
   const base = (noPointInProvince ? MAIL_FIRST_ORDER : BASE_ORDER).filter((m) => enabled.includes(m));
   if (!base.every((m) => previews[m] !== undefined || failed.includes(m))) return base;
-  return [...base].sort((a, b) => Number(isMethodLocked(previews[a])) - Number(isMethodLocked(previews[b])));
+  // Thẻ lỗi bỏ kết quả cũ (có thể của tỉnh khác) để không bị khoá theo nó.
+  const locked = (m: WasteMethod) => !failed.includes(m) && isMethodLocked(previews[m]);
+  return [...base].sort((a, b) => Number(locked(a)) - Number(locked(b)));
 }
