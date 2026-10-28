@@ -79,8 +79,23 @@ describe('countHarvestCoupons (real Postgres)', () => {
       }
     }
     // Bảng nhỏ nên planner thích quét tuần tự: tắt seqscan trong một transaction rồi ROLLBACK để chứng minh câu thật "đi được" index.
+    // Thống kê bảng phụ thuộc các spec chạy trước trên cùng DB: thêm nhiều mã thu hoạch của khách khác rồi ANALYZE để tiền tố mã
+    // không còn chọn lọc như lúc PROD đông khách, khi đó planner phải chọn index theo userId chứ không theo coupons_code_key.
     const plan = await db
       .$transaction(async (tx) => {
+        await tx.coupon.createMany({
+          data: Array.from({ length: 2000 }, (_, i) => ({
+            code: `${i % 2 ? 'HARVEST30000' : 'GARDEN30000'}-X${i}-${randCode(6)}`,
+            type: 'AMOUNT' as const,
+            value: 30000,
+            minOrder: 199000,
+            startAt: hours(1),
+            endAt: new Date(Date.now() + 30 * 86_400_000),
+            scope: 'USER_GROUP' as const,
+            scopeMeta: { userId: `u-explain-other-${i}` },
+          })),
+        });
+        await tx.$executeRaw`ANALYZE "coupons"`;
         await tx.$executeRaw`SET LOCAL enable_seqscan = off`;
         const rows = await tx.$queryRaw<{ 'QUERY PLAN': string }[]>(Prisma.sql`EXPLAIN ${harvestCouponCountSql('u-explain', dayStart, monthStart)}`);
         throw new Rollback(rows.map((r) => r['QUERY PLAN']).join('\n'));
