@@ -13,6 +13,7 @@ import ErrorBoundary, { hashMessage } from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
 import { useStorefrontContext } from '../store/storefront-context';
 import { recordReferralTouch, reportLaunchLinkClick } from '../services/affiliate-api';
+import { hasPartnerLinkParams } from './onboarding-rules';
 import { readClaimParam, savePendingClaim } from '../services/coupon-claim';
 import { createQueryClient } from '../services/query-client';
 import { useScreenTracker } from '../hooks/use-screen-tracker';
@@ -41,6 +42,10 @@ function applySavedFontScale(): void {
     }
   });
 }
+
+// Đọc một lần lúc mở app: khách vào bằng link CTV/gian hàng thì cả phiên không bị quiz chặn.
+const OPENED_FROM_PARTNER_LINK =
+  typeof window !== 'undefined' && hasPartnerLinkParams(window.location.search, window.location.hash);
 
 const OnboardingGate = lazy(() => import('./onboarding').then((m) => ({ default: m.OnboardingGate })));
 const CouponClaimGate = lazy(() => import('./coupon-claim-gate').then((m) => ({ default: m.CouponClaimGate })));
@@ -280,7 +285,11 @@ export default function MyApp() {
               {/* Hai cổng này không cần cho khung hình đầu: tải sau để entry nhẹ hơn. */}
               <SilentBoundary>
                 <Suspense fallback={null}>
-                  <OnboardingGate />
+                  <OnboardingGate openedFromPartnerLink={OPENED_FROM_PARTNER_LINK} />
+                </Suspense>
+              </SilentBoundary>
+              <SilentBoundary>
+                <Suspense fallback={null}>
                   <CouponClaimGate />
                 </Suspense>
               </SilentBoundary>

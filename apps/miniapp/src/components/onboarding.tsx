@@ -10,7 +10,7 @@ import { getMe, completeOnboarding } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
-import { hasPartnerLinkParams, ONBOARDING_SNOOZE_KEY, ONBOARDING_SNOOZE_MS, shouldShowOnboarding } from './onboarding-rules';
+import { ONBOARDING_SNOOZE_KEY, ONBOARDING_SNOOZE_MS, shouldShowOnboarding } from './onboarding-rules';
 import { Button } from './ui/button';
 import { Heading, Text } from './ui/text';
 
@@ -69,10 +69,6 @@ const QUESTIONS: Q[] = [
   },
 ];
 
-// Đọc một lần lúc mở app: khách vào bằng link CTV/gian hàng thì cả phiên không bị quiz chặn.
-const OPENED_FROM_PARTNER_LINK =
-  typeof window !== 'undefined' && hasPartnerLinkParams(window.location.search, window.location.hash);
-
 async function readSnoozedUntil(): Promise<number | null> {
   try {
     const res = await getStorage({ keys: [ONBOARDING_SNOOZE_KEY] });
@@ -83,7 +79,8 @@ async function readSnoozedUntil(): Promise<number | null> {
   }
 }
 
-export function OnboardingGate() {
+/** `openedFromPartnerLink` do entry (app.tsx) tính lúc mở app: module này tải lazy, tính ở đây thì có thể đã sau khi khách đổi màn. */
+export function OnboardingGate({ openedFromPartnerLink = false }: { openedFromPartnerLink?: boolean }) {
   const { status } = useAuthStore();
   const location = useLocation();
   const [dismissed, setDismissed] = useState(false);
@@ -106,7 +103,7 @@ export function OnboardingGate() {
     onboarded: meQ.data.onboarded,
     pathname: location.pathname,
     search: location.search,
-    openedFromPartnerLink: OPENED_FROM_PARTNER_LINK,
+    openedFromPartnerLink,
     snoozedUntil,
     now: Date.now(),
   });

@@ -55,9 +55,9 @@ describe('Luật hiện quiz onboarding (C-018)', () => {
   });
 });
 
-function renderGate() {
+function renderGate(openedFromPartnerLink?: boolean) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}><OnboardingGate /></QueryClientProvider>);
+  return render(<QueryClientProvider client={qc}><OnboardingGate openedFromPartnerLink={openedFromPartnerLink} /></QueryClientProvider>);
 }
 
 describe('OnboardingGate (C-018)', () => {
@@ -72,6 +72,13 @@ describe('OnboardingGate (C-018)', () => {
     renderGate();
     expect(await screen.findByText('Chào mừng đến Tubu Tree!')).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/quà chào mừng|gợi ý sản phẩm/);
+  });
+
+  it('mở app bằng link CTV (cờ do entry truyền vào), về Trang chủ vẫn không phủ quiz', async () => {
+    renderGate(true);
+    await waitFor(() => expect(mocks.getMe).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText('Chào mừng đến Tubu Tree!')).toBeNull();
   });
 
   it('mở link sản phẩm: không phủ quiz', async () => {
