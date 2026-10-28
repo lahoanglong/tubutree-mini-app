@@ -103,10 +103,29 @@ const loadAuthModule = () => import('../store/auth');
 let authModulePromise: ReturnType<typeof loadAuthModule> | null = null;
 const authModule = () => (authModulePromise ??= loadAuthModule());
 
+/**
+ * GET công khai của API (@Public, cùng nội dung cho mọi người): không cần chờ phiên. Thẻ SP và chi tiết SP hiện ngay khi mở
+ * link, phần cá nhân hoá (/products/for-you, giỏ, điểm...) vẫn chờ phiên như cũ.
+ */
+const PUBLIC_GET_PATHS = [
+  /^\/products$/,
+  /^\/products\/(?!for-you(?:\/|$))[^/]+(?:\/related|\/bought-together)?$/,
+  /^\/categories$/,
+  /^\/brands$/,
+  /^\/flash-sales\/active$/,
+  /^\/config\/public$/,
+];
+
+export function isPublicGet(method: string, url: string): boolean {
+  if (method.toUpperCase() !== 'GET') return false;
+  const path = url.split('?')[0]!.replace(/\/+$/, '');
+  return PUBLIC_GET_PATHS.some((re) => re.test(path));
+}
+
 /** Gắn phiên vào request ngay trước khi gửi (chạy lại ở mỗi lần gửi lại). */
 async function prepare(req: PendingRequest): Promise<void> {
   // Chính các lệnh /auth/* KHÔNG được chờ authReady — chúng là thứ tạo ra nó (deadlock).
-  if (authReady && !req.url.includes('/auth/')) {
+  if (authReady && !req.url.includes('/auth/') && !isPublicGet(req.method, req.url)) {
     const pending = authReady;
     await Promise.race([
       pending.catch(() => undefined),
