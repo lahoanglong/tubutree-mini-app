@@ -1,5 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 
+const flags = vi.hoisted(() => ({ subscriptions: false }));
+vi.mock('../utils/features', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  get SUBSCRIPTIONS_IN_MINIAPP() {
+    return flags.subscriptions;
+  },
+}));
+
 // Trang kéo zmp-ui/zmp-sdk (cần môi trường Zalo/DOM) — test chỉ nhắm helper thuần nên thay bằng stub rỗng.
 vi.mock('zmp-ui', () => ({
   Box: () => null, Page: () => null, Text: () => null, Button: () => null, Sheet: () => null,
@@ -153,7 +161,17 @@ describe('notificationAction — nút theo loại tin, không dò nội dung (C-
   });
 
   it('Mini App tạm không bán định kỳ: tin SUBSCRIPTION_* không có nút dẫn về danh sách đơn Tất cả', () => {
+    flags.subscriptions = false;
     expect(notificationAction('SUBSCRIPTION_PAUSED', undefined)).toBeNull();
+  });
+
+  it('bật lại định kỳ ở Mini App: tin SUBSCRIPTION_* có nút Xem gói định kỳ', () => {
+    flags.subscriptions = true;
+    try {
+      expect(to('SUBSCRIPTION_PAUSED')).toBe('/subscriptions');
+    } finally {
+      flags.subscriptions = false;
+    }
   });
 
   it('người thắng sự kiện cộng đồng → Cộng đồng', () => {
