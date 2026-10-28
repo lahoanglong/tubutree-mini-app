@@ -91,7 +91,8 @@ export interface DbSnapshot {
   expectedMigrations: string[];
   orderCount: number;
   /** `tableExists`: bảng waste_points (migration 20261020000000_waste_exchange) đã có chưa; chưa có thì hai số đếm là 0. */
-  waste: { tableExists: boolean; totalPoints: number; activeWarehouses: number; activeWarehousesWithPhone: number };
+  /** `activePointsWithoutHours`: điểm ACTIVE chưa có khung giờ mở cửa nào; vắng nghĩa là chưa đo. */
+  waste: { tableExists: boolean; totalPoints: number; activeWarehouses: number; activeWarehousesWithPhone: number; activePointsWithoutHours?: number };
   /** Giá trị các khoá SystemConfig cần xem; khoá không có trong DB thì không xuất hiện. */
   configs: Record<string, unknown>;
   /** pointMultiplier của từng hạng trong membership_tiers; bảng chưa có hoặc trống thì []. */
@@ -117,6 +118,8 @@ export const CONFIG_KEYS_OF_INTEREST = [
   'waste.enabled',
   'waste.lane_mailin_enabled',
   'waste.lane_pickup_enabled',
+  'waste.rules_text',
+  'waste.mailin_fee_table',
   'waste.mailin_min_points',
   'waste.pickup_min_points',
   'waste.customer_monthly_cap_points',
@@ -130,6 +133,10 @@ export const CONFIG_KEYS_OF_INTEREST = [
   'company.legal_name',
   'company.tax_code',
   'company.address',
+  'legal.dieu-khoan',
+  'legal.bao-mat',
+  'legal.doi-tra',
+  'legal.van-chuyen',
   'app.miniapp_base_url',
   ...Object.values(OPS_THRESHOLD_KEYS).map((t) => t.key),
 ] as const;
@@ -263,6 +270,36 @@ function wastePointCheck(s: DbSnapshot, env: Env): CheckResult {
       title,
       'waste.enabled đang bật, đường Gửi về kho đang bật nhưng kho đang hoạt động chưa có số điện thoại (nhà vận chuyển cần số này để giao kiện)',
       'Vào Quản trị, Đổi rác và game, Đổi rác, Điểm nhận, mở kho và điền ô Số điện thoại bằng số thật của kho; hoặc tắt waste.lane_mailin_enabled ở Quản trị, Cấu hình.',
+    );
+  }
+
+  const rules = s.configs['waste.rules_text'];
+  if (enabled && (typeof rules !== 'string' || rules.trim() === '')) {
+    return fail(
+      G_DB,
+      id,
+      title,
+      'waste.enabled đang bật nhưng thể lệ (waste.rules_text) còn trống: khách phải tick đồng ý với một thể lệ chưa có chữ',
+      'Nhập thể lệ ở Quản trị, Cấu hình, nhóm waste; nếu chưa kịp thì tắt waste.enabled.',
+    );
+  }
+  if (enabled && (s.waste.activePointsWithoutHours ?? 0) > 0) {
+    return fail(
+      G_DB,
+      id,
+      title,
+      `waste.enabled đang bật nhưng ${s.waste.activePointsWithoutHours} điểm đang hoạt động chưa có giờ mở cửa: khách thấy "Chưa cập nhật giờ mở cửa"`,
+      'Vào Quản trị, Đổi rác và game, Đổi rác, Điểm nhận, mở từng điểm và điền giờ mở cửa; hoặc tạm dừng điểm đó.',
+    );
+  }
+  const feeZones = (s.configs['waste.mailin_fee_table'] as { zones?: unknown } | undefined)?.zones;
+  if (enabled && mailinOn && !(Array.isArray(feeZones) && feeZones.length > 0)) {
+    return fail(
+      G_DB,
+      id,
+      title,
+      'waste.enabled đang bật, đường Gửi về kho đang bật nhưng bảng vùng phí ship (waste.mailin_fee_table) chưa có vùng nào: mọi khách thấy khung "Toàn quốc"',
+      'Điền vùng phí (ít nhất TP.HCM) ở Quản trị, Cấu hình, waste.mailin_fee_table; hoặc tắt waste.lane_mailin_enabled.',
     );
   }
 
@@ -406,6 +443,19 @@ function bankCheck(s: DbSnapshot): CheckResult {
     return warn(G_DB, 'db.bank_account', title, `số tài khoản (đuôi ${last4}) vẫn là số mẫu cũ`, 'Đổi sang tài khoản thật của Tubu Tree ở Quản trị, Cấu hình, nhóm payment, và liên kết tài khoản đó với Pancake POS để tự đối soát.');
   }
   return pass(G_DB, 'db.bank_account', title, `BIN ${(bin as string).trim()}, số tài khoản đuôi ${last4}`);
+}
+
+const LEGAL_DOCS = { 'legal.dieu-khoan': 'điều khoản', 'legal.bao-mat': 'bảo mật', 'legal.doi-tra': 'đổi trả', 'legal.van-chuyen': 'vận chuyển' } as const;
+
+function legalPoliciesCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
+  const title = 'Chính sách hiển thị cho khách';
+  const draft = (Object.keys(LEGAL_DOCS) as (keyof typeof LEGAL_DOCS)[]).filter((k) => typeof s.configs[k] !== 'string' || (s.configs[k] as string).trim() === '');
+  if (draft.length > 0) {
+    // Bản nháp mặc định của web hiện banner "chờ Tubu Tree duyệt"; trước deploy chưa có dòng nào là bình thường.
+    const red = phase === 'pre-deploy' ? warn : fail;
+    return red(G_DB, 'db.legal_policies', title, `còn bản nháp: ${draft.map((k) => LEGAL_DOCS[k]).join(', ')}`, 'Duyệt và lưu nội dung từng chính sách ở Quản trị, Cấu hình, nhóm legal; chưa lưu thì khách thấy dòng "BẢN NHÁP — chờ Tubu Tree duyệt".');
+  }
+  return pass(G_DB, 'db.legal_policies', title, 'cả 4 chính sách đã được lưu');
 }
 
 function companyIdentityCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
@@ -599,6 +649,7 @@ export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
       consignmentFromCheck(s),
       bankCheck(s),
       companyIdentityCheck(s, ctx.phase),
+      legalPoliciesCheck(s, ctx.phase),
       miniappBaseUrlCheck(s, ctx.env),
     ]),
     codCapCheck(s),

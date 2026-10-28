@@ -772,3 +772,29 @@ describe('SystemConfigService.set — khoá nhịp chơi người mới của V�
     }
   });
 });
+
+describe('SystemConfigService.set waste.enabled', () => {
+  const rulesFindUnique = (rules: unknown) =>
+    jest.fn().mockImplementation(async ({ where }: { where: { key: string } }) => {
+      if (where.key === 'waste.rules_text') return rules === undefined ? null : { value: rules };
+      return { value: false };
+    });
+
+  it('không cho bật khi thể lệ rỗng, trống chữ hoặc chưa có dòng', async () => {
+    for (const rules of ['', '   \n', undefined]) {
+      const { prisma, upsert } = makePrisma({ findUnique: rulesFindUnique(rules) });
+      const service = new SystemConfigService(prisma);
+      await expect(service.set('waste.enabled', true, 'admin1')).rejects.toThrow(/thể lệ/);
+      expect(upsert).not.toHaveBeenCalled();
+    }
+  });
+
+  it('bật được khi đã có thể lệ; tắt luôn được dù thể lệ rỗng', async () => {
+    const ok = makePrisma({ findUnique: rulesFindUnique('Thể lệ chương trình') });
+    await new SystemConfigService(ok.prisma).set('waste.enabled', true, 'admin1');
+    expect(ok.upsert).toHaveBeenCalledTimes(1);
+    const off = makePrisma({ findUnique: rulesFindUnique('') });
+    await new SystemConfigService(off.prisma).set('waste.enabled', false, 'admin1');
+    expect(off.upsert).toHaveBeenCalledTimes(1);
+  });
+});

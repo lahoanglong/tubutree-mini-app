@@ -96,11 +96,12 @@ export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations
       );
 
       const orderCount = await count('orders');
-      const waste = await guarded('waste', { tableExists: false, totalPoints: 0, activeWarehouses: 0, activeWarehousesWithPhone: 0 }, async () => ({
+      const waste = await guarded('waste', { tableExists: false, totalPoints: 0, activeWarehouses: 0, activeWarehousesWithPhone: 0, activePointsWithoutHours: 0 }, async () => ({
         tableExists: await exists('waste_points'),
         totalPoints: await count('waste_points'),
         activeWarehouses: await count('waste_points', `"kind" = 'WAREHOUSE' AND "status" = 'ACTIVE'`),
         activeWarehousesWithPhone: await count('waste_points', `"kind" = 'WAREHOUSE' AND "status" = 'ACTIVE' AND trim(coalesce("phone", '')) <> ''`),
+        activePointsWithoutHours: await count('waste_points', `"status" = 'ACTIVE' AND "openingHours"::text !~ '"open"'`),
       }));
       const dealerTierCount = await guarded('dealerTiers', 0, () => count('dealer_tiers'));
       const admin = await guarded('admin', { adminCount: 0, pendingAdminGrants: 0 }, async () => ({

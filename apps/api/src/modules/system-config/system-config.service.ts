@@ -483,6 +483,15 @@ export class SystemConfigService {
     }
   }
 
+  /** Khách phải tick "Tôi đồng ý với Thể lệ" ở bước 2, nên không bật chương trình khi thể lệ còn trống. */
+  private async assertWasteRulesPublished(key: string, value: unknown): Promise<void> {
+    if (key !== 'waste.enabled' || value !== true) return;
+    const rules = await this.get<unknown>('waste.rules_text', '');
+    if (typeof rules !== 'string' || rules.trim() === '') {
+      throw new BadRequestException('Chưa bật được Đổi rác: thể lệ (waste.rules_text) còn trống. Nhập thể lệ ở Quản trị, Cấu hình, nhóm waste, rồi bật lại.');
+    }
+  }
+
   async set(key: string, value: object | string | number | boolean | null, changedBy: string): Promise<void> {
     const unset = value === null && SystemConfigService.NULLABLE_KEYS.has(key);
     if ((value === null && !unset) || value === undefined) {
@@ -491,6 +500,7 @@ export class SystemConfigService {
     if (!unset) {
       this.assertInRange(key, value);
       await this.assertRateCapsConsistent(key, value);
+      await this.assertWasteRulesPublished(key, value);
     }
     const stored = unset ? Prisma.JsonNull : (value as object);
     const dotIndex = key.indexOf('.');

@@ -295,6 +295,27 @@ describe('evaluateDb', () => {
         expect(r.hint).toContain('Quản trị, Đổi rác và game, Đổi rác, Điểm nhận');
       }
     });
+    it('waste.enabled bật mà thể lệ trống hoặc chưa có: FAIL', () => {
+      expect(W({}, { 'waste.enabled': true, 'waste.rules_text': '  ' }).status).toBe('FAIL');
+      const r = byId(run(dbWith({ configs: { 'waste.enabled': true }, dropConfigs: ['waste.rules_text'] })), 'db.waste_point');
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toContain('waste.rules_text');
+    });
+    it('waste.enabled bật mà có điểm chưa có giờ mở cửa: FAIL', () => {
+      const r = W({ activePointsWithoutHours: 2 }, { 'waste.enabled': true });
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toContain('giờ mở cửa');
+    });
+    it('waste.enabled bật, Gửi về kho bật mà bảng vùng phí rỗng: FAIL; tắt Gửi về kho thì không đòi', () => {
+      const empty = { zones: [], defaultZone: { name: 'Toàn quốc', low: 30_000, high: 85_000 } };
+      const r = W({}, { 'waste.enabled': true, 'waste.mailin_fee_table': empty });
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toContain('waste.mailin_fee_table');
+      expect(W({}, { 'waste.enabled': true, 'waste.mailin_fee_table': empty, 'waste.lane_mailin_enabled': false }).status).toBe('PASS');
+    });
+    it('chương trình tắt thì không đòi thể lệ, giờ mở cửa, vùng phí', () => {
+      expect(W({ activePointsWithoutHours: 2 }, { 'waste.rules_text': '' }).status).toBe('PASS');
+    });
     it('waste.enabled bật và có một kho ACTIVE: PASS, nêu số kho và số điểm', () => {
       const r = W({ totalPoints: 4, activeWarehouses: 1 }, { 'waste.enabled': true });
       expect(r.status).toBe('PASS');
@@ -501,6 +522,20 @@ describe('evaluateDb', () => {
       expect(r.detail).toContain('company.legal_name');
       expect(r.detail).toContain('company.tax_code');
       expect(r.detail).toContain('company.address');
+    });
+  });
+
+  describe('chính sách (legal.*)', () => {
+    it('đủ 4 bản đã lưu thì PASS', () => expect(status(GOOD_DB, 'db.legal_policies')).toBe('PASS'));
+    it('còn bản nháp (chưa lưu hoặc trống) thì FAIL, nêu tên bản', () => {
+      const r = byId(run(dbWith({ configs: { 'legal.doi-tra': '  ' }, dropConfigs: ['legal.bao-mat'] })), 'db.legal_policies');
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toContain('bảo mật');
+      expect(r.detail).toContain('đổi trả');
+      expect(r.detail).not.toContain('vận chuyển');
+    });
+    it('trước deploy chỉ WARN', () => {
+      expect(status(dbWith({ dropConfigs: ['legal.dieu-khoan'] }), 'db.legal_policies', 'pre-deploy')).toBe('WARN');
     });
   });
 
