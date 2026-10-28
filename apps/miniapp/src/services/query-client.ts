@@ -1,4 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
+import { CATALOG_STALE_MS } from '@tubutree/app-core/catalog-stale';
 import { isHttpError } from './http';
 
 /** Lỗi tạm (mất mạng, timeout, 5xx, 429, 408): tải lại sau có thể khỏi. 4xx còn lại là nghiệp vụ, tải lại vẫn y vậy. */
@@ -8,7 +9,6 @@ function isTransientError(error: unknown): boolean {
   return !status || status >= 500 || status === 408 || status === 429;
 }
 
-const CATALOG_STALE_MS = 60_000;
 const CATALOG_KEYS = [['products'], ['for-you'], ['categories'], ['brands']] as const;
 
 function isOffline(): boolean {

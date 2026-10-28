@@ -15,9 +15,9 @@ describe('shouldRetryQuery (R-80)', () => {
 });
 
 describe('createQueryClient (R-80)', () => {
-  it('danh mục sản phẩm tươi 30 giây, khoá khác không đổi', () => {
+  it('danh mục sản phẩm tươi 60 giây (cùng giá trị với Mini App), khoá khác không đổi', () => {
     const client = createQueryClient();
-    expect(client.defaultQueryOptions({ queryKey: ['products', 'home-featured'] }).staleTime).toBe(30_000);
+    expect(client.defaultQueryOptions({ queryKey: ['products', 'home-featured'] }).staleTime).toBe(60_000);
     expect(client.defaultQueryOptions({ queryKey: ['cart'] }).staleTime).toBeUndefined();
   });
 });

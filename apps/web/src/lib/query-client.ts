@@ -1,7 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
+import { CATALOG_STALE_MS } from '@tubutree/app-core/catalog-stale';
 import { ApiError } from '@/lib/client-api';
-
-const CATALOG_STALE_MS = 30_000;
 
 /** Lỗi 4xx là nghiệp vụ (404, 401...): thử lại vẫn y vậy, chỉ nhân đôi request. Mất mạng và 5xx thì thử một lần. */
 export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
@@ -22,7 +21,7 @@ export function createQueryClient(): QueryClient {
       mutations: { networkMode: 'always' },
     },
   });
-  // Danh mục sản phẩm đổi chậm (đồng bộ Pancake ~15 phút): quay lại trong 30 giây thì dùng lại, không gọi mạng.
+  // Danh mục sản phẩm đổi chậm (đồng bộ Pancake ~15 phút): quay lại trong 60 giây thì dùng lại, không gọi mạng.
   client.setQueryDefaults(['products'], { staleTime: CATALOG_STALE_MS });
   client.setQueryDefaults(['storefront-categories'], { staleTime: CATALOG_STALE_MS });
   return client;
