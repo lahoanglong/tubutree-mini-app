@@ -245,6 +245,23 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await expect(page.getByRole('link', { name: 'Viết đánh giá' })).toBeVisible();
   });
 
+  test('chi tiết đơn ở 375px: khối Vận chuyển trước khối "Cần hỗ trợ?" (thứ tự như Mini App)', async ({ page, api }) => {
+    mockBuyer(api);
+    api.get('/orders/TUBU2026101900004', detailOrder({
+      status: 'SHIPPING', deliveredAt: null, shippingPartner: 'GHN', shippingCode: 'GHN123456',
+    }));
+    api.get('/orders/me/returns', []);
+
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.goto('/tai-khoan/don-hang/TUBU2026101900004');
+    const shipping = page.getByRole('heading', { name: 'Vận chuyển', level: 2 });
+    const support = page.getByText('Cần hỗ trợ?', { exact: true });
+    await expect(shipping).toBeVisible();
+    await expect(support).toBeVisible();
+    const [shipBox, supportBox] = [await shipping.boundingBox(), await support.boundingBox()];
+    expect(shipBox!.y).toBeLessThan(supportBox!.y);
+  });
+
   test('huỷ đơn đã trả tiền: chọn nhận về Ví Tubu thì POST /cancel gửi refundMethod WALLET', async ({ page, api }) => {
     mockBuyer(api);
     const paid = detailOrder({ status: 'CONFIRMED', deliveredAt: null, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', canCancel: true });

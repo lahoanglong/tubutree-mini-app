@@ -393,7 +393,7 @@ export default function OrderDetailPage() {
         </p>
       )}
 
-      <div className="mt-4 px-4 max-md:order-13 md:px-0">
+      <div className="mt-4 px-4 max-md:order-last md:px-0">
         <SupportContact orderCode={o.code} />
       </div>
     </Shell>

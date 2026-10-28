@@ -1,12 +1,12 @@
 'use client';
 
 import { Suspense, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ordersListQuery } from '@tubutree/app-core/queries/orders';
 import { newCustomerOfferQuery } from '@tubutree/app-core/queries/loyalty';
 import { EmptyState as MiniEmptyState } from '@/components/mini/empty-state';
-import { BestSellerRail } from '@/components/home/best-seller-rail';
 import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedTabs, useTabParam } from '@/components/ui/segmented-tabs';
 import { ErrorState } from '@/components/ui/error-state';
@@ -27,6 +27,9 @@ import { PAGE_WIDE } from '@/lib/page-frame';
 import { loadErrorText } from '@/lib/error-text';
 
 const PAGE_LIMIT = 20;
+
+// Chỉ tab rỗng cần lưới món bán chạy: không kéo nó vào bundle đầu của trang.
+const BestSellerRail = dynamic(() => import('@/components/home/best-seller-rail').then((m) => m.BestSellerRail), { ssr: false });
 
 /**
  * Tab gốc "Đơn hàng" như `orders.tsx` của Mini App: tab trạng thái (kèm Định kỳ) → thẻ đơn có ảnh, số món, "Mua lại" → kệ Mua lại

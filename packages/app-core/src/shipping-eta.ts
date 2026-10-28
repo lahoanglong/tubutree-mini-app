@@ -20,19 +20,33 @@ const ETA_STATUSES = new Set(['CONFIRMED', 'PACKED', 'SHIPPING']);
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 /**
- * Ngày giao dự kiến của một đơn đang xử lý: giờ xác nhận (không có thì giờ đặt) cộng khoảng ngày cấu hình, tính theo ngày
- * Việt Nam (UTC+7 quanh năm). null khi chưa cấu hình, đơn chưa xác nhận hoặc đã xong: không bịa ngày.
+ * Ngày giao dự kiến của một đơn đang xử lý: giờ đặt (cùng gốc với màn thanh toán) cộng khoảng ngày cấu hình, tính theo
+ * ngày Việt Nam (UTC+7 quanh năm). null khi chưa cấu hình, đơn chưa xác nhận hoặc đã xong, đơn có món đặt trước (chưa biết
+ * hàng về lúc nào), đơn của gian hàng đối tác (họ tự giao, khoảng ngày của Tubu không áp dụng) hoặc ngày muộn nhất đã qua:
+ * không bịa ngày.
  */
 export function orderDeliveryEtaLabel(
   eta: ShippingEta | null | undefined,
-  order: { status: string; createdAt: string; statusTimes?: Partial<Record<string, string>> | null },
+  order: {
+    status: string;
+    createdAt: string;
+    items?: { backorderedQty?: number | null }[] | null;
+    fulfilment?: { kind: string } | null;
+  },
+  now: Date = new Date(),
 ): string | null {
   if (!eta || !ETA_STATUSES.has(order.status)) return null;
-  const base = new Date(order.statusTimes?.CONFIRMED ?? order.createdAt);
+  if (order.fulfilment?.kind === 'MERCHANT') return null;
+  if (order.items?.some((it) => (it.backorderedQty ?? 0) > 0)) return null;
+  const base = new Date(order.createdAt);
   if (Number.isNaN(base.getTime())) return null;
   const vnDay = new Date(base.getTime() + VN_OFFSET_MS);
+  const dayUtc = (days: number) => Date.UTC(vnDay.getUTCFullYear(), vnDay.getUTCMonth(), vnDay.getUTCDate() + days);
+  const nowVn = new Date(now.getTime() + VN_OFFSET_MS);
+  const todayUtc = Date.UTC(nowVn.getUTCFullYear(), nowVn.getUTCMonth(), nowVn.getUTCDate());
+  if (dayUtc(eta.maxDays) < todayUtc) return null;
   const fmt = (days: number) => {
-    const d = new Date(Date.UTC(vnDay.getUTCFullYear(), vnDay.getUTCMonth(), vnDay.getUTCDate() + days));
+    const d = new Date(dayUtc(days));
     return `${pad2(d.getUTCDate())}/${pad2(d.getUTCMonth() + 1)}`;
   };
   return eta.minDays === eta.maxDays ? fmt(eta.minDays) : `${fmt(eta.minDays)} – ${fmt(eta.maxDays)}`;
