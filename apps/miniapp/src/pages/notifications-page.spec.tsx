@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   markAllNotificationsRead: vi.fn(),
   trackEvent: vi.fn(),
   getSubscriptions: vi.fn(),
+  fetchPurchasedItems: vi.fn(),
   authStatus: 'authenticated' as string,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -35,13 +36,16 @@ vi.mock('../services/account-api', () => ({
 }));
 vi.mock('../services/subscriptions-api', () => ({ getSubscriptions: mocks.getSubscriptions }));
 vi.mock('../services/analytics', () => ({ trackEvent: mocks.trackEvent }));
-vi.mock('../services/shop-api', () => ({ fetchPurchasedItems: vi.fn() }));
+vi.mock('../services/shop-api', () => ({ fetchPurchasedItems: mocks.fetchPurchasedItems }));
 vi.mock('../services/buy-flow-events', () => ({ trackReorderReminderCta: vi.fn() }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.authStatus }),
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
-vi.mock('../components/reorder/reorder-sheet', () => ({ ReorderSheet: () => null }));
+vi.mock('../components/reorder/reorder-sheet', () => ({
+  ReorderSheet: ({ target }: { target: { line: { productName: string } } | null }) =>
+    target ? <div data-testid="reorder-sheet">{target.line.productName}</div> : null,
+}));
 
 import NotificationsPage from './notifications';
 
@@ -268,6 +272,54 @@ describe('E-83: đi tiếp từ chi tiết tin thay mục lịch sử notifDetai
     const dialog = await openRow('Dầu gội sắp hết');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Mua lại ngay' }));
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/product/dau-goi', { replace: true, state: undefined }));
+  });
+});
+
+describe('E-83: nhắc mua lại mở sheet ngay trên trang tin', () => {
+  const REMINDER = {
+    id: 'n9', templateCode: 'REORDER_REMINDER', payload: { body: 'Dầu gội sắp hết', data: { variation_id: 'v1', product_slug: 'dau-goi' } },
+    status: 'READ' as const, sentAt: SENT_AT,
+  };
+  const ITEM = {
+    variationId: 'v1', productId: 'p1', slug: 'dau-goi', productName: 'Dầu gội', variationName: '500ml', brand: 'Tubu', thumbnail: null,
+    price: 90000, salePrice: null, stock: 10, inStock: true, timesBought: 2, lastPurchasedAt: SENT_AT,
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.getNotifications.mockResolvedValue([REMINDER]);
+    mocks.markNotificationRead.mockResolvedValue({ ok: true });
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+  });
+
+  const openAndReorder = async () => {
+    renderPage();
+    fireEvent.click((await screen.findByText('Dầu gội sắp hết')).closest('[role="button"]') as HTMLElement);
+    const dialog = await screen.findByRole('dialog', { name: 'Chi tiết thông báo' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Mua lại ngay' }));
+    await screen.findByTestId('reorder-sheet');
+  };
+
+  it('mở sheet thì gỡ mục lịch sử notifDetail (history.back) để đóng sheet xong lùi một lần là rời trang Thông báo', async () => {
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    await openAndReorder();
+    expect(window.history.state).toMatchObject({ notifDetail: true });
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: 'Chi tiết thông báo' })).toBeNull();
+    back.mockRestore();
+  });
+
+  it('không có mục notifDetail thì không lùi lịch sử', async () => {
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    renderPage();
+    fireEvent.click((await screen.findByText('Dầu gội sắp hết')).closest('[role="button"]') as HTMLElement);
+    const dialog = await screen.findByRole('dialog', { name: 'Chi tiết thông báo' });
+    window.history.replaceState(null, '');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Mua lại ngay' }));
+    await screen.findByTestId('reorder-sheet');
+    expect(back).not.toHaveBeenCalled();
+    back.mockRestore();
   });
 });
 

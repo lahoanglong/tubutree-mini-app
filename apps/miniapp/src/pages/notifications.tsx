@@ -219,6 +219,8 @@ export default function NotificationsPage() {
       if (!mountedRef.current || selectedIdRef.current !== n.id) return;
       const action = reorderReminderAction(n.payload.data, item);
       if (action.kind === 'sheet') {
+        // Sheet mở ngay trên trang này nên không có màn đích để thay mục notifDetail: gỡ nó, nếu không khách phải lùi hai lần mới rời trang tin.
+        if (window.history.state?.notifDetail) window.history.back();
         setSelectedNotif(null);
         setReorderTarget(itemReorderTarget(action.item));
       } else goFromDetail(action.to);
