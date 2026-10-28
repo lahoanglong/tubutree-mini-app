@@ -103,11 +103,11 @@ describe('TierDropNoticeService.sendNotices', () => {
     const u: U = { id: 'u1', tierGraceUntil: inDays(5), tierDropNoticeFor: null, tier: TIER };
     const withZns = build([u], { cfg: { 'loyalty.tier_drop_zns_template_id': '123456' } });
     await withZns.svc.sendNotices(NOW);
-    expect(withZns.notify.mock.calls[0]![3]).toEqual({ znsTemplateId: '123456' });
+    expect(withZns.notify.mock.calls[0]![3]).toEqual({ dedupeKey: expect.stringMatching(/^tier-drop:/), znsTemplateId: '123456' });
     for (const bad of ['', '  ', 'abc']) {
       const b = build([{ ...u }], { cfg: { 'loyalty.tier_drop_zns_template_id': bad } });
       await b.svc.sendNotices(NOW);
-      expect(b.notify.mock.calls[0]![3]).toEqual({});
+      expect(b.notify.mock.calls[0]![3]).toEqual({ dedupeKey: expect.stringMatching(/^tier-drop:/) });
     }
   });
 
