@@ -15,6 +15,8 @@ const gateOf = () => {
 };
 
 async function expectChipHitArea44(chip: Locator): Promise<void> {
+  // Giữa màn hình, không sát mép dưới: chip sát mép dưới nằm sau thanh đáy (cố định) nên mép dưới "trúng" thanh đáy chứ không phải chip.
+  await chip.evaluate((el) => el.scrollIntoView({ block: 'center' }));
   const box = (await chip.boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(44);
   const hit = await chip.evaluate(
