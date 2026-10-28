@@ -26,6 +26,7 @@ function mockExtras(api: MockApi, milestones: unknown = null) {
   api.get('/affiliate/analytics/storefronts', { storefronts: [] });
   api.get('/affiliate/analytics/products', []);
   api.get('/academy/courses', []);
+  api.get('/me/wallet', { walletBalance: 0, cashbackPending: 0, commissionApproved: 80_000, commissionPending: 30_000 });
 }
 
 function mockDashboard(api: MockApi, links: unknown[], me: Record<string, unknown> = {}) {
@@ -79,7 +80,7 @@ test.describe('Web khách: CTV', () => {
     await expect(register).toBeDisabled();
     await page.getByRole('checkbox', { name: /đồng ý với điều khoản hoa hồng/ }).check();
     await register.dblclick();
-    await expect(page.getByText('Hoa hồng tháng này')).toBeVisible();
+    await expect(page.getByText('Có thể chuyển vào Ví', { exact: true })).toBeVisible();
     const calls = api.callsTo('POST', '/affiliate/register');
     expect(calls).toHaveLength(1);
     expect(calls[0]!.body).toEqual({ termsVersion: '2026-10' });
@@ -105,8 +106,10 @@ test.describe('Web khách: CTV', () => {
     await page.goto('/ctv');
     await expect(page.getByRole('heading', { name: 'Cộng tác viên', level: 1 })).toBeVisible();
     await expect(page.getByText('125.000đ')).toBeVisible();
+    await page.getByRole('tab', { name: 'Hoa hồng' }).click();
     await expect(page.getByText('+50.000đ')).toBeVisible();
     await expect(page.getByText('Giao thành công')).toBeVisible();
+    await page.getByRole('tab', { name: 'Chia sẻ' }).click();
     await expect(page.getByText('Chưa có link')).toBeVisible();
     await page.getByRole('button', { name: '+ Tạo link' }).dblclick();
     await expect(page.getByText('0 lượt bấm', { exact: true })).toBeVisible();

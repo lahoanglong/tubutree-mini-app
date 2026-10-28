@@ -109,6 +109,7 @@ export function mockAffiliateDashboard(
   const me: AffiliateMe = { isAffiliate: true, referralCode: 'CTV-AFF1', walletBalance: 0, ...opts.me };
   api.get('/affiliate/me', me);
   api.get('/affiliate/dashboard', CTV_DASHBOARD);
+  api.get('/me/wallet', { walletBalance: 120000, cashbackPending: 0, commissionApproved: 120000, commissionPending: 60000 });
   api.get('/affiliate/links', []);
   api.get('/affiliate/commissions', []);
   api.get('/affiliate/analytics/storefronts', { storefronts: [] });
