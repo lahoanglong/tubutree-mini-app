@@ -9,6 +9,9 @@ vi.mock('@/lib/api', async (importOriginal) => ({
   getPublicSupport: mocks.getPublicSupport,
 }));
 
+vi.mock('@/lib/use-waste-visible', () => ({ useWasteVisible: () => true }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: null }) }));
+
 import SiteFooter from './site-footer';
 import { StickyActionBar } from './sticky-action-bar';
 import { StickyActionBar as MiniStickyActionBar } from './mini/sticky-action-bar';

@@ -138,12 +138,21 @@ describe('/doi-rac trang vào (§4.1)', () => {
     expect(battery.getAttribute('aria-disabled')).toBe('true');
   });
 
-  it('yêu cầu đang xử lý: mã, cách giao, mini timeline; link tới /doi-rac/yeu-cau/:id; biểu tượng lịch sử tới /doi-rac/yeu-cau', async () => {
+  it('yêu cầu đang xử lý: mã, cách giao, mini timeline; link tới /doi-rac/yeu-cau/:id; chữ "Yêu cầu của tôi" tới /doi-rac/yeu-cau', async () => {
     state.me = makeWasteMe({ openRequests: [makeRequestSummary({ method: 'MAIL_IN', status: 'IN_TRANSIT', pointName: 'Kho Tubu TP.HCM' })] });
     const c = await mount();
     expect(link(c, '/doi-rac/yeu-cau/req-1')?.textContent).toContain('TR-8K2M9');
     expect(c.querySelector('ol[aria-label="Tiến độ TR-8K2M9"]')).not.toBeNull();
-    expect(link(c, '/doi-rac/yeu-cau')?.getAttribute('aria-label')).toBe('Yêu cầu của tôi');
+    expect(link(c, '/doi-rac/yeu-cau')?.textContent).toContain('Yêu cầu của tôi');
+  });
+
+  it('yêu cầu vừa xong trong 7 ngày: thẻ "Vừa cộng X điểm" dẫn tới trang kết quả; không có thì không vẽ', async () => {
+    const c0 = await mount();
+    expect(c0.textContent).not.toContain('Vừa cộng');
+    state.me = makeWasteMe({ recentCompleted: makeRequestSummary({ id: 'req-5', status: 'COMPLETED', pointsAwarded: 2500 }) });
+    const c = await mount();
+    expect(c.textContent).toContain('Vừa cộng 2.500 điểm');
+    expect(link(c, '/doi-rac/xong/req-5')).not.toBeNull();
   });
 
   it('thẻ yêu cầu có một dòng trạng thái theo cách giao, kèm mini timeline', async () => {
@@ -385,7 +394,8 @@ describe('/doi-rac thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
 describe('/doi-rac — diện mạo Mini App ở điện thoại', () => {
   it('nút lịch sử không chồng px-5 với px-0 nên icon History hiện đủ; thẻ điểm không viền; hàng Kho quà trơn trên nền trang', async () => {
     const c = await mount();
-    const history = c.querySelector<HTMLAnchorElement>('a[aria-label="Yêu cầu của tôi"]')!;
+    const history = link(c, '/doi-rac/yeu-cau') as HTMLAnchorElement;
+    expect(history.textContent).toContain('Yêu cầu của tôi');
     expect(history.className).not.toContain('px-5');
     expect(history.querySelector('svg')).not.toBeNull();
     const pointsCard = byText(c, 'p', 'Điểm Xanh của bạn')!.parentElement!;

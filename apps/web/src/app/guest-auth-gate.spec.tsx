@@ -68,7 +68,6 @@ import MyPayrollPage from './nhan-vien/bang-luong/page';
 import BrandOwnerPage from './chu-thuong-hieu/page';
 import RecyclePage from './doi-rac/page';
 import RecycleRequestsPage from './doi-rac/yeu-cau/page';
-import RecycleNewPage from './doi-rac/tao/page';
 import RecyclePointsPage from './doi-rac/diem-nhan/page';
 import { RecycleRequestDetail } from '@/components/recycle/recycle-request';
 import { RecycleEdit } from '@/components/recycle/recycle-edit';
@@ -140,7 +139,6 @@ const PRO: PageCase[] = [
 const RECYCLE: PageCase[] = [
   ['/doi-rac', () => <RecyclePage />, '/doi-rac'],
   ['/doi-rac/yeu-cau', () => <RecycleRequestsPage />, '/doi-rac/yeu-cau'],
-  ['/doi-rac/tao', () => <RecycleNewPage />, '/doi-rac/tao'],
   ['/doi-rac/diem-nhan', () => <RecyclePointsPage />, '/doi-rac/tao'],
   ['/doi-rac/yeu-cau/[id]', () => <RecycleRequestDetail id="req-77" />, '/doi-rac/yeu-cau/req-77'],
   ['/doi-rac/yeu-cau/[id]/sua', () => <RecycleEdit id="req-77" />, '/doi-rac/yeu-cau/req-77/sua'],

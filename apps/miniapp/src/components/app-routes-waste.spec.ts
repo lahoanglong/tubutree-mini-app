@@ -22,9 +22,12 @@ const ROUTES: ReadonlyArray<readonly [path: string, component: string, page: str
 describe('route Đổi rác lấy quà ở app.tsx (§16.1: một dòng lazy và một Route)', () => {
   it.each(ROUTES)('%s → %s', (path, component, page) => {
     expect(src).toContain(`const ${component} = lazy(() => import('../pages/${page}'));`);
-    expect(src).toContain(`<Route path="${path}" element={<${component} />} />`);
+    // /recycle có khung chờ riêng (RecyclePageSkeleton) trong lúc tải mã trang, để khung hình đầu không trắng.
+    const element = path === '/recycle' ? `<Suspense fallback={<RecyclePageSkeleton />}>` : `<${component} />`;
+    expect(src).toContain(path === '/recycle' ? `<Route\n                      path="${path}"` : `<Route path="${path}" element={${element}} />`);
+    expect(src).toContain(element);
   });
   it('mỗi đường dẫn chỉ khai một lần', () => {
-    for (const [path] of ROUTES) expect(src.split(`<Route path="${path}" `).length - 1).toBe(1);
+    for (const [path] of ROUTES) expect(src.split(`path="${path}"`).length - 1).toBe(1);
   });
 });

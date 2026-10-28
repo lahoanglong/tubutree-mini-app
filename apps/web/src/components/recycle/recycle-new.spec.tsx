@@ -4,7 +4,7 @@ import type { WastePreviewDTO, WastePreviewRequest } from '@tubutree/shared-type
 import { byText, click, flush, render, selectValue, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
 import { makeRewardCatalog } from '@/components/loyalty/reward-fixtures';
-import { EMPTY_DRAFT, loadDraft, loadPointsNav, markResume, peekResume, saveDraft, saveReturn, type WasteWizardDraft } from '@/lib/recycle-wizard';
+import { EMPTY_DRAFT, loadDraft, loadPointsNav, markResume, markSubmitted, peekResume, saveDraft, saveReturn, takeSubmitted, type WasteWizardDraft } from '@/lib/recycle-wizard';
 import { ApiError } from '@/lib/client-api';
 import { makeRequestDetail, makeWasteMe, makeWastePoint } from './recycle-fixtures';
 
@@ -287,11 +287,19 @@ describe('bước 1: chọn món (§4.2)', () => {
     expect(c.textContent).not.toMatch(/số điện thoại/i);
     expect(state.replace).not.toHaveBeenCalled();
   });
-  it('khách chưa đăng nhập thấy lời mời đăng nhập, không gọi API', async () => {
+  it('khách chưa đăng nhập về trang Đổi rác (có giới thiệu và nút đăng nhập), không gọi API', async () => {
     state.phase = 'guest';
-    const c = await mount();
-    expect(c.querySelector('a[href^="/dang-nhap"]')).not.toBeNull();
+    await mount();
+    expect(state.replace).toHaveBeenCalledWith('/doi-rac');
     expect(state.calls).toEqual([]);
+  });
+  it('quay lại bước 1 sau khi đã gửi yêu cầu thì về trang Đổi rác thay vì form trống; cờ chỉ dùng một lần', async () => {
+    markSubmitted();
+    await mount();
+    expect(state.replace).toHaveBeenCalledWith('/doi-rac');
+    state.replace = vi.fn();
+    await mount();
+    expect(state.replace).not.toHaveBeenCalledWith('/doi-rac');
   });
   it('phiên không khả dụng và lỗi tải /waste/me có trạng thái riêng', async () => {
     state.phase = 'unavailable';
@@ -490,6 +498,7 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
     ]);
     expect(state.replace).toHaveBeenLastCalledWith('/doi-rac/yeu-cau/req-9');
     expect(loadDraft()).toBeNull();
+    expect(takeSubmitted()).toBe(true);
   });
   it('Mang tới điểm nhận chưa chọn điểm thì chưa tạo được', async () => {
     atStep2({ ...DRAFT, method: 'DROP_OFF' });

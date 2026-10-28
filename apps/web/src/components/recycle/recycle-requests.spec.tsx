@@ -97,6 +97,19 @@ describe('/doi-rac/yeu-cau (§4.6, §16.1)', () => {
     expect(byText(c, 'button', 'Thử lại')).toBeNull();
   });
 
+  it('không có yêu cầu đang xử lý mà có yêu cầu đã đóng: mở thẳng tab Đã đóng; tab trống có chữ và nút sang tab kia', async () => {
+    state.rows = [ROWS[2]!];
+    const c = await mount();
+    expect(tab(c, 'Đã đóng')?.getAttribute('aria-selected')).toBe('true');
+    expect(link(c, '/doi-rac/xong/r-done')).not.toBeNull();
+    click(tab(c, 'Đang xử lý')!);
+    await flush(2);
+    expect(c.textContent).toContain('Không có yêu cầu đang xử lý');
+    click(byText(c, 'button', 'Xem yêu cầu đã đóng')!);
+    await flush(2);
+    expect(link(c, '/doi-rac/xong/r-done')).not.toBeNull();
+  });
+
   it('hai tab có số đếm; mặc định Đang xử lý chỉ hiện yêu cầu chưa đóng', async () => {
     const c = await mount();
     expect(tab(c, 'Đang xử lý')?.getAttribute('aria-selected')).toBe('true');

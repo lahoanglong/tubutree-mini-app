@@ -1,7 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ getPublicSupport: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getPublicSupport: vi.fn(), wasteVisible: true, role: 'AFFILIATE' as string | undefined }));
+vi.mock('@/lib/use-waste-visible', () => ({ useWasteVisible: () => mocks.wasteVisible }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: mocks.role ? { id: 'u1', role: mocks.role } : null }) }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getPublicSupport: mocks.getPublicSupport,
@@ -119,8 +121,31 @@ describe('SiteFooter', () => {
     mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
     const out = await html();
     expect(out).toMatch(/<div class="[^"]*lg:grid-cols-4/);
-    for (const to of ['/vuon-xanh', '/doi-rac', '/kho-qua', '/ctv', '/dai-ly', '/cau-chuyen', '/gioi-thieu', '/mua-chung']) {
+    for (const to of ['/vuon-xanh', '/doi-rac', '/kho-qua', '/ctv', '/dai-ly', '/hoc-vien', '/cau-chuyen', '/gioi-thieu', '/mua-chung']) {
       expect(out).toContain(`href="${to}"`);
     }
+  });
+
+  it('Đổi rác tắt (và khách không có yêu cầu đang mở) thì chân trang không có lối vào Đổi rác', async () => {
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
+    mocks.wasteVisible = false;
+    try {
+      const out = await html();
+      expect(out).not.toContain('href="/doi-rac"');
+      expect(out).toContain('href="/kho-qua"');
+    } finally {
+      mocks.wasteVisible = true;
+    }
+  });
+
+  it('Học viện chỉ hiện cho CTV, đại lý, nhân viên: khách thường và khách chưa đăng nhập không thấy', async () => {
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
+    for (const role of ['CUSTOMER', undefined]) {
+      mocks.role = role;
+      expect(await html()).not.toContain('href="/hoc-vien"');
+    }
+    mocks.role = 'STAFF';
+    expect(await html()).toContain('href="/hoc-vien"');
+    mocks.role = 'AFFILIATE';
   });
 });

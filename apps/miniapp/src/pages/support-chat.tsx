@@ -9,7 +9,7 @@ import { vi } from '../i18n/vi';
 import { AuthGate } from '../components/ui/auth-gate';
 import { PageHeader } from '../components/ui/page-header';
 import { ErrorState } from '../components/ui/empty-state';
-import { LineItemSkeleton } from '../components/ui/skeleton';
+import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
 import { Text } from '../components/ui/text';
 import { MessageList, type ChatItem } from '../components/support-chat/message-list';
@@ -212,9 +212,16 @@ function ChatBody() {
 
   if (threadQ.isLoading) {
     return (
-      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <LineItemSkeleton />
-        <LineItemSkeleton />
+      <div role="status" aria-label="Đang tải tin nhắn" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ alignSelf: 'flex-start', width: '70%' }}>
+          <Skeleton height={56} radius="var(--radius-card)" />
+        </div>
+        <div style={{ alignSelf: 'flex-end', width: '55%' }}>
+          <Skeleton height={40} radius="var(--radius-card)" />
+        </div>
+        <div style={{ alignSelf: 'flex-start', width: '62%' }}>
+          <Skeleton height={48} radius="var(--radius-card)" />
+        </div>
       </div>
     );
   }

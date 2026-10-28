@@ -46,6 +46,7 @@ vi.mock('../services/waste-api', async (orig) => ({
   getWasteMe: mocks.getWasteMe,
 }));
 
+import { HttpError } from '../services/http';
 import RecycleRequestsPage from './recycle-requests';
 
 function renderPage() {
@@ -79,6 +80,28 @@ describe('/recycle/requests (§4.6, §16.1)', () => {
     expect(screen.getByRole('tab', { name: /Đã đóng/ })).toHaveTextContent('2');
     expect(screen.getByRole('button', { name: /TR-AAAAA/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /TR-CCCCC/ })).toBeNull();
+  });
+  it('không có yêu cầu đang xử lý mà có yêu cầu đã đóng: mở thẳng tab Đã đóng', async () => {
+    mocks.listWasteRequests.mockResolvedValue([ROWS[2]!, ROWS[3]!]);
+    renderPage();
+    expect(await screen.findByRole('tab', { name: /Đã đóng/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: /TR-CCCCC/ })).toBeInTheDocument();
+  });
+  it('khách tự chọn tab Đang xử lý còn trống: có chữ và nút sang tab kia', async () => {
+    mocks.listWasteRequests.mockResolvedValue([ROWS[2]!]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('tab', { name: /Đang xử lý/ }));
+    expect(screen.getByText('Không có yêu cầu đang xử lý')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem yêu cầu đã đóng' }));
+    expect(screen.getByRole('button', { name: /TR-CCCCC/ })).toBeInTheDocument();
+  });
+  it('API trả 403 (khách chưa cho số điện thoại): thẻ xin số điện thoại, không có Thử lại', async () => {
+    mocks.listWasteRequests.mockRejectedValue(new HttpError('Forbidden', undefined, { status: 403 } as never));
+    renderPage();
+    expect(await screen.findByText('Cho Tubu số điện thoại để xem yêu cầu đổi rác của bạn.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Cho Tubu số điện thoại' }));
+    await waitFor(() => expect(mocks.ensurePhone).toHaveBeenCalled());
   });
   it('yêu cầu đang xử lý → /recycle/r/:id', async () => {
     renderPage();
