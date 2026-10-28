@@ -654,6 +654,10 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     mockHomeEngagement(api, { checkedIn: true, expiringInDays: null });
     api.get('/brands', [{ brand: 'Tubu', count: 28 }, { brand: 'Mộc An', count: 2 }]);
     await page.goto('/');
+    // login() chỉ đặt cờ phiên trong localStorage (không có cookie) nên HTML đầu là bản khách vãng lai; khi biết có phiên, các khối dưới
+    // thẻ thành viên đổi sang khung chờ rồi dựng lại. Đo chip trước lúc đó thì chip bị gỡ khỏi trang giữa chừng.
+    await expect(page.getByText('Chào Nguyễn Văn An')).toBeVisible();
+    await expect(page.getByTestId('home-settling')).toHaveCount(0);
     const chips = [
       page.getByRole('region', { name: /Dải thương hiệu/ }).getByRole('button').first(),
       page.getByRole('region', { name: 'Nguồn gợi ý' }).getByRole('button', { name: 'Bán chạy', exact: true }),
