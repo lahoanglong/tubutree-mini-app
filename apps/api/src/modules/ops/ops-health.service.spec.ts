@@ -165,3 +165,57 @@ describe('cron thoát sớm vì chạy chồng', () => {
     expect(reports).toEqual([expect.objectContaining({ outcome: 'SKIPPED' })]);
   });
 });
+
+describe('OpsHealthService.zaloTokenProblems (hạn token Zalo OA)', () => {
+  const NOW = new Date('2026-10-28T10:00:00Z');
+  const H = 3_600_000;
+  const iso = (ms: number) => new Date(NOW.getTime() + ms).toISOString();
+
+  function build(store: Record<string, string>, env: Record<string, string> = {}) {
+    const prisma = { systemConfig: { findUnique: jest.fn(async ({ where: { key } }: { where: { key: string } }) => (key in store ? { value: store[key] } : null)) } };
+    const svc = new OpsHealthService(prisma as never, { get: (k: string) => env[k] ?? '' } as never, []);
+    return { svc, prisma };
+  }
+  const configured = { 'zalo.oa_access_token': 'acc' };
+
+  it('còn 2 giờ mà ZNS đã cấu hình → cảnh báo zalo.oa_token', async () => {
+    const { svc } = build({ ...configured, 'zalo.oa_token_expires_at': iso(2 * H) });
+    const out = await svc.zaloTokenProblems(NOW);
+    expect(out).toHaveLength(1);
+    expect(out[0].key).toBe('zalo.oa_token');
+    expect(out[0].message).toContain('2 giờ');
+  });
+
+  it('đã quá hạn → cảnh báo nói rõ đã hết hạn', async () => {
+    const { svc } = build({ ...configured, 'zalo.oa_token_expires_at': iso(-1 * H) });
+    const out = await svc.zaloTokenProblems(NOW);
+    expect(out).toHaveLength(1);
+    expect(out[0].message).toContain('đã hết hạn');
+  });
+
+  it('token trong env (chưa từng làm mới) cũng tính là đã cấu hình', async () => {
+    const { svc } = build({ 'zalo.oa_token_expires_at': iso(1 * H) }, { ZALO_OA_ACCESS_TOKEN: 'env-acc' });
+    expect(await svc.zaloTokenProblems(NOW)).toHaveLength(1);
+  });
+
+  it('còn 4 giờ (cron còn lượt thử) → không cảnh báo', async () => {
+    const { svc } = build({ ...configured, 'zalo.oa_token_expires_at': iso(4 * H) });
+    expect(await svc.zaloTokenProblems(NOW)).toEqual([]);
+  });
+
+  it('chưa cấu hình ZNS (không có access token nào) → không cảnh báo dù hạn cũ còn trong DB', async () => {
+    const { svc } = build({ 'zalo.oa_token_expires_at': iso(-5 * H) });
+    expect(await svc.zaloTokenProblems(NOW)).toEqual([]);
+  });
+
+  it('chưa có mốc hạn hoặc mốc hỏng → không cảnh báo (cron làm mới sẽ lo)', async () => {
+    expect(await build(configured).svc.zaloTokenProblems(NOW)).toEqual([]);
+    expect(await build({ ...configured, 'zalo.oa_token_expires_at': 'không-phải-ngày' }).svc.zaloTokenProblems(NOW)).toEqual([]);
+  });
+
+  it('đọc DB lỗi → không làm hỏng màn sức khoẻ, trả rỗng', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const svc = new OpsHealthService({ systemConfig: { findUnique: async () => Promise.reject(new Error('db down')) } } as never, { get: () => '' } as never, []);
+    await expect(svc.zaloTokenProblems(NOW)).resolves.toEqual([]);
+  });
+});
