@@ -148,6 +148,14 @@ export default function AddToCart({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy khi tồn kho thật vừa về
   }, [stockQ.data]);
 
+  // Tải trước bảng chọn lúc rảnh (điện thoại, từ 2 phân loại): mạng chậm thì khách bấm xong không phải nhìn nút im lặng chờ chunk.
+  useEffect(() => {
+    if (!needsVariationPicker(variations) || !isPhoneWidth()) return;
+    const id = window.setTimeout(() => setSheetOpened(true), 800);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- một lần sau khi trang hiện
+  }, []);
+
   const add = async (variationId: string, quantity: number, buyNow = false) => {
     setBusy(true);
     setBuying(buyNow);
