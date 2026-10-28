@@ -12,7 +12,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { formatDate } from '@/lib/format-date';
-import { EmptyState } from '@/components/mini';
+import { EmptyState } from '@/components/mini/empty-state';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ClaimPointInfo } from '@/components/loyalty/claim-point';
 import { Badge } from '@/components/ui/badge';
