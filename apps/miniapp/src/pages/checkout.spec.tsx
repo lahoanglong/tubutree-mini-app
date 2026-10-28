@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   getWallet: vi.fn(),
   getLoyalty: vi.fn(),
   getCouponPreviews: vi.fn(),
+  getCoupons: vi.fn().mockResolvedValue([]),
   getWasteMe: vi.fn(),
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
   user: { id: 'u1', fullName: 'Long', phone: '0900000000' as string | null, walletBalance: 0, pointsBalance: 0, pointsConvertedBalance: 0 },
@@ -43,6 +44,7 @@ vi.mock('../services/shop-api', () => ({
 vi.mock('../services/account-api', () => ({
   getWallet: mocks.getWallet,
   getLoyalty: mocks.getLoyalty,
+  getCoupons: mocks.getCoupons,
   updateAddress: vi.fn(),
 }));
 vi.mock('../components/policy-sheet', () => ({
@@ -218,7 +220,7 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     expect(body.referralCode).toBeUndefined();
   });
 
-  it('mã từ link chưa biết có phải của CTV không (null): ô nhập mở sẵn cho khách, đơn vẫn gửi mã như trước để máy chủ quyết', async () => {
+  it('mã từ link chưa biết có phải của CTV không (null): ô nhập mở sẵn cho khách, đơn vẫn gửi mã để máy chủ quyết', async () => {
     mocks.sfCtx.referralCode = 'linkcode';
     mocks.sfCtx.referralEligible = null;
     renderPage();
@@ -1638,6 +1640,20 @@ describe('CheckoutPage: gợi ý mã dùng được ở dòng "Mã giảm giá" 
     mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
     mocks.getWasteMe.mockResolvedValue(makeWasteMe());
+    mocks.getCoupons.mockResolvedValue([{ id: 'c1', code: 'WELCOME30' }]);
+  });
+
+  it('ví không có mã nào → không hỏi xem trước (không tính thừa trên máy chủ), giữ câu cũ', async () => {
+    mocks.getCoupons.mockResolvedValue([]);
+    mocks.getCouponPreviews.mockResolvedValue([preview('WELCOME30', { discount: 30_000 })]);
+    renderPage();
+    expect(await screen.findByText('Chọn hoặc nhập mã giảm giá')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.getCoupons).toHaveBeenCalled());
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 450));
+    });
+    expect(mocks.getCouponPreviews).not.toHaveBeenCalled();
+    expect(screen.queryByText(/mã dùng được/)).toBeNull();
   });
 
   it('giỏ chưa có mã, có mã dùng được → "Bạn có N mã dùng được · giảm đến X" (tính cả miễn phí giao), hỏi kèm địa chỉ', async () => {
