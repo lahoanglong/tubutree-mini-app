@@ -26,10 +26,13 @@ type Mode = 'batch' | 'shared';
 /** Hạn thẻ hộp hàng sàn khi để trống ngày: luật đã chốt 60 ngày, vì thẻ còn nằm trong kho và trong hộp trước khi tới tay khách. */
 const CLAIM_CARD_DEFAULT_DAYS = 60;
 
-/** Ngày chọn trên ô ngày là ngày giờ VN: ghép giờ địa phương để "đến hết 31/12" không hết hạn lúc 7h sáng. */
+/**
+ * Ngày chọn trên ô ngày là ngày giờ VN: ghép mốc +07:00 để "đến hết 31/12" không hết hạn lúc 7h sáng, kể cả khi máy admin
+ * đặt múi giờ khác.
+ */
 function localDayIso(dayKey: string, endOfDay: boolean, fallbackMs: number): string {
   if (!dayKey) return new Date(fallbackMs).toISOString();
-  return new Date(`${dayKey}T${endOfDay ? '23:59:59' : '00:00:00'}`).toISOString();
+  return new Date(`${dayKey}T${endOfDay ? '23:59:59' : '00:00:00'}+07:00`).toISOString();
 }
 
 export function offerLabel(c: { type: CouponType; value: number; minOrder?: number | null; maxDiscount?: number | null }): string {
