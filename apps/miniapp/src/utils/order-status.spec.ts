@@ -147,6 +147,11 @@ describe('discountRows (R2-BUYERMINI-8: tách mã giảm giá và Điểm Xanh b
       discountRows({ discount: 15_000, couponCode: null, couponDiscount: 15_000, comboDiscount: 0, tierDiscount: 0, pointsDiscount: 0, pointsUsed: 0 }),
     ).toEqual([{ label: 'Mã giảm giá', amount: 15_000 }]);
   });
+  it('đơn đặt định kỳ chỉ có tổng discount: nhãn "Ưu đãi đặt định kỳ", số tiền không đổi', () => {
+    expect(discountRows({ discount: 12_000, pointsUsed: 0, source: 'subscription' })).toEqual([{ label: 'Ưu đãi đặt định kỳ', amount: 12_000 }]);
+    expect(discountRows({ discount: 0, pointsUsed: 0, source: 'subscription' })).toEqual([]);
+    expect(discountRows({ discount: 12_000, pointsUsed: 0, source: 'checkout' })).toEqual([{ label: 'Giảm giá', amount: 12_000 }]);
+  });
   it('đơn cũ không có chi tiết: một dòng Giảm giá, ghi rõ đã gồm Điểm Xanh nếu có dùng điểm', () => {
     expect(discountRows({ discount: 98_000, pointsUsed: 60 })).toEqual([{ label: 'Giảm giá (gồm Điểm Xanh)', amount: 98_000 }]);
     expect(discountRows({ discount: 38_000, pointsUsed: 0 })).toEqual([{ label: 'Giảm giá', amount: 38_000 }]);

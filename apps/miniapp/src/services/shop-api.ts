@@ -610,11 +610,15 @@ export interface OrderItemMedia {
   thumbnail?: string | null;
   stock?: number;
   available?: boolean;
+  /** Trang sản phẩm còn mở công khai; false thì không dẫn tới trang sản phẩm hay mời đánh giá (API cũ không trả: coi như còn). */
+  productPublic?: boolean;
   currentPrice?: number | null;
 }
 export type OrderItemView = OrderItemDTO & OrderItemMedia;
 export type OrderView = Omit<OrderDTO, 'items'> & {
   items: OrderItemView[];
+  /** Nơi đơn được tạo (checkout, buy_now, storefront, ctv_assisted, subscription, dealer). Đơn cũ có thể trống. */
+  source?: string | null;
   /** Mã giảm giá đã dùng và các phần của `discount` (API cũ chưa trả; đơn cũ để 0). */
   couponCode?: string | null;
   /** Mã của lần đặt khi đơn tách này không giữ lượt dùng mã (đơn đầu của nhóm giữ) — để ghi đúng tên mã ở dòng giảm giá. */

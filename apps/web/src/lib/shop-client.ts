@@ -419,6 +419,8 @@ export interface OrderDetailDTO extends OrderDTO {
   /** Số Điểm Xanh đã dùng (đã nằm trong `discount`, không trừ thêm lần nữa). */
   pointsUsed?: number;
   note?: string | null;
+  /** Nơi đơn được tạo (checkout, subscription, ...); đơn cũ có thể trống. */
+  source?: string | null;
   /** Ảnh chụp địa chỉ lúc đặt; đơn đại lý không có địa chỉ khách lẻ, chỉ có `note`. */
   shippingAddress?: {
     recipient?: string;
@@ -445,6 +447,8 @@ export interface OrderDetailDTO extends OrderDTO {
     backorderedQty?: number;
     /** Dòng này còn viết đánh giá mới được (đơn đã nhận, mua lẻ cho chính mình, chưa đánh giá). */
     reviewable?: boolean;
+    /** Trang sản phẩm còn mở công khai; false (đã gỡ) thì không dẫn tới trang sản phẩm. API cũ không trả: coi như còn. */
+    productPublic?: boolean;
   })[];
 }
 export const fetchOrder = (code: string) => apiFetch<OrderDetailDTO>(`/orders/${encodeURIComponent(code)}`);

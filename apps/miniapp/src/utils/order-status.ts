@@ -200,6 +200,8 @@ export interface OrderDiscountParts {
   comboDiscount?: number;
   tierDiscount?: number;
   pointsDiscount?: number;
+  /** Nơi đơn được tạo: đơn đặt định kỳ chỉ có tổng `discount` là ưu đãi đặt định kỳ. */
+  source?: string | null;
 }
 
 /**
@@ -215,6 +217,7 @@ export function discountRows(o: OrderDiscountParts): { label: string; amount: nu
   const known = coupon + combo + tier + points;
   if (known === 0) {
     if (o.discount <= 0) return [];
+    if (o.source === 'subscription') return [{ label: 'Ưu đãi đặt định kỳ', amount: o.discount }];
     return [{ label: o.pointsUsed > 0 ? 'Giảm giá (gồm Điểm Xanh)' : 'Giảm giá', amount: o.discount }];
   }
   const rows = [

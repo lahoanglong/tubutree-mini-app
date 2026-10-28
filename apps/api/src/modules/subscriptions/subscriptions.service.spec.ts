@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { BadRequestException } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -669,6 +671,14 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       await svc.processDue();
       expect(orderCreate).toHaveBeenCalled();
       expect(enqueuePush).toHaveBeenCalledWith(expect.any(String));
+    });
+
+    it('ghi chú đơn định kỳ khớp SUBSCRIPTION_ORDER_NOTE của app-core (app dựa vào đó để hiện nhãn thay chữ tiếng Anh)', async () => {
+      const { svc, orderCreate } = makeProcess(1);
+      await svc.processDue();
+      const { note } = (orderCreate.mock.calls[0] as unknown as [{ data: { note: string } }])[0].data;
+      const appCore = readFileSync(join(__dirname, '../../../../../packages/app-core/src/api/orders.ts'), 'utf8');
+      expect(appCore).toContain(`SUBSCRIPTION_ORDER_NOTE = '${note}'`);
     });
 
     it('enqueuePush lỗi → KHÔNG làm hỏng chu kỳ cron (non-fatal, cron reconcile quét lại)', async () => {
