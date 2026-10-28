@@ -247,9 +247,16 @@ describe('/recycle/points — món chỉ kho nhận (B-36)', () => {
   });
   it('danh sách điểm trả 403 lúc thông tin khách chưa về: chưa đòi số điện thoại, hiện khung chờ', async () => {
     mocks.getWastePoints.mockRejectedValue(new HttpError('Chương trình đang tạm dừng', 'PROGRAMME_OFF', { status: 403, data: null } as never));
-    mocks.getWasteMe.mockReturnValue(new Promise(() => {}));
+    let resolveMe!: (me: ReturnType<typeof makeWasteMe>) => void;
+    mocks.getWasteMe.mockReturnValue(new Promise((r) => (resolveMe = r)));
     renderPage();
+    await waitFor(() => expect(mocks.getWastePoints).toHaveBeenCalled());
     await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText(/Cho Tubu số điện thoại/)).toBeNull();
+    expect(document.querySelector('.tubu-skeleton')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+    resolveMe(makeWasteMe());
+    expect(await screen.findByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
     expect(screen.queryByText(/Cho Tubu số điện thoại/)).toBeNull();
   });
 });
