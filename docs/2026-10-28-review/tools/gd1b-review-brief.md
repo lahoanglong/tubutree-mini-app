@@ -49,7 +49,7 @@ Mỗi màn trong nhóm, Mini App và web 375 chấm riêng (web 1280 ghi nhận 
 - P3: đánh bóng.
 
 ## Đầu ra
-1. Ghi DUY NHẤT file được giao (bằng Write), cấu trúc:
+1. Ghi DUY NHẤT file được giao (bằng Write hoặc Bash heredoc), cấu trúc:
    - `# <Nhóm>`
    - `## Tóm tắt`: tối đa 8 dòng, điều tệ nhất trước.
    - `## Điểm`: bảng `Màn (khoá) | Nền | Rõ | Dễ | Đẹp | Nhanh | Bền | Ghi chú một dòng`.
