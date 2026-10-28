@@ -1143,6 +1143,15 @@ describe('CheckoutPage — Điểm Xanh chỉ dùng cho hàng Tubu (Q8 S7)', () 
     expect(screen.queryByText(/Đơn này dùng tối đa/)).toBeNull();
   });
 
+  it('đơn đối tác khoá điểm: ô ghi tổng điểm đang có, không ghi "Dùng được"', async () => {
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 500, redeemablePoints: 300 });
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 500, redeemablePoints: 300, pointsMax: 0, pointsPartnerNote: NOTE });
+    renderPage();
+    expect(await screen.findByText(NOTE)).toBeInTheDocument();
+    expect(await screen.findByText(/Bạn đang có 500 điểm/)).toBeInTheDocument();
+    expect(screen.queryByText(/Dùng được/)).toBeNull();
+  });
+
   it('giỏ chỉ hàng của gian hàng đối tác: ô Điểm Xanh bị tắt, kèm câu giải thích, không gửi điểm', async () => {
     mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pointsBalance: 300, redeemablePoints: 300, pointsMax: 0, pointsPartnerNote: NOTE });
     renderPage();
