@@ -7,7 +7,7 @@ export const meta = {
   ],
 }
 
-// args: { reports: { <gói>: <báo cáo worker đợt B> }, only?: [<gói>] }
+// args: { only?: [<gói>] }. Báo cáo worker đợt B đọc từ reviews/<gói>-b.md.
 const ROOT = '/Users/longla/coding/tubutree-mini-app/.claude/worktrees'
 const R = ROOT + '/review-1028/docs/2026-10-28-review'
 const BASE = '1384ff3804ee1ce28cab06f0c2bb0230fb138f9b'
@@ -41,17 +41,25 @@ const PKGS = [
 ]
 
 const sel = (args && args.only) ? PKGS.filter((p) => args.only.includes(p.g)) : PKGS
-const reports = (args && args.reports) || {}
+const MIG = 'Ba nhánh đang có migration cùng mốc 20261028110000. Theo thứ tự gộp, giữ: muahang 20261028110000_welcome30_new_customer_only; diemxanh đổi tên thư mục thành 20261028120000_tier_drop_notice; ctv đổi thành 20261028130000_affiliate_auto_wallet_transfer (git mv, sửa mọi chỗ nhắc tên, chạy lại migrate deploy trên DB race).'
+const EXTRA = {
+  doirac: 'Việc thêm: đo web First Load các trang đã đổi (next build qua bundle-report --build-web --only=web) và ghi trước/sau.',
+  taikhoan: 'Việc thêm: /tai-khoan/don-hang/[code] First Load đang +3 KB (vượt +2 KB): cắt về ≤ +2 KB (tải trễ phần dưới màn đầu). Chạy web gate cả bộ (không chỉ order/account).',
+  quantri: 'Việc thêm: ghép ảnh trước/sau admin375 và admin1280 bằng before-after.mjs (ảnh TRƯỚC ở screens/admin*) vào screens-quantri/.',
+  ctv: 'Việc thêm: ' + MIG + ' Hero trang CTV hiện "Đang chờ: 0đ" lúc đang tải: thay bằng khung chờ. Đo web First Load các trang đã đổi.',
+  diemxanh: 'Việc thêm: ' + MIG + ' Tin báo trước hạ hạng là tin dịch vụ về tài khoản, không phải khuyến mãi: xếp vào nhóm tin tài khoản/đơn hàng (khách tắt Khuyến mãi vẫn nhận; vẫn tôn trọng cờ tắt mọi thông báo nếu có). Chụp trạng thái slow5s và error500 cho game, offers, loyalty.',
+  khampha: 'Việc thêm (bắt buộc, lượt đợt B còn dở): (1) CLS web < 0,1 cho khách mới và khách cũ: tải /flash-sales/active ở loadHomeInitial phía máy chủ và đưa vào initialData của FlashSale (hoặc giữ chỗ cố định đúng chiều cao); đo lại bằng cls-probe ở cổng của gói và ghi số. (2) /san-pham First Load +10 KB: tìm nguyên nhân (so next build trước/sau, chunk nào vào First Load) và đưa về ≤ +2 KB. (3) Mini entry 715 KB: đưa về ≤ 711. (4) Chạy web gate CẢ BỘ và Playwright Mini toàn bộ, ghi số. (5) Chụp lại ảnh sau commit cuối (home, browse, browse-category, browse-search, browse-brand, brand-slug, brand-story; persona returning, new, guest; thêm slow5s cho home) và ghép trước/sau; tự xem. (6) Xoá các file *.tmp.mjs trong tools hoặc đưa probe dùng lại được vào tools/perf/ có chú thích cách chạy.',
+  muahang: 'Việc thêm (bắt buộc, đợt B chưa làm): (1) Bật lane 6 từ worktree gói, nạp dữ liệu, chụp trước/sau mini375+web375 cho product-slug (có cảnh bảng chọn phân loại đang mở: SP có ≥ 2 phân loại), cart, checkout, bank-payment-code, group-buy, order-success; ghép bằng before-after.mjs vào screens-muahang/ và tự xem từng ảnh. (2) Chạy web gate CẢ BỘ. (3) Đo web First Load trước/sau (bundle-report --build-web --only=web ở gốc base 1384ff380 bằng cách đọc số trước trong ' + R + '/03-perf-build.md, và ở nhánh) cho /san-pham/[slug], /thanh-toan, /gio-hang, /mua-chung. (4) Mini entry 712 KB: đưa về ≤ 711 (saveImage để ở chunk lazy). (5) Web có test cho bridge.saveImage.',
+  hieunang: 'Việc thêm: (1) Tổng Mini App tăng ~10 KB: brief cấm tăng; giảm về ≤ baseline hoặc giải thích từng KB và đổi được gì (entry giảm 12 KB). (2) Đo web First Load các trang đã đổi (next build) và ghi trước/sau. (3) Thêm IMAGE_CACHE_DIR, IMAGE_CACHE_MAX_MB, IMAGE_RESIZE_EXTRA_HOSTS vào env validation và .env.production.example (không đổi docker-compose PROD). (4) Kiểm Dockerfile API build được sharp trên alpine (đọc Dockerfile; nếu dùng pnpm fetch/install --prod thì binary linuxmusl có trong lock); ghi kết luận. (5) Flaky web-checkout.web.spec:133: chạy 5 lần trên base 1384ff380 và trên nhánh để biết có sẵn hay do gói. (6) /home/me SQL: giảm nếu rẻ, ghi số trước/sau bằng prisma-query-log.',
+}
 
 const review = (p, round, workerReport, prev) => `Bạn là reviewer đối kháng (PM + Tech Lead) cho gói ${p.g} của đợt review Tubu Tree 2026-10-28. Lượt review ${round}. Chỉ đọc, không sửa file, không commit, không bật server.
 Worktree: ${ROOT}/r1028-${p.g}, nhánh review/1028-${p.g}. Diff: \`git -C ${ROOT}/r1028-${p.g} diff ${BASE}..HEAD\`, lịch sử \`git -C ${ROOT}/r1028-${p.g} log --oneline ${BASE}..HEAD\`.
 Mục gói: ${p.items}.
 Luật riêng: ${p.rules}
 Mô tả mục và bằng chứng: ${R}/20-backlog.md, ${R}/10-review-${p.group}.md. Luật chung worker: ${R}/tools/gd3-worker-brief.md. Review lượt trước của đợt A (nếu có): ${R}/reviews/${p.g}-r1.md.
-Báo cáo mới nhất của worker:
----
-${workerReport || '(không có)'}
----
+Báo cáo mới nhất của worker: ${workerReport ? '\n---\n' + workerReport + '\n---' : `đọc ${R}/reviews/${p.g}-b.md`}
+Việc bắt buộc người giao thêm cho lượt sửa (thiếu thì là P2): ${EXTRA[p.g]}
 ${prev ? `Review lượt trước (kiểm từng phát hiện đã sửa thật chưa, rồi tìm lỗi mới):\n---\n${prev}\n---\n` : ''}Ảnh trước/sau: ${R}/screens-${p.g}/ (mở bằng Read; mỗi ảnh 4 cột: Mini trước | Mini sau | Web trước | Web sau).
 
 Tìm lỗi thật, ưu tiên: sai tiền/điểm/giọt/hoa hồng, cộng đôi, race; đổi luật điểm/giá/phí/thể lệ/chữ pháp lý khi chưa được phép; bảo mật (SSRF, quyền, lộ dữ liệu); hồi quy chức năng; Mini App và web 375 lệch nhau (so ảnh); thiếu trạng thái tải/rỗng/lỗi; vùng chạm < 44px; chữ khó hiểu hoặc sai sự thật; test giả (assert lỏng, mock che lỗi); mục báo "đã làm" mà diff không có; vi phạm luật hai nền tảng (logic không ở app-core, thiếu route-map, gọi zmp-sdk/window trong app-core); migration không chỉ-thêm. Được chạy test đơn lẻ (vitest/jest một file) để chứng minh.
@@ -67,6 +75,7 @@ Reviewer Opus vừa trả:
 ---
 ${rv}
 ---
+Việc bắt buộc người giao thêm (làm cả khi reviewer không nhắc): ${EXTRA[p.g]}
 Sửa MỌI P0, P1, P2. P3: sửa nếu rẻ; không sửa thì ghi "không làm" kèm lý do một dòng. Viết test trước cho lỗi logic (thấy đỏ rồi sửa). Chạy lại bộ kiểm của brief cho phần đã đổi (tsc, eslint, vitest toàn bộ app đã đổi, jest API nếu đụng API, race nếu đụng tiền/điểm, Playwright cho màn đã đổi, lint:parity, vite build + bundle-report). Đổi giao diện thì chụp lại ảnh trước/sau và tự xem. Commit nhỏ.
 Trả về theo schema; report: từng phát hiện → đã sửa (commit) / không làm (lý do); số kiểm thật.`
 
@@ -79,7 +88,7 @@ const ok = (t) => typeof t === 'string' && /KẾT LUẬN:\s*merge được/i.tes
 
 const results = await pipeline(sel, async (p) => {
   const rounds = []
-  let wr = reports[p.g]
+  let wr = null
   let rv = await agent(review(p, 1, wr, null), { label: `rv1-${p.g}`, phase: 'Review', agentType: 'reviewer' })
   rounds.push({ review: rv })
   let n = 1
