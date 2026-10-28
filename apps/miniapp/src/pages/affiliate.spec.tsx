@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   getAffiliateMe: vi.fn(),
   registerAffiliate: vi.fn(),
   fetchCourses: vi.fn(),
+  ensurePhone: vi.fn(),
+  user: { id: 'u1', phone: '0901234567', zaloId: '8412345' } as { id: string; phone: string | null; zaloId: string | null },
 }));
 vi.mock('../services/academy-api', () => ({ fetchCourses: mocks.fetchCourses }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -23,7 +25,8 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../store/auth', () => ({
-  useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'authenticated' }),
+  useAuthStore: (sel: (s: { status: string; user: typeof mocks.user; ensurePhone: typeof mocks.ensurePhone }) => unknown) =>
+    sel({ status: 'authenticated', user: mocks.user, ensurePhone: mocks.ensurePhone }),
 }));
 vi.mock('../services/account-api', () => ({ getWallet: vi.fn().mockResolvedValue({ walletBalance: 75_000 }) }));
 vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink }));
@@ -221,6 +224,58 @@ describe('Đăng ký CTV — đồng ý điều khoản hoa hồng & thuế (C-1
   });
 });
 
+describe('Đăng ký CTV — khách vãng lai phải liên kết Zalo trước (CTV-03)', () => {
+  const guest = { id: 'g1', phone: null, zaloId: 'guest_dev-1' };
+  const realUser = { id: 'u1', phone: '0901234567', zaloId: '8412345' };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: false, referralCode: 'TUBU88', walletBalance: 0 });
+    mocks.registerAffiliate.mockResolvedValue({ ok: true, referralCode: 'TUBU88' });
+  });
+  afterEach(() => {
+    mocks.user = realUser;
+  });
+  const submit = async () => {
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Đăng ký miễn phí ngay' });
+    fireEvent.click(screen.getByRole('checkbox', { name: /đồng ý với điều khoản hoa hồng/ }));
+    fireEvent.click(btn);
+  };
+
+  it('khách bấm đăng ký: gọi ensurePhone trước, có SĐT rồi mới gọi API đăng ký', async () => {
+    mocks.user = guest;
+    mocks.ensurePhone.mockResolvedValue('0901234567');
+    await submit();
+    await waitFor(() => expect(mocks.registerAffiliate).toHaveBeenCalledWith('2026-10'));
+    expect(mocks.ensurePhone).toHaveBeenCalledTimes(1);
+    expect(mocks.ensurePhone.mock.invocationCallOrder[0]).toBeLessThan(mocks.registerAffiliate.mock.invocationCallOrder[0]!);
+  });
+
+  it('khách không liên kết được (ensurePhone trả null): không gọi API, báo cần liên kết Zalo', async () => {
+    mocks.user = guest;
+    mocks.ensurePhone.mockResolvedValue(null);
+    await submit();
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    expect(mocks.registerAffiliate).not.toHaveBeenCalled();
+    expect((mocks.openSnackbar.mock.calls[0]![0] as { text: string }).text).toMatch(/liên kết Zalo/);
+  });
+
+  it('ensurePhone ném lỗi: cũng dừng, không gọi API', async () => {
+    mocks.user = guest;
+    mocks.ensurePhone.mockRejectedValue(new Error('zalo từ chối'));
+    await submit();
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    expect(mocks.registerAffiliate).not.toHaveBeenCalled();
+  });
+
+  it('tài khoản thật: không hỏi SĐT, gọi API luôn', async () => {
+    mocks.user = realUser;
+    await submit();
+    await waitFor(() => expect(mocks.registerAffiliate).toHaveBeenCalledTimes(1));
+    expect(mocks.ensurePhone).not.toHaveBeenCalled();
+  });
+});
+
 describe('Dashboard CTV — lối tắt Lên đơn hộ ở đầu trang (C-064)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -346,6 +401,45 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
     expect(screen.getByText('Đơn TB123 ·', { exact: false })).toBeInTheDocument();
     expect(screen.getByText('Giao thành công')).toBeInTheDocument();
     expect(screen.queryByText('Đã trả')).toBeNull();
+  });
+
+  it('lịch sử hoa hồng đầy một trang: có "Tải thêm" gửi con trỏ là id dòng cuối, nối thêm dòng cũ hơn; hết trang thì nút biến mất', async () => {
+    const page1 = Array.from({ length: 50 }, (_, i) => ({ id: `c${i}`, amount: 1_000 + i, orderTotal: 10_000, status: 'PAID', createdAt: '2026-10-01T03:00:00.000Z' }));
+    const page2 = [{ id: 'old1', amount: 7_777, orderTotal: 10_000, status: 'PAID', createdAt: '2026-09-01T03:00:00.000Z' }];
+    vi.mocked(getCommissions).mockResolvedValueOnce(page1 as never).mockResolvedValueOnce(page2 as never);
+    renderPage();
+    await screen.findByRole('tab', { name: 'Hoa hồng' });
+    openTab('Hoa hồng');
+    await screen.findByText('+1.000đ');
+    // Trước đây chỉ vẽ 30 dòng đầu dù tải tới 100: nay vẽ đủ các dòng đã tải.
+    expect(screen.getByText('+1.049đ')).toBeInTheDocument();
+    expect(getCommissions).toHaveBeenLastCalledWith({ take: 50, cursor: undefined });
+    fireEvent.click(screen.getByRole('button', { name: 'Tải thêm' }));
+    expect(await screen.findByText('+7.777đ')).toBeInTheDocument();
+    expect(getCommissions).toHaveBeenLastCalledWith({ take: 50, cursor: 'c49' });
+    expect(screen.getByText('+1.000đ')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Tải thêm' })).toBeNull();
+  });
+
+  it('lịch sử hoa hồng chưa đầy một trang: không có "Tải thêm"', async () => {
+    renderPage();
+    await screen.findByRole('tab', { name: 'Hoa hồng' });
+    openTab('Hoa hồng');
+    await screen.findByText('+25.000đ');
+    expect(screen.queryByRole('button', { name: 'Tải thêm' })).toBeNull();
+  });
+
+  it('lịch sử chuyển vào Ví đầy một trang: "Tải thêm" nối lệnh cũ hơn bằng con trỏ id lệnh cuối', async () => {
+    const mk = (id: string, amount: number) => ({ id, amount, grossAmount: amount, taxWithheld: 0, fee: 0, method: 'WALLET_BALANCE', status: 'PAID', rejectionReason: null, bankRef: null, requestedAt: '2026-10-01T03:00:00.000Z', reviewedAt: null, paidAt: '2026-10-01T03:00:00.000Z' });
+    const page1 = Array.from({ length: 50 }, (_, i) => mk(`p${i}`, 100_000 + i));
+    vi.mocked(getMyPayouts).mockResolvedValueOnce(page1 as never).mockResolvedValueOnce([mk('pold', 555_000)] as never);
+    renderPage();
+    await screen.findByRole('tab', { name: 'Hoa hồng' });
+    openTab('Hoa hồng');
+    await screen.findByText('100.000đ');
+    fireEvent.click(await screen.findByRole('button', { name: 'Tải thêm' }));
+    expect(await screen.findByText('555.000đ')).toBeInTheDocument();
+    expect(getMyPayouts).toHaveBeenLastCalledWith({ take: 50, cursor: 'p49' });
   });
 
   it('mục Lịch sử chuyển vào Ví: trạng thái, lý do từ chối, mã giao dịch và thuế TNCN đã khấu trừ', async () => {

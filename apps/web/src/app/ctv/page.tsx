@@ -3,7 +3,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BadgePercent, ChevronRight, GraduationCap, Handshake, Landmark, Link2, Receipt, Store, TrendingUp, Wallet } from 'lucide-react';
 import { createAffiliateLink, registerAffiliate, type AffiliatePayout, type Commission } from '@tubutree/app-core/api/affiliate';
 import {
@@ -20,7 +20,7 @@ import {
 } from '@tubutree/app-core/queries/affiliate';
 import { academyCoursesQuery } from '@tubutree/app-core/queries/academy';
 import { walletQuery } from '@tubutree/app-core/queries/wallet';
-import { COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, transferBlockedText, transferHeroNote } from '@tubutree/app-core/ctv-dashboard';
+import { affiliateNextCursor, COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, transferBlockedText, transferHeroNote } from '@tubutree/app-core/ctv-dashboard';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
@@ -310,6 +310,19 @@ function CommissionRow({ c }: { c: Commission }) {
   );
 }
 
+/** Nút "Tải thêm" của lịch sử có phân trang; tải trang kế lỗi thì giữ các dòng đã có và nói cách thử lại. */
+function LoadMore({ q }: { q: { hasNextPage: boolean; isFetchingNextPage: boolean; isFetchNextPageError: boolean; fetchNextPage: () => unknown } }) {
+  if (!q.hasNextPage) return null;
+  return (
+    <div className="pt-2">
+      {q.isFetchNextPageError && <p className="mb-1.5 text-center text-xs text-danger-fg">Chưa tải thêm được. Bạn bấm Tải thêm để thử lại nhé.</p>}
+      <button type="button" onClick={() => void q.fetchNextPage()} disabled={q.isFetchingNextPage} className={`${ui.btnSecondary} w-full`}>
+        {q.isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}
+      </button>
+    </div>
+  );
+}
+
 function Dashboard() {
   const qc = useQueryClient();
   const meQ = useQuery(affiliateMeQuery(coreHttp));
@@ -317,8 +330,20 @@ function Dashboard() {
   // Mỗi tab chỉ tải dữ liệu của tab đó: mở trang CTV không còn gọi cả 15 request.
   const [tab, setTab] = useTabParam(CTV_TAB_KEYS, 'overview');
   const linksQ = useQuery({ ...affiliateLinksQuery(coreHttp), enabled: tab === 'share' });
-  const commQ = useQuery({ ...affiliateCommissionsQuery(coreHttp), enabled: tab === 'commission' });
-  const payoutsQ = useQuery({ ...affiliatePayoutsQuery(coreHttp), enabled: tab === 'commission' });
+  const commQ = useInfiniteQuery({
+    ...affiliateCommissionsQuery(coreHttp),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: affiliateNextCursor,
+    enabled: tab === 'commission',
+  });
+  const payoutsQ = useInfiniteQuery({
+    ...affiliatePayoutsQuery(coreHttp),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: affiliateNextCursor,
+    enabled: tab === 'commission',
+  });
+  const commissions = commQ.data?.pages.flat() ?? [];
+  const payouts = payoutsQ.data?.pages.flat() ?? [];
   const taxQ = useQuery({ ...affiliateTaxStatementQuery(coreHttp), enabled: tab === 'commission' });
   const sfQ = useQuery({ ...affiliateStorefrontAnalyticsQuery(coreHttp), enabled: tab === 'commission' });
   const pbQ = useQuery({ ...affiliateProductBreakdownQuery(coreHttp), enabled: tab === 'commission' });
@@ -593,15 +618,18 @@ function Dashboard() {
         {tab === 'commission' && (
           <>
           <Section title="Lịch sử hoa hồng">
-            {commQ.isError ? (
+            {commQ.isError && commissions.length === 0 ? (
               // Tránh "Chưa có hoa hồng" khi thực tế là API lỗi.
               <ErrorState variant="inline" message={errText(commQ.error)} onRetry={() => void commQ.refetch()} />
-            ) : commQ.data && commQ.data.length > 0 ? (
-              <ul>
-                {commQ.data.slice(0, 30).map((c) => (
-                  <CommissionRow key={c.id} c={c} />
-                ))}
-              </ul>
+            ) : commissions.length > 0 ? (
+              <>
+                <ul>
+                  {commissions.map((c) => (
+                    <CommissionRow key={c.id} c={c} />
+                  ))}
+                </ul>
+                <LoadMore q={commQ} />
+              </>
             ) : commQ.isLoading ? (
               <SectionSkeleton />
             ) : (
@@ -624,14 +652,17 @@ function Dashboard() {
                 </div>
               </div>
             )}
-            {payoutsQ.isError ? (
+            {payoutsQ.isError && payouts.length === 0 ? (
               <ErrorState variant="inline" message={errText(payoutsQ.error)} onRetry={() => void payoutsQ.refetch()} />
-            ) : payoutsQ.data && payoutsQ.data.length > 0 ? (
-              <ul>
-                {payoutsQ.data.map((p) => (
-                  <PayoutRow key={p.id} p={p} />
-                ))}
-              </ul>
+            ) : payouts.length > 0 ? (
+              <>
+                <ul>
+                  {payouts.map((p) => (
+                    <PayoutRow key={p.id} p={p} />
+                  ))}
+                </ul>
+                <LoadMore q={payoutsQ} />
+              </>
             ) : payoutsQ.isLoading ? (
               <SectionSkeleton />
             ) : (

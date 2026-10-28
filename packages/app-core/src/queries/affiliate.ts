@@ -14,6 +14,7 @@ import {
   quoteCtvOrder,
   type CtvOrderItemInput,
 } from '../api/affiliate';
+import { AFFILIATE_PAGE_SIZE } from '../ctv-dashboard';
 
 export const affiliateMeQuery = (http: HttpClient) => ({
   queryKey: ['affiliate-me'] as const,
@@ -27,13 +28,14 @@ export const affiliateLinksQuery = (http: HttpClient) => ({
   queryKey: ['affiliate-links'] as const,
   queryFn: () => getAffiliateLinks(http),
 });
+/** Dùng với useInfiniteQuery (initialPageParam undefined, getNextPageParam: affiliateNextCursor). */
 export const affiliateCommissionsQuery = (http: HttpClient) => ({
   queryKey: ['affiliate-commissions'] as const,
-  queryFn: () => getCommissions(http),
+  queryFn: ({ pageParam }: { pageParam?: string } = {}) => getCommissions(http, { take: AFFILIATE_PAGE_SIZE, cursor: pageParam }),
 });
 export const affiliatePayoutsQuery = (http: HttpClient) => ({
   queryKey: ['affiliate-payouts'] as const,
-  queryFn: () => getMyPayouts(http),
+  queryFn: ({ pageParam }: { pageParam?: string } = {}) => getMyPayouts(http, { take: AFFILIATE_PAGE_SIZE, cursor: pageParam }),
 });
 export const affiliateTaxStatementQuery = (http: HttpClient) => ({
   queryKey: ['affiliate-tax-statement'] as const,

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, Sheet, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchCourses } from '../services/academy-api';
 import {
   getAffiliateMe,
@@ -25,12 +25,14 @@ import {
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { ShareSheet } from '../components/share-sheet';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
-import { COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, transferBlockedText, transferHeroNote, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
+import { AFFILIATE_PAGE_SIZE, affiliateNextCursor, COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, transferBlockedText, transferHeroNote, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
 import { getWallet } from '../services/account-api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { formatDate, formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { isGuestUser } from '../utils/guest-user';
+import { useAuthStore } from '../store/auth';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { PERSONAL_TAX_ID_PATTERN } from '../utils/tax-id';
 import { vi as copy } from '../i18n/vi';
@@ -155,12 +157,23 @@ function CannotRegister() {
   );
 }
 
+class GuestLinkRequired extends Error {}
+
 function RegisterGate() {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const ensurePhone = useAuthStore((s) => s.ensurePhone);
   const [agreed, setAgreed] = useState(false);
   const reg = useMutation({
-    mutationFn: () => registerAffiliate(vi.ctvTerms.version),
+    mutationFn: async () => {
+      // Khách chưa có Zalo thật không đăng ký CTV được (máy chủ từ chối): xin SĐT trước, không được thì dừng, không gọi API.
+      if (user && isGuestUser(user)) {
+        const phone = await ensurePhone().catch(() => null);
+        if (!phone) throw new GuestLinkRequired();
+      }
+      return registerAffiliate(vi.ctvTerms.version);
+    },
     onSuccess: () => {
       haptic('medium');
       openSnackbar({ text: 'Chào mừng CTV Tubu Tree! 🎉', type: 'success' });
@@ -168,7 +181,7 @@ function RegisterGate() {
       // Vai trò vừa đổi: tải lại Học viện (lần tải trước khi còn là khách bị từ chối và không thử lại).
       void qc.invalidateQueries({ queryKey: ['academy-courses'] });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => openSnackbar({ text: e instanceof GuestLinkRequired ? vi.ctvTerms.needZalo : getErrorMessage(e), type: 'error' }),
   });
 
   const benefits = [
@@ -288,8 +301,22 @@ function Dashboard() {
   const { search } = useLocation();
   const [tab, setTab] = useState<CtvTabKey>(() => CTV_TAB_KEYS.find((k) => k === new URLSearchParams(search).get('tab')) ?? 'overview');
   const linksQ = useQuery({ queryKey: ['affiliate-links'], queryFn: getAffiliateLinks, enabled: tab === 'share' });
-  const commQ = useQuery({ queryKey: ['affiliate-commissions'], queryFn: getCommissions, enabled: tab === 'commission' });
-  const payoutsQ = useQuery({ queryKey: ['affiliate-payouts'], queryFn: getMyPayouts, enabled: tab === 'commission' });
+  const commQ = useInfiniteQuery({
+    queryKey: ['affiliate-commissions'],
+    queryFn: ({ pageParam }) => getCommissions({ take: AFFILIATE_PAGE_SIZE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: affiliateNextCursor,
+    enabled: tab === 'commission',
+  });
+  const payoutsQ = useInfiniteQuery({
+    queryKey: ['affiliate-payouts'],
+    queryFn: ({ pageParam }) => getMyPayouts({ take: AFFILIATE_PAGE_SIZE, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: affiliateNextCursor,
+    enabled: tab === 'commission',
+  });
+  const commissions = commQ.data?.pages.flat() ?? [];
+  const payouts = payoutsQ.data?.pages.flat() ?? [];
   const taxQ = useQuery({ queryKey: ['affiliate-tax-statement'], queryFn: () => getTaxStatement(), enabled: tab === 'commission' });
   const sfQ = useQuery({ queryKey: ['affiliate-sf-analytics'], queryFn: getStorefrontAnalytics, enabled: tab === 'commission' });
   const pbQ = useQuery({ queryKey: ['affiliate-product-breakdown'], queryFn: getProductBreakdown, enabled: tab === 'commission' });
@@ -749,12 +776,12 @@ function Dashboard() {
         <>
       {/* Lịch sử hoa hồng */}
       <Section title="Lịch sử hoa hồng">
-        {commQ.isError ? (
+        {commQ.isError && commissions.length === 0 ? (
           // Tránh hiển thị "Chưa có hoa hồng" khi thực tế là API lỗi — CTV sẽ mất niềm tin.
           <ErrorState variant="inline" message={getLoadErrorMessage(commQ.error)} onRetry={() => void commQ.refetch()} />
-        ) : commQ.data && commQ.data.length > 0 ? (
+        ) : commissions.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {commQ.data.slice(0, 30).map((c: Commission) => {
+            {commissions.map((c: Commission) => {
               const m = c.withdrawing ? WITHDRAWING_META : COMMISSION_META[c.status];
               return (
                 <div
@@ -786,6 +813,7 @@ function Dashboard() {
                 </div>
               );
             })}
+            <LoadMore q={commQ} />
           </div>
         ) : commQ.isLoading ? (
           <SectionSkeleton />
@@ -811,13 +839,14 @@ function Dashboard() {
             </Text>
           </div>
         )}
-        {payoutsQ.isError ? (
+        {payoutsQ.isError && payouts.length === 0 ? (
           <ErrorState variant="inline" message={getLoadErrorMessage(payoutsQ.error)} onRetry={() => void payoutsQ.refetch()} />
-        ) : payoutsQ.data && payoutsQ.data.length > 0 ? (
+        ) : payouts.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {payoutsQ.data.map((p) => (
+            {payouts.map((p) => (
               <PayoutRow key={p.id} p={p} />
             ))}
+            <LoadMore q={payoutsQ} />
           </div>
         ) : payoutsQ.isLoading ? (
           <SectionSkeleton />
@@ -978,6 +1007,23 @@ function Dashboard() {
         {ctvOrdering && <CtvOrderSheet onClose={() => setCtvOrdering(false)} />}
       </Sheet>
     </Page>
+  );
+}
+
+/** Nút "Tải thêm" của lịch sử có phân trang; tải trang kế lỗi thì giữ các dòng đã có và nói cách thử lại. */
+function LoadMore({ q }: { q: { hasNextPage: boolean; isFetchingNextPage: boolean; isFetchNextPageError: boolean; fetchNextPage: () => unknown } }) {
+  if (!q.hasNextPage) return null;
+  return (
+    <div style={{ paddingTop: 8 }}>
+      {q.isFetchNextPageError && (
+        <Text variant="caption" tone="danger" as="p" style={{ margin: '0 0 6px', textAlign: 'center' }}>
+          Chưa tải thêm được. Bạn bấm Tải thêm để thử lại nhé.
+        </Text>
+      )}
+      <Button fullWidth variant="secondary" loading={q.isFetchingNextPage} onPress={() => void q.fetchNextPage()}>
+        Tải thêm
+      </Button>
+    </div>
   );
 }
 

@@ -717,6 +717,7 @@ export const vi = {
     ],
     agree: 'Tôi đã đọc và đồng ý với điều khoản hoa hồng & thuế của CTV Tubu Tree',
     mustAgree: 'Chọn ô đồng ý điều khoản để đăng ký',
+    needZalo: 'Cần liên kết Zalo để nhận hoa hồng. Bấm Đăng ký lại và chọn cho phép dùng số điện thoại nhé.',
   },
 
   dealerApply: {
