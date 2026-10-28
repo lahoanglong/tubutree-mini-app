@@ -75,6 +75,49 @@ describe('BottomNav', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/profile');
   });
 
+  describe('bấm lại tab đang mở', () => {
+    afterEach(() => {
+      document.querySelectorAll('.zaui-page').forEach((el) => el.remove());
+      vi.restoreAllMocks();
+    });
+    const page = () => {
+      const el = document.createElement('div');
+      el.className = 'zaui-page';
+      el.scrollTo = vi.fn() as unknown as typeof el.scrollTo;
+      document.body.appendChild(el);
+      return el;
+    };
+
+    it('cuộn mượt về đầu trang đang mở (vùng cuộn là .zaui-page), không điều hướng', () => {
+      mocks.pathname = '/offers';
+      const el = page();
+      render(<BottomNav />);
+      fireEvent.click(screen.getByRole('button', { name: 'Ưu đãi' }));
+      expect(el.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+      expect(mocks.navigate).not.toHaveBeenCalled();
+    });
+
+    it('nhiều lớp trang trong DOM (đang chuyển cảnh): cuộn lớp trên cùng, lớp cũ không bị động', () => {
+      mocks.pathname = '/';
+      const old = page();
+      const current = page();
+      render(<BottomNav />);
+      fireEvent.click(screen.getByRole('button', { name: 'Trang chủ' }));
+      expect(current.scrollTo).toHaveBeenCalledTimes(1);
+      expect(old.scrollTo).not.toHaveBeenCalled();
+    });
+
+    it('không thấy .zaui-page thì cuộn cửa sổ; khách bật giảm chuyển động thì không cuộn mượt', () => {
+      mocks.pathname = '/';
+      const win = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+      vi.stubGlobal('matchMedia', () => ({ matches: true }));
+      render(<BottomNav />);
+      fireEvent.click(screen.getByRole('button', { name: 'Trang chủ' }));
+      expect(win).toHaveBeenCalledWith({ top: 0, behavior: 'auto' });
+      vi.unstubAllGlobals();
+    });
+  });
+
   it('ẩn ở trang con (vd /orders và /wallet đã thành trang con)', () => {
     mocks.pathname = '/orders';
     const { container } = render(<BottomNav />);
