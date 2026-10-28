@@ -360,6 +360,8 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
     api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
     api.get('/me', () => USER);
     api.get('/config/public', { freeshipThreshold: 500000, cashbackHoldDays: 45, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
+    // Trang chủ (đích chuyển hướng) tự gọi các API này; test chỉ kiểm địa chỉ.
+    api.allowUnmocked('GET /flash-sales/upcoming', 'GET /me/wishlist/ids', 'GET /products/for-you', 'GET /me/purchased-items');
     await page.goto('/hoan-tien');
     await expect(page).toHaveURL(/\/$/);
   });
