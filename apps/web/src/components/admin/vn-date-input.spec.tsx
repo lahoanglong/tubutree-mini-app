@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { act } from 'react';
-import { flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
+import { byText, click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { VnDateInput, VnDateTimeInput, VnMonthInput, isoToVn, maskVnDate, vnToIso } from './vn-date-input';
 
 let mounted: Rendered[] = [];
@@ -226,5 +226,42 @@ describe('VnDateTimeInput', () => {
     typeInto(date(r.container), '');
     await flush();
     expect(onValue).toHaveBeenLastCalledWith('');
+  });
+
+  it('sửa giá trị có sẵn 20:07: xoá ngày rồi gõ ngày mới thì vẫn giữ giờ 20:07, không rơi về 00:00', async () => {
+    const onValue = vi.fn();
+    const r = render(<Harness initial="2026-10-20T20:07" onValue={onValue} />);
+    mounted.push(r);
+    typeInto(date(r.container), '');
+    await flush();
+    expect(onValue).toHaveBeenLastCalledWith('');
+    expect(hour(r.container).value).toBe('20');
+    expect(minute(r.container).value).toBe('07');
+    typeInto(date(r.container), '21102026');
+    await flush();
+    expect(onValue).toHaveBeenLastCalledWith('2026-10-21T20:07');
+  });
+
+  it('cha đặt giá trị mới thì giờ chờ theo giá trị đó', async () => {
+    const onValue = vi.fn();
+    function Parent() {
+      const [v, setV] = useState('2026-10-20T20:07');
+      return (
+        <>
+          <button type="button" onClick={() => setV('2026-10-22T08:30')}>đổi</button>
+          <button type="button" onClick={() => setV('')}>xoá</button>
+          <VnDateTimeInput value={v} ariaLabel="Bắt đầu" onChange={(x) => { setV(x); onValue(x); }} />
+        </>
+      );
+    }
+    const r = render(<Parent />);
+    mounted.push(r);
+    click(byText(r.container, 'button', 'đổi'));
+    await flush();
+    click(byText(r.container, 'button', 'xoá'));
+    await flush();
+    typeInto(date(r.container), '23102026');
+    await flush();
+    expect(onValue).toHaveBeenLastCalledWith('2026-10-23T08:30');
   });
 });

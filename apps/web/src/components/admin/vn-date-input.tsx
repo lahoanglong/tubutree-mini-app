@@ -183,7 +183,11 @@ export function VnDateTimeInput({
   onPendingChange?: (pending: boolean) => void;
 }) {
   const parsed = splitDateTime(value);
-  const [held, setHeld] = useState({ hh: '00', mm: '00' });
+  const [held, setHeld] = useState(() => (parsed ? { hh: parsed.hh, mm: parsed.mm } : { hh: '00', mm: '00' }));
+  // Cha đổi giá trị từ ngoài thì giờ chờ theo: xoá ngày rồi gõ lại vẫn ghép với giờ đang có, không rơi về 00:00.
+  useEffect(() => {
+    if (parsed) setHeld((h) => (h.hh === parsed.hh && h.mm === parsed.mm ? h : { hh: parsed.hh, mm: parsed.mm }));
+  }, [parsed?.hh, parsed?.mm]);
   const hh = parsed?.hh ?? held.hh;
   const mm = parsed?.mm ?? held.mm;
   const date = parsed?.date ?? '';
