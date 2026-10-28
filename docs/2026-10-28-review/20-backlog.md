@@ -236,3 +236,48 @@ Thứ tự gộp đề xuất: 1 `doirac` → 2 `khampha` → 3 `muahang` → 4 
 - diemxanh, ctv, quantri độc lập, có thể đổi chỗ nhau.
 
 Sau (không vào gói đợt này, 32 mục): R-92, R-93, R-94, R-95, R-98, R-99, R-100, R-101, R-102, R-106, R-112, R-114, R-116 (chờ chủ), R-121, R-122, R-125, R-130, R-131, R-132 (chờ chủ), R-133, R-134, R-135, R-136, R-138, R-140, R-143, R-150, R-151, R-152, R-153, R-154, R-155. Việc của chủ, không có gói: R-86, cùng phần "chủ" của R-1, R-9, R-11.
+
+## Sau đợt 28/10: trạng thái sau GĐ3 và mục mới
+
+Ghi từ báo cáo worker và review Opus của từng gói (`reviews/<gói>-{b,c,d}.md`).
+
+### Mục trong gói chưa xong hoặc chỉ xong một phần
+
+| Mục | Gói | Trạng thái | Còn lại |
+|---|---|---|---|
+| R-16 | khampha | một phần | Bước 1 xong (web gọi `/flash-sales/active` một lần). Bước 2 (web dùng `/home` + `/home/me`) chưa làm. |
+| R-24 | muahang | chưa làm | Chưa tái hiện được lỗi hydrate trên web 375 cho khách vãng lai; giữ mở. |
+| R-32 | muahang | chờ chủ | Chữ chính sách. |
+| R-53 | doirac, taikhoan | một phần | Cổng, chân trang, API gọi theo vai đã làm; dòng Học viện ở menu tài khoản và earn-sheet chưa. |
+| R-54 | doirac | một phần | Web xong. Mini chỉ tách khung chờ trong trang ra component, màn vẫn như cũ; `RouteFallback` ở `app.tsx` giữ nguyên (khung chờ lúc tải chunk lazy chưa làm). |
+| R-55 | doirac | chờ chủ | Bố cục đầu trang Cộng đồng chung cho Mini và web (chip "Sự kiện" đang chung nhóm lọc ở Mini; web còn hàng Xếp hạng/Sự kiện/Đăng bài). |
+| R-56 | doirac | một phần, chờ chủ | Web cho đọc bài và chat khi chưa đăng nhập cần endpoint đọc công khai. |
+| R-70, R-75, R-148, R-149 | quantri | chuyển gói sau | Cần API đếm theo trạng thái hoặc đổi QueryClient dùng chung. |
+| R-77 | hieunang | một phần | Entry Mini 711 → khoảng 709 KB; đích 600 KB cần tách `vi.ts` và lazy khối trang chủ (làm sau khi các gói gộp). |
+| R-82 | hieunang | một phần | `/cart` 8 SQL lần gọi thứ hai (đạt). `/home/me` còn 17–19 SQL (đích ≤ 12). |
+| R-83 | hieunang | chưa làm | `loading.tsx` cho `san-pham` làm trang không tồn tại trả 200 thay 404 nên đã bỏ; cần khung chờ phía client hoặc cách giữ 404. |
+| R-97 | muahang | một phần | Popup chi tiết hạng và đơn sàn chưa làm. |
+| R-110, R-111 | taikhoan | một phần | Ô ngày sinh vẫn là ô ngày gốc của trình duyệt; "Xoá tài khoản" vẫn ở Giới thiệu. |
+
+### Mục mới
+
+| Mục | Ưu tiên | Màn | Vấn đề | Nguồn | Gợi ý |
+|---|---|---|---|---|---|
+| R-156 | P2 | home (Mini) | Khách cũ mất mạng lúc mở app (`status = 'error'`) vẫn thấy quà khách mới. Có từ trước đợt này. | `reviews/khampha-d.md`, `apps/miniapp/src/store/auth.ts:140,198` | Trạng thái lỗi giữ bố cục khách cũ đã nhớ trên máy. |
+| R-157 | P3 | home | `new-customer-gift.tsx` còn nhắc "định kỳ" trong khi Mini tắt Định kỳ (`SUBSCRIPTIONS_IN_MINIAPP = false`). | `reviews/khampha-d.md`, `reviews/muahang-d.md` | Sửa sau khi khampha và muahang cùng gộp. |
+| R-158 | P3 | chi tiết đơn (web) | Lúc khung chờ `/tai-khoan` còn hiện, nút lùi nổi ở chi tiết đơn về danh sách đơn thay vì `/tai-khoan`. | `reviews/hieunang-d.md` | Khung chờ mang theo đích lùi của trang cha. |
+| R-159 | P3 | ảnh SP (`/img`) | Hạn mức yêu cầu sai `?v=` tính theo IP; sau NAT nhiều khách chung IP có thể bị 503 trong phút bị chặn. Danh sách URL làm mới 5 phút: ảnh vừa thay trong 5 phút trả 404 và client rơi về ảnh gốc. | `reviews/hieunang-d.md` | Lấy IP thật qua trust proxy; làm mới danh sách khi lưu ảnh SP. |
+| R-160 | P3 | CTV | Số to là "Số dư Ví Tubu" khi hết hoa hồng chờ chuyển; số này gồm cả tiền hoàn. Chủ chốt có giữ không. Chưa có ảnh ca này. | `reviews/ctv-d.md` | Chủ quyết. |
+| R-161 | P3 | CTV | Ngay sau khi chuyển vào Ví, nút "Chuyển vào Ví Tubu" còn bấm được tới khi dashboard tải lại; máy chủ từ chối nên không mất tiền, nhưng khách thấy lỗi. Guard `autoCredited.has` (`affiliate.service.ts`) không bao giờ có tác dụng. | `reviews/ctv-d.md` | Khoá nút bằng trạng thái "vừa chuyển"; bỏ guard thừa. |
+| R-162 | P3 | Điểm Xanh, Vườn (web) | Khung chờ web dạng thẻ (`loading.tsx` chung) khác Mini dạng khối khi mạng chậm. Có từ trước. | `reviews/diemxanh-d.md` | Khung chờ riêng cho hai màn web. |
+| R-163 | P3 | thanh toán | Luật nhãn ô điểm bị khoá và `pointsSummary` viết hai lần (web, Mini). | `reviews/muahang-d.md` | Gộp vào app-core. |
+| R-164 | P3 | home | Giờ vàng còn hai ca nhảy bố cục một lần: HTML ISR cũ trả sau giờ hết suất; dựng rỗng rồi tải lại có suất mới. | `reviews/khampha-d.md` | Đo bằng `cls-probe`, giữ chỗ khi máy nhớ đã có suất. |
+| R-165 | P3 | công cụ review | `waste-method-order.spec.ts:28`: câu kiểm đầu đúng cả khi chưa sửa; `routes.json` chỉ khai persona returning cho browse-search. | `reviews/doirac-d.md`, `reviews/khampha-d.md` | Sửa ca test; thêm persona new, guest. |
+| R-166 | — | Báo cáo (admin) | Khách vãng lai đã mua không còn nằm trong "đơn đầu" và doanh thu 30 ngày theo nguồn (chỉ đổi chữ hiển thị, SQL giữ). | `reviews/quantri-d.md` | Chủ biết. |
+
+### Điều chủ cần biết (không phải lỗi)
+
+- Gộp chuỗi điểm danh (diemxanh): ngày chuyển đổi lấy theo chuỗi nước. Khách đang ở N6 của chu kỳ Điểm Xanh cũ mà chuỗi nước ở ngày 1 thì hôm chuyển nhận điểm ngày 2 thay vì ngày 7 (chênh 1.000 điểm nếu lẽ ra tới N7). Đây là hệ quả của cách chuyển đổi chủ đã duyệt.
+- Hoa hồng tự vào Ví (ctv): lượt cron đầu sau deploy sẽ tự cộng mọi hoa hồng APPROVED đang tồn. CTV thiếu MST mà bị khấu trừ thì không tự chuyển, vẫn bấm tay.
+- Ngày giao dự kiến (taikhoan) tính từ giờ đặt (`createdAt`), cùng gốc với màn thanh toán; đơn chuyển khoản trả muộn có thể hiện sớm tối đa một ngày.
+- Web vẫn bán Định kỳ (R-30 chỉ ẩn ở Mini), nên thẻ "Đặt định kỳ" ở màn đặt thành công web 375 khác Mini là cố ý.
