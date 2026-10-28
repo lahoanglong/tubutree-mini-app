@@ -364,6 +364,7 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       // Mini App gắn một nhịp tải lại danh sách Giờ vàng ở gốc app (useFlashSalesPoller): mọi trang đều gọi; mặc định không có suất nào.
       api.fallback('GET', '/flash-sales/active', []);
       if (testInfo.project.name.startsWith('Web ')) shellDefaults(api);
+      if (testInfo.project.name === 'Web Admin') adminShellDefaults(api);
       // Đăng ký TRƯỚC → ưu tiên THẤP NHẤT (Playwright chạy route đăng ký sau trước).
       await page.route(
         (url) => !LOCAL_HOSTS.has(url.hostname),
@@ -432,6 +433,12 @@ function shellDefaults(api: MockApi): void {
   api.fallback('GET', '/me/subscriptions', []);
   // Chuông ở thanh đầu máy tính hỏi thông báo ở mọi trang khi đã đăng nhập.
   api.fallback('GET', '/me/notifications', []);
+}
+
+/** Khung trang quản trị gọi hộp việc (huy hiệu menu) và cờ tích điểm tại quầy ở mọi tab; mặc định không có việc nào và quầy đang bật. */
+function adminShellDefaults(api: MockApi): void {
+  api.fallback('GET', '/admin/ops/inbox', { generatedAt: '2026-10-28T03:00:00.000Z', items: [] });
+  api.fallback('GET', '/me/loyalty/member-card', { posCreditEnabled: true });
 }
 
 // ─────────────────────────── Dữ liệu mẫu dùng chung ───────────────────────────

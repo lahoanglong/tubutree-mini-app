@@ -119,7 +119,7 @@ test.describe('Web Admin Dashboard E2E - Luồng Duyệt Đại Lý', () => {
     expect(call.body).toEqual({ approve: true, tierId: 'dealer_l1' });
 
     // Duyệt xong → danh sách chờ được tải lại, hồ sơ rời hàng chờ.
-    await expect(p.getByText('Không có hồ sơ.')).toBeVisible();
+    await expect(p.getByText('Chưa có hồ sơ nào chờ duyệt.')).toBeVisible();
     await expect(p.getByText('Tạp hoá Cô Lan')).toHaveCount(0);
   });
 

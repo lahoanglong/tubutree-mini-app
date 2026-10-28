@@ -1453,7 +1453,7 @@ function OrdersTab({
           )}
         </form>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           {narrow ? (
             <div role="group" aria-label="Lọc đơn theo trạng thái" className="-mx-1 flex w-full gap-2 overflow-x-auto px-1 pb-1">
               {ORDER_STATUS_CHIPS.map((c) => (
