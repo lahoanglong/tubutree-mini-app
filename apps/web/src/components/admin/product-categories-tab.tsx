@@ -10,6 +10,7 @@ import {
   listPancakeCategories,
   type CategoryProduct,
 } from '@/lib/product-categories';
+import { getOpsInbox } from '@/lib/admin-client';
 import { ProductEditDrawer } from './product-edit-drawer';
 import { useConfirm } from './confirm-dialog';
 import { useDebounced } from './search-picker';
@@ -22,13 +23,14 @@ const errText = (e: unknown, fallback: string) => (e instanceof Error && e.messa
  * "Danh mục sản phẩm": đồng bộ Pancake không gán danh mục, nên đây là nơi gán/gỡ danh mục hàng loạt cho sản phẩm
  * (lọc "chưa có danh mục", chỉ hàng Pancake, đang bán mà thiếu ảnh, tìm theo tên/SKU) và sửa ảnh, mô tả của từng sản phẩm. Đồng bộ không ghi đè danh mục đã gán ở đây.
  */
-export function ProductCategoriesTab() {
+export function ProductCategoriesTab({ initialMissingImage = false }: { initialMissingImage?: boolean } = {}) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [typed, setTyped] = useState('');
-  const [uncategorized, setUncategorized] = useState(true);
-  const [pancakeOnly, setPancakeOnly] = useState(true);
-  const [missingImage, setMissingImage] = useState(false);
+  const [uncategorized, setUncategorized] = useState(false);
+  const [pancakeOnly, setPancakeOnly] = useState(false);
+  const [missingImage, setMissingImage] = useState(initialMissingImage);
+  const missingImageCount = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 }).data?.items.find((i) => i.key === 'productsMissingImage')?.count;
   const [editing, setEditing] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [categoryId, setCategoryId] = useState('');
@@ -94,10 +96,10 @@ export function ProductCategoriesTab() {
     <div className="space-y-4">
       {dialog}
       <div>
-        <h2 className="font-display text-lg font-semibold text-stone-900">Danh mục sản phẩm</h2>
+        <h2 className="font-display text-lg font-semibold text-stone-900">Sản phẩm</h2>
         <p className="mt-1 text-sm text-stone-600">
-          Hàng đồng bộ từ Pancake chưa có danh mục nên chưa hiện trong trang từng danh mục. Chọn nhiều sản phẩm rồi gán một danh mục.
-          Đồng bộ Pancake không ghi đè danh mục đã gán ở đây. Danh mục chưa có sản phẩm đang bán bị Mini App ẩn.
+          Sửa ảnh, mô tả, ẩn hoặc hiện từng sản phẩm; chọn nhiều sản phẩm để gán một danh mục. Hàng từ Pancake chưa có danh mục thì chưa hiện trong
+          trang danh mục của Mini App.
         </p>
       </div>
 
@@ -118,7 +120,7 @@ export function ProductCategoriesTab() {
           Chỉ hàng Pancake
         </button>
         <button type="button" aria-pressed={missingImage} onClick={() => setMissingImage((v) => !v)} className={chipClass(missingImage)}>
-          Đang bán, thiếu ảnh
+          Đang bán, thiếu ảnh{missingImageCount !== undefined ? ` (${missingImageCount})` : ''}
         </button>
         {total !== undefined && <span className="text-xs text-stone-500">{total} sản phẩm khớp bộ lọc</span>}
       </div>

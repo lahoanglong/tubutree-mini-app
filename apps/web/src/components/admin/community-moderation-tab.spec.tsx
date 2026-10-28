@@ -25,11 +25,18 @@ const UNANSWERED = [
   { id: 'q1', title: 'Cây khô lá', excerpt: 'Cây để ngoài nắng bị khô.', createdAt: '2026-10-15T03:00:00.000Z', author: 'Bình', category: 'Hỏi đáp', waitingHours: 52 },
 ];
 
-function setup(routes: Parameters<typeof mockFetch>[0] = {}, props: { initialView?: 'pending' | 'published' | 'unanswered'; isAdmin?: boolean } = {}) {
+const REPORTS = [
+  { id: 'r1', reporterId: 'u9', targetType: 'POST', targetId: 'a2', reason: 'Quảng cáo', status: 'OPEN', createdAt: '2026-10-27T03:00:00.000Z', target: { kind: 'POST', author: 'Quân', title: null, excerpt: 'Mua hàng giá rẻ tại link này.', alreadyHandled: false, postId: 'a2' } },
+  { id: 'r2', reporterId: 'u8', targetType: 'COMMENT', targetId: 'c7', reason: 'Lời lẽ khó nghe', status: 'OPEN', createdAt: '2026-10-27T04:00:00.000Z', target: { kind: 'COMMENT', author: 'Hà', title: null, excerpt: 'Bình luận xấu.', alreadyHandled: false, postId: 'a1' } },
+  { id: 'r3', reporterId: 'u7', targetType: 'POST', targetId: 'gone', reason: 'Spam', status: 'OPEN', createdAt: '2026-10-27T05:00:00.000Z', target: null },
+];
+
+function setup(routes: Parameters<typeof mockFetch>[0] = {}, props: { initialView?: 'pending' | 'reports' | 'published' | 'unanswered'; isAdmin?: boolean } = {}) {
   const api = mockFetch({
     '/feed/admin/pending': { body: PENDING },
     '/feed/admin/published': { body: PUBLISHED },
     '/feed/admin/unanswered': { body: UNANSWERED },
+    '/feed/admin/reports': { body: REPORTS },
     ...routes,
   });
   vi.stubGlobal('fetch', vi.fn(api.fn));
@@ -306,15 +313,80 @@ describe('CommunityModerationTab — câu hỏi chưa ai trả lời', () => {
 });
 
 describe('CommunityModerationTab — khung', () => {
-  it('ba mục chuyển đổi được, mục đang xem có aria-pressed; có h2 làm tiêu đề', async () => {
+  it('bốn mục chuyển đổi được, mục đang xem có aria-pressed; có h2 làm tiêu đề', async () => {
     const { r } = setup();
     await flush();
 
     expect(r.container.querySelector('h2')!.textContent).toBe('Cộng đồng');
-    const chips = ['Chờ duyệt', 'Đã đăng', 'Chưa trả lời'].map((t) => byText(r.container, 'button[aria-pressed]', t)!);
-    expect(chips.map((c) => c.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false']);
-    click(chips[2]!);
+    const chips = ['Chờ duyệt', 'Báo cáo vi phạm', 'Đã đăng', 'Chưa trả lời'].map((t) => byText(r.container, 'button[aria-pressed]', t)!);
+    expect(chips.map((c) => c.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false', 'false']);
+    click(chips[3]!);
     await flush();
-    expect(chips.map((c) => c.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'true']);
+    expect(chips.map((c) => c.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'false', 'true']);
+  });
+});
+
+describe('CommunityModerationTab: báo cáo vi phạm (R-75)', () => {
+  it('chip ghi số báo cáo đang mở; danh sách hiện loại, người đăng, trích nội dung và lý do báo cáo; nội dung đã xoá hẳn vẫn đóng được', async () => {
+    const { r } = setup({}, { initialView: 'reports', isAdmin: true });
+    await flush();
+
+    expect(byText(r.container, 'button[aria-pressed]', 'Báo cáo vi phạm (3)')).not.toBeNull();
+    expect(r.container.textContent).toContain('3 báo cáo đang mở');
+    const bai = r.container.querySelector('[data-report="r1"]')!;
+    expect(bai.textContent).toContain('Bài viết');
+    expect(bai.textContent).toContain('Quân');
+    expect(bai.textContent).toContain('Mua hàng giá rẻ tại link này.');
+    expect(bai.textContent).toContain('Lý do báo cáo: Quảng cáo');
+    expect(r.container.querySelector('[data-report="r3"]')!.textContent).toContain('Nội dung đã bị xoá hẳn.');
+    expect(byText(r.container.querySelector('[data-report="r3"]')!, 'button', 'Ẩn bài')).toBeNull();
+    expect(byText(r.container.querySelector('[data-report="r3"]')!, 'button', 'Bỏ qua, đóng báo cáo')).not.toBeNull();
+  });
+
+  it('Ẩn bài: ẩn bài kèm lý do rồi đóng báo cáo', async () => {
+    const { api, r } = setup({ '/feed/admin/a2/hide': { body: { ok: true } }, '/feed/admin/reports/r1/resolve': { body: { ok: true } } }, { initialView: 'reports', isAdmin: true });
+    await flush();
+
+    click(byText(r.container.querySelector('[data-report="r1"]')!, 'button', 'Ẩn bài'));
+    await flush();
+    typeInto(confirmDialog()!.querySelector('input, textarea'), 'Quảng cáo');
+    answerConfirm(true);
+    await flush();
+
+    expect(JSON.parse(String(posted(api, '/feed/admin/a2/hide')!.init!.body))).toEqual({ reason: 'Quảng cáo' });
+    expect(posted(api, '/feed/admin/reports/r1/resolve')).toBeDefined();
+  });
+
+  it('bình luận bị báo cáo: ADMIN gỡ được; nhân viên chỉ đóng báo cáo vì API chỉ cho chủ bình luận hoặc ADMIN gỡ', async () => {
+    const admin = setup({ '/feed/comments/c7': { body: { ok: true } }, '/feed/admin/reports/r2/resolve': { body: { ok: true } } }, { initialView: 'reports', isAdmin: true });
+    await flush();
+    click(byText(admin.r.container.querySelector('[data-report="r2"]')!, 'button', 'Gỡ bình luận'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(admin.api.calls.some((c) => c.url.includes('/feed/comments/c7') && c.init?.method === 'DELETE')).toBe(true);
+    expect(posted(admin.api, '/feed/admin/reports/r2/resolve')).toBeDefined();
+    admin.r.unmount();
+    mounted = [];
+
+    const staff = setup({}, { initialView: 'reports', isAdmin: false });
+    await flush();
+    expect(byText(staff.r.container.querySelector('[data-report="r2"]')!, 'button', 'Gỡ bình luận')).toBeNull();
+    expect(byText(staff.r.container.querySelector('[data-report="r2"]')!, 'button', 'Bỏ qua, đóng báo cáo')).not.toBeNull();
+  });
+
+  it('Bỏ qua, đóng báo cáo chỉ gọi resolve, không đụng tới bài', async () => {
+    const { api, r } = setup({ '/feed/admin/reports/r1/resolve': { body: { ok: true } } }, { initialView: 'reports', isAdmin: true });
+    await flush();
+    click(byText(r.container.querySelector('[data-report="r1"]')!, 'button', 'Bỏ qua, đóng báo cáo'));
+    await flush();
+    expect(posted(api, '/feed/admin/reports/r1/resolve')).toBeDefined();
+    expect(api.calls.some((c) => c.url.includes('/hide'))).toBe(false);
+  });
+
+  it('rỗng: nói chưa có báo cáo nào đang mở', async () => {
+    const { r } = setup({ '/feed/admin/reports': { body: [] } }, { initialView: 'reports' });
+    await flush();
+    expect(r.container.textContent).toContain('Chưa có báo cáo vi phạm nào đang mở');
   });
 });

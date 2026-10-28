@@ -7,12 +7,16 @@ import {
   hideCommunityPost,
   listCommunityPending,
   listCommunityPublished,
+  listCommunityReports,
   listCommunityUnanswered,
   pinCommunityPost,
+  removeCommunityComment,
+  resolveCommunityReport,
   rejectCommunityPost,
   type CommunityPendingPost,
   type CommunityPostKind,
   type CommunityPublishedPost,
+  type CommunityReport,
   type CommunityUnansweredQuestion,
 } from '@/lib/community-moderation-client';
 import { ApiError } from '@/lib/client-api';
@@ -21,10 +25,11 @@ import { useConfirm } from './confirm-dialog';
 import { safeEvidenceImage } from './evidence-images';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, LoadError, chipClass, Notice, ToneBadge } from './ui';
 
-export type CommunityView = 'pending' | 'published' | 'unanswered';
+export type CommunityView = 'pending' | 'reports' | 'published' | 'unanswered';
 
 const VIEWS: { k: CommunityView; label: string }[] = [
   { k: 'pending', label: 'Chờ duyệt' },
+  { k: 'reports', label: 'Báo cáo vi phạm' },
   { k: 'published', label: 'Đã đăng' },
   { k: 'unanswered', label: 'Chưa trả lời' },
 ];
@@ -41,6 +46,7 @@ const KIND_LABELS: Record<CommunityPostKind, string> = {
 
 const QUERY_KEYS = {
   pending: ['admin-community-pending'],
+  reports: ['admin-community-reports'],
   published: ['admin-community-published'],
   unanswered: ['admin-community-unanswered'],
 } as const satisfies Record<CommunityView, QueryKey>;
@@ -58,6 +64,7 @@ const isStale = (e: unknown): e is ApiError => e instanceof ApiError && (e.statu
 export function CommunityModerationTab({ initialView = 'pending', isAdmin = false }: { initialView?: CommunityView; isAdmin?: boolean }) {
   const [view, setView] = useState<CommunityView>(initialView);
   const [staleNotice, setStaleNotice] = useState<string | null>(null);
+  const reportCount = useQuery({ queryKey: QUERY_KEYS.reports, queryFn: listCommunityReports }).data?.length;
   return (
     <StaleNoticeContext.Provider value={setStaleNotice}>
       <div className="space-y-3">
@@ -75,6 +82,7 @@ export function CommunityModerationTab({ initialView = 'pending', isAdmin = fals
               }}
             >
               {v.label}
+              {v.k === 'reports' && reportCount !== undefined && reportCount > 0 ? ` (${reportCount})` : ''}
             </button>
           ))}
         </div>
@@ -84,6 +92,7 @@ export function CommunityModerationTab({ initialView = 'pending', isAdmin = fals
           </Notice>
         )}
         {view === 'pending' && <PendingList />}
+        {view === 'reports' && <ReportsList isAdmin={isAdmin} />}
         {view === 'published' && <PublishedList canPin={isAdmin} />}
         {view === 'unanswered' && <UnansweredList />}
       </div>
@@ -212,6 +221,81 @@ function PendingRow({ post: p }: { post: CommunityPendingPost }) {
         </button>
       </div>
       <RowError message={approve.err ?? reject.err} />
+    </li>
+  );
+}
+
+function ReportsList({ isAdmin }: { isAdmin: boolean }) {
+  const q = useQuery({ queryKey: QUERY_KEYS.reports, queryFn: listCommunityReports });
+  return (
+    <div className="space-y-2">
+      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách báo cáo vi phạm.</LoadError>}
+      {q.data && (
+        <>
+          <p className="text-xs text-stone-500">{q.data.length === 0 ? 'Chưa có báo cáo vi phạm nào đang mở.' : `${q.data.length} báo cáo đang mở · cũ nhất trước`}</p>
+          <ul className="space-y-2">
+            {q.data.map((r) => (
+              <ReportRow key={r.id} report={r} canRemoveComment={isAdmin} />
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ReportRow({ report: r, canRemoveComment }: { report: CommunityReport; canRemoveComment: boolean }) {
+  const { ask, dialog } = useConfirm();
+  const keys = [QUERY_KEYS.reports, QUERY_KEYS.published];
+  const resolve = usePostAction(() => resolveCommunityReport(r.id), keys, 'Không đóng được báo cáo.');
+  const hide = usePostAction(
+    async (reason: string) => {
+      if (r.targetType === 'COMMENT') await removeCommunityComment(r.targetId);
+      else await hideCommunityPost(r.targetId, reason || undefined);
+      await resolveCommunityReport(r.id);
+    },
+    keys,
+    'Không ẩn được nội dung.',
+  );
+  const askHide = async () => {
+    const isComment = r.targetType === 'COMMENT';
+    const reason = await ask({
+      title: isComment ? 'Gỡ bình luận này?' : 'Ẩn bài này khỏi cộng đồng?',
+      message: isComment
+        ? 'Bình luận bị gỡ và báo cáo được đóng.'
+        : 'Bài biến khỏi bảng tin, báo cáo được đóng và tác giả được báo kèm lý do dưới đây; để trống thì dùng lý do mặc định về nội quy cộng đồng.',
+      confirmLabel: isComment ? 'Gỡ bình luận' : 'Ẩn bài',
+      tone: 'danger',
+      ...(isComment ? {} : { input: { label: 'Lý do (tác giả thấy)', placeholder: 'VD: quảng cáo', maxLength: 200 } }),
+    });
+    if (reason !== null) hide.mutate(reason);
+  };
+  const busy = resolve.pending || hide.pending;
+  const canHide = r.target && !r.target.alreadyHandled && (r.targetType !== 'COMMENT' || canRemoveComment);
+  return (
+    <li data-report={r.id} className="rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
+      {dialog}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-stone-600">
+        <ToneBadge tone="warning">{r.targetType === 'COMMENT' ? 'Bình luận' : 'Bài viết'}</ToneBadge>
+        {r.target && <span className="font-medium text-stone-900">{r.target.author}</span>}
+        <span>· {formatDateTime(r.createdAt)}</span>
+        {r.target?.alreadyHandled && <ToneBadge tone="neutral">Đã gỡ</ToneBadge>}
+      </div>
+      {r.target?.title && <div className="mt-1 break-words font-medium text-stone-900">{r.target.title}</div>}
+      <p className="mt-1 whitespace-pre-wrap break-words text-sm text-stone-800">{r.target ? r.target.excerpt : 'Nội dung đã bị xoá hẳn.'}</p>
+      <p className="mt-1 text-xs text-stone-600">Lý do báo cáo: {r.reason}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {canHide && (
+          <button type="button" disabled={busy} onClick={() => void askHide()} className={BTN_DANGER_OUTLINE}>
+            {r.targetType === 'COMMENT' ? 'Gỡ bình luận' : 'Ẩn bài'}
+          </button>
+        )}
+        <button type="button" disabled={busy} onClick={() => resolve.mutate(undefined)} className={BTN_SECONDARY}>
+          Bỏ qua, đóng báo cáo
+        </button>
+      </div>
+      <RowError message={resolve.err ?? hide.err} />
     </li>
   );
 }

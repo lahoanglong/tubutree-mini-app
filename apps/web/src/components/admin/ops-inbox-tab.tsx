@@ -1,8 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, CircleCheck } from 'lucide-react';
-import { getOpsInbox, type AdminPayoutStatus, type DealerRewardClaimStatus, type InboxKey } from '@/lib/admin-client';
+import { getOpsInbox, getRetentionDaily, getTodaySummary, type AdminPayoutStatus, type DealerRewardClaimStatus, type InboxKey, type TodaySummary } from '@/lib/admin-client';
+import { formatVnd } from '@/lib/shop-client';
+import { summarizeNs1 } from './ns1-card';
 import { formatDateTime } from '@/lib/format-date';
 import { seedDealerClaimFilter } from './dealer-claims-tab';
 import { seedPayoutFilter } from './payout-admin-tab';
@@ -38,6 +41,10 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   invoicePending: { title: 'Hoá đơn VAT chờ xuất', hint: 'Khách yêu cầu xuất hoá đơn, chưa phát hành' },
   supportChatUnforwarded: { title: 'Chat CSKH: tin chưa chuyển được vào Zalo', hint: 'Tin khách chuyển lỗi, không rõ kết quả hoặc chờ quá lâu' },
   zaloBridgeDown: { title: 'Cầu nối Zalo mất kết nối', hint: 'Cầu nối không ở trạng thái đang kết nối quá 10 phút, tin khách chưa vào nhóm Zalo' },
+  bankTransferToConfirm: { title: 'Đơn chuyển khoản chờ xác nhận tiền', hint: 'Kiểm tra tiền đã về chưa rồi bấm "Đã nhận tiền". Để quá hạn thì đơn tự huỷ' },
+  storefrontsPending: { title: 'Gian hàng chờ duyệt', hint: 'CTV được hẹn duyệt trong 1 ngày làm việc' },
+  communityReports: { title: 'Báo cáo vi phạm cộng đồng', hint: 'Khách báo bài hoặc bình luận, chưa ai xem' },
+  productsMissingImage: { title: 'Sản phẩm đang bán thiếu ảnh', hint: 'Khách không thấy hình, khó chốt đơn' },
   externalPoints: { title: 'Tích điểm đơn sàn cần xử lý', hint: 'Yêu cầu cần duyệt, mã chưa ghép được đơn, đơn đã cộng điểm bị hoàn một phần hoặc đã đóng' },
 };
 
@@ -47,15 +54,48 @@ const LEGACY_ONLY: ReadonlySet<InboxKey> = new Set<InboxKey>(['payouts', 'payout
 /** Cùng lý do với hai thẻ thưởng đại lý: thẻ chờ chi phải mở hàng đã duyệt, không phải hàng chờ duyệt. */
 const CLAIM_FILTER: Partial<Record<InboxKey, DealerRewardClaimStatus>> = { dealerClaims: 'PENDING', dealerClaimsToPay: 'APPROVED' };
 
-/** Trang chủ quản trị: mỗi hàng đợi một thẻ có số việc đang chờ, bấm vào mở đúng tab/bộ lọc. */
-export function OpsInboxTab({ onOpen: openTab }: { onOpen: (key: InboxKey) => void }) {
+/**
+ * Mục menu mà mỗi hàng đợi dẫn tới (cùng đích với `openInbox` của trang admin), để menu hiện số việc chờ cạnh từng mục.
+ * `customerRefunds` đã có huy hiệu riêng nên không nằm ở đây.
+ */
+const INBOX_TAB: Partial<Record<InboxKey, string>> = {
+  pancakeAttention: 'orders', pancakeUnsynced: 'orders', gomdonAttention: 'orders', invoicePending: 'orders', bankTransferToConfirm: 'orders',
+  returnsPending: 'returns', returnsToReceive: 'returns',
+  merchantOverdue: 'merchantFulfilment', merchantToSettle: 'merchantFulfilment', merchantPayoutsPending: 'merchantFulfilment',
+  merchantProducts: 'merchantProducts', consignmentPending: 'merchantProducts',
+  dealerApplications: 'dealers', dealerClaims: 'dealerClaims', dealerClaimsToPay: 'dealerClaims', payouts: 'payouts', payoutsToPay: 'payouts',
+  communityPending: 'community', communityUnanswered: 'community', communityReports: 'community',
+  externalPoints: 'externalClaims', supportChatUnforwarded: 'supportChat', zaloBridgeDown: 'supportChat',
+  wasteToCount: 'waste', wasteUnmatched: 'waste', wasteBlockedPending: 'waste', wastePointsPending: 'waste', wastePerksPending: 'waste',
+  wasteTransitOverdue: 'waste', wasteGiftOverdue: 'waste', wasteOrderMismatch: 'waste',
+  storefrontsPending: 'storefronts', productsMissingImage: 'productCategories',
+};
+
+/** Số việc chờ cạnh mục menu, lấy từ cùng truy vấn với trang "Hôm nay" (một request cho mọi mục). Mục `inbox` hiện tổng. */
+export function InboxBadge({ tab }: { tab: string }) {
+  const q = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 });
+  const items = (q.data?.items ?? []).filter((i) => i.key in INBOX_LABELS && !LEGACY_ONLY.has(i.key));
+  const n = items.filter((i) => tab === 'inbox' || INBOX_TAB[i.key] === tab).reduce((sum, i) => sum + i.count, 0);
+  if (n <= 0) return null;
+  return (
+    <span data-inbox-badge={tab} className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-warning-bg px-1.5 text-[11px] font-semibold leading-5 text-warning-fg">
+      <span className="sr-only">, </span>
+      {n > 99 ? '99+' : n}
+      <span className="sr-only"> việc đang chờ</span>
+    </span>
+  );
+}
+
+/** Trang chủ quản trị "Hôm nay": số bán hàng trong ngày (chỉ ADMIN), rồi các việc đang chờ; hàng đợi rỗng gom một dòng. */
+export function OpsInboxTab({ onOpen: openTab, isAdmin = false }: { onOpen: (key: InboxKey) => void; isAdmin?: boolean }) {
   const onOpen = (key: InboxKey) => {
     seedPayoutFilter(PAYOUT_FILTER[key] ?? null);
     seedDealerClaimFilter(CLAIM_FILTER[key] ?? null);
     openTab(key);
   };
+  const [showEmpty, setShowEmpty] = useState(false);
   const q = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 });
-  if (q.isLoading) return <p className="text-sm text-stone-500">Đang đếm việc cần xử lý…</p>;
+  if (q.isLoading) return <InboxSkeleton isAdmin={isAdmin} />;
   if (q.isError || !q.data) return <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách việc cần xử lý.</LoadError>;
   // API mới hơn web (đang triển khai dở) có thể trả khoá web chưa biết: bỏ qua thay vì làm sập cả trang chủ.
   const items = q.data.items.filter((i) => i.key in INBOX_LABELS);
@@ -65,9 +105,11 @@ export function OpsInboxTab({ onOpen: openTab }: { onOpen: (key: InboxKey) => vo
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display text-lg font-semibold text-stone-900">Việc cần xử lý</h2>
+        <h2 className="font-display text-lg font-semibold text-stone-900">Hôm nay</h2>
         <span className="text-xs text-stone-500">Cập nhật {formatDateTime(q.data.generatedAt)} · tự làm mới mỗi phút</span>
       </div>
+      {isAdmin && <TodayStats />}
+      <h3 className="text-sm font-semibold text-stone-900">Việc đang chờ{open.length > 0 ? ` (${open.length})` : ''}</h3>
       {open.length === 0 && (
         <p className="flex items-center gap-2 rounded-card border border-success-fg bg-success-bg px-4 py-3 text-sm text-success-fg">
           <CircleCheck aria-hidden="true" className="h-4 w-4 shrink-0" />
@@ -78,35 +120,107 @@ export function OpsInboxTab({ onOpen: openTab }: { onOpen: (key: InboxKey) => vo
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {open.map((i) => (
             <li key={i.key}>
-              <InboxCard k={i.key} count={i.count} onOpen={onOpen} />
+              <InboxCard k={i.key} count={i.count} hoursLeft={i.hoursLeft} onOpen={onOpen} />
             </li>
           ))}
         </ul>
       )}
       {done.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-500">Đang trống</h3>
-          <ul className="mt-2 flex flex-wrap gap-2">
-            {done.map((i) => (
-              <li key={i.key}>
-                <button
-                  type="button"
-                  onClick={() => onOpen(i.key)}
-                  className="min-h-[44px] rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600 hover:bg-stone-200 sm:min-h-[32px]"
-                >
-                  {INBOX_LABELS[i.key].title} · 0
-                </button>
-              </li>
-            ))}
-          </ul>
+          <button
+            type="button"
+            aria-expanded={showEmpty}
+            onClick={() => setShowEmpty((v) => !v)}
+            className="flex min-h-[44px] items-center gap-1 text-sm text-stone-600 hover:text-stone-900 sm:min-h-[32px]"
+          >
+            <ChevronRight aria-hidden="true" className={`h-4 w-4 transition-transform ${showEmpty ? 'rotate-90' : ''}`} />
+            {done.length} hàng đợi đang trống
+          </button>
+          {showEmpty && (
+            <ul className="mt-2 flex flex-wrap gap-2">
+              {done.map((i) => (
+                <li key={i.key}>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(i.key)}
+                    className="min-h-[44px] rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600 hover:bg-stone-200 sm:min-h-[32px]"
+                  >
+                    {INBOX_LABELS[i.key].title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function InboxCard({ k, count, onOpen }: { k: InboxKey; count: number; onOpen: (key: InboxKey) => void }) {
+const pulse = 'animate-pulse rounded-card bg-stone-100';
+function InboxSkeleton({ isAdmin }: { isAdmin: boolean }) {
+  return (
+    <div className="space-y-4" aria-busy="true" role="status" aria-label="Đang đếm việc cần xử lý">
+      <div className="h-6 w-24 animate-pulse rounded bg-stone-100" />
+      {isAdmin && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((n) => <div key={n} className={`${pulse} h-20`} />)}
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {[0, 1, 2].map((n) => <div key={n} className={`${pulse} h-[74px]`} />)}
+      </div>
+    </div>
+  );
+}
+
+/** "+3 so với hôm qua": so số hôm nay với hôm qua; bằng nhau hoặc cả hai bằng 0 thì chỉ nói hôm qua. */
+function vsYesterday(today: number, yesterday: number, fmt: (n: number) => string): string {
+  if (today === yesterday) return `Bằng hôm qua (${fmt(yesterday)})`;
+  return `${today > yesterday ? '+' : '−'}${fmt(Math.abs(today - yesterday))} so với hôm qua`;
+}
+
+function TodayStat({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: 'up' | 'down' | 'flat' }) {
+  return (
+    <div role="group" aria-label={label} className="rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
+      <div className="text-xs text-stone-600">{label}</div>
+      <div className="mt-0.5 text-xl font-bold text-stone-900">{value}</div>
+      <div className={`mt-0.5 text-[11px] ${tone === 'up' ? 'text-success-fg' : tone === 'down' ? 'text-danger-fg' : 'text-stone-500'}`}>{sub}</div>
+    </div>
+  );
+}
+
+const toneOf = (a: number, b: number) => (a > b ? 'up' : a < b ? 'down' : 'flat');
+
+/** Bốn số của ngày: doanh thu đã thu, đơn, khách mới (tài khoản thật) và tỉ lệ khách mua lại trong 30 ngày (NS-1). Mỗi số lỗi thì chỉ nó vắng, không kéo sập cả trang. */
+function TodayStats() {
+  const today = useQuery({ queryKey: ['admin-today-summary'], queryFn: getTodaySummary, refetchInterval: 60_000 });
+  const retention = useQuery({ queryKey: ['admin-analytics-retention'], queryFn: () => getRetentionDaily(30), staleTime: 5 * 60_000 });
+  const t: TodaySummary | undefined = today.data;
+  const ns1 = retention.data ? summarizeNs1(retention.data) : null;
+  if (today.isLoading) return <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-busy="true">{[0, 1, 2, 3].map((n) => <div key={n} className={`${pulse} h-20`} />)}</div>;
+  return (
+    <section aria-label="Số bán hàng hôm nay" className="space-y-1">
+      {today.isError && <LoadError onRetry={() => void today.refetch()} retrying={today.isFetching}>Không tải được số bán hàng hôm nay.</LoadError>}
+      {t && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <TodayStat label="Doanh thu hôm nay" value={formatVnd(t.revenue.today)} sub={`${vsYesterday(t.revenue.today, t.revenue.yesterday, formatVnd)} · 7 ngày ${formatVnd(t.revenue.week)}`} tone={toneOf(t.revenue.today, t.revenue.yesterday)} />
+          <TodayStat label="Đơn hôm nay" value={String(t.orders.today)} sub={`${vsYesterday(t.orders.today, t.orders.yesterday, String)} · 7 ngày ${t.orders.week}`} tone={toneOf(t.orders.today, t.orders.yesterday)} />
+          <TodayStat label="Khách mới hôm nay" value={String(t.newUsers.today)} sub={`7 ngày: ${t.newUsers.week} khách mới`} tone={toneOf(t.newUsers.today, t.newUsers.yesterday)} />
+          <TodayStat
+            label="Khách mua lại (30 ngày)"
+            value={ns1?.pct == null ? '—' : `${Number(ns1.pct.toFixed(1)).toLocaleString('vi-VN')}%`}
+            sub={ns1?.pct == null ? 'Chưa đủ nhóm khách 30 ngày' : `${ns1.repeat}/${ns1.cohort} khách mới có đơn thứ 2`}
+          />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function InboxCard({ k, count, hoursLeft, onOpen }: { k: InboxKey; count: number; hoursLeft?: number; onOpen: (key: InboxKey) => void }) {
   const l = INBOX_LABELS[k];
+  const urgent = k === 'bankTransferToConfirm' && hoursLeft !== undefined;
   return (
     <button
       type="button"
@@ -118,6 +232,11 @@ function InboxCard({ k, count, onOpen }: { k: InboxKey; count: number; onOpen: (
       <span className="min-w-0 flex-1">
         <span className="block font-medium text-stone-900">{l.title}</span>
         <span className="block text-xs text-stone-500">{l.hint}</span>
+        {urgent && (
+          <span className="mt-0.5 block text-xs font-medium text-danger-fg">
+            {hoursLeft === 0 ? 'Đơn cũ nhất đã quá hạn, sắp tự huỷ' : `Đơn cũ nhất còn ${hoursLeft} giờ trước khi tự huỷ`}
+          </span>
+        )}
       </span>
       <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-stone-500" />
     </button>

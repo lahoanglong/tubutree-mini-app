@@ -7,10 +7,14 @@ import { SideDrawer } from './side-drawer';
 export interface NavItem<K extends string> {
   k: K;
   label: string;
+  /** Từ khoá thêm cho ô "Tìm mục" (VD "ảnh" tìm ra mục Sản phẩm). */
+  keywords?: string;
 }
 export interface NavGroup<K extends string> {
   label: string;
   items: NavItem<K>[];
+  /** Nhóm lối tắt (mục lặp lại từ nhóm khác): không hiện khi tìm kiếm để kết quả khỏi lặp. */
+  quick?: boolean;
 }
 
 const SKIP_TARGET_ID = 'admin-main';
@@ -89,7 +93,8 @@ function NavList<K extends string>({
   const q = fold(query.trim());
   const shown = q
     ? groups
-        .map((g) => ({ ...g, items: g.items.filter((i) => fold(i.label).includes(q) || fold(g.label).includes(q)) }))
+        .filter((g) => !g.quick)
+        .map((g) => ({ ...g, items: g.items.filter((i) => fold(`${i.label} ${i.keywords ?? ''}`).includes(q) || fold(g.label).includes(q)) }))
         .filter((g) => g.items.length > 0)
     : groups;
   const firstMatch = q ? shown[0]?.items[0] : undefined;
@@ -160,11 +165,14 @@ export function AdminNav<K extends string>({
   active,
   onSelect,
   badge,
+  summaryBadge,
 }: {
   groups: NavGroup<K>[];
   active: K;
   onSelect: (k: K) => void;
   badge?: (k: K) => ReactNode;
+  /** Điện thoại: một huy hiệu tổng cạnh nút "Đổi mục" (thay cho huy hiệu từng mục) khi ngăn kéo đang đóng. */
+  summaryBadge?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const nav = useOpenGroups(groups[0]?.label);
@@ -205,7 +213,7 @@ export function AdminNav<K extends string>({
             <span className="font-semibold text-stone-900">{current?.label ?? 'Chọn mục'}</span>
           </span>
           {/* Ngăn kéo đóng: số việc chờ vẫn hiện ở nút, không phải mở menu mới thấy. */}
-          {groups.flatMap((g) => g.items).map((i) => <Fragment key={i.k}>{badge?.(i.k)}</Fragment>)}
+          {summaryBadge ?? [...new Set(groups.flatMap((g) => g.items.map((i) => i.k)))].map((k) => <Fragment key={k}>{badge?.(k)}</Fragment>)}
           <span className="shrink-0 text-xs font-medium text-forest-700">Đổi mục</span>
         </button>
       </div>

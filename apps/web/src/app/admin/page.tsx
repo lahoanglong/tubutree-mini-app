@@ -136,6 +136,7 @@ import {
   BTN_PRIMARY,
   BTN_SECONDARY,
   BTN_SMALL,
+  chipClass,
   FIELD_CLASS,
   Field,
   INPUT_CLASS,
@@ -146,7 +147,7 @@ import {
 import { AnalyticsTab } from './analytics-tab';
 import { ReportsTab, reportSectionsFor } from '@/components/admin/reports-tab';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
-import { OpsInboxTab } from '@/components/admin/ops-inbox-tab';
+import { InboxBadge, OpsInboxTab } from '@/components/admin/ops-inbox-tab';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
 import { WasteTab, type WasteSeed } from '@/components/admin/waste-tab';
 import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
@@ -220,9 +221,25 @@ type Tab =
  */
 const NAV_GROUPS: NavGroup<Tab>[] = [
   {
+    label: 'Hay dùng',
+    quick: true,
+    items: [
+      { k: 'inbox', label: 'Hôm nay' },
+      { k: 'orders', label: 'Đơn hàng' },
+      { k: 'productCategories', label: 'Sản phẩm' },
+      { k: 'users', label: 'Người dùng' },
+      { k: 'supportChat', label: 'Chat CSKH' },
+      { k: 'community', label: 'Cộng đồng' },
+      { k: 'coupons', label: 'Mã giảm giá' },
+      { k: 'waste', label: 'Đổi rác' },
+      { k: 'storefronts', label: 'Gian hàng' },
+      { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
+      { k: 'dealers', label: 'Đại lý' },
+    ],
+  },
+  {
     label: 'Tổng quan',
     items: [
-      { k: 'inbox', label: 'Việc cần xử lý' },
       { k: 'dashboard', label: 'Tổng quan chỉ số' },
       { k: 'analytics', label: 'Giữ chân khách & chỉ số chính' },
       { k: 'reports', label: 'Báo cáo' },
@@ -231,13 +248,13 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
   {
     label: 'Bán hàng',
     items: [
+      { k: 'productCategories', label: 'Sản phẩm', keywords: 'ảnh mô tả sửa sản phẩm danh mục ẩn hiện nổi bật' },
       { k: 'orders', label: 'Đơn hàng' },
       { k: 'externalOrders', label: 'Đơn ngoài app' },
       { k: 'returns', label: 'Đổi / Trả' },
       { k: 'customerRefunds', label: 'Hoàn tiền khách' },
       ...(CASHBACK_ENABLED ? [{ k: 'cashback' as const, label: 'Hoàn tiền sàn ngoài' }] : []),
       { k: 'subscriptions', label: 'Gói định kỳ' },
-      { k: 'productCategories', label: 'Danh mục sản phẩm' },
     ],
   },
   {
@@ -389,7 +406,9 @@ export default function AdminPage() {
   const [tab, setTabState] = useState<Tab>(DEFAULT_TAB);
   const [ordersRecycling, setOrdersRecycling] = useState<RecyclingFilter | ''>('');
   const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
-  const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter } | null>(null);
+  const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter; status?: string; extra?: OrderListExtra } | null>(null);
+  const [productsSeed, setProductsSeed] = useState(0);
+  const [storefrontSeed, setStorefrontSeed] = useState(0);
   const [communitySeed, setCommunitySeed] = useState<{ view: CommunityView; n: number } | null>(null);
   const [wasteSeed, setWasteSeed] = useState<WasteSeed | null>(null);
   const [returnsSeed, setReturnsSeed] = useState<{ filter: ReturnsFilter; n: number } | null>(null);
@@ -463,13 +482,28 @@ export default function AdminPage() {
       setReturnsSeed({ filter: k === 'returnsToReceive' ? 'TO_RECEIVE' : 'REQUESTED', n: Date.now() });
       return setTab('returns');
     }
-    if (k === 'communityPending' || k === 'communityUnanswered') {
-      setCommunitySeed({ view: k === 'communityUnanswered' ? 'unanswered' : 'pending', n: Date.now() });
+    if (k === 'communityPending' || k === 'communityUnanswered' || k === 'communityReports') {
+      setCommunitySeed({ view: k === 'communityUnanswered' ? 'unanswered' : k === 'communityReports' ? 'reports' : 'pending', n: Date.now() });
       return setTab('community');
     }
     if (isWasteInboxKey(k)) {
       setWasteSeed({ ...WASTE_INBOX_SEEDS[k], n: Date.now() });
       return setTab('waste');
+    }
+    if (k === 'bankTransferToConfirm') {
+      setOrdersRecycling('');
+      setOrdersPancake('');
+      setOrderSeed({ search: '', n: Date.now(), status: 'PENDING_PAYMENT', extra: { payment: 'UNPAID', order: 'asc' } });
+      setTabState('orders');
+      return writeUrlState('orders', '');
+    }
+    if (k === 'storefrontsPending') {
+      setStorefrontSeed(Date.now());
+      return setTab('storefronts');
+    }
+    if (k === 'productsMissingImage') {
+      setProductsSeed(Date.now());
+      return setTab('productCategories');
     }
     if (k === 'invoicePending') {
       setOrdersRecycling('');
@@ -489,7 +523,11 @@ export default function AdminPage() {
         | 'consignmentPending'
         | 'communityPending'
         | 'communityUnanswered'
+        | 'communityReports'
         | 'invoicePending'
+        | 'bankTransferToConfirm'
+        | 'storefrontsPending'
+        | 'productsMissingImage'
         | WasteInboxKey
       >,
       Tab
@@ -543,9 +581,10 @@ export default function AdminPage() {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-3 sm:py-6">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="min-w-0 truncate font-display text-lg font-semibold text-stone-900 sm:text-xl">Quản trị Tubu Tree</h1>
-        <Link href="/admin/pos" className="inline-flex min-h-[44px] shrink-0 items-center rounded-control border border-stone-450 bg-stone-0 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 sm:min-h-[36px]">
+      <div className={`${isAdmin ? 'hidden sm:flex' : 'flex'} items-center justify-between gap-2`}>
+        <h1 className="hidden min-w-0 truncate font-display text-lg font-semibold text-stone-900 sm:block sm:text-xl">Quản trị Tubu Tree</h1>
+        {/* Điện thoại: bỏ tiêu đề; quản trị viên vào màn thu ngân từ mục "Tích điểm tại quầy" trong menu, nhân viên quầy giữ nút này. */}
+        <Link href="/admin/pos" className={`${isAdmin ? 'hidden sm:inline-flex' : 'inline-flex'} min-h-[44px] shrink-0 items-center rounded-control border border-stone-450 bg-stone-0 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50 sm:min-h-[36px]`}>
           Màn thu ngân<span className="hidden sm:inline">&nbsp;(tích điểm tại quầy)</span>
         </Link>
       </div>
@@ -554,18 +593,19 @@ export default function AdminPage() {
           groups={groups}
           active={active}
           onSelect={setTab}
-          badge={(k) => (k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : null)}
+          summaryBadge={<InboxBadge tab="inbox" />}
+          badge={(k) => (k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : <InboxBadge tab={k} />)}
         />
         <div className="mt-4 min-w-0 flex-1 lg:mt-0">
           <TabErrorBoundary key={active} tabLabel={TABS.find((t) => t.k === active)?.label ?? ''} onGoHome={!allowed.has('inbox') || active === 'inbox' ? undefined : () => setTab('inbox')}>
-          {active === 'inbox' && <OpsInboxTab onOpen={openInbox} />}
+          {active === 'inbox' && <OpsInboxTab onOpen={openInbox} isAdmin={isAdmin} />}
           {active === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} />}
           {active === 'dealers' && <DealersTab />}
           {active === 'dealerClaims' && <DealerClaimsTab canReview={isAdmin} />}
           {active === 'dealerAccounts' && <DealerAccountsTab isAdmin={isAdmin} />}
           {active === 'dealerPrices' && <DealerPriceHistoryTab />}
           {active === 'commissionRates' && <CommissionRatesTab />}
-          {active === 'productCategories' && <ProductCategoriesTab />}
+          {active === 'productCategories' && <ProductCategoriesTab key={productsSeed} initialMissingImage={productsSeed > 0} />}
           {active === 'engagement' && <EngagementTab />}
           {active === 'externalOrders' && <ExternalOrdersTab isAdmin={isAdmin} />}
           {active === 'externalClaims' && <ExternalClaimsTab isAdmin={isAdmin} meId={user?.id} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}
@@ -578,6 +618,8 @@ export default function AdminPage() {
               key={orderSeed?.n ?? 0}
               initialSearch={orderSeed?.search}
               initialInvoice={orderSeed?.invoice}
+              initialStatus={orderSeed?.status}
+              initialExtra={orderSeed?.extra}
               isAdmin={isAdmin}
               canFinance={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KE_TOAN')}
               canWarehouse={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO')}
@@ -610,7 +652,7 @@ export default function AdminPage() {
           {active === 'payroll' && <PayrollAdminTab />}
           {active === 'coupons' && <CouponsTab />}
           {active === 'brands' && <BrandsTab />}
-          {active === 'storefronts' && <StorefrontsTab />}
+          {active === 'storefronts' && <StorefrontsTab key={storefrontSeed} initialStatus={storefrontSeed > 0 ? 'PENDING_APPROVAL' : ''} />}
           {active === 'merchantProducts' && <MerchantProductsTab key={consignmentSeed} focusConsignment={consignmentSeed > 0} />}
           {active === 'merchantFulfilment' && <MerchantFulfilmentTab onOpenConsignmentConfirm={openConsignmentConfirm} isAdmin={isAdmin} />}
           {active === 'flashSales' && <FlashSalesTab />}
@@ -952,6 +994,7 @@ function DashboardTab({
           <div className="mt-1 text-xs text-stone-600">
             Trong đó: <span className="font-semibold text-forest-700">{stats.totalAffiliates}</span> cộng tác viên (CTV)
           </div>
+          {stats.guestUsers !== undefined && <div className="mt-0.5 text-xs text-stone-500">Chưa tính {stats.guestUsers} lượt khách vãng lai (chưa đăng nhập)</div>}
         </div>
 
         {/* Sản phẩm & Quỹ trồng cây */}
@@ -1064,6 +1107,8 @@ function OrdersTab({
   canWarehouse = true,
   initialSearch,
   initialInvoice,
+  initialStatus,
+  initialExtra,
 }: {
   recycling: RecyclingFilter | '';
   onRecyclingChange: (r: RecyclingFilter | '') => void;
@@ -1076,16 +1121,18 @@ function OrdersTab({
   canWarehouse?: boolean;
   initialSearch?: string;
   initialInvoice?: InvoiceFilter;
+  initialStatus?: string;
+  initialExtra?: OrderListExtra;
 }) {
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(initialStatus ?? '');
   const [searchInput, setSearchInput] = useState(initialSearch ?? '');
   const [search, setSearch] = useState(initialSearch ?? '');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [invoice, setInvoice] = useState<InvoiceFilter | ''>(initialInvoice ?? '');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [extra, setExtra] = useState<OrderListExtra>({});
+  const [extra, setExtra] = useState<OrderListExtra>(initialExtra ?? {});
   const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [exporting, setExporting] = useState(false);
   // Điện thoại: chi tiết đơn mở trong ngăn kéo thay vì chen vào giữa bảng đang cuộn ngang.
@@ -1717,7 +1764,8 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const q = useQuery({ queryKey: ['admin-users', page, search], queryFn: () => listUsers(page, search || undefined) });
+  const [guests, setGuests] = useState(false);
+  const q = useQuery({ queryKey: ['admin-users', page, search, guests], queryFn: () => listUsers(page, search || undefined, guests) });
   const totalPages = q.data ? Math.ceil(q.data.meta.total / q.data.meta.limit) : 1;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -1800,7 +1848,12 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
           </button>
         )}
       </div>
-      {isAdmin && <GrantRoleForm onDone={() => q.refetch()} />}
+      {isAdmin && (
+        <details className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
+          <summary className="flex min-h-[44px] cursor-pointer items-center px-4 text-sm font-medium text-forest-800">Cấp hoặc đổi vai trò theo SĐT</summary>
+          <GrantRoleForm onDone={() => q.refetch()} />
+        </details>
+      )}
       <form
         role="search"
         aria-label="Tìm người dùng"
@@ -1837,6 +1890,14 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
           </button>
         )}
       </form>
+      {q.data?.guestCount !== undefined && (q.data.guestCount > 0 || guests) && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
+          <button type="button" aria-pressed={guests} onClick={() => { setGuests((v) => !v); setPage(1); }} className={chipClass(guests)}>
+            Hiện cả khách vãng lai ({q.data.guestCount})
+          </button>
+          <span>Khách vãng lai là lượt mở app chưa đăng nhập, không có SĐT; không tính vào số người dùng.</span>
+        </div>
+      )}
       {msg && (
         <p role="status" className={`text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>
       )}

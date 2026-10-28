@@ -39,14 +39,35 @@ function setup() {
 }
 
 describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
-  it('mặc định lọc chưa có danh mục + hàng Pancake; hiện danh mục đã gán bằng tên', async () => {
+  it('mặc định hiện mọi sản phẩm (không lọc sẵn), mục tên "Sản phẩm"; bật chip mới lọc chưa có danh mục; hiện danh mục đã gán bằng tên', async () => {
     const { m, container } = setup();
     await flush();
     const list = m.calls.find((c) => c.url.includes('/admin/product-categories/products'))!;
-    expect(list.url).toContain('uncategorized=1');
-    expect(list.url).toContain('source=pancake');
-    expect(container.textContent).toContain('Chưa có danh mục');
+    expect(list.url).not.toContain('uncategorized=1');
+    expect(list.url).not.toContain('source=pancake');
+    expect(container.querySelector('h2')!.textContent).toBe('Sản phẩm');
     expect(container.textContent).toContain('Giặt tẩy');
+    click(byText(container, 'button', 'Chưa có danh mục'));
+    await flush();
+    const filtered = m.calls.filter((c) => c.url.includes('/admin/product-categories/products')).at(-1)!;
+    expect(filtered.url).toContain('uncategorized=1');
+  });
+
+  it('chip "Đang bán, thiếu ảnh" ghi số từ hộp việc; mở từ thẻ hộp việc thì bật sẵn', async () => {
+    const m = mockFetch({
+      '/admin/ops/inbox': { body: { generatedAt: '2026-10-28T03:00:00.000Z', items: [{ key: 'productsMissingImage', count: 7 }] } },
+      '/admin/product-categories/products': { body: PAGE },
+      '/admin/pancake/categories': { body: [] },
+      '/categories': { body: [] },
+    });
+    vi.stubGlobal('fetch', vi.fn(m.fn));
+    const r = render(<ProductCategoriesTab initialMissingImage />);
+    mounted.push(r);
+    await flush();
+    const chip = [...r.container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Đang bán, thiếu ảnh'))!;
+    expect(chip.textContent).toBe('Đang bán, thiếu ảnh (7)');
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
+    expect(m.calls.find((c) => c.url.includes('/admin/product-categories/products'))!.url).toContain('missingImage=1');
   });
 
   it('chọn tất cả → chọn danh mục → xác nhận → gửi đúng productIds, categoryId, mode', async () => {
