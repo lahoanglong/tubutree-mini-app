@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
@@ -20,6 +20,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedTabs } from '@/components/ui/segmented-tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
+import { clearSubmitted } from '@/lib/recycle-wizard';
 import { RecycleLinkRow } from './recycle-link-row';
 import { METHOD_LABELS, isRequestPaused, requestStatusText } from './recycle-labels';
 
@@ -36,6 +37,7 @@ function Shell({ children }: { children: ReactNode }) {
 
 export function RecycleRequests() {
   const phase = useAuthPhase();
+  useEffect(() => clearSubmitted(), []);
   const [picked, setTab] = useState<'open' | 'closed' | null>(null);
   const cfg = usePublicConfig();
   const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: phase === 'authenticated' });

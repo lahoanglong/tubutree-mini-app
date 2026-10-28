@@ -64,6 +64,7 @@ import { CheckMark, miniCheckboxWrap, miniCheckbox, miniRadio, mini } from '@/co
 import { PageHeader } from '@/components/ui/page-header';
 import { ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { clearSubmitted } from '@/lib/recycle-wizard';
 
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
 const PRICE_CHANGED = 'PRICE_CHANGED';
@@ -555,7 +556,7 @@ export default function CheckoutPage() {
           {pickupReq !== undefined && (
             <section id="checkout-waste-pickup" data-mini-block="waste" className={`${MINI_BAND} max-md:order-8`}>
               {pickupReq === null ? (
-                <Link href="/doi-rac/tao" className="flex min-h-11 items-center justify-between gap-3 text-sm">
+                <Link href="/doi-rac/tao" onClick={clearSubmitted} className="flex min-h-11 items-center justify-between gap-3 text-sm">
                   <span className="flex items-center gap-3">
                     <Recycle className="h-5 w-5 text-forest-600" aria-hidden="true" />
                     <span>

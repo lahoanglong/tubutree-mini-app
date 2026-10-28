@@ -20,6 +20,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DeclaredCountedTable } from './declared-counted-table';
+import { clearSubmitted } from '@/lib/recycle-wizard';
 import { formatPoints, impactLine, nextRewardProgress } from './recycle-labels';
 
 function Shell({ id, subtitle, children }: { id: string; subtitle?: string; children: ReactNode }) {
@@ -42,6 +43,9 @@ export function RecycleDone({ id }: { id: string }) {
   const rewardsQ = useQuery({ ...rewardsQuery(coreHttp), enabled: authed });
   const r = q.data;
   const notDone = !!r && r.status !== 'COMPLETED';
+
+  // Yêu cầu đã xong: bấm "Đổi thêm rác" phải vào bước 1, không bị cờ "vừa gửi" đưa về trang Đổi rác.
+  useEffect(() => clearSubmitted(), []);
 
   useEffect(() => {
     if (notDone) router.replace(path);
