@@ -6,7 +6,7 @@ const src = readFileSync(join(process.cwd(), 'src', 'components', 'app.tsx'), 'u
 
 describe('cổng chào và cổng nhận mã ở app.tsx', () => {
   it('mỗi cổng có SilentBoundary riêng: cổng này lỗi tải không kéo cổng kia xuống', () => {
-    const boundaries = [...src.matchAll(/<SilentBoundary>([\s\S]*?)<\/SilentBoundary>/g)].map((m) => m[1]);
+    const boundaries = [...src.matchAll(/<SilentBoundary>([\s\S]*?)<\/SilentBoundary>/g)].map((m) => m[1] ?? '');
     const onboarding = boundaries.filter((b) => b.includes('<OnboardingGate'));
     const claim = boundaries.filter((b) => b.includes('<CouponClaimGate'));
     expect(onboarding).toHaveLength(1);
