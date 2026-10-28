@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WasteDeskRequestDTO } from '@tubutree/shared-types';
 import { byText, click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
@@ -190,7 +191,7 @@ describe('/doi-rac/quay: vào màn (§16.1, §4.10)', () => {
     expect(byText(c, 'p', 'Đại lý Cô Ba')).toBeNull();
     expect(byText(c, '[role="tab"]', 'Đại lý Cô Ba')).not.toBeNull();
   });
-  it('thứ tự: hạn mức, ô nhập mã, thẻ yêu cầu, rồi ưu đãi và báo cáo; xác nhận có thanh dính đáy', async () => {
+  it('thứ tự như Mini App: ô nhập mã, hạn mức, thẻ yêu cầu, rồi ưu đãi và báo cáo; xác nhận có thanh dính đáy', async () => {
     const c = await mount();
     await lookUp(c);
     const before = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -199,8 +200,13 @@ describe('/doi-rac/quay: vào màn (§16.1, §4.10)', () => {
     const card = byText(c, 'h2', 'TR-8K2M9')!;
     const perk = byText(c, 'p, h2, h3', 'Ưu đãi riêng của cửa hàng')!;
     const report = c.querySelector('section[aria-label="Báo cáo tháng này"]')!;
-    expect(before(quota, input) && before(input, card) && before(card, perk) && before(perk, report)).toBe(true);
+    expect(before(input, quota) && before(quota, card) && before(card, perk) && before(perk, report)).toBe(true);
     expect(byText(c.querySelector('[data-testid="sticky-bar"]')!, 'button', 'Xác nhận đã nhận')).not.toBeNull();
+  });
+  it('nút "Từ chối cả yêu cầu" dùng màu cảnh báo như nút trong khung từ chối', async () => {
+    const c = await mount();
+    await lookUp(c);
+    expect(button(c, 'Từ chối cả yêu cầu')!.className).toContain('text-danger-fg');
   });
   it('đại lý không giới hạn hạn mức tháng', async () => {
     state.points = [makeDeskPoint({ quota: null })];
@@ -303,10 +309,10 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
     });
   });
   it.each([
-    ['COMPLETED', 'Đã xác nhận'],
+    ['COMPLETED', 'Đã duyệt lúc 10:05'],
     ['REJECTED', 'Đã từ chối'],
   ] as const)('yêu cầu %s: thẻ chỉ xem, không bộ đếm, không nút', async (status, text) => {
-    lookupReq({ status, lines: [{ ...LINE0, receivedQty: 5 }] });
+    lookupReq({ status, closedAt: '2026-10-28T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
     const c = await mount();
     await lookUp(c);
     expect(c.textContent).toContain(text);
@@ -314,6 +320,150 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
     expect(c.querySelector('[aria-label="Tăng số lượng"]')).toBeNull();
     expect(button(c, 'Xác nhận đã nhận')).toBeNull();
     expect(button(c, 'Từ chối cả yêu cầu')).toBeNull();
+  });
+});
+
+describe('/doi-rac/quay: món chỉ kho HCMC nhận (E-127)', () => {
+  const MILK_ONLY = { ...REQ.lines[1]!, itemName: 'Vỏ chai Tubu', warehouseOnly: true };
+  it('điểm đối tác: dòng đó mặc định 0, có câu giải thích, không bộ đếm; duyệt gửi số nhận 0 kèm lý do "Không nhận"', async () => {
+    lookupReq({ lines: [LINE0, MILK_ONLY] });
+    const c = await mount();
+    await lookUp(c);
+    expect(lineOf(c, 'Vỏ chai Tubu').textContent).toContain('Chỉ kho HCMC nhận, trả lại khách');
+    expect(lineOf(c, 'Vỏ chai Tubu').querySelector('[aria-label="Tăng số lượng"]')).toBeNull();
+    expect(lineOf(c, 'Vỏ chai Tubu').querySelector('select')).toBeNull();
+    expect(lineOf(c, 'Thùng carton').textContent).not.toContain('Chỉ kho HCMC nhận');
+    expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 5.000 điểm');
+    expect(button(c, 'Xác nhận đã nhận')!.disabled).toBe(false);
+    click(button(c, 'Xác nhận đã nhận'));
+    await flush(10);
+    expect(calls('/waste/desk/requests/req-1/confirm')[0]!.body).toEqual({
+      lines: [
+        { itemId: 'item-carton', declaredQty: 5, receivedQty: 5 },
+        { itemId: 'item-milk', declaredQty: 5, receivedQty: 0, shortfallReason: 'NOT_ACCEPTED' },
+      ],
+    });
+  });
+  it('kho Tubu: món chỉ kho nhận vẫn mặc định số khai, có bộ đếm', async () => {
+    state.points = [WAREHOUSE_DESK];
+    lookupReq({ pointId: 'wh-1', lines: [LINE0, MILK_ONLY] });
+    const c = await mount();
+    await lookUp(c);
+    expect(c.textContent).not.toContain('Chỉ kho HCMC nhận, trả lại khách');
+    expect(lineOf(c, 'Vỏ chai Tubu').querySelector('[aria-label="Tăng số lượng"]')).not.toBeNull();
+    expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 6.000 điểm');
+  });
+  it('đang ở tab đối tác nhưng tra kiện về kho: theo luật của kho, không khoá dòng', async () => {
+    state.points = [makeDeskPoint(), WAREHOUSE_DESK];
+    lookupReq({ method: 'MAIL_IN', pointId: 'wh-1', lines: [LINE0, MILK_ONLY] });
+    const c = await mount();
+    await lookUp(c);
+    expect(c.textContent).not.toContain('Chỉ kho HCMC nhận, trả lại khách');
+    expect(lineOf(c, 'Vỏ chai Tubu').querySelector('[aria-label="Tăng số lượng"]')).not.toBeNull();
+  });
+});
+
+describe('/doi-rac/quay: duyệt mà chưa đủ để cộng điểm (E-41)', () => {
+  it('0 điểm: tiêu đề không nói "cộng 0 điểm"', async () => {
+    state.confirm = () => ({ ...CONFIRMED, pointsAwarded: 0, quota: null });
+    const c = await mount();
+    await lookUp(c);
+    click(button(c, 'Xác nhận đã nhận'));
+    await flush(10);
+    const status = c.querySelector('[role="status"]')!;
+    expect(status.textContent).toContain('Đã ghi nhận. Lần này chưa đủ để cộng điểm');
+    expect(status.textContent).not.toMatch(/cộng 0/);
+  });
+});
+
+describe('/doi-rac/quay: quét mã bằng camera trình duyệt (E-42)', () => {
+  const stopTrack = vi.fn();
+  const scan = { value: 'TR-8K2M9', throwOnce: false };
+  class FakeDetector {
+    async detect() {
+      if (scan.throwOnce) {
+        scan.throwOnce = false;
+        throw new Error('khung hình chưa sẵn sàng');
+      }
+      return [{ rawValue: scan.value }];
+    }
+  }
+  const camera = (getUserMedia: () => Promise<unknown>) =>
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia } });
+  const waitFrames = () => act(async () => void (await new Promise((r) => setTimeout(r, 700))));
+
+  beforeEach(() => {
+    stopTrack.mockClear();
+    scan.value = 'TR-8K2M9';
+    scan.throwOnce = false;
+    Object.defineProperty(window, 'BarcodeDetector', { configurable: true, writable: true, value: FakeDetector });
+    camera(async () => ({ getTracks: () => [{ stop: stopTrack }] }));
+    // jsdom chưa cài đặt play() của thẻ video.
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (window as unknown as { BarcodeDetector?: unknown }).BarcodeDetector;
+    Reflect.deleteProperty(navigator, 'mediaDevices');
+  });
+
+  it('có BarcodeDetector: nút nằm trước ô gõ, quét ra mã thì tra luôn và tắt camera', async () => {
+    const c = await mount();
+    const scanBtn = button(c, 'Quét mã của khách')!;
+    expect(scanBtn).not.toBeNull();
+    expect(Boolean(scanBtn.compareDocumentPosition(label(c, CODE_LABEL)!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    click(scanBtn);
+    await flush(3);
+    expect(dialog()).not.toBeNull();
+    await waitFrames();
+    expect(calls('/waste/desk/lookup')[0]!.body).toEqual({ code: 'TR-8K2M9' });
+    expect(label(c, CODE_LABEL)).toHaveProperty('value', 'TR-8K2M9');
+    expect(stopTrack).toHaveBeenCalled();
+    expect(dialog()).toBeNull();
+  });
+  it('quét nội dung không phải mã Đổi rác: báo trong khung quét, không tra', async () => {
+    scan.value = 'https://example.com';
+    const c = await mount();
+    click(button(c, 'Quét mã của khách'));
+    await flush(3);
+    await waitFrames();
+    expect(dialog()?.textContent).toContain('Mã QR này không phải mã Đổi rác');
+    expect(calls('/waste/desk/lookup')).toHaveLength(0);
+    click(button(dialog()!, 'Đóng'));
+    await flush(2);
+    expect(stopTrack).toHaveBeenCalled();
+  });
+  it('khung hình chưa sẵn sàng làm detect lỗi một nhịp: vẫn quét tiếp ở nhịp sau', async () => {
+    scan.throwOnce = true;
+    const c = await mount();
+    click(button(c, 'Quét mã của khách'));
+    await flush(3);
+    await waitFrames();
+    expect(calls('/waste/desk/lookup')[0]!.body).toEqual({ code: 'TR-8K2M9' });
+  });
+  it('không cấp quyền camera: đóng khung quét, báo gõ tay, ô gõ vẫn dùng được', async () => {
+    camera(async () => {
+      throw new Error('NotAllowedError');
+    });
+    const c = await mount();
+    click(button(c, 'Quét mã của khách'));
+    await flush(5);
+    expect(dialog()).toBeNull();
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('gõ mã');
+    expect(calls('/waste/desk/lookup')).toHaveLength(0);
+    expect(label(c, CODE_LABEL)).not.toBeNull();
+  });
+  it('không có BarcodeDetector: không hiện nút quét, giữ ô gõ và nút Tra mã', async () => {
+    delete (window as unknown as { BarcodeDetector?: unknown }).BarcodeDetector;
+    const c = await mount();
+    expect(button(c, 'Quét mã của khách')).toBeNull();
+    expect(label(c, CODE_LABEL)).not.toBeNull();
+    expect(button(c, 'Tra mã')).not.toBeNull();
+  });
+  it('có BarcodeDetector nhưng không có camera: không hiện nút quét', async () => {
+    Reflect.deleteProperty(navigator, 'mediaDevices');
+    const c = await mount();
+    expect(button(c, 'Quét mã của khách')).toBeNull();
   });
 });
 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { HAZARDOUS_DESK_NOTES } from '@tubutree/app-core/waste-copy';
+import { WAREHOUSE_ONLY_RETURN_NOTE, deskClosedText, deskDoneCopy, deskInitialLines, isPartnerWarehouseOnly } from '@tubutree/app-core/waste-desk';
 import type { CSSProperties } from 'react';
 import { Input, Page, useSnackbar } from 'zmp-ui';
 import { CheckCircle2, ChevronDown, ScanLine } from 'lucide-react';
@@ -180,6 +181,8 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   const [scanning, setScanning] = useState(false);
 
   const point = points.find((p) => p.id === pointId) ?? points[0]!;
+  // Bưu kiện về kho có thể tra khi đang chọn tab đối tác: luật nhận theo điểm của yêu cầu, không theo tab đang chọn.
+  const kindOfRequest = (req: WasteDeskRequestDTO) => (points.find((p) => p.id === req.pointId) ?? point).kind;
 
   const find = useMutation({
     mutationFn: (c: string) => deskLookup(c),
@@ -188,12 +191,9 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setGift(res.type === 'GIFT' ? res.redemption : null);
       setLookedUpCode(c);
       setDone(null);
-      setReceived(
-        res.type === 'REQUEST' && !isReadOnly(res.request)
-          ? Object.fromEntries(res.request.lines.map((l) => [l.itemId, l.declaredQty]))
-          : {},
-      );
-      setReasons({});
+      const initial = res.type === 'REQUEST' && !isReadOnly(res.request) ? deskInitialLines(res.request.lines, kindOfRequest(res.request)) : null;
+      setReceived(initial?.received ?? {});
+      setReasons(initial?.reasons ?? {});
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -248,7 +248,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       return deskConfirm(req.id, { lines, ...(match ? { match } : {}) });
     },
     onSuccess: (res, req) => {
-      openSnackbar({ text: `Tubu sẽ cộng ${formatPoints(res.pointsAwarded)} cho khách`, type: 'success' });
+      openSnackbar({ text: deskDoneCopy(res.pointsAwarded, formatPoints).toast, type: 'success' });
       // Bưu kiện về kho có thể tra khi đang chọn tab đối tác: hạn mức mới thuộc điểm của yêu cầu, không phải tab đang chọn.
       const target = points.some((p) => p.id === req.pointId) ? req.pointId : point.id;
       qc.setQueryData<WasteDeskPointDTO[]>(WASTE_QUERY_KEYS.desk, (old) =>
@@ -337,7 +337,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
         <Card>
           <div role="status" style={{ ...COLUMN, gap: 12, alignItems: 'center', textAlign: 'center' }}>
             <Icon icon={CheckCircle2} size="lg" tone="brand" />
-            <Heading variant="title-md" as="h2">{`Đã ghi nhận. Tubu sẽ cộng ${formatPoints(done.pointsAwarded)} cho khách`}</Heading>
+            <Heading variant="title-md" as="h2">{deskDoneCopy(done.pointsAwarded, formatPoints).heading}</Heading>
             <Text variant="body-md" as="div">{`Yêu cầu ${done.code} của ${done.customerName} đã xong`}</Text>
             {done.remaining && (
               <Text variant="body-sm" tone="secondary" as="div">{`${done.remaining.label}: ${formatPoints(done.remaining.value)}`}</Text>
@@ -370,7 +370,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
 
             {readOnly && (
               <Text variant="body-md" tone={request.status === 'COMPLETED' ? 'success' : 'danger'} as="div" style={{ fontWeight: 600 }}>
-                {request.status === 'COMPLETED' ? 'Đã xác nhận' : 'Đã từ chối'}
+                {deskClosedText(request)}
               </Text>
             )}
 
@@ -385,6 +385,9 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                   <>
                     <Text variant="body-sm" tone="secondary" as="div">{`Khách khai ${l.declaredQty} ${l.unitLabel}`}</Text>
                     {l.hazardous && HAZARDOUS_DESK_NOTES.map((t) => <Text key={t} variant="body-sm" tone="danger" as="div">{t}</Text>)}
+                    {isPartnerWarehouseOnly(l, kindOfRequest(request)) ? (
+                      <Text variant="body-sm" tone="danger" as="div" style={{ fontWeight: 600 }}>{WAREHOUSE_ONLY_RETURN_NOTE}</Text>
+                    ) : (
                       <>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                           <QuantitySelector
@@ -418,6 +421,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                           </div>
                         )}
                       </>
+                    )}
                   </>
                 )}
               </div>
@@ -425,7 +429,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
 
             {!readOnly && (
               <>
-                <Button fullWidth variant="secondary" onPress={() => setRejectOpen(true)}>
+                <Button fullWidth variant="secondary" style={{ color: 'var(--color-text-danger)' }} onPress={() => setRejectOpen(true)}>
                   Từ chối cả yêu cầu
                 </Button>
               </>
