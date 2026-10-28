@@ -185,6 +185,7 @@ export const VARIABLE_LABELS: Readonly<Record<string, string>> = {
   ref: 'mã tham chiếu',
   refund_note: 'câu báo hoàn tiền',
   tax_note: 'câu báo thuế TNCN đã khấu trừ (rỗng nếu không có)',
+  tax: 'số thuế TNCN đã khấu trừ',
   remaining: 'số còn lại',
   result: 'kết quả',
   retry: 'lần thử lại',
