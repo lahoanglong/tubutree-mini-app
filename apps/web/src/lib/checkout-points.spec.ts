@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkoutPointsOffer, convertedPointsLine, pointsCapState, pointsSummary, zeroTotalNote } from './checkout-points';
+import { checkoutPointsOffer, convertedPointsLine, lockedPointsLabel, pointsCapState, pointsSummary, zeroTotalNote } from './checkout-points';
 
 // Backend kẹp Điểm Xanh ở checkout theo số DÙNG ĐƯỢC (số dư − điểm đơn còn trong hạn đổi/trả hoặc đang
 // chờ xử lý đổi/trả) — ô "Dùng … Điểm Xanh" trên web phải đề nghị đúng số đó, không phải số dư.
@@ -170,5 +170,11 @@ describe('convertedPointsLine', () => {
 
   it('không có điểm quy đổi → không có dòng', () => {
     expect(convertedPointsLine(checkoutPointsOffer({ pointsBalance: 90 }), { capNote: 'x', partnerNote: null })).toBeNull();
+  });
+});
+
+describe('lockedPointsLabel', () => {
+  it('ô khoá theo đơn, một phần điểm bị giữ: chỉ ghi số dư, không "Dùng được X/Y"', () => {
+    expect(lockedPointsLabel({ pointsBalance: 500 }, { usable: 300 })).toBe('Bạn đang có 500 điểm');
   });
 });

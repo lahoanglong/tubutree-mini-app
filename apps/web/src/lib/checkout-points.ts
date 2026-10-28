@@ -71,9 +71,9 @@ export function checkoutPointsOffer(
  * Nhãn ô Điểm Xanh khi ô bị khoá (đơn không dùng được điểm): ghi số dư, không hứa "dùng được" ngay cạnh câu "chưa dùng được".
  * Cùng chữ với checkoutPoints().label của Mini App.
  */
-export function lockedPointsLabel(quote: { pointsBalance: number; pointsConvertedBalance?: number } | undefined, offer: CheckoutPointsOffer): string {
+export function lockedPointsLabel(quote: { pointsBalance: number; pointsConvertedBalance?: number } | undefined, offer: Pick<CheckoutPointsOffer, 'usable'>): string {
   const total = quote ? pointsSummary(quote).total : offer.usable;
-  return offer.lockNote ? `Dùng được ${group(offer.usable)}/${group(total)} điểm` : `Bạn đang có ${group(offer.usable)} điểm`;
+  return `Bạn đang có ${group(total)} điểm`;
 }
 
 /**

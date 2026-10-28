@@ -32,6 +32,7 @@ import {
   paymentMissingNote,
   paymentUnavailableReason,
   pickPaymentMethod,
+  lockedPointsLabel,
   pointsCapState,
   pointsEarnLabel,
   zeroTotalNote,
@@ -762,7 +763,9 @@ export default function CheckoutPage() {
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                 {pointsUsable
                   ? pointsOfferText(points.usable, quote.data, usePoints && quote.data ? quote.data : null, publicConfig.loyalty?.vndPerPointRedeem)
-                  : (points.label ?? vi.checkout.pointsNone)}
+                  : partnerPoints.disabled && points.usable > 0
+                    ? lockedPointsLabel(points.balance)
+                    : (points.label ?? vi.checkout.pointsNone)}
               </Text>
               {points.usable > 0 && partnerPoints.capNote && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>

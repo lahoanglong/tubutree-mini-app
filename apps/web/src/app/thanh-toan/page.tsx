@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, CheckCircle2, Plus, Recycle, ShoppingBag, Sprout } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
@@ -67,9 +66,6 @@ import { CheckMark, miniCheckboxWrap, miniCheckbox, miniRadio, mini } from '@/co
 import { PageHeader } from '@/components/ui/page-header';
 import { ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
-
-// Chỉ hiện sau khi đặt đơn chuyển khoản: không nằm trong gói đầu của màn thanh toán.
-const BankTransferPanel = dynamic(() => import('./bank-transfer-panel').then((m) => m.BankTransferPanel), { ssr: false });
 
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
 const PRICE_CHANGED = 'PRICE_CHANGED';
@@ -369,11 +365,6 @@ export default function CheckoutPage() {
     return (
       <Shell bare>
         <OrderSuccess order={placed} etaLabel={etaLabel} continueHref={continueHref} />
-        {/* A2-02 = A6-01: đơn CHUYỂN KHOẢN hiện QR/STK/nội dung CK ngay sau khi đặt để khách trả liền;
-            nếu đóng tab, trang chi tiết đơn (`/tai-khoan/don-hang/[code]`) dựng lại đúng khung này. */}
-        <div className="mx-auto max-w-md">
-          <BankTransferPanel order={placed} />
-        </div>
       </Shell>
     );
   }
