@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, type ComponentType } from 'react';
 import { App, ZMPRouter, AnimationRoutes, SnackbarProvider } from 'zmp-ui';
 import { Navigate, Route } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -52,8 +52,10 @@ const OPENED_FROM_PARTNER_LINK =
 const CouponClaimGate = lazy(() => import('./coupon-claim-gate').then((m) => ({ default: m.CouponClaimGate })));
 
 // Code-split: Home eager (first paint), các trang khác lazy để giữ initial bundle nhỏ (§13.4).
-// Khảo sát đang tắt: mã của nó nằm ngoài gói khởi động và chỉ tải khi bật cờ (chỗ vẽ bên dưới cũng theo cờ).
-const OnboardingGate = lazy(() => import('./onboarding').then((m) => ({ default: m.OnboardingGate })));
+// Khảo sát đang tắt: cờ là hằng nên nhánh import bị bỏ lúc build, bản build không có chunk khảo sát.
+const OnboardingGate: ComponentType<{ openedFromPartnerLink?: boolean }> = ONBOARDING_SURVEY_ENABLED
+  ? lazy(() => import('./onboarding').then((m) => ({ default: m.OnboardingGate })))
+  : () => null;
 const loadBrowse = () => import('../pages/browse');
 const BrowsePage = lazy(loadBrowse);
 const loadProductDetail = () => import('../pages/product-detail');
