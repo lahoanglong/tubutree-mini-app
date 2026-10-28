@@ -95,7 +95,7 @@ const browserProbe = (): VideoProbe => {
 };
 
 /** Độ dài video (giây) từ metadata của trình duyệt; null khi không đọc được hoặc quá `timeoutMs`. Cả hai nền tảng đều chạy trong trình duyệt. */
-export function readVideoDuration(file: Blob, probe: VideoProbe = browserProbe(), timeoutMs = 8000): Promise<number | null> {
+export function readVideoDuration(file: Blob, probe: VideoProbe = browserProbe(), timeoutMs = 4000): Promise<number | null> {
   return new Promise((resolve) => {
     const video = probe.createVideo();
     const url = probe.createObjectURL(file);
