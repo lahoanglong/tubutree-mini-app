@@ -5,7 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Gift, Leaf, PackageOpen, Recycle, ScanLine, Sprout, Users, type LucideIcon } from 'lucide-react';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { memberCardAriaLabel, memberCardView, RECYCLE_REQUESTS_LABEL } from '@tubutree/app-core/home-layout';
+import { memberCardAriaLabel, RECYCLE_REQUESTS_LABEL } from '@tubutree/app-core/home-layout';
+import { offersMemberCard } from '@tubutree/app-core/member-card-grace';
 import { getCoupons, getLoyalty } from '../services/account-api';
 import { getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -70,7 +71,7 @@ export default function OffersPage() {
   );
 
   const card = user
-    ? memberCardView({ overview: loyaltyQ.data, pointsTotal: pointsSummary(loyaltyQ.data ?? user).total, vndPerPointRedeem: cfg.loyalty?.vndPerPointRedeem })
+    ? offersMemberCard({ overview: loyaltyQ.data, pointsTotal: pointsSummary(loyaltyQ.data ?? user).total, vndPerPointRedeem: cfg.loyalty?.vndPerPointRedeem })
     : null;
   // Trong hạn giữ hạng dòng dưới thẻ nói chuyện giữ hạng, nên thanh tiến độ lên hạng kế không vẽ (tránh bị đọc thành tiến độ giữ hạng).
   const showProgress = !!loyaltyQ.data && !card?.inGrace;
