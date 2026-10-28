@@ -7,6 +7,7 @@ import { request as httpsRequest } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PublicImageService } from './public-image.service';
 import {
@@ -47,11 +48,11 @@ const MAX_CONCURRENT_JOBS = 4;
 /** Hàng đợi chờ xử lý tối đa: đầy thì 503 để RAM (mỗi việc giữ tới 8 MB nguồn) không phình theo số URL khác nhau. */
 const MAX_QUEUED_JOBS = 32;
 const REGISTRY_TTL_MS = 5 * 60 * 1000;
-const REGISTRY_MISS_TTL_MS = 60 * 1000;
-const REGISTRY_MAX_ENTRIES = 2_000;
-/** Số lần tra DB cho nguồn lạ mỗi phút: URL không có trong DB bị từ chối nhưng mỗi lần vẫn tốn một lần quét. */
-const REGISTRY_MISS_LOOKUPS_PER_MIN = 30;
+/** Ảnh của chính API sai ?v= hoặc không có: mỗi lần vẫn tốn một lần đọc DB và một chỗ trong hàng đợi, nên giới hạn theo phút. */
+const OWN_MISSES_PER_MIN = 30;
 const PRUNE_MIN_GAP_WHEN_FULL_MS = 10 * 1000;
+/** Dọn tới 80% trần để còn chỗ ghi ảnh mới, không dừng ghi ngay sát trần. */
+const PRUNE_LOW_WATER = 0.8;
 const DEFAULT_CACHE_MAX_MB = 512;
 const CACHE_MAX_AGE_MS = 14 * 24 * 3600 * 1000;
 const PRUNE_EVERY_MS = 10 * 60 * 1000;
@@ -70,9 +71,11 @@ export class ImageResizeService {
   private readonly waiters: (() => void)[] = [];
   private lastPrune = 0;
   private cacheBytes: number | null = null;
-  private readonly registry = new Map<string, { ok: boolean; until: number }>();
-  private missWindowStart = 0;
-  private missCount = 0;
+  private registry = new Set<string>();
+  private registryUntil = 0;
+  private registryLoad: Promise<void> | null = null;
+  private ownMissWindowStart = 0;
+  private ownMissCount = 0;
 
   constructor(
     private readonly own: PublicImageService,
@@ -106,33 +109,50 @@ export class ImageResizeService {
   }
 
   /**
-   * Chỉ đổi cỡ ảnh đang nằm trong sản phẩm hoặc nhãn: host Pancake/Cloudinary chung của mọi cửa hàng, kiểm host thôi sẽ biến
-   * endpoint thành proxy ảnh cho bất kỳ ai. Khớp nguyên văn chuỗi `u` với dữ liệu, nhớ kết quả ít phút.
+   * Chỉ đổi cỡ ảnh đang nằm trong sản phẩm, nhãn, vật phẩm/quà đổi rác: host Pancake/Cloudinary chung của mọi cửa hàng, kiểm host
+   * thôi sẽ biến endpoint thành proxy ảnh cho bất kỳ ai. Danh sách URL http(s) nạp bằng MỘT truy vấn (ảnh base64 bị loại ngay trong
+   * SQL), dùng chung cho mọi request và làm mới mỗi 5 phút; tra một URL là tra trong bộ nhớ, không chạm DB.
    */
   private async isRegistered(raw: string): Promise<boolean> {
-    const now = Date.now();
-    const known = this.registry.get(raw);
-    if (known && known.until > now) return known.ok;
-    if (now - this.missWindowStart > 60_000) {
-      this.missWindowStart = now;
-      this.missCount = 0;
+    if (Date.now() >= this.registryUntil) {
+      this.registryLoad ??= this.loadRegistry().finally(() => {
+        this.registryLoad = null;
+      });
+      try {
+        await this.registryLoad;
+      } catch (e) {
+        if (this.registryUntil === 0) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
+        this.log.warn(`Không làm mới được danh sách ảnh: ${(e as Error).message}`);
+        this.registryUntil = Date.now() + 30_000;
+      }
     }
-    if (this.missCount >= REGISTRY_MISS_LOOKUPS_PER_MIN) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
-    const ok = await this.lookupRegistered(raw);
-    if (!ok) this.missCount += 1;
-    if (this.registry.size >= REGISTRY_MAX_ENTRIES) this.registry.clear();
-    this.registry.set(raw, { ok, until: now + (ok ? REGISTRY_TTL_MS : REGISTRY_MISS_TTL_MS) });
-    return ok;
+    return this.registry.has(raw);
   }
 
-  private async lookupRegistered(raw: string): Promise<boolean> {
-    const product = await this.prisma.product.findFirst({ where: { OR: [{ images: { has: raw } }, { thumbnail: raw }] }, select: { id: true } });
-    if (product) return true;
-    const brand = await this.prisma.brand.findFirst({ where: { OR: [{ logoUrl: raw }, { coverUrl: raw }, { storyImages: { has: raw } }] }, select: { id: true } });
-    return brand !== null;
+  private async loadRegistry(): Promise<void> {
+    const rows = await this.prisma.$queryRaw<{ u: string }[]>(Prisma.sql`
+      SELECT u FROM (SELECT unnest("images") AS u FROM "products") a WHERE left(u, 8) = 'https://'
+      UNION ALL SELECT "thumbnail" FROM "products" WHERE left("thumbnail", 8) = 'https://'
+      UNION ALL SELECT "logoUrl" FROM "brands" WHERE left("logoUrl", 8) = 'https://'
+      UNION ALL SELECT "coverUrl" FROM "brands" WHERE left("coverUrl", 8) = 'https://'
+      UNION ALL SELECT u FROM (SELECT unnest("storyImages") AS u FROM "brands") b WHERE left(u, 8) = 'https://'
+      UNION ALL SELECT "imageUrl" FROM "waste_items" WHERE left("imageUrl", 8) = 'https://'
+      UNION ALL SELECT "imageUrl" FROM "waste_gifts" WHERE left("imageUrl", 8) = 'https://'`);
+    this.registry = new Set(rows.map((r) => r.u));
+    this.registryUntil = Date.now() + REGISTRY_TTL_MS;
+  }
+
+  private ownMissLimited(): boolean {
+    const now = Date.now();
+    if (now - this.ownMissWindowStart > 60_000) {
+      this.ownMissWindowStart = now;
+      this.ownMissCount = 0;
+    }
+    return this.ownMissCount >= OWN_MISSES_PER_MIN;
   }
 
   private async produce(source: string, key: string, width: number, format: ResizeFormat): Promise<ResizedImage> {
+    if (parseOwnImagePath(source) && this.ownMissLimited()) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
     const release = await this.acquire();
     let data: Buffer;
     try {
@@ -153,7 +173,10 @@ export class ImageResizeService {
     const own = parseOwnImagePath(source);
     if (own) {
       const found = await this.own.get(own.kind, own.id, own.slot, own.version).catch(() => null);
-      if (!found || !found.versionOk) throw new NotFoundException('Không tìm thấy ảnh.');
+      if (!found || !found.versionOk) {
+        this.ownMissCount += 1;
+        throw new NotFoundException('Không tìm thấy ảnh.');
+      }
       return found.data;
     }
     const url = parseRemoteSource(source);
@@ -259,7 +282,7 @@ export class ImageResizeService {
     }
   }
 
-  /** Xoá file quá tuổi, rồi xoá file cũ nhất cho tới khi dưới trần dung lượng. */
+  /** Xoá file quá tuổi, rồi xoá file cũ nhất cho tới khi dưới 80% trần dung lượng (khi đã vượt trần). */
   async prune(): Promise<{ removed: number; bytes: number }> {
     const files: { path: string; size: number; mtime: number }[] = [];
     let shards: string[] = [];
@@ -290,9 +313,11 @@ export class ImageResizeService {
     const now = Date.now();
     let removed = 0;
     let total = files.reduce((s, f) => s + f.size, 0);
+    // Vượt trần thì dọn xuống mức thấp; chưa vượt thì chỉ xoá file quá tuổi.
+    const target = total > this.maxBytes ? this.maxBytes * PRUNE_LOW_WATER : this.maxBytes;
     files.sort((a, b) => a.mtime - b.mtime);
     for (const f of files) {
-      if (now - f.mtime <= CACHE_MAX_AGE_MS && total <= this.maxBytes) break;
+      if (now - f.mtime <= CACHE_MAX_AGE_MS && total <= target) break;
       await fs.rm(f.path, { force: true });
       total -= f.size;
       removed += 1;

@@ -31,11 +31,9 @@ afterEach(() => {
 });
 
 const ownImages = (data: Buffer | null) => ({ get: jest.fn(async () => (data ? { mime: 'image/png', data, versionOk: true } : Promise.reject(new NotFoundException()))) });
-const prismaWith = (registered: boolean) => ({
-  product: { findFirst: jest.fn(async () => (registered ? { id: 'p' } : null)) },
-  brand: { findFirst: jest.fn(async () => null) },
-});
-const make = (own = ownImages(png), prisma = prismaWith(true)) => ({ svc: new ImageResizeService(own as never, prisma as never), own, prisma });
+const REGISTERED = ['a.jpg', 'a.png', 'big.jpg', 'big2.jpg', 'dns.png', 'bomb.png'].map((n) => `https://content.pancake.vn/${n}`);
+const prismaWith = (urls: string[] = REGISTERED) => ({ $queryRaw: jest.fn(async () => urls.map((u) => ({ u }))) });
+const make = (own = ownImages(png), prisma = prismaWith()) => ({ svc: new ImageResizeService(own as never, prisma as never), own, prisma });
 
 /** Phản hồi giả của https.request: gọi callback với res rồi phát dữ liệu. */
 function fakeHttps(res: { status: number; headers?: Record<string, string>; body?: Buffer }) {
@@ -131,18 +129,33 @@ describe('ImageResizeService', () => {
   });
 
   it('nguồn đúng host nhưng không có trong sản phẩm/nhãn thì 404, không chạm mạng (không thành proxy mở)', async () => {
-    const { svc, prisma } = make(ownImages(png), prismaWith(false));
+    const { svc, prisma } = make(ownImages(png), prismaWith([]));
     await expect(svc.get('https://content.pancake.vn/someone-else.jpg', 320, 'webp')).rejects.toBeInstanceOf(NotFoundException);
     expect(requestMock).not.toHaveBeenCalled();
     expect(readdirSync(dir).length).toBe(0);
     await expect(svc.get('https://content.pancake.vn/someone-else.jpg', 320, 'webp')).rejects.toBeInstanceOf(NotFoundException);
-    expect(prisma.product.findFirst).toHaveBeenCalledTimes(1);
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
   });
 
-  it('tra nguồn lạ quá 30 lần mỗi phút thì 503', async () => {
-    const { svc } = make(ownImages(png), prismaWith(false));
-    for (let i = 0; i < 30; i++) await expect(svc.get(`https://content.pancake.vn/x${i}.jpg`, 320, 'webp')).rejects.toBeInstanceOf(NotFoundException);
-    await expect(svc.get('https://content.pancake.vn/x-last.jpg', 320, 'webp')).rejects.toBeInstanceOf(ServiceUnavailableException);
+  it('1.200 URL lạ cùng lúc chỉ tốn đúng một truy vấn DB (danh sách dùng chung, không tra từng URL)', async () => {
+    const { svc, prisma } = make(ownImages(png), prismaWith([]));
+    const results = await Promise.allSettled(Array.from({ length: 1200 }, (_, i) => svc.get(`https://content.pancake.vn/x${i}.jpg`, 320, 'webp')));
+    expect(results.every((r) => r.status === 'rejected' && r.reason instanceof NotFoundException)).toBe(true);
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('không nạp được danh sách ảnh lần đầu thì 503, có danh sách cũ rồi thì dùng tiếp', async () => {
+    const prisma = { $queryRaw: jest.fn().mockRejectedValueOnce(new Error('db down')) };
+    const { svc } = make(ownImages(png), prisma as never);
+    await expect(svc.get('https://content.pancake.vn/a.jpg', 320, 'webp')).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('ảnh của chính API sai ?v= liên tục: quá 30 lần mỗi phút thì 503, không tốn thêm lượt đọc DB', async () => {
+    const own = { get: jest.fn(async () => ({ mime: 'image/png', data: png, versionOk: false })) };
+    const { svc } = make(own as never);
+    for (let i = 0; i < 30; i++) await expect(svc.get(`/public-image/product/p1/0?v=bad${i}`, 320, 'webp')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.get('/public-image/product/p1/0?v=bad-last', 320, 'webp')).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(own.get).toHaveBeenCalledTimes(30);
   });
 
   it('ảnh của chính API sai phiên bản (?v=) thì 404, không ghi cache', async () => {
@@ -201,5 +214,20 @@ describe('ImageResizeService', () => {
     const res = await svc.prune();
     expect(res.removed).toBe(2);
     expect(readdirSync(sub)).toEqual(['b']);
+  });
+
+  it('prune: khi vượt trần dọn xuống còn tối đa 80% trần', async () => {
+    process.env.IMAGE_CACHE_MAX_MB = '1';
+    const { svc } = make();
+    const sub = join(dir, 'bb');
+    require('node:fs').mkdirSync(sub);
+    for (let i = 0; i < 6; i++) {
+      const f = join(sub, `f${i}`);
+      writeFileSync(f, Buffer.alloc(200 * 1024));
+      utimesSync(f, new Date(Date.now() - (10 - i) * 1000), new Date(Date.now() - (10 - i) * 1000));
+    }
+    const res = await svc.prune();
+    expect(res.bytes).toBeLessThanOrEqual(0.8 * 1024 * 1024);
+    expect(readdirSync(sub).sort()).toEqual(['f2', 'f3', 'f4', 'f5']);
   });
 });
