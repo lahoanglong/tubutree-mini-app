@@ -4,7 +4,8 @@ INSERT INTO "system_configs" ("key", "value", "description", "category", "update
 ON CONFLICT ("key") DO NOTHING;
 
 INSERT INTO "notification_templates" ("id", "code", "channel", "bodyTemplate") VALUES
-  ('nt-ctv-wallet-credited', 'COMMISSION_WALLET_CREDITED', 'INAPP', '💰 Đã cộng {{amount}} hoa hồng vào Ví Tubu{{tax_note}}. Bạn dùng được ngay khi thanh toán đơn hàng.')
+  ('nt-ctv-wallet-credited', 'COMMISSION_WALLET_CREDITED', 'INAPP', '💰 Đã cộng {{amount}} hoa hồng vào Ví Tubu{{tax_note}}. Bạn dùng được ngay khi thanh toán đơn hàng.'),
+  ('nt-ctv-wallet-tax-only', 'COMMISSION_WALLET_TAX_ONLY', 'INAPP', '💰 Đã xử lý {{amount}} hoa hồng của bạn: toàn bộ được khấu trừ thuế TNCN ({{tax}}) nên chưa có tiền cộng vào Ví Tubu.')
 ON CONFLICT DO NOTHING;
 
 UPDATE "notification_templates" SET "bodyTemplate" = '✅ {{count}} khoản hoa hồng (tổng {{amount}}) đã được duyệt. Khoản này chưa tự vào Ví, bạn chuyển vào Ví Tubu ngay trong mục CTV nhé.'

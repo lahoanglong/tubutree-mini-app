@@ -49,6 +49,7 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
     config = moduleRef.get(SystemConfigService);
     for (const t of [
       { id: 'nt-ctv-wallet-credited', code: CTV_NOTIFICATION.AUTO_WALLET, body: 'Đã cộng {{amount}} hoa hồng vào Ví Tubu{{tax_note}}.' },
+      { id: 'nt-ctv-wallet-tax-only', code: CTV_NOTIFICATION.AUTO_WALLET_TAX_ONLY, body: 'Đã xử lý {{amount}}: khấu trừ thuế {{tax}}, chưa có tiền vào Ví.' },
       { id: 'nt-ctv-commission-approved', code: CTV_NOTIFICATION.APPROVED, body: '{{count}} khoản hoa hồng (tổng {{amount}}) đã được duyệt.' },
     ]) {
       await prisma.notificationTemplate.upsert({
@@ -284,5 +285,37 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
     const s = await state(u.id);
     expect(s.balance).toBe(0);
     expect(s.commissions[0]!.status).toBe('APPROVED');
+  });
+
+  it('CTV bị khoá: cron không tự chuyển (commission giữ APPROVED, Ví 0); mở khoá thì cron chuyển', async () => {
+    const blocked = await ctv({ isBlocked: true });
+    const normal = await ctv();
+    await commissionFor(blocked.id, 80_000);
+    await commissionFor(normal.id, 80_000);
+    await affiliate.autoTransferApprovedToWallet();
+    const sb = await state(blocked.id);
+    expect(sb.balance).toBe(0);
+    expect(sb.payouts).toHaveLength(0);
+    expect(sb.commissions[0]!.status).toBe('APPROVED');
+    expect((await state(normal.id)).balance).toBe(80_000);
+    await prisma.user.update({ where: { id: blocked.id }, data: { isBlocked: false } });
+    await affiliate.autoTransferApprovedToWallet();
+    expect((await state(blocked.id)).balance).toBe(80_000);
+  });
+
+  it('thuế truy thu ăn hết số tiền lần này: payout tạo, commission PAID, Ví +0, CTV nhận tin "đã khấu trừ" (không nhận tin dặn bấm tay)', async () => {
+    const u = await ctv({ personalTaxId: MST });
+    await commissionFor(u.id, 4_900_000);
+    await affiliate.autoTransferApprovedToWallet();
+    expect((await state(u.id)).balance).toBe(4_900_000);
+    await commissionFor(u.id, 100_000);
+    await affiliate.autoTransferApprovedToWallet();
+    const s = await state(u.id);
+    expect(s.balance).toBe(4_900_000);
+    expect(s.commissions.every((c) => c.status === 'PAID')).toBe(true);
+    expect(s.payouts.map((p) => [p.grossAmount, p.taxWithheld, p.amount]).sort()).toEqual([[100_000, 100_000, 0], [4_900_000, 0, 4_900_000]]);
+    const logs = await prisma.notificationLog.findMany({ where: { userId: u.id } });
+    expect(logs.filter((l) => l.templateCode === CTV_NOTIFICATION.AUTO_WALLET_TAX_ONLY)).toHaveLength(1);
+    expect(logs.some((l) => l.templateCode === CTV_NOTIFICATION.APPROVED)).toBe(false);
   });
 });

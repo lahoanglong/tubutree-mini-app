@@ -1335,7 +1335,7 @@ export class AffiliateService {
    * Ví, giới hạn), nên cron và bấm tay đồng thời chỉ cộng một lần (người đến sau không còn dòng APPROVED nào để đánh dấu PAID).
    * Khoá idempotency xác định theo tập id commission: chạy lại hay hai lượt cron chồng nhau cùng tập thì cùng khoá. CTV lỗi (chưa có
    * MST khi bị khấu trừ, đã bị bấm tay trước, lỗi tạm) thì để đó cho nút "Chuyển vào Ví" và lượt cron sau, không chặn người khác.
-   * Trả về các CTV thực sự được cộng tiền vào Ví (>0đ). Không ném lỗi.
+   * Trả về các CTV đã được xử lý (payout tạo xong, kể cả khi thuế truy thu ăn hết số tiền). Không ném lỗi.
    */
   async autoTransferApprovedToWallet(): Promise<Set<string>> {
     const credited = new Set<string>();
@@ -1343,7 +1343,8 @@ export class AffiliateService {
       const enabled = await this.config.get<unknown>(AFFILIATE_AUTO_WALLET_TRANSFER_KEY, DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED);
       if (enabled !== true) return credited;
       const rows = await this.prisma.commission.findMany({
-        where: { status: 'APPROVED', payoutBatchId: null },
+        // CTV bị khoá giữ nguyên tiền ở APPROVED: chuyển vào Ví sẽ ghi thu nhập chịu thuế và cộng tiền cho tài khoản đang bị xem xét.
+        where: { status: 'APPROVED', payoutBatchId: null, user: { isBlocked: false } },
         select: { id: true, affiliateUserId: true, amount: true },
         orderBy: { id: 'asc' },
       });
@@ -1360,10 +1361,8 @@ export class AffiliateService {
         try {
           const result = await this.requestPayout(userId, total, 'WALLET_BALANCE', undefined, key);
           const net = ('credited' in result ? result.credited : undefined) ?? 0;
-          if (net > 0) {
-            credited.add(userId);
-            await this.notifyAutoWalletCredited(userId, net, key);
-          }
+          credited.add(userId);
+          await this.notifyAutoWalletCredited(userId, net, total, key);
         } catch (err) {
           const code = (err as { response?: { code?: string } }).response?.code;
           const msg = err instanceof Error ? err.message : String(err);
@@ -1378,11 +1377,15 @@ export class AffiliateService {
   }
 
   /** Tiền đã vào Ví xong: thông báo hỏng không được làm hỏng vòng chuyển của CTV khác (chỉ log). */
-  private async notifyAutoWalletCredited(userId: string, credited: number, key: string): Promise<void> {
+  private async notifyAutoWalletCredited(userId: string, credited: number, gross: number, key: string): Promise<void> {
     if (!this.notifications) return;
     try {
       const payout = await this.prisma.payout.findUnique({ where: { idempotencyKey: key }, select: { taxWithheld: true } });
       const tax = payout?.taxWithheld ?? 0;
+      if (credited <= 0) {
+        await this.notifications.notify(userId, CTV_NOTIFICATION.AUTO_WALLET_TAX_ONLY, { amount: vnd(gross), tax: vnd(tax) }, { dedupeKey: key });
+        return;
+      }
       await this.notifications.notify(
         userId,
         CTV_NOTIFICATION.AUTO_WALLET,

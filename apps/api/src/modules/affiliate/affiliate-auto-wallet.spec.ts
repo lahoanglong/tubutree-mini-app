@@ -60,7 +60,7 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
     const t = build({ rows: [...rows('a', 10_000, 5_000), ...rows('b', 7_000)] });
     t.requestPayout.mockResolvedValue({ ok: true, method: 'WALLET_BALANCE', credited: 1, note: '' });
     const credited = await t.svc.autoTransferApprovedToWallet();
-    expect(t.findMany.mock.calls[0][0].where).toEqual({ status: 'APPROVED', payoutBatchId: null });
+    expect(t.findMany.mock.calls[0][0].where).toEqual({ status: 'APPROVED', payoutBatchId: null, user: { isBlocked: false } });
     expect(t.requestPayout).toHaveBeenCalledTimes(2);
     expect(t.requestPayout).toHaveBeenCalledWith('a', 15_000, 'WALLET_BALANCE', undefined, expect.stringMatching(/^auto-wallet:a:/));
     expect(t.requestPayout).toHaveBeenCalledWith('b', 7_000, 'WALLET_BALANCE', undefined, expect.stringMatching(/^auto-wallet:b:/));
@@ -93,17 +93,21 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
     );
   });
 
-  it('không có thuế → tax_note rỗng; thực vào Ví 0đ (thuế truy thu ăn hết) → không báo "đã cộng"', async () => {
+  it('không có thuế → tax_note rỗng', async () => {
     const a = build({ rows: rows('a', 10_000), payout: { amount: 10_000, taxWithheld: 0 } });
     a.requestPayout.mockResolvedValue({ ok: true, method: 'WALLET_BALANCE', credited: 10_000, note: '' });
     await a.svc.autoTransferApprovedToWallet();
     expect(a.notify.mock.calls[0][2]).toEqual({ amount: '10.000đ', tax_note: '' });
+  });
 
-    const b = build({ rows: rows('a', 10_000) });
+  it('thuế truy thu ăn hết (payout đã tạo, vào Ví 0đ) → báo "đã khấu trừ toàn bộ thuế", không báo "đã cộng", và CTV không nhận tin dặn bấm tay', async () => {
+    const b = build({ rows: rows('a', 10_000), payout: { amount: 0, taxWithheld: 10_000 } });
     b.requestPayout.mockResolvedValue({ ok: true, method: 'WALLET_BALANCE', credited: 0, note: '' });
     const credited = await b.svc.autoTransferApprovedToWallet();
-    expect(b.notify).not.toHaveBeenCalled();
-    expect(credited.has('a')).toBe(false);
+    const key = b.requestPayout.mock.calls[0]![4] as string;
+    expect(b.notify).toHaveBeenCalledTimes(1);
+    expect(b.notify).toHaveBeenCalledWith('a', CTV_NOTIFICATION.AUTO_WALLET_TAX_ONLY, { amount: '10.000đ', tax: '10.000đ' }, { dedupeKey: key });
+    expect(credited.has('a')).toBe(true);
   });
 
   it('một CTV lỗi (thiếu MST, đã bị bấm tay trước, lỗi lạ) thì CTV khác vẫn được chuyển; người lỗi không vào danh sách đã cộng', async () => {

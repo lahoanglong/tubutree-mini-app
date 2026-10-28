@@ -15,7 +15,8 @@ import { OrderStatusService } from '../../src/modules/orders/order-status.servic
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
-import { createOrder, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
+import { AFFILIATE_AUTO_WALLET_TRANSFER_KEY } from '../../src/modules/affiliate/affiliate-auto-transfer-config';
+import { createOrder, createUser, pinConfig, randCode, setConfig, summarize, warmPool } from './helpers';
 
 /**
  * Trả một phần (D3) phải đi hết các chỗ lấy đơn đã giao làm nền:
@@ -32,6 +33,7 @@ describe('Trả một phần: hoa hồng CTV / doanh số mốc và hạng thàn
   let affiliate: AffiliateService;
   let loyalty: LoyaltyService;
   const notify = jest.fn().mockResolvedValue(undefined);
+  let restoreAutoWallet: (() => Promise<void>) | undefined;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -59,9 +61,13 @@ describe('Trả một phần: hoa hồng CTV / doanh số mốc và hạng thàn
     affiliate = moduleRef.get(AffiliateService);
     loyalty = moduleRef.get(LoyaltyService);
     await setConfig(prisma, 'returns.window_days', 7);
+    // Cờ tắt: duyệt xong commission nằm ở APPROVED, assert đúng một trạng thái (không phụ thuộc cờ của DB dùng chung).
+    restoreAutoWallet = await pinConfig(prisma, AFFILIATE_AUTO_WALLET_TRANSFER_KEY, false);
+    (moduleRef.get(SystemConfigService) as unknown as { cache: Map<string, unknown> }).cache.clear();
   });
 
   afterAll(async () => {
+    await restoreAutoWallet?.();
     await moduleRef?.close();
   });
 
@@ -221,8 +227,7 @@ describe('Trả một phần: hoa hồng CTV / doanh số mốc và hạng thàn
 
       const after = await affiliate.getMilestones(o.ctv.id);
       expect(after).toMatchObject({ currentRevenue: 80_833, pendingRevenue: 0 });
-      // Đã chốt: cron duyệt xong thì hoa hồng tự vào Ví (PAID) khi cờ tự chuyển bật; cờ tắt thì nằm ở APPROVED. Cả hai đều tính vào doanh số chốt.
-      expect(await commissionOf(o.order.id)).toMatchObject({ status: expect.stringMatching(/^(APPROVED|PAID)$/), amount: 5_708, commissionableTotal: 80_833 });
+      expect(await commissionOf(o.order.id)).toMatchObject({ status: 'APPROVED', amount: 5_708, commissionableTotal: 80_833 });
     });
 
     it('hai admin duyệt cùng một yêu cầu cùng lúc: hoa hồng và nền chỉ giảm một lần', async () => {
