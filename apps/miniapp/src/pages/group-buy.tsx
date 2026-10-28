@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Share2 } from 'lucide-react';
@@ -8,6 +9,7 @@ import { fetchActiveFlashSales } from '../services/shop-api';
 import { serverNow } from '../utils/server-clock';
 import { formatVnd } from '../utils/format';
 import { useAuthStore } from '../store/auth';
+import { isGuestUser } from '../utils/guest-user';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { Badge } from '../components/ui/badge';
@@ -35,7 +37,9 @@ export default function GroupBuyPage() {
   const { id: invitedId } = useParams<{ id: string }>();
   const authed = useAuthStore((s) => s.status) === 'authenticated';
   const login = useAuthStore((s) => s.login);
-  const referralCode = useAuthStore((s) => s.user?.referralCode);
+  const user = useAuthStore((s) => s.user);
+  const ensurePhone = useAuthStore((s) => s.ensurePhone);
+  const referralCode = user?.referralCode;
   const shareWithFallback = useShareWithFallback();
 
   const {
@@ -71,6 +75,33 @@ export default function GroupBuyPage() {
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
+  // Tài khoản khách (chưa có số điện thoại hay Zalo thật) bị máy chủ từ chối tham gia: liên kết trước, xong mới gửi. Khoá đồng bộ để
+  // chạm đúp không mở hai lần hộp xin số điện thoại.
+  const linking = useRef(false);
+  const join = async (id: string) => {
+    if (!authed) {
+      void login();
+      return;
+    }
+    if (user && isGuestUser(user)) {
+      if (linking.current) return;
+      linking.current = true;
+      let phone: string | null = null;
+      try {
+        phone = await ensurePhone();
+      } catch {
+        phone = null;
+      } finally {
+        linking.current = false;
+      }
+      if (!phone) {
+        openSnackbar({ text: 'Chưa liên kết được số điện thoại Zalo nên chưa tham gia được. Bạn bấm Tham gia và cho phép lại nhé.', type: 'warning' });
+        return;
+      }
+    }
+    joinM.mutate(id);
+  };
+
   const share = (g: GroupBuy) =>
     void shareWithFallback(
       {
@@ -91,7 +122,9 @@ export default function GroupBuyPage() {
       authed={authed}
       invitedBanner={invitedBanner}
       onOpen={() => navigate(`/product/${g.product.slug}`)}
-      onJoin={() => (authed ? joinM.mutate(g.id) : void login())}
+      // Nhóm đủ người: trang sản phẩm áp mã của nhóm vào giỏ sau khi khách thêm giỏ hay mua ngay.
+      onBuy={() => navigate(`/product/${g.product.slug}`, { state: { variationId: g.variationId, applyCoupon: g.couponCode } })}
+      onJoin={() => void join(g.id)}
       onShare={() => share(g)}
       joining={joinM.isPending && joinM.variables === g.id}
     />
@@ -139,6 +172,7 @@ function GroupCard({
   authed,
   invitedBanner,
   onOpen,
+  onBuy,
   onJoin,
   onShare,
   joining,
@@ -147,6 +181,7 @@ function GroupCard({
   authed: boolean;
   invitedBanner: boolean;
   onOpen: () => void;
+  onBuy: () => void;
   onJoin: () => void;
   onShare: () => void;
   joining: boolean;
@@ -223,7 +258,7 @@ function GroupCard({
               {' '}· chọn trong “Chọn mã” ở giỏ hàng, dùng trong 30 ngày.
             </Text>
           )}
-          <Button fullWidth onPress={onOpen} style={{ marginTop: 10 }}>
+          <Button fullWidth onPress={onBuy} style={{ marginTop: 10 }}>
             {`Mua ngay với mã giảm ${g.discountPct}%`}
           </Button>
         </>

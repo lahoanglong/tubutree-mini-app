@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { ShoppingCart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { addToCart, formatVnd, getCart, getProductStock } from '@/lib/shop-client';
+import { addToCart, applyCoupon, formatVnd, getCart, getProductStock } from '@/lib/shop-client';
+import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ui, uiBar } from '@/lib/guest-ui';
@@ -157,13 +158,30 @@ export default function AddToCart({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- một lần sau khi trang hiện
   }, []);
 
+  // Mã của nhóm mua chung đủ người (`?ma=` do nút "Mua ngay với mã" ở trang Mua chung đặt). Mã gắn riêng sản phẩm và có đơn tối thiểu nên
+  // chỉ áp được khi món đã nằm trong giỏ: thử một lần ngay sau lần thêm giỏ đầu tiên thành công. Lỗi không chặn việc mua, chỉ nói lý do.
+  const groupCouponTried = useRef(false);
+  const applyGroupCoupon = async (cart: Awaited<ReturnType<typeof addToCart>>) => {
+    const code = new URLSearchParams(window.location.search).get('ma')?.trim().toUpperCase();
+    if (!code || groupCouponTried.current) return { cart, note: null };
+    groupCouponTried.current = true;
+    try {
+      const next = await applyCoupon(code);
+      void qc.invalidateQueries({ queryKey: ['quote'] });
+      const outcome = couponUseOutcome(cart.couponCode, code, next);
+      return { cart: next, note: outcome.kind === 'ok' ? `Đã áp mã ${code}.` : outcome.text };
+    } catch (e) {
+      return { cart, note: couponUseCopy.notApplied(actionErrorText(e)) };
+    }
+  };
+
   const add = async (variationId: string, quantity: number, buyNow = false) => {
     setBusy(true);
     setBuying(buyNow);
     setMsg(null);
     let leaving = false;
     try {
-      const cart = await addToCart(variationId, quantity);
+      const { cart, note } = await applyGroupCoupon(await addToCart(variationId, quantity));
       // Badge giỏ ở header đọc cùng queryKey ['cart'] nhưng nằm trong layout nên không bao giờ
       // remount, và providers tắt refetchOnWindowFocus — không cập nhật thì khách thêm 3 món
       // vẫn thấy số cũ, tưởng chưa thêm được rồi thêm lại thành trùng số lượng.
@@ -178,7 +196,7 @@ export default function AddToCart({
         router.push('/thanh-toan');
         return;
       }
-      setMsg('Đã thêm vào giỏ!');
+      setMsg(note ? `Đã thêm vào giỏ! ${note}` : 'Đã thêm vào giỏ!');
       setSuccess(true);
     } catch (e) {
       setMsg(actionErrorText(e));

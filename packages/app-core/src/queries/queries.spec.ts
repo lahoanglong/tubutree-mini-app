@@ -62,7 +62,7 @@ const cases: Case[] = [
   ['flashUpcoming', (h) => flash.flashUpcomingQuery(h), ['flash-sales', 'upcoming'], '/flash-sales/upcoming'],
   ['publicConfig', (h) => config.publicConfigQuery(h), ['public-config'], '/config/public'],
   ['groupBuyList', (h) => groupbuy.groupBuyListQuery(h), ['group-buy', 'list', 'guest'], '/group-buy'],
-  ['groupBuyOne', (h) => groupbuy.groupBuyOneQuery(h, 'g1'), ['group-buy', 'one', 'g1'], '/group-buy/g1'],
+  ['groupBuyOne', (h) => groupbuy.groupBuyOneQuery(h, 'g1'), ['group-buy', 'one', 'g1', 'guest'], '/group-buy/g1'],
   ['publicBrand', (h) => brand.publicBrandQuery(h, 'tubu'), ['public-brand', 'tubu'], '/brand/public/tubu'],
   ['brandFollow', (h) => brand.brandFollowQuery(h, 'tubu'), ['brand-follow', 'tubu'], '/brand/tubu/follow-state'],
   ['brandShareToEarn', (h) => brand.brandShareToEarnQuery(h, 'tubu'), ['brand-ste', 'tubu'], '/brand/tubu/share-to-earn'],
@@ -182,6 +182,15 @@ describe('makeFlashRefetchInterval (B-132)', () => {
 
   it('suất không có endAt hợp lệ: nhịp 60 giây', () => {
     expect(poll({ state: { data: [{}, { endAt: 'abc' }] } })).toBe(60_000);
+  });
+});
+
+describe('groupBuyOneQuery gắn với người xem (E-44)', () => {
+  it('khách và người đã đăng nhập không dùng chung bản chi tiết nhóm (joined/couponCode theo người xem)', async () => {
+    const { groupBuyOneQuery } = await import('./groupbuy');
+    const http = {} as never;
+    expect(groupBuyOneQuery(http, 'g1', 'guest').queryKey).not.toEqual(groupBuyOneQuery(http, 'g1', 'u1').queryKey);
+    expect(groupBuyOneQuery(http, 'g1', 'u1').queryKey).toEqual(['group-buy', 'one', 'g1', 'u1']);
   });
 });
 

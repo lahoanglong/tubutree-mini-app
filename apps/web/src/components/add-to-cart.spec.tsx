@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   auth: { status: 'idle' as string, initialized: true, user: null as unknown },
   push: vi.fn(),
   addToCart: vi.fn(),
+  applyCoupon: vi.fn(),
   getProductStock: vi.fn(),
   getActiveFlashSales: vi.fn(),
   getCart: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push, replac
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   addToCart: mocks.addToCart,
+  applyCoupon: mocks.applyCoupon,
   getProductStock: mocks.getProductStock,
   getActiveFlashSales: mocks.getActiveFlashSales,
   getCart: mocks.getCart,
@@ -128,6 +130,106 @@ describe('AddToCart — quay lại sau đăng nhập', () => {
     const { container } = mount();
     await flush();
     expect(container.textContent).toContain('Chỉ còn 0 sản phẩm trong kho.');
+  });
+});
+
+describe('AddToCart — áp mã mua chung từ ?ma= (E-9)', () => {
+  const CODE = 'GBUY-ABCD1234-WXYZ5678';
+  const openedFrom = (search: string) => window.history.replaceState(null, '', `/san-pham/dau-goi${search}`);
+  const withLine = (over: Record<string, unknown> = {}) => ({ items: [{ id: 'line-A', variationId: 'v1', quantity: 1 }], itemCount: 1, couponCode: null, discount: 0, ...over });
+  const buy = (c: HTMLElement) => Array.from(c.querySelectorAll('button')).find((b) => /^Mua ngay/.test(b.textContent ?? '') && !b.hasAttribute('hidden')) as HTMLButtonElement;
+
+  beforeEach(() => {
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    mocks.addToCart.mockResolvedValue(withLine());
+    mocks.applyCoupon.mockReset().mockResolvedValue(withLine({ couponCode: CODE, discount: 15000 }));
+  });
+  afterEach(() => openedFrom(''));
+
+  it('thêm giỏ xong thì áp đúng mã (viết hoa) và báo "Đã áp mã"', async () => {
+    openedFrom(`?ma=${encodeURIComponent(CODE.toLowerCase())}`);
+    const { container } = mount();
+    await flush();
+    click(addButton(container));
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1);
+    expect(mocks.applyCoupon).toHaveBeenCalledWith(CODE);
+    expect(mocks.addToCart.mock.invocationCallOrder[0]).toBeLessThan(mocks.applyCoupon.mock.invocationCallOrder[0]);
+    expect(container.textContent).toContain('Đã thêm vào giỏ!');
+    expect(container.textContent).toContain(`Đã áp mã ${CODE}`);
+  });
+
+  it('mua ngay: áp mã xong mới sang thanh toán', async () => {
+    openedFrom(`?ma=${CODE}`);
+    const { container } = mount();
+    await flush();
+    click(buy(container));
+    await flush();
+    expect(mocks.applyCoupon).toHaveBeenCalledWith(CODE);
+    expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
+    expect(mocks.applyCoupon.mock.invocationCallOrder[0]).toBeLessThan(mocks.push.mock.invocationCallOrder[0]);
+  });
+
+  it('áp mã lỗi: món vẫn vào giỏ, nói lý do của máy chủ; mua ngay vẫn sang thanh toán', async () => {
+    mocks.applyCoupon.mockRejectedValue(new Error('Mã đã hết hạn'));
+    openedFrom(`?ma=${CODE}`);
+    const first = mount();
+    await flush();
+    click(addButton(first.container));
+    await flush();
+    expect(first.container.textContent).toContain('Đã thêm vào giỏ!');
+    expect(first.container.textContent).toContain('Mã đã hết hạn');
+    first.unmount();
+    mounted = mounted.filter((m) => m !== first);
+
+    mocks.push.mockReset();
+    const second = mount();
+    await flush();
+    click(buy(second.container));
+    await flush();
+    expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
+  });
+
+  it('máy chủ giữ mã nhưng chưa tính giảm (đơn tối thiểu): nói lý do thay vì báo đã áp', async () => {
+    mocks.applyCoupon.mockResolvedValue(withLine({ couponCode: CODE, discount: 0, couponNotice: 'Cần thêm 20.000đ để dùng mã' }));
+    openedFrom(`?ma=${CODE}`);
+    const { container } = mount();
+    await flush();
+    click(addButton(container));
+    await flush();
+    expect(container.textContent).toContain('Cần thêm 20.000đ để dùng mã');
+    expect(container.textContent).not.toContain('Đã áp mã');
+  });
+
+  it('chỉ áp một lần mỗi lần mở trang', async () => {
+    openedFrom(`?ma=${CODE}`);
+    const { container } = mount();
+    await flush();
+    click(addButton(container));
+    await flush();
+    click(addButton(container));
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledTimes(2);
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+  });
+
+  it('không có ?ma= (lối vào thường): không gọi applyCoupon', async () => {
+    const { container } = mount();
+    await flush();
+    click(addButton(container));
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalled();
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
+  });
+
+  it('thêm giỏ lỗi: không áp mã', async () => {
+    mocks.addToCart.mockRejectedValue(new Error('Chỉ còn 0 sản phẩm trong kho.'));
+    openedFrom(`?ma=${CODE}`);
+    const { container } = mount();
+    await flush();
+    click(addButton(container));
+    await flush();
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
   });
 });
 

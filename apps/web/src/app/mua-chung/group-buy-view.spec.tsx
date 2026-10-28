@@ -369,11 +369,36 @@ describe('/mua-chung/[id] — nhóm được mời', () => {
     expect((btn(c, 'Nhóm đã hết hạn') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('khách chưa đăng nhập: không gọi API chi tiết (cần đăng nhập), vẫn xem được danh sách', async () => {
+  it('E-44: khách chưa đăng nhập mở link mời vẫn thấy nhóm được mời đầu danh sách, kèm "Đăng nhập để tham gia"', async () => {
     mocks.phase = 'guest';
+    mocks.one = GROUP('b');
+    mocks.list = [GROUP('a')];
     const c = await mount('b');
+    expect(mocks.get).toHaveBeenCalledWith('/group-buy/b');
+    expect(c.textContent).toContain('Bạn được mời vào nhóm này');
+    expect(c.textContent).toContain('Sản phẩm b');
+    const first = c.querySelector('article')!;
+    expect(first.textContent).toContain('Sản phẩm b');
+    expect(Array.from(first.querySelectorAll('button')).map((b) => b.textContent)).toContain('Đăng nhập để tham gia');
+    click(btn(first as HTMLElement, 'Đăng nhập để tham gia')!);
+    expect(mocks.push).toHaveBeenCalledWith('/dang-nhap?returnTo=%2Fmua-chung%2Fb');
+  });
+
+  it('E-44: khách xem nhóm đã đủ người thì không thấy mã giảm dù dữ liệu có couponCode', async () => {
+    mocks.phase = 'guest';
+    mocks.one = GROUP('b', { status: 'SUCCESS', currentSize: 5, joined: true, couponCode: 'GBUY-LO-RA' });
+    mocks.list = [];
+    const c = await mount('b');
+    expect(c.textContent).toContain('Sản phẩm b');
+    expect(c.textContent).not.toContain('GBUY-LO-RA');
+  });
+
+  it('E-44: link mời không tìm thấy nhóm (404) thì vẫn hiện danh sách chung, không vỡ trang', async () => {
+    mocks.phase = 'guest';
+    mocks.oneError = true;
+    const c = await mount('zzz');
     expect(c.textContent).toContain('Sản phẩm a');
-    expect(mocks.get).not.toHaveBeenCalledWith('/group-buy/b');
+    expect(c.textContent).not.toContain('Bạn được mời vào nhóm này');
   });
 
   it('nhóm của mình đã đủ người: mục riêng, hiện mã giảm và nút mua ngay sang trang sản phẩm', async () => {
@@ -383,8 +408,17 @@ describe('/mua-chung/[id] — nhóm được mời', () => {
     expect(c.textContent).toContain('GBUY-DONE-ME');
     expect(c.textContent).toContain('5/5 người · đã đủ nhóm');
     const buy = Array.from(c.querySelectorAll('a')).find((a) => a.textContent === 'Mua ngay với mã giảm 20%');
-    expect(buy?.getAttribute('href')).toBe('/san-pham/sp-done');
+    // Mã đi theo link để trang sản phẩm áp vào giỏ sau khi thêm giỏ.
+    expect(buy?.getAttribute('href')).toBe('/san-pham/sp-done?ma=GBUY-DONE-ME');
+    expect(c.querySelector('a[href="/san-pham/sp-done"]')).not.toBeNull();
     expect(btn(c, 'Nhóm đã đủ người')).toBeUndefined();
+  });
+
+  it('E-9: nhóm đủ người mà API chưa trả mã thì nút mua ngay về trang sản phẩm trơn, không có ?ma=', async () => {
+    mocks.list = [GROUP('done', { joined: true, status: 'SUCCESS', currentSize: 5 })];
+    const c = await mount();
+    const buy = Array.from(c.querySelectorAll('a')).find((a) => a.textContent === 'Mua ngay với mã giảm 20%');
+    expect(buy?.getAttribute('href')).toBe('/san-pham/sp-done');
   });
 });
 

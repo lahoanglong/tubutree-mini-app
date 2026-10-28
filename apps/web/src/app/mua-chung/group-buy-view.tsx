@@ -41,8 +41,8 @@ function timeLeft(iso: string): string {
 }
 
 /**
- * Trang Mua chung: danh sách nhóm và nhóm được mời qua link `/mua-chung/:id`. Danh sách công khai nhưng mỗi nhóm mang `joined`/`isOwner`
- * theo người xem nên tải ở trình duyệt; API chi tiết cần đăng nhập nên khách chỉ xem danh sách chung, và chạm Tham gia thì sang đăng nhập.
+ * Trang Mua chung: danh sách nhóm và nhóm được mời qua link `/mua-chung/:id`. Danh sách và chi tiết nhóm công khai nhưng mỗi nhóm
+ * mang `joined`/`isOwner` theo người xem nên tải ở trình duyệt; khách chưa đăng nhập chạm Tham gia thì sang đăng nhập rồi quay lại.
  */
 export function GroupBuyView({ invitedId }: { invitedId?: string }) {
   const router = useRouter();
@@ -61,9 +61,11 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
     setNote({ text: 'Đã mở nhóm mua chung! Rủ bạn bè tham gia nhé 🛒', error: false });
   }, []);
 
-  const listQ = useQuery(groupBuyListQuery(coreHttp, authed ? (user?.id ?? 'user') : 'guest'));
-  // Nhóm được mời có thể không nằm trong 30 nhóm mới nhất của danh sách chung.
-  const invitedQ = useQuery({ ...groupBuyOneQuery(coreHttp, invitedId ?? ''), enabled: Boolean(invitedId) && authed, retry: false });
+  const viewer = authed ? (user?.id ?? 'user') : 'guest';
+  const listQ = useQuery(groupBuyListQuery(coreHttp, viewer));
+  // Nhóm được mời có thể không nằm trong 30 nhóm mới nhất của danh sách chung. Khách chưa đăng nhập cũng xem được (máy chủ không
+  // trả mã giảm cho người chưa tham gia); đăng nhập xong khoá đổi nên `joined`/`couponCode` được tải lại theo người xem.
+  const invitedQ = useQuery({ ...groupBuyOneQuery(coreHttp, invitedId ?? '', viewer), enabled: Boolean(invitedId), retry: false });
   const invited = invitedQ.data;
   const rest = (listQ.data ?? []).filter((g) => g.id !== invited?.id);
   const others = rest.filter((g) => g.status !== 'SUCCESS');
@@ -236,7 +238,7 @@ function GroupCard({
               Mã của bạn: <span className="font-bold text-forest-700">{g.couponCode}</span> · chọn trong “Chọn mã” ở giỏ hàng, dùng trong 30 ngày.
             </p>
           )}
-          <Link href={productHref} className={`${ui.btnPrimary} mt-3 w-full`}>
+          <Link href={g.couponCode ? `${productHref}?ma=${encodeURIComponent(g.couponCode)}` : productHref} className={`${ui.btnPrimary} mt-3 w-full`}>
             {`Mua ngay với mã giảm ${g.discountPct}%`}
           </Link>
         </>

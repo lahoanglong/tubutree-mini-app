@@ -14,8 +14,12 @@ const mocks = vi.hoisted(() => ({
   joinGroupBuy: vi.fn(),
   fetchActiveFlashSales: vi.fn(),
   shareWithFallback: vi.fn(),
+  ensurePhone: vi.fn(),
   params: {} as { id?: string },
-  auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous', user: undefined as { referralCode: string } | undefined },
+  auth: {
+    status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous',
+    user: undefined as { referralCode?: string; phone?: string | null; zaloId?: string | null } | undefined,
+  },
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -36,7 +40,7 @@ vi.mock('../components/share-sheet', () => ({ useShareWithFallback: () => mocks.
 vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, login: mocks.login, user: mocks.auth.user };
+    const state = { status: mocks.auth.status, login: mocks.login, user: mocks.auth.user, ensurePhone: mocks.ensurePhone };
     return sel ? sel(state) : state;
   },
 }));
@@ -377,7 +381,78 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     expect(screen.getByText('GBUY-DONE-ME')).toBeInTheDocument();
     expect(screen.getByText('5/5 người · đã đủ nhóm')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Mua ngay với mã giảm 20%' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-done');
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-done', { state: { variationId: undefined, applyCoupon: 'GBUY-DONE-ME' } });
     expect(screen.queryByRole('button', { name: 'Nhóm đã đủ người' })).toBeNull();
+  });
+
+  it('E-9: nút "Mua ngay với mã" gửi sang trang sản phẩm kèm phân loại của nhóm và mã của người xem để trang áp mã sau khi thêm giỏ', async () => {
+    mocks.listGroupBuys.mockResolvedValue([
+      GROUP('done', { joined: true, status: 'SUCCESS', currentSize: 5, couponCode: 'GBUY-DONE-ME', variationId: 'v-rep' }),
+    ]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mua ngay với mã giảm 20%' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-done', { state: { variationId: 'v-rep', applyCoupon: 'GBUY-DONE-ME' } });
+  });
+
+  it('E-9: bấm ảnh sản phẩm của nhóm đủ người vẫn mở trang sản phẩm trơn, không áp mã', async () => {
+    mocks.listGroupBuys.mockResolvedValue([
+      GROUP('done', { joined: true, status: 'SUCCESS', currentSize: 5, couponCode: 'GBUY-DONE-ME' }),
+    ]);
+    renderPage();
+    fireEvent.click(await screen.findByAltText('Sản phẩm done'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-done');
+  });
+});
+
+describe('GroupBuyPage — tài khoản khách bấm Tham gia (E-11)', () => {
+  const GUEST_USER = { phone: null, zaloId: 'guest_dev1' };
+  const joinButton = () => screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' });
+
+  it('tài khoản khách: gọi ensurePhone trước, liên kết xong mới gửi tham gia', async () => {
+    mocks.auth.user = GUEST_USER;
+    mocks.ensurePhone.mockResolvedValue('0912345678');
+    renderPage();
+    fireEvent.click(await joinButton());
+    await waitFor(() => expect(mocks.joinGroupBuy).toHaveBeenCalledWith('a'));
+    expect(mocks.ensurePhone).toHaveBeenCalledTimes(1);
+  });
+
+  it('ensurePhone trả null (không liên kết được): dừng, không gọi API tham gia, nói khách cần làm gì', async () => {
+    mocks.auth.user = GUEST_USER;
+    mocks.ensurePhone.mockResolvedValue(null);
+    renderPage();
+    fireEvent.click(await joinButton());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', text: expect.stringContaining('số điện thoại') })));
+    expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
+  });
+
+  it('ensurePhone ném lỗi: xử lý như không liên kết được, không gọi API tham gia', async () => {
+    mocks.auth.user = GUEST_USER;
+    mocks.ensurePhone.mockRejectedValue(new Error('Zalo từ chối'));
+    renderPage();
+    fireEvent.click(await joinButton());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning' })));
+    expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
+  });
+
+  it('bấm đúp khi đang chờ liên kết chỉ mở một lần xin số điện thoại', async () => {
+    mocks.auth.user = GUEST_USER;
+    let release: (v: string | null) => void = () => undefined;
+    mocks.ensurePhone.mockReturnValue(new Promise<string | null>((r) => (release = r)));
+    renderPage();
+    const btn = await joinButton();
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    expect(mocks.ensurePhone).toHaveBeenCalledTimes(1);
+    release(null);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+  });
+
+  it('tài khoản thật (có số điện thoại hoặc Zalo thật): tham gia thẳng, không gọi ensurePhone', async () => {
+    mocks.auth.user = { phone: '0912345678', zaloId: 'z1' };
+    renderPage();
+    fireEvent.click(await joinButton());
+    await waitFor(() => expect(mocks.joinGroupBuy).toHaveBeenCalledWith('a'));
+    expect(mocks.ensurePhone).not.toHaveBeenCalled();
   });
 });
