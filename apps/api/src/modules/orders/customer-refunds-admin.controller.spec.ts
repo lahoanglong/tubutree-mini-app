@@ -92,6 +92,25 @@ describe('CustomerRefundsAdminController — che SĐT và số trong ghi chú v�
     }
   });
 
+  it('ô tìm q chuyển xuống dịch vụ; chỉ người thấy SĐT đầy đủ mới tìm được theo một phần SĐT', async () => {
+    const refunds = { list: jest.fn().mockResolvedValue({ data: [], meta: {} }) };
+    const ctl = new CustomerRefundsAdminController(refunds as never);
+    await ctl.list({ page: 1, limit: 20, status: 'OPEN', q: 'TUBU1' } as never, ketoan);
+    expect(refunds.list).toHaveBeenLastCalledWith('OPEN', 1, 20, undefined, { q: 'TUBU1', exactPhoneOnly: true });
+    await ctl.list({ page: 1, limit: 20, q: '0901' } as never, both);
+    expect(refunds.list).toHaveBeenLastCalledWith(undefined, 1, 20, undefined, { q: '0901', exactPhoneOnly: false });
+    await ctl.list({ page: 1, limit: 20 } as never, admin);
+    expect(refunds.list).toHaveBeenLastCalledWith(undefined, 1, 20, undefined, { q: undefined, exactPhoneOnly: false });
+  });
+
+  it('ListCustomerRefundsQuery nhận q tối đa 100 ký tự', async () => {
+    const { validate } = await import('class-validator');
+    const { plainToInstance } = await import('class-transformer');
+    const { ListCustomerRefundsQuery } = await import('./customer-refunds-admin.controller');
+    expect(await validate(plainToInstance(ListCustomerRefundsQuery, { q: 'TUBU1' }))).toHaveLength(0);
+    expect((await validate(plainToInstance(ListCustomerRefundsQuery, { q: 'a'.repeat(101) }))).map((e) => e.property)).toEqual(['q']);
+  });
+
   it('mọi thao tác ghi trả về cũng che cho KE_TOAN, đủ cho ADMIN', async () => {
     const ctl = make();
     const calls = [

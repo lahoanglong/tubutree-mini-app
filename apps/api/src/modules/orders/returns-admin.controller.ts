@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { IsIn, IsOptional } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -14,6 +14,8 @@ export class ReturnRequestsQuery extends PaginationQuery {
   // Giá trị lạ lọt xuống Prisma thành PrismaClientValidationError → 500 trần; chặn bằng enum thật.
   @IsOptional() @IsIn(RETURN_STATUSES) status?: (typeof RETURN_STATUSES)[number];
   @IsOptional() @IsIn(SORT_ORDERS) order?: (typeof SORT_ORDERS)[number];
+  /** Mã đơn, SĐT hoặc tên khách. */
+  @IsOptional() @IsString() @MaxLength(100) q?: string;
 }
 
 /** Duyệt đổi/trả theo dòng (D3): xem số tiền tính sẵn → xác nhận → nhận hàng về (cộng kho). */
@@ -25,7 +27,7 @@ export class ReturnsAdminController {
   @AllowStaff('CSKH', 'KHO')
   @Get()
   list(@Query() q: ReturnRequestsQuery) {
-    return this.returns.listForAdmin(q.status, q.page, q.limit, q.order);
+    return this.returns.listForAdmin(q.status, q.page, q.limit, q.order, q.q);
   }
 
   @AllowStaff('CSKH')

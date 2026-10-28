@@ -3,6 +3,7 @@ import { Prisma, type Order, type OrderItem, type ReturnRequest, type ReturnRequ
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { notifyAdmins } from '../../common/notify-admins';
+import { findSearchUserIds, normalizeAdminOrderSearch, orderCodeVariants } from '../admin/admin-order-filter';
 import { formatPoints } from '../../common/format-points';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
@@ -297,9 +298,13 @@ export class OrderReturnsService {
 
   // ── Admin ──
 
-  async listForAdmin(status: string | undefined, page: number, limit: number, order?: 'asc' | 'desc') {
-    if (status === RETURNS_TO_RECEIVE) return this.listToReceive(page, limit, order ?? 'asc');
-    const where = status ? { status: status as never } : {};
+  async listForAdmin(status: string | undefined, page: number, limit: number, order?: 'asc' | 'desc', q?: string) {
+    const match = await this.searchMatch(q);
+    if (status === RETURNS_TO_RECEIVE) return this.listToReceive(page, limit, order ?? 'asc', match);
+    const where = {
+      ...(status ? { status: status as never } : {}),
+      ...(match ? { OR: [{ orderId: { in: match.orderIds } }, { userId: { in: match.userIds } }] } : {}),
+    };
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.returnRequest.findMany({
         where,
@@ -314,15 +319,33 @@ export class OrderReturnsService {
   }
 
   /**
+   * Ô tìm của admin: mã đơn chính xác, hoặc SĐT/tên khách (chỉ CSKH/KHO/ADMIN xem được danh sách này, đều thấy SĐT đủ nên không cần
+   * chặn tìm theo một phần SĐT). null = không có chuỗi tìm; mảng rỗng = không khớp ai, danh sách rỗng.
+   */
+  private async searchMatch(q?: string): Promise<{ orderIds: string[]; userIds: string[] } | null> {
+    const s = normalizeAdminOrderSearch(q);
+    if (!s) return null;
+    const [orders, userIds] = await Promise.all([
+      this.prisma.order.findMany({ where: { code: { in: orderCodeVariants(s) } }, select: { id: true } }),
+      findSearchUserIds(this.prisma, s),
+    ]);
+    return { orderIds: orders.map((o) => o.id), userIds: userIds ?? [] };
+  }
+
+  /**
    * Cùng tập với thẻ inbox returnsToReceive: hàng trả của đơn gian hàng tự giao về gian hàng, không về kho Tubu. Lọc đơn gian
    * hàng bằng NOT EXISTS trong SQL: đưa id đơn qua danh sách IN/NOT IN thì quá ~32k yêu cầu chờ là vượt giới hạn tham số bind.
    */
-  private async listToReceive(page: number, limit: number, order: 'asc' | 'desc') {
+  private async listToReceive(page: number, limit: number, order: 'asc' | 'desc', match: { orderIds: string[]; userIds: string[] } | null) {
+    const search = match
+      ? Prisma.sql`AND (rr."orderId" = ANY(${match.orderIds}::text[]) OR rr."userId" = ANY(${match.userIds}::text[]))`
+      : Prisma.empty;
     const from = Prisma.sql`
       FROM "return_requests" rr
       WHERE rr."status" = 'APPROVED' AND rr."receivedAt" IS NULL
         AND EXISTS (SELECT 1 FROM "return_request_items" i WHERE i."returnRequestId" = rr."id")
-        AND NOT EXISTS (SELECT 1 FROM "orders" o WHERE o."id" = rr."orderId" AND o."fulfiller" = 'MERCHANT')`;
+        AND NOT EXISTS (SELECT 1 FROM "orders" o WHERE o."id" = rr."orderId" AND o."fulfiller" = 'MERCHANT')
+        ${search}`;
     const dir = order === 'desc' ? Prisma.sql`DESC` : Prisma.sql`ASC`;
     const { skip, take } = skipTake(page, limit);
     const [ids, counted] = await this.prisma.$transaction([
