@@ -361,7 +361,7 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
     api.get('/me', () => USER);
     api.get('/config/public', { freeshipThreshold: 500000, cashbackHoldDays: 45, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
     // Trang chủ (đích chuyển hướng) tự gọi các API này; test chỉ kiểm địa chỉ.
-    api.allowUnmocked('GET /flash-sales/upcoming', 'GET /me/wishlist/ids', 'GET /products/for-you', 'GET /me/purchased-items');
+    api.allowUnmocked('GET /flash-sales/upcoming', 'GET /me/wishlist/ids', 'GET /products/for-you', 'GET /me/purchased-items', 'GET /me/new-customer-offer');
     await page.goto('/hoan-tien');
     await expect(page).toHaveURL(/\/$/);
   });
