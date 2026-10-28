@@ -31,6 +31,7 @@ function fakePrisma(opts: { tables: string[]; counts?: Record<string, number>; m
     }),
     $queryRawUnsafe: jest.fn(async (q: string) => {
       sql.push(q);
+      if (q.includes('DISTINCT "provinceCode"')) return [{ provinceCode: '84_VN79' }];
       const table = /FROM "(\w+)"/.exec(q)?.[1] ?? '';
       if (opts.failing && table in opts.failing) throw opts.failing[table];
       return [{ n: BigInt(opts.counts?.[table] ?? 0) }];
@@ -82,7 +83,7 @@ describe('collectDbSnapshot', () => {
   it('đếm waste_points: tổng và kho WAREHOUSE đang ACTIVE', async () => {
     const { prisma, sql } = fakePrisma({ tables: ALL_TABLES, counts: { waste_points: 2 } });
     const snap = await collectDbSnapshot(prisma, ['m1']);
-    expect(snap.waste).toEqual({ tableExists: true, totalPoints: 2, activeWarehouses: 2, activeWarehousesWithPhone: 2, activePointsWithoutHours: 2 });
+    expect(snap.waste).toEqual({ tableExists: true, totalPoints: 2, activeWarehouses: 2, activeWarehousesWithPhone: 2, activePointsWithoutHours: 2, activeWarehouseProvinceCodes: ['84_VN79'] });
     expect(sql.some((q) => q.includes(`"openingHours"::text !~ '"open"'`))).toBe(true);
     expect(sql.some((q) => q.includes(`FROM "waste_points" WHERE "kind" = 'WAREHOUSE' AND "status" = 'ACTIVE'`))).toBe(true);
     expect(sql.some((q) => q.includes(`"kind" = 'WAREHOUSE' AND "status" = 'ACTIVE' AND trim(coalesce("phone", '')) <> ''`))).toBe(true);
@@ -108,7 +109,7 @@ describe('collectDbSnapshot', () => {
   it('DB trước khi áp migration mới: bảng chưa có thì bỏ qua, không truy vấn', async () => {
     const { prisma, sql, tx } = fakePrisma({ tables: ['_prisma_migrations', 'orders', 'users', 'system_configs'], counts: { orders: 10 } });
     const snap = await collectDbSnapshot(prisma, ['m1']);
-    expect(snap.waste).toEqual({ tableExists: false, totalPoints: 0, activeWarehouses: 0, activeWarehousesWithPhone: 0, activePointsWithoutHours: 0 });
+    expect(snap.waste).toEqual({ tableExists: false, totalPoints: 0, activeWarehouses: 0, activeWarehousesWithPhone: 0, activePointsWithoutHours: 0, activeWarehouseProvinceCodes: [] });
     expect(snap.pendingAdminGrants).toBe(0);
     expect(snap.znsTemplates).toEqual([]);
     expect(sql.some((q) => q.includes('FROM "waste_points"'))).toBe(false);

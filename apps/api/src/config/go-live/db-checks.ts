@@ -3,6 +3,7 @@ import { WASTE_CONFIG_KEYS } from '../../modules/waste-exchange/waste-config.key
 import { OPS_THRESHOLD_KEYS, type OpsThresholds } from '../../modules/ops/ops-alerts';
 import { toShippingEta } from '../../modules/system-config/shipping-eta';
 import { evaluateDemoData, type DemoDataSnapshot } from './demo-data-checks';
+import { sameProvince } from '@tubutree/shared-types';
 import { envValue } from './secrets';
 import { fail, pass, warn, type CheckResult, type Env, type GoLivePhase } from './types';
 
@@ -91,8 +92,8 @@ export interface DbSnapshot {
   expectedMigrations: string[];
   orderCount: number;
   /** `tableExists`: bảng waste_points (migration 20261020000000_waste_exchange) đã có chưa; chưa có thì hai số đếm là 0. */
-  /** `activePointsWithoutHours`: điểm ACTIVE chưa có khung giờ mở cửa nào; vắng nghĩa là chưa đo. */
-  waste: { tableExists: boolean; totalPoints: number; activeWarehouses: number; activeWarehousesWithPhone: number; activePointsWithoutHours?: number };
+  /** `activePointsWithoutHours`: điểm ACTIVE chưa có khung giờ mở cửa nào; vắng nghĩa là chưa đo. `activeWarehouseProvinceCodes`: mã tỉnh của các kho ACTIVE; vắng nghĩa là chưa đo. */
+  waste: { tableExists: boolean; totalPoints: number; activeWarehouses: number; activeWarehousesWithPhone: number; activePointsWithoutHours?: number; activeWarehouseProvinceCodes?: string[] };
   /** Giá trị các khoá SystemConfig cần xem; khoá không có trong DB thì không xuất hiện. */
   configs: Record<string, unknown>;
   /** pointMultiplier của từng hạng trong membership_tiers; bảng chưa có hoặc trống thì []. */
@@ -301,6 +302,20 @@ function wastePointCheck(s: DbSnapshot, env: Env): CheckResult {
       'waste.enabled đang bật, đường Gửi về kho đang bật nhưng bảng vùng phí ship (waste.mailin_fee_table) chưa có vùng nào: mọi khách thấy khung "Toàn quốc"',
       'Điền vùng phí (ít nhất TP.HCM) ở Quản trị, Cấu hình, waste.mailin_fee_table; hoặc tắt waste.lane_mailin_enabled.',
     );
+  }
+
+  const whProvinces = s.waste.activeWarehouseProvinceCodes ?? [];
+  if (enabled && mailinOn && whProvinces.length > 0 && Array.isArray(feeZones)) {
+    const zoneCodes = (feeZones as { provinceCodes?: unknown }[]).flatMap((z) => (Array.isArray(z.provinceCodes) ? z.provinceCodes.filter((c): c is string => typeof c === 'string') : []));
+    if (!whProvinces.some((w) => zoneCodes.some((c) => sameProvince(c, w)))) {
+      return fail(
+        G_DB,
+        id,
+        title,
+        `waste.mailin_fee_table chưa có vùng nào chứa tỉnh của kho đang hoạt động (${whProvinces.join(', ')}): khách cùng tỉnh với kho vẫn thấy khung "Toàn quốc"`,
+        'Thêm tỉnh của kho vào một vùng phí ở Quản trị, Cấu hình, waste.mailin_fee_table (mã "79" và "84_VN79" đều được hiểu là cùng một tỉnh).',
+      );
+    }
   }
 
   const warnings: string[] = [];

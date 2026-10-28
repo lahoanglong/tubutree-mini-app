@@ -797,4 +797,18 @@ describe('SystemConfigService.set waste.enabled', () => {
     await new SystemConfigService(off.prisma).set('waste.enabled', false, 'admin1');
     expect(off.upsert).toHaveBeenCalledTimes(1);
   });
+
+  it('không cho xoá trắng thể lệ khi Đổi rác đang bật; tắt rồi hoặc sửa thành chữ khác thì được', async () => {
+    const on = (rules: string) =>
+      jest.fn().mockImplementation(async ({ where }: { where: { key: string } }) => ({ value: where.key === 'waste.enabled' ? true : rules }));
+    const blocked = makePrisma({ findUnique: on('Thể lệ cũ') });
+    await expect(new SystemConfigService(blocked.prisma).set('waste.rules_text', '  ', 'admin1')).rejects.toThrow(/thể lệ/);
+    expect(blocked.upsert).not.toHaveBeenCalled();
+    const edit = makePrisma({ findUnique: on('Thể lệ cũ') });
+    await new SystemConfigService(edit.prisma).set('waste.rules_text', 'Thể lệ mới', 'admin1');
+    expect(edit.upsert).toHaveBeenCalledTimes(1);
+    const off = makePrisma({ findUnique: rulesFindUnique('Thể lệ cũ') });
+    await new SystemConfigService(off.prisma).set('waste.rules_text', '', 'admin1');
+    expect(off.upsert).toHaveBeenCalledTimes(1);
+  });
 });

@@ -313,6 +313,16 @@ describe('evaluateDb', () => {
       expect(r.detail).toContain('waste.mailin_fee_table');
       expect(W({}, { 'waste.enabled': true, 'waste.mailin_fee_table': empty, 'waste.lane_mailin_enabled': false }).status).toBe('PASS');
     });
+    it('Gửi về kho bật mà không vùng phí nào chứa tỉnh của kho: FAIL; "79" và "84_VN79" coi là một', () => {
+      const zones = (code: string) => ({ zones: [{ name: 'Miền Bắc', provinceCodes: [code], low: 1, high: 2 }], defaultZone: { name: 'Toàn quốc', low: 3, high: 4 } });
+      const cfg = (code: string) => ({ 'waste.enabled': true, 'waste.mailin_fee_table': zones(code) });
+      const wh = { activeWarehouseProvinceCodes: ['84_VN79'] };
+      const miss = W(wh, cfg('01'));
+      expect(miss.status).toBe('FAIL');
+      expect(miss.detail).toContain('84_VN79');
+      expect(W(wh, cfg('79')).status).toBe('PASS');
+      expect(W(wh, cfg('84_VN79')).status).toBe('PASS');
+    });
     it('chương trình tắt thì không đòi thể lệ, giờ mở cửa, vùng phí', () => {
       expect(W({ activePointsWithoutHours: 2 }, { 'waste.rules_text': '' }).status).toBe('PASS');
     });

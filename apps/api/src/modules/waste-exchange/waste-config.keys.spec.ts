@@ -73,7 +73,7 @@ const BOOLS = EXPECTED.filter((e) => e[1] === 'boolean').map((e) => e[0]);
 
 function makeService() {
   const tx = { systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn() }, systemConfigHistory: { create: jest.fn() } };
-  const prisma = { $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)) } as unknown as PrismaService;
+  const prisma = { systemConfig: tx.systemConfig, $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)) } as unknown as PrismaService;
   return new SystemConfigService(prisma);
 }
 const accepts = async (key: string, value: object | string | number | boolean): Promise<boolean> => {

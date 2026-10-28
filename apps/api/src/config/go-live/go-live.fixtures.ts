@@ -83,7 +83,7 @@ export const GOOD_DB: DbSnapshot = {
   unfinishedMigrations: [],
   expectedMigrations: [...MIGRATIONS],
   orderCount: 1200,
-  waste: { tableExists: true, totalPoints: 1, activeWarehouses: 1, activeWarehousesWithPhone: 1, activePointsWithoutHours: 0 },
+  waste: { tableExists: true, totalPoints: 1, activeWarehouses: 1, activeWarehousesWithPhone: 1, activePointsWithoutHours: 0, activeWarehouseProvinceCodes: ['84_VN79'] },
   configs: {
     'ops.alert_unsynced_minutes': 30,
     'ops.alert_stuck_orders': 1,
