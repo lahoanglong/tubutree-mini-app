@@ -22,7 +22,7 @@ import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { formatNumber, formatDate, formatMultiplier } from '../utils/format';
 import { haptic } from '../utils/haptic';
-import { COUPONS_LOAD_ERROR_TITLE } from '@tubutree/app-core/loyalty-copy';
+import { COUPONS_LOAD_ERROR_TITLE, tierGraceLine, tierRank } from '@tubutree/app-core/loyalty-copy';
 import { earnRuleLine, moneyShort, pointsToSpend, redeemRuleLine, tierThresholdLabel } from '../utils/loyalty-copy';
 import { copyText } from '../utils/clipboard';
 import { PageHeader } from '../components/ui/page-header';
@@ -48,13 +48,15 @@ import { tierPerkLabel } from '@tubutree/app-core/number-format';
  * token semantic --color-* nào diễn đạt được, và scripts/check-undefined-css-vars.mjs chỉ biết các
  * token trong design-tokens/tokens.css nên token riêng của trang sẽ bị báo "chưa định nghĩa".
  */
-const TIER_STYLE: Record<string, { emoji: string; color: string; bg: string }> = {
-  'Mầm Xanh': { emoji: '🌱', color: 'var(--sage-700)', bg: 'var(--sage-50)' },
-  'Lộc Biếc': { emoji: '🌿', color: 'var(--sage-600)', bg: 'var(--sage-100)' },
-  'Đại Thụ': { emoji: '🌳', color: 'var(--forest-700)', bg: 'var(--forest-50)' },
-  'Cổ Thụ': { emoji: '🌲', color: 'var(--forest-900)', bg: 'var(--clay-50)' },
-};
-const DEFAULT_STYLE = TIER_STYLE['Mầm Xanh']!;
+const TIER_STYLES: readonly { emoji: string; color: string; bg: string }[] = [
+  { emoji: '🌱', color: 'var(--sage-700)', bg: 'var(--sage-50)' },
+  { emoji: '🌿', color: 'var(--sage-600)', bg: 'var(--sage-100)' },
+  { emoji: '🌳', color: 'var(--forest-700)', bg: 'var(--forest-50)' },
+  { emoji: '🌲', color: 'var(--forest-900)', bg: 'var(--clay-50)' },
+];
+/** Tra theo THỨ HẠNG (không theo tên): đổi tên hạng trong admin vẫn giữ biểu tượng và màu. */
+const tierStyleAt = (rank: number) => TIER_STYLES[Math.min(Math.max(rank, 0), TIER_STYLES.length - 1)]!;
+const HISTORY_PAGE = 20;
 
 /** Giữ giá trị khác null gần nhất: BottomSheet còn chạy hoạt ảnh đóng ~200ms sau khi state về null,
  * nội dung không được trống đi trong lúc trượt xuống. */
@@ -79,9 +81,10 @@ export default function LoyaltyPage() {
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const txnQ = useQuery({ queryKey: ['points-txn'], queryFn: getPointsTransactions, enabled: authed });
-  const memberCardQ = useQuery({ queryKey: ['loyalty-member-card'], queryFn: getMemberCard, enabled: authed });
-
   const [showMemberCard, setShowMemberCard] = useState(false);
+  // Thẻ thành viên chỉ tải khi khách mở thẻ: bớt một lần gọi mỗi lần vào trang.
+  const memberCardQ = useQuery({ queryKey: ['loyalty-member-card'], queryFn: getMemberCard, enabled: authed && showMemberCard });
+  const [historyShown, setHistoryShown] = useState(HISTORY_PAGE);
   const [copiedCode, setCopiedCode] = useState(false);
   const copyMemberCode = async () => {
     const code = memberCardQ.data?.memberCode;
@@ -98,7 +101,7 @@ export default function LoyaltyPage() {
   };
 
   const data = loyaltyQ.data;
-  const tierStyle = data?.tier ? (TIER_STYLE[data.tier.name] ?? DEFAULT_STYLE) : DEFAULT_STYLE;
+  const tierStyle = tierStyleAt(data ? tierRank(data.tiers, { id: data.tier?.id }) : 0);
   const tierName = data?.tier?.name ?? 'Mầm Xanh';
   const perks = Array.isArray(data?.tier?.perks) ? (data.tier.perks as string[]) : [];
 
@@ -113,6 +116,7 @@ export default function LoyaltyPage() {
   const convertedNote = convertedPointsNote(lots?.converted);
   const expiringNote = expiringPointsNote(data?.expiringPoints);
   const expiryPolicy = pointExpiryPolicyNote(data?.pointExpireMonths);
+  const graceLine = tierGraceLine(data?.tierGrace, tierName, { money: moneyShort, points: formatNumber, date: formatDate });
 
   // Phát hiện LÊN HẠNG (§6.6 #78): so minPoints hạng hiện tại với lần xem trước (localStorage).
   const [celebrate, setCelebrate] = useState<string | null>(null);
@@ -239,6 +243,12 @@ export default function LoyaltyPage() {
               ) : (
                 <Text variant="caption" as="div" style={{ color: tierStyle.color, marginTop: 8 }}>
                   Bạn đang ở hạng cao nhất 🎉
+                </Text>
+              )}
+
+              {graceLine && (
+                <Text variant="caption" tone="warning" as="div" style={{ marginTop: 8, fontWeight: 600 }}>
+                  {graceLine}
                 </Text>
               )}
 
@@ -375,9 +385,9 @@ export default function LoyaltyPage() {
           {/* Bậc thang hạng */}
           <Section title="Các hạng">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {data.tiers.map((t) => {
-                const active = t.name === tierName;
-                const ts = TIER_STYLE[t.name] ?? DEFAULT_STYLE;
+              {data.tiers.map((t, rank) => {
+                const active = data.tier ? t.id === data.tier.id : rank === 0;
+                const ts = tierStyleAt(rank);
                 return (
                   <div
                     key={t.id}
@@ -392,13 +402,13 @@ export default function LoyaltyPage() {
                       border: active ? `1px solid ${ts.color}` : '1px solid var(--color-border-subtle)',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                       <span aria-hidden>{ts.emoji}</span>
-                      <Text variant="body-sm" style={{ fontWeight: active ? 700 : 400 }}>
+                      <Text variant="body-sm" style={{ fontWeight: active ? 700 : 400, whiteSpace: 'nowrap' }}>
                         {t.name}
                       </Text>
                     </div>
-                    <Text variant="caption" tone="secondary" style={{ textAlign: 'right' }}>
+                    <Text variant="caption" tone="secondary" style={{ textAlign: 'right', minWidth: 0 }}>
                       {tierThresholdLabel(t, rates)} · ×{formatMultiplier(t.multiplier)}
                     </Text>
                   </div>
@@ -411,7 +421,7 @@ export default function LoyaltyPage() {
           <Section title="Lịch sử Điểm Xanh">
             {txnQ.data && txnQ.data.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {txnQ.data.slice(0, 20).map((t: PointsTxn) => (
+                {txnQ.data.slice(0, historyShown).map((t: PointsTxn) => (
                   <div
                     key={t.id}
                     style={{
@@ -438,6 +448,11 @@ export default function LoyaltyPage() {
                     </Text>
                   </div>
                 ))}
+                {txnQ.data.length > historyShown && (
+                  <Button variant="secondary" fullWidth onPress={() => setHistoryShown((n) => n + HISTORY_PAGE)} style={{ marginTop: 12 }}>
+                    {`Xem thêm (${txnQ.data.length - historyShown})`}
+                  </Button>
+                )}
               </div>
             ) : (
               <EmptyState variant="inline" art="sprout" heading="Chưa có giao dịch điểm nào" />
@@ -546,7 +561,7 @@ export default function LoyaltyPage() {
         {sheetCelebrate && (
           <div style={{ textAlign: 'center' }}>
             <div aria-hidden style={{ fontSize: 64, lineHeight: '72px' }}>
-              {(TIER_STYLE[sheetCelebrate] ?? DEFAULT_STYLE).emoji}🎉
+              {tierStyleAt(tierRank(data?.tiers ?? [], { name: sheetCelebrate })).emoji}🎉
             </div>
             <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 6 }}>
               Bạn vừa mở khoá quyền lợi mới của hạng {sheetCelebrate}. Cảm ơn bạn đã đồng hành sống xanh

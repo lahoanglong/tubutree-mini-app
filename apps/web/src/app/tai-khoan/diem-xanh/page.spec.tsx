@@ -328,8 +328,39 @@ describe('/tai-khoan/diem-xanh — điểm danh', () => {
   it('lỗi tải lịch điểm danh: báo lỗi có Thử lại', async () => {
     state.fail.add('/me/daily-check-in');
     const c = await mount();
-    expect(c.textContent).toContain('Chưa tải được lịch điểm danh: Máy chủ đang bận');
+    expect(c.textContent).toContain('Chưa tải được lịch điểm danh');
+    expect(c.textContent).toContain('Máy chủ đang bận');
+    expect(c.textContent).not.toContain('Chưa tải được lịch điểm danh: ');
     expect(byText(c, 'button', 'Thử lại')).not.toBeNull();
+  });
+});
+
+describe('/tai-khoan/diem-xanh — hạn giữ hạng, biểu tượng theo thứ hạng, thẻ thành viên tải khi mở', () => {
+  it('đang trong hạn giữ hạng: một dòng nói phải mua thêm bao nhiêu và đến ngày nào', async () => {
+    state.loyalty = { ...state.loyalty, tierGrace: { until: '2026-11-07T10:00:00.000Z', spendingToKeep: 400_000, pointsToKeep: 0 } };
+    const c = await mount();
+    expect(c.textContent).toContain('Giữ hạng Mầm Xanh: mua thêm 400.000đ trước 07/11/2026');
+  });
+
+  it('không có hạn giữ hạng: không có dòng đó', async () => {
+    const c = await mount();
+    expect(c.textContent).not.toContain('Giữ hạng');
+  });
+
+  it('đổi tên hạng trong admin: biểu tượng vẫn theo thứ hạng, tên hạng không xuống dòng', async () => {
+    state.loyalty = { ...state.loyalty, tier: { ...(state.loyalty as { tier: object }).tier, id: 't2', name: 'Hạng Bạc Đặc Biệt' } };
+    const c = await mount();
+    expect(c.querySelector('section[aria-label="Hạng thành viên"]')!.textContent).toContain('🌿');
+    const names = Array.from(c.querySelectorAll('section[aria-label="Các hạng"] li span.whitespace-nowrap')).map((x) => x.textContent);
+    expect(names).toEqual(['Mầm Xanh', 'Lộc Biếc', 'Đại Thụ']);
+  });
+
+  it('thẻ thành viên chỉ tải khi khách mở thẻ', async () => {
+    const c = await mount();
+    expect(state.calls.some((x) => x.path === '/me/loyalty/member-card')).toBe(false);
+    click(byText(c, 'button', 'Thẻ thành viên số (mã QR)')!);
+    await flush(8);
+    expect(state.calls.some((x) => x.path === '/me/loyalty/member-card')).toBe(true);
   });
 });
 
@@ -425,11 +456,23 @@ describe('/tai-khoan/diem-xanh — lịch sử Điểm Xanh', () => {
     expect(c.textContent).not.toContain('WEIRD_INTERNAL_CODE');
   });
 
-  it('chỉ hiện 20 giao dịch gần nhất và không có dòng chú thích cuối như Mini App', async () => {
-    state.txns = Array.from({ length: 25 }, (_, i) => ({ id: `n${i}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }));
+  it('hiện 20 giao dịch gần nhất, "Xem thêm" mở thêm 20 dòng cho tới hết', async () => {
+    state.txns = Array.from({ length: 45 }, (_, i) => ({ id: `n${i}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }));
     const c = await mount();
-    expect(c.querySelectorAll('section[aria-label="Lịch sử Điểm Xanh"] li')).toHaveLength(20);
+    const rows = () => c.querySelectorAll('section[aria-label="Lịch sử Điểm Xanh"] li').length;
+    expect(rows()).toBe(20);
     expect(c.textContent).not.toContain('Hiển thị tối đa');
+    click(byText(c, 'button', 'Xem thêm (25)')!);
+    expect(rows()).toBe(40);
+    click(byText(c, 'button', 'Xem thêm (5)')!);
+    expect(rows()).toBe(45);
+    expect(byText(c, 'button', /^Xem thêm/)).toBeFalsy();
+  });
+
+  it('đủ 20 dòng trở xuống thì không có nút Xem thêm', async () => {
+    state.txns = Array.from({ length: 20 }, (_, i) => ({ id: `n${i}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }));
+    const c = await mount();
+    expect(byText(c, 'button', /^Xem thêm/)).toBeFalsy();
   });
 
   it('chưa có giao dịch: câu báo trống; tải lỗi: báo lỗi và Thử lại', async () => {

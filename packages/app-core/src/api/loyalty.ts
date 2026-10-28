@@ -50,6 +50,11 @@ export interface LoyaltyOverview {
   /** Điểm dùng được để đổi quà ngay = số dư − lockedPoints (≥ 0). */
   redeemablePoints?: number;
   tier: { id: string; name: string; multiplier: number; perks: unknown } | null;
+  /**
+   * Hạn giữ hạng: khách đã tụt dưới mốc hạng hiện tại nhưng chưa bị hạ. `spendingToKeep` là tiền mua còn thiếu để giữ hạng
+   * (null khi hạng không có mốc chi tiêu thì xem `pointsToKeep`). null/thiếu = hạng đang ổn. Optional: API cũ chưa trả.
+   */
+  tierGrace?: { until: string; spendingToKeep: number | null; pointsToKeep: number } | null;
   nextTier: {
     id: string;
     name: string;

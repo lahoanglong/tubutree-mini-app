@@ -355,6 +355,55 @@ describe('LoyaltyPage — hạn dùng Điểm Xanh (R2-ENGAGE-8)', () => {
   });
 });
 
+describe('LoyaltyPage — hạn giữ hạng, lịch sử, biểu tượng hạng, thẻ tải khi mở', () => {
+  it('đang trong hạn giữ hạng: một dòng nói phải mua thêm bao nhiêu và đến ngày nào', async () => {
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, tierGrace: { until: '2026-11-07T10:00:00.000Z', spendingToKeep: 400_000, pointsToKeep: 0 } });
+    renderPage();
+    expect(await screen.findByText('Giữ hạng Mầm Xanh: mua thêm 400.000đ trước 07/11/2026')).toBeInTheDocument();
+  });
+
+  it('không có hạn giữ hạng: không có dòng đó', async () => {
+    renderPage();
+    await screen.findByText(/Tích điểm ×1/);
+    expect(screen.queryByText(/Giữ hạng/)).not.toBeInTheDocument();
+  });
+
+  it('lịch sử: 20 dòng, "Xem thêm" mở thêm 20 dòng cho tới hết', async () => {
+    mocks.getPointsTransactions.mockResolvedValue(
+      Array.from({ length: 45 }, (_, i) => ({ id: `n${i}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' })),
+    );
+    renderPage();
+    const rows = () => screen.getAllByText('+1').length;
+    await screen.findByRole('button', { name: 'Xem thêm (25)' });
+    expect(rows()).toBe(20);
+    fireEvent.click(screen.getByRole('button', { name: 'Xem thêm (25)' }));
+    expect(rows()).toBe(40);
+    fireEvent.click(screen.getByRole('button', { name: 'Xem thêm (5)' }));
+    expect(rows()).toBe(45);
+    expect(screen.queryByRole('button', { name: /^Xem thêm/ })).not.toBeInTheDocument();
+  });
+
+  it('đổi tên hạng trong admin: biểu tượng vẫn theo thứ hạng', async () => {
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, tier: { id: 't2', name: 'Hạng Bạc Đặc Biệt', multiplier: 1.2, perks: [] } });
+    const { container } = renderPage();
+    await screen.findByText(/Tích điểm ×1,2/);
+    expect(container.textContent).toContain('🌿');
+  });
+
+  it('thẻ thành viên chỉ tải khi khách mở thẻ', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByText('Thẻ thành viên số (mã QR)'));
+    await screen.findByText('Thẻ Thành Viên Tubu');
+    expect(mocks.getMemberCard).toHaveBeenCalledTimes(1);
+  });
+
+  it('chưa mở thẻ: không gọi getMemberCard', async () => {
+    renderPage();
+    await screen.findByText(/Tích điểm ×1/);
+    expect(mocks.getMemberCard).not.toHaveBeenCalled();
+  });
+});
+
 describe('LoyaltyPage — thẻ thành viên số', () => {
   const openCard = async () => {
     renderPage();

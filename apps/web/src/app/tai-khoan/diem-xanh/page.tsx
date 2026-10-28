@@ -42,18 +42,21 @@ import { QrCode } from '@/components/ui/qr-code';
 import { miniBtnSecondary, miniCard, miniSectionTitle, miniSurface } from '@/components/loyalty/mini-surface';
 import { LedgerShell, SignedAmount } from '../ledger-shell';
 import { loadErrorText } from '@/lib/error-text';
+import { tierGraceLine, tierRank } from '@tubutree/app-core/loyalty-copy';
 import { tierPerkLabel } from '@tubutree/app-core/number-format';
 
 const TITLE = 'Hạng thành viên & Điểm Xanh';
 const TIER_KEY = 'tubu_last_tier_min_v2';
 
-const TIER_STYLE: Record<string, { emoji: string; bg: string; fg: string }> = {
-  'Mầm Xanh': { emoji: '🌱', bg: 'bg-sage-50', fg: 'text-sage-700' },
-  'Lộc Biếc': { emoji: '🌿', bg: 'bg-sage-100', fg: 'text-sage-600' },
-  'Đại Thụ': { emoji: '🌳', bg: 'bg-forest-50', fg: 'text-forest-700' },
-  'Cổ Thụ': { emoji: '🌲', bg: 'bg-stone-100', fg: 'text-forest-900' },
-};
-const DEFAULT_STYLE = TIER_STYLE['Mầm Xanh']!;
+const TIER_STYLES: readonly { emoji: string; bg: string; fg: string }[] = [
+  { emoji: '🌱', bg: 'bg-sage-50', fg: 'text-sage-700' },
+  { emoji: '🌿', bg: 'bg-sage-100', fg: 'text-sage-600' },
+  { emoji: '🌳', bg: 'bg-forest-50', fg: 'text-forest-700' },
+  { emoji: '🌲', bg: 'bg-stone-100', fg: 'text-forest-900' },
+];
+/** Tra theo THỨ HẠNG (không theo tên): đổi tên hạng trong admin vẫn giữ biểu tượng và màu. */
+const tierStyleAt = (rank: number) => TIER_STYLES[Math.min(Math.max(rank, 0), TIER_STYLES.length - 1)]!;
+const HISTORY_PAGE = 20;
 
 const errText = loadErrorText;
 
@@ -69,7 +72,6 @@ export default function LoyaltyPage() {
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed, refetchOnWindowFocus: true });
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
   const txnQ = useQuery({ ...pointsTxnQuery(coreHttp), enabled: authed });
-  const cardQ = useQuery({ ...memberCardQuery(coreHttp), enabled: authed });
   const configQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: authed });
   // Chương trình tắt mà khách từng có yêu cầu thì vẫn cho xem lại (không tạo mới được).
   const wasteOff = configQ.data != null && configQ.data.waste?.enabled !== true;
@@ -77,6 +79,9 @@ export default function LoyaltyPage() {
   const hasWasteHistory = (wasteHistoryQ.data?.length ?? 0) > 0;
 
   const [showCard, setShowCard] = useState(false);
+  // Thẻ thành viên chỉ tải khi khách mở thẻ: bớt một lần gọi mỗi lần vào trang.
+  const cardQ = useQuery({ ...memberCardQuery(coreHttp), enabled: authed && showCard });
+  const [historyShown, setHistoryShown] = useState(HISTORY_PAGE);
   const [celebrate, setCelebrate] = useState<string | null>(null);
   const data = loyaltyQ.data;
   const curMin = data?.tiers.find((t) => t.id === data.tier?.id)?.minPoints ?? 0;
@@ -137,7 +142,8 @@ export default function LoyaltyPage() {
   }
 
   const tierName = data.tier?.name ?? 'Mầm Xanh';
-  const tierStyle = data.tier ? (TIER_STYLE[data.tier.name] ?? DEFAULT_STYLE) : DEFAULT_STYLE;
+  const tierStyle = tierStyleAt(tierRank(data.tiers, { id: data.tier?.id }));
+  const graceLine = tierGraceLine(data.tierGrace, tierName, { money: moneyShort, points: formatCount, date: formatDate });
   const perks = Array.isArray(data.tier?.perks) ? (data.tier.perks as string[]) : [];
   const next = data.nextTier;
   const rates = data.rates;
@@ -152,7 +158,7 @@ export default function LoyaltyPage() {
     { href: '/doi-rac/yeu-cau', icon: Recycle, title: wasteHistoryMenu.label, sub: wasteHistoryMenu.hint, show: wasteOff && hasWasteHistory && isWebRouteReady('/doi-rac/yeu-cau') },
     { href: '/kho-qua', icon: Gift, title: 'Kho quà', sub: 'Đổi Điểm Xanh lấy mã giảm giá và quà', show: isWebRouteReady('/kho-qua') },
   ].filter((s) => s.show);
-  const celebrateStyle = celebrate ? (TIER_STYLE[celebrate] ?? DEFAULT_STYLE) : DEFAULT_STYLE;
+  const celebrateStyle = tierStyleAt(celebrate ? tierRank(data.tiers, { name: celebrate }) : 0);
 
   return (
     <LedgerShell title={TITLE} wide>
@@ -198,6 +204,8 @@ export default function LoyaltyPage() {
             ) : (
               <p className={`mt-3 text-sm ${tierStyle.fg}`}>Bạn đang ở hạng cao nhất 🎉</p>
             )}
+
+            {graceLine && <p className="mt-2 text-caption font-semibold text-warning-fg">{graceLine}</p>}
 
             {rates && (
               <div className="mt-3 space-y-0.5 text-caption text-stone-600">
@@ -286,20 +294,20 @@ export default function LoyaltyPage() {
           <section aria-label="Các hạng" className={`p-4 ${miniCard}`}>
             <h2 className={`mb-3 ${ui.sectionTitle} ${miniSectionTitle}`}>Các hạng</h2>
             <ul className="space-y-1.5">
-              {data.tiers.map((t) => {
-                const active = t.name === tierName;
-                const ts = TIER_STYLE[t.name] ?? DEFAULT_STYLE;
+              {data.tiers.map((t, rank) => {
+                const active = data.tier ? t.id === data.tier.id : rank === 0;
+                const ts = tierStyleAt(rank);
                 return (
                   <li
                     key={t.id}
                     aria-current={active ? 'true' : undefined}
                     className={`flex items-center justify-between gap-2 rounded-control border p-3 ${active ? `${ts.bg} border-forest-600` : 'border-stone-200'}`}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-none items-center gap-2">
                       <span aria-hidden="true">{ts.emoji}</span>
-                      <span className={`text-sm ${active ? 'font-bold' : ''}`}>{t.name}</span>
+                      <span className={`whitespace-nowrap text-sm ${active ? 'font-bold' : ''}`}>{t.name}</span>
                     </div>
-                    <span className="text-right text-caption text-stone-700">
+                    <span className="min-w-0 text-right text-caption text-stone-700">
                       {tierThresholdLabel(t, rates)} · ×{formatMultiplier(t.multiplier)}
                     </span>
                   </li>
@@ -319,7 +327,7 @@ export default function LoyaltyPage() {
               <p className="py-3 text-center text-sm text-stone-600">Chưa có giao dịch điểm nào.</p>
             ) : (
               <ul className="divide-y divide-stone-200">
-                {txnQ.data.slice(0, 20).map((t) => (
+                {txnQ.data.slice(0, historyShown).map((t) => (
                   <li key={t.id} className="flex items-start justify-between gap-3 py-2.5">
                     <div className="min-w-0">
                       <div className="break-words text-sm font-medium text-stone-900">{pointsReasonLabel(t.reason)}</div>
@@ -332,6 +340,11 @@ export default function LoyaltyPage() {
                   </li>
                 ))}
               </ul>
+            )}
+            {txnQ.data && txnQ.data.length > historyShown && (
+              <button type="button" onClick={() => setHistoryShown((n) => n + HISTORY_PAGE)} className={`${miniBtnSecondary} mt-3 w-full`}>
+                {`Xem thêm (${txnQ.data.length - historyShown})`}
+              </button>
             )}
           </section>
       </div>

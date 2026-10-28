@@ -191,7 +191,7 @@ describe('/uu-dai — trang Ưu đãi', () => {
   it('Mã giảm giá lỗi: thông báo có lý do và nút Thử lại', async () => {
     state.fail.add('/me/coupons');
     const c = await mount();
-    expect(region(c, 'Mã giảm giá của tôi')!.textContent).toContain('Chưa tải được mã giảm giá: Máy chủ đang bận');
+    expect(region(c, 'Mã giảm giá của tôi')!.textContent).toContain('Chưa tải được mã giảm giáMáy chủ đang bận');
     expect(byText(region(c, 'Mã giảm giá của tôi')!, 'button', 'Thử lại')).not.toBeNull();
   });
 

@@ -672,6 +672,16 @@ export class LoyaltyService {
       loadPointExpiryTxns(this.prisma, userId),
     ]);
     const expiring = user.pointsBalance > 0 ? nextPointExpiry(expiryTxns, new Date()) : null;
+    // Đang trong hạn giữ hạng (đã đủ điều kiện rớt hạng nhưng chưa bị hạ): cho khách biết phải mua thêm bao nhiêu để giữ.
+    const graceUntil = user.tierGraceUntil && user.tier && user.tierGraceUntil.getTime() > Date.now() ? user.tierGraceUntil : null;
+    const tierGrace =
+      graceUntil && user.tier
+        ? {
+            until: graceUntil.toISOString(),
+            spendingToKeep: user.tier.minSpending != null ? Math.max(0, user.tier.minSpending - spent12m) : null,
+            pointsToKeep: Math.max(0, user.tier.minPoints - tierPoints),
+          }
+        : null;
 
     return {
       /** Quy tắc tích/đổi để màn Điểm Xanh giải thích đúng theo cấu hình thay vì FE tự ghi con số. */
@@ -684,6 +694,8 @@ export class LoyaltyService {
       pointExpireMonths,
       /** PD-3: lô quy đổi từ xu (không hết hạn, tiêu tới 100% giá trị hàng, chỉ ở checkout/góp quỹ). */
       pointsConvertedBalance: user.pointsConvertedBalance,
+      /** Hạn giữ hạng (loyalty.tier_grace_days): có khi khách sắp bị hạ hạng; null khi hạng đang ổn. */
+      tierGrace,
       /** Số Điểm Xanh khách nhìn thấy = tổng hai lô. */
       pointsTotal: user.pointsBalance + user.pointsConvertedBalance,
       tierPoints,

@@ -44,6 +44,8 @@ export interface LoyaltyOverview {
   /** Điểm dùng được để đổi quà ngay = số dư − lockedPoints (≥ 0). */
   redeemablePoints?: number;
   tier: { id: string; name: string; multiplier: number; perks: unknown } | null;
+  /** Hạn giữ hạng: đã tụt dưới mốc hạng hiện tại nhưng chưa bị hạ; null/thiếu = hạng đang ổn. Optional: API cũ chưa trả. */
+  tierGrace?: { until: string; spendingToKeep: number | null; pointsToKeep: number } | null;
   nextTier: {
     id: string;
     name: string;

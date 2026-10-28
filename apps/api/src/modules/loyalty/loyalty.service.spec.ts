@@ -937,6 +937,36 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     expect(ov.nextTier).toMatchObject({ id: 'loc', minSpending: 1_500_000, spendingToGo: 900_000 });
   });
 
+  describe('getOverview: hạn giữ hạng (tierGraceUntil)', () => {
+    const GRACE_TIERS = [
+      { id: 'mam', name: 'Mầm Xanh', sortOrder: 0, minPoints: 0, minSpending: null, pointMultiplier: 1 },
+      { id: 'loc', name: 'Lộc Biếc', sortOrder: 1, minPoints: 30_000, minSpending: 1_500_000, pointMultiplier: 1.2 },
+    ];
+    const build = (user: Record<string, unknown>) =>
+      ({
+        user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, ...user }) },
+        membershipTier: { findMany: jest.fn().mockResolvedValue(GRACE_TIERS) },
+        order: { aggregate: jest.fn().mockResolvedValue({ _sum: { total: 1_100_000 } }), findMany: jest.fn().mockResolvedValue([]) },
+        returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+        externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
+        pointsTransaction: fakeLedger([]),
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      }) as unknown as PrismaService;
+
+    it('đang trong hạn giữ hạng: trả ngày hết hạn và số tiền mua còn thiếu để giữ hạng hiện tại', async () => {
+      const until = new Date(Date.now() + 10 * 864e5);
+      const ov = await new LoyaltyService(build({ tierId: 'loc', tier: GRACE_TIERS[1], tierGraceUntil: until }), makeConfig()).getOverview('u1');
+      expect(ov.tierGrace).toEqual({ until: until.toISOString(), spendingToKeep: 400_000, pointsToKeep: 30_000 });
+    });
+
+    it('không có hạn, hoặc hạn đã qua, hoặc chưa có hạng: không trả tierGrace', async () => {
+      const past = new Date(Date.now() - 864e5);
+      expect((await new LoyaltyService(build({ tierId: 'loc', tier: GRACE_TIERS[1], tierGraceUntil: null }), makeConfig()).getOverview('u1')).tierGrace).toBeNull();
+      expect((await new LoyaltyService(build({ tierId: 'loc', tier: GRACE_TIERS[1], tierGraceUntil: past }), makeConfig()).getOverview('u1')).tierGrace).toBeNull();
+      expect((await new LoyaltyService(build({ tierId: null, tier: null, tierGraceUntil: new Date(Date.now() + 864e5) }), makeConfig()).getOverview('u1')).tierGrace).toBeNull();
+    });
+  });
+
   // ENGAGE-21: trang Điểm Xanh phải giải thích được cách tích/đổi điểm từ chính SystemConfig, không hardcode ở FE.
   it('getOverview: trả tỷ lệ tích/đổi điểm từ SystemConfig và mốc chi tiêu của từng hạng', async () => {
     const values: Record<string, number> = {
