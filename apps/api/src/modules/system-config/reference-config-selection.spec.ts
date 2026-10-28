@@ -21,6 +21,7 @@ const keysOf = (rows: readonly { key: string }[]) => rows.map((r) => r.key);
 
 const APPROVED_LOADED_KEYS = [
     'affiliate.attribution_days',
+    'affiliate.auto_wallet_transfer_enabled',
     'affiliate.commission_eligible_roles',
     'affiliate.default_rate_pct',
     'affiliate.hold_days',

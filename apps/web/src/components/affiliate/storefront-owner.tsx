@@ -34,13 +34,8 @@ function GuestLink({ label }: { label: string }) {
 export function StorefrontAction({ slug, title, referralCode }: { slug: string; title: string; referralCode?: string | null }) {
   const owner = useIsStorefrontOwner(referralCode);
   const [shareOpen, setShareOpen] = useState(false);
-  if (!owner) {
-    return (
-      <div data-sticky-bar className={BAR}>
-        <GuestLink label="Xem sản phẩm" />
-      </div>
-    );
-  }
+  // Khách không có nút dính đáy kéo họ rời gian hàng đúng lúc đang xem hàng CTV chọn; lối sang Tubu Tree là link phụ cuối trang.
+  if (!owner) return null;
   return (
     <>
       <div data-sticky-bar className={BAR}>
@@ -94,5 +89,18 @@ export function OpenStorefrontCta({ referralCode }: { referralCode?: string | nu
         {OPEN_STOREFRONT_CTA}
       </Link>
     </section>
+  );
+}
+
+/** Link phụ cuối trang cho khách: lối sang sản phẩm chung của Tubu Tree, không nổi bằng nút chính. */
+export function MoreAtTubuLink({ referralCode }: { referralCode?: string | null }) {
+  const owner = useIsStorefrontOwner(referralCode);
+  if (owner) return null;
+  return (
+    <p className="mt-4 text-center max-md:mx-4">
+      <Link href={guestHref()} className={ui.btnText}>
+        Xem thêm ở Tubu Tree
+      </Link>
+    </p>
   );
 }

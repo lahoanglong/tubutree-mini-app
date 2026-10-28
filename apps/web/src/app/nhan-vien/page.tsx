@@ -12,7 +12,6 @@ export default function StaffPage() {
     <StaffGate
       title="Ca làm của tôi"
       loginMessage="Đăng nhập để xem ca làm của bạn."
-      deniedMessage="Trang dành cho nhân viên. Liên hệ quản trị để được cấp quyền."
       returnTo="/nhan-vien"
     >
       <StaffHub />

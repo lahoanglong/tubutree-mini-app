@@ -12,18 +12,17 @@ import { Heading, Text } from './ui/text';
 import { Skeleton } from './ui/skeleton';
 import { ErrorState } from './ui/empty-state';
 import { copyText } from '../utils/clipboard';
-import { WEB_BASE_URL } from '../utils/web-base-url';
+import { miniAppLink } from '../utils/miniapp-link';
 
 /**
  * `app.miniapp_base_url` (URL gốc Mini App, vd https://zalo.me/s/<Mini App ID>) chưa cấu hình thì API trả đường dẫn tương
- * đối của Mini App ('/product/<slug>?ref=..'): dán vào Zalo/Facebook không mở được, nên ghép domain WEB (cùng nguồn
- * với share-sheet/affiliate). Trên web trang sản phẩm là /san-pham/<slug>; route /product/<slug> của web chỉ là
- * redirect 307 cho link đã chia sẻ trước đây, nên link mới đi thẳng tới đường thật. URL tuyệt đối do API dựng từ
- * `app.miniapp_base_url` trỏ vào Mini App (nơi /product/<slug> là route thật) nên giữ nguyên.
+ * đối của Mini App ('/product/<slug>?ref=..'): dán vào Zalo/Facebook không mở được, nên ghép link Mini App
+ * (zalo.me/s/<id>/...), nơi /product/<slug> là route thật: người nhận ở lại trong Zalo, không phải đăng nhập lại như link web.
+ * URL tuyệt đối do API dựng từ `app.miniapp_base_url` đã trỏ vào Mini App nên giữ nguyên.
  */
 function absoluteLink(link: string): string {
   if (!link.startsWith('/')) return link;
-  return `${WEB_BASE_URL}${link.replace(/^\/product\//, '/san-pham/')}`;
+  return miniAppLink(link);
 }
 
 /**

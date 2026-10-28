@@ -118,12 +118,12 @@ describe('ShareSheet — khung sheet và caption gợi ý (DS v2)', () => {
     expect(parseFloat(btn.style.minHeight)).toBeGreaterThanOrEqual(44);
     fireEvent.click(btn);
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
-    expect(mocks.copyText).toHaveBeenCalledWith('Ghé gian hàng của mình nhé https://app.tubutree.com/s/an-lanh?ref=CTV123');
+    expect(mocks.copyText).toHaveBeenCalledWith('Ghé gian hàng của mình nhé https://zalo.me/s/2070857098114207963/s/an-lanh?ref=CTV123');
   });
 
   it('không truyền caption: có đủ 3 caption mặc định, đều kèm liên kết có mã', () => {
     renderSheet();
-    const captionButtons = screen.getAllByRole('button', { name: /app\.tubutree\.com\/s\/an-lanh\?ref=CTV123/ });
+    const captionButtons = screen.getAllByRole('button', { name: /zalo\.me\/s\/\d+\/s\/an-lanh\?ref=CTV123/ });
     expect(captionButtons).toHaveLength(3);
   });
 

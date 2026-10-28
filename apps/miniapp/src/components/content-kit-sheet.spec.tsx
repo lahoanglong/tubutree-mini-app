@@ -21,6 +21,9 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../services/affiliate-api', () => ({ fetchContentKit: mocks.fetchContentKit }));
 
 import { ContentKitSheet } from './content-kit-sheet';
+import { miniAppLink } from '../utils/miniapp-link';
+
+const MINI_PRODUCT_LINK = miniAppLink('/product/tra-xanh?ref=ABC123');
 
 describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () => {
   beforeEach(() => {
@@ -56,7 +59,7 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     );
   }
 
-  it('bài mẫu soạn tay không có {link}: chép kèm liên kết giới thiệu tuyệt đối, không mất mã ref', async () => {
+  it('bài mẫu soạn tay không có {link}: chép kèm liên kết giới thiệu của Mini App, không mất mã ref', async () => {
     mocks.fetchContentKit.mockResolvedValue({
       productName: 'Trà xanh', images: [], usps: [], faqs: [], videoUrls: [],
       captions: ['Trà xanh ngon lắm, mua đi'],
@@ -67,7 +70,7 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ Zalo/ }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
     expect(mocks.copyText).toHaveBeenCalledWith(
-      'Trà xanh ngon lắm, mua đi https://app.tubutree.com/san-pham/tra-xanh?ref=ABC123',
+      `Trà xanh ngon lắm, mua đi ${MINI_PRODUCT_LINK}`,
     );
   });
 
@@ -80,7 +83,7 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     renderKit();
     fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ Zalo/ }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
-    expect(mocks.copyText).toHaveBeenCalledWith('https://app.tubutree.com/san-pham/tra-xanh?ref=ABC123');
+    expect(mocks.copyText).toHaveBeenCalledWith(MINI_PRODUCT_LINK);
   });
 
   it('nút Sao chép liên kết cũng chép liên kết tuyệt đối khi API trả đường dẫn tương đối', async () => {
@@ -91,9 +94,8 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     renderKit();
     fireEvent.click(await screen.findByRole('button', { name: /Sao chép/ }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
-    // Đường dẫn tương đối (app.miniapp_base_url trống) đi tới domain WEB, nơi trang sản phẩm là /san-pham/<slug>
-    // (route /product/<slug> của web chỉ là redirect 307 cho link đã chia sẻ trước đây).
-    expect(mocks.copyText).toHaveBeenCalledWith('https://app.tubutree.com/san-pham/tra-xanh?ref=ABC123');
+    // Đường dẫn tương đối (app.miniapp_base_url trống) thành link Mini App (zalo.me/s/<id>/product/<slug>), không phải link web.
+    expect(mocks.copyText).toHaveBeenCalledWith(MINI_PRODUCT_LINK);
   });
 
   it('nút Chia sẻ Zalo giữ `path` là đường dẫn trong Mini App (/product/<slug>), không phải đường web', async () => {
@@ -108,7 +110,7 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     expect(mocks.shareLink).toHaveBeenCalledWith(expect.objectContaining({ path: '/product/tra-xanh?ref=ABC123' }));
   });
 
-  it('{link} trong bài mẫu do API chèn là đường dẫn tương đối: bài mẫu hiện và chép với link web tuyệt đối, giữ mã ref', async () => {
+  it('{link} trong bài mẫu do API chèn là đường dẫn tương đối: bài mẫu hiện và chép với link Mini App, giữ mã ref', async () => {
     mocks.fetchContentKit.mockResolvedValue({
       productName: 'Trà xanh', images: [], usps: [], faqs: [], videoUrls: [],
       captions: ['Mua ngay /product/tra-xanh?ref=ABC123 nhé', 'Bài không có link'],
@@ -116,10 +118,10 @@ describe('ContentKitSheet — chia sẻ lỗi không bị nuốt (C-067)', () =>
     });
     renderKit();
     const caption = await screen.findByRole('button', { name: /Mua ngay/ });
-    expect(caption).toHaveTextContent('Mua ngay https://app.tubutree.com/san-pham/tra-xanh?ref=ABC123 nhé');
+    expect(caption).toHaveTextContent(`Mua ngay ${MINI_PRODUCT_LINK} nhé`);
     fireEvent.click(caption);
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
-    expect(mocks.copyText).toHaveBeenCalledWith('Mua ngay https://app.tubutree.com/san-pham/tra-xanh?ref=ABC123 nhé');
+    expect(mocks.copyText).toHaveBeenCalledWith(`Mua ngay ${MINI_PRODUCT_LINK} nhé`);
     fireEvent.click(screen.getByRole('button', { name: 'Bài không có link' }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenLastCalledWith('Bài không có link'));
   });

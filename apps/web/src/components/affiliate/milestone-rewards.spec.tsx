@@ -45,8 +45,23 @@ afterEach(() => {
 });
 
 describe('MilestoneRewards — danh sách gọn', () => {
-  it('mỗi mốc một dòng: thưởng bằng điểm, đã nhận có nhãn, đạt chưa nhận có nút, chưa đạt có chữ còn thiếu', () => {
+  it('mặc định chỉ hiện mốc nhận được và mốc kế tiếp; "Xem tất cả" mở đủ, "Thu gọn" gập lại', async () => {
     const { container } = mount(data());
+    expect(container.textContent).toContain('Mốc B');
+    expect(container.textContent).toContain('Mốc C');
+    expect(container.textContent).not.toContain('Mốc A');
+    click(btn(/^Xem tất cả 3 mốc$/));
+    await flush();
+    expect(container.textContent).toContain('Mốc A');
+    click(btn(/^Thu gọn$/));
+    await flush();
+    expect(container.textContent).not.toContain('Mốc A');
+  });
+
+  it('mỗi mốc một dòng: thưởng bằng điểm, đã nhận có nhãn, đạt chưa nhận có nút, chưa đạt có chữ còn thiếu', async () => {
+    const { container } = mount(data());
+    click(btn(/^Xem tất cả 3 mốc$/));
+    await flush();
     const text = container.textContent ?? '';
     expect(text).toContain('+200 điểm');
     expect(text.match(/\+50 điểm/g)).toHaveLength(2);

@@ -35,8 +35,20 @@ function renderRewards(d: CtvMilestonesResponse) {
 describe('MilestoneRewards — danh sách gọn', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('mặc định chỉ hiện mốc nhận được và mốc kế tiếp; "Xem tất cả" mở đủ, "Thu gọn" gập lại', () => {
+    renderRewards(data());
+    expect(screen.getByText('Mốc B')).toBeInTheDocument();
+    expect(screen.getByText('Mốc C')).toBeInTheDocument();
+    expect(screen.queryByText('Mốc A')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả 3 mốc' }));
+    expect(screen.getByText('Mốc A')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Thu gọn' }));
+    expect(screen.queryByText('Mốc A')).toBeNull();
+  });
+
   it('mỗi mốc một dòng: thưởng bằng điểm, đã nhận có nhãn, đạt chưa nhận có nút, chưa đạt có chữ còn thiếu', () => {
     renderRewards(data());
+    fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả 3 mốc' }));
     expect(screen.getByText('+200 điểm')).toBeInTheDocument();
     expect(screen.getAllByText('+50 điểm')).toHaveLength(2);
     expect(screen.getByText('Đã nhận')).toBeInTheDocument();

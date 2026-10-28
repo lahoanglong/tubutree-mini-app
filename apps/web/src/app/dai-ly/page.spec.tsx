@@ -6,7 +6,7 @@ import { byText, click, flush, render, typeInto, type Rendered } from '@/test-ut
 import { headingProblems, smallTouchTargets, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 
 // Mini App dealer.spec.tsx: trạng thái (đăng ký / chờ duyệt / hub), 4 tab, đặt trước vượt tồn, nhãn -X% thật, mẫu đơn,
-// dán đơn, Trả trước → trang chuyển khoản, hạn mức, đơn, công nợ (Báo đã CK có Idempotency-Key), báo cáo quý, thưởng.
+// dán đơn, Trả trước → trang chuyển khoản, hạn mức, đơn, công nợ (Báo đã chuyển khoản có Idempotency-Key), báo cáo quý, thưởng.
 
 type Call = { method: string; path: string; body?: unknown; headers?: Record<string, string> };
 
@@ -566,7 +566,7 @@ describe('/dai-ly — đơn hàng, công nợ, báo cáo', () => {
     expect(document.body.textContent).toContain('Máy chủ đang bận');
   });
 
-  it('công nợ: Báo đã CK gửi đúng số tiền, ghi chú và Idempotency-Key; chặn số vượt dư nợ; sổ rỗng có trạng thái rỗng', async () => {
+  it('công nợ: Báo đã chuyển khoản gửi đúng số tiền, ghi chú và Idempotency-Key; chặn số vượt dư nợ; sổ rỗng có trạng thái rỗng', async () => {
     setup({ '/dealer/credit-ledger': { balance: 3_000_000, entries: [] } });
     m.post['/dealer/credit-payment'] = () => ({ ok: true });
     await open('Công nợ');
@@ -574,11 +574,11 @@ describe('/dai-ly — đơn hàng, công nợ, báo cáo', () => {
     expect(document.body.textContent).toContain('Chưa có giao dịch công nợ');
     const amount = document.querySelector<HTMLInputElement>('input[aria-label="Số tiền đã chuyển"]')!;
     typeInto(amount, '4000000');
-    expect(button('Báo đã CK').disabled).toBe(true);
+    expect(button('Báo đã chuyển khoản').disabled).toBe(true);
     expect(document.body.textContent).toContain('Số tiền vượt dư nợ hiện tại (3.000.000đ).');
     typeInto(amount, '1000000');
-    expect(button('Báo đã CK').disabled).toBe(false);
-    click(button('Báo đã CK'));
+    expect(button('Báo đã chuyển khoản').disabled).toBe(false);
+    click(button('Báo đã chuyển khoản'));
     await flush();
     const [call] = posts('/dealer/credit-payment');
     expect(call?.body).toEqual({ amount: 1_000_000, note: 'Báo đã chuyển khoản' });
@@ -586,7 +586,7 @@ describe('/dai-ly — đơn hàng, công nợ, báo cáo', () => {
     expect(document.body.textContent).toContain('chờ xác nhận đã nhận được tiền');
   });
 
-  it('Báo đã CK: bấm lại sau lỗi giữ key, sau thành công đổi key', async () => {
+  it('Báo đã chuyển khoản: bấm lại sau lỗi giữ key, sau thành công đổi key', async () => {
     setup({ '/dealer/credit-ledger': { balance: 3_000_000, entries: [] } });
     let n = 0;
     m.post['/dealer/credit-payment'] = () => {
@@ -596,12 +596,12 @@ describe('/dai-ly — đơn hàng, công nợ, báo cáo', () => {
     };
     await open('Công nợ');
     typeInto(document.querySelector('input[aria-label="Số tiền đã chuyển"]'), '1000000');
-    click(button('Báo đã CK'));
+    click(button('Báo đã chuyển khoản'));
     await flush();
-    click(button('Báo đã CK'));
+    click(button('Báo đã chuyển khoản'));
     await flush();
     typeInto(document.querySelector('input[aria-label="Số tiền đã chuyển"]'), '500000');
-    click(button('Báo đã CK'));
+    click(button('Báo đã chuyển khoản'));
     await flush();
     const keys = posts('/dealer/credit-payment').map((p) => p.headers?.['Idempotency-Key']);
     expect(keys[1]).toBe(keys[0]);
@@ -780,10 +780,10 @@ describe('/dai-ly — nút chính navy ở điện thoại như inkButton của 
     expect(button('Gửi hồ sơ đăng ký').className).toContain(INK);
   });
 
-  it('Báo đã CK navy', async () => {
+  it('Báo đã chuyển khoản navy', async () => {
     setup({ '/dealer/credit-ledger': { balance: 3_000_000, entries: [] } });
     await mount('tab=credit');
-    expect(button('Báo đã CK').className).toContain(INK);
+    expect(button('Báo đã chuyển khoản').className).toContain(INK);
   });
 
   it('Báo cáo: thẻ doanh số quý gradient navy, thưởng và thanh tiến độ dùng màu nhấn đại lý, Yêu cầu nhận thưởng navy', async () => {

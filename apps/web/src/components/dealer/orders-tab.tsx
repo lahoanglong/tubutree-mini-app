@@ -8,6 +8,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { formatDate } from '@/lib/format-date';
 import { orderStatusLabel } from '@/lib/order-view';
+import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
@@ -15,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { errText } from './dealer-shell';
 
 /** Danh sách đơn đại lý. Đơn Trả trước chờ thanh toán dẫn thẳng tới trang chuyển khoản. */
-export function OrdersTab() {
+export function OrdersTab({ onOrderFirst }: { onOrderFirst: () => void }) {
   const q = useQuery(dealerOrdersQuery(coreHttp));
   if (q.isLoading) {
     return (
@@ -32,6 +33,9 @@ export function OrdersTab() {
       <section aria-label="Chưa có đơn đại lý nào" className={`p-8 text-center ${skin.card}`}>
         <Package className="mx-auto h-8 w-8 text-stone-500" aria-hidden="true" />
         <h2 className="mt-2 font-display text-base font-semibold text-stone-900">Chưa có đơn đại lý nào</h2>
+        <button type="button" onClick={onOrderFirst} className={`${ui.btnPrimary} mt-3`}>
+          Đặt đơn sỉ
+        </button>
       </section>
     );
   }

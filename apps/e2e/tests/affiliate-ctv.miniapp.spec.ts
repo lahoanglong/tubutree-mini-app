@@ -80,6 +80,7 @@ test.describe('Dashboard CTV — bậc doanh số & thưởng mốc Điểm Xanh
     expect(call.body).toEqual({ month: '2026-09' });
 
     await expect(page.getByText('Chúc mừng bạn đã nhận 50 Điểm Xanh', { exact: false })).toBeVisible({ timeout: 5_000 });
+    await page.getByRole('button', { name: /Xem tất cả \d+ mốc/ }).click();
     await expect(page.getByText('Đã nhận', { exact: true })).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText('Đã cộng vào Điểm Xanh')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Nhận thưởng' })).toHaveCount(0);

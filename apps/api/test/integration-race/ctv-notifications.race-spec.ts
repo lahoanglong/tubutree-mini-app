@@ -12,7 +12,7 @@ import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-ev
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { ZnsClient } from '../../src/modules/integrations/zns/zns.client';
 import { QUEUE_NOTIFICATIONS } from '../../src/jobs/queues';
-import { createOrder, createUser, warmPool } from './helpers';
+import { createOrder, createUser, pinConfig, warmPool } from './helpers';
 
 /**
  * C-029: CTV nhận thông báo khi có hoa hồng mới / được duyệt / lệnh rút đã chi. Chạy trên Postgres
@@ -23,6 +23,7 @@ describe('AffiliateService thông báo CTV (real Postgres)', () => {
   let moduleRef: TestingModule;
   let prisma: PrismaService;
   let affiliate: AffiliateService;
+  let restoreAutoTransfer: () => Promise<void>;
 
   const TEMPLATES = [
     { id: 'nt-ctv-commission-new', code: CTV_NOTIFICATION.NEW, bodyTemplate: 'Có đơn mới từ link của bạn! Hoa hồng dự kiến {{amount}}.' },
@@ -49,6 +50,8 @@ describe('AffiliateService thông báo CTV (real Postgres)', () => {
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
     affiliate = moduleRef.get(AffiliateService);
+    // Tin "đã duyệt" là đường của hoa hồng chưa tự vào Ví (cờ tự chuyển tắt); đường tự chuyển ở affiliate-auto-wallet.race-spec.ts.
+    restoreAutoTransfer = await pinConfig(prisma, 'affiliate.auto_wallet_transfer_enabled', false);
     for (const t of TEMPLATES) {
       await prisma.notificationTemplate.upsert({
         where: { id: t.id },
@@ -59,6 +62,7 @@ describe('AffiliateService thông báo CTV (real Postgres)', () => {
   });
 
   afterAll(async () => {
+    await restoreAutoTransfer?.();
     await moduleRef?.close();
   });
 

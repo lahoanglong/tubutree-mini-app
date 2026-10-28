@@ -76,7 +76,7 @@ test.describe('Web đại lý', () => {
     await page.goto('/dai-ly?tab=credit');
     await page.getByLabel('Số tiền đã chuyển').fill('1000000');
     const paid = api.waitForCall('POST', '/dealer/credit-payment');
-    await page.getByRole('button', { name: 'Báo đã CK' }).click();
+    await page.getByRole('button', { name: 'Báo đã chuyển khoản' }).click();
     const call = await paid;
     expect(call.body).toEqual({ amount: 1_000_000, note: 'Báo đã chuyển khoản' });
     expect(call.headers['idempotency-key']).toBeTruthy();
@@ -110,7 +110,8 @@ test.describe('Web nhân viên', () => {
     mockStaff(api, 'CUSTOMER');
     await page.goto('/nhan-vien');
     await expect(page.getByRole('heading', { name: 'Ca làm của tôi', level: 1 })).toBeVisible();
-    await expect(page.getByText('Trang dành cho nhân viên. Liên hệ quản trị để được cấp quyền.')).toBeVisible();
+    await expect(page.getByText('Trang dành cho nhân viên', { exact: true })).toBeVisible();
+    await expect(page.getByText('Tài khoản này chưa có quyền nhân viên. Liên hệ quản trị để được cấp quyền.')).toBeVisible();
   });
 
   test('thêm ca theo ca chuẩn gửi đúng body; chấm công chỉ dẫn mở trên Zalo', async ({ page, api }) => {

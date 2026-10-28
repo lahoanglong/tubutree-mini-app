@@ -35,9 +35,9 @@ function PriceRow({ row, qty, onQty }: { row: PricelistRow; qty: number; onQty: 
   return (
     <li className="flex items-center gap-2 border-b border-stone-200 p-3">
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold text-stone-900">
-          {row.product} · {row.variation}
-        </div>
+        {/* Tên cho hai dòng, phân loại ở dòng riêng ngay trên SKU: hai phân loại của cùng một món không còn trông giống hệt nhau. */}
+        <div className="line-clamp-2 text-sm font-semibold text-stone-900">{row.product}</div>
+        {row.variation && <div className="text-xs font-[700] text-stone-900">{row.variation}</div>}
         <div className="text-xs text-stone-600">
           {row.sku} · {row.stock > 0 ? `tồn ${row.stock}` : OUT_OF_STOCK_PREORDER}
         </div>
@@ -242,7 +242,7 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
           <input
             type="search"
             aria-label="Tìm sản phẩm"
-            placeholder="Tìm theo tên / SKU / thương hiệu"
+            placeholder="Tìm tên, SKU"
             className={`${ui.field} pl-9`}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -305,7 +305,7 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
             ))}
           </ul>
         ) : (
-          <p className="p-6 text-center text-sm text-stone-600">Không tìm thấy sản phẩm</p>
+          <p className="p-6 text-center text-sm text-stone-600">{search.trim() ? 'Không tìm thấy sản phẩm' : 'Chưa có hàng giá sỉ cho bậc của bạn'}</p>
         )}
       </div>
 

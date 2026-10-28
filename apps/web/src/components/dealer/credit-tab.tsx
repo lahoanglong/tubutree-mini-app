@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { errText } from './dealer-shell';
 
 /**
- * Công nợ. "Báo đã CK" KHÔNG tự trừ nợ: chỉ tạo thông báo cho admin, sổ chỉ giảm sau khi admin đối chiếu sao kê và xác nhận.
+ * Công nợ. "Báo đã chuyển khoản" KHÔNG tự trừ nợ: chỉ tạo thông báo cho admin, sổ chỉ giảm sau khi admin đối chiếu sao kê và xác nhận.
  */
 export function CreditTab() {
   const qc = useQueryClient();
@@ -70,7 +70,7 @@ export function CreditTab() {
             onChange={(e) => setAmount(e.target.value)}
           />
           <button type="button" disabled={payDisabled} onClick={submit} className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-none`}>
-            {pay.isPending ? 'Đang gửi...' : 'Báo đã CK'}
+            {pay.isPending ? 'Đang gửi...' : 'Báo đã chuyển khoản'}
           </button>
         </div>
         {Number(amount) > balance && (
@@ -88,7 +88,7 @@ export function CreditTab() {
           </p>
         )}
         <p className="mt-1.5 text-xs text-stone-600">
-          &ldquo;Báo đã CK&rdquo; chỉ gửi thông báo cho Tubu Tree — dư nợ chỉ giảm sau khi admin kiểm tra sao kê ngân hàng và xác nhận.
+          &ldquo;Báo đã chuyển khoản&rdquo; chỉ gửi thông báo cho Tubu Tree — dư nợ chỉ giảm sau khi admin kiểm tra sao kê ngân hàng và xác nhận.
         </p>
       </section>
 

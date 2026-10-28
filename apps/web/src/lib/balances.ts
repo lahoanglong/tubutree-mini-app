@@ -7,6 +7,6 @@ import type { QueryClient } from '@tanstack/react-query';
  */
 export const BALANCE_QUERY_KEYS = ['me', 'wallet', 'wallet-txn', 'points-txn'] as const;
 
-export function invalidateBalances(qc: QueryClient): void {
-  for (const key of BALANCE_QUERY_KEYS) void qc.invalidateQueries({ queryKey: [key] });
+export function invalidateBalances(qc: QueryClient): Promise<unknown> {
+  return Promise.all(BALANCE_QUERY_KEYS.map((key) => qc.invalidateQueries({ queryKey: [key] })));
 }
