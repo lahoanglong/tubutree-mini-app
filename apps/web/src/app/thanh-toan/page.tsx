@@ -537,21 +537,21 @@ export default function CheckoutPage() {
           </section>
 
           <section data-mini-block="note" className={`${MINI_BAND} max-md:order-7`}>
-            <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Ghi chú cho đơn hàng</h2>
+            <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Ghi chú cho Tubu</h2>
             <label className="mt-2 block">
-              <span className="text-caption font-medium text-stone-700">Lời nhắn cho người giao hàng (không bắt buộc)</span>
+              <span className="text-caption font-medium text-stone-700 max-md:sr-only">Lời nhắn cho người giao hàng (không bắt buộc)</span>
               <textarea
                 value={note}
                 onChange={chosen((e: React.ChangeEvent<HTMLTextAreaElement>) => setNote(e.target.value))}
                 maxLength={ORDER_NOTE_MAX}
-                rows={3}
-                placeholder="Ví dụ: giao giờ hành chính, gọi trước khi giao, gửi ở bảo vệ"
+                rows={2}
+                placeholder="Ví dụ: giao giờ hành chính..."
                 disabled={place.isPending}
                 aria-describedby="order-note-count"
                 className={`${ui.field} mt-1 py-2`}
               />
             </label>
-            <p id="order-note-count" className="mt-1 text-caption text-stone-600">
+            <p id="order-note-count" className="mt-1 text-caption text-stone-600 max-md:sr-only">
               {note.length}/{ORDER_NOTE_MAX} ký tự
             </p>
           </section>

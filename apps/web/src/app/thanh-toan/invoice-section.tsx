@@ -2,7 +2,7 @@
 
 import { useId } from 'react';
 import { ui } from '@/lib/guest-ui';
-import { mini } from '@/components/order-mobile/mobile-ui';
+import { CheckMark, mini, miniCheckbox, miniCheckboxWrap } from '@/components/order-mobile/mobile-ui';
 import type { InvoiceInfo } from '@/lib/checkout-rules';
 
 /** Yêu cầu xuất hoá đơn VAT (doanh nghiệp): bật thì cần đủ MST, tên công ty, địa chỉ và email — API validate IsEmail. */
@@ -32,14 +32,11 @@ export function InvoiceSection({
 
   return (
     <section aria-label="Hoá đơn VAT" className={`p-4 ${ui.card} ${mini.band}`}>
-      <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-semibold text-stone-900">
-        <input
-          type="checkbox"
-          checked={want}
-          onChange={(e) => onWant(e.target.checked)}
-          disabled={disabled}
-          className="h-6 w-6 shrink-0 accent-forest-600"
-        />
+      <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-semibold text-stone-900 max-md:flex-row-reverse max-md:justify-between">
+        <span className={miniCheckboxWrap}>
+          <input type="checkbox" checked={want} onChange={(e) => onWant(e.target.checked)} disabled={disabled} className={miniCheckbox} />
+          <CheckMark />
+        </span>
         Yêu cầu xuất hoá đơn VAT
       </label>
       {want && (
