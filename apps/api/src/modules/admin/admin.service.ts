@@ -1254,10 +1254,31 @@ export class AdminService {
   private async resolveOrderRef(idOrCode: string) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
-      select: { id: true, code: true, gomdonStatus: true, gomdonPartnerCode: true },
+      select: { id: true, code: true, status: true, gomdonStatus: true, gomdonPartnerCode: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     return order;
+  }
+
+  /**
+   * Vết "Đã xử lý" trong lịch sử đơn (cùng trạng thái, khách không thấy: dòng giờ hành trình bỏ dòng cùng trạng thái). Việc đã đóng
+   * xong, nên ghi vết lỗi chỉ cảnh báo chứ không làm hỏng thao tác.
+   */
+  private async logHandledInHistory(adminId: string, order: { id: string; code: string; status: OrderStatus }, what: string, note?: string) {
+    try {
+      await this.prisma.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          fromStatus: order.status,
+          toStatus: order.status,
+          actorType: 'ADMIN',
+          actorId: adminId,
+          note: `${what}${note ? ` — ${note}` : ''}`.slice(0, 1000),
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Không ghi được lịch sử "đã xử lý" của đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   async retryGomdonPush(adminId: string, idOrCode: string, confirmedNoWaybill?: boolean) {
@@ -1334,7 +1355,7 @@ export class AdminService {
   async resolvePancakeAttention(adminId: string, idOrCode: string, note?: string) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
-      select: { id: true, code: true, pancakeAttention: true },
+      select: { id: true, code: true, status: true, pancakeAttention: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     // Việc hoàn tiền COD trả hàng do Kế toán quyết ở mục "Hoàn tiền khách" (để lại vết trong lịch sử đơn); nhân viên kho bấm
@@ -1358,6 +1379,7 @@ export class AdminService {
       `Admin ${adminId} đánh dấu đã xử lý việc Pancake của đơn ${order.code}: "${order.pancakeAttention ?? ''}"` +
         `${cleanNote ? ` — ghi chú: ${cleanNote}` : ''}.`,
     );
+    await this.logHandledInHistory(adminId, order, `Đã xử lý việc Pancake: ${order.pancakeAttention ?? ''}`.trimEnd(), cleanNote);
     return { ok: true, message: `Đơn ${order.code} đã rời hàng đợi cần xử lý Pancake.` };
   }
 
@@ -1370,6 +1392,7 @@ export class AdminService {
         `Admin ${adminId} đánh dấu "Đã xử lý tay" vận đơn thu gom đơn ${order.code} (trạng thái trước: ${res.previousStatus})` +
           `${cleanNote ? ` — ghi chú: ${cleanNote}` : ''}.`,
       );
+      await this.logHandledInHistory(adminId, order, `Đã xử lý việc thu gom: ${res.previousStatus}`, cleanNote);
       return res;
     } catch (err) {
       this.logger.warn(
