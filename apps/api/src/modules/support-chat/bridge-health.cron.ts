@@ -121,7 +121,7 @@ export class BridgeHealthCron {
     this.alerted.set(kind, { at: now.getTime(), count });
     await notifyAdmins(
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
-      { template: 'OPS_ZALO_BRIDGE_ALERT', subject: 'cầu nối Zalo gặp sự cố', data: () => ({ message }) },
+      { template: 'OPS_ZALO_BRIDGE_ALERT', audience: 'admins+cskh', subject: 'cầu nối Zalo gặp sự cố', data: () => ({ message }) },
     );
   }
 
@@ -144,7 +144,7 @@ export class BridgeHealthCron {
     if (alertedAt && now.getTime() - alertedAt.getTime() <= ALERT_EVERY_MS) return;
     await notifyAdmins(
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
-      { template: 'OPS_ZALO_BRIDGE_DOWN', subject: 'cầu nối Zalo mất kết nối', data: () => ({ since: formatVnDateTime(since), state }) },
+      { template: 'OPS_ZALO_BRIDGE_DOWN', audience: 'admins+cskh', subject: 'cầu nối Zalo mất kết nối', data: () => ({ since: formatVnDateTime(since), state }) },
     );
     await this.prisma.supportBridgeStatus.update({ where: { id: 'main' }, data: { downAlertedAt: now } });
   }

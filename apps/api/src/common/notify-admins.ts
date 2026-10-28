@@ -1,5 +1,5 @@
 import type { Logger } from '@nestjs/common';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 
 /** Phần của NotificationsService mà helper cần (khai báo cấu trúc để common/ không import ngược module). */
 interface AdminNotifier {
@@ -13,8 +13,12 @@ export interface NotifyAdminsContext {
   logger: Pick<Logger, 'warn'>;
 }
 
+/** `admins` (mặc định): chỉ ADMIN. `admins+cskh`: thêm nhân viên có quyền CSKH, cho việc nhân viên trực chat phải biết. */
+export type AdminAudience = 'admins' | 'admins+cskh';
+
 export interface AdminNotice {
   template: string;
+  audience?: AdminAudience;
   /** Cụm mô tả sự việc, dùng trong log cảnh báo ("đại lý X đã chuyển khoản"). */
   subject: string;
   /** Chạy song song với truy vấn admin; chỉ dùng khi có admin để báo. */
@@ -24,8 +28,13 @@ export interface AdminNotice {
 /** Số admin tối đa được báo một lần, đủ cho vận hành mà không quét cả bảng user. */
 const MAX_ADMINS = 20;
 
+const AUDIENCE_WHERE: Record<AdminAudience, Prisma.UserWhereInput> = {
+  admins: { role: 'ADMIN', isBlocked: false },
+  'admins+cskh': { isBlocked: false, OR: [{ role: 'ADMIN' }, { role: 'STAFF', staffPermissions: { has: 'CSKH' } }] },
+};
+
 /**
- * Báo mọi tài khoản ADMIN chưa bị khoá về một sự việc cần xử lý. Best-effort: thiếu wiring, không có
+ * Báo mọi tài khoản ADMIN chưa bị khoá (hoặc cả nhân viên CSKH, theo `audience`) về một sự việc cần xử lý. Best-effort: thiếu wiring, không có
  * admin hay một admin lỗi chỉ ghi cảnh báo, không chặn việc đã ghi nhận của khách. Lỗi truy vấn
  * (admin, data) thì ném ra để nơi gọi tự bắt và ghi log theo ngữ cảnh của mình.
  */
@@ -36,7 +45,7 @@ export async function notifyAdmins(ctx: NotifyAdminsContext, notice: AdminNotice
     return;
   }
   const [admins, data] = await Promise.all([
-    prisma.user.findMany({ where: { role: 'ADMIN', isBlocked: false }, select: { id: true }, take: MAX_ADMINS }),
+    prisma.user.findMany({ where: AUDIENCE_WHERE[notice.audience ?? 'admins'], select: { id: true }, take: MAX_ADMINS }),
     (async () => notice.data())(),
   ]);
   if (admins.length === 0) {
