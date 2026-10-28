@@ -16,6 +16,30 @@ export function shippingEtaLabel(eta: ShippingEta, now: Date = new Date()): stri
   return eta.minDays === eta.maxDays ? fmt(eta.minDays) : `${fmt(eta.minDays)} – ${fmt(eta.maxDays)}`;
 }
 
+/**
+ * Ngày giao dự kiến ở thanh toán và màn đặt xong. Khoảng ngày cấu hình chỉ là của kho Tubu: lần đặt chỉ có hàng gian hàng
+ * tự giao thì không hứa ngày thay họ (cùng luật với chi tiết đơn); lần đặt trộn thì nói rõ ngày chỉ cho phần hàng Tubu Tree.
+ * `kinds` là loại nơi giao của từng kiện ('TUBU' | 'MERCHANT'); không biết kiện nào thì không hứa.
+ */
+export function checkoutEtaLabel(
+  eta: ShippingEta | null | undefined,
+  kinds: ReadonlyArray<string | null | undefined>,
+  now: Date = new Date(),
+): string | null {
+  if (!eta || !kinds.includes('TUBU')) return null;
+  const label = shippingEtaLabel(eta, now);
+  return kinds.includes('MERCHANT') ? `${label} (hàng Tubu Tree)` : label;
+}
+
+/** Nơi giao của lần vừa đặt: từng đơn con khi bị tách, không thì chính đơn (máy chủ trả cột `fulfiller` của đơn). */
+export function placedOrderKinds(order: {
+  fulfiller?: string | null;
+  splitOrders?: ReadonlyArray<{ fulfiller: string }> | null;
+}): string[] {
+  if (order.splitOrders && order.splitOrders.length > 0) return order.splitOrders.map((o) => o.fulfiller);
+  return order.fulfiller ? [order.fulfiller] : [];
+}
+
 const ETA_STATUSES = new Set(['CONFIRMED', 'PACKED', 'SHIPPING']);
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 

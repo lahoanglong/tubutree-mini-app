@@ -19,6 +19,7 @@ import {
   isFreeshipRedundant,
   sortCouponsForCart,
 } from '@/lib/coupon-view';
+import { couponHint, couponHintText } from '@tubutree/app-core/coupon-use';
 import { autoCouponName } from '@/lib/coupon-name';
 import { cartKey } from '@/lib/cart-key';
 import { actionErrorText } from '@/lib/error-text';
@@ -127,6 +128,8 @@ export function CouponBox({
   const previews = new Map(
     (previewTrusted ? (previewsQ.data ?? []) : []).map((p) => [p.code.toUpperCase(), p]),
   );
+  // Dòng thu gọn nhắc khách đang có mã dùng được (chỉ gợi ý, không tự áp); dùng chính số xem trước đã hỏi ở trên.
+  const hint = !currentCode && previewTrusted ? couponHint(previewsQ.data) : null;
   const usable = (c: { code: string; minOrder: number | null }) => {
     const p = previews.get(c.code.toUpperCase());
     return p ? p.eligible : isCouponEligible(c, subtotal);
@@ -245,9 +248,15 @@ export function CouponBox({
             </span>
             <span className="flex flex-col">
               Mã giảm giá
-              <span className="text-caption font-normal text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">
-                Chọn hoặc nhập mã giảm giá
-              </span>
+              {hint ? (
+                <span className="text-caption font-normal text-forest-700 max-md:text-[color:var(--color-text-brand)]">
+                  {couponHintText(hint, formatVnd)}
+                </span>
+              ) : (
+                <span className="text-caption font-normal text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">
+                  Chọn hoặc nhập mã giảm giá
+                </span>
+              )}
             </span>
           </span>
           <span className="inline-flex items-center gap-1 text-caption font-medium text-forest-700">

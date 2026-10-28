@@ -18,10 +18,12 @@ const mocks = vi.hoisted(() => ({
   requestZaloProfile: vi.fn(),
   getWallet: vi.fn(),
   getLoyalty: vi.fn(),
+  getCouponPreviews: vi.fn(),
+  getCoupons: vi.fn().mockResolvedValue([]),
   getWasteMe: vi.fn(),
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
   user: { id: 'u1', fullName: 'Long', phone: '0900000000' as string | null, walletBalance: 0, pointsBalance: 0, pointsConvertedBalance: 0 },
-  sfCtx: { slug: null as string | null, referralCode: null as string | null, kind: 'ctv' as 'ctv' | 'brand' },
+  sfCtx: { slug: null as string | null, referralCode: null as string | null, kind: 'ctv' as 'ctv' | 'brand', referralEligible: null as boolean | null },
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -36,11 +38,13 @@ vi.mock('../services/shop-api', () => ({
   getCart: mocks.getCart,
   checkoutQuote: mocks.checkoutQuote,
   placeOrder: mocks.placeOrder,
+  getCouponPreviews: mocks.getCouponPreviews,
   createAddress: vi.fn(),
 }));
 vi.mock('../services/account-api', () => ({
   getWallet: mocks.getWallet,
   getLoyalty: mocks.getLoyalty,
+  getCoupons: mocks.getCoupons,
   updateAddress: vi.fn(),
 }));
 vi.mock('../components/policy-sheet', () => ({
@@ -136,6 +140,8 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     mocks.user.phone = '0900000000';
     localStorage.clear();
     mocks.sfCtx.referralCode = null;
+    mocks.sfCtx.referralEligible = null;
+    mocks.getCouponPreviews.mockResolvedValue([]);
     mocks.getAddresses.mockResolvedValue([ADDRESS]);
     mocks.getCart.mockResolvedValue(CART);
     mocks.checkoutQuote.mockResolvedValue(QUOTE);
@@ -192,13 +198,49 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     expect(mocks.recordReferralTouch).not.toHaveBeenCalled();
   });
 
-  it('mua qua link giới thiệu → hiện mã cố định, không có ô nhập, và vẫn gửi referralCode của link', async () => {
+  it('mua qua link giới thiệu của CTV thật (đã xác nhận) → hiện mã cố định, không có ô nhập, và vẫn gửi referralCode của link', async () => {
     mocks.sfCtx.referralCode = 'linkcode';
+    mocks.sfCtx.referralEligible = true;
     renderPage();
     expect(await screen.findByText('LINKCODE')).toBeInTheDocument();
+    expect(screen.getByText('Bạn đang mua qua link giới thiệu')).toBeInTheDocument();
     expect(screen.queryByText('Nhập mã')).not.toBeInTheDocument();
     const body = await placeOrderClick();
     expect(body.referralCode).toBe('linkcode');
+  });
+
+  it('mã từ link là của khách thường (máy chủ bỏ qua, referralEligible=false) → không khoá ô nhập, không nói "mua qua link giới thiệu", đơn không gửi mã đó', async () => {
+    mocks.sfCtx.referralCode = 'KHACH01';
+    mocks.sfCtx.referralEligible = false;
+    renderPage();
+    expect(await screen.findByText('Nhập mã')).toBeInTheDocument();
+    expect(screen.queryByText('KHACH01')).not.toBeInTheDocument();
+    expect(screen.queryByText('Bạn đang mua qua link giới thiệu')).not.toBeInTheDocument();
+    const body = await placeOrderClick();
+    expect(body.referralCode).toBeUndefined();
+  });
+
+  it('mã từ link chưa biết có phải của CTV không (null): ô nhập mở sẵn cho khách, đơn vẫn gửi mã để máy chủ quyết', async () => {
+    mocks.sfCtx.referralCode = 'linkcode';
+    mocks.sfCtx.referralEligible = null;
+    renderPage();
+    expect(await screen.findByText('Nhập mã')).toBeInTheDocument();
+    expect(screen.queryByText('Bạn đang mua qua link giới thiệu')).not.toBeInTheDocument();
+    const body = await placeOrderClick();
+    expect(body.referralCode).toBe('linkcode');
+  });
+
+  it('mã link của khách thường nhưng khách tự nhập mã CTV thật → gửi mã khách nhập', async () => {
+    mocks.sfCtx.referralCode = 'KHACH01';
+    mocks.sfCtx.referralEligible = false;
+    mocks.recordReferralTouch.mockResolvedValue({ ok: true });
+    renderPage();
+    fireEvent.click(await screen.findByText('Nhập mã'));
+    fireEvent.change(screen.getByPlaceholderText('Nhập mã người giới thiệu'), { target: { value: 'ctv0001' } });
+    fireEvent.click(screen.getByText('Áp dụng'));
+    await waitFor(() => expect(screen.getByText('CTV0001')).toBeInTheDocument());
+    const body = await placeOrderClick();
+    expect(body.referralCode).toBe('CTV0001');
   });
 
   it('mã sai (server trả ok:false) → báo lỗi, đặt hàng vẫn không gửi mã sai', async () => {
@@ -1537,8 +1579,17 @@ describe('CheckoutPage — dòng giao dự kiến ở bước thanh toán (D6-20
     delete cfg.shippingEta;
   });
 
+  const withShipments = (...kinds: string[]) =>
+    mocks.checkoutQuote.mockResolvedValue({
+      ...QUOTE,
+      shipments: kinds.map((kind, i) => ({
+        key: `k${i}`, fulfiller: { kind, storefrontId: kind === 'MERCHANT' ? 'sf1' : null, name: kind }, itemIds: ['ci1'], subtotal: 50_000, discount: 0, shippingFee: 0, total: 50_000,
+      })),
+    });
+
   it('cấu hình có shippingEta → dưới phí vận chuyển có dòng "Giao dự kiến" kèm khoảng ngày', async () => {
     cfg.shippingEta = { minDays: 2, maxDays: 4 };
+    withShipments('TUBU');
     renderPage();
     const label = await screen.findByText(viCopy.success.etaLabel);
     const row = label.parentElement as HTMLElement;
@@ -1547,11 +1598,95 @@ describe('CheckoutPage — dòng giao dự kiến ở bước thanh toán (D6-20
     expect(shipRow.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('giỏ chỉ có hàng gian hàng tự giao → không hứa ngày giao dự kiến', async () => {
+    cfg.shippingEta = { minDays: 2, maxDays: 4 };
+    withShipments('MERCHANT');
+    renderPage();
+    // Dòng ngày chỉ nằm trong khối có báo giá: đợi báo giá xong (nút Đặt hàng mở) rồi mới khẳng định không có.
+    const btn = await screen.findByText(/Đặt hàng · /);
+    await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
+    expect(screen.queryByText(viCopy.success.etaLabel)).toBeNull();
+  });
+
+  it('giỏ trộn hàng Tubu và hàng gian hàng tự giao → ngày kèm "(hàng Tubu Tree)"', async () => {
+    cfg.shippingEta = { minDays: 2, maxDays: 4 };
+    withShipments('TUBU', 'MERCHANT');
+    renderPage();
+    const row = (await screen.findByText(viCopy.success.etaLabel)).parentElement as HTMLElement;
+    expect(row.textContent).toMatch(/\d{2}\/\d{2} – \d{2}\/\d{2} \(hàng Tubu Tree\)/);
+  });
+
   it('shippingEta null hoặc thiếu → không có dòng giao dự kiến', async () => {
     cfg.shippingEta = null;
     renderPage();
     await screen.findByText(viCopy.checkout.shippingFee);
     expect(screen.queryByText(viCopy.success.etaLabel)).toBeNull();
     delete cfg.shippingEta;
+  });
+});
+
+describe('CheckoutPage: gợi ý mã dùng được ở dòng "Mã giảm giá" (chỉ gợi ý, không tự áp)', () => {
+  const preview = (code: string, over: object = {}) => ({ code, eligible: true, discount: 0, ...over });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.sfCtx.referralEligible = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe());
+    mocks.getCoupons.mockResolvedValue([{ id: 'c1', code: 'WELCOME30' }]);
+  });
+
+  it('ví không có mã nào → không hỏi xem trước (không tính thừa trên máy chủ), giữ câu cũ', async () => {
+    mocks.getCoupons.mockResolvedValue([]);
+    mocks.getCouponPreviews.mockResolvedValue([preview('WELCOME30', { discount: 30_000 })]);
+    renderPage();
+    expect(await screen.findByText('Chọn hoặc nhập mã giảm giá')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.getCoupons).toHaveBeenCalled());
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 450));
+    });
+    expect(mocks.getCouponPreviews).not.toHaveBeenCalled();
+    expect(screen.queryByText(/mã dùng được/)).toBeNull();
+  });
+
+  it('giỏ chưa có mã, có mã dùng được → "Bạn có N mã dùng được · giảm đến X" (tính cả miễn phí giao), hỏi kèm địa chỉ', async () => {
+    mocks.getCouponPreviews.mockResolvedValue([
+      preview('WELCOME30', { discount: 30_000 }),
+      preview('SHIP', { freeshipSaving: 20_000 }),
+      preview('BIG', { eligible: false, reason: 'Cần đơn tối thiểu', discount: 99_000 }),
+    ]);
+    renderPage();
+    expect(await screen.findByText('Bạn có 2 mã dùng được · giảm đến 30.000đ')).toBeInTheDocument();
+    expect(screen.queryByText('Chọn hoặc nhập mã giảm giá')).toBeNull();
+    expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(1);
+    expect(mocks.getCouponPreviews).toHaveBeenCalledWith({ addressId: 'a1', storefrontSlug: undefined, itemIds: undefined });
+  });
+
+  it('không mã nào dùng được → giữ câu cũ; không tự áp mã nào', async () => {
+    mocks.getCouponPreviews.mockResolvedValue([preview('BIG', { eligible: false, reason: 'x', discount: 9 })]);
+    renderPage();
+    await waitFor(() => expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('Chọn hoặc nhập mã giảm giá')).toBeInTheDocument();
+    expect(screen.queryByText(/mã dùng được/)).toBeNull();
+  });
+
+  it('giỏ đã có mã → không hỏi xem trước (không gọi thừa), chip mã như cũ', async () => {
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'XANH10' });
+    mocks.getCouponPreviews.mockResolvedValue([preview('WELCOME30', { discount: 30_000 })]);
+    renderPage();
+    expect(await screen.findByText('XANH10')).toBeInTheDocument();
+    await screen.findByText(viCopy.checkout.shippingFee);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 450));
+    });
+    expect(mocks.getCouponPreviews).not.toHaveBeenCalled();
+    expect(screen.queryByText(/mã dùng được/)).toBeNull();
   });
 });

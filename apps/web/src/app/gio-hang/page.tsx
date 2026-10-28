@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ShoppingBag, Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { addToCart, getCart, getCartSelection, updateCartItem, removeCartItem, formatVnd, type CartLine } from '@/lib/shop-client';
@@ -29,6 +30,8 @@ const UNDO_WINDOW_MS = 3500;
 // Ô −/+ của dòng giỏ: từ md nút trần trong khung viền chung; ở điện thoại là hai ô vuông có viền tách rời như QuantitySelector của Mini App.
 const qtyButton =
   'flex h-11 w-11 items-center justify-center text-lg disabled:opacity-40 max-md:rounded-control max-md:border max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]';
+
+const EmptyCart = dynamic(() => import('./empty-cart'), { ssr: false });
 
 const clampPercent = (pct: number) => (Number.isFinite(pct) ? Math.min(100, Math.max(0, Math.round(pct))) : 0);
 
@@ -217,16 +220,7 @@ export default function CartPage() {
       ) : cartQ.isError ? (
         <ErrorState message={loadErrorText(cartQ.error)} onRetry={() => void cartQ.refetch()} />
       ) : !cart || cart.items.length === 0 ? (
-        <div className="py-20 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">
-            <ShoppingBag className="h-8 w-8 stroke-[1.5]" aria-hidden="true" />
-          </div>
-          <h2 className="mt-4 font-display text-lg font-semibold text-stone-900">Giỏ hàng đang trống</h2>
-          <p className="mt-1 text-sm text-stone-600">Khám phá các sản phẩm xanh và bảo vệ môi trường cùng Tubu Tree</p>
-          <Link href="/" className={`${ui.btnPrimary} mt-5`}>
-            Khám phá sản phẩm
-          </Link>
-        </div>
+        <EmptyCart />
       ) : (
         <div className="grid grid-cols-1 gap-6 max-md:gap-3 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="min-w-0">
@@ -522,7 +516,7 @@ export default function CartPage() {
             {shownCombo > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownCombo)}`} tone="success" />}
             {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" />}
             {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" />}
-            <KeyValueRow label="Tạm tính (đã giảm)" value={formatVnd(payTotal)} emphasis />
+            <KeyValueRow label={shownCombo + shownDiscount + shownTier > 0 ? 'Tạm tính (đã giảm)' : 'Tạm tính'} value={formatVnd(payTotal)} emphasis />
             {payHint ? (
               <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} mt-2 w-full`}>
                 Thanh toán ({selectedCount})

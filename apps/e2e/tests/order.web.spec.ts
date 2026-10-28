@@ -73,6 +73,8 @@ test.describe('Web khách: giỏ và thanh toán', () => {
 
   test('xoá dòng ở giỏ rồi Hoàn tác thêm lại đúng phân loại và số lượng', async ({ page, api }) => {
     mockBuyer(api);
+    // Xoá dòng cuối thì giỏ trống và kệ "Có thể bạn thích" tải gợi ý.
+    api.get('/products', { data: [], meta: { page: 1, limit: 4, total: 0 } });
     await page.goto('/gio-hang');
     await page.getByRole('button', { name: 'Xoá Dầu gội bồ kết hữu cơ khỏi giỏ hàng' }).click();
     await expect(page.getByText('Đã bỏ khỏi giỏ')).toBeVisible();

@@ -416,6 +416,7 @@ export function loyaltyDefaults(api: MockApi): void {
     rewards: [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, points: day, claimed: day === 1, isToday: day === 1 })),
   });
   api.fallback('GET', '/me/coupons', []);
+  api.fallback('POST', '/checkout/coupon-previews', { coupons: [] });
   api.fallback('GET', '/me/referral', { referralCode: 'E2EREF', successCount: 0, earnedPoints: 0, milestones: [], nextMilestone: null });
   api.fallback('GET', '/feed', { posts: [], nextCursor: null });
   api.fallback('GET', '/feed/public-preview', { posts: [] });
