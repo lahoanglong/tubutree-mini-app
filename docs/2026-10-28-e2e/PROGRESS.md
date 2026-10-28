@@ -1,0 +1,35 @@
+# PROGRESS: review end-to-end xuyên chức năng 2026-10-28 (đêm, phiên tubutree-mini-app-f3)
+
+Worktree `.claude/worktrees/e2e`, nhánh `review/e2e-2026-10-28` = main f4ec472d7 (đã gồm #59–#67; lúc đầu là d96c5b7b3 + gộp 6 nhánh, cây như nhau). Bị ngắt thì đọc file này trước. Giờ lấy bằng `date '+%H:%M'`.
+
+## Chủ giao (22:00, rồi đi ngủ, không trả lời được tới sáng)
+Cài ECC (affaan-m/ECC) và dùng để review toàn dự án theo hành trình end-to-end, hoàn thiện chức năng ở chuẩn cao nhất: liền mạch, logic, dễ hiểu, giúp người dùng làm nhanh hơn.
+
+Chủ chốt (AskUserQuestion 22:0x):
+- ECC: plugin `ecc@ecc` toàn máy, hook profile standard (đã cài 22:01, bản 2.2.3, `~/.claude/plugins/cache/ecc/ecc/2.2.3`). Phiên này không nạp được skill mới, nên agent đọc file agent/skill ECC theo đường dẫn.
+- Bản gốc: main + #62–#67.
+- Quyền: push nhánh của đợt, mở PR, MERGE vào main khi gate + Playwright xanh + reviewer Opus không P1/P2, và chỉ sau khi phiên `tubutree-mini-app-93` báo merge #62–#67 + deploy Vietnix xong. KHÔNG deploy, ghi PROD, đẩy Mini App, gộp #39, push --force, --no-verify.
+- Việc "cần chủ quyết": tự chọn phương án an toàn, đảo ngược được, ghi lý do. KHÔNG đổi giá, luật điểm, phí, thể lệ, chữ pháp lý, cờ PROD: ghi danh sách cho sáng.
+- Cách chạy: Workflow, không giới hạn số agent.
+- Phạm vi sửa: mục mới P0–P3; 32 mục P3 "Sau" của đợt 28/10 (trừ R-86, R-116, R-160 chờ chủ); R-132 bỏ trang Xếp hạng web cho giống Mini.
+- Không điểm dừng giữa chừng: tự làm hết, báo cuối (Artifact).
+
+## Phân vùng với phiên tubutree-mini-app-93 (đang merge #62–#67 + deploy)
+Nó giữ: lane 5 (API 3251, fake-pancake 3258, DB `tubutree_uat_l5`), Redis 26379 db 0, web 3601, perf 3603/3611, cổng gate 3710–3799.
+Tôi được dùng: cụm Postgres 127.0.0.1:25432 với DB tên `tubutree_e2e_<gói>`, cổng 3800–3899, API từ 3261, Redis 26379 db index ≠ 0. Kiểm `lsof -iTCP:<p> -sTCP:LISTEN` trước khi dùng. Không dừng cụm 25432 hay Redis 26379.
+
+## Mốc
+| Giờ | Việc | Kết quả |
+|---|---|---|
+| 22:01 | Cài ECC plugin user scope, hook standard | xong |
+| 22:05 | Worktree e2e = main d96c5b7b3 + muahang, taikhoan, diemxanh, ctv, quantri, hieunang (không xung đột; khác integ chỉ test bank-transfer-panel) | xong |
+| 22:10 | Chủ trả lời 4 câu (trên), đi ngủ | |
+| 22:12 | Phiên 93 đồng ý cho dùng lane 6, 7, 8 của uat-harness (`lane-up.sh N --fresh` trên tubutree_uat_l6..l8); nó chỉ giữ lane 5 | |
+| 22:08 | Workflow review `wf_031b8445-6c0` (8 nhóm hành trình Opus → phản biện → gộp backlog + chia gói), brief `tools/brief-review.md`. Báo cáo nhóm `11-*.md`..`18-*.md`, gộp `20-backlog.md`, `21-quyet-dinh.md`, `goi/<gói>.md` | đang chạy |
+
+## Kế hoạch đợt sửa
+- Script `tools/fix.workflow.js` (gọi bằng scriptPath, args `{base, packages:[{key,title,brief_file,money,migration,depends_on,slot}]}`), brief `tools/brief-worker.md`.
+- Mỗi gói: worktree `.claude/worktrees/e2e-<gói>`, nhánh `review/e2e-<gói>` từ `review/e2e-2026-10-28`. Khối cổng B = 3800 + 5*slot (B+1..B+5), cổng race 45800 + 10*slot (`race-one.sh`).
+- Sau workflow: gộp các gói vào worktree tích hợp, chạy gate.sh + pw-gate + race trên bản gộp, chụp ảnh trên lane 6 so với ảnh trước, review Opus bản gộp, push, PR; merge chỉ sau khi phiên 93 báo deploy xong.
+| 22:21 | Phiên 93 báo: merge #59–#67 xong 22:14, deploy Vietnix xong 22:19 (PROD 239 migration), Mini App Testing V26 từ f4ec472d7. Cây main f4ec472d7 trùng khít bản gốc của tôi; dời nhánh `review/e2e-2026-10-28` về f4ec472d7 (`reset --keep`, không đổi file). Từ giờ được merge PR của đợt khi đủ điều kiện | xong |
+| 22:48 | Phiên 93 mở PR #69 (review/1028-chip-e2e, sửa test chip 44px ở shop.web.spec.ts:652, chờ chủ duyệt). Main còn 2 ca đỏ đó + ~10 ca chập chờn /san-pham (B-130): ghi vào brief worker là đỏ sẵn. Không gộp #69 vào nhánh của đợt (để chủ duyệt) | |
