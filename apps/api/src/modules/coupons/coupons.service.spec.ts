@@ -658,7 +658,7 @@ describe('CouponsService.previewMany', () => {
     // id ngược thứ tự ví: nếu còn chọn theo id thì 5 mã cuối ví sẽ chiếm chỗ.
     const rows = codes.map((code, i) => coupon({ id: `c${99 - i}`, code, isActive: true, scope: 'PUBLIC' }));
     const findMany = jest.fn().mockImplementation(({ where }: { where: { code: { in: string[] }; scope?: string } }) =>
-      Promise.resolve(rows.filter((r) => where.code.in.includes(r.code as string) && (where.scope == null || r.scope === where.scope))),
+      Promise.resolve(rows.filter((r) => where.code.in.includes(r.code as string) && (where.scope == null || (r as { scope?: string }).scope === where.scope))),
     );
     const prisma = {
       coupon: { findMany },
