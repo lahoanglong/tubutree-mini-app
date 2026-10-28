@@ -796,6 +796,22 @@ describe('FlashSaleService.notifyStartedFlashSales', () => {
     expect(notify).toHaveBeenCalledWith('u1', 'FLASH_STARTING', { product: 'Dầu gội Visante' });
   });
 
+  it('có slug sản phẩm → thêm product_slug để nút "Xem ưu đãi giờ vàng" mở thẳng sản phẩm; truy vấn chọn slug', async () => {
+    const row = reminderRow({
+      item: {
+        flashSale: { isActive: true, startAt: new Date('2026-07-05T09:00:00Z'), endAt: new Date('2026-07-05T12:00:00Z') },
+        variation: { product: { name: 'Dầu gội Visante', slug: 'dau-goi-visante' } },
+      },
+    });
+    const findMany = jest.fn().mockResolvedValue([row]);
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const prisma = { flashSaleReminder: { findMany, updateMany } } as any;
+    const notify = jest.fn().mockResolvedValue(undefined);
+    await new FlashSaleService(prisma, config, { notify } as unknown as NotificationsService, lifecycle).notifyStartedFlashSales(now);
+    expect(notify).toHaveBeenCalledWith('u1', 'FLASH_STARTING', { product: 'Dầu gội Visante', product_slug: 'dau-goi-visante' });
+    expect(findMany.mock.calls[0][0].include.item.include.variation.include.product.select).toEqual({ name: true, slug: true });
+  });
+
   it('claim thất bại (count 0, cron khác đã nhắc) → KHÔNG notify', async () => {
     const findMany = jest.fn().mockResolvedValue([reminderRow()]);
     const updateMany = jest.fn().mockResolvedValue({ count: 0 });

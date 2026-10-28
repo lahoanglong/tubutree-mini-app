@@ -17,7 +17,7 @@ vi.mock('zmp-ui', () => ({
 }));
 vi.mock('zmp-sdk/apis', () => ({ vibrate: () => undefined, setStorage: async () => ({}), getStorage: async () => ({}), removeStorage: async () => ({}) }));
 
-import { notificationAction, notificationMeta, notificationOrderLink } from './notifications';
+import { notificationAction, notificationMeta, notificationNote, notificationOrderLink } from './notifications';
 import { reminderFallbackPath } from '../components/reorder/reorder-reminder';
 
 /**
@@ -160,15 +160,25 @@ describe('notificationAction — nút theo loại tin, không dò nội dung (C-
     expect(to('GROUP_BUY_SUCCESS', { discount: '15.000' })).toBe('/group-buy');
   });
 
-  it('Mini App tạm không bán định kỳ: tin SUBSCRIPTION_* không có nút dẫn về danh sách đơn Tất cả', () => {
-    flags.subscriptions = false;
-    expect(notificationAction('SUBSCRIPTION_PAUSED', undefined)).toBeNull();
+  it('nhóm mua chung thành công có product_slug → "Dùng mã, mua ngay" mở sản phẩm', () => {
+    expect(notificationAction('GROUP_BUY_SUCCESS', { discount: '15.000', product_slug: 'nuoc-rua-chen' })).toEqual({ kind: 'link', label: 'Dùng mã, mua ngay', to: '/product/nuoc-rua-chen' });
   });
 
-  it('bật lại định kỳ ở Mini App: tin SUBSCRIPTION_* có nút Xem gói định kỳ', () => {
+  it('khách chưa có gói (Mini App không có lối tạo gói): tin SUBSCRIPTION_* không có nút dẫn về danh sách đơn Tất cả', () => {
+    flags.subscriptions = false;
+    expect(notificationAction('SUBSCRIPTION_PAUSED', undefined)).toBeNull();
+    expect(notificationAction('SUBSCRIPTION_PAUSED', undefined, { hasSubscription: false })).toBeNull();
+  });
+
+  it('khách đã có gói (đặt trên web): tin SUBSCRIPTION_* có nút "Xem gói" mở tab Định kỳ', () => {
+    flags.subscriptions = false;
+    expect(notificationAction('SUBSCRIPTION_PAUSED', undefined, { hasSubscription: true })).toEqual({ kind: 'link', label: 'Xem gói', to: '/orders?tab=subscriptions' });
+  });
+
+  it('bật lại định kỳ ở Mini App: tin SUBSCRIPTION_* luôn có nút Xem gói', () => {
     flags.subscriptions = true;
     try {
-      expect(to('SUBSCRIPTION_PAUSED')).toBe('/subscriptions');
+      expect(to('SUBSCRIPTION_PAUSED')).toBe('/orders?tab=subscriptions');
     } finally {
       flags.subscriptions = false;
     }
@@ -223,5 +233,95 @@ describe('SUPPORT_CHAT_REPLY (Tubu Tree trả lời trong chat)', () => {
   it('có nhãn riêng và nút mở /chat', () => {
     expect(notificationMeta('SUPPORT_CHAT_REPLY').title).toBe('Tubu Tree trả lời bạn');
     expect(notificationAction('SUPPORT_CHAT_REPLY', { preview: 'Dạ vâng', route: '/chat' })).toMatchObject({ kind: 'link', to: '/chat' });
+  });
+});
+
+describe('E-4: tin cho chủ gian hàng không mở đơn người mua', () => {
+  it.each(['MERCHANT_ORDER_NEW', 'MERCHANT_ORDER_OVERDUE', 'MERCHANT_ORDER_CANCELLED', 'MERCHANT_RETURN_REQUESTED', 'MERCHANT_RETURN_APPROVED'])(
+    '%s có order_code → không nút (Mini App không có Cổng người bán), tiêu đề "Gian hàng đối tác"',
+    (code) => {
+      expect(notificationAction(code, { order_code: 'TB1' })).toBeNull();
+      expect(notificationOrderLink(code, 'TB1')).toBe(false);
+      expect(notificationMeta(code).title).toBe('Gian hàng đối tác');
+    },
+  );
+
+  it('tin huỷ đơn của người bán gửi cho khách vẫn mở /order/TB1', () => {
+    expect(notificationAction('MERCHANT_ORDER_CANCELLED_BY_SELLER', { order_code: 'TB1' })).toEqual({ kind: 'link', label: 'Xem chi tiết đơn hàng', to: '/order/TB1' });
+    expect(notificationMeta('MERCHANT_ORDER_CANCELLED_BY_SELLER').title).toBe('Cập nhật đơn hàng');
+  });
+
+  it('chi tiết tin của chủ gian hàng có câu chỉ dẫn sang web (không link); tin khác không có', () => {
+    expect(notificationNote('MERCHANT_ORDER_NEW')).toBe('Mở trang Đối tác trên web Tubu Tree để xử lý đơn.');
+    expect(notificationNote('ORDER_CONFIRMED')).toBeNull();
+    expect(notificationNote('MERCHANT_ORDER_CANCELLED_BY_SELLER')).toBeNull();
+  });
+});
+
+describe('E-5: hoa hồng, hạng, điểm sàn, gian hàng có nút và tiêu đề đúng', () => {
+  const act = (code: string) => {
+    const a = notificationAction(code, undefined);
+    return a?.kind === 'link' ? [a.label, a.to] : null;
+  };
+  it.each([
+    ['COMMISSION_WALLET_CREDITED', ['Xem Ví Tubu', '/wallet']],
+    ['COMMISSION_PAYOUT_PAID', ['Xem Ví Tubu', '/wallet']],
+    ['COMMISSION_NEW', ['Xem hoa hồng', '/affiliate?tab=commission']],
+    ['TIER_DROP_NOTICE', ['Xem cách giữ hạng', '/loyalty']],
+    ['EXTERNAL_POINTS_CREDITED', ['Xem Điểm Xanh', '/loyalty']],
+    ['CHAT_ORDER_POINTS_LINKED', ['Xem Điểm Xanh', '/loyalty']],
+    ['STOREFRONT_APPROVED', ['Chia sẻ gian hàng', '/storefront']],
+    ['STOREFRONT_REINSTATED', ['Chia sẻ gian hàng', '/storefront']],
+    ['STOREFRONT_TAKEN_DOWN', ['Xem gian hàng', '/storefront']],
+    ['STOREFRONT_TRENDING_PRODUCTS', ['Thêm vào gian hàng', '/storefront']],
+  ])('%s → %j', (code, expected) => {
+    expect(act(code)).toEqual(expected);
+  });
+
+  it.each([
+    ['TIER_DROP_NOTICE', 'Hạng thành viên'],
+    ['EXTERNAL_POINTS_VOIDED', 'Điểm Xanh'],
+    ['CHAT_ORDER_POINTS_CREDITED', 'Điểm Xanh'],
+    ['COMMISSION_REVERSED', 'Hoa hồng CTV'],
+  ])('%s → tiêu đề %s', (code, title) => {
+    expect(notificationMeta(code).title).toBe(title);
+  });
+});
+
+describe('E-87: tiêu đề đúng loại, không còn "Thông báo" chung', () => {
+  it.each([
+    ['REFUND_WALLET_CREDITED', 'Hoàn tiền đơn hàng'],
+    ['WINBACK_VOUCHER', 'Ưu đãi cho bạn'],
+    ['GAME_TREE_THIRSTY', 'Vườn Xanh'],
+    ['CART_ABANDONED', 'Giỏ hàng của bạn'],
+    ['PRICE_DROP_ALERT', 'Giảm giá'],
+    ['GROUP_BUY_SUCCESS', 'Mua chung'],
+    ['REVIEW_REQUEST', 'Mời đánh giá'],
+    ['SUBSCRIPTION_PAUSED', 'Đơn định kỳ'],
+    ['COMMUNITY_BEST_ANSWER', 'Cộng đồng'],
+  ])('%s → %s', (code, title) => {
+    expect(notificationMeta(code).title).toBe(title);
+  });
+});
+
+describe('E-32: tin mời đánh giá mở thẳng form đánh giá', () => {
+  it('có product_slug và order_id → "Viết đánh giá" tới trang sản phẩm kèm state { reviewOrderId }', () => {
+    expect(notificationAction('REVIEW_REQUEST', { order_code: 'TB1', order_id: 'o1', product_slug: 'sua-tam' })).toEqual({
+      kind: 'link',
+      label: 'Viết đánh giá',
+      to: '/product/sua-tam',
+      state: { reviewOrderId: 'o1' },
+    });
+  });
+
+  it('tin cũ thiếu order_id → "Viết đánh giá" tới chi tiết đơn', () => {
+    expect(notificationAction('REVIEW_REQUEST', { order_code: 'TB1', product_slug: 'sua-tam' })).toEqual({ kind: 'link', label: 'Viết đánh giá', to: '/order/TB1' });
+  });
+});
+
+describe('E-90: cảnh báo cầu nối Zalo ở Mini App', () => {
+  it('giữ không nút', () => {
+    expect(notificationAction('OPS_ZALO_BRIDGE_DOWN', {})).toBeNull();
+    expect(notificationAction('OPS_ZALO_BRIDGE_ALERT', {})).toBeNull();
   });
 });
