@@ -286,6 +286,23 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     expect(text).not.toContain('Giá trị đơn đặt');
   });
 
+  it('ba số bán hàng bấm được và báo đúng số nào được bấm; số khách mua lại không bấm (E-56)', async () => {
+    stub([{ key: 'merchantOverdue', count: 1 }], {
+      '/admin/dashboard/today': { body: { orders: { today: 5, yesterday: 3, week: 20 }, revenue: { today: 100000, yesterday: 0, week: 100000 }, newUsers: { today: 2, yesterday: 2, week: 11 } } },
+      '/admin/analytics/retention': { body: [] },
+    });
+    const onOpenStat = vi.fn();
+    const r = render(<OpsInboxTab onOpen={vi.fn()} onOpenStat={onOpenStat} isAdmin />);
+    mounted.push(r);
+    await flush();
+    const press = (label: string) => r.container.querySelector<HTMLButtonElement>(`[role="group"][aria-label="${label}"] button`);
+    click(press('Đơn hôm nay')!);
+    click(press('Đã thu từ đơn hôm nay')!);
+    click(press('Khách mới hôm nay')!);
+    expect(onOpenStat.mock.calls.map((c) => c[0])).toEqual(['orders', 'revenue', 'newUsers']);
+    expect(press('Khách mua lại (30 ngày)')).toBeNull();
+  });
+
   it('một số lỗi không kéo sập trang: số bán lỗi thì hiện thử lại, các thẻ việc vẫn hiện', async () => {
     stub([{ key: 'merchantOverdue', count: 1 }], { '/admin/dashboard/today': { status: 500, body: { message: 'lỗi' } }, '/admin/analytics/retention': { body: [] } });
     const r = render(<OpsInboxTab onOpen={vi.fn()} isAdmin />);
