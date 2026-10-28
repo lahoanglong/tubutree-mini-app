@@ -5,7 +5,7 @@ import type * as ZmpUi from 'zmp-ui';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), openSnackbar: vi.fn(), fetchPurchasedItems: vi.fn(), addToCart: vi.fn(), repurchaseOrder: vi.fn(), fetchActiveFlashSales: vi.fn(),
-  status: 'authenticated',
+  status: 'authenticated', subs: true,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<typeof ZmpUi>()),
@@ -19,6 +19,7 @@ vi.mock('../../services/shop-api', () => ({
 vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1 }) }));
 vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.status }) }));
 vi.mock('../../services/buy-flow-events', () => ({ trackReorderClicked: vi.fn(), trackReorderCompleted: vi.fn() }));
+vi.mock('../../utils/features', () => ({ get SUBSCRIPTIONS_IN_MINIAPP() { return mocks.subs; } }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
@@ -39,6 +40,7 @@ const RAIL_KEY = ['purchased-items', 10];
 describe('PurchasedRail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.subs = true;
     mocks.status = 'authenticated';
     mocks.fetchActiveFlashSales.mockResolvedValue([]);
   });
@@ -184,6 +186,15 @@ describe('PurchasedRail', () => {
       renderRail();
       const region = await screen.findByRole('region', { name: 'Mua lại' });
       expect(within(region).getByRole('button', { name: 'Định kỳ -10%' })).toBeEnabled();
+    });
+
+    it('cờ SUBSCRIPTIONS_IN_MINIAPP tắt: không mời "Định kỳ" dù hàng thường, vẫn có "Mua lại"', async () => {
+      mocks.subs = false;
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ ...ITEM, retailOnly: false }], nextCursor: null });
+      renderRail();
+      const region = await screen.findByRole('region', { name: 'Mua lại' });
+      expect(region).not.toHaveTextContent('Định kỳ');
+      expect(region).toHaveTextContent('Mua lại');
     });
 
     it('API cũ chưa trả retailOnly: không mời "Định kỳ" (máy chủ có thể từ chối)', async () => {
