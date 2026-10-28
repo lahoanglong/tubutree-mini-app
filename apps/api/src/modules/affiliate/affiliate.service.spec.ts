@@ -994,6 +994,19 @@ describe('AffiliateService.dashboard (doanh số tháng = doanh số ĐÃ CHỐT
     });
   });
 
+  it('autoWalletTransfer: mặc định bật (thiếu dòng cấu hình); cờ false thì trả false để trang CTV không hứa tự vào Ví', async () => {
+    expect((await build().svc.dashboard('u1', NOW)).autoWalletTransfer).toBe(true);
+    const off = {
+      get: async <T>(k: string, fb?: T): Promise<T> => (k === 'affiliate.auto_wallet_transfer_enabled' ? false : fb) as T,
+    } as unknown as SystemConfigService;
+    const prisma = {
+      commission: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 0, commissionableTotal: 0 } }), count: jest.fn().mockResolvedValue(0) },
+      affiliateLink: { aggregate: jest.fn().mockResolvedValue({ _sum: { clicks: 0, conversions: 0 } }) },
+    } as unknown as PrismaService;
+    const d = await new AffiliateService(prisma, off, pricing, pancakeOrder, coins, analytics).dashboard('u1', NOW);
+    expect(d.autoWalletTransfer).toBe(false);
+  });
+
   it('dashboard.tier.bonusPct = 0 (tương thích miniapp cũ render "Bonus +X%") — không hứa khoản không trả', async () => {
     const { svc } = build();
     const d = await svc.dashboard('u1', NOW);

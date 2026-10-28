@@ -356,6 +356,7 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
       ],
     ],
     // Cờ gian hàng: chuỗi "false" hay số 0 mà lọt vào thì đọc ra tắt âm thầm, nên chỉ nhận boolean ngay lúc ghi.
+    ['affiliate.auto_wallet_transfer_enabled', true, ['true', 'false', 1, 0, null, {}]],
     ['storefront.require_approval', true, ['true', 'false', 1, 0, null, {}]],
     ['storefront.subdomain_enabled', false, ['true', 'false', 1, 0, null, []]],
   ] as const)('%s: nhận giá trị hợp lệ, từ chối giá trị sai', async (key, fine, badValues) => {

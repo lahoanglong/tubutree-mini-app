@@ -221,7 +221,8 @@ describe('Trả một phần: hoa hồng CTV / doanh số mốc và hạng thàn
 
       const after = await affiliate.getMilestones(o.ctv.id);
       expect(after).toMatchObject({ currentRevenue: 80_833, pendingRevenue: 0 });
-      expect(await commissionOf(o.order.id)).toMatchObject({ status: 'APPROVED', amount: 5_708, commissionableTotal: 80_833 });
+      // Đã chốt: cron duyệt xong thì hoa hồng tự vào Ví (PAID) khi cờ tự chuyển bật; cờ tắt thì nằm ở APPROVED. Cả hai đều tính vào doanh số chốt.
+      expect(await commissionOf(o.order.id)).toMatchObject({ status: expect.stringMatching(/^(APPROVED|PAID)$/), amount: 5_708, commissionableTotal: 80_833 });
     });
 
     it('hai admin duyệt cùng một yêu cầu cùng lúc: hoa hồng và nền chỉ giảm một lần', async () => {

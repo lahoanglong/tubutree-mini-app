@@ -98,6 +98,7 @@ const COMMISSION_RATE = 'src/modules/affiliate/commission-rate-csv.ts';
 const COMMISSION_DEFAULT_RATE = 'src/modules/affiliate/commission-rate.ts';
 const COMMISSION_ROLES = 'src/modules/affiliate/commission-eligibility.ts';
 const STOREFRONT_CONFIG = 'src/modules/storefront/storefront-config.ts';
+const AFFILIATE_AUTO_TRANSFER = 'src/modules/affiliate/affiliate-auto-transfer-config.ts';
 const PANCAKE_CATEGORY_MAP = 'src/modules/integrations/pancake/pancake-sync.service.ts';
 const PANCAKE_PROCESSOR = 'src/modules/integrations/pancake/pancake.processor.ts';
 const EXTERNAL_ORDER_CONFIG = 'src/modules/external-points/external-order.config.ts';
@@ -117,6 +118,7 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'affiliate.max_rate_pct', value: 50, category: 'affiliate', description: 'Trần % hoa hồng CTV admin được đặt cho một biến thể (phần trăm, 50 = 50%)', fallbackSource: { file: COMMISSION_RATE, text: 'export const DEFAULT_AFFILIATE_MAX_RATE_PCT = 50;' } },
   { key: 'affiliate.default_rate_pct', value: 8, category: 'affiliate', description: 'Hoa hồng CTV (phần trăm, 8 = 8%) cho biến thể chưa có % riêng; % đặt riêng cho biến thể (kể cả 0) luôn thắng. Hàng gian hàng đối tác chưa đặt % riêng và sản phẩm bị chặn CTV vẫn 0đ', fallbackSource: { file: COMMISSION_DEFAULT_RATE, text: 'export const DEFAULT_AFFILIATE_DEFAULT_RATE_PCT = 8;' } },
   { key: 'affiliate.commission_eligible_roles', value: ['AFFILIATE', 'DEALER'], category: 'affiliate', description: 'Vai trò được ghi công đơn và hưởng hoa hồng CTV (thêm "CUSTOMER" nếu khách thường chia sẻ cũng được hưởng)', fallbackSource: { file: COMMISSION_ROLES, text: 'DEFAULT_COMMISSION_ELIGIBLE_ROLES: readonly UserRole[] = [UserRole.AFFILIATE, UserRole.DEALER];' } },
+  { key: 'affiliate.auto_wallet_transfer_enabled', value: true, category: 'affiliate', description: 'true = hoa hồng CTV đã duyệt tự chuyển vào Ví Tubu sau mỗi lượt duyệt (cùng khấu trừ thuế TNCN và sổ Ví như CTV bấm Chuyển vào Ví); false = CTV tự bấm Chuyển vào Ví', fallbackSource: { file: AFFILIATE_AUTO_TRANSFER, text: 'export const DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED = true;' } },
   { key: 'storefront.require_approval', value: true, category: 'storefront', description: 'Bật thì gian hàng CTV phải được admin duyệt lần đầu mới hiện trên trang công khai (tắt: hiện ngay khi CTV đăng)', fallbackSource: { file: STOREFRONT_CONFIG, text: 'export const DEFAULT_STOREFRONT_REQUIRE_APPROVAL = true;' } },
   { key: 'storefront.subdomain_enabled', value: false, category: 'storefront', description: 'Bật khi DNS wildcard và chứng chỉ đã xong: gian hàng được hiện và chia sẻ link <tên>.tubutree.com (tắt: chỉ link /s/<mã>)', fallbackSource: { file: STOREFRONT_CONFIG, text: 'export const DEFAULT_STOREFRONT_SUBDOMAIN_ENABLED = false;' } },
   { key: 'pancake.total_mismatch_check', value: true, category: 'pancake', description: 'So tổng tiền Pancake với đơn Tubu mỗi lần webhook; lệch thì đưa đơn vào "Cần xử lý Pancake" (false = tắt khi báo nhầm hàng loạt)', fallbackSource: { file: PANCAKE_PROCESSOR, text: 'get<boolean>(PANCAKE_TOTAL_CHECK_KEY, true)' } },

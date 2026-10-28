@@ -11,6 +11,7 @@ import { COMMISSION_ELIGIBLE_ROLES_KEY, eligibleRolesProblem } from '../affiliat
 import { PANCAKE_CATEGORY_MAP_KEY, categoryMapProblem } from '../integrations/pancake/pancake-category-map';
 import { AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT, sanitizeDefaultRate } from '../affiliate/commission-rate';
 import { AFFILIATE_MAX_RATE_KEY, DEFAULT_AFFILIATE_MAX_RATE_PCT, sanitizeMaxRate } from '../affiliate/commission-rate-csv';
+import { AFFILIATE_AUTO_WALLET_TRANSFER_KEY } from '../affiliate/affiliate-auto-transfer-config';
 import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } from '../storefront/storefront-config';
 import { DEALER_BONUS_TIERS_KEY, dealerBonusTiersProblem } from './dealer-bonus-tiers-rule';
 import { WASTE_JSON_RULES, WASTE_RANGES } from '../waste-exchange/waste-config.keys';
@@ -287,6 +288,8 @@ export class SystemConfigService {
     'dealer.block_credit_when_overdue': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     [DEALER_BONUS_TIERS_KEY]: dealerBonusTiersProblem,
     // Cờ gian hàng: chuỗi "false" là truthy ở chỗ đọc lỏng, nên chỉ nhận đúng boolean.
+    // Cờ tự chuyển hoa hồng vào Ví: chuỗi "false" là truthy ở chỗ đọc lỏng, nên chỉ nhận đúng boolean (đây là đường ghi tiền).
+    [AFFILIATE_AUTO_WALLET_TRANSFER_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     [STOREFRONT_REQUIRE_APPROVAL_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     [STOREFRONT_SUBDOMAIN_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     'payment.bank_bin': (value) =>

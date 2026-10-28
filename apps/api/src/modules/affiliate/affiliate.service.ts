@@ -11,7 +11,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { CommissionStatus, Prisma, type PayoutStatus, type UserRole } from '@prisma/client';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { Env } from '../../config/env.validation';
 import { hashIp } from '../../common/ip-hash';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -63,6 +63,7 @@ import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanit
 import { loadDefaultRate, resolveVariationRate } from './commission-rate';
 import { loadPublicVisibility } from '../storefront/public-visibility';
 import type { PublicVisibilityOptions } from '../storefront/storefront-visibility';
+import { AFFILIATE_AUTO_WALLET_TRANSFER_KEY, DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED } from './affiliate-auto-transfer-config';
 import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
 import { TrackCron } from '../../common/cron-run/track-cron';
 import { SessionStateService } from '../auth/session-state.service';
@@ -340,7 +341,11 @@ export class AffiliateService {
     ]);
 
     const withdrawable = approved._sum.amount ?? 0;
+    const autoWalletTransfer =
+      (await this.config.get<unknown>(AFFILIATE_AUTO_WALLET_TRANSFER_KEY, DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED)) === true;
     return {
+      // Chữ trên trang CTV/Ví nói hoa hồng tự vào Ví hay phải bấm tay theo cờ này.
+      autoWalletTransfer,
       // Thuế sẽ bị khấu trừ nếu rút hết số khả dụng ngay bây giờ (cộng dồn tháng VN); chỉ để hiển thị, lệnh rút tính lại dưới khoá.
       withdrawTaxPreview: withdrawable > 0 ? await this.personalIncomeTax(this.prisma, userId, withdrawable, now) : 0,
       withdrawingCommission: withdrawing._sum.amount ?? 0,
@@ -1312,12 +1317,80 @@ export class AffiliateService {
         },
         data: { status: 'APPROVED', approvedAt },
       });
-      if (res.count > 0) {
-        this.logger.log(`Duyệt ${res.count} commission hết hold.`);
-        await this.notifyCommissionsApproved(approvedAt);
-      }
+      if (res.count > 0) this.logger.log(`Duyệt ${res.count} commission hết hold.`);
+      // Chạy cả khi lượt này không duyệt thêm khoản nào: quét luôn phần còn sót (cờ từng tắt, lần trước lỗi hoặc thiếu MST).
+      const credited = await this.autoTransferApprovedToWallet().catch((err: unknown) => {
+        this.logger.error(`autoTransferApprovedToWallet lỗi: ${err instanceof Error ? err.message : err}`);
+        return new Set<string>();
+      });
+      if (res.count > 0) await this.notifyCommissionsApproved(approvedAt, credited);
     } catch (err) {
       this.logger.error(`approveDueCommissions lỗi: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  /**
+   * Tự chuyển hoa hồng APPROVED chưa gắn batch vào Ví Tubu cho từng CTV (cờ `affiliate.auto_wallet_transfer_enabled`, mặc định bật).
+   * KHÔNG có đường ghi tiền riêng: mỗi CTV đi qua đúng `requestPayout` như khi bấm tay (cùng khoá tháng, khấu trừ TNCN, bút toán
+   * Ví, giới hạn), nên cron và bấm tay đồng thời chỉ cộng một lần (người đến sau không còn dòng APPROVED nào để đánh dấu PAID).
+   * Khoá idempotency xác định theo tập id commission: chạy lại hay hai lượt cron chồng nhau cùng tập thì cùng khoá. CTV lỗi (chưa có
+   * MST khi bị khấu trừ, đã bị bấm tay trước, lỗi tạm) thì để đó cho nút "Chuyển vào Ví" và lượt cron sau, không chặn người khác.
+   * Trả về các CTV thực sự được cộng tiền vào Ví (>0đ). Không ném lỗi.
+   */
+  async autoTransferApprovedToWallet(): Promise<Set<string>> {
+    const credited = new Set<string>();
+    try {
+      const enabled = await this.config.get<unknown>(AFFILIATE_AUTO_WALLET_TRANSFER_KEY, DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED);
+      if (enabled !== true) return credited;
+      const rows = await this.prisma.commission.findMany({
+        where: { status: 'APPROVED', payoutBatchId: null },
+        select: { id: true, affiliateUserId: true, amount: true },
+        orderBy: { id: 'asc' },
+      });
+      const byUser = new Map<string, { ids: string[]; total: number }>();
+      for (const r of rows) {
+        const cur = byUser.get(r.affiliateUserId) ?? { ids: [], total: 0 };
+        cur.ids.push(r.id);
+        cur.total += r.amount;
+        byUser.set(r.affiliateUserId, cur);
+      }
+      for (const [userId, { ids, total }] of byUser) {
+        if (total <= 0) continue;
+        const key = `auto-wallet:${userId}:${createHash('sha1').update([...ids].sort().join(',')).digest('hex')}`;
+        try {
+          const result = await this.requestPayout(userId, total, 'WALLET_BALANCE', undefined, key);
+          const net = ('credited' in result ? result.credited : undefined) ?? 0;
+          if (net > 0) {
+            credited.add(userId);
+            await this.notifyAutoWalletCredited(userId, net, key);
+          }
+        } catch (err) {
+          const code = (err as { response?: { code?: string } }).response?.code;
+          const msg = err instanceof Error ? err.message : String(err);
+          if (code === PIT_TAX_ID_REQUIRED) this.logger.log(`Chưa tự chuyển hoa hồng của ${userId} vào Ví: cần mã số thuế, chờ CTV bấm Chuyển vào Ví.`);
+          else this.logger.warn(`Tự chuyển hoa hồng của ${userId} vào Ví lỗi: ${msg}`);
+        }
+      }
+    } catch (err) {
+      this.logger.error(`autoTransferApprovedToWallet lỗi: ${err instanceof Error ? err.message : err}`);
+    }
+    return credited;
+  }
+
+  /** Tiền đã vào Ví xong: thông báo hỏng không được làm hỏng vòng chuyển của CTV khác (chỉ log). */
+  private async notifyAutoWalletCredited(userId: string, credited: number, key: string): Promise<void> {
+    if (!this.notifications) return;
+    try {
+      const payout = await this.prisma.payout.findUnique({ where: { idempotencyKey: key }, select: { taxWithheld: true } });
+      const tax = payout?.taxWithheld ?? 0;
+      await this.notifications.notify(
+        userId,
+        CTV_NOTIFICATION.AUTO_WALLET,
+        { amount: vnd(credited), tax_note: tax > 0 ? ` (đã khấu trừ thuế TNCN ${vnd(tax)})` : '' },
+        { dedupeKey: key },
+      );
+    } catch (err) {
+      this.logger.error(`Gửi thông báo tự cộng hoa hồng vào Ví cho ${userId} lỗi: ${err instanceof Error ? err.message : err}`);
     }
   }
 
@@ -1327,7 +1400,7 @@ export class AffiliateService {
    * mốc đã ghi ở câu UPDATE (không cần thêm cột/đổi câu UPDATE đang có test). Mọi lỗi chỉ log: tiền
    * đã chốt xong, thông báo hỏng không được làm cron báo thất bại.
    */
-  private async notifyCommissionsApproved(approvedAt: Date): Promise<void> {
+  private async notifyCommissionsApproved(approvedAt: Date, autoCredited: ReadonlySet<string> = new Set()): Promise<void> {
     if (!this.notifications) return;
     try {
       const rows = await this.prisma.commission.findMany({
@@ -1340,6 +1413,8 @@ export class AffiliateService {
         perUser.set(r.affiliateUserId, { count: cur.count + 1, amount: cur.amount + r.amount });
       }
       for (const [userId, sum] of perUser) {
+        // Đã tự vào Ví thì CTV nhận tin "Đã cộng…" rồi; tin này dặn bấm tay sẽ sai.
+        if (autoCredited.has(userId)) continue;
         try {
           await this.notifications.notify(userId, CTV_NOTIFICATION.APPROVED, {
             count: String(sum.count),
