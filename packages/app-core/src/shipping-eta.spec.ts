@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import type { PlacedOrder } from './api/checkout';
 import { checkoutEtaLabel, orderDeliveryEtaLabel, placedOrderKinds, shippingEtaLabel } from './shipping-eta';
 
 describe('shippingEtaLabel', () => {
@@ -110,5 +111,10 @@ describe('placedOrderKinds', () => {
   it('không có thông tin nơi giao → rỗng (checkoutEtaLabel không hứa ngày)', () => {
     expect(placedOrderKinds({})).toEqual([]);
     expect(placedOrderKinds({ fulfiller: null })).toEqual([]);
+  });
+  it('phản hồi đặt đơn khai báo cột fulfiller: bỏ cột khỏi kiểu thì ngày giao ở màn đặt xong biến mất mà không báo lỗi', () => {
+    expectTypeOf<PlacedOrder['fulfiller']>().toEqualTypeOf<'TUBU' | 'MERCHANT' | undefined>();
+    const placed = { fulfiller: 'MERCHANT' } as PlacedOrder;
+    expect(placedOrderKinds(placed)).toEqual(['MERCHANT']);
   });
 });
