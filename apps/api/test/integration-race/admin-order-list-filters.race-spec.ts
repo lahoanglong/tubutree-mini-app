@@ -77,6 +77,22 @@ describe('Admin order list filters (real Postgres)', () => {
     expect(new Set((await codesOf(s.tok, { platform: 'web', payment: 'PAID', kind: 'retail' })).codes)).toEqual(new Set([s.code.RETW]));
   });
 
+  it('hàng đợi chuyển khoản chờ xác nhận: chỉ đơn lẻ chuyển khoản chưa trả, không lẫn ZaloPay, ví hay đơn đại lý', async () => {
+    const tok = randCode(8);
+    const buyer = await createUser(prisma, { fullName: `Hàng đợi ${tok}` });
+    const mk = (name: string, data: Partial<Parameters<typeof createOrder>[1]>) =>
+      createOrder(prisma, { userId: buyer.id, status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID', paymentMethod: 'BANK_TRANSFER', ...data, code: `ITQ${tok}${name}` }).then((o) => o.code);
+    const bank = await mk('BANK', {});
+    await mk('ZALO', { paymentMethod: 'ZALOPAY' });
+    await mk('WALLET', { paymentMethod: 'WALLET' });
+    await mk('DLR', { type: 'DEALER' });
+    await mk('PAID', { paymentStatus: 'PAID', status: 'CONFIRMED' });
+    const got = await codesOf(tok, { queue: 'bank_transfer_to_confirm' });
+    expect(got.codes).toEqual([bank]);
+    expect(got.total).toBe(1);
+    expect((await codesOf(tok, {})).total).toBe(5);
+  });
+
   it('lọc theo CTV (id) và theo gian hàng (slug, subdomain hoa thường); slug lạ trả danh sách rỗng', async () => {
     const s = await seed();
     const byCtv = await codesOf(s.tok, { referrerUserId: s.ctv.id });

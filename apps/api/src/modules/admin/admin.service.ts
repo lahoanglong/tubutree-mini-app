@@ -41,6 +41,7 @@ import {
 } from './admin-order-filter';
 import { orderCsvChunks, userCsvChunks } from './admin-export';
 import { GMV_ORDER_SQL, REVENUE_ORDER_SQL } from './admin-revenue';
+import { NEW_CUSTOMER_SQL } from './admin-source-report';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { isDeadConfigKey } from '../system-config/dead-config-keys';
 import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from './admin-config-rules';
@@ -193,7 +194,10 @@ function canAdminRecordLatePayment(o: { type: string; paymentMethod: string; pay
  * Nâng cấp lên tài khoản thật thì zaloId đổi hoặc có SĐT nên rời nhóm này. Không xoá, chỉ tách khỏi số "người dùng".
  */
 export const GUEST_USER_WHERE: Prisma.UserWhereInput = { role: 'CUSTOMER', phone: null, zaloId: { startsWith: 'guest_' } };
-const REAL_USER_WHERE: Prisma.UserWhereInput = { NOT: GUEST_USER_WHERE };
+// Bù đúng của GUEST_USER_WHERE; viết rõ từng nhánh vì NOT(... zaloId LIKE ...) trên zaloId NULL ra NULL và làm tài khoản đã ẩn danh biến mất.
+export const REAL_USER_WHERE: Prisma.UserWhereInput = {
+  OR: [{ role: { not: 'CUSTOMER' } }, { phone: { not: null } }, { zaloId: null }, { NOT: { zaloId: { startsWith: 'guest_' } } }],
+};
 
 /** Ô tìm người dùng: SĐT (cả +84/84), tên có hoặc không dấu, hoặc đúng id. `%`/`_` khớp đúng nghĩa đen. */
 export function adminUserSearchWhere(search?: string): Prisma.UserWhereInput | undefined {
@@ -839,34 +843,44 @@ export class AdminService {
   }
 
   /**
-   * Số của trang "Hôm nay": đơn, doanh thu (cùng định nghĩa "đã thu" với tổng quan) và khách mới (tài khoản thật,
-   * không tính phiên khách vãng lai) trong ngày giờ VN và 7 ngày gần nhất (gồm hôm nay), kèm hôm qua để so.
+   * Số của trang "Hôm nay": cùng định nghĩa với trang Báo cáo doanh thu cho cùng khoảng ngày giờ VN (đếm mọi đơn, doanh thu =
+   * đơn đã thu trừ hoàn một phần đã duyệt, khách mới theo NEW_CUSTOMER_SQL). Hôm nay, hôm qua và 7 ngày gần nhất (gồm hôm nay).
    */
   async getTodaySummary(now = new Date()) {
     const dayStart = startOfVnDay(now);
+    const dayEnd = new Date(dayStart.getTime() + 86_400_000);
     const yesterdayStart = new Date(dayStart.getTime() - 86_400_000);
     const weekStart = new Date(dayStart.getTime() - 6 * 86_400_000);
-    const [rows, newToday, newYesterday, newWeek] = await Promise.all([
+    const [rows, users] = await Promise.all([
       this.prisma.$queryRaw<
         { orders_today: number; orders_yesterday: number; orders_week: number; rev_today: bigint | null; rev_yesterday: bigint | null; rev_week: bigint | null }[]
       >`
         SELECT (COUNT(*) FILTER (WHERE o."createdAt" >= ${dayStart}))::int AS orders_today,
                (COUNT(*) FILTER (WHERE o."createdAt" >= ${yesterdayStart} AND o."createdAt" < ${dayStart}))::int AS orders_yesterday,
                COUNT(*)::int AS orders_week,
-               SUM(o.total) FILTER (WHERE ${REVENUE_ORDER_SQL} AND o."createdAt" >= ${dayStart}) AS rev_today,
-               SUM(o.total) FILTER (WHERE ${REVENUE_ORDER_SQL} AND o."createdAt" >= ${yesterdayStart} AND o."createdAt" < ${dayStart}) AS rev_yesterday,
-               SUM(o.total) FILTER (WHERE ${REVENUE_ORDER_SQL}) AS rev_week
+               COALESCE(SUM(o.total - COALESCE(pr.refund, 0)) FILTER (WHERE ${REVENUE_ORDER_SQL} AND o."createdAt" >= ${dayStart}), 0) AS rev_today,
+               COALESCE(SUM(o.total - COALESCE(pr.refund, 0)) FILTER (WHERE ${REVENUE_ORDER_SQL} AND o."createdAt" >= ${yesterdayStart} AND o."createdAt" < ${dayStart}), 0) AS rev_yesterday,
+               COALESCE(SUM(o.total - COALESCE(pr.refund, 0)) FILTER (WHERE ${REVENUE_ORDER_SQL}), 0) AS rev_week
           FROM orders o
-         WHERE o."createdAt" >= ${weekStart} AND o.status <> 'CANCELLED'`,
-      this.prisma.user.count({ where: { AND: [REAL_USER_WHERE, { createdAt: { gte: dayStart } }] } }),
-      this.prisma.user.count({ where: { AND: [REAL_USER_WHERE, { createdAt: { gte: yesterdayStart, lt: dayStart } }] } }),
-      this.prisma.user.count({ where: { AND: [REAL_USER_WHERE, { createdAt: { gte: weekStart } }] } }),
+          LEFT JOIN LATERAL (
+            SELECT SUM(r."refundAmount" + r."shippingRefund") AS refund
+              FROM return_requests r
+             WHERE r."orderId" = o.id AND r.status = 'APPROVED'
+          ) pr ON true
+         WHERE o."createdAt" >= ${weekStart} AND o."createdAt" < ${dayEnd}`,
+      this.prisma.$queryRaw<{ today: number; yesterday: number; week: number }[]>`
+        SELECT (COUNT(*) FILTER (WHERE u."createdAt" >= ${dayStart}))::int AS today,
+               (COUNT(*) FILTER (WHERE u."createdAt" >= ${yesterdayStart} AND u."createdAt" < ${dayStart}))::int AS yesterday,
+               COUNT(*)::int AS week
+          FROM users u
+         WHERE u."createdAt" >= ${weekStart} AND u."createdAt" < ${dayEnd} AND ${NEW_CUSTOMER_SQL}`,
     ]);
     const r = rows[0];
+    const u = users[0];
     return {
       orders: { today: r?.orders_today ?? 0, yesterday: r?.orders_yesterday ?? 0, week: r?.orders_week ?? 0 },
       revenue: { today: Number(r?.rev_today ?? 0), yesterday: Number(r?.rev_yesterday ?? 0), week: Number(r?.rev_week ?? 0) },
-      newUsers: { today: newToday, yesterday: newYesterday, week: newWeek },
+      newUsers: { today: u?.today ?? 0, yesterday: u?.yesterday ?? 0, week: u?.week ?? 0 },
     };
   }
 

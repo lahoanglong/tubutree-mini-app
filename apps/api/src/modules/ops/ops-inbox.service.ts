@@ -6,7 +6,7 @@ import { COMMUNITY_MODERATORS, type StaffPermission } from '../../common/staff-p
 import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
 import { PENDING_MERCHANT_PRODUCT_WHERE } from '../merchant/merchant-product-review';
 import { CONSIGNMENT_PENDING_LINK_WHERE } from '../merchant/merchant-pancake-link';
-import { buildAdminOrderWhere, pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
+import { BANK_TRANSFER_TO_CONFIRM_WHERE, buildAdminOrderWhere, pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
 import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
 import { countUnansweredQuestions, DEFAULT_UNANSWERED_ALERT_HOURS, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from '../feed/community-unanswered';
 import { readPendingPaymentTtlHours } from '../orders/pending-payment-ttl';
@@ -61,12 +61,6 @@ export type InboxKey =
   | 'communityReports'
   | 'productsMissingImage';
 
-const BANK_TRANSFER_TO_CONFIRM_WHERE = {
-  type: 'RETAIL',
-  status: 'PENDING_PAYMENT',
-  paymentStatus: 'UNPAID',
-  paymentMethod: 'BANK_TRANSFER',
-} as const;
 const STOREFRONT_PENDING_APPROVAL_WHERE = { isPublished: true, takenDownAt: null, type: 'CTV', isPartner: false, approvedAt: null } as const;
 
 /** Ai thấy việc này ngoài ADMIN: nhóm việc của nhân viên, hoặc 'STAFF' = mọi nhân viên (route vốn mở cho STAFF). */
@@ -171,9 +165,9 @@ export class OpsInboxService {
     return (await this.config?.get<number>('waste.in_transit_review_days', 30)) ?? 30;
   }
 
-  /** Số giờ còn lại của đơn chuyển khoản chờ lâu nhất trước khi cron tự huỷ (0 = đã quá hạn, chờ lượt cron kế). */
+  /** Số giờ còn lại của đơn chuyển khoản chờ lâu nhất trước khi cron tự huỷ (0 = đã quá hạn, chờ lượt cron kế). Đơn đã bàn giao vận chuyển không bao giờ bị cron huỷ nên không tính. */
   private async bankTransferHoursLeft(now: Date): Promise<number | undefined> {
-    const oldest = await this.prisma.order.findFirst({ where: BANK_TRANSFER_TO_CONFIRM_WHERE, orderBy: { createdAt: 'asc' }, select: { createdAt: true } });
+    const oldest = await this.prisma.order.findFirst({ where: { ...BANK_TRANSFER_TO_CONFIRM_WHERE, autoCancelBlockedAt: null }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } });
     if (!oldest || !this.config) return undefined;
     const ttl = await readPendingPaymentTtlHours(this.config);
     return Math.max(0, Math.ceil((oldest.createdAt.getTime() + ttl * 3_600_000 - now.getTime()) / 3_600_000));

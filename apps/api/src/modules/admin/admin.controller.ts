@@ -35,12 +35,14 @@ import { CatalogService } from '../catalog/catalog.service';
 import {
   ADMIN_ORDER_STATUSES,
   ORDER_KINDS,
+  ORDER_QUEUES,
   ORDER_LIST_PLATFORMS,
   ORDER_PAYMENT_STATUSES,
   PANCAKE_FILTERS,
   type InvoiceFilter,
   type OrderKind,
   type OrderListPlatform,
+  type OrderQueue,
   type OrderPaymentFilter,
   type PancakeFilter,
   type RecyclingFilter,
@@ -316,6 +318,7 @@ export class ListOrdersQuery extends PaginationQuery {
   @IsOptional() @IsIn([...ORDER_KINDS]) kind?: OrderKind;
   @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
   @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
+  @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
   /** Id CTV / người giới thiệu (chọn từ ô tìm khách). */
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
   /** Slug hoặc subdomain của gian hàng được ghi công. */
@@ -336,6 +339,7 @@ export class ExportOrdersQuery {
   @IsOptional() @IsIn([...ORDER_KINDS]) kind?: OrderKind;
   @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
   @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
+  @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
   @IsOptional() @IsString() @MaxLength(100) storefront?: string;
 }
@@ -484,11 +488,12 @@ export class AdminController {
   @AllowStaff('CSKH', 'KHO', 'KE_TOAN')
   @Get('orders')
   orders(@Query() q: ListOrdersQuery, @CurrentUser() viewer: JwtPayload) {
-    const { kind, payment, platform, referrerUserId, storefront, order } = q;
+    const { kind, payment, platform, queue, referrerUserId, storefront, order } = q;
     return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake, q.from, q.to, viewer, {
       kind,
       payment,
       platform,
+      queue,
       referrerUserId,
       storefront,
       order,

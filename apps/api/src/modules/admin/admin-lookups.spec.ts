@@ -3,7 +3,7 @@ import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { AdminService, GUEST_USER_WHERE } from './admin.service';
+import { AdminService, GUEST_USER_WHERE, REAL_USER_WHERE } from './admin.service';
 import {
   AdminController,
   ListReviewsQuery,
@@ -112,8 +112,8 @@ describe('AdminService.listUsers — tìm khách theo SĐT/tên/id', () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const count = jest.fn().mockResolvedValueOnce(5).mockResolvedValueOnce(2);
     const res = await mkAdmin({ user: { findMany, count }, $transaction: tx }).listUsers(1, 20);
-    expect(findMany.mock.calls[0]![0].where).toEqual({ NOT: GUEST_USER_WHERE });
-    expect(count).toHaveBeenNthCalledWith(1, { where: { NOT: GUEST_USER_WHERE } });
+    expect(findMany.mock.calls[0]![0].where).toEqual(REAL_USER_WHERE);
+    expect(count).toHaveBeenNthCalledWith(1, { where: REAL_USER_WHERE });
     expect(count).toHaveBeenNthCalledWith(2, { where: GUEST_USER_WHERE });
     expect(res).toMatchObject({ guestCount: 2, meta: { total: 5 } });
     const all = jest.fn().mockResolvedValue(0);
@@ -134,7 +134,7 @@ describe('AdminService.listUsers — tìm khách theo SĐT/tên/id', () => {
         { id: '0901' },
       ],
     };
-    expect(where).toEqual({ AND: [{ NOT: GUEST_USER_WHERE }, searchWhere] });
+    expect(where).toEqual({ AND: [REAL_USER_WHERE, searchWhere] });
     expect(count).toHaveBeenCalledWith({ where });
   });
 
@@ -283,16 +283,18 @@ describe('AdminController — route + DTO của các endpoint tra cứu', () => 
 });
 
 describe('AdminService.getTodaySummary (R-74)', () => {
-  it('đếm theo ngày giờ VN: mốc hôm nay 00:00 VN, hôm qua, và 7 ngày gồm hôm nay; khách mới không tính khách vãng lai', async () => {
-    const queryRaw = jest.fn().mockResolvedValue([{ orders_today: 3, orders_yesterday: 2, orders_week: 9, rev_today: 300n, rev_yesterday: 200n, rev_week: 900n }]);
-    const count = jest.fn().mockResolvedValueOnce(4).mockResolvedValueOnce(1).mockResolvedValueOnce(11);
-    const admin = mkAdmin({ $queryRaw: queryRaw, user: { count } });
+  it('đếm theo ngày giờ VN: mốc hôm nay 00:00 VN, hôm qua, và 7 ngày gồm hôm nay; mỗi truy vấn nhận đúng mốc', async () => {
+    const queryRaw = jest
+      .fn()
+      .mockResolvedValueOnce([{ orders_today: 3, orders_yesterday: 2, orders_week: 9, rev_today: 300n, rev_yesterday: 200n, rev_week: 900n }])
+      .mockResolvedValueOnce([{ today: 4, yesterday: 1, week: 11 }]);
+    const admin = mkAdmin({ $queryRaw: queryRaw });
     // 2026-10-28 02:00 UTC = 09:00 VN
     const res = await admin.getTodaySummary(new Date('2026-10-28T02:00:00Z'));
     expect(res).toEqual({ orders: { today: 3, yesterday: 2, week: 9 }, revenue: { today: 300, yesterday: 200, week: 900 }, newUsers: { today: 4, yesterday: 1, week: 11 } });
     const dayStart = new Date('2026-10-27T17:00:00Z');
     expect(queryRaw.mock.calls[0]).toContainEqual(dayStart);
-    expect(count.mock.calls[0]![0]).toEqual({ where: { AND: [{ NOT: GUEST_USER_WHERE }, { createdAt: { gte: dayStart } }] } });
-    expect(count.mock.calls[2]![0].where.AND[1].createdAt.gte).toEqual(new Date('2026-10-21T17:00:00Z'));
+    expect(queryRaw.mock.calls[0]).toContainEqual(new Date('2026-10-21T17:00:00Z'));
+    expect(queryRaw.mock.calls[1]).toContainEqual(dayStart);
   });
 });

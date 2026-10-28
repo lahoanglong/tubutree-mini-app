@@ -466,6 +466,12 @@ describe('OpsInboxService: hàng đợi đã có ở tab nhưng từng thiếu t
     expect(find(kho, 'bankTransferToConfirm')).toBeUndefined();
   });
 
+  it('bankTransferToConfirm: hạn tự huỷ chỉ tính đơn mà cron có thể huỷ (autoCancelBlockedAt rỗng)', async () => {
+    const { svc, prisma } = withMocks({ bank: 2, oldest: new Date('2026-10-27T10:00:00Z') });
+    await svc.counts({ role: 'ADMIN' }, now);
+    expect(prisma.order.findFirst.mock.calls[0][0].where).toEqual({ type: 'RETAIL', status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID', paymentMethod: 'BANK_TRANSFER', autoCancelBlockedAt: null });
+  });
+
   it('bankTransferToConfirm: đơn đã quá hạn chờ thì hoursLeft = 0, không âm; không có đơn thì không có hoursLeft', async () => {
     const late = await withMocks({ bank: 1, oldest: new Date('2026-10-20T00:00:00Z') }).svc.counts({ role: 'ADMIN' }, now);
     expect(find(late, 'bankTransferToConfirm')?.hoursLeft).toBe(0);
