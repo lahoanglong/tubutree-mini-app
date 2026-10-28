@@ -8,6 +8,9 @@ function isTransientError(error: unknown): boolean {
   return !status || status >= 500 || status === 408 || status === 429;
 }
 
+const CATALOG_STALE_MS = 60_000;
+const CATALOG_KEYS = [['products'], ['for-you'], ['categories'], ['brands']] as const;
+
 function isOffline(): boolean {
   return typeof navigator !== 'undefined' && navigator.onLine === false;
 }
@@ -25,7 +28,7 @@ function isOffline(): boolean {
  *    gửi request thật, lỗi mạng rơi vào onError (hiện câu "Có vẻ mất mạng…"), không có hàng đợi nào chạy lại về sau.
  */
 export function createQueryClient(): QueryClient {
-  return new QueryClient({
+  const client = new QueryClient({
     defaultOptions: {
       queries: {
         networkMode: 'always',
@@ -51,4 +54,7 @@ export function createQueryClient(): QueryClient {
       },
     },
   });
+  // Danh sách sản phẩm đổi chậm (đồng bộ Pancake ~15 phút): quay lại trong 60 giây thì dùng lại, không gọi lại cả sort=best_seller.
+  for (const key of CATALOG_KEYS) client.setQueryDefaults(key, { staleTime: CATALOG_STALE_MS });
+  return client;
 }

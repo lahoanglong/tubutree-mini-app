@@ -213,11 +213,11 @@ function errorMessage(error: unknown, timeoutMessage: string): string {
     // Message backend 4xx là nghiệp vụ (viết sẵn tiếng Việt) — hiển thị thẳng; lời tiếng Anh của framework thì câu chung.
     if (backendMsg && error.response && error.response.status < 500) return businessMsg ?? vi.errors.generic;
     if (error.code === 'ECONNABORTED') return timeoutMessage;
-    // Không có response: phân biệt MẤT MẠNG thật (navigator.onLine=false) với server/CORS không
-    // phản hồi (vẫn có mạng) — tránh báo "mất mạng" sai khi thực chất là lỗi máy chủ.
+    // Không có response: máy báo offline thì nói mất mạng; còn lại (sóng yếu, wifi không ra mạng) dùng câu trung tính,
+    // không đổ lỗi cho máy chủ. Chỉ 5xx mới nói máy chủ bận.
     if (!error.response) {
       const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-      return offline ? vi.errors.offline : vi.errors.server;
+      return offline ? vi.errors.offline : vi.errors.network;
     }
     return vi.errors.server;
   }

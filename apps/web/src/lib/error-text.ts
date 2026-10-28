@@ -2,6 +2,7 @@ import { ApiError, GENERIC_ERROR, NetworkError } from '@/lib/client-api';
 
 const RATE_LIMITED = 'Bạn thao tác hơi nhanh, đợi vài giây rồi thử lại nhé.';
 const SERVER_BUSY = 'Máy chủ đang bận, thử lại nhé.';
+const NO_RESPONSE = 'Chưa kết nối được tới Tubu Tree. Kiểm tra mạng rồi thử lại nhé.';
 const OFFLINE = 'Có vẻ mất mạng. Kiểm tra kết nối rồi thử lại nhé.';
 const GENERIC = 'Có chút trục trặc, thử lại nhé';
 export const SESSION_EXPIRED_TEXT = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
@@ -36,7 +37,7 @@ function errorText(error: unknown, timeout: string): string {
   }
   if (error instanceof NetworkError) {
     if (error.timedOut) return timeout;
-    return typeof navigator !== 'undefined' && navigator.onLine === false ? OFFLINE : SERVER_BUSY;
+    return typeof navigator !== 'undefined' && navigator.onLine === false ? OFFLINE : NO_RESPONSE;
   }
   // Lỗi do chính web ném (không qua máy chủ) kèm lời tiếng Việt tự viết thì giữ; lời tiếng Anh của trình duyệt/thư viện (Failed to fetch…) thì câu chung.
   if (error instanceof Error && /[^\x00-\x7F]/.test(error.message)) return error.message;
