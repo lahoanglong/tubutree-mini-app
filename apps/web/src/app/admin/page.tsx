@@ -80,10 +80,13 @@ import {
   type PancakeFilter,
   type InvoiceFilter,
   type OrderListExtra,
+  type OrderQueue,
   orderExtraFilters,
   downloadOrdersCsv,
   downloadUsersCsv,
   getOpsAccess,
+  getOpsInbox,
+  OPS_INBOX_QUERY_KEY,
   type InboxKey,
   type StaffPermission,
   type AdminOrder,
@@ -105,6 +108,8 @@ import { ReturnRow } from '@/components/admin/return-request-row';
 import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
 import { ConfigItem } from '@/components/admin/config-item';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
+import { isDirectVideoUrl } from '@tubutree/app-core/video-url';
+import { useDebounced } from '@/lib/use-debounced';
 import { FeatureFlagsCard } from '@/components/admin/feature-flags-card';
 import { PartnerRulesCard } from '@/components/admin/partner-rules-card';
 import { ShopInfoCard } from '@/components/admin/shop-info-card';
@@ -123,7 +128,7 @@ import { AccountDeletionPanel } from '@/components/admin/account-deletion-panel'
 import { useConfirm } from '@/components/admin/confirm-dialog';
 import { CouponList } from '@/components/admin/coupon-list';
 import { InvoiceFilterChips } from '@/components/admin/invoice-filter-chips';
-import { VnDateInput, datePresets } from '@/components/admin/vn-date-input';
+import { VnDateInput, VnDateTimeInput, datePresets } from '@/components/admin/vn-date-input';
 import { OrderExtraFilters } from '@/components/admin/order-extra-filters';
 import { OrderInvoicePanel, OrderReferralPanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
 import { DealerTierSelect } from '@/components/admin/dealer-tier-select';
@@ -388,25 +393,39 @@ function firstAllowedTab(allowed: ReadonlySet<Tab>): Tab {
  * F5 không mất chỗ đang xem. Đọc window.location sau khi mount (không dùng useSearchParams — trang
  * client thuần, tránh bắt buộc Suspense boundary khi build).
  */
-function readUrlState(): { tab: Tab | null; recycling: RecyclingFilter | ''; pancake: PancakeFilter | '' } {
-  if (typeof window === 'undefined') return { tab: null, recycling: '', pancake: '' };
+type OrdersUrlExtras = { status: string; invoice: InvoiceFilter | ''; queue: OrderQueue | '' };
+const NO_ORDERS_URL_EXTRAS: OrdersUrlExtras = { status: '', invoice: '', queue: '' };
+
+function readUrlState(): { tab: Tab | null; recycling: RecyclingFilter | ''; pancake: PancakeFilter | ''; orders: OrdersUrlExtras } {
+  if (typeof window === 'undefined') return { tab: null, recycling: '', pancake: '', orders: NO_ORDERS_URL_EXTRAS };
   const sp = new URLSearchParams(window.location.search);
   const t = sp.get('tab');
   const r = sp.get('recycling');
   const p = sp.get('pancake');
+  const s = sp.get('status');
+  const i = sp.get('invoice');
+  const q = sp.get('queue');
   return {
     tab: t && TAB_KEYS.has(t as Tab) ? (t as Tab) : null,
     recycling: r === 'attention' || r === 'all' ? r : '',
     pancake: p === 'attention' || p === 'unsynced' ? p : '',
+    orders: {
+      status: s && ORDER_STATUS_CHIPS.some((c) => c.k === s) ? s : '',
+      invoice: i === 'pending' || i === 'issued' || i === 'all' ? i : '',
+      queue: q === 'bank_transfer_to_confirm' || q === 'dealer_transfer_to_confirm' ? q : '',
+    },
   };
 }
 
-function writeUrlState(tab: Tab, recycling: RecyclingFilter | '', pancake: PancakeFilter | '' = '') {
+function writeUrlState(tab: Tab, recycling: RecyclingFilter | '', pancake: PancakeFilter | '' = '', orders: OrdersUrlExtras = NO_ORDERS_URL_EXTRAS) {
   if (typeof window === 'undefined') return;
   const sp = new URLSearchParams();
   if (tab !== DEFAULT_TAB) sp.set('tab', tab);
   if (tab === 'orders' && recycling) sp.set('recycling', recycling);
   if (tab === 'orders' && pancake) sp.set('pancake', pancake);
+  if (tab === 'orders' && orders.status) sp.set('status', orders.status);
+  if (tab === 'orders' && orders.invoice) sp.set('invoice', orders.invoice);
+  if (tab === 'orders' && orders.queue) sp.set('queue', orders.queue);
   const qs = sp.toString();
   window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
 }
@@ -416,7 +435,7 @@ export default function AdminPage() {
   const [tab, setTabState] = useState<Tab>(DEFAULT_TAB);
   const [ordersRecycling, setOrdersRecycling] = useState<RecyclingFilter | ''>('');
   const [ordersPancake, setOrdersPancake] = useState<PancakeFilter | ''>('');
-  const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter; status?: string; extra?: OrderListExtra; from?: string; to?: string } | null>(null);
+  const [orderSeed, setOrderSeed] = useState<{ search: string; n: number; invoice?: InvoiceFilter; status?: string; extra?: OrderListExtra; from?: string; to?: string; userLabel?: string } | null>(null);
   const [productsSeed, setProductsSeed] = useState(0);
   const [storefrontSeed, setStorefrontSeed] = useState(0);
   const [deletionSeed, setDeletionSeed] = useState(0);
@@ -440,6 +459,16 @@ export default function AdminPage() {
     if (u.tab) setTabState(u.tab);
     if (u.recycling) setOrdersRecycling(u.recycling);
     if (u.pancake) setOrdersPancake(u.pancake);
+    // Link/F5 mang trạng thái, hoá đơn hoặc hàng đợi chuyển khoản: gieo cho tab Đơn hàng mở đúng bộ lọc đó.
+    if (u.tab === 'orders' && (u.orders.status || u.orders.invoice || u.orders.queue)) {
+      setOrderSeed({
+        search: '',
+        n: 1,
+        status: u.orders.status || undefined,
+        invoice: u.orders.invoice || undefined,
+        extra: u.orders.queue ? { queue: u.orders.queue, order: 'asc' } : undefined,
+      });
+    }
   }, []);
 
   // Link mang tab bị cấm (vd KE_TOAN mở ?tab=users) vẫn hiện tab đầu được phép; sửa URL để link gửi tiếp và F5 không mang tab sai.
@@ -479,6 +508,14 @@ export default function AdminPage() {
     setOrdersRecycling('');
     setOrdersPancake('');
     setOrderSeed({ search: code, n: Date.now() });
+    setTabState('orders');
+    writeUrlState('orders', '');
+  };
+  // Từ hồ sơ khách: toàn bộ đơn của người đó (mới nhất trước), có nhãn tên để biết đang lọc ai.
+  const openUserOrders = (userId: string, label: string) => {
+    setOrdersRecycling('');
+    setOrdersPancake('');
+    setOrderSeed({ search: '', n: Date.now(), extra: { userId, order: 'desc' }, userLabel: label });
     setTabState('orders');
     writeUrlState('orders', '');
   };
@@ -661,7 +698,10 @@ export default function AdminPage() {
               initialExtra={orderSeed?.extra}
               initialFrom={orderSeed?.from}
               initialTo={orderSeed?.to}
+              initialUserLabel={orderSeed?.userLabel}
               isAdmin={isAdmin}
+              canViewProfile={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')}
+              inboxEnabled={allowed.has('inbox')}
               canFinance={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KE_TOAN')}
               canWarehouse={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO')}
               recycling={ordersRecycling}
@@ -680,7 +720,7 @@ export default function AdminPage() {
           )}
           {active === 'cashback' && <CashbackTab />}
           {active === 'posCredits' && <PosCreditsTab />}
-          {active === 'users' && <UsersTab isAdmin={isAdmin} />}
+          {active === 'users' && <UsersTab isAdmin={isAdmin} onOpenOrder={openOrderByCode} onOpenUserOrders={openUserOrders} />}
           {active === 'users' && isAdmin && <AccountDeletionPanel seed={deletionSeed} />}
           {active === 'reviews' && <ReviewsTab />}
           {active === 'subscriptions' && <SubscriptionsTab />}
@@ -1168,6 +1208,9 @@ function OrdersTab({
   initialExtra,
   initialFrom,
   initialTo,
+  initialUserLabel,
+  canViewProfile = false,
+  inboxEnabled = true,
 }: {
   recycling: RecyclingFilter | '';
   onRecyclingChange: (r: RecyclingFilter | '') => void;
@@ -1185,6 +1228,12 @@ function OrdersTab({
   /** Khoảng ngày đặt mở sẵn, 'YYYY-MM-DD' giờ VN (số "Đơn hôm nay" của trang Hôm nay). */
   initialFrom?: string;
   initialTo?: string;
+  /** Tên khách đang lọc (từ hồ sơ khách) để ghi nhãn bộ lọc `extra.userId`. */
+  initialUserLabel?: string;
+  /** Xem hồ sơ khách từ chi tiết đơn: API hồ sơ chỉ mở cho ADMIN và nhân viên CSKH. */
+  canViewProfile?: boolean;
+  /** Số hàng đợi chuyển khoản lấy từ hộp việc, chỉ ADMIN và nhóm việc được mở hộp việc mới gọi được. */
+  inboxEnabled?: boolean;
 }) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState(initialStatus ?? '');
@@ -1195,6 +1244,10 @@ function OrdersTab({
   const [from, setFrom] = useState(initialFrom ?? '');
   const [to, setTo] = useState(initialTo ?? '');
   const [extra, setExtra] = useState<OrderListExtra>(initialExtra ?? {});
+  const [userLabel, setUserLabel] = useState(initialUserLabel ?? '');
+  const [profileId, setProfileId] = useState<string | null>(null);
+  // Dòng báo sau khi xác nhận tiền: đơn vừa ghi nhận rời hàng đợi nên câu báo trong chi tiết đơn biến mất cùng nó.
+  const [paidNote, setPaidNote] = useState<{ code: string; remaining: number | null } | null>(null);
   const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [exporting, setExporting] = useState(false);
   // Điện thoại: chi tiết đơn mở trong ngăn kéo thay vì chen vào giữa bảng đang cuộn ngang.
@@ -1240,6 +1293,12 @@ function OrdersTab({
     }
   };
   const expandedOrder = q.data?.data.find((o) => (o.id || o.code) === expandedId) ?? null;
+  // F5 và link gửi đồng nghiệp giữ trạng thái, hoá đơn và hàng đợi chuyển khoản (thu gom/Pancake do trang cha ghi).
+  useEffect(() => {
+    writeUrlState('orders', recycling, pancake, { status, invoice, queue: extra.queue ?? '' });
+  }, [recycling, pancake, status, invoice, extra.queue]);
+  const inboxQ = useQuery({ queryKey: OPS_INBOX_QUERY_KEY, queryFn: getOpsInbox, refetchInterval: 60_000, enabled: inboxEnabled });
+  const inboxCount = (k: InboxKey) => inboxQ.data?.items.find((i) => i.key === k)?.count;
   const attentionQ = useQuery({ queryKey: ['admin-recycling-count'], queryFn: countRecyclingAttention });
   const pancakeQ = useQuery({ queryKey: PANCAKE_ATTENTION_COUNT_KEY, queryFn: countPancakeAttention });
   const pancakeCount = pancakeQ.data ?? 0;
@@ -1247,12 +1306,14 @@ function OrdersTab({
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
+    setPaidNote(null);
     setSearch(searchInput.trim());
   };
 
   const handleStatusChange = (newStatus: string) => {
     setStatus(newStatus);
     setPage(1);
+    setPaidNote(null);
   };
 
   const totalPages = q.data ? Math.ceil(q.data.meta.total / q.data.meta.limit) : 1;
@@ -1313,6 +1374,7 @@ function OrdersTab({
   const extraFiltersEl = (
     <OrderExtraFilters
       value={extra}
+      userLabel={userLabel}
       onChange={(v) => {
         setPage(1);
         setExpandedId(null);
@@ -1324,6 +1386,49 @@ function OrdersTab({
   const resetPaging = () => {
     setPage(1);
     setExpandedId(null);
+    setPaidNote(null);
+  };
+  const toggleQueue = (queue: OrderQueue) => {
+    resetPaging();
+    if (extra.queue === queue) {
+      const { queue: _queue, ...rest } = extra;
+      setExtra(rest);
+      return;
+    }
+    setStatus('PENDING_PAYMENT');
+    setExtra({ ...extra, queue, order: 'asc' });
+  };
+  const queueChips = [
+    { id: 'queue-bank', label: `Chuyển khoản chờ tiền${inboxCount('bankTransferToConfirm') !== undefined ? ` (${inboxCount('bankTransferToConfirm')})` : ''}`, on: extra.queue === 'bank_transfer_to_confirm', flip: () => toggleQueue('bank_transfer_to_confirm') },
+    { id: 'queue-dealer', label: `Đại lý chờ tiền${inboxCount('dealerTransferToConfirm') !== undefined ? ` (${inboxCount('dealerTransferToConfirm')})` : ''}`, on: extra.queue === 'dealer_transfer_to_confirm', flip: () => toggleQueue('dealer_transfer_to_confirm') },
+  ];
+  // Xác nhận tiền xong đơn rời hàng đợi: giữ câu báo trên danh sách, và trên điện thoại mở luôn đơn kế tiếp thay vì đóng ngăn kéo.
+  const onPaid = (o: AdminOrder) => {
+    const list = q.data?.data ?? [];
+    const at = list.findIndex((x) => (x.id || x.code) === (o.id || o.code));
+    const total = q.data?.meta.total;
+    setPaidNote({ code: o.code, remaining: extra.queue && total !== undefined ? Math.max(0, total - 1) : null });
+    if (narrow && extra.queue) {
+      const next = list[at + 1] ?? (at > 0 ? list[at - 1] : undefined);
+      setExpandedId(next ? next.id || next.code : null);
+    }
+  };
+  // Từ hồ sơ khách sang danh sách đơn: bỏ mọi bộ lọc cũ để đơn cần xem không bị ẩn.
+  const showOrders = (next: { search?: string; userId?: string; label?: string }) => {
+    setProfileId(null);
+    setExpandedId(null);
+    setPaidNote(null);
+    setPage(1);
+    setStatus('');
+    setInvoice('');
+    setFrom('');
+    setTo('');
+    setSearchInput(next.search ?? '');
+    setSearch(next.search ?? '');
+    setExtra(next.userId ? { userId: next.userId, order: 'desc' } : {});
+    setUserLabel(next.label ?? '');
+    onRecyclingChange('');
+    onPancakeChange('');
   };
   const queueEl = narrow ? (
     // Điện thoại: một nhóm "Cần xử lý" thay cho ba hàng chip mỗi hàng một "Mọi đơn"; bấm chip đang bật để tắt.
@@ -1332,13 +1437,14 @@ function OrdersTab({
       <div className="flex flex-wrap gap-2">
         {(
           [
+            ...queueChips,
             { id: 'rec-attention', label: `Cần xử lý thu gom${attentionQ.data !== undefined ? ` (${attentionQ.data})` : ''}`, on: recycling === 'attention', flip: () => onRecyclingChange(recycling === 'attention' ? '' : 'attention') },
             { id: 'rec-all', label: 'Có thu gom', on: recycling === 'all', flip: () => onRecyclingChange(recycling === 'all' ? '' : 'all') },
             { id: 'pk-attention', label: `Cần xử lý Pancake${pancakeQ.data !== undefined ? ` (${pancakeQ.data})` : ''}`, on: pancake === 'attention', flip: () => onPancakeChange(pancake === 'attention' ? '' : 'attention') },
             { id: 'pk-unsynced', label: 'Chưa lên Pancake', on: pancake === 'unsynced', flip: () => onPancakeChange(pancake === 'unsynced' ? '' : 'unsynced') },
             { id: 'vat-pending', label: `VAT chờ xuất${invoicePendingQ.data !== undefined ? ` (${invoicePendingQ.data})` : ''}`, on: invoice === 'pending', flip: () => setInvoice(invoice === 'pending' ? '' : 'pending') },
             { id: 'vat-issued', label: 'VAT đã xuất', on: invoice === 'issued', flip: () => setInvoice(invoice === 'issued' ? '' : 'issued') },
-          ] as const
+          ]
         ).map((c) => (
           <button
             key={c.id}
@@ -1357,6 +1463,14 @@ function OrdersTab({
     </div>
   ) : (
     <>
+      {/* Hàng đợi chờ nhận tiền chuyển khoản (số từ hộp việc) */}
+      <div role="group" aria-label="Chờ nhận tiền chuyển khoản" className="flex flex-wrap items-center gap-2">
+        {queueChips.map((c) => (
+          <button key={c.id} type="button" aria-pressed={c.on} onClick={c.flip} className={chipClass(c.on)}>
+            {c.label}
+          </button>
+        ))}
+      </div>
       {/* Bộ lọc đơn thu kèm Gomdon */}
       <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Lọc đơn thu kèm Gomdon">
         {RECYCLING_FILTERS.map((f) => {
@@ -1565,6 +1679,33 @@ function OrdersTab({
           </button>
         </p>
       )}
+      {narrow && extra.userId && (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
+          Đang xem đơn của {userLabel || 'một khách'}.
+          <button
+            type="button"
+            onClick={() => {
+              const { userId: _userId, ...rest } = extra;
+              resetPaging();
+              setExtra(rest);
+            }}
+            className={BTN_SMALL}
+          >
+            Bỏ lọc khách
+          </button>
+        </p>
+      )}
+      {paidNote && (
+        <p role="status" className="flex flex-wrap items-center gap-2 rounded-control bg-success-bg px-3 py-2 text-sm text-success-fg">
+          <span>
+            Đã ghi nhận đơn {paidNote.code}.
+            {paidNote.remaining === null ? '' : paidNote.remaining === 0 ? ' Không còn đơn chờ.' : ` Còn ${paidNote.remaining} đơn chờ.`}
+          </span>
+          <button type="button" onClick={() => setPaidNote(null)} className={BTN_SMALL}>
+            Ẩn
+          </button>
+        </p>
+      )}
 
       {/* Orders Table */}
       {q.isError && (
@@ -1717,7 +1858,7 @@ function OrdersTab({
                       {isExpanded && !narrow && (
                         <tr className="border-t border-stone-100 bg-stone-50">
                           <td colSpan={7} className="px-4 py-3">
-                            <OrderDetailBody o={o} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} />
+                            <OrderDetailBody o={o} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} onPaid={() => onPaid(o)} onOpenProfile={canViewProfile && o.user?.id ? () => setProfileId(o.user!.id) : undefined} />
                           </td>
                         </tr>
                       )}
@@ -1758,8 +1899,18 @@ function OrdersTab({
               {PAYMENT_METHOD_LABELS[expandedOrder.paymentMethod] ?? expandedOrder.paymentMethod} · {formatDateTime(expandedOrder.createdAt)}
             </span>
           </div>
-          <OrderDetailBody o={expandedOrder} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} />
+          <OrderDetailBody o={expandedOrder} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} onPaid={() => onPaid(expandedOrder)} onOpenProfile={canViewProfile && expandedOrder.user?.id ? () => setProfileId(expandedOrder.user!.id) : undefined} />
         </SideDrawer>
+      )}
+
+      {profileId && (
+        <UserDetailDrawer
+          userId={profileId}
+          isAdmin={isAdmin}
+          onClose={() => setProfileId(null)}
+          onOpenOrder={(code) => showOrders({ search: code })}
+          onOpenUserOrders={(id, label) => showOrders({ userId: id, label })}
+        />
       )}
 
       {/* Pagination Bar */}
@@ -1803,6 +1954,24 @@ function PaymentStatusShort({ order: o }: { order: AdminOrder }) {
   );
 }
 
+/** Dòng "Khách: tên · SĐT" đầu chi tiết đơn; có `onOpenProfile` thì kèm nút mở hồ sơ khách (đơn, sổ ví, Điểm Xanh). */
+function OrderCustomerLine({ order: o, onOpenProfile }: { order: AdminOrder; onOpenProfile?: () => void }) {
+  if (!o.user) return null;
+  return (
+    <div data-order-customer className="flex flex-wrap items-center gap-x-2 text-xs text-stone-700">
+      <span>
+        <span className="font-semibold">Khách:</span> {o.user.fullName ?? 'Khách lẻ'}
+        {o.user.phone ? ` · ${o.user.phone}` : ''}
+      </span>
+      {onOpenProfile && (
+        <button type="button" onClick={onOpenProfile} className="min-h-[44px] font-semibold text-forest-700 underline-offset-2 hover:underline sm:min-h-0">
+          Xem hồ sơ
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Đơn quà/đặt hộ: người nhận khác chủ tài khoản — hiện ra để kết quả tìm theo tên người nhận không trông như khớp nhầm. */
 function OrderRecipientLine({ order: o }: { order: AdminOrder }) {
   const recipient = o.shippingAddress?.recipient?.trim();
@@ -1817,9 +1986,26 @@ function OrderRecipientLine({ order: o }: { order: AdminOrder }) {
 }
 
 /** Chi tiết + thao tác một đơn — mở rộng trong bảng trên máy tính, trong ngăn kéo trên điện thoại. */
-function OrderDetailBody({ o, isAdmin, canFinance, canWarehouse }: { o: AdminOrder; isAdmin: boolean; canFinance: boolean; canWarehouse: boolean }) {
+function OrderDetailBody({
+  o,
+  isAdmin,
+  canFinance,
+  canWarehouse,
+  onPaid,
+  onOpenProfile,
+}: {
+  o: AdminOrder;
+  isAdmin: boolean;
+  canFinance: boolean;
+  canWarehouse: boolean;
+  /** Xác nhận tiền xong: danh sách giữ câu báo và (điện thoại, đang làm hàng đợi) mở đơn kế tiếp. */
+  onPaid?: () => void;
+  /** Có thì dòng "Khách" có nút "Xem hồ sơ" (chỉ ADMIN và nhân viên CSKH được xem hồ sơ khách). */
+  onOpenProfile?: () => void;
+}) {
   return (
     <div className="space-y-3">
+      <OrderCustomerLine order={o} onOpenProfile={onOpenProfile} />
       <OrderPaymentSummary order={o} isAdmin={isAdmin} />
       {canWarehouse && <PancakeAttentionPanel order={o} />}
       {canWarehouse && <PancakeSyncPanel order={o} />}
@@ -1879,7 +2065,7 @@ function OrderDetailBody({ o, isAdmin, canFinance, canWarehouse }: { o: AdminOrd
       {canFinance && <DealerCreditPanel order={o} />}
 
       {/* Nút trạng thái + "Đã nhận tiền" theo allowedTransitions/canConfirmPayment của API (C-024). */}
-      <OrderStatusActions order={o} canConfirmPayment={canFinance} canResync={isAdmin} canRecordLate={isAdmin} />
+      <OrderStatusActions order={o} canConfirmPayment={canFinance} canResync={isAdmin} canRecordLate={isAdmin} onPaid={onPaid ? () => onPaid() : undefined} />
 
       <OrderStatusHistory order={o} />
     </div>
@@ -1906,13 +2092,15 @@ function ReturnsTab({
   initialFilter?: ReturnsFilter;
 }) {
   const [filter, setFilter] = useState<ReturnsFilter>(initialFilter);
+  const [searchInput, setSearchInput] = useState('');
+  const search = useDebounced(searchInput.trim(), 300);
   // Trước đây 1 trang (mặc định 20 của BE) và vứt meta → quá 20 yêu cầu thì các yêu cầu CŨ NHẤT (sát hạn
   // 7 ngày nhất) biến mất im lặng. Nay "Tải thêm" + hiện tổng.
   const oldestFirst = filter === 'REQUESTED' || filter === 'TO_RECEIVE';
   const q = useInfiniteQuery({
-    queryKey: ['admin-returns', filter],
+    queryKey: ['admin-returns', filter, search],
     queryFn: ({ pageParam }) =>
-      listReturnRequests(filter || undefined, pageParam, undefined, oldestFirst ? 'asc' : undefined),
+      listReturnRequests(filter || undefined, pageParam, undefined, oldestFirst ? 'asc' : undefined, search || undefined),
     initialPageParam: 1,
     getNextPageParam: (last) => nextPageParam(last.meta),
   });
@@ -1922,18 +2110,29 @@ function ReturnsTab({
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <select
-          aria-label="Lọc yêu cầu đổi/trả theo trạng thái"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value as ReturnsFilter)}
-          className={`${FIELD_CLASS} ${TOUCH_H}`}
-        >
-          {(Object.keys(RETURNS_FILTER_LABELS) as ReturnsFilter[]).map((s) => (
-            <option key={s} value={s}>
-              {RETURNS_FILTER_LABELS[s]}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            aria-label="Tìm yêu cầu đổi/trả theo mã đơn hoặc SĐT khách"
+            placeholder="Mã đơn hoặc SĐT khách"
+            maxLength={100}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className={`${FIELD_CLASS} ${TOUCH_H} w-full sm:w-56`}
+          />
+          <select
+            aria-label="Lọc yêu cầu đổi/trả theo trạng thái"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as ReturnsFilter)}
+            className={`${FIELD_CLASS} ${TOUCH_H}`}
+          >
+            {(Object.keys(RETURNS_FILTER_LABELS) as ReturnsFilter[]).map((s) => (
+              <option key={s} value={s}>
+                {RETURNS_FILTER_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </div>
         <span className="text-xs text-stone-500">
           Khách trả theo dòng và số lượng. Duyệt: xem số tiền tính sẵn rồi xác nhận (hoàn tiền, đảo điểm/hoa hồng);
           kho chỉ cộng khi bấm &quot;Đã nhận hàng về&quot;.
@@ -1950,7 +2149,7 @@ function ReturnsTab({
         {q.isError && <LoadError message="Không tải được danh sách yêu cầu đổi/trả." onRetry={() => void q.refetch()} />}
         {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách yêu cầu…</p>}
         {view.items.map((r) => <ReturnRow key={r.id} item={r} canReview={canReview} canReceive={canReceive} />)}
-        {q.data && view.items.length === 0 && <Empty>Không có yêu cầu đổi/trả nào.</Empty>}
+        {q.data && view.items.length === 0 && <Empty>{search ? `Không có yêu cầu đổi/trả nào khớp "${search}".` : 'Không có yêu cầu đổi/trả nào.'}</Empty>}
       </div>
       <LoadMoreButton
         hasMore={view.hasMore}
@@ -1964,7 +2163,7 @@ function ReturnsTab({
 
 const ROLES: UserRole[] = ['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN'];
 
-function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
+function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?: boolean; onOpenOrder?: (code: string) => void; onOpenUserOrders?: (userId: string, label: string) => void }) {
   // Trước đây gọi listUsers(1) CỐ ĐỊNH trang 1, không có UI phân trang — hệ thống có hơn 20
   // người dùng (limit mặc định của BE) thì phần còn lại vĩnh viễn không xem/không cấp quyền
   // được. Thêm page state + nút chuyển trang, mirror đúng pattern OrdersTab cùng file.
@@ -2157,7 +2356,7 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
         </>
       )}
       {dialog}
-      {detailId && <UserDetailDrawer userId={detailId} isAdmin={isAdmin} onClose={() => setDetailId(null)} />}
+      {detailId && <UserDetailDrawer userId={detailId} isAdmin={isAdmin} onClose={() => setDetailId(null)} onOpenOrder={onOpenOrder} onOpenUserOrders={onOpenUserOrders} />}
     </div>
   );
 }
@@ -2380,7 +2579,7 @@ function ConfigTab({ onOpenSupportChat }: { onOpenSupportChat?: () => void }) {
 }
 
 /**
- * `<input type="date">` trả "2026-09-30". `new Date("2026-09-30")` được JS hiểu theo UTC, tức
+ * Ô ngày trả "2026-09-30". `new Date("2026-09-30")` được JS hiểu theo UTC, tức
  * 07:00 sáng giờ VN — voucher "đến hết 30/9" chết từ 7h sáng 30/9, còn voucher "từ 1/10" không
  * dùng được suốt 7 tiếng đầu ngày. Ghép giờ địa phương trước khi dựng Date để mốc đúng ý admin.
  */
@@ -2407,6 +2606,7 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
   const num = (v: string) => (v.trim() === '' ? undefined : Number(v));
   const [startPending, setStartPending] = useState(false);
   const [endPending, setEndPending] = useState(false);
+  const endBeforeStart = !!f.endAt && !!f.startAt && f.endAt < f.startAt;
   const create = useMutation({
     mutationFn: () =>
       createCoupon({
@@ -2512,7 +2712,8 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
           </Field>
         </div>
       </div>
-      <button onClick={() => create.mutate()} disabled={!f.code || startPending || endPending || (!!f.endAt && !!f.startAt && f.endAt < f.startAt)} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
+      <button onClick={() => create.mutate()} disabled={!f.code || startPending || endPending || endBeforeStart} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
+      {endBeforeStart && <p role="alert" className="text-xs text-danger-fg">Ngày hết hạn phải sau ngày bắt đầu.</p>}
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
     )}
@@ -2599,6 +2800,8 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
     onError: onRowError,
   });
   const [promo, setPromo] = useState({ title: '', subtitle: '', startAt: '', endAt: '' });
+  const [promoStartPending, setPromoStartPending] = useState(false);
+  const [promoEndPending, setPromoEndPending] = useState(false);
   const addPromo = useMutation({
     mutationFn: () => createPromotion(brand.id, {
       title: promo.title.trim(), subtitle: promo.subtitle.trim() || undefined,
@@ -2709,12 +2912,12 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
                 </Field>
               </div>
               <Field label="Bắt đầu từ ngày">
-                <input type="date" aria-label="Khuyến mãi bắt đầu từ ngày" value={promo.startAt} onChange={(e) => setPromo({ ...promo, startAt: e.target.value })} className={field} />
+                <VnDateInput ariaLabel="Khuyến mãi bắt đầu từ ngày" value={promo.startAt} onChange={(v) => setPromo({ ...promo, startAt: v })} onPendingChange={setPromoStartPending} className={field} />
               </Field>
               <Field label="Kết thúc ngày">
-                <input type="date" aria-label="Khuyến mãi kết thúc ngày" value={promo.endAt} onChange={(e) => setPromo({ ...promo, endAt: e.target.value })} className={field} />
+                <VnDateInput ariaLabel="Khuyến mãi kết thúc ngày" value={promo.endAt} min={promo.startAt || undefined} onChange={(v) => setPromo({ ...promo, endAt: v })} onPendingChange={setPromoEndPending} className={field} />
               </Field>
-              <button onClick={() => addPromo.mutate()} disabled={!promo.title.trim()} className={BTN_PRIMARY}>Thêm KM</button>
+              <button onClick={() => addPromo.mutate()} disabled={!promo.title.trim() || promoStartPending || promoEndPending} className={BTN_PRIMARY}>Thêm KM</button>
             </div>
             {addPromo.isError && <p className="mt-1 text-xs text-danger-fg">{(addPromo.error as Error).message}</p>}
           </div>
@@ -2875,6 +3078,8 @@ function FlashSalesTab() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-flash-sales'], queryFn: listFlashSales });
   const [f, setF] = useState({ title: '', startAt: '', endAt: '' });
+  const [startPending, setStartPending] = useState(false);
+  const [endPending, setEndPending] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const create = useMutation({
     mutationFn: () =>
@@ -2908,14 +3113,14 @@ function FlashSalesTab() {
             </Field>
           </div>
           <Field label="Bắt đầu lúc">
-            <input type="datetime-local" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
+            <VnDateTimeInput ariaLabel="Giờ vàng bắt đầu lúc" value={f.startAt} onChange={(v) => setF({ ...f, startAt: v })} onPendingChange={setStartPending} className={field} />
           </Field>
           <Field label="Kết thúc lúc">
-            <input type="datetime-local" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
+            <VnDateTimeInput ariaLabel="Giờ vàng kết thúc lúc" value={f.endAt} onChange={(v) => setF({ ...f, endAt: v })} onPendingChange={setEndPending} className={field} />
           </Field>
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
-            disabled={!f.title.trim() || !f.startAt || !f.endAt || create.isPending}
+            disabled={!f.title.trim() || !f.startAt || !f.endAt || startPending || endPending || create.isPending}
             className={BTN_PRIMARY}
           >
             {create.isPending ? 'Đang tạo…' : 'Tạo đợt'}
@@ -2933,7 +3138,7 @@ function FlashSalesTab() {
   );
 }
 
-/** Giá trị cho `<input type="datetime-local">` (giờ máy admin), cùng cách đọc với lúc tạo đợt: `new Date(value)`. */
+/** Giá trị cho VnDateTimeInput "yyyy-mm-ddTHH:mm" (giờ máy admin), cùng cách đọc với lúc tạo đợt: `new Date(value)`. */
 function toDatetimeLocal(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
@@ -2991,6 +3196,8 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ title: '', startAt: '', endAt: '' });
+  const [draftStartPending, setDraftStartPending] = useState(false);
+  const [draftEndPending, setDraftEndPending] = useState(false);
   const startEdit = () => {
     setDraft({ title: sale.title, startAt: toDatetimeLocal(sale.startAt), endAt: toDatetimeLocal(sale.endAt) });
     setRowErr(null);
@@ -3066,20 +3273,21 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
             </Field>
           </div>
           <Field label="Bắt đầu lúc (sửa)">
-            <input
-              type="datetime-local"
+            <VnDateTimeInput
+              ariaLabel="Giờ vàng bắt đầu lúc (sửa)"
               value={draft.startAt}
-              onChange={(e) => setDraft({ ...draft, startAt: e.target.value })}
+              onChange={(v) => setDraft({ ...draft, startAt: v })}
+              onPendingChange={setDraftStartPending}
               disabled={!notStarted}
               className={`${field} disabled:cursor-not-allowed disabled:opacity-60`}
             />
           </Field>
           <Field label="Kết thúc lúc (sửa)">
-            <input type="datetime-local" value={draft.endAt} onChange={(e) => setDraft({ ...draft, endAt: e.target.value })} className={field} />
+            <VnDateTimeInput ariaLabel="Giờ vàng kết thúc lúc (sửa)" value={draft.endAt} onChange={(v) => setDraft({ ...draft, endAt: v })} onPendingChange={setDraftEndPending} className={field} />
           </Field>
           <button
             onClick={() => saveEdit.mutate()}
-            disabled={!changed || !draft.title.trim() || !draft.startAt || !draft.endAt || saveEdit.isPending}
+            disabled={!changed || !draft.title.trim() || !draft.startAt || !draft.endAt || draftStartPending || draftEndPending || saveEdit.isPending}
             className={BTN_PRIMARY}
           >
             {saveEdit.isPending ? 'Đang lưu…' : 'Lưu thay đổi'}
@@ -3699,6 +3907,17 @@ function ContentKitEditor({
 }
 
 // ── CTV Academy (khoá học/bài học đào tạo CTV) ──
+/** Mini App chỉ phát được file video trực tiếp; link khác (YouTube, Facebook...) khách Mini App không xem được nên báo trước khi lưu, không chặn. */
+function VideoUrlNote({ url }: { url: string }) {
+  const v = url.trim();
+  if (!v || isDirectVideoUrl(v)) return null;
+  return (
+    <p role="status" className="mt-1 text-xs text-warning-fg">
+      Mini App chỉ phát file .mp4/.webm/.m4v. Link này chỉ xem được trên web.
+    </p>
+  );
+}
+
 function AcademyTab() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-academy-courses'], queryFn: listAcademyCourses });
@@ -3941,6 +4160,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
                     onChange={(e) => setLesson({ ...lesson, videoUrl: e.target.value })}
                     className={input}
                   />
+                  <VideoUrlNote url={lesson.videoUrl} />
                 </Field>
               ) : (
                 <Field label="Nội dung bài viết">
@@ -4041,6 +4261,7 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
           {f.contentType === 'VIDEO' ? (
             <Field label="Link video">
               <input placeholder="Video URL" value={f.videoUrl} onChange={(e) => setF({ ...f, videoUrl: e.target.value })} className={`${INPUT_CLASS} ${TOUCH_H}`} />
+              <VideoUrlNote url={f.videoUrl} />
             </Field>
           ) : (
             <Field label="Nội dung bài viết">

@@ -135,6 +135,40 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     expect(inboxCalls()).toBe(2);
   });
 
+  it('onPaid chỉ gọi khi xác nhận tiền thành công, kèm câu của máy chủ; huỷ hộp thoại hay lỗi 400 thì không gọi', async () => {
+    let fail = true;
+    const onPaid = vi.fn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        fail
+          ? new Response(JSON.stringify({ message: 'Đơn đã huỷ.' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+          : new Response(JSON.stringify({ ok: true, alreadyPaid: false, message: 'Đã xác nhận nhận tiền đơn TB-300.', order: {} }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+      ),
+    );
+    const { container } = mount(<OrderStatusActions order={order()} onPaid={onPaid} />);
+    const btn = byText(container, 'button', 'Đã nhận tiền');
+    click(btn);
+    await flush();
+    answerConfirm(false);
+    await flush();
+    click(btn);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(onPaid).not.toHaveBeenCalled();
+    fail = false;
+    click(btn);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(onPaid).toHaveBeenCalledTimes(1);
+    expect(onPaid).toHaveBeenCalledWith('Đã xác nhận nhận tiền đơn TB-300.');
+  });
+
   it('"Đã nhận tiền" bấm dồn → chỉ 1 request', async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));

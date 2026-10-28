@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import AdminPage from './page';
 import { vnTodayKey } from '@/lib/admin-reports';
-import { click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, scrollRegionProblems, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 import { ADMIN_CONFIG_ROWS } from '@/test-utils/fixtures/admin-config-rows';
 
@@ -1396,7 +1396,9 @@ describe('admin/page — tab Nhãn hàng', () => {
     expect(add.className).toContain('bg-forest-600');
     const title = container.querySelector('input[placeholder^="Tiêu đề (MUA"]')!;
     expect(title.className).toContain('min-h-[44px]');
-    for (const d of container.querySelectorAll('input[type="date"]')) expect(d.className).toContain('min-h-[44px]');
+    const dates = container.querySelectorAll('input[placeholder="dd/mm/yyyy"]');
+    expect(dates.length).toBeGreaterThan(0);
+    for (const d of dates) expect(d.className).toContain('min-h-[44px]');
     typeInto(title, 'Freeship');
     expect(add.disabled).toBe(false);
     mocks.createPromotion.mockResolvedValue({});
@@ -1497,6 +1499,21 @@ describe('admin/page — tab Nhãn hàng', () => {
   });
 });
 
+/** Ô "ngày giờ" của giờ vàng: ô ngày gõ dd/mm/yyyy cùng hai ô chọn giờ, phút. `value` dạng yyyy-mm-ddTHH:mm. */
+const setDateTime = (root: ParentNode, label: string, value: string) => {
+  const [d, t] = value.split('T') as [string, string];
+  const [y, m, day] = d.split('-') as [string, string, string];
+  const [hh, mm] = t.split(':') as [string, string];
+  typeInto(root.querySelector(`input[aria-label="${label}: ngày"]`), `${day}${m}${y}`);
+  selectValue(root.querySelector(`select[aria-label="${label}: giờ"]`), hh);
+  selectValue(root.querySelector(`select[aria-label="${label}: phút"]`), mm);
+};
+const readDateTime = (root: ParentNode, label: string) => {
+  const [day, m, y] = (root.querySelector<HTMLInputElement>(`input[aria-label="${label}: ngày"]`)!.value).split('/');
+  const hh = root.querySelector<HTMLSelectElement>(`select[aria-label="${label}: giờ"]`)!.value;
+  const mm = root.querySelector<HTMLSelectElement>(`select[aria-label="${label}: phút"]`)!.value;
+  return `${y}-${m}-${day}T${hh}:${mm}`;
+};
 const labelledInput = (root: ParentNode, label: string) =>
   [...root.querySelectorAll('label')].find((l) => l.textContent?.startsWith(label))?.querySelector('input') as HTMLInputElement;
 
@@ -1518,9 +1535,11 @@ describe('admin/page — tab Flash Sale', () => {
     const { container } = await openSales();
     const heading = container.querySelector('h2')!;
     expect(heading.className).toContain('font-display');
-    const inputs = [...container.querySelectorAll('input:not([aria-label="Tìm mục quản trị"])')];
+    const inputs = [...container.querySelectorAll('input:not([type="date"]):not([aria-label="Tìm mục quản trị"])')];
+    const selects = [...container.querySelectorAll('select')].filter((el) => el.getAttribute('aria-label')?.startsWith('Giờ vàng'));
     expect(inputs).toHaveLength(3);
-    for (const el of inputs) {
+    expect(selects).toHaveLength(4);
+    for (const el of [...inputs, ...selects]) {
       expect(el.className).toContain('min-h-[44px]');
       expect(el.className).toContain('border-stone-450');
     }
@@ -1531,9 +1550,9 @@ describe('admin/page — tab Flash Sale', () => {
     expect(create.className).toContain('bg-forest-600');
     expect(create.disabled).toBe(true);
     typeInto(inputs[0]!, 'Đợt mới');
-    typeInto(inputs[1]!, '2026-10-20T08:00');
+    setDateTime(container, 'Giờ vàng bắt đầu lúc', '2026-10-20T08:00');
     expect(create.disabled).toBe(true);
-    typeInto(inputs[2]!, '2026-10-21T08:00');
+    setDateTime(container, 'Giờ vàng kết thúc lúc', '2026-10-21T08:00');
     expect(create.disabled).toBe(false);
 
     mocks.createFlashSale.mockResolvedValueOnce({});
@@ -1547,8 +1566,8 @@ describe('admin/page — tab Flash Sale', () => {
     expect(para(container, 'Đã tạo đợt giờ vàng!').className).toContain('text-success-fg');
 
     typeInto(inputs[0]!, 'Đợt hai');
-    typeInto(inputs[1]!, '2026-10-20T08:00');
-    typeInto(inputs[2]!, '2026-10-21T08:00');
+    setDateTime(container, 'Giờ vàng bắt đầu lúc', '2026-10-20T08:00');
+    setDateTime(container, 'Giờ vàng kết thúc lúc', '2026-10-21T08:00');
     mocks.createFlashSale.mockRejectedValueOnce(new Error('Trùng khung giờ'));
     click(create);
     await flush();
@@ -1665,8 +1684,8 @@ describe('admin/page — tab Flash Sale: nhập liệu rõ ràng, sửa và xoá
     click(btn(container, 'Sửa đợt'));
     const title = labelledInput(container, 'Tên đợt (sửa)');
     expect(title.value).toBe('Đợt sắp tới');
-    expect(labelledInput(container, 'Bắt đầu lúc (sửa)').value).toBe(localInput(sale.startAt));
-    expect(labelledInput(container, 'Kết thúc lúc (sửa)').value).toBe(localInput(sale.endAt));
+    expect(readDateTime(container, 'Giờ vàng bắt đầu lúc (sửa)')).toBe(localInput(sale.startAt));
+    expect(readDateTime(container, 'Giờ vàng kết thúc lúc (sửa)')).toBe(localInput(sale.endAt));
     expect(btn(container, 'Lưu thay đổi').disabled).toBe(true);
     typeInto(title, 'Đợt sắp tới (đã sửa)');
     mocks.updateFlashSale.mockResolvedValue({});
@@ -1679,7 +1698,7 @@ describe('admin/page — tab Flash Sale: nhập liệu rõ ràng, sửa và xoá
     mocks.flashSales = [upcoming()];
     const { container } = await openSales();
     click(btn(container, 'Sửa đợt'));
-    typeInto(labelledInput(container, 'Bắt đầu lúc (sửa)'), '2031-01-02T08:30');
+    setDateTime(container, 'Giờ vàng bắt đầu lúc (sửa)', '2031-01-02T08:30');
     mocks.updateFlashSale.mockResolvedValue({});
     click(btn(container, 'Lưu thay đổi'));
     await flush();
@@ -2620,7 +2639,7 @@ describe('admin/page — thẻ "Hàng trả chờ nhận về kho" mở đúng d
     await flush();
     expect(returnsFilter(container).value).toBe('TO_RECEIVE');
     expect(returnsFilter(container).selectedOptions[0]!.textContent).toBe('Chờ nhận hàng về');
-    expect(mocks.returnsArgs.at(-1)).toEqual(['TO_RECEIVE', 1, undefined, 'asc']);
+    expect(mocks.returnsArgs.at(-1)).toEqual(['TO_RECEIVE', 1, undefined, 'asc', undefined]);
   });
 
   it('thẻ "chờ duyệt" vẫn mở danh sách REQUESTED', async () => {
@@ -2628,7 +2647,7 @@ describe('admin/page — thẻ "Hàng trả chờ nhận về kho" mở đúng d
     click(container.querySelector('[data-inbox="returnsPending"]')!);
     await flush();
     expect(returnsFilter(container).value).toBe('REQUESTED');
-    expect(mocks.returnsArgs.at(-1)).toEqual(['REQUESTED', 1, undefined, 'asc']);
+    expect(mocks.returnsArgs.at(-1)).toEqual(['REQUESTED', 1, undefined, 'asc', undefined]);
   });
 
   it('nhân viên chỉ có nhóm KHO mở tab Đổi/Trả: mặc định danh sách chờ nhận hàng về', async () => {
@@ -2999,7 +3018,7 @@ describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần x
     click(card);
     await flush();
 
-    expect(window.location.search).toBe('?tab=orders');
+    expect(window.location.search).toBe('?tab=orders&invoice=pending');
     expect(mocks.listOrders.mock.lastCall![5]).toBe('pending');
     expect(container.querySelector('[role="tablist"][aria-label="Lọc đơn yêu cầu hoá đơn VAT"] [aria-selected="true"]')!.textContent).toContain('VAT chờ xuất');
   });
@@ -3588,7 +3607,7 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(card.textContent).toContain('còn 6 giờ trước khi tự huỷ');
     click(card);
     await flush();
-    expect(window.location.search).toBe('?tab=orders');
+    expect(window.location.search).toBe('?tab=orders&status=PENDING_PAYMENT&queue=bank_transfer_to_confirm');
     expect(mocks.listOrders).toHaveBeenLastCalledWith(1, 'PENDING_PAYMENT', undefined, undefined, 20, undefined, undefined, undefined, undefined, { queue: 'bank_transfer_to_confirm', order: 'asc' });
   });
 
@@ -3598,7 +3617,7 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(card.textContent).toContain('còn 40 giờ trước khi tự huỷ');
     click(card);
     await flush();
-    expect(window.location.search).toBe('?tab=orders');
+    expect(window.location.search).toBe('?tab=orders&status=PENDING_PAYMENT&queue=dealer_transfer_to_confirm');
     expect(mocks.listOrders).toHaveBeenLastCalledWith(1, 'PENDING_PAYMENT', undefined, undefined, 20, undefined, undefined, undefined, undefined, { queue: 'dealer_transfer_to_confirm', order: 'asc' });
   });
 
@@ -3767,5 +3786,222 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     } finally {
       delete (window as { matchMedia?: unknown }).matchMedia;
     }
+  });
+});
+
+// Đơn hàng: F5 giữ bộ lọc, hồ sơ khách ↔ đơn của khách, xác nhận tiền không làm mất mạch làm việc.
+describe('admin/page — đơn hàng: bộ lọc theo link, hồ sơ khách, xác nhận tiền', () => {
+  const orderOf = (code: string, over: Record<string, unknown> = {}) => ({
+    id: `id-${code}`,
+    code,
+    status: 'PENDING_PAYMENT',
+    type: 'RETAIL',
+    total: 250000,
+    paymentMethod: 'BANK_TRANSFER',
+    paymentStatus: 'UNPAID',
+    fulfiller: 'TUBU',
+    createdAt: '2026-10-14T01:00:00.000Z',
+    user: { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444' },
+    items: [],
+    allowedTransitions: ['CANCELLED'],
+    canConfirmPayment: true,
+    ...over,
+  });
+  const PROFILE = {
+    user: {
+      id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', email: null, role: 'CUSTOMER', staffPermissions: [], referralCode: 'AN1',
+      pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0, isBlocked: false, blockedAt: null, blockedReason: null,
+      createdAt: '2026-09-01T00:00:00.000Z', tier: null,
+    },
+    orders: { items: [{ id: 'o1', code: 'TT1', status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'PAID', total: 120000, createdAt: '2026-10-01T00:00:00.000Z', fulfiller: 'TUBU' }], total: 3 },
+    wallet: [], points: [], roleHistory: [], blockHistory: [], grants: [],
+  };
+  const lastArgs = () => mocks.listOrders.mock.lastCall!;
+  const group = (c: HTMLElement, label: string) => c.querySelector(`[role="group"][aria-label="${label}"]`)!;
+  const chip = (c: HTMLElement, startsWith: string) =>
+    [...group(c, 'Chờ nhận tiền chuyển khoản').querySelectorAll('button')].find((b) => b.textContent?.startsWith(startsWith))!;
+  const narrowScreen = () => {
+    const mm = vi.fn().mockImplementation((q: string) => ({ matches: q.includes('max-width'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    window.matchMedia = mm as unknown as typeof window.matchMedia;
+  };
+  afterEach(() => {
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  it('link có status và invoice mở đúng bộ lọc và F5 giữ nguyên; giá trị lạ bị bỏ khỏi link', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders&status=CONFIRMED&invoice=pending');
+    await mount();
+    expect(lastArgs()[1]).toBe('CONFIRMED');
+    expect(lastArgs()[5]).toBe('pending');
+    expect(window.location.search).toBe('?tab=orders&status=CONFIRMED&invoice=pending');
+
+    document.body.innerHTML = '';
+    window.history.replaceState(null, '', '/admin?tab=orders&status=HACK&invoice=zzz&queue=nope');
+    await mount();
+    expect(lastArgs()[1]).toBeUndefined();
+    expect(lastArgs()[5]).toBeUndefined();
+    expect(window.location.search).toBe('?tab=orders');
+  });
+
+  it('hàng đợi chuyển khoản vào bằng link: chip có số từ hộp việc, bấm đổi hàng đợi và tắt được, link theo kịp', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders&status=PENDING_PAYMENT&queue=bank_transfer_to_confirm');
+    const { container } = await mount();
+    expect(lastArgs()[9]).toEqual({ queue: 'bank_transfer_to_confirm', order: 'asc' });
+    expect(chip(container, 'Chuyển khoản chờ tiền').textContent).toBe('Chuyển khoản chờ tiền (1)');
+    expect(chip(container, 'Chuyển khoản chờ tiền').getAttribute('aria-pressed')).toBe('true');
+    expect(chip(container, 'Đại lý chờ tiền').textContent).toBe('Đại lý chờ tiền (2)');
+
+    click(chip(container, 'Đại lý chờ tiền'));
+    await flush();
+    expect(lastArgs()[9]).toEqual({ queue: 'dealer_transfer_to_confirm', order: 'asc' });
+    expect(window.location.search).toBe('?tab=orders&status=PENDING_PAYMENT&queue=dealer_transfer_to_confirm');
+
+    click(chip(container, 'Đại lý chờ tiền'));
+    await flush();
+    expect(lastArgs()[9]).toEqual({ order: 'asc' });
+    expect(window.location.search).toBe('?tab=orders&status=PENDING_PAYMENT');
+  });
+
+  it('chi tiết đơn có tên và SĐT khách kèm nút "Xem hồ sơ"; mã đơn trong hồ sơ mở đúng đơn đó', async () => {
+    mocks.orders = [orderOf('TB10')];
+    mocks.userDetail.mockResolvedValue(PROFILE);
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa')!);
+    await flush();
+    const line = container.querySelector('[data-order-customer]')!;
+    expect(line.textContent).toContain('Khách: Nguyễn An · 0944444444');
+    click([...line.querySelectorAll('button')].find((b) => b.textContent === 'Xem hồ sơ')!);
+    await flush();
+    expect(mocks.userDetail).toHaveBeenCalledWith('u1');
+    const dialog = document.body.querySelector('[role="dialog"]')!;
+    click([...dialog.querySelectorAll('button')].find((b) => b.textContent === 'TT1')!);
+    await flush();
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+    expect(lastArgs()[2]).toBe('TT1');
+  });
+
+  it('nhân viên không có nhóm CSKH không thấy nút "Xem hồ sơ" (API hồ sơ chỉ mở cho ADMIN và CSKH)', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['KHO'] };
+    mocks.orders = [orderOf('TB10')];
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const { container } = await mount();
+    click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa')!);
+    await flush();
+    expect(container.querySelector('[data-order-customer]')!.textContent).toContain('Nguyễn An');
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Xem hồ sơ')).toBe(false);
+  });
+
+  it('"Xem tất cả N đơn" trong hồ sơ ở tab Người dùng mở tab Đơn hàng lọc theo khách, có nhãn tên khách', async () => {
+    mocks.userDetail.mockResolvedValue(PROFILE);
+    window.history.replaceState(null, '', '/admin?tab=users');
+    const { container } = await mount();
+    click(container.querySelector('button[aria-label="Xem chi tiết Nguyễn An"]'));
+    await flush();
+    click([...document.body.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === 'Xem tất cả 3 đơn')!);
+    await flush();
+    expect(window.location.search).toBe('?tab=orders');
+    expect(lastArgs()[9]).toEqual({ userId: 'u1', order: 'desc' });
+    expect(container.textContent).toContain('Đang xem đơn của Nguyễn An');
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('xác nhận tiền xong: danh sách giữ câu "Đã ghi nhận đơn … Còn N đơn chờ." thay cho khối biến mất cùng đơn', async () => {
+    const api = mockFetch({ '/confirm-payment': { body: { ok: true, alreadyPaid: false, message: 'Đã xác nhận nhận tiền đơn TB10.', order: {} } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    mocks.orders = [orderOf('TB10'), orderOf('TB11')];
+    window.history.replaceState(null, '', '/admin?tab=orders&status=PENDING_PAYMENT&queue=bank_transfer_to_confirm');
+    const { container } = await mount();
+    click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa')!);
+    await flush();
+    click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Đã nhận tiền')!);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.calls.some((c) => c.url.includes('/admin/orders/id-TB10/confirm-payment'))).toBe(true);
+    const note = [...container.querySelectorAll('[role="status"]')].find((e) => e.textContent?.includes('Đã ghi nhận đơn TB10'))!;
+    expect(note.textContent).toContain('Còn 59 đơn chờ.');
+    click([...note.querySelectorAll('button')].find((b) => b.textContent === 'Ẩn')!);
+    expect(container.textContent).not.toContain('Đã ghi nhận đơn TB10');
+  });
+
+  it('390px: xác nhận tiền một đơn trong hàng đợi thì ngăn kéo mở luôn đơn kế tiếp thay vì đóng', async () => {
+    narrowScreen();
+    const api = mockFetch({ '/confirm-payment': { body: { ok: true, alreadyPaid: false, message: 'Đã xác nhận nhận tiền đơn TB10.', order: {} } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    mocks.orders = [orderOf('TB10'), orderOf('TB11')];
+    window.history.replaceState(null, '', '/admin?tab=orders&status=PENDING_PAYMENT&queue=bank_transfer_to_confirm');
+    const { container } = await mount();
+    act(() => (container.querySelector('[data-orders-cards] > li button') as HTMLElement).click());
+    await flush();
+    let dialog = document.body.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain('Đơn TB10');
+    click([...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Đã nhận tiền')!);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    dialog = document.body.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain('Đơn TB11');
+    expect(container.textContent).toContain('Đã ghi nhận đơn TB10');
+  });
+});
+
+describe('admin/page — ô ngày giờ và ghi chú link video', () => {
+  it('mã giảm giá: ngày hết hạn trước ngày bắt đầu báo lỗi và khoá nút; cùng ngày thì cho tạo', async () => {
+    window.history.replaceState(null, '', '/admin?tab=coupons');
+    const { container } = await mount();
+    click([...container.querySelectorAll('[role="group"][aria-label="Mục mã giảm giá"] button')].find((b) => b.textContent === 'Tạo mã mới')!);
+    await flush();
+    typeInto(container.querySelector('input[placeholder^="Mã"]'), 'WELCOME30');
+    const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá') as HTMLButtonElement;
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá bắt đầu từ ngày"]'), '20102026');
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '10102026');
+    expect(container.textContent).toContain('Ngày hết hạn phải sau ngày bắt đầu.');
+    expect(create.disabled).toBe(true);
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '20102026');
+    expect(container.textContent).not.toContain('Ngày hết hạn phải sau ngày bắt đầu.');
+    expect(create.disabled).toBe(false);
+  });
+
+  it('giờ vàng: chọn giờ kiểu 24 giờ, 20:00 gửi đúng mốc ISO (không còn AM/PM)', async () => {
+    window.history.replaceState(null, '', '/admin?tab=flashSales');
+    const { container } = await mount();
+    const hours = [...container.querySelectorAll<HTMLSelectElement>('select[aria-label="Giờ vàng bắt đầu lúc: giờ"] option')].map((o) => o.value);
+    expect(hours).toHaveLength(24);
+    expect(hours[20]).toBe('20');
+    typeInto(labelledInput(container, 'Tên đợt'), 'Đợt tối');
+    setDateTime(container, 'Giờ vàng bắt đầu lúc', '2026-10-20T20:00');
+    setDateTime(container, 'Giờ vàng kết thúc lúc', '2026-10-20T23:45');
+    mocks.createFlashSale.mockResolvedValueOnce({});
+    click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo đợt')!);
+    await flush();
+    expect(mocks.createFlashSale).toHaveBeenCalledWith({
+      title: 'Đợt tối',
+      startAt: new Date('2026-10-20T20:00').toISOString(),
+      endAt: new Date('2026-10-20T23:45').toISOString(),
+    });
+  });
+
+  it('Học viện: link video không phải file .mp4/.webm/.m4v được báo trước khi lưu, file trực tiếp thì không báo', async () => {
+    mocks.courses = [{ id: 'c1', title: 'Bán hàng 101', description: null, coverUrl: null, sortOrder: 1, isPublished: false, lessons: [] }];
+    window.history.replaceState(null, '', '/admin?tab=academy');
+    const { container } = await mount();
+    click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Quản lý')!);
+    await flush();
+    selectValue(container.querySelector('select[aria-label="Loại bài học"]'), 'VIDEO');
+    const url = container.querySelector('input[placeholder="Video URL"]');
+    typeInto(url, 'https://youtu.be/abc');
+    expect(container.textContent).toContain('Mini App chỉ phát file .mp4/.webm/.m4v');
+    typeInto(url, 'https://cdn.tubutree.vn/bai-1.mp4');
+    expect(container.textContent).not.toContain('Mini App chỉ phát file');
+  });
+
+  it('tab Đổi/Trả: ô tìm theo mã đơn hoặc SĐT gửi `q` đã cắt khoảng trắng lên API', async () => {
+    window.history.replaceState(null, '', '/admin?tab=returns');
+    const { container } = await mount();
+    typeInto(container.querySelector('input[aria-label="Tìm yêu cầu đổi/trả theo mã đơn hoặc SĐT khách"]'), '  0944444444 ');
+    await waitFor(() => mocks.returnsArgs.some((a) => a[4] === '0944444444'));
+    expect(mocks.returnsArgs.at(-1)![4]).toBe('0944444444');
   });
 });
