@@ -74,6 +74,7 @@ const cases: Case[] = [
   ['geoCommunes', (h) => geo.communesQuery(h, 'p'), ['geo-communes', 'p'], '/geo/communes'],
   ['me', (h) => account.meQuery(h), ['me'], '/me'],
   ['notifications', (h) => account.notificationsQuery(h), ['notifications'], '/me/notifications'],
+  ['unreadNotifications', (h) => account.unreadNotificationCountQuery(h), ['notifications', 'unread'], '/me/notifications/unread-count'],
   ['faqs', (h) => config.faqsQuery(h), ['faqs'], '/faqs'],
   ['supportContact', (h) => config.supportContactQuery(h), ['support-contact'], '/config/public'],
   ['loyalty', (h) => loyalty.loyaltyQuery(h), ['loyalty'], '/me/loyalty'],
@@ -107,6 +108,31 @@ describe('queries — queryKey giống Mini App, queryFn gọi đúng đường 
     expect(calls).toHaveLength(0);
     await q.queryFn();
     expect(calls[0]!.path).toBe(path);
+  });
+});
+
+describe('queries — danh sách thông báo (infinite)', () => {
+  const row = (i: number) => ({ id: `n${i}`, templateCode: 'X', payload: {}, status: 'SENT' as const, sentAt: `2026-10-28T03:00:0${i}.000Z` });
+
+  it('khoá con của ["notifications"] (invalidate cũ vẫn đúng) và khác khoá mảng phẳng; trang đầu không con trỏ', async () => {
+    const { http, calls } = fakeHttp();
+    const q = account.notificationsInfiniteQuery(http);
+    expect(q.queryKey).toEqual(['notifications', 'list']);
+    expect(q.queryKey[0]).toBe(account.notificationsQuery(http).queryKey[0]);
+    await q.queryFn({ pageParam: undefined });
+    await q.queryFn({ pageParam: { before: '2026-10-28T03:00:00.000Z', beforeId: 'n9' } });
+    expect(calls.map((c) => c.opts)).toEqual([
+      { query: { limit: 20 } },
+      { query: { before: '2026-10-28T03:00:00.000Z', beforeId: 'n9', limit: 20 } },
+    ]);
+  });
+
+  it('trang đủ 20 tin: con trỏ là sentAt + id của tin cuối; trang ít hơn hoặc rỗng: hết tin', () => {
+    const full = Array.from({ length: 20 }, (_, i) => row(i % 10));
+    expect(account.nextNotificationCursor(full)).toEqual({ before: full[19]!.sentAt, beforeId: full[19]!.id });
+    expect(account.nextNotificationCursor(full.slice(0, 19))).toBeUndefined();
+    expect(account.nextNotificationCursor([])).toBeUndefined();
+    expect(account.nextNotificationCursor(full.slice(0, 5), 5)).toEqual({ before: full[4]!.sentAt, beforeId: full[4]!.id });
   });
 });
 
