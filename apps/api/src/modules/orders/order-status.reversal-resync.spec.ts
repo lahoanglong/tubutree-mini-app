@@ -195,7 +195,7 @@ describe('OrderStatusService.resyncReversalEffects (Q19)', () => {
     it('tin huỷ đã đi thiếu dòng hoàn: cron ghi khoản hoàn và khoản hoàn tự báo khách đúng một lần', async () => {
       const { svc, notifications } = withUnderpayment(true);
       await expect(svc.resyncReversalEffects('o1')).resolves.toEqual({ outcome: 'DONE' });
-      expect(sentTo(notifications, 'REFUND_LATE_PAYMENT')).toEqual([['u1', 'REFUND_LATE_PAYMENT', expect.objectContaining({ order_code: 'TUBU1' })]]);
+      expect(sentTo(notifications, 'REFUND_LATE_PAYMENT')).toEqual([['u1', 'REFUND_LATE_PAYMENT', expect.objectContaining({ order_code: 'TUBU1' }), undefined, 'order=TUBU1']]);
       expect(sentTo(notifications, 'ORDER_CANCELLED')).toHaveLength(0);
     });
 

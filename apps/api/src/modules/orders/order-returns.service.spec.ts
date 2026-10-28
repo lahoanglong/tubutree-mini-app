@@ -99,7 +99,7 @@ describe('OrderReturnsService.request — chọn dòng/số lượng (BUYERMINI-
       items: 'SP a ×2',
       reason: 'Sản phẩm lỗi, hỏng',
     });
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_REQUESTED', { order_code: 'TUBU1' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_REQUESTED', { order_code: 'TUBU1' }, undefined, 'order=TUBU1');
   });
 
   it('đơn kho Tubu → không báo gian hàng nào', async () => {
@@ -344,7 +344,7 @@ describe('OrderReturnsService.review — duyệt trả cả đơn, lỗi đảo 
   });
 });
 
-describe('OrderReturnsService.review — trả một phần cắt hoa hồng thì báo CTV (E-45)', () => {
+describe('OrderReturnsService.review — trả một phần cắt hoa hồng thì báo CTV', () => {
   function setupPartialApprove(commissionCutBy: { affiliateUserId: string; amount: number }[]) {
     const order = deliveredOrder({ pancakeOrderId: 'pk1', fulfiller: 'TUBU', fulfillerStorefront: null });
     const prisma = {

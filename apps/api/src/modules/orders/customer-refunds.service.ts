@@ -306,7 +306,7 @@ export class CustomerRefundsService {
           amount: formatVnd(done.amount),
           bank: maskedBank(done),
           bank_ref: bankRef,
-        });
+        }, undefined, `order=${done.orderCode}`);
     }
     return done;
   }
@@ -408,7 +408,7 @@ export class CustomerRefundsService {
     this.logger.log(`Admin ${adminId} xác nhận tiền trả dư ${amount}đ đơn ${row.orderCode} (khoản ${id}).`);
     // Khoản COD trả hàng chưa có mẫu tin riêng (mẫu "tiền dư" nói sai lý do): khách thấy khoản ở chi tiết đơn, Kế toán liên hệ khách.
     if (row.userId && !codReturn) {
-      await this.notifications?.notifySafe(row.userId, 'REFUND_OVERPAYMENT', { order_code: row.orderCode, amount: formatVnd(amount) });
+      await this.notifications?.notifySafe(row.userId, 'REFUND_OVERPAYMENT', { order_code: row.orderCode, amount: formatVnd(amount) }, undefined, `order=${row.orderCode}`);
     }
     return this.prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id } });
   }
@@ -539,7 +539,7 @@ export class CustomerRefundsService {
         return true;
       });
       if (!won) throw new BadRequestException(await this.customerLostReason(id));
-      await this.notifications?.notifySafe(userId, 'REFUND_WALLET_CREDITED', { order_code: row.orderCode, amount: formatVnd(row.amount) });
+      await this.notifications?.notifySafe(userId, 'REFUND_WALLET_CREDITED', { order_code: row.orderCode, amount: formatVnd(row.amount) }, undefined, `order=${row.orderCode}`);
     } else {
       const bank = normalizeBankDetails(input);
       const res = await this.prisma.orderCustomerRefund.updateMany({

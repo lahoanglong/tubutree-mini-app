@@ -80,7 +80,7 @@ describe('CustomerRefundsService.markPaid (D2: admin chuyển khoản tay rồi 
       amount: '114.000đ',
       bank: 'Techcombank ••• 5678',
       bank_ref: 'FT123',
-    });
+    }, undefined, 'order=TB100');
   });
 
   it('khoản chưa khoá bằng "Bắt đầu chuyển khoản" → không cho xác nhận (khách còn đổi sang Ví được)', async () => {
@@ -192,7 +192,7 @@ describe('CustomerRefundsService.chooseDestination (khách chọn nơi nhận kh
       data: expect.objectContaining({ method: 'WALLET', status: 'COMPLETED' }),
     });
     expect(applyWalletDelta).toHaveBeenCalledWith(tx, expect.objectContaining({ userId: 'u1', delta: 114_000, refType: 'CUSTOMER_REFUND', refId: 'r1' }));
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_WALLET_CREDITED', { order_code: 'TB100', amount: '114.000đ' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_WALLET_CREDITED', { order_code: 'TB100', amount: '114.000đ' }, undefined, 'order=TB100');
   });
 
   it('admin vừa xác nhận đã chuyển (guard thua) → KHÔNG cộng Ví', async () => {
@@ -284,7 +284,7 @@ describe('CustomerRefundsService — khoản tiền dư Pancake chờ đối so�
         note: expect.stringContaining('Xác nhận tiền trả dư 114.000đ'),
       }),
     });
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', { order_code: 'TB100', amount: '114.000đ' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', { order_code: 'TB100', amount: '114.000đ' }, undefined, 'order=TB100');
   });
 
   it('sao kê chỉ có một phần → khoản còn đúng số thực nhận, phần còn lại ghi "đã bỏ qua" (Pancake báo lại không đẻ thêm)', async () => {
@@ -307,7 +307,7 @@ describe('CustomerRefundsService — khoản tiền dư Pancake chờ đối so�
       ],
       skipDuplicates: true,
     });
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', { order_code: 'TB100', amount: '50.000đ' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'REFUND_OVERPAYMENT', { order_code: 'TB100', amount: '50.000đ' }, undefined, 'order=TB100');
   });
 
   it.each([0, -1, 114_001, 1.5])('số tiền xác nhận %p ngoài 1đ..số Pancake báo dư → từ chối', async (amount) => {

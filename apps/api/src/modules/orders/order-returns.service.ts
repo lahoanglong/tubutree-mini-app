@@ -250,7 +250,7 @@ export class OrderReturnsService {
       }
       throw err;
     }
-    await this.notifications.notifySafe(userId, 'RETURN_REQUESTED', { order_code: code });
+    await this.notifications.notifySafe(userId, 'RETURN_REQUESTED', { order_code: code }, undefined, `order=${code}`);
     const itemName = new Map(order.items.map((i) => [i.id, i.productName]));
     await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_RETURN_REQUESTED', {
       order_code: code,
@@ -369,7 +369,7 @@ export class OrderReturnsService {
       });
       if (rejected.count === 0) throw new BadRequestException('Yêu cầu đã được xử lý.');
       const order = await this.prisma.order.findUnique({ where: { id: req.orderId }, select: { code: true } });
-      await this.notifications.notifySafe(req.userId, 'RETURN_REJECTED', { order_code: order?.code ?? '', reason: note });
+      await this.notifications.notifySafe(req.userId, 'RETURN_REJECTED', { order_code: order?.code ?? '', reason: note }, undefined, `return=${id}`);
       return this.withContext(await this.prisma.returnRequest.findUniqueOrThrow({ where: { id }, include: { items: true } }));
     }
 
@@ -496,7 +496,7 @@ export class OrderReturnsService {
       .notifySafe(order.userId, 'RETURN_APPROVED_DETAIL', {
         order_code: order.code,
         refund_note: refundNote(money, req, outcome.pointsBack),
-      });
+      }, undefined, `order=${order.code}`);
     // Đảo điểm/hoa hồng lỗi đã ném ở dòng trên nên tới đây là đảo xong: lỗi thì đơn không có mốc và cron chạy lại. Trả một phần không
     // đổi trạng thái đơn nên cron không quét, không cần mốc.
     if (reversalFailure !== null) throw reversalFailure;
@@ -631,7 +631,7 @@ export class OrderReturnsService {
     this.logger.log(
       `${actor.kind === 'ADMIN' ? 'Admin' : 'Gian hàng'} ${actor.userId} nhận hàng trả yêu cầu ${id} (đơn ${order?.code}), cộng kho ${restocked} đơn vị.`,
     );
-    await this.notifications.notifySafe(req.userId, 'RETURN_RECEIVED', { order_code: order?.code ?? '' });
+    await this.notifications.notifySafe(req.userId, 'RETURN_RECEIVED', { order_code: order?.code ?? '' }, undefined, `return=${id}`);
   }
 
   // ── Nội bộ ──

@@ -363,7 +363,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
   it('hết stock → báo user (KHÔNG pause lịch, khác nhánh isActive=false/địa chỉ hỏng)', async () => {
     const { svc, notify } = makeProcess(1, { stockCount: 0 });
     await svc.processDue();
-    expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.any(Object));
+    expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.any(Object), undefined, 'sub=s1');
   });
 
   it('hết stock → phát subscription_changed action=order_failed reason=out_of_stock (best-effort, ngoài tx đã rollback)', async () => {
@@ -407,7 +407,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       const { svc, updateMany, notify } = makeProcess(1, { stockCount: 0, retryCount: 1 });
       await svc.processDue();
       expect(retryWrite(updateMany).data.retryCount).toEqual({ increment: 1 });
-      expect(notify).not.toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.anything());
+      expect(notify).not.toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.anything(), undefined, 'sub=s1');
     });
 
     it('hết lượt thử lại (retryCount = trần) → bỏ kỳ: giữ nextRunAt của claim, reset retryCount, báo ngày kỳ kế tiếp', async () => {
@@ -423,21 +423,21 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       const { svc, updateMany, notify } = makeProcess(1, { stockCount: 0, retryDays: 0 });
       await svc.processDue();
       expect(retryWrite(updateMany)).toBeUndefined();
-      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.anything());
+      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.anything(), undefined, 'sub=s1');
     });
 
     it('lỗi tạm thời khác (vd P2034) → trước đây chỉ log: giờ cũng hẹn thử lại ngày mai và báo khách', async () => {
       const { svc, updateMany, notify } = makeProcess(1, { orderCreateError: new Error('P2034 write conflict') });
       await svc.processDue();
       expect(retryWrite(updateMany).data.nextRunAt).toEqual(tomorrowVn());
-      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.objectContaining({ reason: expect.any(String) }));
+      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.objectContaining({ reason: expect.any(String) }), undefined, 'sub=s1');
     });
 
     it('lỗi sau khi đơn kỳ ĐÃ ghi (idempotencyKey có đơn) → không thử lại, không báo hỏng', async () => {
       const { svc, updateMany, notify } = makeProcess(1, { orderCreateError: new Error('boom'), existingOrder: { id: 'o-existing' } });
       await svc.processDue();
       expect(retryWrite(updateMany)).toBeUndefined();
-      expect(notify).not.toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.anything());
+      expect(notify).not.toHaveBeenCalledWith('u1', 'SUBSCRIPTION_ORDER_FAILED', expect.anything(), undefined, 'sub=s1');
     });
 
     it('ra đơn thành công → reset retryCount về 0 trong cùng tx', async () => {
@@ -503,7 +503,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     expect(stockExecuteRaw).not.toHaveBeenCalled();
     expect(orderCreate).not.toHaveBeenCalled();
     expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED' } });
-    expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_PAUSED', expect.anything());
+    expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_PAUSED', expect.anything(), undefined, 'sub=s1');
   });
 
   it('địa chỉ không hợp lệ → tạm dừng lịch + phát subscription_changed action=order_failed reason=invalid_address', async () => {
@@ -570,7 +570,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       const { svc, updateMany, notify, enqueuePush, analytics } = makeProcess(1, { paymentMethod: 'WALLET', applyDelta });
       await svc.processDue();
       expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED' } });
-      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_PAUSED', { reason: expect.stringContaining('Ví Tubu') });
+      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_PAUSED', { reason: expect.stringContaining('Ví Tubu') }, undefined, 'sub=s1');
       expect(enqueuePush).not.toHaveBeenCalled();
       expect(analytics.recordBestEffort).toHaveBeenCalledWith(
         expect.objectContaining({ props: expect.objectContaining({ action: 'order_failed', reason: 'insufficient_wallet' }) }),
@@ -602,6 +602,8 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
         'u1',
         'SUBSCRIPTION_ORDER_AWAITING_PAYMENT',
         expect.objectContaining({ order_code: data.code, hours: '24' }),
+        undefined,
+        `order=${data.code}`,
       );
     });
 
@@ -615,7 +617,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       expect(updateMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 's1', status: 'ACTIVE' }, data: expect.objectContaining({ status: 'PAUSED' }) }),
       );
-      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_PAUSED', { reason: expect.stringContaining('5.000.000đ') });
+      expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_PAUSED', { reason: expect.stringContaining('5.000.000đ') }, undefined, 'sub=s1');
       expect(analytics.recordBestEffort).toHaveBeenCalledWith(
         expect.objectContaining({ props: expect.objectContaining({ action: 'order_failed', reason: 'cod_limit' }) }),
       );

@@ -705,7 +705,7 @@ export class SubscriptionsService {
       }
       retry = `Lịch vẫn giữ nhưng kỳ này không giao, kỳ kế tiếp ngày ${formatVnDate(nextCycleAt)}.`;
     }
-    if (retry) await this.notifications.notifySafe(sub.userId, 'SUBSCRIPTION_ORDER_FAILED', { reason, retry });
+    if (retry) await this.notifications.notifySafe(sub.userId, 'SUBSCRIPTION_ORDER_FAILED', { reason, retry }, undefined, `sub=${sub.id}`);
     await this.analytics.recordBestEffort({
       eventName: 'subscription_changed',
       userId: sub.userId,
@@ -892,17 +892,17 @@ export class SubscriptionsService {
           order_code: order.code,
           amount: order.total.toLocaleString('vi-VN'),
           hours: String(hours),
-        });
+        }, undefined, `order=${order.code}`);
       return;
     }
-    await this.notifications.notifySafe(userId, 'SUBSCRIPTION_ORDER', { order_code: order.code });
+    await this.notifications.notifySafe(userId, 'SUBSCRIPTION_ORDER', { order_code: order.code }, undefined, `order=${order.code}`);
   }
 
   /** Không sinh đơn được vì lý do không tự hết (SP ngừng bán, địa chỉ hỏng, ví thiếu): tạm dừng + báo khách. */
   private async pauseSubscription(sub: { id: string; userId: string }, reason: string, reasonCode: string): Promise<void> {
     // Chỉ lật gói còn ACTIVE: khách vừa huỷ thì giữ CANCELLED.
     await this.prisma.subscription.updateMany({ where: { id: sub.id, status: 'ACTIVE' }, data: { status: 'PAUSED' } });
-    await this.notifications.notifySafe(sub.userId, 'SUBSCRIPTION_PAUSED', { reason });
+    await this.notifications.notifySafe(sub.userId, 'SUBSCRIPTION_PAUSED', { reason }, undefined, `sub=${sub.id}`);
     await this.analytics.recordBestEffort({
       eventName: 'subscription_changed',
       userId: sub.userId,
