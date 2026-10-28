@@ -1,4 +1,5 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { AuthService, isMergeBusy } from './auth.service';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -781,6 +782,99 @@ describe('AuthService — ghi nhận người giới thiệu lúc đăng ký (re
     const { svc, create } = guestSvc({ id: 'referrer1' }, true);
     await svc.loginAsGuest('dev1', 'REF1');
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthService.loginAsGuest — khoá khách là băm của deviceId, không lưu thô', () => {
+  const sha = (v: string) => createHash('sha256').update(v).digest('hex');
+  const HASHED = (deviceId: string) => `guest_h_${sha(deviceId)}`;
+  const P2002 = () => new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
+
+  /** Bảng users giả theo zaloId: findUnique/updateMany/create hành xử như một bảng có unique(zaloId). */
+  function guestTable(rows: Array<Record<string, unknown>>) {
+    const table = [...rows];
+    const findUnique = jest.fn(async ({ where }: { where: Record<string, unknown> }) => {
+      if (where.zaloId) return table.find((r) => r.zaloId === where.zaloId) ?? null;
+      return null; // referralCode chưa bị chiếm, người giới thiệu không có
+    });
+    const updateMany = jest.fn(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+      const hit = table.filter((r) => r.zaloId === where.zaloId && (where.id === undefined || r.id === where.id));
+      for (const r of hit) Object.assign(r, data);
+      return { count: hit.length };
+    });
+    const create = jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
+      if (table.some((r) => r.zaloId === data.zaloId)) throw P2002();
+      const row = { id: `new${table.length}`, role: 'CUSTOMER', ...data };
+      table.push(row);
+      return row;
+    });
+    const prisma = { refreshToken: { create: jest.fn().mockResolvedValue({}) }, user: { findUnique, updateMany, create } } as unknown as PrismaService;
+    const jwt = { signAsync: jest.fn().mockResolvedValue('jwt') } as unknown as JwtService;
+    const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
+    return { svc: new AuthService(prisma, jwt, config, {} as unknown as ZaloService, mkRbac()), table, findUnique, updateMany, create };
+  }
+
+  it('khách mới: dòng tạo mang guest_h_<sha256(deviceId)>, deviceId thô không xuất hiện trong dữ liệu lưu', async () => {
+    const { svc, create } = guestTable([]);
+    await svc.loginAsGuest('d_abcdef123456');
+    const zaloId = create.mock.calls[0]![0].data.zaloId as string;
+    expect(zaloId).toBe(HASHED('d_abcdef123456'));
+    expect(zaloId.startsWith('guest_')).toBe(true);
+    expect(JSON.stringify(create.mock.calls[0]![0])).not.toContain('d_abcdef123456');
+  });
+
+  it('dòng đã băm: đăng nhập lại cùng deviceId dùng lại dòng, không tạo, không ghi', async () => {
+    const { svc, create, updateMany } = guestTable([{ id: 'g1', role: 'CUSTOMER', zaloId: HASHED('d_abcdef123456') }]);
+    await svc.loginAsGuest('d_abcdef123456');
+    expect(create).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('dòng cũ guest_<deviceId>: đổi tại chỗ sang khoá băm, giữ nguyên user (id, điểm, đơn), đăng nhập lại được bằng cùng deviceId', async () => {
+    const { svc, table, create, updateMany } = guestTable([{ id: 'g1', role: 'CUSTOMER', zaloId: 'guest_d_abcdef123456' }]);
+    await svc.loginAsGuest('d_abcdef123456');
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 'g1', zaloId: 'guest_d_abcdef123456' }, data: { zaloId: HASHED('d_abcdef123456') } });
+    expect(create).not.toHaveBeenCalled();
+    expect(table).toHaveLength(1);
+    expect(table[0]!.zaloId).toBe(HASHED('d_abcdef123456'));
+    // Lần sau: khoá băm có sẵn, không còn đụng tới khoá cũ.
+    updateMany.mockClear();
+    await svc.loginAsGuest('d_abcdef123456');
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(table).toHaveLength(1);
+  });
+
+  it('hai request song song cùng deviceId (dòng cũ): chỉ một dòng, request thua đổi khoá đọc lại dòng đã đổi', async () => {
+    const { svc, table, create } = guestTable([{ id: 'g1', role: 'CUSTOMER', zaloId: 'guest_d_abcdef123456' }]);
+    const results = await Promise.all([svc.loginAsGuest('d_abcdef123456'), svc.loginAsGuest('d_abcdef123456')]);
+    expect(results).toHaveLength(2);
+    expect(table).toHaveLength(1);
+    expect(table[0]!.zaloId).toBe(HASHED('d_abcdef123456'));
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('hai request song song cùng deviceId (khách mới): P2002 của request sau được hấp thụ, chỉ một dòng', async () => {
+    const { svc, table } = guestTable([]);
+    await Promise.all([svc.loginAsGuest('d_abcdef123456'), svc.loginAsGuest('d_abcdef123456')]);
+    expect(table).toHaveLength(1);
+  });
+
+  it('deviceId do kẻ gọi chọn (h_<băm của người khác>) không cướp được dòng của người đó qua đường khoá cũ', async () => {
+    const victim = { id: 'victim', role: 'CUSTOMER', zaloId: HASHED('d_victim0000001') };
+    const { svc, table, updateMany } = guestTable([victim]);
+    const attackerDevice = `h_${sha('d_victim0000001')}`;
+    const res = await svc.loginAsGuest(attackerDevice);
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(table).toHaveLength(2);
+    expect(table[0]!.zaloId).toBe(HASHED('d_victim0000001'));
+    expect(res.user.id).not.toBe('victim');
+  });
+
+  it('dòng khách đã gộp (guest_<deviceId>_merged_…) không bị khôi phục: thiết bị nhận dòng mới', async () => {
+    const { svc, table } = guestTable([{ id: 'old', role: 'CUSTOMER', zaloId: 'guest_d_abcdef123456_merged_1700000000000' }]);
+    const res = await svc.loginAsGuest('d_abcdef123456');
+    expect(table).toHaveLength(2);
+    expect(res.user.id).not.toBe('old');
   });
 });
 
