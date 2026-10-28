@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
-  visibleHomeShortcuts,
+  visibleHomeShortcuts, homeRenderOrder, homeSettling,
 } from './home-layout';
 import type { LoyaltyOverview } from './api/loyalty';
 
@@ -11,8 +11,10 @@ describe('homeBlockOrder', () => {
       'search', 'member', 'todo', 'shortcuts', 'purchased', 'flash', 'categories', 'journey', 'community', 'suggest',
     ]);
   });
-  it('khách mới: Quà khách mới thay thẻ thành viên, không có Mua lại', () => {
+  it('khách mới: Quà khách mới thay thẻ thành viên, món hàng (Giờ vàng, Bán chạy) đứng trước Danh mục', () => {
     const order = homeBlockOrder('new');
+    expect(order.indexOf('bestSellers')).toBeLessThan(order.indexOf('categories'));
+    expect(order.indexOf('flash')).toBeLessThan(order.indexOf('categories'));
     expect(order).toContain('welcome');
     expect(order).not.toContain('member');
     expect(order).not.toContain('purchased');
@@ -29,13 +31,15 @@ describe('homeBlockOrder', () => {
 });
 
 describe('visibleHomeShortcuts', () => {
-  it('có đúng 8 lối tắt khi mọi cờ bật', () => {
+  it('có đúng 8 lối tắt khi mọi cờ bật, mở đầu bằng Đơn hàng và không có Vườn Xanh (đã là tab giữa)', () => {
     expect(HOME_SHORTCUTS).toHaveLength(8);
-    expect(visibleHomeShortcuts({ wasteEnabled: true, claimEnabled: true })).toHaveLength(8);
+    const ids = visibleHomeShortcuts({ wasteEnabled: true, claimEnabled: true }).map((s) => s.id);
+    expect(ids).toEqual(['orders', 'rewards', 'recycle', 'groupBuy', 'coupons', 'claim', 'earn', 'community']);
+    expect(ids).not.toContain('garden');
   });
   it('cờ tắt thì ẩn mục, các mục còn lại giữ thứ tự', () => {
     const ids = visibleHomeShortcuts({ wasteEnabled: false, claimEnabled: false }).map((s) => s.id);
-    expect(ids).toEqual(['rewards', 'garden', 'groupBuy', 'coupons', 'earn', 'community']);
+    expect(ids).toEqual(['orders', 'rewards', 'groupBuy', 'coupons', 'earn', 'community']);
   });
 });
 
@@ -143,7 +147,9 @@ describe('resolveHomeKind', () => {
     const pendingAuth = { ...base, authed: false, authPending: true } as const;
     expect(resolveHomeKind({ ...pendingAuth, stored: 'returning' })).toBe('returning');
     expect(resolveHomeKind({ ...pendingAuth, stored: 'new' })).toBe('new');
-    expect(resolveHomeKind(pendingAuth)).toBe('unknown');
+    expect(resolveHomeKind(pendingAuth)).toBe('new');
+    expect(resolveHomeKind({ ...pendingAuth, unknownWhenUnremembered: true })).toBe('unknown');
+    expect(resolveHomeKind({ ...pendingAuth, stored: 'returning', unknownWhenUnremembered: true })).toBe('returning');
   });
   it('thứ tự khối của "chưa biết" giữ chỗ thẻ thành viên và không có khối riêng của một loại', () => {
     const order = homeBlockOrder('unknown');
@@ -233,5 +239,25 @@ describe('dropForeignHomeHints', () => {
   it('không có kho hoặc chưa biết tài khoản: không làm gì', () => {
     expect(dropForeignHomeHints(null, 'A')).toBe(false);
     expect(dropForeignHomeHints(store({ [HOME_KIND_KEY]: kind('A') }), null)).toBe(false);
+  });
+});
+
+describe('homeRenderOrder / homeSettling', () => {
+  it('không giữ chỗ thì đúng thứ tự khối', () => {
+    for (const k of ['returning', 'new', 'unknown'] as const) expect(homeRenderOrder(k, false)).toEqual(homeBlockOrder(k));
+  });
+  it('đang giữ chỗ: chỉ còn tìm kiếm, thẻ thành viên và một khung chờ chung', () => {
+    expect(homeRenderOrder('unknown', true)).toEqual(['search', 'member', 'settling']);
+    expect(homeRenderOrder('returning', true)).toEqual(['search', 'member', 'settling']);
+  });
+  it('khách mới đang giữ chỗ (dải quà thay thẻ thành viên) cũng gọn về một khung chờ', () => {
+    expect(homeRenderOrder('new', true)).toEqual(['search', 'welcome', 'settling']);
+  });
+  it('chỉ giữ khi lần mở đầu chưa biết loại khách, tới khi biết loại và dữ liệu đã về', () => {
+    expect(homeSettling({ startedUnknown: true, kind: 'unknown', dataPending: false })).toBe(true);
+    expect(homeSettling({ startedUnknown: true, kind: 'returning', dataPending: true })).toBe(true);
+    expect(homeSettling({ startedUnknown: true, kind: 'new', dataPending: false })).toBe(false);
+    expect(homeSettling({ startedUnknown: false, kind: 'returning', dataPending: true })).toBe(false);
+    expect(homeSettling({ startedUnknown: false, kind: 'unknown', dataPending: true })).toBe(false);
   });
 });

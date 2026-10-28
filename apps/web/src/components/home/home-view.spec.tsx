@@ -10,13 +10,14 @@ const mocks = vi.hoisted(() => ({ get: vi.fn(), push: vi.fn(), phase: 'authentic
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: vi.fn(), delete: vi.fn() } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase, useAuthRestoring: () => mocks.restoring }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: mocks.phase === 'authenticated' ? mocks.user : null }) }));
-vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
+vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/use-flash-sales')>()), useActiveFlashSales: () => [] }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 const routeState = vi.hoisted(() => ({ pending: new Set<string>() }));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => !routeState.pending.has(p) }));
 
 import HomeView from './home-view';
 import { homeBlockOrder } from './home-blocks';
+import { homeRenderOrder } from '@tubutree/app-core/home-layout';
 import { HOME_KIND_KEY } from './use-home-customer-kind';
 
 const CONFIG = {
@@ -120,7 +121,7 @@ describe('HomeView — thứ tự khối (9 khối, một lưới gợi ý)', ()
     mocks.phase = 'loading';
     mocks.restoring = true;
     const c = await mount();
-    expect(blockOrder(c)).toEqual([...homeBlockOrder('unknown')]);
+    expect(blockOrder(c)).toEqual([...homeRenderOrder('unknown', true)]);
     expect(region(c, 'Bán chạy')).toBeNull();
     expect(region(c, 'Quà khách mới')).toBeNull();
   });

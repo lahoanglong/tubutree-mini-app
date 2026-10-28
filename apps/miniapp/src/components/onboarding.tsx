@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ONBOARDING_SURVEY_ENABLED } from './onboarding-flag';
 import { useLocation, useSnackbar } from 'zmp-ui';
 import { getStorage, setStorage } from 'zmp-sdk/apis';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -83,7 +84,13 @@ async function readSnoozedUntil(): Promise<number | null> {
   }
 }
 
-export function OnboardingGate() {
+export { ONBOARDING_SURVEY_ENABLED };
+
+export function OnboardingGate({ enabled = ONBOARDING_SURVEY_ENABLED }: { enabled?: boolean } = {}) {
+  return enabled ? <OnboardingGateInner /> : null;
+}
+
+function OnboardingGateInner() {
   const { status } = useAuthStore();
   const location = useLocation();
   const [dismissed, setDismissed] = useState(false);

@@ -16,7 +16,8 @@ export function formatVndShort(amount: number): string {
 }
 
 export const browseText = {
-  title: 'Khám phá',
+  title: 'Danh mục',
+  categoryChips: 'Đổi danh mục',
   searchPlaceholder: 'Tìm sản phẩm...',
   searchLabel: 'Tìm sản phẩm',
   clearSearch: 'Xoá từ khoá',
@@ -80,6 +81,7 @@ export const browseText = {
     categories: 'Danh mục',
     products: 'Sản phẩm',
     searchFor: (q: string) => `Tìm “${q}”`,
-    none: 'Chưa có gợi ý — nhấn Tìm để xem kết quả',
+    none: 'Chưa có gợi ý. Chạm dòng “Tìm” ở trên để xem kết quả.',
+    failed: 'Không tải được gợi ý',
   },
 } as const;

@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { renderToString } from 'react-dom/server';
+import { hydrateRoot } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets } from '@/test-utils/a11y';
@@ -11,6 +14,8 @@ vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 
 import { FlashSale, UpcomingFlashSales } from './flash-sale';
+import { FLASH_HINT_KEY } from '@tubutree/app-core/home-layout';
+import { resetFlashSales } from '@/lib/use-flash-sales';
 
 const HOUR = 3_600_000;
 const active = (over: Record<string, unknown> = {}) => ({
@@ -32,6 +37,7 @@ const mount = async (ui: React.ReactElement) => {
 };
 
 beforeEach(() => {
+  resetFlashSales();
   mocks.phase = 'guest';
   activeResult = async () => [];
   upcomingResult = async () => [];
@@ -43,6 +49,106 @@ afterEach(() => {
   mounted?.unmount();
   mounted = null;
   vi.useRealTimers();
+});
+
+describe('FlashSale hydrate', () => {
+  it('suất còn dưới 24 giờ: HTML dựng trước đồng hồ trình duyệt 75 giây thì chữ "Còn Xh YYm" lệch vẫn không làm hỏng hydrate', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-28T10:00:50Z'));
+    const items = [active({ endAt: '2026-10-28T12:16:00Z' })];
+    const ui = () => (
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <FlashSale initial={items as never} />
+      </QueryClientProvider>
+    );
+    const html = renderToString(ui());
+    expect(html).toContain('2h 16m');
+    vi.setSystemTime(new Date('2026-10-28T10:02:05Z'));
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.appendChild(container);
+    const errors: unknown[] = [];
+    const consoleError = vi.spyOn(console, 'error').mockImplementation((...a) => void errors.push(a));
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, ui(), { onRecoverableError: (e) => void errors.push(e) });
+    });
+    consoleError.mockRestore();
+    expect(errors).toEqual([]);
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('HTML ISR cũ trả sau giờ hết suất (đồng hồ trình duyệt đã qua endAt): hydrate không lỗi, đồng hồ ẩn', async () => {
+    activeResult = () => new Promise(() => undefined);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-28T11:55:00Z'));
+    const items = [active({ endAt: '2026-10-28T12:00:00Z' })];
+    const ui = () => (
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <FlashSale initial={items as never} />
+      </QueryClientProvider>
+    );
+    const html = renderToString(ui());
+    expect(html).toContain('5m');
+    vi.setSystemTime(new Date('2026-10-28T12:30:00Z'));
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.appendChild(container);
+    const errors: unknown[] = [];
+    const consoleError = vi.spyOn(console, 'error').mockImplementation((...a) => void errors.push(a));
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, ui(), { onRecoverableError: (e) => void errors.push(e) });
+    });
+    consoleError.mockRestore();
+    expect(errors).toEqual([]);
+    expect(container.querySelector('[role="timer"]')?.className ?? '').toContain('invisible');
+    act(() => root.unmount());
+    container.remove();
+  });
+});
+
+describe('FlashSale dữ liệu dựng sẵn rỗng', () => {
+  const withStorage = (hadFlash: boolean) => {
+    try { localStorage.clear(); if (hadFlash) localStorage.setItem(FLASH_HINT_KEY, '1'); } catch { /* không có kho */ }
+  };
+  it('máy nhớ lần trước có Giờ vàng, bản dựng sẵn rỗng, lần tải lại cũng rỗng: hydrate không chèn khung giữ chỗ nào (HTML server không có khung)', async () => {
+    withStorage(true);
+    activeResult = async () => [];
+    const ui = () => (
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <FlashSale initial={[]} />
+      </QueryClientProvider>
+    );
+    const html = renderToString(ui());
+    expect(html).toBe('');
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const seen: boolean[] = [];
+    const watch = new MutationObserver(() => seen.push(container.querySelector('[data-testid="flash-sale-loading"]') !== null));
+    watch.observe(container, { childList: true, subtree: true });
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, ui());
+    });
+    await flush(8);
+    watch.disconnect();
+    expect(seen).not.toContain(true);
+    expect(container.innerHTML).toBe('');
+    act(() => root.unmount());
+    container.remove();
+  });
+  it('chưa nhớ Giờ vàng: không vẽ khung giữ chỗ', async () => {
+    withStorage(false);
+    activeResult = () => new Promise(() => undefined);
+    const c = await mount(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <FlashSale initial={[]} />
+      </QueryClientProvider>,
+    );
+    expect(c.querySelector('[data-testid="flash-sale-loading"]')).toBeNull();
+  });
 });
 
 describe('FlashSale', () => {
@@ -129,6 +235,7 @@ describe('FlashSale', () => {
     expect(c.textContent).not.toMatch(/-\d+%|-0%/);
     expect(c.querySelector('.line-through')).toBeNull();
     mounted!.unmount();
+    resetFlashSales();
     activeResult = async () => [active({ flashPrice: 70000, retailPrice: 100000, salePrice: 80000 })];
     c = await mount(<FlashSale />);
     expect(c.textContent).toContain('-13%');
@@ -138,7 +245,9 @@ describe('FlashSale', () => {
   it('đã quá giờ kết thúc (chờ lần tải lại kế tiếp): ẩn đồng hồ, không hiện "Còn 0h 00m"', async () => {
     activeResult = async () => [active({ endAt: new Date(Date.now() - 1000).toISOString() })];
     const c = await mount(<FlashSale />);
-    expect(c.querySelector('[role="timer"]')).toBeNull();
+    const timer = c.querySelector('[role="timer"]');
+    expect(timer?.className).toContain('invisible');
+    expect(timer?.getAttribute('aria-hidden')).toBe('true');
     expect(c.textContent).not.toContain('0h 00m');
   });
 
@@ -236,5 +345,15 @@ describe('FlashSale — khổ máy tính', () => {
     activeResult = async () => [{ ...active(), thumbnail: null }];
     const c = await mount(<FlashSale />);
     expect(c.querySelector('[data-testid="product-image-fallback"]')).not.toBeNull();
+  });
+});
+
+describe('FlashSale — dữ liệu dựng sẵn từ máy chủ', () => {
+  it('có suất trong HTML đầu: vẽ khối ngay ở lần render đầu, không qua khung chờ hay khoảng trống', () => {
+    mocks.get.mockReturnValue(new Promise(() => {}));
+    const r = render(<FlashSale initial={[active() as never]} />);
+    mounted = r;
+    expect(r.container.querySelector('section')?.textContent).toContain('Nước rửa chén');
+    expect(r.container.querySelector('[data-testid="flash-sale-loading"]')).toBeNull();
   });
 });

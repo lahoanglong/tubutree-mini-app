@@ -93,6 +93,9 @@ export const vi = {
       voucherPercent: (pct: number) => `Mã giảm giá chào mừng ${pct}%`,
       voucherFreeship: 'Mã miễn phí giao hàng chào mừng',
       voucherMinOrder: (min: string) => `Cho đơn từ ${min}`,
+      voucherShort: (what: string) => `Mã ${what}`,
+      expand: 'Xem quyền lợi',
+      collapse: 'Thu gọn',
       voucherExpires: (date: string) => `Dùng đến ${date}`,
       cta: 'Chọn sản phẩm',
       benefitsTitle: 'Mua trực tiếp tại Tubu Tree',
@@ -414,7 +417,9 @@ export const vi = {
   } as Record<string, string>,
 
   browse: {
-    title: 'Khám phá',
+    title: 'Danh mục',
+    categoryChips: 'Đổi danh mục',
+    viewBrand: (brand: string) => `Xem trang nhãn hàng ${brand}`,
     searchPlaceholder: 'Tìm sản phẩm...',
     searchLabel: 'Tìm sản phẩm',
     clearSearch: 'Xoá từ khoá',
@@ -475,7 +480,8 @@ export const vi = {
       categories: 'Danh mục',
       products: 'Sản phẩm',
       searchFor: (q: string) => `Tìm “${q}”`,
-      none: 'Chưa có gợi ý — nhấn Tìm để xem kết quả',
+      none: 'Chưa có gợi ý. Chạm dòng “Tìm” ở trên để xem kết quả.',
+      failed: 'Không tải được gợi ý',
     },
   },
 

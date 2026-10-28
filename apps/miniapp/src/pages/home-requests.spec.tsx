@@ -101,7 +101,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByText('Gợi ý riêng')).toBeInTheDocument();
     // D2-07b: khối "Quà khách mới" (số công khai + ưu đãi của khách) đi cùng hai request gộp, không thêm request lẻ.
-    expect(await screen.findByText('Mã giảm giá chào mừng 25.000đ')).toBeInTheDocument();
+    expect(await screen.findByText(/^Mã 25\.000đ/)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
     // Trang đầu của lưới gợi ý (không page, limit 12) lấy từ khối gộp; số yêu cầu đổi rác đang mở cũng lấy từ /home/me (không gọi /waste/me).
     expect(paths().sort()).toEqual(['/feed', '/home', '/home/me']);
@@ -123,7 +123,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     mocks.status = 'guest';
     mocks.routes['/home'] = () => ({ data: PUBLIC_FEED });
     renderHome();
-    expect(await screen.findByText('Đặt định kỳ giảm 17% mỗi đơn')).toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'Quà khách mới' })).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
     expect(paths().sort()).toEqual(['/home']);
   });
@@ -136,7 +136,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     mocks.routes['/config/public'] = () => ({ data: publicConfig });
     mocks.routes['/me/new-customer-offer'] = () => ({ data: newCustomerOffer });
     renderHome();
-    expect(await screen.findByText('Mã giảm giá chào mừng 25.000đ')).toBeInTheDocument();
+    expect(await screen.findByText(/^Mã 25\.000đ/)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
     expect(paths().sort()).toEqual(['/config/public', '/feed', '/home', '/home/me', '/me/new-customer-offer']);
   });

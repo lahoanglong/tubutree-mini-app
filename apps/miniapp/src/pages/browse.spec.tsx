@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate as useRouterNavigate, useNavigationType } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -118,7 +118,7 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
   it('trang có đúng một h1 (ẩn về mặt hình ảnh) làm điểm mốc cho trình đọc màn hình', async () => {
     renderAt('/browse');
     await listPainted();
-    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Khám phá']);
+    expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Danh mục']);
   });
 
   it('header có nút giỏ khi không gõ (CartButton), và không có nút "Huỷ"', async () => {
@@ -227,7 +227,9 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     renderAt('/browse?segment=eco');
     expect(await screen.findByRole('button', { name: 'Bỏ lọc Sống xanh' })).toBeInTheDocument();
     await waitFor(() => expect(catalogCalls().some((q) => q.segment === 'eco')).toBe(true));
-    expect(screen.queryByRole('button', { name: 'Cho mẹ & bé' })).toBeNull(); // không còn ở trạng thái gốc → không có lưới Danh mục
+    expect(screen.getByRole('heading', { level: 2, name: 'Sống xanh' })).toBeInTheDocument();
+    const chips = screen.getByRole('group', { name: 'Đổi danh mục' });
+    expect(within(chips).getByRole('button', { name: 'Cho mẹ & bé' })).toBeInTheDocument(); // hàng chip thay lưới Danh mục gốc
   });
 
   it('chạm một ô Danh mục → URL ?segment=… (replace), bỏ q', async () => {

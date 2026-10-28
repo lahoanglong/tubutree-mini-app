@@ -83,10 +83,20 @@ async function readSnoozedUntil(): Promise<number | null> {
 }
 
 /**
+ * Khảo sát chào mừng đang TẮT: lớp phủ che kín Trang chủ lần mở đầu, 9 chạm mà câu trả lời chưa được dùng ở đâu. Bật lại (`enabled`) khi câu
+ * trả lời đã dùng cho "Gợi ý cho bạn"; khi đó phải là thẻ nhỏ trong trang, không phủ màn.
+ */
+export const ONBOARDING_SURVEY_ENABLED = false;
+
+export function OnboardingGate({ enabled = ONBOARDING_SURVEY_ENABLED }: { enabled?: boolean } = {}) {
+  return enabled ? <OnboardingGateInner /> : null;
+}
+
+/**
  * Quiz chào khách mới ở Trang chủ (cùng luật hiện với `OnboardingGate` của Mini App, xem `onboarding-rules.ts`): chỉ khi đã đăng
  * nhập và chưa làm quiz, không phủ khi khách vào từ link CTV/gian hàng/thẻ QR, "Để sau" nhớ 7 ngày trên máy.
  */
-export function OnboardingGate() {
+function OnboardingGateInner() {
   const phase = useAuthPhase();
   const pathname = useShellPathname();
   const [dismissed, setDismissed] = useState(false);

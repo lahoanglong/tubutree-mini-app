@@ -5,7 +5,7 @@ import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 import { ApiError } from '@/lib/client-api';
 
 // Chép ý nghĩa home-parts.spec của Mini App (HomeSection, khối lỗi, dải lỗi cấp trang).
-vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
+vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/use-flash-sales')>()), useActiveFlashSales: () => [] }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined }) }));
 
