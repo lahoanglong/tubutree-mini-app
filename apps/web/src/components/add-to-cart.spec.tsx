@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -190,24 +191,41 @@ describe('AddToCart — áp mã mua chung từ ?ma= (E-9)', () => {
     expect(mocks.applyCoupon.mock.invocationCallOrder[0]!).toBeLessThan(mocks.push.mock.invocationCallOrder[0]!);
   });
 
-  it('áp mã lỗi: món vẫn vào giỏ, nói lý do của máy chủ; mua ngay vẫn sang thanh toán', async () => {
+  it('áp mã lỗi: món vẫn vào giỏ và nói lý do của máy chủ', async () => {
     mocks.applyCoupon.mockRejectedValue(new Error('Mã đã hết hạn'));
     openedFrom(`?ma=${CODE}`);
-    const first = mount();
+    const { container } = mount();
     await flush();
-    click(addButton(first.container));
+    click(addButton(container));
     await flush();
-    expect(first.container.textContent).toContain('Đã thêm vào giỏ!');
-    expect(first.container.textContent).toContain('Mã đã hết hạn');
-    first.unmount();
-    mounted = mounted.filter((m) => m !== first);
+    expect(container.textContent).toContain('Đã thêm vào giỏ!');
+    expect(container.textContent).toContain('Mã đã hết hạn');
+  });
 
-    mocks.push.mockReset();
-    const second = mount();
+  it('mua ngay mà áp mã lỗi: giữ câu lý do trên màn rồi mới sang thanh toán, không im lặng chuyển trang', async () => {
+    mocks.applyCoupon.mockRejectedValue(new Error('Mã đã hết hạn'));
+    openedFrom(`?ma=${CODE}`);
+    const { container } = mount();
     await flush();
-    click(buy(second.container));
+    click(buy(container));
     await flush();
+    expect(container.textContent).toContain('Chưa chọn sẵn được mã: Mã đã hết hạn');
+    expect(mocks.push).not.toHaveBeenCalled();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1900));
+    });
     expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
+  });
+
+  it('mua ngay mà máy chủ giữ mã nhưng chưa tính giảm: cũng giữ câu lý do trước khi sang thanh toán', async () => {
+    mocks.applyCoupon.mockResolvedValue(withLine({ couponCode: CODE, discount: 0, couponNotice: 'Cần thêm 20.000đ để dùng mã' }));
+    openedFrom(`?ma=${CODE}`);
+    const { container } = mount();
+    await flush();
+    click(buy(container));
+    await flush();
+    expect(container.textContent).toContain('Cần thêm 20.000đ để dùng mã');
+    expect(mocks.push).not.toHaveBeenCalled();
   });
 
   it('máy chủ giữ mã nhưng chưa tính giảm (đơn tối thiểu): nói lý do thay vì báo đã áp', async () => {
@@ -231,6 +249,36 @@ describe('AddToCart — áp mã mua chung từ ?ma= (E-9)', () => {
     await flush();
     expect(mocks.addToCart).toHaveBeenCalledTimes(2);
     expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+  });
+
+  it('đã thử áp thì gỡ ?ma= khỏi URL: tải lại hay quay lại trang rồi thêm giỏ không áp lại mã khách có thể đã bỏ chọn ở giỏ', async () => {
+    openedFrom(`?ma=${CODE}&v=v1`);
+    const first = mount();
+    await flush();
+    click(addButton(first.container));
+    await flush();
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+    expect(window.location.search).toBe('?v=v1');
+    first.unmount();
+    mounted = mounted.filter((m) => m !== first);
+
+    const reloaded = mount();
+    await flush();
+    click(addButton(reloaded.container));
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledTimes(2);
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+  });
+
+  it('chỉ nhận mã của nhóm (GBUY-): ?ma= mang mã khác không thay mã đang chọn ở giỏ, và không bị gỡ khỏi URL', async () => {
+    openedFrom('?ma=WELCOME30');
+    const { container } = mount();
+    await flush();
+    click(addButton(container));
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalled();
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
+    expect(window.location.search).toBe('?ma=WELCOME30');
   });
 
   it('không có ?ma= (lối vào thường): không gọi applyCoupon', async () => {

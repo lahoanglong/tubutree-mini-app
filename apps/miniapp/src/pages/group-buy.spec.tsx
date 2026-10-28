@@ -326,12 +326,18 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     expect(closed).toBeDisabled();
   });
 
-  it('chưa đăng nhập mở link nhóm: không gọi API chi tiết (cần đăng nhập), vẫn xem được danh sách', async () => {
+  it('chưa đăng nhập mở link nhóm: vẫn gọi API chi tiết (công khai), hiện thẻ nhóm được mời với nút "Đăng nhập để tham gia"', async () => {
     mocks.auth.status = 'anonymous';
     mocks.params = { id: 'b' };
+    mocks.getGroupBuy.mockResolvedValue(GROUP('b'));
     renderPage();
-    await screen.findByText('Sản phẩm a');
-    expect(mocks.getGroupBuy).not.toHaveBeenCalled();
+    expect(await screen.findByText('Bạn được mời vào nhóm này')).toBeInTheDocument();
+    expect(mocks.getGroupBuy).toHaveBeenCalledWith('b');
+    expect(screen.getAllByText('Sản phẩm b')).toHaveLength(1);
+    const buttons = screen.getAllByRole('button', { name: 'Đăng nhập để tham gia' });
+    fireEvent.click(buttons[0]!);
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+    expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
   });
 
   it('nói rõ cơ chế: đủ người thì nhận mã giảm theo % của nhóm (mã giảm % trên biến thể khách mua, không phải số tiền cố định)', async () => {

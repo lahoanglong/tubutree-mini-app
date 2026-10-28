@@ -50,12 +50,13 @@ export default function GroupBuyPage() {
     refetch,
   } = useQuery({ queryKey: ['group-buy'], queryFn: listGroupBuys });
 
-  // Link /group-buy/:id (người trong nhóm gửi bạn): nhóm đó có thể không nằm trong 30 nhóm mới nhất của danh sách chung.
-  // API chi tiết cần đăng nhập nên khách chưa đăng nhập chỉ xem danh sách chung.
+  // Link /group-buy/:id (người trong nhóm gửi bạn): nhóm đó có thể không nằm trong 30 nhóm mới nhất của danh sách chung. API chi tiết
+  // công khai (khách thấy đúng nhóm rồi mới được mời đăng nhập; mã giảm chỉ trả cho thành viên), nhưng `joined`/`couponCode` theo
+  // người xem nên khoá gắn với người xem, như `groupBuyOneQuery` của app-core: đăng nhập xong thì tải lại.
   const invitedQ = useQuery({
-    queryKey: ['group-buy', 'one', invitedId],
+    queryKey: ['group-buy', 'one', invitedId, user?.id ?? 'guest'],
     queryFn: () => getGroupBuy(invitedId!),
-    enabled: Boolean(invitedId) && authed,
+    enabled: Boolean(invitedId),
     retry: false,
   });
   const invited = invitedQ.data;

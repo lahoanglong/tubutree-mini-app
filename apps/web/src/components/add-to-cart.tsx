@@ -13,7 +13,7 @@ import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ui, uiBar } from '@/lib/guest-ui';
 import { phoneSecondary } from '@/lib/phone-ui';
 import { CountBadge } from '@/components/mini/badge';
-import { defaultVariationFor, pickDefaultVariation, variationPricing } from '@/lib/flash-price';
+import { defaultVariationFor, pickDefaultVariation, runningFlash, variationPricing } from '@/lib/flash-price';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import dynamic from 'next/dynamic';
 import type { VariationSheetMode } from './variation-sheet';
@@ -24,7 +24,6 @@ import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { actionErrorText } from '@/lib/error-text';
-import { runningFlash } from '@/lib/pdp-logic';
 
 // Bảng chỉ dùng ở khổ điện thoại khi khách bấm mua: tách khỏi First Load của trang sản phẩm.
 const VariationSheet = dynamic(() => import('./variation-sheet').then((m) => m.VariationSheet), { ssr: false });
@@ -47,6 +46,19 @@ function isPhoneWidth(): boolean {
 
 /** Còn từng này trở xuống thì nhắc "Chỉ còn N" để khách biết nên chốt sớm. */
 const LOW_STOCK_NOTICE = 5;
+
+/** Mã của nhóm mua chung (`GBUY-<nhóm>-<người>`), đúng dạng máy chủ cấp. */
+const GROUP_COUPON_CODE = /^GBUY-[A-Z0-9-]+$/;
+/** Thời gian giữ câu báo trên màn trước khi sang thanh toán: đủ đọc một câu ngắn (cùng mức với "Dùng ngay" ở thẻ mã). */
+const NOTICE_HOLD_MS = 1800;
+
+/** Gỡ `?ma=` khỏi mục lịch sử hiện tại sau khi đã thử áp: cùng cách với `?danh-gia=` ở khối đánh giá, không dựng lại trang. */
+function forgetCouponParam() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has('ma')) return;
+  url.searchParams.delete('ma');
+  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
 
 export default function AddToCart({
   slug,
@@ -160,19 +172,22 @@ export default function AddToCart({
   }, []);
 
   // Mã của nhóm mua chung đủ người (`?ma=` do nút "Mua ngay với mã" ở trang Mua chung đặt). Mã gắn riêng sản phẩm và có đơn tối thiểu nên
-  // chỉ áp được khi món đã nằm trong giỏ: thử một lần ngay sau lần thêm giỏ đầu tiên thành công. Lỗi không chặn việc mua, chỉ nói lý do.
+  // chỉ áp được khi món đã nằm trong giỏ: thử một lần ngay sau lần thêm giỏ đầu tiên thành công, rồi gỡ `ma` khỏi URL để tải lại hay
+  // quay lại trang không áp lại một mã khách có thể đã bỏ chọn ở giỏ. Chỉ nhận mã nhóm (`GBUY-`): một đường dẫn soạn sẵn mang mã khác
+  // không được thay mã khách đang chọn. Lỗi không chặn việc mua, chỉ nói lý do; `hold` báo có điều khách cần đọc trước khi rời trang.
   const groupCouponTried = useRef(false);
   const applyGroupCoupon = async (cart: Awaited<ReturnType<typeof addToCart>>) => {
     const code = new URLSearchParams(window.location.search).get('ma')?.trim().toUpperCase();
-    if (!code || groupCouponTried.current) return { cart, note: null };
+    if (!code || !GROUP_COUPON_CODE.test(code) || groupCouponTried.current) return { cart, note: null, hold: false };
     groupCouponTried.current = true;
+    forgetCouponParam();
     try {
       const next = await applyCoupon(code);
       void qc.invalidateQueries({ queryKey: ['quote'] });
       const outcome = couponUseOutcome(cart.couponCode, code, next);
-      return { cart: next, note: outcome.kind === 'ok' ? `Đã áp mã ${code}.` : outcome.text };
+      return { cart: next, note: outcome.kind === 'ok' ? `Đã áp mã ${code}.` : outcome.text, hold: outcome.kind !== 'ok' };
     } catch (e) {
-      return { cart, note: couponUseCopy.notApplied(actionErrorText(e)) };
+      return { cart, note: couponUseCopy.notApplied(actionErrorText(e)), hold: true };
     }
   };
 
@@ -182,7 +197,7 @@ export default function AddToCart({
     setMsg(null);
     let leaving = false;
     try {
-      const { cart, note } = await applyGroupCoupon(await addToCart(variationId, quantity));
+      const { cart, note, hold } = await applyGroupCoupon(await addToCart(variationId, quantity));
       // Badge giỏ ở header đọc cùng queryKey ['cart'] nhưng nằm trong layout nên không bao giờ
       // remount, và providers tắt refetchOnWindowFocus — không cập nhật thì khách thêm 3 món
       // vẫn thấy số cũ, tưởng chưa thêm được rồi thêm lại thành trùng số lượng.
@@ -194,6 +209,12 @@ export default function AddToCart({
         rememberCheckoutSelection(bought.length > 0 ? bought : null);
         // Không bỏ khoá `busy`: trang sắp chuyển đi, bấm thêm lúc này là cộng đôi số lượng vào giỏ.
         leaving = true;
+        if (hold && note) {
+          // Trang thanh toán không biết mã vừa áp hụt: giữ câu báo trên màn một lúc (như "Dùng ngay" ở thẻ mã) rồi mới sang.
+          setSuccess(false);
+          setMsg(note);
+          await new Promise((resolve) => window.setTimeout(resolve, NOTICE_HOLD_MS));
+        }
         router.push('/thanh-toan');
         return;
       }
