@@ -14,6 +14,7 @@ vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 
 import { FlashSale, UpcomingFlashSales } from './flash-sale';
+import { FLASH_HINT_KEY } from '@tubutree/app-core/home-layout';
 import { resetFlashSales } from '@/lib/use-flash-sales';
 
 const HOUR = 3_600_000;
@@ -76,6 +77,66 @@ describe('FlashSale hydrate', () => {
     expect(errors).toEqual([]);
     act(() => root.unmount());
     container.remove();
+  });
+
+  it('HTML ISR cũ trả sau giờ hết suất (đồng hồ trình duyệt đã qua endAt): hydrate không lỗi, đồng hồ ẩn', async () => {
+    activeResult = () => new Promise(() => undefined);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-28T11:55:00Z'));
+    const items = [active({ endAt: '2026-10-28T12:00:00Z' })];
+    const ui = () => (
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <FlashSale initial={items as never} />
+      </QueryClientProvider>
+    );
+    const html = renderToString(ui());
+    expect(html).toContain('5m');
+    vi.setSystemTime(new Date('2026-10-28T12:30:00Z'));
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.appendChild(container);
+    const errors: unknown[] = [];
+    const consoleError = vi.spyOn(console, 'error').mockImplementation((...a) => void errors.push(a));
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, ui(), { onRecoverableError: (e) => void errors.push(e) });
+    });
+    consoleError.mockRestore();
+    expect(errors).toEqual([]);
+    expect(container.querySelector('[role="timer"]')?.className ?? '').toContain('invisible');
+    act(() => root.unmount());
+    container.remove();
+  });
+});
+
+describe('FlashSale dữ liệu dựng sẵn rỗng', () => {
+  const withStorage = (hadFlash: boolean) => {
+    try { localStorage.clear(); if (hadFlash) localStorage.setItem(FLASH_HINT_KEY, '1'); } catch { /* không có kho */ }
+  };
+  it('máy nhớ lần trước có Giờ vàng, bản dựng sẵn rỗng, đang tải lại: vẽ khung giữ chỗ rồi hiện suất mới', async () => {
+    withStorage(true);
+    let resolve!: (v: unknown) => void;
+    activeResult = () => new Promise((r) => { resolve = r; });
+    const c = await mount(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <FlashSale initial={[]} />
+      </QueryClientProvider>,
+    );
+    expect(c.querySelector('[data-testid="flash-sale-loading"]')).not.toBeNull();
+    resolve([active()]);
+    await flush(8);
+    expect(c.querySelector('[data-testid="flash-sale-loading"]')).toBeNull();
+    expect(c.textContent).toContain('Nước rửa chén');
+  });
+  it('chưa nhớ Giờ vàng: không vẽ khung giữ chỗ', async () => {
+    withStorage(false);
+    activeResult = () => new Promise(() => undefined);
+    const c = await mount(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <FlashSale initial={[]} />
+      </QueryClientProvider>,
+    );
+    expect(c.querySelector('[data-testid="flash-sale-loading"]')).toBeNull();
   });
 });
 
@@ -173,7 +234,9 @@ describe('FlashSale', () => {
   it('đã quá giờ kết thúc (chờ lần tải lại kế tiếp): ẩn đồng hồ, không hiện "Còn 0h 00m"', async () => {
     activeResult = async () => [active({ endAt: new Date(Date.now() - 1000).toISOString() })];
     const c = await mount(<FlashSale />);
-    expect(c.querySelector('[role="timer"]')).toBeNull();
+    const timer = c.querySelector('[role="timer"]');
+    expect(timer?.className).toContain('invisible');
+    expect(timer?.getAttribute('aria-hidden')).toBe('true');
     expect(c.textContent).not.toContain('0h 00m');
   });
 

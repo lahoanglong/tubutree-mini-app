@@ -83,6 +83,8 @@ export function FlashSale({ initial }: { initial?: FlashSaleActiveItem[] }) {
   }, [items, expiredTick]);
 
   const timeLeft = useCountdown(soonestEndAt);
+  const [afterMount, setAfterMount] = useState(false);
+  useEffect(() => setAfterMount(true), []);
   useEffect(() => {
     if (soonestEndAt && timeLeft === '') setExpiredTick((n) => n + 1);
   }, [soonestEndAt, timeLeft]);
@@ -90,12 +92,15 @@ export function FlashSale({ initial }: { initial?: FlashSaleActiveItem[] }) {
   // Lần mở trước có Giờ vàng thì giữ chỗ lúc tải (khối nằm sát màn đầu, chen vào sẽ đẩy cả trang); chưa nhớ thì chờ im lặng.
   // Đọc bằng useSyncExternalStore: HTML server không có kho nên bản server là "chưa nhớ", sau hydrate mới đọc thật.
   const hadFlash = useSyncExternalStore(subscribeNothing, () => readFlashHint(browserStorage()), () => false);
-  const settledWithFlash = q.data !== undefined && !q.isLoading ? soonestEndAt !== null : null;
+  // Đang tải lại thì chưa chốt: dữ liệu dựng sẵn có thể cũ, ghi "không có" lúc này sẽ xoá dấu nhớ trước khi biết kết quả thật.
+  const settledWithFlash = q.data !== undefined && !q.isLoading && !q.isFetching ? soonestEndAt !== null : null;
   useEffect(() => {
     if (settledWithFlash !== null) writeFlashHint(browserStorage(), settledWithFlash);
   }, [settledWithFlash]);
 
   if (q.isLoading) return hadFlash ? <FlashSkeleton /> : null;
+  // Bản dựng sẵn rỗng (hết suất lúc dựng trang) mà lần trước có Giờ vàng: lần tải lại ngay sau đó có thể mang suất mới về, giữ chỗ để khối không chen vào.
+  if (items.length === 0 && hadFlash && q.isFetching && !q.isError) return <FlashSkeleton />;
   if (items.length === 0) {
     return q.isError ? <HomeBlockError title={flashSaleText.sectionName} error={q.error} onRetry={q.refetch} retrying={q.isFetching} /> : null;
   }
@@ -107,15 +112,22 @@ export function FlashSale({ initial }: { initial?: FlashSaleActiveItem[] }) {
           <Zap className="h-4 w-4" aria-hidden="true" />
           {flashSaleText.sectionTitle}
         </h2>
-        {/* Hết giờ mà danh sách chưa kịp tải lại (poll 60s): không hiện đồng hồ về 0. */}
-        {timeLeft && (
-          <span role="timer" suppressHydrationWarning aria-label={flashSaleText.endsIn(timeLeft)}>
-            <Badge tone="promo" icon={Clock}>
-              {/* HTML ISR dựng trước lúc hydrate tới 60s: chữ phút lệch là bình thường, chỉ che đúng phần tử chứa chữ. */}
-              <span suppressHydrationWarning>{flashSaleText.endsIn(timeLeft)}</span>
-            </Badge>
-          </span>
-        )}
+        {/* Khung đồng hồ luôn có trong cây: HTML ISR cũ có thể được trả sau giờ hết suất (hoặc đồng hồ máy khách chạy trước máy chủ),
+            khi đó máy chủ vẽ đồng hồ mà trình duyệt tính ra rỗng; khác cấu trúc phần tử thì hydrate hỏng. Hết giờ thì ẩn, không hiện về 0.
+            React không sửa thuộc tính/chữ lệch khi hydrate, nên sau mount đổi key để vẽ lại đúng theo giờ trình duyệt. */}
+        <span
+          key={afterMount ? 'live' : 'ssr'}
+          role="timer"
+          suppressHydrationWarning
+          aria-label={timeLeft ? flashSaleText.endsIn(timeLeft) : undefined}
+          aria-hidden={timeLeft ? undefined : true}
+          className={timeLeft ? undefined : 'invisible'}
+        >
+          <Badge tone="promo" icon={Clock}>
+            {/* Chữ phút lệch giữa HTML ISR và trình duyệt là bình thường, chỉ che đúng phần tử chứa chữ. */}
+            <span suppressHydrationWarning>{timeLeft ? flashSaleText.endsIn(timeLeft) : ''}</span>
+          </Badge>
+        </span>
       </div>
       <ScrollRail className={RAIL}>
         {items.map((item: FlashSaleActiveItem) => {
