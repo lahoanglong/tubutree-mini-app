@@ -44,7 +44,9 @@ function applySavedFontScale(): void {
 
 // Code-split: Home eager (first paint), các trang khác lazy để giữ initial bundle nhỏ (§13.4).
 // Khảo sát đang tắt: mã của nó nằm ngoài gói khởi động và chỉ tải khi bật cờ.
-const OnboardingGate = lazy(() => import('./onboarding').then((m) => ({ default: m.OnboardingGate })));
+const OnboardingGate = ONBOARDING_SURVEY_ENABLED
+  ? lazy(() => import('./onboarding').then((m) => ({ default: m.OnboardingGate })))
+  : () => null;
 const BrowsePage = lazy(() => import('../pages/browse'));
 const ProductDetailPage = lazy(() => import('../pages/product-detail'));
 const CartPage = lazy(() => import('../pages/cart'));
