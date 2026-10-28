@@ -4,8 +4,8 @@ import { HARVEST_COUPON_CODE_PREFIXES } from '../../src/modules/game/game.consta
 import { createUser, randCode } from './helpers';
 
 /**
- * Đếm trần mã thu hoạch bằng một câu SQL theo partial index `coupons_user_group_userId_idx`, thay cho hai lần
- * `coupon.count` với `scopeMeta.path` (quét cả bảng trong tx Serializable). Số đếm phải bằng cách cũ trên cùng dữ liệu.
+ * Đếm trần mã thu hoạch bằng một câu SQL theo partial index `coupons_user_group_userId_idx` (hai lần `coupon.count` với
+ * `scopeMeta.path` quét cả bảng trong tx Serializable). Số đếm phải bằng phép đếm `coupon.count` trên cùng dữ liệu.
  */
 describe('countHarvestCoupons (real Postgres)', () => {
   let db: PrismaClient;

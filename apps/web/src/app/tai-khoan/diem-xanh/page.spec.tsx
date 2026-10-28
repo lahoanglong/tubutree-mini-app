@@ -205,7 +205,7 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
   });
 });
 
-describe('/tai-khoan/diem-xanh — một dòng mã giảm giá thay cho danh sách mã', () => {
+describe('/tai-khoan/diem-xanh — dòng mã giảm giá: Ví mã hoặc Đổi quà', () => {
   const COUPONS = [
     { code: 'FREESHIP1', type: 'FREESHIP', value: 0, minOrder: 199000, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' },
     { code: 'PCT10', type: 'PERCENT', value: 10, minOrder: null, maxDiscount: 50000, endAt: '2026-11-01T05:00:00Z' },

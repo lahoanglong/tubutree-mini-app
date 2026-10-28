@@ -171,7 +171,7 @@ describe('LoyaltyPage — thẻ hạng', () => {
   });
 });
 
-describe('LoyaltyPage — một dòng mã giảm giá thay cho danh sách mã', () => {
+describe('LoyaltyPage — dòng mã giảm giá: Ví mã hoặc Đổi quà', () => {
   const COUPON = { code: 'WELCOME30', type: 'AMOUNT', value: 30_000, minOrder: 199_000, maxDiscount: null, endAt: '2026-12-31T00:00:00.000Z' };
 
   it('có mã: dòng "Ví mã (n)" dẫn tới Ưu đãi mục mã, không liệt kê từng mã; Kho quà vẫn là dòng riêng', async () => {

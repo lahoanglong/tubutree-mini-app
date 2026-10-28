@@ -1524,7 +1524,7 @@ export class CommunityFeedService {
       if (count !== 1) throw new BadRequestException('Sự kiện đã đóng hoặc đã chọn người thắng.');
       return this.reward.rewardEventWinner(userId, eventId, event.rewardPoints, tx, expiresAt);
     });
-    // Người thắng phải biết mình trúng (trước đây chỉ cộng điểm im lặng); báo SAU commit, lỗi thông báo không đảo việc đã chốt.
+    // Người thắng phải biết mình trúng; báo SAU commit, lỗi thông báo không đảo việc đã chốt.
     await this.notifications
       ?.notify(userId, 'COMMUNITY_EVENT_WINNER', {
         title: event.title,

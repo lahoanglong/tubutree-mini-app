@@ -28,7 +28,7 @@ export function tierGraceLine(
 }
 
 /**
- * Dòng mã giảm giá ở trang Hạng (thay cho khối danh sách mã, vì mã đã có ở Ưu đãi): có mã thì "Ví mã (n)" tới Ưu đãi mục mã;
+ * Dòng mã giảm giá ở trang Hạng (trang Hạng chỉ có một dòng lối tắt, vì danh sách mã nằm ở Ưu đãi): có mã thì "Ví mã (n)" tới Ưu đãi mục mã;
  * chưa có mã thì "Đổi quà" tới Kho quà; chưa biết số mã (đang tải lỗi) thì "Ví mã" không kèm số, để Ưu đãi tự báo lỗi và thử lại.
  */
 export function couponShortcut(count: number | null): { title: string; sub: string; to: 'coupons' | 'rewards' } {

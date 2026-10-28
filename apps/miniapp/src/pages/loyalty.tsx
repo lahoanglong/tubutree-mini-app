@@ -280,7 +280,7 @@ export default function LoyaltyPage() {
             </div>
           </div>
 
-          {/* Mã giảm giá nằm ở Ưu đãi: trang Hạng chỉ giữ một dòng lối tắt, ngay dưới thẻ hạng (A1-021) để khách có mã vẫn thấy lý do quay lại. */}
+          {/* Mã giảm giá nằm ở Ưu đãi: trang Hạng chỉ giữ một dòng lối tắt, ngay dưới thẻ hạng để khách có mã vẫn thấy lý do quay lại. */}
           {couponsQ.isLoading ? (
             <div style={{ margin: '0 16px 12px' }}>
               <Skeleton height={56} radius="var(--radius-card)" />

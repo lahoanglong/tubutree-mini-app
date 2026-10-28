@@ -766,7 +766,7 @@ export class LoyaltyService {
   }
 
   /**
-   * Lịch sử điểm của khách, mới nhất trước. Không tham số thì trả 100 dòng đầu như bản cũ; `before` + `beforeId` (createdAt và id
+   * Lịch sử điểm của khách, mới nhất trước. Không tham số thì trả tối đa 100 dòng mới nhất (client chưa phân trang vẫn chạy); `before` + `beforeId` (createdAt và id
    * của dòng cuối trang trước) lấy trang kế theo đúng thứ tự (createdAt, id) giảm dần nên nhiều dòng cùng mili giây không bị
    * trùng hay sót.
    */

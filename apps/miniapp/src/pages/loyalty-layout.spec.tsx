@@ -81,7 +81,7 @@ beforeEach(() => {
 
 const before = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-describe('LoyaltyPage — dòng mã giảm giá ngay dưới thẻ hạng (C-074, R-122)', () => {
+describe('LoyaltyPage — dòng mã giảm giá ngay dưới thẻ hạng', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getLoyalty.mockResolvedValue(LOYALTY);

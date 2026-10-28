@@ -10,7 +10,7 @@ import { createUser, summarize, warmPool } from './helpers';
 
 /**
  * Chọn người thắng sự kiện: đóng sự kiện và cộng Điểm Xanh cùng một giao dịch. Cộng lỗi thì sự kiện vẫn OPEN
- * (trước đây đóng trước, cộng lỗi chỉ ghi warn nên người thắng mất thưởng mà không chọn lại được).
+ * để admin chọn lại, người thắng không mất thưởng.
  */
 describe('CommunityFeedService.pickWinner (real Postgres)', () => {
   let moduleRef: TestingModule;
