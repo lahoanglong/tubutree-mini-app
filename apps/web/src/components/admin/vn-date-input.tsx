@@ -138,12 +138,12 @@ export function VnDateInput({
         className="pointer-events-none absolute bottom-0 right-0 h-0 w-0 opacity-0"
       />
       {pending && (
-        <span role="status" className="absolute left-0 top-full z-10 mt-0.5 whitespace-nowrap rounded-control bg-stone-0 px-1 text-xs text-stone-500">
+        <span role="status" className="absolute left-0 top-full z-10 mt-0.5 w-max max-w-full rounded-control bg-stone-0 px-1 text-xs text-stone-500">
           {text.length === 10 ? 'Ngày không có thật, chưa áp dụng.' : 'Chưa áp dụng, gõ đủ ngày dd/mm/yyyy.'}
         </span>
       )}
       {invalid && (
-        <span role="alert" className="absolute left-0 top-full z-10 mt-0.5 whitespace-nowrap rounded-control bg-stone-0 px-1 text-xs text-danger-fg">
+        <span role="alert" className="absolute left-0 top-full z-10 mt-0.5 w-max max-w-full rounded-control bg-stone-0 px-1 text-xs text-danger-fg">
           {outOfRange ? 'Ngày nằm ngoài khoảng cho phép.' : text.length === 10 ? 'Ngày không có thật, chưa áp dụng.' : 'Nhập ngày dạng dd/mm/yyyy, ví dụ 03/10/2026.'}
         </span>
       )}
