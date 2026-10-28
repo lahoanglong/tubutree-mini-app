@@ -16,7 +16,8 @@ import { Button } from '../components/ui/button';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { OrderCard } from '../components/orders/order-card';
-import { ORDERS_TABS, parseOrdersTab, type OrdersTabKey } from '../components/orders/orders-tabs';
+import { ordersTabs, parseOrdersTab, type OrdersTabKey } from '../components/orders/orders-tabs';
+import { useHasSubscription } from '../hooks/use-has-subscription';
 import { BestSellerRail } from '../components/home/best-seller-rail';
 import { PurchasedRail } from '../components/reorder/purchased-rail';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
@@ -33,10 +34,15 @@ export default function OrdersPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const phase = useAuthPhase();
-  const [tab, setTab] = useState<OrdersTabKey>(() => parseOrdersTab(location.search));
+  // Tab Định kỳ chỉ có khi khách đã có gói (đặt trên web): danh sách tab và tab mở sẵn theo ?tab= phải chờ biết điều đó.
+  const { hasSubscription, isLoading: subsLoading } = useHasSubscription(phase === 'authenticated');
+  const tabs = ordersTabs(hasSubscription);
+  const [picked, setPicked] = useState<OrdersTabKey | null>(null);
+  const tab = picked && tabs.some((t) => t.key === picked) ? picked : parseOrdersTab(location.search, tabs);
+  const awaitingTabs = picked === null && subsLoading && new URLSearchParams(location.search).get('tab') === 'subscriptions';
   // State ổn định (không dựng target trong JSX) — ReorderSheet reset lựa chọn theo identity của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
-  const current = ORDERS_TABS.find((t) => t.key === tab) ?? ORDERS_TABS[0]!;
+  const current = tabs.find((t) => t.key === tab) ?? tabs[0]!;
   const isSubscriptions = tab === 'subscriptions';
 
   // Phân trang bằng useInfiniteQuery + "Xem thêm" (giữ fix cũ: >20 đơn vẫn xem được đơn cũ).
@@ -49,7 +55,7 @@ export default function OrdersPage() {
       const { page, limit, total } = lastPage.meta;
       return page * limit < total ? page + 1 : undefined;
     },
-    enabled: phase === 'authenticated' && !isSubscriptions,
+    enabled: phase === 'authenticated' && !isSubscriptions && !awaitingTabs,
   });
   const list = orders.data?.pages.flatMap((pg) => pg.data) ?? [];
 
@@ -73,17 +79,22 @@ export default function OrdersPage() {
       <AuthGate>
         <div style={{ padding: '8px 12px' }}>
           <SegmentedTabs
-            items={ORDERS_TABS.map((t) => ({ key: t.key, label: t.label }))}
+            items={tabs.map((t) => ({ key: t.key, label: t.label }))}
             value={tab}
             onChange={(key) => {
               haptic('light');
-              setTab(key as OrdersTabKey);
+              setPicked(key as OrdersTabKey);
             }}
             scroll
           />
         </div>
 
-        {isSubscriptions ? (
+        {awaitingTabs ? (
+          <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <LineItemSkeleton />
+            <LineItemSkeleton />
+          </div>
+        ) : isSubscriptions ? (
           <SubscriptionsPanel />
         ) : orders.isLoading ? (
           <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
