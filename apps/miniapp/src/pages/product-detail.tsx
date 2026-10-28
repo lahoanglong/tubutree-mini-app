@@ -19,7 +19,7 @@ import { createGroupBuy } from '../services/groupbuy-api';
 import { groupBuyPitch } from '../utils/group-buy-copy';
 import { useAuthStore } from '../store/auth';
 import { useShareWithFallback } from '../components/share-sheet';
-import { WEB_BASE_URL } from '../utils/web-base-url';
+import { miniAppLink } from '../utils/miniapp-link';
 import { withReferral } from '../utils/share-link';
 import { ReviewsSection, Stars } from '../components/reviews-section';
 import { WishlistHeart } from '../components/wishlist-heart';
@@ -342,7 +342,7 @@ export default function ProductDetailPage() {
         thumbnail: p.thumbnail ?? undefined,
         path: withReferral(`/product/${p.slug}`, code),
       },
-      withReferral(`${WEB_BASE_URL}/san-pham/${p.slug}`, code),
+      withReferral(miniAppLink(`/product/${p.slug}`), code),
     );
   };
 

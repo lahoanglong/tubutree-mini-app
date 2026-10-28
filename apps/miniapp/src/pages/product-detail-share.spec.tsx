@@ -42,7 +42,7 @@ vi.mock('../components/ui/cart-badge', () => ({ CartBadge: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { vi as viText } from '../i18n/vi';
-import { WEB_BASE_URL } from '../utils/web-base-url';
+import { miniAppLink } from '../utils/miniapp-link';
 import ProductDetailPage from './product-detail';
 
 const FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
@@ -74,7 +74,7 @@ describe('ProductDetailPage nút Chia sẻ', () => {
     expect(mocks.shareLink).not.toHaveBeenCalled();
     expect(mocks.shareWithFallback).toHaveBeenCalledWith(
       { title: 'Sản phẩm a', description: 'Mô tả ngắn', thumbnail: 'https://img/thumb.jpg', path: '/product/a' },
-      `${WEB_BASE_URL}/san-pham/a`,
+      miniAppLink('/product/a'),
     );
   });
 
@@ -93,7 +93,7 @@ describe('ProductDetailPage nút Chia sẻ', () => {
     fireEvent.click(await screen.findByRole('button', { name: viText.product.share }));
     expect(mocks.shareWithFallback).toHaveBeenCalledWith(
       expect.objectContaining({ path: '/product/a?ref=ABCD1234' }),
-      `${WEB_BASE_URL}/san-pham/a?ref=ABCD1234`,
+      miniAppLink('/product/a?ref=ABCD1234'),
     );
   });
 });

@@ -36,7 +36,7 @@ import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
 import { pointsSummary } from '../utils/points-lots';
-import { WEB_BASE_URL } from '../utils/web-base-url';
+import { miniAppLink } from '../utils/miniapp-link';
 
 interface MenuItem {
   Icon: LucideIcon;
@@ -211,7 +211,7 @@ export default function ProfilePage() {
     haptic('light');
     void shareWithFallback(
       { title: 'Tubu Tree — Trồng cây, nhận quà', description: `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé!`, path: `/?ref=${code}` },
-      `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé: ${WEB_BASE_URL}/?ref=${code}`,
+      `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé: ${miniAppLink(`/?ref=${code}`)}`,
     );
   };
 

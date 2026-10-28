@@ -23,11 +23,13 @@ describe('resolveWebBaseUrl', () => {
 });
 
 describe('nơi dựng link chia sẻ', () => {
-  it.each(['components/content-kit-sheet.tsx'])(
-    '%s dùng WEB_BASE_URL dùng chung, không tự ghi tên miền',
+  // R-67: mọi link chia sẻ phát ra từ Mini App là link Mini App (zalo.me/s/<id>/...), người nhận ở lại trong Zalo.
+  it.each(['components/content-kit-sheet.tsx', 'pages/product-detail.tsx', 'pages/profile.tsx'])(
+    '%s dựng link bằng miniAppLink, không dùng domain web',
     (rel) => {
       const src = source(rel);
-      expect(src).toContain('WEB_BASE_URL');
+      expect(src).toContain('miniAppLink(');
+      expect(src).not.toContain('WEB_BASE_URL');
       expect(src).not.toMatch(/tubutree\.com'/);
       expect(src).not.toContain('VITE_WEB_BASE_URL');
     },
