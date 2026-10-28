@@ -76,8 +76,9 @@ export function PayrollAdjustSheet({
         reason: reasonText,
         ...(allowDuplicate ? { allowDuplicate: true } : {}),
       });
-      // Máy chủ chỉ tính lại bảng lương THÁNG khi mở đúng tháng hiện tại; tháng trước vẫn hiện số cũ (kể cả trong QR và ô "Số tiền" khi ghi đã trả)
-      // tới đêm sau. Khoản đã ghi rồi nên lỗi ở bước này không được biến thành lỗi ghi khoản (admin sẽ ghi lại và phạt hai lần).
+      // Máy chủ chỉ tự tính lại bảng lương khi mở đúng tháng hiện tại; cron chỉ tính lại tháng trước trong 3 ngày đầu tháng, ngoài khoảng đó
+      // số tháng cũ (kể cả trong QR và ô "Số tiền" khi ghi đã trả) đứng yên tới khi chốt, ghi đã trả hoặc mở Xem giờ. Khoản đã ghi rồi nên lỗi ở bước này
+      // không được biến thành lỗi ghi khoản (admin sẽ ghi lại và phạt hai lần).
       try {
         await recomputePayroll(coreHttp, row.staff.id, year, month);
         return true;
@@ -102,7 +103,19 @@ export function PayrollAdjustSheet({
           confirmLabel: 'Vẫn ghi thêm',
           tone: 'danger',
         });
-        if (again) void submit(true);
+        if (again) {
+          void submit(true);
+          return;
+        }
+        // Lần ghi trước có thể đã vào sổ mà phản hồi bị mất: tính lại để dòng lương khớp sổ dù admin không ghi thêm.
+        let recomputed = true;
+        try {
+          await recomputePayroll(coreHttp, row.staff.id, year, month);
+        } catch {
+          recomputed = false;
+        }
+        const same = 'Khoản giống hệt đã có nên chưa ghi thêm.';
+        onDone(recomputed ? `${same} Đã cập nhật số lương trên dòng.` : `${same} Chưa cập nhật được số lương trên dòng: bấm Tính lại tháng để cập nhật số.`);
         return;
       }
       setErr(actionErrorText(e));
@@ -128,6 +141,7 @@ export function PayrollAdjustSheet({
       <Sheet
         open
         onClose={onClose}
+        dismissible={!send.isPending}
         title={`Thưởng/phạt · ${name}`}
         footer={
           <button
