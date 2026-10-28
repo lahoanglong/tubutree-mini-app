@@ -147,7 +147,7 @@ export interface AdminExternalClaimDetail extends AdminExternalClaimRow {
 }
 
 /** Bộ lọc `attention` của GET /admin/external-claims (thêm sau review lượt 3): đúng các dòng mục "Cần xử lý" đếm. */
-export type AdminExternalClaimAttentionFilter = 'closed_credited' | 'stale';
+export type AdminExternalClaimAttentionFilter = 'closed_credited' | 'stale' | 'partial_refund';
 
 export interface AdminExternalClaimListResponse {
   data: AdminExternalClaimRow[];

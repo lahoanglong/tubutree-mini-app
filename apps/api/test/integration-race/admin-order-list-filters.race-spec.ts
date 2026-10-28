@@ -85,12 +85,16 @@ describe('Admin order list filters (real Postgres)', () => {
     const bank = await mk('BANK', {});
     await mk('ZALO', { paymentMethod: 'ZALOPAY' });
     await mk('WALLET', { paymentMethod: 'WALLET' });
-    await mk('DLR', { type: 'DEALER' });
+    const dealer = await mk('DLR', { type: 'DEALER' });
     await mk('PAID', { paymentStatus: 'PAID', status: 'CONFIRMED' });
     const got = await codesOf(tok, { queue: 'bank_transfer_to_confirm' });
     expect(got.codes).toEqual([bank]);
     expect(got.total).toBe(1);
     expect((await codesOf(tok, {})).total).toBe(5);
+    // Hàng đợi đại lý: chỉ đơn đại lý chuyển khoản chưa trả, hàng đợi lẻ ở trên không đổi.
+    const gotDealer = await codesOf(tok, { queue: 'dealer_transfer_to_confirm' });
+    expect(gotDealer.codes).toEqual([dealer]);
+    expect(gotDealer.total).toBe(1);
   });
 
   it('lọc theo CTV (id) và theo gian hàng (slug, subdomain hoa thường); slug lạ trả danh sách rỗng', async () => {

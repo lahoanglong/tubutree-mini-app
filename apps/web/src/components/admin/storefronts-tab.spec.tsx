@@ -204,6 +204,22 @@ describe('StorefrontsTab (D3-02)', () => {
       expect(api.calls.find((c) => c.url.includes('/s1/approval'))!.init?.body).toBe(JSON.stringify({ approved: true }));
     });
 
+    it('duyệt nhanh xong thì số "Gian hàng chờ duyệt" trên hộp việc tải lại ngay (E-52)', async () => {
+      const api = mockFetch({
+        '/admin/ops/inbox': { body: { generatedAt: '2026-10-28T03:00:00.000Z', items: [{ key: 'storefrontsPending', count: 1 }] } },
+        '/admin/storefronts?': page([row()]),
+        '/admin/storefronts/s1/approval': { body: { ok: true } },
+      });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      const inboxCalls = () => api.calls.filter((c) => c.url.includes('/admin/ops/inbox')).length;
+      expect(inboxCalls()).toBe(1);
+      click(byText(container.querySelector('article[aria-label="Shop của Linh"]') as HTMLElement, 'button', 'Duyệt'));
+      await flush();
+      expect(inboxCalls()).toBe(2);
+    });
+
     it('gian hàng đối tác không có nút duyệt (luôn tính là đã duyệt)', async () => {
       await open([row()], detail({ type: 'MERCHANT', isPartner: true, approved: true }));
       const drawer = document.body.querySelector('[role="dialog"]') as HTMLElement;

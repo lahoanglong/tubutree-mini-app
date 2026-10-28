@@ -1,5 +1,6 @@
 'use client';
 
+import type { QueryClient } from '@tanstack/react-query';
 import { apiDownload, apiFetch } from './client-api';
 import type { GomdonAlertView } from './recycling';
 import type {
@@ -456,10 +457,12 @@ export const setUserRole = (phone: string, role: UserRole, tierId?: string) => {
     { method: 'POST', body: { phone, role, ...(tier ? { tierId: tier } : {}) } },
   );
 };
-/** Số của trang "Hôm nay" (chỉ ADMIN): đơn, doanh thu đã thu, khách mới (tài khoản thật) theo ngày giờ VN. */
+/** Số của trang "Hôm nay" (chỉ ADMIN): đơn, tiền đã thu, giá trị đơn đặt, khách mới (tài khoản thật) theo ngày giờ VN. */
 export interface TodaySummary {
   orders: { today: number; yesterday: number; week: number };
   revenue: { today: number; yesterday: number; week: number };
+  /** Giá trị đơn đặt (đơn COD chưa giao cũng tính); thiếu khi API chưa cập nhật. */
+  gmv?: { today: number; yesterday: number; week: number };
   newUsers: { today: number; yesterday: number; week: number };
 }
 export const getTodaySummary = () => apiFetch<TodaySummary>('/admin/dashboard/today');
@@ -476,7 +479,7 @@ export type OrderKind = 'retail' | 'ctv' | 'dealer' | 'ctv_assisted' | 'storefro
 export type OrderPaymentFilter = 'UNPAID' | 'PAID' | 'REFUNDED' | 'FAILED';
 export type OrderListPlatform = 'miniapp' | 'web';
 /** Hàng đợi của hộp việc, đúng điều kiện của số đếm (không có ô chọn riêng trên bộ lọc). */
-export type OrderQueue = 'bank_transfer_to_confirm';
+export type OrderQueue = 'bank_transfer_to_confirm' | 'dealer_transfer_to_confirm';
 /** Bộ lọc thêm của danh sách đơn (D1-17) cùng thứ tự theo ngày đặt; `storefront` là slug hoặc tên miền con. */
 export interface OrderListExtra {
   kind?: OrderKind;
@@ -672,6 +675,8 @@ export const getDealerCreditLedger = (userId: string) =>
 
 export interface RecordDealerCreditPaymentResult {
   balance: number;
+  /** Chỉ có khi gửi kèm reportId: false là mã giao dịch đã có trong sổ từ lần ghi khác nên báo cáo này vẫn chưa đóng. */
+  reportClosed?: boolean;
 }
 /**
  * POST /admin/dealers/:userId/credit-payment — GHI GIẢM sổ công nợ, trần theo dư nợ TẠI LÚC DUYỆT
@@ -679,17 +684,36 @@ export interface RecordDealerCreditPaymentResult {
  */
 export const recordDealerCreditPayment = (
   userId: string,
-  input: { amount: number; bankRef?: string; note?: string },
+  input: { amount: number; bankRef?: string; note?: string; /** Báo cáo chuyển khoản của đại lý mà khoản này xử lý; đóng báo cáo cùng lúc ghi sổ. */ reportId?: string },
   idempotencyKey?: string,
 ) => {
   const bankRef = input.bankRef?.trim().slice(0, DEALER_BANK_REF_MAX) || undefined;
   const note = input.note?.trim().slice(0, DEALER_PAYMENT_NOTE_MAX) || undefined;
   return apiFetch<RecordDealerCreditPaymentResult>(`/admin/dealers/${encodeURIComponent(userId)}/credit-payment`, {
     method: 'POST',
-    body: { amount: input.amount, ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}) },
+    body: { amount: input.amount, ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}), ...(input.reportId ? { reportId: input.reportId } : {}) },
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
   });
 };
+
+/** Đại lý bấm "Báo đã chuyển khoản" trả nợ; kế toán đối chiếu sao kê rồi Ghi nhận (kèm reportId) hoặc đánh dấu Không thấy tiền. */
+export interface DealerCreditReport {
+  id: string;
+  userId: string;
+  amount: number;
+  note: string | null;
+  status: 'REPORTED' | 'RECORDED' | 'DISMISSED';
+  createdAt: string;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  resolveNote: string | null;
+  dealer: { id: string; fullName: string | null; phone: string | null };
+}
+export const DEALER_CREDIT_REPORTS_QUERY_KEY = ['admin-dealer-credit-reports'] as const;
+/** Mặc định chỉ báo cáo chưa xử lý, cũ nhất trước. */
+export const listDealerCreditReports = () => apiFetch<DealerCreditReport[]>('/admin/dealer-credit-reports');
+export const dismissDealerCreditReport = (id: string, reason: string) =>
+  apiFetch<{ ok: true; alreadyProcessed: boolean }>(`/admin/dealer-credit-reports/${encodeURIComponent(id)}/dismiss`, { method: 'POST', body: { reason: reason.trim() } });
 export interface GomdonIntegrationStatus {
   baseUrlSet: boolean;
   credentialsSet: boolean;
@@ -1723,6 +1747,7 @@ export type InboxKey =
   | 'dealerApplications'
   | 'dealerClaims'
   | 'dealerClaimsToPay'
+  | 'dealerCreditReported'
   | 'payouts'
   | 'payoutsToPay'
   | 'wasteToCount'
@@ -1740,14 +1765,29 @@ export type InboxKey =
   | 'supportChatUnforwarded'
   | 'zaloBridgeDown'
   | 'bankTransferToConfirm'
+  | 'dealerTransferToConfirm'
   | 'storefrontsPending'
+  | 'accountDeletionPending'
+  | 'shiftsPending'
   | 'communityReports'
   | 'productsMissingImage';
 export interface OpsInbox {
   generatedAt: string;
-  items: { key: InboxKey; count: number; /** Chỉ `bankTransferToConfirm`: giờ còn lại của đơn chờ lâu nhất trước khi tự huỷ. */ hoursLeft?: number }[];
+  items: {
+    key: InboxKey;
+    count: number;
+    /** Hai thẻ chuyển khoản chờ tiền: giờ còn lại của đơn chờ lâu nhất trước khi tự huỷ. */
+    hoursLeft?: number;
+    /** Mốc của việc chờ lâu nhất trong thẻ (ISO); thẻ không có cột thời gian rõ thì không trả. */
+    oldestAt?: string;
+    /** Thẻ gồm nhiều phần (Tích điểm đơn sàn): số của từng phần, cộng lại bằng `count`. */
+    parts?: Partial<Record<'review' | 'partial' | 'closed' | 'stale' | 'attempts', number>>;
+  }[];
 }
 export const getOpsInbox = () => apiFetch<OpsInbox>('/admin/ops/inbox');
+export const OPS_INBOX_QUERY_KEY = ['admin-ops-inbox'] as const;
+/** Số trên thẻ Hôm nay và huy hiệu menu tự làm mới mỗi phút; gọi sau khi xử lý xong một việc để số giảm ngay thay vì đứng im tới phút sau. */
+export const invalidateInbox = (qc: QueryClient) => qc.invalidateQueries({ queryKey: OPS_INBOX_QUERY_KEY });
 
 // ── Chat CSKH qua cầu nối Zalo ──
 export interface SupportBridgeStatus {

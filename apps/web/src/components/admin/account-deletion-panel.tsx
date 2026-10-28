@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { invalidateInbox } from '@/lib/admin-client';
 import { apiFetch } from '@/lib/client-api';
 import { formatVnd } from '@/lib/shop-client';
 import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge, chipClass, Field } from './ui';
@@ -57,12 +58,19 @@ const QUERY_KEY = 'admin-account-deletions';
  * dữ liệu cá nhân (BE AccountDeletionService), giữ đơn và sổ tiền cho kế toán; BE kiểm lại điều kiện
  * chặn trong transaction nên danh sách lý do ở đây chỉ để admin biết trước.
  */
-export function AccountDeletionPanel() {
+export function AccountDeletionPanel({ seed = 0 }: { seed?: number }) {
   const [filter, setFilter] = useState<DeletionStatusFilter>('PENDING');
   const q = useQuery({ queryKey: [QUERY_KEY, filter], queryFn: () => listDeletionRequests(filter) });
+  const sectionRef = useRef<HTMLElement>(null);
+  // Thẻ "Hôm nay" mở tab Người dùng: khối này nằm dưới danh sách người dùng nên phải cuộn tới, và mở lại hàng chờ xử lý.
+  useEffect(() => {
+    if (seed <= 0) return;
+    setFilter('PENDING');
+    sectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [seed]);
 
   return (
-    <section className="mt-6 space-y-3" aria-labelledby="account-deletion-heading">
+    <section id="account-deletions" ref={sectionRef} className="mt-6 scroll-mt-4 space-y-3" aria-labelledby="account-deletion-heading">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="account-deletion-heading" className="text-base font-semibold text-stone-900">
           Yêu cầu xoá tài khoản
@@ -118,10 +126,12 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
       setErr(null);
       setNote('');
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
+      void invalidateInbox(qc);
     },
     onError: (e) => {
       setErr(e instanceof Error ? e.message : 'Thao tác thất bại.');
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
+      void invalidateInbox(qc);
     },
   });
 

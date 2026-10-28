@@ -10,6 +10,7 @@ import {
   type AdminCustomerRefund,
   type AdminCustomerRefundFilter,
   type AdminCustomerRefundKind,
+  invalidateInbox,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { parseVndInput } from '@/lib/loyalty-pos';
@@ -135,10 +136,12 @@ export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; is
       releaseCustomerRefund(r.id, takeOverReason ? { takeOverReason } : undefined),
     onSuccess: (_d, { refund: r }) => {
       void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
+      void invalidateInbox(qc);
       setFlash({ tone: 'success', text: `Đã trả khoản ${formatVnd(r.amount)} (đơn ${r.orderCode}) về hàng chờ. Khách lại đổi được nơi nhận.` });
     },
     onError: (e) => {
       void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
+      void invalidateInbox(qc);
       setFlash({ tone: 'warning', text: markPaidFailure(e, 'claim').message });
     },
   });
@@ -173,6 +176,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; is
     mutationFn: ({ refund: r, amount }: { refund: AdminCustomerRefund; amount: number }) => verifyCustomerRefund(r.id, { amount }),
     onSuccess: (_d, { refund: r, amount }) => {
       void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
+      void invalidateInbox(qc);
       setFlash({
         tone: 'success',
         text: isCodReturn(r)
@@ -186,6 +190,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; is
     },
     onError: (e) => {
       void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
+      void invalidateInbox(qc);
       setFlash({ tone: 'warning', text: overpaymentFailure(e) });
     },
   });
@@ -193,6 +198,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; is
     mutationFn: ({ refund: r, reason }: { refund: AdminCustomerRefund; reason: string }) => dismissCustomerRefund(r.id, reason),
     onSuccess: (_d, { refund: r }) => {
       void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
+      void invalidateInbox(qc);
       setFlash({
         tone: 'success',
         text: isCodReturn(r)
@@ -202,6 +208,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; is
     },
     onError: (e) => {
       void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
+      void invalidateInbox(qc);
       setFlash({ tone: 'warning', text: overpaymentFailure(e) });
     },
   });

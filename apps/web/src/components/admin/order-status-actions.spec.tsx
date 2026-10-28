@@ -2,8 +2,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { OrderStatusActions, orderStatusActions } from './order-status-actions';
+import { useQuery } from '@tanstack/react-query';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
-import type { AdminOrder } from '@/lib/admin-client';
+import { getOpsInbox, OPS_INBOX_QUERY_KEY, type AdminOrder } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -105,6 +106,33 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     expect(api.calls[0]!.init?.method).toBe('POST');
     expect(api.calls[0]!.init?.body).toBe('{}');
     expect(container.querySelector('[role="status"]')?.textContent).toBe('Đã xác nhận nhận tiền đơn TB-300.');
+  });
+
+  it('xác nhận tiền xong thì số trên hộp việc tải lại ngay, không chờ vòng 60 giây (E-52)', async () => {
+    const InboxProbe = () => {
+      useQuery({ queryKey: OPS_INBOX_QUERY_KEY, queryFn: getOpsInbox, refetchInterval: 60_000 });
+      return null;
+    };
+    const api = mockFetch({
+      '/admin/ops/inbox': { body: { generatedAt: '2026-10-28T03:00:00.000Z', items: [] } },
+      '/confirm-payment': { body: { ok: true, alreadyPaid: false, message: 'Đã xác nhận nhận tiền đơn TB-300.', order: {} } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(
+      <>
+        <InboxProbe />
+        <OrderStatusActions order={order()} />
+      </>,
+    );
+    await flush();
+    const inboxCalls = () => api.calls.filter((c) => c.url.includes('/admin/ops/inbox')).length;
+    expect(inboxCalls()).toBe(1);
+    click(byText(container, 'button', 'Đã nhận tiền'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.calls.some((c) => c.url.includes('/confirm-payment'))).toBe(true);
+    expect(inboxCalls()).toBe(2);
   });
 
   it('"Đã nhận tiền" bấm dồn → chỉ 1 request', async () => {
