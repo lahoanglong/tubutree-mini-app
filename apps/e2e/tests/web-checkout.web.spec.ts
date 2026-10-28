@@ -167,7 +167,11 @@ test.describe('Web khách: thanh toán', () => {
     await expect(page).toHaveURL(/\/tai-khoan\/don-hang/);
     // Chi tiết đơn ở điện thoại không có thanh tab (như Mini App); nút lùi về /tai-khoan bằng router.replace vì trang mở thẳng nên chưa có lịch sử trong web.
     if (desktop) await page.locator('a[href="/tai-khoan"]:visible').first().click();
-    else await page.getByRole('button', { name: 'Quay lại' }).click();
+    else {
+      // Nút lùi nổi đọc trang cha từ tiêu đề trang; khi khung chờ của nhóm /tai-khoan còn hiện thì chưa có tiêu đề và nó suy trang cha từ đường dẫn (danh sách đơn).
+      await expect(page.locator('[data-back-href]')).toBeAttached();
+      await page.getByRole('button', { name: 'Quay lại' }).click();
+    }
     await expect(page).toHaveURL(/\/tai-khoan$/);
     await expect(page.getByText('220.000đ')).toBeVisible();
     await expect(page.getByText('500.000đ')).toHaveCount(0);
