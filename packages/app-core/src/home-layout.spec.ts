@@ -184,6 +184,26 @@ describe('memberCardView', () => {
     const v = memberCardView({ overview: undefined, pointsTotal: 0, vndPerPointRedeem: undefined });
     expect(v).toMatchObject({ tierName: null, valueLabel: null, toGoLine: null, progressPct: 0 });
   });
+  it('đang trong hạn giữ hạng: dòng giữ hạng thay dòng lên hạng', () => {
+    const v = memberCardView({
+      overview: { ...overview, tierGrace: { until: '2026-11-07T00:00:00.000Z', spendingToKeep: 400_000, pointsToKeep: 30_000 } } as LoyaltyOverview,
+      pointsTotal: 45_400,
+      vndPerPointRedeem: 1,
+    });
+    expect(v.toGoLine).toBe('Giữ hạng Lộc Biếc: đơn giao thành công thêm 400.000đ trước 07/11/2026');
+  });
+  it('giữ hạng tính theo điểm khi hạng không xét tiền mua', () => {
+    const v = memberCardView({
+      overview: { ...overview, tierGrace: { until: '2026-11-07T00:00:00.000Z', spendingToKeep: null, pointsToKeep: 120 } } as LoyaltyOverview,
+      pointsTotal: 45_400,
+      vndPerPointRedeem: 1,
+    });
+    expect(v.toGoLine).toBe('Giữ hạng Lộc Biếc: tích thêm 120 điểm từ đơn giao thành công trước 07/11/2026');
+  });
+  it('không có hạn giữ hạng: vẫn là dòng lên hạng', () => {
+    const v = memberCardView({ overview: { ...overview, tierGrace: null } as LoyaltyOverview, pointsTotal: 45_400, vndPerPointRedeem: 1 });
+    expect(v.toGoLine).toBe('Còn 18,3 triệu mua hàng lên Đại Thụ');
+  });
 });
 
 describe('mergeSuggestions', () => {

@@ -1,5 +1,6 @@
 import type { CheckInStatusResponse, CouponDTO, LoyaltyOverview } from './api/loyalty';
 import { decimalVi, tierProgressPercent } from './loyalty-copy';
+import { tierGraceLine } from './loyalty-tier-copy';
 
 /**
  * Bố cục Trang chủ, thanh đáy, Ưu đãi và hàng trạng thái đơn của trang Cá nhân. Một nguồn cho Mini App và web khổ điện thoại:
@@ -254,11 +255,21 @@ export interface MemberCardView {
   /** "≈ 45.400đ"; null khi chưa biết giá trị một điểm. */
   valueLabel: string | null;
   progressPct: number;
-  /** "Còn 18,3 triệu mua hàng lên Đại Thụ"; null khi đã hạng cao nhất hoặc chưa có số. */
+  /**
+   * "Còn 18,3 triệu mua hàng lên Đại Thụ"; null khi đã hạng cao nhất hoặc chưa có số. Khách đang trong hạn giữ hạng thì là dòng giữ hạng
+   * ("Giữ hạng Lộc Biếc: ... trước 07/11/2026"), vì mất hạng gấp hơn lên hạng.
+   */
   toGoLine: string | null;
 }
 
 const moneyShort = (n: number) => (n >= 1_000_000 ? `${decimalVi(n / 1_000_000)} triệu` : `${num(n)}đ`);
+
+/** dd/mm/yyyy theo giờ Việt Nam (UTC+7 quanh năm), không phụ thuộc múi giờ máy. */
+function vnDay(iso: string): string {
+  const v = new Date(new Date(iso).getTime() + 7 * 3600 * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(v.getUTCDate())}/${pad(v.getUTCMonth() + 1)}/${v.getUTCFullYear()}`;
+}
 
 export function memberCardView(opts: {
   overview: LoyaltyOverview | undefined;
@@ -274,8 +285,11 @@ export function memberCardView(opts: {
     if (next.spendingToGo != null) toGoLine = `Còn ${moneyShort(next.spendingToGo)} mua hàng lên ${next.name}`;
     else toGoLine = `Còn ${num(next.pointsToGo)} điểm lên ${next.name}`;
   }
+  const tierName = overview?.tier?.name ?? null;
+  const graceLine = tierName ? tierGraceLine(overview?.tierGrace, tierName, { money: moneyShort, points: num, date: vnDay }) : null;
+  if (graceLine) toGoLine = graceLine;
   return {
-    tierName: overview?.tier?.name ?? null,
+    tierName,
     pointsLabel: `${num(pointsTotal)} điểm`,
     valueLabel: vndPerPointRedeem && vndPerPointRedeem > 0 ? `≈ ${num(Math.round(pointsTotal * vndPerPointRedeem))}đ` : null,
     progressPct: overview ? tierProgressPercent(overview) : 0,
