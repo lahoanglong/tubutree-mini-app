@@ -135,7 +135,10 @@ describe('/kho-qua — số dư, tab và thẻ quà', () => {
     const c = await mount();
     expect(c.textContent).toContain('35.000 điểm');
     expect(c.textContent).toContain('Đổi quà dùng được 30.000 điểm');
-    expect(c.textContent).toContain('Điểm không hết hạn chỉ dùng khi thanh toán và góp quỹ trồng cây, không dùng để đổi mã giảm giá hay quà.');
+    expect(c.textContent).not.toContain('Điểm không hết hạn chỉ dùng');
+    click(byText(c, 'button', 'Thể lệ')!);
+    await flush(2);
+    expect(document.body.textContent).toContain('Điểm không hết hạn chỉ dùng khi thanh toán và góp quỹ trồng cây, không dùng để đổi mã giảm giá hay quà.');
     expect(c.querySelector('a[href="/kho-qua/cua-toi"]')?.textContent).toContain('Quà của tôi');
   });
 
@@ -146,7 +149,9 @@ describe('/kho-qua — số dư, tab và thẻ quà', () => {
     mounted.forEach((m) => m.unmount());
     mounted = [];
     c = await mount();
-    expect(c.textContent).toContain('Điểm Xanh thường dùng tối đa 20% giá trị hàng Tubu trong đơn, không trừ vào phí ship. Điểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.');
+    click(byText(c, 'button', 'Thể lệ')!);
+    await flush(2);
+    expect(document.body.textContent).toContain('Điểm Xanh thường dùng tối đa 20% giá trị hàng Tubu trong đơn, không trừ vào phí ship. Điểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.');
   });
 
   it('không lặp số dư: dòng "Đổi quà dùng được" chỉ hiện khi khác tổng', async () => {
@@ -174,7 +179,9 @@ describe('/kho-qua — số dư, tab và thẻ quà', () => {
   it('có điểm khoá thì hiện ghi chú vì sao chưa đổi được; không khoá thì không có', async () => {
     state.loyalty = { pointsBalance: 100, lockedPoints: 60, lockedReturnPoints: 0, lockedUntil: '2026-10-03T17:30:00.000Z', redeemablePoints: 40 };
     const c = await mount();
-    expect(c.textContent).toContain('60 điểm từ đơn mới giao sẽ dùng được sau ngày 04/10/2026');
+    click(byText(c, 'button', 'Thể lệ')!);
+    await flush(2);
+    expect(document.body.textContent).toContain('60 điểm từ đơn mới giao sẽ dùng được sau ngày 04/10/2026');
   });
 
   it('ba tab theo loại quà, mặc định Mã giảm giá', async () => {
@@ -381,6 +388,9 @@ describe('/kho-qua — quà thừa với hạng, quà nhận tại kho, Dùng ng
     expect(free.textContent).not.toContain('Phổ biến');
     expect((byText(free, 'button', 'Đổi') as HTMLButtonElement).disabled).toBe(false);
     expect((byText(card(c, 'Giảm 50.000đ'), 'button', 'Đổi') as HTMLButtonElement).disabled).toBe(false);
+    await openConfirm(c, 'Miễn phí vận chuyển');
+    expect(dialog()!.textContent).toContain('Hạng Lộc Biếc đã được miễn phí giao hàng cho đơn Tubu từ 99.000đ. Bạn vẫn muốn đổi mã này?');
+    expect((byText(dialog()!, 'button', 'Xác nhận đổi') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('hạng chưa freeship tới ngưỡng của mã: quà freeship vẫn đổi được', async () => {

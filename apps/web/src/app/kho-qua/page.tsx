@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Gift, Leaf, Sprout, Ticket } from 'lucide-react';
+import { ChevronRight, Gift, Info, Leaf, Sprout, Ticket } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
 import { redeemLoyaltyReward } from '@tubutree/app-core/api/loyalty';
@@ -16,6 +16,8 @@ import {
   REWARD_TABS,
   WAREHOUSE_ONLY_LABEL,
   WAREHOUSE_PICKUP_DONE,
+  freeShipConfirmText,
+  rewardsGuideCopy,
   rewardFreeShipNote,
   isWarehousePickup,
   lockedPointsNote,
@@ -78,6 +80,7 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
   // `disabled={isPending}` chỉ có hiệu lực sau lần render kế: hai cú bấm trong cùng khung hình vẫn gọi mutate hai lần.
   const busyRef = useRef(false);
   const claimPoint = reward.kind === 'SEED_PACK' || reward.kind === 'GIFT' ? catalog.claimPoint : null;
+  const freeNote = rewardFreeShipNote(reward, catalog, formatVnd);
 
   const redeem = useMutation({
     mutationFn: async (): Promise<RedeemOutcome> => {
@@ -120,6 +123,7 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
         <span className="tabular-nums">{points(Math.max(0, pointsSummary(catalog).total - reward.pointsCost))}</span>
       </div>
       {isWarehousePickup(reward) && <p className="text-sm font-semibold text-stone-900">{warehouseConfirmText(claimPoint)}</p>}
+      {freeNote && <p className="text-sm text-stone-700">{freeShipConfirmText(freeNote)}</p>}
       {claimPoint && (
         <div className="space-y-0.5">
           <ClaimPointInfo point={claimPoint} heading={claimPoint.name} />
@@ -240,6 +244,7 @@ function RewardsBody() {
   const [tab, setTab] = useState<string>(REWARD_TABS[0].key);
   const [confirmReward, setConfirmReward] = useState<RewardItemDTO | null>(null);
   const [result, setResult] = useState<RedeemOutcome | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
   // Giữ khoá ở thân trang để đóng khung rồi mở lại cùng quà sau lỗi mạng vẫn gửi đúng khoá cũ: máy chủ có thể đã trừ điểm.
   const idem = useIdempotencyKey({ rewardId: confirmReward?.id ?? null });
 
@@ -256,18 +261,39 @@ function RewardsBody() {
   return (
     <div className="space-y-4 pb-12">
       <div className="space-y-1">
-        <div className="font-bold tabular-nums text-stone-900 md:text-3xl max-md:font-display max-md:text-[length:var(--type-display-md-size)] max-md:font-semibold max-md:leading-[var(--type-display-md-lh)]">
-          {points(total)}
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-bold tabular-nums text-stone-900 md:text-3xl max-md:font-display max-md:text-[length:var(--type-display-md-size)] max-md:font-semibold max-md:leading-[var(--type-display-md-lh)]">
+            {points(total)}
+          </div>
+          <button type="button" onClick={() => setRulesOpen(true)} className={`${ui.btnText} flex-none gap-1.5 text-forest-700`}>
+            <Info className="h-4 w-4" aria-hidden="true" />
+            {rewardsGuideCopy.rulesButton}
+          </button>
         </div>
         {c.redeemablePoints !== total && <p className="text-sm text-stone-700">{`Đổi quà dùng được ${points(c.redeemablePoints)}`}</p>}
-        {rulesNote && <p className="text-caption text-stone-600">{rulesNote}</p>}
-        {lockedNote && <p className="text-caption text-stone-600">{lockedNote}</p>}
-        {c.pointsConvertedBalance > 0 && (
-          <p className="text-caption text-stone-600">
-            Điểm không hết hạn chỉ dùng khi thanh toán và góp quỹ trồng cây, không dùng để đổi mã giảm giá hay quà.
-          </p>
-        )}
       </div>
+      {total === 0 && (
+        <section className={`space-y-2 p-4 ${ui.card}`}>
+          <h2 className="font-display text-base font-semibold text-stone-900">{rewardsGuideCopy.earnTitle}</h2>
+          {rewardsGuideCopy.earnItems.map((line) => (
+            <p key={line} className="text-sm text-stone-700">
+              {line}
+            </p>
+          ))}
+          <Link href="/tai-khoan/diem-xanh" className={`${miniBtnSecondary} w-full`}>
+            {rewardsGuideCopy.earnCta}
+          </Link>
+        </section>
+      )}
+      <Sheet open={rulesOpen} onClose={() => setRulesOpen(false)} title={rewardsGuideCopy.rulesTitle}>
+        <div className="space-y-2">
+          {rulesNote && <p className="text-sm text-stone-700">{rulesNote}</p>}
+          {lockedNote && <p className="text-sm text-stone-700">{lockedNote}</p>}
+          {c.pointsConvertedBalance > 0 && (
+            <p className="text-sm text-stone-700">Điểm không hết hạn chỉ dùng khi thanh toán và góp quỹ trồng cây, không dùng để đổi mã giảm giá hay quà.</p>
+          )}
+        </div>
+      </Sheet>
       <Link href="/kho-qua/cua-toi" className={`flex min-h-11 items-center gap-3 p-3 hover:bg-stone-50 ${ui.card} max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:px-0 max-md:shadow-none`}>
         <Gift className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
         <span className="flex-1 text-sm font-semibold text-stone-900">Quà của tôi</span>

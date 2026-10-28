@@ -98,10 +98,20 @@ describe('quà miễn phí giao hàng và hạng đã có quyền lợi này (B-
     expect(freeShipCovered(freeship(99_000), undefined)).toBe(false);
   });
 
-  it('orderRewards: quà thừa xuống cuối, còn lại giữ thứ tự sortOrder', () => {
-    const list = [{ id: 'a', ...freeship(99_000, 1) }, { id: 'b', ...freeship(49_000, 2) }, { id: 'c', kind: 'VOUCHER' as const, voucher: null, sortOrder: 3 }];
+  it('orderRewards: quà thừa xuống cuối nhóm, còn lại giữ thứ tự sortOrder', () => {
+    const ok = { canRedeem: true, soldOut: false };
+    const list = [{ id: 'a', ...ok, ...freeship(99_000, 1) }, { id: 'b', ...ok, ...freeship(49_000, 2) }, { id: 'c', ...ok, kind: 'VOUCHER' as const, voucher: null, sortOrder: 3 }];
     expect(orderRewards(list, { tierFreeShip: locBiec }).map((r) => r.id)).toEqual(['b', 'c', 'a']);
     expect(orderRewards(list, {}).map((r) => r.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('orderRewards: quà đủ điểm lên trước, quà chưa đủ điểm hoặc hết hàng xuống sau, vẫn theo sortOrder trong từng nhóm', () => {
+    const v = (id: string, sortOrder: number, canRedeem: boolean, soldOut = false) => ({ id, kind: 'VOUCHER' as const, voucher: null, sortOrder, canRedeem, soldOut });
+    const list = [v('a', 1, false), v('b', 2, false), v('c', 3, false), v('freeship', 4, true), v('hết', 5, true, true)];
+    expect(orderRewards(list, {}).map((r) => r.id)).toEqual(['freeship', 'a', 'b', 'c', 'hết']);
+    // Món duy nhất đủ điểm là freeship thừa với hạng: vẫn nằm đầu vì nó là món duy nhất đổi được.
+    const covered = [v('a', 1, false), { id: 'fs', ...freeship(99_000, 4), canRedeem: true, soldOut: false }];
+    expect(orderRewards(covered, { tierFreeShip: locBiec }).map((r) => r.id)).toEqual(['fs', 'a']);
   });
 
   it('quà thừa với hạng vẫn đổi được (ngưỡng mã tính cả hàng đối tác); chỉ thêm ghi chú kèm ngưỡng hạng cho đơn Tubu', () => {
