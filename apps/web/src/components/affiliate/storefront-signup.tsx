@@ -3,12 +3,13 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Plus, Trash2 } from 'lucide-react';
+import { Check, Circle, Info, Plus, Trash2 } from 'lucide-react';
 import {
   SIGNUP_COPY,
   SIGNUP_STEPS,
   STOREFRONT_NOTE_MAX,
   STOREFRONT_REVIEW_PROMISE,
+  signupConditionRows,
   signupGate,
   storefrontNeedsReview,
   storefrontPublishCopy,
@@ -154,12 +155,18 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
       <Card>
         <p className="mb-2.5 text-sm text-stone-600">{SIGNUP_COPY.conditionsIntro}</p>
         <ul className="flex flex-col gap-2">
-          {[...SIGNUP_COPY.conditions, ...(!sf || storefrontNeedsReview(sf) ? [SIGNUP_COPY.reviewCondition] : [])].map((c) => (
-            <li key={c} className="flex items-start gap-2 text-sm text-stone-900">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-              {c}
-            </li>
-          ))}
+          {signupConditionRows(gate, sf, !sf || storefrontNeedsReview(sf)).map((c) => {
+            const MarkIcon = c.state === 'done' ? Check : c.state === 'info' ? Info : Circle;
+            return (
+              <li key={c.text} className="flex items-start gap-2 text-sm text-stone-900">
+                <MarkIcon className={`mt-0.5 h-4 w-4 shrink-0 ${c.state === 'done' ? 'text-forest-700' : 'text-stone-500'}`} aria-hidden="true" />
+                <span>
+                  {c.text}
+                  {c.hint && <span className="block text-xs text-stone-600">{c.hint}</span>}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       </Card>
 

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Input, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Plus, Trash2 } from 'lucide-react';
+import { Check, Circle, Info, Plus, Trash2 } from 'lucide-react';
 import {
   SIGNUP_COPY,
   SIGNUP_STEPS,
   STOREFRONT_NOTE_MAX,
   STOREFRONT_REVIEW_PROMISE,
+  signupConditionRows,
   signupGate,
   storefrontNeedsReview,
   storefrontPublishCopy,
@@ -120,10 +121,13 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
       <Card style={SECTION}>
         <Text variant="body-sm" tone="secondary" as="p" style={{ margin: '0 0 10px' }}>{SIGNUP_COPY.conditionsIntro}</Text>
         <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {[...SIGNUP_COPY.conditions, ...(!sf || storefrontNeedsReview(sf) ? [SIGNUP_COPY.reviewCondition] : [])].map((c) => (
-            <li key={c} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-              <Icon icon={Check} size="sm" tone="brand" style={{ marginTop: 2, flexShrink: 0 }} />
-              <Text variant="body-sm">{c}</Text>
+          {signupConditionRows(gate, sf, !sf || storefrontNeedsReview(sf)).map((c) => (
+            <li key={c.text} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <Icon icon={c.state === 'done' ? Check : c.state === 'info' ? Info : Circle} size="sm" tone={c.state === 'done' ? 'brand' : 'muted'} style={{ marginTop: 2, flexShrink: 0 }} />
+              <div>
+                <Text variant="body-sm">{c.text}</Text>
+                {c.hint && <Text variant="caption" tone="tertiary" as="div">{c.hint}</Text>}
+              </div>
             </li>
           ))}
         </ul>

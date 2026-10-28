@@ -116,6 +116,34 @@ export function signupGate(me: { isAffiliate?: boolean; canRegister?: boolean; c
   return 'CANNOT_BE_CTV';
 }
 
+export interface SignupConditionRow {
+  text: string;
+  /** done: đã đạt (dấu tích). todo: chưa đạt (vòng tròn rỗng, kèm lối làm). info: chỉ để biết, không phải việc của chủ. */
+  state: 'done' | 'todo' | 'info';
+  hint?: string;
+}
+
+/**
+ * Bốn dòng "Điều kiện mở gian hàng" theo trạng thái thật của người xem, thay vì luôn ✓: chưa là CTV hay chưa có sản phẩm thì dòng
+ * đó chưa đạt và nói làm ở đâu. Dòng "cần Tubu duyệt" chỉ là thông tin.
+ */
+export function signupConditionRows(
+  gate: SignupGate,
+  sf: { collections: { items: unknown[] }[] } | null | undefined,
+  showReview: boolean,
+): SignupConditionRow[] {
+  const ctvDone = gate === 'READY';
+  const productCount = sf?.collections.reduce((n, c) => n + c.items.length, 0) ?? 0;
+  const [isCtv, terms, product] = SIGNUP_COPY.conditions;
+  const ctvHint = gate === 'CANNOT_BE_CTV' ? undefined : 'Đăng ký ở nút bên dưới.';
+  return [
+    { text: isCtv, state: ctvDone ? 'done' : 'todo', ...(ctvDone ? {} : { hint: ctvHint }) },
+    { text: terms, state: ctvDone ? 'done' : 'todo', ...(ctvDone ? {} : { hint: ctvHint }) },
+    { text: product, state: productCount > 0 ? 'done' : 'todo', ...(productCount > 0 ? {} : { hint: 'Bạn chọn ở bước 3.' }) },
+    ...(showReview ? [{ text: SIGNUP_COPY.reviewCondition, state: 'info' as const }] : []),
+  ];
+}
+
 /** Gian hàng này còn phải qua Tubu duyệt trước khi khách thấy? API trả `needsApproval`; API cũ thì suy từ `approved` (chưa duyệt = cần). */
 export function storefrontNeedsReview(sf: { needsApproval?: boolean; approved?: boolean }): boolean {
   return sf.needsApproval ?? sf.approved !== true;

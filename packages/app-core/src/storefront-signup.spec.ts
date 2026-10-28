@@ -8,6 +8,7 @@ import {
   storefrontPublishedMessage,
   ctvMenuEntry,
   shouldStartSignupWizard,
+  signupConditionRows,
   signupGate,
   storefrontNeedsReview,
   storefrontPublishCopy,
@@ -178,5 +179,31 @@ describe('sampleShareText', () => {
     expect(sampleShareText('Góc Mẹ Bỉm Lá', true)).toBe('Gian hàng mẫu · Góc Mẹ Bỉm Lá');
     expect(sampleShareText('Shop An', false)).toBe('Shop An');
     expect(sampleShareText('Shop An', undefined)).toBe('Shop An');
+  });
+});
+
+describe('signupConditionRows', () => {
+  const empty = { collections: [{ items: [] }] };
+  const one = { collections: [{ items: [{}] }] };
+
+  it('người chưa là CTV và chưa có sản phẩm: hai dòng đầu và dòng sản phẩm chưa đạt, có lối làm, dòng duyệt chỉ là thông tin', () => {
+    const rows = signupConditionRows('NEEDS_CTV', null, true);
+    expect(rows.map((r) => r.state)).toEqual(['todo', 'todo', 'todo', 'info']);
+    expect(rows[0]!.hint).toBe('Đăng ký ở nút bên dưới.');
+    expect(rows[2]!.hint).toBe('Bạn chọn ở bước 3.');
+  });
+
+  it('CTV có gian hàng trống: đạt hai dòng đầu, chưa có sản phẩm', () => {
+    expect(signupConditionRows('READY', empty, false).map((r) => r.state)).toEqual(['done', 'done', 'todo']);
+  });
+
+  it('CTV đã có sản phẩm: đạt cả ba, không còn gợi ý', () => {
+    const rows = signupConditionRows('READY', one, false);
+    expect(rows.map((r) => r.state)).toEqual(['done', 'done', 'done']);
+    expect(rows.every((r) => r.hint === undefined)).toBe(true);
+  });
+
+  it('tài khoản không làm CTV được: dòng CTV chưa đạt và không hứa lối đăng ký', () => {
+    expect(signupConditionRows('CANNOT_BE_CTV', null, false)[0]).toEqual({ text: SIGNUP_COPY.conditions[0], state: 'todo' });
   });
 });
