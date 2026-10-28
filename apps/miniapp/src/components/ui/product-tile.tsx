@@ -45,6 +45,8 @@ export interface ProductTileProps {
   action?: 'add' | 'rebuy' | 'subscribe' | 'none';
   onAction?: () => void;
   badge?: ReactNode;
+  /** Nút nổi trên ảnh (vd. giỏ nhanh): caller tự định vị trong khung ảnh `position: relative`, đặt zIndex 1 để nằm trên lớp phủ của nút tên. */
+  imageOverlay?: ReactNode;
   onPress: () => void;
 }
 
@@ -74,6 +76,7 @@ export function ProductTile({
   action = 'none',
   onAction,
   badge,
+  imageOverlay,
   onPress,
 }: ProductTileProps) {
   const standing = p.salePrice ?? p.basePrice;
@@ -121,6 +124,7 @@ export function ProductTile({
             )}
           </div>
         )}
+        {imageOverlay}
         {p.inStock === false && (
           <div
             style={{

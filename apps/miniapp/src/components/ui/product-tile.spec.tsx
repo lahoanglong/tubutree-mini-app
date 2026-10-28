@@ -41,6 +41,27 @@ describe('ProductTile', () => {
     screen.getByText('Mua lại').click();
     expect(onAction).toHaveBeenCalledTimes(1);
   });
+  it('imageOverlay nằm trong khung ảnh và bấm nó không mở thẻ', () => {
+    const onPress = vi.fn();
+    const onOverlay = vi.fn();
+    renderTile(
+      <ProductTile
+        product={PRODUCT}
+        variant="grid"
+        onPress={onPress}
+        imageOverlay={
+          <button type="button" aria-label="nút nổi" onClick={onOverlay}>
+            +
+          </button>
+        }
+      />,
+    );
+    const overlay = screen.getByRole('button', { name: 'nút nổi' });
+    expect(overlay.parentElement?.style.aspectRatio).toBe('1 / 1');
+    fireEvent.click(overlay);
+    expect(onOverlay).toHaveBeenCalledTimes(1);
+    expect(onPress).not.toHaveBeenCalled();
+  });
   it('onPress fires when the tile itself (not a nested button) is clicked', () => {
     const onPress = vi.fn();
     renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={onPress} />);

@@ -212,3 +212,25 @@ describe('ProductCard — nhãn "Mới"', () => {
   });
 });
 
+describe('ProductCard — nút nổi trên ảnh (quickAdd)', () => {
+  const html = (p: Record<string, unknown>, quickAdd?: ReactElement) => {
+    const el = document.createElement('div');
+    el.innerHTML = renderToStaticMarkup(<ProductCard product={p as never} quickAdd={quickAdd} />);
+    return el;
+  };
+  const BTN = <button type="button" aria-label="Thêm vào giỏ">+</button>;
+
+  it('đặt nút trong khung phủ vùng ảnh vuông, khung không chặn chạm và nút nằm ngoài link sản phẩm', () => {
+    const el = html(PRODUCT, BTN);
+    const btn = el.querySelector('button[aria-label="Thêm vào giỏ"]')!;
+    expect(btn.closest('a')).toBeNull();
+    const frame = btn.parentElement!.parentElement!;
+    expect(frame.className).toContain('pointer-events-none');
+    expect(frame.className).toContain('aspect-square');
+  });
+
+  it('hết hàng hoặc không truyền nút: không vẽ khung nút', () => {
+    expect(html({ ...PRODUCT, inStock: false }, BTN).querySelector('button[aria-label="Thêm vào giỏ"]')).toBeNull();
+    expect(html(PRODUCT).querySelector('.pointer-events-none')).toBeNull();
+  });
+});

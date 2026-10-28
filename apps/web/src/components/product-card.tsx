@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { isNewProduct, NEW_PRODUCT_LABEL } from '@tubutree/app-core/product-badges';
 import { type ProductCard as P, formatSold } from '@/lib/api';
 import { CardSaleBadge, ProductPriceRow } from '@/components/flash-price';
@@ -16,7 +17,7 @@ export const PRIORITY_CARDS = 4;
  * của máy tính. Cùng một cây DOM, đổi kiểu bằng class (không dựng hai bản) để HTML dựng sẵn (ISR) đúng ở cả hai khổ.
  * Tim là anh em của link (không lồng nút trong thẻ `a`).
  */
-export default function ProductCard({ product, priority = false }: { product: P; priority?: boolean }) {
+export default function ProductCard({ product, priority = false, quickAdd }: { product: P; priority?: boolean; quickAdd?: ReactNode }) {
   // `=== false`: API cũ/nguồn không có cờ thì coi như còn hàng, không dán nhãn nhầm.
   const soldOut = product.inStock === false;
   const reviewed = (product.reviewCount ?? 0) > 0;
@@ -105,6 +106,12 @@ export default function ProductCard({ product, priority = false }: { product: P;
         </div>
       </ProductLink>
       <WishlistHeart productId={product.id} floating />
+      {/* Nút nổi (giỏ nhanh) là anh em của link: khung này phủ đúng vùng ảnh vuông nhưng không chặn chạm, chỉ nút bên trong nhận chạm. */}
+      {quickAdd && !soldOut && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 aspect-square">
+          <div className="pointer-events-auto absolute bottom-0.5 right-0.5">{quickAdd}</div>
+        </div>
+      )}
     </div>
   );
 }
