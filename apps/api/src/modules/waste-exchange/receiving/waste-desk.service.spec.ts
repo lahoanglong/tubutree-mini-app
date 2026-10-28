@@ -24,8 +24,8 @@ const reqRow = (o: Record<string, unknown> = {}) => ({
   id: 'r1', code: 'TR-ABCDE', method: 'DROP_OFF', status: 'OPEN', pointId: 'p1', estimatedPoints: 20_000,
   confirmedByUserId: null, closedAt: null, user: USER,
   lines: [
-    { itemId: 'i1', itemName: 'Pin đã dùng', unitLabel: 'viên', unitsPerPoint: 10, pointsPerGroup: 5_000, declaredQty: 4, receivedQty: null, item: { hazardous: true } },
-    { itemId: 'i2', itemName: 'Lon nhôm', unitLabel: 'lon', unitsPerPoint: 1, pointsPerGroup: 1_000, declaredQty: 2, receivedQty: null, item: { hazardous: false } },
+    { itemId: 'i1', itemName: 'Pin đã dùng', unitLabel: 'viên', unitsPerPoint: 10, pointsPerGroup: 5_000, declaredQty: 4, receivedQty: null, item: { hazardous: true, warehouseOnly: false } },
+    { itemId: 'i2', itemName: 'Lon nhôm', unitLabel: 'lon', unitsPerPoint: 1, pointsPerGroup: 1_000, declaredQty: 2, receivedQty: null, item: { hazardous: false, warehouseOnly: false } },
   ],
   ...o,
 });
@@ -159,10 +159,10 @@ describe('WasteDeskService.lookup', () => {
     expect(res).toEqual({
       type: 'REQUEST',
       request: {
-        id: 'r1', code: 'TR-ABCDE', method: 'DROP_OFF', status: 'OPEN', pointId: 'p1', customerName: 'An***', customerPhone: '090****567', estimatedPoints: 20_000,
+        id: 'r1', code: 'TR-ABCDE', method: 'DROP_OFF', status: 'OPEN', pointId: 'p1', customerName: 'An***', customerPhone: '090****567', estimatedPoints: 20_000, closedAt: null,
         lines: [
-          { itemId: 'i1', itemName: 'Pin đã dùng', unitLabel: 'viên', unitsPerPoint: 10, pointsPerGroup: 5_000, declaredQty: 4, receivedQty: null, hazardous: true },
-          { itemId: 'i2', itemName: 'Lon nhôm', unitLabel: 'lon', unitsPerPoint: 1, pointsPerGroup: 1_000, declaredQty: 2, receivedQty: null, hazardous: false },
+          { itemId: 'i1', itemName: 'Pin đã dùng', unitLabel: 'viên', unitsPerPoint: 10, pointsPerGroup: 5_000, declaredQty: 4, receivedQty: null, hazardous: true, warehouseOnly: false },
+          { itemId: 'i2', itemName: 'Lon nhôm', unitLabel: 'lon', unitsPerPoint: 1, pointsPerGroup: 1_000, declaredQty: 2, receivedQty: null, hazardous: false, warehouseOnly: false },
         ],
       },
     });
@@ -222,9 +222,41 @@ describe('WasteDeskService.lookup', () => {
     expect(await setup({ accessList: [partner()], request: r }).svc.lookup('s1', 'TR-ABCDE')).toMatchObject({ type: 'REQUEST' });
   });
 
-  it('hides a recently completed request that another staff confirmed', async () => {
-    const r = reqRow({ status: 'COMPLETED', confirmedByUserId: 'other-staff', closedAt: new Date(Date.now() - 2 * HOUR) });
+  it('shows read-only a request a colleague of the same point completed an hour ago, with no LOOKUP_MISS', async () => {
+    const closedAt = new Date(Date.now() - HOUR);
+    const r = reqRow({ status: 'COMPLETED', confirmedByUserId: 'other-staff', closedAt });
+    const res = await setup({ accessList: [partner()], request: r }).svc.lookup('s1', 'TR-ABCDE');
+    expect(res).toMatchObject({ type: 'REQUEST', request: { status: 'COMPLETED', closedAt: closedAt.toISOString(), customerPhone: '090****567' } });
+    expect(JSON.stringify(res)).not.toContain('other-staff');
+    expect(writeWasteEvent).not.toHaveBeenCalled();
+  });
+
+  it('shows read-only a request a colleague rejected recently', async () => {
+    const r = reqRow({ status: 'REJECTED', confirmedByUserId: 'other-staff', closedAt: new Date(Date.now() - 3 * HOUR) });
+    expect(await setup({ accessList: [partner()], request: r }).svc.lookup('s1', 'TR-ABCDE')).toMatchObject({ type: 'REQUEST', request: { status: 'REJECTED' } });
+  });
+
+  it('answers 404 and writes LOOKUP_MISS for a request a colleague closed at another point', async () => {
+    const r = reqRow({ status: 'COMPLETED', pointId: 'other', confirmedByUserId: 'other-staff', closedAt: new Date(Date.now() - HOUR) });
+    const { svc } = setup({ accessList: [partner()], request: r });
+    await expect(svc.lookup('s1', 'TR-ABCDE')).rejects.toBeInstanceOf(NotFoundException);
+    missCall({ pointId: 'p1' });
+  });
+
+  it('answers 404 for a request a colleague closed 25 hours ago (WASTE_DESK_RECENT_MS)', async () => {
+    const r = reqRow({ status: 'COMPLETED', confirmedByUserId: 'other-staff', closedAt: new Date(Date.now() - 25 * HOUR) });
     await expect(setup({ accessList: [partner()], request: r }).svc.lookup('s1', 'TR-ABCDE')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('carries warehouseOnly per line so the desk can leave such a line at 0 at a partner point', async () => {
+    const r = reqRow({
+      lines: [
+        { itemId: 'i3', itemName: 'Hộp sữa', unitLabel: 'hộp', unitsPerPoint: 10, pointsPerGroup: 500, declaredQty: 10, receivedQty: null, item: { hazardous: false, warehouseOnly: true } },
+        { itemId: 'i2', itemName: 'Lon nhôm', unitLabel: 'lon', unitsPerPoint: 1, pointsPerGroup: 1_000, declaredQty: 2, receivedQty: null, item: { hazardous: false, warehouseOnly: false } },
+      ],
+    });
+    const res = await setup({ accessList: [partner()], request: r }).svc.lookup('s1', 'TR-ABCDE');
+    expect(res.type === 'REQUEST' && res.request.lines.map((l) => [l.itemId, l.warehouseOnly])).toEqual([['i3', true], ['i2', false]]);
   });
 
   it('keeps the typed text out of the LOOKUP_MISS meta unless it looks like a code', async () => {

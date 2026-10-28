@@ -30,7 +30,6 @@ import { metadata as orders } from './tai-khoan/don-hang/layout';
 import { metadata as bankPayment } from './thanh-toan/chuyen-khoan/[code]/layout';
 import { metadata as ctv } from './ctv/layout';
 import { metadata as ctvStorefront } from './ctv/gian-hang/layout';
-import { metadata as leaderboard } from './cong-dong/xep-hang/layout';
 import { metadata as events } from './cong-dong/su-kien/layout';
 import { metadata as postDetail } from './cong-dong/[id]/layout';
 import { metadata as dealer } from './dai-ly/layout';
@@ -68,7 +67,6 @@ const LOYALTY: TitleCase[] = [
   ['/hoan-tien', cashback, 'Hoàn tiền — Tubu Tree'],
 ];
 const COMMUNITY: TitleCase[] = [
-  ['/cong-dong/xep-hang', leaderboard, 'Bảng xếp hạng — Tubu Tree'],
   ['/cong-dong/su-kien', events, 'Sự kiện — Tubu Tree'],
   ['/cong-dong/[id]', postDetail, 'Bài viết cộng đồng — Tubu Tree'],
 ];

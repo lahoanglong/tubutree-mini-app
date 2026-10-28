@@ -70,8 +70,8 @@ const httpError = (status: number | undefined, message?: string) => ({
   ...(status ? { response: { status, data: { message } } } : {}),
 });
 
-function setAuth(user: AuthUser | null, status: 'authenticated' | 'idle' | 'loading' = 'authenticated', ensurePhone = vi.fn()) {
-  act(() => useAuthStore.setState({ user, status, ensurePhone }));
+function setAuth(user: AuthUser | null, status: 'authenticated' | 'idle' | 'loading' = 'authenticated', ensurePhoneOrThrow = vi.fn()) {
+  act(() => useAuthStore.setState({ user, status, ensurePhoneOrThrow }));
 }
 
 function renderGate() {
@@ -225,6 +225,15 @@ describe('CouponClaimGate — nhận ưu đãi từ thẻ QR hộp hàng (D2-03)
     expect(mocks.storage[PENDING_CLAIM_KEY]).toBe('SHOPEE-AB12CD34');
     fireEvent.click(screen.getByRole('button', { name: 'Để sau' }));
     await waitFor(() => expect(screen.queryByTestId('sheet')).not.toBeInTheDocument());
+  });
+
+  it('liên kết Zalo bị máy chủ từ chối (409): sheet nói lời máy chủ, mã vẫn giữ trên máy', async () => {
+    window.history.replaceState({}, '', '/?claim=SHOPEE-AB12CD34');
+    setAuth(GUEST, 'authenticated', vi.fn().mockRejectedValue(httpError(409, 'Số điện thoại này đã gắn với tài khoản Zalo khác.')));
+    renderGate();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đăng nhập bằng Zalo' }));
+    expect(await screen.findByText('Số điện thoại này đã gắn với tài khoản Zalo khác.')).toBeInTheDocument();
+    expect(mocks.storage[PENDING_CLAIM_KEY]).toBe('SHOPEE-AB12CD34');
   });
 
   it('lần mở sau (không còn link) đã đăng nhập: mã chờ trên máy tự vào ví', async () => {

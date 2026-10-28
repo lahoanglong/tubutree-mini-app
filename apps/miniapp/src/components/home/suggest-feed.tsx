@@ -48,6 +48,9 @@ export function SuggestFeed() {
     return () => io.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, items.length]);
 
+  // Nguồn mặc định đã tải xong mà rỗng (không lỗi): không để lại tiêu đề và chip trên khoảng trống. Ở chip khác khối ở lại để khách còn đường quay về.
+  if (tab === 'for-you' && !loadingFirst && !pages.isError && items.length === 0) return null;
+
   return (
     <section aria-label={homeCopy.suggest.title} style={{ padding: '16px 16px 0' }}>
       <Heading variant="title-sm" as="h2">

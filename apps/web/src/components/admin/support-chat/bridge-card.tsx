@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getSupportBridge,
@@ -74,8 +75,11 @@ function reconnectSteps(state: SupportBridgeStatus['state'], isAdmin: boolean): 
 
 const errText = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
 
-/** Trạng thái cầu nối Zalo; chỉ ADMIN có thêm đăng nhập, đăng xuất, nhóm nhận tin, công tắc chat. */
-export function BridgeCard({ isAdmin }: { isAdmin: boolean }) {
+/**
+ * Trạng thái cầu nối Zalo; chỉ ADMIN có thêm đăng nhập, đăng xuất, nhóm nhận tin, công tắc chat. `compact` (khổ hẹp) thu thẻ
+ * thành một dòng tên + trạng thái, bấm để mở chi tiết, để thẻ không chiếm cả màn trước danh sách hội thoại.
+ */
+export function BridgeCard({ isAdmin, compact = false }: { isAdmin: boolean; compact?: boolean }) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const statusQ = useQuery({ queryKey: BRIDGE_QUERY_KEY, queryFn: getSupportBridge, refetchInterval: 30_000 });
@@ -87,6 +91,7 @@ export function BridgeCard({ isAdmin }: { isAdmin: boolean }) {
   const [groupId, setGroupId] = useState('');
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   // Chỉ theo groupId: mỗi lần poll trả đối tượng mới (checkedAt đổi) và sẽ xoá lựa chọn nhóm chưa lưu.
   const savedGroupId = status?.groupId;
@@ -173,11 +178,28 @@ export function BridgeCard({ isAdmin }: { isAdmin: boolean }) {
   const hasSession = status && (['CONNECTED', 'CONNECTING', 'KICKED', 'ERROR'].includes(status.state) || (status.state === 'NEED_QR' && !!status.lastError));
 
   return (
-    <section aria-labelledby="bridge-h" className="space-y-3 rounded-card border border-stone-200 bg-stone-0 p-4">
-      <h2 id="bridge-h" className="font-display text-lg font-semibold text-stone-900">Cầu nối Zalo</h2>
+    <section aria-labelledby="bridge-h" className={`space-y-3 rounded-card border border-stone-200 bg-stone-0 ${compact ? 'p-2' : 'p-4'}`}>
+      {compact ? (
+        <h2 id="bridge-h" className="font-display text-base font-semibold text-stone-900">
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+            className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-control px-2 text-left"
+          >
+            <span>Cầu nối Zalo</span>
+            <span className="flex items-center gap-2">
+              {view && <ToneBadge tone={view.tone}>{view.text}</ToneBadge>}
+              <ChevronDown aria-hidden="true" className={`h-4 w-4 shrink-0 text-stone-600 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+            </span>
+          </button>
+        </h2>
+      ) : (
+        <h2 id="bridge-h" className="font-display text-lg font-semibold text-stone-900">Cầu nối Zalo</h2>
+      )}
       {statusQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {statusQ.isError && <LoadError onRetry={() => void statusQ.refetch()} retrying={statusQ.isFetching}>Không tải được trạng thái cầu nối Zalo.</LoadError>}
-      {status && view && (
+      {status && view && (!compact || expanded) && (
         <>
           <div data-bridge-state={status.state} className="flex flex-wrap items-center gap-2 text-sm">
             <ToneBadge tone={view.tone}>{view.text}</ToneBadge>

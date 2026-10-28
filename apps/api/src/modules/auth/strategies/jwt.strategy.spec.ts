@@ -29,7 +29,9 @@ describe('JwtStrategy.validate — quyền đọc từ DB, không tin role trong
 
   it('tài khoản bị khoá → 401 ngay, không đợi access token hết hạn', async () => {
     const { strategy } = setup({ role: 'ADMIN', isBlocked: true });
-    await expect(strategy.validate(ADMIN_TOKEN)).rejects.toMatchObject({ response: { code: 'ACCOUNT_BLOCKED' } });
+    await expect(strategy.validate(ADMIN_TOKEN)).rejects.toMatchObject({
+      response: { code: 'ACCOUNT_BLOCKED', message: expect.stringContaining('liên hệ CSKH Tubu Tree') },
+    });
   });
 
   it('user không còn tồn tại → 401', async () => {

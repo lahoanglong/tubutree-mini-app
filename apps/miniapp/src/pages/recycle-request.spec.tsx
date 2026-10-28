@@ -300,11 +300,11 @@ describe('/recycle/r/:id — Thu kèm đơn mua (§4.5b, §15.6)', () => {
     expect(screen.getByText('Đang tạm dừng')).toBeInTheDocument();
     expect(screen.queryByText('Chờ gắn vào đơn')).toBeNull();
   });
-  it('đã gắn đơn: "Đã gắn vào đơn TUBU123", timeline ở "Chờ kho nhận"', async () => {
+  it('đã gắn đơn: "Đã gắn vào đơn TUBU123", timeline ở "Kho nhận, đếm"', async () => {
     mocks.getWasteRequest.mockResolvedValue(PICKUP({ orderCode: 'TUBU123', orderId: 'ord-1', editable: false }));
     renderPage();
     expect(await screen.findByText('Đã gắn vào đơn TUBU123')).toBeInTheDocument();
-    expect(within(screen.getByRole('list', { name: 'Tiến độ yêu cầu' })).getByText('Chờ kho nhận').closest('li')).toHaveAttribute('aria-current', 'step');
+    expect(within(screen.getByRole('list', { name: 'Tiến độ yêu cầu' })).getByText('Kho nhận, đếm').closest('li')).toHaveAttribute('aria-current', 'step');
   });
 });
 
@@ -430,6 +430,25 @@ describe('/recycle/r/:id — theo dõi (B-83)', () => {
       await waitFor(() => expect(mocks.getWasteRequest.mock.calls.length).toBeGreaterThan(calls));
       await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/recycle/done/req-1', { replace: true }));
       expect(screen.queryByRole('dialog')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('quầy duyệt (OPEN sang COMPLETED) thì làm mới nhóm waste và điểm thưởng trước khi sang màn kết quả, để số dư không còn là số cũ', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { qc, invalidate } = renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Xem mã QR' }));
+      await screen.findByRole('dialog');
+      expect(mocks.invalidate).not.toHaveBeenCalled();
+      mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ status: 'COMPLETED', pointsAwarded: 5000 }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5100);
+      });
+      await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/recycle/done/req-1', { replace: true }));
+      expect(mocks.invalidate).toHaveBeenCalledWith(qc);
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['loyalty-rewards'] });
+      expect(mocks.invalidate.mock.invocationCallOrder[0]!).toBeLessThan(mocks.navigate.mock.invocationCallOrder.at(-1)!);
     } finally {
       vi.useRealTimers();
     }

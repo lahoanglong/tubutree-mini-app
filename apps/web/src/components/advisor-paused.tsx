@@ -8,6 +8,7 @@ import { supportContactQuery } from '@tubutree/app-core/queries/config';
 import { Heading, Text } from '@/components/mini';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
+import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { usePublicConfig } from '@/lib/use-public-config';
 
@@ -38,7 +39,7 @@ export function AdvisorPaused() {
           </a>
         )
       )}
-      <Link href="/" className={`${ui.btnSecondary} w-full max-md:min-h-12`}>
+      <Link href="/" className={`${miniBtnSecondary} w-full max-md:min-h-12`}>
         {copy.home}
       </Link>
     </div>

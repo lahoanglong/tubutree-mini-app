@@ -292,7 +292,7 @@ describe('Query DTO lọc danh sách admin — qua ValidationPipe thật (forbid
     expect(admin.listDealerApplications).toHaveBeenCalledWith('PENDING', 1, 20, 'asc');
     const returns = { listForAdmin: jest.fn().mockResolvedValue({ data: [], meta: {} }) };
     await new ReturnsAdminController(returns as never).list(Object.assign(new ReturnRequestsQuery(), { page: 2, limit: 10 }));
-    expect(returns.listForAdmin).toHaveBeenCalledWith(undefined, 2, 10, undefined);
+    expect(returns.listForAdmin).toHaveBeenCalledWith(undefined, 2, 10, undefined, undefined);
   });
 
   it('xuất CSV đơn: người xuất không phải quản trị viên thì che SĐT (D1-05)', async () => {

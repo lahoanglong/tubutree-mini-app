@@ -37,7 +37,7 @@ describe('Webhook Pancake mang mã đơn gian hàng đối tác tự giao (real 
       grantReferralReward: jest.fn().mockResolvedValue(undefined),
       reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
     } as unknown as AffiliateService;
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     const reversal = new OrderReversalService(
       { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService,
       { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService,
@@ -96,7 +96,7 @@ describe('Webhook Pancake mang mã đơn gian hàng đối tác tự giao (real 
     expect(after.pancakeAttention).toContain(`#${pancakeId}`);
     expect(await prisma.orderStatusHistory.count({ where: { orderId: order.id } })).toBe(0);
     expect(loyalty.creditOrderPoints).not.toHaveBeenCalledWith(order.id);
-    expect(notify).not.toHaveBeenCalledWith(order.userId, expect.anything(), expect.anything());
+    expect(notify.mock.calls.filter((c) => c[0] === order.userId)).toHaveLength(0);
     for (const e of [shipped, delivered]) {
       expect(e.status).toBe('IGNORED');
       expect(e.processedAt).not.toBeNull();

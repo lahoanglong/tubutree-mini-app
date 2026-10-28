@@ -17,7 +17,7 @@ function setup(profiles: unknown[], remindedUserIds: string[] = []) {
     notificationLog: { findMany: logFindMany },
   } as unknown as PrismaService;
   const notify = jest.fn().mockResolvedValue(undefined);
-  const notifications = { notify } as unknown as NotificationsService;
+  const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
   return { svc: new GameReminderService(prisma, config, notifications), findMany, notify, logFindMany };
 }
 
@@ -46,15 +46,15 @@ describe('GameReminderService.sendCheckInReminders', () => {
     expect(where.lastCheckInAt.gte.getTime()).toBeLessThan(where.lastCheckInAt.lt.getTime());
   });
 
-  it('lỗi gửi 1 user không chặn cả lô', async () => {
+  it('gửi không được cho 1 user (notifySafe trả false, lỗi đã log) không chặn cả lô', async () => {
     const { svc, notify } = setup([
       { userId: 'u1', streakDays: 3, streakFreezes: 0 },
       { userId: 'u2', streakDays: 5, streakFreezes: 0 },
     ]);
-    (notify as jest.Mock).mockRejectedValueOnce(new Error('zns down'));
-    const sent = await svc.sendCheckInReminders();
-    expect(sent).toBe(2);
+    (notify as jest.Mock).mockResolvedValueOnce(false);
+    await svc.sendCheckInReminders();
     expect(notify).toHaveBeenCalledTimes(2);
+    expect(notify).toHaveBeenLastCalledWith('u2', 'GAME_CHECKIN_REMINDER', expect.any(Object));
   });
 });
 
@@ -82,7 +82,7 @@ describe('GameReminderService.sendThirstyTreeReminders — cây bỏ lâu không
     const cfg = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'game.death_days' ? (30 as T) : (fb as T)) } as unknown as SystemConfigService;
     const findMany = jest.fn().mockResolvedValue([]);
     const prisma = { gameProfile: { findMany }, notificationLog: { findMany: jest.fn().mockResolvedValue([]) } } as unknown as PrismaService;
-    const svc = new GameReminderService(prisma, cfg, { notify: jest.fn() } as unknown as NotificationsService);
+    const svc = new GameReminderService(prisma, cfg, { notify: jest.fn(), notifySafe: jest.fn() } as unknown as NotificationsService);
     const before = Date.now();
     await svc.sendThirstyTreeReminders();
     const gt = findMany.mock.calls[0][0].where.lastWateredAt.gt as Date;

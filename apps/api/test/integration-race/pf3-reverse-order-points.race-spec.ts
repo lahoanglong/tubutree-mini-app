@@ -36,7 +36,7 @@ describe('huỷ/trả đơn so với cron hết hạn điểm (real Postgres)', 
         SystemConfigService,
         LoyaltyService,
         LoyaltyExpiryService,
-        { provide: NotificationsService, useValue: { notify: async () => undefined } },
+        { provide: NotificationsService, useValue: { notify: async () => undefined, notifySafe: jest.fn().mockResolvedValue(true) } },
       ],
     }).compile();
     await moduleRef.init();

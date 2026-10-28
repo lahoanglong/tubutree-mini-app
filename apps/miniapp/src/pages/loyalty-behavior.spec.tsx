@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   getLoyalty: vi.fn(),
   getCoupons: vi.fn(),
   getPointsTransactions: vi.fn(),
+  coreGet: vi.fn(),
   getDailyCheckInStatus: vi.fn(),
   getMemberCard: vi.fn(),
   postDailyCheckIn: vi.fn(),
@@ -44,11 +45,12 @@ vi.mock('../services/account-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getLoyalty: mocks.getLoyalty,
   getCoupons: mocks.getCoupons,
-  getPointsTransactions: mocks.getPointsTransactions,
   getDailyCheckInStatus: mocks.getDailyCheckInStatus,
   getMemberCard: mocks.getMemberCard,
   postDailyCheckIn: mocks.postDailyCheckIn,
 }));
+// Lịch sử điểm đọc qua app-core + coreHttp (phân trang); mocks.getPointsTransactions nhận query của trang.
+vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.coreGet } }));
 
 vi.mock('../services/waste-api', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), listWasteRequests: mocks.listWasteRequests }));
 
@@ -82,6 +84,14 @@ function renderPage() {
   );
 }
 
+/** Máy chủ giả: trả đúng trang theo before/beforeId/limit như API thật (dòng đã sắp mới nhất trước). */
+function servePointsHistory(rows: { id: string }[]) {
+  mocks.getPointsTransactions.mockImplementation(async (q?: { beforeId?: string; limit?: number }) => {
+    const start = q?.beforeId ? rows.findIndex((r) => r.id === q.beforeId) + 1 : 0;
+    return rows.slice(start, start + (q?.limit ?? 100));
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.publicConfig.waste.enabled = true;
@@ -95,6 +105,9 @@ beforeEach(() => {
   mocks.getLoyalty.mockResolvedValue(LOYALTY);
   mocks.getCoupons.mockResolvedValue([]);
   mocks.getPointsTransactions.mockResolvedValue([]);
+  mocks.coreGet.mockImplementation((path: string, opts?: { query?: Record<string, unknown> }) =>
+    path === '/me/points/transactions' ? mocks.getPointsTransactions(opts?.query) : Promise.reject(new Error(`chưa giả ${path}`)),
+  );
   mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
   mocks.getMemberCard.mockResolvedValue({ memberCode: 'TUBU123', posCreditEnabled: false });
   mocks.postDailyCheckIn.mockResolvedValue({
@@ -145,28 +158,59 @@ describe('LoyaltyPage — thẻ hạng', () => {
     expect(container.querySelector('[style*="width: 50%"]')).toBeNull();
   });
 
-  it('các lối tắt dẫn đúng trang: Vườn Xanh → /game, Đổi rác lấy quà → /recycle, Kho quà → /rewards, mua sắm → /browse', async () => {
+  it('các lối tắt dẫn đúng trang: Vườn Xanh → /game, Đổi rác lấy quà → /recycle, Đổi quà (chưa có mã) → /rewards, mua sắm → /browse', async () => {
     renderPage();
     fireEvent.click(await screen.findByText('Vườn Xanh'));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/game');
     fireEvent.click(screen.getByText('Đổi rác lấy quà'));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
-    fireEvent.click(screen.getByRole('button', { name: /Kho quà/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Đổi quà/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/rewards');
     fireEvent.click(screen.getByText(/Mua sắm để tích thêm Điểm Xanh/));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/browse');
   });
 });
 
+describe('LoyaltyPage — dòng mã giảm giá: Ví mã hoặc Đổi quà', () => {
+  const COUPON = { code: 'WELCOME30', type: 'AMOUNT', value: 30_000, minOrder: 199_000, maxDiscount: null, endAt: '2026-12-31T00:00:00.000Z' };
+
+  it('có mã: dòng "Ví mã (n)" dẫn tới Ưu đãi mục mã, không liệt kê từng mã; Kho quà vẫn là dòng riêng', async () => {
+    mocks.getCoupons.mockResolvedValue([COUPON, { ...COUPON, code: 'FREESHIP1' }]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Ví mã \(2\)/ }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?section=coupons');
+    expect(screen.queryByText('Mã giảm giá của tôi')).toBeNull();
+    expect(screen.queryByText('Giảm 30.000đ')).toBeNull();
+    expect(screen.queryByText('Đổi quà')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Kho quà/ }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/rewards');
+  });
+
+  it('chưa có mã: dòng "Đổi quà" dẫn tới Kho quà, không lặp thêm dòng "Kho quà"', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: /Đổi quà/ });
+    expect(screen.queryByText(/Ví mã/)).toBeNull();
+    expect(screen.queryByText('Kho quà')).toBeNull();
+  });
+
+  it('không tải được mã: dòng "Ví mã" không kèm số, không giả vờ "chưa có mã"', async () => {
+    mocks.getCoupons.mockRejectedValue(new Error('boom'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /^Ví mã/ }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?section=coupons');
+    expect(screen.queryByText('Đổi quà')).toBeNull();
+  });
+});
+
 describe('LoyaltyPage — lối vào Đổi rác theo cờ chương trình', () => {
-  it('chương trình tắt → không có hàng Đổi rác; hàng Kho quà vẫn hiện', async () => {
+  it('chương trình tắt → không có hàng Đổi rác; lối vào Kho quà vẫn hiện', async () => {
     mocks.publicConfig.waste.enabled = false;
     boost.cfg = { isLoaded: true };
     renderPage();
     await screen.findByText('Lịch sử Điểm Xanh');
     expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
     expect(screen.queryByText('Trạm Refill')).toBeNull();
-    expect(screen.getByText('Kho quà')).toBeInTheDocument();
+    expect(screen.getByText('Đổi quà')).toBeInTheDocument();
     expect(mocks.listWasteRequests).toHaveBeenCalledTimes(1);
   });
   it('chương trình tắt nhưng khách từng có yêu cầu → hàng "Yêu cầu đổi rác" chỉ để xem, mở /recycle/requests', async () => {
@@ -368,19 +412,53 @@ describe('LoyaltyPage — hạn giữ hạng, lịch sử, biểu tượng hạn
     expect(screen.queryByText(/Giữ hạng/)).not.toBeInTheDocument();
   });
 
-  it('lịch sử: 20 dòng, "Xem thêm" mở thêm 20 dòng cho tới hết', async () => {
-    mocks.getPointsTransactions.mockResolvedValue(
-      Array.from({ length: 45 }, (_, i) => ({ id: `n${i}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' })),
-    );
+  it('lịch sử: 20 dòng, "Xem thêm" tải trang kế từ máy chủ (cả dòng cũ hơn 100) cho tới hết', async () => {
+    const rows = Array.from({ length: 145 }, (_, i) => ({
+      id: `n${String(i).padStart(3, '0')}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: new Date(Date.UTC(2026, 9, 10, 5, 0, 0) - i * 1000).toISOString(),
+    }));
+    servePointsHistory(rows);
     renderPage();
-    const rows = () => screen.getAllByText('+1').length;
-    await screen.findByRole('button', { name: 'Xem thêm (25)' });
-    expect(rows()).toBe(20);
-    fireEvent.click(screen.getByRole('button', { name: 'Xem thêm (25)' }));
-    expect(rows()).toBe(40);
-    fireEvent.click(screen.getByRole('button', { name: 'Xem thêm (5)' }));
-    expect(rows()).toBe(45);
+    const rowsShown = () => screen.getAllByText('+1').length;
+    await screen.findByRole('button', { name: 'Xem thêm' });
+    expect(rowsShown()).toBe(20);
+    for (const shown of [40, 60, 80, 100, 120, 140]) {
+      fireEvent.click(screen.getByRole('button', { name: 'Xem thêm' }));
+      await waitFor(() => expect(rowsShown()).toBe(shown));
+    }
+    // Trang 8 chỉ còn 5 dòng: hết dòng cũ hơn thì không còn nút.
+    fireEvent.click(screen.getByRole('button', { name: 'Xem thêm' }));
+    await waitFor(() => expect(rowsShown()).toBe(145));
     expect(screen.queryByRole('button', { name: /^Xem thêm/ })).not.toBeInTheDocument();
+    // Mỗi trang gửi mốc của dòng cuối trang trước.
+    expect(mocks.getPointsTransactions.mock.calls[0]![0]).toMatchObject({ limit: 20 });
+    expect(mocks.getPointsTransactions.mock.calls[1]![0]).toMatchObject({ limit: 20, beforeId: 'n019', before: rows[19]!.createdAt });
+  });
+
+  it('lịch sử: ít hơn một trang thì không có nút "Xem thêm"', async () => {
+    servePointsHistory([{ id: 'a', delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' } as never]);
+    renderPage();
+    await screen.findByText('+1');
+    expect(screen.queryByRole('button', { name: /^Xem thêm/ })).not.toBeInTheDocument();
+  });
+
+  it('lịch sử: tải lỗi thì báo lỗi có nút thử lại, không giả vờ "chưa có giao dịch"', async () => {
+    mocks.getPointsTransactions.mockRejectedValueOnce(new Error('boom'));
+    renderPage();
+    expect(await screen.findByText('Chưa tải được lịch sử Điểm Xanh')).toBeInTheDocument();
+    expect(screen.queryByText('Chưa có giao dịch điểm nào')).toBeNull();
+  });
+
+  it('lịch sử: tải trang kế lỗi thì giữ các dòng đã có, nút đổi thành "thử lại" và bấm lại tải được', async () => {
+    const rows = Array.from({ length: 30 }, (_, i) => ({ id: `n${String(i).padStart(2, '0')}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: new Date(Date.UTC(2026, 9, 10, 5) - i * 1000).toISOString() }));
+    servePointsHistory(rows);
+    renderPage();
+    await screen.findByRole('button', { name: 'Xem thêm' });
+    mocks.getPointsTransactions.mockImplementationOnce(async () => {
+      throw new Error('boom');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Xem thêm' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Chưa tải được, bấm để thử lại' }));
+    await waitFor(() => expect(screen.getAllByText('+1')).toHaveLength(30));
   });
 
   it('đổi tên hạng trong admin: biểu tượng vẫn theo thứ hạng', async () => {
@@ -502,24 +580,12 @@ describe('LoyaltyPage — cảnh báo React trùng key', () => {
     );
     try {
       renderPage();
-      await screen.findByText('2 mã');
+      await screen.findByText('Ví mã (2)');
       await screen.findByText('Lịch sử Điểm Xanh');
       expect(errors.mock.calls.filter((c) => /same key|unique "key"/.test(String(c[0])))).toEqual([]);
     } finally {
       errors.mockRestore();
     }
-  });
-});
-
-describe('LoyaltyPage — thẻ mã giảm giá (R6-BUYER-12)', () => {
-  it('mã phần trăm có trần ghi "tối đa …"; không có trần thì chỉ ghi phần trăm', async () => {
-    mocks.getCoupons.mockResolvedValue([
-      { code: 'XANH10', type: 'PERCENT', value: 10, minOrder: null, maxDiscount: 50_000, endAt: '2026-12-31T00:00:00.000Z' },
-      { code: 'KHONGTRAN', type: 'PERCENT', value: 5, minOrder: null, maxDiscount: null, endAt: '2026-12-31T00:00:00.000Z' },
-    ]);
-    renderPage();
-    expect(await screen.findByText('Giảm 10% (tối đa 50.000đ)')).toBeInTheDocument();
-    expect(screen.getByText('Giảm 5%')).toBeInTheDocument();
   });
 });
 

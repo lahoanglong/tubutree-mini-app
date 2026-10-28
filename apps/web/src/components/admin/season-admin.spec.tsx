@@ -27,11 +27,29 @@ describe('SeasonAdmin', () => {
     expect(r.container.textContent).toContain('Hiện không có mùa nào đang chạy');
     expect(r.container.textContent).toContain('Đã hết hạn');
     typeInto(r.container.querySelector('input[name="season-name"]')!, 'Mùa Thu');
-    typeInto(r.container.querySelector('input[name="season-start"]')!, '2026-11-01');
-    typeInto(r.container.querySelector('input[name="season-end"]')!, '2026-11-30');
+    typeInto(r.container.querySelector('input[aria-label="Từ ngày"]')!, '01/11/2026');
+    typeInto(r.container.querySelector('input[aria-label="Đến hết ngày"]')!, '30/11/2026');
     click(byText(r.container, 'button', 'Tạo mùa'));
     await flush();
     const post = m.calls.find((c) => c.init?.method === 'POST');
     expect(JSON.parse(String(post?.init?.body))).toMatchObject({ name: 'Mùa Thu', startAt: '2026-10-31T17:00:00.000Z', endAt: '2026-11-30T16:59:59.000Z' });
+  });
+
+  it('ô ngày hiện dd/mm/yyyy (không dùng ô gốc mm/dd); gõ dở thì nút Tạo mùa khoá', async () => {
+    const m = mockFetch({ '/admin/engagement/seasons': () => ({ body: [ENDED] }) });
+    vi.stubGlobal('fetch', vi.fn(m.fn));
+    const r = render(<SeasonAdmin />);
+    mounted.push(r);
+    await flush();
+    expect(r.container.querySelector('input[aria-label="Từ ngày"]')!.getAttribute('placeholder')).toBe('dd/mm/yyyy');
+    typeInto(r.container.querySelector('input[name="season-name"]')!, 'Mùa Thu');
+    typeInto(r.container.querySelector('input[aria-label="Từ ngày"]')!, '01/11/2026');
+    typeInto(r.container.querySelector('input[aria-label="Đến hết ngày"]')!, '30/11/2026');
+    await flush();
+    const create = byText(r.container, 'button', 'Tạo mùa') as HTMLButtonElement;
+    expect(create.disabled).toBe(false);
+    typeInto(r.container.querySelector('input[aria-label="Đến hết ngày"]')!, '30/1');
+    await flush();
+    expect(create.disabled).toBe(true);
   });
 });

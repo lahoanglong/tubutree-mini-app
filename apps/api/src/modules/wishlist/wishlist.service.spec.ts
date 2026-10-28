@@ -72,6 +72,15 @@ describe('WishlistService.list', () => {
     expect(result[0]).toMatchObject({ ratingAvg: 4.5, reviewCount: 12, sold: 10 });
   });
 
+  it('thẻ yêu thích có createdAt dạng ISO để dán nhãn "Mới" như thẻ catalog', async () => {
+    const prisma = {
+      wishlist: { findMany: jest.fn().mockResolvedValue([{ productId: 'p1' }]) },
+      product: { findMany: jest.fn().mockResolvedValue([{ ...product('p1'), createdAt: new Date('2026-10-20T03:00:00.000Z') }]) },
+    } as unknown as PrismaService;
+    const result = await new WishlistService(prisma).list('user1');
+    expect(result[0]!.createdAt).toBe('2026-10-20T03:00:00.000Z');
+  });
+
   it('giá thẻ lấy từ phân loại mặc định (Pancake chỉ ghi giá bán vào phân loại)', async () => {
     const prisma = {
       wishlist: { findMany: jest.fn().mockResolvedValue([{ productId: 'p1' }]) },

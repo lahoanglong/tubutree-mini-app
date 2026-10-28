@@ -31,6 +31,8 @@ const CUSTOMER_REFUND_KINDS = ['END_CUSTOMER', 'CANCEL', 'RETURN', 'LATE_PAYMENT
 export class ListCustomerRefundsQuery extends PaginationQuery {
   @IsOptional() @IsIn(CUSTOMER_REFUND_STATUSES) status?: (typeof CUSTOMER_REFUND_STATUSES)[number];
   @IsOptional() @IsIn(CUSTOMER_REFUND_KINDS) kind?: (typeof CUSTOMER_REFUND_KINDS)[number];
+  /** Mã đơn, SĐT hoặc tên khách. */
+  @IsOptional() @IsString() @MaxLength(100) q?: string;
 }
 
 /** Admin khác người đang chuyển khoản phải chọn tiếp quản tường minh kèm lý do (ghi vào lịch sử đơn). */
@@ -75,7 +77,7 @@ export class CustomerRefundsAdminController {
 
   @Get()
   async list(@Query() q: ListCustomerRefundsQuery, @CurrentUser() viewer: JwtPayload) {
-    const res = await this.refunds.list(q.status, q.page, q.limit, q.kind);
+    const res = await this.refunds.list(q.status, q.page, q.limit, q.kind, { q: q.q, exactPhoneOnly: !seesFullOrderPhones(viewer) });
     return { ...res, data: res.data.map((r) => forViewer(r, viewer)) };
   }
 

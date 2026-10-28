@@ -44,7 +44,7 @@ describe('Buy-flow 4a — repurchase v2 + purchased-items (real Postgres)', () =
         { provide: CouponsService, useValue: { validateAndCompute: jest.fn(), release: jest.fn() } },
         { provide: FlashSaleService, useValue: { resolveEffective: jest.fn().mockResolvedValue(new Map()), restore: jest.fn() } },
         { provide: AffiliateService, useValue: { reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined), getActiveTouch: jest.fn().mockResolvedValue(null) } },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
       ],
     }).compile();
     await moduleRef.init();

@@ -1,8 +1,9 @@
 import { ctvMenuEntry, type CtvAccessHint } from '@tubutree/app-core/storefront-signup';
-import { BadgeDollarSign, BookOpen, Bell, CalendarClock, GraduationCap, Heart, Info, MapPin, MessageCircle, Settings, ShieldCheck, Sparkles, Store, Users, Wallet, type LucideIcon } from 'lucide-react';
+import { BadgeDollarSign, BookOpen, Bell, CalendarClock, GraduationCap, Heart, Info, MapPin, MessageCircle, Recycle, Settings, ShieldCheck, Sparkles, Store, Users, Wallet, type LucideIcon } from 'lucide-react';
 import type { DealerMe } from '@tubutree/app-core/api/dealer';
 import { canSeeAcademy } from '@tubutree/app-core/account-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
+import { DESK_ENTRY_LABEL } from '@tubutree/app-core/profile-sections';
 
 export interface AccountMenuItem {
   icon: LucideIcon;
@@ -25,6 +26,8 @@ export interface AccountMenuContext {
   ownedBrandName: string | null | undefined;
   /** GET /affiliate/me (chỉ cần với đại lý, nhân viên, admin): quyết định mục Cộng tác viên. */
   ctvAccess?: CtvAccessHint | null;
+  /** Tên các điểm nhận hàng (kho, điểm đối tác) khách này vận hành, từ GET /waste/desk/points; rỗng hoặc chưa có thì không hiện hàng "Nhận hàng tại điểm". */
+  deskPointNames?: readonly string[];
   /** Route web đã xong chưa (route map): mục trỏ route còn `pending` bị ẩn để khách không rơi vào 404. */
   isReady: (webPath: string) => boolean;
 }
@@ -79,7 +82,10 @@ export function buildAccountMenu(c: AccountMenuContext): AccountMenuGroup[] {
           { icon: Wallet, label: 'Lương của tôi', to: '/nhan-vien/bang-luong', hint: 'Xem lương & thông tin nhận' },
         ]
       : []),
-    ...(c.role === 'ADMIN' ? [{ icon: ShieldCheck, label: 'Quản trị nhân sự', to: '/admin', hint: 'Cấp quyền, duyệt ca, lương' }] : []),
+    ...(c.deskPointNames && c.deskPointNames.length > 0
+      ? [{ icon: Recycle, label: DESK_ENTRY_LABEL, to: '/doi-rac/quay', hint: c.deskPointNames.join(', ') }]
+      : []),
+    ...(c.role === 'ADMIN' ? [{ icon: ShieldCheck, label: 'Quản trị nhân sự', to: '/admin?tab=staffRoster', hint: 'Cấp quyền, duyệt ca, lương' }] : []),
   ];
   if (work.length > 0) groups.push({ group: homeCopy.profile.groupWork, items: work });
 

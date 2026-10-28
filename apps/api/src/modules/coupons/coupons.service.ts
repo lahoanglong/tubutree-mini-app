@@ -177,9 +177,25 @@ export class CouponsService {
   }
 
   /**
+   * Chọn tối đa COUPON_PREVIEW_LIMIT mã để xem trước. Ví vượt trần thì mã riêng của khách (cấp riêng, vd quà Vườn) được giữ
+   * trước mã công khai, vì mã công khai đứng theo id nên một mã riêng mới tạo (id lớn) sẽ luôn bị cắt khỏi bảng giá. Trong mỗi
+   * nhóm giữ thứ tự ví. Ví không vượt trần thì không tốn thêm truy vấn.
+   */
+  private async capPreviewCodes(codes: string[], userId: string): Promise<string[]> {
+    if (codes.length <= COUPON_PREVIEW_LIMIT) return codes;
+    const own = await this.prisma.coupon.findMany({
+      where: { code: { in: codes }, scope: 'USER_GROUP', scopeMeta: { path: ['userId'], equals: userId } },
+      select: { code: true },
+    });
+    const ownCodes = new Set(own.map((c) => c.code));
+    const keep = new Set([...codes.filter((c) => ownCodes.has(c)), ...codes.filter((c) => !ownCodes.has(c))].slice(0, COUPON_PREVIEW_LIMIT));
+    return codes.filter((c) => keep.has(c));
+  }
+
+  /**
    * Kết quả validateAndCompute của nhiều mã trên cùng một phần hàng, đọc gộp (mã, người dùng, số lượt) thay vì vài truy vấn
-   * mỗi mã. Mã bị từ chối trả đúng lỗi validateAndCompute sẽ ném. Chỉ đọc: không ghi lượt dùng, không khoá. Xét
-   * COUPON_PREVIEW_LIMIT mã ĐẦU TIÊN theo đúng thứ tự `codes` (thứ tự ví khách thấy), kết quả cũng theo thứ tự đó; mã ngoài trần
+   * mỗi mã. Mã bị từ chối trả đúng lỗi validateAndCompute sẽ ném. Chỉ đọc: không ghi lượt dùng, không khoá. Xét tối đa
+   * COUPON_PREVIEW_LIMIT mã (xem capPreviewCodes), kết quả theo đúng thứ tự `codes` (thứ tự ví khách thấy); mã ngoài trần
    * không có trong kết quả.
    */
   async previewMany(
@@ -189,7 +205,7 @@ export class CouponsService {
     lines?: CouponLine[],
   ): Promise<Map<string, CouponResult | BadRequestException>> {
     const out = new Map<string, CouponResult | BadRequestException>();
-    const wanted = [...new Set(codes.map(normalizeCouponCode))].slice(0, COUPON_PREVIEW_LIMIT);
+    const wanted = await this.capPreviewCodes([...new Set(codes.map(normalizeCouponCode))], userId);
     if (wanted.length === 0) return out;
     const rows = await this.prisma.coupon.findMany({ where: { code: { in: wanted } } });
     const byCode = new Map(rows.map((c) => [c.code, c]));

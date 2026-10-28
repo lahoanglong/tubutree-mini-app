@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 
-type Call = { method: string; path: string; body?: unknown };
+type Call = { method: string; path: string; body?: unknown; query?: Record<string, unknown> };
 
 const state = vi.hoisted(() => ({
   phase: 'authenticated' as string,
@@ -42,10 +42,16 @@ vi.mock('@/lib/route-map', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/route-map')>()),
   isWebRouteReady: (p: string) => p === '/hoc-vien' || (p === '/ctv/gian-hang' && state.routeReady.gianHang),
 }));
+// Máy chủ giả: cắt mảng theo con trỏ id + take như API thật (mới nhất trước, mảng đã sắp sẵn).
+function pageOf(rows: unknown[], query?: { take?: number; cursor?: string }) {
+  const list = rows as { id: string }[];
+  const start = query?.cursor ? list.findIndex((r) => r.id === query.cursor) + 1 : 0;
+  return query?.take ? list.slice(start, start + query.take) : list.slice(start);
+}
 vi.mock('@/lib/core-http', () => ({
   coreHttp: {
-    get: async (path: string) => {
-      state.calls.push({ method: 'get', path });
+    get: async (path: string, opts?: { query?: Record<string, unknown> }) => {
+      state.calls.push({ method: 'get', path, ...(opts?.query && Object.keys(opts.query).length > 0 ? { query: opts.query } : {}) });
       if (state.fail.has(path)) throw new Error('mất mạng');
       if (path === '/affiliate/me') return state.me;
       if (path === '/affiliate/dashboard') {
@@ -53,8 +59,8 @@ vi.mock('@/lib/core-http', () => ({
         return state.dash;
       }
       if (path === '/affiliate/links') return state.links;
-      if (path === '/affiliate/commissions') return state.commissions;
-      if (path === '/affiliate/payouts') return state.payouts;
+      if (path === '/affiliate/commissions') return pageOf(state.commissions, opts?.query);
+      if (path === '/affiliate/payouts') return pageOf(state.payouts, opts?.query);
       if (path === '/affiliate/tiers') return state.tiers;
       if (path === '/affiliate/milestones') return state.milestones;
       if (path === '/academy/courses') return state.courses;
@@ -555,6 +561,47 @@ describe('/ctv — bảng điều khiển', () => {
     expect(t).toContain('Đang chờ · đang giữ');
   });
 
+  it('lịch sử hoa hồng đầy một trang: "Tải thêm" gửi con trỏ id dòng cuối và nối dòng cũ hơn; hết thì nút biến mất', async () => {
+    state.tab = 'commission';
+    state.commissions = [
+      ...Array.from({ length: 50 }, (_, i) => ({ id: `c${i}`, orderId: `o${i}`, orderTotal: 10_000, rate: '0.1', amount: 1_000 + i, status: 'PAID', createdAt: '2026-10-02T03:00:00Z' })),
+      { id: 'old1', orderId: 'oo', orderTotal: 10_000, rate: '0.1', amount: 7_777, status: 'PAID', createdAt: '2026-09-02T03:00:00Z' },
+    ];
+    const { container } = mount();
+    await flush();
+    // Trước đây chỉ vẽ 30 dòng đầu: nay vẽ đủ trang đã tải.
+    expect(container.textContent).toContain('+1.049đ');
+    expect(container.textContent).not.toContain('+7.777đ');
+    expect(state.calls.find((c) => c.path === '/affiliate/commissions')?.query).toEqual({ take: 50 });
+    click(byText(container, 'button', 'Tải thêm'));
+    await flush();
+    expect(container.textContent).toContain('+7.777đ');
+    expect(container.textContent).toContain('+1.000đ');
+    expect(state.calls.filter((c) => c.path === '/affiliate/commissions').at(-1)?.query).toEqual({ take: 50, cursor: 'c49' });
+    expect(Array.from(container.querySelectorAll('button')).some((b) => b.textContent === 'Tải thêm')).toBe(false);
+  });
+
+  it('lịch sử chuyển vào Ví đầy một trang: "Tải thêm" nối lệnh cũ hơn bằng con trỏ id lệnh cuối', async () => {
+    state.tab = 'commission';
+    const mk = (id: string, amount: number) => ({ id, amount, grossAmount: amount, taxWithheld: 0, fee: 0, method: 'WALLET_BALANCE', status: 'PAID', rejectionReason: null, bankRef: null, requestedAt: '2026-10-01T03:00:00Z', reviewedAt: null, paidAt: null });
+    state.payouts = [...Array.from({ length: 50 }, (_, i) => mk(`p${i}`, 100_000 + i)), mk('pold', 555_000)];
+    const { container } = mount();
+    await flush();
+    expect(container.textContent).not.toContain('555.000đ');
+    click(byText(container, 'button', 'Tải thêm'));
+    await flush();
+    expect(container.textContent).toContain('555.000đ');
+    expect(state.calls.filter((c) => c.path === '/affiliate/payouts').at(-1)?.query).toEqual({ take: 50, cursor: 'p49' });
+  });
+
+  it('lịch sử chưa đầy một trang: không có "Tải thêm"', async () => {
+    state.tab = 'commission';
+    state.commissions = [{ id: 'c1', orderId: 'o1', orderTotal: 10_000, rate: '0.1', amount: 1_000, status: 'PAID', createdAt: '2026-10-02T03:00:00Z' }];
+    const { container } = mount();
+    await flush();
+    expect(Array.from(container.querySelectorAll('button')).some((b) => b.textContent === 'Tải thêm')).toBe(false);
+  });
+
   it('lịch sử hoa hồng: rỗng có lời mời, lỗi tải có Thử lại', async () => {
     state.tab = 'commission';
     const a = mount();
@@ -702,5 +749,53 @@ describe('/ctv — bậc, thưởng mốc, phân tích', () => {
     expect(section.querySelectorAll('li')).toHaveLength(10);
     expect(section.textContent).toContain('SP 1');
     expect(section.textContent).not.toContain('SP 12');
+  });
+});
+
+describe('/ctv — kiểu Mini App ở điện thoại (trạng thái rỗng, mã giới thiệu, điều khoản)', () => {
+  it('đang khôi phục phiên: khung chờ có đủ thẻ hoa hồng, 4 lối tắt, 2 ô số liệu', async () => {
+    state.phase = 'loading';
+    const { container } = mount();
+    await flush();
+    expect(container.querySelectorAll('[data-testid="ctv-skeleton"] [data-skeleton]')).toHaveLength(7);
+    state.phase = 'authenticated';
+  });
+
+  it('điều khoản đăng ký không có chấm đầu dòng, thụt lề 18px như Mini App', async () => {
+    state.me = { isAffiliate: false, referralCode: '', walletBalance: 0 };
+    const { container } = mount();
+    await flush();
+    const list = container.querySelector('section[aria-label="Điều khoản hoa hồng & thuế"] ul')!;
+    expect(list.className).not.toContain('list-disc');
+    expect(list.className).toContain('pl-[18px]');
+  });
+
+  it('mã giới thiệu: chữ Inter đậm 20px cách chữ 1px, màu thương hiệu như Mini App', async () => {
+    state.me = { isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 };
+    state.tab = 'share';
+    const { container } = mount();
+    await flush();
+    const code = Array.from(container.querySelectorAll('span')).find((s) => s.textContent === 'TUBU88')!;
+    expect(code.className).toContain('max-md:font-ui');
+    expect(code.className).toContain('max-md:font-bold');
+    expect(code.className).toContain('max-md:tracking-[1px]');
+    expect(code.className).toContain('max-md:text-[length:var(--type-price-lg-size)]');
+  });
+
+  it('trạng thái rỗng có hình minh hoạ như Mini App: link (lá), hoa hồng (mầm), theo sản phẩm (giỏ)', async () => {
+    state.me = { isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 };
+    state.tab = 'share';
+    const a = mount();
+    await flush();
+    const linkEmpty = Array.from(a.container.querySelectorAll('section')).find((s) => s.getAttribute('aria-label') === 'Link chia sẻ')!;
+    expect(linkEmpty.textContent).toContain('Chưa có link');
+    expect(linkEmpty.querySelector('svg[aria-hidden]')).not.toBeNull();
+    a.unmount();
+    state.tab = 'commission';
+    const b = mount();
+    await flush();
+    const commissionEmpty = Array.from(b.container.querySelectorAll('section')).find((s) => s.getAttribute('aria-label') === 'Lịch sử hoa hồng')!;
+    expect(commissionEmpty.textContent).toContain('Chưa có hoa hồng');
+    expect(commissionEmpty.querySelector('svg[aria-hidden]')).not.toBeNull();
   });
 });

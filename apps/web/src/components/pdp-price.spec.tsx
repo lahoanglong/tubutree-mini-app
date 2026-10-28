@@ -71,3 +71,19 @@ describe('PdpPrice theo phân loại đang chọn', () => {
     expect(priceText(container)).toBe('Từ 289.000đ');
   });
 });
+
+describe('PdpPrice khi danh sách Giờ vàng ở máy đã cũ', () => {
+  it('suất đã quá hạn thì giá lớn về giá thường, không nhãn Giờ vàng', async () => {
+    mocks.getActiveFlashSales.mockResolvedValue([
+      { itemId: 'f1', variationId: 'v2', productSlug: 'serum', flashPrice: 200000, retailPrice: 320000, salePrice: 289000, soldCount: 1, quota: 10, endAt: '2020-01-01T00:00:00.000Z' },
+    ]);
+    const { container } = mount(
+      <PdpSelectionProvider initialId="v2">
+        <PdpPrice product={PRODUCT} />
+      </PdpSelectionProvider>,
+    );
+    await flush();
+    expect(priceText(container)).toBe('289.000đ');
+    expect(container.querySelector('[data-testid="pdp-flash-badge"]')).toBeNull();
+  });
+});

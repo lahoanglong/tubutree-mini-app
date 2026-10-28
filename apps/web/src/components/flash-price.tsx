@@ -1,7 +1,7 @@
 'use client';
 
 import { Zap } from 'lucide-react';
-import { cardPricing, variationPricing } from '@/lib/flash-price';
+import { cardPricing, runningFlash, variationPricing } from '@/lib/flash-price';
 import { usePdpSelection } from './pdp-selection';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { formatVnd } from '@/lib/api';
@@ -54,7 +54,7 @@ type PdpVariation = { id: string; retailPrice: number; salePrice?: number | null
  * giá gốc gạch và nhãn giảm. Chưa chọn phân loại nào thì ghi "Từ" giá thấp nhất.
  */
 export function PdpPrice({ product }: { product: PricedProduct & { variations: PdpVariation[] } }) {
-  const flash = useActiveFlashSales();
+  const flash = runningFlash(useActiveFlashSales());
   const selectedId = usePdpSelection()?.selectedId;
   const selected = product.variations.find((v) => v.id === selectedId);
   if (!selected) {

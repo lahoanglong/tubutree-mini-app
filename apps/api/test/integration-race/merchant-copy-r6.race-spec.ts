@@ -17,7 +17,7 @@ describe('Lời báo cho đối tác (real Postgres)', () => {
     prisma = new PrismaService();
     await prisma.$connect();
     await warmPool(prisma);
-    const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    const notifications = { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } as unknown as NotificationsService;
     fulfilment = new MerchantFulfilmentService(prisma, { setStatus } as unknown as OrderStatusService, notifications, new SystemConfigService(prisma));
     merchant = new MerchantService(prisma, { setStatus } as unknown as OrderStatusService, notifications);
   });

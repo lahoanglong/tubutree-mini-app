@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Bell } from 'lucide-react';
-import { notificationsQuery } from '@tubutree/app-core/queries/account';
+import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
 import { coreHttp } from '@/lib/core-http';
 import { homeText } from '@/lib/home-text';
 import { isWebRouteReady } from '@/lib/route-map';
 
 /**
- * Chuông thông báo ở thanh đầu máy tính, mọi trang. Dùng chung queryKey ['notifications'] với trang Thông báo và HomeHeader
- * của điện thoại nên không thêm request. Khách chưa đăng nhập không có chuông.
+ * Chuông thông báo ở thanh đầu máy tính, mọi trang. Dùng chung queryKey ['notifications', 'unread'] với trang Thông báo và HomeHeader
+ * của điện thoại nên không thêm request, và chỉ đếm chứ không tải danh sách tin. Khách chưa đăng nhập không có chuông.
  */
 export function HeaderBell({ authed }: { authed: boolean }) {
   // Thanh đầu chỉ hiện từ md; điện thoại có chuông riêng ở Trang chủ, nên không gọi thêm request ở đó (giữ như trước khi có chuông này).
@@ -27,9 +27,9 @@ export function HeaderBell({ authed }: { authed: boolean }) {
     mq.addEventListener('change', sync);
     return () => mq.removeEventListener('change', sync);
   }, []);
-  const q = useQuery({ ...notificationsQuery(coreHttp), enabled: authed && wide });
+  const q = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: authed && wide });
   if (!authed || !isWebRouteReady('/tai-khoan/thong-bao')) return null;
-  const unread = Array.isArray(q.data) ? q.data.filter((n) => n.status !== 'READ').length : 0;
+  const unread = q.data?.count ?? 0;
   return (
     <Link
       href="/tai-khoan/thong-bao"

@@ -38,7 +38,7 @@ describe('dòng thu hồi ăn đúng lô gốc khi cron hết hạn chạy (real
         LoyaltyService,
         LoyaltyExpiryService,
         RewardPointsService,
-        { provide: NotificationsService, useValue: { notify: async () => undefined } },
+        { provide: NotificationsService, useValue: { notify: async () => undefined, notifySafe: jest.fn().mockResolvedValue(true) } },
       ],
     }).compile();
     await moduleRef.init();

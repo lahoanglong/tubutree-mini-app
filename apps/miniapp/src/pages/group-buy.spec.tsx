@@ -14,8 +14,12 @@ const mocks = vi.hoisted(() => ({
   joinGroupBuy: vi.fn(),
   fetchActiveFlashSales: vi.fn(),
   shareWithFallback: vi.fn(),
+  ensurePhone: vi.fn(),
   params: {} as { id?: string },
-  auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous', user: undefined as { referralCode: string } | undefined },
+  auth: {
+    status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous',
+    user: undefined as { referralCode?: string; phone?: string | null; zaloId?: string | null } | undefined,
+  },
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -36,7 +40,7 @@ vi.mock('../components/share-sheet', () => ({ useShareWithFallback: () => mocks.
 vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, login: mocks.login, user: mocks.auth.user };
+    const state = { status: mocks.auth.status, login: mocks.login, user: mocks.auth.user, ensurePhone: mocks.ensurePhone };
     return sel ? sel(state) : state;
   },
 }));
@@ -322,25 +326,46 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     expect(closed).toBeDisabled();
   });
 
-  it('chưa đăng nhập mở link nhóm: không gọi API chi tiết (cần đăng nhập), vẫn xem được danh sách', async () => {
+  it('chưa đăng nhập mở link nhóm: vẫn gọi API chi tiết (công khai), hiện thẻ nhóm được mời với nút "Đăng nhập để tham gia"', async () => {
     mocks.auth.status = 'anonymous';
     mocks.params = { id: 'b' };
+    mocks.getGroupBuy.mockResolvedValue(GROUP('b'));
     renderPage();
-    await screen.findByText('Sản phẩm a');
-    expect(mocks.getGroupBuy).not.toHaveBeenCalled();
+    expect(await screen.findByText('Bạn được mời vào nhóm này')).toBeInTheDocument();
+    expect(mocks.getGroupBuy).toHaveBeenCalledWith('b');
+    expect(screen.getAllByText('Sản phẩm b')).toHaveLength(1);
+    const buttons = screen.getAllByRole('button', { name: 'Đăng nhập để tham gia' });
+    fireEvent.click(buttons[0]!);
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+    expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
   });
 
   it('nói rõ cơ chế: đủ người thì nhận mã giảm theo % của nhóm (mã giảm % trên biến thể khách mua, không phải số tiền cố định)', async () => {
     renderPage();
-    const hints = await screen.findAllByText(`Đủ 5 người: mỗi người nhận mã giảm 20%, dùng cho đơn từ ${formatVnd(80_000)}`);
+    const hints = await screen.findAllByText(`Đủ nhóm: mỗi người nhận mã giảm 20% cho đơn từ ${formatVnd(80_000)}`);
     expect(hints).toHaveLength(2);
     expect(screen.queryByText(new RegExp(`mã giảm ${formatVnd(20_000)}`))).toBeNull();
+  });
+
+  it('E-100: "Còn thiếu N người" là một dòng riêng, tách khỏi điều nhận được khi đủ nhóm; người đã trong nhóm có dòng trạng thái riêng nên không lặp', async () => {
+    renderPage();
+    // Nhóm a chưa tham gia (2/5), nhóm b đã tham gia.
+    expect(await screen.findAllByText('Còn thiếu 3 người')).toHaveLength(1);
+    expect(screen.getByText('Bạn đã ở trong nhóm · cần thêm 3 người')).toBeInTheDocument();
+  });
+
+  it('E-100: nhóm đã đủ người không có dòng "Còn thiếu"', async () => {
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a', { currentSize: 5, status: 'SUCCESS', joined: true })]);
+    renderPage();
+    await screen.findByText('Sản phẩm a');
+    expect(screen.queryByText(/Còn thiếu/)).toBeNull();
+    expect(screen.queryByText(/^Đủ nhóm:/)).toBeNull();
   });
 
   it('Q18: đơn từ ghi đúng đơn tối thiểu của mã (biến thể rẻ nhất), không phải giá nhóm của sản phẩm', async () => {
     mocks.listGroupBuys.mockResolvedValue([GROUP('a', { unitPrice: 365_500, basePrice: 430_000, minOrder: 102_000, discountPct: 15 })]);
     renderPage();
-    expect((await screen.findAllByText(`Đủ 5 người: mỗi người nhận mã giảm 15%, dùng cho đơn từ ${formatVnd(102_000)}`)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(`Đủ nhóm: mỗi người nhận mã giảm 15% cho đơn từ ${formatVnd(102_000)}`)).length).toBeGreaterThan(0);
   });
 
   it('R2-BUYERMINI-4: người mở nhóm vào nhóm của chính mình không thấy banner "Bạn được mời"', async () => {
@@ -362,7 +387,78 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     expect(screen.getByText('GBUY-DONE-ME')).toBeInTheDocument();
     expect(screen.getByText('5/5 người · đã đủ nhóm')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Mua ngay với mã giảm 20%' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-done');
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-done', { state: { variationId: undefined, applyCoupon: 'GBUY-DONE-ME' } });
     expect(screen.queryByRole('button', { name: 'Nhóm đã đủ người' })).toBeNull();
+  });
+
+  it('E-9: nút "Mua ngay với mã" gửi sang trang sản phẩm kèm phân loại của nhóm và mã của người xem để trang áp mã sau khi thêm giỏ', async () => {
+    mocks.listGroupBuys.mockResolvedValue([
+      GROUP('done', { joined: true, status: 'SUCCESS', currentSize: 5, couponCode: 'GBUY-DONE-ME', variationId: 'v-rep' }),
+    ]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mua ngay với mã giảm 20%' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-done', { state: { variationId: 'v-rep', applyCoupon: 'GBUY-DONE-ME' } });
+  });
+
+  it('E-9: bấm ảnh sản phẩm của nhóm đủ người vẫn mở trang sản phẩm trơn, không áp mã', async () => {
+    mocks.listGroupBuys.mockResolvedValue([
+      GROUP('done', { joined: true, status: 'SUCCESS', currentSize: 5, couponCode: 'GBUY-DONE-ME' }),
+    ]);
+    renderPage();
+    fireEvent.click(await screen.findByAltText('Sản phẩm done'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-done');
+  });
+});
+
+describe('GroupBuyPage — tài khoản khách bấm Tham gia (E-11)', () => {
+  const GUEST_USER = { phone: null, zaloId: 'guest_dev1' };
+  const joinButton = () => screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' });
+
+  it('tài khoản khách: gọi ensurePhone trước, liên kết xong mới gửi tham gia', async () => {
+    mocks.auth.user = GUEST_USER;
+    mocks.ensurePhone.mockResolvedValue('0912345678');
+    renderPage();
+    fireEvent.click(await joinButton());
+    await waitFor(() => expect(mocks.joinGroupBuy).toHaveBeenCalledWith('a'));
+    expect(mocks.ensurePhone).toHaveBeenCalledTimes(1);
+  });
+
+  it('ensurePhone trả null (không liên kết được): dừng, không gọi API tham gia, nói khách cần làm gì', async () => {
+    mocks.auth.user = GUEST_USER;
+    mocks.ensurePhone.mockResolvedValue(null);
+    renderPage();
+    fireEvent.click(await joinButton());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', text: expect.stringContaining('số điện thoại') })));
+    expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
+  });
+
+  it('ensurePhone ném lỗi: xử lý như không liên kết được, không gọi API tham gia', async () => {
+    mocks.auth.user = GUEST_USER;
+    mocks.ensurePhone.mockRejectedValue(new Error('Zalo từ chối'));
+    renderPage();
+    fireEvent.click(await joinButton());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning' })));
+    expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
+  });
+
+  it('bấm đúp khi đang chờ liên kết chỉ mở một lần xin số điện thoại', async () => {
+    mocks.auth.user = GUEST_USER;
+    let release: (v: string | null) => void = () => undefined;
+    mocks.ensurePhone.mockReturnValue(new Promise<string | null>((r) => (release = r)));
+    renderPage();
+    const btn = await joinButton();
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    expect(mocks.ensurePhone).toHaveBeenCalledTimes(1);
+    release(null);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+  });
+
+  it('tài khoản thật (có số điện thoại hoặc Zalo thật): tham gia thẳng, không gọi ensurePhone', async () => {
+    mocks.auth.user = { phone: '0912345678', zaloId: 'z1' };
+    renderPage();
+    fireEvent.click(await joinButton());
+    await waitFor(() => expect(mocks.joinGroupBuy).toHaveBeenCalledWith('a'));
+    expect(mocks.ensurePhone).not.toHaveBeenCalled();
   });
 });

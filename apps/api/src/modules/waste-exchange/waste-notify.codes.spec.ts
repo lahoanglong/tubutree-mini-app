@@ -26,27 +26,31 @@ const EXPECTED: [code: string, id: string, placeholders: string[], body: string]
   ['WASTE_GIFT_CANCELLED', 'nt-waste-gift-cancelled', ['gift', 'points_note'], 'Lượt đổi quà {{gift}} đã bị huỷ.{{points_note}}'],
   ['WASTE_PERK_REVIEWED', 'nt-waste-perk-reviewed', ['point', 'result'], 'Ưu đãi riêng của điểm nhận {{point}}: {{result}}.'],
 ];
+// Mẫu thêm sau lần phát hành đầu: chèn bằng migration riêng, không nằm trong khối WASTE TEMPLATES của migration gốc.
+const EXPIRING = ['WASTE_REQUEST_EXPIRING', 'nt-waste-request-expiring', ['code', 'until', 'next_step'], 'Yêu cầu {{code}} sắp hết hạn giữ chỗ vào ngày {{until}}. Bạn nhớ {{next_step}} trước ngày đó nhé.'] as const;
+const ALL = [...EXPECTED, [EXPIRING[0], EXPIRING[1], [...EXPIRING[2]], EXPIRING[3]] as (typeof EXPECTED)[number]];
+const EXPIRING_SQL = readFileSync(join(__dirname, '../../../prisma/migrations/20261029010000_waste_request_expiring_template/migration.sql'), 'utf-8');
 const render = (body: string, data: Record<string, string>) => body.replace(/\{\{(\w+)\}\}/g, (_m, k: string) => data[k] ?? '');
 
-describe('WASTE_TEMPLATE_CODES and the ten templates', () => {
+describe('WASTE_TEMPLATE_CODES and the eleven templates', () => {
   const seeded = seededTemplates();
   const a = SQL.indexOf('-- BEGIN WASTE TEMPLATES');
   const b = SQL.indexOf('-- END WASTE TEMPLATES');
   const section = a >= 0 && b > a ? SQL.slice(a, b) : '';
 
-  it('exports the ten codes in registry order', () => {
-    expect([...WASTE_TEMPLATE_CODES]).toEqual(EXPECTED.map((e) => e[0]));
+  it('exports the eleven codes in registry order', () => {
+    expect([...WASTE_TEMPLATE_CODES]).toEqual(ALL.map((e) => e[0]));
   });
   it('no waste code is in the promotion catalogue, so every one is always sent (spec 11.6)', () => {
     for (const code of WASTE_TEMPLATE_CODES) expect(notificationCategory(code)).toBe('TRANSACTIONAL');
   });
-  it.each(EXPECTED)('%s: seed row has the pinned id, body, placeholders and createOnly', (code, id, placeholders, body) => {
+  it.each(ALL)('%s: seed row has the pinned id, body, placeholders and createOnly', (code, id, placeholders, body) => {
     const row = seeded.find((t) => t.code === code);
     expect(row).toEqual({ id, code, channel: 'INAPP', bodyTemplate: body, createOnly: true });
     expect([...new Set([...row!.bodyTemplate.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]))].sort()).toEqual([...placeholders].sort());
   });
   it('no waste body has an apostrophe, an emoji, the word voucher, or a standalone xu', () => {
-    for (const [, , , body] of EXPECTED) {
+    for (const [, , , body] of ALL) {
       expect(body).not.toContain("'");
       expect(body).not.toMatch(/\p{Extended_Pictographic}/u);
       expect(body).not.toMatch(/voucher/i);
@@ -64,6 +68,14 @@ describe('WASTE_TEMPLATE_CODES and the ten templates', () => {
       EXPECTED.map(([code, id, , body]) => ({ id, code, channel: 'INAPP', bodyTemplate: body })),
     );
   });
+  it('the expiring template migration inserts exactly that one row, equal to the seed word for word, and ON CONFLICT DO NOTHING', () => {
+    expect(EXPIRING_SQL).toContain('INSERT INTO "notification_templates" ("id", "code", "channel", "bodyTemplate") VALUES');
+    expect(EXPIRING_SQL).toContain('ON CONFLICT DO NOTHING;');
+    const tuples = [...EXPIRING_SQL.matchAll(/\('([^']+)', '([A-Z_]+)', '([A-Z]+)', '([^']*)'\)/g)];
+    expect(tuples.map((m) => ({ id: m[1], code: m[2], channel: m[3], bodyTemplate: m[4] }))).toEqual([
+      { id: EXPIRING[1], code: EXPIRING[0], channel: 'INAPP', bodyTemplate: EXPIRING[3] },
+    ]);
+  });
   it('migration content follows the order of spec 11.7: enums, tables, ordinary indexes, hand-written constraints, seed, config rows, templates', () => {
     const marks = ['CREATE TYPE "WasteItemStatus"', 'CREATE TABLE "waste_requests"', 'CREATE INDEX "waste_requests_trackingNorm_idx"', '-- BEGIN WASTE HAND-WRITTEN CONSTRAINTS', '-- BEGIN WASTE SEED DATA', '-- BEGIN WASTE CONFIG ROWS', '-- BEGIN WASTE TEMPLATES'];
     const pos = marks.map((m) => SQL.indexOf(m));
@@ -76,6 +88,9 @@ describe('WASTE_TEMPLATE_CODES and the ten templates', () => {
     const body = (c: string) => EXPECTED.find((e) => e[0] === c)![3];
     expect(render(body('WASTE_POINTS_CREDITED'), { code: 'TR-A2C4E', result: 'Tubu đã cộng 12.000 Điểm Xanh và 4 giọt nước' })).toBe(
       'Yêu cầu TR-A2C4E đã đếm xong. Tubu đã cộng 12.000 Điểm Xanh và 4 giọt nước.',
+    );
+    expect(render(ALL.find((e) => e[0] === 'WASTE_REQUEST_EXPIRING')![3], { code: 'TR-A2C4E', until: '03/11/2026', next_step: 'mang rác tới điểm nhận' })).toBe(
+      'Yêu cầu TR-A2C4E sắp hết hạn giữ chỗ vào ngày 03/11/2026. Bạn nhớ mang rác tới điểm nhận trước ngày đó nhé.',
     );
     expect(render(body('WASTE_GIFT_CANCELLED'), { gift: 'Túi vải Tubu', points_note: ' Tubu đã hoàn 20.000 Điểm Xanh vào tài khoản của bạn.' })).toBe(
       'Lượt đổi quà Túi vải Tubu đã bị huỷ. Tubu đã hoàn 20.000 Điểm Xanh vào tài khoản của bạn.',

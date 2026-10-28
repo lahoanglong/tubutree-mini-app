@@ -17,7 +17,7 @@ describe('Gửi mã khi người khác đang chờ cùng mã (real Postgres)', (
   const userIds: string[] = [];
   const orderIds: string[] = [];
   const lookup = { lookupAndIngest: jest.fn(async () => false) };
-  const service = () => new ExternalClaimService(prisma, new SystemConfigService(prisma), lookup as never, { notify: jest.fn(async () => undefined) } as never);
+  const service = () => new ExternalClaimService(prisma, new SystemConfigService(prisma), lookup as never, { notify: jest.fn(async () => undefined), notifySafe: jest.fn().mockResolvedValue(true) } as never);
 
   beforeAll(async () => {
     prisma = new PrismaService();
@@ -98,7 +98,7 @@ describe('Gửi mã khi người khác đang chờ cùng mã (real Postgres)', (
     expect(await rejectCode(service().submit(b.id, code))).toBe('ALREADY_CLAIMED');
   });
 
-  const adminSvc = () => new ExternalClaimsAdminService(prisma, new SystemConfigService(prisma), { notify: jest.fn(async () => undefined) } as never, service());
+  const adminSvc = () => new ExternalClaimsAdminService(prisma, new SystemConfigService(prisma), { notify: jest.fn(async () => undefined), notifySafe: jest.fn().mockResolvedValue(true) } as never, service());
   const ageAttempts = (code: string, userId: string, days: number) =>
     prisma.externalClaimAttempt.updateMany({ where: { code, userId }, data: { createdAt: new Date(Date.now() - days * DAY) } });
   const openAttempts = (code: string) => prisma.externalClaimAttempt.findMany({ where: { code, result: 'UNMATCHED', resolvedAt: null } });

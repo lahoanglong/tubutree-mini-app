@@ -84,6 +84,8 @@ export interface ProductCard {
   inStock: boolean;
   ratingAvg?: number;
   reviewCount?: number;
+  /** Ngày tạo (ISO) để dán nhãn "Mới"; thiếu khi API cũ → không nhãn. */
+  createdAt?: string;
 }
 export interface VariationDetail {
   id: string;

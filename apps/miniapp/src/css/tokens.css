@@ -496,3 +496,19 @@ body.with-back-btn .page.page-bleed {
     padding-right: 6px;
   }
 }
+
+/*
+ * Khổ rộng (máy tính, máy tính bảng): giao diện Mini App là của điện thoại nên giữ khung 480px căn giữa, không kéo dài hết màn hình.
+ * `transform` biến #app thành hộp chứa của mọi phần tử `position: fixed` bên trong (thanh đáy, nút dính đáy, nút quay lại, tấm chọn
+ * của ZaUI và lớp mờ của nó), nên chúng cũng chỉ rộng bằng khung mà không phải sửa từng chỗ. Từ 481px trở lên mới áp dụng: mọi điện thoại giữ nguyên.
+ */
+@media (min-width: 481px) {
+  #app {
+    width: 480px;
+    height: 100%;
+    margin: 0 auto;
+    transform: translateZ(0);
+    background: var(--color-bg-canvas);
+    box-shadow: var(--elevation-2);
+  }
+}

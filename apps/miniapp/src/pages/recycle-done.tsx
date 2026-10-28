@@ -31,8 +31,9 @@ export default function RecycleDonePage() {
   const authed = phase === 'authenticated';
 
   const q = useQuery({ queryKey: WASTE_QUERY_KEYS.request(id), queryFn: () => getWasteRequest(id), enabled: authed });
-  const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: authed });
-  const rewardsQ = useQuery({ queryKey: WASTE_QUERY_KEYS.rewards, queryFn: getLoyaltyRewards, enabled: authed });
+  // Quầy vừa cộng điểm: số dư lấy từ lần xem trước còn "tươi" trong bộ nhớ sẽ là số cũ, nên luôn gọi lại khi vào màn này.
+  const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: authed, refetchOnMount: 'always' });
+  const rewardsQ = useQuery({ queryKey: WASTE_QUERY_KEYS.rewards, queryFn: getLoyaltyRewards, enabled: authed, refetchOnMount: 'always' });
   const r = q.data;
   const notDone = !!r && r.status !== 'COMPLETED';
 
@@ -54,8 +55,8 @@ export default function RecycleDonePage() {
 
   const awarded = r.pointsAwarded ?? 0;
   const short = r.lines.filter((l) => (l.receivedQty ?? 0) < l.unitsPerPoint);
-  const me = meQ.data;
-  const p = nextRewardProgress(rewardsQ.data);
+  const me = meQ.isSuccess && meQ.isFetchedAfterMount ? meQ.data : undefined;
+  const p = rewardsQ.isSuccess && rewardsQ.isFetchedAfterMount ? nextRewardProgress(rewardsQ.data) : null;
   const drops = r.dropsAwarded ?? 0;
   const impact = impactLine(r.impactGrams);
 

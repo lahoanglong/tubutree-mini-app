@@ -17,7 +17,12 @@ export interface StorefrontAdminListQuery {
   status?: StorefrontStatusFilter;
   type?: StorefrontTypeFilter;
   q?: string;
+  /** Chỉ gian hàng đã duyệt mà chủ đã đổi tên/lời giới thiệu/ảnh và chưa ai bấm "Đã xem". */
+  changedAfterApproval?: boolean;
 }
+
+/** Gian hàng đã duyệt mà chủ đổi nội dung sau đó (cột contentChangedAt do StorefrontService.updateMine ghi). */
+const CHANGED_AFTER_APPROVAL_WHERE = { approvedAt: { not: null }, contentChangedAt: { not: null } } satisfies Prisma.StorefrontWhereInput;
 
 /** Danh sách không kéo ảnh bìa/avatar: ở gian hàng thiếu Cloudinary chúng là base64 tới 1,5MB mỗi ảnh. */
 const LIST_SELECT = {
@@ -30,6 +35,7 @@ const LIST_SELECT = {
   isPublished: true,
   publishedAt: true,
   approvedAt: true,
+  contentChangedAt: true,
   takenDownAt: true,
   takenDownReason: true,
   createdAt: true,
@@ -92,12 +98,17 @@ export class StorefrontAdminService {
   async list(q: StorefrontAdminListQuery) {
     const where = this.listWhere(q);
     const { skip, take } = skipTake(q.page, q.limit);
-    const [rows, total, opts] = await Promise.all([
+    const [rows, total, opts, changedAfterApproval] = await Promise.all([
       this.prisma.storefront.findMany({ where, select: LIST_SELECT, orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }], skip, take }),
       this.prisma.storefront.count({ where }),
       this.visibilityOptions(),
+      // Số trên chip "Đổi sau duyệt": đếm trên mọi gian hàng, không theo bộ lọc đang chọn.
+      this.prisma.storefront.count({ where: CHANGED_AFTER_APPROVAL_WHERE }),
     ]);
-    return paginated(rows.map(({ collections, ...r }) => this.summary(r, opts, itemsOf(collections))), q.page, q.limit, total);
+    return {
+      ...paginated(rows.map(({ collections, ...r }) => this.summary(r, opts, itemsOf(collections))), q.page, q.limit, total),
+      changedAfterApproval,
+    };
   }
 
   async detail(id: string) {
@@ -172,13 +183,21 @@ export class StorefrontAdminService {
       if (target.type !== 'CTV') throw new BadRequestException('Chỉ gian hàng CTV mới cần duyệt.');
     }
     const { count } = approved
-      ? await this.prisma.storefront.updateMany({ where: { id, type: 'CTV', approvedAt: null }, data: { approvedAt: new Date(), approvedById: adminId } })
+      ? await this.prisma.storefront.updateMany({ where: { id, type: 'CTV', approvedAt: null }, data: { approvedAt: new Date(), approvedById: adminId, contentChangedAt: null } })
       : await this.prisma.storefront.updateMany({ where: { id, approvedAt: { not: null } }, data: { approvedAt: null, approvedById: null } });
     const sf = await this.summaryOf(id);
     if (count === 1) {
       this.logger.warn(`Admin ${adminId} ${approved ? 'duyệt' : 'bỏ duyệt'} gian hàng ${id}.`);
       if (approved) await this.notifyOwner(sf.ownerUserId, 'STOREFRONT_APPROVED', { store: sf.title });
     }
+    return sf;
+  }
+
+  /** "Đã xem": admin đã xem nội dung chủ đổi sau khi duyệt. Chỉ bỏ dấu; không đổi duyệt/đăng và không báo chủ. */
+  async markContentSeen(adminId: string, id: string) {
+    const { count } = await this.prisma.storefront.updateMany({ where: { id, contentChangedAt: { not: null } }, data: { contentChangedAt: null } });
+    const sf = await this.summaryOf(id);
+    if (count === 1) this.logger.warn(`Admin ${adminId} đã xem nội dung đổi sau duyệt của gian hàng ${id}.`);
     return sf;
   }
 
@@ -189,6 +208,7 @@ export class StorefrontAdminService {
     else if (q.status === 'TAKEN_DOWN') and.push({ takenDownAt: { not: null } });
     else if (q.status === 'PENDING_APPROVAL') and.push(STOREFRONT_PENDING_APPROVAL_WHERE);
     if (q.type) and.push({ type: q.type });
+    if (q.changedAfterApproval) and.push(CHANGED_AFTER_APPROVAL_WHERE);
     const term = q.q?.trim();
     if (term) {
       const like = { contains: term, mode: 'insensitive' as const };

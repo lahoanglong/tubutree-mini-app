@@ -62,6 +62,14 @@ describe('AuthGate — một cổng cho mọi trang cần đăng nhập (R5-BUYE
     expect(screen.getByText('mời đăng nhập riêng')).toBeInTheDocument();
   });
 
+  it('tài khoản bị khoá (idle kèm lời máy chủ) → lời mời đăng nhập mặc định nói lời đó thay cho lời mời chung', () => {
+    act(() => useAuthStore.setState({ status: 'idle', restore, login, error: 'Tài khoản đã bị khoá.' }));
+    renderGate();
+    expect(screen.getByText('Tài khoản đã bị khoá.')).toBeInTheDocument();
+    expect(screen.queryByText(copy.auth.loginHint)).toBeNull();
+    act(() => useAuthStore.setState({ error: undefined }));
+  });
+
   it('phục hồi xong (error → authenticated) thì nội dung tự hiện, không cần tải lại app', () => {
     setStatus('error');
     renderGate();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, CheckCircle2, Plus, Recycle, ShoppingBag, Sprout } from 'lucide-react';
@@ -25,9 +25,9 @@ import {
   type CartLine,
   type OrderDTO,
 } from '@/lib/shop-client';
-import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
+import { ctvSlugFor, getStorefrontContext, subscribeStorefrontContext } from '@/lib/storefront-context';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
-import { shippingEtaLabel } from '@tubutree/app-core/shipping-eta';
+import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
 import { checkoutPointsOffer, convertedPointsLine, formatCount, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
   ORDER_NOTE_MAX,
@@ -131,8 +131,7 @@ export default function CheckoutPage() {
   // Chỉ hiện "Thu kèm rác" khi cờ pickup đã bật thật từ máy chủ; chưa tải xong thì ẩn, không hứa dịch vụ chưa chắc có.
   const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
   const pickupFlag = configQ.data?.waste?.pickup === true;
-  // Chưa có cấu hình (đang tải, lỗi, API cũ) thì không hứa ngày giao.
-  const etaLabel = configQ.data?.shippingEta ? shippingEtaLabel(configQ.data.shippingEta) : null;
+  const shippingEta = configQ.data?.shippingEta;
   const wasteMeQ = useQuery({
     queryKey: WASTE_QUERY_KEYS.me,
     queryFn: () => getWasteMe(coreHttp),
@@ -169,6 +168,13 @@ export default function CheckoutPage() {
   // không. Đọc một lần khi mount: sessionStorage không phải state phản ứng, và giá trị chỉ đổi
   // khi khách đi qua một gian hàng khác (tức là đã rời trang này).
   const [sfCtx] = useState(() => getStorefrontContext());
+  // Mã từ link chỉ khoá ô nhập khi máy chủ đã xác nhận là mã CTV; mã khách thường (nút chia sẻ sản phẩm) bị máy chủ bỏ qua nên
+  // không được hiện như "đang mua qua link giới thiệu". Chưa biết (null) vẫn gửi kèm đơn để máy chủ tự quyết: lỗi mạng lúc chạm không được làm CTV mất công.
+  // Phản ứng theo thay đổi: chạm giới thiệu trả kết quả sau khi màn này đã mở thì ô mã đổi theo, không kẹt ở giá trị lúc mở trang.
+  const linkReferral = useSyncExternalStore(subscribeStorefrontContext, () => getStorefrontContext().referralCode, () => null);
+  const referralEligible = useSyncExternalStore(subscribeStorefrontContext, () => getStorefrontContext().referralEligible, () => null);
+  const linkedReferral = referralEligible === true ? linkReferral : null;
+  const orderLinkReferral = referralEligible === false ? null : linkReferral;
   // CHỈ gian hàng CTV mới gắn vào đơn — xem ghi chú ở StorefrontContext.kind.
   const ctvSlug = ctvSlugFor(sfCtx);
   // Web chỉ ghi ngữ cảnh ở /s/[slug] (mọi loại gian hàng), còn /brand/[slug] đọc thực thể khác: không dựng link /brand/ từ đây.
@@ -219,6 +225,8 @@ export default function CheckoutPage() {
   const shipments = quote?.shipments ?? [];
   const split = shipments.length > 1 || shipments.some((s) => s.fulfiller.kind === 'MERCHANT');
   const splitNote = shipmentsNote(shipments);
+  // Chưa có cấu hình (đang tải, lỗi, API cũ) thì không hứa ngày giao; giỏ chỉ có hàng gian hàng tự giao thì cũng không.
+  const etaLabel = checkoutEtaLabel(shippingEta, shipments.map((s) => s.fulfiller.kind));
   // Cách thanh toán dùng được theo báo giá (máy chủ từ chối đặt đúng các cách nó khoá: hạn mức COD từng đơn, giỏ tách đơn D4)
   // và số dư Ví mới nhất. Lựa chọn không còn dùng được thì đổi sang cách khác dùng được, hết cách thì bỏ chọn để khoá nút đặt.
   const pickedPayment = quote ? pickPaymentMethod(payment, quote, walletBalance) : payment;
@@ -257,7 +265,7 @@ export default function CheckoutPage() {
         ...(quote ? { expectedTotal: quote.total } : {}),
         pointsToUse: usePoints ? usablePoints : 0,
         storefrontSlug: ctvSlug,
-        referralCode: effectiveReferralCode(referralApplied, sfCtx.referralCode),
+        referralCode: effectiveReferralCode(referralApplied, orderLinkReferral),
       };
       const frozen = unknownAttempt.current;
       if (frozen) {
@@ -365,7 +373,11 @@ export default function CheckoutPage() {
   if (placed) {
     return (
       <Shell bare>
-        <OrderSuccess order={placed} etaLabel={etaLabel} continueHref={continueHref} />
+        <OrderSuccess
+          order={placed}
+          etaLabel={checkoutEtaLabel(shippingEta, placedOrderKinds(placed))}
+          continueHref={continueHref}
+        />
       </Shell>
     );
   }
@@ -635,7 +647,7 @@ export default function CheckoutPage() {
 
           <div data-mini-block="referral" className="max-md:order-4 max-md:mt-2">
             <ReferralCodeBox
-              linkedCode={sfCtx.referralCode}
+              linkedCode={linkedReferral}
               appliedCode={referralApplied}
               onApplied={chosen(setReferralApplied)}
               disabled={place.isPending}

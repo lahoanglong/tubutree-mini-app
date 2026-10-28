@@ -200,6 +200,21 @@ export interface MemberCardResponse {
 export const getReferral = (http: HttpClient) => http.get<ReferralOverview>('/me/referral');
 export const getLoyalty = (http: HttpClient) => http.get<LoyaltyOverview>('/me/loyalty');
 export const getPointsTransactions = (http: HttpClient) => http.get<PointsTxn[]>('/me/points/transactions');
+
+/** Số dòng mỗi trang lịch sử điểm. */
+export const POINTS_TXN_PAGE_SIZE = 20;
+/** Mốc trang kế: createdAt và id của dòng cuối trang trước (API sắp theo createdAt, id giảm dần). */
+export interface PointsTxnCursor {
+  before: string;
+  beforeId: string;
+}
+export const getPointsTransactionsPage = (http: HttpClient, cursor?: PointsTxnCursor, limit = POINTS_TXN_PAGE_SIZE) =>
+  http.get<PointsTxn[]>('/me/points/transactions', { query: { limit, before: cursor?.before, beforeId: cursor?.beforeId } });
+/** Mốc cho trang kế; undefined khi trang vừa tải chưa đầy (đã hết dòng cũ hơn). */
+export const nextPointsTxnCursor = (page: readonly PointsTxn[], limit = POINTS_TXN_PAGE_SIZE): PointsTxnCursor | undefined => {
+  const last = page[page.length - 1];
+  return last && page.length >= limit ? { before: last.createdAt, beforeId: last.id } : undefined;
+};
 export const getCoupons = (http: HttpClient) => http.get<CouponDTO[]>('/me/coupons');
 export const getNewCustomerOffer = (http: HttpClient) => http.get<NewCustomerOffer>('/me/new-customer-offer');
 export const getLoyaltyPreview = (http: HttpClient) => http.get<LoyaltyPreviewDTO>('/loyalty/preview');

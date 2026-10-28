@@ -32,7 +32,7 @@ function setup(opts: {
   const executeRaw = jest.fn().mockResolvedValue(1);
   const prisma = { user, waterGift, gameProfile, $executeRaw: executeRaw } as unknown as PrismaService;
   const notify = jest.fn().mockResolvedValue(undefined);
-  const notifications = { notify } as unknown as NotificationsService;
+  const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
   return { svc: new GameGiftService(prisma, config, notifications), user, waterGift, gameProfile, notify, executeRaw };
 }
 

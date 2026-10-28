@@ -27,12 +27,6 @@ const cases: Case[] = [
   ['post', (h) => feed.postQuery(h, 'p1'), ['community', 'p1'], '/feed/p1'],
   ['events', (h) => feed.communityEventsQuery(h), ['community', 'events'], '/feed/events'],
   [
-    'leaderboard',
-    (h) => feed.communityLeaderboardQuery(h),
-    ['community', 'leaderboard'],
-    '/feed/leaderboard',
-  ],
-  [
     'adminPending',
     (h) => feed.adminPendingPostsQuery(h),
     ['admin-community-pending'],

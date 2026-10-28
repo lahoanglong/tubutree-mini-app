@@ -6,8 +6,19 @@ import { miniappRedirects } from './route-map';
 describe('next.config redirects()', () => {
   it('chuyển hướng danh mục cũ của trang chủ rồi đến danh sách sinh từ route map, đều 307', async () => {
     const list = await nextConfig.redirects!();
-    expect(list).toEqual([...buildCatalogRedirects(), ...miniappRedirects()]);
-    expect(list.every((r) => r.permanent === false)).toBe(true);
+    expect(list.slice(0, -1)).toEqual([...buildCatalogRedirects(), ...miniappRedirects()]);
+    expect(list.slice(0, -1).every((r) => r.permanent === false)).toBe(true);
+  });
+
+  it('đường web đã xoá /cong-dong/xep-hang chuyển vĩnh viễn về /cong-dong', async () => {
+    const list = await nextConfig.redirects!();
+    expect(list).toContainEqual({ source: '/cong-dong/xep-hang', destination: '/cong-dong', permanent: true });
+  });
+
+  it('đường Mini App /feed/leaderboard và /refill đi cùng đích với bản chuyển hướng của Mini App', async () => {
+    const list = await nextConfig.redirects!();
+    expect(list).toContainEqual({ source: '/feed/leaderboard', destination: '/cong-dong', permanent: false });
+    expect(list).toContainEqual({ source: '/refill', destination: '/doi-rac', permanent: false });
   });
 });
 

@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import { isNewProduct, NEW_PRODUCT_LABEL } from '@tubutree/app-core/product-badges';
 import { type ProductCard as P, formatSold } from '@/lib/api';
 import { CardSaleBadge, ProductPriceRow } from '@/components/flash-price';
 import { WishlistHeart } from '@/components/catalog/wishlist-heart';
@@ -15,11 +17,12 @@ export const PRIORITY_CARDS = 4;
  * của máy tính. Cùng một cây DOM, đổi kiểu bằng class (không dựng hai bản) để HTML dựng sẵn (ISR) đúng ở cả hai khổ.
  * Tim là anh em của link (không lồng nút trong thẻ `a`).
  */
-export default function ProductCard({ product, priority = false }: { product: P; priority?: boolean }) {
+export default function ProductCard({ product, priority = false, quickAdd }: { product: P; priority?: boolean; quickAdd?: ReactNode }) {
   // `=== false`: API cũ/nguồn không có cờ thì coi như còn hàng, không dán nhãn nhầm.
   const soldOut = product.inStock === false;
   const reviewed = (product.reviewCount ?? 0) > 0;
   const sold = formatSold(product.sold);
+  const isNew = isNewProduct(product.createdAt);
 
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-card bg-stone-0 shadow-[var(--elevation-1)] md:border md:border-stone-200 md:shadow-card md:transition-all md:duration-300 md:hover:-translate-y-1 md:hover:border-forest-600/40 md:hover:shadow-raised">
@@ -41,12 +44,22 @@ export default function ProductCard({ product, priority = false }: { product: P;
             </div>
           )}
 
-          {/* Nhãn giảm giá; giá Giờ vàng được gắn nhãn riêng (giá hiển thị khớp giỏ và đơn). */}
+          {/* Nhãn giảm giá; giá Giờ vàng được gắn nhãn riêng (giá hiển thị khớp giỏ và đơn). "Mới" xếp dưới nhãn giảm giá, không chồng lên. */}
           {!soldOut && (
-            <CardSaleBadge
-              product={product}
-              className="absolute left-2.5 top-2.5 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-900 shadow-card max-md:[&:not([data-flash])]:bg-promo-bg max-md:[&:not([data-flash])]:text-promo-fg max-md:[&:not([data-flash])]:shadow-none"
-            />
+            <div className="absolute left-2.5 top-2.5 flex flex-col items-start gap-1">
+              <CardSaleBadge
+                product={product}
+                className="rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-900 shadow-card max-md:[&:not([data-flash])]:bg-promo-bg max-md:[&:not([data-flash])]:text-promo-fg max-md:[&:not([data-flash])]:shadow-none"
+              />
+              {isNew && (
+                <span
+                  data-testid="card-new-badge"
+                  className="rounded-full bg-[var(--color-action-secondary-bg)] px-1.5 py-0.5 text-xs font-semibold text-[var(--color-action-secondary-fg)]"
+                >
+                  {NEW_PRODUCT_LABEL}
+                </span>
+              )}
+            </div>
           )}
 
           {/* Máy tính: nhãn nằm trên ảnh; điện thoại có hàng chấm màu + nhãn bên dưới ảnh như Mini App. */}
@@ -93,6 +106,12 @@ export default function ProductCard({ product, priority = false }: { product: P;
         </div>
       </ProductLink>
       <WishlistHeart productId={product.id} floating />
+      {/* Nút nổi (giỏ nhanh) là anh em của link: khung này phủ đúng vùng ảnh vuông nhưng không chặn chạm, chỉ nút bên trong nhận chạm. */}
+      {quickAdd && !soldOut && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 aspect-square">
+          <div className="pointer-events-auto absolute bottom-0.5 right-0.5">{quickAdd}</div>
+        </div>
+      )}
     </div>
   );
 }

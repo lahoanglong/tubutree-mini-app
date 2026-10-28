@@ -10,28 +10,42 @@ describe('OrdersController', () => {
     expect(Reflect.getMetadata('path', OrdersController.prototype.activeCount)).toBe('active-count');
   });
 
+  it('khai báo GET status-counts TRƯỚC GET :code, không thì ":code" nuốt route và đếm đơn im lặng về 0', () => {
+    const methods = Object.getOwnPropertyNames(OrdersController.prototype);
+    expect(methods.indexOf('statusCounts')).toBeGreaterThan(-1);
+    expect(methods.indexOf('statusCounts')).toBeLessThan(methods.indexOf('detail'));
+    expect(Reflect.getMetadata('path', OrdersController.prototype.statusCounts)).toBe('status-counts');
+  });
+
+  it('statusCounts trả số đơn theo tab của chính người gọi', async () => {
+    const statusCounts = jest.fn().mockResolvedValue({ pending_payment: 1, processing: 0, shipping: 2, delivered: 5, closed: 0 });
+    const ctrl = new OrdersController({} as never, {} as never, {} as never, { statusCounts } as never);
+    await expect(ctrl.statusCounts('u1')).resolves.toEqual({ pending_payment: 1, processing: 0, shipping: 2, delivered: 5, closed: 0 });
+    expect(statusCounts).toHaveBeenCalledWith('u1');
+  });
+
   it('list chuyển status + group xuống service', async () => {
     const list = jest.fn().mockResolvedValue({ data: [], meta: { page: 1, limit: 20, total: 0 } });
-    const ctrl = new OrdersController({ list } as unknown as OrdersService, {} as never, {} as never);
+    const ctrl = new OrdersController({ list } as unknown as OrdersService, {} as never, {} as never, {} as never);
     await ctrl.list('u1', { group: 'processing', page: 1, limit: 20 } as never);
     expect(list).toHaveBeenCalledWith('u1', { status: undefined, group: 'processing' }, 1, 20);
   });
 
   it('activeCount trả { count } của service', async () => {
     const activeCount = jest.fn().mockResolvedValue({ count: 3 });
-    const ctrl = new OrdersController({ activeCount } as unknown as OrdersService, {} as never, {} as never);
+    const ctrl = new OrdersController({ activeCount } as unknown as OrdersService, {} as never, {} as never, {} as never);
     await expect(ctrl.activeCount('u1')).resolves.toEqual({ count: 3 });
     expect(activeCount).toHaveBeenCalledWith('u1');
   });
   it('GET :code dùng detailView (có ảnh/tồn kho), không phải detail thô', async () => {
     const detailView = jest.fn().mockResolvedValue({ code: 'A', items: [] });
-    const ctrl = new OrdersController({ detailView } as unknown as OrdersService, {} as never, {} as never);
+    const ctrl = new OrdersController({ detailView } as unknown as OrdersService, {} as never, {} as never, {} as never);
     await ctrl.detail('u1', 'A');
     expect(detailView).toHaveBeenCalledWith('u1', 'A');
   });
   it('repurchase chuyển items + addSource trong body; body thiếu → input rỗng', async () => {
     const repurchase = jest.fn().mockResolvedValue({ items: [], results: [] });
-    const ctrl = new OrdersController({ repurchase } as unknown as OrdersService, {} as never, {} as never);
+    const ctrl = new OrdersController({ repurchase } as unknown as OrdersService, {} as never, {} as never, {} as never);
     await ctrl.repurchase('u1', 'A', { items: [{ orderItemId: 'i1', quantity: 2 }], addSource: 'repurchase' });
     expect(repurchase).toHaveBeenLastCalledWith('u1', 'A', { items: [{ orderItemId: 'i1', quantity: 2 }], addSource: 'repurchase' });
     await ctrl.repurchase('u1', 'A', undefined as never);
@@ -48,7 +62,7 @@ describe('OrdersController', () => {
     expect(types[2]).toBe(ReturnEstimateDto);
     expect(Reflect.getMetadata('path', OrdersController.prototype.estimateReturn)).toBe(':code/return-estimate');
     const estimate = jest.fn().mockResolvedValue({ refund: 1 });
-    const ctrl = new OrdersController({} as never, { estimate } as never, {} as never);
+    const ctrl = new OrdersController({} as never, { estimate } as never, {} as never, {} as never);
     const dto = { reasonCode: 'OTHER' as const, items: [{ orderItemId: 'i1', quantity: 1 }] };
     await expect(ctrl.estimateReturn('u1', 'A', dto)).resolves.toEqual({ refund: 1 });
     expect(estimate).toHaveBeenCalledWith('u1', 'A', dto);

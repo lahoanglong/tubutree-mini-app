@@ -57,7 +57,6 @@ import CashbackPage from './hoan-tien/page';
 import WishlistPage from './tai-khoan/yeu-thich/page';
 import CtvPage from './ctv/page';
 import CtvStorefrontPage from './ctv/gian-hang/page';
-import LeaderboardPage from './cong-dong/xep-hang/page';
 import EventsPage from './cong-dong/su-kien/page';
 import PostDetailPage from './cong-dong/[id]/page';
 import { CourseList } from './hoc-vien/course-list';
@@ -116,7 +115,6 @@ const LOYALTY: PageCase[] = [
   ['/hoan-tien', () => <CashbackPage />, '/hoan-tien'],
 ];
 const COMMUNITY: PageCase[] = [
-  ['/cong-dong/xep-hang', () => <LeaderboardPage />, '/cong-dong/xep-hang'],
   ['/cong-dong/su-kien', () => <EventsPage />, '/cong-dong/su-kien'],
   ['/cong-dong/[id]', () => <PostDetailPage />, '/cong-dong/p1'],
   ['/hoc-vien', () => <CourseList />, '/hoc-vien'],

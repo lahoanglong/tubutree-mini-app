@@ -112,6 +112,28 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
     expect(days).toBeLessThan(60.01);
   });
 
+  it('ngày bắt đầu và hết hạn gõ dạng dd/mm/yyyy: gửi mốc 00:00 và 23:59:59 giờ Việt Nam; gõ dở thì khoá nút tạo', async () => {
+    const { r, api } = mount({
+      '/admin/coupon-batches/claim-url-base': configRoute(BASE),
+      '/admin/coupon-batches': (init) => (init?.method === 'POST' ? { body: { batch: 'HOA', created: 1, claimUrlBase: BASE, codes: [] } } : { body: [] }),
+    });
+    await flush();
+    typeInto(input(r, 'Tiền tố lô'), 'hoa');
+    typeInto(input(r, 'Số thẻ'), '1');
+    typeInto(input(r, 'Mức giảm'), '30000');
+    const create = byText(r.container, 'button', 'Tạo lô và tải CSV') as HTMLButtonElement;
+    typeInto(input(r, 'Thẻ bắt đầu từ ngày'), '0111');
+    expect(create.disabled).toBe(true);
+    typeInto(input(r, 'Thẻ bắt đầu từ ngày'), '01112026');
+    typeInto(input(r, 'Thẻ hết hạn ngày'), '31122026');
+    expect(create.disabled).toBe(false);
+    click(create);
+    await flush();
+    const body = bodyOf(api.calls.find((c) => c.init?.method === 'POST'));
+    expect(body.startAt).toBe('2026-10-31T17:00:00.000Z');
+    expect(body.endAt).toBe('2026-12-31T16:59:59.000Z');
+  });
+
   it('lô đã tạo: hiện số thẻ đã nhận/đã dùng; tải lại CSV; tắt lô phải xác nhận', async () => {
     const { r, api } = mount({
       '/admin/coupon-batches/claim-url-base': configRoute(BASE),

@@ -28,6 +28,7 @@ import { ACTIVE_ORDER_STATUSES, ORDER_STATUS_GROUPS, type OrderStatusGroup } fro
 import { returnPointsTaken } from './return-ledger';
 import { markReversalEffectsDone } from './reversal-effects';
 import { foldVietnamese } from '../catalog/search-text';
+import { isPublicProduct } from '../catalog/public-product';
 import { orderLineReviews, type OrderLineReview } from '../reviews/review-eligibility';
 import { publicProductThumb } from '../../common/public-image';
 
@@ -47,6 +48,8 @@ export interface OrderItemMedia {
   thumbnail: string | null;
   stock: number;
   available: boolean;
+  /** Trang sản phẩm còn mở công khai (đang bán và đã duyệt): false thì nút "Viết đánh giá" / liên kết sản phẩm sẽ dẫn tới 404. */
+  productPublic: boolean;
   currentPrice: number | null;
 }
 export type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
@@ -91,7 +94,7 @@ export type OrderView = Omit<OrderWithItems, 'items' | BuyerHiddenOrderField> & 
   manualHandling: boolean;
 };
 
-const MISSING_MEDIA: OrderItemMedia = { thumbnail: null, stock: 0, available: false, currentPrice: null };
+const MISSING_MEDIA: OrderItemMedia = { thumbnail: null, stock: 0, available: false, productPublic: false, currentPrice: null };
 
 export type RepurchaseAddSource = 'repurchase' | 'reorder_notification';
 export type RepurchaseSkipReason = 'OUT_OF_STOCK' | 'INACTIVE' | 'NOT_APPROVED' | 'EXCEEDS_STOCK';
@@ -344,19 +347,29 @@ export class OrdersService {
         })
       : [];
     const byId = new Map(variations.map((v) => [v.id, v]));
-    const media = (variationId: string): OrderItemMedia => {
+    // Biến thể có thể bị xoá hẳn (gắn mã Pancake xoá biến thể tạm của sản phẩm đối tác) trong khi sản phẩm vẫn đang bán: dòng đơn chỉ còn
+    // slug đã lưu, tra sản phẩm theo đó để khách không mất nút "Viết đánh giá" của một sản phẩm còn mở.
+    const orphanSlugs = [...new Set(orders.flatMap((o) => o.items.flatMap((it) => (!byId.has(it.variationId) && it.productSlug ? [it.productSlug] : []))))];
+    const publicBySlug = new Map(
+      (orphanSlugs.length
+        ? await this.prisma.product.findMany({ where: { slug: { in: orphanSlugs } }, select: { slug: true, isActive: true, approvalStatus: true } })
+        : []
+      ).map((p) => [p.slug, isPublicProduct(p)]),
+    );
+    const media = (variationId: string, productSlug: string | null): OrderItemMedia => {
       const v = byId.get(variationId);
-      if (!v) return MISSING_MEDIA;
+      if (!v) return { ...MISSING_MEDIA, productPublic: productSlug ? (publicBySlug.get(productSlug) ?? false) : false };
       return {
         thumbnail: publicProductThumb(v.product),
         stock: v.stock,
-        available: v.isActive && v.product.isActive && v.product.approvalStatus === 'APPROVED' && v.stock > 0,
+        available: v.isActive && isPublicProduct(v.product) && v.stock > 0,
+        productPublic: isPublicProduct(v.product),
         currentPrice: v.salePrice ?? v.retailPrice,
       };
     };
     return orders.map((o) => ({
       ...forBuyer(o),
-      items: o.items.map((it) => ({ ...it, ...media(it.variationId) })),
+      items: o.items.map((it) => ({ ...it, ...media(it.variationId, it.productSlug) })),
       canCancel: customerCancelBlock(o, viewerId) === null,
       manualHandling: isManualHandling(o),
       paymentDeadline: deadlines.get(o.id) ?? null,
@@ -487,11 +500,10 @@ export class OrdersService {
     }
     const pointsBack = ((reversed as ReversalResult | null)?.pointsRefunded ?? 0) + standardPointsBack;
     await this.notifications
-      .notify(userId, 'ORDER_CANCELLED', {
+      .notifySafe(userId, 'ORDER_CANCELLED', {
         order_code: code,
         refund_note: refundNote(refund, bank, pointsBack) + receivedRefundNote(receivedBack, !!order.placedForCustomer),
-      })
-      .catch(() => undefined);
+      }, undefined, `order=${code}`);
     await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_ORDER_CANCELLED', {
       order_code: code,
       reason: 'Khách huỷ đơn',

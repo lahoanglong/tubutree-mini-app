@@ -10,6 +10,7 @@ import { ATTENTION_UNDERPAID } from '../integrations/pancake/pancake-attention';
 /** Phần của NotificationsService cần ở đây (khai báo cấu trúc: hàm tự do không kéo DI/vòng module). */
 export interface RefundNotifier {
   notify(userId: string, templateCode: string, data: Record<string, string>): Promise<void>;
+  notifySafe(userId: string, templateCode: string, data: Record<string, string>, opts?: undefined, context?: string): Promise<boolean>;
 }
 
 /**
@@ -225,12 +226,11 @@ export async function announceBankRefund(
   const amount = formatVnd(refund.amount);
   if ((opts.notifyCustomer ?? true) && refund.userId && refund.bankAccountNo) {
     await ctx.notifications
-      ?.notify(refund.userId, 'REFUND_BANK_REQUESTED', {
+      ?.notifySafe(refund.userId, 'REFUND_BANK_REQUESTED', {
         order_code: refund.orderCode,
         amount,
         bank: maskedBank(refund),
-      })
-      .catch(() => undefined);
+      }, undefined, `order=${refund.orderCode}`);
   }
   await notifyAdmins(
     { prisma: ctx.prisma, notifications: ctx.notifications, logger: ctx.logger },
@@ -470,9 +470,7 @@ async function announceOverpayment(ctx: LateCtx, order: OverOrder, rawAmount: nu
   ctx.logger.warn(`Khách trả thêm ${amount} qua ZaloPay cho đơn ${order.code} đã nhận đủ tiền — đã tạo khoản hoàn tiền trả dư.`);
   // Đơn CTV lên hộ: người trả là khách cuối, CTV không có quyền chọn nơi nhận nên không báo CTV.
   if (!order.placedForCustomer) {
-    await ctx.notifications
-      ?.notify(order.userId, 'REFUND_OVERPAYMENT', { order_code: order.code, amount })
-      .catch(() => undefined);
+    await ctx.notifications?.notifySafe(order.userId, 'REFUND_OVERPAYMENT', { order_code: order.code, amount }, undefined, `order=${order.code}`);
   }
   await notifyAdmins(
     { prisma: ctx.prisma, notifications: ctx.notifications, logger: ctx.logger },
@@ -549,9 +547,7 @@ async function announceLatePayment(ctx: LateCtx, order: LateOrder, rawAmount: nu
   ctx.logger.warn(`Tiền ${source} ${amount} về cho đơn ${order.code} đã ${order.status} — đã tạo yêu cầu hoàn tiền.`);
   // Đơn CTV lên hộ: tiền là của khách cuối, CTV không được mời chọn Ví hay ngân hàng cho khoản này.
   if (notifyCustomer && !order.placedForCustomer) {
-    await ctx.notifications
-      ?.notify(order.userId, 'REFUND_LATE_PAYMENT', { order_code: order.code, amount })
-      .catch(() => undefined);
+    await ctx.notifications?.notifySafe(order.userId, 'REFUND_LATE_PAYMENT', { order_code: order.code, amount }, undefined, `order=${order.code}`);
   }
   await notifyAdmins(
     { prisma: ctx.prisma, notifications: ctx.notifications, logger: ctx.logger },

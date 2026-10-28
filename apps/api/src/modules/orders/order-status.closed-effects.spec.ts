@@ -49,7 +49,9 @@ function build(order: Record<string, unknown>, over: { loyalty?: Record<string, 
     gomdonAlert: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
   };
-  const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+  const notifyMock = jest.fn().mockResolvedValue(true);
+  // Service gửi tin qua notifySafe; hai tên dùng chung một mock để kiểm theo mã tin.
+  const notifications = { notify: notifyMock, notifySafe: notifyMock };
   const hooks = {
     precheckCancel: jest.fn().mockResolvedValue({ kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' }),
     afterLocalCancel: jest.fn().mockResolvedValue(undefined),
@@ -96,7 +98,7 @@ describe('OrderStatusService — việc sau commit của CANCELLED/RETURNED (D12
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
     expect(hooks.afterLocalCancel).toHaveBeenCalledTimes(1);
     expect(notifications.notify).toHaveBeenCalledTimes(1);
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', expect.objectContaining({ order_code: 'TUBU1' }));
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', expect.objectContaining({ order_code: 'TUBU1' }), undefined, expect.stringMatching(/^order=/));
   });
 
   it('quyết định DEFERRED + reverseOrderPoints ném lỗi: afterLocalCancel vẫn nhận đúng quyết định để xếp lệnh huỷ Pancake', async () => {

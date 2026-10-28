@@ -198,6 +198,76 @@ describe('CustomerRefundsTab — bộ lọc, phân trang, trạng thái', () => 
     expect(api.calls.at(-1)!.url).not.toContain('kind=');
   });
 
+  it('ô tìm theo mã đơn hoặc SĐT: gửi q đã cắt khoảng trắng sau nhịp gõ, về trang 1; xoá ô thì bỏ q', async () => {
+    const api = mockFetch(LIST([refund()]));
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const input = container.querySelector('input[aria-label="Tìm khoản hoàn theo mã đơn hoặc SĐT khách"]');
+    typeInto(input, '  0912345678 ');
+    const waitUntil = async (cond: () => boolean) => {
+      for (let i = 0; i < 40 && !cond(); i += 1) {
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 20));
+        });
+      }
+    };
+    await waitUntil(() => api.calls.some((c) => c.url.includes('q=0912345678')));
+    const last = api.calls.at(-1)!.url;
+    expect(last).toContain('q=0912345678');
+    expect(last).toContain('page=1');
+    typeInto(input, '');
+    await waitUntil(() => !api.calls.at(-1)!.url.includes('q='));
+    expect(api.calls.at(-1)!.url).not.toContain('q=');
+  });
+
+  it('Kế toán (bị che SĐT): ô tìm nói phải đủ 10 số, gõ dở số mà không ra thì câu rỗng nhắc gõ đủ 10 số; admin thì không nhắc', async () => {
+    const api = mockFetch(LIST([]));
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const accountant = mount(<CustomerRefundsTab isAdmin={false} />);
+    await flush();
+    const input = accountant.container.querySelector('input[aria-label="Tìm khoản hoàn theo mã đơn hoặc SĐT khách"]') as HTMLInputElement;
+    expect(input.placeholder).toBe('Mã đơn hoặc đủ 10 số SĐT');
+    typeInto(input, '0912');
+    for (let i = 0; i < 40 && !accountant.container.textContent?.includes('Không có khoản hoàn nào khớp'); i += 1) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+    }
+    expect(accountant.container.textContent).toContain('Không có khoản hoàn nào khớp "0912".');
+    expect(accountant.container.textContent).toContain('Gõ đủ 10 số SĐT để tìm theo khách.');
+
+    const admin = mount(<CustomerRefundsTab isAdmin />);
+    await flush();
+    const adminInput = admin.container.querySelector('input[aria-label="Tìm khoản hoàn theo mã đơn hoặc SĐT khách"]') as HTMLInputElement;
+    expect(adminInput.placeholder).toBe('Mã đơn hoặc SĐT khách');
+    typeInto(adminInput, '0912');
+    for (let i = 0; i < 40 && !admin.container.textContent?.includes('Không có khoản hoàn nào khớp'); i += 1) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+    }
+    expect(admin.container.textContent).toContain('Không có khoản hoàn nào khớp "0912".');
+    expect(admin.container.textContent).not.toContain('Gõ đủ 10 số SĐT');
+  });
+
+  it('nhân viên Kế toán kiêm CSKH (không phải admin nhưng thấy đủ SĐT): ô tìm không đòi đủ 10 số và câu rỗng không nhắc điều đó', async () => {
+    const api = mockFetch(LIST([]));
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<CustomerRefundsTab isAdmin={false} phoneMasked={false} />);
+    await flush();
+    const input = container.querySelector('input[aria-label="Tìm khoản hoàn theo mã đơn hoặc SĐT khách"]') as HTMLInputElement;
+    expect(input.placeholder).toBe('Mã đơn hoặc SĐT khách');
+    typeInto(input, '0912');
+    for (let i = 0; i < 40 && !container.textContent?.includes('Không có khoản hoàn nào khớp'); i += 1) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+    }
+    expect(container.textContent).toContain('Không có khoản hoàn nào khớp "0912".');
+    expect(container.textContent).not.toContain('Gõ đủ 10 số SĐT');
+  });
+
   it('thanh lọc: "Đang mở" đứng đầu và đang chọn, chip 44px; bấm "Đã chuyển" gọi status=COMPLETED trang 1', async () => {
     const api = mockFetch(LIST([]));
     vi.stubGlobal('fetch', vi.fn(api.fn));

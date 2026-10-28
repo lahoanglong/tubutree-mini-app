@@ -24,6 +24,8 @@ const MAX_COLLECTIONS_PER_STORE = 30;
 const MAX_ITEMS_PER_COLLECTION = 100;
 // Trần hostname DNS (RFC 1035): dài hơn không thể là host thật.
 const HOST_MAX_LENGTH = 253;
+/** Trường nội dung khách nhìn thấy đầu tiên trên gian hàng; đổi sau khi đã duyệt thì admin được báo. */
+const CONTENT_FIELDS = ['title', 'headerNote', 'avatarUrl', 'coverUrl'] as const;
 
 /** Lý do khách không thấy một món trong gian hàng (null = khách thấy) — cùng điều kiện lọc của getPublicBySlug. */
 export function buyerHiddenReason(item: {
@@ -209,11 +211,14 @@ export class StorefrontService {
     // Chuỗi rỗng = CHỦ ĐỘNG XOÁ → ghi null. FE gửi '' khi CTV xoá ảnh/lời nhắn (gửi undefined
     // thì PATCH bỏ qua trường đó, xoá xong ảnh cũ vẫn còn). Lưu '' thay vì null sẽ làm bẩn dữ
     // liệu và khiến điều kiện `Boolean(sf.avatarUrl && ...)` của nhiệm vụ hồ sơ đọc khó hiểu.
-    const data: Record<string, string | null> = {};
+    const data: Record<string, string | Date | null> = {};
     for (const [k, v] of Object.entries(dto)) {
       if (v === undefined || (!isPartnerStore(sf) && k.startsWith('warehouse'))) continue;
       data[k] = k !== 'title' && typeof v === 'string' && v.trim() === '' ? null : v;
     }
+    // Gian hàng đã duyệt mà chủ đổi nội dung khách nhìn thấy trước tiên: chỉ đánh dấu để admin xem lại, không bắt duyệt lại. So với giá trị
+    // đang lưu vì builder gửi lại cả bộ trường mỗi lần bấm Lưu.
+    if (sf.approvedAt && CONTENT_FIELDS.some((k) => k in data && data[k] !== sf[k])) data.contentChangedAt = new Date();
     if (dto.subdomain && dto.subdomain !== sf.subdomain) {
       await recordReleasedIdentifiers(this.prisma, sf.id, [sf.subdomain], [dto.subdomain]);
     }

@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
   fetchProducts: vi.fn(),
   fetchCategories: vi.fn(),
   fetchPurchasedItems: vi.fn(),
-  getNotifications: vi.fn(),
+  unreadCount: vi.fn(),
+  coreGet: vi.fn(),
   auth: { status: 'authenticated' as 'authenticated' | 'guest' | 'loading', user: { id: 'u1' } as { id: string } | null },
   onRefresh: undefined as undefined | (() => Promise<unknown> | void),
 }));
@@ -26,7 +27,16 @@ vi.mock('../services/shop-api', () => ({
   fetchUpcomingFlashSales: vi.fn().mockResolvedValue([]),
   getCart: vi.fn(),
 }));
-vi.mock('../services/account-api', () => ({ getNotifications: mocks.getNotifications }));
+// Chuông chỉ đếm: một lời gọi unread-count, không tải danh sách tin (/me/notifications).
+vi.mock('../services/core-http', () => ({
+  coreHttp: {
+    get: (path: string) => {
+      mocks.coreGet(path);
+      if (path === '/me/notifications/unread-count') return mocks.unreadCount();
+      return Promise.reject(new Error(`không mock ${path}`));
+    },
+  },
+}));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { status: string; user: { id: string } | null }) => unknown) => sel({ status: mocks.auth.status, user: mocks.auth.user }),
 }));
@@ -92,7 +102,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     mocks.onRefresh = undefined;
     mocks.fetchProducts.mockResolvedValue(PAGE([card('bs', 'Bán chạy nhất')]));
     mocks.fetchCategories.mockResolvedValue([]);
-    mocks.getNotifications.mockResolvedValue([]);
+    mocks.unreadCount.mockResolvedValue({ count: 0 });
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
   });
 
@@ -203,26 +213,28 @@ describe('HomePage (phương án A, 9 khối)', () => {
     mocks.auth.user = null;
     renderHome();
     await screen.findByRole('region', { name: 'Bán chạy' });
-    expect(mocks.getNotifications).not.toHaveBeenCalled();
+    expect(mocks.coreGet).not.toHaveBeenCalled();
     expect(mocks.fetchPurchasedItems).not.toHaveBeenCalled();
     expect(blockOrder()).toEqual(NEW);
   });
 
   it('chuông báo số tin chưa đọc (chỉ khi đã đăng nhập)', async () => {
-    mocks.getNotifications.mockResolvedValue([{ id: 'n1', status: 'UNREAD' }, { id: 'n2', status: 'READ' }, { id: 'n3', status: 'UNREAD' }]);
+    mocks.unreadCount.mockResolvedValue({ count: 73 });
     renderHome();
-    expect(await screen.findByRole('button', { name: 'Thông báo, 2 chưa đọc' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Thông báo, 73 chưa đọc' })).toBeInTheDocument();
+    // Một lời gọi đếm nhỏ, không tải trang tin nào: khách có hơn 50 tin chưa đọc thấy đúng số như ở Cá nhân.
+    expect(mocks.coreGet.mock.calls.map((c) => c[0])).toEqual(['/me/notifications/unread-count']);
   });
 
   it('kéo để làm mới làm mới MỌI truy vấn của Trang chủ', async () => {
     const { qc } = renderHome();
     await screen.findByRole('region', { name: 'Bán chạy' });
-    await waitFor(() => expect(mocks.getNotifications).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.unreadCount).toHaveBeenCalled());
     const before = {
       products: mocks.fetchProducts.mock.calls.length,
       purchased: mocks.fetchPurchasedItems.mock.calls.length,
       categories: mocks.fetchCategories.mock.calls.length,
-      notifications: mocks.getNotifications.mock.calls.length,
+      unread: mocks.unreadCount.mock.calls.length,
     };
     expect(mocks.onRefresh).toBeDefined();
     await act(async () => {
@@ -231,7 +243,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(mocks.fetchProducts.mock.calls.length).toBeGreaterThan(before.products);
     expect(mocks.fetchPurchasedItems.mock.calls.length).toBe(before.purchased + 1);
     expect(mocks.fetchCategories.mock.calls.length).toBe(before.categories + 1);
-    expect(mocks.getNotifications.mock.calls.length).toBe(before.notifications + 1);
+    expect(mocks.unreadCount.mock.calls.length).toBe(before.unread + 1);
     expect(qc.isFetching()).toBe(0);
   });
 

@@ -19,7 +19,7 @@ export class AdminStaffController {
 
   @Post('grant')
   grant(@CurrentUser('sub') adminId: string, @Body() dto: GrantRoleDto) {
-    return this.rbac.addGrant(adminId, dto.phone, dto.role);
+    return this.rbac.addGrant(adminId, dto.phone, dto.role, dto.permissions);
   }
 
   @Post('revoke')

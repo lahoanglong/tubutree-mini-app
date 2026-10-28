@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Logger } from '@nestjs/common';
 import { WASTE_CLOSE_REASON_VALUES, WASTE_REJECTION_REASON_VALUES } from '@tubutree/shared-types';
-import { WASTE_EXPIRED_DETAIL_TEXT, WASTE_REJECTION_REASON_TEXT, WasteNotifierService, stripTrailingStop } from './waste-notifier.service';
+import { WASTE_EXPIRED_DETAIL_TEXT, WASTE_MAIL_IN_HOLD_EXPIRED_TEXT, WASTE_REJECTION_REASON_TEXT, WasteNotifierService, stripTrailingStop } from './waste-notifier.service';
 import type { NotificationsService } from '../../notifications/notifications.service';
 
 const make = (fail = false) => {
@@ -24,6 +24,11 @@ describe('WasteNotifierService (spec 10.2, 11.6; registry 4.4)', () => {
     ['requestExpired HOLD_EXPIRED', (s) => s.requestExpired('u1', req, 'HOLD_EXPIRED', new Date('2026-10-20T03:00:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRED', { code: 'TR-A2C4E', detail: 'hết hạn giữ chỗ, phần trần của bạn đã được trả lại', request_id: 'r1' }, 'waste:r1:EXPIRED:2026-10-20T03:00:00.000Z'],
     ['requestExpired LOST_AT_WAREHOUSE', (s) => s.requestExpired('u1', req, 'LOST_AT_WAREHOUSE', new Date('2026-10-21T03:00:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRED', { code: 'TR-A2C4E', detail: 'kiện bị thất lạc tại kho Tubu, xin lỗi bạn. Bạn nhắn Tubu Tree để được hỗ trợ', request_id: 'r1' }, 'waste:r1:EXPIRED:2026-10-21T03:00:00.000Z'],
     ['requestExpired PICKUP_NOT_DISPATCHED', (s) => s.requestExpired('u1', req, 'PICKUP_NOT_DISPATCHED', new Date('2026-10-22T03:00:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRED', { code: 'TR-A2C4E', detail: 'Tubu chưa sắp xếp được người đến lấy rác thu kèm đơn, xin lỗi bạn. Bạn có thể gửi về kho Tubu ở lần sau', request_id: 'r1' }, 'waste:r1:EXPIRED:2026-10-22T03:00:00.000Z'],
+    ['requestExpired HOLD_EXPIRED DROP_OFF keeps the generic sentence', (s) => s.requestExpired('u1', { ...req, method: 'DROP_OFF' }, 'HOLD_EXPIRED', new Date('2026-10-20T03:00:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRED', { code: 'TR-A2C4E', detail: 'hết hạn giữ chỗ, phần trần của bạn đã được trả lại', request_id: 'r1' }, 'waste:r1:EXPIRED:2026-10-20T03:00:00.000Z'],
+    ['requestExpired HOLD_EXPIRED MAIL_IN points to CSKH with the tracking code', (s) => s.requestExpired('u1', { ...req, method: 'MAIL_IN' }, 'HOLD_EXPIRED', new Date('2026-10-20T03:00:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRED', { code: 'TR-A2C4E', detail: 'hết hạn giữ chỗ. Nếu bạn đã gửi kiện, hãy nhắn CSKH kèm mã vận đơn để được hỗ trợ', request_id: 'r1' }, 'waste:r1:EXPIRED:2026-10-20T03:00:00.000Z'],
+    ['requestExpired LOST on MAIL_IN is not rewritten', (s) => s.requestExpired('u1', { ...req, method: 'MAIL_IN' }, 'LOST', new Date('2026-10-21T03:00:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRED', { code: 'TR-A2C4E', detail: 'kiện thất lạc trên đường gửi. Bạn nhắn Tubu Tree để được hỗ trợ', request_id: 'r1' }, 'waste:r1:EXPIRED:2026-10-21T03:00:00.000Z'],
+    ['requestExpiring DROP_OFF', (s) => s.requestExpiring('u1', req, 'DROP_OFF', new Date('2026-10-20T17:30:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRING', { code: 'TR-A2C4E', until: '21/10/2026', next_step: 'mang rác tới điểm nhận', request_id: 'r1' }, 'waste:r1:EXPIRING'],
+    ['requestExpiring MAIL_IN', (s) => s.requestExpiring('u1', req, 'MAIL_IN', new Date('2026-10-20T17:30:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRING', { code: 'TR-A2C4E', until: '21/10/2026', next_step: 'gửi kiện và nhập mã vận đơn', request_id: 'r1' }, 'waste:r1:EXPIRING'],
     ['pickupStarted', (s) => s.pickupStarted('u1', req, new Date('2026-10-20T17:30:00.000Z')), 'u1', 'WASTE_PICKUP_STARTED', { code: 'TR-A2C4E', until: '21/10/2026', request_id: 'r1' }, 'waste:r1:IN_TRANSIT'],
     ['pickupCancelled', (s) => s.pickupCancelled('u1', req), 'u1', 'WASTE_PICKUP_CANCELLED', { code: 'TR-A2C4E', request_id: 'r1' }, 'waste:r1:CANCELLED'],
     ['pointsReversed', (s) => s.pointsReversed('u1', req, 7_000, 'Gian lận số lượng.'), 'u1', 'WASTE_POINTS_REVERSED', { code: 'TR-A2C4E', points: '7.000', reason: 'Gian lận số lượng', request_id: 'r1' }, 'waste:r1:REVERSED'],
@@ -71,14 +76,20 @@ describe('WasteNotifierService (spec 10.2, 11.6; registry 4.4)', () => {
     expect(rendered).not.toContain('..');
   });
 
+  it('the MAIL_IN hold-expired sentence promises nothing: no reopen, no points, no full stop at the end', () => {
+    expect(WASTE_MAIL_IN_HOLD_EXPIRED_TEXT).toBe('hết hạn giữ chỗ. Nếu bạn đã gửi kiện, hãy nhắn CSKH kèm mã vận đơn để được hỗ trợ');
+    expect(WASTE_MAIL_IN_HOLD_EXPIRED_TEXT.endsWith('.')).toBe(false);
+    expect(WASTE_MAIL_IN_HOLD_EXPIRED_TEXT).not.toMatch(/mở lại|cộng|hoàn|điểm/iu);
+  });
+
   it('stripTrailingStop removes trailing dots and spaces only', () => {
     expect(stripTrailingStop(' Gian lận số lượng... ')).toBe('Gian lận số lượng');
     expect(stripTrailingStop('Đã kiểm 3.5 kg')).toBe('Đã kiểm 3.5 kg');
   });
 
-  it('passes each of the ten codes as a string literal to notify (notification-templates-seed gate)', () => {
+  it('passes each of the eleven codes as a string literal to notify (notification-templates-seed gate)', () => {
     const src = readFileSync(join(__dirname, 'waste-notifier.service.ts'), 'utf-8');
-    for (const code of ['WASTE_PARCEL_RECEIVED', 'WASTE_POINTS_CREDITED', 'WASTE_REQUEST_REJECTED', 'WASTE_REQUEST_EXPIRED', 'WASTE_PICKUP_STARTED', 'WASTE_PICKUP_CANCELLED', 'WASTE_POINTS_REVERSED', 'WASTE_SHIP_LOCKED', 'WASTE_GIFT_CANCELLED', 'WASTE_PERK_REVIEWED']) {
+    for (const code of ['WASTE_PARCEL_RECEIVED', 'WASTE_POINTS_CREDITED', 'WASTE_REQUEST_REJECTED', 'WASTE_REQUEST_EXPIRED', 'WASTE_REQUEST_EXPIRING', 'WASTE_PICKUP_STARTED', 'WASTE_PICKUP_CANCELLED', 'WASTE_POINTS_REVERSED', 'WASTE_SHIP_LOCKED', 'WASTE_GIFT_CANCELLED', 'WASTE_PERK_REVIEWED']) {
       expect(src).toMatch(new RegExp(`notify\\(\\s*\\w+,\\s*'${code}'`));
     }
   });

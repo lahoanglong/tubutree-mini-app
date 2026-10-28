@@ -34,4 +34,12 @@ describe('NewCollectionForm', () => {
     click(createBtn());
     expect(nameInput().value).toBe('');
   });
+
+  it('ở điện thoại như Mini App: không bọc thẻ, nút "Tạo bộ sưu tập" là nút phụ nền xanh nhạt không viền', () => {
+    mounted = render(<NewCollectionForm onCreate={vi.fn()} pending={false} />);
+    const frame = mounted.container.firstElementChild as HTMLElement;
+    for (const c of ['max-md:border-0', 'max-md:bg-transparent', 'max-md:p-0', 'max-md:shadow-none']) expect(frame.className).toContain(c);
+    expect(createBtn().className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    expect(createBtn().className).toContain('max-md:border-0');
+  });
 });

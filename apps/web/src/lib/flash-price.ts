@@ -1,4 +1,5 @@
-import { cardPricing as sharedCardPricing, variationPricing as sharedVariationPricing } from '@tubutree/app-core/flash-price';
+import { cardPricing as sharedCardPricing, isFlashRunning, variationPricing as sharedVariationPricing } from '@tubutree/app-core/flash-price';
+import { serverNow } from '@tubutree/app-core/server-clock';
 
 export { defaultVariationFor, pickDefaultVariation } from '@tubutree/app-core/flash-price';
 
@@ -81,4 +82,12 @@ export function variationPricing(
     salePct: r.salePct,
     ...(r.endAt ? { endAt: r.endAt } : {}),
   };
+}
+
+/**
+ * Danh sách Giờ vàng tải ở trình duyệt có thể cũ hơn mốc kết thúc của đợt: trang sản phẩm chỉ dùng suất còn chạy theo giờ máy chủ,
+ * không đợi lần tải lại, để giá và nhãn Giờ vàng biến mất đúng lúc đợt hết.
+ */
+export function runningFlash<T extends { endAt?: string }>(list: readonly T[], now: number = serverNow()): T[] {
+  return list.filter((f) => isFlashRunning(f, now));
 }

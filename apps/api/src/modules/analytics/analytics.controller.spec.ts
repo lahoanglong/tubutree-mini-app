@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { ValidationPipe } from '@nestjs/common';
 import type { JwtPayload } from '@tubutree/shared-types';
 import { AnalyticsController } from './analytics.controller';
@@ -33,6 +34,29 @@ describe('AnalyticsController.ingest', () => {
     ]);
   });
 
+  it('không có anonymousId ở body: dùng băm sha256 cắt 32 ký tự của X-Device-Id, không chép header thô (deviceId là khoá đăng nhập khách)', async () => {
+    const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
+    const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);
+
+    await ctrl.ingest(
+      { sub: 'u1', role: 'CUSTOMER' } as JwtPayload,
+      { events: [{ eventId: 'e1', eventName: 'app_opened', occurredAt: '2026-09-27T00:00:00Z', platform: 'miniapp' }] },
+      'd_secretdevice0001',
+    );
+
+    const [rec] = recordManyBestEffort.mock.calls[0]![0] as Array<{ anonymousId: string }>;
+    expect(rec!.anonymousId).toBe(createHash('sha256').update('d_secretdevice0001').digest('hex').slice(0, 32));
+    expect(rec!.anonymousId).not.toContain('secretdevice');
+    expect(rec!.anonymousId).toHaveLength(32);
+  });
+
+  it('không có anonymousId và không có header → null', async () => {
+    const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
+    const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);
+    await ctrl.ingest(undefined, { events: [{ eventId: 'e1', eventName: 'app_opened', occurredAt: '2026-09-27T00:00:00Z', platform: 'miniapp' }] });
+    expect((recordManyBestEffort.mock.calls[0]![0] as Array<{ anonymousId: unknown }>)[0]!.anonymousId).toBeNull();
+  });
+
   it('user undefined (edge case) → userId null, không throw', async () => {
     const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
     const svc = { recordManyBestEffort } as unknown as AnalyticsEventsService;
@@ -64,7 +88,7 @@ describe('AnalyticsController.ingest', () => {
       const arg = createMany.mock.calls[0][0];
       expect(arg.data).toHaveLength(50);
       expect(arg.skipDuplicates).toBe(true);
-      expect(arg.data[0]).toMatchObject({ eventName: 'screen_viewed', userId: 'u1', anonymousId: 'dev-1', platform: 'miniapp', props: { i: 0 } });
+      expect(arg.data[0]).toMatchObject({ eventName: 'screen_viewed', userId: 'u1', anonymousId: createHash('sha256').update('dev-1').digest('hex').slice(0, 32), platform: 'miniapp', props: { i: 0 } });
       expect(arg.data[0].occurredAt).toEqual(new Date('2026-09-27T00:00:00Z'));
     });
 

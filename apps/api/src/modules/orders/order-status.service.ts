@@ -412,8 +412,9 @@ export class OrderStatusService {
     // (retry thấy status đã bằng targetStatus) không còn mất việc: DELIVERED chỉ có mốc deliveredEffectsAt khi mọi việc sau
     // giao xong, thiếu mốc thì lần gọi DELIVERED lặp hoặc DeliveredEffectsResyncCron chạy lại (resyncDeliveredEffects). Phần
     // tiền trả trước và điểm đã dùng (Điểm Xanh lô quy đổi và lô thường) vẫn KHÔNG nằm ở đây mà hoàn trong tx ở reverseFinancials.
+    let deliveredEffects: DeliveredEffectsResult | undefined;
     if (targetStatus === 'DELIVERED') {
-      await this.runDeliveredEffects(order);
+      deliveredEffects = await this.runDeliveredEffects(order);
     }
     let standardPointsBack = 0;
     let receivedBack = 0;
@@ -452,12 +453,7 @@ export class OrderStatusService {
       }
     }
 
-    // Điểm Xanh chỉ được cộng khi đơn có pointsEarned > 0 (đơn XU cũ, đơn CTV lên hộ thì không): lời tin
-    // ORDER_DELIVERED chỉ nhắc điểm khi thật sự có, qua {{points_note}}.
     const notifyData: Record<string, string> = { ...opts.notifyData, order_code: order.code };
-    if (targetStatus === 'DELIVERED' && order.pointsEarned > 0) {
-      notifyData.points_note = ` Bạn được cộng ${formatPoints(order.pointsEarned)} Điểm Xanh.`;
-    }
     // Admin/hệ thống/Pancake huỷ hoặc trả đơn đã trả tiền: khách được báo số tiền hoàn và nơi tiền về (R2-LIFECYCLE-5).
     if ((targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') && notifyData.refund_note === undefined) {
       const r = reversed as ReversalResult | null;
@@ -473,9 +469,12 @@ export class OrderStatusService {
         refundNote(r?.refund ?? null, null, (r?.pointsRefunded ?? 0) + standardPointsBack) +
         (noteCarriesRefund ? receivedRefundNote(receivedBack, order.placedForCustomer) : '');
     }
-    await this.notifications
-      .notify(order.userId, opts.notifyEvent ?? `ORDER_${targetStatus}`, notifyData)
-      .catch(() => undefined);
+    if (targetStatus === 'DELIVERED') {
+      // Việc sau giao xong thì runDeliveredEffects đã gửi tin; còn dở (xét thưởng lỗi) thì gửi ở đây, lượt resync sau chặn bằng cùng khoá.
+      if (deliveredEffects?.outcome !== 'DONE') await this.sendDeliveredNotice(order);
+    } else {
+      await this.notifications.notifySafe(order.userId, opts.notifyEvent ?? `ORDER_${targetStatus}`, notifyData, undefined, `order=${order.code}`);
+    }
 
     if (closedEffectsFailure !== null) throw closedEffectsFailure;
     // Mọi việc sau commit đã chạy: cron chạy lại (ReversalEffectsResyncCron) chỉ còn thấy đơn mà tiến trình chết trước dòng này.
@@ -522,7 +521,7 @@ export class OrderStatusService {
   async resyncDeliveredEffects(orderIdOrCode: string): Promise<DeliveredEffectsResult> {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: orderIdOrCode }, { code: orderIdOrCode }] },
-      select: { id: true, code: true, status: true, deliveredEffectsAt: true },
+      select: { id: true, code: true, userId: true, pointsEarned: true, status: true, deliveredEffectsAt: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     if (order.status !== 'DELIVERED') return { outcome: 'NOT_DELIVERED' };
@@ -599,18 +598,23 @@ export class OrderStatusService {
       if (cancelled) {
         receivedBack = Math.max(receivedBack, await recordedPancakeUnderpayment(this.prisma, order.id).catch(() => 0));
       }
-      await this.notifications
-        .notify(order.userId, `ORDER_${order.status}`, {
-          order_code: order.code,
-          refund_note: refundNote(null, null, standardPointsBack) + receivedRefundNote(receivedBack, order.placedForCustomer),
-        })
-        .catch(() => undefined);
+      await this.notifications.notifySafe(
+        order.userId,
+        `ORDER_${order.status}`,
+        { order_code: order.code, refund_note: refundNote(null, null, standardPointsBack) + receivedRefundNote(receivedBack, order.placedForCustomer) },
+        undefined,
+        `order=${order.code}`,
+      );
     }
     const ownerId = order.fulfiller === 'MERCHANT' ? order.fulfillerStorefront?.ownerUserId : null;
     if (cancelled && actor !== 'MERCHANT' && ownerId && !(await this.closureNoticeSent(ownerId, order.code, since))) {
-      await this.notifications
-        .notify(ownerId, 'MERCHANT_ORDER_CANCELLED', { order_code: order.code, reason: MERCHANT_CANCEL_REASON[actor] ?? MERCHANT_CANCEL_REASON.SYSTEM })
-        .catch(() => undefined);
+      await this.notifications.notifySafe(
+        ownerId,
+        'MERCHANT_ORDER_CANCELLED',
+        { order_code: order.code, reason: MERCHANT_CANCEL_REASON[actor] ?? MERCHANT_CANCEL_REASON.SYSTEM },
+        undefined,
+        `order=${order.code}`,
+      );
     }
     await markReversalEffectsDone(this.prisma, order.id, this.logger);
     return { outcome: 'DONE' };
@@ -630,7 +634,7 @@ export class OrderStatusService {
    * được chạy song song (xem DeliveredEffectsResyncCron). Mốc chỉ ghi khi cả ba xong. Lỗi xét thưởng không làm hỏng lần giao
    * (đơn đã commit) — chỉ để lại đơn chưa có mốc cho lần chạy lại.
    */
-  private async runDeliveredEffects(order: Pick<Order, 'id' | 'code'>): Promise<DeliveredEffectsResult> {
+  private async runDeliveredEffects(order: Pick<Order, 'id' | 'code' | 'userId' | 'pointsEarned'>): Promise<DeliveredEffectsResult> {
     const pointsCredited = await this.loyalty.creditOrderPoints(order.id);
     const commissionsLocked = (await this.affiliate.lockCommissionsForOrder(order.id)) ?? 0;
     const referralError = await this.affiliate.grantReferralReward(order.id).then(
@@ -661,7 +665,33 @@ export class OrderStatusService {
       this.logger.warn(`Không ghi được mốc xong việc sau giao cho đơn ${order.code}: ${msg} — cron sẽ chạy lại (idempotent).`);
       return { outcome: 'INCOMPLETE', ...effects, error: `Ghi mốc lỗi: ${msg}` };
     }
+    await this.sendDeliveredNotice(order);
     return { outcome: 'DONE', ...effects };
+  }
+
+  /**
+   * Tin "Đã giao" gửi từ hai chỗ: lần giao (khi việc sau giao còn dở) và lúc việc sau giao xong (lần giao hoặc lượt chạy lại). Cùng
+   * khoá nên đơn chỉ nhận một tin; lần giao mà cộng điểm ném thì chưa có tin nào, lượt chạy lại gửi khi xong thay vì mất hẳn.
+   */
+  private async sendDeliveredNotice(order: Pick<Order, 'code' | 'userId' | 'pointsEarned'>): Promise<boolean> {
+    // Tin "Đã giao" của đơn giao trước khi có khoá chống gửi đôi không mang khoá nên khoá không chặn được: tìm theo mã đơn để đơn đang
+    // chờ làm nốt việc sau giao lúc chuyển bản không bị báo "Đã giao" lần hai.
+    let alreadySent = false;
+    try {
+      const row = await this.prisma.notificationLog.findFirst({
+        where: { userId: order.userId, channel: 'INAPP', templateCode: 'ORDER_DELIVERED', payload: { path: ['data', 'order_code'], equals: order.code } },
+        select: { id: true },
+      });
+      alreadySent = row !== null;
+    } catch (err) {
+      // Không đọc được thì cứ gửi: khoá chống gửi đôi của NotificationsService vẫn chặn trùng với tin cùng khoá.
+      this.logger.warn(`Không kiểm được tin "Đã giao" cũ của đơn ${order.code}, gửi theo khoá chống gửi đôi: ${err instanceof Error ? err.message : err}`);
+    }
+    if (alreadySent) return true;
+    // Điểm Xanh chỉ được cộng khi đơn có pointsEarned > 0 (đơn XU cũ, đơn CTV lên hộ thì không): lời tin chỉ nhắc điểm khi thật sự có, qua {{points_note}}.
+    const data: Record<string, string> = { order_code: order.code };
+    if (order.pointsEarned > 0) data.points_note = ` Bạn được cộng ${formatPoints(order.pointsEarned)} Điểm Xanh.`;
+    return this.notifications.notifySafe(order.userId, 'ORDER_DELIVERED', data, { dedupeKey: `order-delivered:${order.code}` }, `order=${order.code}`);
   }
 
   /**
@@ -730,9 +760,7 @@ export class OrderStatusService {
       await clearPancakeAttention(this.prisma, order.id, ATTENTION_UNDERPAID);
       if (!opts.deferGomdonPush) await this.enqueueGomdonAfterPaid(order);
       await this.pancakeHooks?.afterPaid(order.id);
-      await this.notifications
-        .notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code })
-        .catch(() => undefined);
+      await this.notifications.notifySafe(order.userId, 'ORDER_CONFIRMED', { order_code: order.code }, undefined, `order=${order.code}`);
       return {
         outcome: 'PAID',
         order: await this.prisma.order.findUniqueOrThrow({ where: { id: order.id } }),

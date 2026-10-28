@@ -32,7 +32,7 @@ describe('Điểm đơn chat/điện thoại: tạo, liên kết, giữ, cộng,
   const MAP = { marketplaceIds: { '-3': 'shopee' }, chatSources: ['ITCHAT|itacc|'] };
 
   const freshConfig = () => new SystemConfigService(prisma);
-  const deps = () => ({ config: freshConfig(), notifier: { notify } as never });
+  const deps = () => ({ config: freshConfig(), notifier: { notify, notifySafe: notify } as never });
   const loyalty = () => new LoyaltyService(prisma, freshConfig());
 
   async function pin(key: string, value: Prisma.InputJsonValue) {
@@ -266,7 +266,7 @@ describe('Điểm đơn chat/điện thoại: tạo, liên kết, giữ, cộng,
       await ingest(p);
       const c = (await claimOf(String(p.id)))!;
       expect(c.state).toBe('REVIEW');
-      const admin = new ExternalClaimsAdminService(prisma, freshConfig(), { notify } as never, new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify } as never));
+      const admin = new ExternalClaimsAdminService(prisma, freshConfig(), { notify, notifySafe: notify } as never, new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify, notifySafe: notify } as never));
       await expect(admin.approve(c.id, creator.id)).rejects.toMatchObject({ response: { code: 'PANCAKE_CREATOR_SELF' } });
       await expect(admin.approve(c.id, other.id)).resolves.toMatchObject({ state: 'PENDING' });
       const after = (await claimOf(String(p.id)))!;
@@ -338,7 +338,7 @@ describe('Điểm đơn chat/điện thoại: tạo, liên kết, giữ, cộng,
       const results = await Promise.all([
         linkClaimsByPhone(prisma, deps(), user),
         linkClaimsByPhone(prisma, deps(), user),
-        new ExternalChatService(prisma, freshConfig(), { notify } as never).sweep(),
+        new ExternalChatService(prisma, freshConfig(), { notify, notifySafe: notify } as never).sweep(),
         linkWaitingClaims(prisma, deps()),
       ]);
       expect(results).toHaveLength(4);
@@ -469,8 +469,8 @@ describe('Điểm đơn chat/điện thoại: tạo, liên kết, giữ, cộng,
       // Vượt ngưỡng 5.000.000 nên REVIEW; người khác duyệt.
       await ingest(p);
       const staff = await mkUser({ role: 'STAFF', fullName: 'Duyệt Viên' });
-      const claimsSvc = new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify } as never);
-      const admin = new ExternalClaimsAdminService(prisma, freshConfig(), { notify } as never, claimsSvc, loyalty());
+      const claimsSvc = new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify, notifySafe: notify } as never);
+      const admin = new ExternalClaimsAdminService(prisma, freshConfig(), { notify, notifySafe: notify } as never, claimsSvc, loyalty());
       const c0 = (await claimOf(String(p.id)))!;
       expect(c0.state).toBe('REVIEW');
       await admin.approve(c0.id, staff.id);
@@ -478,7 +478,7 @@ describe('Điểm đơn chat/điện thoại: tạo, liên kết, giữ, cộng,
       const l = loyalty();
       const hook = { recalcTier: (id: string) => l.recalcTier(id, t.set) };
       notify.mockClear();
-      const res = await releaseDueClaims(prisma, freshConfig(), { notify } as never, new Date(), hook);
+      const res = await releaseDueClaims(prisma, freshConfig(), { notify, notifySafe: notify } as never, new Date(), hook);
       expect(res.credited).toBeGreaterThanOrEqual(1);
       const c = (await claimOf(String(p.id)))!;
       expect(c.state).toBe('CREDITED');
@@ -493,7 +493,7 @@ describe('Điểm đơn chat/điện thoại: tạo, liên kết, giữ, cộng,
       // lần đầu phát hiện chỉ đặt tierGraceUntil, hết ân hạn thì lần tính lại sau áp hạng thấp.
       await prisma.externalOrder.update({ where: { id: c.externalOrderId }, data: { status: 'RETURNED', pancakeStatus: 5, closedAt: new Date() } });
       const l2 = new LoyaltyService(prisma, freshConfig());
-      expect(await applyStatusToClaim(prisma, { notify } as never, freshConfig(), String(p.id), { recalcTier: (id) => l2.recalcTier(id, t.set) })).toBe('REVERSE');
+      expect(await applyStatusToClaim(prisma, { notify, notifySafe: notify } as never, freshConfig(), String(p.id), { recalcTier: (id) => l2.recalcTier(id, t.set) })).toBe('REVERSE');
       expect(await claimOf(String(p.id))).toMatchObject({ state: 'REVERSED' });
       expect(await balanceOf(user.id)).toBe(0);
       const afterReverse = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
@@ -553,8 +553,8 @@ describe('Điểm đơn chat/điện thoại: tạo, liên kết, giữ, cộng,
       const p = payload({ phone: user.phone!, goods: 500_000, deliveredDaysAgo: 15 });
       await ingest(p);
       const results = await Promise.all([
-        releaseDueClaims(prisma, freshConfig(), { notify } as never),
-        releaseDueClaims(prisma, freshConfig(), { notify } as never),
+        releaseDueClaims(prisma, freshConfig(), { notify, notifySafe: notify } as never),
+        releaseDueClaims(prisma, freshConfig(), { notify, notifySafe: notify } as never),
         releaseClaim(prisma, (await claimOf(String(p.id)))!.id, await releaseOpts()),
         releaseClaim(prisma, (await claimOf(String(p.id)))!.id, await releaseOpts()),
       ]);
@@ -596,7 +596,7 @@ describe('Điểm đơn chat/điện thoại: tạo, liên kết, giữ, cộng,
       expect(await balanceOf(a.id)).toBe(10_000);
       await prisma.$executeRaw`
         UPDATE "points_transactions" SET "createdAt" = "createdAt" - interval '13 months', "expiresAt" = "expiresAt" - interval '13 months' WHERE "userId" = ${a.id}`;
-      await new LoyaltyExpiryService(prisma, freshConfig(), { notify } as never).expirePoints();
+      await new LoyaltyExpiryService(prisma, freshConfig(), { notify, notifySafe: notify } as never).expirePoints();
       expect(await balanceOf(a.id)).toBe(0);
       const ca = (await claimOf(String(pa.id)))!;
       await prisma.externalOrder.update({ where: { id: ca.externalOrderId }, data: { status: 'RETURNED', pancakeStatus: 5, closedAt: new Date() } });
@@ -618,7 +618,7 @@ describe('Điểm đơn chat/điện thoại: tạo, liên kết, giữ, cộng,
       expect(await balanceOf(b.id)).toBe(1_000);
       await prisma.$executeRaw`
         UPDATE "points_transactions" SET "createdAt" = "createdAt" - interval '13 months', "expiresAt" = "expiresAt" - interval '13 months' WHERE "userId" = ${b.id}`;
-      await new LoyaltyExpiryService(prisma, freshConfig(), { notify } as never).expirePoints();
+      await new LoyaltyExpiryService(prisma, freshConfig(), { notify, notifySafe: notify } as never).expirePoints();
       expect(await ledger(b.id, 'POINTS_EXPIRED')).toHaveLength(0);
       expect(await balanceOf(b.id)).toBe(1_000);
       await noDrift();
@@ -671,7 +671,7 @@ describe('Điểm đơn chat/điện thoại: tạo, liên kết, giữ, cộng,
       const ph = phone();
       const p = payload({ phone: ph, goods: 500_000 });
       await ingest(p);
-      const admin = new ExternalClaimsAdminService(prisma, freshConfig(), { notify } as never, new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify } as never));
+      const admin = new ExternalClaimsAdminService(prisma, freshConfig(), { notify, notifySafe: notify } as never, new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify, notifySafe: notify } as never));
       const phoneRes = await admin.list({ page: 1, limit: 50, kind: 'PHONE', q: ph });
       expect(phoneRes.data).toHaveLength(1);
       expect(phoneRes.data[0]).toMatchObject({ kind: 'PHONE', userId: null, state: 'PENDING' });
@@ -685,7 +685,7 @@ describe('Điểm đơn chat/điện thoại: tạo, liên kết, giữ, cộng,
       const user = await mkUser();
       const p = payload({ phone: user.phone!, goods: 500_000 });
       await ingest(p);
-      const svc = new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify } as never);
+      const svc = new ExternalClaimService(prisma, freshConfig(), { lookupAndIngest: async () => false } as never, { notify, notifySafe: notify } as never);
       const chat = await svc.listMine(user.id, 1, 20, 'PHONE');
       expect(chat.data).toHaveLength(1);
       expect(chat.data[0]).toMatchObject({ kind: 'PHONE', state: 'PENDING', points: 10_000, holdUntil: null });

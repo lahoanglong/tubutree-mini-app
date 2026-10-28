@@ -40,13 +40,14 @@ describe('nhãn Đổi rác', () => {
   it('TIMELINE_STEPS: tên bước của từng đường như Mini App, bước đầu đường gửi kiện là "Gửi kiện"', () => {
     expect(TIMELINE_STEPS.MAIL_IN).toEqual(['Gửi kiện', 'Vận chuyển', 'Đã nhận ở kho', 'Cộng điểm']);
     expect(TIMELINE_STEPS.DROP_OFF).toEqual(['Đã tạo', 'Mang tới điểm', 'Điểm nhận đếm', 'Cộng điểm']);
-    expect(TIMELINE_STEPS.PICKUP).toEqual(['Đã tạo', 'Gắn vào đơn', 'Chờ kho nhận', 'Cộng điểm']);
+    expect(TIMELINE_STEPS.PICKUP).toEqual(['Đã tạo', 'Gắn vào đơn', 'Kho nhận, đếm', 'Cộng điểm']);
   });
 
   it('timelineFor: đường kho đi 0/1/2, đóng thì null, xong là bước 4', () => {
     expect(timelineFor({ method: 'MAIL_IN', status: 'IN_TRANSIT', orderCode: null })?.current).toBe(1);
     expect(timelineFor({ method: 'DROP_OFF', status: 'OPEN', orderCode: null })?.current).toBe(1);
     expect(timelineFor({ method: 'PICKUP', status: 'OPEN', orderCode: 'TB-1' })?.current).toBe(2);
+    expect(timelineFor({ method: 'PICKUP', status: 'RECEIVED', orderCode: 'TB-1' })?.current).toBe(3);
     expect(timelineFor({ method: 'DROP_OFF', status: 'COMPLETED', orderCode: null })?.current).toBe(4);
     expect(timelineFor({ method: 'DROP_OFF', status: 'CANCELLED', orderCode: null })).toBeNull();
   });

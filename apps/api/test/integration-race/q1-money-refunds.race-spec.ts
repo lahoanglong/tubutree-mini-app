@@ -32,7 +32,7 @@ describe('Q1 hoàn tiền: khoá nơi nhận, tiền về muộn cộng dồn, h
   let returns: OrderReturnsService;
   let affiliate: AffiliateService;
   const notify = jest.fn().mockResolvedValue(undefined);
-  const ctx = () => ({ prisma, notifications: { notify }, logger: { warn: jest.fn(), log: jest.fn() } });
+  const ctx = () => ({ prisma, notifications: { notify, notifySafe: notify }, logger: { warn: jest.fn(), log: jest.fn() } });
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -49,7 +49,7 @@ describe('Q1 hoàn tiền: khoá nơi nhận, tiền về muộn cộng dồn, h
         CustomerRefundsService,
         { provide: PricingService, useValue: { calcShippingFee: jest.fn().mockResolvedValue(0) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
-        { provide: NotificationsService, useValue: { notify } },
+        { provide: NotificationsService, useValue: { notify, notifySafe: notify } },
         { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
         { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
       ],

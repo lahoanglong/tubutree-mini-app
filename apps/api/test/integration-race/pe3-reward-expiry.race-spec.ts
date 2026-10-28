@@ -45,7 +45,7 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
         LoyaltyExpiryService,
         GameService,
         ReviewsService,
-        { provide: NotificationsService, useValue: { notify: async () => undefined } },
+        { provide: NotificationsService, useValue: { notify: async () => undefined, notifySafe: jest.fn().mockResolvedValue(true) } },
       ],
     }).compile();
     await moduleRef.init();

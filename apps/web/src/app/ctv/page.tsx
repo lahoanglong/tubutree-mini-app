@@ -3,7 +3,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BadgePercent, ChevronRight, GraduationCap, Handshake, Landmark, Link2, Receipt, Store, TrendingUp, Wallet } from 'lucide-react';
 import { createAffiliateLink, registerAffiliate, type AffiliatePayout, type Commission } from '@tubutree/app-core/api/affiliate';
 import {
@@ -20,7 +20,7 @@ import {
 } from '@tubutree/app-core/queries/affiliate';
 import { academyCoursesQuery } from '@tubutree/app-core/queries/academy';
 import { walletQuery } from '@tubutree/app-core/queries/wallet';
-import { COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, transferBlockedText, transferHeroNote } from '@tubutree/app-core/ctv-dashboard';
+import { affiliateNextCursor, COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, transferBlockedText, transferHeroNote } from '@tubutree/app-core/ctv-dashboard';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
@@ -31,12 +31,14 @@ import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
-import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { Badge } from '@/components/ui/badge';
 import { Sheet } from '@/components/ui/sheet';
 import { SegmentedTabs, useTabParam } from '@/components/ui/segmented-tabs';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/mini/empty-state';
+import { CtvDashboardSkeleton } from '@/components/affiliate/ctv-skeleton';
 import { CtvShortcuts, type CtvShortcut } from '@/components/affiliate/ctv-shortcuts';
 import { MilestoneRewards } from '@/components/affiliate/milestone-rewards';
 import { TierCard } from '@/components/affiliate/tier-card';
@@ -92,7 +94,7 @@ export default function CtvPage() {
   if (phase === 'loading') {
     return (
       <Shell>
-        <AuthLoading />
+        <CtvDashboardSkeleton />
       </Shell>
     );
   }
@@ -113,10 +115,7 @@ export default function CtvPage() {
   if (meQ.isLoading) {
     return (
       <Shell>
-        <div className="space-y-3">
-          <Skeleton height={120} />
-          <Skeleton height={80} />
-        </div>
+        <CtvDashboardSkeleton />
       </Shell>
     );
   }
@@ -208,7 +207,7 @@ function RegisterGate() {
 
         <section aria-label={CTV_TERMS.heading} className={`${ui.card} ${phoneFlatCard} mt-4 p-4`}>
           <h2 className="text-sm font-semibold text-stone-900">{CTV_TERMS.heading}</h2>
-          <ul className="mt-2 list-disc space-y-1.5 pl-5">
+          <ul className="mt-2 space-y-1.5 pl-[18px]">
             {CTV_TERMS.items.map((item) => (
               <li key={item} className="text-xs text-stone-700">
                 {item}
@@ -310,6 +309,19 @@ function CommissionRow({ c }: { c: Commission }) {
   );
 }
 
+/** Nút "Tải thêm" của lịch sử có phân trang; tải trang kế lỗi thì giữ các dòng đã có và nói cách thử lại. */
+function LoadMore({ q }: { q: { hasNextPage: boolean; isFetchingNextPage: boolean; isFetchNextPageError: boolean; fetchNextPage: () => unknown } }) {
+  if (!q.hasNextPage) return null;
+  return (
+    <div className="pt-2">
+      {q.isFetchNextPageError && <p className="mb-1.5 text-center text-xs text-danger-fg">Chưa tải thêm được. Bạn bấm Tải thêm để thử lại nhé.</p>}
+      <button type="button" onClick={() => void q.fetchNextPage()} disabled={q.isFetchingNextPage} className={`${ui.btnSecondary} w-full`}>
+        {q.isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}
+      </button>
+    </div>
+  );
+}
+
 function Dashboard() {
   const qc = useQueryClient();
   const meQ = useQuery(affiliateMeQuery(coreHttp));
@@ -317,8 +329,20 @@ function Dashboard() {
   // Mỗi tab chỉ tải dữ liệu của tab đó: mở trang CTV không còn gọi cả 15 request.
   const [tab, setTab] = useTabParam(CTV_TAB_KEYS, 'overview');
   const linksQ = useQuery({ ...affiliateLinksQuery(coreHttp), enabled: tab === 'share' });
-  const commQ = useQuery({ ...affiliateCommissionsQuery(coreHttp), enabled: tab === 'commission' });
-  const payoutsQ = useQuery({ ...affiliatePayoutsQuery(coreHttp), enabled: tab === 'commission' });
+  const commQ = useInfiniteQuery({
+    ...affiliateCommissionsQuery(coreHttp),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: affiliateNextCursor,
+    enabled: tab === 'commission',
+  });
+  const payoutsQ = useInfiniteQuery({
+    ...affiliatePayoutsQuery(coreHttp),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: affiliateNextCursor,
+    enabled: tab === 'commission',
+  });
+  const commissions = commQ.data?.pages.flat() ?? [];
+  const payouts = payoutsQ.data?.pages.flat() ?? [];
   const taxQ = useQuery({ ...affiliateTaxStatementQuery(coreHttp), enabled: tab === 'commission' });
   const sfQ = useQuery({ ...affiliateStorefrontAnalyticsQuery(coreHttp), enabled: tab === 'commission' });
   const pbQ = useQuery({ ...affiliateProductBreakdownQuery(coreHttp), enabled: tab === 'commission' });
@@ -527,7 +551,7 @@ function Dashboard() {
           <>
           <Section title="Mã giới thiệu của bạn">
             <div className="flex items-center justify-between gap-2 rounded-control bg-forest-50 p-3">
-              <span className="font-display text-xl font-semibold tracking-wide text-forest-700">{referral}</span>
+              <span className="font-display text-xl font-semibold tracking-wide text-forest-700 max-md:font-ui max-md:text-[length:var(--type-price-lg-size)] max-md:font-bold max-md:leading-[var(--type-price-lg-lh)] max-md:tracking-[1px] max-md:text-[var(--color-text-brand)]">{referral}</span>
               <button type="button" onClick={copyReferral} className={ui.btnPrimary}>
                 Sao chép mã
               </button>
@@ -580,10 +604,7 @@ function Dashboard() {
             ) : linksQ.isLoading ? (
               <SectionSkeleton />
             ) : (
-              <div className="py-4 text-center">
-                <div className="text-sm font-semibold text-stone-900">Chưa có link</div>
-                <div className="text-xs text-stone-600">Tạo link đầu tiên để bắt đầu chia sẻ.</div>
-              </div>
+              <EmptyState variant="inline" art="leaf" heading="Chưa có link" body="Tạo link đầu tiên để bắt đầu chia sẻ." />
             )}
           </Section>
 
@@ -593,22 +614,22 @@ function Dashboard() {
         {tab === 'commission' && (
           <>
           <Section title="Lịch sử hoa hồng">
-            {commQ.isError ? (
+            {commQ.isError && commissions.length === 0 ? (
               // Tránh "Chưa có hoa hồng" khi thực tế là API lỗi.
               <ErrorState variant="inline" message={errText(commQ.error)} onRetry={() => void commQ.refetch()} />
-            ) : commQ.data && commQ.data.length > 0 ? (
-              <ul>
-                {commQ.data.slice(0, 30).map((c) => (
-                  <CommissionRow key={c.id} c={c} />
-                ))}
-              </ul>
+            ) : commissions.length > 0 ? (
+              <>
+                <ul>
+                  {commissions.map((c) => (
+                    <CommissionRow key={c.id} c={c} />
+                  ))}
+                </ul>
+                <LoadMore q={commQ} />
+              </>
             ) : commQ.isLoading ? (
               <SectionSkeleton />
             ) : (
-              <div className="py-4 text-center">
-                <div className="text-sm font-semibold text-stone-900">Chưa có hoa hồng</div>
-                <div className="text-xs text-stone-600">Chia sẻ link để nhận hoa hồng từ đơn của bạn bè.</div>
-              </div>
+              <EmptyState variant="inline" art="sprout" heading="Chưa có hoa hồng" body="Chia sẻ link để nhận hoa hồng từ đơn của bạn bè." />
             )}
           </Section>
 
@@ -624,14 +645,17 @@ function Dashboard() {
                 </div>
               </div>
             )}
-            {payoutsQ.isError ? (
+            {payoutsQ.isError && payouts.length === 0 ? (
               <ErrorState variant="inline" message={errText(payoutsQ.error)} onRetry={() => void payoutsQ.refetch()} />
-            ) : payoutsQ.data && payoutsQ.data.length > 0 ? (
-              <ul>
-                {payoutsQ.data.map((p) => (
-                  <PayoutRow key={p.id} p={p} />
-                ))}
-              </ul>
+            ) : payouts.length > 0 ? (
+              <>
+                <ul>
+                  {payouts.map((p) => (
+                    <PayoutRow key={p.id} p={p} />
+                  ))}
+                </ul>
+                <LoadMore q={payoutsQ} />
+              </>
             ) : payoutsQ.isLoading ? (
               <SectionSkeleton />
             ) : (
@@ -659,10 +683,7 @@ function Dashboard() {
             ) : sfQ.isLoading ? (
               <SectionSkeleton />
             ) : (
-              <div className="py-4 text-center">
-                <div className="text-sm font-semibold text-stone-900">Chưa có đơn từ gian hàng nào</div>
-                <div className="text-xs text-stone-600">Chia sẻ link gian hàng để nhận hoa hồng.</div>
-              </div>
+              <EmptyState variant="inline" art="box" heading="Chưa có đơn từ gian hàng nào" body="Chia sẻ link gian hàng để nhận hoa hồng." />
             )}
           </Section>
 
@@ -684,10 +705,7 @@ function Dashboard() {
             ) : pbQ.isLoading ? (
               <SectionSkeleton />
             ) : (
-              <div className="py-4 text-center">
-                <div className="text-sm font-semibold text-stone-900">Chưa có hoa hồng theo sản phẩm</div>
-                <div className="text-xs text-stone-600">Chia sẻ link sản phẩm để bắt đầu.</div>
-              </div>
+              <EmptyState variant="inline" art="basket" heading="Chưa có hoa hồng theo sản phẩm" body="Chia sẻ link sản phẩm để bắt đầu." />
             )}
           </Section>
           </>

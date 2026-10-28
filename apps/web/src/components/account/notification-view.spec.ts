@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { notificationAction, notificationMeta, notificationOrderLink, relativeTime, resolveWebRoute, type RouteResolver } from './notification-view';
+import { reviewHref } from '@/lib/reviews-client';
 
 // Chép ý notifications.spec.ts (Mini App): nhãn nhóm theo templateCode, nút theo loại tin (không dò nội dung), chặn route ngoài.
 // Đích kiểm bằng đường dẫn Mini App qua resolver giả `/w` + path để không phụ thuộc cờ pending của route map.
@@ -106,7 +107,7 @@ describe('notificationAction: nút theo loại tin, không dò nội dung', () =
     ['XU_CONVERTED', '/w/loyalty'],
     ['REFERRAL_REWARD_PAID', '/w/loyalty'],
     ['CASHBACK_PAID', '/w/wallet'],
-    ['SUBSCRIPTION_PAUSED', '/w/subscriptions'],
+    ['SUBSCRIPTION_PAUSED', '/w/orders?tab=subscriptions'],
     ['STOREFRONT_TRENDING_PRODUCTS', '/w/storefront'],
     ['DEALER_BONUS_PAID', '/w/dealer'],
     ['FLASH_STARTING', '/w/'],
@@ -171,6 +172,13 @@ describe('resolveWebRoute: đổi đường dẫn Mini App sang route web bằng
     expect(resolveWebRoute('/profile')).toBe('/tai-khoan');
   });
 
+  it('giữ ?tab= của đường dẫn Mini App khi đổi sang route web; gộp với query có sẵn của dòng đích', () => {
+    expect(resolveWebRoute('/affiliate?tab=commission')).toBe('/ctv?tab=commission');
+    expect(resolveWebRoute('/orders?tab=subscriptions')).toBe('/tai-khoan/don-hang?tab=subscriptions');
+    expect(resolveWebRoute('/subscriptions?x=1')).toBe('/tai-khoan/don-hang?tab=subscriptions&x=1');
+    expect(resolveWebRoute('/wallet#lich-su')).toBe('/tai-khoan/vi-tubu');
+  });
+
   it('không có trong bản đồ hoặc chỉ có ở Mini App thì null', () => {
     expect(resolveWebRoute('/points/scan')).toBeNull();
     expect(resolveWebRoute('/khong-co-trang-nay')).toBeNull();
@@ -187,5 +195,124 @@ describe('relativeTime', () => {
     ['2026-10-01T10:00:00Z', '01/10/2026'],
   ])('%s → %s', (iso, text) => {
     expect(relativeTime(iso, now)).toBe(text);
+  });
+});
+
+describe('E-4: tin cho chủ gian hàng mở trang Đối tác, không mở đơn người mua', () => {
+  // Đi thẳng, không qua route map: resolver giả đổi mọi đường dẫn nên sẽ lộ ra nếu bị gọi nhầm.
+  const direct = (code: string, data?: Record<string, string>) => notificationAction(code, data, prefix);
+
+  it.each(['MERCHANT_ORDER_NEW', 'MERCHANT_ORDER_OVERDUE', 'MERCHANT_ORDER_CANCELLED', 'MERCHANT_RETURN_REQUESTED', 'MERCHANT_RETURN_APPROVED'])(
+    '%s (có order_code) → "Mở đơn cần xử lý" /merchant?tab=fulfil',
+    (code) => {
+      expect(direct(code, { order_code: 'TB1' })).toEqual({ kind: 'link', label: 'Mở đơn cần xử lý', to: '/merchant?tab=fulfil' });
+      expect(notificationOrderLink(code, 'TB1')).toBe(false);
+      expect(notificationMeta(code).title).toBe('Gian hàng đối tác');
+    },
+  );
+
+  it('phiếu đối soát → tab Đối soát; sản phẩm → tab Sản phẩm', () => {
+    expect(direct('MERCHANT_PAYOUT_PAID')?.to).toBe('/merchant?tab=settlement');
+    expect(direct('MERCHANT_PAYOUT_CREATED_TO_TUBU')?.to).toBe('/merchant?tab=settlement');
+    expect(direct('MERCHANT_PRODUCT_APPROVED')?.to).toBe('/merchant?tab=products');
+    expect(direct('MERCHANT_PRODUCT_REJECTED')?.to).toBe('/merchant?tab=products');
+  });
+
+  it('tin huỷ đơn của người bán gửi cho khách vẫn mở đơn của khách', () => {
+    expect(direct('MERCHANT_ORDER_CANCELLED_BY_SELLER', { order_code: 'TB1' })).toMatchObject({ label: 'Xem chi tiết đơn hàng', to: '/w/order/TB1' });
+  });
+});
+
+describe('E-5: hoa hồng, hạng, điểm sàn, gian hàng', () => {
+  const act = (code: string) => {
+    const a = notificationAction(code, {}, prefix);
+    return a ? [a.label, a.to] : null;
+  };
+  it.each([
+    ['COMMISSION_WALLET_CREDITED', ['Xem Ví Tubu', '/w/wallet']],
+    ['COMMISSION_WALLET_TAX_ONLY', ['Xem Ví Tubu', '/w/wallet']],
+    ['COMMISSION_PAYOUT_REJECTED', ['Xem Ví Tubu', '/w/wallet']],
+    ['COMMISSION_NEW', ['Xem hoa hồng', '/w/affiliate?tab=commission']],
+    ['COMMISSION_REVERSED', ['Xem hoa hồng', '/w/affiliate?tab=commission']],
+    ['TIER_DROP_NOTICE', ['Xem cách giữ hạng', '/w/loyalty']],
+    ['EXTERNAL_POINTS_CREDITED', ['Xem Điểm Xanh', '/w/loyalty']],
+    ['CHAT_ORDER_POINTS_CREDITED', ['Xem Điểm Xanh', '/w/loyalty']],
+    ['STOREFRONT_APPROVED', ['Chia sẻ gian hàng', '/w/storefront']],
+    ['STOREFRONT_REINSTATED', ['Chia sẻ gian hàng', '/w/storefront']],
+    ['STOREFRONT_TAKEN_DOWN', ['Xem gian hàng', '/w/storefront']],
+    ['STOREFRONT_TRENDING_PRODUCTS', ['Thêm vào gian hàng', '/w/storefront']],
+  ])('%s → %j', (code, expected) => {
+    expect(act(code)).toEqual(expected);
+  });
+
+  it('route map thật: /affiliate?tab=commission đổi sang /ctv và GIỮ ?tab=; hoa hồng vào Ví → /tai-khoan/vi-tubu', () => {
+    expect(notificationAction('COMMISSION_NEW', {}, resolveWebRoute)).toMatchObject({ to: '/ctv?tab=commission' });
+    expect(notificationAction('COMMISSION_WALLET_CREDITED', {}, resolveWebRoute)).toMatchObject({ to: '/tai-khoan/vi-tubu' });
+    expect(notificationAction('TIER_DROP_NOTICE', {}, resolveWebRoute)).toMatchObject({ to: '/tai-khoan/diem-xanh' });
+    expect(notificationAction('STOREFRONT_APPROVED', {}, resolveWebRoute)).toMatchObject({ to: '/ctv/gian-hang' });
+  });
+
+  it.each([
+    ['TIER_DROP_NOTICE', 'Hạng thành viên'],
+    ['EXTERNAL_POINTS_PENDING', 'Điểm Xanh'],
+    ['CHAT_ORDER_POINTS_LINKED', 'Điểm Xanh'],
+    ['COMMISSION_APPROVED', 'Hoa hồng CTV'],
+  ])('%s → tiêu đề %s', (code, title) => {
+    expect(notificationMeta(code).title).toBe(title);
+  });
+});
+
+describe('E-87: tiêu đề đúng loại', () => {
+  it.each([
+    ['REFUND_BANK_COMPLETED', 'Hoàn tiền đơn hàng'],
+    ['SECOND_ORDER_VOUCHER', 'Ưu đãi cho bạn'],
+    ['GAME_WATER_GIFT', 'Vườn Xanh'],
+    ['CART_ABANDONED', 'Giỏ hàng của bạn'],
+    ['PRICE_DROP_ALERT', 'Giảm giá'],
+    ['GROUP_BUY_FAILED', 'Mua chung'],
+    ['REVIEW_REQUEST', 'Mời đánh giá'],
+    ['SUBSCRIPTION_ORDER_FAILED', 'Đơn định kỳ'],
+    ['COMMUNITY_POST_APPROVED', 'Cộng đồng'],
+  ])('%s → %s', (code, title) => {
+    expect(notificationMeta(code).title).toBe(title);
+  });
+});
+
+describe('E-32: tin mời đánh giá mở thẳng form đánh giá', () => {
+  it('có product_slug và order_id → "Viết đánh giá" tới trang sản phẩm kèm tham số đơn (reviewHref), không qua route map', () => {
+    expect(notificationAction('REVIEW_REQUEST', { order_code: 'TB1', order_id: 'o1', product_slug: 'sua-tam' }, prefix)).toEqual({
+      kind: 'link',
+      label: 'Viết đánh giá',
+      to: reviewHref('sua-tam', 'o1'),
+    });
+    expect(reviewHref('sua-tam', 'o1')).toBe('/san-pham/sua-tam?danh-gia=o1#danh-gia');
+  });
+
+  it('tin cũ thiếu order_id → "Viết đánh giá" tới chi tiết đơn (qua route map)', () => {
+    expect(notificationAction('REVIEW_REQUEST', { order_code: 'TB1', product_slug: 'sua-tam' }, prefix)).toEqual({ kind: 'link', label: 'Viết đánh giá', to: '/w/order/TB1' });
+    expect(notificationAction('REVIEW_REQUEST', { order_code: 'TB1' }, resolveWebRoute)).toMatchObject({ to: '/tai-khoan/don-hang/TB1' });
+  });
+});
+
+describe('E-81: giờ vàng và mua chung thành công', () => {
+  it('FLASH_STARTING có slug mở sản phẩm; GROUP_BUY_SUCCESS có product_slug → "Dùng mã, mua ngay"', () => {
+    expect(notificationAction('FLASH_STARTING', { product: 'X', product_slug: 'dau-goi' }, resolveWebRoute)).toMatchObject({ to: '/san-pham/dau-goi' });
+    expect(notificationAction('GROUP_BUY_SUCCESS', { product_slug: 'nuoc-rua-chen' }, resolveWebRoute)).toEqual({ kind: 'link', label: 'Dùng mã, mua ngay', to: '/san-pham/nuoc-rua-chen' });
+    expect(notificationAction('GROUP_BUY_SUCCESS', { discount: '15.000' }, prefix)).toMatchObject({ label: 'Xem mua chung', to: '/w/group-buy' });
+  });
+});
+
+describe('E-71: tin gói định kỳ trên web', () => {
+  it('luôn có nút "Xem gói" tới tab Định kỳ của danh sách đơn', () => {
+    expect(notificationAction('SUBSCRIPTION_PAUSED', {}, resolveWebRoute)).toEqual({ kind: 'link', label: 'Xem gói', to: '/tai-khoan/don-hang?tab=subscriptions' });
+  });
+});
+
+describe('E-90: cảnh báo cầu nối Zalo', () => {
+  it.each(['OPS_ZALO_BRIDGE_DOWN', 'OPS_ZALO_BRIDGE_ALERT'])('%s → "Mở Chat CSKH" /admin?tab=supportChat (đi thẳng)', (code) => {
+    expect(notificationAction(code, {}, prefix)).toEqual({ kind: 'link', label: 'Mở Chat CSKH', to: '/admin?tab=supportChat' });
+  });
+  it('OPS_* khác vẫn không có nút', () => {
+    expect(notificationAction('OPS_GOMDON_ALERT', { order_code: 'T1' }, prefix)).toBeNull();
   });
 });

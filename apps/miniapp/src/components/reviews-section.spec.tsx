@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   login: vi.fn(),
   auth: { status: 'authenticated' } as { status: string },
   openSnackbar: vi.fn(),
+  cloudinary: true,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<typeof ZmpUi>()),
@@ -29,10 +30,25 @@ vi.mock('./image-upload', () => ({
       Thêm ảnh ({value.length})
     </button>
   ),
-  VideoUpload: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
-    <button type="button" onClick={() => onChange('https://v/moi.mp4')}>
-      Chọn video thử ({value ? 1 : 0})
-    </button>
+  isCloudinaryConfigured: () => mocks.cloudinary,
+  VideoUpload: ({ value, onChange, onBusyChange }: { value: string; onChange: (v: string) => void; onBusyChange?: (busy: boolean) => void }) => (
+    <>
+      <button type="button" onClick={() => onChange('https://v/moi.mp4')}>
+        Chọn video thử ({value ? 1 : 0})
+      </button>
+      <button type="button" onClick={() => onBusyChange?.(true)}>
+        Bắt đầu tải video thử
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          onChange('https://v/xong.mp4');
+          onBusyChange?.(false);
+        }}
+      >
+        Tải xong video thử
+      </button>
+    </>
   ),
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -98,6 +114,7 @@ const MYREVIEWS: Record<string, unknown> = { a: MINE_A, b: MINE_B };
 describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.cloudinary = true;
     mocks.auth = { status: 'authenticated' };
     mocks.fetchReviews.mockResolvedValue(DATA);
     mocks.canReview.mockResolvedValue(ELIG_NEW);
@@ -530,6 +547,7 @@ describe('ReviewsSection: mỗi lần mua một đánh giá (R8)', () => {
 describe('ReviewsSection: câu gợi ý điểm trước khi gửi (chỉ lần đầu)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.cloudinary = true;
     mocks.auth = { status: 'authenticated' };
     mocks.fetchReviews.mockResolvedValue(DATA);
     mocks.canReview.mockResolvedValue(ELIG_NEW);
@@ -560,6 +578,29 @@ describe('ReviewsSection: câu gợi ý điểm trước khi gửi (chỉ lần 
     await openNewForm();
     fireEvent.click(screen.getByRole('button', { name: 'Thêm ảnh (0)' }));
     expect(hintOf(HINT_IMAGES)).toBeInTheDocument();
+  });
+
+  it('bản build chưa cấu hình Cloudinary: câu gợi ý không mời video', async () => {
+    mocks.cloudinary = false;
+    await openNewForm();
+    expect(hintOf(`${FIRST_ONLY}: thêm ảnh +10.000 Điểm Xanh (chỉ chữ +5.000). Chỉ đánh giá được khi đã mua và nhận hàng.`)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm ảnh (0)' }));
+    expect(hintOf(`${FIRST_ONLY}, bạn nhận +10.000 Điểm Xanh cho đánh giá có ảnh!`)).toBeInTheDocument();
+  });
+
+  it('đang tải video: nút gửi khoá và đổi nhãn, bấm không gọi createReview; tải xong gửi kèm videoUrl', async () => {
+    await openNewForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu tải video thử' }));
+    const waiting = screen.getByRole('button', { name: 'Đang tải video…' });
+    expect(waiting).toBeDisabled();
+    fireEvent.click(waiting);
+    expect(mocks.createReview).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Tải xong video thử' }));
+    const send = await screen.findByRole('button', { name: 'Gửi đánh giá' });
+    expect(send).not.toBeDisabled();
+    fireEvent.click(send);
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
+    expect(mocks.createReview.mock.calls[0]![1]).toMatchObject({ videoUrl: 'https://v/xong.mp4', orderId: 'o1' });
   });
 
   it('có video: nêu điều kiện lần đầu rồi mới nêu +15, kể cả khi có cả ảnh', async () => {

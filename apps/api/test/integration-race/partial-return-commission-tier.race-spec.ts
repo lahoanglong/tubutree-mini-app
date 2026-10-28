@@ -49,7 +49,7 @@ describe('Trả một phần: hoa hồng CTV / doanh số mốc và hạng thàn
         OrderReturnsService,
         { provide: PricingService, useValue: { calcShippingFee: jest.fn().mockResolvedValue(0) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
-        { provide: NotificationsService, useValue: { notify } },
+        { provide: NotificationsService, useValue: { notify, notifySafe: notify } },
         { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
         { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
       ],

@@ -21,8 +21,14 @@ export class GroupBuyController {
     return this.groupBuy.listOpen(userId);
   }
 
+  /**
+   * Link mời `/mua-chung/:id` mở được khi chưa đăng nhập để khách thấy đúng nhóm rồi mới được mời đăng nhập. Mã giảm chỉ trả cho
+   * thành viên của nhóm (`couponCode` trong toView), khách và người ngoài nhóm không thấy.
+   */
+  @Public()
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':id')
-  detail(@CurrentUser('sub') userId: string, @Param('id') id: string) {
+  detail(@CurrentUser('sub') userId: string | undefined, @Param('id') id: string) {
     return this.groupBuy.getGroup(id, userId);
   }
 

@@ -168,6 +168,18 @@ describe('BridgeHealthCron', () => {
     expect(saved(prisma).update.deaf).toBe(true);
   });
 
+  it('lời dặn kết nối lại nói rõ là việc của Admin: nhân viên CSKH cũng nhận tin nhưng không có quyền kết nối', async () => {
+    const { cron, notifications } = setup({ health: deafHealth() });
+    await cron.everyMinute();
+    expect(opsCalls(notifications)[0][2].message).toContain('Admin vào tab Chat CSKH bấm Kết nối lại');
+  });
+
+  it('cảnh báo điếc/bỏ tin cũng tới cả nhân viên CSKH', async () => {
+    const { cron, prisma } = setup({ health: deafHealth() });
+    await cron.everyMinute();
+    expect(prisma.user.findMany.mock.calls[0][0].where).toEqual({ isBlocked: false, OR: [{ role: 'ADMIN' }, { role: 'STAFF', staffPermissions: { has: 'CSKH' } }] });
+  });
+
   it('lastEventAt null cũng là điếc', async () => {
     const { cron, notifications } = setup({ health: deafHealth({ lastEventAt: null }) });
     await cron.everyMinute();
@@ -280,6 +292,12 @@ describe('BridgeHealthCron', () => {
     expect(notifications.notify).toHaveBeenCalledTimes(1);
     expect(notifications.notify).toHaveBeenCalledWith('adm1', 'OPS_ZALO_BRIDGE_DOWN', expect.objectContaining({ state: 'NEED_QR', since: expect.any(String) }));
     expect(prisma.supportBridgeStatus.update).toHaveBeenCalledWith({ where: { id: 'main' }, data: { downAlertedAt: NOW } });
+  });
+
+  it('cảnh báo mất kết nối tới cả nhân viên CSKH trực chat, không chỉ ADMIN', async () => {
+    const { cron, prisma } = setup({ health: health({ state: 'NEED_QR', since: min(11).toISOString() }), prev: { state: 'NEED_QR', since: min(11), downAlertedAt: null } });
+    await cron.everyMinute();
+    expect(prisma.user.findMany.mock.calls[0][0].where).toEqual({ isBlocked: false, OR: [{ role: 'ADMIN' }, { role: 'STAFF', staffPermissions: { has: 'CSKH' } }] });
   });
 
   it('đã báo cách chưa tới 1 giờ thì không báo lại; quá 1 giờ thì báo lại', async () => {

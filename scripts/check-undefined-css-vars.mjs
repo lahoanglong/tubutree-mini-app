@@ -2,9 +2,9 @@
 // Repo-root script — CI guardrail mirroring audit's own C2 method (comm -13 defs used).
 //
 // Quét apps/miniapp/src/**/*.{css,ts,tsx} tìm mọi tham chiếu var(--x), đối chiếu với các
-// token được định nghĩa trong 5 file nguồn: design-tokens gốc, tokens.css riêng của miniapp,
-// cầu nối theme ZaUI (zaui-bridge.css) và hai file theme riêng của trang (dealer-theme.css,
-// brand-theme.css). Không tự sửa gì — chỉ báo cáo file:line.
+// token được định nghĩa trong 4 file nguồn: design-tokens gốc (gồm theme dealer), tokens.css riêng của
+// miniapp, cầu nối theme ZaUI (zaui-bridge.css) và file theme riêng của trang (brand-theme.css).
+// Không tự sửa gì — chỉ báo cáo file:line.
 //
 // Bỏ qua có chủ đích (không phải lỗ hổng):
 //  - File test (*.spec.* / *.test.*): chứa chuỗi regex/fixture như `var(--color-` chứ không
@@ -21,12 +21,11 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Danh sách tường minh, không quét thư mục: một file css bất kỳ khai báo biến không được làm im lỗi
-// "chưa định nghĩa". Token riêng của trang (dealer-theme.css, brand-theme.css) phải được thêm vào đây có chủ ý.
+// "chưa định nghĩa". Token riêng của trang (brand-theme.css) phải được thêm vào đây có chủ ý.
 const DEFINITION_FILES = [
   'packages/design-tokens/src/tokens.css',
   'apps/miniapp/src/css/tokens.css',
   'apps/miniapp/src/css/zaui-bridge.css',
-  'apps/miniapp/src/css/dealer-theme.css',
   'apps/miniapp/src/css/brand-theme.css',
 ];
 

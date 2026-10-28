@@ -40,11 +40,31 @@ export interface OrderItemMedia {
   thumbnail?: string | null;
   stock?: number;
   available?: boolean;
+  /** Trang sản phẩm còn mở công khai; false thì không dẫn tới trang sản phẩm hay mời đánh giá (API cũ không trả: coi như còn). */
+  productPublic?: boolean;
   currentPrice?: number | null;
 }
 export type OrderItemView = OrderItemDTO & OrderItemMedia;
+
+/** Slug để mở trang sản phẩm từ một dòng đơn; null khi dòng không có slug hoặc sản phẩm đã gỡ (trang sản phẩm sẽ trả 404). */
+export function openProductSlug(it: { productSlug?: string | null; productPublic?: boolean }): string | null {
+  return it.productPublic === false ? null : (it.productSlug ?? null);
+}
+
+/** Ghi chú cố định API gắn vào đơn đặt định kỳ (SubscriptionsService); không phải lời khách viết nên chi tiết đơn không hiện như "Ghi chú". */
+export const SUBSCRIPTION_ORDER_NOTE = 'Đơn đặt định kỳ (Subscribe & Save)';
+
+export const isSubscriptionOrder = (o: { source?: string | null }): boolean => o.source === 'subscription';
+
+/** Ghi chú của khách để hiện ở chi tiết đơn: null khi trống hoặc chỉ là ghi chú cố định của đơn định kỳ. */
+export function customerOrderNote(o: { note?: string | null; source?: string | null }): string | null {
+  if (!o.note) return null;
+  return isSubscriptionOrder(o) && o.note === SUBSCRIPTION_ORDER_NOTE ? null : o.note;
+}
 export type OrderView = Omit<OrderDTO, 'items'> & {
   items: OrderItemView[];
+  /** Nơi đơn được tạo (checkout, buy_now, storefront, ctv_assisted, subscription, dealer). Đơn cũ có thể trống. */
+  source?: string | null;
   /** Mã giảm giá đã dùng và các phần của `discount` (API cũ chưa trả; đơn cũ để 0). */
   couponCode?: string | null;
   /** Mã của lần đặt khi đơn tách này không giữ lượt dùng mã (đơn đầu của nhóm giữ) — để ghi đúng tên mã ở dòng giảm giá. */

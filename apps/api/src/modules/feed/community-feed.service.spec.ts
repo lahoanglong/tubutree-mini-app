@@ -2271,6 +2271,16 @@ describe('CommunityFeedService.closeEvent (admin)', () => {
   });
 });
 
+function makeEventReward() {
+  return {
+    rewardPost: jest.fn(),
+    rewardAnswer: jest.fn(),
+    rewardBestAnswer: jest.fn(),
+    expiresAt: jest.fn().mockResolvedValue(new Date('2027-04-28T00:00:00Z')),
+    rewardEventWinner: jest.fn().mockResolvedValue(true),
+  };
+}
+
 describe('CommunityFeedService.pickWinner (admin)', () => {
   it('sự kiện không tồn tại → NotFound', async () => {
     const prisma = makePrisma();
@@ -2281,7 +2291,7 @@ describe('CommunityFeedService.pickWinner (admin)', () => {
   it('sự kiện đã CLOSED → BadRequest sớm, KHÔNG thưởng, KHÔNG updateMany (chống trả thưởng đôi)', async () => {
     const prisma = makePrisma();
     (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardXu: 5000, rewardPoints: 5, status: 'CLOSED' });
-    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(), rewardEventWinner: jest.fn() };
+    const reward = makeEventReward();
     await expect(makeSvc(prisma, reward).pickWinner('ev1', 'u1')).rejects.toBeInstanceOf(BadRequestException);
     expect(reward.rewardEventWinner).not.toHaveBeenCalled();
     expect(prisma.communityEvent.updateMany).not.toHaveBeenCalled();
@@ -2292,7 +2302,7 @@ describe('CommunityFeedService.pickWinner (admin)', () => {
     (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardPoints: 30_000, status: 'OPEN' });
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'uat_marketing' });
     (prisma.feedPost.findFirst as jest.Mock).mockResolvedValue(null);
-    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(), rewardEventWinner: jest.fn() };
+    const reward = makeEventReward();
     await expect(makeSvc(prisma, reward).pickWinner('ev1', 'uat_marketing')).rejects.toThrow(/dự thi/);
     expect(reward.rewardEventWinner).not.toHaveBeenCalled();
     expect(prisma.communityEvent.updateMany).not.toHaveBeenCalled();
@@ -2306,7 +2316,7 @@ describe('CommunityFeedService.pickWinner (admin)', () => {
     const prisma = makePrisma();
     (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardXu: 5000, rewardPoints: 5, status: 'OPEN' });
     (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
-    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(), rewardEventWinner: jest.fn() };
+    const reward = makeEventReward();
     await expect(makeSvc(prisma, reward).pickWinner('ev1', 'u1')).rejects.toBeInstanceOf(NotFoundException);
     expect(reward.rewardEventWinner).not.toHaveBeenCalled();
     expect(prisma.communityEvent.updateMany).not.toHaveBeenCalled();
@@ -2317,7 +2327,7 @@ describe('CommunityFeedService.pickWinner (admin)', () => {
     (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardXu: 5000, rewardPoints: 5, status: 'OPEN' });
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1' });
     (prisma.communityEvent.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
-    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(), rewardEventWinner: jest.fn() };
+    const reward = makeEventReward();
     await expect(makeSvc(prisma, reward).pickWinner('ev1', 'u1')).rejects.toBeInstanceOf(BadRequestException);
     expect(reward.rewardEventWinner).not.toHaveBeenCalled();
   });
@@ -2327,31 +2337,82 @@ describe('CommunityFeedService.pickWinner (admin)', () => {
     (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardXu: 5000, rewardPoints: 5, status: 'OPEN' });
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1' });
     (prisma.communityEvent.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(), rewardEventWinner: jest.fn() };
+    const reward = makeEventReward();
     const r = await makeSvc(prisma, reward).pickWinner('ev1', 'u1');
     expect(prisma.communityEvent.updateMany).toHaveBeenCalledWith({
       where: { id: 'ev1', status: 'OPEN' },
       data: { winnerUserId: 'u1', status: 'CLOSED' },
     });
-    expect(reward.rewardEventWinner).toHaveBeenCalledWith('u1', 'ev1', 5);
-    expect(r).toEqual({ ok: true });
+    expect(reward.rewardEventWinner).toHaveBeenCalledWith('u1', 'ev1', 5, expect.anything(), expect.any(Date));
+    expect(r).toEqual({ ok: true, rewarded: true });
   });
 
-  it('rewardEventWinner ném lỗi → pickWinner vẫn trả ok (non-fatal)', async () => {
+  it('rewardEventWinner ném lỗi → pickWinner ném theo (tx rollback, không nuốt lỗi)', async () => {
     const prisma = makePrisma();
     (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardXu: 5000, rewardPoints: 5, status: 'OPEN' });
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1' });
     (prisma.communityEvent.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-    const reward = {
-      rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(),
-      rewardEventWinner: jest.fn().mockRejectedValue(new Error('boom')),
-    };
-    const r = await makeSvc(prisma, reward).pickWinner('ev1', 'u1');
-    expect(r).toEqual({ ok: true });
-    expect(prisma.communityEvent.updateMany).toHaveBeenCalledWith({
-      where: { id: 'ev1', status: 'OPEN' },
-      data: { winnerUserId: 'u1', status: 'CLOSED' },
+    const reward = makeEventReward();
+    reward.rewardEventWinner.mockRejectedValue(new Error('boom'));
+    await expect(makeSvc(prisma, reward).pickWinner('ev1', 'u1')).rejects.toThrow('boom');
+  });
+});
+
+// Giao dịch giả có rollback thật: mọi thay đổi status khi callback ném đều bị hoàn lại.
+describe('CommunityFeedService.pickWinner — đóng sự kiện và cộng thưởng cùng một giao dịch', () => {
+  function setupAtomic() {
+    const prisma = makePrisma();
+    let status = 'OPEN';
+    (prisma.communityEvent.findUnique as jest.Mock).mockImplementation(async () => ({ id: 'ev1', title: 'Thi khoe vườn', rewardPoints: 5, status }));
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1' });
+    (prisma.communityEvent.updateMany as jest.Mock).mockImplementation(async ({ where }: { where: { status: string } }) => {
+      if (status !== where.status) return { count: 0 };
+      status = 'CLOSED';
+      return { count: 1 };
     });
+    (prisma.$transaction as jest.Mock).mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+      const before = status;
+      try {
+        return await fn(prisma);
+      } catch (err) {
+        status = before;
+        throw err;
+      }
+    });
+    const reward = makeEventReward();
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) };
+    return { svc: makeSvc(prisma, reward, notify), reward, notify, status: () => status };
+  }
+
+  it('cộng điểm ném lỗi → sự kiện vẫn OPEN, không có tin "trúng"; gọi lại thành công → CLOSED, có điểm, đúng một tin', async () => {
+    const { svc, reward, notify, status } = setupAtomic();
+    reward.rewardEventWinner.mockRejectedValueOnce(new Error('db đứt'));
+
+    await expect(svc.pickWinner('ev1', 'u1')).rejects.toThrow('db đứt');
+    expect(status()).toBe('OPEN');
+    expect(notify.notify).not.toHaveBeenCalled();
+
+    await expect(svc.pickWinner('ev1', 'u1')).resolves.toEqual({ ok: true, rewarded: true });
+    expect(status()).toBe('CLOSED');
+    expect(reward.rewardEventWinner).toHaveBeenCalledTimes(2);
+    expect(notify.notify).toHaveBeenCalledTimes(1);
+    expect(notify.notify).toHaveBeenCalledWith('u1', 'COMMUNITY_EVENT_WINNER', {
+      title: 'Thi khoe vườn',
+      reward: ' Bạn được thưởng 5 Điểm Xanh.',
+    });
+  });
+
+  it('tin "trúng" chỉ gửi sau khi tx đã xong (không gửi khi tx còn mở)', async () => {
+    const { svc, reward, notify } = setupAtomic();
+    let txDone = false;
+    reward.rewardEventWinner.mockImplementation(async () => {
+      expect(notify.notify).not.toHaveBeenCalled();
+      txDone = true;
+      return true;
+    });
+    await svc.pickWinner('ev1', 'u1');
+    expect(txDone).toBe(true);
+    expect(notify.notify).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -2362,7 +2423,7 @@ describe('CommunityFeedService.pickWinner — báo người thắng (R2-ENGAGE-1
     (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', title: 'Thi khoe vườn', rewardPoints, status: 'OPEN' });
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1' });
     (prisma.communityEvent.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(), rewardEventWinner: jest.fn() };
+    const reward = makeEventReward();
     const notify = { notify: jest.fn().mockResolvedValue(undefined) };
     return { prisma, reward, notify, svc: makeSvc(prisma, reward, notify) };
   };
@@ -2376,16 +2437,18 @@ describe('CommunityFeedService.pickWinner — báo người thắng (R2-ENGAGE-1
     });
   });
 
-  it('rewardEventWinner ném lỗi → câu báo KHÔNG hứa thưởng điểm', async () => {
+  it('điểm không vào sổ (đã thưởng trước đó, grant trả false) → câu báo KHÔNG hứa thưởng điểm', async () => {
     const { svc, reward, notify } = setup(5);
-    reward.rewardEventWinner.mockRejectedValue(new Error('boom'));
-    await svc.pickWinner('ev1', 'u1');
+    reward.rewardEventWinner.mockResolvedValue(false);
+    await expect(svc.pickWinner('ev1', 'u1')).resolves.toEqual({ ok: true, rewarded: false });
     expect(notify.notify).toHaveBeenCalledWith('u1', 'COMMUNITY_EVENT_WINNER', { title: 'Thi khoe vườn', reward: '' });
   });
 
-  it('sự kiện không có thưởng điểm → câu báo không nhắc điểm', async () => {
-    const { svc, notify } = setup(0);
+  it('sự kiện không có thưởng điểm → câu báo không nhắc điểm, không đọc hạn điểm', async () => {
+    const { svc, notify, reward } = setup(0);
+    reward.rewardEventWinner.mockResolvedValue(false);
     await svc.pickWinner('ev1', 'u1');
+    expect(reward.expiresAt).not.toHaveBeenCalled();
     expect(notify.notify).toHaveBeenCalledWith('u1', 'COMMUNITY_EVENT_WINNER', { title: 'Thi khoe vườn', reward: '' });
   });
 
@@ -2399,7 +2462,7 @@ describe('CommunityFeedService.pickWinner — báo người thắng (R2-ENGAGE-1
   it('gửi thông báo lỗi không làm hỏng việc chốt người thắng', async () => {
     const { svc, notify } = setup();
     notify.notify.mockRejectedValue(new Error('db'));
-    await expect(svc.pickWinner('ev1', 'u1')).resolves.toEqual({ ok: true });
+    await expect(svc.pickWinner('ev1', 'u1')).resolves.toEqual({ ok: true, rewarded: true });
   });
 });
 

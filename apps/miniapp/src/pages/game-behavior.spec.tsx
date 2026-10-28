@@ -1209,7 +1209,7 @@ describe('GamePage — nhiệm vụ', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Làm ngay: Viết 3 đánh giá' }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/orders?tab=delivered');
     fireEvent.click(screen.getByRole('button', { name: 'Làm ngay: Mời 3 bạn' }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/wallet');
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/profile?section=referral');
   });
 
   it('nhiệm vụ Chăm chỉ 7 ngày: "Làm ngay" cuộn tới khối điểm danh', async () => {

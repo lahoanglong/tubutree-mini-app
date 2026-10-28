@@ -430,6 +430,41 @@ Nhận biết: kết quả INCOMPLETE của đơn mang câu `Cộng nước thư
 
 Đơn đã giao rồi bị trả hoặc huỷ: nước được đảo cùng lúc với Điểm Xanh (`reverseClosedOrderEffects`, chạy lại bởi `ReversalEffectsResyncCron`, idempotent theo dòng sổ `ORDER_REVERSED` cùng `refId`). Đã cộng thì trừ khỏi hồ sơ tối đa bằng số dư (không xuống dưới 0, nước đã tiêu thì không đòi lại) và ghi dòng âm đúng bằng phần thu hồi được (mang `createdAt` của dòng cộng): chỉ phần thu hồi được mới trả lại vào trần tuần, phần đã tiêu vẫn tính vào trần; thu hồi 0 vẫn ghi dòng delta 0. Còn chờ thì huỷ đơn chờ. Nhiều kiện cùng `checkoutGroup` chỉ đảo khi mọi kiện đã trả hoặc huỷ. Đảo lỗi thì đơn chưa có mốc `reversalEffectsAt` và cron thử lại; không có nút chạy tay riêng cho phần đảo: chờ cron (5 phút một lượt, cửa sổ 14 ngày).
 
+### 1.11 Đo mức lệch sổ nền trước khi bật cron lệch sổ
+
+Bản này có cron `ops.ledger-drift` (04:30 giờ VN, chỉ đọc): mỗi đêm so số dư Điểm Xanh từng lô và Ví Tubu với sổ cái, có lệch thì ghi log lỗi và gửi tin `OPS_HEALTH_ALERT` cho mọi admin. Nếu PROD đã có lệch từ trước thì admin nhận tin báo lại mỗi đêm sau deploy, nên đo mức lệch nền trước:
+
+```bash
+$DC run --rm --no-deps -T api pnpm run reconcile:points
+$DC run --rm --no-deps -T api pnpm run reconcile:wallet
+```
+
+Cả hai chỉ đọc (`reconcile:points` không kèm `--apply`; `reconcile:wallet` không có chế độ sửa). Ghi lại số khách lệch: Điểm ______, Ví ______. Có lệch thì tra nguyên nhân và xử lý trước, hoặc báo admin biết trước là tin lệch sổ đêm đầu đã được chờ; Ví không tự sửa, lệch Ví phải ghi dòng ADJUST sau khi tra nguyên nhân.
+
+### 1.12 Hai route điểm danh cũ đã xoá: bản Mini App phải từ V21 trở lên
+
+API không còn `POST /game/check-in`, `GET /me/loyalty/check-in` và `POST /me/loyalty/check-in`; điểm danh chỉ đi qua `GET`/`POST /me/daily-check-in`. Bản Mini App từ `0a43f0b0` (V21, đã có commit `694b67636` "một nút điểm danh") không gọi các route cũ. Bản V19, V20 (`4eea3135` trở về trước) vẫn gọi, và nút điểm danh sẽ báo 404.
+
+Trước khi deploy API có thay đổi này: xác nhận bản Mini App đang chạy cho khách trên Zalo (bản Live, không phải bản Testing) là V21 trở lên. Nếu Live còn V19 hoặc V20 thì chưa deploy, hoặc đẩy bản Mini App mới lên Live trước. `POST /me/loyalty/check-in` đã xoá từ `5c1d47a2f` (deploy 2026-10-28) với cùng giả định này.
+
+### 1.13 Bản đợt 29/10: quay image (7.2) không còn sạch sau khi khách đã dùng bản mới
+
+Bốn migration của bản này (`20261029010000`, `20261029020000`, `20261029030000`, `20261029030100`) chỉ thêm bảng, cột và mẫu tin, nên image cũ vẫn chạy được trên schema mới. Nhưng dữ liệu ghi bởi API mới làm 7.2 để lại hậu quả. Đọc hết mục này trước khi chọn 7.2:
+
+1. **Tài khoản khách vãng lai bị tách.** API mới lưu khoá khách là băm của thiết bị (`guest_h_<sha256>`), và lần đăng nhập đầu của mỗi khách vãng lai đổi khoá cũ `guest_<deviceId>` sang khoá băm. Băm là một chiều, không đổi ngược được. Nếu quay image cũ: khách vãng lai đã mở app trong lúc chạy bản mới sẽ được image cũ tạo tài khoản MỚI rỗng (mất điểm, giỏ, địa chỉ, đơn trên màn hình). Khi deploy lại bản mới, khách về tài khoản cũ, còn tài khoản tạm lúc quay lại bị bỏ lại. Khách đăng nhập Zalo không bị ảnh hưởng. Đã quay image thì sau khi deploy lại, lấy danh sách tài khoản tạm để gộp tay (đơn đặt trong lúc quay lại nằm ở đó):
+
+   ```bash
+   psqlq -c "SELECT u.id, u.\"zaloId\", u.\"createdAt\", count(o.id) AS don FROM users u LEFT JOIN orders o ON o.\"userId\" = u.id WHERE u.\"zaloId\" LIKE 'guest\_%' AND u.\"zaloId\" NOT LIKE 'guest\_h\_%' AND u.\"createdAt\" >= '<giờ bắt đầu quay lại, UTC>' GROUP BY u.id ORDER BY u.\"createdAt\""
+   ```
+
+2. **Mini App bản mới cần API bản này.** Mini App bản mới gọi `GET /orders/status-counts` (đếm đơn ở Cá nhân) và `GET /me/notifications/unread-count` (chuông). API cũ không có hai route này: Cá nhân báo lỗi đếm đơn và chuông về 0. Chỉ đẩy Mini App bản mới lên Testing/Live sau khi API bản này đã chạy ổn. Mini App bản mới đã Live thì không quay API xuống dưới bản này; sửa tiến bằng hotfix.
+
+3. **Báo cáo chuyển khoản trả nợ của đại lý.** API mới lưu mỗi lần đại lý báo đã chuyển khoản (`dealer_credit_payment_reports`, thẻ việc ở Hôm nay) và đóng báo cáo khi kế toán ghi nhận. Image cũ vẫn ghi nhận trả nợ nhưng không đóng báo cáo. Sau khi deploy lại, các báo cáo có ngày trong khoảng quay lại vẫn hiện là chờ xử lý: đối chiếu sổ công nợ của đại lý trước khi bấm Ghi nhận, để không ghi một khoản hai lần.
+
+4. **Cron hết hạn điểm báo lỗi khi sổ điểm lệch.** Bản này nâng hai log của `expirePoints` (khách lỗi khi trừ điểm hết hạn; số dư nhỏ hơn số điểm cần trừ) từ cảnh báo lên lỗi. Nếu mục 1.11 đo thấy lệch Điểm Xanh, cron hết hạn điểm sẽ báo lỗi mỗi đêm cho tới khi chạy `reconcile:points --apply` cho các khách đó. Không sai điểm, chỉ là tin báo lặp.
+
+Kết luận: sau khi bản này đã nhận khách, ưu tiên sửa tiến. Chỉ dùng 7.2 khi lỗi nặng hơn các hậu quả trên, và làm thêm bước 1 và 3 sau khi deploy lại.
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.
@@ -955,6 +990,8 @@ $DC logs --tail 20 api | grep -E 'P3009|migrate|No pending'
 Kỳ vọng: `api=healthy`, log có "No pending migrations to apply" và không có `P3009`. Điều kiện: CHƯA chạy `up -d` thay container ở bước 8 và 9 của mục 5 (nếu rồi thì container API đã là bản mới: dùng 7.2 hoặc 7.3 theo bảng 7.0, không dùng đường này).
 
 ### 7.2 Chỉ quay image (giữ DB đã migrate, giữ dữ liệu phát sinh)
+
+Bản đợt 29/10 trở đi: đọc mục 1.13 trước (quay image tách tài khoản khách vãng lai và làm Mini App bản mới lỗi đếm đơn).
 
 Chỉ đúng khi image cũ khớp schema sau migrate (mục 7.0). Hai điều kiện BẮT BUỘC (nếu không thoả, sang 7.3):
 

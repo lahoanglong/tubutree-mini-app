@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, CircleCheck } from 'lucide-react';
-import { getOpsInbox, getRetentionDaily, getTodaySummary, type AdminPayoutStatus, type DealerRewardClaimStatus, type InboxKey, type TodaySummary } from '@/lib/admin-client';
+import { getOpsInbox, getRetentionDaily, getTodaySummary, type AdminPayoutStatus, type DealerRewardClaimStatus, type InboxKey, type OpsInbox, type TodaySummary } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { summarizeNs1 } from './ns1-card';
 import { formatDateTime } from '@/lib/format-date';
@@ -26,6 +26,7 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   dealerApplications: { title: 'Hồ sơ đại lý chờ duyệt', hint: 'Đăng ký đại lý mới' },
   dealerClaims: { title: 'Thưởng đại lý chờ duyệt', hint: 'Đại lý đã đạt mốc, chờ xác nhận' },
   dealerClaimsToPay: { title: 'Thưởng đại lý chờ chi', hint: 'Admin đã duyệt, chờ kế toán trao thưởng và bấm "Đã chi"' },
+  dealerCreditReported: { title: 'Đại lý báo đã chuyển khoản trả nợ', hint: 'Đối chiếu sao kê rồi bấm "Ghi nhận", hoặc "Không thấy tiền" kèm lý do' },
   payouts: { title: 'Lệnh rút ngân hàng cũ chờ duyệt', hint: 'Lệnh tạo trước khi bỏ rút tiền' },
   payoutsToPay: { title: 'Lệnh rút ngân hàng cũ chờ chi', hint: 'Admin đã duyệt, chờ kế toán chuyển khoản và bấm "Đã chi"' },
   wasteToCount: { title: 'Kiện đổi rác chờ đếm', hint: 'Kiện gửi kho hoặc thu kèm đơn đã nhận, chưa đếm' },
@@ -42,7 +43,10 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   supportChatUnforwarded: { title: 'Chat CSKH: tin chưa chuyển được vào Zalo', hint: 'Tin khách chuyển lỗi, không rõ kết quả hoặc chờ quá lâu' },
   zaloBridgeDown: { title: 'Cầu nối Zalo mất kết nối', hint: 'Cầu nối không ở trạng thái đang kết nối quá 10 phút, tin khách chưa vào nhóm Zalo' },
   bankTransferToConfirm: { title: 'Đơn chuyển khoản chờ xác nhận tiền', hint: 'Kiểm tra tiền đã về chưa rồi bấm "Đã nhận tiền". Để quá hạn thì đơn tự huỷ' },
+  dealerTransferToConfirm: { title: 'Đơn đại lý trả trước chờ xác nhận tiền', hint: 'Kiểm tra tiền đại lý đã về chưa rồi bấm "Đã nhận tiền". Để quá hạn thì đơn tự huỷ' },
   storefrontsPending: { title: 'Gian hàng chờ duyệt', hint: 'CTV được hẹn duyệt trong 1 ngày làm việc' },
+  accountDeletionPending: { title: 'Yêu cầu xoá tài khoản chờ xử lý', hint: 'Đã hứa khách xử lý trong 3 ngày làm việc' },
+  shiftsPending: { title: 'Ca nhân viên chờ duyệt', hint: 'Nhân viên đã đăng ký ca từ hôm nay trở đi, chưa ai duyệt' },
   communityReports: { title: 'Báo cáo vi phạm cộng đồng', hint: 'Khách báo bài hoặc bình luận, chưa ai xem' },
   productsMissingImage: { title: 'Sản phẩm đang bán thiếu ảnh', hint: 'Khách không thấy hình, khó chốt đơn' },
   externalPoints: { title: 'Tích điểm đơn sàn cần xử lý', hint: 'Yêu cầu cần duyệt, mã chưa ghép được đơn, đơn đã cộng điểm bị hoàn một phần hoặc đã đóng' },
@@ -59,16 +63,16 @@ const CLAIM_FILTER: Partial<Record<InboxKey, DealerRewardClaimStatus>> = { deale
  * `customerRefunds` đã có huy hiệu riêng nên không nằm ở đây.
  */
 const INBOX_TAB: Partial<Record<InboxKey, string>> = {
-  pancakeAttention: 'orders', pancakeUnsynced: 'orders', gomdonAttention: 'orders', invoicePending: 'orders', bankTransferToConfirm: 'orders',
+  pancakeAttention: 'orders', pancakeUnsynced: 'orders', gomdonAttention: 'orders', invoicePending: 'orders', bankTransferToConfirm: 'orders', dealerTransferToConfirm: 'orders',
   returnsPending: 'returns', returnsToReceive: 'returns',
   merchantOverdue: 'merchantFulfilment', merchantToSettle: 'merchantFulfilment', merchantPayoutsPending: 'merchantFulfilment',
   merchantProducts: 'merchantProducts', consignmentPending: 'merchantProducts',
-  dealerApplications: 'dealers', dealerClaims: 'dealerClaims', dealerClaimsToPay: 'dealerClaims', payouts: 'payouts', payoutsToPay: 'payouts',
+  dealerApplications: 'dealers', dealerClaims: 'dealerClaims', dealerClaimsToPay: 'dealerClaims', dealerCreditReported: 'dealerAccounts', payouts: 'payouts', payoutsToPay: 'payouts',
   communityPending: 'community', communityUnanswered: 'community', communityReports: 'community',
   externalPoints: 'externalClaims', supportChatUnforwarded: 'supportChat', zaloBridgeDown: 'supportChat',
   wasteToCount: 'waste', wasteUnmatched: 'waste', wasteBlockedPending: 'waste', wastePointsPending: 'waste', wastePerksPending: 'waste',
   wasteTransitOverdue: 'waste', wasteGiftOverdue: 'waste', wasteOrderMismatch: 'waste',
-  storefrontsPending: 'storefronts', productsMissingImage: 'productCategories',
+  storefrontsPending: 'storefronts', productsMissingImage: 'productCategories', accountDeletionPending: 'users', shiftsPending: 'shiftApproval',
 };
 
 const QUALITY_KEYS: ReadonlySet<InboxKey> = new Set<InboxKey>(['productsMissingImage']);
@@ -90,8 +94,11 @@ export function InboxBadge({ tab, enabled = true }: { tab: string; enabled?: boo
   );
 }
 
+/** Số bán hàng trong ngày bấm được: mỗi số mở đúng màn xem chi tiết của nó. */
+export type TodayStatKey = 'orders' | 'revenue' | 'newUsers';
+
 /** Trang chủ quản trị "Hôm nay": số bán hàng trong ngày (chỉ ADMIN), rồi các việc đang chờ; hàng đợi rỗng gom một dòng. */
-export function OpsInboxTab({ onOpen: openTab, isAdmin = false }: { onOpen: (key: InboxKey) => void; isAdmin?: boolean }) {
+export function OpsInboxTab({ onOpen: openTab, onOpenStat, isAdmin = false }: { onOpen: (key: InboxKey) => void; onOpenStat?: (stat: TodayStatKey) => void; isAdmin?: boolean }) {
   const onOpen = (key: InboxKey) => {
     seedPayoutFilter(PAYOUT_FILTER[key] ?? null);
     seedDealerClaimFilter(CLAIM_FILTER[key] ?? null);
@@ -103,7 +110,7 @@ export function OpsInboxTab({ onOpen: openTab, isAdmin = false }: { onOpen: (key
   if (q.isError || !q.data) return <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách việc cần xử lý.</LoadError>;
   // API mới hơn web (đang triển khai dở) có thể trả khoá web chưa biết: bỏ qua thay vì làm sập cả trang chủ.
   const items = q.data.items.filter((i) => i.key in INBOX_LABELS);
-  const open = items.filter((i) => i.count > 0);
+  const open = items.filter((i) => i.count > 0).sort(byUrgency);
   // Rút ngân hàng đã bỏ: hai thẻ lệnh rút cũ chỉ hiện khi còn lệnh đang mở, không nằm trong danh sách "Đang trống".
   const done = items.filter((i) => i.count === 0 && !LEGACY_ONLY.has(i.key));
   return (
@@ -112,7 +119,7 @@ export function OpsInboxTab({ onOpen: openTab, isAdmin = false }: { onOpen: (key
         <h2 className="font-display text-lg font-semibold text-stone-900">Hôm nay</h2>
         <span className="text-xs text-stone-500">Cập nhật {formatDateTime(q.data.generatedAt)} · tự làm mới mỗi phút</span>
       </div>
-      {isAdmin && <TodayStats />}
+      {isAdmin && <TodayStats onOpenStat={onOpenStat} />}
       <h3 className="text-sm font-semibold text-stone-900">Việc đang chờ{open.length > 0 ? ` (${open.length})` : ''}</h3>
       {open.length === 0 && (
         <p className="flex items-center gap-2 rounded-card border border-success-fg bg-success-bg px-4 py-3 text-sm text-success-fg">
@@ -124,7 +131,7 @@ export function OpsInboxTab({ onOpen: openTab, isAdmin = false }: { onOpen: (key
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {open.map((i) => (
             <li key={i.key}>
-              <InboxCard k={i.key} count={i.count} hoursLeft={i.hoursLeft} onOpen={onOpen} />
+              <InboxCard k={i.key} count={i.count} hoursLeft={i.hoursLeft} oldestAgeHours={ageHours(i.oldestAt, q.data.generatedAt)} onOpen={onOpen} />
             </li>
           ))}
         </ul>
@@ -184,20 +191,35 @@ function vsYesterday(today: number, yesterday: number, fmt: (n: number) => strin
   return `${today > yesterday ? '+' : '−'}${fmt(Math.abs(today - yesterday))} so với hôm qua`;
 }
 
-function TodayStat({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: 'up' | 'down' | 'flat' }) {
+function TodayStat({ label, value, sub, note, tone, onPress }: { label: string; value: string; sub: string; note?: string; tone?: 'up' | 'down' | 'flat'; onPress?: () => void }) {
+  const body = (
+    <>
+      <span className="flex items-center justify-between gap-1 text-xs text-stone-600">
+        {label}
+        {onPress && <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-stone-500" />}
+      </span>
+      <span className="mt-0.5 block text-xl font-bold text-stone-900">{value}</span>
+      {note && <span className="mt-0.5 block text-[11px] font-medium text-stone-700">{note}</span>}
+      <span className={`mt-0.5 block text-[11px] ${tone === 'up' ? 'text-success-fg' : tone === 'down' ? 'text-danger-fg' : 'text-stone-500'}`}>{sub}</span>
+    </>
+  );
   return (
-    <div role="group" aria-label={label} className="rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
-      <div className="text-xs text-stone-600">{label}</div>
-      <div className="mt-0.5 text-xl font-bold text-stone-900">{value}</div>
-      <div className={`mt-0.5 text-[11px] ${tone === 'up' ? 'text-success-fg' : tone === 'down' ? 'text-danger-fg' : 'text-stone-500'}`}>{sub}</div>
+    <div role="group" aria-label={label} className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
+      {onPress ? (
+        <button type="button" onClick={onPress} className="block min-h-[44px] w-full rounded-card p-3 text-left hover:bg-stone-50">
+          {body}
+        </button>
+      ) : (
+        <div className="p-3">{body}</div>
+      )}
     </div>
   );
 }
 
 const toneOf = (a: number, b: number) => (a > b ? 'up' : a < b ? 'down' : 'flat');
 
-/** Bốn số của ngày: doanh thu đã thu, đơn, khách mới (tài khoản thật) và tỉ lệ khách mua lại trong 30 ngày (NS-1). Mỗi số lỗi thì chỉ nó vắng, không kéo sập cả trang. */
-function TodayStats() {
+/** Bốn số của ngày: tiền đã thu từ đơn hôm nay (kèm giá trị đơn đặt, vì COD chưa giao chưa phải tiền đã thu), đơn, khách mới (tài khoản thật) và tỉ lệ khách mua lại trong 30 ngày (NS-1). Mỗi số lỗi thì chỉ nó vắng, không kéo sập cả trang. */
+function TodayStats({ onOpenStat }: { onOpenStat?: (stat: TodayStatKey) => void }) {
   const today = useQuery({ queryKey: ['admin-today-summary'], queryFn: getTodaySummary, refetchInterval: 60_000 });
   const retention = useQuery({ queryKey: ['admin-analytics-retention'], queryFn: () => getRetentionDaily(30), staleTime: 5 * 60_000 });
   const t: TodaySummary | undefined = today.data;
@@ -208,9 +230,9 @@ function TodayStats() {
       {today.isError && <LoadError onRetry={() => void today.refetch()} retrying={today.isFetching}>Không tải được số bán hàng hôm nay.</LoadError>}
       {t && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <TodayStat label="Doanh thu hôm nay" value={formatVnd(t.revenue.today)} sub={`${vsYesterday(t.revenue.today, t.revenue.yesterday, formatVnd)} · 7 ngày ${formatVnd(t.revenue.week)}`} tone={toneOf(t.revenue.today, t.revenue.yesterday)} />
-          <TodayStat label="Đơn hôm nay" value={String(t.orders.today)} sub={`${vsYesterday(t.orders.today, t.orders.yesterday, String)} · 7 ngày ${t.orders.week}`} tone={toneOf(t.orders.today, t.orders.yesterday)} />
-          <TodayStat label="Khách mới hôm nay" value={String(t.newUsers.today)} sub={`7 ngày: ${t.newUsers.week} khách mới`} tone={toneOf(t.newUsers.today, t.newUsers.yesterday)} />
+          <TodayStat label="Đã thu từ đơn hôm nay" value={formatVnd(t.revenue.today)} note={t.gmv ? `Giá trị đơn đặt ${formatVnd(t.gmv.today)}` : undefined} sub={`${vsYesterday(t.revenue.today, t.revenue.yesterday, formatVnd)} · 7 ngày ${formatVnd(t.revenue.week)}`} tone={toneOf(t.revenue.today, t.revenue.yesterday)} onPress={onOpenStat && (() => onOpenStat('revenue'))} />
+          <TodayStat label="Đơn hôm nay" value={String(t.orders.today)} sub={`${vsYesterday(t.orders.today, t.orders.yesterday, String)} · 7 ngày ${t.orders.week}`} tone={toneOf(t.orders.today, t.orders.yesterday)} onPress={onOpenStat && (() => onOpenStat('orders'))} />
+          <TodayStat label="Khách mới hôm nay" value={String(t.newUsers.today)} sub={`7 ngày: ${t.newUsers.week} khách mới`} tone={toneOf(t.newUsers.today, t.newUsers.yesterday)} onPress={onOpenStat && (() => onOpenStat('newUsers'))} />
           <TodayStat
             label="Khách mua lại (30 ngày)"
             value={ns1?.pct == null ? '—' : `${ns1.pct.toFixed(1).replace(/\.0$/, '').replace('.', ',')}%`}
@@ -222,9 +244,44 @@ function TodayStats() {
   );
 }
 
-function InboxCard({ k, count, hoursLeft, onOpen }: { k: InboxKey; count: number; hoursLeft?: number; onOpen: (key: InboxKey) => void }) {
+/** Việc sắp bị tự huỷ lên đầu (ít giờ nhất trước), rồi việc chờ lâu nhất; còn lại giữ thứ tự API (sort ổn định). */
+function byUrgency(a: OpsInbox['items'][number], b: OpsInbox['items'][number]) {
+  const ha = a.hoursLeft ?? Infinity;
+  const hb = b.hoursLeft ?? Infinity;
+  if (ha !== hb) return ha - hb;
+  const oa = a.oldestAt ? Date.parse(a.oldestAt) : Infinity;
+  const ob = b.oldestAt ? Date.parse(b.oldestAt) : Infinity;
+  if (Number.isNaN(oa) || Number.isNaN(ob) || oa === ob) return 0;
+  return oa - ob;
+}
+
+function ageHours(oldestAt: string | undefined, generatedAt: string): number | undefined {
+  if (!oldestAt) return undefined;
+  const ms = Date.parse(generatedAt) - Date.parse(oldestAt);
+  return Number.isNaN(ms) ? undefined : Math.max(0, Math.floor(ms / 3_600_000));
+}
+
+function ageLabel(hours: number): string {
+  if (hours < 1) return 'dưới 1 giờ';
+  if (hours < 48) return `${hours} giờ`;
+  return `${Math.floor(hours / 24)} ngày`;
+}
+
+function InboxCard({
+  k,
+  count,
+  hoursLeft,
+  oldestAgeHours,
+  onOpen,
+}: {
+  k: InboxKey;
+  count: number;
+  hoursLeft?: number;
+  oldestAgeHours?: number;
+  onOpen: (key: InboxKey) => void;
+}) {
   const l = INBOX_LABELS[k];
-  const urgent = k === 'bankTransferToConfirm' && hoursLeft !== undefined;
+  const urgent = hoursLeft !== undefined;
   return (
     <button
       type="button"
@@ -241,6 +298,7 @@ function InboxCard({ k, count, hoursLeft, onOpen }: { k: InboxKey; count: number
             {hoursLeft === 0 ? 'Đơn cũ nhất đã quá hạn, sắp tự huỷ' : `Đơn cũ nhất còn ${hoursLeft} giờ trước khi tự huỷ`}
           </span>
         )}
+        {oldestAgeHours !== undefined && <span className="mt-0.5 block text-xs text-stone-600">Cũ nhất: {ageLabel(oldestAgeHours)}</span>}
       </span>
       <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-stone-500" />
     </button>

@@ -27,7 +27,7 @@ describe('trả một phần: voucher mốc và điểm khoá (real Postgres)', 
         SystemConfigService,
         LoyaltyService,
         VouchersService,
-        { provide: NotificationsService, useValue: { notify: async () => undefined } },
+        { provide: NotificationsService, useValue: { notify: async () => undefined, notifySafe: jest.fn().mockResolvedValue(true) } },
       ],
     }).compile();
     await moduleRef.init();

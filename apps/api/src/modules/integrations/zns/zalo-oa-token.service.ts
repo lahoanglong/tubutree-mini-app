@@ -5,9 +5,9 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import type { Env } from '../../../config/env.validation';
 import { needsRefresh, computeExpiresAt } from './zalo-oa-token.util';
 
-const K_ACCESS = 'zalo.oa_access_token';
+export const K_ACCESS = 'zalo.oa_access_token';
 const K_REFRESH = 'zalo.oa_refresh_token';
-const K_EXPIRES = 'zalo.oa_token_expires_at';
+export const K_EXPIRES = 'zalo.oa_token_expires_at';
 
 /**
  * Quản lý OA Access Token của Zalo (Build Spec §11). Access token hết hạn ~25h và refresh_token
@@ -75,9 +75,20 @@ export class ZaloOaTokenService {
         return false;
       }
       const expiresAt = computeExpiresAt(Number(data.expires_in), now);
-      await this.writeConfig(K_ACCESS, data.access_token);
-      await this.writeConfig(K_REFRESH, data.refresh_token); // refresh_token XOAY VÒNG → lưu cái mới
-      await this.writeConfig(K_EXPIRES, expiresAt);
+      // refresh_token XOAY VÒNG: Zalo đã vô hiệu cái cũ, nên cái mới ghi đầu tiên và cả ba khoá cùng thành công hoặc cùng hoàn lại.
+      try {
+        await this.prisma.$transaction([
+          this.upsertConfig(K_REFRESH, data.refresh_token),
+          this.upsertConfig(K_ACCESS, data.access_token),
+          this.upsertConfig(K_EXPIRES, expiresAt),
+        ]);
+      } catch (e) {
+        this.logger.error(
+          `Zalo OA đã cấp token mới nhưng ghi DB lỗi (${(e as Error).message}). Refresh token mới kết thúc bằng "${data.refresh_token.slice(-6)}": ` +
+            'lấy lại token ở developers.zalo.me nếu lượt làm mới sau vẫn lỗi.',
+        );
+        return false;
+      }
       this.logger.log(`Zalo OA token đã làm mới (hết hạn ${expiresAt}).`);
       return true;
     } catch (e) {
@@ -91,8 +102,8 @@ export class ZaloOaTokenService {
     return typeof row?.value === 'string' ? row.value : '';
   }
 
-  private async writeConfig(key: string, value: string): Promise<void> {
-    await this.prisma.systemConfig.upsert({
+  private upsertConfig(key: string, value: string) {
+    return this.prisma.systemConfig.upsert({
       where: { key },
       update: { value, updatedBy: 'system' },
       create: { key, value, category: 'zalo', updatedBy: 'system' },

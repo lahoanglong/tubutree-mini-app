@@ -46,6 +46,24 @@ const req = (over: Partial<AdminDeletionRequest> = {}): AdminDeletionRequest => 
 });
 
 describe('AccountDeletionPanel (C-016)', () => {
+  it('mở từ thẻ Hôm nay (seed > 0): cuộn tới khối yêu cầu xoá tài khoản và quay về hàng chờ xử lý; không seed thì không cuộn', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const api = mockFetch({ '/admin/account-deletion-requests': { body: [req()] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const plain = mount(<AccountDeletionPanel />);
+    await flush();
+    expect(scroll).not.toHaveBeenCalled();
+    plain.unmount();
+    mounted = [];
+
+    const { container } = mount(<AccountDeletionPanel seed={1} />);
+    await flush();
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.contexts[0]).toBe(container.querySelector('#account-deletions'));
+    expect(container.querySelector('[role="tab"][aria-selected="true"]')!.textContent).toBe('Chờ xử lý');
+  });
+
   it('khách đã đồng ý bỏ số dư Ví: admin thấy số tiền và thời điểm đồng ý', async () => {
     const api = mockFetch({
       '/admin/account-deletion-requests': { body: [req({ walletForfeitAmount: 42000, walletForfeitConsentAt: '2026-10-25T03:00:00.000Z' })] },

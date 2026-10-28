@@ -36,7 +36,7 @@ describe('Admin confirm-payment race (real Postgres)', () => {
       grantReferralReward: jest.fn().mockResolvedValue(undefined),
       reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
     } as unknown as AffiliateService;
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     const reversal = new OrderReversalService(
       { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService,
       { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService,
@@ -199,7 +199,7 @@ describe('Admin confirm-payment race (real Postgres)', () => {
   });
   describe('tiền về muộn: mỗi lần chuyển chỉ thành MỘT khoản hoàn, dù ghi từ webhook Pancake hay admin (R2-ADMINOPS-3)', () => {
     const lateRefunds = (orderId: string) => prisma.orderCustomerRefund.findMany({ where: { orderId, kind: 'LATE_PAYMENT' } });
-    const ctx = () => ({ prisma, notifications: { notify }, logger: { warn: jest.fn(), log: jest.fn() } });
+    const ctx = () => ({ prisma, notifications: { notify, notifySafe: notify }, logger: { warn: jest.fn(), log: jest.fn() } });
     async function cancelledUnpaid(total = 300_000) {
       const { order } = await bankTransferOrder(total);
       return prisma.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });

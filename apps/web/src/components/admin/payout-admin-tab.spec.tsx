@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { PayoutAdminTab, PayoutRow } from './payout-admin-tab';
 import { OpsInboxTab } from './ops-inbox-tab';
-import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminPayout } from '@/lib/admin-client';
 
 /** Ô nhập theo chữ nhãn hiện của Field (tên truy cập lấy từ nhãn, không còn aria-label riêng). */
@@ -268,9 +268,9 @@ describe('Thuế TNCN trên lệnh rút và báo cáo tháng (SELLER-11)', () =>
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<PayoutAdminTab />);
     await flush();
-    const monthInput = container.querySelector<HTMLInputElement>('input[aria-label="Tháng báo cáo"]')!;
-    expect(monthInput.type).toBe('month');
-    typeInto(monthInput, '2026-10');
+    expect(container.querySelector('input[type="month"]')).toBeNull();
+    selectValue(container.querySelector('select[aria-label="Tháng báo cáo: năm"]'), '2026');
+    selectValue(container.querySelector('select[aria-label="Tháng báo cáo: tháng"]'), '10');
     await flush();
     expect(api.calls.some((c) => c.url.includes('/admin/payouts/pit-report?month=2026-10'))).toBe(true);
     const region = container.querySelector('[aria-label="Báo cáo khấu trừ thuế TNCN theo người nhận"]')!;

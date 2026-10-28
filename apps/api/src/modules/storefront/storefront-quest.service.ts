@@ -91,7 +91,7 @@ export class StorefrontQuestService {
     const items = sf.collections.flatMap((c) => c.items);
     const itemsTotal = items.length;
     const itemsWithNote = items.filter((i) => i.note && i.note.trim().length > 0).length;
-    const firstOrderCount = await this.prisma.commission.count({ where: { affiliateUserId: userId } });
+    const firstOrderCount = await this.prisma.commission.count({ where: { affiliateUserId: userId, status: { not: 'REJECTED' } } });
     const stats: QuestStats = {
       itemsTotal,
       itemsWithNote,

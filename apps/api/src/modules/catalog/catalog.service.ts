@@ -644,6 +644,7 @@ export class CatalogService {
     reviewCount: number;
     soldExternal: number;
     soldApp: number;
+    createdAt?: Date;
     variations: { id: string; sku: string; retailPrice: number; salePrice: number | null; stock: number }[];
   }) {
     return {
@@ -658,6 +659,7 @@ export class CatalogService {
       reviewCount: p.reviewCount,
       sold: (p.soldExternal ?? 0) + (p.soldApp ?? 0), // tổng "đã bán" (sàn ngoài + app)
       inStock: p.variations.some((v) => v.stock > 0),
+      createdAt: p.createdAt?.toISOString(),
     };
   }
 

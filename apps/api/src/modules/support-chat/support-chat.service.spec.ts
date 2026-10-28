@@ -27,6 +27,7 @@ function setup(opts: { enabled?: boolean; conv?: any; existing?: any; dayCount?:
       }),
     },
     supportRetiredCode: { findUnique: jest.fn().mockResolvedValue(null) },
+    notificationLog: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     supportBridgeStatus: { findUnique: jest.fn().mockResolvedValue(opts.bridge ?? null) },
     order: {
@@ -393,10 +394,38 @@ describe('unreadCount / markRead', () => {
       }
     });
 
+    it('đổi chuông trả lời CSKH của khách sang READ (chỉ SUPPORT_CHAT_REPLY, INAPP, đã gửi tới bây giờ), ở cả hai nhánh', async () => {
+      for (const arg of [{ ids: ['m1'] }, undefined]) {
+        const { svc, prisma } = setup();
+        await svc.markRead('u1', arg);
+        expect(prisma.notificationLog.updateMany).toHaveBeenCalledTimes(1);
+        expect(prisma.notificationLog.updateMany).toHaveBeenCalledWith({
+          where: { userId: 'u1', channel: 'INAPP', templateCode: 'SUPPORT_CHAT_REPLY', status: { not: 'READ' }, sentAt: { lte: expect.any(Date) } },
+          data: { status: 'READ' },
+        });
+      }
+    });
+
+    it('ids rỗng (khách chưa thấy tin nào) vẫn không bỏ sót chuông cũ, và không đụng thông báo của mẫu khác', async () => {
+      const { svc, prisma } = setup();
+      await svc.markRead('u1', { ids: [] });
+      const where = prisma.notificationLog.updateMany.mock.calls[0][0].where;
+      expect(where.templateCode).toBe('SUPPORT_CHAT_REPLY');
+      expect(where.userId).toBe('u1');
+    });
+
+    it('ghi chuông lỗi không làm markRead lỗi (các mốc đã đọc đã ghi xong)', async () => {
+      const { svc, prisma } = setup();
+      prisma.notificationLog.updateMany.mockRejectedValue(new Error('db'));
+      await expect(svc.markRead('u1', { ids: ['m1'] })).resolves.toEqual({ ok: true });
+      expect(prisma.supportConversation.updateMany).toHaveBeenCalled();
+    });
+
     it('khách chưa có hội thoại: không làm gì, không tạo', async () => {
       const { svc, prisma } = setup();
       prisma.supportConversation.findUnique.mockResolvedValue(null);
       expect(await svc.markRead('u1', { ids: ['m1'] })).toEqual({ ok: true });
+      expect(prisma.notificationLog.updateMany).not.toHaveBeenCalled();
       expect(prisma.supportMessage.updateMany).not.toHaveBeenCalled();
       expect(prisma.supportConversation.updateMany).not.toHaveBeenCalled();
       expect(prisma.supportConversation.create).not.toHaveBeenCalled();

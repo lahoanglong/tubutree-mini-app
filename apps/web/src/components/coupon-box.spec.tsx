@@ -220,6 +220,50 @@ describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/c
   });
 });
 
+describe('CouponBox — dòng thu gọn nói khách đang có mã dùng được (chỉ gợi ý, không tự áp)', () => {
+  const toggle = (box: HTMLElement) => box.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
+  const mountWith = async (preview: { addressId?: string; itemIds?: string[] } | undefined, currentCode: string | null = null) => {
+    const r = render(<CouponBox currentCode={currentCode} subtotal={300000} preview={preview} />);
+    mounted.push(r);
+    await flush(8);
+    return r.container;
+  };
+
+  it('có mã dùng được → "Bạn có N mã dùng được · giảm đến X" thay câu mời, không áp mã nào', async () => {
+    state.coupons = [c('GIAM30'), c('FS', { type: 'FREESHIP', value: 15000, maxDiscount: null }), c('BIG', { minOrder: 900000 })];
+    state.previews.mockResolvedValue([
+      { code: 'GIAM30', eligible: true, discount: 43800 },
+      { code: 'FS', eligible: true, discount: 0, freeshipSaving: 19000 },
+      { code: 'BIG', eligible: false, reason: 'Cần đơn tối thiểu', discount: 999000 },
+    ]);
+    const box = await mountWith({ addressId: 'a1' });
+    expect(toggle(box).textContent).toContain('Bạn có 2 mã dùng được · giảm đến 43.800đ');
+    expect(toggle(box).textContent).not.toContain('Chọn hoặc nhập mã giảm giá');
+    expect(toggle(box).textContent).toContain('Chọn mã');
+    expect(state.applied).toEqual([]);
+  });
+
+  it('không mã nào dùng được, đang tải hoặc lỗi → giữ câu cũ', async () => {
+    state.coupons = [c('BIG', { minOrder: 900000 })];
+    state.previews.mockResolvedValue([{ code: 'BIG', eligible: false, reason: 'x', discount: 9 }]);
+    expect(toggle(await mountWith({ addressId: 'a1' })).textContent).toContain('Chọn hoặc nhập mã giảm giá');
+    state.previews.mockRejectedValue(new Error('404'));
+    expect(toggle(await mountWith({ addressId: 'a1' })).textContent).toContain('Chọn hoặc nhập mã giảm giá');
+    state.previews.mockReturnValue(new Promise(() => {}));
+    const loading = toggle(await mountWith({ addressId: 'a1' }));
+    expect(loading.textContent).toContain('Chọn hoặc nhập mã giảm giá');
+    expect(loading.textContent).not.toContain('mã dùng được');
+  });
+
+  it('giỏ đã có mã: không hỏi xem trước thừa khi dòng đang thu gọn', async () => {
+    state.coupons = [c('GIAM30')];
+    state.previews.mockResolvedValue([{ code: 'GIAM30', eligible: true, discount: 43800 }]);
+    const box = await mountWith({ addressId: 'a1' }, 'XANH10');
+    expect(state.previews).not.toHaveBeenCalled();
+    expect(box.textContent).not.toContain('mã dùng được');
+  });
+});
+
 // D7 việc 4: ô mã giảm giá gọn một dòng, mở rộng khi bấm (trước đây danh sách voucher chiếm cả màn hình điện thoại).
 describe('CouponBox — gọn một dòng, mở khi bấm', () => {
   const toggle = (box: HTMLElement) => box.querySelector<HTMLButtonElement>('button[aria-expanded]')!;

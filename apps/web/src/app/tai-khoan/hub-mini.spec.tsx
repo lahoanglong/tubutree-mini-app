@@ -45,7 +45,7 @@ import { ApiError } from '@/lib/client-api';
 const defaults = (): Record<string, () => unknown> => ({
   '/me/loyalty': () => ({ tier: { name: 'Hạt Giống' }, pointsBalance: 1800, pointsConvertedBalance: 0 }),
   '/me/coupons': () => [{ id: 'c1' }, { id: 'c2' }],
-  '/me/notifications': () => [{ id: 'n1', status: 'SENT' }, { id: 'n2', status: 'READ' }, { id: 'n3', status: 'FAILED' }],
+  '/me/notifications/unread-count': () => ({ count: 2 }),
   '/config/public': () => ({ aiAdvisorEnabled: false, loyalty: { marketplaceClaimEnabled: false } }),
   '/brand/owner/me': () => {
     throw new ApiError('Không tìm thấy', 404);

@@ -119,6 +119,17 @@ describe('BrandService.getPublicBySlug', () => {
     }));
   });
 
+  it('thẻ SP trang nhãn có createdAt dạng ISO (select thêm cột, không thêm truy vấn)', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: [], isVerified: false, followerCount: 0 });
+    prisma.product.findMany.mockResolvedValue([
+      { id: 'p1', name: 'Mới về', slug: 'p1', thumbnail: null, basePrice: 1, salePrice: null, ratingAvg: 0, reviewCount: 0, soldExternal: 0, soldApp: 0, createdAt: new Date('2026-10-20T03:00:00.000Z'), variations: [] },
+    ]);
+    const out = await new BrandService(prisma, brandConfig).getPublicBySlug('sachi', NOW);
+    expect(out.products[0]!.createdAt).toBe('2026-10-20T03:00:00.000Z');
+    expect(prisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({ createdAt: true }) }));
+  });
+
   it('SP chỉ còn tồn kho ở variation ngừng bán → inStock=false (DB lọc isActive nên mảng rỗng)', async () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: [], isVerified: false, followerCount: 0 });

@@ -5,11 +5,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createAdminSeason, deleteAdminSeason, listAdminSeasons, type AdminSeason } from '@/lib/admin-client';
 import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
+import { VnDateInput } from './vn-date-input';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, INPUT_CLASS, Field, LoadError } from './ui';
 
 const STATUS_TEXT: Record<AdminSeason['status'], string> = { ACTIVE: 'Đang chạy', UPCOMING: 'Sắp tới', ENDED: 'Đã hết hạn' };
 
-/** Ngày chọn trên ô date là ngày giờ VN: bắt đầu từ 00:00, kết thúc hết 23:59:59 ngày đó. */
+/** Ngày chọn trên ô ngày là ngày giờ VN: bắt đầu từ 00:00, kết thúc hết 23:59:59 ngày đó. */
 export const seasonDayStart = (day: string) => new Date(`${day}T00:00:00+07:00`).toISOString();
 export const seasonDayEnd = (day: string) => new Date(`${day}T23:59:59+07:00`).toISOString();
 
@@ -20,7 +21,9 @@ export function SeasonAdmin() {
   const seasonsQ = useQuery({ queryKey: ['admin-seasons'], queryFn: listAdminSeasons });
   const [f, setF] = useState({ name: '', theme: '', region: '', start: '', end: '' });
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const valid = f.name.trim() !== '' && f.start !== '' && f.end !== '' && f.end >= f.start;
+  const [startPending, setStartPending] = useState(false);
+  const [endPending, setEndPending] = useState(false);
+  const valid = f.name.trim() !== '' && f.start !== '' && f.end !== '' && f.end >= f.start && !startPending && !endPending;
   const create = useMutation({
     mutationFn: () =>
       createAdminSeason({ name: f.name.trim(), theme: f.theme.trim() || null, region: f.region.trim() || null, startAt: seasonDayStart(f.start), endAt: seasonDayEnd(f.end) }),
@@ -77,10 +80,10 @@ export function SeasonAdmin() {
         </Field>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Từ ngày">
-            <input name="season-start" type="date" value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })} className={INPUT_CLASS} />
+            <VnDateInput ariaLabel="Từ ngày" value={f.start} onChange={(v) => setF({ ...f, start: v })} onPendingChange={setStartPending} className={INPUT_CLASS} />
           </Field>
           <Field label="Đến hết ngày">
-            <input name="season-end" type="date" value={f.end} onChange={(e) => setF({ ...f, end: e.target.value })} className={INPUT_CLASS} />
+            <VnDateInput ariaLabel="Đến hết ngày" value={f.end} min={f.start || undefined} onChange={(v) => setF({ ...f, end: v })} onPendingChange={setEndPending} className={INPUT_CLASS} />
           </Field>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:col-span-2">

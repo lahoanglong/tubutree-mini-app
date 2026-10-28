@@ -119,11 +119,12 @@ describe('/gio-hang — thẻ mã giảm giá như Mini App', () => {
 });
 
 describe('/gio-hang — thanh dính đáy như Mini App', () => {
-  it('đủ freeship: "Bạn được miễn phí giao hàng 🌿", tạm tính (đã giảm, chưa gồm phí giao hàng), một nút "Thanh toán (2)", không có Tổng cộng', async () => {
+  it('đủ freeship: "Bạn được miễn phí giao hàng 🌿", tạm tính (chưa gồm phí giao hàng, không ghi "đã giảm" khi chưa có giảm), một nút "Thanh toán (2)", không có Tổng cộng', async () => {
     const c = await mount();
     const b = bar(c).textContent!;
     expect(b).toContain('Bạn được miễn phí giao hàng 🌿');
-    expect(b).toContain('Tạm tính (đã giảm)');
+    expect(b).toContain('Tạm tính');
+    expect(b).not.toContain('đã giảm');
     expect(b).toContain('578.000đ');
     expect(b).not.toContain('Tổng cộng');
     expect(bar(c).querySelector('a[href="/thanh-toan"]')!.textContent).toBe('Thanh toán (2)');
@@ -172,6 +173,7 @@ describe('/gio-hang — thanh dính đáy như Mini App', () => {
     state.cart = cartOf([line({})], { discount: 50000, couponCode: 'XANH50' });
     const c = await mount();
     const b = bar(c).textContent!;
+    expect(b).toContain('Tạm tính (đã giảm)');
     expect(b).toContain('Giảm giá');
     expect(b).toContain('-50.000đ');
     expect(b).toContain('528.000đ');

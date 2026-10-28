@@ -52,6 +52,16 @@ describe('storefront — đúng route, query, body', () => {
       { method: 'delete', path: '/storefront/me/collections/c1' },
     ],
     [
+      'reorderCollections',
+      (h) => s.reorderCollections(h, ['c2', 'c1']),
+      { method: 'post', path: '/storefront/me/collections/reorder', body: { orderedIds: ['c2', 'c1'] } },
+    ],
+    [
+      'reorderItems',
+      (h) => s.reorderItems(h, 'c1', ['i2', 'i1']),
+      { method: 'post', path: '/storefront/me/collections/c1/items/reorder', body: { orderedIds: ['i2', 'i1'] } },
+    ],
+    [
       'addItem',
       (h) => s.addItem(h, 'c1', { productId: 'p1', note: 'n' }),
       {

@@ -25,11 +25,18 @@ export class ZaloOaMessageClient {
       return false;
     }
     try {
-      await axios.post(
+      const res = await axios.post(
         this.baseUrl,
         { recipient: { user_id: zaloUserId }, message: { text } },
         { headers: { access_token: accessToken }, timeout: 10000 },
       );
+      // Zalo trả HTTP 200 kèm lỗi nghiệp vụ trong body (hết cửa sổ 48h, token hết hạn...): chỉ `error === 0` là đã gửi.
+      const body = (res?.data ?? {}) as { error?: unknown; message?: unknown };
+      const code = typeof body.error === 'string' && body.error.trim() !== '' ? Number(body.error) : body.error;
+      if (code !== 0) {
+        this.logger.error(`Zalo OA không gửi được tin CSKH: mã ${code ?? 'n/a'} — ${typeof body.message === 'string' && body.message ? body.message : 'không có thông điệp'}`);
+        return false;
+      }
       return true;
     } catch (err) {
       this.logger.error(`Gửi tin CSKH Zalo OA thất bại: ${err instanceof Error ? err.message : String(err)}`);

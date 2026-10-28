@@ -29,7 +29,7 @@ describe('điểm hoàn khi huỷ đơn có hạn (real Postgres)', () => {
         SystemConfigService,
         LoyaltyService,
         LoyaltyExpiryService,
-        { provide: NotificationsService, useValue: { notify: async () => undefined } },
+        { provide: NotificationsService, useValue: { notify: async () => undefined, notifySafe: jest.fn().mockResolvedValue(true) } },
       ],
     }).compile();
     await moduleRef.init();

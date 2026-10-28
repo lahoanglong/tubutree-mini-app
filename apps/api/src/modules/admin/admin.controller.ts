@@ -321,6 +321,8 @@ export class ListOrdersQuery extends PaginationQuery {
   @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
   /** Id CTV / người giới thiệu (chọn từ ô tìm khách). */
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
+  /** Id khách đặt đơn (từ hồ sơ khách: "Xem tất cả đơn"). */
+  @IsOptional() @IsString() @MaxLength(64) userId?: string;
   /** Slug hoặc subdomain của gian hàng được ghi công. */
   @IsOptional() @IsString() @MaxLength(100) storefront?: string;
   /** Thứ tự theo ngày đặt; mặc định mới nhất trước. */
@@ -341,6 +343,7 @@ export class ExportOrdersQuery {
   @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
   @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
   @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
+  @IsOptional() @IsString() @MaxLength(64) userId?: string;
   @IsOptional() @IsString() @MaxLength(100) storefront?: string;
 }
 
@@ -490,13 +493,14 @@ export class AdminController {
   @AllowStaff('CSKH', 'KHO', 'KE_TOAN')
   @Get('orders')
   orders(@Query() q: ListOrdersQuery, @CurrentUser() viewer: JwtPayload) {
-    const { kind, payment, platform, queue, referrerUserId, storefront, order } = q;
+    const { kind, payment, platform, queue, referrerUserId, userId, storefront, order } = q;
     return this.admin.listOrders(q.page, q.limit, q.status, q.search, q.recycling, q.invoice, q.pancake, q.from, q.to, viewer, {
       kind,
       payment,
       platform,
       queue,
       referrerUserId,
+      userId,
       storefront,
       order,
     });

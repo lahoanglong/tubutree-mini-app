@@ -109,6 +109,12 @@ describe('ZaloOaEventsProcessor.process', () => {
     });
   });
 
+  it('Zalo báo lỗi trong body (client trả false) → không bao giờ ghi REPLIED', async () => {
+    const { proc, update } = setup({ matched: TEMPLATE, sendResult: false });
+    await proc.process({ data: { eventId: 'evt1' } } as never);
+    expect(update.mock.calls.map(([a]) => a.data.status)).not.toContain('REPLIED');
+  });
+
   it('lỗi bất ngờ trong lúc xử lý → không throw ra ngoài worker (best-effort, không retry)', async () => {
     const { proc, cskh, update } = setup({});
     (cskh.matchTemplate as jest.Mock).mockRejectedValue(new Error('DB down'));

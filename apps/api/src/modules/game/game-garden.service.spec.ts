@@ -5,6 +5,21 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import { startOfVnDay, startOfVnMonth } from '../../common/vn-time';
 
+/** Câu đếm mã thu hoạch ($queryRaw trên coupons): nhận theo SQL để không lẫn với các $queryRaw khác. */
+const isHarvestCountSql = (q: unknown): q is Prisma.Sql =>
+  typeof q === 'object' && q !== null && String((q as { sql?: unknown }).sql).includes('FROM "coupons"');
+/** Số mã thu hoạch đã cấp trong ngày / trong tháng mà câu đếm trả về (mặc định không có mã nào). */
+function harvestCounts(prisma: PrismaService, day: number, month = day) {
+  const raw = prisma.$queryRaw as jest.Mock;
+  const other = raw.getMockImplementation();
+  raw.mockImplementation((q: unknown, ...rest: unknown[]) =>
+    isHarvestCountSql(q) ? Promise.resolve([{ day: BigInt(day), month: BigInt(month) }]) : other?.(q, ...rest),
+  );
+}
+/** Câu đếm đã chạy: values = [mốc ngày, mốc tháng, userId, ...tiền tố mã]. */
+const harvestCountSql = (prisma: PrismaService): Prisma.Sql =>
+  (prisma.$queryRaw as jest.Mock).mock.calls.map((c) => c[0]).find(isHarvestCountSql) as Prisma.Sql;
+
 /** Config mock: override theo key, fallback nếu không có. */
 function makeConfig(overrides: Record<string, unknown> = {}): SystemConfigService {
   return {
@@ -27,7 +42,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
       update: jest.fn().mockResolvedValue({}),
     },
     user: { findUnique: jest.fn().mockResolvedValue({ zaloId: 'z1', phone: null }) },
-    coupon: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
+    coupon: { create: jest.fn().mockResolvedValue({}) },
+    $queryRaw: jest.fn().mockResolvedValue([{ day: BigInt(0), month: BigInt(0) }]),
     plantedTree: { create: jest.fn().mockResolvedValue({}) },
   };
   base.$transaction = jest
@@ -318,9 +334,7 @@ describe('GameGardenService.waterPlot', () => {
       const prisma = makePrisma();
       (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(harvestPlot());
       const monthStart = startOfVnMonth().getTime();
-      (prisma.coupon.count as jest.Mock).mockImplementation(async ({ where }: { where: { startAt: { gte: Date } } }) =>
-        where.startAt.gte.getTime() === monthStart ? 4 : 0,
-      );
+      harvestCounts(prisma, 0, 4);
       const svc = new GameGardenService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 }));
       const r = await svc.waterPlot('u1', 'p1', 20);
       expect(r.harvested).toBe(true);
@@ -328,17 +342,13 @@ describe('GameGardenService.waterPlot', () => {
       expect(r.reward.coupon).toBeUndefined();
       expect(prisma.coupon.create).not.toHaveBeenCalled();
       expect(prisma.plantedTree.create).toHaveBeenCalledTimes(1);
-      const where = (prisma.coupon.count as jest.Mock).mock.calls.map((c) => c[0].where).find((w) => w.startAt.gte.getTime() === monthStart);
-      expect(where.OR).toEqual([{ code: { startsWith: 'HARVEST' } }, { code: { startsWith: 'GARDEN' } }]);
+      expect(harvestCountSql(prisma).values).toEqual([startOfVnDay(), new Date(monthStart), 'u1', 'HARVEST%', 'GARDEN%']);
     });
 
     it('đủ trần ngày, tháng còn suất → couponCapped = DAY', async () => {
       const prisma = makePrisma();
       (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(harvestPlot());
-      const monthStart = startOfVnMonth().getTime();
-      (prisma.coupon.count as jest.Mock).mockImplementation(async ({ where }: { where: { startAt: { gte: Date } } }) =>
-        where.startAt.gte.getTime() === monthStart ? 0 : 1,
-      );
+      harvestCounts(prisma, 1, 0);
       const r = await new GameGardenService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 1 })).waterPlot('u1', 'p1', 20);
       expect(r.couponCapped).toBe('DAY');
       expect(prisma.coupon.create).not.toHaveBeenCalled();
@@ -347,7 +357,7 @@ describe('GameGardenService.waterPlot', () => {
     it('đủ cả trần ngày lẫn trần tháng → MONTH (tháng được xét trước ngày)', async () => {
       const prisma = makePrisma();
       (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(harvestPlot());
-      (prisma.coupon.count as jest.Mock).mockResolvedValue(9);
+      harvestCounts(prisma, 9);
       const r = await new GameGardenService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 1 })).waterPlot('u1', 'p1', 20);
       expect(r.couponCapped).toBe('MONTH');
     });
@@ -409,7 +419,7 @@ describe('GameGardenService.waterPlot', () => {
   it('đã đạt trần coupon/ngày (kể cả trần đến từ lô nhà HARVEST-prefix) → vẫn thu hoạch nhưng KHÔNG cấp thêm coupon', async () => {
     const prisma = makePrisma();
     (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(plotRow({ progress: 0, target: 30, treesPlanted: 0 }));
-    (prisma.coupon.count as jest.Mock).mockResolvedValue(3); // đã đủ trần mặc định (3/ngày), kể cả do lô nhà cấp
+    harvestCounts(prisma, 3); // đã đủ trần mặc định (3/ngày), kể cả do lô nhà cấp
     const svc = new GameGardenService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 }));
     const r = await svc.waterPlot('u1', 'p1', 70); // 70/30 = 2 lần harvest
     expect(r.harvested).toBe(true);
@@ -418,14 +428,13 @@ describe('GameGardenService.waterPlot', () => {
     expect(prisma.coupon.create).not.toHaveBeenCalled();
     expect(r.reward.coupon).toBeUndefined();
     // Đếm trần phải gộp cả 2 tiền tố coupon (lô nhà + lô phụ) — nếu không sẽ lọt lưới an toàn.
-    const countArgs = (prisma.coupon.count as jest.Mock).mock.calls[0][0];
-    expect(countArgs.where.OR).toEqual([{ code: { startsWith: 'HARVEST' } }, { code: { startsWith: 'GARDEN' } }]);
+    expect((harvestCountSql(prisma).values as string[]).slice(2)).toEqual(['u1', 'HARVEST%', 'GARDEN%']);
   });
 
   it('còn dưới trần → cấp coupon tới khi CHẠM trần trong CÙNG 1 lần tưới, phần sau đó thì thôi', async () => {
     const prisma = makePrisma();
     (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(plotRow({ progress: 0, target: 30, treesPlanted: 0 }));
-    (prisma.coupon.count as jest.Mock).mockResolvedValue(2); // còn đúng 1 suất trước khi chạm trần 3
+    harvestCounts(prisma, 2); // còn đúng 1 suất trước khi chạm trần 3
     const svc = new GameGardenService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 }));
     const r = await svc.waterPlot('u1', 'p1', 70); // 2 lần harvest trong lần gọi này
     expect(r.treesPlanted).toBe(2);
@@ -470,7 +479,7 @@ describe('GameGardenService — ngày 1 giờ VN và khách vãng lai', () => {
     freezeNow('2026-10-31T20:00:00Z'); // 03:00 ngày 1/11 giờ VN
     const prisma = makePrisma();
     (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(plotRow({ progress: 590, target: 600, treesPlanted: 2 }));
-    (prisma.coupon.count as jest.Mock).mockResolvedValue(3);
+    harvestCounts(prisma, 3);
     const r = await new GameGardenService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 })).waterPlot('u1', 'p1', 20);
     expect(startOfVnMonth().getTime()).toBe(startOfVnDay().getTime());
     expect(r.couponCapped).toBe('DAY');

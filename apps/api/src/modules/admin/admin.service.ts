@@ -851,7 +851,8 @@ export class AdminService {
 
   /**
    * Số của trang "Hôm nay": cùng định nghĩa với trang Báo cáo doanh thu cho cùng khoảng ngày giờ VN (đếm mọi đơn, doanh thu =
-   * đơn đã thu trừ hoàn một phần đã duyệt, khách mới theo NEW_CUSTOMER_SQL). Hôm nay, hôm qua và 7 ngày gần nhất (gồm hôm nay).
+   * đơn đã thu trừ hoàn một phần đã duyệt, giá trị đơn đặt (gmv) theo GMV_ORDER_SQL, khách mới theo NEW_CUSTOMER_SQL). Hôm nay,
+   * hôm qua và 7 ngày gần nhất (gồm hôm nay). Đơn COD vừa đặt chưa giao thì có trong gmv mà chưa có trong doanh thu.
    */
   async getTodaySummary(now = new Date()) {
     const dayStart = startOfVnDay(now);
@@ -860,14 +861,27 @@ export class AdminService {
     const weekStart = new Date(dayStart.getTime() - 6 * 86_400_000);
     const [rows, users] = await Promise.all([
       this.prisma.$queryRaw<
-        { orders_today: number; orders_yesterday: number; orders_week: number; rev_today: bigint | null; rev_yesterday: bigint | null; rev_week: bigint | null }[]
+        {
+          orders_today: number;
+          orders_yesterday: number;
+          orders_week: number;
+          rev_today: bigint | null;
+          rev_yesterday: bigint | null;
+          rev_week: bigint | null;
+          gmv_today: bigint | null;
+          gmv_yesterday: bigint | null;
+          gmv_week: bigint | null;
+        }[]
       >`
         SELECT (COUNT(*) FILTER (WHERE o."createdAt" >= ${dayStart}))::int AS orders_today,
                (COUNT(*) FILTER (WHERE o."createdAt" >= ${yesterdayStart} AND o."createdAt" < ${dayStart}))::int AS orders_yesterday,
                COUNT(*)::int AS orders_week,
                COALESCE(SUM(o.total - COALESCE(pr.refund, 0)) FILTER (WHERE ${REVENUE_ORDER_SQL} AND o."createdAt" >= ${dayStart}), 0) AS rev_today,
                COALESCE(SUM(o.total - COALESCE(pr.refund, 0)) FILTER (WHERE ${REVENUE_ORDER_SQL} AND o."createdAt" >= ${yesterdayStart} AND o."createdAt" < ${dayStart}), 0) AS rev_yesterday,
-               COALESCE(SUM(o.total - COALESCE(pr.refund, 0)) FILTER (WHERE ${REVENUE_ORDER_SQL}), 0) AS rev_week
+               COALESCE(SUM(o.total - COALESCE(pr.refund, 0)) FILTER (WHERE ${REVENUE_ORDER_SQL}), 0) AS rev_week,
+               COALESCE(SUM(o.total) FILTER (WHERE ${GMV_ORDER_SQL} AND o."createdAt" >= ${dayStart}), 0) AS gmv_today,
+               COALESCE(SUM(o.total) FILTER (WHERE ${GMV_ORDER_SQL} AND o."createdAt" >= ${yesterdayStart} AND o."createdAt" < ${dayStart}), 0) AS gmv_yesterday,
+               COALESCE(SUM(o.total) FILTER (WHERE ${GMV_ORDER_SQL}), 0) AS gmv_week
           FROM orders o
           LEFT JOIN LATERAL (
             SELECT SUM(r."refundAmount" + r."shippingRefund") AS refund
@@ -887,6 +901,7 @@ export class AdminService {
     return {
       orders: { today: r?.orders_today ?? 0, yesterday: r?.orders_yesterday ?? 0, week: r?.orders_week ?? 0 },
       revenue: { today: Number(r?.rev_today ?? 0), yesterday: Number(r?.rev_yesterday ?? 0), week: Number(r?.rev_week ?? 0) },
+      gmv: { today: Number(r?.gmv_today ?? 0), yesterday: Number(r?.gmv_yesterday ?? 0), week: Number(r?.gmv_week ?? 0) },
       newUsers: { today: u?.today ?? 0, yesterday: u?.yesterday ?? 0, week: u?.week ?? 0 },
     };
   }
@@ -1239,10 +1254,43 @@ export class AdminService {
   private async resolveOrderRef(idOrCode: string) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
-      select: { id: true, code: true, gomdonStatus: true, gomdonPartnerCode: true },
+      select: { id: true, code: true, status: true, reversalEffectsAt: true, gomdonStatus: true, gomdonPartnerCode: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     return order;
+  }
+
+  /**
+   * Vết "Đã xử lý" trong lịch sử đơn (cùng trạng thái, khách không thấy: dòng giờ hành trình bỏ dòng cùng trạng thái). Việc đã đóng
+   * xong, nên ghi vết lỗi chỉ cảnh báo chứ không làm hỏng thao tác.
+   */
+  private async logHandledInHistory(
+    adminId: string,
+    order: { id: string; code: string; status: OrderStatus; reversalEffectsAt?: Date | null },
+    what: string,
+    note?: string,
+  ) {
+    // Đơn đã huỷ/trả mà phần đảo sau commit chưa xong: cron chạy lại (resyncReversalEffects) lấy dòng lịch sử MỚI NHẤT có toStatus = trạng
+    // thái đơn làm "dòng đóng đơn" để biết ai đóng và gửi tin từ lúc nào. Một dòng cùng trạng thái của admin chen vào sẽ làm cron gửi
+    // lại tin huỷ/trả, nhầm người huỷ, hoặc xếp huỷ Pancake lần nữa — nên chưa ghi, chỉ để lại log.
+    if ((order.status === 'CANCELLED' || order.status === 'RETURNED') && !order.reversalEffectsAt) {
+      this.logger.warn(`Đơn ${order.code} ${order.status} chưa xong phần đảo sau huỷ/trả: không ghi dòng "đã xử lý" vào lịch sử để cron chạy lại không nhầm dòng đóng đơn.`);
+      return;
+    }
+    try {
+      await this.prisma.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          fromStatus: order.status,
+          toStatus: order.status,
+          actorType: 'ADMIN',
+          actorId: adminId,
+          note: `${what}${note ? ` — ${note}` : ''}`.slice(0, 1000),
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Không ghi được lịch sử "đã xử lý" của đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   async retryGomdonPush(adminId: string, idOrCode: string, confirmedNoWaybill?: boolean) {
@@ -1319,7 +1367,7 @@ export class AdminService {
   async resolvePancakeAttention(adminId: string, idOrCode: string, note?: string) {
     const order = await this.prisma.order.findFirst({
       where: { OR: [{ id: idOrCode }, { code: idOrCode }] },
-      select: { id: true, code: true, pancakeAttention: true },
+      select: { id: true, code: true, status: true, reversalEffectsAt: true, pancakeAttention: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
     // Việc hoàn tiền COD trả hàng do Kế toán quyết ở mục "Hoàn tiền khách" (để lại vết trong lịch sử đơn); nhân viên kho bấm
@@ -1343,6 +1391,7 @@ export class AdminService {
       `Admin ${adminId} đánh dấu đã xử lý việc Pancake của đơn ${order.code}: "${order.pancakeAttention ?? ''}"` +
         `${cleanNote ? ` — ghi chú: ${cleanNote}` : ''}.`,
     );
+    await this.logHandledInHistory(adminId, order, `Đã xử lý việc Pancake: ${order.pancakeAttention ?? ''}`.trimEnd(), cleanNote);
     return { ok: true, message: `Đơn ${order.code} đã rời hàng đợi cần xử lý Pancake.` };
   }
 
@@ -1355,6 +1404,7 @@ export class AdminService {
         `Admin ${adminId} đánh dấu "Đã xử lý tay" vận đơn thu gom đơn ${order.code} (trạng thái trước: ${res.previousStatus})` +
           `${cleanNote ? ` — ghi chú: ${cleanNote}` : ''}.`,
       );
+      await this.logHandledInHistory(adminId, order, `Đã xử lý việc thu gom: ${res.previousStatus}`, cleanNote);
       return res;
     } catch (err) {
       this.logger.warn(
