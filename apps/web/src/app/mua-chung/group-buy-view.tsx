@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Share2 } from 'lucide-react';
 import { joinGroupBuy, type GroupBuy } from '@tubutree/app-core/api/groupbuy';
-import { groupMemberStatus, groupMissing, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
+import { groupMemberStatus, groupMissing, groupMissingLine, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
 import { groupBuyListQuery, groupBuyOneQuery } from '@tubutree/app-core/queries/groupbuy';
 import { EmptyState } from '@/components/empty-state';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
@@ -194,6 +194,7 @@ function GroupCard({
   const label = !isOpen ? closedLabel : !authed ? 'Đăng nhập để tham gia' : `Tham gia mua chung (−${g.discountPct}%)`;
   const prices = groupPriceLabels(g, formatVnd, useActiveFlashSales());
   const inOpenGroup = member && isOpen;
+  const missingLine = groupMissingLine(g);
 
   return (
     <article className={`${ui.card} flex flex-col p-3 max-md:border-0 max-md:shadow-[var(--elevation-1)]`}>
@@ -222,7 +223,11 @@ function GroupCard({
         <ProgressBar value={g.currentSize} max={g.targetSize} ariaLabel={`${g.product.name}: tiến độ nhóm mua chung`} />
       </div>
       {g.status !== 'SUCCESS' && (
-        <p className="mt-1.5 text-xs text-stone-700 max-md:text-[length:var(--type-caption-size)]">{groupRewardLine(g, formatVnd)}</p>
+        <div className="mt-1.5 text-xs text-stone-700 max-md:text-[length:var(--type-caption-size)]">
+          {/* Người đã ở trong nhóm có dòng trạng thái riêng bên dưới ("cần thêm N người"), không lặp ý. */}
+          {isOpen && !inOpenGroup && missingLine && <p className="font-semibold">{missingLine}</p>}
+          <p>{groupRewardLine(g, formatVnd)}</p>
+        </div>
       )}
       {g.status === 'SUCCESS' && member ? (
         <>

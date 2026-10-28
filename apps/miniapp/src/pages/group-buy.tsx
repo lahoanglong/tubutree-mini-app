@@ -1,7 +1,7 @@
 import { Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Share2 } from 'lucide-react';
-import { groupMemberStatus, groupMissing, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
+import { groupMemberStatus, groupMissing, groupMissingLine, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
 import { getGroupBuy, listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { fetchActiveFlashSales } from '../services/shop-api';
@@ -160,6 +160,7 @@ function GroupCard({
   const flash = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 }).data;
   const prices = groupPriceLabels(g, formatVnd, flash, serverNow());
   const inOpenGroup = member && isOpen;
+  const missingLine = groupMissingLine(g);
   return (
     <Card padding={12}>
       {invitedBanner && (
@@ -199,9 +200,17 @@ function GroupCard({
         <ProgressBar value={pct} max={100} ariaLabel={`${g.product.name}: tiến độ nhóm mua chung`} />
       </div>
       {g.status !== 'SUCCESS' && (
-        <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
-          {groupRewardLine(g, formatVnd)}
-        </Text>
+        <div style={{ marginTop: 6 }}>
+          {/* Người đã ở trong nhóm có dòng trạng thái riêng bên dưới ("cần thêm N người"), không lặp ý. */}
+          {isOpen && !inOpenGroup && missingLine && (
+            <Text variant="caption" tone="secondary" as="div" style={{ fontWeight: 600 }}>
+              {missingLine}
+            </Text>
+          )}
+          <Text variant="caption" tone="secondary" as="div">
+            {groupRewardLine(g, formatVnd)}
+          </Text>
+        </div>
       )}
       {g.status === 'SUCCESS' && member ? (
         <>

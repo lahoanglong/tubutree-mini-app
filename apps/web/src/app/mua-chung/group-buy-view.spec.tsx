@@ -129,14 +129,21 @@ describe('/mua-chung — danh sách nhóm', () => {
 
   it('nói rõ cơ chế: đủ người thì nhận mã giảm theo % của nhóm (mã giảm % trên biến thể khách mua, không phải số tiền cố định)', async () => {
     const c = await mount();
-    expect(c.textContent).toContain(`Đủ 5 người: mỗi người nhận mã giảm 20%, dùng cho đơn từ ${formatVnd(80_000)}`);
+    expect(c.textContent).toContain(`Đủ nhóm: mỗi người nhận mã giảm 20% cho đơn từ ${formatVnd(80_000)}`);
     expect(c.textContent).not.toContain(`mã giảm ${formatVnd(20_000)}`);
+  });
+
+  it('E-100: "Còn thiếu N người" là dòng riêng, tách khỏi điều nhận được khi đủ nhóm; người đã trong nhóm có dòng trạng thái riêng nên không lặp', async () => {
+    const c = await mount();
+    // Nhóm a chưa tham gia (2/5), nhóm b đã tham gia.
+    expect(c.textContent!.match(/Còn thiếu 3 người/g)).toHaveLength(1);
+    expect(c.textContent).toContain('Bạn đã ở trong nhóm · cần thêm 3 người');
   });
 
   it('Q18: đơn từ ghi đúng đơn tối thiểu của mã (minOrder) khi API trả, thiếu thì dùng giá nhóm', async () => {
     mocks.list = [GROUP('a', { unitPrice: 365_500, basePrice: 430_000, minOrder: 102_000, discountPct: 15 })];
     const c = await mount();
-    expect(c.textContent).toContain(`Đủ 5 người: mỗi người nhận mã giảm 15%, dùng cho đơn từ ${formatVnd(102_000)}`);
+    expect(c.textContent).toContain(`Đủ nhóm: mỗi người nhận mã giảm 15% cho đơn từ ${formatVnd(102_000)}`);
     expect(c.textContent).not.toContain(`dùng cho đơn từ ${formatVnd(365_500)}`);
   });
 
