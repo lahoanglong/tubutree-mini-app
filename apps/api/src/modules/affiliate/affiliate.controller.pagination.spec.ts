@@ -41,3 +41,43 @@ describe('AffiliateController.payout: hoa hồng chỉ chuyển vào Ví Tubu (c
     expect(affiliate.requestPayout).toHaveBeenCalledWith('u', 500_000, 'WALLET_BALANCE', undefined, 'k1', '0123456789');
   });
 });
+
+describe('AffiliateController.touch: nền tảng lấy từ header X-Client-Platform', () => {
+  it.each([
+    ['web', 'web'],
+    ['miniapp', 'miniapp'],
+    [undefined, 'miniapp'],
+    ['ios', 'miniapp'],
+  ])('header %s → recordTouch nhận %s', (header, expected) => {
+    const affiliate = { recordTouch: jest.fn() };
+    const dto = { referralCode: 'LINH', kind: 'ctv' };
+    new AffiliateController(affiliate as never).touch('u', dto, header);
+    expect(affiliate.recordTouch).toHaveBeenCalledWith('u', dto, undefined, expected);
+  });
+});
+
+describe('AffiliateController.commissions / myPayouts: phân trang con trỏ, không tham số thì như cũ', () => {
+  it('khai báo query bằng CursorPageQuery để tham số sai bị 400', () => {
+    for (const name of ['commissions', 'myPayouts']) {
+      expect(Reflect.getMetadata('design:paramtypes', AffiliateController.prototype, name) as unknown[]).toContain(CursorPageQuery);
+    }
+  });
+
+  it('commissions: không tham số → để service dùng mặc định 100; có take/cursor → chuyển xuống', () => {
+    const affiliate = { listCommissions: jest.fn() };
+    const c = new AffiliateController(affiliate as never);
+    c.commissions('u', {});
+    expect(affiliate.listCommissions).toHaveBeenLastCalledWith('u', { take: 100, cursor: undefined });
+    c.commissions('u', { take: '50', cursor: 'c1' });
+    expect(affiliate.listCommissions).toHaveBeenLastCalledWith('u', { take: 50, cursor: 'c1' });
+  });
+
+  it('myPayouts: không tham số → mặc định 50 như cũ; có take/cursor → chuyển xuống', () => {
+    const affiliate = { listMyPayouts: jest.fn() };
+    const c = new AffiliateController(affiliate as never);
+    c.myPayouts('u', {});
+    expect(affiliate.listMyPayouts).toHaveBeenLastCalledWith('u', { take: 50, cursor: undefined });
+    c.myPayouts('u', { take: '20', cursor: 'p1' });
+    expect(affiliate.listMyPayouts).toHaveBeenLastCalledWith('u', { take: 20, cursor: 'p1' });
+  });
+});

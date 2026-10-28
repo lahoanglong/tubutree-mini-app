@@ -14,6 +14,8 @@ import { CommissionStatus, Prisma, type PayoutStatus, type UserRole } from '@pri
 import { createHash, randomBytes } from 'node:crypto';
 import type { Env } from '../../config/env.validation';
 import { hashIp } from '../../common/ip-hash';
+import { notifyAdmins } from '../../common/notify-admins';
+import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { PricingService } from '../pricing/pricing.service';
@@ -132,6 +134,8 @@ export class AffiliateService {
     if (!canRegisterAsAffiliate(user.role)) {
       throw new BadRequestException('Tài khoản này không thể đăng ký CTV.');
     }
+    // Khách theo deviceId tạo được vô hạn: hoa hồng và Ví chỉ dành cho tài khoản đã có Zalo thật hoặc SĐT.
+    if (!isRealUser(user)) throw new BadRequestException(REAL_USER_REQUIRED_MSG);
     const data: Prisma.UserUpdateInput = {};
     if (user.role !== 'AFFILIATE') data.role = 'AFFILIATE';
     // Bằng chứng người dùng đã đồng ý điều khoản hoa hồng/thuế: ghi vào User.metadata (đã dùng cho
@@ -184,6 +188,7 @@ export class AffiliateService {
     userId: string,
     dto: { referralCode?: string; storefrontSlug?: string; kind?: string },
     now: Date = new Date(),
+    platform: 'miniapp' | 'web' = 'miniapp',
   ): Promise<{ ok: boolean }> {
     if (!dto.referralCode) return { ok: false };
     const referrerUserId = await this.findEligibleReferrer(dto.referralCode, userId);
@@ -206,7 +211,7 @@ export class AffiliateService {
     await this.analytics.recordBestEffort({
       eventName: 'referral_touched',
       userId,
-      platform: 'miniapp',
+      platform,
       // Không cần `?? null`: guard `if (!dto.referralCode) return` ở đầu hàm đã đảm bảo non-empty
       // string tới đây.
       refCode: dto.referralCode,
@@ -229,17 +234,18 @@ export class AffiliateService {
   async findEligibleReferrer(referralCode: string, buyerId: string): Promise<string | null> {
     const ref = await this.prisma.user.findUnique({
       where: { referralCode: referralCode.toUpperCase() },
-      select: { id: true, role: true, isBlocked: true, storefronts: SAMPLE_STOREFRONT_SELECT },
+      select: { id: true, role: true, isBlocked: true, mergedIntoId: true, storefronts: SAMPLE_STOREFRONT_SELECT },
     });
     // Tài khoản bị khoá không ghi công đơn mới; hoa hồng đã tạo cho đơn cũ giữ nguyên. Chủ gian hàng mẫu không nhận hoa hồng.
-    if (!ref || ref.id === buyerId || ref.isBlocked || ref.storefronts.length > 0) return null;
+    // Dòng khách đã gộp vào tài khoản khác (auth.service gộp bỏ lại vai trò CTV ở dòng cũ) không còn người dùng nên không ghi công.
+    if (!ref || ref.id === buyerId || ref.isBlocked || ref.mergedIntoId || ref.storefronts.length > 0) return null;
     return (await this.commissionEligibleRoles()).has(ref.role) ? ref.id : null;
   }
 
   /** Người dùng (chủ gian hàng CTV, người của "chạm") có thuộc vai trò được ghi công đơn không — checkout/attribution.ts. */
   async isCommissionEligible(userId: string): Promise<boolean> {
-    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, isBlocked: true, storefronts: SAMPLE_STOREFRONT_SELECT } });
-    return !!u && !u.isBlocked && u.storefronts.length === 0 && (await this.commissionEligibleRoles()).has(u.role);
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, isBlocked: true, mergedIntoId: true, storefronts: SAMPLE_STOREFRONT_SELECT } });
+    return !!u && !u.isBlocked && !u.mergedIntoId && u.storefronts.length === 0 && (await this.commissionEligibleRoles()).has(u.role);
   }
 
   /** Điều kiện khách thấy một gian hàng (storefront/storefront-visibility.ts) tính từ cấu hình hiện hành. */
@@ -400,11 +406,13 @@ export class AffiliateService {
     return { name: tier.name, emoji: tier.emoji };
   }
 
-  async listCommissions(userId: string) {
+  /** Mới nhất trước; mặc định 100 như trước khi có phân trang (client cũ không gửi tham số), tối đa 200 mỗi lần. */
+  async listCommissions(userId: string, opts: { take?: number; cursor?: string } = {}) {
     const rows = await this.prisma.commission.findMany({
       where: { affiliateUserId: userId },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: Math.min(Math.max(opts.take ?? 100, 1), 200),
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
       include: { order: { select: { code: true, status: true } } },
     });
     // SELLER-10: "Đang rút" = đã duyệt nhưng nằm trong lệnh rút ngân hàng chưa chuyển tiền (PAID chỉ khi admin xác nhận).
@@ -420,11 +428,12 @@ export class AffiliateService {
    * Lịch sử lệnh rút của CTV: trạng thái, lý do từ chối, mã giao dịch, thuế TNCN đã khấu trừ (SELLER-10, SELLER-11).
    * `taxWithheld` là thuế thực giữ (đã trừ phần hoàn về Ví, `taxRefunded`) để các màn cũ hiện đúng mà không phải sửa.
    */
-  async listMyPayouts(userId: string) {
+  async listMyPayouts(userId: string, opts: { take?: number; cursor?: string } = {}) {
     const rows = await this.prisma.payout.findMany({
       where: { userId },
-      orderBy: { requestedAt: 'desc' },
-      take: 50,
+      orderBy: [{ requestedAt: 'desc' }, { id: 'desc' }],
+      take: Math.min(Math.max(opts.take ?? 50, 1), 200),
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
       select: {
         id: true,
         amount: true,
@@ -1106,7 +1115,7 @@ export class AffiliateService {
     // → bỏ qua; đơn CTV lên-đơn-hộ (placedForCustomer=true) VẪN đảo bình thường.
     const order = await this.prisma.order.findUniqueOrThrow({
       where: { id: orderId },
-      select: { referrerUserId: true, userId: true, placedForCustomer: true },
+      select: { code: true, referrerUserId: true, userId: true, placedForCustomer: true },
     });
     if (!order.referrerUserId || (order.referrerUserId === order.userId && !order.placedForCustomer)) return;
 
@@ -1127,6 +1136,38 @@ export class AffiliateService {
           .notify(uid, CTV_NOTIFICATION.REVERSED, { amount: vnd(amount) })
           .catch((e: unknown) => this.logger.warn(`Báo thu hồi hoa hồng đơn ${orderId} lỗi: ${(e as Error).message}`));
       }
+    }
+    await this.alertPaidCommissionOfReversedOrder(orderId, order.code);
+  }
+
+  /**
+   * Hoa hồng đã duyệt hoặc đã chuyển vào Ví thì không còn đảo được ở đây (chỉ dòng chưa duyệt đổi thành REJECTED), mà đơn đã bị
+   * trả/huỷ: tiền CTV đã nhận không có nguồn. Việc thu hồi là quyết định của chủ nên chỉ báo kế toán; dedupeKey theo đơn vì
+   * setStatus được gọi lại khi một bước đảo khác lỗi.
+   */
+  private async alertPaidCommissionOfReversedOrder(orderId: string, orderCode: string): Promise<void> {
+    try {
+      const paid = await this.prisma.commission.findMany({
+        where: { orderId, status: { in: ['APPROVED', 'PAID'] } },
+        select: { amount: true, status: true, user: { select: { fullName: true, referralCode: true } } },
+      });
+      if (paid.length === 0) return;
+      const message = paid
+        .map((c) => `hoa hồng CTV ${c.user.fullName ?? c.user.referralCode} ${vnd(c.amount)} đã ${c.status === 'PAID' ? 'chuyển vào Ví' : 'duyệt'}`)
+        .join('; ');
+      this.logger.warn(`Đơn ${orderCode} bị trả/huỷ nhưng ${message}: cần kế toán xử lý.`);
+      const dedupeKey = `commission-paid-order-reversed:${orderId}`;
+      const notifications = this.notifications;
+      await notifyAdmins(
+        {
+          prisma: this.prisma,
+          notifications: notifications && { notify: (userId, code, data) => notifications.notify(userId, code, data, { dedupeKey }) },
+          logger: this.logger,
+        },
+        { template: 'OPS_REFUND_ALERT', subject: `hoa hồng đã duyệt/chuyển của đơn ${orderCode} bị trả`, data: () => ({ order_code: orderCode, message: `${message}, cần kế toán xử lý` }) },
+      );
+    } catch (e) {
+      this.logger.warn(`Báo kế toán hoa hồng đơn ${orderCode} lỗi: ${(e as Error).message}`);
     }
   }
 

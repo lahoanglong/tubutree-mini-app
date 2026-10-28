@@ -133,3 +133,28 @@ describe('StorefrontQuestService.claimQuest', () => {
     ]);
   });
 });
+
+describe('StorefrontQuestService: "Đơn hàng đầu tiên" không tính hoa hồng đã huỷ (REJECTED)', () => {
+  // count mô phỏng đúng điều kiện lọc status của Prisma (`not`) trên danh sách hoa hồng trong bộ nhớ.
+  function withCommissions(statuses: string[]) {
+    const { prisma, coins } = makeDeps();
+    prisma.storefront.findFirst.mockResolvedValue({ id: 'sf1', isPublished: false, collections: [] });
+    prisma.commission.count.mockImplementation(async ({ where }: { where: { affiliateUserId: string; status?: { not: string } } }) =>
+      statuses.filter((st) => where.affiliateUserId === 'u1' && (!where.status || st !== where.status.not)).length,
+    );
+    return { svc: new StorefrontQuestService(prisma, coins), coins };
+  }
+  const firstOrder = async (svc: StorefrontQuestService) => (await svc.listQuests('u1')).quests.find((q) => q.code === 'first_order')!;
+
+  it('chỉ có hoa hồng REJECTED → chưa xong, không nhận thưởng được', async () => {
+    const { svc, coins } = withCommissions(['REJECTED', 'REJECTED']);
+    expect((await firstOrder(svc)).done).toBe(false);
+    await expect(svc.claimQuest('u1', 'first_order')).rejects.toBeInstanceOf(BadRequestException);
+    expect(coins.grant).not.toHaveBeenCalled();
+  });
+
+  it.each(['PENDING', 'LOCKED', 'APPROVED', 'PAID'])('có hoa hồng %s → xong', async (status) => {
+    const { svc } = withCommissions(['REJECTED', status]);
+    expect((await firstOrder(svc)).done).toBe(true);
+  });
+});
