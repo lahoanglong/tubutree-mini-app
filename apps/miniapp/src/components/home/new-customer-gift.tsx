@@ -9,6 +9,7 @@ import { fetchOrders, getPublicConfig, type PublicConfig } from '../../services/
 import { useAuthStore } from '../../store/auth';
 import { isGuestUser } from '../../utils/guest-user';
 import { vi } from '../../i18n/vi';
+import { SUBSCRIPTIONS_IN_MINIAPP } from '../../utils/features';
 import { formatDate, formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
 import { earnPctOf, percentLabel } from '../../utils/loyalty-copy';
@@ -26,7 +27,7 @@ interface Benefit {
 }
 
 /**
- * 3 lợi ích mua trực tiếp, mọi con số lấy từ cấu hình công khai (không viết cứng ở đây). Thiếu số (API cũ chưa trả) thì bỏ
+ * Các lợi ích mua trực tiếp (giao hàng, điểm, và giảm khi đặt định kỳ nếu Mini App đang mở định kỳ), mọi con số lấy từ cấu hình công khai (không viết cứng ở đây). Thiếu số (API cũ chưa trả) thì bỏ
  * dòng đó thay vì hiện con số mặc định.
  */
 export function directBenefits(cfg: PublicConfig): Benefit[] {
@@ -44,7 +45,9 @@ export function directBenefits(cfg: PublicConfig): Benefit[] {
   if (cfg.loyalty && earnPct != null) {
     out.push({ icon: Leaf, text: vi.home.newGift.points(percentLabel(earnPct), formatVnd(cfg.loyalty.vndPerPointRedeem)) });
   }
-  out.push({ icon: CalendarClock, text: vi.home.newGift.subscribe(Math.round(cfg.subscribeDiscountPct * 100)) });
+  if (SUBSCRIPTIONS_IN_MINIAPP) {
+    out.push({ icon: CalendarClock, text: vi.home.newGift.subscribe(Math.round(cfg.subscribeDiscountPct * 100)) });
+  }
   return out;
 }
 
@@ -61,7 +64,7 @@ function voucherTitle(v: NonNullable<NewCustomerOffer['welcomeVoucher']>): strin
 }
 
 /**
- * Khối "Quà khách mới" ở Trang chủ (D2-07b): voucher chào mừng của khách (nếu có) và 3 lợi ích mua trực tiếp. Chỉ khách chưa có
+ * Khối "Quà khách mới" ở Trang chủ (D2-07b): voucher chào mừng của khách (nếu có) và các lợi ích mua trực tiếp. Chỉ khách chưa có
  * đơn theo định nghĩa đơn đầu của API (GET /me/new-customer-offer); khách chưa đăng nhập thì chỉ thấy phần lợi ích.
  * Đang tải, lỗi tải hay thiếu cấu hình → không vẽ gì: đây là khối quảng bá phụ, không đáng một khung chờ hay thẻ lỗi và không được hiện số suy đoán.
  */
