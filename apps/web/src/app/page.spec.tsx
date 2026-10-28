@@ -10,7 +10,7 @@ vi.mock('@/lib/core-http-server', () => ({ createServerHttp: () => ({ get: mocks
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: vi.fn().mockResolvedValue([]) } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'loading', useAuthRestoring: () => false }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: null }) }));
-vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
+vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/use-flash-sales')>()), useActiveFlashSales: () => [] }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import { homeCopy } from '@tubutree/app-core/home-copy';

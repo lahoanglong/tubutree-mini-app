@@ -13,6 +13,7 @@ import { formatVnd } from '@/lib/format-vnd';
 import { productHref } from '@/lib/product-href';
 import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
+import { loadActiveFlashSales } from '@/lib/use-flash-sales';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { FLASH_SKELETON_HEIGHT, readFlashHint, writeFlashHint } from '@tubutree/app-core/home-layout';
 import { browserStorage } from '@/lib/recently-viewed';
@@ -59,7 +60,7 @@ function FlashSkeleton() {
 
 /** Ưu đãi giờ vàng — flash sale thật từ backend. Countdown êm đến mốc kết thúc sớm nhất. */
 export function FlashSale() {
-  const q = useBlockQuery(useQuery({ ...flashActiveQuery(coreHttp), staleTime: 30_000, refetchInterval: 60_000 }));
+  const q = useBlockQuery(useQuery({ queryKey: flashActiveQuery(coreHttp).queryKey, queryFn: loadActiveFlashSales, staleTime: 30_000, refetchInterval: 60_000 }));
   const items = q.data ?? [];
 
   // Chỉ tính suất còn giờ: suất sớm nhất có thể đã hết mà danh sách chưa kịp tải lại (poll 60s) trong khi các suất khác còn chạy.

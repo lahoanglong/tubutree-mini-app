@@ -11,6 +11,7 @@ vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 
 import { FlashSale, UpcomingFlashSales } from './flash-sale';
+import { resetFlashSales } from '@/lib/use-flash-sales';
 
 const HOUR = 3_600_000;
 const active = (over: Record<string, unknown> = {}) => ({
@@ -32,6 +33,7 @@ const mount = async (ui: React.ReactElement) => {
 };
 
 beforeEach(() => {
+  resetFlashSales();
   mocks.phase = 'guest';
   activeResult = async () => [];
   upcomingResult = async () => [];

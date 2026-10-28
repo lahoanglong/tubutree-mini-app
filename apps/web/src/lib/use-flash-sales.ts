@@ -4,6 +4,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { makeFlashRefetchInterval } from '@tubutree/app-core/queries/flash-sale';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { getActiveFlashSales } from '@/lib/shop-client';
+import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
 import type { FlashItem } from '@/lib/flash-price';
 
 /**
@@ -17,6 +18,7 @@ const NONE: readonly FlashItem[] = [];
 let items: readonly FlashItem[] = NONE;
 let loaded = false;
 let fetchedAt = 0;
+let failure: unknown = null;
 let inflight: Promise<void> | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 const listeners = new Set<() => void>();
@@ -26,10 +28,12 @@ function load(): Promise<void> {
     .then((res) => {
       items = Array.isArray(res) ? res : NONE;
       fetchedAt = Date.now();
+      failure = null;
     })
-    .catch(() => {
+    .catch((err: unknown) => {
       items = NONE;
       fetchedAt = 0;
+      failure = err ?? new Error('flash-sales');
     })
     .finally(() => {
       loaded = true;
@@ -38,6 +42,18 @@ function load(): Promise<void> {
       reschedule();
     });
   return inflight;
+}
+
+/**
+ * Cùng một lần tải cho khối Giờ vàng ở Trang chủ (React Query) và các thẻ sản phẩm (kho này): nhờ vậy `/flash-sales/active` chỉ bị gọi một lần.
+ * Lỗi được ném lại để khối Trang chủ giữ trạng thái lỗi riêng.
+ */
+export async function loadActiveFlashSales(): Promise<FlashSaleActiveItem[]> {
+  void load();
+  await inflight;
+  if (failure) throw failure;
+  // API trả cả tên và ảnh sản phẩm; FlashItem của thẻ sản phẩm chỉ giữ phần giá.
+  return [...items] as unknown as FlashSaleActiveItem[];
 }
 
 function ensureFresh(): void {
@@ -93,5 +109,6 @@ export function resetFlashSales(): void {
   loaded = false;
   items = NONE;
   fetchedAt = 0;
+  failure = null;
   inflight = null;
 }
