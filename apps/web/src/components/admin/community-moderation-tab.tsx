@@ -1,6 +1,8 @@
 'use client';
 
 import { createContext, useContext, useState } from 'react';
+import Link from 'next/link';
+import { addComment } from '@tubutree/app-core/api/feed';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import {
   approveCommunityPost,
@@ -21,18 +23,21 @@ import {
 } from '@/lib/community-moderation-client';
 import { getOpsInbox } from '@/lib/admin-client';
 import { ApiError } from '@/lib/client-api';
+import { coreHttp } from '@/lib/core-http';
 import { formatDateTime } from '@/lib/format-date';
+import { EventsPanel } from './community-events-panel';
 import { useConfirm } from './confirm-dialog';
 import { safeEvidenceImage } from './evidence-images';
-import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, LoadError, chipClass, Notice, ToneBadge } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, LoadError, chipClass, Notice, ToneBadge } from './ui';
 
-export type CommunityView = 'pending' | 'reports' | 'published' | 'unanswered';
+export type CommunityView = 'pending' | 'reports' | 'published' | 'unanswered' | 'events';
 
 const VIEWS: { k: CommunityView; label: string }[] = [
   { k: 'pending', label: 'Chờ duyệt' },
   { k: 'reports', label: 'Báo cáo vi phạm' },
   { k: 'published', label: 'Đã đăng' },
   { k: 'unanswered', label: 'Chưa trả lời' },
+  { k: 'events', label: 'Sự kiện' },
 ];
 
 const KIND_LABELS: Record<CommunityPostKind, string> = {
@@ -50,7 +55,7 @@ const QUERY_KEYS = {
   reports: ['admin-community-reports'],
   published: ['admin-community-published'],
   unanswered: ['admin-community-unanswered'],
-} as const satisfies Record<CommunityView, QueryKey>;
+} as const satisfies Record<Exclude<CommunityView, 'events'>, QueryKey>;
 const INBOX_KEY: QueryKey = ['admin-ops-inbox'];
 
 /** Bài đã đổi trạng thái do người khác (409) hoặc không còn (404): dòng sẽ biến khỏi danh sách sau khi làm mới, nên lời giải thích đứng ở đầu tab thay vì trên dòng. */
@@ -59,11 +64,14 @@ const isStale = (e: unknown): e is ApiError => e instanceof ApiError && (e.statu
 
 /**
  * Kiểm duyệt cộng đồng trên web admin cho ADMIN và nhân viên nhóm CSKH (trước đây chỉ ADMIN duyệt được, và chỉ trong mini app):
- * duyệt/từ chối bài chờ duyệt, ẩn/ghim bài đã đăng, và xem câu hỏi chờ quá lâu chưa ai trả lời. Tác giả được báo khi bài bị từ
- * chối hoặc ẩn, kèm lý do người kiểm duyệt nhập. Ghim bài chỉ ADMIN (API từ chối nhân viên), nên nút ghim chỉ hiện khi `isAdmin`.
+ * duyệt/từ chối bài chờ duyệt, ẩn/ghim bài đã đăng, và trả lời ngay câu hỏi chờ quá lâu chưa ai trả lời. Tác giả được báo khi
+ * bài bị từ chối hoặc ẩn, kèm lý do người kiểm duyệt nhập. Ghim bài và quản lý sự kiện chỉ ADMIN (API từ chối nhân viên), nên
+ * nút ghim và mục Sự kiện chỉ hiện khi `isAdmin`.
  */
 export function CommunityModerationTab({ initialView = 'pending', isAdmin = false }: { initialView?: CommunityView; isAdmin?: boolean }) {
-  const [view, setView] = useState<CommunityView>(initialView);
+  const [picked, setView] = useState<CommunityView>(initialView);
+  const views = isAdmin ? VIEWS : VIEWS.filter((v) => v.k !== 'events');
+  const view = views.some((v) => v.k === picked) ? picked : 'pending';
   const [staleNotice, setStaleNotice] = useState<string | null>(null);
   const reports = useQuery({ queryKey: QUERY_KEYS.reports, queryFn: listCommunityReports }).data;
   // adminReports chỉ trả tối đa 50 báo cáo; số thật lấy từ hộp việc (cùng số với thẻ ở trang Hôm nay), chưa có thì ghi "50+" khi đủ trần.
@@ -75,7 +83,7 @@ export function CommunityModerationTab({ initialView = 'pending', isAdmin = fals
       <div className="space-y-3">
         <h2 className="font-display text-lg font-semibold text-stone-900">Cộng đồng</h2>
         <div className="flex flex-wrap gap-2" role="group" aria-label="Mục kiểm duyệt cộng đồng">
-          {VIEWS.map((v) => (
+          {views.map((v) => (
             <button
               key={v.k}
               type="button"
@@ -100,6 +108,7 @@ export function CommunityModerationTab({ initialView = 'pending', isAdmin = fals
         {view === 'reports' && <ReportsList isAdmin={isAdmin} />}
         {view === 'published' && <PublishedList canPin={isAdmin} />}
         {view === 'unanswered' && <UnansweredList />}
+        {view === 'events' && <EventsPanel />}
       </div>
     </StaleNoticeContext.Provider>
   );
@@ -388,7 +397,7 @@ function UnansweredList() {
           <p className="text-xs text-stone-500">
             {q.data.length === 0
               ? 'Không có câu hỏi nào đang chờ trả lời.'
-              : `${q.data.length} câu hỏi chờ lâu chưa ai trả lời · cũ nhất trước. Trả lời trong ứng dụng Tubu Tree, mục Cộng đồng.`}
+              : `${q.data.length} câu hỏi chờ lâu chưa ai trả lời · cũ nhất trước. Trả lời ngay tại đây hoặc mở bài trên web.`}
           </p>
           <ul className="space-y-2">
             {q.data.map((p) => (
@@ -401,7 +410,12 @@ function UnansweredList() {
   );
 }
 
+const REPLY_MAX = 500;
+
 function UnansweredRow({ question: p }: { question: CommunityUnansweredQuestion }) {
+  const [reply, setReply] = useState('');
+  const send = usePostAction((body: string) => addComment(coreHttp, p.id, body), [QUERY_KEYS.unanswered], 'Không gửi được câu trả lời.');
+  const body = reply.trim();
   return (
     <li data-post={p.id} className="rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
       <PostMeta kind="QUESTION" author={p.author} category={p.category} createdAt={p.createdAt} />
@@ -410,6 +424,27 @@ function UnansweredRow({ question: p }: { question: CommunityUnansweredQuestion 
       </div>
       {p.title && <div className="mt-1 break-words font-medium text-stone-900">{p.title}</div>}
       <p className="mt-1 whitespace-pre-wrap break-words text-sm text-stone-800">{p.excerpt}</p>
+      <form
+        className="mt-3 space-y-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (body && !send.pending) send.mutate(body);
+        }}
+      >
+        <label className="block text-xs">
+          <span className="font-medium text-stone-700">Trả lời {p.author ?? 'bạn Tubu'} (hiện công khai dưới bài)</span>
+          <textarea name="reply" rows={2} maxLength={REPLY_MAX} value={reply} onChange={(e) => setReply(e.target.value)} className={`mt-1 ${INPUT_CLASS}`} />
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="submit" disabled={!body || send.pending} className={BTN_PRIMARY}>
+            {send.pending ? 'Đang gửi…' : 'Gửi trả lời'}
+          </button>
+          <Link href={`/cong-dong/${encodeURIComponent(p.id)}`} className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-forest-700 underline sm:min-h-6 sm:px-1">
+            Mở bài
+          </Link>
+        </div>
+      </form>
+      <RowError message={send.err} />
     </li>
   );
 }
