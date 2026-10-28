@@ -479,6 +479,15 @@ describe('OpsInboxService: hàng đợi đã có ở tab nhưng từng thiếu t
     expect(find(none, 'bankTransferToConfirm')).toEqual({ key: 'bankTransferToConfirm', count: 0 });
   });
 
+  it('storefrontsPending: cờ storefront.require_approval tắt thì không có hàng đợi duyệt (gian hàng đã hiện công khai), không truy vấn', async () => {
+    const base = build({ config: { 'storefront.require_approval': false } });
+    const prisma = (base.svc as unknown as { prisma: Record<string, any> }).prisma;
+    prisma.storefront.count.mockResolvedValue(7);
+    const res = await base.svc.counts({ role: 'ADMIN' }, now);
+    expect(find(res, 'storefrontsPending')?.count ?? 0).toBe(0);
+    expect(prisma.storefront.count).not.toHaveBeenCalled();
+  });
+
   it('storefrontsPending, productsMissingImage: chỉ ADMIN; communityReports: người kiểm duyệt cộng đồng', async () => {
     const { svc, prisma } = withMocks({ stores: 1, noImage: 4, reports: 3 });
 

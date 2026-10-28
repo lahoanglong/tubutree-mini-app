@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
 /**
@@ -6,6 +7,8 @@ import type { SystemConfigService } from '../system-config/system-config.service
  */
 export const STOREFRONT_REQUIRE_APPROVAL_KEY = 'storefront.require_approval';
 export const DEFAULT_STOREFRONT_REQUIRE_APPROVAL = true;
+/** Gian hàng CTV đã đăng đang chờ duyệt lần đầu: dùng chung cho bộ lọc tab Gian hàng và số ở hộp việc. */
+export const STOREFRONT_PENDING_APPROVAL_WHERE = { isPublished: true, takenDownAt: null, type: 'CTV', isPartner: false, approvedAt: null } satisfies Prisma.StorefrontWhereInput;
 
 /**
  * Cho CTV/đối tác dùng link `<tên>.tubutree.com`. Tắt cho tới khi DNS wildcard và chứng chỉ xong (D6-02): mọi nơi chỉ hiện và

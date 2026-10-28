@@ -10,6 +10,7 @@ import { BANK_TRANSFER_TO_CONFIRM_WHERE, buildAdminOrderWhere, pancakeUnsyncedWh
 import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
 import { countUnansweredQuestions, DEFAULT_UNANSWERED_ALERT_HOURS, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from '../feed/community-unanswered';
 import { readPendingPaymentTtlHours } from '../orders/pending-payment-ttl';
+import { isStorefrontApprovalRequired, STOREFRONT_PENDING_APPROVAL_WHERE } from '../storefront/storefront-config';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { externalPointsAttentionCount } from '../external-points/external-points-attention';
 import { bridgeIsDown, unforwardedWhere } from '../support-chat/support-chat-health';
@@ -61,8 +62,6 @@ export type InboxKey =
   | 'communityReports'
   | 'productsMissingImage';
 
-const STOREFRONT_PENDING_APPROVAL_WHERE = { isPublished: true, takenDownAt: null, type: 'CTV', isPartner: false, approvedAt: null } as const;
-
 /** Ai thấy việc này ngoài ADMIN: nhóm việc của nhân viên, hoặc 'STAFF' = mọi nhân viên (route vốn mở cho STAFF). */
 type Audience = readonly StaffPermission[] | 'STAFF' | 'ADMIN';
 
@@ -110,7 +109,7 @@ export class OpsInboxService {
       // Đơn chuyển khoản chờ kế toán bấm "Đã nhận tiền": quá hạn chờ thanh toán thì cron tự huỷ (pending-payment-expiry.cron), nên là việc gấp.
       { key: 'bankTransferToConfirm', audience: ['KE_TOAN'], count: () => p.order.count({ where: BANK_TRANSFER_TO_CONFIRM_WHERE }) },
       // Cùng điều kiện với chip "Chờ duyệt" của tab Gian hàng (StorefrontAdminService.listWhere).
-      { key: 'storefrontsPending', audience: 'ADMIN', count: () => p.storefront.count({ where: STOREFRONT_PENDING_APPROVAL_WHERE }) },
+      { key: 'storefrontsPending', audience: 'ADMIN', count: async () => ((this.config ? await isStorefrontApprovalRequired(this.config) : true) ? p.storefront.count({ where: STOREFRONT_PENDING_APPROVAL_WHERE }) : 0) },
       { key: 'productsMissingImage', audience: 'ADMIN', count: () => p.product.count({ where: { isActive: true, images: { isEmpty: true } } }) },
       { key: 'merchantOverdue', audience: 'ADMIN', count: () => this.merchant.countOverdue(now) },
       { key: 'merchantProducts', audience: 'ADMIN', count: () => p.product.count({ where: PENDING_MERCHANT_PRODUCT_WHERE }) },
