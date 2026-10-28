@@ -21,13 +21,16 @@ const mocks = vi.hoisted(() => ({
   getSubscriptions: vi.fn(),
   shareLink: vi.fn(),
   cashback: false,
+  subscriptions: true,
 }));
 vi.mock('../utils/features', () => ({
   get CASHBACK_ENABLED() {
     return mocks.cashback;
   },
   SEASON_PASS_ENABLED: false,
-  SUBSCRIPTIONS_IN_MINIAPP: true,
+  get SUBSCRIPTIONS_IN_MINIAPP() {
+    return mocks.subscriptions;
+  },
 }));
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -275,6 +278,19 @@ describe('Hàng trạng thái đơn ở đầu trang Cá nhân', () => {
     expect(screen.getByRole('button', { name: 'Đang xử lý' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Đã giao' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Định kỳ, 1 đơn' })).toBeInTheDocument();
+  });
+
+  it('Mini App tắt giao định kỳ: 4 ô, không có ô Định kỳ và không gọi danh sách định kỳ', async () => {
+    mocks.subscriptions = false;
+    try {
+      renderPage();
+      expect(await screen.findByRole('button', { name: 'Chờ thanh toán, 2 đơn' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Đã giao' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Định kỳ/ })).not.toBeInTheDocument();
+      expect(mocks.getSubscriptions).not.toHaveBeenCalled();
+    } finally {
+      mocks.subscriptions = true;
+    }
   });
 
   it('bấm ô mở danh sách đơn đã lọc; "Xem tất cả" mở /orders', async () => {

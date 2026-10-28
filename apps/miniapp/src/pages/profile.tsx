@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { canSeeAcademy, orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { CASHBACK_ENABLED } from '../utils/features';
+import { CASHBACK_ENABLED, SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
 import { useAuthStore } from '../store/auth';
 import { getCoupons, getLoyalty, getNotifications, getReferral, getWallet } from '../services/account-api';
@@ -102,7 +102,9 @@ export default function ProfilePage() {
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const referralQ = useQuery({ queryKey: ['referral'], queryFn: getReferral, enabled: authed });
-  const subsQ = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions, enabled: authed });
+  // Mini App tạm không bán giao định kỳ nên hàng đơn bỏ ô Định kỳ khi cờ tắt; web vẫn có ô này.
+  const orderRow = SUBSCRIPTIONS_IN_MINIAPP ? ORDER_STATUS_ROW : ORDER_STATUS_ROW.filter((r) => r.key !== 'subscriptions');
+  const subsQ = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions, enabled: authed && SUBSCRIPTIONS_IN_MINIAPP });
   const orderCounts = useQueries({
     queries: ORDER_ROW_TARGETS.map((r) => {
       const filter = ORDERS_TABS.find((t) => t.key === r.key)?.filter ?? {};
@@ -351,8 +353,8 @@ export default function ProfilePage() {
               <Icon icon={ChevronRight} size="sm" tone="brand" />
             </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 4 }}>
-            {ORDER_STATUS_ROW.map((r) => {
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${orderRow.length}, minmax(0, 1fr))`, gap: 4 }}>
+            {orderRow.map((r) => {
               const n = r.counted ? countFor(r.key) : null;
               return (
                 <button
