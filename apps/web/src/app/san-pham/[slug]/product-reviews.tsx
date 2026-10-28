@@ -29,6 +29,7 @@ import {
   type ReviewableOrder,
 } from '@/lib/reviews-client';
 import { EvidenceUpload } from '@/components/evidence-upload';
+import { ReviewVideoUpload } from './review-video-upload';
 import { actionErrorText } from '@/lib/error-text';
 
 const PAGE_SIZE = 5;
@@ -393,8 +394,7 @@ function ReviewForm({
   const [rating, setRating] = useState(initial?.rating ?? 5);
   const [comment, setComment] = useState(initial?.comment ?? '');
   const [images, setImages] = useState<string[]>(initial?.images ?? []);
-  // Web chưa tải video lên được: sửa đánh giá có video thì gửi lại đúng video cũ để không mất.
-  const videoUrl = initial?.videoUrl ?? null;
+  const [videoUrl, setVideoUrl] = useState<string | null>(initial?.videoUrl ?? null);
 
   const save = useMutation({
     mutationFn: () =>
@@ -467,7 +467,7 @@ function ReviewForm({
           disabled={save.isPending}
         />
       </div>
-      {videoUrl && <p className="mt-2 text-sm text-stone-600">Video đã gửi kèm đánh giá này được giữ nguyên.</p>}
+      <ReviewVideoUpload value={videoUrl} onChange={setVideoUrl} disabled={save.isPending} />
       <p className={`mt-3 text-sm ${!isEdit && rewardAvailable && hasMedia ? 'font-semibold text-success-fg' : 'text-stone-600'}`}>{hint}</p>
       {save.isError && (
         <p role="alert" className={`mt-2 ${ui.error}`}>

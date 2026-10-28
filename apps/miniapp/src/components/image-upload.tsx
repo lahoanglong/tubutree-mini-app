@@ -1,5 +1,12 @@
 import { useRef, useState, type CSSProperties } from 'react';
 import { Camera, Loader2, RefreshCw, Video, X } from 'lucide-react';
+import {
+  readVideoDuration,
+  uploadCloudinaryVideo,
+  videoUploadCopy,
+  VideoUploadError,
+  REVIEW_VIDEO_MAX_SECONDS,
+} from '@tubutree/app-core/cloudinary-video';
 import { haptic } from '../utils/haptic';
 import { Text } from './ui/text';
 
@@ -11,7 +18,7 @@ const CONFIGURED = Boolean(CLOUD && PRESET);
 export const isCloudinaryConfigured = (): boolean => CONFIGURED;
 
 /** Chặn ảnh gốc quá lớn TRƯỚC khi đưa vào canvas nén — ảnh vài chục MB (panorama, RAW export...)
- * có thể treo/crash webview khi drawImage/toDataURL. VideoUpload đã có guard tương tự (50MB). */
+ * có thể treo/crash webview khi drawImage/toDataURL. VideoUpload có guard tương tự (50MB, 60 giây). */
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 /** Nút văn bản có vùng chạm 44px (chữ nhỏ vẫn phải bấm dễ). */
@@ -212,7 +219,7 @@ export function ImageUpload({
 export function VideoUpload({
   value,
   onChange,
-  maxSeconds = 60,
+  maxSeconds = REVIEW_VIDEO_MAX_SECONDS,
 }: {
   value: string;
   onChange: (url: string) => void;
@@ -231,27 +238,13 @@ export function VideoUpload({
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
-    if (file.size > 50 * 1024 * 1024) {
-      setError('Video quá lớn (tối đa 50MB). Hãy quay ngắn hơn nhé.');
-      if (inputRef.current) inputRef.current.value = '';
-      return;
-    }
     setUploading(true);
     try {
-      const form = new FormData();
-      form.append('file', file);
-      form.append('upload_preset', PRESET!);
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/video/upload`, {
-        method: 'POST',
-        body: form,
-      });
-      if (!res.ok) throw new Error('upload failed');
-      const data = (await res.json()) as { secure_url?: string };
-      if (!data.secure_url) throw new Error('no url');
+      const url = await uploadCloudinaryVideo(file, { cloudName: CLOUD!, uploadPreset: PRESET! }, { maxSeconds, readDuration: readVideoDuration });
       haptic('medium');
-      onChange(data.secure_url);
-    } catch {
-      setError('Tải video thất bại, thử lại.');
+      onChange(url);
+    } catch (err) {
+      setError(err instanceof VideoUploadError ? err.message : videoUploadCopy.failed);
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -294,7 +287,7 @@ export function VideoUpload({
         >
           <Text variant="body-sm" tone="brand" as="span" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Video size={16} aria-hidden />
-            {uploading ? 'Đang tải video…' : `Quay/đăng video review (≤ ${maxSeconds}s)`}
+            {uploading ? videoUploadCopy.uploading : videoUploadCopy.pick(maxSeconds)}
           </Text>
         </button>
       )}

@@ -108,6 +108,8 @@ beforeEach(() => {
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe('ProductReviews (web) — danh sách công khai', () => {
@@ -191,9 +193,9 @@ describe('ProductReviews (web) — mỗi lần mua một đánh giá', () => {
     const c = await mount();
     click(button(c, 'Viết đánh giá'));
     await flush();
-    expect(form(c)!.textContent).toContain('Lần đầu đánh giá sản phẩm này: thêm ảnh +10.000 Điểm Xanh (chỉ chữ +5.000). Chỉ đánh giá được khi đã mua và nhận hàng.');
+    expect(form(c)!.textContent).toContain('Lần đầu đánh giá sản phẩm này: thêm video +15.000 / ảnh +10.000 Điểm Xanh (chỉ chữ +5.000). Chỉ đánh giá được khi đã mua và nhận hàng.');
     click(button(c, 'Ảnh đánh giá (0)'));
-    expect(form(c)!.textContent).toContain('Lần đầu đánh giá sản phẩm này, bạn nhận +10.000 Điểm Xanh cho đánh giá có ảnh!');
+    expect(form(c)!.textContent).toContain('Lần đầu đánh giá sản phẩm này, bạn nhận +10.000 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.000.');
     click(star(c, 4));
     typeInto(c.querySelector('textarea'), '  Dùng êm  ');
     click(button(c, 'Gửi đánh giá'));
@@ -206,6 +208,27 @@ describe('ProductReviews (web) — mỗi lần mua một đánh giá', () => {
       orderId: 'o1',
     });
     expect(c.querySelector('[role="status"]')?.textContent).toBe('Cảm ơn đánh giá của bạn! Đã cộng 10 Điểm Xanh');
+  });
+
+  it('tải video lên: gửi kèm videoUrl và câu thưởng đổi sang mức video (+15.000)', async () => {
+    vi.stubEnv('NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME', 'demo');
+    vi.stubEnv('NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET', 'reviews');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ secure_url: 'https://res.cloudinary.com/demo/v.mp4', duration: 30 }) }));
+    mocks.elig = structuredClone(ELIG_NEW);
+    mocks.saveResult = { id: 'a', updated: false, pointsEarned: 15 };
+    const c = await mount();
+    click(button(c, 'Viết đánh giá'));
+    await flush();
+    const input = c.querySelector<HTMLInputElement>('input[type="file"][accept="video/*"]')!;
+    Object.defineProperty(input, 'files', { value: [new File(['x'], 'v.mp4', { type: 'video/mp4' })], configurable: true });
+    act(() => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush(6);
+    expect(form(c)!.textContent).toContain('Tuyệt! Lần đầu đánh giá sản phẩm này, đánh giá có video nhận +15.000 Điểm Xanh!');
+    click(button(c, 'Gửi đánh giá'));
+    await flush();
+    expect(mocks.saved[0]!.body).toMatchObject({ videoUrl: 'https://res.cloudinary.com/demo/v.mp4', orderId: 'o1' });
   });
 
   it('nút "Sửa" của dòng mình: điền theo GET /reviews/:id, giữ ảnh và video cũ, lưu gửi đúng đơn của đánh giá đó', async () => {

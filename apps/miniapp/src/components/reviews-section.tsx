@@ -13,6 +13,7 @@ import {
 } from '../services/shop-api';
 import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { REWARD_ALREADY_GIVEN, rewardHint } from '@tubutree/app-core/review-copy';
 import { MultiImageUpload, VideoUpload } from './image-upload';
 import { formatDate, formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
@@ -409,14 +410,6 @@ export function ReviewsSection({
   );
 }
 
-// Biểu mẫu không biết khách đã nhận thưởng sản phẩm này trước đó hay chưa (xoá đánh giá rồi viết lại thì BE cho
-// pointsEarned = 0), nên mọi câu nhắc điểm phải nêu điều kiện này thay vì hứa vô điều kiện.
-const FIRST_REVIEW_ONLY = 'Lần đầu đánh giá sản phẩm này';
-// Cờ hết thưởng không hứa điểm nữa nhưng cũng không được im lặng: khách gửi xong chỉ thấy snackbar không kèm điểm.
-const REWARD_ALREADY_GIVEN =
-  'Bạn đã nhận Điểm Xanh cho đánh giá đầu tiên của sản phẩm này, đánh giá lần mua này không cộng thêm điểm.';
-const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.';
-
 function WriteReview({
   slug,
   draft,
@@ -544,13 +537,7 @@ function WriteReview({
           as="p"
           style={{ marginTop: 8, fontWeight: bonus ? 600 : 400 }}
         >
-          {isEdit
-            ? EDIT_HINT
-            : video
-              ? `Tuyệt! ${FIRST_REVIEW_ONLY}, đánh giá có video nhận +15.000 Điểm Xanh!`
-              : images.length > 0
-                ? `${FIRST_REVIEW_ONLY}, bạn nhận +10.000 Điểm Xanh cho đánh giá có ảnh! Thêm video để được +15.000.`
-                : `${FIRST_REVIEW_ONLY}: thêm video +15.000 / ảnh +10.000 Điểm Xanh (chỉ chữ +5.000). Chỉ đánh giá được khi đã mua và nhận hàng.`}
+          {rewardHint({ isEdit, rewardAvailable: true, hasImages: images.length > 0, hasVideo: Boolean(video) })}
         </Text>
       )}
       {!isEdit && !showReward && (
