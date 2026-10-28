@@ -257,7 +257,7 @@ export class LifecycleService {
     };
     if (product?.slug) data.product_slug = product.slug;
     for (const w of recipients) {
-      await this.notifications.notify(w.userId, 'PRICE_DROP_ALERT', data).catch(() => undefined);
+      await this.notifications.notifySafe(w.userId, 'PRICE_DROP_ALERT', data);
     }
     const capped = items.length === LifecycleService.PRICE_DROP_MAX_RECIPIENTS ? ' (đã chạm trần)' : '';
     this.logger.log(

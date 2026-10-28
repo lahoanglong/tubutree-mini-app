@@ -131,7 +131,7 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
       setGroup: async () => ({ ok: true, data: {} }),
       health: async () => ({ state: 'CONNECTED', zaloUid: 'z', displayName: 'CSKH', avatar: null, since: new Date().toISOString(), lastError: null, queueSize: 0, outboxSize: 0, groupId: 'g-it' }),
     };
-    const mk = () => new BridgeHealthCron(prisma, cronBridge, cfg, chat, { notify: jest.fn() } as never);
+    const mk = () => new BridgeHealthCron(prisma, cronBridge, cfg, chat, { notify: jest.fn(), notifySafe: jest.fn().mockResolvedValue(true) } as never);
     await Promise.all([mk().everyMinute(), mk().everyMinute()]);
 
     const after = await prisma.supportForward.findUniqueOrThrow({ where: { id: f.id } });
@@ -163,7 +163,7 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
     };
     const findMany = jest.spyOn(prisma.supportForward, 'findMany').mockResolvedValueOnce([selected] as never);
     try {
-      await new BridgeHealthCron(prisma, cronBridge, cfg, chat, { notify: jest.fn() } as never).everyMinute();
+      await new BridgeHealthCron(prisma, cronBridge, cfg, chat, { notify: jest.fn(), notifySafe: jest.fn().mockResolvedValue(true) } as never).everyMinute();
     } finally {
       findMany.mockRestore();
     }
@@ -351,7 +351,7 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
       return { conv, u, a: a!, b: b! };
     }
     const processor = () => {
-      const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+      const notifications = { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) };
       return { notifications, proc: new SupportChatNotifyProcessor(prisma, new ReplyNotifier(notifications as never, {} as never)) };
     };
 

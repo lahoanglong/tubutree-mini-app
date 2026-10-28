@@ -68,7 +68,7 @@ describe('r8 email báo động vận hành (real Postgres)', () => {
       [fakeQueue('pancake-push'), fakeQueue('notifications')],
       sysConfig as never,
       gomdon as never,
-      { notify } as never,
+      { notify, notifySafe: notify } as never,
       fetchMock as never,
       email,
     );

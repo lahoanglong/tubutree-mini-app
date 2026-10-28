@@ -62,6 +62,8 @@ export interface PartialReversalResult {
   pointsBack: number;
   pointsTaken: number;
   commissionCut: number;
+  /** Phần hoa hồng đã cắt theo từng CTV (chỉ số > 0): để báo CTV sau commit, như lần thu hồi cả đơn. */
+  commissionCutBy: { affiliateUserId: string; amount: number }[];
   /** Như ReversalResult.referralNotices. */
   referralNotices?: ReferralNotice[];
 }
@@ -391,7 +393,7 @@ export class OrderReversalService {
     },
   ): Promise<PartialReversalResult> {
     const { shares, requestId } = input;
-    const result: PartialReversalResult = { refund: null, pointsBack: 0, pointsTaken: 0, commissionCut: 0 };
+    const result: PartialReversalResult = { refund: null, pointsBack: 0, pointsTaken: 0, commissionCut: 0, commissionCutBy: [] };
 
     // Thưởng đánh giá của các sản phẩm bị trả: khoá trước mọi ghi lên dòng users (xem reverseFinancials).
     const reviewable = canHaveReviewReward(order);
@@ -504,7 +506,7 @@ export class OrderReversalService {
     // vẫn tính đủ 80tr vào mốc thưởng tháng khi hoa hồng được duyệt.
     const rows = await tx.commission.findMany({
       where: { orderId: order.id, status: { in: ['PENDING', 'LOCKED'] } },
-      select: { id: true, amount: true, commissionableTotal: true, lineAmounts: true },
+      select: { id: true, affiliateUserId: true, amount: true, commissionableTotal: true, lineAmounts: true },
     });
     const itemById = new Map(order.items.map((i) => [i.id, i]));
     const paid = paidLineTotals(order, order.items);
@@ -537,7 +539,10 @@ export class OrderReversalService {
         },
         data: { amount: { decrement: cut }, commissionableTotal: { decrement: baseCut } },
       });
-      if (res.count === 1) result.commissionCut += cut;
+      if (res.count === 1) {
+        result.commissionCut += cut;
+        if (cut > 0) result.commissionCutBy.push({ affiliateUserId: row.affiliateUserId, amount: cut });
+      }
     }
 
     // Thưởng giới thiệu thu hồi theo tỷ lệ tiền hàng đã trả luỹ kế của đơn (gồm yêu cầu này), cùng điều kiện với nhánh trả cả

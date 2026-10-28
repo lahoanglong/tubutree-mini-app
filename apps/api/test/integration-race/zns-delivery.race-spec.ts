@@ -21,7 +21,8 @@ describe('Gửi ZNS: HTTP 200 kèm lỗi trong body (real Postgres)', () => {
   let hits = 0;
   const queued: ZnsSendJobData[] = [];
 
-  async function build(withQueue: boolean) {
+  /** `lateOnRedis`: queue.add vừa giữ job (Redis đã nhận) vừa báo lỗi, như withQueueTimeout quá hạn. */
+  async function build(withQueue: boolean, lateOnRedis = false) {
     const tokens = { getAccessToken: async () => 'tok' } as unknown as ZaloOaTokenService;
     const client = new ZnsClient(
       { get: () => `http://127.0.0.1:${(zns.address() as AddressInfo).port}` } as never,
@@ -29,6 +30,7 @@ describe('Gửi ZNS: HTTP 200 kèm lỗi trong body (real Postgres)', () => {
     );
     const add = jest.fn(async (_name: string, data: ZnsSendJobData) => {
       queued.push(data);
+      if (lateOnRedis) throw new Error('queue timeout');
     });
     const svc = new NotificationsService(
       prisma,
@@ -138,5 +140,27 @@ describe('Gửi ZNS: HTTP 200 kèm lỗi trong body (real Postgres)', () => {
     reply = { status: 200, body: { error: -108, message: 'invalid phone' } };
     await svc.notify(u.id, 'IT_ZNS_DELIVERY', { order_code: 'IT5' });
     expect(await znsLog(u.id)).toMatchObject({ status: 'FAILED', error: expect.stringContaining('-108') });
+  });
+
+  it('tin thường xếp hàng quá hạn nhưng job vẫn vào Redis: log FAILED không có khoá để nhả, job đến muộn vẫn gửi và log thành SENT', async () => {
+    const { svc } = await build(true, true);
+    const u = await createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+    await svc.notify(u.id, 'IT_ZNS_DELIVERY', { order_code: 'IT6' });
+    expect((await znsLog(u.id)).status).toBe('FAILED');
+
+    expect(await svc.deliverZns(queued[0]!, false)).toBe('SENT');
+    expect(hits).toBe(1);
+    expect(await znsLog(u.id)).toMatchObject({ status: 'SENT', error: null });
+  });
+
+  it('retryZns xếp hàng quá hạn: khoá đã nhả để lượt sau tạo log mới, job đến muộn bị bỏ qua và không gọi Zalo', async () => {
+    const { svc } = await build(true, true);
+    const u = await createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+    await expect(svc.notify(u.id, 'IT_ZNS_DELIVERY', { order_code: 'IT7' }, { dedupeKey: 'it-zns:7', retryZns: true })).rejects.toThrow('queue timeout');
+    expect((await znsLog(u.id)).status).toBe('FAILED');
+
+    expect(await svc.deliverZns(queued[0]!, false)).toBe('SKIPPED');
+    expect(hits).toBe(0);
+    expect((await znsLog(u.id)).status).toBe('FAILED');
   });
 });

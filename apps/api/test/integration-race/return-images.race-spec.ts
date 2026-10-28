@@ -47,7 +47,7 @@ describe('Ảnh minh chứng trả hàng phục vụ qua endpoint riêng (real P
         OrderStatusService,
         OrderReturnsService,
         { provide: AffiliateService, useValue: {} },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
         { provide: FlashSaleService, useValue: {} },
         { provide: CouponsService, useValue: {} },
       ],

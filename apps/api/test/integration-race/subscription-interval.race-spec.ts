@@ -31,7 +31,7 @@ describe('Đổi chu kỳ gói định kỳ (real Postgres)', () => {
         WalletLedgerService,
         { provide: PricingService, useValue: {} },
         { provide: LoyaltyService, useValue: {} },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
       ],
     }).compile();

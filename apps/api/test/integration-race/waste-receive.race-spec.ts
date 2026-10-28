@@ -125,7 +125,7 @@ beforeAll(async () => {
           perkReviewed: jest.fn().mockResolvedValue(undefined),
         },
       },
-      { provide: NotificationsService, useValue: { notify: async () => undefined } },
+      { provide: NotificationsService, useValue: { notify: async () => undefined, notifySafe: jest.fn().mockResolvedValue(true) } },
       {
         provide: WasteShipLockService,
         useValue: { evaluateAndLock: jest.fn().mockResolvedValue({ locked: false, shipLockedAt: null, cancelledRequestIds: [] }) },

@@ -8,7 +8,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { isMoneyBackable, OrderReversalService, type RefundOutcome } from './order-reversal.service';
+import { isMoneyBackable, OrderReversalService, type PartialReversalResult, type RefundOutcome } from './order-reversal.service';
 import { sendReferralNotices, type ReferralNotice } from '../wallet/referral-notify';
 import { computeReturnShares, type AllocOrder, type ReturnShares } from './refund-allocation';
 import {
@@ -250,7 +250,7 @@ export class OrderReturnsService {
       }
       throw err;
     }
-    await this.notifications.notify(userId, 'RETURN_REQUESTED', { order_code: code }).catch(() => undefined);
+    await this.notifications.notifySafe(userId, 'RETURN_REQUESTED', { order_code: code }, undefined, `order=${code}`);
     const itemName = new Map(order.items.map((i) => [i.id, i.productName]));
     await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_RETURN_REQUESTED', {
       order_code: code,
@@ -369,9 +369,7 @@ export class OrderReturnsService {
       });
       if (rejected.count === 0) throw new BadRequestException('Yêu cầu đã được xử lý.');
       const order = await this.prisma.order.findUnique({ where: { id: req.orderId }, select: { code: true } });
-      await this.notifications
-        .notify(req.userId, 'RETURN_REJECTED', { order_code: order?.code ?? '', reason: note })
-        .catch(() => undefined);
+      await this.notifications.notifySafe(req.userId, 'RETURN_REJECTED', { order_code: order?.code ?? '', reason: note }, undefined, `return=${id}`);
       return this.withContext(await this.prisma.returnRequest.findUniqueOrThrow({ where: { id }, include: { items: true } }));
     }
 
@@ -404,6 +402,7 @@ export class OrderReturnsService {
       let money: RefundOutcome | null;
       let pointsBack = shares.pointsUsedBack;
       let commissionCut = 0;
+      let commissionCutBy: PartialReversalResult['commissionCutBy'] = [];
       let referralNotices: ReferralNotice[];
       if (shares.isFull) {
         const flipped = await tx.order.updateMany({ where: { id: order.id, status: 'DELIVERED' }, data: { status: 'RETURNED' } });
@@ -425,6 +424,7 @@ export class OrderReturnsService {
         money = partial.refund;
         pointsBack = partial.pointsBack;
         commissionCut = partial.commissionCut;
+        commissionCutBy = partial.commissionCutBy;
         referralNotices = partial.referralNotices ?? [];
       }
 
@@ -446,11 +446,15 @@ export class OrderReturnsService {
           ...(destination.method === 'WALLET' && req.refundMethod === 'BANK' ? { refundMethod: 'WALLET' } : {}),
         },
       });
-      return { order, shares, money, pointsBack, referralNotices };
+      return { order, shares, money, pointsBack, referralNotices, commissionCutBy };
     });
 
     const { order, shares, money } = outcome;
     await sendReferralNotices({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, outcome.referralNotices);
+    // Trả cả đơn thì reverseCommissionsForOrder (dưới) tự báo CTV; trả một phần cắt hoa hồng ở trong commit nên báo ở đây.
+    for (const cut of outcome.commissionCutBy) {
+      await this.notifications.notifySafe(cut.affiliateUserId, 'COMMISSION_REVERSED', { amount: formatVnd(cut.amount) }, undefined, `return=${id}`);
+    }
     // Yêu cầu đã APPROVED và đơn đã RETURNED từ lúc commit nên duyệt lại báo "đã xử lý": lỗi đảo ở đây không được làm bỏ các bước sau,
     // chúng chạy hết rồi mới ném lỗi đầu tiên.
     let reversalFailure: unknown = null;
@@ -489,11 +493,10 @@ export class OrderReturnsService {
       items: this.describeLines(order, shares),
     });
     await this.notifications
-      .notify(order.userId, 'RETURN_APPROVED_DETAIL', {
+      .notifySafe(order.userId, 'RETURN_APPROVED_DETAIL', {
         order_code: order.code,
         refund_note: refundNote(money, req, outcome.pointsBack),
-      })
-      .catch(() => undefined);
+      }, undefined, `order=${order.code}`);
     // Đảo điểm/hoa hồng lỗi đã ném ở dòng trên nên tới đây là đảo xong: lỗi thì đơn không có mốc và cron chạy lại. Trả một phần không
     // đổi trạng thái đơn nên cron không quét, không cần mốc.
     if (reversalFailure !== null) throw reversalFailure;
@@ -628,7 +631,7 @@ export class OrderReturnsService {
     this.logger.log(
       `${actor.kind === 'ADMIN' ? 'Admin' : 'Gian hàng'} ${actor.userId} nhận hàng trả yêu cầu ${id} (đơn ${order?.code}), cộng kho ${restocked} đơn vị.`,
     );
-    await this.notifications.notify(req.userId, 'RETURN_RECEIVED', { order_code: order?.code ?? '' }).catch(() => undefined);
+    await this.notifications.notifySafe(req.userId, 'RETURN_RECEIVED', { order_code: order?.code ?? '' }, undefined, `return=${id}`);
   }
 
   // ── Nội bộ ──

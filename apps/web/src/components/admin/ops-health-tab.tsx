@@ -124,6 +124,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'TierDropNoticeService.runDaily': 'Báo trước khi hạ hạng',
   'merchant.sla-reminder': 'Nhắc đối tác các đơn tự giao quá hạn (có báo khách)',
   'ops.health-alert': 'Kiểm tra sức khoẻ hệ thống và báo động',
+  'ops.ledger-drift': 'Đối soát số dư Điểm Xanh và Ví Tubu với sổ cái mỗi đêm (chỉ báo lệch, không tự sửa)',
   'orders.delivered-effects-resync': 'Chạy lại việc sau giao (cộng điểm, khoá hoa hồng, thưởng giới thiệu) cho đơn bị sót',
   'orders.pending-payment-expiry': 'Huỷ đơn quá hạn thanh toán',
   'orders.reversal-effects-resync': 'Chạy lại phần đảo sau huỷ hoặc trả đơn (đảo điểm, thu hồi hoa hồng, lệnh huỷ Pancake) cho đơn bị sót',

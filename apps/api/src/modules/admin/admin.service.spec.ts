@@ -47,7 +47,8 @@ const affiliate = {
   grantReferralReward: jest.fn().mockResolvedValue(undefined),
   reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
 } as unknown as AffiliateService;
-const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+const notify = jest.fn().mockResolvedValue(undefined);
+const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
 const flash = { restore: jest.fn().mockResolvedValue(undefined) } as unknown as FlashSaleService;
 const coupons = { release: jest.fn().mockResolvedValue(undefined) } as unknown as CouponsService;
 const rbac = { revokeGrantsAbove: jest.fn().mockResolvedValue(0) } as unknown as RbacService;

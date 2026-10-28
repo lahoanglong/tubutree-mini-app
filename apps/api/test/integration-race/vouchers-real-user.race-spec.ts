@@ -28,7 +28,7 @@ describe('VouchersService real-user + batching (real Postgres)', () => {
       providers: [
         SystemConfigService,
         VouchersService,
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } },
       ],
     }).compile();
     await moduleRef.init();

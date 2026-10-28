@@ -26,7 +26,7 @@ describe('Báo động vận hành: việc cho người (real Postgres)', () => 
       },
     };
     const gomdon = { getConfig: async () => ({ baseUrl: 'http://gomdon.invalid', phone: '0900000000', password: 'x' }), getHealth: () => null };
-    health = new OpsHealthService(prisma, { get: (k: string) => env[k] ?? '' } as never, [queue], sysConfig as never, gomdon as never, { notify } as never);
+    health = new OpsHealthService(prisma, { get: (k: string) => env[k] ?? '' } as never, [queue], sysConfig as never, gomdon as never, { notify, notifySafe: notify } as never);
     await setConfig(prisma, 'ops.alert_repeat_hours', 6);
     await createUser(prisma, { role: 'ADMIN' });
   });

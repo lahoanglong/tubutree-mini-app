@@ -12,6 +12,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { startOfNextVnMonth, startOfVnMonth, VN_OFFSET_MS } from '../../common/vn-time';
 import { isAllowedByPrefs, type NotificationPrefs } from './notification-categories';
 import { MARKETING_TEMPLATE_CODES } from './notification-templates-admin.service';
+import { captureServerError } from '../../config/sentry';
 
 /** Nội dung dùng khi template chưa được seed — tuyệt đối không in mã code ra cho khách. */
 const MISSING_TEMPLATE_BODY = 'Tubu Tree có cập nhật mới cho bạn. Mở mục liên quan trong app để xem chi tiết nhé 🌿';
@@ -42,6 +43,14 @@ const DEFAULT_QUIET_END_HOUR = 8;
 const DEFAULT_PROMO_MONTHLY_CAP = 2;
 const HOUR_MS = 3_600_000;
 
+const releasedZnsDedupeKey = (dedupeKey: string, logId: string) => `${dedupeKey}:failed:${logId}`;
+
+/** Log ZNS đã đóng vì không xếp được hàng đợi và đã nhả khoá chống trùng (xem dispatchZns). */
+function isReleasedZnsLog(payload: unknown, logId: string): boolean {
+  const key = (payload as { dedupeKey?: unknown } | null)?.dedupeKey;
+  return typeof key === 'string' && key.endsWith(`:failed:${logId}`);
+}
+
 /**
  * Số mili giây phải chờ để ZNS rời khỏi giờ yên tĩnh (giờ VN, từ `startHour` tới trước `endHour`, qua nửa đêm được);
  * 0 khi đang trong giờ gửi hoặc khi hai mốc bằng nhau (tắt giờ yên tĩnh).
@@ -64,8 +73,11 @@ interface PromoCap {
   to: Date;
 }
 
-/** Kết cục một lần xử lý job ZNS: RETRY = lỗi tạm thời còn lượt thử lại, processor phải ném lỗi để BullMQ xếp lịch. */
-export type ZnsDeliveryOutcome = 'SENT' | 'RETRY' | 'FAILED';
+/**
+ * Kết cục một lần xử lý job ZNS: RETRY = lỗi tạm thời còn lượt thử lại, processor phải ném lỗi để BullMQ xếp lịch;
+ * SKIPPED = job đến muộn sau khi log đã bị đóng và khoá chống trùng đã nhả, không gọi Zalo.
+ */
+export type ZnsDeliveryOutcome = 'SENT' | 'RETRY' | 'FAILED' | 'SKIPPED';
 
 /**
  * Gửi thông báo theo template code (Build Spec §4.10, §11).
@@ -167,11 +179,38 @@ export class NotificationsService {
     }
   }
 
+  /**
+   * Dùng ở nơi tin là việc phụ của một thao tác đã xong (đơn đã xác nhận, đã hoàn tiền...): lỗi gửi không được làm hỏng thao tác
+   * đó, nhưng cũng không được mất dấu — ghi log error (mã tin, khách, ngữ cảnh) và báo Sentry. Trả false khi lỗi để nơi gọi
+   * biết mà nhả phần việc đã nhận (nếu có). `context` là nhãn ngắn kiểu `order=<mã>`, không đưa dữ liệu cá nhân vào.
+   */
+  async notifySafe(
+    userId: string,
+    templateCode: string,
+    data: Record<string, string>,
+    opts?: { dedupeKey?: string; dedupeWithinMs?: number; znsTemplateId?: string; retryZns?: boolean },
+    context?: string,
+  ): Promise<boolean> {
+    try {
+      await this.notify(userId, templateCode, data, opts);
+      return true;
+    } catch (err) {
+      this.logger.error(
+        `Gửi tin ${templateCode} cho ${userId}${context ? ` (${context})` : ''} lỗi: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      captureServerError(err);
+      return false;
+    }
+  }
+
   private dedupeWhere(userId: string, dedupeKey: string, withinMs: number | null, channel: 'INAPP' | 'ZNS' = 'INAPP') {
     return {
       userId,
       channel,
       payload: { path: ['dedupeKey'], equals: dedupeKey },
+      // Log ZNS đã FAILED (không xếp được hàng đợi, Zalo từ chối hết lượt) không được chặn lượt gửi lại: chỉ log đang chờ, đang thử lại
+      // hay đã gửi mới tính là "đã gửi ZNS cho sự kiện này".
+      ...(channel === 'ZNS' ? { status: { in: ['PENDING', 'RETRYING', 'SENT'] } } : {}),
       ...(withinMs != null ? { sentAt: { gte: new Date(Date.now() - withinMs) } } : {}),
     };
   }
@@ -238,7 +277,17 @@ export class NotificationsService {
     } catch (err) {
       const reason = `Không xếp được hàng đợi gửi ZNS: ${err instanceof Error ? err.message : String(err)}`;
       this.logger.error(`${reason} (log ${log.id})`);
-      await this.prisma.notificationLog.update({ where: { id: log.id }, data: { status: 'FAILED', error: reason } });
+      await this.prisma.notificationLog.update({
+        where: { id: log.id },
+        data: {
+          status: 'FAILED',
+          error: reason,
+          // Nhả khoá để lượt gửi lại sau (retryZns) tạo log mới thay vì coi là đã gửi.
+          ...(dedupeKey ? { payload: { data, dedupeKey: releasedZnsDedupeKey(dedupeKey, log.id) } } : {}),
+        },
+      });
+      // Chỉ nơi gọi dùng retryZns (đã tự nhận phần việc) mới cần biết để nhả phần việc của nó; tin thường thì lỗi này không ném ra ngoài.
+      if (dedupeKey) throw err;
     }
   }
 
@@ -291,8 +340,11 @@ export class NotificationsService {
    */
   async deliverZns(job: ZnsSendJobData, finalAttempt: boolean): Promise<ZnsDeliveryOutcome> {
     const where = { id: job.notificationLogId };
-    const current = await this.prisma.notificationLog.findUnique({ where, select: { status: true } });
+    const current = await this.prisma.notificationLog.findUnique({ where, select: { status: true, payload: true } });
     if (current?.status === 'SENT') return 'SENT';
+    // Log bị đóng vì xếp hàng báo lỗi (dù Redis vẫn nhận job) đã nhả khoá để lượt retryZns sau tạo log mới: gửi tiếp ở đây là gửi đôi.
+    // Tin thường không có khoá để nhả và không ai gửi lại, nên job đến muộn vẫn phải gửi.
+    if (current?.status === 'FAILED' && isReleasedZnsLog(current.payload, job.notificationLogId)) return 'SKIPPED';
 
     const result = await this.zns.sendTemplate(job.phone, job.templateId, job.templateData, job.notificationLogId);
     if (result.ok) {

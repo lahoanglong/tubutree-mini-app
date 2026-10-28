@@ -60,7 +60,7 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
             grantReferralReward: jest.fn().mockResolvedValue(undefined),
           },
         },
-        { provide: NotificationsService, useValue: { notify } },
+        { provide: NotificationsService, useValue: { notify, notifySafe: notify } },
         { provide: CartService, useValue: {} },
         { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
         { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
@@ -227,13 +227,13 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
       bankAccountName: 'NGUYEN VAN A',
     });
     // R2-BUYERMINI-9: một lần duyệt chỉ một tin cho khách — tin duyệt đã nói số tiền và tài khoản.
-    expect(notify).toHaveBeenCalledWith(user.id, 'RETURN_APPROVED_DETAIL', expect.objectContaining({ refund_note: expect.stringContaining('Techcombank ••• 5678') }));
-    expect(notify).not.toHaveBeenCalledWith(user.id, 'REFUND_BANK_REQUESTED', expect.anything());
+    expect(notify).toHaveBeenCalledWith(user.id, 'RETURN_APPROVED_DETAIL', expect.objectContaining({ refund_note: expect.stringContaining('Techcombank ••• 5678') }), undefined, expect.stringMatching(/^order=/));
+    expect(notify.mock.calls.filter((c) => c[0] === user.id && c[1] === 'REFUND_BANK_REQUESTED')).toHaveLength(0);
 
     await refunds.claim(adminUser.id, row.id);
     await refunds.markPaid(adminUser.id, row.id, { bankRef: 'FT26101400001' });
     expect(await prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({ status: 'COMPLETED', bankRef: 'FT26101400001' });
-    expect(notify).toHaveBeenCalledWith(user.id, 'REFUND_BANK_COMPLETED', expect.objectContaining({ bank_ref: 'FT26101400001' }));
+    expect(notify).toHaveBeenCalledWith(user.id, 'REFUND_BANK_COMPLETED', expect.objectContaining({ bank_ref: 'FT26101400001' }), undefined, expect.stringMatching(/^order=/));
   });
 
   it('BUYERMINI-9: khách huỷ đơn chuyển khoản đã trả và chọn ngân hàng → đơn REFUNDED, khoản CANCEL chờ chuyển, Ví không đổi', async () => {
@@ -260,14 +260,14 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
     expect(notify).toHaveBeenCalledWith(user.id, 'ORDER_CANCELLED', {
       order_code: order.code,
       refund_note: expect.stringContaining('chuyển khoản 114.000đ về VCB ••• 3456'),
-    });
-    expect(notify).not.toHaveBeenCalledWith(user.id, 'REFUND_BANK_REQUESTED', expect.anything());
+    }, undefined, `order=${order.code}`);
+    expect(notify.mock.calls.filter((c) => c[0] === user.id && c[1] === 'REFUND_BANK_REQUESTED')).toHaveLength(0);
   });
 
   it('BUYERMINI-7/MONEY-6: tiền về muộn cho đơn đã huỷ — webhook gửi lại đồng thời 3 lần → đúng 1 yêu cầu hoàn, báo khách 1 lần', async () => {
     const user = await createUser(prisma, { role: 'CUSTOMER' });
     const order = await createOrder(prisma, { userId: user.id, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', total: 197_000 });
-    const ctx = { prisma, notifications: { notify }, logger: { warn: jest.fn(), log: jest.fn() } };
+    const ctx = { prisma, notifications: { notify, notifySafe: notify }, logger: { warn: jest.fn(), log: jest.fn() } };
 
     const created = await Promise.all(
       [1, 2, 3].map(() => recordLatePaymentRefund(ctx, order, { amount: 197_000, source: 'PANCAKE', refKey: 'p1:197000' })),
@@ -291,7 +291,7 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
         subtotal: 150_000,
         paymentTxnId: appTransId,
       });
-      const zalopay = new ZalopayService(prisma, { notify } as never, zalopayConfig() as never);
+      const zalopay = new ZalopayService(prisma, { notify, notifySafe: notify } as never, zalopayConfig() as never);
       const raw = JSON.stringify({ app_trans_id: appTransId, amount: 150_000 });
       expect((await zalopay.handleCallback(raw, zalopayMac(raw))).return_code).toBe(1);
       expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ paymentStatus: 'PAID', status: 'CONFIRMED' });
@@ -320,7 +320,7 @@ describe('P5 hoàn tiền + trả hàng theo dòng (real Postgres)', () => {
       const adminUser = await createUser(prisma, { role: 'ADMIN' });
       const user = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
       const order = await createOrder(prisma, { userId: user.id, status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', total: 60_000 });
-      await recordLatePaymentRefund({ prisma, notifications: { notify }, logger: { warn: jest.fn(), log: jest.fn() } }, order, {
+      await recordLatePaymentRefund({ prisma, notifications: { notify, notifySafe: notify }, logger: { warn: jest.fn(), log: jest.fn() } }, order, {
         amount: 60_000,
         source: 'PANCAKE',
         refKey: `race-${round}`,

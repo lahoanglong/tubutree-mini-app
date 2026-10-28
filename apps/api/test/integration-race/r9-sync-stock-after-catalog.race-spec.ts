@@ -29,7 +29,7 @@ describe('Đồng bộ danh mục xen giữa các webhook tồn kho, giờ VN (r
     await warmPool(prisma);
     proc = new PancakeProcessor(
       prisma,
-      { notify: jest.fn() } as unknown as NotificationsService,
+      { notify: jest.fn(), notifySafe: jest.fn().mockResolvedValue(true) } as unknown as NotificationsService,
       {} as OrderStatusService,
       { alert: jest.fn() } as never,
     );

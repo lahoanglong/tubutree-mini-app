@@ -9,7 +9,9 @@ import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 
 const DAY = 864e5;
-const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+const notifyMock = jest.fn().mockResolvedValue(true);
+// Service gửi tin qua notifySafe (lỗi gửi không làm hỏng thao tác); hai tên dùng chung một mock để kiểm theo mã tin.
+const notifications = { notify: notifyMock, notifySafe: notifyMock } as unknown as NotificationsService;
 
 const line = (id: string, quantity: number, total: number) => ({
   id,
@@ -97,7 +99,7 @@ describe('OrderReturnsService.request — chọn dòng/số lượng (BUYERMINI-
       items: 'SP a ×2',
       reason: 'Sản phẩm lỗi, hỏng',
     });
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_REQUESTED', { order_code: 'TUBU1' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'RETURN_REQUESTED', { order_code: 'TUBU1' }, undefined, 'order=TUBU1');
   });
 
   it('đơn kho Tubu → không báo gian hàng nào', async () => {
@@ -285,6 +287,7 @@ describe('OrderReturnsService.review — duyệt trả cả đơn, lỗi đảo 
         money: { to: 'BANK', amount: 300_000 },
         pointsBack: 0,
         referralNotices: [],
+        commissionCutBy: [],
       }),
     } as unknown as PrismaService;
     const loyalty = {
@@ -338,6 +341,50 @@ describe('OrderReturnsService.review — duyệt trả cả đơn, lỗi đảo 
     const commissions = setupFullApprove({ commissions: new Error('P1001') });
     await expect(commissions.svc.review('a1', 'r1', { approve: true, shopFault: true })).rejects.toThrow('P1001');
     expect(commissions.markerWrites()).toHaveLength(0);
+  });
+});
+
+describe('OrderReturnsService.review — trả một phần cắt hoa hồng thì báo CTV', () => {
+  function setupPartialApprove(commissionCutBy: { affiliateUserId: string; amount: number }[]) {
+    const order = deliveredOrder({ pancakeOrderId: 'pk1', fulfiller: 'TUBU', fulfillerStorefront: null });
+    const prisma = {
+      returnRequest: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'r1', orderId: 'o1', userId: 'u1', status: 'REQUESTED', refundMethod: 'WALLET', items: [] }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'r1', items: [] }),
+      },
+      order: { findUnique: jest.fn().mockResolvedValue(null), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      $transaction: jest.fn().mockResolvedValue({
+        order,
+        shares: { isFull: false, lines: [] },
+        money: { to: 'WALLET', amount: 90_000 },
+        pointsBack: 0,
+        referralNotices: [],
+        commissionCutBy,
+      }),
+    } as unknown as PrismaService;
+    const loyalty = { pointsExpiresAt: jest.fn().mockResolvedValue(null), reverseOrderPoints: jest.fn() };
+    const affiliate = { reverseCommissionsForOrder: jest.fn() };
+    const svc = new OrderReturnsService(prisma, {} as never, {} as never, loyalty as never, affiliate as never, notifications);
+    (svc as unknown as { flagPancakeReturn: unknown }).flagPancakeReturn = jest.fn().mockResolvedValue(undefined);
+    (svc as unknown as { withContext: unknown }).withContext = jest.fn().mockResolvedValue({ id: 'r1' });
+    return { svc, affiliate };
+  }
+  const reversedNotices = () => (notifications.notify as jest.Mock).mock.calls.filter((c) => c[1] === 'COMMISSION_REVERSED');
+
+  beforeEach(() => (notifications.notify as jest.Mock).mockClear());
+
+  it('có hoa hồng bị cắt → đúng một tin COMMISSION_REVERSED cho CTV với số đã cắt', async () => {
+    const { svc, affiliate } = setupPartialApprove([{ affiliateUserId: 'ctv1', amount: 3_333 }]);
+    await svc.review('a1', 'r1', { approve: true, shopFault: true });
+    expect(reversedNotices()).toHaveLength(1);
+    expect(reversedNotices()[0]!.slice(0, 3)).toEqual(['ctv1', 'COMMISSION_REVERSED', { amount: '3.333đ' }]);
+    expect(affiliate.reverseCommissionsForOrder).not.toHaveBeenCalled();
+  });
+
+  it('không có hoa hồng bị cắt → không gửi tin COMMISSION_REVERSED', async () => {
+    const { svc } = setupPartialApprove([]);
+    await svc.review('a1', 'r1', { approve: true, shopFault: true });
+    expect(reversedNotices()).toHaveLength(0);
   });
 });
 

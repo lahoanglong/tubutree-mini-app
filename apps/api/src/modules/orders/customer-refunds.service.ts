@@ -301,13 +301,12 @@ export class CustomerRefundsService {
     const done = await this.prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id } });
     if (done.userId) {
       await this.notifications
-        ?.notify(done.userId, 'REFUND_BANK_COMPLETED', {
+        ?.notifySafe(done.userId, 'REFUND_BANK_COMPLETED', {
           order_code: done.orderCode,
           amount: formatVnd(done.amount),
           bank: maskedBank(done),
           bank_ref: bankRef,
-        })
-        .catch(() => undefined);
+        }, undefined, `order=${done.orderCode}`);
     }
     return done;
   }
@@ -409,9 +408,7 @@ export class CustomerRefundsService {
     this.logger.log(`Admin ${adminId} xác nhận tiền trả dư ${amount}đ đơn ${row.orderCode} (khoản ${id}).`);
     // Khoản COD trả hàng chưa có mẫu tin riêng (mẫu "tiền dư" nói sai lý do): khách thấy khoản ở chi tiết đơn, Kế toán liên hệ khách.
     if (row.userId && !codReturn) {
-      await this.notifications
-        ?.notify(row.userId, 'REFUND_OVERPAYMENT', { order_code: row.orderCode, amount: formatVnd(amount) })
-        .catch(() => undefined);
+      await this.notifications?.notifySafe(row.userId, 'REFUND_OVERPAYMENT', { order_code: row.orderCode, amount: formatVnd(amount) }, undefined, `order=${row.orderCode}`);
     }
     return this.prisma.orderCustomerRefund.findUniqueOrThrow({ where: { id } });
   }
@@ -542,9 +539,7 @@ export class CustomerRefundsService {
         return true;
       });
       if (!won) throw new BadRequestException(await this.customerLostReason(id));
-      await this.notifications
-        ?.notify(userId, 'REFUND_WALLET_CREDITED', { order_code: row.orderCode, amount: formatVnd(row.amount) })
-        .catch(() => undefined);
+      await this.notifications?.notifySafe(userId, 'REFUND_WALLET_CREDITED', { order_code: row.orderCode, amount: formatVnd(row.amount) }, undefined, `order=${row.orderCode}`);
     } else {
       const bank = normalizeBankDetails(input);
       const res = await this.prisma.orderCustomerRefund.updateMany({

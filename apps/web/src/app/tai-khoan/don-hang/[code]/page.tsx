@@ -7,6 +7,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Leaf, ExternalLink, Star } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { orderCopy } from '@tubutree/app-core/account-copy';
+import { customerOrderNote, isSubscriptionOrder, openProductSlug } from '@tubutree/app-core/api/orders';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { useAuth } from '@/lib/auth-context';
@@ -279,6 +280,8 @@ export default function OrderDetailPage() {
         <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Sản phẩm</h2>
         <ul className="mt-2 divide-y divide-stone-200">
           {o.items.map((it, i) => {
+            // Sản phẩm đã gỡ thì trang sản phẩm trả 404: dòng vẫn hiện, chỉ không dẫn đi đâu.
+            const slug = openProductSlug(it);
             const rowBody = (
               <>
                 <span className="flex-none md:hidden">
@@ -306,8 +309,8 @@ export default function OrderDetailPage() {
               <li key={`${it.productName}-${it.variationName}-${i}`} className="py-3 max-md:py-1.5">
                 <div className="flex items-center justify-between gap-3">
                   {/* Chạm vào món để mở lại trang sản phẩm. */}
-                  {it.productSlug ? (
-                    <Link href={`/san-pham/${it.productSlug}`} aria-label={`Xem sản phẩm ${it.productName}`} className="tubu-press flex min-h-12 min-w-0 flex-1 items-center gap-3">
+                  {slug ? (
+                    <Link href={`/san-pham/${slug}`} aria-label={`Xem sản phẩm ${it.productName}`} className="tubu-press flex min-h-12 min-w-0 flex-1 items-center gap-3">
                       {rowBody}
                     </Link>
                   ) : (
@@ -327,9 +330,9 @@ export default function OrderDetailPage() {
                     </div>
                   )}
                   {/* Mỗi lần mua một đánh giá: dòng đã đánh giá ở đơn này thì mở sửa đúng đánh giá đó. */}
-                  {o.status === 'DELIVERED' && it.productSlug && (it.reviewId || it.reviewable !== false) && (
+                  {o.status === 'DELIVERED' && slug && (it.reviewId || it.reviewable !== false) && (
                     <Link
-                      href={reviewHref(it.productSlug, o.id)}
+                      href={reviewHref(slug, o.id)}
                       className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline max-md:min-h-0 max-md:py-1 max-md:text-xs max-md:text-[color:var(--color-text-brand)] max-md:no-underline"
                     >
                       <Star className="h-4 w-4" aria-hidden="true" />
@@ -385,11 +388,19 @@ export default function OrderDetailPage() {
         <AddressSection order={o} />
       </div>
 
-      {o.note && (
+      {customerOrderNote(o) ? (
         <section className={`mt-4 p-4 max-md:order-10 max-md:mt-2 ${ui.card} ${mini.band}`}>
           <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Ghi chú</h2>
-          <p className="mt-2 whitespace-pre-line text-sm text-stone-700">{o.note}</p>
+          <p className="mt-2 whitespace-pre-line text-sm text-stone-700">{customerOrderNote(o)}</p>
         </section>
+      ) : (
+        // Ghi chú cố định của hệ thống không phải lời khách viết: thay bằng nhãn.
+        isSubscriptionOrder(o) && (
+          <section className={`mt-4 p-4 max-md:order-10 max-md:mt-2 ${ui.card} ${mini.band}`}>
+            <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Đơn định kỳ</h2>
+            <p className="mt-2 text-sm text-stone-700">Đơn này tự đặt theo lịch bạn đã chọn.</p>
+          </section>
+        )
       )}
 
       {cancelClosed && (

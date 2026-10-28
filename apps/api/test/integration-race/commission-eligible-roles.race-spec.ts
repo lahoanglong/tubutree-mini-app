@@ -70,7 +70,7 @@ describe('Chỉ CTV/đại lý hưởng hoa hồng (real Postgres, checkout th�
           provide: CouponsService,
           useValue: { validateAndCompute: jest.fn(), redeem: jest.fn().mockResolvedValue(undefined), release: jest.fn().mockResolvedValue(undefined) },
         },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifyMany: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true), notifyMany: jest.fn().mockResolvedValue(undefined) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
         { provide: GomdonOrderService, useValue: { isRecyclingEnabled: jest.fn().mockResolvedValue(false), enqueuePush: jest.fn() } },
         { provide: ComboService, useValue: { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) } },

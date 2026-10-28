@@ -74,7 +74,7 @@ describe('CTV được duyệt làm đối tác giữ gian hàng CTV (real Postg
           provide: CouponsService,
           useValue: { validateAndCompute: jest.fn(), redeem: jest.fn().mockResolvedValue(undefined), release: jest.fn().mockResolvedValue(undefined) },
         },
-        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifyMany: jest.fn().mockResolvedValue(undefined) } },
+        { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true), notifyMany: jest.fn().mockResolvedValue(undefined) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
         { provide: GomdonOrderService, useValue: { isRecyclingEnabled: jest.fn().mockResolvedValue(false), enqueuePush: jest.fn() } },
         { provide: ComboService, useValue: { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) } },
@@ -99,7 +99,7 @@ describe('CTV được duyệt làm đối tác giữ gian hàng CTV (real Postg
     storefrontSvc = moduleRef.get(StorefrontService);
     returns = moduleRef.get(OrderReturnsService);
     const none = {} as never;
-    admin = new AdminService(prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined) } as never, none, none, none, none, none);
+    admin = new AdminService(prisma, none, none, none, { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } as never, none, none, none, none, none);
     await setConfig(prisma, 'merchant.settlement_hold_days', 7);
     await setConfig(prisma, 'merchant.consignment_settle_from', '2000-01-01T00:00:00Z');
   });

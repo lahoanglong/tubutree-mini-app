@@ -280,6 +280,12 @@ describe('discountRows — tách từng khoản giảm giá của đơn', () => 
     ]);
   });
 
+  it('đơn đặt định kỳ chỉ có tổng discount: nhãn "Ưu đãi đặt định kỳ", số tiền không đổi', () => {
+    expect(discountRows({ discount: 12_000, pointsUsed: 0, source: 'subscription' })).toEqual([{ label: 'Ưu đãi đặt định kỳ', amount: 12_000 }]);
+    expect(discountRows({ discount: 0, source: 'subscription' })).toEqual([]);
+    expect(discountRows({ discount: 12_000, source: 'checkout' })).toEqual([{ label: 'Giảm giá', amount: 12_000 }]);
+  });
+
   it('combo, hạng thành viên và phần giảm không rõ nguồn đều có dòng riêng; tổng các dòng = discount', () => {
     const rows = discountRows({ discount: 100_000, couponDiscount: 0, comboDiscount: 30_000, tierDiscount: 20_000, pointsDiscount: 0, pointsUsed: 0 });
     expect(rows).toEqual([

@@ -56,7 +56,7 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
       paymentAttempt: { findUnique: attemptFindUnique, create: jest.fn().mockResolvedValue({}) },
     }) as unknown as PrismaService;
     const notify = jest.fn().mockResolvedValue(undefined);
-    const notifications = { notify } as unknown as NotificationsService;
+    const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
     // record() mock — Task 5 review finding: không test nào từng truyền analytics nên
     // if(this.analytics) luôn no-op; giờ wiring thật để có assert flip⇒event có xảy ra.
     const analytics = { record: jest.fn().mockResolvedValue(undefined) };
@@ -123,7 +123,7 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
     }) as unknown as PrismaService;
     const notify = jest.fn();
     const analytics = { record: jest.fn().mockResolvedValue(undefined) };
-    const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never, undefined, analytics as never);
+    const svc = new ZalopayService(prisma, { notify, notifySafe: notify } as unknown as NotificationsService, makeConfig(true) as never, undefined, analytics as never);
     const raw = JSON.stringify({ app_trans_id: '250101_TUBU1', amount: 250000 });
     const r = await svc.handleCallback(raw, sign(raw));
     expect(r.return_code).toBe(1);
@@ -148,7 +148,7 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
     } as unknown as PrismaService;
     const notify = jest.fn().mockResolvedValue(undefined);
     const analytics = { record: jest.fn().mockResolvedValue(undefined) };
-    const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never, undefined, analytics as never);
+    const svc = new ZalopayService(prisma, { notify, notifySafe: notify } as unknown as NotificationsService, makeConfig(true) as never, undefined, analytics as never);
     const raw = JSON.stringify({ app_trans_id: '250101_TUBU1', amount: 250000 });
     await svc.handleCallback(raw, sign(raw));
     expect(analytics.record).toHaveBeenCalledTimes(1);
@@ -176,7 +176,7 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
       orderCustomerRefund: { createMany },
       user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
     }) as unknown as PrismaService;
-    const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never);
+    const svc = new ZalopayService(prisma, { notify, notifySafe: notify } as unknown as NotificationsService, makeConfig(true) as never);
     return { svc, updateMany, notify, createMany, prisma };
   }
 
@@ -190,9 +190,9 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
       data: [expect.objectContaining({ orderId: 'o1', kind: 'LATE_PAYMENT', refKey: 'ZALOPAY:250101_TUBU1', amount: 250000, userId: 'u1' })],
       skipDuplicates: true,
     });
-    expect(notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', { order_code: 'TUBU1', amount: '250.000đ' });
+    expect(notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', { order_code: 'TUBU1', amount: '250.000đ' }, undefined, 'order=TUBU1');
     expect(notify).toHaveBeenCalledWith('admin1', 'OPS_REFUND_ALERT', expect.objectContaining({ order_code: 'TUBU1' }));
-    expect(notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
+    expect(notify.mock.calls.filter((c) => c[0] === 'u1' && c[1] === 'ORDER_CONFIRMED')).toHaveLength(0);
   });
 
   // Đơn đã nhận tiền qua callback trước (PAID), sau đó huỷ/trả và đã hoàn (REFUNDED): ZaloPay gửi lại CÙNG
@@ -241,15 +241,15 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
       orderCustomerRefund: { createMany },
       user: { findMany: jest.fn().mockResolvedValue([]) },
     }) as unknown as PrismaService;
-    const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never);
+    const svc = new ZalopayService(prisma, { notify, notifySafe: notify } as unknown as NotificationsService, makeConfig(true) as never);
     const raw = JSON.stringify({ app_trans_id: '250101_TUBU1', amount: 250000 });
     await svc.handleCallback(raw, sign(raw));
     expect(createMany).toHaveBeenCalledWith({
       data: [expect.objectContaining({ kind: 'LATE_PAYMENT', amount: 250000, refKey: 'ZALOPAY:250101_TUBU1' })],
       skipDuplicates: true,
     });
-    expect(notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', expect.anything());
-    expect(notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
+    expect(notify).toHaveBeenCalledWith('u1', 'REFUND_LATE_PAYMENT', expect.anything(), undefined, 'order=TUBU1');
+    expect(notify.mock.calls.filter((c) => c[0] === 'u1' && c[1] === 'ORDER_CONFIRMED')).toHaveLength(0);
   });
 
   it('guard thua vì đơn đã PAID (callback trùng) → không tạo yêu cầu hoàn', async () => {
@@ -303,7 +303,7 @@ describe('ZalopayService — nhiều lần thử thanh toán (PaymentAttempt)', 
     }) as unknown as PrismaService;
     const notify = jest.fn().mockResolvedValue(undefined);
     const analytics = { record: jest.fn().mockResolvedValue(undefined) };
-    const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never, undefined, analytics as never);
+    const svc = new ZalopayService(prisma, { notify, notifySafe: notify } as unknown as NotificationsService, makeConfig(true) as never, undefined, analytics as never);
     return { svc, update, updateMany, prisma, notify, analytics };
   }
 
@@ -366,7 +366,7 @@ describe('ZalopayService — đơn thu gom tái chế: chỉ đặt vận đơn 
     const gomdonQueue = { getJob: jest.fn().mockResolvedValue(undefined), add: jest.fn().mockResolvedValue({}) };
     const notify = jest.fn().mockResolvedValue(undefined);
     const analytics = { record: jest.fn().mockResolvedValue(undefined) };
-    const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never, gomdonQueue as never, analytics as never);
+    const svc = new ZalopayService(prisma, { notify, notifySafe: notify } as unknown as NotificationsService, makeConfig(true) as never, gomdonQueue as never, analytics as never);
     return { svc, gomdonQueue, notify, analytics };
   }
   const base = { id: 'o1', code: 'TUBU1', userId: 'u1', paymentStatus: 'UNPAID', status: 'PENDING_PAYMENT', total: 100000 };
@@ -423,7 +423,7 @@ describe('ZalopayService — tiền về thì đơn mới lên kho Pancake (BUYE
     const pancakeHooks = { afterPaid: jest.fn().mockResolvedValue(undefined) };
     const svc = new ZalopayService(
       prisma,
-      { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService,
+      { notify: jest.fn().mockResolvedValue(undefined), notifySafe: jest.fn().mockResolvedValue(true) } as unknown as NotificationsService,
       makeConfig(true) as never,
       undefined,
       undefined,
@@ -557,7 +557,7 @@ describe('ZalopayService — callback thiếu/sai kiểu số tiền', () => {
       user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]) },
     }) as unknown as PrismaService;
     const notify = jest.fn().mockResolvedValue(undefined);
-    const svc = new ZalopayService(prisma, { notify } as unknown as NotificationsService, makeConfig(true) as never);
+    const svc = new ZalopayService(prisma, { notify, notifySafe: notify } as unknown as NotificationsService, makeConfig(true) as never);
     return { svc, updateMany, createMany, notify, attemptUpdateMany };
   }
 
@@ -576,7 +576,7 @@ describe('ZalopayService — callback thiếu/sai kiểu số tiền', () => {
       expect.objectContaining({ data: expect.objectContaining({ pancakeAttention: expect.stringContaining('không khớp 285.000đ') }) }),
     );
     expect(notify).toHaveBeenCalledWith('admin1', 'OPS_PAYMENT_ALERT', expect.objectContaining({ order_code: 'TUBU1' }));
-    expect(notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
+    expect(notify.mock.calls.filter((c) => c[0] === 'u1' && c[1] === 'ORDER_CONFIRMED')).toHaveLength(0);
     expect(attemptUpdateMany).toHaveBeenCalledWith({ where: { id: 'a1', resolvedAt: null }, data: { resolvedAt: expect.any(Date) } });
   });
 

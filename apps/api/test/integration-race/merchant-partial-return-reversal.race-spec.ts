@@ -48,7 +48,7 @@ describe('Trả một phần dòng hàng gian hàng đã đối soát → REVERS
             grantReferralReward: jest.fn().mockResolvedValue(undefined),
           },
         },
-        { provide: NotificationsService, useValue: { notify } },
+        { provide: NotificationsService, useValue: { notify, notifySafe: notify } },
         { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
         { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
       ],

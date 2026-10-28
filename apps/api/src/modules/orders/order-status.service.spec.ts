@@ -28,7 +28,8 @@ function makeOrder(overrides: Record<string, unknown> = {}) {
 describe('OrderStatusService', () => {
   let service: OrderStatusService;
   let prisma: {
-    order: { findFirst: jest.Mock; findUniqueOrThrow: jest.Mock };
+    order: { findFirst: jest.Mock; findUniqueOrThrow: jest.Mock; updateMany?: jest.Mock };
+    notificationLog: { findFirst: jest.Mock };
     $transaction: jest.Mock;
   };
   let loyalty: { creditOrderPoints: jest.Mock; reverseOrderPoints: jest.Mock };
@@ -37,7 +38,7 @@ describe('OrderStatusService', () => {
     grantReferralReward: jest.Mock;
     reverseCommissionsForOrder: jest.Mock;
   };
-  let notifications: { notify: jest.Mock };
+  let notifications: { notify: jest.Mock; notifySafe: jest.Mock };
   let reversal: { reverseFinancials: jest.Mock };
   // Task 6 review finding: nếu không wiring thật, this.analytics luôn undefined trong mọi test
   // (@Optional() no-op câm lặng) → không test nào từng chứng minh order_status_changed thật sự
@@ -48,6 +49,7 @@ describe('OrderStatusService', () => {
   beforeEach(async () => {
     prisma = {
       order: { findFirst: jest.fn(), findUniqueOrThrow: jest.fn() },
+      notificationLog: { findFirst: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn(),
     };
     loyalty = { creditOrderPoints: jest.fn().mockResolvedValue(undefined), reverseOrderPoints: jest.fn().mockResolvedValue(undefined) };
@@ -56,7 +58,9 @@ describe('OrderStatusService', () => {
       grantReferralReward: jest.fn().mockResolvedValue(undefined),
       reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
     };
-    notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+    const notify = jest.fn().mockResolvedValue(true);
+    // Service gửi tin qua notifySafe; hai tên dùng chung một mock để kiểm theo mã tin.
+    notifications = { notify, notifySafe: notify };
     reversal = { reverseFinancials: jest.fn().mockResolvedValue(undefined) };
     analytics = { record: jest.fn().mockResolvedValue(undefined) };
 
@@ -153,7 +157,7 @@ describe('OrderStatusService', () => {
     prisma.order.findFirst.mockResolvedValue(order);
     mockTx();
     await service.setStatus('o1', 'CANCELLED' as never, { actorType: 'MERCHANT', note: 'Hết hàng' });
-    expect(notifications.notify).not.toHaveBeenCalledWith('shop-owner', 'MERCHANT_ORDER_CANCELLED', expect.anything());
+    expect((notifications.notify as jest.Mock).mock.calls.filter((c) => c[0] === 'shop-owner' && c[1] === 'MERCHANT_ORDER_CANCELLED')).toHaveLength(0);
   });
 
   it.each([
@@ -192,7 +196,7 @@ describe('OrderStatusService', () => {
     expect(notifications.notify).toHaveBeenCalledWith('u1', code, {
       order_code: 'TUBU1',
       refund_note: ' Đã hoàn 103.000đ vào Ví Tubu. Đã hoàn 15 Điểm Xanh.',
-    });
+    }, undefined, expect.stringMatching(/^order=/));
   });
 
   it('R3-MONEY-7: admin huỷ kèm lý do → tin nói lý do và cả Điểm Xanh thường (lô STANDARD) được hoàn sau tx', async () => {
@@ -211,7 +215,7 @@ describe('OrderStatusService', () => {
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', {
       order_code: 'TUBU1',
       refund_note: ' Lý do: Hết hàng nhà cung cấp. Đã hoàn 95.000đ vào Ví Tubu. Đã hoàn 19 Điểm Xanh.',
-    });
+    }, undefined, expect.stringMatching(/^order=/));
   });
 
   it('đơn chưa thu tiền bị huỷ → refund_note rỗng (không nói gì về tiền)', async () => {
@@ -222,7 +226,7 @@ describe('OrderStatusService', () => {
     reversal.reverseFinancials.mockResolvedValue({ moneyRefunded: false, pointsRefunded: 0, refund: null });
     mockTx();
     await service.setStatus('o1', 'CANCELLED' as never, { actorType: 'SYSTEM' });
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', { order_code: 'TUBU1', refund_note: '' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', { order_code: 'TUBU1', refund_note: '' }, undefined, expect.stringMatching(/^order=/));
   });
 
   it('UAT GOMDON-10: ghi chú hệ thống (webhook/cron/admin) KHÔNG nối vào Order.note — ô "Ghi chú" khách tự viết', async () => {
@@ -311,7 +315,7 @@ describe('OrderStatusService', () => {
     expect(affiliate.lockCommissionsForOrder).toHaveBeenCalledWith('o1');
     expect(affiliate.grantReferralReward).toHaveBeenCalledWith('o1');
     expect(reversal.reverseFinancials).not.toHaveBeenCalled();
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', { order_code: 'TUBU1' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', { order_code: 'TUBU1' }, { dedupeKey: 'order-delivered:TUBU1' }, 'order=TUBU1');
   });
 
   // C-053 (A1-019): lời ORDER_DELIVERED từng khẳng định "Điểm Xanh đã được cộng" kể cả đơn trả bằng xu (không tích điểm).
@@ -326,7 +330,7 @@ describe('OrderStatusService', () => {
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', {
       order_code: 'TUBU1',
       points_note: ' Bạn được cộng 12 Điểm Xanh.',
-    });
+    }, { dedupeKey: 'order-delivered:TUBU1' }, 'order=TUBU1');
   });
 
   it('DELIVERED: đơn không tích điểm (trả bằng xu) → tin báo KHÔNG nhắc điểm', async () => {
@@ -337,7 +341,7 @@ describe('OrderStatusService', () => {
 
     await service.setStatus('o1', 'DELIVERED' as never);
 
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', { order_code: 'TUBU1' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', { order_code: 'TUBU1' }, { dedupeKey: 'order-delivered:TUBU1' }, 'order=TUBU1');
   });
 
   it('chỉ DELIVERED mới có points_note: đơn tích điểm chuyển PACKED vẫn chỉ gửi order_code', async () => {
@@ -348,7 +352,7 @@ describe('OrderStatusService', () => {
 
     await service.setStatus('o1', 'PACKED' as never);
 
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_PACKED', { order_code: 'TUBU1' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_PACKED', { order_code: 'TUBU1' }, undefined, expect.stringMatching(/^order=/));
   });
 
   it('DELIVERED: xét thưởng giới thiệu lỗi (khoá/deadlock) → đơn vẫn giao xong, vẫn notify', async () => {
@@ -359,7 +363,85 @@ describe('OrderStatusService', () => {
     affiliate.grantReferralReward.mockRejectedValue(new Error('deadlock detected'));
 
     await expect(service.setStatus('o1', 'DELIVERED' as never)).resolves.toMatchObject({ status: 'DELIVERED' });
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', { order_code: 'TUBU1' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_DELIVERED', { order_code: 'TUBU1' }, { dedupeKey: 'order-delivered:TUBU1' }, 'order=TUBU1');
+  });
+
+  describe('tin "Đã giao" không mất khi việc sau giao lỗi', () => {
+    const deliveredNotices = () => notifications.notify.mock.calls.filter((c) => c[1] === 'ORDER_DELIVERED');
+    const NOTICE = ['u1', 'ORDER_DELIVERED', { order_code: 'TUBU1', points_note: ' Bạn được cộng 12 Điểm Xanh.' }, { dedupeKey: 'order-delivered:TUBU1' }, 'order=TUBU1'];
+
+    function deliver(over: Record<string, unknown> = {}) {
+      const order = makeOrder({ status: 'SHIPPING', pointsEarned: 12, ...over });
+      prisma.order.findFirst.mockResolvedValue(order);
+      prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'DELIVERED' });
+      prisma.order.updateMany = jest.fn().mockResolvedValue({ count: 1 });
+      mockTx();
+      return order;
+    }
+
+    it('cộng điểm ném ở lần giao → chưa có tin; resyncDeliveredEffects xong thì gửi đúng một tin; gọi lại không thêm', async () => {
+      const order = deliver();
+      loyalty.creditOrderPoints.mockRejectedValueOnce(new Error('P2024 pool timeout'));
+      await expect(service.setStatus('o1', 'DELIVERED' as never)).rejects.toThrow('P2024');
+      expect(deliveredNotices()).toHaveLength(0);
+
+      prisma.order.findFirst.mockResolvedValue({ ...order, status: 'DELIVERED', deliveredEffectsAt: null });
+      await expect(service.resyncDeliveredEffects('o1')).resolves.toMatchObject({ outcome: 'DONE' });
+      expect(deliveredNotices()).toEqual([NOTICE]);
+
+      prisma.order.findFirst.mockResolvedValue({ ...order, status: 'DELIVERED', deliveredEffectsAt: new Date() });
+      await expect(service.resyncDeliveredEffects('o1')).resolves.toMatchObject({ outcome: 'ALREADY_DONE' });
+      expect(deliveredNotices()).toHaveLength(1);
+    });
+
+    it('giao bình thường (việc sau giao xong ngay): đúng một tin, kèm khoá chống gửi đôi', async () => {
+      deliver();
+      await service.setStatus('o1', 'DELIVERED' as never);
+      expect(deliveredNotices()).toEqual([NOTICE]);
+    });
+
+    it('xét thưởng giới thiệu lỗi (còn dở) → lần giao vẫn gửi tin; lượt resync sau gửi cùng khoá nên NotificationsService chặn trùng', async () => {
+      const order = deliver();
+      affiliate.grantReferralReward.mockRejectedValueOnce(new Error('deadlock detected'));
+      await service.setStatus('o1', 'DELIVERED' as never);
+      expect(deliveredNotices()).toEqual([NOTICE]);
+
+      prisma.order.findFirst.mockResolvedValue({ ...order, status: 'DELIVERED', deliveredEffectsAt: null });
+      await service.resyncDeliveredEffects('o1');
+      expect(deliveredNotices().map((c) => c[3])).toEqual([{ dedupeKey: 'order-delivered:TUBU1' }, { dedupeKey: 'order-delivered:TUBU1' }]);
+    });
+
+    it('đơn giao trước bản có khoá chống gửi đôi (tin "Đã giao" cũ không mang khoá) → lượt resync làm nốt việc nhưng không gửi tin lần hai', async () => {
+      const order = deliver();
+      prisma.notificationLog.findFirst.mockResolvedValue({ id: 'old-notice' });
+      prisma.order.findFirst.mockResolvedValue({ ...order, status: 'DELIVERED', deliveredEffectsAt: null });
+      await expect(service.resyncDeliveredEffects('o1')).resolves.toMatchObject({ outcome: 'DONE' });
+      expect(prisma.notificationLog.findFirst).toHaveBeenCalledWith({
+        where: { userId: 'u1', channel: 'INAPP', templateCode: 'ORDER_DELIVERED', payload: { path: ['data', 'order_code'], equals: 'TUBU1' } },
+        select: { id: true },
+      });
+      expect(deliveredNotices()).toHaveLength(0);
+    });
+
+    it('không đọc được tin cũ (DB lỗi) → vẫn gửi tin, để khoá chống gửi đôi của NotificationsService lo; không ném ra ngoài', async () => {
+      const order = deliver();
+      prisma.notificationLog.findFirst.mockRejectedValue(new Error('P2024 pool timeout'));
+      prisma.order.findFirst.mockResolvedValue({ ...order, status: 'DELIVERED', deliveredEffectsAt: null });
+      await expect(service.resyncDeliveredEffects('o1')).resolves.toMatchObject({ outcome: 'DONE' });
+      expect(deliveredNotices()).toEqual([NOTICE]);
+    });
+
+    it('DELIVERED lặp (webhook) khi việc sau giao chưa xong → làm nốt rồi gửi tin; đơn đã có mốc thì không gửi', async () => {
+      const order = deliver();
+      prisma.order.findFirst.mockResolvedValue({ ...order, status: 'DELIVERED', deliveredEffectsAt: null });
+      await service.setStatus('o1', 'DELIVERED' as never);
+      expect(deliveredNotices()).toEqual([NOTICE]);
+
+      notifications.notify.mockClear();
+      prisma.order.findFirst.mockResolvedValue({ ...order, status: 'DELIVERED', deliveredEffectsAt: new Date() });
+      await service.setStatus('o1', 'DELIVERED' as never);
+      expect(deliveredNotices()).toHaveLength(0);
+    });
   });
 
   it('CANCELLED: gọi reversal trong tx + đảo điểm/hoa hồng, KHÔNG credit', async () => {
@@ -593,6 +675,7 @@ describe('OrderStatusService — huỷ đơn thu gom tái chế → huỷ vận 
     };
     const prisma = {
       order: { findFirst: jest.fn().mockResolvedValue(order), findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+      notificationLog: { findFirst: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
     };
     const queue = { getJob: jest.fn().mockResolvedValue(undefined), add: queueAdd };
@@ -604,7 +687,7 @@ describe('OrderStatusService — huỷ đơn thu gom tái chế → huỷ vận 
         grantReferralReward: jest.fn(),
         reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
       } as unknown as AffiliateService,
-      { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService,
+      { notify: jest.fn(), notifySafe: jest.fn() } as unknown as NotificationsService,
       { reverseFinancials: jest.fn().mockResolvedValue(undefined) } as unknown as OrderReversalService,
       queue as never,
     );
@@ -641,6 +724,7 @@ describe('OrderStatusService — ghi deliveredAt khi lật DELIVERED (mốc hạ
     const order = makeOrder({ status: 'SHIPPING' });
     const prisma = {
       order: { findFirst: jest.fn().mockResolvedValue(order), findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+      notificationLog: { findFirst: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
     };
     const svc = new OrderStatusService(
@@ -651,7 +735,7 @@ describe('OrderStatusService — ghi deliveredAt khi lật DELIVERED (mốc hạ
         grantReferralReward: jest.fn().mockResolvedValue(undefined),
         reverseCommissionsForOrder: jest.fn(),
       } as unknown as AffiliateService,
-      { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService,
+      { notify: jest.fn(), notifySafe: jest.fn() } as unknown as NotificationsService,
       { reverseFinancials: jest.fn() } as unknown as OrderReversalService,
     );
     await svc.setStatus('o1', 'DELIVERED' as never);
@@ -676,6 +760,7 @@ describe('OrderStatusService — chặn giao đơn trả trước chưa thanh to
     };
     const prisma = {
       order: { findFirst: jest.fn().mockResolvedValue(order), findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+      notificationLog: { findFirst: jest.fn().mockResolvedValue(null) },
       dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(opts.creditDebit ? { id: 'l1' } : null) },
       $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
       $executeRaw: jest.fn().mockResolvedValue(1),
@@ -690,7 +775,7 @@ describe('OrderStatusService — chặn giao đơn trả trước chưa thanh to
       prisma as unknown as PrismaService,
       loyalty as unknown as LoyaltyService,
       affiliate as unknown as AffiliateService,
-      { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService,
+      { notify: jest.fn(), notifySafe: jest.fn() } as unknown as NotificationsService,
       { reverseFinancials: jest.fn() } as unknown as OrderReversalService,
     );
     return { svc, prisma, tx, loyalty, affiliate };
@@ -828,7 +913,8 @@ describe('OrderStatusService.markPaid', () => {
       },
       $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
     };
-    const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+    const notifyMock = jest.fn().mockResolvedValue(true);
+    const notifications = { notify: notifyMock, notifySafe: notifyMock };
     const queue = { getJob: jest.fn().mockResolvedValue(undefined), add: jest.fn().mockResolvedValue({}) };
     const analytics = { record: jest.fn().mockResolvedValue(undefined) };
     const loyalty = { creditOrderPoints: jest.fn(), reverseOrderPoints: jest.fn() };
@@ -894,7 +980,7 @@ describe('OrderStatusService.markPaid', () => {
         props: expect.objectContaining({ orderId: 'o1', method: 'BANK_TRANSFER', amount: 100000 }),
       }),
     );
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' });
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' }, undefined, expect.stringMatching(/^order=/));
   });
 
   it('đơn đã xác nhận trước khi tiền về → chỉ lật PAID, giữ trạng thái', async () => {
@@ -993,6 +1079,7 @@ describe('OrderStatusService.setStatus — onlyIfUnpaid (cron huỷ đơn quá h
     };
     const prisma = {
       order: { findFirst: jest.fn().mockResolvedValue(order), findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+      notificationLog: { findFirst: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
     };
     const reversal = { reverseFinancials: jest.fn().mockResolvedValue({ moneyRefunded: false }) };
@@ -1005,7 +1092,7 @@ describe('OrderStatusService.setStatus — onlyIfUnpaid (cron huỷ đơn quá h
         grantReferralReward: jest.fn(),
         reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
       } as unknown as AffiliateService,
-      { notify } as unknown as NotificationsService,
+      { notify, notifySafe: notify } as unknown as NotificationsService,
       reversal as unknown as OrderReversalService,
     );
     return { svc, prisma, tx, reversal, notify };
@@ -1062,6 +1149,7 @@ describe('OrderStatusService — hook thu kèm rác sau commit (§12.2 bước 3
     const seen: string[] = [];
     const prisma = {
       order: { findFirst: jest.fn().mockResolvedValue(order), findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+      notificationLog: { findFirst: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn(async (fn: (t: unknown) => unknown) => {
         const r = await fn(tx);
         seen.push('tx end');
@@ -1081,7 +1169,7 @@ describe('OrderStatusService — hook thu kèm rác sau commit (§12.2 bước 3
       prisma as unknown as PrismaService,
       loyalty as unknown as LoyaltyService,
       { lockCommissionsForOrder: jest.fn().mockResolvedValue(0), grantReferralReward: jest.fn().mockResolvedValue(undefined), reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined) } as unknown as AffiliateService,
-      { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService,
+      { notify: jest.fn(), notifySafe: jest.fn() } as unknown as NotificationsService,
       { reverseFinancials: jest.fn().mockResolvedValue(null) } as unknown as OrderReversalService,
       undefined,
       undefined,

@@ -58,7 +58,7 @@ describe('gộp phiên khách với dòng thu hồi ghép lô, rồi cron hết 
         LoyaltyExpiryService,
         RewardPointsService,
         ReviewsService,
-        { provide: NotificationsService, useValue: { notify: async () => undefined } },
+        { provide: NotificationsService, useValue: { notify: async () => undefined, notifySafe: jest.fn().mockResolvedValue(true) } },
       ],
     }).compile();
     await moduleRef.init();
