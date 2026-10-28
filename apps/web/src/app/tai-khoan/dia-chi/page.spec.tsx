@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -37,6 +37,11 @@ const A1 = {
   provinceCode: '84_VN01', districtCode: '', wardCode: '84_VN01_001', isDefault: true,
 };
 const A2 = { ...A1, id: 'a2', recipient: 'Trần Bình', phone: '0987654321', street: '9 Hoàng Quốc Việt', isDefault: false };
+
+// Sổ địa chỉ trống vẽ EmptyState nạp bằng next/dynamic; lần nạp đầu phải biên dịch, trên máy CI chậm lâu hơn các nhịp flush() của mount.
+beforeAll(async () => {
+  await import('@/components/mini/empty-state');
+});
 
 let mounted: Rendered[] = [];
 const mount = async () => {

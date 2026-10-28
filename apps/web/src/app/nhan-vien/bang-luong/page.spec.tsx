@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 import { formatVnd } from '@/lib/format-vnd';
@@ -75,6 +75,11 @@ const payroll = (year: number, month: number, over: Record<string, unknown> = {}
 
 // Phiên của ngày 02/03: vào 08:00 (trễ), ra 12:30 (giờ VN).
 const SESSIONS = [{ id: 's1', shiftId: 'sh1', checkinAt: '2026-03-02T01:00:00.000Z', checkoutAt: '2026-03-02T05:30:00.000Z', isLate: true, closeReason: null }];
+
+// Trang chặn (không phải nhân viên) vẽ EmptyState nạp bằng next/dynamic; lần nạp đầu phải biên dịch, trên máy CI chậm lâu hơn các nhịp flush() của mount.
+beforeAll(async () => {
+  await import('@/components/mini/empty-state');
+});
 
 let mounted: Rendered[] = [];
 const mount = async () => {
