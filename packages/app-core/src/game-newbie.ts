@@ -80,6 +80,20 @@ export function tutorialState(t: TutorialInput): TutorialState {
   return { visible: !t.dismissed, current, done };
 }
 
+/** Số nhiệm vụ chưa xong hiện sẵn ở tab Hôm nay; phần còn lại nằm sau "Xem tất cả". */
+export const MISSIONS_COLLAPSED = 3;
+
+/**
+ * Thu gọn thẻ nhiệm vụ: chỉ các việc chưa nhận thưởng, tối đa `MISSIONS_COLLAPSED`. Chưa có việc nào dang dở
+ * thì giữ nguyên cả danh sách (không có gì để giấu). `collapsible` = có phần bị giấu, cần nút "Xem tất cả".
+ */
+export function collapseMissions<T extends { claimed?: boolean }>(missions: T[], showAll: boolean): { items: T[]; collapsible: boolean } {
+  const open = missions.filter((m) => !m.claimed);
+  if (open.length === 0) return { items: missions, collapsible: false };
+  const compact = open.slice(0, MISSIONS_COLLAPSED);
+  return { items: showAll ? missions : compact, collapsible: compact.length < missions.length };
+}
+
 /** Lô phụ chỉ hiện từ khi thu hoạch cây thứ 2, hoặc khi khách đã có lô phụ. */
 export function extraPlotsVisible(treesPlanted: number | null | undefined, hasExtraPlot: boolean): boolean {
   return hasExtraPlot || (treesPlanted ?? 0) >= 2;
@@ -221,6 +235,8 @@ export const gameNewbieCopy = {
     feedHintReadOnly: 'Xem mẹo sống xanh từ mọi người',
   },
   missions: {
+    showAll: (total: number) => `Xem tất cả (${total})`,
+    showLess: 'Thu gọn',
     doNow: 'Làm ngay',
     doNowFor: (title: string) => `Làm ngay: ${title}`,
     progressLabel: (title: string, progress: number, goal: number) => `${title}: ${progress}/${goal}`,

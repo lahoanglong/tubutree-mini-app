@@ -51,7 +51,7 @@ export function CheckInStreak({
             <div key={day} className="flex-1 text-center">
               <div
                 data-testid="streak-cell"
-                className={`flex h-10 items-center justify-center rounded-control text-sm ${done ? 'bg-forest-600 text-stone-0' : 'bg-stone-100 text-stone-600'}`}
+                className={`flex h-8 items-center justify-center rounded-control text-sm ${done ? 'bg-forest-600 text-stone-0' : 'bg-stone-100 text-stone-600'}`}
               >
                 {done ? '💧' : bonus ? '🎁' : day}
               </div>

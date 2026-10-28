@@ -57,7 +57,7 @@ export function CheckInStreak({
             <div key={i} style={{ flex: 1, textAlign: 'center' }}>
               <div
                 style={{
-                  height: 40,
+                  height: 32,
                   borderRadius: 'var(--radius-control)',
                   background: done ? 'var(--color-action-primary-bg)' : 'var(--stone-100)',
                   display: 'flex',

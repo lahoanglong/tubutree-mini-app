@@ -1166,8 +1166,10 @@ describe('GamePage — nhiệm vụ', () => {
       mission({ code: 'B', title: 'Đang làm', progress: 1, goal: 3 }),
     ]);
     renderPage();
-    expect(await screen.findByText('Đã xong')).toBeInTheDocument();
-    expect(screen.getByText('Đang làm')).toBeInTheDocument();
+    expect(await screen.findByText('Đang làm')).toBeInTheDocument();
+    expect(screen.queryByText('Đã xong')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả (2)' }));
+    expect(screen.getByText('Đã xong')).toBeInTheDocument();
     expect(screen.getByText('1/3')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: viText.game.missions.claim })).not.toBeInTheDocument();
   });

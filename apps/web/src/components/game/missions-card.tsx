@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { Check, Target } from 'lucide-react';
 import type { MissionItem } from '@tubutree/app-core/api/game';
-import { gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
+import { collapseMissions, gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ui } from '@/lib/guest-ui';
 import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
@@ -25,10 +26,12 @@ export function MissionsCard({
   /** Bấm "Làm ngay" trên nhiệm vụ chưa xong; thiếu thì không hiện nút. */
   onGo?: (target: MissionTarget) => void;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const { items, collapsible } = collapseMissions(missions ?? [], showAll);
   return (
     <GameCard title="Nhiệm vụ" icon={Target}>
       {missions && missions.length > 0 ? (
-        missions.map((m, idx) => {
+        items.map((m, idx) => {
           // BE Mission.goal mặc định = 1: "> 1" từng loại bỏ nhầm mọi nhiệm vụ cấu hình goal=1 hợp lệ.
           const goal = m.goal && m.goal > 0 ? m.goal : (DEFAULT_GOALS[m.code] ?? 1);
           const rawProgress = m.code === 'CHECKIN_7' ? Math.min(goal, streakDays ?? m.progress ?? 0) : (m.progress ?? 0);
@@ -81,6 +84,11 @@ export function MissionsCard({
         })
       ) : (
         <p className="text-sm text-stone-600">Chưa có nhiệm vụ.</p>
+      )}
+      {(collapsible || showAll) && missions && missions.length > 0 && (
+        <button type="button" onClick={() => setShowAll((v) => !v)} className={`${miniBtnSecondary} mt-1 w-full`}>
+          {showAll ? gameNewbieCopy.missions.showLess : gameNewbieCopy.missions.showAll(missions.length)}
+        </button>
       )}
     </GameCard>
   );

@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { Check, Target } from 'lucide-react';
-import { gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
+import { collapseMissions, gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
 import type { MissionItem } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { formatNumber } from '../../utils/format';
@@ -26,10 +27,12 @@ export function MissionsCard({
   /** Bấm "Làm ngay" trên nhiệm vụ chưa xong; thiếu thì không hiện nút. */
   onGo?: (target: MissionTarget) => void;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const { items, collapsible } = collapseMissions(missions ?? [], showAll);
   return (
     <GameCard title="Nhiệm vụ" icon={Target}>
       {missions && missions.length > 0 ? (
-        missions.map((m: MissionItem, idx) => {
+        items.map((m: MissionItem, idx) => {
           const defaultGoal = { CHECKIN_7: 7, REVIEW_3: 3, INVITE_3: 3, FIRST_ORDER: 1 }[m.code] ?? 1;
           // BE Mission.goal mặc định = 1 (schema @default(1)) — "> 1" từng loại bỏ nhầm mọi
           // mission cấu hình goal=1 hợp lệ và âm thầm thay bằng default cứng của FE.
@@ -104,6 +107,11 @@ export function MissionsCard({
         <Text variant="body-sm" tone="tertiary" as="div">
           Chưa có nhiệm vụ.
         </Text>
+      )}
+      {(collapsible || showAll) && missions && missions.length > 0 && (
+        <Button fullWidth variant="ghost" onPress={() => setShowAll((v) => !v)} style={{ marginTop: 4 }}>
+          {showAll ? gameNewbieCopy.missions.showLess : gameNewbieCopy.missions.showAll(missions.length)}
+        </Button>
       )}
     </GameCard>
   );

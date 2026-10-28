@@ -531,6 +531,8 @@ describe('Vườn Xanh: nhiệm vụ', () => {
     const c = await mount();
     expect(Array.from(c.querySelectorAll('button')).filter((b) => b.textContent === 'Nhận thưởng')).toHaveLength(1);
     expect(c.textContent).toContain('1/3');
+    expect(c.textContent).not.toContain('(đã nhận thưởng)');
+    click(btn(c, /^Xem tất cả/));
     expect(c.textContent).toContain('(đã nhận thưởng)');
     expect(c.textContent).toContain('+30 Điểm Xanh');
     const b = btn(c, 'Nhận thưởng');
