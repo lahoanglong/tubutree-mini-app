@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UserPlus, ShieldCheck, Check, X, Clock, Plus, MessagesSquare } from 'lucide-react';
-import { listStaff, grantStaff, revokeStaff, type StaffRole } from '../services/staff-api';
+import { listStaff, grantStaff, revokeStaff, STAFF_PERMISSIONS, STAFF_PERMISSION_LABELS, type StaffPermission, type StaffRole } from '../services/staff-api';
 import {
   adminGetShifts,
   approveShift,
@@ -31,6 +31,7 @@ import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { Chip } from '../components/ui/chip';
 import { ConfirmSheet } from '../components/ui/confirm-sheet';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Field } from '../components/ui/form';
@@ -486,6 +487,14 @@ function DetailSheet({
 }
 
 const PHONE_RE = /^0\d{8,10}$/;
+const NO_PERMISSIONS_TEXT = 'Chưa có nhóm việc (chỉ dùng quầy, Đổi rác, chấm công)';
+
+/** Nhãn nhóm việc theo thứ tự chuẩn; bỏ giá trị lạ (máy chủ có thể thêm nhóm mới trước khi app cập nhật). */
+function permissionsText(perms: readonly string[] | undefined): string {
+  const names = STAFF_PERMISSIONS.filter((p) => perms?.includes(p)).map((p) => STAFF_PERMISSION_LABELS[p]);
+  return names.length ? `Nhóm việc: ${names.join(', ')}` : NO_PERMISSIONS_TEXT;
+}
+
 const TIME_RE = /^\d{1,2}:\d{2}$/;
 
 function StaffSection() {
@@ -496,11 +505,13 @@ function StaffSection() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [phone, setPhone] = useState('');
   const [role, setRole] = useState<StaffRole>('STAFF');
+  const [perms, setPerms] = useState<StaffPermission[]>([]);
   const [revokeTarget, setRevokeTarget] = useState<{ phone: string; who: string } | null>(null);
   const [confirmAdmin, setConfirmAdmin] = useState(false);
 
   const grantM = useMutation({
-    mutationFn: () => grantStaff(phone.trim(), role),
+    // Nhóm việc chỉ có nghĩa với nhân viên; không chọn nhóm nào thì không gửi (như trước).
+    mutationFn: () => grantStaff(phone.trim(), role, role === 'STAFF' && perms.length ? STAFF_PERMISSIONS.filter((p) => perms.includes(p)) : undefined),
     onSuccess: (r) => {
       openSnackbar({
         text: r.applied ? 'Đã cấp quyền & áp ngay.' : 'Đã lưu quyền (sẽ áp khi họ mở app).',
@@ -508,6 +519,7 @@ function StaffSection() {
       });
       setSheetOpen(false);
       setPhone('');
+      setPerms([]);
       qc.invalidateQueries({ queryKey: ['admin-staff'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -564,6 +576,11 @@ function StaffSection() {
                   <Text variant="caption" tone="secondary" as="div">
                     {m.phone ?? '—'} · {m.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
                   </Text>
+                  {m.role === 'STAFF' && (
+                    <Text variant="caption" tone="secondary" as="div">
+                      {permissionsText(m.staffPermissions)}
+                    </Text>
+                  )}
                 </div>
                 {m.id === meId && (
                   <Text variant="caption" tone="secondary">
@@ -598,9 +615,16 @@ function StaffSection() {
               {staffQ.data.pendingInvites.map((p) => (
                 <Card key={p.phone} variant="flat">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                    <Text variant="body-sm">
-                      {p.phone} · {p.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
-                    </Text>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Text variant="body-sm" as="div">
+                        {p.phone} · {p.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
+                      </Text>
+                      {p.role === 'STAFF' && (
+                        <Text variant="caption" tone="secondary" as="div">
+                          {permissionsText(p.staffPermissions)}
+                        </Text>
+                      )}
+                    </div>
                     <Button
                       variant="ghost"
                       aria-label={`Huỷ lời mời · ${p.phone}`}
@@ -651,6 +675,28 @@ function StaffSection() {
               Quản trị
             </Button>
           </div>
+          {role === 'STAFF' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
+                Nhóm việc (không bắt buộc)
+              </Text>
+              <div role="group" aria-label="Nhóm việc" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {STAFF_PERMISSIONS.map((p) => (
+                  <Chip
+                    key={p}
+                    variant="choice"
+                    selected={perms.includes(p)}
+                    onPress={() => setPerms((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]))}
+                  >
+                    {STAFF_PERMISSION_LABELS[p]}
+                  </Chip>
+                ))}
+              </div>
+              <Text variant="caption" tone="secondary" as="div">
+                Không chọn nhóm nào: chỉ dùng quầy thu ngân, Đổi rác và chấm công.
+              </Text>
+            </div>
+          )}
         </div>
       </BottomSheet>
 

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -36,7 +36,12 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useLocation: () => ({ pathname: '/admin', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
-vi.mock('../services/staff-api', () => ({ listStaff: mocks.listStaff, grantStaff: mocks.grantStaff, revokeStaff: mocks.revokeStaff }));
+vi.mock('../services/staff-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  listStaff: mocks.listStaff,
+  grantStaff: mocks.grantStaff,
+  revokeStaff: mocks.revokeStaff,
+}));
 vi.mock('../services/shifts-api', () => ({
   adminGetShifts: mocks.adminGetShifts,
   approveShift: mocks.approveShift,
@@ -74,11 +79,11 @@ const NOW = '2026-03-11T05:00:00Z';
 const vn = (day: string, hhmm: string) => new Date(`${day}T${hhmm}:00+07:00`).toISOString();
 
 const MEMBERS = [
-  { id: 'u1', phone: '0901234567', fullName: 'Lan', avatarUrl: null, role: 'STAFF', createdAt: '2026-01-01T00:00:00Z' },
-  { id: 'u2', phone: '0912345678', fullName: null, avatarUrl: null, role: 'ADMIN', createdAt: '2026-01-01T00:00:00Z' },
-  { id: 'u3', phone: null, fullName: 'Chưa có số', avatarUrl: null, role: 'STAFF', createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'u1', phone: '0901234567', fullName: 'Lan', avatarUrl: null, role: 'STAFF', staffPermissions: ['KHO', 'KE_TOAN'], createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'u2', phone: '0912345678', fullName: null, avatarUrl: null, role: 'ADMIN', staffPermissions: [], createdAt: '2026-01-01T00:00:00Z' },
+  { id: 'u3', phone: null, fullName: 'Chưa có số', avatarUrl: null, role: 'STAFF', staffPermissions: [], createdAt: '2026-01-01T00:00:00Z' },
 ];
-const INVITES = [{ phone: '0987654321', role: 'STAFF', createdAt: '2026-02-01T00:00:00Z' }];
+const INVITES = [{ phone: '0987654321', role: 'STAFF', staffPermissions: ['CSKH'], createdAt: '2026-02-01T00:00:00Z' }];
 
 const shift = (id: string, day: string, status: string, who: { id: string; name: string | null; phone: string | null }, over: Record<string, unknown> = {}) => ({
   id,
@@ -333,7 +338,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       fireEvent.change(phone, { target: { value: '0901112223' } });
       expect(screen.getByRole('button', { name: 'Lưu quyền' })).toBeEnabled();
       fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
-      await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'STAFF'));
+      await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'STAFF', undefined));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã cấp quyền & áp ngay.', type: 'success' }));
       await waitFor(() => expect(screen.queryByText('Thêm nhân sự theo SĐT')).not.toBeInTheDocument());
 
@@ -364,8 +369,60 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect((screen.getByLabelText('Số điện thoại') as HTMLInputElement).value).toBe('0901112223');
       fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
       fireEvent.click(screen.getByRole('button', { name: 'Cấp quyền quản trị' }));
-      await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'ADMIN'));
+      await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'ADMIN', undefined));
       expect(confirm).not.toHaveBeenCalled();
+    });
+
+    describe('nhóm việc (E-57)', () => {
+      const groupChips = () => within(screen.getByRole('group', { name: 'Nhóm việc' })).getAllByRole('button');
+
+      it('thẻ nhân sự hiện nhóm việc; nhân viên chưa có nhóm thì nói rõ; quản trị không có dòng nhóm; lời mời chờ cũng hiện nhóm đã chọn', async () => {
+        renderPage();
+        await screen.findByText('Lan');
+        expect(screen.getByText('Nhóm việc: Kho, Kế toán')).toBeInTheDocument();
+        expect(screen.getByText('Chưa có nhóm việc (chỉ dùng quầy, Đổi rác, chấm công)')).toBeInTheDocument();
+        expect(screen.getByText('Nhóm việc: Chăm sóc khách')).toBeInTheDocument();
+        expect(screen.getAllByText(/Nhóm việc:|Chưa có nhóm việc/)).toHaveLength(3);
+      });
+
+      it('sheet Thêm: bốn nút chọn nhóm, bấm để bật/tắt; lưu gửi các nhóm theo thứ tự chuẩn', async () => {
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
+        expect(groupChips().map((c) => c.textContent)).toEqual(['Chăm sóc khách', 'Kho', 'Nội dung và khuyến mãi', 'Kế toán']);
+        expect(groupChips().every((c) => c.getAttribute('aria-pressed') === 'false')).toBe(true);
+        fireEvent.click(screen.getByRole('button', { name: 'Kho' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Chăm sóc khách' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Kế toán' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Kế toán' }));
+        expect(screen.getByRole('button', { name: 'Kho' })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: 'Kế toán' })).toHaveAttribute('aria-pressed', 'false');
+        fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901112223' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
+        await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'STAFF', ['CSKH', 'KHO']));
+      });
+
+      it('lưu xong thì chọn lại từ đầu: nhóm của người trước không kéo sang người sau', async () => {
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Kho' }));
+        fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901112223' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
+        await waitFor(() => expect(screen.queryByText('Thêm nhân sự theo SĐT')).not.toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: 'Thêm' }));
+        expect(groupChips().every((c) => c.getAttribute('aria-pressed') === 'false')).toBe(true);
+      });
+
+      it('chọn Quản trị thì ẩn nhóm việc và không gửi nhóm đã chọn trước đó', async () => {
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Kho' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Quản trị' }));
+        expect(screen.queryByRole('group', { name: 'Nhóm việc' })).toBeNull();
+        fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901112223' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Cấp quyền quản trị' }));
+        await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'ADMIN', undefined));
+      });
     });
 
     it('cấp quyền lỗi: báo lỗi máy chủ và giữ khung', async () => {
