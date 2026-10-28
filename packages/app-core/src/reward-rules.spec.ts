@@ -8,6 +8,7 @@ import {
   lockedPointsNote,
   openingHoursText,
   orderRewards,
+  sortRedemptions,
   pointAddress,
   rewardCardState,
   warehouseConfirmText,
@@ -140,5 +141,17 @@ describe('quà nhận tại kho (B-60)', () => {
     const point = { name: 'Kho Tubu', addressLine: '99 Nguyễn Văn Linh', communeName: 'Phường Tân Phong', provinceName: 'TP.HCM' };
     expect(warehouseConfirmText(point)).toBe('Quà này chỉ nhận tại kho TP.HCM, không giao tận nhà: Kho Tubu, 99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM. Bạn vẫn muốn đổi?');
     expect(warehouseConfirmText(null)).toBe('Quà này chỉ nhận tại kho TP.HCM, không giao tận nhà: kho Tubu TP.HCM. Bạn vẫn muốn đổi?');
+  });
+});
+
+describe('sortRedemptions', () => {
+  const r = (id: string, status: string, createdAt: string, couponCode: string | null = null) => ({ id, status, createdAt, couponCode });
+  const list = [r('old', 'FULFILLED', '2026-10-01'), r('new', 'FULFILLED', '2026-10-05', 'REWARD-X'), r('mid', 'FULFILLED', '2026-10-09'), r('ready', 'READY', '2026-09-01')];
+  it('chờ nhận trước, rồi mới nhất trước', () => {
+    expect(sortRedemptions(list).map((x) => x.id)).toEqual(['ready', 'mid', 'new', 'old']);
+  });
+  it('mã vừa đổi lên đầu nhóm còn lại', () => {
+    expect(sortRedemptions(list, 'REWARD-X').map((x) => x.id)).toEqual(['ready', 'new', 'mid', 'old']);
+    expect(sortRedemptions(list, 'KHÔNG-CÓ').map((x) => x.id)).toEqual(['ready', 'mid', 'new', 'old']);
   });
 });

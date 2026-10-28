@@ -270,7 +270,7 @@ describe('/kho-qua — xác nhận và đổi quà', () => {
     await flush(6);
     expect(dialog()!.textContent).toContain('Đổi quà thành công');
     expect(dialog()!.textContent).toContain('Mã FREESHIP-ABC đã vào ví mã giảm giá');
-    expect(dialog()!.querySelector('a[href="/tai-khoan/diem-xanh"]')?.textContent).toContain('Xem ví mã');
+    expect(dialog()!.querySelector('a[href="/kho-qua/cua-toi?new=FREESHIP-ABC"]')?.textContent).toContain('Xem ví mã');
     expect(postsOf(REDEEM_FREESHIP)).toHaveLength(1);
     expect(postsOf(REDEEM_FREESHIP)[0]!.headers).toEqual({ 'Idempotency-Key': 'key-2' });
     expect(postsOf(REDEEM_FREESHIP)[0]!.body).toBeUndefined();

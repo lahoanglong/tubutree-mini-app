@@ -155,3 +155,13 @@ export const rewardsGuideCopy = {
   earnItems: ['Mua hàng: điểm cộng sau khi đơn giao thành công', 'Điểm danh mỗi ngày ở tab Ưu đãi', 'Chăm cây và làm nhiệm vụ ở Vườn Xanh'],
   earnCta: 'Xem cách kiếm điểm',
 } as const;
+
+/** Tham số `?new=<mã>` khi "Xem ví mã" mở Quà của tôi: mã vừa đổi được làm nổi lên đầu và có nhãn "Mới". */
+export const NEW_COUPON_PARAM = 'new';
+export const NEW_COUPON_BADGE = 'Mới';
+
+/** Chờ nhận trước, mã vừa đổi lên đầu nhóm còn lại, rồi mới nhất trước. */
+export function sortRedemptions<T extends { status: string; createdAt: string; couponCode?: string | null }>(list: readonly T[], newCode?: string | null): T[] {
+  const rank = (r: T) => (r.status === 'READY' ? 0 : newCode && r.couponCode === newCode ? 1 : 2);
+  return [...list].sort((a, b) => rank(a) - rank(b) || b.createdAt.localeCompare(a.createdAt));
+}

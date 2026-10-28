@@ -18,6 +18,7 @@ import {
   WAREHOUSE_PICKUP_DONE,
   freeShipConfirmText,
   rewardsGuideCopy,
+  NEW_COUPON_PARAM,
   rewardFreeShipNote,
   isWarehousePickup,
   lockedPointsNote,
@@ -217,7 +218,11 @@ function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onC
               {notice.text}
             </p>
           )}
-          <Link href="/tai-khoan/diem-xanh" onClick={onClose} className={`${miniBtnSecondary} w-full`}>
+          <Link
+            href={outcome.couponCode ? `/kho-qua/cua-toi?${NEW_COUPON_PARAM}=${encodeURIComponent(outcome.couponCode)}` : '/kho-qua/cua-toi'}
+            onClick={onClose}
+            className={`${miniBtnSecondary} w-full`}
+          >
             Xem ví mã
           </Link>
         </div>

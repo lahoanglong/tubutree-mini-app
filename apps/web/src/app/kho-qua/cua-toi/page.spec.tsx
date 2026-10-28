@@ -9,6 +9,13 @@ const state = vi.hoisted(() => ({
   mine: [] as object[],
   failOnce: false,
   calls: [] as string[],
+  push: vi.fn(),
+  search: '',
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: state.push }),
+  useSearchParams: () => new URLSearchParams(state.search),
 }));
 
 vi.mock('@/components/ui/qr-code', () => ({ QrCode: ({ value }: { value: string }) => <div data-testid="qr">{value}</div> }));
@@ -48,6 +55,8 @@ beforeEach(() => {
   state.mine = [];
   state.failOnce = false;
   state.calls = [];
+  state.push.mockClear();
+  state.search = '';
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -131,7 +140,22 @@ describe('/kho-qua/cua-toi — Quà của tôi', () => {
   it('rỗng → thông báo và lối về Kho quà', async () => {
     const c = await mount();
     expect(c.textContent).toContain('Bạn chưa đổi quà nào');
-    expect(byText(c, 'a', 'Đến Kho quà')?.getAttribute('href')).toBe('/kho-qua');
+    click(byText(c, 'button', 'Đến Kho quà')!);
+    expect(state.push).toHaveBeenCalledWith('/kho-qua');
+    expect(c.querySelector('svg[aria-hidden]')).not.toBeNull();
+  });
+
+  it('mở từ "Xem ví mã" (?new=): mã vừa đổi lên đầu và có nhãn "Mới"', async () => {
+    state.search = 'new=REWARD-NEW';
+    state.mine = [
+      makeGiftRedemption({ id: 'r1', giftKind: 'VOUCHER', status: 'FULFILLED', code: null, couponCode: 'REWARD-OLD', giftName: 'Mã cũ', createdAt: '2026-10-20T00:00:00.000Z' }),
+      makeGiftRedemption({ id: 'r2', giftKind: 'VOUCHER', status: 'FULFILLED', code: null, couponCode: 'REWARD-NEW', giftName: 'Mã mới đổi', createdAt: '2026-10-10T00:00:00.000Z' }),
+    ];
+    const c = await mount();
+    const names = Array.from(c.querySelectorAll('[data-redemption]')).map((e) => e.textContent ?? '');
+    expect(names[0]).toContain('Mã mới đổi');
+    expect(names[0]).toContain('Mới');
+    expect(names[1]).not.toContain('Mới');
   });
 
   it('lỗi tải → ErrorState + Thử lại gọi lại API', async () => {

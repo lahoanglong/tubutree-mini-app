@@ -13,6 +13,7 @@ import {
   WAREHOUSE_PICKUP_DONE,
   freeShipConfirmText,
   rewardsGuideCopy,
+  NEW_COUPON_PARAM,
   rewardFreeShipNote,
   isWarehousePickup,
   openingHoursText,
@@ -199,7 +200,7 @@ function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onC
         <div style={{ ...COLUMN, gap: 12 }}>
           <Text variant="body-md" as="div">{`Mã ${outcome.couponCode ?? ''} đã vào ví mã giảm giá`}</Text>
           {outcome.couponCode && <Button onPress={() => use(outcome.couponCode ?? '', onClose)}>{couponUseCopy.use}</Button>}
-          <Button variant="secondary" onPress={() => go('/loyalty')}>Xem ví mã</Button>
+          <Button variant="secondary" onPress={() => go(outcome.couponCode ? `/rewards/mine?${NEW_COUPON_PARAM}=${encodeURIComponent(outcome.couponCode)}` : '/rewards/mine')}>Xem ví mã</Button>
         </div>
       )}
       {outcome?.kind === 'CLAIM' && (
