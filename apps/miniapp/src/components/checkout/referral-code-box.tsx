@@ -85,7 +85,7 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <Tile />
           <div>
-            <Text variant="label" as="div">
+            <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
               Mã người giới thiệu
             </Text>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
@@ -140,7 +140,7 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
         <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <Tile />
           <span style={{ display: 'block', minWidth: 0 }}>
-            <Text variant="label" as="span" style={{ display: 'block' }}>
+            <Text variant="body-sm" as="span" style={{ display: 'block', fontWeight: 600 }}>
               Mã người giới thiệu
             </Text>
             <Text variant="caption" tone="tertiary" as="span" style={{ display: 'block', marginTop: 2 }}>
@@ -184,7 +184,7 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
 
   return shell(
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <Text variant="label" as="div">
+      <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
         Mã người giới thiệu
       </Text>
       <Input

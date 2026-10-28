@@ -18,6 +18,7 @@ import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
+import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { ReferralCodeBox, effectiveReferralCode } from '../components/checkout/referral-code-box';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -33,7 +34,6 @@ import {
   pickPaymentMethod,
   pointsCapState,
   pointsEarnLabel,
-  pointsUseLabel,
   zeroTotalNote,
 } from '../utils/checkout-rules';
 import {
@@ -459,7 +459,10 @@ export default function CheckoutPage() {
     // mà KHÔNG thu tiền (như COD) → đơn treo/sai đối soát. Mở lại khi tích hợp Payment API Zalo.
     { value: 'BANK_TRANSFER', label: vi.checkout.paymentBank },
     { value: 'WALLET', label: vi.checkout.paymentWallet(formatVnd(walletBalance)) },
-  ].map((m) => {
+  ]
+    // Ví chỉ trả được cả đơn: số dư 0đ thì khách không làm gì được với dòng này.
+    .filter((m) => m.value !== 'WALLET' || walletBalance > 0)
+    .map((m) => {
     const hint = quote.isSuccess ? paymentUnavailableReason(m.value, quote.data, walletBalance) : null;
     return { ...m, hint, disabled: hint !== null };
   });
@@ -757,8 +760,8 @@ export default function CheckoutPage() {
                 {vi.checkout.points}
               </Text>
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-                {points.usable > 0 && usePoints && quote.data
-                  ? pointsUseLabel(quote.data.pointsUsed, formatVnd(quote.data.pointsDiscount))
+                {pointsUsable
+                  ? pointsOfferText(points.usable, quote.data, usePoints && quote.data ? quote.data : null)
                   : (points.label ?? vi.checkout.pointsNone)}
               </Text>
               {points.usable > 0 && partnerPoints.capNote && (
