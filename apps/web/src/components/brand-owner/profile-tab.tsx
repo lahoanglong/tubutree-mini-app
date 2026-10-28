@@ -90,10 +90,10 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
   });
 
   const bigField = `${ui.field} max-md:text-[length:var(--type-body-lg-size)]`;
-  const dateClass = `${ui.field} min-w-0 flex-1`;
+  const dateClass = `${ui.field} w-full min-w-0`;
 
   return (
-    <div className="grid gap-4 pb-6 xl:grid-cols-2 xl:items-start">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 pb-6 xl:grid-cols-2 xl:items-start">
       {notice && <div className="xl:col-span-2">{notice}</div>}
 
       <section aria-label="Thông tin nhãn" className={`flex flex-col gap-3 p-4 ${skin.card}`}>
@@ -172,9 +172,13 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
             Có mã thì khách chạm để sao chép ngay trên trang nhãn. Mã giảm giá phải do Tubu tạo sẵn, công khai và còn hạn — mã không có trong hệ thống
             sẽ bị từ chối khi lưu. Để trống ô này khi sửa để gỡ mã.
           </p>
-          <div className="flex gap-2">
-            <input type="date" aria-label="Từ ngày" className={dateClass} value={promo.startAt} onChange={(e) => setPromo({ ...promo, startAt: e.target.value })} />
-            <input type="date" aria-label="Đến ngày" className={dateClass} value={promo.endAt} onChange={(e) => setPromo({ ...promo, endAt: e.target.value })} />
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
+            <Field label="Từ ngày">
+              <input type="date" className={dateClass} value={promo.startAt} onChange={(e) => setPromo({ ...promo, startAt: e.target.value })} />
+            </Field>
+            <Field label="Đến ngày">
+              <input type="date" className={dateClass} value={promo.endAt} onChange={(e) => setPromo({ ...promo, endAt: e.target.value })} />
+            </Field>
           </div>
           {invalid && <p className={ui.error}>Ngày kết thúc phải sau ngày bắt đầu.</p>}
           {editingId ? (

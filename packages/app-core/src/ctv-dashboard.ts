@@ -84,3 +84,5 @@ export function nextMilestoneRows<T extends { achieved: boolean; canClaim: boole
   const keep = ms.filter((m) => m.canClaim || m === next);
   return keep.length > 0 ? keep : [ms[ms.length - 1]!];
 }
+
+export { AFFILIATE_PAGE_SIZE, affiliateNextCursor } from './affiliate-page';

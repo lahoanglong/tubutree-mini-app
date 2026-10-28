@@ -61,9 +61,19 @@ describe('affiliate — đúng route, query, body, Idempotency-Key', () => {
     [
       'getCommissions',
       (h) => a.getCommissions(h),
-      { method: 'get', path: '/affiliate/commissions' },
+      { method: 'get', path: '/affiliate/commissions', opts: { query: {} } },
     ],
-    ['getMyPayouts', (h) => a.getMyPayouts(h), { method: 'get', path: '/affiliate/payouts' }],
+    [
+      'getCommissions(trang tiếp)',
+      (h) => a.getCommissions(h, { take: 50, cursor: 'c9' }),
+      { method: 'get', path: '/affiliate/commissions', opts: { query: { take: 50, cursor: 'c9' } } },
+    ],
+    ['getMyPayouts', (h) => a.getMyPayouts(h), { method: 'get', path: '/affiliate/payouts', opts: { query: {} } }],
+    [
+      'getMyPayouts(trang tiếp)',
+      (h) => a.getMyPayouts(h, { take: 50, cursor: 'p9' }),
+      { method: 'get', path: '/affiliate/payouts', opts: { query: { take: 50, cursor: 'p9' } } },
+    ],
     [
       'requestPayout (chuyển vào Ví, có MST)',
       (h) => a.requestPayout(h, 500000, 'key-1', '0123456789'),

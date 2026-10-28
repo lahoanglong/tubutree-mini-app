@@ -1,7 +1,8 @@
 import 'reflect-metadata';
+import { BadRequestException } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { AffiliateService } from './affiliate.service';
+import { AFFILIATE_REAL_USER_REQUIRED_MSG, AffiliateService } from './affiliate.service';
 import { RegisterAffiliateDto } from './dto/register-affiliate.dto';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -15,8 +16,10 @@ const noop = {} as never;
 
 function makeService(user: Record<string, unknown>, sessionState?: SessionStateService) {
   const update = jest.fn().mockResolvedValue({});
+  // Mặc định là tài khoản thật (có SĐT); ca khách ghi đè phone/zaloId.
+  const row = { phone: '0901234567', ...user };
   const prisma = {
-    user: { findUniqueOrThrow: jest.fn().mockResolvedValue(user), update },
+    user: { findUniqueOrThrow: jest.fn().mockResolvedValue(row), update },
   } as unknown as PrismaService;
   const svc = new AffiliateService(
     prisma,
@@ -110,6 +113,30 @@ describe('AffiliateService.register — ghi nhận đồng ý điều khoản CT
       await expect(svc.register('u1', '2026-10')).rejects.toThrow('không thể đăng ký CTV');
       expect(update).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe('AffiliateService.register — khách vãng lai không thành CTV (CTV-03)', () => {
+  it('tài khoản khách (zaloId guest_, chưa có SĐT) → 400, không ghi vai trò, không ghi điều khoản', async () => {
+    const { svc, update } = makeService({ id: 'g1', role: 'CUSTOMER', referralCode: 'G1', phone: null, zaloId: 'guest_dev-1', metadata: null });
+    const err = await svc.register('g1', '2026-10').catch((e: unknown) => e as Error);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as Error).message).toBe(AFFILIATE_REAL_USER_REQUIRED_MSG);
+    expect((err as Error).message).toContain('đăng ký CTV');
+    expect((err as Error).message).not.toContain('Ưu đãi');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('khách đã liên kết SĐT (zaloId vẫn guest_) → đăng ký được', async () => {
+    const { svc, update } = makeService({ id: 'g1', role: 'CUSTOMER', referralCode: 'G1', phone: '0901234567', zaloId: 'guest_dev-1', metadata: null });
+    await svc.register('g1', '2026-10');
+    expect(update.mock.calls[0][0].data.role).toBe('AFFILIATE');
+  });
+
+  it('tài khoản Zalo thật chưa có SĐT → đăng ký được', async () => {
+    const { svc, update } = makeService({ id: 'u1', role: 'CUSTOMER', referralCode: 'U1', phone: null, zaloId: '8412345', metadata: null });
+    await svc.register('u1', '2026-10');
+    expect(update.mock.calls[0][0].data.role).toBe('AFFILIATE');
   });
 });
 

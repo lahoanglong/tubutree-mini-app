@@ -95,6 +95,11 @@ const field = (text: string) => {
   return document.getElementById(label?.getAttribute('for') ?? '__none__') as HTMLInputElement | HTMLTextAreaElement | null;
 };
 const byLabel = (name: string) => document.querySelector<HTMLInputElement>(`[aria-label="${name}"]`);
+/** Ô có nhãn nhìn thấy: `<label for>` trỏ tới control. */
+const byVisibleLabel = (name: string) => {
+  const label = Array.from(document.querySelectorAll('label')).find((l) => l.textContent === name);
+  return label ? document.getElementById(label.htmlFor) as HTMLInputElement | null : null;
+};
 const calls = (method: string, path: string) => m.calls.filter((c) => c.method === method && c.path === path);
 const httpError = (status: number, message: string) => Object.assign(new Error(message), { status });
 
@@ -144,7 +149,22 @@ describe('khung trang /chu-thuong-hieu', () => {
     expect(text()).toContain('Bạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn.');
     expect(h1s()).toEqual(['Quản lý nhãn hàng']);
     expect(btn(/thử lại/i)).toBeNull();
-    expect(Array.from(document.querySelectorAll('a')).some((a) => a.textContent === 'Nhắn Tubu')).toBe(true);
+  });
+
+  it('chưa được cấp nhãn, chat tắt: nút "Liên hệ Tubu" dẫn tới trang hỗ trợ, không rơi về trang giới thiệu', async () => {
+    m.fail.set('GET /brand/owner/me', httpError(404, 'Not Found'));
+    await mount();
+    const link = Array.from(document.querySelectorAll('a')).find((a) => a.textContent === 'Liên hệ Tubu');
+    expect(link?.getAttribute('href')).toBe('/ho-tro/chat');
+    expect(Array.from(document.querySelectorAll('a')).some((a) => a.textContent === 'Nhắn Tubu')).toBe(false);
+  });
+
+  it('chưa được cấp nhãn, chat bật: nút "Nhắn Tubu" vào chat', async () => {
+    m.fail.set('GET /brand/owner/me', httpError(404, 'Not Found'));
+    m.data['/config/public'] = { chat: { enabled: true } };
+    await mount();
+    const link = Array.from(document.querySelectorAll('a')).find((a) => a.textContent === 'Nhắn Tubu');
+    expect(link?.getAttribute('href')).toBe('/ho-tro/chat');
   });
 
   it('máy chủ từ chối (403): báo không có quyền bằng lời dễ hiểu, không lộ mã lỗi', async () => {
@@ -274,11 +294,29 @@ describe('tab Hồ sơ & khuyến mãi', () => {
     expect(calls('PATCH', '/brand/owner/me/promotions/p1')[0]!.body).toEqual({ isActive: false });
   });
 
+  it('hai ô ngày khuyến mãi có nhãn nhìn thấy "Từ ngày" và "Đến ngày", chia đôi hàng không tràn', async () => {
+    await mount();
+    const from = byVisibleLabel('Từ ngày')!;
+    const to = byVisibleLabel('Đến ngày')!;
+    expect(from.type).toBe('date');
+    expect(to.type).toBe('date');
+    expect(from.className).toContain('min-w-0');
+    expect(from.parentElement!.parentElement!.className).toContain('grid-cols-[minmax(0,1fr)_minmax(0,1fr)]');
+    expect(unlabeledFields(document.body)).toEqual([]);
+  });
+
+  it('lưới trang không có cột auto: cột đơn dùng minmax(0,1fr) để nội dung dài không đẩy tràn ngang', async () => {
+    await mount();
+    const grids = Array.from(document.querySelectorAll('main div')).filter((d) => d.className.split(' ').includes('grid') && /lg:grid-cols|xl:grid-cols/.test(d.className));
+    expect(grids.length).toBeGreaterThan(0);
+    for (const g of grids) expect(g.className).toContain('grid-cols-[minmax(0,1fr)]');
+  });
+
   it('ngày kết thúc trước ngày bắt đầu: báo lỗi và khoá nút thêm', async () => {
     await mount();
     typeInto(byLabel('Tiêu đề (MUA 2 TẶNG 1)'), 'Giảm sốc');
-    typeInto(byLabel('Từ ngày'), '2026-11-10');
-    typeInto(byLabel('Đến ngày'), '2026-11-01');
+    typeInto(byVisibleLabel('Từ ngày'), '2026-11-10');
+    typeInto(byVisibleLabel('Đến ngày'), '2026-11-01');
     expect(text()).toContain('Ngày kết thúc phải sau ngày bắt đầu.');
     expect((btn('Thêm khuyến mãi') as HTMLButtonElement).disabled).toBe(true);
   });
@@ -392,7 +430,7 @@ describe('/chu-thuong-hieu — khối Khuyến mãi và tiêu đề thẻ', () =
     await mount();
     const add = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.includes('Thêm khuyến mãi'))!;
     expect(add.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
-    expect(document.querySelector('input[aria-label="Từ ngày"]')!.className).toContain('min-w-0');
-    expect(document.querySelector('input[aria-label="Đến ngày"]')!.className).toContain('min-w-0');
+    expect(byVisibleLabel('Từ ngày')!.className).toContain('min-w-0');
+    expect(byVisibleLabel('Đến ngày')!.className).toContain('min-w-0');
   });
 });

@@ -28,8 +28,6 @@ const TOKEN_DEFINITION_LINE = /^\s*--[\w-]+\s*:/;
  * cần liệt kê ở đây; chỉ liệt kê file mà màu thô nằm ngoài kiểu đó hoặc cần tách bạch lý do.
  */
 const RAW_COLOR_EXCEPTIONS: Record<string, string> = {
-  // Kênh đại lý (B2B) chưa có thiết kế riêng trong DS v2 nên giữ bộ navy cũ; pages/dealer.tsx chỉ tham chiếu --color-dealer-*.
-  'css/dealer-theme.css': 'palette navy của dealer, ngoài phạm vi DS v2',
   // Bảng màu cửa hàng do CTV chọn: mã hex là DỮ LIỆU gửi lên API và lưu ở DB, không phải màu của DS.
   'utils/storefront-theme.ts': 'mã màu cửa hàng CTV chọn (dữ liệu, lưu ở backend)',
 };

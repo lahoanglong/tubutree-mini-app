@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
@@ -26,10 +26,10 @@ const m = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => m.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn(), user: { role: 'DEALER' } }) }));
-vi.mock('@/components/evidence-upload', () => ({
-  EvidenceUpload: ({ label, value, onChange }: { label: string; value: string[]; onChange: (v: string[]) => void }) => (
-    <button type="button" className="min-h-11" onClick={() => onChange(['data:image/jpeg;base64,AAAA'])}>
-      {value.length ? `Đã chọn ${label}` : `Chọn ${label}`}
+vi.mock('@/components/brand-owner/brand-image-field', () => ({
+  BrandImageField: ({ label, value, onChange, upload }: { label: string; value: string; onChange: (v: string) => void; upload?: string }) => (
+    <button type="button" className="min-h-11" data-upload={upload ?? 'cloudinary'} onClick={() => onChange('data:image/jpeg;base64,AAAA')}>
+      {value ? `Đã chọn ${label}` : `Chọn ${label}`}
     </button>
   ),
 }));
@@ -62,6 +62,8 @@ vi.mock('@/lib/core-http', () => ({
 }));
 
 import DealerPage from './page';
+
+const DESIGN_TOKENS_CSS = readFileSync(resolve(process.cwd(), '../../packages/design-tokens/src/tokens.css'), 'utf8');
 
 const APPROVED = { isDealer: true, status: 'APPROVED', tier: { id: 't1', name: 'Bạc', creditLimit: 50_000_000 }, currentDebt: 1_000_000, hasPartnerStorefront: true };
 const row = (over: Record<string, unknown> = {}) => ({
@@ -242,6 +244,9 @@ describe('/dai-ly — đăng ký đại lý', () => {
     expect(button('Gửi hồ sơ đăng ký').disabled).toBe(true);
     fillText(c);
     expect(button('Gửi hồ sơ đăng ký').disabled).toBe(true);
+    // Ảnh CCCD là giấy tờ cá nhân: chỉ nén nhúng vào hồ sơ, không đưa lên dịch vụ ảnh công khai.
+    expect(button('Chọn Ảnh CCCD mặt trước *').dataset.upload).toBe('inline');
+    expect(button('Chọn Ảnh CCCD mặt sau *').dataset.upload).toBe('inline');
     click(button('Chọn Ảnh CCCD mặt trước *'));
     expect(button('Gửi hồ sơ đăng ký').disabled).toBe(true);
     click(button('Chọn Ảnh CCCD mặt sau *'));
@@ -710,9 +715,8 @@ describe('/dai-ly — diện mạo Mini App ở điện thoại (theme B2B navy)
     const main = c.querySelector('main')!;
     expect(main.className).toContain('max-md:bg-[var(--color-dealer-bg)]');
     expect(main.hasAttribute('data-dealer-theme')).toBe(true);
-    const css = readFileSync(resolve(process.cwd(), 'src/components/dealer/dealer-theme.css'), 'utf8');
-    expect(css).toContain('--color-dealer-ink: #1f2a44;');
-    expect(css).toContain('--color-dealer-bg: #f4f6f9;');
+    expect(DESIGN_TOKENS_CSS).toContain('--color-dealer-ink: var(--navy-900);');
+    expect(DESIGN_TOKENS_CSS).toContain('--color-dealer-bg: var(--navy-50);');
     expect(c.querySelector('section[aria-label="Tổng quan đại lý"]')!.className).toContain('max-md:bg-[var(--color-dealer-ink)]');
     expect(button('Dán đơn').className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
     expect(c.querySelector('li .font-bold')!.className).toContain('max-md:text-[var(--color-dealer-ink)]');
@@ -721,10 +725,21 @@ describe('/dai-ly — diện mạo Mini App ở điện thoại (theme B2B navy)
 });
 
 describe('/dai-ly — biến màu navy nhìn thấy được từ sheet (portal ra body)', () => {
-  it('dealer-theme.css khai báo biến ở :root vì Sheet render ngoài khung data-dealer-theme', () => {
-    const css = readFileSync(resolve(process.cwd(), 'src/components/dealer/dealer-theme.css'), 'utf8');
-    expect(css).toMatch(/^:root\s*\{/m);
-    expect(css).not.toMatch(/^\[data-dealer-theme\]\s*\{/m);
+  it('theme dealer khai ở :root trong design-tokens vì Sheet render ngoài khung data-dealer-theme', () => {
+    expect(DESIGN_TOKENS_CSS).toMatch(/:root\s*\{[^}]*--color-dealer-ink:/);
+    expect(DESIGN_TOKENS_CSS).not.toMatch(/\[data-dealer-theme\]\s*\{/);
+  });
+  it('web không còn file màu đại lý riêng và không giữ mã hex của kênh này ngoài design-tokens', () => {
+    expect(existsSync(resolve(process.cwd(), 'src/components/dealer/dealer-theme.css'))).toBe(false);
+    for (const file of ['src/components/dealer/dealer-shell.tsx', 'src/components/pro-shared/mini-skin.ts']) {
+      expect(readFileSync(resolve(process.cwd(), file), 'utf8')).not.toMatch(/#(?:1f2a44|2e3b5e|f4f6f9)/i);
+    }
+  });
+  it('điện thoại: nền xanh xám kéo xuống sát chân trang gọn, không lộ dải be dưới khung', async () => {
+    const c = await mount();
+    const cls = c.querySelector('main')!.className;
+    expect(cls).toContain('max-md:-mb-8');
+    expect(cls).toContain('max-md:pb-14');
   });
   it('nút Lưu mẫu và Thêm vào đơn có màu dự phòng khi biến không phân giải', async () => {
     await mount();
@@ -808,9 +823,8 @@ describe('/dai-ly — nút chính navy ở điện thoại như inkButton của 
     expect(hero.querySelector('b')!.className).toContain('max-md:text-[var(--color-dealer-accent)]');
     expect(hero.querySelector('[role="progressbar"] > div')!.className).toContain('max-md:bg-[var(--color-dealer-accent)]');
     expect(button('Yêu cầu nhận thưởng').className).toContain(INK);
-    const css = readFileSync(resolve(process.cwd(), 'src/components/dealer/dealer-theme.css'), 'utf8');
-    expect(css).toContain('--color-dealer-ink-soft: #2e3b5e;');
-    expect(css).toContain('--color-dealer-accent: var(--forest-300);');
+    expect(DESIGN_TOKENS_CSS).toContain('--color-dealer-ink-soft: var(--navy-800);');
+    expect(DESIGN_TOKENS_CSS).toContain('--color-dealer-accent: var(--forest-300);');
   });
 });
 

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { EyeOff, Plus } from 'lucide-react';
 import {
   addItem,
   applyStorefrontTemplate,
@@ -19,6 +19,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { isPartnerStore } from '@/lib/partner-store';
 import { ui } from '@/lib/guest-ui';
+import { phoneSecondary } from '@/lib/phone-ui';
 import { Badge } from '@/components/ui/badge';
 import { EmptyStateInline } from './storefront-inline';
 import { ErrorState } from '@/components/ui/error-state';
@@ -235,15 +236,42 @@ function ProfileForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: ()
 }
 
 /** Cấu hình gian hàng: tên, subdomain (khi cờ bật), màu chủ đề, và với gian hàng tự giao thì kho + hotline (SĐT kho). */
-export function ConfigSheet({ open, sf, onClose, onSaved }: { open: boolean; sf: StorefrontEdit; onClose: () => void; onSaved: Notify }) {
+export function ConfigSheet({
+  open,
+  sf,
+  onClose,
+  onSaved,
+  unpublishLabel,
+  onUnpublish,
+}: {
+  open: boolean;
+  sf: StorefrontEdit;
+  onClose: () => void;
+  onSaved: Notify;
+  /** Có chữ thì gian hàng đang đăng/chờ duyệt: hiện nút gỡ đăng ở cuối cấu hình. */
+  unpublishLabel: string | null;
+  onUnpublish: () => void;
+}) {
   return (
     <Sheet open={open} onClose={onClose} title="Cấu hình gian hàng">
-      {open && <ConfigForm sf={sf} onClose={onClose} onSaved={onSaved} />}
+      {open && <ConfigForm sf={sf} onClose={onClose} onSaved={onSaved} unpublishLabel={unpublishLabel} onUnpublish={onUnpublish} />}
     </Sheet>
   );
 }
 
-function ConfigForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: () => void; onSaved: Notify }) {
+function ConfigForm({
+  sf,
+  onClose,
+  onSaved,
+  unpublishLabel,
+  onUnpublish,
+}: {
+  sf: StorefrontEdit;
+  onClose: () => void;
+  onSaved: Notify;
+  unpublishLabel: string | null;
+  onUnpublish: () => void;
+}) {
   const [form, setForm] = useState({
     title: sf.title ?? '',
     subdomain: sf.subdomain ?? '',
@@ -356,6 +384,15 @@ function ConfigForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: () 
       <button type="button" className={`${ui.btnPrimary} mt-2 w-full`} disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
         {saveMut.isPending ? 'Đang lưu…' : 'Lưu cấu hình gian hàng'}
       </button>
+      {unpublishLabel && (
+        <div className="border-t border-stone-200 pt-3">
+          <p className="mb-2 text-xs text-stone-600">Khách mở link gian hàng sẽ không thấy gì cho tới khi bạn đăng lại.</p>
+          <button type="button" className={`${ui.btnSecondary} w-full`} onClick={onUnpublish}>
+            <EyeOff className="mr-1 h-4 w-4" aria-hidden="true" />
+            {unpublishLabel}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -413,7 +450,7 @@ export function NewCollectionForm({ onCreate, pending }: { onCreate: (dto: { tit
   };
 
   return (
-    <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+    <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none">
       <div className="flex items-start gap-2">
         <input
           className={`${ui.field} flex-1`}
@@ -423,7 +460,7 @@ export function NewCollectionForm({ onCreate, pending }: { onCreate: (dto: { tit
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
-        <button type="button" className={ui.btnSecondary} disabled={!title.trim() || pending} onClick={submit}>
+        <button type="button" className={`${ui.btnSecondary} ${phoneSecondary}`} disabled={!title.trim() || pending} onClick={submit}>
           <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
           Tạo bộ sưu tập
         </button>
