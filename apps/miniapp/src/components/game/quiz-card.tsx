@@ -1,5 +1,4 @@
 import { Brain, Lightbulb } from 'lucide-react';
-import {  } from '@tubutree/app-core/game-newbie';
 import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import type { AnswerResult, QuizItem } from '../../services/game-api';
 import { formatDrops } from '../../utils/format';
@@ -23,6 +22,7 @@ export function QuizCard({
   onNext,
   loadError,
   onRetry,
+  answeredToday,
 }: {
   quiz: QuizItem[] | undefined;
   currentQuiz: QuizItem | undefined;
@@ -34,6 +34,8 @@ export function QuizCard({
   /** Tải câu đố lỗi: khác với "chưa có câu" và "đã làm xong". */
   loadError?: boolean;
   onRetry?: () => void;
+  /** Số câu đã làm hôm nay (từ hồ sơ): danh sách câu rỗng mà đã làm ít nhất một câu = đã hoàn thành. */
+  answeredToday?: number;
 }) {
   const t = gameMoreCopy.quiz;
   return (
@@ -82,9 +84,13 @@ export function QuizCard({
         </>
       ) : loadError && quiz === undefined ? (
         <ErrorState variant="inline" title={t.loadErrorTitle} message={t.loadErrorBody} onRetry={() => onRetry?.()} />
+      ) : quiz === undefined ? (
+        <Text variant="body-sm" tone="tertiary" as="div">
+          {t.loading}
+        </Text>
       ) : (
         <Text variant="body-sm" tone="tertiary" as="div">
-          {quiz && quiz.length > 0 ? t.done : t.empty}
+          {quiz.length > 0 || (answeredToday ?? 0) > 0 ? t.done : t.empty}
         </Text>
       )}
     </GameCard>

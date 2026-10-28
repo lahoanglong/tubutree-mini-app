@@ -15,6 +15,7 @@ export const gameMoreCopy = {
   quiz: {
     done: 'Bạn đã hoàn thành câu đố hôm nay 🎉',
     empty: 'Câu đố mới vào ngày mai',
+    loading: 'Đang tải câu đố…',
     loadErrorTitle: 'Chưa tải được câu đố',
     loadErrorBody: 'Kiểm tra mạng rồi thử lại.',
   },

@@ -1,5 +1,4 @@
 import { Brain, Lightbulb } from 'lucide-react';
-import {  } from '@tubutree/app-core/game-newbie';
 import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import type { AnswerResult, QuizItem } from '@tubutree/app-core/api/game';
 import { ui } from '@/lib/guest-ui';
@@ -22,6 +21,7 @@ export function QuizCard({
   onNext,
   loadError,
   onRetry,
+  answeredToday,
 }: {
   quiz: QuizItem[] | undefined;
   currentQuiz: QuizItem | undefined;
@@ -33,6 +33,8 @@ export function QuizCard({
   /** Tải câu đố lỗi: khác với "chưa có câu" và "đã làm xong". */
   loadError?: boolean;
   onRetry?: () => void;
+  /** Số câu đã làm hôm nay (từ hồ sơ): danh sách câu rỗng mà đã làm ít nhất một câu = đã hoàn thành. */
+  answeredToday?: number;
 }) {
   const t = gameMoreCopy.quiz;
   const shownReveal = currentQuiz && reveal && reveal.quizId === currentQuiz.id ? reveal : null;
@@ -67,8 +69,12 @@ export function QuizCard({
         </>
       ) : loadError && quiz === undefined ? (
         <ErrorState variant="inline" title={t.loadErrorTitle} message={t.loadErrorBody} onRetry={() => onRetry?.()} />
+      ) : quiz === undefined ? (
+        <p role="status" className="text-sm text-stone-600">
+          {t.loading}
+        </p>
       ) : (
-        <p className="text-sm text-stone-600">{quiz && quiz.length > 0 ? t.done : t.empty}</p>
+        <p className="text-sm text-stone-600">{quiz.length > 0 || (answeredToday ?? 0) > 0 ? t.done : t.empty}</p>
       )}
     </GameCard>
   );

@@ -103,7 +103,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
     $executeRaw: jest.fn().mockResolvedValue(1),
     gameSpin: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
     gameQuiz: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
-    gameQuizAttempt: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), create: jest.fn().mockResolvedValue({}) },
+    gameQuizAttempt: { findMany: jest.fn().mockResolvedValue([]), findFirst: jest.fn(), count: jest.fn().mockResolvedValue(0), create: jest.fn().mockResolvedValue({}) },
     coupon: { create: jest.fn().mockResolvedValue({}), count: jest.fn().mockResolvedValue(0) },
     plantedTree: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
     mission: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
@@ -942,6 +942,17 @@ describe('GameService.treeHealth (§6.7.3 héo/chết)', () => {
   });
   it('8 ngày không tưới → vẫn WILTED, không bao giờ DEAD', async () => {
     expect(await health({ lastWateredAt: new Date(Date.now() - 8 * DAYMS), ecoImpact: { progress: 100, target: 600 } })).toBe('WILTED');
+  });
+});
+
+describe('GameService.getProfile — quizAnsweredToday', () => {
+  it('trả số câu đố đã làm hôm nay (giờ VN) để màn phân biệt "đã làm xong" với "chưa có câu"', async () => {
+    const prisma = makePrisma();
+    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(profile({}));
+    (prisma.gameQuizAttempt.count as jest.Mock).mockResolvedValue(5);
+    const r = (await new GameService(prisma, makeConfig(), analytics).getProfile('u1')) as { quizAnsweredToday: number };
+    expect(r.quizAnsweredToday).toBe(5);
+    expect(prisma.gameQuizAttempt.count).toHaveBeenCalledWith({ where: { userId: 'u1', dayKey: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) } });
   });
 });
 
