@@ -285,6 +285,44 @@ describe('Pickup attach at checkout ‖ two-step ship lock ‖ expiry cron (real
     for (const r of [tooSoon, tooFar, pickup, withTracking]) expect(reminded.map(([id]) => id)).not.toContain(r.id);
   });
 
+  it('reminder sweep skips a blocked customer, a waste-blocked customer and a merged account, and sends nothing while the programme is off', async () => {
+    const HOUR = 3_600_000;
+    const plain = await customer();
+    const accountBlocked = await customer();
+    const wasteBlocked = await customer();
+    const flagOnly = await customer();
+    const merged = await customer();
+    await prisma.user.update({ where: { id: accountBlocked.u.id }, data: { isBlocked: true } });
+    await prisma.wasteUserFlags.create({ data: { userId: wasteBlocked.u.id, blockedAt: new Date() } });
+    await prisma.wasteUserFlags.create({ data: { userId: flagOnly.u.id, shipLockedAt: new Date() } });
+    await prisma.user.update({ where: { id: merged.u.id }, data: { mergedIntoId: plain.u.id } });
+    const mk = (userId: string) =>
+      createWasteRequest(prisma, { userId, method: 'DROP_OFF', status: 'OPEN', pointId: warehouse.id, lines: [{ itemId: item.id, declaredQty: 12 }], expiresAt: new Date(Date.now() + 30 * HOUR) });
+    const reqs = {
+      plain: await mk(plain.u.id),
+      accountBlocked: await mk(accountBlocked.u.id),
+      wasteBlocked: await mk(wasteBlocked.u.id),
+      flagOnly: await mk(flagOnly.u.id),
+      merged: await mk(merged.u.id),
+    };
+    const mine = new Set(Object.values(reqs).map((r) => r.id));
+    const remindedIds = () => notifier.requestExpiring.mock.calls.map(([, req]: [string, { id: string }]) => req.id).filter((id: string) => mine.has(id));
+    notifier.requestExpiring.mockClear();
+    await expiry.run(new Date());
+    expect(remindedIds().sort()).toEqual([reqs.plain.id, reqs.flagOnly.id].sort());
+
+    await setConfig(prisma, 'waste.enabled', false);
+    clearConfigCache();
+    try {
+      notifier.requestExpiring.mockClear();
+      await expiry.run(new Date());
+      expect(remindedIds()).toEqual([]);
+    } finally {
+      await setConfig(prisma, 'waste.enabled', true);
+      clearConfigCache();
+    }
+  });
+
   it('checkout attach then expiry cron', async () => {
     const { u, addr, req } = await pickupCustomer();
     await prisma.wasteRequest.update({ where: { id: req.id }, data: { expiresAt: new Date(Date.now() - 60_000) } });
