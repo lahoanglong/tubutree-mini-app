@@ -126,8 +126,8 @@ export function OrderExtraFilters({ value, onChange }: { value: OrderListExtra; 
         <form onSubmit={submitStore} className="flex min-w-[240px] flex-1 items-center gap-2">
           <input
             type="text"
-            aria-label="Lọc đơn theo gian hàng (tên ngắn trong link)"
-            placeholder="Gian hàng: tên ngắn trong link"
+            aria-label="Lọc đơn theo gian hàng (tên hoặc mã ngắn của gian hàng)"
+            placeholder="Tìm theo gian hàng"
             maxLength={100}
             value={storeInput}
             onChange={(e) => setStoreInput(e.target.value)}

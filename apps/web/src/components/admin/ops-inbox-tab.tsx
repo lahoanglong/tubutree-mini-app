@@ -209,7 +209,7 @@ function TodayStats() {
           <TodayStat label="Khách mới hôm nay" value={String(t.newUsers.today)} sub={`7 ngày: ${t.newUsers.week} khách mới`} tone={toneOf(t.newUsers.today, t.newUsers.yesterday)} />
           <TodayStat
             label="Khách mua lại (30 ngày)"
-            value={ns1?.pct == null ? '—' : `${Number(ns1.pct.toFixed(1)).toLocaleString('vi-VN')}%`}
+            value={ns1?.pct == null ? '—' : `${ns1.pct.toFixed(1).replace(/\.0$/, '').replace('.', ',')}%`}
             sub={ns1?.pct == null ? 'Chưa đủ nhóm khách 30 ngày' : `${ns1.repeat}/${ns1.cohort} khách mới có đơn thứ 2`}
           />
         </div>

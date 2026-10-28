@@ -54,10 +54,10 @@ describe('OrderExtraFilters (D1-17)', () => {
   it('gian hàng: nhập slug rồi bấm Lọc; để trống rồi bấm Lọc thì bỏ lọc', () => {
     const onChange = vi.fn();
     const { container } = mount(<OrderExtraFilters value={{}} onChange={onChange} />);
-    typeInto(container.querySelector('input[aria-label="Lọc đơn theo gian hàng (tên ngắn trong link)"]'), '  Tubu-Hoa ');
+    typeInto(container.querySelector('input[aria-label="Lọc đơn theo gian hàng (tên hoặc mã ngắn của gian hàng)"]'), '  Tubu-Hoa ');
     click(byText(container, 'button', 'Lọc gian hàng'));
     expect(onChange).toHaveBeenLastCalledWith({ storefront: 'Tubu-Hoa' });
-    typeInto(container.querySelector('input[aria-label="Lọc đơn theo gian hàng (tên ngắn trong link)"]'), '');
+    typeInto(container.querySelector('input[aria-label="Lọc đơn theo gian hàng (tên hoặc mã ngắn của gian hàng)"]'), '');
     click(byText(container, 'button', 'Lọc gian hàng'));
     expect(onChange).toHaveBeenLastCalledWith({});
   });
