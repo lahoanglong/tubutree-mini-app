@@ -348,7 +348,6 @@ describe('GameGardenService.waterPlot', () => {
     it('đủ trần ngày, tháng còn suất → couponCapped = DAY', async () => {
       const prisma = makePrisma();
       (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(harvestPlot());
-      const monthStart = startOfVnMonth().getTime();
       harvestCounts(prisma, 1, 0);
       const r = await new GameGardenService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 1 })).waterPlot('u1', 'p1', 20);
       expect(r.couponCapped).toBe('DAY');

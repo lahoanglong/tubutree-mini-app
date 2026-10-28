@@ -2423,7 +2423,6 @@ describe('GameService.waterTree — nhịp người mới (thang cây, cây mầ
     it('còn 1 suất tháng (3/4) mà một lần tưới thu hoạch 2 cây → cây đầu có mã, cây sau bị trần MONTH', async () => {
       const prisma = makePrisma();
       setProfile(prisma, eco({ target: 300, treesPlanted: 1 }));
-      const monthStart = startOfVnMonth().getTime();
       harvestCounts(prisma, 0, 3);
       const r = await svcWith(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 })).waterTree('u1', 300 + 600);
       expect(r.treesPlanted).toBe(3);
@@ -2434,7 +2433,6 @@ describe('GameService.waterTree — nhịp người mới (thang cây, cây mầ
     it('trần tháng theo config game.harvest_coupon_monthly_cap', async () => {
       const prisma = makePrisma();
       setProfile(prisma, secondTree());
-      const monthStart = startOfVnMonth().getTime();
       harvestCounts(prisma, 0, 4);
       const r = await svcWith(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3, 'game.harvest_coupon_monthly_cap': 5 })).waterTree('u1', 300);
       expect(r.reward.coupon).toBeTruthy();
@@ -2457,7 +2455,6 @@ describe('GameService.waterTree — nhịp người mới (thang cây, cây mầ
     it('đủ trần ngày (1/ngày), tháng còn suất → couponCapped = DAY', async () => {
       const prisma = makePrisma();
       setProfile(prisma, secondTree());
-      const monthStart = startOfVnMonth().getTime();
       harvestCounts(prisma, 1, 0);
       const r = await svcWith(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 1 })).waterTree('u1', 300);
       expect(r.couponCapped).toBe('DAY');
@@ -2483,7 +2480,6 @@ describe('GameService.waterTree — nhịp người mới (thang cây, cây mầ
 
       const monthFull = makePrisma();
       setProfile(monthFull, secondTree());
-      const monthStart = startOfVnMonth().getTime();
       harvestCounts(monthFull, 0, 4);
       const month = await svcWith(monthFull).waterTree('u1', 300);
       expect(month.couponCapped).toBe('MONTH');
