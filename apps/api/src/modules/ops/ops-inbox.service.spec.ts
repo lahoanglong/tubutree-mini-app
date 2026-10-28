@@ -241,6 +241,26 @@ describe('OpsInboxService — externalPoints', () => {
     });
   });
 
+  it('trả parts từng phần (chờ duyệt, lần gửi mã, hoàn một phần, đã đóng, kẹt) và tổng parts đúng bằng số trên thẻ', async () => {
+    const { svc } = build({ extReview: 2, extAttempts: 3, extPartial: 1, extClosed: 4, extStuck: 5 });
+    const item = (await svc.counts({ role: 'ADMIN' }, new Date('2026-10-20T00:00:00.000Z'))).items.find((i) => i.key === 'externalPoints');
+    expect(item?.parts).toEqual({ review: 2, attempts: 3, partial: 1, closed: 4, stale: 5 });
+    expect(Object.values(item?.parts ?? {}).reduce((a, b) => a + b, 0)).toBe(item?.count);
+  });
+
+  it('thẻ rỗng thì không có parts; các thẻ khác không bao giờ có parts', async () => {
+    const res = await build({ extReview: 0, extAttempts: 0, extPartial: 0, extClosed: 0, extStuck: 0, refunds: 2 }).svc.counts({ role: 'ADMIN' });
+    expect(res.items.find((i) => i.key === 'externalPoints')).toEqual({ key: 'externalPoints', count: 0 });
+    expect(res.items.find((i) => i.key === 'customerRefunds')).not.toHaveProperty('parts');
+  });
+
+  it('mỗi phần chỉ đếm một lần: count và parts dùng chung một lượt truy vấn', async () => {
+    const { svc, extClaimCount, extAttemptCount } = build({ extReview: 1 });
+    await svc.counts({ role: 'ADMIN' }, new Date('2026-10-20T00:00:00.000Z'));
+    expect(extClaimCount).toHaveBeenCalledTimes(4);
+    expect(extAttemptCount).toHaveBeenCalledTimes(1);
+  });
+
   it('KE_TOAN và KHO không thấy khoá này (CSKH và ADMIN xử lý)', async () => {
     for (const perms of [['KE_TOAN'], ['KHO'], []]) {
       const res = await build().svc.counts({ role: 'STAFF', staffPermissions: perms });

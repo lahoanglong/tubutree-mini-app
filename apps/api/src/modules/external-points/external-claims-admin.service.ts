@@ -26,7 +26,7 @@ import { canonicalUserId, claimIntroducers, recordClaimEvent } from './external-
 import { lockOrderThenClaim, reverseCreditedClaim } from './external-claim-status';
 import { evaluateClaimRules, settlePoints } from './external-claim.rules';
 import { advisoryUserLock, type CreatedClaim, ExternalClaimService, rejectionOf, USER_SELECT } from './external-claim.service';
-import { closedCreditedWhere, stalePendingWhere, UNMATCHED_RETRY_DAYS_FOR_ATTENTION } from './external-points-attention';
+import { closedCreditedWhere, partialRefundWhere, stalePendingWhere, UNMATCHED_RETRY_DAYS_FOR_ATTENTION } from './external-points-attention';
 import { normalizeTrackingCode, pancakeCreatorRefs } from './external-order.mapper';
 import { claimCodeLabel, claimPoints, maskClaimCode } from './external-points-rate';
 
@@ -49,8 +49,8 @@ export interface AdminClaimListQuery {
   state?: ExternalClaimState;
   /** SCAN = đơn sàn khách tự nhập mã; PHONE = đơn chat/điện thoại tự cộng theo SĐT. Bỏ trống = cả hai. */
   kind?: 'SCAN' | 'PHONE';
-  /** Lọc đúng các dòng "Cần xử lý" đang đếm: claim đã cộng mà đơn đã đóng, hoặc PENDING không tới hạn. */
-  attention?: 'closed_credited' | 'stale';
+  /** Lọc đúng các dòng "Cần xử lý" đang đếm: claim đã cộng mà đơn đã đóng hoặc hoàn một phần, hoặc PENDING không tới hạn. */
+  attention?: 'closed_credited' | 'stale' | 'partial_refund';
   q?: string;
 }
 
@@ -122,6 +122,7 @@ export class ExternalClaimsAdminService {
     const and: Prisma.ExternalPointsClaimWhereInput[] = [];
     if (q.attention === 'closed_credited') and.push(closedCreditedWhere);
     if (q.attention === 'stale') and.push(stalePendingWhere(new Date()));
+    if (q.attention === 'partial_refund') and.push(partialRefundWhere);
     const where: Prisma.ExternalPointsClaimWhereInput = { ...(q.state ? { state: q.state } : {}), ...(q.kind ? { kind: q.kind } : {}), ...(and.length ? { AND: and } : {}) };
     const text = q.q?.trim();
     if (text) {

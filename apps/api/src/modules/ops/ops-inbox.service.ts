@@ -13,7 +13,7 @@ import { countUnansweredQuestions, DEFAULT_UNANSWERED_ALERT_HOURS, UNANSWERED_AL
 import { readDealerPendingPaymentTtlHours, readPendingPaymentTtlHours } from '../orders/pending-payment-ttl';
 import { isStorefrontApprovalRequired, STOREFRONT_PENDING_APPROVAL_WHERE } from '../storefront/storefront-config';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { externalPointsAttentionCount } from '../external-points/external-points-attention';
+import { externalPointsAttentionParts } from '../external-points/external-points-attention';
 import { bridgeIsDown, unforwardedWhere } from '../support-chat/support-chat-health';
 import { CHAT_ENABLED_KEY } from '../support-chat/support-chat.config';
 import {
@@ -86,6 +86,8 @@ interface InboxDef {
   hoursLeft?: () => Promise<number | undefined>;
   /** Mốc của việc chờ lâu nhất (một findFirst sắp theo cột thời gian); chỉ hỏi khi `count` > 0. */
   oldest?: () => Promise<Date | null | undefined>;
+  /** Các phần cộng nên số trên thẻ, để màn đích mở đúng phần có việc; chỉ hỏi khi `count` > 0 và dùng chung truy vấn với `count`. */
+  parts?: () => Promise<Record<string, number>>;
 }
 
 /**
@@ -105,6 +107,9 @@ export class OpsInboxService {
 
   private defs(now: Date): InboxDef[] {
     const p = this.prisma;
+    // Một lượt truy vấn cho cả số tổng lẫn các phần của thẻ điểm đơn sàn.
+    let externalCache: ReturnType<typeof externalPointsAttentionParts> | undefined;
+    const externalParts = () => (externalCache ??= externalPointsAttentionParts(p, now));
     return [
       { key: 'pancakeAttention', audience: ['KHO'], count: () => p.order.count({ where: { pancakeAttentionAt: { not: null } } }) },
       { key: 'pancakeUnsynced', audience: ['KHO'], count: () => p.order.count({ where: pancakeUnsyncedWhere(now) }) },
@@ -204,7 +209,12 @@ export class OpsInboxService {
       // Cùng điều kiện với bộ lọc "VAT chờ xuất" ở tab Đơn hàng; xuất hoá đơn (issue-invoice) là việc của kế toán.
       { key: 'invoicePending', audience: ['KE_TOAN'], count: () => p.order.count({ where: buildAdminOrderWhere({ invoice: 'pending' }) }) },
       // Điểm đơn ngoài app cần người: claim chờ duyệt, lần gửi mã quá 3 ngày chưa thấy đơn (hoặc thấy đơn nguồn lạ), đơn hoàn một phần sau khi đã cộng.
-      { key: 'externalPoints', audience: ['CSKH'], count: () => externalPointsAttentionCount(p, now) },
+      {
+        key: 'externalPoints',
+        audience: ['CSKH'],
+        count: async () => Object.values(await externalParts()).reduce((a, b) => a + b, 0),
+        parts: () => externalParts(),
+      },
       // Chat CSKH: hội thoại có tin chưa vào được nhóm Zalo (cùng điều kiện với bộ lọc "Chưa chuyển" ở tab Chat CSKH); cầu nối mất kết nối là việc của ADMIN (đăng nhập QR chỉ ADMIN).
       { key: 'supportChatUnforwarded', audience: ['CSKH'], count: () => p.supportConversation.count({ where: unforwardedWhere(now) }) },
       { key: 'zaloBridgeDown', audience: 'ADMIN', count: async () => ((await this.bridgeAlertable()) && bridgeIsDown(await p.supportBridgeStatus.findUnique({ where: { id: 'main' } }), now) ? 1 : 0) },
@@ -243,7 +253,7 @@ export class OpsInboxService {
     return Math.max(0, Math.ceil((oldest.createdAt.getTime() + ttl * 3_600_000 - now.getTime()) / 3_600_000));
   }
 
-  async counts(viewer: InboxViewer, now = new Date()): Promise<{ generatedAt: string; items: { key: InboxKey; count: number; hoursLeft?: number; oldestAt?: string }[] }> {
+  async counts(viewer: InboxViewer, now = new Date()): Promise<{ generatedAt: string; items: { key: InboxKey; count: number; hoursLeft?: number; oldestAt?: string; parts?: Record<string, number> }[] }> {
     const perms = viewer.staffPermissions ?? [];
     const visible = this.defs(now).filter(
       (d) =>
@@ -251,9 +261,10 @@ export class OpsInboxService {
         (viewer.role === 'STAFF' && (d.audience === 'STAFF' || (Array.isArray(d.audience) && d.audience.some((a) => perms.includes(a))))),
     );
     const counts = await Promise.all(visible.map((d) => d.count()));
-    const [hoursLeft, oldest] = await Promise.all([
+    const [hoursLeft, oldest, parts] = await Promise.all([
       Promise.all(visible.map((d, i) => ((counts[i] ?? 0) > 0 ? d.hoursLeft?.() : undefined))),
       Promise.all(visible.map((d, i) => ((counts[i] ?? 0) > 0 ? d.oldest?.() : undefined))),
+      Promise.all(visible.map((d, i) => ((counts[i] ?? 0) > 0 ? d.parts?.() : undefined))),
     ]);
     return {
       generatedAt: now.toISOString(),
@@ -262,6 +273,7 @@ export class OpsInboxService {
         count: counts[i] ?? 0,
         ...(hoursLeft[i] !== undefined ? { hoursLeft: hoursLeft[i] } : {}),
         ...(oldest[i] ? { oldestAt: oldest[i]!.toISOString() } : {}),
+        ...(parts[i] ? { parts: parts[i] } : {}),
       })),
     };
   }

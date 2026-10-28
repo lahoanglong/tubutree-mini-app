@@ -6,7 +6,10 @@ import { ExternalClaimsAdminService } from '../../src/modules/external-points/ex
 import { applyStatusToClaim } from '../../src/modules/external-points/external-claim-status';
 import { releaseClaim, releaseDueClaims } from '../../src/modules/external-points/external-claim-release';
 import { advisoryUserLock } from '../../src/modules/external-points/external-claim.service';
-import { externalPointsAttentionCount } from '../../src/modules/external-points/external-points-attention';
+import { externalPointsAttentionParts } from '../../src/modules/external-points/external-points-attention';
+
+const externalPointsAttentionCount = async (db: Parameters<typeof externalPointsAttentionParts>[0], now: Date) =>
+  Object.values(await externalPointsAttentionParts(db, now)).reduce((a, b) => a + b, 0);
 import { createUser, deleteItData, pinConfig, randCode, warmPool } from './helpers';
 
 const DAY = 864e5;
@@ -492,11 +495,23 @@ describe('Điểm đơn ngoài app: gắn đơn, duyệt, nhật ký, hoàn mộ
       const stale = await prisma.externalPointsClaim.create({
         data: { externalOrderId: o2.id, userId: u2.id, kind: 'SCAN', state: 'PENDING', ratePct: 1, multiplier: 1, points: 2_000, claimedCode: o2.code, dayKey: '2026-08-01', createdAt: new Date(Date.now() - 70 * DAY) },
       });
-      const ids = async (attention: 'closed_credited' | 'stale') => (await adm().list({ page: 1, limit: 200, attention })).data.map((r) => r.id);
+      const u3 = await mkUser();
+      const o3 = await mkOrder({ status: 'PARTIAL_RETURN', pancakeStatus: 5 });
+      const partial = await prisma.externalPointsClaim.create({
+        data: { externalOrderId: o3.id, userId: u3.id, kind: 'SCAN', state: 'CREDITED', ratePct: 1, multiplier: 1, points: 2_000, claimedCode: o3.code, dayKey: '2026-10-20', creditedAt: new Date(), reviewReason: 'Đơn hoàn một phần' },
+      });
+      const ids = async (attention: 'closed_credited' | 'stale' | 'partial_refund') => (await adm().list({ page: 1, limit: 200, attention })).data.map((r) => r.id);
       expect(await ids('closed_credited')).toContain(closed.id);
       expect(await ids('closed_credited')).not.toContain(stale.id);
       expect(await ids('stale')).toContain(stale.id);
       expect(await ids('stale')).not.toContain(closed.id);
+      expect(await ids('partial_refund')).toContain(partial.id);
+      expect(await ids('partial_refund')).not.toContain(closed.id);
+      expect(await ids('partial_refund')).not.toContain(stale.id);
+      const parts = await externalPointsAttentionParts(prisma, new Date());
+      expect((await adm().list({ page: 1, limit: 200, attention: 'partial_refund' })).meta.total).toBe(parts.partial);
+      expect((await adm().list({ page: 1, limit: 200, attention: 'closed_credited' })).meta.total).toBe(parts.closed);
+      expect((await adm().list({ page: 1, limit: 200, attention: 'stale' })).meta.total).toBe(parts.stale);
     });
   });
 });

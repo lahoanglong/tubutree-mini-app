@@ -9,7 +9,10 @@ import type { Prisma } from '@prisma/client';
 /** Claim đã cộng mà đơn đã đóng (huỷ, hoàn, xoá): lẽ ra phải đã đảo. */
 export const closedCreditedWhere: Prisma.ExternalPointsClaimWhereInput = { state: 'CREDITED', externalOrder: { status: { in: ['CANCELLED', 'RETURNED', 'DELETED'] } } };
 
-/** Claim PENDING không có đường tới hạn (xem externalPointsAttentionCount). */
+/** Claim đã cộng mà đơn hoàn một phần: đã được gắn cờ để người xem quyết giữ hay đảo điểm. */
+export const partialRefundWhere: Prisma.ExternalPointsClaimWhereInput = { state: 'CREDITED', reviewReason: { not: null } };
+
+/** Claim PENDING không có đường tới hạn (xem externalPointsAttentionParts). */
 export const stalePendingWhere = (now: Date): Prisma.ExternalPointsClaimWhereInput => ({
   state: 'PENDING',
   OR: [
@@ -21,21 +24,34 @@ export const stalePendingWhere = (now: Date): Prisma.ExternalPointsClaimWhereInp
 
 type Db = Pick<PrismaService, 'externalPointsClaim' | 'externalClaimAttempt'>;
 
+export type ExternalPointsAttentionParts = {
+  /** Claim chờ duyệt (state REVIEW). */
+  review: number;
+  /** Lần gửi mã chưa ghép được đơn. */
+  attempts: number;
+  /** Claim đã cộng mà đơn hoàn một phần. */
+  partial: number;
+  /** Claim đã cộng mà đơn đã đóng. */
+  closed: number;
+  /** Claim PENDING không có đường tới hạn. */
+  stale: number;
+};
+
 /**
- * Số việc "Cần xử lý" của điểm đơn ngoài app, cùng điều kiện với hai danh sách admin: claim REVIEW, lần gửi mã UNMATCHED chưa xử lý đã
+ * Các phần của việc "Cần xử lý" của điểm đơn ngoài app, cùng điều kiện với hai danh sách admin: claim REVIEW, lần gửi mã UNMATCHED chưa xử lý đã
  * hết 3 ngày tự ghép (hoặc đã thấy đơn nhưng nguồn lạ), claim đã cộng mà đơn hoàn một phần (cờ reviewReason), claim đã cộng mà đơn đã đóng
- * (huỷ, hoàn, xoá) vì lẽ ra phải đã đảo.
+ * (huỷ, hoàn, xoá) vì lẽ ra phải đã đảo, và claim PENDING không đường tới hạn.
  */
-export async function externalPointsAttentionCount(db: Db, now: Date): Promise<number> {
+export async function externalPointsAttentionParts(db: Db, now: Date): Promise<ExternalPointsAttentionParts> {
   const stale = new Date(now.getTime() - UNMATCHED_RETRY_DAYS_FOR_ATTENTION * 864e5);
   const [review, attempts, partial, closed, stuck] = await Promise.all([
     db.externalPointsClaim.count({ where: { state: 'REVIEW' } }),
     db.externalClaimAttempt.count({ where: { result: 'UNMATCHED', resolvedAt: null, OR: [{ externalOrderId: { not: null } }, { createdAt: { lt: stale } }] } }),
-    db.externalPointsClaim.count({ where: { state: 'CREDITED', reviewReason: { not: null } } }),
+    db.externalPointsClaim.count({ where: partialRefundWhere }),
     db.externalPointsClaim.count({ where: closedCreditedWhere }),
     // Lưới an toàn: PENDING không có đường nào tới hạn. Đơn kẹt chưa giao lâu (OPEN, RETURNING), đơn DELIVERED thiếu deliveredAt,
     // đơn hoàn một phần chưa ai duyệt hoặc thiếu mốc cộng.
     db.externalPointsClaim.count({ where: stalePendingWhere(now) }),
   ]);
-  return review + attempts + partial + closed + stuck;
+  return { review, attempts, partial, closed, stale: stuck };
 }

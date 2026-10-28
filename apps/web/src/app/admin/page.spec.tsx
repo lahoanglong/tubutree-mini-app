@@ -82,6 +82,7 @@ const mocks = vi.hoisted(() => ({
   updateAcademyLesson: vi.fn(),
   deleteAcademyLesson: vi.fn(),
   inbox: vi.fn(),
+  inboxExternal: null as Record<string, number> | null,
   access: { role: 'STAFF', staffPermissions: [] as string[] },
   refundsCalls: 0,
   refundsArgs: [] as unknown[][],
@@ -165,6 +166,7 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'dealerCreditReported', count: 1 },
           { key: 'communityReports', count: 3 },
           { key: 'productsMissingImage', count: 4 },
+          ...(mocks.inboxExternal ? [{ key: 'externalPoints', count: Object.values(mocks.inboxExternal).reduce((a, b) => a + b, 0), parts: mocks.inboxExternal }] : []),
         ],
       };
     },
@@ -355,6 +357,7 @@ beforeEach(() => {
     mocks.createPromotion, mocks.deletePromotion, mocks.createDealerReward, mocks.deleteDealerReward,
   ]) fn.mockReset();
   mocks.inbox.mockReset();
+  mocks.inboxExternal = null;
   mocks.todayCalls = 0;
   mocks.guestCount = 7;
   mocks.access = { role: 'STAFF', staffPermissions: [] };
@@ -3678,6 +3681,37 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     await flush();
     expect(window.location.search).toBe('?tab=orders');
     expect(mocks.listOrders.mock.lastCall![2]).toBe('TT0');
+  });
+
+  it('thẻ Tích điểm đơn sàn mở tab và bật chip của phần có việc đầu tiên (hoàn một phần), không mặc định "Chờ duyệt" rỗng', async () => {
+    mocks.inboxExternal = { review: 0, partial: 2, closed: 1, stale: 0, attempts: 0 };
+    const api = mockFetch({
+      '/admin/external-claims/attempts?': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
+      '/admin/external-claims?': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    click(container.querySelector('[data-inbox="externalPoints"]')!);
+    await flush();
+    expect(window.location.search).toBe('?tab=externalClaims');
+    const list = api.calls.filter((c) => c.url.includes('/admin/external-claims?')).at(-1)!.url;
+    expect(list).toContain('attention=partial_refund');
+    expect(list).not.toContain('state=');
+    expect(container.querySelector('[data-attention-part="partial"]')!.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('thẻ Tích điểm đơn sàn có việc chờ duyệt thì mở chip "Chờ duyệt" như cũ', async () => {
+    mocks.inboxExternal = { review: 3, partial: 2 };
+    const api = mockFetch({
+      '/admin/external-claims/attempts?': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
+      '/admin/external-claims?': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    click(container.querySelector('[data-inbox="externalPoints"]')!);
+    await flush();
+    expect(api.calls.filter((c) => c.url.includes('/admin/external-claims?')).at(-1)!.url).toContain('state=REVIEW');
+    expect(container.querySelector('[data-attention-part="review"]')!.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('thẻ yêu cầu xoá tài khoản mở tab Người dùng và cuộn tới khối yêu cầu xoá', async () => {
