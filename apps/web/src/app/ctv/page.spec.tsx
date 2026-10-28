@@ -404,7 +404,7 @@ describe('/ctv — bảng điều khiển', () => {
     expect(full.container.textContent).toContain('3 lượt bấm');
     expect(full.container.textContent).not.toContain('3 lượt bấm ·');
     expect(full.container.textContent).toContain('Lượt bấm');
-    click(Array.from(full.container.querySelectorAll('button')).find((b) => b.textContent === 'Sao chép'));
+    click(Array.from(full.container.querySelectorAll('button')).find((b) => b.textContent === 'Sao chép') ?? null);
     await flush();
     expect(state.copied[0]).toMatch(/\/\?ref=TUBU88&l=abc123$/);
   });

@@ -25,7 +25,7 @@ import {
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { ShareSheet } from '../components/share-sheet';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
-import { CTV_TAB_KEYS, CTV_TABS, ctvHeadline, hasFirstOrder, transferBlockedText, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
+import { COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, hasFirstOrder, transferBlockedText, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
 import { getWallet } from '../services/account-api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -360,7 +360,7 @@ function Dashboard() {
               {formatVnd(head.big)}
             </Text>
             <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.9, marginTop: 4 }}>
-              Đang chờ: {formatVnd(head.pending)} · đơn chưa giao hoặc đang trong thời gian đổi/trả
+              Đang chờ: {formatVnd(head.pending)} · {COMMISSION_PENDING_NOTE}
             </Text>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', marginTop: 12 }}>
               <MiniStat label="Tạm tính tháng này" value={formatVnd(head.monthEstimate)} />

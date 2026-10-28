@@ -7,6 +7,10 @@ export const CTV_TABS = [
 export type CtvTabKey = (typeof CTV_TABS)[number]['key'];
 export const CTV_TAB_KEYS: readonly CtvTabKey[] = CTV_TABS.map((t) => t.key);
 
+/** Một câu chung cho khoản hoa hồng đang chờ, dùng ở trang CTV và ở Ví Tubu để CTV không thấy hai tên cho cùng một số. */
+export const COMMISSION_PENDING_LABEL = 'Hoa hồng đang chờ';
+export const COMMISSION_PENDING_NOTE = 'đơn chưa giao hoặc trong thời gian đổi/trả';
+
 interface DashboardMoney {
   monthCommission: number;
   pendingCommission: number;

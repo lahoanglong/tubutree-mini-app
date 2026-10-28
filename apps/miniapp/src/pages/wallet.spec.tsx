@@ -138,7 +138,7 @@ describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2
     expect(screen.getByText('Điểm Xanh (đổi giảm giá)')).toBeInTheDocument();
     expect(screen.getByText('50.000 điểm')).toBeInTheDocument();
     expect(screen.getByText('Bạc')).toBeInTheDocument();
-    expect(screen.getByText('Hoa hồng chờ duyệt')).toBeInTheDocument();
+    expect(screen.getByText('Hoa hồng đang chờ')).toBeInTheDocument();
     expect(screen.getByText('30.000đ')).toBeInTheDocument();
     expect(screen.getByText('Hoa hồng có thể chuyển vào Ví')).toBeInTheDocument();
     expect(screen.getByText('520.000đ')).toBeInTheDocument();
@@ -326,7 +326,7 @@ describe('WalletPage — ẩn lối vào Hoàn tiền sàn ngoài (C-086, Q-15)'
   it('hết khoản đã duyệt chờ về Ví: không còn thẻ "Hoàn tiền đã duyệt, chờ về Ví"', async () => {
     stubLoaded({ ...WALLET, cashbackPending: 0 });
     renderPage();
-    await screen.findByText('Hoa hồng chờ duyệt');
+    await screen.findByText('Hoa hồng đang chờ');
     expect(screen.queryByText('Hoàn tiền đã duyệt, chờ về Ví')).toBeNull();
   });
 
@@ -372,7 +372,7 @@ describe('WalletPage — khách thường (R6-BUYER-13)', () => {
     stubLoaded(PLAIN_WALLET, REFUND_TXNS);
     renderPage();
     expect(await screen.findByText('Dùng để trả tiền hàng ở bước thanh toán')).toBeInTheDocument();
-    expect(screen.queryByText('Hoa hồng chờ duyệt')).toBeNull();
+    expect(screen.queryByText('Hoa hồng đang chờ')).toBeNull();
     expect(screen.queryByText('Hoa hồng có thể chuyển vào Ví')).toBeNull();
     expect(screen.queryByText(/Tiền thật từ hoa hồng/)).toBeNull();
   });
@@ -382,7 +382,7 @@ describe('WalletPage — khách thường (R6-BUYER-13)', () => {
       mocks.role = role;
       stubLoaded(PLAIN_WALLET, REFUND_TXNS);
       const view = renderPage();
-      expect(await screen.findByText('Hoa hồng chờ duyệt')).toBeInTheDocument();
+      expect(await screen.findByText('Hoa hồng đang chờ')).toBeInTheDocument();
       expect(screen.getByText('Hoa hồng có thể chuyển vào Ví')).toBeInTheDocument();
       view.unmount();
     }

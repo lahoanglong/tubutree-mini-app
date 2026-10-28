@@ -111,7 +111,7 @@ describe('/tai-khoan/vi-tubu — thẻ số dư và nguồn tiền', () => {
     expect(c.textContent).toContain('50.000');
     expect(c.textContent).toContain('trong đó 2.000 điểm không hết hạn');
     expect(c.textContent).toContain('Bạc');
-    expect(c.textContent).toContain('Hoa hồng chờ duyệt');
+    expect(c.textContent).toContain('Hoa hồng đang chờ');
     expect(c.textContent).toContain('30.000đ');
     expect(c.textContent).toContain('Hoa hồng có thể chuyển vào Ví');
     expect(c.textContent).toContain('520.000đ');
@@ -162,7 +162,7 @@ describe('/tai-khoan/vi-tubu — thẻ số dư và nguồn tiền', () => {
     state.wallet = { ...WALLET, commissionApproved: 0, commissionPending: 0, cashbackPending: 0 };
     const c = await mount();
     expect(c.textContent).toContain('Dùng để trả tiền hàng ở bước thanh toán');
-    expect(c.textContent).not.toContain('Hoa hồng chờ duyệt');
+    expect(c.textContent).not.toContain('Hoa hồng đang chờ');
     expect(c.textContent).not.toContain('Hoa hồng có thể chuyển vào Ví');
     expect(c.textContent).not.toContain('Tiền thật từ hoa hồng');
     expect(c.textContent).not.toContain('Hoàn tiền đã duyệt, chờ về Ví');
@@ -173,7 +173,7 @@ describe('/tai-khoan/vi-tubu — thẻ số dư và nguồn tiền', () => {
       state.role = role;
       state.wallet = { ...WALLET, commissionApproved: 0, commissionPending: 0, cashbackPending: 0 };
       const c = await mount();
-      expect(c.textContent).toContain('Hoa hồng chờ duyệt');
+      expect(c.textContent).toContain('Hoa hồng đang chờ');
       expect(c.textContent).toContain('Hoa hồng có thể chuyển vào Ví');
       expect(c.textContent).toContain('Tiền thật từ hoa hồng — dùng để trả tiền hàng.');
       expect(c.textContent).not.toContain('hoàn tiền sàn ngoài');
@@ -349,8 +349,8 @@ describe('/tai-khoan/vi-tubu — giao diện điện thoại như Mini App', () 
     const at = (needle: string) => labels.findIndex((l) => l.includes(needle));
     expect(at('Số dư Ví Tubu')).toBeGreaterThan(-1);
     expect(at('Số dư Ví Tubu')).toBeLessThan(at('Điểm Xanh (đổi giảm giá)'));
-    expect(at('Điểm Xanh (đổi giảm giá)')).toBeLessThan(at('Hoa hồng chờ duyệt'));
-    expect(at('Hoa hồng chờ duyệt')).toBeLessThan(at('Hoàn tiền đã duyệt'));
+    expect(at('Điểm Xanh (đổi giảm giá)')).toBeLessThan(at('Hoa hồng đang chờ'));
+    expect(at('Hoa hồng đang chờ')).toBeLessThan(at('Hoàn tiền đã duyệt'));
     expect(at('Hoàn tiền đã duyệt')).toBeLessThan(at('Mẹo: tiền hoàn đơn'));
     expect(at('Mẹo: tiền hoàn đơn')).toBeLessThan(at('Lịch sử Ví'));
   });

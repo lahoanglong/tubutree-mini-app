@@ -9,6 +9,7 @@ import { loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import { walletQuery, walletTransactionsQuery } from '@tubutree/app-core/queries/wallet';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { walletTxLabel } from '@tubutree/app-core/wallet-rules';
+import { COMMISSION_PENDING_LABEL, COMMISSION_PENDING_NOTE } from '@tubutree/app-core/ctv-dashboard';
 import { uniqueById } from '@tubutree/app-core/unique-by-id';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -93,6 +94,7 @@ export default function WalletPage() {
   // Vẫn hiện khi còn khoản hoa hồng thật dù role chưa khớp (tiền của khách không được giấu).
   const showCommission = isCommissionRole || w.commissionPending > 0 || w.commissionApproved > 0;
   const ctvLinkable = w.commissionApproved > 0 && isWebRouteReady('/ctv');
+  const ctvPendingLinkable = w.commissionPending > 0 && isWebRouteReady('/ctv');
   const points = loyalty ? pointsSummary(loyalty) : null;
   // Ví 0đ và chưa có biến động: nói tiền vào Ví từ đâu thay cho câu chung chung và khối Mẹo (trùng ý).
   const walletEmpty = w.walletBalance === 0 && txQ.isSuccess && (txQ.data?.pages[0]?.data.length ?? 0) === 0;
@@ -125,8 +127,8 @@ export default function WalletPage() {
                 {/* Hạng nằm dưới số, không cùng hàng: ở 390px cột số chỉ còn ~120px nên số bị gãy "130.000 / điểm". */}
                 <span className="block whitespace-nowrap text-xl font-bold tabular-nums text-stone-900">{formatCount(points?.total ?? 0)} điểm</span>
                 {tierName && (
-                  <span className="mt-1 block">
-                    <Badge tone="brand">{tierName}</Badge>
+                  <span className="mt-1 block min-w-0">
+                    <Badge tone="brand" className="max-w-full !inline-block truncate align-top">{tierName}</Badge>
                   </span>
                 )}
                 {points?.convertedNote && <span className="mt-1 block text-xs text-stone-700">{points.convertedNote}</span>}
@@ -143,7 +145,15 @@ export default function WalletPage() {
 
           {showCommission && (
             <div className="flex gap-2.5 max-md:order-5">
-              <SourceCard label="Hoa hồng chờ duyệt" value={w.commissionPending} icon={Clock} />
+              {/* Cùng câu với trang CTV; có tiền chờ thì chạm để xem từng khoản ở tab Hoa hồng. */}
+              <SourceCard
+                label={COMMISSION_PENDING_LABEL}
+                value={w.commissionPending}
+                icon={Clock}
+                note={COMMISSION_PENDING_NOTE}
+                hint={ctvPendingLinkable ? 'Xem chi tiết →' : undefined}
+                href={ctvPendingLinkable ? '/ctv?tab=commission' : undefined}
+              />
               {/* Hoa hồng đã duyệt KHÔNG tự vào Ví: phải bấm "Chuyển vào Ví" ở trang Cộng tác viên, nên thẻ chỉ dẫn khi có tiền. */}
               <SourceCard
                 label="Hoa hồng có thể chuyển vào Ví"
@@ -182,7 +192,7 @@ export default function WalletPage() {
 }
 
 /** Thẻ một nguồn tiền; có `href` thì cả thẻ là liên kết. */
-function SourceCard({ label, value, icon: SourceIcon, wide, hint, href }: { label: string; value: number; icon: LucideIcon; wide?: boolean; hint?: string; href?: string }) {
+function SourceCard({ label, value, icon: SourceIcon, wide, hint, href, note }: { label: string; value: number; icon: LucideIcon; wide?: boolean; hint?: string; href?: string; note?: string }) {
   const body = (
     <>
       <span className="grid h-8 w-8 place-items-center rounded-full bg-stone-100">
@@ -190,6 +200,7 @@ function SourceCard({ label, value, icon: SourceIcon, wide, hint, href }: { labe
       </span>
       <span className={`mt-1 block font-bold tabular-nums text-stone-900 ${wide ? 'text-lg' : 'text-base'}`}>{formatVnd(value)}</span>
       <span className="block text-xs text-stone-600">{label}</span>
+      {note && <span className="block text-xs text-stone-600">{note}</span>}
       {hint && <span className="mt-1 block text-xs font-semibold text-forest-700">{hint}</span>}
     </>
   );

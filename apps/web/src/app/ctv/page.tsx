@@ -19,7 +19,7 @@ import {
 } from '@tubutree/app-core/queries/affiliate';
 import { academyCoursesQuery } from '@tubutree/app-core/queries/academy';
 import { walletQuery } from '@tubutree/app-core/queries/wallet';
-import { CTV_TAB_KEYS, CTV_TABS, ctvHeadline, hasFirstOrder, transferBlockedText } from '@tubutree/app-core/ctv-dashboard';
+import { COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, hasFirstOrder, transferBlockedText } from '@tubutree/app-core/ctv-dashboard';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
@@ -418,7 +418,7 @@ function Dashboard() {
             {/* Số to là tiền dùng được ngay; hoa hồng đang chờ và số tạm tính tháng là dòng phụ. */}
             <div className="text-sm">Có thể chuyển vào Ví</div>
             <div className="mt-1 font-display text-3xl font-bold tabular-nums">{formatVnd(head.big)}</div>
-            <div className="mt-1 text-xs">Đang chờ: {formatVnd(head.pending)} · đơn chưa giao hoặc đang trong thời gian đổi/trả</div>
+            <div className="mt-1 text-xs">Đang chờ: {formatVnd(head.pending)} · {COMMISSION_PENDING_NOTE}</div>
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
               <MiniStat label="Tạm tính tháng này" value={formatVnd(head.monthEstimate)} />
               <MiniStat label="Lượt bấm" value={String(d?.totalClicks ?? 0)} />

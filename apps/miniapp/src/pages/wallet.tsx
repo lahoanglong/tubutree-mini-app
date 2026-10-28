@@ -23,6 +23,7 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { vi } from '../i18n/vi';
+import { COMMISSION_PENDING_LABEL, COMMISSION_PENDING_NOTE } from '@tubutree/app-core/ctv-dashboard';
 
 const CARD: CSSProperties = {
   background: 'var(--color-bg-surface)',
@@ -135,7 +136,7 @@ export default function WalletPage() {
                   {formatPoints(points?.total ?? 0)}
                 </Text>
                 {loyalty?.tier && (
-                  <Badge tone="brand" style={{ marginTop: 4 }}>
+                  <Badge tone="brand" style={{ marginTop: 4, display: 'block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', boxSizing: 'border-box', width: 'fit-content' }}>
                     {loyalty.tier.name}
                   </Badge>
                 )}
@@ -160,7 +161,15 @@ export default function WalletPage() {
           {/* Nguồn tiền chờ */}
           {showCommission && (
             <div style={{ margin: '0 16px 12px', display: 'flex', gap: 10 }}>
-              <SourceCard label="Hoa hồng chờ duyệt" value={w.commissionPending} Icon={Clock} />
+              {/* Cùng câu với trang CTV; có tiền chờ thì chạm để xem từng khoản ở tab Hoa hồng. */}
+              <SourceCard
+                label={COMMISSION_PENDING_LABEL}
+                value={w.commissionPending}
+                Icon={Clock}
+                note={COMMISSION_PENDING_NOTE}
+                hint={w.commissionPending > 0 ? 'Xem chi tiết →' : undefined}
+                onClick={w.commissionPending > 0 ? () => navigate('/affiliate?tab=commission') : undefined}
+              />
               {/* Hoa hồng APPROVED KHÔNG tự vào Ví: CTV bấm "Chuyển vào Ví" ở trang Cộng tác viên. */}
               <SourceCard
                 label="Hoa hồng có thể chuyển vào Ví"
@@ -293,6 +302,7 @@ function SourceCard({
   Icon: SourceIcon,
   wide,
   hint,
+  note,
   onClick,
 }: {
   label: string;
@@ -301,6 +311,8 @@ function SourceCard({
   wide?: boolean;
   /** Dòng phụ giải thích tiền này ở đâu / cần làm gì để lấy về. */
   hint?: string;
+  /** Giải thích ngắn dưới nhãn. */
+  note?: string;
   onClick?: () => void;
 }) {
   return (
@@ -322,6 +334,11 @@ function SourceCard({
       <Text variant="caption" tone="tertiary" as="div">
         {label}
       </Text>
+      {note && (
+        <Text variant="label" tone="tertiary" as="div" style={{ fontWeight: 400 }}>
+          {note}
+        </Text>
+      )}
       {hint && (
         <Text variant="caption" tone="brand" as="div" style={{ marginTop: 4, fontWeight: 600 }}>
           {hint}
