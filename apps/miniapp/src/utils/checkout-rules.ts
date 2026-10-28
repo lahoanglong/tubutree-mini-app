@@ -128,6 +128,11 @@ export function checkoutPoints(
   return { ...base, label: `Dùng được ${groupThousands(usable)}/${formatPoints(balance)}`, lockNote: heldText };
 }
 
+/** Nhãn ô Điểm Xanh khi ô bị khoá theo đơn: chỉ ghi số dư, phần bị giữ để `lockNote` nói, không hứa "dùng được" cạnh "chưa dùng được". */
+export function lockedPointsLabel(balance: number): string {
+  return `Bạn đang có ${formatPoints(balance)}`;
+}
+
 /**
  * Trần Điểm Xanh của đơn (`quote.pointsMax`, đã gồm số dư dùng được, trần theo giá trị hàng và luật hàng của gian hàng đối tác).
  * Khách chỉ thấy số thật được trừ sau khi tick, nên trước khi tick ô phải nêu trần khi nó thấp hơn số điểm dùng được:

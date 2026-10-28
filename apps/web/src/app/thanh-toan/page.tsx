@@ -26,8 +26,9 @@ import {
   type OrderDTO,
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
+import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { shippingEtaLabel } from '@tubutree/app-core/shipping-eta';
-import { checkoutPointsOffer, convertedPointsLine, formatCount, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
+import { checkoutPointsOffer, convertedPointsLine, formatCount, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
   ORDER_NOTE_MAX,
   effectiveReferralCode,
@@ -50,8 +51,9 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { ReferralCodeBox } from '@/components/referral-code-box';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { OrderSuccess } from '@/components/checkout/order-success';
-import { BankTransferPanel } from './bank-transfer-panel';
+import { CheckoutSkeleton } from './checkout-skeleton';
 import { InvoiceSection } from './invoice-section';
+import { ErrorState } from '@/components/ui/error-state';
 import { EMPTY_INVOICE, loadSavedInvoice, saveInvoice } from '@/lib/saved-invoice';
 import { fulfillerLabel, shipmentsNote } from '@/lib/shipments';
 import { useCartKey } from '@/lib/cart-key';
@@ -112,6 +114,7 @@ export default function CheckoutPage() {
   // Đếm số lần khách tự đổi lựa chọn. Không so các trường của body: phương thức thanh toán, yêu cầu thu rác, điểm dùng
   // được tính lại từ dữ liệu máy chủ (ví tụt, yêu cầu rác gắn mã đơn) ngay khi nạp lại sau đơn đã tạo, không phải khách đổi ý.
   const choiceRev = useRef(0);
+  const bootedRef = useRef(false);
   // Bản sao của cờ đóng băng trong state: giỏ nguyên vẹn nạp lại thành rỗng thì form (và nút Đặt hàng) biến mất, màn giỏ trống phải còn lối gửi lại.
   const [maybePlaced, setMaybePlaced] = useState(false);
   const chosen = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => {
@@ -363,11 +366,6 @@ export default function CheckoutPage() {
     return (
       <Shell bare>
         <OrderSuccess order={placed} etaLabel={etaLabel} continueHref={continueHref} />
-        {/* A2-02 = A6-01: đơn CHUYỂN KHOẢN hiện QR/STK/nội dung CK ngay sau khi đặt để khách trả liền;
-            nếu đóng tab, trang chi tiết đơn (`/tai-khoan/don-hang/[code]`) dựng lại đúng khung này. */}
-        <div className="mx-auto max-w-md">
-          <BankTransferPanel order={placed} />
-        </div>
       </Shell>
     );
   }
@@ -415,6 +413,27 @@ export default function CheckoutPage() {
     );
   }
 
+  // Chưa đủ giỏ, địa chỉ và báo giá đầu tiên thì giữ chỗ từng khối bằng khung chờ: các khối hiện dần làm trang nhảy ngay lúc khách sắp bấm.
+  // Chốt một lần: đổi điểm/mã giảm tính lại báo giá không được dựng lại khung chờ.
+  const firstQuotePending = !!addrQ.data?.length && !cartQ.isError && (addressId === null || quoteQ.isPending);
+  const bootReady = !cartQ.isPending && !addrQ.isPending && !firstQuotePending;
+  if (bootReady) bootedRef.current = true;
+  if (!bootedRef.current) {
+    return (
+      <Shell>
+        <CheckoutSkeleton />
+      </Shell>
+    );
+  }
+  // Giỏ không tải được: lỗi cả trang kèm Thử lại như Mini App, không dựng form với "Tạm tính 0đ" và nút Đặt hàng xám không lý do.
+  if (cartQ.isError && !cartQ.data) {
+    return (
+      <Shell>
+        <ErrorState message="Không tải được giỏ hàng." onRetry={() => void cartQ.refetch()} />
+      </Shell>
+    );
+  }
+
   const cart = cartQ.data;
   const priceChanged = place.error instanceof Error && place.error.message === PRICE_CHANGED;
   const placeErrorMessage = place.error instanceof Error && !priceChanged ? (place.error instanceof NetworkError ? place.error.message : actionErrorText(place.error)) : null;
@@ -428,13 +447,26 @@ export default function CheckoutPage() {
     { k: 'COD', label: 'Thanh toán khi nhận hàng (COD)' },
     { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
     { k: 'WALLET', label: `Ví Tubu (${formatVnd(walletBalance)})` },
-  ].map((m) => ({ ...m, hint: quote ? paymentUnavailableReason(m.k, quote, walletBalance) : null }));
+  ]
+    // Ví chỉ trả được cả đơn: số dư 0đ thì khách không làm gì được với dòng này.
+    .filter((m) => m.k !== 'WALLET' || walletBalance > 0)
+    .map((m) => ({ ...m, hint: quote ? paymentUnavailableReason(m.k, quote, walletBalance) : null }));
   const paymentNote = quote && !zeroNote && payment === '' ? paymentMissingNote(quote, walletBalance) : null;
   const placeDisabled =
     !addressId || !quote || quoteStale || place.isPending || !invoiceValid || !!overStock || (!zeroNote && payment === '');
   const totalText = quote ? formatVnd(quote.total) : addressId ? '…' : 'Chưa tính';
   // Lời báo đặt lỗi/giỏ cần sửa nằm cuối khung tóm tắt; thanh dính đáy nhắc lại để khách không phải cuộn xuống mới biết vì sao.
-  const barHint = cartIssue ?? (priceChanged ? 'Giá ưu đãi đã thay đổi. Vui lòng xem lại giỏ hàng trước khi đặt.' : place.isError ? (placeErrorMessage ?? 'Đặt hàng thất bại.') : null);
+  const barHint =
+    cartIssue ??
+    (priceChanged
+      ? 'Giá ưu đãi đã thay đổi. Vui lòng xem lại giỏ hàng trước khi đặt.'
+      : place.isError
+        ? (placeErrorMessage ?? 'Đặt hàng thất bại.')
+        : !addressId
+          ? 'Chọn địa chỉ giao hàng để đặt hàng.'
+          : quoteQ.isError
+            ? 'Chưa tính được tổng tiền. Bấm Thử lại ở phần tóm tắt rồi đặt hàng.'
+            : null);
 
   return (
     <Shell>
@@ -534,21 +566,21 @@ export default function CheckoutPage() {
           </section>
 
           <section data-mini-block="note" className={`${MINI_BAND} max-md:order-7`}>
-            <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Ghi chú cho đơn hàng</h2>
+            <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Ghi chú cho Tubu</h2>
             <label className="mt-2 block">
-              <span className="text-caption font-medium text-stone-700">Lời nhắn cho người giao hàng (không bắt buộc)</span>
+              <span className="text-caption font-medium text-stone-700 max-md:sr-only">Lời nhắn cho người giao hàng (không bắt buộc)</span>
               <textarea
                 value={note}
                 onChange={chosen((e: React.ChangeEvent<HTMLTextAreaElement>) => setNote(e.target.value))}
                 maxLength={ORDER_NOTE_MAX}
-                rows={3}
-                placeholder="Ví dụ: giao giờ hành chính, gọi trước khi giao, gửi ở bảo vệ"
+                rows={2}
+                placeholder="Ví dụ: giao giờ hành chính..."
                 disabled={place.isPending}
                 aria-describedby="order-note-count"
                 className={`${ui.field} mt-1 py-2`}
               />
             </label>
-            <p id="order-note-count" className="mt-1 text-caption text-stone-600">
+            <p id="order-note-count" className="mt-1 text-caption text-stone-600 max-md:sr-only">
               {note.length}/{ORDER_NOTE_MAX} ký tự
             </p>
           </section>
@@ -723,10 +755,13 @@ export default function CheckoutPage() {
                 <CheckMark />
               </span>
               {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
-              <span className="text-forest-800">
-                {usePoints && quote
-                  ? `Dùng ${quote.pointsUsed.toLocaleString('vi-VN')} Điểm Xanh — giảm ${formatVnd(quote.pointsDiscount)}`
-                  : `Bạn có ${usablePoints.toLocaleString('vi-VN')} Điểm Xanh`}
+              <span className="min-w-0 text-forest-800">
+                <span className="block font-semibold max-md:text-stone-900">Điểm Xanh</span>
+                <span className="block text-caption max-md:text-stone-600">
+                  {partnerPoints.disabled
+                    ? lockedPointsLabel(quote, pointsOffer)
+                    : pointsOfferText(usablePoints, quote, usePoints && quote ? quote : null, configQ.data?.loyalty?.vndPerPointRedeem)}
+                </span>
               </span>
             </label>
           )}

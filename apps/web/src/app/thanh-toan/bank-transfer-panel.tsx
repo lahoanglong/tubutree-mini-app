@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, Check, Clock, Copy, Download, Loader2, TriangleAlert } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -8,7 +8,11 @@ import { getBankQr, formatVnd, type OrderDTO } from '@/lib/shop-client';
 import { CopyButton } from '@/components/copy-button';
 import { ui } from '@/lib/guest-ui';
 import { formatDateTime } from '@/lib/format-date';
-import { saveImage, type SaveImageResult } from '@/lib/download-image';
+import { BANK_QR_HINT, BANK_QR_SAVED, BANK_QR_SAVE_FAILED } from '@tubutree/app-core/bank-payment-copy';
+import type { SaveImageResult } from '@tubutree/app-core/bridge';
+import { platformBridge } from '@/lib/platform-bridge';
+import { StickyActionBar } from '@/components/sticky-action-bar';
+import { mini } from '@/components/order-mobile/mobile-ui';
 import { useRemaining } from '@/lib/use-remaining';
 import { copyText } from '@/lib/copy-text';
 import { ApiError, NetworkError } from '@/lib/client-api';
@@ -53,6 +57,7 @@ export function BankTransferPanel({
   showHeading = true,
   onState,
   orderHref,
+  stickyCheck = false,
 }: {
   order: Pick<OrderDTO, 'code' | 'paymentMethod'>;
   onPaid?: () => void;
@@ -64,6 +69,8 @@ export function BankTransferPanel({
   onState?: (state: BankPanelState) => void;
   /** Có thì khối lỗi và khối "không còn chờ chuyển khoản" dẫn về đơn (trang riêng của đơn); trang chi tiết đơn đã ở đó nên không truyền. */
   orderHref?: string;
+  /** Trang riêng của đơn: ở điện thoại nút Kiểm tra dính đáy như StickyActionBar của Mini App; từ md vẫn nằm trong dòng chảy. */
+  stickyCheck?: boolean;
 }) {
   const isBankTransfer = order.paymentMethod === 'BANK_TRANSFER';
   const { data, isLoading, refetch, isFetching, error } = useQuery({
@@ -78,6 +85,9 @@ export function BankTransferPanel({
   const [checkResult, setCheckResult] = useState<'unpaid' | 'failed' | 'error' | null>(null);
   const [checkError, setCheckError] = useState(NETWORK_CHECK_MESSAGE);
   const [qrSaved, setQrSaved] = useState<SaveImageResult | null>(null);
+  const [savingQr, setSavingQr] = useState(false);
+  // Ref: hai lần chạm liền nhau chưa kịp vẽ lại thì state `savingQr` còn cũ.
+  const savingQrNow = useRef(false);
 
   // Trang chứa khung này (chi tiết đơn) cần tải lại trạng thái đơn khi tiền về, nếu không thì
   // khung báo "Đã nhận thanh toán" còn nhãn đơn vẫn là "Chờ thanh toán".
@@ -110,8 +120,26 @@ export function BankTransferPanel({
     }
   };
 
+  const checkResultText =
+    checkResult === 'error'
+      ? checkError
+      : checkResult === 'failed'
+        ? 'Giao dịch không thành công hoặc đã được hoàn lại. Vui lòng liên hệ bộ phận hỗ trợ.'
+        : 'Chưa thấy tiền về. Ngân hàng thường xử lý trong 30 giây đến 1 phút sau khi chuyển.';
+
   const handleSaveQr = async (url: string, orderCode: string) => {
-    setQrSaved(await saveImage(url, `tubu-qr-${orderCode}.png`));
+    if (savingQrNow.current) return;
+    savingQrNow.current = true;
+    setSavingQr(true);
+    try {
+      setQrSaved(await platformBridge.saveImage(url, `tubu-qr-${orderCode}.png`));
+    } catch {
+      // saveImage tự bắt lỗi của nó; đây là lúc nạp mô-đun lưu ảnh hỏng (mất chunk, mạng chập chờn).
+      setQrSaved('failed');
+    } finally {
+      savingQrNow.current = false;
+      setSavingQr(false);
+    }
   };
 
   if (isLoading) {
@@ -178,7 +206,7 @@ export function BankTransferPanel({
       {showHeading && (
         <>
           <h2 className={`text-center ${ui.sectionTitle}`}>Quét QR để chuyển khoản</h2>
-          <p className="mt-1 text-center text-xs text-stone-600">Mở app ngân hàng / ví bất kỳ để quét mã bên dưới</p>
+          <p className="mt-1 text-center text-xs text-stone-600 md:hidden">{BANK_QR_HINT}</p>
         </>
       )}
 
@@ -191,9 +219,14 @@ export function BankTransferPanel({
           <img
             src={data.qrImageUrl}
             alt="VietQR"
-            className="h-56 w-56 rounded-card border border-stone-200 bg-stone-0 object-contain max-md:h-60 max-md:w-60 max-md:max-w-[70%] max-md:rounded-none max-md:border-[var(--color-border-subtle)]"
+            className="h-56 w-56 rounded-card border border-stone-200 bg-stone-0 object-contain max-md:h-60 max-md:w-60 max-md:max-w-[70%] max-md:rounded-none max-md:border-0"
           />
-          <p className="text-xl font-bold text-stone-900 max-md:mt-2 max-md:text-lg max-md:text-success-fg">{formatVnd(data.amount)}</p>
+          <div className="flex items-center justify-center gap-1.5 max-md:mt-2 max-md:py-1.5">
+            <p className="text-xl font-bold text-stone-900 max-md:text-lg max-md:font-semibold max-md:text-success-fg">{formatVnd(data.amount)}</p>
+            <span className="md:hidden">
+              <CopyControls text={String(data.amount)} name="số tiền" iconOnly />
+            </span>
+          </div>
           {!!data.paidSoFar && data.paidSoFar > 0 && (
             <p data-testid="paid-so-far" className="text-xs text-warning-fg max-md:mt-1 max-md:text-sm">
               Đã nhận {formatVnd(data.paidSoFar)}, còn thiếu {formatVnd(data.amount)}. Mã QR đã trừ phần này.
@@ -202,22 +235,23 @@ export function BankTransferPanel({
           <button
             type="button"
             onClick={() => void handleSaveQr(data.qrImageUrl, data.orderCode)}
-            className={`${ui.btnSecondary} gap-2 max-md:hidden`}
+            disabled={savingQr}
+            className={`${ui.btnSecondary} ${mini.secondary} gap-2 max-md:mt-2 max-md:w-full`}
           >
-            <Download className="h-4 w-4" aria-hidden="true" />
+            <Download className="h-4 w-4 max-md:hidden" aria-hidden="true" />
             Lưu mã QR
           </button>
           {qrSaved && (
             <p role="status" data-testid="bank-qr-saved" className="text-xs text-stone-700">
               {qrSaved === 'saved'
-                ? 'Đã lưu ảnh QR vào máy.'
-                : 'Chưa lưu được. Bạn nhấn giữ vào ảnh QR để lưu, hoặc chụp màn hình nhé.'}
+                ? BANK_QR_SAVED
+                : BANK_QR_SAVE_FAILED}
             </p>
           )}
         </div>
 
         <div className="mt-3 space-y-1 text-sm max-md:mt-2 max-md:space-y-0 max-md:text-left">
-          <PanelRow label="Ngân hàng" value={data.bank.name} />
+          <PanelRow label="Ngân hàng" value={data.bank.name} stacked />
           <div data-bank-row className={ROW}>
             <span className={LABEL}>Số tài khoản</span>
             <span className="flex items-center gap-2 font-mono font-semibold text-stone-900 max-md:gap-1.5 max-md:font-ui">
@@ -225,8 +259,9 @@ export function BankTransferPanel({
               <CopyControls text={data.bank.accountNo} name="số tài khoản" />
             </span>
           </div>
-          <PanelRow label="Chủ tài khoản" value={data.bank.accountName} />
-          <div data-bank-row className={ROW}>
+          <PanelRow label="Chủ tài khoản" value={data.bank.accountName} stacked />
+          {/* Điện thoại: số tiền đã ở giữa thẻ kèm nút chép (như Mini App) nên bỏ dòng lặp. */}
+          <div data-bank-row className={`${ROW} max-md:hidden`}>
             <span className={LABEL}>Số tiền</span>
             <span className="flex items-center gap-2 font-semibold text-stone-900 max-md:gap-1.5">
               {formatVnd(data.amount)}
@@ -279,7 +314,7 @@ export function BankTransferPanel({
         type="button"
         onClick={() => void handleCheck()}
         disabled={checking}
-        className={`${ui.btnPrimary} mt-4 w-full max-md:mx-2 max-md:mt-3 max-md:w-[calc(100%-16px)]`}
+        className={`${ui.btnPrimary} mt-4 w-full max-md:mx-2 max-md:mt-3 max-md:w-[calc(100%-16px)] ${stickyCheck ? 'max-md:hidden' : ''}`}
       >
         {checking ? 'Đang kiểm tra…' : 'Tôi đã chuyển khoản — Kiểm tra'}
       </button>
@@ -287,18 +322,29 @@ export function BankTransferPanel({
         <p
           role="status"
           data-testid="bank-check-result"
-          className={`mt-2 text-center text-xs ${checkResult === 'error' || checkResult === 'failed' ? 'text-danger-fg' : 'text-stone-700'}`}
+          className={`${checkResultClass(checkResult)} mt-2 text-center text-xs ${stickyCheck ? 'max-md:hidden' : ''}`}
         >
-          {checkResult === 'error'
-            ? checkError
-            : checkResult === 'failed'
-              ? 'Giao dịch không thành công hoặc đã được hoàn lại. Vui lòng liên hệ bộ phận hỗ trợ.'
-              : 'Chưa thấy tiền về. Ngân hàng thường xử lý trong 30 giây đến 1 phút sau khi chuyển.'}
+          {checkResultText}
         </p>
+      )}
+      {stickyCheck && (
+        <StickyActionBar label="Kiểm tra thanh toán">
+          {/* Nút dính đáy: lời báo trong trang sẽ nằm dưới mép màn, nên hiện ngay trên nút (như snackbar trên đầu của Mini App). */}
+          {checkResult && (
+            <p role="status" data-testid="bank-check-result-sticky" className={`${checkResultClass(checkResult)} mb-2 text-center text-sm`}>
+              {checkResultText}
+            </p>
+          )}
+          <button type="button" onClick={() => void handleCheck()} disabled={checking} className={`${ui.btnPrimary} w-full`}>
+            {checking ? 'Đang kiểm tra…' : 'Tôi đã chuyển khoản — Kiểm tra'}
+          </button>
+        </StickyActionBar>
       )}
     </section>
   );
 }
+
+const checkResultClass = (r: 'unpaid' | 'failed' | 'error') => (r === 'error' || r === 'failed' ? 'text-danger-fg' : 'text-stone-700');
 
 const NETWORK_CHECK_MESSAGE = 'Không kết nối được tới Tubu Tree. Bạn kiểm tra mạng rồi bấm lại nhé.';
 
@@ -309,7 +355,7 @@ const LABEL = 'text-stone-600 max-md:text-[color:var(--color-text-tertiary)]';
 const DEADLINE_BOX = 'max-md:mx-2 max-md:mt-2 max-md:rounded-control max-md:bg-[var(--color-status-warning-bg)] max-md:p-3';
 
 /** Sao chép: nút chữ có viền từ md; ở điện thoại chỉ là icon không viền (IconButton sm của Mini App). */
-function CopyControls({ text, name }: { text: string; name: string }) {
+function CopyControls({ text, name, iconOnly = false }: { text: string; name: string; iconOnly?: boolean }) {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
   const copy = async () => {
@@ -321,9 +367,11 @@ function CopyControls({ text, name }: { text: string; name: string }) {
   };
   return (
     <>
-      <span className="max-md:hidden">
-        <CopyButton text={text} label="Sao chép" />
-      </span>
+      {!iconOnly && (
+        <span className="max-md:hidden">
+          <CopyButton text={text} label="Sao chép" />
+        </span>
+      )}
       <button
         type="button"
         onClick={() => void copy()}
@@ -346,9 +394,9 @@ function CopyControls({ text, name }: { text: string; name: string }) {
   );
 }
 
-function PanelRow({ label, value }: { label: string; value: string }) {
+function PanelRow({ label, value, stacked = false }: { label: string; value: string; stacked?: boolean }) {
   return (
-    <div data-bank-row className={ROW}>
+    <div data-bank-row className={`${ROW}${stacked ? ' max-md:flex-col max-md:items-start' : ''}`}>
       <span className={LABEL}>{label}</span>
       <span className="font-medium text-stone-900 max-md:font-semibold">{value}</span>
     </div>

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   checkoutPoints,
+  lockedPointsLabel,
   isInvoiceValid,
   pointsCapState,
   walletUnavailableReason,
@@ -287,5 +288,14 @@ describe('pointsCapState (Q8 S7, R4-BUYER-2)', () => {
       partnerNote: null,
     });
     expect(pointsCapState({ pointsMax: 0, pointsPartnerNote: null }, 0)).toEqual({ disabled: false, capNote: null, partnerNote: null });
+  });
+});
+
+describe('lockedPointsLabel', () => {
+  it('ô khoá theo đơn, một phần điểm bị giữ: chỉ ghi số dư, không "Dùng được X/Y"', () => {
+    const p = checkoutPoints({ pointsBalance: 500, redeemablePoints: 300 }, 0);
+    expect(p.label).toMatch(/Dùng được/);
+    expect(lockedPointsLabel(p.balance)).toBe('Bạn đang có 500 điểm');
+    expect(lockedPointsLabel(p.balance)).not.toMatch(/Dùng được/);
   });
 });

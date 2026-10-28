@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Star } from 'lucide-react';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { useHydrated } from '@/lib/use-hydrated';
 import { apiMediaUrl } from '@/lib/client-api';
 import { formatDate } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
@@ -87,6 +88,7 @@ export function ProductReviews({ slug }: { slug: string }) {
   const params = useSearchParams();
   const openForOrderId = params?.get(REVIEW_ORDER_PARAM) ?? undefined;
   const phase = useAuthPhase();
+  const hydrated = useHydrated();
   const listQ = useQuery({ queryKey: ['reviews', slug], queryFn: () => fetchProductReviews(slug) });
   const eligQ = useQuery({
     queryKey: ['can-review', slug],
@@ -136,7 +138,7 @@ export function ProductReviews({ slug }: { slug: string }) {
         <h2 id="danh-gia-title" className={ui.sectionTitle}>
           Đánh giá{data && data.count > 0 ? ` (${data.count})` : ''}
         </h2>
-        {phase === 'guest' && (
+        {hydrated && phase === 'guest' && (
           <Link href={loginHref(returnTo)} className={`${ui.btnText} text-forest-700`}>
             Đăng nhập để đánh giá
           </Link>

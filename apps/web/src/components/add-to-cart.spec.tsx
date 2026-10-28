@@ -13,7 +13,19 @@ const mocks = vi.hoisted(() => ({
   getProductStock: vi.fn(),
   getActiveFlashSales: vi.fn(),
   getCart: vi.fn(),
+  sheetProps: null as null | { onConfirm: (v: never, qty: number) => void },
 }));
+// Bọc bảng thật để lấy được onConfirm: hai lần gọi liền nhau chưa kịp render lại, chỉ khoá `confirming` chặn được lần hai.
+vi.mock('./variation-sheet', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./variation-sheet')>();
+  return {
+    ...real,
+    VariationSheet: (props: Parameters<typeof real.VariationSheet>[0]) => {
+      mocks.sheetProps = props;
+      return real.VariationSheet(props);
+    },
+  };
+});
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push, replace: vi.fn() }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -575,5 +587,78 @@ describe('AddToCart — Mua ngay', () => {
       expect(smallTouchTargets(container)).toEqual([]);
       expect(unnamedControls(container)).toEqual([]);
     });
+  });
+});
+
+describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () => {
+  const realMatchMedia = window.matchMedia;
+  beforeEach(() => {
+    window.matchMedia = ((q: string) => ({ matches: q.includes('max-width: 767px'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as never;
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+  });
+  afterEach(() => {
+    window.matchMedia = realMatchMedia;
+  });
+  const sheet = () => document.body.querySelector('[role="dialog"]') as HTMLElement | null;
+  // Bảng nạp lười (next/dynamic): chờ tới khi hiện.
+  const sheetReady = async () => {
+    for (let n = 0; n < 40 && !sheet(); n++) await flush();
+  };
+
+  it('Thêm vào giỏ mở bảng chọn, chọn 500ml rồi xác nhận mới thêm giỏ', async () => {
+    const { container } = mount();
+    await flush();
+    click(addButton(container));
+    await sheetReady();
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+    expect(sheet()).not.toBeNull();
+    click(byText(sheet()!, 'button', '500ml'));
+    click(byText(sheet()!, 'button', /^Thêm vào giỏ · /));
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v2', 1);
+  });
+
+  it('xác nhận hai lần liền nhau (chưa kịp vẽ lại) chỉ thêm giỏ một lần', async () => {
+    const { container } = mount();
+    await flush();
+    click(addButton(container));
+    await sheetReady();
+    const confirm = mocks.sheetProps!.onConfirm;
+    confirm({ id: 'v2' } as never, 1);
+    confirm({ id: 'v2' } as never, 1);
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+  });
+
+  it('thêm 3 món từ bảng ở phân loại khác: trang và thanh dính giữ số lượng 3, không về 1', async () => {
+    const { container } = mount();
+    await flush();
+    click(addButton(container));
+    await sheetReady();
+    click(byText(sheet()!, 'button', '500ml'));
+    click(sheet()!.querySelector('button[aria-label="Tăng số lượng"]'));
+    click(sheet()!.querySelector('button[aria-label="Tăng số lượng"]'));
+    click(byText(sheet()!, 'button', /^Thêm vào giỏ · /));
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v2', 3);
+    expect(container.textContent).toContain('900.000đ');
+  });
+
+  it('Mua ngay mở bảng chọn với nhãn Mua ngay', async () => {
+    const { container } = mount();
+    await flush();
+    click(byText(container, 'button', /^Mua ngay/));
+    await sheetReady();
+    expect(byText(sheet()!, 'button', /^Mua ngay · /)).toBeTruthy();
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+  });
+
+  it('sản phẩm 1 phân loại thêm thẳng, không bảng chọn', async () => {
+    const { container } = mount([VARIATIONS[0]!]);
+    await flush();
+    click(addButton(container));
+    await flush();
+    expect(sheet()).toBeNull();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1);
   });
 });

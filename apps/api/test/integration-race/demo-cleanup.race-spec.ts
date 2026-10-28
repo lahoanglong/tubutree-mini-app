@@ -54,6 +54,8 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
   let storeSlug = '';
   let storefrontId = '';
   let user2Id = '';
+  // WELCOME30 chỉ cho khách chưa có đơn (newCustomerOnly): kiểm "mã còn dùng được" bằng khách chưa đặt đơn nào.
+  let freshUserId = '';
   let upcomingSaleId = '';
   let realProductId = '';
 
@@ -108,6 +110,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
 
     const user = await createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}`, zaloId: `itdemo-${tag}` });
     userId = user.id;
+    freshUserId = (await createUser(prisma, { phone: `07${Date.now().toString().slice(-8)}`, zaloId: `itdemo-new-${tag}` })).id;
     const order = await createOrder(prisma, { userId, status: 'DELIVERED' });
     await prisma.orderItem.create({
       data: {
@@ -145,7 +148,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
       await prisma.feedPost.deleteMany({ where: { userId } });
       await prisma.wishlist.deleteMany({ where: { userId } });
       await deleteItData(prisma, {
-        userIds: [userId, user2Id].filter(Boolean),
+        userIds: [userId, user2Id, freshUserId].filter(Boolean),
         flashSaleIds: [saleId, upcomingSaleId].filter(Boolean),
         productIds: [realProductId].filter(Boolean),
       });
@@ -162,7 +165,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     const page = await storefront().getPublicBySlug(storeSlug);
     expect(page.collections[0]!.items.map((i) => i.product.id)).toEqual([demoProduct.id]);
     await expect(assertVariationsSellable(prisma, [{ variationId: demoVariation.id }])).resolves.toBeUndefined();
-    await expect(coupons().validateAndCompute('WELCOME30', userId, 250_000)).resolves.toMatchObject({ code: 'WELCOME30', discount: 30_000 });
+    await expect(coupons().validateAndCompute('WELCOME30', freshUserId, 250_000)).resolves.toMatchObject({ code: 'WELCOME30', discount: 30_000 });
     expect(await goLive()).toEqual({ 'db.demo_products': 'FAIL', 'db.demo_coupons': 'WARN' });
   });
 
@@ -355,7 +358,7 @@ describe('Dọn dữ liệu demo của migration demo_catalog (real Postgres)', 
     expect(byCode.WELCOME30!.isActive).toBe(true);
     expect(byCode.FREESHIP!.isActive).toBe(false);
     expect(byCode.XANH10!.isActive).toBe(false);
-    await expect(coupons().validateAndCompute('WELCOME30', userId, 250_000)).resolves.toMatchObject({ discount: 30_000 });
+    await expect(coupons().validateAndCompute('WELCOME30', freshUserId, 250_000)).resolves.toMatchObject({ discount: 30_000 });
     await expect(coupons().validateAndCompute('XANH10', userId, 300_000)).rejects.toThrow(/ngừng áp dụng/);
     expect(await goLive()).toEqual({ 'db.demo_products': 'PASS', 'db.demo_coupons': 'WARN' });
     expect(await goLive({ GO_LIVE_ACCEPT_DEMO_COUPONS: 'WELCOME30' })).toEqual({ 'db.demo_products': 'PASS', 'db.demo_coupons': 'WARN' });

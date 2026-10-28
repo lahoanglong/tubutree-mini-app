@@ -92,7 +92,8 @@ describe('OrderSuccess khổ điện thoại', () => {
     const m = mount(order({ pointsEarned: 1300 }));
     expect(m.textContent).toContain('Điểm Xanh sẽ nhận');
     expect(m.textContent).toContain('+1.300 điểm');
-    expect(m.textContent).toContain('1.300 Điểm Xanh sẽ về tay khi đơn giao thành công');
+    expect(m.textContent).toContain('+1.300 điểm, về khi đơn giao xong');
+    expect(m.textContent).not.toContain('sẽ về tay');
   });
 
   it('Giao dự kiến chỉ khi có nhãn ngày', () => {

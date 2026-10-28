@@ -12,6 +12,7 @@ import { isRetailOnly } from '../../utils/retail-only';
 import { shippingEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { vi } from '../../i18n/vi';
 import { SubscribeSheet } from '../subscribe-sheet';
+import { SUBSCRIPTIONS_IN_MINIAPP } from '../../utils/features';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Icon } from '../ui/icon';
@@ -33,7 +34,9 @@ export interface SubscribeCandidate {
  * đối tác). Dùng chung queryKey ['product', slug] với PDP. Đơn không có dòng nào đủ điều kiện → null (ẩn gợi ý).
  */
 export function useSubscribeCandidate(order: OrderDTO): SubscribeCandidate | null {
-  const slugs = [...new Set(order.items.map((it) => it.productSlug).filter((s): s is string => !!s))].slice(0, MAX_SUBSCRIBE_CHECKS);
+  const slugs = SUBSCRIPTIONS_IN_MINIAPP
+    ? [...new Set(order.items.map((it) => it.productSlug).filter((s): s is string => !!s))].slice(0, MAX_SUBSCRIBE_CHECKS)
+    : [];
   const products = useQueries({
     queries: slugs.map((slug) => ({
       queryKey: ['product', slug],
@@ -153,12 +156,7 @@ export function OrderSuccess({
             </Text>
           )}
           {pointsEarned > 0 && (
-            <>
-              <KeyValueRow label={vi.success.pointsLabel} value={vi.success.pointsValue(pointsEarned)} tone="success" />
-              <Text variant="caption" tone="tertiary" as="div">
-                {vi.success.pointsComing(pointsEarned)}
-              </Text>
-            </>
+            <KeyValueRow label={vi.success.pointsLabel} value={vi.success.pointsValueWhen(pointsEarned)} tone="success" />
           )}
           {eta && <KeyValueRow label={vi.success.etaLabel} value={eta} />}
         </div>
