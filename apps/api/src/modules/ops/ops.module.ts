@@ -14,6 +14,7 @@ import {
 import { GomdonModule } from '../integrations/gomdon/gomdon.module';
 import { MerchantModule } from '../merchant/merchant.module';
 import { CronRunService } from './cron-run.service';
+import { LedgerDriftCron } from './ledger-drift.cron';
 import { OpsController } from './ops.controller';
 import { OpsEmailService } from './ops-email.service';
 import { OPS_QUEUES, OpsHealthService } from './ops-health.service';
@@ -28,6 +29,7 @@ const QUEUES = [QUEUE_PANCAKE_PUSH, QUEUE_PANCAKE_EVENTS, QUEUE_GOMDON_PUSH, QUE
   providers: [
     { provide: OPS_QUEUES, inject: QUEUES.map((q) => getQueueToken(q)), useFactory: (...queues: Queue[]) => queues },
     CronRunService,
+    LedgerDriftCron,
     OpsEmailService,
     OpsHealthService,
     OpsInboxService,
