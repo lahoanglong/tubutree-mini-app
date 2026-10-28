@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { act } from 'react';
 import { EngagementTab } from './engagement-tab';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 
@@ -23,6 +24,7 @@ const MISSIONS = [
 function stub(patch: { status?: number; body: unknown } = { body: { id: 'm-first' } }) {
   const m = mockFetch({
     '/admin/engagement/seasons': { body: [] },
+    '/admin/engagement/quiz': { body: { data: [{ id: 'q1', question: 'Chai nhựa phân huỷ sau bao lâu?', options: ['5 năm', '450 năm'], correct: 1, category: 'tai_che', difficulty: 2, explanation: null, waterReward: 10 }], meta: { page: 1, limit: 20, total: 1 } } },
     '/admin/engagement/missions/': () => patch,
     '/admin/engagement/missions': { body: MISSIONS },
   });
@@ -43,6 +45,18 @@ describe('EngagementTab (Nhiệm vụ & quà đổi điểm)', () => {
     expect(first.textContent).toContain('12 lượt đã nhận');
     const streak = container.querySelector<HTMLElement>('[data-mission="CHECKIN_7"]')!;
     expect(streak.textContent).toContain('Mục tiêu 7 · lặp lại');
+  });
+
+  it('có mục "Câu đố hằng ngày" nạp theo tab, liệt kê câu đố từ API', async () => {
+    stub();
+    const { container } = mount(<EngagementTab />);
+    for (let i = 0; i < 40 && !container.querySelector('[data-quiz="q1"]'); i += 1) {
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+    }
+    expect(container.querySelector('h2#quiz-h')?.textContent).toBe('Câu đố hằng ngày');
+    expect(container.querySelector('[data-quiz="q1"]')?.textContent).toContain('450 năm (đáp án đúng)');
   });
 
   it('không còn danh mục quà chỉ xem; trỏ sang tab Đổi rác (13.2)', async () => {

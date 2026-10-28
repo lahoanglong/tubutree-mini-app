@@ -132,6 +132,7 @@ export function OrderStatusActions({
   canConfirmPayment = true,
   canResync = false,
   canRecordLate = true,
+  onPaid,
 }: {
   order: AdminOrder;
   canConfirmPayment?: boolean;
@@ -139,6 +140,8 @@ export function OrderStatusActions({
   canResync?: boolean;
   /** Tiền về muộn của đơn đã huỷ/trả sinh khoản hoàn: chỉ ADMIN (API trả 403 cho nhân viên Kế toán). */
   canRecordLate?: boolean;
+  /** Gọi khi xác nhận (hoặc ghi nhận tiền về muộn) thành công, kèm câu của máy chủ và cờ alreadyPaid (người khác ghi nhận trước). Đơn rời hàng đợi sau đó nên cha giữ câu báo thay cho khối này. */
+  onPaid?: (message: string, alreadyPaid: boolean) => void;
 }) {
   const qc = useQueryClient();
   const [bankRef, setBankRef] = useState('');
@@ -192,6 +195,7 @@ export function OrderStatusActions({
       setPayMsg({ ok: true, text: r.message });
       setBankRef('');
       refresh();
+      onPaid?.(r.message, r.alreadyPaid);
     },
     onError: (e: unknown) => setPayMsg({ ok: false, text: e instanceof Error ? e.message : 'Xác nhận thanh toán thất bại.' }),
     onSettled: () => {

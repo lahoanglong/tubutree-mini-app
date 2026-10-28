@@ -77,19 +77,33 @@ function EventLine({ e }: { e: AdminUserEvent }) {
 }
 
 /** Chi tiết một người dùng (ADMINOPS-11): đơn, sổ ví, Điểm Xanh, lịch sử vai trò/khoá; ADMIN gán nhóm việc cho nhân viên. */
-export function UserDetailDrawer({ userId, isAdmin, onClose }: { userId: string; isAdmin: boolean; onClose: () => void }) {
+export function UserDetailDrawer({
+  userId,
+  isAdmin,
+  onClose,
+  onOpenOrder,
+  onOpenUserOrders,
+}: {
+  userId: string;
+  isAdmin: boolean;
+  onClose: () => void;
+  /** Bấm mã đơn: sang tab Đơn hàng mở đúng đơn đó. Không truyền thì mã chỉ là chữ. */
+  onOpenOrder?: (code: string) => void;
+  /** "Xem tất cả N đơn": sang tab Đơn hàng lọc theo khách này (tên để ghi nhãn bộ lọc). */
+  onOpenUserOrders?: (userId: string, label: string) => void;
+}) {
   const q = useQuery({ queryKey: ['admin-user-detail', userId], queryFn: () => getUserDetail(userId) });
   const title = q.data ? (q.data.user.fullName ?? q.data.user.phone ?? 'Người dùng') : 'Người dùng';
   return (
     <SideDrawer title={title} onClose={onClose}>
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được chi tiết người dùng.</LoadError>}
-      {q.data && <DetailBody d={q.data} isAdmin={isAdmin} />}
+      {q.data && <DetailBody d={q.data} isAdmin={isAdmin} onOpenOrder={onOpenOrder} onOpenUserOrders={onOpenUserOrders} />}
     </SideDrawer>
   );
 }
 
-function DetailBody({ d, isAdmin }: { d: AdminUserDetail; isAdmin: boolean }) {
+function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUserDetail; isAdmin: boolean; onOpenOrder?: (code: string) => void; onOpenUserOrders?: (userId: string, label: string) => void }) {
   const u = d.user;
   const pts = pointsSummary(u);
   return (
@@ -139,7 +153,14 @@ function DetailBody({ d, isAdmin }: { d: AdminUserDetail; isAdmin: boolean }) {
             {d.orders.items.map((o) => (
               <li key={o.id} className="flex flex-wrap justify-between gap-x-2 py-1.5">
                 <span>
-                  <b>{o.code}</b> <span className="text-xs text-stone-500">· {formatDateTime(o.createdAt)}</span>
+                  {onOpenOrder ? (
+                    <button type="button" onClick={() => onOpenOrder(o.code)} className="min-h-[44px] font-bold text-forest-700 underline-offset-2 hover:underline sm:min-h-0">
+                      {o.code}
+                    </button>
+                  ) : (
+                    <b>{o.code}</b>
+                  )}{' '}
+                  <span className="text-xs text-stone-500">· {formatDateTime(o.createdAt)}</span>
                   {o.fulfiller === 'MERCHANT' && <span className="text-xs text-stone-500"> · gian hàng tự giao</span>}
                 </span>
                 <span className="text-right">
@@ -150,8 +171,14 @@ function DetailBody({ d, isAdmin }: { d: AdminUserDetail; isAdmin: boolean }) {
             ))}
           </ul>
         )}
-        {d.orders.total > d.orders.items.length && (
-          <p className="mt-1 text-xs text-stone-500">Hiện {d.orders.items.length} đơn mới nhất — tìm theo SĐT ở tab Đơn hàng để xem hết.</p>
+        {onOpenUserOrders && d.orders.total > 0 ? (
+          <button type="button" onClick={() => onOpenUserOrders(u.id, u.fullName ?? u.phone ?? 'khách này')} className={`${BTN_SECONDARY} mt-2`}>
+            Xem tất cả {d.orders.total} đơn
+          </button>
+        ) : (
+          d.orders.total > d.orders.items.length && (
+            <p className="mt-1 text-xs text-stone-500">Hiện {d.orders.items.length} đơn mới nhất — tìm theo SĐT ở tab Đơn hàng để xem hết.</p>
+          )
         )}
       </Section>
 

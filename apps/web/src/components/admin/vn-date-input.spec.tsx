@@ -2,8 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { act } from 'react';
-import { flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
-import { VnDateInput, VnMonthInput, isoToVn, maskVnDate, vnToIso } from './vn-date-input';
+import { byText, click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
+import { VnDateInput, VnDateTimeInput, VnMonthInput, isoToVn, maskVnDate, vnToIso } from './vn-date-input';
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -113,6 +113,37 @@ describe('VnDateInput', () => {
     expect(r.container.textContent).toContain('Nhập ngày dạng dd/mm/yyyy');
   });
 
+  it('gõ lần hai sau khi đã rời ô thì không báo đỏ khi đang gõ dở; rời ô lần nữa mới báo', async () => {
+    const r = render(<VnDateInput value="" ariaLabel="Từ ngày" onChange={() => {}} />);
+    mounted.push(r);
+    typeInto(field(r.container), '15/1');
+    act(() => field(r.container).dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    await flush();
+    expect(field(r.container).getAttribute('aria-invalid')).toBe('true');
+    act(() => field(r.container).dispatchEvent(new FocusEvent('focusin', { bubbles: true })));
+    typeInto(field(r.container), '15/11/20');
+    await flush();
+    expect(field(r.container).getAttribute('aria-invalid')).toBeNull();
+    expect(r.container.querySelector('[role="alert"]')).toBeNull();
+    act(() => field(r.container).dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    await flush();
+    expect(field(r.container).getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('dòng nhắc nằm trong luồng (không absolute) để không che nút bên dưới', async () => {
+    const r = render(<VnDateInput value="" ariaLabel="Từ ngày" onChange={() => {}} />);
+    mounted.push(r);
+    typeInto(field(r.container), '15/1');
+    await flush();
+    const hint = r.container.querySelector('[role="status"]')!;
+    expect(hint.textContent).toContain('Chưa áp dụng');
+    expect(hint.className).not.toMatch(/\babsolute\b/);
+    act(() => field(r.container).dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    await flush();
+    const alert = r.container.querySelector('[role="alert"]')!;
+    expect(alert.className).not.toMatch(/\babsolute\b/);
+  });
+
   it('xoá hết thì báo rỗng; cha đặt lại giá trị thì ô chữ theo', async () => {
     const onValue = vi.fn();
     const r = render(<Harness onValue={onValue} />);
@@ -148,5 +179,89 @@ describe('VnMonthInput', () => {
     const [m, y] = [...r.container.querySelectorAll('select')];
     expect((m as HTMLSelectElement).value).toBe('03');
     expect((y as HTMLSelectElement).value).toBe('2015');
+  });
+});
+
+describe('VnDateTimeInput', () => {
+  function Harness({ initial = '', onValue }: { initial?: string; onValue?: (v: string) => void }) {
+    const [v, setV] = useState(initial);
+    return <VnDateTimeInput value={v} ariaLabel="Bắt đầu" onChange={(x) => { setV(x); onValue?.(x); }} />;
+  }
+  const hour = (c: HTMLElement) => c.querySelector<HTMLSelectElement>('select[aria-label="Bắt đầu: giờ"]')!;
+  const minute = (c: HTMLElement) => c.querySelector<HTMLSelectElement>('select[aria-label="Bắt đầu: phút"]')!;
+  const date = (c: HTMLElement) => c.querySelector<HTMLInputElement>('input[aria-label="Bắt đầu: ngày"]')!;
+
+  it('giờ 24h 00-23, phút 00/15/30/45; không có ô gốc của trình duyệt', () => {
+    const r = render(<Harness initial="2026-10-28T20:00" />);
+    mounted.push(r);
+    expect([...hour(r.container).options].map((o) => o.value)).toEqual(['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23']);
+    expect([...minute(r.container).options].map((o) => o.value)).toEqual(['00', '15', '30', '45']);
+    expect(hour(r.container).value).toBe('20');
+    expect(minute(r.container).value).toBe('00');
+    expect(date(r.container).value).toBe('28/10/2026');
+    expect(r.container.querySelector('input[type="datetime-local"]')).toBeNull();
+  });
+
+  it('giá trị cũ 20:07 vẫn hiện đúng phút 07 và giữ khi đổi giờ', () => {
+    const onValue = vi.fn();
+    const r = render(<Harness initial="2026-10-28T20:07" onValue={onValue} />);
+    mounted.push(r);
+    expect(minute(r.container).value).toBe('07');
+    expect([...minute(r.container).options].map((o) => o.value)).toEqual(['00', '07', '15', '30', '45']);
+    selectValue(hour(r.container), '21');
+    expect(onValue).toHaveBeenLastCalledWith('2026-10-28T21:07');
+  });
+
+  it('gõ ngày rồi chọn giờ ra yyyy-mm-ddTHH:mm; chọn giờ trước ngày thì giữ giờ chờ ngày; xoá ngày thì rỗng', async () => {
+    const onValue = vi.fn();
+    const r = render(<Harness onValue={onValue} />);
+    mounted.push(r);
+    selectValue(hour(r.container), '20');
+    expect(onValue).not.toHaveBeenCalled();
+    typeInto(date(r.container), '28102026');
+    await flush();
+    expect(onValue).toHaveBeenLastCalledWith('2026-10-28T20:00');
+    selectValue(minute(r.container), '45');
+    expect(onValue).toHaveBeenLastCalledWith('2026-10-28T20:45');
+    typeInto(date(r.container), '');
+    await flush();
+    expect(onValue).toHaveBeenLastCalledWith('');
+  });
+
+  it('sửa giá trị có sẵn 20:07: xoá ngày rồi gõ ngày mới thì vẫn giữ giờ 20:07, không rơi về 00:00', async () => {
+    const onValue = vi.fn();
+    const r = render(<Harness initial="2026-10-20T20:07" onValue={onValue} />);
+    mounted.push(r);
+    typeInto(date(r.container), '');
+    await flush();
+    expect(onValue).toHaveBeenLastCalledWith('');
+    expect(hour(r.container).value).toBe('20');
+    expect(minute(r.container).value).toBe('07');
+    typeInto(date(r.container), '21102026');
+    await flush();
+    expect(onValue).toHaveBeenLastCalledWith('2026-10-21T20:07');
+  });
+
+  it('cha đặt giá trị mới thì giờ chờ theo giá trị đó', async () => {
+    const onValue = vi.fn();
+    function Parent() {
+      const [v, setV] = useState('2026-10-20T20:07');
+      return (
+        <>
+          <button type="button" onClick={() => setV('2026-10-22T08:30')}>đổi</button>
+          <button type="button" onClick={() => setV('')}>xoá</button>
+          <VnDateTimeInput value={v} ariaLabel="Bắt đầu" onChange={(x) => { setV(x); onValue(x); }} />
+        </>
+      );
+    }
+    const r = render(<Parent />);
+    mounted.push(r);
+    click(byText(r.container, 'button', 'đổi'));
+    await flush();
+    click(byText(r.container, 'button', 'xoá'));
+    await flush();
+    typeInto(date(r.container), '23102026');
+    await flush();
+    expect(onValue).toHaveBeenLastCalledWith('2026-10-23T08:30');
   });
 });

@@ -108,6 +108,19 @@ describe('Admin order list filters (real Postgres)', () => {
     expect(none.total).toBe(0);
   });
 
+  it('lọc theo khách (userId): chỉ đơn của đúng khách đó, ghép được với trạng thái thanh toán; id lạ trả rỗng', async () => {
+    const s = await seed();
+    const mine = await codesOf(s.tok, { userId: s.buyer.id });
+    expect(new Set(mine.codes)).toEqual(new Set([s.code.RET, s.code.RETW, s.code.CTV, s.code.STO, s.code.STOM, s.code.DLR]));
+    expect(mine.total).toBe(6);
+    expect(new Set((await codesOf(s.tok, { userId: s.ctv.id })).codes)).toEqual(new Set([s.code.ASS]));
+    expect(new Set((await codesOf(s.tok, { userId: s.buyer.id, payment: 'PAID' })).codes)).toEqual(new Set([s.code.RETW, s.code.CTV]));
+    // Không gõ chữ tìm: lọc khách vẫn cô lập được đơn (hồ sơ khách mở "Xem tất cả N đơn" không có ô tìm).
+    const noSearch = await codesOf('', { userId: s.buyer.id });
+    expect(noSearch.total).toBe(6);
+    expect((await codesOf('', { userId: `khong-co-${s.tok}` })).total).toBe(0);
+  });
+
   it('đổi thứ tự: mặc định mới nhất trước, order=asc cũ nhất trước', async () => {
     const s = await seed();
     const t = (n: number) => new Date(Date.UTC(2026, 0, n, 3, 0, 0));

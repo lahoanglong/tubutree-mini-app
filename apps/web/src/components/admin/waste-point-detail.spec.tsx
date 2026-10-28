@@ -49,6 +49,11 @@ async function mount(point = wastePoint()) {
 }
 
 const btn = (root: ParentNode, text: string) => Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent === text) ?? null;
+const pickMonth = (c: HTMLElement, ym: string) => {
+  const [y, m] = ym.split('-');
+  selectValue(c.querySelector('select[aria-label="Tháng số lượng: năm"]'), y!);
+  selectValue(c.querySelector('select[aria-label="Tháng số lượng: tháng"]'), m!);
+};
 const callsTo = (api: { calls: { url: string; init?: RequestInit }[] }, method: string, part: string) =>
   api.calls.filter((x) => x.url.includes(part) && (x.init?.method ?? 'GET') === method);
 
@@ -346,7 +351,7 @@ describe('WastePointDetail', () => {
 
   it('số lượng đã nhận trong tháng', async () => {
     const { c, api } = await mount();
-    typeInto(c.querySelector('input[type="month"]'), '2026-10');
+    pickMonth(c, '2026-10');
     await flush();
     expect(callsTo(api, 'GET', '/admin/waste/points/p1/report').some((x) => x.url.endsWith('/admin/waste/points/p1/report?month=2026-10'))).toBe(true);
     expect(c.textContent).toContain('Thùng carton cũ: 40 thùng');
@@ -356,7 +361,7 @@ describe('WastePointDetail', () => {
 
   it('đổi tháng gọi lại báo cáo theo tháng mới', async () => {
     const { c, api } = await mount();
-    typeInto(c.querySelector('input[type="month"]'), '2026-09');
+    pickMonth(c, '2026-09');
     await flush();
     expect(callsTo(api, 'GET', '/admin/waste/points/p1/report').some((x) => x.url.endsWith('?month=2026-09'))).toBe(true);
   });

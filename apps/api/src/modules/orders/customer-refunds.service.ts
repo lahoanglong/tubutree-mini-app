@@ -10,6 +10,7 @@ import { ATTENTION_COD_RETURN_UNVERIFIED, removeAttentionReason } from '../integ
 import { formatVnDateTime } from '../../common/vn-time';
 import { maskPhone } from '../../common/mask-pii';
 import { toLocalPhone } from '../../common/phone';
+import { findSearchUserIds, normalizeAdminOrderSearch, orderCodeVariants, userPhoneClauses } from '../admin/admin-order-filter';
 
 /** Khoản khách thấy ở chi tiết đơn (không lộ cột nội bộ như completedBy). */
 export interface MyRefundView {
@@ -84,10 +85,32 @@ export class CustomerRefundsService {
     @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
-  async list(status: CustomerRefundStatus | 'OPEN' | undefined, page: number, limit: number, kind?: CustomerRefundKind) {
+  /**
+   * `search.q`: mã đơn chính xác, SĐT hoặc tên khách. Khớp cả chủ đơn, tài khoản nhận Ví và SĐT khách cuối (đơn CTV lên hộ chỉ có
+   * SĐT, không có tài khoản). Người xem bị che SĐT (`exactPhoneOnly`) chỉ tìm được bằng đủ số, như ô tìm đơn.
+   */
+  async list(
+    status: CustomerRefundStatus | 'OPEN' | undefined,
+    page: number,
+    limit: number,
+    kind?: CustomerRefundKind,
+    search: { q?: string; exactPhoneOnly?: boolean } = {},
+  ) {
+    const q = normalizeAdminOrderSearch(search.q);
+    const userIds = q ? ((await findSearchUserIds(this.prisma, q, search.exactPhoneOnly)) ?? []) : [];
     const where: Prisma.OrderCustomerRefundWhereInput = {
       ...(status === 'OPEN' ? { status: { in: [...OPEN_CUSTOMER_REFUND_STATUSES] } } : status ? { status } : {}),
       ...(kind ? { kind } : {}),
+      ...(q
+        ? {
+            OR: [
+              { orderCode: { in: orderCodeVariants(q) } },
+              { userId: { in: userIds } },
+              { customerUserId: { in: userIds } },
+              ...userPhoneClauses(q, search.exactPhoneOnly === true).map((c) => ({ phone: c.phone as Prisma.StringNullableFilter | string })),
+            ],
+          }
+        : {}),
     };
     const queue = status === 'OPEN' || status === 'PENDING' || status === 'UNVERIFIED';
     const [items, total] = await this.prisma.$transaction([

@@ -41,6 +41,8 @@ import { BTN_LINK, BTN_SECONDARY, BTN_SMALL, BTN_WARNING, FIELD_CLASS, FIELD_XS,
 import { CustomerRefundPaidDialog, type MarkPaidOutcome } from './customer-refund-paid-dialog';
 import { useConfirm } from './confirm-dialog';
 import { formatDateTime } from '@/lib/format-date';
+import { useDebounced } from '@/lib/use-debounced';
+import { searchEmptyHint } from './search-empty-hint';
 
 const PAGE_SIZE = 20;
 
@@ -106,17 +108,20 @@ export function CustomerRefundsPendingBadge() {
  * Khoản của khách có tài khoản: admin bấm "Bắt đầu chuyển khoản" (khoá nơi nhận, khách không rút về Ví được nữa) TRƯỚC khi
  * chuyển tiền bên ngoài, rồi xác nhận kèm mã giao dịch để sổ khớp. Màn này chỉ ghi sổ, không chuyển tiền thật.
  */
-export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; isAdmin?: boolean } = {}) {
+/** `phoneMasked`: máy chủ che SĐT (nhân viên không có CSKH/KHO, cùng luật seesFullOrderPhones) nên ô tìm chỉ khớp đủ 10 số. */
+export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmin }: { meId?: string; isAdmin?: boolean; phoneMasked?: boolean } = {}) {
   const [filter, setFilter] = useState<AdminCustomerRefundFilter>('OPEN');
   const [kind, setKind] = useState<AdminCustomerRefundKind | ''>('');
   const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState('');
+  const search = useDebounced(searchInput.trim(), 300);
   const [target, setTarget] = useState<{ refund: AdminCustomerRefund; mode: RefundAction } | null>(null);
   const [flash, setFlash] = useState<{ tone: 'success' | 'warning'; text: string } | null>(null);
   // Dòng vừa ghi xong: BE đã COMPLETED nhưng danh sách chưa tải lại xong, ẩn nút để không mở hộp lần hai.
   const [recorded, setRecorded] = useState<ReadonlySet<string>>(() => new Set());
   const q = useQuery({
-    queryKey: [CUSTOMER_REFUNDS_QUERY_KEY, filter, kind, page],
-    queryFn: () => listCustomerRefunds(filter, page, PAGE_SIZE, kind || undefined),
+    queryKey: [CUSTOMER_REFUNDS_QUERY_KEY, filter, kind, page, search],
+    queryFn: () => listCustomerRefunds(filter, page, PAGE_SIZE, kind || undefined, search || undefined),
   });
 
   const total = q.data?.meta.total ?? 0;
@@ -304,6 +309,18 @@ export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; is
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-semibold text-stone-900">Hoàn tiền khách</h2>
         <div className="flex flex-wrap items-center gap-1.5">
+          <input
+            type="search"
+            aria-label="Tìm khoản hoàn theo mã đơn hoặc SĐT khách"
+            placeholder={phoneMasked ? 'Mã đơn hoặc đủ 10 số SĐT' : 'Mã đơn hoặc SĐT khách'}
+            maxLength={100}
+            value={searchInput}
+            onChange={(e) => {
+              setSearchInput(e.target.value);
+              setPage(1);
+            }}
+            className={`${FIELD_CLASS} ${TOUCH_H} w-full sm:w-56`}
+          />
           <select
             aria-label="Lọc theo loại khoản hoàn"
             value={kind}
@@ -395,7 +412,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; is
         ))}
         {q.data && !outOfRange && rows.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
-            {CUSTOMER_REFUND_EMPTY[filter]}
+            {search ? `Không có khoản hoàn nào khớp "${search}". ${searchEmptyHint(search, { phoneMasked }) ?? ''}`.trim() : CUSTOMER_REFUND_EMPTY[filter]}
           </p>
         )}
       </div>

@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { GOMDON_CANCEL, GOMDON_CARRIER, GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
 import { DEALER_AWAITING_STOCK_WHERE } from '../dealer/dealer-awaiting-stock';
 import { TUBU_FULFILLED_ORDER_WHERE } from '../integrations/pancake/pancake-fulfilment';
@@ -156,6 +157,8 @@ export interface AdminOrderFilter {
   queue?: OrderQueue;
   /** Id CTV / người giới thiệu (Order.referrerUserId). */
   referrerUserId?: string;
+  /** Id khách đặt đơn (Order.userId): "Xem tất cả đơn" từ hồ sơ khách. */
+  userId?: string;
   /** Id gian hàng được ghi công (Order.storefrontId); web gửi slug, AdminService.adminOrderWhere đổi sang id. */
   storefrontId?: string;
   /** Khoảng ngày đặt theo giờ VN, 'YYYY-MM-DD', tính cả hai đầu. */
@@ -183,6 +186,7 @@ export interface OrderListExtra {
   platform?: OrderListPlatform;
   queue?: OrderQueue;
   referrerUserId?: string;
+  userId?: string;
   storefront?: string;
   order?: 'asc' | 'desc';
 }
@@ -235,6 +239,35 @@ export function recipientPhoneVariants(local: string): string[] {
 export const ADMIN_SEARCH_MIN_TRGM_LENGTH = 3;
 /** Khớp nhiều khách hơn mức này (tìm quá chung) thì giữ lọc theo quan hệ để không cắt bớt kết quả. */
 export const ADMIN_SEARCH_USER_CAP = 1000;
+
+/**
+ * Id khách khớp chuỗi tìm (SĐT hoặc tên), tra bằng index trigram trên users. undefined = chuỗi quá ngắn hoặc quá chung (khớp
+ * nhiều hơn ADMIN_SEARCH_USER_CAP khách): người gọi bỏ nhánh "theo khách" thay vì cắt bớt kết quả. Dùng chung cho ô tìm của
+ * danh sách đơn, đổi/trả và hoàn tiền.
+ */
+export async function findSearchUserIds(prisma: Pick<PrismaService, 'user'>, search?: string, exactPhoneOnly = false): Promise<string[] | undefined> {
+  const s = normalizeAdminOrderSearch(search);
+  if (!s || s.length < ADMIN_SEARCH_MIN_TRGM_LENGTH) return undefined;
+  const like = escapePrismaLike(s);
+  const folded = foldVietnamese(s);
+  const rows = await prisma.user.findMany({
+    where: {
+      OR: [
+        ...userPhoneClauses(s, exactPhoneOnly),
+        { fullName: { contains: like, mode: 'insensitive' } },
+        ...(folded.length >= ADMIN_SEARCH_MIN_TRGM_LENGTH ? [{ fullNameSearch: { contains: escapePrismaLike(folded) } }] : []),
+      ],
+    },
+    select: { id: true },
+    take: ADMIN_SEARCH_USER_CAP + 1,
+  });
+  return rows.length > ADMIN_SEARCH_USER_CAP ? undefined : rows.map((r) => r.id);
+}
+
+/** Mã đơn gõ ở ô tìm (thường, hoa) về các dạng có thể lưu, để tra theo index của cột mã (so khớp đúng, không quét bảng). */
+export function orderCodeVariants(search: string): string[] {
+  return [...new Set([search, search.toUpperCase()])];
+}
 
 export function recyclingAttentionWhere(): Prisma.OrderWhereInput {
   return {
@@ -323,6 +356,7 @@ export function buildAdminOrderWhere(f: AdminOrderFilter): Prisma.OrderWhereInpu
   if (f.queue === 'bank_transfer_to_confirm') and.push(BANK_TRANSFER_TO_CONFIRM_WHERE);
   else if (f.queue === 'dealer_transfer_to_confirm') and.push(DEALER_TRANSFER_TO_CONFIRM_WHERE);
   if (f.referrerUserId) and.push({ referrerUserId: f.referrerUserId });
+  if (f.userId) and.push({ userId: f.userId });
   if (f.storefrontId) and.push({ storefrontId: f.storefrontId });
   if (and.length === 0) return {};
   return and.length === 1 ? and[0]! : { AND: and };
