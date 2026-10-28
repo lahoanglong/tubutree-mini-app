@@ -9,6 +9,7 @@ export const WASTE_TEMPLATE_CODES = [
   'WASTE_SHIP_LOCKED',
   'WASTE_GIFT_CANCELLED',
   'WASTE_PERK_REVIEWED',
+  'WASTE_REQUEST_EXPIRING',
 ] as const;
 
 export type WasteTemplateCode = (typeof WASTE_TEMPLATE_CODES)[number];

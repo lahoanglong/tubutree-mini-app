@@ -11,6 +11,10 @@ import { GOMDON_DISPATCHED_STATUSES } from '../waste.constants';
 import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
 
 const PAGE = 200;
+const HOUR_MS = 3_600_000;
+/** Cron chạy mỗi ngày nên cửa sổ [24 giờ, 48 giờ) tới hạn ghép kín: mỗi yêu cầu rơi vào đúng một lượt chạy. */
+const REMIND_FROM_HOURS = 24;
+const REMIND_TO_HOURS = 48;
 
 type ExpiryCloseReason = 'HOLD_EXPIRED' | 'PICKUP_NO_SHOW' | 'PICKUP_NOT_DISPATCHED';
 
@@ -88,7 +92,7 @@ export class WasteExpiryCron {
           const closed = await this.closeRow(row, now);
           if (!closed) continue;
           expired += 1;
-          await this.notifier.requestExpired(row.userId, { id: row.id, code: row.code }, closed, now);
+          await this.notifier.requestExpired(row.userId, { id: row.id, code: row.code, method: row.method }, closed, now);
           if (closed === 'PICKUP_NO_SHOW') noShowUsers.add(row.userId);
         } catch (err) {
           this.logger.error(`Đóng yêu cầu hết hạn ${row.id} lỗi: ${err instanceof Error ? (err.stack ?? err.message) : err}`);
@@ -104,7 +108,45 @@ export class WasteExpiryCron {
         this.logger.error(`Xét khoá giao hàng cho ${userId} lỗi: ${err instanceof Error ? (err.stack ?? err.message) : err}`);
       }
     }
+    await this.remindExpiring(now);
     return { expired };
+  }
+
+  /**
+   * Nhắc khách còn khoảng một đến hai ngày giữ chỗ. MAIL_IN đã nhập mã vận đơn chuyển sang IN_TRANSIT và không còn hạn nên không vào đây;
+   * `trackingCode: null` giữ điều đó ngay cả khi trạng thái chưa kịp đổi. Tin trùng bị chặn bằng dedupeKey theo id yêu cầu.
+   */
+  private async remindExpiring(now: Date): Promise<void> {
+    const base: Prisma.WasteRequestWhereInput = {
+      status: 'OPEN',
+      orderId: null,
+      trackingCode: null,
+      method: { in: ['DROP_OFF', 'MAIL_IN'] },
+      expiresAt: { gte: new Date(now.getTime() + REMIND_FROM_HOURS * HOUR_MS), lt: new Date(now.getTime() + REMIND_TO_HOURS * HOUR_MS) },
+    };
+    try {
+      let lastId: string | null = null;
+      for (;;) {
+        const page: { id: string; code: string; userId: string; method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP'; expiresAt: Date | null }[] = await this.prisma.wasteRequest.findMany({
+          where: lastId === null ? base : { AND: [base, { id: { gt: lastId } }] },
+          select: { id: true, code: true, userId: true, method: true, expiresAt: true },
+          orderBy: { id: 'asc' },
+          take: PAGE,
+        });
+        for (const row of page) {
+          if (!row.expiresAt || row.method === 'PICKUP') continue;
+          try {
+            await this.notifier.requestExpiring(row.userId, { id: row.id, code: row.code }, row.method, row.expiresAt);
+          } catch (err) {
+            this.logger.error(`Nhắc yêu cầu sắp hết hạn ${row.id} lỗi: ${err instanceof Error ? (err.stack ?? err.message) : err}`);
+          }
+        }
+        if (page.length < PAGE) break;
+        lastId = page[page.length - 1]!.id;
+      }
+    } catch (err) {
+      this.logger.error(`Quét nhắc yêu cầu sắp hết hạn lỗi: ${err instanceof Error ? (err.stack ?? err.message) : err}`);
+    }
   }
 
   /** Một transaction ngắn cho một dòng; không lấy khoá nào khác (rule 15). Trả lý do đóng khi dòng trúng điều kiện. */

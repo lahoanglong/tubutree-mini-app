@@ -134,6 +134,7 @@ export const TEMPLATE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
   WASTE_SHIP_LOCKED: [],
   WASTE_GIFT_CANCELLED: ['gift', 'points_note'],
   WASTE_PERK_REVIEWED: ['point', 'result'],
+  WASTE_REQUEST_EXPIRING: ['code', 'until', 'next_step'],
 };
 
 /** Tên gọi dễ hiểu của biến, hiện trong màn sửa mẫu thay cho tên kỹ thuật. */
@@ -169,6 +170,7 @@ export const VARIABLE_LABELS: Readonly<Record<string, string>> = {
   missing: 'số tiền còn thiếu',
   mode: 'cách giao hàng',
   need: 'phần còn thiếu để giữ hạng',
+  next_step: 'việc khách cần làm trước hạn',
   note: 'ghi chú của người gửi',
   order_code: 'mã đơn hàng',
   owner: 'tên chủ cơ sở',
