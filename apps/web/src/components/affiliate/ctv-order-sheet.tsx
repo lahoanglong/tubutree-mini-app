@@ -30,7 +30,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { ChoiceCard } from './choice-card';
 import { CTV_ORDER_COPY as t } from './ctv-order-copy';
 import { loadRecentCustomers, normalizeCustomerPhone, recentCustomerLabel, saveRecentCustomer, type RecentCustomer } from './recent-customers';
-import { ProductThumb } from '@/components/mini';
+import { ProductThumb } from '@/components/mini/product-thumb';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 interface OrderLine {

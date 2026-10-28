@@ -37,7 +37,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { SegmentedTabs, useTabParam } from '@/components/ui/segmented-tabs';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState } from '@/components/mini';
+import { EmptyState } from '@/components/mini/empty-state';
 import { CtvDashboardSkeleton } from '@/components/affiliate/ctv-skeleton';
 import { CtvShortcuts, type CtvShortcut } from '@/components/affiliate/ctv-shortcuts';
 import { MilestoneRewards } from '@/components/affiliate/milestone-rewards';

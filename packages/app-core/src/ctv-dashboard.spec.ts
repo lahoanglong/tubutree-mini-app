@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AFFILIATE_PAGE_SIZE, affiliateNextCursor, CTV_TAB_KEYS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote } from './ctv-dashboard';
+import { CTV_TAB_KEYS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote } from './ctv-dashboard';
 
 const ZERO = { monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0, totalConversions: 0 };
 
@@ -102,16 +102,5 @@ describe('heroShowsWalletBalance', () => {
     expect(heroShowsWalletBalance(ctvHeroAmount(0, true, 5400000))).toBe(true);
     expect(heroShowsWalletBalance(ctvHeroAmount(120000, true, 5400000))).toBe(false);
     expect(heroShowsWalletBalance(ctvHeroAmount(0, true, undefined, true))).toBe(false);
-  });
-});
-
-describe('affiliateNextCursor', () => {
-  const rows = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `r${i}` }));
-  it('trang đầy: con trỏ là id dòng cuối', () => {
-    expect(affiliateNextCursor(rows(AFFILIATE_PAGE_SIZE))).toBe(`r${AFFILIATE_PAGE_SIZE - 1}`);
-  });
-  it('trang chưa đầy hoặc rỗng: hết, không có con trỏ', () => {
-    expect(affiliateNextCursor(rows(AFFILIATE_PAGE_SIZE - 1))).toBeUndefined();
-    expect(affiliateNextCursor([])).toBeUndefined();
   });
 });

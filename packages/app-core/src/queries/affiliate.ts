@@ -14,7 +14,7 @@ import {
   quoteCtvOrder,
   type CtvOrderItemInput,
 } from '../api/affiliate';
-import { AFFILIATE_PAGE_SIZE } from '../ctv-dashboard';
+import { AFFILIATE_PAGE_SIZE } from '../affiliate-page';
 
 export const affiliateMeQuery = (http: HttpClient) => ({
   queryKey: ['affiliate-me'] as const,
