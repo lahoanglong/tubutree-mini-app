@@ -222,7 +222,7 @@ export function CouponBox({
                 </span>
               </span>
             </span>
-            <span className="inline-flex items-center gap-1 text-caption font-medium text-[color:var(--color-text-brand)]">
+            <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
               Thay đổi
               <ChevronRight
                 className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}
@@ -259,7 +259,7 @@ export function CouponBox({
               )}
             </span>
           </span>
-          <span className="inline-flex items-center gap-1 text-caption font-medium text-forest-700">
+          <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-caption font-medium text-forest-700">
             {actionLabel}
             <ChevronRight
               className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}

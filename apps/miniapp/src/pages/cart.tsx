@@ -622,7 +622,7 @@ function CouponBlock({
           </Box>
         </Box>
 
-        <Box flex alignItems="center" style={{ gap: 4, color: 'var(--color-text-brand)' }}>
+        <Box flex alignItems="center" style={{ gap: 4, flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--color-text-brand)' }}>
           <Text size="xSmall" bold style={{ color: 'var(--color-text-brand)' }}>
             {summary.couponCode ? 'Thay đổi' : 'Chọn mã'}
           </Text>

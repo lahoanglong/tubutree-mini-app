@@ -151,7 +151,7 @@ export function NewCustomerGift() {
               <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {vi.home.newGift.title}
               </Text>
-              <Text variant="caption" tone="secondary" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Text variant="caption" tone="secondary" as="div" style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                 {headline}
               </Text>
             </span>
