@@ -65,6 +65,7 @@ function problemOf(f: FormState): string | null {
 export function GameQuizAdmin() {
   const [page, setPage] = useState(1);
   const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState<string | null>(null);
   const q = useQuery({ queryKey: [...QUERY_KEY, page], queryFn: () => listAdminQuizzes(page), placeholderData: (prev) => prev });
   const rows = q.data?.data ?? [];
   const range = q.data ? pageRange(q.data.meta, q.data.meta.total, rows.length) : null;
@@ -82,16 +83,30 @@ export function GameQuizAdmin() {
           submitLabel="Thêm câu đố"
           initial={BLANK}
           save={(f) => createAdminQuiz(toInput(f))}
-          onDone={() => {
+          onDone={(question) => {
             setAdding(false);
             setPage(1);
+            setAdded(question);
           }}
           onCancel={() => setAdding(false)}
         />
       ) : (
-        <button type="button" onClick={() => setAdding(true)} className={BTN_XS_SECONDARY}>
+        <button
+          type="button"
+          onClick={() => {
+            setAdded(null);
+            setAdding(true);
+          }}
+          className={BTN_XS_SECONDARY}
+        >
           Thêm câu đố
         </button>
+      )}
+      {/* Danh sách sắp theo mã nên câu mới rơi vào trang bất kỳ; câu báo này tránh việc thêm lại câu trùng. */}
+      {added && !adding && (
+        <p role="status" className="break-words text-xs text-success-fg">
+          Đã thêm câu đố: {added}
+        </p>
       )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách câu đố.</LoadError>}
@@ -176,7 +191,7 @@ function QuizForm({
   submitLabel: string;
   initial: FormState;
   save: (f: FormState) => Promise<unknown>;
-  onDone: () => void;
+  onDone: (question: string) => void;
   onCancel: () => void;
 }) {
   const qc = useQueryClient();
@@ -188,7 +203,7 @@ function QuizForm({
     onSuccess: () => {
       setErr(null);
       void qc.invalidateQueries({ queryKey: QUERY_KEY });
-      onDone();
+      onDone(f.question.trim());
     },
     onError: (e) => setErr(e instanceof Error ? e.message : 'Không lưu được câu đố.'),
   });

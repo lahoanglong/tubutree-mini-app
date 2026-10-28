@@ -95,6 +95,10 @@ describe('GameQuizAdmin (câu đố hằng ngày)', () => {
       explanation: '',
     });
     expect(container.querySelector('form[aria-label="Thêm câu đố"]')).toBeNull();
+    const note = container.querySelector('[role="status"]');
+    expect(note?.textContent).toContain('Đã thêm câu đố: Cây nào hút CO2 nhiều nhất?');
+    click(byText(container, 'button', 'Thêm câu đố'));
+    expect(container.querySelector('[role="status"]')).toBeNull();
   });
 
   it('đáp án đúng trỏ vào ô trống thì khoá nút lưu và nói rõ', async () => {
