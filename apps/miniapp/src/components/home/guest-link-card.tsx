@@ -5,7 +5,7 @@ import { haptic } from '../../utils/haptic';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Heading, Text } from '../ui/text';
-import { isGuestUser } from '../coupon-claim-gate';
+import { isGuestUser } from '../../utils/guest-user';
 
 /** Thẻ mời tài khoản khách (chưa liên kết Zalo) liên kết Zalo để giữ điểm và nhận quà. Tài khoản thật không thấy thẻ này. */
 export function GuestLinkCard({ title, body, cta }: { title: string; body: string; cta: string }) {

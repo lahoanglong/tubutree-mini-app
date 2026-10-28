@@ -6,8 +6,6 @@ import { getStorage } from 'zmp-sdk/apis';
 import HomePage from '../pages/home';
 import BottomNav from './bottom-nav';
 import BackButton from './back-button';
-import { OnboardingGate } from './onboarding';
-import { CouponClaimGate } from './coupon-claim-gate';
 import { OpenAppRouter } from './open-app-router';
 import { MainLandmark } from './ui/main-landmark';
 import { RouteShell, RouteSkeleton } from './route-shell';
@@ -42,6 +40,9 @@ function applySavedFontScale(): void {
     }
   });
 }
+
+const OnboardingGate = lazy(() => import('./onboarding').then((m) => ({ default: m.OnboardingGate })));
+const CouponClaimGate = lazy(() => import('./coupon-claim-gate').then((m) => ({ default: m.CouponClaimGate })));
 
 // Code-split: Home eager (first paint), các trang khác lazy để giữ initial bundle nhỏ (§13.4).
 const loadBrowse = () => import('../pages/browse');
@@ -272,8 +273,11 @@ export default function MyApp() {
               </LivePathnameProvider>
               <BottomNav />
               <BackButton />
-              <OnboardingGate />
-              <CouponClaimGate />
+              {/* Hai cổng này không cần cho khung hình đầu: tải sau để entry nhẹ hơn. */}
+              <Suspense fallback={null}>
+                <OnboardingGate />
+                <CouponClaimGate />
+              </Suspense>
               <OpenAppRouter />
             </ZMPRouter>
           </SnackbarProvider>

@@ -19,10 +19,13 @@ import {
 } from '../services/coupon-claim';
 import { setCardGiftNote } from '../services/card-gift-note';
 import { formatDate } from '../utils/format';
+import { isGuestUser } from '../utils/guest-user';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { Icon } from './ui/icon';
 import { Text } from './ui/text';
+
+export { isGuestUser };
 
 type Phase =
   | { kind: 'closed' }
@@ -30,12 +33,6 @@ type Phase =
   | { kind: 'needLogin'; loginFailed?: boolean }
   | { kind: 'done'; coupon: ClaimedCoupon }
   | { kind: 'failed'; message: string; retryable: boolean };
-
-/** Cùng luật "khách thật" của máy chủ (common/real-user.ts): có SĐT, hoặc zaloId Zalo thật (không phải guest_). */
-export function isGuestUser(u: Pick<AuthUser, 'phone' | 'zaloId'>): boolean {
-  if (u.phone) return false;
-  return !u.zaloId || u.zaloId.startsWith('guest_');
-}
 
 const isRateLimited = (err: unknown) => isHttpError(err) && err.response?.status === 429;
 const needsZaloLogin = (message: string) => /đăng nhập Zalo/i.test(message);
