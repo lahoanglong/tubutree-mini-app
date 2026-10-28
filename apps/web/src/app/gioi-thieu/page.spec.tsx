@@ -371,9 +371,8 @@ describe('/gioi-thieu: tài khoản', () => {
     expect(mocks.openChat).toHaveBeenCalledWith('Tôi muốn xoá tài khoản Tubu Tree');
   });
 
-  it('nút Đăng xuất gọi logout', async () => {
+  it('không còn nút Đăng xuất ở trang Giới thiệu (chỉ có ở Cài đặt)', async () => {
     const { container } = await mount();
-    click(button(container, 'Đăng xuất'));
-    expect(mocks.auth.logout).toHaveBeenCalledTimes(1);
+    expect(byText(container, 'button', 'Đăng xuất')).toBeNull();
   });
 });

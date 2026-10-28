@@ -50,8 +50,11 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
 import { ListRow } from '../components/ui/list-row';
+import { ProductThumb } from '../components/ui/product-thumb';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { CancelReasonPicker } from '../components/orders/cancel-reason-picker';
+import { orderCopy } from '@tubutree/app-core/account-copy';
+import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { cancelReasonBody, type CancelReasonCode } from '@tubutree/app-core/cancel-reasons';
 import { SupportContact } from '../components/support-contact';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -260,6 +263,7 @@ export default function OrderDetailPage() {
   const canPayNow = canPayOrderNow(o);
   const isDone = o.status === 'DELIVERED' || o.status === 'CANCELLED' || o.status === 'RETURNED';
   const stamp = orderStamp(o);
+  const etaLabel = publicConfig.isLoaded ? orderDeliveryEtaLabel(publicConfig.shippingEta, o) : null;
   const timelineSteps = timelineStepsFor(o.paymentMethod);
   const discounts = discountRows(o);
   const returnDays = publicConfig.returnWindowDays ?? 7;
@@ -287,6 +291,11 @@ export default function OrderDetailPage() {
         <Text.Title size="small" style={{ color: color.fg }}>
           {buyerStatusLabel(o)}
         </Text.Title>
+        {etaLabel && (
+          <Text size="xSmall" style={{ color: color.fg, marginTop: 4 }}>
+            {orderCopy.etaLine(etaLabel)}
+          </Text>
+        )}
         {o.manualHandling ? (
           <Text size="xSmall" style={{ color: color.fg, marginTop: 4 }}>
             {vi.orders.manualHandling}
@@ -336,6 +345,7 @@ export default function OrderDetailPage() {
             steps={timelineSteps}
             current={timelineIndex(o.status, timelineSteps)}
             times={timelineSteps.map((s, i) => stepTime(o, s, i, timelineIndex(o.status, timelineSteps)))}
+            etaLabel={etaLabel}
           />
         </Box>
       )}
@@ -347,13 +357,26 @@ export default function OrderDetailPage() {
         </Text>
         {o.items.map((it) => (
           <Box key={it.id} style={{ padding: '6px 0' }}>
-            <Box flex justifyContent="space-between" style={{ gap: 12 }}>
-              <Text size="small" style={{ flex: 1 }}>
-                {it.productName} · {it.variationName}{' '}
-                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', display: 'inline' }}>
-                  ×{it.quantity}
+            <Box flex alignItems="center" justifyContent="space-between" style={{ gap: 12 }}>
+              {/* Chạm vào món để mở lại trang sản phẩm (xem hướng dẫn dùng, mua riêng món này). */}
+              <Box
+                flex
+                alignItems="center"
+                className={it.productSlug ? 'tubu-press' : undefined}
+                role={it.productSlug ? 'link' : undefined}
+                {...(it.productSlug ? rowKeyboardProps() : {})}
+                aria-label={it.productSlug ? `Xem sản phẩm ${it.productName}` : undefined}
+                onClick={it.productSlug ? () => navigate(`/product/${it.productSlug}`) : undefined}
+                style={{ gap: 12, flex: 1, minWidth: 0, minHeight: 48, cursor: it.productSlug ? 'pointer' : undefined }}
+              >
+                <ProductThumb src={it.thumbnail} alt="" size={48} />
+                <Text size="small" style={{ flex: 1, minWidth: 0 }}>
+                  {it.productName} · {it.variationName}{' '}
+                  <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', display: 'inline' }}>
+                    ×{it.quantity}
+                  </Text>
                 </Text>
-              </Text>
+              </Box>
               <Text size="small" style={{ flex: '0 0 auto' }}>
                 {formatVnd(it.total)}
               </Text>
@@ -641,6 +664,17 @@ export default function OrderDetailPage() {
         );
       })()}
 
+      {o.note && (
+        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+          <Text bold size="small" style={{ marginBottom: 4 }}>
+            {vi.orders.note}
+          </Text>
+          <Text size="small" style={{ color: 'var(--color-text-secondary)', whiteSpace: 'pre-line' }}>
+            {o.note}
+          </Text>
+        </Box>
+      )}
+
       {/* Đổi/trả theo dòng (D3) — mỗi yêu cầu một khung trạng thái */}
       {(o.status === 'DELIVERED' || o.status === 'RETURNED') &&
         orderReturns.map((ret, idx) => {
@@ -852,7 +886,17 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 /** Timeline dọc 5 bước — bước hiện tại pulse, bước qua tick lá. */
-function Timeline({ steps, current, times }: { steps: readonly string[]; current: number; times?: readonly (string | null)[] }) {
+function Timeline({
+  steps,
+  current,
+  times,
+  etaLabel,
+}: {
+  steps: readonly string[];
+  current: number;
+  times?: readonly (string | null)[];
+  etaLabel?: string | null;
+}) {
   return (
     <Box style={{ display: 'flex', flexDirection: 'column' }}>
       {steps.map((step, i) => {
@@ -908,6 +952,11 @@ function Timeline({ steps, current, times }: { steps: readonly string[]; current
               {times?.[i] && (
                 <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                   {formatDateTime(times[i])}
+                </Text>
+              )}
+              {etaLabel && i === steps.length - 1 && !times?.[i] && (
+                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+                  {orderCopy.etaLine(etaLabel)}
                 </Text>
               )}
             </Box>

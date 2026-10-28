@@ -42,9 +42,9 @@ describe('nhóm menu hub tài khoản', () => {
     expect(buildAccountMenu(ctx()).map((g) => g.group)).toEqual(['Kiếm tiền cùng Tubu', 'Tài khoản', 'Hỗ trợ']);
   });
 
-  it('mục đúng như Mini App khi mọi route đã xong và cờ tắt', () => {
+  it('mục đúng như Mini App khi mọi route đã xong và cờ tắt; khách thường không có Học viện', () => {
     const m = buildAccountMenu(ctx());
-    expect(labels(m, 'Kiếm tiền cùng Tubu')).toEqual(['Mở gian hàng Cộng tác viên', 'Học viện Tubu', 'Đại lý']);
+    expect(labels(m, 'Kiếm tiền cùng Tubu')).toEqual(['Mở gian hàng Cộng tác viên', 'Đại lý']);
     expect(labels(m, 'Tài khoản')).toEqual(['Sản phẩm yêu thích', 'Sổ địa chỉ', 'Thông báo', 'Cài đặt']);
     expect(labels(m, 'Hỗ trợ')).toEqual(['Câu chuyện thương hiệu', 'Về Tubu Tree & Hỗ trợ']);
   });
@@ -61,8 +61,14 @@ describe('nhóm menu hub tài khoản', () => {
     expect(labels(buildAccountMenu(ctx({ aiEnabled: true, chatEnabled: true })), 'Hỗ trợ').slice(0, 2)).toEqual(['Chat với Tubu Tree', 'Trợ lý AI 24/7']);
   });
 
+  it('Học viện chỉ hiện cho CTV, đại lý, nhân viên, quản trị', () => {
+    const has = (role: string) => labels(buildAccountMenu(ctx({ role })), 'Kiếm tiền cùng Tubu').includes('Học viện Tubu');
+    expect(has('CUSTOMER')).toBe(false);
+    for (const role of ['AFFILIATE', 'DEALER', 'STAFF', 'ADMIN']) expect(has(role)).toBe(true);
+  });
+
   it('đích là route web của mục Mini App tương ứng', () => {
-    const to = (label: string) => all(buildAccountMenu(ctx({ aiEnabled: true }))).find((i) => i.label === label)?.to;
+    const to = (label: string) => all(buildAccountMenu(ctx({ aiEnabled: true, role: 'AFFILIATE' }))).find((i) => i.label === label)?.to;
     expect(to('Sổ địa chỉ')).toBe('/tai-khoan/dia-chi');
     expect(to('Thông báo')).toBe('/tai-khoan/thong-bao');
     expect(to('Cài đặt')).toBe('/tai-khoan/cai-dat');

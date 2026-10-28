@@ -31,6 +31,8 @@ function mockBuyer(api: MockApi, balances: Balances, opts: { coupons?: unknown[]
   api.get('/me', () => user());
   api.get('/me/addresses', [ADDR]);
   api.get('/me/coupons', opts.coupons ?? []);
+  // Danh sách đơn rỗng có kệ món bán chạy; ca đặt đơn đi qua trang này nên kệ có thể kịp gọi trước khi rời trang.
+  api.get('/products', { data: [], meta: { page: 1, limit: 30, total: 0 } });
   api.get('/config/public', { freeshipThreshold: 500000 });
   api.get('/cart', () => {
     const subtotal = LINES.reduce((s, l) => s + l.total, 0);

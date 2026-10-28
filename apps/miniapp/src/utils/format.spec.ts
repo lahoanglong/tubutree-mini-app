@@ -177,8 +177,8 @@ describe('formatDrops — giọt nước 💧 của Vườn Xanh', () => {
 
 // toLocale*String('vi-VN') phụ thuộc phiên bản ICU của webview ("15-10" thay vì "15/10" trên Node 24),
 // nên ngày giờ tự ghép để mọi máy ra cùng một chuỗi.
-describe('formatDate / formatDateTime — ngày giờ theo giờ máy, không phụ thuộc ICU', () => {
-  const d = new Date(2026, 9, 5, 7, 4, 9); // 05/10/2026 07:04:09 giờ địa phương
+describe('formatDate / formatDateTime — ngày giờ theo giờ Việt Nam, không phụ thuộc ICU hay múi giờ máy', () => {
+  const d = new Date('2026-10-05T00:04:09.000Z'); // 07:04:09 05/10/2026 giờ Việt Nam
 
   it('formatDate → dd/MM/yyyy', () => {
     expect(formatDate(d)).toBe('05/10/2026');
@@ -187,6 +187,11 @@ describe('formatDate / formatDateTime — ngày giờ theo giờ máy, không ph
 
   it('formatDateTime → HH:mm dd/MM/yyyy (bỏ giây)', () => {
     expect(formatDateTime(d)).toBe('07:04 05/10/2026');
+  });
+
+  it('qua nửa đêm UTC vẫn ra ngày Việt Nam', () => {
+    expect(formatDateTime('2026-10-28T18:30:00.000Z')).toBe('01:30 29/10/2026');
+    expect(formatDate('2026-12-31T17:00:00.000Z')).toBe('01/01/2027');
   });
 
   it('rỗng / ngày hỏng → "—", không in "Invalid Date"', () => {

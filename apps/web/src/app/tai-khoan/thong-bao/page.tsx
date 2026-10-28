@@ -15,7 +15,7 @@ import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { Sheet } from '@/components/ui/sheet';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
-import { EmptyState } from '@/components/empty-state';
+import { EmptyState as MiniEmptyState } from '@/components/mini/empty-state';
 import { ReorderSheet } from '@/components/reorder/reorder-sheet';
 import { pickReminderItem, reorderReminderAction } from '@/components/reorder/reorder-reminder';
 import type { ReorderSummary } from '@/components/reorder/reorder-summary';
@@ -144,7 +144,7 @@ export default function NotificationsPage() {
     );
   }
   if (!notifQ.data || notifQ.data.length === 0) {
-    return shell(<EmptyState title="Chưa có thông báo nào" body="Cập nhật đơn hàng và ưu đãi sẽ hiện ở đây." actionHref="/" actionLabel="Về trang chủ" />);
+    return shell(<MiniEmptyState art="leaf" heading="Chưa có thông báo nào" body="Cập nhật đơn hàng và ưu đãi sẽ hiện ở đây." />);
   }
 
   return shell(

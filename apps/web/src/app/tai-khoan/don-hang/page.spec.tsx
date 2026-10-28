@@ -177,7 +177,8 @@ describe('trang Đơn hàng /tai-khoan/don-hang', () => {
     orders = [];
     const c = await mount();
     expect(c.textContent).toContain('Bạn chưa có đơn nào');
-    expect(Array.from(c.querySelectorAll('a')).find((a) => a.textContent === 'Bắt đầu mua')?.getAttribute('href')).toBe('/san-pham');
+    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Bắt đầu mua')!);
+    expect(m.push).toHaveBeenCalledWith('/san-pham');
   });
 
   it('tab khác "Tất cả" rỗng: thông báo nhẹ, không lối mua đơn đầu, không gọi ưu đãi khách mới', async () => {

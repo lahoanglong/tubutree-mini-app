@@ -83,7 +83,7 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
   it('chưa có địa chỉ nào: nói rõ và vẫn có nút thêm', async () => {
     mocks.list = [];
     const c = await mount();
-    expect(c.textContent).toContain('Bạn chưa lưu địa chỉ nào');
+    expect(c.textContent).toContain('Bạn chưa có địa chỉ giao hàng nào');
     expect(btn(c, 'Thêm địa chỉ mới')).toBeDefined();
   });
 
