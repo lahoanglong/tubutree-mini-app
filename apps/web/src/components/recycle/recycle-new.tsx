@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   WasteCreateRequest,
   WasteLineInput,
@@ -247,14 +247,19 @@ export function RecycleNew() {
         queryKey: [...WASTE_QUERY_KEYS.all, 'preview', body],
         queryFn: () => previewWaste(coreHttp, body),
         enabled: step === 'method' && body.lines.length > 0,
-        placeholderData: keepPreviousData,
       };
     }),
   });
   const previewFailed = enabledMethods.filter((_, i) => previewQueries[i]?.isError);
   const previews: Partial<Record<WasteMethod, WastePreviewDTO | undefined>> = {};
+  // useQueries tạo observer mới mỗi khi khoá đổi nên data về undefined; giữ kết quả cuối riêng cho thứ tự thẻ để thẻ không nhảy chỗ.
+  const lastPreview = useRef<Partial<Record<WasteMethod, WastePreviewDTO>>>({});
+  const orderPreviews: Partial<Record<WasteMethod, WastePreviewDTO | undefined>> = {};
   enabledMethods.forEach((m, i) => {
-    previews[m] = previewQueries[i]?.data;
+    const data = previewQueries[i]?.data;
+    if (data) lastPreview.current[m] = data;
+    previews[m] = data;
+    orderPreviews[m] = data ?? lastPreview.current[m];
   });
 
   const pointsQ = useQuery({ ...wastePointsQuery(coreHttp, null), enabled: step === 'method' && authed });
@@ -373,7 +378,7 @@ export function RecycleNew() {
   const mailPreview = previews.MAIL_IN;
   const province = mailPreview?.feeEstimate?.provinceCode ?? draft.provinceCode;
   const noPointInProvince = province != null && pointsQ.data !== undefined && !pointsQ.data.some((pt) => sameProvince(pt.provinceCode, province));
-  const order = orderWasteMethods(enabledMethods, previews, noPointInProvince, previewFailed);
+  const order = orderWasteMethods(enabledMethods, orderPreviews, noPointInProvince, previewFailed);
   const showShipLocked = !!me.shipLockedAt && ((cfg.waste.mailin && me.laneFlags.mailin) || (cfg.waste.pickup && me.laneFlags.pickup));
   const ctxFor = (pv: WastePreviewDTO | undefined, method?: WasteMethod): BlockContext => ({
     items: me.items,

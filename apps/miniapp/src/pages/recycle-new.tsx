@@ -3,7 +3,7 @@ import { dropOffDayLimitText, itemQtyMax } from '@tubutree/app-core/waste-copy';
 import { sameProvince } from '@tubutree/app-core/waste-province';
 import { isMethodLocked, orderWasteMethods, WASTE_METHODS_BASE } from '@tubutree/app-core/waste-method-order';
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
-import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   WasteCreateRequest,
   WasteLineInput,
@@ -306,14 +306,17 @@ export default function RecycleNewPage() {
         queryKey: [...WASTE_QUERY_KEYS.all, 'preview', body],
         queryFn: () => previewWaste(body),
         enabled: step === 'method' && body.lines.length > 0,
-        placeholderData: keepPreviousData,
       };
     }),
   });
   const previewFailed = enabledMethods.filter((_, i) => previewQueries[i]?.isError);
   const previews: Partial<Record<WasteMethod, MethodPreview>> = {};
+  // useQueries tạo observer mới mỗi khi khoá đổi nên data về undefined; giữ kết quả cuối riêng cho thứ tự thẻ để thẻ không nhảy chỗ.
+  const lastPreview = useRef<Partial<Record<WasteMethod, WastePreviewDTO>>>({});
   enabledMethods.forEach((m, i) => {
-    previews[m] = { data: previewQueries[i]?.data };
+    const data = previewQueries[i]?.data;
+    if (data) lastPreview.current[m] = data;
+    previews[m] = { data };
   });
 
   const pointsQ = useQuery({
@@ -481,7 +484,7 @@ export default function RecycleNewPage() {
   const noPointInProvince = province != null && pointsQ.data !== undefined && !pointsQ.data.some((pt) => sameProvince(pt.provinceCode, province));
   const order = orderWasteMethods(
     enabledMethods,
-    Object.fromEntries(enabledMethods.map((m) => [m, previews[m]?.data])),
+    Object.fromEntries(enabledMethods.map((m) => [m, previews[m]?.data ?? lastPreview.current[m]])),
     noPointInProvince,
     previewFailed,
   );

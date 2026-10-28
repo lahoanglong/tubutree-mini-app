@@ -400,6 +400,25 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     expect(previewCalls()).toContainEqual(expect.objectContaining({ method: 'MAIL_IN', provinceCode: '01' }));
     expect(loadDraft()?.provinceCode).toBe('01');
   });
+  it('đổi tỉnh ở thẻ Gửi về kho: thẻ khoá giữ chỗ trong lúc xem trước mới chưa về', async () => {
+    state.preview = (b) => {
+      const req = b as WastePreviewRequest;
+      if (req.method === 'DROP_OFF') return preview({ blocks: [{ code: 'MAX_OPEN' }] });
+      if (req.method === 'MAIL_IN' && !req.provinceCode) return preview({ blocks: [{ code: 'NEED_PROVINCE' }] });
+      if (req.method === 'MAIL_IN') return new Promise(() => {});
+      return preview();
+    };
+    state.points = [makeWastePoint({ provinceCode: '01' })];
+    atStep2();
+    const c = await mount();
+    expect(methods(c)).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF']);
+    click(method(c, 'MAIL_IN'));
+    await flush(4);
+    selectValue(c.querySelector<HTMLSelectElement>('select[aria-label="Chọn tỉnh để ước tính phí ship"]')!, '01');
+    await flush(10);
+    expect(previewCalls()).toContainEqual(expect.objectContaining({ method: 'MAIL_IN', provinceCode: '01' }));
+    expect(methods(c)).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF']);
+  });
   it('phí ship ước tính ghi tên tỉnh từ danh sách, không ghi mã tỉnh', async () => {
     state.provinces = [{ code: '48', name: 'Đà Nẵng' }];
     state.preview = (b) => preview((b as WastePreviewRequest).method === 'MAIL_IN' ? { feeEstimate: { ...FEE, provinceCode: '48', provinceName: '48' } } : {});

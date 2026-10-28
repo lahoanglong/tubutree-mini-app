@@ -339,6 +339,23 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     fireEvent.change(select, { target: { value: '01' } });
     await waitFor(() => expect(mocks.previewWaste).toHaveBeenCalledWith(expect.objectContaining({ method: 'MAIL_IN', provinceCode: '01' })));
   });
+  it('đổi tỉnh ở thẻ Gửi về kho: thẻ khoá giữ chỗ trong lúc xem trước mới chưa về', async () => {
+    mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => {
+      if (b.method === 'DROP_OFF') return preview({ blocks: [{ code: 'MAX_OPEN', openCount: 3 }] });
+      if (b.method === 'MAIL_IN' && !b.provinceCode) return preview({ blocks: [{ code: 'NEED_PROVINCE' }] });
+      if (b.method === 'MAIL_IN') return new Promise<never>(() => {});
+      return preview();
+    });
+    mocks.getWastePoints.mockResolvedValue([makeWastePoint({ provinceCode: '01' })]);
+    atStep2();
+    renderPage();
+    const order = async () => (await screen.findAllByRole('radio')).map((c) => c.getAttribute('data-method'));
+    await waitFor(async () => expect(await order()).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF']));
+    fireEvent.click(await screen.findByRole('radio', { name: /Gửi về kho/ }));
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Chọn tỉnh để ước tính phí ship' }), { target: { value: '01' } });
+    await waitFor(() => expect(mocks.previewWaste).toHaveBeenCalledWith(expect.objectContaining({ method: 'MAIL_IN', provinceCode: '01' })));
+    expect(await order()).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF']);
+  });
   it('chưa chọn Gửi về kho: không có ô chọn tỉnh và không có lời nhắc chọn tỉnh; chọn xong thì lời nhắc không dùng màu lỗi', async () => {
     mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview(b.method === 'MAIL_IN' && !b.provinceCode ? { blocks: [{ code: 'NEED_PROVINCE' }] } : {}));
     atStep2();
