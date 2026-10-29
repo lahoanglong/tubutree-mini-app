@@ -20,5 +20,6 @@ Chủ nhắn sáng 29/10: "continue làm tiếp cho xong", sau khi PR #70 (đợ
 |---|---|---|
 | 05:41 | PR #70 merge (6f5897078). Dọn 16 worktree + nhánh gói, lane 6 | xong |
 | 06:52 | Gom 139 P3/mục dở + 6 mục báo cáo vào 8 gói, dựng nhánh gộp từ main 815fa3c1e | xong |
-| 06:55 | Workflow `wf_8043b683-fb8` chạy 8 gói P3 (slot 0–7) | đang chạy |
+| 06:5x | Workflow `wf_8043b683-fb8` chạy 8 gói P3 (slot 0–7) | đang chạy |
 | 06:58 | Chủ chốt E-2, E-43, deploy, link Cộng đồng. Thêm 2 gói e2-diem-khach (slot 8), e43-vi-ctv (slot 9) | |
+| 07:27 | Workflow `wf_9f99a0cc-144` chạy e2-diem-khach, e43-vi-ctv. Runbook 1.12: chủ trả lời bản Mini Live "không rõ, chưa có khách thật" nên deploy được. Log PROD 48 giờ chỉ có dòng ánh xạ route lúc khởi động, không có lượt gọi route điểm danh cũ. Phiên 93 không deploy, nhường deploy cho phiên này | đang chạy |
