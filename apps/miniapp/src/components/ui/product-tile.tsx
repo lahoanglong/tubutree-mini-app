@@ -124,7 +124,6 @@ export function ProductTile({
             )}
           </div>
         )}
-        {imageOverlay}
         {p.inStock === false && (
           <div
             style={{
@@ -192,6 +191,22 @@ export function ProductTile({
         {showWishlist && !isLine && (
           <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 1 }}>
             <WishlistHeart productId={p.id} floating size={18} />
+          </div>
+        )}
+        {/* Nút nổi trên ảnh (giỏ nhanh) cũng là anh em của nút tên và đứng sau tim: Tab/đọc đi tên, tim, rồi tới nút. Khung này phủ đúng
+            vùng ảnh nhưng không chặn chạm (nút tên ::after vẫn nhận chạm lên ảnh), chỉ khối chứa nút nhận chạm. */}
+        {imageOverlay && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              ...(isLine ? { width: 64, height: 64 } : { right: 0, aspectRatio: '1 / 1' }),
+              pointerEvents: 'none',
+              zIndex: 1,
+            }}
+          >
+            <div style={{ position: 'absolute', right: 2, bottom: 2, pointerEvents: 'auto' }}>{imageOverlay}</div>
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3, minHeight: 16 }}>
