@@ -100,6 +100,66 @@ describe('WalletLedgerService.applyDelta', () => {
     expect(r.balanceAfter).toBe(500);
   });
 
+  describe('trừ làm âm (COMMISSION_REVERSAL)', () => {
+    it('allowNegative + COMMISSION_REVERSAL: trừ quá số dư vẫn ghi sổ, số dư thành âm', async () => {
+      const m = makeTx({ balance: 20_000 });
+      const r = await svc.applyDelta(m.tx, {
+        userId: 'u1',
+        delta: -70_000,
+        type: 'COMMISSION_REVERSAL',
+        refType: 'COMMISSION',
+        refId: 'c1',
+        allowNegative: true,
+      });
+      expect(r).toEqual({ applied: true, balanceAfter: -50_000, entryId: 'wtx-1' });
+      expect(m.create.mock.calls[0][0].data).toMatchObject({ delta: -70_000, balanceAfter: -50_000, type: 'COMMISSION_REVERSAL' });
+    });
+
+    it('allowNegative: ví đang âm vẫn trừ tiếp được', async () => {
+      const m = makeTx({ balance: -10_000 });
+      const r = await svc.applyDelta(m.tx, { userId: 'u1', delta: -5_000, type: 'COMMISSION_REVERSAL', refId: 'c2', allowNegative: true });
+      expect(r.balanceAfter).toBe(-15_000);
+    });
+
+    it('chạy lại cùng (userId, COMMISSION_REVERSAL, refId) không trừ lần hai', async () => {
+      const m = makeTx({ balance: -50_000, existing: { id: 'wtx-old' } });
+      const r = await svc.applyDelta(m.tx, { userId: 'u1', delta: -70_000, type: 'COMMISSION_REVERSAL', refId: 'c1', allowNegative: true });
+      expect(r).toEqual({ applied: false, balanceAfter: -50_000, entryId: 'wtx-old' });
+      expect(m.userUpdate).not.toHaveBeenCalled();
+      expect(m.create).not.toHaveBeenCalled();
+    });
+
+    it('thiếu allowNegative thì COMMISSION_REVERSAL vẫn bị chặn như mọi lệnh trừ', async () => {
+      const m = makeTx({ balance: 20_000 });
+      await expect(svc.applyDelta(m.tx, { userId: 'u1', delta: -70_000, type: 'COMMISSION_REVERSAL', refId: 'c1' })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(m.userUpdate).not.toHaveBeenCalled();
+    });
+
+    it.each(['ORDER_PAY', 'XU_CONVERT', 'WITHDRAW', 'ADJUST', 'MERGE_OUT'] as const)(
+      'allowNegative trên loại %s bị từ chối, không chạm DB',
+      async (type) => {
+        const m = makeTx({ balance: 20_000 });
+        await expect(svc.applyDelta(m.tx, { userId: 'u1', delta: -70_000, type, refId: 'x', allowNegative: true })).rejects.toThrow(
+          /COMMISSION_REVERSAL/,
+        );
+        expect(m.queryRaw).not.toHaveBeenCalled();
+        expect(m.userUpdate).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['ORDER_PAY', 'XU_CONVERT', 'WITHDRAW', 'ADJUST', 'MERGE_OUT'] as const)(
+      'ví đang âm: lệnh trừ loại %s vẫn bị chặn dù chỉ 1đ',
+      async (type) => {
+        const m = makeTx({ balance: -50_000 });
+        await expect(svc.applyDelta(m.tx, { userId: 'u1', delta: -1, type, refId: 'x' })).rejects.toBeInstanceOf(BadRequestException);
+        expect(m.userUpdate).not.toHaveBeenCalled();
+        expect(m.create).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   it('user không tồn tại → NotFound', async () => {
     const m = makeTx({ balance: null });
     await expect(svc.applyDelta(m.tx, { userId: 'nope', delta: 1_000, type: 'ADJUST' })).rejects.toBeInstanceOf(
