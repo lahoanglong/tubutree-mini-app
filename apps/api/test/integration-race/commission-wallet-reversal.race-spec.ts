@@ -218,23 +218,37 @@ describe('Thu hồi hoa hồng đã vào Ví khi đơn bị trả (real Postgres
     expect(await reversals(o.ctv.id)).toHaveLength(0);
   });
 
-  it('hai yêu cầu trả một phần cùng đơn duyệt song song: mỗi yêu cầu trừ đúng một lần, tổng bằng phần hoa hồng đã cắt', async () => {
+  it('hai quản trị cùng duyệt một yêu cầu trả một phần: hoa hồng chỉ bị cắt và Ví chỉ bị trừ một lần', async () => {
     const o = await paidInWalletOrder(3);
     await moveToWallet(o.ctv.id);
     expect(await balance(o.ctv.id)).toBe(30_000);
     const second = await createUser(prisma, { role: 'ADMIN' });
     const r1 = await returns.request(o.buyer.id, o.order.code, { reasonCode: 'DEFECTIVE', items: [{ orderItemId: o.a.id, quantity: 1 }], refundMethod: 'WALLET' });
-    const r2 = await returns.request(o.buyer.id, o.order.code, { reasonCode: 'DEFECTIVE', items: [{ orderItemId: o.a.id, quantity: 1 }], refundMethod: 'WALLET' });
 
-    const s = summarize(await Promise.allSettled([returns.review(o.admin.id, r1.id, { approve: true }), returns.review(second.id, r2.id, { approve: true })]));
+    const s = summarize(await Promise.allSettled([returns.review(o.admin.id, r1.id, { approve: true }), returns.review(second.id, r1.id, { approve: true })]));
+    expect(s.fulfilled).toHaveLength(1);
+    expect(s.errors).toEqual([expect.stringMatching(/^(BadRequestException|ConflictException)/)]);
+
+    expect(await commissionOf(o.order.id)).toMatchObject({ amount: 20_000, commissionableTotal: 200_000 });
+    const rows = await reversals(o.ctv.id);
+    expect(rows.map((r) => [r.refId, r.delta])).toEqual([[`${o.commission.id}:${r1.id}`, -10_000]]);
+    expect(await balance(o.ctv.id)).toBe(20_000);
+    await noDrift(o.ctv.id);
+  });
+
+  it('duyệt trả một phần chạy song song với thu hồi cả đơn: tổng trừ đúng bằng hoa hồng đã vào Ví, không trừ trùng', async () => {
+    const o = await paidInWalletOrder(2);
+    await moveToWallet(o.ctv.id);
+    expect(await balance(o.ctv.id)).toBe(20_000);
+    const r1 = await returns.request(o.buyer.id, o.order.code, { reasonCode: 'DEFECTIVE', items: [{ orderItemId: o.a.id, quantity: 1 }], refundMethod: 'WALLET' });
+
+    const s = summarize(await Promise.allSettled([returns.review(o.admin.id, r1.id, { approve: true }), affiliate.reverseCommissionsForOrder(o.order.id)]));
     expect(s.errors).toEqual([]);
 
-    const cut = await prisma.returnRequest.findMany({ where: { id: { in: [r1.id, r2.id] } }, select: { id: true, commissionReversed: true } });
-    expect(cut.map((c) => c.commissionReversed)).toEqual([10_000, 10_000]);
-    expect(await commissionOf(o.order.id)).toMatchObject({ amount: 10_000, commissionableTotal: 100_000 });
+    expect(await commissionOf(o.order.id)).toMatchObject({ status: 'REJECTED' });
     const rows = await reversals(o.ctv.id);
-    expect(rows.map((r) => r.refId).sort()).toEqual([`${o.commission.id}:${r1.id}`, `${o.commission.id}:${r2.id}`].sort());
-    expect(await balance(o.ctv.id)).toBe(10_000);
+    expect(rows.reduce((sum, r) => sum + r.delta, 0)).toBe(-20_000);
+    expect(await balance(o.ctv.id)).toBe(0);
     await noDrift(o.ctv.id);
   });
 

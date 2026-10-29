@@ -349,6 +349,14 @@ describe('CheckoutPage — Ví bị mờ phải nói lý do, số điểm có d�
     expect(screen.getByRole('radio', { name: /Ví Tubu/ })).toHaveAttribute('aria-disabled', 'true');
   });
 
+  it('Ví đang âm (hoa hồng đơn trả bị thu hồi) → dòng Ví vẫn hiện, bị khoá, lý do nói rõ số âm và cách xử lý', async () => {
+    mocks.getWallet.mockResolvedValue({ walletBalance: -50_000 });
+    renderPage();
+    expect(await screen.findByText('Ví Tubu (-50.000đ)')).toBeInTheDocument();
+    expect(await screen.findByText(/Ví đang âm 50\.000đ do thu hồi hoa hồng đơn trả hàng/)).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Ví Tubu/ })).toHaveAttribute('aria-disabled', 'true');
+  });
+
   it('chỉ còn ba cách thanh toán: COD, chuyển khoản, Ví Tubu — không có TubuXu (Q-26, PD-3)', async () => {
     renderPage();
     await screen.findByText('Ví Tubu (130.000đ)');
