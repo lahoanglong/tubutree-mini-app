@@ -159,6 +159,11 @@ describe('AddToCart — áp mã mua chung từ ?ma=', () => {
   const openedFrom = (search: string) => window.history.replaceState(null, '', `/san-pham/dau-goi${search}`);
   const withLine = (over: Record<string, unknown> = {}) => ({ items: [{ id: 'line-A', variationId: 'v1', quantity: 1 }], itemCount: 1, couponCode: null, discount: 0, ...over });
   const buy = (c: HTMLElement) => Array.from(c.querySelectorAll('button')).find((b) => /^Mua ngay/.test(b.textContent ?? '') && !b.hasAttribute('hidden')) as HTMLButtonElement;
+  // Câu báo giữ trên màn rồi mới sang thanh toán: chờ hết để lần chuyển trang đó không rơi vào ca kế tiếp.
+  const waitHoldOver = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1900));
+    });
 
   beforeEach(() => {
     mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
@@ -211,9 +216,7 @@ describe('AddToCart — áp mã mua chung từ ?ma=', () => {
     await flush();
     expect(container.textContent).toContain('Chưa chọn sẵn được mã: Mã đã hết hạn');
     expect(mocks.push).not.toHaveBeenCalled();
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 1900));
-    });
+    await waitHoldOver();
     expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
   });
 
@@ -226,6 +229,8 @@ describe('AddToCart — áp mã mua chung từ ?ma=', () => {
     await flush();
     expect(container.textContent).toContain('Cần thêm 20.000đ để dùng mã');
     expect(mocks.push).not.toHaveBeenCalled();
+    await waitHoldOver();
+    expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
   });
 
   it('máy chủ giữ mã nhưng chưa tính giảm (đơn tối thiểu): nói lý do thay vì báo đã áp', async () => {
@@ -257,6 +262,8 @@ describe('AddToCart — áp mã mua chung từ ?ma=', () => {
       expect(note.className).toContain('text-success-fg');
       expect(note.className).not.toContain('text-danger-fg');
       expect(mocks.push).not.toHaveBeenCalled();
+      await waitHoldOver();
+      expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
     });
 
     it('mua ngay mà mã chưa áp được: câu lý do màu cảnh báo, không đỏ như lỗi', async () => {
@@ -269,6 +276,8 @@ describe('AddToCart — áp mã mua chung từ ?ma=', () => {
       const note = lineWith(container, NOT_APPLIED)!;
       expect(note.className).toContain('text-warning-fg');
       expect(note.className).not.toContain('text-danger-fg');
+      await waitHoldOver();
+      expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
     });
 
     it('thêm giỏ xong mà mã chưa áp được: "Đã thêm vào giỏ!" vẫn xanh, câu về mã tách ra dòng cảnh báo', async () => {
