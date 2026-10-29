@@ -463,6 +463,8 @@ Bốn migration của bản này (`20261029010000`, `20261029020000`, `202610290
 
 4. **Cron hết hạn điểm báo lỗi khi sổ điểm lệch.** Bản này nâng hai log của `expirePoints` (khách lỗi khi trừ điểm hết hạn; số dư nhỏ hơn số điểm cần trừ) từ cảnh báo lên lỗi. Nếu mục 1.11 đo thấy lệch Điểm Xanh, cron hết hạn điểm sẽ báo lỗi mỗi đêm cho tới khi chạy `reconcile:points --apply` cho các khách đó. Không sai điểm, chỉ là tin báo lặp.
 
+5. **Thu hồi hoa hồng đã vào Ví (`20261029040000_commission_wallet_reversal`).** Migration thêm giá trị `COMMISSION_REVERSAL` cho enum `WalletTxType`; API mới trừ thẳng Ví CTV khi đơn bị trả mà hoa hồng đã vào Ví (số dư có thể âm). Image cũ không biết giá trị enum này: Prisma báo lỗi khi đọc sao kê và số dư của CTV có dòng đó, và giá trị enum đã thêm không gỡ được. Nếu đã có dòng `COMMISSION_REVERSAL` (đếm: `psqlq -c "SELECT count(*) FROM wallet_transactions WHERE type = 'COMMISSION_REVERSAL'"`) thì quay image (7.2) phải xem lại; đường an toàn là 7.3.
+
 Kết luận: sau khi bản này đã nhận khách, ưu tiên sửa tiến. Chỉ dùng 7.2 khi lỗi nặng hơn các hậu quả trên, và làm thêm bước 1 và 3 sau khi deploy lại.
 
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
