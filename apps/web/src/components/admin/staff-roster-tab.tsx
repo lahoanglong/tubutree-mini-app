@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { grantStaff, revokeStaff, type StaffRole } from '@tubutree/app-core/api/staff';
 import { adminStaffQuery } from '@tubutree/app-core/queries/staff';
+import { grantDoneText, grantPermissionsHint } from '@tubutree/app-core/staff-copy';
 import { coreHttp } from '@/lib/core-http';
 import { setStaffPermissions, STAFF_PERMISSION_LABELS, STAFF_PERMISSION_SHORT, type StaffPermission } from '@/lib/admin-client';
 import { errText } from '@/components/staff/staff-shell';
@@ -24,12 +25,21 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
   const [newPerms, setNewPerms] = useState<StaffPermission[]>([]);
   const [msg, setMsg] = useState<{ tone: 'success' | 'warning' | 'danger'; text: string } | null>(null);
   const refresh = () => void qc.invalidateQueries({ queryKey: ['admin-staff'] });
+  // Thêm lại SĐT của người đã là nhân viên: máy chủ thay nhóm cũ bằng nhóm chọn ở đây, nên báo trước nhóm họ đang có.
+  const typedPhone = phone.trim();
+  const existingStaff = role === 'STAFF' ? staffQ.data?.members.find((m) => m.role === 'STAFF' && m.phone === typedPhone) : undefined;
+  const existingNames = existingStaff ? PERMISSIONS.filter((p) => existingStaff.staffPermissions?.includes(p)).map((p) => STAFF_PERMISSION_SHORT[p]) : null;
 
   const grantM = useMutation({
-    // Nhóm việc chỉ có nghĩa với nhân viên; không chọn nhóm nào thì không gửi khoá permissions (như trước).
-    mutationFn: () => grantStaff(coreHttp, phone.trim(), role, role === 'STAFF' && newPerms.length ? newPerms : undefined),
-    onSuccess: (r) => {
-      setMsg({ tone: 'success', text: r.applied ? 'Đã cấp quyền & áp ngay.' : 'Đã lưu quyền (sẽ áp khi họ mở app).' });
+    // Nhóm việc chỉ có nghĩa với nhân viên; không chọn nhóm nào thì không gửi khoá permissions để máy chủ giữ nguyên nhóm đã lưu.
+    mutationFn: async () => {
+      const to = phone.trim();
+      const names = PERMISSIONS.filter((p) => newPerms.includes(p)).map((p) => STAFF_PERMISSION_SHORT[p]);
+      const r = await grantStaff(coreHttp, to, role, role === 'STAFF' && newPerms.length ? newPerms : undefined);
+      return { r, to, names };
+    },
+    onSuccess: ({ r, to, names }) => {
+      setMsg({ tone: 'success', text: grantDoneText(r, to, names) });
       setPhone('');
       setNewPerms([]);
       refresh();
@@ -139,7 +149,7 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-stone-500">Không chọn nhóm nào: chỉ dùng quầy thu ngân, Đổi rác và chấm công.</p>
+            <p className="text-xs text-stone-500">{grantPermissionsHint(existingNames)}</p>
           </div>
         )}
         <button type="submit" disabled={!PHONE_RE.test(phone.trim()) || grantM.isPending} className={BTN_PRIMARY}>

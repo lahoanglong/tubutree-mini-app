@@ -404,6 +404,27 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
         await waitFor(() => expect(mocks.grantStaff).toHaveBeenCalledWith('0901112223', 'STAFF', ['CSKH', 'KHO']));
       });
 
+      it('gõ SĐT của nhân viên đang có: hiện nhóm đang có và nói lưu sẽ thay; SĐT lạ thì giữ dòng gợi ý chung', async () => {
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
+        expect(screen.getByText('Không chọn nhóm nào: chỉ dùng quầy thu ngân, Đổi rác và chấm công.')).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901234567' } });
+        expect(screen.getByText(/Nhóm đang có: Kho, Kế toán\. .*thay bằng nhóm bạn chọn/)).toBeInTheDocument();
+        expect(screen.queryByText(/chỉ dùng quầy thu ngân/)).toBeNull();
+        fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0907778889' } });
+        expect(screen.getByText('Không chọn nhóm nào: chỉ dùng quầy thu ngân, Đổi rác và chấm công.')).toBeInTheDocument();
+      });
+
+      it('vai trò không đổi mà nhóm đã đổi ngay: báo "Đã đổi nhóm việc của <SĐT> thành ...", không hứa "sẽ áp khi họ mở app"', async () => {
+        mocks.grantStaff.mockResolvedValue({ granted: 'STAFF', applied: false, permissionsChanged: true });
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
+        fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901234567' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Chăm sóc khách' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đổi nhóm việc của 0901234567 thành Chăm sóc khách.', type: 'success' }));
+      });
+
       it('lưu xong thì chọn lại từ đầu: nhóm của người trước không kéo sang người sau', async () => {
         renderPage();
         fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));

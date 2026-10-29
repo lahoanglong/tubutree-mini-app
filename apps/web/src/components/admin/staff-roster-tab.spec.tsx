@@ -23,14 +23,14 @@ const LIST = {
   pendingInvites: [{ phone: '0933333333', role: 'STAFF', staffPermissions: ['KE_TOAN'], createdAt: '2026-10-02T00:00:00Z' }],
 };
 
-function stub(over: { list?: unknown; listStatus?: number; revoke?: unknown } = {}) {
+function stub(over: { list?: unknown; listStatus?: number; revoke?: unknown; grant?: unknown } = {}) {
   const calls: { url: string; init?: RequestInit }[] = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url, init });
       const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } });
-      if (url.includes('/admin/staff/grant')) return json({ granted: 'STAFF', applied: false });
+      if (url.includes('/admin/staff/grant')) return json(over.grant ?? { granted: 'STAFF', applied: false });
       if (url.includes('/staff-permissions')) return json({ id: 'u1', staffPermissions: [], changed: true });
       if (url.includes('/admin/staff/revoke')) return json(over.revoke ?? { revoked: 1, downgraded: true });
       return json(over.list ?? LIST, over.listStatus ?? 200);
@@ -166,6 +166,35 @@ describe('StaffRosterTab (Nhân sự)', () => {
     await flush();
     expect(b.container.querySelector('[role=alert]')).not.toBeNull();
     expect(b.container.textContent).toContain('Thử lại');
+  });
+
+  describe('thêm lại SĐT của người đã là nhân viên (máy chủ thay nhóm cũ bằng nhóm vừa chọn)', () => {
+    const hint = (container: HTMLElement) => container.querySelector('form')!.textContent ?? '';
+
+    it('gõ SĐT của nhân viên đang có: hiện nhóm đang có và nói lưu sẽ thay; SĐT lạ thì giữ dòng gợi ý chung', async () => {
+      stub();
+      const { container } = mount(<StaffRosterTab />);
+      await flush();
+      expect(hint(container)).toContain('Không chọn nhóm nào: chỉ dùng quầy thu ngân');
+      typeInto(container.querySelector('input[type=tel]'), '0911111111');
+      expect(hint(container)).toContain('Nhóm đang có: Kho');
+      expect(hint(container)).toContain('thay bằng nhóm bạn chọn');
+      expect(hint(container)).not.toContain('chỉ dùng quầy thu ngân');
+      typeInto(container.querySelector('input[type=tel]'), '0944444444');
+      expect(hint(container)).toContain('Không chọn nhóm nào: chỉ dùng quầy thu ngân');
+    });
+
+    it('vai trò không đổi mà nhóm đã đổi ngay: báo "Đã đổi nhóm việc của <SĐT> thành ...", không hứa "sẽ áp khi họ mở app"', async () => {
+      stub({ grant: { granted: 'STAFF', applied: false, permissionsChanged: true } });
+      const { container } = mount(<StaffRosterTab />);
+      await flush();
+      typeInto(container.querySelector('input[type=tel]'), '0911111111');
+      click(byText(container.querySelector('[aria-label="Nhóm việc cho người mới"]') as HTMLElement, 'button', 'Chăm sóc khách'));
+      click(byText(container, 'button', 'Lưu quyền'));
+      await flush();
+      expect(container.textContent).toContain('Đã đổi nhóm việc của 0911111111 thành Chăm sóc khách.');
+      expect(container.textContent).not.toContain('sẽ áp khi họ mở app');
+    });
   });
 
   describe('nhóm việc cho người mới và lời mời chờ mở app', () => {
