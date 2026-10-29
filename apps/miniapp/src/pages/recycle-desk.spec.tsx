@@ -334,7 +334,7 @@ describe('/recycle/desk — món chỉ kho HCMC nhận', () => {
   });
 });
 
-describe('/recycle/desk — duyệt mà chưa đủ để cộng điểm (E-41)', () => {
+describe('/recycle/desk — duyệt mà chưa đủ để cộng điểm', () => {
   it('0 điểm: tiêu đề và snackbar không nói "cộng 0 điểm"', async () => {
     mocks.deskConfirm.mockResolvedValue({ requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 0, dropsAwarded: 0, quota: null, staffDailyCapRemaining: 150_000 });
     renderPage();
@@ -578,7 +578,7 @@ describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
   });
 });
 
-describe('/recycle/desk — quét mã và gõ mã (B-35)', () => {
+describe('/recycle/desk — quét mã và gõ mã', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.auth.status = 'authenticated';

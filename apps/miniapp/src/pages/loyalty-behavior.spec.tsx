@@ -335,7 +335,7 @@ describe('LoyaltyPage — điểm danh Điểm Xanh', () => {
   });
 });
 
-describe('LoyaltyPage — hai lô Điểm Xanh sau khi gộp xu (PD-3)', () => {
+describe('LoyaltyPage — hai lô Điểm Xanh sau khi gộp xu', () => {
   const WITH_CONVERTED = { ...LOYALTY, pointsBalance: 120, pointsConvertedBalance: 30, pointsTotal: 150 };
 
   it('thẻ hạng hiện TỔNG hai lô và dòng "trong đó N điểm không hết hạn"', async () => {
