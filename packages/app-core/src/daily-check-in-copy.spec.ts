@@ -101,6 +101,17 @@ describe('khách vãng lai (pointsBlocked = GUEST): không hứa Điểm Xanh', 
     expect(checkInRule({})).toBe(checkInCopy.rule);
   });
 
+  it('thẻ chuỗi ngày: câu phụ chỉ nói giọt nước, không nhắc Điểm Xanh', () => {
+    expect(guestCheckInCopy.streakSub(10, 0)).toBe('Nhận +10💧 mỗi ngày');
+    expect(guestCheckInCopy.streakSub(10, 20)).toBe('Lần đầu nhận +30💧, các ngày sau +10💧');
+    expect(guestCheckInCopy.streakSub(null, 0)).toBe('Nhận giọt nước mỗi ngày');
+    for (const s of [guestCheckInCopy.streakSub(10, 0), guestCheckInCopy.streakSub(10, 20), guestCheckInCopy.streakSub(null, 0)]) expect(s).not.toContain('Điểm Xanh');
+  });
+  it('nút điểm danh còn thiếu phần điểm: nhãn của khách không hứa Điểm Xanh', () => {
+    expect(guestCheckInCopy.claimToday).toBe('Điểm danh hôm nay');
+    expect(guestCheckInCopy.claimToday).not.toContain('Điểm Xanh');
+  });
+
   it('câu mời đăng nhập ngắn, đúng chữ chủ chốt', () => {
     expect(checkInCopy.guestPoints).toBe('Đăng nhập Zalo để nhận Điểm Xanh');
     expect(guestCheckInCopy.cta).toBe('Đăng nhập Zalo');

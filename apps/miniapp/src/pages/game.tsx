@@ -211,6 +211,7 @@ export default function GamePage() {
           <TreeActions
             profile={profile}
             pointsPending={pointsPending}
+            pointsBlocked={!!status?.pointsBlocked}
             checkInSeeds={checkInSeeds}
             pending={waterM.isPending || checkInM.isPending || dewM.isPending}
             onClaim={claimDaily}
