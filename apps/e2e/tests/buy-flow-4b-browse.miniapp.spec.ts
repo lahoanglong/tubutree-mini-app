@@ -11,6 +11,15 @@ import { eventsNamed, flushEvents } from './support/events';
 
 const SORT_GROUP = 'Sắp xếp';
 
+/**
+ * Sheet Bộ lọc trượt lên bằng react-spring. Máy CI chậm làm hiệu ứng khựng vài khung hình: Playwright thấy chip "đứng yên" rồi bấm vào toạ độ cũ
+ * trong lúc sheet còn trượt, cú bấm rơi ra ngoài chip. Chờ sheet về hẳn translateY(0) rồi mới bấm.
+ */
+async function filterSheetOpen(page: Page): Promise<void> {
+  const sheet = page.locator('.zaui-sheet-content').filter({ has: page.getByRole('heading', { name: 'Bộ lọc', level: 2 }) });
+  await expect(sheet).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
+}
+
 /** Danh sách ở trạng thái CUỐI: đã gọi /products và khung chờ lưới biến mất. */
 async function waitBrowseSettled(page: Page, api: MockApi): Promise<void> {
   await expect.poll(() => api.callsTo('GET', '/products').length, { timeout: 15_000 }).toBeGreaterThan(0);
@@ -143,6 +152,7 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     await page.goto('/browse');
     await expect(page.getByTestId('result-count')).toHaveText('30 sản phẩm', { timeout: 15_000 });
     await page.getByRole('button', { name: 'Bộ lọc' }).click();
+    await filterSheetOpen(page);
     for (const name of ['100k–200k', 'Chỉ hiện còn hàng', 'Từ 4★ trở lên', 'Tubu']) {
       await page.getByRole('button', { name, exact: true }).click();
     }
@@ -166,6 +176,7 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
 
     // Chỉ đổi MỘT loại (bỏ 4★) → thêm đúng một sự kiện `rating`, không bắn lại 3 loại không đổi.
     await page.getByRole('button', { name: 'Bộ lọc (4)' }).click();
+    await filterSheetOpen(page);
     await page.getByRole('button', { name: 'Từ 4★ trở lên', exact: true }).click();
     const applyAgain = page.getByRole('button', { name: 'Xem 1 sản phẩm' });
     await expect(applyAgain).toBeVisible({ timeout: 15_000 });
