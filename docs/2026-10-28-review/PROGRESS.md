@@ -80,6 +80,7 @@ Quyền: tạo worktree/nhánh, sửa mã, test, commit, push nhánh của đợ
 | 02:06 (29/10) | CI #69 (04d5ce4be) xanh hết: CI, Docker build, Playwright 557 passed, 56 skipped, 0 flaky, 0 failed (run 40748290571). #68 xanh. Cả hai PR vẫn mở, chờ chủ duyệt merge | xong |
 | 06:50 (29/10) | Chủ duyệt: merge #68 + #69; sửa R-179 + R-178 (PR mới, chỉ mở PR); sửa 2 test chập chờn trên main (`support-chat.web.spec.ts:30`, `buy-flow-4b-browse.miniapp.spec.ts:141`, PR riêng). #69 ĐÃ MERGE (815fa3c1e, sau khi gộp main 6f5897078 có #70; CI xanh, Playwright 579 passed, 0 flaky) | xong |
 | 07:16 (29/10) | #68 ĐÃ MERGE (45d73e7d9). R-178 đã được #70 sửa (8ebb196c2). R-179 sửa ở `review/1028-r179-r178` (9c122f5f8): vitest test mới đỏ rồi xanh; Playwright CPU chậm 6 lần, test 79 không chờ hydrate: trước Web Customer đỏ 5/5, sau 10/10; web-customer + shop 89 passed. Mở PR, chưa merge | xong |
+| 07:32 (29/10) | PR #71 (R-179) và #72 (2 test chập chờn main: chat CSKH chờ POST bằng poll; bộ lọc Mini App chờ sheet về translateY(0) trước khi bấm chip, theo trace CI: chip kế tiếp "not stable") ĐÃ MỞ, chưa merge. Máy local load 70–100 do đợt P3 của phiên e2e: e2e web hết giờ khởi động, để CI kiểm | xong |
 
 ## Backlog cũ còn mở
 B-130 (CI e2e chập chờn), B-147 (nhãn Mới), B-148 (ngày giao dự kiến, việc chủ), B-149 (hai đồng hồ máy chủ), B-150 (chữ quyền lợi hạng), B-151 (múi giờ Mini App), B-152 (thanh toán web 375 lệch), B-153 (gian hàng CTV web thừa chi tiết), B-154 (xem trước mã giảm 50 mã), B-155 (đĩa VPS, việc deploy, chỉ ghi nhận).
