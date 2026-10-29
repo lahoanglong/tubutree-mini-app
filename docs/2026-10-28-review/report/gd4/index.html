@@ -1,0 +1,252 @@
+<title>Tubu Tree sau review 28/10</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+<style>
+/* Báo cáo một cột đọc dọc như bản GĐ2; bảng và ảnh ghép rộng hơn cột chữ. Màu xanh lá Tubu, nền xám ngả xanh. */
+:root {
+  --bg: #f3f5f2; --surface: #ffffff; --fg: #18231c; --muted: #5b6a60; --line: #d9e0da;
+  --accent: #1f5a3c; --accent-soft: #e3eee6;
+  --good: #1f7a46; --warn: #a45d00; --bad: #b3261e;
+  --good-bg: #e2f1e7; --warn-bg: #fbefd9; --bad-bg: #fbe4e1;
+  --font: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111713; --surface: #182019; --fg: #e5ece6; --muted: #9db0a2; --line: #2c3a30;
+  --accent: #7cc79a; --accent-soft: #1f3326;
+  --good: #7cc79a; --warn: #f0b45a; --bad: #f08a80;
+  --good-bg: #1d3325; --warn-bg: #3a2c14; --bad-bg: #3c1e1b; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111713; --surface: #182019; --fg: #e5ece6; --muted: #9db0a2; --line: #2c3a30;
+  --accent: #7cc79a; --accent-soft: #1f3326;
+  --good: #7cc79a; --warn: #f0b45a; --bad: #f08a80;
+  --good-bg: #1d3325; --warn-bg: #3a2c14; --bad-bg: #3c1e1b; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--font); }
+.wrap { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px; display: grid; gap: 40px; }
+header { display: grid; gap: 8px; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font-size: clamp(28px, 4vw, 40px); line-height: 1.15; margin: 0; text-wrap: balance; }
+h2 { font-size: 22px; margin: 0 0 4px; text-wrap: balance; }
+h3 { font-size: 16px; margin: 0; }
+p { margin: 0; max-width: 70ch; }
+code { font-size: 13px; overflow-wrap: anywhere; }
+.meta { color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px 18px; font-variant-numeric: tabular-nums; }
+section { display: grid; gap: 16px; min-width: 0; }
+.lead { color: var(--muted); }
+ol.top { margin: 0; padding-left: 22px; display: grid; gap: 8px; max-width: 78ch; }
+.goals { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.goal { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.pills { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; }
+.pill.good { background: var(--good-bg); color: var(--good); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.goal p { font-size: 14px; color: var(--muted); }
+.shots { display: grid; gap: 16px; }
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 10px; min-width: 0; }
+figure img { width: 100%; height: auto; border-radius: 6px; display: block; max-width: 100%; }
+figure.half { max-width: 820px; }
+figcaption { font-size: 14px; display: grid; gap: 4px; }
+figcaption span { color: var(--muted); }
+.tag { font-size: 12px; font-weight: 600; color: var(--accent); }
+.tablebox { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; background: var(--accent-soft); }
+tr:last-child td { border-bottom: 0; }
+td.n { text-align: right; white-space: nowrap; }
+.s2, .s3, .s4, .s5 { font-weight: 600; white-space: nowrap; }
+.s2 { color: var(--bad); } .s3 { color: var(--warn); } .s4 { color: var(--fg); } .s5 { color: var(--good); }
+.ok { color: var(--good); font-weight: 600; white-space: nowrap; } .no { color: var(--warn); font-weight: 600; white-space: nowrap; }
+ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 78ch; }
+.foot { color: var(--muted); font-size: 13px; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Kết quả sửa (GĐ3–GĐ4) · đã merge và deploy 28/10</div>
+  <h1>Tubu Tree sau review 28/10</h1>
+  <div class="meta"><span>Gốc: main 9d0e95bd5</span><span>8 PR gói + 1 PR tài liệu</span><span>Mục trong gói: 105 xong · 9 một phần · 8 chưa (122)</span><span>Đã merge (main f4ec472d7) · đã deploy 22:19 · Mini App Testing V26</span></div>
+</header>
+
+<section>
+  <h2>Điều cần biết trước</h2>
+  <ol class="top">
+    <li><b>Đã merge và deploy (28/10).</b> Anh/chị duyệt "merge và deploy hết". Lúc 22:14, 9 PR #59–#67 đã vào main (f4ec472d7). Lúc 22:19 bản này lên Vietnix: API ngừng 21 giây, 3 migration đã áp, smoke đạt. Mini App Testing Version 26 cùng mã, chờ anh/chị gửi Live. Go-live còn 2 FAIL là việc của anh/chị: thông tin công ty và 4 trang chính sách còn bản nháp. PROD lúc deploy chưa có hoa hồng CTV nào, chưa có khách nào sắp hạ hạng, nên hai cron mới chưa gửi gì. Trước khi merge, nhánh nào cũng đạt: tsc, eslint, vitest, jest API, lint:parity, vite build, Playwright Mini App (205 test) và web gate (354–356 test). Review Opus cuối kết luận "merge được". Tám nhánh cũng đã gộp thử chung một nhánh và chạy lại cả bộ kiểm trên đó.</li>
+    <li><b>Khách thấy gì khác:</b> trang chủ gọn, món hàng ngay ở màn đầu, mở app không còn khảo sát; SP có từ 2 phân loại thì mở bảng chọn; màn chuyển khoản có nút Lưu mã QR và nút Kiểm tra dính đáy; chi tiết đơn có ngày giao dự kiến; điểm danh một lần ra một số nước; trang CTV gọn thành ba tab.</li>
+    <li><b>Luật mới theo quyết định của anh/chị:</b> WELCOME30 chỉ cho khách chưa có đơn. Hoa hồng CTV đã duyệt tự vào Ví; <b>lượt chạy đầu sau deploy sẽ cộng mọi hoa hồng APPROVED đang tồn</b>. Hai chuỗi điểm danh gộp làm một; ngày chuyển đổi có thể lệch một mốc. Báo trước khi hạ hạng (mặc định 14 ngày); lượt đầu báo mọi khách có hạn giữ hạng còn từ 14 ngày trở xuống.</li>
+    <li><b>Ảnh sản phẩm do API tự đổi cỡ:</b> ảnh tải về ở trang chủ Mini App giảm từ 26,8 MB còn 1,7 MB; danh mục từ 3,6 MB còn 0,16 MB. Ảnh lưu tạm trên đĩa VPS và có trần dung lượng. Đĩa VPS từng đầy, nên đặt <code>IMAGE_CACHE_MAX_MB=200</code> và thử <code>docker build</code> trước khi deploy.</li>
+    <li><b>Hiệu năng:</b> Trang chủ hết nhảy bố cục ở lần mở đầu: CLS Mini khách vãng lai 0,83 → 0,07, khách quay lại 0,46 → 0; web 0,42 → 0. Thanh toán web 0,31 → 0,05. <code>/san-pham</code> web LCP 4,4 s → 1,2 s (Lighthouse 85 → 100). <b>Đổi lại</b>, ở lần mở đầu trên máy mới, món hàng ở Mini hiện chậm hơn khoảng 1 giây vì chờ biết khách là ai (R-177); anh/chị chọn giữ hay bỏ ở câu hỏi cuối.</li>
+    <li><b>Vẫn chặn mở khách, và đây là việc của anh/chị:</b> tên công ty, mã số thuế, địa chỉ (go-live còn FAIL <code>company_identity</code>); 4 trang chính sách còn bản nháp; <code>shipping.eta_*</code>; thể lệ Đổi rác.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>Ba mục tiêu của đợt: trước và sau</h2>
+  <div class="goals">
+    <div class="goal"><div class="pills"><span class="pill warn">Đạt phần lớn</span>→<span class="pill good">Đạt</span></div><h3>Việc chính trong 2 chạm</h3><p>Trang chủ có lối tắt Đơn hàng. Hàng đơn ở Cá nhân có biểu tượng và số đơn, bấm là mở danh sách đã lọc. Chat lên đầu trang Cá nhân. Ví mở được từ trang CTV. Web cho khách chưa đăng nhập xem Ưu đãi. Còn lại: web chưa cho khách chưa đăng nhập đọc Cộng đồng và chat (R-56).</p></div>
+    <div class="goal"><div class="pills"><span class="pill bad">Chưa đạt</span>→<span class="pill warn">Đạt phần lớn</span></div><h3>Một việc chính mỗi màn, đủ trạng thái, web = Mini App</h3><p>Điểm "Dễ" lên từ 3,2 lên 3,8 ở cả Mini App và web. Trang chủ, CTV, Vườn Xanh, chuyển khoản mỗi màn còn một nút chính. Web 375 giống Mini ở đơn rỗng, chi tiết đơn, Cá nhân, chuyển khoản, CTV, nhân viên. Còn lại: Học viện ở menu (R-53), ô ngày sinh (R-110), "Xoá tài khoản" (R-111).</p></div>
+    <div class="goal"><div class="pills"><span class="pill warn">Gần đạt</span>→<span class="pill good">Đạt phần lớn</span></div><h3>Nhanh, không màn trắng, có Thử lại</h3><p>Mini App có boundary và khung chờ theo từng màn. Gặp lỗi tải mã thì "Thử lại" tải lại app. Mất mạng báo đúng là mất mạng. Web có <code>loading.tsx</code>/<code>error.tsx</code> theo nhóm trang. Còn lại: trang sản phẩm web chưa có khung chờ riêng (R-83), <code>/home/me</code> còn 17–19 câu SQL (R-82).</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>PR và thứ tự merge</h2>
+  <p class="lead">Merge theo đúng thứ tự dưới đây. Nhánh taikhoan đã gộp muahang. Nhánh hieunang đã gộp khampha. Trước khi PR tài liệu vào main, diff của mỗi PR gói còn kèm thư mục tài liệu.</p>
+  <div class="tablebox"><table>
+    <thead><tr><th>#</th><th>PR</th><th>Gói</th><th>Đổi chính</th><th>Migration và deploy</th><th>Mini App gzip</th></tr></thead>
+    <tbody>
+      <tr><td>0</td><td><a href="https://github.com/lahoanglong/tubutree-mini-app/pull/59">#59</a></td><td>tài liệu</td><td>Review, backlog R-1..R-177, công cụ kiểm và đo</td><td>Không</td><td class="n">0</td></tr>
+      <tr><td>1</td><td><a href="https://github.com/lahoanglong/tubutree-mini-app/pull/60">#60</a></td><td>doirac</td><td>Đổi rác hiện "Vừa cộng điểm", thẻ khoá xuống dưới, chữ lỗi đúng; Học viện theo vai; chip chat 44px</td><td>Không</td><td class="n">+1,6 KB</td></tr>
+      <tr><td>2</td><td><a href="https://github.com/lahoanglong/tubutree-mini-app/pull/61">#61</a></td><td>khampha</td><td>Trang chủ gọn, hết nhảy bố cục ở lần mở đầu; danh mục có lưới và tiêu đề; trang nhãn 404 đúng; ghim đúng tỉnh</td><td>Không</td><td class="n">+0,9 KB (entry −4 KB)</td></tr>
+      <tr><td>3</td><td><a href="https://github.com/lahoanglong/tubutree-mini-app/pull/62">#62</a></td><td>muahang</td><td>Bảng chọn phân loại; thanh toán gọn; Lưu mã QR, nút Kiểm tra dính đáy; ẩn Định kỳ ở Mini; WELCOME30</td><td>Migration <code>20261028110000</code></td><td class="n">+2,5 KB</td></tr>
+      <tr><td>4</td><td><a href="https://github.com/lahoanglong/tubutree-mini-app/pull/63">#63</a></td><td>taikhoan</td><td>Ngày giao dự kiến; Cá nhân có hàng đơn biểu tượng, chat ở đầu; đơn rỗng có món bán chạy</td><td>Anh/chị điền <code>shipping.eta_*</code></td><td class="n">+2,6 KB</td></tr>
+      <tr><td>5</td><td><a href="https://github.com/lahoanglong/tubutree-mini-app/pull/64">#64</a></td><td>diemxanh</td><td>Gộp chuỗi điểm danh; báo trước hạ hạng; lịch sử điểm đủ; web khách xem Ưu đãi</td><td>Migration <code>20261028120000</code>; khoá <code>loyalty.tier_drop_*</code>; bỏ <code>POST /me/loyalty/check-in</code></td><td class="n">+1,9 KB</td></tr>
+      <tr><td>6</td><td><a href="https://github.com/lahoanglong/tubutree-mini-app/pull/65">#65</a></td><td>ctv</td><td>Hoa hồng tự vào Ví; trang CTV ba tab; nhân viên thấy rõ hôm nay; link chia sẻ mở Mini App</td><td>Migration <code>20261028130000</code>; phát hành Mini App cùng API</td><td class="n">+2,7 KB</td></tr>
+      <tr><td>7</td><td><a href="https://github.com/lahoanglong/tubutree-mini-app/pull/66">#66</a></td><td>quantri</td><td>Trang Hôm nay, huy hiệu việc chờ; đơn dạng thẻ trên điện thoại; ô ngày dd/mm/yyyy; First Load <code>/admin</code> 356 → 325 KB</td><td>Không</td><td class="n">0</td></tr>
+      <tr><td>8</td><td><a href="https://github.com/lahoanglong/tubutree-mini-app/pull/67">#67</a></td><td>hieunang</td><td>Ảnh đổi cỡ bằng sharp; khung chờ và lỗi theo màn; <code>/cart</code> 18 → 13 câu SQL</td><td><code>IMAGE_CACHE_*</code>; thử <code>docker build</code></td><td class="n">+3,2 KB (entry −7 KB)</td></tr>
+    </tbody>
+  </table></div>
+  <p class="lead">Luật gói Mini App của đợt: file đầu (entry) không tăng; tổng gzip mỗi gói tăng không quá 3 KB. hieunang vượt 0,2 KB: phần tăng là boundary và khung chờ cho mọi màn, còn entry giảm 7 KB.</p>
+</section>
+
+<section>
+  <h2>Ảnh trước và sau</h2>
+  <p class="lead">Mỗi ảnh có 4 cột: Mini App trước, Mini App sau, web 375 trước, web 375 sau. Chụp trên lane cục bộ với dữ liệu mẫu. Dữ liệu mẫu không có ảnh sản phẩm nên thẻ SP hiện hình lá. Bong bóng "Trồng cây mỗi ngày" chỉ hiện một lần, cuộn hay bấm là ẩn.</p>
+  <div class="shots">
+    <figure><img src="img/khampha-home-returning-ok.png" alt="Trang chủ khách quay lại, trước và sau" loading="lazy"><figcaption><span class="tag">R-2 · R-3 · R-4 · khampha</span><b>Trang chủ khách quay lại: món hàng lên màn đầu</b><span>Thẻ thành viên còn một dòng, nút Điểm danh nằm ngay trên thẻ. Lối tắt thành một hàng cuộn ngang, có thêm Đơn hàng. Mua lại và Giờ vàng hiện ngay ở màn đầu.</span></figcaption></figure>
+    <figure><img src="img/khampha-home-new-ok.png" alt="Trang chủ khách mới, trước và sau" loading="lazy"><figcaption><span class="tag">R-3 · R-4 · khampha</span><b>Trang chủ khách mới</b><span>Không còn khảo sát phủ kín lúc mở. Bố cục không nhảy khi tải.</span></figcaption></figure>
+    <figure><img src="img/muahang-product-slug-bang-chon-phan-loai-returning-ok.png" alt="Bảng chọn phân loại" loading="lazy"><figcaption><span class="tag">R-6 · muahang</span><b>Thêm vào giỏ khi SP có từ 2 phân loại: mở bảng chọn</b><span>Trước đây app tự lấy phân loại chọn sẵn mà không hỏi.</span></figcaption></figure>
+    <figure><img src="img/muahang-bank-payment-code-returning-ok.png" alt="Màn chuyển khoản" loading="lazy"><figcaption><span class="tag">R-8 · muahang</span><b>Chuyển khoản: Lưu mã QR, nút Kiểm tra dính đáy</b><span>Câu dẫn đổi thành "Lưu mã QR rồi mở app ngân hàng". Số tiền to, có nút chép. Tên ngân hàng và chủ tài khoản xếp dọc. Web 375 giống Mini App.</span></figcaption></figure>
+    <figure><img src="img/taikhoan-profile-returning-ok.png" alt="Trang Cá nhân" loading="lazy"><figcaption><span class="tag">R-33 · R-34 · taikhoan</span><b>Cá nhân: hàng đơn có biểu tượng và số, chat ở đầu trang</b><span>Avatar hiện chữ cái đầu. Trong bản gộp, Mini App bỏ ô Định kỳ vì tạm không bán.</span></figcaption></figure>
+    <figure><img src="img/taikhoan-order-code-returning-ok.png" alt="Chi tiết đơn" loading="lazy"><figcaption><span class="tag">R-9 · R-35 · taikhoan</span><b>Chi tiết đơn: ngày giao dự kiến</b><span>"Dự kiến giao 29/10 – 31/10" ở đầu đơn và ở mốc Giao thành công. Ảnh món có khung. Ảnh trước và sau là hai đơn khác nhau. Ảnh chụp trước bản sửa cuối (R-172).</span></figcaption></figure>
+    <figure><img src="img/taikhoan-orders-returning-ok.png" alt="Danh sách đơn" loading="lazy"><figcaption><span class="tag">R-36 · taikhoan</span><b>Danh sách đơn: nhãn ngắn, web giống Mini</b><span>Đơn rỗng có món bán chạy và nút chính rõ.</span></figcaption></figure>
+    <figure><img src="img/diemxanh-offers-returning-ok.png" alt="Ưu đãi" loading="lazy"><figcaption><span class="tag">R-10 · diemxanh</span><b>Một lần điểm danh, một số nước</b><span>Ưu đãi ghi "+60 giọt nước", khớp với Vườn Xanh. Trước đây ghi "+10".</span></figcaption></figure>
+    <figure><img src="img/doirac-recycle-returning-ok.png" alt="Đổi rác" loading="lazy"><figcaption><span class="tag">R-47 · doirac</span><b>Đổi rác: thấy ngay kết quả vừa cộng</b><span>Thẻ "Vừa cộng 10.000 điểm" đứng đầu. Đầu trang có lối "Yêu cầu của tôi".</span></figcaption></figure>
+    <figure><img src="img/doirac-recycle-new-returning-ok.png" alt="Gửi yêu cầu đổi rác" loading="lazy"><figcaption><span class="tag">R-48 · R-49 · doirac</span><b>Gửi yêu cầu: cách dùng được đứng đầu</b><span>Thẻ bị khoá xuống dưới. Quay lại không còn về form trống.</span></figcaption></figure>
+    <figure><img src="img/ctv-affiliate-ctv-ok.png" alt="Trang CTV" loading="lazy"><figcaption><span class="tag">R-12 · R-59 · R-60 · ctv</span><b>CTV: số to là tiền chuyển vào Ví được</b><span>Tiền đang chờ ghi riêng ở dòng dưới. 12 khối gom thành ba tab: Tổng quan, Hoa hồng, Chia sẻ. Có dòng Số dư Ví mở thẳng Ví.</span></figcaption></figure>
+    <figure><img src="img/ctv-staff-returning-ok.png" alt="Trang nhân viên khi chưa có quyền" loading="lazy"><figcaption><span class="tag">R-64 · R-65 · ctv</span><b>Nhân viên: trang chặn có hình và nút về</b><span>Mini App và web giống nhau.</span></figcaption></figure>
+    <figure class="half"><img src="img/quantri-tab-dashboard-admin-admin1280-s1.png" alt="Admin trang Hôm nay" loading="lazy"><figcaption><span class="tag">R-13 · R-74 · quantri</span><b>Admin: trang Hôm nay</b><span>Số đơn, doanh thu và khách mới dùng cùng định nghĩa với Báo cáo. Hộp việc đếm cả đơn chuyển khoản chờ xác nhận.</span></figcaption></figure>
+    <figure class="half"><img src="img/quantri-tab-orders-admin-admin375-s1.png" alt="Admin đơn hàng trên điện thoại" loading="lazy"><figcaption><span class="tag">R-69 · R-71 · quantri</span><b>Admin trên điện thoại: đơn dạng thẻ</b><span>Chip trạng thái và nút Lọc thay cho dãy ô chọn. Ngày nhập dạng dd/mm/yyyy.</span></figcaption></figure>
+    <figure><img src="img/hieunang-browse-category-returning-ok.png" alt="Danh mục có ảnh thật" loading="lazy"><figcaption><span class="tag">R-5 · hieunang</span><b>Ảnh thật qua <code>/img</code>: nhìn như cũ, nhẹ hơn 22 lần</b><span>Byte ảnh ở danh mục: 3.585 KB còn 162 KB. Đo ở Mini App 375, DPR 2, khách quay lại, cuộn hết trang.</span></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>Điểm 1–5 theo màn: trước và sau</h2>
+  <p class="lead">Rõ · Dễ · Đẹp · Nhanh · Bền, cùng thang với bản GĐ2. Điểm sau do người giao chấm lại. Chỉ đổi tiêu chí có mục R đã sửa xong; cột Nhanh lấy theo số đo ở dưới. Chưa có khách thật dùng thử.</p>
+  <div class="tablebox"><table>
+    <thead><tr><th>Màn</th><th>Mini trước</th><th>Mini sau</th><th>Web 375 trước</th><th>Web 375 sau</th><th>Đã sửa</th></tr></thead>
+    <tbody>
+      <tr><td>home</td><td>3·3·3·2·4 <span class="s3">3,0</span></td><td><b>4</b>·<b>4</b>·<b>4</b>·<b>3,5</b>·4 <span class="s4">3,9</span></td><td>3·3·3·2·3 <span class="s3">2,8</span></td><td><b>4</b>·<b>4</b>·<b>4</b>·<b>3,5</b>·<b>3,5</b> <span class="s4">3,8</span></td><td>R-2, R-3, R-4</td></tr>
+      <tr><td>browse</td><td>4·4·4·4·4 <span class="s4">4,0</span></td><td>như trước</td><td>4·4·4·3·4 <span class="s4">3,8</span></td><td>4·4·4·<b>4</b>·4 <span class="s4">4,0</span></td><td>R-17</td></tr>
+      <tr><td>browse-category</td><td>3·3·4·3,5·4 <span class="s3">3,5</span></td><td><b>4</b>·<b>4</b>·4·<b>4</b>·4 <span class="s4">4,0</span></td><td>3·3·4·3·4 <span class="s3">3,4</span></td><td><b>4</b>·<b>4</b>·4·<b>3,5</b>·4 <span class="s4">3,9</span></td><td>R-89, R-5</td></tr>
+      <tr><td>browse-search</td><td>4·4·4·3,5·2,5 <span class="s3">3,6</span></td><td>4·4·4·3,5·<b>4</b> <span class="s4">3,9</span></td><td>4·4·4·3·3,5 <span class="s3">3,7</span></td><td>4·4·4·3·<b>4</b> <span class="s4">3,8</span></td><td>R-14</td></tr>
+      <tr><td>brand-slug</td><td>2·2·4·4·2 <span class="s3">2,8</span></td><td><b>4</b>·<b>4</b>·4·4·<b>4</b> <span class="s4">4,0</span></td><td>4·4·4·4·4 <span class="s4">4,0</span></td><td>như trước</td><td>R-19</td></tr>
+      <tr><td>brand-story</td><td>3·4·4·4·4 <span class="s4">3,8</span></td><td><b>4</b>·4·4·4·4 <span class="s4">4,0</span></td><td>3·4·4·4·4 <span class="s4">3,8</span></td><td><b>4</b>·4·4·4·4 <span class="s4">4,0</span></td><td>R-20</td></tr>
+      <tr><td>about</td><td>3·3·3·4·4 <span class="s3">3,4</span></td><td>như trước</td><td>3·4·4·4·4 <span class="s4">3,8</span></td><td>như trước</td><td>Chờ anh/chị (R-1)</td></tr>
+      <tr><td>product-slug</td><td>4·3·3·3·4 <span class="s3">3,4</span></td><td>4·<b>4</b>·<b>4</b>·<b>3,5</b>·4 <span class="s4">3,9</span></td><td>4·3·3·3·3 <span class="s3">3,2</span></td><td>4·<b>4</b>·<b>4</b>·3·3 <span class="s3">3,6</span></td><td>R-6, R-5; R-24 còn</td></tr>
+      <tr><td>cart</td><td>4·4·4·3,5·4 <span class="s4">3,9</span></td><td>như trước</td><td>4·4·3·3,5·4 <span class="s3">3,7</span></td><td>như trước</td><td>/cart 18 → 13 câu SQL</td></tr>
+      <tr><td>checkout</td><td>4·4·3·3,5·4 <span class="s3">3,7</span></td><td>4·4·<b>4</b>·3,5·4 <span class="s4">3,9</span></td><td>4·3·3·2·3 <span class="s3">3,0</span></td><td>4·<b>4</b>·<b>4</b>·<b>3,5</b>·<b>4</b> <span class="s4">3,9</span></td><td>R-7, R-22, R-23</td></tr>
+      <tr><td>bank-payment-code</td><td>3·2·3·4·4 <span class="s3">3,2</span></td><td><b>4</b>·<b>4</b>·<b>4</b>·4·4 <span class="s4">4,0</span></td><td>3·2·3·4·4 <span class="s3">3,2</span></td><td><b>4</b>·<b>4</b>·<b>4</b>·4·4 <span class="s4">4,0</span></td><td>R-8</td></tr>
+      <tr><td>group-buy</td><td>3·4·4·4·4 <span class="s4">3,8</span></td><td>như trước</td><td>3·2·4·4·4 <span class="s3">3,4</span></td><td>3·<b>4</b>·4·4·4 <span class="s4">3,8</span></td><td>R-25</td></tr>
+      <tr><td>orders</td><td>4·4·4·4·4 <span class="s4">4,0</span></td><td>như trước</td><td>4·4·3·3,5·4 <span class="s3">3,7</span></td><td>4·4·<b>4</b>·3,5·4 <span class="s4">3,9</span></td><td>R-36</td></tr>
+      <tr><td>order-code</td><td>4·3·4·4·4 <span class="s4">3,8</span></td><td>4·<b>4</b>·4·4·4 <span class="s4">4,0</span></td><td>4·3·3·3·3 <span class="s3">3,2</span></td><td>4·<b>4</b>·<b>4</b>·3·<b>4</b> <span class="s4">3,8</span></td><td>R-9, R-35</td></tr>
+      <tr><td>profile</td><td>4·3·3·3,5·4 <span class="s3">3,5</span></td><td>4·<b>4</b>·<b>4</b>·3,5·4 <span class="s4">3,9</span></td><td>4·3·3·3·4 <span class="s3">3,4</span></td><td>4·<b>4</b>·<b>4</b>·3·4 <span class="s4">3,8</span></td><td>R-33, R-34</td></tr>
+      <tr><td>loyalty</td><td>4·3·3·4·4 <span class="s3">3,6</span></td><td>4·<b>4</b>·3·4·4 <span class="s4">3,8</span></td><td>4·3·3·3·4 <span class="s3">3,4</span></td><td>4·<b>4</b>·3·3·4 <span class="s3">3,6</span></td><td>R-37, R-41, R-42</td></tr>
+      <tr><td>offers</td><td>4·3·4·4·3,5 <span class="s3">3,7</span></td><td>4·<b>4</b>·4·4·<b>4</b> <span class="s4">4,0</span></td><td>3·3·4·3·3,5 <span class="s3">3,3</span></td><td><b>4</b>·<b>4</b>·4·3·<b>4</b> <span class="s4">3,8</span></td><td>R-10, R-37, R-43</td></tr>
+      <tr><td>rewards</td><td>4·3·3·4·4 <span class="s3">3,6</span></td><td>4·<b>4</b>·3·4·4 <span class="s4">3,8</span></td><td>4·3·3·4·4 <span class="s3">3,6</span></td><td>4·<b>4</b>·3·4·4 <span class="s4">3,8</span></td><td>R-39</td></tr>
+      <tr><td>game</td><td>3·3·3·4·3,5 <span class="s3">3,3</span></td><td><b>4</b>·<b>3,5</b>·3·4·<b>4</b> <span class="s3">3,7</span></td><td>3·3·4·3·3,5 <span class="s3">3,3</span></td><td><b>4</b>·<b>3,5</b>·4·3·<b>4</b> <span class="s3">3,7</span></td><td>R-37, R-45 một phần</td></tr>
+      <tr><td>recycle</td><td>4·3·3·3,5·4 <span class="s3">3,5</span></td><td>4·<b>4</b>·3·3,5·4 <span class="s3">3,7</span></td><td>4·3·4·3,5·4 <span class="s3">3,7</span></td><td>4·<b>4</b>·4·3,5·4 <span class="s4">3,9</span></td><td>R-47</td></tr>
+      <tr><td>recycle-new</td><td>4·3·4·4·4 <span class="s4">3,8</span></td><td>4·<b>4</b>·4·4·4 <span class="s4">4,0</span></td><td>3·3·4·4·4 <span class="s3">3,6</span></td><td>3·<b>4</b>·4·4·4 <span class="s4">3,8</span></td><td>R-48, R-49, R-52</td></tr>
+      <tr><td>recycle-rules</td><td>2·3·3·4·3 <span class="s3">3,0</span></td><td>như trước</td><td>2·3·3·4·3 <span class="s3">3,0</span></td><td>như trước</td><td>Chờ anh/chị (R-11)</td></tr>
+      <tr><td>recycle-requests</td><td>3·3·3·4·2 <span class="s3">3,0</span></td><td><b>4</b>·3·3·4·<b>4</b> <span class="s3">3,6</span></td><td>3·3·4·4·3 <span class="s3">3,4</span></td><td><b>4</b>·3·4·4·<b>4</b> <span class="s4">3,8</span></td><td>R-50, R-51</td></tr>
+      <tr><td>chat</td><td>4·3·3·3,5·4 <span class="s3">3,5</span></td><td>4·<b>4</b>·<b>3,5</b>·3,5·4 <span class="s4">3,8</span></td><td>4·3·3·3,5·4 <span class="s3">3,5</span></td><td>4·<b>4</b>·3·3,5·4 <span class="s3">3,7</span></td><td>R-52, R-128</td></tr>
+      <tr><td>feed</td><td>3·3·3·4·4 <span class="s3">3,4</span></td><td>như trước</td><td>3·3·3·4·4 <span class="s3">3,4</span></td><td>như trước</td><td>Chờ anh/chị (R-55)</td></tr>
+      <tr><td>academy</td><td>3·3·3·4·4 <span class="s3">3,4</span></td><td>3·<b>3,5</b>·3·4·4 <span class="s3">3,5</span></td><td>3·3·3·4·4 <span class="s3">3,4</span></td><td>3·<b>3,5</b>·3·4·4 <span class="s3">3,5</span></td><td>R-53 một phần</td></tr>
+      <tr><td>affiliate</td><td>3·3·4·3,5·4 <span class="s3">3,5</span></td><td><b>4</b>·<b>4</b>·4·3,5·4 <span class="s4">3,9</span></td><td>3·3·4·3·4 <span class="s3">3,4</span></td><td><b>4</b>·<b>4</b>·4·3·4 <span class="s4">3,8</span></td><td>R-12, R-59, R-60</td></tr>
+      <tr><td>storefront</td><td>3·3·3·4·3 <span class="s3">3,2</span></td><td><b>4</b>·3·3·4·<b>4</b> <span class="s3">3,6</span></td><td>3·3·4·4·3 <span class="s3">3,4</span></td><td><b>4</b>·3·4·4·<b>4</b> <span class="s4">3,8</span></td><td>R-58</td></tr>
+      <tr><td>s-slug</td><td>4·3·4·4·4 <span class="s4">3,8</span></td><td>4·<b>4</b>·4·4·4 <span class="s4">4,0</span></td><td>4·3·4·4·4 <span class="s4">3,8</span></td><td>4·<b>4</b>·4·4·4 <span class="s4">4,0</span></td><td>R-61</td></tr>
+      <tr><td>dealer</td><td>4·3·3·4·4 <span class="s3">3,6</span></td><td>4·<b>4</b>·3·4·4 <span class="s4">3,8</span></td><td>4·3·3·3,5·4 <span class="s3">3,5</span></td><td>4·<b>4</b>·3·3,5·4 <span class="s3">3,7</span></td><td>R-62</td></tr>
+      <tr><td>wallet</td><td>4·3·4·4·4 <span class="s4">3,8</span></td><td>4·<b>4</b>·4·4·4 <span class="s4">4,0</span></td><td>4·3·4·3,5·3,5 <span class="s3">3,6</span></td><td>4·<b>4</b>·4·3,5·3,5 <span class="s4">3,8</span></td><td>R-60</td></tr>
+      <tr><td>staff</td><td>4·3·3·4·3 <span class="s3">3,4</span></td><td>4·<b>4</b>·<b>4</b>·4·<b>4</b> <span class="s4">4,0</span></td><td>4·4·4·4·4 <span class="s4">4,0</span></td><td>như trước</td><td>R-64, R-65</td></tr>
+      <tr><td>cashback</td><td>–</td><td>–</td><td>2·3·3·4·4 <span class="s3">3,2</span></td><td>Không còn màn này</td><td>R-44: web về trang chủ khi cờ tắt, như Mini</td></tr>
+      <tr><td>404</td><td>4·4·4·5·5 <span class="s4">4,4</span></td><td>như trước</td><td>4·4·4·4·5 <span class="s4">4,2</span></td><td>như trước</td><td>—</td></tr>
+      <tr><td><b>Trung bình</b></td><td><b>3,5·3,2·3,5·3,8·3,7</b> <span class="s3">3,5</span></td><td><b>3,8·3,8·3,7·3,9·4,0</b> <span class="s4">3,8</span></td><td><b>3,5·3,2·3,5·3,5·3,8</b> <span class="s3">3,5</span></td><td><b>3,8·3,8·3,8·3,6·3,9</b> <span class="s4">3,8</span></td><td>Dễ 3,2 → 3,8 (Mini), 3,2 → 3,8 (web)</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Hiệu năng: trước và sau</h2>
+  <p class="lead">Đo bằng <code>tools/perf/run-all.mjs</code> ở main <code>9d0e95bd5</code> (trước) và bản gộp 8 nhánh <code>79d1bfaed</code> (sau): web Moto G, Mini App 375, cả hai 4G chậm và CPU chậm 4 lần, API lane 5, 3 lần mỗi số, lấy trung vị. CLS từng ca Trang chủ đo thêm bằng <code>tools/perf/home-probe.mjs</code>. Lúc đo bản gộp máy tải 19,7 (lúc đo gốc 1,4), nên số thời gian của bản gộp có thể chậm hơn thật một chút; CLS và số byte không phụ thuộc tải. Dữ liệu lane không có ảnh sản phẩm, nên LCP Trang chủ web là chữ nhỏ tới sau: bóng gợi ý Vườn Xanh hiện trễ 1,5 giây (3.520 px²). Ở PROD, ảnh thẻ sản phẩm lớn hơn nhiều; chưa đo với ảnh thật. Độ trễ API chưa đo lại: công cụ bắn tải vào API lane 5, lane này chạy mã main.</p>
+  <div class="tablebox"><table>
+    <thead><tr><th>Phép đo</th><th>Trước</th><th>Sau</th><th>Mục tiêu</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>CLS Trang chủ Mini, khách vãng lai</td><td class="n">0,828</td><td class="n">0,066</td><td class="n">&lt; 0,1</td><td><span class="ok">Đạt</span></td></tr>
+      <tr><td>CLS Trang chủ Mini, khách quay lại</td><td class="n">0,456</td><td class="n">0,000</td><td class="n">&lt; 0,1</td><td><span class="ok">Đạt</span></td></tr>
+      <tr><td>CLS Trang chủ web, khách quay lại</td><td class="n">0,416</td><td class="n">0,000</td><td class="n">&lt; 0,1</td><td><span class="ok">Đạt</span></td></tr>
+      <tr><td>CLS Trang chủ web, khách vãng lai (Lighthouse)</td><td class="n">0,143</td><td class="n">0,005</td><td class="n">&lt; 0,1</td><td><span class="ok">Đạt</span></td></tr>
+      <tr><td>CLS thanh toán web</td><td class="n">0,313</td><td class="n">0,046</td><td class="n">&lt; 0,1</td><td><span class="ok">Đạt</span></td></tr>
+      <tr><td>Thẻ sản phẩm đầu tiên, Mini khách vãng lai</td><td class="n">2,2 s</td><td class="n">3,3 s</td><td class="n">không chậm hơn</td><td><span class="no">Chậm hơn (R-177)</span></td></tr>
+      <tr><td>Thẻ sản phẩm đầu tiên, Mini khách quay lại</td><td class="n">2,3 s</td><td class="n">2,6 s</td><td class="n">không chậm hơn</td><td><span class="no">Chậm hơn (R-177)</span></td></tr>
+      <tr><td>LCP Mini khách vãng lai: Danh mục / trang SP</td><td class="n">3,3 / 3,3 s</td><td class="n">2,4 / 2,6 s</td><td class="n">≤ 2,5 s</td><td><span class="no">Gần đạt</span></td></tr>
+      <tr><td>LCP <code>/san-pham</code> web (Lighthouse)</td><td class="n">4,4 s</td><td class="n">1,2 s</td><td class="n">≤ 2,5 s</td><td><span class="ok">Đạt</span></td></tr>
+      <tr><td>Điểm Lighthouse <code>/san-pham</code></td><td class="n">85</td><td class="n">100</td><td class="n">≥ 90</td><td><span class="ok">Đạt</span></td></tr>
+      <tr><td>LCP Trang chủ web (Lighthouse)</td><td class="n">1,2 s</td><td class="n">6,0 s</td><td class="n">≤ 2,5 s</td><td><span class="no">Đo trên dữ liệu không ảnh, xem trên</span></td></tr>
+      <tr><td>Điểm Lighthouse Trang chủ</td><td class="n">94</td><td class="n">78</td><td class="n">≥ 90</td><td><span class="no">Như dòng trên</span></td></tr>
+      <tr><td>LCP trang sản phẩm web (Lighthouse)</td><td class="n">4,5 s</td><td class="n">4,8 s</td><td class="n">≤ 2,5 s</td><td><span class="no">Chưa làm (R-83)</span></td></tr>
+      <tr><td>FCP Mini App</td><td class="n">1,65 s</td><td class="n">1,65 s</td><td class="n">không chậm hơn</td><td><span class="ok">Như cũ</span></td></tr>
+      <tr><td>Gói Mini App: entry (gzip)</td><td class="n">222 KB</td><td class="n">220 KB</td><td class="n">không tăng</td><td><span class="ok">Đạt</span></td></tr>
+      <tr><td>JS Mini tải lúc mở Trang chủ</td><td class="n">222 KB</td><td class="n">330 KB</td><td class="n">—</td><td><span class="ok">Có chủ ý: tải sẵn 4 màn mua hàng khi rảnh (R-79)</span></td></tr>
+      <tr><td>Byte ảnh Trang chủ Mini (ảnh thật)</td><td class="n">26,8 MB</td><td class="n">1,7 MB</td><td class="n">—</td><td><span class="ok">Đạt</span></td></tr>
+      <tr><td>Byte ảnh Danh mục (ảnh thật)</td><td class="n">3,6 MB</td><td class="n">0,16 MB</td><td class="n">—</td><td><span class="ok">Đạt</span></td></tr>
+      <tr><td>Câu SQL <code>/cart</code>, lần gọi thứ hai</td><td class="n">18</td><td class="n">13</td><td class="n">≤ 8</td><td><span class="no">Chưa đạt với giỏ lane 5 (R-82)</span></td></tr>
+      <tr><td>Câu SQL <code>/home/me</code>, lần gọi thứ hai</td><td class="n">18</td><td class="n">19</td><td class="n">≤ 12</td><td><span class="no">Chưa làm (R-82)</span></td></tr>
+      <tr><td>Lời gọi API của Trang chủ web</td><td class="n">21</td><td class="n">19</td><td class="n">—</td><td><span class="ok">Bớt 2</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Khi deploy</h2>
+  <ul class="plain">
+    <li>Migration chạy theo thứ tự: <code>20261028110000_welcome30_new_customer_only</code> (đổi cờ mã WELCOME30), <code>20261028120000_tier_drop_notice</code> (thêm cột rỗng được <code>users.tierDropNoticeFor</code>), <code>20261028130000_affiliate_auto_wallet_transfer</code> (thêm dữ liệu cấu hình và mẫu tin).</li>
+    <li>Lượt cron hoa hồng đầu tiên sẽ chuyển mọi hoa hồng APPROVED đang tồn vào Ví. CTV thiếu mã số thuế mà bị khấu trừ thì không tự chuyển, vẫn bấm tay. Mini App phải phát hành cùng lúc với API.</li>
+    <li>Lượt đêm đầu tiên của tin báo hạ hạng sẽ báo mọi khách đang trong hạn giữ hạng. Khi chưa có mã mẫu ZNS (<code>loyalty.tier_drop_zns_template_id</code>), chỉ gửi tin trong app.</li>
+    <li>Ảnh: thêm <code>IMAGE_CACHE_MAX_MB=200</code> vào <code>.env</code> PROD và kiểm <code>df -h</code>. Thử <code>docker build</code> image API vì có thư viện sharp mới. <code>IMAGE_CACHE_DIR</code> và <code>IMAGE_RESIZE_EXTRA_HOSTS</code> để mặc định.</li>
+    <li>Không đụng PR #39 (Pancake tags). Đơn thử TUBUSUB7659607093 vẫn là điều kiện của PR đó.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Việc còn lại</h2>
+  <div class="tablebox"><table>
+    <thead><tr><th>Mục</th><th>Trạng thái</th><th>Còn lại</th></tr></thead>
+    <tbody>
+      <tr><td>R-16</td><td class="no">một phần</td><td>Web trang chủ chưa dùng chung <code>/home</code> và <code>/home/me</code></td></tr>
+      <tr><td>R-24</td><td class="no">chưa</td><td>Lỗi hydrate ở chi tiết SP web cho khách vãng lai chưa tái hiện được</td></tr>
+      <tr><td>R-53, R-54</td><td class="no">một phần</td><td>Dòng Học viện ở menu tài khoản; khung chờ khi tải màn Mini App</td></tr>
+      <tr><td>R-56</td><td class="no">một phần</td><td>Web cho đọc Cộng đồng và chat khi chưa đăng nhập cần API đọc công khai</td></tr>
+      <tr><td>R-70, R-75, R-148, R-149</td><td class="no">gói sau</td><td>Admin cần API đếm theo trạng thái</td></tr>
+      <tr><td>R-77</td><td class="no">một phần</td><td>Entry Mini 711 → 706 KB (bản gộp), đích 600 KB: tách <code>vi.ts</code>, tải lười khối trang chủ</td></tr>
+      <tr><td>R-82</td><td class="no">một phần</td><td><code>/home/me</code> còn 17–19 câu SQL, đích 12; <code>/cart</code> 13 câu với giỏ lane 5, đích 8</td></tr>
+      <tr><td>R-83</td><td class="no">chưa</td><td>Khung chờ trang sản phẩm web mà vẫn trả 404 đúng</td></tr>
+      <tr><td>R-97, R-110, R-111</td><td class="no">một phần</td><td>Popup chi tiết hạng; ô ngày sinh; "Xoá tài khoản" chỉ ở Cài đặt</td></tr>
+      <tr><td>R-156..R-177</td><td>mới</td><td>22 mục P2/P3 phát hiện khi review: quà khách mới khi mất mạng (P2), món hàng Mini hiện chậm khoảng 1 giây ở lần mở đầu (P2), ô ngày admin, tin ZNS khi hàng đợi lỗi, khoảng hở giữ hạng, giới hạn <code>/img</code> theo IP. Chi tiết ở <code>20-backlog.md</code>.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Việc chỉ anh/chị làm được</h3>
+  <ul class="plain">
+    <li>Điền <code>company.legal_name</code>, <code>tax_code</code>, <code>address</code>; duyệt 4 trang chính sách (go-live còn FAIL <code>company_identity</code>).</li>
+    <li>Đặt <code>shipping.eta_min_days</code>, <code>shipping.eta_max_days</code> để ngày giao dự kiến hiện.</li>
+    <li>Đổi rác: thể lệ, giờ mở cửa, bảng phí; sau đó mới bật.</li>
+    <li>Chọn giữ hay bỏ khung chờ chung ở Trang chủ (R-177): Trang chủ hết nhảy, đổi lại món hàng ở Mini hiện chậm khoảng 1 giây ở lần mở đầu trên máy mới.</li>
+    <li>Chốt: chữ chính sách R-32; bố cục đầu Cộng đồng R-55; số to trang CTV gồm cả tiền hoàn R-160; web vẫn bán Định kỳ (thẻ "Đặt định kỳ" ở web là cố ý).</li>
+    <li>Đĩa VPS (B-155) trước khi bật cache ảnh.</li>
+  </ul>
+</section>
+
+<p class="foot">Nguồn: <code>docs/2026-10-28-review/</code> trên nhánh <code>review/2026-10-28</code>: <code>20-backlog.md</code>, <code>reviews/</code>, <code>pr/</code>, <code>perf/</code>. Số kiểm do người giao tự chạy lại bằng <code>tools/gate.sh</code> và <code>tools/pw-gate.sh</code>, không lấy theo lời worker.</p>
+</div>
