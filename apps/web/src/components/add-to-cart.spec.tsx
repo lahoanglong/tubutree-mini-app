@@ -154,7 +154,7 @@ describe('AddToCart — ô số lượng như Mini App', () => {
   });
 });
 
-describe('AddToCart — áp mã mua chung từ ?ma= (E-9)', () => {
+describe('AddToCart — áp mã mua chung từ ?ma=', () => {
   const CODE = 'GBUY-ABCD1234-WXYZ5678';
   const openedFrom = (search: string) => window.history.replaceState(null, '', `/san-pham/dau-goi${search}`);
   const withLine = (over: Record<string, unknown> = {}) => ({ items: [{ id: 'line-A', variationId: 'v1', quantity: 1 }], itemCount: 1, couponCode: null, discount: 0, ...over });
@@ -237,6 +237,67 @@ describe('AddToCart — áp mã mua chung từ ?ma= (E-9)', () => {
     await flush();
     expect(container.textContent).toContain('Cần thêm 20.000đ để dùng mã');
     expect(container.textContent).not.toContain('Đã áp mã');
+  });
+
+  describe('màu câu báo theo kết quả áp mã', () => {
+    const lineWith = (c: HTMLElement, re: RegExp) => Array.from(c.querySelectorAll('p')).find((p) => re.test(p.textContent ?? ''));
+    const SAVED = /Đã thêm vào giỏ!/;
+    const NOT_APPLIED = /Chưa chọn sẵn được mã/;
+    const SWITCHED = /Đã đổi sang mã/;
+
+    it('mua ngay mà mã thay mã cũ (áp được): câu "Đã đổi sang mã" màu thành công, không đỏ như lỗi', async () => {
+      mocks.addToCart.mockResolvedValue(withLine({ couponCode: 'CU10' }));
+      openedFrom(`?ma=${CODE}`);
+      const { container } = mount();
+      await flush();
+      click(buy(container));
+      await flush();
+      const note = lineWith(container, SWITCHED)!;
+      expect(note).toBeTruthy();
+      expect(note.className).toContain('text-success-fg');
+      expect(note.className).not.toContain('text-danger-fg');
+      expect(mocks.push).not.toHaveBeenCalled();
+    });
+
+    it('mua ngay mà mã chưa áp được: câu lý do màu cảnh báo, không đỏ như lỗi', async () => {
+      mocks.applyCoupon.mockRejectedValue(new Error('Mã đã hết hạn'));
+      openedFrom(`?ma=${CODE}`);
+      const { container } = mount();
+      await flush();
+      click(buy(container));
+      await flush();
+      const note = lineWith(container, NOT_APPLIED)!;
+      expect(note.className).toContain('text-warning-fg');
+      expect(note.className).not.toContain('text-danger-fg');
+    });
+
+    it('thêm giỏ xong mà mã chưa áp được: "Đã thêm vào giỏ!" vẫn xanh, câu về mã tách ra dòng cảnh báo', async () => {
+      mocks.applyCoupon.mockRejectedValue(new Error('Mã đã hết hạn'));
+      openedFrom(`?ma=${CODE}`);
+      const { container } = mount();
+      await flush();
+      click(addButton(container));
+      await flush();
+      const saved = lineWith(container, SAVED)!;
+      expect(saved.className).toContain('text-success-fg');
+      expect(saved.textContent).not.toMatch(NOT_APPLIED);
+      const warn = lineWith(container, NOT_APPLIED)!;
+      expect(warn.className).toContain('text-warning-fg');
+      expect(warn.textContent).toContain('Mã đã hết hạn');
+    });
+
+    it('thêm giỏ xong và mã áp được (kể cả thay mã cũ): cả câu màu thành công, không có dòng cảnh báo', async () => {
+      mocks.addToCart.mockResolvedValue(withLine({ couponCode: 'CU10' }));
+      openedFrom(`?ma=${CODE}`);
+      const { container } = mount();
+      await flush();
+      click(addButton(container));
+      await flush();
+      const saved = lineWith(container, SAVED)!;
+      expect(saved.className).toContain('text-success-fg');
+      expect(saved.textContent).toMatch(SWITCHED);
+      expect(container.querySelector('[role="status"] .text-warning-fg')).toBeNull();
+    });
   });
 
   it('chỉ áp một lần mỗi lần mở trang', async () => {
