@@ -32,7 +32,7 @@ export const vi = {
     sessionExpired: 'Phiên đăng nhập đã hết hạn. Bạn mở lại ứng dụng hoặc đăng nhập lại rồi thử lại nhé.',
     loadFailed: 'Chưa tải được nội dung',
     sessionUnavailable: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.',
-    sessionRateLimited: 'Bạn thao tác quá nhanh, thử lại sau ít phút nhé.',
+    sessionRateLimited: 'Bạn thao tác quá nhanh, thử lại sau khoảng một phút nhé.',
     title: 'Chưa tải được trang này',
     notFoundTitle: 'Không tìm thấy',
     needHelp: 'Cần hỗ trợ?',

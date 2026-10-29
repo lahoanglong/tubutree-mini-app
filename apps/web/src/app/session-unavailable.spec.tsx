@@ -175,8 +175,11 @@ describe('khôi phục phiên bị giới hạn tốc độ (429)', () => {
       const { container } = mount(<CartPage />);
       await flush();
       expect(container.textContent).toContain('Bạn thao tác quá nhanh');
-      expect(container.textContent).toContain('Đợi ít phút');
+      expect(container.textContent).toContain('khoảng một phút');
       expect(container.textContent).not.toContain('Không kết nối được với Tubu Tree');
+      // Mạng vẫn ổn: không dùng biểu tượng mất mạng.
+      expect(container.querySelector('svg.lucide-wifi-off')).toBeNull();
+      expect(container.querySelector('svg.lucide-clock')).not.toBeNull();
       const retry = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Thử lại')!;
       click(retry);
       await flush();
