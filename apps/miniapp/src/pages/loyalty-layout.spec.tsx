@@ -118,6 +118,14 @@ describe('LoyaltyPage — dòng mã giảm giá ngay dưới thẻ hạng', () =
     expect(screen.queryByText(/HSD/)).toBeNull();
   });
 
+  it('mã còn đang tải: dòng "Kho quà" ở thẻ lối tắt đã có sẵn, để thẻ không giãn ra khi tải xong', async () => {
+    mocks.getCoupons.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+    await screen.findByText('Các hạng');
+    expect(screen.getByText('Kho quà')).toBeInTheDocument();
+    expect(screen.queryByText(/Ví mã/)).toBeNull();
+  });
+
   it('chưa có mã → dòng "Đổi quà" thay cho "Ví mã"', async () => {
     mocks.getCoupons.mockResolvedValue([]);
     renderPage();
