@@ -465,6 +465,42 @@ Bốn migration của bản này (`20261029010000`, `20261029020000`, `202610290
 
 Kết luận: sau khi bản này đã nhận khách, ưu tiên sửa tiến. Chỉ dùng 7.2 khi lỗi nặng hơn các hậu quả trên, và làm thêm bước 1 và 3 sau khi deploy lại.
 
+### 1.14 Sau deploy bản đợt 29/10: đổi khoá khách cũ sang khoá băm (một lần, chủ hoặc điều phối quyết giờ chạy)
+
+API mới chỉ đổi khoá `guest_<deviceId>` sang `guest_h_<băm>` khi chính thiết bị đó gọi `/auth/guest`. Khách cũ còn refresh token (token xoay mỗi lần mở app) không đi qua đường này, nên `users.zaloId` của họ vẫn mang deviceId thô, CSKH đọc được qua `GET /admin/users`. Dòng đã gộp `guest_<deviceId>_merged_<ts>` cũng giữ deviceId thô. Bảng `analytics_events` các dòng ghi trước bản này còn deviceId thô ở `anonymousId`. Chạy một lần SAU khi API bản này đã chạy ổn (image cũ không biết khoá băm). Sau đó `adoptLegacyGuest` chỉ còn là lưới an toàn.
+
+Chạy ngoài giờ cao điểm (bảng `analytics_events` lớn, câu thứ ba ghi lại cả chỉ mục `anonymousId`). Cả ba câu chạy lại được nhiều lần; câu đầu bỏ qua dòng mà khoá băm của thiết bị đã có dòng khác (khách quay lại bằng image cũ, xem 1.13 mục 1) để không đụng khoá duy nhất. Đã thử trên Postgres 16 với deviceId có ký tự Unicode: kết quả trùng `createHash('sha256').update(deviceId).digest('hex')` của Node.
+
+```bash
+psqlq <<'SQL'
+UPDATE users u
+   SET "zaloId" = 'guest_h_' || encode(sha256(convert_to(substr(u."zaloId", 7), 'UTF8')), 'hex')
+ WHERE u."zaloId" LIKE 'guest\_%'
+   AND u."zaloId" NOT LIKE 'guest\_h\_%'
+   AND u."zaloId" NOT LIKE '%\_merged\_%'
+   AND NOT EXISTS (SELECT 1 FROM users h WHERE h."zaloId" = 'guest_h_' || encode(sha256(convert_to(substr(u."zaloId", 7), 'UTF8')), 'hex'));
+
+UPDATE users u
+   SET "zaloId" = 'guest_h_' || encode(sha256(convert_to(m.dev, 'UTF8')), 'hex') || '_merged_' || m.ts
+  FROM (SELECT id,
+               substring("zaloId" from '^guest_(.*)_merged_[0-9]+$') AS dev,
+               substring("zaloId" from '_merged_([0-9]+)$') AS ts
+          FROM users
+         WHERE "zaloId" ~ '^guest_.*_merged_[0-9]+$' AND "zaloId" NOT LIKE 'guest\_h\_%') m
+ WHERE u.id = m.id;
+
+UPDATE analytics_events
+   SET "anonymousId" = left(encode(sha256(convert_to("anonymousId", 'UTF8')), 'hex'), 32)
+ WHERE "anonymousId" LIKE 'd\_%';
+SQL
+```
+
+Kiểm: còn dòng nào mang khoá thô không (mong đợi 0; dòng còn lại là thiết bị đã có cả dòng băm lẫn dòng thô, gộp tay theo 1.13 mục 1).
+
+```bash
+psqlq -c "SELECT id, \"zaloId\", \"createdAt\" FROM users WHERE \"zaloId\" LIKE 'guest\_%' AND \"zaloId\" NOT LIKE 'guest\_h\_%'"
+```
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.
