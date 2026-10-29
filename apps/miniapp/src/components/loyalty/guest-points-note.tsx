@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
+import { guestCheckInCopy } from '@tubutree/app-core/daily-check-in-guest-copy';
 import { vi } from '../../i18n/vi';
 import { getErrorMessage } from '../../services/api';
 import { useAuthStore } from '../../store/auth';
@@ -43,7 +44,7 @@ export function GuestPointsNote({ margin }: { margin?: string }) {
         </div>
       )}
       <Button fullWidth variant="secondary" loading={pending} disabled={pending} onPress={() => void login()}>
-        {checkInCopy.guestCta}
+        {guestCheckInCopy.cta}
       </Button>
     </div>
   );

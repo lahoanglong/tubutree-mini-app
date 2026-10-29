@@ -48,11 +48,11 @@ describe('DailyCheckInCard: khách vãng lai không được hứa Điểm Xanh'
     expect(screen.getByLabelText('Ngày 1: +1.000 Điểm Xanh')).toBeInTheDocument();
   });
 
-  it('khách vãng lai: giọt nước vẫn hiện, không chữ "+N Điểm Xanh", có câu và nút đăng nhập Zalo', () => {
+  it('khách vãng lai: giọt nước vẫn hiện, không chữ "+N Điểm Xanh", có câu và nút đăng nhập Zalo', async () => {
     mocks.status = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
     render(<DailyCheckInCard authed />);
     expect(screen.getByText('Hôm nay nhận +10 giọt nước')).toBeInTheDocument();
-    const note = screen.getByTestId('guest-points-note');
+    const note = await screen.findByTestId('guest-points-note');
     expect(note).toHaveTextContent('Đăng nhập Zalo để nhận Điểm Xanh');
     expect(screen.queryByText(/\+[\d.]+ Điểm Xanh/)).not.toBeInTheDocument();
     expect(screen.getByLabelText('Ngày 1')).toBeInTheDocument();
@@ -63,7 +63,7 @@ describe('DailyCheckInCard: khách vãng lai không được hứa Điểm Xanh'
     mocks.ensurePhone.mockResolvedValue('0901234567');
     mocks.status = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
     render(<DailyCheckInCard authed />);
-    fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập Zalo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Đăng nhập Zalo' }));
     await waitFor(() => expect(mocks.ensurePhone).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Đăng nhập Zalo' })).toBeEnabled());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -73,14 +73,14 @@ describe('DailyCheckInCard: khách vãng lai không được hứa Điểm Xanh'
     mocks.ensurePhone.mockResolvedValue(null);
     mocks.status = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
     render(<DailyCheckInCard authed />);
-    fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập Zalo' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Đăng nhập Zalo' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Chưa đăng nhập được Zalo. Bạn thử lại nhé.');
   });
 
-  it('khách đã điểm danh hôm nay: vẫn có câu mời, thể lệ không nhắc Điểm Xanh', () => {
+  it('khách đã điểm danh hôm nay: vẫn có câu mời, thể lệ không nhắc Điểm Xanh', async () => {
     mocks.status = { ...base, checkedInToday: true, todayPoints: 0, pointsBlocked: 'GUEST' };
     render(<DailyCheckInCard authed />);
-    expect(screen.getByTestId('guest-points-note')).toBeInTheDocument();
+    expect(await screen.findByTestId('guest-points-note')).toBeInTheDocument();
     const rule = screen.getByTestId('daily-check-in').textContent ?? '';
     expect(rule).toContain('nhận giọt nước');
     expect(rule).not.toContain('Một lần bấm nhận cả Điểm Xanh');

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { checkInCopy, checkInDayAria, checkInDayIcon, checkInRule, checkInSuccessText, checkInTodayLine } from './daily-check-in-copy';
+import { checkInCopy, checkInDayIcon, checkInSuccessText, checkInTodayLine } from './daily-check-in-copy';
+import { checkInDayAria, checkInRule, guestCheckInCopy } from './daily-check-in-guest-copy';
 import type { CheckInResult } from './api/loyalty';
 
 const pts = { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' };
@@ -102,6 +103,6 @@ describe('khách vãng lai (pointsBlocked = GUEST): không hứa Điểm Xanh', 
 
   it('câu mời đăng nhập ngắn, đúng chữ chủ chốt', () => {
     expect(checkInCopy.guestPoints).toBe('Đăng nhập Zalo để nhận Điểm Xanh');
-    expect(checkInCopy.guestCta).toBe('Đăng nhập Zalo');
+    expect(guestCheckInCopy.cta).toBe('Đăng nhập Zalo');
   });
 });

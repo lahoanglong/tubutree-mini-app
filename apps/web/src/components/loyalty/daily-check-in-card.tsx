@@ -1,7 +1,8 @@
 'use client';
 
 import { CalendarCheck, Check, Gift, Sprout, type LucideIcon } from 'lucide-react';
-import { checkInCopy, checkInDayAria, checkInDayIcon, checkInRule, checkInTodayLine, type CheckInDayIcon } from '@tubutree/app-core/daily-check-in-copy';
+import { checkInCopy, checkInDayIcon, checkInTodayLine, type CheckInDayIcon } from '@tubutree/app-core/daily-check-in-copy';
+import { checkInDayAria, checkInRule } from '@tubutree/app-core/daily-check-in-guest-copy';
 import { useCheckIn } from '@/lib/use-check-in';
 import { ErrorState } from '@/components/ui/error-state';
 import { Button, Card, Heading, Icon, Skeleton, Text } from '@/components/mini';

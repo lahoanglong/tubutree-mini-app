@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
+import { guestCheckInCopy } from '@tubutree/app-core/daily-check-in-guest-copy';
 import { loginHref } from '@/lib/return-to';
 import { miniBtnSecondary } from './mini-surface';
 
@@ -20,7 +21,7 @@ export function GuestPointsNote({ margin }: { margin?: string }) {
     >
       <p className="text-sm font-semibold text-stone-700">{checkInCopy.guestPoints}</p>
       <Link href={loginHref(pathname)} className={`${miniBtnSecondary} w-full`}>
-        {checkInCopy.guestCta}
+        {guestCheckInCopy.cta}
       </Link>
     </div>
   );

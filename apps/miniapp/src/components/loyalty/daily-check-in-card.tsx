@@ -1,5 +1,7 @@
+import { lazy, Suspense } from 'react';
 import { CalendarCheck, Check, Gift, Sprout, type LucideIcon } from 'lucide-react';
-import { checkInCopy, checkInDayAria, checkInDayIcon, checkInRule, checkInTodayLine, type CheckInDayIcon } from '@tubutree/app-core/daily-check-in-copy';
+import { checkInCopy, checkInDayIcon, checkInTodayLine, type CheckInDayIcon } from '@tubutree/app-core/daily-check-in-copy';
+import { checkInDayAria, checkInRule } from '@tubutree/app-core/daily-check-in-guest-copy';
 import { getLoadErrorMessage } from '../../services/api';
 import { useCheckIn } from '../../hooks/use-check-in';
 import { Button } from '../ui/button';
@@ -7,8 +9,10 @@ import { Card } from '../ui/card';
 import { ErrorState } from '../ui/empty-state';
 import { Icon } from '../ui/icon';
 import { Skeleton } from '../ui/skeleton';
-import { GuestPointsNote } from './guest-points-note';
 import { Heading, Text } from '../ui/text';
+
+// Chỉ khách vãng lai mới thấy: tách chunk để thẻ này (nằm trong entry) không phình.
+const GuestPointsNote = lazy(() => import('./guest-points-note').then((m) => ({ default: m.GuestPointsNote })));
 
 const DAY_ICON: Record<CheckInDayIcon, LucideIcon> = { check: Check, gift: Gift, sprout: Sprout };
 
@@ -79,7 +83,11 @@ export function DailyCheckInCard({ authed, margin }: { authed: boolean; margin?:
             {today}
           </Text>
         )}
-        {status.pointsBlocked && <GuestPointsNote margin="10px 0 0" />}
+        {status.pointsBlocked && (
+          <Suspense fallback={null}>
+            <GuestPointsNote margin="10px 0 0" />
+          </Suspense>
+        )}
         <Button fullWidth disabled={!view.canCheckIn || pending} loading={pending} onPress={checkIn} style={{ marginTop: 12 }}>
           {view.buttonLabel}
         </Button>
