@@ -185,9 +185,9 @@ function RejectSheet({
 /** Thanh xác nhận: dính đáy trên điện thoại, nằm trong thẻ yêu cầu từ md; hai bản cùng nội dung. */
 function ConfirmBar({ summary, children }: { summary: ReactNode; children: ReactNode }) {
   const body = (
-    <div className="flex items-center gap-3">
-      <div className="min-w-0 flex-1">{summary}</div>
-      <div className="flex-none">{children}</div>
+    <div className="flex flex-col gap-3 md:flex-row md:items-center">
+      <div className="min-w-0 md:flex-1">{summary}</div>
+      <div className="md:flex-none">{children}</div>
     </div>
   );
   return (
