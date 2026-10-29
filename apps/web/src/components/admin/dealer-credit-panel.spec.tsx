@@ -168,6 +168,21 @@ describe('DealerCreditPanel — trạng thái dư nợ', () => {
     expect(container.textContent).not.toContain('Đã ghi giảm công nợ');
   });
 
+  it('kèm reportId mà báo cáo đã được ghi nhận từ lần khác (alreadyRecorded): khối nói sổ không đổi lần này, không nói "đã ghi giảm", và báo lại cho nơi chứa', async () => {
+    const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY }, '/credit-payment': { body: { balance: 3_000_000, reportClosed: true, alreadyRecorded: true } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const onPaid = vi.fn();
+    const { container } = mount(<DealerCreditPanel order={dealerOrder()} defaultOpen defaultAmount={1_500_000} reportId="rp1" onPaid={onPaid} />);
+    await flush();
+    click(byText(container, 'button', 'Xác nhận đã nhận, giảm nợ'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(onPaid).toHaveBeenCalledWith({ amount: 1_500_000, balance: 3_000_000, reportClosed: true, alreadyRecorded: true });
+    expect(container.textContent).toContain('đã được ghi nhận trước đó');
+    expect(container.textContent).not.toContain('Đã ghi giảm công nợ');
+  });
+
   it('defaultOpen: mở sẵn và tải sổ ngay (dùng trong tab Đại lý, nút "Ghi nhận thanh toán" đã là thao tác mở)', async () => {
     const api = mockFetch({ '/credit-ledger': { body: LEDGER_BODY } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
