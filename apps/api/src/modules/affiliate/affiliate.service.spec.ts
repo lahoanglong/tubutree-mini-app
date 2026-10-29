@@ -25,6 +25,7 @@ jest.mock('../wallet/wallet-ledger.service', () => ({
   ),
 }));
 const ledger = applyWalletDelta as jest.MockedFunction<typeof applyWalletDelta>;
+const defaultLedger = ledger.getMockImplementation()!;
 
 const SAMPLE_SELECT = { where: { isSample: true }, select: { id: true }, take: 1 };
 // Ngưỡng thuế đặt tay 2.000.000đ (admin được phép đổi) để các ca cộng dồn dùng số nhỏ; mặc định 5.000.000đ có ca riêng dùng `defaultConfig`.
@@ -340,12 +341,13 @@ function reversalPrisma(order: unknown, rows: ReversalRow[], opts: { anonymized?
     },
     $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
   } as unknown as PrismaService;
-  ledger.mockImplementation(async (_tx, input) => ({ applied: true, balanceAfter: opts.balanceAfter ?? 0 - 0 + input.delta, entryId: 'wtx' }));
+  ledger.mockImplementation(async (_tx, input) => ({ applied: true, balanceAfter: opts.balanceAfter ?? input.delta, entryId: 'wtx' }));
   return { prisma, state, commissionUpdate, queryRaw };
 }
 
 describe('AffiliateService.reverseCommissionsForOrder (guard đối xứng cho lên-đơn-hộ)', () => {
   beforeEach(() => ledger.mockClear());
+  afterEach(() => ledger.mockImplementation(defaultLedger));
 
   it('đơn thường (referrer ≠ buyer) → VẪN đảo hoa hồng chưa chuyển', async () => {
     const { prisma, commissionUpdate } = reversalPrisma({ id: 'o1', code: 'T1', userId: 'buyer', referrerUserId: 'ctv', placedForCustomer: false }, [{ status: 'PENDING', amount: 12_000 }]);
@@ -394,6 +396,7 @@ describe('AffiliateService.reverseCommissionsForOrder: hoa hồng đã vào Ví 
   const alerts = (notify: jest.Mock) => notify.mock.calls.filter(([, code]) => code === 'OPS_REFUND_ALERT');
   const toCtv = (notify: jest.Mock) => notify.mock.calls.filter(([uid, code]) => uid === 'ctv' && code === 'COMMISSION_REVERSED');
   beforeEach(() => ledger.mockClear());
+  afterEach(() => ledger.mockImplementation(defaultLedger));
 
   it('hoa hồng PAID (đã vào Ví): trừ đúng số tiền bằng COMMISSION_REVERSAL cho phép âm, đổi REJECTED cùng transaction, báo CTV', async () => {
     const { svc, state, notify, prisma } = setup([{ status: 'PAID', amount: 45_000 }], { balanceAfter: 5_000 });
