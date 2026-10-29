@@ -426,6 +426,8 @@ export class OrderReturnsService {
       let pointsBack = shares.pointsUsedBack;
       let commissionCut = 0;
       let commissionCutBy: PartialReversalResult['commissionCutBy'] = [];
+      let commissionDebited: PartialReversalResult['commissionDebited'] = [];
+      let commissionManual: PartialReversalResult['commissionManual'] = [];
       let referralNotices: ReferralNotice[];
       if (shares.isFull) {
         const flipped = await tx.order.updateMany({ where: { id: order.id, status: 'DELIVERED' }, data: { status: 'RETURNED' } });
@@ -448,6 +450,8 @@ export class OrderReturnsService {
         pointsBack = partial.pointsBack;
         commissionCut = partial.commissionCut;
         commissionCutBy = partial.commissionCutBy;
+        commissionDebited = partial.commissionDebited;
+        commissionManual = partial.commissionManual;
         referralNotices = partial.referralNotices ?? [];
       }
 
@@ -469,7 +473,7 @@ export class OrderReturnsService {
           ...(destination.method === 'WALLET' && req.refundMethod === 'BANK' ? { refundMethod: 'WALLET' } : {}),
         },
       });
-      return { order, shares, money, pointsBack, referralNotices, commissionCutBy };
+      return { order, shares, money, pointsBack, referralNotices, commissionCutBy, commissionDebited, commissionManual };
     });
 
     const { order, shares, money } = outcome;
@@ -496,8 +500,12 @@ export class OrderReturnsService {
         this.logger.error(`Thu hồi hoa hồng của đơn ${order.code} sau khi duyệt trả cả đơn lỗi: ${err instanceof Error ? err.message : err}`);
       }
     } else {
-      // Hoa hồng đã duyệt/đã vào Ví không cắt được trong commit; kế toán cần biết phần CTV đã nhận vượt phần còn lại của đơn.
-      await this.affiliate.alertPaidCommissionOfReversedOrder(order.id, order.code, { returnRequestId: id });
+      // Phần cắt của hoa hồng đã vào Ví đã trừ Ví CTV trong commit; kế toán chỉ cần biết khi Ví CTV âm hoặc phần không tự trừ được.
+      await this.affiliate.alertPaidCommissionOfReversedOrder(order.id, order.code, {
+        returnRequestId: id,
+        debited: outcome.commissionDebited,
+        manual: outcome.commissionManual,
+      });
     }
     if (money?.to === 'BANK') {
       await announceBankRefund(

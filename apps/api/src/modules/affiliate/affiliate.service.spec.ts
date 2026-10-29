@@ -306,139 +306,226 @@ describe('AffiliateService.createCommissionForOrder — tính trên giá khách 
   });
 });
 
-describe('AffiliateService.reverseCommissionsForOrder (guard đối xứng cho lên-đơn-hộ)', () => {
-  function makePrisma(order: unknown) {
-    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
-    const prisma = {
-      order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
-      commission: {
-        updateMany,
-        findMany: jest.fn(async ({ where }: { where: { status: { in: string[] } } }) =>
-          where.status.in.includes('PENDING') ? [{ affiliateUserId: 'ctv', amount: 12_000 }] : [],
-        ),
-      },
-    } as unknown as PrismaService;
-    return { prisma, updateMany };
-  }
+type ReversalRow = { id?: string; status: string; amount: number; payoutBatchId?: string | null; affiliateUserId?: string };
 
-  it('đơn thường (referrer ≠ buyer) → VẪN đảo hoa hồng (không đổi)', async () => {
-    const { prisma, updateMany } = makePrisma({ id: 'o1', userId: 'buyer', referrerUserId: 'ctv', placedForCustomer: false });
+/**
+ * prisma giả cho reverseCommissionsForOrder: `rows` là hoa hồng của đơn. Mỗi hoa hồng chạy một transaction: SELECT ... FOR NO KEY
+ * UPDATE đọc dòng, `commission.update` đổi trạng thái; `user` (đọc cờ ẩn danh) và sổ Ví (applyWalletDelta đã mock) ở trong tx.
+ */
+function reversalPrisma(order: unknown, rows: ReversalRow[], opts: { anonymized?: boolean; balanceAfter?: number } = {}) {
+  const state = rows.map((r, i) => ({ id: `c${i + 1}`, affiliateUserId: 'ctv', payoutBatchId: null, ...r }));
+  const commissionUpdate = jest.fn(async ({ where, data }: { where: { id: string }; data: { status: string } }) => {
+    const row = state.find((r) => r.id === where.id);
+    if (row) row.status = data.status;
+    return row;
+  });
+  const queryRaw = jest.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    const sql = strings.join('?');
+    if (sql.includes('FROM "commissions"')) return state.filter((r) => r.id === values[0]);
+    if (sql.includes('"metadata"')) return [{ metadata: opts.anonymized ? { anonymizedAt: '2026-10-01T00:00:00.000Z' } : null }];
+    return [];
+  });
+  const tx = { $queryRaw: queryRaw, commission: { update: commissionUpdate }, user: { update: jest.fn() } };
+  const prisma = {
+    order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+    commission: {
+      findMany: jest.fn(async ({ where }: { where: { status: { in: string[] } } }) =>
+        state.filter((r) => where.status.in.includes(r.status)).map((r) => ({ id: r.id })),
+      ),
+    },
+    user: {
+      findMany: jest.fn(async ({ where }: { where: { id?: { in: string[] } } }) =>
+        where.id ? [{ id: 'ctv', fullName: 'Linh', referralCode: 'LINH' }] : [{ id: 'adm1' }, { id: 'adm2' }],
+      ),
+    },
+    $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
+  } as unknown as PrismaService;
+  ledger.mockImplementation(async (_tx, input) => ({ applied: true, balanceAfter: opts.balanceAfter ?? 0 - 0 + input.delta, entryId: 'wtx' }));
+  return { prisma, state, commissionUpdate, queryRaw };
+}
+
+describe('AffiliateService.reverseCommissionsForOrder (guard đối xứng cho lên-đơn-hộ)', () => {
+  beforeEach(() => ledger.mockClear());
+
+  it('đơn thường (referrer ≠ buyer) → VẪN đảo hoa hồng chưa chuyển', async () => {
+    const { prisma, commissionUpdate } = reversalPrisma({ id: 'o1', code: 'T1', userId: 'buyer', referrerUserId: 'ctv', placedForCustomer: false }, [{ status: 'PENDING', amount: 12_000 }]);
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).reverseCommissionsForOrder('o1');
-    expect(updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { orderId: 'o1', status: { in: ['PENDING', 'LOCKED'] } } }),
-    );
+    expect(commissionUpdate).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { status: 'REJECTED' } });
   });
 
   it('CTV lên đơn hộ (referrer === buyer, placedForCustomer=true) → đảo hoa hồng', async () => {
-    const { prisma, updateMany } = makePrisma({ id: 'o1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true });
+    const { prisma, commissionUpdate } = reversalPrisma({ id: 'o1', code: 'T1', userId: 'ctv', referrerUserId: 'ctv', placedForCustomer: true }, [{ status: 'LOCKED', amount: 12_000 }]);
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).reverseCommissionsForOrder('o1');
-    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(commissionUpdate).toHaveBeenCalledTimes(1);
   });
 
   it('tự giới thiệu ORGANIC (referrer === buyer, placedForCustomer=false) → KHÔNG đảo (không có hoa hồng)', async () => {
-    const { prisma, updateMany } = makePrisma({ id: 'o1', userId: 'u1', referrerUserId: 'u1', placedForCustomer: false });
+    const { prisma, commissionUpdate } = reversalPrisma({ id: 'o1', code: 'T1', userId: 'u1', referrerUserId: 'u1', placedForCustomer: false }, [{ status: 'PAID', amount: 12_000 }]);
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).reverseCommissionsForOrder('o1');
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(commissionUpdate).not.toHaveBeenCalled();
+    expect(ledger).not.toHaveBeenCalled();
   });
 
   it('không có người giới thiệu → KHÔNG đảo', async () => {
-    const { prisma, updateMany } = makePrisma({ id: 'o1', userId: 'u1', referrerUserId: null, placedForCustomer: false });
+    const { prisma, commissionUpdate } = reversalPrisma({ id: 'o1', code: 'T1', userId: 'u1', referrerUserId: null, placedForCustomer: false }, [{ status: 'PAID', amount: 12_000 }]);
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).reverseCommissionsForOrder('o1');
-    expect(updateMany).not.toHaveBeenCalled();
+    expect(commissionUpdate).not.toHaveBeenCalled();
   });
 });
 
-describe('AffiliateService.reverseCommissionsForOrder: hoa hồng đã duyệt/đã chuyển mà đơn bị trả → báo kế toán (không trừ Ví)', () => {
+describe('AffiliateService.reverseCommissionsForOrder: hoa hồng đã vào Ví thì trừ Ví CTV; chỉ phần không tự trừ được mới báo kế toán', () => {
   const order = { id: 'o1', code: 'TUBU1', userId: 'buyer', referrerUserId: 'ctv', placedForCustomer: false };
 
-  function setup(commissions: Array<{ status: string; amount: number; affiliateUserId?: string; user?: unknown }>) {
-    const updateMany = jest.fn().mockResolvedValue({ count: 0 });
-    const userUpdate = jest.fn();
-    const prisma = {
-      order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
-      commission: {
-        updateMany,
-        findMany: jest.fn(async ({ where }: { where: { status: { in: string[] } } }) =>
-          commissions.filter((c) => where.status.in.includes(c.status)).map((c) => ({ affiliateUserId: 'ctv', user: { fullName: 'Linh', referralCode: 'LINH' }, ...c })),
-        ),
-      },
-      user: { findMany: jest.fn().mockResolvedValue([{ id: 'adm1' }, { id: 'adm2' }]), update: userUpdate },
-    } as unknown as PrismaService;
+  function setup(rows: ReversalRow[], opts: { anonymized?: boolean; balanceAfter?: number } = {}) {
+    const fake = reversalPrisma(order, rows, opts);
     // Giữ đúng luật chặn lặp của NotificationsService.notify: cùng (người nhận, dedupeKey) chỉ lưu một lần.
     const seen = new Set<string>();
     const delivered: string[] = [];
-    const notify = jest.fn(async (userId: string, code: string, _data: Record<string, string>, opts: { dedupeKey?: string } = {}) => {
-      const key = `${userId}:${opts.dedupeKey}`;
-      if (opts.dedupeKey && seen.has(key)) return;
+    const notify = jest.fn(async (userId: string, code: string, _data: Record<string, string>, o: { dedupeKey?: string } = {}) => {
+      const key = `${userId}:${o.dedupeKey}`;
+      if (o.dedupeKey && seen.has(key)) return;
       seen.add(key);
       if (code === 'OPS_REFUND_ALERT') delivered.push(userId);
     });
     const notifications = { notify } as unknown as NotificationsService;
-    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics, notifications);
-    return { svc, notify, updateMany, userUpdate, delivered };
+    const svc = new AffiliateService(fake.prisma, config, pricing, pancakeOrder, coins, analytics, notifications);
+    return { svc, notify, delivered, ...fake };
   }
   const alerts = (notify: jest.Mock) => notify.mock.calls.filter(([, code]) => code === 'OPS_REFUND_ALERT');
+  const toCtv = (notify: jest.Mock) => notify.mock.calls.filter(([uid, code]) => uid === 'ctv' && code === 'COMMISSION_REVERSED');
+  beforeEach(() => ledger.mockClear());
 
-  it('hoa hồng PAID: mỗi admin được báo một lần, nêu mã đơn, CTV, số tiền, trạng thái; không ghi trạng thái hoa hồng hay Ví', async () => {
-    const { svc, notify, updateMany, userUpdate } = setup([{ status: 'PAID', amount: 45_000 }]);
+  it('hoa hồng PAID (đã vào Ví): trừ đúng số tiền bằng COMMISSION_REVERSAL cho phép âm, đổi REJECTED cùng transaction, báo CTV', async () => {
+    const { svc, state, notify, prisma } = setup([{ status: 'PAID', amount: 45_000 }], { balanceAfter: 5_000 });
+    await svc.reverseCommissionsForOrder('o1');
+    expect(ledger).toHaveBeenCalledTimes(1);
+    expect(ledger).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        userId: 'ctv',
+        delta: -45_000,
+        type: 'COMMISSION_REVERSAL',
+        refType: 'COMMISSION',
+        refId: 'c1',
+        allowNegative: true,
+        reason: 'Thu hồi hoa hồng đơn TUBU1 (trả hàng)',
+      }),
+    );
+    expect(state[0]!.status).toBe('REJECTED');
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(toCtv(notify)).toHaveLength(1);
+    expect(toCtv(notify)[0][2]).toEqual({ amount: `${(45_000).toLocaleString('vi-VN')}đ` });
+    // Ví còn dương: việc đã xong, không có gì để kế toán làm.
+    expect(alerts(notify)).toHaveLength(0);
+  });
+
+  it('chạy lại sau khi đã thu hồi: hoa hồng REJECTED không bị trừ lần hai và không báo lại', async () => {
+    const { svc, notify } = setup([{ status: 'PAID', amount: 45_000 }]);
+    await svc.reverseCommissionsForOrder('o1');
+    await svc.reverseCommissionsForOrder('o1');
+    expect(ledger).toHaveBeenCalledTimes(1);
+    expect(toCtv(notify)).toHaveLength(1);
+  });
+
+  it('Ví CTV âm sau khi trừ: báo mỗi admin một lần, nêu số tiền đã trừ và số âm; không cần kế toán xử lý tay', async () => {
+    const { svc, notify, delivered } = setup([{ status: 'PAID', amount: 45_000 }], { balanceAfter: -20_000 });
     await svc.reverseCommissionsForOrder('o1');
     const sent = alerts(notify);
     expect(sent.map(([uid]) => uid)).toEqual(['adm1', 'adm2']);
     const data = sent[0][2] as { order_code: string; message: string };
     expect(data.order_code).toBe('TUBU1');
-    expect(data.message).toContain('Linh');
+    expect(data.message).toContain('đã trừ Ví CTV Linh');
     expect(data.message).toContain(`${(45_000).toLocaleString('vi-VN')}đ`);
-    expect(data.message).toContain('đã chuyển vào Ví');
-    expect(data.message).toContain('kế toán');
+    expect(data.message).toContain(`đang âm ${(20_000).toLocaleString('vi-VN')}đ`);
+    expect(data.message).not.toContain('cần kế toán');
     expect(sent[0][3]).toEqual({ dedupeKey: 'commission-paid-order-reversed:o1' });
-    // Chỉ dòng PENDING/LOCKED được đảo; dòng PAID/APPROVED không bị đụng, Ví không đổi.
-    expect(updateMany).toHaveBeenCalledTimes(1);
-    expect(updateMany.mock.calls[0][0].where.status).toEqual({ in: ['PENDING', 'LOCKED'] });
-    expect(userUpdate).not.toHaveBeenCalled();
-    expect(ledger).not.toHaveBeenCalled();
-  });
-
-  it('hoa hồng APPROVED (chờ chuyển vào Ví) cũng báo, ghi "đã duyệt"', async () => {
-    const { svc, notify } = setup([{ status: 'APPROVED', amount: 10_000 }]);
-    await svc.reverseCommissionsForOrder('o1');
-    expect((alerts(notify)[0][2] as { message: string }).message).toContain('đã duyệt');
-  });
-
-  it('gọi lần hai cho cùng đơn (setStatus chạy lại) không báo lại', async () => {
-    const { svc, delivered } = setup([{ status: 'PAID', amount: 45_000 }]);
-    await svc.reverseCommissionsForOrder('o1');
     await svc.reverseCommissionsForOrder('o1');
     expect(delivered).toEqual(['adm1', 'adm2']);
+  });
+
+  it('hoa hồng APPROVED chưa vào Ví: đổi REJECTED như PENDING/LOCKED, không đụng Ví, báo CTV, không báo kế toán', async () => {
+    const { svc, state, notify } = setup([{ status: 'APPROVED', amount: 10_000 }]);
+    await svc.reverseCommissionsForOrder('o1');
+    expect(state[0]!.status).toBe('REJECTED');
+    expect(ledger).not.toHaveBeenCalled();
+    expect(toCtv(notify)).toHaveLength(1);
+    expect(alerts(notify)).toHaveLength(0);
+  });
+
+  it('hoa hồng PENDING/LOCKED: đổi REJECTED, không đụng Ví', async () => {
+    const { svc, state, notify } = setup([{ status: 'PENDING', amount: 12_000 }]);
+    await svc.reverseCommissionsForOrder('o1');
+    expect(state[0]!.status).toBe('REJECTED');
+    expect(ledger).not.toHaveBeenCalled();
+    expect(alerts(notify)).toHaveLength(0);
+  });
+
+  it.each(['APPROVED', 'PAID'])('hoa hồng %s nằm trong lệnh rút ngân hàng cũ (payoutBatchId): không trừ Ví, không đổi trạng thái, báo kế toán', async (status) => {
+    const { svc, state, notify } = setup([{ status, amount: 45_000, payoutBatchId: 'pay1' }]);
+    await svc.reverseCommissionsForOrder('o1');
+    expect(ledger).not.toHaveBeenCalled();
+    expect(state[0]!.status).toBe(status);
+    expect(toCtv(notify)).toHaveLength(0);
+    const sent = alerts(notify);
+    expect(sent.map(([uid]) => uid)).toEqual(['adm1', 'adm2']);
+    const message = (sent[0][2] as { message: string }).message;
+    expect(message).toContain('Linh');
+    expect(message).toContain('lệnh rút ngân hàng cũ');
+    expect(message).toContain('cần kế toán xử lý');
+    expect(sent[0][3]).toEqual({ dedupeKey: 'commission-paid-order-reversed:o1' });
+  });
+
+  it('CTV đã xoá tài khoản (ẩn danh): không trừ Ví, giữ hoa hồng PAID, báo kế toán', async () => {
+    const { svc, state, notify } = setup([{ status: 'PAID', amount: 45_000 }], { anonymized: true });
+    await svc.reverseCommissionsForOrder('o1');
+    expect(ledger).not.toHaveBeenCalled();
+    expect(state[0]!.status).toBe('PAID');
+    expect((alerts(notify)[0][2] as { message: string }).message).toContain('tài khoản đã xoá');
+  });
+
+  it('hoa hồng PAID đã bị cắt về 0 đồng (trả một phần các dòng): đổi REJECTED, không có dòng sổ 0đ, không báo CTV', async () => {
+    const { svc, state, notify } = setup([{ status: 'PAID', amount: 0 }]);
+    await svc.reverseCommissionsForOrder('o1');
+    expect(ledger).not.toHaveBeenCalled();
+    expect(state[0]!.status).toBe('REJECTED');
+    expect(toCtv(notify)).toHaveLength(0);
   });
 
   it('đường trả một phần gọi thẳng cảnh báo: báo "trả một phần", khoá chống lặp theo yêu cầu trả; hai yêu cầu khác nhau đều được báo, cùng yêu cầu thì không lặp', async () => {
-    const { svc, notify, delivered, updateMany, userUpdate } = setup([{ status: 'PAID', amount: 45_000 }]);
-    await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', { returnRequestId: 'rr1' });
+    const { svc, notify, delivered, commissionUpdate } = setup([{ status: 'PAID', amount: 45_000 }]);
+    const manual = [{ affiliateUserId: 'ctv', amount: 9_000, reason: 'LEGACY_PAYOUT' as const }];
+    await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', { returnRequestId: 'rr1', manual });
     const first = alerts(notify);
     expect(first.map(([uid]) => uid)).toEqual(['adm1', 'adm2']);
     expect((first[0][2] as { message: string }).message).toContain('trả một phần');
-    expect((first[0][2] as { message: string }).message).toContain('đã chuyển vào Ví');
+    expect((first[0][2] as { message: string }).message).toContain('cần kế toán xử lý');
     expect(first[0][3]).toEqual({ dedupeKey: 'commission-paid-order-reversed:o1:rr1' });
-    await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', { returnRequestId: 'rr1' });
+    await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', { returnRequestId: 'rr1', manual });
     expect(delivered).toEqual(['adm1', 'adm2']);
-    await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', { returnRequestId: 'rr2' });
+    await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', { returnRequestId: 'rr2', manual });
     expect(delivered).toEqual(['adm1', 'adm2', 'adm1', 'adm2']);
-    expect(updateMany).not.toHaveBeenCalled();
-    expect(userUpdate).not.toHaveBeenCalled();
+    expect(commissionUpdate).not.toHaveBeenCalled();
     expect(ledger).not.toHaveBeenCalled();
   });
 
-  it('chỉ có hoa hồng PENDING/LOCKED (đảo được): không báo kế toán', async () => {
-    const { svc, notify, updateMany } = setup([{ status: 'PENDING', amount: 12_000 }, { status: 'LOCKED', amount: 3_000 }]);
-    await svc.reverseCommissionsForOrder('o1');
-    expect(updateMany).toHaveBeenCalledTimes(1);
+  it('cảnh báo không có gì cần theo dõi (không phần thủ công, Ví không âm): không gửi tin', async () => {
+    const { svc, notify } = setup([]);
+    await svc.alertPaidCommissionOfReversedOrder('o1', 'TUBU1', { returnRequestId: 'rr1', debited: [{ affiliateUserId: 'ctv', amount: 9_000, balanceAfter: 1_000 }] });
     expect(alerts(notify)).toHaveLength(0);
   });
 
   it('báo admin lỗi không làm hỏng việc thu hồi (setStatus gọi lại được)', async () => {
-    const { svc, notify } = setup([{ status: 'PAID', amount: 45_000 }]);
+    const { svc, notify, state } = setup([{ status: 'PAID', amount: 45_000, payoutBatchId: 'pay1' }]);
     notify.mockRejectedValue(new Error('queue down'));
     await expect(svc.reverseCommissionsForOrder('o1')).resolves.toBeUndefined();
+    expect(state[0]!.status).toBe('PAID');
+  });
+
+  it('trừ Ví lỗi: transaction ném lỗi ra caller (để bước thu hồi được thử lại), hoa hồng giữ nguyên trạng thái', async () => {
+    const { svc, state } = setup([{ status: 'PAID', amount: 45_000 }]);
+    ledger.mockRejectedValueOnce(new Error('db down'));
+    await expect(svc.reverseCommissionsForOrder('o1')).rejects.toThrow('db down');
+    expect(state[0]!.status).toBe('PAID');
   });
 });
 

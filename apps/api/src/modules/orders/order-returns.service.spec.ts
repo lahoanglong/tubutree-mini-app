@@ -345,7 +345,10 @@ describe('OrderReturnsService.review — duyệt trả cả đơn, lỗi đảo 
 });
 
 describe('OrderReturnsService.review — trả một phần cắt hoa hồng thì báo CTV', () => {
-  function setupPartialApprove(commissionCutBy: { affiliateUserId: string; amount: number }[]) {
+  function setupPartialApprove(
+    commissionCutBy: { affiliateUserId: string; amount: number }[],
+    extra: { commissionDebited?: unknown[]; commissionManual?: unknown[] } = {},
+  ) {
     const order = deliveredOrder({ pancakeOrderId: 'pk1', fulfiller: 'TUBU', fulfillerStorefront: null });
     const prisma = {
       returnRequest: {
@@ -360,6 +363,8 @@ describe('OrderReturnsService.review — trả một phần cắt hoa hồng th�
         pointsBack: 0,
         referralNotices: [],
         commissionCutBy,
+        commissionDebited: extra.commissionDebited ?? [],
+        commissionManual: extra.commissionManual ?? [],
       }),
     } as unknown as PrismaService;
     const loyalty = { pointsExpiresAt: jest.fn().mockResolvedValue(null), reverseOrderPoints: jest.fn() };
@@ -387,11 +392,13 @@ describe('OrderReturnsService.review — trả một phần cắt hoa hồng th�
     expect(reversedNotices()).toHaveLength(0);
   });
 
-  it('trả một phần: báo kế toán nếu đơn có hoa hồng đã duyệt/đã chuyển, mỗi yêu cầu trả một lần', async () => {
-    const { svc, affiliate, order } = setupPartialApprove([]);
+  it('trả một phần: đưa phần đã trừ Ví và phần không tự trừ được sang cảnh báo kế toán, mỗi yêu cầu trả một lần', async () => {
+    const debited = [{ affiliateUserId: 'ctv1', amount: 3_333, balanceAfter: -1_000 }];
+    const manual = [{ affiliateUserId: 'ctv1', amount: 2_000, reason: 'LEGACY_PAYOUT' }];
+    const { svc, affiliate, order } = setupPartialApprove([{ affiliateUserId: 'ctv1', amount: 3_333 }], { commissionDebited: debited, commissionManual: manual });
     await svc.review('a1', 'r1', { approve: true, shopFault: true });
     expect(affiliate.alertPaidCommissionOfReversedOrder).toHaveBeenCalledTimes(1);
-    expect(affiliate.alertPaidCommissionOfReversedOrder).toHaveBeenCalledWith(order.id, order.code, { returnRequestId: 'r1' });
+    expect(affiliate.alertPaidCommissionOfReversedOrder).toHaveBeenCalledWith(order.id, order.code, { returnRequestId: 'r1', debited, manual });
   });
 });
 

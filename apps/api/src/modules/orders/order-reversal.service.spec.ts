@@ -1040,7 +1040,7 @@ describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền
       ],
     }) as never;
 
-  type Row = { amount: number; commissionableTotal: number; lineAmounts: unknown; status: string };
+  type Row = { amount: number; commissionableTotal: number; lineAmounts: unknown; status: string; payoutBatchId?: string | null };
   const newRow = (over: Partial<Row> = {}): Row => ({
     amount: 14_750,
     commissionableTotal: 195_000,
@@ -1056,7 +1056,17 @@ describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền
       commission: {
         findMany: jest.fn(async ({ where }: { where: { status: { in: string[] } } }) =>
           where.status.in.includes(row.status)
-            ? [{ id: 'c1', affiliateUserId: 'ctv1', amount: row.amount, commissionableTotal: row.commissionableTotal, lineAmounts: row.lineAmounts }]
+            ? [
+                {
+                  id: 'c1',
+                  affiliateUserId: 'ctv1',
+                  amount: row.amount,
+                  commissionableTotal: row.commissionableTotal,
+                  lineAmounts: row.lineAmounts,
+                  status: row.status,
+                  payoutBatchId: row.payoutBatchId ?? null,
+                },
+              ]
             : [],
         ),
         updateMany: jest.fn(
@@ -1064,10 +1074,10 @@ describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền
             where,
             data,
           }: {
-            where: { amount: number; commissionableTotal: number; status: { in: string[] } };
+            where: { amount: number; commissionableTotal: number; status: string };
             data: { amount: { decrement: number }; commissionableTotal: { decrement: number } };
           }) => {
-            if (where.amount !== row.amount || where.commissionableTotal !== row.commissionableTotal || !where.status.in.includes(row.status)) {
+            if (where.amount !== row.amount || where.commissionableTotal !== row.commissionableTotal || where.status !== row.status) {
               return { count: 0 };
             }
             row.amount -= data.amount.decrement;
@@ -1109,7 +1119,7 @@ describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền
     expect(tx.row).toMatchObject({ amount: 11_417, commissionableTotal: 161_667 });
     expect(tx.commission.updateMany).toHaveBeenCalledTimes(1);
     expect(tx.commission.updateMany).toHaveBeenCalledWith({
-      where: { id: 'c1', amount: 14_750, commissionableTotal: 195_000, status: { in: ['PENDING', 'LOCKED'] } },
+      where: { id: 'c1', amount: 14_750, commissionableTotal: 195_000, status: 'LOCKED' },
       data: { amount: { decrement: 3_333 }, commissionableTotal: { decrement: 33_333 } },
     });
   });
@@ -1119,18 +1129,130 @@ describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền
     expect(cut.commissionCutBy).toEqual([{ affiliateUserId: 'ctv1', amount: 3_333 }]);
     const none = await partial(commissionTx(newRow()), { i3: 1 }, {});
     expect(none.commissionCutBy).toEqual([]);
-    const settled = await partial(commissionTx(newRow({ status: 'APPROVED' })), { i1: 1 }, {});
-    expect(settled.commissionCutBy).toEqual([]);
+    const rejected = await partial(commissionTx(newRow({ status: 'REJECTED' })), { i1: 1 }, {});
+    expect(rejected.commissionCutBy).toEqual([]);
   });
 
-  it('chỉ đọc commission PENDING/LOCKED: đã duyệt/đã chi thì không đụng gì (giống lần đảo cả đơn)', async () => {
-    for (const status of ['APPROVED', 'PAID', 'REJECTED']) {
-      const tx = commissionTx(newRow({ status }));
-      const res = await partial(tx, { i1: 1 }, {});
+  it('hoa hồng REJECTED thì không đụng gì', async () => {
+    const tx = commissionTx(newRow({ status: 'REJECTED' }));
+    const res = await partial(tx, { i1: 1 }, {});
+    expect(res.commissionCut).toBe(0);
+    expect(tx.commission.updateMany).not.toHaveBeenCalled();
+    expect(tx.row).toMatchObject({ amount: 14_750, commissionableTotal: 195_000 });
+  });
+
+  describe('hoa hồng đã duyệt / đã vào Ví (E-43)', () => {
+    const ctvOrder = () => ({ ...(order() as object), referrerUserId: 'ctv1' }) as never;
+    const withRaw = (tx: ReturnType<typeof commissionTx>) =>
+      Object.assign(tx, {
+        $queryRaw: jest.fn(async (strings: TemplateStringsArray): Promise<unknown[]> => (strings.join('').includes('"metadata"') ? [{ metadata: null }] : [])),
+        $executeRaw: jest.fn().mockResolvedValue(1),
+        user: { update: jest.fn().mockResolvedValue({}) },
+      });
+    beforeEach(() => jest.mocked(applyWalletDelta).mockClear());
+
+    it('APPROVED chưa vào Ví: cắt amount và nền doanh số như PENDING/LOCKED, không đụng Ví', async () => {
+      const tx = withRaw(commissionTx(newRow({ status: 'APPROVED' })));
+      const res = await partial(tx, { i1: 1 }, {}, ctvOrder());
+      expect(res.commissionCut).toBe(3_333);
+      expect(tx.row).toMatchObject({ amount: 11_417, commissionableTotal: 161_667 });
+      expect(applyWalletDelta).not.toHaveBeenCalled();
+      expect(res.commissionCutBy).toEqual([{ affiliateUserId: 'ctv1', amount: 3_333 }]);
+      expect(res.commissionDebited).toEqual([]);
+    });
+
+    it('PAID đã vào Ví: cắt amount và trừ Ví đúng phần cắt bằng COMMISSION_REVERSAL, refId = <hoa hồng>:<yêu cầu trả>', async () => {
+      jest.mocked(applyWalletDelta).mockResolvedValueOnce({ applied: true, balanceAfter: 40_000, entryId: 'w1' });
+      const tx = withRaw(commissionTx(newRow({ status: 'PAID' })));
+      const res = await partial(tx, { i1: 1 }, {}, ctvOrder());
+      expect(tx.row).toMatchObject({ amount: 11_417, commissionableTotal: 161_667 });
+      expect(applyWalletDelta).toHaveBeenCalledTimes(1);
+      expect(applyWalletDelta).toHaveBeenCalledWith(
+        tx,
+        expect.objectContaining({
+          userId: 'ctv1',
+          delta: -3_333,
+          type: 'COMMISSION_REVERSAL',
+          refType: 'COMMISSION',
+          refId: 'c1:r1',
+          allowNegative: true,
+          reason: 'Thu hồi hoa hồng đơn TUBU1 (trả một phần)',
+        }),
+      );
+      expect(res.commissionDebited).toEqual([{ affiliateUserId: 'ctv1', amount: 3_333, balanceAfter: 40_000 }]);
+      expect(res.commissionManual).toEqual([]);
+      expect(res.commissionCutBy).toEqual([{ affiliateUserId: 'ctv1', amount: 3_333 }]);
+    });
+
+    it('PAID, trả món 0%: không cắt, không trừ Ví', async () => {
+      const tx = withRaw(commissionTx(newRow({ status: 'PAID' })));
+      const res = await partial(tx, { i3: 1 }, {}, ctvOrder());
       expect(res.commissionCut).toBe(0);
       expect(tx.commission.updateMany).not.toHaveBeenCalled();
+      expect(applyWalletDelta).not.toHaveBeenCalled();
       expect(tx.row).toMatchObject({ amount: 14_750, commissionableTotal: 195_000 });
-    }
+    });
+
+    it('PAID, hai yêu cầu trả khác nhau: mỗi yêu cầu một dòng sổ riêng (refId khác nhau)', async () => {
+      const tx = withRaw(commissionTx(newRow({ status: 'PAID' })));
+      await partial(tx, { i1: 1 }, {}, ctvOrder());
+      const shares = (qty: Record<string, number>) => ({
+        isFull: false, goods: 0, shipping: 0, pointsUsedBack: 0, convertedBack: 0, pointsEarnedBack: 0, ratioBefore: 0, ratioAfter: 0,
+        lines: Object.entries(qty).map(([orderItemId, quantity]) => ({ orderItemId, quantity, refundAmount: 0 })),
+      });
+      await service.reversePartialReturn(tx as never, ctvOrder(), {
+        requestId: 'r2',
+        shares: shares({ i1: 1 }),
+        destination: WALLET_DESTINATION,
+        prior: { ...NO_PARTIAL_RETURNS, approvedQty: new Map([['i1', 1]]) },
+        standardPointsExpiresAt: null,
+      });
+      expect(jest.mocked(applyWalletDelta).mock.calls.map((c) => c[1].refId)).toEqual(['c1:r1', 'c1:r2']);
+    });
+
+    it('PAID nhưng dòng sổ (userId, COMMISSION_REVERSAL, refId) đã có: không cắt amount lần hai', async () => {
+      jest.mocked(applyWalletDelta).mockResolvedValueOnce({ applied: false, balanceAfter: 10_000, entryId: 'old' });
+      const tx = withRaw(commissionTx(newRow({ status: 'PAID' })));
+      const res = await partial(tx, { i1: 1 }, {}, ctvOrder());
+      expect(res.commissionCut).toBe(0);
+      expect(tx.row).toMatchObject({ amount: 14_750, commissionableTotal: 195_000 });
+    });
+
+    it('PAID mà guard cập nhật thua sau khi đã trừ Ví: ném lỗi để cả lần duyệt trả rollback, không để Ví lệch hoa hồng', async () => {
+      const tx = withRaw(commissionTx(newRow({ status: 'PAID' })));
+      tx.commission.updateMany.mockResolvedValueOnce({ count: 0 });
+      await expect(partial(tx, { i1: 1 }, {}, ctvOrder())).rejects.toThrow(/thay đổi/);
+    });
+
+    it.each(['APPROVED', 'PAID'])('%s nằm trong lệnh rút ngân hàng cũ (payoutBatchId): không cắt, không trừ Ví, trả về phần cần kế toán xử lý', async (status) => {
+      const tx = withRaw(commissionTx(newRow({ status, payoutBatchId: 'pay1' })));
+      const res = await partial(tx, { i1: 1 }, {}, ctvOrder());
+      expect(res.commissionCut).toBe(0);
+      expect(tx.commission.updateMany).not.toHaveBeenCalled();
+      expect(applyWalletDelta).not.toHaveBeenCalled();
+      expect(tx.row).toMatchObject({ amount: 14_750, commissionableTotal: 195_000 });
+      expect(res.commissionManual).toEqual([{ affiliateUserId: 'ctv1', amount: 3_333, reason: 'LEGACY_PAYOUT' }]);
+    });
+
+    it('CTV đã xoá tài khoản (ẩn danh): không cắt, không trừ Ví, báo kế toán', async () => {
+      const tx = withRaw(commissionTx(newRow({ status: 'PAID' })));
+      tx.$queryRaw.mockImplementation(async (strings: TemplateStringsArray) =>
+        strings.join('').includes('"metadata"') ? [{ metadata: { anonymizedAt: '2026-10-01T00:00:00.000Z' } }] : [],
+      );
+      const res = await partial(tx, { i1: 1 }, {}, ctvOrder());
+      expect(res.commissionCut).toBe(0);
+      expect(applyWalletDelta).not.toHaveBeenCalled();
+      expect(res.commissionManual).toEqual([{ affiliateUserId: 'ctv1', amount: 3_333, reason: 'ANONYMIZED' }]);
+    });
+
+    it('đơn có người giới thiệu: khoá dòng hoa hồng của đơn TRƯỚC mọi lần ghi Ví/users (cùng chiều với requestPayout)', async () => {
+      const tx = withRaw(commissionTx(newRow({ status: 'PAID' })));
+      await partial(tx, { i1: 1 }, {}, ctvOrder());
+      const firstRaw = (tx.$queryRaw.mock.calls[0]![0] as unknown as string[]).join('');
+      expect(firstRaw).toContain('"commissions"');
+      expect(firstRaw).toContain('FOR NO KEY UPDATE');
+      expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(jest.mocked(applyWalletDelta).mock.invocationCallOrder[0]!);
+    });
   });
 
   it('trả món không hoa hồng (0%) → không đổi hoa hồng, không đổi nền doanh số', async () => {
