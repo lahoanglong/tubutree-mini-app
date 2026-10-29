@@ -317,16 +317,29 @@ export class AuthService {
     try {
       // Có điều kiện: một request song song có thể vừa gộp chính dòng khách này (đọc ở trên trước lúc nó commit). Nâng cấp
       // vô điều kiện sẽ ghi đè zaloId của dòng đã gộp mà mergedIntoId vẫn trỏ tài khoản đích.
-      const upgraded = await this.prisma.user.updateMany({
-        where: { id: currentUser.id, zaloId: currentUser.zaloId, mergedIntoId: null },
-        data: {
-          zaloId: info.zaloId,
-          fullName: info.name,
-          avatarUrl: info.avatar ?? currentUser.avatarUrl,
-          ...(checkedPhone ? { phone: checkedPhone, phoneVerifiedAt: new Date() } : {}),
-        },
-      });
-      const fresh = await this.prisma.user.findUniqueOrThrow({ where: { id: currentUser.id } });
+      const upgrade = (fromZaloId: string | null) =>
+        this.prisma.user.updateMany({
+          where: { id: currentUser.id, zaloId: fromZaloId, mergedIntoId: null },
+          data: {
+            zaloId: info.zaloId,
+            fullName: info.name,
+            avatarUrl: info.avatar ?? currentUser.avatarUrl,
+            ...(checkedPhone ? { phone: checkedPhone, phoneVerifiedAt: new Date() } : {}),
+          },
+        });
+      let upgraded = await upgrade(currentUser.zaloId);
+      let fresh = await this.prisma.user.findUniqueOrThrow({ where: { id: currentUser.id } });
+      // Khoá khách có thể vừa đổi sang dạng băm (adoptLegacyGuest, hoặc câu backfill ở runbook 1.14) giữa lúc đọc và lúc ghi:
+      // dòng vẫn là khách, thử lại một lần với khoá hiện tại thay vì bắt khách đăng xuất.
+      if (
+        upgraded.count === 0 &&
+        fresh.zaloId?.startsWith('guest_') &&
+        !fresh.zaloId.includes('_merged_') &&
+        !fresh.mergedIntoId
+      ) {
+        upgraded = await upgrade(fresh.zaloId);
+        fresh = await this.prisma.user.findUniqueOrThrow({ where: { id: currentUser.id } });
+      }
       if (upgraded.count === 1 || fresh.zaloId === info.zaloId) {
         await this.grantWelcomeVoucher(fresh.id);
         return this.issueTokens(fresh);

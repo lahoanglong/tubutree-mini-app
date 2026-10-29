@@ -532,6 +532,31 @@ describe('AuthService mergeGuestInto (real Postgres)', () => {
     expect(g.zaloId).not.toContain(deviceId);
   });
 
+  it('upgrade in place: legacy guest row is re-keyed by /auth/guest between the read and the upgrade -> row is upgraded, no 409, points stay on the same id', async () => {
+    const deviceId = `d_${randCode(20)}`;
+    const guest = await createUser(prisma, { zaloId: `guest_${deviceId}`, fullName: 'Khách', pointsBalance: 40 });
+    const newZaloId = `zalo_${randCode(10)}`;
+    const cfg: Record<string, unknown> = { JWT_ACCESS_SECRET: 'it-secret-merge', JWT_ACCESS_TTL: '15m', JWT_REFRESH_TTL_DAYS: 30 };
+    const config = { get: (k: string) => cfg[k] } as unknown as ConfigService<Env, true>;
+    const rbac = { applyGrants: async <T>(u: T) => u } as unknown as RbacService;
+    const zalo = {
+      getUserInfo: async () => {
+        await auth.loginAsGuest(deviceId);
+        return { zaloId: newZaloId, name: 'Zalo IT' };
+      },
+      resolvePhoneNumber: async () => null,
+    } as unknown as ZaloService;
+    const hooked = new AuthService(prisma, new JwtService(), config, zalo, rbac);
+
+    const res = await hooked.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
+
+    expect(res.user.id).toBe(guest.id);
+    const g = await prisma.user.findUniqueOrThrow({ where: { id: guest.id } });
+    expect(g.zaloId).toBe(newZaloId);
+    expect(g.pointsBalance).toBe(40);
+    expect(g.mergedIntoId).toBeNull();
+  });
+
   it('merge: two guest devices upgrading to the same new Zalo account at once -> loser merges into winner, no 500', async () => {
     const g1 = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}`, pointsBalance: 3 });
     const g2 = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}`, pointsBalance: 4 });

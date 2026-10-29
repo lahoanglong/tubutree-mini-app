@@ -597,6 +597,39 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
     expect(fixture.state.carts.get('guest1')!.items).toHaveLength(1);
   });
 
+  it('khách + chưa ai giữ zaloId, khoá khách đổi sang dạng băm giữa lúc đọc và lúc nâng cấp → vẫn nâng cấp tại chỗ, không trả 409', async () => {
+    const fixture = makeGuestMergeFixture({ guest: GUEST });
+    const hashedKey = `guest_h_${'b'.repeat(64)}`;
+    const zalo = {
+      getUserInfo: jest.fn(async () => {
+        fixture.state.users.get('guest1')!.zaloId = hashedKey;
+        return { zaloId: 'z-new-real', name: 'Long' };
+      }),
+      resolvePhoneNumber: jest.fn().mockResolvedValue(null),
+    };
+    const svc = makeEnsurePhoneSvc(fixture, zalo);
+
+    const res = await svc.ensurePhoneForCurrentUser('guest1', 'code', 'at');
+
+    expect(res.user.id).toBe('guest1');
+    expect(fixture.state.users.get('guest1')!.zaloId).toBe('z-new-real');
+  });
+
+  it('khách vừa được request song song nâng lên Zalo khác (không còn là khách) và chưa ai giữ zaloId này → vẫn 409, không nâng cấp lần nữa', async () => {
+    const fixture = makeGuestMergeFixture({ guest: GUEST });
+    const zalo = {
+      getUserInfo: jest.fn(async () => {
+        fixture.state.users.get('guest1')!.zaloId = 'z-upgraded-elsewhere';
+        return { zaloId: 'z-new-real', name: 'Long' };
+      }),
+      resolvePhoneNumber: jest.fn().mockResolvedValue(null),
+    };
+    const svc = makeEnsurePhoneSvc(fixture, zalo);
+
+    await expect(svc.ensurePhoneForCurrentUser('guest1', 'code', 'at')).rejects.toBeInstanceOf(ConflictException);
+    expect(fixture.state.users.get('guest1')!.zaloId).toBe('z-upgraded-elsewhere');
+  });
+
   it('KHÔNG PHẢI khách (đã là Zalo thật) nhưng Zalo trên máy giờ là danh tính KHÁC → từ chối rõ ràng, KHÔNG đổi danh tính', async () => {
     const realUser = { ...GUEST, id: 'real1', zaloId: 'z-real-old' };
     const fixture = makeGuestMergeFixture({ guest: realUser });
