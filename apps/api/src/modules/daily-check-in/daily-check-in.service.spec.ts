@@ -120,6 +120,29 @@ describe('DailyCheckInService.run', () => {
   });
 });
 
+describe('DailyCheckInService — khách vãng lai', () => {
+  const GUEST_POINTS = { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 0, totalPoints: 7, message: 'Điểm danh Ngày 1 thành công!', pointsBlocked: 'GUEST' as const };
+
+  it('run: phần Điểm Xanh báo pointsBlocked=GUEST, phần giọt nước vẫn cộng như thường', async () => {
+    const { svc, loyalty, economy } = build();
+    loyalty.dailyCheckIn.mockImplementationOnce(async () => GUEST_POINTS as never);
+    const r = await svc.run('g1');
+    expect(r.points).toMatchObject({ pointsEarned: 0, pointsBlocked: 'GUEST' });
+    expect(r.water).toEqual(WATER_RESULT);
+    expect(r.pending).toEqual([]);
+    expect(economy.checkIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('status: giữ cờ pointsBlocked và todayPoints=0 của phần Điểm Xanh, vẫn hứa giọt nước', async () => {
+    const { svc, loyalty } = build();
+    loyalty.getDailyCheckInStatus.mockImplementationOnce(
+      async () => ({ checkedInToday: false, streakDays: 0, currentCycleDay: 1, todayPoints: 0, rewards: [], pointsBlocked: 'GUEST' }) as never,
+    );
+    const s = await svc.status('g1');
+    expect(s).toMatchObject({ pointsBlocked: 'GUEST', todayPoints: 0, checkedInToday: false, todayWater: 10 });
+  });
+});
+
 describe('DailyCheckInService.status', () => {
   it('đã điểm danh khi cả hai phần xong; thiếu một phần thì chưa', async () => {
     expect((await build({ pointsDone: true, waterDone: true }).svc.status('u1')).checkedInToday).toBe(true);

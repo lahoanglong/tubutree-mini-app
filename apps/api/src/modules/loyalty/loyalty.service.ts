@@ -22,7 +22,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible, requiresRealUser } from '../coupons/coupon-scope';
 import { hasPriorOrder } from '../../common/first-order';
 import { couponProductIds } from '../coupons/coupons.service';
-import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
+import { isRealUser, pointsBlockedFor, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import { voucherCode } from '../vouchers/voucher-code';
 import { projectCheckIn, streakCycleDay } from '../game/checkin-streak';
 import { decideTier } from './tier-policy';
@@ -1297,11 +1297,13 @@ export class LoyaltyService {
   async getDailyCheckInStatus(userId: string) {
     const now = new Date();
     const today = vnDateKey(now);
-    const [table, doneRow, streak] = await Promise.all([
+    const [table, doneRow, streak, owner] = await Promise.all([
       this.getCheckInPointsTable(),
       this.todayCheckIn(userId, today),
       this.sharedStreak(userId, now),
+      this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } }),
     ]);
+    const pointsBlocked = pointsBlockedFor(owner);
     const checkedInToday = !!doneRow;
     // Điểm danh Điểm Xanh hôm nay đã xong nhưng nước chưa: ngày hôm nay vẫn là ngày của chuỗi nước kế tiếp.
     const currentCycleDay = streak.cycleDay;
@@ -1311,8 +1313,9 @@ export class LoyaltyService {
       streakDays: streak.aliveStreak,
       currentCycleDay,
       streakDay: currentCycleDay,
-      /** Điểm của ô hôm nay: đã nhận (nếu đã điểm danh) hoặc sẽ nhận khi bấm. */
-      todayPoints: table[currentCycleDay - 1] ?? 0,
+      /** Điểm của ô hôm nay: đã nhận (nếu đã điểm danh) hoặc sẽ nhận khi bấm. Khách vãng lai không nhận điểm nên luôn 0. */
+      todayPoints: pointsBlocked ? 0 : (table[currentCycleDay - 1] ?? 0),
+      ...(pointsBlocked ? { pointsBlocked } : {}),
       rewards: table.map((points, idx) => ({
         day: idx + 1,
         points,
@@ -1332,6 +1335,10 @@ export class LoyaltyService {
    * unique (userId, refId=dayKey) WHERE refType='CHECKIN' làm lớp phòng thủ thứ hai.
    *
    * Điểm điểm danh có hạn (loyalty.point_expire_months) và KHÔNG tính vào xét hạng.
+   *
+   * Khách vãng lai (chưa là user thật) vẫn điểm danh và giữ chuỗi nhưng dòng điểm danh ghi 0 điểm, không có dòng ledger:
+   * deviceId mới tạo được vô hạn tài khoản guest, điểm danh được điểm rồi gộp vào tài khoản thật sẽ thành máy in điểm.
+   * Điểm của những ngày đã điểm danh khi còn là khách không được cộng bù sau khi đăng nhập Zalo.
    */
   async dailyCheckIn(userId: string) {
     const now = new Date();
@@ -1343,7 +1350,9 @@ export class LoyaltyService {
     const streak = await this.sharedStreak(userId, now);
     const { cycleDay, streakDays } = streak;
     const table = await this.getCheckInPointsTable();
-    const points = table[cycleDay - 1] ?? 0;
+    const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    const pointsBlocked = pointsBlockedFor(owner);
+    const points = pointsBlocked ? 0 : (table[cycleDay - 1] ?? 0);
     const expiresAt = await this.pointsExpiresAt(now);
 
     try {
@@ -1392,6 +1401,7 @@ export class LoyaltyService {
             points > 0
               ? `Điểm danh Ngày ${cycleDay} thành công! Nhận +${formatPoints(points)} Điểm Xanh.`
               : `Điểm danh Ngày ${cycleDay} thành công!`,
+          ...(pointsBlocked ? { pointsBlocked } : {}),
         };
       });
     } catch (err) {

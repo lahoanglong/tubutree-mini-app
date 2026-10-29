@@ -5,7 +5,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { GameService } from '../../src/modules/game/game.service';
-import { createOrder, createUser, randCode, setConfig, warmPool } from './helpers';
+import { createOrder, createRealUser, randCode, setConfig, warmPool } from './helpers';
 
 const DAY = 864e5;
 const ago = (days: number) => new Date(Date.now() - days * DAY);
@@ -62,7 +62,7 @@ describe('Nhiệm vụ FIRST_ORDER, REVIEW_3 chờ hết hạn đổi/trả (rea
   const delivered = (userId: string, days: number) => createOrder(prisma, { userId, status: 'DELIVERED', deliveredAt: ago(days) });
 
   it('FIRST_ORDER: đơn giao 1 ngày trước, cửa sổ 7 ngày → không nhận được; thẻ báo chờ hết hạn đổi/trả', async () => {
-    const user = await createUser(prisma);
+    const user = await createRealUser(prisma);
     await delivered(user.id, 1);
 
     expect(await mission(user.id, 'FIRST_ORDER')).toMatchObject({ progress: 0, completed: false, claimed: false });
@@ -72,7 +72,7 @@ describe('Nhiệm vụ FIRST_ORDER, REVIEW_3 chờ hết hạn đổi/trả (rea
   });
 
   it('FIRST_ORDER: đơn giao 8 ngày trước → nhận được, mô tả không thêm chữ chờ', async () => {
-    const user = await createUser(prisma);
+    const user = await createRealUser(prisma);
     await delivered(user.id, 8);
 
     const card = await mission(user.id, 'FIRST_ORDER');
@@ -82,7 +82,7 @@ describe('Nhiệm vụ FIRST_ORDER, REVIEW_3 chờ hết hạn đổi/trả (rea
   });
 
   it('FIRST_ORDER: đơn đã qua hạn nhưng đang có yêu cầu trả chờ duyệt → chưa nhận; từ chối yêu cầu thì nhận được', async () => {
-    const user = await createUser(prisma);
+    const user = await createRealUser(prisma);
     const order = await delivered(user.id, 20);
     const req = await prisma.returnRequest.create({ data: { orderId: order.id, userId: user.id, reason: 'Không còn nhu cầu' } });
 
@@ -92,13 +92,13 @@ describe('Nhiệm vụ FIRST_ORDER, REVIEW_3 chờ hết hạn đổi/trả (rea
   });
 
   it('FIRST_ORDER: đơn đã trả (RETURNED) không tính', async () => {
-    const user = await createUser(prisma);
+    const user = await createRealUser(prisma);
     await createOrder(prisma, { userId: user.id, status: 'RETURNED', deliveredAt: ago(20) });
     await expect(game.claimMission(user.id, 'FIRST_ORDER')).rejects.toThrow(TOO_EARLY);
   });
 
   it('REVIEW_3: chỉ tính đánh giá có ảnh của đơn đã qua hạn đổi/trả', async () => {
-    const user = await createUser(prisma);
+    const user = await createRealUser(prisma);
     const PHOTO = ['https://res.cloudinary.com/it/p.jpg'];
     const review = async (productId: string, days: number) =>
       prisma.review.create({ data: { userId: user.id, productId, orderId: (await delivered(user.id, days)).id, rating: 5, images: PHOTO } });
@@ -117,7 +117,7 @@ describe('Nhiệm vụ FIRST_ORDER, REVIEW_3 chờ hết hạn đổi/trả (rea
   });
 
   it('REVIEW_3: đánh giá của sản phẩm đã bị trả một phần trên đơn (đơn vẫn giao, đã qua hạn) không tính', async () => {
-    const user = await createUser(prisma);
+    const user = await createRealUser(prisma);
     const PHOTO = ['https://res.cloudinary.com/it/p.jpg'];
     const orders = [] as { id: string }[];
     for (let i = 0; i < 3; i += 1) {
@@ -141,7 +141,7 @@ describe('Nhiệm vụ FIRST_ORDER, REVIEW_3 chờ hết hạn đổi/trả (rea
   });
 
   it('REVIEW_3: đánh giá của đơn đã trả (RETURNED) không tính', async () => {
-    const user = await createUser(prisma);
+    const user = await createRealUser(prisma);
     const order = await createOrder(prisma, { userId: user.id, status: 'RETURNED', deliveredAt: ago(30) });
     await prisma.review.create({ data: { userId: user.id, productId: productIds[0]!, orderId: order.id, rating: 5, images: ['https://res.cloudinary.com/it/p.jpg'] } });
     expect(await mission(user.id, 'REVIEW_3')).toMatchObject({ progress: 0 });

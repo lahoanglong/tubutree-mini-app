@@ -6,7 +6,7 @@ import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-ev
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { GameService } from '../../src/modules/game/game.service';
 import { AdminEngagementService } from '../../src/modules/admin/admin-engagement.service';
-import { createOrder, createUser, randCode, setConfig, warmPool } from './helpers';
+import { createOrder, createRealUser, randCode, setConfig, warmPool } from './helpers';
 
 const DAY = 864e5;
 const ago = (days: number) => new Date(Date.now() - days * DAY);
@@ -53,14 +53,14 @@ describe('Nhiệm vụ quản trị thêm (real Postgres)', () => {
   };
 
   it('khách có đơn giao từ trước không nhận được; có đơn mới sau khi tạo (qua hạn đổi/trả) thì nhận; hai lượt nhận đồng thời chỉ cộng một lần', async () => {
-    const old = await createUser(prisma);
+    const old = await createRealUser(prisma);
     await createOrder(prisma, { userId: old.id, status: 'DELIVERED', deliveredAt: ago(30) });
     const mission = await create();
     await expect(game.claimMission(old.id, mission.code)).rejects.toThrow('Chưa đủ điều kiện');
 
     // Đơn giao sau mốc bắt đầu: dời mốc về 20 ngày trước để đơn 10 ngày trước đã qua hạn 7 ngày.
     await prisma.mission.update({ where: { id: mission.id }, data: { startsAt: ago(20) } });
-    const buyer = await createUser(prisma);
+    const buyer = await createRealUser(prisma);
     await createOrder(prisma, { userId: buyer.id, status: 'DELIVERED', deliveredAt: ago(10) });
     const results = await Promise.allSettled([game.claimMission(buyer.id, mission.code), game.claimMission(buyer.id, mission.code)]);
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
@@ -98,7 +98,7 @@ describe('Nhiệm vụ quản trị thêm (real Postgres)', () => {
   async function buyers(n: number) {
     const users = [];
     for (let i = 0; i < n; i += 1) {
-      const u = await createUser(prisma);
+      const u = await createRealUser(prisma);
       await createOrder(prisma, { userId: u.id, status: 'DELIVERED', deliveredAt: ago(10) });
       users.push(u);
     }
@@ -122,7 +122,7 @@ describe('Nhiệm vụ quản trị thêm (real Postgres)', () => {
     await prisma.mission.update({ where: { id: mission.id }, data: { startsAt: ago(20) } });
     const users = await Promise.all(
       Array.from({ length: 40 }, async () => {
-        const u = await createUser(prisma);
+        const u = await createRealUser(prisma);
         for (let i = 0; i < 3; i += 1) await createOrder(prisma, { userId: u.id, status: 'DELIVERED', deliveredAt: ago(10 + i) });
         return u;
       }),

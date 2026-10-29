@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { SeasonPassService } from './season-pass.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
@@ -36,7 +36,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     coinTransaction: { create: jest.fn().mockResolvedValue({}) },
-    user: { update: jest.fn().mockResolvedValue({}) },
+    user: { update: jest.fn().mockResolvedValue({}), findUnique: jest.fn().mockResolvedValue({ zaloId: 'zalo-u1', phone: null }) },
     ...over,
   };
   db.$transaction = jest
@@ -224,6 +224,40 @@ describe('SeasonPassService.claim', () => {
     expect(pAny.coinTransaction.create).not.toHaveBeenCalled();
     expect(pAny.user.update).not.toHaveBeenCalled();
     expect((p.userSeasonPass.updateMany as jest.Mock).mock.calls[0][0].data).toEqual({ claimedPremium: { push: 0 } });
+  });
+
+  describe('khách vãng lai (không phải user thật)', () => {
+    const guest = { zaloId: 'guest_h_abc', phone: null };
+
+    it('bậc thưởng Điểm Xanh → 403, KHÔNG đánh dấu đã nhận, KHÔNG cấp điểm (nhận được sau khi đăng nhập Zalo)', async () => {
+      const p = premiumReady();
+      (p.user.findUnique as jest.Mock).mockResolvedValue(guest);
+      const { svc, rewards } = svcWith(p, makeConfig({ 'seasonpass.tiers': TIERS }));
+      await expect(svc.claim('u1', 0, 'premium')).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(svc.claim('u1', 0, 'premium')).rejects.toThrow('Đăng nhập Zalo để nhận Điểm Xanh');
+      expect(rewards.grant).not.toHaveBeenCalled();
+      expect(p.userSeasonPass.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('bậc thưởng giọt nước vẫn nhận bình thường', async () => {
+      const p = makePrisma({
+        userSeasonPass: {
+          findUnique: jest.fn().mockResolvedValue({ xp: 100, claimedFree: [], claimedPremium: [] }),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        user: { findUnique: jest.fn().mockResolvedValue(guest) },
+      });
+      const { svc } = svcWith(p, makeConfig({ 'seasonpass.tiers': TIERS }));
+      await expect(svc.claim('u1', 0, 'free')).resolves.toEqual({ claimed: true, reward: { type: 'SEEDS', amount: 20 } });
+    });
+
+    it('khách đã có SĐT là user thật: nhận Điểm Xanh như thường', async () => {
+      const p = premiumReady();
+      (p.user.findUnique as jest.Mock).mockResolvedValue({ zaloId: 'guest_h_abc', phone: '0901234567' });
+      const { svc, rewards } = svcWith(p, makeConfig({ 'seasonpass.tiers': TIERS }));
+      await expect(svc.claim('u1', 0, 'premium')).resolves.toMatchObject({ claimed: true });
+      expect(rewards.grant).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('bậc còn cấu hình XU (đơn vị xu, chưa quy đổi) → từ chối, KHÔNG cấp, KHÔNG đánh dấu đã nhận', async () => {
