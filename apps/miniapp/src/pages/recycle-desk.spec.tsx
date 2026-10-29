@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { WasteDeskRequestDTO } from '@tubutree/shared-types';
 
 const mocks = vi.hoisted(() => ({
@@ -262,6 +262,15 @@ describe('/recycle/desk — tra mã và đếm (§4.10)', () => {
 });
 
 describe('/recycle/desk — yêu cầu đồng nghiệp vừa đóng, chỉ đọc', () => {
+  // Chỉ giả Date: hẹn giờ thật vẫn chạy để react-query và findBy hoạt động.
+  beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-28T08:00:00.000Z') }));
+  afterEach(() => void vi.useRealTimers());
+  it('duyệt từ hôm trước: ghi cả ngày, để không đọc nhầm là hôm nay', async () => {
+    lookupReq({ status: 'COMPLETED', closedAt: '2026-10-27T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
+    renderPage();
+    await lookUp();
+    expect(await screen.findByText('Đã duyệt lúc 10:05 ngày 27/10')).toBeInTheDocument();
+  });
   it('đã duyệt: ghi giờ duyệt theo giờ Việt Nam, không nút duyệt hay từ chối', async () => {
     lookupReq({ status: 'COMPLETED', closedAt: '2026-10-28T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
     renderPage();
@@ -280,7 +289,7 @@ describe('/recycle/desk — yêu cầu đồng nghiệp vừa đóng, chỉ đ�
   });
 });
 
-describe('/recycle/desk — món chỉ kho HCMC nhận (E-127)', () => {
+describe('/recycle/desk — món chỉ kho HCMC nhận', () => {
   const MILK_ONLY = { ...REQ.lines[1]!, itemName: 'Vỏ chai Tubu', warehouseOnly: true };
   it('điểm đối tác: dòng đó mặc định 0, có câu giải thích, không bộ đếm; duyệt gửi số nhận 0 kèm lý do "Không nhận"', async () => {
     lookupReq({ lines: [LINE0, MILK_ONLY] });

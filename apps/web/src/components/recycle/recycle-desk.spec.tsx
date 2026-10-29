@@ -311,18 +311,29 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
       lines: [{ itemId: 'item-battery', declaredQty: 25, receivedQty: 25 }],
     });
   });
-  it.each([
-    ['COMPLETED', 'Đã duyệt lúc 10:05'],
-    ['REJECTED', 'Đã từ chối'],
-  ] as const)('yêu cầu %s: thẻ chỉ xem, không bộ đếm, không nút', async (status, text) => {
-    lookupReq({ status, closedAt: '2026-10-28T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
-    const c = await mount();
-    await lookUp(c);
-    expect(c.textContent).toContain(text);
-    if (status === 'COMPLETED') expect(lineOf(c, 'Thùng carton').textContent).toContain('Đã nhận 5 thùng');
-    expect(c.querySelector('[aria-label="Tăng số lượng"]')).toBeNull();
-    expect(button(c, 'Xác nhận đã nhận')).toBeNull();
-    expect(button(c, 'Từ chối cả yêu cầu')).toBeNull();
+  describe('yêu cầu vừa đóng', () => {
+    // Chỉ giả Date: hẹn giờ thật vẫn chạy để react-query và flush hoạt động.
+    beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-28T08:00:00.000Z') }));
+    afterEach(() => void vi.useRealTimers());
+    it.each([
+      ['COMPLETED', 'Đã duyệt lúc 10:05'],
+      ['REJECTED', 'Đã từ chối'],
+    ] as const)('yêu cầu %s: thẻ chỉ xem, không bộ đếm, không nút', async (status, text) => {
+      lookupReq({ status, closedAt: '2026-10-28T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
+      const c = await mount();
+      await lookUp(c);
+      expect(c.textContent).toContain(text);
+      if (status === 'COMPLETED') expect(lineOf(c, 'Thùng carton').textContent).toContain('Đã nhận 5 thùng');
+      expect(c.querySelector('[aria-label="Tăng số lượng"]')).toBeNull();
+      expect(button(c, 'Xác nhận đã nhận')).toBeNull();
+      expect(button(c, 'Từ chối cả yêu cầu')).toBeNull();
+    });
+    it('duyệt từ hôm trước: ghi cả ngày, để không đọc nhầm là hôm nay', async () => {
+      lookupReq({ status: 'COMPLETED', closedAt: '2026-10-27T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
+      const c = await mount();
+      await lookUp(c);
+      expect(c.textContent).toContain('Đã duyệt lúc 10:05 ngày 27/10');
+    });
   });
 });
 
