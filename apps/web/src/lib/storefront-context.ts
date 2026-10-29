@@ -14,6 +14,7 @@
  */
 const KEY = 'tubu_web_storefront';
 const PENDING_KEY = 'tubu_web_ref_pending';
+const CTV_TOUCHED_KEY = 'tubu_web_ctv_touched';
 /**
  * Bản chờ nguồn giới thiệu chỉ có giá trị trong chừng này ngày kể từ lúc khách mở link. Chạm bù xảy ra lúc đăng nhập nên hạn ghi
  * công phía máy chủ (affiliate.attribution_days) tính từ lúc đó: khách đăng nhập ngày thứ 6 thì nguồn sống tới ~13 ngày kể từ lúc
@@ -208,6 +209,31 @@ export function readPendingRefs(now: number = Date.now()): PendingRef[] {
   }
 }
 
+/**
+ * Mã đã được máy chủ ghi công qua gian hàng CTV (chạm kiểu ctv, ok:true) trong tab này. Mở gian hàng đối tác/nhãn sau đó không chạm
+ * lại cùng mã kiểu brand: máy chủ upsert cả dòng chạm và sẽ xoá slug gian hàng CTV khỏi nó (đơn sau không còn gắn gian hàng CTV, combo,
+ * storefrontSlug) dù hoa hồng không đổi. Ở sessionStorage chứ không phải biến module để tải lại trang hay quay về từ đăng nhập Zalo
+ * không làm mất (Mini App giữ cho cả phiên chạy).
+ */
+export function markCtvTouched(code: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(CTV_TOUCHED_KEY, norm(code));
+  } catch {
+    /* private mode / hết quota — mất dấu chấp nhận được, chỉ có thể chạm kiểu brand thừa */
+  }
+}
+
+export function wasCtvTouched(code: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const stored = sessionStorage.getItem(CTV_TOUCHED_KEY);
+    return !!stored && stored === norm(code);
+  } catch {
+    return false;
+  }
+}
+
 export function clearPendingRef(): void {
   if (typeof window === 'undefined') return;
   try {
@@ -221,6 +247,7 @@ export function clearStorefrontContext(): void {
   if (typeof window === 'undefined') return;
   try {
     sessionStorage.removeItem(KEY);
+    sessionStorage.removeItem(CTV_TOUCHED_KEY);
   } catch {
     /* ignore */
   }

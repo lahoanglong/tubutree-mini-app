@@ -12,6 +12,8 @@ import {
   rememberStorefront,
   rememberReferral,
   clearStorefrontContext,
+  markCtvTouched,
+  wasCtvTouched,
 } from './storefront-context';
 
 describe('ngữ cảnh gian hàng trên web', () => {
@@ -127,6 +129,32 @@ describe('referralEligible: mã giới thiệu có thật sự là của CTV', (
   it('bản lưu cũ (chưa có trường này) đọc ra null', () => {
     sessionStorage.setItem('tubu_web_storefront', JSON.stringify({ slug: null, referralCode: 'A', kind: null }));
     expect(getStorefrontContext().referralEligible).toBeNull();
+  });
+});
+
+describe('mã đã được ghi công qua gian hàng CTV trong tab', () => {
+  beforeEach(() => sessionStorage.clear());
+
+  it('chưa đánh dấu thì không mã nào được coi là đã chạm; đánh dấu không phân biệt hoa thường', () => {
+    expect(wasCtvTouched('AN123')).toBe(false);
+    markCtvTouched(' an123 ');
+    expect(wasCtvTouched('AN123')).toBe(true);
+    expect(wasCtvTouched('an123')).toBe(true);
+    expect(wasCtvTouched('KHAC')).toBe(false);
+  });
+
+  it('nằm ở sessionStorage (sống qua tải lại trang) và bị xoá cùng ngữ cảnh gian hàng', () => {
+    markCtvTouched('AN123');
+    expect(sessionStorage.length).toBe(1);
+    clearStorefrontContext();
+    expect(wasCtvTouched('AN123')).toBe(false);
+  });
+
+  it('ghi đè bằng mã CTV khác: chỉ nhớ mã sau cùng', () => {
+    markCtvTouched('AN123');
+    markCtvTouched('BINH9');
+    expect(wasCtvTouched('AN123')).toBe(false);
+    expect(wasCtvTouched('BINH9')).toBe(true);
   });
 });
 

@@ -8,9 +8,11 @@ import {
   confirmReferralTouch,
   ctvSlugFor,
   getStorefrontContext,
+  markCtvTouched,
   readPendingRefs,
   rememberEntryLink,
   rememberStorefront,
+  wasCtvTouched,
   type PendingRef,
 } from '@/lib/storefront-context';
 import { recordReferralTouch } from '@/lib/shop-client';
@@ -40,18 +42,6 @@ function touchFromPending(p: PendingRef): TouchDto | null {
 const sameTouch = (a: TouchDto, b: TouchDto) => a.referralCode.toUpperCase() === b.referralCode.toUpperCase();
 
 /**
- * Mã đã được ghi công qua gian hàng CTV (chạm kiểu ctv, ok:true) trong lần mở trang này. Mở gian hàng đối tác/nhãn sau đó không chạm
- * lại cùng mã kiểu brand: máy chủ upsert cả dòng chạm và sẽ xoá slug gian hàng CTV khỏi nó (đơn sau không còn gắn gian hàng CTV, combo,
- * storefrontSlug) dù hoa hồng không đổi.
- */
-let ctvTouched: string | null = null;
-
-/** Chỉ cho test: quên mã đã chạm giữa các ca. */
-export function resetCtvTouched(): void {
-  ctvTouched = null;
-}
-
-/**
  * Máy chủ đã nhận và từ chối (4xx trừ 401, 429): gửi lại y hệt cũng bị từ chối, giữ bản chờ chỉ làm nó kẹt và chạm lại mỗi lần tải trang.
  * Mất mạng, 5xx, 401 (phiên vừa hết hạn) và 429 thì lần sau có thể khác nên vẫn thử lại.
  */
@@ -64,9 +54,14 @@ const isPermanentRejection = (e: unknown) => e instanceof ApiError && e.status >
  * cũng vậy); lỗi tạm thời (mạng, 5xx, hết phiên) thì giữ để lần sau thử lại. Best-effort: hỏng thì vẫn còn ngữ cảnh trong tab để gửi lúc đặt đơn.
  */
 async function replayTouches(session: TouchDto | null): Promise<void> {
-  const older = readPendingRefs()
+  const pending = readPendingRefs()
     .map(touchFromPending)
-    .filter((t): t is TouchDto => t !== null && !(session && sameTouch(t, session)));
+    .filter((t): t is TouchDto => t !== null);
+  // Phiên là gian hàng nhãn/đối tác mang mã của một link CTV còn chờ (khách mở link khi chưa đăng nhập, rồi sang gian hàng đối tác):
+  // chạm bản CTV có slug, không chạm kiểu brand đè mất slug gian hàng CTV.
+  const ctvSource = session?.kind === 'brand' ? pending.find((t) => t.storefrontSlug && sameTouch(t, session)) : undefined;
+  const last = ctvSource ?? session;
+  const older = pending.filter((t) => !(last && sameTouch(t, last)));
   let delivered = true;
   for (const dto of older) {
     try {
@@ -75,10 +70,10 @@ async function replayTouches(session: TouchDto | null): Promise<void> {
       if (!isPermanentRejection(e)) delivered = false;
     }
   }
-  if (session && !(session.kind === 'brand' && session.referralCode.toUpperCase() === ctvTouched)) {
+  if (last && !(last.kind === 'brand' && wasCtvTouched(last.referralCode))) {
     try {
-      const res = await touchAndConfirm(session);
-      if (res?.ok && session.kind === 'ctv') ctvTouched = session.referralCode.toUpperCase();
+      const res = await touchAndConfirm(last);
+      if (res?.ok && last.kind === 'ctv') markCtvTouched(last.referralCode);
     } catch (e) {
       if (!isPermanentRejection(e)) delivered = false;
     }

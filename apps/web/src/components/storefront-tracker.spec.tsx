@@ -8,8 +8,15 @@ vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: mocks.status })
 vi.mock('@/lib/shop-client', () => ({ recordReferralTouch: mocks.touch }));
 
 import { ApiError, NetworkError } from '@/lib/client-api';
-import { clearPendingRef, clearStorefrontContext, getStorefrontContext, PENDING_REF_TTL_DAYS, readPendingRefs } from '@/lib/storefront-context';
-import { ReferralCapture, resetCtvTouched, StorefrontTracker } from './storefront-tracker';
+import {
+  clearPendingRef,
+  clearStorefrontContext,
+  getStorefrontContext,
+  PENDING_REF_TTL_DAYS,
+  readPendingRefs,
+  wasCtvTouched,
+} from '@/lib/storefront-context';
+import { ReferralCapture, StorefrontTracker } from './storefront-tracker';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -24,7 +31,6 @@ async function mount() {
 
 describe('ReferralCapture ghi nguồn gian hàng ?s= như Mini App', () => {
   beforeEach(() => {
-    resetCtvTouched();
     mocks.status = 'authenticated';
     mocks.touch.mockReset().mockResolvedValue({ ok: true });
     clearStorefrontContext();
@@ -99,7 +105,6 @@ async function mountKept(node: React.ReactElement = <ReferralCapture />) {
 describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chưa đăng nhập', () => {
   const DAY = 24 * 60 * 60 * 1000;
   beforeEach(() => {
-    resetCtvTouched();
     mocks.status = 'anonymous';
     mocks.touch.mockReset().mockResolvedValue({ ok: true });
     sessionStorage.clear();
@@ -304,7 +309,6 @@ describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chư
 
 describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã có phải của CTV không', () => {
   beforeEach(() => {
-    resetCtvTouched();
     mocks.status = 'authenticated';
     mocks.touch.mockReset();
     sessionStorage.clear();
@@ -377,6 +381,35 @@ describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã c�
     window.history.replaceState({}, '', '/?s=an-shop&ref=AN123');
     await mount();
     expect(mocks.touch).toHaveBeenCalledTimes(1);
+    mocks.touch.mockClear();
+    const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+    expect(mocks.touch).not.toHaveBeenCalled();
+    await t.unmount();
+  });
+
+  it('khách chưa đăng nhập mở gian hàng CTV rồi sang gian hàng đối tác, đăng nhập sau: chạm bản CTV kèm slug, không chạm kiểu brand cùng mã', async () => {
+    mocks.touch.mockResolvedValue({ ok: true });
+    mocks.status = 'anonymous';
+    const ctv = await mountKept(<StorefrontTracker slug="an-shop" type="CTV" referralCode="AN123" />);
+    await ctv.unmount();
+    const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+    expect(mocks.touch).not.toHaveBeenCalled();
+    mocks.status = 'authenticated';
+    await t.rerender();
+    expect(mocks.touch.mock.calls.map(([dto]) => dto)).toEqual([{ referralCode: 'AN123', storefrontSlug: 'an-shop', kind: 'ctv' }]);
+    expect(readPendingRefs()).toEqual([]);
+    expect(getStorefrontContext()).toMatchObject({ referralCode: 'AN123', referralEligible: true });
+    mocks.touch.mockClear();
+    await t.rerender(<StorefrontTracker slug="doi-tac-2" type="MERCHANT" referralCode={null} />);
+    expect(mocks.touch).not.toHaveBeenCalled();
+    await t.unmount();
+  });
+
+  it('chạm CTV được ghi công thì nhớ ở sessionStorage, nên tải lại trang rồi mở gian hàng đối tác vẫn không chạm kiểu brand', async () => {
+    mocks.touch.mockResolvedValue({ ok: true });
+    const ctv = await mountKept(<StorefrontTracker slug="an-shop" type="CTV" referralCode="AN123" />);
+    await ctv.unmount();
+    expect(wasCtvTouched('an123')).toBe(true);
     mocks.touch.mockClear();
     const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
     expect(mocks.touch).not.toHaveBeenCalled();
