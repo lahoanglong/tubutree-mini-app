@@ -5,7 +5,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { AffiliateDashboard, CtvTiersResponse } from '@tubutree/app-core/api/affiliate';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
-import { phoneFlatCard } from '@/lib/phone-ui';
+import { phoneCaption, phoneFlatCard } from '@/lib/phone-ui';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { progressPct, tierRewardLabel } from './milestone-copy';
 
@@ -17,20 +17,20 @@ export function TierCard({ dash, tiers }: { dash: Pick<AffiliateDashboard, 'tier
     <section aria-label="Bậc CTV" className={`${ui.card} ${phoneFlatCard} p-4`}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-2xl leading-none" aria-hidden="true">
+          <span className="text-2xl leading-none max-md:text-[length:var(--type-display-md-size)]" aria-hidden="true">
             {tier.emoji}
           </span>
           <div>
-            <div className="text-base font-semibold text-stone-900">CTV {tier.name}</div>
-            <div className="text-xs text-forest-700">Bậc theo doanh số đã chốt tháng này</div>
+            <div className="text-base font-semibold text-stone-900 max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)]">CTV {tier.name}</div>
+            <div className={`text-xs text-forest-700 ${phoneCaption}`}>Bậc theo doanh số đã chốt tháng này</div>
           </div>
         </div>
-        <div className="text-xs text-stone-600">Đã chốt: {formatVnd(dash.monthRevenue)}</div>
+        <div className={`text-xs text-stone-600 ${phoneCaption}`}>Đã chốt: {formatVnd(dash.monthRevenue)}</div>
       </div>
       {tier.nextName && tier.nextThreshold && (
         <div className="mt-3">
           <ProgressBar value={progressPct(dash.monthRevenue, tier.nextThreshold)} max={100} ariaLabel="Tiến độ lên hạng kế tiếp" />
-          <div className="mt-1 text-xs text-stone-700">
+          <div className={`mt-1 text-xs text-stone-700 ${phoneCaption}`}>
             Còn <b>{formatVnd(tier.toNext)}</b> doanh số đã chốt để lên bậc {tier.nextName}
           </div>
         </div>
@@ -58,12 +58,12 @@ export function TierCard({ dash, tiers }: { dash: Pick<AffiliateDashboard, 'tier
               >
                 <div className="flex items-center gap-1.5">
                   <span aria-hidden="true">{t.emoji}</span>
-                  <span className={`text-xs ${current ? 'font-semibold text-forest-700' : 'text-stone-900'}`}>
+                  <span className={`text-xs ${phoneCaption} ${current ? 'font-semibold text-forest-700' : 'text-stone-900'}`}>
                     {t.name} {current ? '(Hiện tại)' : ''}
                   </span>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs font-semibold text-forest-700">{tierRewardLabel(t)}</div>
+                  <div className={`text-xs font-semibold text-forest-700 ${phoneCaption}`}>{tierRewardLabel(t)}</div>
                   <div className="text-xs text-stone-600">{t.min === 0 ? 'Mặc định' : `DS từ ${formatVnd(t.min)}`}</div>
                 </div>
               </li>
