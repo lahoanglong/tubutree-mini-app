@@ -157,6 +157,7 @@ describe('walletTxLabel', () => {
     expect(walletTxLabel('ORDER_REFUND')).toBe('Hoàn tiền đơn hàng');
     expect(walletTxLabel('WITHDRAW')).toBe('Rút về ngân hàng');
     expect(walletTxLabel('PIT_REFUND')).toBe('Hoàn thuế TNCN giữ dư');
+    expect(walletTxLabel('COMMISSION_REVERSAL')).toBe('Thu hồi hoa hồng');
     expect(walletTxLabel('BRAND_NEW_TYPE')).toBe('Biến động ví');
   });
 });
