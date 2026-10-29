@@ -168,6 +168,25 @@ describe.each(PAGES)('mở %s khi cờ phiên còn mà API không trả lời', 
   });
 });
 
+describe('khôi phục phiên bị giới hạn tốc độ (429)', () => {
+  it('nói "thao tác quá nhanh" kèm Thử lại, không nói mất kết nối', async () => {
+    mocks.auth.sessionRateLimited = true;
+    try {
+      const { container } = mount(<CartPage />);
+      await flush();
+      expect(container.textContent).toContain('Bạn thao tác quá nhanh');
+      expect(container.textContent).toContain('Đợi ít phút');
+      expect(container.textContent).not.toContain('Không kết nối được với Tubu Tree');
+      const retry = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Thử lại')!;
+      click(retry);
+      await flush();
+      expect(mocks.retrySession).toHaveBeenCalledTimes(1);
+    } finally {
+      mocks.auth.sessionRateLimited = false;
+    }
+  });
+});
+
 describe('khách vãng lai thật (không có cờ phiên)', () => {
   it('vẫn thấy lời mời đăng nhập', async () => {
     mocks.auth.sessionUnavailable = false;

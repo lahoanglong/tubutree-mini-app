@@ -34,7 +34,7 @@ export function AuthLoading() {
  * thay vì mời đăng nhập lại. Trang tự thử lại khi có mạng hoặc khi quay lại tab; nút để khách chủ động thử.
  */
 export function SessionUnavailable() {
-  const { retrySession } = useAuth();
+  const { retrySession, sessionRateLimited } = useAuth();
   const [busy, setBusy] = useState(false);
 
   const retry = async () => {
@@ -51,9 +51,13 @@ export function SessionUnavailable() {
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-warning-bg text-warning-fg shadow-card">
         <WifiOff className="h-8 w-8 stroke-[1.5]" aria-hidden="true" />
       </div>
-      <p className="mx-auto mt-4 max-w-sm font-semibold text-stone-900">Không kết nối được với Tubu Tree</p>
+      <p className="mx-auto mt-4 max-w-sm font-semibold text-stone-900">
+        {sessionRateLimited ? 'Bạn thao tác quá nhanh' : 'Không kết nối được với Tubu Tree'}
+      </p>
       <p className="mx-auto mt-1 max-w-sm text-sm text-stone-700">
-        Bạn vẫn đang đăng nhập — chỉ là mạng hoặc máy chủ đang chập chờn. Tubu sẽ tự thử lại khi có mạng, hoặc bạn bấm nút bên dưới.
+        {sessionRateLimited
+          ? 'Bạn vẫn đang đăng nhập — Tubu tạm dừng vài phút để giữ tài khoản an toàn. Đợi ít phút rồi bấm nút bên dưới nhé.'
+          : 'Bạn vẫn đang đăng nhập — chỉ là mạng hoặc máy chủ đang chập chờn. Tubu sẽ tự thử lại khi có mạng, hoặc bạn bấm nút bên dưới.'}
       </p>
       <button type="button" onClick={() => void retry()} disabled={busy} className={`${ui.btnPrimary} mt-4`}>
         {busy ? 'Đang thử lại…' : 'Thử lại'}
