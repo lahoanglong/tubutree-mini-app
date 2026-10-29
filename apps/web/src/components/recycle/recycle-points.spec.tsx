@@ -99,6 +99,12 @@ describe('/doi-rac/diem-nhan (§4.4)', () => {
     expect(state.replace).toHaveBeenCalledWith('/doi-rac');
     expect(state.replace).not.toHaveBeenCalledWith('/doi-rac/tao');
   });
+  it('đang khôi phục phiên: chưa chuyển đi, chưa gọi API', async () => {
+    state.phase = 'loading';
+    await mount();
+    expect(state.replace).not.toHaveBeenCalled();
+    expect(state.calls).toEqual([]);
+  });
   it('chưa đủ điều kiện (thiếu SĐT): chỉ lời chỉ sang Zalo (Q2)', async () => {
     state.me = makeWasteMe({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null });
     const c = await mount();
