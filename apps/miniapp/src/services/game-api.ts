@@ -93,6 +93,8 @@ export interface MissionItem {
   completed: boolean;
   /** A1-02: đã nhận thưởng cho chu kỳ hiện tại chưa (mission_progress). */
   claimed: boolean;
+  /** 'GUEST' = khách vãng lai chưa nhận được Điểm Xanh: không hứa `rewardPoints`, mời đăng nhập Zalo; tiến độ vẫn tính. */
+  pointsBlocked?: 'GUEST';
 }
 export interface ClaimMissionResult {
   claimed: boolean;

@@ -1,5 +1,5 @@
 import type { HttpClient } from '../http';
-import type { CheckInResult } from './loyalty';
+import type { CheckInResult, PointsBlocked } from './loyalty';
 
 export interface GameProfile {
   totalSeeds: number;
@@ -94,6 +94,8 @@ export interface MissionItem {
   completed: boolean;
   /** A1-02: đã nhận thưởng cho chu kỳ hiện tại chưa (mission_progress). */
   claimed: boolean;
+  /** 'GUEST' = khách vãng lai chưa nhận được Điểm Xanh: không hứa `rewardPoints`, mời đăng nhập Zalo; tiến độ vẫn tính. */
+  pointsBlocked?: PointsBlocked;
 }
 export interface ClaimMissionResult {
   claimed: boolean;

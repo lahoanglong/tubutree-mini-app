@@ -5,6 +5,7 @@ import { gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app
 import { collapseMissions, gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ui } from '@/lib/guest-ui';
+import { GuestPointsNote } from '@/components/loyalty/guest-points-note';
 import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { formatNumber } from './format';
 import { GameCard } from './game-card';
@@ -29,8 +30,11 @@ export function MissionsCard({
 }) {
   const [showAll, setShowAll] = useState(false);
   const { items, collapsible } = collapseMissions(missions ?? [], showAll);
+  // Khách vãng lai: tiến độ vẫn tính nhưng không hứa điểm và không có nút nhận thưởng; một câu mời đăng nhập cho cả thẻ.
+  const guest = (missions ?? []).some((m) => m.pointsBlocked);
   return (
     <GameCard title="Nhiệm vụ" icon={Target}>
+      {guest && <GuestPointsNote margin="0 0 4px" />}
       {missions && missions.length > 0 ? (
         items.map((m, idx) => {
           // BE Mission.goal mặc định = 1: "> 1" từng loại bỏ nhầm mọi nhiệm vụ cấu hình goal=1 hợp lệ.
@@ -40,7 +44,7 @@ export function MissionsCard({
           const isDone = m.completed || progress >= goal;
           // "Đạt điều kiện" và "đã nhận thưởng" là hai việc: dấu ✓ chỉ khi đã nhận (thưởng thật đã vào Điểm Xanh),
           // đạt mà chưa nhận thì hiện nút "Nhận thưởng".
-          const canClaim = isDone && !m.claimed;
+          const canClaim = isDone && !m.claimed && !m.pointsBlocked;
           const claiming = claimPending && claimVariables === m.code;
           const target = !isDone && onGo ? missionTarget(m.code, m.kind) : null;
 
@@ -52,7 +56,7 @@ export function MissionsCard({
                   {m.title}
                   {m.claimed && <span className="sr-only"> (đã nhận thưởng)</span>}
                 </span>
-                <span className="whitespace-nowrap text-caption text-forest-700">+{formatNumber(m.rewardPoints)} Điểm Xanh</span>
+                {!m.pointsBlocked && <span className="whitespace-nowrap text-caption text-forest-700">+{formatNumber(m.rewardPoints)} Điểm Xanh</span>}
               </div>
               {m.description && <div className="text-caption text-stone-600">{m.description}</div>}
               <div className="mt-2">

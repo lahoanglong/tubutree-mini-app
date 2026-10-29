@@ -1,4 +1,4 @@
-import type { CheckInResult, CheckInStatusResponse } from './api/loyalty';
+import type { CheckInResult, CheckInReward, CheckInStatusResponse } from './api/loyalty';
 
 const num = (n: number): string => ((Number.isFinite(n) ? n : 0) + 0).toLocaleString('vi-VN');
 
@@ -16,13 +16,28 @@ export const checkInCopy = {
   loadErrorTitle: 'Chưa tải được lịch điểm danh',
   dayAria: (day: number, points: number, claimed: boolean) =>
     `Ngày ${day}: +${num(points)} Điểm Xanh${claimed ? ', đã nhận' : ''}`,
+  /** Khách vãng lai (API báo `pointsBlocked`): vẫn điểm danh và nhận giọt nước, nhưng Điểm Xanh chỉ có sau khi đăng nhập Zalo. */
+  guestPoints: 'Đăng nhập Zalo để nhận Điểm Xanh',
+  guestCta: 'Đăng nhập Zalo',
+  ruleGuest: 'Mỗi ngày điểm danh 1 lần (giờ Việt Nam) để nhận giọt nước. Lỡ 1 ngày mà có vé giữ lửa thì chuỗi được giữ, không thì lịch 7 ngày bắt đầu lại.',
+  dayAriaGuest: (day: number, claimed: boolean) => `Ngày ${day}${claimed ? ', đã nhận' : ''}`,
 } as const;
 
+/** Nhãn đọc màn hình của một ô ngày: khách vãng lai không được hứa điểm. */
+export function checkInDayAria(s: Pick<CheckInStatusResponse, 'pointsBlocked'>, r: Pick<CheckInReward, 'day' | 'points' | 'claimed'>): string {
+  return s.pointsBlocked ? checkInCopy.dayAriaGuest(r.day, r.claimed) : checkInCopy.dayAria(r.day, r.points, r.claimed);
+}
+
+/** Thể lệ ngắn dưới nút điểm danh; bản của khách vãng lai không nhắc Điểm Xanh. */
+export function checkInRule(s: Pick<CheckInStatusResponse, 'pointsBlocked'>): string {
+  return s.pointsBlocked ? checkInCopy.ruleGuest : checkInCopy.rule;
+}
+
 /** "Hôm nay nhận +1.000 Điểm Xanh · +10 giọt nước": chỉ liệt kê phần CÒN THIẾU (phần đã xong, hoặc thiếu số, thì bỏ vế đó). */
-export function checkInTodayLine(s: Pick<CheckInStatusResponse, 'todayPoints' | 'todayWater' | 'tankFull' | 'checkedInToday' | 'pointsDone' | 'waterDone'>): string | null {
+export function checkInTodayLine(s: Pick<CheckInStatusResponse, 'todayPoints' | 'todayWater' | 'tankFull' | 'checkedInToday' | 'pointsDone' | 'waterDone' | 'pointsBlocked'>): string | null {
   if (s.checkedInToday) return null;
   const parts: string[] = [];
-  if (!s.pointsDone && (s.todayPoints ?? 0) > 0) parts.push(`+${num(s.todayPoints ?? 0)} Điểm Xanh`);
+  if (!s.pointsBlocked && !s.pointsDone && (s.todayPoints ?? 0) > 0) parts.push(`+${num(s.todayPoints ?? 0)} Điểm Xanh`);
   if (!s.waterDone && (s.todayWater ?? 0) > 0) parts.push(`+${num(s.todayWater ?? 0)} giọt nước`);
   const tankFull = s.waterDone === false && s.tankFull === true;
   if (parts.length === 0) return tankFull ? checkInCopy.tankFull : null;
@@ -51,6 +66,8 @@ export function checkInSuccessText(r: CheckInResult): string {
   if (parts.length > 0) text = parts.join(' · ');
   else if (r.points || r.water) text = 'Điểm danh thành công!';
   else text = checkInCopy.alreadyDone;
+  // Khách vãng lai: API không cộng Điểm Xanh; nói thẳng cách nhận thay vì để khách tưởng điểm đã vào.
+  if (r.points?.pointsBlocked) text = `${text.replace(/[.!]$/, '')}. ${checkInCopy.guestPoints}`;
   return r.pending.length > 0 ? `${text}. ${checkInCopy.retryMissing}` : text;
 }
 
