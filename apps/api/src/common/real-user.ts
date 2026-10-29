@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
  * "User thật" (Q-05): có zaloId Zalo thật hoặc SĐT. Khách đăng nhập theo deviceId mang zaloId
  * `guest_<deviceId>` (cả dòng guest đã gộp `guest_..._merged_...`) — tạo vô hạn chỉ bằng deviceId
  * mới nên không được nhận hay được đếm vào quyền lợi khuyến mãi (voucher chào mừng, mã công khai,
- * mua chung, nhiệm vụ mời bạn). SĐT chỉ được ghi từ phoneToken Zalo (auth.service) nên có SĐT = đã
+ * mua chung, nhiệm vụ mời bạn, Điểm Xanh từ điểm danh, nhiệm vụ và chặng mùa). SĐT chỉ được ghi từ phoneToken Zalo (auth.service) nên có SĐT = đã
  * xác thực, kể cả khi dòng vẫn mang zaloId guest.
  */
 export const REAL_USER_WHERE: Prisma.UserWhereInput = {
