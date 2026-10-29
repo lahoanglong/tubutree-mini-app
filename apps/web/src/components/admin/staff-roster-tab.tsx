@@ -29,6 +29,9 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
   const typedPhone = phone.trim();
   const existingStaff = role === 'STAFF' ? staffQ.data?.members.find((m) => m.role === 'STAFF' && m.phone === typedPhone) : undefined;
   const existingNames = existingStaff ? PERMISSIONS.filter((p) => existingStaff.staffPermissions?.includes(p)).map((p) => STAFF_PERMISSION_SHORT[p]) : null;
+  // Lời mời đang chờ trùng SĐT: chọn nhóm thì thay nhóm của lời mời, để trống thì lời mời giữ nhóm đã ghi.
+  const pendingInvite = role === 'STAFF' && !existingStaff ? staffQ.data?.pendingInvites.find((i) => i.role === 'STAFF' && i.phone === typedPhone) : undefined;
+  const pendingNames = pendingInvite ? PERMISSIONS.filter((p) => pendingInvite.staffPermissions?.includes(p)).map((p) => STAFF_PERMISSION_SHORT[p]) : null;
 
   const grantM = useMutation({
     // Nhóm việc chỉ có nghĩa với nhân viên; không chọn nhóm nào thì không gửi khoá permissions để máy chủ giữ nguyên nhóm đã lưu.
@@ -36,10 +39,10 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
       const to = phone.trim();
       const names = PERMISSIONS.filter((p) => newPerms.includes(p)).map((p) => STAFF_PERMISSION_SHORT[p]);
       const r = await grantStaff(coreHttp, to, role, role === 'STAFF' && newPerms.length ? newPerms : undefined);
-      return { r, to, names };
+      return { r, to, names, alreadyStaff: existingNames !== null };
     },
-    onSuccess: ({ r, to, names }) => {
-      setMsg({ tone: 'success', text: grantDoneText(r, to, names) });
+    onSuccess: ({ r, to, names, alreadyStaff }) => {
+      setMsg({ tone: 'success', text: grantDoneText(r, to, names, alreadyStaff) });
       setPhone('');
       setNewPerms([]);
       refresh();
@@ -149,7 +152,7 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-stone-500">{grantPermissionsHint(existingNames)}</p>
+            <p className="text-xs text-stone-500">{grantPermissionsHint(existingNames, pendingNames)}</p>
           </div>
         )}
         <button type="submit" disabled={!PHONE_RE.test(phone.trim()) || grantM.isPending} className={BTN_PRIMARY}>

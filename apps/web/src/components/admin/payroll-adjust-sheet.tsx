@@ -60,6 +60,7 @@ export function PayrollAdjustSheet({
   const [day, setDay] = useState(() => defaultDay(year, month));
   const [reason, setReason] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
   const amount = /^\d+$/.test(amountText) ? Number(amountText) : 0;
   const reasonText = reason.trim();
@@ -90,6 +91,7 @@ export function PayrollAdjustSheet({
 
   const submit = async (allowDuplicate: boolean) => {
     setErr(null);
+    setInfo(null);
     try {
       const recomputed = await send.mutateAsync(allowDuplicate);
       const done = `Đã ghi khoản ${label} ${formatVnd(amount)} cho ${name} (ngày ${dmy(day)}).`;
@@ -115,7 +117,10 @@ export function PayrollAdjustSheet({
           recomputed = false;
         }
         const same = 'Khoản giống hệt đã có nên chưa ghi thêm.';
-        onDone(recomputed ? `${same} Đã cập nhật số lương trên dòng.` : `${same} Chưa cập nhật được số lương trên dòng: bấm Tính lại tháng để cập nhật số.`);
+        const text = recomputed ? `${same} Đã cập nhật số lương trên dòng.` : `${same} Chưa cập nhật được số lương trên dòng: bấm Tính lại tháng để cập nhật số.`;
+        // Hộp vẫn mở và lớp nền tối che lời báo của trang, nên báo cả trong hộp.
+        setInfo(text);
+        onDone(text);
         return;
       }
       setErr(actionErrorText(e));
@@ -228,6 +233,11 @@ export function PayrollAdjustSheet({
           {err && (
             <Notice tone="danger" role="alert">
               {err}
+            </Notice>
+          )}
+          {info && (
+            <Notice tone="info" role="status">
+              {info}
             </Notice>
           )}
         </div>

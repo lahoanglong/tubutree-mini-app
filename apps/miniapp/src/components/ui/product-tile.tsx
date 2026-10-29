@@ -45,7 +45,7 @@ export interface ProductTileProps {
   action?: 'add' | 'rebuy' | 'subscribe' | 'none';
   onAction?: () => void;
   badge?: ReactNode;
-  /** Nút nổi trên ảnh (vd. giỏ nhanh): caller tự định vị trong khung ảnh `position: relative`, đặt zIndex 1 để nằm trên lớp phủ của nút tên. */
+  /** Nút nổi trên ảnh (vd. giỏ nhanh): tile đặt ở góc phải dưới vùng ảnh, trên lớp phủ của nút tên; caller chỉ đưa nút, không tự định vị. */
   imageOverlay?: ReactNode;
   onPress: () => void;
 }

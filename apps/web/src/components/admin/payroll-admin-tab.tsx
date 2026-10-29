@@ -13,6 +13,7 @@ import {
   type AdminPayrollRow,
   type PayrollStatus,
 } from '@tubutree/app-core/api/payroll';
+import { payrollReopenMessage } from '@tubutree/app-core/payroll-copy';
 import { adminPayrollDetailQuery, adminPayrollQuery } from '@tubutree/app-core/queries/payroll';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/error-text';
@@ -119,9 +120,7 @@ export function PayrollAdminTab() {
   const askReopen = async (r: AdminPayrollRow) => {
     const go = await confirm({
       title: 'Mở lại bảng lương?',
-      message:
-        `Mở lại bảng lương T${ym.month}/${ym.year} của ${r.staff.fullName ?? 'NV'}? Cần chốt lại sau khi sửa.` +
-        (r.month.status === 'PAID' ? ' Mở lại sẽ xoá dấu đã trả và ảnh chứng từ chuyển khoản của tháng này.' : ''),
+      message: payrollReopenMessage(ym.month, ym.year, r.staff.fullName ?? 'NV', r.month.status),
       confirmLabel: 'Mở lại',
     });
     if (go) reopenM.mutate(r);

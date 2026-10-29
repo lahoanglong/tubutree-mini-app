@@ -425,6 +425,32 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
         await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đổi nhóm việc của 0901234567 thành Chăm sóc khách.', type: 'success' }));
       });
 
+      it('nhân viên đã có mà không chọn nhóm: báo nhóm giữ nguyên, không hứa "sẽ áp khi họ mở app"', async () => {
+        mocks.grantStaff.mockResolvedValue({ granted: 'STAFF', applied: false, permissionsChanged: false });
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
+        fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0901234567' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '0901234567 đã là nhân viên, nhóm việc giữ nguyên.', type: 'success' }));
+      });
+
+      it('người chưa có tài khoản vẫn báo "sẽ áp khi họ mở app"', async () => {
+        mocks.grantStaff.mockResolvedValue({ granted: 'STAFF', applied: false, permissionsChanged: false });
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
+        fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0907778889' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Lưu quyền' }));
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã lưu quyền (sẽ áp khi họ mở app).', type: 'success' }));
+      });
+
+      it('gõ SĐT của lời mời đang chờ có nhóm: nêu nhóm của lời mời thay vì gợi ý "chỉ dùng quầy"', async () => {
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
+        fireEvent.change(screen.getByLabelText('Số điện thoại'), { target: { value: '0987654321' } });
+        expect(screen.getByText(/Lời mời đang chờ với nhóm: Chăm sóc khách\. .*giữ nguyên nhóm của lời mời/)).toBeInTheDocument();
+        expect(screen.queryByText(/chỉ dùng quầy thu ngân/)).toBeNull();
+      });
+
       it('lưu xong thì chọn lại từ đầu: nhóm của người trước không kéo sang người sau', async () => {
         renderPage();
         fireEvent.click(await screen.findByRole('button', { name: 'Thêm' }));
@@ -695,7 +721,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       const confirm = confirmSpy();
       await openPayroll();
       fireEvent.click(screen.getByRole('button', { name: 'Mở lại · Bình' }));
-      expect(screen.getByText('Mở lại bảng lương T3/2026 của Bình? Cần chốt lại sau khi sửa.')).toBeInTheDocument();
+      expect(screen.getByText(/^Mở lại bảng lương T3\/2026 của Bình\? Cần chốt lại sau khi sửa\./)).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
       expect(mocks.reopenPayroll).not.toHaveBeenCalled();
       fireEvent.click(screen.getByRole('button', { name: 'Mở lại · Bình' }));
@@ -705,6 +731,16 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
         expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã mở lại bảng lương — sửa xong nhớ chốt lại.', type: 'success' }),
       );
       expect(confirm).not.toHaveBeenCalled();
+    });
+
+    it('Mở lại tháng đã trả: hộp xác nhận nói rõ sẽ xoá dấu đã trả và ảnh chứng từ; tháng chỉ mới chốt thì không nhắc', async () => {
+      await openPayroll();
+      fireEvent.click(screen.getByRole('button', { name: 'Mở lại · Bình' }));
+      expect(screen.getByText(/xoá dấu đã trả và ảnh chứng từ/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Mở lại · 0912345678' }));
+      expect(screen.getByText('Mở lại bảng lương T3/2026 của NV? Cần chốt lại sau khi sửa.')).toBeInTheDocument();
+      expect(screen.queryByText(/chứng từ/)).toBeNull();
     });
 
     it('Đơn giá: nạp đơn giá hiện tại, chỉ lưu khi toàn chữ số, gửi số', async () => {

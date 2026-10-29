@@ -195,6 +195,37 @@ describe('StaffRosterTab (Nhân sự)', () => {
       expect(container.textContent).toContain('Đã đổi nhóm việc của 0911111111 thành Chăm sóc khách.');
       expect(container.textContent).not.toContain('sẽ áp khi họ mở app');
     });
+
+    it('nhân viên đã có mà không chọn nhóm: báo nhóm giữ nguyên, không hứa "sẽ áp khi họ mở app"', async () => {
+      stub({ grant: { granted: 'STAFF', applied: false, permissionsChanged: false } });
+      const { container } = mount(<StaffRosterTab />);
+      await flush();
+      typeInto(container.querySelector('input[type=tel]'), '0911111111');
+      click(byText(container, 'button', 'Lưu quyền'));
+      await flush();
+      expect(container.textContent).toContain('0911111111 đã là nhân viên, nhóm việc giữ nguyên.');
+      expect(container.textContent).not.toContain('sẽ áp khi họ mở app');
+    });
+
+    it('người chưa có tài khoản vẫn báo "sẽ áp khi họ mở app"', async () => {
+      stub({ grant: { granted: 'STAFF', applied: false, permissionsChanged: false } });
+      const { container } = mount(<StaffRosterTab />);
+      await flush();
+      typeInto(container.querySelector('input[type=tel]'), '0944444444');
+      click(byText(container, 'button', 'Lưu quyền'));
+      await flush();
+      expect(container.textContent).toContain('Đã lưu quyền (sẽ áp khi họ mở app).');
+    });
+
+    it('gõ SĐT của lời mời đang chờ có nhóm: nêu nhóm của lời mời thay vì gợi ý "chỉ dùng quầy"', async () => {
+      stub();
+      const { container } = mount(<StaffRosterTab />);
+      await flush();
+      typeInto(container.querySelector('input[type=tel]'), '0933333333');
+      expect(hint(container)).toContain('Lời mời đang chờ với nhóm: Kế toán');
+      expect(hint(container)).toContain('giữ nguyên nhóm của lời mời');
+      expect(hint(container)).not.toContain('chỉ dùng quầy thu ngân');
+    });
   });
 
   describe('nhóm việc cho người mới và lời mời chờ mở app', () => {

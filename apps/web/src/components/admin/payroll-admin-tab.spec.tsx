@@ -387,6 +387,8 @@ describe('PayrollAdminTab: thưởng/phạt và tính lại tháng', () => {
     expect(api.posts('/admin/payroll/adjust')).toHaveLength(1);
     expect(api.posts('/recompute')).toHaveLength(1);
     expect(container.textContent).toContain('Khoản giống hệt đã có');
+    // Hộp vẫn mở có lớp nền tối che trang: lời báo kết quả tính lại phải hiện ngay trong hộp.
+    expect(sheet().querySelector('[role=status]')!.textContent).toContain('Đã cập nhật số lương trên dòng');
   });
 
   it('đang ghi khoản thì Esc và nút Đóng không đóng được hộp (kẻo mất lời báo lỗi/hỏi 409)', async () => {
