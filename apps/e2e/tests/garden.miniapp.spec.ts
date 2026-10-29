@@ -68,6 +68,24 @@ test.describe('Vườn Xanh', () => {
     await expect(page.getByText('Lô 2 · Cây Lim Xanh')).toBeVisible();
   });
 
+  test('khách vãng lai: nhiệm vụ không hứa Điểm Xanh, không nút Nhận thưởng, mời đăng nhập Zalo; giọt nước vẫn hiện', async ({ page, api }) => {
+    mockGame(api);
+    api.get('/game/missions', [
+      { code: 'REVIEW_3', title: 'Đánh giá 3 sản phẩm', rewardPoints: 30, progress: 3, goal: 3, completed: true, claimed: false, pointsBlocked: 'GUEST' },
+    ]);
+    await page.goto('/game');
+
+    await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible({ timeout: 15_000 });
+    const missions = page.locator('section, div').filter({ has: page.getByRole('heading', { name: 'Nhiệm vụ' }) }).last();
+    await expect(missions.getByText('Đánh giá 3 sản phẩm')).toBeVisible();
+    await expect(missions.getByTestId('guest-points-note')).toContainText('Đăng nhập Zalo để nhận Điểm Xanh');
+    await expect(missions.getByText(/\+\d[\d.]* Điểm Xanh/)).toHaveCount(0);
+    await expect(missions.getByRole('button', { name: 'Nhận thưởng' })).toHaveCount(0);
+    await expect(missions.getByRole('button', { name: 'Đăng nhập Zalo', exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(api.callsTo('POST', '/game/missions/REVIEW_3/claim')).toHaveLength(0);
+  });
+
   test('không có mùa nào chạy: server trả thân rỗng (như Nest khi trả null) vẫn hiện màn "chưa có mùa"', async ({ page, api }) => {
     mockGame(api);
     api.get('/game/season', () => replyEmptyBody());

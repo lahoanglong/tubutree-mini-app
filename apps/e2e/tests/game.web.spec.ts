@@ -191,6 +191,25 @@ test.describe('Web khách: Vườn Xanh', () => {
     expect(api.callsTo('POST', '/game/missions/REVIEW_3/claim')).toHaveLength(1);
   });
 
+  test('khách vãng lai (khổ 375): nhiệm vụ không hứa Điểm Xanh, không nút Nhận thưởng, có lời mời đăng nhập Zalo; giọt nước vẫn hiện', async ({ page, api }) => {
+    mockGame(api, { checkedIn: false });
+    api.get('/game/missions', [
+      { code: 'REVIEW_3', title: 'Đánh giá 3 sản phẩm', rewardPoints: 30, progress: 3, goal: 3, completed: true, claimed: false, pointsBlocked: 'GUEST' },
+    ]);
+    api.get('/me/daily-check-in', () => ({ checkedInToday: false, pointsDone: false, waterDone: false, streakDays: 3, currentCycleDay: 3, todayPoints: 0, todayWater: 10, rewards: [], pointsBlocked: 'GUEST' }));
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/vuon-xanh');
+    await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible();
+    const missions = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Nhiệm vụ' }) });
+    await expect(missions.getByText('Đánh giá 3 sản phẩm')).toBeVisible();
+    await expect(missions.getByTestId('guest-points-note')).toContainText('Đăng nhập Zalo để nhận Điểm Xanh');
+    await expect(missions.getByText(/\+\d[\d.]* Điểm Xanh/)).toHaveCount(0);
+    await expect(missions.getByRole('button', { name: 'Nhận thưởng' })).toHaveCount(0);
+    await expect(missions.getByRole('link', { name: 'Đăng nhập Zalo', exact: true })).toHaveAttribute('href', '/dang-nhap?returnTo=%2Fvuon-xanh');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(api.callsTo('POST', '/game/missions/REVIEW_3/claim')).toHaveLength(0);
+  });
+
   test('tab Vườn: lô đất, sổ tay, mục tiêu cộng đồng; mở lô gửi {currency: SEEDS, slot} của lô kế tiếp một lần dù bấm đúp', async ({ page, api }) => {
     mockGame(api, { checkedIn: false });
     await page.goto('/vuon-xanh?tab=garden');
