@@ -17,6 +17,8 @@ export interface StorefrontItem {
     reviewCount: number;
     sold?: number;
     inStock: boolean;
+    /** Ngày tạo (ISO) để thẻ hiện nhãn Mới; API cũ chưa trả. */
+    createdAt?: string;
   };
 }
 export interface StorefrontItemEdit extends StorefrontItem {
