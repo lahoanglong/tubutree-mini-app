@@ -232,7 +232,7 @@ function TodayStats({ onOpenStat }: { onOpenStat?: (stat: TodayStatKey) => void 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <TodayStat label="Đã thu từ đơn hôm nay" value={formatVnd(t.revenue.today)} note={t.gmv ? `Giá trị đơn đặt ${formatVnd(t.gmv.today)}` : undefined} sub={`${vsYesterday(t.revenue.today, t.revenue.yesterday, formatVnd)} · 7 ngày ${formatVnd(t.revenue.week)}`} tone={toneOf(t.revenue.today, t.revenue.yesterday)} onPress={onOpenStat && (() => onOpenStat('revenue'))} />
           <TodayStat label="Đơn hôm nay" value={String(t.orders.today)} sub={`${vsYesterday(t.orders.today, t.orders.yesterday, String)} · 7 ngày ${t.orders.week}`} tone={toneOf(t.orders.today, t.orders.yesterday)} onPress={onOpenStat && (() => onOpenStat('orders'))} />
-          <TodayStat label="Khách mới hôm nay" value={String(t.newUsers.today)} sub={`7 ngày: ${t.newUsers.week} khách mới`} tone={toneOf(t.newUsers.today, t.newUsers.yesterday)} onPress={onOpenStat && (() => onOpenStat('newUsers'))} />
+          <TodayStat label="Khách mới hôm nay" value={String(t.newUsers.today)} sub={`7 ngày: ${t.newUsers.week} khách mới`} onPress={onOpenStat && (() => onOpenStat('newUsers'))} />
           <TodayStat
             label="Khách mua lại (30 ngày)"
             value={ns1?.pct == null ? '—' : `${ns1.pct.toFixed(1).replace(/\.0$/, '').replace('.', ',')}%`}
