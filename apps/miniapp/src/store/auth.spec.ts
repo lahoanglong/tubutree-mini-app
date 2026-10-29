@@ -246,7 +246,7 @@ describe('useAuthStore.restore — refresh dedup', () => {
   });
 });
 
-describe('useAuthStore — mất mạng lúc khôi phục phiên (R5-BUYER-1)', () => {
+describe('useAuthStore — mất mạng lúc khôi phục phiên', () => {
   function offlineEverything(): void {
     mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored-refresh' });
     mockedRefresh.mockRejectedValue({ isHttpError: true, message: 'Network Error', response: undefined });
