@@ -84,12 +84,20 @@ describe('/doi-rac/diem-nhan (§4.4)', () => {
     await mount();
     expect(state.replace).toHaveBeenCalledWith('/doi-rac/tao');
   });
-  it('khách chưa đăng nhập thấy lời mời đăng nhập, không bị đẩy đi', async () => {
+  it('khách chưa đăng nhập về trang Đổi rác như Mini App, không gọi API', async () => {
     state.phase = 'guest';
     const c = await mount();
-    expect(c.querySelector('a[href^="/dang-nhap"]')).not.toBeNull();
-    expect(state.replace).not.toHaveBeenCalled();
+    expect(state.replace).toHaveBeenCalledWith('/doi-rac');
+    expect(state.replace).not.toHaveBeenCalledWith('/doi-rac/tao');
+    expect(c.querySelector('a[href^="/dang-nhap"]')).toBeNull();
     expect(state.calls).toEqual([]);
+  });
+  it('khách chưa đăng nhập mở thẳng (không có nav) cũng về trang Đổi rác', async () => {
+    state.phase = 'guest';
+    window.sessionStorage.clear();
+    await mount();
+    expect(state.replace).toHaveBeenCalledWith('/doi-rac');
+    expect(state.replace).not.toHaveBeenCalledWith('/doi-rac/tao');
   });
   it('chưa đủ điều kiện (thiếu SĐT): chỉ lời chỉ sang Zalo (Q2)', async () => {
     state.me = makeWasteMe({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null });

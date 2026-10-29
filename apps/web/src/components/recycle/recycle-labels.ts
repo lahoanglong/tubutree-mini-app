@@ -21,7 +21,6 @@ import { formatVnd } from '@/lib/format-vnd';
 
 export const PAUSED_TEXT = 'Chương trình đang tạm dừng';
 export const BLOCKED_TEXT = 'Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree';
-export const LOGIN_TEXT = 'Đăng nhập để đổi rác lấy quà';
 
 /** 1 điểm = 1đ (thang Điểm Xanh mới). */
 export const POINT_VALUE_VND = 1;
