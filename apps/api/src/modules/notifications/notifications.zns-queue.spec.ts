@@ -10,17 +10,18 @@ function setup(opts: { queueAdd?: jest.Mock; sendTemplate?: jest.Mock; status?: 
   let seq = 0;
   const create = jest.fn().mockImplementation(async () => ({ id: `log-${++seq}` }));
   const update = jest.fn().mockResolvedValue({});
+  const updateMany = jest.fn().mockResolvedValue({ count: 1 });
   const findUnique = jest.fn().mockResolvedValue({ status: opts.status ?? 'PENDING', payload: opts.payload ?? { data: {} } });
   const prisma = {
     notificationTemplate: { findUnique: jest.fn().mockResolvedValue(ZNS_TEMPLATE) },
     user: { findUnique: jest.fn().mockResolvedValue({ id: 'u1', phone: '0900000000' }) },
-    notificationLog: { create, update, findUnique },
+    notificationLog: { create, update, updateMany, findUnique },
   } as unknown as PrismaService;
   const add = opts.queueAdd ?? jest.fn().mockResolvedValue({});
   const sendTemplate = opts.sendTemplate ?? jest.fn().mockResolvedValue({ ok: true });
   const analytics = { recordBestEffort: jest.fn().mockResolvedValue(undefined) } as unknown as AnalyticsEventsService;
   const svc = new NotificationsService(prisma, { sendTemplate } as unknown as ZnsClient, analytics, { add } as never);
-  return { svc, create, update, add, sendTemplate };
+  return { svc, create, update, updateMany, add, sendTemplate };
 }
 
 describe('NotificationsService: ZNS đi qua hàng đợi', () => {
@@ -38,10 +39,10 @@ describe('NotificationsService: ZNS đi qua hàng đợi', () => {
   });
 
   it('xếp job lỗi (Redis) → log ZNS FAILED kèm lý do, notify() không ném', async () => {
-    const { svc, update } = setup({ queueAdd: jest.fn().mockRejectedValue(new Error('redis down')) });
+    const { svc, updateMany } = setup({ queueAdd: jest.fn().mockRejectedValue(new Error('redis down')) });
     await expect(svc.notify('u1', 'ORDER_CONFIRMED', {})).resolves.toBeUndefined();
-    expect(update).toHaveBeenCalledWith({
-      where: { id: 'log-2' },
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'log-2', status: 'PENDING' },
       data: { status: 'FAILED', error: expect.stringContaining('redis down') },
     });
   });
@@ -140,6 +141,11 @@ describe('NotificationsService: tin báo trước hạ hạng gửi lại ZNS sa
       }),
       findFirst: jest.fn(async ({ where }: { where: Parameters<typeof matches>[1] }) => rows.find((r) => matches(r, where)) ?? null),
       update: jest.fn(async ({ where, data }: { where: { id: string }; data: Partial<Row> }) => Object.assign(rows.find((r) => r.id === where.id)!, data)),
+      updateMany: jest.fn(async ({ where, data }: { where: { id: string; status?: string }; data: Partial<Row> }) => {
+        const row = rows.find((r) => r.id === where.id && (!where.status || r.status === where.status));
+        if (row) Object.assign(row, data);
+        return { count: row ? 1 : 0 };
+      }),
     };
     const prisma = {
       notificationTemplate: { findUnique: jest.fn().mockResolvedValue(ZNS_TEMPLATE) },

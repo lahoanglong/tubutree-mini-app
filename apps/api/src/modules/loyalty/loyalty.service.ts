@@ -652,6 +652,8 @@ export class LoyaltyService {
    * điểm. Hạng chỉ bị hạ ở lượt tính lại hạng 03:15 giờ VN (loyalty.cron.ts) đầu tiên không sớm hơn `until` (ngày hết hạn giữ
    * hạng), và lượt đó nhìn lại 12 tháng tính từ chính giờ chạy. Khung ở đây lấy đúng mốc ấy: đơn hôm nay còn trong khung trượt
    * nhưng sẽ rơi ra trước lượt đó thì không được tính, nếu không khách mua đúng số báo vẫn bị hạ.
+   * Hạn do cron đặt thường lệch vài giây sau 03:15 nên lượt hạ hạng thật có thể chạy cùng đêm hoặc đêm sau tuỳ thứ tự xử lý;
+   * ở đây chọn lượt muộn hơn: khung ngắn lại, "còn thiếu" chỉ có thể báo dư (an toàn), không bao giờ báo thiếu.
    */
   async tierKeepGap(
     userId: string,
