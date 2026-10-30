@@ -512,7 +512,31 @@ describe('CartService guard tồn kho', () => {
     expect(l1.flashSaleItemId).toBe('fi1');
     expect(l2.isFlash).toBe(false);
     // coupon base = tổng line KHÔNG flash = v2 (2×50000)=100000, KHÔNG gồm v1
-    expect(validateAndCompute).toHaveBeenCalledWith('SALE', 'u1', 100000, [{ productId: 'p2', total: 100000 }]);
+    expect(validateAndCompute).toHaveBeenCalledWith('SALE', 'u1', 100000, [{ productId: 'p2', total: 100000 }], undefined);
+  });
+
+  it('R-82: xét mã dùng luôn SĐT, Zalo và số đơn của khách mà giỏ đã đọc (không đọc lại)', async () => {
+    const validateAndCompute = jest.fn().mockResolvedValue({ discount: 1000, freeship: false });
+    const prisma = {
+      cart: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'c1',
+          couponCode: 'SALE',
+          user: { tierId: null, phone: '0912345678', zaloId: 'z1', _count: { orders: 2 } },
+          items: [
+            {
+              id: 'ci1', variationId: 'v1', quantity: 1,
+              variation: { isActive: true, productId: 'p1', salePrice: null, retailPrice: 100000, stock: 5, name: 'A', product: { name: 'A', slug: 'a', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
+            },
+          ],
+        }),
+      },
+    } as any;
+    const flashSvc = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as any;
+    await new CartService(prisma, { validateAndCompute } as any, config, flashSvc, analytics, combo).getCart('u1');
+    expect(validateAndCompute).toHaveBeenCalledWith('SALE', 'u1', 100000, [{ productId: 'p1', total: 100000 }], {
+      phone: '0912345678', zaloId: 'z1', hasPriorOrder: true,
+    });
   });
 
   it('flash line: flashPrice > standing → charge theo standing (không cao hơn giá bán); soldPct quota=0 → 0', async () => {
@@ -768,7 +792,7 @@ describe('CartService guard tồn kho', () => {
             findUnique: jest.fn().mockResolvedValue({
               id: 'cg', code: 'GBUY1', type: 'AMOUNT', value: 30000, minOrder: 200000, maxDiscount: null, isActive: true,
               scope: 'PUBLIC', scopeMeta: null, applyTo: { productIds: ['pG'] },
-              startAt: new Date(Date.now() - 864e5), endAt: new Date(Date.now() + 864e5), perUserLimit: 1, usageLimit: null,
+              startAt: new Date(Date.now() - 864e5), endAt: new Date(Date.now() + 864e5), perUserLimit: 1, usageLimit: null, _count: { redemptions: 0 },
             }),
           },
           couponRedemption: { count: jest.fn().mockResolvedValue(0) },
@@ -899,7 +923,7 @@ describe('CartService guard tồn kho', () => {
         coupon: {
           findUnique: jest.fn().mockResolvedValue({
             id: 'cp', type: 'AMOUNT', value: 20000, minOrder: null, maxDiscount: null, isActive: true, scope: 'PUBLIC', scopeMeta: null,
-            startAt: new Date(Date.now() - 864e5), endAt: new Date(Date.now() + 864e5), perUserLimit: 1, usageLimit: null, ...coupon,
+            startAt: new Date(Date.now() - 864e5), endAt: new Date(Date.now() + 864e5), perUserLimit: 1, usageLimit: null, _count: { redemptions: 0 }, ...coupon,
           }),
         },
         couponRedemption: { count: jest.fn().mockResolvedValue(0) },
