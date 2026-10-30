@@ -224,6 +224,16 @@ export function markCtvTouched(code: string): void {
   }
 }
 
+/** Dấu chạm CTV thuộc về người đang đăng nhập (dòng chạm ở máy chủ theo từng người dùng), nên đăng xuất phải xoá: máy dùng chung thì người sau không được thừa hưởng. */
+export function clearCtvTouched(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.removeItem(CTV_TOUCHED_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function wasCtvTouched(code: string): boolean {
   if (typeof window === 'undefined') return false;
   try {
@@ -247,9 +257,9 @@ export function clearStorefrontContext(): void {
   if (typeof window === 'undefined') return;
   try {
     sessionStorage.removeItem(KEY);
-    sessionStorage.removeItem(CTV_TOUCHED_KEY);
   } catch {
     /* ignore */
   }
+  clearCtvTouched();
   notify();
 }

@@ -70,7 +70,7 @@ export function AccountDeletionPanel({ seed = 0 }: { seed?: number }) {
   }, [seed]);
 
   return (
-    <section id="account-deletions" ref={sectionRef} className={`${seed > 0 ? 'mb-6' : 'mt-6'} scroll-mt-4 space-y-3`} aria-labelledby="account-deletion-heading">
+    <section id="account-deletions" ref={sectionRef} className={`${seed > 0 ? 'mb-6' : 'mt-6'} scroll-mt-20 space-y-3 lg:scroll-mt-4`} aria-labelledby="account-deletion-heading">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="account-deletion-heading" className="text-base font-semibold text-stone-900">
           Yêu cầu xoá tài khoản

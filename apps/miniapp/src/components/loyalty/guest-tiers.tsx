@@ -6,6 +6,7 @@ import { getLoadErrorMessage } from '../../services/api';
 import { useAuthStore } from '../../store/auth';
 import { formatPoints } from '../../utils/format';
 import { moneyShort } from '../../utils/loyalty-copy';
+import { useBlockedMessage } from '../ui/auth-gate';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { ErrorState } from '../ui/empty-state';
@@ -21,12 +22,18 @@ export function GuestLoginButton() {
   return <Button fullWidth onPress={() => void login()}>{guestPreviewCopy.loginCta}</Button>;
 }
 
+/** Dòng dẫn của màn xem trước dành cho khách; tài khoản bị khoá thì nói lời máy chủ thay cho lời mời đăng nhập. */
+export function GuestHint() {
+  const blocked = useBlockedMessage();
+  return <Text variant="body-md" tone="secondary" as="div">{blocked ?? guestPreviewCopy.hint}</Text>;
+}
+
 /** Màn Hạng thành viên cho khách chưa đăng nhập: chỉ xem bảng hạng, muốn đổi hay xem điểm của mình thì đăng nhập. */
 export function GuestTiers() {
   const q = useQuery(loyaltyPreviewQuery(coreHttp));
   return (
     <div style={{ ...COLUMN, padding: 16, gap: 16 }}>
-      <Text variant="body-md" tone="secondary" as="div">{guestPreviewCopy.hint}</Text>
+      <GuestHint />
       <GuestLoginButton />
       <Heading variant="title-md" as="h2">{guestPreviewCopy.tiersTitle}</Heading>
       {q.isError && !q.data ? (

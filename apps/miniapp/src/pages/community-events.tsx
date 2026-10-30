@@ -11,7 +11,7 @@ import { ChevronLeft, Gift } from 'lucide-react';
 import { listEvents, eventPosts, type CommunityEvent, type FeedPage } from '../services/feed-api';
 import { getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
-import { SessionUnavailable } from '../components/ui/auth-gate';
+import { SessionUnavailable, useBlockedMessage } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { vi } from '../i18n/vi';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -79,6 +79,7 @@ function EventMeta({ event }: { event: CommunityEvent }) {
 export default function CommunityEventsPage() {
   const phase = useAuthPhase();
   const login = useAuthStore((s) => s.login);
+  const blocked = useBlockedMessage();
   const authed = phase === 'authenticated';
   const [selected, setSelected] = useState<CommunityEvent | null>(null);
 
@@ -116,7 +117,7 @@ export default function CommunityEventsPage() {
     return (
       <Page style={PAGE_BG}>
         <PageHeader title={vi.community.events} />
-        <EmptyState art="sprout" heading={vi.community.loginToView} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
+        <EmptyState art="sprout" heading={vi.community.loginToView} body={blocked ?? undefined} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
       </Page>
     );
   }

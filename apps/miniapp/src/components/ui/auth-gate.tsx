@@ -1,9 +1,14 @@
 import type { ReactNode } from 'react';
+import { useSnackbar } from 'zmp-ui';
+import { Clock } from 'lucide-react';
 import { useAuthStore } from '../../store/auth';
 import { useAuthPhase, type AuthPhase } from '../../hooks/use-auth-phase';
 import { vi } from '../../i18n/vi';
 import { LineItemSkeleton } from './skeleton';
 import { EmptyState, ErrorState } from './empty-state';
+
+// Khớp tiêu đề màn web (login-required.tsx).
+const RATE_LIMITED_TITLE = 'Bạn thao tác quá nhanh';
 
 /**
  * Mất kết nối lúc khôi phục phiên: nói đúng chuyện đó và cho thử lại. Không bao giờ vẽ màn "trống" hay lời mời đăng nhập —
@@ -12,18 +17,33 @@ import { EmptyState, ErrorState } from './empty-state';
 export function SessionUnavailable({ variant }: { variant?: 'page' | 'inline' }) {
   const restore = useAuthStore((s) => s.restore);
   const error = useAuthStore((s) => s.error);
+  // Bị giới hạn tốc độ thì biểu tượng và tiêu đề nói đúng chuyện đó, mất mạng giữ lỗi tải chung.
+  // Không nói "bạn vẫn đang đăng nhập": 429 cũng đến lúc mở app lần đầu hay bấm đăng nhập quá nhanh, khi chưa có phiên.
+  if (error === vi.errors.sessionRateLimited) {
+    return (
+      <ErrorState icon={Clock} title={RATE_LIMITED_TITLE} message={error} onRetry={() => void restore()} variant={variant} />
+    );
+  }
   return <ErrorState message={error ?? vi.errors.sessionUnavailable} onRetry={() => void restore()} variant={variant} />;
+}
+
+/**
+ * Lời máy chủ khi tài khoản bị khoá: login()/restore() bỏ phiên, về 'idle' và đặt lời đó ở `error`. Màn mời đăng nhập phải đọc
+ * lời này, nếu không khách bấm đăng nhập mãi mà không biết vì sao không vào được. Khách đăng xuất bình thường thì null.
+ */
+export function useBlockedMessage(): string | null {
+  return useAuthStore((s) => (s.status === 'idle' ? (s.error ?? null) : null));
 }
 
 /** Lời mời đăng nhập mặc định cho khách thật sự (đã đăng xuất / hết phiên). Tài khoản bị khoá thì thay lời mời bằng lời máy chủ. */
 export function GuestPrompt() {
   const login = useAuthStore((s) => s.login);
-  const error = useAuthStore((s) => s.error);
+  const blocked = useBlockedMessage();
   return (
     <EmptyState
       art="sprout"
       heading={vi.auth.guestHeading}
-      body={error ?? vi.auth.loginHint}
+      body={blocked ?? vi.auth.loginHint}
       ctaLabel={vi.auth.loginCta}
       onCta={() => void login()}
     />
@@ -58,4 +78,18 @@ export function AuthGate({ loading, guest, children }: { loading?: ReactNode; gu
   const phase = useAuthPhase();
   if (phase === 'authenticated') return <>{children}</>;
   return <AuthPhaseView phase={phase} loading={loading} guest={guest} />;
+}
+
+/**
+ * Nút "đăng nhập" nằm giữa màn đang dùng (không có chỗ để đổi cả màn): đăng nhập xong mà tài khoản bị khoá thì nói lời máy chủ
+ * bằng thanh thông báo, nếu không nút bấm xong im lặng và khách tưởng app hỏng.
+ */
+export function useLoginWithNotice() {
+  const { openSnackbar } = useSnackbar();
+  const login = useAuthStore((s) => s.login);
+  return async () => {
+    await login();
+    const { status, error } = useAuthStore.getState();
+    if (status === 'idle' && error) openSnackbar({ text: error, type: 'error' });
+  };
 }

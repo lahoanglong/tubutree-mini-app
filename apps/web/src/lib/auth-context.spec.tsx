@@ -14,6 +14,7 @@ import { AuthProvider, useAuth } from './auth-context';
 import { useAuthPhase } from './auth-phase';
 import { setSessionMarker, hasSessionMarker } from './client-api';
 import { loadDraft, markResume, peekResume, saveDraft, EMPTY_DRAFT } from './recycle-wizard';
+import { markCtvTouched, wasCtvTouched } from './storefront-context';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -158,6 +159,7 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     localStorage.setItem('tubu_other', 'giữ');
     saveDraft({ ...EMPTY_DRAFT, lines: { 'item-carton': 3 } });
     markResume();
+    markCtvTouched('AN123');
     function LogoutProbe() {
       const { logout } = useAuth();
       return (
@@ -187,6 +189,7 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     expect(localStorage.getItem('tubu_other')).toBe('giữ');
     expect(loadDraft()).toBeNull();
     expect(peekResume()).toBe(false);
+    expect(wasCtvTouched('AN123')).toBe(false);
     vi.unstubAllGlobals();
   });
 });

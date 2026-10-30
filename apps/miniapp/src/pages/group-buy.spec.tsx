@@ -17,7 +17,8 @@ const mocks = vi.hoisted(() => ({
   ensurePhone: vi.fn(),
   params: {} as { id?: string },
   auth: {
-    status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous',
+    status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous' | 'idle',
+    error: undefined as string | undefined,
     user: undefined as { referralCode?: string; phone?: string | null; zaloId?: string | null } | undefined,
   },
 }));
@@ -38,12 +39,10 @@ vi.mock('../services/groupbuy-api', () => ({
 vi.mock('../services/shop-api', () => ({ fetchActiveFlashSales: mocks.fetchActiveFlashSales }));
 vi.mock('../components/share-sheet', () => ({ useShareWithFallback: () => mocks.shareWithFallback }));
 vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
-vi.mock('../store/auth', () => ({
-  useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, login: mocks.login, user: mocks.auth.user, ensurePhone: mocks.ensurePhone };
-    return sel ? sel(state) : state;
-  },
-}));
+vi.mock('../store/auth', () => {
+  const state = () => ({ status: mocks.auth.status, error: mocks.auth.error, login: mocks.login, user: mocks.auth.user, ensurePhone: mocks.ensurePhone });
+  return { useAuthStore: Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), { getState: state }) };
+});
 
 import GroupBuyPage from './group-buy';
 
@@ -78,6 +77,7 @@ beforeEach(() => {
   mocks.params = {};
   mocks.auth.status = 'authenticated';
   mocks.auth.user = undefined;
+  mocks.auth.error = undefined;
   mocks.listGroupBuys.mockResolvedValue([GROUP('a'), GROUP('b', { joined: true })]);
   mocks.joinGroupBuy.mockResolvedValue({ joined: true, currentSize: 3, status: 'OPEN' });
 });
@@ -174,6 +174,25 @@ describe('GroupBuyPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     fireEvent.click(buttons[0]!);
     expect(mocks.login).toHaveBeenCalledTimes(1);
     expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
+  });
+
+  it('tài khoản bị khoá: bấm "Đăng nhập để tham gia" thì báo lời khoá của máy chủ, không gửi yêu cầu tham gia', async () => {
+    mocks.auth.status = 'idle';
+    mocks.auth.error = 'Tài khoản đã bị khoá. Liên hệ Tubu Tree để được hỗ trợ.';
+    renderPage();
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Đăng nhập để tham gia' }))[0]!);
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá. Liên hệ Tubu Tree để được hỗ trợ.', type: 'error' }),
+    );
+    expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
+  });
+
+  it('khách thường bấm "Đăng nhập để tham gia": không có thanh báo lỗi', async () => {
+    mocks.auth.status = 'idle';
+    renderPage();
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Đăng nhập để tham gia' }))[0]!);
+    await waitFor(() => expect(mocks.login).toHaveBeenCalledTimes(1));
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
   });
 
   it('đang gửi tham gia: bấm lại không gửi thêm', async () => {

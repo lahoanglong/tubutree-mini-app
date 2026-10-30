@@ -20,6 +20,7 @@ import { clearHomeHints, dropForeignHomeHints } from '@tubutree/app-core/home-la
 import { browserStorage } from '../utils/recently-viewed';
 import { isHttpError } from '../services/http';
 import { isGuestUser } from '../utils/guest-user';
+import { clearCtvTouched } from './storefront-context';
 import { CATALOG_KEYS, getQueryClient } from '../services/query-client';
 import { errorCode } from '@tubutree/app-core/api/error-status';
 
@@ -312,6 +313,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await clearRefresh();
     set({ user: null, status: 'idle', error: undefined });
     clearHomeHints(browserStorage());
+    clearCtvTouched();
     try {
       browserStorage()?.removeItem(INVOICE_KEY);
     } catch {

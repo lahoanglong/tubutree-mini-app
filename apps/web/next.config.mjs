@@ -53,6 +53,7 @@ const cspReportOnly = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
+  "media-src 'self' blob: https://res.cloudinary.com",
   `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ''} https://api.cloudinary.com${sentryConnect ? ` ${sentryConnect}` : ''}`,
 ].join('; ');
 

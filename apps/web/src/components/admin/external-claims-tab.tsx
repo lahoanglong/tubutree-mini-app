@@ -178,7 +178,7 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId, seed }: Who & { seed?
           </button>
         </div>
       )}
-      <div ref={attemptsRef}>
+      <div ref={attemptsRef} className="scroll-mt-20 lg:scroll-mt-4">
         <AttemptsSection who={who} />
       </div>
     </div>

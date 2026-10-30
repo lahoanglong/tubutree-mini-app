@@ -176,7 +176,7 @@ function LinkedMerchantProducts({ focusConsignment, listSettled }: { focusConsig
   const rows = q.data?.data ?? [];
   const pendingCount = pendingQ.data?.meta.total ?? 0;
   return (
-    <section ref={section} tabIndex={-1} className="mt-8 scroll-mt-4 outline-none" aria-label="Sản phẩm đối tác đang liên kết mã Pancake">
+    <section ref={section} tabIndex={-1} className="mt-8 scroll-mt-20 outline-none lg:scroll-mt-4" aria-label="Sản phẩm đối tác đang liên kết mã Pancake">
       <h2 className="text-base font-semibold text-stone-900">
         {filter === 'PENDING' ? 'Hàng ký gửi chờ xác nhận' : 'Đang liên kết mã Pancake'} ({q.data?.meta.total ?? 0})
       </h2>

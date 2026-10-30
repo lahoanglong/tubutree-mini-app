@@ -8,8 +8,8 @@ import { callPhone, hasOA, openOAChat } from '../services/zmp-bridge';
 import { copyText } from '../utils/clipboard';
 import { haptic } from '../utils/haptic';
 import { formatPhoneDisplay } from '../utils/phone';
-import { useAuthStore } from '../store/auth';
 import { useAuthPhase } from '../hooks/use-auth-phase';
+import { useLoginWithNotice } from './ui/auth-gate';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
 
@@ -24,7 +24,7 @@ export function SupportContact({ orderCode }: { orderCode?: string }) {
   const chatOn = usePublicConfig().chat?.enabled === true;
   const phase = useAuthPhase();
   const loggedIn = phase === 'authenticated';
-  const login = useAuthStore((s) => s.login);
+  const login = useLoginWithNotice();
   const chatReady = chatOn && loggedIn;
   const supportQ = useQuery({ queryKey: ['support-contact'], queryFn: fetchSupportContact, staleTime: 10 * 60_000 });
   const support = supportQ.isError ? DEFAULT_SUPPORT : supportQ.data;

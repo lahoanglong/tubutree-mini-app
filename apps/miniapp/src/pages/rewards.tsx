@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift, Info, Leaf, Sprout, Ticket } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
-import { guestPreviewCopy, previewAsCatalog } from '@tubutree/app-core/guest-preview';
+import { previewAsCatalog } from '@tubutree/app-core/guest-preview';
 import { loyaltyPreviewQuery } from '@tubutree/app-core/queries/loyalty';
 import { couponUseCopy } from '@tubutree/app-core/coupon-use';
 import {
@@ -28,7 +28,7 @@ import { WASTE_QUERY_KEYS, invalidateAfterRedeem } from '../services/waste-api';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useCouponUse } from '../hooks/use-coupon-use';
 import { useIdempotencyKey } from '../hooks/use-idempotency-key';
-import { GuestLoginButton } from '../components/loyalty/guest-tiers';
+import { GuestHint, GuestLoginButton } from '../components/loyalty/guest-tiers';
 import { AuthGate } from '../components/ui/auth-gate';
 import { Badge } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -311,7 +311,7 @@ function GuestRewards() {
   const catalog = q.data ? previewAsCatalog(q.data) : null;
   return (
     <div style={{ ...COLUMN, padding: 16, paddingBottom: 48, gap: 16 }}>
-      <Text variant="body-md" tone="secondary" as="div">{guestPreviewCopy.hint}</Text>
+      <GuestHint />
       <GuestLoginButton />
       {q.isError && !q.data ? (
         <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />

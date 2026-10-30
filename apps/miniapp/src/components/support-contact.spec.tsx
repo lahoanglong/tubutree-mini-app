@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   login: vi.fn(),
   authStatus: 'authenticated' as string,
+  authError: undefined as string | undefined,
   chatEnabled: false,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -23,7 +24,7 @@ vi.mock('../hooks/use-public-config', () => ({
   usePublicConfig: () => ({ chat: { enabled: mocks.chatEnabled, hours: { start: '08:00', end: '21:00' } }, isLoaded: true }),
 }));
 vi.mock('../store/auth', () => {
-  const state = () => ({ status: mocks.authStatus, login: mocks.login, restore: vi.fn() });
+  const state = () => ({ status: mocks.authStatus, error: mocks.authError, login: mocks.login, restore: vi.fn() });
   return { useAuthStore: Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), { getState: state }) };
 });
 vi.mock('../services/zmp-bridge', () => ({
@@ -58,6 +59,7 @@ describe('SupportContact — kênh hỗ trợ trên chi tiết đơn', () => {
     mocks.hasOA = false;
     mocks.chatEnabled = false;
     mocks.authStatus = 'authenticated';
+    mocks.authError = undefined;
     mocks.fetchSupportContact.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null });
     mocks.copyText.mockResolvedValue(true);
   });
@@ -140,6 +142,26 @@ describe('SupportContact — kênh hỗ trợ trên chi tiết đơn', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập để chat với Tubu Tree' }));
       expect(mocks.login).toHaveBeenCalled();
       expect(screen.queryByRole('button', { name: /^Chat với Tubu Tree/ })).toBeNull();
+    });
+
+    it('chat bật, tài khoản bị khoá: bấm đăng nhập thì báo lời khoá của máy chủ', async () => {
+      mocks.chatEnabled = true;
+      mocks.authStatus = 'idle';
+      mocks.authError = 'Tài khoản đã bị khoá. Liên hệ Tubu Tree để được hỗ trợ.';
+      renderBlock();
+      fireEvent.click(await screen.findByRole('button', { name: 'Đăng nhập để chat với Tubu Tree' }));
+      await waitFor(() =>
+        expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá. Liên hệ Tubu Tree để được hỗ trợ.', type: 'error' }),
+      );
+    });
+
+    it('chat bật, khách thường bấm đăng nhập: không có thanh báo lỗi', async () => {
+      mocks.chatEnabled = true;
+      mocks.authStatus = 'idle';
+      renderBlock();
+      fireEvent.click(await screen.findByRole('button', { name: 'Đăng nhập để chat với Tubu Tree' }));
+      await waitFor(() => expect(mocks.login).toHaveBeenCalled());
+      expect(mocks.openSnackbar).not.toHaveBeenCalled();
     });
 
     it('đang khôi phục phiên: không hiện lời mời đăng nhập hay nút chat, chỉ OA và hotline', async () => {

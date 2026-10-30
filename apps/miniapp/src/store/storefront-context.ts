@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 const KEY = 'tubu_sf_ctx';
+const CTV_TOUCHED_KEY = 'tubu_sf_ctv_touched';
 /** kind: 'ctv' = gian hàng CTV (/s/:slug, có combo + attribution storefrontSlug);
  *  'brand' = trang nhãn (/brand/:slug, chỉ điều hướng — KHÔNG gửi storefrontSlug để tránh ô nhiễm analytics CTV);
  *  'partner' = gian hàng đối tác/nhãn hàng ở /s/:slug: như 'brand' không gửi storefrontSlug, nhưng nút quay lại vẫn về /s/:slug
@@ -11,6 +12,29 @@ type Ctx = { slug: string | null; referralCode: string | null; kind: 'ctv' | 'br
 const DEFAULT_CTX: Ctx = { slug: null, referralCode: null, kind: 'ctv', referralEligible: null };
 
 const norm = (code: string | null | undefined) => (code ?? '').trim().toUpperCase();
+
+/**
+ * Mã đã được máy chủ ghi công qua gian hàng CTV (chạm kiểu ctv, ok:true) trong phiên này. Mở gian hàng đối tác/nhãn sau đó không
+ * chạm lại cùng mã kiểu brand: máy chủ upsert cả dòng chạm và sẽ xoá slug gian hàng CTV khỏi nó. Ở sessionStorage như `tubu_sf_ctx`
+ * (WebView tải lại thì ngữ cảnh còn mà biến trong bộ nhớ thì mất, hook sẽ chạm brand đè).
+ */
+export function markCtvTouched(code: string): void {
+  try { sessionStorage.setItem(CTV_TOUCHED_KEY, norm(code)); } catch { /* ignore */ }
+}
+
+export function wasCtvTouched(code: string): boolean {
+  try {
+    const stored = sessionStorage.getItem(CTV_TOUCHED_KEY);
+    return !!stored && stored === norm(code);
+  } catch {
+    return false;
+  }
+}
+
+/** Dấu chạm theo người dùng, nên phải xoá khi đăng xuất: máy dùng chung thì người sau không được thừa hưởng. */
+export function clearCtvTouched(): void {
+  try { sessionStorage.removeItem(CTV_TOUCHED_KEY); } catch { /* ignore */ }
+}
 
 function load(): Ctx {
   try {
@@ -65,6 +89,7 @@ export const useStorefrontContext = create<StorefrontCtxState>((set, get) => ({
   },
   clear: () => {
     try { sessionStorage.removeItem(KEY); } catch { /* ignore */ }
+    clearCtvTouched();
     set({ slug: null, referralCode: null, kind: 'ctv', referralEligible: null });
   },
 }));
