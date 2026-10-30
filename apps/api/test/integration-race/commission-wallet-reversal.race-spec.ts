@@ -22,8 +22,8 @@ import { createOrder, createUser, legacyBankCommissionPayout, pinConfig, randCod
 
 /**
  * Hoa hồng đã vào Ví Tubu của CTV mà đơn bị trả: trừ thẳng Ví (COMMISSION_REVERSAL, số dư có thể âm). Chạy trên Postgres thật qua
- * AffiliateService, OrderReturnsService, OrderReversalService thật. Kiểm: trừ đúng số một lần dù chạy lại/song song; hai yêu cầu
- * trả một phần song song; trả đơn chạy chen cron chuyển hoa hồng vào Ví (không mất, không trừ trùng); Ví âm không trả đơn được;
+ * AffiliateService, OrderReturnsService, OrderReversalService thật. Kiểm: trừ đúng số một lần dù chạy lại/song song; hai quản trị
+ * cùng duyệt một yêu cầu trả một phần; trả một phần chạy chen trả cả đơn; trả đơn chạy chen cron chuyển hoa hồng vào Ví (không mất, không trừ trùng); Ví âm không trả đơn được;
  * lệnh rút ngân hàng cũ không bị trừ; bất biến số dư == tổng sổ giữ nguyên.
  */
 describe('Thu hồi hoa hồng đã vào Ví khi đơn bị trả (real Postgres)', () => {
@@ -233,6 +233,26 @@ describe('Thu hồi hoa hồng đã vào Ví khi đơn bị trả (real Postgres
     const rows = await reversals(o.ctv.id);
     expect(rows.map((r) => [r.refId, r.delta])).toEqual([[`${o.commission.id}:${r1.id}`, -10_000]]);
     expect(await balance(o.ctv.id)).toBe(20_000);
+    await noDrift(o.ctv.id);
+  });
+
+  it('hai yêu cầu trả một phần liên tiếp của cùng đơn: mỗi yêu cầu một dòng sổ riêng, tổng trừ khớp phần cắt', async () => {
+    // Đơn chỉ nhận một yêu cầu chờ duyệt tại một thời điểm, nên hai yêu cầu không chạy song song được; refId theo yêu cầu giữ chúng tách nhau.
+    const o = await paidInWalletOrder(3);
+    await moveToWallet(o.ctv.id);
+    expect(await balance(o.ctv.id)).toBe(30_000);
+    const r1 = await returns.request(o.buyer.id, o.order.code, { reasonCode: 'DEFECTIVE', items: [{ orderItemId: o.a.id, quantity: 1 }], refundMethod: 'WALLET' });
+    await returns.review(o.admin.id, r1.id, { approve: true });
+    const r2 = await returns.request(o.buyer.id, o.order.code, { reasonCode: 'DEFECTIVE', items: [{ orderItemId: o.a.id, quantity: 1 }], refundMethod: 'WALLET' });
+    await returns.review(o.admin.id, r2.id, { approve: true });
+
+    expect(await commissionOf(o.order.id)).toMatchObject({ status: 'PAID', amount: 10_000, commissionableTotal: 100_000 });
+    const rows = await reversals(o.ctv.id);
+    expect(rows.map((r) => [r.refId, r.delta])).toEqual([
+      [`${o.commission.id}:${r1.id}`, -10_000],
+      [`${o.commission.id}:${r2.id}`, -10_000],
+    ]);
+    expect(await balance(o.ctv.id)).toBe(10_000);
     await noDrift(o.ctv.id);
   });
 
