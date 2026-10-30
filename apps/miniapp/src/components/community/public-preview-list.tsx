@@ -3,6 +3,7 @@ import { apiMediaUrl } from '../../services/api';
 import type { FeedPreviewItem } from '../../services/feed-api';
 import { timeAgo } from '../../utils/time-ago';
 import { vi } from '../../i18n/vi';
+import { useBlockedMessage } from '../ui/auth-gate';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { InitialsAvatar } from '../ui/initials-avatar';
@@ -15,10 +16,11 @@ import { KIND_ICON, KIND_LABEL } from './post-card';
  * nên thẻ không tương tác; lối duy nhất đi tiếp là nút đăng nhập ở đầu danh sách.
  */
 export function PublicPreviewList({ posts, onLogin }: { posts: FeedPreviewItem[]; onLogin: () => void }) {
+  const blocked = useBlockedMessage();
   return (
     <div style={{ padding: '12px 12px 24px' }}>
       <Text variant="body-sm" tone="secondary" as="p" style={{ margin: 0 }}>
-        {vi.community.previewLead}
+        {blocked ?? vi.community.previewLead}
       </Text>
       <div style={{ marginTop: 12 }}>
         <Button fullWidth onPress={onLogin}>

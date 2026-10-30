@@ -16,7 +16,7 @@ import { useRecycleOpenRequests } from '../hooks/use-recycle-open-requests';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { haptic } from '../utils/haptic';
 import { pointsSummary } from '../utils/points-lots';
-import { AuthPhaseView } from '../components/ui/auth-gate';
+import { AuthPhaseView, useBlockedMessage } from '../components/ui/auth-gate';
 import { Card } from '../components/ui/card';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Icon } from '../components/ui/icon';
@@ -46,6 +46,7 @@ export default function OffersPage() {
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
   const user = useAuthStore((s) => s.user);
+  const blocked = useBlockedMessage();
   const cfg = usePublicConfig();
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
@@ -101,7 +102,7 @@ export default function OffersPage() {
         <AuthPhaseView
           phase={phase}
           loading={pageSkeleton}
-          guest={<EmptyState art="sprout" heading={homeCopy.offers.loginTitle} body={homeCopy.offers.loginBody} ctaLabel="Đăng nhập ngay" onCta={() => void useAuthStore.getState().login()} />}
+          guest={<EmptyState art="sprout" heading={homeCopy.offers.loginTitle} body={blocked ?? homeCopy.offers.loginBody} ctaLabel="Đăng nhập ngay" onCta={() => void useAuthStore.getState().login()} />}
         />
       ) : (
         <>

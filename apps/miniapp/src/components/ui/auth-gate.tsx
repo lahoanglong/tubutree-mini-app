@@ -22,15 +22,23 @@ export function SessionUnavailable({ variant }: { variant?: 'page' | 'inline' })
   return <ErrorState message={error ?? vi.errors.sessionUnavailable} onRetry={() => void restore()} variant={variant} />;
 }
 
+/**
+ * Lời máy chủ khi tài khoản bị khoá: login()/restore() bỏ phiên, về 'idle' và đặt lời đó ở `error`. Màn mời đăng nhập phải đọc
+ * lời này, nếu không khách bấm đăng nhập mãi mà không biết vì sao không vào được. Khách đăng xuất bình thường thì null.
+ */
+export function useBlockedMessage(): string | null {
+  return useAuthStore((s) => (s.status === 'idle' ? (s.error ?? null) : null));
+}
+
 /** Lời mời đăng nhập mặc định cho khách thật sự (đã đăng xuất / hết phiên). Tài khoản bị khoá thì thay lời mời bằng lời máy chủ. */
 export function GuestPrompt() {
   const login = useAuthStore((s) => s.login);
-  const error = useAuthStore((s) => s.error);
+  const blocked = useBlockedMessage();
   return (
     <EmptyState
       art="sprout"
       heading={vi.auth.guestHeading}
-      body={error ?? vi.auth.loginHint}
+      body={blocked ?? vi.auth.loginHint}
       ctaLabel={vi.auth.loginCta}
       onCta={() => void login()}
     />
