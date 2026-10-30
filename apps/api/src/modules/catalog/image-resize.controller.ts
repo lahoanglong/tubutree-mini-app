@@ -4,6 +4,7 @@ import type { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import { ImageResizeService } from './image-resize.service';
 import { negotiateFormat } from './image-resize';
+import { clientIp } from '../../common/throttle/throttle.config';
 
 @Controller()
 export class ImageResizeController {
@@ -38,7 +39,7 @@ export class ImageResizeController {
       res.status(304).set({ ...headers, ETag: `"${key}"` });
       return;
     }
-    const out = await this.images.get(source, width, format, req.ip ?? '');
+    const out = await this.images.get(source, width, format, clientIp(req));
     res.set({ ...headers, ETag: out.etag });
     return new StreamableFile(out.data, { type: out.mime });
   }

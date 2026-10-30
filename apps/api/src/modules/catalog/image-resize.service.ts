@@ -77,6 +77,7 @@ export class ImageResizeService {
   private registryUntil = 0;
   private registryLoadedAt = 0;
   private registryLoad: Promise<void> | null = null;
+  private registryDirty = false;
   private readonly ownMisses = new Map<string, { start: number; count: number }>();
 
   constructor(
@@ -113,13 +114,18 @@ export class ImageResizeService {
   /**
    * Chỉ đổi cỡ ảnh đang nằm trong sản phẩm, nhãn, vật phẩm/quà đổi rác: host Pancake/Cloudinary chung của mọi cửa hàng, kiểm host
    * thôi sẽ biến endpoint thành proxy ảnh cho bất kỳ ai. Danh sách URL http(s) nạp bằng MỘT truy vấn (ảnh base64 bị loại ngay trong
-   * SQL), dùng chung cho mọi request và làm mới mỗi 5 phút; tra một URL là tra trong bộ nhớ, không chạm DB.
+   * SQL), dùng chung cho mọi request, làm mới mỗi 5 phút và ngay khi admin lưu ảnh sản phẩm; tra một URL là tra trong bộ nhớ, không chạm DB.
    */
   private async isRegistered(raw: string): Promise<boolean> {
-    await this.refreshRegistry(Date.now() >= this.registryUntil);
+    await this.refreshRegistry(this.registryDirty || Date.now() >= this.registryUntil);
     // Ảnh vừa thêm/đổi trong ≤5 phút chưa có trong danh sách: nạp lại một lần, cách nhau ít nhất 30 giây để URL lạ không kéo DB.
     if (!this.registry.has(raw) && Date.now() - this.registryLoadedAt >= REGISTRY_MISS_RELOAD_MS) await this.refreshRegistry(true);
     return this.registry.has(raw);
+  }
+
+  /** Gọi sau khi lưu ảnh sản phẩm: lần tra kế tiếp nạp lại danh sách ngay, không đợi hết 5 phút. */
+  invalidateRegistry(): void {
+    this.registryDirty = true;
   }
 
   private async refreshRegistry(due: boolean): Promise<void> {
@@ -139,6 +145,7 @@ export class ImageResizeService {
   }
 
   private async loadRegistry(): Promise<void> {
+    this.registryDirty = false;
     const rows = await this.prisma.$queryRaw<{ u: string }[]>(Prisma.sql`
       SELECT u FROM (SELECT unnest("images") AS u FROM "products") a WHERE left(u, 8) = 'https://'
       UNION ALL SELECT "thumbnail" FROM "products" WHERE left("thumbnail", 8) = 'https://'

@@ -7,9 +7,9 @@ import { hashMessage } from './error-boundary';
 import { ErrorState } from './ui/empty-state';
 import { LineItemSkeleton, ProductGridSkeleton, Skeleton } from './ui/skeleton';
 
-export type RouteSkeletonKind = 'grid' | 'detail' | 'list';
+export type RouteSkeletonKind = 'grid' | 'detail' | 'list' | 'recycle';
 
-/** Khung chờ theo hình màn: lưới SP (Danh mục), ảnh + chữ (Chi tiết SP), danh sách dòng (Giỏ, Đơn, ...). */
+/** Khung chờ theo hình màn: lưới SP (Danh mục), ảnh + chữ (Chi tiết SP), danh sách dòng (Giỏ, Đơn, ...), tiêu đề + khối (Đổi rác). */
 export function RouteSkeleton({ kind = 'list' }: { kind?: RouteSkeletonKind }) {
   return (
     <div role="status" aria-busy="true" aria-label={vi.common.loading} style={{ minHeight: '100vh', background: 'var(--color-bg-canvas)' }}>
@@ -30,12 +30,20 @@ export function RouteSkeleton({ kind = 'list' }: { kind?: RouteSkeletonKind }) {
           </div>
         </div>
       )}
+      {kind === 'recycle' && (
+        // Cùng hình với RecyclePageSkeleton (dải tiêu đề cỡ PageHeader + 3 khối) nên lúc mã màn tải xong bố cục không nhảy; chữ tiêu đề hiện khi màn về.
+        // Vẽ thẳng bằng div và token, không dùng Page/PageHeader: chúng kéo thêm zmp-ui và chữ vào gói đầu app, mà khung chờ này nằm ở gói đầu.
+        <>
+          <div style={{ background: 'var(--color-bg-surface)', height: 'calc(24px + var(--safe-top) + var(--type-title-lg-size) * var(--type-title-lg-lh))' }} />
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {[140, 80, 80].map((h, i) => <Skeleton key={i} height={h} radius="var(--radius-card)" />)}
+          </div>
+        </>
+      )}
       {kind === 'list' && (
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Skeleton width="45%" height={22} />
-          <LineItemSkeleton />
-          <LineItemSkeleton />
-          <LineItemSkeleton />
+          {[0, 1, 2].map((i) => <LineItemSkeleton key={i} />)}
         </div>
       )}
     </div>
