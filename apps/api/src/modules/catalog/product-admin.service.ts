@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { PrismaService } from '../../prisma/prisma.service';
 import { isStorefrontImageValue } from '../../common/uploaded-image';
 import { storedThumbnailFor } from '../../common/public-image';
+import { ImageResizeService } from './image-resize.service';
 
 export const PRODUCT_IMAGES_MAX = 8;
 export const PRODUCT_CATEGORIES_MAX = 10;
@@ -49,7 +50,10 @@ export const isPancakeManaged = (p: { pancakeId: string | null }) => p.pancakeId
 export class ProductAdminService {
   private readonly logger = new Logger(ProductAdminService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly imageResize: ImageResizeService,
+  ) {}
 
   async get(id: string) {
     const p = await this.prisma.product.findUnique({ where: { id }, select: SELECT });
@@ -121,6 +125,7 @@ export class ProductAdminService {
     const fields = Object.keys(data).filter((k) => k !== 'thumbnail');
     if (fields.length === 0) return this.view(current);
     const updated = await this.prisma.product.update({ where: { id }, data, select: SELECT });
+    if (data.images !== undefined) this.imageResize.invalidateRegistry();
     this.logger.warn(`Admin ${adminId} sửa sản phẩm ${id} (${current.name}): ${fields.join(', ')}`);
     return this.view(updated);
   }

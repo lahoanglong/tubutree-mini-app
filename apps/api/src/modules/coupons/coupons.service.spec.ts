@@ -39,10 +39,9 @@ function extraModels(extra: Extra) {
 }
 
 function makeService(c: unknown, counts: number[] = [0, 0], user: unknown = REAL_USER, extra: Extra = {}) {
-  let i = 0;
   const prisma = {
-    coupon: { findUnique: jest.fn().mockResolvedValue(c) },
-    couponRedemption: { count: jest.fn().mockImplementation(() => Promise.resolve(counts[i++] ?? 0)) },
+    coupon: { findUnique: jest.fn().mockResolvedValue(c ? { ...(c as object), _count: { redemptions: counts[0] ?? 0 } } : c) },
+    couponRedemption: { count: jest.fn().mockImplementation(() => Promise.resolve(counts[1] ?? 0)) },
     user: { findUnique: jest.fn().mockResolvedValue(user) },
     ...extraModels(extra),
   } as unknown as PrismaService;
@@ -95,16 +94,70 @@ describe('CouponsService.validateAndCompute', () => {
   });
 });
 
+describe('CouponsService.validateAndCompute — số câu SQL (R-82)', () => {
+  const setup = (c: unknown, redemptions = 0, totalUsed = 0) => {
+    const prisma = {
+      coupon: { findUnique: jest.fn().mockResolvedValue({ ...(c as object), _count: { redemptions } }) },
+      couponRedemption: { count: jest.fn().mockResolvedValue(totalUsed) },
+      user: { findUnique: jest.fn().mockResolvedValue(REAL_USER) },
+      order: { findFirst: jest.fn().mockResolvedValue(null) },
+    };
+    return { prisma, svc: new CouponsService(prisma as unknown as PrismaService) };
+  };
+
+  it('lượt đã dùng của khách đọc cùng câu đọc mã: một câu coupon, không đếm riêng', async () => {
+    const { prisma, svc } = setup(coupon({ perUserLimit: 2 }), 1);
+    await svc.validateAndCompute('SALE', 'u1', 100000);
+    expect(prisma.coupon.findUnique).toHaveBeenCalledWith({
+      where: { code: 'SALE' },
+      include: { _count: { select: { redemptions: { where: { userId: 'u1' } } } } },
+    });
+    expect(prisma.couponRedemption.count).not.toHaveBeenCalled();
+  });
+
+  it('lượt đã dùng đạt giới hạn từ số đếm kèm theo → vẫn báo hết lượt', async () => {
+    const { svc } = setup(coupon({ perUserLimit: 1 }), 1);
+    await expect(svc.validateAndCompute('SALE', 'u1', 100000)).rejects.toThrow('hết lượt');
+  });
+
+  it('có thông tin khách từ giỏ → không đọc lại user và đơn', async () => {
+    const { prisma, svc } = setup(coupon({ newCustomerOnly: true, perUserLimit: 1 }));
+    await svc.validateAndCompute('SALE', 'u1', 100000, undefined, { phone: '0912345678', zaloId: 'z1', hasPriorOrder: false });
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(prisma.order.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('thông tin khách từ giỏ: khách đã có đơn → mã chỉ-khách-mới bị từ chối như khi đọc từ DB', async () => {
+    const { svc } = setup(coupon({ newCustomerOnly: true }));
+    await expect(
+      svc.validateAndCompute('SALE', 'u1', 100000, undefined, { phone: '0912345678', zaloId: 'z1', hasPriorOrder: true }),
+    ).rejects.toThrow('đơn đầu tiên');
+  });
+
+  it('thông tin khách từ giỏ: tài khoản khách (chưa SĐT) → vẫn đòi đăng nhập Zalo', async () => {
+    const { svc } = setup(coupon({ scope: 'PUBLIC', perUserLimit: 1 }));
+    await expect(
+      svc.validateAndCompute('SALE', 'u1', 100000, undefined, { phone: null, zaloId: 'guest_dev1' }),
+    ).rejects.toThrow('đăng nhập Zalo');
+  });
+
+  it('thiếu hasPriorOrder trong thông tin từ giỏ → vẫn tra đơn như cũ', async () => {
+    const { prisma, svc } = setup(coupon({ newCustomerOnly: true, perUserLimit: 1 }));
+    await svc.validateAndCompute('SALE', 'u1', 100000, undefined, { phone: '0912345678', zaloId: 'z1' });
+    expect(prisma.order.findFirst).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('CouponsService.validateAndCompute — chống lạm dụng mã (UAT p6)', () => {
   it('ADMINOPS-7: mã khách gõ có khoảng trắng/chữ thường vẫn tra theo mã chuẩn hoá (HOA, bỏ khoảng trắng)', async () => {
-    const findUnique = jest.fn().mockResolvedValue(coupon({ code: 'SUMMER10' }));
+    const findUnique = jest.fn().mockResolvedValue({ ...coupon({ code: 'SUMMER10' }), _count: { redemptions: 0 } });
     const prisma = {
       coupon: { findUnique },
       couponRedemption: { count: jest.fn().mockResolvedValue(0) },
       user: { findUnique: jest.fn().mockResolvedValue(REAL_USER) },
     } as unknown as PrismaService;
     const r = await new CouponsService(prisma).validateAndCompute('  summer10 ', 'u1', 100000);
-    expect(findUnique).toHaveBeenCalledWith({ where: { code: 'SUMMER10' } });
+    expect(findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { code: 'SUMMER10' } }));
     expect(r.code).toBe('SUMMER10');
   });
 
@@ -180,10 +233,9 @@ describe('CouponsService.validateAndCompute — chống lạm dụng mã (UAT p6
 });
 
 function makeServiceScoped(c: unknown, user: unknown = null, counts: number[] = [0, 0]) {
-  let i = 0;
   const prisma = {
-    coupon: { findUnique: jest.fn().mockResolvedValue(c) },
-    couponRedemption: { count: jest.fn().mockImplementation(() => Promise.resolve(counts[i++] ?? 0)) },
+    coupon: { findUnique: jest.fn().mockResolvedValue(c ? { ...(c as object), _count: { redemptions: counts[0] ?? 0 } } : c) },
+    couponRedemption: { count: jest.fn().mockImplementation(() => Promise.resolve(counts[1] ?? 0)) },
     user: { findUnique: jest.fn().mockResolvedValue(user) },
   } as unknown as PrismaService;
   return new CouponsService(prisma);

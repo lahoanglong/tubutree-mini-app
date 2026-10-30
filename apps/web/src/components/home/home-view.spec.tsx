@@ -9,7 +9,11 @@ import { ApiError } from '@/lib/client-api';
 
 // Chép ý nghĩa pages/home.spec của Mini App (phương án A, 9 khối): thứ tự khối theo khách cũ/mới, một lưới gợi ý, khối lỗi + Thử lại, lỗi cấp trang, khách vãng lai, chuông.
 const mocks = vi.hoisted(() => ({ get: vi.fn(), push: vi.fn(), phase: 'authenticated', restoring: false, user: { id: 'u1', fullName: 'Lan', pointsBalance: 0 } as unknown }));
-vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: vi.fn(), delete: vi.fn() } }));
+vi.mock('@/lib/core-http', () => ({
+  coreHttp: { get: mocks.get, post: vi.fn(), delete: vi.fn() },
+  rawCoreHttp: { get: mocks.get, post: vi.fn(), delete: vi.fn() },
+  setCoreGetInterceptor: vi.fn(),
+}));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase, useAuthRestoring: () => mocks.restoring }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: mocks.phase === 'authenticated' ? mocks.user : null }) }));
 vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/use-flash-sales')>()), useActiveFlashSales: () => [] }));

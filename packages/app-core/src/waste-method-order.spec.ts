@@ -25,7 +25,7 @@ describe('orderWasteMethods', () => {
     expect(orderWasteMethods(ALL, { DROP_OFF: pv('BELOW_MIN'), PICKUP: undefined, MAIL_IN: pv() }, false, ['PICKUP'])).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF']);
   });
   it('thẻ đang lỗi không bị xếp cuối theo kết quả cũ của tỉnh khác', () => {
-    expect(orderWasteMethods(ALL, { DROP_OFF: pv(), PICKUP: pv(), MAIL_IN: pv('NO_POINT') }, false, ['MAIL_IN'])).toEqual(['DROP_OFF', 'PICKUP', 'MAIL_IN']);
+    expect(orderWasteMethods(ALL, { DROP_OFF: pv(), PICKUP: pv(), MAIL_IN: pv('NO_POINT') }, true, ['MAIL_IN'])).toEqual(['MAIL_IN', 'PICKUP', 'DROP_OFF']);
     expect(orderWasteMethods(ALL, { DROP_OFF: pv('BELOW_MIN'), PICKUP: pv(), MAIL_IN: pv('NO_POINT') }, false, ['MAIL_IN'])).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF']);
   });
 });

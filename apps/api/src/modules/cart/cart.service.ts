@@ -148,6 +148,11 @@ export class CartService {
           : await this.prisma.user.findUnique({ where: { id: userId }, select: { tierId: true, phone: true, zaloId: true, _count: { select: { orders: { where: COUNTED_ORDER_WHERE } } } } }),
       } as unknown as NonNullable<typeof found>);
     const cartId = cart.id;
+    const cartUser = (cart as { user?: { tierId: string | null; phone: string | null; zaloId: string | null; _count?: { orders: number } } | null }).user ?? null;
+    // Giỏ đã đọc khách (SĐT, Zalo, số đơn đã mua) nên xét mã không đọc lại hai thứ này.
+    const userFacts = cartUser
+      ? { phone: cartUser.phone, zaloId: cartUser.zaloId, hasPriorOrder: cartUser._count ? cartUser._count.orders > 0 : undefined }
+      : undefined;
 
     // Q-14: dòng SP đã ngừng bán/chưa duyệt vẫn giữ trong DB (SP mở bán lại thì tự hiện lại) nhưng
     // không được tính tiền hay đặt — tách riêng để FE báo "đã ngừng bán" và cho khách xoá.
@@ -216,7 +221,7 @@ export class CartService {
     // Mã vừa bị gỡ khỏi giỏ ở lần đọc này (hết hạn, bị tắt, hết lượt): checkout nói đúng lý do khi tổng tăng vì mất mã.
     let couponRemoved: { code: string; reason: string } | null = null;
     const applyCoupon = async (code: string) => {
-      const r = await this.coupons.validateAndCompute(code, userId, couponBase, couponLines);
+      const r = await this.coupons.validateAndCompute(code, userId, couponBase, couponLines, userFacts);
       // Coupon PERCENT không tự giới hạn ở subtotal khi value>100% và không set maxDiscount
       // (coupons.service.ts) — checkout đã clamp bằng Math.min(..., goodsAfterCombo), cart
       // trước đây thiếu clamp này nên có thể hiển thị discount > couponBase.
@@ -247,7 +252,7 @@ export class CartService {
           // TOÀN giỏ (gồm flash) → GIỮ mã (chờ flash kết thúc), tạm không giảm. Nếu hỏng cả trên
           // toàn giỏ (hết hạn/hết lượt/không đạt minOrder thật) → gỡ như cũ.
           try {
-            await this.coupons.validateAndCompute(couponCode, userId, subtotal, lines);
+            await this.coupons.validateAndCompute(couponCode, userId, subtotal, lines, userFacts);
             discount = 0;
             freeship = false;
             couponNotice = couponNotAppliedNotice(couponRejectReason(err, lines), lines.some((l) => l.isFlash), combo.total > 0);
@@ -283,13 +288,12 @@ export class CartService {
     let freeshipThreshold = 0;
     if (!forCheckout) {
       // Giảm theo hạng đặt SAU combo và mã, trên phần còn lại, đúng thứ tự và cách làm tròn của checkout (combo → mã → hạng).
-      const cartUser = (cart as { user?: { tierId: string | null; phone: string | null; zaloId: string | null; _count?: { orders: number } } | null }).user ?? null;
       const tierId = cartUser?.tierId;
       tierDiscount = calcTierDiscount(Math.max(0, couponBase - discount), await tierDiscountPctOf(this.prisma, tierId));
 
       // Ngưỡng freeship theo hạng của khách — cùng ngưỡng checkout tính phí giao kho Tubu — để FE hiển thị tiến độ.
       const tierThreshold = await freeShipThreshold(this.config, tierId);
-      const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId, cartUser ? { phone: cartUser.phone, zaloId: cartUser.zaloId, hasPriorOrder: cartUser._count ? cartUser._count.orders > 0 : undefined } : undefined);
+      const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId, userFacts);
       freeshipThreshold = firstOrderFrom != null ? Math.min(tierThreshold, firstOrderFrom) : tierThreshold;
     }
 

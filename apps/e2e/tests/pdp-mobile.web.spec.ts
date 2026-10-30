@@ -54,4 +54,35 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
 
     await page.screenshot({ path: testInfo.outputPath('pdp-web375.png'), fullPage: true });
   });
+  test('khung chờ chi tiết SP: bấm Quay lại lúc trang SP còn đang tải thì ở lại /san-pham, không rời site và không lùi quá một trang', async ({ page, api }) => {
+    api.get('/flash-sales/active', []);
+    api.get('/categories', []);
+    api.get('/brands', []);
+    api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('about:blank');
+    await page.goto('/san-pham');
+    const card = page.locator('a[href^="/san-pham/"]').first();
+    test.skip((await card.count().catch(() => 0)) === 0, 'DB e2e chưa có sản phẩm nào để bấm');
+    await expect(card).toBeVisible();
+    const href = (await card.getAttribute('href'))!;
+    api.allowUnmocked('GET /products/:slug', 'GET /products/:slug/reviews');
+    await page.route(/\/san-pham\/[^/?]+\?_rsc=/, async (route) => {
+      await new Promise((r) => setTimeout(r, 6000));
+      await route.continue().catch(() => undefined);
+    });
+    await card.click();
+    const skeleton = page.getByTestId('pdp-nav-skeleton');
+    await expect(skeleton).toBeVisible();
+    await skeleton.getByRole('button', { name: 'Quay lại' }).click();
+    await expect(skeleton).toBeHidden();
+    await page.waitForTimeout(7500);
+    const url = new URL(page.url());
+    expect(url.origin).toBe(new URL(test.info().project.use.baseURL ?? page.url()).origin);
+    expect(url.pathname).toBe('/san-pham');
+    expect(url.pathname).not.toBe(href);
+    await expect(page.getByRole('button', { name: 'Tăng số lượng' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1, name: 'Danh mục' })).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath('pdp-back-stay.png') });
+  });
 });

@@ -224,7 +224,7 @@ export default function MyApp() {
                     <Route path="/group-buy" element={<RouteShell><GroupBuyPage /></RouteShell>} />
                     <Route path="/group-buy/:id" element={<RouteShell><GroupBuyPage /></RouteShell>} />
                     <Route path="/refill" element={<Navigate to="/recycle" replace />} />
-                    <Route path="/recycle" element={<RouteShell><RecyclePage /></RouteShell>} />
+                    <Route path="/recycle" element={<RouteShell skeleton="recycle"><RecyclePage /></RouteShell>} />
                     <Route path="/recycle/rules" element={<RouteShell><RecycleRulesPage /></RouteShell>} />
                     <Route path="/recycle/new" element={<RouteShell><RecycleNewPage /></RouteShell>} />
                     <Route path="/recycle/points" element={<RouteShell><RecyclePointsPage /></RouteShell>} />

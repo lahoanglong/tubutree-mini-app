@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('./api', () => ({ api: { get: vi.fn(), post: vi.fn() }, getAccessToken: vi.fn(() => 'tok-a') }));
+const authState = vi.hoisted(() => ({ user: { id: 'u-a' } as { id: string } | null }));
 
 import { api, getAccessToken } from './api';
-import { armHomeFeed, disarmHomeFeed, homeProductSlot, resetHomeFeed, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
+import { armHomeFeed, homeFeedIdentity, disarmHomeFeed, homeProductSlot, resetHomeFeed, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
 
 const get = api.get as unknown as ReturnType<typeof vi.fn>;
 
@@ -20,7 +21,7 @@ describe('home-feed', () => {
 
   it('arm: nhiều khối cùng dùng MỘT request /home; mỗi khối chỉ lấy được một lần', async () => {
     get.mockResolvedValue({ data: { categories: [{ id: 'c' }], brands: [] } });
-    armHomeFeed();
+    armHomeFeed(() => authState.user?.id);
     expect(await takePublicBlock('categories')).toEqual([{ id: 'c' }]);
     expect(await takePublicBlock('brands')).toEqual([]);
     expect(await takePublicBlock('categories')).toBeNull();
@@ -30,7 +31,7 @@ describe('home-feed', () => {
 
   it('request gộp lỗi → mọi khối null (không ném lỗi)', async () => {
     get.mockRejectedValue(new Error('404'));
-    armHomeFeed();
+    armHomeFeed(() => authState.user?.id);
     expect(await takePublicBlock('categories')).toBeNull();
     expect(await takePublicBlock('flashActive')).toBeNull();
     expect(get).toHaveBeenCalledTimes(1);
@@ -38,7 +39,7 @@ describe('home-feed', () => {
 
   it('resetHomeFeed: tải lại khối gộp cho lần làm mới kế tiếp', async () => {
     get.mockResolvedValue({ data: { categories: [{ id: 'c' }] } });
-    armHomeFeed();
+    armHomeFeed(() => authState.user?.id);
     await takePublicBlock('categories');
     resetHomeFeed();
     expect(await takePublicBlock('categories')).toEqual([{ id: 'c' }]);
@@ -47,7 +48,7 @@ describe('home-feed', () => {
 
   it('/home/me gửi purchasedLimit; kệ Mua lại chỉ dùng khối gộp khi tham số khớp', async () => {
     get.mockResolvedValue({ data: { purchasedItems: { items: [], nextCursor: null }, activeOrderCount: { count: 2 } } });
-    armHomeFeed();
+    armHomeFeed(() => authState.user?.id);
     expect(await takePurchasedItems({ limit: 20 })).toBeNull();
     expect(await takePurchasedItems({ limit: 10, cursor: 'x' })).toBeNull();
     expect(get).not.toHaveBeenCalled();
@@ -57,14 +58,45 @@ describe('home-feed', () => {
   });
 
   it('đổi tài khoản khi Trang chủ còn mở: khối cá nhân của user cũ không trao cho user mới', async () => {
-    const token = getAccessToken as unknown as ReturnType<typeof vi.fn>;
-    token.mockReturnValue('tok-a');
+    authState.user = { id: 'u-a' };
     get.mockResolvedValue({ data: { notifications: [{ id: 'n1' }], subscriptions: [] } });
-    armHomeFeed();
+    armHomeFeed(() => authState.user?.id);
     expect(await takeMeBlock('subscriptions')).toEqual([]);
-    token.mockReturnValue('tok-b');
+    authState.user = { id: 'u-b' };
     expect(await takeMeBlock('notifications')).toBeNull();
+    authState.user = { id: 'u-a' };
+  });
+
+  it('token làm mới giữa lúc gửi và lúc nhận (cùng user): khối cá nhân vẫn được trao', async () => {
+    const token = getAccessToken as unknown as ReturnType<typeof vi.fn>;
+    authState.user = { id: 'u-a' };
+    token.mockReturnValue('tok-1');
+    let resolveMe!: (v: unknown) => void;
+    get.mockReturnValue(new Promise((r) => { resolveMe = r; }));
+    armHomeFeed(() => authState.user?.id);
+    const taken = takeMeBlock('subscriptions');
+    token.mockReturnValue('tok-2');
+    resolveMe({ data: { subscriptions: [{ id: 's' }] } });
+    expect(await taken).toEqual([{ id: 's' }]);
     token.mockReturnValue('tok-a');
+  });
+
+  it('khách nâng lên Zalo tại chỗ (cùng id): khối cá nhân tính lúc còn là khách không trao cho người đã liên kết', async () => {
+    type U = { id: string; phone: string | null; zaloId: string | null };
+    let user: U | null = { id: 'g1', phone: null, zaloId: 'guest_g1' };
+    get.mockResolvedValue({ data: { newCustomerOffer: { isNewCustomer: false, welcomeVoucher: null } } });
+    armHomeFeed(() => homeFeedIdentity(user));
+    const taken = takeMeBlock('newCustomerOffer');
+    await Promise.resolve();
+    user = { id: 'g1', phone: '0900000000', zaloId: 'z123' };
+    expect(await taken).toBeNull();
+  });
+
+  it('homeFeedIdentity: cùng id và cùng loại thì giống nhau, khách vs thật thì khác, không user thì null', () => {
+    const g = { id: 'a', phone: null, zaloId: 'guest_a' };
+    expect(homeFeedIdentity(g)).toBe(homeFeedIdentity({ ...g }));
+    expect(homeFeedIdentity(g)).not.toBe(homeFeedIdentity({ id: 'a', phone: '09', zaloId: 'z' }));
+    expect(homeFeedIdentity(null)).toBeNull();
   });
 
   it('homeProductSlot chỉ nhận đúng 3 bộ tham số của Home', () => {

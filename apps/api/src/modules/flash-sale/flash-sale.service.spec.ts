@@ -12,78 +12,78 @@ const lifecycle = { notifyWishlistPriceDrop: jest.fn().mockResolvedValue(undefin
 const NOW = new Date('2026-07-05T10:00:00Z');
 const activeItem = (over: Record<string, unknown> = {}) => ({
   id: 'fi1', variationId: 'v1', flashPrice: 80000, quota: 10, soldCount: 3,
-  flashSale: { endAt: new Date('2026-07-05T12:00:00Z') },
+  endAt: new Date('2026-07-05T12:00:00Z'), createdBy: 'staff1',
   ...over,
 });
 
 describe('FlashSaleService.resolveEffective', () => {
   it('variation có flash ACTIVE còn quota → trả flashPrice + metadata', async () => {
-    const prisma = { flashSaleItem: { findMany: jest.fn().mockResolvedValue([activeItem()]) } } as unknown as PrismaService;
+    const prisma = { $queryRaw: jest.fn().mockResolvedValue([activeItem()]) } as unknown as PrismaService;
     const map = await new FlashSaleService(prisma, config, notifications, lifecycle).resolveEffective(['v1'], NOW);
-    expect(map.get('v1')).toMatchObject({ flashPrice: 80000, itemId: 'fi1', soldCount: 3, quota: 10 });
+    expect(map.get('v1')).toMatchObject({ flashPrice: 80000, itemId: 'fi1', soldCount: 3, quota: 10, endAt: new Date('2026-07-05T12:00:00Z') });
   });
 
   it('item hết quota (soldCount>=quota) → không có trong map', async () => {
-    const prisma = { flashSaleItem: { findMany: jest.fn().mockResolvedValue([activeItem({ soldCount: 10 })]) } } as unknown as PrismaService;
+    const prisma = { $queryRaw: jest.fn().mockResolvedValue([activeItem({ soldCount: 10 })]) } as unknown as PrismaService;
     const map = await new FlashSaleService(prisma, config, notifications, lifecycle).resolveEffective(['v1'], NOW);
     expect(map.has('v1')).toBe(false);
   });
 
   it('variation không có item active → không có trong map', async () => {
-    const prisma = { flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) } } as unknown as PrismaService;
+    const prisma = { $queryRaw: jest.fn().mockResolvedValue([]) } as unknown as PrismaService;
     const map = await new FlashSaleService(prisma, config, notifications, lifecycle).resolveEffective(['v9'], NOW);
     expect(map.has('v9')).toBe(false);
   });
 
   it('variationIds rỗng → map rỗng, KHÔNG query', async () => {
     const findMany = jest.fn();
-    const prisma = { flashSaleItem: { findMany } } as unknown as PrismaService;
+    const prisma = { $queryRaw: findMany } as unknown as PrismaService;
     const map = await new FlashSaleService(prisma, config, notifications, lifecycle).resolveEffective([], NOW);
     expect(map.size).toBe(0);
     expect(findMany).not.toHaveBeenCalled();
   });
 
-  it('where CHỈ lấy variation active (variation: { isActive: true })', async () => {
-    const findMany = jest.fn().mockResolvedValue([]);
-    const prisma = { flashSaleItem: { findMany } } as unknown as PrismaService;
-    await new FlashSaleService(prisma, config, notifications, lifecycle).resolveEffective(['v1'], NOW);
-    expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ variation: { isActive: true } }) }),
-    );
+  it('một câu SQL JOIN chỉ lấy variation active, đợt active đang diễn ra tại now, đúng các variationId', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const prisma = { $queryRaw: queryRaw } as unknown as PrismaService;
+    await new FlashSaleService(prisma, config, notifications, lifecycle).resolveEffective(['v1', 'v2'], NOW);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    const q = queryRaw.mock.calls[0][0] as { sql: string; values: unknown[] };
+    expect(q.sql).toContain('v."isActive" = true');
+    expect(q.sql).toContain('s."isActive" = true AND s."startAt" <=');
+    expect(q.values).toEqual(['v1', 'v2', NOW, NOW]);
   });
 });
 
 describe('FlashSaleService.resolveEffective — suất còn lại của khách (ENGAGE-4)', () => {
-  const svcWith = (items: unknown[], purchases: unknown[]) => {
-    const purchaseFind = jest.fn().mockResolvedValue(purchases);
-    const prisma = {
-      flashSaleItem: { findMany: jest.fn().mockResolvedValue(items) },
-      flashSalePurchase: { findMany: purchaseFind },
-    } as unknown as PrismaService;
-    return { svc: new FlashSaleService(prisma, config, notifications, lifecycle), purchaseFind };
+  const svcWith = (items: unknown[]) => {
+    const queryRaw = jest.fn().mockResolvedValue(items);
+    const prisma = { $queryRaw: queryRaw } as unknown as PrismaService;
+    return { svc: new FlashSaleService(prisma, config, notifications, lifecycle), queryRaw };
   };
 
-  it('có userId → allowance = min(quota − đã bán, perUserLimit − khách đã mua)', async () => {
-    const { svc, purchaseFind } = svcWith(
-      [activeItem({ perUserLimit: 3, quota: 10, soldCount: 3 }), activeItem({ id: 'fi2', variationId: 'v2', perUserLimit: 5, quota: 4, soldCount: 2 })],
-      [{ flashSaleItemId: 'fi1', quantity: 2 }],
-    );
+  it('có userId → allowance = min(quota − đã bán, perUserLimit − khách đã mua), lượt mua đọc cùng một câu SQL', async () => {
+    const { svc, queryRaw } = svcWith([
+      activeItem({ perUserLimit: 3, quota: 10, soldCount: 3, bought: 2 }),
+      activeItem({ id: 'fi2', variationId: 'v2', perUserLimit: 5, quota: 4, soldCount: 2, bought: 0 }),
+    ]);
     const map = await svc.resolveEffective(['v1', 'v2'], NOW, 'u1');
-    expect(purchaseFind).toHaveBeenCalledWith({
-      where: { userId: 'u1', flashSaleItemId: { in: ['fi1', 'fi2'] } },
-      select: { flashSaleItemId: true, quantity: true },
-    });
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    const q = queryRaw.mock.calls[0][0] as { sql: string; values: unknown[] };
+    expect(q.sql).toContain('flash_sale_purchases');
+    expect(q.values).toContain('u1');
     expect(map.get('v1')).toMatchObject({ allowance: 1, perUserLeft: 1, quotaLeft: 7 });
     expect(map.get('v2')).toMatchObject({ allowance: 2, perUserLeft: 5, quotaLeft: 2 });
   });
 
-  it('khách đã dùng hết suất → vẫn trả item với allowance 0 (để báo lý do), không có userId → không tra lượt mua', async () => {
-    const { svc } = svcWith([activeItem({ perUserLimit: 1 })], [{ flashSaleItemId: 'fi1', quantity: 1 }]);
+  it('khách đã dùng hết suất → vẫn trả item với allowance 0 (để báo lý do), không có userId → không nối bảng lượt mua', async () => {
+    const { svc } = svcWith([activeItem({ perUserLimit: 1, bought: 1 })]);
     expect((await svc.resolveEffective(['v1'], NOW, 'u1')).get('v1')).toMatchObject({ allowance: 0 });
 
-    const anon = svcWith([activeItem({ perUserLimit: 1 })], []);
+    const anon = svcWith([activeItem({ perUserLimit: 1, bought: 0 })]);
     const map = await anon.svc.resolveEffective(['v1'], NOW);
-    expect(anon.purchaseFind).not.toHaveBeenCalled();
+    const q = anon.queryRaw.mock.calls[0][0] as { sql: string };
+    expect(q.sql).not.toContain('flash_sale_purchases');
     expect(map.get('v1')!.allowance).toBeUndefined();
   });
 });
