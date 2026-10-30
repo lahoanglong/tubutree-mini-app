@@ -9,6 +9,8 @@ import type { PrismaService } from '../../prisma/prisma.service';
 const SEED = readFileSync(join(__dirname, '../../../prisma/seed.ts'), 'utf-8');
 const SQL = readFileSync(join(__dirname, '../../../prisma/migrations/20261020000000_waste_exchange/migration.sql'), 'utf-8');
 
+const OLD_CLAIM_DAYS_KEY = 'waste.gift_claim_days';
+const OLD_CLAIM_DAYS_DESC = 'Số ngày khách được nhận quà bằng mã, quá hạn thì lượt đổi vào danh sách admin xem lại.';
 type Row = { key: string; value: unknown; category?: string; description?: string; createOnly?: boolean };
 function seededRows(): Row[] {
   const start = SEED.indexOf('const SYSTEM_CONFIGS: ConfigSeed[] = [');
@@ -63,7 +65,7 @@ const DESC: Record<string, string> = {
   'waste.shortfall_lock_pct': 'Yêu cầu hoàn tất mà điểm cộng chưa tới (100 trừ ngần này) phần trăm điểm ước tính thì tính là một lần nhận thiếu.',
   'waste.shortfall_lock_streak': 'Số lần nhận thiếu liền nhau thì khoá đường gửi kho và thu kèm đơn của khách.',
   'waste.staff_daily_cap_points': 'Trần Điểm Xanh mỗi nhân viên kho hoặc điểm nhận được xác nhận trong một ngày.',
-  'waste.gift_claim_days': 'Số ngày khách được nhận quà bằng mã, quá hạn thì lượt đổi vào danh sách admin xem lại.',
+  'waste.gift_claim_days': 'Số ngày khách được nhận quà bằng mã. Hết ngày hạn thì quà tự huỷ, hoàn điểm cho khách và báo khách một tin.',
   'waste.point_inactive_days': 'Điểm nhận đối tác không có lượt xác nhận nào quá ngần này ngày kể từ lần xác nhận cuối hoặc lần kích hoạt thì bị ẩn khỏi danh sách khách.',
   'waste.mailin_fee_table': 'Bảng ước tính phí ship gửi kho theo vùng tỉnh, mỗi vùng có phí thấp và phí cao, cộng một vùng mặc định cho tỉnh chưa xếp.',
   'waste.alert_thresholds': 'Ngưỡng cảnh báo bất thường về điểm nhận và người xác nhận, chỉ để admin xem, không tự khoá ai.',
@@ -149,8 +151,18 @@ describe('seed.ts and the migrations carry the same 22 rows', () => {
     for (const m of tuples) {
       const def = WASTE_CONFIG_KEYS[m[1] as keyof typeof WASTE_CONFIG_KEYS];
       expect(JSON.parse(m[2]!)).toEqual(def.default);
-      expect(m[3]).toBe(def.description);
+      expect(m[3]).toBe(m[1] === OLD_CLAIM_DAYS_KEY ? OLD_CLAIM_DAYS_DESC : def.description);
     }
+  });
+});
+
+describe('waste.gift_claim_days description migration', () => {
+  const SQL_D = readFileSync(join(__dirname, '../../../prisma/migrations/20261030100002_waste_gift_claim_days_description/migration.sql'), 'utf-8');
+  it('rewrites the stale sentence only while the row still holds it, to the key description', () => {
+    expect(SQL_D).toContain('UPDATE "system_configs"');
+    expect(SQL_D).toContain(`SET "description" = '${WASTE_CONFIG_KEYS['waste.gift_claim_days'].description}'`);
+    expect(SQL_D).toContain(`AND "description" = '${OLD_CLAIM_DAYS_DESC}'`);
+    expect(SQL_D).toContain(`WHERE "key" = '${OLD_CLAIM_DAYS_KEY}'`);
   });
 });
 

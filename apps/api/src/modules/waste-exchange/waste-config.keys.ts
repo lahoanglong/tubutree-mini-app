@@ -143,7 +143,7 @@ export const WASTE_CONFIG_KEYS = {
     category: 'waste',
     min: 7,
     max: 365,
-    description: 'Số ngày khách được nhận quà bằng mã, quá hạn thì lượt đổi vào danh sách admin xem lại.',
+    description: 'Số ngày khách được nhận quà bằng mã. Hết ngày hạn thì quà tự huỷ, hoàn điểm cho khách và báo khách một tin.',
   },
   'waste.point_inactive_days': {
     default: 60,
