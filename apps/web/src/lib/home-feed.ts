@@ -4,17 +4,16 @@ import { createHomeFeed, takeHomeRequest } from '@tubutree/app-core/home-feed';
 import { fetchHomeMe, type HomePublicDTO } from '@tubutree/app-core/api/home';
 import { rawCoreHttp, setCoreGetInterceptor } from './core-http';
 
-// Server đã tự cắt từng khối ở ~2,5s nên request gộp không cần chờ lâu mới lùi về request lẻ.
-const FEED_TIMEOUT_MS = 4_000;
-
 let userId: string | null = null;
 
 const feed = createHomeFeed({
   fetchPublic: () => rawCoreHttp.get<HomePublicDTO>('/home', { anonymous: true }),
   fetchMe: () => fetchHomeMe(rawCoreHttp),
   identity: () => userId,
-  timeoutMs: FEED_TIMEOUT_MS,
 });
+
+// Không đặt hạn chờ riêng: apiFetch đã có hạn 20s, và server tự cắt từng khối ở ~2,5s. Hạn ngắn hơn chỉ làm lần chờ chậm gấp đôi
+// (bỏ request gộp còn đang chạy rồi gọi lẻ lại, cũng chậm y vậy). Chỉ lỗi hoặc khối null mới lùi về request lẻ.
 
 /**
  * Bật request gộp `/home` + `/home/me` cho Trang chủ (cùng cơ chế với Mini App). Chỉ ở trình duyệt: ở máy chủ trạng thái này dùng chung giữa
