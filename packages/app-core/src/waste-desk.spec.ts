@@ -63,6 +63,10 @@ describe('deskGiftReadOnly: thẻ quà chỉ đọc ở quầy', () => {
     expect(deskGiftReadOnly({ status: 'READY', claimExpiresAt: '2026-11-21T00:00:00.000Z' }, f, now)).toBeNull();
     expect(deskGiftReadOnly({ status: 'READY', claimExpiresAt: null }, f, now)).toBeNull();
   });
+  it('READY có hạn sớm hơn trong cùng ngày VN: chưa quá hạn, vẫn trao được; sang ngày VN kế tiếp mới quá hạn', () => {
+    expect(deskGiftReadOnly({ status: 'READY', claimExpiresAt: '2026-11-19T17:30:00.000Z' }, f, new Date('2026-11-20T07:00:00.000Z'))).toBeNull();
+    expect(deskGiftReadOnly({ status: 'READY', claimExpiresAt: '2026-11-19T17:30:00.000Z' }, f, new Date('2026-11-20T17:00:00.000Z'))!.heading).toBe('Quà đã quá hạn nhận');
+  });
   it('READY đã quá hạn: nói rõ quầy không trao được, hệ thống sẽ huỷ và hoàn điểm', () => {
     const r = deskGiftReadOnly({ status: 'READY', claimExpiresAt: '2026-11-19T00:00:00.000Z' }, f, now)!;
     expect(r.heading).toBe('Quà đã quá hạn nhận');

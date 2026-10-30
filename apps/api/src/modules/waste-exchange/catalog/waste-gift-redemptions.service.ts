@@ -7,6 +7,7 @@ import type {
   WasteDeskGiftFulfilRequest,
   WasteGiftCancelRequest,
 } from '@tubutree/shared-types';
+import { startOfVnDay } from '../../../common/vn-time';
 import { assertActiveAdmin, assertActiveStaff } from '../../../common/staff-access';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { toGiftRedemptionDTO } from '../../loyalty/loyalty.service';
@@ -26,8 +27,8 @@ export const GIFT_EXPIRED_CANCEL_REASON = 'Quá hạn nhận';
 const EXPIRE_PAGE = 200;
 
 /** Còn trong hạn nhận (hoặc quà không có hạn): điều kiện chung của mọi đường trao quà, đối xứng với wasteGiftOverdueWhere. */
-const claimOpenWhere = (now: Date): Prisma.WasteGiftRedemptionWhereInput => ({ OR: [{ claimExpiresAt: null }, { claimExpiresAt: { gte: now } }] });
-const isOverdue = (row: { status: string; claimExpiresAt: Date | null }, now: Date) => row.status === 'READY' && row.claimExpiresAt !== null && row.claimExpiresAt < now;
+const claimOpenWhere = (now: Date): Prisma.WasteGiftRedemptionWhereInput => ({ OR: [{ claimExpiresAt: null }, { claimExpiresAt: { gte: startOfVnDay(now) } }] });
+const isOverdue = (row: { status: string; claimExpiresAt: Date | null }, now: Date) => row.status === 'READY' && row.claimExpiresAt !== null && row.claimExpiresAt < startOfVnDay(now);
 
 @Injectable()
 export class WasteGiftRedemptionsService {
@@ -213,7 +214,7 @@ export class WasteGiftRedemptionsService {
         ...(isAdmin ? { userId: view.userId } : {}),
         claimExpiresAt: row.claimExpiresAt?.toISOString() ?? null,
         cancelReason: row.cancelReason,
-        overdue: row.status === 'READY' && row.claimExpiresAt !== null && row.claimExpiresAt < now,
+        overdue: row.status === 'READY' && row.claimExpiresAt !== null && row.claimExpiresAt < startOfVnDay(now),
         createdAt: row.createdAt.toISOString(),
       };
     });

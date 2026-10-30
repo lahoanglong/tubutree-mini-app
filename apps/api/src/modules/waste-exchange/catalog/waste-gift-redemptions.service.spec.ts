@@ -190,11 +190,33 @@ describe('WasteGiftRedemptionsService.fulfilById', () => {
     });
   });
 
-  it('count 0 because the deadline passed between the read and the write: the overdue sentence, not the generic one', async () => {
+  it('count 0 because the deadline day ended between the read and the write: the overdue sentence, not the generic one', async () => {
     h.tx.wasteGiftRedemption.updateMany.mockResolvedValue({ count: 0 });
-    h.tx.wasteGiftRedemption.findUnique.mockResolvedValue({ ...ready, claimExpiresAt: new Date(Date.now() - 1000) });
+    h.tx.wasteGiftRedemption.findUnique.mockResolvedValue({ ...ready, claimExpiresAt: new Date('2026-10-15T09:00:00Z') });
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-17T03:00:00Z'));
 
     await expect(h.svc.fulfilById('s1', 'r1', { code: 'QG-ABCDEFGH' })).rejects.toThrow(new ConflictException(OVERDUE));
+  });
+
+  it('the updateMany guard is the start of the VN day: a deadline earlier today does not block, one from yesterday does', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-17T07:00:00Z'));
+    h.access.assertWarehouseActor.mockResolvedValue({ id: 's1', role: 'ADMIN', phone: null });
+
+    await h.svc.fulfilById('s1', 'r1', { code: 'qg-abcdefgh' });
+
+    expect(h.tx.wasteGiftRedemption.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'r1', status: 'READY', OR: [{ claimExpiresAt: null }, { claimExpiresAt: { gte: new Date('2026-10-16T17:00:00Z') } }] },
+      }),
+    );
+  });
+
+  it('a deadline at 09:00 today (VN) is still open at 14:00 the same day; the desk is not refused up front', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-17T07:00:00Z'));
+    h.access.assertWarehouseActor.mockResolvedValue({ id: 's1', role: 'ADMIN', phone: null });
+    h.prisma.wasteGiftRedemption.findUnique.mockResolvedValue({ ...ready, claimExpiresAt: new Date('2026-10-17T02:00:00Z') });
+
+    await expect(h.svc.fulfilById('s1', 'r1', { code: 'qg-abcdefgh' })).resolves.toBeDefined();
   });
 
   it('wrong code: 404 plus one LOOKUP_MISS event pinned to the warehouse, nothing updated', async () => {
@@ -417,7 +439,7 @@ describe('WasteGiftRedemptionsService.expireOverdue', () => {
     expect(res).toEqual({ expired: 1, failed: 0 });
     expect(h.prisma.wasteGiftRedemption.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: wasteGiftOverdueWhere(NOW) }));
     expect(h.tx.wasteGiftRedemption.updateMany).toHaveBeenCalledWith({
-      where: { id: 'r1', status: 'READY', claimExpiresAt: { lt: NOW } },
+      where: { id: 'r1', status: 'READY', claimExpiresAt: { lt: new Date('2026-11-19T17:00:00Z') } },
       data: { status: 'CANCELLED', cancelledAt: NOW, cancelledByUserId: null, cancelReason: 'Quá hạn nhận', refundedPoints: 30_000 },
     });
     expect(h.rewards.grant).toHaveBeenCalledWith('u1', 30_000, 'GIFT_REFUND:QG-ABCDEFGH', 'GIFT_REFUND', 'r1', h.tx, expect.any(Date));

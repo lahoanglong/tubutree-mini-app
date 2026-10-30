@@ -12,11 +12,14 @@ import { WasteConfigService } from '../../src/modules/waste-exchange/core/waste-
 import { WasteNotifierService } from '../../src/modules/waste-exchange/core/waste-notifier.service';
 import { WasteGiftRedemptionsService } from '../../src/modules/waste-exchange/catalog/waste-gift-redemptions.service';
 import { WasteGiftExpiryCron } from '../../src/modules/waste-exchange/catalog/waste-gift-expiry.cron';
+import { startOfVnDay } from '../../src/common/vn-time';
 import { createUser, deleteItData, setConfig, warmPool } from './helpers';
 import { cleanupWaste, createGiftRedemption, createWarehouse, createWasteGift, raceWithHold } from './fixtures/waste-fixtures';
 
 const phone = () => '09' + String(randomInt(10_000_000, 99_999_999));
 const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+const pastDeadline = () => new Date(startOfVnDay().getTime() - HOUR);
 const ALREADY = 'Lượt đổi quà này đã được trao hoặc đã huỷ.';
 const OVERDUE = 'Quà đã quá hạn nhận, hệ thống sẽ huỷ và hoàn điểm cho khách.';
 function noDeadlock(results: PromiseSettledResult<unknown>[]) {
@@ -37,7 +40,7 @@ describe('waste-gift-expiry race (real Postgres)', () => {
   const userIds: string[] = [];
   const giftIds: string[] = [];
 
-  const newCase = async (o: { claimExpiresAt: Date | null; stock?: number | null } = { claimExpiresAt: new Date(Date.now() - HOUR) }) => {
+  const newCase = async (o: { claimExpiresAt: Date | null; stock?: number | null } = { claimExpiresAt: pastDeadline() }) => {
     const customer = await createUser(prisma, { pointsBalance: 100_000, phone: phone() });
     userIds.push(customer.id);
     const gift = await createWasteGift(prisma, { stock: o.stock === undefined ? 0 : o.stock, pointsCost: 30_000 });
@@ -174,7 +177,7 @@ describe('waste-gift-expiry race (real Postgres)', () => {
 
   it('the cron sweeps first, then the desk hands over: the row stays CANCELLED, one refund, the desk is a 409', async () => {
     const { customer, gift, redemption } = await newCase({ claimExpiresAt: new Date(Date.now() + HOUR) });
-    const later = new Date(Date.now() + 2 * HOUR);
+    const later = new Date(Date.now() + 2 * DAY);
 
     const results = await raceWithHold(
       prisma,
@@ -200,7 +203,7 @@ describe('waste-gift-expiry race (real Postgres)', () => {
 
   it('the desk hands over first, then the cron sweeps: the row stays FULFILLED, no refund, no notice', async () => {
     const { customer, gift, redemption } = await newCase({ claimExpiresAt: new Date(Date.now() + HOUR) });
-    const later = new Date(Date.now() + 2 * HOUR);
+    const later = new Date(Date.now() + 2 * DAY);
 
     const results = await raceWithHold(
       prisma,
@@ -226,5 +229,29 @@ describe('waste-gift-expiry race (real Postgres)', () => {
     await expect(svc.fulfilById(staff.id, redemption.id, { code: redemption.code! })).rejects.toThrow(new ConflictException(OVERDUE));
 
     expect((await redemptionOf(redemption.id)).status).toBe('READY');
+  });
+
+  it('a deadline earlier today (VN) is still open: the desk hands over, the cron leaves it; the next VN midnight is when the cron cancels it', async () => {
+    const earlierToday = new Date(startOfVnDay().getTime() + 1000);
+    const handed = await newCase({ claimExpiresAt: earlierToday });
+    const swept = await newCase({ claimExpiresAt: earlierToday });
+
+    await svc.expireOverdue();
+    expect((await redemptionOf(swept.redemption.id)).status).toBe('READY');
+    expect(noticesFor(swept.redemption.id)).toBe(0);
+
+    await svc.fulfilById(staff.id, handed.redemption.id, { code: handed.redemption.code! });
+    expect((await redemptionOf(handed.redemption.id)).status).toBe('FULFILLED');
+
+    await svc.expireOverdue(new Date(startOfVnDay().getTime() + DAY - 1000));
+    expect((await redemptionOf(swept.redemption.id)).status).toBe('READY');
+
+    await svc.expireOverdue(new Date(startOfVnDay().getTime() + DAY));
+    const row = await redemptionOf(swept.redemption.id);
+    expect(row.status).toBe('CANCELLED');
+    expect(await balanceOf(swept.customer.id)).toBe(130_000);
+    expect(await refundRows(swept.redemption.id)).toBe(1);
+    expect((await redemptionOf(handed.redemption.id)).status).toBe('FULFILLED');
+    expect(await refundRows(handed.redemption.id)).toBe(0);
   });
 });
