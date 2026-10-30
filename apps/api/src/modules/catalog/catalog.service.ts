@@ -487,8 +487,9 @@ export class CatalogService {
    *    xuất hiện nhưng luôn xếp sau sản phẩm chưa mua (spec 4a.3), trong mỗi nhóm sắp theo tổng đã bán
    *    (soldApp + soldExternal) giảm dần.
    * 3) Không có lịch sử/không match → fallback sản phẩm isFeatured (sắp theo đã bán).
+   *
+   * `known.hasOrders === false` = người gọi đã biết khách chưa có đơn nào (Home đếm sẵn): khỏi đọc lịch sử mua.
    */
-  /** `hasOrders: false` = người gọi đã biết khách chưa có đơn nào (Home đếm sẵn): khỏi đọc lịch sử mua. */
   async getForYou(userId: string, known: { hasOrders?: boolean } = {}) {
     const TAKE = 10;
     const RECENT_ITEMS = 20;
