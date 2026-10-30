@@ -26,7 +26,7 @@ import { EcoImpact } from './eco-impact';
 import { WaterTank } from './water-tank';
 import { SeasonEmpty } from './season-banner';
 
-describe('OrderWaterCard (B-81)', () => {
+describe('OrderWaterCard', () => {
   it('hiện nguồn "Từ đơn hàng" và tiến độ tuần', () => {
     render(<OrderWaterCard info={{ perOrder: 100, weeklyCap: 300, weeklyGranted: 100 }} onShop={vi.fn()} />);
     expect(screen.getByText('Từ đơn hàng')).toBeInTheDocument();
@@ -44,7 +44,7 @@ describe('OrderWaterCard (B-81)', () => {
   });
 });
 
-describe('GuestBanner (B-79)', () => {
+describe('GuestBanner', () => {
   const wrap = () => {
     const qc = new QueryClient();
     return render(
@@ -67,7 +67,7 @@ describe('GuestBanner (B-79)', () => {
   });
 });
 
-describe('HarvestCelebration (B-15)', () => {
+describe('HarvestCelebration', () => {
   const base = { open: true, guest: false, onLogin: vi.fn(), certificate: null, species: null, points: null, sprout: false, couponCapped: null, nextTarget: 60, onClose: vi.fn(), onShare: vi.fn() };
   it('có mã: nút chính "Dùng mã giảm giá ngay" truyền mã, nút phụ "Để sau" đóng', () => {
     const onUseCoupon = vi.fn();
@@ -88,7 +88,7 @@ describe('HarvestCelebration (B-15)', () => {
   });
 });
 
-describe('GardenHero (B-107)', () => {
+describe('GardenHero', () => {
   it('hồ sơ cũ 400/60: tiến độ không vượt đích và nói đủ nước', () => {
     render(<GardenHero eco={{ progress: 400, target: 60, treeType: 'Sồi', treesPlanted: 1 }} totalSeeds={10} streakDays={1} harvestReady />);
     expect(screen.queryByText(/400/)).toBeNull();
