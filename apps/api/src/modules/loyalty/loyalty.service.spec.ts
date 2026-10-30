@@ -1619,6 +1619,15 @@ describe('LoyaltyService.getNewCustomerOffer', () => {
     expect(orderFindFirst.mock.calls[0][0].where).toMatchObject({ userId: 'me', status: { not: 'CANCELLED' } });
   });
 
+  it('đã biết chưa có đơn (số đếm của Trang chủ) → không đọc đơn lần nào, đọc khách một lần, mã chỉ-khách-mới vẫn hiện', async () => {
+    const onlyNew = { ...welcome, newCustomerOnly: true } as unknown as ReturnType<typeof coupon>;
+    const { svc, orderFindFirst, prisma } = setup({ priorOrder: true, coupons: [onlyNew] });
+    const offer = await svc.getNewCustomerOffer('me', { hasPriorOrder: false });
+    expect(offer.welcomeVoucher).toMatchObject({ code: 'WELCOME-ME' });
+    expect(orderFindFirst).not.toHaveBeenCalled();
+    expect(prisma.user.findUniqueOrThrow).toHaveBeenCalledTimes(1);
+  });
+
   it('đã có đơn (chờ thanh toán, đang giao, đã giao, đã trả đều tính) → không phải khách mới, không nạp ví voucher', async () => {
     const { svc, prisma } = setup({ priorOrder: true });
     expect(await svc.getNewCustomerOffer('me')).toEqual({ isNewCustomer: false, welcomeVoucher: null });

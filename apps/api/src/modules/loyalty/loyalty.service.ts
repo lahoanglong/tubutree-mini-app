@@ -11,7 +11,7 @@ import {
 import { randomBytes } from 'node:crypto';
 import { MembershipTier, PosPointCredit, Prisma } from '@prisma/client';
 import type { GiftRedemptionDTO, LoyaltyPreviewDTO, RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO, WasteOpeningHours, WasteVoucherSpec } from '@tubutree/shared-types';
-import type { CouponType, WasteGift, WasteGiftRedemption } from '@prisma/client';
+import type { CouponType, User, WasteGift, WasteGiftRedemption } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NO_PARTIAL_RETURNS, partialReturnTotals } from '../orders/return-ledger';
 import { remainingPointsBack } from '../orders/refund-allocation';
@@ -791,11 +791,13 @@ export class LoyaltyService {
    * khách deviceId sẽ được hứa quà server không cho) chưa có đơn theo đúng định nghĩa đơn đầu (common/first-order.ts), kèm
    * voucher chào mừng nếu còn dùng được. Voucher lấy qua getAvailableCoupons nên hiện thì áp được, đúng như ví voucher.
    */
-  async getNewCustomerOffer(userId: string) {
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { phone: true, zaloId: true } });
-    if (!isRealUser(user) || (await hasPriorOrder(this.prisma, userId))) return { isNewCustomer: false as const, welcomeVoucher: null };
+  async getNewCustomerOffer(userId: string, known: { hasPriorOrder?: boolean } = {}) {
+    // Đọc khách một lần đủ cột cho cả bước kiểm khách thật lẫn getAvailableCoupons.
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!isRealUser(user) || (known.hasPriorOrder ?? (await hasPriorOrder(this.prisma, userId)))) return { isNewCustomer: false as const, welcomeVoucher: null };
     const code = voucherCode('WELCOME', userId);
-    const voucher = (await this.getAvailableCoupons(userId)).find((c) => c.code === code);
+    // Tới đây chắc chắn chưa có đơn: getAvailableCoupons khỏi đọc lại đơn cho mã chỉ-khách-mới.
+    const voucher = (await this.getAvailableCoupons(userId, { user, hasPriorOrder: false })).find((c) => c.code === code);
     return {
       isNewCustomer: true as const,
       welcomeVoucher: voucher ? { code: voucher.code, type: voucher.type, value: voucher.value, minOrder: voucher.minOrder, endAt: voucher.endAt } : null,
@@ -803,8 +805,8 @@ export class LoyaltyService {
   }
 
   /** Coupon khả dụng cho user: PUBLIC + đúng hạng + mã CLAIM đã nhận, còn hạn, chưa hết lượt cá nhân. */
-  async getAvailableCoupons(userId: string) {
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  async getAvailableCoupons(userId: string, known: { user?: User; hasPriorOrder?: boolean } = {}) {
+    const user = known.user ?? (await this.prisma.user.findUniqueOrThrow({ where: { id: userId } }));
     const now = new Date();
     // Lọc scope + hạn NGAY trong SQL: trước đây nạp mọi coupon còn hạn của mọi khách (hàng chục
     // nghìn coupon cá nhân) rồi lọc bằng JS (A3-001). Hai nhánh UNION ALL khớp 2 partial index
@@ -845,7 +847,7 @@ export class LoyaltyService {
       claimIds.length
         ? this.prisma.couponClaim.findMany({ where: { userId, couponId: { in: claimIds } }, select: { couponId: true } })
         : [],
-      coupons.some((c) => c.newCustomerOnly) ? hasPriorOrder(this.prisma, userId) : false,
+      coupons.some((c) => c.newCustomerOnly) ? (known.hasPriorOrder ?? hasPriorOrder(this.prisma, userId)) : false,
     ]);
     const eligibleUser = { ...user, claimedCouponIds: new Set(claims.map((c) => c.couponId)) };
     const realUser = isRealUser(user);

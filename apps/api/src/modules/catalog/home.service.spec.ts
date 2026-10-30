@@ -147,7 +147,7 @@ describe('HomeService — số liệu cho khối Quà khách mới', () => {
   it('khối newCustomerOffer của user: gọi đúng userId, lỗi thì chỉ khối đó null', async () => {
     const { svc, loyalty } = setup();
     const r = await svc.getForUser('u1');
-    expect(loyalty.getNewCustomerOffer).toHaveBeenCalledWith('u1');
+    expect(loyalty.getNewCustomerOffer).toHaveBeenCalledWith('u1', { hasPriorOrder: false });
     expect(r.newCustomerOffer).toEqual({ isNewCustomer: true, welcomeVoucher: null });
     loyalty.getNewCustomerOffer.mockRejectedValue(new Error('boom'));
     const failed = await svc.getForUser('u1');
@@ -179,7 +179,7 @@ describe('HomeService.getForUser — yêu cầu đổi rác đang mở', () => {
     expect(purchased.list).toHaveBeenCalledWith('u1', { limit: 10 });
     expect(orders.list).toHaveBeenCalledWith('u1', { status: 'SHIPPING' }, 1, 1);
     expect(r.shippingOrders).toEqual(page(['o1']));
-    expect(loyalty.getNewCustomerOffer).toHaveBeenCalledWith('u1');
+    expect(loyalty.getNewCustomerOffer).toHaveBeenCalledWith('u1', {});
     expect(r.notifications).toEqual([{ id: 'n1' }]);
   });
 
@@ -251,7 +251,7 @@ describe('HomeService.getForUser', () => {
     const { svc, loyalty, catalog, prisma, factRows } = setup();
     prisma.$queryRaw.mockResolvedValue(factRows({ CANCELLED: 2 }));
     const r = await svc.getForUser('u1');
-    expect(loyalty.getNewCustomerOffer).toHaveBeenCalledWith('u1');
+    expect(loyalty.getNewCustomerOffer).toHaveBeenCalledWith('u1', { hasPriorOrder: false });
     expect(r.newCustomerOffer).toEqual({ isNewCustomer: true, welcomeVoucher: null });
     expect(catalog.getForYou).toHaveBeenCalledWith('u1', { hasOrders: true });
   });
