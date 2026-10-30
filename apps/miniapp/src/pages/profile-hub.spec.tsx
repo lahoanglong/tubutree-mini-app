@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   orderCounts: vi.fn(),
   search: '',
   deskPoints: vi.fn(),
+  authMeFlags: vi.fn(),
   getReferral: vi.fn(),
   getSubscriptions: vi.fn(),
   shareLink: vi.fn(),
@@ -76,7 +77,7 @@ vi.mock('../services/account-api', () => ({
   getCoupons: vi.fn().mockResolvedValue([{ code: 'A' }, { code: 'B' }]),
   getReferral: mocks.getReferral,
 }));
-vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: vi.fn().mockResolvedValue(null), getOwnsBrand: vi.fn().mockResolvedValue(null) }));
+vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: vi.fn().mockResolvedValue(null), getAuthMeFlags: mocks.authMeFlags }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn(async () => mocks.affiliateMe) }));
 vi.mock('../services/dealer-api', () => ({ getDealerMe: vi.fn().mockResolvedValue({ isDealer: false, status: null }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -109,6 +110,7 @@ function arrangeDefaults() {
   mocks.guest = false;
   mocks.orderCounts.mockResolvedValue({ pending_payment: 2, processing: 0, shipping: 1, delivered: 0, closed: 0 });
   mocks.deskPoints.mockResolvedValue([]);
+  mocks.authMeFlags.mockResolvedValue({ ownsBrand: null, hasDeskPoint: false });
   mocks.search = '';
   mocks.getReferral.mockResolvedValue(REFERRAL);
   mocks.getSubscriptions.mockResolvedValue([{ status: 'ACTIVE' }, { status: 'CANCELLED' }]);
@@ -638,6 +640,30 @@ describe('Lối vào quầy Nhận hàng tại điểm (E-39)', () => {
     renderPage();
     await screen.findByText('Câu chuyện thương hiệu');
     await waitFor(() => expect(screen.queryByText('Nhận hàng tại điểm')).toBeNull());
+    expect(mocks.deskPoints).not.toHaveBeenCalled();
+  });
+
+  it('nhân viên điểm đối tác mang vai CUSTOMER: cờ hasDeskPoint của /auth/me mở hàng; chương trình đổi rác tắt thì không hỏi điểm', async () => {
+    mocks.authMeFlags.mockResolvedValue({ ownsBrand: false, hasDeskPoint: true });
+    mocks.deskPoints.mockResolvedValue([POINTS[1]]);
+    mocks.getPublicConfig.mockResolvedValue({ waste: { enabled: true } });
+    const { unmount } = renderPage();
+    expect(await screen.findByText('Nhận hàng tại điểm')).toBeInTheDocument();
+    unmount();
+    mocks.deskPoints.mockClear();
+    mocks.getPublicConfig.mockResolvedValue({ waste: { enabled: false } });
+    renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    await waitFor(() => expect(screen.queryByText('Nhận hàng tại điểm')).toBeNull());
+    expect(mocks.deskPoints).not.toHaveBeenCalled();
+  });
+
+  it('bản API cũ không có cờ hasDeskPoint: khách thường chạy như trước, không hỏi điểm', async () => {
+    mocks.authMeFlags.mockResolvedValue({ ownsBrand: null, hasDeskPoint: false });
+    mocks.getPublicConfig.mockResolvedValue({ waste: { enabled: true } });
+    renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    await waitFor(() => expect(mocks.orderCounts).toHaveBeenCalled());
     expect(mocks.deskPoints).not.toHaveBeenCalled();
   });
 

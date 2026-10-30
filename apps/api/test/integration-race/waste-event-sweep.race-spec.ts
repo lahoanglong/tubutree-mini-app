@@ -624,6 +624,18 @@ const SWEEP: ReadonlyArray<SweepRow> = [
     (c) => ({ giftRedemptionId: c.red.id }),
     (c) => redemptions.cancel(c.admin.id, c.red.id, { reason: 'Sweep huỷ', refundPoints: false }),
   ),
+  sweepRow(
+    'GIFT_EXPIRED',
+    async () => {
+      const customer = await newUser();
+      const gift = await createWasteGift(prisma);
+      reg.giftIds.push(gift.id);
+      return createGiftRedemption(prisma, { userId: customer.id, giftId: gift.id, claimExpiresAt: new Date(Date.now() - 3_600_000) });
+    },
+    () => redemptions.expireOverdue(),
+    (red) => ({ giftRedemptionId: red.id }),
+    () => redemptions.expireOverdue(),
+  ),
 ];
 
 const NOTIFIER_STUB = {
@@ -636,6 +648,7 @@ const NOTIFIER_STUB = {
   pointsReversed: jest.fn().mockResolvedValue(undefined),
   shipLocked: jest.fn().mockResolvedValue(undefined),
   giftCancelled: jest.fn().mockResolvedValue(undefined),
+  giftExpired: jest.fn().mockResolvedValue(undefined),
   perkReviewed: jest.fn().mockResolvedValue(undefined),
 };
 
@@ -767,7 +780,7 @@ describe('Exactly one WasteEvent per successful write, across all routes (real P
     const meta = rows[0]!.meta as Record<string, unknown> | null;
     if (kind !== 'LOOKUP_MISS') expect(Object.keys(meta as object)).toEqual(expect.arrayContaining(['before', 'after']));
     if (kind === 'POINT_STAFF_ADDED' || kind === 'POINT_STAFF_REMOVED') expect(rows[0]!.meta).toHaveProperty('staffUserId');
-    if (kind === 'GIFT_FULFILLED' || kind === 'GIFT_CANCELLED') {
+    if (kind === 'GIFT_FULFILLED' || kind === 'GIFT_CANCELLED' || kind === 'GIFT_EXPIRED') {
       expect(rows[0]!.meta).toHaveProperty('giftId');
       expect(rows[0]!.meta).toHaveProperty('subjectUserId');
     }

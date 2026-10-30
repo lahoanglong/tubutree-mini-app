@@ -1,7 +1,7 @@
 'use client';
 
 import { HAZARDOUS_DESK_NOTES } from '@tubutree/app-core/waste-copy';
-import { WAREHOUSE_ONLY_RETURN_NOTE, deskClosedText, deskDoneCopy, deskInitialLines, isPartnerWarehouseOnly } from '@tubutree/app-core/waste-desk';
+import { WAREHOUSE_ONLY_RETURN_NOTE, deskClosedText, deskDoneCopy, deskGiftReadOnly, deskInitialLines, isPartnerWarehouseOnly } from '@tubutree/app-core/waste-desk';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
@@ -23,7 +23,7 @@ import { deskPointsQuery } from '@tubutree/app-core/queries/waste';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
-import { formatDate } from '@/lib/format-date';
+import { formatDate, formatDateTime } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -47,11 +47,6 @@ const CARD = `flex flex-col gap-3 p-4 max-md:gap-1 max-md:p-3 ${skin.card}`;
 const NO_PERMISSION = 'Tài khoản này không có quyền nhận hàng tại điểm';
 const DANGER_BTN =
   'inline-flex min-h-11 w-full items-center justify-center rounded-control border border-danger-fg bg-danger-bg px-5 text-sm font-semibold text-danger-fg transition active:scale-95 disabled:opacity-50 disabled:active:scale-100';
-
-const GIFT_STATUS_TEXT: Record<Exclude<WasteDeskGiftDTO['status'], 'READY'>, string> = {
-  FULFILLED: 'Quà đã được trao',
-  CANCELLED: 'Lượt đổi quà đã huỷ',
-};
 
 interface DeskDone {
   code: string;
@@ -236,6 +231,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
 
   const request = lookup;
   const readOnly = !!request && isReadOnly(request);
+  const giftReadOnly = gift ? deskGiftReadOnly(gift, { dateTime: formatDateTime, points: formatPoints }) : null;
   // Bưu kiện tra bằng mã TR- ghi trên kiện (cơ sở khớp TR_CODE); không có cơ sở khớp máy chủ trả 409 (spec 15.3, 15.5).
   const match: WasteMatchInput | undefined =
     request && request.method !== 'DROP_OFF' && request.status !== 'RECEIVED' ? { parcelCode: request.code } : undefined;
@@ -491,8 +487,11 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
               </div>
               {!point.giftHandoverEnabled ? (
                 <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">Điểm này không trao quà</p>
-              ) : gift.status !== 'READY' ? (
-                <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] font-semibold text-stone-900">{GIFT_STATUS_TEXT[gift.status]}</p>
+              ) : giftReadOnly ? (
+                <div className="flex flex-col gap-0.5">
+                  <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] font-semibold text-stone-900">{giftReadOnly.heading}</p>
+                  {giftReadOnly.notes.map((n) => <p key={n} className="text-sm text-stone-600">{n}</p>)}
+                </div>
               ) : (
                 <button
                   type="button"

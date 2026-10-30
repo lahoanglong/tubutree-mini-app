@@ -29,6 +29,12 @@ export const wasteRulesQuery = (http: HttpClient) => ({
   queryKey: [...WASTE_QUERY_KEYS.all, 'rules'] as const,
   queryFn: () => getWasteRules(http),
 });
+/** Phiên bản thể lệ hiện hành cho ô đồng ý ở bước tạo yêu cầu; khoá riêng để bản thể lệ dựng sẵn (không có version) không chen vào. */
+export const wasteRulesVersionQuery = (http: HttpClient) => ({
+  queryKey: [...WASTE_QUERY_KEYS.all, 'rules-version'] as const,
+  queryFn: () => getWasteRules(http).then((r) => r.version ?? null),
+  staleTime: 0,
+});
 export const deskPointsQuery = (http: HttpClient) => ({ queryKey: WASTE_QUERY_KEYS.desk, queryFn: () => getDeskPoints(http) });
 export const deskPointReportQuery = (http: HttpClient, pointId: string, month: string) => ({
   queryKey: [...WASTE_QUERY_KEYS.desk, 'report', pointId, month] as const,

@@ -135,6 +135,7 @@ export const TEMPLATE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
   WASTE_GIFT_CANCELLED: ['gift', 'points_note'],
   WASTE_PERK_REVIEWED: ['point', 'result'],
   WASTE_REQUEST_EXPIRING: ['code', 'until', 'next_step'],
+  WASTE_GIFT_EXPIRED: ['gift_name', 'points'],
 };
 
 /** Tên gọi dễ hiểu của biến, hiện trong màn sửa mẫu thay cho tên kỹ thuật. */
@@ -160,6 +161,7 @@ export const VARIABLE_LABELS: Readonly<Record<string, string>> = {
   freezes: 'số lượt giữ chuỗi',
   friend: 'tên người bạn',
   gift: 'tên quà',
+  gift_name: 'tên quà',
   hours: 'số giờ',
   item_count: 'số món',
   items: 'các món hàng',

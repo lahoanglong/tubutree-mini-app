@@ -568,6 +568,37 @@ describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
     expect(await screen.findByText(text)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
   });
+  it('lượt đã huỷ do quá hạn: hiện lý do và điểm đã hoàn, chỉ đọc', async () => {
+    mocks.deskLookup.mockResolvedValue({
+      type: 'GIFT',
+      redemption: { ...GIFT, status: 'CANCELLED', cancelledAt: '2026-11-11T03:00:00.000Z', cancelReason: 'Quá hạn nhận', pointsCost: 30000, refundedPoints: 30000 },
+    });
+    renderPage();
+    await lookUp('QG-8K2M9P4T');
+    expect(await screen.findByText('Lượt đổi quà đã huỷ')).toBeInTheDocument();
+    expect(screen.getByText('Lý do: Quá hạn nhận')).toBeInTheDocument();
+    expect(screen.getByText(/Đã hoàn .*30\.000.* cho khách/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
+  });
+  it('lượt đã trao: hiện giờ trao và số điểm đã đổi, không có nút', async () => {
+    mocks.deskLookup.mockResolvedValue({
+      type: 'GIFT',
+      redemption: { ...GIFT, status: 'FULFILLED', fulfilledAt: '2026-11-10T03:00:00.000Z', pointsCost: 30000 },
+    });
+    renderPage();
+    await lookUp('QG-8K2M9P4T');
+    expect(await screen.findByText('Quà đã được trao')).toBeInTheDocument();
+    expect(screen.getByText(/^Trao lúc /)).toBeInTheDocument();
+    expect(screen.getByText(/Khách đổi bằng .*30\.000/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
+  });
+  it('quà còn READY nhưng đã quá hạn: báo quá hạn, không có nút Trao quà', async () => {
+    mocks.deskLookup.mockResolvedValue({ type: 'GIFT', redemption: { ...GIFT, claimExpiresAt: '2020-01-01T00:00:00.000Z' } });
+    renderPage();
+    await lookUp('QG-8K2M9P4T');
+    expect(await screen.findByText('Quà đã quá hạn nhận')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
+  });
   it('đại lý: thẻ ưu đãi và báo cáo tháng hiện; kho thì không có thẻ ưu đãi', async () => {
     mocks.getDeskPoints.mockResolvedValue([makeDeskPoint(), WAREHOUSE_DESK]);
     mocks.getDeskPointReport.mockResolvedValue({ pointId: 'pt-1', month: '2026-10', confirmations: 0, pointsAwarded: 0, quotaUsed: 0, units: [] });

@@ -43,7 +43,7 @@ describe('WasteRequestsService reads (ownership, spec 15.1)', () => {
   });
 });
 
-const SNAP = { enabled: true, laneDropoff: true, laneMailin: true, lanePickup: false, mailinMinPoints: 15_000, pickupMinPoints: 10_000, customerMonthlyCapPoints: 60_000, maxOpenRequests: 3, requestHoldDays: 7 };
+const SNAP = { enabled: true, rulesVersion: '2026-10-17.1', laneDropoff: true, laneMailin: true, lanePickup: false, mailinMinPoints: 15_000, pickupMinPoints: 10_000, customerMonthlyCapPoints: 60_000, maxOpenRequests: 3, requestHoldDays: 7 };
 type CreatePrior = { id: string; method?: string; pointId?: string; lines?: { itemId: string; declaredQty: number }[] } | null;
 function makeCreate(o: { prior: CreatePrior; hold?: unknown; failWith?: unknown[]; reread?: CreatePrior; codeTaken?: number; snap?: Partial<typeof SNAP> }) {
   const order: string[] = [];
@@ -89,6 +89,30 @@ describe('WasteRequestsService.create (spec 11.2, 15.2)', () => {
     expect(tx.wasteRequest.create.mock.calls[0]![0].data.code).toMatch(/^TR-[2-9A-HJKMNP-TV-Z]{5}$/);
     expect(tx.wasteEvent.create.mock.calls[0]![0].data).toMatchObject({ kind: 'REQUEST_CREATED', actorUserId: 'u1', actorRole: 'CUSTOMER', pointId: 'p1', meta: { before: null, after: { method: 'DROP_OFF', pointId: 'p1', estimatedPoints: 5_000, lines: body.lines } } });
     expect(hold.validateAndHold.mock.calls[0]![1]).toMatchObject({ path: 'CREATE', userId: 'u1', method: 'DROP_OFF', pointId: 'p1' });
+  });
+  it('consentVersion comes from the admin config, not from a constant', async () => {
+    const { svc, tx } = makeCreate({ prior: null, hold: HOLD, snap: { rulesVersion: '2026-11-05.2' } });
+    await svc.create('u1', 'key-00000001', { ...body, consentVersion: '2026-11-05.2' });
+    expect(tx.wasteRequest.create.mock.calls[0]![0].data).toMatchObject({ consentVersion: '2026-11-05.2' });
+  });
+  it('a client that read an older rules version is refused with a read-again message, nothing held or written', async () => {
+    const { svc, tx, hold } = makeCreate({ prior: null, hold: HOLD, snap: { rulesVersion: '2026-11-05.2' } });
+    const call = svc.create('u1', 'key-00000001', { ...body, consentVersion: '2026-10-17.1' });
+    await expect(call).rejects.toThrow(new BadRequestException('Thể lệ đã được cập nhật. Bạn hãy đọc lại Thể lệ rồi đồng ý lại để tạo yêu cầu'));
+    await expect(call).rejects.toBeInstanceOf(BadRequestException);
+    expect(hold.validateAndHold).not.toHaveBeenCalled();
+    expect(tx.wasteRequest.create).not.toHaveBeenCalled();
+  });
+  it('an older Mini App that sends no consentVersion is accepted and stored with the current version', async () => {
+    const { svc, tx } = makeCreate({ prior: null, hold: HOLD, snap: { rulesVersion: '2026-11-05.2' } });
+    await svc.create('u1', 'key-00000001', body);
+    expect(tx.wasteRequest.create.mock.calls[0]![0].data).toMatchObject({ consentVersion: '2026-11-05.2' });
+  });
+  it('a retry of a request created under the old version returns it even after the version changed', async () => {
+    const { svc, tx, loadDetail } = makeCreate({ prior: { id: 'r0', method: 'DROP_OFF', pointId: 'p1', lines: [{ itemId: 'carton', declaredQty: 5 }] }, snap: { rulesVersion: '2026-11-05.2' } });
+    await svc.create('u1', 'key-00000001', { ...body, consentVersion: '2026-10-17.1' });
+    expect(tx.wasteRequest.create).not.toHaveBeenCalled();
+    expect(loadDetail).toHaveBeenCalledWith(expect.anything(), 'u1', 'r0');
   });
   it('same key + same content returns the stored request without any check (even at max open)', async () => {
     const { svc, tx, hold, loadDetail } = makeCreate({ prior: { id: 'r0', method: 'DROP_OFF', pointId: 'p1', lines: [{ itemId: 'carton', declaredQty: 5 }] } });

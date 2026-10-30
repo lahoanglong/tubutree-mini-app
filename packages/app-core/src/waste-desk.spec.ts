@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WAREHOUSE_ONLY_RETURN_NOTE, deskClosedText, deskDoneCopy, deskInitialLines, isPartnerWarehouseOnly } from './waste-desk';
+import { WAREHOUSE_ONLY_RETURN_NOTE, deskClosedText, deskGiftReadOnly, deskDoneCopy, deskInitialLines, isPartnerWarehouseOnly } from './waste-desk';
 
 const fmt = (n: number) => `${n.toLocaleString('vi-VN')} điểm`;
 const LINES = [
@@ -52,4 +52,40 @@ describe('deskClosedText: yêu cầu vừa đóng, chỉ đọc', () => {
   });
   it('COMPLETED thiếu giờ đóng: "Đã duyệt"', () => expect(deskClosedText({ status: 'COMPLETED', closedAt: null })).toBe('Đã duyệt'));
   it('REJECTED: "Đã từ chối"', () => expect(deskClosedText({ status: 'REJECTED', closedAt: '2026-10-28T03:05:00.000Z' })).toBe('Đã từ chối'));
+});
+
+describe('deskGiftReadOnly: thẻ quà chỉ đọc ở quầy', () => {
+  const fmtDt = (iso: string) => `T(${iso})`;
+  const f = { dateTime: fmtDt, points: fmt };
+  const now = new Date('2026-11-20T00:00:00.000Z');
+
+  it('READY còn hạn hoặc không có hạn: null (hiện nút Trao quà)', () => {
+    expect(deskGiftReadOnly({ status: 'READY', claimExpiresAt: '2026-11-21T00:00:00.000Z' }, f, now)).toBeNull();
+    expect(deskGiftReadOnly({ status: 'READY', claimExpiresAt: null }, f, now)).toBeNull();
+  });
+  it('READY có hạn sớm hơn trong cùng ngày VN: chưa quá hạn, vẫn trao được; sang ngày VN kế tiếp mới quá hạn', () => {
+    expect(deskGiftReadOnly({ status: 'READY', claimExpiresAt: '2026-11-19T17:30:00.000Z' }, f, new Date('2026-11-20T07:00:00.000Z'))).toBeNull();
+    expect(deskGiftReadOnly({ status: 'READY', claimExpiresAt: '2026-11-19T17:30:00.000Z' }, f, new Date('2026-11-20T17:00:00.000Z'))!.heading).toBe('Quà đã quá hạn nhận');
+  });
+  it('READY đã quá hạn: nói rõ quầy không trao được, hệ thống sẽ huỷ và hoàn điểm', () => {
+    const r = deskGiftReadOnly({ status: 'READY', claimExpiresAt: '2026-11-19T00:00:00.000Z' }, f, now)!;
+    expect(r.heading).toBe('Quà đã quá hạn nhận');
+    expect(r.notes).toEqual(['Quầy không trao được nữa. Tubu sẽ xử lý lượt đổi này và báo khách']);
+  });
+  it('FULFILLED: đã trao, giờ trao, số điểm khách đã đổi', () => {
+    expect(deskGiftReadOnly({ status: 'FULFILLED', claimExpiresAt: null, fulfilledAt: '2026-11-10T03:00:00.000Z', pointsCost: 30000 }, f, now)).toEqual({
+      heading: 'Quà đã được trao',
+      notes: ['Trao lúc T(2026-11-10T03:00:00.000Z)', `Khách đổi bằng ${fmt(30000)}`],
+    });
+  });
+  it('CANCELLED do quá hạn: giờ huỷ, lý do, điểm đã hoàn', () => {
+    expect(deskGiftReadOnly({ status: 'CANCELLED', claimExpiresAt: null, cancelledAt: '2026-11-11T03:00:00.000Z', cancelReason: 'Quá hạn nhận', refundedPoints: 30000 }, f, now)).toEqual({
+      heading: 'Lượt đổi quà đã huỷ',
+      notes: ['Huỷ lúc T(2026-11-11T03:00:00.000Z)', 'Lý do: Quá hạn nhận', `Đã hoàn ${fmt(30000)} cho khách`],
+    });
+  });
+  it('bản API cũ không gửi chi tiết: vẫn ra tiêu đề, không có ghi chú', () => {
+    expect(deskGiftReadOnly({ status: 'CANCELLED', claimExpiresAt: null }, f, now)).toEqual({ heading: 'Lượt đổi quà đã huỷ', notes: [] });
+    expect(deskGiftReadOnly({ status: 'CANCELLED', claimExpiresAt: null, refundedPoints: 0 }, f, now)!.notes).toEqual([]);
+  });
 });

@@ -14,7 +14,7 @@ import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
 import { couponsQuery, loyaltyQuery, referralQuery } from '@tubutree/app-core/queries/loyalty';
-import { ownedBrandProfileQuery, ownsBrandQuery } from '@tubutree/app-core/queries/brand-owner';
+import { hasDeskPointQuery, ownedBrandProfileQuery, ownsBrandQuery } from '@tubutree/app-core/queries/brand-owner';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { subscriptionsQuery } from '@tubutree/app-core/queries/subscriptions';
 import { supportChatSummaryQuery } from '@tubutree/app-core/queries/support-chat';
@@ -121,9 +121,11 @@ function AccountContent() {
     staleTime: 5 * 60_000,
   });
   const dealerQ = useQuery({ ...dealerMeQuery(coreHttp), enabled: authed, retry: false });
-  // Chỉ hỏi vai thường vận hành quầy (nhân viên/admin kho, đại lý có điểm đối tác) để khách thường không bị gọi thêm API. Nhân viên điểm đối tác
-  // mang vai CUSTOMER (admin thêm qua màn điểm) chưa có hàng này ở đây; họ vào quầy bằng màn Đổi rác. Cần API trả cờ nhẹ mới phủ được nhóm đó.
-  const mayHaveDesk = user?.role === 'STAFF' || user?.role === 'ADMIN' || (user?.role === 'DEALER' && cfgQ.data?.waste?.enabled === true);
+  // Chỉ hỏi quầy khi có lý do (nhân viên/admin kho, đại lý, hoặc cờ hasDeskPoint của /auth/me cho nhân viên điểm đối tác mang vai CUSTOMER)
+  // để khách thường không bị gọi thêm API. Cờ chung một lần gọi /auth/me với ownsBrand; cờ đổi rác tắt thì điểm đối tác không mở quầy.
+  const hasDeskPointQ = useQuery({ ...hasDeskPointQuery(coreHttp), enabled: authed, retry: false });
+  const wasteOn = cfgQ.data?.waste?.enabled === true;
+  const mayHaveDesk = user?.role === 'STAFF' || user?.role === 'ADMIN' || (user?.role === 'DEALER' && wasteOn) || (hasDeskPointQ.data === true && wasteOn);
   const deskQ = useQuery({ ...deskPointsQuery(coreHttp), enabled: authed && mayHaveDesk, staleTime: 5 * 60_000, retry: false });
   // Chỉ vai không rõ quyền CTV (đại lý, nhân viên, admin) mới cần hỏi; CTV và khách thường suy được từ vai trò.
   const needsCtvProbe = authed && !!user?.role && user.role !== 'CUSTOMER' && user.role !== 'AFFILIATE';
