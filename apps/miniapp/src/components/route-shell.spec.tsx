@@ -47,10 +47,16 @@ describe('RouteShell (R-84, R-79)', () => {
     expect(await screen.findByText('Xong')).toBeInTheDocument();
   });
 
-  it('Đổi rác đang tải mã: khung chờ có sẵn tiêu đề trang, không phải màn trắng (R-54)', () => {
+  it('Đổi rác đang tải mã: vẽ đúng khung trang (tiêu đề + 3 khối 140/80/80), không phải khung danh sách (R-54)', () => {
     const Never = lazy(() => new Promise<{ default: () => JSX.Element }>(() => undefined));
-    wrap(<RouteShell skeleton="recycle"><Never /></RouteShell>);
-    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+    const { container, unmount } = wrap(<RouteShell skeleton="recycle"><Never /></RouteShell>);
+    expect(screen.getByRole('heading', { name: 'Đổi rác lấy quà' })).toBeInTheDocument();
+    const heights = Array.from(container.querySelectorAll<HTMLElement>('[style*="height"]')).map((el) => el.style.height);
+    expect(heights).toEqual(expect.arrayContaining(['140px', '80px', '80px']));
+    unmount();
+    const list = wrap(<RouteShell><Never /></RouteShell>);
+    expect(screen.queryByRole('heading', { name: 'Đổi rác lấy quà' })).toBeNull();
+    list.unmount();
   });
 
   it('lỗi tải mã màn (mạng yếu): Thử lại tải lại app vì React.lazy giữ lời hứa đã lỗi', () => {
