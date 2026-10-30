@@ -35,6 +35,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { getZaloAccessToken, requestZaloPhoneToken } from '../services/zmp-bridge';
 import type { LoginResponse, AuthUser } from '@tubutree/shared-types';
 import { useAuthStore, setLogoutCleanup } from './auth';
+import { markCtvTouched, wasCtvTouched } from './storefront-context';
 import { vi as copy } from '../i18n/vi';
 
 const mockedGetStorage = vi.mocked(getStorage);
@@ -768,6 +769,15 @@ describe('logout() — dọn sạch dữ liệu user cũ trên thiết bị dùn
     expect(window.localStorage.getItem('tubu_invoice')).toBeNull();
     expect(mockedRemoveStorage).toHaveBeenCalled();
     expect(useAuthStore.getState().status).toBe('idle');
+  });
+
+  it('xoá dấu "đã ghi công qua gian hàng CTV": người đăng nhập sau trên máy dùng chung không thừa hưởng', async () => {
+    markCtvTouched('AN123');
+    useAuthStore.setState({ user: { id: 'u1' } as AuthUser, status: 'authenticated' });
+
+    await useAuthStore.getState().logout();
+
+    expect(wasCtvTouched('AN123')).toBe(false);
   });
 
   it('API logout lỗi (mất mạng) vẫn đăng xuất trên máy, không ném', async () => {
