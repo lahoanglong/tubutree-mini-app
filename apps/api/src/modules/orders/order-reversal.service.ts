@@ -71,7 +71,7 @@ export interface PartialReversalResult {
   commissionCut: number;
   /** Phần hoa hồng đã cắt theo từng CTV (chỉ số > 0): để báo CTV sau commit, như lần thu hồi cả đơn. */
   commissionCutBy: { affiliateUserId: string; amount: number }[];
-  /** Phần cắt của hoa hồng đã vào Ví CTV: đã trừ Ví (số dư có thể âm). Báo kế toán khi Ví CTV âm. */
+  /** Phần cắt của hoa hồng đã vào Ví CTV: đã trừ Ví phần thực nhận của nó (số dư có thể âm). Báo kế toán khi Ví CTV âm hoặc lệnh chuyển gốc có thuế TNCN. */
   commissionDebited: CommissionDebitNote[];
   /** Phần cắt không tự trừ được (lệnh rút ngân hàng cũ, CTV đã xoá tài khoản): hoa hồng giữ nguyên, kế toán xử lý tay. */
   commissionManual: CommissionManualNote[];
@@ -530,7 +530,7 @@ export class OrderReversalService {
     // vẫn tính đủ 80tr vào mốc thưởng tháng khi hoa hồng được duyệt.
     const rows = await tx.commission.findMany({
       where: { orderId: order.id, status: { in: ['PENDING', 'LOCKED', 'APPROVED', 'PAID'] } },
-      select: { id: true, affiliateUserId: true, amount: true, commissionableTotal: true, lineAmounts: true, status: true, payoutBatchId: true },
+      select: { id: true, affiliateUserId: true, amount: true, commissionableTotal: true, lineAmounts: true, status: true, payoutBatchId: true, walletPayoutId: true, paidAt: true },
     });
     const itemById = new Map(order.items.map((i) => [i.id, i]));
     const paid = paidLineTotals(order, order.items);
@@ -564,18 +564,18 @@ export class OrderReversalService {
       let debited: CommissionDebitNote | null = null;
       if (inWallet) {
         const debit = await debitCommissionFromWallet(tx, {
-          userId: row.affiliateUserId,
+          commission: row,
           amount: cut,
           refId: `${row.id}:${requestId}`,
           reason: `Thu hồi hoa hồng đơn ${order.code} (trả một phần)`,
         });
         if (!debit.debited) {
-          result.commissionManual.push({ affiliateUserId: row.affiliateUserId, amount: cut, reason: 'ANONYMIZED' });
+          result.commissionManual.push({ affiliateUserId: row.affiliateUserId, amount: cut, reason: debit.reason });
           continue;
         }
         // Dòng sổ của yêu cầu này đã có (chạy lại): phần cắt đã áp từ trước, không cắt amount lần hai.
         if (!debit.applied) continue;
-        debited = { affiliateUserId: row.affiliateUserId, amount: cut, balanceAfter: debit.balanceAfter };
+        debited = { affiliateUserId: row.affiliateUserId, amount: cut, walletDebit: debit.walletDebit, taxWithheld: debit.taxWithheld, balanceAfter: debit.balanceAfter };
       }
       const res = await tx.commission.updateMany({
         where: {

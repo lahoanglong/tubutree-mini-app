@@ -1518,6 +1518,8 @@ model Commission {
   approvedAt          DateTime?
   paidAt              DateTime?
   payoutBatchId       String?
+  /// Lệnh chuyển vào Ví (Payout WALLET_BALANCE) đã chứa hoa hồng này, gán trong requestPayout. Thu hồi khi đơn bị trả chỉ trừ Ví phần thực nhận (sau thuế TNCN của lệnh đó). Null ở hoa hồng chưa chuyển hoặc chuyển trước khi có cột này.
+  walletPayoutId      String?
   createdAt           DateTime         @default(now())
 
   // Khoá idempotency tạo hoa hồng (createCommissionForOrder: INSERT ... ON CONFLICT DO NOTHING).

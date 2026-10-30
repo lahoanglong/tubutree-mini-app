@@ -11,7 +11,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { CommissionStatus, Prisma, type PayoutStatus, type UserRole } from '@prisma/client';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Env } from '../../config/env.validation';
 import { hashIp } from '../../common/ip-hash';
 import { notifyAdmins } from '../../common/notify-admins';
@@ -85,7 +85,7 @@ const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
 type CommissionReversal =
   | { kind: 'NONE' }
   | { kind: 'REJECTED'; affiliateUserId: string; amount: number }
-  | { kind: 'DEBITED'; affiliateUserId: string; amount: number; balanceAfter: number }
+  | ({ kind: 'DEBITED' } & CommissionDebitNote)
   | ({ kind: 'MANUAL' } & CommissionManualNote);
 
 /**
@@ -1160,7 +1160,7 @@ export class AffiliateService {
         .catch((e: unknown) => this.logger.warn(`Báo thu hồi hoa hồng đơn ${orderId} lỗi: ${(e as Error).message}`));
     }
     await this.alertPaidCommissionOfReversedOrder(orderId, order.code, {
-      debited: outcomes.flatMap((o) => (o.kind === 'DEBITED' ? [{ affiliateUserId: o.affiliateUserId, amount: o.amount, balanceAfter: o.balanceAfter }] : [])),
+      debited: outcomes.flatMap(({ kind, ...note }) => (kind === 'DEBITED' ? [note as CommissionDebitNote] : [])),
       manual: outcomes.flatMap((o) => (o.kind === 'MANUAL' ? [{ affiliateUserId: o.affiliateUserId, amount: o.amount, reason: o.reason }] : [])),
     });
   }
@@ -1170,22 +1170,24 @@ export class AffiliateService {
       // Khoá dòng hoa hồng trước khi đọc trạng thái: requestPayout (cron/bấm tay) cũng khoá dòng này trước khi đụng Ví CTV, nên hai
       // bên tuần tự: hoặc ta thấy APPROVED chưa chuyển (đổi REJECTED, requestPayout sau đó báo "dữ liệu đã thay đổi" và thử lại),
       // hoặc ta thấy PAID đã kèm dòng cộng Ví.
-      const [row] = await tx.$queryRaw<{ affiliateUserId: string; amount: number; status: CommissionStatus; payoutBatchId: string | null }[]>`
-        SELECT "affiliateUserId", "amount", "status", "payoutBatchId" FROM "commissions" WHERE "id" = ${commissionId} FOR NO KEY UPDATE`;
+      const [row] = await tx.$queryRaw<
+        { affiliateUserId: string; amount: number; status: CommissionStatus; payoutBatchId: string | null; walletPayoutId: string | null; paidAt: Date | null }[]
+      >`
+        SELECT "affiliateUserId", "amount", "status", "payoutBatchId", "walletPayoutId", "paidAt" FROM "commissions" WHERE "id" = ${commissionId} FOR NO KEY UPDATE`;
       if (!row) return { kind: 'NONE' };
       const holding = commissionHolding(row);
       if (holding === 'REJECTED') return { kind: 'NONE' };
       if (holding === 'LEGACY') return { kind: 'MANUAL', affiliateUserId: row.affiliateUserId, amount: row.amount, reason: 'LEGACY_PAYOUT' };
       if (holding === 'WALLET' && row.amount > 0) {
         const debit = await debitCommissionFromWallet(tx, {
-          userId: row.affiliateUserId,
+          commission: { id: commissionId, ...row },
           amount: row.amount,
           refId: commissionId,
           reason: `Thu hồi hoa hồng đơn ${orderCode} (trả hàng)`,
         });
-        if (!debit.debited) return { kind: 'MANUAL', affiliateUserId: row.affiliateUserId, amount: row.amount, reason: 'ANONYMIZED' };
+        if (!debit.debited) return { kind: 'MANUAL', affiliateUserId: row.affiliateUserId, amount: row.amount, reason: debit.reason };
         await tx.commission.update({ where: { id: commissionId }, data: { status: 'REJECTED' } });
-        return { kind: 'DEBITED', affiliateUserId: row.affiliateUserId, amount: row.amount, balanceAfter: debit.balanceAfter };
+        return { kind: 'DEBITED', affiliateUserId: row.affiliateUserId, amount: row.amount, walletDebit: debit.walletDebit, taxWithheld: debit.taxWithheld, balanceAfter: debit.balanceAfter };
       }
       await tx.commission.update({ where: { id: commissionId }, data: { status: 'REJECTED' } });
       return { kind: 'REJECTED', affiliateUserId: row.affiliateUserId, amount: row.amount };
@@ -1194,8 +1196,9 @@ export class AffiliateService {
 
   /**
    * Báo quản trị về hoa hồng của đơn bị trả mà Ví CTV đã bị trừ hoặc không tự trừ được. Chỉ gửi OPS_REFUND_ALERT khi có việc cho kế toán:
-   * phần không tự trừ được (`manual`: lệnh rút ngân hàng cũ, tài khoản CTV đã xoá) hoặc Ví CTV sau khi trừ đang âm (công nợ cần theo
-   * dõi). Trừ Ví mà số dư vẫn không âm là việc đã xong, chỉ ghi log để không gửi thêm tin vô ích. Đường trả cả đơn gọi qua
+   * phần không tự trừ được (`manual`: lệnh rút ngân hàng cũ, tài khoản CTV đã xoá), lệnh chuyển gốc đã khấu trừ thuế TNCN (tờ khai thuế
+   * đã kê thu nhập của khoản vừa thu hồi, Payout.grossAmount/taxWithheld không tự đổi) hoặc Ví CTV sau khi trừ đang âm (công nợ cần theo
+   * dõi). Trừ Ví mà số dư vẫn không âm và không có thuế là việc đã xong, chỉ ghi log để không gửi thêm tin vô ích. Đường trả cả đơn gọi qua
    * reverseCommissionsForOrder (dedupeKey theo đơn vì setStatus được gọi lại khi một bước đảo khác lỗi); đường trả một phần gọi thẳng
    * sau commit, truyền `returnRequestId` để mỗi yêu cầu trả được báo một lần.
    */
@@ -1209,29 +1212,37 @@ export class AffiliateService {
       const manual = opts.manual ?? [];
       const partial = !!opts.returnRequestId;
       for (const d of debited) {
-        this.logger.log(`Đơn ${orderCode} bị ${partial ? 'trả một phần' : 'trả/huỷ'}: đã trừ Ví CTV ${d.affiliateUserId} ${vnd(d.amount)} hoa hồng (Ví còn ${vnd(d.balanceAfter)}).`);
+        this.logger.log(`Đơn ${orderCode} bị ${partial ? 'trả một phần' : 'trả/huỷ'}: đã trừ Ví CTV ${d.affiliateUserId} ${vnd(d.walletDebit)} hoa hồng (Ví còn ${vnd(d.balanceAfter)}).`);
       }
-      const negative = debited.filter((d) => d.balanceAfter < 0);
-      if (manual.length === 0 && negative.length === 0) return;
+      const noteworthy = debited.filter((d) => d.balanceAfter < 0 || d.taxWithheld > 0);
+      const taxed = debited.some((d) => d.taxWithheld > 0);
+      if (manual.length === 0 && noteworthy.length === 0) return;
       const users = await this.prisma.user.findMany({
-        where: { id: { in: [...new Set([...negative, ...manual].map((x) => x.affiliateUserId))] } },
+        where: { id: { in: [...new Set([...noteworthy, ...manual].map((x) => x.affiliateUserId))] } },
         select: { id: true, fullName: true, referralCode: true },
       });
       const nameOf = (id: string) => {
         const u = users.find((x) => x.id === id);
         return u ? (u.fullName ?? u.referralCode) : id;
       };
+      const manualText: Record<CommissionManualNote['reason'], string> = {
+        ANONYMIZED: 'đã chuyển vào Ví của tài khoản đã xoá',
+        LEGACY_PAYOUT: 'nằm trong lệnh rút ngân hàng cũ',
+        PAYOUT_UNKNOWN: 'đã vào Ví nhưng không xác định được lệnh chuyển gốc để biết phần đã nhận sau thuế',
+      };
       const pieces = [
-        ...negative.map((d) => `đã trừ Ví CTV ${nameOf(d.affiliateUserId)} ${vnd(d.amount)} hoa hồng, Ví đang âm ${vnd(-d.balanceAfter)}`),
-        ...manual.map(
-          (m) =>
-            `hoa hồng CTV ${nameOf(m.affiliateUserId)} ${vnd(m.amount)} ${m.reason === 'ANONYMIZED' ? 'đã chuyển vào Ví của tài khoản đã xoá' : 'nằm trong lệnh rút ngân hàng cũ'} (không tự trừ được)`,
-        ),
+        ...noteworthy.map((d) => {
+          const tax = d.taxWithheld > 0 ? `, thuế TNCN đã giữ trên khoản này ${vnd(d.taxWithheld)} cần xem lại` : '';
+          const negative = d.balanceAfter < 0 ? `, Ví đang âm ${vnd(-d.balanceAfter)}` : '';
+          return `đã trừ Ví CTV ${nameOf(d.affiliateUserId)} ${vnd(d.walletDebit)}${tax}${negative}`;
+        }),
+        ...manual.map((m) => `hoa hồng CTV ${nameOf(m.affiliateUserId)} ${vnd(m.amount)} ${manualText[m.reason]} (không tự trừ được)`),
       ];
       const message = pieces.join('; ');
-      this.logger.warn(`Đơn ${orderCode} bị ${partial ? 'trả một phần' : 'trả/huỷ'}: ${message}${manual.length > 0 ? ': cần kế toán xử lý.' : '.'}`);
+      const needsAccounting = manual.length > 0 || taxed;
+      this.logger.warn(`Đơn ${orderCode} bị ${partial ? 'trả một phần' : 'trả/huỷ'}: ${message}${needsAccounting ? ': cần kế toán xử lý.' : '.'}`);
       const dedupeKey = `commission-paid-order-reversed:${orderId}${opts.returnRequestId ? `:${opts.returnRequestId}` : ''}`;
-      const alertMessage = `${partial ? 'đơn trả một phần, ' : ''}${message}${manual.length > 0 ? ', cần kế toán xử lý' : ''}`;
+      const alertMessage = `${partial ? 'đơn trả một phần, ' : ''}${message}${needsAccounting ? ', cần kế toán xử lý' : ''}`;
       const notifications = this.notifications;
       // notifyAdmins không có tuỳ chọn chống gửi lặp; bọc lại để mỗi quản trị viên chỉ nhận một tin cho mỗi đơn (hoặc mỗi yêu cầu trả).
       await notifyAdmins(
@@ -1318,17 +1329,24 @@ export class AffiliateService {
         // Một mốc giờ cho khoá, khung tháng cộng dồn và requestedAt: lệch nhau quanh nửa đêm cuối tháng thì lệnh rơi sang tháng khác.
         const now = new Date();
         await this.lockPitMonth(tx, userId, now);
-        const rows = await tx.commission.findMany({
-          where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
-          select: { id: true, amount: true },
-        });
+        // Khoá dòng khi đọc: lần trả một phần cắt amount của hoa hồng APPROVED giữ khoá tới lúc commit. Đọc không khoá thì thấy amount
+        // cũ, updateMany đợi khoá rồi vẫn khớp (điều kiện WHERE không có amount) và Ví nhận nhiều hơn hoa hồng còn lại. Thứ tự khoá
+        // hoa hồng rồi tới Ví CTV trùng với đường thu hồi nên không deadlock.
+        const rows = await tx.$queryRaw<{ id: string; amount: number }[]>`
+          SELECT "id", "amount" FROM "commissions"
+          WHERE "affiliateUserId" = ${userId} AND "status" = 'APPROVED' AND "payoutBatchId" IS NULL
+          ORDER BY "id" FOR NO KEY UPDATE`;
         const total = rows.reduce((s, c) => s + c.amount, 0);
         // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm. Trừ thuế TNCN khấu trừ (SELLER-11).
         const taxWithheld = await this.personalIncomeTax(tx, userId, total, now);
         const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
+        // Đơn bị trả sau này chỉ trừ Ví phần thực nhận của hoa hồng (sau thuế của lệnh này): hoa hồng ghi luôn id lệnh chuyển ngay lúc
+        // đánh dấu PAID (một câu UPDATE, id sinh trước khi tạo lệnh); hai câu UPDATE liên tiếp trên cùng dòng làm lần trả một phần
+        // đang xếp hàng đợi khoá dòng đó bị deadlock với chính transaction này.
+        const payoutId = randomUUID();
         const marked = await tx.commission.updateMany({
           where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
-          data: { status: 'PAID', paidAt: new Date() },
+          data: { status: 'PAID', paidAt: new Date(), walletPayoutId: payoutId },
         });
         if (marked.count === 0 || total <= 0) throw new BadRequestException('Hoa hồng đã được xử lý.');
         // marked.count !== rows.length nghĩa là 1 phần row đã bị thay đổi (status/payoutBatchId)
@@ -1342,6 +1360,7 @@ export class AffiliateService {
         const credited = total - taxWithheld;
         const payout = await tx.payout.create({
           data: {
+            id: payoutId,
             userId,
             amount: credited,
             grossAmount: total,
