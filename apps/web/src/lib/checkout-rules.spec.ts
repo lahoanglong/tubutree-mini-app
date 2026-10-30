@@ -38,6 +38,12 @@ describe('Ví Tubu ở thanh toán', () => {
     expect(walletUnavailableReason(50000, 50000)).toBeNull();
     expect(pickPaymentMethod('WALLET', { total: 50000 }, 50000)).toBe('WALLET');
   });
+  it('Ví âm → lời riêng nêu số âm, khoá Ví và chọn lại COD', () => {
+    expect(walletUnavailableReason(-50000, 120000)).toBe(
+      'Ví đang âm 50.000đ do thu hồi hoa hồng đơn trả hàng, nên chưa trả đơn bằng Ví được. Hãy chọn cách thanh toán khác.',
+    );
+    expect(pickPaymentMethod('WALLET', { total: 120000 }, -50000)).toBe('COD');
+  });
   it('số dư thiếu → nói thiếu bao nhiêu và chọn lại COD', () => {
     expect(walletUnavailableReason(50000, 120000)).toBe('Số dư chưa đủ — cần thêm 70.000đ');
     expect(pickPaymentMethod('WALLET', { total: 120000 }, 50000)).toBe('COD');

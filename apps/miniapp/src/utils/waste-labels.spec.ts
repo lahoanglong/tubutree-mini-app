@@ -67,6 +67,12 @@ describe('nhãn trạng thái đóng (§4.6, §14.1)', () => {
     [{ status: 'REVERSED', reversedPoints: 4000, reversalReason: 'Kiểm tra lại số lượng' }, 'Đã thu hồi 4.000 điểm', 'Kiểm tra lại số lượng'],
   ])('%o', (over, label, reason) => { expect(L.closedLabel({ ...base, ...over } as never)).toEqual({ label, reason }); });
   it('trạng thái chưa đóng → null', () => { expect(L.closedLabel({ ...base, status: 'OPEN' } as never)).toBeNull(); });
+  it('hết hạn giữ chỗ của đường gửi kiện: chỉ lối đi tiếp (nhắn CSKH kèm mã vận đơn), đường khác thì không', () => {
+    const hint = 'Nếu bạn đã gửi kiện, hãy nhắn CSKH kèm mã vận đơn để được hỗ trợ';
+    expect(L.closedLabel({ ...base, status: 'EXPIRED', closeReason: 'HOLD_EXPIRED', method: 'MAIL_IN' } as never)).toEqual({ label: 'Hết hạn giữ chỗ', reason: hint });
+    expect(L.closedLabel({ ...base, status: 'EXPIRED', closeReason: 'HOLD_EXPIRED', method: 'DROP_OFF' } as never)).toEqual({ label: 'Hết hạn giữ chỗ', reason: null });
+    expect(L.closedLabel({ ...base, status: 'EXPIRED', closeReason: 'LOST', method: 'MAIL_IN' } as never)).toEqual({ label: 'Đã đóng vì thất lạc', reason: null });
+  });
   it('7 lý do nhận thiếu đúng thứ tự §4.10', () => {
     expect(Object.values(L.SHORTFALL_LABELS)).toEqual(['Ướt', 'Bẩn', 'Lẫn vật lạ', 'Sai loại', 'Hỏng', 'Không nhận', 'Khác']);
     expect(Object.keys(L.SHORTFALL_LABELS)).toEqual(['WET', 'DIRTY', 'FOREIGN_OBJECT', 'WRONG_TYPE', 'DAMAGED', 'NOT_ACCEPTED', 'OTHER']);

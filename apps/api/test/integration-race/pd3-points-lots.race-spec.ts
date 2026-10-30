@@ -79,7 +79,7 @@ describe('PD-3 Điểm Xanh hai lô (real Postgres)', () => {
 
   it('T5: luồng điểm hiện có (điểm danh, đổi voucher) ghi lô STANDARD và không chạm lô quy đổi', async () => {
     const reward = { id: 'reward-freeship', pointsCost: 20_000 };
-    const user = await newUser();
+    const user = await newUser({ zaloId: `zalo_it_${randCode(10)}` });
     await prisma.$transaction((tx) =>
       applyPointsDelta(tx, { userId: user.id, delta: reward.pointsCost * 3, lot: 'CONVERTED', reason: 'XU_TO_POINTS:IT', refType: 'IT' }),
     );

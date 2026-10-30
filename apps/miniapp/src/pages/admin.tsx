@@ -24,6 +24,8 @@ import {
   type PayrollStatus,
 } from '../services/payroll-api';
 import { adminEditSession } from '../services/attendance-api';
+import { payrollReopenMessage } from '@tubutree/app-core/payroll-copy';
+import { grantDoneText, grantPermissionsHint } from '@tubutree/app-core/staff-copy';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
@@ -287,7 +289,7 @@ function PayrollSection() {
       <ConfirmSheet
         open={!!reopenRow}
         title="Mở lại bảng lương?"
-        message={reopenRow ? `Mở lại bảng lương T${ym.month}/${ym.year} của ${reopenRow.staff.fullName ?? 'NV'}? Cần chốt lại sau khi sửa.` : undefined}
+        message={reopenRow ? payrollReopenMessage(ym.month, ym.year, reopenRow.staff.fullName ?? 'NV', reopenRow.month.status) : undefined}
         confirmLabel="Mở lại bảng lương"
         onCancel={() => setReopenRow(null)}
         onConfirm={() => {
@@ -515,14 +517,23 @@ function StaffSection() {
   const [revokeTarget, setRevokeTarget] = useState<{ phone: string; who: string } | null>(null);
   const [confirmAdmin, setConfirmAdmin] = useState(false);
 
+  // Thêm lại SĐT của người đã là nhân viên: máy chủ thay nhóm cũ bằng nhóm chọn ở đây, nên báo trước nhóm họ đang có.
+  const existingStaff = role === 'STAFF' ? staffQ.data?.members.find((m) => m.role === 'STAFF' && m.phone === phone.trim()) : undefined;
+  const existingNames = existingStaff ? STAFF_PERMISSIONS.filter((p) => existingStaff.staffPermissions?.includes(p)).map((p) => STAFF_PERMISSION_LABELS[p]) : null;
+  // Lời mời đang chờ trùng SĐT: chọn nhóm thì thay nhóm của lời mời, để trống thì lời mời giữ nhóm đã ghi.
+  const pendingInvite = role === 'STAFF' && !existingStaff ? staffQ.data?.pendingInvites.find((i) => i.role === 'STAFF' && i.phone === phone.trim()) : undefined;
+  const pendingNames = pendingInvite ? STAFF_PERMISSIONS.filter((p) => pendingInvite.staffPermissions?.includes(p)).map((p) => STAFF_PERMISSION_LABELS[p]) : null;
+
   const grantM = useMutation({
-    // Nhóm việc chỉ có nghĩa với nhân viên; không chọn nhóm nào thì không gửi (như trước).
-    mutationFn: () => grantStaff(phone.trim(), role, role === 'STAFF' && perms.length ? STAFF_PERMISSIONS.filter((p) => perms.includes(p)) : undefined),
-    onSuccess: (r) => {
-      openSnackbar({
-        text: r.applied ? 'Đã cấp quyền & áp ngay.' : 'Đã lưu quyền (sẽ áp khi họ mở app).',
-        type: 'success',
-      });
+    // Nhóm việc chỉ có nghĩa với nhân viên; không chọn nhóm nào thì không gửi để máy chủ giữ nguyên nhóm đã lưu.
+    mutationFn: async () => {
+      const to = phone.trim();
+      const picked = STAFF_PERMISSIONS.filter((p) => perms.includes(p));
+      const r = await grantStaff(to, role, role === 'STAFF' && picked.length ? picked : undefined);
+      return { r, to, names: picked.map((p) => STAFF_PERMISSION_LABELS[p]), alreadyStaff: existingNames !== null };
+    },
+    onSuccess: ({ r, to, names, alreadyStaff }) => {
+      openSnackbar({ text: grantDoneText(r, to, names, alreadyStaff), type: 'success' });
       setSheetOpen(false);
       setPhone('');
       setPerms([]);
@@ -699,7 +710,7 @@ function StaffSection() {
                 ))}
               </div>
               <Text variant="caption" tone="secondary" as="div">
-                Không chọn nhóm nào: chỉ dùng quầy thu ngân, Đổi rác và chấm công.
+                {grantPermissionsHint(existingNames, pendingNames)}
               </Text>
             </div>
           )}

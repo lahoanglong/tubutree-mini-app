@@ -89,7 +89,7 @@ describe('StorefrontViewPage — mã giới thiệu lấy từ API, không suy t
   });
 });
 
-describe('StorefrontViewPage: ngữ cảnh ghi công theo loại gian hàng (E-48)', () => {
+describe('StorefrontViewPage: ngữ cảnh ghi công theo loại gian hàng', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();

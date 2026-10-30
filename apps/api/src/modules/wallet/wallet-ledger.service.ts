@@ -12,6 +12,11 @@ export interface WalletDeltaInput {
   reason?: string | null;
   /** Thông báo khi lệnh trừ vượt số dư — giữ đúng câu chữ từng màn đang hiển thị. */
   insufficientMessage?: string;
+  /**
+   * Cho lệnh trừ làm số dư xuống âm. Chỉ loại COMMISSION_REVERSAL được dùng (thu hồi hoa hồng đã vào Ví khi đơn bị trả: tiền
+   * CTV đã nhận không có nguồn, không thể từ chối lệnh); loại khác truyền cờ này là lỗi lập trình.
+   */
+  allowNegative?: boolean;
 }
 
 export interface WalletDeltaResult {
@@ -37,6 +42,9 @@ export async function applyWalletDelta(
   if (!Number.isSafeInteger(delta) || delta === 0) {
     throw new BadRequestException('Số tiền không hợp lệ.');
   }
+  if (input.allowNegative && type !== 'COMMISSION_REVERSAL') {
+    throw new Error(`allowNegative chỉ dùng cho COMMISSION_REVERSAL, không dùng cho ${type}.`);
+  }
   const refId = input.refId?.trim() || null;
 
   // Khoá dòng user TRƯỚC khi tra trùng: mọi lần ghi sổ của cùng user đều đi qua khoá này, nên
@@ -60,8 +68,8 @@ export async function applyWalletDelta(
     if (existing) return { applied: false, balanceAfter: current, entryId: existing.id };
   }
 
-  // Chỉ chặn lệnh TRỪ làm âm; lệnh cộng vẫn cho vào ví lỡ âm từ dữ liệu cũ để nó tiến về 0.
-  if (delta < 0 && current + delta < 0) {
+  // Chỉ chặn lệnh TRỪ làm âm; lệnh cộng vẫn cho vào ví đang âm để nó tiến về 0 (hoa hồng mới bù dần số âm của lệnh thu hồi).
+  if (delta < 0 && current + delta < 0 && !input.allowNegative) {
     throw new BadRequestException(input.insufficientMessage ?? 'Số dư ví không đủ.');
   }
 

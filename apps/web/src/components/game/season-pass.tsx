@@ -1,7 +1,9 @@
 import { Check, Lock, Star, Ticket } from 'lucide-react';
 import type { SeasonPassReward, SeasonPassState, SeasonPassTier } from '@tubutree/app-core/api/game';
+import { guestCheckInCopy } from '@tubutree/app-core/daily-check-in-guest-copy';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ui } from '@/lib/guest-ui';
+import { GuestPointsNote } from '@/components/loyalty/guest-points-note';
 import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { formatDrops, formatNumber, formatPoints } from './format';
 import { GameCard } from './game-card';
@@ -36,6 +38,10 @@ export function SeasonPass({
   const xp = pass.xp ?? 0;
   const maxXp = tiers[tiers.length - 1]?.xpRequired ?? 1;
   const ppct = maxXp > 0 ? Math.min(100, Math.round((xp / maxXp) * 100)) : 0;
+  // Khách vãng lai chưa nhận được Điểm Xanh: bậc thưởng điểm không hứa số điểm, không có nút nhận; bậc giọt nước giữ nguyên.
+  const pointsHidden = (r: SeasonPassReward) => !!pass.pointsBlocked && r.type === 'POINTS';
+  const showGuestNote = tiers.some((t) => pointsHidden(t.free) || pointsHidden(t.premium));
+  const rewardLabel = (r: SeasonPassReward) => (pointsHidden(r) ? guestCheckInCopy.seasonPoints : rewardText(r));
   return (
     <GameCard title="Chặng Mùa" icon={Ticket}>
       <p className="text-caption text-stone-700">{`Điểm danh mỗi ngày để lên bậc mùa "${pass.seasonTitle ?? ''}"`}</p>
@@ -51,6 +57,8 @@ export function SeasonPass({
           Cần đăng ký định kỳ để mở phần thưởng Cao cấp.
         </p>
       )}
+
+      {showGuestNote && <GuestPointsNote margin="12px 0 0" />}
 
       <div className="mt-3 flex flex-col gap-2">
         {tiers.map((t: SeasonPassTier) => {
@@ -69,10 +77,10 @@ export function SeasonPass({
               <div className="flex gap-2">
                 <div className="min-w-0 flex-1 text-center">
                   <div className="text-caption text-stone-700">Miễn phí</div>
-                  <div className="text-caption font-semibold text-forest-700">{rewardText(t.free)}</div>
+                  <div className="text-caption font-semibold text-forest-700">{rewardLabel(t.free)}</div>
                   {t.claimedFree ? (
                     <ClaimedMark />
-                  ) : (
+                  ) : pointsHidden(t.free) ? null : (
                     <button
                       type="button"
                       disabled={!t.unlocked || busy('free')}
@@ -89,10 +97,10 @@ export function SeasonPass({
                     <Star className="h-4 w-4" aria-hidden="true" />
                     Cao cấp
                   </div>
-                  <div className="text-caption font-semibold text-honey-600">{rewardText(t.premium)}</div>
+                  <div className="text-caption font-semibold text-honey-600">{rewardLabel(t.premium)}</div>
                   {t.claimedPremium ? (
                     <ClaimedMark />
-                  ) : (
+                  ) : pointsHidden(t.premium) ? null : (
                     <button
                       type="button"
                       disabled={premiumLocked || busy('premium')}

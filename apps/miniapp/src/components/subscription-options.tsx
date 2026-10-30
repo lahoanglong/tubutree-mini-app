@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { walletNegativeCheckoutReason } from '@tubutree/app-core/wallet-rules';
 import type { AddressDTO } from '../services/shop-api';
 import {
   MAX_START_DAYS_AHEAD,
@@ -89,29 +90,32 @@ function RadioRow({
   onSelect,
   title,
   hint,
+  disabled = false,
 }: {
   checked: boolean;
   onSelect: () => void;
   title: ReactNode;
   hint?: ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <div
       role="radio"
       aria-checked={checked}
+      aria-disabled={disabled || undefined}
       {...rowKeyboardProps()}
-      className="tubu-press"
+      className={disabled ? undefined : 'tubu-press'}
       onClick={() => {
-        if (checked) return;
+        if (checked || disabled) return;
         haptic('light');
         onSelect();
       }}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', minHeight: 44, boxSizing: 'border-box', cursor: 'pointer' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', minHeight: 44, boxSizing: 'border-box', cursor: disabled ? 'not-allowed' : 'pointer' }}
     >
       {/* Chấm tròn chỉ để nhìn: chọn nằm ở onClick của hàng (role=radio), như hàng thanh toán ở checkout. */}
-      <Radio checked={checked} onChange={() => {}} />
+      <Radio checked={checked} disabled={disabled} onChange={() => {}} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <Text variant="body-sm" as="div" style={{ fontWeight: checked ? 600 : 400 }}>
+        <Text variant="body-sm" as="div" tone={disabled ? 'tertiary' : 'primary'} style={{ fontWeight: checked ? 600 : 400 }}>
           {title}
         </Text>
         {hint && (
@@ -124,6 +128,14 @@ function RadioRow({
   );
 }
 
+/**
+ * Lý do không chọn được trả mỗi kỳ bằng Ví (null = chọn được): Ví đang âm vì đã thu hồi hoa hồng đơn trả hàng. Cùng câu với màn thanh
+ * toán; kỳ giao trừ Ví lúc đó sẽ không đủ tiền và gói bị tạm dừng.
+ */
+export function subscriptionWalletBlockedReason(walletBalance: number | undefined): string | null {
+  return walletBalance !== undefined && walletBalance < 0 ? walletNegativeCheckoutReason(formatVnd(-walletBalance)) : null;
+}
+
 export function PaymentMethodPicker({
   value,
   onChange,
@@ -134,17 +146,20 @@ export function PaymentMethodPicker({
   walletBalance?: number;
 }) {
   const t = vi.subscriptions;
+  const walletBlocked = subscriptionWalletBlockedReason(walletBalance);
   const label = (m: SubscriptionPaymentMethod) =>
     m === 'WALLET' && walletBalance !== undefined ? t.payWalletBalance(formatVnd(walletBalance)) : t.payLabel[m];
+  const hint = (m: SubscriptionPaymentMethod) => (m === 'WALLET' && walletBlocked ? walletBlocked : value === m ? t.payHint[m] : undefined);
   return (
     <div role="radiogroup" aria-label={t.paymentLabel}>
       {SUBSCRIPTION_PAYMENT_METHODS.map((m) => (
         <RadioRow
           key={m}
           checked={value === m}
+          disabled={m === 'WALLET' && walletBlocked !== null}
           onSelect={() => onChange(m)}
           title={label(m)}
-          hint={value === m ? t.payHint[m] : undefined}
+          hint={hint(m)}
         />
       ))}
     </div>

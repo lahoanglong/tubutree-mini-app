@@ -66,3 +66,9 @@ Muốn đổi lại thì nói em; mọi thứ dưới đây đổi lại đượ
 - Chạy sau: canhan sau thongbao; admin-nhansu sau admin-hopviec; admin-don sau admin-hopviec và api-tin.
 - Gói đụng tiền, điểm, hoa hồng, Ví, đăng nhập (giohang, muachung, api-tin, diem, ctv, phien, admin-hopviec, admin-congcu) qua hai lượt review Opus.
 - Gói có migration: admin-hopviec (bảng báo trả nợ đại lý), admin-nhansu (hai cột mới), doirac (chèn một mẫu tin). Chỉ thêm, không xoá cột.
+
+## D. Chủ chốt sáng 29/10 (AskUserQuestion)
+- E-2: chặn cộng điểm cho khách vãng lai ở điểm danh và nhiệm vụ 7 ngày. Họ vẫn nhận giọt nước. Làm ở gói `e2-diem-khach` của đợt P3.
+- E-43: trừ thẳng Ví CTV phần hoa hồng đã vào Ví khi đơn bị trả cả đơn hoặc trả một phần. Ví được phép âm, chỉ với dòng thu hồi hoa hồng. Làm ở gói `e43-vi-ctv` của đợt P3.
+- Deploy: deploy main lên Vietnix sau khi PR đợt P3 merge, theo runbook. Không đẩy Mini App.
+- Cộng đồng web: giữ hàng link Facebook/TikTok ở cả khổ điện thoại lẫn máy tính.

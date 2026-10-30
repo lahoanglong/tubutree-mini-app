@@ -100,6 +100,8 @@ export default function AddToCart({
   const [buying, setBuying] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  // Câu về mã nhóm chưa áp được: màu cảnh báo, tách khỏi câu "Đã thêm vào giỏ!" (đã thành công) kẻo hai ý trái nhau chung một màu.
+  const [warn, setWarn] = useState<string | null>(null);
   const userPicked = useRef(false);
   const [sheetMode, setSheetMode] = useState<VariationSheetMode | null>(null);
   const [sheetOpened, setSheetOpened] = useState(false);
@@ -174,20 +176,20 @@ export default function AddToCart({
   // Mã của nhóm mua chung đủ người (`?ma=` do nút "Mua ngay với mã" ở trang Mua chung đặt). Mã gắn riêng sản phẩm và có đơn tối thiểu nên
   // chỉ áp được khi món đã nằm trong giỏ: thử một lần ngay sau lần thêm giỏ đầu tiên thành công, rồi gỡ `ma` khỏi URL để tải lại hay
   // quay lại trang không áp lại một mã khách có thể đã bỏ chọn ở giỏ. Chỉ nhận mã nhóm (`GBUY-`): một đường dẫn soạn sẵn mang mã khác
-  // không được thay mã khách đang chọn. Lỗi không chặn việc mua, chỉ nói lý do; `hold` báo có điều khách cần đọc trước khi rời trang.
+  // không được thay mã khách đang chọn. Lỗi không chặn việc mua, chỉ nói lý do; `hold` báo có điều khách cần đọc trước khi rời trang, `ok` là mã đã nằm ở giỏ (kể cả khi thay mã cũ).
   const groupCouponTried = useRef(false);
   const applyGroupCoupon = async (cart: Awaited<ReturnType<typeof addToCart>>) => {
     const code = new URLSearchParams(window.location.search).get('ma')?.trim().toUpperCase();
-    if (!code || !GROUP_COUPON_CODE.test(code) || groupCouponTried.current) return { cart, note: null, hold: false };
+    if (!code || !GROUP_COUPON_CODE.test(code) || groupCouponTried.current) return { cart, note: null, hold: false, ok: true };
     groupCouponTried.current = true;
     forgetCouponParam();
     try {
       const next = await applyCoupon(code);
       void qc.invalidateQueries({ queryKey: ['quote'] });
       const outcome = couponUseOutcome(cart.couponCode, code, next);
-      return { cart: next, note: outcome.kind === 'ok' ? `Đã áp mã ${code}.` : outcome.text, hold: outcome.kind !== 'ok' };
+      return { cart: next, note: outcome.kind === 'ok' ? `Đã áp mã ${code}.` : outcome.text, hold: outcome.kind !== 'ok', ok: outcome.kind !== 'notApplied' };
     } catch (e) {
-      return { cart, note: couponUseCopy.notApplied(actionErrorText(e)), hold: true };
+      return { cart, note: couponUseCopy.notApplied(actionErrorText(e)), hold: true, ok: false };
     }
   };
 
@@ -195,9 +197,10 @@ export default function AddToCart({
     setBusy(true);
     setBuying(buyNow);
     setMsg(null);
+    setWarn(null);
     let leaving = false;
     try {
-      const { cart, note, hold } = await applyGroupCoupon(await addToCart(variationId, quantity));
+      const { cart, note, hold, ok } = await applyGroupCoupon(await addToCart(variationId, quantity));
       // Badge giỏ ở header đọc cùng queryKey ['cart'] nhưng nằm trong layout nên không bao giờ
       // remount, và providers tắt refetchOnWindowFocus — không cập nhật thì khách thêm 3 món
       // vẫn thấy số cũ, tưởng chưa thêm được rồi thêm lại thành trùng số lượng.
@@ -211,14 +214,16 @@ export default function AddToCart({
         leaving = true;
         if (hold && note) {
           // Trang thanh toán không biết mã vừa áp hụt: giữ câu báo trên màn một lúc (như "Dùng ngay" ở thẻ mã) rồi mới sang.
-          setSuccess(false);
-          setMsg(note);
+          setSuccess(ok);
+          setMsg(ok ? note : null);
+          setWarn(ok ? null : note);
           await new Promise((resolve) => window.setTimeout(resolve, NOTICE_HOLD_MS));
         }
         router.push('/thanh-toan');
         return;
       }
-      setMsg(note ? `Đã thêm vào giỏ! ${note}` : 'Đã thêm vào giỏ!');
+      setMsg(note && ok ? `Đã thêm vào giỏ! ${note}` : 'Đã thêm vào giỏ!');
+      setWarn(note && !ok ? note : null);
       setSuccess(true);
     } catch (e) {
       setMsg(actionErrorText(e));
@@ -254,6 +259,7 @@ export default function AddToCart({
     }
     if (phase === 'unavailable') {
       setSuccess(false);
+      setWarn(null);
       setMsg(
         `Chưa kết nối được tới Tubu Tree nên chưa ${buyNow ? 'mua được' : 'thêm được vào giỏ'}. Bạn kiểm tra mạng rồi bấm lại nhé.`,
       );
@@ -303,15 +309,20 @@ export default function AddToCart({
   const addLabel = !available ? 'Hết hàng' : busy && !buying ? 'Đang thêm…' : `Thêm vào giỏ · ${total}`;
   const buyLabel = busy && buying ? 'Đang xử lý…' : 'Mua ngay';
   const cannotBuy = busy || !available || phase === 'loading';
-  const status = msg && (
-    <p role="status" className={`text-sm ${success ? 'text-success-fg' : 'text-danger-fg'}`}>
-      {msg}{' '}
-      {success && (
-        <a href="/gio-hang" className="font-semibold underline">
-          Xem giỏ hàng →
-        </a>
+  const status = (msg || warn) && (
+    <div role="status" className="space-y-1 text-sm">
+      {msg && (
+        <p className={success ? 'text-success-fg' : 'text-danger-fg'}>
+          {msg}{' '}
+          {success && !buying && (
+            <a href="/gio-hang" className="font-semibold underline">
+              Xem giỏ hàng →
+            </a>
+          )}
+        </p>
       )}
-    </p>
+      {warn && <p className="text-warning-fg">{warn}</p>}
+    </div>
   );
 
   return (

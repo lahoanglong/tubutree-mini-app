@@ -383,6 +383,9 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     mocks.order = new ApiError('Không tìm thấy đơn hàng.', 404);
     const { container } = await mount();
     expect(container.textContent).toContain('Không tìm thấy đơn hàng');
+    // Cùng chữ với order-detail.tsx của Mini App: tiêu đề "Không tìm thấy", lời "Không tìm thấy đơn hàng này.".
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Không tìm thấy');
+    expect(container.querySelector('[data-testid="error-message"]')?.textContent).toBe('Không tìm thấy đơn hàng này.');
     expect(headingProblems(container)).toEqual([]);
     expect(container.querySelector('a[href="/tai-khoan"]')).not.toBeNull();
   });

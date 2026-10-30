@@ -21,7 +21,7 @@ export interface StorefrontAdminListQuery {
   changedAfterApproval?: boolean;
 }
 
-/** Gian hàng đã duyệt mà chủ đổi nội dung sau đó (cột contentChangedAt do StorefrontService.updateMine ghi). */
+/** Gian hàng đã duyệt mà chủ đổi nội dung sau đó (cột contentChangedAt do StorefrontService.updateMine và MerchantService.updateStore ghi). */
 const CHANGED_AFTER_APPROVAL_WHERE = { approvedAt: { not: null }, contentChangedAt: { not: null } } satisfies Prisma.StorefrontWhereInput;
 
 /** Danh sách không kéo ảnh bìa/avatar: ở gian hàng thiếu Cloudinary chúng là base64 tới 1,5MB mỗi ảnh. */
@@ -193,9 +193,16 @@ export class StorefrontAdminService {
     return sf;
   }
 
-  /** "Đã xem": admin đã xem nội dung chủ đổi sau khi duyệt. Chỉ bỏ dấu; không đổi duyệt/đăng và không báo chủ. */
-  async markContentSeen(adminId: string, id: string) {
-    const { count } = await this.prisma.storefront.updateMany({ where: { id, contentChangedAt: { not: null } }, data: { contentChangedAt: null } });
+  /**
+   * "Đã xem": admin đã xem nội dung chủ đổi sau khi duyệt. Chỉ bỏ dấu; không đổi duyệt/đăng và không báo chủ.
+   * `seenChangedAt` là mốc đổi admin đang xem: chủ đổi thêm lần nữa trong lúc ngăn chi tiết mở thì dấu mới hơn mốc đó được giữ lại
+   * (kết quả trả về vẫn mang dấu mới để màn hiện lại). Không gửi mốc thì xoá dấu như app cũ.
+   */
+  async markContentSeen(adminId: string, id: string, seenChangedAt?: string) {
+    const { count } = await this.prisma.storefront.updateMany({
+      where: { id, contentChangedAt: seenChangedAt ? { lte: new Date(seenChangedAt) } : { not: null } },
+      data: { contentChangedAt: null },
+    });
     const sf = await this.summaryOf(id);
     if (count === 1) this.logger.warn(`Admin ${adminId} đã xem nội dung đổi sau duyệt của gian hàng ${id}.`);
     return sf;

@@ -1,5 +1,8 @@
 import { needsVariationPicker } from './variation-picker';
 
+/** Lời báo khi bấm giỏ nhanh mà SP vừa hết hàng: không hứa ngày hàng về, chỉ đường sang SP khác. Mini App và web dùng chung. */
+export const QUICK_ADD_SOLD_OUT = 'Sản phẩm vừa hết hàng. Bạn xem sản phẩm khác nhé.';
+
 export type QuickAddPlan = { kind: 'add'; variationId: string } | { kind: 'pick' } | { kind: 'soldOut' };
 
 /**

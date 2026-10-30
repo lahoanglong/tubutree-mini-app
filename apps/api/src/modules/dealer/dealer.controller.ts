@@ -15,9 +15,9 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { DealerService } from './dealer.service';
 import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
 
-class CreditPaymentDto {
+export class CreditPaymentDto {
   @IsInt() @Min(1) amount!: number;
-  @IsOptional() @IsString() note?: string;
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
 }
 
 export class ClaimRewardDto {

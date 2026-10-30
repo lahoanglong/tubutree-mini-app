@@ -1027,6 +1027,15 @@ describe('thống kê và hành trình gian hàng', () => {
     expect(s).toContain('4 món · 320.000đ');
   });
 
+  it('điện thoại: tiêu đề thẻ thống kê và bộ sưu tập 16px như Mini App', async () => {
+    mount();
+    await flush();
+    const stats = document.querySelector('[aria-label="Thống kê 30 ngày"] h2')!;
+    expect(stats.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+    const col = document.querySelector('section[aria-label="Bộ sưu tập A"] h2')!;
+    expect(col.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+  });
+
   it('chưa có đơn: nhắn chia sẻ link; thống kê lỗi thì ẩn khối, không vỡ trang', async () => {
     state.stats = { ...STATS, byProduct: [] };
     const a = mount();

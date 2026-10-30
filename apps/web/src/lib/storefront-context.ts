@@ -14,6 +14,7 @@
  */
 const KEY = 'tubu_web_storefront';
 const PENDING_KEY = 'tubu_web_ref_pending';
+const CTV_TOUCHED_KEY = 'tubu_web_ctv_touched';
 /**
  * Bản chờ nguồn giới thiệu chỉ có giá trị trong chừng này ngày kể từ lúc khách mở link. Chạm bù xảy ra lúc đăng nhập nên hạn ghi
  * công phía máy chủ (affiliate.attribution_days) tính từ lúc đó: khách đăng nhập ngày thứ 6 thì nguồn sống tới ~13 ngày kể từ lúc
@@ -22,6 +23,8 @@ const PENDING_KEY = 'tubu_web_ref_pending';
 export const PENDING_REF_TTL_DAYS = 7;
 /** Số link gần nhất được giữ chờ: đủ để một link mã khách thường mở sau không làm mất link CTV mở trước. */
 export const PENDING_REF_MAX = 3;
+/** Độ dài tối đa máy chủ nhận cho mã giới thiệu và slug khi chạm (TouchDto): dài hơn thì lần nào cũng bị từ chối nên không đáng giữ chờ. */
+const MAX_TOUCH_FIELD_LENGTH = 64;
 
 export interface StorefrontContext {
   slug: string | null;
@@ -177,6 +180,7 @@ function writePendingRefs(list: PendingRef[]): void {
  */
 function savePendingRef(ref: Omit<PendingRef, 'savedAt'>): void {
   if (typeof window === 'undefined' || (!ref.referralCode && !ref.slug)) return;
+  if ((ref.referralCode?.length ?? 0) > MAX_TOUCH_FIELD_LENGTH || (ref.slug?.length ?? 0) > MAX_TOUCH_FIELD_LENGTH) return;
   const now = Date.now();
   const kept = readPendingRefs(now).filter((p) => !samePendingSource(p, ref));
   writePendingRefs([...kept, { ...ref, savedAt: now }].slice(-PENDING_REF_MAX));
@@ -205,6 +209,31 @@ export function readPendingRefs(now: number = Date.now()): PendingRef[] {
   }
 }
 
+/**
+ * Mã đã được máy chủ ghi công qua gian hàng CTV (chạm kiểu ctv, ok:true) trong tab này. Mở gian hàng đối tác/nhãn sau đó không chạm
+ * lại cùng mã kiểu brand: máy chủ upsert cả dòng chạm và sẽ xoá slug gian hàng CTV khỏi nó (đơn sau không còn gắn gian hàng CTV, combo,
+ * storefrontSlug) dù hoa hồng không đổi. Ở sessionStorage chứ không phải biến module để tải lại trang hay quay về từ đăng nhập Zalo
+ * không làm mất (Mini App giữ cho cả phiên chạy).
+ */
+export function markCtvTouched(code: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(CTV_TOUCHED_KEY, norm(code));
+  } catch {
+    /* private mode / hết quota — mất dấu chấp nhận được, chỉ có thể chạm kiểu brand thừa */
+  }
+}
+
+export function wasCtvTouched(code: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const stored = sessionStorage.getItem(CTV_TOUCHED_KEY);
+    return !!stored && stored === norm(code);
+  } catch {
+    return false;
+  }
+}
+
 export function clearPendingRef(): void {
   if (typeof window === 'undefined') return;
   try {
@@ -218,6 +247,7 @@ export function clearStorefrontContext(): void {
   if (typeof window === 'undefined') return;
   try {
     sessionStorage.removeItem(KEY);
+    sessionStorage.removeItem(CTV_TOUCHED_KEY);
   } catch {
     /* ignore */
   }

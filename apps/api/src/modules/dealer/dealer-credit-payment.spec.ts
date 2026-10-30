@@ -5,6 +5,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { Prisma } from '@prisma/client';
 import { DealerService } from './dealer.service';
+import { CreditPaymentDto } from './dealer.controller';
 import { DealerCreditAdminController, DealerCreditReportAdminController, DismissCreditReportDto, RecordDealerCreditPaymentDto } from './dealer-admin.controller';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { STAFF_PERMISSIONS_KEY } from '../../common/staff-permissions';
@@ -51,6 +52,13 @@ describe('DealerService.reportCreditPayment (đại lý báo — KHÔNG được
     const svc = new DealerService(prisma as unknown as PrismaService, makeConfig(), notifications as never);
     return { svc, prisma, ledgerCreate, notify, reportCreate };
   }
+
+  it('ghi chú dài hơn 500 ký tự (gọi thẳng service, không qua DTO) bị cắt ở 500 trước khi lưu', async () => {
+    const { svc, reportCreate } = build({ entries: [{ delta: 200_000 }] });
+    await svc.reportCreditPayment('d1', 50_000, `  ${'z'.repeat(600)}  `);
+    const note = (reportCreate.mock.calls[0]![0] as { data: { note: string } }).data.note;
+    expect(note).toHaveLength(500);
+  });
 
   it('lưu một dòng báo cáo REPORTED (đại lý, số tiền, ghi chú) rồi mới báo admin; số vượt dư nợ thì không lưu', async () => {
     const { svc, reportCreate, notify } = build({ entries: [{ delta: 200_000 }] });
@@ -189,7 +197,7 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     const res = await svc.adminRecordCreditPayment('admin1', 'd1', 200_000, { reportId: 'rp1', idempotencyKey: 'FT100' });
     expect(ledgerCreate).not.toHaveBeenCalled();
     expect(notify).not.toHaveBeenCalled();
-    expect(res).toMatchObject({ balance: expect.any(Number) });
+    expect(res).toMatchObject({ balance: expect.any(Number), reportClosed: true, alreadyRecorded: true });
   });
 
   it('báo cáo đã bị đánh dấu "không thấy tiền" → BadRequest, không trừ nợ; báo cáo của đại lý khác hoặc không có → NotFound', async () => {
@@ -211,7 +219,9 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
 
   it('ghi nhận kèm reportId xong thì báo reportClosed: true; không kèm reportId thì kết quả không có trường này', async () => {
     const withReport = build({ debt: 500_000 });
-    await expect(withReport.svc.adminRecordCreditPayment('admin1', 'd1', 100_000, { reportId: 'rp1' })).resolves.toMatchObject({ reportClosed: true });
+    const fresh = await withReport.svc.adminRecordCreditPayment('admin1', 'd1', 100_000, { reportId: 'rp1' });
+    expect(fresh).toMatchObject({ reportClosed: true });
+    expect(fresh).not.toHaveProperty('alreadyRecorded');
     const plain = build({ debt: 500_000 });
     expect(await plain.svc.adminRecordCreditPayment('admin1', 'd1', 100_000)).not.toHaveProperty('reportClosed');
   });
@@ -222,11 +232,12 @@ describe('DealerService.adminRecordCreditPayment (admin xác nhận — nguồn 
     expect(ledgerCreate).not.toHaveBeenCalled();
     expect(reportUpdateMany).not.toHaveBeenCalled();
     expect(res).toMatchObject({ balance: expect.any(Number), reportClosed: false });
+    expect(res).not.toHaveProperty('alreadyRecorded');
   });
 
   it('khoá trùng mà báo cáo đã RECORDED (bấm đúp lần ghi nhận của chính báo cáo này): reportClosed: true', async () => {
     const { svc } = build({ existingClaim: { delta: -150_000 }, report: { status: 'RECORDED' } });
-    await expect(svc.adminRecordCreditPayment('kt1', 'd1', 150_000, { reportId: 'rp1' })).resolves.toMatchObject({ reportClosed: true });
+    await expect(svc.adminRecordCreditPayment('kt1', 'd1', 150_000, { reportId: 'rp1' })).resolves.toMatchObject({ reportClosed: true, alreadyRecorded: true });
   });
 
   it('Kế toán ghi nhận (byStaff): ghi chú sổ công nợ ghi nhãn "Kế toán" + id; ADMIN vẫn là "Admin"', async () => {
@@ -358,6 +369,12 @@ describe('DealerCreditAdminController (POST /api/admin/dealers/:userId/credit-pa
       plainToInstance(RecordDealerCreditPaymentDto, { amount: 1, bankRef: 'x'.repeat(101), note: 'y'.repeat(501) }),
     );
     expect(badLen.map((e) => e.property).sort()).toEqual(['bankRef', 'note']);
+  });
+
+  it('CreditPaymentDto (đại lý báo đã chuyển): ghi chú tối đa 500 ký tự, vì được lưu và hiện ở màn kế toán', async () => {
+    expect(await validate(plainToInstance(CreditPaymentDto, { amount: 5, note: 'y'.repeat(500) }))).toHaveLength(0);
+    const tooLong = await validate(plainToInstance(CreditPaymentDto, { amount: 5, note: 'y'.repeat(501) }));
+    expect(tooLong.map((e) => e.property)).toEqual(['note']);
   });
 });
 

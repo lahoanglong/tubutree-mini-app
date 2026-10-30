@@ -142,6 +142,15 @@ describe('client-api — refresh token nằm ở cookie HttpOnly', () => {
     expect(hasSessionMarker()).toBe(true);
   });
 
+  it('refresh bị giới hạn tốc độ (429) → transient kèm rateLimited để trang nói đúng lý do; 503 thì không', async () => {
+    setSessionMarker();
+    fetchMock.mockResolvedValueOnce(jsonRes(429, { message: 'too many' }));
+    await expect(refreshSession()).resolves.toEqual({ kind: 'transient', rateLimited: true });
+    fetchMock.mockResolvedValueOnce(jsonRes(503, { message: 'unavailable' }));
+    await expect(refreshSession()).resolves.toEqual({ kind: 'transient' });
+    expect(hasSessionMarker()).toBe(true);
+  });
+
   it.each([400, 401, 403])('refresh trả %i (phiên chết thật) → xoá cờ phiên', async (status) => {
     setSessionMarker();
     fetchMock.mockResolvedValueOnce(jsonRes(status, { message: 'chết' }));

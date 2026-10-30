@@ -19,3 +19,13 @@ export function throwIfLockBusy(err: unknown): never {
   if (isLockBusy(err)) throw new ServiceUnavailableException(LOCK_BUSY_MESSAGE);
   throw err;
 }
+
+/**
+ * Postgres chọn tx làm nạn nhân deadlock (40P01; Prisma P2034, hoặc P2010 của câu raw mang mã trong message). Tx đã rollback hết nên
+ * chạy lại cả tx một lần là qua; khác với isLockBusy, không gồm hết hạn chờ khoá (chạy lại ngay sẽ lại chờ đúng khoá đó).
+ */
+export function isDeadlock(err: unknown): boolean {
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') return true;
+  const message = err instanceof Error ? err.message : '';
+  return /\b40P01\b|deadlock detected/i.test(message);
+}

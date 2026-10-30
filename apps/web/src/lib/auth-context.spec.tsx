@@ -18,8 +18,13 @@ import { loadDraft, markResume, peekResume, saveDraft, EMPTY_DRAFT } from './rec
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 function Probe() {
-  const { status, user, initialized } = useAuth();
-  return <p id="probe">{`${initialized ? 'init' : 'boot'}|${status}|${user?.id ?? '-'}`}</p>;
+  const { status, user, initialized, sessionUnavailable, sessionRateLimited } = useAuth();
+  return (
+    <>
+      <p id="probe">{`${initialized ? 'init' : 'boot'}|${status}|${user?.id ?? '-'}`}</p>
+      <p id="why">{`${sessionUnavailable}|${sessionRateLimited}`}</p>
+    </>
+  );
 }
 
 const USER = { id: 'u1', fullName: 'An', avatarUrl: null, role: 'CUSTOMER', pointsBalance: 0, walletBalance: 0, referralCode: 'R' };
@@ -100,6 +105,27 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     });
     expect(text()).toBe('init|authenticated|u1');
     expect(mocks.restoreSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('lỗi tạm do 429 → sessionRateLimited bật; thử lại vào được thì cả hai cờ tắt', async () => {
+    setSessionMarker();
+    mocks.restoreSession
+      .mockResolvedValueOnce({ kind: 'transient', rateLimited: true })
+      .mockResolvedValueOnce({ kind: 'ok', data: { accessToken: 'at', user: USER } });
+    await mount();
+    expect(host.querySelector('#why')?.textContent).toBe('true|true');
+
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+    expect(host.querySelector('#why')?.textContent).toBe('false|false');
+  });
+
+  it('lỗi tạm do mất mạng/5xx → chỉ sessionUnavailable bật, không nhầm sang giới hạn tốc độ', async () => {
+    setSessionMarker();
+    mocks.restoreSession.mockResolvedValueOnce({ kind: 'transient' });
+    await mount();
+    expect(host.querySelector('#why')?.textContent).toBe('true|false');
   });
 
   it('phiên chết (cờ đã bị xoá) → không thử lại khi có mạng', async () => {

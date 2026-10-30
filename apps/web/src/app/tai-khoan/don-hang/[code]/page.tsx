@@ -166,8 +166,8 @@ export default function OrderDetailPage() {
       <Shell title="Chi tiết đơn hàng">
         {notFound ? (
           <ErrorState
-            title="Không tìm thấy đơn hàng"
-            message="Đơn hàng này không tồn tại hoặc không thuộc tài khoản của bạn."
+            title="Không tìm thấy"
+            message="Không tìm thấy đơn hàng này."
             retryLabel="Về trang chủ"
             onRetry={() => router.push('/')}
           />
