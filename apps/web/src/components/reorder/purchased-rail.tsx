@@ -24,6 +24,7 @@ import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 import { usePurchasedItems } from './use-purchased-items';
 import { ScrollRail } from '@/components/scroll-rail';
 import { ProductImage } from '@/components/mini/product-image';
+import { announcePdpNavigation } from '@/components/skeletons/pdp-nav-event';
 
 /** Dùng CHUNG query key ['purchased-items', 10] với Trang chủ khi quyết định thứ tự khối. */
 /** Hai nút hàng Mua lại chia đều chỗ; đệm ngang hẹp để nhãn "Định kỳ -17%" không bị cắt dấu ba chấm ở 320px. */
@@ -98,7 +99,11 @@ function CompactRebuyCard({
         type="button"
         aria-label={item.productName}
         className="tubu-press"
-        onClick={() => router.push(productHref(encodeURIComponent(item.slug), null, item.variationId))}
+        onClick={() => {
+          const href = productHref(encodeURIComponent(item.slug), null, item.variationId);
+          announcePdpNavigation(href);
+          router.push(href);
+        }}
         style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', minHeight: 44, padding: 0, border: 'none', background: 'transparent', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}
       >
         <ProductThumb src={item.thumbnail} alt="" size={64} />

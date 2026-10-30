@@ -3,11 +3,11 @@
 import { usePathname } from 'next/navigation';
 import { LineItemSkeleton, ProductGridSkeleton, Skeleton } from '@/components/ui/skeleton';
 
-export type SkeletonKind = 'hub' | 'balance' | 'form' | 'list';
+export type SkeletonKind = 'hub' | 'balance' | 'form' | 'list' | 'loyalty' | 'game';
 
 /** Đường dẫn đứng trước → khung chờ; khớp theo tiền tố dài nhất. Đường dẫn không có trong bảng dùng khung danh sách. */
 const KIND_BY_PREFIX: [string, SkeletonKind][] = [
-  ['/tai-khoan/diem-xanh', 'balance'],
+  ['/tai-khoan/diem-xanh', 'loyalty'],
   ['/tai-khoan/vi-tubu', 'balance'],
   ['/tai-khoan/ho-so', 'form'],
   ['/tai-khoan/cai-dat', 'form'],
@@ -19,7 +19,7 @@ const KIND_BY_PREFIX: [string, SkeletonKind][] = [
   ['/thanh-toan', 'form'],
   ['/gio-hang', 'list'],
   ['/uu-dai', 'balance'],
-  ['/vuon-xanh', 'balance'],
+  ['/vuon-xanh', 'game'],
   ['/kho-qua', 'balance'],
   ['/dai-ly', 'balance'],
   ['/hoan-tien', 'form'],
@@ -63,6 +63,22 @@ function Body({ kind }: { kind: SkeletonKind }) {
           <LineItemSkeleton />
         </>
       );
+    case 'loyalty':
+      return (
+        <>
+          <Skeleton height={180} />
+          <Skeleton height={80} />
+        </>
+      );
+    case 'game':
+      return (
+        <>
+          <Skeleton height={160} rounded="rounded-card" />
+          <Skeleton height={44} />
+          <Skeleton height={56} rounded="rounded-card" />
+          <Skeleton height={140} rounded="rounded-card" />
+        </>
+      );
     case 'form':
       return (
         <>
@@ -90,14 +106,58 @@ function Body({ kind }: { kind: SkeletonKind }) {
  * Khung chờ theo hình màn thật, dùng cho phiên đang khôi phục (AuthLoading) và loading.tsx của từng nhóm trang: nội dung hiện ra
  * không đổi bố cục. Chiều cao tối thiểu đủ cao để chân trang nằm dưới màn hình trong lúc chờ, không bị đẩy xuống khi nội dung về.
  */
-export function RouteSkeleton({ kind }: { kind?: SkeletonKind }) {
+export function RouteSkeleton({ kind, standalone = false }: { kind?: SkeletonKind; standalone?: boolean }) {
   const pathname = usePathname();
   const resolved = kind ?? skeletonKindFor(pathname);
+  // Điểm Xanh và Vườn Xanh dựng trong khung trang (đã có PageHeader), nên khối chờ dạng khối như Mini, không có thanh tiêu đề.
+  // `standalone` (loading.tsx, chưa có PageHeader) vẽ một dải cỡ PageHeader (đệm 12/16 + safe-top, một dòng title-lg, nền surface)
+  // rồi cách mt-4, để lúc trang về khối không nhảy lên và dải trắng không hiện thêm.
+  const blockKind = resolved === 'loyalty' || resolved === 'game';
+  const block = !standalone && blockKind;
+  if (standalone && blockKind) {
+    return (
+      <div role="status" aria-busy="true" className="flex min-h-[80vh] flex-col md:gap-3 md:py-4">
+        <span className="sr-only">Đang tải…</span>
+        <div
+          data-page-bleed=""
+          aria-hidden="true"
+          className="max-md:mx-[calc(50%-50vw)] max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-3 max-md:pt-[calc(12px+var(--safe-top))] md:hidden"
+        >
+          <div style={{ height: 'calc(var(--type-title-lg-size) * var(--type-title-lg-lh))' }} />
+        </div>
+        <div className="max-md:hidden">
+          <Skeleton width="45%" height={24} />
+        </div>
+        <div className="mt-4 flex flex-col gap-3 md:mt-0">
+          <Body kind={resolved} />
+        </div>
+      </div>
+    );
+  }
   return (
-    <div role="status" aria-busy="true" className="flex min-h-[80vh] flex-col gap-3 py-4">
+    <div role="status" aria-busy="true" className={`flex min-h-[80vh] flex-col gap-3 ${block ? '' : 'py-4'}`}>
       <span className="sr-only">Đang tải…</span>
-      <Skeleton width="45%" height={24} />
+      {!block && <Skeleton width="45%" height={24} />}
       <Body kind={resolved} />
+    </div>
+  );
+}
+
+/** Khung chờ chi tiết sản phẩm: ảnh vuông, tên, giá và nút mua; hiện ngay lúc bấm thẻ sản phẩm (xem PdpNavSkeleton). */
+export function ProductDetailSkeleton() {
+  return (
+    <div role="status" aria-busy="true" className="md:grid md:grid-cols-2 md:gap-8">
+      <span className="sr-only">Đang tải…</span>
+      <Skeleton height="auto" rounded="rounded-none" style={{ aspectRatio: '1 / 1' }} />
+      <div className="flex flex-col gap-3 bg-stone-0 p-4 md:bg-transparent md:p-0">
+        <div className="flex items-center max-md:h-11">
+          <Skeleton width={80} height={14} />
+        </div>
+        <Skeleton width="85%" height={22} />
+        <Skeleton width={140} height={26} />
+        <Skeleton width="60%" height={14} />
+        <Skeleton height={48} rounded="rounded-control" />
+      </div>
     </div>
   );
 }
