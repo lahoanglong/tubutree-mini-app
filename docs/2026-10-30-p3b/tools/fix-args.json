@@ -1,0 +1,35 @@
+{
+ "base": "2ca045580",
+ "packages": [
+  {
+   "key": "ctv-ref",
+   "title": "Ghi công CTV, CSP, comment E-43, trang CTV web 375",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-30-p3b/goi/ctv-ref.md",
+   "money": true,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 0
+  },
+  {
+   "key": "giaodien",
+   "title": "Chữ khách vãng lai/bị khoá, màn giới hạn tốc độ, a11y và comment quản trị",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-30-p3b/goi/giaodien.md",
+   "money": false,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 1
+  },
+  {
+   "key": "test-api",
+   "title": "Test Mini rớt ngẫu nhiên, log Zalo OA, tên test, /home/me",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-30-p3b/goi/test-api.md",
+   "money": false,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 2
+  }
+ ]
+}
