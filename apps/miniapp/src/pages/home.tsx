@@ -8,17 +8,22 @@ import { useAuthStore } from '../store/auth';
 import { useCategories } from '../hooks/use-categories';
 import { useHomeCustomerKind } from '../hooks/use-home-customer-kind';
 import { usePurchasedItems } from '../hooks/use-purchased-items';
-import { FlashSale, UpcomingFlashSales } from '../components/flash-sale';
 import { PullToRefresh } from '../components/pull-to-refresh';
-import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '../components/reorder/purchased-rail';
-import { BestSellerRail, BEST_SELLER_LIMIT } from '../components/home/best-seller-rail';
-import { BrandJourney } from '../components/home/brand-journey';
+import { BEST_SELLER_LIMIT, PURCHASED_RAIL_LIMIT } from '../components/home/home-limits';
+import {
+  HomeBestSellerRail,
+  HomeBrandJourney,
+  HomeCommunityPreview,
+  HomeFlashSale,
+  HomeNewCustomerGift,
+  HomePurchasedRail,
+  HomeSuggestFeed,
+  loadHomeBelow,
+  useHomeBelowReady,
+} from '../components/home/home-lazy';
 import { CategoryRow } from '../components/home/category-row';
-import { CommunityPreview } from '../components/home/community-preview';
 import { MemberCard, MemberCardSkeleton } from '../components/home/member-card';
-import { NewCustomerGift } from '../components/home/new-customer-gift';
 import { ShortcutGrid } from '../components/home/shortcut-grid';
-import { SuggestFeed } from '../components/home/suggest-feed';
 import { TodoStrip, useHomeTodoQueries } from '../components/home/todo-strip';
 import { HomeSettlingSkeleton } from '../components/home/home-settling';
 import { useHomeSettling } from '../components/home/use-home-settling';
@@ -41,6 +46,9 @@ import { haptic } from '../utils/haptic';
  * lại: dải "Quà khách mới" thay thẻ thành viên, không có Mua lại, Giờ vàng và Bán chạy đứng trước Danh mục. Thứ tự khối ở app-core (`homeBlockOrder`), dùng chung với web.
  * Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ (C-084), độc lập từng khối; kéo để làm mới vẫn dùng được.
  */
+// Chunk các khối dưới màn đầu tải song song với dữ liệu ngay khi mã trang chủ chạy, không đợi tới lúc render.
+void loadHomeBelow().catch(() => {});
+
 export default function HomePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -73,9 +81,10 @@ export default function HomePage() {
   const flash = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 });
   const upcoming = useQuery({ queryKey: ['flash-sales', 'upcoming'], queryFn: fetchUpcomingFlashSales, enabled: authed, staleTime: 30_000 });
   const todo = useHomeTodoQueries();
+  const belowReady = useHomeBelowReady();
   const settling = useHomeSettling(
     kind,
-    todo.loading || flash.isLoading || (authed && upcoming.isLoading) || categories.isLoading,
+    !belowReady || todo.loading || flash.isLoading || (authed && upcoming.isLoading) || categories.isLoading,
     sessionFailed,
   );
 
@@ -89,15 +98,12 @@ export default function HomePage() {
     member: kind === 'unknown' || (kind === 'returning' && restoring) ? <MemberCardSkeleton /> : kind === 'returning' ? <MemberCard /> : null,
     todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
-    welcome: kind === 'new' ? <NewCustomerGift /> : null,
+    welcome: kind === 'new' ? <HomeNewCustomerGift /> : null,
     shortcuts: <ShortcutGrid />,
     // Lỗi tải Mua lại (kể cả 404 của API cũ) đưa trang về bố cục khách mới, nơi khối này không có mặt, nên khối tự có trạng thái lỗi riêng ở PurchasedRail.
-    purchased: <PurchasedRail source="home_rail" restoring={restoring} />,
+    purchased: <HomePurchasedRail source="home_rail" restoring={restoring} />,
     flash: (
-      <>
-        <FlashSale />
-        <UpcomingFlashSales />
-      </>
+      <HomeFlashSale />
     ),
     categories: (
       <CategoryRow
@@ -110,10 +116,10 @@ export default function HomePage() {
         }}
       />
     ),
-    bestSellers: <BestSellerRail />,
-    journey: <BrandJourney />,
-    community: <CommunityPreview />,
-    suggest: <SuggestFeed />,
+    bestSellers: <HomeBestSellerRail />,
+    journey: <HomeBrandJourney />,
+    community: <HomeCommunityPreview />,
+    suggest: <HomeSuggestFeed />,
   };
 
   return (

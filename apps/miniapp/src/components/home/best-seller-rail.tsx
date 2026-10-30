@@ -9,8 +9,9 @@ import { ScrollRow } from '../ui/scroll-row';
 import { Heading, Text } from '../ui/text';
 import { useBlockQuery } from './use-block-query';
 import { HomeBlockError } from './home-block-error';
+import { BEST_SELLER_LIMIT } from './home-limits';
 
-export const BEST_SELLER_LIMIT = 6;
+export { BEST_SELLER_LIMIT };
 const TILE_WIDTH = 156;
 /** Thẻ hẹp hơn lưới 2 cột nên tên xuống dòng nhiều hơn: đo trên trình duyệt thật ở 375px, thẻ thật cao hơn khung chờ lưới ~20px. */
 const RAIL_TILE_EXTRA = 20;

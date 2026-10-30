@@ -1,5 +1,5 @@
 import { Flame } from 'lucide-react';
-import { missingDrops } from '@tubutree/app-core/game-newbie';
+import { missingDrops, gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { vi } from '../../i18n/vi';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
@@ -44,7 +44,7 @@ export function StreakRepair({
         {vi.game.streakRepair.body}
       </Text>
       <Button variant="flash" fullWidth loading={pending} disabled={pending} onPress={() => (short > 0 ? onNeedWater(short) : onRepair())} style={{ marginTop: 10 }}>
-        {short > 0 ? vi.game.newbie.short(short) : vi.game.streakRepair.cta(cost ?? 0)}
+        {short > 0 ? gameNewbieCopy.short(short) : vi.game.streakRepair.cta(cost ?? 0)}
       </Button>
     </div>
   );

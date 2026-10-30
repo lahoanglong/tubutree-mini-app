@@ -13,6 +13,7 @@ import { haptic } from '../../utils/haptic';
 import { SubscribeSheet } from '../subscribe-sheet';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../../utils/features';
 import { isEndpointMissing } from '../home/home-blocks';
+import { PURCHASED_RAIL_LIMIT } from '../home/home-limits';
 import { useBlockQuery } from '../home/use-block-query';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -39,7 +40,7 @@ const RAIL_PADDING_BOTTOM = 12;
 const NAME_MIN_HEIGHT = 44;
 const ACTION_STYLE = { flex: '1 1 0', minWidth: 0, paddingInline: 12 } as const;
 
-export const PURCHASED_RAIL_LIMIT = 10;
+export { PURCHASED_RAIL_LIMIT };
 
 export function toTileProduct(p: PurchasedItem): ProductTileProduct {
   return {

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { vi } from '../../i18n/vi';
 import { formatNumber } from '../../utils/format';
 import { Text } from '../ui/text';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
-const t = vi.game.newbie.hero;
+const t = gameNewbieCopy.hero;
 
 /**
  * Số giọt nước hiện to ở đầu trang. Khi số đổi (tưới trừ, điểm danh cộng) nó nảy lên và hiện số chênh bay lên một nhịp ngắn;

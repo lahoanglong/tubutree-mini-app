@@ -95,6 +95,7 @@ vi.mock('../services/account-api', () => ({
 
 import GamePage from './game';
 import { vi as viText } from '../i18n/vi';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
 const HOUR = 3600 * 1000;
 const todayIso = () => new Date().toISOString();
@@ -191,7 +192,7 @@ describe('GamePage — trạng thái trang', () => {
   it('chưa đăng nhập: hiện cổng đăng nhập, bấm gọi login(), không tải hồ sơ/nhiệm vụ', async () => {
     mocks.auth.status = 'unauthenticated';
     renderPage();
-    expect(screen.getByText(viText.game.newbie.loginToView)).toBeInTheDocument();
+    expect(screen.getByText(gameNewbieCopy.loginToView)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: viText.auth.loginCta }));
     expect(mocks.login).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button', { name: /Nhận nước hôm nay/ })).not.toBeInTheDocument();
@@ -506,18 +507,18 @@ describe('GamePage — hồi sinh chuỗi và cảnh báo cây', () => {
   it('cây héo/chết hiện đúng cảnh báo; khoẻ thì không có', async () => {
     const view = renderPage();
     await screen.findByText('Sồi');
-    expect(screen.queryByText(viText.game.newbie.treeWilted)).not.toBeInTheDocument();
+    expect(screen.queryByText(gameNewbieCopy.treeWilted)).not.toBeInTheDocument();
     view.unmount();
 
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, treeHealth: 'WILTED' });
     const wilted = renderPage();
-    expect(await screen.findByText(viText.game.newbie.treeWilted)).toBeInTheDocument();
+    expect(await screen.findByText(gameNewbieCopy.treeWilted)).toBeInTheDocument();
     wilted.unmount();
 
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, treeHealth: 'DEAD' });
     renderPage();
     // Hồ sơ cũ còn DEAD: hiện như héo, không nói chuyện mất tiến độ.
-    expect(await screen.findByText(viText.game.newbie.treeWilted)).toBeInTheDocument();
+    expect(await screen.findByText(gameNewbieCopy.treeWilted)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('trồng cây mới từ đầu');
   });
 });
@@ -682,7 +683,7 @@ describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () =
   it('chú thích dưới nút góp quỹ nói rõ điểm không hết hạn chỉ bị dùng khi điểm thường không đủ (PD-3, OQ-5)', async () => {
     renderPage();
     await openTab('Vườn');
-    expect(await screen.findByText(viText.game.newbie.fund.line)).toBeInTheDocument();
+    expect(await screen.findByText(gameNewbieCopy.fund.line)).toBeInTheDocument();
   });
 
   it('hồ sơ không có giá cây: nút "Góp quỹ trồng cây" không kèm giá', async () => {
@@ -823,7 +824,7 @@ describe('GamePage — Chặng Mùa (Season Pass) đã ẩn (C-044, Q-16)', () =
   it('chưa đăng nhập cũng không gọi API season-pass', async () => {
     mocks.auth.status = 'unauthenticated';
     renderPage();
-    await screen.findByText(viText.game.newbie.loginToView);
+    await screen.findByText(gameNewbieCopy.loginToView);
     expect(mocks.api.fetchSeasonPass).not.toHaveBeenCalled();
   });
 });

@@ -62,7 +62,7 @@ vi.mock('../services/game-api', () => mocks.api);
 vi.mock('../services/account-api', () => ({ getLoyalty: () => mocks.getLoyalty(), getDailyCheckInStatus: () => mocks.getDailyCheckInStatus() }));
 
 import GamePage from './game';
-import { vi as viText } from '../i18n/vi';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
 const todayIso = () => new Date().toISOString();
 const yesterdayIso = () => new Date(Date.now() - 24 * 3600 * 1000).toISOString();
@@ -525,6 +525,6 @@ describe('Vườn Xanh người mới — chữ không còn hứa mất tiến �
   });
 
   it('cổng đăng nhập riêng cho game', () => {
-    expect(viText.game.newbie.loginToView).toBe('Đăng nhập để trồng cây, nhận nước và quà');
+    expect(gameNewbieCopy.loginToView).toBe('Đăng nhập để trồng cây, nhận nước và quà');
   });
 });

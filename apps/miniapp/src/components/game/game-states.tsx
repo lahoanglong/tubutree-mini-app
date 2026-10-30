@@ -1,6 +1,7 @@
 import { Skeleton } from '../ui/skeleton';
 import { EmptyState } from '../ui/empty-state';
 import { vi } from '../../i18n/vi';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
 export function GameSkeleton() {
   return (
@@ -14,5 +15,5 @@ export function GameSkeleton() {
 }
 
 export function GameLoginGate({ onLogin }: { onLogin: () => void }) {
-  return <EmptyState art="sprout" heading={vi.game.newbie.loginToView} ctaLabel={vi.auth.loginCta} onCta={onLogin} />;
+  return <EmptyState art="sprout" heading={gameNewbieCopy.loginToView} ctaLabel={vi.auth.loginCta} onCta={onLogin} />;
 }
