@@ -26,9 +26,15 @@ export interface OwnedBrand {
   promotions: OwnedPromotion[];
 }
 
-/** null = API cũ chưa có cờ → người gọi giữ cách cũ (hỏi /brand/owner/me). Không trả undefined vì react-query cấm. */
-export const getOwnsBrand = () =>
-  api.get('/auth/me').then((r) => (r.data as Partial<Pick<AuthMeResponse, 'ownsBrand'>>).ownsBrand ?? null);
+/**
+ * Cờ nhẹ trên /auth/me, một lần gọi. ownsBrand null = API cũ chưa có cờ → người gọi giữ cách cũ (hỏi /brand/owner/me), không trả undefined
+ * vì react-query cấm. hasDeskPoint thiếu (API cũ) là false.
+ */
+export const getAuthMeFlags = () =>
+  api.get('/auth/me').then((r) => {
+    const me = r.data as Partial<Pick<AuthMeResponse, 'ownsBrand' | 'hasDeskPoint'>>;
+    return { ownsBrand: me.ownsBrand ?? null, hasDeskPoint: me.hasDeskPoint === true };
+  });
 export const getOwnedBrand = () => api.get('/brand/owner/me').then((r) => (r.data || null) as OwnedBrand | null);
 export const updateOwnedBrand = (dto: Partial<Pick<OwnedBrand, 'logoUrl' | 'coverUrl' | 'tagline' | 'story' | 'origin'>>) =>
   api.patch('/brand/owner/me', dto).then((r) => r.data as OwnedBrand);
