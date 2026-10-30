@@ -107,8 +107,9 @@ export function CustomerRefundsPendingBadge() {
  * - tiền về sau khi đơn đã huỷ/hết hạn (D2), chờ khách chọn nơi nhận hoặc admin nhập tài khoản khách cung cấp.
  * Khoản của khách có tài khoản: admin bấm "Bắt đầu chuyển khoản" (khoá nơi nhận, khách không rút về Ví được nữa) TRƯỚC khi
  * chuyển tiền bên ngoài, rồi xác nhận kèm mã giao dịch để sổ khớp. Màn này chỉ ghi sổ, không chuyển tiền thật.
+ *
+ * `phoneMasked`: máy chủ che SĐT (nhân viên không có CSKH/KHO, cùng luật seesFullOrderPhones) nên ô tìm chỉ khớp đủ 10 số.
  */
-/** `phoneMasked`: máy chủ che SĐT (nhân viên không có CSKH/KHO, cùng luật seesFullOrderPhones) nên ô tìm chỉ khớp đủ 10 số. */
 export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmin }: { meId?: string; isAdmin?: boolean; phoneMasked?: boolean } = {}) {
   const [filter, setFilter] = useState<AdminCustomerRefundFilter>('OPEN');
   const [kind, setKind] = useState<AdminCustomerRefundKind | ''>('');

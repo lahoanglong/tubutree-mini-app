@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { DealerPaymentPanel, canConfirmDealerPayment } from './dealer-payment-panel';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
-import type { AdminOrder } from '@/lib/admin-client';
+import { getOpsInbox, OPS_INBOX_QUERY_KEY, type AdminOrder } from '@/lib/admin-client';
 
 /** Ô nhập theo chữ nhãn hiện của Field (tên truy cập lấy từ nhãn, không còn aria-label riêng). */
 const field = (root: ParentNode, label: string) =>
@@ -155,6 +156,33 @@ describe('DealerPaymentPanel (chi tiết đơn admin)', () => {
     release();
     await flush();
     expect(container.querySelector('[role="status"]')?.textContent).toBe('Đã xác nhận thanh toán đơn TB-200.');
+  });
+
+  it('xác nhận tiền xong thì số trên thẻ hộp việc tải lại ngay, không chờ vòng 60 giây', async () => {
+    const InboxProbe = () => {
+      useQuery({ queryKey: OPS_INBOX_QUERY_KEY, queryFn: getOpsInbox, refetchInterval: 60_000 });
+      return null;
+    };
+    const api = mockFetch({
+      '/admin/ops/inbox': { body: { generatedAt: '2026-10-28T03:00:00.000Z', items: [] } },
+      '/confirm-payment': { body: OK_BODY },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(
+      <>
+        <InboxProbe />
+        <DealerPaymentPanel order={dealerOrder()} />
+      </>,
+    );
+    await flush();
+    const inboxCalls = () => api.calls.filter((c) => c.url.includes('/admin/ops/inbox')).length;
+    expect(inboxCalls()).toBe(1);
+    click(byText(container, 'button', 'Xác nhận đã nhận chuyển khoản'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.calls.some((c) => c.url.includes('/confirm-payment'))).toBe(true);
+    expect(inboxCalls()).toBe(2);
   });
 
   it('API báo đơn đã được ghi nhận thanh toán từ trước (alreadyPaid) → hiện đúng message đó', async () => {

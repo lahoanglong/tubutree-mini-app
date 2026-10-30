@@ -135,6 +135,28 @@ describe('AdminNav — gom nhóm, gập mở, tìm mục', () => {
     expect(items(c)).toEqual(['Đơn hàng', 'Cấu hình']);
   });
 
+  it('mục có mặt ở hai nhóm (lối tắt "Hay dùng" và nhóm gốc): chỉ một mục sáng, nhóm gập không hiện thêm bản lặp của mục đang xem', () => {
+    const dup: NavGroup<K>[] = [
+      { label: 'Hay dùng', quick: true, items: [{ k: 'orders', label: 'Đơn hàng' }, { k: 'reviews', label: 'Đánh giá' }] },
+      { label: 'Bán hàng', items: [{ k: 'orders', label: 'Đơn hàng' }, { k: 'config', label: 'Cấu hình' }] },
+    ];
+    window.localStorage.setItem('tubu_admin_nav_open', JSON.stringify(['Hay dùng', 'Bán hàng']));
+    const r = render(<AdminNav groups={dup} active="orders" onSelect={() => {}} />);
+    mounted.push(r);
+    const lit = r.container.querySelectorAll('nav [aria-current="page"]');
+    expect(lit).toHaveLength(1);
+    expect(lit[0]!.closest('[role="group"]')!.getAttribute('aria-label')).toBe('Hay dùng');
+    expect(lit[0]!.className).toContain('bg-forest-100');
+    const second = r.container.querySelector('nav [role="group"][aria-label="Bán hàng"]')!;
+    expect(second.querySelector('[aria-current]')).toBeNull();
+    expect(second.querySelector('button:not([aria-expanded])')!.className).not.toContain('bg-forest-100');
+
+    click(second.querySelector('button[aria-expanded]')!);
+    click(r.container.querySelector('nav [role="group"][aria-label="Hay dùng"] button[aria-expanded]')!);
+    expect(r.container.querySelectorAll('nav [aria-current="page"]')).toHaveLength(1);
+    expect([...r.container.querySelectorAll('nav button:not([aria-expanded])')].map((b) => b.textContent)).toEqual(['Đơn hàng']);
+  });
+
   it('bấm tên nhóm thì mở ra, bấm lại thì gập, và nhớ trong trình duyệt', () => {
     const c = mount('orders');
     click(heads(c)[1]!);
