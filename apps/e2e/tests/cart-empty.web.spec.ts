@@ -2,7 +2,8 @@ import { expect, test } from './support/mock-api';
 
 /**
  * Web khách khổ điện thoại: giỏ trống phải như Mini App (apps/miniapp/src/pages/cart.tsx). Số đo ở 375px lấy từ Mini App:
- * minh hoạ cách đỉnh khung 93,9px, kệ "Có thể bạn thích" tràn hết bề ngang, tiêu đề kệ cách lề 16px.
+ * minh hoạ cách đỉnh khung 93,9px, lời mời 205,9px, nút 287,9px, kệ "Có thể bạn thích" tràn hết bề ngang từ 375,9px, tiêu đề kệ cách lề 16px
+ * và cách đỉnh kệ 16px.
  */
 
 const product = (n: number) => ({
@@ -46,7 +47,12 @@ test('giỏ trống ở 375px: kệ gợi ý sát lề 16px như Mini App', asyn
   const section = await box(rail);
   expect(section.x).toBeCloseTo(0, 0);
   expect(section.width).toBeCloseTo(375, 0);
-  expect((await box(rail.getByRole('heading', { name: 'Có thể bạn thích' }))).x).toBeCloseTo(16, 0);
+  expect(section.y).toBeCloseTo(375.9, 0);
+  const heading = await box(rail.getByRole('heading', { name: 'Có thể bạn thích' }));
+  expect(heading.x).toBeCloseTo(16, 0);
+  expect(heading.y).toBeCloseTo(391.9, 0);
+  expect((await box(page.getByText('Giỏ còn trống đấy'))).y).toBeCloseTo(205.9, 0);
+  expect((await box(page.getByRole('button', { name: 'Khám phá ngay' }))).y).toBeCloseTo(287.9, 0);
   const art = await box(page.getByText('Giỏ còn trống đấy').locator('xpath=..').locator('svg').first());
   expect(art.y).toBeCloseTo(93.9, 0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(375);
