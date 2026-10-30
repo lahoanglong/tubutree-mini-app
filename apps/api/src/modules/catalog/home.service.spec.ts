@@ -28,7 +28,11 @@ function setup() {
     ...Object.entries(orders).map(([key, n]) => ({ kind: 'order', key, n })),
     { kind: 'waste', key: 'open', n: wasteOpen },
   ];
-  const prisma = { $queryRaw: jest.fn().mockResolvedValue(factRows()), membershipTier: { findMany: jest.fn().mockResolvedValue([]) } };
+  const prisma = {
+    $queryRaw: jest.fn().mockResolvedValue(factRows()),
+    membershipTier: { findMany: jest.fn().mockResolvedValue([]) },
+    wasteRequest: { count: jest.fn().mockResolvedValue(2) },
+  };
   const svc = new HomeService(
     catalog as never, flashSale as never, orders as never, purchased as never, subs as never, notifications as never, config as never, loyalty as never,
     prisma as never,
@@ -162,14 +166,38 @@ describe('HomeService.getForUser — yêu cầu đổi rác đang mở', () => {
     expect(sql.values).toEqual(['u1', 'u1', 'OPEN', 'IN_TRANSIT', 'RECEIVED']);
   });
 
-  it('đếm lỗi thì các khối dùng số đếm null, các khối khác vẫn trả', async () => {
-    const { svc, prisma } = setup();
+  it('câu đếm lỗi: các khối rơi về đường gọi thẳng từng dịch vụ như trước, không khối nào thành null', async () => {
+    const { svc, prisma, catalog, purchased, orders, loyalty } = setup();
     prisma.$queryRaw.mockRejectedValue(new Error('boom'));
-    const r = await svc.getForUser('u1');
-    expect(r.wasteOpenRequestCount).toBeNull();
-    expect(r.activeOrderCount).toBeNull();
-    expect(r.forYou).toBeNull();
+    const r = await svc.getForUser('u1', 10);
+    expect(r.wasteOpenRequestCount).toBe(2);
+    expect(prisma.wasteRequest.count).toHaveBeenCalledWith({ where: { userId: 'u1', status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] } } });
+    expect(r.activeOrderCount).toEqual({ count: 2 });
+    expect(orders.activeCount).toHaveBeenCalledWith('u1');
+    expect(r.forYou).toEqual([{ id: 'fy' }]);
+    expect(catalog.getForYou).toHaveBeenCalledWith('u1');
+    expect(purchased.list).toHaveBeenCalledWith('u1', { limit: 10 });
+    expect(orders.list).toHaveBeenCalledWith('u1', { status: 'SHIPPING' }, 1, 1);
+    expect(r.shippingOrders).toEqual(page(['o1']));
+    expect(loyalty.getNewCustomerOffer).toHaveBeenCalledWith('u1');
     expect(r.notifications).toEqual([{ id: 'n1' }]);
+  });
+
+  it('câu đếm treo: quá hạn riêng (ngắn) rồi rơi về đường cũ, các khối còn nguyên ngân sách thời gian của mình', async () => {
+    jest.useFakeTimers();
+    try {
+      const { svc, prisma, catalog } = setup();
+      prisma.$queryRaw.mockReturnValue(new Promise(() => undefined));
+      const pending = svc.getForUser('u1');
+      await jest.advanceTimersByTimeAsync(1_100);
+      expect(catalog.getForYou).toHaveBeenCalledWith('u1');
+      const r = await pending;
+      expect(r.forYou).toEqual([{ id: 'fy' }]);
+      expect(r.activeOrderCount).toEqual({ count: 2 });
+      expect(r.wasteOpenRequestCount).toBe(2);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 
