@@ -27,6 +27,7 @@ describe('CtvShortcuts', () => {
     expect(buttons).toHaveLength(2);
     expect(buttons[0]!.getAttribute('aria-label')).toContain('Chia sẻ');
     expect(buttons[0]!.className).toContain('min-h-11');
+    expect(buttons[0]!.className).toContain('max-md:text-[length:var(--type-caption-size)]');
     click(buttons[0]!);
     expect(share).toHaveBeenCalledTimes(1);
     expect(buttons[1]!.disabled).toBe(true);

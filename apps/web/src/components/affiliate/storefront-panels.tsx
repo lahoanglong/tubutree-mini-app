@@ -8,7 +8,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
-import { phoneFlatCard } from '@/lib/phone-ui';
+import { phoneFlatCard, phoneSectionTitle } from '@/lib/phone-ui';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { questPercent, statsRows } from './storefront-rules';
@@ -34,7 +34,7 @@ export function StatsSection() {
     <section aria-label="Thống kê 30 ngày" className={`${ui.card} ${phoneFlatCard} p-4`}>
       <div className="mb-2.5 flex items-center gap-1.5">
         <TrendingUp className="h-5 w-5 text-forest-700" aria-hidden="true" />
-        <h2 className={ui.sectionTitle}>Thống kê 30 ngày</h2>
+        <h2 className={`${ui.sectionTitle} ${phoneSectionTitle}`}>Thống kê 30 ngày</h2>
       </div>
       <div className="mb-3 flex gap-2">
         <StatBox value={String(data.orders30d)} label="Đơn 30 ngày" />
@@ -71,7 +71,7 @@ export function QuestSection({ data, onNotice }: { data: QuestList; onNotice: No
       <div className="mb-1 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <Target className="h-5 w-5 text-forest-700" aria-hidden="true" />
-          <h2 className={ui.sectionTitle}>Hành trình gian hàng</h2>
+          <h2 className={`${ui.sectionTitle} ${phoneSectionTitle}`}>Hành trình gian hàng</h2>
         </div>
         <span className="text-xs text-stone-600">
           {data.level}/{data.levelMax}

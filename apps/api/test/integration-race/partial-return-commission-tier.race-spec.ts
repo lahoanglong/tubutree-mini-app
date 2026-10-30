@@ -230,6 +230,21 @@ describe('Trả một phần: hoa hồng CTV / doanh số mốc và hạng thàn
       expect(await commissionOf(o.order.id)).toMatchObject({ status: 'APPROVED', amount: 5_708, commissionableTotal: 80_833 });
     });
 
+    it('hoa hồng đã duyệt rồi mới trả một phần: trả món không hoa hồng không báo kế toán, trả món có hoa hồng thì báo, hoa hồng không đổi', async () => {
+      const o = await ctvOrder();
+      await approve(o.order.id);
+      expect(await commissionOf(o.order.id)).toMatchObject({ status: 'APPROVED', amount: 14_750 });
+      const accountingAlerts = () => notify.mock.calls.filter((c) => c[1] === 'OPS_REFUND_ALERT' && c[2]?.order_code === o.order.code);
+
+      await partialReturn(o.admin.id, o.buyer.id, o.order.code, [{ orderItemId: o.c.id, quantity: 1 }]);
+      expect(accountingAlerts()).toHaveLength(0);
+
+      await partialReturn(o.admin.id, o.buyer.id, o.order.code, [{ orderItemId: o.a.id, quantity: 1 }]);
+      expect(accountingAlerts().length).toBeGreaterThan(0);
+      expect(accountingAlerts()[0]![2].message).toContain('đơn trả một phần');
+      expect(await commissionOf(o.order.id)).toMatchObject({ status: 'APPROVED', amount: 14_750 });
+    });
+
     it('hai admin duyệt cùng một yêu cầu cùng lúc: hoa hồng và nền chỉ giảm một lần', async () => {
       const o = await ctvOrder();
       const second = await createUser(prisma, { role: 'ADMIN' });

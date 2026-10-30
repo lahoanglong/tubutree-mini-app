@@ -19,3 +19,14 @@ export function paidLineTotals<T extends { total: number; paidTotal?: number | n
   if (paidGoods >= gross) return items.map((i) => i.total);
   return items.map((i) => Math.floor((i.total * paidGoods) / gross));
 }
+
+/**
+ * Hoa hồng đã chi có phần của một trong các dòng bị trả không. `lineAmounts` ghi hoa hồng từng dòng lúc đặt (dòng mức % bằng 0
+ * hoặc hoa hồng làm tròn về 0 thì không có phần); hoa hồng cũ chưa lưu thì không biết dòng nào có hoa hồng, coi là có để kế
+ * toán không sót.
+ */
+export function commissionCoversLines(lineAmounts: unknown, lines: { orderItemId: string; quantity: number }[]): boolean {
+  if (!lineAmounts || typeof lineAmounts !== 'object' || Array.isArray(lineAmounts)) return true;
+  const stored = lineAmounts as Record<string, unknown>;
+  return lines.some((l) => l.quantity > 0 && Number(stored[l.orderItemId]) > 0);
+}
