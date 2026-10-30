@@ -44,6 +44,7 @@ import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
+import { useLoginWithNotice } from '../hooks/use-login-notice';
 import { serverNow } from '../utils/server-clock';
 import { cardPricing, defaultVariationFor, isFlashRunning, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
@@ -107,6 +108,7 @@ export default function ProductDetailPage() {
   const shareWithFallback = useShareWithFallback();
   const queryClient = useQueryClient();
   const { status, login, user } = useAuthStore();
+  const loginWithNotice = useLoginWithNotice();
   // Voucher khả dụng (endpoint /me/coupons đã lọc active + scope-eligible + chưa hết lượt; mã chỉ áp cho vài sản phẩm
   // kèm `products` và chỉ hiện trên trang của đúng sản phẩm đó). Để user KHÁM PHÁ ưu đãi ngay ở PDP.
   const couponsQ = useQuery({
@@ -874,7 +876,7 @@ export default function ProductDetailPage() {
             icon={MessageCircle}
             onPress={() => {
               haptic('light');
-              void login();
+              void loginWithNotice();
             }}
             style={{ marginTop: 12, minWidth: 0 }}
           >
