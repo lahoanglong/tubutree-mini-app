@@ -3,11 +3,11 @@
 import { usePathname } from 'next/navigation';
 import { LineItemSkeleton, ProductGridSkeleton, Skeleton } from '@/components/ui/skeleton';
 
-export type SkeletonKind = 'hub' | 'balance' | 'form' | 'list';
+export type SkeletonKind = 'hub' | 'balance' | 'form' | 'list' | 'loyalty' | 'game';
 
 /** Đường dẫn đứng trước → khung chờ; khớp theo tiền tố dài nhất. Đường dẫn không có trong bảng dùng khung danh sách. */
 const KIND_BY_PREFIX: [string, SkeletonKind][] = [
-  ['/tai-khoan/diem-xanh', 'balance'],
+  ['/tai-khoan/diem-xanh', 'loyalty'],
   ['/tai-khoan/vi-tubu', 'balance'],
   ['/tai-khoan/ho-so', 'form'],
   ['/tai-khoan/cai-dat', 'form'],
@@ -19,7 +19,7 @@ const KIND_BY_PREFIX: [string, SkeletonKind][] = [
   ['/thanh-toan', 'form'],
   ['/gio-hang', 'list'],
   ['/uu-dai', 'balance'],
-  ['/vuon-xanh', 'balance'],
+  ['/vuon-xanh', 'game'],
   ['/kho-qua', 'balance'],
   ['/dai-ly', 'balance'],
   ['/hoan-tien', 'form'],
@@ -63,6 +63,22 @@ function Body({ kind }: { kind: SkeletonKind }) {
           <LineItemSkeleton />
         </>
       );
+    case 'loyalty':
+      return (
+        <>
+          <Skeleton height={180} rounded="rounded-card" />
+          <Skeleton height={80} rounded="rounded-card" />
+        </>
+      );
+    case 'game':
+      return (
+        <>
+          <Skeleton height={160} rounded="rounded-card" />
+          <Skeleton height={44} />
+          <Skeleton height={56} rounded="rounded-card" />
+          <Skeleton height={140} rounded="rounded-card" />
+        </>
+      );
     case 'form':
       return (
         <>
@@ -93,11 +109,29 @@ function Body({ kind }: { kind: SkeletonKind }) {
 export function RouteSkeleton({ kind }: { kind?: SkeletonKind }) {
   const pathname = usePathname();
   const resolved = kind ?? skeletonKindFor(pathname);
+  // Điểm Xanh và Vườn Xanh: tiêu đề đã có sẵn ở khung trang, khối chờ dạng khối như Mini và nối thẳng vào khung chờ riêng của trang.
+  const block = resolved === 'loyalty' || resolved === 'game';
   return (
-    <div role="status" aria-busy="true" className="flex min-h-[80vh] flex-col gap-3 py-4">
+    <div role="status" aria-busy="true" className={`flex min-h-[80vh] flex-col gap-3 ${block ? '' : 'py-4'}`}>
       <span className="sr-only">Đang tải…</span>
-      <Skeleton width="45%" height={24} />
+      {!block && <Skeleton width="45%" height={24} />}
       <Body kind={resolved} />
+    </div>
+  );
+}
+
+/** Khung chờ chi tiết sản phẩm: ảnh vuông, tên, giá và nút mua; hiện ngay lúc bấm thẻ sản phẩm (xem PdpNavSkeleton). */
+export function ProductDetailSkeleton() {
+  return (
+    <div role="status" aria-busy="true" className="md:grid md:grid-cols-2 md:gap-8">
+      <span className="sr-only">Đang tải…</span>
+      <Skeleton height="auto" rounded="rounded-none" style={{ aspectRatio: '1 / 1' }} />
+      <div className="flex flex-col gap-3 bg-stone-0 p-4 max-md:min-h-[40vh] md:bg-transparent md:p-0">
+        <Skeleton width="85%" height={22} />
+        <Skeleton width={140} height={26} />
+        <Skeleton width="60%" height={14} />
+        <Skeleton height={48} rounded="rounded-control" />
+      </div>
     </div>
   );
 }

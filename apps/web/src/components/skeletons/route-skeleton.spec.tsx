@@ -4,7 +4,9 @@ import { skeletonKindFor } from './route-skeleton';
 describe('skeletonKindFor (R-76)', () => {
   it('chọn khung chờ theo trang đang mở, tiền tố dài nhất thắng', () => {
     expect(skeletonKindFor('/tai-khoan')).toBe('hub');
-    expect(skeletonKindFor('/tai-khoan/diem-xanh')).toBe('balance');
+    expect(skeletonKindFor('/tai-khoan/diem-xanh')).toBe('loyalty');
+    expect(skeletonKindFor('/vuon-xanh')).toBe('game');
+    expect(skeletonKindFor('/tai-khoan/vi-tubu')).toBe('balance');
     expect(skeletonKindFor('/tai-khoan/don-hang/TUBU123')).toBe('list');
     expect(skeletonKindFor('/tai-khoan/ho-so')).toBe('form');
     expect(skeletonKindFor('/thanh-toan/chuyen-khoan/TUBU1')).toBe('form');
