@@ -34,6 +34,7 @@ import { ResultHeader } from './result-header';
 import { SortChips } from './sort-chips';
 import { SuggestList } from './suggest-list';
 import { loadErrorText } from '@/lib/error-text';
+import { announcePdpNavigation } from '@/components/skeletons/pdp-nav-event';
 
 
 /** Danh sách đã tải phía server cho đúng URL ban đầu: hiện ngay (và cho crawler) rồi React Query tiếp quản. */
@@ -137,7 +138,9 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   };
   const pickSuggestion = (p: ProductSuggestion) => {
     stopEditing();
-    router.push(`/san-pham/${encodeURIComponent(p.slug)}`);
+    const href = `/san-pham/${encodeURIComponent(p.slug)}`;
+    announcePdpNavigation(href);
+    router.push(href);
   };
   const applyFilters = (d: FilterDraft) => {
     setFiltersOpen(false);

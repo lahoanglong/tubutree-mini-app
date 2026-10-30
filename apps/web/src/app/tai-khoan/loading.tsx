@@ -4,7 +4,7 @@ import { PAGE_WIDE } from '@/lib/page-frame';
 export default function Loading() {
   return (
     <main className={PAGE_WIDE}>
-      <RouteSkeleton />
+      <RouteSkeleton standalone />
     </main>
   );
 }

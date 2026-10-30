@@ -6,6 +6,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RouteShell, SilentBoundary } from './route-shell';
 import { vi as copy } from '../i18n/vi';
 
+vi.mock('zmp-ui', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  Page: ({ children }: { children: React.ReactNode }) => <div data-testid="page">{children}</div>,
+  useNavigate: () => vi.fn(),
+}));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../services/shop-api', () => ({ fetchSupportContact: vi.fn().mockResolvedValue({ hotline: '0900000000' }) }));
 
@@ -40,6 +45,21 @@ describe('RouteShell (R-84, R-79)', () => {
     wrap(<RouteShell skeleton="grid"><Lazy /></RouteShell>);
     expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true');
     expect(await screen.findByText('Xong')).toBeInTheDocument();
+  });
+
+  it('Đổi rác đang tải mã: vẽ đúng khung trang (dải tiêu đề + 3 khối 140/80/80), không phải khung danh sách (R-54)', () => {
+    const Never = lazy(() => new Promise<{ default: () => JSX.Element }>(() => undefined));
+    const { container, unmount } = wrap(<RouteShell skeleton="recycle"><Never /></RouteShell>);
+    const heights = Array.from(container.querySelectorAll<HTMLElement>('[style*="height"]')).map((el) => el.style.height);
+    expect(heights.filter((h) => h === '140px' || h === '80px')).toEqual(['140px', '80px', '80px']);
+    const strip = container.querySelector<HTMLElement>('[role="status"] > div') as HTMLElement;
+    expect(strip.getAttribute('style')).toContain('calc(24px + var(--safe-top) + var(--type-title-lg-size) * var(--type-title-lg-lh))');
+    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', copy.common.loading);
+    unmount();
+    const list = wrap(<RouteShell><Never /></RouteShell>);
+    expect(list.container.querySelectorAll('[style*="140px"]').length).toBe(0);
+    list.unmount();
   });
 
   it('lỗi tải mã màn (mạng yếu): Thử lại tải lại app vì React.lazy giữ lời hứa đã lỗi', () => {
