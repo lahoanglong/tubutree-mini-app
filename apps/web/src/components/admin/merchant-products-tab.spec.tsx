@@ -772,6 +772,8 @@ describe('MerchantProductsTab — hai admin cùng duyệt một sản phẩm (R5
       expect(scroll).toHaveBeenCalledTimes(1);
       expect(scroll.mock.contexts[0]).toBe(section);
       expect(document.activeElement).toBe(section);
+      expect(section!.classList.contains('scroll-mt-20')).toBe(true);
+      expect(section!.classList.contains('lg:scroll-mt-4')).toBe(true);
     } finally {
       delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
     }

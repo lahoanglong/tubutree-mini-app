@@ -349,6 +349,10 @@ describe('ExternalClaimsTab', () => {
       await flush();
       expect(lastClaimsUrl(m)).toContain('state=REVIEW');
       expect(scroll).toHaveBeenCalled();
+      // Thanh "Đổi mục" dính ở đầu trang dưới khổ lg cao khoảng 61px: khối được cuộn tới phải chừa chỗ.
+      const target = scroll.mock.contexts[0] as HTMLElement;
+      expect(target.classList.contains('scroll-mt-20')).toBe(true);
+      expect(target.classList.contains('lg:scroll-mt-4')).toBe(true);
     });
   });
 

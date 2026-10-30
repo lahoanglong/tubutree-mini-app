@@ -64,6 +64,15 @@ describe('AccountDeletionPanel (C-016)', () => {
     expect(container.querySelector('[role="tab"][aria-selected="true"]')!.textContent).toBe('Chờ xử lý');
   });
 
+  it('khối được cuộn tới chừa chỗ cho thanh "Đổi mục" dính ở đầu trang dưới khổ lg, để tiêu đề không nằm dưới thanh', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/account-deletion-requests': { body: [req()] } }).fn));
+    const { container } = mount(<AccountDeletionPanel seed={1} />);
+    await flush();
+    const classes = container.querySelector('#account-deletions')!.classList;
+    expect(classes.contains('scroll-mt-20')).toBe(true);
+    expect(classes.contains('lg:scroll-mt-4')).toBe(true);
+  });
+
   it('khách đã đồng ý bỏ số dư Ví: admin thấy số tiền và thời điểm đồng ý', async () => {
     const api = mockFetch({
       '/admin/account-deletion-requests': { body: [req({ walletForfeitAmount: 42000, walletForfeitConsentAt: '2026-10-25T03:00:00.000Z' })] },
