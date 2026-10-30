@@ -107,17 +107,25 @@ describe('PdpNavSkeleton (R-83)', () => {
     expect(el.querySelectorAll('[data-skeleton]').length).toBe(6);
   });
 
-  it('có nút quay lại 44px: bấm thì ẩn khung và lùi một trang; không có hai thẻ main', () => {
-    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+  it('có nút quay lại 44px; không có hai thẻ main', () => {
     mounted = render(ui());
     click(link('Mật ong'));
     const el = document.querySelector('[data-testid="pdp-nav-skeleton"]') as HTMLElement;
     expect(el.querySelector('main')).toBeNull();
-    const btn = el.querySelector('button[aria-label="Quay lại"]') as HTMLElement;
-    expect(btn.className).toContain('h-11');
-    click(btn);
-    expect(back).toHaveBeenCalledTimes(1);
+    expect(el.querySelector('button[aria-label="Quay lại"]')?.className).toContain('h-11');
+  });
+
+  it('bấm Quay lại: ẩn khung và tải lại trang hiện tại (huỷ điều hướng đang chờ), không lùi lịch sử', () => {
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...window.location, reload });
+    mounted = render(ui());
+    click(link('Mật ong'));
+    click(document.querySelector('[data-testid="pdp-nav-skeleton"] button[aria-label="Quay lại"]') as HTMLElement);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(back).not.toHaveBeenCalled();
     expect(hasSkeleton()).toBe(false);
+    vi.unstubAllGlobals();
     back.mockRestore();
   });
 

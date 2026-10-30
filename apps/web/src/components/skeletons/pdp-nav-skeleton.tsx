@@ -65,8 +65,10 @@ export function PdpNavSkeleton() {
         type="button"
         aria-label="Quay lại"
         onClick={() => {
+          // Next chưa đẩy mục lịch sử mới (back() lùi quá một trang, khách vào từ link Zalo rời site) và không có cách huỷ điều hướng
+          // đang chờ: router.replace về chính trang này bị xếp sau, rồi trang SP về vẫn hiện dưới URL cũ. Tải lại trang hiện tại là cách duy nhất ở lại.
           setTarget(null);
-          window.history.back();
+          window.location.reload();
         }}
         className="absolute left-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] shadow md:hidden"
       >
