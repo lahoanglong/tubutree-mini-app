@@ -201,7 +201,7 @@ export function RecycleNew() {
   const rulesQ = useQuery({ ...wasteRulesVersionQuery(coreHttp), enabled: authed && step === 'method' });
   const rulesVersion = rulesQ.data;
   const consentValid = consent && consentStillValid(ackVersion, rulesVersion);
-  const consentStale = consent && !consentValid;
+  const consentStale = consent && !consentValid && ackVersion !== null;
   const toggleConsent = () => {
     setConsent(!consentValid);
     setAckVersion(consentValid ? null : (rulesVersion ?? null));

@@ -565,7 +565,7 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
     await flush(10);
     expect(createCalls()[0]?.body).toMatchObject({ consent: true, consentVersion: '2026-11-05.2' });
   });
-  it('tick khi thể lệ chưa tải xong rồi thể lệ về: bỏ tick, nhắc đọc lại, nút tạo bị khoá', async () => {
+  it('tick khi thể lệ chưa tải xong rồi thể lệ về: bỏ tick, không nói thể lệ vừa cập nhật, nút tạo bị khoá', async () => {
     let release: () => void = () => {};
     state.rulesGate = new Promise<void>((r) => { release = r; });
     state.rules = { text: 'Thể lệ', version: '2026-11-05.2' };
@@ -577,7 +577,7 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
     release();
     await flush(10);
     expect(check(c, CONSENT).checked).toBe(false);
-    expect(c.textContent).toContain('Thể lệ vừa được cập nhật. Bạn đọc lại Thể lệ rồi tick đồng ý lại nhé');
+    expect(c.textContent).not.toContain('Thể lệ vừa được cập nhật');
     expect(barButton(c, 'Tạo yêu cầu').disabled).toBe(true);
     expect(createCalls()).toHaveLength(0);
   });

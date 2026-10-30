@@ -105,6 +105,17 @@ describe('queries — queryKey giống Mini App, queryFn gọi đúng đường 
   });
 });
 
+describe('queries — phiên bản thể lệ', () => {
+  it('API cũ không trả version: queryFn trả null, không trả undefined (react-query không cho)', async () => {
+    const { http } = fakeHttp(() => ({ text: 'Thể lệ' }));
+    expect(await waste.wasteRulesVersionQuery(http).queryFn()).toBeNull();
+  });
+  it('trả đúng số phiên bản khi API có', async () => {
+    const { http } = fakeHttp(() => ({ text: 'Thể lệ', version: '2026-10-17.1' }));
+    expect(await waste.wasteRulesVersionQuery(http).queryFn()).toBe('2026-10-17.1');
+  });
+});
+
 describe('queries — danh sách thông báo (infinite)', () => {
   const row = (i: number) => ({ id: `n${i}`, templateCode: 'X', payload: {}, status: 'SENT' as const, sentAt: `2026-10-28T03:00:0${i}.000Z` });
 

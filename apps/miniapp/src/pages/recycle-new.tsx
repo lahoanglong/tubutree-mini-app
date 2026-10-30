@@ -259,13 +259,13 @@ export default function RecycleNewPage() {
   // Phiên bản thể lệ hiện hành: ô đồng ý chỉ còn hiệu lực khi khách tick đúng phiên bản này (admin đổi số thì phải tick lại).
   const rulesQ = useQuery({
     queryKey: [...WASTE_QUERY_KEYS.all, 'rules-version'],
-    queryFn: () => getWasteRules().then((r) => r.version),
+    queryFn: () => getWasteRules().then((r) => r.version ?? null),
     staleTime: 0,
     enabled: phase === 'authenticated' && step === 'method',
   });
   const rulesVersion = rulesQ.data;
   const consentValid = consent && consentStillValid(ackVersion, rulesVersion);
-  const consentStale = consent && !consentValid;
+  const consentStale = consent && !consentValid && ackVersion !== null;
   const toggleConsent = () => {
     setConsent(!consentValid);
     setAckVersion(consentValid ? null : (rulesVersion ?? null));

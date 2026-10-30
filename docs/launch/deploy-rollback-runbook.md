@@ -507,6 +507,11 @@ Kiểm: còn dòng nào mang khoá thô không (mong đợi 0; dòng còn lại 
 psqlq -c "SELECT id, \"zaloId\", \"createdAt\" FROM users WHERE \"zaloId\" LIKE 'guest\_%' AND \"zaloId\" NOT LIKE 'guest\_h\_%'"
 ```
 
+### 1.15 Bản có thể lệ theo phiên bản và quà quá hạn tự huỷ: thứ tự deploy và lượt cron đầu
+
+- Deploy API TRƯỚC, rồi mới đẩy Mini App lên Live. Mini App mới gửi thêm `consentVersion` khi tạo yêu cầu đổi rác, mà API cũ chạy `forbidNonWhitelisted` nên trả 400 và khách không tạo được yêu cầu. Nếu phải quay API về bản cũ sau khi Mini App mới đã Live thì phải kéo Mini App về bản cũ luôn.
+- Lượt đầu của cron `waste.gift-expiry` sau deploy (phút 15 của giờ kế tiếp, chạy cả khi `waste.enabled` tắt) sẽ huỷ và hoàn điểm mọi quà hiện vật READY đã quá hạn nhận của khách thường, kèm một tin mỗi quà. Quà của khách bị khoá, có yêu cầu bị thu hồi hoặc đã xoá tài khoản được để lại ở hàng đợi Quá hạn nhận cho admin quyết hoàn hay không.
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.

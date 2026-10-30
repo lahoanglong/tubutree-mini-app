@@ -612,7 +612,7 @@ describe('khai món nhanh và báo trước (B-35/B-36/B-82)', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Tạo yêu cầu' })).toBeEnabled());
     expect(screen.queryByText(/Thể lệ vừa được cập nhật/)).toBeNull();
   });
-  it('tick khi thể lệ chưa tải xong rồi thể lệ về: bỏ tick, nhắc đọc lại, không gửi được bằng ô tick cũ', async () => {
+  it('tick khi thể lệ chưa tải xong rồi thể lệ về: bỏ tick, không nói thể lệ vừa cập nhật, không gửi được bằng ô tick cũ', async () => {
     const PICKED = { ...DRAFT, method: 'DROP_OFF' as const, pointId: 'pt-1', pickedPoint: makeWastePoint() };
     let release: (v: { text: string; version: string }) => void = () => {};
     mocks.getWasteRules.mockReturnValue(new Promise((r) => { release = r; }));
@@ -623,7 +623,7 @@ describe('khai món nhanh và báo trước (B-35/B-36/B-82)', () => {
     await waitFor(() => expect(box).toBeChecked());
     release({ text: 'Thể lệ', version: '2026-11-05.2' });
     await waitFor(() => expect(box).not.toBeChecked());
-    expect(screen.getByText('Thể lệ vừa được cập nhật. Bạn đọc lại Thể lệ rồi tick đồng ý lại nhé')).toBeInTheDocument();
+    expect(screen.queryByText(/Thể lệ vừa được cập nhật/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Tạo yêu cầu' })).toBeDisabled();
     expect(mocks.createWasteRequest).not.toHaveBeenCalled();
   });
