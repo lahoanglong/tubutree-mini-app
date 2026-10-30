@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { WASTE_CONSENT_VERSION } from './waste.constants';
 
 export type WasteConfigType = 'boolean' | 'int' | 'json' | 'string';
 
@@ -13,6 +14,7 @@ export interface WasteConfigKeyDef {
 }
 
 const RULES_TEXT_MAX_LENGTH = 8000;
+const RULES_VERSION_MAX_LENGTH = 32;
 
 export const WASTE_CONFIG_KEYS = {
   'waste.enabled': {
@@ -182,13 +184,20 @@ export const WASTE_CONFIG_KEYS = {
     maxLength: RULES_TEXT_MAX_LENGTH,
     description: 'Thể lệ công khai của chương trình, tối đa 8000 ký tự, để trống thì mục Thể lệ hiện ghi chú sắp có.',
   },
+  'waste.rules_version': {
+    default: WASTE_CONSENT_VERSION,
+    type: 'string',
+    category: 'waste',
+    maxLength: RULES_VERSION_MAX_LENGTH,
+    description: 'Số phiên bản thể lệ, tối đa 32 ký tự. Đổi số này khi sửa nội dung thể lệ để khách đồng ý lại.',
+  },
 } as const satisfies Record<string, WasteConfigKeyDef>;
 
 export type WasteConfigKey = keyof typeof WASTE_CONFIG_KEYS;
 
 type SeedRowShape = { key: string; value: unknown; category?: string; createOnly?: boolean; description?: string };
 
-/** seed.ts keeps the 21 rows as literals (specs evaluate the array); this fails the seed run when a literal drifts from the record. */
+/** seed.ts keeps the 22 rows as literals (specs evaluate the array); this fails the seed run when a literal drifts from the record. */
 export function assertWasteConfigSeedRows(rows: ReadonlyArray<SeedRowShape>): void {
   const defs: Record<string, WasteConfigKeyDef> = WASTE_CONFIG_KEYS;
   for (const row of rows) {
@@ -291,8 +300,15 @@ function rulesTextProblem(value: unknown): string | null {
   return value.length <= RULES_TEXT_MAX_LENGTH ? null : `tối đa ${RULES_TEXT_MAX_LENGTH} ký tự`;
 }
 
+function rulesVersionProblem(value: unknown): string | null {
+  if (typeof value !== 'string') return 'phải là chuỗi';
+  if (value.trim() === '') return 'không được để trống';
+  return value.length <= RULES_VERSION_MAX_LENGTH ? null : `tối đa ${RULES_VERSION_MAX_LENGTH} ký tự`;
+}
+
 export const WASTE_JSON_RULES: Record<string, (value: unknown) => string | null> = {
   'waste.mailin_fee_table': mailinFeeTableProblem,
   'waste.alert_thresholds': alertThresholdsProblem,
   'waste.rules_text': rulesTextProblem,
+  'waste.rules_version': rulesVersionProblem,
 };

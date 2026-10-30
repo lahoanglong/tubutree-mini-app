@@ -298,7 +298,7 @@ describe('seeded reference data after migrate deploy', () => {
     for (const s of splitSqlStatements(section)) await prisma.$executeRawUnsafe(s);
     expect(await prisma.wasteGift.findMany({ where: { id: { startsWith: 'reward-' } }, orderBy: { id: 'asc' } })).toEqual(before);
   });
-  it('the 21 waste.* config rows exist after migrate deploy (prod never runs seed.ts)', async () => {
+  it('the 22 waste.* config rows exist after migrate deploy (prod never runs seed.ts)', async () => {
     const rows = await prisma.systemConfig.findMany({ where: { key: { startsWith: 'waste.' } }, orderBy: { key: 'asc' } });
     expect(rows.map((r) => r.key)).toEqual(Object.keys(WASTE_CONFIG_KEYS).sort());
     for (const r of rows) {

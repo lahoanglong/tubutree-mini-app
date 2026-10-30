@@ -14,6 +14,7 @@ export type WasteConfigField = { key: string; label: string } & (
   | { kind: 'int'; fallback: number; min: number; max: number }
   | { kind: 'json'; fallback: null }
   | { kind: 'text'; fallback: string; maxLength: number }
+  | { kind: 'string'; fallback: string; maxLength: number; hint: string }
 );
 
 export const WASTE_CONFIG_FIELDS: readonly WasteConfigField[] = [
@@ -38,6 +39,14 @@ export const WASTE_CONFIG_FIELDS: readonly WasteConfigField[] = [
   { key: 'waste.mailin_fee_table', label: 'Bảng ước tính phí ship theo vùng (JSON)', kind: 'json', fallback: null },
   { key: 'waste.alert_thresholds', label: 'Ngưỡng cảnh báo bất thường (JSON)', kind: 'json', fallback: null },
   { key: 'waste.rules_text', label: 'Thể lệ công khai', kind: 'text', fallback: '', maxLength: 8000 },
+  {
+    key: 'waste.rules_version',
+    label: 'Số phiên bản thể lệ',
+    kind: 'string',
+    fallback: '2026-10-17.1',
+    maxLength: 32,
+    hint: 'Đổi số này khi sửa nội dung thể lệ để khách đồng ý lại',
+  },
 ];
 
 const MAILIN_MIN = 'waste.mailin_min_points';
@@ -49,6 +58,7 @@ type Checked = { error: string | null; value: unknown };
 const show = (f: WasteConfigField, v: unknown): string => {
   if (f.kind === 'json') return JSON.stringify(v ?? null, null, 2);
   if (f.kind === 'text') return typeof v === 'string' ? v : '';
+  if (f.kind === 'string') return typeof v === 'string' ? v : f.fallback;
   return String(v);
 };
 
@@ -72,11 +82,15 @@ function check(f: WasteConfigField, draft: string): Checked {
       ? { error: `Thể lệ tối đa ${f.maxLength} ký tự`, value: null }
       : { error: null, value: draft };
   }
+  if (f.kind === 'string') {
+    if (draft.trim() === '') return { error: 'Không được để trống', value: null };
+    return draft.length > f.maxLength ? { error: `Tối đa ${f.maxLength} ký tự`, value: null } : { error: null, value: draft.trim() };
+  }
   return { error: null, value: draft };
 }
 
 /**
- * Cấu hình chung đổi rác: 21 khoá `waste.*` sửa qua PUT /admin/config. Mọi lần lưu hỏi xác nhận "trước → sau"
+ * Cấu hình chung đổi rác: 22 khoá `waste.*` sửa qua PUT /admin/config. Mọi lần lưu hỏi xác nhận "trước → sau"
  * vì trần điểm và gói tối thiểu đổi thẳng số Điểm Xanh phát ra. Giá trị cố định của Điểm Xanh chỉ để xem.
  */
 export function WasteConfigCard({ rows, loyaltyRows }: { rows: ConfigRow[] | undefined; loyaltyRows: ConfigRow[] | undefined }) {
@@ -144,11 +158,12 @@ export function WasteConfigCard({ rows, loyaltyRows }: { rows: ConfigRow[] | und
           const changed =
             f.kind === 'boolean'
               ? false
-              : !checked.error && (f.kind === 'text' ? checked.value !== saved(f) : JSON.stringify(checked.value) !== JSON.stringify(saved(f)));
+              : !checked.error && (f.kind === 'text' || f.kind === 'string' ? checked.value !== saved(f) : JSON.stringify(checked.value) !== JSON.stringify(saved(f)));
           return (
             <div key={f.key} data-config-key={f.key} className="rounded-control border border-stone-200 p-3">
               <div className="text-sm font-medium text-stone-900">{f.label}</div>
               <div className="break-all text-xs text-stone-500">{f.key}</div>
+              {f.kind === 'string' && <div className="mt-0.5 text-xs text-stone-600">{f.hint}</div>}
               {f.kind === 'boolean' ? (
                 <label className="mt-1 flex min-h-[44px] cursor-pointer items-center gap-2 text-sm sm:min-h-0">
                   <input
@@ -173,6 +188,15 @@ export function WasteConfigCard({ rows, loyaltyRows }: { rows: ConfigRow[] | und
                       type="number"
                       inputMode="numeric"
                       aria-label={f.label}
+                      className={`${FIELD_CLASS} w-full sm:max-w-xs`}
+                      value={text}
+                      onChange={(e) => setDrafts((d) => ({ ...d, [f.key]: e.target.value }))}
+                    />
+                  ) : f.kind === 'string' ? (
+                    <input
+                      type="text"
+                      aria-label={f.label}
+                      maxLength={f.maxLength + 8}
                       className={`${FIELD_CLASS} w-full sm:max-w-xs`}
                       value={text}
                       onChange={(e) => setDrafts((d) => ({ ...d, [f.key]: e.target.value }))}

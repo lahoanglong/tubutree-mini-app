@@ -64,13 +64,13 @@ export interface WasteNearbyRequest { provinceCode?: string; locationToken: stri
 export interface WastePreviewRequest { lines: WasteLineInput[]; method?: WasteMethod; pointId?: string; provinceCode?: string }
 export interface WastePreviewBlockDTO { code: WastePreviewBlock; itemId?: string; missingPoints?: number; openCount?: number; pickupRequestCode?: string; pointsRemaining?: number }
 export interface WastePreviewDTO { estimatedPoints: number; estimatedDrops: number; estimatedGrams: number | null; pointsValueVnd: number; blocks: WastePreviewBlockDTO[]; feeEstimate: WasteFeeEstimate | null; itemCaps: { itemId: string; monthRemainingQty: number | null; dayRemainingQty: number | null }[]; pointsMonthRemaining: number }
-export interface WasteCreateRequest { method: WasteMethod; lines: WasteLineInput[]; pointId?: string; consent: true; packagingConsent?: boolean; postagePaidConsent?: boolean }
+export interface WasteCreateRequest { method: WasteMethod; lines: WasteLineInput[]; pointId?: string; consent: true; /** Phiên bản thể lệ khách đã đọc (từ GET /waste/rules); bản cũ không gửi thì máy chủ ghi phiên bản hiện hành. */ consentVersion?: string; packagingConsent?: boolean; postagePaidConsent?: boolean }
 export interface WasteEditRequest { lines: WasteLineInput[]; pointId?: string }
 export interface WasteTrackingRequest { carrier: string; trackingCode: string }
 export interface WasteRequestLineDTO { itemId: string; itemName: string; unitLabel: string; unitsPerPoint: number; pointsPerGroup: number; dropsPerUnit: number; gramsPerUnit: number | null; declaredQty: number; receivedQty: number | null; shortfallReason: WasteShortfallReason | null; pointsAwarded: number | null }
 export interface WasteRequestSummaryDTO { id: string; code: string; method: WasteMethod; status: WasteRequestStatus; closeReason: WasteCloseReason | null; createdAt: string; expiresAt: string | null; estimatedPoints: number; pointsAwarded: number | null; pointName: string; orderCode: string | null; lines: { itemName: string; unitLabel: string; declaredQty: number }[] }
 export interface WasteRequestDetailDTO extends WasteRequestSummaryDTO { lines: WasteRequestLineDTO[]; point: WastePointContactDTO | null; pointAvailable: boolean; carrier: string | null; trackingCode: string | null; inTransitAt: string | null; receivedAt: string | null; completedAt: string | null; closedAt: string | null; rejectionReason: WasteRejectionReason | null; rejectionNote: string | null; dropsAwarded: number | null; impactGrams: number | null; reversedPoints: number | null; reversalReason: string | null; editable: boolean; cancellable: boolean; orderId: string | null }
-export interface WasteRulesDTO { text: string | null }
+export interface WasteRulesDTO { text: string | null; /** Phiên bản thể lệ do admin đặt; optional để bản cũ vẫn type-check, API luôn gửi. */ version?: string }
 
 // rewards
 export interface WasteVoucherSpec { type: CouponType; value: number; minOrder: number | null; maxDiscount: number | null; validDays: number }

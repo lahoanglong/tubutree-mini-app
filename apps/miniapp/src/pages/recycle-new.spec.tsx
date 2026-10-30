@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   ensurePhone: vi.fn(),
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } },
   getWasteMe: vi.fn(),
+  getWasteRules: vi.fn(),
   getWastePoints: vi.fn(),
   getNearbyWastePoints: vi.fn(),
   previewWaste: vi.fn(),
@@ -51,6 +52,7 @@ vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publ
 vi.mock('../services/waste-api', async (orig) => ({
   ...(await orig<object>()),
   getWasteMe: mocks.getWasteMe,
+  getWasteRules: mocks.getWasteRules,
   getWastePoints: mocks.getWastePoints,
   getNearbyWastePoints: mocks.getNearbyWastePoints,
   previewWaste: mocks.previewWaste,
@@ -88,6 +90,7 @@ beforeEach(() => {
   mocks.location.search = ''; mocks.location.state = null;
   mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: true };
   mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true } }));
+  mocks.getWasteRules.mockResolvedValue({ text: 'Thể lệ' });
   mocks.getWastePoints.mockResolvedValue([makeWastePoint()]);
   mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview(b.method === 'MAIL_IN' ? { feeEstimate: { ...FEE, provinceCode: '79', provinceName: 'TP.HCM', low: 20000, high: 25000 }, estimatedPoints: 30_000, pointsValueVnd: 30000 } : {}));
   mocks.getLoyaltyRewards.mockResolvedValue(makeRewardCatalog({ redeemablePoints: 14_000 }));
@@ -580,6 +583,51 @@ describe('khai món nhanh và báo trước (B-35/B-36/B-82)', () => {
     expect(screen.getByRole('radio', { name: /Mang tới điểm nhận/ })).toHaveAttribute('aria-checked', 'false');
     expect(mocks.requestZaloLocation).toHaveBeenCalledTimes(1);
   });
+  it('thể lệ có số phiên bản: gửi kèm consentVersion khách đã đọc, và lưu số đó cùng ô đồng ý khi sang màn Thể lệ', async () => {
+    const PICKED = { ...DRAFT, method: 'DROP_OFF' as const, pointId: 'pt-1', pickedPoint: makeWastePoint() };
+    mocks.getWasteRules.mockResolvedValue({ text: 'Thể lệ', version: '2026-11-05.2' });
+    mocks.createWasteRequest.mockResolvedValue(makeRequestDetail({ id: 'req-9' }));
+    atStep2(PICKED);
+    renderPage();
+    const create = await screen.findByRole('button', { name: 'Tạo yêu cầu' });
+    await waitFor(() => expect(mocks.getWasteRules).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('checkbox', { name: /Tôi đồng ý với Thể lệ/ }));
+    await waitFor(() => expect(create).toBeEnabled());
+    fireEvent.click(create);
+    await waitFor(() =>
+      expect(mocks.createWasteRequest).toHaveBeenCalledWith(expect.objectContaining({ consent: true, consentVersion: '2026-11-05.2' }), 'key-1'),
+    );
+  });
+  it('ô đồng ý giữ từ phiên bản cũ: bỏ tick, nhắc đọc lại Thể lệ, khoá nút tạo; tick lại thì tạo được', async () => {
+    const PICKED = { ...DRAFT, method: 'DROP_OFF' as const, pointId: 'pt-1', pickedPoint: makeWastePoint() };
+    mocks.getWasteRules.mockResolvedValue({ text: 'Thể lệ', version: '2026-11-05.2' });
+    mocks.location.search = '?step=method';
+    mocks.location.state = { draft: PICKED, consents: { consent: true, packaging: false, postage: false, version: '2026-10-17.1' } };
+    renderPage();
+    const box = await screen.findByRole('checkbox', { name: /Tôi đồng ý với Thể lệ/ });
+    await waitFor(() => expect(box).not.toBeChecked());
+    expect(screen.getByText('Thể lệ vừa được cập nhật. Bạn đọc lại Thể lệ rồi tick đồng ý lại nhé')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tạo yêu cầu' })).toBeDisabled();
+    fireEvent.click(box);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Tạo yêu cầu' })).toBeEnabled());
+    expect(screen.queryByText(/Thể lệ vừa được cập nhật/)).toBeNull();
+  });
+  it('máy chủ từ chối vì thể lệ đã đổi: hiện lời từ chối và tải lại phiên bản', async () => {
+    const PICKED = { ...DRAFT, method: 'DROP_OFF' as const, pointId: 'pt-1', pickedPoint: makeWastePoint() };
+    mocks.getWasteRules.mockResolvedValueOnce({ text: 'Thể lệ', version: '2026-10-17.1' }).mockResolvedValue({ text: 'Thể lệ', version: '2026-11-05.2' });
+    mocks.createWasteRequest.mockRejectedValueOnce(new Error('Thể lệ đã được cập nhật. Bạn hãy đọc lại Thể lệ rồi đồng ý lại để tạo yêu cầu'));
+    atStep2(PICKED);
+    renderPage();
+    const create = await screen.findByRole('button', { name: 'Tạo yêu cầu' });
+    await waitFor(() => expect(mocks.getWasteRules).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Tôi đồng ý với Thể lệ/ }));
+    await waitFor(() => expect(create).toBeEnabled());
+    fireEvent.click(create);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: expect.stringContaining('Thể lệ đã được cập nhật'), type: 'error' }));
+    await waitFor(() => expect(mocks.getWasteRules).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: /Tôi đồng ý với Thể lệ/ })).not.toBeChecked());
+    expect(screen.getByRole('button', { name: 'Tạo yêu cầu' })).toBeDisabled();
+  });
   it('link Thể lệ cạnh ô đồng ý: lưu nháp đầy đủ và các ô đồng ý vào mục lịch sử rồi mới sang Thể lệ', async () => {
     const draft = { ...DRAFT, method: 'DROP_OFF' as const, pointId: 'pt-1', pickedPoint: makeWastePoint() };
     atStep2(draft);
@@ -587,7 +635,7 @@ describe('khai món nhanh và báo trước (B-35/B-36/B-82)', () => {
     fireEvent.click(await screen.findByRole('checkbox', { name: /Tôi đồng ý với Thể lệ/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Xem Thể lệ' }));
     expect(mocks.navigate.mock.calls.slice(-2)).toEqual([
-      ['/recycle/new?step=method', { replace: true, state: { draft, consents: { consent: true, packaging: false, postage: false } } }],
+      ['/recycle/new?step=method', { replace: true, state: { draft, consents: { consent: true, packaging: false, postage: false, version: null } } }],
       ['/recycle/rules'],
     ]);
   });

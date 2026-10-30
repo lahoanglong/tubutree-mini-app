@@ -40,6 +40,7 @@ export const WASTE_MESSAGES = {
   DUPLICATE_LINE: 'Mỗi món chỉ khai một dòng',
   REQUEST_POINTS_MAX: 'Một yêu cầu tối đa 2.000.000 điểm, hãy tách thành nhiều yêu cầu',
   MAILIN_CONSENT: 'Bạn cần đồng ý quy tắc đóng gói và cam kết đã trả đủ cước để gửi về kho',
+  RULES_UPDATED: 'Thể lệ đã được cập nhật. Bạn hãy đọc lại Thể lệ rồi đồng ý lại để tạo yêu cầu',
   IDEMPOTENCY_CONFLICT: 'Mã chống gửi lặp này đã dùng cho một yêu cầu khác',
   NOT_EDITABLE: 'Yêu cầu này không còn sửa được',
   NOT_CANCELLABLE: 'Yêu cầu này không còn huỷ được',

@@ -1,4 +1,5 @@
 export const WASTE_LOCK_CLASS = { CUSTOMER: 731001, TRACKING: 731002, STAFF_CAP: 731003, POINT_CREATE: 731004 } as const;
+/** Phiên bản thể lệ mặc định của khoá waste.rules_version; admin đổi khoá đó, không đổi hằng số này. */
 export const WASTE_CONSENT_VERSION = '2026-10-17.1';
 export const WASTE_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ';
 export const WASTE_LOOKUP_PATTERN = /^(TR-[2-9A-HJKMNP-TV-Z]{5}|QG-[2-9A-HJKMNP-TV-Z]{8})$/;

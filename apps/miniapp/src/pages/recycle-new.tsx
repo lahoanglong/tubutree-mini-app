@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { dropOffDayLimitText, itemQtyMax } from '@tubutree/app-core/waste-copy';
+import { consentStillValid, WASTE_RULES_UPDATED_NOTE } from '@tubutree/app-core/waste-consent';
 import { sameProvince } from '@tubutree/app-core/waste-province';
 import { isMethodLocked, orderWasteMethods, WASTE_METHODS_BASE } from '@tubutree/app-core/waste-method-order';
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
@@ -20,6 +21,7 @@ import {
   getNearbyWastePoints,
   getWasteMe,
   getWastePoints,
+  getWasteRules,
   invalidateAfterWasteWrite,
   previewWaste,
 } from '../services/waste-api';
@@ -244,13 +246,29 @@ export default function RecycleNewPage() {
   }, [stateDraft]);
 
   // Khách mở Thể lệ rồi quay lại thì giữ cả cách giao lẫn các ô đồng ý (lưu vào state của mục lịch sử trước khi rời trang).
-  const stateConsents = (location.state as { consents?: { consent: boolean; packaging: boolean; postage: boolean } } | null)?.consents;
+  const stateConsents = (location.state as { consents?: { consent: boolean; packaging: boolean; postage: boolean; version?: string | null } } | null)?.consents;
   const [consent, setConsent] = useState(stateConsents?.consent ?? false);
+  const [ackVersion, setAckVersion] = useState<string | null>(stateConsents?.version ?? null);
   const [packagingConsent, setPackagingConsent] = useState(stateConsents?.packaging ?? false);
   const [postageConsent, setPostageConsent] = useState(stateConsents?.postage ?? false);
   const openRules = () => {
-    navigate(`/recycle/new?step=${step}`, { replace: true, state: { draft, consents: { consent, packaging: packagingConsent, postage: postageConsent } } });
+    navigate(`/recycle/new?step=${step}`, { replace: true, state: { draft, consents: { consent, packaging: packagingConsent, postage: postageConsent, version: ackVersion } } });
     navigate('/recycle/rules');
+  };
+
+  // Phiên bản thể lệ hiện hành: ô đồng ý chỉ còn hiệu lực khi khách tick đúng phiên bản này (admin đổi số thì phải tick lại).
+  const rulesQ = useQuery({
+    queryKey: [...WASTE_QUERY_KEYS.all, 'rules-version'],
+    queryFn: () => getWasteRules().then((r) => r.version),
+    staleTime: 0,
+    enabled: phase === 'authenticated' && step === 'method',
+  });
+  const rulesVersion = rulesQ.data;
+  const consentValid = consent && consentStillValid(ackVersion, rulesVersion);
+  const consentStale = consent && !consentValid;
+  const toggleConsent = () => {
+    setConsent(!consentValid);
+    setAckVersion(consentValid ? null : (rulesVersion ?? null));
   };
 
   const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: phase === 'authenticated' });
@@ -379,6 +397,7 @@ export default function RecycleNewPage() {
         lines: lineInputs,
         ...(selected === 'DROP_OFF' ? { pointId: draft.pointId ?? undefined } : {}),
         consent: true,
+        ...((ackVersion ?? rulesVersion) ? { consentVersion: (ackVersion ?? rulesVersion)! } : {}),
         ...(selected === 'MAIL_IN' ? { packagingConsent: true, postagePaidConsent: true } : {}),
       }
     : null;
@@ -394,7 +413,10 @@ export default function RecycleNewPage() {
       await invalidateAfterWasteWrite(qc);
       navigate(`/recycle/r/${r.id}`, { replace: true });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      void qc.invalidateQueries({ queryKey: [...WASTE_QUERY_KEYS.all, 'rules-version'] });
+    },
   });
 
   const shell = (content: React.ReactNode, subtitle: string, bar?: React.ReactNode) => (
@@ -517,7 +539,7 @@ export default function RecycleNewPage() {
   };
 
   const selectedPreview = selected ? previews[selected]?.data : undefined;
-  const consentsOk = consent && (selected !== 'MAIL_IN' || (packagingConsent && postageConsent));
+  const consentsOk = consentValid && (selected !== 'MAIL_IN' || (packagingConsent && postageConsent));
   const canCreate =
     selected !== null &&
     !isLocked(selectedPreview) &&
@@ -692,7 +714,10 @@ export default function RecycleNewPage() {
       )}
       {selected && (
         <div style={{ ...COLUMN, gap: 4 }}>
-          <Checkbox checked={consent} onChange={() => setConsent((v) => !v)} label={WASTE_CONSENT_TEXT} />
+          <Checkbox checked={consentValid} onChange={toggleConsent} label={WASTE_CONSENT_TEXT} />
+          {consentStale && (
+            <Text variant="caption" tone="warning" as="div">{WASTE_RULES_UPDATED_NOTE}</Text>
+          )}
           <div>
             <Button variant="ghost" onPress={openRules}>
               {WASTE_RULES_LINK}

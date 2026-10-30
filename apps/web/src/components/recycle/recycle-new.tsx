@@ -15,7 +15,7 @@ import type {
 } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, WASTE_WRITE_INVALIDATE_KEYS, createWasteRequest, previewWaste } from '@tubutree/app-core/api/waste';
 import { getProvinces } from '@tubutree/app-core/api/geo';
-import { wasteMeQuery, wastePointsQuery } from '@tubutree/app-core/queries/waste';
+import { wasteMeQuery, wastePointsQuery, wasteRulesVersionQuery } from '@tubutree/app-core/queries/waste';
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
 import {
   ITEMS_NEXT_HINT,
@@ -27,6 +27,7 @@ import {
   wasteStepCopy,
   writeLastPointId,
 } from '@tubutree/app-core/waste-copy';
+import { consentStillValid, WASTE_RULES_UPDATED_NOTE } from '@tubutree/app-core/waste-consent';
 import { sameProvince } from '@tubutree/app-core/waste-province';
 import { isMethodLocked, orderWasteMethods, WASTE_METHODS_BASE } from '@tubutree/app-core/waste-method-order';
 import { friendlyActionError as actErrText, friendlyError as errText } from '@/lib/friendly-error';
@@ -167,6 +168,7 @@ export function RecycleNew() {
   }, [draft, ready]);
 
   const [consent, setConsent] = useState(false);
+  const [ackVersion, setAckVersion] = useState<string | null>(null);
   const [packagingConsent, setPackagingConsent] = useState(false);
   const [postageConsent, setPostageConsent] = useState(false);
   // Khách mở Thể lệ rồi quay lại thì giữ các ô đồng ý (cách giao nằm trong nháp, đã lưu cùng lúc).
@@ -175,8 +177,9 @@ export function RecycleNew() {
       const raw = window.sessionStorage.getItem(CONSENT_KEY);
       if (!raw) return;
       window.sessionStorage.removeItem(CONSENT_KEY);
-      const c = JSON.parse(raw) as { consent?: boolean; packaging?: boolean; postage?: boolean };
+      const c = JSON.parse(raw) as { consent?: boolean; packaging?: boolean; postage?: boolean; version?: string | null };
       setConsent(c.consent === true);
+      setAckVersion(typeof c.version === 'string' ? c.version : null);
       setPackagingConsent(c.packaging === true);
       setPostageConsent(c.postage === true);
     } catch {
@@ -188,10 +191,20 @@ export function RecycleNew() {
     saveDraft(draft);
     markResume();
     try {
-      window.sessionStorage.setItem(CONSENT_KEY, JSON.stringify({ consent, packaging: packagingConsent, postage: postageConsent }));
+      window.sessionStorage.setItem(CONSENT_KEY, JSON.stringify({ consent, packaging: packagingConsent, postage: postageConsent, version: ackVersion }));
     } catch {
       // như trên
     }
+  };
+
+  // Phiên bản thể lệ hiện hành: ô đồng ý chỉ còn hiệu lực khi khách tick đúng phiên bản này (admin đổi số thì phải tick lại).
+  const rulesQ = useQuery({ ...wasteRulesVersionQuery(coreHttp), enabled: authed && step === 'method' });
+  const rulesVersion = rulesQ.data;
+  const consentValid = consent && consentStillValid(ackVersion, rulesVersion);
+  const consentStale = consent && !consentValid;
+  const toggleConsent = () => {
+    setConsent(!consentValid);
+    setAckVersion(consentValid ? null : (rulesVersion ?? null));
   };
 
   const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed });
@@ -286,6 +299,7 @@ export function RecycleNew() {
         lines: lineInputs,
         ...(selected === 'DROP_OFF' ? { pointId: draft.pointId ?? undefined } : {}),
         consent: true,
+        ...((ackVersion ?? rulesVersion) ? { consentVersion: (ackVersion ?? rulesVersion)! } : {}),
         ...(selected === 'MAIL_IN' ? { packagingConsent: true, postagePaidConsent: true } : {}),
       }
     : null;
@@ -303,6 +317,7 @@ export function RecycleNew() {
       await Promise.all(WASTE_WRITE_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
       router.replace(`/doi-rac/yeu-cau/${r.id}`);
     },
+    onError: () => void qc.invalidateQueries({ queryKey: wasteRulesVersionQuery(coreHttp).queryKey }),
   });
 
   const subtitle = step === 'items' ? wasteStepCopy.items : wasteStepCopy.method;
@@ -403,7 +418,7 @@ export function RecycleNew() {
   };
 
   const selectedPreview = selected ? previews[selected] : undefined;
-  const consentsOk = consent && (selected !== 'MAIL_IN' || (packagingConsent && postageConsent));
+  const consentsOk = consentValid && (selected !== 'MAIL_IN' || (packagingConsent && postageConsent));
   const canCreate =
     selected !== null && !isLocked(selectedPreview) && consentsOk && (selected !== 'DROP_OFF' || draft.pointId !== null) && !create.isPending;
   const blockedHint = canCreate
@@ -521,7 +536,8 @@ export function RecycleNew() {
       )}
       {selected && (
         <div className="flex flex-col">
-          <Check checked={consent} onChange={() => setConsent((v) => !v)} label={WASTE_CONSENT_TEXT} />
+          <Check checked={consentValid} onChange={toggleConsent} label={WASTE_CONSENT_TEXT} />
+          {consentStale && <p role="status" className="text-xs font-semibold text-warning-fg">{WASTE_RULES_UPDATED_NOTE}</p>}
           <Link href="/doi-rac/quy-dinh" onClick={openRules} className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-forest-700 underline">
             {WASTE_RULES_LINK}
           </Link>
