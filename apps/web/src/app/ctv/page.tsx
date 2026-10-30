@@ -355,6 +355,8 @@ function Dashboard() {
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const linkBusy = useRef(false);
   const [transferring, setTransferring] = useState(false);
+  // Mốc dữ liệu dashboard lúc vừa chuyển xong: nút khoá tới khi dashboard tải lại (hoặc lỗi) để không mở form với số dư đã cũ.
+  const [transferredStamp, setTransferredStamp] = useState<number | null>(null);
   const [ctvOrdering, setCtvOrdering] = useState(false);
   const [sharing, setSharing] = useState(false);
 
@@ -412,13 +414,15 @@ function Dashboard() {
       label: 'Chuyển vào Ví',
       ariaLabel: 'Chuyển vào Ví Tubu',
       icon: Wallet,
-      // Luôn bấm được: ô mờ không nói lý do làm CTV tưởng bị chặn. Chưa có số dư thì sheet giải thích khi nào tiền vào Ví.
+      // Bấm được cả khi chưa có số dư: ô mờ không nói lý do làm CTV tưởng bị chặn, sheet giải thích khi nào tiền vào Ví. Chỉ mờ ngay sau khi vừa chuyển.
+      disabled: transferredStamp !== null && transferredStamp === dashQ.dataUpdatedAt && !dashQ.isError,
       onPress: () => setTransferring(true),
     },
   ];
 
   const transferDone = (message: string) => {
     setTransferring(false);
+    setTransferredStamp(dashQ.dataUpdatedAt);
     setNotice({ text: message, error: false });
     for (const q of [affiliateCommissionsQuery, affiliatePayoutsQuery, affiliateTaxStatementQuery, affiliateMeQuery]) {
       void qc.invalidateQueries({ queryKey: q(coreHttp).queryKey });
