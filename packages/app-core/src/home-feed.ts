@@ -30,9 +30,11 @@ export function createHomeFeed(deps: HomeFeedDeps) {
 
   function start<T extends object>(call: () => Promise<T | null | undefined>, personal: boolean): Feed<T> {
     const feed: Feed<T> = { promise: Promise.resolve(null), taken: new Set() };
+    // Chụp định danh lúc GỬI: đổi tài khoản khi request còn chạy thì khối về sau không còn khớp người xin.
+    const sentAs = personal ? deps.identity() : undefined;
     const request = call().then(
       (data) => {
-        if (personal) feed.identity = deps.identity();
+        if (personal) feed.identity = sentAs;
         return data && typeof data === 'object' ? data : null;
       },
       () => null,

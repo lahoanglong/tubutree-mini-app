@@ -55,6 +55,16 @@ describe('createHomeFeed', () => {
     expect(await feed.takeMe('forYou')).toBeNull();
   });
 
+  it('đổi tài khoản khi /home/me còn đang chạy: khối cá nhân của người trước không lọt sang người sau', async () => {
+    let resolveMe!: (v: unknown) => void;
+    fetchMe.mockReturnValue(new Promise((r) => { resolveMe = r; }));
+    feed.arm();
+    const taken = feed.takeMe('forYou');
+    who = 'b';
+    resolveMe({ forYou: [{ id: 'p' }] });
+    expect(await taken).toBeNull();
+  });
+
   it('quá hạn: bỏ khối gộp để query đi request lẻ', async () => {
     vi.useFakeTimers();
     try {
