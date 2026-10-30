@@ -449,7 +449,7 @@ Trước khi deploy API có thay đổi này: xác nhận bản Mini App đang c
 
 ### 1.13 Bản đợt 29/10: quay image (7.2) không còn sạch sau khi khách đã dùng bản mới
 
-Bốn migration của bản này (`20261029010000`, `20261029020000`, `20261029030000`, `20261029030100`) chỉ thêm bảng, cột và mẫu tin, nên image cũ vẫn chạy được trên schema mới. Nhưng dữ liệu ghi bởi API mới làm 7.2 để lại hậu quả. Đọc hết mục này trước khi chọn 7.2:
+Bốn migration của bản này (`20261029010000`, `20261029020000`, `20261029030000`, `20261029030100`) chỉ thêm bảng, cột và mẫu tin, nên image cũ vẫn chạy được trên schema mới; migration thứ năm `20261029040000` thêm một giá trị enum Ví (mục 5 dưới đây). Nhưng dữ liệu ghi bởi API mới làm 7.2 để lại hậu quả. Đọc hết mục này trước khi chọn 7.2:
 
 1. **Tài khoản khách vãng lai bị tách.** API mới lưu khoá khách là băm của thiết bị (`guest_h_<sha256>`), và lần đăng nhập đầu của mỗi khách vãng lai đổi khoá cũ `guest_<deviceId>` sang khoá băm. Băm là một chiều, không đổi ngược được. Nếu quay image cũ: khách vãng lai đã mở app trong lúc chạy bản mới sẽ được image cũ tạo tài khoản MỚI rỗng (mất điểm, giỏ, địa chỉ, đơn trên màn hình). Khi deploy lại bản mới, khách về tài khoản cũ, còn tài khoản tạm lúc quay lại bị bỏ lại. Khách đăng nhập Zalo không bị ảnh hưởng. Đã quay image thì sau khi deploy lại, lấy danh sách tài khoản tạm để gộp tay (đơn đặt trong lúc quay lại nằm ở đó):
 
