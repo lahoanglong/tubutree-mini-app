@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { StorefrontsTab } from './storefronts-tab';
 import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminStorefrontDetail, AdminStorefrontRow } from '@/lib/admin-storefronts-client';
+import { formatDateTime } from '@/lib/format-date';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -321,7 +322,7 @@ describe('StorefrontsTab (D3-02)', () => {
     it('chủ đổi thêm khi ngăn đang mở: "Đã xem" gửi mốc admin đã thấy, máy chủ trả dấu mới thì ngăn hiện lại dấu mới', async () => {
       let detailCalls = 0;
       const api = mockFetch({
-        '/admin/storefronts/s9/content-seen': { body: row({ id: 's9', contentChangedAt: '2026-10-20T05:00:00.000Z' }) },
+        '/admin/storefronts/s9/content-seen': { body: row({ id: 's9', approved: true, approvedAt: '2026-10-01T00:00:00.000Z', contentChangedAt: '2026-10-20T05:00:00.000Z' }) },
         '/admin/storefronts/s9': () => ({ body: detail({ id: 's9', title: 'Shop đổi tên', approved: true, approvedAt: '2026-10-01T00:00:00.000Z', contentChangedAt: ++detailCalls === 1 ? '2026-10-20T03:30:00.000Z' : '2026-10-20T05:00:00.000Z' }) }),
         '/admin/storefronts?': page([changed()], 1),
       });
@@ -337,6 +338,40 @@ describe('StorefrontsTab (D3-02)', () => {
       expect(JSON.parse(String(seenCall.init?.body))).toEqual({ seenChangedAt: '2026-10-20T03:30:00.000Z' });
       expect(drawer.textContent).toContain('Xem lại rồi bấm "Đã xem"');
       expect(byText(drawer, 'button', 'Đã xem')).not.toBeNull();
+      const more = drawer.querySelector('[role="status"]')!;
+      expect(more.textContent).toContain(`Chủ vừa đổi thêm lúc ${formatDateTime('2026-10-20T05:00:00.000Z')}`);
+    });
+
+    it('chủ đổi thêm khi admin xem danh sách: bấm "Đã xem" mà máy chủ giữ dấu mới thì nói chủ vừa đổi thêm, không để nút như không ăn', async () => {
+      const api = mockFetch({
+        '/admin/storefronts/s9/content-seen': { body: changed({ contentChangedAt: '2026-10-20T05:00:00.000Z' }) },
+        '/admin/storefronts?': page([changed()], 1),
+      });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      expect(container.querySelector('[role="status"]')).toBeNull();
+      click(byText(container, 'button', 'Đã xem'));
+      await flush();
+      const more = container.querySelector('[role="status"]')!;
+      expect(more.textContent).toContain(`Chủ vừa đổi thêm lúc ${formatDateTime('2026-10-20T05:00:00.000Z')}. Xem lại rồi bấm "Đã xem".`);
+    });
+
+    it('bấm "Đã xem" mà máy chủ xoá dấu: không có lời báo chủ đổi thêm, và lời báo cũ biến mất', async () => {
+      let seenCalls = 0;
+      const api = mockFetch({
+        '/admin/storefronts/s9/content-seen': () => ({ body: ++seenCalls === 1 ? changed({ contentChangedAt: '2026-10-20T05:00:00.000Z' }) : changed({ contentChangedAt: null }) }),
+        '/admin/storefronts?': page([changed()], 1),
+      });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      click(byText(container, 'button', 'Đã xem'));
+      await flush();
+      expect(container.querySelector('[role="status"]')).not.toBeNull();
+      click(byText(container, 'button', 'Đã xem'));
+      await flush();
+      expect(container.querySelector('[role="status"]')).toBeNull();
     });
   });
 });

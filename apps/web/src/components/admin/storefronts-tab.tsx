@@ -28,6 +28,8 @@ const REASON_MAX = 300;
 
 const CONTENT_CHANGED_TEXT = (at: string) => `Chủ đã đổi tên, lời giới thiệu hoặc ảnh sau khi duyệt (${formatDateTime(at)}). Xem lại rồi bấm "Đã xem".`;
 
+const CHANGED_AGAIN_TEXT = (at: string) => `Chủ vừa đổi thêm lúc ${formatDateTime(at)}. Xem lại rồi bấm "Đã xem".`;
+
 const errorText = (e: unknown) => (e instanceof ApiError || e instanceof Error ? e.message : 'Không thực hiện được, thử lại sau.');
 
 function StatusBadges({ row }: { row: AdminStorefrontRow }) {
@@ -52,6 +54,15 @@ function StatusBadges({ row }: { row: AdminStorefrontRow }) {
 
 /** Chủ đổi nội dung sau khi duyệt và chưa ai xem lại. Dấu còn sót trên gian hàng đã bỏ duyệt thì không tính. */
 const changedAfterApproval = (row: AdminStorefrontRow) => !!row.contentChangedAt && !!row.approvedAt;
+
+/**
+ * "Đã xem" chỉ xoá dấu đến mốc admin đã thấy; chủ đổi thêm sau đó thì máy chủ giữ dấu mới. Trả mốc mới đó để màn nói rõ,
+ * nếu không dải cảnh báo chỉ đổi giờ và nút trông như không ăn.
+ */
+function changedAgainAt(result: AdminStorefrontRow, sentAt?: string | null): string | null {
+  if (!sentAt || !changedAfterApproval(result)) return null;
+  return new Date(result.contentChangedAt!).getTime() > new Date(sentAt).getTime() ? result.contentChangedAt : null;
+}
 
 function ownerLine(row: AdminStorefrontRow): string {
   if (!row.owner) return 'Không có chủ';
@@ -82,10 +93,12 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
     onError: (e) => setQuickFailure(errorText(e)),
   });
 
+  const [changedAgain, setChangedAgain] = useState<string | null>(null);
   const seen = useMutation({
     mutationFn: (r: AdminStorefrontRow) => markStorefrontContentSeen(r.id, r.contentChangedAt),
-    onSuccess: () => {
+    onSuccess: (result, r) => {
       setQuickFailure(null);
+      setChangedAgain(changedAgainAt(result, r.contentChangedAt));
       return qc.invalidateQueries({ queryKey: ['admin-storefronts'] });
     },
     onError: (e) => setQuickFailure(errorText(e)),
@@ -168,6 +181,7 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
 
       <div className="mt-4 space-y-3">
         {quickFailure && <Notice tone="danger" role="alert">{quickFailure}</Notice>}
+        {changedAgain && <Notice role="status">{CHANGED_AGAIN_TEXT(changedAgain)}</Notice>}
         {list.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách...</p>}
         {list.isError && <LoadError onRetry={() => void list.refetch()} retrying={list.isFetching}>Không tải được danh sách gian hàng.</LoadError>}
         {list.data && view.items.length === 0 && (
@@ -250,7 +264,15 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
   const takeDown = useMutation({ mutationFn: (reason: string) => takeDownStorefront(id, reason), onSuccess: refresh, onError });
   const reinstate = useMutation({ mutationFn: () => reinstateStorefront(id), onSuccess: refresh, onError });
   const approve = useMutation({ mutationFn: (approved: boolean) => approveStorefront(id, approved), onSuccess: refresh, onError });
-  const seen = useMutation({ mutationFn: () => markStorefrontContentSeen(id, sf?.contentChangedAt), onSuccess: refresh, onError });
+  const [changedAgain, setChangedAgain] = useState<string | null>(null);
+  const seen = useMutation({
+    mutationFn: (sentAt: string | null | undefined) => markStorefrontContentSeen(id, sentAt),
+    onSuccess: (result, sentAt) => {
+      setChangedAgain(changedAgainAt(result, sentAt));
+      return refresh();
+    },
+    onError,
+  });
   const busy = takeDown.isPending || reinstate.isPending || approve.isPending || seen.isPending;
 
   const onTakeDown = async () => {
@@ -312,10 +334,11 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
           ) : (
             sf.hiddenReason && <Notice tone="warning">{sf.hiddenReason}</Notice>
           )}
+          {changedAgain && <Notice role="status">{CHANGED_AGAIN_TEXT(changedAgain)}</Notice>}
           {changedAfterApproval(sf) && (
             <Notice tone="warning">
               {CONTENT_CHANGED_TEXT(sf.contentChangedAt!)}{' '}
-              <button type="button" onClick={() => seen.mutate()} disabled={busy} className={BTN_XS_SECONDARY}>
+              <button type="button" onClick={() => seen.mutate(sf.contentChangedAt)} disabled={busy} className={BTN_XS_SECONDARY}>
                 Đã xem
               </button>
             </Notice>
