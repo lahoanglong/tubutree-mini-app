@@ -101,14 +101,25 @@ export class FlashSaleService {
   ): Promise<Map<string, EffectivePrice>> {
     const map = new Map<string, EffectivePrice>();
     if (variationIds.length === 0) return map;
-    const items = await this.prisma.flashSaleItem.findMany({
-      where: {
-        variationId: { in: variationIds },
-        variation: { isActive: true },
-        flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } },
-      },
-      include: { flashSale: { select: { endAt: true, createdBy: true } } },
-    });
+    // Một câu JOIN (không tra đợt flash bằng câu thứ hai): giỏ và báo giá gọi hàm này mỗi lần xem giá.
+    // Lượt đã mua của khách nối luôn vào câu này (unique theo item + khách nên mỗi item tối đa một dòng).
+    const boughtCol = userId ? Prisma.sql`COALESCE(p."quantity", 0)::int` : Prisma.sql`0`;
+    const boughtJoin = userId
+      ? Prisma.sql`LEFT JOIN flash_sale_purchases p ON p."flashSaleItemId" = i."id" AND p."userId" = ${userId}`
+      : Prisma.empty;
+    const rows = await this.prisma.$queryRaw<
+      { id: string; variationId: string; flashPrice: number; quota: number; soldCount: number; perUserLimit: number; endAt: Date; createdBy: string; bought: number }[]
+    >(Prisma.sql`
+      SELECT i."id", i."variationId", i."flashPrice", i."quota", i."soldCount", i."perUserLimit", s."endAt", s."createdBy",
+        ${boughtCol} AS "bought"
+      FROM flash_sale_items i
+      JOIN flash_sales s ON s."id" = i."flashSaleId"
+      JOIN variations v ON v."id" = i."variationId"
+      ${boughtJoin}
+      WHERE i."variationId" IN (${Prisma.join(variationIds)})
+        AND v."isActive" = true
+        AND s."isActive" = true AND s."startAt" <= ${now} AND s."endAt" > ${now}`);
+    const items = rows.map(({ endAt, createdBy, ...it }) => ({ ...it, flashSale: { endAt, createdBy } }));
     // Người tạo đợt không mua giá flash của đợt mình (cùng luật mã giảm giá, isOwnStaffCoupon): nhân viên tự đặt giá rồi tự mua.
     // ADMIN được miễn như với mã giảm giá; chỉ tra vai trò khi người mua thật sự là người tạo một đợt đang xét.
     let ownSalesBlocked = false;
@@ -120,14 +131,6 @@ export class FlashSaleService {
     const open = items.filter((it) => it.soldCount < it.quota && !isOwn(it));
     // Cùng hai giới hạn consumeQuotas kiểm lúc đặt đơn: giỏ/báo giá tính trước để khách không bị chặn ở bước cuối
     // với một giá giỏ không bao giờ đặt được (ENGAGE-4).
-    const bought = new Map<string, number>();
-    if (userId && open.length > 0) {
-      const purchases = await this.prisma.flashSalePurchase.findMany({
-        where: { userId, flashSaleItemId: { in: open.map((it) => it.id) } },
-        select: { flashSaleItemId: true, quantity: true },
-      });
-      for (const p of purchases) bought.set(p.flashSaleItemId, p.quantity);
-    }
     for (const it of open) {
       const entry: EffectivePrice = {
         flashPrice: it.flashPrice,
@@ -138,7 +141,7 @@ export class FlashSaleService {
       };
       if (userId) {
         entry.quotaLeft = it.quota - it.soldCount;
-        entry.perUserLeft = Math.max(0, it.perUserLimit - (bought.get(it.id) ?? 0));
+        entry.perUserLeft = Math.max(0, it.perUserLimit - it.bought);
         entry.allowance = Math.min(entry.quotaLeft, entry.perUserLeft);
       }
       map.set(it.variationId, entry);

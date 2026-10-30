@@ -487,33 +487,32 @@ export class CatalogService {
    *    xuất hiện nhưng luôn xếp sau sản phẩm chưa mua (spec 4a.3), trong mỗi nhóm sắp theo tổng đã bán
    *    (soldApp + soldExternal) giảm dần.
    * 3) Không có lịch sử/không match → fallback sản phẩm isFeatured (sắp theo đã bán).
+   *
+   * `known.hasOrders === false` = người gọi đã biết khách chưa có đơn nào (Home đếm sẵn): khỏi đọc lịch sử mua.
    */
-  async getForYou(userId: string) {
+  async getForYou(userId: string, known: { hasOrders?: boolean } = {}) {
     const TAKE = 10;
     const RECENT_ITEMS = 20;
 
-    const orderItems = await this.prisma.orderItem.findMany({
-      where: { order: { userId } },
-      orderBy: { order: { createdAt: 'desc' } },
-      take: RECENT_ITEMS,
-      select: { variationId: true },
-    });
+    const orderItems =
+      known.hasOrders === false
+        ? []
+        : await this.prisma.orderItem.findMany({
+            where: { order: { userId } },
+            orderBy: { order: { createdAt: 'desc' } },
+            take: RECENT_ITEMS,
+            select: { variationId: true },
+          });
 
     const variationIds = [...new Set(orderItems.map((oi) => oi.variationId))];
-    const variations = variationIds.length
-      ? await this.prisma.variation.findMany({
-          where: { id: { in: variationIds } },
-          select: { id: true, productId: true },
-        })
-      : [];
-    const purchasedProductIds = [...new Set(variations.map((v) => v.productId))];
-
-    const purchasedProducts = purchasedProductIds.length
+    // Sản phẩm của các biến thể đã mua, một câu thay vì tra biến thể rồi tra sản phẩm.
+    const purchasedProducts = variationIds.length
       ? await this.prisma.product.findMany({
-          where: { id: { in: purchasedProductIds } },
-          select: { categoryIds: true },
+          where: { variations: { some: { id: { in: variationIds } } } },
+          select: { id: true, categoryIds: true },
         })
       : [];
+    const purchasedProductIds = purchasedProducts.map((p) => p.id);
     const categorySet = [...new Set(purchasedProducts.flatMap((p) => p.categoryIds))];
 
     const follows = await this.prisma.brandFollow.findMany({
