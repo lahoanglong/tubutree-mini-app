@@ -18,7 +18,7 @@ afterEach(() => {
   mounted = null;
 });
 
-describe('OrderWaterCard (B-81)', () => {
+describe('OrderWaterCard', () => {
   it('hiện nguồn "Từ đơn hàng" và tiến độ tuần; đủ trần thì nói thứ Hai nhận tiếp', () => {
     mounted = render(<OrderWaterCard info={{ perOrder: 100, weeklyCap: 300, weeklyGranted: 100 }} shopHref="/san-pham" />);
     expect(mounted.container.textContent).toContain('Từ đơn hàng');
@@ -33,7 +33,7 @@ describe('OrderWaterCard (B-81)', () => {
   });
 });
 
-describe('HarvestCelebration (B-15)', () => {
+describe('HarvestCelebration', () => {
   const base = { open: true, guest: false, onLogin: vi.fn(), certificate: null, species: null, points: null, sprout: false, canShare: true, couponCapped: null, nextTarget: 60, onClose: vi.fn(), onCopyCoupon: vi.fn(), shared: false, sharing: false, onShare: vi.fn() };
   const byText = (t: string) => Array.from(document.querySelectorAll('button')).find((b) => b.textContent === t);
   it('có mã: "Dùng mã giảm giá ngay" truyền mã; "Để sau" đóng', () => {
@@ -52,7 +52,7 @@ describe('HarvestCelebration (B-15)', () => {
   });
 });
 
-describe('GardenHero (B-107)', () => {
+describe('GardenHero', () => {
   it('hồ sơ cũ 400/60: không hiện 400, nói đủ nước', () => {
     mounted = render(<GardenHero eco={{ progress: 400, target: 60, treeType: 'Sồi', treesPlanted: 1 }} totalSeeds={10} streakDays={1} harvestReady />);
     expect(mounted.container.textContent).not.toContain('400');

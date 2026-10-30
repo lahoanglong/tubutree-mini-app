@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate as useRouterNavigate } from 'react-router-dom';
 import { useEffect, type ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 // Chi tiết đơn mở trang sản phẩm kèm state { reviewOrderId } để mở sẵn form đánh giá cho đúng đơn. Form đã mở thì state đó
 // phải được gỡ khỏi mục lịch sử: còn giữ thì quay lại trang (hay tải lại) mở lại form, lúc đó đã thành form sửa.
@@ -101,6 +101,16 @@ function renderFromOrder(state: Record<string, unknown>) {
 }
 
 describe('ProductDetailPage: mở form đánh giá từ chi tiết đơn chỉ một lần', () => {
+  // Trong một worker jsdom, lần getByRole đầu (~0,4 s đo trên DOM tối giản khi máy bận) và lần dựng đầu của trang chi tiết tốn hàng trăm ms, và chúng
+  // chạy ngay trong lần gọi đầu của waitFor nên ăn mất ngân sách 1 giây của lệnh chờ đó: ca đầu file rớt ngẫu nhiên khi máy bận. Chạy trước một
+  // vòng ở đây để chi phí rơi vào hook; hạn 8 giây chỉ để vòng khởi động này không tự rớt, không nới lệnh chờ của ca nào.
+  beforeAll(async () => {
+    mocks.fetchProduct.mockResolvedValue(product('a'));
+    const { unmount } = renderFromOrder({ reviewOrderId: 'o2' });
+    await waitFor(() => expect(screen.getByTestId('review-link')).toHaveTextContent('none'), { timeout: 8000 });
+    unmount();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.fetchProduct.mockResolvedValue(product('a'));

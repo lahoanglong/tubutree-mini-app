@@ -105,7 +105,7 @@ describe('/doi-rac/diem-nhan (§4.4)', () => {
     expect(state.replace).not.toHaveBeenCalled();
     expect(state.calls).toEqual([]);
   });
-  it('chưa đủ điều kiện (thiếu SĐT): chỉ lời chỉ sang Zalo (Q2)', async () => {
+  it('chưa đủ điều kiện (thiếu SĐT): chỉ lời chỉ sang Zalo', async () => {
     state.me = makeWasteMe({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null });
     const c = await mount();
     expect(c.textContent).toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
@@ -191,7 +191,7 @@ describe('/doi-rac/diem-nhan (§4.4)', () => {
   });
 });
 
-describe('/doi-rac/diem-nhan — món chỉ kho nhận (B-36)', () => {
+describe('/doi-rac/diem-nhan — món chỉ kho nhận', () => {
   const warehouse = makeWastePoint({ id: 'wh-1', kind: 'WAREHOUSE', name: 'Kho Tubu TP.HCM' });
   beforeEach(() => {
     state.me = makeWasteMe({ items: [ITEM_CARTON, { ...ITEM_MILK, warehouseOnly: true }] });
