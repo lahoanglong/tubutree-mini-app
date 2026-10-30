@@ -1,18 +1,21 @@
 import { useEffect, useRef } from 'react';
-import { armHomeFeed, disarmHomeFeed } from '../../services/home-feed';
+import { useAuthStore } from '../../store/auth';
+import { armHomeFeed, disarmHomeFeed, homeFeedIdentity } from '../../services/home-feed';
 
 /**
  * Bật request gộp cho các query của Trang chủ (services/home-feed.ts). Phải arm TRONG render: query của
  * component con khởi chạy ở effect của chúng, chạy trước effect của trang cha.
  */
+const currentUserId = () => homeFeedIdentity(useAuthStore.getState().user);
+
 export function useHomeFeed(): void {
   const armed = useRef(false);
   if (!armed.current) {
     armed.current = true;
-    armHomeFeed();
+    armHomeFeed(currentUserId);
   }
   useEffect(() => {
-    armHomeFeed();
+    armHomeFeed(currentUserId);
     return disarmHomeFeed;
   }, []);
 }

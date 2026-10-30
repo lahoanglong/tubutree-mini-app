@@ -17,10 +17,32 @@ async function call<T>(method: Method, path: string, body: unknown, opts?: Reque
   });
 }
 
-export const coreHttp: HttpClient = {
+export const rawCoreHttp: HttpClient = {
   get: (path, opts) => call('GET', path, undefined, opts),
   post: (path, body, opts) => call('POST', path, body, opts),
   put: (path, body, opts) => call('PUT', path, body, opts),
   patch: (path, body, opts) => call('PATCH', path, body, opts),
   delete: (path, opts) => call('DELETE', path, undefined, opts),
+};
+
+/** Nơi Trang chủ nhận khối đã có sẵn trong request gộp (`lib/home-feed.ts`); null = request lẻ như thường. */
+type GetInterceptor = (path: string, query: RequestOptions['query']) => Promise<unknown | null> | null;
+let getInterceptor: GetInterceptor | null = null;
+export function setCoreGetInterceptor(fn: GetInterceptor | null): void {
+  getInterceptor = fn;
+}
+
+export const coreHttp: HttpClient = {
+  get: async <T,>(path: string, opts?: RequestOptions) => {
+    const taken = getInterceptor?.(path, opts?.query);
+    if (taken) {
+      const block = await taken;
+      if (block != null) return block as T;
+    }
+    return rawCoreHttp.get<T>(path, opts);
+  },
+  post: rawCoreHttp.post,
+  put: rawCoreHttp.put,
+  patch: rawCoreHttp.patch,
+  delete: rawCoreHttp.delete,
 };
