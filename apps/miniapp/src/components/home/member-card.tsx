@@ -25,6 +25,46 @@ export function MemberCardSkeleton() {
 }
 
 /**
+ * Mất mạng hay API tạm lỗi lúc khôi phục phiên của khách cũ: giữ khung thẻ thành viên và nói rõ, kèm "Thử lại", thay vì rút thẻ và đưa trang
+ * về bố cục khách mới (bản Mini App của `MemberCardUnavailable` ở web).
+ */
+export function MemberCardUnavailable({ onRetry }: { onRetry: () => void }) {
+  return (
+    <section aria-label={homeCopy.member.cardLabel} style={{ padding: SECTION_PAD }}>
+      <div
+        style={{
+          background: 'linear-gradient(135deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))',
+          color: 'var(--color-text-inverse)',
+          borderRadius: 'var(--radius-card)',
+          boxShadow: 'var(--elevation-1)',
+          padding: '0 12px 0 16px',
+          height: HOME_HERO_HEIGHT,
+          boxSizing: 'border-box',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        <Text variant="body-sm" tone="inverse" as="div" style={{ flex: 1, minWidth: 0, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {homeCopy.member.offline}
+        </Text>
+        <button
+          type="button"
+          className="tubu-press"
+          onClick={() => {
+            haptic('light');
+            onRetry();
+          }}
+          style={{ flex: '0 0 auto', minWidth: 96, minHeight: 44, padding: '0 12px', border: 'none', borderRadius: 'var(--radius-control)', background: 'var(--color-bg-surface)', color: 'var(--color-action-secondary-fg)', fontFamily: 'inherit', fontSize: 'var(--type-label-size)', fontWeight: 700, cursor: 'pointer' }}
+        >
+          {homeCopy.member.retry}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
  * Thẻ thành viên gọn một dòng ở đầu Trang chủ khách cũ: lời chào + hạng, Điểm Xanh thật và nút Điểm danh. Chạm vào phần chữ để mở
  * trang Ưu đãi (Điểm Xanh). Cao cố định `HOME_HERO_HEIGHT` (bằng dải Quà khách mới) để đổi loại khách không làm trang nhảy.
  * Số điểm lấy từ hồ sơ đăng nhập khi tổng quan chưa về; tổng quan lỗi thì dòng điểm báo lỗi kèm "Thử lại".
