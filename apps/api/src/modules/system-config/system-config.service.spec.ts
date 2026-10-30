@@ -359,6 +359,9 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
     ['affiliate.auto_wallet_transfer_enabled', true, ['true', 'false', 1, 0, null, {}]],
     ['storefront.require_approval', true, ['true', 'false', 1, 0, null, {}]],
     ['storefront.subdomain_enabled', false, ['true', 'false', 1, 0, null, []]],
+    // Mốc ngày mở bán cho nhãn "Mới": chỉ ngày có thật dạng YYYY-MM-DD hoặc rỗng.
+    ['catalog.launch_date', '2026-11-01', ['2026-02-30', '2026-13-01', '01/11/2026', '2026-11-01T00:00:00Z', 'mai', 20261101, null, true]],
+    ['catalog.launch_date', '', ['2026-11-1']],
   ] as const)('%s: nhận giá trị hợp lệ, từ chối giá trị sai', async (key, fine, badValues) => {
     const ok = mk(fine);
     await ok.svc.set(key, fine as never, 'admin1');

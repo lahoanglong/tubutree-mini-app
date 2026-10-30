@@ -231,6 +231,27 @@ describe('ProductTile', () => {
       expect(screen.queryByText('Mới')).toBeNull();
     });
 
+    it('có mốc ngày mở bán (config công khai): tạo trước 00:00 giờ VN của ngày đó → không nhãn; tạo từ mốc → có nhãn', () => {
+      const withLaunch = (launch: string | null, createdAt: string) => {
+        const qc = new QueryClient();
+        qc.setQueryData(['public-config'], { catalogLaunchDate: launch });
+        const out = render(
+          <QueryClientProvider client={qc}>
+            <ProductTile product={{ ...PRODUCT, createdAt }} variant="grid" onPress={() => {}} />
+          </QueryClientProvider>,
+        );
+        const has = screen.queryByText('Mới') !== null;
+        out.unmount();
+        return has;
+      };
+      const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+      const startOfTodayVn = new Date(`${today}T00:00:00+07:00`).getTime();
+      expect(withLaunch(today, new Date(startOfTodayVn - 1000).toISOString())).toBe(false);
+      expect(withLaunch(today, new Date(startOfTodayVn).toISOString())).toBe(true);
+      expect(withLaunch('', new Date(startOfTodayVn - 1000).toISOString())).toBe(true);
+      expect(withLaunch(null, new Date(startOfTodayVn - 1000).toISOString())).toBe(true);
+    });
+
     it('cùng nhãn giảm giá: hai nhãn xếp dọc ở góc ảnh, không chồng nhau', () => {
       renderTile(<ProductTile product={{ ...PRODUCT, createdAt: daysAgo(2) }} badge={<span>-20%</span>} variant="grid" onPress={() => {}} />);
       const stack = screen.getByText('-20%').parentElement as HTMLElement;

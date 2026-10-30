@@ -41,6 +41,7 @@ export const REFERENCE_CONFIG_PREFIXES: readonly string[] = [
   'retention',
   'pancake',
   'home',
+  'catalog',
   'chat',
 ];
 
@@ -115,6 +116,7 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'dealer.review_hours', value: 24, category: 'dealer', description: 'Số giờ Tubu hẹn xét duyệt hồ sơ đại lý (chỉ để hiện chữ cho người đăng ký, không tự duyệt theo số này)', fallbackSource: { file: PUBLIC_CONFIG, text: "get<unknown>('dealer.review_hours', DEALER_REVIEW_HOURS_DEFAULT)" } },
   { key: 'community.public_preview', value: true, category: 'community', description: 'true = khách chưa đăng nhập được xem trước vài bài cộng đồng đã đăng (chỉ đọc, thích/bình luận/đăng bài vẫn cần đăng nhập); false = phải đăng nhập mới thấy', fallbackSource: { file: FEED, text: 'get<unknown>(PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_DEFAULT)' } },
   { key: 'home.new_customer_layout', value: true, category: 'home', description: 'Trang chủ Mini App: cờ chỉ đổi thứ tự khối, không bật/tắt khối. true = với khách chưa có đơn, "Quà khách mới" và danh mục lên ngay sau ô tìm và dải đơn, trước giờ vàng; false = giữ thứ tự cũ. Khối "Quà khách mới" luôn hiện với khách mới ở cả hai trường hợp. Hiện chưa client nào đọc khoá này; đổi giá trị chưa có tác dụng', fallbackSource: { file: PUBLIC_CONFIG, text: "get<unknown>('home.new_customer_layout', true)" } },
+  { key: 'catalog.launch_date', value: '', category: 'catalog', description: 'Ngày mở bán, gõ trong dấu ngoặc kép dạng "YYYY-MM-DD" (giờ Việt Nam), vd "2026-11-01". Sản phẩm tạo trước 00:00 ngày này không gắn nhãn "Mới" (để hàng nạp sẵn lúc dựng kho không cùng mang nhãn Mới); sản phẩm tạo từ ngày này trở đi vẫn gắn Mới trong 30 ngày. Để trống = mọi sản phẩm tạo trong 30 ngày gần nhất đều gắn Mới', fallbackSource: { file: PUBLIC_CONFIG, text: "get<unknown>(CATALOG_LAUNCH_DATE_KEY, '')" } },
   { key: 'affiliate.max_rate_pct', value: 50, category: 'affiliate', description: 'Trần % hoa hồng CTV admin được đặt cho một biến thể (phần trăm, 50 = 50%)', fallbackSource: { file: COMMISSION_RATE, text: 'export const DEFAULT_AFFILIATE_MAX_RATE_PCT = 50;' } },
   { key: 'affiliate.default_rate_pct', value: 8, category: 'affiliate', description: 'Hoa hồng CTV (phần trăm, 8 = 8%) cho biến thể chưa có % riêng; % đặt riêng cho biến thể (kể cả 0) luôn thắng. Hàng gian hàng đối tác chưa đặt % riêng và sản phẩm bị chặn CTV vẫn 0đ', fallbackSource: { file: COMMISSION_DEFAULT_RATE, text: 'export const DEFAULT_AFFILIATE_DEFAULT_RATE_PCT = 8;' } },
   { key: 'affiliate.commission_eligible_roles', value: ['AFFILIATE', 'DEALER'], category: 'affiliate', description: 'Vai trò được ghi công đơn và hưởng hoa hồng CTV (thêm "CUSTOMER" nếu khách thường chia sẻ cũng được hưởng)', fallbackSource: { file: COMMISSION_ROLES, text: 'DEFAULT_COMMISSION_ELIGIBLE_ROLES: readonly UserRole[] = [UserRole.AFFILIATE, UserRole.DEALER];' } },

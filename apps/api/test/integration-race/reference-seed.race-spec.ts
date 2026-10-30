@@ -328,6 +328,7 @@ describe('seed-reference trên DB trống sau migrate deploy (real Postgres)', (
         'dealer.review_hours',
         'community.public_preview',
         'home.new_customer_layout',
+        'catalog.launch_date',
         'loyalty.chat_order_points_enabled',
         'loyalty.chat_order_monthly_points_cap',
         'loyalty.chat_order_review_above_vnd',

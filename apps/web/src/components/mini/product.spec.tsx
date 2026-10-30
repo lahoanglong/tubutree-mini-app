@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToString } from 'react-dom/server';
 import { hydrateRoot } from 'react-dom/client';
 import { click } from '@/test-utils/dom';
@@ -104,6 +105,23 @@ describe('ProductTile', () => {
     expect(text({ createdAt: daysAgo(31) })).not.toContain('Mới');
     expect(text({})).not.toContain('Mới');
     expect(text({ createdAt: daysAgo(5), inStock: false })).not.toContain('Mới');
+  });
+
+  it('mốc ngày mở bán trong config công khai: tạo trước mốc không gắn "Mới", từ mốc trở đi theo luật 30 ngày', () => {
+    const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+    const startVn = new Date(`${today}T00:00:00+07:00`).getTime();
+    const text = (launch: string | null, createdAt: string) => {
+      const qc = new QueryClient();
+      qc.setQueryData(['public-config'], { catalogLaunchDate: launch });
+      return mount(
+        <QueryClientProvider client={qc}>
+          <ProductTile product={{ ...P, createdAt }} onPress={() => {}} />
+        </QueryClientProvider>,
+      ).container.textContent!;
+    };
+    expect(text(today, new Date(startVn - 1000).toISOString())).not.toContain('Mới');
+    expect(text(today, new Date(startVn).toISOString())).toContain('Mới');
+    expect(text('', new Date(startVn - 1000).toISOString())).toContain('Mới');
   });
 
   it('HTML dựng sẵn không mang nhãn "Mới"; SP qua mốc 30 ngày giữa lúc dựng và lúc hydrate thì hydrate không lỗi', async () => {
