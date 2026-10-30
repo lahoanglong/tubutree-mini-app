@@ -75,14 +75,8 @@ export class WasteGiftRedemptionsService {
     if (!row) throw new NotFoundException('Không tìm thấy lượt đổi quà.');
     if (row.status !== 'READY') throw new ConflictException('Chỉ huỷ được lượt đổi quà đang chờ nhận.');
 
-    if (body.refundPoints === undefined) {
-      const [flags, reversed] = await Promise.all([
-        this.prisma.wasteUserFlags.findUnique({ where: { userId: row.userId }, select: { blockedAt: true } }),
-        this.prisma.wasteRequest.count({ where: { userId: row.userId, status: 'REVERSED' } }),
-      ]);
-      if (flags?.blockedAt || reversed > 0) {
-        throw new BadRequestException('Khách đang bị khoá hoặc từng bị thu hồi điểm đổi rác: hãy chọn rõ có hoàn điểm hay không.');
-      }
+    if (body.refundPoints === undefined && (await this.refundNeedsAdminChoice(this.prisma, row.userId))) {
+      throw new BadRequestException('Khách đang bị khoá hoặc từng bị thu hồi điểm đổi rác: hãy chọn rõ có hoàn điểm hay không.');
     }
     const refund = body.refundPoints ?? true;
     const refundedPoints = refund ? row.pointsCost : 0;
@@ -116,14 +110,25 @@ export class WasteGiftRedemptionsService {
     return dto;
   }
 
+  /** Khách bị khoá hoặc từng có yêu cầu bị thu hồi điểm: hoàn điểm hay không là việc admin quyết, không tự động. Dùng chung cho cancel() và cron. */
+  private async refundNeedsAdminChoice(db: Pick<Prisma.TransactionClient, 'wasteUserFlags' | 'wasteRequest'>, userId: string): Promise<boolean> {
+    const [flags, reversed] = await Promise.all([
+      db.wasteUserFlags.findUnique({ where: { userId }, select: { blockedAt: true } }),
+      db.wasteRequest.count({ where: { userId, status: 'REVERSED' } }),
+    ]);
+    return Boolean(flags?.blockedAt) || reversed > 0;
+  }
+
   /**
    * Quà hiện vật (có hạn nhận) còn READY mà quá hạn thì huỷ, hoàn đúng pointsCost qua cùng đường hoàn của cancel(), báo khách một tin.
-   * Mỗi quà một transaction ngắn; updateMany có guard READY + quá hạn nên quầy trao đúng lúc chỉ một bên thắng.
+   * Mỗi quà một transaction ngắn; updateMany có guard READY + quá hạn nên quầy trao đúng lúc chỉ một bên thắng. Khách bị khoá, có yêu cầu
+   * bị thu hồi hoặc tài khoản đã xoá thì để quà ở READY (hàng Quá hạn nhận) cho admin quyết hoàn hay không.
    */
-  async expireOverdue(now: Date = new Date()): Promise<{ expired: number; failed: number }> {
+  async expireOverdue(now: Date = new Date()): Promise<{ expired: number; failed: number; held: number }> {
     const expiresAt = await this.rewards.expiresAt();
     let expired = 0;
     let failed = 0;
+    let held = 0;
     let lastId: string | null = null;
     for (;;) {
       const page: { id: string }[] = await this.prisma.wasteGiftRedemption.findMany({
@@ -135,6 +140,7 @@ export class WasteGiftRedemptionsService {
       for (const { id } of page) {
         try {
           const row = await this.expireOne(id, now, expiresAt);
+          if (row === 'HELD') { held += 1; continue; }
           if (!row) continue;
           expired += 1;
           await this.notifier.giftExpired(row.userId, { id: row.id, giftName: row.giftName }, row.pointsCost);
@@ -146,13 +152,16 @@ export class WasteGiftRedemptionsService {
       if (page.length < EXPIRE_PAGE) break;
       lastId = page[page.length - 1]!.id;
     }
-    return { expired, failed };
+    return { expired, failed, held };
   }
 
-  private expireOne(id: string, now: Date, expiresAt: Date): Promise<WasteGiftRedemption | null> {
+  private expireOne(id: string, now: Date, expiresAt: Date): Promise<WasteGiftRedemption | 'HELD' | null> {
     return this.prisma.$transaction(async (tx) => {
       const row = await tx.wasteGiftRedemption.findUnique({ where: { id } });
-      if (!row) return null;
+      if (!row || row.status !== 'READY') return null;
+      const owner = await tx.user.findUnique({ where: { id: row.userId }, select: { metadata: true } });
+      const anonymized = Boolean((owner?.metadata as { anonymizedAt?: unknown } | null)?.anonymizedAt);
+      if (anonymized || (await this.refundNeedsAdminChoice(tx, row.userId))) return 'HELD';
       const { count } = await tx.wasteGiftRedemption.updateMany({
         where: { id, ...wasteGiftOverdueWhere(now) },
         data: { status: 'CANCELLED', cancelledAt: now, cancelledByUserId: null, cancelReason: GIFT_EXPIRED_CANCEL_REASON, refundedPoints: row.pointsCost },

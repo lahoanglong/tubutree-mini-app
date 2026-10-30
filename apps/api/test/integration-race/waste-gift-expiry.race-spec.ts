@@ -14,7 +14,7 @@ import { WasteGiftRedemptionsService } from '../../src/modules/waste-exchange/ca
 import { WasteGiftExpiryCron } from '../../src/modules/waste-exchange/catalog/waste-gift-expiry.cron';
 import { startOfVnDay } from '../../src/common/vn-time';
 import { createUser, deleteItData, setConfig, warmPool } from './helpers';
-import { cleanupWaste, createGiftRedemption, createWarehouse, createWasteGift, raceWithHold } from './fixtures/waste-fixtures';
+import { cleanupWaste, createGiftRedemption, createWarehouse, createWasteGift, createWasteItem, createWasteRequest, raceWithHold } from './fixtures/waste-fixtures';
 
 const phone = () => '09' + String(randomInt(10_000_000, 99_999_999));
 const HOUR = 3_600_000;
@@ -34,6 +34,8 @@ describe('waste-gift-expiry race (real Postgres)', () => {
   let svc: WasteGiftRedemptionsService;
   let cron: WasteGiftExpiryCron;
   let staff: { id: string };
+  let warehouseId = '';
+  let itemId = '';
   let savedEnabled: { value: unknown } | null = null;
   const clearConfigCache = () => (moduleRef.get(SystemConfigService) as unknown as { cache: Map<string, unknown> }).cache.clear();
   const giftExpired = jest.fn().mockResolvedValue(undefined);
@@ -75,9 +77,10 @@ describe('waste-gift-expiry race (real Postgres)', () => {
     svc = moduleRef.get(WasteGiftRedemptionsService);
     cron = moduleRef.get(WasteGiftExpiryCron);
     savedEnabled = await prisma.systemConfig.findUnique({ where: { key: 'waste.enabled' }, select: { value: true } });
-    await setConfig(prisma, 'waste.enabled', true);
+    await setConfig(prisma, 'waste.enabled', false);
     clearConfigCache();
-    await createWarehouse(prisma);
+    warehouseId = (await createWarehouse(prisma)).id;
+    itemId = (await createWasteItem(prisma, { unitsPerPoint: 1, pointsPerGroup: 1000 })).id;
     staff = await createUser(prisma, { role: 'STAFF' });
     userIds.push(staff.id);
   });
@@ -86,7 +89,8 @@ describe('waste-gift-expiry race (real Postgres)', () => {
     if (savedEnabled) await setConfig(prisma, 'waste.enabled', savedEnabled.value as never);
     else await prisma.systemConfig.deleteMany({ where: { key: 'waste.enabled' } });
     clearConfigCache();
-    await cleanupWaste(prisma, { giftIds });
+    await prisma.wasteUserFlags.deleteMany({ where: { userId: { in: userIds } } });
+    await cleanupWaste(prisma, { giftIds, pointIds: [warehouseId], itemIds: [itemId] });
     await deleteItData(prisma, { userIds });
     await moduleRef?.close();
   });
@@ -163,16 +167,44 @@ describe('waste-gift-expiry race (real Postgres)', () => {
     noDeadlock(results);
   });
 
-  it('the cron programme-flag switch: off means nothing is cancelled', async () => {
-    const { redemption } = await newCase();
-    const original = moduleRef.get(WasteConfigService).snapshot.bind(moduleRef.get(WasteConfigService));
-    const spy = jest.spyOn(moduleRef.get(WasteConfigService), 'snapshot').mockImplementation(async () => ({ ...(await original()), enabled: false }));
-    try {
-      expect(await cron.run()).toEqual({ expired: 0, failed: 0 });
-    } finally {
-      spy.mockRestore();
-    }
-    expect((await redemptionOf(redemption.id)).status).toBe('READY');
+  it('waste.enabled is off for this whole spec: the cron still cancels and refunds', async () => {
+    const { customer, redemption } = await newCase();
+
+    expect(await cron.run()).toMatchObject({ failed: 0 });
+
+    expect((await redemptionOf(redemption.id)).status).toBe('CANCELLED');
+    expect(await balanceOf(customer.id)).toBe(130_000);
+  });
+
+  it.each([
+    ['blocked customer', async (userId: string) => void (await prisma.wasteUserFlags.create({ data: { userId, blockedAt: new Date() } }))],
+    [
+      'customer with a REVERSED request',
+      async (userId: string) =>
+        void (await createWasteRequest(prisma, { userId, method: 'DROP_OFF', status: 'REVERSED', pointId: warehouseId, lines: [{ itemId, declaredQty: 1, receivedQty: 1 }] })),
+    ],
+    [
+      'anonymized account',
+      async (userId: string) => void (await prisma.user.update({ where: { id: userId }, data: { metadata: { anonymizedAt: new Date().toISOString() } } })),
+    ],
+  ])('%s: the cron leaves the overdue gift READY, no refund, no event, no notice; the admin decides', async (_name, arrange) => {
+    const held = await newCase();
+    const normal = await newCase();
+    await arrange(held.customer.id);
+
+    const res = await svc.expireOverdue();
+
+    expect(res.held).toBeGreaterThanOrEqual(1);
+    const row = await redemptionOf(held.redemption.id);
+    expect(row.status).toBe('READY');
+    expect(await balanceOf(held.customer.id)).toBe(100_000);
+    expect(await refundRows(held.redemption.id)).toBe(0);
+    expect(await stockOf(held.gift.id)).toBe(0);
+    expect(await eventCount(held.redemption.id, 'GIFT_EXPIRED')).toBe(0);
+    expect(noticesFor(held.redemption.id)).toBe(0);
+    expect((await redemptionOf(normal.redemption.id)).status).toBe('CANCELLED');
+    expect(await balanceOf(normal.customer.id)).toBe(130_000);
+    expect(noticesFor(normal.redemption.id)).toBe(1);
   });
 
   it('the cron sweeps first, then the desk hands over: the row stays CANCELLED, one refund, the desk is a 409', async () => {
