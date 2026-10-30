@@ -51,7 +51,6 @@ const BLOCKED = 'Tài khoản đã bị khoá. Liên hệ Tubu Tree để đư�
 const PAGES: { name: string; load: () => Promise<{ default: ComponentType }>; generic: RegExp }[] = [
   { name: 'Cá nhân', load: () => import('./profile'), generic: /Đăng nhập để xem tích điểm/ },
   { name: 'Ưu đãi', load: () => import('./offers'), generic: /Đăng nhập/ },
-  { name: 'Vườn Xanh', load: () => import('./game'), generic: /Đăng nhập để trồng cây/ },
   { name: 'Điểm Xanh', load: () => import('./loyalty'), generic: /Đăng nhập/ },
   { name: 'Đổi quà', load: () => import('./rewards'), generic: /Đăng nhập/ },
   { name: 'Cộng đồng', load: () => import('./feed'), generic: /Đăng nhập để xem cộng đồng/ },

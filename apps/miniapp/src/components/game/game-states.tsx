@@ -1,7 +1,6 @@
 import { Skeleton } from '../ui/skeleton';
 import { EmptyState } from '../ui/empty-state';
 import { vi } from '../../i18n/vi';
-import { useBlockedMessage } from '../ui/auth-gate';
 
 export function GameSkeleton() {
   return (
@@ -15,6 +14,5 @@ export function GameSkeleton() {
 }
 
 export function GameLoginGate({ onLogin }: { onLogin: () => void }) {
-  const blocked = useBlockedMessage();
-  return <EmptyState art="sprout" heading={vi.game.newbie.loginToView} body={blocked ?? undefined} ctaLabel={vi.auth.loginCta} onCta={onLogin} />;
+  return <EmptyState art="sprout" heading={vi.game.newbie.loginToView} ctaLabel={vi.auth.loginCta} onCta={onLogin} />;
 }
