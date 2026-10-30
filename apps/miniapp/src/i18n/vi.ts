@@ -33,6 +33,8 @@ export const vi = {
     loadFailed: 'Chưa tải được nội dung',
     sessionUnavailable: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.',
     sessionRateLimited: 'Bạn thao tác quá nhanh, thử lại sau khoảng một phút nhé.',
+    sessionRateLimitedTitle: 'Bạn thao tác quá nhanh',
+    sessionRateLimitedBody: 'Bạn vẫn đang đăng nhập. Đợi khoảng một phút rồi bấm Thử lại nhé.',
     title: 'Chưa tải được trang này',
     notFoundTitle: 'Không tìm thấy',
     needHelp: 'Cần hỗ trợ?',

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Clock } from 'lucide-react';
 import { useAuthStore } from '../../store/auth';
 import { useAuthPhase, type AuthPhase } from '../../hooks/use-auth-phase';
 import { vi } from '../../i18n/vi';
@@ -12,6 +13,12 @@ import { EmptyState, ErrorState } from './empty-state';
 export function SessionUnavailable({ variant }: { variant?: 'page' | 'inline' }) {
   const restore = useAuthStore((s) => s.restore);
   const error = useAuthStore((s) => s.error);
+  // Bị giới hạn tốc độ thì biểu tượng, tiêu đề và lời nói đúng chuyện đó, khớp màn web (login-required.tsx); mất mạng giữ lỗi tải chung.
+  if (error === vi.errors.sessionRateLimited) {
+    return (
+      <ErrorState icon={Clock} title={vi.errors.sessionRateLimitedTitle} message={vi.errors.sessionRateLimitedBody} onRetry={() => void restore()} variant={variant} />
+    );
+  }
   return <ErrorState message={error ?? vi.errors.sessionUnavailable} onRetry={() => void restore()} variant={variant} />;
 }
 

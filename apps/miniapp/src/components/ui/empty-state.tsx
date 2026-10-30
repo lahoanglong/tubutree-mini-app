@@ -1,5 +1,5 @@
 import { Button as ZmpButton, Text } from 'zmp-ui';
-import { TriangleAlert } from 'lucide-react';
+import { TriangleAlert, type LucideIcon } from 'lucide-react';
 import { vi } from '../../i18n/vi';
 import { SupportHotline } from '../support-hotline';
 import { Button } from './button';
@@ -118,6 +118,7 @@ export function ErrorState({
   onHome,
   variant = 'page',
   title,
+  icon: ErrorIcon = TriangleAlert,
   showSupport,
   retrying,
 }: {
@@ -129,6 +130,8 @@ export function ErrorState({
   variant?: 'page' | 'inline';
   /** Mặc định: "Chưa tải được trang này" (lỗi tải) hoặc "Không tìm thấy" (có `onHome`). */
   title?: string;
+  /** Biểu tượng trong vòng tròn vàng; mặc định là tam giác cảnh báo của lỗi tải. */
+  icon?: LucideIcon;
   /** Hiện dòng "Cần hỗ trợ? Gọi …". Mặc định bật ở variant 'page', tắt ở 'inline'. */
   showSupport?: boolean;
   /** Đang tải lại sau khi bấm "Thử lại": nút báo đang tải và không nhận thêm lần bấm. */
@@ -158,7 +161,7 @@ export function ErrorState({
           background: 'var(--color-status-warning-bg)',
         }}
       >
-        <TriangleAlert size={inline ? 22 : 28} strokeWidth={1.75} color="var(--color-status-warning-fg)" />
+        <ErrorIcon size={inline ? 22 : 28} strokeWidth={1.75} color="var(--color-status-warning-fg)" />
       </div>
       <Heading variant="title-md" as="p">
         {title ?? (onHome ? vi.errors.notFoundTitle : vi.errors.title)}
