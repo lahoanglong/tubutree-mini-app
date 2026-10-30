@@ -89,11 +89,11 @@ export function clearSessionMarker(): void {
 /** Header đánh dấu "tôi là web shop" — bật chế độ cookie ở BE, đồng thời là lớp chống CSRF. */
 const WEB_CLIENT_HEADER = { 'x-client': 'web' } as const;
 
-/** Kết quả một lượt refresh: 'dead' = phiên chết thật (đã xoá cờ); 'transient' = lỗi tạm, cờ còn nguyên. */
+/** Kết quả một lượt refresh: 'dead' = phiên chết thật (đã xoá cờ); 'transient' = lỗi tạm, cờ còn nguyên (`rateLimited`: do 429, mạng vẫn ổn). */
 export type RefreshOutcome =
   | { kind: 'ok'; data: { accessToken: string; user?: unknown } }
   | { kind: 'dead' }
-  | { kind: 'transient' };
+  | { kind: 'transient'; rateLimited?: true };
 
 // Khoá Web Locks dùng chung mọi tab cùng origin: các tab mở cùng lúc (khôi phục trình duyệt, mở nhiều
 // sản phẩm ở tab mới) refresh lần lượt, tab sau gửi cookie tab trước vừa xoay thay vì cùng một token.
@@ -125,6 +125,7 @@ async function doRefresh(): Promise<RefreshOutcome> {
     clearSessionMarker();
     return { kind: 'dead' };
   }
+  if (reply.status === 429) return { kind: 'transient', rateLimited: true };
   const data = reply.body as { accessToken?: string; user?: unknown } | undefined;
   if (!reply.ok || typeof data?.accessToken !== 'string') return { kind: 'transient' };
   accessToken = data.accessToken;

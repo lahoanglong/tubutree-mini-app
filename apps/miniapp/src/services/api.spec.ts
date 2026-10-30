@@ -165,7 +165,7 @@ describe('isAnonAuthCall — chỉ các lệnh /auth/* không cần phiên mới
   });
 });
 
-describe('401 ở lệnh /auth/* (E-13)', () => {
+describe('401 ở lệnh /auth/*', () => {
   afterEach(() => {
     setUnauthorizedHandler(null);
     setAccessToken(null);
