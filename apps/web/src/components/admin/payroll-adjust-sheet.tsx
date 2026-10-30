@@ -78,8 +78,9 @@ export function PayrollAdjustSheet({
         ...(allowDuplicate ? { allowDuplicate: true } : {}),
       });
       // Máy chủ chỉ tự tính lại bảng lương khi mở đúng tháng hiện tại; cron chỉ tính lại tháng trước trong 3 ngày đầu tháng, ngoài khoảng đó
-      // số tháng cũ (kể cả trong QR và ô "Số tiền" khi ghi đã trả) đứng yên tới khi chốt, ghi đã trả hoặc mở Xem giờ. Khoản đã ghi rồi nên lỗi ở bước này
-      // không được biến thành lỗi ghi khoản (admin sẽ ghi lại và phạt hai lần).
+      // số tháng cũ (kể cả trong QR và ô "Số tiền" khi ghi đã trả) đứng yên tới khi có lần đọc hay ghi tính lại tháng đó (chốt, ghi đã trả,
+      // Xem giờ, nhân viên mở Lương của tôi). Khoản đã ghi rồi nên lỗi ở bước này không được biến thành lỗi ghi khoản
+      // (admin sẽ ghi lại và phạt hai lần).
       try {
         await recomputePayroll(coreHttp, row.staff.id, year, month);
         return true;

@@ -32,6 +32,7 @@ vi.mock('../services/zmp-bridge', () => ({
   },
 }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: mocks.authStatus, login: mocks.login }) }));
+vi.mock('../components/ui/auth-gate', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useLoginWithNotice: () => mocks.login }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1, returnWindowDays: mocks.returnWindowDays, chat: { enabled: mocks.chatOn, hours: { start: '08:00', end: '21:00' } } }) }));
 vi.mock('../components/reviews-section', () => ({ ReviewsSection: () => null, Stars: () => null }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));

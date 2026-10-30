@@ -19,7 +19,7 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { EmptyState } from '../components/ui/empty-state';
-import { AuthPhaseView } from '../components/ui/auth-gate';
+import { AuthPhaseView, useBlockedMessage } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { Icon } from '../components/ui/icon';
 import { ListRow } from '../components/ui/list-row';
@@ -99,6 +99,7 @@ export default function ProfilePage() {
   const shareWithFallback = useShareWithFallback();
   const { user, status } = useAuthStore();
   const phase = useAuthPhase();
+  const blocked = useBlockedMessage();
   const authed = status === 'authenticated';
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const unreadCount = useQuery({ ...unreadNotificationCountQuery(coreHttp), enabled: authed }).data?.count ?? 0;
@@ -195,7 +196,7 @@ export default function ProfilePage() {
                 <EmptyState
                   art="sprout"
                   heading="Đã đăng xuất"
-                  body="Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn."
+                  body={blocked ?? 'Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn.'}
                   ctaLabel="Đăng nhập ngay"
                   onCta={() => void useAuthStore.getState().login()}
                 />
