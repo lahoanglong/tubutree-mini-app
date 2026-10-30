@@ -2,7 +2,7 @@ import { render, screen, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { ComponentType, ReactNode } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 /**
  * Tài khoản bị khoá: login() gặp 401 ACCOUNT_BLOCKED, store về 'idle' kèm lời máy chủ ở `error`. Mọi màn mời đăng nhập
@@ -58,6 +58,12 @@ const PAGES: { name: string; load: () => Promise<{ default: ComponentType }>; ge
   { name: 'Bài viết', load: () => import('./post-detail'), generic: /Đăng nhập để xem cộng đồng/ },
 ];
 
+// Nạp module trang ngoài thân test: import động cả trang mất vài giây khi máy bận, tính vào hạn 5 giây của ca đầu thì ca đó hết giờ.
+const loaded = new Map<string, ComponentType>();
+beforeAll(async () => {
+  for (const p of PAGES) loaded.set(p.name, (await p.load()).default);
+}, 120_000);
+
 function renderPage(Page: ComponentType) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
@@ -75,19 +81,17 @@ function setGuest(error?: string) {
 
 afterEach(() => setGuest(undefined));
 
-describe.each(PAGES)('$name — khách đã đăng xuất hoặc bị khoá', ({ load, generic }) => {
+describe.each(PAGES)('$name — khách đã đăng xuất hoặc bị khoá', ({ name, generic }) => {
   it('tài khoản bị khoá: hiện lời máy chủ, vẫn còn nút đăng nhập', async () => {
     setGuest(BLOCKED);
-    const { default: Page } = await load();
-    renderPage(Page);
+    renderPage(loaded.get(name)!);
     expect(await screen.findByText(BLOCKED)).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /Đăng nhập|Tiếp tục với Zalo/ }).length).toBeGreaterThan(0);
   });
 
   it('khách thường: vẫn là lời mời đăng nhập của màn, không có lời khoá', async () => {
     setGuest(undefined);
-    const { default: Page } = await load();
-    const { container } = renderPage(Page);
+    const { container } = renderPage(loaded.get(name)!);
     expect(await screen.findAllByText(generic)).not.toHaveLength(0);
     expect(container.textContent).not.toContain('bị khoá');
   });
