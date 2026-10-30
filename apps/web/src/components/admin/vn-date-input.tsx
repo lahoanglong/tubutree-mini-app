@@ -54,6 +54,7 @@ export function VnDateInput({
   className,
   ariaLabel,
   onPendingChange,
+  rangeMessage,
 }: {
   value: string;
   onChange: (iso: string) => void;
@@ -64,6 +65,8 @@ export function VnDateInput({
   disabled?: boolean;
   className?: string;
   ariaLabel?: string;
+  /** Câu báo khi ngày nằm ngoài min/max (nói rõ phải làm gì); `null` = chỉ tô viền, cha đã tự báo bằng câu riêng. Bỏ trống dùng câu chung. */
+  rangeMessage?: string | null;
 }) {
   const [text, setText] = useState(isoToVn(value));
   const [touched, setTouched] = useState(false);
@@ -145,9 +148,9 @@ export function VnDateInput({
           {text.length === 10 ? 'Ngày không có thật, chưa áp dụng.' : 'Chưa áp dụng, gõ đủ ngày dd/mm/yyyy.'}
         </span>
       )}
-      {invalid && (
+      {invalid && !(outOfRange && rangeMessage === null) && (
         <span role="alert" className="mt-0.5 max-w-[18rem] text-xs text-danger-fg">
-          {outOfRange ? 'Ngày nằm ngoài khoảng cho phép.' : text.length === 10 ? 'Ngày không có thật, chưa áp dụng.' : 'Nhập ngày dạng dd/mm/yyyy, ví dụ 03/10/2026.'}
+          {outOfRange ? (rangeMessage ?? 'Ngày nằm ngoài khoảng cho phép.') : text.length === 10 ? 'Ngày không có thật, chưa áp dụng.' : 'Nhập ngày dạng dd/mm/yyyy, ví dụ 03/10/2026.'}
         </span>
       )}
     </span>

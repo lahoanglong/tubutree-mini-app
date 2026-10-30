@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render } from '@/test-utils/dom';
 import { describe, expect, it, vi } from 'vitest';
-import { RouteSkeleton, skeletonKindFor } from './route-skeleton';
+import { RouteSkeleton, skeletonBackHref, skeletonKindFor } from './route-skeleton';
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/tai-khoan/diem-xanh' }));
 
@@ -20,6 +20,18 @@ describe('skeletonKindFor (R-76)', () => {
     expect(skeletonKindFor('/cong-dong')).toBe('list');
     expect(skeletonKindFor(null)).toBe('list');
     expect(skeletonKindFor('/tai-khoan-gia')).toBe('list');
+  });
+});
+
+describe('skeletonBackHref (R-158)', () => {
+  it('trang con của Tài khoản, kể cả chi tiết đơn, lùi về /tai-khoan trong lúc chờ', () => {
+    expect(skeletonBackHref('/tai-khoan/don-hang/TUBU123')).toBe('/tai-khoan');
+    expect(skeletonBackHref('/tai-khoan/diem-xanh')).toBe('/tai-khoan');
+  });
+  it('trang khác và chính /tai-khoan không khai báo đích', () => {
+    expect(skeletonBackHref('/tai-khoan')).toBeUndefined();
+    expect(skeletonBackHref('/gio-hang')).toBeUndefined();
+    expect(skeletonBackHref(null)).toBeUndefined();
   });
 });
 
@@ -50,5 +62,12 @@ describe('RouteSkeleton: chỗ giữ tiêu đề (không nhảy bố cục)', ()
     expect(container.querySelector('[role="status"]')?.className).not.toContain('py-4');
     const game = render(<RouteSkeleton kind="game" />);
     expect(heights(game.container)[0]).toBe('160px');
+  });
+
+  it('trang con của Tài khoản: khung standalone lẫn khung trong trang đều khai đích lùi /tai-khoan cho nút lùi nổi (R-158)', () => {
+    for (const standalone of [true, false]) {
+      const { container } = render(<RouteSkeleton kind="loyalty" standalone={standalone} />);
+      expect(container.querySelector('[data-back-href]')?.getAttribute('data-back-href')).toBe('/tai-khoan');
+    }
   });
 });
