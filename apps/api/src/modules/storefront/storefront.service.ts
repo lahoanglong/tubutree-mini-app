@@ -17,6 +17,7 @@ import { assertStorefrontImagesAllowed, isStorefrontImageKind, matchesStorefront
 import { isStorefrontApprovalRequired, isStorefrontSubdomainEnabled, withSubdomainFlag } from './storefront-config';
 import { isStorefrontApproved, ownerStorefrontState, publicStorefrontWhere } from './storefront-visibility';
 import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from './storefront-publish';
+import { contentChangedPatch } from './storefront-content-change';
 
 // Chặn CTV tạo vô hạn bộ sưu tập/sản phẩm trong 1 gian hàng (không ai cần vượt số này để
 // bán hàng bình thường) — mirror MAX_WISHLIST_ITEMS ở wishlist.service.ts.
@@ -24,8 +25,6 @@ const MAX_COLLECTIONS_PER_STORE = 30;
 const MAX_ITEMS_PER_COLLECTION = 100;
 // Trần hostname DNS (RFC 1035): dài hơn không thể là host thật.
 const HOST_MAX_LENGTH = 253;
-/** Trường nội dung khách nhìn thấy đầu tiên trên gian hàng; đổi sau khi đã duyệt thì admin được báo. */
-const CONTENT_FIELDS = ['title', 'headerNote', 'avatarUrl', 'coverUrl'] as const;
 
 /** Lý do khách không thấy một món trong gian hàng (null = khách thấy) — cùng điều kiện lọc của getPublicBySlug. */
 export function buyerHiddenReason(item: {
@@ -216,9 +215,8 @@ export class StorefrontService {
       if (v === undefined || (!isPartnerStore(sf) && k.startsWith('warehouse'))) continue;
       data[k] = k !== 'title' && typeof v === 'string' && v.trim() === '' ? null : v;
     }
-    // Gian hàng đã duyệt mà chủ đổi nội dung khách nhìn thấy trước tiên: chỉ đánh dấu để admin xem lại, không bắt duyệt lại. So với giá trị
-    // đang lưu vì builder gửi lại cả bộ trường mỗi lần bấm Lưu.
-    if (sf.approvedAt && CONTENT_FIELDS.some((k) => k in data && data[k] !== sf[k])) data.contentChangedAt = new Date();
+    // Gian hàng đã duyệt mà chủ đổi nội dung khách nhìn thấy trước tiên: chỉ đánh dấu để admin xem lại, không bắt duyệt lại.
+    Object.assign(data, contentChangedPatch(sf, data));
     if (dto.subdomain && dto.subdomain !== sf.subdomain) {
       await recordReleasedIdentifiers(this.prisma, sf.id, [sf.subdomain], [dto.subdomain]);
     }
@@ -303,7 +301,7 @@ export class StorefrontService {
                   select: {
                     id: true, name: true, slug: true, thumbnail: true, brand: true,
                     basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, isActive: true,
-                    affiliateBlocked: true, soldExternal: true, soldApp: true, approvalStatus: true, storefrontId: true,
+                    affiliateBlocked: true, soldExternal: true, soldApp: true, approvalStatus: true, storefrontId: true, createdAt: true,
                     // Chỉ để tính inStock (audit A4-06: lưới gian hàng chưa từng biết SP hết hàng
                     // hay chưa, ProductTile giờ cần cờ này để hiện overlay "tạm hết hàng").
                     variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
@@ -373,6 +371,7 @@ export class StorefrontService {
               ratingAvg: i.product.ratingAvg, reviewCount: i.product.reviewCount,
               sold: i.product.soldExternal + i.product.soldApp,
               inStock: (i.product.variations ?? []).some((v) => v.stock > 0),
+              createdAt: i.product.createdAt?.toISOString(),
             },
           })),
         };

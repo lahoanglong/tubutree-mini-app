@@ -2,10 +2,12 @@
 
 import { CalendarCheck, Check, Gift, Sprout, type LucideIcon } from 'lucide-react';
 import { checkInCopy, checkInDayIcon, checkInTodayLine, type CheckInDayIcon } from '@tubutree/app-core/daily-check-in-copy';
+import { checkInDayAria, checkInRule } from '@tubutree/app-core/daily-check-in-guest-copy';
 import { useCheckIn } from '@/lib/use-check-in';
 import { ErrorState } from '@/components/ui/error-state';
 import { Button, Card, Heading, Icon, Skeleton, Text } from '@/components/mini';
 import { loadErrorText } from '@/lib/error-text';
+import { GuestPointsNote } from './guest-points-note';
 
 const DAY_ICON: Record<CheckInDayIcon, LucideIcon> = { check: Check, gift: Gift, sprout: Sprout };
 
@@ -50,7 +52,7 @@ export function DailyCheckInCard({ authed }: { authed: boolean }) {
           {status.rewards.map((r) => (
             <div
               key={r.day}
-              aria-label={checkInCopy.dayAria(r.day, r.points, r.claimed)}
+              aria-label={checkInDayAria(status, r)}
               style={{
                 padding: '6px 0',
                 borderRadius: 'var(--radius-control)',
@@ -77,6 +79,7 @@ export function DailyCheckInCard({ authed }: { authed: boolean }) {
             {today}
           </Text>
         )}
+        {status.pointsBlocked && <GuestPointsNote margin="10px 0 0" />}
         <Button fullWidth disabled={!view.canCheckIn || pending} loading={pending} onPress={checkIn} style={{ marginTop: 12 }}>
           {view.buttonLabel}
         </Button>
@@ -86,7 +89,7 @@ export function DailyCheckInCard({ authed }: { authed: boolean }) {
           </p>
         )}
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
-          {checkInCopy.rule}
+          {checkInRule(status)}
         </Text>
       </Card>
     </div>

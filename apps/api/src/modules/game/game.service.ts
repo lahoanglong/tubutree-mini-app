@@ -30,7 +30,7 @@ import {
 import { countHarvestCoupons } from './harvest-coupon-count';
 import { countReferralSuccesses, readReferralSuccessRows, referralSuccessesSince } from '../wallet/referral-reward';
 import { ensureGameProfile, initialEcoImpact, sproutAlreadyRewarded } from './game-profile';
-import { isRealUser } from '../../common/real-user';
+import { GUEST_POINTS_MSG, isRealUser, pointsBlockedFor } from '../../common/real-user';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { startOfVnDay, startOfVnMonth, vnDateKey, vnDaysBetween } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
@@ -847,6 +847,8 @@ export class GameService {
   async getMissions(userId: string) {
     const missions = await this.prisma.mission.findMany({ where: { disabledAt: null } });
     const metricsFor = await this.metricsBySince(userId, missions);
+    const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    const pointsBlocked = pointsBlockedFor(owner);
 
     const missionIds = missions.map((m) => m.id);
     // A1-02: mission_progress giờ là khoá "đã nhận" thật (trước đây tồn tại trong schema nhưng
@@ -883,6 +885,7 @@ export class GameService {
         goal: targetGoal,
         completed,
         claimed,
+        ...(pointsBlocked ? { pointsBlocked } : {}),
       };
     });
   }
@@ -900,6 +903,9 @@ export class GameService {
     const mission = await this.prisma.mission.findUnique({ where: { code } });
     if (!mission) throw new NotFoundException(`Nhiệm vụ "${code}" không tồn tại.`);
     if (mission.disabledAt) throw new BadRequestException('Nhiệm vụ này đang tạm dừng.');
+    // Khách vãng lai chưa nhận được thưởng: không ghi dòng "đã nhận" để sau khi đăng nhập Zalo vẫn nhận được.
+    const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    if (!isRealUser(owner)) throw new ForbiddenException(GUEST_POINTS_MSG);
 
     const metrics = await this.missionMetrics(userId, mission);
     const targetGoal = mission.goal > 0 ? mission.goal : 1;

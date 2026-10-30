@@ -103,6 +103,32 @@ describe('SubscribeSheet (C-015: ngày bắt đầu + cách trả + địa chỉ
     );
   });
 
+  it('Ví đang âm → hàng Ví Tubu bị khoá kèm lý do, bấm không chọn được, gói tạo bằng COD', async () => {
+    mocks.getWallet.mockResolvedValue({ walletBalance: -50000 });
+    mocks.createSubscription.mockResolvedValue({ ...SUB, firstOrder: null });
+    renderSheet();
+    await waitFor(() => expect(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true'));
+    const wallet = await screen.findByRole('radio', { name: /Ví đang âm 50\.000đ/ });
+    expect(wallet).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(wallet);
+    expect(wallet).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu đặt định kỳ' }));
+    await waitFor(() => expect(mocks.createSubscription).toHaveBeenCalledWith(expect.objectContaining({ paymentMethod: 'COD' })));
+  });
+
+  it('đã chọn Ví rồi số dư tải về âm → khoá nút tạo, không gửi gói trả bằng Ví', async () => {
+    let resolveWallet!: (w: { walletBalance: number }) => void;
+    mocks.getWallet.mockReturnValue(new Promise((r) => (resolveWallet = r)));
+    renderSheet();
+    await waitFor(() => expect(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.click(screen.getByRole('radio', { name: /^Ví Tubu/ }));
+    expect(screen.getByRole('radio', { name: /^Ví Tubu/ })).toHaveAttribute('aria-checked', 'true');
+    resolveWallet({ walletBalance: -50000 });
+    await screen.findByRole('radio', { name: /Ví đang âm 50\.000đ/ });
+    expect(screen.getByRole('button', { name: 'Bắt đầu đặt định kỳ' })).toBeDisabled();
+    expect(mocks.createSubscription).not.toHaveBeenCalled();
+  });
+
   it('ngày ngoài khoảng (hôm nay) → báo lỗi, khoá nút tạo', async () => {
     renderSheet();
     await screen.findByRole('radio', { name: /1 Lê Lợi/ });

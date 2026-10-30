@@ -20,7 +20,7 @@ export function timelineFor(r: { method: WasteMethod; status: WasteRequestStatus
     return { steps, current: r.status === 'IN_TRANSIT' ? 1 : r.status === 'RECEIVED' ? 2 : 0 };
   }
   if (r.method === 'DROP_OFF') return { steps, current: r.status === 'OPEN' ? 1 : 2 };
-  // Thu kèm đơn: kho nhận xong (RECEIVED) là đang đếm, bước 3.
+  // Thu kèm đơn: kho đã nhận (RECEIVED) thì bước "Kho nhận, đếm" đã qua, đang chờ cộng điểm (current = 3).
   if (r.status === 'RECEIVED') return { steps, current: 3 };
   return { steps, current: r.status === 'OPEN' && !r.orderCode ? 1 : 2 };
 }

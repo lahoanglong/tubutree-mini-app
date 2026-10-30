@@ -1448,6 +1448,26 @@ describe('GameService.getMissions', () => {
     expect(checkin.claimed).toBe(false); // chu kỳ mới (1) chưa nhận, dù chu kỳ cũ (0) đã nhận
   });
 
+  it('khách vãng lai: mỗi nhiệm vụ mang pointsBlocked=GUEST, tiến độ và trạng thái xong giữ nguyên; user thật không có cờ', async () => {
+    const over = {
+      gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 7 }) },
+      review: { findMany: jest.fn().mockResolvedValue(reviewedProducts(0)) },
+      order: settledOrders(0),
+      user: { count: jest.fn().mockResolvedValue(0) },
+      mission: { findMany: jest.fn().mockResolvedValue(MISSIONS) },
+      missionProgress: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const guest = await new GameService(
+      makePrisma({ ...over, user: { ...over.user, findUnique: jest.fn().mockResolvedValue({ zaloId: 'guest_h_abc', phone: null }) } }),
+      makeConfig(),
+      analytics,
+    ).getMissions('u1');
+    expect(guest.every((m) => (m as { pointsBlocked?: string }).pointsBlocked === 'GUEST')).toBe(true);
+    expect(guest[0]).toMatchObject({ code: 'CHECKIN_7', progress: 7, completed: true, claimed: false, rewardPoints: 30 });
+    const real = await new GameService(makePrisma(over), makeConfig(), analytics).getMissions('u1');
+    expect(real.some((m) => 'pointsBlocked' in m)).toBe(false);
+  });
+
   it('ENGAGE-1: INVITE_3 đếm lượt giới thiệu THÀNH CÔNG (sổ thưởng REFERRAL_ORDER2 trừ thu hồi), không đếm tài khoản được mời', async () => {
     const pointsCount = jest.fn().mockImplementation(async ({ where }: { where: { reason: { startsWith: string } } }) => (where.reason.startsWith === 'REFERRAL_ORDER2:' ? 2 : 0));
     const pointsFind = jest.fn();
@@ -1738,6 +1758,51 @@ describe('GameService.claimMission', () => {
       data: { userId: 'u1', delta: 20, reason: 'MISSION:FIRST_ORDER:0', refType: 'GAME', expiresAt: REWARD_EXPIRES_AT },
     });
     expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsBalance: { increment: 20 } } });
+  });
+
+  describe('khách vãng lai (không phải user thật)', () => {
+    const guestOwner = { zaloId: 'guest_h_abc', phone: null };
+
+    it('đủ điều kiện nhưng là khách vãng lai → 403 báo đăng nhập Zalo, KHÔNG đánh dấu đã nhận, KHÔNG cộng điểm', async () => {
+      const missionProgressCreate = jest.fn();
+      const pointsCreate = jest.fn();
+      const userUpdate = jest.fn();
+      const prisma = missionsPrisma({
+        missionProgress: { create: missionProgressCreate },
+        pointsTransaction: { create: pointsCreate },
+        user: { findUnique: jest.fn().mockResolvedValue(guestOwner), update: userUpdate },
+      });
+      const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty);
+      await expect(svc.claimMission('u1', 'FIRST_ORDER')).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(svc.claimMission('u1', 'FIRST_ORDER')).rejects.toThrow('Đăng nhập Zalo để nhận Điểm Xanh');
+      expect(missionProgressCreate).not.toHaveBeenCalled();
+      expect(pointsCreate).not.toHaveBeenCalled();
+      expect(userUpdate).not.toHaveBeenCalled();
+    });
+
+    it('nhiệm vụ 7 ngày (CHECKIN_7) cũng bị chặn với khách vãng lai dù chuỗi đã đủ', async () => {
+      const missionProgressCreate = jest.fn();
+      const prisma = makePrisma({
+        mission: { findUnique: jest.fn().mockResolvedValue({ id: 'm1', code: 'CHECKIN_7', goal: 7, rewardPoints: 30_000, isRepeatable: true, rewardCoupon: null }) },
+        gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 7 }) },
+        missionProgress: { create: missionProgressCreate },
+        user: { findUnique: jest.fn().mockResolvedValue(guestOwner) },
+      });
+      await expect(new GameService(prisma, makeConfig(), analytics).claimMission('u1', 'CHECKIN_7')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(missionProgressCreate).not.toHaveBeenCalled();
+    });
+
+    it('khách vãng lai đã có SĐT là user thật: nhận thưởng như thường', async () => {
+      const pointsCreate = jest.fn().mockResolvedValue({});
+      const prisma = missionsPrisma({
+        missionProgress: { create: jest.fn().mockResolvedValue({ id: 'mp1' }) },
+        pointsTransaction: { create: pointsCreate },
+        user: { findUnique: jest.fn().mockResolvedValue({ zaloId: 'guest_h_abc', phone: '0901234567' }), update: jest.fn().mockResolvedValue({}) },
+      });
+      const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty);
+      await expect(svc.claimMission('u1', 'FIRST_ORDER')).resolves.toEqual({ claimed: true, rewardPoints: 20, couponCode: null });
+      expect(pointsCreate).toHaveBeenCalledTimes(1);
+    });
   });
 
   // PE-3 (OQ-1): thưởng nhiệm vụ là Điểm Xanh thường, hết hạn theo loyalty.point_expire_months.

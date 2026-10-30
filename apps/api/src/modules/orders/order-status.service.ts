@@ -532,7 +532,7 @@ export class OrderStatusService {
   /**
    * Chạy lại phần đảo sau commit của đơn CANCELLED/RETURNED chưa có mốc reversalEffectsAt (cron gọi): lần huỷ/trả commit rồi tiến
    * trình chết (SIGTERM lúc deploy, mất kết nối) trước khi đảo điểm tích, thu hồi hoa hồng, xếp lệnh huỷ Pancake/Gomdon và báo —
-   * gọi lại setStatus không làm gì vì trạng thái đã đặt. Mỗi việc idempotent (dòng sổ điểm unique, hoa hồng chỉ đảo PENDING/LOCKED,
+   * gọi lại setStatus không làm gì vì trạng thái đã đặt. Mỗi việc idempotent (dòng sổ điểm unique, hoa hồng đã REJECTED không đảo lại, dòng sổ Ví thu hồi unique theo hoa hồng,
    * lệnh huỷ Pancake chỉ xếp khi chưa có kết quả, tin chỉ gửi khi log chưa có tin của đơn) nên chạy song song hay chạy lại vẫn chỉ
    * làm một lần. Mốc chỉ ghi khi mọi việc xong; việc đảo điểm/hoa hồng lỗi thì chưa báo khách (lần sau xong rồi mới báo).
    */

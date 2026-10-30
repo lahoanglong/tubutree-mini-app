@@ -770,6 +770,25 @@ describe('/ctv — kiểu Mini App ở điện thoại (trạng thái rỗng, m�
     expect(list.className).toContain('pl-[18px]');
   });
 
+  it('thẻ hoa hồng cỡ chữ Mini App: số to 32px, dòng phụ 13px, nhãn và số liệu nhỏ đúng cỡ; tiêu đề thẻ 16px', async () => {
+    state.me = { isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 };
+    state.tab = 'share';
+    const { container } = mount();
+    await flush();
+    const hero = container.querySelector('section[aria-label="Hoa hồng có thể chuyển vào Ví"]')!;
+    const divs = Array.from(hero.querySelectorAll('div'));
+    const of = (text: string) => divs.find((d) => d.textContent === text)!;
+    expect(of('80.000đ').className).toContain('max-md:text-[length:var(--type-display-lg-size)]');
+    expect(of('80.000đ').className).toContain('max-md:leading-10');
+    expect(divs.find((d) => d.textContent?.startsWith('Đang chờ:'))!.className).toContain('max-md:text-[length:var(--type-caption-size)]');
+    expect(of('Tạm tính tháng này').className).toContain('max-md:text-[length:var(--type-caption-size)]');
+    expect(of('125.000đ').className).toContain('max-md:text-[length:var(--type-body-md-size)]');
+    expect(hero.parentElement!.className).toContain('max-md:space-y-3');
+    const title = container.querySelector('section[aria-label="Mã giới thiệu của bạn"] h2')!;
+    expect(title.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+    expect(title.className).toContain('text-lg');
+  });
+
   it('mã giới thiệu: chữ Inter đậm 20px cách chữ 1px, màu thương hiệu như Mini App', async () => {
     state.me = { isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 };
     state.tab = 'share';

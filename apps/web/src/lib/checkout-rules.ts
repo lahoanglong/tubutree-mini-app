@@ -1,3 +1,4 @@
+import { walletNegativeCheckoutReason } from '@tubutree/app-core/wallet-rules';
 import { formatVnd } from './shop-client';
 
 /** Trần ghi chú đơn của API (PlaceOrderDto.note @MaxLength(500)) và của Mini App. */
@@ -23,9 +24,10 @@ export function isInvoiceValid(wantInvoice: boolean, invoice: InvoiceInfo): bool
   );
 }
 
-/** Lý do Ví Tubu bị mờ ở màn thanh toán (null = dùng được): số dư < tổng đơn, đúng điều kiện máy chủ từ chối lúc đặt. */
+/** Lý do Ví Tubu bị mờ ở màn thanh toán (null = dùng được): số dư < tổng đơn, đúng điều kiện máy chủ từ chối lúc đặt. Ví âm có câu riêng. */
 export function walletUnavailableReason(balance: number, total: number): string | null {
   if (balance >= total) return null;
+  if (balance < 0) return walletNegativeCheckoutReason(formatVnd(-balance));
   return `Số dư chưa đủ — cần thêm ${formatVnd(total - balance)}`;
 }
 

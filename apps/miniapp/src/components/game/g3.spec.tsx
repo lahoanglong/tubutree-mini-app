@@ -22,6 +22,7 @@ import { OrderWaterCard } from './order-water-card';
 import { HarvestCelebration } from './harvest-celebration';
 import { GardenHero } from './garden-hero';
 import { GardenPlots } from './garden-plots';
+import { EcoImpact } from './eco-impact';
 import { WaterTank } from './water-tank';
 import { SeasonEmpty } from './season-banner';
 
@@ -119,6 +120,18 @@ describe('GardenPlots: tên loài trên từng lô', () => {
     expect(screen.getByText('Lô 4 · Cây của bạn')).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/Fuwa3e/);
     expect(screen.getByLabelText('Lô 3, Cây của bạn: tiến độ lớn của cây')).toBeInTheDocument();
+  });
+});
+
+describe('EcoImpact: đóng góp của tôi', () => {
+  const tree = (certificateCode: string, treeType: string) => ({ certificateCode, treeType, status: 'PLEDGED' as const, region: null, pledgedAt: '2026-10-01T00:00:00.000Z', plantedAt: null });
+  it('loài mặc định của máy chủ không hiện như tên thật; loài thật thì hiện', () => {
+    const forest = { count: 2, plantedCount: 0, trees: [tree('TUBU-001', 'Cây Dứa Fuwa3e'), tree('TUBU-002', 'Sồi')] };
+    const { container } = render(<EcoImpact eco={undefined} totalSeeds={10} forest={forest} />);
+    expect(container.textContent).not.toMatch(/Fuwa3e/);
+    expect(container.textContent).not.toContain('Cây của bạn');
+    expect(screen.getByText('TUBU-001')).toBeInTheDocument();
+    expect(screen.getByText('Sồi')).toBeInTheDocument();
   });
 });
 

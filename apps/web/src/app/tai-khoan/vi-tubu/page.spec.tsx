@@ -119,6 +119,18 @@ describe('/tai-khoan/vi-tubu — thẻ số dư và nguồn tiền', () => {
     expect(c.textContent).toContain('45.000đ');
   });
 
+  it('Ví âm sau khi thu hồi hoa hồng đơn trả hàng: số dư hiện đúng dấu "-", chú thích nói vì sao âm, dòng sổ có nhãn tiếng Việt', async () => {
+    state.wallet = { ...WALLET, walletBalance: -50_000 };
+    state.pages = [
+      { total: 1, limit: 2, data: [{ id: 't9', delta: -80_000, balanceAfter: -50_000, type: 'COMMISSION_REVERSAL', reason: 'Thu hồi hoa hồng đơn TUBU1 (trả hàng)', orderId: null, createdAt: '2026-10-05T07:04:00Z' }] },
+    ];
+    const c = await mount();
+    expect(c.textContent).toContain('-50.000đ');
+    expect(c.textContent).toContain('Ví đang âm vì hoa hồng của đơn trả hàng đã được thu hồi');
+    expect(c.textContent).toContain('Thu hồi hoa hồng');
+    expect(c.textContent).toContain('Số dư -50.000đ');
+  });
+
   it('thẻ Điểm Xanh dẫn sang /tai-khoan/diem-xanh', async () => {
     const c = await mount();
     const a = c.querySelector<HTMLAnchorElement>('a[href="/tai-khoan/diem-xanh"]');

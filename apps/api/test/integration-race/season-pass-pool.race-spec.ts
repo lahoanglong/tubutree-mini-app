@@ -5,7 +5,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { SeasonPassService } from '../../src/modules/game/season-pass.service';
-import { createUser, randCode, setConfig, summarize } from './helpers';
+import { createRealUser, randCode, setConfig, summarize } from './helpers';
 
 /**
  * R6-SYNC-3: Season Pass claim đọc SystemConfig (cache 60s nguội) BÊN TRONG transaction → mỗi tx giữ một
@@ -57,7 +57,7 @@ describe('SeasonPassService.claim với pool 2 kết nối, cache config nguội
   });
 
   async function users() {
-    const list = await Promise.all(Array.from({ length: N }, () => createUser(fixtures as unknown as PrismaService)));
+    const list = await Promise.all(Array.from({ length: N }, () => createRealUser(fixtures as unknown as PrismaService)));
     await fixtures.userSeasonPass.createMany({ data: list.map((u) => ({ userId: u.id, seasonId, xp: 100 })) });
     return list;
   }

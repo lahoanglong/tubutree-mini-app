@@ -597,6 +597,39 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
     expect(fixture.state.carts.get('guest1')!.items).toHaveLength(1);
   });
 
+  it('khách + chưa ai giữ zaloId, khoá khách đổi sang dạng băm giữa lúc đọc và lúc nâng cấp → vẫn nâng cấp tại chỗ, không trả 409', async () => {
+    const fixture = makeGuestMergeFixture({ guest: GUEST });
+    const hashedKey = `guest_h_${'b'.repeat(64)}`;
+    const zalo = {
+      getUserInfo: jest.fn(async () => {
+        fixture.state.users.get('guest1')!.zaloId = hashedKey;
+        return { zaloId: 'z-new-real', name: 'Long' };
+      }),
+      resolvePhoneNumber: jest.fn().mockResolvedValue(null),
+    };
+    const svc = makeEnsurePhoneSvc(fixture, zalo);
+
+    const res = await svc.ensurePhoneForCurrentUser('guest1', 'code', 'at');
+
+    expect(res.user.id).toBe('guest1');
+    expect(fixture.state.users.get('guest1')!.zaloId).toBe('z-new-real');
+  });
+
+  it('khách vừa được request song song nâng lên Zalo khác (không còn là khách) và chưa ai giữ zaloId này → vẫn 409, không nâng cấp lần nữa', async () => {
+    const fixture = makeGuestMergeFixture({ guest: GUEST });
+    const zalo = {
+      getUserInfo: jest.fn(async () => {
+        fixture.state.users.get('guest1')!.zaloId = 'z-upgraded-elsewhere';
+        return { zaloId: 'z-new-real', name: 'Long' };
+      }),
+      resolvePhoneNumber: jest.fn().mockResolvedValue(null),
+    };
+    const svc = makeEnsurePhoneSvc(fixture, zalo);
+
+    await expect(svc.ensurePhoneForCurrentUser('guest1', 'code', 'at')).rejects.toBeInstanceOf(ConflictException);
+    expect(fixture.state.users.get('guest1')!.zaloId).toBe('z-upgraded-elsewhere');
+  });
+
   it('KHÔNG PHẢI khách (đã là Zalo thật) nhưng Zalo trên máy giờ là danh tính KHÁC → từ chối rõ ràng, KHÔNG đổi danh tính', async () => {
     const realUser = { ...GUEST, id: 'real1', zaloId: 'z-real-old' };
     const fixture = makeGuestMergeFixture({ guest: realUser });
@@ -723,6 +756,45 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
 
       expect(res.user.id).toBe('web1');
       expect(fixture.state.users.get('web1')!.zaloId).toBe('z-brand-new');
+    });
+
+    it('dòng khách cũ vừa được /auth/guest đổi sang khoá băm giữa lúc đọc và lúc khoá → vẫn gộp, không bỏ lại điểm trên dòng khách', async () => {
+      const fixture = makeGuestMergeFixture({ guest: GUEST, target: TARGET });
+      const hashedKey = `guest_h_${'a'.repeat(64)}`;
+      const zalo = {
+        getUserInfo: jest.fn(async () => {
+          fixture.state.users.get('guest1')!.zaloId = hashedKey;
+          return { zaloId: 'z-real-existing', name: 'Người Thật' };
+        }),
+        resolvePhoneNumber: jest.fn().mockResolvedValue(null),
+      };
+      const svc = makeEnsurePhoneSvc(fixture, zalo);
+
+      const res = await svc.ensurePhoneForCurrentUser('guest1', 'code', 'at');
+
+      expect(res.user.id).toBe('target1');
+      expect(fixture.state.users.get('target1')!.pointsBalance).toBe(150);
+      const guestRow = fixture.state.users.get('guest1')!;
+      expect(guestRow.pointsBalance).toBe(0);
+      expect(guestRow.zaloId).toMatch(new RegExp(`^${hashedKey}_merged_\\d+$`));
+    });
+
+    it('khách vừa được request song song nâng lên Zalo (zaloId không còn là khách) → không gộp lần nữa', async () => {
+      const fixture = makeGuestMergeFixture({ guest: GUEST, target: TARGET });
+      const zalo = {
+        getUserInfo: jest.fn(async () => {
+          fixture.state.users.get('guest1')!.zaloId = 'z-upgraded-elsewhere';
+          return { zaloId: 'z-real-existing', name: 'Người Thật' };
+        }),
+        resolvePhoneNumber: jest.fn().mockResolvedValue(null),
+      };
+      const svc = makeEnsurePhoneSvc(fixture, zalo);
+
+      await svc.ensurePhoneForCurrentUser('guest1', 'code', 'at');
+
+      expect(fixture.state.users.get('target1')!.pointsBalance).toBe(50);
+      expect(fixture.state.users.get('guest1')!.pointsBalance).toBe(100);
+      expect(fixture.state.users.get('guest1')!.zaloId).toBe('z-upgraded-elsewhere');
     });
   });
 });
@@ -873,6 +945,16 @@ describe('AuthService.loginAsGuest — khoá khách là băm của deviceId, kh�
   it('dòng khách đã gộp (guest_<deviceId>_merged_…) không bị khôi phục: thiết bị nhận dòng mới', async () => {
     const { svc, table } = guestTable([{ id: 'old', role: 'CUSTOMER', zaloId: 'guest_d_abcdef123456_merged_1700000000000' }]);
     const res = await svc.loginAsGuest('d_abcdef123456');
+    expect(table).toHaveLength(2);
+    expect(res.user.id).not.toBe('old');
+  });
+
+  it('deviceId dựng sao cho khoá thô trùng khoá của dòng đã gộp → dòng đã gộp giữ nguyên, thiết bị nhận dòng mới', async () => {
+    const mergedKey = 'guest_d_abcdef123456_merged_1700000000000';
+    const { svc, table, updateMany } = guestTable([{ id: 'old', role: 'CUSTOMER', zaloId: mergedKey, mergedIntoId: 'target1' }]);
+    const res = await svc.loginAsGuest('d_abcdef123456_merged_1700000000000');
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(table.find((r) => r.id === 'old')!.zaloId).toBe(mergedKey);
     expect(table).toHaveLength(2);
     expect(res.user.id).not.toBe('old');
   });

@@ -1,0 +1,85 @@
+{
+ "base": "815fa3c1e",
+ "packages": [
+  {
+   "key": "muahang",
+   "title": "Giỏ, thanh toán, mua chung, trang SP",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-29-p3/goi/muahang.md",
+   "money": true,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 0
+  },
+  {
+   "key": "tin-canhan",
+   "title": "Thông báo, Cá nhân, Trang chủ",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-29-p3/goi/tin-canhan.md",
+   "money": false,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 1
+  },
+  {
+   "key": "api-hotro",
+   "title": "Gửi tin, lệch sổ, Zalo OA, CSKH, dọn dẹp",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-29-p3/goi/api-hotro.md",
+   "money": false,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 2
+  },
+  {
+   "key": "diem-doirac",
+   "title": "Điểm Xanh, Vườn, Đổi rác",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-29-p3/goi/diem-doirac.md",
+   "money": true,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 3
+  },
+  {
+   "key": "ctv",
+   "title": "CTV, đại lý, hoa hồng",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-29-p3/goi/ctv.md",
+   "money": true,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 4
+  },
+  {
+   "key": "phien",
+   "title": "Phiên đăng nhập, liên kết Zalo",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-29-p3/goi/phien.md",
+   "money": true,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 5
+  },
+  {
+   "key": "admin",
+   "title": "Hộp việc Hôm nay, đơn, đổi trả quản trị",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-29-p3/goi/admin.md",
+   "money": true,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 6
+  },
+  {
+   "key": "giaodien-quantri",
+   "title": "Nhân sự, công cụ quản trị, giao diện chung",
+   "brief_file": "/Users/longla/coding/tubutree-mini-app/.claude/worktrees/e2e/docs/2026-10-29-p3/goi/giaodien-quantri.md",
+   "money": false,
+   "migration": false,
+   "migration_ts": "",
+   "depends_on": [],
+   "slot": 7
+  }
+ ]
+}

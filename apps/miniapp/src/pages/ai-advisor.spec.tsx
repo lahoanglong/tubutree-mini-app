@@ -53,8 +53,9 @@ const PRODUCT = (id: string, over: Partial<AiProduct> = {}): AiProduct => ({
 
 const REPLY = (reply = 'Mình gợi ý bạn thử loại này', products: AiProduct[] = []) => ({ reply, products });
 
-function renderPage() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+
+function renderPage(qc = newClient()) {
   return render(
     <QueryClientProvider client={qc}>
       <AiAdvisorPage />
@@ -455,6 +456,25 @@ describe('AiAdvisorPage — giữ hội thoại khi khách xem sản phẩm rồ
     renderPage();
     expect(screen.getByText('Câu hỏi chậm')).toBeInTheDocument();
     expect(screen.getByText('Trả lời đến muộn')).toBeInTheDocument();
+  });
+
+  it('rời trang lúc trợ lý đang soạn rồi quay lại: vẫn thấy "Trợ lý đang soạn…" và không gửi được câu thứ hai', async () => {
+    let answer: (v: ReturnType<typeof REPLY>) => void = () => {};
+    mocks.aiChat.mockReturnValue(new Promise((r) => (answer = r)));
+    const qc = newClient();
+    const first = renderPage(qc);
+    await ask('Câu hỏi chậm');
+    await screen.findByText('Trợ lý đang soạn…');
+    first.unmount();
+
+    renderPage(qc);
+    expect(screen.getByText('Trợ lý đang soạn…')).toBeInTheDocument();
+    await ask('Câu thứ hai');
+    expect(mocks.aiChat).toHaveBeenCalledTimes(1);
+
+    await act(async () => answer(REPLY('Trả lời câu một')));
+    await screen.findByText('Trả lời câu một');
+    expect(screen.queryByText('Trợ lý đang soạn…')).not.toBeInTheDocument();
   });
 
   it('đăng xuất thì hội thoại rỗng, quay lại thấy phần chào', async () => {

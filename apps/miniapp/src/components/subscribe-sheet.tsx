@@ -23,6 +23,7 @@ import {
   IntervalPicker,
   isStartDateAllowed,
   PaymentMethodPicker,
+  subscriptionWalletBlockedReason,
   SectionLabel,
   startDateRange,
 } from './subscription-options';
@@ -104,7 +105,7 @@ export function SubscribeSheet({
           <Button
             fullWidth
             loading={create.isPending}
-            disabled={!addressId || !dateOk}
+            disabled={!addressId || !dateOk || (payment === 'WALLET' && subscriptionWalletBlockedReason(walletQ.data?.walletBalance) !== null)}
             onPress={() => {
               if (!addressId) return;
               create.mutate({

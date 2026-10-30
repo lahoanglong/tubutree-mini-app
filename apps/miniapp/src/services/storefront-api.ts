@@ -9,6 +9,7 @@ export interface StorefrontItem {
     id: string; name: string; slug: string; thumbnail: string | null; brand: string;
     basePrice: number; salePrice: number | null; ratingAvg: number; reviewCount: number; sold?: number;
     inStock: boolean;
+    createdAt?: string;
   };
 }
 export interface StorefrontItemEdit extends StorefrontItem {

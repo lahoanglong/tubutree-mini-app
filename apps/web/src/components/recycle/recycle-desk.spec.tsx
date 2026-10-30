@@ -311,22 +311,33 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
       lines: [{ itemId: 'item-battery', declaredQty: 25, receivedQty: 25 }],
     });
   });
-  it.each([
-    ['COMPLETED', 'Đã duyệt lúc 10:05'],
-    ['REJECTED', 'Đã từ chối'],
-  ] as const)('yêu cầu %s: thẻ chỉ xem, không bộ đếm, không nút', async (status, text) => {
-    lookupReq({ status, closedAt: '2026-10-28T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
-    const c = await mount();
-    await lookUp(c);
-    expect(c.textContent).toContain(text);
-    if (status === 'COMPLETED') expect(lineOf(c, 'Thùng carton').textContent).toContain('Đã nhận 5 thùng');
-    expect(c.querySelector('[aria-label="Tăng số lượng"]')).toBeNull();
-    expect(button(c, 'Xác nhận đã nhận')).toBeNull();
-    expect(button(c, 'Từ chối cả yêu cầu')).toBeNull();
+  describe('yêu cầu vừa đóng', () => {
+    // Chỉ giả Date: hẹn giờ thật vẫn chạy để react-query và flush hoạt động.
+    beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-28T08:00:00.000Z') }));
+    afterEach(() => void vi.useRealTimers());
+    it.each([
+      ['COMPLETED', 'Đã duyệt lúc 10:05'],
+      ['REJECTED', 'Đã từ chối'],
+    ] as const)('yêu cầu %s: thẻ chỉ xem, không bộ đếm, không nút', async (status, text) => {
+      lookupReq({ status, closedAt: '2026-10-28T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
+      const c = await mount();
+      await lookUp(c);
+      expect(c.textContent).toContain(text);
+      if (status === 'COMPLETED') expect(lineOf(c, 'Thùng carton').textContent).toContain('Đã nhận 5 thùng');
+      expect(c.querySelector('[aria-label="Tăng số lượng"]')).toBeNull();
+      expect(button(c, 'Xác nhận đã nhận')).toBeNull();
+      expect(button(c, 'Từ chối cả yêu cầu')).toBeNull();
+    });
+    it('duyệt từ hôm trước: ghi cả ngày, để không đọc nhầm là hôm nay', async () => {
+      lookupReq({ status: 'COMPLETED', closedAt: '2026-10-27T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
+      const c = await mount();
+      await lookUp(c);
+      expect(c.textContent).toContain('Đã duyệt lúc 10:05 ngày 27/10');
+    });
   });
 });
 
-describe('/doi-rac/quay: món chỉ kho HCMC nhận (E-127)', () => {
+describe('/doi-rac/quay: món chỉ kho HCMC nhận', () => {
   const MILK_ONLY = { ...REQ.lines[1]!, itemName: 'Vỏ chai Tubu', warehouseOnly: true };
   it('điểm đối tác: dòng đó mặc định 0, có câu giải thích, không bộ đếm; duyệt gửi số nhận 0 kèm lý do "Không nhận"', async () => {
     lookupReq({ lines: [LINE0, MILK_ONLY] });
@@ -366,7 +377,7 @@ describe('/doi-rac/quay: món chỉ kho HCMC nhận (E-127)', () => {
   });
 });
 
-describe('/doi-rac/quay: duyệt mà chưa đủ để cộng điểm (E-41)', () => {
+describe('/doi-rac/quay: duyệt mà chưa đủ để cộng điểm', () => {
   it('0 điểm: tiêu đề không nói "cộng 0 điểm"', async () => {
     state.confirm = () => ({ ...CONFIRMED, pointsAwarded: 0, quota: null });
     const c = await mount();
@@ -379,10 +390,15 @@ describe('/doi-rac/quay: duyệt mà chưa đủ để cộng điểm (E-41)', (
   });
 });
 
-describe('/doi-rac/quay: quét mã bằng camera trình duyệt (E-42)', () => {
+describe('/doi-rac/quay: quét mã bằng camera trình duyệt', () => {
   const stopTrack = vi.fn();
   const scan = { value: 'TR-8K2M9', throwOnce: false };
+  const supported = { formats: ['qr_code', 'ean_13'] as string[] | Error };
   class FakeDetector {
+    static async getSupportedFormats() {
+      if (supported.formats instanceof Error) throw supported.formats;
+      return supported.formats;
+    }
     async detect() {
       if (scan.throwOnce) {
         scan.throwOnce = false;
@@ -399,6 +415,7 @@ describe('/doi-rac/quay: quét mã bằng camera trình duyệt (E-42)', () => {
     stopTrack.mockClear();
     scan.value = 'TR-8K2M9';
     scan.throwOnce = false;
+    supported.formats = ['qr_code', 'ean_13'];
     Object.defineProperty(window, 'BarcodeDetector', { configurable: true, writable: true, value: FakeDetector });
     camera(async () => ({ getTracks: () => [{ stop: stopTrack }] }));
     // jsdom chưa cài đặt play() của thẻ video.
@@ -455,6 +472,24 @@ describe('/doi-rac/quay: quét mã bằng camera trình duyệt (E-42)', () => {
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('gõ mã');
     expect(calls('/waste/desk/lookup')).toHaveLength(0);
     expect(label(c, CODE_LABEL)).not.toBeNull();
+  });
+  it('quyền camera bị chặn: câu báo bảo cho phép camera, không bảo "thử lại"', async () => {
+    camera(async () => {
+      throw Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+    });
+    const c = await mount();
+    click(button(c, 'Quét mã của khách'));
+    await flush(5);
+    expect(dialog()).toBeNull();
+    const alert = c.querySelector('[role="alert"]')?.textContent ?? '';
+    expect(alert).toContain('Hãy cho phép camera trong trình duyệt hoặc gõ mã bên dưới');
+    expect(alert).not.toContain('thử lại');
+  });
+  it('BarcodeDetector có nhưng không đọc được QR (hoặc không hỏi được định dạng): không hiện nút quét', async () => {
+    supported.formats = ['ean_13', 'code_128'];
+    expect(button(await mount(), 'Quét mã của khách')).toBeNull();
+    supported.formats = new Error('không hỏi được');
+    expect(button(await mount(), 'Quét mã của khách')).toBeNull();
   });
   it('không có BarcodeDetector: không hiện nút quét, giữ ô gõ và nút Tra mã', async () => {
     delete (window as unknown as { BarcodeDetector?: unknown }).BarcodeDetector;

@@ -80,4 +80,18 @@ test.describe('Zalo Mini App E2E - Ví Tubu (không còn TubuXu)', () => {
     await expect(page.getByText('Mời bạn — nhận Điểm Xanh')).toHaveCount(0);
     await expect(page.getByText(/Mời thêm \d+ bạn/)).toHaveCount(0);
   });
+
+  test('Ví âm sau khi hoa hồng đơn trả bị thu hồi: số dư có dấu trừ, có lời giải thích, dòng sổ ghi "Thu hồi hoa hồng"', async ({ page, api }) => {
+    api.get('/me/wallet', { ...WALLET, walletBalance: -50000 });
+    api.get('/me/wallet/transactions', {
+      data: [{ id: 'tx1', delta: -50000, balanceAfter: -50000, type: 'COMMISSION_REVERSAL', reason: null, orderId: null, createdAt: '2026-10-29T03:00:00.000Z' }],
+      meta: { page: 1, limit: 20, total: 1 },
+    } satisfies WalletTxnPage);
+    await page.goto('/wallet');
+
+    await expect(page.getByText('Ví Tubu (số dư khả dụng)')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('-50.000đ').first()).toBeVisible();
+    await expect(page.getByText(/Ví đang âm vì hoa hồng của đơn trả hàng đã được thu hồi/)).toBeVisible();
+    await expect(page.getByText('Thu hồi hoa hồng')).toBeVisible();
+  });
 });

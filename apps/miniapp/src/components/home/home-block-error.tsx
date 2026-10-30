@@ -19,14 +19,14 @@ export interface HomeBlockErrorProps {
   onRetry: () => unknown;
   /** Đang tải lại sau lỗi (`BlockQuery.isFetching` từ `useBlockQuery`, vốn giữ khối lỗi ở lại suốt lúc tải lại). */
   retrying?: boolean;
-  /** Khối cùng hàng có nút "Xem tất cả" 44px (HomeSection có `seeAllTo`) → hàng tiêu đề cao 44px; không thì bằng khung chờ: không min-height, cách 8px. */
+  /** Khối có nút "Xem tất cả" 44px thì hàng tiêu đề cao 44px; không có thì giống khung chờ: không min-height, cách 8px. */
   seeAllRow?: boolean;
 }
 
 /**
  * Khối lỗi gọn của Trang chủ (C-084): giữ tiêu đề + một dòng thông báo + "Thử lại" ngay tại chỗ để khách không tưởng
- * cửa hàng ít hàng. Mỗi khối lỗi độc lập — thử lại chỉ tải lại đúng khối này. Hàng tiêu đề khai báo y hệt hàng của
- * HomeSection ở khung chờ để tiêu đề không nhảy khi đổi trạng thái.
+ * cửa hàng ít hàng. Mỗi khối lỗi độc lập — thử lại chỉ tải lại đúng khối này. Hàng tiêu đề cao như hàng tiêu đề của khối
+ * ở khung chờ (xem `seeAllRow`) để tiêu đề không nhảy khi đổi trạng thái.
  */
 export function HomeBlockError({ title, error, onRetry, retrying, seeAllRow = true }: HomeBlockErrorProps) {
   const suppressed = useContext(HomeBlockErrorSuppressed);

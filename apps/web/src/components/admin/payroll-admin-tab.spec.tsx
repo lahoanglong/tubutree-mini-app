@@ -113,6 +113,21 @@ describe('PayrollAdminTab (Lương)', () => {
     expect(api.to(`/admin/payroll/2/reopen?year=${year}&month=${month}`)).toHaveLength(1);
   });
 
+  it('mở lại tháng đã trả: hộp xác nhận nói rõ sẽ xoá dấu đã trả và ảnh chứng từ; tháng chỉ mới chốt thì không nhắc', async () => {
+    stub([row('2', 'Mai', 'FINALIZED'), row('3', 'Hoa', 'PAID')]);
+    const { container } = mount(<PayrollAdminTab />);
+    await flush();
+    click(container.querySelector('[aria-label="Mở lại · Hoa"]'));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('xoá dấu đã trả và ảnh chứng từ');
+    answerConfirm(false);
+    await flush();
+    click(container.querySelector('[aria-label="Mở lại · Mai"]'));
+    await flush();
+    expect(confirmDialog()!.textContent).not.toContain('chứng từ');
+    answerConfirm(false);
+  });
+
   it('đặt đơn giá: ô điền sẵn đơn giá hiện tại, chỉ nhận số nguyên, PUT hourlyRate', async () => {
     const api = stub([row('1', 'Lan', 'OPEN')]);
     const { container } = mount(<PayrollAdminTab />);
@@ -248,6 +263,15 @@ describe('PayrollAdminTab: thưởng/phạt và tính lại tháng', () => {
     expect(container.querySelector('section[aria-label="Mai"]')!.textContent).toContain('Mở lại bảng lương trước khi thưởng/phạt');
   });
 
+  it('tháng đã trả không bảo mở lại để thưởng/phạt (mở lại xoá dấu đã trả); chỉ sang ghi vào tháng sau', async () => {
+    stubAdjust([row('3', 'Hoa', 'PAID')]);
+    const { container } = mount(<PayrollAdminTab />);
+    await flush();
+    const text = container.querySelector('section[aria-label="Hoa"]')!.textContent!;
+    expect(text).toContain('Tháng đã trả: ghi thưởng/phạt vào tháng sau.');
+    expect(text).not.toContain('Mở lại bảng lương trước khi thưởng/phạt');
+  });
+
   it('chưa chọn loại, số tiền không hợp lệ hoặc thiếu lý do thì nút ghi bị khoá và không gọi API', async () => {
     const api = stubAdjust([row('1', 'Lan', 'OPEN')]);
     const { container } = mount(<PayrollAdminTab />);
@@ -343,6 +367,60 @@ describe('PayrollAdminTab: thưởng/phạt và tính lại tháng', () => {
     const posts = api.posts('/admin/payroll/adjust');
     expect(posts).toHaveLength(3);
     expect(posts[2]!.body).toEqual({ staffId: '1', workDate: today, amount: 50_000, reason: 'Đi trễ', allowDuplicate: true });
+  });
+
+  it('khi 409 admin bấm Huỷ: vẫn tính lại tháng để dòng lương khớp sổ, và không ghi thêm khoản', async () => {
+    const api = stubAdjust([row('1', 'Lan', 'OPEN')], (url) =>
+      url.includes('/recompute') ? { body: mon('OPEN') } : { status: 409, body: { statusCode: 409, code: 'PAYROLL_ADJUST_DUPLICATE', message: 'Đã có khoản trừ 50.000đ giống hệt vừa ghi lúc 10:00 — lần gửi này CHƯA được ghi.' } },
+    );
+    const { container } = mount(<PayrollAdminTab />);
+    await flush();
+    await openAdjust(container);
+    fill('Phạt', '50000', 'Đi trễ');
+    click(adjustBtn());
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.posts('/recompute')).toHaveLength(0);
+    answerConfirm(false);
+    await flush();
+    expect(api.posts('/admin/payroll/adjust')).toHaveLength(1);
+    expect(api.posts('/recompute')).toHaveLength(1);
+    expect(container.textContent).toContain('Khoản giống hệt đã có');
+    // Hộp vẫn mở có lớp nền tối che trang: lời báo kết quả tính lại phải hiện ngay trong hộp.
+    expect(sheet().querySelector('[role=status]')!.textContent).toContain('Đã cập nhật số lương trên dòng');
+  });
+
+  it('đang ghi khoản thì Esc và nút Đóng không đóng được hộp (kẻo mất lời báo lỗi/hỏi 409)', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        if (init?.method === 'POST' && url.includes('/adjust')) {
+          await gate;
+          return json({ adjusted: true });
+        }
+        if (init?.method === 'POST') return json(mon('OPEN'));
+        return json([row('1', 'Lan', 'OPEN')]);
+      }),
+    );
+    const { container } = mount(<PayrollAdminTab />);
+    await flush();
+    await openAdjust(container);
+    fill('Phạt', '50000', 'Đi trễ');
+    click(adjustBtn());
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(sheet().querySelector('[aria-label="Đóng"]')).toBeNull();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await flush();
+    expect(sheet()).not.toBeNull();
+    release();
+    await flush();
+    expect(document.querySelector('[role=dialog]')).toBeNull();
   });
 
   it('lỗi khác từ máy chủ hiện ngay trong hộp, không đóng hộp và không tự gửi lại', async () => {
