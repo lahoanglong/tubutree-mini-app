@@ -18,9 +18,10 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
   useNavigate: () => vi.fn(),
 }));
-vi.mock('../store/auth', () => ({
-  useAuthStore: (sel: (s: { status: string; user: Record<string, string> | null }) => unknown) => sel({ status: mocks.status, user: { id: 'u1', phone: '0901234567', zaloId: 'z1' } }),
-}));
+vi.mock('../store/auth', () => {
+  const state = () => ({ status: mocks.status, user: { id: 'u1', phone: '0901234567', zaloId: 'z1' } as Record<string, string> | null });
+  return { useAuthStore: Object.assign((sel: (s: ReturnType<typeof state>) => unknown) => sel(state()), { getState: state }) };
+});
 vi.mock('../components/pull-to-refresh', () => ({ PullToRefresh: () => null }));
 vi.mock('../components/cart-button', () => ({ CartButton: () => null }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
