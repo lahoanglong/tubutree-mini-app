@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { ShoppingCart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { quickAddPlan } from '@tubutree/app-core/quick-add';
+import { QUICK_ADD_SOLD_OUT, quickAddPlan } from '@tubutree/app-core/quick-add';
 import { getWishlist } from '../services/wishlist-api';
 import { addToCart, fetchActiveFlashSales, fetchProduct, type ProductCard as ProductCardData, type VariationDetail } from '../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
@@ -17,7 +17,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { ProductGridSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 
-/** Nút giỏ nhanh nổi ở góc dưới ảnh thẻ: vùng chạm 44px bọc vòng trắng 32px, cùng kiểu với nút tim ở góc trên. */
+/** Nút giỏ nhanh nổi ở góc dưới ảnh thẻ (ProductTile đặt vị trí): vùng chạm 44px bọc vòng trắng 32px, cùng kiểu với nút tim ở góc trên. */
 function QuickAddButton({ name, busy, onPress }: { name: string; busy: boolean; onPress: () => void }) {
   return (
     <button
@@ -26,7 +26,7 @@ function QuickAddButton({ name, busy, onPress }: { name: string; busy: boolean; 
       aria-busy={busy}
       disabled={busy}
       onClick={onPress}
-      style={{ position: 'absolute', right: 2, bottom: 2, zIndex: 1, width: 44, height: 44, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      style={{ width: 44, height: 44, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
       <span
         style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-surface)', boxShadow: 'var(--elevation-1)', opacity: busy ? 0.6 : 1 }}
@@ -61,8 +61,11 @@ export default function WishlistPage() {
     try {
       const detail = await queryClient.fetchQuery({ queryKey: ['product', product.slug], queryFn: () => fetchProduct(product.slug), staleTime: 0 });
       const plan = quickAddPlan(detail.variations);
-      if (plan.kind === 'soldOut') openSnackbar({ text: vi.product.outOfStock, type: 'error' });
-      else if (plan.kind === 'pick') setPicker({ product, variations: detail.variations });
+      if (plan.kind === 'soldOut') {
+        openSnackbar({ text: QUICK_ADD_SOLD_OUT, type: 'error' });
+        // Thẻ còn nút giỏ và không có lớp Hết hàng nếu không tải lại: khách bấm lại sẽ ra đúng lời báo này.
+        void queryClient.invalidateQueries({ queryKey: ['wishlist'] });
+      } else if (plan.kind === 'pick') setPicker({ product, variations: detail.variations });
       else await addLine(plan.variationId, 1);
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });

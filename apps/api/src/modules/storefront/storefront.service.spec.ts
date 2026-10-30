@@ -962,6 +962,21 @@ describe('StorefrontService.getPublicBySlug', () => {
       .toEqual({ where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } });
   });
 
+  it('thẻ SP gian hàng có createdAt dạng ISO để thẻ hiện nhãn Mới như ở danh mục (select thêm cột, không thêm truy vấn)', async () => {
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'linh', title: 'Shop', isPublished: true,
+        collections: [{ id: 'c1', title: 'A', kind: 'NORMAL', layout: 'GRID', sortOrder: 0,
+          items: [{ id: 'i1', isHidden: false, isPinned: false, sortOrder: 0, note: null, variationId: null,
+            product: { id: 'p1', name: 'P', slug: 'p1', thumbnail: 't', brand: 'B', basePrice: 1, salePrice: null, ratingAvg: 0, reviewCount: 0, isActive: true, affiliateBlocked: false, createdAt: new Date('2026-10-20T03:00:00.000Z'), variations: [] } }] }],
+      }) },
+    });
+    const r = await new StorefrontService(prisma, config, affiliate).getPublicBySlug('linh');
+    expect(r.collections[0]!.items[0]!.product.createdAt).toBe('2026-10-20T03:00:00.000Z');
+    const arg = (prisma.storefront.findFirst as jest.Mock).mock.calls[0][0];
+    expect(arg.include.collections.include.items.include.product.select.createdAt).toBe(true);
+  });
+
   it('SP chỉ còn tồn kho ở variation ngừng bán → inStock=false (DB lọc isActive nên mảng rỗng)', async () => {
     const prisma = makePrisma({
       storefront: { findFirst: jest.fn().mockResolvedValue({

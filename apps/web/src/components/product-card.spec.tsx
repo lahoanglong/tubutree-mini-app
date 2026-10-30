@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act } from 'react';
 import { renderToStaticMarkup as renderStatic } from 'react-dom/server';
+import { hydrateRoot } from 'react-dom/client';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flush, render, type Rendered } from '@/test-utils/dom';
@@ -179,36 +181,73 @@ describe('ProductCard — kiểu Mini App ở điện thoại', () => {
   });
 });
 
-// "Mới" = tạo trong 30 ngày gần nhất; thiếu ngày tạo (API cũ) thì không nhãn.
+// "Mới" = tạo trong 30 ngày gần nhất; thiếu ngày tạo (API cũ) thì không nhãn. Tính theo giờ máy khách nên chỉ vẽ sau hydrate.
 describe('ProductCard — nhãn "Mới"', () => {
   const daysAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString();
-  const box = (p: Record<string, unknown>) => {
-    const el = document.createElement('div');
-    el.innerHTML = renderToStaticMarkup(<ProductCard product={p as never} />);
-    return el;
+  const box = async (p: Record<string, unknown>) => {
+    const m = render(<ProductCard product={p as never} />);
+    mounted.push(m);
+    await flush();
+    return m.container;
   };
 
-  it('tạo 5 ngày trước → nhãn "Mới" trên ảnh', () => {
-    const badge = box({ ...PRODUCT, createdAt: daysAgo(5) }).querySelector('[data-testid="card-new-badge"]');
+  it('tạo 5 ngày trước → nhãn "Mới" trên ảnh', async () => {
+    const badge = (await box({ ...PRODUCT, createdAt: daysAgo(5) })).querySelector('[data-testid="card-new-badge"]');
     expect(badge?.textContent).toBe('Mới');
   });
 
-  it('tạo 31 ngày trước hoặc thiếu ngày tạo → không nhãn', () => {
-    expect(box({ ...PRODUCT, createdAt: daysAgo(31) }).querySelector('[data-testid="card-new-badge"]')).toBeNull();
-    expect(box(PRODUCT).querySelector('[data-testid="card-new-badge"]')).toBeNull();
+  it('tạo 31 ngày trước hoặc thiếu ngày tạo → không nhãn', async () => {
+    expect((await box({ ...PRODUCT, createdAt: daysAgo(31) })).querySelector('[data-testid="card-new-badge"]')).toBeNull();
+    expect((await box(PRODUCT)).querySelector('[data-testid="card-new-badge"]')).toBeNull();
   });
 
-  it('hết hàng → không nhãn "Mới" (lớp phủ hết hàng đã chiếm ảnh)', () => {
-    expect(box({ ...PRODUCT, inStock: false, createdAt: daysAgo(1) }).querySelector('[data-testid="card-new-badge"]')).toBeNull();
+  it('hết hàng → không nhãn "Mới" (lớp phủ hết hàng đã chiếm ảnh)', async () => {
+    expect((await box({ ...PRODUCT, inStock: false, createdAt: daysAgo(1) })).querySelector('[data-testid="card-new-badge"]')).toBeNull();
   });
 
-  it('cùng nhãn giảm giá: hai nhãn xếp dọc trong một khung ở góc ảnh, không chồng nhau', () => {
-    const el = box({ ...PRODUCT, salePrice: 100000, createdAt: daysAgo(5) });
+  it('cùng nhãn giảm giá: hai nhãn xếp dọc trong một khung ở góc ảnh, không chồng nhau', async () => {
+    const el = await box({ ...PRODUCT, salePrice: 100000, createdAt: daysAgo(5) });
     const badge = el.querySelector('[data-testid="card-new-badge"]')!;
     const stack = badge.parentElement!;
     expect(stack.className).toContain('flex-col');
     expect(stack.textContent).toContain('-17%');
     expect(stack.textContent).toContain('Mới');
+  });
+
+  it('HTML dựng sẵn (ISR) không mang nhãn: giờ máy khách quyết định nên không để server và lần hydrate đầu lệch nhau', () => {
+    const html = renderToStaticMarkup(<ProductCard product={{ ...PRODUCT, createdAt: daysAgo(5) } as never} />);
+    expect(html).not.toContain('card-new-badge');
+  });
+
+  it('SP qua mốc 30 ngày giữa lúc dựng HTML và lúc hydrate: hydrate không lỗi, nhãn không hiện', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-28T10:00:00Z'));
+      const createdAt = new Date('2026-09-28T12:00:00Z').toISOString();
+      const ui = () => (
+        <QueryClientProvider client={new QueryClient()}>
+          <ProductCard product={{ ...PRODUCT, createdAt } as never} />
+        </QueryClientProvider>
+      );
+      const html = renderStatic(ui());
+      vi.setSystemTime(new Date('2026-10-28T13:00:00Z'));
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      document.body.appendChild(container);
+      const errors: unknown[] = [];
+      const consoleError = vi.spyOn(console, 'error').mockImplementation((...a) => void errors.push(a));
+      let root!: ReturnType<typeof hydrateRoot>;
+      await act(async () => {
+        root = hydrateRoot(container, ui(), { onRecoverableError: (e) => void errors.push(e) });
+      });
+      consoleError.mockRestore();
+      expect(errors).toEqual([]);
+      expect(container.querySelector('[data-testid="card-new-badge"]')).toBeNull();
+      act(() => root.unmount());
+      container.remove();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
