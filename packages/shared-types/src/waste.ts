@@ -95,7 +95,8 @@ export interface WasteDeskPointDTO { id: string; kind: WastePointKind; name: str
 export interface WasteDeskLookupRequest { code: string }
 // closedAt và warehouseOnly: API luôn gửi; để tùy chọn cho dữ liệu giả và bản cũ chưa có hai trường này (vắng = null / false).
 export interface WasteDeskRequestDTO { id: string; code: string; method: WasteMethod; status: WasteRequestStatus; pointId: string; customerName: string; customerPhone: string | null; estimatedPoints: number; closedAt?: string | null; lines: { itemId: string; itemName: string; unitLabel: string; unitsPerPoint: number; pointsPerGroup: number; declaredQty: number; receivedQty: number | null; hazardous: boolean; warehouseOnly?: boolean }[] }
-export interface WasteDeskGiftDTO { id: string; giftName: string; customerName: string; status: WasteGiftRedemptionStatus; claimExpiresAt: string | null }
+// Bốn trường sau chỉ có khi quà đã trao hoặc đã huỷ (quầy xem lại, chỉ đọc); tùy chọn để bản cũ vẫn chạy.
+export interface WasteDeskGiftDTO { id: string; giftName: string; customerName: string; status: WasteGiftRedemptionStatus; claimExpiresAt: string | null; fulfilledAt?: string | null; cancelledAt?: string | null; cancelReason?: string | null; pointsCost?: number; refundedPoints?: number | null }
 export type WasteDeskLookupDTO = { type: 'REQUEST'; request: WasteDeskRequestDTO } | { type: 'GIFT'; redemption: WasteDeskGiftDTO };
 export interface WasteMatchInput { parcelCode?: string; phoneMatchConfirmed?: boolean; parcelTracking?: string }
 export interface WasteConfirmLineInput { itemId: string; declaredQty: number; receivedQty: number; shortfallReason?: WasteShortfallReason }

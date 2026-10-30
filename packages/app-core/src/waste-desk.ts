@@ -1,4 +1,4 @@
-import type { WasteDeskRequestDTO, WastePointKind, WasteShortfallReason } from '@tubutree/shared-types';
+import type { WasteDeskGiftDTO, WasteDeskRequestDTO, WastePointKind, WasteShortfallReason } from '@tubutree/shared-types';
 
 /** Chữ cho dòng món chỉ kho TP.HCM nhận khi quầy là điểm đối tác. */
 export const WAREHOUSE_ONLY_RETURN_NOTE = 'Chỉ kho HCMC nhận, trả lại khách';
@@ -55,4 +55,29 @@ export function deskClosedText(r: Pick<WasteDeskRequestDTO, 'status' | 'closedAt
   const vn = new Date(closed.getTime() + VN_OFFSET_MS);
   const time = `${pad2(vn.getUTCHours())}:${pad2(vn.getUTCMinutes())}`;
   return vnDay(closed) === vnDay(now) ? `Đã duyệt lúc ${time}` : `Đã duyệt lúc ${time} ngày ${pad2(vn.getUTCDate())}/${pad2(vn.getUTCMonth() + 1)}`;
+}
+
+/**
+ * Thẻ chỉ đọc của lượt đổi quà ở quầy: quà đã trao, đã huỷ (gồm huỷ do quá hạn nhận), hoặc còn READY nhưng đã quá hạn
+ * nên chỉ chờ hệ thống huỷ. Trả null khi quà trao được (hiện nút Trao quà). Không có thao tác nào trên thẻ này.
+ */
+export function deskGiftReadOnly(
+  g: Pick<WasteDeskGiftDTO, 'status' | 'claimExpiresAt' | 'fulfilledAt' | 'cancelledAt' | 'cancelReason' | 'pointsCost' | 'refundedPoints'>,
+  fmt: { dateTime: (iso: string) => string; points: (n: number) => string },
+  now: Date = new Date(),
+): { heading: string; notes: string[] } | null {
+  if (g.status === 'READY') {
+    if (!g.claimExpiresAt || new Date(g.claimExpiresAt).getTime() >= now.getTime()) return null;
+    return { heading: 'Quà đã quá hạn nhận', notes: ['Hệ thống sẽ huỷ và hoàn điểm cho khách, quầy không trao được nữa'] };
+  }
+  const notes: string[] = [];
+  if (g.status === 'FULFILLED') {
+    if (g.fulfilledAt) notes.push(`Trao lúc ${fmt.dateTime(g.fulfilledAt)}`);
+    if (g.pointsCost) notes.push(`Khách đổi bằng ${fmt.points(g.pointsCost)}`);
+    return { heading: 'Quà đã được trao', notes };
+  }
+  if (g.cancelledAt) notes.push(`Huỷ lúc ${fmt.dateTime(g.cancelledAt)}`);
+  if (g.cancelReason) notes.push(`Lý do: ${g.cancelReason}`);
+  if (g.refundedPoints) notes.push(`Đã hoàn ${fmt.points(g.refundedPoints)} cho khách`);
+  return { heading: 'Lượt đổi quà đã huỷ', notes };
 }
