@@ -19,7 +19,8 @@ import {
   HomePurchasedRail,
   HomeSuggestFeed,
   loadHomeBelow,
-  useHomeBelowReady,
+  useHomeBelow,
+  retryHomeBelow,
 } from '../components/home/home-lazy';
 import { CategoryRow } from '../components/home/category-row';
 import { MemberCard, MemberCardSkeleton } from '../components/home/member-card';
@@ -81,7 +82,8 @@ export default function HomePage() {
   const flash = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 });
   const upcoming = useQuery({ queryKey: ['flash-sales', 'upcoming'], queryFn: fetchUpcomingFlashSales, enabled: authed, staleTime: 30_000 });
   const todo = useHomeTodoQueries();
-  const belowReady = useHomeBelowReady();
+  const belowState = useHomeBelow();
+  const belowReady = belowState.ready;
   const settling = useHomeSettling(
     kind,
     !belowReady || todo.loading || flash.isLoading || (authed && upcoming.isLoading) || categories.isLoading,
@@ -91,6 +93,11 @@ export default function HomePage() {
   // API sập hẳn: chỉ tính khi khách đang THẤY kệ Bán chạy (khách mới) mà kệ lỗi và chưa có gì để hiện → một dải lỗi cấp trang thay
   // cho từng thẻ lỗi. Khách cũ không thấy kệ này nên không bao giờ nhận dải lỗi vì nó.
   const pageDown = kind === 'new' && bestSellers.isError && bestSellers.data === undefined;
+
+  const refreshAll = () => {
+    if (belowState.failed) retryHomeBelow();
+    return refreshHomeQueries(qc);
+  };
 
   const blocks: Record<HomeRenderBlock, ReactNode> = {
     settling: <HomeSettlingSkeleton />,
@@ -125,7 +132,7 @@ export default function HomePage() {
   return (
     // `.page` giữ đệm safe-top của chế độ immersive (actionBar Zalo đã ẩn).
     <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
-      <PullToRefresh onRefresh={() => refreshHomeQueries(qc)} />
+      <PullToRefresh onRefresh={refreshAll} />
       <HomeHeader unreadCount={unreadCount} />
       <HomeBlockErrorSuppressed.Provider value={pageDown}>
         {homeRenderOrder(kind, settling).map((id) => (
@@ -133,12 +140,12 @@ export default function HomePage() {
             <div data-home-block={id} style={id === 'search' ? STICKY_SEARCH : undefined}>
               {blocks[id]}
             </div>
-            {pageDown && id === 'search' && (
+            {(pageDown || belowState.failed) && id === 'search' && (
               <div data-home-block="pageError">
                 <HomePageError
-                  error={bestSellers.error}
-                  retrying={bestSellers.isFetching}
-                  onRetry={() => refreshHomeQueries(qc)}
+                  error={pageDown ? bestSellers.error : belowState.error}
+                  retrying={pageDown && bestSellers.isFetching}
+                  onRetry={refreshAll}
                 />
               </div>
             )}

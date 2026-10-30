@@ -5,6 +5,7 @@ import { trackEvent } from '../services/analytics';
 import { vi } from '../i18n/vi';
 import { hashMessage } from './error-boundary';
 import { ErrorState } from './ui/empty-state';
+import { isChunkError } from '../utils/chunk-error';
 import { LineItemSkeleton, ProductGridSkeleton, Skeleton } from './ui/skeleton';
 
 export type RouteSkeletonKind = 'grid' | 'detail' | 'list';
@@ -53,13 +54,12 @@ interface BoundaryProps {
  * Lỗi render của MỘT màn không làm sập cả app: thanh đáy và các màn khác vẫn dùng được. Đổi route (resetKey) hoặc bấm
  * Thử lại thì dựng lại màn; tải lại cả app chỉ là lưới cuối của ErrorBoundary ngoài cùng.
  */
-const CHUNK_ERROR = /dynamically imported module|Importing a module script failed|Loading chunk|Loading CSS chunk|Unable to preload CSS|error loading dynamically/i;
 
 class RouteBoundary extends Component<BoundaryProps, { failedKey: string | null; chunk: boolean }> {
   override state = { failedKey: null as string | null, chunk: false };
 
   static getDerivedStateFromError(error: unknown): { failedKey: string; chunk: boolean } {
-    return { failedKey: '*', chunk: CHUNK_ERROR.test(error instanceof Error ? `${error.name} ${error.message}` : String(error)) };
+    return { failedKey: '*', chunk: isChunkError(error) };
   }
 
   override componentDidCatch(error: Error): void {
