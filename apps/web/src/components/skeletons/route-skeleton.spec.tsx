@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { skeletonKindFor } from './route-skeleton';
+import { skeletonBackHref, skeletonKindFor } from './route-skeleton';
 
 describe('skeletonKindFor (R-76)', () => {
   it('chọn khung chờ theo trang đang mở, tiền tố dài nhất thắng', () => {
@@ -14,5 +14,17 @@ describe('skeletonKindFor (R-76)', () => {
     expect(skeletonKindFor('/cong-dong')).toBe('list');
     expect(skeletonKindFor(null)).toBe('list');
     expect(skeletonKindFor('/tai-khoan-gia')).toBe('list');
+  });
+});
+
+describe('skeletonBackHref (R-158)', () => {
+  it('trang con của Tài khoản, kể cả chi tiết đơn, lùi về /tai-khoan trong lúc chờ', () => {
+    expect(skeletonBackHref('/tai-khoan/don-hang/TUBU123')).toBe('/tai-khoan');
+    expect(skeletonBackHref('/tai-khoan/diem-xanh')).toBe('/tai-khoan');
+  });
+  it('trang khác và chính /tai-khoan không khai báo đích', () => {
+    expect(skeletonBackHref('/tai-khoan')).toBeUndefined();
+    expect(skeletonBackHref('/gio-hang')).toBeUndefined();
+    expect(skeletonBackHref(null)).toBeUndefined();
   });
 });

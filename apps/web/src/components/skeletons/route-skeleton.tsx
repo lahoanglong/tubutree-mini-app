@@ -33,6 +33,11 @@ export function skeletonKindFor(pathname: string | null | undefined): SkeletonKi
   return hit ? hit[1] : 'list';
 }
 
+/** Trang con của Tài khoản trả nút lùi nổi về /tai-khoan trong lúc khung chờ còn hiện (trang thật khai báo cùng đích bằng PageHeader); không có thì nút suy trang cha từ đường dẫn, chi tiết đơn sẽ lùi về danh sách đơn. */
+export function skeletonBackHref(pathname: string | null | undefined): string | undefined {
+  return pathname?.startsWith('/tai-khoan/') ? '/tai-khoan' : undefined;
+}
+
 function Body({ kind }: { kind: SkeletonKind }) {
   switch (kind) {
     case 'hub':
@@ -93,9 +98,11 @@ function Body({ kind }: { kind: SkeletonKind }) {
 export function RouteSkeleton({ kind }: { kind?: SkeletonKind }) {
   const pathname = usePathname();
   const resolved = kind ?? skeletonKindFor(pathname);
+  const backHref = skeletonBackHref(pathname);
   return (
     <div role="status" aria-busy="true" className="flex min-h-[80vh] flex-col gap-3 py-4">
       <span className="sr-only">Đang tải…</span>
+      {backHref && <span hidden data-back-href={backHref} />}
       <Skeleton width="45%" height={24} />
       <Body kind={resolved} />
     </div>

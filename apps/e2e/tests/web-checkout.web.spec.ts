@@ -170,7 +170,7 @@ test.describe('Web khách: thanh toán', () => {
     // Chi tiết đơn ở điện thoại không có thanh tab (như Mini App); nút lùi về /tai-khoan bằng router.replace vì trang mở thẳng nên chưa có lịch sử trong web.
     if (desktop) await page.locator('a[href="/tai-khoan"]:visible').first().click();
     else {
-      // Nút lùi nổi đọc trang cha từ tiêu đề trang; khi khung chờ của nhóm /tai-khoan còn hiện thì chưa có tiêu đề và nó suy trang cha từ đường dẫn (danh sách đơn).
+      // Nút lùi nổi đọc trang cha từ tiêu đề trang hoặc từ khung chờ của nhóm /tai-khoan; cả hai khai báo /tai-khoan.
       await expect(page.locator('[data-back-href]')).toBeAttached();
       await page.getByRole('button', { name: 'Quay lại' }).click();
     }
