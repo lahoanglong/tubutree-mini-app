@@ -6,6 +6,9 @@ import { vi } from '../../i18n/vi';
 import { LineItemSkeleton } from './skeleton';
 import { EmptyState, ErrorState } from './empty-state';
 
+// Khớp tiêu đề màn web (login-required.tsx).
+const RATE_LIMITED_TITLE = 'Bạn thao tác quá nhanh';
+
 /**
  * Mất kết nối lúc khôi phục phiên: nói đúng chuyện đó và cho thử lại. Không bao giờ vẽ màn "trống" hay lời mời đăng nhập —
  * khách vẫn có đơn, giỏ, điểm; chỉ là app chưa nói chuyện được với máy chủ.
@@ -13,10 +16,11 @@ import { EmptyState, ErrorState } from './empty-state';
 export function SessionUnavailable({ variant }: { variant?: 'page' | 'inline' }) {
   const restore = useAuthStore((s) => s.restore);
   const error = useAuthStore((s) => s.error);
-  // Bị giới hạn tốc độ thì biểu tượng, tiêu đề và lời nói đúng chuyện đó, khớp màn web (login-required.tsx); mất mạng giữ lỗi tải chung.
+  // Bị giới hạn tốc độ thì biểu tượng và tiêu đề nói đúng chuyện đó, mất mạng giữ lỗi tải chung.
+  // Không nói "bạn vẫn đang đăng nhập": 429 cũng đến lúc mở app lần đầu hay bấm đăng nhập quá nhanh, khi chưa có phiên.
   if (error === vi.errors.sessionRateLimited) {
     return (
-      <ErrorState icon={Clock} title={vi.errors.sessionRateLimitedTitle} message={vi.errors.sessionRateLimitedBody} onRetry={() => void restore()} variant={variant} />
+      <ErrorState icon={Clock} title={RATE_LIMITED_TITLE} message={error} onRetry={() => void restore()} variant={variant} />
     );
   }
   return <ErrorState message={error ?? vi.errors.sessionUnavailable} onRetry={() => void restore()} variant={variant} />;

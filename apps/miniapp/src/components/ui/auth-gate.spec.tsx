@@ -73,8 +73,9 @@ describe('AuthGate — một cổng cho mọi trang cần đăng nhập (R5-BUYE
   it('bị giới hạn tốc độ (error kèm lời 429) → tiêu đề "Bạn thao tác quá nhanh" như màn web, vẫn có Thử lại', () => {
     act(() => useAuthStore.setState({ status: 'error', restore, login, error: copy.errors.sessionRateLimited }));
     renderGate();
-    expect(screen.getByText(copy.errors.sessionRateLimitedTitle)).toBeInTheDocument();
-    expect(screen.getByText(copy.errors.sessionRateLimitedBody)).toBeInTheDocument();
+    expect(screen.getByText('Bạn thao tác quá nhanh')).toBeInTheDocument();
+    expect(screen.getByText(copy.errors.sessionRateLimited)).toBeInTheDocument();
+    expect(screen.queryByText(/vẫn đang đăng nhập/)).toBeNull();
     expect(screen.queryByText(copy.errors.title)).toBeNull();
     expect(screen.getByTestId('error-state-icon').querySelector('.lucide-clock')).not.toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
@@ -86,7 +87,7 @@ describe('AuthGate — một cổng cho mọi trang cần đăng nhập (R5-BUYE
     act(() => useAuthStore.setState({ status: 'error', restore, login, error: copy.errors.sessionUnavailable }));
     renderGate();
     expect(screen.getByText(copy.errors.title)).toBeInTheDocument();
-    expect(screen.queryByText(copy.errors.sessionRateLimitedTitle)).toBeNull();
+    expect(screen.queryByText('Bạn thao tác quá nhanh')).toBeNull();
     expect(screen.getByTestId('error-state-icon').querySelector('.lucide-triangle-alert')).not.toBeNull();
     act(() => useAuthStore.setState({ error: undefined }));
   });
