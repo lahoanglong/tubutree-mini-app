@@ -33,6 +33,11 @@ export function skeletonKindFor(pathname: string | null | undefined): SkeletonKi
   return hit ? hit[1] : 'list';
 }
 
+/** Trang con của Tài khoản trả nút lùi nổi về /tai-khoan trong lúc khung chờ còn hiện (trang thật khai báo cùng đích bằng PageHeader); không có thì nút suy trang cha từ đường dẫn, chi tiết đơn sẽ lùi về danh sách đơn. */
+export function skeletonBackHref(pathname: string | null | undefined): string | undefined {
+  return pathname?.startsWith('/tai-khoan/') ? '/tai-khoan' : undefined;
+}
+
 function Body({ kind }: { kind: SkeletonKind }) {
   switch (kind) {
     case 'hub':
@@ -109,6 +114,7 @@ function Body({ kind }: { kind: SkeletonKind }) {
 export function RouteSkeleton({ kind, standalone = false }: { kind?: SkeletonKind; standalone?: boolean }) {
   const pathname = usePathname();
   const resolved = kind ?? skeletonKindFor(pathname);
+  const backHref = skeletonBackHref(pathname);
   // Điểm Xanh và Vườn Xanh dựng trong khung trang (đã có PageHeader), nên khối chờ dạng khối như Mini, không có thanh tiêu đề.
   // `standalone` (loading.tsx, chưa có PageHeader) vẽ một dải cỡ PageHeader (đệm 12/16 + safe-top, một dòng title-lg, nền surface)
   // rồi cách mt-4, để lúc trang về khối không nhảy lên và dải trắng không hiện thêm.
@@ -118,6 +124,7 @@ export function RouteSkeleton({ kind, standalone = false }: { kind?: SkeletonKin
     return (
       <div role="status" aria-busy="true" className="flex min-h-[80vh] flex-col md:gap-3 md:py-4">
         <span className="sr-only">Đang tải…</span>
+        {backHref && <span hidden data-back-href={backHref} />}
         <div
           data-page-bleed=""
           aria-hidden="true"
@@ -137,6 +144,7 @@ export function RouteSkeleton({ kind, standalone = false }: { kind?: SkeletonKin
   return (
     <div role="status" aria-busy="true" className={`flex min-h-[80vh] flex-col gap-3 ${block ? '' : 'py-4'}`}>
       <span className="sr-only">Đang tải…</span>
+      {backHref && <span hidden data-back-href={backHref} />}
       {!block && <Skeleton width="45%" height={24} />}
       <Body kind={resolved} />
     </div>

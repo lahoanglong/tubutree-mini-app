@@ -1,5 +1,6 @@
 import { walletNegativeCheckoutReason } from '@tubutree/app-core/wallet-rules';
 import { formatNumber, formatPoints, formatVnd } from './format';
+import { lockedPointsLabel } from '@tubutree/app-core/points-lots';
 import { convertedPointsNote, pointsSummary } from './points-lots';
 
 export interface InvoiceInfo {
@@ -130,10 +131,7 @@ export function checkoutPoints(
   return { ...base, label: `Dùng được ${groupThousands(usable)}/${formatPoints(balance)}`, lockNote: heldText };
 }
 
-/** Nhãn ô Điểm Xanh khi ô bị khoá theo đơn: chỉ ghi số dư, phần bị giữ để `lockNote` nói, không hứa "dùng được" cạnh "chưa dùng được". */
-export function lockedPointsLabel(balance: number): string {
-  return `Bạn đang có ${formatPoints(balance)}`;
-}
+export { lockedPointsLabel };
 
 /**
  * Trần Điểm Xanh của đơn (`quote.pointsMax`, đã gồm số dư dùng được, trần theo giá trị hàng và luật hàng của gian hàng đối tác).
