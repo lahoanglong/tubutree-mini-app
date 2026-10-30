@@ -158,3 +158,24 @@ describe('StorefrontQuestService: "Đơn hàng đầu tiên" không tính hoa h�
     expect((await firstOrder(svc)).done).toBe(true);
   });
 });
+
+describe('StorefrontQuestService: "Đơn hàng đầu tiên" chỉ tính đơn khách tự đặt đã giao', () => {
+  it('lọc hoa hồng theo đơn DELIVERED, không đặt hộ, không phải đơn của chính CTV', async () => {
+    const { prisma, coins } = makeDeps();
+    prisma.storefront.findFirst.mockResolvedValue({ id: 'sf1', isPublished: false, collections: [] });
+    await new StorefrontQuestService(prisma, coins).listQuests('u1');
+    expect(prisma.commission.count).toHaveBeenCalledWith({
+      where: {
+        affiliateUserId: 'u1',
+        status: { not: 'REJECTED' },
+        order: { status: 'DELIVERED', placedForCustomer: false, userId: { not: 'u1' } },
+      },
+    });
+  });
+
+  it('gợi ý nói rõ khách tự đặt và nhận hàng', () => {
+    expect(QUESTS.find((q) => q.code === 'first_order')!.hint).toBe(
+      'Chia sẻ link, khi khách tự đặt và nhận hàng thành công bạn nhận thưởng!',
+    );
+  });
+});

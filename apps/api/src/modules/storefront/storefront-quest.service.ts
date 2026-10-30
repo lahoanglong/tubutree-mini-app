@@ -60,7 +60,7 @@ export const QUESTS: QuestDef[] = [
   {
     code: 'first_order',
     title: 'Đơn hàng đầu tiên',
-    hint: 'Chia sẻ link — khi có đơn từ gian hàng bạn nhận thưởng!',
+    hint: 'Chia sẻ link, khi khách tự đặt và nhận hàng thành công bạn nhận thưởng!',
     goal: 1,
     rewardPoints: 5_000,
     measure: (s) => (s.firstOrder ? 1 : 0),
@@ -91,7 +91,14 @@ export class StorefrontQuestService {
     const items = sf.collections.flatMap((c) => c.items);
     const itemsTotal = items.length;
     const itemsWithNote = items.filter((i) => i.note && i.note.trim().length > 0).length;
-    const firstOrderCount = await this.prisma.commission.count({ where: { affiliateUserId: userId, status: { not: 'REJECTED' } } });
+    // Đơn khách tự đặt đã giao: loại đơn CTV đặt hộ, đơn huỷ/trả/chưa giao và hoa hồng đã bị huỷ.
+    const firstOrderCount = await this.prisma.commission.count({
+      where: {
+        affiliateUserId: userId,
+        status: { not: 'REJECTED' },
+        order: { status: 'DELIVERED', placedForCustomer: false, userId: { not: userId } },
+      },
+    });
     const stats: QuestStats = {
       itemsTotal,
       itemsWithNote,
