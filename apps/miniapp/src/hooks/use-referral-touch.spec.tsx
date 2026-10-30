@@ -84,4 +84,44 @@ describe('useReferralTouch: ghi chạm giới thiệu và nhớ mã có phải c
     act(() => ctx().setContext({ slug: 'doi-tac', kind: 'partner' }));
     await waitFor(() => expect(mocks.touch).toHaveBeenCalledTimes(2));
   });
+
+  it('WebView tải lại (hook mount mới, ngữ cảnh còn trong sessionStorage) sau khi đã chạm CTV: mở gian hàng đối tác vẫn không chạm kiểu brand', async () => {
+    mocks.touch.mockResolvedValue({ ok: true });
+    ctx().setContext({ slug: 'an', referralCode: 'AN123', kind: 'ctv' });
+    const first = renderHook(() => useReferralTouch(true));
+    await waitFor(() => expect(ctx().referralEligible).toBe(true));
+    first.unmount();
+    expect(mocks.touch).toHaveBeenCalledTimes(1);
+    act(() => ctx().setContext({ slug: 'doi-tac', kind: 'partner' }));
+    renderHook(() => useReferralTouch(true));
+    await Promise.resolve();
+    expect(mocks.touch).toHaveBeenCalledTimes(1);
+  });
+
+  it('sang gian hàng đối tác khi chạm CTV còn đang chạy: chạm brand đợi chạm CTV xong rồi mới quyết, nên không xoá slug gian hàng CTV', async () => {
+    let finishCtv!: (v: { ok: boolean }) => void;
+    mocks.touch.mockReturnValueOnce(new Promise((r) => (finishCtv = r))).mockResolvedValue({ ok: true });
+    ctx().setContext({ slug: 'an', referralCode: 'AN123', kind: 'ctv' });
+    renderHook(() => useReferralTouch(true));
+    await waitFor(() => expect(mocks.touch).toHaveBeenCalledTimes(1));
+    act(() => ctx().setContext({ slug: 'doi-tac', kind: 'partner' }));
+    await Promise.resolve();
+    expect(mocks.touch).toHaveBeenCalledTimes(1);
+    await act(async () => finishCtv({ ok: true }));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(mocks.touch).toHaveBeenCalledTimes(1);
+  });
+
+  it('chạm CTV đang chạy rồi thất bại (lỗi mạng): chạm brand đang đợi vẫn được gửi', async () => {
+    let failCtv!: (e: Error) => void;
+    mocks.touch.mockReturnValueOnce(new Promise((_, rej) => (failCtv = rej))).mockResolvedValue({ ok: true });
+    ctx().setContext({ slug: 'an', referralCode: 'AN123', kind: 'ctv' });
+    renderHook(() => useReferralTouch(true));
+    await waitFor(() => expect(mocks.touch).toHaveBeenCalledTimes(1));
+    act(() => ctx().setContext({ slug: 'doi-tac', kind: 'partner' }));
+    await act(async () => failCtv(new Error('offline')));
+    await waitFor(() => expect(mocks.touch).toHaveBeenCalledTimes(2));
+  });
 });
