@@ -44,7 +44,7 @@ import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
-import { useLoginWithNotice } from '../hooks/use-login-notice';
+import { useLoginWithNotice } from '../components/ui/auth-gate';
 import { serverNow } from '../utils/server-clock';
 import { cardPricing, defaultVariationFor, isFlashRunning, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';

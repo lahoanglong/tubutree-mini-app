@@ -2,13 +2,13 @@ import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ openSnackbar: vi.fn(), login: vi.fn(), state: { status: 'idle', error: undefined as string | undefined } }));
-vi.mock('zmp-ui', () => ({ useSnackbar: () => ({ openSnackbar: mocks.openSnackbar }) }));
-vi.mock('../store/auth', () => {
+vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useSnackbar: () => ({ openSnackbar: mocks.openSnackbar }) }));
+vi.mock('../../store/auth', () => {
   const get = () => ({ ...mocks.state, login: mocks.login });
   return { useAuthStore: Object.assign((sel: (s: unknown) => unknown) => sel(get()), { getState: get }) };
 });
 
-import { useLoginWithNotice } from './use-login-notice';
+import { useLoginWithNotice } from './auth-gate';
 
 describe('useLoginWithNotice', () => {
   beforeEach(() => {

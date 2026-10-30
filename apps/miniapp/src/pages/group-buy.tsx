@@ -9,7 +9,7 @@ import { fetchActiveFlashSales } from '../services/shop-api';
 import { serverNow } from '../utils/server-clock';
 import { formatVnd } from '../utils/format';
 import { useAuthStore } from '../store/auth';
-import { useLoginWithNotice } from '../hooks/use-login-notice';
+import { useLoginWithNotice } from '../components/ui/auth-gate';
 import { isGuestUser } from '../utils/guest-user';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { LineItemSkeleton } from '../components/ui/skeleton';

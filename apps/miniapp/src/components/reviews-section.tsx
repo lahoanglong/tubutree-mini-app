@@ -13,7 +13,7 @@ import {
 } from '../services/shop-api';
 import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
-import { useLoginWithNotice } from '../hooks/use-login-notice';
+import { useLoginWithNotice } from './ui/auth-gate';
 import { REWARD_ALREADY_GIVEN, VIDEO_UPLOADING, rewardHint } from '@tubutree/app-core/review-copy';
 import { MultiImageUpload, VideoUpload, isCloudinaryConfigured } from './image-upload';
 import { formatDate, formatNumber } from '../utils/format';

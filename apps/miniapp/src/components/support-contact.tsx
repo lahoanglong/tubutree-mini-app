@@ -9,7 +9,7 @@ import { copyText } from '../utils/clipboard';
 import { haptic } from '../utils/haptic';
 import { formatPhoneDisplay } from '../utils/phone';
 import { useAuthPhase } from '../hooks/use-auth-phase';
-import { useLoginWithNotice } from '../hooks/use-login-notice';
+import { useLoginWithNotice } from './ui/auth-gate';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
 
