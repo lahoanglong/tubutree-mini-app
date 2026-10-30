@@ -3,6 +3,7 @@ import { Prisma, type Order, type OrderItem, type ReturnRequest, type ReturnRequ
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { notifyAdmins } from '../../common/notify-admins';
+import { isDeadlock } from '../../common/lock-busy';
 import { findSearchUserIds, normalizeAdminOrderSearch, orderCodeVariants } from '../admin/admin-order-filter';
 import { formatPoints } from '../../common/format-points';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -397,7 +398,7 @@ export class OrderReturnsService {
     }
 
     const standardPointsExpiresAt = await this.loyalty.pointsExpiresAt(new Date());
-    const outcome = await this.prisma.$transaction(async (tx) => {
+    const approve = () => this.prisma.$transaction(async (tx) => {
       const approved = await tx.returnRequest.updateMany({
         where: { id, status: 'REQUESTED' },
         data: { status: 'APPROVED', adminNote: note, reviewedBy: adminId, reviewedAt: new Date() },
@@ -426,6 +427,8 @@ export class OrderReturnsService {
       let pointsBack = shares.pointsUsedBack;
       let commissionCut = 0;
       let commissionCutBy: PartialReversalResult['commissionCutBy'] = [];
+      let commissionDebited: PartialReversalResult['commissionDebited'] = [];
+      let commissionManual: PartialReversalResult['commissionManual'] = [];
       let referralNotices: ReferralNotice[];
       if (shares.isFull) {
         const flipped = await tx.order.updateMany({ where: { id: order.id, status: 'DELIVERED' }, data: { status: 'RETURNED' } });
@@ -448,6 +451,8 @@ export class OrderReturnsService {
         pointsBack = partial.pointsBack;
         commissionCut = partial.commissionCut;
         commissionCutBy = partial.commissionCutBy;
+        commissionDebited = partial.commissionDebited;
+        commissionManual = partial.commissionManual;
         referralNotices = partial.referralNotices ?? [];
       }
 
@@ -469,7 +474,15 @@ export class OrderReturnsService {
           ...(destination.method === 'WALLET' && req.refundMethod === 'BANK' ? { refundMethod: 'WALLET' } : {}),
         },
       });
-      return { order, shares, money, pointsBack, referralNotices, commissionCutBy };
+      return { order, shares, money, pointsBack, referralNotices, commissionCutBy, commissionDebited, commissionManual };
+    });
+    // Lần duyệt khoá nhiều dòng (đơn, hoa hồng, Ví khách và CTV, Điểm của người mời khi thu hồi thưởng giới thiệu), nên chạy chen với
+    // việc cộng/thu thưởng giới thiệu có thể bị Postgres chọn làm nạn nhân deadlock (40P01). Tx đã rollback hết (yêu cầu vẫn REQUESTED),
+    // nên chạy lại một lần thay vì trả lỗi cho quản trị.
+    const outcome = await approve().catch((err: unknown) => {
+      if (!isDeadlock(err)) throw err;
+      this.logger.warn(`Duyệt trả ${id} bị Postgres chọn làm nạn nhân deadlock, chạy lại một lần.`);
+      return approve();
     });
 
     const { order, shares, money } = outcome;
@@ -496,8 +509,12 @@ export class OrderReturnsService {
         this.logger.error(`Thu hồi hoa hồng của đơn ${order.code} sau khi duyệt trả cả đơn lỗi: ${err instanceof Error ? err.message : err}`);
       }
     } else {
-      // Hoa hồng đã duyệt/đã vào Ví không cắt được trong commit; kế toán cần biết phần CTV đã nhận vượt phần còn lại của đơn.
-      await this.affiliate.alertPaidCommissionOfReversedOrder(order.id, order.code, { returnRequestId: id, returnedLines: shares.lines });
+      // Phần cắt của hoa hồng đã vào Ví đã trừ Ví CTV trong commit; kế toán cần biết khi khoản đó đã kê là thu nhập, Ví CTV âm hoặc phần không tự trừ được.
+      await this.affiliate.alertPaidCommissionOfReversedOrder(order.id, order.code, {
+        returnRequestId: id,
+        debited: outcome.commissionDebited,
+        manual: outcome.commissionManual,
+      });
     }
     if (money?.to === 'BANK') {
       await announceBankRefund(

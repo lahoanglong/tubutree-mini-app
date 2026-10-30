@@ -345,7 +345,10 @@ describe('OrderReturnsService.review — duyệt trả cả đơn, lỗi đảo 
 });
 
 describe('OrderReturnsService.review — trả một phần cắt hoa hồng thì báo CTV', () => {
-  function setupPartialApprove(commissionCutBy: { affiliateUserId: string; amount: number }[], lines: { orderItemId: string; quantity: number; refundAmount: number }[] = []) {
+  function setupPartialApprove(
+    commissionCutBy: { affiliateUserId: string; amount: number }[],
+    extra: { commissionDebited?: unknown[]; commissionManual?: unknown[] } = {},
+  ) {
     const order = deliveredOrder({ pancakeOrderId: 'pk1', fulfiller: 'TUBU', fulfillerStorefront: null });
     const prisma = {
       returnRequest: {
@@ -355,11 +358,13 @@ describe('OrderReturnsService.review — trả một phần cắt hoa hồng th�
       order: { findUnique: jest.fn().mockResolvedValue(null), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       $transaction: jest.fn().mockResolvedValue({
         order,
-        shares: { isFull: false, lines },
+        shares: { isFull: false, lines: [] },
         money: { to: 'WALLET', amount: 90_000 },
         pointsBack: 0,
         referralNotices: [],
         commissionCutBy,
+        commissionDebited: extra.commissionDebited ?? [],
+        commissionManual: extra.commissionManual ?? [],
       }),
     } as unknown as PrismaService;
     const loyalty = { pointsExpiresAt: jest.fn().mockResolvedValue(null), reverseOrderPoints: jest.fn() };
@@ -367,7 +372,7 @@ describe('OrderReturnsService.review — trả một phần cắt hoa hồng th�
     const svc = new OrderReturnsService(prisma, {} as never, {} as never, loyalty as never, affiliate as never, notifications);
     (svc as unknown as { flagPancakeReturn: unknown }).flagPancakeReturn = jest.fn().mockResolvedValue(undefined);
     (svc as unknown as { withContext: unknown }).withContext = jest.fn().mockResolvedValue({ id: 'r1' });
-    return { svc, affiliate, order };
+    return { svc, affiliate, order, prisma };
   }
   const reversedNotices = () => (notifications.notify as jest.Mock).mock.calls.filter((c) => c[1] === 'COMMISSION_REVERSED');
 
@@ -387,12 +392,42 @@ describe('OrderReturnsService.review — trả một phần cắt hoa hồng th�
     expect(reversedNotices()).toHaveLength(0);
   });
 
-  it('trả một phần: báo kế toán nếu đơn có hoa hồng đã duyệt/đã chuyển, mỗi yêu cầu trả một lần', async () => {
-    const lines = [{ orderItemId: 'i1', quantity: 2, refundAmount: 50_000 }];
-    const { svc, affiliate, order } = setupPartialApprove([], lines);
+  it('trả một phần: đưa phần đã trừ Ví và phần không tự trừ được sang cảnh báo kế toán, mỗi yêu cầu trả một lần', async () => {
+    const debited = [{ affiliateUserId: 'ctv1', amount: 3_333, balanceAfter: -1_000 }];
+    const manual = [{ affiliateUserId: 'ctv1', amount: 2_000, reason: 'LEGACY_PAYOUT' }];
+    const { svc, affiliate, order } = setupPartialApprove([{ affiliateUserId: 'ctv1', amount: 3_333 }], { commissionDebited: debited, commissionManual: manual });
     await svc.review('a1', 'r1', { approve: true, shopFault: true });
     expect(affiliate.alertPaidCommissionOfReversedOrder).toHaveBeenCalledTimes(1);
-    expect(affiliate.alertPaidCommissionOfReversedOrder).toHaveBeenCalledWith(order.id, order.code, { returnRequestId: 'r1', returnedLines: lines });
+    expect(affiliate.alertPaidCommissionOfReversedOrder).toHaveBeenCalledWith(order.id, order.code, { returnRequestId: 'r1', debited, manual });
+  });
+
+  it('tx duyệt bị Postgres chọn làm nạn nhân deadlock (40P01): chạy lại cả tx một lần, các bước sau commit chạy đúng một lần', async () => {
+    const { svc, prisma } = setupPartialApprove([{ affiliateUserId: 'ctv1', amount: 3_333 }]);
+    const tx = prisma.$transaction as unknown as jest.Mock;
+    const ok = await tx();
+    tx.mockReset();
+    tx.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError('Raw query failed. Code: `40P01`. Message: `deadlock detected`', { code: 'P2010', clientVersion: 'x' }));
+    tx.mockResolvedValueOnce(ok);
+    await expect(svc.review('a1', 'r1', { approve: true, shopFault: true })).resolves.toBeDefined();
+    expect(tx).toHaveBeenCalledTimes(2);
+    expect(reversedNotices()).toHaveLength(1);
+  });
+
+  it('deadlock lần hai, hoặc lỗi khác deadlock: không chạy lại thêm, ném lỗi ra', async () => {
+    const deadlock = () => new Prisma.PrismaClientKnownRequestError('Transaction failed due to a write conflict or a deadlock', { code: 'P2034', clientVersion: 'x' });
+    const twice = setupPartialApprove([]);
+    const tx2 = twice.prisma.$transaction as unknown as jest.Mock;
+    tx2.mockReset();
+    tx2.mockRejectedValueOnce(deadlock()).mockRejectedValueOnce(deadlock());
+    await expect(twice.svc.review('a1', 'r1', { approve: true, shopFault: true })).rejects.toThrow('deadlock');
+    expect(tx2).toHaveBeenCalledTimes(2);
+
+    const other = setupPartialApprove([]);
+    const tx1 = other.prisma.$transaction as unknown as jest.Mock;
+    tx1.mockReset();
+    tx1.mockRejectedValueOnce(new Error('Đơn không ở trạng thái có thể trả'));
+    await expect(other.svc.review('a1', 'r1', { approve: true, shopFault: true })).rejects.toThrow('Đơn không ở trạng thái');
+    expect(tx1).toHaveBeenCalledTimes(1);
   });
 });
 

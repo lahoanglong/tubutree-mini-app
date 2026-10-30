@@ -110,6 +110,35 @@ describe('SubscribeSheet (ngày bắt đầu, cách trả, địa chỉ)', () =>
     expect(onNotice).toHaveBeenCalledWith(expect.stringContaining('20/10/2026'));
   });
 
+  it('Ví đang âm thì hàng Ví Tubu bị khoá kèm lý do như màn thanh toán, gói tạo bằng COD', async () => {
+    mocks.getWallet.mockResolvedValue({ walletBalance: -50000 });
+    mocks.http.post.mockResolvedValue({ ...SUB, firstOrder: null });
+    mount();
+    await flush();
+    const wallet = radio(/Ví Tubu/) as HTMLButtonElement;
+    expect(wallet.disabled).toBe(true);
+    expect(wallet.textContent).toContain('Ví đang âm 50.000đ do thu hồi hoa hồng đơn trả hàng, nên chưa trả đơn bằng Ví được.');
+    click(wallet);
+    expect(wallet.getAttribute('aria-checked')).toBe('false');
+    click(create());
+    await flush();
+    expect(mocks.http.post).toHaveBeenCalledWith('/me/subscriptions', expect.objectContaining({ paymentMethod: 'COD' }));
+  });
+
+  it('đã chọn Ví rồi số dư tải về âm thì khoá nút tạo, không gửi gói trả bằng Ví', async () => {
+    let resolveWallet!: (w: { walletBalance: number }) => void;
+    mocks.getWallet.mockReturnValue(new Promise((r) => (resolveWallet = r)));
+    mount();
+    await flush();
+    click(radio(/^Ví Tubu/));
+    expect(radio(/^Ví Tubu/).getAttribute('aria-checked')).toBe('true');
+    resolveWallet({ walletBalance: -50000 });
+    await flush();
+    expect(radio(/Ví đang âm 50\.000đ/)).toBeTruthy();
+    expect(create().disabled).toBe(true);
+    expect(mocks.http.post).not.toHaveBeenCalled();
+  });
+
   it('ngày ngoài khoảng (hôm nay) thì báo lỗi và khoá nút tạo', async () => {
     mount();
     await flush();

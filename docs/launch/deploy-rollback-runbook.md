@@ -449,7 +449,7 @@ Trước khi deploy API có thay đổi này: xác nhận bản Mini App đang c
 
 ### 1.13 Bản đợt 29/10: quay image (7.2) không còn sạch sau khi khách đã dùng bản mới
 
-Bốn migration của bản này (`20261029010000`, `20261029020000`, `20261029030000`, `20261029030100`) chỉ thêm bảng, cột và mẫu tin, nên image cũ vẫn chạy được trên schema mới. Nhưng dữ liệu ghi bởi API mới làm 7.2 để lại hậu quả. Đọc hết mục này trước khi chọn 7.2:
+Bốn migration của bản này (`20261029010000`, `20261029020000`, `20261029030000`, `20261029030100`) chỉ thêm bảng, cột và mẫu tin, nên image cũ vẫn chạy được trên schema mới; migration thứ năm `20261029040000` thêm một giá trị enum Ví và cột rỗng `commissions.walletPayoutId` (mục 5 dưới đây), còn `20261029040001` (đổi chữ mẫu tin `COMMISSION_REVERSED`) chỉ sửa chữ nên image cũ vẫn chạy được. Nhưng dữ liệu ghi bởi API mới làm 7.2 để lại hậu quả. Đọc hết mục này trước khi chọn 7.2:
 
 1. **Tài khoản khách vãng lai bị tách.** API mới lưu khoá khách là băm của thiết bị (`guest_h_<sha256>`), và lần đăng nhập đầu của mỗi khách vãng lai đổi khoá cũ `guest_<deviceId>` sang khoá băm. Băm là một chiều, không đổi ngược được. Nếu quay image cũ: khách vãng lai đã mở app trong lúc chạy bản mới sẽ được image cũ tạo tài khoản MỚI rỗng (mất điểm, giỏ, địa chỉ, đơn trên màn hình). Khi deploy lại bản mới, khách về tài khoản cũ, còn tài khoản tạm lúc quay lại bị bỏ lại. Khách đăng nhập Zalo không bị ảnh hưởng. Sau khi đã chạy 1.14, quay image tách MỌI khách vãng lai đăng nhập lại qua `/auth/guest` (không chỉ khách đã mở app trong bản mới), vì khoá thô không còn ở đâu để image cũ tìm. Đã quay image thì sau khi deploy lại, lấy danh sách tài khoản tạm để gộp tay (đơn đặt trong lúc quay lại nằm ở đó):
 
@@ -462,6 +462,8 @@ Bốn migration của bản này (`20261029010000`, `20261029020000`, `202610290
 3. **Báo cáo chuyển khoản trả nợ của đại lý.** API mới lưu mỗi lần đại lý báo đã chuyển khoản (`dealer_credit_payment_reports`, thẻ việc ở Hôm nay) và đóng báo cáo khi kế toán ghi nhận. Image cũ vẫn ghi nhận trả nợ nhưng không đóng báo cáo. Sau khi deploy lại, các báo cáo có ngày trong khoảng quay lại vẫn hiện là chờ xử lý: đối chiếu sổ công nợ của đại lý trước khi bấm Ghi nhận, để không ghi một khoản hai lần.
 
 4. **Cron hết hạn điểm báo lỗi khi sổ điểm lệch.** Bản này nâng hai log của `expirePoints` (khách lỗi khi trừ điểm hết hạn; số dư nhỏ hơn số điểm cần trừ) từ cảnh báo lên lỗi. Nếu mục 1.11 đo thấy lệch Điểm Xanh, cron hết hạn điểm sẽ báo lỗi mỗi đêm cho tới khi chạy `reconcile:points --apply` cho các khách đó. Không sai điểm, chỉ là tin báo lặp.
+
+5. **Thu hồi hoa hồng đã vào Ví (`20261029040000_commission_wallet_reversal`).** Migration thêm giá trị `COMMISSION_REVERSAL` cho enum `WalletTxType`; API mới trừ thẳng Ví CTV khi đơn bị trả mà hoa hồng đã vào Ví (số dư có thể âm). Image cũ không biết giá trị enum này: Prisma báo lỗi khi đọc sao kê và số dư của CTV có dòng đó, và giá trị enum đã thêm không gỡ được. Nếu đã có dòng `COMMISSION_REVERSAL` (đếm: `psqlq -c "SELECT count(*) FROM wallet_transactions WHERE type = 'COMMISSION_REVERSAL'"`) thì quay image (7.2) phải xem lại; đường an toàn là 7.3.
 
 Kết luận: sau khi bản này đã nhận khách, ưu tiên sửa tiến. Chỉ dùng 7.2 khi lỗi nặng hơn các hậu quả trên, và làm thêm bước 1 và 3 sau khi deploy lại.
 
@@ -995,6 +997,7 @@ cat .pending-migrations
 - `20261018210000_points_1d` nhân 1.000 mọi số điểm: image cũ đọc số điểm theo đơn vị cũ nên giá quà, trần và số dư sai nghiêm trọng. Hoàn tác = khôi phục backup trước migrate (7.3); không quay image, không có script đảo ngược.
 - Các migration q1 và r5 thêm giá trị mới `PROCESSING`, `UNVERIFIED`, `DISMISSED` cho enum `CustomerRefundStatus`: dòng hoàn tiền mang giá trị mới làm code cũ lỗi khi đọc, và giá trị enum đã thêm không gỡ được.
 - `20261022100000_payout_tax_refunded` thêm giá trị `PIT_REFUND` cho enum `WalletTxType` (cùng cột `payouts.taxRefunded`): dòng sổ ví loại `PIT_REFUND` làm code cũ lỗi khi đọc (Prisma báo enum lạ), và giá trị enum đã thêm không gỡ được. Migration này không nằm trong `IMAGE_COMPATIBLE_MIGRATIONS`; đã có dòng `PIT_REFUND` (admin từ chối lệnh rút hoa hồng làm hoàn thuế TNCN giữ dư vào Ví) thì đường quay lại là 7.3.
+- `20261029040000_commission_wallet_reversal` thêm giá trị `COMMISSION_REVERSAL` cho enum `WalletTxType` (cùng cột rỗng `commissions.walletPayoutId`): dòng sổ ví loại `COMMISSION_REVERSAL` (đơn bị trả, hoa hồng đã vào Ví bị trừ thẳng) làm code cũ lỗi khi đọc (Prisma báo enum lạ), và giá trị enum đã thêm không gỡ được. Migration này không nằm trong `IMAGE_COMPATIBLE_MIGRATIONS`; đã có dòng `COMMISSION_REVERSAL` thì đường quay lại là 7.3 (mục 1.13 điểm 5 có câu lệnh đếm).
 
 Vì vậy: danh sách chờ áp có migration ngoài sáu cái của đợt, hoặc bất kỳ migration nào ở trên đã chạy (kể cả chỉ một phần), thì đường quay lại duy nhất là 7.3 (khôi phục bản backup trước deploy). 7.2 giữ nguyên cho đúng trường hợp hẹp nó đúng: PROD đã ở bản mà chỉ còn các migration của đợt chờ áp.
 

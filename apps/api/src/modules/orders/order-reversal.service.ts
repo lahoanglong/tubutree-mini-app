@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { Prisma, type Order, type OrderItem } from '@prisma/client';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
@@ -13,6 +13,13 @@ import { loadPointExpiryTxns, lotRecoverable, orderLotKey } from '../loyalty/loy
 import { canRefundToBank, WALLET_DESTINATION, type RefundDestination } from './refund-destination';
 import { createBankRefund, endCustomerPayee, holdRefundForDeletedAccount, recordWalletRefund } from './refund-queue';
 import { creditWalletUnlessAnonymized } from '../wallet/wallet-anonymized-guard';
+import {
+  commissionHolding,
+  debitCommissionFromWallet,
+  lockCommissionsAndWallets,
+  type CommissionDebitNote,
+  type CommissionManualNote,
+} from '../wallet/commission-wallet-reversal';
 import { NO_PARTIAL_RETURNS, partialReturnTotals, type PartialReturnTotals } from './return-ledger';
 import { distributeByWeight, remainingPointsBack, returnedGoods, shareOf, type ReturnShares } from './refund-allocation';
 import { maskPhone } from '../../common/mask-pii';
@@ -64,6 +71,10 @@ export interface PartialReversalResult {
   commissionCut: number;
   /** Phần hoa hồng đã cắt theo từng CTV (chỉ số > 0): để báo CTV sau commit, như lần thu hồi cả đơn. */
   commissionCutBy: { affiliateUserId: string; amount: number }[];
+  /** Phần cắt của hoa hồng đã vào Ví CTV: đã trừ Ví phần thực nhận của nó (số dư có thể âm). Báo kế toán khi Ví CTV âm hoặc thu nhập đã kê ở báo cáo thuế. */
+  commissionDebited: CommissionDebitNote[];
+  /** Phần cắt không tự trừ được (lệnh rút ngân hàng cũ, CTV đã xoá tài khoản): hoa hồng giữ nguyên, kế toán xử lý tay. */
+  commissionManual: CommissionManualNote[];
   /** Như ReversalResult.referralNotices. */
   referralNotices?: ReferralNotice[];
 }
@@ -393,7 +404,15 @@ export class OrderReversalService {
     },
   ): Promise<PartialReversalResult> {
     const { shares, requestId } = input;
-    const result: PartialReversalResult = { refund: null, pointsBack: 0, pointsTaken: 0, commissionCut: 0, commissionCutBy: [] };
+    const result: PartialReversalResult = {
+      refund: null,
+      pointsBack: 0,
+      pointsTaken: 0,
+      commissionCut: 0,
+      commissionCutBy: [],
+      commissionDebited: [],
+      commissionManual: [],
+    };
 
     // Thưởng đánh giá của các sản phẩm bị trả: khoá trước mọi ghi lên dòng users (xem reverseFinancials).
     const reviewable = canHaveReviewReward(order);
@@ -407,6 +426,10 @@ export class OrderReversalService {
       order.userId,
       shares.lines.map((line) => ({ flashSaleItemId: byId.get(line.orderItemId)?.flashSaleItemId ?? null, quantity: line.quantity })),
     );
+
+    // Hoa hồng của đơn trước mọi ghi lên dòng users: phần cắt của hoa hồng đã vào Ví bị trừ ở cuối hàm, mà requestPayout (cron
+    // chuyển hoa hồng vào Ví) khoá dòng hoa hồng rồi mới tới Ví CTV.
+    if (order.referrerUserId) await lockCommissionsAndWallets(tx, order);
 
     const amount = shares.goods + shares.shipping;
     if (amount > 0 && isMoneyBackable(order)) {
@@ -497,16 +520,17 @@ export class OrderReversalService {
       }
     }
 
-    // Hoa hồng CTV còn chờ (PENDING/LOCKED) giảm đúng phần của các dòng trả, theo mức % của chính dòng đó (R2-MONEY-1):
-    // trả món 10% thì cắt hoa hồng món đó, trả món 0% thì không cắt gì. Mỗi dòng tính luỹ kế sau trừ luỹ kế trước nên trả
-    // nốt một dòng cắt đúng bằng hoa hồng của dòng. Đã duyệt/đã chi thì không đụng — giống lần đảo cả đơn
-    // (reverseCommissionsForOrder chỉ huỷ PENDING/LOCKED).
+    // Hoa hồng CTV giảm đúng phần của các dòng trả, theo mức % của chính dòng đó (R2-MONEY-1): trả món 10% thì cắt hoa hồng món đó,
+    // trả món 0% thì không cắt gì. Mỗi dòng tính luỹ kế sau trừ luỹ kế trước nên trả nốt một dòng cắt đúng bằng hoa hồng của dòng.
+    // Cắt cả khi hoa hồng đã duyệt hoặc đã vào Ví (giống lần đảo cả đơn, reverseCommissionsForOrder): đã vào Ví thì phần cắt
+    // trừ thẳng Ví CTV (số dư có thể âm), mỗi yêu cầu trả một dòng sổ. Hoa hồng nằm trong lệnh rút ngân hàng cũ hoặc của CTV đã
+    // xoá tài khoản thì giữ nguyên, trả về cho kế toán xử lý tay.
     // Nền doanh số bậc/mốc (commissionableTotal) giảm cùng lúc, đúng phần tiền khách thực trả của các đơn vị trả trên những
     // dòng có hoa hồng — cùng nền createCommissionForOrder cộng lúc đặt; nếu không, đơn 80tr chỉ còn một món rẻ sau khi trả
     // vẫn tính đủ 80tr vào mốc thưởng tháng khi hoa hồng được duyệt.
     const rows = await tx.commission.findMany({
-      where: { orderId: order.id, status: { in: ['PENDING', 'LOCKED'] } },
-      select: { id: true, affiliateUserId: true, amount: true, commissionableTotal: true, lineAmounts: true },
+      where: { orderId: order.id, status: { in: ['PENDING', 'LOCKED', 'APPROVED', 'PAID'] } },
+      select: { id: true, affiliateUserId: true, amount: true, commissionableTotal: true, lineAmounts: true, status: true, payoutBatchId: true, walletPayoutId: true, paidAt: true },
     });
     const itemById = new Map(order.items.map((i) => [i.id, i]));
     const paid = paidLineTotals(order, order.items);
@@ -530,18 +554,45 @@ export class OrderReversalService {
       cut = Math.min(row.amount, cut);
       baseCut = Math.min(row.commissionableTotal, baseCut);
       if (cut <= 0 && baseCut <= 0) continue;
+
+      const holding = commissionHolding(row);
+      const inWallet = holding === 'WALLET' && cut > 0;
+      if (holding === 'LEGACY') {
+        if (cut > 0) result.commissionManual.push({ affiliateUserId: row.affiliateUserId, amount: cut, reason: 'LEGACY_PAYOUT' });
+        continue;
+      }
+      let debited: CommissionDebitNote | null = null;
+      if (inWallet) {
+        const debit = await debitCommissionFromWallet(tx, {
+          commission: row,
+          amount: cut,
+          refId: `${row.id}:${requestId}`,
+          reason: `Thu hồi hoa hồng đơn ${order.code} (trả một phần)`,
+        });
+        if (!debit.debited) {
+          result.commissionManual.push({ affiliateUserId: row.affiliateUserId, amount: cut, reason: debit.reason });
+          continue;
+        }
+        // Dòng sổ của yêu cầu này đã có (chạy lại): phần cắt đã áp từ trước, không cắt amount lần hai.
+        if (!debit.applied) continue;
+        debited = debit.note;
+      }
       const res = await tx.commission.updateMany({
         where: {
           id: row.id,
           amount: row.amount,
           commissionableTotal: row.commissionableTotal,
-          status: { in: ['PENDING', 'LOCKED'] },
+          status: row.status,
         },
         data: { amount: { decrement: cut }, commissionableTotal: { decrement: baseCut } },
       });
       if (res.count === 1) {
         result.commissionCut += cut;
         if (cut > 0) result.commissionCutBy.push({ affiliateUserId: row.affiliateUserId, amount: cut });
+        if (debited) result.commissionDebited.push(debited);
+      } else if (debited) {
+        // Dòng hoa hồng được khoá từ đầu hàm nên không đổi giữa chừng; nếu vẫn lệch thì huỷ cả lần duyệt, không để Ví đã trừ mà hoa hồng còn nguyên.
+        throw new ConflictException('Hoa hồng của đơn vừa thay đổi, vui lòng thử lại.');
       }
     }
 
