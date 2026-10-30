@@ -56,36 +56,34 @@ describe('FlashSaleService.resolveEffective', () => {
 });
 
 describe('FlashSaleService.resolveEffective — suất còn lại của khách (ENGAGE-4)', () => {
-  const svcWith = (items: unknown[], purchases: unknown[]) => {
-    const purchaseFind = jest.fn().mockResolvedValue(purchases);
-    const prisma = {
-      $queryRaw: jest.fn().mockResolvedValue(items),
-      flashSalePurchase: { findMany: purchaseFind },
-    } as unknown as PrismaService;
-    return { svc: new FlashSaleService(prisma, config, notifications, lifecycle), purchaseFind };
+  const svcWith = (items: unknown[]) => {
+    const queryRaw = jest.fn().mockResolvedValue(items);
+    const prisma = { $queryRaw: queryRaw } as unknown as PrismaService;
+    return { svc: new FlashSaleService(prisma, config, notifications, lifecycle), queryRaw };
   };
 
-  it('có userId → allowance = min(quota − đã bán, perUserLimit − khách đã mua)', async () => {
-    const { svc, purchaseFind } = svcWith(
-      [activeItem({ perUserLimit: 3, quota: 10, soldCount: 3 }), activeItem({ id: 'fi2', variationId: 'v2', perUserLimit: 5, quota: 4, soldCount: 2 })],
-      [{ flashSaleItemId: 'fi1', quantity: 2 }],
-    );
+  it('có userId → allowance = min(quota − đã bán, perUserLimit − khách đã mua), lượt mua đọc cùng một câu SQL', async () => {
+    const { svc, queryRaw } = svcWith([
+      activeItem({ perUserLimit: 3, quota: 10, soldCount: 3, bought: 2 }),
+      activeItem({ id: 'fi2', variationId: 'v2', perUserLimit: 5, quota: 4, soldCount: 2, bought: 0 }),
+    ]);
     const map = await svc.resolveEffective(['v1', 'v2'], NOW, 'u1');
-    expect(purchaseFind).toHaveBeenCalledWith({
-      where: { userId: 'u1', flashSaleItemId: { in: ['fi1', 'fi2'] } },
-      select: { flashSaleItemId: true, quantity: true },
-    });
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    const q = queryRaw.mock.calls[0][0] as { sql: string; values: unknown[] };
+    expect(q.sql).toContain('flash_sale_purchases');
+    expect(q.values).toContain('u1');
     expect(map.get('v1')).toMatchObject({ allowance: 1, perUserLeft: 1, quotaLeft: 7 });
     expect(map.get('v2')).toMatchObject({ allowance: 2, perUserLeft: 5, quotaLeft: 2 });
   });
 
-  it('khách đã dùng hết suất → vẫn trả item với allowance 0 (để báo lý do), không có userId → không tra lượt mua', async () => {
-    const { svc } = svcWith([activeItem({ perUserLimit: 1 })], [{ flashSaleItemId: 'fi1', quantity: 1 }]);
+  it('khách đã dùng hết suất → vẫn trả item với allowance 0 (để báo lý do), không có userId → không nối bảng lượt mua', async () => {
+    const { svc } = svcWith([activeItem({ perUserLimit: 1, bought: 1 })]);
     expect((await svc.resolveEffective(['v1'], NOW, 'u1')).get('v1')).toMatchObject({ allowance: 0 });
 
-    const anon = svcWith([activeItem({ perUserLimit: 1 })], []);
+    const anon = svcWith([activeItem({ perUserLimit: 1, bought: 0 })]);
     const map = await anon.svc.resolveEffective(['v1'], NOW);
-    expect(anon.purchaseFind).not.toHaveBeenCalled();
+    const q = anon.queryRaw.mock.calls[0][0] as { sql: string };
+    expect(q.sql).not.toContain('flash_sale_purchases');
     expect(map.get('v1')!.allowance).toBeUndefined();
   });
 });
