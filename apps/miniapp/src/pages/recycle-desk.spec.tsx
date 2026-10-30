@@ -509,14 +509,14 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
 });
 
 describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
-  const GIFT = { id: 'red-1', giftName: 'Gói hạt giống Tubu', customerName: 'Ng*** A', status: 'READY' as const, claimExpiresAt: '2026-12-16T17:30:00.000Z' };
+  const GIFT = { id: 'red-1', giftName: 'Gói hạt giống Tubu', customerName: 'Ng*** A', status: 'READY' as const, claimExpiresAt: '2099-12-16T17:30:00.000Z' };
   beforeEach(() => { mocks.getDeskPoints.mockResolvedValue([WAREHOUSE_DESK]); mocks.deskLookup.mockResolvedValue({ type: 'GIFT', redemption: GIFT }); });
   it('mã QG- ở kho trao quà: tên quà, khách che, hạn nhận theo giờ VN, "Trao quà" gửi code + pointId', async () => {
     mocks.deskFulfilGift.mockResolvedValue(makeGiftRedemption({ status: 'FULFILLED' }));
     renderPage();
     await lookUp('qg-8k2m9p4t');
     expect(await screen.findByText('Gói hạt giống Tubu')).toBeInTheDocument();
-    expect(screen.getByText('Hạn nhận 17/12/2026')).toBeInTheDocument();
+    expect(screen.getByText('Hạn nhận 17/12/2099')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Trao quà' }));
     await waitFor(() => expect(mocks.deskFulfilGift).toHaveBeenCalledWith({ code: 'QG-8K2M9P4T', pointId: 'wh-1' }));
     expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã trao Gói hạt giống Tubu', type: 'success' }));

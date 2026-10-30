@@ -66,7 +66,7 @@ import { RecycleDesk, deskPreviewPoints } from './recycle-desk';
 const REQ = makeDeskRequest();
 const LINE0 = REQ.lines[0]!;
 const CONFIRMED = { requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 6000, dropsAwarded: 0, quota: { limit: 500_000, used: 126_000, remaining: 374_000 }, staffDailyCapRemaining: 150_000 };
-const GIFT = { id: 'red-1', giftName: 'Gói hạt giống Tubu', customerName: 'Ng*** A', status: 'READY', claimExpiresAt: '2026-12-16T17:30:00.000Z' };
+const GIFT = { id: 'red-1', giftName: 'Gói hạt giống Tubu', customerName: 'Ng*** A', status: 'READY', claimExpiresAt: '2099-12-16T17:30:00.000Z' };
 const CODE_LABEL = 'Mã yêu cầu hoặc mã nhận quà';
 
 let mounted: Rendered[] = [];
@@ -671,7 +671,7 @@ describe('/doi-rac/quay: trao quà ở kho (§8, §15.3)', () => {
     const c = await mount();
     await lookUp(c, 'qg-8k2m9p4t');
     expect(c.textContent).toContain('Gói hạt giống Tubu');
-    expect(c.textContent).toContain('Hạn nhận 17/12/2026');
+    expect(c.textContent).toContain('Hạn nhận 17/12/2099');
     click(button(c, 'Trao quà'));
     await flush(10);
     expect(calls('/waste/desk/gifts/fulfil')[0]!.body).toEqual({ code: 'QG-8K2M9P4T', pointId: 'wh-1' });
