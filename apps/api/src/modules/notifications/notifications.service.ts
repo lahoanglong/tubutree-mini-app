@@ -208,8 +208,9 @@ export class NotificationsService {
       userId,
       channel,
       payload: { path: ['dedupeKey'], equals: dedupeKey },
-      // Log ZNS đã FAILED (không xếp được hàng đợi, Zalo từ chối hết lượt) không được chặn lượt gửi lại: chỉ log đang chờ, đang thử lại
-      // hay đã gửi mới tính là "đã gửi ZNS cho sự kiện này".
+      // Log ZNS FAILED không chặn lượt gửi lại: chỉ log đang chờ, đang thử lại hay đã gửi mới tính là "đã gửi ZNS cho sự kiện này".
+      // Lưu ý: hàm này chỉ cho phép gửi lại khi nơi gọi gọi lại notify(). Cron báo hạ hạng chỉ gọi lại khi lần trước ném lỗi
+      // (xếp hàng hỏng); Zalo từ chối hết lượt ở worker thì log FAILED bất đồng bộ và cron không gửi lại trong cùng kỳ giữ hạng.
       ...(channel === 'ZNS' ? { status: { in: ['PENDING', 'RETRYING', 'SENT'] } } : {}),
       ...(withinMs != null ? { sentAt: { gte: new Date(Date.now() - withinMs) } } : {}),
     };
@@ -277,8 +278,10 @@ export class NotificationsService {
     } catch (err) {
       const reason = `Không xếp được hàng đợi gửi ZNS: ${err instanceof Error ? err.message : String(err)}`;
       this.logger.error(`${reason} (log ${log.id})`);
-      await this.prisma.notificationLog.update({
-        where: { id: log.id },
+      // Chỉ đóng log còn PENDING: job vào Redis trước khi báo lỗi quá hạn có thể đã được worker gửi (SENT) hoặc đang thử lại,
+      // đóng đè lên đó rồi nhả khoá sẽ làm đêm sau gửi đôi.
+      await this.prisma.notificationLog.updateMany({
+        where: { id: log.id, status: 'PENDING' },
         data: {
           status: 'FAILED',
           error: reason,
