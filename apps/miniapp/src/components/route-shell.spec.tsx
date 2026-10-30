@@ -6,6 +6,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RouteShell, SilentBoundary } from './route-shell';
 import { vi as copy } from '../i18n/vi';
 
+vi.mock('zmp-ui', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  Page: ({ children }: { children: React.ReactNode }) => <div data-testid="page">{children}</div>,
+  useNavigate: () => vi.fn(),
+}));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../services/shop-api', () => ({ fetchSupportContact: vi.fn().mockResolvedValue({ hotline: '0900000000' }) }));
 
@@ -40,6 +45,12 @@ describe('RouteShell (R-84, R-79)', () => {
     wrap(<RouteShell skeleton="grid"><Lazy /></RouteShell>);
     expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true');
     expect(await screen.findByText('Xong')).toBeInTheDocument();
+  });
+
+  it('Đổi rác đang tải mã: khung chờ có sẵn tiêu đề trang, không phải màn trắng (R-54)', () => {
+    const Never = lazy(() => new Promise<{ default: () => JSX.Element }>(() => undefined));
+    wrap(<RouteShell skeleton="recycle"><Never /></RouteShell>);
+    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true');
   });
 
   it('lỗi tải mã màn (mạng yếu): Thử lại tải lại app vì React.lazy giữ lời hứa đã lỗi', () => {

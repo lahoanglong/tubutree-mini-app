@@ -7,9 +7,9 @@ import { hashMessage } from './error-boundary';
 import { ErrorState } from './ui/empty-state';
 import { LineItemSkeleton, ProductGridSkeleton, Skeleton } from './ui/skeleton';
 
-export type RouteSkeletonKind = 'grid' | 'detail' | 'list';
+export type RouteSkeletonKind = 'grid' | 'detail' | 'list' | 'recycle';
 
-/** Khung chờ theo hình màn: lưới SP (Danh mục), ảnh + chữ (Chi tiết SP), danh sách dòng (Giỏ, Đơn, ...). */
+/** Khung chờ theo hình màn: lưới SP (Danh mục), ảnh + chữ (Chi tiết SP), danh sách dòng (Giỏ, Đơn, ...), tiêu đề + khối (Đổi rác). */
 export function RouteSkeleton({ kind = 'list' }: { kind?: RouteSkeletonKind }) {
   return (
     <div role="status" aria-busy="true" aria-label={vi.common.loading} style={{ minHeight: '100vh', background: 'var(--color-bg-canvas)' }}>
@@ -30,12 +30,12 @@ export function RouteSkeleton({ kind = 'list' }: { kind?: RouteSkeletonKind }) {
           </div>
         </div>
       )}
-      {kind === 'list' && (
+      {(kind === 'list' || kind === 'recycle') && (
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Skeleton width="45%" height={22} />
-          <LineItemSkeleton />
-          <LineItemSkeleton />
-          <LineItemSkeleton />
+          {kind === 'recycle'
+            ? [140, 80, 80].map((h, i) => <Skeleton key={i} height={h} radius="var(--radius-card)" />)
+            : [0, 1, 2].map((i) => <LineItemSkeleton key={i} />)}
         </div>
       )}
     </div>
