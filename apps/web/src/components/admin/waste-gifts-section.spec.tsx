@@ -241,6 +241,11 @@ describe('hàng đợi quà chờ nhận', () => {
     expect(c.querySelector<HTMLElement>('[data-redemption="gr1"]')!.textContent).toContain('Đã huỷ: Quá hạn nhận');
   });
 
+  it('ô lý do huỷ nhắc khách và quầy đều thấy lý do này', async () => {
+    const { c } = await mountQueue({ rows: [adminRow()] });
+    click(btn(c, 'Huỷ'));
+    expect(c.textContent).toContain('Khách và quầy đều thấy lý do này');
+  });
   it('Huỷ (chỉ admin): không chọn sẵn hoàn điểm, phải chọn rõ', async () => {
     for (const refund of [false, true]) {
       const { c, api } = await mountQueue({ rows: [adminRow()] });
