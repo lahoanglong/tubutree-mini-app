@@ -85,16 +85,25 @@ describe('useReferralTouch: ghi chạm giới thiệu và nhớ mã có phải c
     await waitFor(() => expect(mocks.touch).toHaveBeenCalledTimes(2));
   });
 
-  it('WebView tải lại (hook mount mới, ngữ cảnh còn trong sessionStorage) sau khi đã chạm CTV: mở gian hàng đối tác vẫn không chạm kiểu brand', async () => {
+  it('WebView tải lại (module nạp lại, ngữ cảnh còn trong sessionStorage) sau khi đã chạm CTV: mở gian hàng đối tác vẫn không chạm kiểu brand', async () => {
     mocks.touch.mockResolvedValue({ ok: true });
     ctx().setContext({ slug: 'an', referralCode: 'AN123', kind: 'ctv' });
     const first = renderHook(() => useReferralTouch(true));
     await waitFor(() => expect(ctx().referralEligible).toBe(true));
     first.unmount();
     expect(mocks.touch).toHaveBeenCalledTimes(1);
-    act(() => ctx().setContext({ slug: 'doi-tac', kind: 'partner' }));
-    renderHook(() => useReferralTouch(true));
-    await Promise.resolve();
+    expect(sessionStorage.getItem('tubu_sf_ctv_touched')).toBe('AN123');
+
+    // Tải lại thật làm mất mọi biến trong bộ nhớ: nạp lại store và hook từ đầu, chỉ còn sessionStorage.
+    vi.resetModules();
+    const store = await import('../store/storefront-context');
+    const { useReferralTouch: useReloaded } = await import('./use-referral-touch');
+    act(() => store.useStorefrontContext.getState().setContext({ slug: 'doi-tac', kind: 'partner' }));
+    expect(store.useStorefrontContext.getState().referralCode).toBe('AN123');
+    renderHook(() => useReloaded(true));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
     expect(mocks.touch).toHaveBeenCalledTimes(1);
   });
 
