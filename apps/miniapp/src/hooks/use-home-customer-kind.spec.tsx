@@ -50,7 +50,7 @@ describe('useHomeCustomerKind trên Mini: chuỗi trạng thái lúc mở app', 
     expect(seen).toEqual(['returning', 'returning', 'returning']);
   });
 
-  it('phiên lỗi (mất mạng) mà máy đã nhớ khách cũ: giữ "returning", không tụt về "new"', () => {
+  it('đang chờ phiên (authPending) mà máy đã nhớ khách cũ: giữ "returning", không tụt về "new"', () => {
     localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
     const seen = sequence([{ authed: false, authPending: true, purchased: pending }]);
     expect(seen).toEqual(['returning']);
