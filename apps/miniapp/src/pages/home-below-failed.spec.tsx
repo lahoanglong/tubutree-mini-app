@@ -48,7 +48,7 @@ vi.mock('../components/home/home-below', () => {
     chunk.failures -= 1;
     throw new Error(chunk.message);
   }
-  return { FlashSale: () => null, UpcomingFlashSales: () => null, PurchasedRail: () => null, BestSellerRail: () => null, BrandJourney: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null };
+  return { FlashSale: () => null, UpcomingFlashSales: () => null, PurchasedRail: () => null, BestSellerRail: () => <section data-testid="best-rail" />, BrandJourney: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null };
 });
 
 import HomePage from './home';
@@ -94,10 +94,13 @@ describe('HomePage — chunk khối dưới màn đầu tải hỏng', () => {
     await settle(500);
     expect(screen.getByTestId('home-page-error')).toBeInTheDocument();
     expect(document.querySelectorAll('[data-home-block="settling"]').length).toBe(0);
+    expect(document.querySelectorAll('.tubu-skeleton').length).toBe(0);
+    expect(screen.queryByTestId('best-rail')).toBeNull();
     await act(async () => {
       screen.getByRole('button', { name: /Thử lại/ }).click();
     });
     await settle(500);
     expect(screen.queryByTestId('home-page-error')).toBeNull();
+    expect(screen.getByTestId('best-rail')).toBeInTheDocument();
   });
 });

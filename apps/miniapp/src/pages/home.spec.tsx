@@ -2,7 +2,7 @@ import { render, screen, waitFor, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -67,6 +67,10 @@ import HomePage from './home';
 import { homeBlockOrder } from '../components/home/home-blocks';
 import { homeRenderOrder } from '@tubutree/app-core/home-layout';
 import { HOME_KIND_KEY } from '../hooks/use-home-customer-kind';
+import { loadHomeBelow } from '../components/home/home-lazy';
+
+// Chunk khối dưới màn đầu nạp thật trước, để test không phụ thuộc tốc độ máy.
+beforeAll(() => loadHomeBelow());
 
 const card = (id: string, name: string) => ({
   id, slug: id, brand: 'Tubu', name, thumbnail: null, basePrice: 50000, salePrice: null, isFeatured: true, inStock: true,
