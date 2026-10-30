@@ -47,15 +47,16 @@ describe('RouteShell (R-84, R-79)', () => {
     expect(await screen.findByText('Xong')).toBeInTheDocument();
   });
 
-  it('Đổi rác đang tải mã: vẽ đúng khung trang (tiêu đề + 3 khối 140/80/80), không phải khung danh sách (R-54)', () => {
+  it('Đổi rác đang tải mã: vẽ đúng khung trang (dải tiêu đề + 3 khối 140/80/80), không phải khung danh sách (R-54)', () => {
     const Never = lazy(() => new Promise<{ default: () => JSX.Element }>(() => undefined));
     const { container, unmount } = wrap(<RouteShell skeleton="recycle"><Never /></RouteShell>);
-    expect(screen.getByRole('heading', { name: 'Đổi rác lấy quà' })).toBeInTheDocument();
     const heights = Array.from(container.querySelectorAll<HTMLElement>('[style*="height"]')).map((el) => el.style.height);
-    expect(heights).toEqual(expect.arrayContaining(['140px', '80px', '80px']));
+    expect(heights.filter((h) => h === '140px' || h === '80px')).toEqual(['140px', '80px', '80px']);
+    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', copy.common.loading);
     unmount();
     const list = wrap(<RouteShell><Never /></RouteShell>);
-    expect(screen.queryByRole('heading', { name: 'Đổi rác lấy quà' })).toBeNull();
+    expect(list.container.querySelectorAll('[style*="140px"]').length).toBe(0);
     list.unmount();
   });
 

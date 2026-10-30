@@ -5,15 +5,12 @@ import { trackEvent } from '../services/analytics';
 import { vi } from '../i18n/vi';
 import { hashMessage } from './error-boundary';
 import { ErrorState } from './ui/empty-state';
-import { RecyclePageSkeleton } from './recycle-page-skeleton';
 import { LineItemSkeleton, ProductGridSkeleton, Skeleton } from './ui/skeleton';
 
 export type RouteSkeletonKind = 'grid' | 'detail' | 'list' | 'recycle';
 
 /** Khung chờ theo hình màn: lưới SP (Danh mục), ảnh + chữ (Chi tiết SP), danh sách dòng (Giỏ, Đơn, ...), tiêu đề + khối (Đổi rác). */
 export function RouteSkeleton({ kind = 'list' }: { kind?: RouteSkeletonKind }) {
-  // Cùng khung với màn Đổi rác vẽ ngay sau khi mã tải xong, để bố cục không nhảy.
-  if (kind === 'recycle') return <RecyclePageSkeleton />;
   return (
     <div role="status" aria-busy="true" aria-label={vi.common.loading} style={{ minHeight: '100vh', background: 'var(--color-bg-canvas)' }}>
       {kind === 'grid' && (
@@ -32,6 +29,16 @@ export function RouteSkeleton({ kind = 'list' }: { kind?: RouteSkeletonKind }) {
             <Skeleton height={44} radius="var(--radius-control)" style={{ marginTop: 8 }} />
           </div>
         </div>
+      )}
+      {kind === 'recycle' && (
+        // Cùng hình với RecyclePageSkeleton (dải tiêu đề cỡ PageHeader + 3 khối) nên lúc mã màn tải xong bố cục không nhảy; chữ tiêu đề hiện khi màn về.
+        // Vẽ thẳng bằng div và token, không dùng Page/PageHeader: chúng kéo thêm zmp-ui và chữ vào gói đầu app, mà khung chờ này nằm ở gói đầu.
+        <>
+          <div style={{ background: 'var(--color-bg-surface)', height: 'calc(24px + var(--safe-top) + var(--type-title-lg-lh))' }} />
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {[140, 80, 80].map((h, i) => <Skeleton key={i} height={h} radius="var(--radius-card)" />)}
+          </div>
+        </>
       )}
       {kind === 'list' && (
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
