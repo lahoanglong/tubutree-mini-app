@@ -4,7 +4,7 @@ vi.mock('./api', () => ({ api: { get: vi.fn(), post: vi.fn() }, getAccessToken: 
 const authState = vi.hoisted(() => ({ user: { id: 'u-a' } as { id: string } | null }));
 
 import { api, getAccessToken } from './api';
-import { armHomeFeed, disarmHomeFeed, homeProductSlot, resetHomeFeed, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
+import { armHomeFeed, homeFeedIdentity, disarmHomeFeed, homeProductSlot, resetHomeFeed, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
 
 const get = api.get as unknown as ReturnType<typeof vi.fn>;
 
@@ -79,6 +79,24 @@ describe('home-feed', () => {
     resolveMe({ data: { subscriptions: [{ id: 's' }] } });
     expect(await taken).toEqual([{ id: 's' }]);
     token.mockReturnValue('tok-a');
+  });
+
+  it('khách nâng lên Zalo tại chỗ (cùng id): khối cá nhân tính lúc còn là khách không trao cho người đã liên kết', async () => {
+    type U = { id: string; phone: string | null; zaloId: string | null };
+    let user: U | null = { id: 'g1', phone: null, zaloId: 'guest_g1' };
+    get.mockResolvedValue({ data: { newCustomerOffer: { isNewCustomer: false, welcomeVoucher: null } } });
+    armHomeFeed(() => homeFeedIdentity(user));
+    const taken = takeMeBlock('newCustomerOffer');
+    await Promise.resolve();
+    user = { id: 'g1', phone: '0900000000', zaloId: 'z123' };
+    expect(await taken).toBeNull();
+  });
+
+  it('homeFeedIdentity: cùng id và cùng loại thì giống nhau, khách vs thật thì khác, không user thì null', () => {
+    const g = { id: 'a', phone: null, zaloId: 'guest_a' };
+    expect(homeFeedIdentity(g)).toBe(homeFeedIdentity({ ...g }));
+    expect(homeFeedIdentity(g)).not.toBe(homeFeedIdentity({ id: 'a', phone: '09', zaloId: 'z' }));
+    expect(homeFeedIdentity(null)).toBeNull();
   });
 
   it('homeProductSlot chỉ nhận đúng 3 bộ tham số của Home', () => {

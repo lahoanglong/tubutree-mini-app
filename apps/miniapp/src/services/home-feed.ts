@@ -1,5 +1,7 @@
 import { HOME_PURCHASED_LIMIT, type HomeMeDTO, type HomePublicDTO } from '@tubutree/app-core/api/home';
 import { createHomeFeed, isHomePurchasedRequest } from '@tubutree/app-core/home-feed';
+import type { AuthUser } from '@tubutree/shared-types';
+import { isGuestUser } from '../utils/guest-user';
 import { api } from './api';
 import type { PurchasedItemsPage } from './shop-api';
 
@@ -31,6 +33,11 @@ const feed = createHomeFeed({
   fetchMe: () => api.get<HomeMeDTO>('/home/me', { params: { purchasedLimit: HOME_PURCHASED_LIMIT }, timeout: FEED_TIMEOUT_MS }).then((r) => r.data),
   identity: () => identityOf?.(),
 });
+
+/** Cùng id nhưng khách → khách thật (liên kết Zalo tại chỗ) là người xin khác: máy chủ tính khối cá nhân theo loại tài khoản lúc gửi. */
+export function homeFeedIdentity(u: Pick<AuthUser, 'id' | 'phone' | 'zaloId'> | null | undefined): string | null {
+  return u ? `${u.id}:${isGuestUser(u) ? 'g' : 'r'}` : null;
+}
 
 /** Gọi khi Trang chủ mount (trước khi các query con chạy). Idempotent. */
 export function armHomeFeed(userIdOf: () => string | null | undefined): void {
