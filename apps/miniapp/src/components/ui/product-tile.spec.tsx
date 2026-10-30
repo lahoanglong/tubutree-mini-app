@@ -57,10 +57,33 @@ describe('ProductTile', () => {
       />,
     );
     const overlay = screen.getByRole('button', { name: 'nút nổi' });
-    expect(overlay.parentElement?.style.aspectRatio).toBe('1 / 1');
+    // Khung phủ đúng vùng ảnh vuông nhưng không chặn chạm; chỉ khối chứa nút nhận chạm.
+    const frame = overlay.parentElement!.parentElement!;
+    expect(frame.style.aspectRatio).toBe('1 / 1');
+    expect(frame.style.pointerEvents).toBe('none');
+    expect(overlay.parentElement!.style.pointerEvents).toBe('auto');
     fireEvent.click(overlay);
     expect(onOverlay).toHaveBeenCalledTimes(1);
     expect(onPress).not.toHaveBeenCalled();
+  });
+  it('thứ tự Tab/đọc màn hình: nút tên sản phẩm, rồi tim, rồi nút nổi trên ảnh (không đọc "Thêm vào giỏ" trước tên)', () => {
+    renderTile(
+      <ProductTile
+        product={PRODUCT}
+        variant="grid"
+        onPress={() => {}}
+        imageOverlay={
+          <button type="button" aria-label="nút nổi">
+            +
+          </button>
+        }
+      />,
+    );
+    const names = screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    expect(names[0]).toBe('Serum Bã Trầu');
+    expect(names[names.length - 1]).toBe('nút nổi');
+    expect(names.indexOf('nút nổi')).toBeGreaterThan(names.indexOf('Serum Bã Trầu'));
+    expect(names).toHaveLength(3);
   });
   it('onPress fires when the tile itself (not a nested button) is clicked', () => {
     const onPress = vi.fn();

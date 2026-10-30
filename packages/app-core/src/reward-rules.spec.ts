@@ -11,6 +11,7 @@ import {
   sortRedemptions,
   pointAddress,
   rewardCardState,
+  rewardsGuideCopy,
   warehouseConfirmText,
 } from './reward-rules';
 
@@ -153,5 +154,14 @@ describe('sortRedemptions', () => {
   it('mã vừa đổi lên đầu nhóm còn lại', () => {
     expect(sortRedemptions(list, 'REWARD-X').map((x) => x.id)).toEqual(['ready', 'new', 'mid', 'old']);
     expect(sortRedemptions(list, 'KHÔNG-CÓ').map((x) => x.id)).toEqual(['ready', 'mid', 'new', 'old']);
+  });
+});
+
+describe('rewardsGuideCopy.earnItems', () => {
+  it('điểm danh và nhiệm vụ nói rõ cần đăng nhập Zalo (khách vãng lai không nhận Điểm Xanh từ hai nguồn này)', () => {
+    const [purchase, checkIn, garden] = rewardsGuideCopy.earnItems;
+    expect(purchase).not.toContain('Zalo');
+    expect(checkIn).toContain('đăng nhập Zalo');
+    expect(garden).toContain('đăng nhập Zalo');
   });
 });

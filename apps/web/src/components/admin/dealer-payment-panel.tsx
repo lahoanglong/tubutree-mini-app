@@ -7,6 +7,7 @@ import {
   confirmDealerOrderPayment,
   DEALER_BANK_REF_MAX,
   DEALER_PAYMENT_NOTE_MAX,
+  invalidateInbox,
   type AdminOrder,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
@@ -52,6 +53,7 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
       setNote('');
       void qc.invalidateQueries({ queryKey: ['admin-orders'] });
       void qc.invalidateQueries({ queryKey: ['admin-dashboard-stats'] });
+      void invalidateInbox(qc);
     },
     onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Xác nhận thanh toán thất bại.' }),
     onSettled: () => {

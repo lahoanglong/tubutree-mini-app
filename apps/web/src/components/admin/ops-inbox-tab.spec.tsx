@@ -328,6 +328,24 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     expect(staff.container.querySelector('[role="group"][aria-label="Đã thu từ đơn hôm nay"]')).toBeNull();
   });
 
+  it('khách mới hôm nay ít hơn hôm qua: dòng "7 ngày" không tô đỏ như cảnh báo, và không tô xanh khi nhiều hơn', async () => {
+    const today = (newUsers: { today: number; yesterday: number; week: number }) => ({
+      '/admin/dashboard/today': { body: { orders: { today: 1, yesterday: 1, week: 1 }, revenue: { today: 0, yesterday: 0, week: 0 }, newUsers } },
+      '/admin/analytics/retention': { body: [] },
+    });
+    for (const newUsers of [{ today: 0, yesterday: 3, week: 7 }, { today: 5, yesterday: 3, week: 7 }]) {
+      stub([{ key: 'merchantOverdue', count: 1 }], today(newUsers));
+      const r = render(<OpsInboxTab onOpen={vi.fn()} isAdmin />);
+      mounted.push(r);
+      await flush();
+      const line = [...r.container.querySelectorAll('[role="group"][aria-label="Khách mới hôm nay"] span')].find((e) => e.textContent === '7 ngày: 7 khách mới')!;
+      expect(line.className).not.toContain('danger');
+      expect(line.className).not.toContain('success');
+      r.unmount();
+      mounted = [];
+    }
+  });
+
   it('API cũ chưa trả giá trị đơn đặt thì chỉ bỏ dòng phụ, số đã thu vẫn hiện', async () => {
     stub([{ key: 'merchantOverdue', count: 1 }], {
       '/admin/dashboard/today': { body: { orders: { today: 1, yesterday: 1, week: 1 }, revenue: { today: 100000, yesterday: 0, week: 100000 }, newUsers: { today: 0, yesterday: 0, week: 0 } } },

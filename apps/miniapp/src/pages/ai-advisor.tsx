@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { Page, Input, Spinner, useNavigate, useSnackbar } from 'zmp-ui';
-import { useMutation } from '@tanstack/react-query';
+import { useIsMutating, useMutation } from '@tanstack/react-query';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { aiChat, type AiChatTurn } from '../services/ai-api';
 import { getErrorMessage } from '../services/api';
@@ -28,6 +28,9 @@ const SUGGESTIONS = [
 // khiến MỌI tin nhắn sau đó bị 400 và tính năng hỏng hẳn cho tới khi reload. Cắt còn cửa sổ gần nhất.
 const MAX_HISTORY_TURNS = 20;
 
+// Mutation sống ở QueryClient chứ không ở trang: khách rời trang lúc trợ lý đang soạn rồi quay lại vẫn phải thấy "đang soạn" và bị chặn gửi chồng.
+const CHAT_MUTATION_KEY = ['ai-advisor-chat'] as const;
+
 export default function AiAdvisorPage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
@@ -41,6 +44,7 @@ export default function AiAdvisorPage() {
     list.slice(-MAX_HISTORY_TURNS).map((m) => ({ role: m.role, content: m.content }));
 
   const chatM = useMutation({
+    mutationKey: CHAT_MUTATION_KEY,
     mutationFn: ({ text, history }: { text: string; history: AiChatTurn[] }) => aiChat(text, history),
     // Ghi vào store (không phải state của trang): trả lời đến sau khi khách đã rời trang vẫn còn khi quay lại.
     onSuccess: (r) => {
@@ -52,16 +56,18 @@ export default function AiAdvisorPage() {
     },
   });
 
+  const pending = useIsMutating({ mutationKey: CHAT_MUTATION_KEY }) > 0;
+
   // Tin mới (của bạn, trả lời, hay trạng thái "đang soạn") phải hiện trong tầm nhìn mà khách không phải tự kéo xuống.
   useEffect(() => {
     if (messages.length === 0) return;
     const reduceMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     endRef.current?.scrollIntoView?.({ block: 'end', behavior: reduceMotion ? 'auto' : 'smooth' });
-  }, [messages.length, chatM.isPending]);
+  }, [messages.length, pending]);
 
   const send = (text: string) => {
     const t = text.trim();
-    if (!t || chatM.isPending) return;
+    if (!t || pending) return;
     useAiAdvisorStore.getState().append({ role: 'user', content: t });
     setDraft('');
     chatM.mutate({ text: t, history: toHistory(messages) });
@@ -70,7 +76,7 @@ export default function AiAdvisorPage() {
   // Gửi lại đúng câu hỏi vừa lỗi: bỏ tin xin lỗi, giữ tin của khách (không nhân đôi), lịch sử là các lượt trước câu đó.
   const retry = (failedIndex: number) => {
     const question = messages[failedIndex - 1];
-    if (chatM.isPending || question?.role !== 'user') return;
+    if (pending || question?.role !== 'user') return;
     useAiAdvisorStore.getState().truncate(failedIndex);
     chatM.mutate({ text: question.content, history: toHistory(messages.slice(0, failedIndex - 1)) });
   };
@@ -153,7 +159,7 @@ export default function AiAdvisorPage() {
                 {m.content}
               </Text>
             </div>
-            {m.failed && i === messages.length - 1 && !chatM.isPending && (
+            {m.failed && i === messages.length - 1 && !pending && (
               <div style={{ marginTop: 6 }}>
                 <Button variant="secondary" onPress={() => retry(i)}>
                   Thử lại
@@ -183,7 +189,7 @@ export default function AiAdvisorPage() {
           </div>
         ))}
 
-        {chatM.isPending && (
+        {pending && (
           <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Spinner /> <Text variant="caption" tone="tertiary">Trợ lý đang soạn…</Text>
           </div>
@@ -217,7 +223,7 @@ export default function AiAdvisorPage() {
           />
         </div>
         {/* Không gộp isPending vào disabled: Button tự chặn bấm lại khi loading, còn disabled sẽ tắt luôn spinner. */}
-        <Button disabled={!draft.trim()} loading={chatM.isPending} onPress={() => send(draft)}>
+        <Button disabled={!draft.trim()} loading={pending} onPress={() => send(draft)}>
           Gửi
         </Button>
       </div>

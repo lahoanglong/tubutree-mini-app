@@ -30,6 +30,8 @@ interface LoyaltyState {
   redemptions: RedeemRewardResultDTO['redemption'][];
   /** Điểm từ đơn mới giao còn trong hạn đổi/trả — backend chưa cho đổi quà (loyalty.service lockedOrderPoints). */
   locked?: { points: number; until: string };
+  /** Khách vãng lai: API báo pointsBlocked=GUEST, điểm danh chỉ cộng giọt nước. */
+  guest?: boolean;
 }
 
 const redeemable = (s: LoyaltyState) => Math.max(0, s.points - (s.locked?.points ?? 0));
@@ -46,8 +48,9 @@ function checkInStatus(s: LoyaltyState): CheckInStatusResponse {
     checkedInToday: s.checkedInToday,
     streakDays: s.checkedInToday ? 3 : 2,
     currentCycleDay: cycleDay,
-    todayPoints: CHECKIN_TABLE[cycleDay - 1],
+    todayPoints: s.guest ? 0 : CHECKIN_TABLE[cycleDay - 1],
     rewards,
+    ...(s.guest ? { todayWater: 10, pointsBlocked: 'GUEST' as const } : {}),
   };
 }
 
@@ -103,9 +106,9 @@ function catalog(s: LoyaltyState): RewardCatalogDTO {
 
 function mockLoyalty(
   api: MockApi,
-  opts: { posCreditEnabled?: boolean; locked?: LoyaltyState['locked'] } = {},
+  opts: { posCreditEnabled?: boolean; locked?: LoyaltyState['locked']; guest?: boolean } = {},
 ): LoyaltyState {
-  const s: LoyaltyState = { points: 60, checkedInToday: false, coupons: [], redemptions: [], locked: opts.locked };
+  const s: LoyaltyState = { points: 60, checkedInToday: false, coupons: [], redemptions: [], locked: opts.locked, guest: opts.guest };
   mockSession(api, makeUser({ id: 'user-loyal', fullName: 'Lê Thành Viên', referralCode: 'E2EREF', pointsBalance: 60 }));
   // Analytics tracker (services/analytics.ts) xả lô khi ẩn app / mỗi 10s: spec chạy chậm sẽ chạm POST /events.
   api.post('/events', { accepted: 1 });
@@ -123,6 +126,16 @@ function mockLoyalty(
     await new Promise((r) => setTimeout(r, 400));
     // Như DailyCheckInService (unique theo ngày VN): lần 2 trong ngày → alreadyDone, không cộng thêm.
     if (s.checkedInToday) return { points: null, water: null, alreadyDone: true, pending: [] } satisfies CheckInResult;
+    if (s.guest) {
+      // Như LoyaltyService.dailyCheckIn cho khách vãng lai: ghi điểm danh, không cộng điểm; giọt nước vẫn cộng.
+      s.checkedInToday = true;
+      return {
+        points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 0, totalPoints: s.points, message: 'Điểm danh Ngày 3 thành công!', pointsBlocked: 'GUEST' },
+        water: { seedsEarned: 10, streakDays: 3, totalSeeds: 10, streakFrozeUsed: false, bonusNote: '' },
+        alreadyDone: false,
+        pending: [],
+      } satisfies CheckInResult;
+    }
     const pts = CHECKIN_TABLE[2]!;
     s.checkedInToday = true;
     s.points += pts;
@@ -223,6 +236,28 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     await expect(page.getByRole('button', { name: 'Đã điểm danh', exact: true })).toBeDisabled({ timeout: 5_000 });
     // Số dư mới từ GET /me/loyalty (60 + 10) — cộng đúng MỘT lần.
     await expect(page.getByText('Tích điểm ×1 · 70 điểm Xanh')).toBeVisible();
+    expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
+  });
+
+  test('Khách vãng lai điểm danh: không hứa Điểm Xanh, vẫn nhận giọt nước, mời đăng nhập Zalo; số dư giữ nguyên', async ({ page, api }) => {
+    const s = mockLoyalty(api, { guest: true });
+    await page.goto('/loyalty');
+
+    const card = page.getByTestId('daily-check-in');
+    await expect(card.getByText('Điểm danh mỗi ngày')).toBeVisible({ timeout: 15_000 });
+    await expect(card.getByText('Hôm nay nhận +10 giọt nước', { exact: true })).toBeVisible();
+    await expect(card.getByText('Đăng nhập Zalo để nhận Điểm Xanh', { exact: true })).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Đăng nhập Zalo', exact: true })).toBeVisible();
+    await expect(card.getByText(/\+\d[\d.]* Điểm Xanh/)).toHaveCount(0);
+    // Khổ điện thoại: thẻ không tràn ngang.
+    expect(await card.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+
+    const posted = api.waitForCall('POST', '/me/daily-check-in');
+    await card.getByRole('button', { name: 'Điểm danh', exact: true }).click();
+    await posted;
+    await expect(page.getByText('+10 giọt nước. Đăng nhập Zalo để nhận Điểm Xanh', { exact: true })).toBeVisible({ timeout: 5_000 });
+    await expect(card.getByRole('button', { name: 'Đã điểm danh', exact: true })).toBeDisabled({ timeout: 5_000 });
+    expect(s.points).toBe(60);
     expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
   });
 

@@ -6,9 +6,9 @@
  * "Doanh số tháng" = tổng Commission.commissionableTotal của commission ĐÃ CHỐT (APPROVED/PAID)
  * có approvedAt trong tháng (giờ VN). Commission chỉ lên APPROVED sau khi đơn DELIVERED + hết
  * max(affiliate.hold_days, returns.window_days) + không còn yêu cầu đổi/trả chờ duyệt
- * (AffiliateService.approveDueCommissions) và reverseCommissionsForOrder CHỈ đảo PENDING/LOCKED
- * → doanh số đã chốt không bao giờ bị đơn huỷ/trả kéo xuống, nên thưởng mốc đã nhận không cần
- * clawback. Không tính PENDING (đơn còn huỷ được) — lỗ hổng cũ: lên đơn hộ 80tr COD, nhận 2,85tr
+ * (AffiliateService.approveDueCommissions) nên khách đã hết hạn đổi/trả; chỉ đơn bị trả muộn (Pancake báo hoàn, admin đổi trạng
+ * thái) mới thu hồi được hoa hồng đã chốt, khi đó khoản đó thành REJECTED và rời doanh số tháng. Thưởng mốc đã nhận không bị thu lại
+ * (chưa có luồng clawback). Không tính PENDING (đơn còn huỷ được) — lỗ hổng cũ: lên đơn hộ 80tr COD, nhận 2,85tr
  * thưởng rồi tự huỷ đơn.
  *
  * Bậc chỉ là DANH HIỆU theo doanh số — KHÔNG có "+X% bonus hoa hồng": chưa có luồng nào trả
@@ -47,7 +47,7 @@ export function vnDayStart(now: Date): Date {
   return new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - VN_OFFSET_MS);
 }
 
-/** Commission đã chốt — không còn đường đảo (reverseCommissionsForOrder chỉ đụng PENDING/LOCKED). */
+/** Commission đã chốt: khách hết hạn đổi/trả, chỉ đơn bị trả muộn mới thu hồi được (reverseCommissionsForOrder). */
 export const CONFIRMED_COMMISSION_STATUSES = ['APPROVED', 'PAID'] as const;
 /** Commission còn chờ chốt (đơn chưa giao / đang trong hold đổi-trả) — chỉ để HIỂN THỊ. */
 export const PENDING_COMMISSION_STATUSES = ['PENDING', 'LOCKED'] as const;

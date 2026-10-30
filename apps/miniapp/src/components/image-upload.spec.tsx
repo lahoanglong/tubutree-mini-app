@@ -94,4 +94,43 @@ describe('VideoUpload — dùng chung hàm tải Cloudinary với web', () => {
     pickFile(container, new File(['x'], 'v2.mp4', { type: 'video/mp4' }));
     await waitFor(() => expect(busy).toEqual([true, false, true, false]));
   });
+  it('đang tải thì nút chọn video khoá và chạm lần hai không mở hộp chọn tệp: không có hai lần tải chạy song song', async () => {
+    let finish!: (res: unknown) => void;
+    const fetchMock = vi.fn().mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+    vi.stubGlobal('fetch', fetchMock);
+    const VideoUpload = await loadConfigured();
+    const busy: boolean[] = [];
+    const { container } = render(<VideoUpload value="" onChange={() => {}} onBusyChange={(b) => busy.push(b)} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const openPicker = vi.spyOn(input, 'click');
+    const pickButton = () => screen.getByRole('button', { name: /video/i }) as HTMLButtonElement;
+    fireEvent.click(pickButton());
+    expect(openPicker).toHaveBeenCalledTimes(1);
+    pickFile(container, new File(['x'], 'v.mp4', { type: 'video/mp4' }));
+    await waitFor(() => expect(busy).toEqual([true]));
+    expect(pickButton().disabled).toBe(true);
+    fireEvent.click(pickButton());
+    expect(openPicker).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    finish({ ok: true, json: async () => ({ secure_url: 'https://res.cloudinary.com/demo/v.mp4', duration: 12 }) });
+    await waitFor(() => expect(busy).toEqual([true, false]));
+    expect(pickButton().disabled).toBe(false);
+  });
+
+  it('đã có video mà đang tải video khác: "Đổi video" và "Xoá video" khoá, không xoá giữa chừng', async () => {
+    let finish!: (res: unknown) => void;
+    vi.stubGlobal('fetch', vi.fn().mockReturnValueOnce(new Promise((resolve) => (finish = resolve))));
+    const VideoUpload = await loadConfigured();
+    const onChange = vi.fn();
+    const { container } = render(<VideoUpload value="https://res.cloudinary.com/demo/cu.mp4" onChange={onChange} />);
+    pickFile(container, new File(['x'], 'v.mp4', { type: 'video/mp4' }));
+    const change = await screen.findByRole('button', { name: /Đang tải video/ });
+    expect((change as HTMLButtonElement).disabled).toBe(true);
+    const remove = screen.getByRole('button', { name: 'Xoá video' }) as HTMLButtonElement;
+    expect(remove.disabled).toBe(true);
+    fireEvent.click(remove);
+    expect(onChange).not.toHaveBeenCalled();
+    finish({ ok: true, json: async () => ({ secure_url: 'https://res.cloudinary.com/demo/moi.mp4', duration: 12 }) });
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('https://res.cloudinary.com/demo/moi.mp4'));
+  });
 });

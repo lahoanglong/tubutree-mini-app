@@ -1,0 +1,50 @@
+{
+ "muahang": {
+  "title": "Giỏ, thanh toán, mua chung, trang SP",
+  "slot": 0,
+  "money": true,
+  "count": 18
+ },
+ "tin-canhan": {
+  "title": "Thông báo, Cá nhân, Trang chủ",
+  "slot": 1,
+  "money": false,
+  "count": 26
+ },
+ "api-hotro": {
+  "title": "Gửi tin, lệch sổ, Zalo OA, CSKH, dọn dẹp",
+  "slot": 2,
+  "money": false,
+  "count": 14
+ },
+ "diem-doirac": {
+  "title": "Điểm Xanh, Vườn, Đổi rác",
+  "slot": 3,
+  "money": true,
+  "count": 18
+ },
+ "ctv": {
+  "title": "CTV, đại lý, hoa hồng",
+  "slot": 4,
+  "money": true,
+  "count": 14
+ },
+ "phien": {
+  "title": "Phiên đăng nhập, liên kết Zalo",
+  "slot": 5,
+  "money": true,
+  "count": 15
+ },
+ "admin": {
+  "title": "Hộp việc Hôm nay, đơn, đổi trả quản trị",
+  "slot": 6,
+  "money": true,
+  "count": 22
+ },
+ "giaodien-quantri": {
+  "title": "Nhân sự, công cụ quản trị, giao diện chung",
+  "slot": 7,
+  "money": false,
+  "count": 18
+ }
+}

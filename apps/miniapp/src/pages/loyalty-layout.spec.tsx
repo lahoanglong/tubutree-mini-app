@@ -118,6 +118,14 @@ describe('LoyaltyPage — dòng mã giảm giá ngay dưới thẻ hạng', () =
     expect(screen.queryByText(/HSD/)).toBeNull();
   });
 
+  it('mã còn đang tải: dòng "Kho quà" ở thẻ lối tắt đã có sẵn, để thẻ không giãn ra khi tải xong', async () => {
+    mocks.getCoupons.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+    await screen.findByText('Các hạng');
+    expect(screen.getByText('Kho quà')).toBeInTheDocument();
+    expect(screen.queryByText(/Ví mã/)).toBeNull();
+  });
+
   it('chưa có mã → dòng "Đổi quà" thay cho "Ví mã"', async () => {
     mocks.getCoupons.mockResolvedValue([]);
     renderPage();
@@ -133,7 +141,7 @@ describe('LoyaltyPage — dòng mã giảm giá ngay dưới thẻ hạng', () =
   });
 });
 
-describe('LoyaltyPage — thuật ngữ Q-26 và số có dấu nghìn (C-074, C-083)', () => {
+describe('LoyaltyPage — thuật ngữ thống nhất và số có dấu nghìn', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getLoyalty.mockResolvedValue(LOYALTY);
@@ -166,7 +174,7 @@ describe('LoyaltyPage — thuật ngữ Q-26 và số có dấu nghìn (C-074, C
   });
 });
 
-describe('LoyaltyPage — một <h1> mỗi trang (C-114)', () => {
+describe('LoyaltyPage — một <h1> mỗi trang', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getLoyalty.mockResolvedValue(LOYALTY);

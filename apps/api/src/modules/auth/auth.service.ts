@@ -132,7 +132,8 @@ export class AuthService {
    */
   private async adoptLegacyGuest(deviceId: string, guestKey: string): Promise<User | null> {
     const legacyKey = legacyGuestZaloId(deviceId);
-    if (isHashedGuestKey(legacyKey)) return null;
+    // deviceId có `_merged_` làm khoá thô trùng khoá của một dòng khách đã gộp: dòng đó không còn là của thiết bị nào.
+    if (isHashedGuestKey(legacyKey) || legacyKey.includes('_merged_')) return null;
     const legacy = await this.prisma.user.findUnique({ where: { zaloId: legacyKey } });
     if (!legacy) return null;
     try {
@@ -316,16 +317,29 @@ export class AuthService {
     try {
       // Có điều kiện: một request song song có thể vừa gộp chính dòng khách này (đọc ở trên trước lúc nó commit). Nâng cấp
       // vô điều kiện sẽ ghi đè zaloId của dòng đã gộp mà mergedIntoId vẫn trỏ tài khoản đích.
-      const upgraded = await this.prisma.user.updateMany({
-        where: { id: currentUser.id, zaloId: currentUser.zaloId, mergedIntoId: null },
-        data: {
-          zaloId: info.zaloId,
-          fullName: info.name,
-          avatarUrl: info.avatar ?? currentUser.avatarUrl,
-          ...(checkedPhone ? { phone: checkedPhone, phoneVerifiedAt: new Date() } : {}),
-        },
-      });
-      const fresh = await this.prisma.user.findUniqueOrThrow({ where: { id: currentUser.id } });
+      const upgrade = (fromZaloId: string | null) =>
+        this.prisma.user.updateMany({
+          where: { id: currentUser.id, zaloId: fromZaloId, mergedIntoId: null },
+          data: {
+            zaloId: info.zaloId,
+            fullName: info.name,
+            avatarUrl: info.avatar ?? currentUser.avatarUrl,
+            ...(checkedPhone ? { phone: checkedPhone, phoneVerifiedAt: new Date() } : {}),
+          },
+        });
+      let upgraded = await upgrade(currentUser.zaloId);
+      let fresh = await this.prisma.user.findUniqueOrThrow({ where: { id: currentUser.id } });
+      // Khoá khách có thể vừa đổi sang dạng băm (adoptLegacyGuest, hoặc câu backfill ở runbook 1.14) giữa lúc đọc và lúc ghi:
+      // dòng vẫn là khách, thử lại một lần với khoá hiện tại thay vì bắt khách đăng xuất.
+      if (
+        upgraded.count === 0 &&
+        fresh.zaloId?.startsWith('guest_') &&
+        !fresh.zaloId.includes('_merged_') &&
+        !fresh.mergedIntoId
+      ) {
+        upgraded = await upgrade(fresh.zaloId);
+        fresh = await this.prisma.user.findUniqueOrThrow({ where: { id: currentUser.id } });
+      }
       if (upgraded.count === 1 || fresh.zaloId === info.zaloId) {
         await this.grantWelcomeVoucher(fresh.id);
         return this.issueTokens(fresh);
@@ -496,7 +510,8 @@ export class AuthService {
                 "firstTouchSource", "firstTouchCampaign", "firstTouchAt"
           FROM "users" WHERE "id" = ${guest.id} FOR UPDATE`;
       const g = lockedGuest[0];
-      if (!g || g.zaloId !== guest.zaloId || g.zaloId?.includes('_merged_')) {
+      // Còn là khách? Khoá có thể đã đổi từ guest_<deviceId> sang dạng băm (adoptLegacyGuest) mà dòng vẫn cần được gộp.
+      if (!g || !g.zaloId?.startsWith('guest_') || g.zaloId.includes('_merged_')) {
         return tx.user.findUniqueOrThrow({ where: { id: target.id } });
       }
       // Target bị khoá hoặc vừa bị xoá (ẩn danh hoá) sau lúc tra ở ngoài: không đổ tiền/đơn của khách vào tài khoản chết.
@@ -765,7 +780,7 @@ export class AuthService {
       await tx.user.update({
         where: { id: gid },
         data: {
-          zaloId: `${guest.zaloId}_merged_${Date.now()}`,
+          zaloId: `${g.zaloId}_merged_${Date.now()}`,
           mergedIntoId: tid,
           // Refresh token vừa xoay trước lúc gộp còn trong khoảng ân hạn: chốt mốc để refresh() không cấp lại phiên cho khách.
           sessionsRevokedAt: new Date(),

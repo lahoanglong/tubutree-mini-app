@@ -121,6 +121,9 @@ export type RewardCatalogResponse = RewardCatalogDTO;
 export type RedeemRewardResult = RedeemRewardResultDTO;
 export type GiftRedemption = GiftRedemptionDTO;
 
+/** Lý do không cộng Điểm Xanh: 'GUEST' = tài khoản khách vãng lai (chưa đăng nhập Zalo/SĐT); giọt nước và chuỗi ngày vẫn tính. */
+export type PointsBlocked = 'GUEST';
+
 export interface CheckInReward {
   day: number;
   points: number;
@@ -144,6 +147,8 @@ export interface CheckInStatusResponse {
   /** Từng phần đã xong hôm nay chưa. Optional: API cũ (chỉ Điểm Xanh) chưa trả. */
   pointsDone?: boolean;
   waterDone?: boolean;
+  /** Có mặt khi tài khoản không nhận được Điểm Xanh (khách vãng lai): `todayPoints` luôn 0, màn hình mời đăng nhập Zalo thay vì hứa điểm. */
+  pointsBlocked?: PointsBlocked;
   /** Giọt nước THỰC SỰ nhận ở lần điểm danh kế tiếp (gồm thưởng mốc chuỗi 3/7 ngày, quà lần đầu, quà quay lại; cắt theo chỗ trống của bình); 0 khi phần nước đã xong hôm nay. */
   todayWater?: number;
   /** Bình nước đã đầy (totalSeeds >= sức chứa): phần nước hôm nay sẽ không cộng thêm. Optional: API cũ chưa trả thì không hiện chữ bình đầy. */
@@ -158,6 +163,8 @@ export interface PointsCheckInPart {
   pointsEarned: number;
   totalPoints: number;
   message: string;
+  /** Như `CheckInStatusResponse.pointsBlocked`: lần điểm danh này không cộng Điểm Xanh vì tài khoản là khách vãng lai. */
+  pointsBlocked?: PointsBlocked;
 }
 
 /** Phần giọt nước của lần điểm danh. */

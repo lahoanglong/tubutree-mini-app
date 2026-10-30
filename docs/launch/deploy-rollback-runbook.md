@@ -449,9 +449,9 @@ Trước khi deploy API có thay đổi này: xác nhận bản Mini App đang c
 
 ### 1.13 Bản đợt 29/10: quay image (7.2) không còn sạch sau khi khách đã dùng bản mới
 
-Bốn migration của bản này (`20261029010000`, `20261029020000`, `20261029030000`, `20261029030100`) chỉ thêm bảng, cột và mẫu tin, nên image cũ vẫn chạy được trên schema mới. Nhưng dữ liệu ghi bởi API mới làm 7.2 để lại hậu quả. Đọc hết mục này trước khi chọn 7.2:
+Bốn migration của bản này (`20261029010000`, `20261029020000`, `20261029030000`, `20261029030100`) chỉ thêm bảng, cột và mẫu tin, nên image cũ vẫn chạy được trên schema mới; migration thứ năm `20261029040000` thêm một giá trị enum Ví và cột rỗng `commissions.walletPayoutId` (mục 5 dưới đây), còn `20261029040001` (đổi chữ mẫu tin `COMMISSION_REVERSED`) chỉ sửa chữ nên image cũ vẫn chạy được. Nhưng dữ liệu ghi bởi API mới làm 7.2 để lại hậu quả. Đọc hết mục này trước khi chọn 7.2:
 
-1. **Tài khoản khách vãng lai bị tách.** API mới lưu khoá khách là băm của thiết bị (`guest_h_<sha256>`), và lần đăng nhập đầu của mỗi khách vãng lai đổi khoá cũ `guest_<deviceId>` sang khoá băm. Băm là một chiều, không đổi ngược được. Nếu quay image cũ: khách vãng lai đã mở app trong lúc chạy bản mới sẽ được image cũ tạo tài khoản MỚI rỗng (mất điểm, giỏ, địa chỉ, đơn trên màn hình). Khi deploy lại bản mới, khách về tài khoản cũ, còn tài khoản tạm lúc quay lại bị bỏ lại. Khách đăng nhập Zalo không bị ảnh hưởng. Đã quay image thì sau khi deploy lại, lấy danh sách tài khoản tạm để gộp tay (đơn đặt trong lúc quay lại nằm ở đó):
+1. **Tài khoản khách vãng lai bị tách.** API mới lưu khoá khách là băm của thiết bị (`guest_h_<sha256>`), và lần đăng nhập đầu của mỗi khách vãng lai đổi khoá cũ `guest_<deviceId>` sang khoá băm. Băm là một chiều, không đổi ngược được. Nếu quay image cũ: khách vãng lai đã mở app trong lúc chạy bản mới sẽ được image cũ tạo tài khoản MỚI rỗng (mất điểm, giỏ, địa chỉ, đơn trên màn hình). Khi deploy lại bản mới, khách về tài khoản cũ, còn tài khoản tạm lúc quay lại bị bỏ lại. Khách đăng nhập Zalo không bị ảnh hưởng. Sau khi đã chạy 1.14, quay image tách MỌI khách vãng lai đăng nhập lại qua `/auth/guest` (không chỉ khách đã mở app trong bản mới), vì khoá thô không còn ở đâu để image cũ tìm. Đã quay image thì sau khi deploy lại, lấy danh sách tài khoản tạm để gộp tay (đơn đặt trong lúc quay lại nằm ở đó):
 
    ```bash
    psqlq -c "SELECT u.id, u.\"zaloId\", u.\"createdAt\", count(o.id) AS don FROM users u LEFT JOIN orders o ON o.\"userId\" = u.id WHERE u.\"zaloId\" LIKE 'guest\_%' AND u.\"zaloId\" NOT LIKE 'guest\_h\_%' AND u.\"createdAt\" >= '<giờ bắt đầu quay lại, UTC>' GROUP BY u.id ORDER BY u.\"createdAt\""
@@ -463,7 +463,49 @@ Bốn migration của bản này (`20261029010000`, `20261029020000`, `202610290
 
 4. **Cron hết hạn điểm báo lỗi khi sổ điểm lệch.** Bản này nâng hai log của `expirePoints` (khách lỗi khi trừ điểm hết hạn; số dư nhỏ hơn số điểm cần trừ) từ cảnh báo lên lỗi. Nếu mục 1.11 đo thấy lệch Điểm Xanh, cron hết hạn điểm sẽ báo lỗi mỗi đêm cho tới khi chạy `reconcile:points --apply` cho các khách đó. Không sai điểm, chỉ là tin báo lặp.
 
+5. **Thu hồi hoa hồng đã vào Ví (`20261029040000_commission_wallet_reversal`).** Migration thêm giá trị `COMMISSION_REVERSAL` cho enum `WalletTxType`; API mới trừ thẳng Ví CTV khi đơn bị trả mà hoa hồng đã vào Ví (số dư có thể âm). Image cũ không biết giá trị enum này: Prisma báo lỗi khi đọc sao kê và số dư của CTV có dòng đó, và giá trị enum đã thêm không gỡ được. Nếu đã có dòng `COMMISSION_REVERSAL` (đếm: `psqlq -c "SELECT count(*) FROM wallet_transactions WHERE type = 'COMMISSION_REVERSAL'"`) thì quay image (7.2) phải xem lại; đường an toàn là 7.3.
+
 Kết luận: sau khi bản này đã nhận khách, ưu tiên sửa tiến. Chỉ dùng 7.2 khi lỗi nặng hơn các hậu quả trên, và làm thêm bước 1 và 3 sau khi deploy lại.
+
+Điều kiện 1 của 7.2 (danh sách chờ áp chỉ gồm sáu migration của đợt 15–20/10) và kiểm go-live `db.pending_scope` viết cho đợt trước, nên với bản này sẽ báo "chỉ còn 7.3" vì sáu migration `20261029*` nằm ngoài danh sách đó. Sáu migration này chỉ thêm bảng, cột rỗng, mẫu tin và giá trị enum (đã thử: image cũ khởi động được trên DB đã migrate). Vì vậy, khi đã quyết dùng 7.2 cho bản này theo mục trên, bỏ qua điều kiện 1 và vẫn làm các điều kiện còn lại. Đã có dòng `COMMISSION_REVERSAL` (lệnh đếm ở điểm 5) thì chỉ còn 7.3.
+
+### 1.14 Sau deploy bản đợt 29/10: đổi khoá khách cũ sang khoá băm (một lần, chủ hoặc điều phối quyết giờ chạy; làm cùng Bước 14, không phải trước ngày deploy)
+
+API mới chỉ đổi khoá `guest_<deviceId>` sang `guest_h_<băm>` khi chính thiết bị đó gọi `/auth/guest`. Khách cũ còn refresh token (token xoay mỗi lần mở app) không đi qua đường này, nên `users.zaloId` của họ vẫn mang deviceId thô, CSKH đọc được qua `GET /admin/users`. Dòng đã gộp `guest_<deviceId>_merged_<ts>` cũng giữ deviceId thô. Bảng `analytics_events` các dòng ghi trước bản này còn deviceId thô ở `anonymousId`. Chạy một lần SAU khi API bản này đã chạy ổn (image cũ không biết khoá băm). Sau đó `adoptLegacyGuest` chỉ còn là lưới an toàn.
+
+**Chỉ chạy khi đã chắc không quay image.** Sau khi chạy xong, quay image 7.2 tách MỌI khách vãng lai không còn refresh token sống sang tài khoản rỗng (image cũ tìm `guest_<deviceId>` thô, không còn dòng nào), kể cả khách chưa từng mở app trong bản mới; xem 1.13 mục 1.
+
+Chạy ngoài giờ cao điểm (bảng `analytics_events` lớn, câu thứ ba ghi lại cả chỉ mục `anonymousId`). Cả ba câu chạy lại được nhiều lần; câu đầu bỏ qua dòng mà khoá băm của thiết bị đã có dòng khác (khách quay lại bằng image cũ, xem 1.13 mục 1) để không đụng khoá duy nhất. Đã thử trên Postgres 16 với deviceId có ký tự Unicode: kết quả trùng `createHash('sha256').update(deviceId).digest('hex')` của Node.
+
+```bash
+psqlq <<'SQL'
+UPDATE users u
+   SET "zaloId" = 'guest_h_' || encode(sha256(convert_to(substr(u."zaloId", 7), 'UTF8')), 'hex')
+ WHERE u."zaloId" LIKE 'guest\_%'
+   AND u."zaloId" NOT LIKE 'guest\_h\_%'
+   AND u."zaloId" NOT LIKE '%\_merged\_%'
+   AND NOT EXISTS (SELECT 1 FROM users h WHERE h."zaloId" = 'guest_h_' || encode(sha256(convert_to(substr(u."zaloId", 7), 'UTF8')), 'hex'));
+
+UPDATE users u
+   SET "zaloId" = 'guest_h_' || encode(sha256(convert_to(m.dev, 'UTF8')), 'hex') || '_merged_' || m.ts
+  FROM (SELECT id,
+               substring("zaloId" from '^guest_(.*)_merged_[0-9]+$') AS dev,
+               substring("zaloId" from '_merged_([0-9]+)$') AS ts
+          FROM users
+         WHERE "zaloId" ~ '^guest_.*_merged_[0-9]+$' AND "zaloId" NOT LIKE 'guest\_h\_%') m
+ WHERE u.id = m.id;
+
+UPDATE analytics_events
+   SET "anonymousId" = left(encode(sha256(convert_to("anonymousId", 'UTF8')), 'hex'), 32)
+ WHERE "anonymousId" LIKE 'd\_%';
+SQL
+```
+
+Kiểm: còn dòng nào mang khoá thô không (mong đợi 0; dòng còn lại là thiết bị đã có cả dòng băm lẫn dòng thô, gộp tay theo 1.13 mục 1).
+
+```bash
+psqlq -c "SELECT id, \"zaloId\", \"createdAt\" FROM users WHERE \"zaloId\" LIKE 'guest\_%' AND \"zaloId\" NOT LIKE 'guest\_h\_%'"
+```
 
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
@@ -899,6 +941,7 @@ Vì sao chờ: nếu phải quay API về bản cũ sau khi Mini App mới đã 
 
 - [ ] Sau tối đa 6 giờ: `tail /var/log/tubutree-backup.log` thấy backup theo cron thành công (không có dòng `WARN`), `rclone ls tubucrypt: | tail -3` thấy file mới, healthcheck xanh.
 - [ ] Chạy lại `go-live:check` (không kèm `--phase`).
+- [ ] Khi đã chắc không quay image: chạy các câu đổi khoá khách ở mục 1.14.
 - [ ] Màn Sức khoẻ hệ thống: không còn dòng đỏ tồn quá 1 giờ.
 - [ ] Làm [pilot-order-playbook.md](pilot-order-playbook.md) (đơn thử thật) trước khi mở bán rộng.
 
@@ -956,6 +999,7 @@ cat .pending-migrations
 - `20261018210000_points_1d` nhân 1.000 mọi số điểm: image cũ đọc số điểm theo đơn vị cũ nên giá quà, trần và số dư sai nghiêm trọng. Hoàn tác = khôi phục backup trước migrate (7.3); không quay image, không có script đảo ngược.
 - Các migration q1 và r5 thêm giá trị mới `PROCESSING`, `UNVERIFIED`, `DISMISSED` cho enum `CustomerRefundStatus`: dòng hoàn tiền mang giá trị mới làm code cũ lỗi khi đọc, và giá trị enum đã thêm không gỡ được.
 - `20261022100000_payout_tax_refunded` thêm giá trị `PIT_REFUND` cho enum `WalletTxType` (cùng cột `payouts.taxRefunded`): dòng sổ ví loại `PIT_REFUND` làm code cũ lỗi khi đọc (Prisma báo enum lạ), và giá trị enum đã thêm không gỡ được. Migration này không nằm trong `IMAGE_COMPATIBLE_MIGRATIONS`; đã có dòng `PIT_REFUND` (admin từ chối lệnh rút hoa hồng làm hoàn thuế TNCN giữ dư vào Ví) thì đường quay lại là 7.3.
+- `20261029040000_commission_wallet_reversal` thêm giá trị `COMMISSION_REVERSAL` cho enum `WalletTxType` (cùng cột rỗng `commissions.walletPayoutId`): dòng sổ ví loại `COMMISSION_REVERSAL` (đơn bị trả, hoa hồng đã vào Ví bị trừ thẳng) làm code cũ lỗi khi đọc (Prisma báo enum lạ), và giá trị enum đã thêm không gỡ được. Migration này không nằm trong `IMAGE_COMPATIBLE_MIGRATIONS`; đã có dòng `COMMISSION_REVERSAL` thì đường quay lại là 7.3 (mục 1.13 điểm 5 có câu lệnh đếm).
 
 Vì vậy: danh sách chờ áp có migration ngoài sáu cái của đợt, hoặc bất kỳ migration nào ở trên đã chạy (kể cả chỉ một phần), thì đường quay lại duy nhất là 7.3 (khôi phục bản backup trước deploy). 7.2 giữ nguyên cho đúng trường hợp hẹp nó đúng: PROD đã ở bản mà chỉ còn các migration của đợt chờ áp.
 

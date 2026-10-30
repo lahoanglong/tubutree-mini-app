@@ -735,8 +735,10 @@ export default function AdminPage() {
           )}
           {active === 'cashback' && <CashbackTab />}
           {active === 'posCredits' && <PosCreditsTab />}
+          {/* Mở từ thẻ "Yêu cầu xoá tài khoản": khối này đứng trên danh sách, vì danh sách tải sau sẽ đẩy nó ra khỏi màn hình. */}
+          {active === 'users' && isAdmin && deletionSeed > 0 && <AccountDeletionPanel seed={deletionSeed} />}
           {active === 'users' && <UsersTab isAdmin={isAdmin} onOpenOrder={openOrderByCode} onOpenUserOrders={openUserOrders} />}
-          {active === 'users' && isAdmin && <AccountDeletionPanel seed={deletionSeed} />}
+          {active === 'users' && isAdmin && deletionSeed === 0 && <AccountDeletionPanel seed={deletionSeed} />}
           {active === 'reviews' && <ReviewsTab />}
           {active === 'subscriptions' && <SubscriptionsTab />}
           {active === 'waste' && <WasteTab key={wasteSeed?.n ?? 0} isAdmin={isAdmin} seed={wasteSeed} />}

@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { clampTankKeepingOverflow, initialEcoImpact } from './game-profile';
 import { RewardPointsService } from '../wallet/reward-points.service';
+import { GUEST_POINTS_MSG, isRealUser, pointsBlockedFor } from '../../common/real-user';
 
 /**
  * Phần thưởng 1 bậc: 💧 (SEEDS) hoặc Điểm Xanh (POINTS). 'XU' là dạng trước PD-3 (đơn vị xu); migration
@@ -77,12 +78,15 @@ export class SeasonPassService {
     const claimedFree = pass?.claimedFree ?? [];
     const claimedPremium = pass?.claimedPremium ?? [];
     const premiumEligible = (await this.prisma.subscription.count({ where: { userId, status: 'ACTIVE' } })) > 0;
+    const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    const pointsBlocked = pointsBlockedFor(owner);
 
     return {
       active: true as const,
       seasonTitle: season.name,
       xp,
       premiumEligible,
+      ...(pointsBlocked ? { pointsBlocked } : {}),
       tiers: tiers.map((t, i) => ({
         tier: i,
         xpRequired: t.xp,
@@ -114,6 +118,13 @@ export class SeasonPassService {
           '(chỉ SEEDS/POINTS; XU là đơn vị xu cũ) — sửa cấu hình.',
       );
       throw new BadRequestException('Phần thưởng bậc này đang được cập nhật, bạn quay lại sau nhé.');
+    }
+
+    // Điểm Xanh chỉ cho user thật (khách vãng lai tạo vô hạn bằng deviceId); giọt nước thì ai cũng nhận. Chặn trước khi
+    // đánh dấu đã nhận để sau khi đăng nhập Zalo khách vẫn nhận được bậc này.
+    if (reward.type === 'POINTS') {
+      const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+      if (!isRealUser(owner)) throw new ForbiddenException(GUEST_POINTS_MSG);
     }
 
     const pass = await this.prisma.userSeasonPass.findUnique({

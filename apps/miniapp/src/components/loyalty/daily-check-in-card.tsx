@@ -1,5 +1,7 @@
+import { lazy, Suspense } from 'react';
 import { CalendarCheck, Check, Gift, Sprout, type LucideIcon } from 'lucide-react';
 import { checkInCopy, checkInDayIcon, checkInTodayLine, type CheckInDayIcon } from '@tubutree/app-core/daily-check-in-copy';
+import { checkInDayAria, checkInRule } from '@tubutree/app-core/daily-check-in-guest-copy';
 import { getLoadErrorMessage } from '../../services/api';
 import { useCheckIn } from '../../hooks/use-check-in';
 import { Button } from '../ui/button';
@@ -8,6 +10,9 @@ import { ErrorState } from '../ui/empty-state';
 import { Icon } from '../ui/icon';
 import { Skeleton } from '../ui/skeleton';
 import { Heading, Text } from '../ui/text';
+
+// Chỉ khách vãng lai mới thấy: tách chunk để thẻ này (nằm trong entry) không phình.
+const GuestPointsNote = lazy(() => import('./guest-points-note').then((m) => ({ default: m.GuestPointsNote })));
 
 const DAY_ICON: Record<CheckInDayIcon, LucideIcon> = { check: Check, gift: Gift, sprout: Sprout };
 
@@ -51,7 +56,7 @@ export function DailyCheckInCard({ authed, margin }: { authed: boolean; margin?:
           {status.rewards.map((r) => (
             <div
               key={r.day}
-              aria-label={checkInCopy.dayAria(r.day, r.points, r.claimed)}
+              aria-label={checkInDayAria(status, r)}
               style={{
                 padding: '6px 0',
                 borderRadius: 'var(--radius-control)',
@@ -78,11 +83,16 @@ export function DailyCheckInCard({ authed, margin }: { authed: boolean; margin?:
             {today}
           </Text>
         )}
+        {status.pointsBlocked && (
+          <Suspense fallback={null}>
+            <GuestPointsNote margin="10px 0 0" />
+          </Suspense>
+        )}
         <Button fullWidth disabled={!view.canCheckIn || pending} loading={pending} onPress={checkIn} style={{ marginTop: 12 }}>
           {view.buttonLabel}
         </Button>
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
-          {checkInCopy.rule}
+          {checkInRule(status)}
         </Text>
       </Card>
     </div>

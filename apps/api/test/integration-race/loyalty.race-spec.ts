@@ -4,7 +4,7 @@ import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
-import { barrierOnFirstCalls, createOrder, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
+import { barrierOnFirstCalls, createOrder, createRealUser, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
 
 /**
  * LoyaltyService trên Postgres thật: điểm danh, đổi quà, tích điểm POS dưới N request đồng thời.
@@ -39,7 +39,7 @@ describe('LoyaltyService race (real Postgres)', () => {
   });
 
   it('(a) dailyCheckIn: 10 concurrent calls by one user -> exactly 1 check-in, 1 ledger row, balance +once', async () => {
-    const user = await createUser(prisma, { pointsBalance: 0 });
+    const user = await createRealUser(prisma, { pointsBalance: 0 });
 
     // Rào chắn: cả 10 cùng chạy pre-check lastCheckIn (findFirst ngoài tx) → đều thấy "chưa điểm
     // danh" → cả 10 mở transaction ghi. Đếm $transaction = 10 chứng minh chính unique DB

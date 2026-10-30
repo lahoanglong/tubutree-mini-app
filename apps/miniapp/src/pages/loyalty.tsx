@@ -286,7 +286,7 @@ export default function LoyaltyPage() {
               <Skeleton height={56} radius="var(--radius-card)" />
             </div>
           ) : (
-            <Card style={{ margin: '0 16px 12px' }} padding={16}>
+            <Card style={{ margin: '0 16px 12px' }} padding={0}>
               <ListRow
                 icon={
                   <IconTile>
@@ -297,6 +297,7 @@ export default function LoyaltyPage() {
                 subtitle={couponRow.sub}
                 trailing="chevron"
                 onPress={() => navigate(couponRow.to === 'coupons' ? '/offers?section=coupons' : '/rewards')}
+                style={{ padding: 12 }}
               />
             </Card>
           )}
@@ -305,7 +306,7 @@ export default function LoyaltyPage() {
           <DailyCheckInCard authed={authed} margin="0 16px 12px" />
 
           {/* Lối tắt tích Điểm & Giọt nước */}
-          <Card style={{ margin: '0 16px 12px' }} padding={16}>
+          <Card style={{ margin: '0 16px 12px' }} padding={0}>
             <ListRow
               icon={
                 <IconTile>
@@ -316,6 +317,7 @@ export default function LoyaltyPage() {
               subtitle="Chăm cây nhận quà"
               trailing="chevron"
               onPress={() => navigate('/game')}
+              style={{ padding: 12 }}
             />
             {!publicConfig.waste.enabled && hasWasteHistory && (
               <ListRow
@@ -328,7 +330,7 @@ export default function LoyaltyPage() {
                 subtitle={wasteHistoryMenu.hint}
                 trailing="chevron"
                 onPress={() => navigate('/recycle/requests')}
-                style={{ borderTop: '1px solid var(--color-border-subtle)' }}
+                style={{ padding: 12, borderTop: '1px solid var(--color-border-subtle)' }}
               />
             )}
             {publicConfig.waste.enabled && (
@@ -342,11 +344,11 @@ export default function LoyaltyPage() {
                 subtitle="Đổi bao bì lấy Điểm Xanh"
                 trailing="chevron"
                 onPress={() => navigate('/recycle')}
-                style={{ borderTop: '1px solid var(--color-border-subtle)' }}
+                style={{ padding: 12, borderTop: '1px solid var(--color-border-subtle)' }}
               />
             )}
-            {/* Dòng "Đổi quà" ở trên đã dẫn tới Kho quà khi khách chưa có mã: không lặp lại. */}
-            {couponRow.to === 'coupons' && (
+            {/* Dòng "Đổi quà" ở trên đã dẫn tới Kho quà khi khách chưa có mã: không lặp lại. Mã còn đang tải thì giữ dòng, để thẻ không giãn ra khi tải xong. */}
+            {(couponsQ.isLoading || couponRow.to === 'coupons') && (
               <ListRow
                 icon={
                   <IconTile>
@@ -357,7 +359,7 @@ export default function LoyaltyPage() {
                 subtitle="Đổi Điểm Xanh lấy mã giảm giá và quà"
                 trailing="chevron"
                 onPress={() => navigate('/rewards')}
-                style={{ borderTop: '1px solid var(--color-border-subtle)' }}
+                style={{ padding: 12, borderTop: '1px solid var(--color-border-subtle)' }}
               />
             )}
           </Card>

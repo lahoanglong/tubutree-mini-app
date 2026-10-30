@@ -1,0 +1,66 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CheckInStatusResponse } from '@tubutree/app-core/api/loyalty';
+import { render, type Rendered } from '@/test-utils/dom';
+
+const mocks = vi.hoisted(() => ({ status: null as CheckInStatusResponse | null }));
+vi.mock('@/lib/use-check-in', () => ({
+  useCheckIn: () => ({
+    status: mocks.status,
+    statusQ: { isLoading: false, isError: false, refetch: vi.fn() },
+    view: mocks.status ? { canCheckIn: !mocks.status.checkedInToday, buttonLabel: mocks.status.checkedInToday ? 'Đã điểm danh' : 'Điểm danh' } : null,
+    pending: false,
+    checkIn: vi.fn(),
+    message: null,
+  }),
+}));
+vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: React.ReactNode }) => <a href={href} {...p}>{children}</a> }));
+vi.mock('next/navigation', () => ({ usePathname: () => '/uu-dai' }));
+
+import { DailyCheckInCard } from './daily-check-in-card';
+
+const REWARDS = Array.from({ length: 7 }, (_, i) => ({ day: i + 1, points: 1000, claimed: false, isToday: i === 0 }));
+const base: CheckInStatusResponse = {
+  checkedInToday: false,
+  streakDays: 0,
+  currentCycleDay: 1,
+  todayPoints: 1000,
+  todayWater: 10,
+  pointsDone: false,
+  waterDone: false,
+  rewards: REWARDS,
+};
+
+let mounted: Rendered | null = null;
+beforeEach(() => {
+  mocks.status = null;
+});
+afterEach(() => {
+  mounted?.unmount();
+  mounted = null;
+});
+
+describe('DailyCheckInCard (web): khách vãng lai không được hứa Điểm Xanh', () => {
+  it('user thật: hứa "+1.000 Điểm Xanh · +10 giọt nước", không có câu mời đăng nhập', () => {
+    mocks.status = base;
+    mounted = render(<DailyCheckInCard authed />);
+    expect(mounted.container.textContent).toContain('Hôm nay nhận +1.000 Điểm Xanh · +10 giọt nước');
+    expect(mounted.container.querySelector('[data-testid="guest-points-note"]')).toBeNull();
+    expect(mounted.container.querySelector('[aria-label="Ngày 1: +1.000 Điểm Xanh"]')).not.toBeNull();
+  });
+
+  it('khách vãng lai: giọt nước vẫn hiện, không chữ "+N Điểm Xanh", có câu mời và liên kết đăng nhập quay lại đúng trang', () => {
+    mocks.status = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
+    mounted = render(<DailyCheckInCard authed />);
+    const text = mounted.container.textContent ?? '';
+    expect(text).toContain('Hôm nay nhận +10 giọt nước');
+    expect(text).not.toMatch(/\+[\d.]+ Điểm Xanh/);
+    const note = mounted.container.querySelector('[data-testid="guest-points-note"]')!;
+    expect(note.textContent).toContain('Đăng nhập Zalo để nhận Điểm Xanh');
+    const link = note.querySelector('a')!;
+    expect(link.textContent).toBe('Đăng nhập Zalo');
+    expect(link.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fuu-dai');
+    expect(mounted.container.querySelector('[aria-label="Ngày 1"]')).not.toBeNull();
+    expect(text).not.toContain('Một lần bấm nhận cả Điểm Xanh');
+  });
+});

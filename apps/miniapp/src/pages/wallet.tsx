@@ -9,7 +9,7 @@ import { getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
-import { walletTxLabel, formatWalletTxTime } from '../utils/wallet-rules';
+import { walletTxLabel, formatWalletTxTime, walletNegativeNote } from '../utils/wallet-rules';
 import { formatVnd, formatPoints } from '../utils/format';
 import { uniqueById } from '../utils/unique-by-id';
 import { convertedPointsNote, pointsSummary } from '../utils/points-lots';
@@ -107,11 +107,12 @@ export default function WalletPage() {
               </Text>
             </div>
             <Text variant="caption" tone="tertiary" as="div" style={CAPTION_BELOW}>
-              {walletEmpty
+              {walletNegativeNote(w.walletBalance) ??
+                (walletEmpty
                 ? walletCopy.empty
                 : showCommission
                 ? `Tiền thật từ hoa hồng${CASHBACK_ENABLED ? ' & hoàn tiền sàn ngoài' : ''} — dùng để trả tiền hàng.`
-                : 'Dùng để trả tiền hàng ở bước thanh toán'}
+                : 'Dùng để trả tiền hàng ở bước thanh toán')}
             </Text>
           </div>
 

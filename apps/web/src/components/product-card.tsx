@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
-import { isNewProduct, NEW_PRODUCT_LABEL } from '@tubutree/app-core/product-badges';
 import { type ProductCard as P, formatSold } from '@/lib/api';
 import { CardSaleBadge, ProductPriceRow } from '@/components/flash-price';
 import { WishlistHeart } from '@/components/catalog/wishlist-heart';
 import { brandAccent } from '@/components/mini/brand-accent';
 import { ProductImage } from '@/components/mini/product-image';
 import { ProductLink } from '@/components/product-link';
+import { NewProductBadge } from '@/components/new-product-badge';
 
 /** Số thẻ đầu trên màn hình đầu (hai hàng trên mobile, một hàng từ md): ảnh của chúng là ứng viên LCP nên tải ngay. */
 export const PRIORITY_CARDS = 4;
@@ -22,7 +22,6 @@ export default function ProductCard({ product, priority = false, quickAdd }: { p
   const soldOut = product.inStock === false;
   const reviewed = (product.reviewCount ?? 0) > 0;
   const sold = formatSold(product.sold);
-  const isNew = isNewProduct(product.createdAt);
 
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-card bg-stone-0 shadow-[var(--elevation-1)] md:border md:border-stone-200 md:shadow-card md:transition-all md:duration-300 md:hover:-translate-y-1 md:hover:border-forest-600/40 md:hover:shadow-raised">
@@ -51,14 +50,7 @@ export default function ProductCard({ product, priority = false, quickAdd }: { p
                 product={product}
                 className="rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-900 shadow-card max-md:[&:not([data-flash])]:bg-promo-bg max-md:[&:not([data-flash])]:text-promo-fg max-md:[&:not([data-flash])]:shadow-none"
               />
-              {isNew && (
-                <span
-                  data-testid="card-new-badge"
-                  className="rounded-full bg-[var(--color-action-secondary-bg)] px-1.5 py-0.5 text-xs font-semibold text-[var(--color-action-secondary-fg)]"
-                >
-                  {NEW_PRODUCT_LABEL}
-                </span>
-              )}
+              <NewProductBadge createdAt={product.createdAt} />
             </div>
           )}
 

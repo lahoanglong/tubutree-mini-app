@@ -152,7 +152,11 @@ export const rewardsGuideCopy = {
   rulesButton: 'Thể lệ',
   rulesTitle: 'Thể lệ đổi quà',
   earnTitle: 'Cách kiếm Điểm Xanh',
-  earnItems: ['Mua hàng: điểm cộng sau khi đơn giao thành công', 'Điểm danh mỗi ngày ở tab Ưu đãi', 'Chăm cây và làm nhiệm vụ ở Vườn Xanh'],
+  earnItems: [
+    'Mua hàng: điểm cộng sau khi đơn giao thành công',
+    'Điểm danh mỗi ngày ở tab Ưu đãi (tài khoản đăng nhập Zalo)',
+    'Chăm cây và làm nhiệm vụ ở Vườn Xanh (tài khoản đăng nhập Zalo)',
+  ],
   earnCta: 'Xem cách kiếm điểm',
 } as const;
 

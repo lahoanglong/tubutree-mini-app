@@ -68,7 +68,7 @@ const DAY_MS = 24 * 3_600_000;
 /** Job lỗi trong 1 giờ: chỉ xem chừng này job lỗi mới nhất (BullMQ giữ tối đa 1000 job lỗi mỗi hàng đợi). */
 const FAILED_SCAN = 200;
 const WEBHOOK_TIMEOUT_MS = 5000;
-/** Token OA còn dưới chừng này mà chưa được làm mới: cron làm mới (ngưỡng 13 giờ, mỗi 6 giờ) đã lỡ ít nhất hai lượt. */
+/** Token OA còn dưới chừng này mà chưa được làm mới: cron làm mới (ngưỡng 13 giờ, mỗi 6 giờ) đã lỡ ít nhất một lượt. */
 const ZALO_TOKEN_WARN_MS = 3 * 3_600_000;
 
 const PANCAKE_STATUSES = Object.values(PANCAKE_EVENT_STATUS);

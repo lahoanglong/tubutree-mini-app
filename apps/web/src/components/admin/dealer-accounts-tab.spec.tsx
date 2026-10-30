@@ -63,9 +63,14 @@ const REPORT = {
   resolvedBy: null, resolvedAt: null, resolveNote: null, dealer: { id: 'u1', fullName: 'Đại lý Hoa', phone: '0911222333' },
 };
 
-function stub(accounts: DealerAccountsPage | ((url: string) => DealerAccountsPage) = page(ROWS), reports: unknown[] = [], payment: unknown = { balance: 2_000_000, entries: [] }) {
+function stub(
+  accounts: DealerAccountsPage | ((url: string) => DealerAccountsPage) = page(ROWS),
+  reports: unknown[] = [],
+  payment: unknown = { balance: 2_000_000, entries: [] },
+  dismiss: unknown = { ok: true, alreadyProcessed: false },
+) {
   const rest = mockFetch({
-    '/admin/dealer-credit-reports/rp1/dismiss': { body: { ok: true, alreadyProcessed: false } },
+    '/admin/dealer-credit-reports/rp1/dismiss': { body: dismiss },
     '/admin/dealer-credit-reports': { body: reports },
     '/admin/ops/inbox': { body: { generatedAt: '2026-10-28T03:00:00.000Z', items: [] } },
     '/admin/dealer-tiers/manage': { body: TIERS },
@@ -168,6 +173,43 @@ describe('DealerAccountsTab — đại lý báo đã chuyển khoản (E-25)', (
     expect(flash.textContent).toContain('Không thấy tiền');
     expect(flash.textContent).not.toContain('Báo cáo đã đóng');
     expect(block.querySelectorAll('[data-dealer-credit-report]')).toHaveLength(1);
+  });
+
+  it('báo cáo đã được kế toán khác ghi nhận (API trả alreadyRecorded): không nói vừa ghi số mình nhập, nói sổ công nợ lần này không đổi', async () => {
+    stub(page(ROWS), [REPORT], { balance: 2_000_000, entries: [], reportClosed: true, alreadyRecorded: true });
+    const { container } = mount(<DealerAccountsTab />);
+    await flush();
+    const block = container.querySelector<HTMLElement>('[data-dealer-credit-reports]')!;
+    click(byText(block, 'button', 'Ghi nhận'));
+    await flush();
+    typeInto(block.querySelector('input[aria-label="Số tiền đã nhận (đ)"]'), '1000000');
+    click(byText(block, 'button', 'Xác nhận đã nhận, giảm nợ'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+
+    const flash = container.querySelector<HTMLElement>('[data-dealer-credit-reports] [role="status"]')!;
+    expect(flash.textContent).toContain('đã được ghi nhận trước đó');
+    expect(flash.textContent).toContain('sổ công nợ lần này không đổi');
+    expect(flash.textContent).toContain('Dư nợ hiện tại 2.000.000');
+    expect(flash.textContent).not.toContain('Đã ghi nhận 1.000.000');
+  });
+
+  it('"Không thấy tiền" mà báo cáo đã được người khác xử lý (alreadyProcessed): báo đã xử lý trước đó, không nói đã đóng vì không thấy tiền', async () => {
+    stub(page(ROWS), [REPORT], undefined, { ok: true, alreadyProcessed: true });
+    const { container } = mount(<DealerAccountsTab />);
+    await flush();
+    click(byText(container, 'button', 'Không thấy tiền'));
+    await flush();
+    typeInto(confirmDialog()!.querySelector('input, textarea'), 'Chưa thấy trên sao kê');
+    await flush();
+    answerConfirm(true);
+    await flush();
+
+    const flash = container.querySelector<HTMLElement>('[data-dealer-credit-reports] [role="status"]')!;
+    expect(flash.textContent).toContain('đã được xử lý trước đó');
+    expect(flash.textContent).toContain('sổ công nợ không đổi');
+    expect(flash.textContent).not.toContain('không thấy tiền');
   });
 
   it('"Không thấy tiền" bắt buộc nhập lý do rồi mới gửi POST dismiss; huỷ hộp thoại thì không gửi gì', async () => {

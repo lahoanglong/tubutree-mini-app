@@ -10,7 +10,7 @@ import { LoyaltyExpiryService } from '../../src/modules/loyalty/loyalty-expiry.s
 import { findPointsLotDrift } from '../../src/modules/loyalty/points-reconcile';
 import { GameService } from '../../src/modules/game/game.service';
 import { ReviewsService } from '../../src/modules/reviews/reviews.service';
-import { createOrder, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
+import { createOrder, createRealUser, randCode, setConfig, summarize, warmPool } from './helpers';
 
 const DAY = 864e5;
 const SPIN_COST = 10_000;
@@ -84,7 +84,7 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
     const v = await prisma.variation.create({
       data: { pancakeId: `it-pe3-v-${tag}`, productId: p.id, sku: `PE3-${tag}`, name: 'Chai', attributes: {}, retailPrice: 100_000, salePrice: 100_000, stock: 9 },
     });
-    const user = await createUser(prisma);
+    const user = await createRealUser(prisma);
     touched.push(user.id);
     // Giao từ 30 ngày trước: qua hạn đổi/trả nên nhiệm vụ FIRST_ORDER tính đơn này.
     const order = await createOrder(prisma, {
