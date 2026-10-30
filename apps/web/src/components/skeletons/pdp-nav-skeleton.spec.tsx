@@ -106,4 +106,25 @@ describe('PdpNavSkeleton (R-83)', () => {
     expect(el.className).toContain('z-50');
     expect(el.querySelectorAll('[data-skeleton]').length).toBe(6);
   });
+
+  it('có nút quay lại 44px: bấm thì ẩn khung và lùi một trang; không có hai thẻ main', () => {
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    mounted = render(ui());
+    click(link('Mật ong'));
+    const el = document.querySelector('[data-testid="pdp-nav-skeleton"]') as HTMLElement;
+    expect(el.querySelector('main')).toBeNull();
+    const btn = el.querySelector('button[aria-label="Quay lại"]') as HTMLElement;
+    expect(btn.className).toContain('h-11');
+    click(btn);
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(hasSkeleton()).toBe(false);
+    back.mockRestore();
+  });
+
+  it('hàng nhãn cao 44px (trên điện thoại) như hàng thật có nút tim và chia sẻ', () => {
+    mounted = render(ui());
+    click(link('Mật ong'));
+    const row = document.querySelector('[data-testid="pdp-nav-skeleton"] .max-md\\:h-11') as HTMLElement;
+    expect(row.querySelector('[data-skeleton]')).not.toBeNull();
+  });
 });

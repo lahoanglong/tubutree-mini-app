@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { ChevronLeft } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { ProductDetailSkeleton } from './route-skeleton';
@@ -60,9 +61,20 @@ export function PdpNavSkeleton() {
   if (target === null || target === pathname) return null;
   return (
     <div data-testid="pdp-nav-skeleton" className="fixed inset-x-0 bottom-0 top-[var(--header-h)] z-50 overflow-hidden bg-[var(--color-bg-canvas)]">
-      <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
+      <button
+        type="button"
+        aria-label="Quay lại"
+        onClick={() => {
+          setTarget(null);
+          window.history.back();
+        }}
+        className="absolute left-3 top-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] shadow md:hidden"
+      >
+        <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+      </button>
+      <div data-page-bleed className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
         <ProductDetailSkeleton />
-      </main>
+      </div>
     </div>
   );
 }
