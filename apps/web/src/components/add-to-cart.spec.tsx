@@ -226,6 +226,11 @@ describe('AddToCart — áp mã mua chung từ ?ma= (E-9)', () => {
     await flush();
     expect(container.textContent).toContain('Cần thêm 20.000đ để dùng mã');
     expect(mocks.push).not.toHaveBeenCalled();
+    // Chờ hết lúc giữ câu báo: bỏ dở thì router.push của món này nổ giữa một test sau (vd. "API từ chối" ở Mua ngay).
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1900));
+    });
+    expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
   });
 
   it('máy chủ giữ mã nhưng chưa tính giảm (đơn tối thiểu): nói lý do thay vì báo đã áp', async () => {
