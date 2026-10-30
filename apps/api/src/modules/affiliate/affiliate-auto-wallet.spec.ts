@@ -142,7 +142,7 @@ describe('AffiliateService.approveDueCommissions + tự chuyển vào Ví', () =
       prisma, config, noop as PricingService, noop as PancakeOrderService, noop as RewardPointsService, noop as AnalyticsEventsService,
       { notify } as unknown as NotificationsService,
     );
-    return { svc, notify, updateMany };
+    return { svc, notify, updateMany, findMany };
   }
 
   it('chạy tự chuyển SAU bước duyệt, kể cả khi lượt này không duyệt thêm khoản nào (quét phần còn sót)', async () => {
@@ -155,7 +155,11 @@ describe('AffiliateService.approveDueCommissions + tự chuyển vào Ví', () =
 
   it('CTV đã được tự cộng vào Ví thì KHÔNG nhận thêm tin "đã duyệt, hãy chuyển vào Ví"; CTV chưa chuyển được vẫn nhận', async () => {
     const t = cron({ count: 2, approved: [{ affiliateUserId: 'a', amount: 10_000 }, { affiliateUserId: 'b', amount: 7_000 }] });
-    jest.spyOn(t.svc, 'autoTransferApprovedToWallet').mockResolvedValue(new Set(['a']));
+    // Như DB thật: khoản đã tự vào Ví thì thành PAID, câu tìm APPROVED không còn thấy CTV 'a'.
+    jest.spyOn(t.svc, 'autoTransferApprovedToWallet').mockImplementation(async () => {
+      t.findMany.mockResolvedValue([{ affiliateUserId: 'b', amount: 7_000 }]);
+      return new Set(['a']);
+    });
     await t.svc.approveDueCommissions();
     expect(t.notify).toHaveBeenCalledTimes(1);
     expect(t.notify).toHaveBeenCalledWith('b', CTV_NOTIFICATION.APPROVED, { count: '1', amount: '7.000đ' });
