@@ -13,6 +13,8 @@ import {
   zeroTotalNote,
   type InvoiceInfo,
 } from './checkout-rules';
+import { formatNumber, formatPoints } from './format';
+import { pointsSummary } from './points-lots';
 
 const emptyInvoice: InvoiceInfo = { taxCode: '', companyName: '', address: '', email: '' };
 const validInvoice: InvoiceInfo = {
@@ -304,5 +306,37 @@ describe('lockedPointsLabel', () => {
     expect(p.label).toMatch(/Dùng được/);
     expect(lockedPointsLabel(p.balance)).toBe('Bạn đang có 500 điểm');
     expect(lockedPointsLabel(p.balance)).not.toMatch(/Dùng được/);
+  });
+});
+
+// R-163: bản cũ của hai hàm (viết tại chỗ trước khi luật dời sang app-core) làm chuẩn so đầu ra.
+const legacyClamp = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
+const legacySummary = (ov: { pointsBalance: number; pointsConvertedBalance?: number }) => {
+  const standard = legacyClamp(ov.pointsBalance);
+  const converted = legacyClamp(ov.pointsConvertedBalance);
+  return { standard, converted, total: standard + converted };
+};
+const CASES: { pointsBalance: number; pointsConvertedBalance?: number }[] = [
+  { pointsBalance: 0 },
+  { pointsBalance: 500 },
+  { pointsBalance: 1800, pointsConvertedBalance: 0 },
+  { pointsBalance: 30, pointsConvertedBalance: 124 },
+  { pointsBalance: 0, pointsConvertedBalance: 1250 },
+  { pointsBalance: -5, pointsConvertedBalance: -1 },
+  { pointsBalance: Number.NaN, pointsConvertedBalance: 7 },
+  { pointsBalance: 1_234_567, pointsConvertedBalance: 8_901 },
+];
+
+describe('R-163: luật dời sang app-core không đổi đầu ra của Mini', () => {
+  it.each(CASES)('pointsSummary %j', (c) => {
+    expect(pointsSummary(c)).toEqual(legacySummary(c));
+  });
+  it.each(CASES)('lockedPointsLabel %j', (c) => {
+    expect(lockedPointsLabel(legacySummary(c).total)).toBe(`Bạn đang có ${formatPoints(legacySummary(c).total)}`);
+  });
+  it.each(CASES)('checkoutPoints %j: convertedNote theo chữ cũ', (c) => {
+    const p = checkoutPoints(c, 0);
+    const conv = legacySummary(c).converted;
+    expect(p.convertedNote).toBe(conv > 0 ? `trong đó ${formatNumber(conv)} điểm không hết hạn, trả tới 100% giá trị hàng` : null);
   });
 });
