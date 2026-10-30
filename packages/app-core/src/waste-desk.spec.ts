@@ -70,7 +70,7 @@ describe('deskGiftReadOnly: thẻ quà chỉ đọc ở quầy', () => {
   it('READY đã quá hạn: nói rõ quầy không trao được, hệ thống sẽ huỷ và hoàn điểm', () => {
     const r = deskGiftReadOnly({ status: 'READY', claimExpiresAt: '2026-11-19T00:00:00.000Z' }, f, now)!;
     expect(r.heading).toBe('Quà đã quá hạn nhận');
-    expect(r.notes).toEqual(['Hệ thống sẽ huỷ và hoàn điểm cho khách, quầy không trao được nữa']);
+    expect(r.notes).toEqual(['Quầy không trao được nữa. Tubu sẽ xử lý lượt đổi này và báo khách']);
   });
   it('FULFILLED: đã trao, giờ trao, số điểm khách đã đổi', () => {
     expect(deskGiftReadOnly({ status: 'FULFILLED', claimExpiresAt: null, fulfilledAt: '2026-11-10T03:00:00.000Z', pointsCost: 30000 }, f, now)).toEqual({

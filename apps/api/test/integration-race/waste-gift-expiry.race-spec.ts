@@ -21,7 +21,7 @@ const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const pastDeadline = () => new Date(startOfVnDay().getTime() - HOUR);
 const ALREADY = 'Lượt đổi quà này đã được trao hoặc đã huỷ.';
-const OVERDUE = 'Quà đã quá hạn nhận, hệ thống sẽ huỷ và hoàn điểm cho khách.';
+const OVERDUE = 'Quà đã quá hạn nhận, quầy không trao được nữa. Tubu sẽ xử lý lượt đổi này và báo khách.';
 function noDeadlock(results: PromiseSettledResult<unknown>[]) {
   const errors = results.flatMap((r) => (r.status === 'rejected' ? [String((r.reason as Error)?.message ?? r.reason)] : []));
   expect(errors.join()).not.toMatch(/40P01|deadlock|P2034/);
@@ -183,6 +183,7 @@ describe('waste-gift-expiry race (real Postgres)', () => {
       async (userId: string) =>
         void (await createWasteRequest(prisma, { userId, method: 'DROP_OFF', status: 'REVERSED', pointId: warehouseId, lines: [{ itemId, declaredQty: 1, receivedQty: 1 }] })),
     ],
+    ['account blocked at user level, no waste flag', async (userId: string) => void (await prisma.user.update({ where: { id: userId }, data: { isBlocked: true } }))],
     [
       'anonymized account',
       async (userId: string) => void (await prisma.user.update({ where: { id: userId }, data: { metadata: { anonymizedAt: new Date().toISOString() } } })),

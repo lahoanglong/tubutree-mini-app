@@ -65,7 +65,7 @@ const DESC: Record<string, string> = {
   'waste.shortfall_lock_pct': 'Yêu cầu hoàn tất mà điểm cộng chưa tới (100 trừ ngần này) phần trăm điểm ước tính thì tính là một lần nhận thiếu.',
   'waste.shortfall_lock_streak': 'Số lần nhận thiếu liền nhau thì khoá đường gửi kho và thu kèm đơn của khách.',
   'waste.staff_daily_cap_points': 'Trần Điểm Xanh mỗi nhân viên kho hoặc điểm nhận được xác nhận trong một ngày.',
-  'waste.gift_claim_days': 'Số ngày khách được nhận quà bằng mã. Hết ngày hạn thì quà tự huỷ, hoàn điểm cho khách và báo khách một tin.',
+  'waste.gift_claim_days': 'Số ngày nhận quà bằng mã. Hết hạn thì quà tự huỷ và hoàn điểm, trừ khách bị khoá, bị thu hồi hoặc đã xoá tài khoản: admin xử lý.',
   'waste.point_inactive_days': 'Điểm nhận đối tác không có lượt xác nhận nào quá ngần này ngày kể từ lần xác nhận cuối hoặc lần kích hoạt thì bị ẩn khỏi danh sách khách.',
   'waste.mailin_fee_table': 'Bảng ước tính phí ship gửi kho theo vùng tỉnh, mỗi vùng có phí thấp và phí cao, cộng một vùng mặc định cho tỉnh chưa xếp.',
   'waste.alert_thresholds': 'Ngưỡng cảnh báo bất thường về điểm nhận và người xác nhận, chỉ để admin xem, không tự khoá ai.',

@@ -22,7 +22,7 @@ import { canonicalWasteLookup, lookupMissMeta } from '../waste-codes';
 
 const CODE_NOT_FOUND = 'Không tìm thấy mã';
 const ALREADY_HANDLED = 'Lượt đổi quà này đã được trao hoặc đã huỷ.';
-const CLAIM_OVERDUE = 'Quà đã quá hạn nhận, hệ thống sẽ huỷ và hoàn điểm cho khách.';
+const CLAIM_OVERDUE = 'Quà đã quá hạn nhận, quầy không trao được nữa. Tubu sẽ xử lý lượt đổi này và báo khách.';
 export const GIFT_EXPIRED_CANCEL_REASON = 'Quá hạn nhận';
 const EXPIRE_PAGE = 200;
 
@@ -110,13 +110,18 @@ export class WasteGiftRedemptionsService {
     return dto;
   }
 
-  /** Khách bị khoá hoặc từng có yêu cầu bị thu hồi điểm: hoàn điểm hay không là việc admin quyết, không tự động. Dùng chung cho cancel() và cron. */
-  private async refundNeedsAdminChoice(db: Pick<Prisma.TransactionClient, 'wasteUserFlags' | 'wasteRequest'>, userId: string): Promise<boolean> {
-    const [flags, reversed] = await Promise.all([
+  /**
+   * Khách bị khoá (đổi rác hoặc cả tài khoản), tài khoản đã xoá, hoặc từng có yêu cầu bị thu hồi điểm: hoàn điểm hay không là việc admin quyết,
+   * không tự động. Dùng chung cho cancel() và cron. Xoá tài khoản cũng đặt isBlocked; kiểm anonymizedAt thêm cho chắc.
+   */
+  private async refundNeedsAdminChoice(db: Pick<Prisma.TransactionClient, 'wasteUserFlags' | 'wasteRequest' | 'user'>, userId: string): Promise<boolean> {
+    const [flags, reversed, owner] = await Promise.all([
       db.wasteUserFlags.findUnique({ where: { userId }, select: { blockedAt: true } }),
       db.wasteRequest.count({ where: { userId, status: 'REVERSED' } }),
+      db.user.findUnique({ where: { id: userId }, select: { isBlocked: true, metadata: true } }),
     ]);
-    return Boolean(flags?.blockedAt) || reversed > 0;
+    const anonymized = Boolean((owner?.metadata as { anonymizedAt?: unknown } | null)?.anonymizedAt);
+    return Boolean(flags?.blockedAt) || reversed > 0 || Boolean(owner?.isBlocked) || anonymized;
   }
 
   /**
@@ -159,9 +164,7 @@ export class WasteGiftRedemptionsService {
     return this.prisma.$transaction(async (tx) => {
       const row = await tx.wasteGiftRedemption.findUnique({ where: { id } });
       if (!row || row.status !== 'READY') return null;
-      const owner = await tx.user.findUnique({ where: { id: row.userId }, select: { metadata: true } });
-      const anonymized = Boolean((owner?.metadata as { anonymizedAt?: unknown } | null)?.anonymizedAt);
-      if (anonymized || (await this.refundNeedsAdminChoice(tx, row.userId))) return 'HELD';
+      if (await this.refundNeedsAdminChoice(tx, row.userId)) return 'HELD';
       const { count } = await tx.wasteGiftRedemption.updateMany({
         where: { id, ...wasteGiftOverdueWhere(now) },
         data: { status: 'CANCELLED', cancelledAt: now, cancelledByUserId: null, cancelReason: GIFT_EXPIRED_CANCEL_REASON, refundedPoints: row.pointsCost },

@@ -68,7 +68,7 @@ export function deskGiftReadOnly(
 ): { heading: string; notes: string[] } | null {
   if (g.status === 'READY') {
     if (!g.claimExpiresAt || vnDay(new Date(g.claimExpiresAt)) >= vnDay(now)) return null;
-    return { heading: 'Quà đã quá hạn nhận', notes: ['Hệ thống sẽ huỷ và hoàn điểm cho khách, quầy không trao được nữa'] };
+    return { heading: 'Quà đã quá hạn nhận', notes: ['Quầy không trao được nữa. Tubu sẽ xử lý lượt đổi này và báo khách'] };
   }
   const notes: string[] = [];
   if (g.status === 'FULFILLED') {

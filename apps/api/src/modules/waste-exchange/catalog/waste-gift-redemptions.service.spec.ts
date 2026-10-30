@@ -15,7 +15,7 @@ const writeEvent = writeWasteEvent as unknown as jest.Mock;
 
 const ALREADY = 'Lượt đổi quà này đã được trao hoặc đã huỷ.';
 const NOT_FOUND_CODE = 'Không tìm thấy mã';
-const OVERDUE = 'Quà đã quá hạn nhận, hệ thống sẽ huỷ và hoàn điểm cho khách.';
+const OVERDUE = 'Quà đã quá hạn nhận, quầy không trao được nữa. Tubu sẽ xử lý lượt đổi này và báo khách.';
 
 const ready = {
   id: 'r1',
@@ -49,7 +49,7 @@ function setup() {
       findUnique: jest.fn().mockResolvedValue(ready),
       findUniqueOrThrow: jest.fn().mockResolvedValue({ ...ready, status: 'FULFILLED', fulfilledAt: new Date('2026-10-18T00:00:00Z') }),
     },
-    user: { findUnique: jest.fn().mockResolvedValue({ metadata: null }) },
+    user: { findUnique: jest.fn().mockResolvedValue({ isBlocked: false, metadata: null }) },
     wasteUserFlags: { findUnique: jest.fn().mockResolvedValue(null) },
     wasteRequest: { count: jest.fn().mockResolvedValue(0) },
     $executeRaw: jest.fn().mockResolvedValue(1),
@@ -337,6 +337,18 @@ describe('WasteGiftRedemptionsService.cancel', () => {
     expect(h.prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('customer blocked at account level (users.isBlocked) and no refundPoints in the body: 400, no transaction', async () => {
+    h.prisma.user.findUnique
+      .mockResolvedValueOnce({ id: 'a1', role: 'ADMIN', isBlocked: false, mergedIntoId: null, phone: '0900000000' })
+      .mockResolvedValueOnce({ isBlocked: true, metadata: null });
+
+    await expect(h.svc.cancel('a1', 'r1', { reason: 'Khách đổi ý' })).rejects.toThrow(
+      new BadRequestException('Khách đang bị khoá hoặc từng bị thu hồi điểm đổi rác: hãy chọn rõ có hoàn điểm hay không.'),
+    );
+
+    expect(h.prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('grant returns false: 500 with the pinned sentence, no notification', async () => {
     h.rewards.grant.mockResolvedValue(false);
 
@@ -465,7 +477,8 @@ describe('WasteGiftRedemptionsService.expireOverdue', () => {
   it.each([
     ['blocked customer', () => h.tx.wasteUserFlags.findUnique.mockResolvedValue({ blockedAt: new Date() })],
     ['customer with a REVERSED request', () => h.tx.wasteRequest.count.mockResolvedValue(1)],
-    ['anonymized account', () => h.tx.user.findUnique.mockResolvedValue({ metadata: { anonymizedAt: '2026-11-01T00:00:00.000Z' } })],
+    ['account blocked at user level (no waste flag)', () => h.tx.user.findUnique.mockResolvedValue({ isBlocked: true, metadata: null })],
+    ['anonymized account', () => h.tx.user.findUnique.mockResolvedValue({ isBlocked: false, metadata: { anonymizedAt: '2026-11-01T00:00:00.000Z' } })],
   ])('%s: the cron leaves the gift READY for the admin, no refund, no event, no notice', async (_n, arrange) => {
     h.prisma.wasteGiftRedemption.findMany.mockResolvedValueOnce([{ id: 'r1' }]);
     h.tx.wasteGiftRedemption.findUnique.mockResolvedValue(overdueRow);
