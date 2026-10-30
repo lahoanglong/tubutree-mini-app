@@ -34,6 +34,7 @@ describe('RouteSkeleton: chỗ giữ tiêu đề (không nhảy bố cục)', ()
       expect(band.className).toContain('max-md:bg-[var(--color-bg-surface)]');
       expect(container.querySelector('[role="status"]')?.className).not.toMatch(/(^|\s)py-4/);
       expect(container.querySelector('.mt-4')).not.toBeNull();
+      expect((band.firstElementChild as HTMLElement).getAttribute('style')).toContain('calc(var(--type-title-lg-size) * var(--type-title-lg-lh))');
     }
   });
 

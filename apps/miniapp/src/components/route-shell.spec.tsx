@@ -52,6 +52,8 @@ describe('RouteShell (R-84, R-79)', () => {
     const { container, unmount } = wrap(<RouteShell skeleton="recycle"><Never /></RouteShell>);
     const heights = Array.from(container.querySelectorAll<HTMLElement>('[style*="height"]')).map((el) => el.style.height);
     expect(heights.filter((h) => h === '140px' || h === '80px')).toEqual(['140px', '80px', '80px']);
+    const strip = container.querySelector<HTMLElement>('[role="status"] > div') as HTMLElement;
+    expect(strip.getAttribute('style')).toContain('calc(24px + var(--safe-top) + var(--type-title-lg-size) * var(--type-title-lg-lh))');
     expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByRole('status')).toHaveAttribute('aria-label', copy.common.loading);
     unmount();

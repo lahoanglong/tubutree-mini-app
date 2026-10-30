@@ -123,7 +123,7 @@ export function RouteSkeleton({ kind, standalone = false }: { kind?: SkeletonKin
           aria-hidden="true"
           className="max-md:mx-[calc(50%-50vw)] max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-3 max-md:pt-[calc(12px+var(--safe-top))] md:hidden"
         >
-          <div style={{ height: 'var(--type-title-lg-lh)' }} />
+          <div style={{ height: 'calc(var(--type-title-lg-size) * var(--type-title-lg-lh))' }} />
         </div>
         <div className="max-md:hidden">
           <Skeleton width="45%" height={24} />

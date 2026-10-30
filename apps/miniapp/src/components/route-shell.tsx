@@ -34,7 +34,7 @@ export function RouteSkeleton({ kind = 'list' }: { kind?: RouteSkeletonKind }) {
         // Cùng hình với RecyclePageSkeleton (dải tiêu đề cỡ PageHeader + 3 khối) nên lúc mã màn tải xong bố cục không nhảy; chữ tiêu đề hiện khi màn về.
         // Vẽ thẳng bằng div và token, không dùng Page/PageHeader: chúng kéo thêm zmp-ui và chữ vào gói đầu app, mà khung chờ này nằm ở gói đầu.
         <>
-          <div style={{ background: 'var(--color-bg-surface)', height: 'calc(24px + var(--safe-top) + var(--type-title-lg-lh))' }} />
+          <div style={{ background: 'var(--color-bg-surface)', height: 'calc(24px + var(--safe-top) + var(--type-title-lg-size) * var(--type-title-lg-lh))' }} />
           <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
             {[140, 80, 80].map((h, i) => <Skeleton key={i} height={h} radius="var(--radius-card)" />)}
           </div>
