@@ -9,6 +9,7 @@ const USER = {
 /** Web: Trang chủ mở bằng GET /home/me (mock đúng dạng API thật) cho khối cá nhân, không gọi các endpoint lẻ đã gộp. */
 test.describe('Web khách: Trang chủ — request gộp', () => {
   test('đã đăng nhập: khối cá nhân lấy từ /home/me, không gọi endpoint lẻ đã gộp', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
     await page.addInitScript(() => {
       try {
         localStorage.setItem('tubu_web_session', '1');
@@ -28,6 +29,7 @@ test.describe('Web khách: Trang chủ — request gộp', () => {
     const me = api.callsTo('GET', '/home/me');
     expect(me).toHaveLength(1);
     expect(me[0]!.query.get('purchasedLimit')).toBe(String(HOME_ME.purchasedLimit));
+    await page.waitForLoadState('networkidle');
     expect(lonePersonalCalls(api)).toEqual([]);
   });
 });

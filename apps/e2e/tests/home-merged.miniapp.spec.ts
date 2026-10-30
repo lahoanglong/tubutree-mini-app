@@ -18,6 +18,8 @@ test.describe('Trang chủ — request gộp', () => {
     expect(me).toHaveLength(1);
     expect(me[0]!.query.get('purchasedLimit')).toBe(String(HOME_ME.purchasedLimit));
     expect(api.callsTo('GET', '/categories')).toHaveLength(0);
+    // Request lẻ nổ muộn (sau khi nội dung đã hiện) vẫn phải bị bắt: chờ mạng yên rồi mới kiểm.
+    await page.waitForLoadState('networkidle');
     expect(lonePersonalCalls(api)).toEqual([]);
   });
 });
