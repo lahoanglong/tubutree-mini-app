@@ -1,6 +1,7 @@
 import { HOME_PURCHASED_LIMIT, type HomeMeDTO, type HomePublicDTO } from '@tubutree/app-core/api/home';
 import { createHomeFeed, isHomePurchasedRequest } from '@tubutree/app-core/home-feed';
-import { api, getAccessToken } from './api';
+import { useAuthStore } from '../store/auth';
+import { api } from './api';
 import type { PurchasedItemsPage } from './shop-api';
 
 /**
@@ -25,7 +26,8 @@ const FEED_TIMEOUT_MS = 4_000;
 const feed = createHomeFeed({
   fetchPublic: () => api.get<HomePublicDTO>('/home', { timeout: FEED_TIMEOUT_MS }).then((r) => r.data),
   fetchMe: () => api.get<HomeMeDTO>('/home/me', { params: { purchasedLimit: HOME_PURCHASED_LIMIT }, timeout: FEED_TIMEOUT_MS }).then((r) => r.data),
-  identity: () => getAccessToken(),
+  // Id tài khoản, không phải access token: token đổi khi làm mới sau 401 dù vẫn cùng một người.
+  identity: () => useAuthStore.getState().user?.id,
 });
 
 /** Gọi khi Trang chủ mount (trước khi các query con chạy). Idempotent. */

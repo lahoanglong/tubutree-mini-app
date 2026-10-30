@@ -64,20 +64,6 @@ describe('createHomeFeed', () => {
     resolveMe({ forYou: [{ id: 'p' }] });
     expect(await taken).toBeNull();
   });
-
-  it('quá hạn: bỏ khối gộp để query đi request lẻ', async () => {
-    vi.useFakeTimers();
-    try {
-      fetchMe.mockReturnValue(new Promise(() => {}));
-      const slow = createHomeFeed({ fetchPublic, fetchMe, identity: () => who, timeoutMs: 4000 });
-      slow.arm();
-      const p = slow.takeMe('forYou');
-      await vi.advanceTimersByTimeAsync(4000);
-      expect(await p).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
 });
 
 describe('takeHomeRequest (web)', () => {

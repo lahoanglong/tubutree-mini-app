@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('./api', () => ({ api: { get: vi.fn(), post: vi.fn() }, getAccessToken: vi.fn(() => 'tok-a') }));
+const authState = vi.hoisted(() => ({ user: { id: 'u-a' } as { id: string } | null }));
+vi.mock('../store/auth', () => ({ useAuthStore: { getState: () => authState } }));
 
 import { api, getAccessToken } from './api';
 import { armHomeFeed, disarmHomeFeed, homeProductSlot, resetHomeFeed, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
@@ -57,13 +59,26 @@ describe('home-feed', () => {
   });
 
   it('đổi tài khoản khi Trang chủ còn mở: khối cá nhân của user cũ không trao cho user mới', async () => {
-    const token = getAccessToken as unknown as ReturnType<typeof vi.fn>;
-    token.mockReturnValue('tok-a');
+    authState.user = { id: 'u-a' };
     get.mockResolvedValue({ data: { notifications: [{ id: 'n1' }], subscriptions: [] } });
     armHomeFeed();
     expect(await takeMeBlock('subscriptions')).toEqual([]);
-    token.mockReturnValue('tok-b');
+    authState.user = { id: 'u-b' };
     expect(await takeMeBlock('notifications')).toBeNull();
+    authState.user = { id: 'u-a' };
+  });
+
+  it('token làm mới giữa lúc gửi và lúc nhận (cùng user): khối cá nhân vẫn được trao', async () => {
+    const token = getAccessToken as unknown as ReturnType<typeof vi.fn>;
+    authState.user = { id: 'u-a' };
+    token.mockReturnValue('tok-1');
+    let resolveMe!: (v: unknown) => void;
+    get.mockReturnValue(new Promise((r) => { resolveMe = r; }));
+    armHomeFeed();
+    const taken = takeMeBlock('subscriptions');
+    token.mockReturnValue('tok-2');
+    resolveMe({ data: { subscriptions: [{ id: 's' }] } });
+    expect(await taken).toEqual([{ id: 's' }]);
     token.mockReturnValue('tok-a');
   });
 

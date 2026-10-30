@@ -5,16 +5,14 @@ import type { Query } from './http';
 /**
  * Request gộp của Trang chủ (C-037), dùng chung Mini App và web. Khi Trang chủ đang mở ("armed"), lần gọi ĐẦU TIÊN của mỗi khối
  * (danh mục, Giờ vàng, Mua lại...) được trả từ hai request `GET /home` + `GET /home/me` thay vì một request riêng; component và
- * query key giữ nguyên. Mọi đường lỗi lùi về request lẻ (API cũ 404, lỗi mạng, quá hạn, khối null phía server). Mỗi khối chỉ dùng MỘT
+ * query key giữ nguyên. Mọi đường lỗi lùi về request lẻ (API cũ 404, lỗi mạng, khối null phía server). Mỗi khối chỉ dùng MỘT
  * lần mỗi phiên mở Trang chủ: refetch định kỳ và invalidate sau đó luôn đi request lẻ để lấy dữ liệu mới.
  */
 export interface HomeFeedDeps {
   fetchPublic: () => Promise<HomePublicDTO | null | undefined>;
   fetchMe: () => Promise<HomeMeDTO | null | undefined>;
-  /** Định danh phiên lúc gọi (access token hoặc id tài khoản): khối cá nhân chỉ trao cho đúng phiên đã xin nó. */
+  /** Định danh phiên lúc gọi (id tài khoản, ổn định khi token làm mới): khối cá nhân chỉ trao cho đúng phiên đã xin nó. */
   identity: () => string | null | undefined;
-  /** Quá hạn thì bỏ khối gộp, các query đi request lẻ. Bỏ trống nếu tầng gọi đã tự có hạn chờ. */
-  timeoutMs?: number;
 }
 
 type MeKey = Exclude<keyof HomeMeDTO, 'purchasedLimit'>;
@@ -39,9 +37,7 @@ export function createHomeFeed(deps: HomeFeedDeps) {
       },
       () => null,
     );
-    feed.promise = deps.timeoutMs
-      ? Promise.race([request, new Promise<null>((resolve) => setTimeout(resolve, deps.timeoutMs, null))])
-      : request;
+    feed.promise = request;
     return feed;
   }
 
