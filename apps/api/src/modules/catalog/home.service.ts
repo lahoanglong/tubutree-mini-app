@@ -87,7 +87,14 @@ export class HomeService {
       this.cached(this.staticSlot, now, PUBLIC_TTL_MS, () => this.buildStatic()),
       this.cached(this.flashSlot, now, FLASH_TTL_MS, () => this.block('flashActive', () => this.flashSale.listActive())),
     ]);
-    return { ...stat, flashActive };
+    return { ...stat, flashActive: this.withServerNow(flashActive, now) };
+  }
+
+  // Cache 3s không được làm đồng hồ máy chủ cũ theo: app dùng serverNow để bù lệch giờ khi đếm ngược Giờ vàng.
+  private withServerNow(flash: Block<HomePublic['flashActive']>, now: number): Block<HomePublic['flashActive']> {
+    if (!Array.isArray(flash)) return flash;
+    const serverNow = new Date(now).toISOString();
+    return flash.map((it) => ('serverNow' in it ? { ...it, serverNow } : it)) as typeof flash;
   }
 
   private async cached<T>(slot: Slot<T>, now: number, ttlMs: number, build: () => Promise<T>): Promise<T> {

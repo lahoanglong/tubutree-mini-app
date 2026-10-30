@@ -88,6 +88,15 @@ describe('HomeService.getPublic', () => {
     expect(catalog.list).toHaveBeenCalledTimes(3);
   });
 
+  it('flash lấy từ cache: serverNow vẫn là giờ lúc trả phản hồi, không phải giờ lúc dựng cache', async () => {
+    const { svc, flashSale } = setup();
+    flashSale.listActive.mockResolvedValue([{ itemId: 'f1', serverNow: new Date(0).toISOString() }]);
+    await svc.getPublic(0);
+    const r = await svc.getPublic(2_000);
+    expect(flashSale.listActive).toHaveBeenCalledTimes(1);
+    expect((r.flashActive as { serverNow: string }[])[0]!.serverNow).toBe(new Date(2_000).toISOString());
+  });
+
   it('flash trong 2s đầu vẫn dùng cache (không đổ dồn xuống DB)', async () => {
     const { svc, flashSale } = setup();
     await svc.getPublic(1000);
