@@ -2750,7 +2750,7 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
         </div>
       </div>
       <button onClick={() => create.mutate()} disabled={!f.code || startPending || endPending || endBeforeStart} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
-      {endBeforeStart && <p role="alert" className="text-xs text-danger-fg">Ngày hết hạn phải sau ngày bắt đầu. Hãy chọn lại ngày hết hạn hoặc ngày bắt đầu để tạo mã.</p>}
+      {endBeforeStart && <p role="alert" className="text-xs text-danger-fg">Ngày hết hạn không được sớm hơn ngày bắt đầu. Hãy chọn lại ngày hết hạn hoặc ngày bắt đầu để tạo mã.</p>}
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
     )}

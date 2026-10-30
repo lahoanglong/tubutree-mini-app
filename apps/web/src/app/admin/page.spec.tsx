@@ -4117,15 +4117,15 @@ describe('admin/page — ô ngày giờ và ghi chú link video', () => {
     const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá') as HTMLButtonElement;
     typeInto(container.querySelector('input[aria-label="Mã giảm giá bắt đầu từ ngày"]'), '20102026');
     typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '10102026');
-    expect(container.textContent).toContain('Ngày hết hạn phải sau ngày bắt đầu. Hãy chọn lại');
+    expect(container.textContent).toContain('Ngày hết hạn không được sớm hơn ngày bắt đầu. Hãy chọn lại');
     expect(create.disabled).toBe(true);
     // Rời ô xong vẫn chỉ MỘT câu giải thích, không thêm câu chung "ngoài khoảng cho phép".
     act(() => container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]')!.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
     await flush();
     expect(container.textContent).not.toContain('Ngày nằm ngoài khoảng cho phép.');
-    expect(container.textContent).toContain('Ngày hết hạn phải sau ngày bắt đầu.');
+    expect(container.textContent).toContain('Ngày hết hạn không được sớm hơn ngày bắt đầu.');
     typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '20102026');
-    expect(container.textContent).not.toContain('Ngày hết hạn phải sau ngày bắt đầu.');
+    expect(container.textContent).not.toContain('Ngày hết hạn không được sớm hơn ngày bắt đầu.');
     expect(create.disabled).toBe(false);
   });
 
