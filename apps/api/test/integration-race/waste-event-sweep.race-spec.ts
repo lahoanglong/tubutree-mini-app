@@ -630,7 +630,8 @@ const SWEEP: ReadonlyArray<SweepRow> = [
       const customer = await newUser();
       const gift = await createWasteGift(prisma);
       reg.giftIds.push(gift.id);
-      return createGiftRedemption(prisma, { userId: customer.id, giftId: gift.id, claimExpiresAt: new Date(Date.now() - 3_600_000) });
+      // Quà chỉ quá hạn khi đã qua hết ngày VN ghi trên hạn, nên lấy hạn từ hai ngày trước.
+      return createGiftRedemption(prisma, { userId: customer.id, giftId: gift.id, claimExpiresAt: new Date(Date.now() - 2 * 86_400_000) });
     },
     () => redemptions.expireOverdue(),
     (red) => ({ giftRedemptionId: red.id }),
