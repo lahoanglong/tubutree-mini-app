@@ -14,6 +14,7 @@ import axios from 'axios';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { orderConfirmedData } from '../../notifications/order-confirmed-data';
 import type { Env } from '../../../config/env.validation';
 import { QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
 import { enqueueGomdonPush } from '../gomdon/gomdon-queue';
@@ -308,7 +309,7 @@ export class ZalopayService {
         );
       }
       await this.pancakeHooks?.afterPaid(order.id);
-      await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code });
+      await this.notifications.notify(order.userId, 'ORDER_CONFIRMED', orderConfirmedData({ code: order.code, paymentStatus: 'PAID' }));
     } else {
       // Guard thua: callback trùng, lệnh khác của cùng đơn đã trả trước (khách trả hai lần), hoặc khách/cron vừa huỷ đơn
       // giữa lần đọc và lần lật.
