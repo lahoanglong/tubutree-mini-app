@@ -342,26 +342,97 @@ describe('StorefrontsTab (D3-02)', () => {
       expect(more.textContent).toContain(`Chủ vừa đổi thêm lúc ${formatDateTime('2026-10-20T05:00:00.000Z')}`);
     });
 
-    it('chủ đổi thêm khi admin xem danh sách: bấm "Đã xem" mà máy chủ giữ dấu mới thì nói chủ vừa đổi thêm, không để nút như không ăn', async () => {
+    /** Máy chủ giả có trạng thái: "Đã xem" xoá dấu đến mốc đã gửi, dấu mới hơn thì giữ. */
+    const statefulServer = (initial: string | null, onSeen?: () => string | null) => {
+      const state = { at: initial };
       const api = mockFetch({
-        '/admin/storefronts/s9/content-seen': { body: changed({ contentChangedAt: '2026-10-20T05:00:00.000Z' }) },
-        '/admin/storefronts?': page([changed()], 1),
+        '/admin/storefronts/s9/content-seen': () => {
+          if (onSeen) state.at = onSeen();
+          else state.at = null;
+          return { body: changed({ contentChangedAt: state.at }) };
+        },
+        '/admin/storefronts/s9': () => ({ body: detail({ id: 's9', title: 'Shop đổi tên', approved: true, approvedAt: '2026-10-01T00:00:00.000Z', contentChangedAt: state.at }) }),
+        '/admin/storefronts?': () => page([changed({ contentChangedAt: state.at })], state.at ? 1 : 0),
       });
       vi.stubGlobal('fetch', vi.fn(api.fn));
+      return { state, api };
+    };
+    const article = (container: HTMLElement) => container.querySelector('article[aria-label="Shop đổi tên"]') as HTMLElement;
+
+    it('chủ đổi thêm khi admin xem danh sách: lời báo nằm ngay trong dòng gian hàng đó, không để nút như không ăn', async () => {
+      statefulServer('2026-10-20T03:30:00.000Z', () => '2026-10-20T05:00:00.000Z');
       const { container } = mount(<StorefrontsTab />);
       await flush();
       expect(container.querySelector('[role="status"]')).toBeNull();
       click(byText(container, 'button', 'Đã xem'));
       await flush();
       const more = container.querySelector('[role="status"]')!;
+      expect(more.closest('article')).toBe(article(container));
       expect(more.textContent).toContain(`Chủ vừa đổi thêm lúc ${formatDateTime('2026-10-20T05:00:00.000Z')}. Xem lại rồi bấm "Đã xem".`);
+    });
+
+    it('lời báo chỉ ở dòng của gian hàng vừa đổi thêm, dòng khác không có', async () => {
+      const other = row({ id: 's8', title: 'Shop khác', approved: true, approvedAt: '2026-10-01T00:00:00.000Z', contentChangedAt: '2026-10-20T02:00:00.000Z' });
+      const state = { at: '2026-10-20T03:30:00.000Z' as string | null };
+      const api = mockFetch({
+        '/admin/storefronts/s9/content-seen': () => {
+          state.at = '2026-10-20T05:00:00.000Z';
+          return { body: changed({ contentChangedAt: state.at }) };
+        },
+        '/admin/storefronts?': () => page([other, changed({ contentChangedAt: state.at })], 2),
+      });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      click(byText(article(container), 'button', 'Đã xem'));
+      await flush();
+      expect(article(container).querySelector('[role="status"]')).not.toBeNull();
+      expect(container.querySelector('article[aria-label="Shop khác"] [role="status"]')).toBeNull();
+      expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
     });
 
     it('bấm "Đã xem" mà máy chủ xoá dấu: không có lời báo chủ đổi thêm, và lời báo cũ biến mất', async () => {
       let seenCalls = 0;
+      statefulServer('2026-10-20T03:30:00.000Z', () => (++seenCalls === 1 ? '2026-10-20T05:00:00.000Z' : null));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      click(byText(container, 'button', 'Đã xem'));
+      await flush();
+      expect(container.querySelector('[role="status"]')).not.toBeNull();
+      click(byText(container, 'button', 'Đã xem'));
+      await flush();
+      expect(container.querySelector('[role="status"]')).toBeNull();
+    });
+
+    it('lời báo ở danh sách tự mất khi dấu được xoá ở ngăn chi tiết rồi đóng ngăn', async () => {
+      let seenCalls = 0;
+      statefulServer('2026-10-20T03:30:00.000Z', () => (++seenCalls === 1 ? '2026-10-20T05:00:00.000Z' : null));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      click(byText(container, 'button', 'Đã xem'));
+      await flush();
+      expect(article(container).querySelector('[role="status"]')).not.toBeNull();
+      click(byText(article(container), 'button', 'Xem'));
+      await flush();
+      const drawer = document.body.querySelector('[role="dialog"]') as HTMLElement;
+      click(byText(drawer, 'button', 'Đã xem'));
+      await flush();
+      expect(byText(drawer, 'button', 'Đã xem')).toBeNull();
+      expect(drawer.querySelector('[role="status"]')).toBeNull();
+      click(drawer.querySelector('button[aria-label="Đóng"]'));
+      await flush();
+      expect(container.querySelector('[role="status"]')).toBeNull();
+      expect(article(container).textContent).not.toContain('Chủ vừa đổi thêm');
+    });
+
+    it('lời báo ở danh sách mất khi bỏ duyệt (dấu không còn tính sau khi bỏ duyệt)', async () => {
+      const state = { approvedAt: '2026-10-01T00:00:00.000Z' as string | null, at: '2026-10-20T03:30:00.000Z' };
       const api = mockFetch({
-        '/admin/storefronts/s9/content-seen': () => ({ body: ++seenCalls === 1 ? changed({ contentChangedAt: '2026-10-20T05:00:00.000Z' }) : changed({ contentChangedAt: null }) }),
-        '/admin/storefronts?': page([changed()], 1),
+        '/admin/storefronts/s9/content-seen': () => {
+          state.at = '2026-10-20T05:00:00.000Z';
+          return { body: changed({ contentChangedAt: state.at }) };
+        },
+        '/admin/storefronts?': () => page([changed({ contentChangedAt: state.at, approvedAt: state.approvedAt, approved: !!state.approvedAt })], 1),
       });
       vi.stubGlobal('fetch', vi.fn(api.fn));
       const { container } = mount(<StorefrontsTab />);
@@ -369,7 +440,8 @@ describe('StorefrontsTab (D3-02)', () => {
       click(byText(container, 'button', 'Đã xem'));
       await flush();
       expect(container.querySelector('[role="status"]')).not.toBeNull();
-      click(byText(container, 'button', 'Đã xem'));
+      state.approvedAt = null;
+      click(byText(container, 'button', 'Làm mới'));
       await flush();
       expect(container.querySelector('[role="status"]')).toBeNull();
     });

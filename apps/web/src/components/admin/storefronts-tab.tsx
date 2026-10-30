@@ -56,13 +56,19 @@ function StatusBadges({ row }: { row: AdminStorefrontRow }) {
 const changedAfterApproval = (row: AdminStorefrontRow) => !!row.contentChangedAt && !!row.approvedAt;
 
 /**
- * "Đã xem" chỉ xoá dấu đến mốc admin đã thấy; chủ đổi thêm sau đó thì máy chủ giữ dấu mới. Trả mốc mới đó để màn nói rõ,
- * nếu không dải cảnh báo chỉ đổi giờ và nút trông như không ăn.
+ * "Đã xem" chỉ xoá dấu đến mốc admin đã thấy; chủ đổi thêm sau đó thì máy chủ giữ dấu mới. Nhớ lại gian hàng và mốc mới đó để
+ * dòng nói rõ, nếu không dải cảnh báo chỉ đổi giờ và nút trông như không ăn.
  */
-function changedAgainAt(result: AdminStorefrontRow, sentAt?: string | null): string | null {
+type ChangedAgain = { id: string; at: string };
+
+function changedAgainOf(result: AdminStorefrontRow, sentAt?: string | null): ChangedAgain | null {
   if (!sentAt || !changedAfterApproval(result)) return null;
-  return new Date(result.contentChangedAt!).getTime() > new Date(sentAt).getTime() ? result.contentChangedAt : null;
+  return new Date(result.contentChangedAt!).getTime() > new Date(sentAt).getTime() ? { id: result.id, at: result.contentChangedAt! } : null;
 }
+
+/** Lời báo tính từ dữ liệu đang hiện: dấu được xoá hay bỏ duyệt ở đâu cũng làm nó tự mất. */
+const showChangedAgain = (row: AdminStorefrontRow, mark: ChangedAgain | null): mark is ChangedAgain =>
+  !!mark && mark.id === row.id && changedAfterApproval(row) && new Date(row.contentChangedAt!).getTime() === new Date(mark.at).getTime();
 
 function ownerLine(row: AdminStorefrontRow): string {
   if (!row.owner) return 'Không có chủ';
@@ -93,12 +99,12 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
     onError: (e) => setQuickFailure(errorText(e)),
   });
 
-  const [changedAgain, setChangedAgain] = useState<string | null>(null);
+  const [changedAgain, setChangedAgain] = useState<ChangedAgain | null>(null);
   const seen = useMutation({
     mutationFn: (r: AdminStorefrontRow) => markStorefrontContentSeen(r.id, r.contentChangedAt),
     onSuccess: (result, r) => {
       setQuickFailure(null);
-      setChangedAgain(changedAgainAt(result, r.contentChangedAt));
+      setChangedAgain(changedAgainOf(result, r.contentChangedAt));
       return qc.invalidateQueries({ queryKey: ['admin-storefronts'] });
     },
     onError: (e) => setQuickFailure(errorText(e)),
@@ -181,7 +187,6 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
 
       <div className="mt-4 space-y-3">
         {quickFailure && <Notice tone="danger" role="alert">{quickFailure}</Notice>}
-        {changedAgain && <Notice role="status">{CHANGED_AGAIN_TEXT(changedAgain)}</Notice>}
         {list.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách...</p>}
         {list.isError && <LoadError onRetry={() => void list.refetch()} retrying={list.isFetching}>Không tải được danh sách gian hàng.</LoadError>}
         {list.data && view.items.length === 0 && (
@@ -213,6 +218,11 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
             </div>
             {(row.takenDownReason || row.hiddenReason) && (
               <p className="mt-2 break-words text-xs text-stone-600">{row.takenDownAt ? `Lý do gỡ: ${row.takenDownReason ?? '—'}` : row.hiddenReason}</p>
+            )}
+            {showChangedAgain(row, changedAgain) && (
+              <div className="mt-2">
+                <Notice role="status">{CHANGED_AGAIN_TEXT(changedAgain.at)}</Notice>
+              </div>
             )}
             {changedAfterApproval(row) && (
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-card bg-warning-bg px-2 py-1.5">
@@ -264,11 +274,11 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
   const takeDown = useMutation({ mutationFn: (reason: string) => takeDownStorefront(id, reason), onSuccess: refresh, onError });
   const reinstate = useMutation({ mutationFn: () => reinstateStorefront(id), onSuccess: refresh, onError });
   const approve = useMutation({ mutationFn: (approved: boolean) => approveStorefront(id, approved), onSuccess: refresh, onError });
-  const [changedAgain, setChangedAgain] = useState<string | null>(null);
+  const [changedAgain, setChangedAgain] = useState<ChangedAgain | null>(null);
   const seen = useMutation({
     mutationFn: (sentAt: string | null | undefined) => markStorefrontContentSeen(id, sentAt),
     onSuccess: (result, sentAt) => {
-      setChangedAgain(changedAgainAt(result, sentAt));
+      setChangedAgain(changedAgainOf(result, sentAt));
       return refresh();
     },
     onError,
@@ -334,7 +344,7 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
           ) : (
             sf.hiddenReason && <Notice tone="warning">{sf.hiddenReason}</Notice>
           )}
-          {changedAgain && <Notice role="status">{CHANGED_AGAIN_TEXT(changedAgain)}</Notice>}
+          {showChangedAgain(sf, changedAgain) && <Notice role="status">{CHANGED_AGAIN_TEXT(changedAgain.at)}</Notice>}
           {changedAfterApproval(sf) && (
             <Notice tone="warning">
               {CONTENT_CHANGED_TEXT(sf.contentChangedAt!)}{' '}
