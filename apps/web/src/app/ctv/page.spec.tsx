@@ -477,6 +477,23 @@ describe('/ctv — bảng điều khiển', () => {
     expect(container.textContent).toContain('Số dư Ví Tubu');
   });
 
+  it('vừa chuyển vào Ví: nút Chuyển vào Ví mờ tới khi dashboard tải lại, rồi bấm lại được', async () => {
+    const { container } = mount();
+    await flush();
+    click(byText(container, '[role="group"] button', 'Chuyển vào Ví'));
+    await flush();
+    let release!: () => void;
+    state.walletGate = new Promise<void>((r) => (release = r));
+    state.dash = { ...DASH, withdrawableCommission: 0 };
+    click(byText(document.body, '[role="dialog"] button', 'vào Ví'));
+    await flush();
+    const btn = byText(container, '[role="group"] button', 'Chuyển vào Ví') as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    release();
+    await flush();
+    expect((byText(container, '[role="group"] button', 'Chuyển vào Ví') as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('Lên đơn hộ mở sheet "Lên đơn hộ khách", chưa gọi API nào khi chưa điền gì', async () => {
     const { container } = mount();
     await flush();

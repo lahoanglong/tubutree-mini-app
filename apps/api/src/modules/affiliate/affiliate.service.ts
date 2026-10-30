@@ -1457,7 +1457,7 @@ export class AffiliateService {
           lockedAt: { lte: threshold },
           // Đơn phải CÒN DELIVERED ngay trong câu UPDATE: duyệt trả hàng lật đơn → RETURNED trước,
           // reverseCommissionsForOrder chạy sau (ngoài tx) — lượt cron rơi vào khe đó mà không có
-          // điều kiện này sẽ chốt APPROVED (không-đảo-được) hoa hồng của đơn đã trả hàng.
+          // điều kiện này sẽ chốt APPROVED hoa hồng của đơn đã trả hàng; cron chuyển nó vào Ví nên lần thu hồi phải trừ Ví CTV.
           order: { status: 'DELIVERED' },
           ...(heldOrderIds.length > 0 ? { orderId: { notIn: heldOrderIds } } : {}),
         },
@@ -1465,11 +1465,10 @@ export class AffiliateService {
       });
       if (res.count > 0) this.logger.log(`Duyệt ${res.count} commission hết hold.`);
       // Chạy cả khi lượt này không duyệt thêm khoản nào: quét luôn phần còn sót (cờ từng tắt, lần trước lỗi hoặc thiếu MST).
-      const credited = await this.autoTransferApprovedToWallet().catch((err: unknown) => {
+      await this.autoTransferApprovedToWallet().catch((err: unknown) => {
         this.logger.error(`autoTransferApprovedToWallet lỗi: ${err instanceof Error ? err.message : err}`);
-        return new Set<string>();
       });
-      if (res.count > 0) await this.notifyCommissionsApproved(approvedAt, credited);
+      if (res.count > 0) await this.notifyCommissionsApproved(approvedAt);
     } catch (err) {
       this.logger.error(`approveDueCommissions lỗi: ${err instanceof Error ? err.message : err}`);
     }
@@ -1546,10 +1545,11 @@ export class AffiliateService {
   /**
    * Báo CTV hoa hồng vừa được duyệt (có thể chuyển vào Ví), gộp theo người: một lượt cron có thể chốt nhiều
    * khoản của cùng CTV, mỗi khoản một tin là spam. Lọc đúng lượt này bằng `approvedAt` trùng
-   * mốc đã ghi ở câu UPDATE (không cần thêm cột/đổi câu UPDATE đang có test). Mọi lỗi chỉ log: tiền
+   * mốc đã ghi ở câu UPDATE (không cần thêm cột/đổi câu UPDATE đang có test). Chạy SAU lượt tự chuyển vào Ví: khoản đã tự vào
+   * Ví đã PAID nên không còn dòng APPROVED để báo (CTV nhận tin "Đã cộng…" thay thế). Mọi lỗi chỉ log: tiền
    * đã chốt xong, thông báo hỏng không được làm cron báo thất bại.
    */
-  private async notifyCommissionsApproved(approvedAt: Date, autoCredited: ReadonlySet<string> = new Set()): Promise<void> {
+  private async notifyCommissionsApproved(approvedAt: Date): Promise<void> {
     if (!this.notifications) return;
     try {
       const rows = await this.prisma.commission.findMany({
@@ -1562,8 +1562,6 @@ export class AffiliateService {
         perUser.set(r.affiliateUserId, { count: cur.count + 1, amount: cur.amount + r.amount });
       }
       for (const [userId, sum] of perUser) {
-        // Đã tự vào Ví thì CTV nhận tin "Đã cộng…" rồi; tin này dặn bấm tay sẽ sai.
-        if (autoCredited.has(userId)) continue;
         try {
           await this.notifications.notify(userId, CTV_NOTIFICATION.APPROVED, {
             count: String(sum.count),
@@ -1603,7 +1601,8 @@ export class AffiliateService {
 
   /**
    * Số ngày giữ THỰC trước khi chốt commission = max(affiliate.hold_days, returns.window_days).
-   * Chốt (APPROVED) là điểm không-đảo-được → không được chốt khi khách còn trong cửa sổ gửi đổi/trả
+   * Chốt (APPROVED) mở đường cho cron chuyển hoa hồng vào Ví, sau đó thu hồi chỉ còn cách trừ Ví CTV (có thể âm)
+   * → không được chốt khi khách còn trong cửa sổ gửi đổi/trả
    * (key + mặc định mirror OrdersService.requestReturn), dù admin cấu hình hold ngắn hơn cửa sổ.
    */
   private async effectiveHoldDays(): Promise<number> {
