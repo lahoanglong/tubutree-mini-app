@@ -3,9 +3,9 @@ export const WASTE_RULES_UPDATED_NOTE = 'Thể lệ vừa được cập nhật.
 
 /**
  * Ô đồng ý còn hiệu lực không. `ack` là phiên bản thể lệ lúc khách tick (có thể đã giữ qua màn Thể lệ), `current` là phiên bản
- * máy chủ đang đặt. Thiếu một trong hai (chưa tải được thể lệ, hoặc tick trước khi tải xong) thì tin ô đã tick: máy chủ vẫn
- * kiểm lại khi tạo yêu cầu.
+ * máy chủ đang đặt. Chưa biết `current` (thể lệ chưa tải được) thì tin ô đã tick, máy chủ vẫn kiểm lại. Đã biết `current` mà
+ * khách tick từ lúc chưa có phiên bản (`ack` rỗng) thì không chắc khách đã đọc bản này nên phải tick lại.
  */
 export function consentStillValid(ack: string | null | undefined, current: string | null | undefined): boolean {
-  return !ack || !current || ack === current;
+  return !current || (!!ack && ack === current);
 }

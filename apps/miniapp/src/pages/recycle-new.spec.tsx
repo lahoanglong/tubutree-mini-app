@@ -612,6 +612,21 @@ describe('khai món nhanh và báo trước (B-35/B-36/B-82)', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Tạo yêu cầu' })).toBeEnabled());
     expect(screen.queryByText(/Thể lệ vừa được cập nhật/)).toBeNull();
   });
+  it('tick khi thể lệ chưa tải xong rồi thể lệ về: bỏ tick, nhắc đọc lại, không gửi được bằng ô tick cũ', async () => {
+    const PICKED = { ...DRAFT, method: 'DROP_OFF' as const, pointId: 'pt-1', pickedPoint: makeWastePoint() };
+    let release: (v: { text: string; version: string }) => void = () => {};
+    mocks.getWasteRules.mockReturnValue(new Promise((r) => { release = r; }));
+    atStep2(PICKED);
+    renderPage();
+    const box = await screen.findByRole('checkbox', { name: /Tôi đồng ý với Thể lệ/ });
+    fireEvent.click(box);
+    await waitFor(() => expect(box).toBeChecked());
+    release({ text: 'Thể lệ', version: '2026-11-05.2' });
+    await waitFor(() => expect(box).not.toBeChecked());
+    expect(screen.getByText('Thể lệ vừa được cập nhật. Bạn đọc lại Thể lệ rồi tick đồng ý lại nhé')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tạo yêu cầu' })).toBeDisabled();
+    expect(mocks.createWasteRequest).not.toHaveBeenCalled();
+  });
   it('máy chủ từ chối vì thể lệ đã đổi: hiện lời từ chối và tải lại phiên bản', async () => {
     const PICKED = { ...DRAFT, method: 'DROP_OFF' as const, pointId: 'pt-1', pickedPoint: makeWastePoint() };
     mocks.getWasteRules.mockResolvedValueOnce({ text: 'Thể lệ', version: '2026-10-17.1' }).mockResolvedValue({ text: 'Thể lệ', version: '2026-11-05.2' });

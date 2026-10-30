@@ -24,6 +24,7 @@ const state = vi.hoisted(() => ({
   provinces: [] as unknown[],
   failProvinces: false,
   rules: { text: 'Thể lệ' } as { text: string; version?: string },
+  rulesGate: null as Promise<void> | null,
   create: null as unknown as (b: unknown, key: string) => unknown,
   calls: [] as { path: string; body?: unknown; headers?: Record<string, string> }[],
   keySeq: 0,
@@ -47,7 +48,10 @@ vi.mock('@/lib/core-http', () => ({
       if (path === '/waste/me') return state.me;
       if (path.startsWith('/waste/points')) return state.points;
       if (path === '/me/loyalty/rewards') return state.rewards;
-      if (path === '/waste/rules') return state.rules;
+      if (path === '/waste/rules') {
+        if (state.rulesGate) await state.rulesGate;
+        return state.rules;
+      }
       if (path === '/geo/provinces') {
         if (state.failProvinces) throw new Error('offline');
         return state.provinces;
@@ -115,6 +119,7 @@ beforeEach(() => {
   state.calls = [];
   state.failProvinces = false;
   state.rules = { text: 'Thể lệ' };
+  state.rulesGate = null;
   state.keySeq = 0;
   state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
   state.me = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true } });
@@ -559,6 +564,22 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
     click(barButton(c, 'Tạo yêu cầu'));
     await flush(10);
     expect(createCalls()[0]?.body).toMatchObject({ consent: true, consentVersion: '2026-11-05.2' });
+  });
+  it('tick khi thể lệ chưa tải xong rồi thể lệ về: bỏ tick, nhắc đọc lại, nút tạo bị khoá', async () => {
+    let release: () => void = () => {};
+    state.rulesGate = new Promise<void>((r) => { release = r; });
+    state.rules = { text: 'Thể lệ', version: '2026-11-05.2' };
+    atStep2(PICKED);
+    const c = await mount();
+    click(check(c, CONSENT));
+    await flush(3);
+    expect(check(c, CONSENT).checked).toBe(true);
+    release();
+    await flush(10);
+    expect(check(c, CONSENT).checked).toBe(false);
+    expect(c.textContent).toContain('Thể lệ vừa được cập nhật. Bạn đọc lại Thể lệ rồi tick đồng ý lại nhé');
+    expect(barButton(c, 'Tạo yêu cầu').disabled).toBe(true);
+    expect(createCalls()).toHaveLength(0);
   });
   it('máy chủ từ chối vì thể lệ đã đổi: hiện lời từ chối, tải lại phiên bản, ô đồng ý bỏ tick', async () => {
     const msg = 'Thể lệ đã được cập nhật. Bạn hãy đọc lại Thể lệ rồi đồng ý lại để tạo yêu cầu';
