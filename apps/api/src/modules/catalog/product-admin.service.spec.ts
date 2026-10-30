@@ -35,10 +35,20 @@ function setup(current: ReturnType<typeof row> | null = row(), categories = 1, s
     category: { count: jest.fn().mockResolvedValue(categories) },
     variation: { count: jest.fn().mockResolvedValue(sellableVariations) },
   };
-  return { svc: new ProductAdminService(prisma as never), update, prisma };
+  const imageResize = { invalidateRegistry: jest.fn() };
+  return { svc: new ProductAdminService(prisma as never, imageResize as never), update, prisma, imageResize };
 }
 
 describe('ProductAdminService — sửa sản phẩm', () => {
+  it('lưu ảnh thì báo làm mới danh sách URL ảnh; sửa trường khác thì không', async () => {
+    const { svc, imageResize } = setup();
+    await svc.update('a1', 'p1', { isFeatured: true });
+    expect(imageResize.invalidateRegistry).not.toHaveBeenCalled();
+    await svc.update('a1', 'p1', { images: ['https://cdn.example.com/a.jpg'] });
+    expect(imageResize.invalidateRegistry).toHaveBeenCalledTimes(1);
+  });
+
+
   it('chỉ ADMIN', () => {
     expect(Reflect.getMetadata(ROLES_KEY, ProductAdminController)).toEqual(['ADMIN']);
   });
