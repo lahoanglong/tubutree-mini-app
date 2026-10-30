@@ -110,8 +110,30 @@ export function RouteSkeleton({ kind, standalone = false }: { kind?: SkeletonKin
   const pathname = usePathname();
   const resolved = kind ?? skeletonKindFor(pathname);
   // Điểm Xanh và Vườn Xanh dựng trong khung trang (đã có PageHeader), nên khối chờ dạng khối như Mini, không có thanh tiêu đề.
-  // `standalone` (loading.tsx, chưa có PageHeader) vẫn giữ thanh tiêu đề để lúc trang về bố cục không nhảy.
-  const block = !standalone && (resolved === 'loyalty' || resolved === 'game');
+  // `standalone` (loading.tsx, chưa có PageHeader) vẽ một dải cỡ PageHeader (đệm 12/16 + safe-top, một dòng title-lg, nền surface)
+  // rồi cách mt-4, để lúc trang về khối không nhảy lên và dải trắng không hiện thêm.
+  const blockKind = resolved === 'loyalty' || resolved === 'game';
+  const block = !standalone && blockKind;
+  if (standalone && blockKind) {
+    return (
+      <div role="status" aria-busy="true" className="flex min-h-[80vh] flex-col md:gap-3 md:py-4">
+        <span className="sr-only">Đang tải…</span>
+        <div
+          data-page-bleed=""
+          aria-hidden="true"
+          className="max-md:mx-[calc(50%-50vw)] max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-3 max-md:pt-[calc(12px+var(--safe-top))] md:hidden"
+        >
+          <div style={{ height: 'var(--type-title-lg-lh)' }} />
+        </div>
+        <div className="max-md:hidden">
+          <Skeleton width="45%" height={24} />
+        </div>
+        <div className="mt-4 flex flex-col gap-3 md:mt-0">
+          <Body kind={resolved} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div role="status" aria-busy="true" className={`flex min-h-[80vh] flex-col gap-3 ${block ? '' : 'py-4'}`}>
       <span className="sr-only">Đang tải…</span>
@@ -128,7 +150,9 @@ export function ProductDetailSkeleton() {
       <span className="sr-only">Đang tải…</span>
       <Skeleton height="auto" rounded="rounded-none" style={{ aspectRatio: '1 / 1' }} />
       <div className="flex flex-col gap-3 bg-stone-0 p-4 md:bg-transparent md:p-0">
-        <Skeleton width={80} height={14} />
+        <div className="flex items-center max-md:h-11">
+          <Skeleton width={80} height={14} />
+        </div>
         <Skeleton width="85%" height={22} />
         <Skeleton width={140} height={26} />
         <Skeleton width="60%" height={14} />

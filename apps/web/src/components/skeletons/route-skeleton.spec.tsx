@@ -26,8 +26,19 @@ describe('skeletonKindFor (R-76)', () => {
 describe('RouteSkeleton: chỗ giữ tiêu đề (không nhảy bố cục)', () => {
   const heights = (el: HTMLElement) => Array.from(el.querySelectorAll<HTMLElement>('[style*="height"]')).map((n) => n.style.height);
 
-  it('standalone (loading.tsx, chưa có PageHeader): giữ thanh tiêu đề 24 và py-4', () => {
-    const { container } = render(<RouteSkeleton kind="loyalty" standalone />);
+  it('standalone loyalty/game (loading.tsx, chưa có PageHeader): dải tiêu đề cỡ PageHeader trên điện thoại, không thanh 24px, khối cách mt-4', () => {
+    for (const kind of ['loyalty', 'game'] as const) {
+      const { container } = render(<RouteSkeleton kind={kind} standalone />);
+      const band = container.querySelector('[data-page-bleed]') as HTMLElement;
+      expect(band.className).toContain('max-md:pt-[calc(12px+var(--safe-top))]');
+      expect(band.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+      expect(container.querySelector('[role="status"]')?.className).not.toMatch(/(^|\s)py-4/);
+      expect(container.querySelector('.mt-4')).not.toBeNull();
+    }
+  });
+
+  it('standalone kiểu khác (hub, list): vẫn thanh tiêu đề 24 và py-4', () => {
+    const { container } = render(<RouteSkeleton kind="list" standalone />);
     expect(heights(container)[0]).toBe('24px');
     expect(container.querySelector('[role="status"]')?.className).toContain('py-4');
   });
