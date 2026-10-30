@@ -67,7 +67,6 @@ import MyPayrollPage from './nhan-vien/bang-luong/page';
 import BrandOwnerPage from './chu-thuong-hieu/page';
 import RecyclePage from './doi-rac/page';
 import RecycleRequestsPage from './doi-rac/yeu-cau/page';
-import RecyclePointsPage from './doi-rac/diem-nhan/page';
 import { RecycleRequestDetail } from '@/components/recycle/recycle-request';
 import { RecycleEdit } from '@/components/recycle/recycle-edit';
 import { RecycleDone } from '@/components/recycle/recycle-done';
@@ -134,10 +133,10 @@ const PRO: PageCase[] = [
   ['/nhan-vien/bang-luong', () => <MyPayrollPage />, '/nhan-vien/bang-luong'],
   ['/chu-thuong-hieu', () => <BrandOwnerPage />, '/chu-thuong-hieu'],
 ];
+// /doi-rac/diem-nhan không có ở đây: khách được chuyển về /doi-rac, spec của trang ấy kiểm điều đó.
 const RECYCLE: PageCase[] = [
   ['/doi-rac', () => <RecyclePage />, '/doi-rac'],
   ['/doi-rac/yeu-cau', () => <RecycleRequestsPage />, '/doi-rac/yeu-cau'],
-  ['/doi-rac/diem-nhan', () => <RecyclePointsPage />, '/doi-rac/tao'],
   ['/doi-rac/yeu-cau/[id]', () => <RecycleRequestDetail id="req-77" />, '/doi-rac/yeu-cau/req-77'],
   ['/doi-rac/yeu-cau/[id]/sua', () => <RecycleEdit id="req-77" />, '/doi-rac/yeu-cau/req-77/sua'],
   ['/doi-rac/xong/[id]', () => <RecycleDone id="req-77" />, '/doi-rac/xong/req-77'],

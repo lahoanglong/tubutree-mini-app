@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   config: { waste: { enabled: true } } as Record<string, unknown>,
   wasteRequests: [] as unknown[],
   fail: new Set<string>(),
+  pending: new Set<string>(),
   readyRoutes: new Set<string>(),
   calls: [] as { method: string; path: string; body?: unknown; headers?: Record<string, string>; query?: Record<string, unknown> }[],
   checkInPost: null as null | (() => Promise<unknown>),
@@ -55,6 +56,7 @@ vi.mock('@/lib/core-http', () => {
       get: async (path: string, opts?: { query?: { beforeId?: string; limit?: number } }) => {
         state.calls.push({ method: 'get', path, query: opts?.query });
         if (state.fail.has(path)) throw new Error('Máy chủ đang bận');
+        if (state.pending.has(path)) return new Promise(() => undefined);
         return table[path]!(opts?.query);
       },
       post: async (path: string, body?: unknown, opts?: { headers?: Record<string, string> }) => {
@@ -86,6 +88,7 @@ const storage = new Map<string, string>();
 beforeEach(() => {
   state.phase = 'authenticated';
   state.fail = new Set();
+  state.pending = new Set();
   state.readyRoutes = new Set();
   state.calls = [];
   state.push.mockReset();
@@ -238,6 +241,14 @@ describe('/tai-khoan/diem-xanh — dòng mã giảm giá: Ví mã hoặc Đổi 
     expect(links[0]!.textContent).toContain('Đổi quà');
     expect(c.querySelector('a[href^="/uu-dai"]')).toBeNull();
     expect(c.textContent).not.toContain('Ví mã');
+  });
+
+  it('mã còn đang tải: dòng "Kho quà" ở thẻ lối tắt đã có sẵn, để thẻ không giãn ra khi tải xong', async () => {
+    state.pending.add('/me/coupons');
+    state.readyRoutes = new Set(['/uu-dai', '/kho-qua']);
+    const c = await mount();
+    expect(c.querySelector('a[href^="/uu-dai"]')).toBeNull();
+    expect(c.querySelector('a[href="/kho-qua"]')?.textContent).toContain('Kho quà');
   });
 
   it('không tải được mã: "Ví mã" không kèm số, không giả vờ "chưa có mã"', async () => {

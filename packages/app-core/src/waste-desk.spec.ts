@@ -36,8 +36,19 @@ describe('deskDoneCopy: chữ sau khi duyệt', () => {
 
 describe('deskClosedText: yêu cầu vừa đóng, chỉ đọc', () => {
   it('COMPLETED: "Đã duyệt lúc HH:mm" theo giờ Việt Nam', () => {
-    expect(deskClosedText({ status: 'COMPLETED', closedAt: '2026-10-28T03:05:00.000Z' })).toBe('Đã duyệt lúc 10:05');
-    expect(deskClosedText({ status: 'COMPLETED', closedAt: '2026-10-28T17:30:00.000Z' })).toBe('Đã duyệt lúc 00:30');
+    const now = new Date('2026-10-28T08:00:00.000Z');
+    expect(deskClosedText({ status: 'COMPLETED', closedAt: '2026-10-28T03:05:00.000Z' }, now)).toBe('Đã duyệt lúc 10:05');
+    expect(deskClosedText({ status: 'COMPLETED', closedAt: '2026-10-28T17:30:00.000Z' }, new Date('2026-10-28T18:00:00.000Z'))).toBe('Đã duyệt lúc 00:30');
+  });
+  it('đóng từ hôm trước (giờ Việt Nam) thì thêm ngày, để nhân viên không hiểu nhầm là hôm nay', () => {
+    const now = new Date('2026-10-29T02:00:00.000Z');
+    expect(deskClosedText({ status: 'COMPLETED', closedAt: '2026-10-28T03:05:00.000Z' }, now)).toBe('Đã duyệt lúc 10:05 ngày 28/10');
+    expect(deskClosedText({ status: 'COMPLETED', closedAt: '2026-10-05T03:05:00.000Z' }, now)).toBe('Đã duyệt lúc 10:05 ngày 05/10');
+  });
+  it('cùng ngày giờ Việt Nam thì chỉ hiện giờ, kể cả khi giờ UTC đã sang ngày khác', () => {
+    const now = new Date('2026-10-29T02:00:00.000Z');
+    expect(deskClosedText({ status: 'COMPLETED', closedAt: '2026-10-28T17:30:00.000Z' }, now)).toBe('Đã duyệt lúc 00:30');
+    expect(deskClosedText({ status: 'COMPLETED', closedAt: '2026-10-28T16:59:00.000Z' }, now)).toBe('Đã duyệt lúc 23:59 ngày 28/10');
   });
   it('COMPLETED thiếu giờ đóng: "Đã duyệt"', () => expect(deskClosedText({ status: 'COMPLETED', closedAt: null })).toBe('Đã duyệt'));
   it('REJECTED: "Đã từ chối"', () => expect(deskClosedText({ status: 'REJECTED', closedAt: '2026-10-28T03:05:00.000Z' })).toBe('Đã từ chối'));
