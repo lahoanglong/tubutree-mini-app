@@ -66,8 +66,8 @@ function Body({ kind }: { kind: SkeletonKind }) {
     case 'loyalty':
       return (
         <>
-          <Skeleton height={180} rounded="rounded-card" />
-          <Skeleton height={80} rounded="rounded-card" />
+          <Skeleton height={180} />
+          <Skeleton height={80} />
         </>
       );
     case 'game':
@@ -106,11 +106,12 @@ function Body({ kind }: { kind: SkeletonKind }) {
  * Khung chờ theo hình màn thật, dùng cho phiên đang khôi phục (AuthLoading) và loading.tsx của từng nhóm trang: nội dung hiện ra
  * không đổi bố cục. Chiều cao tối thiểu đủ cao để chân trang nằm dưới màn hình trong lúc chờ, không bị đẩy xuống khi nội dung về.
  */
-export function RouteSkeleton({ kind }: { kind?: SkeletonKind }) {
+export function RouteSkeleton({ kind, standalone = false }: { kind?: SkeletonKind; standalone?: boolean }) {
   const pathname = usePathname();
   const resolved = kind ?? skeletonKindFor(pathname);
-  // Điểm Xanh và Vườn Xanh: tiêu đề đã có sẵn ở khung trang, khối chờ dạng khối như Mini và nối thẳng vào khung chờ riêng của trang.
-  const block = resolved === 'loyalty' || resolved === 'game';
+  // Điểm Xanh và Vườn Xanh dựng trong khung trang (đã có PageHeader), nên khối chờ dạng khối như Mini, không có thanh tiêu đề.
+  // `standalone` (loading.tsx, chưa có PageHeader) vẫn giữ thanh tiêu đề để lúc trang về bố cục không nhảy.
+  const block = !standalone && (resolved === 'loyalty' || resolved === 'game');
   return (
     <div role="status" aria-busy="true" className={`flex min-h-[80vh] flex-col gap-3 ${block ? '' : 'py-4'}`}>
       <span className="sr-only">Đang tải…</span>
