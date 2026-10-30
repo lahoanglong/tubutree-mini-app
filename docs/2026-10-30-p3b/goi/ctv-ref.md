@@ -38,6 +38,8 @@ Cách sửa đề xuất: Ghi vào PROGRESS hoặc backlog của đợt (mục c
 
 ## e43-comment
 
+**BỎ khỏi đợt này: phiên b4 đang sửa affiliate.service.ts dòng 1468–1565 (nhánh review/1028c-ctv-vi), comment này nằm ngay dưới. Không sửa; nếu worktree đã sửa chỗ này thì trả lại như gốc 2ca045580. Báo cáo ghi skipped.**
+
 File: apps/api/src/modules/affiliate/affiliate.service.ts (khoảng dòng 1606)
 
 Vấn đề: Comment cũ còn ghi hoa hồng APPROVED là "không đảo được", trong khi E-43 (đã merge, docs/2026-10-29-p3/goi/e43-vi-ctv.md) đã đảo và cắt cả APPROVED/PAID.
@@ -45,6 +47,8 @@ Vấn đề: Comment cũ còn ghi hoa hồng APPROVED là "không đảo đượ
 Cách sửa đề xuất: Sửa comment theo hành vi hiện tại (nói vì sao, không kể chuyện thay đổi). grep thêm comment khác trong affiliate/ và orders/ còn nói "không đảo được" hoặc "chỉ báo kế toán, không trừ Ví".
 
 ## ctv-1
+
+**BỎ khỏi đợt này: phiên b4 đang sửa apps/web/src/app/ctv/page.tsx và apps/miniapp/src/pages/affiliate.tsx (nhánh review/1028c-ctv-vi). Không sửa; nếu worktree đã sửa chỗ này thì trả lại như gốc 2ca045580. Báo cáo ghi skipped.**
 
 File: apps/web (trang CTV / hoa hồng, khổ 375) so với apps/miniapp (trang CTV)
 

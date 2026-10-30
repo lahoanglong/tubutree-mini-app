@@ -6,6 +6,8 @@ Với mỗi mục: kiểm còn đúng trên mã hiện tại không (đường d
 
 ## phien-r1
 
+**Phạm vi: KHÔNG sửa apps/miniapp/src/pages/game.tsx, components/game/*, i18n/vi.ts, home.tsx (phiên b4 đang sửa). Chỉ sửa profile.tsx, offers.tsx, group-buy.tsx, loyalty/guest-tiers.tsx, support-contact.tsx; game.tsx ghi skipped.**
+
 File: apps/miniapp/src/pages/profile.tsx:184-201 (cùng game.tsx:146, offers.tsx:101, group-buy.tsx:94, loyalty/guest-tiers.tsx:21, support-contact.tsx:68)
 
 Vấn đề: Mục phien-10 vẫn mở trên mã hiện tại. Tài khoản bị khoá mở tab Cá nhân vẫn thấy 'Đã đăng xuất / Đăng nhập để xem...' với chữ cố định. Bấm 'Đăng nhập ngay' thì login() gặp ACCOUNT_BLOCKED, applyBlocked đặt error, nhưng EmptyState không đọc error nên khách không thấy lời báo gì. Các file này thuộc gói khác, nên gói phien skipped là đúng. Tuy vậy, không gói nào trong 8 gói P3 (kể cả tin-canhan) nhận mục này, nên nó sẽ rơi khỏi backlog.

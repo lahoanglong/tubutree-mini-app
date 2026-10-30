@@ -30,6 +30,8 @@ Cách sửa đề xuất: Tìm gốc (timer thật, waitFor mặc định 1s, d�
 
 ## tin-canhan-25
 
+**BỎ khỏi đợt này: phiên b4 đang sửa apps/api/src/modules/catalog/home.service.ts (/home/me, nhánh hieunang3). Không sửa; nếu worktree đã sửa chỗ này thì trả lại như gốc 2ca045580. Báo cáo ghi skipped.**
+
 File: apps/api (route GET /home/me), apps/miniapp/src/services/home-feed.ts, packages/app-core (HomeMeDTO nếu có), apps/web
 
 Vấn đề: /home/me vẫn trả khối notifications dù Mini/web đã đếm chưa đọc qua /me/notifications/unread-count; payload thừa mỗi lần mở trang chủ.
