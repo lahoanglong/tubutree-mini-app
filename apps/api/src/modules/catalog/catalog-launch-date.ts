@@ -2,9 +2,9 @@ export const CATALOG_LAUNCH_DATE_KEY = 'catalog.launch_date';
 
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** Rỗng (chưa đặt ngày) hoặc ngày YYYY-MM-DD có thật; còn lại trả lý do để từ chối lúc ghi. */
+/** Rỗng hoặc null (chưa đặt ngày) hoặc ngày YYYY-MM-DD có thật; còn lại trả lý do để từ chối lúc ghi. */
 export function catalogLaunchDateProblem(value: unknown): string | null {
-  if (value === '') return null;
+  if (value === '' || value === null) return null;
   const m = typeof value === 'string' ? DATE_RE.exec(value) : null;
   if (!m) return 'phải để trống hoặc là ngày dạng YYYY-MM-DD (giờ Việt Nam), vd "2026-11-01"';
   const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];

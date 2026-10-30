@@ -269,7 +269,7 @@ export class SystemConfigService {
   };
 
   /** Khoá mà null có nghĩa ("chưa đặt" — ETA giao hàng null = ẩn dòng "Giao dự kiến"): admin được đặt lại null. */
-  private static readonly NULLABLE_KEYS = new Set(['shipping.eta_min_days', 'shipping.eta_max_days', CHAT_ORDER_EARN_PCT_KEY]);
+  private static readonly NULLABLE_KEYS = new Set(['shipping.eta_min_days', 'shipping.eta_max_days', CHAT_ORDER_EARN_PCT_KEY, CATALOG_LAUNCH_DATE_KEY]);
 
   /** Bậc thưởng Season Pass tính bằng Điểm Xanh lớn nhất hợp lệ. */
   private static readonly SEASONPASS_POINTS_MAX = 100_000;

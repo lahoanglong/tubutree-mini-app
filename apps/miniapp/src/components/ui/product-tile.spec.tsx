@@ -18,6 +18,8 @@ const PRODUCT = {
 // pattern address-form.spec.tsx đã dùng cho vấn đề tương tự.
 function renderTile(ui: ReactElement) {
   const qc = new QueryClient();
+  // Config công khai đã về (chưa đặt mốc): thẻ áp luật 30 ngày ngay.
+  qc.setQueryData(['public-config'], { catalogLaunchDate: null });
   return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
 }
 
@@ -250,6 +252,26 @@ describe('ProductTile', () => {
       expect(withLaunch(today, new Date(startOfTodayVn).toISOString())).toBe(true);
       expect(withLaunch('', new Date(startOfTodayVn - 1000).toISOString())).toBe(true);
       expect(withLaunch(null, new Date(startOfTodayVn - 1000).toISOString())).toBe(true);
+    });
+
+    it('config công khai chưa về: chưa gắn nhãn (không hiện rồi tắt); tải lỗi thì giữ luật 30 ngày', async () => {
+      const recent = { ...PRODUCT, createdAt: daysAgo(5) };
+      const pending = new QueryClient();
+      const out = render(
+        <QueryClientProvider client={pending}>
+          <ProductTile product={recent} variant="grid" onPress={() => {}} />
+        </QueryClientProvider>,
+      );
+      expect(screen.queryByText('Mới')).toBeNull();
+      out.unmount();
+      const failed = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      await failed.prefetchQuery({ queryKey: ['public-config'], queryFn: () => Promise.reject(new Error('mạng')) });
+      render(
+        <QueryClientProvider client={failed}>
+          <ProductTile product={recent} variant="grid" onPress={() => {}} />
+        </QueryClientProvider>,
+      );
+      expect(await screen.findByText('Mới')).toBeInTheDocument();
     });
 
     it('cùng nhãn giảm giá: hai nhãn xếp dọc ở góc ảnh, không chồng nhau', () => {

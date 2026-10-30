@@ -11,7 +11,7 @@ import { useCatalogLaunchDate } from '@/lib/use-catalog-launch-date';
 export function NewProductBadge({ createdAt }: { createdAt: string | null | undefined }) {
   const hydrated = useHydrated();
   const launchDate = useCatalogLaunchDate();
-  if (!hydrated || !isNewProduct(createdAt, Date.now(), launchDate)) return null;
+  if (!hydrated || launchDate === undefined || !isNewProduct(createdAt, Date.now(), launchDate)) return null;
   return (
     <span
       data-testid="card-new-badge"

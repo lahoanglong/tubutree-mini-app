@@ -4,7 +4,7 @@ import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToString } from 'react-dom/server';
 import { hydrateRoot } from 'react-dom/client';
-import { click } from '@/test-utils/dom';
+import { click, flush } from '@/test-utils/dom';
 import { mount } from './harness';
 
 const mocks = vi.hoisted(() => ({ push: vi.fn(), flash: [] as unknown[] }));
@@ -100,11 +100,38 @@ describe('ProductTile', () => {
 
   it('nhãn "Mới" chỉ khi tạo trong 30 ngày gần nhất; thiếu ngày tạo, hết hàng hay quá 30 ngày thì không', () => {
     const daysAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString();
-    const text = (over: Partial<ProductTileProduct>) => mount(<ProductTile product={{ ...P, ...over }} onPress={() => {}} />).container.textContent!;
+    const text = (over: Partial<ProductTileProduct>) => {
+      const qc = new QueryClient();
+      qc.setQueryData(['public-config'], { catalogLaunchDate: null });
+      return mount(
+        <QueryClientProvider client={qc}>
+          <ProductTile product={{ ...P, ...over }} onPress={() => {}} />
+        </QueryClientProvider>,
+      ).container.textContent!;
+    };
     expect(text({ createdAt: daysAgo(5) })).toContain('Mới');
     expect(text({ createdAt: daysAgo(31) })).not.toContain('Mới');
     expect(text({})).not.toContain('Mới');
     expect(text({ createdAt: daysAgo(5), inStock: false })).not.toContain('Mới');
+  });
+
+  it('config công khai chưa về thì chưa gắn "Mới"; tải lỗi thì giữ luật 30 ngày', async () => {
+    const created = new Date(Date.now() - 5 * 864e5).toISOString();
+    const pending = mount(
+      <QueryClientProvider client={new QueryClient()}>
+        <ProductTile product={{ ...P, createdAt: created }} onPress={() => {}} />
+      </QueryClientProvider>,
+    );
+    expect(pending.container.textContent).not.toContain('Mới');
+    const failed = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await failed.prefetchQuery({ queryKey: ['public-config'], queryFn: () => Promise.reject(new Error('mạng')) });
+    const err = mount(
+      <QueryClientProvider client={failed}>
+        <ProductTile product={{ ...P, createdAt: created }} onPress={() => {}} />
+      </QueryClientProvider>,
+    );
+    await flush();
+    expect(err.container.textContent).toContain('Mới');
   });
 
   it('mốc ngày mở bán trong config công khai: tạo trước mốc không gắn "Mới", từ mốc trở đi theo luật 30 ngày', () => {

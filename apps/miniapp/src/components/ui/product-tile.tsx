@@ -87,7 +87,7 @@ export function ProductTile({
   const isLine = variant === 'line' || variant === 'list';
   // Hết hàng đã có lớp phủ trên ảnh, thẻ dạng dòng chỉ có ảnh 64px: không chồng thêm nhãn.
   const launchDate = useCatalogLaunchDate();
-  const showNew = !isLine && p.inStock !== false && isNewProduct(p.createdAt, Date.now(), launchDate);
+  const showNew = launchDate !== undefined && !isLine && p.inStock !== false && isNewProduct(p.createdAt, Date.now(), launchDate);
   // Tên truy cập = tên sản phẩm; giá (và giá gốc gạch) là mô tả truy cập của thẻ.
   const priceId = useId();
 

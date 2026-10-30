@@ -122,9 +122,10 @@ export class StorefrontQuestService {
     const claimedSet = new Set([...coinClaims, ...pointsClaims].map((t) => t.reason));
     let totalEarnedPoints = 0;
     const quests = QUESTS.map((q) => {
-      const progress = q.measure(stats);
-      const done = progress >= q.goal;
       const claimed = claimedSet.has(`STOREFRONT_QUEST:${q.code}`);
+      // Thưởng đã nhận theo luật cũ thì giữ nguyên: thanh tiến độ đầy dù số đo theo luật mới chưa đạt.
+      const progress = claimed ? q.goal : q.measure(stats);
+      const done = claimed || progress >= q.goal;
       if (claimed) totalEarnedPoints += q.rewardPoints;
       return { code: q.code, title: q.title, hint: q.code === 'publish' ? publishHint : q.hint, goal: q.goal, rewardPoints: q.rewardPoints, progress, done, claimed };
     });

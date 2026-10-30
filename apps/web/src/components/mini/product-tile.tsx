@@ -89,7 +89,7 @@ export function ProductTile({
   // Chỉ sau hydrate: nhãn theo giờ máy khách, HTML dựng sẵn (ISR) không được lệch lần hydrate đầu.
   const hydrated = useHydrated();
   const launchDate = useCatalogLaunchDate();
-  const showNew = hydrated && !isLine && p.inStock !== false && isNewProduct(p.createdAt, Date.now(), launchDate);
+  const showNew = hydrated && launchDate !== undefined && !isLine && p.inStock !== false && isNewProduct(p.createdAt, Date.now(), launchDate);
   // Tên truy cập = tên sản phẩm; giá (và giá gốc gạch) là mô tả truy cập của thẻ.
   const priceId = useId();
 
