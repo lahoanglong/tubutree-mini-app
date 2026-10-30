@@ -66,7 +66,12 @@ function ReportRow({ report: r, onDone }: { report: DealerCreditReport; onDone: 
 
   const dismiss = useMutation({
     mutationFn: (reason: string) => dismissDealerCreditReport(r.id, reason),
-    onSuccess: () => onDone(`Đã đóng báo cáo ${formatVnd(r.amount)} của ${who}: không thấy tiền. Sổ công nợ không đổi.`),
+    onSuccess: (res) =>
+      onDone(
+        res.alreadyProcessed
+          ? `Báo cáo ${formatVnd(r.amount)} của ${who} đã được xử lý trước đó, lần này sổ công nợ không đổi.`
+          : `Đã đóng báo cáo ${formatVnd(r.amount)} của ${who}: không thấy tiền. Sổ công nợ không đổi.`,
+      ),
     onError: (e) => setErr(e instanceof Error ? e.message : 'Thao tác thất bại.'),
   });
 
@@ -113,11 +118,13 @@ function ReportRow({ report: r, onDone }: { report: DealerCreditReport; onDone: 
           defaultOpen
           defaultAmount={r.amount}
           reportId={r.id}
-          onPaid={({ amount, balance, reportClosed }) =>
+          onPaid={({ amount, balance, reportClosed, alreadyRecorded }) =>
             onDone(
-              reportClosed === false
-                ? `Mã giao dịch này đã được ghi nhận trước đó, sổ công nợ của ${who} không đổi. Báo cáo ${formatVnd(r.amount)} vẫn mở: nếu trùng khoản đã ghi, đóng bằng "Không thấy tiền" kèm lý do.`
-                : `Đã ghi nhận ${formatVnd(amount)} của ${who}. Báo cáo đã đóng. Dư nợ còn lại ${formatVnd(balance)}.`,
+              alreadyRecorded
+                ? `Báo cáo ${formatVnd(r.amount)} của ${who} đã được ghi nhận trước đó, sổ công nợ lần này không đổi. Dư nợ hiện tại ${formatVnd(balance)}.`
+                : reportClosed === false
+                  ? `Mã giao dịch này đã được ghi nhận trước đó, sổ công nợ của ${who} không đổi. Báo cáo ${formatVnd(r.amount)} vẫn mở: nếu trùng khoản đã ghi, đóng bằng "Không thấy tiền" kèm lý do.`
+                  : `Đã ghi nhận ${formatVnd(amount)} của ${who}. Báo cáo đã đóng. Dư nợ còn lại ${formatVnd(balance)}.`,
             )
           }
         />

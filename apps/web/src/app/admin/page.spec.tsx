@@ -3649,6 +3649,8 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     await flush();
     expect(window.location.search).toBe('?tab=orders&status=PENDING_PAYMENT&queue=dealer_transfer_to_confirm');
     expect(mocks.listOrders).toHaveBeenLastCalledWith(1, 'PENDING_PAYMENT', undefined, undefined, 20, undefined, undefined, undefined, undefined, { queue: 'dealer_transfer_to_confirm', order: 'asc' });
+    expect(container.textContent).toContain('Đang xem đơn đại lý trả trước chưa nhận tiền, cũ nhất trước. Bấm Xoá bộ lọc để xem tất cả.');
+    expect(container.textContent).not.toContain('Đang xem đơn lẻ chuyển khoản chưa nhận tiền');
   });
 
   it('390px: vào hàng đợi chuyển khoản từ thẻ Hôm nay thì ngoài ngăn kéo vẫn có dòng giải thích và nút xem tất cả', async () => {
@@ -3751,6 +3753,30 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(window.location.search).toBe('?tab=users');
     expect(container.querySelector('#account-deletions')).not.toBeNull();
     expect(scroll).toHaveBeenCalled();
+  });
+
+  it('thẻ yêu cầu xoá tài khoản: khối yêu cầu xoá đứng trên danh sách người dùng (danh sách tải sau không đẩy nó ra khỏi màn hình)', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const api = mockFetch({ '/admin/account-deletion-requests': { body: [] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    click(container.querySelector('[data-inbox="accountDeletionPending"]')!);
+    await flush();
+    const block = container.querySelector('#account-deletions')!;
+    const usersHeading = [...container.querySelectorAll('h2')].find((h) => h.textContent === 'Quản lý người dùng & phân quyền')!;
+    expect(usersHeading).toBeTruthy();
+    expect(block.compareDocumentPosition(usersHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('vào Người dùng từ thanh menu (không qua thẻ): danh sách người dùng đứng trước khối yêu cầu xoá như thường', async () => {
+    const api = mockFetch({ '/admin/account-deletion-requests': { body: [] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    window.history.replaceState(null, '', '/admin?tab=users');
+    const { container } = await mount();
+    await flush();
+    const block = container.querySelector('#account-deletions')!;
+    const usersHeading = [...container.querySelectorAll('h2')].find((h) => h.textContent === 'Quản lý người dùng & phân quyền')!;
+    expect(block.compareDocumentPosition(usersHeading) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
   it('mở khối xoá tài khoản từ thẻ xong, lần sau vào Người dùng từ số "Khách mới hôm nay" thì không tự cuộn xuống khối đó', async () => {

@@ -45,6 +45,7 @@ import {
 } from '../flash-sale/flash-sale.service';
 import { isLockBusy, LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import { formatPoints } from '../../common/format-points';
+import { formatVndText } from '../../common/format-vnd';
 import { CouponPreviewDto, PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
 import { lockVariationsInIdOrder, reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, productDiscontinuedError } from '../cart/sellable';
@@ -412,7 +413,11 @@ export class CheckoutService {
       throw new BadRequestException({ statusCode: 400, error: 'Bad Request', code: PAYMENT_METHOD_NOT_ALLOWED, message: blocked });
     }
     if (paymentMethod === 'WALLET' && user.walletBalance < computed.total) {
-      throw new BadRequestException('Số dư Ví Tubu không đủ.');
+      throw new BadRequestException(
+        user.walletBalance < 0
+          ? `Số dư Ví Tubu đang âm ${formatVndText(-user.walletBalance)} do thu hồi hoa hồng đơn trả hàng. Hãy chọn cách thanh toán khác, hoa hồng mới sẽ bù vào số âm.`
+          : 'Số dư Ví Tubu không đủ.',
+      );
     }
     // Bưu tá thu gom vỏ đi cùng kiện kho Tubu (vận đơn Gomdon đổi hàng) — không có kiện Tubu thì không ai đi thu.
     const tubuShipment = computed.shipments.find((s) => s.fulfiller.kind === 'TUBU');

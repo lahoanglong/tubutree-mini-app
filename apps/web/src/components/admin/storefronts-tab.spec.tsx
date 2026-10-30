@@ -292,6 +292,8 @@ describe('StorefrontsTab (D3-02)', () => {
       await flush();
       const call = api.calls.find((c) => c.url.includes('/content-seen'))!;
       expect(call.init?.method).toBe('POST');
+      // Gửi mốc đổi đang hiện trên dòng: chủ đổi thêm lần nữa thì máy chủ giữ lại dấu mới.
+      expect(JSON.parse(String(call.init?.body))).toEqual({ seenChangedAt: '2026-10-20T03:30:00.000Z' });
       expect(api.calls.some((c) => c.url.includes('/approval') || c.url.includes('/take-down'))).toBe(false);
       expect(listCalls()).toBeGreaterThan(before);
     });
@@ -311,7 +313,30 @@ describe('StorefrontsTab (D3-02)', () => {
       expect(drawer.textContent).toContain('Chủ đã đổi tên, lời giới thiệu hoặc ảnh sau khi duyệt');
       click(byText(drawer, 'button', 'Đã xem'));
       await flush();
-      expect(api.calls.some((c) => c.url.endsWith('/admin/storefronts/s9/content-seen') && c.init?.method === 'POST')).toBe(true);
+      const seenCall = api.calls.find((c) => c.url.endsWith('/admin/storefronts/s9/content-seen') && c.init?.method === 'POST');
+      expect(seenCall).toBeDefined();
+      expect(JSON.parse(String(seenCall!.init?.body))).toEqual({ seenChangedAt: '2026-10-20T03:30:00.000Z' });
+    });
+
+    it('chủ đổi thêm khi ngăn đang mở: "Đã xem" gửi mốc admin đã thấy, máy chủ trả dấu mới thì ngăn hiện lại dấu mới', async () => {
+      let detailCalls = 0;
+      const api = mockFetch({
+        '/admin/storefronts/s9/content-seen': { body: row({ id: 's9', contentChangedAt: '2026-10-20T05:00:00.000Z' }) },
+        '/admin/storefronts/s9': () => ({ body: detail({ id: 's9', title: 'Shop đổi tên', approved: true, approvedAt: '2026-10-01T00:00:00.000Z', contentChangedAt: ++detailCalls === 1 ? '2026-10-20T03:30:00.000Z' : '2026-10-20T05:00:00.000Z' }) }),
+        '/admin/storefronts?': page([changed()], 1),
+      });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      click(byText(container.querySelector('article[aria-label="Shop đổi tên"]') as HTMLElement, 'button', 'Xem'));
+      await flush();
+      const drawer = document.body.querySelector('[role="dialog"]') as HTMLElement;
+      click(byText(drawer, 'button', 'Đã xem'));
+      await flush();
+      const seenCall = api.calls.find((c) => c.url.endsWith('/content-seen'))!;
+      expect(JSON.parse(String(seenCall.init?.body))).toEqual({ seenChangedAt: '2026-10-20T03:30:00.000Z' });
+      expect(drawer.textContent).toContain('Xem lại rồi bấm "Đã xem"');
+      expect(byText(drawer, 'button', 'Đã xem')).not.toBeNull();
     });
   });
 });

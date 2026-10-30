@@ -236,7 +236,9 @@ export function VideoUpload({
     onBusyChange?.(next);
   };
 
+  // Một lần tải mỗi lúc: lần hai chạy song song sẽ báo "xong" trước lần đầu và mở lại nút Gửi của form khi video vẫn đang tải.
   const pick = () => {
+    if (uploading) return;
     haptic('light');
     inputRef.current?.click();
   };
@@ -267,10 +269,10 @@ export function VideoUpload({
         <div>
           <video src={value} controls style={{ width: '100%', maxHeight: 200, borderRadius: 'var(--radius-control)', background: 'var(--color-bg-inverse)' }} />
           <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
-            <button type="button" onClick={pick} style={LINK_BUTTON}>
-              <Text variant="caption" tone="brand" as="span">Đổi video</Text>
+            <button type="button" onClick={pick} disabled={uploading} style={LINK_BUTTON}>
+              <Text variant="caption" tone="brand" as="span">{uploading ? videoUploadCopy.uploading : 'Đổi video'}</Text>
             </button>
-            <button type="button" onClick={() => onChange('')} style={LINK_BUTTON}>
+            <button type="button" onClick={() => onChange('')} disabled={uploading} style={LINK_BUTTON}>
               <Text variant="caption" tone="danger" as="span">Xoá video</Text>
             </button>
           </div>
@@ -280,6 +282,7 @@ export function VideoUpload({
           type="button"
           className="tubu-press"
           onClick={pick}
+          disabled={uploading}
           style={{
             width: '100%',
             font: 'inherit',

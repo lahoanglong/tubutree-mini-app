@@ -209,6 +209,13 @@ describe('walletUnavailableReason (C-080)', () => {
     expect(walletUnavailableReason(130_000, 798_000)).toBe('Số dư chưa đủ — cần thêm 668.000đ');
   });
 
+  it('Ví âm (thu hồi hoa hồng đơn trả hàng) → lời riêng nêu số âm, không "cần thêm" tính từ số âm; chọn lại cách khác', () => {
+    expect(walletUnavailableReason(-50_000, 120_000)).toBe(
+      'Ví đang âm 50.000đ do thu hồi hoa hồng đơn trả hàng, nên chưa trả đơn bằng Ví được. Hãy chọn cách thanh toán khác.',
+    );
+    expect(pickPaymentMethod('WALLET', { total: 120_000 }, -50_000)).toBe('COD');
+  });
+
   it('đủ số dư (kể cả bằng đúng tổng đơn) → null, không có lý do', () => {
     expect(walletUnavailableReason(798_000, 798_000)).toBeNull();
     expect(walletUnavailableReason(900_000, 798_000)).toBeNull();

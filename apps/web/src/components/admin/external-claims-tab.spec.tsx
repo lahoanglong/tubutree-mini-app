@@ -352,6 +352,31 @@ describe('ExternalClaimsTab', () => {
     });
   });
 
+  it('seed lần gửi mã: chờ danh sách yêu cầu phía trên tải xong rồi mới cuộn (danh sách làm khối này dịch xuống), và chỉ cuộn một lần', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const base = stub({ claims: [claim(), claim({ id: 'c2' })] });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (u: string, i?: RequestInit) => {
+        if (u.includes('/admin/external-claims?')) await gate;
+        return base.fn(u, i);
+      }),
+    );
+    const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" seed={{ part: 'attempts', n: 1 }} />);
+    await flush();
+    expect(scroll).not.toHaveBeenCalled();
+    release();
+    await flush();
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(r.container.querySelectorAll('[data-external-claim]')).toHaveLength(2);
+    click(btn(r.container, 'Tất cả')!);
+    await flush();
+    expect(scroll).toHaveBeenCalledTimes(1);
+  });
+
   it('hộp thoại Gắn đơn nói đúng luật; hộp thoại huỷ có nút Đóng thay cho Huỷ', async () => {
     stub({ claims: [claim()], attempts: [attempt()] });
     const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);

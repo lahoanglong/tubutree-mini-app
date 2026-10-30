@@ -70,9 +70,6 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId, seed }: Who & { seed?
   const [typed, setTyped] = useState('');
   const [attention, setAttention] = useState<AdminExternalClaimAttentionFilter | ''>(seeded ? seeded.attention : '');
   const attemptsRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (seed?.part === 'attempts') attemptsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-  }, [seed]);
   // Cùng khoá với thẻ Hôm nay nên dùng chung bộ nhớ đệm; chỉ CSKH và ADMIN có thẻ này.
   const inbox = useQuery({ queryKey: OPS_INBOX_QUERY_KEY, queryFn: getOpsInbox, refetchInterval: 60_000, retry: false, enabled: isAdmin || canAct });
   const parts = inbox.data?.items.find((i) => i.key === 'externalPoints')?.parts;
@@ -99,6 +96,14 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId, seed }: Who & { seed?
   // Chỉ admin đọc được cấu hình; nhân viên không thấy băng này.
   const flag = useQuery({ queryKey: ['admin-config', 'loyalty'], queryFn: () => getConfig('loyalty'), enabled: isAdmin });
   const flagOff = isAdmin && flag.isSuccess && configValue<unknown>(flag.data, 'loyalty.marketplace_claim_enabled', false) !== true;
+  // Khối lần gửi mã nằm dưới danh sách yêu cầu và hàng chip: cuộn khi những phần đó đã tải xong, kẻo chúng đẩy khối xuống ngoài màn hình.
+  const settled = !claims.isLoading && !inbox.isLoading && !flag.isLoading;
+  const scrolledSeed = useRef<number | null>(null);
+  useEffect(() => {
+    if (seed?.part !== 'attempts' || !settled || scrolledSeed.current === seed.n) return;
+    scrolledSeed.current = seed.n;
+    attemptsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [seed, settled]);
 
   return (
     <div className="space-y-4">

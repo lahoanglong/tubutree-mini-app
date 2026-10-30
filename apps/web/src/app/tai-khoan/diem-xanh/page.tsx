@@ -148,8 +148,8 @@ export default function LoyaltyPage() {
     { href: '/vuon-xanh', icon: Sprout, title: 'Vườn Xanh', sub: 'Chăm cây nhận quà', show: isWebRouteReady('/vuon-xanh') },
     { href: '/doi-rac', icon: Recycle, title: 'Đổi rác lấy quà', sub: 'Đổi bao bì lấy Điểm Xanh', show: wasteOn && isWebRouteReady('/doi-rac') },
     { href: '/doi-rac/yeu-cau', icon: Recycle, title: wasteHistoryMenu.label, sub: wasteHistoryMenu.hint, show: wasteOff && hasWasteHistory && isWebRouteReady('/doi-rac/yeu-cau') },
-    // Khi chưa có mã, dòng "Đổi quà" ngay dưới thẻ hạng đã dẫn tới Kho quà: không lặp lại.
-    { href: '/kho-qua', icon: Gift, title: 'Kho quà', sub: 'Đổi Điểm Xanh lấy mã giảm giá và quà', show: couponRow.to === 'coupons' && isWebRouteReady('/kho-qua') },
+    // Khi chưa có mã, dòng "Đổi quà" ngay dưới thẻ hạng đã dẫn tới Kho quà: không lặp lại. Mã còn đang tải thì giữ dòng, để thẻ không giãn ra khi tải xong.
+    { href: '/kho-qua', icon: Gift, title: 'Kho quà', sub: 'Đổi Điểm Xanh lấy mã giảm giá và quà', show: (couponsQ.isLoading || couponRow.to === 'coupons') && isWebRouteReady('/kho-qua') },
   ].filter((s) => s.show);
   const celebrateStyle = tierStyleAt(celebrate ? tierRank(data.tiers, { name: celebrate }) : 0);
 

@@ -7,7 +7,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { ShoppingCart } from 'lucide-react';
 import { addToCart } from '@tubutree/app-core/api/cart';
 import { fetchProduct, type ProductCard, type VariationDetail } from '@tubutree/app-core/api/catalog';
-import { quickAddPlan } from '@tubutree/app-core/quick-add';
+import { QUICK_ADD_SOLD_OUT, quickAddPlan } from '@tubutree/app-core/quick-add';
+import { wishlistQuery } from '@tubutree/app-core/queries/wishlist';
 import { cartKey, cartStorefrontSlug } from '@/lib/cart-key';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/error-text';
@@ -76,7 +77,11 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
       setBusyId(product.id);
       const detail = await fetchProduct(coreHttp, product.slug);
       const plan = quickAddPlan(detail.variations);
-      if (plan.kind === 'soldOut') show({ ok: false, text: 'Sản phẩm vừa hết hàng. Bạn xem sản phẩm khác nhé.' });
+      if (plan.kind === 'soldOut') {
+        show({ ok: false, text: QUICK_ADD_SOLD_OUT });
+        // Thẻ còn nút giỏ và không có lớp Hết hàng nếu không tải lại: khách bấm lại sẽ ra đúng lời báo này.
+        void qc.invalidateQueries({ queryKey: wishlistQuery(coreHttp).queryKey });
+      }
       else if (plan.kind === 'pick') setPicker({ product, variations: detail.variations });
       else await addLine(plan.variationId, 1);
     });

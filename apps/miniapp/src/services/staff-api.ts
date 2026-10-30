@@ -37,7 +37,7 @@ export const listStaff = () => api.get<StaffListResponse>('/admin/staff').then((
 /** `permissions` chỉ gửi khi có (cấp STAFF): không gửi = không đổi nhóm việc đã lưu. */
 export const grantStaff = (phone: string, role: StaffRole, permissions?: StaffPermission[]) =>
   api
-    .post<{ granted: StaffRole; applied: boolean }>('/admin/staff/grant', { phone, role, ...(permissions ? { permissions } : {}) })
+    .post<{ granted: StaffRole; applied: boolean; permissionsChanged?: boolean }>('/admin/staff/grant', { phone, role, ...(permissions ? { permissions } : {}) })
     .then((r) => r.data);
 
 export const revokeStaff = (phone: string) =>

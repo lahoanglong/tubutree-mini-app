@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
+import { renderToString } from 'react-dom/server';
+import { hydrateRoot } from 'react-dom/client';
 import { click } from '@/test-utils/dom';
 import { mount } from './harness';
 
@@ -102,6 +104,34 @@ describe('ProductTile', () => {
     expect(text({ createdAt: daysAgo(31) })).not.toContain('Mới');
     expect(text({})).not.toContain('Mới');
     expect(text({ createdAt: daysAgo(5), inStock: false })).not.toContain('Mới');
+  });
+
+  it('HTML dựng sẵn không mang nhãn "Mới"; SP qua mốc 30 ngày giữa lúc dựng và lúc hydrate thì hydrate không lỗi', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-28T10:00:00Z'));
+      const createdAt = new Date('2026-09-28T12:00:00Z').toISOString();
+      const ui = () => <ProductTile product={{ ...P, createdAt }} onPress={() => {}} />;
+      const html = renderToString(ui());
+      expect(html).not.toContain('Mới');
+      vi.setSystemTime(new Date('2026-10-28T13:00:00Z'));
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      document.body.appendChild(container);
+      const errors: unknown[] = [];
+      const consoleError = vi.spyOn(console, 'error').mockImplementation((...a) => void errors.push(a));
+      let root!: ReturnType<typeof hydrateRoot>;
+      await act(async () => {
+        root = hydrateRoot(container, ui(), { onRecoverableError: (e) => void errors.push(e) });
+      });
+      consoleError.mockRestore();
+      expect(errors).toEqual([]);
+      expect(container.textContent).not.toContain('Mới');
+      act(() => root.unmount());
+      container.remove();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('giá sale hiện kèm giá gốc; priceOverride (giờ vàng) thắng', () => {

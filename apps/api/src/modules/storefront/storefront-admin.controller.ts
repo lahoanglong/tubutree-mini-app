@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsISO8601, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Trim } from '../../common/decorators/trim.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -27,6 +27,11 @@ export class TakeDownStorefrontDto {
 
 export class ApproveStorefrontDto {
   @IsBoolean() approved!: boolean;
+}
+
+export class ContentSeenDto {
+  /** Mốc `contentChangedAt` admin đang xem; app cũ không gửi thì xoá dấu vô điều kiện. */
+  @IsOptional() @IsISO8601() seenChangedAt?: string;
 }
 
 /** Admin: kiểm duyệt gian hàng (D3-02). Chỉ ADMIN: gỡ đăng và duyệt là quyết định về nội dung công khai, không thuộc nhóm việc STAFF nào. */
@@ -66,7 +71,7 @@ export class StorefrontAdminController {
   /** "Đã xem" nội dung chủ đổi sau khi duyệt. */
   @Post(':id/content-seen')
   @HttpCode(HttpStatus.OK)
-  contentSeen(@CurrentUser('sub') adminId: string, @Param('id') id: string) {
-    return this.admin.markContentSeen(adminId, id);
+  contentSeen(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ContentSeenDto) {
+    return this.admin.markContentSeen(adminId, id, dto?.seenChangedAt);
   }
 }

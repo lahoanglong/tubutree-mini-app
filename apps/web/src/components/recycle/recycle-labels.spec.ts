@@ -59,6 +59,12 @@ describe('nhãn Đổi rác', () => {
     expect(closedLabel({ ...base, status: 'REVERSED', reversedPoints: 4000, reversalReason: 'nhầm' })).toEqual({ label: 'Đã thu hồi 4.000 điểm', reason: 'nhầm' });
     expect(closedLabel({ ...base, status: 'OPEN' })).toBeNull();
   });
+  it('closedLabel: hết hạn giữ chỗ của đường gửi kiện chỉ lối đi tiếp (nhắn CSKH kèm mã vận đơn), đường khác thì không', () => {
+    const base = { status: 'EXPIRED' as const, closeReason: 'HOLD_EXPIRED' as const, rejectionReason: null, rejectionNote: null, reversedPoints: null, reversalReason: null };
+    expect(closedLabel({ ...base, method: 'MAIL_IN' })).toEqual({ label: 'Hết hạn giữ chỗ', reason: 'Nếu bạn đã gửi kiện, hãy nhắn CSKH kèm mã vận đơn để được hỗ trợ' });
+    expect(closedLabel({ ...base, method: 'DROP_OFF' })).toEqual({ label: 'Hết hạn giữ chỗ', reason: null });
+    expect(closedLabel({ ...base, closeReason: 'LOST', method: 'MAIL_IN' })).toEqual({ label: 'Đã đóng vì thất lạc', reason: null });
+  });
   it('nextRewardProgress bỏ quà hết hàng và cây, equivalentUnits làm tròn lên', () => {
     const p = nextRewardProgress(makeRewardCatalog({ redeemablePoints: 14_000 }));
     expect(p).toMatchObject({ rewardName: 'mã Miễn phí vận chuyển', missing: 6000, have: 14_000 });

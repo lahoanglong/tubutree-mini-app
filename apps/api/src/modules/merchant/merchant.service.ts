@@ -30,6 +30,7 @@ import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { isLockBusy, LOCK_BUSY_MESSAGE, throwIfLockBusy } from '../../common/lock-busy';
 import { DEFAULT_STOREFRONT_SUBDOMAIN_ENABLED, isStorefrontSubdomainEnabled, withSubdomainFlag } from '../storefront/storefront-config';
 import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from '../storefront/storefront-publish';
+import { contentChangedPatch } from '../storefront/storefront-content-change';
 
 /** Số lần thử lại tối đa khi tạo gian hàng đụng race condition (P2002) trên subdomain. */
 const MAX_CREATE_STORE_RETRY = 5;
@@ -454,6 +455,8 @@ export class MerchantService {
     for (const [key, v] of Object.entries(updateData)) {
       if (key !== 'title' && typeof v === 'string' && v.trim() === '') (updateData as Record<string, unknown>)[key] = null;
     }
+    // Cổng này sửa cùng gian hàng với builder của CTV nên cũng phải để lại dấu cho admin xem lại.
+    Object.assign(updateData, contentChangedPatch(store, updateData));
 
     // Cổng /merchant luôn gửi lại isPublished kèm mọi lần lưu: chỉ lúc đổi trạng thái mới kiểm điều kiện đăng và đụng tới mốc đăng,
     // không thì gian hàng cũ chưa có sản phẩm không lưu nổi tên, và gian hàng đang bị gỡ mất mốc đăng mà admin cần để đăng lại.

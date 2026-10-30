@@ -17,6 +17,7 @@ import {
 } from '@tubutree/app-core/dealer-apply-copy';
 import { applyPitch, pendingBody } from '@/lib/dealer-view';
 import { ui } from '@/lib/guest-ui';
+import { phoneBodySm, phoneCaption } from '@/lib/phone-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { Field } from '@/components/ui/field';
 import { BrandImageField } from '@/components/brand-owner/brand-image-field';
@@ -73,20 +74,20 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
           <p className="mt-1 text-sm text-stone-100">{applyPitch(config.isLoaded ? config.dealer?.maxDiscountPct : null)}</p>
         </div>
 
-        <section data-testid="dealer-conditions" className="mt-3 rounded-card border border-stone-200 bg-stone-0 p-3">
-          <h3 className="text-sm font-semibold text-stone-900">{DEALER_REQUIREMENTS_TITLE}</h3>
-          <ul className="mb-2 mt-1 list-disc pl-[18px] text-sm text-stone-600">
+        <section data-testid="dealer-conditions" className="mt-3 rounded-card border border-stone-200 bg-stone-0 p-3 max-md:border-0">
+          <h3 className={`text-sm font-semibold text-stone-900 ${phoneBodySm}`}>{DEALER_REQUIREMENTS_TITLE}</h3>
+          <ul className={`mb-2 mt-1 list-disc pl-[18px] text-sm text-stone-600 ${phoneBodySm}`}>
             {DEALER_REQUIREMENTS.map((t) => (
               <li key={t}>{t}</li>
             ))}
           </ul>
-          <h3 className="text-sm font-semibold text-stone-900">{DEALER_BENEFITS_TITLE}</h3>
-          <ul className="mb-2 mt-1 list-disc pl-[18px] text-sm text-stone-600">
+          <h3 className={`text-sm font-semibold text-stone-900 ${phoneBodySm}`}>{DEALER_BENEFITS_TITLE}</h3>
+          <ul className={`mb-2 mt-1 list-disc pl-[18px] text-sm text-stone-600 ${phoneBodySm}`}>
             {DEALER_BENEFITS.map((t) => (
               <li key={t}>{t}</li>
             ))}
           </ul>
-          <p className="text-xs text-stone-600">{dealerReviewLine(config.isLoaded ? config.dealer?.reviewHours : null)}</p>
+          <p className={`text-xs text-stone-600 ${phoneCaption}`}>{dealerReviewLine(config.isLoaded ? config.dealer?.reviewHours : null)}</p>
         </section>
 
         {rejected && (

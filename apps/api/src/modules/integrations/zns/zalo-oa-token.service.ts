@@ -84,7 +84,7 @@ export class ZaloOaTokenService {
         ]);
       } catch (e) {
         this.logger.error(
-          `Zalo OA đã cấp token mới nhưng ghi DB lỗi (${(e as Error).message}). Refresh token mới kết thúc bằng "${data.refresh_token.slice(-6)}": ` +
+          `Zalo OA refresh: đã cấp token mới nhưng ghi DB lỗi (${(e as Error).message}). Refresh token mới kết thúc bằng "${data.refresh_token.slice(-6)}": ` +
             'lấy lại token ở developers.zalo.me nếu lượt làm mới sau vẫn lỗi.',
         );
         return false;
