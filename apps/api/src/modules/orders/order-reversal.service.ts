@@ -71,7 +71,7 @@ export interface PartialReversalResult {
   commissionCut: number;
   /** Phần hoa hồng đã cắt theo từng CTV (chỉ số > 0): để báo CTV sau commit, như lần thu hồi cả đơn. */
   commissionCutBy: { affiliateUserId: string; amount: number }[];
-  /** Phần cắt của hoa hồng đã vào Ví CTV: đã trừ Ví phần thực nhận của nó (số dư có thể âm). Báo kế toán khi Ví CTV âm hoặc lệnh chuyển gốc có thuế TNCN. */
+  /** Phần cắt của hoa hồng đã vào Ví CTV: đã trừ Ví phần thực nhận của nó (số dư có thể âm). Báo kế toán khi Ví CTV âm hoặc thu nhập đã kê ở báo cáo thuế. */
   commissionDebited: CommissionDebitNote[];
   /** Phần cắt không tự trừ được (lệnh rút ngân hàng cũ, CTV đã xoá tài khoản): hoa hồng giữ nguyên, kế toán xử lý tay. */
   commissionManual: CommissionManualNote[];
@@ -575,7 +575,7 @@ export class OrderReversalService {
         }
         // Dòng sổ của yêu cầu này đã có (chạy lại): phần cắt đã áp từ trước, không cắt amount lần hai.
         if (!debit.applied) continue;
-        debited = { affiliateUserId: row.affiliateUserId, amount: cut, walletDebit: debit.walletDebit, taxWithheld: debit.taxWithheld, balanceAfter: debit.balanceAfter };
+        debited = debit.note;
       }
       const res = await tx.commission.updateMany({
         where: {

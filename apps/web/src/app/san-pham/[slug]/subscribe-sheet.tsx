@@ -18,7 +18,7 @@ import { formatVnd } from '@/lib/format-vnd';
 import { bankPaymentHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
-import { addressText, formatVnDate, isStartDateAllowed, startDateRange } from '@/lib/subscription-options';
+import { addressText, formatVnDate, isStartDateAllowed, startDateRange, subscriptionWalletBlockedReason } from '@/lib/subscription-options';
 import { actionErrorText } from '@/lib/error-text';
 
 const INTERVALS = [4, 6, 8, 10];
@@ -38,23 +38,24 @@ function SectionLabel({ children }: { children: ReactNode }) {
   return <div className="mb-1 mt-4 text-sm font-semibold text-stone-900">{children}</div>;
 }
 
-function RadioRow({ checked, onSelect, title, hint }: { checked: boolean; onSelect: () => void; title: ReactNode; hint?: ReactNode }) {
+function RadioRow({ checked, onSelect, title, hint, disabled = false }: { checked: boolean; onSelect: () => void; title: ReactNode; hint?: ReactNode; disabled?: boolean }) {
   return (
     <button
       type="button"
       role="radio"
       aria-checked={checked}
+      disabled={disabled}
       onClick={() => {
         if (!checked) onSelect();
       }}
-      className="flex min-h-11 w-full items-center gap-3 py-2 text-left"
+      className={`flex min-h-11 w-full items-center gap-3 py-2 text-left ${disabled ? 'cursor-not-allowed' : ''}`}
     >
       <span
         aria-hidden="true"
         className={`h-5 w-5 shrink-0 rounded-full border-2 ${checked ? 'border-forest-600 bg-forest-600 ring-2 ring-inset ring-stone-0' : 'border-stone-450 bg-stone-0'}`}
       />
       <span className="min-w-0 flex-1">
-        <span className={`block text-sm text-stone-900 ${checked ? 'font-semibold' : ''}`}>{title}</span>
+        <span className={`block text-sm ${disabled ? 'text-stone-500' : 'text-stone-900'} ${checked ? 'font-semibold' : ''}`}>{title}</span>
         {hint && <span className="block text-xs text-stone-600">{hint}</span>}
       </span>
     </button>
@@ -88,6 +89,7 @@ export function SubscribeSheet({
   const discountPct = Math.round(usePublicConfig().subscribeDiscountPct * 100);
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: visible });
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: visible });
+  const walletBlocked = subscriptionWalletBlockedReason(walletQ.data?.walletBalance);
   const addresses = addrQ.data ?? [];
   const defaultAddr = addresses.find((a) => a.isDefault) ?? addresses[0];
 
@@ -164,7 +166,7 @@ export function SubscribeSheet({
             <button
               type="button"
               className={`${ui.btnPrimary} w-full`}
-              disabled={!addressId || !dateOk || create.isPending}
+              disabled={!addressId || !dateOk || create.isPending || (payment === 'WALLET' && walletBlocked !== null)}
               onClick={() => create.mutate()}
             >
               {create.isPending ? 'Đang tạo…' : 'Bắt đầu đặt định kỳ'}
@@ -221,9 +223,10 @@ export function SubscribeSheet({
           <RadioRow
             key={m}
             checked={payment === m}
+            disabled={m === 'WALLET' && walletBlocked !== null}
             onSelect={() => setPayment(m)}
             title={m === 'WALLET' && walletQ.data ? `Ví Tubu (${formatVnd(walletQ.data.walletBalance)})` : PAY_LABEL[m]}
-            hint={payment === m ? PAY_HINT[m] : undefined}
+            hint={m === 'WALLET' && walletBlocked ? walletBlocked : payment === m ? PAY_HINT[m] : undefined}
           />
         ))}
       </div>

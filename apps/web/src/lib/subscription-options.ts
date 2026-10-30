@@ -1,4 +1,6 @@
 import { MAX_START_DAYS_AHEAD, type SubscriptionDTO } from '@tubutree/app-core/api/subscriptions';
+import { walletNegativeCheckoutReason } from '@tubutree/app-core/wallet-rules';
+import { formatVnd } from './format-vnd';
 
 const VN_OFFSET_MS = 7 * 3600 * 1000;
 
@@ -55,4 +57,12 @@ export function formatVnDate(date: string): string {
 
 export function addressText(a: { street: string; ward: string; district: string }): string {
   return [a.street, a.ward, a.district].filter(Boolean).join(', ');
+}
+
+/**
+ * Lý do không chọn được trả mỗi kỳ bằng Ví (null = chọn được): Ví đang âm vì đã thu hồi hoa hồng đơn trả hàng. Cùng câu với màn thanh
+ * toán và Mini App; kỳ giao trừ Ví lúc đó sẽ không đủ tiền và gói bị tạm dừng.
+ */
+export function subscriptionWalletBlockedReason(walletBalance: number | undefined): string | null {
+  return walletBalance !== undefined && walletBalance < 0 ? walletNegativeCheckoutReason(formatVnd(-walletBalance)) : null;
 }

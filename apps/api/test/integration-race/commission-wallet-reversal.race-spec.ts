@@ -563,6 +563,99 @@ describe('Thu hồi hoa hồng đã vào Ví khi đơn bị trả (real Postgres
     await noDrift(o.ctv.id);
   });
 
+  const vndText = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
+  const vnMonthLabel = (at: Date) => {
+    const vn = new Date(at.getTime() + 7 * 3600 * 1000);
+    return `${String(vn.getUTCMonth() + 1).padStart(2, '0')}/${vn.getUTCFullYear()}`;
+  };
+
+  it('một lệnh chuyển có thuế gộp nhiều hoa hồng, thu hồi một khoản: Ví trừ phần thực nhận của riêng khoản đó, tin nêu phần thuế của khoản và tổng thuế của lệnh', async () => {
+    await withPit(async () => {
+      const o1 = await paidInWalletOrder(1);
+      const o2 = await paidInWalletOrder(2, { ctv: o1.ctv });
+      const o3 = await paidInWalletOrder(3, { ctv: o1.ctv });
+      await moveToWallet(o1.ctv.id);
+      const payout = await payoutOf(o1.ctv.id);
+      expect(payout).toMatchObject({ grossAmount: 60_000, taxWithheld: 6_000, amount: 54_000 });
+      expect(await balance(o1.ctv.id)).toBe(54_000);
+
+      await fullReturn(o2);
+
+      expect((await reversals(o1.ctv.id)).map((r) => r.delta)).toEqual([-18_000]);
+      expect(await balance(o1.ctv.id)).toBe(36_000);
+      const message = (taxAlerts(o2.order.code)[0]![2] as { message: string }).message;
+      expect(message).toContain(
+        `${vndText(20_000)}, khoản này đã kê là thu nhập tháng ${vnMonthLabel(payout.paidAt!)}, đã trừ Ví ${vndText(18_000)}, ` +
+          `phần thuế TNCN tương ứng ${vndText(2_000)} (lệnh ${payout.id} giữ tổng ${vndText(6_000)})`,
+      );
+      expect(message).toContain('cần kế toán xử lý');
+
+      // Thu hồi nốt hai khoản còn lại: tổng đã trừ đúng bằng số lệnh đã cộng vào Ví.
+      await fullReturn(o1);
+      await fullReturn(o3);
+      expect((await reversals(o1.ctv.id)).reduce((sum, r) => sum + r.delta, 0)).toBe(-54_000);
+      expect(await balance(o1.ctv.id)).toBe(0);
+      await noDrift(o1.ctv.id);
+    });
+  });
+
+  it('lệnh chuyển không thuế (có grossAmount): Ví không âm vẫn báo kế toán vì thu nhập đã kê ở báo cáo thuế tháng chi', async () => {
+    const o = await paidInWalletOrder(1, { ctvWalletBefore: 5_000 });
+    await moveToWallet(o.ctv.id);
+    const payout = await payoutOf(o.ctv.id);
+    expect(payout).toMatchObject({ grossAmount: 10_000, taxWithheld: 0 });
+
+    await fullReturn(o);
+
+    expect(await balance(o.ctv.id)).toBe(5_000);
+    const message = (taxAlerts(o.order.code)[0]![2] as { message: string }).message;
+    expect(message).toContain(`${vndText(10_000)}, khoản này đã kê là thu nhập tháng ${vnMonthLabel(payout.paidAt!)} (lệnh ${payout.id}), đã trừ Ví ${vndText(10_000)}`);
+    expect(message).not.toContain('thuế TNCN');
+    await noDrift(o.ctv.id);
+  });
+
+  it('hoa hồng PAID cũ mà lệnh chuyển Ví gần nhất đã chi xong trước lúc hoa hồng thành PAID: không phải lệnh chứa nó, không tự trừ, báo kế toán', async () => {
+    const o = await paidInWalletOrder(1, { ctvWalletBefore: 5_000 });
+    await moveToWallet(o.ctv.id);
+    const payout = await payoutOf(o.ctv.id);
+    await prisma.commission.update({ where: { id: o.commission.id }, data: { walletPayoutId: null, paidAt: new Date(payout.paidAt!.getTime() + 60_000) } });
+
+    await fullReturn(o);
+
+    expect(await commissionOf(o.order.id)).toMatchObject({ status: 'PAID' });
+    expect(await reversals(o.ctv.id)).toHaveLength(0);
+    expect(await balance(o.ctv.id)).toBe(15_000);
+    expect(taxAlerts(o.order.code).some(([, , data]) => /không xác định được lệnh chuyển gốc/.test((data as { message: string }).message))).toBe(true);
+    await noDrift(o.ctv.id);
+  });
+
+  it('đơn bị huỷ: dòng sổ thu hồi ghi "(huỷ đơn)"', async () => {
+    const o = await paidInWalletOrder(1);
+    await moveToWallet(o.ctv.id);
+    await prisma.order.update({ where: { id: o.order.id }, data: { status: 'CANCELLED' } });
+    await affiliate.reverseCommissionsForOrder(o.order.id);
+    expect((await reversals(o.ctv.id)).map((r) => r.reason)).toEqual([`Thu hồi hoa hồng đơn ${o.order.code} (huỷ đơn)`]);
+  });
+
+  it('từ chối lệnh rút ngân hàng cũ chứa hoa hồng của đơn đã trả: hoa hồng đó REJECTED (cron không chuyển lại vào Ví), hoa hồng đơn còn hiệu lực về APPROVED', async () => {
+    const returned = await paidInWalletOrder(1);
+    const kept = await paidInWalletOrder(2, { ctv: returned.ctv });
+    const payout = await legacyBankCommissionPayout(prisma, affiliate, returned.ctv.id, CTV_TAX_ID);
+    await fullReturn(returned);
+    // Lúc trả, hoa hồng còn nằm trong lệnh rút nên chỉ báo kế toán, giữ nguyên.
+    expect(await commissionOf(returned.order.id)).toMatchObject({ status: 'APPROVED', payoutBatchId: payout.id });
+    notify.mockClear();
+
+    await affiliate.rejectPayout(returned.admin.id, payout.id, 'Sai STK');
+
+    expect(await commissionOf(returned.order.id)).toMatchObject({ status: 'REJECTED', payoutBatchId: null });
+    expect(await commissionOf(kept.order.id)).toMatchObject({ status: 'APPROVED', payoutBatchId: null });
+    expect(notify.mock.calls.filter(([uid, code]) => uid === returned.ctv.id && code === 'COMMISSION_REVERSED').map(([, , data]) => data)).toEqual([{ amount: vndText(10_000) }]);
+    await moveToWallet(returned.ctv.id);
+    expect(await balance(returned.ctv.id)).toBe(20_000);
+    await noDrift(returned.ctv.id);
+  });
+
   it('hoa hồng nằm trong lệnh rút ngân hàng cũ (payoutBatchId): không trừ Ví, giữ nguyên trạng thái', async () => {
     const o = await paidInWalletOrder(1);
     const payout = await legacyBankCommissionPayout(prisma, affiliate, o.ctv.id, '079201001234');

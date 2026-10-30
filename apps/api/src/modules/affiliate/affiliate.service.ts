@@ -1136,9 +1136,10 @@ export class AffiliateService {
     // → bỏ qua; đơn CTV lên-đơn-hộ (placedForCustomer=true) VẪN đảo bình thường.
     const order = await this.prisma.order.findUniqueOrThrow({
       where: { id: orderId },
-      select: { code: true, referrerUserId: true, userId: true, placedForCustomer: true },
+      select: { code: true, status: true, referrerUserId: true, userId: true, placedForCustomer: true },
     });
     if (!order.referrerUserId || (order.referrerUserId === order.userId && !order.placedForCustomer)) return;
+    const cause = order.status === 'CANCELLED' ? 'huỷ đơn' : 'trả hàng';
 
     const open = await this.prisma.commission.findMany({
       where: { orderId, status: { in: ['PENDING', 'LOCKED', 'APPROVED', 'PAID'] } },
@@ -1146,7 +1147,7 @@ export class AffiliateService {
       orderBy: { id: 'asc' },
     });
     const outcomes: CommissionReversal[] = [];
-    for (const { id } of open) outcomes.push(await this.reverseCommission(id, order.code));
+    for (const { id } of open) outcomes.push(await this.reverseCommission(id, order.code, cause));
 
     // SELLER-10: CTV thấy khoản hoa hồng biến mất mà không ai báo. Báo theo từng CTV (đơn chỉ có một người giới thiệu).
     const byUser = new Map<string, number>();
@@ -1165,7 +1166,7 @@ export class AffiliateService {
     });
   }
 
-  private reverseCommission(commissionId: string, orderCode: string): Promise<CommissionReversal> {
+  private reverseCommission(commissionId: string, orderCode: string, cause: 'huỷ đơn' | 'trả hàng'): Promise<CommissionReversal> {
     return this.prisma.$transaction(async (tx): Promise<CommissionReversal> => {
       // Khoá dòng hoa hồng trước khi đọc trạng thái: requestPayout (cron/bấm tay) cũng khoá dòng này trước khi đụng Ví CTV, nên hai
       // bên tuần tự: hoặc ta thấy APPROVED chưa chuyển (đổi REJECTED, requestPayout sau đó báo "dữ liệu đã thay đổi" và thử lại),
@@ -1183,11 +1184,11 @@ export class AffiliateService {
           commission: { id: commissionId, ...row },
           amount: row.amount,
           refId: commissionId,
-          reason: `Thu hồi hoa hồng đơn ${orderCode} (trả hàng)`,
+          reason: `Thu hồi hoa hồng đơn ${orderCode} (${cause})`,
         });
         if (!debit.debited) return { kind: 'MANUAL', affiliateUserId: row.affiliateUserId, amount: row.amount, reason: debit.reason };
         await tx.commission.update({ where: { id: commissionId }, data: { status: 'REJECTED' } });
-        return { kind: 'DEBITED', affiliateUserId: row.affiliateUserId, amount: row.amount, walletDebit: debit.walletDebit, taxWithheld: debit.taxWithheld, balanceAfter: debit.balanceAfter };
+        return { kind: 'DEBITED', ...debit.note };
       }
       await tx.commission.update({ where: { id: commissionId }, data: { status: 'REJECTED' } });
       return { kind: 'REJECTED', affiliateUserId: row.affiliateUserId, amount: row.amount };
@@ -1195,12 +1196,15 @@ export class AffiliateService {
   }
 
   /**
-   * Báo quản trị về hoa hồng của đơn bị trả mà Ví CTV đã bị trừ hoặc không tự trừ được. Chỉ gửi OPS_REFUND_ALERT khi có việc cho kế toán:
-   * phần không tự trừ được (`manual`: lệnh rút ngân hàng cũ, tài khoản CTV đã xoá), lệnh chuyển gốc đã khấu trừ thuế TNCN (tờ khai thuế
-   * đã kê thu nhập của khoản vừa thu hồi, Payout.grossAmount/taxWithheld không tự đổi) hoặc Ví CTV sau khi trừ đang âm (công nợ cần theo
-   * dõi). Trừ Ví mà số dư vẫn không âm và không có thuế là việc đã xong, chỉ ghi log để không gửi thêm tin vô ích. Đường trả cả đơn gọi qua
-   * reverseCommissionsForOrder (dedupeKey theo đơn vì setStatus được gọi lại khi một bước đảo khác lỗi); đường trả một phần gọi thẳng
-   * sau commit, truyền `returnRequestId` để mỗi yêu cầu trả được báo một lần.
+   * Báo quản trị về hoa hồng của đơn bị trả mà Ví CTV đã bị trừ hoặc không tự trừ được. Gửi OPS_REFUND_ALERT khi có việc cho kế toán:
+   * - phần không tự trừ được (`manual`: lệnh rút ngân hàng cũ, tài khoản CTV đã xoá, không rõ lệnh chuyển gốc);
+   * - khoản đã thu hồi mà lệnh chuyển gốc có grossAmount: báo cáo thuế (pitReport, taxStatement) vẫn kê nó là thu nhập của tháng chi,
+   *   và personalIncomeTax cộng nó vào tổng tháng nên lệnh sau trong tháng có thể bị giữ thuế thừa. Payout không tự đổi, kế toán quyết
+   *   cách điều chỉnh: tin nêu số gộp đã thu hồi, tháng kê khai, số đã trừ Ví và phần thuế tương ứng;
+   * - Ví CTV sau khi trừ đang âm (công nợ cần theo dõi).
+   * Lệnh cũ không có grossAmount mà Ví không âm thì chỉ ghi log. Đường trả cả đơn gọi qua reverseCommissionsForOrder (dedupeKey theo
+   * đơn vì setStatus được gọi lại khi một bước đảo khác lỗi); đường trả một phần gọi thẳng sau commit, truyền `returnRequestId` để mỗi
+   * yêu cầu trả được báo một lần.
    */
   async alertPaidCommissionOfReversedOrder(
     orderId: string,
@@ -1212,10 +1216,12 @@ export class AffiliateService {
       const manual = opts.manual ?? [];
       const partial = !!opts.returnRequestId;
       for (const d of debited) {
-        this.logger.log(`Đơn ${orderCode} bị ${partial ? 'trả một phần' : 'trả/huỷ'}: đã trừ Ví CTV ${d.affiliateUserId} ${vnd(d.walletDebit)} hoa hồng (Ví còn ${vnd(d.balanceAfter)}).`);
+        this.logger.log(
+          `Đơn ${orderCode} bị ${partial ? 'trả một phần' : 'trả/huỷ'}: thu hồi hoa hồng CTV ${d.affiliateUserId} ${vnd(d.amount)}, đã trừ Ví ${vnd(d.walletDebit)} (lệnh ${d.payoutId}, Ví còn ${vnd(d.balanceAfter)}).`,
+        );
       }
-      const noteworthy = debited.filter((d) => d.balanceAfter < 0 || d.taxWithheld > 0);
-      const taxed = debited.some((d) => d.taxWithheld > 0);
+      const noteworthy = debited.filter((d) => d.incomeDeclared || d.balanceAfter < 0);
+      const declared = debited.some((d) => d.incomeDeclared);
       if (manual.length === 0 && noteworthy.length === 0) return;
       const users = await this.prisma.user.findMany({
         where: { id: { in: [...new Set([...noteworthy, ...manual].map((x) => x.affiliateUserId))] } },
@@ -1230,16 +1236,20 @@ export class AffiliateService {
         LEGACY_PAYOUT: 'nằm trong lệnh rút ngân hàng cũ',
         PAYOUT_UNKNOWN: 'đã vào Ví nhưng không xác định được lệnh chuyển gốc để biết phần đã nhận sau thuế',
       };
+      const monthLabel = (key: string) => `${key.slice(5, 7)}/${key.slice(0, 4)}`;
       const pieces = [
         ...noteworthy.map((d) => {
-          const tax = d.taxWithheld > 0 ? `, thuế TNCN đã giữ trên khoản này ${vnd(d.taxWithheld)} cần xem lại` : '';
-          const negative = d.balanceAfter < 0 ? `, Ví đang âm ${vnd(-d.balanceAfter)}` : '';
-          return `đã trừ Ví CTV ${nameOf(d.affiliateUserId)} ${vnd(d.walletDebit)}${tax}${negative}`;
+          const parts = [`thu hồi hoa hồng CTV ${nameOf(d.affiliateUserId)} ${vnd(d.amount)}`];
+          if (d.incomeDeclared) parts.push(`khoản này đã kê là thu nhập tháng ${monthLabel(d.incomeMonth)}${d.taxShare > 0 ? '' : ` (lệnh ${d.payoutId})`}`);
+          if (d.walletDebit > 0) parts.push(`đã trừ Ví ${vnd(d.walletDebit)}`);
+          if (d.taxShare > 0) parts.push(`phần thuế TNCN tương ứng ${vnd(d.taxShare)} (lệnh ${d.payoutId} giữ tổng ${vnd(d.payoutTax)})`);
+          if (d.balanceAfter < 0) parts.push(`Ví đang âm ${vnd(-d.balanceAfter)}`);
+          return parts.join(', ');
         }),
         ...manual.map((m) => `hoa hồng CTV ${nameOf(m.affiliateUserId)} ${vnd(m.amount)} ${manualText[m.reason]} (không tự trừ được)`),
       ];
       const message = pieces.join('; ');
-      const needsAccounting = manual.length > 0 || taxed;
+      const needsAccounting = manual.length > 0 || declared;
       this.logger.warn(`Đơn ${orderCode} bị ${partial ? 'trả một phần' : 'trả/huỷ'}: ${message}${needsAccounting ? ': cần kế toán xử lý.' : '.'}`);
       const dedupeKey = `commission-paid-order-reversed:${orderId}${opts.returnRequestId ? `:${opts.returnRequestId}` : ''}`;
       const alertMessage = `${partial ? 'đơn trả một phần, ' : ''}${message}${needsAccounting ? ', cần kế toán xử lý' : ''}`;
@@ -1977,6 +1987,7 @@ export class AffiliateService {
     const why = reason?.trim();
     if (!why) throw new BadRequestException('Vui lòng nhập lý do từ chối.');
 
+    let revoked: { id: string; affiliateUserId: string; amount: number }[] = [];
     const rejected = await this.prisma.$transaction(async (tx) => {
       // userId/requestedAt không đổi sau khi tạo lệnh nên đọc trước được. Lệnh rút hoa hồng lấy khoá (CTV, tháng) TRƯỚC khi ghi
       // gì, cùng thứ tự với requestPayout, để từ chối và rút mới cùng tháng không giành khoá ngược nhau.
@@ -1996,15 +2007,35 @@ export class AffiliateService {
 
       const linkedCommissions = await tx.commission.findMany({
         where: { payoutBatchId: id, status: { in: ['APPROVED', 'PAID'] } },
-        select: { id: true },
+        select: { id: true, orderId: true, affiliateUserId: true, amount: true },
       });
       if (linkedCommissions.length > 0) {
         // Nguồn 2 (requestPayout nhánh BANK): trả các commission liên quan về APPROVED, gỡ batch
         // → CTV rút lại được. KHÔNG đụng walletBalance (chưa từng cộng/trừ gì ở đó cho payout này).
-        await tx.commission.updateMany({
-          where: { id: { in: linkedCommissions.map((c) => c.id) }, payoutBatchId: id, status: { in: ['APPROVED', 'PAID'] } },
-          data: { status: 'APPROVED', payoutBatchId: null, paidAt: null },
+        // Trừ hoa hồng của đơn đã huỷ/trả (cả đơn): lúc thu hồi, hoa hồng còn nằm trong lệnh rút nên chỉ báo kế toán; trả về APPROVED
+        // thì cron chuyển nó vào Ví. Đổi REJECTED. Khoá dòng hoa hồng (cùng thứ tự với reverseCommission) rồi mới đọc trạng thái đơn,
+        // nên lần thu hồi đang chạy hoặc đã xong luôn được thấy.
+        const ids = linkedCommissions.map((c) => c.id);
+        await tx.$queryRaw`SELECT "id" FROM "commissions" WHERE "id" IN (${Prisma.join(ids)}) ORDER BY "id" FOR NO KEY UPDATE`;
+        const closedOrders = await tx.order.findMany({
+          where: { id: { in: [...new Set(linkedCommissions.map((c) => c.orderId))] }, status: { in: ['CANCELLED', 'RETURNED'] } },
+          select: { id: true },
         });
+        const closed = new Set(closedOrders.map((o) => o.id));
+        const reopened = linkedCommissions.filter((c) => !closed.has(c.orderId));
+        revoked = linkedCommissions.filter((c) => closed.has(c.orderId));
+        if (reopened.length > 0) {
+          await tx.commission.updateMany({
+            where: { id: { in: reopened.map((c) => c.id) }, payoutBatchId: id, status: { in: ['APPROVED', 'PAID'] } },
+            data: { status: 'APPROVED', payoutBatchId: null, paidAt: null },
+          });
+        }
+        if (revoked.length > 0) {
+          await tx.commission.updateMany({
+            where: { id: { in: revoked.map((c) => c.id) }, payoutBatchId: id, status: { in: ['APPROVED', 'PAID'] } },
+            data: { status: 'REJECTED', payoutBatchId: null, paidAt: null },
+          });
+        }
       } else {
         // Nguồn 1 (wallet.service.ts:withdraw): hoàn GROSS đã bị trừ — Payout.amount lưu NET
         // (amount = gross - fee), nên gross = amount + fee (xem wallet.service.ts:withdraw).
@@ -2024,6 +2055,14 @@ export class AffiliateService {
     await this.notifications
       ?.notify(rejected.userId, CTV_NOTIFICATION.PAYOUT_REJECTED, { amount: vnd(rejected.grossAmount ?? rejected.amount), reason: why })
       .catch((e: unknown) => this.logger.warn(`Báo từ chối lệnh rút ${id} lỗi: ${(e as Error).message}`));
+    // Phần hoa hồng của đơn đã huỷ/trả không về số dư khả dụng: báo CTV như mọi lần thu hồi.
+    const revokedTotal = revoked.reduce((sum, c) => sum + c.amount, 0);
+    if (revokedTotal > 0) {
+      this.logger.warn(`Từ chối lệnh rút ${id}: ${revoked.length} hoa hồng của đơn đã huỷ/trả (${vnd(revokedTotal)}) đổi REJECTED, không trả về số dư khả dụng.`);
+      await this.notifications
+        ?.notify(rejected.userId, CTV_NOTIFICATION.REVERSED, { amount: vnd(revokedTotal) })
+        .catch((e: unknown) => this.logger.warn(`Báo thu hồi hoa hồng của lệnh rút ${id} lỗi: ${(e as Error).message}`));
+    }
     return rejected;
   }
 

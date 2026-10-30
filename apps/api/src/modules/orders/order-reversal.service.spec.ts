@@ -1147,13 +1147,27 @@ describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền
 
   describe('hoa hồng đã duyệt / đã vào Ví (E-43)', () => {
     const ctvOrder = () => ({ ...(order() as object), referrerUserId: 'ctv1' }) as never;
-    const withRaw = (tx: ReturnType<typeof commissionTx>, payout: { grossAmount: number | null; taxWithheld: number; taxRefunded: number } | null = { grossAmount: 1_000_000_000, taxWithheld: 0, taxRefunded: 0 }) =>
-      Object.assign(tx, {
+    const payoutBase = { id: 'pay1', paidAt: new Date('2026-10-05T03:00:00Z'), requestedAt: new Date('2026-10-05T03:00:00Z') };
+    const withRaw = (
+      tx: ReturnType<typeof commissionTx>,
+      payoutTax: { grossAmount: number | null; taxWithheld: number; taxRefunded: number } | null = { grossAmount: 1_000_000_000, taxWithheld: 0, taxRefunded: 0 },
+    ) => {
+      const payout = payoutTax && { ...payoutBase, ...payoutTax };
+      return Object.assign(tx, {
         $queryRaw: jest.fn(async (strings: TemplateStringsArray): Promise<unknown[]> => (strings.join('').includes('"metadata"') ? [{ metadata: null, walletBalance: 7_000 }] : [])),
         $executeRaw: jest.fn().mockResolvedValue(1),
         user: { update: jest.fn().mockResolvedValue({}) },
         payout: { findUnique: jest.fn().mockResolvedValue(payout), findFirst: jest.fn().mockResolvedValue(payout) },
       });
+    };
+    const note = (o: { walletDebit: number; taxShare: number; payoutTax: number; balanceAfter: number }) => ({
+      affiliateUserId: 'ctv1',
+      amount: 3_333,
+      payoutId: 'pay1',
+      incomeDeclared: true,
+      incomeMonth: '2026-10',
+      ...o,
+    });
     beforeEach(() => jest.mocked(applyWalletDelta).mockClear());
 
     it('APPROVED chưa vào Ví: cắt amount và nền doanh số như PENDING/LOCKED, không đụng Ví', async () => {
@@ -1184,21 +1198,22 @@ describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền
           reason: 'Thu hồi hoa hồng đơn TUBU1 (trả một phần)',
         }),
       );
-      expect(res.commissionDebited).toEqual([{ affiliateUserId: 'ctv1', amount: 3_333, walletDebit: 3_333, taxWithheld: 0, balanceAfter: 40_000 }]);
+      expect(res.commissionDebited).toEqual([note({ walletDebit: 3_333, taxShare: 0, payoutTax: 0, balanceAfter: 40_000 })]);
       expect(res.commissionManual).toEqual([]);
       expect(res.commissionCutBy).toEqual([{ affiliateUserId: 'ctv1', amount: 3_333 }]);
     });
 
-    it('PAID của lệnh chuyển bị khấu trừ thuế TNCN: cắt đủ amount nhưng chỉ trừ Ví phần thực nhận, trả về số thuế để báo kế toán', async () => {
+    it('PAID của lệnh chuyển bị khấu trừ thuế TNCN: cắt đủ amount nhưng chỉ trừ Ví phần thực nhận (phần thuế làm tròn lên), trả về phần thuế để báo kế toán', async () => {
       jest.mocked(applyWalletDelta).mockResolvedValueOnce({ applied: true, balanceAfter: -500, entryId: 'w1' });
       const tx = withRaw(commissionTx(newRow({ status: 'PAID', walletPayoutId: 'pay1' })), { grossAmount: 14_750, taxWithheld: 1_475, taxRefunded: 0 });
       const res = await partial(tx, { i1: 1 }, {}, ctvOrder());
       expect(tx.row).toMatchObject({ amount: 11_417, commissionableTotal: 161_667 });
       expect(tx.payout.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'pay1' } }));
-      expect(applyWalletDelta).toHaveBeenCalledWith(tx, expect.objectContaining({ delta: -3_000, type: 'COMMISSION_REVERSAL', refId: 'c1:r1' }));
+      // 3.333 × 1.475 / 14.750 = 333,3 → phần thuế 334, trừ Ví 2.999 (không vượt 2.999,7 phần đã nhận).
+      expect(applyWalletDelta).toHaveBeenCalledWith(tx, expect.objectContaining({ delta: -2_999, type: 'COMMISSION_REVERSAL', refId: 'c1:r1' }));
       expect(res.commissionCut).toBe(3_333);
       expect(res.commissionCutBy).toEqual([{ affiliateUserId: 'ctv1', amount: 3_333 }]);
-      expect(res.commissionDebited).toEqual([{ affiliateUserId: 'ctv1', amount: 3_333, walletDebit: 3_000, taxWithheld: 1_475, balanceAfter: -500 }]);
+      expect(res.commissionDebited).toEqual([note({ walletDebit: 2_999, taxShare: 334, payoutTax: 1_475, balanceAfter: -500 })]);
     });
 
     it('PAID, trả món 0%: không cắt, không trừ Ví', async () => {
@@ -1265,7 +1280,7 @@ describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền
       const res = await partial(tx, { i1: 1 }, {}, ctvOrder());
       expect(tx.row).toMatchObject({ amount: 11_417 });
       expect(applyWalletDelta).not.toHaveBeenCalled();
-      expect(res.commissionDebited).toEqual([{ affiliateUserId: 'ctv1', amount: 3_333, walletDebit: 0, taxWithheld: 14_750, balanceAfter: 7_000 }]);
+      expect(res.commissionDebited).toEqual([note({ walletDebit: 0, taxShare: 3_333, payoutTax: 14_750, balanceAfter: 7_000 })]);
     });
 
     it('CTV đã xoá tài khoản (ẩn danh): không cắt, không trừ Ví, báo kế toán', async () => {

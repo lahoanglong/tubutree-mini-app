@@ -1,4 +1,5 @@
 import { Prisma, type CommissionStatus } from '@prisma/client';
+import { vnMonthBounds } from '../affiliate/ctv-milestones';
 import { anonymizedAtOf } from './wallet-anonymized-guard';
 import { applyWalletDelta } from './wallet-ledger.service';
 
@@ -18,16 +19,26 @@ export function commissionHolding(c: { status: CommissionStatus; payoutBatchId: 
   return c.status === 'PAID' ? 'WALLET' : 'UNPAID';
 }
 
-/**
- * Một khoản hoa hồng đã thu hồi từ Ví CTV khi đơn bị trả. `amount` là hoa hồng bị thu hồi (số gộp), `walletDebit` là số đã trừ khỏi
- * Ví: chỉ phần thực nhận của hoa hồng, vì lệnh chuyển gốc chỉ cộng vào Ví sau khi trừ thuế TNCN. `taxWithheld` là thuế thực giữ của
- * lệnh chuyển gốc (> 0 thì tờ khai thuế đã kê thu nhập của khoản vừa thu hồi, kế toán cần xem lại). balanceAfter < 0: Ví CTV đang âm.
- */
+/** Một khoản hoa hồng đã vào Ví CTV bị thu hồi khi đơn bị trả/huỷ. */
 export interface CommissionDebitNote {
   affiliateUserId: string;
+  /** Hoa hồng bị thu hồi (số gộp). */
   amount: number;
+  /** Số đã trừ khỏi Ví: phần thực nhận của `amount`, vì lệnh chuyển gốc chỉ cộng vào Ví sau khi giữ thuế TNCN. 0 thì không có dòng sổ. */
   walletDebit: number;
-  taxWithheld: number;
+  /** Phần thuế TNCN của lệnh chuyển gốc ứng với riêng khoản này (amount − walletDebit). */
+  taxShare: number;
+  /** Lệnh chuyển vào Ví đã chứa hoa hồng này và tổng thuế TNCN thực giữ của cả lệnh. */
+  payoutId: string;
+  payoutTax: number;
+  /**
+   * Lệnh có grossAmount: báo cáo thuế (pitReport, taxStatement) và mức giữ thuế của các lệnh sau trong tháng (personalIncomeTax) đã
+   * tính khoản này là thu nhập tháng `incomeMonth` (YYYY-MM giờ VN theo lúc chi), dù nay đã thu hồi. Lệnh cũ không có grossAmount
+   * không nằm trong báo cáo đó.
+   */
+  incomeDeclared: boolean;
+  incomeMonth: string;
+  /** < 0: Ví CTV đang âm. */
   balanceAfter: number;
 }
 
@@ -57,7 +68,7 @@ export async function lockCommissionsAndWallets(tx: Prisma.TransactionClient, or
 }
 
 export type CommissionDebitResult =
-  | { debited: true; applied: boolean; walletDebit: number; taxWithheld: number; balanceAfter: number }
+  | { debited: true; applied: boolean; note: CommissionDebitNote }
   /** Không trừ Ví, kế toán xử lý tay: tài khoản CTV đã ẩn danh (Ví đã về 0), hoặc không xác định được lệnh chuyển gốc. */
   | { debited: false; reason: 'ANONYMIZED' | 'PAYOUT_UNKNOWN' };
 
@@ -65,34 +76,43 @@ type PayoutTax = { grossAmount: number | null; taxWithheld: number; taxRefunded:
 
 /**
  * requestPayout chỉ cộng vào Ví phần thực nhận của lệnh chuyển (tổng hoa hồng trừ thuế TNCN thực giữ), nên hoa hồng bị thu hồi chỉ
- * trừ Ví theo đúng tỉ lệ đó: trừ cả số gộp thì CTV mất luôn phần thuế chưa bao giờ vào Ví. Chia theo tỉ lệ để mọi hoa hồng của một
- * lệnh bị thu hồi hết thì tổng đã trừ bằng đúng số lệnh đó đã cộng vào Ví (lệch tối đa vài đồng do làm tròn từng khoản).
- * `tax` là thuế thực giữ của lệnh (taxWithheld − taxRefunded; phần đã hoàn về Ví không còn là thuế).
+ * trừ Ví theo đúng tỉ lệ đó: trừ cả số gộp thì CTV mất luôn phần thuế chưa bao giờ vào Ví. Phần thuế của khoản làm tròn lên (phần
+ * trừ Ví làm tròn xuống) để mỗi lần trừ không vượt phần khoản đó đã nhận: thu hồi hết các hoa hồng của một lệnh, kể cả cắt nhiều lần,
+ * không bao giờ trừ quá số lệnh đó đã cộng vào Ví. `tax` là thuế thực giữ của cả lệnh (taxWithheld − taxRefunded; phần đã hoàn về Ví
+ * không còn là thuế), `taxShare` là phần của riêng khoản này.
  */
-export function walletShareOfCommission(cut: number, payout: PayoutTax | null): { debit: number; tax: number } {
+export function walletShareOfCommission(cut: number, payout: PayoutTax | null): { debit: number; taxShare: number; tax: number } {
   const tax = payout ? Math.max(payout.taxWithheld - payout.taxRefunded, 0) : 0;
   const gross = payout?.grossAmount ?? 0;
-  if (tax <= 0 || gross <= 0) return { debit: cut, tax: 0 };
-  const taxShare = Math.min(cut, Math.round((cut * tax) / gross));
-  return { debit: cut - taxShare, tax };
+  if (tax <= 0 || gross <= 0) return { debit: cut, taxShare: 0, tax: 0 };
+  const taxShare = Math.min(cut, Math.ceil((cut * tax) / gross));
+  return { debit: cut - taxShare, taxShare, tax };
 }
 
+type SourcePayout = PayoutTax & { id: string; paidAt: Date | null; requestedAt: Date };
+
 /**
- * Lệnh chuyển hoa hồng vào Ví đã chứa hoa hồng này. Hoa hồng chuyển từ bản có cột walletPayoutId thì tra thẳng; hoa hồng PAID cũ chưa
- * có cột thì lấy lệnh chuyển Ví gần nhất của CTV không muộn hơn lúc hoa hồng thành PAID (requestPayout tạo lệnh trước khi đánh dấu
- * PAID) và tổng hoa hồng của lệnh phải đủ chứa hoa hồng này. Lệnh cũ trước khi có khấu trừ thuế (grossAmount rỗng) cộng đủ vào Ví.
- * Không xác định được thì trả null: không đoán số tiền Ví đã nhận.
+ * Lệnh chuyển hoa hồng vào Ví đã chứa hoa hồng này. Hoa hồng chuyển từ bản có cột walletPayoutId thì tra thẳng. Hoa hồng PAID cũ chưa
+ * có cột thì lấy lệnh chuyển Ví gần nhất của CTV tạo không muộn hơn và chi không sớm hơn lúc hoa hồng thành PAID (requestPayout tạo
+ * mốc requestedAt, đánh dấu PAID rồi mới ghi lệnh với paidAt), và tổng hoa hồng của lệnh phải đủ chứa hoa hồng này. Lệnh cũ trước khi
+ * có khấu trừ thuế (grossAmount rỗng) cộng đủ vào Ví. Không xác định được thì trả null: không đoán số tiền Ví đã nhận.
  */
 async function payoutOfCommission(
   tx: Prisma.TransactionClient,
   c: { affiliateUserId: string; walletPayoutId: string | null; paidAt: Date | null },
   cut: number,
-): Promise<PayoutTax | null> {
-  const select = { grossAmount: true, taxWithheld: true, taxRefunded: true } as const;
+): Promise<SourcePayout | null> {
+  const select = { id: true, grossAmount: true, taxWithheld: true, taxRefunded: true, paidAt: true, requestedAt: true } as const;
   if (c.walletPayoutId) return tx.payout.findUnique({ where: { id: c.walletPayoutId }, select });
   if (!c.paidAt) return null;
   const payout = await tx.payout.findFirst({
-    where: { userId: c.affiliateUserId, method: 'WALLET_BALANCE', status: { not: 'REJECTED' }, requestedAt: { lte: c.paidAt } },
+    where: {
+      userId: c.affiliateUserId,
+      method: 'WALLET_BALANCE',
+      status: { not: 'REJECTED' },
+      requestedAt: { lte: c.paidAt },
+      paidAt: { gte: c.paidAt },
+    },
     orderBy: { requestedAt: 'desc' },
     select,
   });
@@ -121,8 +141,19 @@ export async function debitCommissionFromWallet(
   if (anonymizedAtOf(rows?.[0]?.metadata)) return { debited: false, reason: 'ANONYMIZED' };
   const payout = await payoutOfCommission(tx, input.commission, input.amount);
   if (!payout) return { debited: false, reason: 'PAYOUT_UNKNOWN' };
-  const { debit, tax } = walletShareOfCommission(input.amount, payout);
-  if (debit <= 0) return { debited: true, applied: true, walletDebit: 0, taxWithheld: tax, balanceAfter: rows?.[0]?.walletBalance ?? 0 };
+  const { debit, taxShare, tax } = walletShareOfCommission(input.amount, payout);
+  const note = (balanceAfter: number): CommissionDebitNote => ({
+    affiliateUserId: userId,
+    amount: input.amount,
+    walletDebit: debit,
+    taxShare,
+    payoutId: payout.id,
+    payoutTax: tax,
+    incomeDeclared: payout.grossAmount !== null,
+    incomeMonth: vnMonthBounds(payout.paidAt ?? payout.requestedAt).key,
+    balanceAfter,
+  });
+  if (debit <= 0) return { debited: true, applied: true, note: note(rows?.[0]?.walletBalance ?? 0) };
   const res = await applyWalletDelta(tx, {
     userId,
     delta: -debit,
@@ -132,5 +163,5 @@ export async function debitCommissionFromWallet(
     reason: input.reason,
     allowNegative: true,
   });
-  return { debited: true, applied: res.applied, walletDebit: debit, taxWithheld: tax, balanceAfter: res.balanceAfter };
+  return { debited: true, applied: res.applied, note: note(res.balanceAfter) };
 }

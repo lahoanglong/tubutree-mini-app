@@ -372,7 +372,7 @@ describe('OrderReturnsService.review — trả một phần cắt hoa hồng th�
     const svc = new OrderReturnsService(prisma, {} as never, {} as never, loyalty as never, affiliate as never, notifications);
     (svc as unknown as { flagPancakeReturn: unknown }).flagPancakeReturn = jest.fn().mockResolvedValue(undefined);
     (svc as unknown as { withContext: unknown }).withContext = jest.fn().mockResolvedValue({ id: 'r1' });
-    return { svc, affiliate, order };
+    return { svc, affiliate, order, prisma };
   }
   const reversedNotices = () => (notifications.notify as jest.Mock).mock.calls.filter((c) => c[1] === 'COMMISSION_REVERSED');
 
@@ -399,6 +399,35 @@ describe('OrderReturnsService.review — trả một phần cắt hoa hồng th�
     await svc.review('a1', 'r1', { approve: true, shopFault: true });
     expect(affiliate.alertPaidCommissionOfReversedOrder).toHaveBeenCalledTimes(1);
     expect(affiliate.alertPaidCommissionOfReversedOrder).toHaveBeenCalledWith(order.id, order.code, { returnRequestId: 'r1', debited, manual });
+  });
+
+  it('tx duyệt bị Postgres chọn làm nạn nhân deadlock (40P01): chạy lại cả tx một lần, các bước sau commit chạy đúng một lần', async () => {
+    const { svc, prisma } = setupPartialApprove([{ affiliateUserId: 'ctv1', amount: 3_333 }]);
+    const tx = prisma.$transaction as unknown as jest.Mock;
+    const ok = await tx();
+    tx.mockReset();
+    tx.mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError('Raw query failed. Code: `40P01`. Message: `deadlock detected`', { code: 'P2010', clientVersion: 'x' }));
+    tx.mockResolvedValueOnce(ok);
+    await expect(svc.review('a1', 'r1', { approve: true, shopFault: true })).resolves.toBeDefined();
+    expect(tx).toHaveBeenCalledTimes(2);
+    expect(reversedNotices()).toHaveLength(1);
+  });
+
+  it('deadlock lần hai, hoặc lỗi khác deadlock: không chạy lại thêm, ném lỗi ra', async () => {
+    const deadlock = () => new Prisma.PrismaClientKnownRequestError('Transaction failed due to a write conflict or a deadlock', { code: 'P2034', clientVersion: 'x' });
+    const twice = setupPartialApprove([]);
+    const tx2 = twice.prisma.$transaction as unknown as jest.Mock;
+    tx2.mockReset();
+    tx2.mockRejectedValueOnce(deadlock()).mockRejectedValueOnce(deadlock());
+    await expect(twice.svc.review('a1', 'r1', { approve: true, shopFault: true })).rejects.toThrow('deadlock');
+    expect(tx2).toHaveBeenCalledTimes(2);
+
+    const other = setupPartialApprove([]);
+    const tx1 = other.prisma.$transaction as unknown as jest.Mock;
+    tx1.mockReset();
+    tx1.mockRejectedValueOnce(new Error('Đơn không ở trạng thái có thể trả'));
+    await expect(other.svc.review('a1', 'r1', { approve: true, shopFault: true })).rejects.toThrow('Đơn không ở trạng thái');
+    expect(tx1).toHaveBeenCalledTimes(1);
   });
 });
 
