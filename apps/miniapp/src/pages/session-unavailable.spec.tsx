@@ -2,7 +2,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { ComponentType, ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * R5-BUYER-1: mở app lúc mất mạng thì phiên không khôi phục được (status 'error'). Mọi màn cần đăng nhập và có trạng thái
@@ -109,6 +109,12 @@ const DATA_CALLS = [
   wasteApi.getWasteMe,
   feedApi.getFeed,
 ];
+
+// Lần import động đầu tiên của mỗi trang biên dịch cả cây phụ thuộc của nó, vài giây khi máy bận, và nằm trong hạn 5 giây của ca đang chạy (ca đầu
+// rớt ngẫu nhiên). Nạp hết trước trong hook, hạn riêng của hook; hạn của ca không đổi.
+beforeAll(async () => {
+  await Promise.all(PAGES.map((p) => p.load()));
+}, 60_000);
 
 beforeEach(() => {
   vi.clearAllMocks();
