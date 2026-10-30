@@ -268,6 +268,7 @@ function RedemptionSummary({ row: r }: { row: AdminGiftRedemptionRowDTO }) {
         <span className="font-mono">{codeText}</span>
         {r.claimExpiresAt && ` · Hạn nhận ${formatDate(r.claimExpiresAt)}`}
       </div>
+      {r.status === 'CANCELLED' && r.cancelReason && <div className="text-xs text-stone-700">{`Đã huỷ: ${r.cancelReason}`}</div>}
     </div>
   );
 }

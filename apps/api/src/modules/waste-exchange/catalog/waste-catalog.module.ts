@@ -8,6 +8,7 @@ import { WasteAdminItemsService } from './waste-admin-items.service';
 import { WasteAdminPointsController } from './waste-admin-points.controller';
 import { WasteAdminPointsService } from './waste-admin-points.service';
 import { WasteDeskGiftsController } from './waste-desk-gifts.controller';
+import { WasteGiftExpiryCron } from './waste-gift-expiry.cron';
 import { WasteGiftRedemptionsService } from './waste-gift-redemptions.service';
 import { WasteReportsController } from './waste-reports.controller';
 import { WasteReportsService } from './waste-reports.service';
@@ -15,6 +16,6 @@ import { WasteReportsService } from './waste-reports.service';
 @Module({
   imports: [WasteCoreModule, WalletModule],
   controllers: [WasteDeskGiftsController, WasteAdminGiftsController, WasteAdminItemsController, WasteAdminPointsController, WasteReportsController],
-  providers: [WasteGiftRedemptionsService, WasteAdminGiftsService, WasteAdminItemsService, WasteAdminPointsService, WasteReportsService],
+  providers: [WasteGiftRedemptionsService, WasteGiftExpiryCron, WasteAdminGiftsService, WasteAdminItemsService, WasteAdminPointsService, WasteReportsService],
 })
 export class WasteCatalogModule {}

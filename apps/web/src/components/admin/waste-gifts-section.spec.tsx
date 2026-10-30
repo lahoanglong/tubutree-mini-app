@@ -236,6 +236,11 @@ describe('hàng đợi quà chờ nhận', () => {
     ['QG-AB12CD', 'Lê Văn An', 'Quá hạn nhận'].forEach((t) => expect(r.textContent).toContain(t));
   });
 
+  it('admin: hàng Đã huỷ nêu lý do huỷ, kể cả quá hạn nhận', async () => {
+    const { c } = await mountQueue({ rows: [adminRow({ status: 'CANCELLED', cancelReason: 'Quá hạn nhận' })] });
+    expect(c.querySelector<HTMLElement>('[data-redemption="gr1"]')!.textContent).toContain('Đã huỷ: Quá hạn nhận');
+  });
+
   it('Huỷ (chỉ admin): không chọn sẵn hoàn điểm, phải chọn rõ', async () => {
     for (const refund of [false, true]) {
       const { c, api } = await mountQueue({ rows: [adminRow()] });

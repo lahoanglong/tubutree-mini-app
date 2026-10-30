@@ -166,7 +166,7 @@ export function createWasteGift(prisma: PrismaService, over: Partial<Prisma.Wast
 
 export async function createGiftRedemption(
   prisma: PrismaService,
-  o: { userId: string; giftId?: string; status?: WasteGiftRedemptionStatus; giftKind?: WasteGiftKind; code?: string | null; pointsCost?: number },
+  o: { userId: string; giftId?: string; status?: WasteGiftRedemptionStatus; giftKind?: WasteGiftKind; code?: string | null; pointsCost?: number; claimExpiresAt?: Date | null },
 ): Promise<WasteGiftRedemption> {
   const gift = o.giftId ? await prisma.wasteGift.findUniqueOrThrow({ where: { id: o.giftId } }) : await createWasteGift(prisma);
   return prisma.wasteGiftRedemption.create({
@@ -179,7 +179,7 @@ export async function createGiftRedemption(
       status: o.status ?? 'READY',
       code: o.code === undefined ? `QG-${code5(8)}` : o.code,
       idempotencyKey: `it-${randCode(12)}`,
-      claimExpiresAt: new Date(Date.now() + 60 * DAY_MS),
+      claimExpiresAt: o.claimExpiresAt === undefined ? new Date(Date.now() + 60 * DAY_MS) : o.claimExpiresAt,
     },
   });
 }

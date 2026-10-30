@@ -21,6 +21,13 @@ import { canonicalWasteLookup, lookupMissMeta } from '../waste-codes';
 
 const CODE_NOT_FOUND = 'Không tìm thấy mã';
 const ALREADY_HANDLED = 'Lượt đổi quà này đã được trao hoặc đã huỷ.';
+const CLAIM_OVERDUE = 'Quà đã quá hạn nhận, hệ thống sẽ huỷ và hoàn điểm cho khách.';
+export const GIFT_EXPIRED_CANCEL_REASON = 'Quá hạn nhận';
+const EXPIRE_PAGE = 200;
+
+/** Còn trong hạn nhận (hoặc quà không có hạn): điều kiện chung của mọi đường trao quà, đối xứng với wasteGiftOverdueWhere. */
+const claimOpenWhere = (now: Date): Prisma.WasteGiftRedemptionWhereInput => ({ OR: [{ claimExpiresAt: null }, { claimExpiresAt: { gte: now } }] });
+const isOverdue = (row: { status: string; claimExpiresAt: Date | null }, now: Date) => row.status === 'READY' && row.claimExpiresAt !== null && row.claimExpiresAt < now;
 
 @Injectable()
 export class WasteGiftRedemptionsService {
@@ -87,14 +94,7 @@ export class WasteGiftRedemptionsService {
         data: { status: 'CANCELLED', cancelledAt: new Date(), cancelledByUserId: admin.id, cancelReason: body.reason, refundedPoints },
       });
       if (count !== 1) throw new ConflictException(ALREADY_HANDLED);
-      if (refund) {
-        const ok = await this.rewards.grant(row.userId, row.pointsCost, `GIFT_REFUND:${row.code}`, 'GIFT_REFUND', row.id, tx, expiresAt);
-        if (!ok) {
-          this.logger.error(`Không ghi được điểm hoàn GIFT_REFUND cho lượt đổi quà ${row.id} (user=${row.userId}, điểm=${row.pointsCost}): dòng sổ đã tồn tại.`);
-          throw new InternalServerErrorException('Không ghi được điểm hoàn cho lượt đổi quà, thao tác đã huỷ.');
-        }
-      }
-      await tx.$executeRaw`UPDATE "waste_gifts" SET "stock" = "stock" + 1 WHERE "id" = ${row.giftId} AND "stock" IS NOT NULL`;
+      await this.refundAndRestock(tx, row, refund, expiresAt);
       await writeWasteEvent(tx, {
         kind: 'GIFT_CANCELLED',
         actorUserId: admin.id,
@@ -113,6 +113,77 @@ export class WasteGiftRedemptionsService {
 
     await this.notifier.giftCancelled(row.userId, { id: row.id, giftName: row.giftName }, refundedPoints);
     return dto;
+  }
+
+  /**
+   * Quà hiện vật (có hạn nhận) còn READY mà quá hạn thì huỷ, hoàn đúng pointsCost qua cùng đường hoàn của cancel(), báo khách một tin.
+   * Mỗi quà một transaction ngắn; updateMany có guard READY + quá hạn nên quầy trao đúng lúc chỉ một bên thắng.
+   */
+  async expireOverdue(now: Date = new Date()): Promise<{ expired: number; failed: number }> {
+    const expiresAt = await this.rewards.expiresAt();
+    let expired = 0;
+    let failed = 0;
+    let lastId: string | null = null;
+    for (;;) {
+      const page: { id: string }[] = await this.prisma.wasteGiftRedemption.findMany({
+        where: lastId === null ? wasteGiftOverdueWhere(now) : { AND: [wasteGiftOverdueWhere(now), { id: { gt: lastId } }] },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+        take: EXPIRE_PAGE,
+      });
+      for (const { id } of page) {
+        try {
+          const row = await this.expireOne(id, now, expiresAt);
+          if (!row) continue;
+          expired += 1;
+          await this.notifier.giftExpired(row.userId, { id: row.id, giftName: row.giftName }, row.pointsCost);
+        } catch (err) {
+          failed += 1;
+          this.logger.error(`Huỷ quà quá hạn nhận ${id} lỗi: ${err instanceof Error ? (err.stack ?? err.message) : err}`);
+        }
+      }
+      if (page.length < EXPIRE_PAGE) break;
+      lastId = page[page.length - 1]!.id;
+    }
+    return { expired, failed };
+  }
+
+  private expireOne(id: string, now: Date, expiresAt: Date): Promise<WasteGiftRedemption | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.wasteGiftRedemption.findUnique({ where: { id } });
+      if (!row) return null;
+      const { count } = await tx.wasteGiftRedemption.updateMany({
+        where: { id, ...wasteGiftOverdueWhere(now) },
+        data: { status: 'CANCELLED', cancelledAt: now, cancelledByUserId: null, cancelReason: GIFT_EXPIRED_CANCEL_REASON, refundedPoints: row.pointsCost },
+      });
+      if (count !== 1) return null;
+      await this.refundAndRestock(tx, row, true, expiresAt);
+      await writeWasteEvent(tx, {
+        kind: 'GIFT_EXPIRED',
+        actorUserId: null,
+        actorRole: 'SYSTEM',
+        giftRedemptionId: row.id,
+        meta: {
+          giftId: row.giftId,
+          subjectUserId: row.userId,
+          reason: GIFT_EXPIRED_CANCEL_REASON,
+          before: { status: 'READY' },
+          after: { status: 'CANCELLED', refundedPoints: row.pointsCost },
+        },
+      });
+      return row;
+    });
+  }
+
+  private async refundAndRestock(tx: Prisma.TransactionClient, row: WasteGiftRedemption, refund: boolean, expiresAt: Date): Promise<void> {
+    if (refund) {
+      const ok = await this.rewards.grant(row.userId, row.pointsCost, `GIFT_REFUND:${row.code}`, 'GIFT_REFUND', row.id, tx, expiresAt);
+      if (!ok) {
+        this.logger.error(`Không ghi được điểm hoàn GIFT_REFUND cho lượt đổi quà ${row.id} (user=${row.userId}, điểm=${row.pointsCost}): dòng sổ đã tồn tại.`);
+        throw new InternalServerErrorException('Không ghi được điểm hoàn cho lượt đổi quà, thao tác đã huỷ.');
+      }
+    }
+    await tx.$executeRaw`UPDATE "waste_gifts" SET "stock" = "stock" + 1 WHERE "id" = ${row.giftId} AND "stock" IS NOT NULL`;
   }
 
   async queue(viewerUserId: string, q: GiftRedemptionsQuery): Promise<AdminGiftRedemptionRowDTO[]> {
@@ -141,6 +212,7 @@ export class WasteGiftRedemptionsService {
         customerPhone: view.phone,
         ...(isAdmin ? { userId: view.userId } : {}),
         claimExpiresAt: row.claimExpiresAt?.toISOString() ?? null,
+        cancelReason: row.cancelReason,
         overdue: row.status === 'READY' && row.claimExpiresAt !== null && row.claimExpiresAt < now,
         createdAt: row.createdAt.toISOString(),
       };
@@ -154,12 +226,17 @@ export class WasteGiftRedemptionsService {
     actorRole: 'POINT_STAFF' | 'STAFF' | 'ADMIN',
     pointId: string,
   ): Promise<GiftRedemptionDTO> {
+    const now = new Date();
+    if (isOverdue(row, now)) throw new ConflictException(CLAIM_OVERDUE);
     return this.prisma.$transaction(async (tx) => {
       const { count } = await tx.wasteGiftRedemption.updateMany({
-        where,
-        data: { status: 'FULFILLED', fulfilledAt: new Date(), fulfilledByUserId: callerUserId, fulfilledPointId: pointId },
+        where: { ...where, ...claimOpenWhere(now) },
+        data: { status: 'FULFILLED', fulfilledAt: now, fulfilledByUserId: callerUserId, fulfilledPointId: pointId },
       });
-      if (count !== 1) throw new ConflictException(ALREADY_HANDLED);
+      if (count !== 1) {
+        const cur = await tx.wasteGiftRedemption.findUnique({ where: { id: row.id }, select: { status: true, claimExpiresAt: true } });
+        throw new ConflictException(cur && isOverdue(cur, now) ? CLAIM_OVERDUE : ALREADY_HANDLED);
+      }
       await writeWasteEvent(tx, {
         kind: 'GIFT_FULFILLED',
         actorUserId: callerUserId,
