@@ -1457,7 +1457,7 @@ export class AffiliateService {
           lockedAt: { lte: threshold },
           // Đơn phải CÒN DELIVERED ngay trong câu UPDATE: duyệt trả hàng lật đơn → RETURNED trước,
           // reverseCommissionsForOrder chạy sau (ngoài tx) — lượt cron rơi vào khe đó mà không có
-          // điều kiện này sẽ chốt APPROVED (không-đảo-được) hoa hồng của đơn đã trả hàng.
+          // điều kiện này sẽ chốt APPROVED hoa hồng của đơn đã trả hàng; cron chuyển nó vào Ví nên lần thu hồi phải trừ Ví CTV.
           order: { status: 'DELIVERED' },
           ...(heldOrderIds.length > 0 ? { orderId: { notIn: heldOrderIds } } : {}),
         },
@@ -1601,7 +1601,8 @@ export class AffiliateService {
 
   /**
    * Số ngày giữ THỰC trước khi chốt commission = max(affiliate.hold_days, returns.window_days).
-   * Chốt (APPROVED) là điểm không-đảo-được → không được chốt khi khách còn trong cửa sổ gửi đổi/trả
+   * Chốt (APPROVED) mở đường cho cron chuyển hoa hồng vào Ví, sau đó thu hồi chỉ còn cách trừ Ví CTV (có thể âm)
+   * → không được chốt khi khách còn trong cửa sổ gửi đổi/trả
    * (key + mặc định mirror OrdersService.requestReturn), dù admin cấu hình hold ngắn hơn cửa sổ.
    */
   private async effectiveHoldDays(): Promise<number> {
