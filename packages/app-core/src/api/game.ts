@@ -302,6 +302,8 @@ export interface SeasonPassState {
   xp?: number;
   premiumEligible?: boolean;
   tiers?: SeasonPassTier[];
+  /** 'GUEST' = khách vãng lai chưa nhận được Điểm Xanh: bậc thưởng Điểm Xanh không hứa số điểm, không có nút nhận; giọt nước vẫn nhận. */
+  pointsBlocked?: PointsBlocked;
 }
 export const fetchSeasonPass = (http: HttpClient) => http.get<SeasonPassState>('/game/season-pass');
 export const claimSeasonPass = (http: HttpClient, tier: number, track: 'free' | 'premium') =>

@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { clampTankKeepingOverflow, initialEcoImpact } from './game-profile';
 import { RewardPointsService } from '../wallet/reward-points.service';
-import { GUEST_POINTS_MSG, isRealUser } from '../../common/real-user';
+import { GUEST_POINTS_MSG, isRealUser, pointsBlockedFor } from '../../common/real-user';
 
 /**
  * Phần thưởng 1 bậc: 💧 (SEEDS) hoặc Điểm Xanh (POINTS). 'XU' là dạng trước PD-3 (đơn vị xu); migration
@@ -78,12 +78,15 @@ export class SeasonPassService {
     const claimedFree = pass?.claimedFree ?? [];
     const claimedPremium = pass?.claimedPremium ?? [];
     const premiumEligible = (await this.prisma.subscription.count({ where: { userId, status: 'ACTIVE' } })) > 0;
+    const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    const pointsBlocked = pointsBlockedFor(owner);
 
     return {
       active: true as const,
       seasonTitle: season.name,
       xp,
       premiumEligible,
+      ...(pointsBlocked ? { pointsBlocked } : {}),
       tiers: tiers.map((t, i) => ({
         tier: i,
         xpRequired: t.xp,

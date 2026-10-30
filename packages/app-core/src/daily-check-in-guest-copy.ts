@@ -13,6 +13,8 @@ export const guestCheckInCopy = {
     daily == null ? 'Nhận giọt nước mỗi ngày' : first > 0 ? `Lần đầu nhận +${drops(daily + first)}, các ngày sau +${drops(daily)}` : `Nhận +${drops(daily)} mỗi ngày`,
   /** Nút chính trên cây khi phần điểm danh còn dở: khách vãng lai không có phần Điểm Xanh để "nhận". */
   claimToday: 'Điểm danh hôm nay',
+  /** Bậc Chặng Mùa thưởng Điểm Xanh: tên phần thưởng, không kèm số điểm vì khách vãng lai chưa nhận được. */
+  seasonPoints: 'Điểm Xanh',
 } as const;
 
 /** Nhãn đọc màn hình của một ô ngày: khách vãng lai không được hứa điểm. */

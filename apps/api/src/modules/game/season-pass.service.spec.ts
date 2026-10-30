@@ -132,6 +132,25 @@ describe('SeasonPassService.getState', () => {
     expect(st.xp).toBe(0);
     expect(st.tiers.every((t) => !t.unlocked && !t.claimedFree && !t.claimedPremium)).toBe(true);
   });
+
+  it('khách vãng lai: pointsBlocked=GUEST để client không hứa Điểm Xanh; tiến độ và bậc giữ nguyên', async () => {
+    const p = makePrisma({
+      userSeasonPass: { findUnique: jest.fn().mockResolvedValue({ xp: 80, claimedFree: [], claimedPremium: [] }) },
+      user: { findUnique: jest.fn().mockResolvedValue({ zaloId: 'guest_h_abc', phone: null }) },
+    });
+    const st = await svcWith(p).svc.getState('u1');
+    if (!st.active) throw new Error('expected active season');
+    expect(st).toMatchObject({ pointsBlocked: 'GUEST', xp: 80 });
+    expect(st.tiers.map((t) => t.unlocked)).toEqual([true, true, false]);
+  });
+
+  it('user thật (Zalo thật hoặc guest đã có SĐT) không có cờ pointsBlocked', async () => {
+    for (const owner of [{ zaloId: 'zalo-u1', phone: null }, { zaloId: 'guest_h_abc', phone: '0901234567' }]) {
+      const p = makePrisma({ user: { findUnique: jest.fn().mockResolvedValue(owner) } });
+      const st = await svcWith(p).svc.getState('u1');
+      expect(st).not.toHaveProperty('pointsBlocked');
+    }
+  });
 });
 
 describe('SeasonPassService.claim', () => {
