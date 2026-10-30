@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { ApiError } from '@/lib/client-api';
+import { resetHomeFeed } from '@/lib/home-feed';
 
 // Thứ tự khối và loại khách dùng chung với Mini App: xem packages/app-core/src/home-layout.ts.
 export { customerKind, homeBlockOrder, resolveHomeKind } from '@tubutree/app-core/home-layout';
@@ -12,6 +13,7 @@ export const HOME_QUERY_PREFIXES = [
 ] as const;
 
 export function refreshHomeQueries(qc: QueryClient): Promise<unknown> {
+  resetHomeFeed();
   return Promise.all(HOME_QUERY_PREFIXES.map((k) => qc.invalidateQueries({ queryKey: [k] })));
 }
 
