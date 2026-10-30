@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -7,7 +8,9 @@ import { PurchasedItemsService } from '../orders/purchased-items.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { buildPublicConfig, tierLoaderOf, type PublicConfigDTO } from '../system-config/public-config';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { paginated } from '../../common/pagination';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ACTIVE_ORDER_STATUSES } from '../orders/order-status-groups';
 import { WASTE_OPEN_STATUSES } from '../waste-exchange/waste.constants';
 import { CatalogService } from './catalog.service';
 import type { ProductQuery } from './dto/product-query.dto';
@@ -115,22 +118,60 @@ export class HomeService {
     return { bestSellers, featured, newest, categories, brands, publicConfig };
   }
 
+  /**
+   * Số đơn theo trạng thái và số yêu cầu đổi rác đang mở của khách, MỘT câu SQL: các khối đếm đơn, kệ Mua lại, gợi ý và ưu đãi
+   * khách mới đều chỉ cần biết "có đơn không / có đơn giao không / đang chờ bao nhiêu".
+   */
+  private async userFacts(userId: string): Promise<UserFacts> {
+    const rows = await this.prisma.$queryRaw<{ kind: string; key: string; n: number }[]>(Prisma.sql`
+      SELECT 'order' AS kind, o.status::text AS key, COUNT(*)::int AS n FROM orders o WHERE o."userId" = ${userId} GROUP BY o.status
+      UNION ALL
+      SELECT 'waste', 'open', COUNT(*)::int FROM waste_requests w WHERE w."userId" = ${userId} AND w.status::text IN (${Prisma.join([...WASTE_OPEN_STATUSES])})`);
+    const byStatus = new Map<string, number>();
+    let wasteOpen = 0;
+    for (const r of rows) {
+      if (r.kind === 'order') byStatus.set(r.key, r.n);
+      else wasteOpen = r.n;
+    }
+    const count = (statuses: readonly string[]) => statuses.reduce((s, st) => s + (byStatus.get(st) ?? 0), 0);
+    return {
+      hasOrders: count([...byStatus.keys()]) > 0,
+      hasPriorOrder: count([...byStatus.keys()].filter((k) => k !== 'CANCELLED')) > 0,
+      delivered: count(['DELIVERED']),
+      shipping: count(['SHIPPING']),
+      active: count(ACTIVE_ORDER_STATUSES),
+      wasteOpen,
+    };
+  }
+
   /** Phần theo người dùng — KHÔNG cache dùng chung. */
   async getForUser(userId: string, purchasedLimit: number = DEFAULT_PURCHASED_LIMIT): Promise<HomeMe> {
+    const facts = this.userFacts(userId);
+    facts.catch(() => undefined);
     const [forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount] = await Promise.all([
-      this.block('forYou', () => this.catalog.getForYou(userId)),
+      this.block('forYou', async () => this.catalog.getForYou(userId, { hasOrders: (await facts).hasOrders })),
       this.block('flashUpcoming', () => this.flashSale.listUpcoming(userId)),
-      this.block('purchasedItems', () => this.purchased.list(userId, { limit: purchasedLimit })),
-      this.block('activeOrderCount', () => this.orders.activeCount(userId)),
-      this.block('shippingOrders', () => this.orders.list(userId, { status: 'SHIPPING' }, 1, 1)),
+      this.block('purchasedItems', async () => ((await facts).delivered === 0 ? { items: [], nextCursor: null } : this.purchased.list(userId, { limit: purchasedLimit }))),
+      this.block('activeOrderCount', async () => ({ count: (await facts).active })),
+      this.block('shippingOrders', async () => ((await facts).shipping === 0 ? paginated([], 1, 1, 0) : this.orders.list(userId, { status: 'SHIPPING' }, 1, 1))),
       this.block('subscriptions', () => this.subscriptions.list(userId)),
       this.block('notifications', () => this.notifications.listForUser(userId)),
-      this.block('newCustomerOffer', () => this.loyalty.getNewCustomerOffer(userId)),
+      // Đã có đơn chưa huỷ thì kết quả luôn là "không phải khách mới", dù tài khoản thật hay khách vãng lai: khỏi đọc khách và đơn thêm lần nữa.
+      this.block('newCustomerOffer', async () => ((await facts).hasPriorOrder ? { isNewCustomer: false as const, welcomeVoucher: null } : this.loyalty.getNewCustomerOffer(userId))),
       // Chỉ một câu đếm (không gọi /waste/me nặng): để Trang chủ/Ưu đãi giữ lối vào Đổi rác cho khách còn yêu cầu mở khi chương trình tạm dừng.
-      this.block('wasteOpenRequestCount', () => this.prisma.wasteRequest.count({ where: { userId, status: { in: [...WASTE_OPEN_STATUSES] } } })),
+      this.block('wasteOpenRequestCount', async () => (await facts).wasteOpen),
     ]);
     return { forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount, purchasedLimit };
   }
+}
+
+interface UserFacts {
+  hasOrders: boolean;
+  hasPriorOrder: boolean;
+  delivered: number;
+  shipping: number;
+  active: number;
+  wasteOpen: number;
 }
 
 type Awaited2<F extends (...a: never[]) => unknown> = Awaited<ReturnType<F>>;

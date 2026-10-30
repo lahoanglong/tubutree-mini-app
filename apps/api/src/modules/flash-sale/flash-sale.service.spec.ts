@@ -12,44 +12,46 @@ const lifecycle = { notifyWishlistPriceDrop: jest.fn().mockResolvedValue(undefin
 const NOW = new Date('2026-07-05T10:00:00Z');
 const activeItem = (over: Record<string, unknown> = {}) => ({
   id: 'fi1', variationId: 'v1', flashPrice: 80000, quota: 10, soldCount: 3,
-  flashSale: { endAt: new Date('2026-07-05T12:00:00Z') },
+  endAt: new Date('2026-07-05T12:00:00Z'), createdBy: 'staff1',
   ...over,
 });
 
 describe('FlashSaleService.resolveEffective', () => {
   it('variation có flash ACTIVE còn quota → trả flashPrice + metadata', async () => {
-    const prisma = { flashSaleItem: { findMany: jest.fn().mockResolvedValue([activeItem()]) } } as unknown as PrismaService;
+    const prisma = { $queryRaw: jest.fn().mockResolvedValue([activeItem()]) } as unknown as PrismaService;
     const map = await new FlashSaleService(prisma, config, notifications, lifecycle).resolveEffective(['v1'], NOW);
-    expect(map.get('v1')).toMatchObject({ flashPrice: 80000, itemId: 'fi1', soldCount: 3, quota: 10 });
+    expect(map.get('v1')).toMatchObject({ flashPrice: 80000, itemId: 'fi1', soldCount: 3, quota: 10, endAt: new Date('2026-07-05T12:00:00Z') });
   });
 
   it('item hết quota (soldCount>=quota) → không có trong map', async () => {
-    const prisma = { flashSaleItem: { findMany: jest.fn().mockResolvedValue([activeItem({ soldCount: 10 })]) } } as unknown as PrismaService;
+    const prisma = { $queryRaw: jest.fn().mockResolvedValue([activeItem({ soldCount: 10 })]) } as unknown as PrismaService;
     const map = await new FlashSaleService(prisma, config, notifications, lifecycle).resolveEffective(['v1'], NOW);
     expect(map.has('v1')).toBe(false);
   });
 
   it('variation không có item active → không có trong map', async () => {
-    const prisma = { flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) } } as unknown as PrismaService;
+    const prisma = { $queryRaw: jest.fn().mockResolvedValue([]) } as unknown as PrismaService;
     const map = await new FlashSaleService(prisma, config, notifications, lifecycle).resolveEffective(['v9'], NOW);
     expect(map.has('v9')).toBe(false);
   });
 
   it('variationIds rỗng → map rỗng, KHÔNG query', async () => {
     const findMany = jest.fn();
-    const prisma = { flashSaleItem: { findMany } } as unknown as PrismaService;
+    const prisma = { $queryRaw: findMany } as unknown as PrismaService;
     const map = await new FlashSaleService(prisma, config, notifications, lifecycle).resolveEffective([], NOW);
     expect(map.size).toBe(0);
     expect(findMany).not.toHaveBeenCalled();
   });
 
-  it('where CHỈ lấy variation active (variation: { isActive: true })', async () => {
-    const findMany = jest.fn().mockResolvedValue([]);
-    const prisma = { flashSaleItem: { findMany } } as unknown as PrismaService;
-    await new FlashSaleService(prisma, config, notifications, lifecycle).resolveEffective(['v1'], NOW);
-    expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ variation: { isActive: true } }) }),
-    );
+  it('một câu SQL JOIN chỉ lấy variation active, đợt active đang diễn ra tại now, đúng các variationId', async () => {
+    const queryRaw = jest.fn().mockResolvedValue([]);
+    const prisma = { $queryRaw: queryRaw } as unknown as PrismaService;
+    await new FlashSaleService(prisma, config, notifications, lifecycle).resolveEffective(['v1', 'v2'], NOW);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    const q = queryRaw.mock.calls[0][0] as { sql: string; values: unknown[] };
+    expect(q.sql).toContain('v."isActive" = true');
+    expect(q.sql).toContain('s."isActive" = true AND s."startAt" <=');
+    expect(q.values).toEqual(['v1', 'v2', NOW, NOW]);
   });
 });
 
@@ -57,7 +59,7 @@ describe('FlashSaleService.resolveEffective — suất còn lại của khách (
   const svcWith = (items: unknown[], purchases: unknown[]) => {
     const purchaseFind = jest.fn().mockResolvedValue(purchases);
     const prisma = {
-      flashSaleItem: { findMany: jest.fn().mockResolvedValue(items) },
+      $queryRaw: jest.fn().mockResolvedValue(items),
       flashSalePurchase: { findMany: purchaseFind },
     } as unknown as PrismaService;
     return { svc: new FlashSaleService(prisma, config, notifications, lifecycle), purchaseFind };

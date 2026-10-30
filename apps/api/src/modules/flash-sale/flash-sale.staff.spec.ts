@@ -294,11 +294,11 @@ describe('FlashSaleService — nhân viên không đụng đợt của quản tr
 describe('FlashSaleService.resolveEffective — người tạo đợt không được giá flash của đợt mình (D2-01)', () => {
   const item = (createdBy: string) => ({
     id: 'fi1', variationId: 'v1', flashPrice: 50_000, quota: 10, soldCount: 0, perUserLimit: 2,
-    flashSale: { endAt: new Date('2026-07-05T12:00:00Z'), createdBy },
+    endAt: new Date('2026-07-05T12:00:00Z'), createdBy,
   });
   const svcWith = (createdBy: string, role: string | null = 'STAFF') => {
     const prisma = {
-      flashSaleItem: { findMany: jest.fn().mockResolvedValue([item(createdBy)]) },
+      $queryRaw: jest.fn().mockResolvedValue([item(createdBy)]),
       flashSalePurchase: { findMany: jest.fn().mockResolvedValue([]) },
       user: { findUnique: jest.fn().mockResolvedValue(role ? { role } : null) },
     } as unknown as PrismaService;

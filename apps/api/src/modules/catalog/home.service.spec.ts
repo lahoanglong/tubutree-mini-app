@@ -23,12 +23,17 @@ function setup() {
   // Mặc định cấu hình là bảng rỗng: mọi khoá rơi về mặc định trong mã của buildPublicConfig.
   const config = { get: jest.fn(async (_key: string, fallback?: unknown) => fallback) };
   const loyalty = { getNewCustomerOffer: jest.fn().mockResolvedValue({ isNewCustomer: true, welcomeVoucher: null }) };
-  const prisma = { wasteRequest: { count: jest.fn().mockResolvedValue(2) }, membershipTier: { findMany: jest.fn().mockResolvedValue([]) } };
+  // Một câu SQL cho mọi số đếm của khách: không có dòng đơn nào, 2 yêu cầu đổi rác đang mở.
+  const factRows = (orders: Record<string, number> = {}, wasteOpen = 2) => [
+    ...Object.entries(orders).map(([key, n]) => ({ kind: 'order', key, n })),
+    { kind: 'waste', key: 'open', n: wasteOpen },
+  ];
+  const prisma = { $queryRaw: jest.fn().mockResolvedValue(factRows()), membershipTier: { findMany: jest.fn().mockResolvedValue([]) } };
   const svc = new HomeService(
     catalog as never, flashSale as never, orders as never, purchased as never, subs as never, notifications as never, config as never, loyalty as never,
     prisma as never,
   );
-  return { svc, catalog, flashSale, orders, purchased, subs, notifications, config, loyalty, prisma };
+  return { svc, catalog, flashSale, orders, purchased, subs, notifications, config, loyalty, prisma, factRows };
 }
 
 describe('HomeService.getPublic', () => {
@@ -148,35 +153,60 @@ describe('HomeService — số liệu cho khối Quà khách mới', () => {
 });
 
 describe('HomeService.getForUser — yêu cầu đổi rác đang mở', () => {
-  it('đếm đúng yêu cầu OPEN/IN_TRANSIT/RECEIVED của chính user, một câu count', async () => {
+  it('đếm đúng yêu cầu của chính user bằng cùng câu SQL với số đơn, chỉ một câu cho cả hai', async () => {
     const { svc, prisma } = setup();
     const r = await svc.getForUser('u1');
     expect(r.wasteOpenRequestCount).toBe(2);
-    expect(prisma.wasteRequest.count).toHaveBeenCalledTimes(1);
-    expect(prisma.wasteRequest.count).toHaveBeenCalledWith({ where: { userId: 'u1', status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] } } });
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    const [sql] = prisma.$queryRaw.mock.calls[0] as [{ values: unknown[] }];
+    expect(sql.values).toEqual(['u1', 'u1', 'OPEN', 'IN_TRANSIT', 'RECEIVED']);
   });
 
-  it('đếm lỗi thì chỉ khối đó null, các khối khác vẫn trả', async () => {
+  it('đếm lỗi thì các khối dùng số đếm null, các khối khác vẫn trả', async () => {
     const { svc, prisma } = setup();
-    prisma.wasteRequest.count.mockRejectedValue(new Error('boom'));
+    prisma.$queryRaw.mockRejectedValue(new Error('boom'));
     const r = await svc.getForUser('u1');
     expect(r.wasteOpenRequestCount).toBeNull();
-    expect(r.forYou).toEqual([{ id: 'fy' }]);
+    expect(r.activeOrderCount).toBeNull();
+    expect(r.forYou).toBeNull();
+    expect(r.notifications).toEqual([{ id: 'n1' }]);
   });
 });
 
 describe('HomeService.getForUser', () => {
-  it('trả khối theo user, truyền đúng userId + purchasedLimit, không cache giữa hai user', async () => {
-    const { svc, purchased, orders, flashSale } = setup();
+  it('khách chưa có đơn: không gọi kệ Mua lại, danh sách đơn đang giao; đầu ra như trước (rỗng)', async () => {
+    const { svc, purchased, orders, catalog } = setup();
+    const r = await svc.getForUser('u1', 10);
+    expect(purchased.list).not.toHaveBeenCalled();
+    expect(orders.list).not.toHaveBeenCalled();
+    expect(catalog.getForYou).toHaveBeenCalledWith('u1', { hasOrders: false });
+    expect(r.purchasedItems).toEqual({ items: [], nextCursor: null });
+    expect(r.shippingOrders).toEqual({ data: [], meta: { page: 1, limit: 1, total: 0 } });
+    expect(r.activeOrderCount).toEqual({ count: 0 });
+    expect(r.purchasedLimit).toBe(10);
+  });
+
+  it('khách có đơn giao, đang giao, chờ thanh toán: gọi đúng dịch vụ, đếm đơn đang xử lý đúng nhóm, bỏ qua ưu đãi khách mới', async () => {
+    const { svc, purchased, orders, flashSale, loyalty, prisma, factRows } = setup();
+    prisma.$queryRaw.mockResolvedValue(factRows({ DELIVERED: 3, SHIPPING: 1, PENDING_PAYMENT: 2, CANCELLED: 4, RETURNED: 1 }));
     const r = await svc.getForUser('u1', 10);
     expect(purchased.list).toHaveBeenCalledWith('u1', { limit: 10 });
     expect(orders.list).toHaveBeenCalledWith('u1', { status: 'SHIPPING' }, 1, 1);
     expect(flashSale.listUpcoming).toHaveBeenCalledWith('u1');
-    expect(r.activeOrderCount).toEqual({ count: 2 });
-    expect(r.purchasedLimit).toBe(10);
+    expect(r.activeOrderCount).toEqual({ count: 3 });
+    expect(loyalty.getNewCustomerOffer).not.toHaveBeenCalled();
+    expect(r.newCustomerOffer).toEqual({ isNewCustomer: false, welcomeVoucher: null });
     await svc.getForUser('u2');
-    expect(orders.activeCount).toHaveBeenCalledTimes(2);
-    expect(orders.activeCount).toHaveBeenLastCalledWith('u2');
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it('chỉ có đơn đã huỷ: vẫn là khách mới (hỏi loyalty), nhưng có lịch sử đơn cho gợi ý', async () => {
+    const { svc, loyalty, catalog, prisma, factRows } = setup();
+    prisma.$queryRaw.mockResolvedValue(factRows({ CANCELLED: 2 }));
+    const r = await svc.getForUser('u1');
+    expect(loyalty.getNewCustomerOffer).toHaveBeenCalledWith('u1');
+    expect(r.newCustomerOffer).toEqual({ isNewCustomer: true, welcomeVoucher: null });
+    expect(catalog.getForYou).toHaveBeenCalledWith('u1', { hasOrders: true });
   });
 
   it('một khối lỗi (vd subscriptions) không làm hỏng các khối khác', async () => {

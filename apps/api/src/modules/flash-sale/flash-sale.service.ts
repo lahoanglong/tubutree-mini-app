@@ -101,14 +101,18 @@ export class FlashSaleService {
   ): Promise<Map<string, EffectivePrice>> {
     const map = new Map<string, EffectivePrice>();
     if (variationIds.length === 0) return map;
-    const items = await this.prisma.flashSaleItem.findMany({
-      where: {
-        variationId: { in: variationIds },
-        variation: { isActive: true },
-        flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } },
-      },
-      include: { flashSale: { select: { endAt: true, createdBy: true } } },
-    });
+    // Một câu JOIN (không tra đợt flash bằng câu thứ hai): giỏ và báo giá gọi hàm này mỗi lần xem giá.
+    const rows = await this.prisma.$queryRaw<
+      { id: string; variationId: string; flashPrice: number; quota: number; soldCount: number; perUserLimit: number; endAt: Date; createdBy: string }[]
+    >(Prisma.sql`
+      SELECT i."id", i."variationId", i."flashPrice", i."quota", i."soldCount", i."perUserLimit", s."endAt", s."createdBy"
+      FROM flash_sale_items i
+      JOIN flash_sales s ON s."id" = i."flashSaleId"
+      JOIN variations v ON v."id" = i."variationId"
+      WHERE i."variationId" IN (${Prisma.join(variationIds)})
+        AND v."isActive" = true
+        AND s."isActive" = true AND s."startAt" <= ${now} AND s."endAt" > ${now}`);
+    const items = rows.map(({ endAt, createdBy, ...it }) => ({ ...it, flashSale: { endAt, createdBy } }));
     // Người tạo đợt không mua giá flash của đợt mình (cùng luật mã giảm giá, isOwnStaffCoupon): nhân viên tự đặt giá rồi tự mua.
     // ADMIN được miễn như với mã giảm giá; chỉ tra vai trò khi người mua thật sự là người tạo một đợt đang xét.
     let ownSalesBlocked = false;
