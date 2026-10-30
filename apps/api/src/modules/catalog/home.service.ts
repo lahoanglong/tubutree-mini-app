@@ -63,13 +63,14 @@ export class HomeService {
     private readonly prisma: PrismaService,
   ) {}
 
-  private async block<T>(name: string, run: () => Promise<T>): Promise<Block<T>> {
+  private async block<T>(name: string, run: () => Promise<T>, deadline: number = Date.now() + BLOCK_TIMEOUT_MS): Promise<Block<T>> {
+    const budget = Math.max(0, deadline - Date.now());
     let timer: NodeJS.Timeout | undefined;
     try {
       return await Promise.race([
         run(),
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error(`quá ${BLOCK_TIMEOUT_MS}ms`)), BLOCK_TIMEOUT_MS);
+          timer = setTimeout(() => reject(new Error(`quá ${BLOCK_TIMEOUT_MS}ms`)), budget);
         }),
       ]);
     } catch (err) {
@@ -168,17 +169,19 @@ export class HomeService {
 
   /** Phần theo người dùng — KHÔNG cache dùng chung. */
   async getForUser(userId: string, purchasedLimit: number = DEFAULT_PURCHASED_LIMIT): Promise<HomeMe> {
+    // Một hạn chung cho cả request: thời gian chờ số đếm ăn vào hạn của mọi khối, nên tổng không vượt BLOCK_TIMEOUT_MS (Mini chỉ chờ 4 s).
+    const deadline = Date.now() + BLOCK_TIMEOUT_MS;
     const facts = this.userFactsOrNull(userId);
-    // Khối cần số đếm chờ xong rồi mới bắt đầu tính hạn của chính nó, để thời gian chờ số đếm không ăn vào ngân sách khối.
-    const withFacts = <T>(name: string, run: (f: UserFacts | null) => Promise<T>) => facts.then((f) => this.block(name, () => run(f)));
+    const own = <T>(name: string, run: () => Promise<T>) => this.block(name, run, deadline);
+    const withFacts = <T>(name: string, run: (f: UserFacts | null) => Promise<T>) => facts.then((f) => this.block(name, () => run(f), deadline));
     const [forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount] = await Promise.all([
       withFacts('forYou', (f) => (f ? this.catalog.getForYou(userId, { hasOrders: f.hasOrders }) : this.catalog.getForYou(userId))),
-      this.block('flashUpcoming', () => this.flashSale.listUpcoming(userId)),
+      own('flashUpcoming', () => this.flashSale.listUpcoming(userId)),
       withFacts('purchasedItems', async (f) => (f && f.delivered === 0 ? { items: [], nextCursor: null } : this.purchased.list(userId, { limit: purchasedLimit }))),
       withFacts('activeOrderCount', async (f) => (f ? { count: f.active } : this.orders.activeCount(userId))),
       withFacts('shippingOrders', async (f) => (f && f.shipping === 0 ? paginated([], 1, 1, 0) : this.orders.list(userId, { status: 'SHIPPING' }, 1, 1))),
-      this.block('subscriptions', () => this.subscriptions.list(userId)),
-      this.block('notifications', () => this.notifications.listForUser(userId)),
+      own('subscriptions', () => this.subscriptions.list(userId)),
+      own('notifications', () => this.notifications.listForUser(userId)),
       // Đã có đơn chưa huỷ thì kết quả luôn là "không phải khách mới", dù tài khoản thật hay khách vãng lai: khỏi đọc khách và đơn thêm lần nữa.
       withFacts('newCustomerOffer', async (f) => (f?.hasPriorOrder ? { isNewCustomer: false as const, welcomeVoucher: null } : this.loyalty.getNewCustomerOffer(userId))),
       // Chỉ một câu đếm (không gọi /waste/me nặng): để Trang chủ/Ưu đãi giữ lối vào Đổi rác cho khách còn yêu cầu mở khi chương trình tạm dừng.

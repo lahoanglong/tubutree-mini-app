@@ -199,6 +199,25 @@ describe('HomeService.getForUser — yêu cầu đổi rác đang mở', () => {
       jest.useRealTimers();
     }
   });
+
+  it('hạn chung từ lúc request bắt đầu: câu đếm 0,99 s rồi khối chậm thì tổng không quá 2,5 s', async () => {
+    jest.useFakeTimers();
+    try {
+      const { svc, prisma, catalog } = setup();
+      prisma.$queryRaw.mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve([{ kind: 'waste', key: 'open', n: 0 }]), 990)));
+      catalog.getForYou.mockReturnValue(new Promise(() => undefined));
+      let done = false;
+      const pending = svc.getForUser('u1').then((r) => {
+        done = true;
+        return r;
+      });
+      await jest.advanceTimersByTimeAsync(2_500);
+      expect(done).toBe(true);
+      expect((await pending).forYou).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
 
 describe('HomeService.getForUser', () => {
