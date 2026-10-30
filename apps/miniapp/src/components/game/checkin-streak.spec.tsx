@@ -60,6 +60,16 @@ describe('CheckInStreak', () => {
     expect(doneCells(container)).toBe(2);
   });
 
+  it('câu phụ: user thật được hứa kèm Điểm Xanh, khách vãng lai (pointsBlocked) chỉ thấy giọt nước', () => {
+    const profile = { ...PROFILE, dailyLoginSeeds: 10, firstCheckinBonus: 0 } as unknown as GameProfile;
+    const { unmount } = renderStreak(profile, { status: STATUS(0, 0) });
+    expect(screen.getByText('Nhận +10💧 và Điểm Xanh mỗi ngày')).toBeInTheDocument();
+    unmount();
+    const { container } = renderStreak(profile, { status: { ...(STATUS(0, 0) as object), pointsBlocked: 'GUEST' } as never });
+    expect(screen.getByText('Nhận +10💧 mỗi ngày')).toBeInTheDocument();
+    expect(container.textContent).not.toContain('Điểm Xanh');
+  });
+
   it('trạng thái chung tải lỗi: một dòng báo + Thử lại gọi lại việc tải', () => {
     const retry = vi.fn();
     renderStreak(PROFILE, { statusError: true, onRetryStatus: retry });
