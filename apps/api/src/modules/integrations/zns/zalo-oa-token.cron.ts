@@ -14,7 +14,7 @@ export class ZaloOaTokenCron {
   //
   // Toàn thân bọc try/catch: @Cron của @nestjs/schedule không tự bắt lỗi — một lần refresh lỗi
   // (network, Zalo trả lỗi...) ném ra ngoài là unhandledRejection, mà Node 20 mặc định crash cả
-  // process (sập toàn bộ API, không chỉ riêng ZNS).
+  // process (sập toàn bộ API, không chỉ riêng ZNS). Dòng log phải chứa "Zalo OA refresh": cảnh báo ở màn Sức khoẻ hệ thống bảo người trực tìm chuỗi đó.
   @Cron('0 0 */6 * * *', { timeZone: CRON_TZ })
   @TrackCron()
   async refresh() {
@@ -22,7 +22,7 @@ export class ZaloOaTokenCron {
       const ok = await this.tokens.refreshIfNeeded();
       if (ok) this.logger.log('Đã làm mới Zalo OA access token.');
     } catch (err) {
-      this.logger.error(`Làm mới Zalo OA access token lỗi: ${err instanceof Error ? err.message : err}`);
+      this.logger.error(`Zalo OA refresh: lượt cron lỗi: ${err instanceof Error ? err.message : err}`);
     }
   }
 }

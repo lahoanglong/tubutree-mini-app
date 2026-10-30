@@ -1092,6 +1092,29 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       expect(calls[1]!.toISOString()).toBe('2025-11-21T20:15:00.000Z');
     });
 
+    it('hạn chỉ vài giây sau 03:15 (hạn do cron đặt): lấy lượt 03:15 ngày hôm sau, kể cả múi giờ máy khác nhau', async () => {
+      const calls: Date[] = [];
+      const prisma = {
+        order: {
+          aggregate: jest.fn(async ({ where }: { where: { createdAt: { gte: Date } } }) => {
+            calls.push(where.createdAt.gte);
+            return { _sum: { total: 0 } };
+          }),
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+        externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
+        pointsTransaction: fakeLedger([]),
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      const svc = new LoyaltyService(prisma, makeConfig());
+      // 03:15:02 giờ VN ngày 21/11 (20:15:02Z ngày 20) và đúng 03:15:00.
+      await svc.tierKeepGap('u1', GRACE_TIERS[1] as never, new Date('2026-11-20T20:15:02.000Z'));
+      await svc.tierKeepGap('u1', GRACE_TIERS[1] as never, new Date('2026-11-20T20:15:00.000Z'));
+      expect(calls[0]!.toISOString()).toBe('2025-11-21T20:15:00.000Z');
+      expect(calls[1]!.toISOString()).toBe('2025-11-20T20:15:00.000Z');
+    });
+
     it('không có hạn, hoặc hạn đã qua, hoặc chưa có hạng: không trả tierGrace', async () => {
       const past = new Date(Date.now() - 864e5);
       expect((await new LoyaltyService(build({ tierId: 'loc', tier: GRACE_TIERS[1], tierGraceUntil: null }), makeConfig()).getOverview('u1')).tierGrace).toBeNull();
@@ -1617,6 +1640,15 @@ describe('LoyaltyService.getNewCustomerOffer', () => {
     });
     // Cùng bộ lọc "đơn đã tính" với mã chỉ-khách-mới: đơn huỷ không tính (priorOrderWhere).
     expect(orderFindFirst.mock.calls[0][0].where).toMatchObject({ userId: 'me', status: { not: 'CANCELLED' } });
+  });
+
+  it('đã biết chưa có đơn (số đếm của Trang chủ) → không đọc đơn lần nào, đọc khách một lần, mã chỉ-khách-mới vẫn hiện', async () => {
+    const onlyNew = { ...welcome, newCustomerOnly: true } as unknown as ReturnType<typeof coupon>;
+    const { svc, orderFindFirst, prisma } = setup({ priorOrder: true, coupons: [onlyNew] });
+    const offer = await svc.getNewCustomerOffer('me', { hasPriorOrder: false });
+    expect(offer.welcomeVoucher).toMatchObject({ code: 'WELCOME-ME' });
+    expect(orderFindFirst).not.toHaveBeenCalled();
+    expect(prisma.user.findUniqueOrThrow).toHaveBeenCalledTimes(1);
   });
 
   it('đã có đơn (chờ thanh toán, đang giao, đã giao, đã trả đều tính) → không phải khách mới, không nạp ví voucher', async () => {

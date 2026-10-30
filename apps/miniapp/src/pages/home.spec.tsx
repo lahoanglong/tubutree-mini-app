@@ -11,8 +11,9 @@ const mocks = vi.hoisted(() => ({
   fetchPurchasedItems: vi.fn(),
   unreadCount: vi.fn(),
   coreGet: vi.fn(),
-  auth: { status: 'authenticated' as 'authenticated' | 'guest' | 'loading', user: { id: 'u1' } as { id: string } | null },
+  auth: { status: 'authenticated' as 'authenticated' | 'guest' | 'loading' | 'error', user: { id: 'u1' } as { id: string } | null },
   onRefresh: undefined as undefined | (() => Promise<unknown> | void),
+  restore: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -38,7 +39,7 @@ vi.mock('../services/core-http', () => ({
   },
 }));
 vi.mock('../store/auth', () => ({
-  useAuthStore: (sel: (s: { status: string; user: { id: string } | null }) => unknown) => sel({ status: mocks.auth.status, user: mocks.auth.user }),
+  useAuthStore: (sel: (s: { status: string; user: { id: string } | null; restore: () => void }) => unknown) => sel({ status: mocks.auth.status, user: mocks.auth.user, restore: mocks.restore }),
 }));
 // Mỗi khối mới đã có test riêng; ở đây chỉ kiểm thứ tự, khối lỗi/khung chờ của Bán chạy và hành vi cấp trang.
 vi.mock('../components/flash-sale', () => ({ FlashSale: () => null, UpcomingFlashSales: () => null }));
@@ -46,6 +47,7 @@ vi.mock('../components/reorder/purchased-rail', () => ({ PURCHASED_RAIL_LIMIT: 1
 vi.mock('../components/home/member-card', () => ({
   MemberCard: () => <section aria-label="Thẻ thành viên" />,
   MemberCardSkeleton: () => <div data-testid="member-card-loading" />,
+  MemberCardUnavailable: ({ onRetry }: { onRetry: () => void }) => <button data-testid="member-card-unavailable" onClick={onRetry}>Thử lại</button>,
 }));
 vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false }) }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => <section aria-label="Lối tắt" /> }));
@@ -192,6 +194,23 @@ describe('HomePage (phương án A, 9 khối)', () => {
     renderHome();
     expect(blockOrder()).toEqual(UNKNOWN);
     expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
+  });
+
+  it('R-156: khách cũ mất mạng lúc mở app (status error) và máy đã nhớ khách cũ: bố cục khách cũ kèm thẻ báo lỗi, không quà khách mới, không Bán chạy; máy chưa nhớ gì thì rơi về khách mới', async () => {
+    localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
+    mocks.auth.status = 'error';
+    mocks.auth.user = null;
+    const first = renderHome();
+    expect(blockOrder()).toEqual(RETURNING);
+    expect(screen.getByTestId('member-card-unavailable')).toBeInTheDocument();
+    act(() => screen.getByTestId('member-card-unavailable').click());
+    expect(mocks.restore).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Bán chạy' })).toBeNull();
+    first.unmount();
+    localStorage.clear();
+    renderHome();
+    expect(screen.getByRole('region', { name: 'Quà khách mới' })).toBeInTheDocument();
   });
 
   it('khách cũ không nhận dải lỗi cấp trang dù kệ Bán chạy (khách cũ không thấy) lỗi: kệ này không được tải', async () => {

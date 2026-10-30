@@ -106,7 +106,7 @@ export function RecyclePoints() {
     );
   }
   if (!me || !points || leave) return shell(skeleton);
-  // Chưa có SĐT đã xác minh thì web không xin được (chỉ Zalo xin được): chỉ chỉ đường sang Mini App, không có đường lách (Q2).
+  // Chưa có SĐT đã xác minh thì web không xin được (chỉ Zalo xin được): chỉ chỉ đường sang Mini App, không có đường lách.
   if (me.eligibility !== 'OK') return shell(<MiniAppOnlyNotice path="/doi-rac/tao" />);
 
   const tabItems = provinces.map((x) => ({ key: x.code, label: x.name }));

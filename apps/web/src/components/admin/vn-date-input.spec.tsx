@@ -74,6 +74,30 @@ describe('VnDateInput', () => {
     expect(field(r.container).getAttribute('aria-invalid')).toBe('true');
   });
 
+  it('R-168: ngoài khoảng min/max, rangeMessage thay câu chung; rangeMessage={null} chỉ tô viền, không thêm câu', async () => {
+    const blur = (c: HTMLElement) => act(() => field(c).dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    const a = render(<VnDateInput value="" min="2026-10-05" ariaLabel="Từ ngày" onChange={() => {}} rangeMessage="Chọn ngày từ 05/10/2026 trở đi." />);
+    mounted.push(a);
+    typeInto(field(a.container), '03102026');
+    blur(a.container);
+    await flush();
+    expect(a.container.textContent).toContain('Chọn ngày từ 05/10/2026 trở đi.');
+    expect(a.container.textContent).not.toContain('ngoài khoảng cho phép');
+    const b = render(<VnDateInput value="" min="2026-10-05" ariaLabel="Từ ngày" onChange={() => {}} rangeMessage={null} />);
+    mounted.push(b);
+    typeInto(field(b.container), '03102026');
+    blur(b.container);
+    await flush();
+    expect(field(b.container).getAttribute('aria-invalid')).toBe('true');
+    expect(b.container.querySelector('[role="alert"]')).toBeNull();
+    const c = render(<VnDateInput value="" min="2026-10-05" ariaLabel="Từ ngày" onChange={() => {}} />);
+    mounted.push(c);
+    typeInto(field(c.container), '03102026');
+    blur(c.container);
+    await flush();
+    expect(c.container.textContent).toContain('Ngày nằm ngoài khoảng cho phép.');
+  });
+
   it('onPendingChange báo true khi đang gõ dở hoặc ngày không có thật, false khi đủ ngày hợp lệ hoặc rỗng; dòng nhắc nói đúng lý do', async () => {
     const onPending = vi.fn();
     function H() {

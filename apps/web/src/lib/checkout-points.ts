@@ -1,30 +1,21 @@
 import { formatVnNumber } from '@tubutree/app-core/number-format';
+import { convertedPointsNote, lockedPointsLabel as coreLockedPointsLabel, pointsSummary as coreSummary } from '@tubutree/app-core/points-lots';
 
 const clamp = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
 /** Nhóm nghìn kiểu Việt: 1800 → "1.800". Dùng cho mọi số điểm/số lượng hiển thị. */
 export const formatCount = (n: number) => formatVnNumber(n);
 const group = formatCount;
 const CONVERTED_FULL_VALUE = ', trả tới 100% giá trị hàng';
-const convertedPointsNote = (converted: number) => `trong đó ${group(converted)} điểm không hết hạn`;
 
-/**
- * Điểm Xanh khách thấy: MỘT con số = lô thường (có hạn) + lô quy đổi từ xu cũ (không hết hạn, tiền trả trước).
- * Số âm hoặc rác → 0; phiên/API cũ chưa có lô quy đổi → 0.
- */
+/** Tổng hai lô Điểm Xanh (luật ở app-core, dùng chung với Mini) kèm câu nói rõ phần không hết hạn. */
 export function pointsSummary(u: { pointsBalance: number; pointsConvertedBalance?: number }): {
   standard: number;
   converted: number;
   total: number;
   convertedNote: string | null;
 } {
-  const standard = clamp(u.pointsBalance);
-  const converted = clamp(u.pointsConvertedBalance);
-  return {
-    standard,
-    converted,
-    total: standard + converted,
-    convertedNote: converted > 0 ? convertedPointsNote(converted) : null,
-  };
+  const lots = coreSummary(u);
+  return { ...lots, convertedNote: convertedPointsNote(lots.converted) };
 }
 
 export interface CheckoutPointsOffer {
@@ -72,8 +63,7 @@ export function checkoutPointsOffer(
  * Cùng chữ với checkoutPoints().label của Mini App.
  */
 export function lockedPointsLabel(quote: { pointsBalance: number; pointsConvertedBalance?: number } | undefined, offer: Pick<CheckoutPointsOffer, 'usable'>): string {
-  const total = quote ? pointsSummary(quote).total : offer.usable;
-  return `Bạn đang có ${group(total)} điểm`;
+  return coreLockedPointsLabel(quote ? coreSummary(quote).total : offer.usable);
 }
 
 /**

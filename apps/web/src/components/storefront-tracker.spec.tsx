@@ -416,6 +416,56 @@ describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã c�
     await t.unmount();
   });
 
+  it('sang gian hàng đối tác khi chạm CTV còn đang chạy (localStorage hỏng nên không có bản chờ): chạm brand đợi chạm CTV xong rồi mới quyết, không xoá slug gian hàng CTV', async () => {
+    const real = Object.getOwnPropertyDescriptor(window, 'localStorage')!;
+    const boom = () => {
+      throw new Error('blocked');
+    };
+    Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: boom, setItem: boom, removeItem: boom } });
+    try {
+      let finishCtv!: (v: { ok: boolean }) => void;
+      mocks.touch.mockReturnValueOnce(new Promise((r) => (finishCtv = r))).mockResolvedValue({ ok: true });
+      const ctv = await mountKept(<StorefrontTracker slug="an-shop" type="CTV" referralCode="AN123" />);
+      expect(mocks.touch).toHaveBeenCalledTimes(1);
+      await ctv.unmount();
+      const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+      expect(mocks.touch).toHaveBeenCalledTimes(1);
+      await act(async () => finishCtv({ ok: true }));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      expect(mocks.touch).toHaveBeenCalledTimes(1);
+      expect(wasCtvTouched('AN123')).toBe(true);
+      await t.unmount();
+    } finally {
+      Object.defineProperty(window, 'localStorage', real);
+    }
+  });
+
+  it('chạm CTV đang chạy rồi mất mạng (localStorage hỏng): chạm brand đang đợi vẫn được gửi', async () => {
+    const real = Object.getOwnPropertyDescriptor(window, 'localStorage')!;
+    const boom = () => {
+      throw new Error('blocked');
+    };
+    Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: boom, setItem: boom, removeItem: boom } });
+    try {
+      let failCtv!: (e: Error) => void;
+      mocks.touch.mockReturnValueOnce(new Promise((_, rej) => (failCtv = rej))).mockResolvedValue({ ok: true });
+      const ctv = await mountKept(<StorefrontTracker slug="an-shop" type="CTV" referralCode="AN123" />);
+      await ctv.unmount();
+      const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+      await act(async () => failCtv(new NetworkError(false)));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      expect(mocks.touch).toHaveBeenCalledTimes(2);
+      expect(mocks.touch).toHaveBeenLastCalledWith({ referralCode: 'AN123', storefrontSlug: 'doi-tac', kind: 'brand' });
+      await t.unmount();
+    } finally {
+      Object.defineProperty(window, 'localStorage', real);
+    }
+  });
+
   it('gian hàng đối tác mà mã chưa từng được ghi công như CTV: vẫn chạm kiểu brand', async () => {
     mocks.touch.mockResolvedValue({ ok: true });
     window.history.replaceState({}, '', '/?ref=KHAC99');

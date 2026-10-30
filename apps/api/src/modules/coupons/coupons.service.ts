@@ -130,6 +130,14 @@ function couponAmount(coupon: Coupon, subtotal: number): { discount: number; fre
   return { discount, freeship };
 }
 
+/** Dữ liệu khách mà người gọi đã đọc trong cùng yêu cầu (giỏ đọc khách một lần): đỡ đọc lại user và đơn cho mỗi lần xét mã. */
+export interface CouponUserFacts {
+  phone: string | null;
+  zaloId: string | null;
+  /** Có đơn tính là "đã mua" (COUNTED_ORDER_WHERE); thiếu thì tra lại từ DB. */
+  hasPriorOrder?: boolean;
+}
+
 /** Số mã tối đa xem trước trong một lần (các mã đầu ví): ví khách thật có vài mã, trần này chỉ chặn ví bất thường. */
 export const COUPON_PREVIEW_LIMIT = 50;
 
@@ -146,27 +154,36 @@ export class CouponsService {
    * nên `subtotal`; bắt buộc để áp mã gắn sản phẩm (mã mua chung) — thiếu thì mã đó bị từ chối, không
    * bao giờ rơi về tính trên cả giỏ.
    */
-  async validateAndCompute(code: string, userId: string, subtotal: number, lines?: CouponLine[]): Promise<CouponResult> {
-    const coupon = await this.prisma.coupon.findUnique({ where: { code: normalizeCouponCode(code) } });
-    assertCouponLive(coupon);
+  async validateAndCompute(
+    code: string,
+    userId: string,
+    subtotal: number,
+    lines?: CouponLine[],
+    userFacts?: CouponUserFacts,
+  ): Promise<CouponResult> {
+    // Lượt đã dùng của khách đọc luôn trong câu đọc mã (đếm kèm), không một câu count riêng.
+    const found = await this.prisma.coupon.findUnique({
+      where: { code: normalizeCouponCode(code) },
+      include: { _count: { select: { redemptions: { where: { userId } } } } },
+    });
+    assertCouponLive(found);
+    const { _count: usedCount, ...coupon } = found;
 
     await this.assertScopeOwnership(coupon, userId, this.prisma);
     if (requiresRealUser(coupon)) {
-      const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+      const u = userFacts ?? (await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } }));
       if (!isRealUser(u)) throw new BadRequestException(REAL_USER_REQUIRED_MSG);
     }
     // Chỉ để báo sớm; chốt cuối nằm trong transaction đặt đơn (redeemInTx).
-    if (coupon.newCustomerOnly && (await hasPriorOrder(this.prisma, userId))) {
-      throw new BadRequestException(NEW_CUSTOMER_ONLY_MSG);
+    if (coupon.newCustomerOnly) {
+      const prior = userFacts?.hasPriorOrder ?? (await hasPriorOrder(this.prisma, userId));
+      if (prior) throw new BadRequestException(NEW_CUSTOMER_ONLY_MSG);
     }
 
     assertCouponWindow(coupon, new Date());
     const scoped = couponScopedSubtotal(coupon, subtotal, lines);
 
-    const usedByUser = await this.prisma.couponRedemption.count({
-      where: { couponId: coupon.id, userId },
-    });
-    assertPerUserLimit(coupon, usedByUser);
+    assertPerUserLimit(coupon, usedCount.redemptions);
     if (coupon.usageLimit != null) {
       // Chỉ check pre-flight để UX tốt; kiểm cuối ATOMIC ở redeem() (updateMany guard usedCount<usageLimit).
       const totalUsed = await this.prisma.couponRedemption.count({ where: { couponId: coupon.id } });

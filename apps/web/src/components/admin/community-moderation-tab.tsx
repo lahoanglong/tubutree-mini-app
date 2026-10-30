@@ -439,8 +439,8 @@ function UnansweredRow({ question: p }: { question: CommunityUnansweredQuestion 
           <button type="submit" disabled={!body || send.pending} className={BTN_PRIMARY}>
             {send.pending ? 'Đang gửi…' : 'Gửi trả lời'}
           </button>
-          <Link href={`/cong-dong/${encodeURIComponent(p.id)}`} target="_blank" rel="noopener" className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-forest-700 underline sm:min-h-6 sm:px-1">
-            Mở bài
+          <Link href={`/cong-dong/${encodeURIComponent(p.id)}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-forest-700 underline sm:min-h-6 sm:px-1">
+            Mở bài<span className="sr-only"> (mở tab mới)</span>
           </Link>
         </div>
       </form>

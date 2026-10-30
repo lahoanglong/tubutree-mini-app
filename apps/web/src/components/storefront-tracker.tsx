@@ -53,7 +53,7 @@ const isPermanentRejection = (e: unknown) => e instanceof ApiError && e.status >
  * link mã khách thường được mở sau. Bản chờ chỉ xoá khi mọi chạm đều đã được máy chủ trả lời (kể cả ok:false hay bị từ chối hẳn, thử lại
  * cũng vậy); lỗi tạm thời (mạng, 5xx, hết phiên) thì giữ để lần sau thử lại. Best-effort: hỏng thì vẫn còn ngữ cảnh trong tab để gửi lúc đặt đơn.
  */
-async function replayTouches(session: TouchDto | null): Promise<void> {
+async function runReplay(session: TouchDto | null): Promise<void> {
   const pending = readPendingRefs()
     .map(touchFromPending)
     .filter((t): t is TouchDto => t !== null);
@@ -79,6 +79,17 @@ async function replayTouches(session: TouchDto | null): Promise<void> {
     }
   }
   if (delivered) clearPendingRef();
+}
+
+/**
+ * Các lượt chạm chạy lần lượt: lượt chạm brand đợi lượt chạm CTV đang bay xong rồi mới kiểm dấu "đã ghi công như CTV". Gửi song song thì
+ * máy chủ có thể xử lý brand sau cùng và xoá slug gian hàng CTV khỏi dòng chạm; bản chờ chỉ che được chuyện này khi localStorage dùng được.
+ */
+let replayQueue: Promise<unknown> = Promise.resolve();
+function replayTouches(session: TouchDto | null): Promise<void> {
+  const run = replayQueue.then(() => runReplay(session));
+  replayQueue = run.catch(() => {});
+  return run;
 }
 
 /**

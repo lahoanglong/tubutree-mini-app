@@ -13,6 +13,7 @@ import {
 } from '../services/shop-api';
 import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { useLoginWithNotice } from './ui/auth-gate';
 import { REWARD_ALREADY_GIVEN, VIDEO_UPLOADING, rewardHint } from '@tubutree/app-core/review-copy';
 import { MultiImageUpload, VideoUpload, isCloudinaryConfigured } from './image-upload';
 import { formatDate, formatNumber } from '../utils/format';
@@ -97,7 +98,8 @@ export function ReviewsSection({
   openForOrderId?: string;
   onOrderLinkUsed?: () => void;
 }) {
-  const { status, login } = useAuthStore();
+  const { status } = useAuthStore();
+  const login = useLoginWithNotice();
   const [writing, setWriting] = useState(false);
   const [target, setTarget] = useState<FormTarget | null>(null);
   // BottomSheet gỡ nội dung khỏi DOM khi đóng; nháp nằm ở đây để chạm nhầm lên mask/vuốt xuống

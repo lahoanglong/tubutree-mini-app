@@ -29,4 +29,11 @@ describe('next.config CSP', () => {
     const connect = csp.split('; ').find((d) => d.startsWith('connect-src '))!;
     expect(connect.split(' ')).toContain('https://api.cloudinary.com');
   });
+
+  it('media-src cho video Cloudinary và blob: (xem trước, đo độ dài video trên máy), không rơi về default-src', async () => {
+    const rules = await nextConfig.headers!();
+    const csp = rules.flatMap((r) => r.headers).find((h) => h.key === 'Content-Security-Policy-Report-Only')!.value;
+    const media = csp.split('; ').find((d) => d.startsWith('media-src '));
+    expect(media?.split(' ')).toEqual(expect.arrayContaining(["'self'", 'blob:', 'https://res.cloudinary.com']));
+  });
 });

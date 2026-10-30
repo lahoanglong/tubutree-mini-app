@@ -16,6 +16,7 @@ import { HOME_HINT_COOKIE, SESSION_COOKIE } from './home-restore-hint';
 import { clearSavedInvoices } from './saved-invoice';
 import { clearRecentCustomers } from '@/components/affiliate/recent-customers';
 import { clearWizardStorage } from './recycle-wizard';
+import { clearCtvTouched } from './storefront-context';
 import { readFirstTouchCookie } from './entry-source';
 import { browserStorage } from './recently-viewed';
 
@@ -232,6 +233,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearSavedInvoices();
     clearRecentCustomers();
     clearWizardStorage();
+    clearCtvTouched();
   }, [qc]);
 
   const updateProfile = useCallback((patch: Partial<Pick<WebUser, 'fullName' | 'avatarUrl'>>) => {

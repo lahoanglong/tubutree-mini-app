@@ -19,6 +19,6 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
   imports: [FlashSaleModule, OrdersModule, SubscriptionsModule],
   controllers: [CatalogController, HomeController, ProductCategoryAdminController, ProductAdminController, PublicImageController, ImageResizeController],
   providers: [CatalogService, HomeService, ProductCategoryAdminService, ProductAdminService, PublicImageService, ImageResizeService],
-  exports: [CatalogService],
+  exports: [CatalogService, ImageResizeService],
 })
 export class CatalogModule {}
