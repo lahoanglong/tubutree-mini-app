@@ -6,6 +6,7 @@ Website app.tubutree.com và Mini App Zalo "Tubu Tree" (gọi chung là "Tubu Tr
 
 - Tên đơn vị: CÔNG TY TNHH TUBU TREE
 - Mã số thuế: 0319585995
+- Giấy chứng nhận đăng ký doanh nghiệp số [SỐ ĐKDN], cấp lần đầu ngày [NGÀY CẤP ĐKDN] tại [NƠI CẤP ĐKDN] [cần luật sư kiểm]
 - Địa chỉ: Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh, Việt Nam
 - Người đại diện theo pháp luật: [NGƯỜI ĐẠI DIỆN]
 - Hotline: [SỐ HOTLINE]
@@ -18,6 +19,7 @@ Tubu Tree còn là nơi giới thiệu và nhận đơn cho một số gian hàn
 ## 2. Tài khoản
 
 - Bạn đăng nhập bằng tài khoản Zalo. Thông tin bạn cung cấp phải đúng và là của chính bạn.
+- Trong Mini App, bạn có thể dùng thử khi chưa đăng nhập Zalo (gọi là khách vãng lai). Tài khoản khách vãng lai gắn với thiết bị bạn đang dùng. Một số quyền lợi chỉ dành cho tài khoản đã đăng nhập Zalo: Điểm Xanh từ điểm danh, nhiệm vụ và trò chơi, quà và ưu đãi cho khách mới, mã giảm giá công khai, mua chung, đăng ký CTV và chương trình Đổi rác lấy quà. Khách vãng lai vẫn điểm danh và nhận giọt nước tưới cây. Khi bạn đăng nhập Zalo trên cùng thiết bị, giỏ hàng, địa chỉ, điểm và đơn hàng của tài khoản khách vãng lai được gộp vào tài khoản Zalo. Điểm danh trước đó không được cộng bù Điểm Xanh.
 - Người dưới 16 tuổi cần có cha mẹ hoặc người giám hộ đồng ý khi dùng dịch vụ. [cần luật sư kiểm]
 - Mỗi người dùng một tài khoản. Bạn tự giữ an toàn cho tài khoản Zalo của mình và báo ngay cho chúng tôi nếu nghi ngờ bị người khác sử dụng.
 - Chúng tôi có thể tạm khoá tài khoản có dấu hiệu gian lận hoặc vi phạm điều khoản này. Chúng tôi sẽ nêu lý do khi bạn hỏi.
@@ -59,6 +61,7 @@ Hãy đối chiếu thông tin trên màn hình thanh toán với thông tin nà
 
 - Ví Tubu là số dư trên tài khoản Tubu Tree của bạn. Số dư đến từ tiền hoàn đơn hàng, hoa hồng hoặc các khoản Tubu Tree trả cho bạn.
 - Bạn chỉ dùng số dư để thanh toán đơn hàng. Ví Tubu không rút được về tài khoản ngân hàng hay ví điện tử. Hoa hồng của bạn chỉ chuyển vào Ví Tubu, theo tỷ lệ 1:1.
+- Nếu bạn là CTV hoặc đại lý, số dư Ví có thể bị trừ khi Tubu Tree thu hồi hoa hồng của đơn bị huỷ hoặc bị trả (xem mục 9). Chỉ khoản thu hồi này mới có thể làm số dư Ví âm. Khi số dư Ví âm, bạn không thanh toán được bằng Ví Tubu. Hoa hồng mới chuyển vào Ví sẽ bù dần phần âm.
 - Ví Tubu không sinh lãi và không thể nạp tiền mặt vào.
 - Ví Tubu không phải là ví điện tử hay tài khoản thanh toán do ngân hàng hoặc tổ chức được cấp phép cung cấp. [cần luật sư kiểm]
 
@@ -67,14 +70,16 @@ Hãy đối chiếu thông tin trên màn hình thanh toán với thông tin nà
 Điểm Xanh là điểm thưởng của Tubu Tree. 1 điểm có giá trị 1đ khi dùng.
 
 - Đơn mua trong ứng dụng: bạn nhận 2% giá trị hàng sau khi đã trừ mọi giảm giá (không tính phí vận chuyển), nhân với hệ số theo hạng thành viên. Các hạng cho tỷ lệ từ 2% đến 4%.
-- Đơn mua trên sàn (Shopee, Lazada, TikTok Shop): bạn quét hoặc nhập mã vận đơn trong Mini App để tích 1% giá trị hàng. Điểm ở trạng thái chờ. Sau khi đơn giao thành công và qua thêm 14 ngày, điểm thành điểm dùng được. Nếu đơn bị hoàn thì điểm bị huỷ. Mỗi mã vận đơn chỉ tích điểm một lần.
-- Đơn do Tubu Tree tư vấn qua chat hoặc điện thoại: điểm được cộng theo số điện thoại của bạn, cùng tỷ lệ với đơn trong ứng dụng, sau khi đơn giao thành công và qua thêm 14 ngày. Nếu số điện thoại đó chưa dùng Mini App, điểm được giữ trong 30 ngày. Nếu bạn vào Mini App bằng số điện thoại đó trong thời gian này thì tự nhận điểm.
+- Đơn mua hàng Tubu Tree trên sàn (Shopee, Lazada, TikTok Shop), khi tính năng này được mở trong Mini App: bạn quét hoặc nhập mã vận đơn để tích 1% giá trị hàng (không nhân hệ số hạng). Điểm ở trạng thái chờ. Sau khi đơn giao thành công và qua thêm 14 ngày, điểm thành điểm dùng được. Nếu đơn bị hoàn thì điểm bị huỷ. Mỗi mã vận đơn chỉ tích điểm một lần. Có giới hạn số đơn tích mỗi ngày, số điểm mỗi tháng và tuổi của đơn.
+- Đơn do Tubu Tree tư vấn qua chat hoặc điện thoại, khi tính năng này được mở: điểm được cộng theo số điện thoại của bạn, cùng tỷ lệ với đơn trong ứng dụng, sau khi đơn giao thành công và qua thêm 14 ngày. Nếu số điện thoại đó chưa dùng Mini App, điểm được giữ trong 30 ngày. Nếu bạn vào Mini App bằng số điện thoại đó trong thời gian này thì tự nhận điểm.
+- Điểm danh hằng ngày, nhiệm vụ và trò chơi trong ứng dụng: số điểm hiển thị ở từng tính năng. Phần thưởng Điểm Xanh này chỉ dành cho tài khoản đã đăng nhập Zalo (mục 2).
+- Hạng thành viên được xét theo tổng tiền các đơn bạn tự mua trong ứng dụng đã giao thành công trong 12 tháng gần nhất. Phần tiền đã được hoàn khi trả hàng không được tính. Khi không còn đủ mức của hạng hiện tại, bạn được giữ hạng thêm một thời gian (hiện là 30 ngày) rồi mới bị hạ hạng.
 - Điểm Xanh có hạn dùng 12 tháng kể từ ngày bạn nhận. Chúng tôi nhắc bạn trước khi điểm sắp hết hạn. Điểm hết hạn sẽ bị trừ khỏi tài khoản.
 - Bạn dùng điểm để giảm giá ở bước thanh toán. Mức tối đa dùng được cho mỗi đơn hiển thị ở bước thanh toán (hiện là 20% giá trị hàng của đơn). Điểm không dùng để trừ phí vận chuyển.
-- Khi bạn huỷ đơn hoặc trả hàng, điểm đã dùng cho phần hàng đó được trả lại cho bạn. Điểm đã tích từ phần hàng đó bị thu hồi.
+- Khi bạn huỷ đơn hoặc trả hàng, điểm đã dùng cho phần hàng đó được trả lại cho bạn. Điểm đã tích từ phần hàng đó bị thu hồi, tối đa bằng số điểm bạn đang có. Điểm thưởng đánh giá của sản phẩm bị trả cũng bị thu hồi. Nếu đơn đó đã giúp người giới thiệu bạn nhận thưởng giới thiệu, phần thưởng đó bị thu hồi theo tỷ lệ hàng bị trả.
 - Điểm Xanh không đổi thành tiền mặt.
 
-Mã giảm giá và các ưu đãi khác áp dụng theo điều kiện hiển thị kèm theo từng chương trình, gồm thời hạn, đơn tối thiểu, đối tượng và số lần dùng. Chương trình chỉ cho khách mới thì chỉ áp dụng cho tài khoản chưa có đơn nào. Chúng tôi có thể thu hồi ưu đãi nhận được do gian lận hoặc lạm dụng.
+Mã giảm giá và các ưu đãi khác áp dụng theo điều kiện hiển thị kèm theo từng chương trình, gồm thời hạn, đơn tối thiểu, đối tượng và số lần dùng. Chương trình chỉ cho khách mới thì chỉ áp dụng cho tài khoản đã đăng nhập Zalo và chưa có đơn nào (không tính đơn đã huỷ). Chúng tôi có thể thu hồi ưu đãi nhận được do gian lận hoặc lạm dụng.
 
 ## 8. Giao hàng, đổi trả và hoàn tiền
 
@@ -84,10 +89,12 @@ Việc giao hàng thực hiện theo [Chính sách vận chuyển](/chinh-sach/v
 
 Phần này chỉ áp dụng nếu bạn tham gia làm cộng tác viên (CTV), đại lý hoặc mở gian hàng trên Tubu Tree. [cần luật sư kiểm]
 
-- Chỉ CTV và đại lý được hưởng hoa hồng giới thiệu. Tỷ lệ hoa hồng của từng sản phẩm hiển thị trong trang CTV.
-- Hoa hồng được tính trên đơn do link hoặc gian hàng của bạn giới thiệu. Một số sản phẩm không áp dụng hoa hồng. Bạn không nhận hoa hồng khi tự mua hàng bằng link của mình, hoặc với hàng do gian hàng đối tác giao.
-- Hoa hồng được giữ sau khi đơn giao thành công (hiện là 10 ngày) để chờ hết thời hạn đổi trả, rồi mới được chuyển vào Ví Tubu. Nếu đơn bị huỷ hoặc trả thì hoa hồng của phần đó bị trừ.
-- Khi bạn chuyển hoa hồng vào Ví Tubu, Tubu Tree khấu trừ thuế thu nhập cá nhân 10% theo quy định hiện hành và cấp chứng từ khấu trừ cho bạn. Mức và ngưỡng áp dụng hiển thị ở màn hình chuyển hoa hồng vào Ví. Bạn cần cung cấp mã số thuế cá nhân hoặc số căn cước công dân khi được yêu cầu. [cần luật sư kiểm]
+- Chỉ CTV và đại lý được hưởng hoa hồng giới thiệu. Bạn cần đăng nhập Zalo để đăng ký CTV. Tỷ lệ hoa hồng của từng sản phẩm hiển thị trong trang CTV.
+- Hoa hồng được tính trên đơn do link hoặc gian hàng của bạn giới thiệu. Một số sản phẩm không áp dụng hoa hồng. Hàng do gian hàng đối tác giao không có hoa hồng, trừ sản phẩm có ghi mức hoa hồng riêng. Bạn không nhận hoa hồng khi tự mua hàng bằng link của mình.
+- Hoa hồng được giữ sau khi đơn giao thành công (hiện là 10 ngày, và không ngắn hơn thời hạn đổi trả) để chờ hết thời hạn đổi trả. Sau đó hoa hồng được duyệt và chuyển vào Ví Tubu.
+- Nếu đơn bị huỷ hoặc bị trả, cả đơn hay một phần, hoa hồng của phần hàng bị trả bị thu hồi. Việc thu hồi áp dụng cả khi hoa hồng đã được duyệt hoặc đã chuyển vào Ví Tubu. Trả sản phẩm không có hoa hồng thì không thu hồi gì.
+- Nếu hoa hồng đó đã vào Ví Tubu, Tubu Tree trừ thẳng vào Ví số tiền bạn đã thực nhận của phần hoa hồng bị thu hồi, tức là sau khi trừ thuế thu nhập cá nhân đã khấu trừ. Số dư Ví có thể âm vì khoản trừ này (mục 6). Khi Ví âm, bạn không thanh toán được bằng Ví và chưa xoá được tài khoản. [chủ quyết: phần thuế TNCN đã khấu trừ của khoản hoa hồng bị thu hồi xử lý thế nào (hoàn cho CTV, bù trừ kỳ sau hay giữ nguyên). Mã hiện chỉ trừ Ví phần thực nhận và báo kế toán] [cần luật sư kiểm]
+- Khi hoa hồng được chuyển vào Ví Tubu, Tubu Tree khấu trừ thuế thu nhập cá nhân 10% theo quy định hiện hành và cấp chứng từ khấu trừ cho bạn. Mức và ngưỡng áp dụng hiển thị ở trang CTV. Bạn cần cung cấp mã số thuế cá nhân hoặc số căn cước công dân khi được yêu cầu. [cần luật sư kiểm]
 - Gian hàng của CTV phải được Tubu Tree duyệt trước khi hiển thị lần đầu. Chúng tôi có thể ẩn gian hàng nếu nội dung vi phạm điều khoản này.
 - Nếu vai trò của bạn bị thay đổi hoặc bị thu hồi, bạn vẫn nhận hoa hồng của những đơn đã đặt trước thời điểm đó. Gian hàng của bạn sẽ bị ẩn.
 - Chúng tôi có thể dừng chi trả và thu hồi hoa hồng nhận được do gian lận, tạo đơn ảo hoặc vi phạm điều khoản.

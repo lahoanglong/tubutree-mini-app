@@ -2,7 +2,7 @@ Hiệu lực từ ngày [NGÀY HIỆU LỰC].
 
 ## 1. Tóm tắt nhanh
 
-- Đơn đầu tiên của tài khoản từ 199.000đ được miễn phí vận chuyển.
+- Đơn đầu tiên của tài khoản đã đăng nhập Zalo từ 199.000đ được miễn phí vận chuyển.
 - Các đơn còn lại từ 199.000đ được miễn phí vận chuyển. Dưới 199.000đ, phí hiện là 19.000đ cho hàng do Tubu Tree giao.
 - Phí vận chuyển luôn được hiển thị trước khi bạn bấm đặt hàng.
 - Bạn xem trạng thái và mã vận đơn trong mục Đơn hàng.
@@ -27,7 +27,7 @@ Phí được tính cho từng kiện hàng và hiển thị ở giỏ hàng, b�
 **Kiện do Tubu Tree giao**
 - Phí cố định hiện là 19.000đ cho kiện có giá trị hàng dưới 199.000đ.
 - Kiện có giá trị hàng từ 199.000đ được miễn phí vận chuyển.
-- Ưu đãi đơn đầu: đơn đầu tiên của tài khoản (không tính đơn đã huỷ) được miễn phí vận chuyển khi giá trị hàng của kiện từ 199.000đ. Ưu đãi chỉ dùng một lần cho mỗi tài khoản.
+- Ưu đãi đơn đầu: đơn đầu tiên của tài khoản đã đăng nhập Zalo (không tính đơn đã huỷ) được miễn phí vận chuyển khi giá trị hàng của kiện từ 199.000đ. Ưu đãi chỉ dùng một lần cho mỗi tài khoản. Khách vãng lai chưa đăng nhập Zalo không nhận ưu đãi này.
 - Một số hạng thành viên được miễn phí vận chuyển ở mức giá trị hàng thấp hơn. Mức áp dụng cho bạn hiển thị ở giỏ hàng.
 - Mã miễn phí vận chuyển chỉ áp dụng cho kiện do Tubu Tree giao, theo điều kiện của từng mã.
 
@@ -41,6 +41,7 @@ Phí được tính cho từng kiện hàng và hiển thị ở giỏ hàng, b�
 
 - Nội thành Thành phố Hồ Chí Minh: [SỐ NGÀY GIAO NỘI THÀNH] ngày làm việc.
 - Các tỉnh thành khác: [SỐ NGÀY GIAO TỈNH KHÁC] ngày làm việc.
+- Khi có số ngày giao dự kiến, ứng dụng hiển thị ở bước thanh toán hoặc chi tiết đơn. [chủ quyết: ứng dụng chỉ có một khoảng "Giao dự kiến" chung cho mọi địa chỉ (`shipping.eta_min_days`, `shipping.eta_max_days`, đang trống nên ẩn). Đặt khoảng này bao được cả hai dòng trên, hoặc bỏ câu này nếu để trống]
 - Thời gian tính từ lúc đơn được xác nhận. Với chuyển khoản, tính từ lúc Tubu Tree nhận được tiền. Thời gian không tính ngày lễ và ngày nghỉ của đơn vị vận chuyển.
 - Hàng do gian hàng đối tác giao: gian hàng cần xác nhận đơn trong vòng 24 giờ và bàn giao cho đơn vị vận chuyển trong vòng 48 giờ kể từ khi đơn đến gian hàng. Sau đó thời gian giao theo đơn vị vận chuyển.
 - Đơn gặp thiên tai, dịch bệnh, sự cố giao thông hoặc cao điểm khuyến mãi có thể giao chậm hơn dự kiến. Chúng tôi sẽ thông báo cho bạn khi biết đơn bị chậm.
