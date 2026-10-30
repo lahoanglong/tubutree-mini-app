@@ -24,7 +24,7 @@ import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 import { usePurchasedItems } from './use-purchased-items';
 import { ScrollRail } from '@/components/scroll-rail';
 import { ProductImage } from '@/components/mini/product-image';
-import { announcePdpNavigation } from '@/components/skeletons/pdp-nav-skeleton';
+import { announcePdpNavigation } from '@/components/skeletons/pdp-nav-event';
 
 /** Dùng CHUNG query key ['purchased-items', 10] với Trang chủ khi quyết định thứ tự khối. */
 /** Hai nút hàng Mua lại chia đều chỗ; đệm ngang hẹp để nhãn "Định kỳ -17%" không bị cắt dấu ba chấm ở 320px. */

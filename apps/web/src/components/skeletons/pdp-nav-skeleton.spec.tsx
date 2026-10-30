@@ -7,7 +7,8 @@ import { render, type Rendered } from '@/test-utils/dom';
 const nav = vi.hoisted(() => ({ path: '/san-pham' }));
 vi.mock('next/navigation', () => ({ usePathname: () => nav.path }));
 
-import { PdpNavSkeleton, announcePdpNavigation } from './pdp-nav-skeleton';
+import { PdpNavSkeleton } from './pdp-nav-skeleton';
+import { announcePdpNavigation } from './pdp-nav-event';
 
 const hasSkeleton = () => document.querySelector('[data-testid="pdp-nav-skeleton"]') !== null;
 const link = (text: string) => ([...document.querySelectorAll('button')].find((n) => n.textContent === text) ?? [...document.querySelectorAll('a')].find((n) => n.textContent === text)) as HTMLElement;

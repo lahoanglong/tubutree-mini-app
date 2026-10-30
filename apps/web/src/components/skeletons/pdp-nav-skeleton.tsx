@@ -4,17 +4,11 @@ import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { ProductDetailSkeleton } from './route-skeleton';
+import { PDP_NAV_EVENT } from './pdp-nav-event';
 
 const PDP_PATH = /^\/san-pham\/[^/]+\/?$/;
 // Chỉ là lưới an toàn khi điều hướng hỏng hẳn: mạng chậm thì giữ khung tới khi đường dẫn đổi.
 const MAX_WAIT_MS = 20000;
-const ANNOUNCE_EVENT = 'tubu:pdp-nav';
-
-/** Báo cho khung chờ biết sắp mở trang sản phẩm bằng `router.push` (không có thẻ a để bắt lúc bấm). */
-export function announcePdpNavigation(href: string): void {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(ANNOUNCE_EVENT, { detail: href }));
-}
 
 function pdpPathOf(href: string): string | null {
   try {
@@ -48,10 +42,10 @@ export function PdpNavSkeleton() {
       if (path) setTarget(path);
     };
     document.addEventListener('click', onClick);
-    window.addEventListener(ANNOUNCE_EVENT, onAnnounce);
+    window.addEventListener(PDP_NAV_EVENT, onAnnounce);
     return () => {
       document.removeEventListener('click', onClick);
-      window.removeEventListener(ANNOUNCE_EVENT, onAnnounce);
+      window.removeEventListener(PDP_NAV_EVENT, onAnnounce);
     };
   }, []);
 

@@ -34,7 +34,7 @@ import { ResultHeader } from './result-header';
 import { SortChips } from './sort-chips';
 import { SuggestList } from './suggest-list';
 import { loadErrorText } from '@/lib/error-text';
-import { announcePdpNavigation } from '@/components/skeletons/pdp-nav-skeleton';
+import { announcePdpNavigation } from '@/components/skeletons/pdp-nav-event';
 
 
 /** Danh sách đã tải phía server cho đúng URL ban đầu: hiện ngay (và cho crawler) rồi React Query tiếp quản. */
