@@ -12,6 +12,7 @@ import {
   rememberStorefront,
   rememberReferral,
   clearStorefrontContext,
+  clearCtvTouched,
   markCtvTouched,
   wasCtvTouched,
 } from './storefront-context';
@@ -148,6 +149,14 @@ describe('mã đã được ghi công qua gian hàng CTV trong tab', () => {
     expect(sessionStorage.length).toBe(1);
     clearStorefrontContext();
     expect(wasCtvTouched('AN123')).toBe(false);
+  });
+
+  it('clearCtvTouched chỉ xoá dấu chạm CTV, giữ ngữ cảnh gian hàng của tab', () => {
+    rememberStorefront('an-shop', 'CTV', 'AN123');
+    markCtvTouched('AN123');
+    clearCtvTouched();
+    expect(wasCtvTouched('AN123')).toBe(false);
+    expect(getStorefrontContext()).toMatchObject({ slug: 'an-shop', referralCode: 'AN123' });
   });
 
   it('ghi đè bằng mã CTV khác: chỉ nhớ mã sau cùng', () => {
