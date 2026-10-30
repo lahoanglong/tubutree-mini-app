@@ -230,19 +230,24 @@ describe('Trả một phần: hoa hồng CTV / doanh số mốc và hạng thàn
       expect(await commissionOf(o.order.id)).toMatchObject({ status: 'APPROVED', amount: 5_708, commissionableTotal: 80_833 });
     });
 
-    it('hoa hồng đã duyệt rồi mới trả một phần: trả món không hoa hồng không báo kế toán, trả món có hoa hồng thì báo, hoa hồng không đổi', async () => {
+    it('hoa hồng đã duyệt (chưa vào Ví) rồi mới trả một phần: món không hoa hồng không cắt; món có hoa hồng cắt như lúc chưa duyệt, không trừ Ví, không báo kế toán, báo CTV', async () => {
       const o = await ctvOrder();
       await approve(o.order.id);
       expect(await commissionOf(o.order.id)).toMatchObject({ status: 'APPROVED', amount: 14_750 });
       const accountingAlerts = () => notify.mock.calls.filter((c) => c[1] === 'OPS_REFUND_ALERT' && c[2]?.order_code === o.order.code);
+      const ctvNotices = () => notify.mock.calls.filter((c) => c[0] === o.ctv.id && c[1] === 'COMMISSION_REVERSED');
 
-      await partialReturn(o.admin.id, o.buyer.id, o.order.code, [{ orderItemId: o.c.id, quantity: 1 }]);
-      expect(accountingAlerts()).toHaveLength(0);
-
-      await partialReturn(o.admin.id, o.buyer.id, o.order.code, [{ orderItemId: o.a.id, quantity: 1 }]);
-      expect(accountingAlerts().length).toBeGreaterThan(0);
-      expect(accountingAlerts()[0]![2].message).toContain('đơn trả một phần');
+      const r1 = await partialReturn(o.admin.id, o.buyer.id, o.order.code, [{ orderItemId: o.c.id, quantity: 1 }]);
+      expect(r1.commissionReversed).toBe(0);
       expect(await commissionOf(o.order.id)).toMatchObject({ status: 'APPROVED', amount: 14_750 });
+      expect(ctvNotices()).toHaveLength(0);
+
+      const r2 = await partialReturn(o.admin.id, o.buyer.id, o.order.code, [{ orderItemId: o.a.id, quantity: 1 }]);
+      expect(r2.commissionReversed).toBe(3_333);
+      expect(await commissionOf(o.order.id)).toMatchObject({ status: 'APPROVED', amount: 11_417, commissionableTotal: 161_667 });
+      expect(ctvNotices()).toHaveLength(1);
+      expect(accountingAlerts()).toHaveLength(0);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: o.ctv.id } })).walletBalance).toBe(0);
     });
 
     it('hai admin duyệt cùng một yêu cầu cùng lúc: hoa hồng và nền chỉ giảm một lần', async () => {

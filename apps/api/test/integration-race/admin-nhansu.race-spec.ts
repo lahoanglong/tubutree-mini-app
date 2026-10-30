@@ -64,7 +64,7 @@ describe('Nhóm việc của lời mời + gian hàng đổi sau duyệt (real P
     it('lời mời chưa mở app: lưu nhóm; người đó đăng nhập (applyGrants) thì nhận đúng nhóm, có dòng sổ', async () => {
       const adminUser = await user({ role: 'ADMIN' });
       const phone = newPhone();
-      expect(await rbac.addGrant(adminUser.id, phone, 'STAFF', ['KHO', 'CSKH'])).toEqual({ granted: 'STAFF', applied: false });
+      expect(await rbac.addGrant(adminUser.id, phone, 'STAFF', ['KHO', 'CSKH'])).toEqual({ granted: 'STAFF', applied: false, permissionsChanged: false });
       const stored = await prisma.roleGrant.findFirstOrThrow({ where: { phone, revokedAt: null } });
       expect(stored.staffPermissions).toEqual(['CSKH', 'KHO']);
       const { pendingInvites } = await rbac.listStaff();

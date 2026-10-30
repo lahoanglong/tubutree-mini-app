@@ -467,6 +467,8 @@ Bốn migration của bản này (`20261029010000`, `20261029020000`, `202610290
 
 Kết luận: sau khi bản này đã nhận khách, ưu tiên sửa tiến. Chỉ dùng 7.2 khi lỗi nặng hơn các hậu quả trên, và làm thêm bước 1 và 3 sau khi deploy lại.
 
+Điều kiện 1 của 7.2 (danh sách chờ áp chỉ gồm sáu migration của đợt 15–20/10) và kiểm go-live `db.pending_scope` viết cho đợt trước, nên với bản này sẽ báo "chỉ còn 7.3" vì sáu migration `20261029*` nằm ngoài danh sách đó. Sáu migration này chỉ thêm bảng, cột rỗng, mẫu tin và giá trị enum (đã thử: image cũ khởi động được trên DB đã migrate). Vì vậy, khi đã quyết dùng 7.2 cho bản này theo mục trên, bỏ qua điều kiện 1 và vẫn làm các điều kiện còn lại. Đã có dòng `COMMISSION_REVERSAL` (lệnh đếm ở điểm 5) thì chỉ còn 7.3.
+
 ### 1.14 Sau deploy bản đợt 29/10: đổi khoá khách cũ sang khoá băm (một lần, chủ hoặc điều phối quyết giờ chạy; làm cùng Bước 14, không phải trước ngày deploy)
 
 API mới chỉ đổi khoá `guest_<deviceId>` sang `guest_h_<băm>` khi chính thiết bị đó gọi `/auth/guest`. Khách cũ còn refresh token (token xoay mỗi lần mở app) không đi qua đường này, nên `users.zaloId` của họ vẫn mang deviceId thô, CSKH đọc được qua `GET /admin/users`. Dòng đã gộp `guest_<deviceId>_merged_<ts>` cũng giữ deviceId thô. Bảng `analytics_events` các dòng ghi trước bản này còn deviceId thô ở `anonymousId`. Chạy một lần SAU khi API bản này đã chạy ổn (image cũ không biết khoá băm). Sau đó `adoptLegacyGuest` chỉ còn là lưới an toàn.
