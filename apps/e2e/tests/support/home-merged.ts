@@ -8,7 +8,7 @@ import type { MockApi } from './mock-api';
 const card = (n: number, name: string) => ({
   id: `hm-${n}`, slug: `hm-sp-${n}`, brand: 'Tubu', name, thumbnail: null, basePrice: 100_000 + n, salePrice: null, isFeatured: false, inStock: true,
 });
-const pageOf = (data: unknown[], limit: number) => ({ data, meta: { page: 1, limit, total: data.length } });
+const pageOf = <T>(data: T[], limit: number) => ({ data, meta: { page: 1, limit, total: data.length } });
 
 export const MERGED_FOR_YOU = 'Gợi ý từ request gộp';
 export const MERGED_PURCHASED = 'Mua lại từ request gộp';
@@ -36,7 +36,7 @@ export const HOME_ME: HomeMeDTO = {
     nextCursor: null,
   },
   activeOrderCount: { count: 0 },
-  shippingOrders: pageOf([], 1) as HomeMeDTO['shippingOrders'],
+  shippingOrders: pageOf([], 1) as unknown as HomeMeDTO['shippingOrders'],
   subscriptions: [],
   notifications: [],
   newCustomerOffer: { isNewCustomer: false, welcomeVoucher: null } as HomeMeDTO['newCustomerOffer'],

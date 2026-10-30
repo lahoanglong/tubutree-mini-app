@@ -1,6 +1,5 @@
 import { HOME_PURCHASED_LIMIT, type HomeMeDTO, type HomePublicDTO } from '@tubutree/app-core/api/home';
 import { createHomeFeed, isHomePurchasedRequest } from '@tubutree/app-core/home-feed';
-import { useAuthStore } from '../store/auth';
 import { api } from './api';
 import type { PurchasedItemsPage } from './shop-api';
 
@@ -23,15 +22,21 @@ export { HOME_PURCHASED_LIMIT };
 // Server đã tự cắt từng khối ở ~2,5s nên request gộp không cần chờ lâu mới lùi về request lẻ.
 const FEED_TIMEOUT_MS = 4_000;
 
+// Id tài khoản, không phải access token: token đổi khi làm mới sau 401 dù vẫn cùng một người. Nhận từ chỗ gọi arm vì store/auth import
+// api.ts và kéo theo SDK Zalo, không nạp được từ tầng service (và các test của nó).
+let identityOf: (() => string | null | undefined) | null = null;
+
 const feed = createHomeFeed({
   fetchPublic: () => api.get<HomePublicDTO>('/home', { timeout: FEED_TIMEOUT_MS }).then((r) => r.data),
   fetchMe: () => api.get<HomeMeDTO>('/home/me', { params: { purchasedLimit: HOME_PURCHASED_LIMIT }, timeout: FEED_TIMEOUT_MS }).then((r) => r.data),
-  // Id tài khoản, không phải access token: token đổi khi làm mới sau 401 dù vẫn cùng một người.
-  identity: () => useAuthStore.getState().user?.id,
+  identity: () => identityOf?.(),
 });
 
 /** Gọi khi Trang chủ mount (trước khi các query con chạy). Idempotent. */
-export const armHomeFeed = feed.arm;
+export function armHomeFeed(userIdOf: () => string | null | undefined): void {
+  identityOf = userIdOf;
+  feed.arm();
+}
 export const isHomeFeedArmed = feed.isArmed;
 export const disarmHomeFeed = feed.disarm;
 /** Kéo để làm mới: bỏ khối đã dùng, request gộp kế tiếp sẽ tải lại. */
