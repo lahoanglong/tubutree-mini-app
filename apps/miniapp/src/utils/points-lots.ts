@@ -1,4 +1,4 @@
-import { formatDate, formatNumber, formatPoints } from './format';
+import { formatDate, formatNumber } from './format';
 
 export { convertedPointsNote, pointsSummary } from '@tubutree/app-core/points-lots';
 
