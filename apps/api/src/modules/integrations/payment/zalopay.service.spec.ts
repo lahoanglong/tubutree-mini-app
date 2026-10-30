@@ -90,7 +90,7 @@ describe('ZalopayService.handleCallback (verify MAC §10.1)', () => {
     expect(call.data.paymentStatus).toBe('PAID');
     expect(call.data.status).toBe('CONFIRMED');
     expect(call.data.paidAt).toBeInstanceOf(Date);
-    expect(notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' });
+    expect(notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1', payment_note: ' Tubu Tree đã nhận đủ thanh toán.' });
     // flip count>0 ⇒ order_paid PHẢI được ghi, đúng 1 lần, đúng field.
     expect(analytics.record).toHaveBeenCalledTimes(1);
     expect(analytics.record).toHaveBeenCalledWith(

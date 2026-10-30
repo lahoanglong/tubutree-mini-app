@@ -4,6 +4,7 @@ import type { DealerRewardClaim, DealerRewardClaimStatus } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { orderConfirmedData } from '../notifications/order-confirmed-data';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
 import { lockVariationsInIdOrder, reserveAvailableVariationStock } from '../catalog/variation-stock';
@@ -1417,7 +1418,7 @@ export class DealerService {
       .catch((e) => this.logger.error(`Xếp cập nhật thanh toán Pancake lỗi cho đơn ${order.code}: ${(e as Error).message}`));
     if (this.notifications) {
       await this.notifications
-        .notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code })
+        .notify(order.userId, 'ORDER_CONFIRMED', orderConfirmedData({ code: order.code, paymentStatus: 'PAID' }))
         .catch((e) => this.logger.warn(`notify ORDER_CONFIRMED lỗi (${order.userId}): ${(e as Error).message}`));
     }
     return {

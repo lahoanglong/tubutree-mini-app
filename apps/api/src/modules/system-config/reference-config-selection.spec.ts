@@ -43,6 +43,7 @@ const APPROVED_LOADED_KEYS = [
     'cashback.hold_days',
     'cashback.merchant_user_share',
     'cashback.reconcile_lookback_days',
+    'catalog.launch_date',
     'chat.enabled',
     'chat.hours',
     'chat.off_hours_text',

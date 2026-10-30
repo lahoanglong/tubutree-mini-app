@@ -93,7 +93,7 @@ describe('POST /webhooks/zalopay qua ValidationPipe toàn cục', () => {
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ paymentStatus: 'PAID', status: 'CONFIRMED' }) }),
     );
-    expect(notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' });
+    expect(notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1', payment_note: ' Tubu Tree đã nhận đủ thanh toán.' });
   });
 
   it('ZaloPay thêm trường mới vào body → vẫn nhận (không 400 vì trường lạ)', async () => {
