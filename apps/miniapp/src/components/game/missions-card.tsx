@@ -10,6 +10,7 @@ import { Icon } from '../ui/icon';
 import { ProgressBar } from '../ui/progress-bar';
 import { SR_ONLY } from '../ui/sr-only';
 import { Text } from '../ui/text';
+import { GuestPointsNote } from '../loyalty/guest-points-note';
 import { GameCard } from './game-card';
 
 export function MissionsCard({
@@ -30,8 +31,11 @@ export function MissionsCard({
 }) {
   const [showAll, setShowAll] = useState(false);
   const { items, collapsible } = collapseMissions(missions ?? [], showAll);
+  // Khách vãng lai: tiến độ vẫn tính nhưng không hứa điểm và không có nút nhận thưởng; một câu mời đăng nhập cho cả thẻ.
+  const guest = (missions ?? []).some((m) => m.pointsBlocked);
   return (
     <GameCard title="Nhiệm vụ" icon={Target}>
+      {guest && <GuestPointsNote margin="0 0 4px" />}
       {missions && missions.length > 0 ? (
         items.map((m: MissionItem, idx) => {
           const defaultGoal = { CHECKIN_7: 7, REVIEW_3: 3, INVITE_3: 3, FIRST_ORDER: 1 }[m.code] ?? 1;
@@ -47,7 +51,7 @@ export function MissionsCard({
           // hiện ✓ và +Nđ ngay khi đạt điều kiện nhưng KHÔNG có đường cộng thưởng nào. Giờ tách
           // rõ: ✓ chỉ khi đã claimed (thưởng THẬT đã vào Điểm Xanh); đạt điều kiện nhưng chưa
           // nhận thì hiện nút "Nhận thưởng" (mirror pattern claim của Season Pass).
-          const canClaim = isDone && !m.claimed;
+          const canClaim = isDone && !m.claimed && !m.pointsBlocked;
           const claiming = claimPending && claimVariables === m.code;
           const target = !isDone && onGo ? missionTarget(m.code, m.kind) : null;
 
@@ -66,9 +70,11 @@ export function MissionsCard({
                   {m.title}
                   {m.claimed && <span style={SR_ONLY}> (đã nhận thưởng)</span>}
                 </Text>
-                <Text variant="caption" tone="brand" style={{ whiteSpace: 'nowrap' }}>
-                  +{formatNumber(m.rewardPoints)} Điểm Xanh
-                </Text>
+                {!m.pointsBlocked && (
+                  <Text variant="caption" tone="brand" style={{ whiteSpace: 'nowrap' }}>
+                    +{formatNumber(m.rewardPoints)} Điểm Xanh
+                  </Text>
+                )}
               </div>
               {m.description && (
                 <Text variant="caption" tone="tertiary" as="div">

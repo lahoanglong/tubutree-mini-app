@@ -100,6 +100,20 @@ describe('UserDetailDrawer — sổ Điểm Xanh và sổ ví đọc được b�
     expect(text).not.toContain('WITHDRAW');
   });
 
+  it('Ví âm sau khi thu hồi hoa hồng đơn trả: số dư có dấu trừ, dòng sổ hiện nhãn tiếng Việt thay vì mã COMMISSION_REVERSAL', async () => {
+    const body = await open({
+      ...DETAIL,
+      user: { ...DETAIL.user, walletBalance: -50000 },
+      wallet: [
+        { id: 'w3', delta: -50000, balanceAfter: -50000, type: 'COMMISSION_REVERSAL', refType: 'COMMISSION', refId: 'c1', reason: 'Thu hồi hoa hồng đơn TUBU2026101538731 (trả hàng)', createdAt: '2026-10-29T03:00:00.000Z' },
+      ],
+    });
+    expect(section(body, 'Hồ sơ').textContent).toContain('-50.000đ');
+    const text = section(body, 'Sổ ví').textContent ?? '';
+    expect(text).toContain('Thu hồi hoa hồng đơn TUBU2026101538731');
+    expect(text).not.toContain('COMMISSION_REVERSAL');
+  });
+
   it('nhãn dài kèm mã đơn ngắt dòng trong ô của nó, số điểm/số tiền luôn nằm bên phải (không rớt xuống dòng dưới)', async () => {
     const body = await open();
     for (const title of ['Điểm Xanh', 'Sổ ví']) {

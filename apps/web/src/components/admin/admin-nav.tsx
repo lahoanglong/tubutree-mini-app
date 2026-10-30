@@ -100,6 +100,8 @@ function NavList<K extends string>({
         .filter((g) => g.items.length > 0)
     : groups;
   const firstMatch = q ? shown[0]?.items[0] : undefined;
+  // Mục lặp ở nhiều nhóm (lối tắt "Hay dùng" và nhóm gốc): chỉ nhóm đầu tiên chứa nó được sáng, để một route chỉ có một mục sáng.
+  const activeOwner = shown.find((g) => g.items.some((i) => i.k === active))?.label;
   return (
     <div className="space-y-2">
       <div className="relative">
@@ -122,7 +124,8 @@ function NavList<K extends string>({
       {q && shown.length === 0 && <p className="px-3 py-2 text-sm text-stone-600">Không có mục nào khớp &quot;{query.trim()}&quot;.</p>}
       {shown.map((g) => {
         const expanded = !!q || open.includes(g.label);
-        const items = expanded ? g.items : g.items.filter((i) => i.k === active);
+        const owns = g.label === activeOwner;
+        const items = expanded ? g.items : g.items.filter((i) => i.k === active && owns);
         return (
           <div key={g.label} role="group" aria-label={g.label}>
             <button
@@ -144,9 +147,9 @@ function NavList<K extends string>({
                 <li key={t.k}>
                   <button
                     type="button"
-                    aria-current={active === t.k ? 'page' : undefined}
+                    aria-current={active === t.k && owns ? 'page' : undefined}
                     onClick={() => onSelect(t.k)}
-                    className={`${ITEM_CLASS} ${active === t.k ? ITEM_ACTIVE : ITEM_IDLE}`}
+                    className={`${ITEM_CLASS} ${active === t.k && owns ? ITEM_ACTIVE : ITEM_IDLE}`}
                   >
                     {t.label}
                     {badge?.(t.k)}

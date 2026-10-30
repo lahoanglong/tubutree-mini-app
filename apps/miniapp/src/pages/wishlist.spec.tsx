@@ -47,6 +47,7 @@ vi.mock('../components/product-card', () => ({
 }));
 
 import WishlistPage from './wishlist';
+import { QUICK_ADD_SOLD_OUT } from '@tubutree/app-core/quick-add';
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -153,6 +154,15 @@ describe('Trang Yêu thích: nút giỏ nhanh', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' }));
     await waitFor(() => expect(mocks.snackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     expect(mocks.addToCart).not.toHaveBeenCalled();
+  });
+
+  it('hết hàng ngay lúc bấm: cùng lời báo với web (không hứa hàng về) và tải lại danh sách để thẻ hiện "Hết hàng"', async () => {
+    mocks.fetchProduct.mockResolvedValue(detail([variation('v1', 0)]));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' }));
+    await waitFor(() => expect(mocks.snackbar).toHaveBeenCalledWith(expect.objectContaining({ text: QUICK_ADD_SOLD_OUT, type: 'error' })));
+    expect(QUICK_ADD_SOLD_OUT).toBe('Sản phẩm vừa hết hàng. Bạn xem sản phẩm khác nhé.');
+    await waitFor(() => expect(mocks.getWishlist).toHaveBeenCalledTimes(2));
   });
 
   it('thêm giỏ lỗi: báo lỗi cho khách và nút bấm lại được', async () => {

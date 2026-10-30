@@ -3,6 +3,8 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { walletNegativeCheckoutReason } from '@tubutree/app-core/wallet-rules';
+
 import {
   addressText,
   formatVnDate,
@@ -10,6 +12,7 @@ import {
   nextRunAfterIntervalChange,
   PaymentMethodPicker,
   startDateRange,
+  subscriptionWalletBlockedReason,
   vnDateOf,
 } from './subscription-options';
 
@@ -48,6 +51,31 @@ describe('PaymentMethodPicker', () => {
     expect(onChange).toHaveBeenCalledWith('WALLET');
     fireEvent.keyDown(screen.getByRole('radio', { name: /Chuyển khoản ngân hàng/ }), { key: 'Enter' });
     expect(onChange).toHaveBeenCalledWith('BANK_TRANSFER');
+  });
+
+  it('Ví đang âm (thu hồi hoa hồng đơn trả): hàng Ví Tubu bị khoá, ghi đúng câu của màn thanh toán, bấm hay Enter đều không chọn', () => {
+    const onChange = vi.fn();
+    render(<PaymentMethodPicker value="COD" onChange={onChange} walletBalance={-50000} />);
+    const wallet = screen.getByRole('radio', { name: /Ví Tubu/ });
+    expect(wallet).toHaveAttribute('aria-disabled', 'true');
+    expect(wallet).toHaveTextContent(walletNegativeCheckoutReason('50.000đ'));
+    fireEvent.click(wallet);
+    fireEvent.keyDown(wallet, { key: 'Enter' });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    expect(onChange).toHaveBeenCalledWith('BANK_TRANSFER');
+  });
+
+  it('Ví 0đ hoặc chưa tải số dư: hàng Ví Tubu không bị khoá', () => {
+    const onChange = vi.fn();
+    const { unmount } = render(<PaymentMethodPicker value="COD" onChange={onChange} walletBalance={0} />);
+    expect(screen.getByRole('radio', { name: /Ví Tubu/ })).not.toHaveAttribute('aria-disabled');
+    unmount();
+    render(<PaymentMethodPicker value="COD" onChange={onChange} />);
+    fireEvent.click(screen.getByRole('radio', { name: /Ví Tubu/ }));
+    expect(onChange).toHaveBeenCalledWith('WALLET');
+    expect(subscriptionWalletBlockedReason(undefined)).toBeNull();
+    expect(subscriptionWalletBlockedReason(-1)).toBe(walletNegativeCheckoutReason('1đ'));
   });
 });
 

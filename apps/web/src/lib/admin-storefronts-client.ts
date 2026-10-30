@@ -92,5 +92,6 @@ export const reinstateStorefront = (id: string) => apiFetch<AdminStorefrontRow>(
 export const approveStorefront = (id: string, approved: boolean) =>
   apiFetch<AdminStorefrontRow>(`/admin/storefronts/${id}/approval`, { method: 'POST', body: { approved } });
 
-export const markStorefrontContentSeen = (id: string) =>
-  apiFetch<AdminStorefrontRow>(`/admin/storefronts/${id}/content-seen`, { method: 'POST' });
+/** `seenChangedAt`: mốc đổi admin đang xem; chủ đổi thêm sau mốc đó thì dấu mới được giữ lại. */
+export const markStorefrontContentSeen = (id: string, seenChangedAt?: string | null) =>
+  apiFetch<AdminStorefrontRow>(`/admin/storefronts/${id}/content-seen`, { method: 'POST', ...(seenChangedAt ? { body: { seenChangedAt } } : {}) });

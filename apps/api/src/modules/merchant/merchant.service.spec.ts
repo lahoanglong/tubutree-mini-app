@@ -237,6 +237,51 @@ describe('MerchantService', () => {
       });
     });
 
+    describe('gian hàng đã duyệt: chủ đổi nội dung qua cổng /merchant', () => {
+      const APPROVED_AT = new Date('2026-10-01T00:00:00Z');
+      const setup = (stored: Record<string, unknown>) => {
+        const store = { id: 's1', ownerUserId: 'u1', collections: [], title: 'Shop Linh', headerNote: 'Chào bạn', avatarUrl: null, coverUrl: null, ...stored };
+        const update = jest.fn().mockImplementation(({ data }) => ({ ...store, ...data }));
+        const prisma = makePrisma({
+          user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', role: 'AFFILIATE' }) },
+          storefront: { findFirst: jest.fn().mockResolvedValue(store), update },
+          product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+          $transaction: jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
+        });
+        return { svc: new MerchantService(prisma, orderStatus), update };
+      };
+      const dataOf = (update: jest.Mock) => update.mock.calls[0][0].data as Record<string, unknown>;
+
+      it.each([
+        ['title', 'Shop Linh Xanh'],
+        ['headerNote', 'Giảm 10% hôm nay'],
+        ['avatarUrl', 'https://res.cloudinary.com/x/a.jpg'],
+        ['coverUrl', 'https://res.cloudinary.com/x/c.jpg'],
+      ])('đã duyệt, đổi %s → ghi contentChangedAt để admin thấy "Đổi sau duyệt"', async (field, value) => {
+        const { svc, update } = setup({ approvedAt: APPROVED_AT });
+        await svc.updateStore('u1', { [field]: value });
+        expect(dataOf(update)).toMatchObject({ [field]: value, contentChangedAt: expect.any(Date) });
+      });
+
+      it('chưa duyệt → không đánh dấu', async () => {
+        const { svc, update } = setup({ approvedAt: null });
+        await svc.updateStore('u1', { title: 'Shop Linh Xanh' });
+        expect(dataOf(update)).not.toHaveProperty('contentChangedAt');
+      });
+
+      it('cổng gửi lại đúng nội dung đang lưu (cùng lúc đổi giao diện) → không đánh dấu', async () => {
+        const { svc, update } = setup({ approvedAt: APPROVED_AT });
+        await svc.updateStore('u1', { title: 'Shop Linh', headerNote: 'Chào bạn', avatarUrl: '', coverUrl: '', themeColor: '#1f6f43' });
+        expect(dataOf(update)).not.toHaveProperty('contentChangedAt');
+      });
+
+      it('đã duyệt, xoá ảnh bìa đang có → đánh dấu', async () => {
+        const { svc, update } = setup({ approvedAt: APPROVED_AT, coverUrl: 'https://res.cloudinary.com/x/c.jpg' });
+        await svc.updateStore('u1', { coverUrl: '' });
+        expect(dataOf(update)).toMatchObject({ coverUrl: null, contentChangedAt: expect.any(Date) });
+      });
+    });
+
     it('đổi sang subdomain khác vẫn bị kiểm từ khoá hệ thống', async () => {
       const store = { id: 's1', ownerUserId: 'u1', collections: [], subdomain: 'dai-ly-xanh' };
       const prisma = makePrisma({

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as walletRules from './wallet-rules';
-import { walletTxLabel, formatWalletTxTime } from './wallet-rules';
+import { walletTxLabel, formatWalletTxTime, walletNegativeNote, walletNegativeCheckoutReason } from './wallet-rules';
 
 describe('rút Ví về ngân hàng đã bỏ', () => {
   it('không còn quy tắc rút', () => {
@@ -22,6 +22,7 @@ describe('walletTxLabel (sao kê Ví)', () => {
     expect(walletTxLabel('WITHDRAW')).toBe('Rút về ngân hàng');
     expect(walletTxLabel('WITHDRAW_REFUND')).toBe('Hoàn lệnh rút bị từ chối');
     expect(walletTxLabel('PIT_REFUND')).toBe('Hoàn thuế TNCN giữ dư');
+    expect(walletTxLabel('COMMISSION_REVERSAL')).toBe('Thu hồi hoa hồng');
     // Dòng sao kê cũ của lần đổi Ví → xu trước khi xu gộp vào Điểm Xanh.
     expect(walletTxLabel('XU_CONVERT')).toBe('Đổi sang xu cũ (nay là Điểm Xanh)');
   });
@@ -43,5 +44,20 @@ describe('formatWalletTxTime', () => {
   it('dd/MM HH:mm theo giờ máy', () => {
     const d = new Date(2026, 9, 5, 8, 7);
     expect(formatWalletTxTime(d.toISOString())).toBe('05/10 08:07');
+  });
+});
+
+describe('Ví âm sau khi thu hồi hoa hồng đơn trả hàng', () => {
+  it('chỉ giải thích khi số dư âm', () => {
+    expect(walletNegativeNote(-50_000)).toContain('đang âm');
+    expect(walletNegativeNote(-1)).not.toBeNull();
+    expect(walletNegativeNote(0)).toBeNull();
+    expect(walletNegativeNote(120_000)).toBeNull();
+  });
+
+  it('lời khoá nút trả bằng Ví nói rõ số âm và việc khách làm tiếp', () => {
+    expect(walletNegativeCheckoutReason('50.000đ')).toBe(
+      'Ví đang âm 50.000đ do thu hồi hoa hồng đơn trả hàng, nên chưa trả đơn bằng Ví được. Hãy chọn cách thanh toán khác.',
+    );
   });
 });

@@ -41,10 +41,18 @@ export function deskDoneCopy(pointsAwarded: number, formatPoints: (n: number) =>
 const VN_OFFSET_MS = 7 * 3_600_000;
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
-/** Dòng trạng thái của yêu cầu vừa đóng mà quầy xem lại (chỉ đọc). */
-export function deskClosedText(r: Pick<WasteDeskRequestDTO, 'status' | 'closedAt'>): string {
+/** Ngày theo giờ Việt Nam của một mốc thời gian, dạng YYYY-MM-DD (đủ để so cùng ngày). */
+const vnDay = (d: Date) => new Date(d.getTime() + VN_OFFSET_MS).toISOString().slice(0, 10);
+
+/**
+ * Dòng trạng thái của yêu cầu vừa đóng mà quầy xem lại (chỉ đọc). Máy chủ cho xem lại tới 24 giờ, nên yêu cầu đóng từ
+ * hôm trước phải ghi cả ngày, không thì "lúc 10:05" dễ bị hiểu là sáng nay.
+ */
+export function deskClosedText(r: Pick<WasteDeskRequestDTO, 'status' | 'closedAt'>, now: Date = new Date()): string {
   if (r.status !== 'COMPLETED') return 'Đã từ chối';
   if (!r.closedAt) return 'Đã duyệt';
-  const vn = new Date(new Date(r.closedAt).getTime() + VN_OFFSET_MS);
-  return `Đã duyệt lúc ${pad2(vn.getUTCHours())}:${pad2(vn.getUTCMinutes())}`;
+  const closed = new Date(r.closedAt);
+  const vn = new Date(closed.getTime() + VN_OFFSET_MS);
+  const time = `${pad2(vn.getUTCHours())}:${pad2(vn.getUTCMinutes())}`;
+  return vnDay(closed) === vnDay(now) ? `Đã duyệt lúc ${time}` : `Đã duyệt lúc ${time} ngày ${pad2(vn.getUTCDate())}/${pad2(vn.getUTCMonth() + 1)}`;
 }

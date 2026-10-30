@@ -83,7 +83,7 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
   });
 
   const seen = useMutation({
-    mutationFn: (id: string) => markStorefrontContentSeen(id),
+    mutationFn: (r: AdminStorefrontRow) => markStorefrontContentSeen(r.id, r.contentChangedAt),
     onSuccess: () => {
       setQuickFailure(null);
       return qc.invalidateQueries({ queryKey: ['admin-storefronts'] });
@@ -203,7 +203,7 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
             {changedAfterApproval(row) && (
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-card bg-warning-bg px-2 py-1.5">
                 <p className="min-w-0 break-words text-xs text-warning-fg">{CONTENT_CHANGED_TEXT(row.contentChangedAt!)}</p>
-                <button type="button" onClick={() => seen.mutate(row.id)} disabled={seen.isPending} className={BTN_XS_SECONDARY}>
+                <button type="button" onClick={() => seen.mutate(row)} disabled={seen.isPending} className={BTN_XS_SECONDARY}>
                   Đã xem
                 </button>
               </div>
@@ -250,7 +250,7 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
   const takeDown = useMutation({ mutationFn: (reason: string) => takeDownStorefront(id, reason), onSuccess: refresh, onError });
   const reinstate = useMutation({ mutationFn: () => reinstateStorefront(id), onSuccess: refresh, onError });
   const approve = useMutation({ mutationFn: (approved: boolean) => approveStorefront(id, approved), onSuccess: refresh, onError });
-  const seen = useMutation({ mutationFn: () => markStorefrontContentSeen(id), onSuccess: refresh, onError });
+  const seen = useMutation({ mutationFn: () => markStorefrontContentSeen(id, sf?.contentChangedAt), onSuccess: refresh, onError });
   const busy = takeDown.isPending || reinstate.isPending || approve.isPending || seen.isPending;
 
   const onTakeDown = async () => {

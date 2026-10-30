@@ -222,6 +222,7 @@ function GameBody() {
           <TreeActions
             profile={profile}
             pointsPending={pointsPending}
+            pointsBlocked={!!checkInStatusQ.data?.pointsBlocked}
             checkInSeeds={checkInSeeds}
             pending={waterM.isPending || checkInM.isPending || dewM.isPending}
             onClaim={claimDaily}

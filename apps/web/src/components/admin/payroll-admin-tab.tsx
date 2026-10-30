@@ -13,6 +13,7 @@ import {
   type AdminPayrollRow,
   type PayrollStatus,
 } from '@tubutree/app-core/api/payroll';
+import { payrollReopenMessage } from '@tubutree/app-core/payroll-copy';
 import { adminPayrollDetailQuery, adminPayrollQuery } from '@tubutree/app-core/queries/payroll';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/error-text';
@@ -119,7 +120,7 @@ export function PayrollAdminTab() {
   const askReopen = async (r: AdminPayrollRow) => {
     const go = await confirm({
       title: 'Mở lại bảng lương?',
-      message: `Mở lại bảng lương T${ym.month}/${ym.year} của ${r.staff.fullName ?? 'NV'}? Cần chốt lại sau khi sửa.`,
+      message: payrollReopenMessage(ym.month, ym.year, r.staff.fullName ?? 'NV', r.month.status),
       confirmLabel: 'Mở lại',
     });
     if (go) reopenM.mutate(r);
@@ -252,7 +253,8 @@ export function PayrollAdminTab() {
                   </button>
                 )}
               </div>
-              {row.month.status !== 'OPEN' && <p className="mt-1.5 text-xs text-stone-500">Mở lại bảng lương trước khi thưởng/phạt hoặc tính lại tháng.</p>}
+              {row.month.status === 'FINALIZED' && <p className="mt-1.5 text-xs text-stone-500">Mở lại bảng lương trước khi thưởng/phạt hoặc tính lại tháng.</p>}
+              {row.month.status === 'PAID' && <p className="mt-1.5 text-xs text-stone-500">Tháng đã trả: ghi thưởng/phạt vào tháng sau.</p>}
             </section>
           );
         })}

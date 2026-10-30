@@ -460,8 +460,8 @@ export default function CheckoutPage() {
     { k: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
     { k: 'WALLET', label: `Ví Tubu (${formatVnd(walletBalance)})` },
   ]
-    // Ví chỉ trả được cả đơn: số dư 0đ thì khách không làm gì được với dòng này.
-    .filter((m) => m.k !== 'WALLET' || walletBalance > 0)
+    // Ví chỉ trả được cả đơn: số dư 0đ thì khách không làm gì được với dòng này. Ví âm vẫn hiện (khoá, kèm lý do) để khách biết vì sao không dùng được.
+    .filter((m) => m.k !== 'WALLET' || walletBalance !== 0)
     .map((m) => ({ ...m, hint: quote ? paymentUnavailableReason(m.k, quote, walletBalance) : null }));
   const paymentNote = quote && !zeroNote && payment === '' ? paymentMissingNote(quote, walletBalance) : null;
   const placeDisabled =

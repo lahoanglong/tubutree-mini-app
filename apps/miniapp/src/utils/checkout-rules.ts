@@ -1,3 +1,4 @@
+import { walletNegativeCheckoutReason } from '@tubutree/app-core/wallet-rules';
 import { formatNumber, formatPoints, formatVnd } from './format';
 import { convertedPointsNote, pointsSummary } from './points-lots';
 
@@ -23,10 +24,11 @@ export function isInvoiceValid(wantInvoice: boolean, invoice: InvoiceInfo): bool
 
 /**
  * Lý do Ví Tubu bị mờ ở màn thanh toán (null = dùng được): số dư < tổng đơn, đúng điều kiện máy chủ từ chối lúc đặt.
- * Ví chỉ trả TOÀN BỘ đơn.
+ * Ví chỉ trả TOÀN BỘ đơn. Ví âm (đã thu hồi hoa hồng đơn trả hàng) có câu riêng: "cần thêm" tính từ số âm sẽ khó hiểu.
  */
 export function walletUnavailableReason(balance: number, total: number): string | null {
   if (balance >= total) return null;
+  if (balance < 0) return walletNegativeCheckoutReason(formatVnd(-balance));
   return `Số dư chưa đủ — cần thêm ${formatVnd(total - balance)}`;
 }
 

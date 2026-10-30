@@ -258,3 +258,7 @@ File dùng chung bắt buộc:
 1. Gộp các gói độc lập theo thứ tự rủi ro thấp trước: dondep, giaodien, hotro, doirac, phien, api-tin, diem, ctv, giohang, muachung, thongbao, admin-congcu, admin-hopviec.
 2. Rồi canhan (sau thongbao), admin-nhansu và admin-don (sau admin-hopviec; admin-don sau cả api-tin).
 3. Bước tích hợp: chạy `pnpm lint:parity`, gate đầy đủ, Playwright cả hai nền; chụp lại ảnh đơn CONFIRMED/SHIPPING (E-120) và ảnh `state-coupon-chua-ap-dung` (R-169).
+
+## Chuyển tiếp sau đợt P3 (gói ctv)
+
+- Web 375: `ui.field` (`apps/web/src/lib/guest-ui.ts`, `min-h-11`) cao 44px so Mini 50px; cỡ chữ `ui.btn*` lệch Mini. Là thành phần dùng chung toàn web nên cần một gói giao diện web dùng chung, có thể thêm hằng kiểu phone vào `apps/web/src/lib/phone-ui.ts` như `phoneSectionTitle`. Đợt P3 chưa sửa mã phần này.

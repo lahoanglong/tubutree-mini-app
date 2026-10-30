@@ -8,7 +8,7 @@ import { CheckCircle2, ChevronRight, Clock, History, Leaf, ShoppingBag, Wallet, 
 import { loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import { walletQuery, walletTransactionsQuery } from '@tubutree/app-core/queries/wallet';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
-import { walletTxLabel } from '@tubutree/app-core/wallet-rules';
+import { walletNegativeNote, walletTxLabel } from '@tubutree/app-core/wallet-rules';
 import { COMMISSION_PENDING_LABEL, COMMISSION_PENDING_NOTE } from '@tubutree/app-core/ctv-dashboard';
 import { uniqueById } from '@tubutree/app-core/unique-by-id';
 import { useAuth } from '@/lib/auth-context';
@@ -110,11 +110,12 @@ export default function WalletPage() {
             <div className="mt-1 text-3xl font-bold tabular-nums">{formatVnd(w.walletBalance)}</div>
           </section>
           <p className="-mt-2 px-1 text-xs text-stone-600 max-md:order-2">
-            {walletEmpty
+            {walletNegativeNote(w.walletBalance) ??
+              (walletEmpty
               ? walletCopy.empty
               : showCommission
               ? `Tiền thật từ hoa hồng${CASHBACK_ENABLED ? ' & hoàn tiền sàn ngoài' : ''} — dùng để trả tiền hàng.`
-              : 'Dùng để trả tiền hàng ở bước thanh toán'}
+              : 'Dùng để trả tiền hàng ở bước thanh toán')}
           </p>
 
           <div className="max-md:order-3">

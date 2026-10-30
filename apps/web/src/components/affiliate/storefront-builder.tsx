@@ -21,7 +21,7 @@ import { pickerQuery, storefrontQuestsQuery } from '@tubutree/app-core/queries/s
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
-import { phoneBrandText, phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
+import { phoneBrandText, phoneCaption, phoneFlatCard, phoneSecondary, phoneSectionTitle } from '@/lib/phone-ui';
 import { cssUrl } from '@/lib/safe-color';
 import { Badge } from '@/components/ui/badge';
 import { Sheet } from '@/components/ui/sheet';
@@ -286,10 +286,10 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
                 {view.label}
               </Badge>
             </div>
-            <div className="text-xs text-stone-600">{storefrontHost(sf)}</div>
-            {view.code === 'LIVE' && <div className="text-xs text-stone-600">Gian hàng cập nhật sau vài phút khi bạn đổi nội dung.</div>}
+            <div className={`text-xs text-stone-600 ${phoneCaption}`}>{storefrontHost(sf)}</div>
+            {view.code === 'LIVE' && <div className={`text-xs text-stone-600 ${phoneCaption}`}>Gian hàng cập nhật sau vài phút khi bạn đổi nội dung.</div>}
             {(view.hint || sf.publicHiddenReason) && (
-              <div data-testid="hidden-reason" role="status" className="mt-2 rounded-control bg-warning-bg px-3 py-2 text-xs text-warning-fg">
+              <div data-testid="hidden-reason" role="status" className={`mt-2 rounded-control bg-warning-bg px-3 py-2 text-xs text-warning-fg ${phoneCaption}`}>
                 {view.code === 'PENDING_APPROVAL' ? view.hint : (sf.publicHiddenReason ?? view.hint)}
               </div>
             )}
@@ -342,7 +342,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
             <section key={col.id} aria-label={col.title} className={`${ui.card} ${phoneFlatCard} p-4`}>
               <div className="mb-1 flex items-center gap-1">
                 <div className="min-w-0 flex-1">
-                  <h2 className={ui.sectionTitle}>{col.title}</h2>
+                  <h2 className={`${ui.sectionTitle} ${phoneSectionTitle}`}>{col.title}</h2>
                   <div className="mt-0.5 flex flex-wrap gap-1">
                     {col.kind === 'COMBO' && (
                       <Badge tone="promo" size="sm">

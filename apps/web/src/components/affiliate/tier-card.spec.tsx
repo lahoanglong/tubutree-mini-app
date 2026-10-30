@@ -66,6 +66,15 @@ describe('TierCard — bậc CTV theo doanh số đã chốt', () => {
     expect(rows[0]!.className).not.toContain('action-secondary-bg');
   });
 
+  it('điện thoại: tên bậc 15px, biểu tượng 28px, chữ phụ 13px như Mini App', () => {
+    mounted = render(<TierCard dash={dash} tiers={tiers} />);
+    const title = Array.from(mounted.container.querySelectorAll('div')).find((d) => d.textContent === `CTV ${dash.tier.name}`)!;
+    expect(title.className).toContain('max-md:text-[length:var(--type-body-md-size)]');
+    const caption = Array.from(mounted.container.querySelectorAll('div')).find((d) => d.textContent === 'Bậc theo doanh số đã chốt tháng này')!;
+    expect(caption.className).toContain('max-md:text-[length:var(--type-caption-size)]');
+    expect(mounted.container.querySelector('span[aria-hidden="true"]')!.className).toContain('max-md:text-[length:var(--type-display-md-size)]');
+  });
+
   it('chưa tải được bảng bậc: mở ra không vẽ gì sai', () => {
     mounted = render(<TierCard dash={dash} tiers={undefined} />);
     click(mounted.container.querySelector('button[aria-expanded]'));

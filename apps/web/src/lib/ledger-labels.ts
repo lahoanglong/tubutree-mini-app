@@ -141,6 +141,7 @@ const WALLET_TX_LABELS: Record<string, string> = {
   ORDER_PAY: 'Thanh toán đơn hàng',
   ORDER_REFUND: 'Hoàn tiền đơn hàng',
   COMMISSION_PAYOUT: 'Hoa hồng CTV về Ví',
+  COMMISSION_REVERSAL: 'Thu hồi hoa hồng',
   CASHBACK: 'Hoàn tiền sàn ngoài',
   WITHDRAW: 'Rút về ngân hàng',
   WITHDRAW_REFUND: 'Hoàn lệnh rút bị từ chối',

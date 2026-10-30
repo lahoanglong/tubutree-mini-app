@@ -25,15 +25,14 @@ import { throwIfLockBusy } from '../../common/lock-busy';
 import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-config';
 import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
 import {
-  ADMIN_SEARCH_MIN_TRGM_LENGTH,
   ADMIN_SEARCH_USER_CAP,
   buildAdminOrderWhere,
+  findSearchUserIds,
   NO_SUCH_STOREFRONT_ID,
   normalizeAdminOrderSearch,
   recipientPhoneVariants,
   searchPhone,
   type AdminOrderFilterInput,
-  userPhoneClauses,
   type InvoiceFilter,
   type OrderListExtra,
   type PancakeFilter,
@@ -906,26 +905,6 @@ export class AdminService {
     };
   }
 
-  /** undefined = giữ lọc theo quan hệ `user` (chuỗi quá ngắn cho trigram, hoặc khớp quá nhiều khách). */
-  private async findSearchUserIds(search?: string, exactPhoneOnly = false): Promise<string[] | undefined> {
-    const s = normalizeAdminOrderSearch(search);
-    if (!s || s.length < ADMIN_SEARCH_MIN_TRGM_LENGTH) return undefined;
-    const like = escapePrismaLike(s);
-    const folded = foldVietnamese(s);
-    const rows = await this.prisma.user.findMany({
-      where: {
-        OR: [
-          ...userPhoneClauses(s, exactPhoneOnly),
-          { fullName: { contains: like, mode: 'insensitive' } },
-          ...(folded.length >= ADMIN_SEARCH_MIN_TRGM_LENGTH ? [{ fullNameSearch: { contains: escapePrismaLike(folded) } }] : []),
-        ],
-      },
-      select: { id: true },
-      take: ADMIN_SEARCH_USER_CAP + 1,
-    });
-    return rows.length > ADMIN_SEARCH_USER_CAP ? undefined : rows.map((r) => r.id);
-  }
-
   /** Đơn có SĐT người nhận khớp đúng số (index orders_shippingAddress_phone_idx trên đúng biểu thức này). */
   private async findSearchOrderIds(search?: string): Promise<string[] | undefined> {
     const s = normalizeAdminOrderSearch(search);
@@ -951,7 +930,7 @@ export class AdminService {
     const { storefront, ...filter } = f;
     const exactPhoneOnly = opts.exactPhoneOnly === true;
     const [searchUserIds, searchOrderIds, storefrontId] = await Promise.all([
-      this.findSearchUserIds(f.search, exactPhoneOnly),
+      findSearchUserIds(this.prisma, f.search, exactPhoneOnly),
       this.findSearchOrderIds(f.search),
       this.findStorefrontId(storefront),
     ]);

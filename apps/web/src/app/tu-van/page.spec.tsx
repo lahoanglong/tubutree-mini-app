@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -535,6 +536,37 @@ describe('Trợ lý AI: giữ hội thoại khi khách xem sản phẩm rồi qu
       { role: 'user', content: 'Câu hỏi 1' },
       { role: 'assistant', content: 'Mình gợi ý bạn thử loại này' },
     ]);
+  });
+
+  it('rời trang lúc trợ lý đang soạn rồi quay lại: vẫn thấy "Trợ lý đang soạn…" và không gửi được câu thứ hai', async () => {
+    let answer: (v: Reply) => void = () => {};
+    state.chat = () => new Promise<Reply>((r) => (answer = r));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const mountShared = async () => {
+      const r = render(
+        <QueryClientProvider client={client}>
+          <AdvisorPage />
+        </QueryClientProvider>,
+      );
+      mounted.push(r);
+      await flush(6);
+      return r.container;
+    };
+    const first = await mountShared();
+    await ask(first, 'Câu hỏi chậm');
+    expect(first.textContent).toContain('Trợ lý đang soạn…');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+
+    const again = await mountShared();
+    expect(again.textContent).toContain('Trợ lý đang soạn…');
+    await ask(again, 'Câu thứ hai');
+    expect(state.calls).toHaveLength(1);
+
+    await act(async () => answer(REPLY('Trả lời câu một')));
+    await flush(4);
+    expect(again.textContent).toContain('Trả lời câu một');
+    expect(again.textContent).not.toContain('Trợ lý đang soạn…');
   });
 
   it('đăng xuất thì hội thoại rỗng: đăng nhập lại thấy phần chào', async () => {
