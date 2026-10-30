@@ -39,7 +39,8 @@ test.describe('Chat với Tubu Tree — web', () => {
 
     const mine = page.locator('[data-sender="CUSTOMER"]');
     await expect(mine).toContainText(CUSTOMER_TEXT);
-    expect(state.sent).toHaveLength(1);
+    // Tin hiện ngay ở trạng thái đang gửi, trước khi lời gọi POST tới máy chủ.
+    await expect.poll(() => state.sent.length).toBe(1);
     expect(state.sent[0]).toMatchObject({ body: CUSTOMER_TEXT });
     expect(state.sent[0]?.clientMsgId).toBeTruthy();
 

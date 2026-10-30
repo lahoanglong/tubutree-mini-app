@@ -80,6 +80,25 @@ describe('SiteSearch', () => {
     expect(field().value).toBe('xà phòng');
   });
 
+  it('khách đã gõ vào khung chờ của HTML server trước khi ô thật dựng xong: ô thật giữ chữ, focus và con trỏ', () => {
+    // HTML server chỉ có khung chờ (Suspense vì useSearchParams); ô thật dựng ở trình duyệt rồi thay vào, cùng id.
+    const shell = document.createElement('input');
+    shell.id = 'site-search-q';
+    document.body.appendChild(shell);
+    shell.value = 'xan';
+    shell.focus();
+    shell.setSelectionRange(2, 2);
+    nav.params = new URLSearchParams('q=dầu gội');
+    try {
+      const field = mount().container.querySelector('input')!;
+      expect(field.value).toBe('xan');
+      expect(document.activeElement).toBe(field);
+      expect(field.selectionStart).toBe(2);
+    } finally {
+      shell.remove();
+    }
+  });
+
 
   it('là landmark tìm kiếm, ô nhập và nút có tên truy cập, vùng chạm 44px', () => {
     const { container } = mount();
