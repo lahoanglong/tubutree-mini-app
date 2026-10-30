@@ -127,7 +127,8 @@ export function ProductDetailSkeleton() {
     <div role="status" aria-busy="true" className="md:grid md:grid-cols-2 md:gap-8">
       <span className="sr-only">Đang tải…</span>
       <Skeleton height="auto" rounded="rounded-none" style={{ aspectRatio: '1 / 1' }} />
-      <div className="flex flex-col gap-3 bg-stone-0 p-4 max-md:min-h-[40vh] md:bg-transparent md:p-0">
+      <div className="flex flex-col gap-3 bg-stone-0 p-4 md:bg-transparent md:p-0">
+        <Skeleton width={80} height={14} />
         <Skeleton width="85%" height={22} />
         <Skeleton width={140} height={26} />
         <Skeleton width="60%" height={14} />

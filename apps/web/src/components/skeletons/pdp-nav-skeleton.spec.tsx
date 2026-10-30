@@ -7,7 +7,7 @@ import { render, type Rendered } from '@/test-utils/dom';
 const nav = vi.hoisted(() => ({ path: '/san-pham' }));
 vi.mock('next/navigation', () => ({ usePathname: () => nav.path }));
 
-import { PdpNavSkeleton } from './pdp-nav-skeleton';
+import { PdpNavSkeleton, announcePdpNavigation } from './pdp-nav-skeleton';
 
 const hasSkeleton = () => document.querySelector('[data-testid="pdp-nav-skeleton"]') !== null;
 const link = (text: string) => ([...document.querySelectorAll('button')].find((n) => n.textContent === text) ?? [...document.querySelectorAll('a')].find((n) => n.textContent === text)) as HTMLElement;
@@ -69,8 +69,40 @@ describe('PdpNavSkeleton (R-83)', () => {
     click(link('Mật ong'));
     expect(hasSkeleton()).toBe(true);
     act(() => {
-      vi.advanceTimersByTime(8100);
+      vi.advanceTimersByTime(20100);
     });
     expect(hasSkeleton()).toBe(false);
+  });
+
+  it('mạng chậm: vẫn giữ khung chờ sau 8 giây', () => {
+    mounted = render(ui());
+    click(link('Mật ong'));
+    act(() => {
+      vi.advanceTimersByTime(8100);
+    });
+    expect(hasSkeleton()).toBe(true);
+  });
+
+  it('đường mở bằng router.push (gợi ý tìm kiếm, Mua lại) báo qua announcePdpNavigation: hiện khung, bỏ query', () => {
+    mounted = render(ui());
+    act(() => announcePdpNavigation('/san-pham/mat-ong?v=12'));
+    expect(hasSkeleton()).toBe(true);
+    nav.path = '/san-pham/mat-ong';
+    act(() => mounted!.root.render(ui()));
+    expect(hasSkeleton()).toBe(false);
+  });
+
+  it('announcePdpNavigation bỏ qua đường dẫn không phải sản phẩm', () => {
+    mounted = render(ui());
+    act(() => announcePdpNavigation('/gio-hang'));
+    expect(hasSkeleton()).toBe(false);
+  });
+
+  it('khung phủ cả thanh đáy (z trên 40) và có hàng nhãn hàng như trang thật', () => {
+    mounted = render(ui());
+    click(link('Mật ong'));
+    const el = document.querySelector('[data-testid="pdp-nav-skeleton"]') as HTMLElement;
+    expect(el.className).toContain('z-50');
+    expect(el.querySelectorAll('[data-skeleton]').length).toBe(6);
   });
 });
