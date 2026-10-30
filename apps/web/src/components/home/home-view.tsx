@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -83,14 +83,12 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const restoring = useAuthRestoring();
   const { retrySession, user } = useAuth();
   const userId = user?.id;
-  // Phải bật TRONG render: query của các khối con chạy ở effect của chúng, trước effect của trang cha.
-  armHomeFeed(userId);
-  useEffect(() => {
+  // Layout effect chạy sau effect layout của con nhưng TRƯỚC mọi effect thường, nơi query của các khối con gửi request đầu; khác với bật
+  // trong render, bị bỏ dở giữa chừng thì không để bộ chặn sót lại ở trang khác.
+  useLayoutEffect(() => {
     armHomeFeed(userId);
-    return disarmHomeFeed;
-    // userId được cập nhật mỗi lần render ở trên; đổi tài khoản không dựng lại phiên gộp.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [userId]);
+  useLayoutEffect(() => disarmHomeFeed, []);
   // Cờ phiên còn mà mất mạng hay API tạm lỗi lúc khôi phục: khách KHÔNG phải khách vãng lai, giữ loại khách đã nhớ để trang không tụt về bố cục khách mới.
   const unavailable = phase === 'unavailable';
 
