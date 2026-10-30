@@ -26,11 +26,14 @@ vi.mock('../components/home/member-card', () => ({ MemberCard: () => null, Membe
 vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false }) }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => null }));
 vi.mock('../components/cart-button', () => ({ CartButton: () => null }));
-vi.mock('../components/pull-to-refresh', () => ({ PullToRefresh: () => null }));
+vi.mock('../components/pull-to-refresh', () => ({
+  PullToRefresh: ({ onRefresh }: { onRefresh: () => void }) => <button type="button" data-testid="pull" onClick={() => void onRefresh()} />,
+}));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 // Vitest bọc lỗi của factory nên message gốc mất; nhận diện lỗi chunk (có test riêng ở chunk-error) được giả ở đây.
-vi.mock('../utils/chunk-error', () => ({ isChunkError: () => true }));
+const chunkError = vi.hoisted(() => ({ isChunkError: vi.fn((e: unknown) => e instanceof Error) }));
+vi.mock('../utils/chunk-error', () => chunkError);
 vi.mock('../components/home/home-below', () => {
   throw new Error('Failed to fetch dynamically imported module: /assets/home-below.js');
 });
@@ -59,6 +62,21 @@ describe('HomePage — chunk khối dưới màn đầu hỏng kiểu lỗi mạ
     expect(error).toBeInTheDocument();
     await act(async () => {
       screen.getByRole('button', { name: /Thử lại/ }).click();
+    });
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(chunkError.isChunkError).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  it('kéo để làm mới khi chunk hỏng cũng tải lại cả app', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <HomePage />
+      </QueryClientProvider>,
+    );
+    await screen.findByTestId('home-page-error');
+    await act(async () => {
+      screen.getByTestId('pull').click();
     });
     expect(reload).toHaveBeenCalledTimes(1);
   });
