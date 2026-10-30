@@ -134,6 +134,22 @@ describe('ProductTile', () => {
     expect(err.container.textContent).toContain('Mới');
   });
 
+  it('tải lại config lỗi sau khi đã có mốc: giữ mốc cũ, thẻ tạo trước mốc vẫn không gắn "Mới"', async () => {
+    const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+    const before = new Date(new Date(`${today}T00:00:00+07:00`).getTime() - 1000).toISOString();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(['public-config'], { catalogLaunchDate: today });
+    const r = mount(
+      <QueryClientProvider client={qc}>
+        <ProductTile product={{ ...P, createdAt: before }} onPress={() => {}} />
+      </QueryClientProvider>,
+    );
+    await qc.refetchQueries({ queryKey: ['public-config'] });
+    await flush();
+    expect(qc.getQueryState(['public-config'])?.status).toBe('error');
+    expect(r.container.textContent).not.toContain('Mới');
+  });
+
   it('mốc ngày mở bán trong config công khai: tạo trước mốc không gắn "Mới", từ mốc trở đi theo luật 30 ngày', () => {
     const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
     const startVn = new Date(`${today}T00:00:00+07:00`).getTime();

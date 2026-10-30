@@ -274,6 +274,21 @@ describe('ProductTile', () => {
       expect(await screen.findByText('Mới')).toBeInTheDocument();
     });
 
+    it('tải lại config lỗi sau khi đã có mốc: giữ mốc cũ, thẻ tạo trước mốc vẫn không gắn Mới', async () => {
+      const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+      const before = new Date(new Date(`${today}T00:00:00+07:00`).getTime() - 1000).toISOString();
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      qc.setQueryData(['public-config'], { catalogLaunchDate: today });
+      render(
+        <QueryClientProvider client={qc}>
+          <ProductTile product={{ ...PRODUCT, createdAt: before }} variant="grid" onPress={() => {}} />
+        </QueryClientProvider>,
+      );
+      await qc.refetchQueries({ queryKey: ['public-config'] });
+      expect(qc.getQueryState(['public-config'])?.status).toBe('error');
+      expect(screen.queryByText('Mới')).toBeNull();
+    });
+
     it('cùng nhãn giảm giá: hai nhãn xếp dọc ở góc ảnh, không chồng nhau', () => {
       renderTile(<ProductTile product={{ ...PRODUCT, createdAt: daysAgo(2) }} badge={<span>-20%</span>} variant="grid" onPress={() => {}} />);
       const stack = screen.getByText('-20%').parentElement as HTMLElement;

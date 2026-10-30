@@ -24,6 +24,9 @@ export function useCatalogLaunchDate(): string | null | undefined {
     },
     client ?? NO_PROVIDER_CLIENT,
   );
-  if (client === undefined || q.isError) return null;
-  return q.isPending ? undefined : q.data ?? null;
+  if (client === undefined) return null;
+  // Tải lại lỗi vẫn giữ `data` cũ: không bỏ mốc đang có.
+  if (q.data !== undefined) return q.data;
+  if (q.isError) return null;
+  return q.isPending ? undefined : null;
 }
