@@ -523,7 +523,7 @@ export default function ProductDetailPage() {
         )}
 
         {lowStock && (
-          <Text size="xSmall" style={{ color: 'var(--clay-700)', marginTop: 4 }}>
+          <Text size="xSmall" style={{ color: 'var(--color-text-warning)', marginTop: 4 }}>
             {vi.product.lowStock(selected!.stock)}
           </Text>
         )}
@@ -645,8 +645,8 @@ export default function ProductDetailPage() {
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 2,
-                  background: 'var(--clay-50)',
-                  border: '1px dashed var(--clay-500)',
+                  background: 'var(--color-voucher-bg)',
+                  border: '1px dashed var(--color-voucher-edge)',
                   borderRadius: 'var(--radius-control)',
                   padding: '6px 12px',
                   minHeight: 44,
@@ -654,7 +654,7 @@ export default function ProductDetailPage() {
                   boxSizing: 'border-box',
                 }}
               >
-                <Text size="xSmall" bold style={{ color: 'var(--clay-700)' }}>
+                <Text size="xSmall" bold style={{ color: 'var(--color-voucher-fg)' }}>
                   {c.code} · {couponLabel(c)}
                 </Text>
                 {c.minOrder ? (
