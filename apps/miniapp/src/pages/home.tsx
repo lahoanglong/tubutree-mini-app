@@ -15,7 +15,7 @@ import { BestSellerRail, BEST_SELLER_LIMIT } from '../components/home/best-selle
 import { BrandJourney } from '../components/home/brand-journey';
 import { CategoryRow } from '../components/home/category-row';
 import { CommunityPreview } from '../components/home/community-preview';
-import { MemberCard, MemberCardSkeleton } from '../components/home/member-card';
+import { MemberCard, MemberCardSkeleton, MemberCardUnavailable } from '../components/home/member-card';
 import { NewCustomerGift } from '../components/home/new-customer-gift';
 import { ShortcutGrid } from '../components/home/shortcut-grid';
 import { SuggestFeed } from '../components/home/suggest-feed';
@@ -56,7 +56,10 @@ export default function HomePage() {
   // Cùng query key với PurchasedRail → không thêm request; chỉ để biết khách cũ hay mới. Trong lúc tải dùng loại đã nhớ
   // của tài khoản này để thứ tự khối không đổi sau khung hình đầu (useHomeCustomerKind).
   const purchasedRaw = usePurchasedItems(PURCHASED_RAIL_LIMIT);
-  const kind = useHomeCustomerKind(authed, userId, purchasedRaw, restoring);
+  const resolvedKind = useHomeCustomerKind(authed, userId, purchasedRaw, restoring || sessionFailed);
+  // Phiên lỗi mà máy chưa nhớ loại khách: không còn gì để chờ, dùng bố cục khách mới mặc định.
+  const kind = sessionFailed && resolvedKind === 'unknown' ? 'new' : resolvedKind;
+  const restore = useAuthStore((s) => s.restore);
 
   // Cùng khoá với kệ Bán chạy của khách mới: ở đây chỉ để biết API sập hẳn (dải lỗi cấp trang), không thêm request.
   const bestSellers = useBlockQuery(
@@ -86,7 +89,14 @@ export default function HomePage() {
   const blocks: Record<HomeRenderBlock, ReactNode> = {
     settling: <HomeSettlingSkeleton />,
     search: <SearchShell />,
-    member: kind === 'unknown' || (kind === 'returning' && restoring) ? <MemberCardSkeleton /> : kind === 'returning' ? <MemberCard /> : null,
+    member:
+      kind === 'returning' && sessionFailed ? (
+        <MemberCardUnavailable onRetry={() => void restore()} />
+      ) : kind === 'unknown' || (kind === 'returning' && restoring) ? (
+        <MemberCardSkeleton />
+      ) : kind === 'returning' ? (
+        <MemberCard />
+      ) : null,
     todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <NewCustomerGift /> : null,

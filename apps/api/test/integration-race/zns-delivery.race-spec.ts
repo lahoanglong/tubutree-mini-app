@@ -163,4 +163,20 @@ describe('Gửi ZNS: HTTP 200 kèm lỗi trong body (real Postgres)', () => {
     expect(hits).toBe(0);
     expect((await znsLog(u.id)).status).toBe('FAILED');
   });
+
+  it('retryZns: worker đã gửi xong (SENT) trước khi queue.add báo lỗi quá hạn: log vẫn SENT, khoá không bị nhả nên lượt sau không gửi đôi', async () => {
+    const { svc, add } = await build(true);
+    const u = await createUser(prisma, { phone: `09${Date.now().toString().slice(-8)}` });
+    add.mockImplementationOnce(async (_name: string, data: ZnsSendJobData) => {
+      expect(await svc.deliverZns(data, false)).toBe('SENT');
+      throw new Error('queue timeout');
+    });
+    await expect(svc.notify(u.id, 'IT_ZNS_DELIVERY', { order_code: 'IT8' }, { dedupeKey: 'it-zns:8', retryZns: true })).rejects.toThrow('queue timeout');
+    expect(hits).toBe(1);
+    expect(await znsLog(u.id)).toMatchObject({ status: 'SENT', error: null });
+
+    await svc.notify(u.id, 'IT_ZNS_DELIVERY', { order_code: 'IT8' }, { dedupeKey: 'it-zns:8', retryZns: true });
+    expect(hits).toBe(1);
+    expect(await prisma.notificationLog.count({ where: { userId: u.id, channel: 'ZNS' } })).toBe(1);
+  });
 });

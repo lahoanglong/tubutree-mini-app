@@ -190,7 +190,7 @@ export class HomeService {
       own('subscriptions', () => this.subscriptions.list(userId)),
       own('notifications', () => this.notifications.listForUser(userId)),
       // Đã có đơn chưa huỷ thì kết quả luôn là "không phải khách mới", dù tài khoản thật hay khách vãng lai: khỏi đọc khách và đơn thêm lần nữa.
-      withFacts('newCustomerOffer', async (f) => (f?.hasPriorOrder ? { isNewCustomer: false as const, welcomeVoucher: null } : this.loyalty.getNewCustomerOffer(userId))),
+      withFacts('newCustomerOffer', async (f) => (f?.hasPriorOrder ? { isNewCustomer: false as const, welcomeVoucher: null } : this.loyalty.getNewCustomerOffer(userId, f ? { hasPriorOrder: false } : {}))),
       // Chỉ một câu đếm (không gọi /waste/me nặng): để Trang chủ/Ưu đãi giữ lối vào Đổi rác cho khách còn yêu cầu mở khi chương trình tạm dừng.
       withFacts('wasteOpenRequestCount', async (f) => f?.wasteOpen ?? this.prisma.wasteRequest.count({ where: { userId, status: { in: [...WASTE_OPEN_STATUSES] } } })),
     ]);

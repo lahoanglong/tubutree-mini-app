@@ -178,3 +178,41 @@ describe('lockedPointsLabel', () => {
     expect(lockedPointsLabel({ pointsBalance: 500 }, { usable: 300 })).toBe('Bạn đang có 500 điểm');
   });
 });
+
+// R-163: bản cũ của hai hàm (viết tại chỗ trước khi luật dời sang app-core) làm chuẩn so đầu ra.
+const legacyClamp = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
+const legacyGroup = (n: number) => n.toLocaleString('vi-VN');
+function legacyPointsSummary(u: { pointsBalance: number; pointsConvertedBalance?: number }) {
+  const standard = legacyClamp(u.pointsBalance);
+  const converted = legacyClamp(u.pointsConvertedBalance);
+  return { standard, converted, total: standard + converted, convertedNote: converted > 0 ? `trong đó ${legacyGroup(converted)} điểm không hết hạn` : null };
+}
+const CASES: { pointsBalance: number; pointsConvertedBalance?: number }[] = [
+  { pointsBalance: 0 },
+  { pointsBalance: 500 },
+  { pointsBalance: 1800, pointsConvertedBalance: 0 },
+  { pointsBalance: 30, pointsConvertedBalance: 124 },
+  { pointsBalance: 0, pointsConvertedBalance: 1250 },
+  { pointsBalance: -5, pointsConvertedBalance: -1 },
+  { pointsBalance: Number.NaN, pointsConvertedBalance: 7 },
+  { pointsBalance: 1_234_567, pointsConvertedBalance: 8_901 },
+];
+
+describe('R-163: luật dời sang app-core không đổi đầu ra của web', () => {
+  it.each(CASES)('pointsSummary %j', (c) => {
+    expect(pointsSummary(c)).toEqual(legacyPointsSummary(c));
+  });
+  it.each(CASES)('lockedPointsLabel %j (có và không có báo giá)', (c) => {
+    expect(lockedPointsLabel(c, { usable: 300 })).toBe(`Bạn đang có ${legacyGroup(legacyPointsSummary(c).total)} điểm`);
+  });
+  it('không có báo giá thì lấy số dùng được', () => {
+    expect(lockedPointsLabel(undefined, { usable: 1800 })).toBe('Bạn đang có 1.800 điểm');
+  });
+  it.each(CASES)('convertedPointsLine %j', (c) => {
+    const offer = checkoutPointsOffer({ ...c });
+    const none = { capNote: null, partnerNote: null };
+    const note = legacyPointsSummary(c).convertedNote;
+    expect(convertedPointsLine(offer, { capNote: 'x', partnerNote: null })).toBe(offer.converted > 0 ? note : null);
+    expect(convertedPointsLine(offer, none)).toBe(offer.converted > 0 ? `${note}, trả tới 100% giá trị hàng` : null);
+  });
+});
