@@ -66,7 +66,7 @@ import { RecycleDesk, deskPreviewPoints } from './recycle-desk';
 const REQ = makeDeskRequest();
 const LINE0 = REQ.lines[0]!;
 const CONFIRMED = { requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 6000, dropsAwarded: 0, quota: { limit: 500_000, used: 126_000, remaining: 374_000 }, staffDailyCapRemaining: 150_000 };
-const GIFT = { id: 'red-1', giftName: 'Gói hạt giống Tubu', customerName: 'Ng*** A', status: 'READY', claimExpiresAt: '2026-12-16T17:30:00.000Z' };
+const GIFT = { id: 'red-1', giftName: 'Gói hạt giống Tubu', customerName: 'Ng*** A', status: 'READY', claimExpiresAt: '2099-12-16T17:30:00.000Z' };
 const CODE_LABEL = 'Mã yêu cầu hoặc mã nhận quà';
 
 let mounted: Rendered[] = [];
@@ -311,22 +311,33 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
       lines: [{ itemId: 'item-battery', declaredQty: 25, receivedQty: 25 }],
     });
   });
-  it.each([
-    ['COMPLETED', 'Đã duyệt lúc 10:05'],
-    ['REJECTED', 'Đã từ chối'],
-  ] as const)('yêu cầu %s: thẻ chỉ xem, không bộ đếm, không nút', async (status, text) => {
-    lookupReq({ status, closedAt: '2026-10-28T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
-    const c = await mount();
-    await lookUp(c);
-    expect(c.textContent).toContain(text);
-    if (status === 'COMPLETED') expect(lineOf(c, 'Thùng carton').textContent).toContain('Đã nhận 5 thùng');
-    expect(c.querySelector('[aria-label="Tăng số lượng"]')).toBeNull();
-    expect(button(c, 'Xác nhận đã nhận')).toBeNull();
-    expect(button(c, 'Từ chối cả yêu cầu')).toBeNull();
+  describe('yêu cầu vừa đóng', () => {
+    // Chỉ giả Date: hẹn giờ thật vẫn chạy để react-query và flush hoạt động.
+    beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-28T08:00:00.000Z') }));
+    afterEach(() => void vi.useRealTimers());
+    it.each([
+      ['COMPLETED', 'Đã duyệt lúc 10:05'],
+      ['REJECTED', 'Đã từ chối'],
+    ] as const)('yêu cầu %s: thẻ chỉ xem, không bộ đếm, không nút', async (status, text) => {
+      lookupReq({ status, closedAt: '2026-10-28T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
+      const c = await mount();
+      await lookUp(c);
+      expect(c.textContent).toContain(text);
+      if (status === 'COMPLETED') expect(lineOf(c, 'Thùng carton').textContent).toContain('Đã nhận 5 thùng');
+      expect(c.querySelector('[aria-label="Tăng số lượng"]')).toBeNull();
+      expect(button(c, 'Xác nhận đã nhận')).toBeNull();
+      expect(button(c, 'Từ chối cả yêu cầu')).toBeNull();
+    });
+    it('duyệt từ hôm trước: ghi cả ngày, để không đọc nhầm là hôm nay', async () => {
+      lookupReq({ status: 'COMPLETED', closedAt: '2026-10-27T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
+      const c = await mount();
+      await lookUp(c);
+      expect(c.textContent).toContain('Đã duyệt lúc 10:05 ngày 27/10');
+    });
   });
 });
 
-describe('/doi-rac/quay: món chỉ kho HCMC nhận (E-127)', () => {
+describe('/doi-rac/quay: món chỉ kho HCMC nhận', () => {
   const MILK_ONLY = { ...REQ.lines[1]!, itemName: 'Vỏ chai Tubu', warehouseOnly: true };
   it('điểm đối tác: dòng đó mặc định 0, có câu giải thích, không bộ đếm; duyệt gửi số nhận 0 kèm lý do "Không nhận"', async () => {
     lookupReq({ lines: [LINE0, MILK_ONLY] });
@@ -366,7 +377,7 @@ describe('/doi-rac/quay: món chỉ kho HCMC nhận (E-127)', () => {
   });
 });
 
-describe('/doi-rac/quay: duyệt mà chưa đủ để cộng điểm (E-41)', () => {
+describe('/doi-rac/quay: duyệt mà chưa đủ để cộng điểm', () => {
   it('0 điểm: tiêu đề không nói "cộng 0 điểm"', async () => {
     state.confirm = () => ({ ...CONFIRMED, pointsAwarded: 0, quota: null });
     const c = await mount();
@@ -379,10 +390,15 @@ describe('/doi-rac/quay: duyệt mà chưa đủ để cộng điểm (E-41)', (
   });
 });
 
-describe('/doi-rac/quay: quét mã bằng camera trình duyệt (E-42)', () => {
+describe('/doi-rac/quay: quét mã bằng camera trình duyệt', () => {
   const stopTrack = vi.fn();
   const scan = { value: 'TR-8K2M9', throwOnce: false };
+  const supported = { formats: ['qr_code', 'ean_13'] as string[] | Error };
   class FakeDetector {
+    static async getSupportedFormats() {
+      if (supported.formats instanceof Error) throw supported.formats;
+      return supported.formats;
+    }
     async detect() {
       if (scan.throwOnce) {
         scan.throwOnce = false;
@@ -399,6 +415,7 @@ describe('/doi-rac/quay: quét mã bằng camera trình duyệt (E-42)', () => {
     stopTrack.mockClear();
     scan.value = 'TR-8K2M9';
     scan.throwOnce = false;
+    supported.formats = ['qr_code', 'ean_13'];
     Object.defineProperty(window, 'BarcodeDetector', { configurable: true, writable: true, value: FakeDetector });
     camera(async () => ({ getTracks: () => [{ stop: stopTrack }] }));
     // jsdom chưa cài đặt play() của thẻ video.
@@ -455,6 +472,24 @@ describe('/doi-rac/quay: quét mã bằng camera trình duyệt (E-42)', () => {
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('gõ mã');
     expect(calls('/waste/desk/lookup')).toHaveLength(0);
     expect(label(c, CODE_LABEL)).not.toBeNull();
+  });
+  it('quyền camera bị chặn: câu báo bảo cho phép camera, không bảo "thử lại"', async () => {
+    camera(async () => {
+      throw Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+    });
+    const c = await mount();
+    click(button(c, 'Quét mã của khách'));
+    await flush(5);
+    expect(dialog()).toBeNull();
+    const alert = c.querySelector('[role="alert"]')?.textContent ?? '';
+    expect(alert).toContain('Hãy cho phép camera trong trình duyệt hoặc gõ mã bên dưới');
+    expect(alert).not.toContain('thử lại');
+  });
+  it('BarcodeDetector có nhưng không đọc được QR (hoặc không hỏi được định dạng): không hiện nút quét', async () => {
+    supported.formats = ['ean_13', 'code_128'];
+    expect(button(await mount(), 'Quét mã của khách')).toBeNull();
+    supported.formats = new Error('không hỏi được');
+    expect(button(await mount(), 'Quét mã của khách')).toBeNull();
   });
   it('không có BarcodeDetector: không hiện nút quét, giữ ô gõ và nút Tra mã', async () => {
     delete (window as unknown as { BarcodeDetector?: unknown }).BarcodeDetector;
@@ -636,7 +671,7 @@ describe('/doi-rac/quay: trao quà ở kho (§8, §15.3)', () => {
     const c = await mount();
     await lookUp(c, 'qg-8k2m9p4t');
     expect(c.textContent).toContain('Gói hạt giống Tubu');
-    expect(c.textContent).toContain('Hạn nhận 17/12/2026');
+    expect(c.textContent).toContain('Hạn nhận 17/12/2099');
     click(button(c, 'Trao quà'));
     await flush(10);
     expect(calls('/waste/desk/gifts/fulfil')[0]!.body).toEqual({ code: 'QG-8K2M9P4T', pointId: 'wh-1' });
@@ -676,6 +711,33 @@ describe('/doi-rac/quay: trao quà ở kho (§8, §15.3)', () => {
     const c = await mount();
     await lookUp(c, 'QG-8K2M9P4T');
     expect(c.textContent).toContain(text);
+    expect(button(c, 'Trao quà')).toBeNull();
+  });
+  it('lượt đã huỷ do quá hạn: hiện lý do và điểm đã hoàn, chỉ đọc', async () => {
+    state.lookup = {
+      type: 'GIFT',
+      redemption: { ...GIFT, status: 'CANCELLED', cancelledAt: '2026-11-11T03:00:00.000Z', cancelReason: 'Quá hạn nhận', pointsCost: 30000, refundedPoints: 30000 },
+    };
+    const c = await mount();
+    await lookUp(c, 'QG-8K2M9P4T');
+    expect(c.textContent).toContain('Lượt đổi quà đã huỷ');
+    expect(c.textContent).toContain('Lý do: Quá hạn nhận');
+    expect(c.textContent).toMatch(/Đã hoàn 30\.000 điểm cho khách/);
+    expect(button(c, 'Trao quà')).toBeNull();
+  });
+  it('lượt đã trao: hiện giờ trao và số điểm đã đổi, không có nút', async () => {
+    state.lookup = { type: 'GIFT', redemption: { ...GIFT, status: 'FULFILLED', fulfilledAt: '2026-11-10T03:00:00.000Z', pointsCost: 30000 } };
+    const c = await mount();
+    await lookUp(c, 'QG-8K2M9P4T');
+    expect(c.textContent).toContain('Trao lúc 10:00 10/11/2026');
+    expect(c.textContent).toMatch(/Khách đổi bằng 30\.000 điểm/);
+    expect(button(c, 'Trao quà')).toBeNull();
+  });
+  it('quà còn READY nhưng đã quá hạn: báo quá hạn, không có nút Trao quà', async () => {
+    state.lookup = { type: 'GIFT', redemption: { ...GIFT, claimExpiresAt: '2020-01-01T00:00:00.000Z' } };
+    const c = await mount();
+    await lookUp(c, 'QG-8K2M9P4T');
+    expect(c.textContent).toContain('Quà đã quá hạn nhận');
     expect(button(c, 'Trao quà')).toBeNull();
   });
   it('lỗi trao quà hiện nguyên văn và giữ thẻ quà', async () => {

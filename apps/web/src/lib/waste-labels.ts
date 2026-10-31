@@ -141,7 +141,7 @@ const WASTE_EVENT_KIND_KEYS = [
   'UNMATCHED_RECORDED', 'UNMATCHED_RESOLVED', 'UNMATCHED_CLOSED', 'REQUEST_CONFIRMED', 'REQUEST_REJECTED', 'LOOKUP_MISS', 'POINTS_REVERSED',
   'REQUEST_CLOSED_LOST', 'REQUEST_REOPENED', 'REQUEST_COST_UPDATED', 'PERK_SUBMITTED', 'PERK_APPROVED', 'PERK_REJECTED', 'ITEM_CREATED',
   'ITEM_UPDATED', 'ITEMS_REORDERED', 'POINT_CREATED', 'POINT_UPDATED', 'POINTS_REORDERED', 'POINT_STAFF_ADDED', 'POINT_STAFF_REMOVED',
-  'GIFT_CREATED', 'GIFT_UPDATED', 'GIFTS_REORDERED', 'GIFT_FULFILLED', 'GIFT_CANCELLED', 'USER_FLAGS_UPDATED',
+  'GIFT_CREATED', 'GIFT_UPDATED', 'GIFTS_REORDERED', 'GIFT_FULFILLED', 'GIFT_CANCELLED', 'GIFT_EXPIRED', 'USER_FLAGS_UPDATED',
 ] as const;
 export type WasteEventKindKey = (typeof WASTE_EVENT_KIND_KEYS)[number];
 
@@ -186,6 +186,7 @@ export const WASTE_EVENT_KIND_LABELS: Record<WasteEventKindKey, string> = {
   GIFTS_REORDERED: 'Sắp xếp lại quà',
   GIFT_FULFILLED: 'Trao quà',
   GIFT_CANCELLED: 'Huỷ quà',
+  GIFT_EXPIRED: 'Quà quá hạn nhận, tự huỷ',
   USER_FLAGS_UPDATED: 'Đổi cờ của khách',
 };
 
@@ -204,7 +205,7 @@ const lookup = (map: Record<string, string>, v: unknown): string | null =>
   typeof v === 'string' && Object.prototype.hasOwnProperty.call(map, v) ? map[v]! : null;
 
 // Kinds whose meta.reason is text a person typed; every other kind stores a code there (or none).
-const TYPED_REASON_KINDS: ReadonlySet<string> = new Set(['POINTS_REVERSED', 'REQUEST_CLOSED_LOST', 'REQUEST_REOPENED', 'USER_FLAGS_UPDATED', 'GIFT_CANCELLED']);
+const TYPED_REASON_KINDS: ReadonlySet<string> = new Set(['POINTS_REVERSED', 'REQUEST_CLOSED_LOST', 'REQUEST_REOPENED', 'USER_FLAGS_UPDATED', 'GIFT_CANCELLED', 'GIFT_EXPIRED']);
 
 /** Only fields whose meaning is known are rendered; ids, device data and before/after dumps are dropped. */
 export function wasteEventMetaLines(kind: string, meta: Record<string, unknown> | null): string[] {

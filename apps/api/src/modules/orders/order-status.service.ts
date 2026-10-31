@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { orderConfirmedData } from '../notifications/order-confirmed-data';
 import { OrderReversalService, type ReversalResult } from './order-reversal.service';
 import { partialReturnTotals } from './return-ledger';
 import { recordCodReturnUnverified } from './refund-queue';
@@ -532,7 +533,7 @@ export class OrderStatusService {
   /**
    * Chạy lại phần đảo sau commit của đơn CANCELLED/RETURNED chưa có mốc reversalEffectsAt (cron gọi): lần huỷ/trả commit rồi tiến
    * trình chết (SIGTERM lúc deploy, mất kết nối) trước khi đảo điểm tích, thu hồi hoa hồng, xếp lệnh huỷ Pancake/Gomdon và báo —
-   * gọi lại setStatus không làm gì vì trạng thái đã đặt. Mỗi việc idempotent (dòng sổ điểm unique, hoa hồng chỉ đảo PENDING/LOCKED,
+   * gọi lại setStatus không làm gì vì trạng thái đã đặt. Mỗi việc idempotent (dòng sổ điểm unique, hoa hồng đã REJECTED không đảo lại, dòng sổ Ví thu hồi unique theo hoa hồng,
    * lệnh huỷ Pancake chỉ xếp khi chưa có kết quả, tin chỉ gửi khi log chưa có tin của đơn) nên chạy song song hay chạy lại vẫn chỉ
    * làm một lần. Mốc chỉ ghi khi mọi việc xong; việc đảo điểm/hoa hồng lỗi thì chưa báo khách (lần sau xong rồi mới báo).
    */
@@ -760,7 +761,7 @@ export class OrderStatusService {
       await clearPancakeAttention(this.prisma, order.id, ATTENTION_UNDERPAID);
       if (!opts.deferGomdonPush) await this.enqueueGomdonAfterPaid(order);
       await this.pancakeHooks?.afterPaid(order.id);
-      await this.notifications.notifySafe(order.userId, 'ORDER_CONFIRMED', { order_code: order.code }, undefined, `order=${order.code}`);
+      await this.notifications.notifySafe(order.userId, 'ORDER_CONFIRMED', orderConfirmedData({ code: order.code, paymentStatus: 'PAID' }), undefined, `order=${order.code}`);
       return {
         outcome: 'PAID',
         order: await this.prisma.order.findUniqueOrThrow({ where: { id: order.id } }),

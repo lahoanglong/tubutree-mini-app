@@ -25,6 +25,7 @@ export interface WasteConfigSnapshot {
   mailinFeeTable: WasteFeeTable;
   alertThresholds: WasteAlertThresholds;
   rulesText: string;
+  rulesVersion: string;
 }
 
 const THRESHOLD_FIELDS: readonly (keyof WasteAlertThresholds)[] = [
@@ -61,7 +62,7 @@ export class WasteConfigService {
       enabled, laneDropoff, laneMailin, lanePickup, mailinMinPoints, pickupMinPoints, customerMonthlyCapPoints,
       maxOpenRequests, requestHoldDays, pickupWaitDays, inTransitReviewDays, mailinMaxWeightKg, mailinMaxEdgeCm,
       shortfallLockPct, shortfallLockStreak, staffDailyCapPoints, giftClaimDays, pointInactiveDays,
-      mailinFeeTable, alertThresholds, rulesText,
+      mailinFeeTable, alertThresholds, rulesText, rulesVersion,
     ] = await Promise.all([
       this.config.get<unknown>('waste.enabled', WASTE_CONFIG_KEYS['waste.enabled'].default),
       this.config.get<unknown>('waste.lane_dropoff_enabled', WASTE_CONFIG_KEYS['waste.lane_dropoff_enabled'].default),
@@ -84,6 +85,7 @@ export class WasteConfigService {
       this.config.get<unknown>('waste.mailin_fee_table', WASTE_CONFIG_KEYS['waste.mailin_fee_table'].default),
       this.config.get<unknown>('waste.alert_thresholds', WASTE_CONFIG_KEYS['waste.alert_thresholds'].default),
       this.config.get<unknown>('waste.rules_text', WASTE_CONFIG_KEYS['waste.rules_text'].default),
+      this.config.get<unknown>('waste.rules_version', WASTE_CONFIG_KEYS['waste.rules_version'].default),
     ]);
 
     return {
@@ -108,6 +110,7 @@ export class WasteConfigService {
       mailinFeeTable: this.checked('waste.mailin_fee_table', mailinFeeTable, isFeeTable),
       alertThresholds: this.checked('waste.alert_thresholds', alertThresholds, isThresholds),
       rulesText: this.checked('waste.rules_text', rulesText, (v): v is string => typeof v === 'string'),
+      rulesVersion: this.checked('waste.rules_version', rulesVersion, (v): v is string => typeof v === 'string' && v.trim() !== '' && v.length <= 32),
     };
   }
 

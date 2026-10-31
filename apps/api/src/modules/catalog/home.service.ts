@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -7,7 +8,9 @@ import { PurchasedItemsService } from '../orders/purchased-items.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { buildPublicConfig, tierLoaderOf, type PublicConfigDTO } from '../system-config/public-config';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { paginated } from '../../common/pagination';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ACTIVE_ORDER_STATUSES } from '../orders/order-status-groups';
 import { WASTE_OPEN_STATUSES } from '../waste-exchange/waste.constants';
 import { CatalogService } from './catalog.service';
 import type { ProductQuery } from './dto/product-query.dto';
@@ -25,6 +28,7 @@ const FLASH_TTL_MS = 3_000;
 const PUBLIC_DEGRADED_TTL_MS = 3_000;
 // Khối chậm quá hạn → null để client gọi lẻ khối đó, không giữ cả trang chờ.
 const BLOCK_TIMEOUT_MS = 2_500;
+const FACTS_TIMEOUT_MS = 1_000;
 const DEFAULT_PURCHASED_LIMIT = 10;
 
 const productQuery = (extra: Partial<ProductQuery>) => ({ page: 1, limit: HOME_SECTION_LIMIT, ...extra }) as ProductQuery;
@@ -59,13 +63,14 @@ export class HomeService {
     private readonly prisma: PrismaService,
   ) {}
 
-  private async block<T>(name: string, run: () => Promise<T>): Promise<Block<T>> {
+  private async block<T>(name: string, run: () => Promise<T>, deadline: number = Date.now() + BLOCK_TIMEOUT_MS): Promise<Block<T>> {
+    const budget = Math.max(0, deadline - Date.now());
     let timer: NodeJS.Timeout | undefined;
     try {
       return await Promise.race([
         run(),
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error(`quá ${BLOCK_TIMEOUT_MS}ms`)), BLOCK_TIMEOUT_MS);
+          timer = setTimeout(() => reject(new Error(`quá ${BLOCK_TIMEOUT_MS}ms`)), budget);
         }),
       ]);
     } catch (err) {
@@ -87,7 +92,14 @@ export class HomeService {
       this.cached(this.staticSlot, now, PUBLIC_TTL_MS, () => this.buildStatic()),
       this.cached(this.flashSlot, now, FLASH_TTL_MS, () => this.block('flashActive', () => this.flashSale.listActive())),
     ]);
-    return { ...stat, flashActive };
+    return { ...stat, flashActive: this.withServerNow(flashActive, now) };
+  }
+
+  // Cache 3s không được làm đồng hồ máy chủ cũ theo: app dùng serverNow để bù lệch giờ khi đếm ngược Giờ vàng.
+  private withServerNow(flash: Block<HomePublic['flashActive']>, now: number): Block<HomePublic['flashActive']> {
+    if (!Array.isArray(flash)) return flash;
+    const serverNow = new Date(now).toISOString();
+    return flash.map((it) => ('serverNow' in it ? { ...it, serverNow } : it)) as typeof flash;
   }
 
   private async cached<T>(slot: Slot<T>, now: number, ttlMs: number, build: () => Promise<T>): Promise<T> {
@@ -115,22 +127,84 @@ export class HomeService {
     return { bestSellers, featured, newest, categories, brands, publicConfig };
   }
 
+  /**
+   * Số đơn theo trạng thái và số yêu cầu đổi rác đang mở của khách, MỘT câu SQL: các khối đếm đơn, kệ Mua lại, gợi ý và ưu đãi
+   * khách mới đều chỉ cần biết "có đơn không / có đơn giao không / đang chờ bao nhiêu".
+   */
+  private async userFacts(userId: string): Promise<UserFacts> {
+    const rows = await this.prisma.$queryRaw<{ kind: string; key: string; n: number }[]>(Prisma.sql`
+      SELECT 'order' AS kind, o.status::text AS key, COUNT(*)::int AS n FROM orders o WHERE o."userId" = ${userId} GROUP BY o.status
+      UNION ALL
+      SELECT 'waste', 'open', COUNT(*)::int FROM waste_requests w WHERE w."userId" = ${userId} AND w.status::text IN (${Prisma.join([...WASTE_OPEN_STATUSES])})`);
+    const byStatus = new Map<string, number>();
+    let wasteOpen = 0;
+    for (const r of rows) {
+      if (r.kind === 'order') byStatus.set(r.key, r.n);
+      else wasteOpen = r.n;
+    }
+    const count = (statuses: readonly string[]) => statuses.reduce((s, st) => s + (byStatus.get(st) ?? 0), 0);
+    return {
+      hasOrders: count([...byStatus.keys()]) > 0,
+      hasPriorOrder: count([...byStatus.keys()].filter((k) => k !== 'CANCELLED')) > 0,
+      delivered: count(['DELIVERED']),
+      shipping: count(['SHIPPING']),
+      active: count(ACTIVE_ORDER_STATUSES),
+      wasteOpen,
+    };
+  }
+
+  /**
+   * Số đếm của khách với hạn riêng ngắn hơn hạn của khối: lỗi hoặc quá hạn thì trả null và các khối dùng đường gọi thẳng
+   * từng dịch vụ như trước, nên một câu đếm chậm không kéo cả sáu khối thành null.
+   */
+  private async userFactsOrNull(userId: string): Promise<UserFacts | null> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        this.userFacts(userId),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), FACTS_TIMEOUT_MS);
+        }),
+      ]);
+    } catch (err) {
+      this.logger.warn(`Số đếm của khách lỗi, các khối gọi thẳng dịch vụ: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** Phần theo người dùng — KHÔNG cache dùng chung. */
   async getForUser(userId: string, purchasedLimit: number = DEFAULT_PURCHASED_LIMIT): Promise<HomeMe> {
+    // Một hạn chung cho cả request: thời gian chờ số đếm ăn vào hạn của mọi khối, nên tổng không vượt BLOCK_TIMEOUT_MS (Mini chỉ chờ 4 s).
+    const deadline = Date.now() + BLOCK_TIMEOUT_MS;
+    const facts = this.userFactsOrNull(userId);
+    const own = <T>(name: string, run: () => Promise<T>) => this.block(name, run, deadline);
+    const withFacts = <T>(name: string, run: (f: UserFacts | null) => Promise<T>) => facts.then((f) => this.block(name, () => run(f), deadline));
     const [forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount] = await Promise.all([
-      this.block('forYou', () => this.catalog.getForYou(userId)),
-      this.block('flashUpcoming', () => this.flashSale.listUpcoming(userId)),
-      this.block('purchasedItems', () => this.purchased.list(userId, { limit: purchasedLimit })),
-      this.block('activeOrderCount', () => this.orders.activeCount(userId)),
-      this.block('shippingOrders', () => this.orders.list(userId, { status: 'SHIPPING' }, 1, 1)),
-      this.block('subscriptions', () => this.subscriptions.list(userId)),
-      this.block('notifications', () => this.notifications.listForUser(userId)),
-      this.block('newCustomerOffer', () => this.loyalty.getNewCustomerOffer(userId)),
+      withFacts('forYou', (f) => (f ? this.catalog.getForYou(userId, { hasOrders: f.hasOrders }) : this.catalog.getForYou(userId))),
+      own('flashUpcoming', () => this.flashSale.listUpcoming(userId)),
+      withFacts('purchasedItems', async (f) => (f && f.delivered === 0 ? { items: [], nextCursor: null } : this.purchased.list(userId, { limit: purchasedLimit }))),
+      withFacts('activeOrderCount', async (f) => (f ? { count: f.active } : this.orders.activeCount(userId))),
+      withFacts('shippingOrders', async (f) => (f && f.shipping === 0 ? paginated([], 1, 1, 0) : this.orders.list(userId, { status: 'SHIPPING' }, 1, 1))),
+      own('subscriptions', () => this.subscriptions.list(userId)),
+      own('notifications', () => this.notifications.listForUser(userId)),
+      // Đã có đơn chưa huỷ thì kết quả luôn là "không phải khách mới", dù tài khoản thật hay khách vãng lai: khỏi đọc khách và đơn thêm lần nữa.
+      withFacts('newCustomerOffer', async (f) => (f?.hasPriorOrder ? { isNewCustomer: false as const, welcomeVoucher: null } : this.loyalty.getNewCustomerOffer(userId, f ? { hasPriorOrder: false } : {}))),
       // Chỉ một câu đếm (không gọi /waste/me nặng): để Trang chủ/Ưu đãi giữ lối vào Đổi rác cho khách còn yêu cầu mở khi chương trình tạm dừng.
-      this.block('wasteOpenRequestCount', () => this.prisma.wasteRequest.count({ where: { userId, status: { in: [...WASTE_OPEN_STATUSES] } } })),
+      withFacts('wasteOpenRequestCount', async (f) => f?.wasteOpen ?? this.prisma.wasteRequest.count({ where: { userId, status: { in: [...WASTE_OPEN_STATUSES] } } })),
     ]);
     return { forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount, purchasedLimit };
   }
+}
+
+interface UserFacts {
+  hasOrders: boolean;
+  hasPriorOrder: boolean;
+  delivered: number;
+  shipping: number;
+  active: number;
+  wasteOpen: number;
 }
 
 type Awaited2<F extends (...a: never[]) => unknown> = Awaited<ReturnType<F>>;

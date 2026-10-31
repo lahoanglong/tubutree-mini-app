@@ -18,13 +18,13 @@ const DEFAULTS = {
   enabled: false, laneDropoff: true, laneMailin: true, lanePickup: false, mailinMinPoints: 15_000, pickupMinPoints: 10_000,
   customerMonthlyCapPoints: 60_000, maxOpenRequests: 3, requestHoldDays: 7, pickupWaitDays: 14, inTransitReviewDays: 30,
   mailinMaxWeightKg: 20, mailinMaxEdgeCm: 50, shortfallLockPct: 50, shortfallLockStreak: 3, staffDailyCapPoints: 1_000_000,
-  giftClaimDays: 60, pointInactiveDays: 60, mailinFeeTable: FEE, alertThresholds: THRESHOLDS, rulesText: '',
+  giftClaimDays: 60, pointInactiveDays: 60, mailinFeeTable: FEE, alertThresholds: THRESHOLDS, rulesText: '', rulesVersion: '2026-10-17.1',
 };
 
 describe('WasteConfigService.snapshot', () => {
   afterEach(() => jest.restoreAllMocks());
 
-  it('no stored rows -> the 21 defaults of spec 11.5', async () => {
+  it('no stored rows -> the 22 defaults', async () => {
     expect(await makeConfig().svc.snapshot()).toEqual(DEFAULTS);
   });
 
@@ -43,13 +43,13 @@ describe('WasteConfigService.snapshot', () => {
       'waste.mailin_min_points': 11, 'waste.pickup_min_points': 12, 'waste.customer_monthly_cap_points': 13, 'waste.max_open_requests': 14,
       'waste.request_hold_days': 15, 'waste.pickup_wait_days': 16, 'waste.in_transit_review_days': 17, 'waste.mailin_max_weight_kg': 18,
       'waste.mailin_max_edge_cm': 19, 'waste.shortfall_lock_pct': 20, 'waste.shortfall_lock_streak': 4, 'waste.staff_daily_cap_points': 22,
-      'waste.gift_claim_days': 23, 'waste.point_inactive_days': 24,
+      'waste.gift_claim_days': 23, 'waste.point_inactive_days': 24, 'waste.rules_version': '2026-11-05.2',
     });
     expect(await svc.snapshot()).toEqual({
       ...DEFAULTS, enabled: true, laneDropoff: false, laneMailin: true, lanePickup: true, mailinMinPoints: 11, pickupMinPoints: 12,
       customerMonthlyCapPoints: 13, maxOpenRequests: 14, requestHoldDays: 15, pickupWaitDays: 16, inTransitReviewDays: 17,
       mailinMaxWeightKg: 18, mailinMaxEdgeCm: 19, shortfallLockPct: 20, shortfallLockStreak: 4, staffDailyCapPoints: 22,
-      giftClaimDays: 23, pointInactiveDays: 24,
+      giftClaimDays: 23, pointInactiveDays: 24, rulesVersion: '2026-11-05.2',
     });
   });
 
@@ -63,6 +63,9 @@ describe('WasteConfigService.snapshot', () => {
     ['waste.mailin_fee_table', { zones: [{ name: 'A', provinceCodes: ['01'], low: 90000, high: 30000 }], defaultZone: FEE.defaultZone }, 'mailinFeeTable', FEE],
     ['waste.alert_thresholds', { quotaPacePct: 60 }, 'alertThresholds', THRESHOLDS],
     ['waste.rules_text', 42, 'rulesText', ''],
+    ['waste.rules_version', '', 'rulesVersion', '2026-10-17.1'],
+    ['waste.rules_version', 'x'.repeat(33), 'rulesVersion', '2026-10-17.1'],
+    ['waste.rules_version', 7, 'rulesVersion', '2026-10-17.1'],
   ])('invalid %s = %p -> default and exactly one warning naming the key', async (key, raw, field, expected) => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     const snap = await makeConfig({ [key]: raw }).svc.snapshot();
@@ -71,7 +74,7 @@ describe('WasteConfigService.snapshot', () => {
     expect(String(warn.mock.calls[0]![0])).toContain(key);
   });
 
-  it('reads each of the 21 keys once, with an inline string literal and the record default as fallback', async () => {
+  it('reads each of the 22 keys once, with an inline string literal and the record default as fallback', async () => {
     const { svc, get } = makeConfig();
     await svc.snapshot();
     expect(get.mock.calls.map((c) => c[0]).sort()).toEqual(Object.keys(WASTE_CONFIG_KEYS).sort());

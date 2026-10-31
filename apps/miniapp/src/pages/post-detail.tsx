@@ -5,7 +5,7 @@ import { CheckCircle2, Clock, Flag, MessageCircle, Pin } from 'lucide-react';
 import { getPost, getComments, reportContent, type FeedComment } from '../services/feed-api';
 import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
-import { SessionUnavailable } from '../components/ui/auth-gate';
+import { SessionUnavailable, useBlockedMessage } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { timeAgo } from '../utils/time-ago';
 import { Skeleton } from '../components/ui/skeleton';
@@ -31,6 +31,7 @@ export default function PostDetailPage() {
   const { openSnackbar } = useSnackbar();
   const phase = useAuthPhase();
   const login = useAuthStore((s) => s.login);
+  const blocked = useBlockedMessage();
   const authed = phase === 'authenticated';
 
   const [reportTarget, setReportTarget] = useState<{ targetType: 'POST' | 'COMMENT'; targetId?: string } | null>(null);
@@ -82,7 +83,7 @@ export default function PostDetailPage() {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={vi.community.title} />
-        <EmptyState art="sprout" heading={vi.community.loginToView} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
+        <EmptyState art="sprout" heading={vi.community.loginToView} body={blocked ?? undefined} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
       </Page>
     );
   }

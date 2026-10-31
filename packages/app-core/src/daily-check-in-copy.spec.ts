@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { checkInDayIcon, checkInSuccessText, checkInTodayLine } from './daily-check-in-copy';
+import { checkInCopy, checkInDayIcon, checkInSuccessText, checkInTodayLine } from './daily-check-in-copy';
+import { checkInDayAria, checkInRule, guestCheckInCopy } from './daily-check-in-guest-copy';
 import type { CheckInResult } from './api/loyalty';
 
 const pts = { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' };
@@ -64,5 +65,55 @@ describe('checkInDayIcon', () => {
     expect(checkInDayIcon(3, true)).toBe('check');
     expect(checkInDayIcon(7, false)).toBe('gift');
     expect(checkInDayIcon(2, false)).toBe('sprout');
+  });
+});
+
+describe('khách vãng lai (pointsBlocked = GUEST): không hứa Điểm Xanh', () => {
+  const guestPts = { ...pts, pointsEarned: 0, totalPoints: 0, pointsBlocked: 'GUEST' as const };
+
+  it('báo sau khi bấm: chỉ giọt nước, kèm câu đăng nhập Zalo để nhận Điểm Xanh', () => {
+    expect(checkInSuccessText(res({ points: guestPts }))).toBe('+10 giọt nước. Đăng nhập Zalo để nhận Điểm Xanh');
+  });
+  it('phần nước đã xong từ trước: vẫn báo thành công và câu đăng nhập, không chữ "+0 Điểm Xanh"', () => {
+    const t = checkInSuccessText(res({ points: guestPts, water: null }));
+    expect(t).toBe('Điểm danh thành công. Đăng nhập Zalo để nhận Điểm Xanh');
+    expect(t).not.toContain('+0');
+  });
+  it('còn phần thiếu thì vẫn nhắc bấm lại sau câu đăng nhập', () => {
+    expect(checkInSuccessText(res({ points: guestPts, water: null, pending: ['water'] }))).toBe(
+      'Điểm danh thành công. Đăng nhập Zalo để nhận Điểm Xanh. Còn thiếu một phần, bấm điểm danh lại để nhận nốt',
+    );
+  });
+  it('user thật không có cờ: câu báo không đổi', () => {
+    expect(checkInSuccessText(res({}))).toBe('+1.000 Điểm Xanh · +10 giọt nước');
+  });
+
+  it('dòng "Hôm nay nhận": chỉ giọt nước dù API còn trả todayPoints', () => {
+    expect(checkInTodayLine({ checkedInToday: false, pointsBlocked: 'GUEST', todayPoints: 1000, todayWater: 10 })).toBe('Hôm nay nhận +10 giọt nước');
+    expect(checkInTodayLine({ checkedInToday: false, pointsBlocked: 'GUEST', todayPoints: 0, todayWater: 0 })).toBeNull();
+  });
+
+  it('nhãn đọc màn hình của ô ngày không có điểm; thể lệ không nhắc Điểm Xanh', () => {
+    expect(checkInDayAria({ pointsBlocked: 'GUEST' }, { day: 3, points: 1000, claimed: true })).toBe('Ngày 3, đã nhận');
+    expect(checkInDayAria({ pointsBlocked: 'GUEST' }, { day: 4, points: 1000, claimed: false })).toBe('Ngày 4');
+    expect(checkInDayAria({}, { day: 3, points: 1000, claimed: true })).toBe('Ngày 3: +1.000 Điểm Xanh, đã nhận');
+    expect(checkInRule({ pointsBlocked: 'GUEST' })).not.toContain('Điểm Xanh');
+    expect(checkInRule({})).toBe(checkInCopy.rule);
+  });
+
+  it('thẻ chuỗi ngày: câu phụ chỉ nói giọt nước, không nhắc Điểm Xanh', () => {
+    expect(guestCheckInCopy.streakSub(10, 0)).toBe('Nhận +10💧 mỗi ngày');
+    expect(guestCheckInCopy.streakSub(10, 20)).toBe('Lần đầu nhận +30💧, các ngày sau +10💧');
+    expect(guestCheckInCopy.streakSub(null, 0)).toBe('Nhận giọt nước mỗi ngày');
+    for (const s of [guestCheckInCopy.streakSub(10, 0), guestCheckInCopy.streakSub(10, 20), guestCheckInCopy.streakSub(null, 0)]) expect(s).not.toContain('Điểm Xanh');
+  });
+  it('nút điểm danh còn thiếu phần điểm: nhãn của khách không hứa Điểm Xanh', () => {
+    expect(guestCheckInCopy.claimToday).toBe('Điểm danh hôm nay');
+    expect(guestCheckInCopy.claimToday).not.toContain('Điểm Xanh');
+  });
+
+  it('câu mời đăng nhập ngắn, đúng chữ chủ chốt', () => {
+    expect(checkInCopy.guestPoints).toBe('Đăng nhập Zalo để nhận Điểm Xanh');
+    expect(guestCheckInCopy.cta).toBe('Đăng nhập Zalo');
   });
 });

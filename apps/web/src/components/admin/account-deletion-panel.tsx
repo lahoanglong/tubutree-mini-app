@@ -62,7 +62,7 @@ export function AccountDeletionPanel({ seed = 0 }: { seed?: number }) {
   const [filter, setFilter] = useState<DeletionStatusFilter>('PENDING');
   const q = useQuery({ queryKey: [QUERY_KEY, filter], queryFn: () => listDeletionRequests(filter) });
   const sectionRef = useRef<HTMLElement>(null);
-  // Thẻ "Hôm nay" mở tab Người dùng: khối này nằm dưới danh sách người dùng nên phải cuộn tới, và mở lại hàng chờ xử lý.
+  // Thẻ "Hôm nay" mở tab Người dùng: trang đặt khối này lên đầu (seed > 0); cuộn tới để khỏi nằm dưới phần đã cuộn của trang, và mở lại hàng chờ xử lý.
   useEffect(() => {
     if (seed <= 0) return;
     setFilter('PENDING');
@@ -70,7 +70,7 @@ export function AccountDeletionPanel({ seed = 0 }: { seed?: number }) {
   }, [seed]);
 
   return (
-    <section id="account-deletions" ref={sectionRef} className="mt-6 scroll-mt-4 space-y-3" aria-labelledby="account-deletion-heading">
+    <section id="account-deletions" ref={sectionRef} className={`${seed > 0 ? 'mb-6' : 'mt-6'} scroll-mt-20 space-y-3 lg:scroll-mt-4`} aria-labelledby="account-deletion-heading">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="account-deletion-heading" className="text-base font-semibold text-stone-900">
           Yêu cầu xoá tài khoản

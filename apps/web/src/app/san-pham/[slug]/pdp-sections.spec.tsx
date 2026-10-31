@@ -9,6 +9,7 @@ vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
 const cfg = vi.hoisted(() => ({ returnWindowDays: undefined as number | undefined }));
 vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => ({ returnWindowDays: cfg.returnWindowDays }) }));
+vi.mock('@/lib/use-catalog-launch-date', () => ({ useCatalogLaunchDate: () => null }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined }) }));
 
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';

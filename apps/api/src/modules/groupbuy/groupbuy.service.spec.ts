@@ -615,7 +615,7 @@ describe('D11-05: mã mua chung giảm đúng % trên biến thể khách mua, k
   }
 
   async function discountOn(data: Record<string, unknown>, lines: { total: number }[]) {
-    const row = { id: 'c1', ...data, startAt: new Date(Date.now() - 1000), endAt: new Date(Date.now() + 864e5), usageLimit: null };
+    const row = { id: 'c1', ...data, startAt: new Date(Date.now() - 1000), endAt: new Date(Date.now() + 864e5), usageLimit: null, _count: { redemptions: 0 } };
     const prisma = {
       coupon: { findUnique: jest.fn().mockResolvedValue(row) },
       couponRedemption: { count: jest.fn().mockResolvedValue(0) },
@@ -705,7 +705,7 @@ describe('Q18: đơn tối thiểu của mã mua chung theo giá nhóm của bi�
   }
 
   async function validate(data: Record<string, unknown>, total: number) {
-    const row = { id: 'c1', ...data, startAt: new Date(Date.now() - 1000), endAt: new Date(Date.now() + 864e5), usageLimit: null };
+    const row = { id: 'c1', ...data, startAt: new Date(Date.now() - 1000), endAt: new Date(Date.now() + 864e5), usageLimit: null, _count: { redemptions: 0 } };
     const prisma = {
       coupon: { findUnique: jest.fn().mockResolvedValue(row) },
       couponRedemption: { count: jest.fn().mockResolvedValue(0) },

@@ -33,6 +33,8 @@ export interface AuthUser {
 export interface AuthMeResponse extends AuthUser {
   /** true khi user là chủ ít nhất một nhãn: client biết có nên gọi /brand/owner/me, khỏi chịu 404 của người không phải chủ. */
   ownsBrand: boolean;
+  /** true khi user là nhân viên đang hoạt động của một điểm nhận đang hoạt động; tùy chọn để bản cũ vẫn type-check, API luôn gửi. */
+  hasDeskPoint?: boolean;
 }
 
 export interface AuthTokens {

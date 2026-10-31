@@ -66,3 +66,29 @@ Muốn đổi lại thì nói em; mọi thứ dưới đây đổi lại đượ
 - Chạy sau: canhan sau thongbao; admin-nhansu sau admin-hopviec; admin-don sau admin-hopviec và api-tin.
 - Gói đụng tiền, điểm, hoa hồng, Ví, đăng nhập (giohang, muachung, api-tin, diem, ctv, phien, admin-hopviec, admin-congcu) qua hai lượt review Opus.
 - Gói có migration: admin-hopviec (bảng báo trả nợ đại lý), admin-nhansu (hai cột mới), doirac (chèn một mẫu tin). Chỉ thêm, không xoá cột.
+
+## D. Chủ chốt sáng 29/10 (AskUserQuestion)
+- E-2: chặn cộng điểm cho khách vãng lai ở điểm danh và nhiệm vụ 7 ngày. Họ vẫn nhận giọt nước. Làm ở gói `e2-diem-khach` của đợt P3.
+- E-43: trừ thẳng Ví CTV phần hoa hồng đã vào Ví khi đơn bị trả cả đơn hoặc trả một phần. Ví được phép âm, chỉ với dòng thu hồi hoa hồng. Làm ở gói `e43-vi-ctv` của đợt P3.
+- Deploy: deploy main lên Vietnix sau khi PR đợt P3 merge, theo runbook. Không đẩy Mini App.
+- Cộng đồng web: giữ hàng link Facebook/TikTok ở cả khổ điện thoại lẫn máy tính.
+
+## E. Chủ chốt trưa 30/10 (AskUserQuestion, sau khi deploy d489574bf)
+
+Làm ở đợt "quyết định 30/10" sau khi đợt P3b gộp xong (tránh đụng file của P3b và của phiên b4):
+- E-47: nhiệm vụ "Đơn hàng đầu tiên" (5.000 điểm) chỉ tính đơn đã giao do chính khách đặt; không tính đơn CTV đặt hộ.
+- E-46: chuyển hoa hồng đủ hạn vào Ví mỗi sáng 8:00 (giờ VN), mỗi CTV một tin tổng. Phiên b4 đang sửa vùng chuyển Ví (PR #81, R-161): làm sau khi #81 merge.
+- E-126: quà hiện vật đổi rác quá hạn nhận thì tự huỷ, hoàn điểm, báo khách một tin.
+- Ghi công CTV (muahang-8): hạn tính từ lúc khách bấm link (API nhận thời điểm bấm), không tính từ lúc chạm bù sau đăng nhập.
+- E-80: gửi tin trong app khi khách lên hạng (câu chỉ nêu tên hạng); không gửi khi hạ hạng (đã có tin nhắc trước 14 ngày).
+- E-88: tin ORDER_CONFIRMED của đơn chuyển khoản đổi thành "Tubu Tree đã nhận đủ thanh toán"; đơn COD giữ chữ cũ.
+- E-6: thanh toán tự áp mã giảm nhiều nhất khách đang có, hiện rõ "Đã tự áp" và nút gỡ.
+- E-38(a): quầy đổi rác hiện cả quà đã trao/đã huỷ (chỉ đọc) khi tra mã.
+- E-128: phiên bản thể lệ đổi rác do admin đặt; khách đồng ý lại khi số phiên bản đổi.
+- E-77: xoá khoá thừa `home.new_customer_layout`; chưa bật Chặng Mùa (chủ tự tạo mùa ở quản trị khi sẵn sàng).
+- tin-canhan-14/20: `/auth/me` trả cờ nhẹ "có điểm đối tác" để Cá nhân hiện mục Nhận hàng tại điểm cho nhân viên điểm.
+- Nhãn "Mới" (giaodien-quantri-11): PROD 30/10 có 111/111 SP đang bán tạo ngày 2026-10-25, nên thêm mốc cấu hình "ngày mở bán": SP tạo trước mốc không gắn Mới.
+
+Không đổi: E-50 (giữ đánh dấu để admin soát), E-122 (CLS 0,0655 đã dưới 0,1), nhấn bundle Mini/quản trị (dưới trần).
+
+Chủ tự làm: E-30 (đăng ký mẫu ZNS trả lời chat), E-62(a) (xem cách ký webhook OA trên developers.zalo.me), email báo động (mật khẩu ứng dụng Gmail vào `~/Desktop/smtp-pass.txt`), healthchecks.io (link ping vào `~/Desktop/hc-url.txt`), duyệt 4 bản nháp chính sách (PR #79) và điền `company.*`.

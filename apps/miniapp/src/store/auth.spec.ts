@@ -35,6 +35,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { getZaloAccessToken, requestZaloPhoneToken } from '../services/zmp-bridge';
 import type { LoginResponse, AuthUser } from '@tubutree/shared-types';
 import { useAuthStore, setLogoutCleanup } from './auth';
+import { markCtvTouched, wasCtvTouched } from './storefront-context';
 import { vi as copy } from '../i18n/vi';
 
 const mockedGetStorage = vi.mocked(getStorage);
@@ -158,6 +159,16 @@ describe('useAuthStore.login — guest fallback', () => {
 
     expect(useAuthStore.getState().status).toBe('error');
   });
+
+  it('khách bị giới hạn tốc độ (429) ở loginGuest → status error, câu "thao tác quá nhanh"', async () => {
+    mockedGetZaloAccessToken.mockRejectedValue(new Error('not in zalo'));
+    mockedLoginGuest.mockRejectedValue(httpFail(429));
+
+    await useAuthStore.getState().login();
+
+    expect(useAuthStore.getState().status).toBe('error');
+    expect(useAuthStore.getState().error).toBe(copy.errors.sessionRateLimited);
+  });
 });
 
 describe('useAuthStore.restore — refresh dedup', () => {
@@ -218,7 +229,10 @@ describe('useAuthStore.restore — refresh dedup', () => {
     expect(useAuthStore.getState().error).toBe(copy.errors.sessionUnavailable);
   });
 
-  it.each([503, 429])('refresh bị %i khi máy còn token → không gọi loginZaloMiniApp, không loginGuest, status error', async (status) => {
+  it.each([
+    [503, copy.errors.sessionUnavailable],
+    [429, copy.errors.sessionRateLimited],
+  ])('refresh bị %i khi máy còn token → không gọi loginZaloMiniApp, không loginGuest, status error kèm đúng lý do', async (status, text) => {
     mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored-refresh' });
     mockedRefresh.mockRejectedValue(httpFail(status));
     mockedGetZaloAccessToken.mockResolvedValue({ code: 'c1', accessToken: 'zalo-at' });
@@ -229,10 +243,11 @@ describe('useAuthStore.restore — refresh dedup', () => {
     expect(mockedLoginGuest).not.toHaveBeenCalled();
     expect(mockedRemoveStorage).not.toHaveBeenCalled();
     expect(useAuthStore.getState().status).toBe('error');
+    expect(useAuthStore.getState().error).toBe(text);
   });
 });
 
-describe('useAuthStore — mất mạng lúc khôi phục phiên (R5-BUYER-1)', () => {
+describe('useAuthStore — mất mạng lúc khôi phục phiên', () => {
   function offlineEverything(): void {
     mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored-refresh' });
     mockedRefresh.mockRejectedValue({ isHttpError: true, message: 'Network Error', response: undefined });
@@ -405,7 +420,6 @@ describe.each([
 
   it.each([
     ['503', () => httpFail(503)],
-    ['429', () => httpFail(429, { message: 'ThrottlerException: Too Many Requests' })],
     ['không có response (mạng/timeout)', () => httpFail()],
   ])('zalo-mini-app %s → không loginGuest, status error, câu mất kết nối', async (_label, makeErr) => {
     mockedLoginZalo.mockRejectedValue(makeErr());
@@ -417,6 +431,18 @@ describe.each([
     expect(s.status).toBe('error');
     expect(s.error).toBe(copy.errors.sessionUnavailable);
     expect(s.user).toBeNull();
+  });
+
+  it('zalo-mini-app 429 (giới hạn tốc độ) → không loginGuest, status error, câu "thao tác quá nhanh" thay cho "mất kết nối"', async () => {
+    mockedLoginZalo.mockRejectedValue(httpFail(429, { message: 'ThrottlerException: Too Many Requests' }));
+
+    await run();
+
+    expect(mockedLoginGuest).not.toHaveBeenCalled();
+    const s = useAuthStore.getState();
+    expect(s.status).toBe('error');
+    expect(s.error).toBe(copy.errors.sessionRateLimited);
+    expect(s.error).not.toBe(copy.errors.sessionUnavailable);
   });
 
   it('zalo-mini-app 401 ACCOUNT_BLOCKED → không loginGuest, status idle, error là lời máy chủ, xoá refresh token', async () => {
@@ -511,9 +537,24 @@ describe('restore() — tài khoản bị khoá lúc có refresh token', () => {
     expect(s.user).toBeNull();
     expect(s.error).toContain('bị khoá');
   });
+
+  it('tài khoản bị khoá → dọn cache như đăng xuất (điểm, ví đã tải không còn hiện), mọi đường đăng nhập', async () => {
+    const cleanup = vi.fn();
+    setLogoutCleanup(cleanup);
+    mockedGetStorage.mockResolvedValue({});
+    mockedGetZaloAccessToken.mockResolvedValue({ code: 'c', accessToken: 'a' });
+    mockedLoginZalo.mockRejectedValue(blocked());
+    await useAuthStore.getState().login();
+    expect(cleanup).toHaveBeenCalledTimes(1);
+
+    mockedGetZaloAccessToken.mockRejectedValue(Object.assign(new Error('not in zalo'), { code: -1401 }));
+    mockedLoginGuest.mockRejectedValue(blocked());
+    await useAuthStore.getState().restore();
+    expect(cleanup).toHaveBeenCalledTimes(2);
+  });
 });
 
-describe('useAuthStore.ensurePhoneOrThrow — lỗi liên kết Zalo không bị nuốt (E-13)', () => {
+describe('useAuthStore.ensurePhoneOrThrow — lỗi liên kết Zalo không bị nuốt', () => {
   beforeEach(() => {
     useAuthStore.setState({ user: { id: 'guest-1', zaloId: 'guest_h_abc' } as AuthUser, status: 'authenticated' });
     mockedRequestZaloPhoneToken.mockResolvedValue('phone-token');
@@ -561,7 +602,7 @@ describe('useAuthStore.ensurePhoneOrThrow — lỗi liên kết Zalo không bị
   });
 });
 
-describe('danh tính đổi trong phiên → làm mới cache cá nhân (E-61)', () => {
+describe('danh tính đổi trong phiên → làm mới cache cá nhân', () => {
   let qc: QueryClient;
   let invalidate: MockInstance<QueryClient['invalidateQueries']>;
   beforeEach(() => {
@@ -666,6 +707,30 @@ describe('401 handler đăng ký lúc module load — dùng chung cơ chế refr
     expect(useAuthStore.getState().error).toBe(copy.errors.sessionUnavailable);
   });
 
+  it('refresh bị giới hạn tốc độ (429) → error với câu "thao tác quá nhanh", giữ refresh token', async () => {
+    const handler = unauthorizedHandler!;
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored-refresh-5' });
+    mockedRefresh.mockRejectedValue(httpFail(429));
+
+    expect(await handler()).toBeNull();
+
+    expect(useAuthStore.getState().status).toBe('error');
+    expect(useAuthStore.getState().error).toBe(copy.errors.sessionRateLimited);
+    expect(mockedRemoveStorage).not.toHaveBeenCalled();
+  });
+
+  it('refresh bị từ chối (401) → dọn cache như đăng xuất, số liệu của phiên chết không còn hiện', async () => {
+    const handler = unauthorizedHandler!;
+    const cleanup = vi.fn();
+    setLogoutCleanup(cleanup);
+    mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored-refresh-6' });
+    mockedRefresh.mockRejectedValue(httpFail(401));
+
+    expect(await handler()).toBeNull();
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
   it('refresh lỗi 5xx của máy chủ cũng là chưa biết phiên còn hay không → error, giữ refresh token', async () => {
     const handler = unauthorizedHandler!;
     mockedGetStorage.mockResolvedValue({ tubu_refresh_token: 'stored-refresh-4' });
@@ -704,6 +769,15 @@ describe('logout() — dọn sạch dữ liệu user cũ trên thiết bị dùn
     expect(window.localStorage.getItem('tubu_invoice')).toBeNull();
     expect(mockedRemoveStorage).toHaveBeenCalled();
     expect(useAuthStore.getState().status).toBe('idle');
+  });
+
+  it('xoá dấu "đã ghi công qua gian hàng CTV": người đăng nhập sau trên máy dùng chung không thừa hưởng', async () => {
+    markCtvTouched('AN123');
+    useAuthStore.setState({ user: { id: 'u1' } as AuthUser, status: 'authenticated' });
+
+    await useAuthStore.getState().logout();
+
+    expect(wasCtvTouched('AN123')).toBe(false);
   });
 
   it('API logout lỗi (mất mạng) vẫn đăng xuất trên máy, không ném', async () => {

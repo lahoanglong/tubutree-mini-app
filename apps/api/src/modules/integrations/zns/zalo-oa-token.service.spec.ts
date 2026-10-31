@@ -96,6 +96,8 @@ describe('ZaloOaTokenService.refresh', () => {
       const lines = logError.mock.calls.map((c) => String(c[0]));
       expect(lines.some((l) => l.includes('ABC123'))).toBe(true);
       expect(lines.join('\n')).not.toContain('rotated-token-ABC123');
+      // Cảnh báo ở màn Sức khoẻ hệ thống bảo người trực tìm log "Zalo OA refresh": mọi lỗi của lượt làm mới phải khớp chuỗi đó.
+      expect(lines.every((l) => l.includes('Zalo OA refresh'))).toBe(true);
     } finally {
       logError.mockRestore();
     }

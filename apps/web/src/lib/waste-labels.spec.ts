@@ -88,7 +88,7 @@ describe('waste-labels', () => {
     expect(unmatched).toEqual(['Lý do: Yêu cầu đã hết hạn']);
     expect(unmatched.join(' ')).not.toContain('EXPIRED_REQUEST');
     expect(wasteEventMetaLines('PARCEL_UNMATCHED', { reason: 'SOMETHING_NEW' })).toEqual([]);
-    for (const k of ['POINTS_REVERSED', 'REQUEST_CLOSED_LOST', 'REQUEST_REOPENED', 'USER_FLAGS_UPDATED', 'GIFT_CANCELLED']) {
+    for (const k of ['POINTS_REVERSED', 'REQUEST_CLOSED_LOST', 'REQUEST_REOPENED', 'USER_FLAGS_UPDATED', 'GIFT_CANCELLED', 'GIFT_EXPIRED']) {
       expect(wasteEventMetaLines(k, { reason: 'Khách nhờ' })).toEqual(['Lý do: Khách nhờ']);
     }
     expect(wasteEventMetaLines('UNMATCHED_CLOSED', { reason: 'NO_MATCH' })).toEqual([]);

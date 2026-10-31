@@ -34,6 +34,18 @@ describe('buildPublicConfig — chat', () => {
   });
 });
 
+describe('buildPublicConfig — catalogLaunchDate (mốc ngày mở bán)', () => {
+  it('mặc định null: client giữ luật 30 ngày', async () => {
+    expect((await build({})).catalogLaunchDate).toBeNull();
+    expect((await build({ 'catalog.launch_date': '' })).catalogLaunchDate).toBeNull();
+  });
+
+  it('ngày hợp lệ được trả nguyên văn; giá trị hỏng thành null', async () => {
+    expect((await build({ 'catalog.launch_date': '2026-11-01' })).catalogLaunchDate).toBe('2026-11-01');
+    for (const bad of ['2026-02-30', 'mai', 20261101, null]) expect((await build({ 'catalog.launch_date': bad })).catalogLaunchDate).toBeNull();
+  });
+});
+
 describe('buildPublicConfig — đơn vị vận hành', () => {
   it('mặc định: mọi trường null', async () => {
     expect((await build({})).company).toEqual({ legalName: null, taxCode: null, address: null, bctNoticeUrl: null });

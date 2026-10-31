@@ -2,14 +2,17 @@
 
 import { useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { ApiError } from '@/lib/client-api';
 import {
   clearPendingRef,
   confirmReferralTouch,
   ctvSlugFor,
   getStorefrontContext,
+  markCtvTouched,
   readPendingRefs,
   rememberEntryLink,
   rememberStorefront,
+  wasCtvTouched,
   type PendingRef,
 } from '@/lib/storefront-context';
 import { recordReferralTouch } from '@/lib/shop-client';
@@ -39,31 +42,54 @@ function touchFromPending(p: PendingRef): TouchDto | null {
 const sameTouch = (a: TouchDto, b: TouchDto) => a.referralCode.toUpperCase() === b.referralCode.toUpperCase();
 
 /**
+ * Máy chủ đã nhận và từ chối (4xx trừ 401, 429): gửi lại y hệt cũng bị từ chối, giữ bản chờ chỉ làm nó kẹt và chạm lại mỗi lần tải trang.
+ * Mất mạng, 5xx, 401 (phiên vừa hết hạn) và 429 thì lần sau có thể khác nên vẫn thử lại.
+ */
+const isPermanentRejection = (e: unknown) => e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 401 && e.status !== 429;
+
+/**
  * Chạm lúc đã đăng nhập, theo thứ tự cũ đến mới: các link khách mở khi chưa đăng nhập (bản chờ) trước, nguồn đang dùng trong
  * phiên sau cùng. Máy chủ giữ chạm hợp lệ gần nhất và bỏ qua mã khách thường, nên link CTV mở trước đó không mất công khi một
- * link mã khách thường được mở sau. Bản chờ chỉ xoá khi mọi chạm đều tới được máy chủ (kể cả ok:false, thử lại cũng vậy); lỗi
- * mạng thì giữ để lần sau thử lại. Best-effort: hỏng thì vẫn còn ngữ cảnh trong tab để gửi lúc đặt đơn.
+ * link mã khách thường được mở sau. Bản chờ chỉ xoá khi mọi chạm đều đã được máy chủ trả lời (kể cả ok:false hay bị từ chối hẳn, thử lại
+ * cũng vậy); lỗi tạm thời (mạng, 5xx, hết phiên) thì giữ để lần sau thử lại. Best-effort: hỏng thì vẫn còn ngữ cảnh trong tab để gửi lúc đặt đơn.
  */
-async function replayTouches(session: TouchDto | null): Promise<void> {
-  const older = readPendingRefs()
+async function runReplay(session: TouchDto | null): Promise<void> {
+  const pending = readPendingRefs()
     .map(touchFromPending)
-    .filter((t): t is TouchDto => t !== null && !(session && sameTouch(t, session)));
+    .filter((t): t is TouchDto => t !== null);
+  // Phiên là gian hàng nhãn/đối tác mang mã của một link CTV còn chờ (khách mở link khi chưa đăng nhập, rồi sang gian hàng đối tác):
+  // chạm bản CTV có slug, không chạm kiểu brand đè mất slug gian hàng CTV.
+  const ctvSource = session?.kind === 'brand' ? pending.find((t) => t.storefrontSlug && sameTouch(t, session)) : undefined;
+  const last = ctvSource ?? session;
+  const older = pending.filter((t) => !(last && sameTouch(t, last)));
   let delivered = true;
   for (const dto of older) {
     try {
       await recordReferralTouch(dto);
-    } catch {
-      delivered = false;
+    } catch (e) {
+      if (!isPermanentRejection(e)) delivered = false;
     }
   }
-  if (session) {
+  if (last && !(last.kind === 'brand' && wasCtvTouched(last.referralCode))) {
     try {
-      await touchAndConfirm(session);
-    } catch {
-      delivered = false;
+      const res = await touchAndConfirm(last);
+      if (res?.ok && last.kind === 'ctv') markCtvTouched(last.referralCode);
+    } catch (e) {
+      if (!isPermanentRejection(e)) delivered = false;
     }
   }
   if (delivered) clearPendingRef();
+}
+
+/**
+ * Các lượt chạm chạy lần lượt: lượt chạm brand đợi lượt chạm CTV đang bay xong rồi mới kiểm dấu "đã ghi công như CTV". Gửi song song thì
+ * máy chủ có thể xử lý brand sau cùng và xoá slug gian hàng CTV khỏi dòng chạm; bản chờ chỉ che được chuyện này khi localStorage dùng được.
+ */
+let replayQueue: Promise<unknown> = Promise.resolve();
+function replayTouches(session: TouchDto | null): Promise<void> {
+  const run = replayQueue.then(() => runReplay(session));
+  replayQueue = run.catch(() => {});
+  return run;
 }
 
 /**

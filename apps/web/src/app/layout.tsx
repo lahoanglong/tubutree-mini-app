@@ -11,6 +11,7 @@ import BottomNav from '@/components/bottom-nav';
 import BackButton from '@/components/mini/back-button';
 import { ErrorReporter } from '@/components/error-reporter';
 import { EntrySourceCapture } from '@/components/entry-source-capture';
+import { PdpNavSkeleton } from '@/components/skeletons/pdp-nav-skeleton';
 import { SITE_URL, restoringBootScript, tenantHostBootScript } from '@/lib/site';
 
 export const metadata: Metadata = {
@@ -40,6 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <EntrySourceCapture />
           <ErrorReporter />
           <AppGates />
+          <PdpNavSkeleton />
           <HideOnPortals>
             <SiteHeader />
           </HideOnPortals>

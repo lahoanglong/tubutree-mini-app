@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { StorefrontsTab } from './storefronts-tab';
 import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminStorefrontDetail, AdminStorefrontRow } from '@/lib/admin-storefronts-client';
+import { formatDateTime } from '@/lib/format-date';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -292,6 +293,8 @@ describe('StorefrontsTab (D3-02)', () => {
       await flush();
       const call = api.calls.find((c) => c.url.includes('/content-seen'))!;
       expect(call.init?.method).toBe('POST');
+      // Gửi mốc đổi đang hiện trên dòng: chủ đổi thêm lần nữa thì máy chủ giữ lại dấu mới.
+      expect(JSON.parse(String(call.init?.body))).toEqual({ seenChangedAt: '2026-10-20T03:30:00.000Z' });
       expect(api.calls.some((c) => c.url.includes('/approval') || c.url.includes('/take-down'))).toBe(false);
       expect(listCalls()).toBeGreaterThan(before);
     });
@@ -311,7 +314,136 @@ describe('StorefrontsTab (D3-02)', () => {
       expect(drawer.textContent).toContain('Chủ đã đổi tên, lời giới thiệu hoặc ảnh sau khi duyệt');
       click(byText(drawer, 'button', 'Đã xem'));
       await flush();
-      expect(api.calls.some((c) => c.url.endsWith('/admin/storefronts/s9/content-seen') && c.init?.method === 'POST')).toBe(true);
+      const seenCall = api.calls.find((c) => c.url.endsWith('/admin/storefronts/s9/content-seen') && c.init?.method === 'POST');
+      expect(seenCall).toBeDefined();
+      expect(JSON.parse(String(seenCall!.init?.body))).toEqual({ seenChangedAt: '2026-10-20T03:30:00.000Z' });
+    });
+
+    it('chủ đổi thêm khi ngăn đang mở: "Đã xem" gửi mốc admin đã thấy, máy chủ trả dấu mới thì ngăn hiện lại dấu mới', async () => {
+      let detailCalls = 0;
+      const api = mockFetch({
+        '/admin/storefronts/s9/content-seen': { body: row({ id: 's9', approved: true, approvedAt: '2026-10-01T00:00:00.000Z', contentChangedAt: '2026-10-20T05:00:00.000Z' }) },
+        '/admin/storefronts/s9': () => ({ body: detail({ id: 's9', title: 'Shop đổi tên', approved: true, approvedAt: '2026-10-01T00:00:00.000Z', contentChangedAt: ++detailCalls === 1 ? '2026-10-20T03:30:00.000Z' : '2026-10-20T05:00:00.000Z' }) }),
+        '/admin/storefronts?': page([changed()], 1),
+      });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      click(byText(container.querySelector('article[aria-label="Shop đổi tên"]') as HTMLElement, 'button', 'Xem'));
+      await flush();
+      const drawer = document.body.querySelector('[role="dialog"]') as HTMLElement;
+      click(byText(drawer, 'button', 'Đã xem'));
+      await flush();
+      const seenCall = api.calls.find((c) => c.url.endsWith('/content-seen'))!;
+      expect(JSON.parse(String(seenCall.init?.body))).toEqual({ seenChangedAt: '2026-10-20T03:30:00.000Z' });
+      expect(drawer.textContent).toContain('Xem lại rồi bấm "Đã xem"');
+      expect(byText(drawer, 'button', 'Đã xem')).not.toBeNull();
+      const more = drawer.querySelector('[role="status"]')!;
+      expect(more.textContent).toContain(`Chủ vừa đổi thêm lúc ${formatDateTime('2026-10-20T05:00:00.000Z')}`);
+    });
+
+    /** Máy chủ giả có trạng thái: "Đã xem" xoá dấu đến mốc đã gửi, dấu mới hơn thì giữ. */
+    const statefulServer = (initial: string | null, onSeen?: () => string | null) => {
+      const state = { at: initial };
+      const api = mockFetch({
+        '/admin/storefronts/s9/content-seen': () => {
+          if (onSeen) state.at = onSeen();
+          else state.at = null;
+          return { body: changed({ contentChangedAt: state.at }) };
+        },
+        '/admin/storefronts/s9': () => ({ body: detail({ id: 's9', title: 'Shop đổi tên', approved: true, approvedAt: '2026-10-01T00:00:00.000Z', contentChangedAt: state.at }) }),
+        '/admin/storefronts?': () => page([changed({ contentChangedAt: state.at })], state.at ? 1 : 0),
+      });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      return { state, api };
+    };
+    const article = (container: HTMLElement) => container.querySelector('article[aria-label="Shop đổi tên"]') as HTMLElement;
+
+    it('chủ đổi thêm khi admin xem danh sách: lời báo nằm ngay trong dòng gian hàng đó, không để nút như không ăn', async () => {
+      statefulServer('2026-10-20T03:30:00.000Z', () => '2026-10-20T05:00:00.000Z');
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      expect(container.querySelector('[role="status"]')).toBeNull();
+      click(byText(container, 'button', 'Đã xem'));
+      await flush();
+      const more = container.querySelector('[role="status"]')!;
+      expect(more.closest('article')).toBe(article(container));
+      expect(more.textContent).toContain(`Chủ vừa đổi thêm lúc ${formatDateTime('2026-10-20T05:00:00.000Z')}. Xem lại rồi bấm "Đã xem".`);
+    });
+
+    it('lời báo chỉ ở dòng của gian hàng vừa đổi thêm, dòng khác không có', async () => {
+      const other = row({ id: 's8', title: 'Shop khác', approved: true, approvedAt: '2026-10-01T00:00:00.000Z', contentChangedAt: '2026-10-20T02:00:00.000Z' });
+      const state = { at: '2026-10-20T03:30:00.000Z' as string | null };
+      const api = mockFetch({
+        '/admin/storefronts/s9/content-seen': () => {
+          state.at = '2026-10-20T05:00:00.000Z';
+          return { body: changed({ contentChangedAt: state.at }) };
+        },
+        '/admin/storefronts?': () => page([other, changed({ contentChangedAt: state.at })], 2),
+      });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      click(byText(article(container), 'button', 'Đã xem'));
+      await flush();
+      expect(article(container).querySelector('[role="status"]')).not.toBeNull();
+      expect(container.querySelector('article[aria-label="Shop khác"] [role="status"]')).toBeNull();
+      expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
+    });
+
+    it('bấm "Đã xem" mà máy chủ xoá dấu: không có lời báo chủ đổi thêm, và lời báo cũ biến mất', async () => {
+      let seenCalls = 0;
+      statefulServer('2026-10-20T03:30:00.000Z', () => (++seenCalls === 1 ? '2026-10-20T05:00:00.000Z' : null));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      click(byText(container, 'button', 'Đã xem'));
+      await flush();
+      expect(container.querySelector('[role="status"]')).not.toBeNull();
+      click(byText(container, 'button', 'Đã xem'));
+      await flush();
+      expect(container.querySelector('[role="status"]')).toBeNull();
+    });
+
+    it('lời báo ở danh sách tự mất khi dấu được xoá ở ngăn chi tiết rồi đóng ngăn', async () => {
+      let seenCalls = 0;
+      statefulServer('2026-10-20T03:30:00.000Z', () => (++seenCalls === 1 ? '2026-10-20T05:00:00.000Z' : null));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      click(byText(container, 'button', 'Đã xem'));
+      await flush();
+      expect(article(container).querySelector('[role="status"]')).not.toBeNull();
+      click(byText(article(container), 'button', 'Xem'));
+      await flush();
+      const drawer = document.body.querySelector('[role="dialog"]') as HTMLElement;
+      click(byText(drawer, 'button', 'Đã xem'));
+      await flush();
+      expect(byText(drawer, 'button', 'Đã xem')).toBeNull();
+      expect(drawer.querySelector('[role="status"]')).toBeNull();
+      click(drawer.querySelector('button[aria-label="Đóng"]'));
+      await flush();
+      expect(container.querySelector('[role="status"]')).toBeNull();
+      expect(article(container).textContent).not.toContain('Chủ vừa đổi thêm');
+    });
+
+    it('lời báo ở danh sách mất khi bỏ duyệt (dấu không còn tính sau khi bỏ duyệt)', async () => {
+      const state = { approvedAt: '2026-10-01T00:00:00.000Z' as string | null, at: '2026-10-20T03:30:00.000Z' };
+      const api = mockFetch({
+        '/admin/storefronts/s9/content-seen': () => {
+          state.at = '2026-10-20T05:00:00.000Z';
+          return { body: changed({ contentChangedAt: state.at }) };
+        },
+        '/admin/storefronts?': () => page([changed({ contentChangedAt: state.at, approvedAt: state.approvedAt, approved: !!state.approvedAt })], 1),
+      });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      click(byText(container, 'button', 'Đã xem'));
+      await flush();
+      expect(container.querySelector('[role="status"]')).not.toBeNull();
+      state.approvedAt = null;
+      click(byText(container, 'button', 'Làm mới'));
+      await flush();
+      expect(container.querySelector('[role="status"]')).toBeNull();
     });
   });
 });

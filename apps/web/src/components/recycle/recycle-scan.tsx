@@ -7,10 +7,11 @@ import { Sheet } from '@/components/ui/sheet';
 import { ui } from '@/lib/guest-ui';
 
 type Detector = { detect(source: HTMLVideoElement): Promise<{ rawValue?: string }[]> };
-type DetectorCtor = new (opts?: { formats?: string[] }) => Detector;
+type DetectorCtor = (new (opts?: { formats?: string[] }) => Detector) & { getSupportedFormats?: () => Promise<string[]> };
 
 const NOT_WASTE_CODE = 'Mã QR này không phải mã Đổi rác. Hãy quét lại hoặc gõ mã bên dưới.';
 const SCAN_FAILED = 'Chưa quét được. Hãy thử lại hoặc gõ mã bên dưới.';
+const CAMERA_DENIED = 'Chưa mở được camera. Hãy cho phép camera trong trình duyệt hoặc gõ mã bên dưới.';
 const FRAME_MS = 250;
 
 function detectorCtor(): DetectorCtor | null {
@@ -19,15 +20,31 @@ function detectorCtor(): DetectorCtor | null {
   return typeof ctor === 'function' ? ctor : null;
 }
 
-/** Trình duyệt có đủ BarcodeDetector và camera; Safari và Firefox chưa có BarcodeDetector nên nút quét bị ẩn, chỉ còn ô gõ. */
-export function barcodeScanSupported(): boolean {
-  return detectorCtor() !== null && typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getUserMedia === 'function';
+/**
+ * Trình duyệt có camera và BarcodeDetector đọc được QR. Safari và Firefox chưa có BarcodeDetector; một số máy Android có API nhưng
+ * không đọc được QR (thiếu Google Play Services), mở camera ra sẽ im lặng không quét được gì, nên phải hỏi định dạng hỗ trợ.
+ * Không đủ thì nút quét bị ẩn, chỉ còn ô gõ.
+ */
+export async function barcodeScanSupported(): Promise<boolean> {
+  const ctor = detectorCtor();
+  if (!ctor || typeof navigator === 'undefined' || typeof navigator.mediaDevices?.getUserMedia !== 'function') return false;
+  try {
+    return ((await ctor.getSupportedFormats?.()) ?? []).includes('qr_code');
+  } catch {
+    return false;
+  }
 }
 
 /** Chỉ biết sau khi trang chạy trên trình duyệt, để bản dựng sẵn trên máy chủ và lần vẽ đầu giống nhau. */
 export function useBarcodeScan(): boolean {
   const [supported, setSupported] = useState(false);
-  useEffect(() => setSupported(barcodeScanSupported()), []);
+  useEffect(() => {
+    let alive = true;
+    void barcodeScanSupported().then((ok) => alive && setSupported(ok));
+    return () => {
+      alive = false;
+    };
+  }, []);
   return supported;
 }
 
@@ -104,11 +121,12 @@ export function ScanCodeButton({
               busy = false;
             });
         }, FRAME_MS);
-      } catch {
+      } catch (e) {
         if (stopped) return;
         stop();
         setOpen(false);
-        onFailRef.current(SCAN_FAILED);
+        // Quyền camera bị chặn thì thử lại vẫn lỗi y như cũ: nói khách phải cho phép camera.
+        onFailRef.current((e as { name?: string } | null)?.name === 'NotAllowedError' ? CAMERA_DENIED : SCAN_FAILED);
       }
     })();
     return stop;

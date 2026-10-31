@@ -234,7 +234,7 @@ describe('CatalogService.related/boughtTogether/getForYou/suggest — luôn lọ
   it('getForYou(): cả nhánh gợi ý theo lịch sử lẫn nhánh fallback isFeatured đều lọc approvalStatus APPROVED', async () => {
     const productFindMany = jest
       .fn()
-      .mockResolvedValueOnce([{ categoryIds: ['C'] }])
+      .mockResolvedValueOnce([{ id: 'p1', categoryIds: ['C'] }])
       .mockResolvedValueOnce([card('p2')]);
     const prisma = {
       orderItem: { findMany: jest.fn().mockResolvedValue([{ variationId: 'v1' }]) },
@@ -360,7 +360,7 @@ describe('CatalogService.getForYou (Feed "Dành cho bạn")', () => {
     const variationFindMany = jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }]);
     const productFindMany = jest
       .fn()
-      .mockResolvedValueOnce([{ categoryIds: ['C'] }])
+      .mockResolvedValueOnce([{ id: 'p1', categoryIds: ['C'] }])
       .mockResolvedValueOnce([
         { ...card('p1'), soldExternal: 100, soldApp: 0 }, // đã mua, bán chạy nhất
         { ...card('p2'), soldExternal: 5, soldApp: 0 },
@@ -384,7 +384,7 @@ describe('CatalogService.getForYou (Feed "Dành cho bạn")', () => {
   it('nhánh fallback isFeatured cũng xếp SP đã mua sau', async () => {
     const productFindMany = jest
       .fn()
-      .mockResolvedValueOnce([{ categoryIds: [] }])
+      .mockResolvedValueOnce([{ id: 'p1', categoryIds: [] }])
       .mockResolvedValueOnce([
         { ...card('p1'), isFeatured: true, soldExternal: 50, soldApp: 0 },
         { ...card('pf'), isFeatured: true, soldExternal: 1, soldApp: 0 },

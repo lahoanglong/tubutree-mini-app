@@ -17,7 +17,7 @@ const TIERS = [
 const REWARDS = [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, points: day === 7 ? 10 : day, claimed: day < 3, isToday: day === 3 }));
 
 /** `tall`: cột phải rất cao (4 hạng × 3 quyền lợi, đủ 3 lối tắt) còn cột trái ngắn (chưa có mã, chưa có lịch sử), ca làm hở hàng ở lưới hai cột. */
-function mockLoyalty(api: MockApi, checkIn: { done: boolean }, opts: { tall?: boolean } = {}) {
+function mockLoyalty(api: MockApi, checkIn: { done: boolean }, opts: { tall?: boolean; guest?: boolean } = {}) {
   const tiers = opts.tall
     ? ['Mầm Xanh', 'Lộc Biếc', 'Cổ Thụ', 'Rừng Xanh'].map((name, i) => ({ id: `t${i + 1}`, name, minPoints: i * 200, minSpending: i * 4_000_000, multiplier: 1 + i * 0.1, perks: ['Quà sinh nhật', 'Freeship đơn từ 99k', 'Ưu tiên chăm sóc'] }))
     : TIERS;
@@ -35,9 +35,20 @@ function mockLoyalty(api: MockApi, checkIn: { done: boolean }, opts: { tall?: bo
   api.get('/waste/requests', []);
   api.get('/me/coupons', opts.tall ? [] : [{ code: 'FREESHIP1', type: 'FREESHIP', value: 0, minOrder: 199000, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' }]);
   api.get('/me/points/transactions', opts.tall ? [] : [{ id: 'p1', delta: 250, reason: 'ORDER_DELIVERED:TB0', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }]);
-  api.get('/me/daily-check-in', () => ({ checkedInToday: checkIn.done, streakDays: 2, currentCycleDay: 3, todayPoints: 3, todayWater: 10, rewards: REWARDS }));
+  api.get('/me/daily-check-in', () => ({
+    checkedInToday: checkIn.done, streakDays: 2, currentCycleDay: 3, todayPoints: opts.guest ? 0 : 3, todayWater: 10, rewards: REWARDS,
+    ...(opts.guest ? { pointsBlocked: 'GUEST' } : {}),
+  }));
   api.post('/me/daily-check-in', () => {
     checkIn.done = true;
+    if (opts.guest) {
+      return {
+        points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 0, totalPoints: 1681, message: 'Điểm danh Ngày 3 thành công!', pointsBlocked: 'GUEST' },
+        water: { seedsEarned: 10, streakDays: 3, totalSeeds: 1260, streakFrozeUsed: false, bonusNote: '' },
+        alreadyDone: false,
+        pending: [],
+      };
+    }
     return {
       points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 3, totalPoints: 1803, message: 'Điểm danh thành công +3 Điểm Xanh' },
       water: { seedsEarned: 10, streakDays: 3, totalSeeds: 1260, streakFrozeUsed: false, bonusNote: '' },
@@ -144,6 +155,25 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     await expect(button).toBeEnabled();
     await button.dblclick();
     await expect(page.getByText('+3 Điểm Xanh · +10 giọt nước')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Đã điểm danh', exact: true })).toBeDisabled();
+    expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
+  });
+
+  test('khách vãng lai điểm danh (khổ 375): không hứa Điểm Xanh, vẫn nhận giọt nước, có lời mời đăng nhập Zalo quay lại đúng trang', async ({ page, api }) => {
+    mockLoyalty(api, { done: false }, { guest: true });
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/tai-khoan/diem-xanh');
+    const card = page.getByTestId('daily-check-in');
+    await expect(card.getByText('Hôm nay nhận +10 giọt nước', { exact: true })).toBeVisible();
+    await expect(card.getByText('Đăng nhập Zalo để nhận Điểm Xanh', { exact: true })).toBeVisible();
+    await expect(card.getByText(/\+\d[\d.]* Điểm Xanh/)).toHaveCount(0);
+    const login = card.getByRole('link', { name: 'Đăng nhập Zalo', exact: true });
+    await expect(login).toHaveAttribute('href', '/dang-nhap?returnTo=%2Ftai-khoan%2Fdiem-xanh');
+    expect(await card.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+    await card.getByRole('button', { name: 'Điểm danh', exact: true }).click();
+    await expect(page.getByText('+10 giọt nước. Đăng nhập Zalo để nhận Điểm Xanh', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Đã điểm danh', exact: true })).toBeDisabled();
     expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
   });

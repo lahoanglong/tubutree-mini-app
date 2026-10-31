@@ -956,6 +956,22 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     expect(screen.getByText('170.000đ')).toBeInTheDocument();
   });
 
+  it('vừa chuyển vào Ví: nút Chuyển vào Ví mờ tới khi dashboard tải lại, rồi bấm lại được', async () => {
+    let release!: (v: Awaited<ReturnType<typeof getAffiliateDashboard>>) => void;
+    vi.mocked(getAffiliateDashboard)
+      .mockResolvedValueOnce({ ...ZERO_DASH, withdrawableCommission: 120_000 })
+      .mockReturnValueOnce(new Promise((r) => (release = r)) as ReturnType<typeof getAffiliateDashboard>);
+    vi.mocked(requestPayout).mockResolvedValue({ note: 'Đã chuyển hoa hồng vào Ví Tubu.' } as Awaited<ReturnType<typeof requestPayout>>);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' });
+    await waitFor(() => expect(screen.getByText('Có thể chuyển vào Ví')).toBeInTheDocument());
+    fireEvent.click(btn);
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhận 120.000đ vào Ví' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Chuyển vào Ví Tubu' })).toBeDisabled());
+    release(ZERO_DASH);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Chuyển vào Ví Tubu' })).toBeEnabled());
+  });
+
   it('số to là số dư Ví: số dư chỉ hiện một lần, dòng lối sang Ví không lặp số', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue(ZERO_DASH);
     renderPage();

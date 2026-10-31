@@ -84,14 +84,28 @@ describe('/doi-rac/diem-nhan (§4.4)', () => {
     await mount();
     expect(state.replace).toHaveBeenCalledWith('/doi-rac/tao');
   });
-  it('khách chưa đăng nhập thấy lời mời đăng nhập, không bị đẩy đi', async () => {
+  it('khách chưa đăng nhập về trang Đổi rác như Mini App, không gọi API', async () => {
     state.phase = 'guest';
     const c = await mount();
-    expect(c.querySelector('a[href^="/dang-nhap"]')).not.toBeNull();
+    expect(state.replace).toHaveBeenCalledWith('/doi-rac');
+    expect(state.replace).not.toHaveBeenCalledWith('/doi-rac/tao');
+    expect(c.querySelector('a[href^="/dang-nhap"]')).toBeNull();
+    expect(state.calls).toEqual([]);
+  });
+  it('khách chưa đăng nhập mở thẳng (không có nav) cũng về trang Đổi rác', async () => {
+    state.phase = 'guest';
+    window.sessionStorage.clear();
+    await mount();
+    expect(state.replace).toHaveBeenCalledWith('/doi-rac');
+    expect(state.replace).not.toHaveBeenCalledWith('/doi-rac/tao');
+  });
+  it('đang khôi phục phiên: chưa chuyển đi, chưa gọi API', async () => {
+    state.phase = 'loading';
+    await mount();
     expect(state.replace).not.toHaveBeenCalled();
     expect(state.calls).toEqual([]);
   });
-  it('chưa đủ điều kiện (thiếu SĐT): chỉ lời chỉ sang Zalo (Q2)', async () => {
+  it('chưa đủ điều kiện (thiếu SĐT): chỉ lời chỉ sang Zalo', async () => {
     state.me = makeWasteMe({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null });
     const c = await mount();
     expect(c.textContent).toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
@@ -177,7 +191,7 @@ describe('/doi-rac/diem-nhan (§4.4)', () => {
   });
 });
 
-describe('/doi-rac/diem-nhan — món chỉ kho nhận (B-36)', () => {
+describe('/doi-rac/diem-nhan — món chỉ kho nhận', () => {
   const warehouse = makeWastePoint({ id: 'wh-1', kind: 'WAREHOUSE', name: 'Kho Tubu TP.HCM' });
   beforeEach(() => {
     state.me = makeWasteMe({ items: [ITEM_CARTON, { ...ITEM_MILK, warehouseOnly: true }] });

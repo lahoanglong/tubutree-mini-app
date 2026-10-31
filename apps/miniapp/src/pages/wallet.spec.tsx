@@ -150,6 +150,23 @@ describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2
     expect(screen.getByText('Số dư 1.200.000đ')).toBeInTheDocument();
   });
 
+  it('Ví âm sau khi thu hồi hoa hồng đơn trả hàng: số dư hiện đúng dấu "-", chú thích nói vì sao âm và việc cần làm, dòng sổ có nhãn tiếng Việt', async () => {
+    stubLoaded(
+      { ...WALLET, walletBalance: -50_000 },
+      {
+        data: [{ id: 't9', delta: -80_000, balanceAfter: -50_000, type: 'COMMISSION_REVERSAL', reason: 'Thu hồi hoa hồng đơn TUBU1 (trả hàng)', orderId: null, createdAt: '2026-10-05T07:04:00' }],
+        meta: { page: 1, limit: 2, total: 1 },
+      },
+    );
+    renderPage();
+    expect(await screen.findByText('Ví Tubu (số dư khả dụng)')).toBeInTheDocument();
+    expect(screen.getAllByText('-50.000đ').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Ví đang âm vì hoa hồng của đơn trả hàng đã được thu hồi/)).toBeInTheDocument();
+    expect(await screen.findByText('Thu hồi hoa hồng')).toBeInTheDocument();
+    expect(screen.getByText('−80.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Số dư -50.000đ')).toBeInTheDocument();
+  });
+
   it('Điểm Xanh có phần quy đổi: nói rõ phần không hết hạn dùng ở đâu, không ra tiền (PD-3)', async () => {
     stubLoaded();
     renderPage();

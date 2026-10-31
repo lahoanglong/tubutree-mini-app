@@ -6,6 +6,7 @@ import type { GameProfile } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { formatDrops } from '../../utils/format';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
+import { guestCheckInCopy } from '@tubutree/app-core/daily-check-in-guest-copy';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Icon } from '../ui/icon';
@@ -54,7 +55,7 @@ export function CheckInStreak({
             <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.title(streakDays ?? 0)}</span>
           </Heading>
           <Text variant="caption" tone="tertiary" as="div">
-            {t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}
+            {(status?.pointsBlocked ? guestCheckInCopy.streakSub : t.sub)(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}
           </Text>
         </div>
       </div>

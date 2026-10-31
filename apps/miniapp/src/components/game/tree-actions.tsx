@@ -1,6 +1,7 @@
 import { Droplets, ShowerHead, TreePine } from 'lucide-react';
 import { primaryWaterAction, type PrimaryWaterAction } from '@tubutree/app-core/game-primary-action';
 import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
+import { guestCheckInCopy } from '@tubutree/app-core/daily-check-in-guest-copy';
 import type { GameProfile } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { Button } from '../ui/button';
@@ -30,6 +31,7 @@ export function primaryActionOf(profile: GameProfile | undefined, pointsPending?
 export function TreeActions({
   profile,
   pointsPending,
+  pointsBlocked,
   checkInSeeds,
   pending,
   onClaim,
@@ -40,6 +42,8 @@ export function TreeActions({
   profile: GameProfile | undefined;
   /** Trạng thái điểm danh gộp báo còn phần Điểm Xanh chưa nhận (chỉ true khi đã tải được trạng thái đó). */
   pointsPending?: boolean;
+  /** Khách vãng lai (API báo `pointsBlocked`): không có phần Điểm Xanh để nhận, nút chỉ nói "Điểm danh". */
+  pointsBlocked?: boolean;
   /** `todayWater` của trạng thái điểm danh gộp (xem PrimaryWaterInput.checkInSeeds); chưa tải được thì bỏ trống. */
   checkInSeeds?: number;
   pending: boolean;
@@ -53,7 +57,9 @@ export function TreeActions({
   const label =
     action.kind === 'claim'
       ? action.pointsOnly
-        ? gameMoreCopy.claimPoints
+        ? pointsBlocked
+          ? guestCheckInCopy.claimToday
+          : gameMoreCopy.claimPoints
         : action.first
         ? t.claimFirst(action.gain)
         : t.claim(action.gain)

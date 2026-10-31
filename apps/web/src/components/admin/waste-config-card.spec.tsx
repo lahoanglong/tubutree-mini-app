@@ -46,6 +46,7 @@ const KEYS = [
   'waste.mailin_fee_table',
   'waste.alert_thresholds',
   'waste.rules_text',
+  'waste.rules_version',
 ];
 
 function mount() {
@@ -66,8 +67,8 @@ const field = (c: HTMLElement, key: string) => c.querySelector<HTMLElement>(`[da
 const save = (c: HTMLElement, key: string) => byText(field(c, key), 'button', 'Lưu') as HTMLButtonElement;
 
 describe('WasteConfigCard', () => {
-  it('đủ 21 khoá waste.* theo thứ tự 11.5', () => {
-    expect(WASTE_CONFIG_FIELDS).toHaveLength(21);
+  it('đủ 22 khoá waste.* theo thứ tự 11.5 và thêm số phiên bản thể lệ', () => {
+    expect(WASTE_CONFIG_FIELDS).toHaveLength(22);
     expect(WASTE_CONFIG_FIELDS.map((f) => f.key)).toEqual(KEYS);
     const { c } = mount();
     for (const k of KEYS) expect(field(c, k), k).not.toBeNull();
@@ -162,6 +163,24 @@ describe('WasteConfigCard', () => {
     answerConfirm(true);
     await flush();
     expect(puts).toEqual([{ key: 'waste.rules_text', value: 'Thể lệ đợt 1' }]);
+  });
+
+  it('số phiên bản thể lệ: mặc định 2026-10-17.1, có câu nhắc, không cho để trống, lưu sau xác nhận', async () => {
+    const { c, puts } = mount();
+    const f = field(c, 'waste.rules_version');
+    expect(f.querySelector<HTMLInputElement>('input')!.value).toBe('2026-10-17.1');
+    expect(f.textContent).toContain('Đổi số này khi sửa nội dung thể lệ để khách đồng ý lại');
+    typeInto(f.querySelector('input'), '   ');
+    expect(f.textContent).toContain('Không được để trống');
+    expect(save(c, 'waste.rules_version').disabled).toBe(true);
+    typeInto(f.querySelector('input'), 'x'.repeat(33));
+    expect(f.textContent).toContain('Tối đa 32 ký tự');
+    typeInto(f.querySelector('input'), '2026-11-05.2');
+    click(save(c, 'waste.rules_version'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(puts).toEqual([{ key: 'waste.rules_version', value: '2026-11-05.2' }]);
   });
 
   it('giá trị cố định của Điểm Xanh chỉ để xem', () => {

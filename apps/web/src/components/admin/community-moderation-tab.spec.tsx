@@ -299,6 +299,11 @@ describe('CommunityModerationTab — câu hỏi chưa ai trả lời', () => {
     expect(row.querySelector('textarea')).not.toBeNull();
     const link = byText(row, 'a', 'Mở bài') as HTMLAnchorElement;
     expect(link.getAttribute('href')).toBe('/cong-dong/q1');
+    // Mở ở tab mới: chữ trả lời đang gõ dở không mất và admin không bị đưa ra khỏi /admin.
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    // Người dùng trình đọc màn hình phải được báo trước là link mở sang tab khác.
+    expect(link.querySelector('.sr-only')?.textContent).toContain('mở tab mới');
   });
 
   it('gửi trả lời gọi API bình luận đúng bài, làm mới danh sách và số trên "Việc cần xử lý": dòng biến mất', async () => {

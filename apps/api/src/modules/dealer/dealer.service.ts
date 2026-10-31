@@ -4,6 +4,7 @@ import type { DealerRewardClaim, DealerRewardClaimStatus } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { orderConfirmedData } from '../notifications/order-confirmed-data';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { ApplyDealerDto, DealerOrderDto } from './dto/dealer.dto';
 import { lockVariationsInIdOrder, reserveAvailableVariationStock } from '../catalog/variation-stock';
@@ -527,7 +528,7 @@ export class DealerService {
       throw new BadRequestException(`Số tiền báo (${vnd(amount)}) vượt dư nợ hiện tại của bạn (${vnd(balance)}).`);
     }
     // Lưu trước khi báo: tin báo admin có thể trôi hoặc lỗi, dòng này là việc kế toán còn phải đối chiếu (hộp việc dealerCreditReported).
-    await this.prisma.dealerCreditPaymentReport.create({ data: { userId, amount, note: note?.trim() || null } });
+    await this.prisma.dealerCreditPaymentReport.create({ data: { userId, amount, note: note?.trim().slice(0, 500) || null } });
     await notifyAdmins(
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
       {
@@ -680,13 +681,16 @@ export class DealerService {
 
   /**
    * Sổ công nợ kèm `reportClosed` khi người gọi gắn báo cáo. Đường "đã ghi trước đó" (mã GD trùng một khoản khác) không đóng báo
-   * cáo, nên báo thật trạng thái để màn hình không nói "báo cáo đã đóng" khi dòng báo cáo vẫn nằm trong danh sách.
+   * cáo, nên báo thật trạng thái để màn hình không nói "báo cáo đã đóng" khi dòng báo cáo vẫn nằm trong danh sách. Báo cáo đã
+   * RECORDED mà lần gọi này không ghi gì (người khác ghi trước, hoặc bấm đúp) thì thêm `alreadyRecorded`: số vừa nhập chưa
+   * chắc là số đã vào sổ.
    */
   private async creditLedgerWithReport(userId: string, reportId?: string) {
     const ledger = await this.creditLedger(userId);
     if (!reportId) return ledger;
     const report = await this.prisma.dealerCreditPaymentReport.findFirst({ where: { id: reportId, userId }, select: { status: true } });
-    return { ...ledger, reportClosed: report?.status === 'RECORDED' };
+    const recorded = report?.status === 'RECORDED';
+    return { ...ledger, reportClosed: recorded, ...(recorded ? { alreadyRecorded: true } : {}) };
   }
 
   /** Báo cáo chuyển khoản trả nợ của đại lý cho kế toán đối chiếu: mặc định chỉ dòng chưa xử lý, cũ nhất trước (việc gấp nhất lên đầu). */
@@ -1414,7 +1418,7 @@ export class DealerService {
       .catch((e) => this.logger.error(`Xếp cập nhật thanh toán Pancake lỗi cho đơn ${order.code}: ${(e as Error).message}`));
     if (this.notifications) {
       await this.notifications
-        .notify(order.userId, 'ORDER_CONFIRMED', { order_code: order.code })
+        .notify(order.userId, 'ORDER_CONFIRMED', orderConfirmedData({ code: order.code, paymentStatus: 'PAID' }))
         .catch((e) => this.logger.warn(`notify ORDER_CONFIRMED lỗi (${order.userId}): ${(e as Error).message}`));
     }
     return {

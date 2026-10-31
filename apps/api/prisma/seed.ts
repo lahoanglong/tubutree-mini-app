@@ -345,11 +345,12 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'waste.shortfall_lock_pct', value: 50, category: 'waste', description: 'Yêu cầu hoàn tất mà điểm cộng chưa tới (100 trừ ngần này) phần trăm điểm ước tính thì tính là một lần nhận thiếu.', createOnly: true },
   { key: 'waste.shortfall_lock_streak', value: 3, category: 'waste', description: 'Số lần nhận thiếu liền nhau thì khoá đường gửi kho và thu kèm đơn của khách.', createOnly: true },
   { key: 'waste.staff_daily_cap_points', value: 1_000_000, category: 'waste', description: 'Trần Điểm Xanh mỗi nhân viên kho hoặc điểm nhận được xác nhận trong một ngày.', createOnly: true },
-  { key: 'waste.gift_claim_days', value: 60, category: 'waste', description: 'Số ngày khách được nhận quà bằng mã, quá hạn thì lượt đổi vào danh sách admin xem lại.', createOnly: true },
+  { key: 'waste.gift_claim_days', value: 60, category: 'waste', description: 'Số ngày nhận quà bằng mã. Hết hạn thì quà tự huỷ và hoàn điểm, trừ khách bị khoá, bị thu hồi hoặc đã xoá tài khoản: admin xử lý.', createOnly: true },
   { key: 'waste.point_inactive_days', value: 60, category: 'waste', description: 'Điểm nhận đối tác không có lượt xác nhận nào quá ngần này ngày kể từ lần xác nhận cuối hoặc lần kích hoạt thì bị ẩn khỏi danh sách khách.', createOnly: true },
   { key: 'waste.mailin_fee_table', value: { zones: [], defaultZone: { name: 'Toàn quốc', low: 30_000, high: 85_000 } }, category: 'waste', description: 'Bảng ước tính phí ship gửi kho theo vùng tỉnh, mỗi vùng có phí thấp và phí cao, cộng một vùng mặc định cho tỉnh chưa xếp.', createOnly: true },
   { key: 'waste.alert_thresholds', value: { quotaPacePct: 60, quotaPaceDays: 10, fullMatchPct: 95, fullMatchMinSample: 10, repeatCustomerCount: 3, repeatCustomerDays: 7, avgUnitsFactor: 2, lookupMissCount: 10, lookupMissDays: 1, staffDirectCount: 5, staffDirectDays: 7 }, category: 'waste', description: 'Ngưỡng cảnh báo bất thường về điểm nhận và người xác nhận, chỉ để admin xem, không tự khoá ai.', createOnly: true },
   { key: 'waste.rules_text', value: '', category: 'waste', description: 'Thể lệ công khai của chương trình, tối đa 8000 ký tự, để trống thì mục Thể lệ hiện ghi chú sắp có.', createOnly: true },
+  { key: 'waste.rules_version', value: '2026-10-17.1', category: 'waste', description: 'Số phiên bản thể lệ, tối đa 32 ký tự. Đổi số này khi sửa nội dung thể lệ để khách đồng ý lại.', createOnly: true },
 ];
 assertWasteConfigSeedRows(SYSTEM_CONFIGS);
 
@@ -759,7 +760,7 @@ const PRODUCTS: SeedProduct[] = [
 export const NOTIFICATION_TEMPLATES = [
   // ORDER_CONFIRMED/ORDER_SHIPPING mang kênh ZNS nhưng chưa có zaloTemplateId (cần Zalo duyệt mẫu, không tự điền được):
   // NotificationsService chỉ gửi ZNS khi có mã mẫu, nên hiện khách nhận bản INAPP.
-  { id: 'nt-confirmed', code: 'ORDER_CONFIRMED', channel: 'ZNS', bodyTemplate: 'Đơn {{order_code}} đã được xác nhận. Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
+  { id: 'nt-confirmed', code: 'ORDER_CONFIRMED', channel: 'ZNS', bodyTemplate: 'Đơn {{order_code}} đã được xác nhận.{{payment_note}} Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
   { id: 'nt-shipping', code: 'ORDER_SHIPPING', channel: 'ZNS', bodyTemplate: 'Đơn {{order_code}} đang được giao đến bạn.' },
   // {{points_note}} do OrderStatusService điền khi đơn thật sự có tích điểm (đơn không tích điểm thì rỗng).
   { id: 'nt-delivered', code: 'ORDER_DELIVERED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã giao thành công.{{points_note}} Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
@@ -883,7 +884,7 @@ export const NOTIFICATION_TEMPLATES = [
   // Gói p8-seller: rút hoa hồng (SELLER-10), đối tác tự giao (D4), duyệt hồ sơ/sản phẩm (SELLER-12). Cùng nội dung với migration p8_seller_config_templates.
   { id: 'nt-ctv-payout-approved', code: 'COMMISSION_PAYOUT_APPROVED', channel: 'INAPP', bodyTemplate: 'Lệnh rút {{amount}} của bạn đã được duyệt, Tubu Tree sẽ chuyển khoản trong thời gian sớm nhất.', createOnly: true },
   { id: 'nt-ctv-payout-rejected', code: 'COMMISSION_PAYOUT_REJECTED', channel: 'INAPP', bodyTemplate: 'Lệnh rút {{amount}} chưa được duyệt: {{reason}}. Hoa hồng đã trả lại số dư khả dụng, bạn có thể chuyển vào Ví Tubu trong mục CTV.', createOnly: true },
-  { id: 'nt-ctv-commission-reversed', code: 'COMMISSION_REVERSED', channel: 'INAPP', bodyTemplate: 'Khoản hoa hồng dự kiến {{amount}} đã bị thu hồi vì đơn của khách bị huỷ hoặc trả hàng.', createOnly: true },
+  { id: 'nt-ctv-commission-reversed', code: 'COMMISSION_REVERSED', channel: 'INAPP', bodyTemplate: 'Khoản hoa hồng {{amount}} đã bị thu hồi vì đơn của khách bị huỷ hoặc trả hàng. Phần đã vào Ví Tubu (nếu có) đã được trừ, xem chi tiết ở lịch sử Ví.', createOnly: true },
   { id: 'nt-merchant-order-new', code: 'MERCHANT_ORDER_NEW', channel: 'INAPP', bodyTemplate: '🛒 Gian hàng của bạn có đơn mới {{order_code}} ({{total}}đ). Vào Cổng người bán → Đơn cần giao để xác nhận và gửi hàng.', createOnly: true },
   { id: 'nt-merchant-return-approved', code: 'MERCHANT_RETURN_APPROVED', channel: 'INAPP', bodyTemplate: 'Khách trả hàng đơn {{order_code}} ({{items}}) đã được duyệt. Khi nhận được hàng, hãy bấm "Đã nhận hàng trả" trong Cổng người bán để cộng lại tồn kho.', createOnly: true },
   { id: 'nt-merchant-order-cancelled', code: 'MERCHANT_ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị huỷ ({{reason}}). Bạn không cần gửi hàng cho đơn này nữa.', createOnly: true },
@@ -922,6 +923,7 @@ export const NOTIFICATION_TEMPLATES = [
   { id: 'nt-waste-ship-locked', code: 'WASTE_SHIP_LOCKED', channel: 'INAPP', bodyTemplate: 'Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn. Bạn vẫn mang rác tới điểm nhận được. Yêu cầu thu kèm chưa gắn đơn (nếu có) sẽ được huỷ. Cần hỗ trợ, liên hệ Tubu Tree.', createOnly: true },
   { id: 'nt-waste-gift-cancelled', code: 'WASTE_GIFT_CANCELLED', channel: 'INAPP', bodyTemplate: 'Lượt đổi quà {{gift}} đã bị huỷ.{{points_note}}', createOnly: true },
   { id: 'nt-waste-perk-reviewed', code: 'WASTE_PERK_REVIEWED', channel: 'INAPP', bodyTemplate: 'Ưu đãi riêng của điểm nhận {{point}}: {{result}}.', createOnly: true },
+  { id: 'nt-waste-gift-expired', code: 'WASTE_GIFT_EXPIRED', channel: 'INAPP', bodyTemplate: 'Quà {{gift_name}} đã quá hạn nhận nên Tubu Tree đã huỷ và hoàn {{points}} điểm vào tài khoản của bạn.', createOnly: true },
   { id: 'nt-waste-request-expiring', code: 'WASTE_REQUEST_EXPIRING', channel: 'INAPP', bodyTemplate: 'Yêu cầu {{code}} sắp hết hạn giữ chỗ vào ngày {{until}}. Bạn nhớ {{next_step}} trước ngày đó nhé.', createOnly: true },
 ];
 

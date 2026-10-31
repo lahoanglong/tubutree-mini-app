@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { WasteDeskRequestDTO } from '@tubutree/shared-types';
 
 const mocks = vi.hoisted(() => ({
@@ -262,6 +262,15 @@ describe('/recycle/desk — tra mã và đếm (§4.10)', () => {
 });
 
 describe('/recycle/desk — yêu cầu đồng nghiệp vừa đóng, chỉ đọc', () => {
+  // Chỉ giả Date: hẹn giờ thật vẫn chạy để react-query và findBy hoạt động.
+  beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-28T08:00:00.000Z') }));
+  afterEach(() => void vi.useRealTimers());
+  it('duyệt từ hôm trước: ghi cả ngày, để không đọc nhầm là hôm nay', async () => {
+    lookupReq({ status: 'COMPLETED', closedAt: '2026-10-27T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
+    renderPage();
+    await lookUp();
+    expect(await screen.findByText('Đã duyệt lúc 10:05 ngày 27/10')).toBeInTheDocument();
+  });
   it('đã duyệt: ghi giờ duyệt theo giờ Việt Nam, không nút duyệt hay từ chối', async () => {
     lookupReq({ status: 'COMPLETED', closedAt: '2026-10-28T03:05:00.000Z', lines: [{ ...LINE0, receivedQty: 5 }] });
     renderPage();
@@ -280,7 +289,7 @@ describe('/recycle/desk — yêu cầu đồng nghiệp vừa đóng, chỉ đ�
   });
 });
 
-describe('/recycle/desk — món chỉ kho HCMC nhận (E-127)', () => {
+describe('/recycle/desk — món chỉ kho HCMC nhận', () => {
   const MILK_ONLY = { ...REQ.lines[1]!, itemName: 'Vỏ chai Tubu', warehouseOnly: true };
   it('điểm đối tác: dòng đó mặc định 0, có câu giải thích, không bộ đếm; duyệt gửi số nhận 0 kèm lý do "Không nhận"', async () => {
     lookupReq({ lines: [LINE0, MILK_ONLY] });
@@ -325,7 +334,7 @@ describe('/recycle/desk — món chỉ kho HCMC nhận (E-127)', () => {
   });
 });
 
-describe('/recycle/desk — duyệt mà chưa đủ để cộng điểm (E-41)', () => {
+describe('/recycle/desk — duyệt mà chưa đủ để cộng điểm', () => {
   it('0 điểm: tiêu đề và snackbar không nói "cộng 0 điểm"', async () => {
     mocks.deskConfirm.mockResolvedValue({ requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 0, dropsAwarded: 0, quota: null, staffDailyCapRemaining: 150_000 });
     renderPage();
@@ -500,14 +509,14 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
 });
 
 describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
-  const GIFT = { id: 'red-1', giftName: 'Gói hạt giống Tubu', customerName: 'Ng*** A', status: 'READY' as const, claimExpiresAt: '2026-12-16T17:30:00.000Z' };
+  const GIFT = { id: 'red-1', giftName: 'Gói hạt giống Tubu', customerName: 'Ng*** A', status: 'READY' as const, claimExpiresAt: '2099-12-16T17:30:00.000Z' };
   beforeEach(() => { mocks.getDeskPoints.mockResolvedValue([WAREHOUSE_DESK]); mocks.deskLookup.mockResolvedValue({ type: 'GIFT', redemption: GIFT }); });
   it('mã QG- ở kho trao quà: tên quà, khách che, hạn nhận theo giờ VN, "Trao quà" gửi code + pointId', async () => {
     mocks.deskFulfilGift.mockResolvedValue(makeGiftRedemption({ status: 'FULFILLED' }));
     renderPage();
     await lookUp('qg-8k2m9p4t');
     expect(await screen.findByText('Gói hạt giống Tubu')).toBeInTheDocument();
-    expect(screen.getByText('Hạn nhận 17/12/2026')).toBeInTheDocument();
+    expect(screen.getByText('Hạn nhận 17/12/2099')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Trao quà' }));
     await waitFor(() => expect(mocks.deskFulfilGift).toHaveBeenCalledWith({ code: 'QG-8K2M9P4T', pointId: 'wh-1' }));
     expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã trao Gói hạt giống Tubu', type: 'success' }));
@@ -559,6 +568,37 @@ describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
     expect(await screen.findByText(text)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
   });
+  it('lượt đã huỷ do quá hạn: hiện lý do và điểm đã hoàn, chỉ đọc', async () => {
+    mocks.deskLookup.mockResolvedValue({
+      type: 'GIFT',
+      redemption: { ...GIFT, status: 'CANCELLED', cancelledAt: '2026-11-11T03:00:00.000Z', cancelReason: 'Quá hạn nhận', pointsCost: 30000, refundedPoints: 30000 },
+    });
+    renderPage();
+    await lookUp('QG-8K2M9P4T');
+    expect(await screen.findByText('Lượt đổi quà đã huỷ')).toBeInTheDocument();
+    expect(screen.getByText('Lý do: Quá hạn nhận')).toBeInTheDocument();
+    expect(screen.getByText(/Đã hoàn .*30\.000.* cho khách/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
+  });
+  it('lượt đã trao: hiện giờ trao và số điểm đã đổi, không có nút', async () => {
+    mocks.deskLookup.mockResolvedValue({
+      type: 'GIFT',
+      redemption: { ...GIFT, status: 'FULFILLED', fulfilledAt: '2026-11-10T03:00:00.000Z', pointsCost: 30000 },
+    });
+    renderPage();
+    await lookUp('QG-8K2M9P4T');
+    expect(await screen.findByText('Quà đã được trao')).toBeInTheDocument();
+    expect(screen.getByText(/^Trao lúc /)).toBeInTheDocument();
+    expect(screen.getByText(/Khách đổi bằng .*30\.000/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
+  });
+  it('quà còn READY nhưng đã quá hạn: báo quá hạn, không có nút Trao quà', async () => {
+    mocks.deskLookup.mockResolvedValue({ type: 'GIFT', redemption: { ...GIFT, claimExpiresAt: '2020-01-01T00:00:00.000Z' } });
+    renderPage();
+    await lookUp('QG-8K2M9P4T');
+    expect(await screen.findByText('Quà đã quá hạn nhận')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
+  });
   it('đại lý: thẻ ưu đãi và báo cáo tháng hiện; kho thì không có thẻ ưu đãi', async () => {
     mocks.getDeskPoints.mockResolvedValue([makeDeskPoint(), WAREHOUSE_DESK]);
     mocks.getDeskPointReport.mockResolvedValue({ pointId: 'pt-1', month: '2026-10', confirmations: 0, pointsAwarded: 0, quotaUsed: 0, units: [] });
@@ -569,7 +609,7 @@ describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
   });
 });
 
-describe('/recycle/desk — quét mã và gõ mã (B-35)', () => {
+describe('/recycle/desk — quét mã và gõ mã', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.auth.status = 'authenticated';

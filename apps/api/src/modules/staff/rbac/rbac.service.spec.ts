@@ -500,7 +500,9 @@ describe('RbacService.addGrant: nhóm việc', () => {
       },
       user: { findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF', staffPermissions: ['KHO'] } as Partial<User>)), update: userUpdate },
     });
-    await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF', ['CSKH']);
+    const out = await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF', ['CSKH']);
+    // Vai trò không đổi (applied=false) nhưng nhóm đã đổi ngay: app dựa vào cờ này để không báo "sẽ áp khi họ mở app".
+    expect(out).toEqual({ granted: 'STAFF', applied: false, permissionsChanged: true });
     expect(userUpdate).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { staffPermissions: ['CSKH'] } });
     expect(prisma.userAdminEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ userId: 'u1', kind: 'STAFF_PERMISSIONS', fromValue: 'KHO', toValue: 'CSKH', actorId: 'admin1' }),
@@ -517,8 +519,38 @@ describe('RbacService.addGrant: nhóm việc', () => {
       },
       user: { findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF', staffPermissions: ['KHO'] } as Partial<User>)), update: userUpdate },
     });
-    await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF', []);
+    const out = await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF', []);
     expect(userUpdate).not.toHaveBeenCalled();
+    expect(out.permissionsChanged).toBe(false);
+  });
+
+  it('người này đã là STAFF, admin chọn đúng nhóm họ đang có → không ghi, permissionsChanged=false', async () => {
+    const userUpdate = jest.fn();
+    const prisma = makePrisma({
+      roleGrant: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'g1' }),
+        findMany: jest.fn().mockResolvedValue([{ role: 'STAFF', staffPermissions: ['KHO'] }]),
+      },
+      user: { findUnique: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF', staffPermissions: ['KHO'] } as Partial<User>)), update: userUpdate },
+    });
+    const out = await new RbacService(prisma).addGrant('admin1', '0900000001', 'STAFF', ['KHO']);
+    expect(userUpdate).not.toHaveBeenCalled();
+    expect(out.permissionsChanged).toBe(false);
+  });
+
+  it('người chưa có tài khoản hoặc vừa được nâng vai trò → permissionsChanged=false (đã có applied cho trường hợp nâng)', async () => {
+    const noUserPrisma = makePrisma({ roleGrant: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'g1' }) }, user: noUser });
+    expect(await new RbacService(noUserPrisma).addGrant('admin1', '0900000001', 'STAFF', ['KHO'])).toEqual({ granted: 'STAFF', applied: false, permissionsChanged: false });
+    const promoted = makePrisma({
+      roleGrant: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'g1' }),
+        findMany: jest.fn().mockResolvedValue([{ role: 'STAFF', staffPermissions: ['KHO'] }]),
+      },
+      user: { findUnique: jest.fn().mockResolvedValue(mkUser()), update: jest.fn().mockResolvedValue(mkUser({ role: 'STAFF', staffPermissions: ['KHO'] } as Partial<User>)) },
+    });
+    expect(await new RbacService(promoted).addGrant('admin1', '0900000001', 'STAFF', ['KHO'])).toEqual({ granted: 'STAFF', applied: true, permissionsChanged: false });
   });
 });
 

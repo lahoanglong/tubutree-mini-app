@@ -4,7 +4,7 @@ import { HttpError } from '../services/http';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ openSnackbar: vi.fn(), getOwnedBrand: vi.fn(), getOwnsBrand: vi.fn() }));
+const mocks = vi.hoisted(() => ({ openSnackbar: vi.fn(), getOwnedBrand: vi.fn(), getAuthMeFlags: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
@@ -28,7 +28,7 @@ vi.mock('../services/core-http', () => ({
 }));
 vi.mock('../services/order-counts-api', () => ({ fetchOrderStatusCounts: vi.fn().mockResolvedValue({ pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0 }) }));
 vi.mock('../services/subscriptions-api', () => ({ getSubscriptions: vi.fn().mockResolvedValue([]) }));
-vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: mocks.getOwnedBrand, getOwnsBrand: mocks.getOwnsBrand }));
+vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: mocks.getOwnedBrand, getAuthMeFlags: mocks.getAuthMeFlags }));
 vi.mock('../services/dealer-api', () => ({ getDealerMe: vi.fn().mockResolvedValue({ isDealer: false, status: null }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: vi.fn() }));
@@ -69,7 +69,7 @@ function renderPage() {
 describe('Hub Cá nhân: hỏi chủ nhãn (R6-BUYER-16)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getOwnsBrand.mockResolvedValue(null);
+    mocks.getAuthMeFlags.mockResolvedValue({ ownsBrand: null, hasDeskPoint: false });
   });
 
   it('API trả 404 (không sở hữu nhãn) là trạng thái bình thường: không lỗi trong cache, không toast, không có mục quản lý nhãn', async () => {
@@ -99,34 +99,34 @@ describe('Hub Cá nhân: hỏi chủ nhãn (R6-BUYER-16)', () => {
   });
 
   it('/auth/me báo ownsBrand=false: không gọi /brand/owner/me, không có mục quản lý nhãn', async () => {
-    mocks.getOwnsBrand.mockResolvedValue(false);
+    mocks.getAuthMeFlags.mockResolvedValue({ ownsBrand: false, hasDeskPoint: false });
     renderPage();
     await screen.findByText('Câu chuyện thương hiệu');
-    await waitFor(() => expect(mocks.getOwnsBrand).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.getAuthMeFlags).toHaveBeenCalledTimes(1));
     expect(mocks.getOwnedBrand).not.toHaveBeenCalled();
     expect(screen.queryByText('Quản lý nhãn hàng')).toBeNull();
   });
 
   it('/auth/me báo ownsBrand=true: gọi /brand/owner/me và hiện mục quản lý nhãn', async () => {
-    mocks.getOwnsBrand.mockResolvedValue(true);
+    mocks.getAuthMeFlags.mockResolvedValue({ ownsBrand: true, hasDeskPoint: false });
     mocks.getOwnedBrand.mockResolvedValue({ id: 'b1', name: 'Tubu Home' });
     renderPage();
     expect(await screen.findByText('Quản lý nhãn hàng')).toBeInTheDocument();
   });
 
   it('/auth/me lỗi: giữ cách cũ (vẫn hỏi /brand/owner/me)', async () => {
-    mocks.getOwnsBrand.mockRejectedValue(new Error('mạng'));
+    mocks.getAuthMeFlags.mockRejectedValue(new Error('mạng'));
     mocks.getOwnedBrand.mockResolvedValue({ id: 'b1', name: 'Tubu Home' });
     renderPage();
     expect(await screen.findByText('Quản lý nhãn hàng')).toBeInTheDocument();
   });
 
   it('cờ ownsBrand đổi true → false thì mục quản lý nhãn biến mất dù ownedBrand còn data cũ', async () => {
-    mocks.getOwnsBrand.mockResolvedValue(true);
+    mocks.getAuthMeFlags.mockResolvedValue({ ownsBrand: true, hasDeskPoint: false });
     mocks.getOwnedBrand.mockResolvedValue({ id: 'b1', name: 'Tubu Home' });
     const qc = renderPage();
     expect(await screen.findByText('Quản lý nhãn hàng')).toBeInTheDocument();
-    mocks.getOwnsBrand.mockResolvedValue(false);
+    mocks.getAuthMeFlags.mockResolvedValue({ ownsBrand: false, hasDeskPoint: false });
     await act(async () => {
       await qc.invalidateQueries({ queryKey: ['auth-me'] });
     });

@@ -11,7 +11,7 @@ import {
 import { randomBytes } from 'node:crypto';
 import { MembershipTier, PosPointCredit, Prisma } from '@prisma/client';
 import type { GiftRedemptionDTO, LoyaltyPreviewDTO, RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO, WasteOpeningHours, WasteVoucherSpec } from '@tubutree/shared-types';
-import type { CouponType, WasteGift, WasteGiftRedemption } from '@prisma/client';
+import type { CouponType, User, WasteGift, WasteGiftRedemption } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NO_PARTIAL_RETURNS, partialReturnTotals } from '../orders/return-ledger';
 import { remainingPointsBack } from '../orders/refund-allocation';
@@ -22,7 +22,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { isCouponEligible, requiresRealUser } from '../coupons/coupon-scope';
 import { hasPriorOrder } from '../../common/first-order';
 import { couponProductIds } from '../coupons/coupons.service';
-import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
+import { isRealUser, pointsBlockedFor, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import { voucherCode } from '../vouchers/voucher-code';
 import { projectCheckIn, streakCycleDay } from '../game/checkin-streak';
 import { decideTier } from './tier-policy';
@@ -652,6 +652,8 @@ export class LoyaltyService {
    * điểm. Hạng chỉ bị hạ ở lượt tính lại hạng 03:15 giờ VN (loyalty.cron.ts) đầu tiên không sớm hơn `until` (ngày hết hạn giữ
    * hạng), và lượt đó nhìn lại 12 tháng tính từ chính giờ chạy. Khung ở đây lấy đúng mốc ấy: đơn hôm nay còn trong khung trượt
    * nhưng sẽ rơi ra trước lượt đó thì không được tính, nếu không khách mua đúng số báo vẫn bị hạ.
+   * Hạn do cron đặt thường lệch vài giây sau 03:15 nên lượt hạ hạng thật có thể chạy cùng đêm hoặc đêm sau tuỳ thứ tự xử lý;
+   * ở đây chọn lượt muộn hơn: khung ngắn lại, "còn thiếu" chỉ có thể báo dư (an toàn), không bao giờ báo thiếu.
    */
   async tierKeepGap(
     userId: string,
@@ -791,11 +793,13 @@ export class LoyaltyService {
    * khách deviceId sẽ được hứa quà server không cho) chưa có đơn theo đúng định nghĩa đơn đầu (common/first-order.ts), kèm
    * voucher chào mừng nếu còn dùng được. Voucher lấy qua getAvailableCoupons nên hiện thì áp được, đúng như ví voucher.
    */
-  async getNewCustomerOffer(userId: string) {
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { phone: true, zaloId: true } });
-    if (!isRealUser(user) || (await hasPriorOrder(this.prisma, userId))) return { isNewCustomer: false as const, welcomeVoucher: null };
+  async getNewCustomerOffer(userId: string, known: { hasPriorOrder?: boolean } = {}) {
+    // Đọc khách một lần đủ cột cho cả bước kiểm khách thật lẫn getAvailableCoupons.
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!isRealUser(user) || (known.hasPriorOrder ?? (await hasPriorOrder(this.prisma, userId)))) return { isNewCustomer: false as const, welcomeVoucher: null };
     const code = voucherCode('WELCOME', userId);
-    const voucher = (await this.getAvailableCoupons(userId)).find((c) => c.code === code);
+    // Tới đây chắc chắn chưa có đơn: getAvailableCoupons khỏi đọc lại đơn cho mã chỉ-khách-mới.
+    const voucher = (await this.getAvailableCoupons(userId, { user, hasPriorOrder: false })).find((c) => c.code === code);
     return {
       isNewCustomer: true as const,
       welcomeVoucher: voucher ? { code: voucher.code, type: voucher.type, value: voucher.value, minOrder: voucher.minOrder, endAt: voucher.endAt } : null,
@@ -803,8 +807,8 @@ export class LoyaltyService {
   }
 
   /** Coupon khả dụng cho user: PUBLIC + đúng hạng + mã CLAIM đã nhận, còn hạn, chưa hết lượt cá nhân. */
-  async getAvailableCoupons(userId: string) {
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  async getAvailableCoupons(userId: string, known: { user?: User; hasPriorOrder?: boolean } = {}) {
+    const user = known.user ?? (await this.prisma.user.findUniqueOrThrow({ where: { id: userId } }));
     const now = new Date();
     // Lọc scope + hạn NGAY trong SQL: trước đây nạp mọi coupon còn hạn của mọi khách (hàng chục
     // nghìn coupon cá nhân) rồi lọc bằng JS (A3-001). Hai nhánh UNION ALL khớp 2 partial index
@@ -845,7 +849,7 @@ export class LoyaltyService {
       claimIds.length
         ? this.prisma.couponClaim.findMany({ where: { userId, couponId: { in: claimIds } }, select: { couponId: true } })
         : [],
-      coupons.some((c) => c.newCustomerOnly) ? hasPriorOrder(this.prisma, userId) : false,
+      coupons.some((c) => c.newCustomerOnly) ? (known.hasPriorOrder ?? hasPriorOrder(this.prisma, userId)) : false,
     ]);
     const eligibleUser = { ...user, claimedCouponIds: new Set(claims.map((c) => c.couponId)) };
     const realUser = isRealUser(user);
@@ -1297,11 +1301,13 @@ export class LoyaltyService {
   async getDailyCheckInStatus(userId: string) {
     const now = new Date();
     const today = vnDateKey(now);
-    const [table, doneRow, streak] = await Promise.all([
+    const [table, doneRow, streak, owner] = await Promise.all([
       this.getCheckInPointsTable(),
       this.todayCheckIn(userId, today),
       this.sharedStreak(userId, now),
+      this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } }),
     ]);
+    const pointsBlocked = pointsBlockedFor(owner);
     const checkedInToday = !!doneRow;
     // Điểm danh Điểm Xanh hôm nay đã xong nhưng nước chưa: ngày hôm nay vẫn là ngày của chuỗi nước kế tiếp.
     const currentCycleDay = streak.cycleDay;
@@ -1311,8 +1317,9 @@ export class LoyaltyService {
       streakDays: streak.aliveStreak,
       currentCycleDay,
       streakDay: currentCycleDay,
-      /** Điểm của ô hôm nay: đã nhận (nếu đã điểm danh) hoặc sẽ nhận khi bấm. */
-      todayPoints: table[currentCycleDay - 1] ?? 0,
+      /** Điểm của ô hôm nay: đã nhận (nếu đã điểm danh) hoặc sẽ nhận khi bấm. Khách vãng lai không nhận điểm nên luôn 0. */
+      todayPoints: pointsBlocked ? 0 : (table[currentCycleDay - 1] ?? 0),
+      ...(pointsBlocked ? { pointsBlocked } : {}),
       rewards: table.map((points, idx) => ({
         day: idx + 1,
         points,
@@ -1332,6 +1339,10 @@ export class LoyaltyService {
    * unique (userId, refId=dayKey) WHERE refType='CHECKIN' làm lớp phòng thủ thứ hai.
    *
    * Điểm điểm danh có hạn (loyalty.point_expire_months) và KHÔNG tính vào xét hạng.
+   *
+   * Khách vãng lai (chưa là user thật) vẫn điểm danh và giữ chuỗi nhưng dòng điểm danh ghi 0 điểm, không có dòng ledger:
+   * deviceId mới tạo được vô hạn tài khoản guest, điểm danh được điểm rồi gộp vào tài khoản thật sẽ thành máy in điểm.
+   * Điểm của những ngày đã điểm danh khi còn là khách không được cộng bù sau khi đăng nhập Zalo.
    */
   async dailyCheckIn(userId: string) {
     const now = new Date();
@@ -1343,7 +1354,9 @@ export class LoyaltyService {
     const streak = await this.sharedStreak(userId, now);
     const { cycleDay, streakDays } = streak;
     const table = await this.getCheckInPointsTable();
-    const points = table[cycleDay - 1] ?? 0;
+    const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    const pointsBlocked = pointsBlockedFor(owner);
+    const points = pointsBlocked ? 0 : (table[cycleDay - 1] ?? 0);
     const expiresAt = await this.pointsExpiresAt(now);
 
     try {
@@ -1392,6 +1405,7 @@ export class LoyaltyService {
             points > 0
               ? `Điểm danh Ngày ${cycleDay} thành công! Nhận +${formatPoints(points)} Điểm Xanh.`
               : `Điểm danh Ngày ${cycleDay} thành công!`,
+          ...(pointsBlocked ? { pointsBlocked } : {}),
         };
       });
     } catch (err) {

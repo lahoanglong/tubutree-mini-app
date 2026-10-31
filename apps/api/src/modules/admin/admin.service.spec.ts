@@ -1565,8 +1565,15 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
     const updatedAt = new Date('2026-10-14T03:00:00Z');
     const draft = { id: 'd1', productId: 'p1', name: 'Nến thơm sả', description: 'Mô tả mới', shortDesc: 'mới', images: ['b.jpg'], thumbnail: 'b.jpg', updatedAt };
     const product = { id: 'p1', name: 'Nến thơm', approvalStatus: 'APPROVED', storefront: { ownerUserId: 'owner-1' }, editDraft: draft };
+    const invalidateRegistry = jest.fn();
+    const mkReviewer = (prisma: PrismaService) => {
+      const svc = mkAdmin(prisma) as unknown as { imageResize: unknown };
+      svc.imageResize = { invalidateRegistry };
+      return svc as unknown as ReturnType<typeof mkAdmin>;
+    };
 
     function setup(over: { taken?: number } = {}) {
+      invalidateRegistry.mockClear();
       (notifications.notify as jest.Mock).mockClear();
       const productUpdate = jest.fn().mockResolvedValue({});
       const productUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
@@ -1588,7 +1595,8 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
 
     it('duyệt → nội dung mới ghi đè sản phẩm, bản chờ bị xoá, sản phẩm vẫn APPROVED và không đụng liên kết Pancake', async () => {
       const { prisma, productUpdate, productUpdateMany, draftDeleteMany } = setup();
-      await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, updatedAt.toISOString());
+      await mkReviewer(prisma).reviewMerchantProduct('admin-1', 'p1', true, undefined, false, updatedAt.toISOString());
+      expect(invalidateRegistry).toHaveBeenCalledTimes(1);
       expect(draftDeleteMany).toHaveBeenCalledWith({ where: { id: 'd1', updatedAt } });
       expect(productUpdate).toHaveBeenCalledWith({
         where: { id: 'p1' },
@@ -1600,7 +1608,8 @@ describe('AdminService.listPendingMerchantProducts & reviewMerchantProduct', () 
 
     it('từ chối → nội dung đang bán giữ nguyên, bản chờ bị xoá, lý do lưu ở rejectReason, đối tác được báo', async () => {
       const { prisma, productUpdate, productUpdateMany } = setup();
-      await mkAdmin(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'Ảnh vi phạm bản quyền', false, updatedAt.toISOString());
+      await mkReviewer(prisma).reviewMerchantProduct('admin-1', 'p1', false, 'Ảnh vi phạm bản quyền', false, updatedAt.toISOString());
+      expect(invalidateRegistry).not.toHaveBeenCalled();
       expect(productUpdate).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { rejectReason: 'Ảnh vi phạm bản quyền' } });
       expect(productUpdateMany).not.toHaveBeenCalled();
       expect(notifications.notify).toHaveBeenCalledWith(

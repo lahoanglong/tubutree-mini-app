@@ -84,7 +84,7 @@ for (const lane of rm.routes) {
 // Biến thể có dữ liệu động: danh mục, nhãn hàng
 routes.push({ key: 'browse-category', lane: 'shop', mini: '/browse?category=cat-cleaning', web: '/san-pham?category=cat-cleaning', miniPersonas: CUSTOMER_PERSONAS, webPersonas: CUSTOMER_PERSONAS, extra: true });
 routes.push({ key: 'browse-brand', lane: 'shop', mini: '/browse?brand=Fuwa3e', web: '/san-pham?brand=Fuwa3e', miniPersonas: CUSTOMER_PERSONAS, webPersonas: CUSTOMER_PERSONAS, extra: true });
-routes.push({ key: 'browse-search', lane: 'shop', mini: '/browse?focus=search&q=nuoc', web: '/san-pham?q=nuoc', miniPersonas: ['returning'], webPersonas: ['returning'], extra: true });
+routes.push({ key: 'browse-search', lane: 'shop', mini: '/browse?focus=search&q=nuoc', web: '/san-pham?q=nuoc', miniPersonas: ['returning', 'new', 'guest'], webPersonas: ['returning', 'new', 'guest'], extra: true });
 // Trang không có trong route-map
 routes.push({ key: '404', lane: 'core', mini: '/khong-co-trang-nay', web: '/khong-co-trang-nay', miniPersonas: ['returning', 'guest'], webPersonas: ['returning', 'guest'], extra: true });
 routes.push({ key: 'dang-nhap', lane: 'account', mini: null, web: '/dang-nhap', miniPersonas: [], webPersonas: ['guest', 'returning'], extra: true });

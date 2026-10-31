@@ -1,5 +1,6 @@
 import { useId, type CSSProperties, type ReactNode } from 'react';
 import { isNewProduct, NEW_PRODUCT_LABEL } from '@tubutree/app-core/product-badges';
+import { useCatalogLaunchDate } from '../../hooks/use-catalog-launch-date';
 import { brandAccent } from '../../utils/brands';
 import { vi } from '../../i18n/vi';
 import { formatSold } from '../../utils/format';
@@ -45,7 +46,7 @@ export interface ProductTileProps {
   action?: 'add' | 'rebuy' | 'subscribe' | 'none';
   onAction?: () => void;
   badge?: ReactNode;
-  /** Nút nổi trên ảnh (vd. giỏ nhanh): caller tự định vị trong khung ảnh `position: relative`, đặt zIndex 1 để nằm trên lớp phủ của nút tên. */
+  /** Nút nổi trên ảnh (vd. giỏ nhanh): tile đặt ở góc phải dưới vùng ảnh, trên lớp phủ của nút tên; caller chỉ đưa nút, không tự định vị. */
   imageOverlay?: ReactNode;
   onPress: () => void;
 }
@@ -85,7 +86,8 @@ export function ProductTile({
   const compareAt = priceOverride?.compareAt !== undefined ? priceOverride.compareAt : hasSale ? p.basePrice : undefined;
   const isLine = variant === 'line' || variant === 'list';
   // Hết hàng đã có lớp phủ trên ảnh, thẻ dạng dòng chỉ có ảnh 64px: không chồng thêm nhãn.
-  const showNew = !isLine && p.inStock !== false && isNewProduct(p.createdAt);
+  const launchDate = useCatalogLaunchDate();
+  const showNew = launchDate !== undefined && !isLine && p.inStock !== false && isNewProduct(p.createdAt, Date.now(), launchDate);
   // Tên truy cập = tên sản phẩm; giá (và giá gốc gạch) là mô tả truy cập của thẻ.
   const priceId = useId();
 
@@ -124,7 +126,6 @@ export function ProductTile({
             )}
           </div>
         )}
-        {imageOverlay}
         {p.inStock === false && (
           <div
             style={{
@@ -192,6 +193,22 @@ export function ProductTile({
         {showWishlist && !isLine && (
           <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 1 }}>
             <WishlistHeart productId={p.id} floating size={18} />
+          </div>
+        )}
+        {/* Nút nổi trên ảnh (giỏ nhanh) cũng là anh em của nút tên và đứng sau tim: Tab/đọc đi tên, tim, rồi tới nút. Khung này phủ đúng
+            vùng ảnh nhưng không chặn chạm (nút tên ::after vẫn nhận chạm lên ảnh), chỉ khối chứa nút nhận chạm. */}
+        {imageOverlay && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              ...(isLine ? { width: 64, height: 64 } : { right: 0, aspectRatio: '1 / 1' }),
+              pointerEvents: 'none',
+              zIndex: 1,
+            }}
+          >
+            <div style={{ position: 'absolute', right: 2, bottom: 2, pointerEvents: 'auto' }}>{imageOverlay}</div>
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3, minHeight: 16 }}>

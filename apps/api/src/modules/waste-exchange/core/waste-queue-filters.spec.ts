@@ -32,7 +32,7 @@ describe('waste queue filters (single source for M3.8, M4.3, M4.6, M4.8)', () =>
       ],
     });
   });
-  it('gift overdue: READY past claimExpiresAt', () => {
-    expect(F.wasteGiftOverdueWhere(now)).toEqual({ status: 'READY', claimExpiresAt: { lt: now } });
+  it('gift overdue: READY whose deadline day (VN) is over, not the deadline minute', () => {
+    expect(F.wasteGiftOverdueWhere(now)).toEqual({ status: 'READY', claimExpiresAt: { lt: new Date('2026-10-16T17:00:00.000Z') } });
   });
 });

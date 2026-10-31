@@ -7,7 +7,15 @@ const mocks = vi.hoisted(() => ({ status: 'authenticated', touch: vi.fn() }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: mocks.status }) }));
 vi.mock('@/lib/shop-client', () => ({ recordReferralTouch: mocks.touch }));
 
-import { clearPendingRef, clearStorefrontContext, getStorefrontContext, PENDING_REF_TTL_DAYS, readPendingRefs } from '@/lib/storefront-context';
+import { ApiError, NetworkError } from '@/lib/client-api';
+import {
+  clearPendingRef,
+  clearStorefrontContext,
+  getStorefrontContext,
+  PENDING_REF_TTL_DAYS,
+  readPendingRefs,
+  wasCtvTouched,
+} from '@/lib/storefront-context';
 import { ReferralCapture, StorefrontTracker } from './storefront-tracker';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -94,7 +102,7 @@ async function mountKept(node: React.ReactElement = <ReferralCapture />) {
   };
 }
 
-describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chưa đăng nhập (E-8)', () => {
+describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chưa đăng nhập', () => {
   const DAY = 24 * 60 * 60 * 1000;
   beforeEach(() => {
     mocks.status = 'anonymous';
@@ -154,6 +162,37 @@ describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chư
 
   it('lỗi mạng khi chạm bù: giữ bản chờ để lần sau thử lại (trong hạn 7 ngày)', async () => {
     mocks.touch.mockRejectedValue(new Error('offline'));
+    await openLinkThenCloseTab('/?ref=ABC');
+    const m = await mountKept();
+    mocks.status = 'authenticated';
+    await m.rerender();
+    expect(mocks.touch).toHaveBeenCalledTimes(1);
+    expect(readPendingRefs()).toMatchObject([{ referralCode: 'ABC' }]);
+    await m.unmount();
+  });
+
+  it.each([
+    ['400 (mã sai dạng: gửi lại y hệt cũng bị từ chối)', new ApiError('Mã quá dài', 400)],
+    ['404', new ApiError('Không thấy', 404)],
+  ])('chạm bù bị máy chủ từ chối %s: bỏ bản chờ, không kẹt nhiều ngày', async (_label, err) => {
+    mocks.touch.mockRejectedValue(err);
+    await openLinkThenCloseTab('/?ref=ABC');
+    const m = await mountKept();
+    mocks.status = 'authenticated';
+    await m.rerender();
+    expect(mocks.touch).toHaveBeenCalledTimes(1);
+    expect(readPendingRefs()).toEqual([]);
+    await m.unmount();
+  });
+
+  it.each([
+    ['mất mạng', () => new NetworkError(false)],
+    ['hết thời gian chờ', () => new NetworkError(true)],
+    ['máy chủ lỗi 500', () => new ApiError('Lỗi', 500)],
+    ['phiên hết hạn 401', () => new ApiError('Hết phiên', 401)],
+    ['quá nhiều yêu cầu 429', () => new ApiError('Chậm lại', 429)],
+  ])('chạm bù gặp %s: giữ bản chờ để lần sau thử lại', async (_label, makeErr) => {
+    mocks.touch.mockRejectedValue(makeErr());
     await openLinkThenCloseTab('/?ref=ABC');
     const m = await mountKept();
     mocks.status = 'authenticated';
@@ -268,7 +307,7 @@ describe('ReferralCapture: nguồn giới thiệu sống qua đóng tab khi chư
   });
 });
 
-describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã có phải của CTV không (E-7)', () => {
+describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã có phải của CTV không', () => {
   beforeEach(() => {
     mocks.status = 'authenticated';
     mocks.touch.mockReset();
@@ -336,5 +375,106 @@ describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã c�
     expect(getStorefrontContext()).toMatchObject({ slug: 'doi-tac', referralCode: 'CTV0001', kind: 'MERCHANT', referralEligible: true });
     expect(readPendingRefs()).toEqual([]);
     await m.unmount();
+  });
+  it('đã ghi công mã CTV rồi mở gian hàng đối tác (cùng mã): không chạm lại kiểu brand, kẻo máy chủ xoá slug gian hàng CTV khỏi chạm', async () => {
+    mocks.touch.mockResolvedValue({ ok: true });
+    window.history.replaceState({}, '', '/?s=an-shop&ref=AN123');
+    await mount();
+    expect(mocks.touch).toHaveBeenCalledTimes(1);
+    mocks.touch.mockClear();
+    const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+    expect(mocks.touch).not.toHaveBeenCalled();
+    await t.unmount();
+  });
+
+  it('khách chưa đăng nhập mở gian hàng CTV rồi sang gian hàng đối tác, đăng nhập sau: chạm bản CTV kèm slug, không chạm kiểu brand cùng mã', async () => {
+    mocks.touch.mockResolvedValue({ ok: true });
+    mocks.status = 'anonymous';
+    const ctv = await mountKept(<StorefrontTracker slug="an-shop" type="CTV" referralCode="AN123" />);
+    await ctv.unmount();
+    const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+    expect(mocks.touch).not.toHaveBeenCalled();
+    mocks.status = 'authenticated';
+    await t.rerender();
+    expect(mocks.touch.mock.calls.map(([dto]) => dto)).toEqual([{ referralCode: 'AN123', storefrontSlug: 'an-shop', kind: 'ctv' }]);
+    expect(readPendingRefs()).toEqual([]);
+    expect(getStorefrontContext()).toMatchObject({ referralCode: 'AN123', referralEligible: true });
+    mocks.touch.mockClear();
+    await t.rerender(<StorefrontTracker slug="doi-tac-2" type="MERCHANT" referralCode={null} />);
+    expect(mocks.touch).not.toHaveBeenCalled();
+    await t.unmount();
+  });
+
+  it('chạm CTV được ghi công thì nhớ ở sessionStorage, nên tải lại trang rồi mở gian hàng đối tác vẫn không chạm kiểu brand', async () => {
+    mocks.touch.mockResolvedValue({ ok: true });
+    const ctv = await mountKept(<StorefrontTracker slug="an-shop" type="CTV" referralCode="AN123" />);
+    await ctv.unmount();
+    expect(wasCtvTouched('an123')).toBe(true);
+    mocks.touch.mockClear();
+    const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+    expect(mocks.touch).not.toHaveBeenCalled();
+    await t.unmount();
+  });
+
+  it('sang gian hàng đối tác khi chạm CTV còn đang chạy (localStorage hỏng nên không có bản chờ): chạm brand đợi chạm CTV xong rồi mới quyết, không xoá slug gian hàng CTV', async () => {
+    const real = Object.getOwnPropertyDescriptor(window, 'localStorage')!;
+    const boom = () => {
+      throw new Error('blocked');
+    };
+    Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: boom, setItem: boom, removeItem: boom } });
+    try {
+      let finishCtv!: (v: { ok: boolean }) => void;
+      mocks.touch.mockReturnValueOnce(new Promise((r) => (finishCtv = r))).mockResolvedValue({ ok: true });
+      const ctv = await mountKept(<StorefrontTracker slug="an-shop" type="CTV" referralCode="AN123" />);
+      expect(mocks.touch).toHaveBeenCalledTimes(1);
+      await ctv.unmount();
+      const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+      expect(mocks.touch).toHaveBeenCalledTimes(1);
+      await act(async () => finishCtv({ ok: true }));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      expect(mocks.touch).toHaveBeenCalledTimes(1);
+      expect(wasCtvTouched('AN123')).toBe(true);
+      await t.unmount();
+    } finally {
+      Object.defineProperty(window, 'localStorage', real);
+    }
+  });
+
+  it('chạm CTV đang chạy rồi mất mạng (localStorage hỏng): chạm brand đang đợi vẫn được gửi', async () => {
+    const real = Object.getOwnPropertyDescriptor(window, 'localStorage')!;
+    const boom = () => {
+      throw new Error('blocked');
+    };
+    Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: boom, setItem: boom, removeItem: boom } });
+    try {
+      let failCtv!: (e: Error) => void;
+      mocks.touch.mockReturnValueOnce(new Promise((_, rej) => (failCtv = rej))).mockResolvedValue({ ok: true });
+      const ctv = await mountKept(<StorefrontTracker slug="an-shop" type="CTV" referralCode="AN123" />);
+      await ctv.unmount();
+      const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+      await act(async () => failCtv(new NetworkError(false)));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      expect(mocks.touch).toHaveBeenCalledTimes(2);
+      expect(mocks.touch).toHaveBeenLastCalledWith({ referralCode: 'AN123', storefrontSlug: 'doi-tac', kind: 'brand' });
+      await t.unmount();
+    } finally {
+      Object.defineProperty(window, 'localStorage', real);
+    }
+  });
+
+  it('gian hàng đối tác mà mã chưa từng được ghi công như CTV: vẫn chạm kiểu brand', async () => {
+    mocks.touch.mockResolvedValue({ ok: true });
+    window.history.replaceState({}, '', '/?ref=KHAC99');
+    mocks.status = 'anonymous';
+    await mount();
+    window.history.replaceState({}, '', '/');
+    mocks.status = 'authenticated';
+    const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+    expect(mocks.touch).toHaveBeenCalledWith({ referralCode: 'KHAC99', storefrontSlug: 'doi-tac', kind: 'brand' });
+    await t.unmount();
   });
 });

@@ -129,7 +129,7 @@ export function notificationAction(
   }
   if (templateCode.startsWith('WASTE') || templateCode.startsWith('REFILL')) {
     const requestId = d.request_id ?? d.requestId;
-    if (templateCode === 'WASTE_GIFT_CANCELLED') return { kind: 'link', label: 'Xem quà của tôi', to: '/rewards/mine' };
+    if (templateCode === 'WASTE_GIFT_CANCELLED' || templateCode === 'WASTE_GIFT_EXPIRED') return { kind: 'link', label: 'Xem quà của tôi', to: '/rewards/mine' };
     if (templateCode === 'WASTE_PERK_REVIEWED') return { kind: 'link', label: 'Mở màn nhận hàng', to: '/recycle/desk' };
     if (templateCode === 'WASTE_POINTS_CREDITED' && requestId) return { kind: 'link', label: 'Xem kết quả', to: `/recycle/done/${enc(requestId)}` };
     if (templateCode.startsWith('WASTE') && requestId) return { kind: 'link', label: 'Xem yêu cầu', to: `/recycle/r/${enc(requestId)}` };

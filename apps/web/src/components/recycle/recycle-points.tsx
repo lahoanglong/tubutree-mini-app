@@ -15,7 +15,7 @@ import { skin } from '@/components/pro-shared/mini-skin';
 import { loadPointsNav, saveReturn, type WastePointsNav } from '@/lib/recycle-wizard';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { includesFolded } from '@/lib/vn-fold';
-import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { ErrorState } from '@/components/ui/error-state';
@@ -23,7 +23,7 @@ import { wasteStepCopy, warehouseOnlyPointsNote } from '@tubutree/app-core/waste
 import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedTabs } from '@/components/ui/segmented-tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LOGIN_TEXT, METHOD_LABELS } from './recycle-labels';
+import { METHOD_LABELS } from './recycle-labels';
 import { WastePointPicker } from './waste-point-picker';
 
 const WIZARD_METHOD_STEP = '/doi-rac/tao?step=method';
@@ -48,8 +48,10 @@ export function RecyclePoints() {
     setNav(loadPointsNav());
     setReady(true);
   }, []);
+  // Khách vãng lai về trang Đổi rác (có giới thiệu và nút đăng nhập) như Mini App.
   useEffect(() => {
-    if (ready && !nav && phase !== 'loading' && phase !== 'guest') router.replace('/doi-rac/tao');
+    if (phase === 'guest') router.replace('/doi-rac');
+    else if (ready && !nav && phase !== 'loading') router.replace('/doi-rac/tao');
   }, [ready, nav, phase, router]);
 
   const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed && !!nav });
@@ -89,7 +91,7 @@ export function RecyclePoints() {
 
   if (phase === 'loading') return shell(<AuthLoading />);
   if (phase === 'unavailable') return shell(<SessionUnavailable />);
-  if (phase === 'guest') return shell(<LoginRequired message={LOGIN_TEXT} returnTo="/doi-rac/tao" />);
+  if (phase === 'guest') return shell(skeleton);
   if (!ready || !nav) return shell(skeleton);
   const loadError = (meQ.isError && meQ.error) || (pointsQ.isError && pointsQ.error);
   if (loadError) {
@@ -104,7 +106,7 @@ export function RecyclePoints() {
     );
   }
   if (!me || !points || leave) return shell(skeleton);
-  // Chưa có SĐT đã xác minh thì web không xin được (chỉ Zalo xin được): chỉ chỉ đường sang Mini App, không có đường lách (Q2).
+  // Chưa có SĐT đã xác minh thì web không xin được (chỉ Zalo xin được): chỉ chỉ đường sang Mini App, không có đường lách.
   if (me.eligibility !== 'OK') return shell(<MiniAppOnlyNotice path="/doi-rac/tao" />);
 
   const tabItems = provinces.map((x) => ({ key: x.code, label: x.name }));

@@ -30,7 +30,7 @@ import { invalidateBalances } from '@/lib/balances';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
-import { phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
+import { phoneCaption, phoneFlatCard, phoneSecondary, phoneSectionTitle } from '@/lib/phone-ui';
 import { LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { Badge } from '@/components/ui/badge';
 import { Sheet } from '@/components/ui/sheet';
@@ -236,7 +236,7 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
   return (
     <section aria-label={title} className={`${ui.card} ${phoneFlatCard} p-4`}>
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className={ui.sectionTitle}>{title}</h2>
+        <h2 className={`${ui.sectionTitle} ${phoneSectionTitle}`}>{title}</h2>
         {action}
       </div>
       {children}
@@ -256,8 +256,8 @@ function SectionSkeleton() {
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-base font-semibold tabular-nums">{value}</div>
-      <div className="text-xs">{label}</div>
+      <div className="text-base font-semibold tabular-nums max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)]">{value}</div>
+      <div className={`text-xs ${phoneCaption} max-md:opacity-80`}>{label}</div>
     </div>
   );
 }
@@ -355,6 +355,8 @@ function Dashboard() {
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const linkBusy = useRef(false);
   const [transferring, setTransferring] = useState(false);
+  // Mốc dữ liệu dashboard lúc vừa chuyển xong: nút khoá tới khi dashboard tải lại (hoặc lỗi) để không mở form với số dư đã cũ.
+  const [transferredStamp, setTransferredStamp] = useState<number | null>(null);
   const [ctvOrdering, setCtvOrdering] = useState(false);
   const [sharing, setSharing] = useState(false);
 
@@ -412,13 +414,15 @@ function Dashboard() {
       label: 'Chuyển vào Ví',
       ariaLabel: 'Chuyển vào Ví Tubu',
       icon: Wallet,
-      // Luôn bấm được: ô mờ không nói lý do làm CTV tưởng bị chặn. Chưa có số dư thì sheet giải thích khi nào tiền vào Ví.
+      // Bấm được cả khi chưa có số dư: ô mờ không nói lý do làm CTV tưởng bị chặn, sheet giải thích khi nào tiền vào Ví. Chỉ mờ ngay sau khi vừa chuyển.
+      disabled: transferredStamp !== null && transferredStamp === dashQ.dataUpdatedAt && !dashQ.isError,
       onPress: () => setTransferring(true),
     },
   ];
 
   const transferDone = (message: string) => {
     setTransferring(false);
+    setTransferredStamp(dashQ.dataUpdatedAt);
     setNotice({ text: message, error: false });
     for (const q of [affiliateCommissionsQuery, affiliatePayoutsQuery, affiliateTaxStatementQuery, affiliateMeQuery]) {
       void qc.invalidateQueries({ queryKey: q(coreHttp).queryKey });
@@ -439,7 +443,7 @@ function Dashboard() {
       <div role="status" aria-live="polite">
         {notice && <p className={`mb-3 text-sm ${notice.error ? 'text-danger-fg' : 'font-medium text-success-fg'}`}>{notice.text}</p>}
       </div>
-      <div className="mx-auto max-w-2xl space-y-4">
+      <div className="mx-auto max-w-2xl space-y-4 max-md:space-y-3 max-md:[&>:first-child]:mb-4">
         {dashQ.isError ? (
           // Không đưa "0đ" khi lỗi tải: CTV sẽ tưởng mình chưa có hoa hồng.
           <ErrorState message={errText(dashQ.error)} onRetry={() => void dashQ.refetch()} />
@@ -450,10 +454,10 @@ function Dashboard() {
         ) : (
           <section aria-label={heroShowsWalletBalance(hero) ? hero.label : 'Hoa hồng có thể chuyển vào Ví'} className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-stone-0 shadow-card">
             {/* Số to là tiền dùng được ngay; hoa hồng đang chờ và số tạm tính tháng là dòng phụ. */}
-            <div className="text-sm">{hero.label}</div>
-            <div className="mt-1 font-display text-3xl font-bold tabular-nums">{formatVnd(hero.amount)}</div>
-            <div className="mt-1 text-xs">Đang chờ: {formatVnd(head.pending)} · {COMMISSION_PENDING_NOTE}</div>
-            {head.big > 0 && <div className="mt-1 text-xs">{transferHeroNote(autoTransfer)}</div>}
+            <div className="text-sm max-md:leading-[var(--type-body-sm-lh)] max-md:opacity-[0.85]">{hero.label}</div>
+            <div className="mt-1 font-display text-3xl font-bold tabular-nums max-md:text-[length:var(--type-display-lg-size)] max-md:leading-10">{formatVnd(hero.amount)}</div>
+            <div className={`mt-1 text-xs ${phoneCaption} max-md:opacity-90`}>Đang chờ: {formatVnd(head.pending)} · {COMMISSION_PENDING_NOTE}</div>
+            {head.big > 0 && <div className={`mt-1 text-xs ${phoneCaption} max-md:opacity-90`}>{transferHeroNote(autoTransfer)}</div>}
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
               <MiniStat label="Tạm tính tháng này" value={formatVnd(head.monthEstimate)} />
               <MiniStat label="Lượt bấm" value={String(d?.totalClicks ?? 0)} />
@@ -489,8 +493,8 @@ function Dashboard() {
           <>
             {d && !hasFirstOrder(d) && (
               <section aria-label="Việc đầu tiên" className={`${ui.card} ${phoneFlatCard} p-4`}>
-                <h2 className={ui.sectionTitle}>Việc đầu tiên</h2>
-                <p className="mb-1 mt-0.5 text-xs text-stone-700">Làm lần lượt để có đơn đầu tiên. Thẻ này tự ẩn khi bạn có đơn.</p>
+                <h2 className={`${ui.sectionTitle} ${phoneSectionTitle}`}>Việc đầu tiên</h2>
+                <p className={`mb-1 mt-0.5 text-xs text-stone-700 ${phoneCaption}`}>Làm lần lượt để có đơn đầu tiên. Thẻ này tự ẩn khi bạn có đơn.</p>
                 <ul>
                   {firstSteps.map((step, i) => {
                     const cls = 'flex min-h-12 w-full items-center gap-2.5 border-t border-stone-200 py-2 text-left';

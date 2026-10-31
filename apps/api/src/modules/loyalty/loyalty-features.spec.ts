@@ -855,10 +855,11 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
   // ───────────────────────────── Daily check-in ─────────────────────────────
   describe('Điểm danh hằng ngày (tách riêng khỏi Vườn Xanh)', () => {
     /** `today` = dòng điểm danh Điểm Xanh hôm nay; `profile` = hồ sơ Vườn (chuỗi chung). */
-    function statusPrisma(today: Row | null, profile: Row | null = null) {
+    function statusPrisma(today: Row | null, profile: Row | null = null, owner: Row = { zaloId: 'zalo-u1', phone: null }) {
       return {
         loyaltyCheckIn: { findFirst: jest.fn().mockResolvedValue(today) },
         gameProfile: { findUnique: jest.fn().mockResolvedValue(profile) },
+        user: { findUnique: jest.fn().mockResolvedValue(owner) },
       } as unknown as PrismaService;
     }
     const lastAt = (daysAgo: number) => new Date(Date.now() - daysAgo * DAY);
@@ -961,7 +962,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
     });
 
     it('dailyCheckIn: ngày theo chuỗi chung của Vườn; ghi loyalty_check_ins riêng, ledger CHECKIN có refId=ngày VN + expiresAt, KHÔNG ghi gameProfile', async () => {
-      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 5, referralCode: 'AAAA1111' }]);
+      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 5, referralCode: 'AAAA1111', zaloId: 'zalo-u1' }]);
       const yesterday = vnDay(new Date(Date.now() - DAY));
       db.checkIns.push({ id: 'ci-old', userId: 'u1', dayKey: yesterday, cycleDay: 3, streakDays: 10, points: 1 });
       db.gameProfile = { lastCheckInAt: new Date(Date.now() - DAY), streakDays: 10, streakFreezes: 0 };
@@ -982,7 +983,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
     });
 
     it('dailyCheckIn: hôm nay đã điểm danh → BadRequest, không cộng thêm', async () => {
-      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 5, referralCode: 'AAAA1111' }]);
+      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 5, referralCode: 'AAAA1111', zaloId: 'zalo-u1' }]);
       db.checkIns.push({ id: 'ci-1', userId: 'u1', dayKey: vnDay(new Date()), cycleDay: 1, streakDays: 1, points: 1 });
       await expect(new LoyaltyService(prisma, makeConfig()).dailyCheckIn('u1')).rejects.toThrow(BadRequestException);
       expect(db.users.get('u1')!.pointsBalance).toBe(5);
@@ -990,7 +991,7 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
     });
 
     it('CONCURRENCY: 10 request điểm danh song song → đúng 1 lần cộng điểm, 1 dòng ledger, 9 BadRequest', async () => {
-      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 0, referralCode: 'AAAA1111' }]);
+      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 0, referralCode: 'AAAA1111', zaloId: 'zalo-u1' }]);
       const svc = new LoyaltyService(prisma, makeConfig({ 'loyalty.checkin_points': [5, 5, 5, 5, 5, 5, 5] }));
       const results = await Promise.allSettled(Array.from({ length: 10 }, () => svc.dailyCheckIn('u1')));
       const ok = results.filter((r) => r.status === 'fulfilled');
@@ -1003,8 +1004,80 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(db.checkIns).toHaveLength(1);
     });
 
+    describe('khách vãng lai (không phải user thật): vẫn điểm danh, không nhận Điểm Xanh', () => {
+      const GUEST = { id: 'g1', pointsBalance: 7, referralCode: 'GGGG1111', zaloId: 'guest_h_abc', phone: null };
+      const cfg = () => makeConfig({ 'loyalty.checkin_points': [5, 5, 5, 5, 5, 5, 5] });
+
+      it('dailyCheckIn: ghi dòng điểm danh (points 0), KHÔNG ghi ledger, số dư giữ nguyên, báo pointsBlocked=GUEST', async () => {
+        const { db, prisma } = makeFakeDb([GUEST]);
+        const res = await new LoyaltyService(prisma, cfg()).dailyCheckIn('g1');
+        expect(res).toMatchObject({ success: true, cycleDay: 1, pointsEarned: 0, totalPoints: 7, pointsBlocked: 'GUEST' });
+        expect(res.message).not.toMatch(/Nhận \+/);
+        expect(db.ledger).toHaveLength(0);
+        expect(db.users.get('g1')!.pointsBalance).toBe(7);
+        expect(db.checkIns).toHaveLength(1);
+        expect(db.checkIns[0]).toMatchObject({ userId: 'g1', dayKey: vnDay(new Date()), points: 0 });
+      });
+
+      it('mọi mốc của chuỗi (N1..N7) đều không cộng điểm', async () => {
+        for (let day = 1; day <= 7; day++) {
+          const { db, prisma } = makeFakeDb([GUEST]);
+          db.gameProfile = { lastCheckInAt: new Date(Date.now() - DAY), streakDays: day - 1, streakFreezes: 0 };
+          const res = await new LoyaltyService(prisma, cfg()).dailyCheckIn('g1');
+          expect(res).toMatchObject({ cycleDay: day, pointsEarned: 0, pointsBlocked: 'GUEST' });
+          expect(db.ledger).toHaveLength(0);
+          expect(db.users.get('g1')!.pointsBalance).toBe(7);
+        }
+      });
+
+      it('gọi lần hai trong ngày vẫn báo đã điểm danh (khoá ngày giữ nguyên cho khách)', async () => {
+        const { db, prisma } = makeFakeDb([GUEST]);
+        const svc = new LoyaltyService(prisma, cfg());
+        await svc.dailyCheckIn('g1');
+        await expect(svc.dailyCheckIn('g1')).rejects.toThrow(BadRequestException);
+        expect(db.checkIns).toHaveLength(1);
+        expect(db.ledger).toHaveLength(0);
+      });
+
+      it('CONCURRENCY: 10 request song song của khách → 0 dòng ledger, số dư không đổi, đúng 1 dòng điểm danh', async () => {
+        const { db, prisma } = makeFakeDb([GUEST]);
+        const svc = new LoyaltyService(prisma, cfg());
+        const results = await Promise.allSettled(Array.from({ length: 10 }, () => svc.dailyCheckIn('g1')));
+        expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+        expect(db.ledger).toHaveLength(0);
+        expect(db.users.get('g1')!.pointsBalance).toBe(7);
+        expect(db.checkIns).toHaveLength(1);
+      });
+
+      it('khách đã có SĐT là user thật: vẫn nhận điểm như thường', async () => {
+        const { db, prisma } = makeFakeDb([{ ...GUEST, phone: '0901234567' }]);
+        const res = await new LoyaltyService(prisma, cfg()).dailyCheckIn('g1');
+        expect(res).toMatchObject({ pointsEarned: 5, totalPoints: 12 });
+        expect(res).not.toHaveProperty('pointsBlocked');
+        expect(db.ledger).toHaveLength(1);
+      });
+
+      it('dòng khách đã gộp (guest_..._merged_...) không có SĐT cũng không nhận điểm', async () => {
+        const { db, prisma } = makeFakeDb([{ ...GUEST, zaloId: 'guest_h_abc_merged_x1' }]);
+        const res = await new LoyaltyService(prisma, cfg()).dailyCheckIn('g1');
+        expect(res).toMatchObject({ pointsEarned: 0, pointsBlocked: 'GUEST' });
+        expect(db.ledger).toHaveLength(0);
+      });
+
+      it('status: pointsBlocked=GUEST và todayPoints=0 (không hứa điểm); user thật không có cờ và todayPoints như cũ', async () => {
+        const guest = await new LoyaltyService(statusPrisma(null, null, { zaloId: 'guest_h_abc', phone: null }), cfg()).getDailyCheckInStatus('g1');
+        expect(guest).toMatchObject({ pointsBlocked: 'GUEST', todayPoints: 0, currentCycleDay: 1 });
+        const real = await new LoyaltyService(statusPrisma(null, null), cfg()).getDailyCheckInStatus('u1');
+        expect(real).toMatchObject({ todayPoints: 5 });
+        expect(real).not.toHaveProperty('pointsBlocked');
+        const withPhone = await new LoyaltyService(statusPrisma(null, null, { zaloId: 'guest_h_abc', phone: '0901234567' }), cfg()).getDailyCheckInStatus('g1');
+        expect(withPhone).toMatchObject({ todayPoints: 5 });
+        expect(withPhone).not.toHaveProperty('pointsBlocked');
+      });
+    });
+
     it('ranh giới ngày theo giờ VN: 23:00 VN rồi 00:30 VN hôm sau → 2 lần điểm danh hợp lệ, chuỗi nối tiếp', async () => {
-      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 0, referralCode: 'AAAA1111' }]);
+      const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 0, referralCode: 'AAAA1111', zaloId: 'zalo-u1' }]);
       const svc = new LoyaltyService(prisma, makeConfig({ 'loyalty.checkin_points': [1, 2, 3, 4, 5, 6, 7] }));
       jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
       jest.setSystemTime(new Date('2026-09-26T16:00:00Z')); // 23:00 ngày 26/09 giờ VN

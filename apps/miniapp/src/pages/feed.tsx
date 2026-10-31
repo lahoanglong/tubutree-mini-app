@@ -5,7 +5,7 @@ import { HelpCircle, Hash, MessageCircle, Search, X } from 'lucide-react';
 import { getFeed, getFeedPublicPreview, getCategories, type FeedSort } from '../services/feed-api';
 import { getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
-import { SessionUnavailable } from '../components/ui/auth-gate';
+import { SessionUnavailable, useBlockedMessage } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
@@ -33,6 +33,7 @@ const SORTS: { key: FeedSort; label: string }[] = [
 export default function FeedPage() {
   const phase = useAuthPhase();
   const login = useAuthStore((s) => s.login);
+  const blocked = useBlockedMessage();
   const authed = phase === 'authenticated';
   const navigate = useNavigate();
   const location = useLocation();
@@ -138,7 +139,7 @@ export default function FeedPage() {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={vi.community.title} />
-        <EmptyState art="sprout" heading={vi.community.loginToView} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
+        <EmptyState art="sprout" heading={vi.community.loginToView} body={blocked ?? undefined} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
       </Page>
     );
   }

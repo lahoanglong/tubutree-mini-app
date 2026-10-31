@@ -980,7 +980,7 @@ describe('OrderStatusService.markPaid', () => {
         props: expect.objectContaining({ orderId: 'o1', method: 'BANK_TRANSFER', amount: 100000 }),
       }),
     );
-    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1' }, undefined, expect.stringMatching(/^order=/));
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: 'TUBU1', payment_note: ' Tubu Tree đã nhận đủ thanh toán.' }, undefined, expect.stringMatching(/^order=/));
   });
 
   it('đơn đã xác nhận trước khi tiền về → chỉ lật PAID, giữ trạng thái', async () => {

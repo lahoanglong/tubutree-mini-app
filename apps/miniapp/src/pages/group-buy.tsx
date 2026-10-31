@@ -9,6 +9,7 @@ import { fetchActiveFlashSales } from '../services/shop-api';
 import { serverNow } from '../utils/server-clock';
 import { formatVnd } from '../utils/format';
 import { useAuthStore } from '../store/auth';
+import { useLoginWithNotice } from '../components/ui/auth-gate';
 import { isGuestUser } from '../utils/guest-user';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { LineItemSkeleton } from '../components/ui/skeleton';
@@ -36,7 +37,7 @@ export default function GroupBuyPage() {
   const queryClient = useQueryClient();
   const { id: invitedId } = useParams<{ id: string }>();
   const authed = useAuthStore((s) => s.status) === 'authenticated';
-  const login = useAuthStore((s) => s.login);
+  const login = useLoginWithNotice();
   const user = useAuthStore((s) => s.user);
   const ensurePhone = useAuthStore((s) => s.ensurePhone);
   const referralCode = user?.referralCode;

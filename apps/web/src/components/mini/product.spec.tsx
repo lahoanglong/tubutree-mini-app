@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
-import { click } from '@/test-utils/dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderToString } from 'react-dom/server';
+import { hydrateRoot } from 'react-dom/client';
+import { click, flush } from '@/test-utils/dom';
 import { mount } from './harness';
 
 const mocks = vi.hoisted(() => ({ push: vi.fn(), flash: [] as unknown[] }));
@@ -97,11 +100,99 @@ describe('ProductTile', () => {
 
   it('nhãn "Mới" chỉ khi tạo trong 30 ngày gần nhất; thiếu ngày tạo, hết hàng hay quá 30 ngày thì không', () => {
     const daysAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString();
-    const text = (over: Partial<ProductTileProduct>) => mount(<ProductTile product={{ ...P, ...over }} onPress={() => {}} />).container.textContent!;
+    const text = (over: Partial<ProductTileProduct>) => {
+      const qc = new QueryClient();
+      qc.setQueryData(['public-config'], { catalogLaunchDate: null });
+      return mount(
+        <QueryClientProvider client={qc}>
+          <ProductTile product={{ ...P, ...over }} onPress={() => {}} />
+        </QueryClientProvider>,
+      ).container.textContent!;
+    };
     expect(text({ createdAt: daysAgo(5) })).toContain('Mới');
     expect(text({ createdAt: daysAgo(31) })).not.toContain('Mới');
     expect(text({})).not.toContain('Mới');
     expect(text({ createdAt: daysAgo(5), inStock: false })).not.toContain('Mới');
+  });
+
+  it('config công khai chưa về thì chưa gắn "Mới"; tải lỗi thì giữ luật 30 ngày', async () => {
+    const created = new Date(Date.now() - 5 * 864e5).toISOString();
+    const pending = mount(
+      <QueryClientProvider client={new QueryClient()}>
+        <ProductTile product={{ ...P, createdAt: created }} onPress={() => {}} />
+      </QueryClientProvider>,
+    );
+    expect(pending.container.textContent).not.toContain('Mới');
+    const failed = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await failed.prefetchQuery({ queryKey: ['public-config'], queryFn: () => Promise.reject(new Error('mạng')) });
+    const err = mount(
+      <QueryClientProvider client={failed}>
+        <ProductTile product={{ ...P, createdAt: created }} onPress={() => {}} />
+      </QueryClientProvider>,
+    );
+    await flush();
+    expect(err.container.textContent).toContain('Mới');
+  });
+
+  it('tải lại config lỗi sau khi đã có mốc: giữ mốc cũ, thẻ tạo trước mốc vẫn không gắn "Mới"', async () => {
+    const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+    const before = new Date(new Date(`${today}T00:00:00+07:00`).getTime() - 1000).toISOString();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(['public-config'], { catalogLaunchDate: today });
+    const r = mount(
+      <QueryClientProvider client={qc}>
+        <ProductTile product={{ ...P, createdAt: before }} onPress={() => {}} />
+      </QueryClientProvider>,
+    );
+    await qc.refetchQueries({ queryKey: ['public-config'] });
+    await flush();
+    expect(qc.getQueryState(['public-config'])?.status).toBe('error');
+    expect(r.container.textContent).not.toContain('Mới');
+  });
+
+  it('mốc ngày mở bán trong config công khai: tạo trước mốc không gắn "Mới", từ mốc trở đi theo luật 30 ngày', () => {
+    const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+    const startVn = new Date(`${today}T00:00:00+07:00`).getTime();
+    const text = (launch: string | null, createdAt: string) => {
+      const qc = new QueryClient();
+      qc.setQueryData(['public-config'], { catalogLaunchDate: launch });
+      return mount(
+        <QueryClientProvider client={qc}>
+          <ProductTile product={{ ...P, createdAt }} onPress={() => {}} />
+        </QueryClientProvider>,
+      ).container.textContent!;
+    };
+    expect(text(today, new Date(startVn - 1000).toISOString())).not.toContain('Mới');
+    expect(text(today, new Date(startVn).toISOString())).toContain('Mới');
+    expect(text('', new Date(startVn - 1000).toISOString())).toContain('Mới');
+  });
+
+  it('HTML dựng sẵn không mang nhãn "Mới"; SP qua mốc 30 ngày giữa lúc dựng và lúc hydrate thì hydrate không lỗi', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-28T10:00:00Z'));
+      const createdAt = new Date('2026-09-28T12:00:00Z').toISOString();
+      const ui = () => <ProductTile product={{ ...P, createdAt }} onPress={() => {}} />;
+      const html = renderToString(ui());
+      expect(html).not.toContain('Mới');
+      vi.setSystemTime(new Date('2026-10-28T13:00:00Z'));
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      document.body.appendChild(container);
+      const errors: unknown[] = [];
+      const consoleError = vi.spyOn(console, 'error').mockImplementation((...a) => void errors.push(a));
+      let root!: ReturnType<typeof hydrateRoot>;
+      await act(async () => {
+        root = hydrateRoot(container, ui(), { onRecoverableError: (e) => void errors.push(e) });
+      });
+      consoleError.mockRestore();
+      expect(errors).toEqual([]);
+      expect(container.textContent).not.toContain('Mới');
+      act(() => root.unmount());
+      container.remove();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('giá sale hiện kèm giá gốc; priceOverride (giờ vàng) thắng', () => {

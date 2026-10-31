@@ -238,6 +238,13 @@ describe('/dai-ly — đăng ký đại lý', () => {
     expect(box.textContent).toMatch(/Tubu duyệt hồ sơ/);
   });
 
+  it('điện thoại: khung điều kiện không viền, dòng chữ 22px như Mini App', async () => {
+    const c = await mount();
+    const box = c.querySelector('[data-testid="dealer-conditions"]')!;
+    expect(box.className).toContain('max-md:border-0');
+    expect(box.querySelector('ul')!.className).toContain('max-md:leading-[var(--type-body-sm-lh)]');
+  });
+
   it('nút gửi khoá tới khi đủ trường bắt buộc kể cả hai ảnh CCCD; gửi đúng body tới /dealer/apply', async () => {
     m.post['/dealer/apply'] = () => ({ ok: true });
     const c = await mount();

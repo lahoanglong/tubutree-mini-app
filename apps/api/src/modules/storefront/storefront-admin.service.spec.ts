@@ -247,6 +247,23 @@ describe('StorefrontAdminService.markContentSeen', () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
+  it('"Đã xem" kèm mốc admin đang xem: chỉ xoá dấu không mới hơn mốc đó (chủ đổi thêm lần nữa thì dấu mới còn lại)', async () => {
+    const { svc, storefront } = setup();
+    await svc.markContentSeen('admin1', 's1', '2026-10-20T03:30:00.000Z');
+    expect(storefront.updateMany.mock.calls[0][0].where).toEqual({ id: 's1', contentChangedAt: { lte: new Date('2026-10-20T03:30:00.000Z') } });
+    expect(storefront.updateMany.mock.calls[0][0].data).toEqual({ contentChangedAt: null });
+  });
+
+  it('dấu đã mới hơn mốc admin đang xem (count=0): trả lại gian hàng còn dấu để web hiện dấu mới, không lỗi', async () => {
+    const { svc } = setup({
+      storefront: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findUnique: jest.fn().mockResolvedValue(row({ contentChangedAt: new Date('2026-10-20T05:00:00.000Z') })),
+      },
+    });
+    await expect(svc.markContentSeen('admin1', 's1', '2026-10-20T03:30:00.000Z')).resolves.toMatchObject({ id: 's1', contentChangedAt: new Date('2026-10-20T05:00:00.000Z') });
+  });
+
   it('bấm lại khi không còn dấu (hoặc hai admin cùng bấm): trả gian hàng như cũ, không lỗi', async () => {
     const { svc } = setup({ storefront: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) } });
     await expect(svc.markContentSeen('admin2', 's1')).resolves.toMatchObject({ id: 's1' });

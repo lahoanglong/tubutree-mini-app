@@ -1,4 +1,6 @@
+import { walletNegativeCheckoutReason } from '@tubutree/app-core/wallet-rules';
 import { formatNumber, formatPoints, formatVnd } from './format';
+import { lockedPointsLabel } from '@tubutree/app-core/points-lots';
 import { convertedPointsNote, pointsSummary } from './points-lots';
 
 export interface InvoiceInfo {
@@ -23,10 +25,11 @@ export function isInvoiceValid(wantInvoice: boolean, invoice: InvoiceInfo): bool
 
 /**
  * Lý do Ví Tubu bị mờ ở màn thanh toán (null = dùng được): số dư < tổng đơn, đúng điều kiện máy chủ từ chối lúc đặt.
- * Ví chỉ trả TOÀN BỘ đơn.
+ * Ví chỉ trả TOÀN BỘ đơn. Ví âm (đã thu hồi hoa hồng đơn trả hàng) có câu riêng: "cần thêm" tính từ số âm sẽ khó hiểu.
  */
 export function walletUnavailableReason(balance: number, total: number): string | null {
   if (balance >= total) return null;
+  if (balance < 0) return walletNegativeCheckoutReason(formatVnd(-balance));
   return `Số dư chưa đủ — cần thêm ${formatVnd(total - balance)}`;
 }
 
@@ -128,10 +131,7 @@ export function checkoutPoints(
   return { ...base, label: `Dùng được ${groupThousands(usable)}/${formatPoints(balance)}`, lockNote: heldText };
 }
 
-/** Nhãn ô Điểm Xanh khi ô bị khoá theo đơn: chỉ ghi số dư, phần bị giữ để `lockNote` nói, không hứa "dùng được" cạnh "chưa dùng được". */
-export function lockedPointsLabel(balance: number): string {
-  return `Bạn đang có ${formatPoints(balance)}`;
-}
+export { lockedPointsLabel };
 
 /**
  * Trần Điểm Xanh của đơn (`quote.pointsMax`, đã gồm số dư dùng được, trần theo giá trị hàng và luật hàng của gian hàng đối tác).

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { SUBSCRIPTION_PAYMENT_METHODS, type SubscriptionPaymentMethod } from '@tubutree/app-core/api/subscriptions';
 import type { AddressDTO } from '@tubutree/app-core/api/checkout';
 import { formatVnd } from '@/lib/format-vnd';
+import { subscriptionWalletBlockedReason } from '@/lib/subscription-options';
 
 export const PAY_LABEL: Record<SubscriptionPaymentMethod, string> = {
   COD: 'Thanh toán khi nhận hàng (COD)',
@@ -22,12 +23,26 @@ export function addressText(a: Pick<AddressDTO, 'street' | 'ward' | 'district'>)
 }
 
 /** Hàng chọn một: vùng chạm 44px, cả hàng bấm được, nhóm có role=radiogroup như Mini App. */
-function RadioRow({ checked, onSelect, title, hint, name }: { checked: boolean; onSelect: () => void; title: ReactNode; hint?: ReactNode; name: string }) {
+function RadioRow({
+  checked,
+  onSelect,
+  title,
+  hint,
+  name,
+  disabled = false,
+}: {
+  checked: boolean;
+  onSelect: () => void;
+  title: ReactNode;
+  hint?: ReactNode;
+  name: string;
+  disabled?: boolean;
+}) {
   return (
-    <label className="flex min-h-11 cursor-pointer items-center gap-2.5 py-2">
-      <input type="radio" name={name} checked={checked} onChange={onSelect} className="h-5 w-5 flex-none accent-forest-600" />
+    <label className={`flex min-h-11 items-center gap-2.5 py-2 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+      <input type="radio" name={name} checked={checked} disabled={disabled} onChange={onSelect} className="h-5 w-5 flex-none accent-forest-600" />
       <span className="min-w-0 flex-1">
-        <span className={`block text-sm text-stone-900 ${checked ? 'font-semibold' : ''}`}>{title}</span>
+        <span className={`block text-sm ${disabled ? 'text-stone-500' : 'text-stone-900'} ${checked ? 'font-semibold' : ''}`}>{title}</span>
         {hint && <span className="block text-xs text-stone-600">{hint}</span>}
       </span>
     </label>
@@ -43,11 +58,21 @@ export function PaymentMethodPicker({
   onChange: (m: SubscriptionPaymentMethod) => void;
   walletBalance?: number;
 }) {
+  const walletBlocked = subscriptionWalletBlockedReason(walletBalance);
   const label = (m: SubscriptionPaymentMethod) => (m === 'WALLET' && walletBalance !== undefined ? `Ví Tubu (${formatVnd(walletBalance)})` : PAY_LABEL[m]);
+  const hint = (m: SubscriptionPaymentMethod) => (m === 'WALLET' && walletBlocked ? walletBlocked : value === m ? PAY_HINT[m] : undefined);
   return (
     <div role="radiogroup" aria-label="Thanh toán mỗi kỳ">
       {SUBSCRIPTION_PAYMENT_METHODS.map((m) => (
-        <RadioRow key={m} name="sub-pay" checked={value === m} onSelect={() => onChange(m)} title={label(m)} hint={value === m ? PAY_HINT[m] : undefined} />
+        <RadioRow
+          key={m}
+          name="sub-pay"
+          checked={value === m}
+          disabled={m === 'WALLET' && walletBlocked !== null}
+          onSelect={() => onChange(m)}
+          title={label(m)}
+          hint={hint(m)}
+        />
       ))}
     </div>
   );

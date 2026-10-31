@@ -24,6 +24,7 @@ vi.mock('../services/shop-api', () => ({
   fetchMyReview: mocks.fetchMyReview,
 }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: mocks.auth.status, login: mocks.login }) }));
+vi.mock('./ui/auth-gate', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useLoginWithNotice: () => mocks.login }));
 vi.mock('./image-upload', () => ({
   MultiImageUpload: ({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) => (
     <button type="button" onClick={() => onChange([...value, 'https://i/moi.jpg'])}>

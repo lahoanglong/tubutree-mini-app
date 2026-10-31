@@ -27,6 +27,7 @@ vi.mock('@/components/variation-sheet', () => ({
 }));
 
 import WishlistPage from './page';
+import { QUICK_ADD_SOLD_OUT } from '@tubutree/app-core/quick-add';
 
 const card = (id: string, name: string) => ({
   id, slug: `sp-${id}`, brand: 'Tubu', name, thumbnail: null, basePrice: 100000, salePrice: null, isFeatured: false, inStock: true,
@@ -167,7 +168,9 @@ describe('/tai-khoan/yeu-thich — nút giỏ nhanh', () => {
     click(addButton(c, 'Nước rửa chén')!);
     await flush(6);
     expect(mocks.post).not.toHaveBeenCalled();
-    expect(c.querySelector('[role="alert"]')?.textContent).toContain('hết hàng');
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe(QUICK_ADD_SOLD_OUT);
+    // Tải lại danh sách để thẻ hiện lớp "Hết hàng" và bỏ nút giỏ; bấm lại không ra cùng lời báo.
+    expect(mocks.get.mock.calls.filter(([path]) => path === '/me/wishlist').length).toBeGreaterThanOrEqual(2);
   });
 
   it('thêm giỏ lỗi: nói rõ lỗi và nút bấm lại được', async () => {

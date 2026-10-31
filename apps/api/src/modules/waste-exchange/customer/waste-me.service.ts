@@ -121,7 +121,7 @@ export class WasteMeService {
   }
 
   async rules(): Promise<WasteRulesDTO> {
-    const { rulesText } = await this.config.snapshot();
-    return { text: rulesText === '' ? null : rulesText };
+    const { rulesText, rulesVersion } = await this.config.snapshot();
+    return { text: rulesText === '' ? null : rulesText, version: rulesVersion };
   }
 }

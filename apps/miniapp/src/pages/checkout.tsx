@@ -472,8 +472,8 @@ export default function CheckoutPage() {
     { value: 'BANK_TRANSFER', label: vi.checkout.paymentBank },
     { value: 'WALLET', label: vi.checkout.paymentWallet(formatVnd(walletBalance)) },
   ]
-    // Ví chỉ trả được cả đơn: số dư 0đ thì khách không làm gì được với dòng này.
-    .filter((m) => m.value !== 'WALLET' || walletBalance > 0)
+    // Ví chỉ trả được cả đơn: số dư 0đ thì khách không làm gì được với dòng này. Ví âm vẫn hiện (khoá, kèm lý do) để khách biết vì sao không dùng được.
+    .filter((m) => m.value !== 'WALLET' || walletBalance !== 0)
     .map((m) => {
     const hint = quote.isSuccess ? paymentUnavailableReason(m.value, quote.data, walletBalance) : null;
     return { ...m, hint, disabled: hint !== null };

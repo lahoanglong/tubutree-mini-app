@@ -16,6 +16,7 @@ import { HOME_HINT_COOKIE, SESSION_COOKIE } from './home-restore-hint';
 import { clearSavedInvoices } from './saved-invoice';
 import { clearRecentCustomers } from '@/components/affiliate/recent-customers';
 import { clearWizardStorage } from './recycle-wizard';
+import { clearCtvTouched } from './storefront-context';
 import { readFirstTouchCookie } from './entry-source';
 import { browserStorage } from './recently-viewed';
 
@@ -57,6 +58,8 @@ interface AuthState {
    * Khách vẫn đang đăng nhập: trang phải nói "không kết nối được" kèm nút thử lại, không hiện lời mời đăng nhập.
    */
   sessionUnavailable: boolean;
+  /** Kèm `sessionUnavailable`: lỗi tạm là do bị giới hạn tốc độ (429), không phải mất mạng; trang nói đúng lý do. */
+  sessionRateLimited: boolean;
   /** Thử khôi phục phiên lại ngay (nút "Thử lại"); ngoài ra tự thử khi có mạng/quay lại tab. */
   retrySession: () => Promise<void>;
   /**
@@ -102,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<AuthState['status']>('idle');
   const [initialized, setInitialized] = useState(false);
   const [sessionUnavailable, setSessionUnavailable] = useState(false);
+  const [sessionRateLimited, setSessionRateLimited] = useState(false);
 
   // Khôi phục phiên từ cookie refresh (HttpOnly, do BE set). Cờ `tubu_web_session` trong
   // localStorage chỉ để biết CÓ ĐÁNG gọi hay không — khách vãng lai không tốn một lượt 401.
@@ -114,9 +118,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser((out.data as LoginResponse).user);
       setStatus('authenticated');
       setSessionUnavailable(false);
+      setSessionRateLimited(false);
     } else {
       setStatus('idle');
       setSessionUnavailable(out.kind === 'transient');
+      setSessionRateLimited(out.kind === 'transient' && !!out.rateLimited);
     }
   }, []);
 
@@ -130,6 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const retrySession = useCallback(async () => {
     if (!hasSessionMarker()) {
       setSessionUnavailable(false);
+      setSessionRateLimited(false);
       return;
     }
     await restore();
@@ -200,6 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(res.user);
       setStatus('authenticated');
       setSessionUnavailable(false);
+      setSessionRateLimited(false);
     } catch (e) {
       // Không để `status` kẹt ở 'loading' khi trao đổi code thất bại — các trang khác
       // (giỏ hàng, thanh toán, admin) coi 'loading' là "đang kiểm tra phiên" nên sẽ
@@ -220,10 +228,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setStatus('idle');
     setSessionUnavailable(false);
+    setSessionRateLimited(false);
     qc.clear(); // xoá cache giỏ/đơn để không hiện dữ liệu user cũ
     clearSavedInvoices();
     clearRecentCustomers();
     clearWizardStorage();
+    clearCtvTouched();
   }, [qc]);
 
   const updateProfile = useCallback((patch: Partial<Pick<WebUser, 'fullName' | 'avatarUrl'>>) => {
@@ -237,6 +247,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         status,
         initialized,
         sessionUnavailable,
+        sessionRateLimited,
         retrySession,
         zaloLoginConfigured: !!ZALO_APP_ID,
         startZaloLogin,

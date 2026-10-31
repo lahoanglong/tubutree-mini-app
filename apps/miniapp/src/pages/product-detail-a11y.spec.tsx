@@ -138,7 +138,8 @@ describe('Chi tiết sản phẩm — vùng cuộn ngang focus được (axe scr
     renderPdp();
     const gallery = await screen.findByRole('region', { name: 'Ảnh sản phẩm' });
     expect(within(gallery).getAllByRole('img')).toHaveLength(3);
-    expect(gallery).toHaveAttribute('tabindex', '0');
+    // tabindex đến từ phép đo sau commit (effect rồi setState), không có sẵn lúc vùng vừa hiện: phải chờ chứ không đọc ngay.
+    await waitFor(() => expect(gallery).toHaveAttribute('tabindex', '0'));
   });
 
   it('thư viện ảnh không tràn (một ảnh) → không thêm điểm dừng Tab thừa', async () => {

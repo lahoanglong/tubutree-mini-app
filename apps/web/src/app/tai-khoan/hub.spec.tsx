@@ -527,6 +527,26 @@ describe('hub /tai-khoan — lối vào quầy Nhận hàng tại điểm (E-39)
     expect(deskCalls()).toHaveLength(0);
   });
 
+  it('nhân viên điểm đối tác mang vai CUSTOMER: cờ hasDeskPoint của /auth/me mở hàng, chung một lần gọi /auth/me; chương trình tắt thì không hỏi điểm', async () => {
+    mocks.routes['/auth/me'] = () => ({ id: 'u1', ownsBrand: false, hasDeskPoint: true });
+    mocks.routes['/waste/desk/points'] = () => [POINTS[1]];
+    mocks.routes['/config/public'] = () => ({ waste: { enabled: true } });
+    expect(link(await mount(), '/doi-rac/quay')).not.toBeNull();
+    expect(mocks.calls.filter((p) => p === '/auth/me')).toHaveLength(1);
+    mocks.calls = [];
+    mocks.routes['/config/public'] = () => ({ waste: { enabled: false } });
+    expect(link(await mount(), '/doi-rac/quay')).toBeNull();
+    expect(deskCalls()).toHaveLength(0);
+  });
+
+  it('bản API cũ không có cờ hasDeskPoint: khách thường không phát sinh lời gọi điểm', async () => {
+    mocks.routes['/auth/me'] = () => ({ id: 'u1', ownsBrand: false });
+    mocks.routes['/config/public'] = () => ({ waste: { enabled: true } });
+    mocks.routes['/waste/desk/points'] = () => POINTS;
+    expect(link(await mount(), '/doi-rac/quay')).toBeNull();
+    expect(deskCalls()).toHaveLength(0);
+  });
+
   it('khách thường không phát sinh lời gọi điểm nhận hàng', async () => {
     mocks.routes['/waste/desk/points'] = () => POINTS;
     const c = await mount();

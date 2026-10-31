@@ -344,6 +344,8 @@ describe('BrandViewPage — hàng chứng nhận cuộn ngang focus được (ax
     Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get: () => 600 });
     Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 300 });
     renderPage();
-    expect(await screen.findByRole('region', { name: 'Chứng nhận' })).toHaveAttribute('tabindex', '0');
+    const region = await screen.findByRole('region', { name: 'Chứng nhận' });
+    // tabindex đến từ phép đo sau commit (effect rồi setState), không có sẵn lúc vùng vừa hiện: phải chờ chứ không đọc ngay.
+    await waitFor(() => expect(region).toHaveAttribute('tabindex', '0'));
   });
 });

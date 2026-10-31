@@ -241,6 +241,14 @@ describe('CheckoutService.placeOrder — money safety', () => {
     expect(orderCreate).not.toHaveBeenCalled();
   });
 
+  it('WALLET khi Ví đang âm (thu hồi hoa hồng đơn trả hàng) → lời nêu số âm và việc cần làm, không tạo đơn', async () => {
+    const { svc, orderCreate } = build({ walletBalance: -50_000, total: 100 });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never)).rejects.toThrow(
+      'Số dư Ví Tubu đang âm 50.000đ do thu hồi hoa hồng đơn trả hàng. Hãy chọn cách thanh toán khác, hoa hồng mới sẽ bù vào số âm.',
+    );
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
   it('WALLET hợp lệ → trừ ví qua sổ cái (1 dòng ORDER_PAY theo đơn) trong tx tạo đơn', async () => {
     const { svc, prisma } = build({ walletBalance: 1000, total: 100 });
     ledger.mockClear();
@@ -1670,10 +1678,19 @@ describe('CheckoutService — thông báo khi đặt đơn (BUYERMINI-8)', () =>
     expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
   });
 
-  it.each(['COD', 'WALLET'])('đơn %s → "đã xác nhận" như cũ', async (paymentMethod) => {
+  it('đơn COD → "đã xác nhận" như cũ, không nói đã nhận thanh toán', async () => {
     const { svc, notifications } = build({ walletBalance: 1_000_000 });
-    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod } as never);
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: expect.any(String) });
+  });
+
+  it('đơn WALLET (đã trừ Ví lúc đặt) → "đã xác nhận" kèm câu đã nhận đủ thanh toán', async () => {
+    const { svc, notifications } = build({ walletBalance: 1_000_000 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never);
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', {
+      order_code: expect.any(String),
+      payment_note: ' Tubu Tree đã nhận đủ thanh toán.',
+    });
   });
 });
 

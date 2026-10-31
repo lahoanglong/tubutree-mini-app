@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), openSnackbar: vi.fn(), getAddresses: vi.fn(), getWallet: vi.fn(), createSubscription: vi.fn(),
@@ -34,15 +34,29 @@ const SUB = {
 
 function renderSheet(onClose = vi.fn()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  render(
+  const { unmount } = render(
     <QueryClientProvider client={qc}>
       <SubscribeSheet visible onClose={onClose} variationId="v1" quantity={2} />
     </QueryClientProvider>,
   );
-  return { onClose };
+  return { onClose, unmount };
 }
 
 describe('SubscribeSheet (C-015: ngày bắt đầu + cách trả + địa chỉ)', () => {
+  // Trong một worker jsdom, lần getByRole đầu (~0,4 s đo trên DOM tối giản khi máy bận) và lần dựng/bấm đầu của Sheet tốn hàng trăm ms, và chúng
+  // chạy ngay trong lần gọi đầu của waitFor nên ăn mất ngân sách 1 giây của lệnh chờ đó: ca đầu file rớt ngẫu nhiên khi máy bận. Chạy trước một
+  // vòng ở đây để chi phí rơi vào hook; hạn 8 giây chỉ để vòng khởi động này không tự rớt, không nới lệnh chờ của ca nào.
+  beforeAll(async () => {
+    mocks.getAddresses.mockResolvedValue([ADDR('a2', true, '9 Hai Bà Trưng')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.createSubscription.mockResolvedValue({ ...SUB, firstOrder: null });
+    const { onClose, unmount } = renderSheet();
+    await waitFor(() => expect(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true'), { timeout: 8000 });
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu đặt định kỳ' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled(), { timeout: 8000 });
+    unmount();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -101,6 +115,32 @@ describe('SubscribeSheet (C-015: ngày bắt đầu + cách trả + địa chỉ
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('20/10/2026') })),
     );
+  });
+
+  it('Ví đang âm → hàng Ví Tubu bị khoá kèm lý do, bấm không chọn được, gói tạo bằng COD', async () => {
+    mocks.getWallet.mockResolvedValue({ walletBalance: -50000 });
+    mocks.createSubscription.mockResolvedValue({ ...SUB, firstOrder: null });
+    renderSheet();
+    await waitFor(() => expect(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true'));
+    const wallet = await screen.findByRole('radio', { name: /Ví đang âm 50\.000đ/ });
+    expect(wallet).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(wallet);
+    expect(wallet).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu đặt định kỳ' }));
+    await waitFor(() => expect(mocks.createSubscription).toHaveBeenCalledWith(expect.objectContaining({ paymentMethod: 'COD' })));
+  });
+
+  it('đã chọn Ví rồi số dư tải về âm → khoá nút tạo, không gửi gói trả bằng Ví', async () => {
+    let resolveWallet!: (w: { walletBalance: number }) => void;
+    mocks.getWallet.mockReturnValue(new Promise((r) => (resolveWallet = r)));
+    renderSheet();
+    await waitFor(() => expect(screen.getByRole('radio', { name: /9 Hai Bà Trưng/ })).toHaveAttribute('aria-checked', 'true'));
+    fireEvent.click(screen.getByRole('radio', { name: /^Ví Tubu/ }));
+    expect(screen.getByRole('radio', { name: /^Ví Tubu/ })).toHaveAttribute('aria-checked', 'true');
+    resolveWallet({ walletBalance: -50000 });
+    await screen.findByRole('radio', { name: /Ví đang âm 50\.000đ/ });
+    expect(screen.getByRole('button', { name: 'Bắt đầu đặt định kỳ' })).toBeDisabled();
+    expect(mocks.createSubscription).not.toHaveBeenCalled();
   });
 
   it('ngày ngoài khoảng (hôm nay) → báo lỗi, khoá nút tạo', async () => {

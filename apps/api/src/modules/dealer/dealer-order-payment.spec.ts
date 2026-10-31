@@ -67,7 +67,7 @@ describe('DealerService.confirmDealerOrderPayment (admin xác nhận đã nhận
     expect(h.note).toContain('UNPAID → PAID');
     expect(h.note).toContain('FT26270001');
     expect(h.note).toContain('VCB 27/09');
-    expect(notifications.notify).toHaveBeenCalledWith('d1', 'ORDER_CONFIRMED', { order_code: 'DLR1' });
+    expect(notifications.notify).toHaveBeenCalledWith('d1', 'ORDER_CONFIRMED', { order_code: 'DLR1', payment_note: ' Tubu Tree đã nhận đủ thanh toán.' });
     expect(res).toMatchObject({ ok: true, alreadyPaid: false, order: { id: 'o1', code: 'DLR1', paymentStatus: 'PAID' } });
     // flip count>0 ⇒ order_paid PHẢI được ghi, đúng 1 lần, đúng field, dùng ĐÚNG object tx của
     // $transaction (ở harness này tx === prisma vì mock cố tình delegate — xem test atomic riêng

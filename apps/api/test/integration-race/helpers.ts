@@ -30,6 +30,11 @@ export async function createUser(
   });
 }
 
+/** User thật (zaloId Zalo, không phải guest_): cho các ca cần nhận Điểm Xanh từ điểm danh, nhiệm vụ, Season Pass. */
+export function createRealUser(prisma: PrismaService, data: Partial<Prisma.UserUncheckedCreateInput> & { role?: UserRole } = {}) {
+  return createUser(prisma, { zaloId: `zalo_it_${randCode(10)}`, ...data });
+}
+
 /** Đại lý kèm địa chỉ mặc định — đơn đại lý cần người nhận cho kho Pancake (DealerService.placeOrder). */
 export async function createDealer(
   prisma: PrismaService,

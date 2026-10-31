@@ -1,10 +1,12 @@
 import { Check, Lock, Star, Ticket } from 'lucide-react';
-import type { SeasonPassState, SeasonPassTier } from '../../services/game-api';
+import { guestCheckInCopy } from '@tubutree/app-core/daily-check-in-guest-copy';
+import type { SeasonPassReward, SeasonPassState, SeasonPassTier } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { ProgressBar } from '../ui/progress-bar';
 import { Text } from '../ui/text';
+import { GuestPointsNote } from '../loyalty/guest-points-note';
 import { GameCard } from './game-card';
 
 const INLINE_ICON_STYLE = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 } as const;
@@ -34,6 +36,10 @@ export function SeasonPass({
   const xp = pass.xp ?? 0;
   const maxXp = tiers[tiers.length - 1]?.xpRequired ?? 1;
   const ppct = maxXp > 0 ? Math.min(100, Math.round((xp / maxXp) * 100)) : 0;
+  // Khách vãng lai chưa nhận được Điểm Xanh: bậc thưởng điểm không hứa số điểm, không có nút nhận; bậc giọt nước giữ nguyên.
+  const pointsHidden = (r: SeasonPassReward) => !!pass.pointsBlocked && r.type === 'POINTS';
+  const showGuestNote = tiers.some((t) => pointsHidden(t.free) || pointsHidden(t.premium));
+  const rewardLabel = (r: SeasonPassReward) => (pointsHidden(r) ? guestCheckInCopy.seasonPoints : vi.game.seasonPass.reward(r));
   return (
     <GameCard title={vi.game.seasonPass.title} icon={Ticket}>
       <Text variant="caption" tone="secondary" as="div">
@@ -55,6 +61,8 @@ export function SeasonPass({
           {vi.game.seasonPass.premiumHint}
         </Text>
       )}
+
+      {showGuestNote && <GuestPointsNote margin="12px 0 0" />}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
         {tiers.map((t: SeasonPassTier) => {
@@ -87,11 +95,11 @@ export function SeasonPass({
                     {vi.game.seasonPass.free}
                   </Text>
                   <Text variant="caption" tone="brand" as="div" style={{ fontWeight: 600 }}>
-                    {vi.game.seasonPass.reward(t.free)}
+                    {rewardLabel(t.free)}
                   </Text>
                   {t.claimedFree ? (
                     <ClaimedMark />
-                  ) : (
+                  ) : pointsHidden(t.free) ? null : (
                     <Button
                       fullWidth
                       disabled={!t.unlocked || busy('free')}
@@ -115,11 +123,11 @@ export function SeasonPass({
                     {vi.game.seasonPass.premium}
                   </Text>
                   <Text variant="caption" as="div" style={{ color: 'var(--honey-600)', fontWeight: 600 }}>
-                    {vi.game.seasonPass.reward(t.premium)}
+                    {rewardLabel(t.premium)}
                   </Text>
                   {t.claimedPremium ? (
                     <ClaimedMark />
-                  ) : (
+                  ) : pointsHidden(t.premium) ? null : (
                     <Button
                       fullWidth
                       variant="secondary"

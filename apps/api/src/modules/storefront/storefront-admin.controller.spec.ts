@@ -5,7 +5,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { STAFF_PERMISSIONS_KEY } from '../../common/staff-permissions';
-import { StorefrontAdminController, StorefrontAdminListQueryDto, TakeDownStorefrontDto } from './storefront-admin.controller';
+import { ContentSeenDto, StorefrontAdminController, StorefrontAdminListQueryDto, TakeDownStorefrontDto } from './storefront-admin.controller';
 
 describe('StorefrontAdminController', () => {
   it('chỉ ADMIN, không nhóm việc STAFF nào mở được', () => {
@@ -28,6 +28,14 @@ describe('StorefrontAdminController', () => {
     expect(route('reinstate')).toEqual(['POST', ':id/reinstate']);
     expect(route('approval')).toEqual(['POST', ':id/approval']);
     expect(route('contentSeen')).toEqual(['POST', ':id/content-seen']);
+  });
+
+  it('"Đã xem": mốc seenChangedAt không bắt buộc (app cũ gửi thân rỗng) nhưng nếu có phải là ngày giờ ISO', async () => {
+    const check = async (body: unknown) => (await validate(plainToInstance(ContentSeenDto, body))).length;
+    expect(await check({})).toBe(0);
+    expect(await check({ seenChangedAt: '2026-10-20T03:30:00.000Z' })).toBe(0);
+    expect(await check({ seenChangedAt: 'hôm qua' })).toBeGreaterThan(0);
+    expect(await check({ seenChangedAt: 12345 })).toBeGreaterThan(0);
   });
 
   it('lý do gỡ đăng bắt buộc (chuỗi toàn khoảng trắng cũng bị từ chối) và tối đa 300 ký tự', async () => {

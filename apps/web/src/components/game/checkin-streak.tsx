@@ -4,6 +4,7 @@ import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import type { GameProfile } from '@tubutree/app-core/api/game';
 import type { CheckInStatusResponse } from '@tubutree/app-core/api/loyalty';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
+import { guestCheckInCopy } from '@tubutree/app-core/daily-check-in-guest-copy';
 import { ui } from '@/lib/guest-ui';
 import { miniBtnSecondary, miniCard, miniSectionTitle } from '@/components/loyalty/mini-surface';
 import { formatDrops } from './format';
@@ -49,7 +50,7 @@ export function CheckInStreak({
             <Flame className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
             <span className="min-w-0 truncate">{t.title(streakDays)}</span>
           </h2>
-          <p className="text-caption text-stone-600">{t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}</p>
+          <p className="text-caption text-stone-600">{(status?.pointsBlocked ? guestCheckInCopy.streakSub : t.sub)(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}</p>
         </div>
       </div>
       <div className="mt-3 flex gap-1.5">
