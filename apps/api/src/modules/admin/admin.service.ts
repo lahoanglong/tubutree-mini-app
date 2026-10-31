@@ -20,6 +20,7 @@ import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { GomdonClient } from '../integrations/gomdon/gomdon.client';
 import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
+import { ImageResizeService } from '../catalog/image-resize.service';
 import { losesPartnerStore } from '../merchant/partner-store';
 import { throwIfLockBusy } from '../../common/lock-busy';
 import { GOMDON_RECYCLING_TOGGLE_KEY } from '../integrations/gomdon/gomdon-config';
@@ -249,6 +250,7 @@ export class AdminService {
     private readonly gomdonOrder: GomdonOrderService,
     private readonly gomdonClient: GomdonClient,
     private readonly fulfilment?: MerchantFulfilmentService,
+    private readonly imageResize?: ImageResizeService,
   ) {}
 
   /**
@@ -2009,6 +2011,7 @@ export class AdminService {
           : { rejectReason: reason },
       });
     });
+    if (approve) this.imageResize?.invalidateRegistry();
     const updated = await this.prisma.product.findUniqueOrThrow({ where: { id: product.id } });
     this.logger.warn(
       `Admin ${adminId} đã ${approve ? 'DUYỆT' : 'TỪ CHỐI'} bản sửa của sản phẩm đối tác ${product.id} (${product.name})`,
