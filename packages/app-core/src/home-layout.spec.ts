@@ -37,6 +37,9 @@ describe('visibleHomeShortcuts', () => {
     expect(ids).toEqual(['orders', 'rewards', 'recycle', 'groupBuy', 'coupons', 'claim', 'earn', 'community']);
     expect(ids).not.toContain('garden');
   });
+  it('nhãn mọi lối tắt vừa MỘT dòng ở ô 76px: nhãn xuống dòng làm hàng cao hơn khung chờ 96px và đẩy cả trang (R-184); nhãn đầy đủ nằm ở ariaLabel', () => {
+    for (const s of HOME_SHORTCUTS) expect(s.label.length, s.label).toBeLessThanOrEqual(10);
+  });
   it('cờ tắt thì ẩn mục, các mục còn lại giữ thứ tự', () => {
     const ids = visibleHomeShortcuts({ wasteEnabled: false, claimEnabled: false }).map((s) => s.id);
     expect(ids).toEqual(['orders', 'rewards', 'groupBuy', 'coupons', 'earn', 'community']);

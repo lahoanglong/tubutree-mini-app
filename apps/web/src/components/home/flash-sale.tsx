@@ -52,7 +52,7 @@ const subscribeNothing = () => () => {};
 
 function FlashSkeleton() {
   return (
-    <div data-testid="flash-sale-loading" aria-hidden="true" className="py-2">
+    <div data-testid="flash-sale-loading" aria-hidden="true" className="pt-4">
       <Skeleton height={FLASH_SKELETON_HEIGHT - 16} radius="var(--radius-card)" />
     </div>
   );
@@ -104,7 +104,7 @@ export function FlashSale({ initial }: { initial?: FlashSaleActiveItem[] }) {
   }
 
   return (
-    <section aria-label={flashSaleText.sectionName} className="py-2">
+    <section aria-label={flashSaleText.sectionName} className="pt-4">
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className={TITLE}>
           <Zap className="h-4 w-4" aria-hidden="true" />
@@ -221,7 +221,7 @@ export function UpcomingFlashSales() {
   if (!authed || q.isLoading || items.length === 0) return null;
 
   return (
-    <section aria-label={flashSaleText.upcomingTitle} className="py-2">
+    <section aria-label={flashSaleText.upcomingTitle} className="pt-4">
       <h2 className={`mb-2 ${TITLE}`}>
         <Bell className="h-4 w-4" aria-hidden="true" />
         {flashSaleText.upcomingTitle}

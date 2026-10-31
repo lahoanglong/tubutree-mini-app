@@ -132,7 +132,7 @@ export const HOME_SHORTCUTS: readonly HomeShortcutSpec[] = [
   { id: 'recycle', label: 'Đổi rác', ariaLabel: 'Đổi rác lấy quà', tint: 'sage', flag: 'waste' },
   { id: 'groupBuy', label: 'Mua chung', ariaLabel: 'Mua chung giá tốt', tint: 'amber' },
   { id: 'coupons', label: 'Mã của tôi', ariaLabel: 'Mã của tôi, mã giảm giá của bạn', tint: 'rose' },
-  { id: 'claim', label: 'Tích điểm đơn sàn', ariaLabel: 'Tích điểm đơn sàn, đơn mua trên sàn khác', tint: 'sky', flag: 'claim' },
+  { id: 'claim', label: 'Tích điểm', ariaLabel: 'Tích điểm đơn sàn, đơn mua trên sàn khác', tint: 'sky', flag: 'claim' },
   { id: 'earn', label: 'Kiếm tiền', ariaLabel: 'Kiếm tiền cùng Tubu', tint: 'amber' },
   { id: 'community', label: 'Cộng đồng', ariaLabel: 'Cộng đồng hỏi đáp', tint: 'sky' },
 ];
