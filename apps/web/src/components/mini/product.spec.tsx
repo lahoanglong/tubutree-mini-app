@@ -34,7 +34,7 @@ describe('PriceTag thiếu giá', () => {
     expect(mount(<PriceTag value={null} />).container.textContent).toBe('—');
     expect(mount(<PriceTag value={undefined} />).container.textContent).toBe('—');
     expect(mount(<PriceTag value={NaN} />).container.textContent).toBe('—');
-    expect(mount(<PriceTag value={0} />).container.textContent).toBe('0đ');
+    expect(mount(<PriceTag value={0} />).container.textContent).toBe('Giá 0đ');
     expect(mount(<Money amount={null} />).container.textContent).toBe('—');
     expect(mount(<Points value={NaN} />).container.textContent).toBe('0 điểm');
     expect(mount(<Points value={null} />).container.textContent).toBe('0 điểm');
@@ -42,18 +42,37 @@ describe('PriceTag thiếu giá', () => {
 });
 
 describe('PriceTag', () => {
-  it('hiện giá đủ chữ số, giá gốc gạch khi có giảm, giá giờ vàng luôn thắng', () => {
+  it('hiện giá đủ chữ số, giá gốc gạch khi có giảm, giá giờ vàng luôn thắng; chữ đọc "Giá" nằm ngoài số hiển thị', () => {
     const c = mount(<PriceTag value={80000} compareAt={100000} />).container;
-    expect(c.textContent).toBe('80.000đ100.000đ');
-    expect((c.querySelectorAll('span')[2] as HTMLElement).style.textDecoration).toBe('line-through');
+    expect(c.textContent).toBe('Giá 80.000đ, giá gốc 100.000đ');
+    const struck = Array.from(c.querySelectorAll('span')).find((e) => e.textContent === '100.000đ') as HTMLElement;
+    expect(struck.style.textDecoration).toBe('line-through');
     const flash = mount(<PriceTag value={80000} compareAt={100000} flash={{ price: 60000 }} />).container;
-    expect(flash.textContent).toBe('60.000đ100.000đ');
-    expect((flash.querySelectorAll('span')[1] as HTMLElement).style.color).toBe('var(--color-flash-fg)');
+    expect(flash.textContent).toBe('Giá Giờ vàng 60.000đ, giá gốc 100.000đ');
+    const price = Array.from(flash.querySelectorAll('span')).find((e) => e.textContent === '60.000đ') as HTMLElement;
+    expect(price.style.color).toBe('var(--color-text-price-deal)');
   });
 
-  it('không gạch giá gốc khi không lớn hơn giá hiển thị; size đổi bậc chữ', () => {
-    expect(mount(<PriceTag value={100000} compareAt={100000} />).container.textContent).toBe('100.000đ');
-    expect((mount(<PriceTag value={1} size="xl" />).container.querySelectorAll('span')[1] as HTMLElement).style.fontSize).toBe('var(--type-price-xl-size)');
+  it('không gạch giá gốc khi không lớn hơn giá hiển thị; size đổi bậc chữ, kể cả bậc tile 16/700 của thẻ', () => {
+    expect(mount(<PriceTag value={100000} compareAt={100000} />).container.textContent).toBe('Giá 100.000đ');
+    const xl = Array.from(mount(<PriceTag value={1} size="xl" />).container.querySelectorAll('span')).find((e) => e.textContent === '1đ') as HTMLElement;
+    expect(xl.style.fontSize).toBe('var(--type-price-xl-size)');
+    const tile = Array.from(mount(<PriceTag value={1} size="tile" />).container.querySelectorAll('span')).find((e) => e.textContent === '1đ') as HTMLElement;
+    expect(tile.style.fontSize).toBe('var(--type-price-tile-size)');
+    expect(tile.style.lineHeight).toBe('var(--type-price-tile-lh)');
+  });
+
+  it('tone="deal" dùng màu giá giảm, mặc định dùng màu giá thường', () => {
+    const find = (c: HTMLElement) => Array.from(c.querySelectorAll('span')).find((e) => e.textContent === '39.000đ') as HTMLElement;
+    expect(find(mount(<PriceTag value={39000} tone="deal" />).container).style.color).toBe('var(--color-text-price-deal)');
+    expect(find(mount(<PriceTag value={39000} />).container).style.color).toBe('var(--color-text-price)');
+  });
+
+  it('layout="stack" xếp giá gạch xuống dòng dưới; inline thì cùng hàng', () => {
+    const stack = mount(<PriceTag value={39000} compareAt={52000} layout="stack" />).container;
+    expect((stack.firstElementChild as HTMLElement).style.flexDirection).toBe('column');
+    const inline = mount(<PriceTag value={39000} compareAt={52000} />).container;
+    expect((inline.firstElementChild as HTMLElement).style.flexDirection).not.toBe('column');
   });
 
   it('Money (đủ/rút gọn) và Points', () => {
@@ -83,7 +102,7 @@ describe('ProductTile', () => {
     const c = mount(<ProductTile product={P} onPress={onPress} />).container;
     const link = c.querySelector('button.tubu-tile-link') as HTMLElement;
     expect(link.getAttribute('aria-label')).toBe('Sữa hạt Tubu');
-    expect(c.querySelector(`#${CSS.escape(link.getAttribute('aria-describedby')!)}`)!.textContent).toBe('100.000đ');
+    expect(c.querySelector(`#${CSS.escape(link.getAttribute('aria-describedby')!)}`)!.textContent).toBe('Giá 100.000đ');
     expect(c.querySelectorAll('button').length).toBe(1);
     click(link);
     expect(onPress).toHaveBeenCalledTimes(1);
@@ -196,8 +215,8 @@ describe('ProductTile', () => {
   });
 
   it('giá sale hiện kèm giá gốc; priceOverride (giờ vàng) thắng', () => {
-    expect(mount(<ProductTile product={{ ...P, salePrice: 90000 }} onPress={() => {}} />).container.textContent).toContain('90.000đ100.000đ');
-    expect(mount(<ProductTile product={P} priceOverride={{ price: 70000 }} onPress={() => {}} />).container.textContent).toContain('70.000đ100.000đ');
+    expect(mount(<ProductTile product={{ ...P, salePrice: 90000 }} onPress={() => {}} />).container.textContent).toContain('90.000đ, giá gốc 100.000đ');
+    expect(mount(<ProductTile product={P} priceOverride={{ price: 70000 }} onPress={() => {}} />).container.textContent).toContain('70.000đ, giá gốc 100.000đ');
   });
 
   it('hết hàng phủ nhãn "Tạm hết"; còn hàng thì không', () => {
@@ -237,7 +256,7 @@ describe('ProductCard', () => {
   it('giá giờ vàng rẻ hơn thì hiện giá giờ vàng và nhãn "Giờ vàng -x%"', () => {
     mocks.flash = [{ itemId: 'i', variationId: 'v', productSlug: 'sua-hat', flashPrice: 60000, retailPrice: 100000, soldCount: 0, quota: 5, endAt: '2030-01-01' }];
     const c = mount(<ProductCard product={P as never} />).container;
-    expect(c.textContent).toContain('60.000đ100.000đ');
+    expect(c.textContent).toContain('60.000đ, giá gốc 100.000đ');
     expect(c.textContent).toContain('Giờ vàng -40%');
   });
 

@@ -2,12 +2,11 @@
 
 // Nguồn: apps/miniapp/src/components/ui/product-image.tsx
 import { useEffect, useRef, useState } from 'react';
-import { brandAccent } from './brand-accent';
 import { useSizedImage } from '@/lib/image-src';
 
 /**
- * Ô thay thế khi sản phẩm chưa có ảnh (hay gặp với hàng Pancake chưa có thumbnail) hoặc ảnh tải lỗi: nền ngả màu nhãn,
- * lá xanh và tên nhãn ngắn. Thẻ không còn là ô xám trơn.
+ * Ô thay thế khi sản phẩm chưa có ảnh (hay gặp với hàng Pancake chưa có thumbnail) hoặc ảnh tải lỗi: lá xanh trên nền trung tính
+ * `--color-bg-media` của khung ảnh (PL-15c: nhuộm theo màu nhãn làm lưới thành mảng màu xen kẽ; tên nhãn đã có ở dòng nhãn hiệu).
  */
 export function LeafGlyph({ size }: { size: number | string }) {
   return (
@@ -18,33 +17,14 @@ export function LeafGlyph({ size }: { size: number | string }) {
   );
 }
 
-export function ProductImageFallback({ brand }: { brand: string }) {
-  const accent = brandAccent(brand);
+export function ProductImageFallback(_props: { brand: string }) {
   return (
     <div
       data-testid="product-image-fallback"
       aria-hidden
-      style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, overflow: 'hidden' }}
+      style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
     >
-      <div style={{ position: 'absolute', inset: 0, background: accent, opacity: 0.12 }} />
       <LeafGlyph size={36} />
-      {brand && (
-        <span
-          style={{
-            position: 'relative',
-            maxWidth: '80%',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            fontSize: 'var(--type-caption-size)',
-            fontWeight: 700,
-            color: 'var(--forest-700)',
-            fontFamily: 'var(--font-ui)',
-          }}
-        >
-          {brand}
-        </span>
-      )}
     </div>
   );
 }
@@ -72,6 +52,8 @@ export function ProductImage({
   width?: number;
 }) {
   const [failed, setFailed] = useState(false);
+  // Mặc định hiện: HTML dựng sẵn (ISR) và lần hydrate đầu phải khớp nhau, và ảnh đã tải xong thì không được chớp trong suốt (PL-15a).
+  const [loaded, setLoaded] = useState(true);
   const ref = useRef<HTMLImageElement>(null);
   useEffect(() => setFailed(false), [src]);
   const { img, fallBack } = useSizedImage(src, width);
@@ -79,6 +61,8 @@ export function ProductImage({
   useEffect(() => {
     const el = ref.current;
     if (el && el.complete && el.naturalWidth === 0 && !fallBack()) setFailed(true);
+    // Chưa tải xong: ẩn để hiện dần ở `onLoad`; ảnh chưa tải thì cũng chưa có gì để thấy nên ẩn lúc này không chớp.
+    setLoaded(Boolean(el && el.complete && el.naturalWidth > 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
   if (!img || failed) return <ProductImageFallback brand={brand} />;
@@ -94,9 +78,17 @@ export function ProductImage({
       loading={priority ? 'eager' : 'lazy'}
       fetchPriority={priority ? 'high' : undefined}
       decoding="async"
+      onLoad={() => setLoaded(true)}
       onError={() => fallBack() || setFailed(true)}
       className={className}
-      style={className ? undefined : { width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+      style={{
+        ...(className ? null : { width: '100%', height: '100%', objectFit: 'cover', display: 'block' }),
+        opacity: loaded ? 1 : 0,
+        transition: 'opacity 200ms var(--p-ease-out)',
+        // Ảnh nền trắng (đa số ảnh Pancake) không hoà vào thân thẻ trắng.
+        outline: '1px solid var(--color-media-outline)',
+        outlineOffset: -1,
+      }}
     />
   );
 }

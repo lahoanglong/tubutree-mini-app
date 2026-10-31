@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Heart } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -45,9 +46,12 @@ export function WishlistHeart({
   productId,
   className = '',
   floating = false,
+  productName,
 }: {
   productId: string;
   className?: string;
+  /** Tên sản phẩm để nhãn nút phân biệt được 20 tim trong một lưới (a11y A6). Thiếu thì giữ nhãn cũ đổi theo trạng thái (trang chi tiết chưa truyền, thuộc gói PDP). */
+  productName?: string;
   /** Nổi trên góc ảnh thẻ như Mini App: vùng chạm 44px bọc vòng trắng 32px; đặt ở cha có `position: relative`. */
   floating?: boolean;
 }) {
@@ -58,6 +62,8 @@ export function WishlistHeart({
 
   const idsQ = useQuery({ ...wishlistIdsQuery(coreHttp), enabled: authed, staleTime: 60_000 });
   const liked = idsQ.data?.includes(productId) ?? false;
+  // Nảy khi vừa chạm để thích (không nảy khi dữ liệu máy chủ về làm tim đỏ); hết hiệu ứng thì gỡ lớp để lần sau nảy lại.
+  const [popping, setPopping] = useState(false);
 
   const onClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -69,24 +75,27 @@ export function WishlistHeart({
     void qc.cancelQueries({ queryKey: IDS_KEY });
     const current = qc.getQueryData<string[]>(IDS_KEY) ?? [];
     const want = !current.includes(productId);
+    setPopping(want);
     qc.setQueryData<string[]>(IDS_KEY, want ? [...current, productId] : current.filter((id) => id !== productId));
     sendToggle(qc, productId, want);
   };
 
+  const iconClass = `h-[22px] w-[22px] ${liked ? 'fill-danger-fg text-danger-fg' : ''} ${popping && liked ? 'tubu-heart-pop' : ''}`;
+
   return (
     <button
       type="button"
-      aria-label={liked ? 'Bỏ yêu thích' : 'Thêm yêu thích'}
+      aria-label={productName ? `Yêu thích ${productName}` : liked ? 'Bỏ yêu thích' : 'Thêm yêu thích'}
       aria-pressed={liked}
       onClick={onClick}
       className={`inline-flex h-11 w-11 items-center justify-center text-stone-700 ${floating ? 'absolute right-0.5 top-0.5' : 'rounded-control hover:bg-stone-50'} ${className}`}
     >
       {floating ? (
         <span data-testid="heart-disc" className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-0 shadow-[var(--elevation-1)]">
-          <Heart className={`h-[22px] w-[22px] ${liked ? 'fill-danger-fg text-danger-fg' : ''}`} strokeWidth={1.9} aria-hidden="true" />
+          <Heart className={iconClass} strokeWidth={1.75} aria-hidden="true" onAnimationEnd={() => setPopping(false)} />
         </span>
       ) : (
-        <Heart className={`h-[22px] w-[22px] ${liked ? 'fill-danger-fg text-danger-fg' : ''}`} strokeWidth={1.9} aria-hidden="true" />
+        <Heart className={iconClass} strokeWidth={1.75} aria-hidden="true" onAnimationEnd={() => setPopping(false)} />
       )}
     </button>
   );

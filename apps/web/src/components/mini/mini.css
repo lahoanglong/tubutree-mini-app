@@ -69,6 +69,17 @@
   transition-duration: var(--p-dur-press);
 }
 
+/* Tim yêu thích nảy khi chuyển sang "đã thích" (PL-14), như Mini App. */
+@keyframes tubu-heart-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.25); }
+  70% { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+.tubu-heart-pop {
+  animation: tubu-heart-pop 320ms var(--p-ease-spring);
+}
+
 /* Tab đang chọn của thanh dưới: icon nảy .88 → 1, như Mini App. */
 @keyframes tubu-tab-pop {
   0% {
@@ -309,6 +320,7 @@
   .tubu-rise,
   .tubu-pulse,
   .tubu-tab-pop,
+  .tubu-heart-pop,
   .mini-sheet-panel {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
