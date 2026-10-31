@@ -37,6 +37,11 @@ describe('ShopTopBar', () => {
     expect(bar).toHaveAttribute('aria-hidden', 'true');
   });
 
+  it('nằm trên nền đặc của BackButton (zIndex 199) để chữ không bị che', () => {
+    renderWithPage(100);
+    expect(Number(screen.getByTestId('shop-top-bar').style.zIndex)).toBeGreaterThan(199);
+  });
+
   it('không chặn chạm vào nút lùi nằm dưới', () => {
     renderWithPage(100);
     expect(screen.getByTestId('shop-top-bar').style.pointerEvents).toBe('none');

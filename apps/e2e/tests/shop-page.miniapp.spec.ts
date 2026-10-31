@@ -67,6 +67,12 @@ test.describe('Trang gian hàng CTV (Mini App)', () => {
     });
     await expect(bar).toHaveAttribute('aria-hidden', 'false');
     await expect(bar).toHaveText(SHOP_TITLE);
+    // Chữ phải nhìn thấy được, không bị nền đặc của nút lùi che (thanh tên shop không bắt chạm nên elementFromPoint bỏ qua nó): thanh phải nằm trên nền đó.
+    const z = await page.evaluate(() => ({
+      title: Number(getComputedStyle(document.querySelector('[data-testid="shop-top-bar"]')!).zIndex),
+      back: Number(getComputedStyle(document.querySelector('[data-back-bar]')!).zIndex),
+    }));
+    expect(z.title).toBeGreaterThan(z.back);
   });
 
   test('"Thêm cả combo" bị từ chối cả lô: báo lỗi, giỏ không bị tải lại hay thay đổi', async ({ page, api }) => {
