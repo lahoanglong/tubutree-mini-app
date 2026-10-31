@@ -223,3 +223,10 @@ export function BannerCarousel(p: BannerCarouselProps): JSX.Element | null
 - Phủ spec: 8 thành phần (Task 3–9), gallery + route lazy dev + `notFound()` prod (Task 10), kiểm entry (Task 11), chữ qua `SHOP_COPY` (Task 1), a11y mục B (B1 Task 9, B3 Task 4, B4 Task 3, B6 Task 7, B7 Task 8). Không thay chỗ gọi, không đụng file P4.
 - Tên khớp giữa task: `countdownFrame/countdownDelay/countdownClockParts`, `bannerInterval/bannerShouldAutoplay/bannerNextIndex`, `ComboCardItem`, `GALLERY_*` dùng nhất quán.
 - Rủi ro đã biết: `ProductCardView` không có ảnh (ComboCard thêm `thumbnail?`); `PriceTag` chưa có `tone="deal"` (P4) nên giá combo dùng mặc định, "Tiết kiệm" mới mang màu deal; `IconName` là bảng 6 icon nhỏ để không phình entry khi `SectionHeader` vào Trang chủ (P6), icon khác truyền thẳng `LucideIcon`.
+
+## Ghi nhận khi làm
+
+- Entry Mini (vite build, `bundle-budget.cjs`): base `f299f8dcf` 676 KB raw / 212 KB gzip, sau gói 676 KB / 212 KB (±0), tổng 2024 KB cả hai; không có chunk hay chuỗi `ds-gallery` trong `www/`. Đo "trước" bằng cách đưa tạm `shop-copy.ts` và `app.tsx` về base rồi build, sau đó khôi phục.
+- Chụp 375px (`docs/2026-10-31-shop-redesign/screens/P5/{miniapp,web}-<mục>.png`, thư mục này nằm trong `.gitignore` nên không vào commit). Số đo từng biến thể bằng Playwright: hai app khớp, trừ ≤1,9px chiều rộng chữ do `body` của web bật `font-feature-settings: 'cv02','cv03','cv04','cv11'` (tắt đi thì rộng bằng Mini).
+- Sửa sau khi so ảnh: `SortBar` (4 tab + Lọc không vừa 343px, tab cuối bị che hẳn) nay mờ mép bằng `tubu-scroll-fade` và cuộn ngang tab đang chọn vào khung (không dùng `scrollIntoView` vì nó kéo cả trang); `ComboCard` không còn thừa hưởng cỡ chữ thân trang (Mini 15px, web 16px) làm lệch 1,5px.
+- Gallery Mini mở bằng `/ds-gallery` (đường dẫn, không phải `/#/ds-gallery`) trên Vite dev.
