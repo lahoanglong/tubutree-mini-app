@@ -31,7 +31,7 @@ export const browseText = {
   emptyBody: 'Tubu đang chuẩn bị thêm sản phẩm mới',
   loadMore: 'Xem thêm',
   categories: 'Danh mục',
-  sidebar: { all: 'Tất cả sản phẩm' },
+  sidebar: { all: 'Tất cả sản phẩm', moreBrands: 'Thêm', lessBrands: 'Thu gọn' },
   recentlyViewed: 'Đã xem gần đây',
   segments: {
     mom_baby: 'Cho mẹ & bé',

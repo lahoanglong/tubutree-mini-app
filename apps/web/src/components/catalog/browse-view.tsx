@@ -6,22 +6,24 @@ import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ChevronRight, Leaf, Search, X } from 'lucide-react';
 import type { CatalogPage, CategoryDTO, ProductCard as ProductCardData, ProductSuggestion } from '@tubutree/app-core/api/catalog';
-import { chipScope, findCategory } from '@tubutree/app-core/browse/category-tree';
+import { categoryTrail, chipScope, findCategory } from '@tubutree/app-core/browse/category-tree';
 import { browseSortOptions, sortForTab, sortTab, type SortTab } from '@tubutree/app-core/browse/sort';
 import { brandsQuery, browseQuery, categoriesQuery } from '@tubutree/app-core/queries/catalog';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { browseText } from '@/lib/browse-text';
 import { categoryEntries, segmentLabel, type CategoryEntry } from '@/lib/browse-categories';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { clearRecentSearches, pushRecentSearch, readRecentSearches } from '@/lib/recent-searches';
 import {
-  CLEAR_SEARCH_PATCH, EMPTY_SEARCH_STATE, PAGE_LIMIT, activeFilterChips, activeFilterCount, browseHref, isBrowseHub, isBrowseRoot,
+  BROWSE_PATH, CLEAR_SEARCH_PATCH, EMPTY_SEARCH_STATE, PAGE_LIMIT, activeFilterChips, activeFilterCount, browseHref, isBrowseHub, isBrowseRoot,
   toCatalogQuery, withListMode, type FilterDraft, type SearchState,
 } from '@/lib/search-state';
 import { useBrowseState } from '@/lib/use-browse-state';
 import { useSuggest } from '@/lib/use-suggest';
 import { GRID_PRODUCTS_WITH_FILTER } from '@/lib/product-grid';
 import { PRIORITY_CARDS, ProductGrid, SortBar } from '@/components/mini';
+import { ListingBreadcrumb, ListingLayout, type BreadcrumbItem } from '@/components/layouts/listing-layout';
 import { ErrorState } from '@/components/ui/error-state';
 import { ProductGridSkeleton } from '@/components/ui/skeleton';
 import { BrowsePager } from './browse-pager';
@@ -75,6 +77,9 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   const hubState = isBrowseHub(state, page);
   /** Mọi thay đổi khi đã ở danh sách: ở lại danh sách (gỡ chip cuối, về "Phổ biến" không đẩy khách về hub). */
   const updateList = (patch: Partial<SearchState>) => update(withListMode(patch));
+  const gridRef = useRef<HTMLDivElement>(null);
+  /** Số thẻ trước khi "Xem thêm": thẻ đầu của trang mới nhận focus khi dữ liệu về (không mất vị trí đang đọc). */
+  const focusFrom = useRef<number | null>(null);
 
   // Ô nhập theo `q` của URL mỗi khi URL đổi từ ngoài (Back, chạm từ khoá) — đặt trong render, không qua effect.
   const [draft, setDraft] = useState(state.q);
@@ -122,6 +127,22 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   });
   const firstPage = products.data?.pages[0];
   const list = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []);
+  const listLength = list.length;
+  const fetchingMore = products.isFetchingNextPage;
+  useEffect(() => {
+    const from = focusFrom.current;
+    if (from === null || fetchingMore) return;
+    focusFrom.current = null;
+    if (listLength > from) gridRef.current?.querySelector<HTMLElement>(`ul[data-testid="catalog-grid"] li:nth-child(${from + 1}) a`)?.focus();
+  }, [listLength, fetchingMore]);
+  const loadMore = () => {
+    // aria-disabled không chặn click như `disabled`: bỏ qua lần bấm khi đang tải để không gọi hai trang cùng lúc.
+    if (products.isFetchingNextPage) return;
+    focusFrom.current = list.length;
+    products.fetchNextPage().catch(() => {
+      focusFrom.current = null;
+    });
+  };
 
   // Chế độ gõ chỉ thay nội dung bằng gợi ý khi có gì để gợi ý (đang gõ chữ, hoặc ô trống nhưng có lịch sử tìm); khách mới
   // bấm vào ô trống vẫn thấy nguyên Danh mục/danh sách thay vì một trang trắng.
@@ -175,106 +196,136 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   const scope = state.category ? chipScope(categoriesQ.data, state.category) : null;
   // Trang nhãn hàng (/brand/:slug) chỉ có khi nhãn đã công khai; đây là liên kết duy nhất dẫn tới nó từ danh mục.
   const brandSlug = singleBrand ? (brandsQ.data?.find((b) => b.brand === singleBrand)?.slug ?? null) : null;
+  // h1 từ md: tên đang xem (danh mục chưa biết tên thì "Danh mục", không nhận nhầm là "Tất cả sản phẩm").
+  const h1Text = hubState
+    ? browseText.title
+    : state.q
+      ? fillCopy('browse.resultsFor', { q: state.q })
+      : (listTitle ?? (state.category || state.segment ? browseText.title : fillCopy('browse.allTitle')));
+  const nodes = state.category && !state.q ? categoryTrail(categoriesQ.data, state.category) : [];
+  const trail: BreadcrumbItem[] = [
+    { label: fillCopy('browse.crumbHome'), href: '/' },
+    { label: browseText.title, href: hubState ? undefined : BROWSE_PATH },
+    ...(hubState
+      ? []
+      : nodes.length > 0
+        ? nodes.map((n, i) => ({ label: n.name, href: i < nodes.length - 1 ? `${BROWSE_PATH}?category=${encodeURIComponent(n.id)}` : undefined }))
+        : [{ label: h1Text }]),
+  ];
+  const lastPageMeta = products.data?.pages.at(-1)?.meta;
+  const totalPages = lastPageMeta ? Math.max(1, Math.ceil(lastPageMeta.total / (lastPageMeta.limit || PAGE_LIMIT))) : page;
+
+  const searchForm = (
+    <form
+      role="search"
+      onSubmit={(e) => {
+        e.preventDefault();
+        commit(draft);
+      }}
+      className="flex items-center gap-2 pb-2 max-md:sticky max-md:top-0 max-md:z-20 max-md:-mx-4 max-md:bg-[var(--color-bg-canvas)] max-md:px-4 max-md:py-1.5 lg:max-w-2xl"
+    >
+      <div className="relative min-w-0 flex-1">
+        <label htmlFor="browse-q" className="sr-only">
+          {browseText.searchLabel}
+        </label>
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
+        <input
+          ref={inputRef}
+          id="browse-q"
+          type="search"
+          name="q"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onFocus={() => setEditing(true)}
+          maxLength={100}
+          placeholder={browseText.searchPlaceholder}
+          autoComplete="off"
+          enterKeyHint="search"
+          className={`${ui.field} pl-9 pr-11 max-md:rounded-full max-md:border-[var(--color-border-subtle)]`}
+        />
+        {draft !== '' && (
+          <button
+            type="button"
+            aria-label={browseText.clearSearch}
+            onClick={() => {
+              setDraft('');
+              if (state.q) update({ q: '' });
+              inputRef.current?.focus();
+            }}
+            className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-stone-600"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
+      </div>
+      {editing ? (
+        <button type="button" onClick={leaveSearchField} className={`${ui.btnText} ${phoneBrandText}`}>
+          {browseText.cancel}
+        </button>
+      ) : (
+        <PhoneCartButton />
+      )}
+    </form>
+  );
+
+  const showList = !showSuggest && !hubState;
 
   return (
     // `--sort-bar-top`: SortBar dính ngay dưới hàng ô tìm dính ở điện thoại (58px, số đo của Mini App), dưới thanh đầu từ md. Phải là chuỗi lớp nguyên văn để Tailwind thấy.
     <div data-browse-scope className="max-md:[--sort-bar-top:58px] md:[--sort-bar-top:var(--header-h)]">
-      <h1 className={`${ui.pageTitle} mb-3 max-md:sr-only`}>{browseText.title}</h1>
-      <form
-        role="search"
-        onSubmit={(e) => {
-          e.preventDefault();
-          commit(draft);
-        }}
-        className="flex items-center gap-2 pb-2 max-md:sticky max-md:top-0 max-md:z-20 max-md:-mx-4 max-md:bg-[var(--color-bg-canvas)] max-md:px-4 max-md:py-1.5 lg:max-w-2xl"
-      >
-        <div className="relative min-w-0 flex-1">
-          <label htmlFor="browse-q" className="sr-only">
-            {browseText.searchLabel}
-          </label>
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
-          <input
-            ref={inputRef}
-            id="browse-q"
-            type="search"
-            name="q"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onFocus={() => setEditing(true)}
-            maxLength={100}
-            placeholder={browseText.searchPlaceholder}
-            autoComplete="off"
-            enterKeyHint="search"
-            className={`${ui.field} pl-9 pr-11 max-md:rounded-full max-md:border-[var(--color-border-subtle)]`}
-          />
-          {draft !== '' && (
-            <button
-              type="button"
-              aria-label={browseText.clearSearch}
-              onClick={() => {
-                setDraft('');
-                if (state.q) update({ q: '' });
-                inputRef.current?.focus();
+      <ListingLayout
+        breadcrumb={<ListingBreadcrumb trail={trail} />}
+        title={h1Text}
+        toolbar={searchForm}
+        sidebar={
+          showList ? (
+            <FilterSidebar
+              state={state}
+              entries={entries}
+              tree={categoriesQ.data}
+              brands={brandsQ.data ?? []}
+              onPickCategory={pickCategory}
+              onClearCategory={() => {
+                leaveSearchField();
+                updateList({ category: undefined, segment: undefined });
               }}
-              className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-stone-600"
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </button>
-          )}
-        </div>
-        {editing ? (
-          <button type="button" onClick={leaveSearchField} className={`${ui.btnText} ${phoneBrandText}`}>
-            {browseText.cancel}
-          </button>
-        ) : (
-          <PhoneCartButton />
-        )}
-      </form>
-
-      {showSuggest ? (
-        <SuggestList
-          draft={draft}
-          recent={recent}
-          categories={entries}
-          products={suggest.products}
-          loading={suggest.isFetching}
-          error={suggest.isError}
-          onRetry={suggest.refetch}
-          onPickKeyword={commit}
-          onPickCategory={pickCategory}
-          onPickProduct={pickSuggestion}
-          onClearRecent={() => {
-            clearRecentSearches();
-            setRecent([]);
-          }}
-        />
-      ) : hubState ? (
-        <BrowseHub
-          entries={entries}
-          categoriesLoading={categoriesQ.isLoading}
-          brands={brandsQ.data}
-          initialBestSellers={bestSellers}
-          onPickCategory={pickHubCategory}
-          onPickAll={() => openFromHub({ all: true })}
-          onPickBrand={(brand) => openFromHub({ brands: [brand] })}
-        />
-      ) : (
-        <div className="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start lg:gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
-          <FilterSidebar
-            state={state}
-            entries={entries}
-            brands={brandsQ.data ?? []}
+              onPatch={(patch) => {
+                leaveSearchField();
+                updateList(patch);
+              }}
+            />
+          ) : undefined
+        }
+      >
+        {showSuggest ? (
+          <SuggestList
+            draft={draft}
+            recent={recent}
+            categories={entries}
+            products={suggest.products}
+            loading={suggest.isFetching}
+            error={suggest.isError}
+            onRetry={suggest.refetch}
+            onPickKeyword={commit}
             onPickCategory={pickCategory}
-            onClearCategory={() => {
-              leaveSearchField();
-              updateList({ category: undefined, segment: undefined });
-            }}
-            onPatch={(patch) => {
-              leaveSearchField();
-              updateList(patch);
+            onPickProduct={pickSuggestion}
+            onClearRecent={() => {
+              clearRecentSearches();
+              setRecent([]);
             }}
           />
-          <div className="min-w-0">
+        ) : hubState ? (
+          <BrowseHub
+            entries={entries}
+            categoriesLoading={categoriesQ.isLoading}
+            brands={brandsQ.data}
+            initialBestSellers={bestSellers}
+            onPickCategory={pickHubCategory}
+            onPickAll={() => openFromHub({ all: true })}
+            onPickBrand={(brand) => openFromHub({ brands: [brand] })}
+          />
+        ) : (
+          <>
             {/* Dính ở khung bọc, không ở chính SortBar: cha của phần tử dính phải cao bằng cả danh sách. Từ lg cột lọc đã có nên nút Lọc ẩn đi. */}
             <div className="sticky top-[var(--sort-bar-top,0px)] z-[2] -mx-4 md:mx-0 lg:[&>div>button:last-child]:hidden">
               <SortBar
@@ -335,7 +386,9 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
                 <EmptyResults q={state.q} root={root} onClear={() => updateList(CLEAR_SEARCH_PATCH)} />
               ) : (
                 <>
-                  <ProductGrid items={list} variant="grid" className={GRID_PRODUCTS_WITH_FILTER} priorityCount={PRIORITY_CARDS} />
+                  <div ref={gridRef}>
+                    <ProductGrid items={list} variant="grid" className={GRID_PRODUCTS_WITH_FILTER} priorityCount={PRIORITY_CARDS} />
+                  </div>
                   {/* Lỗi khi ĐÃ có dữ liệu ("Xem thêm" hoặc làm mới nền thất bại): giữ nguyên danh sách, báo và thử lại tại chỗ. */}
                   {products.isError && (
                     <div role="alert" className="flex flex-wrap items-center justify-center gap-2 pt-4">
@@ -353,14 +406,12 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
                     </div>
                   )}
                   {products.hasNextPage && !products.isFetchNextPageError && (
-                    <div className="flex justify-center pt-4">
+                    <div className="flex justify-center pt-4 lg:hidden">
                       <button
                         type="button"
-                        disabled={products.isFetchingNextPage}
-                        onClick={() => {
-                          products.fetchNextPage().catch(() => undefined);
-                        }}
-                        className={`${ui.btnSecondary} min-w-40`}
+                        aria-disabled={products.isFetchingNextPage || undefined}
+                        onClick={loadMore}
+                        className={`${ui.btnSecondary} min-w-40 aria-disabled:opacity-60`}
                       >
                         {browseText.loadMore}
                       </button>
@@ -369,7 +420,8 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
                   <BrowsePager
                     state={state}
                     startPage={startPage}
-                    lastPage={products.data?.pages.at(-1)?.meta.page ?? page}
+                    lastPage={lastPageMeta?.page ?? page}
+                    totalPages={totalPages}
                     hasNext={products.hasNextPage}
                   />
                 </>
@@ -377,9 +429,9 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
             </section>
             {/* Tìm/lọc không ra gì vẫn cho khách lối đi tiếp. */}
             {noResults && <RecentlyViewedRail />}
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </ListingLayout>
 
       <FilterSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} state={state} brands={brandsQ.data ?? []} onApply={applyFilters} />
     </div>

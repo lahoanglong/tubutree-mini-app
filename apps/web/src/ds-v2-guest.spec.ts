@@ -53,6 +53,7 @@ const CORE: string[] = [
 ];
 const SHOP: string[] = [
   'app/san-pham/page.tsx',
+  'components/layouts/listing-layout.tsx',
   'components/catalog/active-filters.tsx',
   'components/catalog/brand-grid.tsx',
   'components/catalog/browse-hub.tsx',

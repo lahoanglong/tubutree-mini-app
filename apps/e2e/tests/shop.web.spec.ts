@@ -63,7 +63,7 @@ test.describe('Web khách: danh mục /san-pham', () => {
     await page.goto('/?q=dau+goi&utm_source=zalo');
     await refetchStale(page, api, 'GET', '/products');
     await expect(page).toHaveURL(/\/san-pham\?q=dau(\+|%20)goi&utm_source=zalo/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Danh mục' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Kết quả cho "dau goi"' })).toBeAttached();
     const call = api.callsTo('GET', '/products').at(-1)!.query;
     expect(call.get('q')).toBe('dau goi');
   });

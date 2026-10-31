@@ -18,7 +18,8 @@ export function ListHeading({ title, count, isLoading }: ListHeadingProps) {
   return (
     <div style={{ padding: '4px 0', minHeight: 28, boxSizing: 'border-box', display: 'flex', alignItems: 'baseline', gap: 8 }}>
       {title && (
-        <Heading variant="title-sm" as="h2" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        // Từ md tên đã là h1 của trang (ListingLayout): chỉ giữ ở điện thoại, nơi Mini App không có tiêu đề trang.
+        <Heading variant="title-sm" as="h2" className="md:hidden" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {title}
         </Heading>
       )}
@@ -26,6 +27,7 @@ export function ListHeading({ title, count, isLoading }: ListHeadingProps) {
         aria-live="polite"
         aria-atomic="true"
         data-testid="result-count"
+        className="md:!ml-0"
         style={{ margin: 0, flex: '0 0 auto', whiteSpace: 'nowrap', marginLeft: title ? 'auto' : 0 }}
       >
         <Text variant="body-sm" tone="secondary">

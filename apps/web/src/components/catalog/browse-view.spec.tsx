@@ -181,7 +181,7 @@ describe('BrowseView — danh sách và trạng thái URL', () => {
     nav.search = LIST;
     const { container } = mount();
     await flush();
-    expect(container.querySelector('h1')!.textContent).toBe('Danh mục');
+    expect(container.querySelector('h1')!.textContent).toBe('Tất cả sản phẩm');
     expect(container.textContent).toContain('Sản phẩm 1');
     expect(container.querySelector('[data-testid="result-count"]')!.textContent).toBe('2 sản phẩm');
     expect(container.querySelector('section[aria-label="Danh mục"]')).toBeNull();
@@ -482,7 +482,7 @@ describe('BrowseView — liên kết phân trang cho crawler', () => {
   const seeded = (startPage: number, total: number) => ({
     urlKey: '', startPage, page: { ...pageOf([product(7)], total, startPage, 20), filtersIgnored: false },
   });
-  const hrefs = (root: ParentNode) => [...root.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Phân trang"] a')].map((a) => [a.getAttribute('rel'), a.getAttribute('href')]);
+  const hrefs = (root: ParentNode) => [...root.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Phân trang"] a[rel]')].map((a) => [a.getAttribute('rel'), a.getAttribute('href')]);
 
   it('trang 1 còn trang sau: HTML có thẻ a rel=next tới ?page=2, giữ bộ lọc, không có liên kết trang trước', async () => {
     nav.search = 'brand=Tubu';
@@ -524,6 +524,108 @@ describe('BrowseView — liên kết phân trang cho crawler', () => {
   });
 });
 
+describe('BrowseView — khung danh sách cho máy tính (tiêu đề, breadcrumb)', () => {
+  const crumbs = (root: ParentNode) => [...root.querySelectorAll('nav[aria-label="Breadcrumb"] li')].map((li) => li.textContent);
+
+  it('h1 theo trạng thái: hub "Danh mục", cả danh sách "Tất cả sản phẩm", từ khoá, danh mục con, phân khúc, một nhãn', async () => {
+    routes['/categories'] = () => TREE;
+    const h1 = async (search: string) => {
+      nav.search = search;
+      const view = mount({ brands: BRANDS });
+      await flush();
+      const text = view.container.querySelector('h1')!.textContent;
+      view.unmount();
+      return text;
+    };
+    expect(await h1('')).toBe('Danh mục');
+    expect(await h1('all=1')).toBe('Tất cả sản phẩm');
+    expect(await h1('q=nuoc')).toBe('Kết quả cho "nuoc"');
+    expect(await h1('category=c-nang')).toBe('Chống nắng');
+    expect(await h1('segment=eco')).toBe('Sống xanh');
+    expect(await h1('brand=Tubu')).toBe('Tubu');
+  });
+
+  it('h1 có tên danh mục thì tiêu đề h2 của danh sách nhường chỗ (ẩn từ md), số kết quả đứng đầu hàng từ md', async () => {
+    nav.search = 'category=c-goi';
+    const { container } = mount({ categories: CATEGORIES });
+    await flush();
+    const h2 = [...container.querySelectorAll('h2')].find((h) => h.textContent === 'Dầu gội')!;
+    expect(h2.className).toContain('md:hidden');
+    expect(container.querySelector<HTMLElement>('[data-testid="result-count"]')!.className).toContain('md:!ml-0');
+  });
+
+  it('breadcrumb "Trang chủ › Danh mục › cha › con" từ cây danh mục; mục cuối là trang hiện tại', async () => {
+    nav.search = 'category=c-nang';
+    routes['/categories'] = () => TREE;
+    const { container } = mount();
+    await flush();
+    expect(crumbs(container)).toEqual(['Trang chủ', 'Danh mục', 'Chăm sóc da', 'Chống nắng']);
+    const links = [...container.querySelectorAll('nav[aria-label="Breadcrumb"] a')].map((a) => a.getAttribute('href'));
+    expect(links).toEqual(['/', '/san-pham', '/san-pham?category=c-da']);
+    expect(container.querySelector('nav[aria-label="Breadcrumb"] [aria-current="page"]')!.textContent).toBe('Chống nắng');
+  });
+
+  it('hub: "Trang chủ › Danh mục"; danh sách tất cả và tìm kiếm có thêm mục cuối là tiêu đề của trang', async () => {
+    const hub = mount();
+    await flush();
+    expect(crumbs(hub.container)).toEqual(['Trang chủ', 'Danh mục']);
+    hub.unmount();
+    nav.search = 'q=nuoc';
+    const search = mount();
+    await flush();
+    expect(crumbs(search.container)).toEqual(['Trang chủ', 'Danh mục', 'Kết quả cho "nuoc"']);
+  });
+
+  it('có cột lọc ở danh sách (từ lg) và không có ở hub', async () => {
+    nav.search = LIST;
+    const list = mount();
+    await flush();
+    expect(list.container.querySelector('aside[data-testid="filter-sidebar"]')).not.toBeNull();
+    list.unmount();
+    nav.search = '';
+    const hub = mount();
+    await flush();
+    expect(hub.container.querySelector('aside[data-testid="filter-sidebar"]')).toBeNull();
+  });
+});
+
+describe('BrowseView — phân trang số từ lg', () => {
+  const seeded = (startPage: number, total: number) => ({
+    urlKey: '', startPage, page: { ...pageOf([product(7)], total, startPage, 20), filtersIgnored: false },
+  });
+  const numbers = (root: ParentNode) => [...root.querySelectorAll<HTMLElement>('nav[aria-label="Phân trang"] ol > li')].map((li) => li.textContent);
+
+  it('trang 5 trên 9: 1 … 4 5 6 … 9 (số là liên kết thật; trang hiện tại có aria-current; mỗi số có tên "Trang n")', async () => {
+    nav.search = 'page=5';
+    const { container } = mount({ initial: seeded(5, 180) });
+    const list = container.querySelector('nav[aria-label="Phân trang"] ol')!;
+    expect(list.className).toContain('hidden');
+    expect(list.className).toContain('lg:flex');
+    expect(numbers(container)).toEqual(['1', '…', '4', '5', '6', '…', '9']);
+    const link = (n: number) => list.querySelector<HTMLAnchorElement>(`a[aria-label="Trang ${n}"]`)!;
+    expect(link(1).getAttribute('href')).toBe('/san-pham?all=1');
+    expect(link(4).getAttribute('href')).toBe('/san-pham?page=4');
+    expect(link(9).getAttribute('href')).toBe('/san-pham?page=9');
+    expect(link(5).getAttribute('aria-current')).toBe('page');
+    expect(link(4).getAttribute('aria-current')).toBeNull();
+  });
+
+  it('giữ bộ lọc trong liên kết; trang 1 của danh sách đã lọc không cần all=1', async () => {
+    nav.search = 'brand=Tubu&page=2';
+    const { container } = mount({ initial: { ...seeded(2, 100), urlKey: 'brand=Tubu' } });
+    const hrefOf = (n: number) => container.querySelector<HTMLAnchorElement>(`a[aria-label="Trang ${n}"]`)!.getAttribute('href');
+    expect(hrefOf(1)).toBe('/san-pham?brand=Tubu');
+    expect(hrefOf(3)).toBe('/san-pham?brand=Tubu&page=3');
+  });
+
+  it('nút Trang trước / Trang sau cũ ẩn từ lg (đã có phân trang số)', async () => {
+    nav.search = 'page=3';
+    const { container } = mount({ initial: seeded(3, 120) });
+    const prev = container.querySelector<HTMLElement>('a[rel="prev"]')!;
+    expect(prev.parentElement!.className).toContain('lg:hidden');
+  });
+});
+
 describe('BrowseView — tải thêm, rỗng, lỗi', () => {
   it('còn trang sau: "Xem thêm" tải trang 2 và nối vào cuối, không trùng; hết trang thì ẩn nút', async () => {
     nav.search = LIST;
@@ -535,6 +637,41 @@ describe('BrowseView — tải thêm, rỗng, lỗi', () => {
     expect(productCalls().at(-1)).toEqual({ page: 2, limit: 20 });
     expect(container.querySelectorAll('a[href^="/san-pham/sp-"]')).toHaveLength(3);
     expect(buttonByName(container, 'Xem thêm')).toBeNull();
+  });
+
+  it('"Xem thêm" khi đang tải: aria-disabled (không disabled, vẫn focus được), bấm lần hai bị bỏ qua, ẩn từ lg', async () => {
+    nav.search = LIST;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    routes['/products'] = (q) => (Number(q?.page) === 2 ? gate.then(() => pageOf([product(3), product(4)], 4, 2, 2)) : pageOf([product(1), product(2)], 4, 1, 2));
+    const { container } = mount();
+    await flush();
+    const more = () => buttonByName(container, 'Xem thêm')!;
+    expect(more().parentElement!.className).toContain('lg:hidden');
+    expect(more().getAttribute('aria-disabled')).toBeNull();
+    click(more());
+    await flush();
+    expect(more().getAttribute('aria-disabled')).toBe('true');
+    expect(more().hasAttribute('disabled')).toBe(false);
+    click(more());
+    expect(productCalls().filter((q) => q?.page === 2)).toHaveLength(1);
+    release();
+    await flush(8);
+    expect(container.querySelectorAll('a[href^="/san-pham/sp-"]').length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('"Xem thêm" xong: focus chuyển vào liên kết của thẻ đầu trang mới (không mất focus về body)', async () => {
+    nav.search = LIST;
+    routes['/products'] = (q) => (Number(q?.page) === 2 ? pageOf([product(3), product(4)], 4, 2, 2) : pageOf([product(1), product(2)], 4, 1, 2));
+    const { container } = mount();
+    await flush();
+    const trigger = buttonByName(container, 'Xem thêm')!;
+    act(() => trigger.focus());
+    click(trigger);
+    await flush(8);
+    const third = container.querySelector('ul[data-testid="catalog-grid"] li:nth-child(3) a') as HTMLElement;
+    expect(third.getAttribute('href')).toBe('/san-pham/sp-3');
+    expect(document.activeElement).toBe(third);
   });
 
   it('trang đầu do server tải là trang 2: "Xem thêm" tải tiếp trang 3', async () => {
