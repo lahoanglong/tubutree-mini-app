@@ -84,7 +84,7 @@ export function StorefrontBody({ storefront: sf, badgeLabel, intro }: Storefront
         {intro}
         <div
           ref={tabsRef}
-          className="sticky z-[3] bg-[var(--color-bg-canvas)] px-4 pb-2 pt-3 md:static md:px-0"
+          className="sticky z-[3] bg-[var(--color-bg-canvas)] px-4 pb-2 pt-3 md:static md:px-0 lg:max-w-md"
           style={{ top: STICKY_TOP, minHeight: TABS_HEIGHT }}
         >
           <SegmentedTabs items={tabs} value={tab} onChange={(k) => openTab(k)} />

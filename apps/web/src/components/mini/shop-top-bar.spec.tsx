@@ -36,6 +36,8 @@ describe('ShopTopBar (web)', () => {
     mount(<ShopTopBar title="Shop" threshold={100} />);
     expect(bar().style.pointerEvents).toBe('none');
     expect(bar().className).toContain('md:hidden');
+    // style nội tuyến `display` sẽ thắng `md:hidden` và thanh hiện cả ở máy tính
+    expect(bar().style.display).toBe('');
   });
 
   it('đặt đúng vị trí ban đầu khi trang đã cuộn sẵn (quay lại từ trang khác)', () => {

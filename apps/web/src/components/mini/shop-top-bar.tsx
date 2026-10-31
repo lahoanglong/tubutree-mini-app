@@ -13,7 +13,7 @@ export interface ShopTopBarProps {
 /**
  * Tên shop trên thanh đầu khi khách cuộn qua bìa. Nền đặc và nút lùi là của `BackButton` (zIndex 39 và 40); thanh này chỉ thêm chữ ở
  * giữa, chừa chỗ cho nút lùi và không bắt chạm. Chỉ có ở khổ điện thoại (từ md trở lên không có `BackButton`, trang tự có thanh
- * đầu của web). Web cuộn ở `window`, khác Mini App cuộn ở `.zaui-page`.
+ * đầu của web); `display` nằm ở class chứ không ở style vì style nội tuyến sẽ thắng `md:hidden`. Web cuộn ở `window`, khác Mini App cuộn ở `.zaui-page`.
  */
 export function ShopTopBar({ title, threshold = SHOP_COVER_HEIGHT - 56 }: ShopTopBarProps) {
   const [shown, setShown] = useState(false);
@@ -26,11 +26,11 @@ export function ShopTopBar({ title, threshold = SHOP_COVER_HEIGHT - 56 }: ShopTo
   return (
     <div
       data-testid="shop-top-bar"
-      className="md:hidden"
+      className="flex md:hidden"
       aria-hidden={!shown}
       style={{
         position: 'fixed', top: 0, left: 0, right: 0, height: 'calc(var(--safe-top) + 56px)', zIndex: 40,
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 64px',
+        alignItems: 'flex-end', justifyContent: 'center', padding: '0 64px',
         opacity: shown ? 1 : 0, transition: 'opacity 150ms', pointerEvents: 'none',
       }}
     >
