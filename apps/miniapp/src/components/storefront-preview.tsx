@@ -15,7 +15,7 @@ export function StorefrontPreview({ sf }: { sf: StorefrontEdit }) {
 
   return (
     <div data-testid="storefront-preview" style={{ background: 'var(--color-bg-canvas)', borderRadius: 'var(--radius-card)', overflow: 'hidden', border: '1px solid var(--color-border-subtle)' }}>
-      <div style={{ height: 72, background: cover ? `url("${cover.replace(/["\\\r\n]/g, encodeURIComponent)}") center/cover` : 'var(--forest-700)' }} />
+      <div style={{ height: 72, background: cover ? `url("${cover.replace(/["\\\r\n]/g, encodeURIComponent)}") center/cover` : 'var(--color-bg-cover)' }} />
       <div style={{ padding: '0 12px 12px', marginTop: -24 }}>
         <div
           style={{

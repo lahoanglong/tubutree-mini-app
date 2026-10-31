@@ -19,6 +19,9 @@
   --dur-slow: var(--p-dur-emphasize);
   --ease-out: var(--p-ease-out);
   --font-body: var(--font-ui);
+  --dur-press: var(--p-dur-press);
+  --dur-release: var(--p-dur-release);
+  --ease-spring: var(--p-ease-spring);
 
   /* Trắng/hổ phách trong suốt: không có token v2 tương ứng (--color-bg-scrim* là nền mờ tối/sáng khác
    * mục đích), nên định nghĩa tại đây để code chỉ tham chiếu tên, không rải rgba() thô. */
@@ -109,15 +112,59 @@ body.with-back-btn .page.page-bleed {
   font-family: var(--font-body);
 }
 
+/* ── Vòng focus (WCAG 2.4.7, 1.4.11): ZaUI đặt `.zaui-btn:focus{outline:0}` và chỉ đổi nền khi :focus-visible (độ khác nền 1,1–1,3:1),
+   nên nút DS không có vòng nhìn thấy. Quy tắc chung phủ cả tim, chip và nút tự vẽ; thẻ sản phẩm có luật riêng ở `.tubu-tile-link` bên dưới. ── */
+:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+.zaui-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* ── Thanh dính (ô tìm, thanh đáy, StickyActionBar) che phần tử đang có focus khi Tab (WCAG 2.4.11): chừa chỗ cho trình duyệt
+   khi cuộn phần tử vào khung. `.zaui-page` là khung cuộn của Page. ── */
+.zaui-page {
+  scroll-padding-top: calc(var(--safe-top) + 64px);
+  scroll-padding-bottom: calc(72px + var(--safe-bottom));
+}
+.tubu-scroll-pad-sticky-bar {
+  scroll-padding-bottom: calc(96px + var(--safe-bottom));
+}
+
 /* ── Pressable: phản hồi chạm cho mọi element bấm được ── */
 .tubu-press {
-  transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
+  transition: transform var(--p-dur-release) var(--p-ease-out);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
+/* Nhấn nhanh, thả chậm; không đổi opacity (ảnh mờ 10% làm thẻ nhũn). Nút/chip/icon co 0,96, thẻ co nhẹ hơn. */
 .tubu-press:active {
-  transform: scale(0.97);
-  opacity: 0.9;
+  transform: scale(0.96);
+  transition-duration: var(--p-dur-press);
+}
+.tubu-press-card {
+  transition: transform var(--p-dur-release) var(--p-ease-out);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tubu-press-card:active {
+  transform: scale(0.985);
+  transition-duration: var(--p-dur-press);
+}
+
+/* ── Tab đang chọn của thanh dưới: icon nảy .88 → 1 (đã chuyển tab). Giảm chuyển động: quy tắc chung cuối file đưa về tức thì. ── */
+@keyframes tubu-tab-pop {
+  0% {
+    transform: scale(0.88);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.tubu-tab-pop {
+  animation: tubu-tab-pop 220ms var(--p-ease-spring) both;
 }
 
 /* ── Card tiêu chuẩn & Claymorphism — UI/UX Pro Max ── */
@@ -465,6 +512,11 @@ body.with-back-btn .page.page-bleed {
  */
 .tubu-btn {
   max-width: 100%;
+  transition: transform var(--p-dur-release) var(--p-ease-out);
+}
+.tubu-btn:active {
+  transform: scale(0.97);
+  transition-duration: var(--p-dur-press);
 }
 .tubu-btn .zaui-btn-container {
   max-width: 100%;

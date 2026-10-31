@@ -1,4 +1,4 @@
-import { act, render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ navigate: vi.fn(), pathname: '/', count: 0, dot: null as null | 'check-in' | 'coupon-expiring' }));
@@ -36,6 +36,28 @@ describe('BottomNav', () => {
     expect(nav).not.toHaveTextContent('Đơn hàng');
     expect(nav).not.toHaveTextContent('Ví & HH');
     expect(nav).toHaveStyle({ height: 'calc(60px + var(--safe-bottom))' });
+  });
+
+  it('tab đang chọn không chỉ khác màu (WCAG 1.4.1): icon tô 16% + nảy; nhãn 12px nét 600, tab thường nét 500', () => {
+    mocks.pathname = '/offers';
+    render(<BottomNav />);
+    const active = screen.getByRole('button', { name: 'Ưu đãi' });
+    const idle = screen.getByRole('button', { name: 'Cá nhân' });
+    expect(active.querySelector('svg')!.getAttribute('fill-opacity')).toBe('0.16');
+    expect(active.querySelector('.tubu-tab-pop')).not.toBeNull();
+    expect(idle.querySelector('svg')!.getAttribute('fill-opacity')).toBeNull();
+    expect(idle.querySelector('.tubu-tab-pop')).toBeNull();
+    const label = (el: HTMLElement, text: string) => within(el).getByText(text);
+    expect(label(active, 'Ưu đãi').style.fontSize).toBe('var(--type-label-size)');
+    expect(label(active, 'Ưu đãi').style.fontWeight).toBe('600');
+    expect(label(idle, 'Cá nhân').style.fontWeight).toBe('500');
+  });
+
+  it('mép trên là --elevation-nav, không còn borderTop chồng bóng cũ', () => {
+    render(<BottomNav />);
+    const nav = screen.getByRole('navigation', { name: 'Điều hướng chính' });
+    expect(nav.style.boxShadow).toBe('var(--elevation-nav)');
+    expect(nav.style.borderTop).toBe('');
   });
 
   it('mỗi tab tự đảm bảo vùng bấm cao ≥44px (đo từng tab, không chỉ thanh nav)', () => {

@@ -58,3 +58,29 @@ describe('mini.css không đổi giao diện máy tính', () => {
     expect(phone).toMatch(/body\s*\{[^}]*overflow-x:\s*clip/);
   });
 });
+
+describe('mini.css: phản hồi nhấn (polish PL-11) khớp Mini App', () => {
+  it('có .tubu-press-card (co 0,985) và .tubu-btn:active (co 0,97); không luật :active nào đổi opacity', () => {
+    expect(css).toMatch(/\.tubu-press:active\s*\{[^}]*scale\(0\.96\)/);
+    expect(css).toMatch(/\.tubu-press-card:active\s*\{[^}]*scale\(0\.985\)/);
+    expect(css).toMatch(/\.tubu-btn:active\s*\{[^}]*scale\(0\.97\)/);
+    const activeBlocks = [...strip(css).matchAll(/[^{}]*:active[^{}]*\{([^}]*)\}/g)].map((m) => m[1]!);
+    expect(activeBlocks.filter((b) => /opacity/.test(b))).toEqual([]);
+  });
+
+  it('giảm chuyển động: nhấn nút/thẻ không còn chuyển động dài', () => {
+    const reduced = [...strip(css).matchAll(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
+    expect(reduced).toMatch(/\.tubu-press-card/);
+    expect(reduced).toMatch(/\.tubu-btn/);
+  });
+});
+
+describe('mini.css: icon nảy khi chọn tab (polish PL-10)', () => {
+  it('có @keyframes tubu-tab-pop (.88 → 1) và .tubu-tab-pop 220ms easing spring; giảm chuyển động đưa về tức thì', () => {
+    expect(css).toMatch(/@keyframes tubu-tab-pop\s*\{[^}]*0%\s*\{[^}]*scale\(0\.88\)[^}]*\}[^}]*100%\s*\{[^}]*scale\(1\)/);
+    expect(css).toMatch(/\.tubu-tab-pop\s*\{[^}]*animation:[^;}]*tubu-tab-pop 220ms var\(--p-ease-spring\)/);
+    const reduced = [...strip(css).matchAll(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
+    expect(reduced).toMatch(/\.tubu-tab-pop/);
+  });
+});
+

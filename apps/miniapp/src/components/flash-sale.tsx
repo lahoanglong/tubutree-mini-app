@@ -151,7 +151,7 @@ export function FlashSale() {
               }}
               style={CARD_STYLE}
             >
-              <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--stone-100)' }}>
+              <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--color-bg-media)' }}>
                 <ProductImage src={item.thumbnail} brand="" />
                 {pct > 0 && (
                   <Badge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
@@ -212,7 +212,7 @@ function UpcomingFlashCard({
 
   return (
     <div className="tubu-press" role="link" {...linkKeyboardProps()} onClick={onOpen} style={CARD_STYLE}>
-      <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--stone-100)' }}>
+      <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--color-bg-media)' }}>
         <ProductImage src={item.thumbnail} brand="" />
         {pct > 0 && (
           <Badge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>

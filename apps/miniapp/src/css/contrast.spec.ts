@@ -45,3 +45,32 @@ describe('chữ trắng trên ô gradient nhãn ở Hành trình nguyên liệu 
     expect(low).toEqual([]);
   });
 });
+
+describe('cặp màu commerce của gói tokens-a11y đạt 4,5:1 (chữ) — WCAG 1.4.3', () => {
+  const pairs: [string, string][] = [
+    ['--color-text-price-deal', '--color-bg-surface'],
+    ['--color-text-price-deal', '--color-promo-bg'],
+    ['--color-text-price-deal', '--color-bg-canvas'],
+    ['--color-flash-fg', '--color-flash-bg'],
+    ['--color-flash-solid-fg', '--color-flash-solid-bg'],
+    ['--color-countdown-fg', '--color-countdown-bg'],
+    ['--color-voucher-fg', '--color-voucher-bg'],
+    ['--color-voucher-stub-fg', '--color-voucher-stub-bg'],
+    ['--color-voucher-ship-fg', '--color-voucher-ship-bg'],
+    ['--color-voucher-shop-fg', '--color-voucher-shop-bg'],
+    ['--color-voucher-shop-stub-fg', '--color-voucher-shop-stub-bg'],
+    ['--color-rank-fg', '--color-rank-1-bg'],
+    ['--color-rank-fg', '--color-rank-2-bg'],
+    ['--color-rank-fg', '--color-rank-3-bg'],
+    ['--color-rank-n-fg', '--color-rank-n-bg'],
+    ['--color-verified-fg', '--color-verified-bg'],
+  ];
+
+  it.each(pairs)('%s trên %s', (fg, bg) => {
+    expect(ratio(tokenRgb(fg), tokenRgb(bg))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('giá deal là cam đậm #9A5200, không phải đỏ (thiết kế §4 Q2)', () => {
+    expect(tokenRgb('--color-text-price-deal')).toEqual([0x9a, 0x52, 0x00]);
+  });
+});

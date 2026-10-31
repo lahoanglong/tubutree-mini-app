@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { BottomSheet } from './bottom-sheet';
 
@@ -97,4 +97,87 @@ describe('BottomSheet', () => {
     await new Promise((r) => setTimeout(r, 400));
     expect(screen.getByText('Nội dung')).toBeInTheDocument();
   });
+
+  describe('hộp thoại thật (a11y A3: WCAG 4.1.2, 2.4.3)', () => {
+    const key = (k: string, init: KeyboardEventInit = {}) =>
+      act(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, ...init }));
+      });
+
+    it('có role=dialog aria-modal, tên lấy từ tiêu đề h2, tabIndex -1', () => {
+      render(<BottomSheet open title="Chọn mã" onClose={() => {}}>nội dung</BottomSheet>);
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveAttribute('aria-modal', 'true');
+      expect(dialog).toHaveAttribute('tabindex', '-1');
+      const h2 = screen.getByRole('heading', { level: 2, name: 'Chọn mã' });
+      expect(h2.id).not.toBe('');
+      expect(dialog.getAttribute('aria-labelledby')).toBe(h2.id);
+      expect(screen.getByRole('dialog', { name: 'Chọn mã' })).toBe(dialog);
+    });
+
+    it('không có tiêu đề thì không gắn aria-labelledby trỏ vào chỗ trống', () => {
+      render(<BottomSheet open onClose={() => {}}>nội dung</BottomSheet>);
+      expect(screen.getByRole('dialog')).not.toHaveAttribute('aria-labelledby');
+    });
+
+    it('mở xong focus nằm ở nút Đóng; không đóng được thì focus vào chính khung', () => {
+      const { unmount } = render(<BottomSheet open title="t" onClose={() => {}}>y</BottomSheet>);
+      expect(screen.getByRole('button', { name: /đóng/i })).toHaveFocus();
+      unmount();
+      render(<BottomSheet open title="t" dismissible={false} onClose={() => {}}>y</BottomSheet>);
+      expect(screen.getByRole('dialog')).toHaveFocus();
+    });
+
+    it('Esc gọi onClose một lần', () => {
+      const onClose = vi.fn();
+      render(<BottomSheet open title="t" onClose={onClose}>y</BottomSheet>);
+      key('Escape');
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('dismissible=false: Esc không đóng (Review Focus 1)', () => {
+      const onClose = vi.fn();
+      render(<BottomSheet open title="t" dismissible={false} onClose={onClose}>y</BottomSheet>);
+      key('Escape');
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('hai sheet chồng nhau: Esc chỉ đóng sheet mở sau (trên cùng)', () => {
+      const lower = vi.fn();
+      const upper = vi.fn();
+      render(
+        <>
+          <BottomSheet open title="dưới" onClose={lower}>a</BottomSheet>
+          <BottomSheet open title="trên" onClose={upper}>b</BottomSheet>
+        </>,
+      );
+      key('Escape');
+      expect(upper).toHaveBeenCalledTimes(1);
+      expect(lower).not.toHaveBeenCalled();
+    });
+
+    it('Tab ở phần tử cuối nhảy về đầu, Shift+Tab ở đầu nhảy về cuối', () => {
+      render(<BottomSheet open title="t" onClose={() => {}} footer={<button type="button">Xong</button>}>y</BottomSheet>);
+      const close = screen.getByRole('button', { name: /đóng/i });
+      const last = screen.getByRole('button', { name: 'Xong' });
+      last.focus();
+      key('Tab');
+      expect(close).toHaveFocus();
+      key('Tab', { shiftKey: true });
+      expect(last).toHaveFocus();
+    });
+
+    it('đóng sheet thì trả focus về nút đã mở nó', () => {
+      const opener = document.createElement('button');
+      document.body.appendChild(opener);
+      const { rerender } = render(<BottomSheet open={false} title="t" onClose={() => {}}>y</BottomSheet>);
+      opener.focus();
+      rerender(<BottomSheet open title="t" onClose={() => {}}>y</BottomSheet>);
+      expect(opener).not.toHaveFocus();
+      rerender(<BottomSheet open={false} title="t" onClose={() => {}}>y</BottomSheet>);
+      expect(opener).toHaveFocus();
+      opener.remove();
+    });
+  });
 });
+

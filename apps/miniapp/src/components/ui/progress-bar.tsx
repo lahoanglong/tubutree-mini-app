@@ -21,7 +21,7 @@ export function ProgressBar({ value, max, tone = 'brand', label, ariaLabel }: Pr
         aria-valuemin={0}
         aria-valuemax={max}
         aria-valuenow={Math.max(0, Math.min(max, value))}
-        style={{ height: 6, borderRadius: 'var(--radius-pill)', background: 'var(--stone-200)', overflow: 'hidden' }}
+        style={{ height: 6, borderRadius: 'var(--radius-pill)', background: 'var(--color-track)', overflow: 'hidden' }}
       >
         <div
           data-testid="progress-fill"
