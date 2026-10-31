@@ -44,7 +44,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
   const inactive = v.state === 'used' || v.state === 'expired' || v.state === 'soldout';
   const ineligible = v.state === 'ineligible';
   const stamp = STAMP[v.state] ? fillCopy(STAMP[v.state]!) : null;
-  // Chip chỉ có tiêu đề + điều kiện (kế hoạch P5); ticket/row thêm mã. Khi hàng không đủ chỗ thì điều kiện bị cắt (…), mã luôn đọc trọn.
+  // Chip chỉ có tiêu đề + điều kiện (kế hoạch P5), một dòng, quá dài thì cắt. Ticket/row thêm mã: không cắt gì, hàng hẹp thì mã xuống dòng nguyên khối (không bao giờ "500…" làm khách đọc nhầm số).
   const showCode = variant !== 'chip' && Boolean(v.code);
   const showMeta = Boolean(v.condition) || showCode;
   const showExpiry = !inactive && v.expiry !== '';
@@ -61,17 +61,10 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
         {v.title}
       </span>
       {showMeta && (
-        <span data-testid="voucher-meta" style={{ display: 'flex', minWidth: 0, fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-tertiary)' }}>
-          {v.condition && (
-            <span data-testid="voucher-condition" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {v.condition}
-            </span>
-          )}
-          {showCode && (
-            <span data-testid="voucher-code" style={{ flex: '0 0 auto', whiteSpace: 'pre' }}>
-              {v.condition ? ` · ${v.code}` : v.code}
-            </span>
-          )}
+        <span data-testid="voucher-meta" style={{ display: 'block', minWidth: 0, fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-tertiary)', ...(variant === 'chip' ? TITLE_ONE_LINE : null) }}>
+          {v.condition}
+          {v.condition && showCode ? ' · ' : null}
+          {showCode && <span data-testid="voucher-code" style={{ whiteSpace: 'nowrap' }}>{v.code}</span>}
         </span>
       )}
       {showExpiry && variant !== 'chip' && (

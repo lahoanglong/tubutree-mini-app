@@ -74,22 +74,22 @@ describe('VoucherTicket', () => {
     expect(q('voucher-expiry')!.textContent).toBe('Còn 2 ngày');
   });
 
-  it('mã luôn là một ô không co, không cắt; điều kiện mới là phần bị cắt khi hàng hẹp', () => {
-    render(<VoucherTicket voucher={view({ condition: 'Đơn từ 500.000đ cho mọi sản phẩm', code: 'CHUADU' })} variant="ticket" primary={{ label: 'Dùng ngay', onClick: vi.fn() }} />);
+  it('ticket và row: mã là một khối không ngắt giữa chừng, meta không nowrap/ellipsis (hẹp thì xuống dòng, không cắt điều kiện hay mã)', () => {
+    render(<VoucherTicket voucher={view({ condition: 'Đơn từ 500k', code: 'CHUADU' })} variant="ticket" primary={{ label: 'Dùng ngay', onClick: vi.fn() }} />);
     const code = q('voucher-code')!;
-    expect(code.textContent).toBe(' · CHUADU');
-    expect(code.style.flex).toBe('0 0 auto');
-    expect(code.style.textOverflow).toBe('');
-    expect(code.style.whiteSpace).toBe('pre');
-    const cond = q('voucher-condition')!;
-    expect(cond.style.minWidth).toBe('0px');
-    expect(cond.style.textOverflow).toBe('ellipsis');
-    expect(cond.style.overflow).toBe('hidden');
+    expect(code.textContent).toBe('CHUADU');
+    expect(code.style.whiteSpace).toBe('nowrap');
+    const meta = q('voucher-meta')!;
+    expect(meta.textContent).toBe('Đơn từ 500k · CHUADU');
+    expect(meta.style.whiteSpace).toBe('');
+    expect(meta.style.textOverflow).toBe('');
   });
 
   it('chip chỉ có tiêu đề và điều kiện: không mã; ticket và row vẫn có mã', () => {
     const { rerender } = render(<VoucherTicket voucher={view()} variant="chip" />);
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k');
+    expect(q('voucher-meta')!.style.whiteSpace).toBe('nowrap');
+    expect(q('voucher-meta')!.style.textOverflow).toBe('ellipsis');
     expect(q('voucher-code')).toBeNull();
     rerender(<VoucherTicket voucher={view({ condition: '' })} variant="chip" />);
     expect(q('voucher-meta')).toBeNull();
