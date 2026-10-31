@@ -26,7 +26,7 @@ export const TILE_METRICS = {
 export interface TileBodyOptions {
   /** Có dòng nhãn hiệu không; mặc định có ở grid và rail-md, không ở biến thể khác. */
   brand?: boolean;
-  /** Có dòng ghi chú dưới giá (flash). */
+  /** Có dòng ghi chú một dòng dưới giá. */
   note?: boolean;
   /** Chiều cao phần `footer` (thanh % đã bán, nút nhắc) nằm trong thẻ. */
   footer?: number;
@@ -36,18 +36,18 @@ const M = TILE_METRICS;
 
 /** Chiều cao thân thẻ (phần dưới ảnh) theo biến thể: mọi thẻ cùng biến thể và cùng tuỳ chọn có đúng chiều cao này, kể cả khi thiếu meta. */
 export function tileBodyHeight(variant: CardVariant, o: TileBodyOptions = {}): number {
+  if (variant === 'line') return M.line;
   const brand = o.brand ?? (variant === 'grid' || variant === 'rail-md');
+  const extra = (o.note ? M.note : 0) + (o.footer ?? 0);
   switch (variant) {
-    case 'line':
-      return M.line;
     case 'grid':
-      return M.inset + (brand ? M.brand : 0) + M.name + M.gap + M.price + M.metaGap + M.meta + M.inset;
+      return M.inset + (brand ? M.brand : 0) + M.name + M.gap + M.price + M.metaGap + M.meta + M.inset + extra;
     case 'rail-md':
-      return M.inset + (brand ? M.brand : 0) + M.name + M.gap + M.price + M.compare + M.metaGap + M.meta + M.inset;
+      return M.inset + (brand ? M.brand : 0) + M.name + M.gap + M.price + M.compare + M.metaGap + M.meta + M.inset + extra;
     case 'rank':
-      return M.inset + M.name + M.gap + M.price + M.compare + M.metaGap + M.meta + M.inset;
+      return M.inset + M.name + M.gap + M.price + M.compare + M.metaGap + M.meta + M.inset + extra;
     case 'rail-sm':
     case 'flash':
-      return M.inset + M.nameCaption + M.gap + M.price + M.compare + M.inset + (o.note ? M.note : 0) + (o.footer ?? 0);
+      return M.inset + M.nameCaption + M.gap + M.price + M.compare + M.inset + extra;
   }
 }

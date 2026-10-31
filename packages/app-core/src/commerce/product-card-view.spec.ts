@@ -225,3 +225,10 @@ describe('pickCardFlash', () => {
     expect(pickCardFlash(p, [flash({ variationId: 'a', flashPrice: 41_000 })], NOW)?.variationId).toBe('a');
   });
 });
+
+describe('thumbnail', () => {
+  it('view mang ảnh của thẻ để ProductTile vẽ được chỉ từ view', () => {
+    expect(view({ product: product({ thumbnail: 'https://img.test/a.jpg' }) }).thumbnail).toBe('https://img.test/a.jpg');
+    expect(view().thumbnail).toBeNull();
+  });
+});

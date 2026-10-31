@@ -35,6 +35,8 @@ export interface ProductCardView {
   slug: string;
   name: string;
   brandLine: string | null;
+  /** Ảnh của thẻ; optional để fixture của gói khác (không có ảnh) vẫn biên dịch. */
+  thumbnail?: string | null;
   price: number;
   compareAt: number | null;
   discountPct: number;
@@ -112,6 +114,7 @@ export function productCardView(input: ProductCardInput): ProductCardView {
     slug: p.slug,
     name: p.name,
     brandLine: SLOTS[variant].brand && input.showBrand !== false ? p.brand : null,
+    thumbnail: p.thumbnail ?? null,
     price: pricing.price,
     compareAt: pricing.compareAt,
     discountPct: pricing.salePct,
