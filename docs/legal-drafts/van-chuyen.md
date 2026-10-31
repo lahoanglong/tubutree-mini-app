@@ -41,7 +41,7 @@ Phí được tính cho từng kiện hàng và hiển thị ở giỏ hàng, b�
 
 - Nội thành Thành phố Hồ Chí Minh: 1–2 ngày làm việc.
 - Các tỉnh thành khác: 3–5 ngày làm việc.
-- Với hàng do Tubu Tree giao, ứng dụng hiển thị khoảng ngày giao dự kiến (từ 1 đến 5 ngày làm việc) ở bước thanh toán và chi tiết đơn.
+- Với hàng do Tubu Tree giao, ứng dụng hiển thị ngày giao dự kiến ở bước thanh toán và chi tiết đơn. Ngày này tính theo ngày lịch kể từ lúc bạn đặt hàng nên chỉ để tham khảo; thời gian giao áp dụng là thời gian ở hai dòng trên.
 - Thời gian tính từ lúc đơn được xác nhận. Với chuyển khoản, tính từ lúc Tubu Tree nhận được tiền. Thời gian không tính ngày lễ và ngày nghỉ của đơn vị vận chuyển.
 - Hàng do gian hàng đối tác giao: gian hàng cần xác nhận đơn trong vòng 24 giờ và bàn giao cho đơn vị vận chuyển trong vòng 48 giờ kể từ khi đơn đến gian hàng. Sau đó thời gian giao theo đơn vị vận chuyển.
 - Đơn gặp thiên tai, dịch bệnh, sự cố giao thông hoặc cao điểm khuyến mãi có thể giao chậm hơn dự kiến. Chúng tôi sẽ thông báo cho bạn khi biết đơn bị chậm.
