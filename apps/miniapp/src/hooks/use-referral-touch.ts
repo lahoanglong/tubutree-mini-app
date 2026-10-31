@@ -34,18 +34,19 @@ export function useReferralTouch(authed: boolean): void {
     if (!authed || !userId) return;
     const code = referralCode ?? slug;
     if (!code) return;
+    const touchKind = kind === 'ctv' ? 'ctv' : 'brand';
     enqueue(async () => {
       if (kind !== 'ctv' && wasCtvTouched(userId, code)) return;
       try {
         const res = await recordReferralTouch({
           referralCode: code,
           storefrontSlug: kind === 'ctv' ? (slug ?? undefined) : undefined,
-          kind: kind === 'ctv' ? 'ctv' : 'brand',
+          kind: touchKind,
           ...clickedAgoParam(clickedAt),
         });
         if (res && typeof res.ok === 'boolean') {
           confirmReferral(code, res.ok);
-          updateCtvTouchMark(userId, code, kind === 'ctv' ? 'ctv' : 'brand', res.ok);
+          updateCtvTouchMark(userId, code, touchKind, res.ok);
         }
       } catch {
         /* chạm là best-effort: ngữ cảnh trong phiên vẫn được gửi kèm lúc đặt đơn */

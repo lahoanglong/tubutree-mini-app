@@ -19,22 +19,18 @@ export interface TouchMark {
 }
 
 export function serializeTouchMark(userId: string, code: string): string {
-  return JSON.stringify({ u: userId, c: norm(code) });
+  return `${userId}|${norm(code)}`;
 }
 
 /** Chuỗi cũ (chỉ có mã, không biết của ai) hay hỏng thì coi như không có dấu. */
 export function parseTouchMark(raw: string | null): TouchMark | null {
-  try {
-    const p = JSON.parse(raw ?? '') as { u?: unknown; c?: unknown } | null;
-    return p && typeof p.u === 'string' && p.u && typeof p.c === 'string' && p.c ? { userId: p.u, code: p.c } : null;
-  } catch {
-    return null;
-  }
+  const [userId, code] = (raw ?? '').split('|');
+  return userId && code ? { userId, code } : null;
 }
 
 /** Dấu chỉ có hiệu lực với đúng người đã được ghi công: người đăng nhập sau trong cùng tab không thừa hưởng. */
 export function touchMarkMatches(mark: TouchMark | null, userId: string | null | undefined, code: string): boolean {
-  return !!mark && !!userId && mark.userId === userId && mark.code === norm(code);
+  return !!mark && mark.userId === userId && mark.code === norm(code);
 }
 
 /**
