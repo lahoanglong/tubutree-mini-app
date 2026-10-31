@@ -68,12 +68,39 @@ describe('Badge / Chip / TierBadge', () => {
     expect((mount(<Badge>x</Badge>).container.firstElementChild as HTMLElement).style.background).toBe('var(--color-status-neutral-bg)');
   });
 
+  it('Badge mọi cỡ chữ 12/600; tông flash và verified dùng token, không cần ghi đè style', () => {
+    const sm = mount(<Badge size="sm">Mới</Badge>).container.firstElementChild as HTMLElement;
+    expect(sm.style.fontSize).toBe('var(--type-label-size)');
+    expect(sm.style.fontWeight).toBe('600');
+    const flash = mount(<Badge tone="flash">-30%</Badge>).container.firstElementChild as HTMLElement;
+    expect([flash.style.background, flash.style.color]).toEqual(['var(--color-flash-solid-bg)', 'var(--color-flash-solid-fg)']);
+    const ok = mount(<Badge tone="verified">Đã duyệt</Badge>).container.firstElementChild as HTMLElement;
+    expect([ok.style.background, ok.style.color]).toEqual(['var(--color-verified-bg)', 'var(--color-verified-fg)']);
+  });
+
+  it('Chip md nhìn cao 36, chưa chọn nền surface + viền trong, chữ 600 cả hai trạng thái; chip sm dùng --color-bg-chip', () => {
+    const on = mount(<Chip selected>Tubu</Chip>).container.querySelector('button')!;
+    expect(on.style.fontWeight).toBe('600');
+    expect(on.style.boxShadow).toBe('');
+    const off = mount(<Chip>Tubu</Chip>).container.querySelector('button')!;
+    expect(off.style.minHeight).toBe('36px');
+    expect(off.style.padding).toBe('7px 14px');
+    expect(off.style.background).toBe('var(--color-bg-surface)');
+    expect(off.style.boxShadow).toContain('--color-border-subtle');
+    expect(off.style.fontWeight).toBe('600');
+    expect(off.className).toContain('tubu-hit-44');
+    const one = mount(<Chip count={3}>5</Chip>).container.querySelector('button')!;
+    expect(one.style.minWidth).toBe('44px');
+    expect(one.className).toContain('tubu-hit-44');
+    expect(mount(<Chip size="sm">x</Chip>).container.querySelector('button')!.style.background).toBe('var(--color-bg-chip)');
+  });
+
   it('Chip là nút aria-pressed, vùng chạm 44px, đếm số, bấm gọi onPress', () => {
     const onPress = vi.fn();
     const b = mount(<Chip selected count={3} onPress={onPress}>Tubu</Chip>).container.querySelector('button')!;
     expect(b.getAttribute('aria-pressed')).toBe('true');
     expect(b.className).toContain('tubu-hit-44');
-    expect(b.style.minHeight).toBe('44px');
+    expect(b.style.minHeight).toBe('36px');
     expect(b.style.minWidth).toBe('44px');
     expect(b.style.background).toBe('var(--color-action-primary-bg)');
     expect(b.textContent).toBe('Tubu(3)');

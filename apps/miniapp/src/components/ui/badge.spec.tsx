@@ -27,6 +27,25 @@ describe('Badge', () => {
     expect(container.querySelector('svg')).toBeNull();
     expect(screen.getByText('Giờ vàng').style.display).toBe('');
   });
+  it('mọi cỡ dùng chữ 12px/600: sm chỉ khác đệm (cấm nhãn dưới 12px)', () => {
+    const { rerender } = render(<Badge size="sm">Mới</Badge>);
+    expect(screen.getByText('Mới').style.fontSize).toBe('var(--type-label-size)');
+    expect(screen.getByText('Mới').style.fontWeight).toBe('600');
+    rerender(<Badge size="md">Mới</Badge>);
+    expect(screen.getByText('Mới').style.fontSize).toBe('var(--type-label-size)');
+  });
+  it('tone flash: nền cam đặc + chữ stone-900 (không cần ghi đè style)', () => {
+    render(<Badge tone="flash">-30%</Badge>);
+    const el = screen.getByText('-30%');
+    expect(el.style.background).toBe('var(--color-flash-solid-bg)');
+    expect(el.style.color).toBe('var(--color-flash-solid-fg)');
+  });
+  it('tone verified: nền forest đặc + chữ trắng', () => {
+    render(<Badge tone="verified">Đã duyệt</Badge>);
+    const el = screen.getByText('Đã duyệt');
+    expect(el.style.background).toBe('var(--color-verified-bg)');
+    expect(el.style.color).toBe('var(--color-verified-fg)');
+  });
   it('StatusPill is the same component under a different name', () => {
     expect(StatusPill).toBe(Badge);
   });
