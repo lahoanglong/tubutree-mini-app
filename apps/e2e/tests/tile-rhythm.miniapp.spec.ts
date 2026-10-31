@@ -91,7 +91,7 @@ test.describe('Thẻ sản phẩm cùng nhịp ở 375px', () => {
 
   test('Danh mục: mọi hàng hai thẻ chênh đáy giá và chiều cao ≤ 1px dù tên, ảnh, sao, giá lệch nhau', async ({ page, api }) => {
     mockRhythm(api);
-    await page.goto('/browse');
+    await page.goto('/browse?all=1'); // gốc /browse là hub, không có lưới thẻ
     const grid = page.getByTestId('catalog-grid');
     await settled(page, grid);
     expectRhythm(await rowsOf(grid));
@@ -109,7 +109,7 @@ test.describe('Thẻ sản phẩm cùng nhịp ở 375px', () => {
 
   test('thẻ cao đúng số đo chung: mỗi biến thể grid dùng chiều cao thân thẻ có nhãn hiệu, không nhảy khi dữ liệu về', async ({ page, api }) => {
     mockRhythm(api);
-    await page.goto('/browse');
+    await page.goto('/browse?all=1'); // gốc /browse là hub, không có lưới thẻ
     const grid = page.getByTestId('catalog-grid');
     await settled(page, grid);
     const bodies = await grid.locator('[data-ds-part="body"]').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));

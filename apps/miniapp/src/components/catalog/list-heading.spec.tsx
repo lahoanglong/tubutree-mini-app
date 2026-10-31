@@ -27,6 +27,15 @@ describe('ListHeading', () => {
     expect(screen.getByTestId('result-count')).toHaveTextContent('0 sản phẩm');
   });
 
+  it('tiêu đề và số kết quả nằm CÙNG MỘT hàng (tiết kiệm chiều cao để thẻ đầu lên cao): số đẩy sang phải', () => {
+    render(<ListHeading title="Chăm sóc da" count={12} isLoading={false} />);
+    const row = screen.getByRole('heading', { level: 2 }).parentElement as HTMLElement;
+    expect(row).toContainElement(screen.getByTestId('result-count'));
+    expect(row.style.display).toBe('flex');
+    expect(row.style.flexDirection).not.toBe('column');
+    expect(screen.getByTestId('result-count').style.marginLeft).toBe('auto');
+  });
+
   it('tên dài không đẩy caption ra ngoài khung: tiêu đề cắt một dòng', () => {
     render(<ListHeading title={'Rất dài '.repeat(20)} count={5} isLoading={false} />);
     const h = screen.getByRole('heading', { level: 2 });

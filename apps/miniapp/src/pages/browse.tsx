@@ -37,8 +37,8 @@ import {
   serializeSearchState, toCatalogQuery, withListMode, type FilterDraft, type SearchState,
 } from '../utils/search-state';
 
-/** Ô tìm cao 44px + đệm dọc 6px: thanh sắp xếp dính ngay dưới nó (`--sort-bar-top`). */
-const SEARCH_ROW_HEIGHT = 56;
+/** Hàng ô tìm đo được 58px (ô 46px gồm viền + đệm dọc 6px mỗi phía): thanh sắp xếp dính ngay dưới nó (`--sort-bar-top`). */
+const SEARCH_ROW_HEIGHT = 58;
 
 // Ô tìm dính đầu trang khi cuộn (dưới vùng an toàn): khách đang xem lưới sâu vẫn tìm hoặc mở giỏ được mà không phải cuộn ngược lên.
 const STICKY_SEARCH: CSSProperties = {
