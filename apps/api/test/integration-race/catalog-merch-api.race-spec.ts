@@ -84,6 +84,29 @@ describe('catalog merch API (real Postgres)', () => {
     expect(by.get(closed.p.id)!.fulfiller).toMatchObject({ kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: paused.title });
   });
 
+  it('danh mục hai tầng: productCount của cha cộng con (mỗi sản phẩm một lần), lọc cha gồm sản phẩm của con', async () => {
+    const brand = `CMA${randCode(6)}`;
+    const t = randCode(6).toLowerCase();
+    const cha = await prisma.category.create({ data: { name: `Cha ${t}`, slug: `cma-cha-${t}`, sortOrder: 9000 } });
+    const con = await prisma.category.create({ data: { name: `Con ${t}`, slug: `cma-con-${t}`, parentId: cha.id, sortOrder: 1 } });
+    categoryIds.push(cha.id, con.id);
+    const both = await product(brand, { categoryIds: [cha.id, con.id] });
+    const onlyChild = await product(brand, { categoryIds: [con.id] });
+    await product(brand, { categoryIds: [] });
+    await product(brand, { categoryIds: [con.id], isActive: false });
+
+    const fresh = new CatalogService(prisma);
+    const tree = await fresh.categories();
+    const node = tree.find((c) => c.id === cha.id)!;
+    expect(node.productCount).toBe(2);
+    expect(node.children.map((c) => [c.id, c.productCount])).toEqual([[con.id, 2]]);
+    expect(tree.find((c) => c.id === con.id)).toBeUndefined();
+
+    const byParent = await fresh.list({ page: 1, limit: 10, category: cha.id, brand });
+    expect(byParent.data.map((c) => c.id).sort()).toEqual([both.p.id, onlyChild.p.id].sort());
+    expect(byParent.meta.total).toBe(2);
+  });
+
   describe('soldApp30d (cron 03:00)', () => {
     async function delivered(userId: string, variationId: string, quantity: number, deliveredAt: Date | null, status: 'DELIVERED' | 'RETURNED' = 'DELIVERED') {
       return createOrder(prisma, {

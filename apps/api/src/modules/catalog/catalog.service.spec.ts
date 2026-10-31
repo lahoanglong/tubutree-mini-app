@@ -997,7 +997,7 @@ describe('CatalogService.list — sắp theo giá đang bán (U1-B01)', () => {
 });
 
 describe('CatalogService.categories — productCount (dự án 4b)', () => {
-  const CAT = (id: string, sortOrder: number) => ({ id, parentId: null, name: id, slug: id, image: null, sortOrder });
+  const CAT = (id: string, sortOrder: number, parentId: string | null = null) => ({ id, parentId, name: id, slug: id, image: null, sortOrder });
 
   function setup() {
     const categoryFindMany = jest.fn().mockResolvedValue([CAT('cat-a', 1), CAT('cat-b', 2)]);
@@ -1013,8 +1013,8 @@ describe('CatalogService.categories — productCount (dự án 4b)', () => {
   it('mỗi danh mục kèm số SP đang bán (active + APPROVED); danh mục trống → 0; giữ thứ tự sortOrder', async () => {
     const { svc, productFindMany } = setup();
     await expect(svc.categories()).resolves.toEqual([
-      { ...CAT('cat-a', 1), productCount: 2 },
-      { ...CAT('cat-b', 2), productCount: 0 },
+      { ...CAT('cat-a', 1), productCount: 2, children: [] },
+      { ...CAT('cat-b', 2), productCount: 0, children: [] },
     ]);
     expect(productFindMany).toHaveBeenCalledWith({
       where: { isActive: true, approvalStatus: 'APPROVED' },
@@ -1028,6 +1028,90 @@ describe('CatalogService.categories — productCount (dự án 4b)', () => {
     await svc.categories();
     expect(categoryFindMany).toHaveBeenCalledTimes(1);
     expect(productFindMany).toHaveBeenCalledTimes(1);
+  });
+
+  describe('cây hai tầng', () => {
+    const ROWS = [
+      CAT('cha', 1),
+      CAT('con1', 1, 'cha'),
+      CAT('con2', 2, 'cha'),
+      CAT('mo-coi', 3, 'cha-da-xoa'),
+      CAT('ca', 4, 'cb'), // vòng parentId: không ai trong vòng là gốc
+      CAT('cb', 5, 'ca'),
+    ];
+    const PRODUCTS = [
+      { categoryIds: ['con1'] },
+      { categoryIds: ['cha', 'con1'] }, // gán cả cha lẫn con → cha vẫn đếm một lần
+      { categoryIds: ['con2'] },
+      { categoryIds: ['ca'] },
+      { categoryIds: [] },
+    ];
+    const build = () => {
+      const prisma = {
+        category: { findMany: jest.fn().mockResolvedValue(ROWS) },
+        product: { findMany: jest.fn().mockResolvedValue(PRODUCTS) },
+      } as unknown as PrismaService;
+      return new CatalogService(prisma);
+    };
+
+    it('gốc là danh mục không cha (hoặc cha không còn); con lồng trong children theo sortOrder; vòng parentId không treo', async () => {
+      const tree = await build().categories();
+      expect(tree.map((c) => c.id)).toEqual(['cha', 'mo-coi']);
+      expect(tree[0]!.children.map((c) => c.id)).toEqual(['con1', 'con2']);
+      expect(tree[0]!.children[0]!.children).toEqual([]);
+    });
+
+    it('productCount của cha cộng cả con, mỗi sản phẩm đếm một lần', async () => {
+      const tree = await build().categories();
+      const cha = tree[0]!;
+      expect(cha.productCount).toBe(3);
+      expect(cha.children.map((c) => [c.id, c.productCount])).toEqual([['con1', 2], ['con2', 1]]);
+      expect(tree[1]!.productCount).toBe(0);
+    });
+  });
+});
+
+describe('CatalogService.list — lọc theo danh mục cha gồm con (BG-13)', () => {
+  const CAT = (id: string, parentId: string | null) => ({ id, parentId });
+  function setup(rows = [CAT('cha', null), CAT('con1', 'cha'), CAT('con2', 'cha'), CAT('ca', 'cb'), CAT('cb', 'ca')]) {
+    const findMany = jest.fn().mockResolvedValue([card('p1')]);
+    const categoryFindMany = jest.fn().mockResolvedValue(rows);
+    const prisma = {
+      category: { findMany: categoryFindMany },
+      product: { findMany, count: jest.fn().mockResolvedValue(1) },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma), findMany, categoryFindMany };
+  }
+
+  it('danh mục cha → categoryIds hasSome [cha, ...con]', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 10, category: 'cha' });
+    expect(findMany.mock.calls[0][0].where.categoryIds).toEqual({ hasSome: ['cha', 'con1', 'con2'] });
+  });
+
+  it('danh mục lá hoặc id lạ → giữ { has: id }, không lỗi', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 10, category: 'con1' });
+    await svc.list({ page: 1, limit: 10, category: 'khong-co' });
+    expect(findMany.mock.calls[0][0].where.categoryIds).toEqual({ has: 'con1' });
+    expect(findMany.mock.calls[1][0].where.categoryIds).toEqual({ has: 'khong-co' });
+  });
+
+  it('vòng parentId không treo: kết thúc và không lặp id', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 10, category: 'ca' });
+    expect(findMany.mock.calls[0][0].where.categoryIds).toEqual({ hasSome: ['ca', 'cb'] });
+  });
+
+  it('cây id con nhớ 60 giây; không có tham số category thì không đọc danh mục', async () => {
+    const { svc, categoryFindMany } = setup();
+    await svc.list({ page: 1, limit: 10 });
+    expect(categoryFindMany).not.toHaveBeenCalled();
+    await svc.list({ page: 1, limit: 10, category: 'cha' });
+    await svc.list({ page: 1, limit: 10, category: 'con1' });
+    expect(categoryFindMany).toHaveBeenCalledTimes(1);
+    expect(categoryFindMany.mock.calls[0][0]).toEqual({ select: { id: true, parentId: true } });
   });
 });
 

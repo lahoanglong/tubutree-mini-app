@@ -13,6 +13,7 @@ import {
   fetchRelated,
   suggestProducts,
   type BrandCount,
+  type CategoryDTO,
   type PageResponse,
   type ProductCard,
 } from './catalog';
@@ -26,6 +27,20 @@ describe('catalog — hợp đồng gọi API', () => {
   it('nhãn có thể kèm slug trang /brand/:slug (kiểm bằng typecheck)', () => {
     const rows: BrandCount[] = [{ brand: 'Tubu', count: 3, slug: 'tubu-xanh' }, { brand: 'A&B', count: 1, slug: null }, { brand: 'C', count: 2 }];
     expect(rows.map((b) => b.slug ?? null)).toEqual(['tubu-xanh', null, null]);
+  });
+
+  it('fetchCategories trả cây: cha có children lồng nhau và productCount đã cộng con (kiểm bằng typecheck)', async () => {
+    const tree: CategoryDTO[] = [
+      {
+        id: 'cha', parentId: null, name: 'Nhà sạch', slug: 'nha-sach', image: null, sortOrder: 1, productCount: 3,
+        children: [{ id: 'con', parentId: 'cha', name: 'Nước giặt', slug: 'nuoc-giat', image: null, sortOrder: 1, productCount: 2, children: [] }],
+      },
+    ];
+    const { http } = fakeHttp(() => tree);
+    const got = await fetchCategories(http);
+    expect(got[0]!.children.map((c) => c.id)).toEqual(['con']);
+    expect(got[0]!.productCount).toBe(3);
+    expect(got[0]!.children[0]!.productCount).toBe(2);
   });
 
   it('đường dẫn, method, query của các hàm GET đơn', async () => {

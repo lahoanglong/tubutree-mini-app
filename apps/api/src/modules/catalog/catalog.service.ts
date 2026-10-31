@@ -97,6 +97,8 @@ function standingOf(p: { id: string; basePrice: number; salePrice: number | null
 
 /** Danh mục kèm số SP đang bán — miniapp chỉ hiện danh mục có hàng (plan 4b Ruling 4). */
 export type CategoryWithCount = Category & { productCount: number };
+/** Nút của cây danh mục: `productCount` của cha đã cộng cả con (mỗi sản phẩm một lần). */
+export type CategoryNode = CategoryWithCount & { children: CategoryNode[] };
 
 type PricedFields = { basePrice: number; salePrice: number | null; variations: CardVariation[] };
 
@@ -136,7 +138,9 @@ export class CatalogService {
   // Khi scale → chuyển sang Redis (đã có trong compose), hoặc emit event từ sync job
   // để gọi invalidate trên TẤT CẢ instance.
   private brandsCache: { value: unknown; expiresAt: number } | null = null;
-  private categoriesCache: { value: CategoryWithCount[]; expiresAt: number } | null = null;
+  private categoriesCache: { value: CategoryNode[]; expiresAt: number } | null = null;
+  // Id con theo id cha, cho lọc `?category=<cha>` gồm cả con. Cùng hạn chế per-instance như categoriesCache.
+  private categoryChildrenCache: { value: Map<string, string[]>; expiresAt: number } | null = null;
   private readonly TTL_MS = 60_000;
 
   // "Thường mua kèm" quét order_items 90 ngày; chi phí tăng theo doanh số của sản phẩm nên cache phần co-occurrence (id sản phẩm),
@@ -370,7 +374,11 @@ export class CatalogService {
         where.brand = { in: brandList };
       }
     }
-    if (category) where.categoryIds = { has: category };
+    if (category) {
+      // Cha gồm cả con (BG-13): sản phẩm thường gán vào lá, nên lọc theo cha phải khớp cả id của các con cháu.
+      const scope = await this.categoryScope(category);
+      where.categoryIds = scope.length > 1 ? { hasSome: scope } : { has: category };
+    }
     if (segment) where.forSegment = { has: segment };
     const text = await this.textWhere(query.q);
     if (text) and.push(text);
@@ -613,27 +621,68 @@ export class CatalogService {
     return value;
   }
 
+  /** `[id, ...mọi con cháu]` của một danh mục; id lạ hoặc danh mục lá trả `[id]`. Có `visited` nên vòng `parentId` không treo. */
+  private async categoryScope(id: string): Promise<string[]> {
+    if (!this.categoryChildrenCache || this.categoryChildrenCache.expiresAt <= Date.now()) {
+      const rows = await this.prisma.category.findMany({ select: { id: true, parentId: true } });
+      const children = new Map<string, string[]>();
+      for (const r of rows) {
+        if (!r.parentId) continue;
+        const list = children.get(r.parentId) ?? [];
+        list.push(r.id);
+        children.set(r.parentId, list);
+      }
+      this.categoryChildrenCache = { value: children, expiresAt: Date.now() + this.TTL_MS };
+    }
+    const children = this.categoryChildrenCache.value;
+    const scope = [id];
+    const visited = new Set(scope);
+    for (let i = 0; i < scope.length; i++) {
+      for (const child of children.get(scope[i]!) ?? []) {
+        if (visited.has(child)) continue;
+        visited.add(child);
+        scope.push(child);
+      }
+    }
+    return scope;
+  }
+
   /**
+   * Cây danh mục hai tầng: gốc là danh mục không cha (hoặc cha không còn), con lồng trong `children`.
    * Đồng bộ Pancake KHÔNG ghi `categoryIds` (chỉ SP seed/đối tác có) → danh mục seed có thể trống
-   * trên prod. Trả thêm `productCount` (field cộng thêm, client cũ bỏ qua) để miniapp ẩn danh mục
-   * trống và lùi về 4 phân khúc khi không còn danh mục nào có hàng.
+   * trên prod. `productCount` (field cộng thêm, client cũ bỏ qua) để miniapp ẩn danh mục
+   * trống và lùi về 4 phân khúc khi không còn danh mục nào có hàng; của cha cộng cả con, mỗi sản phẩm đếm một lần
+   * dù gán cả cha lẫn con.
    */
-  async categories(): Promise<CategoryWithCount[]> {
+  async categories(): Promise<CategoryNode[]> {
     if (this.categoriesCache && this.categoriesCache.expiresAt > Date.now()) {
       return this.categoriesCache.value;
     }
     const [rows, products] = await Promise.all([
-      this.prisma.category.findMany({ orderBy: { sortOrder: 'asc' } }),
+      this.prisma.category.findMany({ orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] }),
       this.prisma.product.findMany({
         where: PUBLIC_PRODUCT_WHERE,
         select: { categoryIds: true },
       }),
     ]);
+    const parentOf = new Map(rows.map((c) => [c.id, c.parentId]));
     const counts = new Map<string, number>();
     for (const p of products) {
-      for (const id of new Set(p.categoryIds)) counts.set(id, (counts.get(id) ?? 0) + 1);
+      // Mỗi danh mục của sản phẩm và mọi tổ tiên của nó, một lần cho sản phẩm này.
+      const covered = new Set<string>();
+      for (const id of p.categoryIds) {
+        for (let cur: string | null | undefined = id; cur && !covered.has(cur); cur = parentOf.get(cur)) covered.add(cur);
+      }
+      for (const id of covered) counts.set(id, (counts.get(id) ?? 0) + 1);
     }
-    const value = rows.map((c) => ({ ...c, productCount: counts.get(c.id) ?? 0 }));
+    const nodes = new Map<string, CategoryNode>(rows.map((c) => [c.id, { ...c, productCount: counts.get(c.id) ?? 0, children: [] }]));
+    const value: CategoryNode[] = [];
+    for (const c of rows) {
+      const node = nodes.get(c.id)!;
+      const parent = c.parentId && c.parentId !== c.id ? nodes.get(c.parentId) : undefined;
+      if (parent) parent.children.push(node);
+      else value.push(node);
+    }
     this.categoriesCache = { value, expiresAt: Date.now() + this.TTL_MS };
     return value;
   }

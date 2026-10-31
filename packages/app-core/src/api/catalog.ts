@@ -92,6 +92,11 @@ export interface CatalogPage extends PageResponse<ProductCard> {
   filtersIgnored: boolean;
 }
 
+/**
+ * Nút của cây danh mục (`GET /categories` trả cây: gốc là danh mục không cha, con lồng trong `children`).
+ * `productCount` của cha đã cộng cả con. API cũ (trước đợt shop 2026-10) trả danh sách phẳng thiếu `children`:
+ * nơi đọc dữ liệu từ API không chắc phiên bản dùng `children ?? []`.
+ */
 export interface CategoryDTO {
   id: string;
   parentId: string | null;
@@ -101,6 +106,7 @@ export interface CategoryDTO {
   sortOrder: number;
   /** Số SP đang bán (API từ 4b). Thiếu = API cũ → miniapp dùng 4 phân khúc. */
   productCount?: number;
+  children: CategoryDTO[];
 }
 
 /**
