@@ -117,6 +117,10 @@ describe('catalog — hợp đồng gọi API', () => {
     expect(catalogParams({ page: 1, limit: 1, inStock: false })).not.toHaveProperty('inStock');
   });
 
+  it('catalogParams: gửi nguyên sort Bán chạy nhất 30 ngày (best_seller_30d) kèm danh mục cha', () => {
+    expect(catalogParams({ page: 1, limit: 10, sort: 'best_seller_30d', category: 'cha' })).toEqual({ page: 1, limit: 10, sort: 'best_seller_30d', category: 'cha' });
+  });
+
   it('fetchCatalog: thành công thì filtersIgnored=false', async () => {
     const { http } = fakeHttp(() => page(0, []));
     expect((await fetchCatalog(http, { page: 1, limit: 5, minPrice: 1 })).filtersIgnored).toBe(false);

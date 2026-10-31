@@ -46,6 +46,17 @@ describe('catalog merch API (real Postgres)', () => {
     return { p, v };
   }
 
+  it('best_seller_30d: 30 ngày giảm dần, hoà theo tổng đã bán (gồm số nhập tay), hoà nữa theo id', async () => {
+    const brand = `CMA${randCode(6)}`;
+    const top = await product(brand, { soldApp30d: 9 });
+    const manual = await product(brand, { soldApp30d: 5, soldExternal: 100, soldApp: 10 });
+    const app = await product(brand, { soldApp30d: 5, soldApp: 50 });
+    const never = await product(brand);
+    const r = await catalog.list({ page: 1, limit: 10, sort: 'best_seller_30d', brand });
+    expect(r.data.map((c) => c.id)).toEqual([top.p.id, manual.p.id, app.p.id, never.p.id]);
+    expect(r.meta.total).toBe(4);
+  });
+
   describe('soldApp30d (cron 03:00)', () => {
     async function delivered(userId: string, variationId: string, quantity: number, deliveredAt: Date | null, status: 'DELIVERED' | 'RETURNED' = 'DELIVERED') {
       return createOrder(prisma, {

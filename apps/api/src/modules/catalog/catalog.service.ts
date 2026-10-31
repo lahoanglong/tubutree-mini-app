@@ -160,6 +160,7 @@ export class CatalogService {
     const where = await this.listWhere(query);
     const price = priceRange(query.minPrice, query.maxPrice);
     if (sort === 'best_seller') return this.listBestSellers(where, page, limit, price);
+    if (sort === 'best_seller_30d') return this.listBestSellers30d(where, page, limit, price);
     if (sort === 'price_asc' || sort === 'price_desc') return this.listByStandingPrice(where, page, limit, sort === 'price_asc' ? 'asc' : 'desc', price);
     if (price) return this.listRanked<{ id: string }>(where, page, limit, { id: true }, null, price, [this.orderBy(sort), { id: 'asc' }]);
     const [items, total] = await this.prisma.$transaction([
@@ -190,6 +191,23 @@ export class CatalogService {
       limit,
       { id: true, soldApp: true, soldExternal: true },
       (x, y) => y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal),
+      price,
+      undefined,
+      false,
+    );
+  }
+
+  /**
+   * "Bán chạy nhất" theo cửa sổ 30 ngày (Q18): `soldApp30d` giảm dần, hoà thì tổng đã bán (gồm số nhập tay) giảm dần, hoà nữa id tăng dần.
+   * Cùng đường xếp hạng và bộ nhớ 60 giây với `listBestSellers`; thứ hạng không phụ thuộc giá nên không đọc phân loại hay Giờ vàng.
+   */
+  private listBestSellers30d(where: Prisma.ProductWhereInput, page: number, limit: number, price?: PriceBounds) {
+    return this.listRanked<{ id: string; soldApp30d: number; soldApp: number; soldExternal: number }>(
+      where,
+      page,
+      limit,
+      { id: true, soldApp30d: true, soldApp: true, soldExternal: true },
+      (x, y) => y.soldApp30d - x.soldApp30d || y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal),
       price,
       undefined,
       false,

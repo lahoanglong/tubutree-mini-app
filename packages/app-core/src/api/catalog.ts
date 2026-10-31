@@ -72,7 +72,7 @@ export interface ProductSuggestion { slug: string; name: string; thumbnail: stri
 
 
 // ── Catalog có bộ lọc (dự án 4b) ──
-export type CatalogSort = 'best_seller' | 'newest' | 'price_asc' | 'price_desc';
+export type CatalogSort = 'best_seller' | 'best_seller_30d' | 'newest' | 'price_asc' | 'price_desc';
 export interface CatalogQuery {
   page: number;
   limit: number;

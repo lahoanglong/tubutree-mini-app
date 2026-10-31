@@ -902,6 +902,38 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
   });
 });
 
+describe('CatalogService.list — best_seller_30d (Bán chạy nhất theo 30 ngày)', () => {
+  const RANKED_30D = [
+    { id: 'a', soldApp30d: 5, soldApp: 50, soldExternal: 0 },
+    { id: 'b', soldApp30d: 5, soldApp: 10, soldExternal: 100 },
+    { id: 'c', soldApp30d: 9, soldApp: 0, soldExternal: 0 },
+    { id: 'd', soldApp30d: 5, soldApp: 50, soldExternal: 0 },
+    { id: 'e', soldApp30d: 0, soldApp: 0, soldExternal: 0 },
+  ];
+
+  it('30 ngày giảm dần, hoà theo tổng đã bán (gồm số nhập tay) giảm dần, hoà nữa theo id tăng', async () => {
+    const findMany = jest.fn().mockResolvedValueOnce(RANKED_30D).mockResolvedValueOnce([card('a'), card('b'), card('c')]);
+    const prisma = { product: { findMany, count: jest.fn() }, flashSaleItem: noFlash() } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).list({ page: 1, limit: 3, sort: 'best_seller_30d' });
+    expect(r.data.map((c) => c.id)).toEqual(['c', 'b', 'a']);
+    expect(r.meta).toEqual({ page: 1, limit: 3, total: 5 });
+    expect(findMany.mock.calls[0][0]).toEqual({
+      where: { isActive: true, approvalStatus: 'APPROVED' },
+      select: { id: true, soldApp30d: true, soldApp: true, soldExternal: true },
+    });
+    expect(findMany.mock.calls[1][0].where.AND[1]).toEqual({ id: { in: ['c', 'b', 'a'] } });
+  });
+
+  it('trang 2 nối tiếp đúng thứ tự và không đọc phân loại hay Giờ vàng ở bước xếp hạng', async () => {
+    const findMany = jest.fn().mockResolvedValueOnce(RANKED_30D).mockResolvedValueOnce([card('d'), card('e')]);
+    const flash = noFlash();
+    const prisma = { product: { findMany, count: jest.fn() }, flashSaleItem: flash } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).list({ page: 2, limit: 3, sort: 'best_seller_30d' });
+    expect(r.data.map((c) => c.id)).toEqual(['d', 'e']);
+    expect(flash.findMany).not.toHaveBeenCalled();
+  });
+});
+
 describe('CatalogService.list — sắp theo giá đang bán (U1-B01)', () => {
   // Giá đang bán = salePrice ?? basePrice, cùng quy tắc với bộ lọc giá và thẻ SP.
   const ROWS = [
