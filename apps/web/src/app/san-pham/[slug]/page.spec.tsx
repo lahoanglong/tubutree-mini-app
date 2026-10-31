@@ -498,6 +498,21 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(quick.compareDocumentPosition(full) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('thứ tự như Mini App (Q8): khối mua → Đánh giá nhanh → Thành phần, Cam kết, Mô tả → danh sách đầy đủ', async () => {
+    api.product = { ...PRODUCT, ingredients: [{ name: 'Bồ kết', percentage: null, benefit: null }] };
+    const c = await mount();
+    await flush();
+    const after = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const info = c.querySelector('[data-testid="pdp-info"]')!;
+    const quick = c.querySelector('section[aria-label="Đánh giá nhanh"]')!;
+    const ingredients = Array.from(c.querySelectorAll('h2')).find((h) => h.textContent === 'Thành phần')!;
+    expect(ingredients).toBeDefined();
+    expect(after(info, quick)).toBe(true);
+    expect(after(quick, ingredients)).toBe(true);
+    expect(after(quick, c.querySelector('#pdp-promises')!)).toBe(true);
+    expect(after(quick, c.querySelector('#pdp-description')!)).toBe(true);
+  });
+
   it('chưa có Combo/Mua kèm (P15 điền): không có khối giữ chỗ', async () => {
     const c = await mount();
     expect(c.querySelector('[data-testid="pdp-bundle-slots"]')).toBeNull();

@@ -193,13 +193,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           below={
             /* Điện thoại: trang không đệm (ảnh tràn mép), nên các khối dưới tự đệm lại 16px. */
             <div className="min-w-0 max-md:px-4 max-md:py-6">
+              {/* Q8: Đánh giá nhanh ngay sau Combo/Mua kèm (cuối khối thông tin), như Mini App; danh sách đầy đủ giữ chỗ cũ. */}
+              <PdpQuickReviews slug={product.slug} />
               <PdpIngredients ingredients={product.ingredients} />
               <PdpPromises>
                 <PdpChatButton productName={product.name} productSlug={product.slug} />
               </PdpPromises>
               {description && <PdpDescription text={description} />}
-
-              <PdpQuickReviews slug={product.slug} />
 
               {/* Đọc tham số ?danh-gia= (mở form cho đúng lần mua) cần Suspense để phần còn lại của trang vẫn dựng sẵn được. */}
               <Suspense fallback={<ProductReviewsFallback />}>
