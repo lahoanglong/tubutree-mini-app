@@ -92,15 +92,16 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-// Máy đã nhớ loại khách: không giữ khung chờ chung, nên khối chưa có chunk chỉ được giữ chỗ đúng bằng hình lúc đang tải của nó (không thì null),
-// để chunk về không làm khối bên dưới nhảy.
+// Máy đã nhớ loại khách: không giữ khung chờ chung. Khối chưa có chunk (Hành trình, Cộng đồng, Gợi ý) không vẽ gì; chúng là các khối cuối
+// trang nên chunk về không đẩy khối nào đang hiện.
 describe('HomePage — mở lại khi máy đã nhớ loại khách, chunk khối dưới chưa về', () => {
   it('không có khung chờ chung; Giờ vàng chỉ có FlashSale thật và Cộng đồng không có phần tử nào; Mua lại chỉ có kệ thật', async () => {
     renderHome();
     await settle(100);
     expect(document.querySelector('[data-testid="home-settling"]')).toBeNull();
     expect(testIdsIn('flash')).toEqual(['flash-sale-real']);
-    expect(blockEl('community')?.innerHTML ?? '').toBe('');
+    expect(blockEl('community')).not.toBeNull();
+    expect(blockEl('community')!.innerHTML).toBe('');
     expect(testIdsIn('purchased')).toEqual(['purchased-rail-real']);
   });
 
