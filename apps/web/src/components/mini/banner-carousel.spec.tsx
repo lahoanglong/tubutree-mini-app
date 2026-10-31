@@ -176,6 +176,36 @@ describe('BannerCarousel (web)', () => {
     expect(currentDot()).toBe(1);
   });
 
+  it('focus dời từ liên kết sang nút Dừng rồi bấm dừng/chạy tiếp: banner chuyển lại sau 5 giây (không kẹt vì cờ focus cũ)', () => {
+    mountPlain(<BannerCarousel slides={SLIDES} />);
+    const a = link('Giảm 20% mỹ phẩm');
+    fire(a, new FocusEvent('focusin', { bubbles: true }));
+    advance(20_000);
+    expect(currentDot()).toBe(0);
+    fire(a, new FocusEvent('focusout', { bubbles: true, relatedTarget: pauseBtn() }));
+    fire(pauseBtn(), new FocusEvent('focusin', { bubbles: true }));
+    click(pauseBtn());
+    expect(pauseBtn().getAttribute('aria-pressed')).toBe('true');
+    click(pauseBtn());
+    expect(pauseBtn().getAttribute('aria-pressed')).toBe('false');
+    advance(5000);
+    expect(currentDot()).toBe(1);
+  });
+
+  it('focus dời từ chấm sang liên kết trong banner vẫn giữ; rời hẳn ra ngoài mới chạy lại', () => {
+    mountPlain(<BannerCarousel slides={SLIDES} />);
+    const a = link('Giảm 20% mỹ phẩm');
+    const dot = dots()[0]!;
+    fire(dot, new FocusEvent('focusin', { bubbles: true }));
+    fire(dot, new FocusEvent('focusout', { bubbles: true, relatedTarget: a }));
+    fire(a, new FocusEvent('focusin', { bubbles: true }));
+    advance(20_000);
+    expect(currentDot()).toBe(0);
+    fire(a, new FocusEvent('focusout', { bubbles: true, relatedTarget: document.body }));
+    advance(5000);
+    expect(currentDot()).toBe(1);
+  });
+
   it('tab ẩn thì dừng, hiện lại thì chạy', () => {
     mountPlain(<BannerCarousel slides={SLIDES} />);
     setVisibility('hidden');

@@ -145,6 +145,37 @@ describe('BannerCarousel', () => {
     expect(currentDot()).toBe(1);
   });
 
+  it('focus dời từ liên kết sang nút Dừng rồi bấm dừng/chạy tiếp: banner chuyển lại sau 5 giây (không kẹt vì cờ focus cũ)', () => {
+    render(<BannerCarousel slides={SLIDES} />);
+    const link = screen.getByRole('link', { name: 'Giảm 20% mỹ phẩm' });
+    const pause = screen.getByRole('button', { name: 'Dừng tự chuyển' });
+    fireEvent.focus(link);
+    advance(20_000);
+    expect(currentDot()).toBe(0);
+    fireEvent.blur(link, { relatedTarget: pause });
+    fireEvent.focus(pause);
+    fireEvent.click(pause);
+    expect(pause).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(pause);
+    expect(pause).toHaveAttribute('aria-pressed', 'false');
+    advance(5000);
+    expect(currentDot()).toBe(1);
+  });
+
+  it('focus dời từ chấm sang liên kết trong banner vẫn giữ; rời hẳn ra ngoài mới chạy lại', () => {
+    render(<BannerCarousel slides={SLIDES} />);
+    const link = screen.getByRole('link', { name: 'Giảm 20% mỹ phẩm' });
+    const dot = dots()[0]!;
+    fireEvent.focus(dot);
+    fireEvent.blur(dot, { relatedTarget: link });
+    fireEvent.focus(link);
+    advance(20_000);
+    expect(currentDot()).toBe(0);
+    fireEvent.blur(link, { relatedTarget: document.body });
+    advance(5000);
+    expect(currentDot()).toBe(1);
+  });
+
   it('tab ẩn thì dừng, hiện lại thì chạy', () => {
     render(<BannerCarousel slides={SLIDES} />);
     setVisibility('hidden');

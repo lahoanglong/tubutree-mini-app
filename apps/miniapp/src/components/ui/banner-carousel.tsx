@@ -74,6 +74,8 @@ function SlideImage({ slide, eager }: { slide: BannerSlide; eager: boolean }) {
   );
 }
 
+const isPauseButton = (node: EventTarget | null) => node instanceof Element && node.closest('[data-banner-pause]') !== null;
+
 /**
  * Dải banner chương trình (Q6, a11y B1): tự chuyển nhưng chỉ khi chắc chắn được phép (không giảm chuyển động, tab đang hiện,
  * không có focus/ngón tay/chuột trong banner, khách chưa bấm Dừng), mỗi slide ≥ 5 giây. Nút Dừng đứng đầu thứ tự DOM để bàn phím
@@ -151,10 +153,11 @@ export function BannerCarousel({ slides, intervalMs }: BannerCarouselProps) {
       aria-label={fillCopy('campaign.carouselLabel')}
       style={{ position: 'relative' }}
       onFocusCapture={(e) => {
-        if (!(e.target as HTMLElement).closest('[data-banner-pause]')) setFocused(true);
+        if (!isPauseButton(e.target)) setFocused(true);
       }}
       onBlurCapture={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
+        // Focus dời từ liên kết/chấm sang nút Dừng cũng là rời khỏi phần "giữ banner": focus-capture của nút Dừng bị bỏ qua nên chỉ có chỗ này hạ cờ.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null) || isPauseButton(e.relatedTarget)) setFocused(false);
       }}
       onTouchStart={() => setTouching(true)}
       onTouchEnd={() => setTouching(false)}
