@@ -533,9 +533,11 @@ function CartLineRow({
             </Text>
           </Box>
         )}
-        {/* Hàng đáy: giá (gạch giá niêm yết khi đang giảm) bên trái, bộ đếm 36px bên phải. Máy hẹp (320px) cho giá xuống dòng thay vì tràn. */}
+        {/* Hàng đáy: giá bên trái, bộ đếm 36px bên phải. Giá niêm yết gạch xếp DƯỚI giá bán (layout stack, cao 36 bằng bộ đếm): xếp ngang
+            thì ở 375px hai giá cộng bộ đếm không vừa một hàng, giá rớt xuống dòng và dòng đang giảm cao gần gấp rưỡi dòng thường. Máy hẹp (320px)
+            vẫn cho cả khối giá xuống dòng thay vì tràn. */}
         <Box flex alignItems="center" justifyContent="space-between" style={{ marginTop: 6, flexWrap: 'wrap', rowGap: 4, columnGap: 8 }}>
-          <PriceTag value={line.unitPrice} compareAt={compareAt} size="sm" tone={compareAt || line.isFlash ? 'deal' : 'default'} />
+          <PriceTag value={line.unitPrice} compareAt={compareAt} size="sm" layout={compareAt ? 'stack' : 'inline'} tone={compareAt || line.isFlash ? 'deal' : 'default'} />
           <QuantitySelector size="sm" value={localQty} max={Math.max(1, line.stock)} onChange={setLocalQty} />
         </Box>
         {/* Số của server (line.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi SL chưa khớp server (chờ debounce) và khi PATCH còn bay (số lúc đó do client tự nhân). */}
