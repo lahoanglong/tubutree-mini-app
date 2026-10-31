@@ -100,3 +100,70 @@ describe('design-tokens/tokens.css', () => {
     });
   });
 });
+
+describe('design-tokens/tokens.css: commerce tokens (P1 tokens-a11y)', () => {
+  const decl = (name: string, value: string) =>
+    expect(css, name).toMatch(new RegExp(`${name}:\\s*${value.replace(/[()*+.]/g, '\\$&')}\\s*;`));
+
+  it('giá đang giảm dùng orange-700 #9A5200 (cam đậm, không đỏ); đồng hồ chữ Giờ vàng cùng màu', () => {
+    decl('--orange-700', '#9A5200');
+    decl('--color-text-price-deal', 'var(--orange-700)');
+    decl('--color-flash-fg', 'var(--orange-700)');
+    expect(resolveToken('--color-text-price-deal')).toBe('#9A5200');
+  });
+
+  it.each([
+    ['--color-bg-media', 'var(--stone-100)'],
+    ['--color-bg-cover', 'var(--forest-700)'],
+    ['--color-bg-chip', 'var(--stone-100)'],
+    ['--color-track', 'var(--stone-200)'],
+    ['--color-media-outline', 'rgba(28,26,22,.06)'],
+    ['--color-verified-bg', 'var(--forest-600)'],
+    ['--color-verified-fg', 'var(--stone-0)'],
+    ['--color-voucher-bg', 'var(--orange-50)'],
+    ['--color-voucher-fg', 'var(--orange-800)'],
+    ['--color-voucher-edge', 'var(--tubu-orange)'],
+    ['--color-voucher-stub-bg', 'var(--tubu-orange)'],
+    ['--color-voucher-stub-fg', 'var(--stone-900)'],
+    ['--color-voucher-ship-bg', 'var(--color-status-success-fg)'],
+    ['--color-voucher-ship-fg', 'var(--stone-0)'],
+    ['--color-voucher-shop-bg', 'var(--forest-50)'],
+    ['--color-voucher-shop-fg', 'var(--forest-700)'],
+    ['--color-voucher-shop-edge', 'var(--forest-300)'],
+    ['--color-voucher-shop-stub-bg', 'var(--forest-600)'],
+    ['--color-voucher-shop-stub-fg', 'var(--stone-0)'],
+    ['--color-rank-1-bg', 'var(--honey-600)'],
+    ['--color-rank-2-bg', 'var(--stone-600)'],
+    ['--color-rank-3-bg', 'var(--clay-600)'],
+    ['--color-rank-fg', 'var(--stone-0)'],
+    ['--color-rank-n-bg', 'var(--stone-100)'],
+    ['--color-rank-n-fg', 'var(--stone-700)'],
+    ['--color-countdown-bg', 'var(--color-bg-inverse)'],
+    ['--color-countdown-fg', 'var(--color-text-inverse)'],
+  ])('lớp semantic %s = %s', (name, value) => decl(name, value));
+
+  it.each([
+    ['--tile-w-sm', '128px'],
+    ['--tile-w-md', '148px'],
+    ['--tile-gap', 'var(--p-space-4)'],
+    ['--tile-inset', 'var(--p-space-3)'],
+    ['--rail-pad-block', 'var(--p-space-2) var(--p-space-4)'],
+    ['--section-header-h', '44px'],
+    ['--space-block', 'var(--p-space-5)'],
+    ['--space-section', 'var(--p-space-7)'],
+    ['--banner-ratio', '5 / 2'],
+    ['--badge-h-sm', '20px'],
+    ['--badge-h-md', '24px'],
+    ['--radius-tag', 'var(--p-radius-1)'],
+    ['--type-price-tile-size', '16px'],
+    ['--type-price-tile-lh', '1.25'],
+    ['--type-price-tile-weight', '700'],
+  ])('lớp component (commerce) %s = %s', (name, value) => decl(name, value));
+
+  it.each([
+    ['--elevation-nav', '0 -1px 0 rgba(28,26,22,.06), 0 -4px 16px rgba(28,26,22,.06)'],
+    ['--p-dur-press', '80ms'],
+    ['--p-dur-release', '180ms'],
+    ['--p-ease-spring', 'cubic-bezier(0.34, 1.56, 0.64, 1)'],
+  ])('chuyển động và bóng %s', (name, value) => decl(name, value));
+});

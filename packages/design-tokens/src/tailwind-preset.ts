@@ -40,7 +40,30 @@ export const tailwindPreset: Partial<Config> = {
         honey: { 500: '#B07A00', 600: '#96650A' },
         terracotta: { 50: '#FFF1E8', 600: '#C2410C' },
         'tubu-orange': '#E38E1E',
-        orange: { 50: '#FDF1DE', 500: '#E38E1E', 800: '#7A4300' },
+        orange: { 50: '#FDF1DE', 500: '#E38E1E', 700: '#9A5200', 800: '#7A4300' },
+        // Lớp ngữ nghĩa commerce: trỏ biến CSS của tokens.css nên không dùng được hậu tố độ trong suốt (`/40`).
+        // Không đặt tên `cover`: đụng utility `bg-cover` (background-size) của Tailwind.
+        media: 'var(--color-bg-media)',
+        chip: 'var(--color-bg-chip)',
+        track: 'var(--color-track)',
+        'shop-cover': 'var(--color-bg-cover)',
+        countdown: 'var(--color-countdown-bg)',
+        'price-deal': 'var(--color-text-price-deal)',
+        voucher: {
+          bg: 'var(--color-voucher-bg)',
+          fg: 'var(--color-voucher-fg)',
+          edge: 'var(--color-voucher-edge)',
+          'stub-bg': 'var(--color-voucher-stub-bg)',
+          'stub-fg': 'var(--color-voucher-stub-fg)',
+          'ship-bg': 'var(--color-voucher-ship-bg)',
+          'ship-fg': 'var(--color-voucher-ship-fg)',
+        },
+        rank: {
+          1: 'var(--color-rank-1-bg)',
+          2: 'var(--color-rank-2-bg)',
+          3: 'var(--color-rank-3-bg)',
+          n: 'var(--color-rank-n-bg)',
+        },
       },
       fontFamily: {
         display: ['Fraunces', 'Georgia', 'serif'],
