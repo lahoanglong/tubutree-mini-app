@@ -518,6 +518,13 @@ psqlq -c "SELECT id, \"zaloId\", \"createdAt\" FROM users WHERE \"zaloId\" LIKE 
 - Migration `20261030110000_order_confirmed_payment_note` chỉ đổi thân mẫu ORDER_CONFIRMED khi thân còn đúng câu seed cũ. Sau deploy, xem thân mẫu bằng `psqlq -tAc "SELECT \"bodyTemplate\" FROM notification_templates WHERE code='ORDER_CONFIRMED'"`. Nếu không có `{{payment_note}}` (admin đã sửa chữ từ trước) thì đơn trả trước vẫn nhận câu cũ; muốn có câu "đã nhận đủ thanh toán" thì admin tự thêm `{{payment_note}}`.
 - Quay image về bản trước bản này: màn sửa mẫu tin của bản cũ không biết biến `{{payment_note}}`, nên admin không lưu được mẫu ORDER_CONFIRMED đang có biến đó. Tin vẫn gửi bình thường; chỉ việc sửa chữ mẫu này phải chờ deploy lại bản mới, hoặc xoá biến khỏi thân mẫu trước khi sửa.
 
+### 1.17 Ghi công CTV theo lúc bấm link: thứ tự deploy
+
+- Deploy API TRƯỚC, rồi mới deploy web và đẩy Mini App lên Live. Web và Mini App mới gửi thêm `clickedAgoMs` khi chạm giới thiệu, mà API cũ chạy `forbidNonWhitelisted` nên trả 400: web xoá bản chờ, Mini App mất chạm. Mini App mới chỉ gửi Live sau khi API mới đã lên.
+- Migration `20261031110000_referral_touch_clicked_at` chỉ thêm cột `clickedAt` (nullable, không backfill); chạy cùng các migration khác của bản.
+- Quay API về `:prev` thì phải quay cả web về bản trước; Mini App Live mới cũng phải kéo về bản cũ.
+- Mini App Live cũ (chưa gửi `clickedAgoMs`) vẫn chạy như trước: máy chủ ghi `clickedAt = now`, hạn tính từ lúc nhận, cho tới khi Mini App mới lên Live.
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.
