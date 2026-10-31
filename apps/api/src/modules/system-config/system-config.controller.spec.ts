@@ -198,7 +198,6 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
       tierMultipliers: { MAM_XANH: 1, LOC_BIEC: 1.2 },
       tierNames: { MAM_XANH: 'Mầm Xanh', LOC_BIEC: 'Lộc Biếc' },
     });
-    expect(out.homeNewCustomerLayout).toBe(true);
     expect(out.communityPublicPreview).toBe(true);
   });
 
@@ -210,7 +209,6 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
         'shipping.first_order_free_enabled': true,
         'shipping.first_order_free_min_subtotal': 99000,
         'loyalty.earn_pct': 4,
-        'home.new_customer_layout': true,
         'community.public_preview': true,
       }),
     ).publicConfig();
@@ -220,17 +218,15 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
     });
     expect(out.loyalty.earnPct).toBe(4);
     expect(out.loyalty.vndPerPoint).toBe(25);
-    expect(out.homeNewCustomerLayout).toBe(true);
     expect(out.communityPublicPreview).toBe(true);
   });
 
   // Chuỗi "false" là truthy: chỉ boolean true thật mới bật, để cờ gõ nhầm không hứa freeship hay đổi bố cục.
   it.each(['true', 'false', 1, 'yes'])('cờ sai kiểu (%p) → coi là tắt', async (bad) => {
     const out = await makeController(
-      makeConfig({ 'shipping.first_order_free_enabled': bad, 'home.new_customer_layout': bad, 'community.public_preview': bad }),
+      makeConfig({ 'shipping.first_order_free_enabled': bad, 'community.public_preview': bad }),
     ).publicConfig();
     expect(out.newCustomer.firstOrderFreeShip.enabled).toBe(false);
-    expect(out.homeNewCustomerLayout).toBe(false);
     expect(out.communityPublicPreview).toBe(false);
   });
 });

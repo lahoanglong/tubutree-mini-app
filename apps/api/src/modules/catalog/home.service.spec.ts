@@ -145,7 +145,6 @@ describe('HomeService — số liệu cho khối Quà khách mới', () => {
     expect(r.publicConfig).toMatchObject({
       freeshipThreshold: 199000,
       newCustomer: { welcomeVoucher: { amount: 30000, minOrder: 199000 }, firstOrderFreeShip: { enabled: true, minSubtotal: 199000 } },
-      homeNewCustomerLayout: true,
     });
     config.get.mockRejectedValue(new Error('db down'));
     const degraded = await svc.getPublic(1000 + 30_000);

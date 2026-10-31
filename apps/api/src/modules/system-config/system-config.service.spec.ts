@@ -588,7 +588,6 @@ describe('SystemConfigService.set — freeship đơn đầu và link Mini App ch
     ['shipping.first_order_free_enabled', [true, false], ['true', 'false', 1, 0, null]],
     ['pancake.total_mismatch_check', [true, false], ['true', 'false', 1, 0, null]],
     ['shipping.first_order_free_min_subtotal', [0, 99000], [-1, 99000.5, 50_000_001, '99000']],
-    ['home.new_customer_layout', [true, false], ['true', 'false', 1, 0, null]],
     ['community.public_preview', [true, false], ['true', 'false', 1, 0, null]],
     ['community.zalo_group_url', ['', 'https://zalo.me/g/abcxyz', 'https://www.zalo.me/g/abc'], ['http://zalo.me/g/a', 'https://evil.com/zalo.me', 'https://zalo.me.evil.com/g', 'https://facebook.com@evil.com/x', 'zalo.me/g/a', ' https://zalo.me/g/a', 5, null]],
     ['community.facebook_url', ['', 'https://www.facebook.com/tubutree', 'https://fb.com/tubutree', 'https://m.facebook.com/tubutree'], ['https://notfacebook.com/x', 'javascript:alert(1)', 'https://facebook.com:8080/x']],

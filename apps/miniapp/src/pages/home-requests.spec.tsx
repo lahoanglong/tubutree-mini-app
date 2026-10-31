@@ -51,7 +51,6 @@ const PUBLIC_FEED = {
     cashbackHoldDays: 30,
     newCustomer: { welcomeVoucher: { amount: 25_000, minOrder: 150_000 }, firstOrderFreeShip: { enabled: false, minSubtotal: 0 } },
     loyalty: { vndPerPoint: 20_000, vndPerPointRedeem: 1_000 },
-    homeNewCustomerLayout: false,
   },
 };
 const ME_FEED = {

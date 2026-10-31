@@ -38,8 +38,6 @@ export interface PublicConfig {
    * và số tháng điểm thường có hạn. Thiếu khi API cũ; hai trường sau thiếu khi API chưa phát hành bản có chúng.
    */
   loyalty?: { earnPct?: number; marketplaceEarnPct?: number; marketplaceClaimEnabled?: boolean; marketplaceClaimMaxAgeDays?: number; vndPerPoint: number; vndPerPointRedeem: number; maxRedeemPct?: number; pointExpireMonths?: number; tierMultipliers?: Record<string, number>; tierNames?: Record<string, string> };
-  /** Cờ bố cục Trang chủ cho khách mới (home.new_customer_layout). Thiếu khi API cũ → bố cục cũ. */
-  homeNewCustomerLayout?: boolean;
   /** AI tư vấn đang bật VÀ có provider dùng được (công tắc tắt khẩn cấp ở API). Thiếu khi API cũ → coi như tắt, ẩn lối vào. */
   aiAdvisorEnabled?: boolean;
   /** Cờ xem trước công khai bảng tin cộng đồng (community.public_preview). Thiếu khi API cũ → phải đăng nhập mới thấy. */
