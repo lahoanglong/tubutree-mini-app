@@ -3107,3 +3107,81 @@ describe('AffiliateService.createCommissionForOrder — mức mặc định affi
     expect((await runSpy(v, 'abc')).lineAmounts).toEqual({ i1: 8000 });
   });
 });
+
+describe('AffiliateService.recordTouch: hạn tính từ lúc khách bấm (clickedAt)', () => {
+  const NOW = new Date('2026-06-27T12:00:00Z');
+  const DAY = 86400000;
+  const { Prisma } = jest.requireActual('@prisma/client');
+  function setup(existing: 'none' | 'row') {
+    const referralTouch = {
+      upsert: jest.fn().mockResolvedValue({}),
+      create: jest.fn().mockImplementation(async () => {
+        if (existing === 'row') throw new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' });
+        return {};
+      }),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    };
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({ id: 'ctv1', role: 'AFFILIATE', storefronts: [] }) },
+      referralTouch,
+    } as unknown as PrismaService;
+    const rec = { record: jest.fn(), recordBestEffort: jest.fn().mockResolvedValue(undefined) };
+    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, rec as unknown as AnalyticsEventsService);
+    return { referralTouch, rec, run: (clickedAt?: string) => svc.recordTouch('buyer1', { referralCode: 'LINH', clickedAt }, NOW) };
+  }
+  const iso = (msBefore: number) => new Date(NOW.getTime() - msBefore).toISOString();
+
+  it('không gửi clickedAt: giữ nguyên đường upsert, hạn = now + 7 ngày', async () => {
+    const t = setup('none');
+    expect(await t.run()).toEqual({ ok: true });
+    expect(t.referralTouch.create).not.toHaveBeenCalled();
+    expect(t.referralTouch.upsert.mock.calls[0][0].create.expiresAt.getTime()).toBe(NOW.getTime() + 7 * DAY);
+  });
+
+  it('clickedAt 2 ngày trước: hạn = clickedAt + 7 ngày (ngắn hơn now + 7 ngày)', async () => {
+    const t = setup('none');
+    await t.run(iso(2 * DAY));
+    expect(t.referralTouch.create.mock.calls[0][0].data.expiresAt.getTime()).toBe(NOW.getTime() - 2 * DAY + 7 * DAY);
+  });
+
+  it('clickedAt quá hạn (8 ngày trước): không ghi công mới, không lỗi', async () => {
+    const t = setup('none');
+    expect(await t.run(iso(8 * DAY))).toEqual({ ok: false });
+    expect(t.referralTouch.create).not.toHaveBeenCalled();
+    expect(t.referralTouch.upsert).not.toHaveBeenCalled();
+    expect(t.rec.recordBestEffort).not.toHaveBeenCalled();
+  });
+
+  it('clickedAt ở tương lai (1 ngày): coi như không gửi, hạn = now + 7 ngày, không dài hơn', async () => {
+    const t = setup('none');
+    await t.run(new Date(NOW.getTime() + DAY).toISOString());
+    expect(t.referralTouch.upsert.mock.calls[0][0].create.expiresAt.getTime()).toBe(NOW.getTime() + 7 * DAY);
+  });
+
+  it('clickedAt lệch tương lai vài phút: kẹp về now, hạn không vượt now + 7 ngày', async () => {
+    const t = setup('none');
+    await t.run(new Date(NOW.getTime() + 2 * 60_000).toISOString());
+    expect(t.referralTouch.create.mock.calls[0][0].data.expiresAt.getTime()).toBe(NOW.getTime() + 7 * DAY);
+  });
+
+  it('clickedAt không phải ngày: tính từ now như cũ', async () => {
+    const t = setup('none');
+    await t.run('khong-phai-ngay');
+    expect(t.referralTouch.upsert.mock.calls[0][0].create.expiresAt.getTime()).toBe(NOW.getTime() + 7 * DAY);
+  });
+
+  it('đã có chạm: updateMany chỉ thay khi hạn hiện tại ngắn hơn hạn mới (không làm ngắn lượt bấm mới hơn)', async () => {
+    const t = setup('row');
+    await t.run(iso(6 * 3600_000));
+    const call = t.referralTouch.updateMany.mock.calls[0][0];
+    expect(call.where).toEqual({ userId: 'buyer1', expiresAt: { lt: new Date(NOW.getTime() - 6 * 3600_000 + 7 * DAY) } });
+    expect(t.rec.recordBestEffort).toHaveBeenCalledTimes(1);
+  });
+
+  it('chạm bù cũ hơn chạm đang có (updateMany không khớp dòng nào): không phát referral_touched', async () => {
+    const t = setup('row');
+    t.referralTouch.updateMany.mockResolvedValue({ count: 0 });
+    expect(await t.run(iso(6 * 3600_000))).toEqual({ ok: true });
+    expect(t.rec.recordBestEffort).not.toHaveBeenCalled();
+  });
+});

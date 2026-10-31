@@ -125,6 +125,16 @@ export const PERSONAL_TAX_ID_FORMAT_MESSAGE = 'Mã số thuế cá nhân gồm 1
 const SAMPLE_STOREFRONT_SELECT = { where: { isSample: true }, select: { id: true }, take: 1 } as const;
 
 @Injectable()
+const CLICKED_AT_SKEW_MS = 5 * 60_000;
+
+/** Thời điểm bấm client gửi lên: chỉ tin khi hợp lệ và không ở tương lai; ngày xấu hoặc quá lệch → null (tính từ now như cũ). */
+function parseClickedAt(raw: string | undefined, now: Date): Date | null {
+  if (!raw) return null;
+  const t = new Date(raw).getTime();
+  if (!Number.isFinite(t) || t > now.getTime() + CLICKED_AT_SKEW_MS) return null;
+  return new Date(Math.min(t, now.getTime()));
+}
+
 export class AffiliateService {
   private readonly logger = new Logger(AffiliateService.name);
 
@@ -202,7 +212,7 @@ export class AffiliateService {
    */
   async recordTouch(
     userId: string,
-    dto: { referralCode?: string; storefrontSlug?: string; kind?: string },
+    dto: { referralCode?: string; storefrontSlug?: string; kind?: string; clickedAt?: string },
     now: Date = new Date(),
     platform: 'miniapp' | 'web' = 'miniapp',
   ): Promise<{ ok: boolean }> {
@@ -210,18 +220,34 @@ export class AffiliateService {
     const referrerUserId = await this.findEligibleReferrer(dto.referralCode, userId);
     if (!referrerUserId) return { ok: false };
     const days = await this.config.get<number>('affiliate.attribution_days', 7);
-    const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    const clickedAt = parseClickedAt(dto.clickedAt, now);
+    const expiresAt = new Date((clickedAt ?? now).getTime() + days * 24 * 60 * 60 * 1000);
+    if (clickedAt && expiresAt <= now) return { ok: false };
     const data = {
       referrerUserId,
       storefrontSlug: dto.storefrontSlug ?? null,
       kind: dto.kind ?? 'ctv',
       expiresAt,
     };
-    await this.prisma.referralTouch.upsert({
-      where: { userId },
-      update: data,
-      create: { userId, ...data },
-    });
+    let applied = true;
+    if (clickedAt) {
+      // Chạm bù mang thời điểm bấm cũ: chỉ được thay chạm đang có khi hạn mới dài hơn, để không làm ngắn hạn
+      // của lượt bấm mới hơn. Điều kiện nằm trong câu UPDATE nên hai chạm đồng thời cũng không ghi đè ngược.
+      try {
+        await this.prisma.referralTouch.create({ data: { userId, ...data } });
+      } catch (err) {
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+        const r = await this.prisma.referralTouch.updateMany({ where: { userId, expiresAt: { lt: expiresAt } }, data });
+        applied = r.count > 0;
+      }
+    } else {
+      await this.prisma.referralTouch.upsert({
+        where: { userId },
+        update: data,
+        create: { userId, ...data },
+      });
+    }
+    if (!applied) return { ok: true };
     // Best-effort (không tx nào đang chạy ở đây) — mất 1 event referral_touched không đáng để
     // chặn/hủy việc ghi "chạm" giới thiệu thật (đường tiền).
     await this.analytics.recordBestEffort({

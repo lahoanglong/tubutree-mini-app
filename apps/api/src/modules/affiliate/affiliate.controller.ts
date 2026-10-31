@@ -51,6 +51,8 @@ class TouchDto {
   @IsString() @MaxLength(64) referralCode!: string;
   @IsOptional() @IsString() @MaxLength(64) storefrontSlug?: string;
   @IsOptional() @IsIn(['ctv', 'brand']) kind?: string;
+  /** Lúc khách bấm link (ISO). Hạn ghi công tính từ đây; không gửi thì tính từ lúc nhận. */
+  @IsOptional() @IsString() @MaxLength(40) clickedAt?: string;
 }
 
 /** Mã ngắn của link CTV: createLink sinh 5 byte base64url (7 ký tự); chừa dư cho mã dài hơn về sau. */
