@@ -789,7 +789,7 @@ describe('AdminService.createCoupon — chặn giá trị gõ nhầm (ADMINOPS-8
 
   it('ngày kết thúc đã qua → 400', async () => {
     const { p } = run({ startAt: '2026-01-01T00:00:00.000Z', endAt: '2026-02-01T00:00:00.000Z' });
-    await expect(p).rejects.toThrow('Ngày kết thúc đã qua — mã tạo ra sẽ không dùng được. Chọn ngày kết thúc từ hôm nay trở đi.');
+    await expect(p).rejects.toThrow('Ngày hết hạn đã qua — mã tạo ra sẽ không dùng được. Chọn ngày hết hạn từ hôm nay trở đi.');
   });
 
   // R4-ADMIN-11: mã trỏ tới hạng / người dùng không có thật thì không ai dùng được (isCouponEligible so đúng id) mà
@@ -879,7 +879,7 @@ describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
     const now = Date.now();
     await expect(
       mkAdmin(prisma).createCoupon({ ...couponBase, startAt: new Date(now).toISOString(), endAt: new Date(now - 10 * 864e5).toISOString() }),
-    ).rejects.toThrow('Ngày kết thúc đã qua — mã tạo ra sẽ không dùng được. Chọn ngày kết thúc từ hôm nay trở đi.');
+    ).rejects.toThrow('Ngày hết hạn đã qua — mã tạo ra sẽ không dùng được. Chọn ngày hết hạn từ hôm nay trở đi.');
     expect(create).not.toHaveBeenCalled();
   });
 
