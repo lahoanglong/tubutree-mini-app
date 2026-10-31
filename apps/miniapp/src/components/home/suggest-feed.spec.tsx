@@ -130,6 +130,22 @@ describe('SuggestFeed — Gợi ý hôm nay (Q9)', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Sản phẩm 99' })).toBeNull());
   });
 
+  it('trang 1 toàn món đã nằm ở kệ trên nhưng còn trang sau: tải tiếp và hiện món của trang 2, không ẩn khối', async () => {
+    mocks.fetchCatalog.mockImplementation(async ({ page: n }: { page: number }) =>
+      n === 2 ? { data: cards(21, 3), meta: { page: 2, limit: 20, total: 23 }, filtersIgnored: false } : page(cards(1, 20), { total: 23 }),
+    );
+    mount(new Set(cards(1, 20).map((c) => c.slug)));
+    expect(await screen.findByRole('button', { name: 'Sản phẩm 21' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Gợi ý hôm nay' })).toBeInTheDocument();
+    expect(mocks.fetchCatalog).toHaveBeenCalledTimes(2);
+  });
+
+  it('mọi trang đều là món đã nằm ở kệ trên và hết trang: ẩn khối sau khi tải hết', async () => {
+    mocks.fetchCatalog.mockResolvedValue(page(cards(1, 4)));
+    const { container } = mount(new Set(cards(1, 4).map((c) => c.slug)));
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+  });
+
   it('đã tải xong, rỗng, không lỗi → ẩn cả khối: không tiêu đề, không chip', async () => {
     mocks.fetchCatalog.mockResolvedValue(page([]));
     const { container } = mount();

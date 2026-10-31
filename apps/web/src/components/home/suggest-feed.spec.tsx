@@ -166,6 +166,22 @@ describe('SuggestFeed (web) — Gợi ý hôm nay (Q9)', () => {
     expect(c.textContent).not.toContain('Sản phẩm 99');
   });
 
+  it('trang 1 toàn món đã nằm ở kệ trên nhưng còn trang sau: tải tiếp và hiện món của trang 2, không ẩn khối', async () => {
+    mocks.get.mockImplementation(async (_path: string, opts?: { query?: { page?: number } }) =>
+      opts?.query?.page === 2 ? { data: cards(21, 3), meta: { page: 2, limit: 20, total: 23 } } : page(cards(1, 20), { total: 23 }),
+    );
+    const c = await mount({ exclude: new Set(cards(1, 20).map((x) => x.slug)) });
+    await flush(8);
+    expect(tiles(c).map((t) => t.textContent)).toEqual(['Sản phẩm 21', 'Sản phẩm 22', 'Sản phẩm 23'].map((n) => expect.stringContaining(n)));
+    expect(c.querySelector('h2')?.textContent).toBe('Gợi ý hôm nay');
+    expect(productCalls()).toHaveLength(2);
+  });
+
+  it('mọi trang đều là món đã nằm ở kệ trên và hết trang: ẩn khối sau khi tải hết', async () => {
+    const c = await mount({ exclude: new Set(cards(1, 4).map((x) => x.slug)) });
+    expect(c.textContent).toBe('');
+  });
+
   it('đã tải xong, rỗng, không lỗi → ẩn cả khối: không tiêu đề, không chip', async () => {
     mocks.get.mockImplementation(async () => page([]));
     const c = await mount();

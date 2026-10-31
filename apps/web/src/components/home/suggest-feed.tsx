@@ -87,8 +87,14 @@ export function SuggestFeed({ initial, seed: serverSeed, categories, exclude }: 
     return () => io.disconnect();
   }, [canLoadMore, isFetchingNextPage, fetchNextPage, items.length]);
 
-  // "Tất cả" đã tải xong mà rỗng (không lỗi): không để lại tiêu đề và chip trên khoảng trống. Ở chip khác khối ở lại để khách còn đường quay về.
-  if (categoryId === null && !loadingFirst && !pages.isError && items.length === 0) return null;
+  // Cả trang đã tải đều là món nằm ở kệ trên: lưới rỗng nhưng còn trang sau, nên tải tiếp (không có gì trên màn để cuộn tới thì không có sentinel chạm) thay vì ẩn khối.
+  const draining = items.length === 0 && !!hasNextPage && !pages.isError;
+  useEffect(() => {
+    if (draining && !isFetchingNextPage) void fetchNextPage();
+  }, [draining, isFetchingNextPage, fetchNextPage]);
+
+  // "Tất cả" đã tải xong mà rỗng (không lỗi, hết trang): không để lại tiêu đề và chip trên khoảng trống. Ở chip khác khối ở lại để khách còn đường quay về.
+  if (categoryId === null && !loadingFirst && !draining && !pages.isError && items.length === 0) return null;
 
   const toBrowse = () => router.push(browseHref(EMPTY_SEARCH_STATE));
   return (
@@ -101,7 +107,7 @@ export function SuggestFeed({ initial, seed: serverSeed, categories, exclude }: 
           </Chip>
         ))}
       </ScrollRow>
-      {loadingFirst ? (
+      {loadingFirst || draining ? (
         <ProductGrid items={[]} variant="grid" loading skeletonCount={6} />
       ) : items.length === 0 ? (
         pages.isError ? <HomeBlockError title={homeCopy.suggest.title} error={pages.error} onRetry={pages.refetch} retrying={pages.isFetching} /> : null

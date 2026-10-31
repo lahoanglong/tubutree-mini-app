@@ -77,8 +77,14 @@ export function SuggestFeed({ exclude }: SuggestFeedProps) {
     return () => io.disconnect();
   }, [canLoadMore, isFetchingNextPage, fetchNextPage, items.length]);
 
-  // "Tất cả" đã tải xong mà rỗng (không lỗi): không để lại tiêu đề và chip trên khoảng trống. Ở chip khác khối ở lại để khách còn đường quay về.
-  if (categoryId === null && !loadingFirst && !pages.isError && items.length === 0) return null;
+  // Cả trang đã tải đều là món nằm ở kệ trên: lưới rỗng nhưng còn trang sau, nên tải tiếp (không có gì trên màn để cuộn tới thì không có sentinel chạm) thay vì ẩn khối.
+  const draining = items.length === 0 && !!hasNextPage && !pages.isError;
+  useEffect(() => {
+    if (draining && !isFetchingNextPage) void fetchNextPage();
+  }, [draining, isFetchingNextPage, fetchNextPage]);
+
+  // "Tất cả" đã tải xong mà rỗng (không lỗi, hết trang): không để lại tiêu đề và chip trên khoảng trống. Ở chip khác khối ở lại để khách còn đường quay về.
+  if (categoryId === null && !loadingFirst && !draining && !pages.isError && items.length === 0) return null;
 
   return (
     <section aria-label={homeCopy.suggest.title}>
@@ -100,7 +106,7 @@ export function SuggestFeed({ exclude }: SuggestFeedProps) {
         ))}
       </ScrollRow>
       <div style={{ padding: '0 16px' }}>
-        {loadingFirst ? (
+        {loadingFirst || draining ? (
           <CatalogGridSkeleton count={6} />
         ) : items.length === 0 ? (
           pages.isError ? <HomeBlockError title={homeCopy.suggest.title} error={pages.error} onRetry={pages.refetch} retrying={pages.isFetching} /> : null
