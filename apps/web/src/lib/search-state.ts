@@ -1,4 +1,5 @@
 import type { CatalogQuery, CatalogSort } from '@tubutree/app-core/api/catalog';
+import { BROWSE_PAGE_LIMIT, browseMode } from '@tubutree/app-core/browse/mode';
 import { browseText, formatVndShort } from './browse-text';
 
 export type FilterType = 'price' | 'in_stock' | 'brand' | 'rating';
@@ -17,6 +18,8 @@ export interface SearchState {
   maxPrice?: number;
   inStock: boolean;
   minRating?: number;
+  /** Nút "Xem tất cả sản phẩm": danh sách không lọc. Vắng thì gốc không tham số là hub. */
+  all?: boolean;
 }
 
 /** Phần trạng thái mà FilterSheet chỉnh (nháp tới khi bấm "Xem n sản phẩm"). */
@@ -59,7 +62,7 @@ export const MAX_QUERY_LENGTH = 100;
  * Các khoá URL mà `parseSearchState`/`serializeSearchState` sở hữu. Mọi khoá khác (utm, ref…) là
  * "tham số lạ": `useSearchState` giữ nguyên khi ghi lại URL (trừ `focus`, tham số dùng một lần).
  */
-export const SEARCH_PARAM_KEYS: readonly string[] = ['q', 'category', 'segment', 'brand', 'minPrice', 'maxPrice', 'inStock', 'rating', 'sort'];
+export const SEARCH_PARAM_KEYS: readonly string[] = ['q', 'category', 'segment', 'brand', 'minPrice', 'maxPrice', 'inStock', 'rating', 'sort', 'all'];
 
 function intParam(v: string | null): number | undefined {
   if (v == null || v.trim() === '') return undefined;
@@ -80,6 +83,7 @@ export function parseSearchState(params: URLSearchParams): SearchState {
     maxPrice: intParam(params.get('maxPrice')),
     inStock: params.get('inStock') === '1',
     minRating: rating != null && rating >= 1 && rating <= 5 ? rating : undefined,
+    all: params.get('all') === '1' ? true : undefined,
   };
 }
 
@@ -96,13 +100,15 @@ export function serializeSearchState(s: SearchState): URLSearchParams {
   if (s.inStock) p.set('inStock', '1');
   if (s.minRating != null) p.set('rating', String(s.minRating));
   if (s.sort) p.set('sort', s.sort);
+  // `all` chỉ có nghĩa khi không còn gì khác đưa trang vào chế độ danh sách: một trạng thái một URL.
+  if (s.all && browseMode({ ...s, all: false }) === 'hub') p.set('all', '1');
   return p;
 }
 
 /** Trang danh mục trên web: cùng bộ tham số với Mini App, đặt dưới /san-pham. */
 export const BROWSE_PATH = '/san-pham';
-/** Số sản phẩm mỗi trang Danh mục. Đặt ở module không 'use client': trang máy chủ import từ file client chỉ nhận một hàm giữ chỗ, không phải số. */
-export const PAGE_LIMIT = 24;
+/** Số sản phẩm mỗi trang Danh mục (20, như Mini App). Đặt ở module không 'use client': trang máy chủ import từ file client chỉ nhận một hàm giữ chỗ, không phải số. */
+export const PAGE_LIMIT = BROWSE_PAGE_LIMIT;
 
 export function browseHref(s: SearchState): string {
   const qs = serializeSearchState(s).toString();
@@ -144,6 +150,22 @@ export function isBrowseRoot(s: SearchState): boolean {
   return !s.q && !s.category && !s.segment && activeFilterCount(s) === 0;
 }
 
+/**
+ * Hub (không lưới sản phẩm) hay danh sách; tham số lạ (utm, ref) không đổi chế độ. Từ trang 2 trở đi luôn là danh sách: `?page=2` ở gốc
+ * là liên kết phân trang của danh sách, không phải hub.
+ */
+export function isBrowseHub(s: SearchState, page = 1): boolean {
+  return browseMode({ ...s, all: s.all || page > 1 }) === 'hub';
+}
+
+/**
+ * Mọi thay đổi khi đã ở danh sách đi qua đây: gỡ chip cuối, về "Gợi ý" hay xoá bộ lọc không được đẩy khách về hub, họ đang xem
+ * danh sách nên ở lại danh sách "tất cả". `serializeSearchState` bỏ `all` khi còn bộ lọc/sort khác.
+ */
+export function withListMode(patch: Partial<SearchState>): Partial<SearchState> {
+  return { ...patch, all: true };
+}
+
 const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
 
 export function changedFilterTypes(before: SearchState, after: FilterDraft): FilterType[] {
@@ -167,11 +189,18 @@ export interface ActiveFilterChip {
   patch: Partial<SearchState>;
 }
 
-/** Chip "đang lọc" gỡ được từng cái. Danh mục chưa có tên (danh sách chưa tải) thì chưa hiện. */
-export function activeFilterChips(s: SearchState, names: { categoryName?: string; segmentName?: string }): ActiveFilterChip[] {
+/**
+ * Chip "đang lọc" gỡ được từng cái. Danh mục chưa có tên (danh sách chưa tải) thì chưa hiện. `omitScope`: tên danh mục/phân khúc đã
+ * là tiêu đề của danh sách (hiện đúng một lần), nên không lặp thành chip.
+ */
+export function activeFilterChips(
+  s: SearchState,
+  names: { categoryName?: string; segmentName?: string },
+  opts: { omitScope?: boolean } = {},
+): ActiveFilterChip[] {
   const chips: ActiveFilterChip[] = [];
-  if (s.category && names.categoryName) chips.push({ key: 'category', label: names.categoryName, patch: { category: undefined } });
-  if (s.segment) chips.push({ key: 'segment', label: names.segmentName ?? s.segment, patch: { segment: undefined } });
+  if (!opts.omitScope && s.category && names.categoryName) chips.push({ key: 'category', label: names.categoryName, patch: { category: undefined } });
+  if (!opts.omitScope && s.segment) chips.push({ key: 'segment', label: names.segmentName ?? s.segment, patch: { segment: undefined } });
   for (const b of s.brands) chips.push({ key: `brand:${b}`, label: b, patch: { brands: s.brands.filter((x) => x !== b) } });
   if (s.minPrice != null || s.maxPrice != null) {
     chips.push({ key: 'price', label: priceRangeLabel(s.minPrice, s.maxPrice), patch: { minPrice: undefined, maxPrice: undefined } });

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   CLEAR_SEARCH_PATCH, EMPTY_SEARCH_STATE, PRICE_RANGES, activeFilterChips, activeFilterCount, changedFilterTypes,
-  browseHref, draftFromState, isBrowseRoot, parseSearchState, priceRangeLabel, serializeSearchState, toCatalogQuery, type SearchState,
+  PAGE_LIMIT, SEARCH_PARAM_KEYS, browseHref, draftFromState, isBrowseHub, isBrowseRoot, parseSearchState, priceRangeLabel,
+  serializeSearchState, toCatalogQuery, withListMode, type SearchState,
 } from './search-state';
 
 const parse = (s: string) => parseSearchState(new URLSearchParams(s));
@@ -120,5 +121,53 @@ describe('browseHref', () => {
     expect(browseHref(EMPTY_SEARCH_STATE)).toBe('/san-pham');
     expect(browseHref({ ...EMPTY_SEARCH_STATE, q: 'dầu gội' })).toBe(`/san-pham?${new URLSearchParams({ q: 'dầu gội' }).toString()}`);
     expect(browseHref({ ...EMPTY_SEARCH_STATE, category: 'c1', brands: ['A&B'] })).toBe('/san-pham?category=c1&brand=A%26B');
+  });
+});
+
+describe('chế độ hub / danh sách (tham số all)', () => {
+  it('một trang 20 món', () => {
+    expect(PAGE_LIMIT).toBe(20);
+  });
+
+  it('parse all=1 thành true; giá trị khác bỏ qua (trạng thái gốc vẫn bằng EMPTY_SEARCH_STATE)', () => {
+    expect(parse('all=1').all).toBe(true);
+    expect(parse('all=0').all).toBeUndefined();
+    expect(parse('all=').all).toBeUndefined();
+    expect(parse('')).toEqual(EMPTY_SEARCH_STATE);
+    expect(SEARCH_PARAM_KEYS).toContain('all');
+  });
+
+  it('serialize: all=1 đứng một mình; có sort hoặc bộ lọc thì bỏ (một trạng thái một URL)', () => {
+    expect(serializeSearchState({ ...EMPTY_SEARCH_STATE, all: true }).toString()).toBe('all=1');
+    expect(serializeSearchState({ ...EMPTY_SEARCH_STATE, all: true, sort: 'newest' }).toString()).toBe('sort=newest');
+    expect(serializeSearchState({ ...EMPTY_SEARCH_STATE, all: true, category: 'c' }).toString()).toBe('category=c');
+    expect(serializeSearchState({ ...EMPTY_SEARCH_STATE, all: true, q: 'x' }).toString()).toBe('q=x');
+    expect(browseHref({ ...EMPTY_SEARCH_STATE, all: true })).toBe('/san-pham?all=1');
+  });
+
+  it('isBrowseHub: gốc và tham số lạ là hub; link cũ và bộ lọc là danh sách; trang > 1 ở gốc cũng là danh sách', () => {
+    expect(isBrowseHub(EMPTY_SEARCH_STATE)).toBe(true);
+    expect(isBrowseHub(parse('utm_source=zalo'))).toBe(true);
+    for (const url of ['sort=best_seller', 'segment=eco', 'brand=Tubu', 'inStock=1', 'all=1', 'q=nuoc', 'category=c', 'rating=4', 'minPrice=1']) {
+      expect(isBrowseHub(parse(url)), url).toBe(false);
+    }
+    expect(isBrowseHub(EMPTY_SEARCH_STATE, 1)).toBe(true);
+    expect(isBrowseHub(EMPTY_SEARCH_STATE, 2)).toBe(false);
+  });
+
+  it('withListMode giữ khách ở danh sách khi gỡ chip cuối hoặc về "Gợi ý"', () => {
+    const next = (from: string, patch: Partial<SearchState>) =>
+      serializeSearchState({ ...parse(from), ...withListMode(patch) }).toString();
+    expect(next('brand=Tubu', { brands: [] })).toBe('all=1');
+    expect(next('sort=best_seller', { sort: undefined })).toBe('all=1');
+    expect(next('sort=best_seller&brand=Tubu', { sort: undefined })).toBe('brand=Tubu');
+    expect(next('sort=newest', { ...CLEAR_SEARCH_PATCH })).toBe('sort=newest');
+  });
+
+  it('activeFilterChips omitScope: tên danh mục/phân khúc đã ở tiêu đề nên không lặp thành chip', () => {
+    const s = { ...EMPTY_SEARCH_STATE, category: 'cat-a', segment: 'eco', brands: ['Tubu'] };
+    const labels = (omitScope: boolean) => activeFilterChips(s, { categoryName: 'Da', segmentName: 'Sống xanh' }, { omitScope }).map((c) => c.label);
+    expect(labels(false)).toEqual(['Da', 'Sống xanh', 'Tubu']);
+    expect(labels(true)).toEqual(['Tubu']);
   });
 });

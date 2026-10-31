@@ -6,32 +6,34 @@ import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ChevronRight, Leaf, Search, X } from 'lucide-react';
 import type { CatalogPage, CategoryDTO, ProductCard as ProductCardData, ProductSuggestion } from '@tubutree/app-core/api/catalog';
+import { chipScope, findCategory } from '@tubutree/app-core/browse/category-tree';
+import { browseSortOptions, sortForTab, sortTab, type SortTab } from '@tubutree/app-core/browse/sort';
 import { brandsQuery, browseQuery, categoriesQuery } from '@tubutree/app-core/queries/catalog';
 import { browseText } from '@/lib/browse-text';
-import { Heading } from '@/components/mini/text';
 import { categoryEntries, segmentLabel, type CategoryEntry } from '@/lib/browse-categories';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { clearRecentSearches, pushRecentSearch, readRecentSearches } from '@/lib/recent-searches';
 import {
-  CLEAR_SEARCH_PATCH, PAGE_LIMIT, activeFilterChips, activeFilterCount, isBrowseRoot, toCatalogQuery, type FilterDraft,
+  CLEAR_SEARCH_PATCH, EMPTY_SEARCH_STATE, PAGE_LIMIT, activeFilterChips, activeFilterCount, browseHref, isBrowseHub, isBrowseRoot,
+  toCatalogQuery, withListMode, type FilterDraft, type SearchState,
 } from '@/lib/search-state';
 import { useBrowseState } from '@/lib/use-browse-state';
 import { useSuggest } from '@/lib/use-suggest';
 import { GRID_PRODUCTS_WITH_FILTER } from '@/lib/product-grid';
-import { PRIORITY_CARDS, ProductGrid } from '@/components/mini';
+import { PRIORITY_CARDS, ProductGrid, SortBar } from '@/components/mini';
 import { ErrorState } from '@/components/ui/error-state';
 import { ProductGridSkeleton } from '@/components/ui/skeleton';
 import { BrowsePager } from './browse-pager';
 import { PhoneCartButton } from '@/components/phone-cart-button';
 import { phoneBrandText } from '@/lib/phone-ui';
-import { CategoryGrid } from './category-grid';
-import { Chip } from './chip';
+import { ActiveFilters } from './active-filters';
+import { BrowseHub } from './browse-hub';
+import { CategoryChipRow } from './category-chip-row';
 import { FilterSheet } from './filter-sheet';
 import { FilterSidebar } from './filter-sidebar';
+import { ListHeading } from './list-heading';
 import { RecentlyViewedRail } from './recently-viewed-rail';
-import { ResultHeader } from './result-header';
-import { SortChips } from './sort-chips';
 import { SuggestList } from './suggest-list';
 import { loadErrorText } from '@/lib/error-text';
 import { announcePdpNavigation } from '@/components/skeletons/pdp-nav-event';
@@ -48,6 +50,8 @@ export interface BrowseViewProps {
   initial?: BrowseInitial | null;
   brands?: { brand: string; count: number; slug?: string | null }[];
   categories?: CategoryDTO[];
+  /** Kệ Bán chạy nhất của hub do server tải sẵn. */
+  bestSellers?: ProductCardData[];
 }
 
 const uniqueById = (list: ProductCardData[]) => {
@@ -58,14 +62,19 @@ const uniqueById = (list: ProductCardData[]) => {
 const errorMessage = loadErrorText;
 
 /**
- * Trang Danh mục / Tìm kiếm của web, cùng hành vi với pages/browse.tsx của Mini App. Toàn bộ trạng thái (q, sắp xếp, lọc,
- * danh mục, phân khúc, thương hiệu) nằm trong URL (`useBrowseState`, replace). Gõ chỉ hiện GỢI Ý; Enter hoặc chạm gợi ý mới
- * ghi `q`.
+ * Trang Danh mục / Tìm kiếm của web, cùng hành vi với pages/browse.tsx của Mini App, hai chế độ theo URL. Gốc `/san-pham` chưa tìm,
+ * chưa lọc, chưa `all=1` và đang ở trang 1 là HUB (ô danh mục, Đã xem, Bán chạy nhất, thương hiệu; KHÔNG tải danh sách). Có từ khoá,
+ * danh mục, bộ lọc, sắp xếp, `all=1` hoặc `?page` từ 2 là DANH SÁCH: SortBar dính, một tiêu đề + số kết quả, chip danh mục con, lưới
+ * 20 món mỗi trang. Toàn bộ trạng thái nằm trong URL (`useBrowseState`): từ hub chạm ô là PUSH (Back về hub), trong danh sách là
+ * replace. Gõ chỉ hiện GỢI Ý; Enter hoặc chạm gợi ý mới ghi `q`.
  */
-export default function BrowseView({ initial = null, brands: initialBrands, categories: initialCategories }: BrowseViewProps) {
+export default function BrowseView({ initial = null, brands: initialBrands, categories: initialCategories, bestSellers }: BrowseViewProps) {
   const router = useRouter();
   const { state, urlKey, focusSearch, page, update, consumeFocus } = useBrowseState();
   const inputRef = useRef<HTMLInputElement>(null);
+  const hubState = isBrowseHub(state, page);
+  /** Mọi thay đổi khi đã ở danh sách: ở lại danh sách (gỡ chip cuối, về "Phổ biến" không đẩy khách về hub). */
+  const updateList = (patch: Partial<SearchState>) => update(withListMode(patch));
 
   // Ô nhập theo `q` của URL mỗi khi URL đổi từ ngoài (Back, chạm từ khoá) — đặt trong render, không qua effect.
   const [draft, setDraft] = useState(state.q);
@@ -108,6 +117,8 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
     initialPageParam: startPage,
     getNextPageParam: (last: CatalogPage) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
     ...(seeded ? { initialData: { pages: [seeded.page], pageParams: [seeded.startPage] }, staleTime: 60_000 } : {}),
+    // Hub không tải danh sách: `enabled` chặn cả lần tải đầu lẫn `refetch` tự động.
+    enabled: !hubState,
   });
   const firstPage = products.data?.pages[0];
   const list = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []);
@@ -136,6 +147,12 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
     stopEditing();
     update(e.kind === 'category' ? { category: e.key, segment: undefined, q: '' } : { segment: e.key, category: undefined, q: '' });
   };
+  /** Mở MỚI từ hub: PUSH, để Back về hub (trong danh sách mọi thay đổi là replace). */
+  const openFromHub = (patch: Partial<SearchState>) => {
+    stopEditing();
+    router.push(browseHref({ ...EMPTY_SEARCH_STATE, ...patch }));
+  };
+  const pickHubCategory = (e: CategoryEntry) => openFromHub(e.kind === 'category' ? { category: e.key } : { segment: e.key });
   const pickSuggestion = (p: ProductSuggestion) => {
     stopEditing();
     const href = `/san-pham/${encodeURIComponent(p.slug)}`;
@@ -144,20 +161,24 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   };
   const applyFilters = (d: FilterDraft) => {
     setFiltersOpen(false);
-    update({ brands: d.brands, minPrice: d.minPrice, maxPrice: d.maxPrice, inStock: d.inStock, minRating: d.minRating });
+    updateList({ brands: d.brands, minPrice: d.minPrice, maxPrice: d.maxPrice, inStock: d.inStock, minRating: d.minRating });
   };
 
   const root = isBrowseRoot(state);
-  const categoryName = state.category ? categoriesQ.data?.find((c) => c.id === state.category)?.name : undefined;
-  const chips = activeFilterChips(state, { categoryName, segmentName: state.segment ? segmentLabel(state.segment) : undefined });
+  const categoryName = state.category ? findCategory(categoriesQ.data, state.category)?.name : undefined;
+  const segmentName = state.segment ? segmentLabel(state.segment) : undefined;
+  // Danh mục/phân khúc đã là tiêu đề của danh sách (hiện đúng một lần) nên không lặp thành chip; có từ khoá thì tiêu đề nhường chỗ cho ô tìm.
+  const chips = activeFilterChips(state, { categoryName, segmentName }, { omitScope: !state.q });
   const noResults = !products.isLoading && !products.isError && list.length === 0;
-  const filterHeading = state.q ? null : (categoryName ?? (state.segment ? segmentLabel(state.segment) : null) ?? (state.brands.length === 1 ? state.brands[0] : null));
-  const activeCategory = state.category ? { kind: 'category' as const, key: state.category } : state.segment ? { kind: 'segment' as const, key: state.segment } : null;
+  const singleBrand = state.brands.length === 1 ? state.brands[0]! : null;
+  const listTitle = state.q ? null : (categoryName ?? segmentName ?? singleBrand);
+  const scope = state.category ? chipScope(categoriesQ.data, state.category) : null;
   // Trang nhãn hàng (/brand/:slug) chỉ có khi nhãn đã công khai; đây là liên kết duy nhất dẫn tới nó từ danh mục.
-  const brandSlug = state.brands.length === 1 ? (brandsQ.data?.find((b) => b.brand === state.brands[0])?.slug ?? null) : null;
+  const brandSlug = singleBrand ? (brandsQ.data?.find((b) => b.brand === singleBrand)?.slug ?? null) : null;
 
   return (
-    <div>
+    // `--sort-bar-top`: SortBar dính ngay dưới hàng ô tìm dính ở điện thoại (58px, số đo của Mini App), dưới thanh đầu từ md. Phải là chuỗi lớp nguyên văn để Tailwind thấy.
+    <div data-browse-scope className="max-md:[--sort-bar-top:58px] md:[--sort-bar-top:var(--header-h)]">
       <h1 className={`${ui.pageTitle} mb-3 max-md:sr-only`}>{browseText.title}</h1>
       <form
         role="search"
@@ -165,7 +186,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
           e.preventDefault();
           commit(draft);
         }}
-        className="flex items-center gap-2 pb-2 max-md:sticky max-md:top-0 max-md:z-20 max-md:-mx-4 max-md:bg-[var(--color-bg-canvas)] max-md:px-4 max-md:pt-3 lg:max-w-2xl"
+        className="flex items-center gap-2 pb-2 max-md:sticky max-md:top-0 max-md:z-20 max-md:-mx-4 max-md:bg-[var(--color-bg-canvas)] max-md:px-4 max-md:py-1.5 lg:max-w-2xl"
       >
         <div className="relative min-w-0 flex-1">
           <label htmlFor="browse-q" className="sr-only">
@@ -227,6 +248,16 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
             setRecent([]);
           }}
         />
+      ) : hubState ? (
+        <BrowseHub
+          entries={entries}
+          categoriesLoading={categoriesQ.isLoading}
+          brands={brandsQ.data}
+          initialBestSellers={bestSellers}
+          onPickCategory={pickHubCategory}
+          onPickAll={() => openFromHub({ all: true })}
+          onPickBrand={(brand) => openFromHub({ brands: [brand] })}
+        />
       ) : (
         <div className="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start lg:gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
           <FilterSidebar
@@ -236,120 +267,116 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
             onPickCategory={pickCategory}
             onClearCategory={() => {
               leaveSearchField();
-              update({ category: undefined, segment: undefined });
+              updateList({ category: undefined, segment: undefined });
             }}
             onPatch={(patch) => {
               leaveSearchField();
-              update(patch);
+              updateList(patch);
             }}
           />
           <div className="min-w-0">
-          {filterHeading && (
-            <Heading variant="title-lg" as="h2" className="mb-1 [overflow-wrap:anywhere] md:hidden">
-              {filterHeading}
-            </Heading>
-          )}
-          {activeCategory && (
-            <div role="group" aria-label={browseText.categoryChips} className="scroll-x -mx-4 mb-1 flex gap-2 px-4 py-1 md:hidden">
-              {entries.map((e) => (
-                <Chip key={`${e.kind}:${e.key}`} selected={e.kind === activeCategory.kind && e.key === activeCategory.key} onPress={() => pickCategory(e)}>
-                  {e.label}
-                </Chip>
-              ))}
-            </div>
-          )}
-          {/* Từ lg danh mục nằm ở cột lọc bên trái nên lưới ô danh mục ẩn đi. */}
-          {root && (
-            <div className="lg:hidden">
-              <CategoryGrid entries={entries} isLoading={categoriesQ.isLoading} onSelect={pickCategory} />
-            </div>
-          )}
-          {root && <RecentlyViewedRail />}
-          <SortChips
-            value={state.sort}
-            onChange={(sort) => {
-              leaveSearchField();
-              update({ sort });
-            }}
-          />
-          <ResultHeader
-            total={products.isError && list.length === 0 ? undefined : (firstPage?.meta.total ?? 0)}
-            isLoading={products.isLoading}
-            chips={chips}
-            filterCount={activeFilterCount(state)}
-            filtersIgnored={firstPage?.filtersIgnored ?? false}
-            onOpenFilters={() => setFiltersOpen(true)}
-            onPatch={(patch) => {
-              leaveSearchField();
-              update(patch);
-            }}
-          />
-          {brandSlug && (
-            <p className="mb-2 text-sm">
-              <Link href={`/brand/${encodeURIComponent(brandSlug)}`} className="inline-flex min-h-11 items-center gap-1 font-semibold text-forest-700 underline">
-                Xem trang nhãn hàng {state.brands[0]}
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </p>
-          )}
-          <section aria-labelledby="danh-sach-san-pham" className="pb-6">
-            <h2 id="danh-sach-san-pham" className="sr-only">
-              Danh sách sản phẩm
-            </h2>
-            {products.isLoading ? (
-              <ProductGridSkeleton count={8} className={GRID_PRODUCTS_WITH_FILTER} />
-            ) : products.isError && list.length === 0 ? (
-              <ErrorState message={errorMessage(products.error)} onRetry={() => void products.refetch()} retryLabel={browseText.retry} />
-            ) : list.length === 0 ? (
-              <EmptyResults
-                q={state.q}
-                root={root}
-                onClear={() => update(CLEAR_SEARCH_PATCH)}
+            {/* Dính ở khung bọc, không ở chính SortBar: cha của phần tử dính phải cao bằng cả danh sách. Từ lg cột lọc đã có nên nút Lọc ẩn đi. */}
+            <div className="sticky top-[var(--sort-bar-top,0px)] z-[2] -mx-4 md:mx-0 lg:[&>div>button:last-child]:hidden">
+              <SortBar
+                value={sortTab(state.sort)}
+                options={browseSortOptions(state.sort, Boolean(state.q))}
+                onChange={(tab) => {
+                  const next = tab as SortTab;
+                  // Chạm lại tab đang chọn không làm gì; riêng tab Giá đảo chiều.
+                  if (next !== 'price' && next === sortTab(state.sort)) return;
+                  leaveSearchField();
+                  updateList({ sort: sortForTab(state.sort, next) });
+                }}
+                filterCount={activeFilterCount(state)}
+                onFilter={() => setFiltersOpen(true)}
               />
-            ) : (
-              <>
-                <ProductGrid items={list} variant="grid" className={GRID_PRODUCTS_WITH_FILTER} priorityCount={PRIORITY_CARDS} />
-                {/* Lỗi khi ĐÃ có dữ liệu ("Xem thêm" hoặc làm mới nền thất bại): giữ nguyên danh sách, báo và thử lại tại chỗ. */}
-                {products.isError && (
-                  <div role="alert" className="flex flex-wrap items-center justify-center gap-2 pt-4">
-                    <p className="text-sm text-danger-fg">{browseText.loadMoreFailed}</p>
-                    <button
-                      type="button"
-                      disabled={products.isFetching}
-                      onClick={() => {
-                        (products.isFetchNextPageError ? products.fetchNextPage() : products.refetch()).catch(() => undefined);
-                      }}
-                      className={ui.btnSecondary}
-                    >
-                      {browseText.retry}
-                    </button>
-                  </div>
-                )}
-                {products.hasNextPage && !products.isFetchNextPageError && (
-                  <div className="flex justify-center pt-4">
-                    <button
-                      type="button"
-                      disabled={products.isFetchingNextPage}
-                      onClick={() => {
-                        products.fetchNextPage().catch(() => undefined);
-                      }}
-                      className={`${ui.btnSecondary} min-w-40`}
-                    >
-                      {browseText.loadMore}
-                    </button>
-                  </div>
-                )}
-                <BrowsePager
-                  state={state}
-                  startPage={startPage}
-                  lastPage={products.data?.pages.at(-1)?.meta.page ?? page}
-                  hasNext={products.hasNextPage}
-                />
-              </>
+            </div>
+            <ListHeading
+              title={listTitle}
+              count={products.isError && list.length === 0 ? undefined : (firstPage?.meta.total ?? 0)}
+              isLoading={products.isLoading}
+            />
+            {brandSlug && !state.q && (
+              <p className="mb-2 text-sm">
+                <Link href={`/brand/${encodeURIComponent(brandSlug)}`} className="inline-flex min-h-11 items-center gap-1 font-semibold text-forest-700 underline">
+                  Xem trang nhãn hàng {singleBrand}
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              </p>
             )}
-          </section>
-          {/* Tìm/lọc không ra gì vẫn cho khách lối đi tiếp; ở trang gốc dải đã hiện phía trên lưới. */}
-          {noResults && !root && <RecentlyViewedRail />}
+            {scope && state.category && (
+              <CategoryChipRow
+                parent={scope.parent}
+                chips={scope.chips}
+                activeId={state.category}
+                onSelect={(id) => {
+                  leaveSearchField();
+                  updateList({ category: id, segment: undefined });
+                }}
+              />
+            )}
+            <ActiveFilters
+              chips={chips}
+              filtersIgnored={firstPage?.filtersIgnored ?? false}
+              onPatch={(patch) => {
+                leaveSearchField();
+                updateList(patch);
+              }}
+            />
+            <section aria-labelledby="danh-sach-san-pham" className="pb-6 pt-2">
+              <h2 id="danh-sach-san-pham" className="sr-only">
+                Danh sách sản phẩm
+              </h2>
+              {products.isLoading ? (
+                <ProductGridSkeleton count={8} className={GRID_PRODUCTS_WITH_FILTER} />
+              ) : products.isError && list.length === 0 ? (
+                <ErrorState message={errorMessage(products.error)} onRetry={() => void products.refetch()} retryLabel={browseText.retry} />
+              ) : list.length === 0 ? (
+                <EmptyResults q={state.q} root={root} onClear={() => updateList(CLEAR_SEARCH_PATCH)} />
+              ) : (
+                <>
+                  <ProductGrid items={list} variant="grid" className={GRID_PRODUCTS_WITH_FILTER} priorityCount={PRIORITY_CARDS} />
+                  {/* Lỗi khi ĐÃ có dữ liệu ("Xem thêm" hoặc làm mới nền thất bại): giữ nguyên danh sách, báo và thử lại tại chỗ. */}
+                  {products.isError && (
+                    <div role="alert" className="flex flex-wrap items-center justify-center gap-2 pt-4">
+                      <p className="text-sm text-danger-fg">{browseText.loadMoreFailed}</p>
+                      <button
+                        type="button"
+                        disabled={products.isFetching}
+                        onClick={() => {
+                          (products.isFetchNextPageError ? products.fetchNextPage() : products.refetch()).catch(() => undefined);
+                        }}
+                        className={ui.btnSecondary}
+                      >
+                        {browseText.retry}
+                      </button>
+                    </div>
+                  )}
+                  {products.hasNextPage && !products.isFetchNextPageError && (
+                    <div className="flex justify-center pt-4">
+                      <button
+                        type="button"
+                        disabled={products.isFetchingNextPage}
+                        onClick={() => {
+                          products.fetchNextPage().catch(() => undefined);
+                        }}
+                        className={`${ui.btnSecondary} min-w-40`}
+                      >
+                        {browseText.loadMore}
+                      </button>
+                    </div>
+                  )}
+                  <BrowsePager
+                    state={state}
+                    startPage={startPage}
+                    lastPage={products.data?.pages.at(-1)?.meta.page ?? page}
+                    hasNext={products.hasNextPage}
+                  />
+                </>
+              )}
+            </section>
+            {/* Tìm/lọc không ra gì vẫn cho khách lối đi tiếp. */}
+            {noResults && <RecentlyViewedRail />}
           </div>
         </div>
       )}
