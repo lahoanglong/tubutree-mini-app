@@ -145,7 +145,7 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
     const batchBtn = byText(r.container, 'button', 'Tạo lô và tải CSV') as HTMLButtonElement;
     typeInto(input(r, 'Thẻ hết hạn ngày'), '01012020');
     expect(batchBtn.disabled).toBe(true);
-    expect(r.container.textContent).toContain('Ngày hết hạn đã qua. Chọn ngày từ hôm nay trở đi.');
+    expect(r.container.textContent).toContain('Ngày hết hạn đã qua. Chọn ngày hết hạn từ hôm nay trở đi.');
     typeInto(input(r, 'Thẻ bắt đầu từ ngày'), '01012019');
     expect(batchBtn.disabled).toBe(true);
     typeInto(input(r, 'Thẻ bắt đầu từ ngày'), '');

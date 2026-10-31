@@ -728,7 +728,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     // Cấu hình Đổi rác do test đặt, không phụ thuộc giá trị trong DB gate lúc chạy.
     api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
     await page.goto('/');
-    await expect(page.getByText('Yêu cầu của tôi', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: /Yêu cầu của tôi/ }).first()).toBeVisible({ timeout: 15_000 });
     expect(api.callsTo('GET', '/waste/me')).toHaveLength(0);
   });
 

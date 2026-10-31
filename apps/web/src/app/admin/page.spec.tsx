@@ -4137,7 +4137,7 @@ describe('admin/page — ô ngày giờ và ghi chú link video', () => {
     typeInto(container.querySelector('input[placeholder^="Mã"]'), 'WELCOME30');
     const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá') as HTMLButtonElement;
     typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '01012020');
-    expect(container.textContent).toContain('Ngày hết hạn đã qua. Chọn ngày từ hôm nay trở đi.');
+    expect(container.textContent).toContain('Ngày hết hạn đã qua. Chọn ngày hết hạn từ hôm nay trở đi.');
     expect(create.disabled).toBe(true);
     const [y, m, d] = vnTodayKey().split('-');
     typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), `${d}${m}${y}`);
@@ -4154,7 +4154,7 @@ describe('admin/page — ô ngày giờ và ghi chú link video', () => {
     const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá') as HTMLButtonElement;
     typeInto(container.querySelector('input[aria-label="Mã giảm giá bắt đầu từ ngày"]'), '01012019');
     typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '01012020');
-    expect(container.textContent).toContain('Ngày hết hạn đã qua. Chọn ngày từ hôm nay trở đi.');
+    expect(container.textContent).toContain('Ngày hết hạn đã qua. Chọn ngày hết hạn từ hôm nay trở đi.');
     expect(create.disabled).toBe(true);
   });
 
