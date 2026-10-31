@@ -57,6 +57,33 @@ describe('catalog merch API (real Postgres)', () => {
     expect(r.meta.total).toBe(4);
   });
 
+  it('thẻ: isLoved theo ngưỡng mặc định, fulfiller TUBU / MERCHANT / UNAVAILABLE theo gian hàng thật', async () => {
+    const brand = `CMA${randCode(6)}`;
+    const mkStore = async (ordersPausedAt: Date | null, shippingFee: number | null) => {
+      const owner = await createUser(prisma, { role: 'DEALER' });
+      userIds.push(owner.id);
+      const t = randCode(8).toLowerCase();
+      const st = await prisma.storefront.create({
+        data: { type: 'MERCHANT', isPartner: true, slug: `cma-${t}`, title: `Shop ${t}`, ownerUserId: owner.id, ordersPausedAt, shippingFee, freeShipFrom: 300_000 },
+      });
+      storefrontIds.push(st.id);
+      return st;
+    };
+    const open = await mkStore(null, 20_000);
+    const paused = await mkStore(new Date(), null);
+    const loved = await product(brand, { ratingAvg: 4.8, reviewCount: 20, soldApp: 50 });
+    const almost = await product(brand, { ratingAvg: 4.8, reviewCount: 20, soldApp: 49 });
+    const merchant = await product(brand, { fulfilment: 'MERCHANT', storefrontId: open.id });
+    const closed = await product(brand, { fulfilment: 'MERCHANT', storefrontId: paused.id });
+
+    const r = await catalog.list({ page: 1, limit: 10, brand });
+    const by = new Map(r.data.map((c) => [c.id, c]));
+    expect(by.get(loved.p.id)).toMatchObject({ isLoved: true, fulfiller: { kind: 'TUBU' } });
+    expect(by.get(almost.p.id)!.isLoved).toBe(false);
+    expect(by.get(merchant.p.id)!.fulfiller).toEqual({ kind: 'MERCHANT', name: open.title, shippingFee: 20_000, freeShipFrom: 300_000 });
+    expect(by.get(closed.p.id)!.fulfiller).toMatchObject({ kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: paused.title });
+  });
+
   describe('soldApp30d (cron 03:00)', () => {
     async function delivered(userId: string, variationId: string, quantity: number, deliveredAt: Date | null, status: 'DELIVERED' | 'RETURNED' = 'DELIVERED') {
       return createOrder(prisma, {

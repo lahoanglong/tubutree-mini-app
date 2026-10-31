@@ -17,6 +17,7 @@ import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { TrackCron } from '../../common/cron-run/track-cron';
 import { publicImages, publicProductThumb } from '../../common/public-image';
 import { publicImage } from '../../common/public-image';
+import { CATALOG_LOVED_KEYS, DEFAULT_LOVED_THRESHOLDS, LOVED_THRESHOLD_MAX, isLoved, sanitizeLovedThreshold, type LovedThresholds } from './catalog-loved';
 
 /**
  * Ai giao sản phẩm (D4), cho trang chi tiết: hàng gian hàng tự giao đi kiện riêng với phí giao/ngưỡng miễn phí của gian
@@ -99,6 +100,27 @@ export type CategoryWithCount = Category & { productCount: number };
 
 type PricedFields = { basePrice: number; salePrice: number | null; variations: CardVariation[] };
 
+/** Cột Product thẻ cần; `fulfilment`/`storefrontId` thiếu (mẫu cũ, dữ liệu trước cột) thì coi như hàng Tubu giao. */
+type CardRow = {
+  id: string;
+  slug: string;
+  brand: string;
+  name: string;
+  thumbnail: string | null;
+  images: string[];
+  basePrice: number;
+  salePrice: number | null;
+  isFeatured: boolean;
+  ratingAvg: number;
+  reviewCount: number;
+  soldExternal: number;
+  soldApp: number;
+  createdAt?: Date;
+  fulfilment?: string;
+  storefrontId?: string | null;
+  variations: { id: string; sku: string; retailPrice: number; salePrice: number | null; stock: number }[];
+};
+
 @Injectable()
 export class CatalogService {
   private readonly logger = new Logger(CatalogService.name);
@@ -174,7 +196,7 @@ export class CatalogService {
       }),
       this.prisma.product.count({ where }),
     ]);
-    return paginated(items.map((p) => this.toCard(p)), page, limit, total);
+    return paginated(await this.toCards(items), page, limit, total);
   }
 
   /**
@@ -256,11 +278,8 @@ export class CatalogService {
       include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
     const byId = new Map(rows.map((r) => [r.id, r]));
-    const items = pageIds
-      .map((id) => byId.get(id))
-      .filter((p): p is NonNullable<typeof p> => Boolean(p))
-      .map((p) => this.toCard(p));
-    return paginated(items, page, limit, rankedIds.length);
+    const ordered = pageIds.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p));
+    return paginated(await this.toCards(ordered), page, limit, rankedIds.length);
   }
 
   private readonly rankCache = new Map<string, { ids: string[]; expiresAt: number }>();
@@ -457,7 +476,7 @@ export class CatalogService {
       include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
     // Trả cùng shape card với /products để FE dùng chung ProductCard.
-    return items.map((p) => this.toCard(p));
+    return this.toCards(items);
   }
 
   /** "Thường mua kèm" (§6.12): co-occurrence trên đơn 90 ngày gần nhất. */
@@ -497,7 +516,7 @@ export class CatalogService {
       include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
     const byId = new Map(products.map((p) => [p.id, p]));
-    return ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)).map((p) => this.toCard(p));
+    return this.toCards(ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)));
   }
 
   /**
@@ -541,7 +560,7 @@ export class CatalogService {
     });
     const followedBrandIds = follows.map((f) => f.brandId);
 
-    let items: Parameters<typeof this.toCard>[0][] = [];
+    let items: CardRow[] = [];
     if (categorySet.length > 0 || followedBrandIds.length > 0) {
       const or: Prisma.ProductWhereInput[] = [];
       if (categorySet.length > 0) or.push({ categoryIds: { hasSome: categorySet } });
@@ -571,7 +590,7 @@ export class CatalogService {
       const pb = purchased.has(b.id) ? 1 : 0;
       return pa !== pb ? pa - pb : sold(b) - sold(a);
     });
-    return sorted.slice(0, TAKE).map((p) => this.toCard(p));
+    return this.toCards(sorted.slice(0, TAKE));
   }
 
   async brands() {
@@ -649,37 +668,73 @@ export class CatalogService {
     }
   }
 
-  private toCard(p: {
-    id: string;
-    slug: string;
-    brand: string;
-    name: string;
-    thumbnail: string | null;
-    images: string[];
-    basePrice: number;
-    salePrice: number | null;
-    isFeatured: boolean;
-    ratingAvg: number;
-    reviewCount: number;
-    soldExternal: number;
-    soldApp: number;
-    createdAt?: Date;
-    variations: { id: string; sku: string; retailPrice: number; salePrice: number | null; stock: number }[];
-  }) {
+  /** Ngưỡng nhãn "Được yêu thích" từ cấu hình; thiếu hoặc hỏng thì dùng mặc định (xem `sanitizeLovedThreshold`). */
+  private async lovedThresholds(): Promise<LovedThresholds> {
+    const d = DEFAULT_LOVED_THRESHOLDS;
+    if (!this.config) return d;
+    const [minRating, minReviews, minSold] = await Promise.all([
+      this.config.get<unknown>(CATALOG_LOVED_KEYS.minRating, d.minRating),
+      this.config.get<unknown>(CATALOG_LOVED_KEYS.minReviews, d.minReviews),
+      this.config.get<unknown>(CATALOG_LOVED_KEYS.minSold, d.minSold),
+    ]);
     return {
-      id: p.id,
-      slug: p.slug,
-      brand: p.brand,
-      name: p.name,
-      thumbnail: publicProductThumb(p),
-      ...cardPrices(p, p.variations),
-      isFeatured: p.isFeatured,
-      ratingAvg: p.ratingAvg,
-      reviewCount: p.reviewCount,
-      sold: (p.soldExternal ?? 0) + (p.soldApp ?? 0), // tổng "đã bán" (sàn ngoài + app)
-      inStock: p.variations.some((v) => v.stock > 0),
-      createdAt: p.createdAt?.toISOString(),
+      minRating: sanitizeLovedThreshold(minRating, d.minRating, LOVED_THRESHOLD_MAX.minRating),
+      minReviews: sanitizeLovedThreshold(minReviews, d.minReviews, LOVED_THRESHOLD_MAX.minReviews),
+      minSold: sanitizeLovedThreshold(minSold, d.minSold, LOVED_THRESHOLD_MAX.minSold),
     };
+  }
+
+  /**
+   * Gian hàng của các thẻ hàng đối tác, một truy vấn theo lô. Thẻ hàng Tubu (đa số) không có `storefrontId` cần tra nên trang toàn
+   * hàng Tubu không tốn thêm truy vấn nào.
+   */
+  private async storesOfCards(rows: readonly CardRow[]): Promise<Map<string, FulfillerStore>> {
+    const ids = [...new Set(rows.filter((p) => p.fulfilment === 'MERCHANT' && p.storefrontId).map((p) => p.storefrontId as string))];
+    if (ids.length === 0) return new Map();
+    const stores = await this.prisma.storefront.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        isPartner: true,
+        shippingFee: true,
+        freeShipFrom: true,
+        ordersPausedAt: true,
+        owner: { select: { role: true, isBlocked: true } },
+      },
+    });
+    return new Map(stores.map((s) => [s.id, s]));
+  }
+
+  /**
+   * Thẻ sản phẩm công khai. `fulfiller` (cùng dạng với trang chi tiết) cho nhãn "Miễn phí giao hàng", `isLoved` cho nhãn "Được yêu thích":
+   * tính ở máy chủ để ngưỡng chỉnh được ở cấu hình và hai app không chép luật.
+   */
+  private async toCards(rows: readonly CardRow[]) {
+    if (rows.length === 0) return [];
+    const [loved, stores] = await Promise.all([this.lovedThresholds(), this.storesOfCards(rows)]);
+    return Promise.all(
+      rows.map(async (p) => {
+        const sold = (p.soldExternal ?? 0) + (p.soldApp ?? 0); // tổng "đã bán" (sàn ngoài + app)
+        return {
+          id: p.id,
+          slug: p.slug,
+          brand: p.brand,
+          name: p.name,
+          thumbnail: publicProductThumb(p),
+          ...cardPrices(p, p.variations),
+          isFeatured: p.isFeatured,
+          ratingAvg: p.ratingAvg,
+          reviewCount: p.reviewCount,
+          sold,
+          inStock: p.variations.some((v) => v.stock > 0),
+          createdAt: p.createdAt?.toISOString(),
+          isLoved: isLoved({ ratingAvg: p.ratingAvg, reviewCount: p.reviewCount, sold }, loved),
+          fulfiller: await this.fulfillerOf(p.fulfilment ?? 'TUBU', p.storefrontId ? (stores.get(p.storefrontId) ?? null) : null),
+        };
+      }),
+    );
   }
 
   /**

@@ -1102,6 +1102,102 @@ describe('CatalogService.getBySlug — ai giao hàng (D4, R2-BUYERMINI-1)', () =
   });
 });
 
+describe('CatalogService — thẻ: fulfiller và isLoved', () => {
+  const TUBU = { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null };
+  const OPEN_STORE = {
+    id: 's1', title: 'Shop A', type: 'MERCHANT', isPartner: true, shippingFee: 20_000 as number | null, freeShipFrom: 300_000 as number | null,
+    ordersPausedAt: null as Date | null, owner: { role: 'DEALER', isBlocked: false } as { role: string; isBlocked: boolean } | null,
+  };
+
+  function setup(rows: Record<string, unknown>[], opts: { config?: unknown; stores?: unknown[] } = {}) {
+    const storefrontFindMany = jest.fn().mockResolvedValue(opts.stores ?? []);
+    const prisma = {
+      product: { findMany: jest.fn().mockResolvedValue(rows), count: jest.fn().mockResolvedValue(rows.length) },
+      storefront: { findMany: storefrontFindMany },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma, opts.config as never), storefrontFindMany };
+  }
+  const cfg = (values: Record<string, unknown>) => ({ get: jest.fn(async <T>(k: string, fb?: T) => (k in values ? (values[k] as T) : (fb as T))) });
+  const lovedRow = (id: string, over: Record<string, unknown>) => ({ ...card(id), ...over });
+
+  it('mặc định 4,8 sao, 20 đánh giá, 50 đã bán (sold = soldExternal + soldApp); không truyền config vẫn chạy', async () => {
+    const { svc } = setup([
+      lovedRow('ok', { ratingAvg: 4.8, reviewCount: 20, soldExternal: 30, soldApp: 20 }),
+      lovedRow('thieu-ban', { ratingAvg: 4.8, reviewCount: 20, soldExternal: 30, soldApp: 19 }),
+      lovedRow('thieu-sao', { ratingAvg: 4.7, reviewCount: 20, soldApp: 50 }),
+    ]);
+    const r = await svc.list({ page: 1, limit: 10 });
+    expect(r.data.map((c) => [c.id, c.isLoved])).toEqual([['ok', true], ['thieu-ban', false], ['thieu-sao', false]]);
+  });
+
+  it('ngưỡng lấy từ catalog.loved_min_rating, catalog.loved_min_reviews, catalog.loved_min_sold', async () => {
+    const config = cfg({ 'catalog.loved_min_rating': 4.5, 'catalog.loved_min_reviews': 5, 'catalog.loved_min_sold': 10 });
+    const { svc } = setup([lovedRow('a', { ratingAvg: 4.5, reviewCount: 5, soldExternal: 6, soldApp: 4 }), lovedRow('b', { ratingAvg: 4.4, reviewCount: 5, soldApp: 10 })], { config });
+    const r = await svc.list({ page: 1, limit: 10 });
+    expect(r.data.map((c) => c.isLoved)).toEqual([true, false]);
+    expect(config.get.mock.calls.map((c) => c[0]).sort()).toEqual(['catalog.loved_min_rating', 'catalog.loved_min_reviews', 'catalog.loved_min_sold']);
+  });
+
+  it('ngưỡng cấu hình hỏng (chuỗi) → dùng mặc định cho đúng khoá đó, không biến mọi thẻ thành Được yêu thích', async () => {
+    const config = cfg({ 'catalog.loved_min_sold': 'abc', 'catalog.loved_min_rating': 4.5 });
+    const { svc } = setup([lovedRow('a', { ratingAvg: 4.9, reviewCount: 30, soldApp: 49 }), lovedRow('b', { ratingAvg: 4.9, reviewCount: 30, soldApp: 50 })], { config });
+    const r = await svc.list({ page: 1, limit: 10 });
+    expect(r.data.map((c) => c.isLoved)).toEqual([false, true]);
+  });
+
+  it('trang toàn hàng Tubu: fulfiller TUBU và không truy vấn gian hàng', async () => {
+    const { svc, storefrontFindMany } = setup([card('a'), { ...card('b'), fulfilment: 'TUBU', storefrontId: null }]);
+    const r = await svc.list({ page: 1, limit: 10 });
+    expect(r.data.map((c) => c.fulfiller)).toEqual([TUBU, TUBU]);
+    expect(storefrontFindMany).not.toHaveBeenCalled();
+  });
+
+  it('hàng đối tác: một truy vấn gian hàng theo lô (id không trùng), fulfiller MERCHANT kèm phí giao và ngưỡng miễn phí', async () => {
+    const rows = [
+      { ...card('m1'), fulfilment: 'MERCHANT', storefrontId: 's1' },
+      { ...card('m2'), fulfilment: 'MERCHANT', storefrontId: 's1' },
+      card('t1'),
+    ];
+    const { svc, storefrontFindMany } = setup(rows, { stores: [OPEN_STORE] });
+    const r = await svc.list({ page: 1, limit: 10 });
+    expect(storefrontFindMany).toHaveBeenCalledTimes(1);
+    expect(storefrontFindMany.mock.calls[0][0].where).toEqual({ id: { in: ['s1'] } });
+    expect(r.data.map((c) => c.fulfiller)).toEqual([
+      { kind: 'MERCHANT', name: 'Shop A', shippingFee: 20_000, freeShipFrom: 300_000 },
+      { kind: 'MERCHANT', name: 'Shop A', shippingFee: 20_000, freeShipFrom: 300_000 },
+      TUBU,
+    ]);
+  });
+
+  it('gian hàng tạm nghỉ → UNAVAILABLE STORE_PAUSED; không thấy gian hàng → MERCHANT mặc định, không ném lỗi', async () => {
+    const rows = [
+      { ...card('m1'), fulfilment: 'MERCHANT', storefrontId: 's1' },
+      { ...card('m2'), fulfilment: 'MERCHANT', storefrontId: 'da-xoa' },
+    ];
+    const { svc } = setup(rows, { stores: [{ ...OPEN_STORE, ordersPausedAt: new Date() }] });
+    const r = await svc.list({ page: 1, limit: 10 });
+    expect(r.data[0]!.fulfiller).toEqual({ kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Shop A', shippingFee: null, freeShipFrom: null });
+    expect(r.data[1]!.fulfiller).toMatchObject({ kind: 'MERCHANT', name: 'Gian hàng đối tác', freeShipFrom: null });
+  });
+
+  it('related, boughtTogether và getForYou cũng trả hai trường', async () => {
+    const prisma = {
+      product: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'p1', brand: 'b', slug: 's' }),
+        findMany: jest.fn().mockResolvedValue([lovedRow('x', { ratingAvg: 5, reviewCount: 99, soldApp: 99 })]),
+      },
+      orderItem: { findMany: jest.fn().mockResolvedValue([]) },
+      brandFollow: { findMany: jest.fn().mockResolvedValue([]) },
+      $queryRaw: jest.fn().mockResolvedValue([{ productId: 'x' }]),
+    } as unknown as PrismaService;
+    const svc = new CatalogService(prisma);
+    for (const rows of [await svc.related('s'), await svc.boughtTogether('s'), await svc.getForYou('u1')]) {
+      expect(rows[0]).toMatchObject({ isLoved: true, fulfiller: TUBU });
+    }
+  });
+});
+
 describe('CatalogService — JSON công khai không nhúng ảnh base64', () => {
   const PNG = 'data:image/png;base64,' + 'A'.repeat(4000);
   const row = (over: Record<string, unknown> = {}) => ({ ...card('p1'), thumbnail: PNG, images: [PNG, 'https://cdn.example.com/b.jpg'], ...over });
