@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { homeBelowPreloadFiles } from './preload-home-below';
+import { appConfigWithAsyncJs, homeBelowPreloadFiles } from './preload-home-below';
 
 const chunk = (fileName: string, imports: string[] = [], extra: Record<string, unknown> = {}) => ({ type: 'chunk' as const, fileName, imports, isEntry: false, isDynamicEntry: false, facadeModuleId: null, ...extra });
 
@@ -19,5 +19,18 @@ describe('homeBelowPreloadFiles', () => {
 
   it('không có chunk home-below thì không preload gì', () => {
     expect(homeBelowPreloadFiles({ 'assets/index.js': bundle['assets/index.js'] })).toEqual([]);
+  });
+});
+
+describe('appConfigWithAsyncJs', () => {
+  it('thêm chunk vào listAsyncJS, giữ nguyên phần còn lại, không trùng', () => {
+    const cfg = { app: { title: 'x' }, listSyncJS: ['assets/index.js'], listAsyncJS: ['assets/a.js'], pages: [] };
+    expect(appConfigWithAsyncJs(cfg, ['assets/a.js', 'assets/b.js'])).toEqual({ ...cfg, listAsyncJS: ['assets/a.js', 'assets/b.js'] });
+  });
+
+  it('thiếu listAsyncJS thì tạo mới; không có chunk thì không đổi gì', () => {
+    expect(appConfigWithAsyncJs({ listSyncJS: [] }, ['assets/b.js'])).toEqual({ listSyncJS: [], listAsyncJS: ['assets/b.js'] });
+    const cfg = { listSyncJS: [] };
+    expect(appConfigWithAsyncJs(cfg, [])).toBe(cfg);
   });
 });
