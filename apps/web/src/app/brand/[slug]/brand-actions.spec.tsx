@@ -36,7 +36,20 @@ const mount = async (ui: Parameters<typeof render>[0]) => {
   await flush(5);
   return r.container;
 };
-const actions = () => <BrandActions slug="sachi" name="Sachi" followerCount={12} />;
+// Thân trang đặt các phần ở nhiều chỗ; ở đây xếp liền nhau và in số người theo dõi để kiểm tra trạng thái dùng chung.
+const withParts = (followerCount: number) => (
+  <BrandActions slug="sachi" name="Sachi" followerCount={followerCount}>
+    {(p) => (
+      <>
+        {p.buttons}
+        {p.note}
+        {p.banner}
+        <span data-testid="followers">{p.followerCount} người theo dõi</span>
+      </>
+    )}
+  </BrandActions>
+);
+const actions = () => withParts(12);
 const btn = (root: ParentNode, name: string | RegExp) =>
   Array.from(root.querySelectorAll('button')).find((b) => {
     const t = (b.getAttribute('aria-label') ?? b.textContent ?? '').trim();
@@ -74,13 +87,20 @@ afterEach(() => {
 });
 
 describe('/brand/[slug] — theo dõi nhãn', () => {
-  it('hiện số người theo dõi; số theo dõi bằng 0 thì ẩn dòng', async () => {
+  it('trao số người theo dõi cho thân trang; khách đăng nhập thì lấy số mới nhất từ API', async () => {
     const c = await mount(actions());
-    expect(c.textContent).toContain('12 người theo dõi');
+    expect(c.querySelector('[data-testid="followers"]')!.textContent).toBe('12 người theo dõi');
     mounted.pop()!.unmount();
-    mocks.follow = { following: false, followerCount: 0 };
-    const c2 = await mount(<BrandActions slug="sachi" name="Sachi" followerCount={0} />);
-    expect(c2.textContent).not.toContain('người theo dõi');
+    mocks.follow = { following: false, followerCount: 20 };
+    const c2 = await mount(actions());
+    expect(c2.querySelector('[data-testid="followers"]')!.textContent).toBe('20 người theo dõi');
+  });
+
+  it('nút Theo dõi và Chia sẻ là nút của đầu shop, không phải thanh dính đáy', async () => {
+    const c = await mount(actions());
+    expect(c.querySelector('[data-sticky-bar]')).toBeNull();
+    expect(btn(c, 'Theo dõi')).toBeDefined();
+    expect(btn(c, 'Chia sẻ')?.getAttribute('aria-label')).toBe('Chia sẻ');
   });
 
   it('Theo dõi gửi POST /brand/:slug/follow, báo đã theo dõi và cập nhật số người ngay', async () => {

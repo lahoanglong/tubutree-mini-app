@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -8,6 +8,9 @@ import { BadgePercent, Check, Copy, Plus, Share2, Store } from 'lucide-react';
 import { followBrand, unfollowBrand } from '@tubutree/app-core/api/brand';
 import { brandFollowQuery, brandShareToEarnQuery } from '@tubutree/app-core/queries/brand';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { Button } from '@/components/mini/button';
+import { IconButton } from '@/components/mini/icon-button';
 import { Sheet } from '@/components/ui/sheet';
 import { QrCode } from '@/components/ui/qr-code';
 import { useAuth } from '@/lib/auth-context';
@@ -15,7 +18,6 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
-import { phoneSecondary } from '@/lib/phone-ui';
 import { platformBridge } from '@/lib/platform-bridge';
 import { loginHref } from '@/lib/return-to';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -26,12 +28,24 @@ type Note = { text: string; error: boolean } | null;
 const LEAF = '\u{1F33F}';
 const HEART = '\u{1F49A}';
 
+export interface BrandActionParts {
+  /** Theo dõi (nút chữ) và Chia sẻ (nút biểu tượng): đặt ở đầu shop. */
+  buttons: ReactNode;
+  /** Kết quả theo dõi vừa bấm ("Đã theo dõi nhãn" hoặc lỗi cần đăng nhập). */
+  note: ReactNode;
+  /** Dải chia sẻ kiếm tiền cho CTV đủ điều kiện; null khi không đủ điều kiện hoặc API lỗi. */
+  banner: ReactNode;
+  /** Số người theo dõi hiện tại (cập nhật ngay sau khi bấm Theo dõi). */
+  followerCount: number;
+}
+
 /**
- * Hàng hành động của trang nhãn: số người theo dõi, Theo dõi/Bỏ theo dõi, Chia sẻ và dải chia sẻ kiếm tiền cho CTV đủ điều kiện.
- * Trang nhãn công khai và render sẵn ở server; mọi thứ theo từng người xem (trạng thái theo dõi, tư cách CTV) chỉ tải ở trình duyệt
- * khi đã đăng nhập. Khách chạm Theo dõi thì sang đăng nhập rồi quay lại đúng trang.
+ * Hành động của trang thương hiệu: Theo dõi/Bỏ theo dõi, Chia sẻ và dải chia sẻ kiếm tiền cho CTV đủ điều kiện, cùng một sheet chia sẻ.
+ * Trang thương hiệu công khai và render sẵn ở server; mọi thứ theo từng người xem (trạng thái theo dõi, tư cách CTV) chỉ tải ở trình duyệt
+ * khi đã đăng nhập. Khách chạm Theo dõi thì sang đăng nhập rồi quay lại đúng trang. Các phần trả về qua `children` để thân trang đặt nút ở
+ * đầu shop, số liệu ở hàng số liệu và dải kiếm tiền dưới đó mà vẫn dùng chung một trạng thái.
  */
-export function BrandActions({ slug, name, followerCount }: { slug: string; name: string; followerCount: number }) {
+export function BrandActions({ slug, name, followerCount, children }: { slug: string; name: string; followerCount: number; children: (parts: BrandActionParts) => ReactNode }) {
   const router = useRouter();
   const qc = useQueryClient();
   const phase = useAuthPhase();
@@ -66,52 +80,36 @@ export function BrandActions({ slug, name, followerCount }: { slug: string; name
     else if (phase === 'guest') router.push(loginHref(`${window.location.pathname}${window.location.search}`));
   };
 
+  const buttons = (
+    <div className="flex items-center gap-1">
+      <Button variant="secondary" icon={following ? Check : Plus} loading={followMut.isPending} aria-pressed={authed ? following : undefined} onPress={onFollow}>
+        {following ? fillCopy('shop.following') : fillCopy('shop.follow')}
+      </Button>
+      <IconButton icon={Share2} label={fillCopy('shop.share')} onPress={() => setShareOpen(true)} />
+    </div>
+  );
+  const noteNode = note && (
+    <p role={note.error ? 'alert' : 'status'} className={`px-4 pt-2 text-sm md:px-0 ${note.error ? 'text-danger-fg' : 'text-success-fg'}`}>
+      {note.text}
+    </p>
+  );
+  const banner = ste?.eligible ? (
+    <button
+      type="button"
+      onClick={() => setShareOpen(true)}
+      className="mx-4 mt-3 block min-h-11 w-[calc(100%-2rem)] rounded-card border border-forest-200 bg-forest-50 p-3 text-left md:mx-0 md:w-full"
+    >
+      <span className="flex items-center gap-1.5 text-sm font-bold text-forest-800">
+        <BadgePercent className="h-[18px] w-[18px]" aria-hidden="true" />
+        {ste.maxAffiliateRate > 0 ? `Chia sẻ nhãn này — nhận tới ${ste.maxAffiliateRate}% hoa hồng` : 'Chia sẻ nhãn này'}
+      </span>
+      <span className="mt-0.5 block text-xs text-forest-700">Bấm để lấy link + lời đăng gắn mã giới thiệu của bạn.</span>
+    </button>
+  ) : null;
+
   return (
-    <div className="mt-3 max-md:mt-0">
-      {count > 0 && <p className="text-xs text-stone-600 max-md:mt-0.5 max-md:text-[length:var(--type-caption-size)] max-md:text-[var(--color-text-tertiary)]">{count} người theo dõi</p>}
-      {/* Điện thoại: thanh dính đáy như StickyActionBar của Mini App (Theo dõi nền nhạt + Chia sẻ nền đậm); từ md nằm ngay dưới tên. */}
-      <div
-        data-testid="brand-actions-bar"
-        data-sticky-bar
-        className="max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:bg-stone-0 max-md:p-4 max-md:pb-[calc(16px+var(--safe-bottom))] max-md:shadow-[var(--elevation-3)]"
-      >
-        <div className="mt-2 flex gap-2 max-md:mt-0 md:justify-end">
-          <button
-            type="button"
-            aria-pressed={authed ? following : undefined}
-            disabled={followMut.isPending}
-            onClick={onFollow}
-            className={`${ui.btnSecondary} ${phoneSecondary} flex-1 gap-1.5 md:w-auto md:min-w-48 md:flex-none`}
-          >
-            {following ? <Check className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
-            {following ? 'Đang theo dõi' : 'Theo dõi'}
-          </button>
-          <button type="button" onClick={() => setShareOpen(true)} className={`${ui.btnPrimary} flex-1 gap-1.5 md:w-auto md:min-w-48 md:flex-none`}>
-            <Share2 className="h-4 w-4" aria-hidden="true" />
-            Chia sẻ
-          </button>
-        </div>
-        {note && (
-          <p role={note.error ? 'alert' : 'status'} className={`mt-2 text-sm ${note.error ? 'text-danger-fg' : 'text-success-fg'}`}>
-            {note.text}
-          </p>
-        )}
-      </div>
-
-      {ste?.eligible && (
-        <button
-          type="button"
-          onClick={() => setShareOpen(true)}
-          className="mt-3 block min-h-11 w-full rounded-card border border-forest-200 bg-forest-50 p-3 text-left"
-        >
-          <span className="flex items-center gap-1.5 text-sm font-bold text-forest-800">
-            <BadgePercent className="h-[18px] w-[18px]" aria-hidden="true" />
-            {ste.maxAffiliateRate > 0 ? `Chia sẻ nhãn này — nhận tới ${ste.maxAffiliateRate}% hoa hồng` : 'Chia sẻ nhãn này'}
-          </span>
-          <span className="mt-0.5 block text-xs text-forest-700">Bấm để lấy link + lời đăng gắn mã giới thiệu của bạn.</span>
-        </button>
-      )}
-
+    <>
+      {children({ buttons, note: noteNode, banner, followerCount: count })}
       <BrandShareSheet
         open={shareOpen}
         onClose={() => setShareOpen(false)}
@@ -124,7 +122,7 @@ export function BrandActions({ slug, name, followerCount }: { slug: string; name
             : []
         }
       />
-    </div>
+    </>
   );
 }
 
