@@ -192,6 +192,21 @@ describe('/gio-hang — khổ điện thoại xếp như Mini App', () => {
   const asPhone = () =>
     vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(max-width: 767px)', addEventListener: () => {}, removeEventListener: () => {} }));
 
+  it('bộ đếm dòng: ô −/+ ở điện thoại 36px (như QuantitySelector sm của Mini App) mà vẫn có vùng chạm 44px, khe 8px; từ md giữ 44px', async () => {
+    const c = await mount();
+    for (const name of ['Giảm số lượng Serum dưỡng ẩm', 'Tăng số lượng Serum dưỡng ẩm']) {
+      const btn = c.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`)!;
+      expect(btn.className, name).toMatch(/\bmax-md:h-9\b/);
+      expect(btn.className, name).toMatch(/\bmax-md:w-9\b/);
+      expect(btn.className, name).toMatch(/\btubu-hit-44-square\b/);
+      expect(btn.className, name).toMatch(/(^|\s)h-11(\s|$)/);
+      expect(btn.className, name).toMatch(/(^|\s)w-11(\s|$)/);
+    }
+    const stepper = c.querySelector('button[aria-label="Giảm số lượng Serum dưỡng ẩm"]')!.parentElement!;
+    expect(stepper.className).toMatch(/\bmax-md:gap-2\b/);
+    expect(stepper.className).not.toMatch(/\bmax-md:gap-3\b/);
+  });
+
   it('hàng mã giảm giá nằm trong thanh dính đáy, không còn trong thân trang', async () => {
     asPhone();
     state.coupons = [{ code: 'XANH10', type: 'PERCENT', value: 10, minOrder: null, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' }];

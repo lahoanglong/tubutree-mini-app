@@ -87,6 +87,10 @@ export default function CartPage() {
   const cartKeyNow = useCartKey();
   const cart = useQuery({ queryKey: cartKeyNow, queryFn: getCart, enabled: phase === 'authenticated' });
   const [removed, setRemoved] = useState<CartLine | null>(null);
+  // Tấm chọn mã nằm ở cấp trang, không trong chân dính (position:fixed, z 20): zmp-ui Sheet không có portal nên lớp phủ và tấm
+  // sẽ kẹt trong ngăn xếp z 20, nút Quay lại (z 200) và thanh Hoàn tác (z 30) vẽ đè lên và vẫn bấm được.
+  const [voucherOpen, setVoucherOpen] = useState(false);
+  const sfCtx = useStorefrontContext();
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Chọn từng món: lưu tập ĐÃ BỎ CHỌN (deselected) → món mới auto-chọn, món xoá tự biến mất
   // (không cần đồng bộ tay). checkout chỉ thanh toán các món đang chọn.
@@ -102,6 +106,11 @@ export default function CartPage() {
   useEffect(() => () => {
     if (undoTimer.current) clearTimeout(undoTimer.current);
   }, []);
+  // Giỏ về trống (làm mới giỏ khi tấm đang mở): tấm gỡ theo, không để nó bật lại khi giỏ có hàng lần sau.
+  const noItems = (cart.data?.items.length ?? 0) === 0;
+  useEffect(() => {
+    if (noItems) setVoucherOpen(false);
+  }, [noItems]);
 
   // Chọn một phần giỏ (còn ít nhất một dòng): hỏi máy chủ giá của đúng phần đó, cùng nhịp debounce với xem trước mã của VoucherSheet.
   // Chọn cả giỏ dùng thẳng giỏ trong bộ nhớ, không hỏi thêm. Khoá nằm dưới ['cart', gian hàng] nên làm mới giỏ cũng làm mới giá này.
@@ -200,6 +209,14 @@ export default function CartPage() {
   const selectedCount = selectedItems.reduce((s, l) => s + l.quantity, 0);
   // Máy chủ từ chối đặt đơn khi số lượng vượt tồn: chặn ngay ở giỏ thay vì để khách điền xong mới báo lỗi.
   const overStockSelected = selectedItems.some((l) => l.quantity > l.stock);
+  // Cùng gian hàng checkout gửi (combo) để số giảm của từng mã đúng số thanh toán sẽ trừ.
+  const ctvSlug = sfCtx.kind === 'ctv' ? (sfCtx.slug ?? undefined) : undefined;
+  // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ.
+  const previewSelection =
+    selectedItems.length === 0
+      ? null
+      : { itemIds: allSelected ? undefined : selectedItems.map((l) => l.id), key: cartPreviewKey(selectedItems) };
+  const previewParams = previewSelection ? { storefrontSlug: ctvSlug, itemIds: previewSelection.itemIds } : undefined;
   const toggleAll = () => {
     haptic('light');
     setDeselected(allSelected ? new Set(summary.items.map((l) => l.id)) : new Set());
@@ -325,18 +342,28 @@ export default function CartPage() {
           onCheckout={goCheckout}
           saving={cartSaving(buyableSelected)}
           coupon={
-            <CouponBlock
+            <CouponRow
               summary={summary}
-              selectedSubtotal={selectedSubtotal}
-              selectedProductIds={cartProductIds(selectedItems)}
-              // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ.
-              previewSelection={
-                selectedItems.length === 0
-                  ? null
-                  : { itemIds: allSelected ? undefined : selectedItems.map((l) => l.id), key: cartPreviewKey(selectedItems) }
-              }
+              previewParams={previewParams}
+              previewKey={previewSelection?.key ?? ''}
+              onOpen={() => setVoucherOpen(true)}
             />
           }
+        />
+      )}
+
+      {!empty && (
+        <VoucherSheet
+          visible={voucherOpen}
+          onClose={() => setVoucherOpen(false)}
+          currentCode={summary.couponCode}
+          // Điều kiện tối thiểu voucher phải tính trên tổng ĐANG CHỌN (checkout tập con) — dùng
+          // summary.subtotal (toàn giỏ) ở đây từng khiến voucher hiện "đủ điều kiện" sai khi user
+          // đã bỏ chọn bớt món (BE re-check khi apply nên không lọt số tiền, nhưng UI gây hiểu lầm).
+          subtotal={selectedSubtotal}
+          productIds={cartProductIds(selectedItems)}
+          previewParams={previewParams}
+          previewKey={previewSelection?.key}
         />
       )}
     </Page>
@@ -558,25 +585,22 @@ function CartLineRow({
   );
 }
 
-function CouponBlock({
+function CouponRow({
   summary,
-  selectedSubtotal,
-  selectedProductIds,
-  previewSelection,
+  previewParams,
+  previewKey,
+  onOpen,
 }: {
   summary: CartSummary;
-  selectedSubtotal: number;
-  selectedProductIds?: string[];
-  /** Món đang chọn (itemIds undefined = cả giỏ) và dấu vân tay của chúng; null = chưa chọn món nào. */
-  previewSelection: { itemIds?: string[]; key: string } | null;
+  /** Món đang chọn (itemIds undefined = cả giỏ) và gian hàng; undefined = chưa chọn món nào. */
+  previewParams?: { storefrontSlug?: string; itemIds?: string[] };
+  /** Dấu vân tay của các món đang chọn ('' = chưa chọn món nào). */
+  previewKey: string;
+  /** Mở tấm chọn mã (do trang giữ, ngoài chân dính). */
+  onOpen: () => void;
 }) {
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const sfCtx = useStorefrontContext();
-  // Cùng gian hàng checkout gửi (combo) để số giảm của từng mã đúng số thanh toán sẽ trừ.
-  const ctvSlug = sfCtx.kind === 'ctv' ? (sfCtx.slug ?? undefined) : undefined;
-  const previewParams = previewSelection ? { storefrontSlug: ctvSlug, itemIds: previewSelection.itemIds } : undefined;
   // Chỉ gợi ý khi giỏ chưa có mã: không tự áp, khách vẫn chọn ở tấm chọn mã.
-  const hint = useCouponHint(!summary.couponCode, previewParams, previewSelection?.key ?? '');
+  const hint = useCouponHint(!summary.couponCode, previewParams, previewKey);
 
   return (
     <>
@@ -587,7 +611,7 @@ function CouponBlock({
         {...rowKeyboardProps()}
         onClick={() => {
           haptic('light');
-          setSheetOpen(true);
+          onOpen();
         }}
         style={{
           minHeight: 44,
@@ -648,19 +672,6 @@ function CouponBlock({
           <ChevronRight size={16} color="var(--color-text-brand)" aria-hidden />
         </Box>
       </Box>
-
-      <VoucherSheet
-        visible={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        currentCode={summary.couponCode}
-        // Điều kiện tối thiểu voucher phải tính trên tổng ĐANG CHỌN (checkout tập con) — dùng
-        // summary.subtotal (toàn giỏ) ở đây từng khiến voucher hiện "đủ điều kiện" sai khi user
-        // đã bỏ chọn bớt món (BE re-check khi apply nên không lọt số tiền, nhưng UI gây hiểu lầm).
-        subtotal={selectedSubtotal}
-        productIds={selectedProductIds}
-        previewParams={previewParams}
-        previewKey={previewSelection?.key}
-      />
     </>
   );
 }

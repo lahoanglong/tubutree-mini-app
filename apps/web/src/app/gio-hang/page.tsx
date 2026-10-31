@@ -30,9 +30,11 @@ import { PAGE_WIDE } from '@/lib/page-frame';
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
 const UNDO_WINDOW_MS = 3500;
 
-// Ô −/+ của dòng giỏ: từ md nút trần trong khung viền chung; ở điện thoại là hai ô vuông có viền tách rời như QuantitySelector của Mini App.
+// Ô −/+ của dòng giỏ: từ md nút trần 44px trong khung viền chung; ở điện thoại là hai ô vuông 36px có viền tách rời như QuantitySelector size sm của
+// Mini App, vùng chạm vẫn 44x44 nhờ .tubu-hit-44-square (giãn 4px mỗi phía, nằm trong khe 8px nên không chồng nút bên cạnh). Ô 44px làm bộ đếm
+// rộng ~134px, giá + bộ đếm không vừa cột chữ ~203px ở 375px và bộ đếm rớt xuống hàng riêng.
 const qtyButton =
-  'flex h-11 w-11 items-center justify-center text-lg disabled:opacity-40 max-md:rounded-control max-md:border max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]';
+  'tubu-hit-44-square flex h-11 w-11 items-center justify-center text-lg disabled:opacity-40 max-md:h-9 max-md:w-9 max-md:rounded-control max-md:border max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]';
 
 const EmptyCart = dynamic(() => import('./empty-cart'), { ssr: false });
 
@@ -332,8 +334,13 @@ export default function CartPage() {
                           </div>
                           <div className="basis-full break-words text-caption text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">{it.variationName}</div>
                           <div className="mt-1 flex items-baseline gap-x-2 max-md:order-3 max-md:mt-1.5 max-md:flex-col max-md:items-start max-md:gap-0">
-                            <span className={`font-semibold ${compareAt || it.isFlash ? 'text-[color:var(--color-text-price-deal)]' : 'text-stone-900'}`}>{formatVnd(it.unitPrice)}</span>
-                            {compareAt && <span className="text-caption text-[color:var(--color-text-price-compare)] line-through">{formatVnd(compareAt)}</span>}
+                            {/* Điện thoại: giá 14/20 và giá gạch 12/16 như PriceTag sm + stack của Mini App, khối giá cao 36 bằng bộ đếm nên dòng giảm giá không cao hơn dòng thường. */}
+                            <span className={`font-semibold max-md:text-[length:var(--type-price-sm-size)] max-md:leading-5 max-md:tabular-nums ${compareAt || it.isFlash ? 'text-[color:var(--color-text-price-deal)]' : 'text-stone-900'}`}>{formatVnd(it.unitPrice)}</span>
+                            {compareAt && (
+                              <span className="text-caption text-[color:var(--color-text-price-compare)] line-through max-md:text-[length:var(--type-label-size)] max-md:leading-4 max-md:tabular-nums">
+                                {formatVnd(compareAt)}
+                              </span>
+                            )}
                           </div>
                           {it.isFlash && (
                             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 max-md:order-1 max-md:basis-full max-md:gap-x-1.5">
@@ -368,7 +375,7 @@ export default function CartPage() {
                           )}
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 md:basis-full max-md:contents">
                             {!soldOut && (
-                              <div className="flex items-center rounded-control border border-stone-450 text-sm max-md:order-3 max-md:ml-auto max-md:gap-3 max-md:rounded-none max-md:border-0">
+                              <div className="flex items-center rounded-control border border-stone-450 text-sm max-md:order-3 max-md:ml-auto max-md:gap-2 max-md:rounded-none max-md:border-0">
                                 <button
                                   type="button"
                                   onClick={() => update.mutate({ id: it.id, q: Math.max(1, Math.min(it.stock, it.quantity - 1)) })}

@@ -47,4 +47,28 @@ test.describe('Zalo Mini App E2E - dòng giỏ ở 375px', () => {
       expect(Math.abs(mid(price!) - mid(stepper!)), `giá và bộ đếm của "${name}" chung một hàng`).toBeLessThanOrEqual(20);
     }
   });
+
+  test('tấm "Chọn mã giảm giá" phủ cả nút Quay lại: bấm vào vị trí nút Quay lại lúc tấm mở không chạm nút, không rời giỏ', async ({ page, api }) => {
+    mockPilotCart(api);
+    api.allowUnmocked('POST /checkout/coupon-previews', 'GET /me/coupons');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/cart');
+    await expect(page.getByRole('button', { name: PILOT_CART.items[0]!.productName, exact: true })).toBeVisible({ timeout: 15_000 });
+
+    // Nút Quay lại toàn cục (fixed, z 200) của back-button.tsx; trong #main-content còn một nút cùng tên nằm ở cùng chỗ, nên thăm dò theo điểm.
+    const back = page.locator('button[aria-label="Quay lại"]').last();
+    await expect(back).toBeVisible();
+    const box = (await back.boundingBox())!;
+    const probe = () =>
+      page.evaluate(({ x, y }) => {
+        const el = document.elementFromPoint(x, y);
+        return { isBack: !!el?.closest('button[aria-label="Quay lại"]'), tag: el?.tagName ?? null };
+      }, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+    expect((await probe()).isBack, 'trước khi mở tấm, nút Quay lại ở trên cùng').toBe(true);
+
+    await page.getByText('Chọn mã', { exact: true }).click();
+    await expect(page.getByText('Chọn mã giảm giá', { exact: true })).toBeVisible();
+    // Tấm kẹt trong chân dính (z 20) thì nút Quay lại (z 200) vẫn vẽ đè lên lớp phủ và bấm được.
+    await expect.poll(async () => (await probe()).isBack, { message: 'tấm mở: nút Quay lại không còn nằm trên lớp phủ' }).toBe(false);
+  });
 });

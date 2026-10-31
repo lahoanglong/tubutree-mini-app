@@ -46,7 +46,7 @@ vi.mock('../components/storefront-context-bar', () => ({ StorefrontContextBar: (
 vi.mock('../components/checkout/voucher-sheet', () => ({
   VoucherSheet: (p: Record<string, unknown>) => {
     mocks.voucherProps.push(p);
-    return null;
+    return <div data-testid="voucher-sheet" data-visible={String(p.visible)} />;
   },
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -300,6 +300,20 @@ describe('CartPage: tham số xem trước mức giảm mã cho VoucherSheet', (
     await screen.findByRole('button', { name: 'Thanh toán (1)' });
     expect(last().previewParams).toEqual({ storefrontSlug: undefined, itemIds: undefined });
     expect(last().previewKey).toBe('ci-ok:1:50000');
+  });
+
+  it('tấm chọn mã nằm ngoài chân dính (z 20): bấm "Chọn mã" mở tấm, tấm không là con của thanh dính, đóng thì tắt', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    renderPage();
+    const sheet = await screen.findByTestId('voucher-sheet');
+    expect(sheet.dataset.visible).toBe('false');
+    expect(sheet.closest('[data-testid="sticky-bar"]')).toBeNull();
+    const bar = screen.getByTestId('sticky-bar');
+    fireEvent.click(within(bar).getByText('Chọn mã'));
+    await waitFor(() => expect(screen.getByTestId('voucher-sheet').dataset.visible).toBe('true'));
+    expect(screen.getByTestId('voucher-sheet').closest('[data-testid="sticky-bar"]')).toBeNull();
+    act(() => (last().onClose as () => void)());
+    await waitFor(() => expect(screen.getByTestId('voucher-sheet').dataset.visible).toBe('false'));
   });
 
   it('bỏ chọn hết: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ)', async () => {
