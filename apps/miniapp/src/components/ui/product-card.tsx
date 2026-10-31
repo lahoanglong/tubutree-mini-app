@@ -25,6 +25,11 @@ export interface ProductCardProps {
   /** Mặc định có tim ở thẻ đủ rộng (grid, rail-md, rank); gian hàng xem trước tắt vì khách chưa đăng nhập vào đó. */
   showWishlist?: boolean;
   imageOverlay?: ReactNode;
+  /** Nút phụ cuối thẻ (Mua lại); thiếu thì thẻ không có nút. */
+  onAdd?: () => void;
+  addLabel?: string;
+  /** Chưa biết giá thật (Đã xem gần đây đang tải): không in giá, vẫn giữ chỗ. */
+  hidePrice?: boolean;
   onOpen?: () => void;
 }
 
@@ -48,6 +53,9 @@ export function ProductCard({
   listSource,
   showWishlist = true,
   imageOverlay,
+  onAdd,
+  addLabel,
+  hidePrice,
   onOpen,
 }: ProductCardProps) {
   const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 });
@@ -79,8 +87,11 @@ export function ProductCard({
     <ProductTile
       view={view}
       variant={variant}
-      href={`/product/${product.slug}`}
+      href={`/product/${encodeURIComponent(product.slug)}`}
       note={note}
+      onAdd={onAdd}
+      addLabel={addLabel}
+      hidePrice={hidePrice}
       navState={Object.keys(navState).length > 0 ? navState : undefined}
       onOpen={onOpen}
       imageOverlay={imageOverlay}

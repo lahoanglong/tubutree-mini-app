@@ -1,21 +1,14 @@
+import type { ReactNode } from 'react';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import type { CardVariant } from '@tubutree/app-core/commerce/product-card-view';
 import { ProductCard } from './product-card';
 import { ScrollRow } from './scroll-row';
+import { ProductTileSkeleton } from './skeleton';
 
-export interface ProductRailProps {
-  items: readonly ProductCardData[];
-  variant: Extract<CardVariant, 'rail-sm' | 'rail-md' | 'rank' | 'flash'>;
-  rankFrom?: number;
-  /** Tên vùng cuộn cho trình đọc màn hình. */
-  label: string;
-  listSource?: string;
-  showBrand?: boolean;
-  onOpen?: (product: ProductCardData, index: number) => void;
-}
+export type RailVariant = Extract<CardVariant, 'rail-sm' | 'rail-md' | 'rank' | 'flash'>;
 
 /** Hai bề rộng kệ duy nhất (token `--tile-w-*`): thẻ 128 cho Giờ vàng, Đã xem, kệ hạng; thẻ 148 cho Bán chạy, Mua lại, Thường mua kèm. */
-const WIDTH: Record<ProductRailProps['variant'], string> = {
+const WIDTH: Record<RailVariant, string> = {
   'rail-sm': 'var(--tile-w-sm)',
   flash: 'var(--tile-w-sm)',
   rank: 'var(--tile-w-sm)',
@@ -23,16 +16,51 @@ const WIDTH: Record<ProductRailProps['variant'], string> = {
 };
 
 /**
- * Kệ ngang. Đệm của kệ chừa chỗ cho bóng và vòng focus của thẻ (cuộn ngang cắt phần tràn); mỗi ô kệ là một hộp flex để thẻ giãn
- * đủ chiều cao ô, nên thẻ cùng kệ thẳng hàng giá dù tên 1 hay 2 dòng.
+ * Khung kệ ngang. Đệm của kệ chừa chỗ cho bóng và vòng focus của thẻ (cuộn ngang cắt phần tràn); các ô xếp trong một hàng flex căng
+ * đủ chiều cao, nên thẻ cùng kệ thẳng hàng giá dù tên 1 hay 2 dòng.
  */
-export function ProductRail({ items, variant, rankFrom, label, listSource, showBrand, onOpen }: ProductRailProps) {
+export function RailShell({ label, children }: { label: string; children: ReactNode }) {
   return (
     <ScrollRow label={label} style={{ padding: 'var(--rail-pad-block)' }}>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'stretch', width: 'max-content', minWidth: '100%' }}>
-        {items.map((p, i) => (
-          <div key={p.id} style={{ flex: '0 0 auto', width: WIDTH[variant], display: 'flex' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'stretch', width: 'max-content', minWidth: '100%' }}>{children}</div>
+    </ScrollRow>
+  );
+}
+
+/** Một ô của kệ: bề rộng theo biến thể, thẻ bên trong giãn đủ chiều cao ô. */
+export function RailCell({ variant, children }: { variant: RailVariant; children: ReactNode }) {
+  return (
+    <div style={{ flex: '0 0 auto', width: WIDTH[variant], display: 'flex' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+    </div>
+  );
+}
+
+export interface ProductRailProps {
+  items: readonly ProductCardData[];
+  variant: RailVariant;
+  rankFrom?: number;
+  /** Tên vùng cuộn cho trình đọc màn hình. */
+  label: string;
+  listSource?: string;
+  showBrand?: boolean;
+  /** Đang tải: vẽ `skeletonCount` khung chờ cùng số đo với thẻ thật. */
+  loading?: boolean;
+  skeletonCount?: number;
+  onOpen?: (product: ProductCardData, index: number) => void;
+}
+
+export function ProductRail({ items, variant, rankFrom, label, listSource, showBrand, loading = false, skeletonCount = 6, onOpen }: ProductRailProps) {
+  return (
+    <RailShell label={label}>
+      {loading
+        ? Array.from({ length: skeletonCount }, (_, i) => (
+            <RailCell key={i} variant={variant}>
+              <ProductTileSkeleton variant={variant} brand={showBrand === false ? false : undefined} />
+            </RailCell>
+          ))
+        : items.map((p, i) => (
+            <RailCell key={p.id} variant={variant}>
               <ProductCard
                 product={p}
                 variant={variant}
@@ -41,10 +69,8 @@ export function ProductRail({ items, variant, rankFrom, label, listSource, showB
                 showBrand={showBrand}
                 onOpen={onOpen ? () => onOpen(p, i) : undefined}
               />
-            </div>
-          </div>
-        ))}
-      </div>
-    </ScrollRow>
+            </RailCell>
+          ))}
+    </RailShell>
   );
 }

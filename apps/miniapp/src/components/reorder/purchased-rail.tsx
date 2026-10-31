@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
 import { useNavigate } from 'zmp-ui';
 import { homeCopy } from '@tubutree/app-core/home-copy';
@@ -18,12 +19,12 @@ import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { ProductThumb } from '../ui/product-thumb';
 import { PriceTag } from '../ui/price-tag';
-import { ProductTile, type ProductTileProduct } from '../ui/product-tile';
+import { ProductCard } from '../ui/product-card';
+import { RailCell, RailShell } from '../ui/product-rail';
 import { Skeleton } from '../ui/skeleton';
 import { Heading, Text } from '../ui/text';
 import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 
-const TILE_WIDTH = 148;
 /** Từ chừng này món trở lên mới dùng kệ cuộn ngang; ít hơn thì thẻ ngang thấp để không để trống nửa màn hình. */
 export const COMPACT_MAX_ITEMS = 2;
 const COMPACT_CARD_HEIGHT = 168;
@@ -39,7 +40,11 @@ const ACTION_STYLE = { flex: '1 1 0', minWidth: 0, paddingInline: 12 } as const;
 
 export const PURCHASED_RAIL_LIMIT = 10;
 
-export function toTileProduct(p: PurchasedItem): ProductTileProduct {
+/**
+ * Món đã mua dưới dạng thẻ sản phẩm: giá của đúng phân loại đã mua. Ghim phân loại để `ProductCard` chỉ xét Giờ vàng của chính phân loại đó
+ * và mở trang chi tiết ở phân loại này, nên giá trên thẻ và giá ở trang là một (cùng luật với `rebuyPricing`).
+ */
+export function toCardProduct(p: PurchasedItem): ProductCardData {
   return {
     id: p.productId,
     slug: p.slug,
@@ -48,6 +53,9 @@ export function toTileProduct(p: PurchasedItem): ProductTileProduct {
     thumbnail: p.thumbnail,
     basePrice: p.price,
     salePrice: p.salePrice,
+    repVariationId: p.variationId,
+    pinnedVariationId: p.variationId,
+    isFeatured: false,
     inStock: p.inStock,
   };
 }
@@ -171,22 +179,20 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
           ))}
         </div>
       ) : (
-        <div className="scroll-x" style={{ display: 'flex', gap: 10, padding: '4px 16px 12px', margin: '-4px 0 -12px', minWidth: 0, maxWidth: '100%' }}>
+        <RailShell label={vi.reorder.railTitle}>
           {items.map((p) => (
-            <div key={p.variationId} style={{ flex: `0 0 ${TILE_WIDTH}px`, width: TILE_WIDTH }}>
-              <ProductTile
-                product={toTileProduct(p)}
-                priceOverride={rebuyPricing(p, flash, serverNow())}
-                variant="rail"
+            <RailCell key={p.variationId} variant="rail-md">
+              <ProductCard
+                product={toCardProduct(p)}
+                variant="rail-md"
                 showWishlist={false}
-                action="rebuy"
-                badge={p.timesBought > 1 ? <Badge tone="brand" size="sm">{vi.reorder.timesBought(p.timesBought)}</Badge> : undefined}
-                onAction={() => openReorder(p)}
-                onPress={() => navigate(`/product/${encodeURIComponent(p.slug)}`, openVariation(p))}
+                note={p.timesBought > 1 ? vi.reorder.timesBought(p.timesBought) : undefined}
+                addLabel={homeCopy.reorder.buy}
+                onAdd={() => openReorder(p)}
               />
-            </div>
+            </RailCell>
           ))}
-        </div>
+        </RailShell>
       )}
       {(target || reorderMounted) && (
         <Suspense fallback={null}>

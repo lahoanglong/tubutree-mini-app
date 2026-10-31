@@ -61,16 +61,18 @@ describe('ProductGrid', () => {
 describe('ProductRail', () => {
   const cellsOf = (name: string) => Array.from((screen.getByRole('region', { name }).firstElementChild as HTMLElement).children) as HTMLElement[];
 
+  const cell = (name: string, i = 0) => cellsOf(name)[i] as HTMLElement;
+
   it('vùng có tên, bề rộng ô theo kích cỡ: rail-md 148, rail-sm 128, rank 128', () => {
     const md = wrap(<ProductRail items={items} variant="rail-md" label="Bán chạy" />);
     expect(cellsOf('Bán chạy')).toHaveLength(3);
-    expect(cellsOf('Bán chạy')[0].style.width).toBe('var(--tile-w-md)');
+    expect(cell('Bán chạy').style.width).toBe('var(--tile-w-md)');
     md.unmount();
     const sm = wrap(<ProductRail items={items} variant="rail-sm" label="Đã xem" />);
-    expect(cellsOf('Đã xem')[0].style.width).toBe('var(--tile-w-sm)');
+    expect(cell('Đã xem').style.width).toBe('var(--tile-w-sm)');
     sm.unmount();
     wrap(<ProductRail items={items} variant="rank" label="Hạng" rankFrom={1} />);
-    expect(cellsOf('Hạng')[0].style.width).toBe('var(--tile-w-sm)');
+    expect(cell('Hạng').style.width).toBe('var(--tile-w-sm)');
     expect(screen.getByText('#1')).toBeInTheDocument();
   });
 
@@ -81,7 +83,7 @@ describe('ProductRail', () => {
     const row = region.firstElementChild as HTMLElement;
     expect(row.style.display).toBe('flex');
     expect(row.style.alignItems).toBe('stretch');
-    expect(cellsOf('Bán chạy')[0].style.display).toBe('flex');
+    expect(cell('Bán chạy').style.display).toBe('flex');
   });
 
   it('rail-sm không nhãn đầu tên và không tim dù sản phẩm nổi bật', () => {
