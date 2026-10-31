@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import type { CardVariant } from '@tubutree/app-core/commerce/product-card-view';
 import type { ProductCard as ProductCardType } from '@/lib/api';
 import { GRID_PRODUCTS } from '@/lib/product-grid';
-import { ProductCard, PRIORITY_CARDS } from './product-card';
+import { ProductCard } from './product-card';
 import { ProductTileSkeleton } from './skeleton';
 
 export interface ProductGridProps {
@@ -19,7 +19,7 @@ export interface ProductGridProps {
   skeletonCount?: number;
   showBrand?: boolean;
   showWishlist?: boolean;
-  /** Số thẻ đầu tải ảnh ngay; 0 cho lưới nằm dưới màn hình đầu. */
+  /** Số thẻ đầu tải ảnh ngay (ứng viên LCP: `PRIORITY_CARDS` cho lưới ở màn hình đầu); mặc định 0, lưới nằm dưới thì tải lười. */
   priorityCount?: number;
   /** Nút nổi trên ảnh của từng thẻ (giỏ nhanh ở Yêu thích). */
   renderImageOverlay?: (product: ProductCardType, index: number) => ReactNode;
@@ -38,7 +38,7 @@ export function ProductGrid({
   skeletonCount = 6,
   showBrand,
   showWishlist,
-  priorityCount = PRIORITY_CARDS,
+  priorityCount = 0,
   renderImageOverlay,
   renderAfter,
   onOpen,

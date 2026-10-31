@@ -1,51 +1,62 @@
 'use client';
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, CheckCircle2, Clock, Zap } from 'lucide-react';
 import { cancelFlashReminder, setFlashReminder, type FlashSaleActiveItem, type UpcomingFlashItem } from '@tubutree/app-core/api/flash-sale';
+import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
+import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { flashActiveQuery, flashUpcomingQuery } from '@tubutree/app-core/queries/flash-sale';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
-import { flashDisplay, soldPercent } from '@/lib/flash-display';
-import { formatVnd } from '@/lib/format-vnd';
+import { soldPercent } from '@/lib/flash-display';
 import { productHref } from '@/lib/product-href';
 import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
+import { useFlashExpiry } from '@/lib/use-flash-expiry';
+import { useHydrated } from '@/lib/use-hydrated';
 import { loadActiveFlashSales } from '@/lib/use-flash-sales';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { FLASH_SKELETON_HEIGHT, readFlashHint, writeFlashHint } from '@tubutree/app-core/home-layout';
 import { browserStorage } from '@/lib/recently-viewed';
 import { Skeleton } from '@/components/mini';
 import { Badge } from '@/components/ui/badge';
-import { Badge as MiniBadge } from '@/components/mini/badge';
+import { ProductTile } from '@/components/mini/product-tile';
+import { RailCell, RailShell } from '@/components/mini/product-rail';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { HomeBlockError } from './home-block-error';
 import { useBlockQuery } from './use-block-query';
-import { ScrollRail } from '@/components/scroll-rail';
-import { ProductImage } from '@/components/mini/product-image';
 
-const CARD = 'flex w-36 flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition hover:shadow-raised sm:w-44 lg:w-48';
-const RAIL = 'flex gap-3 overflow-x-auto px-1 pb-3 pt-1 max-md:-mx-4 max-md:px-4';
 const TITLE = 'flex items-center gap-1.5 font-display text-lg font-semibold text-promo-fg';
 
-/** Nền cam đặc như nhãn Giờ vàng của Mini App và của thẻ sản phẩm. */
-const DISCOUNT_BADGE_STYLE = { background: 'var(--color-flash-solid-bg)', color: 'var(--color-flash-solid-fg)' };
+/** Cuối thẻ Giờ vàng: 4 (cách giá) + 6 (thanh) + 2 + 16 (chữ đã bán). Luôn giữ chỗ để thẻ chưa bán được suất nào vẫn cao bằng thẻ khác. */
+const SOLD_FOOTER_HEIGHT = 28;
+/** Cuối thẻ "Sắp diễn ra": 8 (cách giá) + 44 (nút nhắc). */
+const REMIND_FOOTER_HEIGHT = 52;
 
-function Thumb({ src, name, pct }: { src: string | null; name: string; pct: number }) {
-  return (
-    <div className="relative aspect-square w-full bg-stone-100">
-      <ProductImage src={src} brand="" alt={name} size={176} className="h-full w-full object-cover" />
-      {pct > 0 && (
-        <span className="absolute left-1.5 top-1.5">
-          <MiniBadge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
-            -{pct}%
-          </MiniBadge>
-        </span>
-      )}
-    </div>
-  );
+/** Thẻ sản phẩm của một suất Giờ vàng: giá của đúng phân loại có suất (ghim phân loại để thẻ chỉ xét suất này). */
+function flashCardProduct(item: {
+  itemId: string;
+  productSlug: string;
+  productName: string;
+  thumbnail: string | null;
+  variationId: string;
+  retailPrice: number;
+  salePrice?: number | null;
+}): ProductCardData {
+  return {
+    id: item.itemId,
+    slug: item.productSlug,
+    name: item.productName,
+    brand: '',
+    thumbnail: item.thumbnail,
+    basePrice: item.retailPrice,
+    salePrice: item.salePrice ?? null,
+    repVariationId: item.variationId,
+    pinnedVariationId: item.variationId,
+    isFeatured: false,
+    inStock: true,
+  };
 }
 
 const subscribeNothing = () => () => {};
@@ -71,6 +82,8 @@ export function FlashSale({ initial }: { initial?: FlashSaleActiveItem[] }) {
     }),
   );
   const items = q.data ?? [];
+  // Một dòng phân loại dưới giá chỉ khi có thẻ cần; có thẻ cần thì mọi thẻ giữ chỗ để giá cùng kệ thẳng hàng.
+  const hasVariation = items.some((it) => Boolean(it.variationName));
 
   // Chỉ tính suất còn giờ: suất sớm nhất có thể đã hết mà danh sách chưa kịp tải lại (poll 60s) trong khi các suất khác còn chạy.
   // `expiredTick` tính lại ngay khi suất đang đếm về 0 để đồng hồ chuyển sang suất kế tiếp thay vì biến mất.
@@ -127,68 +140,82 @@ export function FlashSale({ initial }: { initial?: FlashSaleActiveItem[] }) {
           </Badge>
         </span>
       </div>
-      <ScrollRail className={RAIL}>
-        {items.map((item: FlashSaleActiveItem) => {
-          const { price, was, pct } = flashDisplay(item);
-          const sold = soldPercent(item.soldCount, item.quota);
-          return (
-            <li key={item.itemId} className="flex-none">
-              <Link href={productHref(encodeURIComponent(item.productSlug), price < was ? item.variationId : null)} className={CARD}>
-                <Thumb src={item.thumbnail} name={item.productName} pct={pct} />
-                <div className="p-2">
-                  <p className="line-clamp-2 h-8 text-xs leading-4 text-stone-900">{item.productName}</p>
-                  {item.variationName && <p className="truncate text-xs leading-4 text-stone-500">{item.variationName}</p>}
-                  <p className="mt-0.5 text-sm font-bold text-promo-fg">{formatVnd(price)}</p>
-                  {was > price && <p className="text-xs text-stone-500 line-through">{formatVnd(was)}</p>}
-                  {sold > 0 && (
-                    <>
-                      <div className="mt-1">
-                        <ProgressBar value={sold} max={100} tone="flash" ariaLabel={flashSaleText.soldPct(sold)} />
-                      </div>
-                      <p className="mt-0.5 text-xs text-stone-600">{flashSaleText.soldPct(sold)}</p>
-                    </>
-                  )}
-                </div>
-              </Link>
-            </li>
-          );
-        })}
-      </ScrollRail>
+      <RailShell label={flashSaleText.sectionName}>
+        {items.map((item: FlashSaleActiveItem) => (
+          <RailCell key={item.itemId} variant="flash">
+            <ActiveFlashCard item={item} reserveVariation={hasVariation} />
+          </RailCell>
+        ))}
+      </RailShell>
     </section>
+  );
+}
+
+/**
+ * Thẻ Giờ vàng đang chạy: thẻ `flash` chung, thanh "đã bán" ở cuối. Về giá thường đúng mốc `endAt` dù danh sách chưa tải lại.
+ * Danh sách dựng sẵn (ISR) có thể cũ hơn giờ trình duyệt: trước hydrate coi suất còn giờ (đúng như HTML máy chủ đã vẽ), sau hydrate tính theo giờ máy chủ thật.
+ */
+function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleActiveItem; reserveVariation: boolean }) {
+  const hydrated = useHydrated();
+  useFlashExpiry(item.endAt);
+  const end = Date.parse(item.endAt);
+  const now = hydrated || !Number.isFinite(end) ? serverNow() : end - 1;
+  const view = productCardView({ product: flashCardProduct(item), flash: item, variant: 'flash', now });
+  const soldPct = soldPercent(item.soldCount, item.quota);
+  return (
+    <ProductTile
+      view={view}
+      variant="flash"
+      // Sản phẩm nhiều phân loại thì flash chỉ gắn vào MỘT phân loại, mà trang chi tiết mặc định chọn phân loại đầu còn hàng:
+      // mở ra là giá thường, không nhãn, không đếm ngược. `?v=` mở đúng phân loại có suất (chỉ khi suất thật sự rẻ hơn).
+      href={productHref(encodeURIComponent(item.productSlug), view.isFlash ? item.variationId : null)}
+      note={reserveVariation ? (item.variationName ?? '') : undefined}
+      footerHeight={SOLD_FOOTER_HEIGHT}
+      footer={
+        <div style={{ height: SOLD_FOOTER_HEIGHT, paddingTop: 4, boxSizing: 'border-box' }}>
+          {soldPct > 0 && (
+            <>
+              <ProgressBar value={soldPct} max={100} tone="flash" ariaLabel={flashSaleText.soldPct(soldPct)} />
+              <p className="mt-0.5 h-4 text-xs leading-4 text-stone-600">{flashSaleText.soldPct(soldPct)}</p>
+            </>
+          )}
+        </div>
+      }
+    />
   );
 }
 
 /** 1 thẻ trong danh sách "Sắp diễn ra" — countdown riêng theo startAt của item. */
 function UpcomingFlashCard({ item, pending, onToggleRemind }: { item: UpcomingFlashItem; pending: boolean; onToggleRemind: () => void }) {
   const startsIn = useCountdown(item.startAt);
-  const { price, pct } = flashDisplay(item);
+  const view = productCardView({ product: flashCardProduct(item), flash: item, variant: 'flash', now: serverNow() });
   return (
-    <li className={CARD.replace('transition hover:shadow-raised ', '')}>
-      <Link href={`/san-pham/${encodeURIComponent(item.productSlug)}`} className="block">
-        <Thumb src={item.thumbnail} name={item.productName} pct={pct} />
-        <div className="px-2 pt-2">
-          <p className="line-clamp-2 h-8 text-xs leading-4 text-stone-900">{item.productName}</p>
-          <p className="mt-0.5 text-sm font-bold text-promo-fg">{formatVnd(price)}</p>
-          {/* Đã tới giờ mở bán mà danh sách chưa tải lại: không còn gì để nhắc, chạm thẻ là vào xem. */}
-          <p className="mt-0.5 text-xs text-stone-600">{startsIn ? flashSaleText.startsIn(startsIn) : flashSaleText.live}</p>
-        </div>
-      </Link>
-      {startsIn && (
-        <div className="p-2">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={onToggleRemind}
-            className={`inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full text-xs font-semibold transition disabled:opacity-60 ${
-              item.reminded ? 'bg-forest-50 text-forest-700' : 'bg-forest-600 text-stone-0 hover:bg-forest-700'
-            }`}
-          >
-            {item.reminded ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : <Bell className="h-4 w-4" aria-hidden="true" />}
-            {item.reminded ? flashSaleText.reminded : flashSaleText.remindMe}
-          </button>
-        </div>
-      )}
-    </li>
+    <ProductTile
+      view={view}
+      variant="flash"
+      href={productHref(encodeURIComponent(item.productSlug))}
+      // Đã tới giờ mở bán mà danh sách chưa tải lại: không còn gì để nhắc, chạm thẻ là vào xem.
+      note={startsIn ? flashSaleText.startsIn(startsIn) : flashSaleText.live}
+      footerHeight={startsIn ? REMIND_FOOTER_HEIGHT : undefined}
+      footer={
+        startsIn ? (
+          // Anh em của liên kết tên, nổi trên lớp phủ của nó (z-index 1): chạm nút nhắc không mở sản phẩm.
+          <div style={{ position: 'relative', zIndex: 1, marginTop: 8 }}>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={onToggleRemind}
+              className={`inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-full text-xs font-semibold transition disabled:opacity-60 ${
+                item.reminded ? 'bg-forest-50 text-forest-700' : 'bg-forest-600 text-stone-0 hover:bg-forest-700'
+              }`}
+            >
+              {item.reminded ? <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> : <Bell className="h-4 w-4" aria-hidden="true" />}
+              {item.reminded ? flashSaleText.reminded : flashSaleText.remindMe}
+            </button>
+          </div>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -226,16 +253,17 @@ export function UpcomingFlashSales() {
         <Bell className="h-4 w-4" aria-hidden="true" />
         {flashSaleText.upcomingTitle}
       </h2>
-      <ScrollRail className={RAIL}>
+      <RailShell label={flashSaleText.upcomingTitle}>
         {items.map((item) => (
-          <UpcomingFlashCard
-            key={item.itemId}
-            item={item}
-            pending={remind.isPending && remind.variables?.itemId === item.itemId}
-            onToggleRemind={() => remind.mutate({ itemId: item.itemId, reminded: item.reminded })}
-          />
+          <RailCell key={item.itemId} variant="flash">
+            <UpcomingFlashCard
+              item={item}
+              pending={remind.isPending && remind.variables?.itemId === item.itemId}
+              onToggleRemind={() => remind.mutate({ itemId: item.itemId, reminded: item.reminded })}
+            />
+          </RailCell>
         ))}
-      </ScrollRail>
+      </RailShell>
     </section>
   );
 }

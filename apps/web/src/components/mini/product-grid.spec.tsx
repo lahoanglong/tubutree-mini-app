@@ -8,6 +8,7 @@ vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: async () => ({}), post: async () => ({}), delete: async () => ({}) } }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined }) }));
 
+import { PRIORITY_CARDS } from './product-card';
 import { ProductGrid } from './product-grid';
 import { ProductRail } from './product-rail';
 
@@ -31,11 +32,11 @@ const mount = async (ui: React.ReactElement) => {
 };
 
 describe('ProductGrid', () => {
-  it('mỗi sản phẩm một ô; chỉ PRIORITY_CARDS thẻ đầu tải ảnh ngay, priorityCount=0 tắt hẳn', async () => {
-    const c = await mount(<ProductGrid items={ITEMS} variant="grid" />);
+  it('mỗi sản phẩm một ô; priorityCount thẻ đầu tải ảnh ngay, mặc định tải lười hết', async () => {
+    const c = await mount(<ProductGrid items={ITEMS} variant="grid" priorityCount={PRIORITY_CARDS} />);
     expect(c.querySelectorAll('li').length).toBe(6);
     expect(Array.from(c.querySelectorAll('img')).map((i) => i.getAttribute('loading'))).toEqual(['eager', 'eager', 'eager', 'eager', 'lazy', 'lazy']);
-    const none = await mount(<ProductGrid items={ITEMS} variant="grid" priorityCount={0} />);
+    const none = await mount(<ProductGrid items={ITEMS} variant="grid" />);
     expect(Array.from(none.querySelectorAll('img')).every((i) => i.getAttribute('loading') === 'lazy')).toBe(true);
   });
 

@@ -55,7 +55,7 @@ describe('SuggestFeed (web)', () => {
     mocks.get.mockReturnValue(new Promise(() => undefined));
     const c = await mount();
     expect(c.querySelector('h2')?.textContent).toBe('Gợi ý cho bạn');
-    expect(c.querySelector('[data-testid="suggest-skeleton"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="catalog-grid-skeleton"]')).not.toBeNull();
     expect(c.textContent).toContain('Bán chạy');
   });
 

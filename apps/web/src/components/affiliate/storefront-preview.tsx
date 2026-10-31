@@ -1,6 +1,6 @@
 import { Sprout } from 'lucide-react';
 import type { StorefrontEdit } from '@tubutree/app-core/api/storefront';
-import ProductCard from '@/components/product-card';
+import { ProductGrid } from '@/components/mini/product-grid';
 import type { ProductCard as ProductCardData } from '@/lib/api';
 import { cssUrl } from '@/lib/safe-color';
 
@@ -30,14 +30,13 @@ export function StorefrontPreview({ sf }: { sf: StorefrontEdit }) {
         {shown.length === 0 ? (
           <p className="mt-2.5 text-xs text-stone-600">Chưa có sản phẩm nào.</p>
         ) : (
-          <div className="mt-2.5 grid grid-cols-2 gap-2">
-            {shown.map((it) => (
-              // Cùng thẻ sản phẩm với trang công khai. Cả khung preview là `inert`: Tab/Enter không vào link và tim, chủ không rời màn giữa chừng.
-              <div key={it.id}>
-                <ProductCard product={{ brand: '', isFeatured: false, inStock: true, ...(it.product as unknown as Partial<ProductCardData>) } as ProductCardData} />
-              </div>
-            ))}
-          </div>
+          // Cùng thẻ sản phẩm với trang công khai (không tim: chủ chưa phải khách). Cả khung preview là `inert`: Tab/Enter không vào link, chủ không rời màn giữa chừng.
+          <ProductGrid
+            className="mt-2.5 grid grid-cols-2 gap-2"
+            variant="grid"
+            showWishlist={false}
+            items={shown.map((it) => ({ brand: '', isFeatured: false, inStock: true, ...(it.product as unknown as Partial<ProductCardData>) }) as ProductCardData)}
+          />
         )}
         {items.length > shown.length && <p className="mt-2 text-xs text-stone-600">và {items.length - shown.length} sản phẩm khác</p>}
       </div>

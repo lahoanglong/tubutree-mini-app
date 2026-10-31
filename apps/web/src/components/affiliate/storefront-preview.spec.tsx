@@ -4,15 +4,10 @@ import { render, type Rendered } from '@/test-utils/dom';
 import type { StorefrontEdit } from '@tubutree/app-core/api/storefront';
 import { StorefrontPreview } from './storefront-preview';
 
-vi.mock('@/components/product-card', () => ({
-  default: ({ product }: { product: { name: string } }) => (
-    <div>
-      {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-      <a href="/san-pham/x">{product.name}</a>
-      <button type="button" aria-label="Yêu thích">tim</button>
-    </div>
-  ),
-}));
+vi.mock('@/lib/shop-client', () => ({ getActiveFlashSales: async () => [] }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
+vi.mock('@/lib/core-http', () => ({ coreHttp: { get: async () => ({}), post: async () => ({}), delete: async () => ({}) } }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined }) }));
 
 let mounted: Rendered | undefined;
 afterEach(() => {
@@ -32,6 +27,8 @@ describe('StorefrontPreview', () => {
     expect(frame.hasAttribute('inert')).toBe(true);
     const focusables = frame.querySelectorAll('a[href], button');
     expect(focusables.length).toBeGreaterThan(0);
+    // Chủ chưa phải khách: thẻ xem trước không có tim.
+    expect(frame.querySelector('button[aria-label^="Yêu thích"]')).toBeNull();
     for (const el of Array.from(focusables)) expect(el.closest('[inert]')).toBe(frame);
   });
 });

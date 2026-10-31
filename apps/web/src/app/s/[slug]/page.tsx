@@ -21,7 +21,7 @@ import { StorefrontTracker } from '@/components/storefront-tracker';
 import { isPartnerStore } from '@/lib/partner-store';
 import { MoreAtTubuLink, OpenStorefrontCta, StorefrontAction, StorefrontEmpty } from '@/components/affiliate/storefront-owner';
 import { storefrontBadgeLabel } from '@/lib/storefront-badge';
-import ProductCard from '@/components/product-card';
+import { ProductCard } from '@/components/mini/product-card';
 import { safeHexColor } from '@/lib/safe-color';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { GRID_PRODUCTS } from '@/lib/product-grid';
@@ -273,19 +273,22 @@ export default async function StorefrontPage({
             <span className="text-xs text-stone-600 max-md:hidden">({c.items?.length ?? 0} sản phẩm)</span>
           </div>
 
-          <div className={GRID_PRODUCTS}>
+          {/* Trang máy chủ không đưa được hàm xuống ProductGrid (`renderAfter`), nên ô lưới của ghi chú chủ gian hàng dựng tại đây cùng cấu trúc ul > li. */}
+          <ul role="list" data-testid="catalog-grid" className={GRID_PRODUCTS} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
             {c.items.map((it) => (
-              <div key={it.id}>
-                <ProductCard product={it.product as ProductCardData} />
+              <li key={it.id} style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+                  <ProductCard product={it.product as ProductCardData} variant="grid" />
+                </div>
                 {it.note && (
                   <p className="mt-1 flex items-start gap-1 rounded-control bg-success-bg px-2 py-1 text-xs text-success-fg">
                     <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
                     <span>{it.note}</span>
                   </p>
                 )}
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </section>
       ))}
       {sf.type === 'CTV' && <OpenStorefrontCta referralCode={sf.referralCode} />}

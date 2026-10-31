@@ -50,10 +50,12 @@ export interface ProductRailProps {
   /** Đang tải: vẽ `skeletonCount` khung chờ cùng số đo với thẻ thật. */
   loading?: boolean;
   skeletonCount?: number;
+  /** Số thẻ đầu tải ảnh ngay (kệ ở màn hình đầu); mặc định 0. */
+  priorityCount?: number;
   onOpen?: (product: ProductCardType, index: number) => void;
 }
 
-export function ProductRail({ items, variant, rankFrom, label, showBrand, loading = false, skeletonCount = 6, onOpen }: ProductRailProps) {
+export function ProductRail({ items, variant, rankFrom, label, showBrand, loading = false, skeletonCount = 6, priorityCount = 0, onOpen }: ProductRailProps) {
   return (
     <RailShell label={label}>
       {loading
@@ -69,6 +71,7 @@ export function ProductRail({ items, variant, rankFrom, label, showBrand, loadin
                 variant={variant}
                 rank={rankFrom === undefined ? undefined : rankFrom + i}
                 showBrand={showBrand}
+                priority={i < priorityCount}
                 onOpen={onOpen ? () => onOpen(p, i) : undefined}
               />
             </RailCell>

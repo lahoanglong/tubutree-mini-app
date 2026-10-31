@@ -19,7 +19,7 @@ import {
 import { useBrowseState } from '@/lib/use-browse-state';
 import { useSuggest } from '@/lib/use-suggest';
 import { GRID_PRODUCTS_WITH_FILTER } from '@/lib/product-grid';
-import ProductCard, { PRIORITY_CARDS } from '@/components/product-card';
+import { PRIORITY_CARDS, ProductGrid } from '@/components/mini';
 import { ErrorState } from '@/components/ui/error-state';
 import { ProductGridSkeleton } from '@/components/ui/skeleton';
 import { BrowsePager } from './browse-pager';
@@ -308,11 +308,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
               />
             ) : (
               <>
-                <div className={GRID_PRODUCTS_WITH_FILTER}>
-                  {list.map((p, i) => (
-                    <ProductCard key={p.id} product={p} priority={i < PRIORITY_CARDS} />
-                  ))}
-                </div>
+                <ProductGrid items={list} variant="grid" className={GRID_PRODUCTS_WITH_FILTER} priorityCount={PRIORITY_CARDS} />
                 {/* Lỗi khi ĐÃ có dữ liệu ("Xem thêm" hoặc làm mới nền thất bại): giữ nguyên danh sách, báo và thử lại tại chỗ. */}
                 {products.isError && (
                   <div role="alert" className="flex flex-wrap items-center justify-center gap-2 pt-4">

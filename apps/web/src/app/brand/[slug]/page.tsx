@@ -3,12 +3,11 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Award, BadgeCheck, Sparkles, Leaf, MapPin } from 'lucide-react';
 import { getBrand, type ProductCard as ProductCardData } from '@/lib/api';
-import ProductCard from '@/components/product-card';
+import { ProductGrid } from '@/components/mini/product-grid';
 import { EmptyState } from '@/components/empty-state';
 import { safeHexColor } from '@/lib/safe-color';
 import { BrandActions, BrandDealerBlock, BrandPromoCode } from './brand-actions';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { GRID_PRODUCTS } from '@/lib/product-grid';
 import { ScrollRow } from '@/components/mini/scroll-row';
 import { findBrandOrigin } from '@/lib/brand-origins';
 
@@ -139,12 +138,8 @@ export default async function BrandPage({
       {b.products.length > 0 && (
         <section className="mt-6 max-md:mt-4">
           <h2 className="mb-3 font-display font-semibold text-stone-900">Sản phẩm</h2>
-          <div className={GRID_PRODUCTS}>
-            {b.products.map((p) => (
-              // Payload sản phẩm của trang nhãn không kèm `brand` (mọi sản phẩm thuộc nhãn này): dùng tên nhãn của trang như Mini App.
-              <ProductCard key={p.id} product={{ ...p, brand: b.name } as ProductCardData} />
-            ))}
-          </div>
+          {/* Payload sản phẩm của trang nhãn không kèm `brand` (mọi sản phẩm thuộc nhãn này): dùng tên nhãn của trang như Mini App. */}
+          <ProductGrid items={b.products.map((p) => ({ ...p, brand: b.name }) as ProductCardData)} variant="grid" />
         </section>
       )}
 

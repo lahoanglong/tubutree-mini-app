@@ -24,7 +24,17 @@ const state = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn(), user: { id: 'ctv1' } }) }));
-vi.mock('@/components/product-card', () => ({ default: ({ product }: { product: { name: string } }) => <div data-testid="product-card">{product.name}</div> }));
+vi.mock('@/components/mini/product-grid', () => ({
+  ProductGrid: ({ items }: { items: { id: string; name: string }[] }) => (
+    <div>
+      {items.map((p) => (
+        <div key={p.id} data-testid="product-card">
+          {p.name}
+        </div>
+      ))}
+    </div>
+  ),
+}));
 vi.mock('@/lib/platform-bridge', () => ({ platformBridge: { share: (...a: unknown[]) => state.share(...a) } }));
 vi.mock('@/components/account/cloudinary-upload', () => ({ uploadToCloudinary: async () => null }));
 
