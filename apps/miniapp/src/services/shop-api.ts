@@ -1,5 +1,5 @@
 import type { CancelReasonBody } from '@tubutree/app-core/cancel-reasons';
-import { api } from './api';
+import { api, getAccessToken } from './api';
 import { isHttpError } from './http';
 import { syncServerClock } from '../utils/server-clock';
 import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
@@ -331,8 +331,21 @@ export const fetchBrands = async () =>
 export const fetchRelated = (slug: string) =>
   api.get<ProductCard[]>(`/products/${slug}/related`).then((r) => r.data);
 /** Feed "Dành cho bạn" — gợi ý cá nhân hoá (cần đăng nhập, xem home.tsx). */
-export const fetchForYou = async () =>
-  (await takeMeBlock('forYou')) ?? api.get<ProductCard[]>('/products/for-you').then((r) => r.data);
+/**
+ * "Dành cho bạn" cá nhân hoá. `seed` (ngày VN) xoay thứ tự trong ngày; API cũ từ chối tham số lạ bằng 400 thì gọi lại không kèm seed. Lần đầu mỗi phiên
+ * mở Trang chủ lấy từ khối gộp /home/me (máy chủ đã dựng sẵn), các lần sau mới gửi seed.
+ */
+export const fetchForYou = async (query: { seed?: string } = {}): Promise<ProductCard[]> => {
+  const fromFeed = await takeMeBlock('forYou');
+  if (fromFeed) return fromFeed;
+  if (!query.seed) return api.get<ProductCard[]>('/products/for-you').then((r) => r.data);
+  try {
+    return (await api.get<ProductCard[]>('/products/for-you', { params: { seed: query.seed } })).data;
+  } catch (err) {
+    if (!isHttpError(err) || err.response?.status !== 400) throw err;
+    return api.get<ProductCard[]>('/products/for-you').then((r) => r.data);
+  }
+};
 export const fetchBoughtTogether = (slug: string) =>
   api.get<ProductCard[]>(`/products/${slug}/bought-together`).then((r) => r.data);
 
@@ -355,6 +368,8 @@ export interface CatalogQuery {
   maxPrice?: number;
   inStock?: boolean;
   minRating?: number;
+  /** Ngày VN dạng YYYYMMDD: xoay thứ tự mặc định trong ngày (Gợi ý hôm nay). */
+  seed?: string;
 }
 export interface CatalogPage extends PageResponse<ProductCard> {
   /** API cũ (trước 4b) từ chối bộ lọc mới → đã tải lại KHÔNG kèm bộ lọc; UI báo nhẹ. */
@@ -362,7 +377,7 @@ export interface CatalogPage extends PageResponse<ProductCard> {
 }
 
 /** Tham số mà API trước 4b không biết — ValidationPipe `forbidNonWhitelisted` trả 400 nếu gửi. */
-const EXTENDED_CATALOG_PARAMS = ['minPrice', 'maxPrice', 'inStock', 'minRating'] as const;
+const EXTENDED_CATALOG_PARAMS = ['minPrice', 'maxPrice', 'inStock', 'minRating', 'seed'] as const;
 
 /** Chỉ gửi tham số có giá trị — API cũ không bị 400 vì những bộ lọc khách không dùng. */
 export function catalogParams(query: CatalogQuery): Record<string, string | number> {
@@ -377,6 +392,7 @@ export function catalogParams(query: CatalogQuery): Record<string, string | numb
   if (query.maxPrice != null) params.maxPrice = query.maxPrice;
   if (query.inStock) params.inStock = 'true';
   if (query.minRating != null) params.minRating = query.minRating;
+  if (query.seed) params.seed = query.seed;
   return params;
 }
 
@@ -450,8 +466,9 @@ export interface UpcomingFlashItem {
   startAt: string;
   reminded: boolean;
 }
+// Công khai (khách chưa đăng nhập vẫn xem suất sắp mở): chỉ hỏi khối gộp /home/me khi đã có phiên, khách chưa đăng nhập đi thẳng request lẻ.
 export const fetchUpcomingFlashSales = async () =>
-  (await takeMeBlock('flashUpcoming')) ?? api.get<UpcomingFlashItem[]>('/flash-sales/upcoming').then((r) => r.data);
+  ((getAccessToken() ? await takeMeBlock('flashUpcoming') : null) ?? (await api.get<UpcomingFlashItem[]>('/flash-sales/upcoming')).data);
 export const setFlashReminder = (itemId: string) =>
   api.post(`/flash-sales/items/${itemId}/remind`).then((r) => r.data);
 export const cancelFlashReminder = (itemId: string) =>

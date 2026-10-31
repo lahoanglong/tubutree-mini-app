@@ -85,9 +85,9 @@ describe('vùng chạm >= 44px — Trang chủ / Danh mục / Tìm kiếm', () =
     mocks.user = { fullName: 'Lan', pointsBalance: 60 };
   });
 
-  it('đầu Trang chủ (chuông + giỏ)', () => {
+  it('đầu Trang chủ (ô tìm + chuông + giỏ)', () => {
     const { container } = wrap(<HomeHeader unreadCount={2} />);
-    expect(container.querySelectorAll(INTERACTIVE).length).toBe(2);
+    expect(container.querySelectorAll(INTERACTIVE).length).toBe(3);
     expect(undersized(container)).toEqual([]);
   });
 

@@ -115,8 +115,6 @@ export const vi = {
 
   flashSale: {
     badge: 'Giờ vàng',
-    sectionTitle: 'Ưu đãi giờ vàng',
-    sectionName: 'Ưu đãi giờ vàng',
     endsIn: (t: string) => `Còn ${t}`,
     soldPct: (n: number) => `Đã bán ${n}%`,
     priceChangedTitle: 'Giá ưu đãi đã thay đổi',

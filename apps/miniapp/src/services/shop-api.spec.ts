@@ -16,6 +16,7 @@ import {
   fetchActiveOrderCount,
   fetchCatalog,
   fetchCategories,
+  fetchForYou,
   fetchOrders,
   fetchPurchasedItems,
   normalizeRepurchaseResponse,
@@ -121,6 +122,32 @@ describe('shop-api — buy-flow 4b', () => {
   it('fetchCatalog: 500 khi có tham số mới → ném lỗi (chỉ 400 mới lùi)', async () => {
     get.mockRejectedValueOnce(Object.assign(new Error('500'), { isHttpError: true, response: { status: 500 } }));
     await expect(fetchCatalog({ page: 1, limit: 30, inStock: true })).rejects.toThrow('500');
+  });
+
+  it('catalogParams gửi seed (ngày VN) khi có; fetchCatalog gặp 400 thì gọi lại không kèm seed', async () => {
+    expect(catalogParams({ page: 1, limit: 20, seed: '20261101' })).toEqual({ page: 1, limit: 20, seed: '20261101' });
+    get.mockRejectedValueOnce(badRequest()).mockResolvedValueOnce({ data: PAGE });
+    const r = await fetchCatalog({ page: 1, limit: 20, seed: '20261101', category: 'cat-a' });
+    expect(r.filtersIgnored).toBe(true);
+    expect(get).toHaveBeenNthCalledWith(1, '/products', { params: { page: 1, limit: 20, category: 'cat-a', seed: '20261101' } });
+    expect(get).toHaveBeenLastCalledWith('/products', { params: { page: 1, limit: 20, category: 'cat-a' } });
+  });
+
+  it('fetchForYou: gửi seed; API cũ trả 400 thì gọi lại không kèm seed; không seed thì không gửi gì', async () => {
+    get.mockResolvedValueOnce({ data: [] });
+    await fetchForYou({ seed: '20261101' });
+    expect(get).toHaveBeenLastCalledWith('/products/for-you', { params: { seed: '20261101' } });
+    get.mockRejectedValueOnce(badRequest()).mockResolvedValueOnce({ data: [{ id: 'p' }] });
+    await expect(fetchForYou({ seed: '20261101' })).resolves.toEqual([{ id: 'p' }]);
+    expect(get).toHaveBeenLastCalledWith('/products/for-you');
+    get.mockResolvedValueOnce({ data: [] });
+    await fetchForYou();
+    expect(get).toHaveBeenLastCalledWith('/products/for-you');
+  });
+
+  it('fetchForYou: lỗi khác 400 vẫn ném ra', async () => {
+    get.mockRejectedValueOnce(Object.assign(new Error('500'), { isHttpError: true, response: { status: 500 } }));
+    await expect(fetchForYou({ seed: '20261101' })).rejects.toThrow('500');
   });
 
   it('fetchCategories gọi GET /categories', async () => {

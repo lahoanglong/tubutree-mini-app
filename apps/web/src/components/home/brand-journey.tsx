@@ -19,7 +19,7 @@ export function BrandJourney({ initialBrands }: { initialBrands?: { brand: strin
   const brands = useQuery({ ...brandsQuery(coreHttp), staleTime: 60_000, ...(initialBrands ? { initialData: initialBrands } : {}) });
   const list = brands.data ?? [];
   return (
-    <section aria-label={homeCopy.journey.title} style={{ padding: '8px 0' }}>
+    <section aria-label={homeCopy.journey.title}>
       <div style={{ background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-card)', padding: 12 }}>
         <button
           type="button"

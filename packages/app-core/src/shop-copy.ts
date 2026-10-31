@@ -34,6 +34,7 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.buy': 'Mua ngay',
   'flash.remind': 'Nhắc tôi',
   'flash.reminded': 'Đã đặt nhắc',
+  'flash.nextSlot': '{time} · {n} món sắp mở',
   'flash.remindedToast': 'Tubu sẽ nhắc bạn lúc {time}',
   'flash.unremindToast': 'Đã bỏ nhắc',
   'flash.emptyTitle': 'Chưa có Giờ vàng lúc này',

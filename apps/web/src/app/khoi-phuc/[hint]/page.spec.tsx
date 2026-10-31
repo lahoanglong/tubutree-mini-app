@@ -38,13 +38,13 @@ beforeEach(() => {
 });
 
 describe('Trang chủ dựng sẵn cho khách đã có cookie phiên (HTML đầu, chưa hydrate)', () => {
-  it('khách cũ: thẻ thành viên, Việc cần làm và Mua lại đã ở dạng khung chờ trong HTML server, không có kệ Bán chạy', async () => {
+  it('khách cũ: thẻ thành viên, Việc cần làm và Mua lại đã ở dạng khung chờ trong HTML server; Bán chạy nhất đứng sau Danh mục như khách mới', async () => {
     const html = await render('returning-2');
     expect(html).toContain('data-testid="member-card-loading"');
     expect(html).toContain('data-testid="todo-strip-loading"');
     expect(blocks(html)).toEqual(expect.arrayContaining(['member', 'purchased']));
-    expect(blocks(html)).not.toContain('bestSellers');
     expect(blocks(html).indexOf('purchased')).toBeLessThan(blocks(html).indexOf('categories'));
+    expect(blocks(html).indexOf('categories')).toBeLessThan(blocks(html).indexOf('bestSellers'));
   });
 
   it('khách cũ không có việc cần làm lần trước: không dựng khung Việc cần làm', async () => {

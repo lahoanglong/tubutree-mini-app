@@ -5,6 +5,7 @@ import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { CatalogService } from './catalog.service';
 import { toPublicProductDetail } from './catalog-public';
 import { BrandProductsQuery } from './dto/brand-products-query.dto';
+import { ForYouQuery } from './dto/for-you-query.dto';
 import { ProductQuery } from './dto/product-query.dto';
 import { SuggestQuery } from './dto/suggest-query.dto';
 
@@ -24,8 +25,8 @@ export class CatalogController {
   // Cần đăng nhập — gợi ý cá nhân hoá theo lịch sử mua + nhãn theo dõi (Feed "Dành cho bạn").
   // Đặt TRƯỚC ':slug' để không bị route param nuốt mất "for-you".
   @Get('products/for-you')
-  forYou(@CurrentUser('sub') userId: string) {
-    return this.catalog.getForYou(userId);
+  forYou(@CurrentUser('sub') userId: string, @Query() query: ForYouQuery = {}) {
+    return this.catalog.getForYou(userId, query.seed ? { seed: query.seed } : {});
   }
 
   @Public()
