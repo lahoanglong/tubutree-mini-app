@@ -4,6 +4,7 @@ import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/cata
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
 import { useNavigate } from 'zmp-ui';
 import { homeCopy } from '@tubutree/app-core/home-copy';
+import { PURCHASED_LINE_HEIGHT, SECTION_HEADER_HEIGHT, purchasedSkeletonHeight, readPurchasedHint, writePurchasedHint } from '@tubutree/app-core/home-layout';
 import { vi } from '../../i18n/vi';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { usePurchasedItems } from '../../hooks/use-purchased-items';
@@ -11,6 +12,7 @@ import { getLoadErrorMessage } from '../../services/api';
 import { fetchActiveFlashSales, type PurchasedItem } from '../../services/shop-api';
 import { serverNow } from '../../utils/server-clock';
 import { haptic } from '../../utils/haptic';
+import { browserStorage } from '../../utils/recently-viewed';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../../utils/features';
 import { isEndpointMissing } from '../home/home-blocks';
 import { useBlockQuery } from '../home/use-block-query';
@@ -21,16 +23,14 @@ import { ProductThumb } from '../ui/product-thumb';
 import { PriceTag } from '../ui/price-tag';
 import { ProductCard } from '../ui/product-card';
 import { RailCell, RailShell } from '../ui/product-rail';
+import { SectionHeader } from '../ui/section-header';
 import { Skeleton } from '../ui/skeleton';
-import { Heading, Text } from '../ui/text';
+import { Text } from '../ui/text';
 import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 
-/** Từ chừng này món trở lên mới dùng kệ cuộn ngang; ít hơn thì thẻ ngang thấp để không để trống nửa màn hình. */
+/** Tab Đơn hàng: từ chừng này món trở lên mới dùng kệ cuộn ngang; ít hơn thì thẻ ngang thấp để không để trống nửa màn hình. */
 export const COMPACT_MAX_ITEMS = 2;
 const COMPACT_CARD_HEIGHT = 168;
-const HEADING_HEIGHT = 24;
-const HEADING_PAD_TOP = 4;
-const HEADING_PAD_BOTTOM = 8;
 const RAIL_PADDING_BOTTOM = 12;
 /** Export để Trang chủ dùng CHUNG query key ['purchased-items', 10] khi quyết định thứ tự khối (plan 4b). */
 /** Hai nút hàng Mua lại chia đều chỗ; đệm ngang hẹp để nhãn "Định kỳ -17%" không bị cắt dấu ba chấm ở 320px. */
@@ -103,15 +103,35 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
     setTarget(itemReorderTarget(p));
   };
   const discountPct = Math.round(usePublicConfig().subscribeDiscountPct * 100);
+  const onHome = source === 'home_rail';
+  // Khung chờ của Trang chủ cao đúng bằng khối lần trước (một dòng hay một kệ); chưa nhớ thì coi là một món, cỡ nhỏ nhất.
+  const [hint] = useState(() => (onHome ? readPurchasedHint(browserStorage()) : 'none'));
+  const settledCount = !restoring && !q.isLoading && !q.isError && q.data ? q.data.items.length : null;
+  useEffect(() => {
+    if (onHome && settledCount !== null) writePurchasedHint(browserStorage(), settledCount);
+  }, [onHome, settledCount]);
   // Chỉ đọc cache Giờ vàng (nhịp tải lại do useFlashSalesPoller ở gốc app lo).
   const flash = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 }).data ?? [];
 
+  if ((restoring || q.isLoading) && onHome) {
+    const height = purchasedSkeletonHeight(hint === 'none' ? 'one' : hint);
+    return (
+      <div data-testid="purchased-rail-loading" aria-hidden="true" style={{ height }}>
+        <div style={{ height: SECTION_HEADER_HEIGHT, display: 'flex', alignItems: 'center', padding: '0 16px', boxSizing: 'border-box' }}>
+          <Skeleton width={96} height={20} />
+        </div>
+        <div style={{ padding: '0 16px' }}>
+          <Skeleton height={height - SECTION_HEADER_HEIGHT} radius="var(--radius-card)" />
+        </div>
+      </div>
+    );
+  }
   if (restoring || q.isLoading) {
     // Khớp đúng khung kệ thật (tiêu đề + hàng tile + đệm dưới) để dữ liệu về không đẩy nội dung bên dưới.
     return (
       <div data-testid="purchased-rail-loading" aria-hidden="true" style={{ paddingBottom: RAIL_PADDING_BOTTOM }}>
-        <div style={{ padding: `${HEADING_PAD_TOP}px 16px ${HEADING_PAD_BOTTOM}px` }}>
-          <Skeleton width={96} height={HEADING_HEIGHT} />
+        <div style={{ height: SECTION_HEADER_HEIGHT, display: 'flex', alignItems: 'center', padding: '0 16px', boxSizing: 'border-box' }}>
+          <Skeleton width={96} height={20} />
         </div>
         <div style={{ padding: '0 16px' }}>
           <Skeleton height={COMPACT_CARD_HEIGHT} radius="var(--radius-card)" />
@@ -124,26 +144,9 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
   if (items.length === 0 && !(q.isError && !isEndpointMissing(q.error))) return null;
 
   return (
-    <section aria-label={vi.reorder.railTitle} style={{ paddingBottom: RAIL_PADDING_BOTTOM }}>
-      <div style={{ padding: `${HEADING_PAD_TOP}px 16px ${HEADING_PAD_BOTTOM}px`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <Heading variant="title-sm" as="h2">
-          {vi.reorder.railTitle}
-        </Heading>
-        {source === 'home_rail' && (
-          <button
-            type="button"
-            className="tubu-press"
-            onClick={() => {
-              haptic('light');
-              navigate('/orders?tab=delivered');
-            }}
-            style={{ minHeight: 44, margin: '-10px -4px', padding: '0 4px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
-          >
-            <Text variant="label" tone="brand">
-              {vi.home.seeAll}
-            </Text>
-          </button>
-        )}
+    <section aria-label={vi.reorder.railTitle} style={{ paddingBottom: onHome ? 0 : RAIL_PADDING_BOTTOM }}>
+      <div style={{ padding: '0 16px' }}>
+        <SectionHeader title={vi.reorder.railTitle} action={onHome ? { to: '/orders?tab=delivered' } : undefined} />
       </div>
       {q.isError && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '0 16px 8px' }}>
@@ -164,7 +167,14 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
           </Button>
         </div>
       )}
-      {items.length === 0 ? null : items.length <= COMPACT_MAX_ITEMS ? (
+      {items.length === 0 ? null : onHome && items.length === 1 ? (
+        <RebuyLine
+          item={items[0]!}
+          pricing={rebuyPricing(items[0]!, flash, serverNow())}
+          onRebuy={() => openReorder(items[0]!)}
+          onOpen={() => navigate(`/product/${encodeURIComponent(items[0]!.slug)}`, openVariation(items[0]!))}
+        />
+      ) : !onHome && items.length <= COMPACT_MAX_ITEMS ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 16px' }}>
           {items.map((p) => (
             <CompactRebuyCard
@@ -209,7 +219,63 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
   );
 }
 
-/** Thẻ ngang thấp cho kệ Mua lại khi chỉ có 1–2 món: ảnh nhỏ, tên, phân loại, giá, hai nút mua lại và đặt định kỳ. */
+/**
+ * Một món Mua lại ở Trang chủ (Q6): MỘT dòng cao 88px thay thẻ ngang 168px. Ảnh 64, tên một dòng, phân loại (kèm "Đã mua n lần"), giá; nút "Mua lại" ở phải.
+ * Không mời "Định kỳ" ở đây (còn ở tab Đơn hàng): dòng này chỉ là lối mua lại nhanh. Hết hàng thì thay nút bằng chữ, không hứa món không mua được.
+ */
+function RebuyLine({
+  item,
+  pricing,
+  onRebuy,
+  onOpen,
+}: {
+  item: PurchasedItem;
+  pricing: { price: number; compareAt: number | null };
+  onRebuy: () => void;
+  onOpen: () => void;
+}) {
+  const available = item.inStock !== false && item.stock > 0;
+  const caption = [item.variationName, item.timesBought > 1 ? vi.reorder.timesBought(item.timesBought) : null].filter(Boolean).join(' · ');
+  return (
+    <div data-testid="rebuy-line" style={{ height: PURCHASED_LINE_HEIGHT, padding: '0 16px', boxSizing: 'border-box' }}>
+      <Card variant="raised" padding={12} style={{ height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button
+          type="button"
+          aria-label={item.productName}
+          className="tubu-press"
+          onClick={onOpen}
+          style={{ display: 'flex', alignItems: 'center', gap: 12, flex: '1 1 auto', minWidth: 0, minHeight: 44, padding: 0, border: 'none', background: 'transparent', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}
+        >
+          <ProductThumb src={item.thumbnail} alt="" size={64} />
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <Text variant="body-sm" as="span" style={{ fontWeight: 600, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {item.productName}
+            </Text>
+            {caption && (
+              <Text variant="caption" tone="secondary" as="span" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {caption}
+              </Text>
+            )}
+            <span style={{ display: 'block', marginTop: 2 }}>
+              <PriceTag value={pricing.price} compareAt={pricing.compareAt ?? undefined} size="sm" />
+            </span>
+          </span>
+        </button>
+        {available ? (
+          <Button variant="secondary" onPress={onRebuy} style={{ flex: '0 0 auto', minWidth: 0, paddingInline: 14 }}>
+            {homeCopy.reorder.buy}
+          </Button>
+        ) : (
+          <Text variant="caption" tone="secondary" style={{ flex: '0 0 auto', maxWidth: 88, textAlign: 'right' }}>
+            {vi.reorder.unavailable}
+          </Text>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/** Thẻ ngang thấp cho kệ Mua lại ở tab Đơn hàng khi chỉ có 1–2 món: ảnh nhỏ, tên, phân loại, giá, hai nút mua lại và đặt định kỳ. */
 function CompactRebuyCard({
   item,
   discountPct,
