@@ -52,6 +52,7 @@ export const SHOP_COPY: Record<string, string> = {
   'rank.basis': 'Theo lượt bán 30 ngày qua',
   'rank.basisAll': 'Theo tổng lượt bán',
   'rank.tabAll': 'Tất cả',
+  'rank.tabsLabel': 'Danh mục bán chạy',
   'rank.seeAll': 'Xem tất cả',
   'rank.emptyTitle': 'Chưa đủ lượt bán để xếp hạng',
   'rank.emptyCta': 'Xem sản phẩm trong danh mục',
