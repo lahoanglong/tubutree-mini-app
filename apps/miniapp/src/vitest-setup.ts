@@ -32,3 +32,10 @@ if (typeof window !== 'undefined') {
     sheetTimers.clear();
   });
 }
+
+// findBy*/waitFor mặc định chờ 1s. Trên CI, bộ 5k+ test Mini chạy song song làm vài lần dựng trang chậm quá 1s và test đỏ rải
+// rác (orders-subscription-tab, checkout "Thử lại"), trong khi cục bộ luôn xanh. Chỉ test sai mới phải chờ trọn hạn này.
+if (typeof window !== 'undefined') {
+  const { configure } = await import('@testing-library/react');
+  configure({ asyncUtilTimeout: 3000 });
+}
