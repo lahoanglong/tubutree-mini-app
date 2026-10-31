@@ -4,6 +4,7 @@ const revalidates: (number | undefined)[] = [];
 let failAll = false;
 let failFlash = false;
 let flashList: { itemId: string; endAt: string }[] | null = null;
+const productCalls: Record<string, unknown>[] = [];
 
 vi.mock('@/lib/core-http-server', () => ({
   createServerHttp: (init?: { revalidate?: number }) => {
@@ -26,7 +27,11 @@ vi.mock('@tubutree/app-core/api/flash-sale', () => ({
 vi.mock('@tubutree/app-core/api/catalog', () => ({
   fetchBrands: async () => { if (failAll) throw new Error('x'); return []; },
   fetchCategories: async () => { if (failAll) throw new Error('x'); return []; },
-  fetchProducts: async () => { if (failAll) throw new Error('x'); return { data: [], meta: { page: 1, limit: 12, total: 0 } }; },
+  fetchProducts: async (_http: unknown, query: Record<string, unknown>) => {
+    productCalls.push(query);
+    if (failAll) throw new Error('x');
+    return { data: [], meta: { page: 1, limit: 12, total: 0 } };
+  },
 }));
 vi.mock('@tubutree/app-core/queries/config', () => ({ publicConfigQuery: () => ({ queryFn: async () => { if (failAll) throw new Error('x'); return { freeshipThreshold: 350000 }; } }) }));
 vi.mock('@tubutree/app-core/queries/home', () => ({ homeBestSellerQuery: () => ({ queryFn: async () => { if (failAll) throw new Error('x'); return bestSellerRows; } }) }));
@@ -34,6 +39,7 @@ vi.mock('@tubutree/app-core/queries/home', () => ({ homeBestSellerQuery: () => (
 import { BUILD_GAP_REVALIDATE_S, FLASH_REVALIDATE_S, loadHomeInitial } from './home-initial';
 
 afterEach(() => {
+  productCalls.length = 0;
   revalidates.length = 0;
   failAll = false;
   failFlash = false;
@@ -83,5 +89,19 @@ describe('loadHomeInitial: Giờ vàng có trong HTML đầu', () => {
       { itemId: 'live', endAt: '2099-01-01T00:00:00Z' },
     ];
     expect((await loadHomeInitial()).flash).toEqual([flashList[1]]);
+  });
+});
+
+describe('loadHomeInitial: trang 1 của Gợi ý hôm nay', () => {
+  it('xin trang 1 kèm hạt giống ngày VN và trả hạt giống đó để client dùng đúng khoá dữ liệu dựng sẵn', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-31T18:00:00Z'));
+    try {
+      const initial = await loadHomeInitial();
+      expect(productCalls).toEqual([expect.objectContaining({ page: 1, seed: '20261101' })]);
+      expect(initial.suggestSeed).toBe('20261101');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

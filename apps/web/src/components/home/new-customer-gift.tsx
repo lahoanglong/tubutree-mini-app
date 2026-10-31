@@ -96,7 +96,7 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
     : null;
 
   return (
-    <section aria-label={homeText.newGift.title} style={{ padding: '0 0 12px' }}>
+    <section aria-label={homeText.newGift.title}>
       <Card variant="flat" padding={0}>
         <div style={{ minHeight: HOME_HERO_HEIGHT, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px 0 16px' }}>
           <button

@@ -25,8 +25,8 @@ const CART = { items: [], couponCode: null, subtotal: 65000, discount: 0, freesh
 
 let rail: () => Promise<unknown>;
 let mounted: Rendered | null = null;
-const mount = async () => {
-  mounted = render(<PurchasedRail />);
+const mount = async (props: React.ComponentProps<typeof PurchasedRail> = {}) => {
+  mounted = render(<PurchasedRail {...props} />);
   await flush(8);
   return mounted.container;
 };
@@ -58,10 +58,9 @@ describe('PurchasedRail', () => {
     expect(mocks.get).toHaveBeenCalledWith('/me/purchased-items', { query: { limit: 10 } });
   });
 
-  it('tiêu đề có "Xem tất cả" sang danh sách Đã giao', async () => {
+  it('tab Đơn hàng: tiêu đề không có "Xem tất cả" (khách đang ở đúng danh sách đó)', async () => {
     const c = await mount();
-    click(byText(c, 'button', 'Xem tất cả'));
-    expect(mocks.push).toHaveBeenCalledWith('/tai-khoan/don-hang?tab=delivered');
+    expect(c.querySelector('a[aria-label^="Xem tất cả"]')).toBeNull();
   });
 
   // D7-29/D7-30: tên SP cao đúng hai dòng; kệ nhiều món không giãn thẻ theo bề ngang từ md (thẻ giãn làm lệch hàng ở 1280px).
@@ -216,5 +215,76 @@ describe('PurchasedRail', () => {
       rail = async () => ({ items: [{ ...ITEM, timesBought: 1 }], nextCursor: null });
       expect((await mount()).textContent).not.toMatch(/Đã mua \d+ lần/);
     });
+  });
+});
+
+describe('PurchasedRail — Trang chủ (Q6)', () => {
+  const home = (extra: React.ComponentProps<typeof PurchasedRail> = {}) => mount({ source: 'home_rail', ...extra });
+  const heightOf = (c: HTMLElement) => (c.querySelector('[data-testid="purchased-rail-loading"]') as HTMLElement).style.height;
+
+  it('tiêu đề SectionHeader có "Xem tất cả" sang danh sách Đã giao', async () => {
+    const c = await home();
+    expect(c.querySelector('section h2')?.textContent).toBe('Mua lại');
+    expect(c.querySelector('[data-testid="section-header"]')).not.toBeNull();
+    expect(c.querySelector('a[aria-label="Xem tất cả Mua lại"]')?.getAttribute('href')).toBe('/tai-khoan/don-hang?tab=delivered');
+  });
+
+  it('một món: MỘT dòng cao 88px, nút "Mua lại" cùng hàng, không mời "Định kỳ" (còn ở tab Đơn hàng)', async () => {
+    const c = await home();
+    const line = c.querySelector('[data-testid="rebuy-line"]') as HTMLElement;
+    expect(line.style.height).toBe('88px');
+    expect(line.textContent).toContain('Nước rửa chén');
+    expect(line.textContent).toContain('Chanh · Đã mua 2 lần');
+    expect(line.textContent).toContain('65.000đ');
+    expect(byText(line, 'button', 'Mua lại')).not.toBeNull();
+    expect(Array.from(c.querySelectorAll('button')).some((b) => /Định kỳ/.test(b.textContent ?? ''))).toBe(false);
+  });
+
+  it('một món hết hàng: dòng ghi "Tạm hết hàng", không có nút Mua lại', async () => {
+    rail = async () => ({ items: [{ ...ITEM, stock: 0 }], nextCursor: null });
+    const c = await home();
+    const line = c.querySelector('[data-testid="rebuy-line"]') as HTMLElement;
+    expect(line.textContent).toContain('Tạm hết hàng');
+    expect(byText(line, 'button', 'Mua lại')).toBeNull();
+  });
+
+  it('chạm tên/ảnh dòng → trang sản phẩm ở đúng phân loại đã mua', async () => {
+    const c = await home();
+    click(c.querySelector('[data-testid="rebuy-line"] button[aria-label="Nước rửa chén"]'));
+    expect(mocks.push).toHaveBeenCalledWith(expect.stringContaining('/san-pham/nuoc-rua-chen'));
+  });
+
+  it('hai món trở lên: kệ cuộn ngang thẻ, không còn thẻ gọn của tab Đơn hàng', async () => {
+    rail = async () => ({ items: [ITEM, { ...ITEM, variationId: 'v2', slug: 'sp-2' }], nextCursor: null });
+    const c = await home();
+    expect(c.querySelector('[data-testid="rebuy-line"]')).toBeNull();
+    expect(c.querySelectorAll('[role="region"] a.tubu-tile-link, [role="region"] .tubu-tile-link').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('bỏ món đã nằm ở Giờ vàng: món trùng không lặp lại, hết món thì khối ẩn', async () => {
+    rail = async () => ({ items: [ITEM, { ...ITEM, variationId: 'v2', slug: 'sp-2', productName: 'Sản phẩm hai' }], nextCursor: null });
+    const c = await home({ exclude: new Set(['nuoc-rua-chen']) });
+    expect(c.textContent).not.toContain('Nước rửa chén');
+    expect(c.querySelector('[data-testid="rebuy-line"]')).not.toBeNull();
+    mounted!.unmount();
+    const none = await home({ exclude: new Set(['nuoc-rua-chen', 'sp-2']) });
+    expect(none.textContent).toBe('');
+  });
+
+  it('khung chờ cao đúng dòng 88px + tiêu đề 44px khi chưa nhớ hay nhớ "một món"; cao hơn khi nhớ "nhiều món"', async () => {
+    rail = () => new Promise(() => undefined);
+    try { localStorage.clear(); } catch { /* không có kho */ }
+    let c = await home();
+    expect(heightOf(c)).toBe('132px');
+    mounted!.unmount();
+    try { localStorage.setItem('tubu_home_purchased', 'many'); } catch { /* không có kho */ }
+    c = await home();
+    expect(Number.parseInt(heightOf(c), 10)).toBeGreaterThan(132);
+  });
+
+  it('ghi dấu nhớ số món sau khi tải xong để lần sau khung chờ cao đúng', async () => {
+    try { localStorage.clear(); } catch { /* không có kho */ }
+    await home();
+    expect(localStorage.getItem('tubu_home_purchased')).toBe('one');
   });
 });

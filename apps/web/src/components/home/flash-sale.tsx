@@ -1,13 +1,20 @@
 'use client';
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, CheckCircle2, Clock, Zap } from 'lucide-react';
+import { Bell, CheckCircle2, ChevronRight } from 'lucide-react';
 import { cancelFlashReminder, setFlashReminder, type FlashSaleActiveItem, type UpcomingFlashItem } from '@tubutree/app-core/api/flash-sale';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
-import { flashActiveQuery, flashUpcomingQuery } from '@tubutree/app-core/queries/flash-sale';
-import { useAuthPhase } from '@/lib/auth-phase';
+import { nextFlashSlot, slotClock, type NextFlashSlot } from '@tubutree/app-core/merch/flash-next-slot';
+import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
+import { shelf } from '@tubutree/app-core/merch/shelves';
+import { flashUpcomingQuery } from '@tubutree/app-core/queries/flash-sale';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { serverNow } from '@tubutree/app-core/server-clock';
+import { FLASH_NEXT_SLOT_HEIGHT, FLASH_SKELETON_HEIGHT, readFlashHint, readFlashSlotHint, writeFlashHint } from '@tubutree/app-core/home-layout';
+import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { soldPercent } from '@/lib/flash-display';
 import { productHref } from '@/lib/product-href';
@@ -15,24 +22,21 @@ import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
 import { useFlashExpiry } from '@/lib/use-flash-expiry';
 import { useHydrated } from '@/lib/use-hydrated';
-import { loadActiveFlashSales } from '@/lib/use-flash-sales';
-import { serverNow } from '@tubutree/app-core/server-clock';
-import { FLASH_SKELETON_HEIGHT, readFlashHint, writeFlashHint } from '@tubutree/app-core/home-layout';
 import { browserStorage } from '@/lib/recently-viewed';
-import { Skeleton } from '@/components/mini';
-import { Badge } from '@/components/ui/badge';
+import { Icon, SectionHeader, Skeleton, Text } from '@/components/mini';
+import { Countdown } from '@/components/mini/countdown';
+import { FlashSoldBar } from '@/components/mini/flash-sold-bar';
 import { ProductTile } from '@/components/mini/product-tile';
 import { RailCell, RailShell } from '@/components/mini/product-rail';
-import { ProgressBar } from '@/components/ui/progress-bar';
 import { HomeBlockError } from './home-block-error';
-import { useBlockQuery } from './use-block-query';
 
 const TITLE = 'flex items-center gap-1.5 font-display text-lg font-semibold text-promo-fg';
 
-/** Cuối thẻ Giờ vàng: 4 (cách giá) + 6 (thanh) + 2 + 16 (chữ đã bán). Luôn giữ chỗ để thẻ chưa bán được suất nào vẫn cao bằng thẻ khác. */
-const SOLD_FOOTER_HEIGHT = 28;
+/** Cuối thẻ Giờ vàng: 4 (cách giá) + 16 (thanh đã bán có chữ). Luôn giữ chỗ để mọi thẻ cùng kệ cao bằng nhau. */
+const SOLD_FOOTER_HEIGHT = 20;
 /** Cuối thẻ "Sắp diễn ra": 8 (cách giá) + 44 (nút nhắc). */
 const REMIND_FOOTER_HEIGHT = 52;
+const FLASH_SHELF = shelf('home.flash');
 
 /** Thẻ sản phẩm của một suất Giờ vàng: giá của đúng phân loại có suất (ghim phân loại để thẻ chỉ xét suất này). */
 function flashCardProduct(item: {
@@ -61,99 +65,141 @@ function flashCardProduct(item: {
 
 const subscribeNothing = () => () => {};
 
-function FlashSkeleton() {
+function FlashSkeleton({ withNextSlot }: { withNextSlot: boolean }) {
   return (
-    <div data-testid="flash-sale-loading" aria-hidden="true" className="pt-4">
-      <Skeleton height={FLASH_SKELETON_HEIGHT - 16} radius="var(--radius-card)" />
+    <div data-testid="flash-sale-loading" aria-hidden="true">
+      <Skeleton height={FLASH_SKELETON_HEIGHT + (withNextSlot ? FLASH_NEXT_SLOT_HEIGHT : 0)} radius="var(--radius-card)" />
     </div>
   );
 }
 
-/** Ưu đãi giờ vàng — flash sale thật từ backend. Countdown êm đến mốc kết thúc sớm nhất. */
-export function FlashSale({ initial }: { initial?: FlashSaleActiveItem[] }) {
-  // initialDataUpdatedAt 0: dữ liệu dựng sẵn chỉ để HTML đầu có khối, trình duyệt vẫn hỏi lại ngay (giá và số suất còn là của lúc dựng trang).
-  const q = useBlockQuery(
-    useQuery({
-      queryKey: flashActiveQuery(coreHttp).queryKey,
-      queryFn: loadActiveFlashSales,
-      staleTime: 30_000,
-      refetchInterval: 60_000,
-      ...(initial ? { initialData: initial, initialDataUpdatedAt: 0 } : {}),
-    }),
-  );
-  const items = q.data ?? [];
-  // Một dòng phân loại dưới giá chỉ khi có thẻ cần; có thẻ cần thì mọi thẻ giữ chỗ để giá cùng kệ thẳng hàng.
-  const hasVariation = items.some((it) => Boolean(it.variationName));
+export interface FlashSaleProps {
+  /** Suất đang chạy đã qua `composeHomeShelves` (chống trùng, tối đa 8); khối vẫn tự cắt theo `SHELVES` để dùng đúng cả khi gọi thẳng. */
+  items: FlashSaleActiveItem[];
+  /** Lần tải đầu của danh sách suất (không tính lúc tải lại sau lỗi). */
+  loading: boolean;
+  error?: unknown;
+  onRetry?: () => unknown;
+  /** Đang có request bay (tải lại sau lỗi, nhịp nền, hỏi lại dữ liệu dựng sẵn): chưa chốt thì chưa ghi dấu nhớ. */
+  retrying?: boolean;
+}
 
-  // Chỉ tính suất còn giờ: suất sớm nhất có thể đã hết mà danh sách chưa kịp tải lại (poll 60s) trong khi các suất khác còn chạy.
-  // `expiredTick` tính lại ngay khi suất đang đếm về 0 để đồng hồ chuyển sang suất kế tiếp thay vì biến mất.
+/**
+ * Giờ vàng ở Trang chủ (Q3, bản web của `flash-sale.tsx` ở Mini App): tiêu đề promo + MỘT đồng hồ HH:MM:SS của suất sớm nhất còn giờ + "Xem tất cả",
+ * kệ ≤8 thẻ với thanh đã bán có chữ, dòng "suất kế" khi suất sau mở trong 6 giờ. Chỉ tính suất còn giờ: suất sớm nhất hết thì đồng hồ chuyển sang suất
+ * kế, hết mọi suất thì khối ẩn (không hiện 00:00:00). Dưới `minItems` thì ẩn cả khối.
+ *
+ * Khác Mini: kệ có trong HTML server (dữ liệu dựng sẵn) nên KHÔNG chờ suất sắp mở tải xong mới hiện, mà dòng "suất kế" vào sau; lần mở trước có dòng đó
+ * thì chỗ của nó được giữ sẵn. Trước hydrate mọi suất coi là còn giờ (đúng như HTML máy chủ đã vẽ), sau hydrate mới tính theo giờ máy chủ thật.
+ */
+export function FlashSale({ items, loading, error, onRetry, retrying = false }: FlashSaleProps) {
+  const titleId = useId();
+  const hydrated = useHydrated();
+  // Chờ khôi phục phiên xong rồi mới hỏi: hỏi sớm thì chưa có cookie phiên nên đi request lẻ dù khách đã đăng nhập.
+  const sessionReady = !useAuthRestoring();
+  const upcoming = useQuery({ ...flashUpcomingQuery(coreHttp), enabled: sessionReady, staleTime: 30_000 });
+
+  // `expiredTick` tính lại ngay khi suất đang đếm về 0 (Countdown.onEnd): đồng hồ chuyển sang suất kế tiếp thay vì biến mất, thẻ hết giờ rời kệ.
   const [expiredTick, setExpiredTick] = useState(0);
-  const soonestEndAt = useMemo(() => {
+  const live = useMemo(() => {
+    if (!hydrated) return items.slice(0, FLASH_SHELF.maxItems);
     const now = serverNow();
-    const live = items.map((it) => new Date(it.endAt).getTime()).filter((ms) => ms > now);
-    return live.length > 0 ? new Date(Math.min(...live)) : null;
+    return items.filter((it) => Date.parse(it.endAt) > now).slice(0, FLASH_SHELF.maxItems);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, expiredTick]);
-
-  const timeLeft = useCountdown(soonestEndAt);
-  const [afterMount, setAfterMount] = useState(false);
-  useEffect(() => setAfterMount(true), []);
-  useEffect(() => {
-    if (soonestEndAt && timeLeft === '') setExpiredTick((n) => n + 1);
-  }, [soonestEndAt, timeLeft]);
+  }, [items, hydrated, expiredTick]);
+  const soonestEndAt = useMemo(() => live.reduce<string | null>((a, it) => (a === null || Date.parse(it.endAt) < Date.parse(a) ? it.endAt : a), null), [live]);
+  const visible = live.length >= FLASH_SHELF.minItems && soonestEndAt !== null;
+  const slot = useMemo(
+    () => (hydrated ? nextFlashSlot(upcoming.data ?? [], serverNow()) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [upcoming.data, hydrated, expiredTick],
+  );
 
   // Lần mở trước có Giờ vàng thì giữ chỗ lúc tải (khối nằm sát màn đầu, chen vào sẽ đẩy cả trang); chưa nhớ thì chờ im lặng.
   // Đọc bằng useSyncExternalStore: HTML server không có kho nên bản server là "chưa nhớ", sau hydrate mới đọc thật.
   const hadFlash = useSyncExternalStore(subscribeNothing, () => readFlashHint(browserStorage()), () => false);
+  const hadNextSlot = useSyncExternalStore(subscribeNothing, () => readFlashSlotHint(browserStorage()), () => false);
   // Đang tải lại thì chưa chốt: dữ liệu dựng sẵn có thể cũ, ghi "không có" lúc này sẽ xoá dấu nhớ trước khi biết kết quả thật.
-  const settledWithFlash = q.data !== undefined && !q.isLoading && !q.isFetching ? soonestEndAt !== null : null;
+  const settled = !loading && !error && !retrying && hydrated;
+  const hasSlot = slot !== null;
+  const slotKnown = !upcoming.isPending;
   useEffect(() => {
-    if (settledWithFlash !== null) writeFlashHint(browserStorage(), settledWithFlash);
-  }, [settledWithFlash]);
+    if (settled && (!visible || slotKnown)) writeFlashHint(browserStorage(), visible, hasSlot);
+  }, [settled, visible, slotKnown, hasSlot]);
 
-  if (q.isLoading) return hadFlash ? <FlashSkeleton /> : null;
-  if (items.length === 0) {
-    return q.isError ? <HomeBlockError title={flashSaleText.sectionName} error={q.error} onRetry={q.refetch} retrying={q.isFetching} /> : null;
+  if (loading) return hadFlash ? <FlashSkeleton withNextSlot={hadNextSlot} /> : null;
+  if (items.length === 0 && error) {
+    return <HomeBlockError title={fillCopy('flash.title')} error={error} onRetry={() => onRetry?.()} retrying={retrying} />;
   }
+  if (!visible) return null;
 
+  const title = fillCopy('flash.title');
+  const seeAll = seeAllHref('home.flash', 'web');
   return (
-    <section aria-label={flashSaleText.sectionName} className="pt-4">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className={TITLE}>
-          <Zap className="h-4 w-4" aria-hidden="true" />
-          {flashSaleText.sectionTitle}
-        </h2>
-        {/* Khung đồng hồ luôn có trong cây: HTML ISR cũ có thể được trả sau giờ hết suất (hoặc đồng hồ máy khách chạy trước máy chủ),
-            khi đó máy chủ vẽ đồng hồ mà trình duyệt tính ra rỗng; khác cấu trúc phần tử thì hydrate hỏng. Hết giờ thì ẩn, không hiện về 0.
-            React không sửa thuộc tính/chữ lệch khi hydrate, nên sau mount đổi key để vẽ lại đúng theo giờ trình duyệt. */}
-        <span
-          key={afterMount ? 'live' : 'ssr'}
-          role="timer"
-          suppressHydrationWarning
-          aria-label={timeLeft ? flashSaleText.endsIn(timeLeft) : undefined}
-          aria-hidden={timeLeft ? undefined : true}
-          className={timeLeft ? undefined : 'invisible'}
-        >
-          <Badge tone="promo" icon={Clock}>
-            {/* Chữ phút lệch giữa HTML ISR và trình duyệt là bình thường, chỉ che đúng phần tử chứa chữ. */}
-            <span suppressHydrationWarning>{timeLeft ? flashSaleText.endsIn(timeLeft) : ''}</span>
-          </Badge>
-        </span>
-      </div>
-      <RailShell label={flashSaleText.sectionName}>
-        {items.map((item: FlashSaleActiveItem) => (
+    <section aria-labelledby={titleId}>
+      <SectionHeader
+        id={titleId}
+        title={title}
+        icon="zap"
+        tone="promo"
+        trailing={<Countdown endAt={soonestEndAt} mode="clock" onEnd={() => setExpiredTick((n) => n + 1)} />}
+        action={seeAll ? { to: seeAll } : undefined}
+      />
+      <RailShell label={`${title}, vuốt ngang để xem thêm`}>
+        {live.map((item) => (
           <RailCell key={item.itemId} variant="flash">
-            <ActiveFlashCard item={item} reserveVariation={hasVariation} />
+            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(it.variationName))} />
           </RailCell>
         ))}
       </RailShell>
+      {slot ? (
+        <NextSlotLine slot={slot} href={seeAll} />
+      ) : !slotKnown && hadNextSlot ? (
+        <div aria-hidden="true" style={{ height: FLASH_NEXT_SLOT_HEIGHT }} />
+      ) : null}
     </section>
   );
 }
 
+/** Một dòng dưới kệ: suất kế mở lúc mấy giờ, có mấy món; bấm sang trang Giờ vàng, nơi đặt nhắc từng suất. */
+function NextSlotLine({ slot, href }: { slot: NextFlashSlot; href: string | null }) {
+  const body = (
+    <>
+      <Text variant="body-sm" tone="secondary">
+        {fillCopy('flash.nextSlot', { time: slotClock(slot.startAt), n: slot.count })}
+      </Text>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: 'var(--color-text-brand)', fontSize: 'var(--type-label-size)', fontWeight: 600, flex: '0 0 auto' }}>
+        {fillCopy('flash.remind')}
+        <Icon icon={ChevronRight} size="sm" tone="current" />
+      </span>
+    </>
+  );
+  const style = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    boxSizing: 'border-box',
+    width: '100%',
+    minHeight: FLASH_NEXT_SLOT_HEIGHT,
+    padding: 0,
+    textDecoration: 'none',
+  } as const;
+  return href ? (
+    <Link href={href} className="tubu-press" data-testid="flash-next-slot" style={style}>
+      {body}
+    </Link>
+  ) : (
+    <div data-testid="flash-next-slot" style={style}>
+      {body}
+    </div>
+  );
+}
+
 /**
- * Thẻ Giờ vàng đang chạy: thẻ `flash` chung, thanh "đã bán" ở cuối. Về giá thường đúng mốc `endAt` dù danh sách chưa tải lại.
- * Danh sách dựng sẵn (ISR) có thể cũ hơn giờ trình duyệt: trước hydrate coi suất còn giờ (đúng như HTML máy chủ đã vẽ), sau hydrate tính theo giờ máy chủ thật.
+ * Thẻ Giờ vàng đang chạy: thẻ `flash` chung, thanh "đã bán" có chữ ở cuối (luôn có, kể cả chưa bán suất nào: "Vừa mở bán"). Về giá thường đúng mốc `endAt`
+ * dù danh sách chưa tải lại. Danh sách dựng sẵn (ISR) có thể cũ hơn giờ trình duyệt: trước hydrate coi suất còn giờ (đúng như HTML máy chủ đã vẽ),
+ * sau hydrate tính theo giờ máy chủ thật.
  */
 function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleActiveItem; reserveVariation: boolean }) {
   const hydrated = useHydrated();
@@ -173,12 +219,7 @@ function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleActiveItem
       footerHeight={SOLD_FOOTER_HEIGHT}
       footer={
         <div style={{ height: SOLD_FOOTER_HEIGHT, paddingTop: 4, boxSizing: 'border-box' }}>
-          {soldPct > 0 && (
-            <>
-              <ProgressBar value={soldPct} max={100} tone="flash" ariaLabel={flashSaleText.soldPct(soldPct)} />
-              <p className="mt-0.5 h-4 text-xs font-medium leading-4 text-stone-600">{flashSaleText.soldPct(soldPct)}</p>
-            </>
-          )}
+          <FlashSoldBar soldPct={soldPct} soldOut={item.quota > 0 && item.soldCount >= item.quota} />
         </div>
       }
     />
@@ -221,7 +262,8 @@ function UpcomingFlashCard({ item, pending, onToggleRemind }: { item: UpcomingFl
 
 /**
  * "Sắp diễn ra" — flash sale đã lên lịch nhưng chưa mở bán, cho khách đặt nhắc. Cần đăng nhập (API lấy userId từ phiên để trả
- * trạng thái reminded) → chỉ chạy khi đã đăng nhập. Đặt/huỷ nhắc cập nhật ngay, lỗi thì hoàn lại.
+ * trạng thái reminded) → chỉ chạy khi đã đăng nhập. Đặt/huỷ nhắc cập nhật ngay, lỗi thì hoàn lại. Trang Giờ vàng (P12) dùng khối này;
+ * Trang chủ chỉ còn dòng "suất kế" dưới kệ Giờ vàng.
  */
 export function UpcomingFlashSales() {
   const qc = useQueryClient();
