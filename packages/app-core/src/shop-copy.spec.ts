@@ -80,6 +80,24 @@ describe('FORBIDDEN_TERMS', () => {
   });
 });
 
+describe('chữ của bộ thành phần section-kit', () => {
+  it('chữ chốt cho SectionHeader, SortBar, ComboCard', () => {
+    expect(fillCopy('section.seeAll')).toBe('Xem tất cả');
+    expect(fillCopy('section.seeAllSpoken', { title: 'Giờ vàng' })).toBe('Xem tất cả Giờ vàng');
+    expect(fillCopy('sort.groupLabel')).toBe('Sắp xếp');
+    expect(fillCopy('sort.filter')).toBe('Lọc');
+    expect(fillCopy('sort.filterCount', { n: 2 })).toBe('Lọc (2)');
+    expect(fillCopy('sort.filterSpoken', { n: 2 })).toBe('Lọc, 2 bộ lọc đang bật');
+    expect(fillCopy('combo.badge', { pct: 10 })).toBe('Combo -10%');
+    expect(fillCopy('combo.setLabel')).toBe('Mua cả bộ');
+    expect(fillCopy('combo.save', { save: '36.700đ' })).toBe('Tiết kiệm 36.700đ');
+    expect(fillCopy('combo.addSpoken', { title: 'Bếp xanh', n: 3, price: '337.300đ' })).toBe('Thêm cả combo Bếp xanh, 3 món, 337.300đ');
+    expect(fillCopy('combo.seeItems')).toBe('Xem từng món');
+    expect(fillCopy('combo.itemsLabel', { n: 3 })).toBe('Gồm 3 món');
+    expect(fillCopy('combo.more', { n: 2 })).toBe('+2');
+  });
+});
+
 describe('fillCopy', () => {
   it('thay mọi lần xuất hiện của một biến', () => {
     expect(fillCopy('combo.rule', { n: 2, pct: 5 })).toBe('Mua 2 giảm 5%');
