@@ -190,7 +190,7 @@ export default function MyApp() {
     const slug = search.get('s') ?? hash.get('s');
     const ref = search.get('ref') ?? hash.get('ref');
     // ?s= = link gian hàng CTV → kind 'ctv'. (Trang nhãn /brand tự set kind 'brand' khi mở.)
-    if (slug || ref) setSfContext({ slug: slug ?? null, referralCode: ref ?? null, ...(slug ? { kind: 'ctv' as const } : {}) });
+    if (slug || ref) setSfContext({ slug: slug ?? null, referralCode: ref ?? null, clickedAt: Date.now(), ...(slug ? { kind: 'ctv' as const } : {}) });
   }, [setSfContext]);
 
   return (

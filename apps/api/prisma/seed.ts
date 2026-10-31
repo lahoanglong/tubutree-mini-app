@@ -871,14 +871,15 @@ export const NOTIFICATION_TEMPLATES = [
   { id: 'nt-cart-abandon', code: 'CART_ABANDONED', channel: 'INAPP', bodyTemplate: '🛒 Bạn còn {{item_count}} món trong giỏ (có {{product}})! Hoàn tất đơn ngay trước khi hết hàng nhé.' },
   { id: 'nt-voucher-expiring', code: 'VOUCHER_EXPIRING', channel: 'INAPP', bodyTemplate: '⏰ Voucher {{code}} của bạn sắp hết hạn ({{expires}}). Dùng ngay kẻo lỡ nhé!' },
   { id: 'nt-flash-starting', code: 'FLASH_STARTING', channel: 'INAPP', bodyTemplate: '⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé.' },
+  { id: 'nt-tier-upgraded', code: 'TIER_UPGRADED', channel: 'INAPP', bodyTemplate: 'Chúc mừng bạn đã lên hạng {{tier}} tại Tubu Tree 🌿', createOnly: true },
   { id: 'nt-tier-drop-notice', code: 'TIER_DROP_NOTICE', channel: 'INAPP', bodyTemplate: '⚠️ Hạng {{tier}} của bạn được giữ đến {{date}}. {{need}} trước ngày đó để giữ hạng nhé 🌿' },
   { id: 'nt-points-expiring', code: 'POINTS_EXPIRING', channel: 'INAPP', bodyTemplate: '⏳ Bạn có {{points}} Điểm Xanh sắp hết hạn vào {{date}}. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿' },
   { id: 'nt-storefront-trending', code: 'STOREFRONT_TRENDING_PRODUCTS', channel: 'INAPP', bodyTemplate: '✨ Có {{count}} sản phẩm nổi bật (như {{sample}}) bạn chưa thêm vào gian hàng — thêm ngay để không bỏ lỡ khách quan tâm!' },
   // C-029: CTV biết kết quả công việc — đơn mới từ link của mình, hoa hồng được duyệt, lệnh rút đã chi.
   // Không dùng {{order_code}} ở COMMISSION_NEW: đó là đơn của khách, app sẽ hiện nút "Xem đơn" mà CTV không xem được.
   { id: 'nt-ctv-commission-new', code: 'COMMISSION_NEW', channel: 'INAPP', bodyTemplate: '💰 Có đơn mới từ link của bạn! Hoa hồng dự kiến {{amount}}. Khoản này được chốt sau khi khách nhận hàng và hết thời gian đổi/trả.', createOnly: true },
-  { id: 'nt-ctv-commission-approved', code: 'COMMISSION_APPROVED', channel: 'INAPP', bodyTemplate: '✅ {{count}} khoản hoa hồng (tổng {{amount}}) đã được duyệt. Khoản này chưa tự vào Ví, bạn chuyển vào Ví Tubu ngay trong mục CTV nhé.', createOnly: true },
-  { id: 'nt-ctv-wallet-credited', code: 'COMMISSION_WALLET_CREDITED', channel: 'INAPP', bodyTemplate: '💰 Đã cộng {{amount}} hoa hồng vào Ví Tubu{{tax_note}}. Bạn dùng được ngay khi thanh toán đơn hàng.', createOnly: true },
+  { id: 'nt-ctv-commission-approved', code: 'COMMISSION_APPROVED', channel: 'INAPP', bodyTemplate: '✅ Tubu Tree đã duyệt hoa hồng của {{count}} đơn (tổng {{amount}}). Bạn vào mục Hoa hồng, bấm Chuyển vào Ví để nhận tiền nhé.', createOnly: true },
+  { id: 'nt-ctv-wallet-credited', code: 'COMMISSION_WALLET_CREDITED', channel: 'INAPP', bodyTemplate: '💰 Tubu Tree đã chuyển {{amount}} hoa hồng ({{count}} đơn) vào Ví của bạn{{tax_note}}. Bạn dùng được ngay khi thanh toán.', createOnly: true },
   { id: 'nt-ctv-wallet-tax-only', code: 'COMMISSION_WALLET_TAX_ONLY', channel: 'INAPP', bodyTemplate: '💰 Đã xử lý {{amount}} hoa hồng của bạn: toàn bộ được khấu trừ thuế TNCN ({{tax}}) nên chưa có tiền cộng vào Ví Tubu.', createOnly: true },
   { id: 'nt-ctv-payout-paid', code: 'COMMISSION_PAYOUT_PAID', channel: 'INAPP', bodyTemplate: '🏦 Lệnh rút {{amount}} của bạn đã được chuyển khoản{{ref}}. Kiểm tra tài khoản ngân hàng nhé!', createOnly: true },
   // Gói p8-seller: rút hoa hồng (SELLER-10), đối tác tự giao (D4), duyệt hồ sơ/sản phẩm (SELLER-12). Cùng nội dung với migration p8_seller_config_templates.

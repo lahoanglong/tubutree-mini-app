@@ -46,7 +46,7 @@ import { ui, uiBar } from '@/lib/guest-ui';
 import { invalidateBalances } from '@/lib/balances';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
-import { CouponBox, COUPON_MUTATION_KEY, couponPreviewKey } from '@/components/coupon-box';
+import { CouponBox, COUPON_MUTATION_KEY, forgetAutoCoupon, couponPreviewKey } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ReferralCodeBox } from '@/components/referral-code-box';
 import { StickyActionBar } from '@/components/sticky-action-bar';
@@ -290,6 +290,7 @@ export default function CheckoutPage() {
       if (!isBank) setPlaced(order);
       if (wantInvoice) saveInvoice(userId, invoice);
       clearCheckoutSelection();
+      forgetAutoCoupon(userId);
       void qc.invalidateQueries({ queryKey: ['cart'] });
       void qc.invalidateQueries({ queryKey: ['orders'] });
       if (attachWaste && pickupReq) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.all });
@@ -744,6 +745,9 @@ export default function CheckoutPage() {
                 shippingFee={quote?.shippingFee ?? null}
                 notice={quote ? quote.couponNotice : cart.couponNotice}
                 disabled={place.isPending}
+                // Luồng có itemIds ("Mua ngay", chọn món) không tự áp, kể cả khi giỏ chỉ có đúng món đó: máy chủ giữ mã lại trên giỏ sau khi đặt.
+                autoApply={!itemIds && (!!addressId || addrQ.data?.length === 0)}
+                memoryUserId={userId}
                 preview={checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined}
                 previewKey={couponPreviewKey(checkoutItems)}
               />

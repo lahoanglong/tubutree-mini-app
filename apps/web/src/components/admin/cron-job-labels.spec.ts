@@ -40,6 +40,9 @@ function realCronJobs(): { names: string[]; problems: string[] } {
   return { names, problems };
 }
 
+// Dòng cron_runs do mã tự ghi làm mốc (không phải một @Cron): vẫn hiện ở Sức khoẻ hệ thống nên cần tên.
+const MARKER_JOBS = ['AffiliateService.dailyWalletTransfer'];
+
 describe('tên thường của việc nền (Sức khoẻ hệ thống)', () => {
   const { names, problems } = realCronJobs();
   it('đọc được đủ mọi @Cron có @TrackCron trong mã API', () => {
@@ -48,6 +51,6 @@ describe('tên thường của việc nền (Sức khoẻ hệ thống)', () => 
   });
   it('bảng tên khớp từng việc nền thật, không thừa khoá chết', () => {
     expect(names.filter((n) => !CRON_JOB_LABELS[n])).toEqual([]);
-    expect(Object.keys(CRON_JOB_LABELS).filter((k) => !names.includes(k))).toEqual([]);
+    expect(Object.keys(CRON_JOB_LABELS).filter((k) => !names.includes(k) && !MARKER_JOBS.includes(k))).toEqual([]);
   });
 });

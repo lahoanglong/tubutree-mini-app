@@ -518,6 +518,28 @@ psqlq -c "SELECT id, \"zaloId\", \"createdAt\" FROM users WHERE \"zaloId\" LIKE 
 - Migration `20261030110000_order_confirmed_payment_note` chỉ đổi thân mẫu ORDER_CONFIRMED khi thân còn đúng câu seed cũ. Sau deploy, xem thân mẫu bằng `psqlq -tAc "SELECT \"bodyTemplate\" FROM notification_templates WHERE code='ORDER_CONFIRMED'"`. Nếu không có `{{payment_note}}` (admin đã sửa chữ từ trước) thì đơn trả trước vẫn nhận câu cũ; muốn có câu "đã nhận đủ thanh toán" thì admin tự thêm `{{payment_note}}`.
 - Quay image về bản trước bản này: màn sửa mẫu tin của bản cũ không biết biến `{{payment_note}}`, nên admin không lưu được mẫu ORDER_CONFIRMED đang có biến đó. Tin vẫn gửi bình thường; chỉ việc sửa chữ mẫu này phải chờ deploy lại bản mới, hoặc xoá biến khỏi thân mẫu trước khi sửa.
 
+### 1.16 Hoa hồng vào Ví một lần mỗi ngày: rollback API làm tin hiện "( đơn)"
+
+Migration `20261031090000_commission_daily_summary_templates` đổi mẫu tin `COMMISSION_WALLET_CREDITED` thành "Tubu Tree đã chuyển {{amount}} hoa hồng ({{count}} đơn) vào Ví của bạn…". Quay API về bản cũ (không gửi biến `count`) thì tin hiện "( đơn)". Trả chữ cũ, chỉ khi mẫu còn đúng chữ mới (admin đã sửa thì giữ):
+
+```bash
+psqlq -c "UPDATE notification_templates SET \"bodyTemplate\" = '💰 Đã cộng {{amount}} hoa hồng vào Ví Tubu{{tax_note}}. Bạn dùng được ngay khi thanh toán đơn hàng.' WHERE code = 'COMMISSION_WALLET_CREDITED' AND channel = 'INAPP' AND \"bodyTemplate\" = '💰 Tubu Tree đã chuyển {{amount}} hoa hồng ({{count}} đơn) vào Ví của bạn{{tax_note}}. Bạn dùng được ngay khi thanh toán.';"
+```
+
+Mẫu `COMMISSION_APPROVED` vẫn dùng `{{count}}` và `{{amount}}` như bản cũ nên không cần trả lại.
+
+Lượt ngày đầu tiên sau deploy (chưa có dòng `AffiliateService.dailyWalletTransfer` trong `cron_runs`):
+- Nếu deploy sau 8:00 thì lượt chuyển Ví và tin tổng chạy luôn ở lượt :00 kế tiếp, không đợi 8:00 hôm sau. Từ hôm sau chạy lúc 8:00.
+- Lượt này lấy cửa sổ 24 giờ cho tin "đã duyệt". CTV chưa được tự chuyển (thiếu MST, bị khoá, hoặc cờ tự chuyển đang tắt) có thể nhận lại một lần tin "đã duyệt" mà bản cũ đã gửi.
+- Sau 8:00 hôm sau, kiểm lượt ngày đã chạy: `psqlq -tAc "SELECT \"lastSuccessAt\" FROM cron_runs WHERE job = 'AffiliateService.dailyWalletTransfer'"`.
+
+### 1.17 Ghi công CTV theo lúc bấm link: thứ tự deploy
+
+- Web và Mini App mới không được chạy cùng API cũ: chúng gửi thêm `clickedAgoMs` khi chạm giới thiệu, mà API cũ chạy `forbidNonWhitelisted` nên trả 400, web xoá bản chờ và Mini App mất chạm. Thứ tự Bước 8–9 giữ nguyên (web bật trước khi API mới lên là an toàn, vì API đang dừng từ Bước 5 nên web chỉ gặp 5xx và giữ bản chờ). Mini App mới chỉ gửi Live sau khi API mới đã lên (Bước 13).
+- Migration `20261031110000_referral_touch_clicked_at` chỉ thêm cột `clickedAt` (nullable, không backfill); chạy cùng các migration khác của bản.
+- Quay API về `:prev` thì phải quay cả web về bản trước; Mini App Live mới cũng phải kéo về bản cũ.
+- Mini App Live cũ (chưa gửi `clickedAgoMs`) vẫn chạy như trước: máy chủ ghi `clickedAt = now`, hạn tính từ lúc nhận, cho tới khi Mini App mới lên Live.
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.

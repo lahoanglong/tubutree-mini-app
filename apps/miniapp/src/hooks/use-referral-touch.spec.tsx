@@ -1,10 +1,18 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ touch: vi.fn() }));
-vi.mock('../services/affiliate-api', () => ({ recordReferralTouch: mocks.touch }));
+const mocks = vi.hoisted(() => ({ touch: vi.fn(), clicks: [] as Array<number | undefined> }));
+// clickedAgoMs tách riêng để các ca cũ vẫn so nguyên dto; ca về lúc bấm đọc mocks.clicks.
+vi.mock('../services/affiliate-api', () => ({
+  recordReferralTouch: ({ clickedAgoMs, ...dto }: { clickedAgoMs?: number }) => {
+    mocks.clicks.push(clickedAgoMs);
+    return mocks.touch(dto);
+  },
+}));
 
-import { useStorefrontContext } from '../store/storefront-context';
+import { useAuthStore } from '../store/auth';
+import type { AuthUser } from '@tubutree/shared-types';
+import { updateCtvTouchMark, useStorefrontContext, wasCtvTouched } from '../store/storefront-context';
 import { useReferralTouch } from './use-referral-touch';
 
 const ctx = () => useStorefrontContext.getState();
@@ -12,8 +20,10 @@ const ctx = () => useStorefrontContext.getState();
 describe('useReferralTouch: ghi chạm giới thiệu và nhớ mã có phải của CTV không', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.clicks.length = 0;
     sessionStorage.clear();
     ctx().clear();
+    useAuthStore.setState({ user: { id: 'u1' } as AuthUser, status: 'authenticated' });
   });
 
   it('chưa đăng nhập: không gọi máy chủ, chưa biết gì', () => {
@@ -92,7 +102,7 @@ describe('useReferralTouch: ghi chạm giới thiệu và nhớ mã có phải c
     await waitFor(() => expect(ctx().referralEligible).toBe(true));
     first.unmount();
     expect(mocks.touch).toHaveBeenCalledTimes(1);
-    expect(sessionStorage.getItem('tubu_sf_ctv_touched')).toBe('AN123');
+    expect(wasCtvTouched('u1', 'AN123')).toBe(true);
 
     // Tải lại thật làm mất mọi biến trong bộ nhớ: nạp lại store và hook từ đầu, chỉ còn sessionStorage.
     vi.resetModules();
@@ -132,5 +142,46 @@ describe('useReferralTouch: ghi chạm giới thiệu và nhớ mã có phải c
     act(() => ctx().setContext({ slug: 'doi-tac', kind: 'partner' }));
     await act(async () => failCtv(new Error('offline')));
     await waitFor(() => expect(mocks.touch).toHaveBeenCalledTimes(2));
+  });
+
+  it('chạm gửi kèm lúc bấm link, không phải lúc gửi (đăng nhập muộn)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const clicked = new Date('2026-10-31T10:00:00Z');
+      vi.setSystemTime(clicked);
+      ctx().setContext({ referralCode: 'AN123', kind: 'ctv' });
+      vi.setSystemTime(new Date(clicked.getTime() + 5 * 3600_000));
+      mocks.touch.mockResolvedValue({ ok: true });
+      renderHook(() => useReferralTouch(true));
+      await waitFor(() => expect(mocks.touch).toHaveBeenCalledTimes(1));
+      expect(mocks.clicks).toEqual([5 * 3600_000]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('người đăng nhập sau trong cùng WebView không thừa hưởng dấu của người trước: vẫn chạm brand', async () => {
+    mocks.touch.mockResolvedValue({ ok: true });
+    updateCtvTouchMark('u0', 'AN123', 'ctv', true);
+    ctx().setContext({ slug: 'doi-tac', referralCode: 'AN123', kind: 'partner' });
+    renderHook(() => useReferralTouch(true));
+    await waitFor(() => expect(mocks.touch).toHaveBeenCalledTimes(1));
+    expect(mocks.touch).toHaveBeenCalledWith({ referralCode: 'AN123', storefrontSlug: undefined, kind: 'brand' });
+  });
+
+  it('AN123 (ctv), gian hàng đối tác, ?ref=BINH9 (brand, máy chủ ghi BINH9), ?ref=AN123 (brand): lần cuối gửi được', async () => {
+    mocks.touch.mockResolvedValue({ ok: true });
+    ctx().setContext({ slug: 'an', referralCode: 'AN123', kind: 'ctv' });
+    renderHook(() => useReferralTouch(true));
+    await waitFor(() => expect(mocks.touch).toHaveBeenCalledTimes(1));
+    act(() => ctx().setContext({ slug: 'doi-tac', kind: 'partner' }));
+    await Promise.resolve();
+    expect(mocks.touch).toHaveBeenCalledTimes(1);
+    act(() => ctx().setContext({ slug: null, referralCode: 'BINH9' }));
+    await waitFor(() => expect(mocks.touch).toHaveBeenCalledTimes(2));
+    expect(mocks.touch).toHaveBeenLastCalledWith({ referralCode: 'BINH9', storefrontSlug: undefined, kind: 'brand' });
+    act(() => ctx().setContext({ referralCode: 'AN123' }));
+    await waitFor(() => expect(mocks.touch).toHaveBeenCalledTimes(3));
+    expect(mocks.touch).toHaveBeenLastCalledWith({ referralCode: 'AN123', storefrontSlug: undefined, kind: 'brand' });
   });
 });

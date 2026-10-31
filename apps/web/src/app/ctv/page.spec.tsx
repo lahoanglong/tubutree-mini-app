@@ -7,6 +7,7 @@ type Call = { method: string; path: string; body?: unknown; query?: Record<strin
 const state = vi.hoisted(() => ({
   phase: 'authenticated' as string,
   me: null as Record<string, unknown> | null,
+  config: {} as Record<string, unknown>,
   dash: null as Record<string, unknown> | null,
   links: [] as unknown[],
   commissions: [] as unknown[],
@@ -66,7 +67,7 @@ vi.mock('@/lib/core-http', () => ({
       if (path === '/academy/courses') return state.courses;
       if (path === '/affiliate/analytics/storefronts') return { storefronts: state.storefronts };
       if (path === '/affiliate/analytics/products') return state.products;
-      if (path === '/config/public') return {};
+      if (path === '/config/public') return state.config;
       if (path === '/me/wallet') {
         await state.walletGate;
         return { walletBalance: 50_000 };
@@ -108,6 +109,7 @@ beforeEach(() => {
   state.phase = 'authenticated';
   state.me = { isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 };
   state.dash = DASH;
+  state.config = {};
   state.links = [];
   state.commissions = [];
   state.payouts = [];
@@ -335,7 +337,7 @@ describe('/ctv — bảng điều khiển', () => {
     click(btn);
     await flush();
     const dialog = document.querySelector('[role="dialog"]');
-    expect(dialog?.textContent).toContain('Hoa hồng tự vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 30.000đ.');
+    expect(dialog?.textContent).toContain('Hoa hồng được duyệt khi đơn đã giao và hết thời gian đổi/trả, rồi tự vào Ví Tubu lúc 8:00 sáng kế tiếp. Đang chờ: 30.000đ.');
     expect(byText(dialog as HTMLElement, 'button', 'vào Ví')).toBeNull();
     click(byText(dialog as HTMLElement, 'button', 'Đã hiểu'));
     await flush();
@@ -353,10 +355,23 @@ describe('/ctv — bảng điều khiển', () => {
     expect(text).not.toContain('tự vào');
   });
 
+  it('bị khấu trừ thuế mà chưa khai MST: dòng dưới số to nhắc mã số thuế thay vì hứa 8:00; có MST thì hứa 8:00', async () => {
+    state.config = { affiliatePitWithhold: { pct: 0.1, threshold: 50_000 } };
+    const a = mount();
+    await flush();
+    expect(a.container.textContent).toContain('chưa tự vào Ví được vì cần mã số thuế');
+    expect(a.container.textContent).not.toContain('Tự vào Ví Tubu lúc 8:00 sáng');
+    a.unmount();
+    state.me = { isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0, personalTaxId: '079201001234' };
+    const b = mount();
+    await flush();
+    expect(b.container.textContent).toContain('Tự vào Ví Tubu lúc 8:00 sáng');
+  });
+
   it('còn hoa hồng có thể chuyển: dưới số to có dòng nói đây là phần chưa tự vào Ví, bấm tay; hết thì không có dòng đó', async () => {
     const a = mount();
     await flush();
-    expect(a.container.textContent).toContain('Phần này chưa tự vào Ví được');
+    expect(a.container.textContent).toContain('Tự vào Ví Tubu lúc 8:00 sáng');
     a.unmount();
     state.dash = { ...DASH, withdrawableCommission: 0 };
     const b = mount();

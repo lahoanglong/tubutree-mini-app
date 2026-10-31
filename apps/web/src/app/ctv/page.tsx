@@ -20,8 +20,9 @@ import {
 } from '@tubutree/app-core/queries/affiliate';
 import { academyCoursesQuery } from '@tubutree/app-core/queries/academy';
 import { walletQuery } from '@tubutree/app-core/queries/wallet';
-import { affiliateNextCursor, COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, transferBlockedText, transferHeroNote } from '@tubutree/app-core/ctv-dashboard';
+import { affiliateNextCursor, commissionPendingNote, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, needsTaxIdForAutoTransfer, transferBlockedText, transferHeroNote } from '@tubutree/app-core/ctv-dashboard';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -384,6 +385,8 @@ function Dashboard() {
 
   const head = ctvHeadline(d);
   const autoTransfer = isAutoWalletTransfer(d?.autoWalletTransfer);
+  const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000 });
+  const needsTaxId = needsTaxIdForAutoTransfer(head.big, cfgQ.data?.affiliatePitWithhold, me?.personalTaxId);
   const hero = ctvHeroAmount(head.big, autoTransfer, walletQ.data?.walletBalance, walletQ.isLoading);
   const firstSteps: Array<{ key: string; label: string; Icon: typeof Link2; onPress?: () => void; href?: string }> = [
     { key: 'share', label: 'Chia sẻ mã giới thiệu', Icon: Link2, onPress: () => setSharing(true) },
@@ -456,8 +459,8 @@ function Dashboard() {
             {/* Số to là tiền dùng được ngay; hoa hồng đang chờ và số tạm tính tháng là dòng phụ. */}
             <div className="text-sm max-md:leading-[var(--type-body-sm-lh)] max-md:opacity-[0.85]">{hero.label}</div>
             <div className="mt-1 font-display text-3xl font-bold tabular-nums max-md:text-[length:var(--type-display-lg-size)] max-md:leading-10">{formatVnd(hero.amount)}</div>
-            <div className={`mt-1 text-xs ${phoneCaption} max-md:opacity-90`}>Đang chờ: {formatVnd(head.pending)} · {COMMISSION_PENDING_NOTE}</div>
-            {head.big > 0 && <div className={`mt-1 text-xs ${phoneCaption} max-md:opacity-90`}>{transferHeroNote(autoTransfer)}</div>}
+            <div className={`mt-1 text-xs ${phoneCaption} max-md:opacity-90`}>Đang chờ: {formatVnd(head.pending)} · {commissionPendingNote(autoTransfer)}</div>
+            {head.big > 0 && <div className={`mt-1 text-xs ${phoneCaption} max-md:opacity-90`}>{transferHeroNote(autoTransfer, needsTaxId)}</div>}
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
               <MiniStat label="Tạm tính tháng này" value={formatVnd(head.monthEstimate)} />
               <MiniStat label="Lượt bấm" value={String(d?.totalClicks ?? 0)} />

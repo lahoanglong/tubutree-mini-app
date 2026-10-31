@@ -1,11 +1,11 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, renderHook, screen, fireEvent, act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('zmp-sdk/apis', () => ({ setStorage: vi.fn(), getStorage: vi.fn(), removeStorage: vi.fn() }));
 
 import { useAuthStore } from '../../store/auth';
 import { vi as copy } from '../../i18n/vi';
-import { AuthGate } from './auth-gate';
+import { AuthGate, useBlockedMessage } from './auth-gate';
 
 const restore = vi.fn(() => Promise.resolve());
 const login = vi.fn(() => Promise.resolve());
@@ -98,5 +98,25 @@ describe('AuthGate — một cổng cho mọi trang cần đăng nhập (R5-BUYE
     expect(screen.queryByText('nội dung đã đăng nhập')).toBeNull();
     setStatus('authenticated');
     expect(screen.getByText('nội dung đã đăng nhập')).toBeInTheDocument();
+  });
+});
+
+describe('useBlockedMessage', () => {
+  const setAuth = (status: 'idle' | 'loading' | 'authenticated' | 'error', error: string | undefined) =>
+    act(() => useAuthStore.setState({ status, error }));
+
+  it('idle kèm lời máy chủ (tài khoản bị khoá) → trả lời đó', () => {
+    setAuth('idle', 'Tài khoản đã bị khoá.');
+    expect(renderHook(() => useBlockedMessage()).result.current).toBe('Tài khoản đã bị khoá.');
+  });
+
+  it('idle không có lỗi (đăng xuất bình thường) → null', () => {
+    setAuth('idle', undefined);
+    expect(renderHook(() => useBlockedMessage()).result.current).toBeNull();
+  });
+
+  it('status error (mất mạng lúc khôi phục phiên): lời lỗi mạng không được coi là tài khoản bị khoá → null', () => {
+    setAuth('error', 'Mất kết nối, thử lại nhé.');
+    expect(renderHook(() => useBlockedMessage()).result.current).toBeNull();
   });
 });

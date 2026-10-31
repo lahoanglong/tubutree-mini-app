@@ -77,62 +77,69 @@ describe('AffiliateService.notifyCommissionCreated (C-029: hoa hồng mới)', (
   });
 });
 
-describe('AffiliateService.approveDueCommissions (C-029: được duyệt)', () => {
-  function prismaForCron(count: number, approved: { affiliateUserId: string; amount: number }[]) {
-    const updateMany = jest.fn().mockResolvedValue({ count });
+describe('AffiliateService.runDailyWalletTransferIfDue (C-029: tin tổng "đã duyệt")', () => {
+  // 2026-10-31 02:00 UTC = 09:00 giờ VN
+  const NINE_VN = new Date('2026-10-31T02:00:00Z');
+  function prismaForDaily(approved: { affiliateUserId: string; amount: number }[], lastSuccessAt: Date | null = null) {
     const findMany = jest.fn().mockResolvedValue(approved);
-    return {
-      parts: {
-        returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
-        commission: { updateMany, findMany },
-      },
-      updateMany,
-      findMany,
-    };
+    const upsert = jest.fn().mockResolvedValue({});
+    const cronFind = jest.fn().mockResolvedValue(lastSuccessAt ? { lastSuccessAt } : null);
+    return { parts: { commission: { findMany }, cronRun: { findUnique: cronFind, upsert } }, findMany, upsert };
   }
 
-  it('gộp theo CTV: mỗi người nhận đúng một thông báo (số khoản + tổng tiền) cho lượt duyệt này', async () => {
-    const p = prismaForCron(3, [
+  it('gộp theo CTV: mỗi người đúng một tin (số khoản + tổng) cho các khoản duyệt từ lượt ngày trước tới nay, khoá theo CTV + ngày VN', async () => {
+    const last = new Date('2026-10-30T02:00:00Z');
+    const p = prismaForDaily([
       { affiliateUserId: 'a', amount: 10_000 },
       { affiliateUserId: 'a', amount: 5_000 },
       { affiliateUserId: 'b', amount: 7_000 },
-    ]);
+    ], last);
     const { svc, notify } = build(p.parts);
-    await svc.approveDueCommissions();
-    // Lọc đúng lượt vừa chốt: cùng approvedAt với câu UPDATE, không quét lại hoa hồng duyệt từ trước.
-    const stamp = p.updateMany.mock.calls[0][0].data.approvedAt as Date;
-    expect(stamp).toBeInstanceOf(Date);
-    expect(p.findMany.mock.calls[0][0].where).toEqual({ status: 'APPROVED', approvedAt: stamp });
+    await expect(svc.runDailyWalletTransferIfDue(NINE_VN)).resolves.toBe(true);
+    expect(p.findMany.mock.calls[0][0].where).toEqual({ status: 'APPROVED', approvedAt: { gt: last, lte: NINE_VN } });
     expect(notify).toHaveBeenCalledTimes(2);
-    expect(notify).toHaveBeenCalledWith('a', CTV_NOTIFICATION.APPROVED, { count: '2', amount: '15.000đ' });
-    expect(notify).toHaveBeenCalledWith('b', CTV_NOTIFICATION.APPROVED, { count: '1', amount: '7.000đ' });
+    expect(notify).toHaveBeenCalledWith('a', CTV_NOTIFICATION.APPROVED, { count: '2', amount: '15.000đ' }, { dedupeKey: 'commission-approved:a:2026-10-31' });
+    expect(notify).toHaveBeenCalledWith('b', CTV_NOTIFICATION.APPROVED, { count: '1', amount: '7.000đ' }, { dedupeKey: 'commission-approved:b:2026-10-31' });
+    expect(p.upsert).toHaveBeenCalledTimes(1);
   });
 
-  it('không có khoản nào đủ hạn → không truy vấn thêm, không báo', async () => {
-    const p = prismaForCron(0, []);
+  it('lượt đầu chưa có mốc: lấy 24 giờ gần nhất', async () => {
+    const p = prismaForDaily([]);
+    const { svc } = build(p.parts);
+    await svc.runDailyWalletTransferIfDue(NINE_VN);
+    expect(p.findMany.mock.calls[0][0].where.approvedAt.gt).toEqual(new Date(NINE_VN.getTime() - 24 * 3600_000));
+  });
+
+  it('trước 8:00 giờ VN → không làm gì', async () => {
+    const p = prismaForDaily([{ affiliateUserId: 'a', amount: 1 }]);
     const { svc, notify } = build(p.parts);
-    await svc.approveDueCommissions();
+    await expect(svc.runDailyWalletTransferIfDue(new Date('2026-10-30T23:59:00Z'))).resolves.toBe(false);
     expect(p.findMany).not.toHaveBeenCalled();
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it('báo một CTV lỗi thì vẫn báo các CTV còn lại và cron không ném lỗi', async () => {
-    const p = prismaForCron(2, [
-      { affiliateUserId: 'a', amount: 10_000 },
-      { affiliateUserId: 'b', amount: 7_000 },
-    ]);
+  it('hôm nay (ngày VN) đã có lượt xong → không chạy lại', async () => {
+    const p = prismaForDaily([{ affiliateUserId: 'a', amount: 1 }], new Date('2026-10-31T01:05:00Z'));
     const { svc, notify } = build(p.parts);
-    notify.mockRejectedValueOnce(new Error('zns down'));
-    await expect(svc.approveDueCommissions()).resolves.toBeUndefined();
-    expect(notify).toHaveBeenCalledTimes(2);
+    await expect(svc.runDailyWalletTransferIfDue(NINE_VN)).resolves.toBe(false);
+    expect(notify).not.toHaveBeenCalled();
   });
 
-  it('thiếu NotificationsService → chốt hoa hồng như cũ, không truy vấn thêm', async () => {
-    const p = prismaForCron(2, []);
+  it('báo một CTV lỗi thì vẫn báo CTV còn lại và vẫn ghi mốc xong (chạy lại trong ngày sẽ chuyển và báo lần hai)', async () => {
+    const p = prismaForDaily([{ affiliateUserId: 'a', amount: 10_000 }, { affiliateUserId: 'b', amount: 7_000 }]);
+    const { svc, notify } = build(p.parts);
+    notify.mockRejectedValueOnce(new Error('zns down'));
+    await expect(svc.runDailyWalletTransferIfDue(NINE_VN)).resolves.toBe(true);
+    expect(notify).toHaveBeenCalledTimes(2);
+    expect(p.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('thiếu NotificationsService → không truy vấn khoản duyệt, vẫn ghi mốc xong', async () => {
+    const p = prismaForDaily([]);
     const { svc } = build(p.parts, false);
-    await svc.approveDueCommissions();
-    expect(p.updateMany).toHaveBeenCalledTimes(1);
+    await svc.runDailyWalletTransferIfDue(NINE_VN);
     expect(p.findMany).not.toHaveBeenCalled();
+    expect(p.upsert).toHaveBeenCalledTimes(1);
   });
 });
 

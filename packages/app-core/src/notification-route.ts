@@ -56,7 +56,7 @@ export function notificationTitle(code: string): string {
   if (code === 'REFERRAL_MILESTONE_PAID') return 'Thưởng mốc giới thiệu';
   if (code === 'REFERRAL_REWARD_REVOKED') return 'Thu lại thưởng giới thiệu';
   if (code.startsWith('POINTS') || code === 'XU_CONVERTED' || code.startsWith('EXTERNAL_POINTS_') || code.startsWith('CHAT_ORDER_POINTS_')) return 'Điểm Xanh';
-  if (code === 'TIER_DROP_NOTICE') return 'Hạng thành viên';
+  if (code === 'TIER_DROP_NOTICE' || code === 'TIER_UPGRADED') return 'Hạng thành viên';
   if (code.startsWith('STOREFRONT')) return 'Gian hàng của bạn';
   if (code.startsWith('REORDER_REMINDER')) return 'Nhắc mua lại';
   if (code === 'REVIEW_REQUEST') return 'Mời đánh giá';
@@ -143,6 +143,7 @@ export function notificationAction(
       ? { kind: 'link', label: 'Xem Ví Tubu', to: '/wallet' }
       : { kind: 'link', label: 'Xem hoa hồng', to: '/affiliate?tab=commission' };
   }
+  if (templateCode === 'TIER_UPGRADED') return { kind: 'link', label: 'Xem hạng của tôi', to: '/loyalty' };
   if (templateCode === 'TIER_DROP_NOTICE') return { kind: 'link', label: 'Xem cách giữ hạng', to: '/loyalty' };
   if (templateCode.startsWith('EXTERNAL_POINTS_') || templateCode.startsWith('CHAT_ORDER_POINTS_')) {
     return { kind: 'link', label: 'Xem Điểm Xanh', to: '/loyalty' };
