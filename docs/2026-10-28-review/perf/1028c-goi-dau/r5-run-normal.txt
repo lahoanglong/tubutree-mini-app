@@ -1,0 +1,76 @@
+{"loadAvg":"Load Avg: 14.74, 18.90, 17.97 ","cpu":"CPU usage: 67.78% user, 24.63% sys, 7.57% idle "}
+   shift before 0.0152 @3551 DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y310→330 h266 | DIV. "Bán chạyXem tất cảBH.NongGiờ v" y576→596 h216
+guest/cold before 0 firstCard 3496 gift undefined cls 0.0152
+   shift after 0.0152 @3427 DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y310→330 h266 | DIV. "Bán chạyXem tất cảBH.NongGiờ v" y576→596 h216
+guest/cold after 0 firstCard 3376 gift undefined cls 0.0152
+guest/cold before 1 firstCard 3352 gift undefined cls 0.0152
+guest/cold after 1 firstCard 3361 gift undefined cls 0.0152
+guest/cold before 2 firstCard 3368 gift undefined cls 0.0152
+guest/cold after 2 firstCard 3352 gift undefined cls 0.0152
+   shift before 0.0087 @2248 DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y310→330 h265
+guest/warm before 0 firstCard 2244 gift 2244 cls 0.0087
+   shift after 0.0087 @1857 DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y310→330 h265
+guest/warm after 0 firstCard 1853 gift undefined cls 0.0087
+guest/warm before 1 firstCard 2236 gift 2235 cls 0.0087
+guest/warm after 1 firstCard 1853 gift undefined cls 0.0087
+guest/warm before 2 firstCard 2255 gift 2254 cls 0.0087
+guest/warm after 2 firstCard 1883 gift undefined cls 0.0087
+   shift before 0.0152 @2427 DIV. "Ưu đãi giờ vàngCòn 3 ngày 2 gi" y310→330 h265 | DIV. "Bán chạyXem tất cảBH.NongGiờ v" y575→595 h217
+new/cold before 0 firstCard 2371 gift undefined cls 0.0152
+   shift after 0.0152 @2309 DIV. "Ưu đãi giờ vàngCòn 3 ngày 2 gi" y310→330 h265 | DIV. "Bán chạyXem tất cảBH.NongGiờ v" y575→595 h217
+new/cold after 0 firstCard 2259 gift undefined cls 0.0152
+new/cold before 1 firstCard 2376 gift undefined cls 0.0152
+new/cold after 1 firstCard 2302 gift undefined cls 0.0152
+new/cold before 2 firstCard 2366 gift undefined cls 0.0152
+new/cold after 2 firstCard 2260 gift undefined cls 0.0152
+   shift before 0.0087 @2239 DIV. "Ưu đãi giờ vàngCòn 3 ngày 2 gi" y310→330 h265
+new/warm before 0 firstCard 2237 gift undefined cls 0.0087
+   shift after 0.0087 @1871 DIV. "Ưu đãi giờ vàngCòn 3 ngày 2 gi" y310→330 h265
+new/warm after 0 firstCard 1869 gift undefined cls 0.0087
+new/warm before 1 firstCard 2245 gift undefined cls 0.0087
+new/warm after 1 firstCard 1855 gift undefined cls 0.0087
+new/warm before 2 firstCard 2231 gift undefined cls 0.0087
+new/warm after 2 firstCard 1837 gift undefined cls 0.0087
+returning/cold before 0 firstCard 2611 gift undefined cls 0.0000
+returning/cold after 0 firstCard 2583 gift undefined cls 0.0000
+returning/cold before 1 firstCard 2608 gift undefined cls 0.0000
+returning/cold after 1 firstCard 2524 gift undefined cls 0.0000
+returning/cold before 2 firstCard 2626 gift undefined cls 0.0000
+returning/cold after 2 firstCard 2600 gift undefined cls 0.0000
+   shift before 0.013 @2239 DIV. "" y384→404 h216 | DIV. "Ưu đãi giờ vàngCòn 3 ngày 2 gi" y616→636 h176
+   shift before 0.0174 @2691 DIV. "Mua lạiXem tất cảNước rửa chén" y398→420 h225 | DIV. "Ưu đãi giờ vàngCòn 3 ngày 2 gi" y637→659 h154 | DIV. "Đơn hàngĐổi quàMua chungMã của" y288→310 h116
+returning/warm before 0 firstCard 2236 gift undefined cls 0.0304
+   shift after 0.013 @1845 DIV. "" y384→404 h216 | DIV. "Ưu đãi giờ vàngCòn 3 ngày 2 gi" y616→636 h176
+   shift after 0.0174 @2618 DIV. "Mua lạiXem tất cảNước rửa chén" y398→420 h225 | DIV. "Ưu đãi giờ vàngCòn 3 ngày 2 gi" y637→659 h154 | DIV. "Đơn hàngĐổi quàMua chungMã của" y288→310 h116
+returning/warm after 0 firstCard 1843 gift undefined cls 0.0304
+returning/warm before 1 firstCard 2233 gift undefined cls 0.0304
+returning/warm after 1 firstCard 1845 gift undefined cls 0.0304
+returning/warm before 2 firstCard 2260 gift undefined cls 0.0304
+returning/warm after 2 firstCard 1844 gift undefined cls 0.0304
+   shift before 0.0795 @2338 DIV. "" y198→122 h690
+newpending/cold before 0 firstCard 2580 gift undefined cls 0.0795
+   shift after 0.0795 @2256 DIV. "" y198→122 h690
+newpending/cold after 0 firstCard 2488 gift undefined cls 0.0795
+newpending/cold before 1 firstCard 2596 gift undefined cls 0.0795
+newpending/cold after 1 firstCard 2496 gift undefined cls 0.0795
+newpending/cold before 2 firstCard 2602 gift undefined cls 0.0795
+newpending/cold after 2 firstCard 2486 gift undefined cls 0.0795
+   shift before 0.0087 @2248 DIV. "Ưu đãi giờ vàngCòn 3 ngày 2 gi" y400→420 h265
+   shift before 0.0795 @2349 DIV. "Ưu đãi giờ vàngCòn 3 ngày 2 gi" y420→344 h265 | DIV. "Bán chạyXem tất cảBH.NongGiờ v" y685→609 h203 | DIV. "Đơn hàngĐổi quàMua chungMã của" y288→212 h116 | DIV. "" y198→122 h90
+newpending/warm before 0 firstCard 2245 gift undefined cls 0.0882
+   shift after 0.0087 @1851 DIV. "Ưu đãi giờ vàngCòn 3 ngày 2 gi" y400→420 h265
+   shift after 0.0795 @2264 DIV. "Ưu đãi giờ vàngCòn 3 ngày 2 gi" y420→344 h265 | DIV. "Bán chạyXem tất cảBH.NongGiờ v" y685→609 h203 | DIV. "Đơn hàngĐổi quàMua chungMã của" y288→212 h116 | DIV. "" y198→122 h90
+newpending/warm after 0 firstCard 1848 gift undefined cls 0.0882
+newpending/warm before 1 firstCard 2244 gift undefined cls 0.0882
+newpending/warm after 1 firstCard 1852 gift undefined cls 0.0882
+newpending/warm before 2 firstCard 2221 gift undefined cls 0.0882
+newpending/warm after 2 firstCard 1848 gift undefined cls 0.0882
+| ca | before thẻ đầu (ms) | after thẻ đầu (ms) | chênh | CLS trước | CLS sau | dải quà trước | dải quà sau | mẫu trước | mẫu sau |
+| guest/cold | 3368 | 3361 | -7 | 0.0152 | 0.0152 | null | null | 3496/3352/3368 | 3376/3361/3352 |
+| guest/warm | 2244 | 1853 | -391 | 0.0087 | 0.0087 | 2243.9000000003725 | null | 2244/2236/2255 | 1853/1853/1883 |
+| new/cold | 2371 | 2260 | -111 | 0.0152 | 0.0152 | null | null | 2371/2376/2366 | 2259/2302/2260 |
+| new/warm | 2237 | 1855 | -382 | 0.0087 | 0.0087 | null | null | 2237/2245/2231 | 1869/1855/1837 |
+| returning/cold | 2611 | 2583 | -28 | 0.0000 | 0.0000 | null | null | 2611/2608/2626 | 2583/2524/2600 |
+| returning/warm | 2236 | 1844 | -391 | 0.0304 | 0.0304 | null | null | 2236/2233/2260 | 1843/1845/1844 |
+| newpending/cold | 2596 | 2488 | -107 | 0.0795 | 0.0795 | null | null | 2580/2596/2602 | 2488/2496/2486 |
+| newpending/warm | 2244 | 1848 | -395 | 0.0882 | 0.0882 | null | null | 2245/2244/2221 | 1848/1852/1848 |

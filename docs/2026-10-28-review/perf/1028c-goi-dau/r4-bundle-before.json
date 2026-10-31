@@ -1,0 +1,295 @@
+{
+  "generatedAt": "2026-10-31T04:26:29.140Z",
+  "miniapp": {
+    "entry": {
+      "file": "assets/index.Disoz24F.module.js",
+      "rawKB": 711,
+      "gzKB": 222
+    },
+    "groups": {
+      "js": {
+        "files": 157,
+        "rawKB": 1707,
+        "gzKB": 591
+      },
+      "css": {
+        "files": 1,
+        "rawKB": 128,
+        "gzKB": 21
+      },
+      "assets": {
+        "files": 7,
+        "rawKB": 158,
+        "gzKB": 158
+      },
+      "total": {
+        "files": 167,
+        "rawKB": 1994,
+        "gzKB": 770
+      }
+    },
+    "top10": [
+      {
+        "file": "assets/index.Disoz24F.module.js",
+        "rawKB": 711,
+        "gzKB": 222
+      },
+      {
+        "file": "assets/index-CMnKIHKS.css",
+        "rawKB": 128,
+        "gzKB": 21
+      },
+      {
+        "file": "assets/game.cWNKNVhO.module.js",
+        "rawKB": 61,
+        "gzKB": 18
+      },
+      {
+        "file": "assets/affiliate.BWcqzZvw.module.js",
+        "rawKB": 50,
+        "gzKB": 15
+      },
+      {
+        "file": "assets/checkout.BycpiCd9.module.js",
+        "rawKB": 45,
+        "gzKB": 13
+      },
+      {
+        "file": "assets/storefront-builder.C93NUv2Y.module.js",
+        "rawKB": 43,
+        "gzKB": 12
+      },
+      {
+        "file": "assets/product-detail.BvGoVqfD.module.js",
+        "rawKB": 40,
+        "gzKB": 13
+      },
+      {
+        "file": "assets/order-detail.DoSRNYHs.module.js",
+        "rawKB": 35,
+        "gzKB": 11
+      },
+      {
+        "file": "assets/dealer.BzzqpEbO.module.js",
+        "rawKB": 31,
+        "gzKB": 10
+      },
+      {
+        "file": "assets/inter-500-6tkUt_LW.woff2",
+        "rawKB": 27,
+        "gzKB": 27
+      }
+    ],
+    "thresholds": {
+      "entryTargetKB": 450,
+      "entryWarnKB": 700,
+      "totalWarnKB": 2048
+    },
+    "verdict": {
+      "entryOverTarget": true,
+      "entryOverWarn": true,
+      "totalOverWarn": false,
+      "entryOverTargetByKB": 261
+    },
+    "indexHtmlScripts": [
+      "./assets/index.Disoz24F.module.js",
+      "./assets/index-CMnKIHKS.css"
+    ],
+    "routes": {
+      "lazyCount": 46,
+      "lazy": [
+        "bank-payment",
+        "orders",
+        "order-detail",
+        "game",
+        "feed",
+        "community-events",
+        "post-detail",
+        "ai-advisor",
+        "group-buy",
+        "recycle",
+        "recycle-rules",
+        "recycle-new",
+        "recycle-points",
+        "recycle-request",
+        "recycle-edit",
+        "recycle-requests",
+        "recycle-done",
+        "recycle-desk",
+        "rewards",
+        "rewards-mine",
+        "profile",
+        "loyalty",
+        "offers",
+        "wallet",
+        "external-points",
+        "addresses",
+        "notifications",
+        "affiliate",
+        "academy",
+        "cashback",
+        "dealer",
+        "about",
+        "wishlist",
+        "support-chat",
+        "edit-profile",
+        "settings",
+        "brand-story",
+        "storefront-builder",
+        "storefront-view",
+        "brand-view",
+        "brand-owner",
+        "admin",
+        "community-moderation",
+        "staff",
+        "my-payroll",
+        "not-found"
+      ],
+      "eager": [
+        "home"
+      ]
+    },
+    "entryComposition": {
+      "byPackageKB": [
+        [
+          "(app src)",
+          369
+        ],
+        [
+          "react-dom",
+          133
+        ],
+        [
+          "zmp-sdk",
+          128
+        ],
+        [
+          "zmp-ui",
+          93
+        ],
+        [
+          "@tanstack/query-core",
+          76
+        ],
+        [
+          "@react-spring/core",
+          47
+        ],
+        [
+          "@use-gesture/core",
+          38
+        ],
+        [
+          "resize-observer-polyfill",
+          33
+        ],
+        [
+          "@remix-run/router",
+          32
+        ],
+        [
+          "lucide-react",
+          27
+        ],
+        [
+          "react-transition-group",
+          21
+        ],
+        [
+          "react-router",
+          20
+        ]
+      ],
+      "appSrcModules": 165,
+      "appSrcTop20KB": [
+        [
+          "apps/miniapp/src/i18n/vi.ts",
+          37.7
+        ],
+        [
+          "apps/miniapp/src/components/app.tsx",
+          24.1
+        ],
+        [
+          "apps/miniapp/src/components/flash-sale.tsx",
+          10.5
+        ],
+        [
+          "apps/miniapp/src/components/home/new-customer-gift.tsx",
+          9.1
+        ],
+        [
+          "apps/miniapp/src/services/shop-api.ts",
+          8.6
+        ],
+        [
+          "packages/app-core/src/home-layout.ts",
+          8.2
+        ],
+        [
+          "packages/app-core/src/game-newbie.ts",
+          8.1
+        ],
+        [
+          "apps/miniapp/src/components/reorder/purchased-rail.tsx",
+          7.9
+        ],
+        [
+          "apps/miniapp/src/components/ui/product-tile.tsx",
+          7.8
+        ],
+        [
+          "apps/miniapp/src/components/ui/empty-state.tsx",
+          7.8
+        ],
+        [
+          "apps/miniapp/src/store/auth.ts",
+          7.6
+        ],
+        [
+          "apps/miniapp/src/components/home/member-card.tsx",
+          7.2
+        ],
+        [
+          "apps/miniapp/src/services/api.ts",
+          7
+        ],
+        [
+          "apps/miniapp/src/components/subscribe-sheet.tsx",
+          6.4
+        ],
+        [
+          "apps/miniapp/src/utils/refund-rules.ts",
+          6.1
+        ],
+        [
+          "apps/miniapp/src/pages/home.tsx",
+          6
+        ],
+        [
+          "apps/miniapp/src/components/home/todo-strip.tsx",
+          5.6
+        ],
+        [
+          "apps/miniapp/src/services/zmp-bridge.ts",
+          5.5
+        ],
+        [
+          "apps/miniapp/src/services/account-api.ts",
+          5.1
+        ],
+        [
+          "packages/app-core/src/home-copy.ts",
+          5
+        ]
+      ],
+      "appSrcPagesInEntry": [
+        "apps/miniapp/src/pages/about-data.ts",
+        "apps/miniapp/src/pages/home.tsx",
+        "apps/miniapp/src/pages/settings-notify-prefs.ts",
+        "apps/miniapp/src/pages/settings-legacy-sync.ts"
+      ]
+    },
+    "chunkCount": 157
+  }
+}

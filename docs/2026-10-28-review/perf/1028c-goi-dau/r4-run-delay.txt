@@ -1,0 +1,10 @@
+{"loadAvg":"Load Avg: 17.75, 17.22, 19.16 ","cpu":"CPU usage: 36.76% user, 17.2% sys, 46.20% idle "}
+new/cold prev 0 firstCard 4789 cls 0.0152
+new/cold after 0 firstCard 2210 cls 0.0152
+new/cold prev 1 firstCard 4777 cls 0.0152
+new/cold after 1 firstCard 2205 cls 0.0152
+new/cold prev 2 firstCard 4767 cls 0.0152
+new/cold after 2 firstCard 2188 cls 0.0152
+| ca | prev thẻ đầu (ms) | after thẻ đầu (ms) | chênh | CLS trước | CLS sau | mẫu trước | mẫu sau |
+| new/cold | 4777 | 2205 | -2572 | 0.0152 | 0.0152 | 4789/4777/4767 | 2210/2205/2188 |
+done
