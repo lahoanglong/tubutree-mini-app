@@ -33,3 +33,7 @@ export { Countdown } from './countdown';
 export type { CountdownProps } from './countdown';
 export { FlashSoldBar } from './flash-sold-bar';
 export type { FlashSoldBarProps } from './flash-sold-bar';
+export { SectionHeader } from './section-header';
+export type { SectionHeaderProps, IconName } from './section-header';
+export { Section } from './section';
+export type { SectionProps } from './section';
