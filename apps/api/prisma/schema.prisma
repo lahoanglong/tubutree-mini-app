@@ -448,6 +448,7 @@ model Product {
   reviewCount      Int                   @default(0)
   soldExternal     Int                   @default(0) // admin nhập — tổng đã bán gom từ các sàn TMĐT ngoài
   soldApp          Int                   @default(0) // system — đơn DELIVERED trong app (cron recompute). Hiển thị = soldExternal + soldApp
+  soldApp30d       Int                   @default(0) // system — số lượng đơn DELIVERED trong 30 ngày gần nhất (cron 03:00); chỉ để xếp "Bán chạy nhất", không hiển thị
   basePrice        Int
   salePrice        Int?
   metaTitle        String?
@@ -479,6 +480,7 @@ model Product {
   @@index([storefrontId])
   @@index([approvalStatus])
   @@index([isActive, isFeatured])
+  @@index([soldApp30d])
   // GIN cho 3 cột mảng lọc bằng 'has' trong catalog.service.ts list(). PHẢI khai báo trong
   // schema (không chỉ raw SQL) để `prisma migrate` KHÔNG coi chúng là drift rồi tự sinh
   // migration DROP — đúng lỗi migration 20260628035408 đã vô tình xoá 3 index này.

@@ -45,6 +45,8 @@ type FulfillerStore = {
 const TEXT_MATCH_LIMIT = 2000;
 /** Số slug tối đa một lần lấy theo `slugs` (khớp số mục của dải "Đã xem gần đây" trên Mini App). */
 const MAX_LIST_SLUGS = 20;
+/** Cửa sổ của `soldApp30d` ("Bán chạy nhất"), tính theo ngày giao. */
+const SOLD_WINDOW_DAYS = 30;
 
 /** Gợi ý khi gõ: từ khoá (đã gấp dấu) ngắn hơn thế khớp gần như mọi SP và trigram không lọc được. */
 export const SUGGEST_MIN_CHARS = 2;
@@ -663,16 +665,27 @@ export class CatalogService {
   }
 
   /**
-   * Tính lại `soldApp` (đơn DELIVERED, cộng dồn theo product) — idempotent: reset 0 rồi set,
-   * nên tự GIẢM khi đơn bị RETURNED. Hiển thị "đã bán" = soldExternal + soldApp.
+   * Tính lại `soldApp` (đơn DELIVERED, cộng dồn theo product) và `soldApp30d` (cùng đơn nhưng giao trong 30 ngày gần nhất,
+   * để xếp "Bán chạy nhất") — idempotent: ghi đè cả hai, nên tự GIẢM khi đơn bị RETURNED và khi đơn trôi khỏi cửa sổ 30 ngày.
+   * Hiển thị "đã bán" = soldExternal + soldApp; `soldApp30d` không hiển thị và không gồm `soldExternal`.
+   * Đơn DELIVERED chưa có `deliveredAt` (dữ liệu trước khi có cột này) không vào cửa sổ 30 ngày: chấp nhận được vì
+   * cửa sổ ngắn hơn tuổi của dữ liệu đó.
    */
   async recomputeSoldCounts(): Promise<{ updated: number }> {
-    const grouped = await this.prisma.orderItem.groupBy({
-      by: ['variationId'],
-      where: { order: { status: 'DELIVERED' } },
-      _sum: { quantity: true },
-    });
-    const variationIds = grouped.map((g) => g.variationId);
+    const since = new Date(Date.now() - SOLD_WINDOW_DAYS * 864e5);
+    const [grouped, grouped30d] = await Promise.all([
+      this.prisma.orderItem.groupBy({
+        by: ['variationId'],
+        where: { order: { status: 'DELIVERED' } },
+        _sum: { quantity: true },
+      }),
+      this.prisma.orderItem.groupBy({
+        by: ['variationId'],
+        where: { order: { status: 'DELIVERED', deliveredAt: { gte: since } } },
+        _sum: { quantity: true },
+      }),
+    ]);
+    const variationIds = [...new Set([...grouped, ...grouped30d].map((g) => g.variationId))];
     const vars = variationIds.length
       ? await this.prisma.variation.findMany({
           where: { id: { in: variationIds } },
@@ -680,12 +693,17 @@ export class CatalogService {
         })
       : [];
     const vmap = new Map(vars.map((v) => [v.id, v.productId]));
-    const perProduct = new Map<string, number>();
-    for (const g of grouped) {
-      const pid = vmap.get(g.variationId);
-      if (!pid) continue;
-      perProduct.set(pid, (perProduct.get(pid) ?? 0) + (g._sum.quantity ?? 0));
-    }
+    const sumByProduct = (rows: typeof grouped) => {
+      const perProduct = new Map<string, number>();
+      for (const g of rows) {
+        const pid = vmap.get(g.variationId);
+        if (!pid) continue;
+        perProduct.set(pid, (perProduct.get(pid) ?? 0) + (g._sum.quantity ?? 0));
+      }
+      return perProduct;
+    };
+    const perProduct = sumByProduct(grouped);
+    const perProduct30d = sumByProduct(grouped30d);
     // Reset phải nguyên tử cùng với lần ghi lại — nhưng KHÔNG được reset toàn bảng bên trong
     // transaction: `updateMany` không điều kiện khoá MỌI dòng `products` cho tới khi N lệnh
     // update chạy xong, đủ để chặn đứng cron đồng bộ Pancake (cũng nổ lúc 03:00) và mọi thao tác
@@ -694,16 +712,17 @@ export class CatalogService {
     // bán 0" suốt 24 giờ.
     //
     // Cách hiện tại: chỉ chạm đúng những dòng CẦN đổi.
-    //  - Dòng có số bán mới → update từng dòng (khoá đúng dòng đó).
+    //  - Dòng có số bán mới → update từng dòng (khoá đúng dòng đó). Đơn 30 ngày là tập con của đơn
+    //    đã giao nên mọi sản phẩm có số 30 ngày đều có trong `perProduct`.
     //  - Dòng đang khác 0 mà không còn đơn nào → đưa về 0, một câu lệnh, phạm vi hẹp.
     const ids = [...perProduct.keys()];
     const ops = [
       ...[...perProduct.entries()].map(([productId, sold]) =>
-        this.prisma.product.update({ where: { id: productId }, data: { soldApp: sold } }),
+        this.prisma.product.update({ where: { id: productId }, data: { soldApp: sold, soldApp30d: perProduct30d.get(productId) ?? 0 } }),
       ),
       this.prisma.product.updateMany({
-        where: { soldApp: { not: 0 }, ...(ids.length ? { id: { notIn: ids } } : {}) },
-        data: { soldApp: 0 },
+        where: { OR: [{ soldApp: { not: 0 } }, { soldApp30d: { not: 0 } }], ...(ids.length ? { id: { notIn: ids } } : {}) },
+        data: { soldApp: 0, soldApp30d: 0 },
       }),
     ];
     await this.prisma.$transaction(ops);
