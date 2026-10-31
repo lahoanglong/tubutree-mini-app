@@ -9,3 +9,5 @@
 - 00:04 Gói sửa F1 (worktree shop-F1 từ 5777b2cbe): focus đôi ở ô nhập ZaUI, scroll-pad thanh dính, voucher endAt + ngày lịch VN, làm tròn đã bán, hạ entry Mini App ≤680 KB (đang ~698/700).
 - 11-01 00:26 F1 xong (0af562dc3, entry 676 KB) → merge 725679667. Sửa test vouchers đỏ cuối tháng (f299f8dcf). Gate tích hợp 0 FAIL (gate-integ-w1.txt). Gộp origin/main #91 (dc32b3345, sạch). PR #93 đợt 1 → main, chờ CI.
 - 00:26 Đợt 2 chạy: workflow wf_4ac5b0bb-90f, P4 product-tile (shop-P4, cổng 3291/3292), P5 section-kit (shop-P5, 3293/3294), base f299f8dcf.
+- 11-01 01:05 CI #93: e2e đỏ 2 test (lương tính tháng theo UTC, lệch tháng VN lúc 17–24h UTC cuối tháng; chip đòi cao thật 44 trong khi P1 hạ 36 + vùng chạm 44) → 273a43538, chạy cục bộ 4/4 xanh (Next dev 3291 + API giả 3290). Lưu ý: cổng 3291 trùng cổng chụp của P4 trong ~00:58–01:05; xem lại ảnh P4 chụp có đúng bản P4 không.
+- 01:10 verify đỏ 1 lần ở `orders-subscription-tab.spec.tsx` ("khách tự bấm sang tab khác..."), nhánh không đụng orders.tsx, cục bộ 8/8 xanh (cả TZ=UTC) → chập chờn do CI tải nặng, chạy lại job. Lặp lại lần nữa thì nới timeout waitFor của test đó.
