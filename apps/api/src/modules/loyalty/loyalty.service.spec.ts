@@ -894,11 +894,19 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       expect(notifySafe).not.toHaveBeenCalled();
     });
 
-    it('lần đầu được gán hạng (chưa có hạng) → không tin', async () => {
-      const { prisma, notifySafe, svc } = withNotify({ pointsBalance: 0, tierId: null }, 6_000_000);
+    it('chưa có hạng được gán hạng đầu → không tin', async () => {
+      const { prisma, notifySafe, svc } = withNotify({ pointsBalance: 0, tierId: null }, 0);
       (prisma.membershipTier.findMany as jest.Mock).mockResolvedValue(NAMED);
       await svc.recalcTier('u1');
       expect(notifySafe).not.toHaveBeenCalled();
+    });
+
+    it('chưa có hạng, đơn đầu đưa thẳng lên hạng cao hơn hạng đầu → có tin', async () => {
+      const { prisma, notifySafe, svc } = withNotify({ pointsBalance: 0, tierId: null }, 6_000_000);
+      (prisma.membershipTier.findMany as jest.Mock).mockResolvedValue(NAMED);
+      await svc.recalcTier('u1');
+      expect(notifySafe).toHaveBeenCalledTimes(1);
+      expect(notifySafe.mock.calls[0]!.slice(0, 3)).toEqual(['u1', 'TIER_UPGRADED', { tier: 'Lộc' }]);
     });
 
     it('lượt song song thua so-và-ghi (hạng đã bị lượt khác đổi) → không tin', async () => {
@@ -1458,7 +1466,7 @@ describe('LoyaltyService.recalcTier / getOverview sau trả MỘT PHẦN (MONEY-
         orders: [],
       });
       await new LoyaltyService(prisma, makeConfig()).recalcTier('u1');
-      expect(update.mock.calls[0][0].data).toEqual({ tierId: 'loc', tierGraceUntil: null }); // vẫn hạng 'loc' (5 triệu), chỉ xoá ân hạn
+      expect(update.mock.calls[0][0].data).toEqual({ tierGraceUntil: null }); // vẫn hạng 'loc' (5 triệu), chỉ xoá ân hạn
     });
 
     it('không có lần trả một phần nào → không truy vấn lại đơn (chỉ một lần đọc yêu cầu trả hàng đã duyệt)', async () => {
