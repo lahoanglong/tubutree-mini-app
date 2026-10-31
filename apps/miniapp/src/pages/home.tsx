@@ -1,7 +1,6 @@
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search } from 'lucide-react';
 import { fetchActiveFlashSales, fetchProducts, fetchUpcomingFlashSales } from '../services/shop-api';
 import { coreHttp } from '../services/core-http';
 import { useAuthStore } from '../store/auth';
@@ -37,9 +36,6 @@ import { useHomeFeed } from '../components/home/use-home-feed';
 import { refreshHomeQueries } from '../components/home/home-blocks';
 import { homeRenderOrder, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
 import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
-import { Icon } from '../components/ui/icon';
-import { Text } from '../components/ui/text';
-import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 
 /**
@@ -106,7 +102,7 @@ export default function HomePage() {
 
   const blocks: Record<HomeRenderBlock, ReactNode> = {
     settling: <HomeSettlingSkeleton />,
-    search: <SearchShell />,
+    search: <HomeHeader unreadCount={unreadCount} />,
     member:
       kind === 'returning' && sessionFailed ? (
         <MemberCardUnavailable onRetry={() => void restore()} />
@@ -118,6 +114,9 @@ export default function HomePage() {
     todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <HomeNewCustomerGift /> : null,
+    // P11 (chiến dịch) và P15 (combo) nối dữ liệu; tới lúc đó hai khối trả null và không giữ chỗ.
+    banner: null,
+    combos: null,
     shortcuts: <ShortcutGrid />,
     // Lỗi tải Mua lại (kể cả 404 của API cũ) đưa trang về bố cục khách mới, nơi khối này không có mặt, nên khối tự có trạng thái lỗi riêng ở PurchasedRail.
     purchased: <HomePurchasedRail source="home_rail" restoring={restoring} />,
@@ -148,11 +147,10 @@ export default function HomePage() {
     // `.page` giữ đệm safe-top của chế độ immersive (actionBar Zalo đã ẩn).
     <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
       <PullToRefresh onRefresh={refreshAll} />
-      <HomeHeader unreadCount={unreadCount} />
       <HomeBlockErrorSuppressed.Provider value={pageDown}>
         {homeRenderOrder(kind, settling).map((id) => (
           <Fragment key={id}>
-            <div data-home-block={id} style={id === 'search' ? STICKY_SEARCH : undefined}>
+            <div data-home-block={id} style={id === 'search' ? STICKY_HEADER : id === 'settling' ? undefined : BLOCK_GAP}>
               {blocks[id]}
             </div>
             {(pageDown || belowState.failed) && id === 'search' && (
@@ -171,44 +169,8 @@ export default function HomePage() {
   );
 }
 
-// Dính đầu trang khi cuộn (đứng thẳng dưới vùng an toàn); phải là con trực tiếp của trang cuộn nên áp lên chính khối bọc, không phải bên trong.
-const STICKY_SEARCH: CSSProperties = { position: 'sticky', top: 'var(--safe-top)', zIndex: 20, background: 'var(--color-bg-canvas)' };
+// Header dính đầu trang khi cuộn (đứng thẳng dưới vùng an toàn); phải là con trực tiếp của trang cuộn nên áp lên chính khối bọc, không phải bên trong.
+const STICKY_HEADER: CSSProperties = { position: 'sticky', top: 'var(--safe-top)', zIndex: 20, background: 'var(--color-bg-canvas)' };
 
-/** Ô tìm ở Trang chủ chỉ là vỏ: mở thẳng bàn phím ở ô thật bên /browse (?focus=search). */
-function SearchShell() {
-  const navigate = useNavigate();
-  return (
-    <div style={{ padding: '0 16px 8px' }}>
-      <button
-        type="button"
-        aria-label={vi.home.searchPlaceholder}
-        className="tubu-press"
-        onClick={() => {
-          haptic('light');
-          navigate('/browse?focus=search');
-        }}
-        style={{
-          width: '100%',
-          minHeight: 46,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '11px 16px',
-          borderRadius: 'var(--radius-pill)',
-          border: '1px solid var(--color-border-subtle)',
-          background: 'var(--color-bg-surface)',
-          boxShadow: 'var(--elevation-1)',
-          boxSizing: 'border-box',
-          cursor: 'pointer',
-          textAlign: 'left',
-          fontFamily: 'inherit',
-        }}
-      >
-        <Icon icon={Search} size="sm" tone="muted" />
-        <Text variant="body-sm" tone="tertiary">
-          {vi.home.searchPlaceholder}
-        </Text>
-      </button>
-    </div>
-  );
-}
+// Khoảng cách giữa khối đặt ở vỏ khối (CS-05), khối con không tự đặt đệm trên/dưới. Khối rỗng (không dữ liệu) có lề sập qua nên không để lại khoảng trống.
+const BLOCK_GAP: CSSProperties = { marginTop: 'var(--space-block)' };
