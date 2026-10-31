@@ -50,8 +50,20 @@ describe('ShopHeader (web)', () => {
     expect(h1.style.minWidth).toBe('0px');
   });
 
-  it('từ lg gốc là contents: bìa cột trái cao hai hàng, thông tin cột phải, avatar và nút nằm trên hàng tên, không đè mép bìa', () => {
-    mount(<ShopHeader title="Shop" badges={<span>Chính hãng</span>} action={<button type="button">Theo dõi</button>} note="Đồ xanh" />);
+  it('mặc định (ngoài StoreLayout) không có lớp lg: nào: bố cục điện thoại giữ ở mọi khổ, bìa và avatar không rời nhau', () => {
+    mount(<ShopHeader title="Shop" verified badges={<span>Chính hãng</span>} action={<button type="button">Theo dõi</button>} note="Đồ xanh" />);
+    const root = q('shop-cover')!.parentElement!;
+    const lgClasses = Array.from(root.querySelectorAll<HTMLElement>('*'))
+      .concat(root)
+      .flatMap((el) => (typeof el.className === 'string' ? el.className.split(/\s+/) : []))
+      .filter((c) => c.startsWith('lg:'));
+    expect(lgClasses).toEqual([]);
+    expect(q('shop-cover')!.className.split(/\s+/)).toContain(`h-[${SHOP_COVER_HEIGHT}px]`);
+    expect(q('shop-avatar')!.parentElement!.parentElement!.className.split(/\s+/)).toContain('-mt-7');
+  });
+
+  it('inStoreGrid: từ lg gốc là contents: bìa cột trái cao hai hàng, thông tin cột phải, avatar và nút nằm trên hàng tên, không đè mép bìa', () => {
+    mount(<ShopHeader inStoreGrid title="Shop" badges={<span>Chính hãng</span>} action={<button type="button">Theo dõi</button>} note="Đồ xanh" />);
     const cover = q('shop-cover')!;
     const root = cover.parentElement!;
     expect(root.className.split(/\s+/)).toContain('lg:contents');

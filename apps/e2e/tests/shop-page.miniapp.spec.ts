@@ -32,6 +32,18 @@ test.describe('Trang gian hàng CTV (Mini App)', () => {
     await expect(page.getByTestId('shop-rail').getByText('Mình dùng mỗi ngày')).toBeVisible();
   });
 
+  test('kệ ngang sát mép như Trang chủ và web: thẻ đầu kệ cách mép trái 12px (đệm của kệ), không thụt thêm 16px của lề trang', async ({ page }) => {
+    await page.goto(`/s/${SHOP_SLUG}`);
+    const first = page.getByTestId('shop-rail').locator('[data-ds="product-tile"]').first();
+    await expect(first).toBeVisible({ timeout: 15_000 });
+    const title = (await page.getByRole('heading', { level: 2, name: 'Bếp xanh' }).boundingBox())!;
+    const tile = (await first.boundingBox())!;
+    expect(tile.x).toBeGreaterThanOrEqual(11);
+    expect(tile.x).toBeLessThanOrEqual(13);
+    expect(title.x).toBeGreaterThanOrEqual(15);
+    expect(title.x).toBeLessThanOrEqual(17);
+  });
+
   test('tab Sản phẩm: 20 thẻ, "Xem thêm" lên 40, sắp xếp "Mới" đổi thẻ đầu', async ({ page }) => {
     await page.goto(`/s/${SHOP_SLUG}`);
     await page.getByRole('tab', { name: 'Sản phẩm (45)' }).click();
@@ -108,6 +120,15 @@ test.describe('Trang gian hàng CTV (Mini App)', () => {
 
 test.describe('Trang thương hiệu (Mini App)', () => {
   test.beforeEach(({ api }) => mockBrandPage(api));
+
+  test('kệ "Sản phẩm nổi bật" sát mép như web: thẻ đầu kệ cách mép trái 12px, không thụt thêm 16px', async ({ page }) => {
+    await page.goto(`/brand/${BRAND_SLUG}`);
+    const first = page.getByTestId('brand-featured-rail').locator('[data-ds="product-tile"]').first();
+    await expect(first).toBeVisible({ timeout: 15_000 });
+    const tile = (await first.boundingBox())!;
+    expect(tile.x).toBeGreaterThanOrEqual(11);
+    expect(tile.x).toBeLessThanOrEqual(13);
+  });
 
   test('đầu shop có Theo dõi và số liệu; tab "Sản phẩm (45)" gọi trang 1 rồi trang 2 của API thương hiệu', async ({ page, api }) => {
     await page.goto(`/brand/${BRAND_SLUG}`);

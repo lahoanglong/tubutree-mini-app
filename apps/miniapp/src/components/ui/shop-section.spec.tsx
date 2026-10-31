@@ -60,6 +60,16 @@ describe('ShopSection vẽ theo layout', () => {
     expect(onSeeAll).toHaveBeenCalledTimes(1);
   });
 
+  it('CAROUSEL: kệ lùi lề âm 16px để bù lề trang của cột chứa, thẻ đầu kệ thẳng với tiêu đề như kệ Trang chủ (không thụt thêm 16px)', () => {
+    wrap(<ShopSection collection={col({ layout: 'CAROUSEL', items: many(4) })} />);
+    const rail = screen.getByTestId('shop-rail');
+    expect(rail.style.marginLeft).toBe('-16px');
+    expect(rail.style.marginRight).toBe('-16px');
+    // Lưới và hàng dòng nằm trong cột có lề, không lùi.
+    wrap(<ShopSection collection={col({ layout: 'GRID', items: many(4) })} />);
+    expect(screen.getByTestId('shop-grid').style.marginLeft).toBe('');
+  });
+
   it('GRID: lưới 2 cột tối đa 6 thẻ', () => {
     wrap(<ShopSection collection={col({ layout: 'GRID', items: many(9) })} onSeeAll={() => undefined} />);
     expect(tileCount('shop-grid')).toBe(6);

@@ -144,6 +144,15 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     );
   });
 
+  it('kệ "Sản phẩm nổi bật" lùi lề âm 16px bù lề trang, thẻ đầu kệ thẳng với tiêu đề như web (không thụt thêm 16px)', async () => {
+    renderPage();
+    await screen.findByRole('heading', { level: 2, name: 'Sản phẩm nổi bật' });
+    const rail = screen.getByTestId('brand-featured-rail');
+    expect(rail.style.marginLeft).toBe('-16px');
+    expect(rail.style.marginRight).toBe('-16px');
+    expect(within(rail).getByRole('region', { name: 'Sản phẩm nổi bật' })).toBeInTheDocument();
+  });
+
   it('Giờ vàng: thẻ sản phẩm hiện giá Giờ vàng như Trang chủ và web (B-24)', async () => {
     mocks.fetchFlash.mockResolvedValue([{ itemId: 'i1', variationId: 'v1', productSlug: 'nrc-sachi', productName: 'Nước rửa chén Sachi', thumbnail: null, flashPrice: 60000, retailPrice: 100000, salePrice: 80000, soldCount: 1, quota: 10, endAt: '2099-01-01T00:00:00.000Z' }]);
     renderPage();

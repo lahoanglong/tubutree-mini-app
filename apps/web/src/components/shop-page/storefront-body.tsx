@@ -100,6 +100,7 @@ export function StorefrontBody({ storefront: sf, badgeLabel, intro }: Storefront
       <StoreLayout
         header={
           <ShopHeader
+            inStoreGrid
             title={sf.title}
             coverUrl={sf.coverUrl}
             avatarUrl={sf.avatarUrl}

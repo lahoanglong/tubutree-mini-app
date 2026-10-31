@@ -98,6 +98,7 @@ function ComboSection({ collection, pct, preview }: { collection: ShopSectionPro
 /**
  * Một khối của trang shop, vẽ theo `layout` của bộ sưu tập (trước đây mọi bộ thành lưới hiện hết món): CAROUSEL kệ ngang, GRID lưới
  * 2 cột, STACK hàng dòng, COMBO thẻ "mua cả bộ". Ngân sách món do `collectionView` (app-core) giữ; bị cắt thì tiêu đề có "Tất cả (n)".
+ * ShopSection đặt trong cột có lề trang 16px (kệ ngang lùi lề âm đúng 16px); đặt ngoài cột đó thì kệ tràn ra mép.
  * Combo chỉ là combo khi có ít nhất hai sản phẩm khác nhau và `%` giảm hợp lệ (API cũng chỉ giảm khi đủ); không thì hiện như hàng dòng,
  * để không quảng cáo "mua cả bộ" cho thứ không giảm gì. "Thêm cả combo" là một lệnh của máy chủ: thêm hết hoặc không món nào.
  */
@@ -128,7 +129,8 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false }
     <Section id={`shop-col-${collection.id}`}>
       <SectionHeader title={collection.title} action={action} />
       {layout === 'rail' && (
-        <div data-testid="shop-rail">
+        // Lề âm bù lề trang 16px của cột chứa (kệ có đệm 12px chừa bóng thẻ): thẻ đầu kệ thẳng với tiêu đề và với kệ Trang chủ, như BLEED của web.
+        <div data-testid="shop-rail" style={{ margin: '0 -16px' }}>
           <ProductRail items={cards} variant="rail-md" label={collection.title} showBrand={showBrand} noteOf={noteOf} />
         </div>
       )}
