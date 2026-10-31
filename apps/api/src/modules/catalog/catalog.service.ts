@@ -47,6 +47,8 @@ type FulfillerStore = {
 const TEXT_MATCH_LIMIT = 2000;
 /** Số slug tối đa một lần lấy theo `slugs` (khớp số mục của dải "Đã xem gần đây" trên Mini App). */
 const MAX_LIST_SLUGS = 20;
+/** Số sản phẩm của dải "Có thể bạn cũng thích" (cùng nhãn). */
+const RELATED_LIMIT = 8;
 /** Cửa sổ của `soldApp30d` ("Bán chạy nhất"), tính theo ngày giao. */
 const SOLD_WINDOW_DAYS = 30;
 
@@ -493,16 +495,28 @@ export class CatalogService {
     };
   }
 
+  /**
+   * Sản phẩm cùng nhãn, tối đa RELATED_LIMIT, xếp theo tổng đã bán (soldApp + soldExternal) giảm dần, hoà theo id tăng. Prisma không
+   * orderBy được theo biểu thức nên xếp ở TS trên vài cột nhỏ của mọi SP cùng nhãn (một nhãn chỉ vài chục SP), rồi lấy thẻ đầy đủ đúng các id.
+   * Không dùng `rankCache`: khoá theo từng slug sẽ đẩy khoá Bán chạy ra khỏi bộ nhớ có trần.
+   */
   async related(slug: string) {
     const product = await this.prisma.product.findUnique({ where: { slug } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
-    const items = await this.prisma.product.findMany({
-      where: { ...PUBLIC_PRODUCT_WHERE, brand: product.brand, id: { not: product.id } },
-      take: 8,
+    const where = { ...PUBLIC_PRODUCT_WHERE, brand: product.brand, id: { not: product.id } };
+    const siblings = await this.prisma.product.findMany({ where, select: { id: true, soldApp: true, soldExternal: true } });
+    const ids = siblings
+      .sort((x, y) => y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal) || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0))
+      .slice(0, RELATED_LIMIT)
+      .map((r) => r.id);
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.product.findMany({
+      where: { AND: [where, { id: { in: ids } }] },
       include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
+    const byId = new Map(rows.map((r) => [r.id, r]));
     // Trả cùng shape card với /products để FE dùng chung ProductCard.
-    return this.toCards(items);
+    return this.toCards(ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)));
   }
 
   /** "Thường mua kèm" (§6.12): co-occurrence trên đơn 90 ngày gần nhất. */

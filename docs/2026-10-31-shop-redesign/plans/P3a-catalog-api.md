@@ -33,7 +33,7 @@
 
 | File | Việc |
 |---|---|
-| `apps/api/prisma/schema.prisma` + migration `20261031130000_product_sold_app_30d` | cột `soldApp30d` + index |
+| `apps/api/prisma/schema.prisma` + migration `20261031161651_product_sold_app_30d` | cột `soldApp30d` + index |
 | `apps/api/src/modules/catalog/catalog-loved.ts` (+ `.spec.ts`) | khoá cấu hình, mặc định, `isLoved`, chuẩn hoá ngưỡng |
 | `apps/api/src/modules/catalog/catalog.service.ts` | `toCards`, `listPage`, `listBrandProducts`, `categories` cây, `categoryScope`, `recomputeSoldCounts`, `related`, sort 30 ngày |
 | `apps/api/src/modules/catalog/dto/product-query.dto.ts` | `PRODUCT_SORTS`, thêm `best_seller_30d` |
@@ -43,7 +43,7 @@
 | `apps/api/prisma/seed.ts`, `src/modules/system-config/system-config.service.ts`, `reference-config-selection.spec.ts` | ba khoá `catalog.loved_*`: seed, luật ghi, danh sách duyệt |
 | `apps/api/test/integration-race/catalog-merch-api.race-spec.ts` | Postgres thật: cron 30 ngày, cây danh mục, thương hiệu, thẻ |
 | `packages/app-core/src/api/catalog.ts` (+ spec), `api/brand.ts` (+ spec) | `CatalogSort`, `CategoryDTO`, `fetchBrandProducts`, `BrandView.productCount` |
-| `apps/e2e/tests/support/discovery-mocks.ts` | thêm `children: []` cho mẫu `CategoryDTO` để tsc xanh |
+| `apps/e2e/tests/support/home-merged.ts`, `apps/web/src/components/catalog/browse-view.spec.tsx`, `home/home-view.spec.tsx`, `apps/web/src/lib/browse-categories.spec.ts` | thêm `children: []` cho mẫu `CategoryDTO` (kiểu app-core) để tsc xanh; `discovery-mocks.ts` dùng `CategoryDTO` riêng của Mini App nên không đổi |
 
 ## Chuẩn bị (một lần)
 
@@ -56,7 +56,7 @@
 
 **Files:**
 - Modify: `apps/api/prisma/schema.prisma` (model `Product`, cạnh `soldApp`, và khối `@@index`)
-- Create: `apps/api/prisma/migrations/20261031130000_product_sold_app_30d/migration.sql`
+- Create: `apps/api/prisma/migrations/20261031161651_product_sold_app_30d/migration.sql`
 - Modify: `apps/api/src/modules/catalog/catalog.service.ts` (`recomputeSoldCounts`)
 - Test: `apps/api/src/modules/catalog/catalog.service.spec.ts` (describe `"đã bán"`), `apps/api/test/integration-race/catalog-merch-api.race-spec.ts` (tạo mới ở task này, các task sau thêm ca)
 
@@ -65,7 +65,7 @@
 
 - [ ] **Step 1: Test đỏ (jest)** trong describe `"đã bán"`: (a) hai lời gọi `orderItem.groupBy` (`mockResolvedValueOnce` cho tổng, rồi cho 30 ngày) với p1 tổng 8, 30 ngày 3 → `product.update` được gọi với `{ where: { id: 'p1' }, data: { soldApp: 8, soldApp30d: 3 } }`; (b) lời gọi thứ hai có `where: { order: { status: 'DELIVERED', deliveredAt: { gte: <Date> } } }` với `gte` cách `Date.now()` đúng 30 × 864e5 ms (dùng `jest.spyOn(Date, 'now')`); (c) p2 chỉ có trong tổng (không có trong 30 ngày) → `soldApp30d: 0`; (d) `updateMany` đưa về 0 cả hai cột: `where: { OR: [{ soldApp: { not: 0 } }, { soldApp30d: { not: 0 } }], id: { notIn: ['p1','p2'] } }`, `data: { soldApp: 0, soldApp30d: 0 }`; không có đơn nào thì bỏ `id.notIn`. Sửa hai ca cũ của describe theo dạng mới.
 - [ ] **Step 2: Chạy đỏ.** `cd apps/api && npx jest src/modules/catalog/catalog.service.spec.ts -t "đã bán"` → FAIL.
-- [ ] **Step 3: Schema + migration.** Thêm `soldApp30d Int @default(0)` (comment: số lượng đơn DELIVERED trong 30 ngày gần nhất, cron 03:00 ghi, chỉ để xếp hạng, không hiển thị) và `@@index([soldApp30d])`. `DATABASE_URL` trỏ DB riêng, `cd apps/api && npx prisma migrate dev --name product_sold_app_30d`; đổi tên thư mục migration thành `20261031130000_product_sold_app_30d`; nội dung đúng hai câu `ALTER TABLE "products" ADD COLUMN "soldApp30d" INTEGER NOT NULL DEFAULT 0;` và `CREATE INDEX "products_soldApp30d_idx" ON "products"("soldApp30d");`. Kiểm không lệch: `npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url <DB tạm>` ra "No difference" (hoặc dựng DB mới bằng `migrate deploy` rồi `migrate status`). `npx prisma generate`.
+- [ ] **Step 3: Schema + migration.** Thêm `soldApp30d Int @default(0)` (comment: số lượng đơn DELIVERED trong 30 ngày gần nhất, cron 03:00 ghi, chỉ để xếp hạng, không hiển thị) và `@@index([soldApp30d])`. `DATABASE_URL` trỏ DB riêng, `cd apps/api && npx prisma migrate dev --name product_sold_app_30d`; giữ nguyên tên thư mục `migrate dev` sinh ra (đã sau mọi migration khác); nội dung đúng hai câu `ALTER TABLE "products" ADD COLUMN "soldApp30d" INTEGER NOT NULL DEFAULT 0;` và `CREATE INDEX "products_soldApp30d_idx" ON "products"("soldApp30d");`. Kiểm không lệch: `npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url <DB tạm>` ra "No difference" (hoặc dựng DB mới bằng `migrate deploy` rồi `migrate status`). `npx prisma generate`.
 - [ ] **Step 4: Sửa `recomputeSoldCounts`** (`catalog.service.ts`): chạy `Promise.all` hai `orderItem.groupBy` (tổng; và thêm `order.deliveredAt >= now − 30 ngày`), gộp thành hai map theo product (cùng bảng `variation → productId`), ghi `soldApp` + `soldApp30d` từng dòng, và `updateMany` reset như test (d). Comment "vì sao": đơn thiếu `deliveredAt` (dữ liệu trước cột này) không vào cửa sổ 30 ngày, chấp nhận vì cửa sổ ngắn hơn tuổi dữ liệu đó.
 - [ ] **Step 5: Race spec (đỏ rồi xanh)** `catalog-merch-api.race-spec.ts`, describe `"soldApp30d (real Postgres)"`: tạo sản phẩm + biến thể; đơn DELIVERED `deliveredAt = now − 29d` (qty 3), `now − 31d` (qty 5), đơn RETURNED `now − 1d` (qty 7), đơn DELIVERED `deliveredAt: null` (qty 11) (dùng `createOrder` của `helpers.ts`, `items: { create: [...] }`); gọi `new CatalogService(prisma).recomputeSoldCounts()` rồi đọc sản phẩm: `soldApp30d === 3` và `soldApp === 3 + 5 + 11`. Ca hai: xoá đơn 29 ngày rồi chạy lại → `soldApp30d === 0`. Dọn bằng `deleteItData`.
 - [ ] **Step 6: Chạy xanh.** jest như Step 2 → PASS; race: `cd apps/api && DATABASE_URL=postgresql://tubu@127.0.0.1:25541/tubutree_it npx jest -c test/integration-race/jest.config.js --runInBand catalog-merch-api` (trước đó `npx prisma migrate deploy`) → PASS.
@@ -128,12 +128,12 @@
 - Test: `catalog.service.spec.ts` (describe `categories — productCount`, `list — bộ lọc`), `packages/app-core/src/api/catalog.spec.ts`, race spec
 
 **Interfaces:**
-- Produces: `export type CategoryNode = CategoryWithCount & { children: CategoryNode[] }`; `categories(): Promise<CategoryNode[]>` (gốc là `parentId` null hoặc cha không còn; `children` theo `sortOrder`, `id`); `CategoryDTO` có `parentId: string | null; productCount: number; children: CategoryDTO[]`; `GET /products?category=<id>` khớp `categoryIds hasSome [id, ...mọi cháu]`, không có con thì giữ `{ has: id }`.
+- Produces: `export type CategoryNode = CategoryWithCount & { children: CategoryNode[] }`; `categories(): Promise<CategoryNode[]>` (gốc là `parentId` null hoặc cha không còn; `children` theo `sortOrder`, `id`); `CategoryDTO` có `parentId: string | null; productCount?: number` (giữ `?` vì ý nghĩa "thiếu = API cũ" mà `categoryEntries` và spec của web/Mini đang dựa vào); `children: CategoryDTO[]` (bắt buộc); `GET /products?category=<id>` khớp `categoryIds hasSome [id, ...mọi cháu]`, không có con thì giữ `{ has: id }`.
 
 - [ ] **Step 1: Test đỏ.** jest: danh mục `cha` có hai con `con1`, `con2`, thêm `mo-coi` (parentId lạ) và `ca`, `cb` (vòng: `ca.parentId='cb'`, `cb.parentId='ca'`). Sản phẩm: `{categoryIds:['con1']}`, `{categoryIds:['cha','con1']}` (đếm cha một lần), `{categoryIds:['con2']}`, `{categoryIds:[]}` → `cha.productCount === 3`, `con1 === 2`, `con2 === 1`, gốc gồm `cha` và `mo-coi` (không có `ca`, `cb`, hàm không treo), `cha.children.map(id)` = `['con1','con2']`. Ca cũ (hai danh mục phẳng) đổi kỳ vọng thêm `children: []`. Cache 60 giây vẫn hai truy vấn một lần. `list({ category:'cha', ... })` → `where.categoryIds` là `{ hasSome: ['cha','con1','con2'] }`; `category:'con1'` → `{ has: 'con1' }`; `category:'khong-co'` → `{ has: 'khong-co' }` (không lỗi); vòng `ca`/`cb` cho `category:'ca'` trả `hasSome ['ca','cb']` và kết thúc. Bộ nhớ id con có TTL 60 giây (hai lần `list` cùng `category` chỉ một `category.findMany`). vitest: kiểu `CategoryDTO` lồng cây (typecheck) và mẫu e2e có `children: []`.
 - [ ] **Step 2: Chạy đỏ.**
 - [ ] **Step 3: Cài đặt.** `categories()`: `findMany({ orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] })`; với mỗi sản phẩm lấy tập `categoryIds` rồi đi lên cha (có tập `visited` chống vòng), mỗi danh mục trong tập được cộng 1; dựng cây bằng bản đồ `parentId → con`. `categoryScope(id)`: bộ nhớ `Map<parentId, childIds[]>` hạn 60 giây (`TTL_MS`) đọc `category.findMany({ select: { id: true, parentId: true } })`, BFS có `visited`. `listWhere`: `if (category) { const scope = await this.categoryScope(category); where.categoryIds = scope.length > 1 ? { hasSome: scope } : { has: category }; }`. Comment: cùng hạn chế per-instance như `categoriesCache` (đã nêu ở đầu class).
-- [ ] **Step 4: app-core + e2e.** `CategoryDTO`: `productCount: number` (bỏ `?`), thêm `children: CategoryDTO[]`; sửa comment `productCount` (API trước 4b không có, kiểu giữ cho API mới). Thêm `children: []` vào ba mẫu trong `discovery-mocks.ts`. `pnpm`/`npx tsc --noEmit` trong `packages/app-core`, `apps/web`, `apps/miniapp`, `apps/e2e` phải xanh (chỗ nào vỡ vì `productCount` bắt buộc thì sửa tối thiểu, ghi vào notes).
+- [ ] **Step 4: app-core + e2e.** `CategoryDTO`: thêm `children: CategoryDTO[]`, giữ `productCount?`. Thêm `children: []` vào các mẫu `CategoryDTO` của app-core ở web spec và `home-merged.ts`. `pnpm`/`npx tsc --noEmit` trong `packages/app-core`, `apps/web`, `apps/miniapp`, `apps/e2e` phải xanh (chỗ nào vỡ vì `productCount` bắt buộc thì sửa tối thiểu, ghi vào notes).
 - [ ] **Step 5: Race (thêm ca).** Dựng `cha` + `con` + hai sản phẩm (một gán `[cha, con]`, một gán `[con]`) cùng nhãn: `catalog.categories()` cho `cha.productCount === 2` và `cha.children[0].productCount === 2`; `catalog.list({ page:1, limit:10, category: cha.id, brand })` trả cả hai sản phẩm, `total === 2`. Dọn danh mục sau test.
 - [ ] **Step 6: Chạy xanh** (jest catalog + home, vitest app-core, race) và commit `feat(api): danh mục hai tầng (cây, productCount cộng con, lọc cha gồm con)`.
 

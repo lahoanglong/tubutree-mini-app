@@ -133,6 +133,24 @@ describe('catalog merch API (real Postgres)', () => {
     expect(view.products).toHaveLength(5);
   });
 
+  it('related: cùng nhãn, loại chính nó, xếp theo tổng đã bán (gồm số nhập tay), tối đa 8', async () => {
+    const brand = `CMA${randCode(6)}`;
+    const self = await product(brand, { soldApp: 999 });
+    const sold = [5, 50, 40, 0, 30, 20, 10, 60, 1, 45];
+    const made = [];
+    for (const n of sold) made.push(await product(brand, n % 2 ? { soldApp: n } : { soldExternal: n }));
+    await product(`${brand}-khac`, { soldApp: 5000 });
+    await product(brand, { soldApp: 7000, isActive: false });
+
+    const out = await catalog.related(self.p.slug);
+    const expected = made
+      .map((m, i) => ({ id: m.p.id, n: sold[i]! }))
+      .sort((a, b) => b.n - a.n || (a.id < b.id ? -1 : 1))
+      .slice(0, 8)
+      .map((m) => m.id);
+    expect(out.map((c) => c.id)).toEqual(expected);
+  });
+
   describe('soldApp30d (cron 03:00)', () => {
     async function delivered(userId: string, variationId: string, quantity: number, deliveredAt: Date | null, status: 'DELIVERED' | 'RETURNED' = 'DELIVERED') {
       return createOrder(prisma, {
