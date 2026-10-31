@@ -248,6 +248,11 @@ export interface StorefrontItem {
     ratingAvg?: number | null;
     reviewCount?: number | null;
     sold?: number | null;
+    inStock?: boolean;
+    createdAt?: string;
+    /** Phân loại đại diện / CTV ghim: "Thêm cả combo" cần một variationId cho mỗi món. */
+    repVariationId?: string;
+    pinnedVariationId?: string;
   };
 }
 
@@ -284,7 +289,8 @@ export interface StorefrontDetail {
   warehouseDistrict?: string | null;
   warehouseWard?: string | null;
   warehousePhone?: string | null;
-  ownerTier?: { name: string; emoji: string } | null;
+  /** `publicBadge=false` ở bậc thấp nhất: trang công khai không khoe huy hiệu đó; API cũ chưa gửi cờ thì cũng ẩn. */
+  ownerTier?: { name: string; emoji: string; publicBadge?: boolean } | null;
   /** Mã giới thiệu của chủ gian hàng CTV (null với gian hàng khác) — không suy từ slug/subdomain. */
   referralCode?: string | null;
   collections: StorefrontCollection[];
@@ -302,6 +308,8 @@ export interface BrandDetail {
   origin?: string | null;
   isVerified: boolean;
   followerCount: number;
+  /** Tổng sản phẩm công khai của thương hiệu; API cũ hoặc bản cache cũ không trả: dùng `products.length`. */
+  productCount?: number;
   certifications: { code: string; label: string; proofUrl?: string | null }[];
   promotions: {
     id: string;

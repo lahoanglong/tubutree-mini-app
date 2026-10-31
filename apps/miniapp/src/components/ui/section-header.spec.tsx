@@ -30,6 +30,16 @@ describe('SectionHeader', () => {
     expect(screen.getByRole('heading', { name: 'Giờ vàng' })).toHaveAttribute('id', 'flash-title');
   });
 
+  it('action.onPress: gọi hàm của nơi dùng (đổi tab), không điều hướng; tên đọc lấy từ spoken', () => {
+    const onPress = vi.fn();
+    render(<SectionHeader title="Bếp xanh" action={{ label: 'Tất cả (14)', onPress, spoken: 'Xem tất cả 14 sản phẩm trong Bếp xanh' }} />);
+    const btn = screen.getByRole('button', { name: 'Xem tất cả 14 sản phẩm trong Bếp xanh' });
+    expect(btn).toHaveTextContent('Tất cả (14)');
+    fireEvent.click(btn);
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
   it('icon theo tên hoặc truyền thẳng LucideIcon, luôn aria-hidden', () => {
     const { container, rerender } = render(<SectionHeader title="A" icon="zap" />);
     expect(container.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');

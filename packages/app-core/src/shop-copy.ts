@@ -65,6 +65,8 @@ export const SHOP_COPY: Record<string, string> = {
   'stats.productsSpoken': '{n} sản phẩm',
   'stats.ratingSpoken': '{avg} sao',
   'stats.soldSpoken': 'Đã bán hơn {n}',
+  'stats.followers': 'Theo dõi',
+  'stats.followersSpoken': '{n} người theo dõi',
   'brand.title': 'Thương hiệu',
 
   // Đồng hồ (countdown.ts)
@@ -206,6 +208,38 @@ export const SHOP_COPY: Record<string, string> = {
   'combo.soldOut': 'Combo tạm hết',
   'combo.itemsLabel': 'Gồm {n} món',
   'combo.more': '+{n}',
+  'combo.soldOutSpoken': 'Combo tạm hết: {title}',
+
+  // Trang shop (gian hàng CTV, thương hiệu)
+  'shop.tabShop': 'Shop',
+  'shop.tabProducts': 'Sản phẩm',
+  'shop.tabCategories': 'Danh mục',
+  'shop.tabStory': 'Câu chuyện',
+  'shop.follow': 'Theo dõi',
+  'shop.following': 'Đang theo dõi',
+  'shop.share': 'Chia sẻ',
+  'shop.vouchers': 'Mã giảm giá của shop',
+  'shop.seeAllN': 'Tất cả ({n})',
+  'shop.seeAllNSpoken': 'Xem tất cả {n} sản phẩm trong {title}',
+  'shop.sortPopular': 'Phổ biến',
+  'shop.sortNew': 'Mới',
+  'shop.sortSold': 'Bán chạy',
+  'shop.sortPrice': 'Giá ⇅',
+  'shop.sortPriceSpoken': 'Giá, đổi chiều sắp xếp',
+  'shop.loadMore': 'Xem thêm',
+  'shop.emptyProducts': 'Shop chưa có sản phẩm nào để hiện',
+  'shop.categoryCount': '{n} món',
+  'shop.pagerLabel': 'Phân trang',
+  'shop.pagePrev': 'Trang trước',
+  'shop.pageNext': 'Trang sau',
+  'shop.pageN': 'Trang {n}',
+  'shop.noteMore': 'Xem thêm',
+  'shop.noteLess': 'Thu gọn',
+  'shop.readStory': 'Đọc câu chuyện',
+  'shop.comboAdded': 'Đã thêm cả combo vào giỏ',
+  'shop.comboError': 'Chưa thêm được combo, giỏ của bạn không thay đổi. Bạn thử lại nhé.',
+  'shop.loginForCombo': 'Đăng nhập để thêm combo vào giỏ nhé',
+  'shop.learnStore': 'Muốn có gian hàng như này? Tìm hiểu',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */

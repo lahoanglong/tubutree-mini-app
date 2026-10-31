@@ -606,7 +606,7 @@ test.describe('Web: nhãn hàng', () => {
     api.get(`/brand/${slug}/share-to-earn`, { eligible: true, maxAffiliateRate: 15, referralCode: 'AFF1', brandSlug: slug });
     await page.goto(`/brand/${slug}`);
     await page.getByRole('button', { name: /nhận tới 15% hoa hồng/ }).click();
-    const dialog = page.getByRole('dialog', { name: 'Chia sẻ nhãn hàng' });
+    const dialog = page.getByRole('dialog', { name: 'Chia sẻ thương hiệu' });
     await expect(dialog.getByText(new RegExp(`/brand/${slug}\\?ref=AFF1`)).first()).toBeVisible();
   });
 });
@@ -886,5 +886,101 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     }
     expect(Math.abs(heights[1]! - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên dài ${heights[1]}px`).toBeLessThanOrEqual(2);
+  });
+});
+
+test.describe('Web khách: trang thương hiệu và gian hàng theo khung shop', () => {
+  const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT}`;
+  const phone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 768;
+
+  /** Thương hiệu công khai đầu tiên và tổng sản phẩm của nó (phân trang thật, 20 mỗi trang). */
+  async function brandWithTotal(request: import('@playwright/test').APIRequestContext) {
+    const list = await request.get(`${API_ORIGIN}/api/brands`).catch(() => null);
+    if (!list?.ok()) return null;
+    const slug = ((await list.json()) as { slug?: string | null }[]).find((b) => b.slug)?.slug;
+    if (!slug) return null;
+    const res = await request.get(`${API_ORIGIN}/api/brand/public/${slug}/products?page=1&limit=20`).catch(() => null);
+    if (!res?.ok()) return null;
+    return { slug, total: ((await res.json()) as { meta: { total: number } }).meta.total };
+  }
+
+  test('thương hiệu: tab Sản phẩm là lưới có sắp xếp; điện thoại "Xem thêm", từ lg phân trang số (khi hơn 20 món)', async ({ page, api, request }) => {
+    const brand = await brandWithTotal(request);
+    test.skip(!brand || brand.total === 0, 'DB e2e chưa có thương hiệu công khai nào có sản phẩm');
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    api.get('/config/public', {});
+    await page.goto(`/brand/${brand!.slug}`);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('tab', { name: /^Sản phẩm/ }).click();
+    await expect(page.getByRole('group', { name: 'Sắp xếp' })).toBeVisible();
+    const more = page.getByRole('button', { name: 'Xem thêm', exact: true });
+    const pager = page.getByRole('navigation', { name: 'Phân trang' });
+    if (brand!.total <= 20) {
+      await expect(more).toHaveCount(0);
+      await expect(pager).toHaveCount(0);
+    } else if (phone(page)) {
+      await expect(more).toBeVisible();
+      await expect(pager).toHaveCount(0);
+    } else {
+      await expect(pager).toBeVisible();
+      await expect(more).toHaveCount(0);
+      await expect(pager.getByRole('button', { name: 'Trang 1' })).toHaveAttribute('aria-current', 'page');
+    }
+  });
+
+  test('thương hiệu: tên shop trên thanh đầu chỉ ở điện thoại; không còn bìa gradient', async ({ page, api, request }) => {
+    const brand = await brandWithTotal(request);
+    test.skip(!brand, 'DB e2e chưa có thương hiệu công khai nào');
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    api.get('/config/public', {});
+    await page.goto(`/brand/${brand!.slug}`);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 20_000 });
+    const bar = page.getByTestId('shop-top-bar');
+    if (phone(page)) await expect(bar).toBeAttached();
+    else await expect(bar).toBeHidden();
+    expect(await page.locator('main [style*="linear-gradient"]').count()).toBe(0);
+  });
+
+  test('đầu shop: từ lg bìa và thông tin cùng một hàng (bìa trái, avatar + tên + số liệu phải); điện thoại avatar đè mép bìa', async ({ page, api, request }) => {
+    const res = await request.get(`${API_ORIGIN}/api/storefront/public-list`).catch(() => null);
+    const slug = res?.ok() ? ((await res.json()) as { slug: string }[])[0]?.slug : undefined;
+    test.skip(!slug, 'DB e2e chưa có gian hàng công khai nào');
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    api.get('/config/public', {});
+    await page.goto(`/s/${slug}`);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 20_000 });
+    const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
+    const cover = await box('[data-testid="shop-cover"]');
+    const avatar = await box('[data-testid="shop-avatar"]');
+    const name = (await page.getByRole('heading', { level: 1 }).boundingBox())!;
+    if (phone(page)) {
+      expect(avatar.y, 'avatar đè mép dưới bìa').toBeLessThan(cover.y + cover.height);
+      expect(avatar.y + avatar.height).toBeGreaterThan(cover.y + cover.height);
+      expect(name.y).toBeGreaterThan(cover.y + cover.height);
+      return;
+    }
+    if ((page.viewportSize()?.width ?? 0) < 1024) return;
+    expect(avatar.x, 'avatar nằm bên phải bìa').toBeGreaterThanOrEqual(cover.x + cover.width);
+    expect(name.x).toBeGreaterThan(avatar.x);
+    expect(Math.abs(name.y - avatar.y), 'tên cùng hàng với avatar').toBeLessThan(40);
+    expect(avatar.y, 'avatar không đè bìa').toBeGreaterThanOrEqual(cover.y);
+    expect(avatar.y + avatar.height).toBeLessThanOrEqual(cover.y + cover.height);
+    const stat = await box('[data-testid="shop-stat"]');
+    expect(stat.x, 'số liệu cùng cột với thông tin, không dưới bìa').toBeGreaterThanOrEqual(cover.x + cover.width);
+    expect(stat.y + stat.height).toBeLessThanOrEqual(cover.y + cover.height + 1);
+  });
+
+  test('gian hàng công khai: h1 tên shop, tab Shop và Sản phẩm, không bậc thấp nhất, không bìa gradient', async ({ page, api, request }) => {
+    const res = await request.get(`${API_ORIGIN}/api/storefront/public-list`).catch(() => null);
+    const slug = res?.ok() ? ((await res.json()) as { slug: string }[])[0]?.slug : undefined;
+    test.skip(!slug, 'DB e2e chưa có gian hàng công khai nào');
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    api.get('/config/public', {});
+    await page.goto(`/s/${slug}`);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('tab', { name: 'Shop', selected: true })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /^Sản phẩm/ })).toBeVisible();
+    await expect(page.getByTestId('shop-avatar')).toBeVisible();
+    expect(await page.locator('main [style*="linear-gradient"]').count()).toBe(0);
   });
 });

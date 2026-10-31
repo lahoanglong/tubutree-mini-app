@@ -44,8 +44,6 @@ export function ctvMenuEntry(role: string | null | undefined, access?: CtvAccess
   if (access?.canRegister === false) return null;
   return { label: OPEN_STOREFRONT_MENU_LABEL, hint: OPEN_STOREFRONT_MENU_HINT };
 }
-export const OPEN_STOREFRONT_PROMPT = 'Bạn cũng muốn có gian hàng như này?';
-export const OPEN_STOREFRONT_CTA = 'Mở gian hàng';
 
 export const SIGNUP_STEPS = [
   { key: 'conditions', label: 'Điều kiện', title: 'Điều kiện mở gian hàng' },
