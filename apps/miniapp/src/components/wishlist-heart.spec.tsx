@@ -19,12 +19,12 @@ beforeEach(() => {
   api.removeWishlist.mockReset();
 });
 
-function renderHeart(parentClick: () => void, floating = true) {
+function renderHeart(parentClick: () => void, floating = true, productName?: string) {
   const qc = new QueryClient();
   return render(
     <QueryClientProvider client={qc}>
       <div onClick={parentClick}>
-        <WishlistHeart productId="p1" floating={floating} />
+        <WishlistHeart productId="p1" floating={floating} productName={productName} />
       </div>
     </QueryClientProvider>,
   );
@@ -155,5 +155,56 @@ describe('WishlistHeart — chạm nhanh nhiều lần (R4-BUYER-8)', () => {
     expect(api.removeWishlist).not.toHaveBeenCalled();
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['wishlist'] }));
     await waitFor(() => expect(heart()).toHaveAttribute('aria-pressed', 'true'));
+  });
+});
+
+describe('WishlistHeart: tên theo sản phẩm (a11y A6)', () => {
+  let server: string[];
+  function setup(initial: string[]) {
+    auth.status = 'authenticated';
+    server = [...initial];
+    api.getWishlistIds.mockImplementation(async () => [...server]);
+    api.addWishlist.mockImplementation(async (id: string) => {
+      server.push(id);
+      return { ok: true };
+    });
+    api.removeWishlist.mockImplementation(async (id: string) => {
+      server = server.filter((x) => x !== id);
+      return { ok: true };
+    });
+  }
+
+  it('có productName thì nhãn cố định "Yêu thích {tên}" và aria-pressed báo trạng thái', async () => {
+    setup(['p1']);
+    renderHeart(() => {}, true, 'Nước rửa chén');
+    const btn = await screen.findByRole('button', { name: 'Yêu thích Nước rửa chén' });
+    await waitFor(() => expect(btn).toHaveAttribute('aria-pressed', 'true'));
+  });
+
+  it('nhãn không đổi khi bỏ thích (không vừa đổi nhãn vừa aria-pressed)', async () => {
+    setup(['p1']);
+    renderHeart(() => {}, true, 'Nước rửa chén');
+    const btn = await screen.findByRole('button', { name: 'Yêu thích Nước rửa chén' });
+    await waitFor(() => expect(btn).toHaveAttribute('aria-pressed', 'true'));
+    fireEvent.click(btn);
+    await waitFor(() => expect(btn).toHaveAttribute('aria-pressed', 'false'));
+    expect(btn).toHaveAccessibleName('Yêu thích Nước rửa chén');
+  });
+
+  it('chỉ nảy khi khách bấm chuyển sang đã thích; tải danh sách có sẵn tim đỏ thì không nảy', async () => {
+    setup(['p1']);
+    const first = renderHeart(() => {}, true, 'Nước rửa chén');
+    const loaded = await screen.findByRole('button', { name: 'Yêu thích Nước rửa chén' });
+    await waitFor(() => expect(loaded).toHaveAttribute('aria-pressed', 'true'));
+    expect(loaded.querySelector('svg')!.getAttribute('class') ?? '').not.toContain('tubu-heart-pop');
+    first.unmount();
+
+    setup([]);
+    renderHeart(() => {}, true, 'Nước rửa chén');
+    const btn = await screen.findByRole('button', { name: 'Yêu thích Nước rửa chén' });
+    fireEvent.click(btn);
+    await waitFor(() => expect(btn.querySelector('svg')!.getAttribute('class') ?? '').toContain('tubu-heart-pop'));
+    fireEvent.click(btn);
+    await waitFor(() => expect(btn.querySelector('svg')!.getAttribute('class') ?? '').not.toContain('tubu-heart-pop'));
   });
 });

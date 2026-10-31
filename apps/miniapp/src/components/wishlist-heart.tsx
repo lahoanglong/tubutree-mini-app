@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Heart } from 'lucide-react';
 import { getWishlistIds, addWishlist, removeWishlist } from '../services/wishlist-api';
@@ -41,10 +42,13 @@ export function WishlistHeart({
   productId,
   size = 22,
   floating = false,
+  productName,
 }: {
   productId: string;
   size?: number;
   floating?: boolean;
+  /** Tên sản phẩm để nhãn nút phân biệt được 20 tim trong một lưới (a11y A6). Thiếu thì giữ nhãn cũ đổi theo trạng thái (trang chi tiết chưa truyền, thuộc gói PDP). */
+  productName?: string;
 }) {
   const { status, login } = useAuthStore();
   const qc = useQueryClient();
@@ -57,6 +61,8 @@ export function WishlistHeart({
     staleTime: 60_000,
   });
   const liked = idsQ.data?.includes(productId) ?? false;
+  // Nảy theo thao tác của khách chứ không theo `liked`: tải danh sách đã có sẵn tim đỏ không được nảy, bỏ thích cũng không.
+  const [popping, setPopping] = useState(false);
 
   const handle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -65,6 +71,7 @@ export function WishlistHeart({
     void qc.cancelQueries({ queryKey: IDS_KEY });
     const current = qc.getQueryData<string[]>(IDS_KEY) ?? [];
     const want = !current.includes(productId);
+    setPopping(want);
     qc.setQueryData<string[]>(IDS_KEY, want ? [...current, productId] : current.filter((id) => id !== productId));
     sendToggle(qc, productId, want);
   };
@@ -72,7 +79,7 @@ export function WishlistHeart({
   return (
     <button
       type="button"
-      aria-label={liked ? 'Bỏ yêu thích' : 'Thêm yêu thích'}
+      aria-label={productName ? `Yêu thích ${productName}` : liked ? 'Bỏ yêu thích' : 'Thêm yêu thích'}
       aria-pressed={liked}
       onClick={handle}
       style={{
@@ -107,8 +114,10 @@ export function WishlistHeart({
         }}
       >
         <Heart
+          className={popping && liked ? 'tubu-heart-pop' : undefined}
+          onAnimationEnd={() => setPopping(false)}
           size={size}
-          strokeWidth={1.9}
+          strokeWidth={1.75}
           color={liked ? 'var(--color-text-danger)' : 'var(--color-text-secondary)'}
           fill={liked ? 'var(--color-text-danger)' : 'none'}
         />

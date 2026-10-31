@@ -287,6 +287,17 @@ body.with-back-btn .page.page-bleed {
   }
 }
 
+/* Tim yêu thích nảy khi chuyển sang "đã thích" (PL-14). Giảm chuyển động: quy tắc chung cuối file đưa thời lượng về 0,01ms. */
+@keyframes tubu-heart-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.25); }
+  70% { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+.tubu-heart-pop {
+  animation: tubu-heart-pop 320ms var(--p-ease-spring);
+}
+
 /* ── Pop-in (badge, modal content) ── */
 @keyframes tubu-pop {
   0% {
