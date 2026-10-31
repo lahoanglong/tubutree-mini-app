@@ -86,4 +86,35 @@ describe('SortBar', () => {
     render(<SortBar value="best" options={OPTIONS} onChange={() => {}} filterCount={1} onFilter={() => {}} />);
     for (const b of screen.getAllByRole('button')) expect(b.style.minHeight).toBe('44px');
   });
+
+  it('hàng tab cuộn ngang có mờ mép; tab đang chọn nằm ngoài khung thì cuộn ngang hàng vào, không kéo trang', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const rect = (left: number, right: number) => ({ left, right, top: 0, bottom: 44, width: right - left, height: 44, x: left, y: 0, toJSON: () => ({}) }) as DOMRect;
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.getAttribute('role') === 'group') return rect(0, 300);
+      return this.getAttribute('aria-pressed') === 'true' ? rect(350, 420) : rect(0, 0);
+    });
+    const { rerender } = render(<SortBar value="best" options={OPTIONS} onChange={() => {}} filterCount={3} onFilter={() => {}} />);
+    const group = screen.getByRole('group', { name: 'Sắp xếp' });
+    expect(group.className).toContain('tubu-scroll-fade');
+    expect(group.scrollLeft).toBe(120);
+    spy.mockImplementation(function (this: HTMLElement) {
+      if (this.getAttribute('role') === 'group') return rect(0, 300);
+      return this.getAttribute('aria-pressed') === 'true' ? rect(100, 160) : rect(0, 0);
+    });
+    group.scrollLeft = 0;
+    rerender(<SortBar value="price" options={OPTIONS} onChange={() => {}} filterCount={3} onFilter={() => {}} />);
+    expect(group.scrollLeft).toBe(0);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    spy.mockRestore();
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+
+  it('options rỗng rồi có lại: không lỗi hook (hook đứng trước return sớm)', () => {
+    const { rerender, container } = render(<SortBar value="" options={[]} onChange={() => {}} />);
+    expect(container).toBeEmptyDOMElement();
+    rerender(<SortBar value="best" options={OPTIONS} onChange={() => {}} />);
+    expect(screen.getByRole('group', { name: 'Sắp xếp' })).toBeInTheDocument();
+  });
 });

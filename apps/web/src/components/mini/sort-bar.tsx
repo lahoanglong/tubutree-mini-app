@@ -1,8 +1,10 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/ui/sort-bar.tsx
+import { useEffect } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { useScrollHints } from './use-scroll-hints';
 
 export interface SortOption {
   value: string;
@@ -27,6 +29,17 @@ export interface SortBarProps {
  * xếp, không đổi nội dung của một tabpanel. Dính dưới ô tìm: nơi gọi đặt `--sort-bar-top`.
  */
 export function SortBar({ value, options, onChange, filterCount, onFilter, sticky }: SortBarProps) {
+  const hints = useScrollHints<HTMLDivElement>();
+  useEffect(() => {
+    // Chỉ cuộn ngang trong hàng: scrollIntoView sẽ kéo cả trang tới thanh sắp xếp khi nó nằm dưới màn hình lúc mới vào.
+    const row = hints.ref.current;
+    const on = row?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!row || !on) return;
+    const a = row.getBoundingClientRect();
+    const b = on.getBoundingClientRect();
+    if (b.left < a.left) row.scrollLeft += b.left - a.left;
+    else if (b.right > a.right) row.scrollLeft += b.right - a.right;
+  }, [value, hints.ref]);
   if (options.length === 0 && !onFilter) return null;
   const n = typeof filterCount === 'number' && Number.isFinite(filterCount) && filterCount > 0 ? Math.floor(filterCount) : 0;
   return (
@@ -39,7 +52,7 @@ export function SortBar({ value, options, onChange, filterCount, onFilter, stick
         ...(sticky ? { position: 'sticky', top: 'var(--sort-bar-top, 0px)', zIndex: 2 } : null),
       }}
     >
-      <div role="group" aria-label={fillCopy('sort.groupLabel')} className="scroll-x" style={{ display: 'flex', flex: '1 1 auto', minWidth: 0 }}>
+      <div {...hints} role="group" aria-label={fillCopy('sort.groupLabel')} className="scroll-x tubu-scroll-fade" style={{ display: 'flex', flex: '1 1 auto', minWidth: 0 }}>
         {options.map((o) => {
           const on = o.value === value;
           return (
