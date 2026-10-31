@@ -39,3 +39,5 @@ export { Section } from './section';
 export type { SectionProps } from './section';
 export { SortBar } from './sort-bar';
 export type { SortBarProps, SortOption } from './sort-bar';
+export { VoucherTicket } from './voucher-ticket';
+export type { VoucherTicketProps } from './voucher-ticket';
