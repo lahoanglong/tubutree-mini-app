@@ -3,9 +3,15 @@ import { act, cloneElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ status: 'authenticated', touch: vi.fn() }));
-vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: mocks.status }) }));
-vi.mock('@/lib/shop-client', () => ({ recordReferralTouch: mocks.touch }));
+const mocks = vi.hoisted(() => ({ status: 'authenticated', userId: 'u1', touch: vi.fn(), clicks: [] as Array<string | undefined> }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: mocks.status, user: mocks.status === 'authenticated' ? { id: mocks.userId } : null }) }));
+// clickedAt tách riêng để các ca cũ vẫn so nguyên dto; ca về lúc bấm đọc mocks.clicks.
+vi.mock('@/lib/shop-client', () => ({
+  recordReferralTouch: ({ clickedAt, ...dto }: { clickedAt?: string }) => {
+    mocks.clicks.push(clickedAt);
+    return mocks.touch(dto);
+  },
+}));
 
 import { ApiError, NetworkError } from '@/lib/client-api';
 import {
@@ -33,6 +39,7 @@ describe('ReferralCapture ghi nguồn gian hàng ?s= như Mini App', () => {
   beforeEach(() => {
     mocks.status = 'authenticated';
     mocks.touch.mockReset().mockResolvedValue({ ok: true });
+    mocks.clicks.length = 0;
     clearStorefrontContext();
     clearPendingRef();
   });
@@ -409,7 +416,7 @@ describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã c�
     mocks.touch.mockResolvedValue({ ok: true });
     const ctv = await mountKept(<StorefrontTracker slug="an-shop" type="CTV" referralCode="AN123" />);
     await ctv.unmount();
-    expect(wasCtvTouched('an123')).toBe(true);
+    expect(wasCtvTouched('u1', 'an123')).toBe(true);
     mocks.touch.mockClear();
     const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
     expect(mocks.touch).not.toHaveBeenCalled();
@@ -435,7 +442,7 @@ describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã c�
         await new Promise((r) => setTimeout(r, 0));
       });
       expect(mocks.touch).toHaveBeenCalledTimes(1);
-      expect(wasCtvTouched('AN123')).toBe(true);
+      expect(wasCtvTouched('u1', 'AN123')).toBe(true);
       await t.unmount();
     } finally {
       Object.defineProperty(window, 'localStorage', real);
@@ -476,5 +483,88 @@ describe('chạm giới thiệu trả kết quả thì ngữ cảnh nhớ mã c�
     const t = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
     expect(mocks.touch).toHaveBeenCalledWith({ referralCode: 'KHAC99', storefrontSlug: 'doi-tac', kind: 'brand' });
     await t.unmount();
+  });
+});
+
+describe('lúc bấm link gửi kèm lượt chạm, dấu chạm theo người dùng và theo máy chủ', () => {
+  const HOUR = 60 * 60 * 1000;
+  beforeEach(() => {
+    mocks.status = 'anonymous';
+    mocks.userId = 'u1';
+    mocks.touch.mockReset().mockResolvedValue({ ok: true });
+    mocks.clicks.length = 0;
+    sessionStorage.clear();
+    clearStorefrontContext();
+    clearPendingRef();
+  });
+  afterEach(() => {
+    window.history.replaceState({}, '', '/');
+    clearStorefrontContext();
+    clearPendingRef();
+    vi.useRealTimers();
+  });
+
+  it('mở link lúc chưa đăng nhập, đăng nhập 5 giờ sau: chạm bù mang đúng lúc bấm (không phải lúc đăng nhập)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const clicked = new Date('2026-10-31T10:00:00Z');
+    vi.setSystemTime(clicked);
+    window.history.replaceState({}, '', '/?ref=AN123');
+    const m = await mountKept();
+    expect(mocks.touch).not.toHaveBeenCalled();
+    vi.setSystemTime(new Date(clicked.getTime() + 5 * HOUR));
+    mocks.status = 'authenticated';
+    await m.rerender();
+    expect(mocks.touch).toHaveBeenCalledTimes(1);
+    expect(mocks.clicks).toEqual([clicked.toISOString()]);
+    await m.unmount();
+  });
+
+  it('chạm từ bản chờ (đóng tab giữa chừng) cũng mang lúc bấm của bản chờ', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const clicked = new Date('2026-10-30T08:00:00Z');
+    vi.setSystemTime(clicked);
+    window.history.replaceState({}, '', '/?ref=AN123');
+    const first = await mountKept();
+    await first.unmount();
+    sessionStorage.clear();
+    window.history.replaceState({}, '', '/');
+    vi.setSystemTime(new Date(clicked.getTime() + 20 * HOUR));
+    const m = await mountKept();
+    mocks.status = 'authenticated';
+    await m.rerender();
+    expect(mocks.clicks).toEqual([clicked.toISOString()]);
+    await m.unmount();
+  });
+
+  it('người khác đăng nhập sau trong cùng tab không thừa hưởng dấu chạm CTV của người trước', async () => {
+    mocks.status = 'authenticated';
+    mocks.userId = 'u1';
+    const a = await mountKept(<StorefrontTracker slug="an-shop" type="CTV" referralCode="AN123" />);
+    await a.unmount();
+    expect(wasCtvTouched('u1', 'AN123')).toBe(true);
+    mocks.touch.mockClear();
+    mocks.userId = 'u2';
+    const b = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+    expect(mocks.touch).toHaveBeenCalledWith({ referralCode: 'AN123', storefrontSlug: 'doi-tac', kind: 'brand' });
+    await b.unmount();
+  });
+
+  it('AN123 (ctv), /s/doi-tac, /?ref=BINH9 (brand), /?ref=AN123 (brand): lần cuối vẫn được gửi để máy chủ ghi AN123', async () => {
+    mocks.status = 'authenticated';
+    const a = await mountKept(<StorefrontTracker slug="an-shop" type="CTV" referralCode="AN123" />);
+    await a.unmount();
+    const p = await mountKept(<StorefrontTracker slug="doi-tac" type="MERCHANT" referralCode={null} />);
+    await p.unmount();
+    expect(mocks.touch).toHaveBeenCalledTimes(1);
+    window.history.replaceState({}, '', '/?ref=BINH9');
+    const b = await mountKept();
+    await b.unmount();
+    expect(mocks.touch).toHaveBeenLastCalledWith({ referralCode: 'BINH9', kind: 'brand' });
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
+    window.history.replaceState({}, '', '/?ref=AN123');
+    const c = await mountKept();
+    await c.unmount();
+    expect(mocks.touch).toHaveBeenCalledTimes(3);
+    expect(mocks.touch).toHaveBeenLastCalledWith({ referralCode: 'AN123', kind: 'brand' });
   });
 });

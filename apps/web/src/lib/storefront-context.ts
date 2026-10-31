@@ -12,13 +12,14 @@
  * giữ 3 ngày. Khách chưa đăng nhập thì chưa chạm được, nên nguồn từ link còn được ghi vào "bản chờ" ở localStorage để lần
  * đăng nhập sau (kể cả tab mới) chạm bù.
  */
+import { parseTouchMark, serializeTouchMark, touchMarkAfter, touchMarkMatches, type TouchMark } from '@tubutree/app-core/referral-touch';
+
 const KEY = 'tubu_web_storefront';
 const PENDING_KEY = 'tubu_web_ref_pending';
 const CTV_TOUCHED_KEY = 'tubu_web_ctv_touched';
 /**
- * Bản chờ nguồn giới thiệu chỉ có giá trị trong chừng này ngày kể từ lúc khách mở link. Chạm bù xảy ra lúc đăng nhập nên hạn ghi
- * công phía máy chủ (affiliate.attribution_days) tính từ lúc đó: khách đăng nhập ngày thứ 6 thì nguồn sống tới ~13 ngày kể từ lúc
- * bấm link, và có thể đè một chạm mới hơn đã ghi từ Mini App.
+ * Bản chờ nguồn giới thiệu chỉ có giá trị trong chừng này ngày kể từ lúc khách mở link. Chạm bù gửi kèm lúc bấm (savedAt) nên hạn ghi
+ * công phía máy chủ (affiliate.attribution_days) tính từ lúc bấm; bản chờ quá hạn đó bị máy chủ bỏ qua, giữ lâu hơn cũng vô ích.
  */
 export const PENDING_REF_TTL_DAYS = 7;
 /** Số link gần nhất được giữ chờ: đủ để một link mã khách thường mở sau không làm mất link CTV mở trước. */
@@ -43,9 +44,11 @@ export interface StorefrontContext {
    * ở thanh toán.
    */
   referralEligible: boolean | null;
+  /** Epoch ms lúc khách bấm link nguồn: máy chủ tính hạn ghi công từ đây, kể cả khi chạm được gửi sau (đăng nhập muộn). */
+  clickedAt: number | null;
 }
 
-const EMPTY: StorefrontContext = { slug: null, referralCode: null, kind: null, referralEligible: null };
+const EMPTY: StorefrontContext = { slug: null, referralCode: null, kind: null, referralEligible: null, clickedAt: null };
 
 const norm = (code: string | null | undefined) => (code ?? '').trim().toUpperCase();
 
@@ -53,6 +56,12 @@ const norm = (code: string | null | undefined) => (code ?? '').trim().toUpperCas
 function eligibilityFor(current: StorefrontContext, nextCode: string | null, hint: boolean | null): boolean | null {
   if (!nextCode) return null;
   return norm(nextCode) === norm(current.referralCode) ? (current.referralEligible ?? hint) : hint;
+}
+
+/** Cùng mã thì giữ lúc bấm đã ghi; mã mới (hoặc chưa có lúc bấm) thì là lượt bấm vừa xảy ra. */
+function clickedAtFor(current: StorefrontContext, nextCode: string | null): number | null {
+  if (!nextCode) return null;
+  return norm(nextCode) === norm(current.referralCode) && current.clickedAt !== null ? current.clickedAt : Date.now();
 }
 
 function read(): StorefrontContext {
@@ -66,6 +75,7 @@ function read(): StorefrontContext {
       referralCode: typeof parsed.referralCode === 'string' ? parsed.referralCode : null,
       kind: typeof parsed.kind === 'string' ? parsed.kind : null,
       referralEligible: typeof parsed.referralEligible === 'boolean' ? parsed.referralEligible : null,
+      clickedAt: typeof parsed.clickedAt === 'number' ? parsed.clickedAt : null,
     };
   } catch {
     return EMPTY;
@@ -114,6 +124,7 @@ export function rememberStorefront(slug: string, type?: string, ownerReferralCod
     referralCode,
     // Mã của chủ gian hàng CTV là mã CTV (API chỉ trả mã cho gian hàng CTV); các loại khác không đổi mã đang có.
     referralEligible: eligibilityFor(current, referralCode, code ? true : null),
+    clickedAt: clickedAtFor(current, referralCode),
   });
   if (type === 'CTV') savePendingRef({ referralCode: code, slug, kind: 'CTV' });
 }
@@ -126,7 +137,7 @@ export function ctvSlugFor(ctx: StorefrontContext): string | undefined {
 export function rememberReferral(code: string): void {
   const current = read();
   const referralCode = code.trim().toUpperCase() || current.referralCode;
-  write({ ...current, referralCode, referralEligible: eligibilityFor(current, referralCode, null) });
+  write({ ...current, referralCode, referralEligible: eligibilityFor(current, referralCode, null), clickedAt: clickedAtFor(current, referralCode) });
 }
 
 /** Ghi kết quả "chạm giới thiệu" của máy chủ cho đúng mã đang nhớ; kết quả của mã đã đổi (đến muộn) bị bỏ. */
@@ -150,6 +161,8 @@ export function rememberEntryLink(slug: string | null, ref: string | null): void
     referralCode,
     kind: slug ? 'CTV' : current.kind,
     referralEligible: eligibilityFor(current, referralCode, null),
+    // Mở lại link là một lượt bấm mới, kể cả cùng mã: hạn ghi công được làm mới như trước.
+    clickedAt: Date.now(),
   });
   savePendingRef({ referralCode, slug: slug ?? null, kind: slug ? 'CTV' : null });
 }
@@ -215,10 +228,10 @@ export function readPendingRefs(now: number = Date.now()): PendingRef[] {
  * storefrontSlug) dù hoa hồng không đổi. Ở sessionStorage chứ không phải biến module để tải lại trang hay quay về từ đăng nhập Zalo
  * không làm mất (Mini App giữ cho cả phiên chạy).
  */
-export function markCtvTouched(code: string): void {
+export function markCtvTouched(userId: string, code: string): void {
   if (typeof window === 'undefined') return;
   try {
-    sessionStorage.setItem(CTV_TOUCHED_KEY, norm(code));
+    sessionStorage.setItem(CTV_TOUCHED_KEY, serializeTouchMark(userId, code));
   } catch {
     /* private mode / hết quota — mất dấu chấp nhận được, chỉ có thể chạm kiểu brand thừa */
   }
@@ -234,14 +247,26 @@ export function clearCtvTouched(): void {
   }
 }
 
-export function wasCtvTouched(code: string): boolean {
-  if (typeof window === 'undefined') return false;
+export function wasCtvTouched(userId: string | null | undefined, code: string): boolean {
+  return touchMarkMatches(readCtvTouchMark(), userId, code);
+}
+
+function readCtvTouchMark(): TouchMark | null {
+  if (typeof window === 'undefined') return null;
   try {
-    const stored = sessionStorage.getItem(CTV_TOUCHED_KEY);
-    return !!stored && stored === norm(code);
+    return parseTouchMark(sessionStorage.getItem(CTV_TOUCHED_KEY));
   } catch {
-    return false;
+    return null;
   }
+}
+
+/** Cập nhật dấu theo kết quả máy chủ vừa trả (xem touchMarkAfter): chạm brand ghi công mã khác thì dấu cũ không còn đúng. */
+export function updateCtvTouchMark(userId: string, code: string, kind: 'ctv' | 'brand', ok: boolean): void {
+  const before = readCtvTouchMark();
+  const after = touchMarkAfter(before, userId, code, kind, ok);
+  if (after === before) return;
+  if (after) markCtvTouched(after.userId, after.code);
+  else clearCtvTouched();
 }
 
 export function clearPendingRef(): void {
