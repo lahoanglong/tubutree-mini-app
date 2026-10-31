@@ -14,6 +14,10 @@ const LABEL_HEIGHT = 32;
 const MAX_SKELETON_CELLS = 10;
 const TINTS: ShortcutTint[] = ['forest', 'sage', 'clay', 'amber', 'sky', 'rose'];
 
+// Tới 10 ô (kể cả "Tất cả"): xếp theo hàng, đọc trái sang phải như thứ tự đọc của trình đọc màn hình và "Tất cả" luôn ở cuối. Quá 10 ô mới xếp theo cột để cuộn ngang.
+const ROW_FLOW = { gridTemplateColumns: 'repeat(5, 20%)' } as const;
+const COLUMN_FLOW = { gridTemplateRows: 'repeat(2, auto)', gridAutoFlow: 'column', gridAutoColumns: '20%' } as const;
+
 export interface CategoryRowProps {
   entries: CategoryEntry[];
   isLoading: boolean;
@@ -51,10 +55,12 @@ function Label({ children }: { children: string }) {
 
 /**
  * Danh mục ở Trang chủ (Q7): lưới 2 hàng × 5 cột, ô vuông bo 56px nền màu xoay vòng (có ảnh thì vẽ ảnh), nhãn tối đa hai dòng. Ô cuối là "Tất cả".
- * Quá 10 ô thì lưới xếp theo cột và cuộn ngang (mỗi cột đúng 1/5 bề rộng, ô thứ 6 thò ra mép để khách biết còn nữa), không cắt bớt danh mục.
+ * Tới 10 ô xếp theo hàng ("Tất cả" luôn cuối); quá 10 ô thì lưới xếp theo cột và cuộn ngang (mỗi cột đúng 1/5 bề rộng, ô thứ 6 thò ra mép để khách biết còn nữa), không cắt bớt danh mục.
  */
 export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholderCount = MAX_SKELETON_CELLS - 1 }: CategoryRowProps) {
   const skeletonCells = Math.min(placeholderCount + 1, MAX_SKELETON_CELLS);
+  const cells = isLoading ? skeletonCells : entries.length + (onSeeAll ? 1 : 0);
+  const flow = cells <= MAX_SKELETON_CELLS ? ROW_FLOW : COLUMN_FLOW;
   return (
     <section aria-label={homeCopy.categories.title}>
       <div style={{ padding: '0 16px' }}>
@@ -62,7 +68,7 @@ export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholde
       </div>
       <ScrollRow
         label={homeCopy.categories.rail}
-        style={{ display: 'grid', gridTemplateRows: 'repeat(2, auto)', gridAutoFlow: 'column', gridAutoColumns: '20%', rowGap: 8, padding: '4px 16px 8px' }}
+        style={{ display: 'grid', ...flow, rowGap: 8, padding: '4px 16px 8px' }}
       >
         {isLoading
           ? Array.from({ length: skeletonCells }, (_, i) => (

@@ -26,8 +26,8 @@ afterEach(() => {
 });
 
 describe('CategoryRow web — lưới 2 hàng × 5 cột như Mini (Q7)', () => {
-  it('vùng tên "Danh mục" với tiêu đề h2 (SectionHeader); lưới xếp theo cột, 2 hàng, mỗi cột 1/5 bề rộng', () => {
-    const { c, grid } = mount(6);
+  it('vùng tên "Danh mục" với tiêu đề h2 (SectionHeader); quá 10 ô: lưới xếp theo cột, 2 hàng, mỗi cột 1/5 bề rộng', () => {
+    const { c, grid } = mount(12);
     const section = c.querySelector('section[aria-label="Danh mục"]')!;
     expect(section.querySelector('h2')?.textContent).toBe('Danh mục');
     expect(section.querySelector('[data-testid="section-header"]')).not.toBeNull();
@@ -35,6 +35,29 @@ describe('CategoryRow web — lưới 2 hàng × 5 cột như Mini (Q7)', () => 
     expect(grid.style.gridAutoFlow).toBe('column');
     expect(grid.style.gridTemplateRows).toBe('repeat(2, auto)');
     expect(grid.style.gridAutoColumns).toBe('20%');
+  });
+
+  it('tới 10 ô (kể cả "Tất cả"): xếp theo hàng, 5 cột 1/5 bề rộng, không xếp theo cột', () => {
+    for (const n of [2, 3, 6, 9]) {
+      const { grid } = mount(n);
+      expect(grid.style.display).toBe('grid');
+      expect(grid.style.gridTemplateColumns).toBe('repeat(5, 20%)');
+      expect(grid.style.gridAutoFlow).toBe('');
+      expect(grid.style.gridTemplateRows).toBe('');
+      mounted?.unmount();
+    }
+  });
+
+  it('2 danh mục: thứ tự DOM là hai danh mục rồi "Tất cả" ở cuối (cùng hàng, không chen giữa)', () => {
+    const { grid } = mount(2);
+    const labels = Array.from(grid.querySelectorAll('button')).map((b) => b.getAttribute('aria-label') ?? b.textContent);
+    expect(labels).toEqual(['Danh mục 0', 'Danh mục 1', 'Tất cả danh mục']);
+  });
+
+  it('9 danh mục + "Tất cả" = 10 ô vẫn xếp theo hàng; 10 danh mục + "Tất cả" = 11 ô chuyển sang cột', () => {
+    expect(mount(9).grid.style.gridAutoFlow).toBe('');
+    mounted?.unmount();
+    expect(mount(10).grid.style.gridAutoFlow).toBe('column');
   });
 
   it('6 danh mục: 6 ô + "Tất cả" (ô thứ 7), tất cả nằm trong lưới', () => {

@@ -19,12 +19,37 @@ function renderRow(n: number, over: Partial<React.ComponentProps<typeof Category
 }
 
 describe('CategoryRow — lưới 2 hàng × 5 cột (Q7)', () => {
-  it('vùng tên "Danh mục" với tiêu đề h2; lưới xếp theo cột, 2 hàng, mỗi cột 1/5 bề rộng', () => {
-    renderRow(6);
+  it('vùng tên "Danh mục" với tiêu đề h2; quá 10 ô: lưới xếp theo cột, 2 hàng, mỗi cột 1/5 bề rộng, cuộn ngang', () => {
+    renderRow(12);
     const region = screen.getByRole('region', { name: 'Danh mục' });
     expect(within(region).getByRole('heading', { level: 2, name: 'Danh mục' })).toBeInTheDocument();
     const grid = within(region).getByRole('region', { name: /vuốt ngang/ });
     expect(grid).toHaveStyle({ display: 'grid', gridAutoFlow: 'column', gridTemplateRows: 'repeat(2, auto)', gridAutoColumns: '20%' });
+  });
+
+  it('tới 10 ô (kể cả "Tất cả"): xếp theo hàng, 5 cột 1/5 bề rộng, không xếp theo cột', () => {
+    for (const n of [2, 3, 6, 9]) {
+      const { unmount } = renderRow(n);
+      const grid = screen.getByRole('region', { name: /vuốt ngang/ });
+      expect(grid).toHaveStyle({ display: 'grid', gridTemplateColumns: 'repeat(5, 20%)' });
+      expect(grid.style.gridAutoFlow).toBe('');
+      expect(grid.style.gridTemplateRows).toBe('');
+      unmount();
+    }
+  });
+
+  it('2 danh mục: thứ tự DOM là hai danh mục rồi "Tất cả" ở cuối (cùng hàng, không chen giữa)', () => {
+    renderRow(2);
+    const buttons = within(screen.getByRole('region', { name: /vuốt ngang/ })).getAllByRole('button');
+    expect(buttons.map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Danh mục 0', 'Danh mục 1', 'Tất cả danh mục']);
+  });
+
+  it('9 danh mục + "Tất cả" = 10 ô vẫn xếp theo hàng; 10 danh mục + "Tất cả" = 11 ô chuyển sang cột', () => {
+    const nine = renderRow(9);
+    expect(screen.getByRole('region', { name: /vuốt ngang/ }).style.gridAutoFlow).toBe('');
+    nine.unmount();
+    renderRow(10);
+    expect(screen.getByRole('region', { name: /vuốt ngang/ }).style.gridAutoFlow).toBe('column');
   });
 
   it('6 danh mục: 6 ô + "Tất cả" (ô thứ 7), tất cả nằm trong lưới', () => {
