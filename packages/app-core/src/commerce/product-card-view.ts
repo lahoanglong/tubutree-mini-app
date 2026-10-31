@@ -1,9 +1,9 @@
 import type { ProductCard } from '../api/catalog';
 import { cardPricing, type FlashPriceItem } from '../flash-price';
 import { isNewProduct } from '../product-badges';
-import { fillCopy } from '../shop-copy';
-import { cardMetaLine } from './card-meta';
+import { cardMetaLine, cardMetaSpoken } from './card-meta';
 import { vnd } from './money';
+import { fillTileCopy, type TileCopyKey } from './tile-copy';
 
 export type CardVariant = 'grid' | 'rail-sm' | 'rail-md' | 'flash' | 'rank' | 'line';
 export type CardBadgeKind = 'flash' | 'discount' | 'combo' | 'featured' | 'loved' | 'new' | 'freeship';
@@ -48,7 +48,8 @@ export interface ProductCardView {
   stock: 'in' | 'out';
   stockText: string | null;
   rank: number | null;
-  spoken: { price: string; stock: string | null; badges: string | null };
+  /** `meta` là bản đọc của dòng ★ / đã bán ("4,8 sao, đã bán hơn 1.200"); optional để fixture của gói khác vẫn biên dịch. */
+  spoken: { price: string; stock: string | null; badges: string | null; meta?: string | null };
 }
 
 // Khe nhãn theo biến thể (design-system B2–B3): thẻ hẹp không đủ chỗ cho nhãn, thẻ Giờ vàng chỉ mang nhãn Giờ vàng,
@@ -62,8 +63,8 @@ const SLOTS: Record<CardVariant, { image: 'any' | 'flash' | false; label: boolea
   line: { image: false, label: false, brand: false },
 };
 
-const plain = (kind: CardBadgeKind, key: string): CardBadge => {
-  const text = fillCopy(key);
+const plain = (kind: CardBadgeKind, key: TileCopyKey): CardBadge => {
+  const text = fillTileCopy(key);
   return { kind, text, spoken: text };
 };
 
@@ -72,11 +73,11 @@ function imageBadgeOf(variant: CardVariant, isFlash: boolean, pct: number): Card
   if (slot === false || pct <= 0) return null;
   if (isFlash) {
     // Thẻ Giờ vàng 128px nằm trong khối đã có tiêu đề "Giờ vàng", nên chỉ "-x%" kèm biểu tượng.
-    const text = variant === 'flash' ? fillCopy('badge.discount', { pct }) : fillCopy('flash.badge', { pct });
-    return { kind: 'flash', text, spoken: fillCopy('badge.flashSpoken', { pct }) };
+    const text = variant === 'flash' ? fillTileCopy('badge.discount', { pct }) : fillTileCopy('flash.badge', { pct });
+    return { kind: 'flash', text, spoken: fillTileCopy('badge.flashSpoken', { pct }) };
   }
   if (slot === 'flash') return null;
-  return { kind: 'discount', text: fillCopy('badge.discount', { pct }), spoken: fillCopy('badge.discountSpoken', { pct }) };
+  return { kind: 'discount', text: fillTileCopy('badge.discount', { pct }), spoken: fillTileCopy('badge.discountSpoken', { pct }) };
 }
 
 function labelOf(input: ProductCardInput, price: number): CardBadge | null {
@@ -102,8 +103,8 @@ export function productCardView(input: ProductCardInput): ProductCardView {
   const inStock = p.inStock !== false;
   const imageBadge = inStock ? imageBadgeOf(variant, pricing.isFlash, pricing.salePct) : null;
   const label = inStock ? labelOf(input, pricing.price) : null;
-  const stockText = inStock ? null : fillCopy('stock.out');
-  const priceNow = fillCopy(pricing.isFlash ? 'price.flashSpoken' : 'price.spoken', { price: vnd(pricing.price) });
+  const stockText = inStock ? null : fillTileCopy('stock.out');
+  const priceNow = fillTileCopy(pricing.isFlash ? 'price.flashSpoken' : 'price.spoken', { price: vnd(pricing.price) });
   const badges = [imageBadge, label].filter((b): b is CardBadge => b !== null).map((b) => b.spoken);
 
   return {
@@ -123,9 +124,24 @@ export function productCardView(input: ProductCardInput): ProductCardView {
     stockText,
     rank: input.rank ?? null,
     spoken: {
-      price: pricing.compareAt ? priceNow + fillCopy('price.compareSpoken', { price: vnd(pricing.compareAt) }) : priceNow,
+      price: pricing.compareAt ? priceNow + fillTileCopy('price.compareSpoken', { price: vnd(pricing.compareAt) }) : priceNow,
       stock: stockText,
       badges: badges.length > 0 ? badges.join(', ') : null,
+      meta: cardMetaSpoken(p),
     },
   };
+}
+
+/**
+ * Suất Giờ vàng thắng trên thẻ của sản phẩm (cùng luật với `cardPricing`), hoặc null. `productCardView` nhận MỘT suất, mà sản phẩm nhiều
+ * phân loại có nhiều suất: nơi gọi chọn bằng hàm này để giá thẻ, nhãn và phân loại mở ở trang chi tiết luôn là một.
+ */
+export function pickCardFlash(
+  product: { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string; pinnedVariationId?: string },
+  allFlash: readonly FlashPriceItem[],
+  now: number,
+): FlashPriceItem | null {
+  const { isFlash, flashVariationId } = cardPricing(product, allFlash, now);
+  if (!isFlash) return null;
+  return allFlash.find((f) => f.productSlug === product.slug && f.variationId === flashVariationId) ?? null;
 }
