@@ -2644,6 +2644,8 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
   const [startPending, setStartPending] = useState(false);
   const [endPending, setEndPending] = useState(false);
   const endBeforeStart = !!f.endAt && !!f.startAt && f.endAt < f.startAt;
+  // Bắt đầu để trống thì mã bắt đầu từ lúc tạo, nên Hết hạn phải từ hôm nay (giờ VN) trở đi.
+  const endAlreadyPast = !!f.endAt && !f.startAt && f.endAt < vnTodayKey();
   const create = useMutation({
     mutationFn: () =>
       createCoupon({
@@ -2749,8 +2751,9 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
           </Field>
         </div>
       </div>
-      <button onClick={() => create.mutate()} disabled={!f.code || startPending || endPending || endBeforeStart} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
+      <button onClick={() => create.mutate()} disabled={!f.code || startPending || endPending || endBeforeStart || endAlreadyPast} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
       {endBeforeStart && <p role="alert" className="text-xs text-danger-fg">Ngày hết hạn không được sớm hơn ngày bắt đầu. Hãy chọn lại ngày hết hạn hoặc ngày bắt đầu để tạo mã.</p>}
+      {endAlreadyPast && <p role="alert" className="text-xs text-danger-fg">Ngày hết hạn đã qua. Chọn ngày từ hôm nay trở đi.</p>}
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
     )}

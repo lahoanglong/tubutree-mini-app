@@ -873,6 +873,16 @@ describe('AdminService coupons — xem, sửa, tắt mã (ADMINOPS-8)', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it('createCoupon: ngày bắt đầu đã tới mà ngày kết thúc đã qua (form để trống Bắt đầu) → nói "đã qua", không nói "sau ngày bắt đầu"', async () => {
+    const create = jest.fn();
+    const prisma = makePrisma({ coupon: { create } });
+    const now = Date.now();
+    await expect(
+      mkAdmin(prisma).createCoupon({ ...couponBase, startAt: new Date(now).toISOString(), endAt: new Date(now - 10 * 864e5).toISOString() }),
+    ).rejects.toThrow('Ngày kết thúc đã qua');
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it('createCoupon: trùng mã (P2002) → 409 "Mã ... đã tồn tại"', async () => {
     const { Prisma } = jest.requireActual('@prisma/client');
     const create = jest.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 't' }));

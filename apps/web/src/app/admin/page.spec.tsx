@@ -4129,6 +4129,22 @@ describe('admin/page — ô ngày giờ và ghi chú link video', () => {
     expect(create.disabled).toBe(false);
   });
 
+  it('mã giảm giá: Bắt đầu để trống mà Hết hạn đã qua thì khoá nút và báo ngày hết hạn đã qua; hôm nay thì cho tạo', async () => {
+    window.history.replaceState(null, '', '/admin?tab=coupons');
+    const { container } = await mount();
+    click([...container.querySelectorAll('[role="group"][aria-label="Mục mã giảm giá"] button')].find((b) => b.textContent === 'Tạo mã mới')!);
+    await flush();
+    typeInto(container.querySelector('input[placeholder^="Mã"]'), 'WELCOME30');
+    const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá') as HTMLButtonElement;
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), '01012020');
+    expect(container.textContent).toContain('Ngày hết hạn đã qua. Chọn ngày từ hôm nay trở đi.');
+    expect(create.disabled).toBe(true);
+    const [y, m, d] = vnTodayKey().split('-');
+    typeInto(container.querySelector('input[aria-label="Mã giảm giá hết hạn ngày"]'), `${d}${m}${y}`);
+    expect(container.textContent).not.toContain('Ngày hết hạn đã qua.');
+    expect(create.disabled).toBe(false);
+  });
+
   it('giờ vàng: chọn giờ kiểu 24 giờ, 20:00 gửi đúng mốc ISO (không còn AM/PM)', async () => {
     window.history.replaceState(null, '', '/admin?tab=flashSales');
     const { container } = await mount();

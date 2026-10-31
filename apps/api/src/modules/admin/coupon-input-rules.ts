@@ -31,8 +31,11 @@ export function assertCouponInput(data: {
   usageLimit?: number | null;
 }): void {
   assertClaimUsageLimit({ scope: data.scope }, data.usageLimit);
+  const now = new Date();
+  // Form để trống "Bắt đầu" thì web gửi giờ tạo: ngày kết thúc đã qua phải nói "đã qua", không nói "sau ngày bắt đầu".
+  if (data.startAt <= now && data.endAt <= now) throw new BadRequestException('Ngày kết thúc đã qua — mã tạo ra sẽ không dùng được.');
   if (data.endAt <= data.startAt) throw new BadRequestException('Ngày kết thúc phải sau ngày bắt đầu.');
-  if (data.endAt <= new Date()) throw new BadRequestException('Ngày kết thúc đã qua — mã tạo ra sẽ không dùng được.');
+  if (data.endAt <= now) throw new BadRequestException('Ngày kết thúc đã qua — mã tạo ra sẽ không dùng được.');
   if (data.type !== 'FREESHIP' && data.value <= 0) throw new BadRequestException('Mức giảm phải lớn hơn 0.');
   if (data.type === 'PERCENT' && data.value >= COUPON_PERCENT_NEEDS_CAP && !data.maxDiscount) {
     throw new BadRequestException(`Mã giảm từ ${COUPON_PERCENT_NEEDS_CAP}% phải đặt Giảm tối đa (đ) để một đơn lớn không được giảm gần hết.`);
