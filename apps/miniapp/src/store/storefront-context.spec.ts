@@ -81,13 +81,15 @@ describe('storefront-context: lúc bấm link và dấu chạm theo người dù
   });
   afterEach(() => vi.useRealTimers());
 
-  it('mở link ghi lúc bấm; cùng mã mở lại giữ lúc bấm đầu, mã mới thì ghi lại', () => {
+  it('mở link ghi lúc bấm; điều hướng cùng mã giữ lúc bấm đầu, mở lại từ link (clickedAt tường minh) làm mới, mã mới thì ghi lại', () => {
     ctx().setContext({ referralCode: 'AN123' });
     const first = ctx().clickedAt;
     expect(first).toBe(Date.parse('2026-10-31T10:00:00Z'));
     vi.setSystemTime(new Date('2026-10-31T12:00:00Z'));
     ctx().setContext({ slug: 'an', kind: 'ctv' });
     expect(ctx().clickedAt).toBe(first);
+    ctx().setContext({ referralCode: 'AN123', clickedAt: Date.now() });
+    expect(ctx().clickedAt).toBe(Date.parse('2026-10-31T12:00:00Z'));
     ctx().setContext({ referralCode: 'BINH9' });
     expect(ctx().clickedAt).toBe(Date.parse('2026-10-31T12:00:00Z'));
   });

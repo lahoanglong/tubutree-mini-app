@@ -83,8 +83,9 @@ export const useStorefrontContext = create<StorefrontCtxState>((set, get) => ({
       : norm(referralCode) === norm(cur.referralCode)
         ? (cur.referralEligible ?? ctx.referralEligible ?? null)
         : (ctx.referralEligible ?? null);
-    // Cùng mã thì giữ lúc bấm đã ghi; mã mới là lượt bấm vừa xảy ra.
-    const clickedAt = !referralCode ? null : norm(referralCode) === norm(cur.referralCode) && cur.clickedAt ? cur.clickedAt : Date.now();
+    // Lượt đến từ link truyền clickedAt tường minh (luôn là lúc bấm mới, kể cả cùng mã). Điều hướng trong app: cùng mã giữ lúc bấm
+    // đã ghi, mã mới là lượt bấm vừa xảy ra.
+    const clickedAt = !referralCode ? null : ctx.clickedAt ?? (norm(referralCode) === norm(cur.referralCode) && cur.clickedAt ? cur.clickedAt : Date.now());
     const next: Ctx = {
       slug: ctx.slug !== undefined ? ctx.slug : cur.slug,
       referralCode,
