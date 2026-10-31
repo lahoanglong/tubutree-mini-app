@@ -278,6 +278,14 @@ export class UsersService {
     };
   }
 
+  /** Webhook Zalo "rút đồng ý": tìm khách theo zaloId rồi đi đúng đường yêu cầu xoá của khách (PENDING, lặp thì không tạo thêm). Không có khách khớp thì không làm gì. */
+  async requestAccountDeletionByZaloId(zaloId: string, reason: string): Promise<{ userId: string | null; alreadyRequested: boolean }> {
+    const user = await this.prisma.user.findUnique({ where: { zaloId }, select: { id: true } });
+    if (!user) return { userId: null, alreadyRequested: false };
+    const res = await this.requestAccountDeletion(user.id, reason);
+    return { userId: user.id, alreadyRequested: res.alreadyRequested };
+  }
+
   private serialize(user: {
     id: string;
     zaloId: string | null;

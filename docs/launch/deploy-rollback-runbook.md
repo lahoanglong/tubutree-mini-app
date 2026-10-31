@@ -194,6 +194,7 @@ Mở file bằng `nano .env` (hoặc, cho các khoá ghi được, trỏ lại G
 | `OPS_ALERT_ENV_LABEL` | Ví dụ `production`. Tối đa 24 ký tự, không có `[` `]` |
 | `CORS_ORIGINS` | Ví dụ `https://app.tubutree.com,https://tubutree.com` |
 | `ACCESSTRADE_WEBHOOK_SECRET` | Bắt buộc ở production: rỗng thì API không khởi động và `go-live:check` FAIL. Chuỗi ngẫu nhiên (`openssl rand -hex 32`), dán y hệt vào header `x-accesstrade-token` bên Accesstrade |
+| `ZALO_OPEN_API_KEY` | API Key Zalo tạo khi bấm Cập nhật ở mini.zalo.me/developers, Open APIs; dùng ký webhook Mini App (header `x-zevent-signature`). Trống thì API từ chối mọi request webhook (401), `go-live:check` WARN. Zalo bắt buộc có Webhook URL trước khi gửi xét duyệt: dán `https://api.tubutree.com/api/webhooks/zalo-miniapp` vào Zalo Mini App console, Xét duyệt phiên bản > Thiết lập chung > Webhook URL. Sự kiện `user.revoke.consent` chỉ tạo yêu cầu xoá tài khoản chờ admin xử lý (mục Yêu cầu xoá tài khoản trong admin), không xoá ngay. `set-env` chưa ghi khoá này: sửa tay `.env` |
 | `AUTH_COOKIE_SAMESITE`, `AUTH_COOKIE_DOMAIN` | `lax` và (nếu cần chia sẻ phiên giữa subdomain) `.tubutree.com` |
 | `THROTTLE_BYPASS_TOKEN` | Chuỗi ngẫu nhiên từ 32 ký tự (`openssl rand -hex 32`), CÙNG một giá trị cho `api` và `web` (xem ghi chú dưới) |
 

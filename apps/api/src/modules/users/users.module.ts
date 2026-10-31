@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { AccountDeletionService, PARTNER_STORE_BLOCKERS } from './account-deletion.service';
+import { ZaloConsentWebhookController } from './zalo-consent-webhook.controller';
 import { AdminAccountDeletionController } from './admin-account-deletion.controller';
 import { PancakeModule } from '../integrations/pancake/pancake.module';
 import { SessionStateModule } from '../auth/session-state.module';
@@ -10,7 +11,7 @@ import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.servi
 
 @Module({
   imports: [PancakeModule, MerchantModule, SessionStateModule],
-  controllers: [UsersController, AdminAccountDeletionController],
+  controllers: [UsersController, AdminAccountDeletionController, ZaloConsentWebhookController],
   providers: [UsersService, AccountDeletionService, { provide: PARTNER_STORE_BLOCKERS, useExisting: MerchantFulfilmentService }],
   exports: [UsersService],
 })

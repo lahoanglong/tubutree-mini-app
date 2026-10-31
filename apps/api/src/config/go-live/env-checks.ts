@@ -322,6 +322,12 @@ function zaloChecks(env: Env): CheckResult[] {
       hint: 'Chỉ cần khi đã đăng ký webhook OA trên Zalo; để trống thì API từ chối mọi request tới webhook này ở production.',
     }),
   );
+  out.push(
+    secretRow(G_ZALO, 'env.zalo.open_api_key', 'API Key webhook Mini App Zalo (rút đồng ý, xoá dữ liệu)', 'ZALO_OPEN_API_KEY', env, {
+      status: 'WARN',
+      hint: 'Lấy ở mini.zalo.me/developers, Open APIs, Cập nhật (Zalo tạo API Key). Zalo bắt buộc có Webhook URL trước khi gửi xét duyệt phiên bản; để trống thì API từ chối mọi request tới webhook này.',
+    }),
+  );
   return out;
 }
 

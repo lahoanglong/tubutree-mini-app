@@ -269,6 +269,11 @@ describe('evaluateEnv', () => {
       expect(status({ ZALO_OA_WEBHOOK_SECRET: 'abc' }, 'env.zalo.oa_webhook_secret')).toBe('WARN');
       expect(status({}, 'env.zalo.oa_webhook_secret')).toBe('PASS');
     });
+    it('API Key webhook Mini App: trống WARN, ngắn WARN, đủ PASS', () => {
+      expect(status({ ZALO_OPEN_API_KEY: '' }, 'env.zalo.open_api_key')).toBe('WARN');
+      expect(status({ ZALO_OPEN_API_KEY: 'abc' }, 'env.zalo.open_api_key')).toBe('WARN');
+      expect(status({}, 'env.zalo.open_api_key')).toBe('PASS');
+    });
   });
 
   describe('Accesstrade', () => {
