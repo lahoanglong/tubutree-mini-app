@@ -58,6 +58,8 @@ Các câu hỏi trong báo cáo được chốt như sau. Chủ giao quyền t�
 | Q15 | Tiền combo/mua kèm toàn sàn (backend-gap §4, §7) | Tubu tài trợ. Hoa hồng CTV tính trên `paidTotal` của dòng sau giảm (giữ luật hiện có của combo gian hàng; builder kiểm lại và ghi rõ nếu khác). Khách trả một món của combo: hoàn đúng `paidTotal` của dòng đó, không thu lại phần giảm của món còn giữ. Một đơn một mã. Ghi "Mỗi đơn dùng 1 mã" ở chỗ chọn mã. |
 | Q16 | Skill dự án (DS E4) | `.claude/skills/tubu-ui/SKILL.md` vào git: `.gitignore` đổi `.claude/` thành `.claude/*` + `!.claude/skills/`. |
 | Q17 | Kiểm a11y axe 375px (a11y C7) | Chạy trong gate trước merge của đợt này; đưa vào CI nếu dưới 2 phút. |
+| Q18 | Bán chạy nhất khi chưa có đơn thật (builder check) | Xếp `soldApp30d` giảm dần, hoà thì theo `sold` trọn đời (`soldExternal + soldApp`, số nhập tay là bán ngoài kênh, vẫn là dữ liệu thật). Số hạng luôn hiện. "Đã bán" trên thẻ và ngưỡng "Được yêu thích" dùng `sold` tổng như hiện tại. |
+| Q19 | Dung lượng Mini App (builder check) | Ngưỡng cứng đợt này: chunk vào (entry) Mini App không vượt 700 KB (`scripts/ci/bundle-budget.cjs`). Khối dưới màn đầu nạp lười theo mẫu `home-lazy.tsx`/`home-below.tsx` kèm chiều cao giữ chỗ; trang mới (`/flash-sale`, Bán chạy nhất, chiến dịch, `/ds-gallery`) là chunk theo route. Gói nào làm entry tăng phải ghi số trước/sau trong PR. |
 
 ## 5. Hướng thiết kế theo màn
 
