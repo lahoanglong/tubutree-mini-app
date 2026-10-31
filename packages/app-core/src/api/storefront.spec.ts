@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { fakeHttp, type RecordedCall } from './fake-http';
 import * as s from './storefront';
 import type { HttpClient } from '../http';
@@ -105,5 +105,15 @@ describe('storefront — đúng route, query, body', () => {
     const { http, calls } = fakeHttp();
     await run(http);
     expect(calls).toEqual([expected]);
+  });
+});
+
+describe('storefront — ownerTier.publicBadge (P9 ẩn huy hiệu bậc thấp nhất)', () => {
+  it('type bắt buộc cờ publicBadge: boolean (tsc đỏ nếu thiếu), thân trả về giữ nguyên cờ', async () => {
+    expectTypeOf<NonNullable<s.Storefront['ownerTier']>['publicBadge']>().toEqualTypeOf<boolean>();
+    const tier = { name: 'Tân binh', emoji: '🌱', publicBadge: false };
+    const { http } = fakeHttp(() => ({ slug: 'ctv-an', ownerTier: tier }));
+    const sf = await s.getPublicStorefront(http, 'ctv-an');
+    expect(sf.ownerTier?.publicBadge).toBe(false);
   });
 });
