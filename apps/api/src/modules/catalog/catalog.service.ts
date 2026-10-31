@@ -6,6 +6,7 @@ import { activeFlashWhere, isStillDiscounted } from '../flash-sale/flash-active'
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
+import type { BrandProductsQuery } from './dto/brand-products-query.dto';
 import { foldVietnamese, likeContainsPattern } from './search-text';
 import { CRON_TZ } from '../../common/cron-tz';
 import { PUBLIC_PRODUCT_WHERE, isPublicProduct } from './public-product';
@@ -182,8 +183,15 @@ export class CatalogService {
   ) {}
 
   async list(query: ProductQuery) {
+    return this.listPage(await this.listWhere(query), query);
+  }
+
+  /**
+   * Trang sản phẩm công khai cho một điều kiện lọc có sẵn: `/products` (bộ lọc của query) và trang thương hiệu (theo nhãn) dùng chung
+   * cách xếp, phân trang và dựng thẻ, không có đường thứ hai.
+   */
+  private async listPage(where: Prisma.ProductWhereInput, query: Pick<ProductQuery, 'page' | 'limit' | 'sort' | 'minPrice' | 'maxPrice'>) {
     const { page, limit, sort } = query;
-    const where = await this.listWhere(query);
     const price = priceRange(query.minPrice, query.maxPrice);
     if (sort === 'best_seller') return this.listBestSellers(where, page, limit, price);
     if (sort === 'best_seller_30d') return this.listBestSellers30d(where, page, limit, price);
@@ -404,6 +412,16 @@ export class CatalogService {
       this.logger.warn(`Tìm không dấu lỗi, dùng contains: ${err instanceof Error ? err.message : String(err)}`);
       return { OR: [{ name: { contains: raw, mode: 'insensitive' } }, { tags: { has: raw.toLowerCase() } }] };
     }
+  }
+
+  /**
+   * Sản phẩm công khai của một nhãn đã đăng (`GET /brand/public/:slug/products`), phân trang thật: trang nhãn không còn bị cắt cứng
+   * ở 30 món của `getPublicBySlug`. Nhãn chưa đăng thì 404 như trang nhãn.
+   */
+  async listBrandProducts(slug: string, query: BrandProductsQuery) {
+    const brand = await this.prisma.brand.findFirst({ where: { slug, isPublished: true }, select: { id: true } });
+    if (!brand) throw new NotFoundException('Nhãn hàng không tồn tại hoặc chưa đăng.');
+    return this.listPage({ ...PUBLIC_PRODUCT_WHERE, brandId: brand.id }, query);
   }
 
   async getBySlug(slug: string) {

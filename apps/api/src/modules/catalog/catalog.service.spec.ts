@@ -1282,6 +1282,53 @@ describe('CatalogService — thẻ: fulfiller và isLoved', () => {
   });
 });
 
+describe('CatalogService.listBrandProducts — GET /brand/public/:slug/products', () => {
+  const WHERE = { isActive: true, approvalStatus: 'APPROVED', brandId: 'b1' };
+  function setup(brand: { id: string } | null = { id: 'b1' }) {
+    const findMany = jest.fn().mockResolvedValue([card('p1'), card('p2')]);
+    const count = jest.fn().mockResolvedValue(5);
+    const brandFindFirst = jest.fn().mockResolvedValue(brand);
+    const prisma = {
+      brand: { findFirst: brandFindFirst },
+      product: { findMany, count },
+      flashSaleItem: noFlash(),
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma), findMany, count, brandFindFirst };
+  }
+
+  it('nhãn chưa đăng hoặc không có → NotFound', async () => {
+    const { svc, brandFindFirst } = setup(null);
+    await expect(svc.listBrandProducts('khong-co', { page: 1, limit: 20 })).rejects.toBeInstanceOf(NotFoundException);
+    expect(brandFindFirst).toHaveBeenCalledWith({ where: { slug: 'khong-co', isPublished: true }, select: { id: true } });
+  });
+
+  it('phân trang thật trên sản phẩm công khai của nhãn: trang 2 limit 2 → skip 2, take 2, total đúng', async () => {
+    const { svc, findMany, count } = setup();
+    const r = await svc.listBrandProducts('sachi', { page: 2, limit: 2 });
+    expect(r.meta).toEqual({ page: 2, limit: 2, total: 5 });
+    expect(findMany.mock.calls[0][0]).toMatchObject({ where: WHERE, skip: 2, take: 2 });
+    expect(count).toHaveBeenCalledWith({ where: WHERE });
+    expect(r.data[0]).toHaveProperty('fulfiller');
+  });
+
+  it('sort newest đi orderBy createdAt giảm dần kèm id; mặc định giữ nổi bật trước', async () => {
+    const { svc, findMany } = setup();
+    await svc.listBrandProducts('sachi', { page: 1, limit: 20, sort: 'newest' });
+    await svc.listBrandProducts('sachi', { page: 1, limit: 20 });
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([{ createdAt: 'desc' }, { id: 'asc' }]);
+    expect(findMany.mock.calls[1][0].orderBy).toEqual([{ isFeatured: 'desc' }, { id: 'asc' }]);
+  });
+
+  it('sort best_seller_30d dùng đường xếp hạng cùng bộ lọc nhãn', async () => {
+    const findMany = jest.fn().mockResolvedValueOnce([{ id: 'x', soldApp30d: 1, soldApp: 1, soldExternal: 0 }]).mockResolvedValueOnce([card('x')]);
+    const prisma = { brand: { findFirst: jest.fn().mockResolvedValue({ id: 'b1' }) }, product: { findMany, count: jest.fn() }, flashSaleItem: noFlash() } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).listBrandProducts('sachi', { page: 1, limit: 20, sort: 'best_seller_30d' });
+    expect(findMany.mock.calls[0][0].where).toEqual(WHERE);
+    expect(r.data.map((c) => c.id)).toEqual(['x']);
+  });
+});
+
 describe('CatalogService — JSON công khai không nhúng ảnh base64', () => {
   const PNG = 'data:image/png;base64,' + 'A'.repeat(4000);
   const row = (over: Record<string, unknown> = {}) => ({ ...card('p1'), thumbnail: PNG, images: [PNG, 'https://cdn.example.com/b.jpg'], ...over });

@@ -1,4 +1,5 @@
 import type { HttpClient } from '../http';
+import type { CatalogSort, PageResponse, ProductCard } from './catalog';
 
 export interface BrandCert {
   code: string;
@@ -48,6 +49,9 @@ export interface BrandView {
   followerCount: number;
   certifications: BrandCert[];
   promotions: BrandPromotionView[];
+  /** Tổng sản phẩm công khai của nhãn (hiện "Tất cả (n)"); API cũ không trả. */
+  productCount: number;
+  /** Tối đa 30 món đầu, chỉ để client cũ chạy được: danh sách đầy đủ lấy bằng `fetchBrandProducts`. */
   products: BrandProductView[];
   dealerRewards: DealerRewardView[];
 }
@@ -56,6 +60,21 @@ export type ShareToEarn =
   | { eligible: true; maxAffiliateRate: number; referralCode: string; brandSlug: string };
 
 export const getPublicBrand = (http: HttpClient, slug: string) => http.get<BrandView>(`/brand/public/${slug}`);
+
+export interface BrandProductsQuery {
+  page?: number;
+  limit?: number;
+  sort?: CatalogSort;
+}
+
+/** Sản phẩm của nhãn, phân trang thật (cùng dạng thẻ với `GET /products`). */
+export const fetchBrandProducts = (http: HttpClient, slug: string, query: BrandProductsQuery = {}) => {
+  const params: Record<string, string | number> = {};
+  if (query.page != null) params.page = query.page;
+  if (query.limit != null) params.limit = query.limit;
+  if (query.sort) params.sort = query.sort;
+  return http.get<PageResponse<ProductCard>>(`/brand/public/${encodeURIComponent(slug)}/products`, { query: params });
+};
 
 export const getBrandShareToEarn = (http: HttpClient, slug: string) => http.get<ShareToEarn>(`/brand/${slug}/share-to-earn`);
 

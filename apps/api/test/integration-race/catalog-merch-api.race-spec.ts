@@ -1,6 +1,9 @@
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { CatalogService } from '../../src/modules/catalog/catalog.service';
+import { BrandService } from '../../src/modules/brand/brand.service';
+import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
+import { NotFoundException } from '@nestjs/common';
 import { createOrder, createUser, deleteItData, randCode, warmPool } from './helpers';
 
 /**
@@ -105,6 +108,29 @@ describe('catalog merch API (real Postgres)', () => {
     const byParent = await fresh.list({ page: 1, limit: 10, category: cha.id, brand });
     expect(byParent.data.map((c) => c.id).sort()).toEqual([both.p.id, onlyChild.p.id].sort());
     expect(byParent.meta.total).toBe(2);
+  });
+
+  it('thương hiệu: phân trang thật trên sản phẩm công khai, chưa duyệt và đã ẩn không tính, productCount khớp total', async () => {
+    const t = randCode(6).toLowerCase();
+    const brand = await prisma.brand.create({ data: { slug: `cma-${t}`, name: `CMA Nhãn ${t}`, isPublished: true } });
+    brandIds.push(brand.id);
+    const draft = await prisma.brand.create({ data: { slug: `cma-nhap-${t}`, name: `CMA Nháp ${t}`, isPublished: false } });
+    brandIds.push(draft.id);
+    for (let i = 0; i < 5; i++) await product(brand.name, { brandId: brand.id });
+    await product(brand.name, { brandId: brand.id, approvalStatus: 'PENDING_REVIEW' });
+    await product(brand.name, { brandId: brand.id, isActive: false });
+
+    const page = (n: number) => catalog.listBrandProducts(brand.slug, { page: n, limit: 2 });
+    const [p1, p2, p3, p4] = [await page(1), await page(2), await page(3), await page(4)];
+    expect([p1.data.length, p2.data.length, p3.data.length, p4.data.length]).toEqual([2, 2, 1, 0]);
+    expect([p1.meta.total, p4.meta.total]).toEqual([5, 5]);
+    const ids = [...p1.data, ...p2.data, ...p3.data].map((c) => c.id);
+    expect(new Set(ids).size).toBe(5);
+
+    await expect(catalog.listBrandProducts(draft.slug, { page: 1, limit: 2 })).rejects.toBeInstanceOf(NotFoundException);
+    const view = await new BrandService(prisma, new SystemConfigService(prisma)).getPublicBySlug(brand.slug);
+    expect(view.productCount).toBe(5);
+    expect(view.products).toHaveLength(5);
   });
 
   describe('soldApp30d (cron 03:00)', () => {

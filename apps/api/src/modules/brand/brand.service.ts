@@ -7,6 +7,7 @@ import { loadDefaultRate, maxResolvedRate } from '../affiliate/commission-rate';
 import type { BrandSalesPeriod } from './dto/brand.dto';
 import { publicImage, publicImages } from '../../common/public-image';
 import { cardPrices } from '../catalog/variation-order';
+import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { isStorefrontImageValue } from '../../common/uploaded-image';
 
 interface Cert {
@@ -103,20 +104,24 @@ export class BrandService {
       .filter((c) => c && c.verified === true)
       .map((c) => ({ code: c.code, label: c.label, proofUrl: c.proofUrl ?? null }));
 
-    const [promotions, products, dealerRewards] = await Promise.all([
+    // Cùng điều kiện cho danh sách và đếm, và là điều kiện công khai của catalog (SP chưa duyệt không lộ ra trang nhãn).
+    const productWhere = { brandId: brand.id, ...PUBLIC_PRODUCT_WHERE };
+    const [promotions, products, productCount, dealerRewards] = await Promise.all([
       this.prisma.brandPromotion.findMany({
         where: { brandId: brand.id, isActive: true, startAt: { lte: now }, endAt: { gte: now } },
         orderBy: { sortOrder: 'asc' },
         select: { id: true, title: true, subtitle: true, themeColor: true, couponCode: true, startAt: true, endAt: true },
       }),
       this.prisma.product.findMany({
-        where: { brandId: brand.id, isActive: true },
+        where: productWhere,
         orderBy: [{ isFeatured: 'desc' }, { reviewCount: 'desc' }],
+        // Chỉ giữ cho client cũ; trang nhãn mới lấy cả danh sách qua GET /brand/public/:slug/products (phân trang thật).
         take: 30,
         // variations chỉ để tính inStock (audit A4-06 — lưới trang nhãn chưa từng biết SP hết
         // hàng hay chưa); ProductTile cần cờ này để hiện overlay "tạm hết hàng".
         select: { id: true, name: true, slug: true, thumbnail: true, basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, soldExternal: true, soldApp: true, createdAt: true, variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } } },
       }),
+      this.prisma.product.count({ where: productWhere }),
       this.prisma.dealerReward.findMany({
         where: { OR: [{ brandId: brand.id }, { brandId: null }], isActive: true },
         orderBy: { sortOrder: 'asc' },
@@ -140,6 +145,7 @@ export class BrandService {
       followerCount: brand.followerCount,
       certifications: verifiedCerts,
       promotions: publicPromotions,
+      productCount,
       products: products.map(({ soldExternal, soldApp, variations, ...p }) => ({
         ...p,
         ...cardPrices(p, variations),

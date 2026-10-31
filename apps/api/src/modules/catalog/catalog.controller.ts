@@ -4,6 +4,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { CatalogService } from './catalog.service';
 import { toPublicProductDetail } from './catalog-public';
+import { BrandProductsQuery } from './dto/brand-products-query.dto';
 import { ProductQuery } from './dto/product-query.dto';
 import { SuggestQuery } from './dto/suggest-query.dto';
 
@@ -46,6 +47,15 @@ export class CatalogController {
   @Get('products/:slug/bought-together')
   boughtTogether(@Param('slug') slug: string) {
     return this.catalog.boughtTogether(slug);
+  }
+
+  // Trang thương hiệu phân trang thật. Đặt ở đây (không ở BrandController) để dùng chung cách xếp và dựng thẻ của /products
+  // mà BrandModule không phải import CatalogModule; đường dẫn vẫn nằm dưới /brand.
+  @Public()
+  @PublicCache('CATALOG')
+  @Get('brand/public/:slug/products')
+  brandProducts(@Param('slug') slug: string, @Query() query: BrandProductsQuery) {
+    return this.catalog.listBrandProducts(slug, query);
   }
 
   @Public()
