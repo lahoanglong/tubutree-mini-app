@@ -79,7 +79,7 @@ const underPrefix = (path: string, prefix: string) => path === prefix || path.st
 
 /** Tiền tố riêng tư: đường dẫn của route `private` cắt từ tham số đầu, khử trùng và bỏ tiền tố nằm dưới tiền tố khác. */
 export function privatePrefixes(): string[] {
-  const cut = new Set(['ds']);
+  const cut = new Set<string>();
   for (const item of webItems) {
     if (!item.private) continue;
     const segments = withoutQuery(item.web).split('/').filter(Boolean);
@@ -93,7 +93,7 @@ export function privatePrefixes(): string[] {
 
 /** Route công khai không tham số, không query, đã xong: đưa vào sitemap. */
 export function publicStaticRoutes(): string[] {
-  const out = new Set(['ds']);
+  const out = new Set<string>();
   for (const item of publicWebItems) {
     if (item.private || item.pending) continue;
     if (item.web.includes(':') || item.web.includes('?')) continue;
@@ -104,7 +104,7 @@ export function publicStaticRoutes(): string[] {
 
 /** Route công khai tĩnh nằm dưới (hoặc trùng) một tiền tố riêng tư: robots phải `allow` riêng, kể cả khi còn pending. */
 export function publicAllowPaths(prefixes: readonly string[]): string[] {
-  const out = new Set(['ds']);
+  const out = new Set<string>();
   for (const item of publicWebItems) {
     if (item.private || item.web.includes(':') || item.web.includes('?')) continue;
     if (prefixes.some((p) => underPrefix(item.web, p))) out.add(item.web);

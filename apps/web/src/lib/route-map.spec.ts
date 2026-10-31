@@ -91,6 +91,7 @@ describe('privatePrefixes', () => {
     expect(p).toContain('/admin');
     expect(p.filter((x) => x === '/admin')).toHaveLength(1);
     expect(p.every((x) => !x.includes(':') && !x.includes('?'))).toBe(true);
+    expect(p.every((x) => x.startsWith('/'))).toBe(true);
   });
 
   it('không chứa tiền tố nằm dưới tiền tố khác', () => {
@@ -115,6 +116,7 @@ describe('publicStaticRoutes', () => {
     for (const w of pendingPublic) expect(r).not.toContain(w);
     expect(r).toContain('/gioi-thieu');
     expect(r.every((x) => !x.includes(':') && !x.includes('?'))).toBe(true);
+    expect(r.every((x) => x.startsWith('/'))).toBe(true);
   });
 
   it('bỏ route công khai còn pending (bản đồ giả: bản đồ thật nay không còn route pending)', async () => {
