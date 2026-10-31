@@ -9,6 +9,7 @@ import BackButton from './back-button';
 import { ONBOARDING_SURVEY_ENABLED } from './onboarding-flag';
 import { OpenAppRouter } from './open-app-router';
 import { MainLandmark } from './ui/main-landmark';
+import { NotifyRegion } from './notify-region';
 import { RouteShell, RouteSkeleton, SilentBoundary } from './route-shell';
 import ErrorBoundary, { hashMessage } from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
@@ -202,6 +203,7 @@ export default function MyApp() {
         <FlashSalesPoller />
         <App>
           <SnackbarProvider>
+            <NotifyRegion />
             <ZMPRouter>
               <ScreenTracker />
               {/* Loại điều hướng thật cho trang con — useNavigationType của react-router luôn là POP trong AnimationRoutes. */}

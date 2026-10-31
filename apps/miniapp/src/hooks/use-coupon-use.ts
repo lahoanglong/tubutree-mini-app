@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useSnackbar } from 'zmp-ui';
+import { useNavigate } from 'zmp-ui';
+import { useNotify } from './use-notify';
 import { couponUseCopy, couponUseOutcome, couponUseTarget } from '@tubutree/app-core/coupon-use';
 import { cartKey } from '../services/cart-key';
 import { getErrorMessage } from '../services/api';
@@ -16,14 +17,14 @@ import { haptic } from '../utils/haptic';
 export function useCouponUse() {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { openSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   // Khoá đồng bộ chống chạm đúp: chỉ một lần "Dùng ngay" đang chạy, nên chuyển trang đúng một lần.
   const busy = useRef(false);
 
   const copy = async (code: string) => {
     const ok = await copyText(code);
     haptic('light');
-    openSnackbar(ok ? { text: couponUseCopy.copied, type: 'success' } : { text: couponUseCopy.copyFailed, type: 'error' });
+    notify(ok ? { text: couponUseCopy.copied, type: 'success' } : { text: couponUseCopy.copyFailed, type: 'error' });
   };
 
   const use = async (code: string, onBeforeNavigate?: () => void) => {
@@ -43,7 +44,7 @@ export function useCouponUse() {
       before = await qc.fetchQuery({ queryKey: cartKey(), queryFn: getCart, staleTime: 15_000 });
     } catch (e) {
       // Không đọc được giỏ: không đoán là trống, đưa khách tới giỏ để thấy tình trạng thật.
-      openSnackbar({ text: couponUseCopy.notApplied(getErrorMessage(e)), type: 'warning' });
+      notify({ text: couponUseCopy.notApplied(getErrorMessage(e)), type: 'warning' });
       onBeforeNavigate?.();
       navigate('/cart');
       return;
@@ -58,9 +59,9 @@ export function useCouponUse() {
       qc.setQueryData(cartKey(), cart);
       void qc.invalidateQueries({ queryKey: ['quote'] });
       const outcome = couponUseOutcome(before.couponCode, code, cart);
-      if (outcome.kind !== 'ok') openSnackbar({ text: outcome.text, type: outcome.kind === 'notApplied' ? 'warning' : 'info' });
+      if (outcome.kind !== 'ok') notify({ text: outcome.text, type: outcome.kind === 'notApplied' ? 'warning' : 'info' });
     } catch (e) {
-      openSnackbar({ text: couponUseCopy.notApplied(getErrorMessage(e)), type: 'warning' });
+      notify({ text: couponUseCopy.notApplied(getErrorMessage(e)), type: 'warning' });
     }
     onBeforeNavigate?.();
     navigate('/cart');
