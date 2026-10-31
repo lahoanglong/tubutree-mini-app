@@ -71,9 +71,9 @@ import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanit
 import { loadDefaultRate, resolveVariationRate } from './commission-rate';
 import { loadPublicVisibility } from '../storefront/public-visibility';
 import type { PublicVisibilityOptions } from '../storefront/storefront-visibility';
-import { APPROVE_COMMISSIONS_CRON, AFFILIATE_AUTO_WALLET_TRANSFER_KEY, DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED } from './affiliate-auto-transfer-config';
+import { APPROVE_COMMISSIONS_CRON, DAILY_WALLET_TRANSFER_HOUR_VN, DAILY_WALLET_TRANSFER_JOB, AFFILIATE_AUTO_WALLET_TRANSFER_KEY, DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED } from './affiliate-auto-transfer-config';
 import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
-import { TrackCron } from '../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 import { SessionStateService } from '../auth/session-state.service';
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
@@ -127,6 +127,7 @@ const SAMPLE_STOREFRONT_SELECT = { where: { isSample: true }, select: { id: true
 @Injectable()
 export class AffiliateService {
   private readonly logger = new Logger(AffiliateService.name);
+  private approveRunning = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -1333,7 +1334,7 @@ export class AffiliateService {
     // Rút = cash-out TOÀN BỘ hoa hồng khả dụng (commission là bản ghi rời rạc, không
     // tách lẻ theo số tiền tùy ý). credited tính theo tổng THỰC trong transaction →
     // không mất tiền; gate theo updateMany.count → không double-spend khi chạy đồng thời.
-    let result: { credited: number };
+    let result: { credited: number; count: number };
     try {
       result = await this.prisma.$transaction(async (tx) => {
         // Một mốc giờ cho khoá, khung tháng cộng dồn và requestedAt: lệch nhau quanh nửa đêm cuối tháng thì lệnh rơi sang tháng khác.
@@ -1396,7 +1397,7 @@ export class AffiliateService {
               : `Chuyển ${rows.length} khoản hoa hồng vào Ví`,
           });
         }
-        return { credited };
+        return { credited, count: rows.length };
       });
     } catch (err) {
       // Race idempotency: 2 request cùng key chạy đồng thời — request thua ăn P2002 trên
@@ -1419,6 +1420,7 @@ export class AffiliateService {
       ok: true,
       method,
       credited: result.credited,
+      count: result.count,
       note:
         result.credited > 0
           ? `Đã cộng ${result.credited}đ vào Ví Tubu.`
@@ -1427,7 +1429,9 @@ export class AffiliateService {
   }
 
   /**
-   * Cron 8:00 sáng giờ VN mỗi ngày: LOCKED quá hold_days → APPROVED, rồi tự chuyển vào Ví. Mỗi CTV nhận tối đa một tin tổng cho lượt này.
+   * Cron mỗi giờ: LOCKED quá hold_days → APPROVED (không gửi tin: approvedAt là mốc doanh số tháng nên duyệt không được dời giờ).
+   * Từ 8:00 giờ VN, nếu hôm nay (ngày VN) chưa có lượt ngày nào xong thì chạy lượt ngày: tự chuyển vào Ví và gửi tin tổng
+   * (lượt 8:00 bị lỡ vì deploy/khởi động lại/DB lỗi được chạy bù ở giờ sau).
    * try/catch BẮT BUỘC: đây là job Nest @Cron chạy NGAY TRONG process API chính, không ai await
    * Promise nó trả về — một lỗi Prisma tạm thời (mất kết nối DB, timeout pool, deadlock...) văng
    * ra ngoài sẽ thành unhandledRejection; Node 20 mặc định (--unhandled-rejections=throw) CRASH
@@ -1436,42 +1440,88 @@ export class AffiliateService {
    */
   @Cron(APPROVE_COMMISSIONS_CRON, { timeZone: CRON_TZ })
   @TrackCron()
-  async approveDueCommissions(): Promise<void> {
+  async approveDueCommissions(now: Date = new Date()): Promise<void> {
+    if (this.approveRunning) {
+      markCronSkipped('RUNNING');
+      return;
+    }
+    this.approveRunning = true;
     try {
-      const holdDays = await this.effectiveHoldDays();
-      const threshold = new Date(Date.now() - holdDays * 24 * 3600 * 1000);
-      // Đơn còn yêu cầu đổi/trả CHỜ DUYỆT (khách gửi trong cửa sổ, admin chưa xử lý) → chưa chốt:
-      // APPROVED là điểm chốt: hoa hồng đã chuyển vào Ví chỉ thu hồi được bằng cách trừ Ví CTV (có thể âm), và APPROVED là
-      // nền doanh số mốc thưởng. Chốt sớm thì admin duyệt trả hàng sau đó phải trừ tiền CTV đã nhận.
-      // Yêu cầu mới không lọt giữa 2 câu lệnh: hold hiệu lực ≥ cửa sổ đổi/trả (effectiveHoldDays)
-      // nên lúc đủ hold khách đã hết hạn gửi; bị từ chối thì lượt cron sau chốt tiếp.
-      const openReturns = await this.prisma.returnRequest.findMany({
-        where: { status: 'REQUESTED' },
-        select: { orderId: true },
-      });
-      const heldOrderIds = [...new Set(openReturns.map((r) => r.orderId))];
-      const approvedAt = new Date();
-      const res = await this.prisma.commission.updateMany({
-        where: {
-          status: 'LOCKED',
-          lockedAt: { lte: threshold },
-          // Đơn phải CÒN DELIVERED ngay trong câu UPDATE: duyệt trả hàng lật đơn → RETURNED trước,
-          // reverseCommissionsForOrder chạy sau (ngoài tx) — lượt cron rơi vào khe đó mà không có
-          // điều kiện này sẽ chốt APPROVED hoa hồng của đơn đã trả hàng; cron chuyển nó vào Ví nên lần thu hồi phải trừ Ví CTV.
-          order: { status: 'DELIVERED' },
-          ...(heldOrderIds.length > 0 ? { orderId: { notIn: heldOrderIds } } : {}),
+      // Khoá advisory theo transaction giữ suốt lượt: hai tiến trình cùng chạy thì bên thua bỏ qua. Việc ghi chạy trên kết nối khác.
+      await this.prisma.$transaction(
+        async (tx) => {
+          const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
+            SELECT pg_try_advisory_xact_lock(hashtext('cron:affiliate.approve_due')) AS "locked"`;
+          if (!row?.locked) {
+            markCronSkipped('LOCKED');
+            return;
+          }
+          await this.approveDueAndMaybeTransfer(now);
         },
-        data: { status: 'APPROVED', approvedAt },
-      });
-      if (res.count > 0) this.logger.log(`Duyệt ${res.count} commission hết hold.`);
-      // Chạy cả khi lượt này không duyệt thêm khoản nào: quét luôn phần còn sót (cờ từng tắt, lần trước lỗi hoặc thiếu MST).
-      await this.autoTransferApprovedToWallet().catch((err: unknown) => {
-        this.logger.error(`autoTransferApprovedToWallet lỗi: ${err instanceof Error ? err.message : err}`);
-      });
-      if (res.count > 0) await this.notifyCommissionsApproved(approvedAt);
+        { maxWait: 10_000, timeout: 15 * 60_000 },
+      );
     } catch (err) {
       this.logger.error(`approveDueCommissions lỗi: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      this.approveRunning = false;
     }
+  }
+
+  private async approveDueAndMaybeTransfer(now: Date): Promise<void> {
+    const holdDays = await this.effectiveHoldDays();
+    const threshold = new Date(now.getTime() - holdDays * 24 * 3600 * 1000);
+    // Đơn còn yêu cầu đổi/trả CHỜ DUYỆT (khách gửi trong cửa sổ, admin chưa xử lý) → chưa chốt:
+    // APPROVED là điểm chốt: hoa hồng đã chuyển vào Ví chỉ thu hồi được bằng cách trừ Ví CTV (có thể âm), và APPROVED là
+    // nền doanh số mốc thưởng. Chốt sớm thì admin duyệt trả hàng sau đó phải trừ tiền CTV đã nhận.
+    // Yêu cầu mới không lọt giữa 2 câu lệnh: hold hiệu lực ≥ cửa sổ đổi/trả (effectiveHoldDays)
+    // nên lúc đủ hold khách đã hết hạn gửi; bị từ chối thì lượt cron sau chốt tiếp.
+    const openReturns = await this.prisma.returnRequest.findMany({
+      where: { status: 'REQUESTED' },
+      select: { orderId: true },
+    });
+    const heldOrderIds = [...new Set(openReturns.map((r) => r.orderId))];
+    const res = await this.prisma.commission.updateMany({
+      where: {
+        status: 'LOCKED',
+        lockedAt: { lte: threshold },
+        // Đơn phải CÒN DELIVERED ngay trong câu UPDATE: duyệt trả hàng lật đơn → RETURNED trước,
+        // reverseCommissionsForOrder chạy sau (ngoài tx) — lượt cron rơi vào khe đó mà không có
+        // điều kiện này sẽ chốt APPROVED hoa hồng của đơn đã trả hàng; cron chuyển nó vào Ví nên lần thu hồi phải trừ Ví CTV.
+        order: { status: 'DELIVERED' },
+        ...(heldOrderIds.length > 0 ? { orderId: { notIn: heldOrderIds } } : {}),
+      },
+      data: { status: 'APPROVED', approvedAt: new Date() },
+    });
+    if (res.count > 0) this.logger.log(`Duyệt ${res.count} commission hết hold.`);
+    await this.runDailyWalletTransferIfDue(now).catch((err: unknown) => {
+      this.logger.error(`Lượt chuyển hoa hồng vào Ví lỗi: ${err instanceof Error ? err.message : err}`);
+    });
+  }
+
+  /**
+   * Lượt ngày: tự chuyển vào Ví rồi gửi tin tổng. Chưa tới 8:00 giờ VN, hoặc hôm nay đã có lượt xong thì không làm gì.
+   * Mốc xong (cron_runs.lastSuccessAt = lúc BẮT ĐẦU lượt, để khoản duyệt trong lúc lượt chạy vẫn thuộc cửa sổ của lượt sau) chỉ ghi
+   * khi cả chuyển lẫn báo đều không lỗi; lỗi giữa chừng thì giờ sau chạy lại, và chạy lại không chuyển đôi (khoá idempotency theo tập
+   * khoản, tin theo CTV + ngày VN).
+   */
+  async runDailyWalletTransferIfDue(now: Date = new Date()): Promise<boolean> {
+    const vnHour = new Date(now.getTime() + VN_OFFSET_MS).getUTCHours();
+    if (vnHour < DAILY_WALLET_TRANSFER_HOUR_VN) return false;
+    const run = await this.prisma.cronRun.findUnique({ where: { job: DAILY_WALLET_TRANSFER_JOB }, select: { lastSuccessAt: true } });
+    const last = run?.lastSuccessAt ?? undefined;
+    if (last && vnDateKey(last) === vnDateKey(now)) return false;
+    const since = last ?? new Date(now.getTime() - 24 * 3600 * 1000);
+    const transfer = await this.transferApproved();
+    const notified = await this.notifyCommissionsApproved(since, now);
+    if (!transfer.ok || !notified) return false;
+    const finished = new Date();
+    const timing = { lastStartedAt: now, lastFinishedAt: finished, lastDurationMs: Math.max(0, finished.getTime() - now.getTime()) };
+    await this.prisma.cronRun.upsert({
+      where: { job: DAILY_WALLET_TRANSFER_JOB },
+      create: { job: DAILY_WALLET_TRANSFER_JOB, ...timing, lastOutcome: 'OK', lastSuccessAt: now, consecutiveFailures: 0 },
+      update: { ...timing, lastOutcome: 'OK', lastErrorCount: 0, lastSuccessAt: now, consecutiveFailures: 0 },
+    });
+    return true;
   }
 
   /**
@@ -1483,10 +1533,15 @@ export class AffiliateService {
    * Trả về các CTV đã được xử lý (payout tạo xong, kể cả khi thuế truy thu ăn hết số tiền). Không ném lỗi.
    */
   async autoTransferApprovedToWallet(): Promise<Set<string>> {
+    return (await this.transferApproved()).credited;
+  }
+
+  /** `ok` false khi cả vòng hỏng (không đọc được cờ hay danh sách); lỗi riêng từng CTV không tính. */
+  private async transferApproved(): Promise<{ credited: Set<string>; ok: boolean }> {
     const credited = new Set<string>();
     try {
       const enabled = await this.config.get<unknown>(AFFILIATE_AUTO_WALLET_TRANSFER_KEY, DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED);
-      if (enabled !== true) return credited;
+      if (enabled !== true) return { credited, ok: true };
       const rows = await this.prisma.commission.findMany({
         // CTV bị khoá giữ nguyên tiền ở APPROVED: chuyển vào Ví sẽ ghi thu nhập chịu thuế và cộng tiền cho tài khoản đang bị xem xét.
         where: { status: 'APPROVED', payoutBatchId: null, user: { isBlocked: false } },
@@ -1507,7 +1562,7 @@ export class AffiliateService {
           const result = await this.requestPayout(userId, total, 'WALLET_BALANCE', undefined, key);
           const net = ('credited' in result ? result.credited : undefined) ?? 0;
           credited.add(userId);
-          await this.notifyAutoWalletCredited(userId, net, total, ids.length, key);
+          await this.notifyAutoWalletCredited(userId, net, total, ('count' in result ? result.count : undefined) ?? ids.length, key);
         } catch (err) {
           const code = (err as { response?: { code?: string } }).response?.code;
           const msg = err instanceof Error ? err.message : String(err);
@@ -1517,8 +1572,9 @@ export class AffiliateService {
       }
     } catch (err) {
       this.logger.error(`autoTransferApprovedToWallet lỗi: ${err instanceof Error ? err.message : err}`);
+      return { credited, ok: false };
     }
-    return credited;
+    return { credited, ok: true };
   }
 
   /** Tiền đã vào Ví xong: thông báo hỏng không được làm hỏng vòng chuyển của CTV khác (chỉ log). */
@@ -1528,14 +1584,14 @@ export class AffiliateService {
       const payout = await this.prisma.payout.findUnique({ where: { idempotencyKey: key }, select: { taxWithheld: true } });
       const tax = payout?.taxWithheld ?? 0;
       if (credited <= 0) {
-        await this.notifications.notify(userId, CTV_NOTIFICATION.AUTO_WALLET_TAX_ONLY, { amount: vnd(gross), tax: vnd(tax) }, { dedupeKey: key });
+        await this.notifications.notify(userId, CTV_NOTIFICATION.AUTO_WALLET_TAX_ONLY, { amount: vnd(gross), tax: vnd(tax) }, { dedupeKey: `commission-wallet:${userId}:${vnDateKey()}` });
         return;
       }
       await this.notifications.notify(
         userId,
         CTV_NOTIFICATION.AUTO_WALLET,
         { amount: vnd(credited), count: String(count), tax_note: tax > 0 ? ` (đã khấu trừ thuế TNCN ${vnd(tax)})` : '' },
-        { dedupeKey: key },
+        { dedupeKey: `commission-wallet:${userId}:${vnDateKey()}` },
       );
     } catch (err) {
       this.logger.error(`Gửi thông báo tự cộng hoa hồng vào Ví cho ${userId} lỗi: ${err instanceof Error ? err.message : err}`);
@@ -1543,17 +1599,16 @@ export class AffiliateService {
   }
 
   /**
-   * Báo CTV hoa hồng vừa được duyệt (có thể chuyển vào Ví), gộp theo người: một lượt cron có thể chốt nhiều
-   * khoản của cùng CTV, mỗi khoản một tin là spam. Lọc đúng lượt này bằng `approvedAt` trùng
-   * mốc đã ghi ở câu UPDATE (không cần thêm cột/đổi câu UPDATE đang có test). Chạy SAU lượt tự chuyển vào Ví: khoản đã tự vào
-   * Ví đã PAID nên không còn dòng APPROVED để báo (CTV nhận tin "Đã cộng…" thay thế). Mọi lỗi chỉ log: tiền
-   * đã chốt xong, thông báo hỏng không được làm cron báo thất bại.
+   * Tin tổng "đã duyệt" cho khoản APPROVED có `approvedAt` trong (since, until]: gộp theo CTV, mỗi CTV tối đa một tin mỗi ngày VN
+   * (dedupeKey theo CTV + ngày, nên lượt chạy lại không báo đôi). Chạy SAU lượt tự chuyển: khoản đã vào Ví đã PAID nên không còn dòng
+   * APPROVED để báo (CTV nhận tin "đã chuyển vào Ví" thay thế). Trả false khi có lỗi để lượt ngày chạy lại ở giờ sau.
    */
-  private async notifyCommissionsApproved(approvedAt: Date): Promise<void> {
-    if (!this.notifications) return;
+  private async notifyCommissionsApproved(since: Date, until: Date): Promise<boolean> {
+    if (!this.notifications) return true;
+    let ok = true;
     try {
       const rows = await this.prisma.commission.findMany({
-        where: { status: 'APPROVED', approvedAt },
+        where: { status: 'APPROVED', approvedAt: { gt: since, lte: until } },
         select: { affiliateUserId: true, amount: true },
       });
       const perUser = new Map<string, { count: number; amount: number }>();
@@ -1567,15 +1622,18 @@ export class AffiliateService {
             userId,
             CTV_NOTIFICATION.APPROVED,
             { count: String(sum.count), amount: vnd(sum.amount) },
-            { dedupeKey: `commission-approved:${userId}:${approvedAt.toISOString()}` },
+            { dedupeKey: `commission-approved:${userId}:${vnDateKey(until)}` },
           );
         } catch (err) {
+          ok = false;
           this.logger.error(`Gửi thông báo hoa hồng được duyệt cho ${userId} lỗi: ${err instanceof Error ? err.message : err}`);
         }
       }
     } catch (err) {
+      ok = false;
       this.logger.error(`notifyCommissionsApproved lỗi: ${err instanceof Error ? err.message : err}`);
     }
+    return ok;
   }
 
   /**

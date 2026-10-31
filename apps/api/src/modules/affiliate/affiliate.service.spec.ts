@@ -1430,13 +1430,19 @@ describe('AffiliateService.getPublicTier', () => {
   });
 });
 
+function lockable<T extends object>(parts: T) {
+  const p = { ...parts, $queryRaw: jest.fn().mockResolvedValue([{ locked: true }]), $transaction: jest.fn() };
+  p.$transaction.mockImplementation((cb: (tx: unknown) => unknown) => cb(p));
+  return p;
+}
+
 describe('AffiliateService.approveDueCommissions (chỉ chốt đơn KHÔNG còn yêu cầu đổi/trả chờ duyệt)', () => {
   it('đơn đang có ReturnRequest REQUESTED → không chuyển APPROVED (để reverseCommissionsForOrder còn đảo được)', async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
-    const prisma = {
+    const prisma = lockable({
       returnRequest: { findMany: jest.fn().mockResolvedValue([{ orderId: 'o-return' }]) },
       commission: { updateMany },
-    } as unknown as PrismaService;
+    }) as unknown as PrismaService;
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).approveDueCommissions();
     expect((prisma as unknown as { returnRequest: { findMany: jest.Mock } }).returnRequest.findMany).toHaveBeenCalledWith({
       where: { status: 'REQUESTED' },
@@ -1452,30 +1458,30 @@ describe('AffiliateService.approveDueCommissions (chỉ chốt đơn KHÔNG còn
   // hồng vẫn LOCKED → bị chốt APPROVED (không-đảo-được) cho một đơn đã trả hàng.
   it('chỉ chốt hoa hồng của đơn còn DELIVERED (đơn vừa lật RETURNED/CANCELLED chờ đảo thì bỏ qua)', async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 0 });
-    const prisma = {
+    const prisma = lockable({
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
       commission: { updateMany },
-    } as unknown as PrismaService;
+    }) as unknown as PrismaService;
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).approveDueCommissions();
     expect(updateMany.mock.calls[0][0].where).toMatchObject({ status: 'LOCKED', order: { status: 'DELIVERED' } });
   });
 
   it('không có yêu cầu đổi/trả treo → không thêm điều kiện orderId', async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 0 });
-    const prisma = {
+    const prisma = lockable({
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
       commission: { updateMany },
-    } as unknown as PrismaService;
+    }) as unknown as PrismaService;
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).approveDueCommissions();
     expect(updateMany.mock.calls[0][0].where.orderId).toBeUndefined();
   });
 
   it('cửa sổ đổi/trả dài hơn hold_days → chờ hết cửa sổ mới chốt (khách còn gửi trả được thì chưa APPROVED)', async () => {
     const updateMany = jest.fn().mockResolvedValue({ count: 0 });
-    const prisma = {
+    const prisma = lockable({
       returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
       commission: { updateMany },
-    } as unknown as PrismaService;
+    }) as unknown as PrismaService;
     // Admin cấu hình hold 5 ngày nhưng cho đổi/trả 10 ngày.
     const cfg = {
       get: async <T>(k: string, fb?: T): Promise<T> =>
