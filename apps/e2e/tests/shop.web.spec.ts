@@ -14,7 +14,7 @@ const product = (n: number, over: Record<string, unknown> = {}) => ({
   id: `p${n}`, slug: `sp-${n}`, brand: 'Tubu', name: `Sản phẩm ${n}`, thumbnail: null, basePrice: 100000 + n,
   salePrice: null, isFeatured: false, inStock: true, ...over,
 });
-const pageOf = (data: unknown[], total: number, page = 1, limit = 24) => ({ data, meta: { page, limit, total } });
+const pageOf = (data: unknown[], total: number, page = 1, limit = 20) => ({ data, meta: { page, limit, total } });
 
 /** Làm dữ liệu SSR hết tươi rồi kích tải lại khi có mạng trở lại; lặp tới khi mock nhận được lời gọi. Giữ 15 giây làm đệm cho máy CI chậm; chưa đo lại trên GitHub Actions sau khi web chạy bằng bản build, hạ về 5 giây khi CI ổn định. */
 async function refetchStale(page: Page, api: MockApi, method: string, pattern: string, minCalls = 1) {
@@ -63,12 +63,12 @@ test.describe('Web khách: danh mục /san-pham', () => {
     await page.goto('/?q=dau+goi&utm_source=zalo');
     await refetchStale(page, api, 'GET', '/products');
     await expect(page).toHaveURL(/\/san-pham\?q=dau(\+|%20)goi&utm_source=zalo/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Danh mục' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Kết quả cho "dau goi"' })).toBeAttached();
     const call = api.callsTo('GET', '/products').at(-1)!.query;
     expect(call.get('q')).toBe('dau goi');
   });
 
-  test('lưới danh mục, sắp xếp và bộ lọc ghi vào URL và gọi API đúng tham số', async ({ page, api }, testInfo) => {
+  test('hub: ô danh mục, sắp xếp (SortBar) và bộ lọc ghi vào URL và gọi API đúng tham số', async ({ page, api }, testInfo) => {
     mockCatalog(api);
     api.get('/products', ({ call }) => {
       if (call.query.get('limit') === '1') return pageOf([product(1)], 5, 1, 1);
@@ -77,10 +77,11 @@ test.describe('Web khách: danh mục /san-pham', () => {
     // Từ lg bộ lọc nằm ở cột bên trái nên không có nút mở sheet; project desktop hạ xuống khổ dưới lg để kiểm luồng sheet,
     // project Mobile giữ nguyên khổ điện thoại.
     if (testInfo.project.name === 'Web Customer') await page.setViewportSize({ width: 900, height: 900 });
+    // Gốc /san-pham là hub (không tải danh sách): chỉ có ô danh mục, thương hiệu và kệ Bán chạy nhất.
     await page.goto('/san-pham');
     await refetchStale(page, api, 'GET', '/categories');
-    await refetchStale(page, api, 'GET', '/products');
-    await expect(page.getByText('Sản phẩm 1')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Dầu gội' })).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Sắp xếp' })).toHaveCount(0);
 
     // Đổi URL làm Next dựng lại trang ở máy chủ với dữ liệu thật của DB e2e (không có danh mục c-goi), nên mỗi lần đổi đều kích tải lại qua mock.
     const productCalls = () => api.callsTo('GET', '/products').length;
@@ -88,12 +89,13 @@ test.describe('Web khách: danh mục /san-pham', () => {
     await expect(page).toHaveURL(/\/san-pham\?category=c-goi$/);
     await refetchStale(page, api, 'GET', '/products', productCalls() + 1);
     await expect(page.getByRole('region', { name: 'Danh mục' })).toHaveCount(0);
+    await expect(page.getByText('Sản phẩm 1')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Giá tăng' }).click();
+    await page.getByRole('button', { name: 'Giá ⇅' }).click();
     await expect(page).toHaveURL(/category=c-goi&sort=price_asc/);
     await refetchStale(page, api, 'GET', '/products', productCalls() + 1);
 
-    await page.getByRole('button', { name: 'Bộ lọc' }).click();
+    await page.getByRole('button', { name: 'Lọc', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Bộ lọc' });
     await dialog.getByRole('button', { name: 'Chỉ hiện còn hàng' }).click();
     await dialog.getByRole('button', { name: 'Từ 4★ trở lên' }).click();
@@ -106,7 +108,7 @@ test.describe('Web khách: danh mục /san-pham', () => {
     expect(last.get('inStock')).toBe('true');
     expect(last.get('minRating')).toBe('4');
     expect(last.get('sort')).toBe('price_asc');
-    await expect(page.getByRole('button', { name: 'Bộ lọc (2)' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Lọc, 2 bộ lọc đang bật' })).toBeVisible();
   });
 
   test('từ lg bộ lọc là cột bên trái: không có nút Bộ lọc, chọn danh mục và còn hàng ghi vào URL', async ({ page, api }, testInfo) => {
@@ -114,11 +116,11 @@ test.describe('Web khách: danh mục /san-pham', () => {
     mockCatalog(api);
     api.get('/products', pageOf([product(1), product(2)], 2));
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/san-pham');
+    await page.goto('/san-pham?all=1');
     await refetchStale(page, api, 'GET', '/categories');
     const side = page.getByRole('complementary', { name: 'Bộ lọc' });
     await expect(side).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Bộ lọc', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Lọc', exact: true })).toHaveCount(0);
     await side.getByRole('button', { name: /Dầu gội/ }).click();
     await expect(page).toHaveURL(/category=c-goi/);
     await side.getByRole('checkbox', { name: 'Chỉ hiện còn hàng' }).click();
@@ -139,7 +141,7 @@ test.describe('Web khách: danh mục /san-pham', () => {
     await expect(page).toHaveURL(/\/san-pham\?q=xyz$/);
     await expect(page.getByText('Không tìm thấy "xyz"')).toBeVisible();
     await page.getByRole('button', { name: 'Xoá tìm kiếm & bộ lọc' }).click();
-    await expect(page).toHaveURL(/\/san-pham$/);
+    await expect(page).toHaveURL(/\/san-pham\?all=1$/);
   });
 
   test('"Xem thêm" tải trang kế và nối vào danh sách', async ({ page, api }) => {
@@ -147,7 +149,7 @@ test.describe('Web khách: danh mục /san-pham', () => {
     api.get('/products', ({ call }) =>
       call.query.get('page') === '2' ? pageOf([product(3)], 3, 2, 2) : pageOf([product(1), product(2)], 3, 1, 2),
     );
-    await page.goto('/san-pham');
+    await page.goto('/san-pham?all=1');
     await refetchStale(page, api, 'GET', '/products');
     await expect(page.getByText('Sản phẩm 2')).toBeVisible();
     await page.getByRole('button', { name: 'Xem thêm' }).click();
@@ -160,6 +162,11 @@ test.describe('Web khách: danh mục /san-pham', () => {
     api.get('/products', pageOf([product(1)], 1));
     await page.setViewportSize({ width: 320, height: 640 });
     await page.goto('/san-pham');
+    await refetchStale(page, api, 'GET', '/categories');
+    await expect(page.getByRole('button', { name: 'Xem tất cả sản phẩm' })).toBeVisible();
+    const hubOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(hubOverflow).toBeLessThanOrEqual(0);
+    await page.goto('/san-pham?all=1');
     await refetchStale(page, api, 'GET', '/products');
     await expect(page.getByText('Sản phẩm 1')).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

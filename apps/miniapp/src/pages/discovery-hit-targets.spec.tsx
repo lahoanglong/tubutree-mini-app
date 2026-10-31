@@ -30,12 +30,13 @@ vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { UpcomingFlashSales } from '../components/flash-sale';
+import { ActiveFilters } from '../components/catalog/active-filters';
 import { CatalogGrid } from '../components/catalog/catalog-grid';
-import { CategoryGrid } from '../components/catalog/category-grid';
+import { CategoryChipRow } from '../components/catalog/category-chip-row';
+import { CategoryTiles } from '../components/catalog/category-tiles';
 import { FilterSheet } from '../components/catalog/filter-sheet';
+import { ListHeading } from '../components/catalog/list-heading';
 import { RecentlyViewedRail } from '../components/catalog/recently-viewed-rail';
-import { ResultHeader } from '../components/catalog/result-header';
-import { SortChips } from '../components/catalog/sort-chips';
 import { SuggestList } from '../components/catalog/suggest-list';
 import { HomeBlockError } from '../components/home/home-block-error';
 import { HomeHeader } from '../components/home/home-header';
@@ -101,23 +102,17 @@ describe('vùng chạm >= 44px — Trang chủ / Danh mục / Tìm kiếm', () =
     expect(undersized(container)).toEqual([]);
   });
 
-  it('lưới danh mục, dải sắp xếp, đầu kết quả (nút Bộ lọc + chip gỡ lọc)', () => {
+  it('lưới danh mục, chip danh mục con, tiêu đề kết quả, chip gỡ lọc', () => {
+    const child = { id: 'c1', parentId: 'p', name: 'Rửa mặt', slug: 'rua-mat', image: null, productCount: 3, children: [] };
     const { container } = wrap(
       <>
-        <CategoryGrid entries={SEGMENT_ENTRIES} isLoading={false} onSelect={vi.fn()} />
-        <SortChips value="newest" onChange={vi.fn()} />
-        <ResultHeader
-          total={30}
-          isLoading={false}
-          chips={[{ key: 'brand:Tubu', label: 'Tubu', patch: {} }]}
-          filterCount={1}
-          filtersIgnored={false}
-          onOpenFilters={vi.fn()}
-          onPatch={vi.fn()}
-        />
+        <CategoryTiles entries={SEGMENT_ENTRIES} isLoading={false} placeholderCount={4} onSelect={vi.fn()} onSelectAll={vi.fn()} />
+        <ListHeading title="Chăm sóc da" count={30} isLoading={false} />
+        <CategoryChipRow parent={{ ...child, id: 'p', name: 'Chăm sóc da', children: [child] }} chips={[child]} activeId="p" onSelect={vi.fn()} />
+        <ActiveFilters chips={[{ key: 'brand:Tubu', label: 'Tubu', patch: {} }]} filtersIgnored={false} onPatch={vi.fn()} />
       </>,
     );
-    expect(container.querySelectorAll(INTERACTIVE).length).toBeGreaterThanOrEqual(10);
+    expect(container.querySelectorAll(INTERACTIVE).length).toBeGreaterThanOrEqual(8);
     expect(undersized(container)).toEqual([]);
   });
 

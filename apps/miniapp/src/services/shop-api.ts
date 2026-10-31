@@ -405,6 +405,8 @@ export interface CategoryDTO {
   sortOrder: number;
   /** Số SP đang bán (API từ 4b). Thiếu = API cũ → miniapp dùng 4 phân khúc. */
   productCount?: number;
+  /** Cây danh mục (API từ P3a); API cũ trả danh sách phẳng nên thiếu. */
+  children?: CategoryDTO[];
 }
 export const fetchCategories = async () =>
   (await takePublicBlock('categories')) ?? api.get<CategoryDTO[]>('/categories').then((r) => r.data);

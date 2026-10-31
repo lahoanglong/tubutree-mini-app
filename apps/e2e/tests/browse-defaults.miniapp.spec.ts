@@ -16,11 +16,18 @@ test.describe('Danh mục — mock mặc định của mockSession', () => {
     api.allowUnmocked('POST /events', 'POST /affiliate/touch', 'GET /me/coupons', 'GET /affiliate/me');
   });
 
-  test('/browse (gốc) mở được, đã gọi /categories và /products', async ({ page, api }) => {
+  test('/browse (gốc, hub) mở được, đã gọi /categories và /products của kệ Bán chạy nhất (sort=best_seller_30d, limit=10), không tải danh sách đầy đủ', async ({ page, api }) => {
     await page.goto('/browse');
     await expect(page.getByRole('searchbox', { name: 'Tìm sản phẩm' })).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => api.callsTo('GET', '/categories').length, { timeout: 15_000 }).toBeGreaterThan(0);
     await expect.poll(() => api.callsTo('GET', '/products').length, { timeout: 15_000 }).toBeGreaterThan(0);
+    expect(api.callsTo('GET', '/products').map((c) => [c.query.get('sort'), c.query.get('limit')])).toEqual([['best_seller_30d', '10']]);
+  });
+
+  test('/browse?all=1 (danh sách đầy đủ) gọi /products với limit=20 và không có lời gọi chưa mock', async ({ page, api }) => {
+    await page.goto('/browse?all=1');
+    await expect(page.getByRole('searchbox', { name: 'Tìm sản phẩm' })).toBeVisible({ timeout: 15_000 });
+    await expect.poll(() => api.callsTo('GET', '/products').some((c) => c.query.get('limit') === '20'), { timeout: 15_000 }).toBe(true);
   });
 
   test('/browse với đủ tham số lọc mới vẫn không có lời gọi chưa mock', async ({ page, api }) => {

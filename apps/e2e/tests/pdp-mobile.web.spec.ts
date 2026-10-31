@@ -61,7 +61,7 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('about:blank');
-    await page.goto('/san-pham');
+    await page.goto('/san-pham?all=1');
     const card = page.locator('a[href^="/san-pham/"]').first();
     test.skip((await card.count().catch(() => 0)) === 0, 'DB e2e chưa có sản phẩm nào để bấm');
     await expect(card).toBeVisible();
@@ -82,7 +82,7 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     expect(url.pathname).toBe('/san-pham');
     expect(url.pathname).not.toBe(href);
     await expect(page.getByRole('button', { name: 'Tăng số lượng' })).toHaveCount(0);
-    await expect(page.getByRole('heading', { level: 1, name: 'Danh mục' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Tất cả sản phẩm' })).toBeAttached();
     await page.screenshot({ path: test.info().outputPath('pdp-back-stay.png') });
   });
 });

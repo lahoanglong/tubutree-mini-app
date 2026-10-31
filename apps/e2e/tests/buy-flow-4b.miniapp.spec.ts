@@ -67,7 +67,7 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
       .toBe(true);
   });
 
-  test('Danh mục thật chỉ hiện mục có hàng; chạm "Cho bé" → /browse?category=cat-baby, có chip gỡ được', async ({ page, api }) => {
+  test('Danh mục thật chỉ hiện mục có hàng; chạm "Cho bé" → /browse?category=cat-baby, tên danh mục là tiêu đề của danh sách', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/');
     const cats = page.getByRole('region', { name: 'Danh mục', exact: true });
@@ -75,7 +75,7 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     await expect(cats.getByRole('button', { name: 'Cà phê & Đồ uống' })).toHaveCount(0);
     await cats.getByRole('button', { name: 'Cho bé' }).click();
     await expect(page).toHaveURL(/\/browse\?category=cat-baby$/, { timeout: 15_000 });
-    await expect(page.getByRole('button', { name: 'Bỏ lọc Cho bé' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { level: 2, name: 'Cho bé' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('result-count')).toHaveText('1 sản phẩm', { timeout: 15_000 });
   });
 
@@ -213,15 +213,17 @@ test.describe('Buy-flow 4b — bố cục 320/375/390, vùng chạm, khung chờ
       expect(await noHorizontalScroll(page)).toBe(true);
       await page.screenshot({ path: test.info().outputPath(`home-4b-${width}.png`), fullPage: true });
 
-      await page.goto('/browse');
+      // Gốc /browse là hub (không có lưới): danh sách đầy đủ vào thẳng ?all=1.
+      await page.goto('/browse?all=1');
       await expect(page.getByTestId('result-count')).toHaveText('30 sản phẩm', { timeout: 15_000 });
       expect(await noHorizontalScroll(page)).toBe(true);
-      for (const name of ['Gợi ý', 'Bán chạy']) {
-        await expectChipHitArea44(page.getByRole('group', { name: 'Sắp xếp' }).getByRole('button', { name, exact: true }));
+      // Tab sắp xếp là nút cao 44px thật của SortBar, không còn là Chip 36px + vùng chạm giãn.
+      for (const name of ['Phổ biến', 'Bán chạy']) {
+        expect((await page.getByRole('group', { name: 'Sắp xếp' }).getByRole('button', { name, exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
       }
       await page.screenshot({ path: test.info().outputPath(`browse-4b-${width}.png`) });
 
-      await page.getByRole('button', { name: 'Bộ lọc' }).click();
+      await page.getByRole('button', { name: 'Lọc', exact: true }).click();
       const apply = page.getByRole('button', { name: /^Xem [\d.]+ sản phẩm$/ });
       await expect(apply).toBeVisible({ timeout: 15_000 });
       await expect.poll(() => settled(apply), { timeout: 5_000 }).toBe(true);
@@ -260,13 +262,15 @@ test.describe('Buy-flow 4b — bố cục 320/375/390, vùng chạm, khung chờ
 
     const gate2 = gateOf();
     api.get('/products', async (ctx: MockContext) => {
-      if (ctx.call.query.get('limit') === '30') await gate2.promise;
+      if (ctx.call.query.get('limit') === '20') await gate2.promise;
       return real(ctx);
     });
     await page.goto('/browse?sort=newest');
     const skel2 = page.getByTestId('catalog-tile-skeleton').first();
     await expect(skel2).toBeVisible({ timeout: 15_000 });
-    const skel2H = (await skel2.boundingBox())!.height;
+    // WebKit đôi khi trả boundingBox() = null ở lần gọi ĐẦU ngay sau toBeVisible (phần tử có bố cục thật, không bị gỡ/gắn lại): đợi có số đo.
+    let skel2H = 0;
+    await expect.poll(async () => (skel2H = (await skel2.boundingBox())?.height ?? 0), { timeout: 5_000 }).toBeGreaterThan(0);
     gate2.open();
     const tile2 = tileRoot(page.getByTestId('catalog-grid'));
     await expect(tile2).toBeVisible({ timeout: 15_000 });
