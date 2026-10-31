@@ -1,5 +1,5 @@
 /**
- * Nhịp chơi người mới của Vườn Xanh: luật chọn nút chính, thẻ 3 bước và chữ dùng chung. Mini App (qua `vi.game.newbie`)
+ * Nhịp chơi người mới của Vườn Xanh: luật chọn nút chính, thẻ 3 bước và chữ dùng chung. Mini App (import trực tiếp `gameNewbieCopy`)
  * và web cùng đọc file này nên chữ và luật không lệch nhau.
  */
 

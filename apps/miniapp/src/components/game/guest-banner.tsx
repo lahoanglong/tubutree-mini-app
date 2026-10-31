@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { vi } from '../../i18n/vi';
 import { getErrorMessage } from '../../services/api';
 import { useAuthStore } from '../../store/auth';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
-const t = vi.game.newbie.guest;
+const t = gameNewbieCopy.guest;
 
 /**
  * Tài khoản khách của Mini App (chưa gắn SĐT, zaloId `guest_…`): nói rõ đang chơi thử và cho đăng nhập Zalo ngay.

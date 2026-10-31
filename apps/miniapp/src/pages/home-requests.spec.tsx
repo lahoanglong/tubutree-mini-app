@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeAll, describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -28,7 +28,11 @@ vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import HomePage from './home';
+import { loadHomeBelow } from '../components/home/home-lazy';
 import { refreshHomeQueries } from '../components/home/home-blocks';
+
+// Chunk khối dưới màn đầu nạp thật trước (giờ thật): giờ giả không đẩy được import() động.
+beforeAll(() => loadHomeBelow());
 
 const card = (id: string, name: string) => ({ id, slug: id, brand: 'Tubu', name, thumbnail: null, basePrice: 50000, salePrice: null, isFeatured: true, inStock: true });
 const PAGE = (items: ReturnType<typeof card>[]) => ({ data: items, meta: { page: 1, limit: 6, total: items.length } });

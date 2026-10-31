@@ -3,11 +3,11 @@ import { primaryWaterAction, type PrimaryWaterAction } from '@tubutree/app-core/
 import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import { guestCheckInCopy } from '@tubutree/app-core/daily-check-in-guest-copy';
 import type { GameProfile } from '../../services/game-api';
-import { vi } from '../../i18n/vi';
 import { Button } from '../ui/button';
 import { isSameVNDay } from './game-utils';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
-const t = vi.game.newbie.primary;
+const t = gameNewbieCopy.primary;
 
 export function primaryActionOf(profile: GameProfile | undefined, pointsPending?: boolean, checkInSeeds?: number): PrimaryWaterAction {
   return primaryWaterAction({

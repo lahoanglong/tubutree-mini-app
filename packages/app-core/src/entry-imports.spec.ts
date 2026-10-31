@@ -10,7 +10,7 @@ function importsOf(file: string): string[] {
   return [...src.matchAll(/^(?:import|export)\s[^;]*?from\s+'([^']+)'/gms)].map((m) => m[1]!);
 }
 
-// Mini App nạp thẳng Trang chủ và i18n/vi.ts, nên home-layout.ts và game-newbie.ts nằm trong gói đầu. Module chỉ trang con dùng
+// Mini App nạp thẳng Trang chủ và i18n/vi.ts, nên home-layout.ts nằm trong gói đầu (game-newbie.ts nay chỉ vào qua guest-points-note và wheel, không còn qua vi.ts). Module chỉ trang con dùng
 // mà bị hai file này import sẽ kéo cả khối theo vào gói đầu (entry đã từng tăng 1 KB vì lỗi này).
 describe('module của gói đầu Mini App không kéo module của trang con', () => {
   const LAZY_ONLY = ['./loyalty-tier-copy', './member-card-grace', './game-mission-paths', './profile-sections'];

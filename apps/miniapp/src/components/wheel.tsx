@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react';
 import { WHEEL_SEG as SEG, WHEEL_SLOTS as SLOTS, pickWheelSlot, wheelRotationFor } from '@tubutree/app-core/game-wheel';
 import type { SpinResult } from '../services/game-api';
-import { vi } from '../i18n/vi';
 import { formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Button } from './ui/button';
 import { Text } from './ui/text';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
 const SPIN_MS = 3600;
 
@@ -151,10 +151,10 @@ export function WheelOfFortune({
       {short ? (
         <>
           <Text variant="body-sm" tone="secondary" as="div" style={{ textAlign: 'center' }}>
-            {vi.game.newbie.wheel.have(points, cost)}
+            {gameNewbieCopy.wheel.have(points, cost)}
           </Text>
           <Button size="lg" variant="secondary" onPress={onEarnPoints} style={{ minWidth: 200 }}>
-            {vi.game.newbie.wheel.howToEarn}
+            {gameNewbieCopy.wheel.howToEarn}
           </Button>
         </>
       ) : (

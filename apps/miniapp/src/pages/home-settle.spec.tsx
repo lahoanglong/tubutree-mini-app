@@ -1,7 +1,7 @@
 import { render, screen, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, type ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HOME_SETTLE_MAX_MS, homeBlockOrder, homeRenderOrder } from '@tubutree/app-core/home-layout';
 
 // Khung chờ chung của Trang chủ ở cấp trang: Giờ vàng thật (khối hiện lỗi + "Thử lại"), giờ giả, StrictMode. home.spec.tsx mock Giờ vàng nên không thấy được.
@@ -44,6 +44,10 @@ vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import HomePage from './home';
+import { loadHomeBelow } from '../components/home/home-lazy';
+
+// Chunk khối dưới màn đầu nạp thật trước (giờ thật): giờ giả không đẩy được import() động.
+beforeAll(() => loadHomeBelow());
 
 const never = () => new Promise<never>(() => undefined);
 const deferred = <T,>() => {

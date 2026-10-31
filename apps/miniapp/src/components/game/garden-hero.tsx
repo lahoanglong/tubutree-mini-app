@@ -1,11 +1,11 @@
 import { treeTitle } from '@tubutree/app-core/tree-title';
 import type { GameProfile } from '../../services/game-api';
-import { vi } from '../../i18n/vi';
 import { formatNumber } from '../../utils/format';
 import { Heading, Text } from '../ui/text';
 import { WaterTank } from './water-tank';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
-const t = vi.game.newbie.hero;
+const t = gameNewbieCopy.hero;
 
 // Mầm/cành/cây và 💧 🔥 🌳 là nội dung của game (giai đoạn cây, đơn vị giọt nước, chuỗi ngày).
 export function GardenHero({

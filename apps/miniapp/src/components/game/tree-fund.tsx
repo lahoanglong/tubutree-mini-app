@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react';
 import { TreePine } from 'lucide-react';
-import { vi } from '../../i18n/vi';
 import { formatPoints } from '../../utils/format';
 import { newIdempotencyKey } from '../../utils/idempotency';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
 /**
  * Góp quỹ trồng cây bằng Điểm Xanh (tab Vườn, cạnh Tác động xanh). Thiếu điểm thì không mở hộp xác nhận mà hiện số dư
@@ -69,10 +69,10 @@ export function TreeFund({
       {short ? (
         <>
           <Text variant="body-sm" tone="secondary" as="div" style={{ textAlign: 'center' }}>
-            {vi.game.newbie.fund.have(points ?? 0, treePointsPrice ?? 0)}
+            {gameNewbieCopy.fund.have(points ?? 0, treePointsPrice ?? 0)}
           </Text>
           <Button fullWidth variant="secondary" icon={TreePine} onPress={onEarnPoints}>
-            {vi.game.newbie.fund.howToEarn}
+            {gameNewbieCopy.fund.howToEarn}
           </Button>
         </>
       ) : (
@@ -82,7 +82,7 @@ export function TreeFund({
         </Button>
       )}
       <Text variant="caption" tone="tertiary" as="div" style={{ textAlign: 'center' }}>
-        {vi.game.newbie.fund.line}
+        {gameNewbieCopy.fund.line}
       </Text>
       <BottomSheet
         open={confirmOpen}
@@ -104,7 +104,7 @@ export function TreeFund({
           {treePointsPrice != null ? `Góp quỹ trồng cây sẽ trừ ${formatPoints(treePointsPrice)} từ Điểm Xanh của bạn.` : 'Góp quỹ trồng cây sẽ trừ Điểm Xanh của bạn.'}
         </Text>
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
-          {vi.game.newbie.fund.confirmOrder}
+          {gameNewbieCopy.fund.confirmOrder}
         </Text>
       </BottomSheet>
     </div>
