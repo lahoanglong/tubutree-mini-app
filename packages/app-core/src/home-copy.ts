@@ -34,7 +34,7 @@ export const homeCopy = {
     preparingMany: (n: number) => `${n} đơn đang chuẩn bị`,
     preparingHint: 'Chạm để xem đơn',
   },
-  shortcuts: { title: 'Lối tắt', rail: 'Lối tắt, vuốt ngang để xem thêm' },
+  shortcuts: { title: 'Lối tắt', rail: 'Lối tắt, vuốt ngang để xem thêm', all: 'Tất cả', allAria: 'Tất cả lối tắt' },
   reorder: { buy: 'Mua lại', subscribe: (pct: number) => `Định kỳ -${pct}%`, seeAll: 'Xem đơn hàng' },
   categories: { title: 'Danh mục', rail: 'Danh mục, vuốt ngang để xem thêm' },
   journey: {

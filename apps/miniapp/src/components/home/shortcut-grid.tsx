@@ -1,52 +1,65 @@
 import { useState } from 'react';
 import { useNavigate } from 'zmp-ui';
-import { Gift, HeartHandshake, MessagesSquare, Package, Recycle, ScanLine, Ticket, Users, Zap, type LucideIcon } from 'lucide-react';
+import { LayoutGrid } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { SHORTCUT_TINT_VARS, visibleHomeShortcuts, type HomeShortcutId } from '@tubutree/app-core/home-layout';
+import { SHORTCUT_TINT_VARS, homeShortcutSlots, type HomeShortcutSpec } from '@tubutree/app-core/home-layout';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { useRecycleOpenRequests } from '../../hooks/use-recycle-open-requests';
 import { useAuthStore } from '../../store/auth';
 import { haptic } from '../../utils/haptic';
 import { Icon } from '../ui/icon';
-import { ScrollRow } from '../ui/scroll-row';
 import { Text } from '../ui/text';
 import { EarnSheet } from './earn-sheet';
+import { SHORTCUT_ICONS, SHORTCUT_ROUTES } from './shortcut-visuals';
+import { ShortcutsSheet } from './shortcuts-sheet';
 
-const VISUALS: Record<HomeShortcutId, { Icon: LucideIcon; to: string | null }> = {
-  flash: { Icon: Zap, to: '/flash-sale' },
-  orders: { Icon: Package, to: '/orders' },
-  rewards: { Icon: Gift, to: '/rewards' },
-  recycle: { Icon: Recycle, to: '/recycle' },
-  groupBuy: { Icon: Users, to: '/group-buy' },
-  coupons: { Icon: Ticket, to: '/offers?section=coupons' },
-  claim: { Icon: ScanLine, to: '/points/scan' },
-  earn: { Icon: HeartHandshake, to: null },
-  community: { Icon: MessagesSquare, to: '/feed' },
-};
-
-const ITEM_WIDTH = 76;
+const CELL_HEIGHT = 84;
 const CIRCLE = 44;
 
+const cellStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 6,
+  height: CELL_HEIGHT,
+  minHeight: 44,
+  minWidth: 0,
+  padding: '8px 2px 0',
+  boxSizing: 'border-box',
+  border: 'none',
+  background: 'transparent',
+  fontFamily: 'inherit',
+  cursor: 'pointer',
+} as const;
+
 /**
- * Lối tắt MỘT hàng cuộn ngang ở Trang chủ (Đơn hàng, Đổi quà, Đổi rác, Mua chung, Mã của tôi, Kiếm tiền, Cộng đồng...): biểu tượng
- * tròn màu nhạt, nhãn ngắn. Không có ô trùng thanh đáy (Vườn Xanh). Mục có cờ tắt (Đổi rác, Tích điểm đơn sàn) bị ẩn và hàng tự dồn.
+ * Lối tắt Trang chủ (Q7): 4 ô cố định + ô "Tất cả" trong MỘT hàng 5 cột đều nhau, không cuộn ngang. Phần còn lại (Đổi quà, Đơn hàng,
+ * Kiếm tiền, Cộng đồng...) nằm trong sheet "Tất cả". Mục có cờ tắt (Đổi rác, Tích điểm đơn sàn) bị ẩn, mục kế lấp chỗ.
+ * Nhãn một dòng: "Mã giảm giá" là nhãn dài nhất, cắt "…" nếu máy 320px không đủ chỗ (câu đọc đầy đủ vẫn nằm ở aria-label).
  */
 export function ShortcutGrid() {
   const navigate = useNavigate();
   const cfg = usePublicConfig();
   const [earnOpen, setEarnOpen] = useState(false);
+  const [allOpen, setAllOpen] = useState(false);
   const authed = useAuthStore((st) => st.status === 'authenticated');
   const recycleOpenRequests = useRecycleOpenRequests(authed, cfg.isLoaded && !cfg.waste.enabled);
-  const items = visibleHomeShortcuts({
+  const { pinned, all } = homeShortcutSlots({
     recycleOpenRequests,
     wasteEnabled: cfg.isLoaded && cfg.waste.enabled,
     claimEnabled: cfg.isLoaded && cfg.loyalty?.marketplaceClaimEnabled === true,
   });
+
+  const open = (s: HomeShortcutSpec) => {
+    const to = SHORTCUT_ROUTES[s.id];
+    if (to) navigate(to);
+    else setEarnOpen(true);
+  };
+
   return (
-    <section aria-label={homeCopy.shortcuts.title} style={{ padding: '0 0 12px' }}>
-      <ScrollRow label={homeCopy.shortcuts.rail} style={{ gap: 4, padding: '4px 12px' }}>
-        {items.map((s) => {
-          const v = VISUALS[s.id];
+    <section aria-label={homeCopy.shortcuts.title} style={{ padding: '0 8px' }}>
+      <div data-testid="shortcut-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}>
+        {pinned.map((s) => {
           const tint = SHORTCUT_TINT_VARS[s.tint];
           return (
             <button
@@ -56,39 +69,47 @@ export function ShortcutGrid() {
               className="tubu-press"
               onClick={() => {
                 haptic('light');
-                if (v.to) navigate(v.to);
-                else setEarnOpen(true);
+                open(s);
               }}
-              style={{
-                flex: `0 0 ${ITEM_WIDTH}px`,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 4,
-                minHeight: 44,
-                padding: '4px 2px',
-                border: 'none',
-                background: 'transparent',
-                fontFamily: 'inherit',
-                cursor: 'pointer',
-              }}
+              style={cellStyle}
             >
-              <span
-                aria-hidden
-                style={{ width: CIRCLE, height: CIRCLE, borderRadius: 'var(--radius-pill)', background: tint.bg, color: tint.fg, display: 'grid', placeItems: 'center' }}
-              >
-                <Icon icon={v.Icon} size="md" tone="current" />
+              <span aria-hidden style={{ width: CIRCLE, height: CIRCLE, borderRadius: 'var(--radius-pill)', background: tint.bg, color: tint.fg, display: 'grid', placeItems: 'center' }}>
+                <Icon icon={SHORTCUT_ICONS[s.id]} size="md" tone="current" />
               </span>
-              <Text
-                variant="caption"
-                style={{ textAlign: 'center', fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}
-              >
+              <Text variant="caption" style={{ maxWidth: '100%', textAlign: 'center', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {s.label}
               </Text>
             </button>
           );
         })}
-      </ScrollRow>
+        <button
+          type="button"
+          aria-label={homeCopy.shortcuts.allAria}
+          aria-haspopup="dialog"
+          className="tubu-press"
+          onClick={() => {
+            haptic('light');
+            setAllOpen(true);
+          }}
+          style={cellStyle}
+        >
+          <span aria-hidden style={{ width: CIRCLE, height: CIRCLE, borderRadius: 'var(--radius-pill)', background: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)', display: 'grid', placeItems: 'center' }}>
+            <Icon icon={LayoutGrid} size="md" tone="current" />
+          </span>
+          <Text variant="caption" style={{ textAlign: 'center', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {homeCopy.shortcuts.all}
+          </Text>
+        </button>
+      </div>
+      <ShortcutsSheet
+        open={allOpen}
+        onClose={() => setAllOpen(false)}
+        items={all}
+        onSelect={(s) => {
+          setAllOpen(false);
+          open(s);
+        }}
+      />
       <EarnSheet open={earnOpen} onClose={() => setEarnOpen(false)} />
     </section>
   );
