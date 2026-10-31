@@ -323,14 +323,6 @@ export function memberCardAriaLabel(card: Pick<MemberCardView, 'tierName' | 'poi
 
 // ---- Gợi ý cuộn vô tận ----
 
-export type SuggestTab = 'for-you' | 'best-seller' | 'newest';
-
-export const SUGGEST_TABS: readonly { key: SuggestTab; label: string; sort?: string }[] = [
-  { key: 'for-you', label: 'Cho bạn' },
-  { key: 'best-seller', label: 'Bán chạy', sort: 'best_seller' },
-  { key: 'newest', label: 'Mới', sort: 'newest' },
-];
-
 /** Số sản phẩm mỗi trang của lưới gợi ý. */
 export const SUGGEST_PAGE_SIZE = 20;
 

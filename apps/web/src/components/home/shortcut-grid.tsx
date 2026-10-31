@@ -62,7 +62,7 @@ export function ShortcutGrid() {
   };
 
   return (
-    <section aria-label={homeCopy.shortcuts.title} className="lg:hidden">
+    <section aria-label={homeCopy.shortcuts.title} className="max-md:-mx-2 lg:hidden">
       <div data-testid="shortcut-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}>
         {pinned.map((s) => {
           const tint = SHORTCUT_TINT_VARS[s.tint];

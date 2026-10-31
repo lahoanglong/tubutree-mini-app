@@ -34,7 +34,7 @@ export const homeCopy = {
     preparingMany: (n: number) => `${n} đơn đang chuẩn bị`,
     preparingHint: 'Chạm để xem đơn',
   },
-  shortcuts: { title: 'Lối tắt', rail: 'Lối tắt, vuốt ngang để xem thêm', all: 'Tất cả', allAria: 'Tất cả lối tắt' },
+  shortcuts: { title: 'Lối tắt', all: 'Tất cả', allAria: 'Tất cả lối tắt' },
   reorder: { buy: 'Mua lại', subscribe: (pct: number) => `Định kỳ -${pct}%`, seeAll: 'Xem đơn hàng' },
   categories: { title: 'Danh mục', rail: 'Danh mục, vuốt ngang để xem thêm', all: 'Tất cả', allAria: 'Tất cả danh mục' },
   journey: {
@@ -50,13 +50,11 @@ export const homeCopy = {
   },
   suggest: {
     title: 'Gợi ý hôm nay',
-    tabsLabel: 'Nguồn gợi ý',
     chipsLabel: 'Lọc gợi ý theo danh mục',
     more: 'Xem thêm',
     end: 'Bạn đã xem hết gợi ý hôm nay',
     enter: 'Vào Danh mục',
   },
-  bestSellers: { title: 'Bán chạy', seeAll: 'Xem tất cả' },
   guestGift: {
     cta: 'Nhận quà bằng Zalo',
     ctaShort: 'Nhận quà',
