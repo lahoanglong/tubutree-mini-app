@@ -880,21 +880,26 @@ export class CatalogService {
     // bán 0" suốt 24 giờ.
     //
     // Cách hiện tại: chỉ chạm đúng những dòng CẦN đổi.
-    //  - Dòng có số bán mới → update từng dòng (khoá đúng dòng đó). Đơn 30 ngày là tập con của đơn
-    //    đã giao nên mọi sản phẩm có số 30 ngày đều có trong `perProduct`.
+    //  - Dòng có số bán mới → update từng dòng (khoá đúng dòng đó). Hai `groupBy` đọc ở hai thời điểm nên đơn
+    //    giao xen giữa có thể chỉ hiện ở số 30 ngày: lấy hợp hai tập sản phẩm và `soldApp` không thấp hơn
+    //    `soldApp30d`, để sản phẩm đó không bị bỏ sót hay bị đưa về 0 oan (lần chạy 03:00 sau tự chỉnh về đúng).
     //  - Dòng đang khác 0 mà không còn đơn nào → đưa về 0, một câu lệnh, phạm vi hẹp.
-    const ids = [...perProduct.keys()];
+    const ids = [...new Set([...perProduct.keys(), ...perProduct30d.keys()])];
     const ops = [
-      ...[...perProduct.entries()].map(([productId, sold]) =>
-        this.prisma.product.update({ where: { id: productId }, data: { soldApp: sold, soldApp30d: perProduct30d.get(productId) ?? 0 } }),
-      ),
+      ...ids.map((productId) => {
+        const recent = perProduct30d.get(productId) ?? 0;
+        return this.prisma.product.update({
+          where: { id: productId },
+          data: { soldApp: Math.max(perProduct.get(productId) ?? 0, recent), soldApp30d: recent },
+        });
+      }),
       this.prisma.product.updateMany({
         where: { OR: [{ soldApp: { not: 0 } }, { soldApp30d: { not: 0 } }], ...(ids.length ? { id: { notIn: ids } } : {}) },
         data: { soldApp: 0, soldApp30d: 0 },
       }),
     ];
     await this.prisma.$transaction(ops);
-    return { updated: perProduct.size };
+    return { updated: ids.length };
   }
 
   /** Cron 03:00 hằng ngày — tính lại số đã bán (social proof không cần realtime). */

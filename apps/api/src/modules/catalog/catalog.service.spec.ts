@@ -506,6 +506,31 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
     expect(r.updated).toBe(2);
   });
 
+  it('recomputeSoldCounts: đơn giao xen giữa hai lần đọc chỉ hiện ở số 30 ngày → sản phẩm vẫn được ghi, soldApp không thấp hơn soldApp30d', async () => {
+    const groupBy = jest
+      .fn()
+      .mockResolvedValueOnce([{ variationId: 'v1', _sum: { quantity: 8 } }])
+      .mockResolvedValueOnce([
+        { variationId: 'v1', _sum: { quantity: 9 } }, // tổng đọc trước khi đơn mới được giao
+        { variationId: 'v2', _sum: { quantity: 4 } }, // p2 chưa có trong lần đọc tổng
+      ]);
+    const prisma = {
+      orderItem: { groupBy },
+      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', productId: 'p1' }, { id: 'v2', productId: 'p2' }]) },
+      product: { updateMany: jest.fn().mockResolvedValue({ count: 0 }), update: jest.fn() },
+      $transaction: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).recomputeSoldCounts();
+    expect((prisma as any).product.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { soldApp: 9, soldApp30d: 9 } });
+    expect((prisma as any).product.update).toHaveBeenCalledWith({ where: { id: 'p2' }, data: { soldApp: 4, soldApp30d: 4 } });
+    // p2 nằm trong notIn: không bị đưa về 0 oan.
+    expect((prisma as any).product.updateMany).toHaveBeenCalledWith({
+      where: { OR: [{ soldApp: { not: 0 } }, { soldApp30d: { not: 0 } }], id: { notIn: ['p1', 'p2'] } },
+      data: { soldApp: 0, soldApp30d: 0 },
+    });
+    expect(r.updated).toBe(2);
+  });
+
   it('recomputeSoldCounts: cửa sổ 30 ngày tính theo deliveredAt, đúng 30 × 24 giờ trước bây giờ', async () => {
     const now = jest.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 9, 31, 3, 0, 0));
     try {
