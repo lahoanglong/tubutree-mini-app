@@ -3,7 +3,7 @@ import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { click } from '@/test-utils/dom';
 import { mount } from './harness';
-import { ShopHeader } from './shop-header';
+import { SHOP_COVER_HEIGHT, ShopHeader } from './shop-header';
 
 const q = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 
@@ -56,7 +56,7 @@ describe('ShopHeader (web)', () => {
     const root = cover.parentElement!;
     expect(root.className.split(/\s+/)).toContain('lg:contents');
     const coverCls = cover.className.split(/\s+/);
-    expect(coverCls).toEqual(expect.arrayContaining(['lg:col-start-1', 'lg:row-span-2', 'lg:row-start-1', 'lg:h-auto']));
+    expect(coverCls).toEqual(expect.arrayContaining(['lg:col-start-1', 'lg:row-span-2', 'lg:row-start-1', 'lg:h-auto', `h-[${SHOP_COVER_HEIGHT}px]`]));
     const info = cover.nextElementSibling as HTMLElement;
     expect(info.className.split(/\s+/)).toEqual(expect.arrayContaining(['lg:col-start-2', 'lg:row-start-1', 'lg:grid']));
     const avatarRow = q('shop-avatar')!.parentElement!.parentElement!;

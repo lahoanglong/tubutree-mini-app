@@ -23,6 +23,7 @@ export interface ShopHeaderProps {
   note?: string | null;
 }
 
+/** Cao bìa ở điện thoại. Lớp `h-[120px]` của bìa phải bằng số này (Tailwind chỉ nhận lớp viết nguyên văn; `shop-header.spec` giữ hai số khớp). */
 export const SHOP_COVER_HEIGHT = 120;
 /** ~2 dòng ở 375px; ngắn hơn thì không cần nút "Xem thêm". */
 const NOTE_FOLD_CHARS = 90;
@@ -48,8 +49,8 @@ export function ShopHeader({ title, coverUrl, avatarUrl, verified, badges, actio
       <div
         data-testid="shop-cover"
         aria-hidden="true"
-        className="h-[var(--shop-cover-h)] lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:h-auto lg:min-h-[200px]"
-        style={{ ['--shop-cover-h' as string]: `${SHOP_COVER_HEIGHT}px`, background }}
+        className="h-[120px] lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:h-auto lg:min-h-[200px]"
+        style={{ background }}
       />
       <div className="px-4 lg:col-start-2 lg:row-start-1 lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-start lg:gap-x-4 lg:gap-y-1 lg:px-6 lg:pb-2 lg:pt-6">
         <div className="-mt-7 flex items-end justify-between gap-3 lg:contents">
