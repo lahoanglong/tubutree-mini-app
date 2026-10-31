@@ -239,9 +239,11 @@
 
 - Ca DTO của batch nằm ở `cart/dto/cart.dto.spec.ts` (không phải `cart.controller.spec.ts`), gọi `createValidationPipe()` thật.
 - Race spec bắt một lỗi có sẵn: hai lượt tạo giỏ đầu tiên của cùng khách song song làm `cart.upsert` thua tranh unique `userId` (P2002) và trả 500 (nhấn đúp "Thêm cả combo" ở khách mới). `ensureCart` nay bắt P2002 rồi đọc giỏ đã có (test đơn vị trong `CartService.addItemsBatch`, race spec `hai batch song song`). Đã kiểm: bỏ khoá `carts` thì race spec đỏ 3/3.
+- Sau review lượt 1: `Storefront.ownerTier.publicBadge: boolean` (bắt buộc) ở app-core; `CART_BATCH_REJECTED` chuyển về `packages/shared-types/src/cart.ts` (API và app-core cùng import, đổi tên một chỗ là cả hai đổi); batch nêu tên món ngừng bán ("X đã ngừng bán."), chỉ biến thể không tồn tại mới dùng câu chung; trần 999 tính lại trên tổng sau khi gộp dòng trùng (400 trước khi khoá giỏ); thêm race `cart-batch-checkout` (batch xen đặt đơn: CART_CHANGED, món mới còn trong giỏ, bảo toàn số lượng) và test HTTP thật cho `/flash-sales/upcoming` (không token, token hỏng, token hết hạn, token hợp lệ).
 - `CartLine.listUnitPrice` ở app-core để tuỳ chọn (`?`): fixture `CartLine` ở Mini/web chưa có trường này, bắt buộc sẽ vỡ tsc ở file gói khác.
 
 ## Ghi chú cho gói sau
 
+- `Storefront.ownerTier` còn bản chép ở `apps/miniapp/src/services/storefront-api.ts:33` và `apps/web/src/lib/api.ts:287`: P9 thêm `publicBadge` ở đó (P3b chỉ sửa app-core).
 - `CartLine` còn bản chép ở `apps/miniapp/src/services/shop-api.ts:77` và `apps/web/src/lib/shop-client.ts:13`: P8 thêm `listUnitPrice` ở đó (P3b chỉ sửa app-core).
 - Lỗi batch: thân `{ code: 'CART_BATCH_REJECTED', reason: 'UNAVAILABLE'|'STOCK', variationId, productName, message }`. Web `ApiError` hiện chỉ giữ `code` và `message` (không có `variationId`): `message` đã nêu tên món; P9 muốn tô đúng dòng thì mở rộng `ApiError`.
