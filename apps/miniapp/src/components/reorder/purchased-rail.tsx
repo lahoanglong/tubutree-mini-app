@@ -13,8 +13,6 @@ import { haptic } from '../../utils/haptic';
 import { SubscribeSheet } from '../subscribe-sheet';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../../utils/features';
 import { isEndpointMissing } from '../home/home-blocks';
-import { PURCHASED_RAIL_LIMIT } from '../home/home-limits';
-import { HEADING_PAD_BOTTOM, HEADING_PAD_TOP, PurchasedRailSkeleton, RAIL_PADDING_BOTTOM } from '../home/purchased-rail-skeleton';
 import { useBlockQuery } from '../home/use-block-query';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -22,6 +20,7 @@ import { Card } from '../ui/card';
 import { ProductThumb } from '../ui/product-thumb';
 import { PriceTag } from '../ui/price-tag';
 import { ProductTile, type ProductTileProduct } from '../ui/product-tile';
+import { Skeleton } from '../ui/skeleton';
 import { Heading, Text } from '../ui/text';
 import { ReorderSheet } from './reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from './reorder-types';
@@ -29,13 +28,18 @@ import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 const TILE_WIDTH = 148;
 /** Từ chừng này món trở lên mới dùng kệ cuộn ngang; ít hơn thì thẻ ngang thấp để không để trống nửa màn hình. */
 export const COMPACT_MAX_ITEMS = 2;
+const COMPACT_CARD_HEIGHT = 168;
+const HEADING_HEIGHT = 24;
+const HEADING_PAD_TOP = 4;
+const HEADING_PAD_BOTTOM = 8;
+const RAIL_PADDING_BOTTOM = 12;
 /** Export để Trang chủ dùng CHUNG query key ['purchased-items', 10] khi quyết định thứ tự khối (plan 4b). */
 /** Hai nút hàng Mua lại chia đều chỗ; đệm ngang hẹp để nhãn "Định kỳ -17%" không bị cắt dấu ba chấm ở 320px. */
 /** Tên luôn chiếm đủ 2 dòng (14px x 1.57) để thẻ cao như nhau với tên ngắn hay dài và khung chờ khớp thẻ thật. */
 const NAME_MIN_HEIGHT = 44;
 const ACTION_STYLE = { flex: '1 1 0', minWidth: 0, paddingInline: 12 } as const;
 
-export { PURCHASED_RAIL_LIMIT };
+export const PURCHASED_RAIL_LIMIT = 10;
 
 export function toTileProduct(p: PurchasedItem): ProductTileProduct {
   return {
@@ -79,7 +83,17 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
   const flash = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 }).data ?? [];
 
   if (restoring || q.isLoading) {
-    return <PurchasedRailSkeleton />;
+    // Khớp đúng khung kệ thật (tiêu đề + hàng tile + đệm dưới) để dữ liệu về không đẩy nội dung bên dưới.
+    return (
+      <div data-testid="purchased-rail-loading" aria-hidden="true" style={{ paddingBottom: RAIL_PADDING_BOTTOM }}>
+        <div style={{ padding: `${HEADING_PAD_TOP}px 16px ${HEADING_PAD_BOTTOM}px` }}>
+          <Skeleton width={96} height={HEADING_HEIGHT} />
+        </div>
+        <div style={{ padding: '0 16px' }}>
+          <Skeleton height={COMPACT_CARD_HEIGHT} radius="var(--radius-card)" />
+        </div>
+      </div>
+    );
   }
   const items = q.data?.items ?? [];
   // Chưa có món nào: lỗi thật (không phải API cũ 404) vẫn hiện khối lỗi kèm "Thử lại", khách cũ không thấy kệ biến mất im lặng.

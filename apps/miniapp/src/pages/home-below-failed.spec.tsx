@@ -31,6 +31,7 @@ vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { status: string; user: { id: string } | null }) => unknown) => sel({ status: mocks.auth.status, user: mocks.auth.user }),
 }));
 vi.mock('../components/reorder/purchased-rail', () => ({ PURCHASED_RAIL_LIMIT: 10, PurchasedRail: () => null }));
+vi.mock('../components/home/best-seller-rail', () => ({ BEST_SELLER_LIMIT: 6, BestSellerRail: () => <section data-testid="best-rail" /> }));
 vi.mock('../components/home/member-card', () => ({ MemberCard: () => null, MemberCardSkeleton: () => <div data-testid="member-card-loading" /> }));
 vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false }) }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => null }));
@@ -48,7 +49,7 @@ vi.mock('../components/home/home-below', () => {
     chunk.failures -= 1;
     throw new Error(chunk.message);
   }
-  return { FlashSale: () => null, UpcomingFlashSales: () => null, PurchasedRail: () => null, BestSellerRail: () => <section data-testid="best-rail" />, BrandJourney: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null };
+  return { FlashSale: () => null, UpcomingFlashSales: () => null, BrandJourney: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null };
 });
 
 import HomePage from './home';
@@ -95,7 +96,8 @@ describe('HomePage — chunk khối dưới màn đầu tải hỏng', () => {
     expect(screen.getByTestId('home-page-error')).toBeInTheDocument();
     expect(document.querySelectorAll('[data-home-block="settling"]').length).toBe(0);
     expect(document.querySelectorAll('.tubu-skeleton').length).toBe(0);
-    expect(screen.queryByTestId('best-rail')).toBeNull();
+    // Kệ Bán chạy nằm trong gói đầu nên chunk hỏng không làm nó biến mất.
+    expect(screen.getByTestId('best-rail')).toBeInTheDocument();
     await act(async () => {
       screen.getByRole('button', { name: /Thử lại/ }).click();
     });

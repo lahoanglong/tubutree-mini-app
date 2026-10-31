@@ -1,7 +1,5 @@
 // Một chunk chung cho các khối Trang chủ nằm dưới màn đầu, để entry không gánh mã của chúng.
 export { FlashSale, UpcomingFlashSales } from '../flash-sale';
-export { PurchasedRail } from '../reorder/purchased-rail';
-export { BestSellerRail } from './best-seller-rail';
 export { BrandJourney } from './brand-journey';
 export { CommunityPreview } from './community-preview';
 export { NewCustomerGift } from './new-customer-gift';

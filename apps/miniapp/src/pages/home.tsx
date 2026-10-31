@@ -9,7 +9,8 @@ import { useCategories } from '../hooks/use-categories';
 import { useHomeCustomerKind } from '../hooks/use-home-customer-kind';
 import { usePurchasedItems } from '../hooks/use-purchased-items';
 import { PullToRefresh } from '../components/pull-to-refresh';
-import { BEST_SELLER_LIMIT, PURCHASED_RAIL_LIMIT } from '../components/home/home-limits';
+import { PURCHASED_RAIL_LIMIT } from '../components/reorder/purchased-rail';
+import { BEST_SELLER_LIMIT } from '../components/home/best-seller-rail';
 import {
   HomeBestSellerRail,
   HomeBrandJourney,

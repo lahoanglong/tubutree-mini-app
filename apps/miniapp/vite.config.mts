@@ -3,7 +3,6 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import zaloMiniApp from 'zmp-vite-plugin';
 import { assertMiniappBuildEnv } from './src/build-env';
-import { preloadHomeBelow } from './src/preload-home-below';
 
 // Cấu hình Vite cho Zalo Mini App.
 // Layout chuẩn zmp: index.html ở gốc project (zmp-cli/extension yêu cầu), entry src/app.tsx.
@@ -15,7 +14,7 @@ export default defineConfig(({ command, mode }) => {
   return {
     root: '.',
     base: '',
-    plugins: [zaloMiniApp(), react(), preloadHomeBelow()],
+    plugins: [zaloMiniApp(), react()],
     // Hai bản React trong một bundle làm hook null; web dùng React 19 nên ép một bản duy nhất.
     // shared-types phát hành CJS (dist); Vite gói sẵn CJS nên tên export qua `export *` không thấy được ("Importing binding name ... is not found")
     // khi Mini App lấy giá trị chạy thật (không chỉ kiểu). Trỏ thẳng vào mã nguồn TS như jest của API.

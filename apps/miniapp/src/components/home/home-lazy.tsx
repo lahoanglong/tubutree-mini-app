@@ -3,7 +3,8 @@ import { FLASH_SKELETON_HEIGHT, HOME_HERO_HEIGHT, HOME_SETTLING_HEIGHTS as H, re
 import { isChunkError } from '../../utils/chunk-error';
 import { browserStorage } from '../../utils/recently-viewed';
 import { Skeleton } from '../ui/skeleton';
-import { PurchasedRailSkeleton } from './purchased-rail-skeleton';
+import { PurchasedRail } from '../reorder/purchased-rail';
+import { BestSellerRail } from './best-seller-rail';
 import type * as BelowModule from './home-below';
 
 type Below = typeof BelowModule;
@@ -81,12 +82,11 @@ const SLOT_GIFT: Slot = { height: HOME_HERO_HEIGHT, bottom: 12 };
 const SLOT_FLASH: Slot = { height: H.flash, top: FLASH_SKELETON_HEIGHT - H.flash };
 const SLOT_NONE: Slot = { height: 0 };
 
-function Block({ slot, placeholder, children }: { slot: Slot; placeholder?: ReactNode; children: (m: Below) => ReactNode }) {
+function Block({ slot, children }: { slot: Slot; children: (m: Below) => ReactNode }) {
   const { failed } = useSyncExternalStore(subscribe, getState, getState);
   if (below) return <>{children(below)}</>;
   // Chunk hỏng: Trang chủ hiện một dải lỗi có "Thử lại" (home.tsx), các khối không giữ chỗ vĩnh viễn.
   if (failed) return null;
-  if (placeholder) return <>{placeholder}</>;
   if (slot.height === 0) return null;
   const top = slot.top ?? 0;
   const bottom = slot.bottom ?? 0;
@@ -116,10 +116,9 @@ export const HomeFlashSale = () => {
     </Block>
   );
 };
-export const HomePurchasedRail = (p: ComponentProps<Below['PurchasedRail']>) => (
-  <Block slot={SLOT_NONE} placeholder={<PurchasedRailSkeleton />}>{(m) => <m.PurchasedRail {...p} />}</Block>
-);
-export const HomeBestSellerRail = () => <Block slot={{ height: H.products }}>{(m) => <m.BestSellerRail />}</Block>;
+// Hai kệ sản phẩm nằm trong gói đầu (như trước khi tách khối): thẻ sản phẩm đầu không đợi thêm một request chunk.
+export const HomePurchasedRail = (p: ComponentProps<typeof PurchasedRail>) => <PurchasedRail {...p} />;
+export const HomeBestSellerRail = () => <BestSellerRail />;
 export const HomeBrandJourney = () => <Block slot={SLOT_NONE}>{(m) => <m.BrandJourney />}</Block>;
 export const HomeCommunityPreview = () => <Block slot={SLOT_NONE}>{(m) => <m.CommunityPreview />}</Block>;
 export const HomeNewCustomerGift = () => <Block slot={SLOT_GIFT}>{(m) => <m.NewCustomerGift />}</Block>;

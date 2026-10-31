@@ -724,7 +724,6 @@ VITE_API_BASE_URL=https://api.tubutree.com/api pnpm --filter @tubutree/miniapp b
 # PowerShell: $env:VITE_API_BASE_URL='https://api.tubutree.com/api'; pnpm --filter @tubutree/miniapp build
 cd apps/miniapp
 npx zmp sync-config www/index.html
-pnpm zmp:preloads   # sync-config bỏ thẻ modulepreload; lệnh này đưa lại 37 chunk Trang chủ vào listAsyncJS
 npx zmp deploy -t -e -m "UAT b756c4a"
 # Sau đó trả apps/miniapp/app-config.json về bản đã commit (hash asset đổi mỗi lần build, không commit).
 ```

@@ -35,7 +35,8 @@ vi.mock('../services/account-api', () => ({ getNotifications: mocks.getNotificat
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { status: string; user: { id: string } | null }) => unknown) => sel({ status: mocks.auth.status, user: mocks.auth.user }),
 }));
-vi.mock('../components/reorder/purchased-rail', () => ({ PURCHASED_RAIL_LIMIT: 10, PurchasedRail: () => null }));
+vi.mock('../components/reorder/purchased-rail', () => ({ PURCHASED_RAIL_LIMIT: 10, PurchasedRail: () => <div data-testid="purchased-rail-real" /> }));
+vi.mock('../components/home/best-seller-rail', () => ({ BEST_SELLER_LIMIT: 6, BestSellerRail: () => <div data-testid="best-seller-rail-real" /> }));
 vi.mock('../components/home/member-card', () => ({ MemberCard: () => null, MemberCardSkeleton: () => <div data-testid="member-card-loading" /> }));
 vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false }) }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => null }));
@@ -50,7 +51,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 vi.mock('../components/home/home-below', async () => {
   await chunk.gate;
-  return { FlashSale: () => null, UpcomingFlashSales: () => null, PurchasedRail: () => null, BestSellerRail: () => null, BrandJourney: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null };
+  return { FlashSale: () => null, UpcomingFlashSales: () => null, BrandJourney: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null };
 });
 
 import HomePage from './home';
@@ -99,7 +100,13 @@ describe('HomePage — mở lại khi máy đã nhớ loại khách, chunk khố
     expect(heightOf('flash')).toBeUndefined();
     expect(heightOf('community')).toBeUndefined();
     expect(heightOf('purchased')).toBeUndefined();
-    expect(document.querySelector('[data-home-block="purchased"] [data-testid="purchased-rail-loading"]')).not.toBeNull();
+  });
+
+  it('kệ Mua lại nằm trong gói đầu nên hiện ngay, không có ô giữ chỗ', async () => {
+    renderHome();
+    await settle(100);
+    expect(document.querySelector('[data-home-block="purchased"] [data-testid="purchased-rail-real"]')).not.toBeNull();
+    expect(heightOf('purchased')).toBeUndefined();
   });
 
   it('lần trước có Giờ vàng thì giữ chỗ 300px (gồm lề trên)', async () => {
@@ -110,5 +117,26 @@ describe('HomePage — mở lại khi máy đã nhớ loại khách, chunk khố
     // Lề trên (không phải đệm) như FlashSkeleton: cùng một phần tử thay chỗ nhau nên không bị tính là dịch chuyển bố cục.
     expect(document.querySelector<HTMLElement>('[data-home-block="flash"] [data-testid="home-below-placeholder"]')?.style.marginTop).toBe('16px');
     expect(placeholders().length).toBeGreaterThan(0);
+  });
+});
+
+describe('HomePage — khách mới và khách vãng lai mở lại, chunk khối dưới chưa về', () => {
+  it.each([
+    ['khách mới đã nhớ', () => localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'new' }))],
+    [
+      'khách vãng lai',
+      () => {
+        localStorage.clear();
+        mocks.auth.status = 'guest';
+        mocks.auth.user = null;
+      },
+    ],
+  ])('%s: kệ Bán chạy hiện ngay, không có ô xám 260px giữ chỗ', async (_name, setup) => {
+    setup();
+    renderHome();
+    await settle(100);
+    expect(document.querySelector('[data-home-block="bestSellers"] [data-testid="best-seller-rail-real"]')).not.toBeNull();
+    expect(heightOf('bestSellers')).toBeUndefined();
+    expect(document.querySelector('[data-testid="purchased-rail-real"]')).toBeNull();
   });
 });
