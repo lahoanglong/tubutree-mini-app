@@ -13,7 +13,10 @@ const ENTRIES: Record<string, Entry> = {
   '/browse': { mini: '/browse', web: '/san-pham', pending: false },
 };
 
-/** `usable: false` = trang thay thế không hiện nội dung mà lối đó hứa (Ưu đãi không có Giờ vàng, cũng không có "Nhắc tôi"): lối vào phải ẩn tới khi route thật có. */
+/**
+ * `usable: false` = trang thay thế không hiện nội dung mà lối đó hứa (Ưu đãi không có Giờ vàng, cũng không có "Nhắc tôi"): lối vào phải ẩn tới khi route thật có.
+ * `/flash-sale` đang ở trạng thái này nên Trang chủ không còn chỗ đặt "Nhắc tôi" Giờ vàng: không deploy khi P12 (trang Giờ vàng) chưa vào cùng.
+ */
 const PENDING_TARGET: Record<string, { mini: string; web: string; usable: boolean }> = {
   '/flash-sale': { mini: '/offers', web: '/uu-dai', usable: false },
   '/best-sellers': { mini: '/browse?sort=best_seller', web: '/san-pham?sort=best_seller', usable: true },
