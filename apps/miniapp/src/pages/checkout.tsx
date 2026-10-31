@@ -18,8 +18,8 @@ import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
 import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
-import { useCouponHint } from '../components/checkout/use-coupon-hint';
-import { couponHintText } from '@tubutree/app-core/coupon-use';
+import { useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
+import { couponAutoCopy, couponHintText } from '@tubutree/app-core/coupon-use';
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { ReferralCodeBox, effectiveReferralCode } from '../components/checkout/referral-code-box';
 import { Skeleton } from '../components/ui/skeleton';
@@ -198,12 +198,21 @@ export default function CheckoutPage() {
   const checkoutItems = itemIds
     ? (cart.data?.items ?? []).filter((it) => itemIds.includes(it.id))
     : (cart.data?.items ?? []);
-  // Giỏ chưa có mã thì nhắc khách đang có mã dùng được (chỉ gợi ý, không tự áp); cùng tham số xem trước với VoucherSheet.
-  const couponHint = useCouponHint(
-    authed && !addresses.isLoading && cartHasItems && !!cart.data && !cart.data.couponCode,
-    checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined,
-    cartPreviewKey(checkoutItems),
-  );
+  // Giỏ chưa có mã thì tự áp mã giảm nhiều nhất khách đang có (một lần); không áp được hoặc khách đã gỡ thì chỉ nhắc còn
+  // mã dùng được. Cùng tham số xem trước với VoucherSheet.
+  const couponPreviewParams = checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined;
+  const couponPreviewKey = cartPreviewKey(checkoutItems);
+  const couponReady = authed && !addresses.isLoading && cartHasItems && !!cart.data && !cart.data.couponCode;
+  const autoCoupon = useCheckoutCoupon({
+    enabled: couponReady,
+    addressReady: !!addressId || addresses.data?.length === 0,
+    currentCode: cart.data?.couponCode,
+    previewParams: couponPreviewParams,
+    previewKey: couponPreviewKey,
+    onChanged: () => {
+      choiceRev.current += 1;
+    },
+  });
 
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
   const partnerPoints = pointsCapState(quote.data, points.usable);
@@ -661,9 +670,9 @@ export default function CheckoutPage() {
                     </Text>
                   )}
                 </Box>
-              ) : couponHint ? (
+              ) : autoCoupon.hint ? (
                 <Text size="xSmall" style={{ color: 'var(--color-text-brand)', marginTop: 2 }}>
-                  {couponHintText(couponHint, formatVnd)}
+                  {couponHintText(autoCoupon.hint, formatVnd)}
                 </Text>
               ) : (
                 <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
@@ -680,6 +689,36 @@ export default function CheckoutPage() {
             <ChevronRight size={16} color="var(--color-text-brand)" />
           </Box>
         </Box>
+        {autoCoupon.autoCode && (
+          <Box flex alignItems="center" justifyContent="space-between" style={{ marginTop: 4, paddingLeft: 46 }}>
+            <Text size="xSmall" data-testid="coupon-auto-label" style={{ color: 'var(--color-text-success)' }}>
+              {couponAutoCopy.applied}
+            </Text>
+            <button
+              type="button"
+              data-testid="coupon-auto-remove"
+              aria-label={couponAutoCopy.removeAria(autoCoupon.autoCode)}
+              disabled={autoCoupon.removing}
+              onClick={() => {
+                haptic('light');
+                autoCoupon.remove();
+              }}
+              style={{
+                minHeight: 44,
+                minWidth: 44,
+                padding: '0 8px',
+                background: 'none',
+                border: 0,
+                color: 'var(--color-text-brand)',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {couponAutoCopy.remove}
+            </button>
+          </Box>
+        )}
         {cart.data?.couponCode && (quote.data ? quote.data.couponNotice : cart.data.couponNotice) && (
           <Text
             size="xSmall"

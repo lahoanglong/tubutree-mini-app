@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   applyError: null as Error | null,
   applyGate: null as Promise<void> | null,
   applyCart: {} as Record<string, unknown>,
+  removed: 0,
   previews: vi.fn<(p: unknown) => Promise<unknown[]>>(),
 }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -23,8 +24,14 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     state.applied.push(code);
     return { items: [], couponCode: code, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 0, itemCount: 0, ...state.applyCart };
   },
+  removeCoupon: async () => {
+    state.removed += 1;
+    return { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 0, itemCount: 0 };
+  },
 }));
 
+import { useQuery } from '@tanstack/react-query';
+import { cartKey } from '@/lib/cart-key';
 import { CouponBox } from './coupon-box';
 
 const c = (code: string, over: Record<string, unknown> = {}) => ({
@@ -45,6 +52,7 @@ beforeEach(() => {
   state.applyError = null;
   state.applyGate = null;
   state.applyCart = {};
+  state.removed = 0;
   state.coupons = [];
   state.previews.mockReset();
 });
@@ -452,5 +460,82 @@ describe('CouponBox — báo mã chưa áp dụng theo lý do máy chủ', () =>
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () => {
+  const PREVIEWS = [
+    { code: 'GIAM30', eligible: true, discount: 43800 },
+    { code: 'FS', eligible: true, discount: 0, freeshipSaving: 19000 },
+    { code: 'BIG', eligible: false, reason: 'Cần đơn tối thiểu', discount: 999000 },
+  ];
+  /** Giỏ sống trong bộ nhớ đệm như ở trang thanh toán: áp/gỡ mã ghi vào đó và CouponBox đọc lại `currentCode`. */
+  function Harness({ initial = null, autoApply = true }: { initial?: string | null; autoApply?: boolean }) {
+    const q = useQuery({ queryKey: cartKey(), queryFn: () => null, enabled: false, initialData: { couponCode: initial } as { couponCode: string | null } });
+    return <CouponBox currentCode={q.data?.couponCode ?? null} subtotal={300000} preview={{ addressId: 'a1' }} autoApply={autoApply} />;
+  }
+  const mountHarness = async (props: { initial?: string | null; autoApply?: boolean } = {}) => {
+    const r = render(<Harness {...props} />);
+    mounted.push(r);
+    await flush(10);
+    return r.container;
+  };
+  const label = (box: HTMLElement) => box.querySelector('[data-testid="coupon-auto-label"]');
+  const remove = (box: HTMLElement) => box.querySelector<HTMLButtonElement>('[data-testid="coupon-auto-remove"]');
+
+  beforeEach(() => {
+    state.coupons = [c('GIAM30'), c('FS', { type: 'FREESHIP', value: 15000, maxDiscount: null }), c('BIG', { minOrder: 900000 })];
+    state.previews.mockResolvedValue(PREVIEWS);
+  });
+
+  it('giỏ chưa có mã → áp mã tiết kiệm nhiều nhất, hiện "Đã tự áp" và nút Gỡ', async () => {
+    const box = await mountHarness();
+    expect(state.applied).toEqual(['GIAM30']);
+    expect(label(box)!.textContent).toBe('Đã tự áp');
+    expect(remove(box)!.textContent).toBe('Gỡ');
+    expect(box.textContent).toContain('GIAM30');
+  });
+
+  it('bấm Gỡ → gỡ mã bằng đường gỡ sẵn có, không áp lại, câu gợi ý hiện lại', async () => {
+    const box = await mountHarness();
+    click(remove(box));
+    await flush(10);
+    expect(state.removed).toBe(1);
+    expect(label(box)).toBeNull();
+    expect(box.textContent).toContain('Bạn có 2 mã dùng được · giảm đến 43.800đ');
+    expect(state.applied).toEqual(['GIAM30']);
+  });
+
+  it('khách tự chọn mã khác → nhãn "Đã tự áp" biến mất', async () => {
+    const box = await mountHarness();
+    click(box.querySelector<HTMLButtonElement>('button[aria-expanded]'));
+    await flush(3);
+    click(box.querySelector<HTMLButtonElement>('button[aria-label$="mã FS"]'));
+    await flush(10);
+    expect(state.applied).toEqual(['GIAM30', 'FS']);
+    expect(label(box)).toBeNull();
+  });
+
+  it('giỏ đã có mã, hoặc chưa bật tự áp → không tự áp', async () => {
+    const withCode = await mountHarness({ initial: 'XANH10' });
+    expect(state.applied).toEqual([]);
+    expect(label(withCode)).toBeNull();
+    const off = await mountHarness({ autoApply: false });
+    expect(state.applied).toEqual([]);
+    expect(off.textContent).toContain('Bạn có 2 mã dùng được');
+  });
+
+  it('không mã nào dùng được → không áp', async () => {
+    state.previews.mockResolvedValue([{ code: 'BIG', eligible: false, reason: 'x', discount: 9 }]);
+    await mountHarness();
+    expect(state.applied).toEqual([]);
+  });
+
+  it('áp lỗi → im lặng: không báo lỗi, giữ câu gợi ý', async () => {
+    state.applyError = new Error('mạng');
+    const box = await mountHarness();
+    expect(box.querySelector('[role="alert"]')).toBeNull();
+    expect(label(box)).toBeNull();
+    expect(box.textContent).toContain('Bạn có 2 mã dùng được');
   });
 });

@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   getWallet: vi.fn(),
   getLoyalty: vi.fn(),
   getCouponPreviews: vi.fn(),
+  applyCoupon: vi.fn(),
+  removeCoupon: vi.fn(),
   getCoupons: vi.fn().mockResolvedValue([]),
   getWasteMe: vi.fn(),
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
@@ -39,6 +41,8 @@ vi.mock('../services/shop-api', () => ({
   checkoutQuote: mocks.checkoutQuote,
   placeOrder: mocks.placeOrder,
   getCouponPreviews: mocks.getCouponPreviews,
+  applyCoupon: mocks.applyCoupon,
+  removeCoupon: mocks.removeCoupon,
   createAddress: vi.fn(),
 }));
 vi.mock('../services/account-api', () => ({
@@ -70,7 +74,12 @@ vi.mock('../store/auth', () => {
   });
   return { useAuthStore };
 });
-vi.mock('../store/storefront-context', () => ({ useStorefrontContext: () => mocks.sfCtx }));
+vi.mock('../store/storefront-context', () => ({
+  useStorefrontContext: Object.assign(
+    (sel?: (s: typeof mocks.sfCtx) => unknown) => (sel ? sel(mocks.sfCtx) : mocks.sfCtx),
+    { getState: () => mocks.sfCtx },
+  ),
+}));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publicConfig }));
 vi.mock('../services/waste-api', async (orig) => ({ ...(await orig<object>()), getWasteMe: mocks.getWasteMe }));
 vi.mock('../components/checkout/voucher-sheet', () => ({
@@ -1633,8 +1642,14 @@ describe('CheckoutPage — dòng giao dự kiến ở bước thanh toán (D6-20
   });
 });
 
-describe('CheckoutPage: gợi ý mã dùng được ở dòng "Mã giảm giá" (chỉ gợi ý, không tự áp)', () => {
+describe('CheckoutPage: tự áp mã giảm nhiều nhất, gợi ý khi chưa áp', () => {
   const preview = (code: string, over: object = {}) => ({ code, eligible: true, discount: 0, ...over });
+  const PREVIEWS = [
+    preview('WELCOME30', { discount: 30_000 }),
+    preview('SHIP', { freeshipSaving: 20_000 }),
+    preview('BIG', { eligible: false, reason: 'Cần đơn tối thiểu', discount: 99_000 }),
+  ];
+  const APPLIED = { ...CART, couponCode: 'WELCOME30', discount: 30_000 };
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
@@ -1642,6 +1657,7 @@ describe('CheckoutPage: gợi ý mã dùng được ở dòng "Mã giảm giá" 
     mocks.sfCtx.slug = null;
     mocks.sfCtx.referralCode = null;
     mocks.sfCtx.referralEligible = null;
+    mocks.voucherProps = [];
     mocks.getAddresses.mockResolvedValue([ADDRESS]);
     mocks.getCart.mockResolvedValue(CART);
     mocks.checkoutQuote.mockResolvedValue(QUOTE);
@@ -1649,11 +1665,13 @@ describe('CheckoutPage: gợi ý mã dùng được ở dòng "Mã giảm giá" 
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
     mocks.getWasteMe.mockResolvedValue(makeWasteMe());
     mocks.getCoupons.mockResolvedValue([{ id: 'c1', code: 'WELCOME30' }]);
+    mocks.getCouponPreviews.mockResolvedValue(PREVIEWS);
+    mocks.applyCoupon.mockResolvedValue(APPLIED);
+    mocks.removeCoupon.mockResolvedValue(CART);
   });
 
   it('ví không có mã nào → không hỏi xem trước (không tính thừa trên máy chủ), giữ câu cũ', async () => {
     mocks.getCoupons.mockResolvedValue([]);
-    mocks.getCouponPreviews.mockResolvedValue([preview('WELCOME30', { discount: 30_000 })]);
     renderPage();
     expect(await screen.findByText('Chọn hoặc nhập mã giảm giá')).toBeInTheDocument();
     await waitFor(() => expect(mocks.getCoupons).toHaveBeenCalled());
@@ -1661,33 +1679,47 @@ describe('CheckoutPage: gợi ý mã dùng được ở dòng "Mã giảm giá" 
       await new Promise((r) => setTimeout(r, 450));
     });
     expect(mocks.getCouponPreviews).not.toHaveBeenCalled();
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
     expect(screen.queryByText(/mã dùng được/)).toBeNull();
   });
 
-  it('giỏ chưa có mã, có mã dùng được → "Bạn có N mã dùng được · giảm đến X" (tính cả miễn phí giao), hỏi kèm địa chỉ', async () => {
-    mocks.getCouponPreviews.mockResolvedValue([
-      preview('WELCOME30', { discount: 30_000 }),
-      preview('SHIP', { freeshipSaving: 20_000 }),
-      preview('BIG', { eligible: false, reason: 'Cần đơn tối thiểu', discount: 99_000 }),
-    ]);
+  it('giỏ chưa có mã, có mã dùng được → áp mã giảm nhiều nhất (hỏi kèm địa chỉ), hiện "Đã tự áp" và nút Gỡ', async () => {
     renderPage();
-    expect(await screen.findByText('Bạn có 2 mã dùng được · giảm đến 30.000đ')).toBeInTheDocument();
-    expect(screen.queryByText('Chọn hoặc nhập mã giảm giá')).toBeNull();
-    expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(1);
+    expect(await screen.findByTestId('coupon-auto-label')).toHaveTextContent('Đã tự áp');
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+    expect(mocks.applyCoupon).toHaveBeenCalledWith('WELCOME30');
     expect(mocks.getCouponPreviews).toHaveBeenCalledWith({ addressId: 'a1', storefrontSlug: undefined, itemIds: undefined });
-  });
-
-  it('không mã nào dùng được → giữ câu cũ; không tự áp mã nào', async () => {
-    mocks.getCouponPreviews.mockResolvedValue([preview('BIG', { eligible: false, reason: 'x', discount: 9 })]);
-    renderPage();
-    await waitFor(() => expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText('Chọn hoặc nhập mã giảm giá')).toBeInTheDocument();
+    expect(screen.getByText('WELCOME30')).toBeInTheDocument();
+    expect(screen.getByTestId('coupon-auto-remove')).toHaveTextContent('Gỡ');
     expect(screen.queryByText(/mã dùng được/)).toBeNull();
   });
 
-  it('giỏ đã có mã → không hỏi xem trước (không gọi thừa), chip mã như cũ', async () => {
+  it('bấm Gỡ → bỏ mã bằng đường gỡ sẵn có, không tự áp lại, câu gợi ý hiện lại', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByTestId('coupon-auto-remove'));
+    expect(await screen.findByText('Bạn có 2 mã dùng được · giảm đến 30.000đ')).toBeInTheDocument();
+    expect(mocks.removeCoupon).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('coupon-auto-label')).toBeNull();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 450));
+    });
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+  });
+
+  it('khách tự chọn mã khác → nhãn "Đã tự áp" biến mất', async () => {
+    renderPage();
+    await screen.findByTestId('coupon-auto-label');
+    mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'SHIP', discount: 0, freeship: true });
+    await act(async () => {
+      (mocks.voucherProps[mocks.voucherProps.length - 1]!.onCouponApplied as () => void)();
+    });
+    expect(await screen.findByText('SHIP')).toBeInTheDocument();
+    expect(screen.queryByTestId('coupon-auto-label')).toBeNull();
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+  });
+
+  it('giỏ đã có mã → không hỏi xem trước, không tự áp, không nhãn; gỡ tay rồi cũng không tự áp', async () => {
     mocks.getCart.mockResolvedValue({ ...CART, couponCode: 'XANH10' });
-    mocks.getCouponPreviews.mockResolvedValue([preview('WELCOME30', { discount: 30_000 })]);
     renderPage();
     expect(await screen.findByText('XANH10')).toBeInTheDocument();
     await screen.findByText(viCopy.checkout.shippingFee);
@@ -1695,6 +1727,34 @@ describe('CheckoutPage: gợi ý mã dùng được ở dòng "Mã giảm giá" 
       await new Promise((r) => setTimeout(r, 450));
     });
     expect(mocks.getCouponPreviews).not.toHaveBeenCalled();
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('coupon-auto-label')).toBeNull();
+    mocks.getCart.mockResolvedValue(CART);
+    await act(async () => {
+      (mocks.voucherProps[mocks.voucherProps.length - 1]!.onCouponApplied as () => void)();
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 450));
+    });
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
+  });
+
+  it('áp không được (mạng, mã vừa hết) → im lặng: không báo lỗi, giữ câu gợi ý như chưa áp', async () => {
+    mocks.applyCoupon.mockRejectedValue(new Error('mạng'));
+    renderPage();
+    expect(await screen.findByText('Bạn có 2 mã dùng được · giảm đến 30.000đ')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('coupon-auto-label')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+  });
+
+  it('không mã nào dùng được → giữ câu cũ; không tự áp mã nào', async () => {
+    mocks.getCouponPreviews.mockResolvedValue([preview('BIG', { eligible: false, reason: 'x', discount: 9 })]);
+    renderPage();
+    await waitFor(() => expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('Chọn hoặc nhập mã giảm giá')).toBeInTheDocument();
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
     expect(screen.queryByText(/mã dùng được/)).toBeNull();
   });
 });

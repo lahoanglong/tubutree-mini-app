@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { couponHint, couponHintText, couponUseCopy, couponUseOutcome, couponUseTarget } from './coupon-use';
+import { couponAutoCopy, couponHint, pickBestCoupon, couponHintText, couponUseCopy, couponUseOutcome, couponUseTarget } from './coupon-use';
 
 describe('couponUseTarget', () => {
   it('giỏ có hàng → giỏ; giỏ trống hoặc chưa biết → sản phẩm', () => {
@@ -71,5 +71,48 @@ describe('couponHintText', () => {
   });
   it('chưa biết mức tiết kiệm → chỉ nói số mã, không hứa số 0đ', () => {
     expect(couponHintText({ count: 1, maxSaving: 0 }, fmt)).toBe('Bạn có 1 mã dùng được');
+  });
+});
+
+describe('pickBestCoupon', () => {
+  const pv = (code: string, discount: number, extra: Partial<{ eligible: boolean; freeshipSaving: number }> = {}) => ({
+    code,
+    eligible: true,
+    discount,
+    ...extra,
+  });
+
+  it('chọn mã tiết kiệm nhiều nhất, tính cả phí giao được miễn', () => {
+    expect(pickBestCoupon([pv('A', 20_000), pv('B', 10_000, { freeshipSaving: 25_000 }), pv('C', 30_000)], [])).toBe('B');
+  });
+
+  it('hoà mức tiết kiệm thì mã hết hạn sớm hơn; không biết hạn xếp sau', () => {
+    const wallet = [
+      { code: 'A', endAt: '2026-12-31T00:00:00Z' },
+      { code: 'B', endAt: '2026-11-30T00:00:00Z' },
+    ];
+    expect(pickBestCoupon([pv('A', 20_000), pv('B', 20_000), pv('Z', 20_000)], wallet)).toBe('B');
+    expect(pickBestCoupon([pv('Z', 20_000), pv('A', 20_000)], wallet)).toBe('A');
+  });
+
+  it('hoà cả hạn thì theo mã để kết quả ổn định', () => {
+    expect(pickBestCoupon([pv('B', 5_000), pv('A', 5_000)], [])).toBe('A');
+  });
+
+  it('bỏ mã không dùng được và mã không giảm gì', () => {
+    expect(pickBestCoupon([pv('A', 50_000, { eligible: false }), pv('B', 0), pv('C', 1_000)], [])).toBe('C');
+  });
+
+  it('không mã nào dùng được, rỗng hoặc chưa có số → null', () => {
+    expect(pickBestCoupon([pv('A', 50_000, { eligible: false }), pv('B', 0)], [])).toBeNull();
+    expect(pickBestCoupon([], [])).toBeNull();
+    expect(pickBestCoupon(null, null)).toBeNull();
+  });
+});
+
+describe('couponAutoCopy', () => {
+  it('nhãn theo chữ chủ chốt', () => {
+    expect(couponAutoCopy.applied).toBe('Đã tự áp');
+    expect(couponAutoCopy.remove).toBe('Gỡ');
   });
 });

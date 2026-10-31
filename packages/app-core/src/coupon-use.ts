@@ -58,3 +58,30 @@ export function couponUseOutcome(
   if (previous && previous.toUpperCase() !== now) return { kind: 'switched', text: couponUseCopy.switched(now) };
   return { kind: 'ok' };
 }
+
+/** Chữ của dòng mã giảm giá khi thanh toán tự áp mã cho khách (Mini App và web dùng chung). */
+export const couponAutoCopy = {
+  applied: 'Đã tự áp',
+  remove: 'Gỡ',
+  removeAria: (code: string) => `Gỡ mã ${code} đã tự áp`,
+} as const;
+
+/**
+ * Mã tự áp ở thanh toán: mã dùng được có mức tiết kiệm (giảm tiền hàng + phí giao được miễn) lớn nhất theo xem trước của máy chủ.
+ * Hoà thì mã hết hạn sớm hơn (`endAt` trong ví; không biết hạn thì xếp sau), vẫn hoà thì theo mã cho kết quả ổn định.
+ * Trả null khi không mã nào giảm được.
+ */
+export function pickBestCoupon(
+  previews: readonly CouponPreviewDTO[] | null | undefined,
+  wallet: readonly { code: string; endAt?: string | null }[] | null | undefined,
+): string | null {
+  const expiry = new Map((wallet ?? []).map((c) => [c.code.toUpperCase(), c.endAt ? Date.parse(c.endAt) : Infinity]));
+  const saving = (p: CouponPreviewDTO) => Math.max(0, p.discount || 0) + Math.max(0, p.freeshipSaving ?? 0);
+  const endsAt = (p: CouponPreviewDTO) => {
+    const t = expiry.get(p.code.toUpperCase());
+    return t == null || Number.isNaN(t) ? Infinity : t;
+  };
+  const candidates = (previews ?? []).filter((p) => p.eligible && saving(p) > 0);
+  candidates.sort((a, b) => saving(b) - saving(a) || endsAt(a) - endsAt(b) || a.code.localeCompare(b.code));
+  return candidates[0]?.code ?? null;
+}

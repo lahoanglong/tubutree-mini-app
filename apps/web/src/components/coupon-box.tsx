@@ -19,7 +19,7 @@ import {
   isFreeshipRedundant,
   sortCouponsForCart,
 } from '@/lib/coupon-view';
-import { couponHint, couponHintText } from '@tubutree/app-core/coupon-use';
+import { couponAutoCopy, couponHint, couponHintText, pickBestCoupon } from '@tubutree/app-core/coupon-use';
 import { autoCouponName } from '@/lib/coupon-name';
 import { cartKey } from '@/lib/cart-key';
 import { actionErrorText } from '@/lib/error-text';
@@ -72,6 +72,7 @@ export function CouponBox({
   actionLabel = 'Chọn mã',
   band = false,
   appliedDiscount = 0,
+  autoApply = false,
 }: {
   currentCode: string | null;
   subtotal: number;
@@ -97,6 +98,11 @@ export function CouponBox({
   band?: boolean;
   /** Số đã giảm bởi mã đang áp; thẻ điện thoại ghi cạnh chip mã như Mini App. */
   appliedDiscount?: number;
+  /**
+   * Thanh toán: tự áp mã giảm nhiều nhất khách đang có, một lần cho mỗi lượt mở màn (khách gỡ rồi thì không áp lại). Chỉ bật
+   * khi địa chỉ đã chốt để số xem trước có cả phí giao được miễn. Lỗi thì im lặng.
+   */
+  autoApply?: boolean;
 }) {
   const qc = useQueryClient();
   const [code, setCode] = useState('');
@@ -173,6 +179,28 @@ export function CouponBox({
     onError: (e) => setErr(actionErrorText(e)),
   });
   const busy = apply.isPending || drop.isPending || disabled;
+
+  const [autoCode, setAutoCode] = useState<string | null>(null);
+  const autoSettled = useRef(false);
+  useEffect(() => {
+    if (currentCode) autoSettled.current = true;
+  }, [currentCode]);
+  const autoApplyMut = useMutation({
+    mutationKey: COUPON_MUTATION_KEY,
+    mutationFn: (c: string) => applyCoupon(c),
+    onSuccess: (cart, appliedCode) => {
+      setAutoCode(appliedCode.toUpperCase());
+      afterChange(cart);
+    },
+  });
+  const autoMutate = autoApplyMut.mutate;
+  useEffect(() => {
+    if (!autoApply || autoSettled.current || currentCode || !previewTrusted) return;
+    autoSettled.current = true;
+    const best = pickBestCoupon(previewsQ.data, couponsQ.data);
+    if (best) autoMutate(best);
+  }, [autoApply, currentCode, previewTrusted, previewsQ.data, couponsQ.data, autoMutate]);
+  const isAuto = !!autoCode && currentCode?.toUpperCase() === autoCode;
 
   return (
     <div
@@ -393,6 +421,23 @@ export function CouponBox({
               )}
             </>
           )}
+        </div>
+      )}
+      {isAuto && (
+        <div className="mt-1 flex items-center justify-between max-md:pl-[46px]">
+          <span data-testid="coupon-auto-label" className="text-caption text-success-fg">
+            {couponAutoCopy.applied}
+          </span>
+          <button
+            type="button"
+            data-testid="coupon-auto-remove"
+            onClick={() => drop.mutate()}
+            disabled={busy}
+            aria-label={couponAutoCopy.removeAria(currentCode!)}
+            className="min-h-11 min-w-11 px-2 text-caption font-semibold text-[color:var(--color-text-brand)] disabled:opacity-50"
+          >
+            {couponAutoCopy.remove}
+          </button>
         </div>
       )}
       {currentCode && notice && (

@@ -744,6 +744,7 @@ export default function CheckoutPage() {
                 shippingFee={quote?.shippingFee ?? null}
                 notice={quote ? quote.couponNotice : cart.couponNotice}
                 disabled={place.isPending}
+                autoApply={!!addressId || addrQ.data?.length === 0}
                 preview={checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined}
                 previewKey={couponPreviewKey(checkoutItems)}
               />
