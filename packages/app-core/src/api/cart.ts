@@ -83,7 +83,7 @@ export const getCartSelection = (http: HttpClient, itemIds: string[], storefront
 export const addToCart = (http: HttpClient, variationId: string, quantity: number, addSource?: AddToCartSource, storefrontSlug?: string | null) =>
   http.post<CartSummary>('/cart/items', { variationId, quantity, ...(addSource ? { addSource } : {}) }, cartOpts(storefrontSlug));
 /** Mã lỗi API trả khi một món làm cả lô hỏng (hết hàng, ngừng bán): thân lỗi có `reason: 'UNAVAILABLE' | 'STOCK'` và `variationId`; giỏ không đổi. */
-export const CART_BATCH_REJECTED = 'CART_BATCH_REJECTED';
+export { CART_BATCH_REJECTED } from '@tubutree/shared-types';
 /** Thêm nhiều món một lượt ("Thêm cả combo"): một transaction, một món lỗi thì không món nào vào giỏ. */
 export const addCartItemsBatch = (
   http: HttpClient,

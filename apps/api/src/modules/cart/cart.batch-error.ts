@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
+import { CART_BATCH_REJECTED } from '@tubutree/shared-types';
 
-/** Mã lỗi ổn định: batch thêm giỏ bị từ chối vì một món; không có món nào được ghi. FE đọc `reason` và `variationId` để báo đúng món. */
-export const CART_BATCH_REJECTED = 'CART_BATCH_REJECTED';
+export { CART_BATCH_REJECTED };
 export type CartBatchReason = 'UNAVAILABLE' | 'STOCK';
 
 const NOTHING_ADDED = 'Chưa có món nào được thêm vào giỏ.';

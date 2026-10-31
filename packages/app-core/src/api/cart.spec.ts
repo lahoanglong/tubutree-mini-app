@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fakeHttp } from './fake-http';
-import { addCartItemsBatch, addToCart, applyCoupon, CART_BATCH_REJECTED, getCart, getCartSelection, removeCartItem, removeCoupon, updateCartItem } from './cart';
+import { addCartItemsBatch, addToCart, applyCoupon, getCart, getCartSelection, removeCartItem, removeCoupon, updateCartItem } from './cart';
 
 const withSlug = { query: { storefrontSlug: 'ctv-a' } };
 
@@ -64,9 +64,5 @@ describe('cart — hợp đồng gọi API', () => {
       { method: 'post', path: '/cart/items/batch', body: { items, addSource: 'ctv_sheet' }, opts: withSlug },
       { method: 'post', path: '/cart/items/batch', body: { items, addSource: 'pdp' } },
     ]);
-  });
-
-  it('CART_BATCH_REJECTED khớp mã lỗi API trả khi một món làm batch hỏng', () => {
-    expect(CART_BATCH_REJECTED).toBe('CART_BATCH_REJECTED');
   });
 });
