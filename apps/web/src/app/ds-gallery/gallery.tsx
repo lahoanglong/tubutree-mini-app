@@ -118,19 +118,27 @@ export function DsGallery() {
 
         <Group name="countdown">
           <Variant label="clock, còn hơn 2 giờ">
-            <Countdown endAt={end(7_533_000)} mode="clock" />
+            <div style={{ display: 'flex' }}>
+              <Countdown endAt={end(7_533_000)} mode="clock" />
+            </div>
           </Variant>
           <Variant label="clock, dưới 1 phút">
-            <Countdown endAt={end(45_000)} mode="clock" />
+            <div style={{ display: 'flex' }}>
+              <Countdown endAt={end(45_000)} mode="clock" />
+            </div>
           </Variant>
           <Variant label="text, kết thúc sau">
-            <Countdown endAt={end(11_520_000)} mode="text" />
+            <div style={{ display: 'flex' }}>
+              <Countdown endAt={end(11_520_000)} mode="text" />
+            </div>
           </Variant>
           <Variant label="text, bắt đầu sau">
-            <Countdown endAt={end(5_400_000)} mode="text" kind="starts" />
+            <div style={{ display: 'flex' }}>
+              <Countdown endAt={end(5_400_000)} mode="text" kind="starts" />
+            </div>
           </Variant>
           <Variant label="đã hết giờ: không vẽ gì trong khung">
-            <div style={{ minHeight: 24, border: '1px dashed var(--color-border-strong)', borderRadius: 'var(--radius-tag)' }}>
+            <div style={{ display: 'flex', minHeight: 24, border: '1px dashed var(--color-border-strong)', borderRadius: 'var(--radius-tag)' }}>
               <Countdown endAt={end(-1000)} mode="clock" onEnd={noop} />
             </div>
           </Variant>

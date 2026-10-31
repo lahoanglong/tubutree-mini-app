@@ -1,7 +1,7 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/ui/combo-card.tsx
-import { Fragment } from 'react';
+import { Fragment, type CSSProperties } from 'react';
 import type { ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { vnd } from '@tubutree/app-core/commerce/money';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -31,6 +31,7 @@ export interface ComboCardProps {
 
 /** Tối đa 3 ảnh trong dải; món thứ 4 trở đi gộp thành một ô "+n" (critique-store 3.1b). */
 const MAX_THUMBS = 3;
+const PLUS: CSSProperties = { color: 'var(--color-text-tertiary)', fontWeight: 600, fontSize: 'var(--type-body-md-size)', lineHeight: 1 };
 const THUMB = 56;
 
 /**
@@ -64,7 +65,7 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
           {title}
         </h3>
         {pctShown > 0 && (
-          <span style={{ flex: '0 0 auto' }}>
+          <span style={{ flex: '0 0 auto', display: 'inline-flex' }}>
             <Badge tone="promo" size="sm">{fillCopy('combo.badge', { pct: pctShown })}</Badge>
           </span>
         )}
@@ -73,7 +74,7 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
       <div aria-hidden="true" style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '10px 0' }}>
         {shown.map((it, i) => (
           <Fragment key={it.id}>
-            {i > 0 && <span style={{ color: 'var(--color-text-tertiary)', fontWeight: 600 }}>+</span>}
+            {i > 0 && <span style={PLUS}>+</span>}
             <span data-testid="combo-thumb" style={{ opacity: it.stock === 'out' ? 0.5 : 1, display: 'inline-flex' }}>
               <ProductThumb src={it.thumbnail} alt="" size={THUMB} />
             </span>
@@ -81,7 +82,7 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
         ))}
         {extra > 0 && (
           <>
-            <span style={{ color: 'var(--color-text-tertiary)', fontWeight: 600 }}>+</span>
+            <span style={PLUS}>+</span>
             <span
               data-testid="combo-more"
               style={{ flex: '0 0 auto', width: THUMB, height: THUMB, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-media)', background: 'var(--color-bg-chip)', color: 'var(--color-text-secondary)', fontWeight: 700, fontSize: 'var(--type-body-md-size)' }}
@@ -103,7 +104,7 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
         ))}
       </ul>
 
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10, flexWrap: 'wrap', lineHeight: 'var(--type-caption-lh)' }}>
         <span style={{ fontSize: 'var(--type-caption-size)', color: 'var(--color-text-secondary)' }}>{fillCopy('combo.setLabel')}</span>
         <PriceTag value={comboTotal} compareAt={total} size="md" />
       </div>
