@@ -56,6 +56,7 @@ describe('Đơn đã huỷ rồi mới có tiền → vào hàng hoàn tiền, k
     isConfigured: jest.fn().mockReturnValue(true),
     createOrder: jest.fn(),
     searchOrders: jest.fn().mockResolvedValue([]),
+    resolveOrderTags: jest.fn().mockResolvedValue([]),
     getOrder: jest.fn(),
     updateOrder: jest.fn(),
   };

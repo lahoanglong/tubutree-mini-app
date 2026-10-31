@@ -38,6 +38,7 @@ describe('UAT race p3 (real Postgres)', () => {
       isConfigured: jest.fn().mockReturnValue(true),
       createOrder: jest.fn(),
       searchOrders: jest.fn(),
+      resolveOrderTags: jest.fn().mockResolvedValue([]),
       getOrder: jest.fn(),
       updateOrder: jest.fn(),
     };

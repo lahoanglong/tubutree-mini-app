@@ -45,6 +45,7 @@ describe('Đơn gian hàng tự giao không bao giờ tới Pancake (real Postgr
     isConfigured: jest.fn().mockReturnValue(true),
     createOrder: jest.fn(),
     searchOrders: jest.fn().mockResolvedValue([]),
+    resolveOrderTags: jest.fn().mockResolvedValue([]),
     getOrder: jest.fn(),
     updateOrder: jest.fn(),
   };

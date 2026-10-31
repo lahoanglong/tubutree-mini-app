@@ -4,7 +4,7 @@ import type { Queue } from 'bullmq';
 import type { Order, OrderItem } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
-import type { PancakeOrderDTO } from './pancake.types';
+import type { PancakeOrderDTO, PancakeOrderTagRef, PancakeUpdateOrderBody } from './pancake.types';
 import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { loadGomdonConfig, DEFAULT_GOMDON_WEIGHT_FALLBACK } from '../gomdon/gomdon-config';
@@ -18,6 +18,7 @@ import { isMerchantFulfilledOrder, isPancakeFulfilledLine, TUBU_FULFILLED_ORDER_
 import {
   buildPancakeOrderBody,
   isPancakePrepaid,
+  PANCAKE_PAYMENT_TAG,
   pancakePaymentState,
   recyclingNoteDetail,
   type PancakeLinePredicate,
@@ -136,6 +137,10 @@ export function mayExistOnPancake(order: Pick<Order, 'pancakeOrderId' | 'pancake
   return Boolean(order.pancakeOrderId || order.pancakePushClaimedAt);
 }
 
+function isTagsRejection(err: unknown): boolean {
+  return err instanceof PancakeApiError && !err.transient && /Pancake (?:trả 4\d\d\b|từ chối\b).*\btags\b/is.test(err.message);
+}
+
 /**
  * Đẩy đơn local → Pancake (Build Spec §8.3) và các cập nhật sau đó (đã thanh toán, huỷ).
  *
@@ -218,13 +223,15 @@ export class PancakeOrderService {
     if (skipped > 0) await this.flagUnpushableLines(order.id, order.code, skipped, pancakeLineCount === 0);
     if (pancakeLineCount === 0) return null;
 
-    const { body, paymentSynced } = buildPancakeOrderBody(order, {
+    const { body, paymentSynced, tagNames } = buildPancakeOrderBody(order, {
       recipient: await this.recipientOf(order),
       variations,
       onDealerCredit: await this.isOnDealerCredit(order),
       recyclingNote: await this.buildRecyclingNote(order),
       isPancakeLine,
     });
+    const tags = await this.client.resolveOrderTags(tagNames);
+    if (tags.length > 0) body.tags = tags;
 
     // Giữ quyền đẩy (một tiến trình một lúc): job push, job thanh toán và cron có thể cùng chạm một đơn. Tiến trình
     // chết giữa chừng để lại PUSHING — quá PUSH_LEASE_MS thì lần sau được vào lại (và tra cứu trước khi tạo).
@@ -274,7 +281,7 @@ export class PancakeOrderService {
           return adopted;
         }
       }
-      pancakeOrderId = extractPancakeOrderId(await this.client.createOrder(body));
+      pancakeOrderId = extractPancakeOrderId(await this.withTagFallback(body, (b) => this.client.createOrder(b)));
     } catch (err) {
       // Từ chối dứt khoát → Pancake chắc chắn chưa tạo: gỡ mốc để lần sau không phải tra cứu.
       const definite = err instanceof PancakeApiError && !err.transient;
@@ -397,7 +404,7 @@ export class PancakeOrderService {
     if (!this.client.isConfigured()) return;
     const { payload, amountDue } = await this.orderUpdate(order, onCredit);
     try {
-      await this.client.updateOrder(order.pancakeOrderId, payload);
+      await this.putOrder(order.pancakeOrderId, payload);
     } catch (err) {
       await this.setPushError(order.id, err);
       if (final) {
@@ -426,7 +433,7 @@ export class PancakeOrderService {
     if (!order.pancakeOrderId || isMerchantFulfilledOrder(order) || order.status === 'CANCELLED' || order.status === 'RETURNED') return;
     if (!this.client.isConfigured()) throw new PancakeApiError('Pancake chưa cấu hình (PANCAKE_API_KEY/SHOP_ID).', false);
     const onCredit = await this.isOnDealerCredit(order);
-    await this.client.updateOrder(order.pancakeOrderId, (await this.orderUpdate(order, onCredit)).payload);
+    await this.putOrder(order.pancakeOrderId, (await this.orderUpdate(order, onCredit)).payload);
     if (isPancakePrepaid(pancakePaymentState(order, onCredit)) && !order.pancakePaymentSynced) {
       await this.prisma.order.update({ where: { id: order.id }, data: { pancakePaymentSynced: true, pancakeSyncError: null } });
       await clearPancakeAttention(this.prisma, order.id, ATTENTION_PAYMENT_PENDING);
@@ -438,19 +445,73 @@ export class PancakeOrderService {
   /** Nội dung PUT: note/tag (và số đã trả khi trả trước) dựng từ đơn hiện tại; amountDue = phần giao qua Pancake. */
   private async orderUpdate(order: OrderWithItems, onCredit: boolean) {
     const variations = await this.variationsOf(order);
-    const { body, amountDue, paymentState } = buildPancakeOrderBody(order, {
+    const { body, amountDue, paymentState, tagNames } = buildPancakeOrderBody(order, {
       recipient: await this.recipientOf(order),
       variations,
       onDealerCredit: onCredit,
       recyclingNote: await this.buildRecyclingNote(order),
       isPancakeLine: this.pancakeLinesOf(variations),
     });
+    const tags = await this.mergedTags(order, tagNames);
     const payload = {
       ...(isPancakePrepaid(paymentState) ? { transfer_money: body.transfer_money, cod: body.cod } : {}),
-      tags: body.tags,
+      ...(tags ? { tags } : {}),
       note: body.note,
     };
     return { payload, amountDue };
+  }
+
+  /**
+   * Thẻ cho PUT: PUT thay cả danh sách nên giữ thẻ nhân viên gắn tay trên Pancake (đọc đơn hiện tại), chỉ gỡ thẻ
+   * trạng thái thanh toán của ta khi không còn đúng. Không đọc được đơn thì bỏ hẳn `tags` — thà không đổi thẻ còn hơn xoá thẻ tay.
+   */
+  private async mergedTags(order: OrderWithItems, tagNames: string[]): Promise<PancakeOrderTagRef[] | undefined> {
+    // Một lần gọi cho cả hai nhóm: hai lần gọi có thể cho kết quả lệch nhau khi lần đọc danh sách thẻ đầu lỗi (trả [] không cache).
+    const paymentNames = Object.values(PANCAKE_PAYMENT_TAG);
+    const resolved = await this.client.resolveOrderTags([...new Set([...tagNames, ...paymentNames])]);
+    const norm = (n: string | undefined) => (n ?? '').trim().toLowerCase();
+    const wantedKeys = new Set(tagNames.map(norm));
+    const paymentKeys = new Set(paymentNames.map(norm));
+    const wanted = resolved.filter((t) => wantedKeys.has(norm(t.name)));
+    const ownPaymentIds = new Set(resolved.filter((t) => paymentKeys.has(norm(t.name))).map((t) => t.id));
+    if (wanted.length === 0 && ownPaymentIds.size === 0) return undefined;
+    let current: PancakeOrderDTO | null;
+    try {
+      current = await this.client.getOrder(order.pancakeOrderId!);
+    } catch {
+      return undefined;
+    }
+    if (!current) return undefined;
+    const existing = current.tags ?? [];
+    if (!Array.isArray(existing)) return undefined;
+    // Thẻ không đọc được dạng {id: số} thì không dựng lại danh sách được: PUT sẽ xoá nhầm thẻ tay.
+    if (!existing.every((t): t is PancakeOrderTagRef => typeof t === 'object' && t !== null && typeof t.id === 'number')) return undefined;
+    const wantedIds = new Set(wanted.map((t) => t.id));
+    const kept = existing.filter((t) => !ownPaymentIds.has(t.id) || wantedIds.has(t.id));
+    if (wanted.length === 0 && kept.length === existing.length) return undefined;
+    const merged = new Map<number, PancakeOrderTagRef>();
+    for (const t of [...kept, ...wanted]) merged.set(t.id, { id: t.id, ...(t.name ? { name: t.name } : {}) });
+    return [...merged.values()];
+  }
+
+  /**
+   * Thẻ lấy từ cache có thể đã bị xoá trên Pancake: 4xx nhắc tới `tags` thì bỏ cache và gửi lại MỘT lần không kèm thẻ,
+   * để thẻ không làm hỏng đẩy đơn / ghi nhận thanh toán.
+   */
+  private async withTagFallback<T extends { tags?: PancakeOrderTagRef[] }, R>(payload: T, send: (p: T) => Promise<R>): Promise<R> {
+    try {
+      return await send(payload);
+    } catch (err) {
+      if (!payload.tags || !isTagsRejection(err)) throw err;
+      this.client.invalidateOrderTags();
+      this.logger.warn(`Pancake từ chối thẻ đơn, gửi lại không kèm thẻ: ${pancakeErrorText(err)}`);
+      const { tags: _dropped, ...rest } = payload;
+      return send(rest as T);
+    }
+  }
+
+  private putOrder(pancakeOrderId: string, payload: PancakeUpdateOrderBody): Promise<PancakeOrderDTO | null> {
+    return this.withTagFallback(payload, (p) => this.client.updateOrder(pancakeOrderId, p));
   }
 
   /**
