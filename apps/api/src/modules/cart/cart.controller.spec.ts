@@ -75,3 +75,16 @@ describe('CartController — áp mã ở giỏ cùng trần với nhận mã th�
     expect(Reflect.getMetadata('THROTTLER:TTLdefault', CartController.prototype.applyCoupon)).toBe(60_000);
   });
 });
+
+describe('CartController — POST /cart/items/batch', () => {
+  it('chuyển items, addSource và gian hàng ghi công cho addItemsBatch; trả giỏ không lộ ID chủ gian hàng', async () => {
+    const cart = { id: 'c1', items: [{ id: 'i1', fulfiller: { kind: 'MERCHANT', storefrontId: 'sf-a', name: 'Shop A', ownerUserId: 'u_ma' } }] };
+    const svc = { addItemsBatch: jest.fn().mockResolvedValue(cart) };
+    const ctl = new CartController(svc as unknown as CartService);
+    const items = [{ variationId: 'v1', quantity: 1 }, { variationId: 'v2', quantity: 2 }];
+    const res = await ctl.addItemsBatch('u1', { items, addSource: 'ctv_sheet' } as never, { storefrontSlug: 'shop-a' });
+    expect(svc.addItemsBatch).toHaveBeenCalledWith('u1', items, 'ctv_sheet', 'shop-a');
+    expect(JSON.stringify(res)).not.toContain('u_ma');
+    expect(res.items[0]!.fulfiller).toEqual({ kind: 'MERCHANT', storefrontId: 'sf-a', name: 'Shop A' });
+  });
+});

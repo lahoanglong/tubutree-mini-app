@@ -1,12 +1,25 @@
-import { Transform } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+
+const ADD_SOURCES = ['pdp', 'buy_now', 'repurchase', 'wishlist', 'ctv_sheet', 'reorder_notification'] as const;
 
 export class AddItemDto {
   @IsString() variationId!: string;
   @IsInt() @Min(1) @Max(999) quantity!: number;
   @IsOptional()
-  @IsIn(['pdp', 'buy_now', 'repurchase', 'wishlist', 'ctv_sheet', 'reorder_notification'])
+  @IsIn(ADD_SOURCES)
   addSource?: string;
+}
+
+export class BatchItemDto {
+  @IsString() variationId!: string;
+  @IsInt() @Min(1) @Max(999) quantity!: number;
+}
+
+/** "Thêm cả combo": 20 món là trần thừa cho một combo/mua kèm, chặn lô lớn giữ khoá giỏ lâu. */
+export class AddItemsBatchDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(20) @ValidateNested({ each: true }) @Type(() => BatchItemDto) items!: BatchItemDto[];
+  @IsOptional() @IsIn(ADD_SOURCES) addSource?: string;
 }
 
 export class UpdateItemDto {
