@@ -198,6 +198,7 @@ describe('seed mẫu thông báo', () => {
       'WASTE_PERK_REVIEWED',
       'WASTE_REQUEST_EXPIRING',
       'WASTE_GIFT_EXPIRED',
+      'TIER_UPGRADED',
     ];
 
     it.each(CODES)('%s: prod (chỉ chạy migration) có đúng lời tin như seed', (code) => {

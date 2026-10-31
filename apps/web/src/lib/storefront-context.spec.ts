@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   PENDING_REF_TTL_DAYS,
   clearPendingRef,
@@ -15,23 +15,24 @@ import {
   clearCtvTouched,
   markCtvTouched,
   wasCtvTouched,
+  updateCtvTouchMark,
 } from './storefront-context';
 
 describe('ngữ cảnh gian hàng trên web', () => {
   beforeEach(() => sessionStorage.clear());
 
   it('chưa vào gian hàng nào → rỗng', () => {
-    expect(getStorefrontContext()).toEqual({ slug: null, referralCode: null, kind: null, referralEligible: null });
+    expect(getStorefrontContext()).toEqual({ slug: null, referralCode: null, kind: null, referralEligible: null, clickedAt: null });
   });
 
   it('gian hàng CTV → mã giới thiệu là của chủ gian hàng do API trả', () => {
     rememberStorefront('abc123', 'CTV', 'abc123');
-    expect(getStorefrontContext()).toEqual({ slug: 'abc123', referralCode: 'ABC123', kind: 'CTV', referralEligible: true });
+    expect(getStorefrontContext()).toEqual({ slug: 'abc123', referralCode: 'ABC123', kind: 'CTV', referralEligible: true, clickedAt: expect.any(Number) });
   });
 
   it('SELLER-4: CTV đổi subdomain → mã giới thiệu vẫn là của chủ, không suy từ slug/subdomain', () => {
     rememberStorefront('ctvone1', 'CTV', 'CTVONE1');
-    expect(getStorefrontContext()).toEqual({ slug: 'ctvone1', referralCode: 'CTVONE1', kind: 'CTV', referralEligible: true });
+    expect(getStorefrontContext()).toEqual({ slug: 'ctvone1', referralCode: 'CTVONE1', kind: 'CTV', referralEligible: true, clickedAt: expect.any(Number) });
     sessionStorage.clear();
     rememberStorefront('greenshop', 'CTV');
     expect(getStorefrontContext().referralCode).toBeNull();
@@ -39,7 +40,7 @@ describe('ngữ cảnh gian hàng trên web', () => {
 
   it('gian hàng nhãn hàng → giữ slug nhưng KHÔNG bịa mã giới thiệu', () => {
     rememberStorefront('visante', 'BRAND');
-    expect(getStorefrontContext()).toEqual({ slug: 'visante', referralCode: null, kind: 'BRAND', referralEligible: null });
+    expect(getStorefrontContext()).toEqual({ slug: 'visante', referralCode: null, kind: 'BRAND', referralEligible: null, clickedAt: null });
   });
 
   it('?ref= trên link bất kỳ → nhớ mã, viết hoa', () => {
@@ -50,18 +51,18 @@ describe('ngữ cảnh gian hàng trên web', () => {
   it('mã đã nhớ không bị gian hàng nhãn hàng xoá mất', () => {
     rememberReferral('ABC123');
     rememberStorefront('visante', 'BRAND');
-    expect(getStorefrontContext()).toEqual({ slug: 'visante', referralCode: 'ABC123', kind: 'BRAND', referralEligible: null });
+    expect(getStorefrontContext()).toEqual({ slug: 'visante', referralCode: 'ABC123', kind: 'BRAND', referralEligible: null, clickedAt: expect.any(Number) });
   });
 
   it('dữ liệu hỏng → rỗng chứ không ném lỗi', () => {
     sessionStorage.setItem('tubu_web_storefront', '{nope');
-    expect(getStorefrontContext()).toEqual({ slug: null, referralCode: null, kind: null, referralEligible: null });
+    expect(getStorefrontContext()).toEqual({ slug: null, referralCode: null, kind: null, referralEligible: null, clickedAt: null });
   });
 
   it('xoá xong quay về rỗng', () => {
     rememberStorefront('abc123', 'CTV', 'ABC123');
     clearStorefrontContext();
-    expect(getStorefrontContext()).toEqual({ slug: null, referralCode: null, kind: null, referralEligible: null });
+    expect(getStorefrontContext()).toEqual({ slug: null, referralCode: null, kind: null, referralEligible: null, clickedAt: null });
   });
 });
 
@@ -96,7 +97,7 @@ describe('referralEligible: mã giới thiệu có thật sự là của CTV', (
 
   it('mở link ?ref= chưa biết (null); chạm giới thiệu ok:false → false, ok:true → true', () => {
     rememberEntryLink(null, 'khach01');
-    expect(getStorefrontContext()).toMatchObject({ referralCode: 'KHACH01', referralEligible: null });
+    expect(getStorefrontContext()).toMatchObject({ referralCode: 'KHACH01', referralEligible: null, clickedAt: expect.any(Number) });
     confirmReferralTouch('KHACH01', false);
     expect(getStorefrontContext().referralEligible).toBe(false);
     rememberEntryLink(null, 'ctv0001');
@@ -137,33 +138,33 @@ describe('mã đã được ghi công qua gian hàng CTV trong tab', () => {
   beforeEach(() => sessionStorage.clear());
 
   it('chưa đánh dấu thì không mã nào được coi là đã chạm; đánh dấu không phân biệt hoa thường', () => {
-    expect(wasCtvTouched('AN123')).toBe(false);
-    markCtvTouched(' an123 ');
-    expect(wasCtvTouched('AN123')).toBe(true);
-    expect(wasCtvTouched('an123')).toBe(true);
-    expect(wasCtvTouched('KHAC')).toBe(false);
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
+    markCtvTouched('u1', ' an123 ');
+    expect(wasCtvTouched('u1', 'AN123')).toBe(true);
+    expect(wasCtvTouched('u1', 'an123')).toBe(true);
+    expect(wasCtvTouched('u1', 'KHAC')).toBe(false);
   });
 
   it('nằm ở sessionStorage (sống qua tải lại trang) và bị xoá cùng ngữ cảnh gian hàng', () => {
-    markCtvTouched('AN123');
+    markCtvTouched('u1', 'AN123');
     expect(sessionStorage.length).toBe(1);
     clearStorefrontContext();
-    expect(wasCtvTouched('AN123')).toBe(false);
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
   });
 
   it('clearCtvTouched chỉ xoá dấu chạm CTV, giữ ngữ cảnh gian hàng của tab', () => {
     rememberStorefront('an-shop', 'CTV', 'AN123');
-    markCtvTouched('AN123');
+    markCtvTouched('u1', 'AN123');
     clearCtvTouched();
-    expect(wasCtvTouched('AN123')).toBe(false);
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
     expect(getStorefrontContext()).toMatchObject({ slug: 'an-shop', referralCode: 'AN123' });
   });
 
   it('ghi đè bằng mã CTV khác: chỉ nhớ mã sau cùng', () => {
-    markCtvTouched('AN123');
-    markCtvTouched('BINH9');
-    expect(wasCtvTouched('AN123')).toBe(false);
-    expect(wasCtvTouched('BINH9')).toBe(true);
+    markCtvTouched('u1', 'AN123');
+    markCtvTouched('u1', 'BINH9');
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
+    expect(wasCtvTouched('u1', 'BINH9')).toBe(true);
   });
 });
 
@@ -267,6 +268,152 @@ describe('bản chờ nguồn giới thiệu trong localStorage', () => {
       expect(() => clearPendingRef()).not.toThrow();
     } finally {
       Object.defineProperty(window, 'localStorage', real);
+    }
+  });
+});
+
+describe('lúc bấm link (clickedAt) và dấu chạm theo người dùng', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-31T10:00:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('mở link ghi lúc bấm; mở lại cùng link là lượt bấm mới (làm mới hạn)', () => {
+    rememberEntryLink(null, 'an123');
+    expect(getStorefrontContext().clickedAt).toBe(Date.parse('2026-10-31T10:00:00Z'));
+    vi.setSystemTime(new Date('2026-10-31T15:00:00Z'));
+    rememberEntryLink(null, 'an123');
+    expect(getStorefrontContext().clickedAt).toBe(Date.parse('2026-10-31T15:00:00Z'));
+  });
+
+  it('xem lại gian hàng cùng mã không dời lúc bấm; đổi sang mã khác thì ghi lúc bấm mới', () => {
+    rememberStorefront('an-shop', 'CTV', 'AN123');
+    const first = getStorefrontContext().clickedAt;
+    vi.setSystemTime(new Date('2026-10-31T12:00:00Z'));
+    rememberStorefront('an-shop', 'CTV', 'AN123');
+    expect(getStorefrontContext().clickedAt).toBe(first);
+    rememberStorefront('binh-shop', 'CTV', 'BINH9');
+    expect(getStorefrontContext().clickedAt).toBe(Date.parse('2026-10-31T12:00:00Z'));
+  });
+
+  it('mở lại /s/<mã> từ link (fromLink) là lượt bấm mới dù cùng mã; điều hướng trong app thì giữ', () => {
+    rememberStorefront('an-shop', 'CTV', 'AN123', true);
+    vi.setSystemTime(new Date('2026-10-31T13:00:00Z'));
+    rememberStorefront('an-shop', 'CTV', 'AN123');
+    expect(getStorefrontContext().clickedAt).toBe(Date.parse('2026-10-31T10:00:00Z'));
+    rememberStorefront('an-shop', 'CTV', 'AN123', true);
+    expect(getStorefrontContext().clickedAt).toBe(Date.parse('2026-10-31T13:00:00Z'));
+  });
+
+  it('bản chờ: xem lại cùng nguồn trong app giữ lúc bấm cũ, mở lại từ link làm mới', () => {
+    localStorage.clear();
+    rememberEntryLink('an-shop', 'an123');
+    const first = readPendingRefs()[0]!.savedAt;
+    vi.setSystemTime(new Date('2026-10-31T12:00:00Z'));
+    rememberStorefront('an-shop', 'CTV', 'AN123');
+    expect(readPendingRefs().find((p) => p.slug === 'an-shop')!.savedAt).toBe(first);
+    vi.setSystemTime(new Date('2026-10-31T14:00:00Z'));
+    rememberEntryLink('an-shop', 'an123');
+    expect(readPendingRefs().find((p) => p.slug === 'an-shop')!.savedAt).toBe(Date.parse('2026-10-31T14:00:00Z'));
+  });
+
+  it('bản lưu cũ chưa có clickedAt đọc ra null', () => {
+    sessionStorage.setItem('tubu_web_storefront', JSON.stringify({ slug: null, referralCode: 'A', kind: null }));
+    expect(getStorefrontContext().clickedAt).toBeNull();
+  });
+
+  it('dấu chạm gắn người dùng: người đăng nhập sau trong cùng tab không thừa hưởng', () => {
+    markCtvTouched('u1', 'AN123');
+    expect(wasCtvTouched('u1', 'AN123')).toBe(true);
+    expect(wasCtvTouched('u2', 'AN123')).toBe(false);
+  });
+
+  it('dấu dạng cũ (chỉ mã) không còn tính là đã chạm', () => {
+    sessionStorage.setItem('tubu_web_ctv_touched', 'AN123');
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
+  });
+
+  it('dấu đổi theo máy chủ: AN123 (ctv) rồi BINH9 (brand, ghi công) → dấu AN123 mất, AN123 brand gửi lại được', () => {
+    updateCtvTouchMark('u1', 'AN123', 'ctv', true);
+    expect(wasCtvTouched('u1', 'AN123')).toBe(true);
+    updateCtvTouchMark('u1', 'BINH9', 'brand', true);
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
+  });
+
+  it('máy chủ không ghi công (ok:false) thì dấu giữ nguyên', () => {
+    updateCtvTouchMark('u1', 'AN123', 'ctv', true);
+    updateCtvTouchMark('u1', 'KHACH', 'brand', false);
+    expect(wasCtvTouched('u1', 'AN123')).toBe(true);
+  });
+});
+
+describe('cờ "đến từ link": tải lại trang và link subdomain', () => {
+  const navType = (type: string | null) =>
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue(type ? ([{ type }] as unknown as PerformanceEntryList) : []);
+  async function freshModule(url: string) {
+    window.history.replaceState({}, '', url);
+    vi.resetModules();
+    sessionStorage.clear();
+    localStorage.clear();
+    return import('./storefront-context');
+  }
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('mở /s/<mã> bằng link: lần mở gian hàng đầu là từ link, lần sau (điều hướng trong app) thì không', async () => {
+    navType('navigate');
+    const m = await freshModule('/s/an-shop');
+    expect(m.consumeStorefrontLanding()).toBe(true);
+    expect(m.consumeStorefrontLanding()).toBe(false);
+  });
+
+  it('tải lại trang (reload) hoặc quay lại tải lại (back_forward): không phải bấm mới', async () => {
+    for (const type of ['reload', 'back_forward']) {
+      navType(type);
+      const m = await freshModule('/s/an-shop');
+      expect(m.consumeStorefrontLanding()).toBe(false);
+    }
+  });
+
+  it('link subdomain (đường dẫn vẫn là / sau khi viết lại): lần mount đầu ở đúng địa chỉ lúc nạp là từ link', async () => {
+    navType('navigate');
+    const m = await freshModule('/');
+    expect(m.consumeStorefrontLanding()).toBe(true);
+  });
+
+  it('vào trang chủ rồi điều hướng trong app sang /s/<mã> (địa chỉ đã đổi): không tính là từ link', async () => {
+    navType('navigate');
+    const m = await freshModule('/');
+    window.history.pushState({}, '', '/s/an-shop');
+    expect(m.consumeStorefrontLanding()).toBe(false);
+  });
+
+  it('không có Navigation Timing: giữ hành vi từ link', async () => {
+    navType(null);
+    const m = await freshModule('/s/an-shop');
+    expect(m.consumeStorefrontLanding()).toBe(true);
+  });
+
+  it('mở lại ?ref= bằng tải lại trang không làm mới lúc bấm; bằng link mới thì làm mới', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-31T10:00:00Z'));
+      navType('navigate');
+      const m = await freshModule('/');
+      m.rememberEntryLink(null, 'an123');
+      vi.setSystemTime(new Date('2026-10-31T12:00:00Z'));
+      navType('reload');
+      m.rememberEntryLink(null, 'an123');
+      expect(m.getStorefrontContext().clickedAt).toBe(Date.parse('2026-10-31T10:00:00Z'));
+      navType('navigate');
+      m.rememberEntryLink(null, 'an123');
+      expect(m.getStorefrontContext().clickedAt).toBe(Date.parse('2026-10-31T12:00:00Z'));
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

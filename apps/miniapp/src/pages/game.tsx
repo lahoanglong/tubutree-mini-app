@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MISSION_PATHS } from '@tubutree/app-core/game-mission-paths';
-import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, type MissionTarget, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
+import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, type MissionTarget, type PrimaryWaterAction, gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { Page, useNavigate } from 'zmp-ui';
 import type { HarvestCouponTerms, HarvestSpecies } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
@@ -19,7 +19,6 @@ import { shareLink } from '../services/zmp-bridge';
 import { pointsSummary } from '../utils/points-lots';
 import { dismissGameTutorial, isGameTutorialDismissed } from '../utils/game-tutorial';
 import { MessagesSquare, Recycle } from 'lucide-react';
-import { vi } from '../i18n/vi';
 import { Text } from '../components/ui/text';
 import { GameLoginGate, GameSkeleton } from '../components/game/game-states';
 import { GardenHero } from '../components/game/garden-hero';
@@ -116,7 +115,7 @@ export default function GamePage() {
     else navigate(MISSION_PATHS.miniapp[target]);
   };
   const shareHarvest = () => {
-    const t = vi.game.newbie.harvest;
+    const t = gameNewbieCopy.harvest;
     void shareLink({ title: t.shareTitle, description: t.shareDescription, path: '/game' }).catch(() => undefined);
   };
   const nextQuiz = () => {
@@ -285,7 +284,7 @@ export default function GamePage() {
           {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
           {garden === undefined && !gardenQ.isError && <Skeleton height={120} radius="var(--radius-card)" />}
           {garden === undefined && gardenQ.isError && (
-            <ErrorState variant="inline" message={vi.game.newbie.loadError.garden} onRetry={() => void gardenQ.refetch()} retrying={gardenQ.isFetching} />
+            <ErrorState variant="inline" message={gameNewbieCopy.loadError.garden} onRetry={() => void gardenQ.refetch()} retrying={gardenQ.isFetching} />
           )}
           {garden && plotsOpen && (
             <GardenPlots
@@ -302,7 +301,7 @@ export default function GamePage() {
 
           {garden && !plotsOpen && (
             <Text variant="caption" tone="secondary" as="div">
-              {vi.game.newbie.plots.locked}
+              {gameNewbieCopy.plots.locked}
             </Text>
           )}
 
@@ -340,8 +339,8 @@ export default function GamePage() {
           {/* Bảng tin cộng đồng (§6.14.12) */}
           <GameLinkRow
             icon={MessagesSquare}
-            title={vi.game.newbie.community.feedTitle}
-            hint={vi.game.newbie.community.feedHintReadOnly}
+            title={gameNewbieCopy.community.feedTitle}
+            hint={gameNewbieCopy.community.feedHintReadOnly}
             onClick={() => navigate('/feed')}
           />
         </GameTabPanel>

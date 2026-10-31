@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { ShoppingBag } from 'lucide-react';
 import type { GameProfile } from '../../services/game-api';
-import { vi } from '../../i18n/vi';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Icon } from '../ui/icon';
 import { Heading, Text } from '../ui/text';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
-const t = vi.game.newbie.orderWater;
+const t = gameNewbieCopy.orderWater;
 
 /** Nguồn nước "Từ đơn hàng" kèm tiến độ tuần (thứ Hai đến Chủ nhật, giờ VN). Ẩn khi admin tắt hoặc API cũ không trả. */
 export function OrderWaterCard({ info, onShop }: { info: GameProfile['orderWater']; onShop: () => void }) {

@@ -1,7 +1,6 @@
 import { LockOpen, ShowerHead, Sprout } from 'lucide-react';
-import { WATER_STEP, missingDrops } from '@tubutree/app-core/game-newbie';
+import { WATER_STEP, missingDrops, gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { treeTitle } from '@tubutree/app-core/tree-title';
-import { vi } from '../../i18n/vi';
 import type { Garden } from '../../services/game-api';
 import { formatDrops, formatNumber } from '../../utils/format';
 import { Button } from '../ui/button';
@@ -75,7 +74,7 @@ export function GardenPlots({
       {garden.nextUnlock ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
           <Button fullWidth icon={LockOpen} disabled={unlockPending} loading={unlockPending} onPress={() => (unlockShort > 0 ? onNeedWater(unlockShort) : onUnlock(garden.nextUnlock!.slot))}>
-            {unlockShort > 0 ? vi.game.newbie.short(unlockShort) : `Mở lô (${formatDrops(garden.nextUnlock.seedCost)})`}
+            {unlockShort > 0 ? gameNewbieCopy.short(unlockShort) : `Mở lô (${formatDrops(garden.nextUnlock.seedCost)})`}
           </Button>
         </div>
       ) : (

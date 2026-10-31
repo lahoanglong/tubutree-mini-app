@@ -1,9 +1,8 @@
 import { Droplets, Flame, Snowflake } from 'lucide-react';
-import { STREAK_3_SEEDS, missingDrops } from '@tubutree/app-core/game-newbie';
+import { STREAK_3_SEEDS, missingDrops, gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import type { CheckInStatusResponse } from '@tubutree/app-core/api/loyalty';
 import type { GameProfile } from '../../services/game-api';
-import { vi } from '../../i18n/vi';
 import { formatDrops } from '../../utils/format';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { guestCheckInCopy } from '@tubutree/app-core/daily-check-in-guest-copy';
@@ -41,7 +40,7 @@ export function CheckInStreak({
   const streakDays = status?.streakDays ?? profile?.streakDays;
   const dewCollectedToday = isSameVNDay(profile?.lastDewAt ?? null);
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
-  const t = vi.game.newbie.checkin;
+  const t = gameNewbieCopy.checkin;
   const freezeCost = profile?.streakFreezeCost ?? 80;
   const freezeShort = profile ? missingDrops(profile.totalSeeds, freezeCost) : 0;
   const dayReward = (day: number): number | null =>

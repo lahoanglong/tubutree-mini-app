@@ -1,3 +1,4 @@
+import { payoutTax } from './affiliate-rules';
 /** Ba tab của trang CTV: mỗi tab chỉ tải dữ liệu của tab đó. */
 export const CTV_TABS = [
   { key: 'overview', label: 'Tổng quan' },
@@ -10,6 +11,11 @@ export const CTV_TAB_KEYS: readonly CtvTabKey[] = CTV_TABS.map((t) => t.key);
 /** Một câu chung cho khoản hoa hồng đang chờ, dùng ở trang CTV và ở Ví Tubu để CTV không thấy hai tên cho cùng một số. */
 export const COMMISSION_PENDING_LABEL = 'Hoa hồng đang chờ';
 export const COMMISSION_PENDING_NOTE = 'đơn chưa giao hoặc trong thời gian đổi/trả';
+
+/** Dòng phụ của "Đang chờ": chỉ hứa lịch tự vào Ví khi tự chuyển bật (máy chủ không làm thì không hứa). */
+export function commissionPendingNote(auto: boolean): string {
+  return auto ? `${COMMISSION_PENDING_NOTE}; duyệt xong vào Ví lúc 8:00` : COMMISSION_PENDING_NOTE;
+}
 
 interface DashboardMoney {
   monthCommission: number;
@@ -60,15 +66,28 @@ export function heroShowsWalletBalance(hero: { label: string; waiting: boolean }
 /** Lời cho ô "Chuyển vào Ví" khi chưa có số dư: nói vì sao và khi nào có. `pendingText` đã định dạng tiền. */
 export function transferBlockedText(pendingText: string, auto = true): string {
   return auto
-    ? `Hoa hồng tự vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: ${pendingText}.`
+    ? `Hoa hồng được duyệt khi đơn đã giao và hết thời gian đổi/trả, rồi tự vào Ví Tubu lúc 8:00 sáng kế tiếp. Đang chờ: ${pendingText}.`
     : `Hoa hồng chuyển được vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: ${pendingText}.`;
 }
 
-/** Dòng dưới số to khi còn hoa hồng "có thể chuyển": với tự chuyển bật thì đây là phần chưa tự vào Ví được, CTV bấm tay. */
-export function transferHeroNote(auto = true): string {
-  return auto
-    ? 'Phần này chưa tự vào Ví được (thường do cần mã số thuế). Bấm Chuyển vào Ví để nhận ngay.'
-    : 'Bấm Chuyển vào Ví để chuyển phần này vào Ví Tubu.';
+/** Dòng dưới số to khi còn hoa hồng "có thể chuyển": với tự chuyển bật thì phần này chờ lượt 8:00, CTV có thể bấm tay để nhận ngay. */
+export function transferHeroNote(auto = true, needsTaxId = false): string {
+  if (!auto) return 'Bấm Chuyển vào Ví để chuyển phần này vào Ví Tubu.';
+  return needsTaxId
+    ? 'Phần này chưa tự vào Ví được vì cần mã số thuế. Bấm Chuyển vào Ví để nhận ngay.'
+    : 'Tự vào Ví Tubu lúc 8:00 sáng. Muốn nhận ngay thì bấm Chuyển vào Ví.';
+}
+
+/**
+ * Lượt tự chuyển bỏ qua CTV bị khấu trừ thuế TNCN mà chưa khai MST (máy chủ đòi MST ở lần bấm tay đầu). Ước tính riêng lần chuyển này
+ * (máy chủ còn cộng dồn theo tháng); chưa tải được cấu hình thuế thì coi như không cần để màn không nói sai.
+ */
+export function needsTaxIdForAutoTransfer(
+  transferable: number,
+  pit: { pct: number; threshold: number } | undefined,
+  taxIdOnFile: string | null | undefined,
+): boolean {
+  return payoutTax(transferable, pit) > 0 && !taxIdOnFile;
 }
 
 /** Thẻ "Việc đầu tiên" chỉ hiện cho CTV chưa có đơn nào: có chuyển đổi hoặc bất kỳ khoản hoa hồng nào là đã có đơn đầu. */

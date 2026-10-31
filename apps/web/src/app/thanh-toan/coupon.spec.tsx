@@ -32,12 +32,17 @@ const state = vi.hoisted(() => ({
   cartNotice: null as string | null,
   /** Tham số trang gửi cho xem trước mã. */
   previewCalls: [] as Record<string, unknown>[],
+  /** Kết quả xem trước từng mã. */
+  previewData: [] as unknown[],
+  /** Giỏ có thêm một dòng thứ hai (để thanh toán một phần). */
+  twoItems: false,
 }));
 const SUBTOTAL = 300000;
 const discountOf = () => (state.couponCode && !state.couponNotice ? 90000 : 0);
 const cartNow = () => ({
   items: [
     { id: 'i1', variationId: 'v1', productName: 'Dầu gội bồ kết', variationName: '500ml', slug: 'dau-goi', thumbnail: null, unitPrice: 150000, quantity: 2, stock: 5, total: SUBTOTAL },
+    ...(state.twoItems ? [{ id: 'i2', variationId: 'v2', productName: 'Xà bông', variationName: null, slug: 'xb', thumbnail: null, unitPrice: 10000, quantity: 1, stock: 5, total: 10000 }] : []),
   ],
   couponCode: state.couponCode,
   couponNotice: state.cartNotice ?? state.couponNotice,
@@ -69,7 +74,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   },
   getCouponPreviews: async (params: Record<string, unknown>) => {
     state.previewCalls.push(params);
-    return [];
+    return state.previewData;
   },
   getAddresses: async () => state.noAddress ? [] : [
     { id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Cầu Giấy', street: '1 Xuân Thuỷ', provinceCode: '84_VN01', districtCode: '', wardCode: '84_VN01_001', isDefault: true },
@@ -127,6 +132,9 @@ beforeEach(() => {
   state.noAddress = false;
   state.cartNotice = null;
   state.previewCalls = [];
+  state.previewData = [];
+  state.twoItems = false;
+  sessionStorage.clear();
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -325,5 +333,33 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     expect(headingProblems(container)).toEqual([]);
     expect(unnamedControls(container)).toEqual([]);
     expect(smallTouchTargets(container)).toEqual([]);
+  });
+});
+
+describe('/thanh-toan — tự áp mã giảm nhiều nhất', () => {
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+  beforeEach(() => {
+    state.previewData = [{ code: 'WELCOME30', eligible: true, discount: 90000 }];
+  });
+
+  it('toàn giỏ → tự áp mã, hiện "Đã tự áp" và nút Gỡ', async () => {
+    const { container } = await mount();
+    await settle();
+    await flush(6);
+    expect(state.applied).toEqual(['WELCOME30']);
+    expect(container.querySelector('[data-testid="coupon-auto-label"]')?.textContent).toBe('Đã tự áp');
+    expect(sessionStorage.getItem('tubu.autocoupon.applied:u')).toBe('WELCOME30');
+    click(container.querySelector('[data-testid="coupon-auto-remove"]'));
+    await flush(8);
+    expect(state.removed).toBe(1);
+    expect(container.querySelector('[data-testid="coupon-auto-label"]')).toBeNull();
+  });
+
+  it('"Mua ngay" khi giỏ chỉ có đúng món đó (có itemIds) → không tự áp mã', async () => {
+    sessionStorage.setItem('tubu_checkout_selection', JSON.stringify({ itemIds: ['i1'] }));
+    await mount();
+    await settle();
+    await flush(6);
+    expect(state.applied).toEqual([]);
   });
 });

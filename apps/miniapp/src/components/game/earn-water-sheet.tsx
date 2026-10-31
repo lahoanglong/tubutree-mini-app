@@ -1,14 +1,14 @@
 import { Droplets, HelpCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { vi } from '../../i18n/vi';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
 export type EarnQuizState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; left: number };
 
-const t = vi.game.newbie.earn;
+const t = gameNewbieCopy.earn;
 
 function Row({ title, hint, gain, children }: { title: string; hint?: string; gain?: string; children: ReactNode }) {
   return (

@@ -37,12 +37,13 @@ function renderSheet(
     subtotal?: number;
     shippingFee?: number;
     previewParams?: { addressId?: string; itemIds?: string[] };
+    busy?: boolean;
   } = {},
 ) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <VoucherSheet visible onClose={extra.onClose ?? (() => {})} onCouponApplied={extra.onCouponApplied} currentCode={currentCode} subtotal={extra.subtotal ?? 100_000} shippingFee={extra.shippingFee} previewParams={extra.previewParams} />
+      <VoucherSheet visible onClose={extra.onClose ?? (() => {})} onCouponApplied={extra.onCouponApplied} currentCode={currentCode} subtotal={extra.subtotal ?? 100_000} shippingFee={extra.shippingFee} previewParams={extra.previewParams} busy={extra.busy} />
     </QueryClientProvider>,
   );
 }
@@ -143,6 +144,16 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     expect(notEnough).toBeDisabled();
     fireEvent.click(notEnough);
     expect(mocks.applyCoupon).not.toHaveBeenCalled();
+  });
+
+  it('trang đang tự áp/gỡ mã (busy) → khoá nút Dùng mã và ô nhập, bấm không gọi API', async () => {
+    renderSheet(undefined, { busy: true });
+    const use = await screen.findByRole('button', { name: /^Dùng mã/ });
+    expect(use).toBeDisabled();
+    fireEvent.click(use);
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Nhập mã giảm giá khác'), { target: { value: 'abc' } });
+    expect(screen.getByRole('button', { name: 'Áp dụng' })).toBeDisabled();
   });
 
   it('nhập mã tay: bỏ khoảng trắng + IN HOA; ô trống thì nút "Áp dụng" khoá; Enter cũng áp dụng', async () => {

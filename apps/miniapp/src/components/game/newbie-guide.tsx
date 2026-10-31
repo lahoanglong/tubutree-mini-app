@@ -1,14 +1,13 @@
 import { Check } from 'lucide-react';
 import type { GameProfile } from '../../services/game-api';
-import { tutorialState } from '@tubutree/app-core/game-newbie';
-import { vi } from '../../i18n/vi';
+import { tutorialState, gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Icon } from '../ui/icon';
 import { SR_ONLY } from '../ui/sr-only';
 import { Heading, Text } from '../ui/text';
 
-const t = vi.game.newbie.tutorial;
+const t = gameNewbieCopy.tutorial;
 
 /** Thẻ 3 bước của phiên đầu, nằm trên nút tưới; tự ẩn khi khách bấm "Đã hiểu" ở bước 3. */
 export function NewbieGuide({

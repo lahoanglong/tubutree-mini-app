@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { guestCheckInCopy } from '@tubutree/app-core/daily-check-in-guest-copy';
-import { vi } from '../../i18n/vi';
 import { getErrorMessage } from '../../services/api';
 import { useAuthStore } from '../../store/auth';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
 /**
  * Khách vãng lai điểm danh hoặc xem nhiệm vụ vẫn nhận giọt nước nhưng không nhận Điểm Xanh (API báo `pointsBlocked`): một câu
@@ -20,7 +20,7 @@ export function GuestPointsNote({ margin }: { margin?: string }) {
     setFailed(null);
     try {
       const phone = await ensurePhoneOrThrow();
-      if (!phone) setFailed(vi.game.newbie.guest.failed);
+      if (!phone) setFailed(gameNewbieCopy.guest.failed);
     } catch (err) {
       setFailed(getErrorMessage(err));
     } finally {

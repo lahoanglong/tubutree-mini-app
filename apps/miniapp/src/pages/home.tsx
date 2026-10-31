@@ -10,15 +10,22 @@ import { useHomeCustomerKind } from '../hooks/use-home-customer-kind';
 import { usePurchasedItems } from '../hooks/use-purchased-items';
 import { FlashSale, UpcomingFlashSales } from '../components/flash-sale';
 import { PullToRefresh } from '../components/pull-to-refresh';
-import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '../components/reorder/purchased-rail';
-import { BestSellerRail, BEST_SELLER_LIMIT } from '../components/home/best-seller-rail';
-import { BrandJourney } from '../components/home/brand-journey';
+import { PURCHASED_RAIL_LIMIT } from '../components/reorder/purchased-rail';
+import { BEST_SELLER_LIMIT } from '../components/home/best-seller-rail';
+import {
+  HomeBestSellerRail,
+  HomeBrandJourney,
+  HomeCommunityPreview,
+  HomeNewCustomerGift,
+  HomePurchasedRail,
+  HomeSuggestFeed,
+  loadHomeBelow,
+  useHomeBelow,
+  retryHomeBelow,
+} from '../components/home/home-lazy';
 import { CategoryRow } from '../components/home/category-row';
-import { CommunityPreview } from '../components/home/community-preview';
 import { MemberCard, MemberCardSkeleton, MemberCardUnavailable } from '../components/home/member-card';
-import { NewCustomerGift } from '../components/home/new-customer-gift';
 import { ShortcutGrid } from '../components/home/shortcut-grid';
-import { SuggestFeed } from '../components/home/suggest-feed';
 import { TodoStrip, useHomeTodoQueries } from '../components/home/todo-strip';
 import { HomeSettlingSkeleton } from '../components/home/home-settling';
 import { useHomeSettling } from '../components/home/use-home-settling';
@@ -41,6 +48,11 @@ import { haptic } from '../utils/haptic';
  * lại: dải "Quà khách mới" thay thẻ thành viên, không có Mua lại, Giờ vàng và Bán chạy đứng trước Danh mục. Thứ tự khối ở app-core (`homeBlockOrder`), dùng chung với web.
  * Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ (C-084), độc lập từng khối; kéo để làm mới vẫn dùng được.
  */
+// Chunk các khối dưới màn đầu tải song song với dữ liệu ngay khi mã trang chủ chạy, không đợi tới lúc render. Mã này chạy cả khi app mở thẳng
+// vào trang khác (deep link) vì Trang chủ nằm trong gói đầu; chunk hỏng ở đó thì khi khách về Trang chủ sẽ thấy dải lỗi có "Thử lại" (tải lại
+// app với lỗi kiểu chunk). Thẻ sản phẩm đầu không phụ thuộc chunk: khung chờ chung không đợi nó.
+void loadHomeBelow().catch(() => {});
+
 export default function HomePage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -76,6 +88,7 @@ export default function HomePage() {
   const flash = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 });
   const upcoming = useQuery({ queryKey: ['flash-sales', 'upcoming'], queryFn: fetchUpcomingFlashSales, enabled: authed, staleTime: 30_000 });
   const todo = useHomeTodoQueries();
+  const belowState = useHomeBelow();
   const settling = useHomeSettling(
     kind,
     todo.loading || flash.isLoading || (authed && upcoming.isLoading) || categories.isLoading,
@@ -85,6 +98,11 @@ export default function HomePage() {
   // API sập hẳn: chỉ tính khi khách đang THẤY kệ Bán chạy (khách mới) mà kệ lỗi và chưa có gì để hiện → một dải lỗi cấp trang thay
   // cho từng thẻ lỗi. Khách cũ không thấy kệ này nên không bao giờ nhận dải lỗi vì nó.
   const pageDown = kind === 'new' && bestSellers.isError && bestSellers.data === undefined;
+
+  const refreshAll = () => {
+    if (belowState.failed) retryHomeBelow();
+    return refreshHomeQueries(qc);
+  };
 
   const blocks: Record<HomeRenderBlock, ReactNode> = {
     settling: <HomeSettlingSkeleton />,
@@ -99,10 +117,10 @@ export default function HomePage() {
       ) : null,
     todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
-    welcome: kind === 'new' ? <NewCustomerGift /> : null,
+    welcome: kind === 'new' ? <HomeNewCustomerGift /> : null,
     shortcuts: <ShortcutGrid />,
     // Lỗi tải Mua lại (kể cả 404 của API cũ) đưa trang về bố cục khách mới, nơi khối này không có mặt, nên khối tự có trạng thái lỗi riêng ở PurchasedRail.
-    purchased: <PurchasedRail source="home_rail" restoring={restoring} />,
+    purchased: <HomePurchasedRail source="home_rail" restoring={restoring} />,
     flash: (
       <>
         <FlashSale />
@@ -120,16 +138,16 @@ export default function HomePage() {
         }}
       />
     ),
-    bestSellers: <BestSellerRail />,
-    journey: <BrandJourney />,
-    community: <CommunityPreview />,
-    suggest: <SuggestFeed />,
+    bestSellers: <HomeBestSellerRail />,
+    journey: <HomeBrandJourney />,
+    community: <HomeCommunityPreview />,
+    suggest: <HomeSuggestFeed />,
   };
 
   return (
     // `.page` giữ đệm safe-top của chế độ immersive (actionBar Zalo đã ẩn).
     <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 72 }}>
-      <PullToRefresh onRefresh={() => refreshHomeQueries(qc)} />
+      <PullToRefresh onRefresh={refreshAll} />
       <HomeHeader unreadCount={unreadCount} />
       <HomeBlockErrorSuppressed.Provider value={pageDown}>
         {homeRenderOrder(kind, settling).map((id) => (
@@ -137,12 +155,12 @@ export default function HomePage() {
             <div data-home-block={id} style={id === 'search' ? STICKY_SEARCH : undefined}>
               {blocks[id]}
             </div>
-            {pageDown && id === 'search' && (
+            {(pageDown || belowState.failed) && id === 'search' && (
               <div data-home-block="pageError">
                 <HomePageError
-                  error={bestSellers.error}
-                  retrying={bestSellers.isFetching}
-                  onRetry={() => refreshHomeQueries(qc)}
+                  error={pageDown ? bestSellers.error : belowState.error}
+                  retrying={pageDown && bestSellers.isFetching}
+                  onRetry={refreshAll}
                 />
               </div>
             )}

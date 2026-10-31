@@ -92,6 +92,7 @@ function Row({ label, value, warn }: { label: string; value: ReactNode; warn?: b
  */
 export const CRON_JOB_LABELS: Record<string, string> = {
   'AffiliateService.approveDueCommissions': 'Duyệt hoa hồng cộng tác viên khi hết thời gian giữ',
+  'AffiliateService.dailyWalletTransfer': 'Chuyển hoa hồng vào Ví (8:00)',
   'AnalyticsAggregationService.runNightly': 'Tính số liệu giữ chân khách mỗi đêm',
   'CashbackService.settleConfirmed': 'Chuyển hoàn tiền sàn ngoài đã xác nhận vào Ví khi hết thời gian giữ',
   'CashbackService.reconcile': 'Kéo giao dịch hoàn tiền sàn ngoài về đối chiếu (bắt tin báo bị rớt)',

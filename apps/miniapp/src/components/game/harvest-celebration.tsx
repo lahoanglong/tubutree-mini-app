@@ -1,7 +1,6 @@
 import { Lightbulb } from 'lucide-react';
 import { useSnackbar } from 'zmp-ui';
 import type { HarvestCouponCap, HarvestCouponTerms, HarvestSpecies } from '../../services/game-api';
-import { vi } from '../../i18n/vi';
 import { copyText } from '../../utils/clipboard';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
@@ -9,6 +8,7 @@ import { Icon } from '../ui/icon';
 import { rowKeyboardProps } from '../ui/row-keyboard';
 import { Text } from '../ui/text';
 import { rarityColor, rarityLabel } from './game-utils';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
 const CONFETTI = [
   ['6%', 'var(--forest-500)', 0],
@@ -74,7 +74,7 @@ export function HarvestCelebration({
   onShare: () => void;
 }) {
   const { openSnackbar } = useSnackbar();
-  const t = vi.game.newbie.harvest;
+  const t = gameNewbieCopy.harvest;
   const seedling = sprout || (points != null && points > 0);
   const showPoints = points != null && points > 0;
   const hasCoupon = coupons.length > 0;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CTV_TAB_KEYS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote } from './ctv-dashboard';
+import { needsTaxIdForAutoTransfer, commissionPendingNote, COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote } from './ctv-dashboard';
 
 const ZERO = { monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0, totalConversions: 0 };
 
@@ -26,7 +26,7 @@ describe('ctvHeadline', () => {
 
 describe('transferBlockedText', () => {
   it('tự chuyển bật (mặc định): nói hoa hồng tự vào Ví khi nào, kèm số đang chờ', () => {
-    expect(transferBlockedText('9.520đ')).toBe('Hoa hồng tự vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 9.520đ.');
+    expect(transferBlockedText('9.520đ')).toBe('Hoa hồng được duyệt khi đơn đã giao và hết thời gian đổi/trả, rồi tự vào Ví Tubu lúc 8:00 sáng kế tiếp. Đang chờ: 9.520đ.');
   });
   it('tự chuyển tắt: không hứa tự vào Ví, chỉ nói khi nào chuyển được', () => {
     const t = transferBlockedText('9.520đ', false);
@@ -36,9 +36,21 @@ describe('transferBlockedText', () => {
 });
 
 describe('transferHeroNote và isAutoWalletTransfer', () => {
-  it('tự chuyển bật: phần còn lại là phần chưa tự vào Ví được, dặn bấm tay; tắt: dặn bấm để chuyển', () => {
-    expect(transferHeroNote(true)).toContain('chưa tự vào Ví được');
+  it('tự chuyển bật: phần còn lại chờ lượt 8:00, dặn bấm tay để nhận ngay; tắt: dặn bấm để chuyển', () => {
+    expect(transferHeroNote(true)).toContain('lúc 8:00 sáng');
     expect(transferHeroNote(false)).toBe('Bấm Chuyển vào Ví để chuyển phần này vào Ví Tubu.');
+  });
+  it('tự chuyển bật mà CTV cần khai MST: nhắc mã số thuế thay vì hứa 8:00', () => {
+    expect(transferHeroNote(true, true)).toContain('cần mã số thuế');
+    expect(transferHeroNote(true, true)).not.toContain('8:00');
+    expect(transferHeroNote(false, true)).toBe('Bấm Chuyển vào Ví để chuyển phần này vào Ví Tubu.');
+  });
+  it('needsTaxIdForAutoTransfer: chỉ khi có thuế và chưa có MST', () => {
+    const pit = { pct: 0.1, threshold: 2_000_000 };
+    expect(needsTaxIdForAutoTransfer(3_000_000, pit, null)).toBe(true);
+    expect(needsTaxIdForAutoTransfer(3_000_000, pit, '0123456789')).toBe(false);
+    expect(needsTaxIdForAutoTransfer(1_000_000, pit, null)).toBe(false);
+    expect(needsTaxIdForAutoTransfer(3_000_000, undefined, null)).toBe(false);
   });
   it('chỉ đúng false mới là tắt; API cũ chưa trả trường này coi như bật', () => {
     expect(isAutoWalletTransfer(false)).toBe(false);
@@ -102,5 +114,13 @@ describe('heroShowsWalletBalance', () => {
     expect(heroShowsWalletBalance(ctvHeroAmount(0, true, 5400000))).toBe(true);
     expect(heroShowsWalletBalance(ctvHeroAmount(120000, true, 5400000))).toBe(false);
     expect(heroShowsWalletBalance(ctvHeroAmount(0, true, undefined, true))).toBe(false);
+  });
+});
+
+describe('commissionPendingNote', () => {
+  it('chỉ hứa lịch 8:00 khi tự chuyển bật', () => {
+    expect(commissionPendingNote(true)).toContain('vào Ví lúc 8:00');
+    expect(commissionPendingNote(false)).toBe(COMMISSION_PENDING_NOTE);
+    expect(COMMISSION_PENDING_NOTE).not.toContain('8:00');
   });
 });
