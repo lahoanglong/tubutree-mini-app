@@ -208,4 +208,5 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'shop.comboAdded': null,
   'shop.comboError': null,
   'shop.loginForCombo': null,
+  'shop.learnStore': null,
 };

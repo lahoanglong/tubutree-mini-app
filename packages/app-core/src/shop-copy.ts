@@ -202,6 +202,7 @@ export const SHOP_COPY: Record<string, string> = {
   'shop.comboAdded': 'Đã thêm cả combo vào giỏ',
   'shop.comboError': 'Chưa thêm được combo, giỏ của bạn không thay đổi. Bạn thử lại nhé.',
   'shop.loginForCombo': 'Đăng nhập để thêm combo vào giỏ nhé',
+  'shop.learnStore': 'Muốn có gian hàng như này? Tìm hiểu',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */
