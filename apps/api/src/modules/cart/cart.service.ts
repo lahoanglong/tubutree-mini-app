@@ -14,7 +14,7 @@ import { loadPublicVisibility } from '../storefront/public-visibility';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { resolveAttribution } from '../checkout/attribution';
 import { COUNTED_ORDER_WHERE } from '../../common/first-order';
-import { AddItemDto } from './dto/cart.dto';
+import { AddItemDto, MAX_ITEM_QUANTITY } from './dto/cart.dto';
 import { batchStockMessage, cartBatchRejected } from './cart.batch-error';
 import { isSellableVariation, productDiscontinuedError } from './sellable';
 import { isPartnerOwnedVariation } from './partner-goods';
@@ -494,6 +494,10 @@ export class CartService {
   async addItemsBatch(userId: string, lines: { variationId: string; quantity: number }[], addSource: string | undefined, storefrontSlug?: string) {
     const merged = new Map<string, number>();
     for (const l of lines) merged.set(l.variationId, (merged.get(l.variationId) ?? 0) + l.quantity);
+    // DTO chỉ chặn từng dòng ≤ 999; dòng trùng được gộp nên trần phải tính lại trên tổng, nếu không 20 dòng × 999 ghi một dòng giỏ 19.980.
+    for (const quantity of merged.values()) {
+      if (quantity > MAX_ITEM_QUANTITY) throw new BadRequestException(`Mỗi món chỉ thêm tối đa ${MAX_ITEM_QUANTITY} sản phẩm một lần.`);
+    }
     if (merged.size > 0) {
       const cartId = await this.ensureCart(userId);
       const variationIds = [...merged.keys()];
@@ -511,7 +515,9 @@ export class CartService {
             sellable = this.assertSellable(variation);
           } catch (err) {
             if (err instanceof NotFoundException || err instanceof BadRequestException) {
-              throw cartBatchRejected({ reason: 'UNAVAILABLE', variationId, productName, message: err.message });
+              // Món còn tên mà bị NotFound là ngừng bán/chưa duyệt: nêu tên để khách biết món nào (FE web chỉ giữ `message`). Thiếu biến thể thì không có tên để nêu.
+              const message = err instanceof NotFoundException && productName !== null ? `${productName} đã ngừng bán.` : err.message;
+              throw cartBatchRejected({ reason: 'UNAVAILABLE', variationId, productName, message });
             }
             throw err;
           }

@@ -1,6 +1,9 @@
 import { Transform, Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 
+/** Trần số lượng một món trong một lần thêm (DTO) và sau khi batch gộp các dòng trùng variationId. */
+export const MAX_ITEM_QUANTITY = 999;
+
 const ADD_SOURCES = ['pdp', 'buy_now', 'repurchase', 'wishlist', 'ctv_sheet', 'reorder_notification'] as const;
 
 export class AddItemDto {
@@ -13,7 +16,7 @@ export class AddItemDto {
 
 export class BatchItemDto {
   @IsString() variationId!: string;
-  @IsInt() @Min(1) @Max(999) quantity!: number;
+  @IsInt() @Min(1) @Max(MAX_ITEM_QUANTITY) quantity!: number;
 }
 
 /** "Thêm cả combo": 20 món là trần thừa cho một combo/mua kèm, chặn lô lớn giữ khoá giỏ lâu. */

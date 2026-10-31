@@ -1343,9 +1343,16 @@ describe('CartService.addItemsBatch (thêm nhiều món một transaction: hỏn
     const off = setup([sellable('v1', 5), sellable('v2', 5, { isActive: false })]);
     expect(await reject(off.svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }, { variationId: 'v2', quantity: 1 }], undefined))).toMatchObject({
       code: 'CART_BATCH_REJECTED', reason: 'UNAVAILABLE', variationId: 'v2', productName: 'SP v2',
+      message: 'SP v2 đã ngừng bán. Chưa có món nào được thêm vào giỏ.',
+    });
+    const inactiveProduct = setup([sellable('v1', 5, { product: { isActive: false, approvalStatus: 'APPROVED', fulfilment: 'TUBU', storefront: null, name: 'SP v1' } })]);
+    expect(await reject(inactiveProduct.svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }], undefined))).toMatchObject({
+      reason: 'UNAVAILABLE', variationId: 'v1', message: 'SP v1 đã ngừng bán. Chưa có món nào được thêm vào giỏ.',
     });
     const rejected = setup([sellable('v1', 5, { product: { isActive: true, approvalStatus: 'REJECTED', fulfilment: 'TUBU', storefront: null, name: 'SP v1' } })]);
-    expect(await reject(rejected.svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }], undefined))).toMatchObject({ reason: 'UNAVAILABLE', variationId: 'v1' });
+    expect(await reject(rejected.svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }], undefined))).toMatchObject({
+      reason: 'UNAVAILABLE', variationId: 'v1', message: 'SP v1 đã ngừng bán. Chưa có món nào được thêm vào giỏ.',
+    });
     const gone = setup([sellable('v1', 5)]);
     const body = await reject(gone.svc.addItemsBatch('u1', [{ variationId: 'ghost', quantity: 1 }, { variationId: 'v1', quantity: 1 }], undefined));
     expect(body).toMatchObject({ reason: 'UNAVAILABLE', variationId: 'ghost', productName: null });
@@ -1375,6 +1382,27 @@ describe('CartService.addItemsBatch (thêm nhiều món một transaction: hỏn
       update: { quantity: { increment: 4 } },
       create: { cartId: 'c1', variationId: 'v1', quantity: 4 },
     });
+  });
+
+  it('trần 999 tính trên tổng sau khi gộp dòng trùng: 20 dòng × 999 → 400, không khoá giỏ, không ghi gì; đúng 999 vẫn qua', async () => {
+    const big = setup([sellable('v1', 50_000)]);
+    const dup = Array.from({ length: 20 }, () => ({ variationId: 'v1', quantity: 999 }));
+    const err = await big.svc.addItemsBatch('u1', dup, undefined).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).message).toBe('Mỗi món chỉ thêm tối đa 999 sản phẩm một lần.');
+    expect(big.transaction).not.toHaveBeenCalled();
+    expect(big.cartUpsert).not.toHaveBeenCalled();
+    expect(big.txUpsert).not.toHaveBeenCalled();
+
+    const edge = setup([sellable('v1', 50_000)]);
+    await edge.svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 500 }, { variationId: 'v1', quantity: 499 }], undefined);
+    expect(edge.txUpsert).toHaveBeenCalledWith({
+      where: { cartId_variationId: { cartId: 'c1', variationId: 'v1' } },
+      update: { quantity: { increment: 999 } },
+      create: { cartId: 'c1', variationId: 'v1', quantity: 999 },
+    });
+    const over = setup([sellable('v1', 50_000)]);
+    await expect(over.svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 500 }, { variationId: 'v1', quantity: 500 }], undefined)).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('tính cả số đang có trong giỏ: giỏ có v1×2, tồn 3, thêm 2 → STOCK, không ghi gì', async () => {
