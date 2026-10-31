@@ -104,16 +104,28 @@ describe('trang gian hàng /s/[slug] — gian hàng mẫu và lối mở gian h�
     expect(real.querySelector('[data-testid="sample-note"]')).toBeNull();
   });
 
-  it('gian hàng CTV của người khác: khách thấy lời mời Mở gian hàng dẫn tới /ctv/gian-hang', async () => {
+  it('gian hàng CTV của người khác: khách thấy một dòng chữ phụ "Tìm hiểu" như Mini App, không còn thẻ + nút Mở gian hàng; link dẫn tới /ctv/gian-hang, đủ 44px', async () => {
     const box = await html();
-    const cta = box.querySelector('[data-testid="open-storefront-cta"]')!;
-    expect(cta.textContent).toContain('Bạn cũng muốn có gian hàng như này?');
-    expect(cta.querySelector('a')?.getAttribute('href')).toBe('/ctv/gian-hang');
+    const link = box.querySelector('[data-testid="learn-storefront"] a')!;
+    expect(link.textContent).toBe('Muốn có gian hàng như này? Tìm hiểu');
+    expect(link.getAttribute('href')).toBe('/ctv/gian-hang');
+    expect(link.className).toContain('min-h-11');
+    expect(link.querySelector('svg')).not.toBeNull();
+    expect(box.querySelector('[data-testid="open-storefront-cta"]')).toBeNull();
+    expect(box.textContent).not.toContain('Bạn cũng muốn có gian hàng như này?');
+    expect(Array.from(box.querySelectorAll('a')).some((a) => a.textContent === 'Mở gian hàng')).toBe(false);
   });
 
-  it('gian hàng đối tác không có lời mời mở gian hàng CTV', async () => {
+  it('dòng "Tìm hiểu" nằm ngay trên link "Xem thêm ở Tubu Tree"', async () => {
+    const box = await html();
+    const learn = box.querySelector('[data-testid="learn-storefront"]')!;
+    const more = Array.from(box.querySelectorAll('p')).find((p) => p.textContent === 'Xem thêm ở Tubu Tree')!;
+    expect(learn.nextElementSibling).toBe(more);
+  });
+
+  it('gian hàng đối tác không có dòng mời mở gian hàng CTV', async () => {
     mocks.sf = { ...SF, type: 'MERCHANT', isPartner: true, approved: true };
-    expect((await html()).querySelector('[data-testid="open-storefront-cta"]')).toBeNull();
+    expect((await html()).querySelector('[data-testid="learn-storefront"]')).toBeNull();
   });
 });
 

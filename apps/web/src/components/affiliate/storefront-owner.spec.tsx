@@ -11,7 +11,7 @@ vi.mock('./storefront-share', () => ({
     open ? <div data-testid="share">{`${slug}|${referralCode}`}</div> : null,
 }));
 
-import { MoreAtTubuLink, StorefrontAction, StorefrontEmpty } from './storefront-owner';
+import { LearnStorefrontLink, MoreAtTubuLink, StorefrontAction, StorefrontEmpty } from './storefront-owner';
 
 let mounted: Rendered | undefined;
 afterEach(() => {
@@ -55,6 +55,20 @@ describe('StorefrontAction', () => {
     mounted.unmount();
     state.ref = 'CTV123';
     mounted = render(<MoreAtTubuLink referralCode="ctv123" />);
+    expect(mounted.container.querySelector('a')).toBeNull();
+  });
+});
+
+describe('LearnStorefrontLink', () => {
+  it('khách thấy dòng "Tìm hiểu" dẫn tới /ctv/gian-hang; chủ gian hàng (so mã không phân biệt hoa thường) không thấy', () => {
+    state.ref = undefined;
+    mounted = render(<LearnStorefrontLink referralCode="ctv123" />);
+    const a = mounted.container.querySelector('a')!;
+    expect(a.textContent).toBe('Muốn có gian hàng như này? Tìm hiểu');
+    expect(a.getAttribute('href')).toBe('/ctv/gian-hang');
+    mounted.unmount();
+    state.ref = 'CTV123';
+    mounted = render(<LearnStorefrontLink referralCode="ctv123" />);
     expect(mounted.container.querySelector('a')).toBeNull();
   });
 });

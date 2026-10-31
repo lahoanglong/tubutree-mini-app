@@ -7,7 +7,7 @@ import { getReturnWindowDays, getStorefront } from '@/lib/api';
 import { SITE_URL } from '@/lib/site';
 import { StorefrontTracker } from '@/components/storefront-tracker';
 import { isPartnerStore } from '@/lib/partner-store';
-import { MoreAtTubuLink, OpenStorefrontCta, StorefrontEmpty } from '@/components/affiliate/storefront-owner';
+import { LearnStorefrontLink, MoreAtTubuLink, StorefrontEmpty } from '@/components/affiliate/storefront-owner';
 import { storefrontBadgeLabel } from '@/lib/storefront-badge';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { StorefrontBody } from '@/components/shop-page/storefront-body';
@@ -160,7 +160,7 @@ export default async function StorefrontPage({
       />
 
       {collections.length === 0 && <StorefrontEmpty referralCode={sf.referralCode} />}
-      {sf.type === 'CTV' && <OpenStorefrontCta referralCode={sf.referralCode} />}
+      {sf.type === 'CTV' && <LearnStorefrontLink referralCode={sf.referralCode} />}
       {collections.length > 0 && <MoreAtTubuLink referralCode={sf.referralCode} />}
     </main>
   );
