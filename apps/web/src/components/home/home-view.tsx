@@ -1,10 +1,8 @@
 'use client';
 
 import { Fragment, useLayoutEffect, useMemo, type ReactNode } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search } from 'lucide-react';
 import type { CategoryDTO, PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
@@ -18,7 +16,6 @@ import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { armHomeFeed, disarmHomeFeed } from '@/lib/home-feed';
-import { homeText } from '@/lib/home-text';
 import { HomeRestoreHintContext } from '@/lib/home-restore-context';
 import type { HomeRestoreHint } from '@/lib/home-restore-hint';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
@@ -129,7 +126,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
 
   const blocks: Record<HomeRenderBlock, ReactNode> = {
     settling: <HomeSettlingSkeleton />,
-    search: <SearchRow />,
+    search: <HomeHeader unreadCount={unreadCount} />,
     member:
       kind === 'returning' && unavailable ? (
         <MemberCardUnavailable onRetry={() => void retrySession()} />
@@ -156,6 +153,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
         onSelect={(e) =>
           router.push(browseHref({ ...EMPTY_SEARCH_STATE, ...(e.kind === 'category' ? { category: e.key } : { segment: e.key }) }))
         }
+        onSeeAll={() => router.push(browseHref(EMPTY_SEARCH_STATE))}
       />
     ),
     bestSellers: <BestSellerRail initial={initial.bestSellers} />,
@@ -197,30 +195,10 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
 
   return (
     <HomeBlockErrorSuppressed.Provider value={pageDown}>
-      <HomeHeader unreadCount={unreadCount} />
       {nodes}
     </HomeBlockErrorSuppressed.Provider>
   );
 }
 
-// Dính đầu trang khi cuộn ở điện thoại; từ md thanh đầu website đã có ô tìm nên trả về bình thường.
+// Header 56px dính đầu trang khi cuộn ở điện thoại; từ md thanh đầu website đã có ô tìm nên trả về bình thường.
 const STICKY_SEARCH = 'sticky top-0 z-20 -mx-4 bg-[var(--color-bg-canvas)] px-4 md:static md:mx-0 md:bg-transparent md:px-0';
-
-/**
- * Ô tìm ở Trang chủ chỉ là vỏ: mở thẳng bàn phím ở ô thật bên /san-pham (?focus=search). Chỉ ở điện thoại: từ md thanh đầu website
- * đã có ô tìm và chuông thông báo (HeaderBell), chuông điện thoại nằm ở HomeHeader.
- */
-function SearchRow() {
-  return (
-    <div className="flex items-center gap-2 pb-2 md:hidden">
-      <Link
-        href="/san-pham?focus=search"
-        aria-label={homeText.searchPlaceholder}
-        className="flex min-h-[46px] min-w-0 flex-1 items-center gap-2 rounded-full border border-[var(--color-border-subtle)] bg-stone-0 px-4 py-[11px] shadow-card transition"
-      >
-        <Search className="h-4 w-4 flex-none text-stone-600" aria-hidden="true" />
-        <span className="min-w-0 truncate text-sm text-stone-600">{homeText.searchPlaceholder}</span>
-      </Link>
-    </div>
-  );
-}

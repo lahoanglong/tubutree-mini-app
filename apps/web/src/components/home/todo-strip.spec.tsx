@@ -117,4 +117,22 @@ describe('TodoStrip web — Việc cần làm', () => {
       expect(JSON.parse(window.localStorage.getItem(KEY)!)).toEqual({ userId: 'u1', rows: 0 });
     });
   });
+
+  it('mỗi việc là MỘT dòng cao 64px, thẻ có viền trái cảnh báo 3px và không đệm dọc (khoảng cách do vỏ khối giữ)', async () => {
+    const c = await mount();
+    const region = c.querySelector<HTMLElement>('section[aria-label="Việc cần làm"]')!;
+    const rows = region.querySelectorAll<HTMLElement>('[data-todo-row]');
+    expect(rows).toHaveLength(2);
+    for (const r of Array.from(rows)) expect(r.style.height).toBe('64px');
+    expect((region.firstElementChild as HTMLElement).style.borderLeft).toContain('3px');
+    expect(region.style.padding).toBe('');
+  });
+
+  it('khung chờ cao đúng số dòng nhớ × 64px', async () => {
+    window.localStorage.setItem('tubu_home_todo_rows', JSON.stringify({ userId: 'u1', rows: 2 }));
+    mocks.get.mockImplementation(() => new Promise(() => undefined));
+    const c = await mount();
+    const sk = c.querySelector<HTMLElement>('[data-testid="todo-strip-loading"]')!;
+    expect((sk.firstElementChild as HTMLElement).style.height).toBe('128px');
+  });
 });

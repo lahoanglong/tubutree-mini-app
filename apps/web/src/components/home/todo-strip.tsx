@@ -1,6 +1,6 @@
 'use client';
 
-import { useContext, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useContext, useEffect, useMemo, useSyncExternalStore, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, PackageCheck, Truck } from 'lucide-react';
@@ -19,7 +19,16 @@ import { useRemaining } from '@/lib/use-remaining';
 import { canPayNow, showsPaymentDeadline } from '@/components/orders/order-rules';
 import { Button, Card, Icon, ListRow, Skeleton } from '@/components/mini';
 
-const ROW_PADDING = '8px 4px';
+/** Mỗi việc đúng một dòng 64px (HM-06): `todoSkeletonHeight` cũng tính theo số này. Đường kẻ giữa hai dòng là bóng trong, không cộng chiều cao. */
+const ROW_HEIGHT = 64;
+const rowStyle = (divider: boolean): CSSProperties => ({
+  height: ROW_HEIGHT,
+  padding: '0 12px 0 8px',
+  boxSizing: 'border-box',
+  ...(divider ? { boxShadow: 'inset 0 1px 0 var(--color-border-subtle)' } : {}),
+});
+// Viền trái 3px màu cảnh báo là dấu hiệu "việc cần làm"; viền ngoài là bóng trong để thẻ không cao thêm 2px so với khung chờ.
+const CARD_STYLE: CSSProperties = { border: 'none', borderLeft: '3px solid var(--color-status-warning-fg)', boxShadow: 'inset 0 0 0 1px var(--color-border-subtle)', overflow: 'hidden' };
 
 type TodoOrder = Awaited<ReturnType<typeof fetchOrders>>['data'][number];
 
@@ -44,14 +53,14 @@ function PendingPaymentRow({ order }: { order: TodoOrder }) {
         )
       }
       onPress={payable ? undefined : () => router.push(`/tai-khoan/don-hang/${encodeURIComponent(order.code)}`)}
-      style={{ padding: ROW_PADDING }}
+      style={rowStyle(false)}
     />
   );
 }
 
 function TodoSkeleton({ rows }: { rows: number }) {
   return (
-    <div data-testid="todo-strip-loading" aria-hidden="true" style={{ padding: '0 0 12px' }}>
+    <div data-testid="todo-strip-loading" aria-hidden="true">
       <Skeleton height={todoSkeletonHeight(rows)} radius="var(--radius-card)" />
     </div>
   );
@@ -130,28 +139,36 @@ export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
   if (rows === 0) return null;
 
   return (
-    <section aria-label={homeCopy.todo.title} style={{ padding: '0 0 12px' }}>
-      <Card variant="outline" padding={8}>
-        {payOrder && <PendingPaymentRow order={payOrder} />}
+    <section aria-label={homeCopy.todo.title}>
+      <Card variant="outline" padding={0} style={CARD_STYLE}>
+        {payOrder && (
+          <div data-todo-row style={{ height: ROW_HEIGHT }}>
+            <PendingPaymentRow order={payOrder} />
+          </div>
+        )}
         {showShip && shipOrder && (
-          <ListRow
-            icon={<Icon icon={Truck} tone="brand" />}
-            title={shipTotal > 1 ? homeCopy.todo.shippingMany(shipTotal) : homeCopy.todo.shipping(shipOrder.code)}
-            subtitle={homeCopy.todo.shippingHint}
-            trailing="chevron"
-            onPress={() => router.push(shipTotal > 1 ? '/tai-khoan/don-hang?tab=shipping' : `/tai-khoan/don-hang/${encodeURIComponent(shipOrder.code)}`)}
-            style={{ padding: ROW_PADDING, borderTop: payOrder ? '1px solid var(--color-border-subtle)' : undefined }}
-          />
+          <div data-todo-row style={{ height: ROW_HEIGHT }}>
+            <ListRow
+              icon={<Icon icon={Truck} tone="brand" />}
+              title={shipTotal > 1 ? homeCopy.todo.shippingMany(shipTotal) : homeCopy.todo.shipping(shipOrder.code)}
+              subtitle={homeCopy.todo.shippingHint}
+              trailing="chevron"
+              onPress={() => router.push(shipTotal > 1 ? '/tai-khoan/don-hang?tab=shipping' : `/tai-khoan/don-hang/${encodeURIComponent(shipOrder.code)}`)}
+              style={rowStyle(Boolean(payOrder))}
+            />
+          </div>
         )}
         {showPrep && prepOrder && (
-          <ListRow
-            icon={<Icon icon={PackageCheck} tone="brand" />}
-            title={prepTotal > 1 ? homeCopy.todo.preparingMany(prepTotal) : homeCopy.todo.preparing(prepOrder.code)}
-            subtitle={homeCopy.todo.preparingHint}
-            trailing="chevron"
-            onPress={() => router.push(prepTotal > 1 ? '/tai-khoan/don-hang?tab=processing' : `/tai-khoan/don-hang/${encodeURIComponent(prepOrder.code)}`)}
-            style={{ padding: ROW_PADDING, borderTop: payOrder || showShip ? '1px solid var(--color-border-subtle)' : undefined }}
-          />
+          <div data-todo-row style={{ height: ROW_HEIGHT }}>
+            <ListRow
+              icon={<Icon icon={PackageCheck} tone="brand" />}
+              title={prepTotal > 1 ? homeCopy.todo.preparingMany(prepTotal) : homeCopy.todo.preparing(prepOrder.code)}
+              subtitle={homeCopy.todo.preparingHint}
+              trailing="chevron"
+              onPress={() => router.push(prepTotal > 1 ? '/tai-khoan/don-hang?tab=processing' : `/tai-khoan/don-hang/${encodeURIComponent(prepOrder.code)}`)}
+              style={rowStyle(Boolean(payOrder || showShip))}
+            />
+          </div>
         )}
       </Card>
     </section>
