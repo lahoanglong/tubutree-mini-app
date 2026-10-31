@@ -5,6 +5,7 @@ import { usePdpSelection } from './pdp-selection';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { formatVnd } from '@/lib/api';
+import { Badge } from '@/components/mini/badge';
 
 type PricedProduct = { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string; pinnedVariationId?: string };
 
@@ -34,13 +35,16 @@ export function PdpPrice({ product }: { product: PricedProduct & { variations: P
   if (pricing.isFlash) return null;
   return (
     <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-      <span data-testid="pdp-price" className="text-2xl font-bold text-stone-900">
+      {/* Giá đang giảm màu giá deal (cam đậm, không đỏ) như PriceTag tone="deal" của Mini App; giá thường giữ chữ đen. */}
+      <span data-testid="pdp-price" className={`text-2xl font-bold ${pricing.hasSale ? 'text-[color:var(--color-text-price-deal)]' : 'text-stone-900'}`}>
         {formatVnd(pricing.price)}
       </span>
       {pricing.hasSale && <span className="text-sm text-stone-500 line-through">{formatVnd(pricing.originalPrice)}</span>}
       {pricing.hasSale && pricing.salePct > 0 && (
-        <span data-testid="pdp-sale-badge" className="rounded-full bg-danger-bg px-2 py-0.5 text-xs font-bold text-danger-fg max-md:hidden">
-          -{pricing.salePct}%
+        <span data-testid="pdp-sale-badge">
+          <Badge tone="promo" size="sm">
+            -{pricing.salePct}%
+          </Badge>
         </span>
       )}
     </div>
