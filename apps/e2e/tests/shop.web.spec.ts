@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, makeOrder, makeUser, mockSession, reply, test, type MockApi } from './support/mock-api';
 import { mockHomeEngagement } from './support/discovery-mocks';
+import { expectChipHitArea44 } from './support/hit-area';
 
 /**
  * Web khách, cửa hàng: Trang chủ "/" như Mini App (dòng 1) và danh mục + tìm kiếm ở /san-pham (chuyển từ "/", 00-ma-tran dòng 2). Mọi lời gọi /api/** từ trình
@@ -669,21 +670,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
       page.getByRole('region', { name: /Dải thương hiệu/ }).getByRole('button').first(),
       page.getByRole('region', { name: 'Nguồn gợi ý' }).getByRole('button', { name: 'Bán chạy', exact: true }),
     ];
-    for (const chip of chips) {
-      await chip.evaluate((el) => el.scrollIntoView({ block: 'center' }));
-      const box = (await chip.boundingBox())!;
-      expect(box.height).toBeGreaterThanOrEqual(36);
-      const hit = await chip.evaluate(
-        (el, b) => {
-          const x = b.x + b.width / 2;
-          const mid = b.y + b.height / 2;
-          const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
-          return { top44: at(mid - 21), bottom44: at(mid + 21), inside: at(mid) };
-        },
-        { x: box.x, y: box.y, width: box.width, height: box.height },
-      );
-      expect(hit).toEqual({ top44: true, bottom44: true, inside: true });
-    }
+    for (const chip of chips) await expectChipHitArea44(chip);
   });
 
   test('khách cũ đã nhớ "returning", /auth/refresh chậm 3s: Danh mục không xê dịch từ lúc đầu tới sau đăng nhập (≤ 2px)', async ({ page, api }) => {

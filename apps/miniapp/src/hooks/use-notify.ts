@@ -32,7 +32,7 @@ function publish(kind: Kind, text: string) {
 }
 
 /**
- * Ghi một câu vào vùng `role=status` / `role=alert`. Xoá vùng trước rồi ghi lại sau 50ms: trình đọc màn hình chỉ đọc khi nội
+ * Ghi một câu vào vùng `aria-live` polite / assertive. Xoá vùng trước rồi ghi lại sau 50ms: trình đọc màn hình chỉ đọc khi nội
  * dung đổi, nên cùng một câu hai lần liên tiếp (bấm "Chép mã" hai lần) sẽ im nếu không xoá giữa hai lần.
  */
 export function announce(kind: Kind, text: string): void {
@@ -57,7 +57,7 @@ export function useAnnouncements(): Announcements {
 
 /**
  * Thông báo cho cả mắt và tai: hiện snackbar của ZaUI (không có aria-live, nên người dùng VoiceOver/TalkBack không nghe gì) và
- * đồng thời ghi vào vùng đọc. Lỗi/cảnh báo vào `role=alert`, còn lại vào `role=status`.
+ * đồng thời ghi vào vùng đọc. Lỗi/cảnh báo vào vùng assertive, còn lại vào vùng polite.
  */
 export function useNotify(): { notify: (opts: NotifyOptions) => void } {
   const { openSnackbar } = useSnackbar();

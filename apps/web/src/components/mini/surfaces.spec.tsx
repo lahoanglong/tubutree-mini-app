@@ -73,6 +73,7 @@ describe('Badge / Chip / TierBadge', () => {
     const sm = mount(<Badge size="sm">Mới</Badge>).container.firstElementChild as HTMLElement;
     expect(sm.style.fontSize).toBe('var(--type-label-size)');
     expect(sm.style.fontWeight).toBe('600');
+    expect(sm.style.lineHeight).toBe('var(--type-label-lh)');
     const flash = mount(<Badge tone="flash">-30%</Badge>).container.firstElementChild as HTMLElement;
     expect([flash.style.background, flash.style.color]).toEqual(['var(--color-flash-solid-bg)', 'var(--color-flash-solid-fg)']);
     const ok = mount(<Badge tone="verified">Đã duyệt</Badge>).container.firstElementChild as HTMLElement;

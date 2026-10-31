@@ -15,8 +15,8 @@ function Probe({ opts }: { opts: NotifyOptions }) {
   return <button type="button" onClick={() => notify(opts)}>gọi</button>;
 }
 
-const status = () => screen.getByRole('status');
-const alert = () => screen.getByRole('alert');
+const status = () => screen.getByTestId('notify-status');
+const alert = () => screen.getByTestId('notify-alert');
 const settle = () => act(() => { vi.advanceTimersByTime(60); });
 
 describe('spokenText', () => {
@@ -51,11 +51,14 @@ describe('useNotify + NotifyRegion (a11y A2: WCAG 4.1.3)', () => {
     vi.useRealTimers();
   });
 
-  it('có hai vùng ẩn trực quan: role=status (polite, atomic) và role=alert', () => {
+  it('có hai vùng ẩn trực quan: polite và assertive (atomic), không mang role nên không thành alert/status rỗng thường trực', () => {
     render(<NotifyRegion />);
     expect(status()).toHaveAttribute('aria-live', 'polite');
     expect(status()).toHaveAttribute('aria-atomic', 'true');
-    expect(alert()).toBeInTheDocument();
+    expect(alert()).toHaveAttribute('aria-live', 'assertive');
+    expect(alert()).toHaveAttribute('aria-atomic', 'true');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
     expect(status().textContent).toBe('');
   });
 
@@ -75,7 +78,7 @@ describe('useNotify + NotifyRegion (a11y A2: WCAG 4.1.3)', () => {
     expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Xong', type: 'info', duration: 3200, position: 'top' });
   });
 
-  it('error và warning đi vào vùng role=alert, không vào status', () => {
+  it('error và warning đi vào vùng assertive, không vào polite', () => {
     render(<><NotifyRegion /><Probe opts={{ text: 'Cần đăng nhập để theo dõi nhãn.', type: 'warning' }} /></>);
     fireEvent.click(screen.getByRole('button', { name: 'gọi' }));
     settle();

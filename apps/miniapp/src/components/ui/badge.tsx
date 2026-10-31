@@ -37,6 +37,8 @@ export function Badge({ children, tone = 'neutral', size = 'md', icon: IconCmp, 
         borderRadius: 'var(--radius-pill)',
         // Chữ nhãn luôn 12px (cấm dưới 12px); cỡ sm chỉ khác đệm.
         fontSize: 'var(--type-label-size)',
+        // Không thừa kế line-height của khối cha: nhãn 12px trong hàng flex sẽ cao theo dòng chữ thân bài và đẩy khung đã đo sẵn.
+        lineHeight: 'var(--type-label-lh)',
         padding: size === 'md' ? '3px 8px' : '2px 6px',
         ...(IconCmp ? { display: 'inline-flex', alignItems: 'center', gap: 4 } : null),
         ...style,

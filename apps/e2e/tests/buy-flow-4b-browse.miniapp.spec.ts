@@ -2,6 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { test, expect, type MockApi } from './support/mock-api';
 import { BINH_SUA, NRC, XA_PHONG, mockDiscovery } from './support/discovery-mocks';
 import { eventsNamed, flushEvents } from './support/events';
+import { expectChipHitArea44 } from './support/hit-area';
 
 /**
  * Zalo Mini App E2E — Dự án 4b "Khám phá & tìm kiếm" (spec §5), phần Danh mục / Tìm kiếm. API mock toàn bộ.
@@ -30,24 +31,6 @@ async function waitBrowseSettled(page: Page, api: MockApi): Promise<void> {
 const scrollerOf = (page: Page): Locator => page.locator('.zaui-page', { has: page.getByTestId('catalog-grid') }).first();
 const tilesOf = (page: Page): Locator => page.getByTestId('catalog-grid').locator('button.tubu-tile-link');
 const scrollTopOf = (loc: Locator): Promise<number> => loc.evaluate((el) => el.scrollTop);
-
-/**
- * Chip cao thật 44px. Điểm sát mép trên/dưới (2px bên trong) phải trúng chính chip (không bị `.scroll-x` cắt);
- * điểm 8px ngoài mép thì KHÔNG (đối chứng: phép đo không vô nghĩa).
- */
-async function expectChipHitArea44(chip: Locator): Promise<void> {
-  const box = (await chip.boundingBox())!;
-  expect(box.height).toBeGreaterThanOrEqual(44);
-  const hit = await chip.evaluate(
-    (el, b) => {
-      const x = b.x + b.width / 2;
-      const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
-      return { above3: at(b.y + 2), below3: at(b.y + b.height - 2), above8: at(b.y - 8), below8: at(b.y + b.height + 8), inside: at(b.y + b.height / 2) };
-    },
-    { x: box.x, y: box.y, width: box.width, height: box.height },
-  );
-  expect(hit).toEqual({ above3: true, below3: true, above8: false, below8: false, inside: true });
-}
 
 test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
   test('Gợi ý khi gõ (không tải kết quả); Enter mới tìm; từ khoá vào "Tìm gần đây"', async ({ page, api }) => {
@@ -409,8 +392,8 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     await page.goto('/browse?inStock=1');
     await expect(page.getByTestId('result-count')).toHaveText('29 sản phẩm', { timeout: 15_000 });
     await waitBrowseSettled(page, api);
-    await expectChipHitArea44(page.getByRole('group', { name: SORT_GROUP }).getByRole('button', { name: 'Bán chạy' }));
-    await expectChipHitArea44(page.getByRole('group', { name: 'Đang lọc' }).getByRole('button', { name: 'Bỏ lọc Còn hàng' }));
+    await expectChipHitArea44(page.getByRole('group', { name: SORT_GROUP }).getByRole('button', { name: 'Bán chạy' }), { control: true });
+    await expectChipHitArea44(page.getByRole('group', { name: 'Đang lọc' }).getByRole('button', { name: 'Bỏ lọc Còn hàng' }), { control: true });
   });
 
   test.describe('Ô tìm kiếm trên trình duyệt thật', () => {

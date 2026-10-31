@@ -34,6 +34,10 @@ describe('Badge', () => {
     rerender(<Badge size="md">Mới</Badge>);
     expect(screen.getByText('Mới').style.fontSize).toBe('var(--type-label-size)');
   });
+  it('line-height theo token nhãn, không thừa kế từ khối cha (khung chờ đo sẵn không bị đẩy)', () => {
+    render(<Badge size="sm">Mua 3 lần</Badge>);
+    expect(screen.getByText('Mua 3 lần').style.lineHeight).toBe('var(--type-label-lh)');
+  });
   it('tone flash: nền cam đặc + chữ stone-900 (không cần ghi đè style)', () => {
     render(<Badge tone="flash">-30%</Badge>);
     const el = screen.getByText('-30%');
