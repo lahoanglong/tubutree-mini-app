@@ -47,7 +47,8 @@ export function pdpShelves<T extends { id: string }>(i: { currentId: string; bou
   brand: T[];
   feed: T[];
 } {
-  const notCurrent = (list: T[]) => list.filter((x) => x.id !== i.currentId);
+  // Dải phụ chỉ là gợi ý: API trả sai dạng (không phải mảng) thì dải đó rỗng, không được làm sập cả trang sản phẩm khi vẽ.
+  const notCurrent = (list: unknown) => (Array.isArray(list) ? (list as T[]).filter((x) => x.id !== i.currentId) : []);
   const [together] = applyShelfDedupe([{ id: 'pdp.boughtTogether', items: notCurrent(i.boughtTogether) }]);
   const togetherIds = new Set(together!.items.map((x) => x.id));
   const brand = notCurrent(i.brand)

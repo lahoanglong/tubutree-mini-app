@@ -10,7 +10,9 @@ describe('PdpQuickReviews', () => {
   it('hiện điểm, số lượt, đúng 2 đánh giá có chữ và nút "Xem tất cả (n)" cuộn tới danh sách đầy đủ', () => {
     const onSeeAll = vi.fn();
     render(<PdpQuickReviews average={4.4} count={27} items={[item('a'), item('b', { comment: null }), item('c', { images: ['x.jpg'] }), item('d')]} onSeeAll={onSeeAll} />);
-    expect(screen.getByRole('heading', { level: 2, name: 'Đánh giá' })).toBeInTheDocument();
+    const title = screen.getByRole('heading', { level: 2, name: 'Đánh giá' });
+    // Tiêu đề khối là Inter (font-ui), không phải Fraunces của tiêu đề trang (§4 Q1).
+    expect(title.style.fontFamily).toBe('var(--font-ui)');
     expect(screen.getByText(/4,4/)).toBeInTheDocument();
     expect(screen.getAllByTestId('quick-review')).toHaveLength(2);
     expect(screen.getByText('Dùng rất ổn c')).toBeInTheDocument();

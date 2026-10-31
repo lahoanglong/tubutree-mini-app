@@ -87,4 +87,12 @@ describe('pdpShelves', () => {
     expect(ids).not.toContain('b1');
     expect(ids).not.toContain('n0');
   });
+
+  it('API trả sai dạng (không phải mảng): dải đó rỗng, không ném lỗi, dải còn lại vẫn đủ', () => {
+    const bad = { error: 'x' } as unknown as { id: string }[];
+    const out = pdpShelves({ currentId: 'cur', boughtTogether: bad, brand: null as unknown as { id: string }[], feed: many('f', 5) });
+    expect(out.boughtTogether).toEqual([]);
+    expect(out.brand).toEqual([]);
+    expect(out.feed).toHaveLength(5);
+  });
 });

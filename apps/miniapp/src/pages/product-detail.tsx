@@ -174,9 +174,10 @@ export default function ProductDetailPage() {
     queryFn: () => fetchBoughtTogether(slug!),
     enabled: !!slug && product.isSuccess,
   });
+  // Cùng khoá với lưới gợi ý Trang chủ: phản hồi `/products/for-you` không phụ thuộc sản phẩm đang xem nên mở món khác không gọi lại.
+  // Lỗi chỉ làm ẩn dải gợi ý; dạng dữ liệu sai thì `pdpShelves` coi như rỗng.
   const feed = useQuery({
-    queryKey: ['pdp-feed', slug],
-    // Bọc trong hàm: lỗi hay thiếu hàm chỉ làm ẩn dải gợi ý, không chạm cả trang.
+    queryKey: ['for-you'],
     queryFn: () => fetchForYou(),
     enabled: !!slug && product.isSuccess,
     staleTime: 5 * 60_000,

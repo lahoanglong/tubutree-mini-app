@@ -149,4 +149,13 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     expect(screen.queryByRole('heading', { name: 'Có thể bạn cũng thích' })).toBeNull();
     expect(screen.queryByTestId('pdp-bundle-slots')).toBeNull();
   });
+
+  it('dải gợi ý trả sai dạng (không phải mảng): trang vẫn dựng, chỉ ẩn dải đó', async () => {
+    mocks.fetchForYou.mockResolvedValue({ error: 'x' });
+    mocks.fetchRelated.mockResolvedValue('lỗi');
+    renderPdp();
+    await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+    expect(screen.queryByRole('heading', { name: 'Có thể bạn cũng thích' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Cùng nhà Cô Lan' })).toBeNull();
+  });
 });

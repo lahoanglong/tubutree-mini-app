@@ -3,7 +3,8 @@ import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { pickQuickReviews } from '@tubutree/app-core/commerce/pdp-view';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { Stars } from '../reviews-section';
-import { Heading, Text } from '../ui/text';
+import { SectionTitle } from '../ui/section-title';
+import { Text } from '../ui/text';
 
 export interface PdpQuickReviewsProps {
   average: number;
@@ -21,9 +22,7 @@ export function PdpQuickReviews({ average, count, items, onSeeAll }: PdpQuickRev
     <section aria-label="Đánh giá nhanh" style={{ background: 'var(--color-bg-surface)', padding: 16, marginTop: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <Heading variant="title-sm" as="h2">
-            {fillCopy('pdp.reviews')}
-          </Heading>
+          <SectionTitle>{fillCopy('pdp.reviews')}</SectionTitle>
           <Stars value={average} size={14} />
           <Text variant="caption" tone="secondary" as="span">
             {formatRating(average)} · {count}

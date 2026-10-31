@@ -2,17 +2,19 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { ShoppingCart } from 'lucide-react';
-import type { ProductCard as CoreProductCard } from '@tubutree/app-core/api/catalog';
+import { fetchProducts, type ProductCard as CoreProductCard } from '@tubutree/app-core/api/catalog';
 import { pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { boughtTogetherQuery, forYouQuery, relatedQuery } from '@tubutree/app-core/queries/catalog';
 import { ProductRail } from '@/components/mini/product-rail';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { PdpFeed } from './pdp-feed';
 import { pdpSectionTitle } from './pdp-sections';
 
 const FIVE_MIN = 5 * 60_000;
+const POPULAR_LIMIT = 24;
 
 function Rail({ title, icon, products, loading }: { title: string; icon?: boolean; products: CoreProductCard[] | undefined; loading: boolean }) {
   if (loading) {
@@ -60,8 +62,19 @@ export function PdpRails({
 }) {
   const together = useQuery({ ...boughtTogetherQuery(coreHttp, slug), initialData: initialBoughtTogether, staleTime: FIVE_MIN, retry: 0 });
   const related = useQuery({ ...relatedQuery(coreHttp, slug), initialData: initialRelated, staleTime: FIVE_MIN, retry: 0 });
-  const feed = useQuery({ ...forYouQuery(coreHttp), staleTime: FIVE_MIN, retry: 0 });
-  const shelves = pdpShelves({ currentId: productId, boughtTogether: together.data ?? [], brand: related.data ?? [], feed: feed.data ?? [] });
+  // `/products/for-you` cần đăng nhập: khách vãng lai (phần lớn lượt vào trang SEO này) gọi sẽ nhận 401 mỗi lần xem. Họ xem bán chạy
+  // (nguồn công khai); đang khôi phục phiên thì chờ, chưa gọi nguồn nào.
+  const phase = useAuthPhase();
+  const personal = useQuery({ ...forYouQuery(coreHttp), enabled: phase === 'authenticated', staleTime: FIVE_MIN, retry: 0 });
+  const popular = useQuery({
+    queryKey: ['products', 'pdp-popular'],
+    queryFn: () => fetchProducts(coreHttp, { limit: POPULAR_LIMIT, sort: 'best_seller' }),
+    enabled: phase !== 'authenticated' && phase !== 'loading',
+    staleTime: FIVE_MIN,
+    retry: 0,
+  });
+  const feed = phase === 'authenticated' ? personal.data : popular.data?.data;
+  const shelves = pdpShelves({ currentId: productId, boughtTogether: together.data ?? [], brand: related.data ?? [], feed: feed ?? [] });
   return (
     <>
       <Rail title={fillCopy('pdp.boughtTogether')} icon products={shelves.boughtTogether} loading={together.isPending} />
