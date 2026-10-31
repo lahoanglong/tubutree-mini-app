@@ -772,12 +772,12 @@ describe('logout() — dọn sạch dữ liệu user cũ trên thiết bị dùn
   });
 
   it('xoá dấu "đã ghi công qua gian hàng CTV": người đăng nhập sau trên máy dùng chung không thừa hưởng', async () => {
-    markCtvTouched('AN123');
+    markCtvTouched('u1', 'AN123');
     useAuthStore.setState({ user: { id: 'u1' } as AuthUser, status: 'authenticated' });
 
     await useAuthStore.getState().logout();
 
-    expect(wasCtvTouched('AN123')).toBe(false);
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
   });
 
   it('API logout lỗi (mất mạng) vẫn đăng xuất trên máy, không ném', async () => {

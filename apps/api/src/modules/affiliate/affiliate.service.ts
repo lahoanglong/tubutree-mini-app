@@ -125,6 +125,14 @@ export const PERSONAL_TAX_ID_FORMAT_MESSAGE = 'Mã số thuế cá nhân gồm 1
 /** Chủ gian hàng mẫu (Storefront.isSample): không ghi công đơn, không sinh hoa hồng. */
 const SAMPLE_STOREFRONT_SELECT = { where: { isSample: true }, select: { id: true }, take: 1 } as const;
 
+/**
+ * Khoảng thời gian đã trôi kể từ lúc khách bấm link, do client đo bằng cùng một đồng hồ máy (không gửi giờ tuyệt đối để đồng hồ
+ * lệch không làm mất hay kéo dài ghi công). Âm, không phải số hoặc không hữu hạn thì coi như không gửi.
+ */
+function parseClickedAgo(raw: unknown, maxMs: number): number | null {
+  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? Math.min(raw, maxMs) : null;
+}
+
 @Injectable()
 export class AffiliateService {
   private readonly logger = new Logger(AffiliateService.name);
@@ -204,7 +212,7 @@ export class AffiliateService {
    */
   async recordTouch(
     userId: string,
-    dto: { referralCode?: string; storefrontSlug?: string; kind?: string },
+    dto: { referralCode?: string; storefrontSlug?: string; kind?: string; clickedAgoMs?: number },
     now: Date = new Date(),
     platform: 'miniapp' | 'web' = 'miniapp',
   ): Promise<{ ok: boolean }> {
@@ -212,18 +220,53 @@ export class AffiliateService {
     const referrerUserId = await this.findEligibleReferrer(dto.referralCode, userId);
     if (!referrerUserId) return { ok: false };
     const days = await this.config.get<number>('affiliate.attribution_days', 7);
-    const expiresAt = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    const dayMs = 24 * 60 * 60 * 1000;
+    // Kẹp ở hạn + 1 ngày: giá trị lớn hơn vẫn là chạm quá hạn, nhưng không làm ngày vượt biên (Invalid Date → 500).
+    const ago = parseClickedAgo(dto.clickedAgoMs, days * dayMs + dayMs);
+    const clickedAt = new Date(now.getTime() - (ago ?? 0));
+    const expiresAt = new Date(clickedAt.getTime() + days * dayMs);
+    if (!Number.isFinite(expiresAt.getTime()) || (ago !== null && expiresAt <= now)) return { ok: false };
     const data = {
       referrerUserId,
       storefrontSlug: dto.storefrontSlug ?? null,
       kind: dto.kind ?? 'ctv',
+      clickedAt,
       expiresAt,
     };
-    await this.prisma.referralTouch.upsert({
-      where: { userId },
-      update: data,
-      create: { userId, ...data },
-    });
+    let applied = true;
+    if (ago !== null) {
+      // Chạm bù mang khoảng thời gian từ lúc bấm: chỉ được thay chạm đang có khi lúc bấm mới hơn (so theo lúc bấm, không theo
+      // hạn, vì admin đổi số ngày giữa chừng làm hạn không còn so được). Dòng cũ chưa có lúc bấm thì lấy hạn - số ngày hiện tại
+      // làm mốc, tức so hạn. Dòng đã hết hạn (kể cả khi còn clickedAt, vd CTV xoá tài khoản đặt hạn = lúc đó) không chặn chạm hợp lệ.
+      // Điều kiện nằm trong câu UPDATE nên hai chạm đồng thời cũng không ghi đè ngược.
+      try {
+        await this.prisma.referralTouch.create({ data: { userId, ...data } });
+      } catch (err) {
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
+        const newer: Prisma.ReferralTouchWhereInput[] = [
+          { clickedAt: { lt: clickedAt } },
+          { clickedAt: null, expiresAt: { lt: expiresAt } },
+          { expiresAt: { lte: now } },
+        ];
+        const r = await this.prisma.referralTouch.updateMany({ where: { userId, OR: newer }, data });
+        applied = r.count > 0;
+        // Cùng người giới thiệu mà dòng chưa có slug gian hàng (vd ?ref= rồi /s/<mã>): chỉ bổ sung slug và loại, không đụng lúc
+        // bấm hay hạn, vì lúc bấm của hai lượt lệch nhau theo độ trễ mạng.
+        if (!applied && dto.storefrontSlug) {
+          await this.prisma.referralTouch.updateMany({
+            where: { userId, referrerUserId, storefrontSlug: null },
+            data: { storefrontSlug: dto.storefrontSlug, kind: dto.kind ?? 'ctv' },
+          });
+        }
+      }
+    } else {
+      await this.prisma.referralTouch.upsert({
+        where: { userId },
+        update: data,
+        create: { userId, ...data },
+      });
+    }
+    if (!applied) return { ok: true };
     // Best-effort (không tx nào đang chạy ở đây) — mất 1 event referral_touched không đáng để
     // chặn/hủy việc ghi "chạm" giới thiệu thật (đường tiền).
     await this.analytics.recordBestEffort({

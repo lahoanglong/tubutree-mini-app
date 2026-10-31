@@ -528,6 +528,13 @@ psqlq -c "UPDATE notification_templates SET \"bodyTemplate\" = '💰 Đã cộng
 
 Mẫu `COMMISSION_APPROVED` vẫn dùng `{{count}}` và `{{amount}}` như bản cũ nên không cần trả lại.
 
+### 1.17 Ghi công CTV theo lúc bấm link: thứ tự deploy
+
+- Deploy API TRƯỚC, rồi mới deploy web và đẩy Mini App lên Live. Web và Mini App mới gửi thêm `clickedAgoMs` khi chạm giới thiệu, mà API cũ chạy `forbidNonWhitelisted` nên trả 400: web xoá bản chờ, Mini App mất chạm. Mini App mới chỉ gửi Live sau khi API mới đã lên.
+- Migration `20261031110000_referral_touch_clicked_at` chỉ thêm cột `clickedAt` (nullable, không backfill); chạy cùng các migration khác của bản.
+- Quay API về `:prev` thì phải quay cả web về bản trước; Mini App Live mới cũng phải kéo về bản cũ.
+- Mini App Live cũ (chưa gửi `clickedAgoMs`) vẫn chạy như trước: máy chủ ghi `clickedAt = now`, hạn tính từ lúc nhận, cho tới khi Mini App mới lên Live.
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.
