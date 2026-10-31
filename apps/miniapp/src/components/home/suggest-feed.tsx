@@ -1,43 +1,72 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'zmp-ui';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { mergeSuggestions, SUGGEST_PAGE_SIZE, SUGGEST_TABS, type SuggestTab } from '@tubutree/app-core/home-layout';
-import { fetchForYou, fetchProducts } from '../../services/shop-api';
+import { HOME_HEADER_HEIGHT, mergeSuggestions, SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
+import { SUGGEST_MAX, suggestChips, vnDateSeed } from '@tubutree/app-core/home-suggest';
+import { useCategories } from '../../hooks/use-categories';
+import { fetchCatalog, fetchForYou } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
 import { haptic } from '../../utils/haptic';
+import { serverNow } from '../../utils/server-clock';
 import { CatalogGrid, CatalogGridSkeleton } from '../catalog/catalog-grid';
 import { Button } from '../ui/button';
 import { Chip } from '../ui/chip';
 import { ScrollRow } from '../ui/scroll-row';
-import { Heading, Text } from '../ui/text';
+import { SectionHeader } from '../ui/section-header';
+import { Text } from '../ui/text';
 import { HomeBlockError } from './home-block-error';
 
-const LIST_SOURCE: Record<SuggestTab, string> = { 'for-you': 'home_for_you', 'best-seller': 'home_best_seller', newest: 'home_newest' };
+// Hàng chip dính ngay dưới header dính của Trang chủ (cao `HOME_HEADER_HEIGHT`, đứng ở `--safe-top`), dưới z-index của header (20).
+const CHIPS_STYLE = {
+  gap: 8,
+  padding: '8px 16px',
+  position: 'sticky',
+  top: `calc(var(--safe-top) + ${HOME_HEADER_HEIGHT}px)`,
+  zIndex: 10,
+  background: 'var(--color-bg-canvas)',
+} as const;
+
+export interface SuggestFeedProps {
+  /** Slug món đã nằm ở các kệ hàng phía trên: lưới không lặp lại chúng. */
+  exclude: ReadonlySet<string>;
+}
 
 /**
- * MỘT lưới gợi ý cuộn vô tận ở cuối Trang chủ, thay bốn lưới riêng. Ba nguồn đổi bằng chip: "Cho bạn" (gợi ý cá nhân hoá lên
- * đầu rồi tới danh mục), "Bán chạy", "Mới". Tải thêm khi kéo gần hết lưới; có nút "Xem thêm" cho máy không đo được cuộn.
+ * "Gợi ý hôm nay" (Q9): MỘT lưới cuộn vô tận ở cuối Trang chủ, đổi chủ đề bằng chip danh mục thay cho ba tab nguồn. Thứ tự xoay theo ngày Việt Nam
+ * (`seed`): cuộn, quay lại, mở lại app trong ngày không xáo lưới, sang ngày khác thì đổi. Khách đã đăng nhập thấy gợi ý cá nhân lên đầu ở chip "Tất cả".
+ * Dừng ở `SUGGEST_MAX` món rồi mời vào Danh mục: cuộn vô tận không có đáy làm khách mất đường tới chân trang và thanh đáy.
  */
-export function SuggestFeed() {
+export function SuggestFeed({ exclude }: SuggestFeedProps) {
+  const navigate = useNavigate();
   const authed = useAuthStore((s) => s.status === 'authenticated');
-  const [tab, setTab] = useState<SuggestTab>('for-you');
-  const sort = SUGGEST_TABS.find((t) => t.key === tab)?.sort;
-  const forYou = useQuery({ queryKey: ['for-you'], queryFn: fetchForYou, enabled: authed && tab === 'for-you' });
+  // Chốt một lần mỗi lần mở: qua nửa đêm giữa chừng không đổi thứ tự dưới chân khách.
+  const seed = useMemo(() => vnDateSeed(serverNow()), []);
+  const { categories } = useCategories();
+  const chips = useMemo(() => suggestChips(categories.filter((c) => !c.parentId)), [categories]);
+  const [chipKey, setChipKey] = useState('all');
+  const active = chips.find((c) => c.key === chipKey) ?? chips[0]!;
+  const categoryId = active.categoryId;
+
+  const forYou = useQuery({ queryKey: ['for-you', seed], queryFn: () => fetchForYou({ seed }), enabled: authed && categoryId === null });
   const pages = useInfiniteQuery({
-    queryKey: ['products', 'home-suggest', sort ?? 'default'],
-    queryFn: ({ pageParam }) => fetchProducts({ limit: SUGGEST_PAGE_SIZE, ...(pageParam > 1 ? { page: pageParam } : {}), ...(sort ? { sort } : {}) }),
+    queryKey: ['products', 'home-suggest', seed, categoryId ?? 'all'],
+    queryFn: ({ pageParam }) => fetchCatalog({ page: pageParam, limit: SUGGEST_PAGE_SIZE, seed, ...(categoryId ? { category: categoryId } : {}) }),
     initialPageParam: 1,
     getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
   });
-  const personal = tab === 'for-you' && authed ? (forYou.data ?? []) : [];
-  const items = mergeSuggestions(personal, (pages.data?.pages ?? []).map((p) => p.data));
-  const loadingFirst = pages.isLoading || (tab === 'for-you' && authed && forYou.isPending && !pages.data);
+  const personal = categoryId === null && authed ? (forYou.data ?? []) : [];
+  const fresh = mergeSuggestions(personal, (pages.data?.pages ?? []).map((p) => p.data)).filter((p) => !exclude.has(p.slug));
+  const capped = fresh.length >= SUGGEST_MAX;
+  const items = capped ? fresh.slice(0, SUGGEST_MAX) : fresh;
+  const loadingFirst = pages.isLoading || (categoryId === null && authed && forYou.isPending && !pages.data);
 
   const sentinel = useRef<HTMLDivElement>(null);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = pages;
+  const canLoadMore = hasNextPage && !capped;
   useEffect(() => {
     const el = sentinel.current;
-    if (!el || !hasNextPage || typeof IntersectionObserver === 'undefined') return;
+    if (!el || !canLoadMore || typeof IntersectionObserver === 'undefined') return;
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting) && !isFetchingNextPage) void fetchNextPage();
@@ -46,51 +75,65 @@ export function SuggestFeed() {
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage, items.length]);
+  }, [canLoadMore, isFetchingNextPage, fetchNextPage, items.length]);
 
-  // Nguồn mặc định đã tải xong mà rỗng (không lỗi): không để lại tiêu đề và chip trên khoảng trống. Ở chip khác khối ở lại để khách còn đường quay về.
-  if (tab === 'for-you' && !loadingFirst && !pages.isError && items.length === 0) return null;
+  // "Tất cả" đã tải xong mà rỗng (không lỗi): không để lại tiêu đề và chip trên khoảng trống. Ở chip khác khối ở lại để khách còn đường quay về.
+  if (categoryId === null && !loadingFirst && !pages.isError && items.length === 0) return null;
 
   return (
-    <section aria-label={homeCopy.suggest.title} style={{ padding: '16px 16px 0' }}>
-      <Heading variant="title-sm" as="h2">
-        {homeCopy.suggest.title}
-      </Heading>
-      <ScrollRow label={homeCopy.suggest.tabsLabel} style={{ gap: 8, padding: '8px 0' }}>
-        {SUGGEST_TABS.map((t) => (
+    <section aria-label={homeCopy.suggest.title}>
+      <div style={{ padding: '0 16px' }}>
+        <SectionHeader title={homeCopy.suggest.title} />
+      </div>
+      <ScrollRow label={homeCopy.suggest.chipsLabel} style={CHIPS_STYLE}>
+        {chips.map((c) => (
           <Chip
-            key={t.key}
-            selected={tab === t.key}
+            key={c.key}
+            selected={active.key === c.key}
             onPress={() => {
               haptic('light');
-              setTab(t.key);
+              setChipKey(c.key);
             }}
           >
-            {t.label}
+            {c.label}
           </Chip>
         ))}
       </ScrollRow>
-      {loadingFirst ? (
-        <CatalogGridSkeleton count={6} />
-      ) : items.length === 0 ? (
-        pages.isError ? <HomeBlockError title={homeCopy.suggest.title} error={pages.error} onRetry={pages.refetch} retrying={pages.isFetching} /> : null
-      ) : (
-        <>
-          <CatalogGrid products={items} listSource={LIST_SOURCE[tab]} />
-          <div ref={sentinel} aria-hidden style={{ height: 1 }} />
-          {hasNextPage ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0' }}>
-              <Button variant="secondary" loading={isFetchingNextPage} onPress={() => void fetchNextPage()} style={{ minWidth: 160 }}>
-                {homeCopy.suggest.more}
-              </Button>
-            </div>
-          ) : (
-            <Text variant="caption" tone="tertiary" as="p" style={{ textAlign: 'center', padding: '16px 0' }}>
-              {homeCopy.suggest.end}
-            </Text>
-          )}
-        </>
-      )}
+      <div style={{ padding: '0 16px' }}>
+        {loadingFirst ? (
+          <CatalogGridSkeleton count={6} />
+        ) : items.length === 0 ? (
+          pages.isError ? <HomeBlockError title={homeCopy.suggest.title} error={pages.error} onRetry={pages.refetch} retrying={pages.isFetching} /> : null
+        ) : (
+          <>
+            <CatalogGrid products={items} listSource="home_suggest" />
+            <div ref={sentinel} aria-hidden style={{ height: 1 }} />
+            {canLoadMore ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0' }}>
+                <Button variant="secondary" loading={isFetchingNextPage} onPress={() => void fetchNextPage()} style={{ minWidth: 160 }}>
+                  {homeCopy.suggest.more}
+                </Button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '16px 0' }}>
+                <Text variant="caption" tone="tertiary" as="p" style={{ margin: 0, textAlign: 'center' }}>
+                  {homeCopy.suggest.end}
+                </Text>
+                <Button
+                  variant="secondary"
+                  onPress={() => {
+                    haptic('light');
+                    navigate('/browse');
+                  }}
+                  style={{ minWidth: 160 }}
+                >
+                  {homeCopy.suggest.enter}
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </section>
   );
 }

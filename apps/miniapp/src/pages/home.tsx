@@ -149,7 +149,7 @@ export default function HomePage() {
     ),
     journey: <HomeBrandJourney />,
     community: <HomeCommunityPreview />,
-    suggest: <HomeSuggestFeed />,
+    suggest: <HomeSuggestFeed exclude={shelves.seen} />,
   };
 
   return (

@@ -49,10 +49,12 @@ export const homeCopy = {
     noComments: 'Chưa có bình luận',
   },
   suggest: {
-    title: 'Gợi ý cho bạn',
+    title: 'Gợi ý hôm nay',
     tabsLabel: 'Nguồn gợi ý',
+    chipsLabel: 'Lọc gợi ý theo danh mục',
     more: 'Xem thêm',
     end: 'Bạn đã xem hết gợi ý hôm nay',
+    enter: 'Vào Danh mục',
   },
   bestSellers: { title: 'Bán chạy', seeAll: 'Xem tất cả' },
   guestGift: {

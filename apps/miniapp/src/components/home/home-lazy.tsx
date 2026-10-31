@@ -84,4 +84,4 @@ export const HomeBestSellerRail = (p: ComponentProps<typeof BestSellerRail>) => 
 export const HomeBrandJourney = () => <Block>{(m) => <m.BrandJourney />}</Block>;
 export const HomeCommunityPreview = () => <Block>{(m) => <m.CommunityPreview />}</Block>;
 export const HomeNewCustomerGift = () => <NewCustomerGift />;
-export const HomeSuggestFeed = () => <Block>{(m) => <m.SuggestFeed />}</Block>;
+export const HomeSuggestFeed = (p: ComponentProps<Below['SuggestFeed']>) => <Block>{(m) => <m.SuggestFeed {...p} />}</Block>;
