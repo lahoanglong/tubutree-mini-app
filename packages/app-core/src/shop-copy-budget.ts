@@ -163,4 +163,19 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'addon.lost': null,
   'pdp.boughtTogether': null,
 
+  // Bộ thành phần section-kit
+  'section.seeAll': 10,
+  'section.seeAllSpoken': null,
+  'sort.groupLabel': 10,
+  'sort.filter': 4,
+  'sort.filterCount': 8,
+  'sort.filterSpoken': null,
+  'combo.badge': 12,
+  'combo.setLabel': 10,
+  'combo.save': 18,
+  'combo.addSpoken': null,
+  'combo.seeItems': 12,
+  'combo.soldOut': 13,
+  'combo.itemsLabel': 12,
+  'combo.more': 4,
 };

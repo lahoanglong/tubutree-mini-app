@@ -21,10 +21,16 @@ interface RouteItem {
   skip?: string;
 }
 
+/** Lane chỉ có ở bản dev (trang trả 404 khi production, vd /ds-gallery): không phải màn của khách nên không tham quan. */
+const DEV_ONLY_LANES = new Set(['ds']);
+
 export function routeMapItems(): RouteItem[] {
   const file = path.resolve(__dirname, '../../../../packages/app-core/src/route-map.json');
-  const map = JSON.parse(readFileSync(file, 'utf8')) as { routes: { items: RouteItem[] }[] };
-  return map.routes.flatMap((l) => l.items).filter((i) => !i.skip);
+  const map = JSON.parse(readFileSync(file, 'utf8')) as { routes: { lane: string; items: RouteItem[] }[] };
+  return map.routes
+    .filter((l) => !DEV_ONLY_LANES.has(l.lane))
+    .flatMap((l) => l.items)
+    .filter((i) => !i.skip);
 }
 
 const BANK_CODE = 'TUBU20261019003';

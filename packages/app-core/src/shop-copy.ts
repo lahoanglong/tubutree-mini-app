@@ -157,6 +157,21 @@ export const SHOP_COPY: Record<string, string> = {
   'addon.lost': 'Đã bỏ giá mua kèm vì {name} không còn trong giỏ',
   'pdp.boughtTogether': 'Khách thường mua cùng',
 
+  // Bộ thành phần section-kit (SectionHeader, SortBar, ComboCard)
+  'section.seeAll': 'Xem tất cả',
+  'section.seeAllSpoken': 'Xem tất cả {title}',
+  'sort.groupLabel': 'Sắp xếp',
+  'sort.filter': 'Lọc',
+  'sort.filterCount': 'Lọc ({n})',
+  'sort.filterSpoken': 'Lọc, {n} bộ lọc đang bật',
+  'combo.badge': 'Combo -{pct}%',
+  'combo.setLabel': 'Mua cả bộ',
+  'combo.save': 'Tiết kiệm {save}',
+  'combo.addSpoken': 'Thêm cả combo {title}, {n} món, {price}',
+  'combo.seeItems': 'Xem từng món',
+  'combo.soldOut': 'Combo tạm hết',
+  'combo.itemsLabel': 'Gồm {n} món',
+  'combo.more': '+{n}',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */

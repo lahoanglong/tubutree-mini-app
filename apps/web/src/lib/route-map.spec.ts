@@ -91,6 +91,7 @@ describe('privatePrefixes', () => {
     expect(p).toContain('/admin');
     expect(p.filter((x) => x === '/admin')).toHaveLength(1);
     expect(p.every((x) => !x.includes(':') && !x.includes('?'))).toBe(true);
+    expect(p.every((x) => x.startsWith('/'))).toBe(true);
   });
 
   it('không chứa tiền tố nằm dưới tiền tố khác', () => {
@@ -115,6 +116,7 @@ describe('publicStaticRoutes', () => {
     for (const w of pendingPublic) expect(r).not.toContain(w);
     expect(r).toContain('/gioi-thieu');
     expect(r.every((x) => !x.includes(':') && !x.includes('?'))).toBe(true);
+    expect(r.every((x) => x.startsWith('/'))).toBe(true);
   });
 
   it('bỏ route công khai còn pending (bản đồ giả: bản đồ thật nay không còn route pending)', async () => {
@@ -125,6 +127,31 @@ describe('publicStaticRoutes', () => {
     const fake = await import('./route-map');
     expect(fake.publicStaticRoutes()).toContain('/da-xong');
     expect(fake.publicStaticRoutes()).not.toContain('/chua-xong');
+    vi.doUnmock('@tubutree/app-core/route-map.json');
+    vi.resetModules();
+  });
+});
+
+describe('lane chỉ ở bản dev (ds)', () => {
+  it('bản đồ thật: /ds-gallery có trong bản đồ nhưng không vào sitemap', () => {
+    expect(isWebRouteReady('/ds-gallery')).toBe(true);
+    expect(publicStaticRoutes()).not.toContain('/ds-gallery');
+    expect(publicAllowPaths(['/ds-gallery'])).not.toContain('/ds-gallery');
+  });
+
+  it('bản đồ giả: lane ds bị bỏ khỏi route công khai, lane khác giữ', async () => {
+    vi.resetModules();
+    vi.doMock('@tubutree/app-core/route-map.json', () => ({
+      default: {
+        routes: [
+          { lane: 'ds', items: [{ miniapp: '/dev', web: '/dev' }] },
+          { lane: 't', items: [{ miniapp: '/y', web: '/da-xong' }] },
+        ],
+      },
+    }));
+    const fake = await import('./route-map');
+    expect(fake.publicStaticRoutes()).toEqual(['/da-xong']);
+    expect(fake.publicAllowPaths(['/dev', '/da-xong'])).toEqual(['/da-xong']);
     vi.doUnmock('@tubutree/app-core/route-map.json');
     vi.resetModules();
   });

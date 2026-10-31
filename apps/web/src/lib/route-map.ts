@@ -17,6 +17,13 @@ const groups = routeMapJson.routes as RouteGroup[];
 const items: RouteItem[] = groups.flatMap((g) => g.items);
 const webItems = items.filter((i): i is RouteItem & { web: string } => typeof i.web === 'string');
 
+// Lane chỉ có ở bản dev (trang trả 404 khi production): không vào sitemap, không cần allow riêng cho robots.
+const DEV_ONLY_LANES = new Set(['ds']);
+const publicWebItems = groups
+  .filter((g) => !DEV_ONLY_LANES.has(g.lane))
+  .flatMap((g) => g.items)
+  .filter((i): i is RouteItem & { web: string } => typeof i.web === 'string');
+
 function splitWeb(web: string): { segments: string[]; query: URLSearchParams } {
   const [path = '', query = ''] = web.split(/[?#]/, 2);
   return { segments: path.split('/').filter(Boolean), query: new URLSearchParams(query) };
@@ -87,7 +94,7 @@ export function privatePrefixes(): string[] {
 /** Route công khai không tham số, không query, đã xong: đưa vào sitemap. */
 export function publicStaticRoutes(): string[] {
   const out = new Set<string>();
-  for (const item of webItems) {
+  for (const item of publicWebItems) {
     if (item.private || item.pending) continue;
     if (item.web.includes(':') || item.web.includes('?')) continue;
     out.add(item.web);
@@ -98,7 +105,7 @@ export function publicStaticRoutes(): string[] {
 /** Route công khai tĩnh nằm dưới (hoặc trùng) một tiền tố riêng tư: robots phải `allow` riêng, kể cả khi còn pending. */
 export function publicAllowPaths(prefixes: readonly string[]): string[] {
   const out = new Set<string>();
-  for (const item of webItems) {
+  for (const item of publicWebItems) {
     if (item.private || item.web.includes(':') || item.web.includes('?')) continue;
     if (prefixes.some((p) => underPrefix(item.web, p))) out.add(item.web);
   }
