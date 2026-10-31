@@ -106,6 +106,8 @@ describe('HomePage — mở lại khi máy đã nhớ loại khách, chunk khố
     renderHome();
     await settle(100);
     expect(heightOf('flash')).toBe('300');
+    // Lề trên (không phải đệm) như FlashSkeleton: cùng một phần tử thay chỗ nhau nên không bị tính là dịch chuyển bố cục.
+    expect(document.querySelector<HTMLElement>('[data-home-block="flash"] [data-testid="home-below-placeholder"]')?.style.marginTop).toBe('16px');
     expect(placeholders().length).toBeGreaterThan(0);
   });
 });

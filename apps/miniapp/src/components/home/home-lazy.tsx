@@ -72,7 +72,7 @@ export function useHomeBelow(): BelowState {
 interface Slot {
   /** Chiều cao ô xám; 0 = khối không vẽ gì lúc tải nên không giữ chỗ. */
   height: number;
-  /** Đệm quanh ô xám, đúng như khối thật. */
+  /** Lề trên và đệm dưới quanh ô xám, đúng như khung chờ của khối thật (lề trên là lề, không phải đệm, để cùng một phần tử thay chỗ nhau mà không bị tính là dịch chuyển). */
   top?: number;
   bottom?: number;
 }
@@ -93,7 +93,7 @@ function Block({ slot, children }: { slot: Slot; children: (m: Below) => ReactNo
       data-testid="home-below-placeholder"
       data-height={top + slot.height + bottom}
       aria-hidden="true"
-      style={{ padding: `${top}px 16px ${bottom}px` }}
+      style={{ marginTop: top, padding: `0 16px ${bottom}px` }}
     >
       <Skeleton height={slot.height} radius="var(--radius-card)" />
     </div>
