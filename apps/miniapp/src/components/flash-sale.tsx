@@ -119,41 +119,45 @@ export function FlashSale({ items, loading, error, onRetry, retrying }: FlashSal
           </RailCell>
         ))}
       </RailShell>
-      {slot && <NextSlotLine slot={slot} onOpen={() => seeAll && navigate(seeAll)} />}
+      {slot && <NextSlotLine slot={slot} onOpen={seeAll ? () => navigate(seeAll) : undefined} />}
     </section>
   );
 }
 
-/** Một dòng dưới kệ: suất kế mở lúc mấy giờ, có mấy món; bấm sang trang Giờ vàng, nơi đặt nhắc từng suất. */
-function NextSlotLine({ slot, onOpen }: { slot: NextFlashSlot; onOpen: () => void }) {
+/**
+ * Một dòng dưới kệ: suất kế mở lúc mấy giờ, có mấy món; bấm sang trang Giờ vàng, nơi đặt nhắc từng suất. Chưa có trang đó (`onOpen` trống)
+ * thì chỉ là dòng thông tin, không hứa "Nhắc tôi": nút dẫn tới trang không có gì để nhắc là lạc.
+ */
+function NextSlotLine({ slot, onOpen }: { slot: NextFlashSlot; onOpen?: () => void }) {
+  const label = (
+    <Text variant="body-sm" tone="secondary">
+      {fillCopy('flash.nextSlot', { time: slotClock(slot.startAt), n: slot.count })}
+    </Text>
+  );
+  const frame: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    boxSizing: 'border-box',
+    width: 'calc(100% - 32px)',
+    minHeight: 44,
+    margin: '0 16px',
+    padding: 0,
+  };
+  if (!onOpen) return <div data-testid="flash-next-slot" style={frame}>{label}</div>;
   return (
     <button
       type="button"
+      data-testid="flash-next-slot"
       className="tubu-press"
       onClick={() => {
         haptic('light');
         onOpen();
       }}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 8,
-        boxSizing: 'border-box',
-        width: 'calc(100% - 32px)',
-        minHeight: 44,
-        margin: '0 16px',
-        padding: 0,
-        border: 'none',
-        background: 'transparent',
-        fontFamily: 'inherit',
-        textAlign: 'left',
-        cursor: 'pointer',
-      }}
+      style={{ ...frame, border: 'none', background: 'transparent', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer' }}
     >
-      <Text variant="body-sm" tone="secondary">
-        {fillCopy('flash.nextSlot', { time: slotClock(slot.startAt), n: slot.count })}
-      </Text>
+      {label}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: 'var(--color-text-brand)', fontSize: 'var(--type-label-size)', fontWeight: 600, flex: '0 0 auto' }}>
         {fillCopy('flash.remind')}
         <Icon icon={ChevronRight} size="sm" tone="current" />

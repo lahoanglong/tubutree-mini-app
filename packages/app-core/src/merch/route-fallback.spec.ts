@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { liveRoute } from './route-fallback';
+import { liveRoute, routeUsable } from './route-fallback';
+
+describe('routeUsable', () => {
+  it('Giờ vàng chờ P12: trang thay thế (Ưu đãi) không có Giờ vàng hay "Nhắc tôi" nên lối vào không dùng được', () => {
+    expect(routeUsable('/flash-sale')).toBe(false);
+  });
+  it('Bán chạy nhất và Mã giảm giá đang chờ nhưng trang thay thế đúng nội dung; route thật và route lạ dùng được', () => {
+    for (const r of ['/best-sellers', '/vouchers', '/orders', '/browse', '/somewhere']) expect(routeUsable(r)).toBe(true);
+  });
+});
 
 describe('liveRoute (nhận route Mini như SHELVES khai)', () => {
   it('Mini: route của gói sau (chưa có trang) trỏ về trang đang có', () => {

@@ -4,8 +4,10 @@ import {
   visibleHomeShortcuts, homeRenderOrder, homeKeptOrder, homeSettling, homeShortcutSlots, HOME_HEADER_HEIGHT, HOME_SHORTCUT_SLOTS,
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
   readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
+  HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, CATEGORY_CELL_HEIGHT,
 } from './home-layout';
 import type { LoyaltyOverview } from './api/loyalty';
+import { routeUsable } from './merch/route-fallback';
 
 describe('homeBlockOrder', () => {
   it('khách cũ: header, thẻ thành viên, việc cần làm, banner, lối tắt, Giờ vàng trước Mua lại, Danh mục, Bán chạy nhất, combos, rồi một lưới gợi ý', () => {
@@ -44,11 +46,15 @@ describe('homeBlockOrder', () => {
 });
 
 describe('visibleHomeShortcuts', () => {
-  it('có đúng 9 lối tắt khi mọi cờ bật, mở đầu bằng Giờ vàng, Mã giảm giá và không có Vườn Xanh (đã là tab giữa)', () => {
+  it('khai 9 lối tắt; khi mọi cờ bật hiện 8 (Giờ vàng chờ trang riêng ở P12), mở đầu bằng Mã giảm giá và không có Vườn Xanh (đã là tab giữa)', () => {
     expect(HOME_SHORTCUTS).toHaveLength(9);
     const ids = visibleHomeShortcuts({ wasteEnabled: true, claimEnabled: true }).map((s) => s.id);
-    expect(ids).toEqual(['flash', 'coupons', 'recycle', 'groupBuy', 'rewards', 'orders', 'claim', 'earn', 'community']);
+    expect(ids).toEqual(['coupons', 'recycle', 'groupBuy', 'rewards', 'orders', 'claim', 'earn', 'community']);
     expect(ids).not.toContain('garden');
+  });
+  it('ô Giờ vàng chỉ hiện khi /flash-sale có đích dùng được: Ưu đãi không có Giờ vàng, bấm vào là lạc', () => {
+    const ids = visibleHomeShortcuts({ wasteEnabled: true, claimEnabled: true }).map((s) => s.id);
+    expect(ids.includes('flash')).toBe(routeUsable('/flash-sale'));
   });
   it('nhãn mọi lối tắt vừa MỘT dòng ở ô 5 cột (≤11 ký tự): nhãn xuống dòng làm hàng cao hơn khung chờ và đẩy cả trang (R-184); nhãn đầy đủ nằm ở ariaLabel', () => {
     for (const s of HOME_SHORTCUTS) expect(s.label.length, s.label).toBeLessThanOrEqual(11);
@@ -70,7 +76,7 @@ describe('visibleHomeShortcuts', () => {
   });
   it('cờ tắt thì ẩn mục, các mục còn lại giữ thứ tự', () => {
     const ids = visibleHomeShortcuts({ wasteEnabled: false, claimEnabled: false }).map((s) => s.id);
-    expect(ids).toEqual(['flash', 'coupons', 'groupBuy', 'rewards', 'orders', 'earn', 'community']);
+    expect(ids).toEqual(['coupons', 'groupBuy', 'rewards', 'orders', 'earn', 'community']);
   });
   it('Giờ vàng đi tới /flash-sale, Mã giảm giá ghi đúng chữ chốt', () => {
     expect(HOME_SHORTCUTS.find((s) => s.id === 'flash')).toMatchObject({ label: 'Giờ vàng' });
@@ -79,16 +85,32 @@ describe('visibleHomeShortcuts', () => {
 });
 
 describe('homeShortcutSlots (Q7: 4 ô cố định + "Tất cả")', () => {
-  it('4 ô cố định là Giờ vàng, Mã giảm giá, Đổi rác, Mua chung; "Tất cả" liệt kê đủ mục còn hiển thị', () => {
+  it('4 ô cố định là Mã giảm giá, Đổi rác, Mua chung, Đổi quà (Giờ vàng vào đầu hàng khi có trang riêng); "Tất cả" liệt kê đủ mục còn hiển thị', () => {
     expect(HOME_SHORTCUT_SLOTS).toBe(4);
     const { pinned, all } = homeShortcutSlots({ wasteEnabled: true, claimEnabled: true });
-    expect(pinned.map((s) => s.id)).toEqual(['flash', 'coupons', 'recycle', 'groupBuy']);
+    expect(pinned.map((s) => s.id)).toEqual(['coupons', 'recycle', 'groupBuy', 'rewards']);
     expect(all.map((s) => s.id)).toEqual(expect.arrayContaining(['earn', 'community', 'orders', 'rewards', 'claim']));
-    expect(all).toHaveLength(9);
+    expect(all).toHaveLength(8);
   });
   it('Đổi rác tắt thì ô trống được mục kế lấp, vẫn đủ 4 ô', () => {
     const { pinned } = homeShortcutSlots({ wasteEnabled: false, claimEnabled: false });
-    expect(pinned.map((s) => s.id)).toEqual(['flash', 'coupons', 'groupBuy', 'rewards']);
+    expect(pinned.map((s) => s.id)).toEqual(['coupons', 'groupBuy', 'rewards', 'orders']);
+  });
+});
+
+describe('chiều cao khối Danh mục theo số ô', () => {
+  it('ô danh mục cao 92 (56 + 4 + nhãn hai dòng 32)', () => {
+    expect(CATEGORY_CELL_HEIGHT).toBe(92);
+  });
+  it('tới 5 ô một hàng (148), từ 6 ô hai hàng (248); quá 10 ô cuộn ngang vẫn hai hàng; khung chờ chung dùng số hai hàng', () => {
+    for (const n of [1, 4, 5]) expect(categoriesBlockHeight(n), `${n} ô`).toBe(148);
+    for (const n of [6, 10, 14]) expect(categoriesBlockHeight(n), `${n} ô`).toBe(248);
+    expect(HOME_SETTLING_HEIGHTS.categories).toBe(248);
+  });
+  it('số ô khung chờ = số danh mục nhớ + "Tất cả", không quá một màn', () => {
+    expect(categorySkeletonCells(3)).toBe(4);
+    expect(categorySkeletonCells(9)).toBe(10);
+    expect(categorySkeletonCells(40)).toBe(10);
   });
 });
 

@@ -162,18 +162,15 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false }: 
   );
 }
 
-/** Một dòng dưới kệ: suất kế mở lúc mấy giờ, có mấy món; bấm sang trang Giờ vàng, nơi đặt nhắc từng suất. */
+/**
+ * Một dòng dưới kệ: suất kế mở lúc mấy giờ, có mấy món; bấm sang trang Giờ vàng, nơi đặt nhắc từng suất. Chưa có trang đó (`href` null)
+ * thì chỉ là dòng thông tin, không hứa "Nhắc tôi": nút dẫn tới trang không có gì để nhắc là lạc.
+ */
 function NextSlotLine({ slot, href }: { slot: NextFlashSlot; href: string | null }) {
-  const body = (
-    <>
-      <Text variant="body-sm" tone="secondary">
-        {fillCopy('flash.nextSlot', { time: slotClock(slot.startAt), n: slot.count })}
-      </Text>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: 'var(--color-text-brand)', fontSize: 'var(--type-label-size)', fontWeight: 600, flex: '0 0 auto' }}>
-        {fillCopy('flash.remind')}
-        <Icon icon={ChevronRight} size="sm" tone="current" />
-      </span>
-    </>
+  const label = (
+    <Text variant="body-sm" tone="secondary">
+      {fillCopy('flash.nextSlot', { time: slotClock(slot.startAt), n: slot.count })}
+    </Text>
   );
   const style = {
     display: 'flex',
@@ -186,14 +183,21 @@ function NextSlotLine({ slot, href }: { slot: NextFlashSlot; href: string | null
     padding: 0,
     textDecoration: 'none',
   } as const;
-  return href ? (
+  if (!href) {
+    return (
+      <div data-testid="flash-next-slot" style={style}>
+        {label}
+      </div>
+    );
+  }
+  return (
     <Link href={href} className="tubu-press" data-testid="flash-next-slot" style={style}>
-      {body}
+      {label}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, color: 'var(--color-text-brand)', fontSize: 'var(--type-label-size)', fontWeight: 600, flex: '0 0 auto' }}>
+        {fillCopy('flash.remind')}
+        <Icon icon={ChevronRight} size="sm" tone="current" />
+      </span>
     </Link>
-  ) : (
-    <div data-testid="flash-next-slot" style={style}>
-      {body}
-    </div>
   );
 }
 

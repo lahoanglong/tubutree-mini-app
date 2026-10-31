@@ -55,11 +55,13 @@ describe('composeHomeShelves', () => {
 
 describe('seeAllHref', () => {
   it('lấy ở SHELVES và đi qua liveRoute', () => {
-    expect(seeAllHref('home.flash')).toBe('/offers');
-    expect(seeAllHref('home.flash', 'web')).toBe('/uu-dai');
     expect(seeAllHref('home.bestSellers')).toBe('/browse?sort=best_seller');
     expect(seeAllHref('home.purchased')).toBe('/orders');
     expect(seeAllHref('home.purchased', 'web')).toBe('/tai-khoan/don-hang');
+  });
+  it('Giờ vàng chưa có trang riêng (P12): không trỏ vào Ưu đãi, trả null để khối ẩn "Xem tất cả"', () => {
+    expect(seeAllHref('home.flash')).toBeNull();
+    expect(seeAllHref('home.flash', 'web')).toBeNull();
   });
   it('kệ không có lối xem tất cả trả null', () => {
     expect(seeAllHref('home.combos')).toBeNull();

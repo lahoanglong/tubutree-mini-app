@@ -1,4 +1,4 @@
-import { liveRoute } from './route-fallback';
+import { liveRoute, routeUsable } from './route-fallback';
 import { applyShelfDedupe, shelf } from './shelves';
 
 /** Phần tử của một kệ Trang chủ kèm khoá chống trùng: slug sản phẩm (Giờ vàng chỉ có `productSlug`, không có id sản phẩm). */
@@ -46,8 +46,8 @@ export function composeHomeShelves<F, P, C, B>(input: HomeShelvesInput<F, P, C, 
   };
 }
 
-/** Lối "Xem tất cả" của kệ theo nền đang chạy; kệ không khai lối thì null. */
+/** Lối "Xem tất cả" của kệ theo nền đang chạy; kệ không khai lối, hoặc lối chưa có trang đúng nghĩa (`routeUsable`), thì null. */
 export function seeAllHref(shelfId: string, platform: 'mini' | 'web' = 'mini'): string | null {
   const route = shelf(shelfId).seeAllRoute;
-  return route ? liveRoute(route, platform) : null;
+  return route && routeUsable(route) ? liveRoute(route, platform) : null;
 }
