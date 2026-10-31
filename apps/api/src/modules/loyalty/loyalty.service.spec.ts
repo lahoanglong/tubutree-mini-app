@@ -840,7 +840,15 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
       ledgerRows ?? (pts > 0 ? [{ reason: 'ORDER_DELIVERED:TUBU1', delta: pts, refId: 'o1' }] : []),
     );
     const prisma = {
-      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', ...user }), update },
+      user: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', ...user }),
+        update,
+        // Đổi hạng ghi bằng updateMany có điều kiện hạng cũ; dồn về `update` để các ca dưới đọc chung một chỗ.
+        updateMany: jest.fn(async (args: { data: unknown }) => {
+          await update({ data: args.data });
+          return { count: 1 };
+        }),
+      },
       membershipTier: { findMany: jest.fn().mockResolvedValue(tiers) },
       order: { aggregate, findMany: orderFindMany },
       returnRequest: { findMany: returnFindMany },
@@ -849,6 +857,58 @@ describe('LoyaltyService.recalcTier (chọn hạng cao nhất đạt được)',
     } as unknown as PrismaService;
     return { prisma, update, aggregate, ledger, orderFindMany, returnFindMany };
   }
+
+  describe('tin lên hạng', () => {
+    function withNotify(user: { pointsBalance: number; tierId: string | null }, spent12m: number, graceUntil?: Date) {
+      const r = prismaFor({ ...user, ...(graceUntil ? { tierGraceUntil: graceUntil } : {}) } as never, spent12m);
+      const notifySafe = jest.fn().mockResolvedValue(true);
+      const svc = new LoyaltyService(r.prisma, makeConfig(), undefined, { notifySafe } as never);
+      return { ...r, notifySafe, svc };
+    }
+    const NAMED = [
+      { id: 'mam', name: 'Mầm', sortOrder: 0, minPoints: 0, minSpending: null },
+      { id: 'loc', name: 'Lộc', sortOrder: 1, minPoints: 1000, minSpending: 5_000_000 },
+      { id: 'dai', name: 'Đại thụ', sortOrder: 2, minPoints: 5000, minSpending: 20_000_000 },
+    ];
+
+    it('lên hạng cao hơn → một tin TIER_UPGRADED chỉ mang tên hạng mới', async () => {
+      const { prisma, notifySafe, svc } = withNotify({ pointsBalance: 0, tierId: 'mam' }, 6_000_000);
+      (prisma.membershipTier.findMany as jest.Mock).mockResolvedValue(NAMED);
+      await svc.recalcTier('u1');
+      expect(notifySafe).toHaveBeenCalledTimes(1);
+      expect(notifySafe.mock.calls[0]!.slice(0, 3)).toEqual(['u1', 'TIER_UPGRADED', { tier: 'Lộc' }]);
+      expect(notifySafe.mock.calls[0]![3]).toMatchObject({ dedupeKey: expect.stringMatching(/^tier-up:loc:/) });
+    });
+
+    it('giữ nguyên hạng → không tin', async () => {
+      const { prisma, notifySafe, svc } = withNotify({ pointsBalance: 0, tierId: 'loc' }, 6_000_000);
+      (prisma.membershipTier.findMany as jest.Mock).mockResolvedValue(NAMED);
+      await svc.recalcTier('u1');
+      expect(notifySafe).not.toHaveBeenCalled();
+    });
+
+    it('hạ hạng (hết ân hạn) → không tin', async () => {
+      const { prisma, notifySafe, svc } = withNotify({ pointsBalance: 0, tierId: 'dai' }, 6_000_000, new Date(Date.now() - 864e5));
+      (prisma.membershipTier.findMany as jest.Mock).mockResolvedValue(NAMED);
+      await svc.recalcTier('u1');
+      expect(notifySafe).not.toHaveBeenCalled();
+    });
+
+    it('lần đầu được gán hạng (chưa có hạng) → không tin', async () => {
+      const { prisma, notifySafe, svc } = withNotify({ pointsBalance: 0, tierId: null }, 6_000_000);
+      (prisma.membershipTier.findMany as jest.Mock).mockResolvedValue(NAMED);
+      await svc.recalcTier('u1');
+      expect(notifySafe).not.toHaveBeenCalled();
+    });
+
+    it('lượt song song thua so-và-ghi (hạng đã bị lượt khác đổi) → không tin', async () => {
+      const { prisma, notifySafe, svc } = withNotify({ pointsBalance: 0, tierId: 'mam' }, 6_000_000);
+      (prisma.membershipTier.findMany as jest.Mock).mockResolvedValue(NAMED);
+      (prisma.user.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      await svc.recalcTier('u1');
+      expect(notifySafe).not.toHaveBeenCalled();
+    });
+  });
 
   it('điểm cao nhưng chi tiêu thấp → KHÔNG lên hạng có mốc chi tiêu (hạng xét theo tiền mua)', async () => {
     const { prisma, update } = prismaFor({ pointsBalance: 5000, tierId: 'mam' }, 0);
@@ -1336,7 +1396,7 @@ describe('LoyaltyService.recalcTier / getOverview sau trả MỘT PHẦN (MONEY-
     const orderFindMany = jest.fn().mockResolvedValue(opts.orders ?? []);
     const returnFindMany = jest.fn().mockResolvedValue(opts.requests ?? []);
     const prisma = {
-      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: opts.tierId, tierGraceUntil: null }), update },
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId: opts.tierId, tierGraceUntil: null }), update, updateMany: jest.fn(async (a: { data: unknown }) => { await update({ data: a.data }); return { count: 1 }; }) },
       membershipTier: { findMany: jest.fn().mockResolvedValue(opts.pointTiers ? TIERS.map((t) => ({ ...t, minSpending: null })) : TIERS) },
       order: { aggregate, findMany: orderFindMany },
       returnRequest: { findMany: returnFindMany },
@@ -1716,7 +1776,7 @@ describe('LoyaltyService chi tiêu xét hạng: chỉ đơn khách tự mua lẻ
       );
     const update = jest.fn().mockResolvedValue({});
     const prisma = {
-      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId, tierGraceUntil: null, tier: null }), update },
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId, tierGraceUntil: null, tier: null }), update, updateMany: jest.fn(async (a: { data: unknown }) => { await update({ data: a.data }); return { count: 1 }; }) },
       membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
       order: {
         aggregate: jest.fn(async ({ where }: { where: OrderWhere }) => ({ _sum: { total: hit(where).reduce((s, o) => s + o.total, 0) } })),
