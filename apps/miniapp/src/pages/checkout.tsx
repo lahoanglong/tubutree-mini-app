@@ -203,12 +203,12 @@ export default function CheckoutPage() {
   const couponPreviewParams = checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined;
   const couponPreviewKey = cartPreviewKey(checkoutItems);
   const couponReady = authed && !addresses.isLoading && cartHasItems && !!cart.data && !cart.data.couponCode;
-  // Thanh toán một phần giỏ ("Mua ngay", chọn vài món) không tự áp: mã nằm trên cả giỏ và còn lại sau khi đặt, khách sẽ nhận
-  // lời "mã đã bị gỡ" cho mã họ chưa từng chọn.
   const wholeCart = !itemIds || itemIds.length === (cart.data?.items.length ?? 0);
   const autoCoupon = useCheckoutCoupon({
     enabled: couponReady,
-    autoAllowed: wholeCart && (!!addressId || addresses.data?.length === 0),
+    // Luồng có `itemIds` ("Mua ngay", chọn món) không tự áp, kể cả khi giỏ chỉ có đúng món đó: máy chủ coi đơn có itemIds là tập
+    // con và giữ mã lại trên giỏ sau khi đặt, khách sẽ nhận lời "mã đã bị gỡ" cho mã họ chưa từng chọn.
+    autoAllowed: !itemIds && (!!addressId || addresses.data?.length === 0),
     userId: user?.id,
     cartLoaded: !!cart.data,
     currentCode: cart.data?.couponCode,
@@ -1217,6 +1217,7 @@ export default function CheckoutPage() {
         productIds={cartProductIds(checkoutItems)}
         previewParams={checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined}
         previewKey={cartPreviewKey(checkoutItems)}
+        busy={autoCoupon.busy}
         onCouponApplied={() => {
           choiceRev.current += 1;
           void cart.refetch();

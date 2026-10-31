@@ -49,7 +49,7 @@ export function useCouponHint(enabled: boolean, previewParams: CouponPreviewRequ
 export function useCheckoutCoupon(opts: {
   /** Có hỏi xem trước để gợi ý không (đã đăng nhập, giỏ có hàng và chưa có mã). */
   enabled: boolean;
-  /** Được phép tự áp: toàn giỏ (không phải thanh toán một phần) và địa chỉ đã chốt (hoặc chưa có địa chỉ nào). */
+  /** Được phép tự áp: luồng thanh toán không có `itemIds` và địa chỉ đã chốt (hoặc chưa có địa chỉ nào). Chưa biết khách thì chưa áp. */
   autoAllowed: boolean;
   userId: string | null | undefined;
   cartLoaded: boolean;
@@ -64,6 +64,12 @@ export function useCheckoutCoupon(opts: {
   const memory = useMemo(() => autoCouponMemory(browserSession(), userId), [userId]);
   const settled = useRef(memory.off());
   const [applied, setApplied] = useState<string | null>(() => memory.applied());
+
+  // Mở nguội thẳng vào màn này thì `userId` về sau lần dựng đầu (hoặc khách đổi tài khoản): đọc lại trí nhớ của khách đó.
+  useEffect(() => {
+    settled.current = memory.off();
+    setApplied(memory.applied());
+  }, [memory]);
 
   useEffect(() => {
     if (!cartLoaded) return;
@@ -106,11 +112,11 @@ export function useCheckoutCoupon(opts: {
   });
 
   useEffect(() => {
-    if (!data || settled.current || !opts.autoAllowed) return;
+    if (!data || settled.current || !opts.autoAllowed || !userId) return;
     settled.current = true;
     const best = pickBestCoupon(data.previews, data.wallet);
     if (best) applyMut.mutate(best);
-  }, [data, applyMut.mutate, opts.autoAllowed]);
+  }, [data, applyMut.mutate, opts.autoAllowed, userId, memory]);
 
   const isAuto = !!applied && !!currentCode && currentCode.toUpperCase() === applied;
   return {

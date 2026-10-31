@@ -1799,11 +1799,7 @@ describe('CheckoutPage: tự áp mã giảm nhiều nhất, gợi ý khi chưa �
     expect(screen.queryByTestId('coupon-auto-label')).toBeNull();
   });
 
-  it('thanh toán một phần giỏ → không tự áp, vẫn gợi ý', async () => {
-    mocks.getCart.mockResolvedValue({
-      ...CART,
-      items: [CART.items[0]!, { ...CART.items[0]!, id: 'ci2', variationId: 'v2' }],
-    });
+  it('"Mua ngay" khi giỏ chỉ có đúng món đó (có itemIds) → không tự áp, vẫn gợi ý', async () => {
     mocks.locState = { itemIds: ['ci1'] };
     renderPage();
     expect(await screen.findByText('Bạn có 2 mã dùng được · giảm đến 30.000đ')).toBeInTheDocument();
@@ -1842,5 +1838,96 @@ describe('CheckoutPage: tự áp mã giảm nhiều nhất, gợi ý khi chưa �
     fireEvent.click(await screen.findByTestId('coupon-auto-remove'));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     expect(screen.getByTestId('coupon-auto-label')).toBeInTheDocument();
+  });
+
+  it('mở nguội: khách (user.id) về sau lần dựng đầu → không áp lại mã đã gỡ của khách đó', async () => {
+    sessionStorage.setItem('tubu.autocoupon.off:u1', '1');
+    const id = mocks.user.id;
+    (mocks.user as { id: string | undefined }).id = undefined;
+    try {
+      renderPage();
+      await screen.findByText('Bạn có 2 mã dùng được · giảm đến 30.000đ');
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 450));
+      });
+      expect(mocks.applyCoupon).not.toHaveBeenCalled();
+      mocks.user.id = id;
+      await act(async () => {
+        (mocks.voucherProps[mocks.voucherProps.length - 1]!.onCouponApplied as () => void)();
+      });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 450));
+      });
+      expect(mocks.applyCoupon).not.toHaveBeenCalled();
+    } finally {
+      mocks.user.id = id;
+    }
+  });
+
+  it('mở nguội: khách về sau lần dựng đầu, mã tự áp còn trên giỏ → hiện nhãn "Đã tự áp"', async () => {
+    sessionStorage.setItem('tubu.autocoupon.applied:u1', 'WELCOME30');
+    mocks.getCart.mockResolvedValue(APPLIED);
+    const id = mocks.user.id;
+    (mocks.user as { id: string | undefined }).id = undefined;
+    try {
+      renderPage();
+      await screen.findByText('WELCOME30');
+      expect(screen.queryByTestId('coupon-auto-label')).toBeNull();
+      mocks.user.id = id;
+      await act(async () => {
+        (mocks.voucherProps[mocks.voucherProps.length - 1]!.onCouponApplied as () => void)();
+      });
+      expect(await screen.findByTestId('coupon-auto-label')).toHaveTextContent('Đã tự áp');
+      expect(mocks.applyCoupon).not.toHaveBeenCalled();
+    } finally {
+      mocks.user.id = id;
+    }
+  });
+
+  it('chưa biết khách → chưa tự áp', async () => {
+    const id = mocks.user.id;
+    (mocks.user as { id: string | undefined }).id = undefined;
+    try {
+      renderPage();
+      await screen.findByText('Bạn có 2 mã dùng được · giảm đến 30.000đ');
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 450));
+      });
+      expect(mocks.applyCoupon).not.toHaveBeenCalled();
+    } finally {
+      mocks.user.id = id;
+    }
+  });
+
+  it('đổi tài khoản trong cùng lần mở → đọc cờ của khách mới', async () => {
+    sessionStorage.setItem('tubu.autocoupon.off:u1', '1');
+    renderPage();
+    await screen.findByText('Bạn có 2 mã dùng được · giảm đến 30.000đ');
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 450));
+    });
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
+    const id = mocks.user.id;
+    mocks.user.id = 'u2';
+    try {
+      await act(async () => {
+        (mocks.voucherProps[mocks.voucherProps.length - 1]!.onCouponApplied as () => void)();
+      });
+      await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledWith('WELCOME30'));
+    } finally {
+      mocks.user.id = id;
+    }
+  });
+
+  it('đang tự áp mã → tấm chọn mã nhận busy để khoá nút chọn mã', async () => {
+    let release!: (v: unknown) => void;
+    mocks.applyCoupon.mockReturnValue(new Promise((r) => (release = r)));
+    renderPage();
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.voucherProps[mocks.voucherProps.length - 1]!.busy).toBe(true));
+    await act(async () => {
+      release(APPLIED);
+    });
+    await waitFor(() => expect(mocks.voucherProps[mocks.voucherProps.length - 1]!.busy).toBe(false));
   });
 });
