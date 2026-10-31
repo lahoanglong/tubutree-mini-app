@@ -470,8 +470,10 @@ export default function ProductDetailPage() {
     );
   };
 
-  // Dòng "Vận chuyển": mỗi câu một phần tử riêng (đọc được từng câu, dễ so chữ). Hàng của gian hàng tự giao có thêm câu về thanh toán và giá lẻ.
+  // Dòng "Vận chuyển ›" chỉ nói ai giao và phí/freeship (ngắn, tên truy cập gọn). Các lưu ý dài (thanh toán COD, chỉ bán giá lẻ, gian hàng
+  // tạm nghỉ) là chữ thường dưới bảng dòng: không nằm trong nút, và thông báo trạng thái không bị bọc trong một nút bấm.
   const shippingLines: ReactNode[] = [];
+  const shippingNotes: ReactNode[] = [];
   if (p.fulfiller?.kind === 'TUBU') {
     shippingLines.push(
       <div key="tubu" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
@@ -486,18 +488,18 @@ export default function ProductDetailPage() {
       </div>,
     );
     if (merchant.shippingFee != null) shippingLines.push(<div key="fee">{merchantShippingLine(merchant.shippingFee, merchant.freeShipFrom)}</div>);
-    shippingLines.push(<div key="cod">Thanh toán khi nhận hàng (COD) hoặc bằng Ví Tubu, không nhận chuyển khoản hay ZaloPay.</div>);
-    shippingLines.push(<div key="retail">Hàng gian hàng tự giao chỉ bán theo giá lẻ, không dùng Điểm Xanh, chưa đặt định kỳ hay mua chung được.</div>);
+    shippingNotes.push(<div key="cod">Thanh toán khi nhận hàng (COD) hoặc bằng Ví Tubu, không nhận chuyển khoản hay ZaloPay.</div>);
+    shippingNotes.push(<div key="retail">Hàng gian hàng tự giao chỉ bán theo giá lẻ, không dùng Điểm Xanh, chưa đặt định kỳ hay mua chung được.</div>);
   }
   if (unavailable) {
-    shippingLines.push(
+    shippingNotes.push(
       <div key="unavailable" role="status" style={{ color: 'var(--color-status-warning-fg)', fontWeight: 600 }}>
         {unavailable.reason === 'STORE_PAUSED' ? `${unavailable.name} đang tạm nghỉ, chưa nhận đơn.` : `${unavailable.name} đã ngừng bán trên Tubu Tree.`}
       </div>,
     );
   }
   if (!fromStore && p.partnerOwned) {
-    shippingLines.push(<div key="partner">Hàng của gian hàng đối tác chỉ bán theo giá lẻ, không dùng Điểm Xanh, chưa đặt định kỳ hay mua chung được.</div>);
+    shippingNotes.push(<div key="partner">Hàng của gian hàng đối tác chỉ bán theo giá lẻ, không dùng Điểm Xanh, chưa đặt định kỳ hay mua chung được.</div>);
   }
   // Badge freeship ở nơi ra quyết định mua (trước đây chỉ có ở giỏ).
   if (!fromStore && freeshipFrom != null) {
@@ -507,7 +509,7 @@ export default function ProductDetailPage() {
       </div>,
     );
   }
-  const infoRows: { key: string; icon: ReactNode; title: string; subtitle: ReactNode; onPress: () => void }[] = [];
+  const infoRows: { key: string; icon: ReactNode; title: string; subtitle: ReactNode; onPress?: () => void }[] = [];
   if (pdpCoupons.length > 0) {
     infoRows.push({
       key: 'offers',
@@ -518,7 +520,14 @@ export default function ProductDetailPage() {
     });
   }
   if (shippingLines.length > 0) {
-    infoRows.push({ key: 'shipping', icon: <Icon icon={Truck} size="md" tone="brand" />, title: fillCopy('pdp.shipping'), subtitle: <>{shippingLines}</>, onPress: () => scrollToId('pdp-promises') });
+    // Hàng Tubu: bấm tới Cam kết Tubu (giao, đổi trả). Hàng gian hàng tự giao không có cam kết đó nên dòng chỉ để đọc, không bấm được.
+    infoRows.push({
+      key: 'shipping',
+      icon: <Icon icon={Truck} size="md" tone="brand" />,
+      title: fillCopy('pdp.shipping'),
+      subtitle: <>{shippingLines}</>,
+      onPress: fromStore ? undefined : () => scrollToId('pdp-promises'),
+    });
   }
   if (variations.length > 1 && selected) {
     const sel = variationPricing(selected, flashList);
@@ -706,7 +715,7 @@ export default function ProductDetailPage() {
       </Box>
 
       {/* ── Dòng thông tin (Ưu đãi, Vận chuyển, Phân loại): mỗi dòng một "›" ── */}
-      {infoRows.length > 0 && (
+      {(infoRows.length > 0 || shippingNotes.length > 0) && (
         <Box px={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           {infoRows.map((row, i) => (
             <ListRow
@@ -714,7 +723,7 @@ export default function ProductDetailPage() {
               icon={row.icon}
               title={row.title}
               subtitle={row.subtitle}
-              trailing="chevron"
+              trailing={row.onPress ? 'chevron' : undefined}
               onPress={row.onPress}
               style={i < infoRows.length - 1 ? { boxShadow: 'inset 0 -1px 0 var(--color-border-subtle)' } : undefined}
             />
@@ -733,6 +742,17 @@ export default function ProductDetailPage() {
                   }}
                 />
               ))}
+            </div>
+          )}
+          {shippingNotes.length > 0 && (
+            <div
+              data-testid="pdp-shipping-notes"
+              style={{
+                display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 0 12px',
+                fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-tertiary)',
+              }}
+            >
+              {shippingNotes}
             </div>
           )}
         </Box>

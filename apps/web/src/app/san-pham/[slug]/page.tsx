@@ -139,9 +139,23 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               {/* Dòng thông tin kiểu Mini App: Ưu đãi › và Vận chuyển ›; "Phân loại ›" nằm trong khối mua (cùng chỗ giữ trạng thái chọn). */}
               <div className="mt-3">
                 <PdpCoupons productId={product.id} />
-                {(unavailableText || fulfillerText || partnerNote || !fromStore) && (
-                  <PdpShippingRow>
-                    {unavailableText ? (
+                {(fulfillerText || !fromStore) && (
+                  <PdpShippingRow pressable={!fromStore}>
+                    {fulfillerText && (
+                      <p
+                        data-testid="pdp-fulfiller"
+                        className={`text-sm text-stone-700 ${fulfillerIsTubu ? 'max-md:text-xs max-md:font-semibold max-md:text-[var(--color-text-brand)]' : ''}`}
+                      >
+                        {fulfillerText}
+                      </p>
+                    )}
+                    {!fromStore && <PdpFreeship />}
+                  </PdpShippingRow>
+                )}
+                {/* Lưu ý dài (gian hàng tạm nghỉ, hàng đối tác chỉ bán giá lẻ) là chữ thường dưới dòng, không nằm trong nút "Vận chuyển ›". */}
+                {(unavailableText || partnerNote) && (
+                  <div data-testid="pdp-shipping-notes" className="flex flex-col gap-1 py-2">
+                    {unavailableText && (
                       <p
                         data-testid="pdp-unavailable"
                         role="status"
@@ -150,23 +164,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                         <span>{unavailableText}</span>
                       </p>
-                    ) : (
-                      fulfillerText && (
-                        <p
-                          data-testid="pdp-fulfiller"
-                          className={`text-sm text-stone-700 ${fulfillerIsTubu ? 'max-md:text-xs max-md:font-semibold max-md:text-[var(--color-text-brand)]' : ''}`}
-                        >
-                          {fulfillerText}
-                        </p>
-                      )
                     )}
                     {partnerNote && (
                       <p data-testid="pdp-partner-note" className="text-xs text-stone-600">
                         {partnerNote}
                       </p>
                     )}
-                    {!fromStore && <PdpFreeship />}
-                  </PdpShippingRow>
+                  </div>
                 )}
               </div>
 

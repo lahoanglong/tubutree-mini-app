@@ -106,17 +106,17 @@ export function PdpFreeship() {
 }
 
 /**
- * Dòng "Vận chuyển ›": gom ai giao, phí giao, freeship và lưu ý gian hàng vào một chỗ, như Mini App. Bấm cuộn tới Cam kết Tubu.
- * Nội dung do trang cha dựng (một phần từ server) nên nhận qua `children`.
+ * Dòng "Vận chuyển ›": ai giao và freeship, ngắn. Hàng Tubu bấm cuộn tới Cam kết Tubu; hàng gian hàng tự giao không có cam kết đó nên dòng chỉ
+ * để đọc (không bấm, không "›"). Lưu ý dài và thông báo tạm nghỉ do trang cha dựng ngoài dòng. Nội dung nhận qua `children`.
  */
-export function PdpShippingRow({ children }: { children: ReactNode }) {
+export function PdpShippingRow({ children, pressable = true }: { children: ReactNode; pressable?: boolean }) {
   return (
     <ListRow
       icon={<Icon icon={Truck} size="md" tone="brand" />}
       title={fillCopy('pdp.shipping')}
       subtitle={<div className="flex flex-col gap-1 md:flex-row md:flex-wrap md:items-baseline md:gap-x-3 md:gap-y-0">{children}</div>}
-      trailing="chevron"
-      onPress={() => document.getElementById('pdp-promises')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+      trailing={pressable ? 'chevron' : undefined}
+      onPress={pressable ? () => document.getElementById('pdp-promises')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) : undefined}
       style={{ boxShadow: 'inset 0 -1px 0 var(--color-border-subtle)' }}
     />
   );

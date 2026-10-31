@@ -325,6 +325,35 @@ describe('/san-pham/[slug] — ai giao hàng (R2-MERCHANT-7, R2-BUYERWEB-10)', (
   });
 });
 
+describe('/san-pham/[slug] — dòng "Vận chuyển ›" ngắn, lưu ý dài nằm ngoài nút', () => {
+  const asButton = (el: Element | null) => el?.closest('[role="button"]') ?? null;
+
+  it('hàng Tubu giao hộ đối tác: dòng bấm được chứa ai giao, lời báo giá lẻ là chữ thường dưới dòng', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'TUBU', partnerOwned: true, fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } };
+    const c = await mount();
+    const row = asButton(c.querySelector('[data-testid="pdp-fulfiller"]'))!;
+    expect(row).not.toBeNull();
+    expect(row.textContent).not.toContain('không dùng Điểm Xanh');
+    expect(asButton(c.querySelector('[data-testid="pdp-partner-note"]'))).toBeNull();
+  });
+
+  it('hàng gian hàng tự giao: dòng chỉ để đọc (không nút, không "›"), không có Cam kết Tubu để cuộn tới', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'MERCHANT', name: 'Gốm Minh An', shippingFee: 30000, freeShipFrom: null } };
+    const c = await mount();
+    expect(asButton(c.querySelector('[data-testid="pdp-fulfiller"]'))).toBeNull();
+    expect(asButton(c.querySelector('[data-testid="pdp-partner-note"]'))).toBeNull();
+  });
+
+  it('gian hàng tạm nghỉ: thông báo role=status không nằm trong nút nào, và không còn dòng Vận chuyển rỗng', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null } };
+    const c = await mount();
+    const note = c.querySelector('[data-testid="pdp-unavailable"]')!;
+    expect(note.getAttribute('role')).toBe('status');
+    expect(asButton(note)).toBeNull();
+    expect(Array.from(c.querySelectorAll('[role="button"]')).some((b) => b.textContent?.startsWith('Vận chuyển'))).toBe(false);
+  });
+});
+
 describe('/san-pham/[slug] — gian hàng tạm nghỉ hoặc đã ngừng bán (R3-MERCHANT-3)', () => {
   it('gian hàng tạm nghỉ: báo rõ chưa nhận đơn, không còn dòng phí giao/thanh toán', async () => {
     api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null } };
