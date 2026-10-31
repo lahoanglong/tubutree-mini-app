@@ -62,7 +62,6 @@ const settle = async (ms = 0) => {
   await act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
   for (let i = 0; i < 4; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
 };
-const placeholders = () => Array.from(document.querySelectorAll<HTMLElement>('[data-testid="home-below-placeholder"]'));
 const heightOf = (block: string) => document.querySelector<HTMLElement>(`[data-home-block="${block}"] [data-testid="home-below-placeholder"]`)?.dataset.height;
 
 function renderHome() {
