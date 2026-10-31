@@ -332,7 +332,7 @@ export const SUGGEST_TABS: readonly { key: SuggestTab; label: string; sort?: str
 ];
 
 /** Số sản phẩm mỗi trang của lưới gợi ý. */
-export const SUGGEST_PAGE_SIZE = 12;
+export const SUGGEST_PAGE_SIZE = 20;
 
 /** Gộp gợi ý cá nhân hoá lên đầu rồi tới các trang danh mục, bỏ trùng theo id và giữ thứ tự. */
 export function mergeSuggestions<T extends { id: string }>(personal: readonly T[], pages: readonly (readonly T[])[]): T[] {

@@ -159,4 +159,36 @@ describe('catalog — hợp đồng gọi API', () => {
     await expect(fetchCatalog(mk(400), { page: 1, limit: 5 })).rejects.toThrow();
     await expect(fetchCatalog(mk(500), { page: 1, limit: 5, minPrice: 1 })).rejects.toThrow();
   });
+
+  it('catalogParams: gửi seed (ngày VN) khi có, không gửi khi thiếu', () => {
+    expect(catalogParams({ page: 1, limit: 20, seed: '20261101' })).toEqual({ page: 1, limit: 20, seed: '20261101' });
+    expect(catalogParams({ page: 1, limit: 20 })).not.toHaveProperty('seed');
+  });
+
+  it('fetchCatalog: API cũ chưa biết seed (400) → gọi lại không kèm seed, kết quả vẫn dùng được', async () => {
+    let n = 0;
+    const { http, calls } = fakeHttp(() => {
+      if (n++ === 0) throw Object.assign(new Error('x'), { status: 400 });
+      return page(1, ['a']);
+    });
+    const r = await fetchCatalog(http, { page: 1, limit: 20, seed: '20261101' });
+    expect(r.data.map((p) => p.id)).toEqual(['a']);
+    expect(calls[1]!.opts!.query).toEqual({ page: 1, limit: 20 });
+  });
+
+  it('fetchForYou: gửi seed trong query; 400 (API cũ) → gọi lại không seed; không seed thì không có opts', async () => {
+    const withSeed = fakeHttp();
+    await fetchForYou(withSeed.http, { seed: '20261101' });
+    expect(withSeed.calls[0]).toMatchObject({ path: '/products/for-you', opts: { query: { seed: '20261101' } } });
+    let n = 0;
+    const old = fakeHttp(() => {
+      if (n++ === 0) throw Object.assign(new Error('x'), { status: 400 });
+      return [{ id: 'x' }];
+    });
+    expect(await fetchForYou(old.http, { seed: '20261101' })).toEqual([{ id: 'x' }]);
+    expect(old.calls[1]!.opts).toBeUndefined();
+    const plain = fakeHttp();
+    await fetchForYou(plain.http);
+    expect(plain.calls[0]).toEqual({ method: 'get', path: '/products/for-you' });
+  });
 });
