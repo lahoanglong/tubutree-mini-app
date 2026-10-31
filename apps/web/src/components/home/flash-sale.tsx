@@ -14,7 +14,7 @@ import { flashUpcomingQuery } from '@tubutree/app-core/queries/flash-sale';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { FLASH_NEXT_SLOT_HEIGHT, FLASH_SKELETON_HEIGHT, readFlashHint, readFlashSlotHint, writeFlashHint } from '@tubutree/app-core/home-layout';
-import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
+import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { soldPercent } from '@/lib/flash-display';
 import { productHref } from '@/lib/product-href';
@@ -95,8 +95,9 @@ export interface FlashSaleProps {
 export function FlashSale({ items, loading, error, onRetry, retrying = false }: FlashSaleProps) {
   const titleId = useId();
   const hydrated = useHydrated();
-  // Chờ khôi phục phiên xong rồi mới hỏi: hỏi sớm thì chưa có cookie phiên nên đi request lẻ dù khách đã đăng nhập.
-  const sessionReady = !useAuthRestoring();
+  // Chờ biết phiên xong rồi mới hỏi: hỏi sớm thì đi request lẻ dù khách đã đăng nhập. Không dùng `useAuthRestoring`: ở lượt hydrate đầu nó là `false`
+  // (ảnh chụp phía server) cả với khách có cờ phiên, nên câu hỏi sớm vẫn lọt ra trước khi phiên khôi phục xong.
+  const sessionReady = useAuthPhase() !== 'loading';
   const upcoming = useQuery({ ...flashUpcomingQuery(coreHttp), enabled: sessionReady, staleTime: 30_000 });
 
   // `expiredTick` tính lại ngay khi suất đang đếm về 0 (Countdown.onEnd): đồng hồ chuyển sang suất kế tiếp thay vì biến mất, thẻ hết giờ rời kệ.

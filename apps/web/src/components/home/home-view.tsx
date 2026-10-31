@@ -108,7 +108,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
 
   // Lần mở đầu chưa biết loại khách: các khối dưới thẻ thành viên chờ dữ liệu quyết định hình dạng của chúng rồi hiện cùng lúc, nên tải sớm các
   // query mà khối nào cũng sẽ dùng (cùng khoá, không thêm request).
-  const upcoming = useQuery({ ...flashUpcomingQuery(coreHttp), enabled: !restoring, staleTime: 30_000 });
+  const upcoming = useQuery({ ...flashUpcomingQuery(coreHttp), enabled: phase !== 'loading', staleTime: 30_000 });
   const todo = useHomeTodoQueries();
   const settling = useHomeSettling(
     kind,

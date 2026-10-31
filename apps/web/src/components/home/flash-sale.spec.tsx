@@ -340,6 +340,18 @@ describe('FlashSale — dòng "suất kế" và giữ chỗ khi tải', () => {
     expect(localStorage.getItem(FLASH_HINT_KEY)).toBe('2');
   });
 
+  it('phiên còn đang kiểm tra (phase "loading"): chưa hỏi suất sắp mở; biết phiên rồi mới hỏi một lần', async () => {
+    withStorage(null);
+    mocks.phase = 'loading';
+    activeResult = async () => three();
+    await mount(<FlashSale />);
+    expect(mocks.get.mock.calls.filter(([path]) => path === '/flash-sales/upcoming')).toHaveLength(0);
+    mounted?.unmount();
+    mocks.phase = 'guest';
+    await mount(<FlashSale />);
+    expect(mocks.get.mock.calls.filter(([path]) => path === '/flash-sales/upcoming')).toHaveLength(1);
+  });
+
   it('suất kế xa hơn 6 giờ hoặc không có: không có dòng, dấu nhớ là "1"', async () => {
     withStorage(null);
     activeResult = async () => three();

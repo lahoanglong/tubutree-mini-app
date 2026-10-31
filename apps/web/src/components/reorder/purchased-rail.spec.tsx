@@ -74,6 +74,9 @@ describe('PurchasedRail', () => {
     expect(tile.className).not.toContain('md:flex-1');
     expect(tile.textContent).toContain('Đã mua 2 lần');
     expect((tile.closest('[style*="--tile-w-md"]') as HTMLElement).style.width).toBe('var(--tile-w-md)');
+    // Hàng cuộn bên trong là vùng riêng: không trùng tên khối "Mua lại" (trình đọc màn hình nghe hai vùng cùng tên lồng nhau).
+    expect(c.querySelectorAll('section[aria-label="Mua lại"], [role="region"][aria-label="Mua lại"]')).toHaveLength(1);
+    expect(c.querySelector('[role="region"][aria-label="Sản phẩm đã mua"]')).not.toBeNull();
   });
 
   it('có giá sale thì hiện giá sale kèm giá gạch', async () => {
