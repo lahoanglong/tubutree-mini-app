@@ -55,7 +55,7 @@ type FormTarget =
   | { kind: 'new'; orderId: string; orderCode: string | null }
   | { kind: 'edit'; reviewId: string; orderId: string; orderCode: string | null };
 
-function Stars({ value, small = false }: { value: number; small?: boolean }) {
+export function Stars({ value, small = false }: { value: number; small?: boolean }) {
   return (
     <span role="img" aria-label={`${value} trên 5 sao`} className="inline-flex whitespace-nowrap">
       {[1, 2, 3, 4, 5].map((i) => (

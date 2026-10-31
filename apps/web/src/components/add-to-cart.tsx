@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ShoppingCart } from 'lucide-react';
+import { Layers, ShoppingCart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { addToCart, applyCoupon, formatVnd, getCart, getProductStock } from '@/lib/shop-client';
@@ -13,12 +13,15 @@ import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ui, uiBar } from '@/lib/guest-ui';
 import { phoneSecondary } from '@/lib/phone-ui';
 import { CountBadge } from '@/components/mini/badge';
+import { Icon } from '@/components/mini/icon';
+import { ListRow } from '@/components/mini/list-row';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { defaultVariationFor, pickDefaultVariation, runningFlash, variationPricing } from '@/lib/flash-price';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import dynamic from 'next/dynamic';
 import type { VariationSheetMode } from './variation-sheet';
 import { useActiveFlashSales, useFlashSalesLoaded } from '@/lib/use-flash-sales';
-import { formatDateTime } from '@/lib/format-date';
 import { usePdpSelection } from './pdp-selection';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
@@ -109,6 +112,8 @@ export default function AddToCart({
   // Số món ở nút giỏ của thanh dính (như Mini App); cùng khoá và cùng GET /cart với giỏ ở thanh đầu.
   const cartCount = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' }).data?.itemCount ?? 0;
   const flash = runningFlash(useActiveFlashSales());
+  // Hết giờ khi khách đang xem: vẽ lại đúng mốc để chip và nút về giá thường, không chờ lần tải lại danh sách.
+  useFlashListExpiry(flash);
   const selected = variations.find((v) => v.id === selectedId);
   const selectedPricing = selected ? variationPricing(selected, flash) : null;
   const price = selectedPricing?.price ?? 0;
@@ -327,9 +332,23 @@ export default function AddToCart({
 
   return (
     <div className="mt-4">
+      {variations.length > 1 && selected && (
+        // Điện thoại: dòng "Phân loại ›" như Mini App mở bảng chọn đủ ảnh, giá, tồn; chip bên dưới là lối tắt cho phân loại hay chọn.
+        <ListRow
+          className="md:hidden"
+          icon={<Icon icon={Layers} size="md" tone="brand" />}
+          title={fillCopy('pdp.variation')}
+          subtitle={`${selected.name} · ${formatVnd(selectedPricing?.price ?? 0)}`}
+          trailing="chevron"
+          onPress={() => {
+            setSheetOpened(true);
+            setSheetMode('add');
+          }}
+        />
+      )}
       {variations.length > 1 && (
         <div role="group" aria-labelledby="variation-label">
-          <div id="variation-label" className="text-sm font-semibold text-stone-900">
+          <div id="variation-label" className="text-sm font-semibold text-stone-900 max-md:sr-only">
             Phân loại
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -359,13 +378,6 @@ export default function AddToCart({
             })}
           </div>
         </div>
-      )}
-
-      {selectedPricing?.isFlash && (
-        <p data-testid="flash-price-note" className="mt-3 text-sm font-medium text-promo-fg">
-          Giá Giờ vàng {formatVnd(selectedPricing.price)}, giá gốc {formatVnd(selectedPricing.originalPrice)}
-          {selectedPricing.endAt ? ` · đến ${formatDateTime(selectedPricing.endAt)}` : ''}
-        </p>
       )}
 
       {available && (selected?.stock ?? 0) <= LOW_STOCK_NOTICE && (

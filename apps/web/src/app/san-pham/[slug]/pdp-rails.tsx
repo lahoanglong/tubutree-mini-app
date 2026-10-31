@@ -3,10 +3,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { ShoppingCart } from 'lucide-react';
 import type { ProductCard as CoreProductCard } from '@tubutree/app-core/api/catalog';
-import { boughtTogetherQuery, relatedQuery } from '@tubutree/app-core/queries/catalog';
+import { pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { boughtTogetherQuery, forYouQuery, relatedQuery } from '@tubutree/app-core/queries/catalog';
 import { ProductRail } from '@/components/mini/product-rail';
 import { Skeleton } from '@/components/ui/skeleton';
 import { coreHttp } from '@/lib/core-http';
+import { PdpFeed } from './pdp-feed';
 import { pdpSectionTitle } from './pdp-sections';
 
 const FIVE_MIN = 5 * 60_000;
@@ -38,15 +41,18 @@ function Rail({ title, icon, products, loading }: { title: string; icon?: boolea
 }
 
 /**
- * "Thường mua kèm" và "Cùng nhà {nhãn}". Danh sách đầu do server dựng sẵn (liên kết nội bộ cho công cụ tìm kiếm); thiếu thì tải ở
- * trình duyệt. Giá Giờ vàng trên thẻ khớp giá thật qua `ProductCard`.
+ * "Khách thường mua cùng", "Cùng nhà {nhãn}" và "Có thể bạn cũng thích" (lưới cuối trang), không trùng nhau và không có món đang xem
+ * (`pdpShelves`: trần và sàn lấy từ SHELVES). Danh sách đầu do server dựng sẵn (liên kết nội bộ cho công cụ tìm kiếm); thiếu thì tải ở
+ * trình duyệt; lưới cuối chỉ tải ở trình duyệt. Giá Giờ vàng trên thẻ khớp giá thật qua `ProductCard`.
  */
 export function PdpRails({
+  productId,
   slug,
   brand,
   initialRelated,
   initialBoughtTogether,
 }: {
+  productId: string;
   slug: string;
   brand: string;
   initialRelated?: CoreProductCard[];
@@ -54,10 +60,13 @@ export function PdpRails({
 }) {
   const together = useQuery({ ...boughtTogetherQuery(coreHttp, slug), initialData: initialBoughtTogether, staleTime: FIVE_MIN, retry: 0 });
   const related = useQuery({ ...relatedQuery(coreHttp, slug), initialData: initialRelated, staleTime: FIVE_MIN, retry: 0 });
+  const feed = useQuery({ ...forYouQuery(coreHttp), staleTime: FIVE_MIN, retry: 0 });
+  const shelves = pdpShelves({ currentId: productId, boughtTogether: together.data ?? [], brand: related.data ?? [], feed: feed.data ?? [] });
   return (
     <>
-      <Rail title="Thường mua kèm" icon products={together.data} loading={together.isPending} />
-      <Rail title={`Cùng nhà ${brand}`} products={related.data} loading={related.isPending} />
+      <Rail title={fillCopy('pdp.boughtTogether')} icon products={shelves.boughtTogether} loading={together.isPending} />
+      <Rail title={`Cùng nhà ${brand}`} products={shelves.brand} loading={related.isPending} />
+      <PdpFeed items={shelves.feed} />
     </>
   );
 }

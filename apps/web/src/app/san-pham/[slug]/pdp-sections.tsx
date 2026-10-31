@@ -59,7 +59,7 @@ export function PdpPromises({ children }: { children?: React.ReactNode }) {
   const { returnWindowDays } = usePublicConfig();
   const promises = ['Hàng chính hãng — nguồn gốc rõ ràng', returnsPromise(returnWindowDays), 'Sản phẩm xanh, an lành cho cả nhà'].filter((t): t is string => t !== null);
   return (
-    <section className="mt-8">
+    <section id="pdp-promises" className="mt-8 scroll-mt-20">
       <h2 className={pdpSectionTitle}>Cam kết Tubu</h2>
       <ul className="mt-2 flex flex-col gap-1.5">
         {promises.map((t) => (

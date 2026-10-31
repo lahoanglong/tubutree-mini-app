@@ -100,30 +100,56 @@ describe('PdpDescription', () => {
 });
 
 describe('PdpRails', () => {
+  const many = (from: number, n: number) => Array.from({ length: n }, (_, i) => card(from + i));
+  const server = (map: Record<string, unknown>) => mocks.http.get.mockImplementation(async (p: string) => map[p] ?? []);
+
   it('có danh sách server dựng sẵn thì hiện ngay hai dải, tên nhãn trong tiêu đề, thẻ trỏ /san-pham/<slug>', async () => {
-    mocks.http.get.mockResolvedValue([]);
-    const { container } = mount(<PdpRails slug="dau-goi" brand="Xanh Việt" initialRelated={[card(1)]} initialBoughtTogether={[card(2), card(3)]} />);
+    server({});
+    const { container } = mount(<PdpRails productId="cur" slug="dau-goi" brand="Xanh Việt" initialRelated={[card(1)]} initialBoughtTogether={many(2, 3)} />);
     await flush();
     const titles = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
-    expect(titles).toEqual(['Thường mua kèm', 'Cùng nhà Xanh Việt']);
-    expect(Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(['/san-pham/sp-2', '/san-pham/sp-3', '/san-pham/sp-1']);
-    // Thẻ có thể hỏi cấu hình công khai (nhãn Mới, miễn phí giao); hai dải thì không được hỏi lại khi server đã đưa danh sách.
-    expect(mocks.http.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/config/public')).toEqual([]);
+    expect(titles).toEqual(['Khách thường mua cùng', 'Cùng nhà Xanh Việt']);
+    expect(Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(['/san-pham/sp-2', '/san-pham/sp-3', '/san-pham/sp-4', '/san-pham/sp-1']);
+    // Hai dải không được hỏi lại khi server đã đưa danh sách; chỉ dải "Có thể bạn cũng thích" tải ở trình duyệt.
+    expect(mocks.http.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/config/public')).toEqual(['/products/for-you']);
+  });
+  it('"Khách thường mua cùng" dưới 3 món thì ẩn cả dải (kệ pdp.boughtTogether)', async () => {
+    server({});
+    const { container } = mount(<PdpRails productId="cur" slug="dau-goi" brand="Xanh" initialRelated={[]} initialBoughtTogether={many(2, 2)} />);
+    await flush();
+    expect(container.querySelectorAll('h2')).toHaveLength(0);
   });
   it('thiếu dữ liệu server thì tải ở trình duyệt: khung chờ rồi hiện; endpoint như Mini App', async () => {
-    mocks.http.get.mockImplementation(async (p: string) => (p === '/products/dau-goi/related' ? [card(1)] : []));
-    const { container } = mount(<PdpRails slug="dau-goi" brand="Xanh" />);
+    server({ '/products/dau-goi/related': [card(1)] });
+    const { container } = mount(<PdpRails productId="cur" slug="dau-goi" brand="Xanh" />);
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
     await flush();
-    expect(mocks.http.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/config/public').sort()).toEqual(['/products/dau-goi/bought-together', '/products/dau-goi/related']);
+    expect(mocks.http.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/config/public').sort()).toEqual(['/products/dau-goi/bought-together', '/products/dau-goi/related', '/products/for-you']);
     expect(container.querySelectorAll('h2')).toHaveLength(1);
     expect(container.querySelector('h2')!.textContent).toBe('Cùng nhà Xanh');
   });
   it('lỗi hoặc rỗng thì ẩn dải, không vỡ trang', async () => {
     mocks.http.get.mockRejectedValue(new Error('500'));
-    const { container } = mount(<PdpRails slug="dau-goi" brand="Xanh" />);
+    const { container } = mount(<PdpRails productId="cur" slug="dau-goi" brand="Xanh" />);
     await flush();
     expect(container.innerHTML).toBe('');
+  });
+  it('"Có thể bạn cũng thích" ở cuối: lưới, không có món đang xem, không trùng hai dải trên; dưới 4 món thì ẩn', async () => {
+    const together = many(10, 3);
+    const brand = [card(20)];
+    server({ '/products/for-you': [card(99), together[0]!, brand[0]!, ...many(30, 5)] });
+    const { container } = mount(<PdpRails productId="p99" slug="dau-goi" brand="Xanh" initialRelated={brand} initialBoughtTogether={together} />);
+    await flush();
+    const titles = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
+    expect(titles).toEqual(['Khách thường mua cùng', 'Cùng nhà Xanh', 'Có thể bạn cũng thích']);
+    const feed = container.querySelector('section[aria-labelledby="pdp-feed-title"]')!;
+    const hrefs = Array.from(feed.querySelectorAll('a')).map((a) => a.getAttribute('href'));
+    expect(hrefs).toEqual(['/san-pham/sp-30', '/san-pham/sp-31', '/san-pham/sp-32', '/san-pham/sp-33', '/san-pham/sp-34']);
+    mounted.pop()!.unmount();
+    server({ '/products/for-you': many(30, 3) });
+    const few = mount(<PdpRails productId="p99" slug="dau-goi" brand="Xanh" initialRelated={[]} initialBoughtTogether={[]} />);
+    await flush();
+    expect(few.container.querySelector('#pdp-feed-title')).toBeNull();
   });
 });
 
@@ -140,7 +166,7 @@ describe('tiêu đề mục của trang sản phẩm khổ điện thoại giố
   });
   it('hai dải sản phẩm', async () => {
     mocks.http.get.mockResolvedValue([]);
-    const { container } = mount(<PdpRails slug="dau-goi" brand="Xanh" initialRelated={[card(1)]} initialBoughtTogether={[card(2)]} />);
+    const { container } = mount(<PdpRails productId="cur" slug="dau-goi" brand="Xanh" initialRelated={[card(1)]} initialBoughtTogether={[card(2), card(3), card(4)]} />);
     await flush();
     const titles = Array.from(container.querySelectorAll('h2'));
     expect(titles).toHaveLength(2);
