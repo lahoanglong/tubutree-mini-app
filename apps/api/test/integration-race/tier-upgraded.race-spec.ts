@@ -141,4 +141,48 @@ describe('recalcTier tin lên hạng race (real Postgres)', () => {
     await stale;
     expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).tierId).toBe(highId);
   });
+
+  it('lượt thua so-và-ghi tính lại một lần trên dữ liệu mới: khách ra hạng cao, tin hạng cao đúng một lần', async () => {
+    const config = moduleRef.get(SystemConfigService);
+    const user = await createUser(prisma, { tierId: baseId });
+    userIds.push(user.id);
+    const gates: { reached: () => void; release: () => void; promise: Promise<void> }[] = [];
+    const newGate = () => {
+      let reached!: () => void;
+      let release!: () => void;
+      const at = new Promise<void>((r) => (reached = r));
+      const promise = new Promise<void>((r) => (release = r));
+      gates.push({ reached, release, promise });
+      return { at, release: () => release() };
+    };
+    const realGet = config.get.bind(config);
+    const spy = jest.spyOn(config, 'get').mockImplementation((async (key: string, def: unknown) => {
+      const g = key === 'loyalty.tier_grace_days' ? gates.shift() : undefined;
+      if (g) {
+        g.reached();
+        await g.promise;
+      }
+      return realGet(key, def as never);
+    }) as never);
+
+    // A chỉ thấy một đơn nhỏ (đủ hạng thấp); B thấy đủ hai đơn (đủ hạng cao). B đọc xong nhưng A ghi trước.
+    await deliver(user.id, 100);
+    const gateA = newGate();
+    const a = loyalty.recalcTier(user.id);
+    await gateA.at;
+    await deliver(user.id, 2_000_000);
+    const gateB = newGate();
+    const b = loyalty.recalcTier(user.id);
+    await gateB.at;
+    gateA.release();
+    await a;
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).tierId).toBe(lowId);
+    gateB.release();
+    await b;
+    spy.mockRestore();
+
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).tierId).toBe(highId);
+    expect(calls(user.id).filter((c) => (c[2] as { tier: string }).tier === 'Hạng cao thử')).toHaveLength(1);
+    expect(calls(user.id)).toHaveLength(2);
+  });
 });
