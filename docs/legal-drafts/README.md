@@ -244,3 +244,16 @@ Việc chủ cần biết thêm, không đặt dấu trong bài:
 - ZaloPay: bài không liệt kê ZaloPay ở cách thanh toán. Nếu đặt khoá `ZALOPAY_*` trên PROD thì thêm ZaloPay vào `dieu-khoan.md` mục 5. `bao-mat.md` đã ghi ZaloPay ở dạng "chỉ khi bạn chọn".
 - Sentry: `bao-mat.md` ghi Sentry là bên nhận. Nếu PROD không đặt `SENTRY_DSN` và `NEXT_PUBLIC_SENTRY_DSN` thì có thể bỏ dòng đó (giữ cũng không sai).
 - Chat CSKH và Đổi rác lấy quà đang tắt (`chat.enabled`, `waste.enabled`). Bài viết ở dạng "nếu bạn dùng", nên đúng cả khi tắt.
+
+## 9. Chủ duyệt đăng 31/10
+
+Chủ chọn đăng bốn bài lên PROD trước, luật sư soát sau. Mục 4 vẫn là danh sách việc cho luật sư, dù các dấu `[cần luật sư kiểm]` đã được bỏ khỏi bài để dán.
+
+Đã điền theo quyết định của chủ:
+- Ngày hiệu lực: 31/10/2026, cả bốn bài.
+- Hotline: `0984 606 774`, khớp `support.hotline` trên PROD.
+- Bỏ dòng người đại diện theo pháp luật ở cả bốn bài.
+- `dieu-khoan.md` mục 1: gộp hai dòng mã số thuế và số ĐKDN thành "Mã số doanh nghiệp (cũng là mã số thuế): 0319585995". Ngày cấp và nơi cấp ĐKDN chưa có. Khi có giấy tờ thì thêm vào dòng này, vì website bán hàng phải ghi đủ số, ngày cấp và nơi cấp.
+- `dieu-khoan.md` mục 9: phần thuế TNCN đã khấu trừ của khoản hoa hồng bị thu hồi để nguyên như mã đang làm. Ví chỉ bị trừ phần thực nhận, CTV không trả lại phần thuế, và Tubu Tree tự xử lý phần thuế với cơ quan thuế.
+- `dieu-khoan.md` mục 18: bỏ dòng số xác nhận thông báo với Bộ Công Thương vì chưa có. Có số thì thêm lại và điền `company.bct_notice_url`.
+- `van-chuyen.md` mục 5: nội thành 1–2 ngày làm việc, tỉnh khác 3–5. Khoảng chung trong app là `shipping.eta_min_days` = 1 và `shipping.eta_max_days` = 5. Ứng dụng chỉ hiện khoảng này cho hàng do Tubu Tree giao (`packages/app-core/src/shipping-eta.ts:29`, `:64`).

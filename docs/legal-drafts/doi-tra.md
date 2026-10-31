@@ -1,4 +1,4 @@
-Hiệu lực từ ngày [NGÀY HIỆU LỰC].
+Hiệu lực từ ngày 31/10/2026.
 
 ## 1. Tóm tắt nhanh
 
@@ -21,7 +21,7 @@ Thời hạn là 7 ngày, tính từ lúc đơn được ghi nhận là đã gia
 - Sản phẩm hết hạn hoặc sai hạn sử dụng.
 - Sản phẩm không đúng mô tả đã đăng trên Tubu Tree.
 
-Với các lý do khác (ví dụ không hợp nhu cầu), bạn vẫn chọn được "Lý do khác" và mô tả. Tubu Tree xem xét từng trường hợp và quyết định có nhận hay không. Nếu nhận, phí vận chuyển có thể không được hoàn lại (xem mục 7). [cần luật sư kiểm]
+Với các lý do khác (ví dụ không hợp nhu cầu), bạn vẫn chọn được "Lý do khác" và mô tả. Tubu Tree xem xét từng trường hợp và quyết định có nhận hay không. Nếu nhận, phí vận chuyển có thể không được hoàn lại (xem mục 7).
 
 ## 4. Trường hợp không áp dụng
 
@@ -88,8 +88,7 @@ Tubu Tree phản hồi trong 24 giờ. Nếu cần thêm thông tin, chúng tôi
 
 - CÔNG TY TNHH TUBU TREE, MST 0319585995
 - Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh, Việt Nam
-- Người đại diện theo pháp luật: [NGƯỜI ĐẠI DIỆN]
-- Hotline: [SỐ HOTLINE]
+- Hotline: 0984 606 774
 - Email: tubutree@gmail.com
 
 Nếu không đồng ý với kết quả xử lý, bạn gửi lại khiếu nại theo mục "Khiếu nại và giải quyết tranh chấp" trong [Điều khoản sử dụng](/chinh-sach/dieu-khoan). Xem thêm [Chính sách vận chuyển](/chinh-sach/van-chuyen).

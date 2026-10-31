@@ -1,26 +1,24 @@
-Hiệu lực từ ngày [NGÀY HIỆU LỰC].
+Hiệu lực từ ngày 31/10/2026.
 
 ## 1. Ai bán hàng cho bạn
 
 Website app.tubutree.com và Mini App Zalo "Tubu Tree" (gọi chung là "Tubu Tree") do đơn vị sau vận hành và bán hàng:
 
 - Tên đơn vị: CÔNG TY TNHH TUBU TREE
-- Mã số thuế: 0319585995
-- Giấy chứng nhận đăng ký doanh nghiệp số [SỐ ĐKDN], cấp lần đầu ngày [NGÀY CẤP ĐKDN] tại [NƠI CẤP ĐKDN] [cần luật sư kiểm]
+- Mã số doanh nghiệp (cũng là mã số thuế): 0319585995
 - Địa chỉ: Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh, Việt Nam
-- Người đại diện theo pháp luật: [NGƯỜI ĐẠI DIỆN]
-- Hotline: [SỐ HOTLINE]
+- Hotline: 0984 606 774
 - Email: tubutree@gmail.com
 
 Khi bạn truy cập, đăng nhập hoặc đặt hàng, bạn đồng ý với các điều khoản dưới đây. Nếu không đồng ý, vui lòng ngừng sử dụng dịch vụ.
 
-Tubu Tree còn là nơi giới thiệu và nhận đơn cho một số gian hàng đối tác. Với hàng do gian hàng đối tác giao, tên gian hàng được hiển thị ở giỏ hàng và chi tiết đơn. Tubu Tree vẫn là đầu mối tiếp nhận đơn, đổi trả và khiếu nại của bạn. [cần luật sư kiểm]
+Tubu Tree còn là nơi giới thiệu và nhận đơn cho một số gian hàng đối tác. Với hàng do gian hàng đối tác giao, tên gian hàng được hiển thị ở giỏ hàng và chi tiết đơn. Tubu Tree vẫn là đầu mối tiếp nhận đơn, đổi trả và khiếu nại của bạn.
 
 ## 2. Tài khoản
 
 - Bạn đăng nhập bằng tài khoản Zalo. Thông tin bạn cung cấp phải đúng và là của chính bạn.
 - Trong Mini App, bạn có thể dùng thử khi chưa đăng nhập Zalo (gọi là khách vãng lai). Tài khoản khách vãng lai gắn với thiết bị bạn đang dùng. Một số quyền lợi chỉ dành cho tài khoản đã đăng nhập Zalo: Điểm Xanh từ điểm danh, nhiệm vụ và trò chơi, quà và ưu đãi cho khách mới, mã giảm giá công khai, mua chung, đăng ký CTV và chương trình Đổi rác lấy quà. Khách vãng lai vẫn điểm danh và nhận giọt nước tưới cây. Khi bạn đăng nhập Zalo trên cùng thiết bị, giỏ hàng, địa chỉ, điểm và đơn hàng của tài khoản khách vãng lai được gộp vào tài khoản Zalo. Điểm danh trước đó không được cộng bù Điểm Xanh.
-- Người dưới 16 tuổi cần có cha mẹ hoặc người giám hộ đồng ý khi dùng dịch vụ. [cần luật sư kiểm]
+- Người dưới 16 tuổi cần có cha mẹ hoặc người giám hộ đồng ý khi dùng dịch vụ.
 - Mỗi người dùng một tài khoản. Bạn tự giữ an toàn cho tài khoản Zalo của mình và báo ngay cho chúng tôi nếu nghi ngờ bị người khác sử dụng.
 - Chúng tôi có thể tạm khoá tài khoản có dấu hiệu gian lận hoặc vi phạm điều khoản này. Chúng tôi sẽ nêu lý do khi bạn hỏi.
 - Bạn có thể yêu cầu xoá tài khoản bất kỳ lúc nào. Cách làm nằm trong [Chính sách bảo mật](/chinh-sach/bao-mat).
@@ -63,7 +61,7 @@ Hãy đối chiếu thông tin trên màn hình thanh toán với thông tin nà
 - Bạn chỉ dùng số dư để thanh toán đơn hàng. Ví Tubu không rút được về tài khoản ngân hàng hay ví điện tử. Hoa hồng của bạn chỉ chuyển vào Ví Tubu, theo tỷ lệ 1:1.
 - Nếu bạn là CTV hoặc đại lý, số dư Ví có thể bị trừ khi Tubu Tree thu hồi hoa hồng của đơn bị huỷ hoặc bị trả (xem mục 9). Chỉ khoản thu hồi này mới có thể làm số dư Ví âm. Khi số dư Ví âm, bạn không thanh toán được bằng Ví Tubu. Hoa hồng mới chuyển vào Ví sẽ bù dần phần âm.
 - Ví Tubu không sinh lãi và không thể nạp tiền mặt vào.
-- Ví Tubu không phải là ví điện tử hay tài khoản thanh toán do ngân hàng hoặc tổ chức được cấp phép cung cấp. [cần luật sư kiểm]
+- Ví Tubu không phải là ví điện tử hay tài khoản thanh toán do ngân hàng hoặc tổ chức được cấp phép cung cấp.
 
 ## 7. Điểm Xanh, mã giảm giá và khuyến mãi
 
@@ -87,14 +85,14 @@ Việc giao hàng thực hiện theo [Chính sách vận chuyển](/chinh-sach/v
 
 ## 9. Cộng tác viên, đại lý và gian hàng
 
-Phần này chỉ áp dụng nếu bạn tham gia làm cộng tác viên (CTV), đại lý hoặc mở gian hàng trên Tubu Tree. [cần luật sư kiểm]
+Phần này chỉ áp dụng nếu bạn tham gia làm cộng tác viên (CTV), đại lý hoặc mở gian hàng trên Tubu Tree.
 
 - Chỉ CTV và đại lý được hưởng hoa hồng giới thiệu. Bạn cần đăng nhập Zalo để đăng ký CTV. Tỷ lệ hoa hồng của từng sản phẩm hiển thị trong trang CTV.
 - Hoa hồng được tính trên đơn do link hoặc gian hàng của bạn giới thiệu. Một số sản phẩm không áp dụng hoa hồng. Hàng do gian hàng đối tác giao không có hoa hồng, trừ sản phẩm có ghi mức hoa hồng riêng. Bạn không nhận hoa hồng khi tự mua hàng bằng link của mình.
 - Hoa hồng được giữ sau khi đơn giao thành công (hiện là 10 ngày, và không ngắn hơn thời hạn đổi trả) để chờ hết thời hạn đổi trả. Sau đó hoa hồng được duyệt và chuyển vào Ví Tubu.
 - Nếu đơn bị huỷ hoặc bị trả, cả đơn hay một phần, hoa hồng của phần hàng bị trả bị thu hồi. Việc thu hồi áp dụng cả khi hoa hồng đã được duyệt hoặc đã chuyển vào Ví Tubu. Trả sản phẩm không có hoa hồng thì không thu hồi gì.
-- Nếu hoa hồng đó đã vào Ví Tubu, Tubu Tree trừ thẳng vào Ví số tiền bạn đã thực nhận của phần hoa hồng bị thu hồi, tức là sau khi trừ thuế thu nhập cá nhân đã khấu trừ. Số dư Ví có thể âm vì khoản trừ này (mục 6). Khi Ví âm, bạn không thanh toán được bằng Ví và chưa xoá được tài khoản. [chủ quyết: phần thuế TNCN đã khấu trừ của khoản hoa hồng bị thu hồi xử lý thế nào (hoàn cho CTV, bù trừ kỳ sau hay giữ nguyên). Mã hiện chỉ trừ Ví phần thực nhận và báo kế toán] [cần luật sư kiểm]
-- Khi hoa hồng được chuyển vào Ví Tubu, Tubu Tree khấu trừ thuế thu nhập cá nhân 10% theo quy định hiện hành và cấp chứng từ khấu trừ cho bạn. Mức và ngưỡng áp dụng hiển thị ở trang CTV. Bạn cần cung cấp mã số thuế cá nhân hoặc số căn cước công dân khi được yêu cầu. [cần luật sư kiểm]
+- Nếu hoa hồng đó đã vào Ví Tubu, Tubu Tree trừ thẳng vào Ví số tiền bạn đã thực nhận của phần hoa hồng bị thu hồi, tức là sau khi trừ thuế thu nhập cá nhân đã khấu trừ. Số dư Ví có thể âm vì khoản trừ này (mục 6). Khi Ví âm, bạn không thanh toán được bằng Ví và chưa xoá được tài khoản. Bạn không phải trả lại phần thuế thu nhập cá nhân đã khấu trừ của khoản hoa hồng bị thu hồi; Tubu Tree tự xử lý phần thuế đó với cơ quan thuế theo quy định.
+- Khi hoa hồng được chuyển vào Ví Tubu, Tubu Tree khấu trừ thuế thu nhập cá nhân 10% theo quy định hiện hành và cấp chứng từ khấu trừ cho bạn. Mức và ngưỡng áp dụng hiển thị ở trang CTV. Bạn cần cung cấp mã số thuế cá nhân hoặc số căn cước công dân khi được yêu cầu.
 - Gian hàng của CTV phải được Tubu Tree duyệt trước khi hiển thị lần đầu. Chúng tôi có thể ẩn gian hàng nếu nội dung vi phạm điều khoản này.
 - Nếu vai trò của bạn bị thay đổi hoặc bị thu hồi, bạn vẫn nhận hoa hồng của những đơn đã đặt trước thời điểm đó. Gian hàng của bạn sẽ bị ẩn.
 - Chúng tôi có thể dừng chi trả và thu hồi hoa hồng nhận được do gian lận, tạo đơn ảo hoặc vi phạm điều khoản.
@@ -125,13 +123,13 @@ Hình ảnh, nội dung mô tả, nhãn hiệu và giao diện trên Tubu Tree t
 
 ## 14. Giới hạn trách nhiệm
 
-Chúng tôi cố gắng để dịch vụ chạy ổn định nhưng không bảo đảm không bao giờ gián đoạn. Trong phạm vi pháp luật cho phép, chúng tôi không chịu trách nhiệm về thiệt hại gián tiếp phát sinh từ sự cố ngoài tầm kiểm soát hợp lý, ví dụ thiên tai, mất điện, sự cố Internet hoặc sự cố của Zalo. Điều này không làm giảm quyền lợi của bạn với tư cách người tiêu dùng theo quy định pháp luật. [cần luật sư kiểm]
+Chúng tôi cố gắng để dịch vụ chạy ổn định nhưng không bảo đảm không bao giờ gián đoạn. Trong phạm vi pháp luật cho phép, chúng tôi không chịu trách nhiệm về thiệt hại gián tiếp phát sinh từ sự cố ngoài tầm kiểm soát hợp lý, ví dụ thiên tai, mất điện, sự cố Internet hoặc sự cố của Zalo. Điều này không làm giảm quyền lợi của bạn với tư cách người tiêu dùng theo quy định pháp luật.
 
 ## 15. Khiếu nại và giải quyết tranh chấp
 
-1. Gửi khiếu nại qua hotline [SỐ HOTLINE], email tubutree@gmail.com hoặc Zalo OA của Tubu Tree. Vui lòng nêu mã đơn, mô tả vấn đề và đính kèm ảnh (nếu có).
+1. Gửi khiếu nại qua hotline 0984 606 774, email tubutree@gmail.com hoặc Zalo OA của Tubu Tree. Vui lòng nêu mã đơn, mô tả vấn đề và đính kèm ảnh (nếu có).
 2. Chúng tôi tiếp nhận và phản hồi cho bạn. Yêu cầu đổi trả được phản hồi trong 24 giờ. Với các khiếu nại khác, chúng tôi sẽ báo thời gian xử lý dự kiến khi tiếp nhận.
-3. Nếu hai bên không tự thoả thuận được, bạn có thể nhờ tổ chức bảo vệ người tiêu dùng hoặc cơ quan quản lý nhà nước hỗ trợ, hoặc khởi kiện tại Toà án có thẩm quyền theo quy định pháp luật. [cần luật sư kiểm]
+3. Nếu hai bên không tự thoả thuận được, bạn có thể nhờ tổ chức bảo vệ người tiêu dùng hoặc cơ quan quản lý nhà nước hỗ trợ, hoặc khởi kiện tại Toà án có thẩm quyền theo quy định pháp luật.
 
 ## 16. Bảo vệ thông tin cá nhân
 
@@ -143,12 +141,10 @@ Chúng tôi có thể cập nhật điều khoản và đăng bản mới tại 
 
 ## 18. Luật áp dụng
 
-Điều khoản này tuân theo pháp luật Việt Nam, gồm Luật Bảo vệ quyền lợi người tiêu dùng 2023 (số 19/2023/QH15), Luật Thương mại điện tử 2025 (số 122/2025/QH15) và Luật Bảo vệ dữ liệu cá nhân 2025 (số 91/2025/QH15), cùng các văn bản hướng dẫn. [cần luật sư kiểm]
-
-Website đã được thông báo hoặc đăng ký với Bộ Công Thương: [SỐ XÁC NHẬN THÔNG BÁO / ĐĂNG KÝ]. [cần luật sư kiểm]
+Điều khoản này tuân theo pháp luật Việt Nam, gồm Luật Bảo vệ quyền lợi người tiêu dùng 2023 (số 19/2023/QH15), Luật Thương mại điện tử 2025 (số 122/2025/QH15) và Luật Bảo vệ dữ liệu cá nhân 2025 (số 91/2025/QH15), cùng các văn bản hướng dẫn.
 
 ## 19. Liên hệ
 
 CÔNG TY TNHH TUBU TREE, MST 0319585995, Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh, Việt Nam.
 
-Hotline [SỐ HOTLINE] hoặc email tubutree@gmail.com.
+Hotline 0984 606 774 hoặc email tubutree@gmail.com.

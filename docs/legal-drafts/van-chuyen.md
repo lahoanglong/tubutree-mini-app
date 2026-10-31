@@ -1,4 +1,4 @@
-Hiệu lực từ ngày [NGÀY HIỆU LỰC].
+Hiệu lực từ ngày 31/10/2026.
 
 ## 1. Tóm tắt nhanh
 
@@ -39,9 +39,9 @@ Phí được tính cho từng kiện hàng và hiển thị ở giỏ hàng, b�
 
 ## 5. Thời gian giao hàng dự kiến
 
-- Nội thành Thành phố Hồ Chí Minh: [SỐ NGÀY GIAO NỘI THÀNH] ngày làm việc.
-- Các tỉnh thành khác: [SỐ NGÀY GIAO TỈNH KHÁC] ngày làm việc.
-- Khi có số ngày giao dự kiến, ứng dụng hiển thị ở bước thanh toán hoặc chi tiết đơn. [chủ quyết: ứng dụng chỉ có một khoảng "Giao dự kiến" chung cho mọi địa chỉ (`shipping.eta_min_days`, `shipping.eta_max_days`, đang trống nên ẩn). Đặt khoảng này bao được cả hai dòng trên, hoặc bỏ câu này nếu để trống]
+- Nội thành Thành phố Hồ Chí Minh: 1–2 ngày làm việc.
+- Các tỉnh thành khác: 3–5 ngày làm việc.
+- Với hàng do Tubu Tree giao, ứng dụng hiển thị khoảng ngày giao dự kiến (từ 1 đến 5 ngày làm việc) ở bước thanh toán và chi tiết đơn.
 - Thời gian tính từ lúc đơn được xác nhận. Với chuyển khoản, tính từ lúc Tubu Tree nhận được tiền. Thời gian không tính ngày lễ và ngày nghỉ của đơn vị vận chuyển.
 - Hàng do gian hàng đối tác giao: gian hàng cần xác nhận đơn trong vòng 24 giờ và bàn giao cho đơn vị vận chuyển trong vòng 48 giờ kể từ khi đơn đến gian hàng. Sau đó thời gian giao theo đơn vị vận chuyển.
 - Đơn gặp thiên tai, dịch bệnh, sự cố giao thông hoặc cao điểm khuyến mãi có thể giao chậm hơn dự kiến. Chúng tôi sẽ thông báo cho bạn khi biết đơn bị chậm.
@@ -71,8 +71,7 @@ Phí được tính cho từng kiện hàng và hiển thị ở giỏ hàng, b�
 
 - CÔNG TY TNHH TUBU TREE, MST 0319585995
 - Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh, Việt Nam
-- Người đại diện theo pháp luật: [NGƯỜI ĐẠI DIỆN]
-- Hotline: [SỐ HOTLINE]
+- Hotline: 0984 606 774
 - Email: tubutree@gmail.com
 
 Xem thêm [Điều khoản sử dụng](/chinh-sach/dieu-khoan).

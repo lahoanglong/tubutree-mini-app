@@ -1,16 +1,15 @@
-Hiệu lực từ ngày [NGÀY HIỆU LỰC].
+Hiệu lực từ ngày 31/10/2026.
 
 ## 1. Chính sách này nói về điều gì
 
-Chính sách này giải thích Tubu Tree thu thập, dùng, chia sẻ và bảo vệ thông tin cá nhân của bạn như thế nào khi bạn dùng website app.tubutree.com và Mini App Zalo "Tubu Tree". Chúng tôi xử lý thông tin cá nhân theo pháp luật Việt Nam, gồm Luật Bảo vệ dữ liệu cá nhân 2025 (số 91/2025/QH15) và Nghị định 356/2025/NĐ-CP hướng dẫn luật này. [cần luật sư kiểm]
+Chính sách này giải thích Tubu Tree thu thập, dùng, chia sẻ và bảo vệ thông tin cá nhân của bạn như thế nào khi bạn dùng website app.tubutree.com và Mini App Zalo "Tubu Tree". Chúng tôi xử lý thông tin cá nhân theo pháp luật Việt Nam, gồm Luật Bảo vệ dữ liệu cá nhân 2025 (số 91/2025/QH15) và Nghị định 356/2025/NĐ-CP hướng dẫn luật này.
 
 Đơn vị quyết định mục đích và cách xử lý thông tin:
 
 - Tên đơn vị: CÔNG TY TNHH TUBU TREE
 - Mã số thuế: 0319585995
 - Địa chỉ: Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh, Việt Nam
-- Người đại diện theo pháp luật: [NGƯỜI ĐẠI DIỆN]
-- Hotline: [SỐ HOTLINE]
+- Hotline: 0984 606 774
 - Email: tubutree@gmail.com
 
 Khi bạn đăng nhập hoặc đặt hàng, bạn đồng ý để chúng tôi xử lý thông tin theo chính sách này. Bạn có thể rút lại sự đồng ý bất kỳ lúc nào theo mục 9.
@@ -62,7 +61,7 @@ Khi bạn đăng nhập hoặc đặt hàng, bạn đồng ý để chúng tôi 
 - Vận hành tài khoản, Điểm Xanh, Ví Tubu, mã giảm giá, hạng thành viên và chương trình giới thiệu.
 - Chăm sóc khách hàng và giải quyết khiếu nại.
 - Gửi thông báo về đơn hàng, hoàn tiền, tài khoản. Các tin này luôn được gửi.
-- Gửi tin khuyến mãi, mã giảm giá và nhắc nhở. Loại tin này được bật sẵn khi bạn tạo tài khoản, và bạn tắt được bất kỳ lúc nào (mục 9). [cần luật sư kiểm]
+- Gửi tin khuyến mãi, mã giảm giá và nhắc nhở. Loại tin này được bật sẵn khi bạn tạo tài khoản, và bạn tắt được bất kỳ lúc nào (mục 9).
 - Tính và chi trả hoa hồng, khấu trừ thuế cho CTV và đại lý.
 - Phòng ngừa gian lận, bảo đảm an toàn hệ thống và tuân thủ pháp luật (kế toán, thuế, thương mại điện tử).
 - Thống kê và cải thiện dịch vụ.
@@ -72,7 +71,7 @@ Khi bạn đăng nhập hoặc đặt hàng, bạn đồng ý để chúng tôi 
 Chúng tôi không bán thông tin cá nhân của bạn. Chúng tôi chỉ chia sẻ phần cần thiết cho các bên dưới đây, để thực hiện dịch vụ bạn yêu cầu hoặc vận hành hệ thống:
 
 - **Zalo**: đăng nhập bằng tài khoản Zalo, gửi thông báo qua Zalo OA và ZNS. Zalo xử lý thông tin theo chính sách riêng của Zalo.
-- **Kênh chat chăm sóc khách hàng qua Zalo**: khi bạn dùng mục "Chat với Tubu Tree", tin nhắn của bạn được chuyển vào nhóm Zalo nội bộ của đội chăm sóc khách hàng, kèm tên, số điện thoại đã che bớt, hạng thành viên, mã đơn hoặc sản phẩm bạn hỏi và đường dẫn ảnh bạn gửi. Câu trả lời của nhân viên được chuyển lại cho bạn trong ứng dụng. [cần luật sư kiểm]
+- **Kênh chat chăm sóc khách hàng qua Zalo**: khi bạn dùng mục "Chat với Tubu Tree", tin nhắn của bạn được chuyển vào nhóm Zalo nội bộ của đội chăm sóc khách hàng, kèm tên, số điện thoại đã che bớt, hạng thành viên, mã đơn hoặc sản phẩm bạn hỏi và đường dẫn ảnh bạn gửi. Câu trả lời của nhân viên được chuyển lại cho bạn trong ứng dụng.
 - **Pancake (phần mềm quản lý bán hàng và kho)**: họ tên, số điện thoại, địa chỉ nhận hàng, sản phẩm trong đơn, ghi chú giao hàng và thông tin xuất hoá đơn (nếu bạn yêu cầu), để xử lý đơn, xuất hoá đơn, đối soát chuyển khoản và đồng bộ đơn sàn.
 - **Đơn vị vận chuyển**: họ tên, số điện thoại, địa chỉ nhận hàng, tiền thu hộ (nếu có). Đơn vị vận chuyển do Tubu Tree chọn cho từng đơn. Nếu bạn chọn thu gom vỏ, bao bì kèm đơn hàng (Đổi rác lấy quà), thông tin này còn đến đơn vị trung gian vận chuyển và thu gom (hiện là Gomdon) thực hiện chuyến giao và lấy hàng đó.
 - **Điểm nhận Đổi rác lấy quà** (đại lý hoặc cửa hàng nhận vỏ, bao bì): khi bạn mang tới, nhân viên ở đó thấy mã yêu cầu, tên và số điện thoại đã che bớt của bạn để xác nhận.
@@ -89,7 +88,7 @@ Với CTV, đại lý và gian hàng đối tác, chúng tôi chỉ cho xem thô
 
 ## 5. Chuyển thông tin ra nước ngoài
 
-Một số bên ở mục 4 (nhà cung cấp mô hình AI, dịch vụ lưu trữ ảnh, dịch vụ ghi nhận lỗi, dịch vụ sao lưu) có thể đặt máy chủ ở ngoài Việt Nam. Khi đó chúng tôi chỉ chuyển phần thông tin cần thiết và thực hiện các thủ tục pháp luật yêu cầu cho việc chuyển dữ liệu cá nhân ra nước ngoài. [cần luật sư kiểm]
+Một số bên ở mục 4 (nhà cung cấp mô hình AI, dịch vụ lưu trữ ảnh, dịch vụ ghi nhận lỗi, dịch vụ sao lưu) có thể đặt máy chủ ở ngoài Việt Nam. Khi đó chúng tôi chỉ chuyển phần thông tin cần thiết và thực hiện các thủ tục pháp luật yêu cầu cho việc chuyển dữ liệu cá nhân ra nước ngoài.
 
 ## 6. Cookie và công nghệ tương tự trên website
 
@@ -97,7 +96,7 @@ Một số bên ở mục 4 (nhà cung cấp mô hình AI, dịch vụ lưu tr�
 - Cookie đánh dấu phiên (tubu_web_session và tubu_home_hint, giữ 30 ngày): cho trang biết bạn đang có phiên đăng nhập để hiển thị đúng ngay khi mở lại. Hai cookie này không chứa thông tin đăng nhập.
 - Cookie nguồn truy cập (tên tubu_ft, giữ 30 ngày): ghi lại bạn vào Tubu Tree từ link nào lần đầu, để tính ưu đãi và hoa hồng giới thiệu.
 - Bộ nhớ trình duyệt (localStorage, sessionStorage): nhớ bạn đang đăng nhập, gian hàng hoặc link giới thiệu bạn vào từ đó, các sản phẩm bạn chọn để thanh toán, các sản phẩm bạn xem gần đây, thông tin xuất hoá đơn bạn đã nhập (để khỏi nhập lại), và hỗ trợ bước đăng nhập qua Zalo. Dữ liệu này nằm trên thiết bị của bạn.
-- Hiện website không dùng cookie quảng cáo hay công cụ phân tích của bên thứ ba. Nhật ký sử dụng do chính Tubu Tree ghi và lưu trên hệ thống của Tubu Tree. Dịch vụ ghi nhận lỗi ở mục 4 không đặt cookie quảng cáo. [cần luật sư kiểm]
+- Hiện website không dùng cookie quảng cáo hay công cụ phân tích của bên thứ ba. Nhật ký sử dụng do chính Tubu Tree ghi và lưu trên hệ thống của Tubu Tree. Dịch vụ ghi nhận lỗi ở mục 4 không đặt cookie quảng cáo.
 
 Bạn có thể xoá hoặc chặn cookie trong cài đặt trình duyệt, nhưng một số tính năng như đăng nhập có thể không hoạt động. Mini App chạy trong Zalo nên còn chịu chính sách của Zalo về bộ nhớ và quyền truy cập trên điện thoại.
 
@@ -105,7 +104,7 @@ Bạn có thể xoá hoặc chặn cookie trong cài đặt trình duyệt, như
 
 - Thông tin tài khoản: lưu trong thời gian bạn còn dùng dịch vụ.
 - Sau khi bạn yêu cầu xoá tài khoản và chúng tôi xử lý xong: thông tin nhận diện bạn bị xoá hoặc ẩn danh (mục 8).
-- Chứng từ đơn hàng, thanh toán, hoàn tiền, hoá đơn, hoa hồng, các lệnh rút tiền tạo trước đây và sổ Ví: chúng tôi phải giữ theo thời hạn pháp luật về kế toán và thuế quy định, ngay cả sau khi xoá tài khoản. Phần thông tin nhận diện cá nhân trong các chứng từ này đã được ẩn danh, trừ những thông tin pháp luật bắt buộc phải giữ (ví dụ mã số thuế, tên công ty, địa chỉ trên hoá đơn đã xuất). [cần luật sư kiểm]
+- Chứng từ đơn hàng, thanh toán, hoàn tiền, hoá đơn, hoa hồng, các lệnh rút tiền tạo trước đây và sổ Ví: chúng tôi phải giữ theo thời hạn pháp luật về kế toán và thuế quy định, ngay cả sau khi xoá tài khoản. Phần thông tin nhận diện cá nhân trong các chứng từ này đã được ẩn danh, trừ những thông tin pháp luật bắt buộc phải giữ (ví dụ mã số thuế, tên công ty, địa chỉ trên hoá đơn đã xuất).
 - Nhật ký thao tác trong ứng dụng: giữ khoảng 13 tháng.
 - Lịch sử thông báo: giữ khoảng 6 tháng.
 - Nhật ký đồng bộ với các hệ thống bên ngoài và tin nhắn Zalo OA: giữ khoảng 3 tháng.
@@ -121,7 +120,7 @@ Cách gửi yêu cầu trong Mini App Zalo:
 2. Kéo xuống cuối trang, chọn "Xoá tài khoản", rồi bấm "Gửi yêu cầu xoá".
 3. Đội chăm sóc khách hàng liên hệ bạn để xác minh chính chủ và xử lý trong vòng 3 ngày làm việc. Tài khoản chưa bị xoá ngay khi bạn bấm nút.
 
-Bạn cũng có thể gửi yêu cầu qua email tubutree@gmail.com hoặc hotline [SỐ HOTLINE]. Vui lòng ghi rõ số điện thoại gắn với tài khoản để chúng tôi xác minh.
+Bạn cũng có thể gửi yêu cầu qua email tubutree@gmail.com hoặc hotline 0984 606 774. Vui lòng ghi rõ số điện thoại gắn với tài khoản để chúng tôi xác minh.
 
 Chúng tôi chỉ xử lý xoá khi tài khoản không còn việc dở dang, để bảo vệ tiền và quyền lợi của bạn. Cụ thể:
 
@@ -157,14 +156,14 @@ Cách làm:
 
 - **Xem và sửa thông tin**: trong Mini App (tab Cá nhân) hoặc trên website (Tài khoản), bạn sửa được họ tên, email, ảnh đại diện và sổ địa chỉ. Ngày sinh chỉ đặt được một lần, muốn sửa lại thì liên hệ chúng tôi. Số điện thoại chỉ xem được. Muốn đổi số điện thoại, bạn liên hệ chúng tôi.
 - **Tắt tin khuyến mãi (rút lại sự đồng ý)**: trong Mini App hoặc trên website, vào Cài đặt, tắt "Khuyến mãi & mã giảm giá". Bạn cũng tắt được "Nhắc nhở Vườn Xanh & tương tác bài viết". Tin về đơn hàng, hoàn tiền và tài khoản vẫn được gửi vì đó là thông tin bạn cần. Bạn cũng có thể bỏ theo dõi Zalo OA của Tubu Tree.
-- **Nhận bản sao, hạn chế xử lý, phản đối, xoá thông tin**: gửi yêu cầu qua email tubutree@gmail.com hoặc hotline [SỐ HOTLINE]. Với xoá tài khoản, bạn có thể dùng cách ở mục 8.
-- Chúng tôi xác minh chính chủ trước khi thực hiện và phản hồi trong thời hạn pháp luật quy định. Với yêu cầu xoá tài khoản, đội chăm sóc khách hàng liên hệ bạn trong vòng 3 ngày làm việc. [cần luật sư kiểm]
+- **Nhận bản sao, hạn chế xử lý, phản đối, xoá thông tin**: gửi yêu cầu qua email tubutree@gmail.com hoặc hotline 0984 606 774. Với xoá tài khoản, bạn có thể dùng cách ở mục 8.
+- Chúng tôi xác minh chính chủ trước khi thực hiện và phản hồi trong thời hạn pháp luật quy định. Với yêu cầu xoá tài khoản, đội chăm sóc khách hàng liên hệ bạn trong vòng 3 ngày làm việc.
 
 Nếu bạn rút lại sự đồng ý hoặc yêu cầu xoá, một số dịch vụ cần thông tin đó (ví dụ giao hàng) có thể không dùng được. Việc này không ảnh hưởng đến những xử lý đã thực hiện trước đó theo đúng pháp luật.
 
 ## 10. Người dưới 16 tuổi
 
-Dịch vụ không dành cho người dưới 16 tuổi tự đăng ký. Nếu là cha mẹ hoặc người giám hộ và phát hiện con bạn đã cung cấp thông tin, vui lòng liên hệ chúng tôi để được xoá. [cần luật sư kiểm]
+Dịch vụ không dành cho người dưới 16 tuổi tự đăng ký. Nếu là cha mẹ hoặc người giám hộ và phát hiện con bạn đã cung cấp thông tin, vui lòng liên hệ chúng tôi để được xoá.
 
 ## 11. Chúng tôi bảo vệ thông tin như thế nào
 
@@ -186,7 +185,7 @@ Mọi câu hỏi hoặc khiếu nại về thông tin cá nhân, vui lòng liên
 
 - CÔNG TY TNHH TUBU TREE, MST 0319585995
 - Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh, Việt Nam
-- Hotline: [SỐ HOTLINE]
+- Hotline: 0984 606 774
 - Email: tubutree@gmail.com
 
-Nếu chưa hài lòng với cách chúng tôi giải quyết, bạn có quyền gửi khiếu nại tới cơ quan nhà nước có thẩm quyền về bảo vệ dữ liệu cá nhân. [cần luật sư kiểm]
+Nếu chưa hài lòng với cách chúng tôi giải quyết, bạn có quyền gửi khiếu nại tới cơ quan nhà nước có thẩm quyền về bảo vệ dữ liệu cá nhân.
