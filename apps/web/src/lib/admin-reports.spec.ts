@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addDaysKey, formatPct, lastDaysRange, vnMonthRange, pivotRevenue, rangeDays, rangeError, vnTodayKey } from './admin-reports';
+import { addDaysKey, formatPct, lastDaysRange, vnMonthRange, pivotRevenue, rangeDays, rangeError, vnTodayKey, isCouponEndPast } from './admin-reports';
 
 describe('khoảng ngày giờ VN', () => {
   it('hôm nay theo giờ VN, không theo UTC: 20:00Z ngày 17 đã là ngày 18 ở VN', () => {
@@ -81,5 +81,18 @@ describe('vnMonthRange', () => {
 
   it('00:00 giờ VN ngày 1 đã là tháng mới dù UTC còn tháng cũ', () => {
     expect(vnMonthRange(0, new Date('2026-10-31T17:00:00Z'))).toEqual({ from: '2026-11-01', to: '2026-11-01' });
+  });
+});
+
+describe('isCouponEndPast (Hết hạn so với hôm nay giờ VN)', () => {
+  it('quanh nửa đêm VN: 23:59:59 ngày 30 thì ngày 30 còn tạo được, 00:00 ngày 31 thì ngày 30 đã qua', () => {
+    const before = new Date('2026-10-30T16:59:59Z');
+    const after = new Date('2026-10-30T17:00:00Z');
+    expect(isCouponEndPast('2026-10-30', before)).toBe(false);
+    expect(isCouponEndPast('2026-10-30', after)).toBe(true);
+    expect(isCouponEndPast('2026-10-31', after)).toBe(false);
+  });
+  it('để trống Hết hạn thì không coi là đã qua', () => {
+    expect(isCouponEndPast('')).toBe(false);
   });
 });

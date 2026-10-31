@@ -11,6 +11,10 @@ const msKey = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 /** Hôm nay theo giờ VN, không phụ thuộc múi giờ máy khách. */
 export const vnTodayKey = (now: Date = new Date()) => msKey(now.getTime() + VN_OFFSET_MS);
 
+/** Hết hạn trước hôm nay (giờ VN) thì mã tạo ra không dùng được, dù có hay không có ngày Bắt đầu. Hết hạn đúng hôm nay vẫn tạo được. */
+export const isCouponEndPast = (endAt: string, now: Date = new Date()) => !!endAt && endAt < vnTodayKey(now);
+export const COUPON_END_PAST_MESSAGE = 'Ngày hết hạn đã qua. Chọn ngày từ hôm nay trở đi.';
+
 export const addDaysKey = (key: string, days: number) => msKey(keyMs(key) + days * DAY_MS);
 
 /** N ngày kết thúc hôm nay (cả hai đầu tính). */
