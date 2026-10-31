@@ -10,6 +10,8 @@ export interface CartLine {
   slug: string;
   thumbnail: string | null;
   unitPrice: number;
+  /** Giá niêm yết trước sale và Giờ vàng. Lớn hơn `unitPrice` thì dòng đang giảm (gạch giá, "Tiết kiệm"); API cũ chưa trả. */
+  listUnitPrice?: number;
   quantity: number;
   stock: number;
   weight?: number | null;
@@ -80,6 +82,15 @@ export const getCartSelection = (http: HttpClient, itemIds: string[], storefront
   http.get<CartSummary>('/cart', { query: { ...cartOpts(storefrontSlug)?.query, itemIds: itemIds.join(',') } });
 export const addToCart = (http: HttpClient, variationId: string, quantity: number, addSource?: AddToCartSource, storefrontSlug?: string | null) =>
   http.post<CartSummary>('/cart/items', { variationId, quantity, ...(addSource ? { addSource } : {}) }, cartOpts(storefrontSlug));
+/** Mã lỗi API trả khi một món làm cả lô hỏng (hết hàng, ngừng bán): thân lỗi có `reason: 'UNAVAILABLE' | 'STOCK'` và `variationId`; giỏ không đổi. */
+export const CART_BATCH_REJECTED = 'CART_BATCH_REJECTED';
+/** Thêm nhiều món một lượt ("Thêm cả combo"): một transaction, một món lỗi thì không món nào vào giỏ. */
+export const addCartItemsBatch = (
+  http: HttpClient,
+  items: { variationId: string; quantity: number }[],
+  addSource: AddToCartSource,
+  storefrontSlug?: string | null,
+) => http.post<CartSummary>('/cart/items/batch', { items, addSource }, cartOpts(storefrontSlug));
 export const updateCartItem = (http: HttpClient, id: string, quantity: number, storefrontSlug?: string | null) =>
   http.patch<CartSummary>(`/cart/items/${id}`, { quantity }, cartOpts(storefrontSlug));
 export const removeCartItem = (http: HttpClient, id: string, storefrontSlug?: string | null) =>
