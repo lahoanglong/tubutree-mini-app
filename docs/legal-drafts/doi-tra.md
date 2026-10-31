@@ -1,4 +1,4 @@
-Hiệu lực từ ngày [NGÀY HIỆU LỰC].
+Hiệu lực từ ngày 31/10/2026.
 
 ## 1. Tóm tắt nhanh
 
@@ -21,7 +21,7 @@ Thời hạn là 7 ngày, tính từ lúc đơn được ghi nhận là đã gia
 - Sản phẩm hết hạn hoặc sai hạn sử dụng.
 - Sản phẩm không đúng mô tả đã đăng trên Tubu Tree.
 
-Với các lý do khác (ví dụ không hợp nhu cầu), bạn vẫn chọn được "Lý do khác" và mô tả. Tubu Tree xem xét từng trường hợp và quyết định có nhận hay không. Nếu nhận, phí vận chuyển có thể không được hoàn lại (xem mục 7). [cần luật sư kiểm]
+Với các lý do khác (ví dụ không hợp nhu cầu), bạn vẫn chọn được "Lý do khác" và mô tả. Tubu Tree xem xét từng trường hợp và quyết định có nhận hay không. Nếu nhận, phí vận chuyển có thể không được hoàn lại (xem mục 7).
 
 ## 4. Trường hợp không áp dụng
 
@@ -35,8 +35,8 @@ Với các lý do khác (ví dụ không hợp nhu cầu), bạn vẫn chọn đ
 
 ## 5. Cách gửi yêu cầu đổi trả
 
-1. Vào Tài khoản, chọn Đơn hàng, mở đơn đã giao và bấm "Yêu cầu đổi/trả".
-2. Chọn sản phẩm và số lượng muốn trả. Bạn có thể trả một phần của đơn.
+1. Mở mục Đơn hàng (trong tab Cá nhân của Mini App, hoặc Tài khoản trên website), mở đơn đã giao và bấm "Yêu cầu đổi/trả". Nếu đơn đã được trả một phần, nút này là "Trả thêm sản phẩm".
+2. Chọn sản phẩm và số lượng muốn trả. Bạn có thể trả một phần của đơn, và trả thêm phần khác sau đó nếu còn trong thời hạn.
 3. Chọn lý do. Nếu chọn "Lý do khác", hãy mô tả ít nhất 5 ký tự.
 4. Đính kèm tối đa 6 ảnh: sản phẩm, bao bì, tem nhãn, hộp ngoài. Nếu có thể, bạn nên quay video lúc mở hàng để chúng tôi duyệt nhanh hơn.
 5. Chọn nơi nhận tiền hoàn: Ví Tubu hoặc tài khoản ngân hàng (xem mục 7).
@@ -63,11 +63,14 @@ Tubu Tree phản hồi trong 24 giờ. Nếu cần thêm thông tin, chúng tôi
 - Tài khoản ngân hàng (chỉ với đơn bạn đã trả bằng chuyển khoản, ZaloPay, VNPAY hoặc tiền mặt khi nhận hàng): Tubu Tree chuyển khoản trong 1 đến 3 ngày làm việc kể từ khi duyệt, miễn phí, không giới hạn số tiền. Bạn nhập tên ngân hàng, số tài khoản và tên chủ tài khoản khi gửi yêu cầu.
 - Đơn đã thanh toán bằng Ví Tubu luôn được hoàn về Ví Tubu.
 - Với đơn được chọn nơi nhận, bạn đổi được giữa Ví Tubu và ngân hàng cho đến khi Tubu Tree bắt đầu chuyển khoản. Sau đó nơi nhận đã chốt.
+- Đơn do CTV hoặc đại lý đặt hộ bạn: tiền hoàn trả cho người nhận hàng, không trả cho CTV. Nếu số điện thoại nhận hàng đã có tài khoản Tubu Tree, tiền vào Ví Tubu của tài khoản đó. Nếu chưa, Tubu Tree liên hệ theo số điện thoại nhận hàng để chuyển khoản.
 
 **Điểm Xanh và ưu đãi**
 - Điểm Xanh bạn đã dùng cho phần hàng được trả sẽ được hoàn lại.
-- Điểm Xanh đã tích từ phần hàng được trả sẽ bị thu hồi.
-- Mã giảm giá đã dùng cho đơn được xử lý theo điều kiện của từng chương trình.
+- Điểm Xanh đã tích từ phần hàng được trả sẽ bị thu hồi, tối đa bằng số điểm bạn đang có. Điểm thưởng đánh giá của sản phẩm bị trả cũng bị thu hồi.
+- Phần tiền được hoàn không còn tính vào mức chi tiêu xét hạng thành viên (xem [Điều khoản sử dụng](/chinh-sach/dieu-khoan), mục 7).
+- Mã giảm giá: khi mọi kiện của cùng một lần đặt đều bị huỷ hoặc trả hết, lượt dùng mã được trả lại cho bạn và mã dùng lại được nếu còn hạn. Khi chỉ trả một phần, mã vẫn tính là đã dùng.
+- Nếu đơn được mua qua link của CTV, hoa hồng của phần hàng bị trả bị thu hồi theo mục 9 của [Điều khoản sử dụng](/chinh-sach/dieu-khoan). Việc này không ảnh hưởng số tiền hoàn cho bạn.
 
 ## 8. Đổi sang sản phẩm khác
 
@@ -85,8 +88,7 @@ Tubu Tree phản hồi trong 24 giờ. Nếu cần thêm thông tin, chúng tôi
 
 - CÔNG TY TNHH TUBU TREE, MST 0319585995
 - Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh, Việt Nam
-- Người đại diện theo pháp luật: [NGƯỜI ĐẠI DIỆN]
-- Hotline: [SỐ HOTLINE]
+- Hotline: 0984 606 774
 - Email: tubutree@gmail.com
 
 Nếu không đồng ý với kết quả xử lý, bạn gửi lại khiếu nại theo mục "Khiếu nại và giải quyết tranh chấp" trong [Điều khoản sử dụng](/chinh-sach/dieu-khoan). Xem thêm [Chính sách vận chuyển](/chinh-sach/van-chuyen).
