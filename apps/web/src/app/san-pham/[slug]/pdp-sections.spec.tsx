@@ -6,7 +6,8 @@ import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 const mocks = vi.hoisted(() => ({ http: { get: vi.fn() } }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: mocks.http }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
-vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
+// Dải gợi ý cá nhân (/products/for-you) chỉ gọi khi đã đăng nhập; đường khách vãng lai có spec riêng ở pdp-rails.spec.tsx.
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'authenticated' }));
 const cfg = vi.hoisted(() => ({ returnWindowDays: undefined as number | undefined }));
 vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => ({ returnWindowDays: cfg.returnWindowDays }) }));
 vi.mock('@/lib/use-catalog-launch-date', () => ({ useCatalogLaunchDate: () => null }));
@@ -111,7 +112,7 @@ describe('PdpRails', () => {
     expect(titles).toEqual(['Khách thường mua cùng', 'Cùng nhà Xanh Việt']);
     expect(Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(['/san-pham/sp-2', '/san-pham/sp-3', '/san-pham/sp-4', '/san-pham/sp-1']);
     // Hai dải không được hỏi lại khi server đã đưa danh sách; chỉ dải "Có thể bạn cũng thích" tải ở trình duyệt.
-    expect(mocks.http.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/config/public')).toEqual(['/products/for-you']);
+    expect(mocks.http.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/config/public' && p !== '/me/wishlist/ids')).toEqual(['/products/for-you']);
   });
   it('"Khách thường mua cùng" dưới 3 món thì ẩn cả dải (kệ pdp.boughtTogether)', async () => {
     server({});
@@ -124,7 +125,7 @@ describe('PdpRails', () => {
     const { container } = mount(<PdpRails productId="cur" slug="dau-goi" brand="Xanh" />);
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
     await flush();
-    expect(mocks.http.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/config/public').sort()).toEqual(['/products/dau-goi/bought-together', '/products/dau-goi/related', '/products/for-you']);
+    expect(mocks.http.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/config/public' && p !== '/me/wishlist/ids').sort()).toEqual(['/products/dau-goi/bought-together', '/products/dau-goi/related', '/products/for-you']);
     expect(container.querySelectorAll('h2')).toHaveLength(1);
     expect(container.querySelector('h2')!.textContent).toBe('Cùng nhà Xanh');
   });

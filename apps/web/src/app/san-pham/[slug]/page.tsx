@@ -17,7 +17,7 @@ import { isRetailOnly } from '@/lib/pdp-logic';
 import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
 import { SITE_URL } from '@/lib/site';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
-import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpPointsEarn, PdpShippingRow, PdpSubscribeRow } from './pdp-extras';
+import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow } from './pdp-extras';
 import { PdpBundleSlots } from './pdp-bundle-slots';
 import { PdpQuickReviews } from './pdp-quick-reviews';
 import { PdpRails } from './pdp-rails';
@@ -72,6 +72,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const partnerNote = unavailableText ? null : pdpPartnerNote(product);
   const fulfillerIsTubu = fulfillerText === 'Tubu Tree giao hàng';
   const retailOnly = isRetailOnly(product);
+  const soldText = formatSold(product.sold);
   const fromStore = product.fulfiller?.kind === 'MERCHANT' || product.fulfiller?.kind === 'UNAVAILABLE';
 
   return (
@@ -96,7 +97,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             </div>
           }
           info={
-            <div data-testid="pdp-info" className="min-w-0 max-md:bg-stone-0 max-md:p-4">
+            <div data-testid="pdp-info" className="flex min-w-0 flex-col max-md:bg-stone-0 max-md:p-4">
               <div className="flex items-center justify-between gap-2">
                 {/* Như Mini App: tên nhãn mở danh mục lọc theo nhãn (brandBrowsePath), không rẽ sang trang nhãn. */}
                 <Link
@@ -119,10 +120,14 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 </div>
               </div>
               <h1 className="font-display text-2xl font-semibold text-stone-900 max-md:font-[family-name:var(--font-ui)] max-md:text-lg max-md:leading-[1.44] sm:text-3xl max-md:sm:text-lg">{product.name}</h1>
-              <PdpRating average={product.ratingAvg} count={product.reviewCount} />
-              <div className="flex flex-wrap items-baseline gap-x-3 max-md:flex-nowrap">
+              {/* Giờ vàng: dòng giá trống nên "Đã bán" ở dòng đánh giá (PdpSold chọn chỗ); rỗng cả hai thì dòng không chiếm chỗ. */}
+              <div className="mt-1.5 flex items-center justify-between gap-2 empty:hidden">
+                <PdpRating average={product.ratingAvg} count={product.reviewCount} />
+                {soldText && <PdpSold text={soldText} product={product} slot="rating" />}
+              </div>
+              <div className="flex flex-wrap items-baseline gap-x-3 empty:hidden max-md:flex-nowrap">
                 <PdpPrice product={product} />
-                {formatSold(product.sold) && <span className="mt-2 text-sm text-stone-500 max-md:ml-auto max-md:text-xs">{formatSold(product.sold)}</span>}
+                {soldText && <PdpSold text={soldText} product={product} slot="price" />}
               </div>
               <PdpPointsEarn product={product} />
               {shortDesc && shortDesc !== description && (
@@ -165,6 +170,16 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 )}
               </div>
 
+              {/*
+                Thứ tự trong HTML là thứ tự đọc và bấm Tab ở máy tính: khối mua rồi mới tới chứng nhận và "Đặt định kỳ" (lối phụ), nên nút
+                "Thêm vào giỏ" không bị đẩy xuống dưới khung 1280×800. Điện thoại kéo chứng nhận và "Đặt định kỳ" lên trước khối mua như Mini App
+                bằng `order` (các hàng này hiển thị liền nhau nên lệch thứ tự Tab chỉ vài bước).
+              */}
+              {product.variations.length > 0 && (
+                <div className="max-md:order-2">
+                  <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} />
+                </div>
+              )}
               {product.certifications.length > 0 && (
                 <div data-testid="pdp-certs" className="mt-3 flex flex-wrap gap-2">
                   {product.certifications.map((c) => (
@@ -178,16 +193,17 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                   ))}
                 </div>
               )}
-
-              {!retailOnly && <PdpSubscribeRow slug={product.slug} variations={product.variations} />}
-
-              {product.variations.length > 0 && (
-                <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} />
+              {!retailOnly && (
+                <div className="max-md:order-1">
+                  <PdpSubscribeRow slug={product.slug} variations={product.variations} />
+                </div>
               )}
 
-              {!retailOnly && <PdpGroupBuyRow productId={product.id} slug={product.slug} />}
-              <PdpContentKitRow slug={product.slug} />
-              <PdpBundleSlots />
+              <div className="max-md:order-3">
+                {!retailOnly && <PdpGroupBuyRow productId={product.id} slug={product.slug} />}
+                <PdpContentKitRow slug={product.slug} />
+                <PdpBundleSlots />
+              </div>
             </div>
           }
           below={

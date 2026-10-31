@@ -17,7 +17,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getProduct: async () => api.product,
 }));
-vi.mock('@/components/add-to-cart', () => ({ default: () => null }));
+vi.mock('@/components/add-to-cart', () => ({ default: () => <div data-testid="add-to-cart" /> }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: async () => Promise.reject(new Error('offline')), post: vi.fn() } }));
 vi.mock('@/lib/core-http-server', () => ({
   createServerHttp: () => ({
@@ -511,6 +511,37 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(after(quick, ingredients)).toBe(true);
     expect(after(quick, c.querySelector('#pdp-promises')!)).toBe(true);
     expect(after(quick, c.querySelector('#pdp-description')!)).toBe(true);
+  });
+
+  it('Giờ vàng: "Đã bán" dời lên dòng đánh giá (dòng giá trống); hết Giờ vàng thì về dòng giá', async () => {
+    api.product = { ...PRODUCT, sold: 12 };
+    api.flash = [FLASH];
+    const c = await mount();
+    const sold = () => Array.from(c.querySelectorAll('span')).filter((s) => s.textContent === 'Đã bán 12');
+    expect(sold()).toHaveLength(1);
+    expect(sold()[0]!.parentElement).toBe(c.querySelector('[data-testid="pdp-rating"]')!.parentElement);
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    api.flash = [];
+    const c2 = await mount();
+    const sold2 = Array.from(c2.querySelectorAll('span')).filter((s) => s.textContent === 'Đã bán 12');
+    expect(sold2).toHaveLength(1);
+    expect(sold2[0]!.parentElement).not.toBe(c2.querySelector('[data-testid="pdp-rating"]')!.parentElement);
+  });
+
+  it('máy tính: khối mua đứng trước chứng nhận và "Đặt định kỳ" trong HTML (nút mua nằm trong 1280×800); điện thoại kéo hai khối đó lên bằng order', async () => {
+    const c = await mount();
+    const after = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const add = c.querySelector('[data-testid="add-to-cart"]')!;
+    const certs = c.querySelector('[data-testid="pdp-certs"]')!;
+    const subscribe = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Đặt định kỳ'))!;
+    expect(subscribe).toBeDefined();
+    expect(after(add, certs)).toBe(true);
+    expect(after(add, subscribe)).toBe(true);
+    // Điện thoại giữ thứ tự cũ như Mini App: chứng nhận (order 0) → Đặt định kỳ (1) → khối mua (2).
+    expect(certs.className).not.toMatch(/order-/);
+    expect(subscribe.closest('.max-md\\:order-1')).not.toBeNull();
+    expect(add.parentElement!.className).toContain('max-md:order-2');
   });
 
   it('chưa có Combo/Mua kèm (P15 điền): không có khối giữ chỗ', async () => {

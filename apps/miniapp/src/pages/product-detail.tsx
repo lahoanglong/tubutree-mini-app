@@ -368,6 +368,8 @@ export default function ProductDetailPage() {
   const price = priceView.price;
   const originalPrice = priceView.compareAt;
   const flashPct = priceView.salePct;
+  const soldText = formatSold(p.sold);
+  const ratingData = reviews.data && reviews.data.count > 0 ? reviews.data : null;
   const inStock = (selected?.stock ?? 0) > 0;
   const lowStock = inStock && (selected?.stock ?? 0) <= LOW_STOCK_THRESHOLD;
   const cartCount = cart.data?.itemCount ?? 0;
@@ -594,31 +596,40 @@ export default function ProductDetailPage() {
         {/* Trang hero không có PageHeader nên tên sản phẩm là h1 duy nhất. */}
         <h1 style={PRODUCT_NAME_STYLE}>{p.name}</h1>
 
-        {reviews.data && reviews.data.count > 0 && (
+        {/* Giờ vàng: dòng giá trống (giá nằm ở FlashPriceBar dưới ảnh) nên "Đã bán" dời lên dòng đánh giá, không để một dòng gần như trống. */}
+        {(ratingData || (priceView.isFlash && soldText)) && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 6 }}>
-            <Stars value={reviews.data.average} size={14} />
-            <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
-              {reviews.data.average.toFixed(1)} · {reviews.data.count} đánh giá
-            </Text>
+            {ratingData && (
+              <>
+                <Stars value={ratingData.average} size={14} />
+                <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
+                  {ratingData.average.toFixed(1)} · {ratingData.count} đánh giá
+                </Text>
+              </>
+            )}
+            {priceView.isFlash && soldText && (
+              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginLeft: ratingData ? 'auto' : 0 }}>
+                {soldText}
+              </Text>
+            )}
           </Box>
         )}
 
-        {/* Giờ vàng: giá nằm ở FlashPriceBar dưới ảnh nên hàng này chỉ còn số đã bán. */}
-        <Box flex alignItems="baseline" style={{ gap: 8, marginTop: 8 }}>
-          {!priceView.isFlash && (
-            <>
-              <PriceTag value={price} compareAt={originalPrice} size="xl" tone={originalPrice ? 'deal' : 'default'} />
-              {flashPct > 0 && (
-                <Badge tone="promo" size="sm">
-                  -{flashPct}%
-                </Badge>
-              )}
-            </>
-          )}
-          {formatSold(p.sold) && (
-            <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginLeft: 'auto' }}>{formatSold(p.sold)}</Text>
-          )}
-        </Box>
+        {!priceView.isFlash && (
+          <Box flex alignItems="baseline" style={{ gap: 8, marginTop: 8 }}>
+            <PriceTag value={price} compareAt={originalPrice} size="xl" tone={originalPrice ? 'deal' : 'default'} />
+            {flashPct > 0 && (
+              <Badge tone="promo" size="sm">
+                -{flashPct}%
+              </Badge>
+            )}
+            {soldText && (
+              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginLeft: 'auto' }}>
+                {soldText}
+              </Text>
+            )}
+          </Box>
+        )}
 
         <PointsEarnLine goods={price * quantity} authStatus={status} tierId={user?.tierId} />
 

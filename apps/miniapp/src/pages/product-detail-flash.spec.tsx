@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchActiveFlashSales: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchActiveFlashSales: vi.fn(), fetchReviews: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
@@ -15,7 +15,7 @@ vi.mock('../services/shop-api', () => ({
   fetchProduct: mocks.fetchProduct,
   fetchRelated: vi.fn().mockResolvedValue([]),
   fetchBoughtTogether: vi.fn().mockResolvedValue([]),
-  fetchReviews: vi.fn().mockResolvedValue({ data: [], count: 0, average: 0 }),
+  fetchReviews: mocks.fetchReviews,
   fetchActiveFlashSales: mocks.fetchActiveFlashSales,
   getCart: vi.fn().mockResolvedValue({ items: [], itemCount: 0 }),
   addToCart: vi.fn(),
@@ -66,6 +66,7 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.fetchProduct.mockResolvedValue(product);
+    mocks.fetchReviews.mockResolvedValue({ data: [], count: 0, average: 0, items: [] });
   });
 
   it('còn giờ: thanh Giờ vàng dưới ảnh có "Kết thúc sau …" theo phút và "Đã bán %" (Q3, không "Còn")', async () => {
@@ -75,6 +76,34 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
     expect(screen.getByRole('timer')).toHaveTextContent('Kết thúc sau 2 giờ 00 phút');
     expect(screen.getByText('Đã bán 40%')).toBeInTheDocument();
     expect(screen.queryByText(/^Còn \d+h/)).toBeNull();
+  });
+
+  it('Giờ vàng: "Đã bán" nằm cùng dòng với đánh giá, không còn dòng giá trống chỉ để chứa số đã bán', async () => {
+    mocks.fetchProduct.mockResolvedValue({ ...product, sold: 1234 });
+    mocks.fetchReviews.mockResolvedValue({ data: [], count: 27, average: 4.6, items: [] });
+    mocks.fetchActiveFlashSales.mockResolvedValue([flash()]);
+    renderPdp();
+    await screen.findByTestId('flash-price-bar');
+    const sold = screen.getByText(/^Đã bán 1,2k/);
+    const rating = screen.getByText(/4\.6 · 27 đánh giá/);
+    expect(sold.parentElement).toBe(rating.parentElement);
+    const h1 = screen.getByRole('heading', { level: 1 });
+    // Ngay sau tên là dòng đánh giá (đã gồm "Đã bán"), không có dòng thứ hai trước dòng Điểm Xanh/mô tả.
+    expect(h1.nextElementSibling).toBe(sold.parentElement);
+  });
+
+  it('Giờ vàng, chưa có đánh giá: "Đã bán" vẫn hiện (một dòng, canh trái); hết Giờ vàng thì về bên phải dòng giá', async () => {
+    mocks.fetchProduct.mockResolvedValue({ ...product, sold: 1234 });
+    mocks.fetchActiveFlashSales.mockResolvedValue([flash()]);
+    const first = renderPdp();
+    await screen.findByTestId('flash-price-bar');
+    expect(screen.getByText(/^Đã bán 1,2k/).style.marginLeft).toBe('0px');
+    first.unmount();
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    renderPdp();
+    await screen.findByText(/^Đã bán 1,2k/);
+    expect(screen.queryByTestId('flash-price-bar')).toBeNull();
+    expect(screen.getByText(/^Đã bán 1,2k/).style.marginLeft).toBe('auto');
   });
 
   it('API gửi giới hạn mua: ghi "Mỗi khách tối đa n"; không gửi thì không có dòng', async () => {

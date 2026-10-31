@@ -201,6 +201,20 @@ export function PdpFlashBar({ product }: { product: { variations: { id: string; 
   );
 }
 
+/**
+ * "Đã bán 1,2k+" nằm bên phải dòng giá. Phân loại đang Giờ vàng thì dòng giá trống (giá lên thanh Giờ vàng dưới ảnh), nên số này dời lên
+ * dòng đánh giá thay vì để một dòng gần như trống chiếm chỗ (khung 1280×800 rất sát). Server chưa biết Giờ vàng nên HTML đầu vẫn ở dòng giá.
+ */
+export function PdpSold({ text, product, slot }: { text: string; product: { variations: { id: string; retailPrice: number; salePrice?: number | null }[] }; slot: 'price' | 'rating' }) {
+  const flash = runningFlash(useActiveFlashSales());
+  useFlashListExpiry(flash);
+  const selectedId = usePdpSelection()?.selectedId;
+  const selected = product.variations.find((v) => v.id === selectedId);
+  const isFlash = selected ? variationPricing(selected, flash).isFlash : false;
+  if ((slot === 'rating') !== isFlash) return null;
+  return <span className={slot === 'price' ? 'mt-2 text-sm text-stone-500 max-md:ml-auto max-md:text-xs' : 'text-sm text-stone-500 max-md:text-xs'}>{text}</span>;
+}
+
 interface PdpVariation {
   id: string;
   stock: number;
