@@ -136,4 +136,9 @@ describe('web tailwind.config', () => {
       expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
     });
   });
+
+  it('có bóng thanh dưới (shadow-nav) và cỡ chữ nhãn 12px (text-label) theo token', () => {
+    expect(ext?.boxShadow).toMatchObject({ nav: 'var(--elevation-nav)' });
+    expect(ext?.fontSize).toMatchObject({ label: ['var(--type-label-size)', { lineHeight: 'var(--type-label-lh)' }] });
+  });
 });

@@ -75,3 +75,12 @@ describe('mini.css: phản hồi nhấn (polish PL-11) khớp Mini App', () => {
   });
 });
 
+describe('mini.css: icon nảy khi chọn tab (polish PL-10)', () => {
+  it('có @keyframes tubu-tab-pop (.88 → 1) và .tubu-tab-pop 220ms easing spring; giảm chuyển động đưa về tức thì', () => {
+    expect(css).toMatch(/@keyframes tubu-tab-pop\s*\{[^}]*0%\s*\{[^}]*scale\(0\.88\)[^}]*\}[^}]*100%\s*\{[^}]*scale\(1\)/);
+    expect(css).toMatch(/\.tubu-tab-pop\s*\{[^}]*animation:[^;}]*tubu-tab-pop 220ms var\(--p-ease-spring\)/);
+    const reduced = [...strip(css).matchAll(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
+    expect(reduced).toMatch(/\.tubu-tab-pop/);
+  });
+});
+

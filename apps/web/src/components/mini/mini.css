@@ -69,6 +69,19 @@
   transition-duration: var(--p-dur-press);
 }
 
+/* Tab đang chọn của thanh dưới: icon nảy .88 → 1, như Mini App. */
+@keyframes tubu-tab-pop {
+  0% {
+    transform: scale(0.88);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.tubu-tab-pop {
+  animation: tubu-tab-pop 220ms var(--p-ease-spring) both;
+}
+
 .tubu-hit-44 {
   position: relative;
 }
@@ -295,6 +308,7 @@
   .tubu-skeleton::after,
   .tubu-rise,
   .tubu-pulse,
+  .tubu-tab-pop,
   .mini-sheet-panel {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;

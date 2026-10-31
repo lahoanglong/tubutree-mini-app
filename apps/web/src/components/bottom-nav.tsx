@@ -51,7 +51,7 @@ export default function BottomNav() {
       <div aria-hidden="true" style={{ height: 'calc(60px + env(safe-area-inset-bottom, 0px))' }} />
       <nav
         aria-label="Thanh điều hướng dưới"
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-stone-200 bg-stone-0 shadow-card"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch bg-stone-0 shadow-nav"
         style={{ height: 'calc(60px + env(safe-area-inset-bottom, 0px))', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         <GardenHintBubble onGardenTab={pathname === '/vuon-xanh'} />
@@ -71,7 +71,7 @@ export default function BottomNav() {
                 e.preventDefault();
                 scrollToTop();
               }}
-              className={`relative flex min-h-11 min-w-0 flex-1 flex-col items-center gap-[3px] ${t.center ? 'justify-end pb-1.5' : 'justify-center'} ${active ? 'font-bold text-forest-700' : 'font-medium text-stone-500'}`}
+              className={`relative flex min-h-11 min-w-0 flex-1 flex-col items-center gap-[3px] ${t.center ? 'justify-end pb-1.5' : 'justify-center'} ${active ? 'font-semibold text-forest-700' : 'font-medium text-stone-500'}`}
             >
               {t.center ? (
                 <span
@@ -81,8 +81,8 @@ export default function BottomNav() {
                   <t.Icon className="h-6 w-6" />
                 </span>
               ) : (
-                <span aria-hidden="true" className="relative grid place-items-center">
-                  <t.Icon className="h-6 w-6" />
+                <span aria-hidden="true" className={`relative grid place-items-center${active ? ' tubu-tab-pop' : ''}`}>
+                  <t.Icon className="h-6 w-6" {...(active ? { fill: 'currentColor', fillOpacity: 0.16, strokeWidth: 2 } : null)} />
                   <CountBadge count={count} />
                   {dot && (
                     <span
@@ -93,7 +93,7 @@ export default function BottomNav() {
                   )}
                 </span>
               )}
-              <span className="text-caption">{t.label}</span>
+              <span className="text-label">{t.label}</span>
             </Link>
           );
         })}

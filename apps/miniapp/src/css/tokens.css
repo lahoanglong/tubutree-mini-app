@@ -154,6 +154,19 @@ body.with-back-btn .page.page-bleed {
   transition-duration: var(--p-dur-press);
 }
 
+/* ── Tab đang chọn của thanh dưới: icon nảy .88 → 1 (đã chuyển tab). Giảm chuyển động: quy tắc chung cuối file đưa về tức thì. ── */
+@keyframes tubu-tab-pop {
+  0% {
+    transform: scale(0.88);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.tubu-tab-pop {
+  animation: tubu-tab-pop 220ms var(--p-ease-spring) both;
+}
+
 /* ── Card tiêu chuẩn & Claymorphism — UI/UX Pro Max ── */
 .tubu-card {
   background: var(--color-bg-surface);

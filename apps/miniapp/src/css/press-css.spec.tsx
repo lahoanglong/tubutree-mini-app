@@ -43,3 +43,23 @@ describe('css/tokens.css: phản hồi nhấn (polish PL-11)', () => {
     expect(css).toMatch(/--ease-spring:\s*var\(--p-ease-spring\)/);
   });
 });
+
+describe('css/tokens.css: icon nảy khi chọn tab (polish PL-10)', () => {
+  afterEach(() => document.head.querySelectorAll('style').forEach((s) => s.remove()));
+
+  it('có @keyframes tubu-tab-pop từ scale .88 về 1 và lớp .tubu-tab-pop 220ms easing spring', () => {
+    const css = readFileSync(resolve(__dirname, 'tokens.css'), 'utf8');
+    expect(css).toMatch(/@keyframes tubu-tab-pop\s*\{[^}]*0%\s*\{[^}]*scale\(0\.88\)[^}]*\}[^}]*100%\s*\{[^}]*scale\(1\)/);
+    const rule = loadRules().find((r) => r.selectorText === '.tubu-tab-pop');
+    expect(rule, 'thiếu .tubu-tab-pop').toBeDefined();
+    const animation = rule!.style.getPropertyValue('animation');
+    expect(animation).toContain('tubu-tab-pop');
+    expect(animation).toContain('220ms');
+    expect(animation).toContain('var(--p-ease-spring)');
+  });
+
+  it('khách bật giảm chuyển động: quy tắc chung đưa animation-duration về 0,01ms (phủ cả .tubu-tab-pop)', () => {
+    const css = readFileSync(resolve(__dirname, 'tokens.css'), 'utf8');
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{\s*\*,\s*\*::before,\s*\*::after\s*\{[^}]*animation-duration:\s*0\.01ms/);
+  });
+});

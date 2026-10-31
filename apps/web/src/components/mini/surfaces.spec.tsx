@@ -8,6 +8,7 @@ import { Card } from './card';
 import { ListRow } from './list-row';
 import { Badge, StatusPill } from './badge';
 import { Chip } from './chip';
+import { Icon } from './icon';
 import { TierBadge } from './tier-badge';
 import { Avatar, CountdownChip, FlashBadge, StatTile } from './tiles';
 import { ProgressBar } from './progress-bar';
@@ -205,3 +206,13 @@ describe('ProgressBar có tên đọc được', () => {
     expect(b.getAttribute('aria-label')).toBe('Tiến độ nhiệm vụ');
   });
 });
+
+describe('Icon filled', () => {
+  it('filled tô 16% cùng màu nét của tông, nét 2; không filled giữ rỗng nét 1,75', () => {
+    const on = mount(<Icon icon={Zap} tone="brand" filled />).container.querySelector('svg')!;
+    expect([on.getAttribute('fill'), on.getAttribute('fill-opacity'), on.getAttribute('stroke-width')]).toEqual(['var(--color-text-brand)', '0.16', '2']);
+    const off = mount(<Icon icon={Zap} />).container.querySelector('svg')!;
+    expect([off.getAttribute('fill'), off.getAttribute('stroke-width')]).toEqual(['none', '1.75']);
+  });
+});
+
