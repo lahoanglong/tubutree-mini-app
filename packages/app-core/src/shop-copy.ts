@@ -1,0 +1,194 @@
+import { META_COPY } from './commerce/meta-copy';
+import { fillTemplate } from './copy-template';
+
+/**
+ * Một nguồn chữ cho gian hàng (Mini App và web). Chữ của màn mua sắm chỉ thêm ở đây; số ký tự tối đa của từng khoá ở
+ * `shop-copy-budget.ts` (tách riêng để bản build không phải mang bảng ngân sách). Mẫu có chỗ trống `{tên}`, điền bằng `fillCopy`.
+ * Nguồn chữ: docs/2026-10-31-shop-redesign/review/ux-copy.md mục B; chữ Giờ vàng theo kế hoạch (Vừa mở bán / Đã bán n% / Sắp hết /
+ * Đã bán hết) vì kế hoạch chốt sau báo cáo.
+ *
+ * Bảng là object literal thuần để bundler bỏ được khi không ai dùng (Mini App giữ gói đầu dưới 700 KB). Chữ nằm trên đường nạp của gói
+ * đầu (dòng "Đã bán", sao) đặt ở `commerce/meta-copy.ts` để `card-meta` không kéo cả bảng này theo.
+ */
+export const SHOP_COPY: Record<string, string> = {
+  // Giờ vàng
+  'flash.title': 'Giờ vàng',
+  'flash.seeAll': 'Xem tất cả',
+  'flash.slotLive': 'Đang diễn ra',
+  'flash.slotNext': 'Sắp diễn ra',
+  'flash.slotTomorrow': 'Ngày mai',
+  'flash.slotEnded': 'Đã kết thúc',
+  'flash.endsIn': 'Kết thúc sau {t}',
+  'flash.startsIn': 'Bắt đầu sau {t}',
+  'flash.startsAt': 'Mở lúc {time}',
+  'flash.startsAtDay': 'Mở lúc {time} ngày {day}',
+  'flash.badge': 'Giờ vàng -{pct}%',
+  'flash.justOpened': 'Vừa mở bán',
+  'flash.soldPct': 'Đã bán {n}%',
+  'flash.almostGone': 'Sắp hết',
+  'flash.left': 'Còn {n} suất',
+  'flash.soldOut': 'Đã bán hết',
+  'flash.limit': 'Mỗi khách tối đa {n}',
+  'flash.buy': 'Mua ngay',
+  'flash.remind': 'Nhắc tôi',
+  'flash.reminded': 'Đã đặt nhắc',
+  'flash.remindedToast': 'Tubu sẽ nhắc bạn lúc {time}',
+  'flash.unremindToast': 'Đã bỏ nhắc',
+  'flash.emptyTitle': 'Chưa có Giờ vàng lúc này',
+  'flash.emptyBody': 'Khung giờ tiếp theo sẽ hiện ở đây.',
+  'flash.emptyCta': 'Xem sản phẩm khác',
+  'flash.endedTitle': 'Khung giờ này đã kết thúc',
+  'flash.endedCta': 'Xem khung giờ tiếp theo',
+  'flash.priceChangedBody': 'Vài sản phẩm Giờ vàng vừa hết suất hoặc hết giờ. Bạn xem lại giỏ trước khi đặt nhé.',
+  'flash.overLimitError': 'Giá Giờ vàng chỉ áp cho {n} sản phẩm mỗi khách. Bạn giảm số lượng rồi đặt lại nhé.',
+  'flash.soldOutError': 'Suất Giờ vàng vừa hết, sản phẩm về giá thường. Bạn xem lại giỏ nhé.',
+  'flash.notifyStart': '{name} đang có giá Giờ vàng tới {time}.',
+
+  // Bán chạy nhất
+  'rank.title': 'Bán chạy nhất',
+  'rank.basis': 'Theo lượt bán 30 ngày qua',
+  'rank.basisAll': 'Theo tổng lượt bán',
+  'rank.tabAll': 'Tất cả',
+  'rank.spoken': 'Hạng {n} bán chạy',
+  'rank.seeAll': 'Xem tất cả',
+  'rank.emptyTitle': 'Chưa đủ lượt bán để xếp hạng',
+  'rank.emptyCta': 'Xem sản phẩm trong danh mục',
+
+  // Nhãn, tồn kho, giá đọc, dòng meta, số liệu shop
+  'badge.discount': '-{pct}%',
+  'badge.new': 'Mới',
+  'badge.featured': 'Tubu chọn',
+  'badge.loved': 'Được yêu thích',
+  'badge.freeship': 'Miễn phí giao hàng',
+  'badge.flashSpoken': 'Giờ vàng giảm {pct}%',
+  'badge.discountSpoken': 'Giảm {pct}%',
+  'stock.out': 'Tạm hết hàng',
+  'stock.discontinued': 'Ngừng bán',
+  'price.spoken': 'Giá {price}',
+  'price.flashSpoken': 'Giá Giờ vàng {price}',
+  'price.compareSpoken': ', giá gốc {price}',
+  'meta.rating': META_COPY.rating,
+  'meta.sold': META_COPY.sold,
+  'stats.products': 'Sản phẩm',
+  'stats.rating': 'Đánh giá',
+  'stats.sold': 'Đã bán',
+  'stats.productsSpoken': '{n} sản phẩm',
+  'stats.ratingSpoken': '{avg} sao',
+  'stats.soldSpoken': 'Đã bán hơn {n}',
+  'brand.title': 'Thương hiệu',
+
+  // Đồng hồ (countdown.ts)
+  'time.days': '{d} ngày',
+  'time.daysHours': '{d} ngày {h} giờ',
+  'time.hoursMinutes': '{h} giờ {m} phút',
+  'time.hours': '{h} giờ',
+  'time.minutes': '{m} phút',
+  'time.underMinute': 'dưới 1 phút',
+  'time.daysClock': '{d} ngày {clock}',
+
+  // Gợi ý hôm nay
+  'suggest.title': 'Gợi ý hôm nay',
+  'suggest.tabForYou': 'Dành cho bạn',
+  'suggest.tabBest': 'Bán chạy',
+  'suggest.tabNew': 'Mới nhất',
+  'suggest.guestHint': 'Đăng nhập để có gợi ý hợp với bạn',
+  'suggest.loadingMore': 'Đang tải thêm…',
+  'suggest.loadMoreFailed': 'Chưa tải thêm được.',
+  'suggest.more': 'Xem thêm',
+  'suggest.end': 'Bạn đã xem hết gợi ý hôm nay',
+
+  // Banner và chiến dịch
+  'campaign.carouselLabel': 'Chương trình nổi bật',
+  'campaign.slideLabel': '{title}, {i} trên {n}',
+  'campaign.dot': 'Xem chương trình {i}',
+  'campaign.pause': 'Dừng tự chuyển',
+  'campaign.play': 'Tự chuyển tiếp',
+  'campaign.dateRange': 'Từ {a} đến {b}',
+  'campaign.statusLive': 'Đang diễn ra',
+  'campaign.statusNext': 'Sắp diễn ra',
+  'campaign.statusEnded': 'Đã kết thúc',
+  'campaign.sectionCoupons': 'Mã giảm giá của chương trình',
+  'campaign.sectionFlash': 'Giờ vàng trong chương trình',
+  'campaign.sectionProducts': 'Sản phẩm trong chương trình',
+  'campaign.notStarted': 'Chương trình mở lúc {when}',
+  'campaign.endedTitle': 'Chương trình đã kết thúc',
+  'campaign.endedBody': 'Cảm ơn bạn đã ghé. Xem các ưu đãi đang có nhé.',
+  'campaign.notFound': 'Không tìm thấy chương trình này',
+  'campaign.share': 'Chia sẻ chương trình',
+
+  // Mã giảm giá
+  'coupon.title': 'Mã giảm giá',
+  'coupon.tabClaim': 'Nhận mã',
+  'coupon.tabMine': 'Mã của tôi',
+  'coupon.tabHistory': 'Đã dùng/hết hạn',
+  'coupon.freeship': 'Miễn phí giao hàng',
+  'coupon.amount': 'Giảm {amount}',
+  'coupon.percent': 'Giảm {pct}%',
+  'coupon.percentMax': 'Giảm {pct}% (tối đa {max})',
+  'coupon.minOrder': 'Đơn từ {min}',
+  'coupon.scopeAll': 'Mọi sản phẩm',
+  'coupon.scopeBrand': 'Cho sản phẩm {name}',
+  'coupon.scopeCount': 'Cho {n} sản phẩm',
+  'coupon.expires': 'Dùng đến {date}',
+  'coupon.expiresToday': 'Hết hạn hôm nay',
+  'coupon.expiresInDays': 'Còn {n} ngày',
+  'coupon.usesLeft': 'Còn {n} lượt',
+  'coupon.save': 'Lưu mã',
+  'coupon.saved': 'Đã lưu',
+  'coupon.use': 'Dùng ngay',
+  'coupon.copy': 'Sao chép',
+  'coupon.needMore': 'Mua thêm {x} để dùng',
+  'coupon.outOfQuota': 'Đã hết lượt',
+  'coupon.expired': 'Đã hết hạn',
+  'coupon.used': 'Đã dùng',
+  'coupon.savedToast': 'Đã lưu vào Mã của tôi',
+  'coupon.loginToSave': 'Đăng nhập để lưu mã nhé',
+  'coupon.detailTitle': 'Điều kiện dùng mã',
+  'coupon.emptyMineTitle': 'Bạn chưa có mã nào dùng được',
+  'coupon.emptyMineBody': 'Lưu mã ở mục Nhận mã, hoặc đổi Điểm Xanh lấy mã ở Đổi quà.',
+  'coupon.emptyClaimTitle': 'Hôm nay chưa có mã mới',
+  'coupon.oneCodeHint': 'Mỗi đơn dùng 1 mã',
+
+  // Combo và mua kèm
+  'combo.title': 'Combo tiết kiệm',
+  'combo.rule': 'Mua {n} giảm {pct}%',
+  'combo.total': 'Tổng {price} · Tiết kiệm {save}',
+  'combo.add': 'Thêm combo vào giỏ',
+  'combo.tileTag': 'Có combo',
+  'combo.cartHint': 'Thêm {n} sản phẩm nữa để giảm combo {pct}%',
+  'combo.cartReached': 'Đã đủ combo, giảm {x}',
+  'combo.cartLost': 'Combo chưa đủ món nên chưa giảm',
+  'combo.cartLine': 'Giảm giá combo',
+  'addon.title': 'Mua kèm giá ưu đãi',
+  'addon.price': 'Giá mua kèm {price}',
+  'addon.condition': 'Chỉ khi mua cùng {name}',
+  'addon.add': 'Thêm',
+  'addon.added': 'Đã thêm',
+  'addon.cartLine': 'Ưu đãi mua kèm',
+  'addon.lost': 'Đã bỏ giá mua kèm vì {name} không còn trong giỏ',
+  'pdp.boughtTogether': 'Khách thường mua cùng',
+
+};
+
+/** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */
+export const FORBIDDEN_TERMS: readonly { pattern: RegExp; use: string }[] = [
+  { pattern: /Nhãn hàng|theo dõi nhãn|nhãn này|Cùng nhà/i, use: 'Thương hiệu' },
+  { pattern: /\bTop\b/, use: 'Bán chạy nhất' },
+  { pattern: /Freeship/i, use: 'Miễn phí giao hàng' },
+  { pattern: /voucher/i, use: 'Mã giảm giá' },
+  { pattern: /Flash sale/i, use: 'Giờ vàng' },
+  { pattern: /giờ vàng/, use: 'Giờ vàng (hoa chữ G)' },
+  { pattern: /\bHSD\b/, use: 'Hạn dùng hoặc Dùng đến' },
+  { pattern: /Chỉ còn/i, use: 'Còn {n} sản phẩm' },
+  { pattern: /Vui lòng|chúng tôi/i, use: 'Bạn hoặc Tubu' },
+  { pattern: /cửa hàng/i, use: 'Gian hàng' },
+  { pattern: /\.{3}/, use: '… (một ký tự)' },
+  { pattern: /\b\d+h \d{2}m\b/, use: 'countdownText, ví dụ "2 giờ 05 phút"' },
+  { pattern: /\bHOT\b|SỐC|Nhanh tay/, use: 'bỏ chữ giục mua' },
+];
+
+/** Điền mẫu `SHOP_COPY[key]`. Khoá lạ hoặc thiếu biến thì ném lỗi: lỗi của người viết mã, bắt ở test chứ không để "{t}" tới tay khách. */
+export function fillCopy(key: string, vars: Record<string, string | number> = {}): string {
+  if (!Object.prototype.hasOwnProperty.call(SHOP_COPY, key)) throw new Error(`shop-copy: không có khoá "${key}"`);
+  return fillTemplate(SHOP_COPY[key]!, vars, key);
+}
