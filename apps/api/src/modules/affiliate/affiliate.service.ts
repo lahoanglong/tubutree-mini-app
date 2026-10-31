@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
@@ -1544,6 +1545,8 @@ export class AffiliateService {
   /** `ok` false khi cả vòng hỏng (không đọc được cờ hay danh sách); lỗi riêng từng CTV không tính. */
   private async transferApproved(): Promise<{ credited: Set<string>; ok: boolean }> {
     const credited = new Set<string>();
+    let candidates = 0;
+    let realErrors = 0;
     try {
       const enabled = await this.config.get<unknown>(AFFILIATE_AUTO_WALLET_TRANSFER_KEY, DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED);
       if (enabled !== true) return { credited, ok: true };
@@ -1562,6 +1565,7 @@ export class AffiliateService {
       }
       for (const [userId, { ids, total }] of byUser) {
         if (total <= 0) continue;
+        candidates++;
         const key = `auto-wallet:${userId}:${createHash('sha1').update([...ids].sort().join(',')).digest('hex')}`;
         try {
           const result = await this.requestPayout(userId, total, 'WALLET_BALANCE', undefined, key);
@@ -1572,8 +1576,17 @@ export class AffiliateService {
           const code = (err as { response?: { code?: string } }).response?.code;
           const msg = err instanceof Error ? err.message : String(err);
           if (code === PIT_TAX_ID_REQUIRED) this.logger.log(`Chưa tự chuyển hoa hồng của ${userId} vào Ví: cần mã số thuế, chờ CTV bấm Chuyển vào Ví.`);
-          else this.logger.warn(`Tự chuyển hoa hồng của ${userId} vào Ví lỗi: ${msg}`);
+          else {
+            // Từ chối nghiệp vụ (đã bị bấm tay trước, dữ liệu vừa đổi) là ca bỏ qua có chủ ý; còn lại (DB chập...) là lỗi thật.
+            if (!(err instanceof HttpException)) realErrors++;
+            this.logger.error(`Tự chuyển hoa hồng của ${userId} vào Ví lỗi: ${msg}`);
+          }
         }
+      }
+      // Có ứng viên mà không ai chuyển được vì lỗi thật: không ghi mốc ngày để giờ sau chạy lại, và log error để TrackCron báo admin.
+      if (candidates > 0 && credited.size === 0 && realErrors > 0) {
+        this.logger.error(`Tự chuyển hoa hồng vào Ví: ${candidates} CTV có khoản chờ nhưng không ai chuyển được (${realErrors} lỗi).`);
+        return { credited, ok: false };
       }
     } catch (err) {
       this.logger.error(`autoTransferApprovedToWallet lỗi: ${err instanceof Error ? err.message : err}`);

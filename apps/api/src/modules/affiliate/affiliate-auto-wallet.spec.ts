@@ -122,6 +122,37 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
     expect([...credited]).toEqual(['d']);
   });
 
+  it('có ứng viên nhưng không ai chuyển được vì lỗi thật (DB chập): ok=false để không ghi mốc ngày, và log error', async () => {
+    const t = build({ rows: [...rows('a', 1_000), ...rows('b', 2_000)] });
+    t.requestPayout.mockRejectedValue(new Error('db chập'));
+    const err = jest.spyOn((t.svc as unknown as { logger: { error: () => void } }).logger, 'error').mockImplementation(() => undefined);
+    const r = await (t.svc as unknown as { transferApproved(): Promise<{ credited: Set<string>; ok: boolean }> }).transferApproved();
+    expect(r.ok).toBe(false);
+    expect(r.credited.size).toBe(0);
+    expect(err).toHaveBeenCalled();
+  });
+
+  it('không ai chuyển được nhưng toàn là ca bỏ qua có chủ ý (thiếu MST, bị bấm tay trước): ok=true', async () => {
+    const t = build({ rows: [...rows('a', 1_000), ...rows('b', 2_000)] });
+    t.requestPayout
+      .mockRejectedValueOnce(new BadRequestException({ code: PIT_TAX_ID_REQUIRED, message: 'cần MST' }))
+      .mockRejectedValueOnce(new BadRequestException('Hoa hồng đã được xử lý.'));
+    const r = await (t.svc as unknown as { transferApproved(): Promise<{ ok: boolean }> }).transferApproved();
+    expect(r.ok).toBe(true);
+  });
+
+  it('đã có ít nhất một CTV chuyển xong thì ok=true dù CTV khác lỗi thật (lỗi đó log error)', async () => {
+    const t = build({ rows: [...rows('a', 1_000), ...rows('b', 2_000)] });
+    t.requestPayout
+      .mockRejectedValueOnce(new Error('db chập'))
+      .mockResolvedValueOnce({ ok: true, method: 'WALLET_BALANCE', credited: 2_000, note: '' });
+    const err = jest.spyOn((t.svc as unknown as { logger: { error: () => void } }).logger, 'error').mockImplementation(() => undefined);
+    const r = await (t.svc as unknown as { transferApproved(): Promise<{ credited: Set<string>; ok: boolean }> }).transferApproved();
+    expect(r.ok).toBe(true);
+    expect([...r.credited]).toEqual(['b']);
+    expect(err).toHaveBeenCalled();
+  });
+
   it('truy vấn lỗi → không ném (cron không được sập process)', async () => {
     const t = build();
     t.findMany.mockRejectedValue(new Error('db down'));
