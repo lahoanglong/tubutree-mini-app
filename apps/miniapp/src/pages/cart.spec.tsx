@@ -1,4 +1,4 @@
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
@@ -168,13 +168,13 @@ describe('CartPage — vùng chạm >= 44px (C-021)', () => {
     expect(undo.className).toContain('tubu-hit-44');
   });
 
-  it('nút tăng/giảm số lượng vuông tối thiểu 44x44 (trước đây 36x36)', async () => {
+  it('nút tăng/giảm số lượng nhìn 36px (size sm của dòng gọn) nhưng vùng chạm vẫn 44x44 qua tubu-hit-44-square', async () => {
     renderPage();
     await screen.findByText('Xà bông thảo mộc');
     for (const name of ['Giảm số lượng', 'Tăng số lượng']) {
       const btn = screen.getByRole('button', { name });
-      expect(Number.parseFloat(btn.style.width)).toBeGreaterThanOrEqual(44);
-      expect(Number.parseFloat(btn.style.height)).toBeGreaterThanOrEqual(44);
+      expect(Number.parseFloat(btn.style.width)).toBeGreaterThanOrEqual(36);
+      expect(btn.className).toContain('tubu-hit-44-square');
     }
   });
 });
@@ -711,5 +711,68 @@ describe('CartPage: gợi ý mã dùng được ở dòng "Mã giảm giá" (ch�
     });
     expect(mocks.getCouponPreviews).not.toHaveBeenCalled();
     expect(screen.queryByText(/mã dùng được/)).toBeNull();
+  });
+});
+
+describe('CartPage: giá gạch, Tiết kiệm, Countdown Giờ vàng, chân dính (P8)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useStorefrontContext.getState().clear();
+    mocks.getCoupons.mockResolvedValue([]);
+  });
+
+  it('dòng có giá niêm yết cao hơn giá bán: gạch giá niêm yết, chân dính ghi Tiết kiệm đúng số; thiếu listUnitPrice thì không', async () => {
+    const discounted = { ...OK_LINE, unitPrice: 33_000, listUnitPrice: 50_000, quantity: 2, total: 66_000 };
+    mocks.getCart.mockResolvedValue(summary({ items: [discounted], subtotal: 66_000, itemCount: 2 }));
+    const first = renderPage();
+    const line = (await screen.findByText('Xà bông thảo mộc')).closest('[data-testid="cart-line"]') as HTMLElement;
+    expect(within(line).getByText('50.000đ')).toHaveStyle({ textDecoration: 'line-through' });
+    expect(within(screen.getByTestId('sticky-bar')).getByText('Tiết kiệm 34.000đ')).toBeInTheDocument();
+    first.unmount();
+    mocks.getCart.mockResolvedValue(summary({}));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    expect(screen.queryByText(/Tiết kiệm/)).toBeNull();
+  });
+
+  it('dòng Giờ vàng: "Kết thúc sau …" thay cho "Đã bán %", đọc được bằng role timer', async () => {
+    const flash = { ...OK_LINE, isFlash: true, soldPct: 98, flashEndAt: new Date(Date.now() + 2 * 3_600_000 + 30_000).toISOString() };
+    mocks.getCart.mockResolvedValue(summary({ items: [flash] }));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    expect(screen.getByRole('timer')).toHaveTextContent('Kết thúc sau 2 giờ 00 phút');
+    expect(screen.queryByText(/Đã bán \d+%/)).toBeNull();
+  });
+
+  it('dòng Giờ vàng chưa có giờ kết thúc (API cũ): vẫn có nhãn Giờ vàng, không đồng hồ', async () => {
+    const flash = { ...OK_LINE, isFlash: true, soldPct: 98 };
+    mocks.getCart.mockResolvedValue(summary({ items: [flash] }));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    expect(screen.getByText('Giờ vàng')).toBeInTheDocument();
+    expect(screen.queryByRole('timer')).toBeNull();
+  });
+
+  it('chân dính gồm dòng mã giảm giá, thanh miễn phí giao, tổng và nút Thanh toán; thân danh sách không còn khối mã', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    const bar = screen.getByTestId('sticky-bar');
+    expect(within(bar).getByRole('button', { name: /Mã giảm giá/ })).toBeInTheDocument();
+    expect(within(bar).getByText(/Mua thêm 150\.000đ để được miễn phí giao hàng/)).toBeInTheDocument();
+    expect(within(bar).getByText('Tạm tính')).toBeInTheDocument();
+    expect(within(bar).getByRole('button', { name: 'Thanh toán (1)' })).toBeInTheDocument();
+    const body = screen.getByRole('region', { name: 'Sản phẩm trong giỏ' });
+    expect(within(body).queryByText('Mã giảm giá')).toBeNull();
+  });
+
+  it('bấm dòng mã trong chân dính mở tấm chọn mã', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    const before = mocks.voucherProps.length;
+    fireEvent.click(within(screen.getByTestId('sticky-bar')).getByRole('button', { name: /Mã giảm giá/ }));
+    await waitFor(() => expect(mocks.voucherProps.at(-1)).toMatchObject({ visible: true }));
+    expect(mocks.voucherProps.length).toBeGreaterThan(before);
   });
 });

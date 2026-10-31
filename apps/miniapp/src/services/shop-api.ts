@@ -84,6 +84,8 @@ export interface CartLine {
   slug: string;
   thumbnail: string | null;
   unitPrice: number;
+  /** Giá niêm yết của dòng (đã tính theo phân loại); lớn hơn `unitPrice` thì giỏ gạch giá và ghi Tiết kiệm. API cũ chưa trả. */
+  listUnitPrice?: number | null;
   quantity: number;
   stock: number;
   weight?: number | null;

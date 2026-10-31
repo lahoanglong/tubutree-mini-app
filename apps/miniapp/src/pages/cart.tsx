@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Page, Text, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Ticket, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
+import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import {
   getCart,
   getCartSelection,
@@ -46,6 +48,7 @@ import { Heading } from '../components/ui/text';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '../utils/shipments';
 import { cartKey, useCartKey } from '../services/cart-key';
 import { ProductThumb } from '../components/ui/product-thumb';
+import { Countdown } from '../components/ui/countdown';
 
 const UNDO_WINDOW_MS = 3500;
 
@@ -211,7 +214,7 @@ export default function CartPage() {
   };
 
   return (
-    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 190 }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 260 }}>
       <PageHeader title="Giỏ hàng" />
       <StorefrontContextBar />
       <DiscontinuedNotice
@@ -263,24 +266,13 @@ export default function CartPage() {
                     onQty={(qty) => update.mutate({ id: line.id, qty })}
                     onRemove={() => handleRemove(line)}
                     onOpen={() => navigate(`/product/${line.slug}`)}
+                    onFlashEnd={() => void queryClient.invalidateQueries({ queryKey: ['cart'] })}
                     pending={update.isPending && update.variables?.id === line.id}
                   />
                 ))}
               </Box>
             </section>
           ))}
-
-          <CouponBlock
-            summary={summary}
-            selectedSubtotal={selectedSubtotal}
-            selectedProductIds={cartProductIds(selectedItems)}
-            // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ.
-            previewSelection={
-              selectedItems.length === 0
-                ? null
-                : { itemIds: allSelected ? undefined : selectedItems.map((l) => l.id), key: cartPreviewKey(selectedItems) }
-            }
-          />
         </>
       )}
 
@@ -290,7 +282,7 @@ export default function CartPage() {
           className="tubu-rise"
           style={{
             position: 'fixed',
-            bottom: empty ? 80 : 156,
+            bottom: empty ? 80 : 236,
             left: 12,
             right: 12,
             background: 'var(--color-bg-inverse)',
@@ -331,6 +323,20 @@ export default function CartPage() {
           tubuOnlyFreeship={hasMerchant}
           tubuSelectedSubtotal={tubuSubtotal(buyableSelected)}
           onCheckout={goCheckout}
+          saving={cartSaving(buyableSelected)}
+          coupon={
+            <CouponBlock
+              summary={summary}
+              selectedSubtotal={selectedSubtotal}
+              selectedProductIds={cartProductIds(selectedItems)}
+              // Không chọn món nào: không hỏi máy chủ (itemIds rỗng bị coi là cả giỏ), thẻ giữ cách hiện cũ.
+              previewSelection={
+                selectedItems.length === 0
+                  ? null
+                  : { itemIds: allSelected ? undefined : selectedItems.map((l) => l.id), key: cartPreviewKey(selectedItems) }
+              }
+            />
+          }
         />
       )}
     </Page>
@@ -401,6 +407,7 @@ function CartLineRow({
   onQty,
   onRemove,
   onOpen,
+  onFlashEnd,
   pending,
 }: {
   line: CartLine;
@@ -409,6 +416,8 @@ function CartLineRow({
   onQty: (qty: number) => void;
   onRemove: () => void;
   onOpen: () => void;
+  /** Hết giờ Giờ vàng khi khách đang xem: làm mới giỏ để API tính lại giá, không cần tải trang. */
+  onFlashEnd: () => void;
   /** PATCH số lượng của chính dòng này đang bay: line.total lúc đó là số client tự nhân (optimistic), chưa phải số server. */
   pending: boolean;
 }) {
@@ -427,14 +436,17 @@ function CartLineRow({
     if (debouncedQty !== line.quantity) onQty(debouncedQty);
     // onQty/line.quantity ổn định trong scope mutate; chỉ trigger khi debouncedQty đổi.
   }, [debouncedQty]);
+  const compareAt = lineCompareAt(line);
   return (
     <Box
+      data-testid="cart-line"
       p={3}
       style={{
+        position: 'relative',
         background: 'var(--color-bg-surface)',
         borderRadius: 'var(--radius-card)',
         display: 'flex',
-        gap: 12,
+        gap: 10,
         alignItems: 'center',
         boxShadow: 'var(--elevation-1)',
       }}
@@ -449,25 +461,37 @@ function CartLineRow({
         data-testid="cart-line-thumb"
         onClick={onOpen}
         style={{
-          width: 64,
-          height: 64,
+          width: 72,
+          height: 72,
           borderRadius: 'var(--radius-media)',
           overflow: 'hidden',
           background: 'var(--color-bg-subtle)',
           flex: '0 0 auto',
+          alignSelf: 'flex-start',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <ProductThumb src={line.thumbnail} alt={line.productName} size={64} />
+        <ProductThumb src={line.thumbnail} alt={line.productName} size={72} />
       </Box>
 
       <Box style={{ flex: 1, minWidth: 0 }}>
-        {/* Tên 1-2 dòng chỉ cao 18-36px: tubu-hit-44 nới vùng chạm lên 44px mà không đổi bố cục dòng. */}
-        <Text size="small" bold role="button" {...rowKeyboardProps()} onClick={onOpen} className="tubu-hit-44" style={{ cursor: 'pointer', display: 'block' }}>
-          {line.productName}
-        </Text>
+        {/* Chừa 36px bên phải cho thùng rác góc trên (vùng chạm 44 nhô ra khỏi lề thẻ). Tên 1-2 dòng chỉ cao 18-36px:
+            tubu-hit-44 nới vùng chạm lên 44px mà không đổi bố cục dòng. */}
+        <div style={{ paddingRight: 36 }}>
+          <Text
+            size="small"
+            bold
+            role="button"
+            {...rowKeyboardProps()}
+            onClick={onOpen}
+            className="tubu-hit-44"
+            style={{ cursor: 'pointer', display: 'block' }}
+          >
+            {line.productName}
+          </Text>
+        </div>
         {line.variationName && (
           <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
             {typeof line.variationName === 'object' && line.variationName !== null
@@ -475,24 +499,21 @@ function CartLineRow({
               : String(line.variationName)}
           </Text>
         )}
-        <Box style={{ marginTop: 4 }}>
-          <PriceTag value={line.unitPrice} size="sm" />
-        </Box>
-        {/* Số của server (line.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi SL chưa khớp server (chờ debounce) và khi PATCH còn bay (số lúc đó do client tự nhân). */}
-        {line.quantity > 1 && localQty === line.quantity && !pending && (
-          <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', display: 'block', fontVariantNumeric: 'tabular-nums' }}>
-            Thành tiền {formatVnd(line.total)}
-          </Text>
-        )}
         {line.isFlash && (
-          <Box flex alignItems="center" style={{ gap: 6, marginTop: 4 }}>
+          <Box flex alignItems="center" style={{ gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
             <Badge tone="promo" size="sm" icon={Zap}>
               {vi.flashSale.badge}
             </Badge>
-            {line.soldPct != null && Number.isFinite(line.soldPct) && clampPercent(line.soldPct) > 0 && (
+            {line.flashEndAt ? (
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-                {vi.flashSale.soldPct(clampPercent(line.soldPct))}
+                <Countdown endAt={line.flashEndAt} mode="text" onEnd={onFlashEnd} />
               </Text>
+            ) : (
+              line.soldPct != null && Number.isFinite(line.soldPct) && clampPercent(line.soldPct) > 0 && (
+                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+                  {vi.flashSale.soldPct(clampPercent(line.soldPct))}
+                </Text>
+              )
             )}
           </Box>
         )}
@@ -512,19 +533,25 @@ function CartLineRow({
             </Text>
           </Box>
         )}
-        {/* Stepper 44px + thùng rác 44px rộng ~180px: máy hẹp (320px) cho thùng rác xuống dòng thay vì tràn khỏi thẻ. */}
-        <Box flex alignItems="center" style={{ marginTop: 8, flexWrap: 'wrap', rowGap: 4 }}>
-          <QuantitySelector
-            size="md"
-            value={localQty}
-            max={Math.max(1, line.stock)}
-            onChange={setLocalQty}
-          />
-          <Box style={{ marginLeft: 'auto' }}>
-            <IconButton icon={Trash2} label={`Xoá ${line.productName}`} onPress={onRemove} />
-          </Box>
+        {/* Hàng đáy: giá (gạch giá niêm yết khi đang giảm) bên trái, bộ đếm 36px bên phải. Máy hẹp (320px) cho giá xuống dòng thay vì tràn. */}
+        <Box flex alignItems="center" justifyContent="space-between" style={{ marginTop: 6, flexWrap: 'wrap', rowGap: 4, columnGap: 8 }}>
+          <PriceTag value={line.unitPrice} compareAt={compareAt} size="sm" tone={compareAt || line.isFlash ? 'deal' : 'default'} />
+          <QuantitySelector size="sm" value={localQty} max={Math.max(1, line.stock)} onChange={setLocalQty} />
         </Box>
+        {/* Số của server (line.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi SL chưa khớp server (chờ debounce) và khi PATCH còn bay (số lúc đó do client tự nhân). */}
+        {line.quantity > 1 && localQty === line.quantity && !pending && (
+          <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', display: 'block', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>
+            Thành tiền {formatVnd(line.total)}
+          </Text>
+        )}
       </Box>
+      <IconButton
+        icon={Trash2}
+        label={`Xoá ${line.productName}`}
+        onPress={onRemove}
+        size="sm"
+        style={{ position: 'absolute', top: 4, right: 4 }}
+      />
     </Box>
   );
 }
@@ -551,9 +578,8 @@ function CouponBlock({
 
   return (
     <>
+      {/* Hàng gọn nằm trong chân dính (mã là bước cuối trước khi bấm Thanh toán): một dòng, vùng chạm 44. */}
       <Box
-        p={3}
-        mx={3}
         className="tubu-press"
         role="button"
         {...rowKeyboardProps()}
@@ -562,76 +588,62 @@ function CouponBlock({
           setSheetOpen(true);
         }}
         style={{
-          background: 'var(--color-bg-surface)',
-          borderRadius: 'var(--radius-card)',
+          minHeight: 44,
+          boxSizing: 'border-box',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 8,
           cursor: 'pointer',
-          boxShadow: 'var(--elevation-1)',
+          boxShadow: 'inset 0 -1px 0 var(--color-border-subtle)',
         }}
       >
-        <Box flex alignItems="center" style={{ gap: 10, minWidth: 0 }}>
-          <Box
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 'var(--radius-control)',
-              background: 'var(--clay-50)',
-              display: 'grid',
-              placeItems: 'center',
-              flex: '0 0 auto',
-            }}
-          >
-            <Ticket size={20} color="var(--clay-700)" />
-          </Box>
-          <Box style={{ minWidth: 0 }}>
-            <Text size="small" bold style={{ color: 'var(--color-text-primary)' }}>
-              Mã giảm giá
+        <Box flex alignItems="center" style={{ gap: 8, minWidth: 0, flex: 1 }}>
+          <Ticket size={20} color="var(--clay-700)" aria-hidden style={{ flex: '0 0 auto' }} />
+          <Text size="small" bold style={{ color: 'var(--color-text-primary)', flex: '0 0 auto' }}>
+            Mã giảm giá
+          </Text>
+          {summary.couponCode ? (
+            <Box flex alignItems="center" style={{ gap: 8, minWidth: 0 }}>
+              <span
+                style={{
+                  background: 'var(--clay-50)',
+                  border: '1px dashed var(--clay-500)',
+                  borderRadius: 'var(--radius-control)',
+                  padding: '2px 6px',
+                  color: 'var(--clay-700)',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {summary.couponCode}
+              </span>
+              {summary.discount > 0 && (
+                <Text size="xSmall" style={{ color: 'var(--color-text-success)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                  -{formatVnd(summary.discount)}
+                </Text>
+              )}
+            </Box>
+          ) : hint ? (
+            <Text size="xSmall" style={{ color: 'var(--color-text-brand)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {couponHintText(hint, formatVnd)}
             </Text>
-            {summary.couponCode ? (
-              <Box flex alignItems="center" style={{ gap: 8, marginTop: 2, minWidth: 0 }}>
-                <span
-                  style={{
-                    background: 'var(--clay-50)',
-                    border: '1px dashed var(--clay-500)',
-                    borderRadius: 'var(--radius-control)',
-                    padding: '2px 6px',
-                    color: 'var(--clay-700)',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    minWidth: 0,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {summary.couponCode}
-                </span>
-                {summary.discount > 0 && (
-                  <Text size="xSmall" style={{ color: 'var(--color-text-success)', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    -{formatVnd(summary.discount)}
-                  </Text>
-                )}
-              </Box>
-            ) : hint ? (
-              <Text size="xSmall" style={{ color: 'var(--color-text-brand)', marginTop: 2 }}>
-                {couponHintText(hint, formatVnd)}
-              </Text>
-            ) : (
-              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-                Chọn hoặc nhập mã giảm giá
-              </Text>
-            )}
-          </Box>
+          ) : (
+            <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Chọn hoặc nhập mã giảm giá
+            </Text>
+          )}
         </Box>
 
-        <Box flex alignItems="center" style={{ gap: 4, flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--color-text-brand)' }}>
+        <Box flex alignItems="center" style={{ gap: 2, flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--color-text-brand)' }}>
           <Text size="xSmall" bold style={{ color: 'var(--color-text-brand)' }}>
             {summary.couponCode ? 'Thay đổi' : 'Chọn mã'}
           </Text>
-          <ChevronRight size={16} color="var(--color-text-brand)" />
+          <ChevronRight size={16} color="var(--color-text-brand)" aria-hidden />
         </Box>
       </Box>
 
@@ -663,6 +675,8 @@ function StickySummary({
   tubuOnlyFreeship,
   tubuSelectedSubtotal,
   onCheckout,
+  saving,
+  coupon,
 }: {
   summary: CartSummary;
   selectedSubtotal: number;
@@ -677,6 +691,10 @@ function StickySummary({
   tubuOnlyFreeship: boolean;
   tubuSelectedSubtotal: number;
   onCheckout: () => void;
+  /** Tiền khách tiết kiệm nhờ giá giảm của các dòng đang chọn (chỉ hiển thị, tiền thật do máy chủ tính). */
+  saving: number;
+  /** Hàng mã giảm giá: dính cùng tổng tiền để chọn mã xong là bấm Thanh toán luôn. */
+  coupon: ReactNode;
 }) {
   const threshold = summary.freeshipThreshold;
   // Freeship progress theo tổng ĐANG CHỌN (không phải toàn giỏ) — khớp số tiền sẽ thanh toán. Có hàng gian hàng tự giao
@@ -701,6 +719,7 @@ function StickySummary({
     <StickyActionBar
       summary={
         <>
+          {coupon}
           {showFreeship && (
             <Box style={{ marginBottom: 2 }}>
               <Text size="xSmall" style={{ color: reached ? 'var(--color-text-success)' : 'var(--color-text-secondary)' }}>
@@ -755,6 +774,11 @@ function StickySummary({
             value={formatVnd(Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount))}
             emphasis
           />
+          {saving > 0 && (
+            <Text size="xSmall" data-testid="cart-saving" style={{ color: 'var(--color-text-success)', textAlign: 'right' }}>
+              {fillCopy('cart.saving', { x: formatVnd(saving) })}
+            </Text>
+          )}
           {outOfStockNames.length > 0 && (
             <Box flex alignItems="flex-start" role="status" style={{ gap: 4, marginTop: 4 }}>
               <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
