@@ -31,3 +31,5 @@ export { TierBadge } from './tier-badge';
 export { BottomSheet, Dialog } from './bottom-sheet';
 export { Countdown } from './countdown';
 export type { CountdownProps } from './countdown';
+export { FlashSoldBar } from './flash-sold-bar';
+export type { FlashSoldBarProps } from './flash-sold-bar';
