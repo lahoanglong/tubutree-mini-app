@@ -15,11 +15,13 @@ export interface SegmentedTabsProps {
   value: string;
   onChange: (key: string) => void;
   scroll?: boolean;
+  /** Tên của cả dải tab cho trình đọc màn hình ("Danh mục bán chạy"); thiếu thì dải không có tên. */
+  label?: string;
 }
 
 /** Thay 5 kiểu tab khác nhau hiện tại (pill cam, TabChip, Button ZaUI đổi variant, Chip, Text-chip
  * — audit A4-19). role="tablist"/"tab" cho a11y (0 chỗ dùng hiện tại). */
-export function SegmentedTabs({ items, value, onChange, scroll }: SegmentedTabsProps) {
+export function SegmentedTabs({ items, value, onChange, scroll, label }: SegmentedTabsProps) {
   const hints = useScrollHints<HTMLDivElement>();
   useEffect(() => {
     if (!scroll) return;
@@ -30,6 +32,7 @@ export function SegmentedTabs({ items, value, onChange, scroll }: SegmentedTabsP
     <div
       {...(scroll ? hints : {})}
       role="tablist"
+      aria-label={label}
       className={scroll ? 'scroll-x tubu-scroll-fade' : undefined}
       style={{
         display: 'flex',
