@@ -276,7 +276,8 @@ describe('FeedPage — tiêu đề, vùng chạm, biểu tượng (C-076, C-113,
     for (const name of ['Sự kiện', 'Hỏi Tubu']) {
       const btn = screen.getByRole('button', { name });
       expect(Number.parseFloat(btn.style.minWidth)).toBeGreaterThanOrEqual(44);
-      expect(Number.parseFloat(btn.style.minHeight)).toBeGreaterThanOrEqual(44);
+      // Chip md nhìn cao 36px; vùng chạm 44px do `.tubu-hit-44` (::after) nên chiều cao khai báo hoặc lớp phải đủ.
+      expect(Number.parseFloat(btn.style.minHeight) >= 44 || btn.className.includes('tubu-hit-44'), name).toBe(true);
     }
     expect(screen.getByRole('button', { name: 'Nổi bật' }).className).toContain('tubu-hit-44');
   });
