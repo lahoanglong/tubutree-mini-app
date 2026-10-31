@@ -211,3 +211,34 @@ Lệnh kiểm một file: `cd packages/app-core && npx vitest run src/<đường
 - [ ] **Step 3: e2e Mini đầy đủ:** `cd apps/e2e && E2E_SCOPE=miniapp E2E_MINIAPP_PORT=3303 npx playwright test --workers=2 --reporter=line` → 0 đỏ (đỏ vì thiết kế đã chốt thì sửa test và ghi notes).
 - [ ] **Step 4: gate:** `bash docs/2026-10-28-review/tools/gate.sh <worktree> --base 2e52b9be9 --out .claude/worktrees/gate-P7.txt`; bước FAIL kiểm lại ở base (worktree tạm) để ghi "có sẵn".
 - [ ] **Step 5: ghi `plans/P7-browse.md` mục "Ghi chú cho gói sau"** (lệch kế hoạch thật, số bundle, đường dẫn ảnh) rồi commit `docs(shop-redesign): P7 browse, ghi chú bàn giao`.
+
+## Ghi chú cho gói sau
+
+### Kết quả kiểm cuối gói
+
+- Gate (`gate-P7.txt`): 0 FAIL, mọi bước PASS: vitest app-core 1556, miniapp 5684 (cả múi giờ UTC), web 8398, jest api 11989; tsc 5 gói, eslint 3 gói, lint-parity, vite-build, bundle-mini (entry 682 KB, tổng 2044 KB).
+- e2e Mini đầy đủ (`--workers=2`): 236 passed, 10 skipped, 0 failed.
+- Chụp 375px khớp Mini ở hub (có và không cây), danh sách theo danh mục có con, theo `q`, và web lg 1280 có cột lọc; số đo: hàng ô tìm 58, ô danh mục 102, tiêu đề khối 24, SortBar 44, lưới đầu danh sách 140 (Mini 140,5).
+
+### Việc đã làm lệch kế hoạch hoặc cần biết
+
+- **Bundle Mini:** entry 682 KB (trần 700 KB), tổng 2044 KB trên cảnh báo 2048 KB. Gói sau thêm vào Mini phải đo lại bằng `node scripts/ci/bundle-budget.cjs apps/miniapp/www`; còn 4 KB dư.
+- **`/brands` thiếu `logoUrl`:** hub đọc `logoUrl?` nếu có, không thì hiện chữ cái đầu (`avatarInitial`/`avatarTone` của app-core). Sửa ở `catalog.service.ts` thuộc P6.
+- **"Xem tất cả" của kệ Bán chạy nhất:** Mini trỏ `/browse?sort=best_seller`, web trỏ `/san-pham?sort=best_seller`. P13 đổi sang `shelf('browse.bestSellers').seeAllRoute` khi có route `/best-sellers`.
+- **`CLEAR_SEARCH_PATCH` giữ nguyên:** dùng `withListMode(patch)` thêm `all: true`. Prop `onSeeBestSellers` của hub bỏ vì nút "Xem tất cả" tự đẩy URL.
+- **PUSH và replace:** ô danh mục ở hub, ô thương hiệu và "Xem tất cả sản phẩm" dùng PUSH (Back về hub). Mọi thao tác trong danh sách dùng replace (`update`/`updateList`).
+- **Chia sẻ chung đã đổi:** `useScrollRestoration` (khôi phục cuộn theo từng chế độ hub/danh sách), Mini `CategoryDTO.children?`, kiểu trả về của `sortForTab` thu hẹp thành `BrowseSort`.
+- **Hàng tiêu đề danh sách:** `ListHeading` là MỘT hàng (tên trái, số phải) cả Mini lẫn web; ở web tên chỉ hiện từ điện thoại (`md:hidden`), từ md tên là `h1` của `ListingLayout`. Hàng ô tìm Mini cao 58px (ô 46 + đệm 6x2); web đặt `max-md:h-[46px]` cho khớp, `--sort-bar-top:58px` ở khung `data-browse-scope`.
+- **Trình tự TDD:** `pages/browse.tsx` của Mini viết trước spec của nó (vi phạm thứ tự); spec bổ sung ngay sau.
+- **e2e sửa vì thiết kế đã chốt:** `browse-defaults`, `buy-flow-4b-browse`, `buy-flow-4b`, `tile-rhythm` (Mini), `shop.web`, `pdp-mobile.web` đổi sang hub ở `/browse` và danh sách ở `?all=1`, mock dùng chung `support/discovery-mocks.ts` thêm `CATEGORY_TREE`, cờ `tree`/`emptyCategories` và 400 cho `best_seller_30d` ở chế độ `legacy`; `browse-hub.miniapp.spec.ts` mới; nhãn SortBar "Giá ⇅", "Lọc"; tiêu đề h1 web 'Kết quả cho "dau goi"' và 'Tất cả sản phẩm'; limit 20. WebKit đọc `boundingBox` sau cuộn lệch 1px nên dùng `expect.poll`.
+- **Web:** liên kết trang có `all=1` chỉ ở trang 1 (canonical không đổi); `ListingLayout` có thêm prop `toolbar`; SortBar dính ở khung bọc (cha của phần tử dính phải cao bằng danh sách) và nút Lọc ẩn từ lg bằng `!hidden` (nút có `display` ở style); cột lọc lg hiện 6 thương hiệu rồi "Thêm"/"Thu gọn".
+- **SEO web:** `/san-pham` gốc không còn liệt kê toàn bộ sản phẩm (hub chỉ có liên kết Bán chạy, ô danh mục là nút); `?all=1` vào `NOINDEX_PARAMS`; `?page=N` canonical lấy từ phân trang.
+- **Chưa chạy ở máy:** `shop.web.spec.ts` và `pdp-mobile.web.spec.ts` cần API thật, để CI.
+
+### Bẫy khi dựng lại ảnh chụp
+
+- `.scroll-x` (mini.css và tokens.css) có `max-width: 100%`: dòng `-mx-4` trên web bị chặn ở 343px. Hàng cuộn tràn mép phải đặt `maxWidth: 'none'` ở style.
+- Chữ nền web 16px, Mini 15px: phần tử không đặt cỡ chữ sẽ cao hơn Mini 1,5px mỗi dòng.
+- Next dev giữ cache fetch của `/categories` (stale-while-revalidate): đổi API giả giữa hai lần chụp phải dừng server, chuyển `apps/web/.next/cache/fetch-cache` đi rồi mới chạy lại.
+- Cổng 3304 có thể trùng API giả của gói khác nghe ở `*:3304`; Next của mình nghe `[::1]`. Dùng `localhost` và kiểm `lsof` trước khi tắt, chỉ tắt tiến trình có cwd trong worktree của mình.
+- Ảnh: `docs/2026-10-31-shop-redesign/screens/P7/{miniapp,web}-{hub,hub-notree,list-category,list-search,list-all}.png` (375x812, DPR 3) và `web-lg-{hub,list-category}.png` (1280). Thư mục không vào git.
