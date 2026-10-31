@@ -14,6 +14,7 @@ import {
 } from '@/lib/admin-client';
 import { downloadCsvFile, generateClaimCodesCsv } from '@/lib/export-csv';
 import { formatVnd } from '@/lib/shop-client';
+import { COUPON_END_PAST_MESSAGE, isCouponEndPast } from '@/lib/admin-reports';
 import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { VnDateInput } from './vn-date-input';
@@ -179,11 +180,12 @@ export function ClaimCampaignPanel({ onOpenConfig }: { onOpenConfig?: () => void
     toggleBatch.mutate({ batch: b.batch, isActive: !turnOff });
   };
 
+  const endAlreadyPast = isCouponEndPast(f.endAt);
   const valueMissing = f.type !== 'FREESHIP' && !(Number(f.value) > 0);
   const quantity = Number(f.quantity);
-  const batchReady = /^[A-Z0-9]{2,16}$/.test(f.prefix) && Number.isInteger(quantity) && quantity >= 1 && quantity <= BATCH_MAX && !valueMissing && cardOk && !datePending;
+  const batchReady = /^[A-Z0-9]{2,16}$/.test(f.prefix) && Number.isInteger(quantity) && quantity >= 1 && quantity <= BATCH_MAX && !valueMissing && cardOk && !datePending && !endAlreadyPast;
   const claimLimit = Number(f.claimLimit);
-  const sharedReady = /^[A-Z0-9_-]{3,40}$/.test(f.code) && Number.isInteger(claimLimit) && claimLimit >= 1 && !valueMissing && cardOk && !datePending;
+  const sharedReady = /^[A-Z0-9_-]{3,40}$/.test(f.code) && Number.isInteger(claimLimit) && claimLimit >= 1 && !valueMissing && cardOk && !datePending && !endAlreadyPast;
   const field = `${FIELD_CLASS} ${TOUCH_H} w-full`;
 
   return (
@@ -343,6 +345,7 @@ export function ClaimCampaignPanel({ onOpenConfig }: { onOpenConfig?: () => void
         Chỉ khách mới (chưa có đơn nào tại Tubu Tree, trừ đơn huỷ)
       </label>
 
+      {endAlreadyPast && <p role="alert" className="text-xs text-danger-fg">{COUPON_END_PAST_MESSAGE}</p>}
       {mode === 'batch' ? (
         <button type="button" className={`${BTN_PRIMARY} w-full`} disabled={!batchReady || createBatch.isPending} onClick={() => createBatch.mutate()}>
           {createBatch.isPending ? 'Đang tạo lô...' : 'Tạo lô và tải CSV'}

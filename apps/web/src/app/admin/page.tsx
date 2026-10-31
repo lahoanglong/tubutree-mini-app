@@ -160,7 +160,7 @@ import { AnalyticsTab } from './analytics-tab';
 import { ReportsTab, reportSectionsFor } from '@/components/admin/reports-tab';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { InboxBadge, OpsInboxTab, type TodayStatKey } from '@/components/admin/ops-inbox-tab';
-import { vnTodayKey } from '@/lib/admin-reports';
+import { COUPON_END_PAST_MESSAGE, isCouponEndPast, vnTodayKey } from '@/lib/admin-reports';
 import { OpsHealthTab } from '@/components/admin/ops-health-tab';
 import type { WasteSeed } from '@/components/admin/waste-tab';
 import { DealerAccountsTab } from '@/components/admin/dealer-accounts-tab';
@@ -2644,6 +2644,7 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
   const [startPending, setStartPending] = useState(false);
   const [endPending, setEndPending] = useState(false);
   const endBeforeStart = !!f.endAt && !!f.startAt && f.endAt < f.startAt;
+  const endAlreadyPast = isCouponEndPast(f.endAt);
   const create = useMutation({
     mutationFn: () =>
       createCoupon({
@@ -2749,8 +2750,9 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
           </Field>
         </div>
       </div>
-      <button onClick={() => create.mutate()} disabled={!f.code || startPending || endPending || endBeforeStart} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
+      <button onClick={() => create.mutate()} disabled={!f.code || startPending || endPending || endBeforeStart || endAlreadyPast} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
       {endBeforeStart && <p role="alert" className="text-xs text-danger-fg">Ngày hết hạn không được sớm hơn ngày bắt đầu. Hãy chọn lại ngày hết hạn hoặc ngày bắt đầu để tạo mã.</p>}
+      {endAlreadyPast && <p role="alert" className="text-xs text-danger-fg">{COUPON_END_PAST_MESSAGE}</p>}
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
     )}

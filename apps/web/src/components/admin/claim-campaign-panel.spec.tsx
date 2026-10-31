@@ -11,6 +11,7 @@ vi.mock('@/lib/export-csv', async (importOriginal) => ({
 
 import { ClaimCampaignPanel, claimLink, offerLabel } from './claim-campaign-panel';
 import { generateClaimCodesCsv } from '@/lib/export-csv';
+import { vnTodayKey } from '@/lib/admin-reports';
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -132,6 +133,33 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
     const body = bodyOf(api.calls.find((c) => c.init?.method === 'POST'));
     expect(body.startAt).toBe('2026-10-31T17:00:00.000Z');
     expect(body.endAt).toBe('2026-12-31T16:59:59.000Z');
+  });
+
+  it('Hết hạn trước hôm nay (giờ VN) thì khoá nút tạo lô và tạo mã chung, dù Bắt đầu để trống hay đã điền; hết hạn hôm nay vẫn tạo được', async () => {
+    const { r } = mount({ '/admin/coupon-batches/claim-url-base': configRoute(BASE), '/admin/coupon-batches': { body: [] } });
+    await flush();
+    const today = vnTodayKey().split('-').reverse().join('');
+    typeInto(input(r, 'Tiền tố lô'), 'hoa');
+    typeInto(input(r, 'Số thẻ'), '1');
+    typeInto(input(r, 'Mức giảm'), '30000');
+    const batchBtn = byText(r.container, 'button', 'Tạo lô và tải CSV') as HTMLButtonElement;
+    typeInto(input(r, 'Thẻ hết hạn ngày'), '01012020');
+    expect(batchBtn.disabled).toBe(true);
+    expect(r.container.textContent).toContain('Ngày hết hạn đã qua. Chọn ngày hết hạn từ hôm nay trở đi.');
+    typeInto(input(r, 'Thẻ bắt đầu từ ngày'), '01012019');
+    expect(batchBtn.disabled).toBe(true);
+    typeInto(input(r, 'Thẻ bắt đầu từ ngày'), '');
+    typeInto(input(r, 'Thẻ hết hạn ngày'), today);
+    expect(batchBtn.disabled).toBe(false);
+    expect(r.container.textContent).not.toContain('Ngày hết hạn đã qua.');
+
+    click(byText(r.container, 'button', 'Một mã chung cho cả đợt'));
+    typeInto(input(r, 'Mã chung'), 'SHOPEE11');
+    typeInto(input(r, 'Tổng lượt nhận'), '10');
+    const sharedBtn = byText(r.container, 'button', 'Tạo mã chung') as HTMLButtonElement;
+    expect(sharedBtn.disabled).toBe(false);
+    typeInto(input(r, 'Thẻ hết hạn ngày'), '01012020');
+    expect(sharedBtn.disabled).toBe(true);
   });
 
   it('lô đã tạo: hiện số thẻ đã nhận/đã dùng; tải lại CSV; tắt lô phải xác nhận', async () => {

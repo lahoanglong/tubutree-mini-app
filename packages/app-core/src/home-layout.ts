@@ -120,11 +120,13 @@ export interface HomeShortcutSpec {
 export interface HomeFlags {
   wasteEnabled: boolean;
   claimEnabled: boolean;
-  /** Khách còn yêu cầu đổi rác đang mở: mục Đổi rác vẫn hiện (ghi "Yêu cầu của tôi") dù chương trình tạm dừng. */
+  /** Khách còn yêu cầu đổi rác đang mở: mục Đổi rác vẫn hiện (ghi "Yêu cầu") dù chương trình tạm dừng. */
   recycleOpenRequests?: boolean;
 }
 
 export const RECYCLE_REQUESTS_LABEL = 'Yêu cầu của tôi';
+/** Nhãn lối tắt Trang chủ (ô 76px, một dòng): ngắn hơn tên đầy đủ, câu đọc vẫn là tên đầy đủ. */
+export const RECYCLE_REQUESTS_SHORTCUT_LABEL = 'Yêu cầu';
 
 export const HOME_SHORTCUTS: readonly HomeShortcutSpec[] = [
   { id: 'orders', label: 'Đơn hàng', ariaLabel: 'Đơn hàng của tôi', tint: 'forest' },
@@ -132,20 +134,20 @@ export const HOME_SHORTCUTS: readonly HomeShortcutSpec[] = [
   { id: 'recycle', label: 'Đổi rác', ariaLabel: 'Đổi rác lấy quà', tint: 'sage', flag: 'waste' },
   { id: 'groupBuy', label: 'Mua chung', ariaLabel: 'Mua chung giá tốt', tint: 'amber' },
   { id: 'coupons', label: 'Mã của tôi', ariaLabel: 'Mã của tôi, mã giảm giá của bạn', tint: 'rose' },
-  { id: 'claim', label: 'Tích điểm đơn sàn', ariaLabel: 'Tích điểm đơn sàn, đơn mua trên sàn khác', tint: 'sky', flag: 'claim' },
+  { id: 'claim', label: 'Đơn sàn', ariaLabel: 'Tích điểm đơn sàn, đơn mua trên sàn khác', tint: 'sky', flag: 'claim' },
   { id: 'earn', label: 'Kiếm tiền', ariaLabel: 'Kiếm tiền cùng Tubu', tint: 'amber' },
   { id: 'community', label: 'Cộng đồng', ariaLabel: 'Cộng đồng hỏi đáp', tint: 'sky' },
 ];
 
 /**
  * Một hàng cuộn ngang, không có Vườn Xanh (đã là tab giữa của thanh đáy). Mục có cờ tắt bị bỏ, hàng tự dồn. Riêng Đổi rác: chương trình tạm dừng mà khách còn yêu cầu đang mở thì vẫn hiện,
- * đổi nhãn thành "Yêu cầu của tôi" để khách còn vào theo dõi, không hứa tính năng đang tạm dừng.
+ * đổi nhãn thành "Yêu cầu" để khách còn vào theo dõi, không hứa tính năng đang tạm dừng.
  */
 export function visibleHomeShortcuts(flags: HomeFlags): HomeShortcutSpec[] {
   return HOME_SHORTCUTS.flatMap((s): HomeShortcutSpec[] => {
     if (s.flag === 'waste') {
       if (flags.wasteEnabled) return [s];
-      return flags.recycleOpenRequests ? [{ ...s, label: RECYCLE_REQUESTS_LABEL, ariaLabel: 'Yêu cầu của tôi về đổi rác' }] : [];
+      return flags.recycleOpenRequests ? [{ ...s, label: RECYCLE_REQUESTS_SHORTCUT_LABEL, ariaLabel: 'Yêu cầu của tôi về đổi rác' }] : [];
     }
     if (s.flag === 'claim') return flags.claimEnabled ? [s] : [];
     return [s];

@@ -37,6 +37,24 @@ describe('visibleHomeShortcuts', () => {
     expect(ids).toEqual(['orders', 'rewards', 'recycle', 'groupBuy', 'coupons', 'claim', 'earn', 'community']);
     expect(ids).not.toContain('garden');
   });
+  it('nhãn mọi lối tắt vừa MỘT dòng ở ô 76px: nhãn xuống dòng làm hàng cao hơn khung chờ 96px và đẩy cả trang (R-184); nhãn đầy đủ nằm ở ariaLabel', () => {
+    for (const s of HOME_SHORTCUTS) expect(s.label.length, s.label).toBeLessThanOrEqual(10);
+  });
+  it('mọi tổ hợp cờ và trạng thái: nhãn hiển thị (kể cả nhãn thay thế của Đổi rác) tối đa 10 ký tự và có câu đọc đầy đủ chứa nhãn', () => {
+    const bools = [false, true];
+    for (const wasteEnabled of bools) for (const claimEnabled of bools) for (const recycleOpenRequests of [undefined, false, true]) {
+      for (const s of visibleHomeShortcuts({ wasteEnabled, claimEnabled, recycleOpenRequests })) {
+        expect(s.label.length, `${s.label} (${wasteEnabled}/${claimEnabled}/${recycleOpenRequests})`).toBeLessThanOrEqual(10);
+        expect(s.ariaLabel.toLowerCase()).toContain(s.label.toLowerCase());
+      }
+    }
+  });
+  it('lối tắt đơn sàn ghi "Đơn sàn", câu đọc vẫn nói đầy đủ; Đổi rác tạm dừng mà còn yêu cầu mở ghi "Yêu cầu"', () => {
+    const on = visibleHomeShortcuts({ wasteEnabled: true, claimEnabled: true });
+    expect(on.find((s) => s.id === 'claim')).toMatchObject({ label: 'Đơn sàn', ariaLabel: expect.stringContaining('Tích điểm đơn sàn') });
+    const paused = visibleHomeShortcuts({ wasteEnabled: false, claimEnabled: true, recycleOpenRequests: true }).find((s) => s.id === 'recycle');
+    expect(paused).toMatchObject({ label: 'Yêu cầu', ariaLabel: expect.stringContaining('Yêu cầu của tôi') });
+  });
   it('cờ tắt thì ẩn mục, các mục còn lại giữ thứ tự', () => {
     const ids = visibleHomeShortcuts({ wasteEnabled: false, claimEnabled: false }).map((s) => s.id);
     expect(ids).toEqual(['orders', 'rewards', 'groupBuy', 'coupons', 'earn', 'community']);
