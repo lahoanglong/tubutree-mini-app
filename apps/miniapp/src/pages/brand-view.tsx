@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Page, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, useParams, useNavigate } from 'zmp-ui';
+import { useNotify } from '../hooks/use-notify';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getPublicBrand, getBrandShareToEarn,
@@ -33,7 +34,7 @@ export default function BrandViewPage() {
   const { slug = '' } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { openSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const [shareOpen, setShareOpen] = useState(false);
   const setSfContext = useStorefrontContext((s) => s.setContext);
   const q = useQuery({ queryKey: ['public-brand', slug], queryFn: () => getPublicBrand(slug), staleTime: 60_000 });
@@ -61,9 +62,9 @@ export default function BrandViewPage() {
       // thì bấm Theo dõi xong con số đứng im cả phút → người dùng bấm lại "cho chắc" và vô
       // tình bỏ theo dõi.
       void qc.invalidateQueries({ queryKey: ['public-brand', slug] });
-      openSnackbar({ text: r.following ? 'Đã theo dõi nhãn 💚' : 'Đã bỏ theo dõi', type: 'success' });
+      notify({ text: r.following ? 'Đã theo dõi nhãn 💚' : 'Đã bỏ theo dõi', type: 'success' });
     },
-    onError: () => openSnackbar({ text: 'Cần đăng nhập để theo dõi nhãn.', type: 'warning' }),
+    onError: () => notify({ text: 'Cần đăng nhập để theo dõi nhãn.', type: 'warning' }),
   });
   // Banner share-to-earn: chỉ AFFILIATE đăng nhập mới eligible; lỗi (401/chưa login) coi như ẩn.
   const steQ = useQuery({
@@ -219,7 +220,7 @@ export default function BrandViewPage() {
                     onClick={() => {
                       const code = p.couponCode!;
                       void copyText(code).then((ok) =>
-                        openSnackbar(
+                        notify(
                           ok
                             ? { text: `Đã chép mã ${code} — dán ở bước thanh toán`, type: 'success', duration: 2600 }
                             : { text: `Mã giảm giá: ${code}`, type: 'info', duration: 3000 },

@@ -7,6 +7,8 @@ export interface IconProps {
   icon: LucideIcon;
   size?: keyof typeof SIZE_PX;
   tone?: 'default' | 'muted' | 'brand' | 'danger' | 'inverse' | 'current';
+  /** Tô đặc nhẹ 16% cùng màu nét + nét 2: tab đang chọn của thanh dưới (tín hiệu ngoài màu, WCAG 1.4.1). */
+  filled?: boolean;
   className?: string;
   style?: CSSProperties;
   'data-testid'?: string;
@@ -24,12 +26,14 @@ const TONE_VAR: Record<NonNullable<IconProps['tone']>, string> = {
 
 /** Wrapper cố định strokeWidth 1,75 + 3 cỡ chuẩn (sm16/md20/lg24) — thay 8 giá trị strokeWidth
  * và 18 cỡ rải rác hiện tại (audit A4-16). */
-export function Icon({ icon: LucideIconCmp, size = 'md', tone = 'default', className, style, ...rest }: IconProps) {
+export function Icon({ icon: LucideIconCmp, size = 'md', tone = 'default', filled, className, style, ...rest }: IconProps) {
   return (
     <LucideIconCmp
       size={SIZE_PX[size]}
-      strokeWidth={1.75}
+      strokeWidth={filled ? 2 : 1.75}
       color={TONE_VAR[tone]}
+      // `color` của lucide chỉ đặt stroke, nên fill phải lấy cùng giá trị tông chứ không dùng currentColor (màu chữ cha).
+      {...(filled ? { fill: TONE_VAR[tone], fillOpacity: 0.16 } : null)}
       className={className}
       style={style}
       {...rest}

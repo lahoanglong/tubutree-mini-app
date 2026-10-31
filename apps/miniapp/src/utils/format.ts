@@ -57,17 +57,8 @@ export function formatDateTime(v: string | number | Date | null | undefined): st
   return c ? `${pad2(c.getUTCHours())}:${pad2(c.getUTCMinutes())} ${dayPart(c)}` : '—';
 }
 
-// Bản sao của formatSold ở apps/web/src/lib/api.ts. Chưa gom vào packages/shared-types (nay chỉ có kiểu, enum, hằng);
-// sửa một nơi thì sửa cả nơi kia, spec hai bên dùng cùng bảng ca.
-/** "Đã bán" kiểu Shopee: <1 → null (ẩn); <1000 → "Đã bán 12"; ≥1000 → "Đã bán 1,2k+"; ≥1tr → "...tr+". */
-export function formatSold(n: number | null | undefined): string | null {
-  const v = Number(n ?? 0);
-  if (!Number.isFinite(v) || v < 1) return null;
-  const trim = (x: number) => x.toFixed(1).replace(/\.0$/, '').replace('.', ',');
-  if (v < 1000) return `Đã bán ${v}`;
-  if (v < 1_000_000) return `Đã bán ${trim(v / 1000)}k+`;
-  return `Đã bán ${trim(v / 1_000_000)}tr+`;
-}
+// Một bản cho cả Mini App và web: logic ở app-core (commerce/card-meta); bảng ca của format.spec vẫn chứng minh hành vi không đổi.
+export { formatSoldShort as formatSold } from '@tubutree/app-core/commerce/card-meta';
 
 /** Ghép dòng địa chỉ, bỏ phần rỗng (hệ 2 cấp không còn quận/huyện → tránh ", ,"). */
 export function addressLine(a?: {

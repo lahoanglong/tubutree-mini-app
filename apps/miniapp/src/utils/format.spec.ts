@@ -223,8 +223,8 @@ describe('formatSold — kiểu Shopee', () => {
     expect(formatSold(1234)).toBe('Đã bán 1,2k+');
   });
 
-  it('biên 999.999 → toFixed(1) làm tròn thành "1000k+" (cùng quirk với bản web)', () => {
-    expect(formatSold(999_999)).toBe('Đã bán 1000k+');
+  it('biên 999.999 → "1tr+" (không in "1000k+")', () => {
+    expect(formatSold(999_999)).toBe('Đã bán 1tr+');
   });
 
   it('≥ 1 triệu → rút gọn "tr+"', () => {

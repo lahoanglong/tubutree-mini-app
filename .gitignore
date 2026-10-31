@@ -69,3 +69,4 @@ scripts/uiux/.probe/
 # Kết quả dọn demo ở gốc repo trên máy chủ (runbook mục 5 bước 7c). Giữ lại trên máy chủ: `.demo-cleanup-apply.txt` chứa
 # khối hoàn tác.
 .demo-cleanup-*
+docs/2026-10-31-shop-redesign/screens/

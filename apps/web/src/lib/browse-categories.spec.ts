@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { LayoutGrid } from 'lucide-react';
 import { SEGMENT_ENTRIES, categoryEntries, segmentLabel } from './browse-categories';
 
-const cat = (id: string, productCount?: number) => ({ id, parentId: null, name: `DM ${id}`, slug: id, image: null, sortOrder: 1, productCount });
+const cat = (id: string, productCount?: number) => ({ id, parentId: null, name: `DM ${id}`, slug: id, image: null, sortOrder: 1, productCount, children: [] });
 
 describe('categoryEntries (plan 4b Ruling 4)', () => {
   it('danh mục thật có hàng → giữ, theo thứ tự API; danh mục trống bị ẩn', () => {
@@ -43,7 +43,7 @@ describe('categoryEntries (plan 4b Ruling 4)', () => {
 });
 
 describe('categoryEntries — icon riêng theo danh mục (D6-09)', () => {
-  const bySlug = (slug: string, image: string | null = null) => ({ id: slug, parentId: null, name: slug, slug, image, sortOrder: 1, productCount: 3 });
+  const bySlug = (slug: string, image: string | null = null) => ({ id: slug, parentId: null, name: slug, slug, image, sortOrder: 1, productCount: 3, children: [] });
   const SLUGS = ['my-pham-thien-nhien', 'tay-rua-sinh-hoc', 'cho-be', 'cho-me-bau', 'cham-soc-ca-nhan', 'ca-phe-do-uong', 'nong-san-thuc-pham'];
 
   it('7 danh mục chuẩn có icon khác LayoutGrid và khác nhau từng đôi', () => {

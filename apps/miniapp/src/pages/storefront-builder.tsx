@@ -358,7 +358,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
             gap: 6,
             background: sf.coverUrl
               ? `center/cover no-repeat url(${sf.coverUrl})`
-              : 'linear-gradient(135deg, var(--sage-100), var(--forest-100))',
+              : 'linear-gradient(135deg, var(--color-bg-subtle), var(--color-action-secondary-bg-pressed))',
           }}
         >
           {!sf.coverUrl && (
@@ -379,7 +379,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
               marginTop: -28,
               background: sf.avatarUrl
                 ? `center/cover no-repeat url(${sf.avatarUrl})`
-                : 'var(--stone-200)',
+                : 'var(--color-bg-media)',
             }}
           />
           <div style={{ flex: 1, minWidth: 0 }}>

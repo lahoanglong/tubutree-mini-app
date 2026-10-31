@@ -51,6 +51,7 @@ import { normalizeZaloPhone, parseTypedVnPhone, TYPED_VN_PHONE_MESSAGE } from '.
 import {
   CONFIRMED_COMMISSION_STATUSES,
   CTV_MONTHLY_MILESTONES,
+  CTV_TIERS,
   PENDING_COMMISSION_STATUSES,
   milestoneProgressPct,
   tierForRevenue,
@@ -459,12 +460,13 @@ export class AffiliateService {
    * CHỈ trả tên+icon, KHÔNG trả doanh thu/bonusPct thật để tránh lộ doanh số CTV cho khách xem
    * gian hàng của họ.
    */
-  async getPublicTier(userId: string, now: Date = new Date()): Promise<{ name: string; emoji: string }> {
+  async getPublicTier(userId: string, now: Date = new Date()): Promise<{ name: string; emoji: string; publicBadge: boolean }> {
     // Cùng định nghĩa doanh số ĐÃ CHỐT (tháng VN) với dashboard/bậc của chính CTV — huy hiệu công
     // khai không được "cao hơn" bậc CTV tự thấy.
     const revenue = await this.confirmedRevenue(this.prisma, userId, vnMonthBounds(now));
     const tier = this.monthlyTier(revenue);
-    return { name: tier.name, emoji: tier.emoji };
+    // publicBadge=false ở bậc thấp nhất: trang shop công khai chỉ khoe từ bậc 2 (huy hiệu "Tân binh" không thêm niềm tin cho khách).
+    return { name: tier.name, emoji: tier.emoji, publicBadge: tier.name !== CTV_TIERS[0]!.name };
   }
 
   /** Mới nhất trước; mặc định 100 như trước khi có phân trang (client cũ không gửi tham số), tối đa 200 mỗi lần. */

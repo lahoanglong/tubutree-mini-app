@@ -9,7 +9,7 @@ function makePrisma() {
     brand: { findFirst: jest.fn() },
     brandPromotion: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
     coupon: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
-    product: { findMany: jest.fn().mockResolvedValue([]) },
+    product: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
     dealerReward: { findMany: jest.fn().mockResolvedValue([]) },
   } as any;
 }

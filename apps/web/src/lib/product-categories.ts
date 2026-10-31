@@ -46,7 +46,8 @@ export const listCategoryProducts = (p: { q?: string; uncategorized: boolean; pa
   if (p.cursor) sp.set('cursor', p.cursor);
   return apiFetch<CategoryProductsPage>(`/admin/product-categories/products?${sp.toString()}`);
 };
-export const listCategoryOptions = () => apiFetch<CategoryOption[]>('/categories');
+/** `?flat=1`: mọi danh mục một dòng, gồm cả danh mục con (mặc định `/categories` trả cây chỉ có gốc ở tầng ngoài). */
+export const listCategoryOptions = () => apiFetch<CategoryOption[]>('/categories?flat=1');
 export const assignCategory = (productIds: string[], categoryId: string, mode: 'ADD' | 'REMOVE') =>
   apiFetch<AssignResult>('/admin/product-categories/assign', { method: 'POST', body: { productIds, categoryId, mode } });
 export const listPancakeCategories = () => apiFetch<PancakeCategoryRow[]>('/admin/pancake/categories');

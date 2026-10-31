@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
 import { useNavigate } from 'zmp-ui';
@@ -10,7 +10,6 @@ import { getLoadErrorMessage } from '../../services/api';
 import { fetchActiveFlashSales, type PurchasedItem } from '../../services/shop-api';
 import { serverNow } from '../../utils/server-clock';
 import { haptic } from '../../utils/haptic';
-import { SubscribeSheet } from '../subscribe-sheet';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../../utils/features';
 import { isEndpointMissing } from '../home/home-blocks';
 import { useBlockQuery } from '../home/use-block-query';
@@ -22,7 +21,6 @@ import { PriceTag } from '../ui/price-tag';
 import { ProductTile, type ProductTileProduct } from '../ui/product-tile';
 import { Skeleton } from '../ui/skeleton';
 import { Heading, Text } from '../ui/text';
-import { ReorderSheet } from './reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 
 const TILE_WIDTH = 148;
@@ -57,6 +55,12 @@ export function toTileProduct(p: PurchasedItem): ProductTileProduct {
 // `pinnedVariationId` (không phải `variationId`): trang chi tiết chỉ nhận `variationId` khi phân loại đó đang có Giờ vàng, còn ghim thì mở miễn còn hàng.
 const openVariation = (p: PurchasedItem) => ({ state: { pinnedVariationId: p.variationId } });
 
+// Hai sheet chỉ mở khi khách chạm nút: nạp lười để gói đầu không gánh chúng (nạp trước khi kệ có hàng, nên lần chạm đầu hiếm khi đợi mạng).
+const loadReorderSheet = () => import('./reorder-sheet');
+const loadSubscribeSheet = () => import('../subscribe-sheet');
+const ReorderSheet = lazy(() => loadReorderSheet().then((m) => ({ default: m.ReorderSheet })));
+const SubscribeSheet = lazy(() => loadSubscribeSheet().then((m) => ({ default: m.SubscribeSheet })));
+
 export interface PurchasedRailProps {
   source: 'home_rail' | 'orders_tab';
   /** Đang khôi phục phiên: giữ chỗ kệ bằng khung chờ để khi phiên về nội dung bên dưới không bị đẩy. */
@@ -78,6 +82,18 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
   const q = useBlockQuery(usePurchasedItems(PURCHASED_RAIL_LIMIT));
   const [target, setTarget] = useState<ReorderTarget | null>(null);
   const [subscribeFor, setSubscribeFor] = useState<PurchasedItem | null>(null);
+  // Đã mở sheet mua lại một lần thì giữ nó dựng: ZaUI Sheet còn trượt xuống ~200ms sau khi target về null.
+  const [reorderMounted, setReorderMounted] = useState(false);
+  const hasItems = (q.data?.items.length ?? 0) > 0;
+  useEffect(() => {
+    if (!hasItems) return;
+    loadReorderSheet().catch(() => undefined);
+    if (SUBSCRIPTIONS_IN_MINIAPP) loadSubscribeSheet().catch(() => undefined);
+  }, [hasItems]);
+  const openReorder = (p: PurchasedItem) => {
+    setReorderMounted(true);
+    setTarget(itemReorderTarget(p));
+  };
   const discountPct = Math.round(usePublicConfig().subscribeDiscountPct * 100);
   // Chỉ đọc cache Giờ vàng (nhịp tải lại do useFlashSalesPoller ở gốc app lo).
   const flash = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 }).data ?? [];
@@ -147,7 +163,7 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
               key={p.variationId}
               item={p}
               discountPct={discountPct}
-              onRebuy={() => setTarget(itemReorderTarget(p))}
+              onRebuy={() => openReorder(p)}
               onSubscribe={() => setSubscribeFor(p)}
               pricing={rebuyPricing(p, flash, serverNow())}
               onOpen={() => navigate(`/product/${encodeURIComponent(p.slug)}`, openVariation(p))}
@@ -165,16 +181,22 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
                 showWishlist={false}
                 action="rebuy"
                 badge={p.timesBought > 1 ? <Badge tone="brand" size="sm">{vi.reorder.timesBought(p.timesBought)}</Badge> : undefined}
-                onAction={() => setTarget(itemReorderTarget(p))}
+                onAction={() => openReorder(p)}
                 onPress={() => navigate(`/product/${encodeURIComponent(p.slug)}`, openVariation(p))}
               />
             </div>
           ))}
         </div>
       )}
-      <ReorderSheet target={target} source={source} navigateToCart onClose={() => setTarget(null)} />
+      {(target || reorderMounted) && (
+        <Suspense fallback={null}>
+          <ReorderSheet target={target} source={source} navigateToCart onClose={() => setTarget(null)} />
+        </Suspense>
+      )}
       {subscribeFor && (
-        <SubscribeSheet visible onClose={() => setSubscribeFor(null)} variationId={subscribeFor.variationId} quantity={1} />
+        <Suspense fallback={null}>
+          <SubscribeSheet visible onClose={() => setSubscribeFor(null)} variationId={subscribeFor.variationId} quantity={1} />
+        </Suspense>
       )}
     </section>
   );

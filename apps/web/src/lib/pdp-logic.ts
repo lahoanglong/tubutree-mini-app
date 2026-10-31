@@ -19,12 +19,8 @@ export function groupBuyPitch(cfg?: { discountPct: number; targetSize: number } 
   return 'Rủ bạn bè cho đủ nhóm, mỗi người nhận mã giảm giá';
 }
 
-/** Nhãn ngắn cho mã giảm giá hiển thị ở trang sản phẩm. */
-export function couponLabel(c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount'>): string {
-  if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
-  if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
-  return `Giảm ${formatVnd(c.value)}`;
-}
+// Logic ở app-core (commerce/voucher), dùng chung với Mini App.
+export { couponLabel } from '@tubutree/app-core/commerce/voucher';
 
 /** /me/coupons đã lọc mã còn hạn và đủ điều kiện; mã gắn riêng cho vài sản phẩm (mã mua chung) chỉ hiện ở đúng sản phẩm đó. */
 export function pdpCoupons(coupons: readonly CouponDTO[] | undefined, productId: string): CouponDTO[] {

@@ -134,13 +134,30 @@ describe('BottomNav (điện thoại)', () => {
     expect(offers.enabled.at(-1)).toBe(false);
   });
 
-  it('nhãn tab dùng cỡ chữ phụ của token như Mini App (13px), không phải text-xs 12px; khoảng cách icon-nhãn 3px', () => {
+  it('nhãn tab dùng cỡ chữ nhãn của token như Mini App (12px, text-label), không phải text-xs hay text-caption 13px; khoảng cách icon-nhãn 3px', () => {
     mocks.ready = () => true;
     const out = render('/');
     const labels = ['Trang chủ', 'Danh mục', 'Vườn Xanh', 'Ưu đãi', 'Cá nhân'];
-    for (const l of labels) expect(out, l).toContain(`<span class="text-caption">${l}</span>`);
+    for (const l of labels) expect(out, l).toContain(`<span class="text-label">${l}</span>`);
     expect(out).not.toContain('text-xs');
+    expect(out).not.toContain('text-caption');
     expect(out.match(/gap-\[3px\]/g)).toHaveLength(5);
+  });
+
+  it('tab đang chọn không chỉ khác màu: icon tô 16% + nảy, nét 600; tab thường nét 500; mép trên là --elevation-nav (không viền)', () => {
+    mocks.ready = () => true;
+    const out = render('/uu-dai');
+    const anchor = (label: string) => new RegExp(`<a[^>]*aria-label="${label}"[^>]*>[\\s\\S]*?</a>`).exec(out)![0];
+    const active = anchor('Ưu đãi');
+    expect(active).toContain('font-semibold');
+    expect(active).toContain('tubu-tab-pop');
+    expect(active).toContain('fill-opacity="0.16"');
+    const idle = anchor('Trang chủ');
+    expect(idle).toContain('font-medium');
+    expect(idle).not.toContain('tubu-tab-pop');
+    expect(idle).not.toContain('fill-opacity');
+    expect(out).toContain('shadow-nav');
+    expect(out).not.toContain('border-t');
   });
 
   it('tab giữa cùng đường chân chữ với các tab khác: cùng cỡ chữ và cùng khoảng cách, chỉ đẩy lên bằng đệm đáy 6px', () => {

@@ -46,6 +46,7 @@
 
   --tubu-orange: #E38E1E; /* lấy từ chữ Tubu Tree của logo thật; không dùng làm màu nút hành động */
   --orange-50: #FDF1DE;
+  --orange-700: #9A5200; /* giá đang giảm: 5,86:1 trên trắng; cam bão hoà hơn (#B05E00) không đạt 4,5:1 */
   --orange-800: #7A4300; /* chữ nhỏ trên nền cam nhạt/trắng: 7,15:1 và 7,98:1 */
 
   --red-50: #FBEAE8;
@@ -89,6 +90,10 @@
   --p-dur-emphasize: 350ms;
   --p-ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
   --p-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  /* Nhấn nhanh, thả chậm: cảm giác "đã nhận chạm" mà không làm thẻ nhũn. */
+  --p-dur-press: 80ms;
+  --p-dur-release: 180ms;
+  --p-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* ── Layer 2: SEMANTIC — the only layer pages/components may reference ──── */
   --color-bg-canvas: var(--stone-50);
@@ -111,6 +116,7 @@
   --color-text-brand: var(--forest-600);
   --color-text-link: var(--forest-600);
   --color-text-price: var(--stone-900);
+  --color-text-price-deal: var(--orange-700); /* giá đang giảm (Giờ vàng, giá sale); giá thường giữ --color-text-price */
   --color-text-price-compare: var(--stone-500); /* 5.59:1 on surface — informative text (WCAG 1.4.3), not "disabled" */
   --color-text-success: #2F7A48;
   --color-text-warning: var(--amber-600);
@@ -159,10 +165,39 @@
 
   --color-flash-solid-bg: var(--tubu-orange);
   --color-flash-solid-fg: var(--stone-900);
-  --color-flash-fg: var(--orange-800);
+  --color-flash-fg: var(--orange-700);
   --color-flash-bg: var(--orange-50);
 
   --color-rating: var(--honey-500);
+
+  /* Commerce: nền ô ảnh/bìa/chip, rãnh tiến độ, phiếu giảm giá, hạng, đồng hồ. */
+  --color-bg-media: var(--stone-100); /* nền ô ảnh sản phẩm và khung chờ ảnh */
+  --color-bg-cover: var(--forest-700); /* bìa gian hàng/thương hiệu chưa có ảnh */
+  --color-bg-chip: var(--stone-100); /* chip nhỏ chưa chọn, nhãn tĩnh */
+  --color-track: var(--stone-200); /* rãnh thanh tiến độ */
+  --color-media-outline: rgba(28,26,22,.06); /* viền mảnh quanh ảnh trắng trên nền trắng */
+  --color-verified-bg: var(--forest-600);
+  --color-verified-fg: var(--stone-0);
+  --color-voucher-bg: var(--orange-50);
+  --color-voucher-fg: var(--orange-800);
+  --color-voucher-edge: var(--tubu-orange); /* viền đứt và răng cưa: trang trí, không mang chữ */
+  --color-voucher-stub-bg: var(--tubu-orange);
+  --color-voucher-stub-fg: var(--stone-900); /* 6,75:1 */
+  --color-voucher-ship-bg: var(--color-status-success-fg);
+  --color-voucher-ship-fg: var(--stone-0);
+  --color-voucher-shop-bg: var(--forest-50);
+  --color-voucher-shop-fg: var(--forest-700);
+  --color-voucher-shop-edge: var(--forest-300);
+  --color-voucher-shop-stub-bg: var(--forest-600);
+  --color-voucher-shop-stub-fg: var(--stone-0);
+  --color-rank-1-bg: var(--honey-600); /* honey-500 chỉ 3,7:1 với chữ trắng nên không dùng */
+  --color-rank-2-bg: var(--stone-600);
+  --color-rank-3-bg: var(--clay-600);
+  --color-rank-fg: var(--stone-0);
+  --color-rank-n-bg: var(--stone-100);
+  --color-rank-n-fg: var(--stone-700);
+  --color-countdown-bg: var(--color-bg-inverse);
+  --color-countdown-fg: var(--color-text-inverse);
 
   --space-inline-xs: var(--p-space-1);
   --space-inline-sm: var(--p-space-3);
@@ -177,17 +212,20 @@
   --space-inset-page: var(--p-space-5);
   --space-gutter: var(--p-space-5);
   --space-section: var(--p-space-7);
+  --space-block: var(--p-space-5); /* giữa hai khối ở màn danh sách; --space-section (24px) cho màn nội dung */
 
   --radius-control: var(--p-radius-3);
   --radius-card: var(--p-radius-4);
   --radius-media: var(--p-radius-3);
   --radius-sheet: var(--p-radius-5);
   --radius-pill: var(--p-radius-full);
+  --radius-tag: var(--p-radius-1); /* ô đếm ngược, ruy-băng hạng */
 
   --elevation-1: 0 1px 2px rgba(28, 26, 22, 0.06), 0 2px 8px rgba(28, 26, 22, 0.05);
   --elevation-2: 0 4px 16px rgba(28, 26, 22, 0.08);
   --elevation-3: 0 -8px 24px rgba(28, 26, 22, 0.10);
   --elevation-4: 0 16px 40px rgba(28, 26, 22, 0.16);
+  --elevation-nav: 0 -1px 0 rgba(28,26,22,.06), 0 -4px 16px rgba(28,26,22,.06); /* thanh dưới: một mép mảnh thay cho viền + bóng dày */
 
   --motion-tap: var(--p-dur-tap) var(--p-ease-out);
   --motion-enter: var(--p-dur-enter) var(--p-ease-out);
@@ -221,6 +259,18 @@
   --type-price-lg-size: 20px; --type-price-lg-lh: 1.4; --type-price-lg-weight: 700;
   --type-price-md-size: 16px; --type-price-md-lh: 1.375; --type-price-md-weight: 600;
   --type-price-sm-size: 14px; --type-price-sm-lh: 1.43; --type-price-sm-weight: 600;
+  --type-price-tile-size: 16px; --type-price-tile-lh: 1.25; --type-price-tile-weight: 700;
+
+  /* Layer 3: component (commerce). Chỉ components/ui và thành phần web tương ứng dùng. */
+  --tile-w-sm: 128px; /* Giờ vàng, Đã xem, kệ hạng: ở 375px thấy 2,6 thẻ */
+  --tile-w-md: 148px; /* Bán chạy, Mua lại, Thường mua kèm: thấy 2,25 thẻ */
+  --tile-gap: var(--p-space-4);
+  --tile-inset: var(--p-space-3);
+  --rail-pad-block: var(--p-space-2) var(--p-space-4); /* chừa chỗ cho bóng và vòng focus của thẻ trong kệ */
+  --section-header-h: 44px;
+  --banner-ratio: 5 / 2;
+  --badge-h-sm: 20px;
+  --badge-h-md: 24px;
 
   --font-display: 'Fraunces', 'Georgia', serif;
   --font-ui: 'Inter', system-ui, sans-serif;

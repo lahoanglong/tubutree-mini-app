@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { Box, Page, Text, useNavigate, useParams, useSnackbar, useLocation } from 'zmp-ui';
+import { Box, Page, Text, useNavigate, useParams, useLocation } from 'zmp-ui';
+import { useNotify } from '../hooks/use-notify';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Clock } from 'lucide-react';
 import {
@@ -104,7 +105,7 @@ function couponLabel(c: CouponDTO): string {
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { openSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const shareWithFallback = useShareWithFallback();
   const queryClient = useQueryClient();
   const { status, login, user } = useAuthStore();
@@ -274,13 +275,13 @@ export default function ProductDetailPage() {
       haptic('medium');
       setBadgeBounce(true);
       if (note) dropGroupCouponState();
-      openSnackbar(
+      notify(
         note
           ? { text: `${vi.product.added} · ${note.text}`, type: note.ok ? 'success' : 'warning', duration: 3200, position: 'top' }
           : { text: vi.product.added, type: 'success', duration: 2000, position: 'top' },
       );
     },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
   });
 
   // "Mua ngay": thêm vào giỏ rồi tới thẳng checkout (giảm 2 chạm so với thêm-giỏ→mở-giỏ→checkout).
@@ -303,29 +304,29 @@ export default function ProductDetailPage() {
           : null;
       if (note) dropGroupCouponState();
       if (note) {
-        openSnackbar({
+        notify({
           text: [mergeNote, note.text].filter(Boolean).join('. '),
           type: note.ok ? 'info' : 'warning',
           duration: 3200,
         });
       } else if (mergeNote) {
-        openSnackbar({ text: mergeNote, type: 'info', duration: 3200 });
+        notify({ text: mergeNote, type: 'info', duration: 3200 });
       }
       // "Mua ngay" chỉ thanh toán đúng dòng vừa thêm; ghi nhớ để tải lại trang không tính cả giỏ.
       const itemIds = line ? [line.id] : null;
       rememberCheckoutSelection(itemIds);
       navigate('/checkout', { state: { itemIds } });
     },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
   });
 
   const groupBuyMutation = useMutation({
     mutationFn: (productId: string) => createGroupBuy(productId),
     onSuccess: (group) => {
-      openSnackbar({ text: 'Đã mở nhóm mua chung! Rủ bạn bè tham gia nhé 🛒', type: 'success' });
+      notify({ text: 'Đã mở nhóm mua chung! Rủ bạn bè tham gia nhé 🛒', type: 'success' });
       navigate(`/group-buy/${group.id}`);
     },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
   });
 
   if (product.isLoading) return <PdpSkeleton />;
@@ -523,7 +524,7 @@ export default function ProductDetailPage() {
         )}
 
         {lowStock && (
-          <Text size="xSmall" style={{ color: 'var(--clay-700)', marginTop: 4 }}>
+          <Text size="xSmall" style={{ color: 'var(--color-text-warning)', marginTop: 4 }}>
             {vi.product.lowStock(selected!.stock)}
           </Text>
         )}
@@ -629,7 +630,7 @@ export default function ProductDetailPage() {
                 onClick={() => {
                   haptic('light');
                   void copyText(c.code).then((ok) =>
-                    openSnackbar(
+                    notify(
                       ok
                         ? {
                             text: `Đã chép mã ${c.code} — mã đã có sẵn trong ví, chọn ở bước thanh toán`,
@@ -645,8 +646,8 @@ export default function ProductDetailPage() {
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 2,
-                  background: 'var(--clay-50)',
-                  border: '1px dashed var(--clay-500)',
+                  background: 'var(--color-voucher-bg)',
+                  border: '1px dashed var(--color-voucher-edge)',
                   borderRadius: 'var(--radius-control)',
                   padding: '6px 12px',
                   minHeight: 44,
@@ -654,7 +655,7 @@ export default function ProductDetailPage() {
                   boxSizing: 'border-box',
                 }}
               >
-                <Text size="xSmall" bold style={{ color: 'var(--clay-700)' }}>
+                <Text size="xSmall" bold style={{ color: 'var(--color-voucher-fg)' }}>
                   {c.code} · {couponLabel(c)}
                 </Text>
                 {c.minOrder ? (

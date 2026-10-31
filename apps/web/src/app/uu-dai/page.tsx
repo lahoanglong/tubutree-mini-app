@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Gift, Leaf, PackageOpen, Recycle, ScanLine, Sprout, Users, type LucideIcon } from 'lucide-react';
 import type { CouponDTO } from '@tubutree/app-core/api/loyalty';
+import { couponLabel } from '@tubutree/app-core/commerce/voucher';
 import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { isCouponExpiring, memberCardAriaLabel, RECYCLE_REQUESTS_LABEL } from '@tubutree/app-core/home-layout';
@@ -32,12 +33,6 @@ import { PAGE_NARROW } from '@/lib/page-frame';
 import { loadErrorText } from '@/lib/error-text';
 
 const errText = loadErrorText;
-
-function couponLabel(c: CouponDTO): string {
-  if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
-  if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
-  return `Giảm ${formatVnd(c.value)}`;
-}
 
 function IconTile({ icon }: { icon: LucideIcon }) {
   return (

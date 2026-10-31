@@ -441,12 +441,5 @@ export async function getLegalDoc(loai: string): Promise<LegalDoc> {
 
 export { formatVnd };
 
-/** "Đã bán" kiểu Shopee: <1 ẩn; <1000 "Đã bán 12"; ≥1000 "Đã bán 1,2k+"; ≥1tr "...tr+". */
-export function formatSold(n: number | null | undefined): string | null {
-  const v = Number(n ?? 0);
-  if (!Number.isFinite(v) || v < 1) return null;
-  const trim = (x: number) => x.toFixed(1).replace(/\.0$/, '').replace('.', ',');
-  if (v < 1000) return `Đã bán ${v}`;
-  if (v < 1_000_000) return `Đã bán ${trim(v / 1000)}k+`;
-  return `Đã bán ${trim(v / 1_000_000)}tr+`;
-}
+// Logic ở app-core (commerce/card-meta), dùng chung với Mini App.
+export { formatSoldShort as formatSold } from '@tubutree/app-core/commerce/card-meta';

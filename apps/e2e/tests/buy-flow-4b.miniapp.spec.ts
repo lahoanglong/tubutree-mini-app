@@ -3,6 +3,7 @@ import { test, expect, makeOrder, publicConfig, type MockApi, type MockContext }
 import { PURCHASED_PAGE } from './support/buy-flow-mocks';
 import { BINH_SUA, SHIPPING_CODE, XA_PHONG, catalogHandler, mockDiscovery, toCard } from './support/discovery-mocks';
 import { eventsNamed, flushEvents } from './support/events';
+import { expectChipHitArea44 } from './support/hit-area';
 
 /**
  * Zalo Mini App E2E — Dự án 4b "Khám phá & tìm kiếm" (spec §5), phần Trang chủ. API mock toàn bộ.
@@ -216,15 +217,7 @@ test.describe('Buy-flow 4b — bố cục 320/375/390, vùng chạm, khung chờ
       await expect(page.getByTestId('result-count')).toHaveText('30 sản phẩm', { timeout: 15_000 });
       expect(await noHorizontalScroll(page)).toBe(true);
       for (const name of ['Gợi ý', 'Bán chạy']) {
-        const chip = page.getByRole('group', { name: 'Sắp xếp' }).getByRole('button', { name, exact: true });
-        const hit = await chip.evaluate((el) => {
-          const r = el.getBoundingClientRect();
-          if (r.height < 44) return { above: false, below: false, height: r.height };
-          const x = r.left + r.width / 2;
-          const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
-          return { above: at(r.top + 2), below: at(r.bottom - 2), height: r.height };
-        });
-        expect(hit, `"${name}": chip cao ≥ 44px và vùng chạm phủ trọn chiều dọc`).toMatchObject({ above: true, below: true });
+        await expectChipHitArea44(page.getByRole('group', { name: 'Sắp xếp' }).getByRole('button', { name, exact: true }));
       }
       await page.screenshot({ path: test.info().outputPath(`browse-4b-${width}.png`) });
 

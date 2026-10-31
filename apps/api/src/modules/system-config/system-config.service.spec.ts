@@ -363,6 +363,10 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
     ['catalog.launch_date', '2026-11-01', ['2026-02-30', '2026-13-01', '01/11/2026', '2026-11-01T00:00:00Z', 'mai', 20261101, true]],
     ['catalog.launch_date', '', ['2026-11-1']],
     ['catalog.launch_date', null, ['2026-11-1']],
+    // Ngưỡng nhãn "Được yêu thích": số âm, số quá trần hay số lẻ ở khoá đếm làm nhãn hiện cho mọi thẻ hoặc không thẻ nào.
+    ['catalog.loved_min_rating', 4.8, [-0.1, 5.1, 99, '4.8']],
+    ['catalog.loved_min_reviews', 20, [-1, 1.5, 100_001, '20']],
+    ['catalog.loved_min_sold', 50, [-1, 1.5, 10_000_001, '50']],
   ] as const)('%s: nhận giá trị hợp lệ, từ chối giá trị sai', async (key, fine, badValues) => {
     const ok = mk(fine);
     await ok.svc.set(key, fine as never, 'admin1');

@@ -19,7 +19,7 @@ export const HOME_PUBLIC: HomePublicDTO = {
   newest: pageOf([card(3, 'Mới từ request gộp')], 6),
   flashActive: [],
   categories: [
-    { id: 'hm-cat', parentId: null, name: 'Danh mục gộp', slug: 'danh-muc-gop', image: null, sortOrder: 1, productCount: 3 },
+    { id: 'hm-cat', parentId: null, name: 'Danh mục gộp', slug: 'danh-muc-gop', image: null, sortOrder: 1, productCount: 3, children: [] },
   ],
   brands: [{ brand: 'Tubu', count: 3 }],
   publicConfig: { freeshipThreshold: 350_000, subscribeDiscountPct: 0.12 } as HomePublicDTO['publicConfig'],

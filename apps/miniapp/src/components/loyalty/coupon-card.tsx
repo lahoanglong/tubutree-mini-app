@@ -1,3 +1,4 @@
+import { couponLabel } from '@tubutree/app-core/commerce/voucher';
 import { couponUseCopy } from '@tubutree/app-core/coupon-use';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { isCouponExpiring } from '@tubutree/app-core/home-layout';
@@ -11,11 +12,8 @@ import { Text } from '../ui/text';
 /** Đệm ngang hẹp: thẻ mã nằm trong hai lớp đệm, ở 320px hai nút với đệm mặc định rộng hơn chỗ có và tràn khỏi viền thẻ. */
 const TIGHT = { minWidth: 0, paddingInline: 8 } as const;
 
-export function couponLabel(c: CouponDTO): string {
-  if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
-  if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
-  return `Giảm ${formatVnd(c.value)}`;
-}
+// Logic ở app-core (commerce/voucher); giữ tên export cũ cho chỗ gọi hiện có.
+export { couponLabel } from '@tubutree/app-core/commerce/voucher';
 
 /** Một mã giảm giá của khách (Điểm Xanh và Ưu đãi dùng chung). */
 export function CouponCard({ coupon: c }: { coupon: CouponDTO }) {

@@ -77,7 +77,7 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
                 overflow: 'hidden',
               }}
             >
-              <div style={{ position: 'relative', width: CARD_WIDTH, height: CARD_WIDTH, background: 'var(--stone-100)' }}>
+              <div style={{ position: 'relative', width: CARD_WIDTH, height: CARD_WIDTH, background: 'var(--color-bg-media)' }}>
                 <ProductImage src={it.thumbnail} brand="" />
               </div>
               <div style={{ padding: 8 }}>

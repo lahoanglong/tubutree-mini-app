@@ -54,7 +54,8 @@ export interface Storefront {
   headerNote: string | null;
   /** Mã giới thiệu của chủ gian hàng CTV (API trả ở trang công khai; null với gian hàng khác). */
   referralCode?: string | null;
-  ownerTier: { name: string; emoji: string } | null;
+  /** `publicBadge=false` ở bậc thấp nhất: trang shop công khai không khoe huy hiệu đó (API luôn gửi cờ này). */
+  ownerTier: { name: string; emoji: string; publicBadge: boolean } | null;
   avatarUrl: string | null;
   coverUrl: string | null;
   theme: string;
@@ -107,7 +108,7 @@ export interface StorefrontCategory {
 }
 /** Danh mục sản phẩm hiện có — dùng làm danh sách mẫu gian hàng (mỗi mẫu = 1 danh mục). */
 export const getStorefrontCategories = (http: HttpClient) =>
-  http.get<StorefrontCategory[]>('/categories');
+  http.get<StorefrontCategory[]>('/categories', { query: { flat: 1 } });
 export const applyStorefrontTemplate = (http: HttpClient, categoryId: string) =>
   http.post<{ collectionId: string; title: string; itemCount: number }>(
     '/storefront/me/apply-template',

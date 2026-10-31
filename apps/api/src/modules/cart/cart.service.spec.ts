@@ -636,6 +636,38 @@ describe('CartService guard tồn kho', () => {
     });
   });
 
+  describe('listUnitPrice: giá niêm yết để FE gạch giá và tính "Tiết kiệm"', () => {
+    const line = (id: string, retailPrice: number, salePrice: number | null) => ({
+      id: `ci-${id}`,
+      variationId: id,
+      quantity: 2,
+      variation: { isActive: true, productId: `p-${id}`, salePrice, retailPrice, stock: 50, name: id, product: { name: `SP ${id}`, slug: id, thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
+    });
+    const cartOf = (items: unknown[], flashMap = new Map()) => {
+      const prisma = {
+        cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique: jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items }) },
+      } as unknown as PrismaService;
+      const flashSvc = { resolveEffective: jest.fn().mockResolvedValue(flashMap) } as unknown as FlashSaleService;
+      return new CartService(prisma, coupons, config, flashSvc, analytics, combo).getCart('u1');
+    };
+
+    it('không sale, không Giờ vàng → listUnitPrice bằng unitPrice (FE không vẽ giá gạch)', async () => {
+      const l = (await cartOf([line('a', 50000, null)])).items[0]!;
+      expect(l).toMatchObject({ unitPrice: 50000, listUnitPrice: 50000 });
+    });
+
+    it('có salePrice → unitPrice là giá sale, listUnitPrice là retailPrice', async () => {
+      const l = (await cartOf([line('b', 50000, 42000)])).items[0]!;
+      expect(l).toMatchObject({ unitPrice: 42000, listUnitPrice: 50000 });
+    });
+
+    it('đang Giờ vàng → unitPrice là giá Giờ vàng, listUnitPrice vẫn là retailPrice (không phải salePrice)', async () => {
+      const flashMap = new Map([['c', { flashPrice: 33000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10, allowance: 5, perUserLeft: 5, quotaLeft: 9 }]]);
+      const l = (await cartOf([line('c', 50000, 42000)], flashMap as never)).items[0]!;
+      expect(l).toMatchObject({ unitPrice: 33000, isFlash: true, listUnitPrice: 50000 });
+    });
+  });
+
   it('applyCoupon: validate trên base KHÔNG flash (không phải subtotal đầy đủ)', async () => {
     const validateAndCompute = jest.fn().mockResolvedValue({ discount: 0, freeship: false });
     const prisma = {
@@ -1224,5 +1256,190 @@ describe('CartService.addItems (D9-05: mua lại cả đơn một lượt)', () 
     const { svc, transaction } = setup([sellable('v1', 5)]);
     transaction.mockRejectedValue(new Error('connection reset'));
     await expect(svc.addItems('u1', [{ variationId: 'v1', quantity: 1 }])).rejects.toThrow('connection reset');
+  });
+});
+
+describe('CartService.addItemsBatch (thêm nhiều món một transaction: hỏng một món thì không ghi món nào)', () => {
+  const sellable = (id: string, stock: number, over: Record<string, unknown> = {}) => ({
+    id, isActive: true, stock, product: { isActive: true, approvalStatus: 'APPROVED', fulfilment: 'TUBU', storefront: null, name: `SP ${id}` }, ...over,
+  });
+
+  function setup(variations: ReturnType<typeof sellable>[], inCart: { variationId: string; quantity: number }[] = []) {
+    const txUpsert = jest.fn().mockResolvedValue({});
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'c1' }]),
+      variation: { findMany: jest.fn().mockResolvedValue(variations) },
+      cartItem: { findMany: jest.fn().mockResolvedValue(inCart), upsert: txUpsert },
+    };
+    const transaction = jest.fn().mockImplementation((fn: (t: unknown) => unknown) => fn(tx));
+    const cartUpsert = jest.fn().mockResolvedValue({ id: 'c1' });
+    const prisma = { cart: { upsert: cartUpsert }, $transaction: transaction } as unknown as PrismaService;
+    const analyticsSpy = { record: jest.fn(), recordMany: jest.fn().mockResolvedValue(undefined) } as unknown as AnalyticsEventsService;
+    const svc = new CartService(prisma, coupons, config, flash, analyticsSpy, combo);
+    const cartView = { items: [], itemCount: 0 };
+    const getCart = jest.spyOn(svc, 'getCart').mockResolvedValue(cartView as never);
+    return { svc, tx, txUpsert, transaction, cartUpsert, analyticsSpy, getCart, cartView };
+  }
+
+  const reject = async (p: Promise<unknown>) => {
+    const err = await p.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    return (err as BadRequestException).getResponse() as Record<string, unknown>;
+  };
+
+  it('3 dòng đạt → một transaction, khoá carts trước, upsert increment theo thứ tự variationId, một lần ghi sự kiện, rồi dựng giỏ', async () => {
+    const { svc, tx, txUpsert, transaction, analyticsSpy, getCart, cartView } = setup([sellable('v1', 5), sellable('v2', 5), sellable('v3', 5)]);
+    const out = await svc.addItemsBatch(
+      'u1',
+      [{ variationId: 'v3', quantity: 3 }, { variationId: 'v1', quantity: 1 }, { variationId: 'v2', quantity: 2 }],
+      'ctv_sheet',
+      'shop-a',
+    );
+    expect(out).toBe(cartView);
+    expect(getCart).toHaveBeenCalledWith('u1', 'shop-a');
+    expect(transaction).toHaveBeenCalledTimes(1);
+    // Khoá giỏ phải đứng trước mọi lần đọc tồn và ghi: hai batch của cùng khách xếp hàng sau nhau.
+    const lockOrder = tx.$queryRaw.mock.invocationCallOrder[0]!;
+    expect(lockOrder).toBeLessThan(tx.variation.findMany.mock.invocationCallOrder[0]!);
+    expect(lockOrder).toBeLessThan(txUpsert.mock.invocationCallOrder[0]!);
+    expect(txUpsert.mock.calls.map((c) => [c[0].where.cartId_variationId.variationId, c[0].update.quantity, c[0].create.quantity])).toEqual([
+      ['v1', { increment: 1 }, 1],
+      ['v2', { increment: 2 }, 2],
+      ['v3', { increment: 3 }, 3],
+    ]);
+    expect(analyticsSpy.recordMany).toHaveBeenCalledTimes(1);
+    expect(analyticsSpy.recordMany).toHaveBeenCalledWith(tx, [
+      { eventName: 'add_to_cart', userId: 'u1', platform: 'miniapp', props: { variationId: 'v3', quantity: 3, addSource: 'ctv_sheet' } },
+      { eventName: 'add_to_cart', userId: 'u1', platform: 'miniapp', props: { variationId: 'v1', quantity: 1, addSource: 'ctv_sheet' } },
+      { eventName: 'add_to_cart', userId: 'u1', platform: 'miniapp', props: { variationId: 'v2', quantity: 2, addSource: 'ctv_sheet' } },
+    ]);
+  });
+
+  it('một món hết hàng → lỗi code CART_BATCH_REJECTED/STOCK nêu variationId và tên món; KHÔNG ghi món nào, KHÔNG ghi sự kiện, KHÔNG dựng giỏ', async () => {
+    const { svc, txUpsert, analyticsSpy, getCart } = setup([sellable('v1', 5), sellable('v2', 0), sellable('v3', 5)]);
+    const body = await reject(
+      svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }, { variationId: 'v2', quantity: 1 }, { variationId: 'v3', quantity: 1 }], undefined),
+    );
+    expect(body).toMatchObject({
+      statusCode: 400,
+      code: 'CART_BATCH_REJECTED',
+      reason: 'STOCK',
+      variationId: 'v2',
+      productName: 'SP v2',
+      message: 'SP v2 đã hết hàng. Chưa có món nào được thêm vào giỏ.',
+    });
+    expect(txUpsert).not.toHaveBeenCalled();
+    expect(analyticsSpy.recordMany).not.toHaveBeenCalled();
+    expect(getCart).not.toHaveBeenCalled();
+  });
+
+  it('vượt tồn nhưng còn hàng → câu nêu số còn lại', async () => {
+    const { svc } = setup([sellable('v1', 3)]);
+    const body = await reject(svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 4 }], undefined));
+    expect(body).toMatchObject({ reason: 'STOCK', variationId: 'v1', message: 'SP v1 chỉ còn 3 sản phẩm. Chưa có món nào được thêm vào giỏ.' });
+  });
+
+  it('món không bán được (ngừng bán, chưa duyệt) hoặc không tồn tại → reason UNAVAILABLE, dòng đầu tiên hỏng theo thứ tự đến', async () => {
+    const off = setup([sellable('v1', 5), sellable('v2', 5, { isActive: false })]);
+    expect(await reject(off.svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }, { variationId: 'v2', quantity: 1 }], undefined))).toMatchObject({
+      code: 'CART_BATCH_REJECTED', reason: 'UNAVAILABLE', variationId: 'v2', productName: 'SP v2',
+      message: 'SP v2 đã ngừng bán. Chưa có món nào được thêm vào giỏ.',
+    });
+    const inactiveProduct = setup([sellable('v1', 5, { product: { isActive: false, approvalStatus: 'APPROVED', fulfilment: 'TUBU', storefront: null, name: 'SP v1' } })]);
+    expect(await reject(inactiveProduct.svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }], undefined))).toMatchObject({
+      reason: 'UNAVAILABLE', variationId: 'v1', message: 'SP v1 đã ngừng bán. Chưa có món nào được thêm vào giỏ.',
+    });
+    const rejected = setup([sellable('v1', 5, { product: { isActive: true, approvalStatus: 'REJECTED', fulfilment: 'TUBU', storefront: null, name: 'SP v1' } })]);
+    expect(await reject(rejected.svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }], undefined))).toMatchObject({
+      reason: 'UNAVAILABLE', variationId: 'v1', message: 'SP v1 đã ngừng bán. Chưa có món nào được thêm vào giỏ.',
+    });
+    const gone = setup([sellable('v1', 5)]);
+    const body = await reject(gone.svc.addItemsBatch('u1', [{ variationId: 'ghost', quantity: 1 }, { variationId: 'v1', quantity: 1 }], undefined));
+    expect(body).toMatchObject({ reason: 'UNAVAILABLE', variationId: 'ghost', productName: null });
+    expect(body.message).toBe('Sản phẩm không khả dụng. Chưa có món nào được thêm vào giỏ.');
+    expect(gone.txUpsert).not.toHaveBeenCalled();
+  });
+
+  it('gian hàng đối tác tạm nghỉ → UNAVAILABLE kèm lời nêu tên gian hàng', async () => {
+    const store = { title: 'Shop A', type: 'MERCHANT', ordersPausedAt: new Date(), owner: { role: 'DEALER', isBlocked: false } };
+    const { svc } = setup([sellable('v1', 5, { product: { isActive: true, approvalStatus: 'APPROVED', fulfilment: 'MERCHANT', storefrontId: 'sf-a', storefront: store, name: 'Xà phòng' } })]);
+    const body = await reject(svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }], undefined));
+    expect(body).toMatchObject({ reason: 'UNAVAILABLE', variationId: 'v1' });
+    expect(body.message).toContain('Shop A đang tạm nghỉ');
+    expect(body.message).toContain('Chưa có món nào được thêm vào giỏ.');
+  });
+
+  it('gộp dòng trùng variationId: [v1×2, v1×2] với tồn 3 → STOCK (tính trên tổng 4); đạt thì một upsert với tổng', async () => {
+    const over = setup([sellable('v1', 3)]);
+    expect(await reject(over.svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 2 }, { variationId: 'v1', quantity: 2 }], undefined))).toMatchObject({
+      reason: 'STOCK', variationId: 'v1',
+    });
+    const ok = setup([sellable('v1', 5)]);
+    await ok.svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 2 }, { variationId: 'v1', quantity: 2 }], undefined);
+    expect(ok.txUpsert).toHaveBeenCalledTimes(1);
+    expect(ok.txUpsert).toHaveBeenCalledWith({
+      where: { cartId_variationId: { cartId: 'c1', variationId: 'v1' } },
+      update: { quantity: { increment: 4 } },
+      create: { cartId: 'c1', variationId: 'v1', quantity: 4 },
+    });
+  });
+
+  it('trần 999 tính trên tổng sau khi gộp dòng trùng: 20 dòng × 999 → 400, không khoá giỏ, không ghi gì; đúng 999 vẫn qua', async () => {
+    const big = setup([sellable('v1', 50_000)]);
+    const dup = Array.from({ length: 20 }, () => ({ variationId: 'v1', quantity: 999 }));
+    const err = await big.svc.addItemsBatch('u1', dup, undefined).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).message).toBe('Mỗi món chỉ thêm tối đa 999 sản phẩm một lần.');
+    expect(big.transaction).not.toHaveBeenCalled();
+    expect(big.cartUpsert).not.toHaveBeenCalled();
+    expect(big.txUpsert).not.toHaveBeenCalled();
+
+    const edge = setup([sellable('v1', 50_000)]);
+    await edge.svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 500 }, { variationId: 'v1', quantity: 499 }], undefined);
+    expect(edge.txUpsert).toHaveBeenCalledWith({
+      where: { cartId_variationId: { cartId: 'c1', variationId: 'v1' } },
+      update: { quantity: { increment: 999 } },
+      create: { cartId: 'c1', variationId: 'v1', quantity: 999 },
+    });
+    const over = setup([sellable('v1', 50_000)]);
+    await expect(over.svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 500 }, { variationId: 'v1', quantity: 500 }], undefined)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('tính cả số đang có trong giỏ: giỏ có v1×2, tồn 3, thêm 2 → STOCK, không ghi gì', async () => {
+    const { svc, txUpsert } = setup([sellable('v1', 3), sellable('v2', 5)], [{ variationId: 'v1', quantity: 2 }]);
+    const body = await reject(svc.addItemsBatch('u1', [{ variationId: 'v2', quantity: 1 }, { variationId: 'v1', quantity: 2 }], undefined));
+    expect(body).toMatchObject({ reason: 'STOCK', variationId: 'v1' });
+    expect(txUpsert).not.toHaveBeenCalled();
+  });
+
+  it('giỏ chưa tồn tại: tạo giỏ (cart.upsert) trước transaction rồi mới thêm', async () => {
+    const { svc, cartUpsert, transaction, txUpsert } = setup([sellable('v1', 5)]);
+    await svc.addItemsBatch('u-new', [{ variationId: 'v1', quantity: 1 }], undefined);
+    expect(cartUpsert).toHaveBeenCalledWith({ where: { userId: 'u-new' }, update: {}, create: { userId: 'u-new' } });
+    expect(cartUpsert.mock.invocationCallOrder[0]).toBeLessThan(transaction.mock.invocationCallOrder[0]!);
+    expect(txUpsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('hai lượt tạo giỏ đầu tiên của cùng khách song song (nhấn đúp "Thêm cả combo"): upsert thua tranh P2002 thì đọc giỏ đã có, không 500', async () => {
+    const { svc, cartUpsert, txUpsert } = setup([sellable('v1', 5)]);
+    cartUpsert.mockRejectedValue(Object.assign(new Error('Unique constraint failed on the fields: (`userId`)'), { code: 'P2002' }));
+    const findUniqueOrThrow = jest.fn().mockResolvedValue({ id: 'c1' });
+    (svc as unknown as { prisma: { cart: { findUniqueOrThrow: jest.Mock } } }).prisma.cart.findUniqueOrThrow = findUniqueOrThrow;
+    await svc.addItemsBatch('u-new', [{ variationId: 'v1', quantity: 1 }], undefined);
+    expect(findUniqueOrThrow).toHaveBeenCalledWith({ where: { userId: 'u-new' } });
+    expect(txUpsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('upsert giỏ lỗi khác P2002 (hạ tầng) vẫn ném ra, không nuốt', async () => {
+    const { svc, cartUpsert } = setup([sellable('v1', 5)]);
+    cartUpsert.mockRejectedValue(Object.assign(new Error('connection reset'), { code: 'P1001' }));
+    await expect(svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }], undefined)).rejects.toThrow('connection reset');
+  });
+
+  it('không gửi addSource → sự kiện ghi addSource pdp', async () => {
+    const { svc, analyticsSpy } = setup([sellable('v1', 5)]);
+    await svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }], undefined);
+    const events = (analyticsSpy.recordMany as jest.Mock).mock.calls[0][1] as { props: { addSource: string } }[];
+    expect(events[0]!.props.addSource).toBe('pdp');
   });
 });

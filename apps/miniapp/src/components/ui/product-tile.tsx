@@ -111,7 +111,7 @@ export function ProductTile({
           width: isLine ? 64 : undefined,
           aspectRatio: isLine ? undefined : '1 / 1',
           height: isLine ? 64 : undefined,
-          background: 'var(--stone-100)',
+          background: 'var(--color-bg-media)',
           flex: isLine ? '0 0 auto' : undefined,
         }}
       >

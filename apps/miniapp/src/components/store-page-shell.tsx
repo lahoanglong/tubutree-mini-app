@@ -24,7 +24,7 @@ export function StorePageShell({ coverUrl, coverHeight, avatarUrl, avatarFallbac
   return (
     <div style={{ background: 'var(--color-bg-canvas)', paddingBottom: stickyBar ? 'calc(90px + var(--safe-bottom))' : 24 }}>
       {/* Ngoặc kép quanh URL + mã hoá ký tự phá chuỗi (", \, xuống dòng) để URL lạ không thoát khỏi url(). */}
-      <div style={{ height: coverHeight, background: coverUrl ? `url("${coverUrl.replace(/["\\\r\n]/g, encodeURIComponent)}") center/cover` : 'var(--forest-700)' }} />
+      <div style={{ height: coverHeight, background: coverUrl ? `url("${coverUrl.replace(/["\\\r\n]/g, encodeURIComponent)}") center/cover` : 'var(--color-bg-cover)' }} />
       <div style={{ padding: '0 16px', marginTop: -(avatarSize / 2) }}>
         <div style={{ position: 'relative', width: avatarSize, height: avatarSize }}>
           <div style={{

@@ -3,7 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CartService } from './cart.service';
 import { toPublicCart } from '../checkout/checkout-split';
-import { AddItemDto, ApplyCouponDto, CartQueryDto, UpdateItemDto } from './dto/cart.dto';
+import { AddItemDto, AddItemsBatchDto, ApplyCouponDto, CartQueryDto, UpdateItemDto } from './dto/cart.dto';
 
 @Controller('cart')
 export class CartController {
@@ -19,6 +19,12 @@ export class CartController {
   @Post('items')
   async addItem(@CurrentUser('sub') userId: string, @Body() dto: AddItemDto, @Query() q: CartQueryDto) {
     return toPublicCart(await this.cart.addItem(userId, dto, q.storefrontSlug));
+  }
+
+  // Một transaction: một món hết hàng hoặc ngừng bán thì không món nào vào giỏ (lỗi CART_BATCH_REJECTED nêu variationId).
+  @Post('items/batch')
+  async addItemsBatch(@CurrentUser('sub') userId: string, @Body() dto: AddItemsBatchDto, @Query() q: CartQueryDto) {
+    return toPublicCart(await this.cart.addItemsBatch(userId, dto.items, dto.addSource, q.storefrontSlug));
   }
 
   @Patch('items/:id')

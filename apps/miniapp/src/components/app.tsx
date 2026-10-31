@@ -9,6 +9,7 @@ import BackButton from './back-button';
 import { ONBOARDING_SURVEY_ENABLED } from './onboarding-flag';
 import { OpenAppRouter } from './open-app-router';
 import { MainLandmark } from './ui/main-landmark';
+import { NotifyRegion } from './notify-region';
 import { RouteShell, RouteSkeleton, SilentBoundary } from './route-shell';
 import ErrorBoundary, { hashMessage } from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
@@ -27,6 +28,7 @@ import { trackEvent, trackAppOpened, flushEventQueueOnHide } from '../services/a
 import { useLegacyNotifyPrefsSync } from '../pages/settings-legacy-sync';
 
 import { applyFontScale } from '../utils/font-scale';
+import { installPressFeedback } from '../utils/press-feedback';
 import { CASHBACK_ENABLED } from '../utils/features';
 
 const FONT_PX: Record<string, string> = { small: '15px', normal: '16px', large: '18px' };
@@ -153,6 +155,8 @@ export default function MyApp() {
     const claim = readClaimParam(window.location.search, window.location.hash);
     if (claim) void savePendingClaim(claim);
   }, [restore]);
+  // iOS chỉ áp :active (.tubu-press) khi có listener touchstart ở tổ tiên: gắn một lần cho cả app.
+  useEffect(() => installPressFeedback(), []);
   useLegacyNotifyPrefsSync(authed);
   // Mở app lúc mất mạng: phiên ở trạng thái lỗi thì tự khôi phục khi có mạng/quay lại app, không chờ khách bấm Thử lại.
   useSessionRecovery();
@@ -199,6 +203,7 @@ export default function MyApp() {
         <FlashSalesPoller />
         <App>
           <SnackbarProvider>
+            <NotifyRegion />
             <ZMPRouter>
               <ScreenTracker />
               {/* Loại điều hướng thật cho trang con — useNavigationType của react-router luôn là POP trong AnimationRoutes. */}

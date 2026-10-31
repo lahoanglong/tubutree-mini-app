@@ -20,7 +20,8 @@ export interface ChipProps {
 }
 
 /** Chip lọc/chọn — thay 3 định nghĩa trùng lặp (browse.tsx/feed.tsx byte-for-byte, audit A4-19).
- * Nhìn cao 36px nhưng vùng chạm 44px nhờ `.tubu-hit-44` (follow-up DS v2: "Chip under 44px").
+ * Cỡ md nhìn cao 36px nhưng vùng chạm 44px nhờ `.tubu-hit-44` (follow-up DS v2: "Chip under 44px").
+ * Chưa chọn: nền surface + viền trong vẽ bằng bóng (không đổi kích thước), vì stone-100 trên canvas chỉ 1,08:1.
  * Chiều rộng tối thiểu 44px vì `.tubu-hit-44::after` chỉ giãn theo chiều dọc: chip chỉ có một ký tự
  * ("5", "x") nếu không sẽ hẹp hơn 44px.
  * `flexShrink: 0`: minWidth tường minh thay min-content của flex item, nên không có nó chip trong hàng cuộn bị bóp về 44px.
@@ -52,12 +53,13 @@ export function Chip({
         display: 'inline-flex',
         alignItems: 'center',
         gap: 4,
-        background: selected ? 'var(--color-action-primary-bg)' : 'var(--stone-100)',
+        background: selected ? 'var(--color-action-primary-bg)' : size === 'md' ? 'var(--color-bg-surface)' : 'var(--color-bg-chip)',
+        boxShadow: !selected && size === 'md' ? 'inset 0 0 0 1px var(--color-border-subtle)' : undefined,
         color: selected ? 'var(--color-action-primary-fg)' : 'var(--color-text-secondary)',
-        fontWeight: selected ? 600 : 500,
+        fontWeight: 600,
         fontSize: 'var(--type-body-sm-size)',
-        padding: size === 'md' ? '10px 14px' : '6px 10px',
-        minHeight: size === 'md' ? 44 : 32,
+        padding: size === 'md' ? '7px 14px' : '6px 10px',
+        minHeight: size === 'md' ? 36 : 32,
         minWidth: 44,
         flexShrink: 0,
         borderRadius: 'var(--radius-pill)',

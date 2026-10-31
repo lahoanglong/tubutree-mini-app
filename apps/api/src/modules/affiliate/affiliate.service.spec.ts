@@ -1414,8 +1414,8 @@ describe('AffiliateService.getPublicTier', () => {
     const prisma = { commission: { aggregate: agg } } as unknown as PrismaService;
     const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics);
     const t = await svc.getPublicTier('u1', new Date('2026-09-30T18:00:00.000Z')); // 01:00 1/10 giờ VN
-    expect(t).toEqual({ name: 'Bạc', emoji: '🌳' });
-    expect(Object.keys(t)).toEqual(['name', 'emoji']);
+    expect(t).toEqual({ name: 'Bạc', emoji: '🌳', publicBadge: true });
+    expect(Object.keys(t)).toEqual(['name', 'emoji', 'publicBadge']);
     const where = agg.mock.calls[0]?.[0].where;
     expect(where.status).toEqual({ in: ['APPROVED', 'PAID'] });
     expect(where.approvedAt.gte.toISOString()).toBe('2026-09-30T17:00:00.000Z');
@@ -1427,6 +1427,19 @@ describe('AffiliateService.getPublicTier', () => {
     const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics);
     const t = await svc.getPublicTier('u1');
     expect(t.name).toBe('Tân binh');
+  });
+
+  // Q9 (01-thiet-ke.md §4): trang shop công khai ẩn bậc thấp nhất, hiện từ bậc 2.
+  it.each([
+    [null, 'Tân binh', false],
+    [2_999_999, 'Tân binh', false],
+    [3_000_000, 'Đồng', true],
+    [80_000_000, 'Kim Cương', true],
+  ])('doanh số %s → %s, publicBadge=%s (ẩn bậc thấp nhất, hiện từ bậc 2)', async (revenue, name, publicBadge) => {
+    const agg = jest.fn().mockResolvedValue({ _sum: { commissionableTotal: revenue } });
+    const prisma = { commission: { aggregate: agg } } as unknown as PrismaService;
+    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics);
+    expect(await svc.getPublicTier('u1')).toMatchObject({ name, publicBadge });
   });
 });
 

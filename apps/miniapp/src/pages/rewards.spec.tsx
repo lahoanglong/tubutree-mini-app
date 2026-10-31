@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
-  Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) => (visible ? <div role="dialog">{children}</div> : null),
+  Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) => (visible ? <div data-testid="zaui-sheet">{children}</div> : null),
   useNavigate: () => mocks.navigate,
   useLocation: () => mocks.location,
   useParams: () => mocks.params,

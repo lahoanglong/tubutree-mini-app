@@ -4,6 +4,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { CatalogService } from './catalog.service';
 import { toPublicProductDetail } from './catalog-public';
+import { BrandProductsQuery } from './dto/brand-products-query.dto';
 import { ProductQuery } from './dto/product-query.dto';
 import { SuggestQuery } from './dto/suggest-query.dto';
 
@@ -48,6 +49,15 @@ export class CatalogController {
     return this.catalog.boughtTogether(slug);
   }
 
+  // Trang thương hiệu phân trang thật. Đặt ở đây (không ở BrandController) để dùng chung cách xếp và dựng thẻ của /products
+  // mà BrandModule không phải import CatalogModule; đường dẫn vẫn nằm dưới /brand.
+  @Public()
+  @PublicCache('CATALOG')
+  @Get('brand/public/:slug/products')
+  brandProducts(@Param('slug') slug: string, @Query() query: BrandProductsQuery) {
+    return this.catalog.listBrandProducts(slug, query);
+  }
+
   @Public()
   @PublicCache('STATIC')
   @Get('brands')
@@ -58,8 +68,10 @@ export class CatalogController {
   @Public()
   @PublicCache('STATIC')
   @Get('categories')
-  categories() {
-    return this.catalog.categories();
+  categories(@Query('flat') flat?: string) {
+    // Mặc định là cây cho trang mua sắm; `?flat=1` là danh sách phẳng cho bộ chọn danh mục (admin, gian hàng CTV),
+    // nơi danh mục con phải chọn được như danh mục gốc.
+    return flat === '1' || flat === 'true' ? this.catalog.categoriesFlat() : this.catalog.categories();
   }
 
   @Public()

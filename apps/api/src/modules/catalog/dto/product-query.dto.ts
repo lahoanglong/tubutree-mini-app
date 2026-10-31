@@ -10,6 +10,10 @@ function toBool({ value }: { value: unknown }): unknown {
   return value;
 }
 
+/** Kiểu sắp xếp công khai của danh sách sản phẩm; dùng chung cho `/products` và `/brand/public/:slug/products`. */
+export const PRODUCT_SORTS = ['price_asc', 'price_desc', 'newest', 'best_seller', 'best_seller_30d', 'rating'] as const;
+export type ProductSort = (typeof PRODUCT_SORTS)[number];
+
 export class ProductQuery extends PaginationQuery {
   @IsOptional() @IsString() brand?: string;
   @IsOptional() @IsString() category?: string;
@@ -17,8 +21,8 @@ export class ProductQuery extends PaginationQuery {
   @IsOptional() @IsString() @MaxLength(SEARCH_Q_MAX_LENGTH) q?: string;
 
   @IsOptional()
-  @IsIn(['price_asc', 'price_desc', 'newest', 'best_seller', 'rating'])
-  sort?: 'price_asc' | 'price_desc' | 'newest' | 'best_seller' | 'rating';
+  @IsIn([...PRODUCT_SORTS])
+  sort?: ProductSort;
 
   // ── Dự án 4b (bộ lọc Browse). Đều tuỳ chọn → web shop và miniapp cũ gọi như trước. ──
 

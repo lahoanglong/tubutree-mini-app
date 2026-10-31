@@ -1,7 +1,8 @@
-import type { Locator, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { test, expect, E2E_TOKENS, makeUser } from './support/mock-api';
 import { PURCHASED_PAGE } from './support/buy-flow-mocks';
 import { BINH_SUA, mockDiscovery, mockHomeEngagement, toCard } from './support/discovery-mocks';
+import { expectChipHitArea44 } from './support/hit-area';
 
 /**
  * Zalo Mini App E2E — gói H sau review: không nhảy bố cục ở Trang chủ, chấm đỏ Ưu đãi nhớ đã xem, Cộng đồng, vùng chạm chip.
@@ -13,22 +14,6 @@ const gateOf = () => {
   const promise = new Promise<void>((resolve) => { open = resolve; });
   return { promise, open };
 };
-
-async function expectChipHitArea44(chip: Locator): Promise<void> {
-  // Đưa chip về giữa khung trước khi đo: mép trên bị ô tìm dính che, mép dưới bị thanh đáy (cố định) che.
-  await chip.evaluate((el) => el.scrollIntoView({ block: 'center' }));
-  const box = (await chip.boundingBox())!;
-  expect(box.height).toBeGreaterThanOrEqual(44);
-  const hit = await chip.evaluate(
-    (el, b) => {
-      const x = b.x + b.width / 2;
-      const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
-      return { above3: at(b.y + 2), below3: at(b.y + b.height - 2), inside: at(b.y + b.height / 2) };
-    },
-    { x: box.x, y: box.y, width: box.width, height: box.height },
-  );
-  expect(hit).toEqual({ above3: true, below3: true, inside: true });
-}
 
 async function blocks(page: Page): Promise<string[]> {
   return page.evaluate(() =>
@@ -190,7 +175,7 @@ test.describe('Trang chủ — chấm đỏ Ưu đãi và Cộng đồng', () =>
 });
 
 test.describe('Trang chủ — vùng chạm 44px', () => {
-  test('chip dải thương hiệu và tab gợi ý cao thật 44px, mép trên và dưới vẫn trúng chip', async ({ page, api }) => {
+  test('chip dải thương hiệu và tab gợi ý có vùng chạm 44px quanh tâm (chip nhìn cao 36px)', async ({ page, api }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     mockDiscovery(api, { returning: true, forYou: [toCard(BINH_SUA)] });
     await page.goto('/');

@@ -52,8 +52,7 @@ export default function BottomNav() {
         height: 'calc(60px + var(--safe-bottom))',
         paddingBottom: 'var(--safe-bottom)',
         background: 'var(--color-bg-surface)',
-        borderTop: '1px solid var(--color-border-subtle)',
-        boxShadow: 'var(--elevation-3)',
+        boxShadow: 'var(--elevation-nav)',
         display: 'flex',
         alignItems: 'stretch',
         zIndex: 100,
@@ -110,8 +109,8 @@ export default function BottomNav() {
                 <Icon icon={t.Icon} size="lg" tone="inverse" />
               </span>
             ) : (
-              <span aria-hidden style={{ position: 'relative', display: 'grid', placeItems: 'center' }}>
-                <Icon icon={t.Icon} size="lg" tone={active ? 'brand' : 'muted'} />
+              <span aria-hidden className={active ? 'tubu-tab-pop' : undefined} style={{ position: 'relative', display: 'grid', placeItems: 'center' }}>
+                <Icon icon={t.Icon} size="lg" tone={active ? 'brand' : 'muted'} filled={active} />
                 <CountBadge count={count} label={vi.nav.activeOrders(count)} />
                 {dot && (
                   <span
@@ -132,7 +131,7 @@ export default function BottomNav() {
                 )}
               </span>
             )}
-            <Text variant="caption" tone={active ? 'brand' : 'tertiary'} style={{ fontWeight: active ? 700 : 500 }}>
+            <Text variant="label" tone={active ? 'brand' : 'tertiary'} style={{ fontWeight: active ? 600 : 500 }}>
               {t.label}
             </Text>
           </button>

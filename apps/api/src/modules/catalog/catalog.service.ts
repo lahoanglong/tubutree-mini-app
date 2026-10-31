@@ -6,6 +6,7 @@ import { activeFlashWhere, isStillDiscounted } from '../flash-sale/flash-active'
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
+import type { BrandProductsQuery } from './dto/brand-products-query.dto';
 import { foldVietnamese, likeContainsPattern } from './search-text';
 import { CRON_TZ } from '../../common/cron-tz';
 import { PUBLIC_PRODUCT_WHERE, isPublicProduct } from './public-product';
@@ -17,6 +18,7 @@ import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { TrackCron } from '../../common/cron-run/track-cron';
 import { publicImages, publicProductThumb } from '../../common/public-image';
 import { publicImage } from '../../common/public-image';
+import { CATALOG_LOVED_KEYS, DEFAULT_LOVED_THRESHOLDS, LOVED_THRESHOLD_MAX, isLoved, sanitizeLovedThreshold, type LovedThresholds } from './catalog-loved';
 
 /**
  * Ai giao sản phẩm (D4), cho trang chi tiết: hàng gian hàng tự giao đi kiện riêng với phí giao/ngưỡng miễn phí của gian
@@ -45,6 +47,10 @@ type FulfillerStore = {
 const TEXT_MATCH_LIMIT = 2000;
 /** Số slug tối đa một lần lấy theo `slugs` (khớp số mục của dải "Đã xem gần đây" trên Mini App). */
 const MAX_LIST_SLUGS = 20;
+/** Số sản phẩm của dải "Có thể bạn cũng thích" (cùng nhãn). */
+const RELATED_LIMIT = 8;
+/** Cửa sổ của `soldApp30d` ("Bán chạy nhất"), tính theo ngày giao. */
+const SOLD_WINDOW_DAYS = 30;
 
 /** Gợi ý khi gõ: từ khoá (đã gấp dấu) ngắn hơn thế khớp gần như mọi SP và trigram không lọc được. */
 export const SUGGEST_MIN_CHARS = 2;
@@ -94,8 +100,31 @@ function standingOf(p: { id: string; basePrice: number; salePrice: number | null
 
 /** Danh mục kèm số SP đang bán — miniapp chỉ hiện danh mục có hàng (plan 4b Ruling 4). */
 export type CategoryWithCount = Category & { productCount: number };
+/** Nút của cây danh mục: `productCount` của cha đã cộng cả con (mỗi sản phẩm một lần). */
+export type CategoryNode = CategoryWithCount & { children: CategoryNode[] };
 
 type PricedFields = { basePrice: number; salePrice: number | null; variations: CardVariation[] };
+
+/** Cột Product thẻ cần; `fulfilment`/`storefrontId` thiếu (mẫu cũ, dữ liệu trước cột) thì coi như hàng Tubu giao. */
+type CardRow = {
+  id: string;
+  slug: string;
+  brand: string;
+  name: string;
+  thumbnail: string | null;
+  images: string[];
+  basePrice: number;
+  salePrice: number | null;
+  isFeatured: boolean;
+  ratingAvg: number;
+  reviewCount: number;
+  soldExternal: number;
+  soldApp: number;
+  createdAt?: Date;
+  fulfilment?: string;
+  storefrontId?: string | null;
+  variations: { id: string; sku: string; retailPrice: number; salePrice: number | null; stock: number }[];
+};
 
 @Injectable()
 export class CatalogService {
@@ -112,7 +141,9 @@ export class CatalogService {
   // Khi scale → chuyển sang Redis (đã có trong compose), hoặc emit event từ sync job
   // để gọi invalidate trên TẤT CẢ instance.
   private brandsCache: { value: unknown; expiresAt: number } | null = null;
-  private categoriesCache: { value: CategoryWithCount[]; expiresAt: number } | null = null;
+  private categoriesCache: { tree: CategoryNode[]; flat: CategoryWithCount[]; expiresAt: number } | null = null;
+  // Id con theo id cha, cho lọc `?category=<cha>` gồm cả con. Cùng hạn chế per-instance như categoriesCache.
+  private categoryChildrenCache: { value: Map<string, string[]>; expiresAt: number } | null = null;
   private readonly TTL_MS = 60_000;
 
   // "Thường mua kèm" quét order_items 90 ngày; chi phí tăng theo doanh số của sản phẩm nên cache phần co-occurrence (id sản phẩm),
@@ -154,10 +185,18 @@ export class CatalogService {
   ) {}
 
   async list(query: ProductQuery) {
+    return this.listPage(await this.listWhere(query), query);
+  }
+
+  /**
+   * Trang sản phẩm công khai cho một điều kiện lọc có sẵn: `/products` (bộ lọc của query) và trang thương hiệu (theo nhãn) dùng chung
+   * cách xếp, phân trang và dựng thẻ, không có đường thứ hai.
+   */
+  private async listPage(where: Prisma.ProductWhereInput, query: Pick<ProductQuery, 'page' | 'limit' | 'sort' | 'minPrice' | 'maxPrice'>) {
     const { page, limit, sort } = query;
-    const where = await this.listWhere(query);
     const price = priceRange(query.minPrice, query.maxPrice);
     if (sort === 'best_seller') return this.listBestSellers(where, page, limit, price);
+    if (sort === 'best_seller_30d') return this.listBestSellers30d(where, page, limit, price);
     if (sort === 'price_asc' || sort === 'price_desc') return this.listByStandingPrice(where, page, limit, sort === 'price_asc' ? 'asc' : 'desc', price);
     if (price) return this.listRanked<{ id: string }>(where, page, limit, { id: true }, null, price, [this.orderBy(sort), { id: 'asc' }]);
     const [items, total] = await this.prisma.$transaction([
@@ -171,7 +210,7 @@ export class CatalogService {
       }),
       this.prisma.product.count({ where }),
     ]);
-    return paginated(items.map((p) => this.toCard(p)), page, limit, total);
+    return paginated(await this.toCards(items), page, limit, total);
   }
 
   /**
@@ -188,6 +227,23 @@ export class CatalogService {
       limit,
       { id: true, soldApp: true, soldExternal: true },
       (x, y) => y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal),
+      price,
+      undefined,
+      false,
+    );
+  }
+
+  /**
+   * "Bán chạy nhất" theo cửa sổ 30 ngày (Q18): `soldApp30d` giảm dần, hoà thì tổng đã bán (gồm số nhập tay) giảm dần, hoà nữa id tăng dần.
+   * Cùng đường xếp hạng và bộ nhớ 60 giây với `listBestSellers`; thứ hạng không phụ thuộc giá nên không đọc phân loại hay Giờ vàng.
+   */
+  private listBestSellers30d(where: Prisma.ProductWhereInput, page: number, limit: number, price?: PriceBounds) {
+    return this.listRanked<{ id: string; soldApp30d: number; soldApp: number; soldExternal: number }>(
+      where,
+      page,
+      limit,
+      { id: true, soldApp30d: true, soldApp: true, soldExternal: true },
+      (x, y) => y.soldApp30d - x.soldApp30d || y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal),
       price,
       undefined,
       false,
@@ -236,11 +292,8 @@ export class CatalogService {
       include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
     const byId = new Map(rows.map((r) => [r.id, r]));
-    const items = pageIds
-      .map((id) => byId.get(id))
-      .filter((p): p is NonNullable<typeof p> => Boolean(p))
-      .map((p) => this.toCard(p));
-    return paginated(items, page, limit, rankedIds.length);
+    const ordered = pageIds.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p));
+    return paginated(await this.toCards(ordered), page, limit, rankedIds.length);
   }
 
   private readonly rankCache = new Map<string, { ids: string[]; expiresAt: number }>();
@@ -331,7 +384,11 @@ export class CatalogService {
         where.brand = { in: brandList };
       }
     }
-    if (category) where.categoryIds = { has: category };
+    if (category) {
+      // Cha gồm cả con (BG-13): sản phẩm thường gán vào lá, nên lọc theo cha phải khớp cả id của các con cháu.
+      const scope = await this.categoryScope(category);
+      where.categoryIds = scope.length > 1 ? { hasSome: scope } : { has: category };
+    }
     if (segment) where.forSegment = { has: segment };
     const text = await this.textWhere(query.q);
     if (text) and.push(text);
@@ -357,6 +414,16 @@ export class CatalogService {
       this.logger.warn(`Tìm không dấu lỗi, dùng contains: ${err instanceof Error ? err.message : String(err)}`);
       return { OR: [{ name: { contains: raw, mode: 'insensitive' } }, { tags: { has: raw.toLowerCase() } }] };
     }
+  }
+
+  /**
+   * Sản phẩm công khai của một nhãn đã đăng (`GET /brand/public/:slug/products`), phân trang thật: trang nhãn không còn bị cắt cứng
+   * ở 30 món của `getPublicBySlug`. Nhãn chưa đăng thì 404 như trang nhãn.
+   */
+  async listBrandProducts(slug: string, query: BrandProductsQuery) {
+    const brand = await this.prisma.brand.findFirst({ where: { slug, isPublished: true }, select: { id: true } });
+    if (!brand) throw new NotFoundException('Nhãn hàng không tồn tại hoặc chưa đăng.');
+    return this.listPage({ ...PUBLIC_PRODUCT_WHERE, brandId: brand.id }, query);
   }
 
   async getBySlug(slug: string) {
@@ -428,16 +495,28 @@ export class CatalogService {
     };
   }
 
+  /**
+   * Sản phẩm cùng nhãn, tối đa RELATED_LIMIT, xếp theo tổng đã bán (soldApp + soldExternal) giảm dần, hoà theo id tăng. Prisma không
+   * orderBy được theo biểu thức nên xếp ở TS trên vài cột nhỏ của mọi SP cùng nhãn (một nhãn chỉ vài chục SP), rồi lấy thẻ đầy đủ đúng các id.
+   * Không dùng `rankCache`: khoá theo từng slug sẽ đẩy khoá Bán chạy ra khỏi bộ nhớ có trần.
+   */
   async related(slug: string) {
     const product = await this.prisma.product.findUnique({ where: { slug } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
-    const items = await this.prisma.product.findMany({
-      where: { ...PUBLIC_PRODUCT_WHERE, brand: product.brand, id: { not: product.id } },
-      take: 8,
+    const where = { ...PUBLIC_PRODUCT_WHERE, brand: product.brand, id: { not: product.id } };
+    const siblings = await this.prisma.product.findMany({ where, select: { id: true, soldApp: true, soldExternal: true } });
+    const ids = siblings
+      .sort((x, y) => y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal) || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0))
+      .slice(0, RELATED_LIMIT)
+      .map((r) => r.id);
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.product.findMany({
+      where: { AND: [where, { id: { in: ids } }] },
       include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
+    const byId = new Map(rows.map((r) => [r.id, r]));
     // Trả cùng shape card với /products để FE dùng chung ProductCard.
-    return items.map((p) => this.toCard(p));
+    return this.toCards(ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)));
   }
 
   /** "Thường mua kèm" (§6.12): co-occurrence trên đơn 90 ngày gần nhất. */
@@ -477,7 +556,7 @@ export class CatalogService {
       include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
     });
     const byId = new Map(products.map((p) => [p.id, p]));
-    return ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)).map((p) => this.toCard(p));
+    return this.toCards(ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)));
   }
 
   /**
@@ -521,7 +600,7 @@ export class CatalogService {
     });
     const followedBrandIds = follows.map((f) => f.brandId);
 
-    let items: Parameters<typeof this.toCard>[0][] = [];
+    let items: CardRow[] = [];
     if (categorySet.length > 0 || followedBrandIds.length > 0) {
       const or: Prisma.ProductWhereInput[] = [];
       if (categorySet.length > 0) or.push({ categoryIds: { hasSome: categorySet } });
@@ -551,7 +630,7 @@ export class CatalogService {
       const pb = purchased.has(b.id) ? 1 : 0;
       return pa !== pb ? pa - pb : sold(b) - sold(a);
     });
-    return sorted.slice(0, TAKE).map((p) => this.toCard(p));
+    return this.toCards(sorted.slice(0, TAKE));
   }
 
   async brands() {
@@ -574,29 +653,84 @@ export class CatalogService {
     return value;
   }
 
+  /** `[id, ...mọi con cháu]` của một danh mục; id lạ hoặc danh mục lá trả `[id]`. Có `visited` nên vòng `parentId` không treo. */
+  private async categoryScope(id: string): Promise<string[]> {
+    if (!this.categoryChildrenCache || this.categoryChildrenCache.expiresAt <= Date.now()) {
+      const rows = await this.prisma.category.findMany({ select: { id: true, parentId: true } });
+      const children = new Map<string, string[]>();
+      for (const r of rows) {
+        if (!r.parentId) continue;
+        const list = children.get(r.parentId) ?? [];
+        list.push(r.id);
+        children.set(r.parentId, list);
+      }
+      this.categoryChildrenCache = { value: children, expiresAt: Date.now() + this.TTL_MS };
+    }
+    const children = this.categoryChildrenCache.value;
+    const scope = [id];
+    const visited = new Set(scope);
+    for (let i = 0; i < scope.length; i++) {
+      for (const child of children.get(scope[i]!) ?? []) {
+        if (visited.has(child)) continue;
+        visited.add(child);
+        scope.push(child);
+      }
+    }
+    return scope;
+  }
+
   /**
+   * Cây danh mục hai tầng: gốc là danh mục không cha (hoặc cha không còn), con lồng trong `children`.
    * Đồng bộ Pancake KHÔNG ghi `categoryIds` (chỉ SP seed/đối tác có) → danh mục seed có thể trống
-   * trên prod. Trả thêm `productCount` (field cộng thêm, client cũ bỏ qua) để miniapp ẩn danh mục
-   * trống và lùi về 4 phân khúc khi không còn danh mục nào có hàng.
+   * trên prod. `productCount` (field cộng thêm, client cũ bỏ qua) để miniapp ẩn danh mục
+   * trống và lùi về 4 phân khúc khi không còn danh mục nào có hàng; của cha cộng cả con, mỗi sản phẩm đếm một lần
+   * dù gán cả cha lẫn con.
    */
-  async categories(): Promise<CategoryWithCount[]> {
+  async categories(): Promise<CategoryNode[]> {
+    return (await this.loadCategories()).tree;
+  }
+
+  /**
+   * Cùng dữ liệu với `categories()` nhưng phẳng, mọi danh mục một dòng (không `children`, không bỏ danh mục nằm trong vòng
+   * `parentId`): cho bộ chọn của admin và gian hàng CTV, nơi danh mục con phải chọn được như danh mục gốc. Dạng dòng giữ
+   * như API trước khi có cây nên bản client cũ vẫn đọc được.
+   */
+  async categoriesFlat(): Promise<CategoryWithCount[]> {
+    return (await this.loadCategories()).flat;
+  }
+
+  private async loadCategories() {
     if (this.categoriesCache && this.categoriesCache.expiresAt > Date.now()) {
-      return this.categoriesCache.value;
+      return this.categoriesCache;
     }
     const [rows, products] = await Promise.all([
-      this.prisma.category.findMany({ orderBy: { sortOrder: 'asc' } }),
+      this.prisma.category.findMany({ orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] }),
       this.prisma.product.findMany({
         where: PUBLIC_PRODUCT_WHERE,
         select: { categoryIds: true },
       }),
     ]);
+    const parentOf = new Map(rows.map((c) => [c.id, c.parentId]));
     const counts = new Map<string, number>();
     for (const p of products) {
-      for (const id of new Set(p.categoryIds)) counts.set(id, (counts.get(id) ?? 0) + 1);
+      // Mỗi danh mục của sản phẩm và mọi tổ tiên của nó, một lần cho sản phẩm này.
+      const covered = new Set<string>();
+      for (const id of p.categoryIds) {
+        for (let cur: string | null | undefined = id; cur && !covered.has(cur); cur = parentOf.get(cur)) covered.add(cur);
+      }
+      for (const id of covered) counts.set(id, (counts.get(id) ?? 0) + 1);
     }
-    const value = rows.map((c) => ({ ...c, productCount: counts.get(c.id) ?? 0 }));
-    this.categoriesCache = { value, expiresAt: Date.now() + this.TTL_MS };
-    return value;
+    const flat: CategoryWithCount[] = rows.map((c) => ({ ...c, productCount: counts.get(c.id) ?? 0 }));
+    const nodes = new Map<string, CategoryNode>(flat.map((c) => [c.id, { ...c, children: [] }]));
+    const tree: CategoryNode[] = [];
+    for (const c of rows) {
+      const node = nodes.get(c.id)!;
+      const parent = c.parentId && c.parentId !== c.id ? nodes.get(c.parentId) : undefined;
+      if (parent) parent.children.push(node);
+      else tree.push(node);
+    }
+    this.categoriesCache = { tree, flat, expiresAt: Date.now() + this.TTL_MS };
+    return this.categoriesCache;
   }
 
   async suggest(q: string) {
@@ -629,50 +763,97 @@ export class CatalogService {
     }
   }
 
-  private toCard(p: {
-    id: string;
-    slug: string;
-    brand: string;
-    name: string;
-    thumbnail: string | null;
-    images: string[];
-    basePrice: number;
-    salePrice: number | null;
-    isFeatured: boolean;
-    ratingAvg: number;
-    reviewCount: number;
-    soldExternal: number;
-    soldApp: number;
-    createdAt?: Date;
-    variations: { id: string; sku: string; retailPrice: number; salePrice: number | null; stock: number }[];
-  }) {
+  /** Ngưỡng nhãn "Được yêu thích" từ cấu hình; thiếu hoặc hỏng thì dùng mặc định (xem `sanitizeLovedThreshold`). */
+  private async lovedThresholds(): Promise<LovedThresholds> {
+    const d = DEFAULT_LOVED_THRESHOLDS;
+    if (!this.config) return d;
+    const [minRating, minReviews, minSold] = await Promise.all([
+      this.config.get<unknown>(CATALOG_LOVED_KEYS.minRating, d.minRating),
+      this.config.get<unknown>(CATALOG_LOVED_KEYS.minReviews, d.minReviews),
+      this.config.get<unknown>(CATALOG_LOVED_KEYS.minSold, d.minSold),
+    ]);
     return {
-      id: p.id,
-      slug: p.slug,
-      brand: p.brand,
-      name: p.name,
-      thumbnail: publicProductThumb(p),
-      ...cardPrices(p, p.variations),
-      isFeatured: p.isFeatured,
-      ratingAvg: p.ratingAvg,
-      reviewCount: p.reviewCount,
-      sold: (p.soldExternal ?? 0) + (p.soldApp ?? 0), // tổng "đã bán" (sàn ngoài + app)
-      inStock: p.variations.some((v) => v.stock > 0),
-      createdAt: p.createdAt?.toISOString(),
+      minRating: sanitizeLovedThreshold(minRating, d.minRating, LOVED_THRESHOLD_MAX.minRating),
+      minReviews: sanitizeLovedThreshold(minReviews, d.minReviews, LOVED_THRESHOLD_MAX.minReviews),
+      minSold: sanitizeLovedThreshold(minSold, d.minSold, LOVED_THRESHOLD_MAX.minSold),
     };
   }
 
   /**
-   * Tính lại `soldApp` (đơn DELIVERED, cộng dồn theo product) — idempotent: reset 0 rồi set,
-   * nên tự GIẢM khi đơn bị RETURNED. Hiển thị "đã bán" = soldExternal + soldApp.
+   * Gian hàng của các thẻ hàng đối tác, một truy vấn theo lô. Thẻ hàng Tubu (đa số) không có `storefrontId` cần tra nên trang toàn
+   * hàng Tubu không tốn thêm truy vấn nào.
+   */
+  private async storesOfCards(rows: readonly CardRow[]): Promise<Map<string, FulfillerStore>> {
+    const ids = [...new Set(rows.filter((p) => p.fulfilment === 'MERCHANT' && p.storefrontId).map((p) => p.storefrontId as string))];
+    if (ids.length === 0) return new Map();
+    const stores = await this.prisma.storefront.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        isPartner: true,
+        shippingFee: true,
+        freeShipFrom: true,
+        ordersPausedAt: true,
+        owner: { select: { role: true, isBlocked: true } },
+      },
+    });
+    return new Map(stores.map((s) => [s.id, s]));
+  }
+
+  /**
+   * Thẻ sản phẩm công khai. `fulfiller` (cùng dạng với trang chi tiết) cho nhãn "Miễn phí giao hàng", `isLoved` cho nhãn "Được yêu thích":
+   * tính ở máy chủ để ngưỡng chỉnh được ở cấu hình và hai app không chép luật.
+   */
+  private async toCards(rows: readonly CardRow[]) {
+    if (rows.length === 0) return [];
+    const [loved, stores] = await Promise.all([this.lovedThresholds(), this.storesOfCards(rows)]);
+    return Promise.all(
+      rows.map(async (p) => {
+        const sold = (p.soldExternal ?? 0) + (p.soldApp ?? 0); // tổng "đã bán" (sàn ngoài + app)
+        return {
+          id: p.id,
+          slug: p.slug,
+          brand: p.brand,
+          name: p.name,
+          thumbnail: publicProductThumb(p),
+          ...cardPrices(p, p.variations),
+          isFeatured: p.isFeatured,
+          ratingAvg: p.ratingAvg,
+          reviewCount: p.reviewCount,
+          sold,
+          inStock: p.variations.some((v) => v.stock > 0),
+          createdAt: p.createdAt?.toISOString(),
+          isLoved: isLoved({ ratingAvg: p.ratingAvg, reviewCount: p.reviewCount, sold }, loved),
+          fulfiller: await this.fulfillerOf(p.fulfilment ?? 'TUBU', p.storefrontId ? (stores.get(p.storefrontId) ?? null) : null),
+        };
+      }),
+    );
+  }
+
+  /**
+   * Tính lại `soldApp` (đơn DELIVERED, cộng dồn theo product) và `soldApp30d` (cùng đơn nhưng giao trong 30 ngày gần nhất,
+   * để xếp "Bán chạy nhất") — idempotent: ghi đè cả hai, nên tự GIẢM khi đơn bị RETURNED và khi đơn trôi khỏi cửa sổ 30 ngày.
+   * Hiển thị "đã bán" = soldExternal + soldApp; `soldApp30d` không hiển thị và không gồm `soldExternal`.
+   * Đơn DELIVERED chưa có `deliveredAt` (dữ liệu trước khi có cột này) không vào cửa sổ 30 ngày: chấp nhận được vì
+   * cửa sổ ngắn hơn tuổi của dữ liệu đó.
    */
   async recomputeSoldCounts(): Promise<{ updated: number }> {
-    const grouped = await this.prisma.orderItem.groupBy({
-      by: ['variationId'],
-      where: { order: { status: 'DELIVERED' } },
-      _sum: { quantity: true },
-    });
-    const variationIds = grouped.map((g) => g.variationId);
+    const since = new Date(Date.now() - SOLD_WINDOW_DAYS * 864e5);
+    const [grouped, grouped30d] = await Promise.all([
+      this.prisma.orderItem.groupBy({
+        by: ['variationId'],
+        where: { order: { status: 'DELIVERED' } },
+        _sum: { quantity: true },
+      }),
+      this.prisma.orderItem.groupBy({
+        by: ['variationId'],
+        where: { order: { status: 'DELIVERED', deliveredAt: { gte: since } } },
+        _sum: { quantity: true },
+      }),
+    ]);
+    const variationIds = [...new Set([...grouped, ...grouped30d].map((g) => g.variationId))];
     const vars = variationIds.length
       ? await this.prisma.variation.findMany({
           where: { id: { in: variationIds } },
@@ -680,12 +861,17 @@ export class CatalogService {
         })
       : [];
     const vmap = new Map(vars.map((v) => [v.id, v.productId]));
-    const perProduct = new Map<string, number>();
-    for (const g of grouped) {
-      const pid = vmap.get(g.variationId);
-      if (!pid) continue;
-      perProduct.set(pid, (perProduct.get(pid) ?? 0) + (g._sum.quantity ?? 0));
-    }
+    const sumByProduct = (rows: typeof grouped) => {
+      const perProduct = new Map<string, number>();
+      for (const g of rows) {
+        const pid = vmap.get(g.variationId);
+        if (!pid) continue;
+        perProduct.set(pid, (perProduct.get(pid) ?? 0) + (g._sum.quantity ?? 0));
+      }
+      return perProduct;
+    };
+    const perProduct = sumByProduct(grouped);
+    const perProduct30d = sumByProduct(grouped30d);
     // Reset phải nguyên tử cùng với lần ghi lại — nhưng KHÔNG được reset toàn bảng bên trong
     // transaction: `updateMany` không điều kiện khoá MỌI dòng `products` cho tới khi N lệnh
     // update chạy xong, đủ để chặn đứng cron đồng bộ Pancake (cũng nổ lúc 03:00) và mọi thao tác
@@ -694,20 +880,26 @@ export class CatalogService {
     // bán 0" suốt 24 giờ.
     //
     // Cách hiện tại: chỉ chạm đúng những dòng CẦN đổi.
-    //  - Dòng có số bán mới → update từng dòng (khoá đúng dòng đó).
+    //  - Dòng có số bán mới → update từng dòng (khoá đúng dòng đó). Hai `groupBy` đọc ở hai thời điểm nên đơn
+    //    giao xen giữa có thể chỉ hiện ở số 30 ngày: lấy hợp hai tập sản phẩm và `soldApp` không thấp hơn
+    //    `soldApp30d`, để sản phẩm đó không bị bỏ sót hay bị đưa về 0 oan (lần chạy 03:00 sau tự chỉnh về đúng).
     //  - Dòng đang khác 0 mà không còn đơn nào → đưa về 0, một câu lệnh, phạm vi hẹp.
-    const ids = [...perProduct.keys()];
+    const ids = [...new Set([...perProduct.keys(), ...perProduct30d.keys()])];
     const ops = [
-      ...[...perProduct.entries()].map(([productId, sold]) =>
-        this.prisma.product.update({ where: { id: productId }, data: { soldApp: sold } }),
-      ),
+      ...ids.map((productId) => {
+        const recent = perProduct30d.get(productId) ?? 0;
+        return this.prisma.product.update({
+          where: { id: productId },
+          data: { soldApp: Math.max(perProduct.get(productId) ?? 0, recent), soldApp30d: recent },
+        });
+      }),
       this.prisma.product.updateMany({
-        where: { soldApp: { not: 0 }, ...(ids.length ? { id: { notIn: ids } } : {}) },
-        data: { soldApp: 0 },
+        where: { OR: [{ soldApp: { not: 0 } }, { soldApp30d: { not: 0 } }], ...(ids.length ? { id: { notIn: ids } } : {}) },
+        data: { soldApp: 0, soldApp30d: 0 },
       }),
     ];
     await this.prisma.$transaction(ops);
-    return { updated: perProduct.size };
+    return { updated: ids.length };
   }
 
   /** Cron 03:00 hằng ngày — tính lại số đã bán (social proof không cần realtime). */

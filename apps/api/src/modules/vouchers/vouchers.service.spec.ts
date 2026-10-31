@@ -628,14 +628,20 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
 
   it('khoá idempotency vẫn theo tháng → cùng tháng chỉ cấp 1 lần (grant trả false lần 2)', async () => {
     const { svc, create, prisma } = setup([{ userId: 'u1', spent: BigInt(3_500_000) }]);
-    await svc.milestoneVouchers();
-    const reason = create.mock.calls[0][0].data.scopeMeta?.reason ?? create.mock.calls[0][0].data.code;
-    expect(String(reason)).toContain(new Date().toISOString().slice(0, 7));
-    // Lần 2 trong cùng tháng: coupon đã tồn tại → grant() bail, không tạo thêm.
-    (prisma.coupon.findUnique as jest.Mock).mockResolvedValue({ id: 'c1' });
-    create.mockClear();
-    await svc.milestoneVouchers();
-    expect(create).not.toHaveBeenCalled();
+    // Ghim giữa tháng: đồng hồ thật lúc 17:00–24:00 UTC ngày cuối tháng đã sang tháng sau theo giờ VN mà ISO UTC chưa.
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-15T03:00:00Z'));
+    try {
+      await svc.milestoneVouchers();
+      const reason = create.mock.calls[0][0].data.scopeMeta?.reason ?? create.mock.calls[0][0].data.code;
+      expect(String(reason)).toContain('2026-10');
+      // Lần 2 trong cùng tháng: coupon đã tồn tại → grant() bail, không tạo thêm.
+      (prisma.coupon.findUnique as jest.Mock).mockResolvedValue({ id: 'c1' });
+      create.mockClear();
+      await svc.milestoneVouchers();
+      expect(create).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 

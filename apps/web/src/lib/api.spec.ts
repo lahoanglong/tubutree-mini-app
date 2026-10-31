@@ -26,8 +26,8 @@ describe('formatSold — kiểu Shopee', () => {
     expect(formatSold(1200)).toBe('Đã bán 1,2k+');
   });
 
-  it('biên 999.999 (sát 1 triệu) → toFixed(1) làm tròn thành "1000k+" thay vì nhảy sang "1tr+" (quirk hiện tại, không phải bug chặn)', () => {
-    expect(formatSold(999_999)).toBe('Đã bán 1000k+');
+  it('biên 999.999 (sát 1 triệu) → "1tr+", không in "1000k+"', () => {
+    expect(formatSold(999_999)).toBe('Đã bán 1tr+');
   });
 
   it('≥ 1 triệu → rút gọn "tr+"', () => {

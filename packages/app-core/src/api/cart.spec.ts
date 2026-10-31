@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fakeHttp } from './fake-http';
-import { addToCart, applyCoupon, getCart, getCartSelection, removeCartItem, removeCoupon, updateCartItem } from './cart';
+import { addCartItemsBatch, addToCart, applyCoupon, getCart, getCartSelection, removeCartItem, removeCoupon, updateCartItem } from './cart';
 
 const withSlug = { query: { storefrontSlug: 'ctv-a' } };
 
@@ -50,6 +50,19 @@ describe('cart — hợp đồng gọi API', () => {
     expect(calls).toEqual([
       { method: 'get', path: '/cart', opts: { query: { itemIds: 'a,b' } } },
       { method: 'get', path: '/cart', opts: { query: { storefrontSlug: 'ctv-a', itemIds: 'a' } } },
+    ]);
+  });
+
+  it('addCartItemsBatch: một POST /cart/items/batch gửi cả danh sách, kèm addSource; có gian hàng thì kèm storefrontSlug', async () => {
+    const { http, calls } = fakeHttp();
+    const items = [{ variationId: 'v1', quantity: 1 }, { variationId: 'v2', quantity: 2 }];
+    await addCartItemsBatch(http, items, 'pdp');
+    await addCartItemsBatch(http, items, 'ctv_sheet', 'ctv-a');
+    await addCartItemsBatch(http, items, 'pdp', null);
+    expect(calls).toEqual([
+      { method: 'post', path: '/cart/items/batch', body: { items, addSource: 'pdp' } },
+      { method: 'post', path: '/cart/items/batch', body: { items, addSource: 'ctv_sheet' }, opts: withSlug },
+      { method: 'post', path: '/cart/items/batch', body: { items, addSource: 'pdp' } },
     ]);
   });
 });

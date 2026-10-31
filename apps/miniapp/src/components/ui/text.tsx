@@ -51,6 +51,8 @@ export interface HeadingProps {
   variant: HeadingVariant;
   as?: ElementType;
   tone?: Tone;
+  /** Để `aria-labelledby` của hộp thoại trỏ vào tiêu đề. */
+  id?: string;
   className?: string;
   style?: CSSProperties;
   'data-testid'?: string;
