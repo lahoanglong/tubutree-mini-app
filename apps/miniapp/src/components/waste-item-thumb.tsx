@@ -22,7 +22,7 @@ export function WasteItemThumb({ item, size = 48 }: { item: { code: string; imag
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: 'var(--color-brand-fg, var(--forest-600))',
+        color: 'var(--color-text-brand)',
       }}
     >
       <Cmp size={Math.round(size * 0.5)} strokeWidth={1.8} aria-hidden />
