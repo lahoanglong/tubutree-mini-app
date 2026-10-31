@@ -54,17 +54,28 @@ describe('voucherView', () => {
   it('không có đơn tối thiểu thì điều kiện rỗng', () => {
     expect(voucherView(coupon({ minOrder: null }), NOW).condition).toBe('');
   });
-  it('loại theo mã: freeship, gắn sản phẩm (shop), còn lại discount', () => {
+  it('loại theo mã: freeship; shop chỉ khi báo shop; mã mua chung (products) vẫn là discount', () => {
     expect(voucherView(coupon({ type: 'FREESHIP' }), NOW).kind).toBe('freeship');
-    expect(voucherView(coupon({ products: [{ id: 'p1', name: 'A' }] }), NOW).kind).toBe('shop');
-    expect(voucherView(coupon({ products: [] }), NOW).kind).toBe('discount');
+    expect(voucherView({ ...coupon(), shop: true }, NOW).kind).toBe('shop');
+    expect(voucherView(coupon({ products: [{ id: 'p1', name: 'A' }] }), NOW).kind).toBe('discount');
   });
-  it('chữ hạn: dưới 24 giờ, còn 2 ngày, hết hạn', () => {
+  it('chữ hạn: ngày lịch giờ Việt Nam, hết hạn', () => {
     expect(voucherView(coupon({ endAt: iso(NOW + 5 * 3_600_000) }), NOW).expiry).toBe('Hết hạn hôm nay');
     expect(voucherView(coupon({ endAt: iso(NOW + 2 * D) }), NOW).expiry).toBe('Còn 2 ngày');
     expect(voucherView(coupon({ endAt: iso(NOW + 3 * D) }), NOW).expiry).toBe('Còn 3 ngày');
-    expect(voucherView(coupon({ endAt: iso(NOW + 3 * D + 1) }), NOW).expiry).toBe('Dùng đến 04/11');
+    expect(voucherView(coupon({ endAt: iso(NOW + 4 * D) }), NOW).expiry).toBe('Dùng đến 05/11');
     expect(voucherView(coupon({ endAt: iso(NOW - 1) }), NOW).expiry).toBe('Đã hết hạn');
+  });
+  it('ngày lịch VN, không phải cửa sổ 24 giờ: 20:00 VN, hạn 10:00 sáng hôm sau là "Còn 1 ngày" (không phải "hôm nay"); 23:59 hôm sau cũng 1 ngày (không phải 2)', () => {
+    const now = Date.parse('2026-10-31T13:00:00Z'); // 20:00 31/10 giờ VN
+    expect(voucherView(coupon({ endAt: '2026-11-01T03:00:00Z' }), now).expiry).toBe('Còn 1 ngày');
+    expect(voucherView(coupon({ endAt: '2026-11-01T16:59:00Z' }), now).expiry).toBe('Còn 1 ngày');
+    expect(voucherView(coupon({ endAt: '2026-10-31T16:59:00Z' }), now).expiry).toBe('Hết hạn hôm nay');
+  });
+  it('ranh giới nửa đêm VN: 23:59 VN hạn 00:01 VN hôm sau là còn 1 ngày, hạn 23:58 cùng ngày là hôm nay', () => {
+    const now = Date.parse('2026-10-31T16:59:00Z'); // 23:59 31/10 VN
+    expect(voucherView(coupon({ endAt: '2026-10-31T17:01:00Z' }), now).expiry).toBe('Còn 1 ngày');
+    expect(voucherView(coupon({ endAt: '2026-10-31T16:59:30Z' }), now).expiry).toBe('Hết hạn hôm nay');
   });
   it('hạn không đọc được thì không đoán: còn dùng được, chữ hạn rỗng', () => {
     const v = voucherView(coupon({ endAt: 'không phải ngày' }), NOW);
@@ -83,10 +94,14 @@ describe('voucherView', () => {
 });
 
 describe('sortVouchers', () => {
-  const v = (id: string, expiresAt?: string | null) => ({ id, expiresAt });
+  const v = (id: string, endAt?: string | null) => ({ id, endAt });
   it('sắp hết hạn trước, không hạn sau mã còn hạn, hết hạn cuối cùng', () => {
     const list = [v('none'), v('late', iso(NOW + 9 * D)), v('gone', iso(NOW - D)), v('soon', iso(NOW + D)), v('mid', iso(NOW + 4 * D))];
     expect(sortVouchers(list, NOW).map((x) => x.id)).toEqual(['soon', 'mid', 'late', 'none', 'gone']);
+  });
+  it('nhận CouponDTO thật, sắp theo endAt', () => {
+    const list = [coupon({ code: 'late', endAt: iso(NOW + 9 * D) }), coupon({ code: 'soon', endAt: iso(NOW + D) })];
+    expect(sortVouchers(list, NOW).map((x) => x.code)).toEqual(['soon', 'late']);
   });
   it('ổn định khi hoà và không đổi mảng vào', () => {
     const list = [v('a', iso(NOW + D)), v('b', iso(NOW + D)), v('c', null), v('d', null)];

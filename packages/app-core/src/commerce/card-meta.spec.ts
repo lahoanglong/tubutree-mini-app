@@ -29,7 +29,7 @@ describe('formatSoldShort — kiểu Shopee (cùng bảng ca với formatSold c�
     expect(formatSoldShort(1000)).toBe('Đã bán 1k+');
     expect(formatSoldShort(1200)).toBe('Đã bán 1,2k+');
     expect(formatSoldShort(1234)).toBe('Đã bán 1,2k+');
-    expect(formatSoldShort(999_999)).toBe('Đã bán 1000k+');
+    expect(formatSoldShort(999_999)).toBe('Đã bán 1tr+');
   });
   it('từ 1 triệu rút gọn tr+', () => {
     expect(formatSoldShort(1_000_000)).toBe('Đã bán 1tr+');
@@ -65,5 +65,17 @@ describe('cardMetaLine', () => {
   });
   it('trường hợp dài nhất thực tế vẫn trong 22 ký tự (ux-copy ước 20, đo thật 21)', () => {
     expect(cardMetaLine({ ratingAvg: 5, sold: 99_900 })!.length).toBeLessThanOrEqual(22);
+  });
+});
+
+describe('soldCountText: ngưỡng làm tròn', () => {
+  it('không in 1000k+ hay 1000tr+', () => {
+    expect(soldCountText(999_949)).toBe('999,9k+');
+    expect(soldCountText(999_950)).toBe('1tr+');
+    expect(soldCountText(999_999)).toBe('1tr+');
+    expect(soldCountText(1_000_000)).toBe('1tr+');
+    expect(soldCountText(999_949_999)).toBe('999,9tr+');
+    expect(soldCountText(999_950_000)).toBe('1 tỷ+');
+    expect(soldCountText(1e9)).toBe('1 tỷ+');
   });
 });
