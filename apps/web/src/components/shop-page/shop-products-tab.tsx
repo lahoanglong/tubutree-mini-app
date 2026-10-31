@@ -2,7 +2,7 @@
 
 // Nguồn: apps/miniapp/src/components/shop-page/shop-products-tab.tsx (thêm phân trang số từ lg)
 import { useMemo, useRef, useState } from 'react';
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import {
   SHOP_PAGE_SIZE,
@@ -74,13 +74,22 @@ function LocalList({ products, sort, showBrand, wide, onPage }: { products: Prod
   );
 }
 
-const brandQuery = (slug: string, sort: ShopSort, page: number) => fetchBrandProductsPage(slug, { page, limit: SHOP_PAGE_SIZE, sort: shopSortToCatalog(sort) });
+/**
+ * Một trang sản phẩm của thương hiệu, một khoá cho cả hai chế độ (nối dài ở điện thoại, phân trang số từ lg): đổi khổ giữa chừng
+ * (xoay máy, kéo rộng cửa sổ qua 1024px) thì chế độ mới dùng lại trang đã tải thay vì gọi trang 1 lần nữa.
+ */
+const brandPage = (slug: string, sort: ShopSort, page: number) => ({
+  queryKey: ['brand-products-page', slug, sort, page] as const,
+  queryFn: () => fetchBrandProductsPage(slug, { page, limit: SHOP_PAGE_SIZE, sort: shopSortToCatalog(sort) }),
+  staleTime: 60_000,
+});
 
 function BrandInfinite({ slug, sort, showBrand }: { slug: string; sort: ShopSort; showBrand?: boolean }) {
+  const qc = useQueryClient();
   const q = useInfiniteQuery({
     queryKey: ['brand-products', slug, sort],
     initialPageParam: 1,
-    queryFn: ({ pageParam }) => brandQuery(slug, sort, pageParam),
+    queryFn: ({ pageParam }) => qc.fetchQuery(brandPage(slug, sort, pageParam)),
     getNextPageParam: (last, all) => (all.length * SHOP_PAGE_SIZE < last.meta.total ? all.length + 1 : undefined),
     staleTime: 60_000,
   });
@@ -99,7 +108,7 @@ function BrandInfinite({ slug, sort, showBrand }: { slug: string; sort: ShopSort
 
 function BrandPaged({ slug, sort, showBrand, onPage }: { slug: string; sort: ShopSort; showBrand?: boolean; onPage: () => void }) {
   const [page, setPage] = useState(1);
-  const q = useQuery({ queryKey: ['brand-products-page', slug, sort, page], queryFn: () => brandQuery(slug, sort, page), placeholderData: keepPreviousData, staleTime: 60_000 });
+  const q = useQuery({ ...brandPage(slug, sort, page), placeholderData: keepPreviousData });
   if (q.isPending) return <ProductGrid items={[]} variant="grid" loading showBrand={showBrand} />;
   if (q.isError) return <ErrorState variant="inline" message={loadErrorText(q.error)} onRetry={() => void q.refetch()} />;
   const items = q.data.data as ProductCardData[];

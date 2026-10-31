@@ -1,10 +1,26 @@
 // @vitest-environment jsdom
+import { useSyncExternalStore } from 'react';
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { resetFlashSales } from '@/lib/use-flash-sales';
 
-const mocks = vi.hoisted(() => ({ wide: false, fetchPage: vi.fn() }));
-vi.mock('@/lib/use-media-query', () => ({ useMediaQuery: () => mocks.wide }));
+const mocks = vi.hoisted(() => ({ wide: false, subs: new Set<() => void>(), fetchPage: vi.fn() }));
+vi.mock('@/lib/use-media-query', () => ({
+  useMediaQuery: () =>
+    useSyncExternalStore(
+      (cb) => {
+        mocks.subs.add(cb);
+        return () => mocks.subs.delete(cb);
+      },
+      () => mocks.wide,
+    ),
+}));
+const setWide = (v: boolean) =>
+  act(() => {
+    mocks.wide = v;
+    mocks.subs.forEach((cb) => cb());
+  });
 vi.mock('@/lib/shop-brand-products', () => ({ fetchBrandProductsPage: mocks.fetchPage }));
 vi.mock('@/lib/shop-client', () => ({ getActiveFlashSales: async () => [] }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
@@ -119,6 +135,28 @@ describe('ShopProductsTab (web) — nguồn thương hiệu (phân trang thật)
     await flush();
     expect(mocks.fetchPage).toHaveBeenLastCalledWith('fuwa', { page: 1, limit: 20, sort: 'newest' });
     expect(c.querySelector('[aria-current="page"]')?.textContent).toBe('1');
+  });
+
+  it('đổi khổ giữa chừng (điện thoại sang lg và ngược lại): trang đã tải được dùng lại, không gọi trang 1 lần hai', async () => {
+    const c = await mount(<ShopProductsTab source={{ kind: 'brand', slug: 'fuwa' }} showBrand={false} />);
+    expect(mocks.fetchPage).toHaveBeenCalledTimes(1);
+    setWide(true);
+    await flush();
+    expect(c.querySelector('nav button[aria-label^="Trang "]')).not.toBeNull();
+    expect(slugs(c)).toHaveLength(20);
+    expect(mocks.fetchPage).toHaveBeenCalledTimes(1);
+    setWide(false);
+    await flush();
+    expect(btn(c, 'Xem thêm')).toBeDefined();
+    expect(slugs(c)).toHaveLength(20);
+    expect(mocks.fetchPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('mở thẳng ở lg: đúng một lần gọi trang 1', async () => {
+    mocks.wide = true;
+    const c = await mount(<ShopProductsTab source={{ kind: 'brand', slug: 'fuwa' }} showBrand={false} />);
+    expect(slugs(c)).toHaveLength(20);
+    expect(mocks.fetchPage).toHaveBeenCalledTimes(1);
   });
 
   it('lỗi tải: báo lỗi có nút Thử lại gọi lại API; thương hiệu rỗng: thông báo rỗng', async () => {
