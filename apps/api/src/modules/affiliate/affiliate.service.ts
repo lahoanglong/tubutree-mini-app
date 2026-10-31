@@ -124,14 +124,12 @@ export const PERSONAL_TAX_ID_FORMAT_MESSAGE = 'Mã số thuế cá nhân gồm 1
 /** Chủ gian hàng mẫu (Storefront.isSample): không ghi công đơn, không sinh hoa hồng. */
 const SAMPLE_STOREFRONT_SELECT = { where: { isSample: true }, select: { id: true }, take: 1 } as const;
 
-const CLICKED_AT_SKEW_MS = 5 * 60_000;
-
-/** Thời điểm bấm client gửi lên: chỉ tin khi hợp lệ và không ở tương lai; ngày xấu hoặc quá lệch → null (tính từ now như cũ). */
-function parseClickedAt(raw: string | undefined, now: Date): Date | null {
-  if (!raw) return null;
-  const t = new Date(raw).getTime();
-  if (!Number.isFinite(t) || t > now.getTime() + CLICKED_AT_SKEW_MS) return null;
-  return new Date(Math.min(t, now.getTime()));
+/**
+ * Khoảng thời gian đã trôi kể từ lúc khách bấm link, do client đo bằng cùng một đồng hồ máy (không gửi giờ tuyệt đối để đồng hồ
+ * lệch không làm mất hay kéo dài ghi công). Âm, không phải số hoặc không hữu hạn thì coi như không gửi.
+ */
+function parseClickedAgo(raw: unknown): number | null {
+  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : null;
 }
 
 @Injectable()
@@ -212,7 +210,7 @@ export class AffiliateService {
    */
   async recordTouch(
     userId: string,
-    dto: { referralCode?: string; storefrontSlug?: string; kind?: string; clickedAt?: string },
+    dto: { referralCode?: string; storefrontSlug?: string; kind?: string; clickedAgoMs?: number },
     now: Date = new Date(),
     platform: 'miniapp' | 'web' = 'miniapp',
   ): Promise<{ ok: boolean }> {
@@ -220,24 +218,33 @@ export class AffiliateService {
     const referrerUserId = await this.findEligibleReferrer(dto.referralCode, userId);
     if (!referrerUserId) return { ok: false };
     const days = await this.config.get<number>('affiliate.attribution_days', 7);
-    const clickedAt = parseClickedAt(dto.clickedAt, now);
-    const expiresAt = new Date((clickedAt ?? now).getTime() + days * 24 * 60 * 60 * 1000);
-    if (clickedAt && expiresAt <= now) return { ok: false };
+    const ago = parseClickedAgo(dto.clickedAgoMs);
+    const clickedAt = new Date(now.getTime() - (ago ?? 0));
+    const expiresAt = new Date(clickedAt.getTime() + days * 24 * 60 * 60 * 1000);
+    if (ago !== null && expiresAt <= now) return { ok: false };
     const data = {
       referrerUserId,
       storefrontSlug: dto.storefrontSlug ?? null,
       kind: dto.kind ?? 'ctv',
+      clickedAt,
       expiresAt,
     };
     let applied = true;
-    if (clickedAt) {
-      // Chạm bù mang thời điểm bấm cũ: chỉ được thay chạm đang có khi hạn mới dài hơn, để không làm ngắn hạn
-      // của lượt bấm mới hơn. Điều kiện nằm trong câu UPDATE nên hai chạm đồng thời cũng không ghi đè ngược.
+    if (ago !== null) {
+      // Chạm bù mang khoảng thời gian từ lúc bấm: chỉ được thay chạm đang có khi lúc bấm mới hơn (so theo lúc bấm, không theo
+      // hạn, vì admin đổi số ngày giữa chừng làm hạn không còn so được). Dòng cũ chưa có lúc bấm thì lấy hạn - số ngày hiện tại
+      // làm mốc, tức so hạn. Cùng người giới thiệu và cùng lúc bấm thì chạm có slug gian hàng được bổ sung vào dòng chưa có slug.
+      // Điều kiện nằm trong câu UPDATE nên hai chạm đồng thời cũng không ghi đè ngược.
       try {
         await this.prisma.referralTouch.create({ data: { userId, ...data } });
       } catch (err) {
         if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) throw err;
-        const r = await this.prisma.referralTouch.updateMany({ where: { userId, expiresAt: { lt: expiresAt } }, data });
+        const newer: Prisma.ReferralTouchWhereInput[] = [
+          { clickedAt: { lt: clickedAt } },
+          { clickedAt: null, expiresAt: { lt: expiresAt } },
+        ];
+        if (dto.storefrontSlug) newer.push({ referrerUserId, storefrontSlug: null, clickedAt: { lte: clickedAt } });
+        const r = await this.prisma.referralTouch.updateMany({ where: { userId, OR: newer }, data });
         applied = r.count > 0;
       }
     } else {

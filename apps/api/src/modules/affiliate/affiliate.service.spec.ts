@@ -3108,11 +3108,12 @@ describe('AffiliateService.createCommissionForOrder — mức mặc định affi
   });
 });
 
-describe('AffiliateService.recordTouch: hạn tính từ lúc khách bấm (clickedAt)', () => {
+describe('AffiliateService.recordTouch: hạn tính từ lúc khách bấm (clickedAgoMs)', () => {
   const NOW = new Date('2026-06-27T12:00:00Z');
   const DAY = 86400000;
+  const HOUR = 3600000;
   const { Prisma } = jest.requireActual('@prisma/client');
-  function setup(existing: 'none' | 'row') {
+  function setup(existing: 'none' | 'row', days = 7) {
     const referralTouch = {
       upsert: jest.fn().mockResolvedValue({}),
       create: jest.fn().mockImplementation(async () => {
@@ -3126,62 +3127,91 @@ describe('AffiliateService.recordTouch: hạn tính từ lúc khách bấm (clic
       referralTouch,
     } as unknown as PrismaService;
     const rec = { record: jest.fn(), recordBestEffort: jest.fn().mockResolvedValue(undefined) };
-    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, rec as unknown as AnalyticsEventsService);
-    return { referralTouch, rec, run: (clickedAt?: string) => svc.recordTouch('buyer1', { referralCode: 'LINH', clickedAt }, NOW) };
+    const cfg = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'affiliate.attribution_days' ? (days as unknown as T) : (fb as T)) } as unknown as SystemConfigService;
+    const svc = new AffiliateService(prisma, cfg, pricing, pancakeOrder, coins, rec as unknown as AnalyticsEventsService);
+    return {
+      referralTouch,
+      rec,
+      run: (clickedAgoMs?: unknown, slug?: string) => svc.recordTouch('buyer1', { referralCode: 'LINH', storefrontSlug: slug, clickedAgoMs: clickedAgoMs as number }, NOW),
+    };
   }
-  const iso = (msBefore: number) => new Date(NOW.getTime() - msBefore).toISOString();
 
-  it('không gửi clickedAt: giữ nguyên đường upsert, hạn = now + 7 ngày', async () => {
+  it('không gửi clickedAgoMs: đường upsert, hạn = now + 7 ngày, clickedAt = now', async () => {
     const t = setup('none');
     expect(await t.run()).toEqual({ ok: true });
     expect(t.referralTouch.create).not.toHaveBeenCalled();
-    expect(t.referralTouch.upsert.mock.calls[0][0].create.expiresAt.getTime()).toBe(NOW.getTime() + 7 * DAY);
+    const c = t.referralTouch.upsert.mock.calls[0][0].create;
+    expect(c.expiresAt.getTime()).toBe(NOW.getTime() + 7 * DAY);
+    expect(c.clickedAt.getTime()).toBe(NOW.getTime());
   });
 
-  it('clickedAt 2 ngày trước: hạn = clickedAt + 7 ngày (ngắn hơn now + 7 ngày)', async () => {
+  it('bấm 2 ngày trước: clickedAt = now - 2 ngày, hạn = clickedAt + 7 ngày', async () => {
     const t = setup('none');
-    await t.run(iso(2 * DAY));
-    expect(t.referralTouch.create.mock.calls[0][0].data.expiresAt.getTime()).toBe(NOW.getTime() - 2 * DAY + 7 * DAY);
+    await t.run(2 * DAY);
+    const d = t.referralTouch.create.mock.calls[0][0].data;
+    expect(d.clickedAt.getTime()).toBe(NOW.getTime() - 2 * DAY);
+    expect(d.expiresAt.getTime()).toBe(NOW.getTime() + 5 * DAY);
   });
 
-  it('clickedAt quá hạn (8 ngày trước): không ghi công mới, không lỗi', async () => {
+  it('bấm 8 ngày trước (quá hạn): không ghi công mới, không lỗi', async () => {
     const t = setup('none');
-    expect(await t.run(iso(8 * DAY))).toEqual({ ok: false });
+    expect(await t.run(8 * DAY)).toEqual({ ok: false });
     expect(t.referralTouch.create).not.toHaveBeenCalled();
     expect(t.referralTouch.upsert).not.toHaveBeenCalled();
     expect(t.rec.recordBestEffort).not.toHaveBeenCalled();
   });
 
-  it('clickedAt ở tương lai (1 ngày): coi như không gửi, hạn = now + 7 ngày, không dài hơn', async () => {
+  it.each([-1, -5 * DAY, 'abc', NaN, Infinity, null])('clickedAgoMs không hợp lệ (%s): coi như không gửi, upsert tính từ now', async (bad) => {
     const t = setup('none');
-    await t.run(new Date(NOW.getTime() + DAY).toISOString());
+    await t.run(bad);
+    expect(t.referralTouch.create).not.toHaveBeenCalled();
     expect(t.referralTouch.upsert.mock.calls[0][0].create.expiresAt.getTime()).toBe(NOW.getTime() + 7 * DAY);
   });
 
-  it('clickedAt lệch tương lai vài phút: kẹp về now, hạn không vượt now + 7 ngày', async () => {
+  it('khoảng 0: clickedAt = now, hạn không vượt now + 7 ngày', async () => {
     const t = setup('none');
-    await t.run(new Date(NOW.getTime() + 2 * 60_000).toISOString());
+    await t.run(0);
     expect(t.referralTouch.create.mock.calls[0][0].data.expiresAt.getTime()).toBe(NOW.getTime() + 7 * DAY);
   });
 
-  it('clickedAt không phải ngày: tính từ now như cũ', async () => {
-    const t = setup('none');
-    await t.run('khong-phai-ngay');
-    expect(t.referralTouch.upsert.mock.calls[0][0].create.expiresAt.getTime()).toBe(NOW.getTime() + 7 * DAY);
-  });
-
-  it('đã có chạm: updateMany chỉ thay khi hạn hiện tại ngắn hơn hạn mới (không làm ngắn lượt bấm mới hơn)', async () => {
+  it('đã có chạm: updateMany theo lúc bấm (không theo hạn); dòng cũ chưa có lúc bấm so hạn', async () => {
     const t = setup('row');
-    await t.run(iso(6 * 3600_000));
+    await t.run(6 * HOUR);
+    const clicked = new Date(NOW.getTime() - 6 * HOUR);
     const call = t.referralTouch.updateMany.mock.calls[0][0];
-    expect(call.where).toEqual({ userId: 'buyer1', expiresAt: { lt: new Date(NOW.getTime() - 6 * 3600_000 + 7 * DAY) } });
+    expect(call.where).toEqual({
+      userId: 'buyer1',
+      OR: [{ clickedAt: { lt: clicked } }, { clickedAt: null, expiresAt: { lt: new Date(clicked.getTime() + 7 * DAY) } }],
+    });
     expect(t.rec.recordBestEffort).toHaveBeenCalledTimes(1);
   });
 
-  it('chạm bù cũ hơn chạm đang có (updateMany không khớp dòng nào): không phát referral_touched', async () => {
+  it('admin hạ số ngày (7 → 2): so theo lúc bấm nên điều kiện không phụ thuộc hạn của dòng cũ; hạn mới = clickedAt + 2 ngày', async () => {
+    const t = setup('row', 2);
+    await t.run(HOUR);
+    const call = t.referralTouch.updateMany.mock.calls[0][0];
+    expect(call.where.OR[0]).toEqual({ clickedAt: { lt: new Date(NOW.getTime() - HOUR) } });
+    expect(call.data.expiresAt.getTime()).toBe(NOW.getTime() - HOUR + 2 * DAY);
+  });
+
+  it('chạm có slug cùng người giới thiệu và cùng lúc bấm được bổ sung vào dòng chưa có slug', async () => {
+    const t = setup('row');
+    await t.run(HOUR, 'an-shop');
+    const or = t.referralTouch.updateMany.mock.calls[0][0].where.OR;
+    expect(or[2]).toEqual({ referrerUserId: 'ctv1', storefrontSlug: null, clickedAt: { lte: new Date(NOW.getTime() - HOUR) } });
+    expect(t.referralTouch.updateMany.mock.calls[0][0].data.storefrontSlug).toBe('an-shop');
+  });
+
+  it('chạm không có slug thì không có nhánh bổ sung slug', async () => {
+    const t = setup('row');
+    await t.run(HOUR);
+    expect(t.referralTouch.updateMany.mock.calls[0][0].where.OR).toHaveLength(2);
+  });
+
+  it('chạm bù cũ hơn chạm đang có (updateMany không khớp dòng nào): ok:true như cũ, không phát referral_touched', async () => {
     const t = setup('row');
     t.referralTouch.updateMany.mockResolvedValue({ count: 0 });
-    expect(await t.run(iso(6 * 3600_000))).toEqual({ ok: true });
+    expect(await t.run(6 * HOUR)).toEqual({ ok: true });
     expect(t.rec.recordBestEffort).not.toHaveBeenCalled();
   });
 });

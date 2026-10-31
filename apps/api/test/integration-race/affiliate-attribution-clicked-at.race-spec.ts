@@ -130,26 +130,24 @@ describe('Ghi công CTV theo lúc bấm link (real Postgres, checkout thật)', 
   const commissionsOf = (orderId: string) =>
     prisma.commission.findMany({ where: { orderId }, select: { affiliateUserId: true, amount: true } });
   const touchOf = (userId: string) => prisma.referralTouch.findUniqueOrThrow({ where: { userId } });
-  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 
   it('chạm bù cũ hơn lượt bấm lại: hạn giữ theo lượt bấm mới (15:00), không bị kéo về 10:00', async () => {
     const { user: a } = await ctvWithCode();
     const b = await buyer();
-    await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, kind: 'ctv', clickedAt: ago(5 * HOUR) });
+    await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, kind: 'ctv', clickedAgoMs: 5 * HOUR });
     const fresh = await touchOf(b.u.id);
-    await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, kind: 'ctv', clickedAt: ago(10 * HOUR) });
+    await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, kind: 'ctv', clickedAgoMs: 10 * HOUR });
     expect((await touchOf(b.u.id)).expiresAt.getTime()).toBe(fresh.expiresAt.getTime());
     await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, kind: 'ctv' });
     expect((await touchOf(b.u.id)).expiresAt.getTime()).toBeGreaterThan(fresh.expiresAt.getTime());
   });
 
-  it('clickedAt xa hơn hạn (8 ngày) không ghi công; clickedAt tương lai không kéo dài hơn now + 7 ngày', async () => {
+  it('clickedAt xa hơn hạn (8 ngày) không ghi công; clickedAgoMs âm không kéo dài hơn now + 7 ngày', async () => {
     const { user: a } = await ctvWithCode();
     const b = await buyer();
-    expect(await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, clickedAt: ago(8 * DAY) })).toEqual({ ok: false });
+    expect(await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, clickedAgoMs: 8 * DAY })).toEqual({ ok: false });
     expect(await prisma.referralTouch.count({ where: { userId: b.u.id } })).toBe(0);
-    const before = Date.now();
-    await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, clickedAt: new Date(before + 3 * DAY).toISOString() });
+    await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, clickedAgoMs: -3 * DAY });
     expect((await touchOf(b.u.id)).expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 7 * DAY);
   });
 
@@ -160,8 +158,8 @@ describe('Ghi công CTV theo lúc bấm link (real Postgres, checkout thật)', 
       const { user: newer } = await ctvWithCode();
       const b = await buyer();
       const tasks = [
-        () => affiliate.recordTouch(b.u.id, { referralCode: older.referralCode!, kind: 'ctv', clickedAt: ago(30 * HOUR) }),
-        () => affiliate.recordTouch(b.u.id, { referralCode: newer.referralCode!, kind: 'ctv', clickedAt: ago(2 * HOUR) }),
+        () => affiliate.recordTouch(b.u.id, { referralCode: older.referralCode!, kind: 'ctv', clickedAgoMs: 30 * HOUR }),
+        () => affiliate.recordTouch(b.u.id, { referralCode: newer.referralCode!, kind: 'ctv', clickedAgoMs: 2 * HOUR }),
       ];
       if (round % 2) tasks.reverse();
       await Promise.all(tasks.map((t) => t()));
@@ -179,7 +177,7 @@ describe('Ghi công CTV theo lúc bấm link (real Postgres, checkout thật)', 
     const { user: a } = await ctvWithCode();
     const b = await buyer();
     await prisma.referralTouch.create({ data: { userId: b.u.id, referrerUserId: a.id, kind: 'ctv', expiresAt: new Date(Date.now() - HOUR) } });
-    expect(await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, clickedAt: ago(9 * DAY) })).toEqual({ ok: false });
+    expect(await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, clickedAgoMs: 9 * DAY })).toEqual({ ok: false });
     const o = await place(b, v.id);
     expect(o.referrerUserId).toBeNull();
     expect(await commissionsOf(o.id)).toEqual([]);
@@ -190,11 +188,56 @@ describe('Ghi công CTV theo lúc bấm link (real Postgres, checkout thật)', 
     const { user: a } = await ctvWithCode();
     const b = await buyer();
     await prisma.referralTouch.create({ data: { userId: b.u.id, referrerUserId: a.id, kind: 'ctv', expiresAt: new Date(Date.now() - HOUR) } });
-    expect(await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, clickedAt: ago(DAY) })).toEqual({ ok: true });
+    expect(await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, clickedAgoMs: DAY })).toEqual({ ok: true });
     expect((await touchOf(b.u.id)).expiresAt.getTime()).toBeLessThanOrEqual(Date.now() - DAY + 7 * DAY + 1000);
     const o = await place(b, v.id);
     expect(await commissionsOf(o.id)).toEqual([{ affiliateUserId: a.id, amount: 20_000 }]);
   });
+
+  it('admin hạ affiliate.attribution_days (7 → 2) sau khi đã có chạm: chạm bù cũ hơn vẫn không đè lượt bấm mới hơn', async () => {
+    const { user: older } = await ctvWithCode();
+    const { user: newer } = await ctvWithCode();
+    const b = await buyer();
+    await affiliate.recordTouch(b.u.id, { referralCode: newer.referralCode!, clickedAgoMs: HOUR });
+    await setConfig(prisma, 'affiliate.attribution_days', 2);
+    try {
+      await affiliate.recordTouch(b.u.id, { referralCode: older.referralCode!, clickedAgoMs: 20 * HOUR });
+      expect((await touchOf(b.u.id)).referrerUserId).toBe(newer.id);
+      expect((await touchOf(b.u.id)).clickedAt).not.toBeNull();
+    } finally {
+      await setConfig(prisma, 'affiliate.attribution_days', 7);
+    }
+  });
+
+  it('dòng cũ chưa có clickedAt: so theo hạn - số ngày hiện tại (chạm cũ hơn không đè, chạm mới hơn thay)', async () => {
+    const { user: a } = await ctvWithCode();
+    const { user: c } = await ctvWithCode();
+    const b = await buyer();
+    await prisma.referralTouch.create({ data: { userId: b.u.id, referrerUserId: a.id, kind: 'ctv', expiresAt: new Date(Date.now() - 5 * HOUR + 7 * DAY) } });
+    await affiliate.recordTouch(b.u.id, { referralCode: c.referralCode!, clickedAgoMs: 10 * HOUR });
+    expect((await touchOf(b.u.id)).referrerUserId).toBe(a.id);
+    await affiliate.recordTouch(b.u.id, { referralCode: c.referralCode!, clickedAgoMs: HOUR });
+    const t = await touchOf(b.u.id);
+    expect(t.referrerUserId).toBe(c.id);
+    expect(t.clickedAt).not.toBeNull();
+  });
+
+  it('cùng người giới thiệu, chạm sau có slug gian hàng: bổ sung slug vào dòng chưa có slug', async () => {
+    const { user: a, store } = await ctvWithStore();
+    const b = await buyer();
+    await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, kind: 'ctv', clickedAgoMs: 1000 });
+    expect((await touchOf(b.u.id)).storefrontSlug).toBeNull();
+    await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, storefrontSlug: store.slug, kind: 'ctv', clickedAgoMs: 1000 });
+    expect((await touchOf(b.u.id)).storefrontSlug).toBe(store.slug);
+  });
+
+  async function ctvWithStore() {
+    const user = await createUser(prisma, { role: 'AFFILIATE' });
+    const store = await prisma.storefront.create({
+      data: { type: 'CTV', slug: user.referralCode!.toLowerCase(), ownerUserId: user.id, title: 'Shop CTV IT', isPublished: true, approvedAt: new Date() },
+    });
+    return { user, store };
+  }
 
   async function ctvWithCode() {
     const user = await createUser(prisma, { role: 'AFFILIATE' });
