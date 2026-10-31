@@ -333,7 +333,7 @@ export class LoyaltyService {
    * đã load 1 lần thay vì để mỗi lần gọi tự findMany lại — tránh N+1 query khi quét N user.
    * Bỏ trống thì tự load (giữ hành vi cũ cho caller đơn lẻ như creditOrderPoints).
    */
-  async recalcTier(userId: string, preloadedTiers?: MembershipTier[]): Promise<void> {
+  async recalcTier(userId: string, preloadedTiers?: MembershipTier[], attempt = 0): Promise<void> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const tiers =
       preloadedTiers ?? (await this.prisma.membershipTier.findMany({ orderBy: { sortOrder: 'asc' } }));
@@ -374,12 +374,16 @@ export class LoyaltyService {
         data: { tierId: decision.tierId, tierGraceUntil: decision.graceUntil },
       });
       if (moved.count === 1) await this.notifyTierUpgrade(userId, user.tierId, decision.tierId, tiers);
+      // Thua so-và-ghi: lượt khác đã ghi bằng dữ liệu có thể cũ hơn của ta (vd đơn giao gần như cùng lúc). Tính lại đúng một
+      // lần trên dữ liệu mới để khách không nằm ở hạng thấp tới lượt cron đêm.
+      else if (attempt < 1) await this.recalcTier(userId, preloadedTiers, attempt + 1);
     } else if (graceChanged) {
       // Chỉ đổi ân hạn và chỉ khi hạng + hạn vẫn như đã đọc: không được kéo hạng vừa lên ở lượt song song về hạng cũ.
-      await this.prisma.user.updateMany({
+      const moved = await this.prisma.user.updateMany({
         where: { id: userId, tierId: user.tierId, tierGraceUntil: user.tierGraceUntil },
         data: { tierGraceUntil: decision.graceUntil },
       });
+      if (moved.count === 0 && attempt < 1) await this.recalcTier(userId, preloadedTiers, attempt + 1);
     }
   }
 
