@@ -18,6 +18,7 @@ import { armHomeFeed, disarmHomeFeed } from '@/lib/home-feed';
 import { HomeRestoreHintContext } from '@/lib/home-restore-context';
 import type { HomeRestoreHint } from '@/lib/home-restore-hint';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
+import { HubLayout } from '@/components/layouts/hub-layout';
 import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '@/components/reorder/purchased-rail';
 import { usePurchasedItems } from '@/components/reorder/use-purchased-items';
 import { BestSellerRail } from './best-seller-rail';
@@ -173,37 +174,46 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   // Giữ nội dung đã dựng cả khi hẹn giờ đã nhả khung chờ mà loại khách vẫn "chưa biết" (mạng chậm): bố cục "chưa biết" bỏ Bán chạy và dải quà,
   // tới lúc biết là khách mới sẽ dựng lại, nội dung đã vẽ biến mất rồi hiện lại.
   const order = startedNew && (settling || kind === 'unknown') ? homeKeptOrder(kind) : homeRenderOrder(kind, settling);
-  const nodes: ReactNode[] = [];
-  for (let i = 0; i < order.length; i++) {
-    const id = order[i]!;
-    // Từ md thẻ thành viên (hoặc dải quà) và Việc cần làm đứng cạnh nhau để dùng hết bề ngang; khối rỗng tự ẩn khỏi hàng.
-    if ((id === 'member' || id === 'welcome') && order[i + 1] === 'todo') {
-      nodes.push(
-        <div key={id} style={BLOCK_GAP} className="md:flex md:gap-4 md:[&>div:empty]:hidden md:[&>div]:min-w-0 md:[&>div]:flex-1">
-          <div data-home-block={id}>{blocks[id]}</div>
-          <div data-home-block="todo">{blocks.todo}</div>
-        </div>,
-      );
-      i++;
-      continue;
-    }
-    nodes.push(
-      <Fragment key={id}>
-        <div data-home-block={id} className={id === 'search' ? STICKY_SEARCH : undefined} style={id === 'search' || id === 'settling' ? undefined : BLOCK_GAP}>
-          {blocks[id]}
-        </div>
-        {pageDown && id === 'search' && (
-          <div data-home-block="pageError">
-            <HomePageError error={shelves.bestSellerQuery.error} retrying={shelves.bestSellerQuery.isFetching} onRetry={() => refreshHomeQueries(qc)} />
-          </div>
-        )}
-      </Fragment>,
+  const wrap = (id: HomeRenderBlock) => (
+    <div key={id} data-home-block={id} className={id === 'search' ? STICKY_SEARCH : undefined} style={id === 'search' || id === 'settling' ? undefined : BLOCK_GAP}>
+      {blocks[id]}
+    </div>
+  );
+  // Ô tìm (dính) đứng ngoài lưới: nó phải là con trực tiếp của trang thì `sticky` mới bám theo cuộn.
+  const head: readonly HomeRenderBlock[] = order.filter((id) => id === 'search');
+  // Máy tính (HubLayout): thẻ thành viên hoặc dải quà cùng Việc cần làm ở `aside`, banner bên trái nó, mọi khối còn lại bên dưới. Điện thoại giữ đúng thứ tự Mini.
+  const asideIds: readonly HomeRenderBlock[] = order.filter((id) => id === 'member' || id === 'welcome' || id === 'todo');
+  const hasBanner = order.includes('banner') && blocks.banner != null;
+  const rest = order.filter((id) => !head.includes(id) && !asideIds.includes(id) && !(hasBanner && id === 'banner'));
+  const body =
+    asideIds.length === 0 ? (
+      rest.map(wrap)
+    ) : (
+      <HubLayout
+        // Banner rỗng thì không vẽ khung (không chừa cột trống); khối vẫn đứng đầu `rest` đúng thứ tự.
+        banner={hasBanner ? wrap('banner') : undefined}
+        aside={
+          // Từ md hai khối đứng cạnh nhau để dùng hết bề ngang; khối rỗng tự ẩn khỏi hàng.
+          <div className="md:flex md:gap-4 md:[&>div:empty]:hidden md:[&>div]:min-w-0 md:[&>div]:flex-1">{asideIds.map(wrap)}</div>
+        }
+      >
+        {rest.map(wrap)}
+      </HubLayout>
     );
-  }
 
   return (
     <HomeBlockErrorSuppressed.Provider value={pageDown}>
-      {nodes}
+      {head.map((id) => (
+        <Fragment key={id}>
+          {wrap(id)}
+          {pageDown && id === 'search' && (
+            <div data-home-block="pageError">
+              <HomePageError error={shelves.bestSellerQuery.error} retrying={shelves.bestSellerQuery.isFetching} onRetry={() => refreshHomeQueries(qc)} />
+            </div>
+          )}
+        </Fragment>
+      ))}
+      {body}
     </HomeBlockErrorSuppressed.Provider>
   );
 }

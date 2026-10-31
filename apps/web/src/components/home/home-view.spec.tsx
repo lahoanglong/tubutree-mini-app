@@ -211,6 +211,35 @@ describe('HomeView — nội dung các khối', () => {
   });
 });
 
+describe('HomeView — HubLayout cho máy tính', () => {
+  const hubPart = (c: HTMLElement, name: string) => c.querySelector<HTMLElement>(`[data-hub-part="${name}"]`)!;
+
+  it('thẻ thành viên (hoặc quà khách mới) và Việc cần làm nằm trong aside của lưới 12 cột; ô tìm ở NGOÀI lưới (phải là con trực tiếp của trang để dính); phần còn lại ở children', async () => {
+    const c = await mount();
+    const hub = c.querySelector<HTMLElement>('[data-testid="hub-layout"]')!;
+    expect(hub).not.toBeNull();
+    expect(hub.contains(block(c, 'search'))).toBe(false);
+    const aside = hubPart(c, 'aside');
+    expect(Array.from(aside.querySelectorAll('[data-home-block]')).map((el) => (el as HTMLElement).dataset.homeBlock)).toEqual(['welcome', 'todo']);
+    const rest = hubPart(c, 'rest');
+    expect(rest.contains(block(c, 'shortcuts'))).toBe(true);
+    expect(rest.contains(block(c, 'suggest'))).toBe(true);
+    expect(rest.contains(block(c, 'welcome'))).toBe(false);
+  });
+
+  it('chưa có banner (chờ P11): không vẽ khung banner, aside chiếm 12 cột; khối banner rỗng vẫn đứng đúng thứ tự', async () => {
+    const c = await mount();
+    expect(c.querySelector('[data-hub-part="banner"]')).toBeNull();
+    expect(hubPart(c, 'aside').className).toContain('lg:col-span-12');
+    expect(blockOrder(c)).toContain('banner');
+  });
+
+  it('lối tắt 4 ô chỉ ở điện thoại: từ lg ẩn (thanh đầu website đã đủ lối vào)', async () => {
+    const c = await mount();
+    expect(block(c, 'shortcuts').querySelector('section')?.className).toContain('lg:hidden');
+  });
+});
+
 describe('HomeView — chuông và khách vãng lai', () => {
   it('chuông báo số tin chưa đọc (chỉ khi đã đăng nhập), dẫn sang trang Thông báo', async () => {
     routes['/me/notifications/unread-count'] = () => ({ count: 2 });
