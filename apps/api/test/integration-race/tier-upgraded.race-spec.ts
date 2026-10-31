@@ -110,4 +110,35 @@ describe('recalcTier tin lên hạng race (real Postgres)', () => {
     await loyalty.recalcTier(user.id);
     expect(calls(user.id)).toHaveLength(1);
   });
+
+  it('lượt hạ hạng đọc cũ không đè lượt vừa xoá ân hạn (khách đã đủ điều kiện giữ hạng)', async () => {
+    const config = moduleRef.get(SystemConfigService);
+    const user = await createUser(prisma, { tierId: highId, tierGraceUntil: new Date(Date.now() - 864e5) });
+    userIds.push(user.id);
+
+    // Lượt A đọc: hết ân hạn và chưa đủ chi tiêu nên sẽ hạ hạng; dừng ở bước đọc cấu hình ân hạn.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let reached!: () => void;
+    const atGate = new Promise<void>((r) => (reached = r));
+    const realGet = config.get.bind(config);
+    const spy = jest.spyOn(config, 'get').mockImplementation((async (key: string, def: unknown) => {
+      if (key === 'loyalty.tier_grace_days') {
+        reached();
+        await gate;
+      }
+      return realGet(key, def as never);
+    }) as never);
+    const stale = loyalty.recalcTier(user.id);
+    await atGate;
+    spy.mockRestore();
+
+    await deliver(user.id, 2_000_000);
+    await loyalty.recalcTier(user.id);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).tierGraceUntil).toBeNull();
+
+    release();
+    await stale;
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).tierId).toBe(highId);
+  });
 });

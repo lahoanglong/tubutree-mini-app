@@ -368,9 +368,9 @@ export class LoyaltyService {
     });
     const graceChanged = (decision.graceUntil?.getTime() ?? null) !== (user.tierGraceUntil?.getTime() ?? null);
     if (decision.tierId !== user.tierId) {
-      // So-và-ghi theo hạng cũ: hai lượt tính song song chỉ một bên ghi được nên chỉ một bên báo lên hạng.
+      // So-và-ghi theo hạng và ân hạn đã đọc: hai lượt tính song song chỉ một bên ghi được nên chỉ một bên báo lên hạng, và lượt hạ hạng đọc cũ không đè lượt vừa xoá ân hạn.
       const moved = await this.prisma.user.updateMany({
-        where: { id: userId, tierId: user.tierId },
+        where: { id: userId, tierId: user.tierId, tierGraceUntil: user.tierGraceUntil },
         data: { tierId: decision.tierId, tierGraceUntil: decision.graceUntil },
       });
       if (moved.count === 1) await this.notifyTierUpgrade(userId, user.tierId, decision.tierId, tiers);
