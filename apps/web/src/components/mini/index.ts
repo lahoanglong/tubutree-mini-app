@@ -41,3 +41,5 @@ export { SortBar } from './sort-bar';
 export type { SortBarProps, SortOption } from './sort-bar';
 export { VoucherTicket } from './voucher-ticket';
 export type { VoucherTicketProps } from './voucher-ticket';
+export { ComboCard } from './combo-card';
+export type { ComboCardProps, ComboCardItem } from './combo-card';
