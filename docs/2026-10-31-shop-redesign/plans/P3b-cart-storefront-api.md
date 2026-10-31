@@ -235,6 +235,12 @@
 - DB riêng: `bash docs/2026-10-20-uat/tools/pg-native.sh start 25542`; tạo DB `tubutree_it` trong cụm (tên đúng, `setup-env.ts` đòi); `DATABASE_URL=postgresql://tubu@127.0.0.1:25542/tubutree_it`; áp migration bằng `npx prisma migrate deploy` (gói này không thêm migration).
 - Máy thiếu RAM: chỉ chạy jest/vitest theo file trong lúc làm; không chạy song song hai bộ nặng.
 
+## Điều chỉnh lúc làm
+
+- Ca DTO của batch nằm ở `cart/dto/cart.dto.spec.ts` (không phải `cart.controller.spec.ts`), gọi `createValidationPipe()` thật.
+- Race spec bắt một lỗi có sẵn: hai lượt tạo giỏ đầu tiên của cùng khách song song làm `cart.upsert` thua tranh unique `userId` (P2002) và trả 500 (nhấn đúp "Thêm cả combo" ở khách mới). `ensureCart` nay bắt P2002 rồi đọc giỏ đã có (test đơn vị trong `CartService.addItemsBatch`, race spec `hai batch song song`). Đã kiểm: bỏ khoá `carts` thì race spec đỏ 3/3.
+- `CartLine.listUnitPrice` ở app-core để tuỳ chọn (`?`): fixture `CartLine` ở Mini/web chưa có trường này, bắt buộc sẽ vỡ tsc ở file gói khác.
+
 ## Ghi chú cho gói sau
 
 - `CartLine` còn bản chép ở `apps/miniapp/src/services/shop-api.ts:77` và `apps/web/src/lib/shop-client.ts:13`: P8 thêm `listUnitPrice` ở đó (P3b chỉ sửa app-core).
