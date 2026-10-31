@@ -158,3 +158,32 @@ describe('StorefrontQuestService: "Đơn hàng đầu tiên" không tính hoa h�
     expect((await firstOrder(svc)).done).toBe(true);
   });
 });
+
+describe('StorefrontQuestService: "Đơn hàng đầu tiên" chỉ tính đơn khách tự đặt đã giao', () => {
+  it('lọc hoa hồng theo đơn DELIVERED, không đặt hộ, không phải đơn của chính CTV', async () => {
+    const { prisma, coins } = makeDeps();
+    prisma.storefront.findFirst.mockResolvedValue({ id: 'sf1', isPublished: false, collections: [] });
+    await new StorefrontQuestService(prisma, coins).listQuests('u1');
+    expect(prisma.commission.count).toHaveBeenCalledWith({
+      where: {
+        affiliateUserId: 'u1',
+        status: { not: 'REJECTED' },
+        order: { status: 'DELIVERED', placedForCustomer: false, userId: { not: 'u1' } },
+      },
+    });
+  });
+
+  it('đã nhận thưởng theo luật cũ mà số đo mới chưa đạt: vẫn hiện done và tiến độ đầy', async () => {
+    const { prisma, coins } = makeDeps();
+    prisma.storefront.findFirst.mockResolvedValue({ id: 'sf1', isPublished: false, collections: [] });
+    prisma.pointsTransaction.findMany.mockResolvedValue([{ reason: 'STOREFRONT_QUEST:first_order' }]);
+    const q = (await new StorefrontQuestService(prisma, coins).listQuests('u1')).quests.find((x) => x.code === 'first_order')!;
+    expect(q).toMatchObject({ claimed: true, done: true, progress: 1, goal: 1 });
+  });
+
+  it('gợi ý nói rõ khách tự đặt và nhận hàng', () => {
+    expect(QUESTS.find((q) => q.code === 'first_order')!.hint).toBe(
+      'Chia sẻ link, khi khách tự đặt và nhận hàng thành công bạn nhận thưởng!',
+    );
+  });
+});

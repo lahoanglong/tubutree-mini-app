@@ -1678,10 +1678,19 @@ describe('CheckoutService — thông báo khi đặt đơn (BUYERMINI-8)', () =>
     expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', expect.anything());
   });
 
-  it.each(['COD', 'WALLET'])('đơn %s → "đã xác nhận" như cũ', async (paymentMethod) => {
+  it('đơn COD → "đã xác nhận" như cũ, không nói đã nhận thanh toán', async () => {
     const { svc, notifications } = build({ walletBalance: 1_000_000 });
-    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod } as never);
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', { order_code: expect.any(String) });
+  });
+
+  it('đơn WALLET (đã trừ Ví lúc đặt) → "đã xác nhận" kèm câu đã nhận đủ thanh toán', async () => {
+    const { svc, notifications } = build({ walletBalance: 1_000_000 });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'WALLET' } as never);
+    expect(notifications.notify).toHaveBeenCalledWith('u1', 'ORDER_CONFIRMED', {
+      order_code: expect.any(String),
+      payment_note: ' Tubu Tree đã nhận đủ thanh toán.',
+    });
   });
 });
 

@@ -145,8 +145,12 @@ export class AuthController {
   async me(@CurrentUser() user: JwtPayload) {
     const dbUser = await this.prisma.user.findUniqueOrThrow({ where: { id: user.sub } });
     // Cùng điều kiện với BrandService.getOwnedBrand (/brand/owner/me), chỉ khỏi tải promotions.
-    const ownedBrand = await this.prisma.brand.findFirst({ where: { ownerUserId: dbUser.id }, select: { id: true } });
-    return { ...this.auth.toAuthUser(dbUser), ownsBrand: ownedBrand !== null };
+    const [ownedBrand, deskStaff] = await Promise.all([
+      this.prisma.brand.findFirst({ where: { ownerUserId: dbUser.id }, select: { id: true } }),
+      // Nhân viên điểm đối tác thường mang vai CUSTOMER: cờ nhẹ này (một dòng, theo chỉ mục userId + isActive) cho Cá nhân biết có hiện mục quầy.
+      this.prisma.wastePointStaff.findFirst({ where: { userId: dbUser.id, isActive: true, point: { status: 'ACTIVE' } }, select: { id: true } }),
+    ]);
+    return { ...this.auth.toAuthUser(dbUser), ownsBrand: ownedBrand !== null, hasDeskPoint: deskStaff !== null };
   }
 
   /**

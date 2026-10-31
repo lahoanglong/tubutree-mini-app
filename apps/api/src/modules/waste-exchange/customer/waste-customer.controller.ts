@@ -95,6 +95,11 @@ export class WasteCreateDto implements WasteCreateRequest {
   consent!: true;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  consentVersion?: string;
+
+  @IsOptional()
   @IsBoolean()
   packagingConsent?: boolean;
 

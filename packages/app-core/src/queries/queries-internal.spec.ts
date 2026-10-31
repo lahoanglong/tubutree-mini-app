@@ -57,17 +57,30 @@ describe('queries miền nội bộ — queryKey giống Mini App, queryFn gọi
   });
 
   it('ownsBrand: thiếu cờ -> null (API cũ), có cờ giữ nguyên, lỗi ném lại', async () => {
+    const owns = async (http: ReturnType<typeof fakeHttp>['http']) => {
+      const q = brandOwner.ownsBrandQuery(http);
+      return q.select(await q.queryFn());
+    };
     const old = fakeHttp(() => ({ id: 'u1' }));
-    expect(brandOwner.ownsBrandQuery(old.http).queryKey).toEqual(['auth-me', 'owns-brand']);
-    await expect(brandOwner.ownsBrandQuery(old.http).queryFn()).resolves.toBeNull();
+    expect(brandOwner.ownsBrandQuery(old.http).queryKey).toEqual(['auth-me', 'flags']);
+    await expect(owns(old.http)).resolves.toBeNull();
     expect(old.calls[0]).toMatchObject({ method: 'get', path: '/auth/me' });
-    const no = fakeHttp(() => ({ ownsBrand: false }));
-    await expect(brandOwner.ownsBrandQuery(no.http).queryFn()).resolves.toBe(false);
-    const yes = fakeHttp(() => ({ ownsBrand: true }));
-    await expect(brandOwner.ownsBrandQuery(yes.http).queryFn()).resolves.toBe(true);
+    await expect(owns(fakeHttp(() => ({ ownsBrand: false })).http)).resolves.toBe(false);
+    await expect(owns(fakeHttp(() => ({ ownsBrand: true })).http)).resolves.toBe(true);
     const boom = fakeHttp(() => {
       throw { status: 500 };
     });
     await expect(brandOwner.ownsBrandQuery(boom.http).queryFn()).rejects.toEqual({ status: 500 });
+  });
+
+  it('hasDeskPoint: một lần gọi /auth/me dùng chung với ownsBrand; thiếu cờ (API cũ) là false', async () => {
+    const has = async (http: ReturnType<typeof fakeHttp>['http']) => {
+      const q = brandOwner.hasDeskPointQuery(http);
+      return q.select(await q.queryFn());
+    };
+    expect(brandOwner.hasDeskPointQuery(fakeHttp(() => ({})).http).queryKey).toEqual(brandOwner.ownsBrandQuery(fakeHttp(() => ({})).http).queryKey);
+    await expect(has(fakeHttp(() => ({ id: 'u1', ownsBrand: false })).http)).resolves.toBe(false);
+    await expect(has(fakeHttp(() => ({ ownsBrand: false, hasDeskPoint: true })).http)).resolves.toBe(true);
+    await expect(has(fakeHttp(() => ({ ownsBrand: false, hasDeskPoint: false })).http)).resolves.toBe(false);
   });
 });

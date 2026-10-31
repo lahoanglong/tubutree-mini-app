@@ -16,6 +16,7 @@ import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } fro
 import { DEALER_BONUS_TIERS_KEY, dealerBonusTiersProblem } from './dealer-bonus-tiers-rule';
 import { WASTE_JSON_RULES, WASTE_RANGES } from '../waste-exchange/waste-config.keys';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY, CHAT_HOURS_KEY, CHAT_OFF_HOURS_TEXT_KEY, CHAT_RETENTION_KEY, chatGroupIdProblem, chatHoursProblem, offHoursTextProblem } from '../support-chat/support-chat.config';
+import { CATALOG_LAUNCH_DATE_KEY, catalogLaunchDateProblem } from '../catalog/catalog-launch-date';
 import { EXTERNAL_CAPTURE_ENABLED_KEY, ORDER_SOURCE_MAP_KEY, orderSourceMapProblem } from '../external-points/external-order.config';
 import {
   EXTERNAL_LOOKUP_ENABLED_KEY,
@@ -268,7 +269,7 @@ export class SystemConfigService {
   };
 
   /** Khoá mà null có nghĩa ("chưa đặt" — ETA giao hàng null = ẩn dòng "Giao dự kiến"): admin được đặt lại null. */
-  private static readonly NULLABLE_KEYS = new Set(['shipping.eta_min_days', 'shipping.eta_max_days', CHAT_ORDER_EARN_PCT_KEY]);
+  private static readonly NULLABLE_KEYS = new Set(['shipping.eta_min_days', 'shipping.eta_max_days', CHAT_ORDER_EARN_PCT_KEY, CATALOG_LAUNCH_DATE_KEY]);
 
   /** Bậc thưởng Season Pass tính bằng Điểm Xanh lớn nhất hợp lệ. */
   private static readonly SEASONPASS_POINTS_MAX = 100_000;
@@ -327,6 +328,8 @@ export class SystemConfigService {
       value === null || value === '' || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value) && !Number.isNaN(Date.parse(value))) ? null : 'phải là ngày dạng YYYY-MM-DD hoặc để trống',
     // Sai bản đồ nguồn thì mọi đơn sàn rơi xuống "chưa biết" mà không ai thấy lỗi.
     [ORDER_SOURCE_MAP_KEY]: orderSourceMapProblem,
+    // Ngày mở bán cho nhãn "Mới" (giờ Việt Nam): sai dạng thì client bỏ qua mốc, nên chặn ngay lúc ghi để chủ shop thấy lỗi.
+    [CATALOG_LAUNCH_DATE_KEY]: catalogLaunchDateProblem,
     // Cờ bố cục Trang chủ cho khách mới: chỉ nhận boolean để chuỗi "false" không vô tình đổi thứ tự khối của mọi khách mới.
     'home.new_customer_layout': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Cờ mở cho khách chưa đăng nhập xem trước bài cộng đồng: chỉ nhận boolean để chuỗi "false" không vô tình công khai bài của khách.

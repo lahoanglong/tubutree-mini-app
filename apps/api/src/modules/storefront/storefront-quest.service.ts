@@ -60,7 +60,7 @@ export const QUESTS: QuestDef[] = [
   {
     code: 'first_order',
     title: 'Đơn hàng đầu tiên',
-    hint: 'Chia sẻ link — khi có đơn từ gian hàng bạn nhận thưởng!',
+    hint: 'Chia sẻ link, khi khách tự đặt và nhận hàng thành công bạn nhận thưởng!',
     goal: 1,
     rewardPoints: 5_000,
     measure: (s) => (s.firstOrder ? 1 : 0),
@@ -91,7 +91,14 @@ export class StorefrontQuestService {
     const items = sf.collections.flatMap((c) => c.items);
     const itemsTotal = items.length;
     const itemsWithNote = items.filter((i) => i.note && i.note.trim().length > 0).length;
-    const firstOrderCount = await this.prisma.commission.count({ where: { affiliateUserId: userId, status: { not: 'REJECTED' } } });
+    // Đơn khách tự đặt đã giao: loại đơn CTV đặt hộ, đơn huỷ/trả/chưa giao và hoa hồng đã bị huỷ.
+    const firstOrderCount = await this.prisma.commission.count({
+      where: {
+        affiliateUserId: userId,
+        status: { not: 'REJECTED' },
+        order: { status: 'DELIVERED', placedForCustomer: false, userId: { not: userId } },
+      },
+    });
     const stats: QuestStats = {
       itemsTotal,
       itemsWithNote,
@@ -115,9 +122,10 @@ export class StorefrontQuestService {
     const claimedSet = new Set([...coinClaims, ...pointsClaims].map((t) => t.reason));
     let totalEarnedPoints = 0;
     const quests = QUESTS.map((q) => {
-      const progress = q.measure(stats);
-      const done = progress >= q.goal;
       const claimed = claimedSet.has(`STOREFRONT_QUEST:${q.code}`);
+      // Thưởng đã nhận theo luật cũ thì giữ nguyên: thanh tiến độ đầy dù số đo theo luật mới chưa đạt.
+      const progress = claimed ? q.goal : q.measure(stats);
+      const done = claimed || progress >= q.goal;
       if (claimed) totalEarnedPoints += q.rewardPoints;
       return { code: q.code, title: q.title, hint: q.code === 'publish' ? publishHint : q.hint, goal: q.goal, rewardPoints: q.rewardPoints, progress, done, claimed };
     });

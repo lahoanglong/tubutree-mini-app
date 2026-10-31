@@ -1,7 +1,7 @@
 import { WasteMeService } from './waste-me.service';
 
 const NOW = new Date('2026-10-17T03:00:00.000Z');
-const SNAP = { enabled: true, mailinMinPoints: 15_000, pickupMinPoints: 10_000, maxOpenRequests: 3, customerMonthlyCapPoints: 60_000, mailinMaxWeightKg: 20, mailinMaxEdgeCm: 50, rulesText: '' };
+const SNAP = { enabled: true, mailinMinPoints: 15_000, pickupMinPoints: 10_000, maxOpenRequests: 3, customerMonthlyCapPoints: 60_000, mailinMaxWeightKg: 20, mailinMaxEdgeCm: 50, rulesText: '', rulesVersion: '2026-10-17.1' };
 const ITEM = { id: 'carton', code: 'CARTON', name: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1_000, dropsPerUnit: 2, dailyCapQty: 20, monthlyCapQty: 60, status: 'ACTIVE', prepInstructions: null, imageUrl: null, gramsPerUnit: 300, hazardous: false, sortOrder: 1 };
 const WH_DESK = [{ pointId: 'wh', name: 'Kho Tubu', kind: 'WAREHOUSE' }];
 function setup(user: unknown, o: { snap?: Partial<typeof SNAP>; completed?: unknown[]; desk?: unknown[]; recent?: unknown } = {}) {
@@ -107,7 +107,7 @@ describe('WasteMeService.me (spec 15.1 read exception, 15.2 row)', () => {
 
 describe('WasteMeService.rules', () => {
   it('empty text -> null, else the text', async () => {
-    await expect(setup(base).svc.rules()).resolves.toEqual({ text: null });
-    await expect(setup(base, { snap: { rulesText: 'Thể lệ chương trình' } }).svc.rules()).resolves.toEqual({ text: 'Thể lệ chương trình' });
+    await expect(setup(base).svc.rules()).resolves.toEqual({ text: null, version: '2026-10-17.1' });
+    await expect(setup(base, { snap: { rulesText: 'Thể lệ chương trình' } }).svc.rules()).resolves.toEqual({ text: 'Thể lệ chương trình', version: '2026-10-17.1' });
   });
 });

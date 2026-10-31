@@ -507,6 +507,17 @@ Kiểm: còn dòng nào mang khoá thô không (mong đợi 0; dòng còn lại 
 psqlq -c "SELECT id, \"zaloId\", \"createdAt\" FROM users WHERE \"zaloId\" LIKE 'guest\_%' AND \"zaloId\" NOT LIKE 'guest\_h\_%'"
 ```
 
+### 1.15 Bản có thể lệ theo phiên bản và quà quá hạn tự huỷ: thứ tự deploy và lượt cron đầu
+
+- Deploy API TRƯỚC, rồi mới đẩy Mini App lên Live. Mini App mới gửi thêm `consentVersion` khi tạo yêu cầu đổi rác, mà API cũ chạy `forbidNonWhitelisted` nên trả 400 và khách không tạo được yêu cầu. Nếu phải quay API về bản cũ sau khi Mini App mới đã Live thì phải kéo Mini App về bản cũ luôn.
+- Lượt đầu của cron `waste.gift-expiry` sau deploy (lượt :15 đầu tiên sau khi API mới chạy, chạy cả khi `waste.enabled` tắt) sẽ huỷ và hoàn điểm mọi quà hiện vật READY đã quá hạn nhận của khách thường, kèm một tin mỗi quà. Quà của khách bị khoá (khoá đổi rác hoặc khoá tài khoản), có yêu cầu bị thu hồi hoặc đã xoá tài khoản được để lại ở hàng đợi Quá hạn nhận cho admin quyết hoàn hay không.
+- Trước ngày deploy, đếm số quà sẽ bị lượt cron đầu huỷ (chỉ đọc). Lệnh này đếm cả quà của khách bị khoá; những quà đó cron để lại cho admin. Số lớn thì báo chủ trước khi deploy:
+  ```bash
+  psqlq -tAc "SELECT count(*), coalesce(sum(\"pointsCost\"),0) FROM waste_gift_redemptions WHERE status='READY' AND \"claimExpiresAt\" < date_trunc('day', now() AT TIME ZONE 'Asia/Ho_Chi_Minh') - interval '7 hours'"
+  ```
+- Migration `20261030110000_order_confirmed_payment_note` chỉ đổi thân mẫu ORDER_CONFIRMED khi thân còn đúng câu seed cũ. Sau deploy, xem thân mẫu bằng `psqlq -tAc "SELECT \"bodyTemplate\" FROM notification_templates WHERE code='ORDER_CONFIRMED'"`. Nếu không có `{{payment_note}}` (admin đã sửa chữ từ trước) thì đơn trả trước vẫn nhận câu cũ; muốn có câu "đã nhận đủ thanh toán" thì admin tự thêm `{{payment_note}}`.
+- Quay image về bản trước bản này: màn sửa mẫu tin của bản cũ không biết biến `{{payment_note}}`, nên admin không lưu được mẫu ORDER_CONFIRMED đang có biến đó. Tin vẫn gửi bình thường; chỉ việc sửa chữ mẫu này phải chờ deploy lại bản mới, hoặc xoá biến khỏi thân mẫu trước khi sửa.
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.

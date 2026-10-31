@@ -209,6 +209,7 @@ describe('notificationAction — nút theo loại tin, không dò nội dung (C-
   it('đổi rác: theo tiền tố, id lấy từ nội dung (§11.6)', () => {
     expect(to('WASTE_POINTS_CREDITED', { request_id: 'req-1' })).toBe('/recycle/done/req-1');
     expect(to('WASTE_GIFT_CANCELLED', { redemption_id: 'red-1' })).toBe('/rewards/mine');
+    expect(to('WASTE_GIFT_EXPIRED', { redemption_id: 'red-1' })).toBe('/rewards/mine');
     expect(to('WASTE_PERK_REVIEWED', { point_id: 'pt-1' })).toBe('/recycle/desk');
     for (const code of ['WASTE_PARCEL_RECEIVED', 'WASTE_REQUEST_REJECTED', 'WASTE_REQUEST_EXPIRED', 'WASTE_PICKUP_STARTED', 'WASTE_PICKUP_CANCELLED', 'WASTE_POINTS_REVERSED']) {
       expect(to(code, { request_id: 'r/2' })).toBe('/recycle/r/r%2F2');

@@ -24,6 +24,7 @@ import {
 import { assertFirstOrderInTx } from '../../common/first-order';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { orderConfirmedData } from '../notifications/order-confirmed-data';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
 import { isGomdonRecyclingEnabled } from '../integrations/gomdon/gomdon-config';
@@ -778,7 +779,7 @@ export class CheckoutService {
             deadline: formatVnDateTime(new Date((order.createdAt ?? new Date()).getTime() + hours * 3_600_000)),
           });
         } else {
-          await this.notifications.notify(userId, 'ORDER_CONFIRMED', { order_code: order.code });
+          await this.notifications.notify(userId, 'ORDER_CONFIRMED', orderConfirmedData(order));
         }
       } catch (err) {
         this.logger.error(`Gửi thông báo lỗi cho đơn ${order.code}: ${err instanceof Error ? err.message : err}`);

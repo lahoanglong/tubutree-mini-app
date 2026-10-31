@@ -37,12 +37,13 @@ describe('AuthController — giao refresh token theo client', () => {
     ensurePhoneForCurrentUser: jest.fn(),
     toAuthUser: jest.fn((u: { id: string }) => ({ id: u.id })),
   };
-  const prisma = { user: { findUniqueOrThrow: jest.fn() }, brand: { findFirst: jest.fn() } };
+  const prisma = { user: { findUniqueOrThrow: jest.fn() }, brand: { findFirst: jest.fn() }, wastePointStaff: { findFirst: jest.fn() } };
   const config = { get: jest.fn().mockReturnValue(30) };
   let c: AuthController;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prisma.wastePointStaff.findFirst.mockResolvedValue(null);
     c = new AuthController(
       auth as never,
       prisma as never,
@@ -56,14 +57,36 @@ describe('AuthController — giao refresh token theo client', () => {
       prisma.brand.findFirst.mockResolvedValue({ id: 'b1' });
       const out = await c.me({ sub: 'u1' } as never);
       expect(prisma.brand.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { ownerUserId: 'u1' } }));
-      expect(out).toEqual({ id: 'u1', ownsBrand: true });
+      expect(out).toEqual({ id: 'u1', ownsBrand: true, hasDeskPoint: false });
     });
 
     it('false khi không sở hữu nhãn nào', async () => {
       prisma.user.findUniqueOrThrow.mockResolvedValue({ id: 'u2' });
       prisma.brand.findFirst.mockResolvedValue(null);
       const out = await c.me({ sub: 'u2' } as never);
-      expect(out).toEqual({ id: 'u2', ownsBrand: false });
+      expect(out).toEqual({ id: 'u2', ownsBrand: false, hasDeskPoint: false });
+    });
+  });
+
+  describe('GET /auth/me - hasDeskPoint (nhân viên điểm đối tác mang vai CUSTOMER)', () => {
+    beforeEach(() => {
+      prisma.user.findUniqueOrThrow.mockResolvedValue({ id: 'u3' });
+      prisma.brand.findFirst.mockResolvedValue(null);
+    });
+
+    it('true khi có dòng nhân viên đang hoạt động ở điểm đang hoạt động; truy vấn một dòng, đi theo chỉ mục (userId, isActive)', async () => {
+      prisma.wastePointStaff.findFirst.mockResolvedValue({ id: 'ps1' });
+      const out = await c.me({ sub: 'u3' } as never);
+      expect(out).toMatchObject({ hasDeskPoint: true });
+      expect(prisma.wastePointStaff.findFirst).toHaveBeenCalledWith({
+        where: { userId: 'u3', isActive: true, point: { status: 'ACTIVE' } },
+        select: { id: true },
+      });
+    });
+
+    it('false khi không có dòng nào (khách thường, điểm tắt hoặc nhân viên đã tắt cũng rơi vào đây vì where đã loại)', async () => {
+      prisma.wastePointStaff.findFirst.mockResolvedValue(null);
+      expect(await c.me({ sub: 'u3' } as never)).toMatchObject({ hasDeskPoint: false });
     });
   });
 

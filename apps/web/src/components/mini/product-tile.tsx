@@ -4,6 +4,7 @@
 import { useId, type CSSProperties, type ReactNode } from 'react';
 import { isNewProduct, NEW_PRODUCT_LABEL } from '@tubutree/app-core/product-badges';
 import { formatSold } from '@/lib/api';
+import { useCatalogLaunchDate } from '@/lib/use-catalog-launch-date';
 import { useHydrated } from '@/lib/use-hydrated';
 import { Badge } from './badge';
 import { brandAccent } from './brand-accent';
@@ -87,7 +88,8 @@ export function ProductTile({
   // Hết hàng đã có lớp phủ trên ảnh, thẻ dạng dòng chỉ có ảnh 64px: không chồng thêm nhãn.
   // Chỉ sau hydrate: nhãn theo giờ máy khách, HTML dựng sẵn (ISR) không được lệch lần hydrate đầu.
   const hydrated = useHydrated();
-  const showNew = hydrated && !isLine && p.inStock !== false && isNewProduct(p.createdAt);
+  const launchDate = useCatalogLaunchDate();
+  const showNew = hydrated && launchDate !== undefined && !isLine && p.inStock !== false && isNewProduct(p.createdAt, Date.now(), launchDate);
   // Tên truy cập = tên sản phẩm; giá (và giá gốc gạch) là mô tả truy cập của thẻ.
   const priceId = useId();
 

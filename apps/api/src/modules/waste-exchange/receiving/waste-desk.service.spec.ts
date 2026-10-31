@@ -298,9 +298,37 @@ describe('WasteDeskService.lookup', () => {
     missCall({ pointId: 'p1' });
   });
 
-  it('hides a gift that is not READY', async () => {
-    const { svc } = setup({ accessList: [wh()], gift: giftRow({ status: 'FULFILLED' }) });
+  it('FULFILLED gift: read-only card with status, time and points, still masked', async () => {
+    const fulfilledAt = new Date('2026-10-20T03:00:00.000Z');
+    const { svc } = setup({ accessList: [wh()], gift: giftRow({ status: 'FULFILLED', fulfilledAt, pointsCost: 30_000, claimExpiresAt: new Date('2026-12-01T00:00:00.000Z') }) });
+    const res = await svc.lookup('s1', 'QG-23456789');
+    expect(res).toEqual({
+      type: 'GIFT',
+      redemption: {
+        id: 'g1', giftName: 'Miễn phí vận chuyển', customerName: 'An***', status: 'FULFILLED', claimExpiresAt: '2026-12-01T00:00:00.000Z',
+        fulfilledAt: '2026-10-20T03:00:00.000Z', pointsCost: 30_000,
+      },
+    });
+    expect(JSON.stringify(res)).not.toContain('Nguyễn Văn An');
+    expect(JSON.stringify(res)).not.toContain('QG-23456789');
+  });
+
+  it('CANCELLED gift: status, cancel time, reason (the deadline one included) and refunded points', async () => {
+    const cancelledAt = new Date('2026-10-21T03:00:00.000Z');
+    const { svc } = setup({ accessList: [wh()], gift: giftRow({ status: 'CANCELLED', cancelledAt, cancelReason: 'Quá hạn nhận', refundedPoints: 30_000, pointsCost: 30_000 }) });
+    expect(await svc.lookup('s1', 'QG-23456789')).toEqual({
+      type: 'GIFT',
+      redemption: {
+        id: 'g1', giftName: 'Miễn phí vận chuyển', customerName: 'An***', status: 'CANCELLED', claimExpiresAt: null,
+        cancelledAt: '2026-10-21T03:00:00.000Z', cancelReason: 'Quá hạn nhận', pointsCost: 30_000, refundedPoints: 30_000,
+      },
+    });
+  });
+
+  it('a gift that is not READY is still hidden from a partner point that does not hand gifts over, and counts as a miss', async () => {
+    const { svc } = setup({ accessList: [partner({ giftHandoverEnabled: false })], gift: giftRow({ status: 'FULFILLED' }) });
     await expect(svc.lookup('s1', 'QG-23456789')).rejects.toBeInstanceOf(NotFoundException);
+    missCall({ pointId: 'p1' });
   });
 
   it('answers 404 for an unknown code', async () => {

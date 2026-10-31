@@ -2,6 +2,7 @@
 
 import { isNewProduct, NEW_PRODUCT_LABEL } from '@tubutree/app-core/product-badges';
 import { useHydrated } from '@/lib/use-hydrated';
+import { useCatalogLaunchDate } from '@/lib/use-catalog-launch-date';
 
 /**
  * Nhãn "Mới" tính theo giờ máy khách nên chỉ vẽ sau hydrate: HTML dựng sẵn (ISR) có thể được trả muộn hơn lúc dựng, SP qua mốc 30 ngày
@@ -9,7 +10,8 @@ import { useHydrated } from '@/lib/use-hydrated';
  */
 export function NewProductBadge({ createdAt }: { createdAt: string | null | undefined }) {
   const hydrated = useHydrated();
-  if (!hydrated || !isNewProduct(createdAt)) return null;
+  const launchDate = useCatalogLaunchDate();
+  if (!hydrated || launchDate === undefined || !isNewProduct(createdAt, Date.now(), launchDate)) return null;
   return (
     <span
       data-testid="card-new-badge"

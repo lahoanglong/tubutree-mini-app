@@ -23,6 +23,8 @@ const state = vi.hoisted(() => ({
   preview: null as unknown as (b: unknown) => unknown,
   provinces: [] as unknown[],
   failProvinces: false,
+  rules: { text: 'Thể lệ' } as { text: string; version?: string },
+  rulesGate: null as Promise<void> | null,
   create: null as unknown as (b: unknown, key: string) => unknown,
   calls: [] as { path: string; body?: unknown; headers?: Record<string, string> }[],
   keySeq: 0,
@@ -46,6 +48,10 @@ vi.mock('@/lib/core-http', () => ({
       if (path === '/waste/me') return state.me;
       if (path.startsWith('/waste/points')) return state.points;
       if (path === '/me/loyalty/rewards') return state.rewards;
+      if (path === '/waste/rules') {
+        if (state.rulesGate) await state.rulesGate;
+        return state.rules;
+      }
       if (path === '/geo/provinces') {
         if (state.failProvinces) throw new Error('offline');
         return state.provinces;
@@ -112,6 +118,8 @@ beforeEach(() => {
   state.replace = vi.fn();
   state.calls = [];
   state.failProvinces = false;
+  state.rules = { text: 'Thể lệ' };
+  state.rulesGate = null;
   state.keySeq = 0;
   state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
   state.me = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true } });
@@ -547,6 +555,50 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
     expect(keys[1]).toBe(keys[0]);
     expect(loadDraft()).toBeNull();
   });
+  it('thể lệ có số phiên bản: gửi kèm consentVersion khách đã đọc', async () => {
+    state.rules = { text: 'Thể lệ', version: '2026-11-05.2' };
+    atStep2(PICKED);
+    const c = await mount();
+    click(check(c, CONSENT));
+    await flush(3);
+    click(barButton(c, 'Tạo yêu cầu'));
+    await flush(10);
+    expect(createCalls()[0]?.body).toMatchObject({ consent: true, consentVersion: '2026-11-05.2' });
+  });
+  it('tick khi thể lệ chưa tải xong rồi thể lệ về: bỏ tick, không nói thể lệ vừa cập nhật, nút tạo bị khoá', async () => {
+    let release: () => void = () => {};
+    state.rulesGate = new Promise<void>((r) => { release = r; });
+    state.rules = { text: 'Thể lệ', version: '2026-11-05.2' };
+    atStep2(PICKED);
+    const c = await mount();
+    click(check(c, CONSENT));
+    await flush(3);
+    expect(check(c, CONSENT).checked).toBe(true);
+    release();
+    await flush(10);
+    expect(check(c, CONSENT).checked).toBe(false);
+    expect(c.textContent).not.toContain('Thể lệ vừa được cập nhật');
+    expect(barButton(c, 'Tạo yêu cầu').disabled).toBe(true);
+    expect(createCalls()).toHaveLength(0);
+  });
+  it('máy chủ từ chối vì thể lệ đã đổi: hiện lời từ chối, tải lại phiên bản, ô đồng ý bỏ tick', async () => {
+    const msg = 'Thể lệ đã được cập nhật. Bạn hãy đọc lại Thể lệ rồi đồng ý lại để tạo yêu cầu';
+    state.rules = { text: 'Thể lệ', version: '2026-10-17.1' };
+    state.create = () => {
+      state.rules = { text: 'Thể lệ', version: '2026-11-05.2' };
+      throw new ApiError(msg, 400);
+    };
+    atStep2(PICKED);
+    const c = await mount();
+    click(check(c, CONSENT));
+    await flush(3);
+    click(barButton(c, 'Tạo yêu cầu'));
+    await flush(10);
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe(msg);
+    expect(check(c, CONSENT).checked).toBe(false);
+    expect(c.textContent).toContain('Thể lệ vừa được cập nhật. Bạn đọc lại Thể lệ rồi tick đồng ý lại nhé');
+    expect(barButton(c, 'Tạo yêu cầu').disabled).toBe(true);
+  });
   it('lỗi 403 kèm câu nghiệp vụ → hiện nguyên văn câu của máy chủ', async () => {
     const msg = 'Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn, liên hệ CSKH.';
     state.create = () => {
@@ -600,11 +652,24 @@ describe('Thể lệ từ bước 2: quay lại không mất ô đồng ý', () 
     const rules = byText(c, 'a', 'Xem Thể lệ') as HTMLAnchorElement;
     rules.addEventListener('click', (e) => e.preventDefault());
     click(rules);
-    expect(JSON.parse(window.sessionStorage.getItem('tubu.waste.consents')!)).toEqual({ consent: true, packaging: false, postage: false });
+    expect(JSON.parse(window.sessionStorage.getItem('tubu.waste.consents')!)).toEqual({ consent: true, packaging: false, postage: false, version: null });
     mounted.pop()!.unmount();
     c = await mount();
     expect(check(c, CONSENT).checked).toBe(true);
     expect(window.sessionStorage.getItem('tubu.waste.consents')).toBeNull();
     expect(method(c, 'DROP_OFF').getAttribute('aria-checked')).toBe('true');
+  });
+  it('ô đồng ý giữ từ phiên bản cũ: bỏ tick và nhắc đọc lại khi admin đã đổi số phiên bản', async () => {
+    state.rules = { text: 'Thể lệ', version: '2026-11-05.2' };
+    atStep2(PICKED);
+    window.sessionStorage.setItem('tubu.waste.consents', JSON.stringify({ consent: true, packaging: false, postage: false, version: '2026-10-17.1' }));
+    const c = await mount();
+    expect(check(c, CONSENT).checked).toBe(false);
+    expect(c.textContent).toContain('Thể lệ vừa được cập nhật. Bạn đọc lại Thể lệ rồi tick đồng ý lại nhé');
+    expect(barButton(c, 'Tạo yêu cầu').disabled).toBe(true);
+    click(check(c, CONSENT));
+    await flush(3);
+    expect(barButton(c, 'Tạo yêu cầu').disabled).toBe(false);
+    expect(c.textContent).not.toContain('Thể lệ vừa được cập nhật');
   });
 });

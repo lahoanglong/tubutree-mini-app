@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { orderConfirmedData } from '../notifications/order-confirmed-data';
 import { OrderReversalService, type ReversalResult } from './order-reversal.service';
 import { partialReturnTotals } from './return-ledger';
 import { recordCodReturnUnverified } from './refund-queue';
@@ -760,7 +761,7 @@ export class OrderStatusService {
       await clearPancakeAttention(this.prisma, order.id, ATTENTION_UNDERPAID);
       if (!opts.deferGomdonPush) await this.enqueueGomdonAfterPaid(order);
       await this.pancakeHooks?.afterPaid(order.id);
-      await this.notifications.notifySafe(order.userId, 'ORDER_CONFIRMED', { order_code: order.code }, undefined, `order=${order.code}`);
+      await this.notifications.notifySafe(order.userId, 'ORDER_CONFIRMED', orderConfirmedData({ code: order.code, paymentStatus: 'PAID' }), undefined, `order=${order.code}`);
       return {
         outcome: 'PAID',
         order: await this.prisma.order.findUniqueOrThrow({ where: { id: order.id } }),
