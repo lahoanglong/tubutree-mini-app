@@ -82,6 +82,7 @@ describe('WishlistHeart', () => {
     expect(heart(container).className).toMatch(/\babsolute\b/);
     expect(heart(container).className).toContain('h-11');
     expect(container.querySelector('[data-testid="heart-disc"]')!.className).toMatch(/\bh-8\b.*\bw-8\b.*\brounded-full\b/);
+    expect(container.querySelector('svg')!.getAttribute('class')).toContain('h-[18px]');
   });
 
   it('khách chưa đăng nhập chạm tim thì sang đăng nhập và quay lại đúng trang, không nổi bọt lên thẻ cha', async () => {

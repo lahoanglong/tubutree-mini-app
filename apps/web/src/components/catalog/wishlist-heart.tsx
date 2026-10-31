@@ -80,7 +80,8 @@ export function WishlistHeart({
     sendToggle(qc, productId, want);
   };
 
-  const iconClass = `h-[22px] w-[22px] ${liked ? 'fill-danger-fg text-danger-fg' : ''} ${popping && liked ? 'tubu-heart-pop' : ''}`;
+  // Tim nổi trên thẻ sản phẩm 18px như Mini App (đĩa 32px quanh nó); tim đứng riêng (trang chi tiết) 22px.
+  const iconClass = `${floating ? 'h-[18px] w-[18px]' : 'h-[22px] w-[22px]'} ${liked ? 'fill-danger-fg text-danger-fg' : ''} ${popping && liked ? 'tubu-heart-pop' : ''}`;
 
   return (
     <button
