@@ -68,6 +68,13 @@ describe('SortBar (web)', () => {
     expect(b.container.innerHTML).toBe('');
   });
 
+  it('đệm ngang 8px, tab dãn chứ không co: bộ nhãn BR-01 + "Lọc (3)" vừa hàng 343px (đo Playwright ở gallery, 375px)', () => {
+    mount(<SortBar value="best" options={OPTIONS} onChange={() => {}} filterCount={3} onFilter={() => {}} />);
+    for (const b of buttons()) expect(b.style.padding).toBe('0px 8px');
+    const group = document.querySelector('[role="group"]')!;
+    for (const b of Array.from(group.querySelectorAll('button'))) expect(b.style.flex).toBe('1 0 auto');
+  });
+
   it('sticky dính dưới --sort-bar-top; mọi nút cao tối thiểu 44px', () => {
     const m = mount(<SortBar value="best" options={OPTIONS} onChange={() => {}} sticky filterCount={1} onFilter={() => {}} />);
     const root = m.container.firstElementChild as HTMLElement;

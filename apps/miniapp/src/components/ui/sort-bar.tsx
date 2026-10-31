@@ -61,10 +61,10 @@ export function SortBar({ value, options, onChange, filterCount, onFilter, stick
               aria-label={o.spoken}
               onClick={() => onChange(o.value)}
               style={{
-                flex: '0 0 auto',
+                flex: '1 0 auto',
                 minHeight: 44,
                 minWidth: 44,
-                padding: '0 12px',
+                padding: '0 8px',
                 border: 'none',
                 background: 'transparent',
                 fontFamily: 'inherit',
@@ -95,7 +95,7 @@ export function SortBar({ value, options, onChange, filterCount, onFilter, stick
             gap: 4,
             minHeight: 44,
             minWidth: 44,
-            padding: '0 12px',
+            padding: '0 8px',
             border: 'none',
             background: 'transparent',
             fontFamily: 'inherit',

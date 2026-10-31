@@ -87,6 +87,14 @@ describe('SortBar', () => {
     for (const b of screen.getAllByRole('button')) expect(b.style.minHeight).toBe('44px');
   });
 
+  it('đệm ngang 8px, tab dãn chứ không co: bộ nhãn BR-01 + "Lọc (3)" vừa hàng 343px (đo Playwright ở gallery, 375px)', () => {
+    render(<SortBar value="best" options={OPTIONS} onChange={() => {}} filterCount={3} onFilter={() => {}} />);
+    for (const b of screen.getAllByRole('button')) expect(b.style.padding).toBe('0px 8px');
+    for (const b of screen.getByRole('group', { name: 'Sắp xếp' }).querySelectorAll('button')) {
+      expect(b.style.flex).toBe('1 0 auto');
+    }
+  });
+
   it('hàng tab cuộn ngang có mờ mép; tab đang chọn nằm ngoài khung thì cuộn ngang hàng vào, không kéo trang', () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;

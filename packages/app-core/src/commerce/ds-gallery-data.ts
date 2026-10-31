@@ -93,7 +93,7 @@ export function galleryCombo(items: { price: number }[], pct: number): { total: 
 
 export const GALLERY_SORT_OPTIONS: { value: string; label: string; spoken?: string }[] = [
   { value: 'popular', label: 'Phổ biến' },
-  { value: 'new', label: 'Mới nhất' },
   { value: 'best', label: 'Bán chạy' },
+  { value: 'new', label: 'Mới' },
   { value: 'price', label: 'Giá ⇅', spoken: 'Giá, đổi chiều sắp xếp' },
 ];
