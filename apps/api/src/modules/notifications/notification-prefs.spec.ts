@@ -72,6 +72,7 @@ describe('Phân loại tin (C-022)', () => {
     'COMMUNITY_POST_HIDDEN',
     // Báo trước hạ hạng là tin dịch vụ về tài khoản: tắt Khuyến mãi vẫn phải nhận.
     'TIER_DROP_NOTICE',
+    'TIER_UPGRADED',
   ])('%s là tin giao dịch, luôn gửi', (code) => {
     expect(notificationCategory(code)).toBe('TRANSACTIONAL');
   });

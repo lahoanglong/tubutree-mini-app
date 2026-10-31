@@ -38,6 +38,8 @@ export interface VoucherSheetProps {
    */
   previewKey?: string;
   onCouponApplied?: () => void;
+  /** Trang chứa đang tự áp hoặc gỡ mã: khoá mọi nút chọn mã để hai lần đổi mã không chồng nhau. */
+  busy?: boolean;
 }
 
 export function VoucherSheet({
@@ -50,6 +52,7 @@ export function VoucherSheet({
   previewParams,
   previewKey,
   onCouponApplied,
+  busy = false,
 }: VoucherSheetProps) {
   const queryClient = useQueryClient();
   const { openSnackbar } = useSnackbar();
@@ -112,7 +115,7 @@ export function VoucherSheet({
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  const isAnyMutating = applyMut.isPending || removeMut.isPending;
+  const isAnyMutating = applyMut.isPending || removeMut.isPending || busy;
   // Spinner của "Áp dụng" chỉ quay khi chính mã tay đang được áp; mã bấm từ danh sách thì khoá nút này.
   const applyingCustom = applyMut.isPending && applyMut.variables === customCode.trim().toUpperCase();
 
@@ -171,7 +174,7 @@ export function VoucherSheet({
               />
             </div>
             <Button
-              disabled={!customCode.trim() || removeMut.isPending || (applyMut.isPending && !applyingCustom)}
+              disabled={!customCode.trim() || busy || removeMut.isPending || (applyMut.isPending && !applyingCustom)}
               loading={applyingCustom}
               onPress={handleApplyCustom}
             >
@@ -301,7 +304,7 @@ export function VoucherSheet({
                       {isApplied ? (
                         <Button
                           variant="secondary"
-                          disabled={applyMut.isPending}
+                          disabled={applyMut.isPending || busy}
                           loading={removeMut.isPending}
                           onPress={() => removeMut.mutate()}
                           aria-label={`Bỏ dùng mã ${coupon.code}`}
@@ -311,7 +314,7 @@ export function VoucherSheet({
                         </Button>
                       ) : (
                         <Button
-                          disabled={notEligible || removeMut.isPending || (applyMut.isPending && !applyingThis)}
+                          disabled={notEligible || busy || removeMut.isPending || (applyMut.isPending && !applyingThis)}
                           loading={applyingThis}
                           onPress={() => applyMut.mutate(coupon.code)}
                           aria-label={`${belowMin ? 'Chưa đủ điều kiện dùng' : 'Dùng'} mã ${coupon.code}`}

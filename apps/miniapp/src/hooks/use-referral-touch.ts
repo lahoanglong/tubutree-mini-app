@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { recordReferralTouch } from '../services/affiliate-api';
-import { markCtvTouched, useStorefrontContext, wasCtvTouched } from '../store/storefront-context';
+import { clickedAgoParam } from '@tubutree/app-core/referral-touch';
+import { useAuthStore } from '../store/auth';
+import { updateCtvTouchMark, useStorefrontContext, wasCtvTouched } from '../store/storefront-context';
 
 /**
  * Các lần chạm xếp hàng một chuỗi: lần chạm brand đợi lần chạm CTV đang bay xong rồi mới kiểm dấu "đã ghi công như CTV". Gửi song
@@ -24,25 +26,31 @@ export function useReferralTouch(authed: boolean): void {
   const referralCode = useStorefrontContext((s) => s.referralCode);
   const slug = useStorefrontContext((s) => s.slug);
   const kind = useStorefrontContext((s) => s.kind);
+  const clickedAt = useStorefrontContext((s) => s.clickedAt);
   const confirmReferral = useStorefrontContext((s) => s.confirmReferral);
+  const userId = useAuthStore((s) => s.user?.id);
 
   useEffect(() => {
-    if (!authed) return;
+    if (!authed || !userId) return;
     const code = referralCode ?? slug;
     if (!code) return;
+    const touchKind = kind === 'ctv' ? 'ctv' : 'brand';
     enqueue(async () => {
-      if (kind !== 'ctv' && wasCtvTouched(code)) return;
+      if (kind !== 'ctv' && wasCtvTouched(userId, code)) return;
       try {
         const res = await recordReferralTouch({
           referralCode: code,
           storefrontSlug: kind === 'ctv' ? (slug ?? undefined) : undefined,
-          kind: kind === 'ctv' ? 'ctv' : 'brand',
+          kind: touchKind,
+          ...clickedAgoParam(clickedAt),
         });
-        if (res && typeof res.ok === 'boolean') confirmReferral(code, res.ok);
-        if (res?.ok && kind === 'ctv') markCtvTouched(code);
+        if (res && typeof res.ok === 'boolean') {
+          confirmReferral(code, res.ok);
+          updateCtvTouchMark(userId, code, touchKind, res.ok);
+        }
       } catch {
         /* chạm là best-effort: ngữ cảnh trong phiên vẫn được gửi kèm lúc đặt đơn */
       }
     });
-  }, [authed, referralCode, slug, kind, confirmReferral]);
+  }, [authed, userId, referralCode, slug, kind, clickedAt, confirmReferral]);
 }

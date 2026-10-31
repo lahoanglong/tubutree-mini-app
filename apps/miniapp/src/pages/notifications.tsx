@@ -60,7 +60,7 @@ function notificationIcon(code: string): LucideIcon {
   if (code.startsWith('CASHBACK')) return ShoppingBag;
   if (code.startsWith('BIRTHDAY') || code.startsWith('VOUCHER') || code.endsWith('_VOUCHER')) return Gift;
   if (code.startsWith('REFERRAL_')) return UserPlus;
-  if (code.startsWith('POINTS') || code === 'XU_CONVERTED' || code === 'TIER_DROP_NOTICE' || code.startsWith('EXTERNAL_POINTS_') || code.startsWith('CHAT_ORDER_POINTS_')) return Leaf;
+  if (code.startsWith('POINTS') || code === 'XU_CONVERTED' || code === 'TIER_DROP_NOTICE' || code === 'TIER_UPGRADED' || code.startsWith('EXTERNAL_POINTS_') || code.startsWith('CHAT_ORDER_POINTS_')) return Leaf;
   if (code.startsWith('STOREFRONT')) return Store;
   if (code.startsWith('REORDER_REMINDER')) return Repeat;
   if (code === 'REVIEW_REQUEST') return Star;

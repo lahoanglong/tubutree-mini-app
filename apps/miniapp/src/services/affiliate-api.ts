@@ -222,7 +222,7 @@ export function __resetLinkClickForTest(): void {
 }
 
 /** Ghi "chạm" giới thiệu để attribution sống 3 ngày (fallback khi phiên mất). Fire-and-forget. */
-export const recordReferralTouch = (dto: { referralCode: string; storefrontSlug?: string; kind?: 'ctv' | 'brand' }) =>
+export const recordReferralTouch = (dto: { referralCode: string; storefrontSlug?: string; kind?: 'ctv' | 'brand'; clickedAgoMs?: number }) =>
   api.post('/affiliate/touch', dto).then((r) => r.data as { ok: boolean });
 
 // ── CTV lên đơn hộ khách (CTV đặt hộ, hưởng hoa hồng) ──

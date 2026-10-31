@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { parseTouchMark, serializeTouchMark, touchMarkAfter, touchMarkMatches } from '@tubutree/app-core/referral-touch';
 
 const KEY = 'tubu_sf_ctx';
 const CTV_TOUCHED_KEY = 'tubu_sf_ctv_touched';
@@ -7,9 +8,10 @@ const CTV_TOUCHED_KEY = 'tubu_sf_ctv_touched';
  *  'partner' = gian hàng đối tác/nhãn hàng ở /s/:slug: như 'brand' không gửi storefrontSlug, nhưng nút quay lại vẫn về /s/:slug
  *  (không phải /brand/:slug, trang của thực thể khác). */
 /** `referralEligible`: mã giới thiệu có thật sự là của CTV (máy chủ ghi công được) hay chưa biết (null); chỉ mã đã xác nhận mới khoá ô nhập ở thanh toán. */
-type Ctx = { slug: string | null; referralCode: string | null; kind: 'ctv' | 'brand' | 'partner'; referralEligible: boolean | null };
+/** `clickedAt`: epoch ms lúc khách bấm link nguồn; máy chủ tính hạn ghi công từ đây kể cả khi chạm gửi muộn. */
+type Ctx = { slug: string | null; referralCode: string | null; kind: 'ctv' | 'brand' | 'partner'; referralEligible: boolean | null; clickedAt: number | null };
 
-const DEFAULT_CTX: Ctx = { slug: null, referralCode: null, kind: 'ctv', referralEligible: null };
+const DEFAULT_CTX: Ctx = { slug: null, referralCode: null, kind: 'ctv', referralEligible: null, clickedAt: null };
 
 const norm = (code: string | null | undefined) => (code ?? '').trim().toUpperCase();
 
@@ -18,17 +20,26 @@ const norm = (code: string | null | undefined) => (code ?? '').trim().toUpperCas
  * chạm lại cùng mã kiểu brand: máy chủ upsert cả dòng chạm và sẽ xoá slug gian hàng CTV khỏi nó. Ở sessionStorage như `tubu_sf_ctx`
  * (WebView tải lại thì ngữ cảnh còn mà biến trong bộ nhớ thì mất, hook sẽ chạm brand đè).
  */
-export function markCtvTouched(code: string): void {
-  try { sessionStorage.setItem(CTV_TOUCHED_KEY, norm(code)); } catch { /* ignore */ }
+export function markCtvTouched(userId: string, code: string): void {
+  try { sessionStorage.setItem(CTV_TOUCHED_KEY, serializeTouchMark(userId, code)); } catch { /* ignore */ }
 }
 
-export function wasCtvTouched(code: string): boolean {
-  try {
-    const stored = sessionStorage.getItem(CTV_TOUCHED_KEY);
-    return !!stored && stored === norm(code);
-  } catch {
-    return false;
-  }
+const readMark = () => {
+  try { return parseTouchMark(sessionStorage.getItem(CTV_TOUCHED_KEY)); } catch { return null; }
+};
+
+/** Dấu gắn người dùng: người đăng nhập sau trong cùng WebView không thừa hưởng dấu của người trước. */
+export function wasCtvTouched(userId: string | null | undefined, code: string): boolean {
+  return touchMarkMatches(readMark(), userId, code);
+}
+
+/** Cập nhật dấu theo kết quả máy chủ vừa trả: chạm brand ghi công mã khác thì dấu cũ không còn đúng (xem touchMarkAfter). */
+export function updateCtvTouchMark(userId: string, code: string, kind: 'ctv' | 'brand', ok: boolean): void {
+  const before = readMark();
+  const after = touchMarkAfter(before, userId, code, kind, ok);
+  if (after === before) return;
+  if (after) markCtvTouched(after.userId, after.code);
+  else clearCtvTouched();
 }
 
 /** Dấu chạm theo người dùng, nên phải xoá khi đăng xuất: máy dùng chung thì người sau không được thừa hưởng. */
@@ -72,11 +83,15 @@ export const useStorefrontContext = create<StorefrontCtxState>((set, get) => ({
       : norm(referralCode) === norm(cur.referralCode)
         ? (cur.referralEligible ?? ctx.referralEligible ?? null)
         : (ctx.referralEligible ?? null);
+    // Lượt đến từ link truyền clickedAt tường minh (luôn là lúc bấm mới, kể cả cùng mã). Điều hướng trong app: cùng mã giữ lúc bấm
+    // đã ghi, mã mới là lượt bấm vừa xảy ra.
+    const clickedAt = !referralCode ? null : ctx.clickedAt ?? (norm(referralCode) === norm(cur.referralCode) && cur.clickedAt ? cur.clickedAt : Date.now());
     const next: Ctx = {
       slug: ctx.slug !== undefined ? ctx.slug : cur.slug,
       referralCode,
       kind: ctx.kind !== undefined ? ctx.kind : cur.kind,
       referralEligible,
+      clickedAt,
     };
     persist(next);
     set(next);
@@ -84,12 +99,12 @@ export const useStorefrontContext = create<StorefrontCtxState>((set, get) => ({
   confirmReferral: (code, ok) => {
     const cur = get();
     if (!cur.referralCode || norm(cur.referralCode) !== norm(code) || cur.referralEligible === ok) return;
-    persist({ slug: cur.slug, referralCode: cur.referralCode, kind: cur.kind, referralEligible: ok });
+    persist({ slug: cur.slug, referralCode: cur.referralCode, kind: cur.kind, referralEligible: ok, clickedAt: cur.clickedAt });
     set({ referralEligible: ok });
   },
   clear: () => {
     try { sessionStorage.removeItem(KEY); } catch { /* ignore */ }
     clearCtvTouched();
-    set({ slug: null, referralCode: null, kind: 'ctv', referralEligible: null });
+    set({ slug: null, referralCode: null, kind: 'ctv', referralEligible: null, clickedAt: null });
   },
 }));
