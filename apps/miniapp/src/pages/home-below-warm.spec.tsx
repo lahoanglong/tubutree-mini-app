@@ -52,7 +52,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 vi.mock('../components/home/home-below', async () => {
   await chunk.gate;
-  return { BrandJourney: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null };
+  return { BrandJourney: () => null, CommunityPreview: () => null, SuggestFeed: () => null };
 });
 
 import HomePage from './home';
@@ -62,7 +62,9 @@ const settle = async (ms = 0) => {
   await act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
   for (let i = 0; i < 4; i++) await act(async () => void (await vi.advanceTimersByTimeAsync(0)));
 };
-const heightOf = (block: string) => document.querySelector<HTMLElement>(`[data-home-block="${block}"] [data-testid="home-below-placeholder"]`)?.dataset.height;
+const blockEl = (id: string) => document.querySelector<HTMLElement>(`[data-home-block="${id}"]`);
+// Khối chỉ chứa đúng các phần tử thật nêu tên (không có ô giữ chỗ thừa nào của chunk).
+const testIdsIn = (id: string) => Array.from(blockEl(id)?.querySelectorAll('*') ?? []).map((el) => el.getAttribute('data-testid') ?? el.tagName);
 
 function renderHome() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -93,28 +95,26 @@ afterEach(() => vi.useRealTimers());
 // Máy đã nhớ loại khách: không giữ khung chờ chung, nên khối chưa có chunk chỉ được giữ chỗ đúng bằng hình lúc đang tải của nó (không thì null),
 // để chunk về không làm khối bên dưới nhảy.
 describe('HomePage — mở lại khi máy đã nhớ loại khách, chunk khối dưới chưa về', () => {
-  it('không có khung chờ chung; Giờ vàng chưa từng có và Cộng đồng không giữ chỗ; Mua lại giữ chỗ bằng đúng khung chờ của kệ thật', async () => {
+  it('không có khung chờ chung; Giờ vàng chỉ có FlashSale thật và Cộng đồng không có phần tử nào; Mua lại chỉ có kệ thật', async () => {
     renderHome();
     await settle(100);
     expect(document.querySelector('[data-testid="home-settling"]')).toBeNull();
-    expect(heightOf('flash')).toBeUndefined();
-    expect(heightOf('community')).toBeUndefined();
-    expect(heightOf('purchased')).toBeUndefined();
+    expect(testIdsIn('flash')).toEqual(['flash-sale-real']);
+    expect(blockEl('community')?.innerHTML ?? '').toBe('');
+    expect(testIdsIn('purchased')).toEqual(['purchased-rail-real']);
   });
 
   it('kệ Mua lại nằm trong gói đầu nên hiện ngay, không có ô giữ chỗ', async () => {
     renderHome();
     await settle(100);
-    expect(document.querySelector('[data-home-block="purchased"] [data-testid="purchased-rail-real"]')).not.toBeNull();
-    expect(heightOf('purchased')).toBeUndefined();
+    expect(testIdsIn('purchased')).toEqual(['purchased-rail-real']);
   });
 
   it('lần trước có Giờ vàng thì Giờ vàng vẫn nằm trong gói đầu: không có ô giữ chỗ của chunk, khung chờ là của chính FlashSale', async () => {
     localStorage.setItem(FLASH_HINT_KEY, '1');
     renderHome();
     await settle(100);
-    expect(heightOf('flash')).toBeUndefined();
-    expect(document.querySelector('[data-home-block="flash"] [data-testid="flash-sale-real"]')).not.toBeNull();
+    expect(testIdsIn('flash')).toEqual(['flash-sale-real']);
   });
 });
 
@@ -129,12 +129,11 @@ describe('HomePage — khách mới và khách vãng lai mở lại, chunk khố
         mocks.auth.user = null;
       },
     ],
-  ])('%s: kệ Bán chạy hiện ngay, không có ô xám 260px giữ chỗ', async (_name, setup) => {
+  ])('%s: kệ Bán chạy hiện ngay, không có ô xám giữ chỗ', async (_name, setup) => {
     setup();
     renderHome();
     await settle(100);
-    expect(document.querySelector('[data-home-block="bestSellers"] [data-testid="best-seller-rail-real"]')).not.toBeNull();
-    expect(heightOf('bestSellers')).toBeUndefined();
+    expect(testIdsIn('bestSellers')).toEqual(['best-seller-rail-real']);
     expect(document.querySelector('[data-testid="purchased-rail-real"]')).toBeNull();
   });
 });

@@ -25,6 +25,7 @@ vi.mock('../components/reorder/purchased-rail', () => ({ PURCHASED_RAIL_LIMIT: 1
 vi.mock('../components/home/member-card', () => ({ MemberCard: () => null, MemberCardSkeleton: () => null }));
 vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false }) }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => null }));
+vi.mock('../components/home/new-customer-gift', () => ({ NewCustomerGift: () => null }));
 vi.mock('../components/cart-button', () => ({ CartButton: () => null }));
 vi.mock('../components/pull-to-refresh', () => ({
   PullToRefresh: ({ onRefresh }: { onRefresh: () => void }) => <button type="button" data-testid="pull" onClick={() => void onRefresh()} />,
