@@ -59,6 +59,26 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
     expect(blocks).not.toContain('banner');
   });
 
+  test('khách mới có Quà khách mới và Giờ vàng: dải nằm trên lối tắt, Giờ vàng vẫn kết thúc trong màn đầu 375×812', async ({ page, api }) => {
+    mockDiscovery(api);
+    api.get('/me/new-customer-offer', { isNewCustomer: true, welcomeVoucher: null });
+    mockFlash(api);
+    await page.goto('/');
+    const welcome = page.getByRole('region', { name: 'Quà khách mới' });
+    const flash = page.getByRole('region', { name: 'Giờ vàng', exact: true });
+    await expect(welcome).toBeVisible({ timeout: 15_000 });
+    await expect(flash).toBeVisible({ timeout: 15_000 });
+    await expect.poll(() => visibleBlocks(page), { timeout: 15_000 }).toEqual(expect.arrayContaining(['welcome', 'shortcuts', 'flash', 'categories', 'bestSellers']));
+    const blocks = await visibleBlocks(page);
+    expect(blocks).not.toContain('member');
+    expect(blocks).not.toContain('purchased');
+    expect(blocks.indexOf('welcome')).toBeLessThan(blocks.indexOf('shortcuts'));
+    expect(blocks.indexOf('shortcuts')).toBeLessThan(blocks.indexOf('flash'));
+    expect(blocks.indexOf('flash')).toBeLessThan(blocks.indexOf('categories'));
+    const box = (await flash.boundingBox())!;
+    expect(box.y + box.height, `Giờ vàng kết thúc ở ${Math.round(box.y + box.height)}px khi có dải Quà khách mới`).toBeLessThanOrEqual(812);
+  });
+
   test('Mua lại một món: nút "Mua lại" nằm cùng hàng với tên trong dòng cao 88px, trang không tràn ngang', async ({ page, api }) => {
     mockDiscovery(api, { returning: true });
     await page.goto('/');
