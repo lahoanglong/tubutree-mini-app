@@ -1493,18 +1493,18 @@ export class AffiliateService {
       data: { status: 'APPROVED', approvedAt: new Date() },
     });
     if (res.count > 0) this.logger.log(`Duyệt ${res.count} commission hết hold.`);
-    await this.runDailyWalletTransferIfDue(now).catch((err: unknown) => {
+    await this.runDailyWalletTransferIfDue(now, new Date(Math.max(now.getTime(), Date.now()))).catch((err: unknown) => {
       this.logger.error(`Lượt chuyển hoa hồng vào Ví lỗi: ${err instanceof Error ? err.message : err}`);
     });
   }
 
   /**
    * Lượt ngày: tự chuyển vào Ví rồi gửi tin tổng. Chưa tới 8:00 giờ VN, hoặc hôm nay đã có lượt xong thì không làm gì.
-   * Mốc xong (cron_runs.lastSuccessAt = lúc BẮT ĐẦU lượt, để khoản duyệt trong lúc lượt chạy vẫn thuộc cửa sổ của lượt sau) chỉ ghi
+   * Mốc xong (cron_runs.lastSuccessAt = `until`, mốc chặn trên của cửa sổ tin đã duyệt, để không khoản nào bị báo hai lần hay sót) chỉ ghi
    * khi cả chuyển lẫn báo đều không lỗi; lỗi giữa chừng thì giờ sau chạy lại, và chạy lại không chuyển đôi (khoá idempotency theo tập
    * khoản, tin theo CTV + ngày VN).
    */
-  async runDailyWalletTransferIfDue(now: Date = new Date()): Promise<boolean> {
+  async runDailyWalletTransferIfDue(now: Date = new Date(), until: Date = now): Promise<boolean> {
     const vnHour = new Date(now.getTime() + VN_OFFSET_MS).getUTCHours();
     if (vnHour < DAILY_WALLET_TRANSFER_HOUR_VN) return false;
     const run = await this.prisma.cronRun.findUnique({ where: { job: DAILY_WALLET_TRANSFER_JOB }, select: { lastSuccessAt: true } });
@@ -1512,14 +1512,14 @@ export class AffiliateService {
     if (last && vnDateKey(last) === vnDateKey(now)) return false;
     const since = last ?? new Date(now.getTime() - 24 * 3600 * 1000);
     const transfer = await this.transferApproved();
-    const notified = await this.notifyCommissionsApproved(since, now);
+    const notified = await this.notifyCommissionsApproved(since, until);
     if (!transfer.ok || !notified) return false;
     const finished = new Date();
     const timing = { lastStartedAt: now, lastFinishedAt: finished, lastDurationMs: Math.max(0, finished.getTime() - now.getTime()) };
     await this.prisma.cronRun.upsert({
       where: { job: DAILY_WALLET_TRANSFER_JOB },
-      create: { job: DAILY_WALLET_TRANSFER_JOB, ...timing, lastOutcome: 'OK', lastSuccessAt: now, consecutiveFailures: 0 },
-      update: { ...timing, lastOutcome: 'OK', lastErrorCount: 0, lastSuccessAt: now, consecutiveFailures: 0 },
+      create: { job: DAILY_WALLET_TRANSFER_JOB, ...timing, lastOutcome: 'OK', lastSuccessAt: until, consecutiveFailures: 0 },
+      update: { ...timing, lastOutcome: 'OK', lastErrorCount: 0, lastSuccessAt: until, consecutiveFailures: 0 },
     });
     return true;
   }
@@ -1584,14 +1584,14 @@ export class AffiliateService {
       const payout = await this.prisma.payout.findUnique({ where: { idempotencyKey: key }, select: { taxWithheld: true } });
       const tax = payout?.taxWithheld ?? 0;
       if (credited <= 0) {
-        await this.notifications.notify(userId, CTV_NOTIFICATION.AUTO_WALLET_TAX_ONLY, { amount: vnd(gross), tax: vnd(tax) }, { dedupeKey: `commission-wallet:${userId}:${vnDateKey()}` });
+        await this.notifications.notify(userId, CTV_NOTIFICATION.AUTO_WALLET_TAX_ONLY, { amount: vnd(gross), tax: vnd(tax) }, { dedupeKey: key });
         return;
       }
       await this.notifications.notify(
         userId,
         CTV_NOTIFICATION.AUTO_WALLET,
         { amount: vnd(credited), count: String(count), tax_note: tax > 0 ? ` (đã khấu trừ thuế TNCN ${vnd(tax)})` : '' },
-        { dedupeKey: `commission-wallet:${userId}:${vnDateKey()}` },
+        { dedupeKey: key },
       );
     } catch (err) {
       this.logger.error(`Gửi thông báo tự cộng hoa hồng vào Ví cho ${userId} lỗi: ${err instanceof Error ? err.message : err}`);

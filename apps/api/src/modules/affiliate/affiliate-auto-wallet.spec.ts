@@ -89,7 +89,7 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
       'a',
       CTV_NOTIFICATION.AUTO_WALLET,
       { amount: '5.400.000đ', count: '1', tax_note: ' (đã khấu trừ thuế TNCN 600.000đ)' },
-      { dedupeKey: expect.stringMatching(/^commission-wallet:a:\d{4}-\d{2}-\d{2}$/) },
+      { dedupeKey: key },
     );
   });
 
@@ -106,7 +106,7 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
     const credited = await b.svc.autoTransferApprovedToWallet();
     const key = b.requestPayout.mock.calls[0]![4] as string;
     expect(b.notify).toHaveBeenCalledTimes(1);
-    expect(b.notify).toHaveBeenCalledWith('a', CTV_NOTIFICATION.AUTO_WALLET_TAX_ONLY, { amount: '10.000đ', tax: '10.000đ' }, { dedupeKey: expect.stringMatching(/^commission-wallet:a:\d{4}-\d{2}-\d{2}$/) });
+    expect(b.notify).toHaveBeenCalledWith('a', CTV_NOTIFICATION.AUTO_WALLET_TAX_ONLY, { amount: '10.000đ', tax: '10.000đ' }, { dedupeKey: key });
     expect(credited.has('a')).toBe(true);
   });
 
