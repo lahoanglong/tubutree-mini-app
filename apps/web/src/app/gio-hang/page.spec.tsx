@@ -314,13 +314,13 @@ describe('/gio-hang — chọn món để thanh toán một phần giỏ (R2-BUY
 });
 
 describe('/gio-hang — dòng giá Giờ vàng (R4-BUYER-4)', () => {
-  it('dòng đang tính giá Giờ vàng được ghi nhãn "Giá Giờ vàng" cạnh giá, dòng thường thì không', async () => {
+  it('dòng đang tính giá Giờ vàng được ghi nhãn "Giờ vàng" (như Mini App), dòng thường thì không', async () => {
     state.cart = cartOf([line({ unitPrice: 79000, isFlash: true }), line({ id: 'i2', variationId: 'v2', productName: 'Xà bông' })]);
     const { container } = await mount();
     const badges = container.querySelectorAll('[data-testid="cart-flash-badge"]');
     expect(badges).toHaveLength(1);
-    expect(badges[0]!.textContent).toContain('Giá Giờ vàng');
-    expect(badges[0]!.closest('div')!.textContent).toContain('79.000đ');
+    expect(badges[0]!.textContent).toBe('Giờ vàng');
+    expect(badges[0]!.closest('[data-testid="cart-line"]')!.textContent).toContain('79.000đ');
   });
 
   it('vượt giới hạn mua Giờ vàng: hiện câu giải thích của server, dòng tính giá thường không có nhãn', async () => {

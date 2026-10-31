@@ -46,6 +46,7 @@ beforeEach(() => {
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
+  vi.unstubAllGlobals();
 });
 
 describe('/gio-hang — chữ và cách đếm như Mini App', () => {
@@ -184,5 +185,65 @@ describe('/gio-hang — thanh dính đáy như Mini App', () => {
     const card = c.querySelector('[data-testid="cart-summary"]')!;
     expect(card.className).toMatch(/\bmax-md:contents\b/);
     expect(card.querySelector('[data-testid="cart-summary-rows"]')!.className).toMatch(/\bmax-md:hidden\b/);
+  });
+});
+
+describe('/gio-hang — khổ điện thoại xếp như Mini App', () => {
+  const asPhone = () =>
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(max-width: 767px)', addEventListener: () => {}, removeEventListener: () => {} }));
+
+  it('hàng mã giảm giá nằm trong thanh dính đáy, không còn trong thân trang', async () => {
+    asPhone();
+    state.coupons = [{ code: 'XANH10', type: 'PERCENT', value: 10, minOrder: null, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' }];
+    const c = await mount();
+    expect(bar(c).textContent).toContain('Mã giảm giá');
+    const row = bar(c).querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
+    expect(row.className).toMatch(/\bmin-h-11\b/);
+    expect(c.querySelector('[data-testid="cart-summary"] #coupon-panel')).toBeNull();
+    expect(c.querySelectorAll('[aria-haspopup="dialog"]')).toHaveLength(1);
+  });
+
+  it('bấm hàng mã mở bảng trượt "Mã giảm giá" có ô nhập và danh sách mã; đóng lại thì bảng biến mất', async () => {
+    asPhone();
+    state.coupons = [{ code: 'XANH10', type: 'PERCENT', value: 10, minOrder: null, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' }];
+    const c = await mount();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    click(bar(c).querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.textContent).toContain('Mã giảm giá');
+    expect(dialog.querySelector('input[name="coupon-code"]')).not.toBeNull();
+    expect(dialog.querySelector('button[aria-label$="mã XANH10"]')).not.toBeNull();
+    click(dialog.querySelector('button[aria-label="Đóng"]'));
+    await flush(3);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('từ md hàng mã vẫn nằm trong khung tóm tắt, thanh dính không mang nó', async () => {
+    const c = await mount();
+    expect(bar(c).querySelector('[aria-haspopup="dialog"]')).toBeNull();
+    expect(c.querySelector('[data-testid="cart-summary"]')!.textContent).toContain('Mã giảm giá');
+  });
+
+  it('dòng hàng: nhãn Giờ vàng + đếm ngược trước giá; giá + bộ đếm cùng hàng; Thành tiền sau cùng; thùng rác ở góc trên phải', async () => {
+    state.cart = cartOf([line({ unitPrice: 79000, isFlash: true, flashEndAt: new Date(Date.now() + 3_600_000).toISOString(), quantity: 2, total: 158000 })]);
+    const c = await mount();
+    const lineEl = c.querySelector<HTMLElement>('[data-testid="cart-line"]')!;
+    expect(lineEl.className).toMatch(/\bmax-md:relative\b/);
+    const order = (el: Element | null) => Number(/max-md:order-(\d)/.exec(el?.className ?? '')?.[1] ?? 0);
+    const badgeRow = lineEl.querySelector('[data-testid="cart-flash-badge"]')!.parentElement!;
+    const priceRow = Array.from(lineEl.querySelectorAll('div')).find((d) => /max-md:order-3/.test(d.className) && d.textContent!.includes('79.000đ'))!;
+    const totalRow = Array.from(lineEl.querySelectorAll('div')).find((d) => d.textContent === 'Thành tiền 158.000đ')!;
+    expect(order(badgeRow)).toBeLessThan(order(priceRow));
+    expect(order(priceRow)).toBeLessThan(order(totalRow));
+    expect(badgeRow.textContent).toContain('Giờ vàng');
+    expect(badgeRow.textContent).toContain('Kết thúc sau');
+    const stepper = lineEl.querySelector('button[aria-label^="Tăng số lượng"]')!.parentElement!;
+    expect(order(stepper)).toBe(order(priceRow));
+    const del = lineEl.querySelector('button[aria-label^="Xoá"]')!;
+    expect(del.className).toMatch(/\bmax-md:absolute\b/);
+    expect(del.className).toMatch(/\bmax-md:top-1\b/);
+    // Ảnh bám mép trên như Mini App (ô chọn vẫn giữa dòng), không trôi xuống giữa khi cột chữ cao.
+    expect(lineEl.querySelector('a[tabindex="-1"]')!.className).toMatch(/\bmax-md:self-start\b/);
   });
 });
