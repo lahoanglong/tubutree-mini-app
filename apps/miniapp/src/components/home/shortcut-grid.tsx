@@ -17,16 +17,31 @@ const ShortcutsSheet = lazy(() => import('./shortcuts-sheet').then((m) => ({ def
 
 const CELL_HEIGHT = 84;
 const CIRCLE = 44;
+const LABEL_LINE = 16;
+
+// Hai dòng, cao cố định: 4 + 44 + 4 + 2×16 = 84, nên ô vẫn 84px và các ô thẳng hàng dù "Mã giảm giá" xuống dòng ở 375px (nhãn một dòng bị cắt "…" ở cả hai app).
+const labelStyle = {
+  maxWidth: '100%',
+  height: LABEL_LINE * 2,
+  lineHeight: `${LABEL_LINE}px`,
+  textAlign: 'center',
+  fontWeight: 600,
+  textWrap: 'balance',
+  display: '-webkit-box',
+  WebkitBoxOrient: 'vertical',
+  WebkitLineClamp: 2,
+  overflow: 'hidden',
+} as const;
 
 const cellStyle = {
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
-  gap: 6,
+  gap: 4,
   height: CELL_HEIGHT,
   minHeight: 44,
   minWidth: 0,
-  padding: '8px 2px 0',
+  padding: '4px 2px 0',
   boxSizing: 'border-box',
   border: 'none',
   background: 'transparent',
@@ -37,7 +52,7 @@ const cellStyle = {
 /**
  * Lối tắt Trang chủ (Q7): 4 ô cố định + ô "Tất cả" trong MỘT hàng 5 cột đều nhau, không cuộn ngang. Phần còn lại (Đổi quà, Đơn hàng,
  * Kiếm tiền, Cộng đồng...) nằm trong sheet "Tất cả". Mục có cờ tắt (Đổi rác, Tích điểm đơn sàn) bị ẩn, mục kế lấp chỗ.
- * Nhãn một dòng: "Mã giảm giá" là nhãn dài nhất, cắt "…" nếu máy 320px không đủ chỗ (câu đọc đầy đủ vẫn nằm ở aria-label).
+ * Nhãn tối đa hai dòng, không cắt chữ ở 375px và 320px; câu đọc đầy đủ nằm ở aria-label.
  */
 export function ShortcutGrid() {
   const navigate = useNavigate();
@@ -83,7 +98,7 @@ export function ShortcutGrid() {
               <span aria-hidden style={{ width: CIRCLE, height: CIRCLE, borderRadius: 'var(--radius-pill)', background: tint.bg, color: tint.fg, display: 'grid', placeItems: 'center' }}>
                 <Icon icon={SHORTCUT_ICONS[s.id]} size="md" tone="current" />
               </span>
-              <Text variant="caption" style={{ maxWidth: '100%', textAlign: 'center', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <Text variant="caption" style={labelStyle}>
                 {s.label}
               </Text>
             </button>
@@ -104,7 +119,7 @@ export function ShortcutGrid() {
           <span aria-hidden style={{ width: CIRCLE, height: CIRCLE, borderRadius: 'var(--radius-pill)', background: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)', display: 'grid', placeItems: 'center' }}>
             <Icon icon={LayoutGrid} size="md" tone="current" />
           </span>
-          <Text variant="caption" style={{ textAlign: 'center', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          <Text variant="caption" style={labelStyle}>
             {homeCopy.shortcuts.all}
           </Text>
         </button>

@@ -51,6 +51,22 @@ afterEach(() => {
 });
 
 describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
+
+  it('nhãn tối đa hai dòng, cao cố định 32px, không nowrap: "Mã giảm giá" xuống dòng chứ không bị cắt "…"; ô vẫn cao 84px', () => {
+    const c = mount();
+    const buttons = Array.from(c.querySelectorAll<HTMLElement>('[data-testid="shortcut-grid"] button'));
+    expect(buttons).toHaveLength(5);
+    for (const b of buttons) {
+      expect(b.style.height).toBe('84px');
+      const label = b.lastElementChild as HTMLElement;
+      expect(label.style.height).toBe('32px');
+      expect(label.style.lineHeight).toBe('16px');
+      expect(label.style.overflow).toBe('hidden');
+      expect(label.style.whiteSpace).not.toBe('nowrap');
+      expect(label.style.textOverflow).toBe('');
+      expect(label.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
+    }
+  });
   it('cờ bật hết: 4 ô cố định (Giờ vàng, Mã giảm giá, Đổi rác, Mua chung) và ô "Tất cả", lưới 5 cột không cuộn ngang', () => {
     const c = mount();
     expect(labels(c)).toEqual(['Giờ vàng', 'Mã giảm giá', 'Đổi rác', 'Mua chung', 'Tất cả']);

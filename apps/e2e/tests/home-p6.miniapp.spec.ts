@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect, type MockApi } from './support/mock-api';
 import { CATALOG, mockDiscovery } from './support/discovery-mocks';
+import { shortcutLabelProblems } from './support/shortcut-labels';
 
 /**
  * Zalo Mini App E2E — Trang chủ theo thiết kế mới (gói P6): màn đầu 375×812 có Giờ vàng khi chưa có banner, Bán chạy nhất có hạng cho cả hai loại khách,
@@ -87,4 +88,17 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
     const first = (await flash.locator('[data-ds="product-tile"]').first().boundingBox())!;
     expect(clock.y, 'đồng hồ nằm trên hàng thẻ').toBeLessThan(first.y);
   });
+
+  for (const width of [375, 320]) {
+    test(`${width}px: 4 lối tắt cố định đọc đủ nhãn (không bị cắt "…"), ô vẫn cao 84px`, async ({ page, api }) => {
+      mockDiscovery(api, { returning: true });
+      await page.setViewportSize({ width, height: 812 });
+      await page.goto('/');
+      const grid = page.getByTestId('shortcut-grid');
+      await expect(grid.getByRole('button', { name: /Mã giảm giá/ })).toBeVisible({ timeout: 15_000 });
+      expect(await shortcutLabelProblems(page)).toEqual([]);
+      const heights = await grid.getByRole('button').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
+      expect(heights).toEqual([84, 84, 84, 84, 84]);
+    });
+  }
 });

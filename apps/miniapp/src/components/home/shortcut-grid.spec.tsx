@@ -39,6 +39,18 @@ describe('ShortcutGrid — 4 ô cố định + "Tất cả" (Q7)', () => {
     expect(screen.queryByRole('group', { name: /vuốt ngang/ })).toBeNull();
   });
 
+  it('nhãn tối đa hai dòng, cao cố định 32px, không nowrap: "Mã giảm giá" xuống dòng chứ không bị cắt "…"; ô vẫn cao 84px', () => {
+    render(<ShortcutGrid />);
+    for (const b of screen.getAllByRole('button')) {
+      expect(b).toHaveStyle({ height: '84px' });
+      const label = b.lastElementChild as HTMLElement;
+      expect(label).toHaveStyle({ height: '32px', lineHeight: '16px', overflow: 'hidden' });
+      expect(label.style.whiteSpace).not.toBe('nowrap');
+      expect(label.style.textOverflow).toBe('');
+      expect(label.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
+    }
+  });
+
   it('Giờ vàng dẫn tới trang đang có (qua liveRoute) và Mã giảm giá tới mã của tôi', () => {
     render(<ShortcutGrid />);
     fireEvent.click(screen.getByRole('button', { name: /Giờ vàng/ }));
