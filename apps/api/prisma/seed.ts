@@ -877,7 +877,7 @@ export const NOTIFICATION_TEMPLATES = [
   // C-029: CTV biết kết quả công việc — đơn mới từ link của mình, hoa hồng được duyệt, lệnh rút đã chi.
   // Không dùng {{order_code}} ở COMMISSION_NEW: đó là đơn của khách, app sẽ hiện nút "Xem đơn" mà CTV không xem được.
   { id: 'nt-ctv-commission-new', code: 'COMMISSION_NEW', channel: 'INAPP', bodyTemplate: '💰 Có đơn mới từ link của bạn! Hoa hồng dự kiến {{amount}}. Khoản này được chốt sau khi khách nhận hàng và hết thời gian đổi/trả.', createOnly: true },
-  { id: 'nt-ctv-commission-approved', code: 'COMMISSION_APPROVED', channel: 'INAPP', bodyTemplate: '✅ Tubu Tree đã duyệt {{count}} hoa hồng (tổng {{amount}}). Bạn vào mục Hoa hồng, bấm Chuyển vào Ví để nhận tiền nhé.', createOnly: true },
+  { id: 'nt-ctv-commission-approved', code: 'COMMISSION_APPROVED', channel: 'INAPP', bodyTemplate: '✅ Tubu Tree đã duyệt hoa hồng của {{count}} đơn (tổng {{amount}}). Bạn vào mục Hoa hồng, bấm Chuyển vào Ví để nhận tiền nhé.', createOnly: true },
   { id: 'nt-ctv-wallet-credited', code: 'COMMISSION_WALLET_CREDITED', channel: 'INAPP', bodyTemplate: '💰 Tubu Tree đã chuyển {{amount}} hoa hồng ({{count}} đơn) vào Ví của bạn{{tax_note}}. Bạn dùng được ngay khi thanh toán.', createOnly: true },
   { id: 'nt-ctv-wallet-tax-only', code: 'COMMISSION_WALLET_TAX_ONLY', channel: 'INAPP', bodyTemplate: '💰 Đã xử lý {{amount}} hoa hồng của bạn: toàn bộ được khấu trừ thuế TNCN ({{tax}}) nên chưa có tiền cộng vào Ví Tubu.', createOnly: true },
   { id: 'nt-ctv-payout-paid', code: 'COMMISSION_PAYOUT_PAID', channel: 'INAPP', bodyTemplate: '🏦 Lệnh rút {{amount}} của bạn đã được chuyển khoản{{ref}}. Kiểm tra tài khoản ngân hàng nhé!', createOnly: true },

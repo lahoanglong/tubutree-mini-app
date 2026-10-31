@@ -9,7 +9,7 @@ export const CTV_TAB_KEYS: readonly CtvTabKey[] = CTV_TABS.map((t) => t.key);
 
 /** Một câu chung cho khoản hoa hồng đang chờ, dùng ở trang CTV và ở Ví Tubu để CTV không thấy hai tên cho cùng một số. */
 export const COMMISSION_PENDING_LABEL = 'Hoa hồng đang chờ';
-export const COMMISSION_PENDING_NOTE = 'đơn chưa giao hoặc trong thời gian đổi/trả';
+export const COMMISSION_PENDING_NOTE = 'đơn chưa giao hoặc trong thời gian đổi/trả; khi được duyệt, vào Ví lúc 8:00 sáng kế tiếp';
 
 interface DashboardMoney {
   monthCommission: number;
@@ -60,7 +60,7 @@ export function heroShowsWalletBalance(hero: { label: string; waiting: boolean }
 /** Lời cho ô "Chuyển vào Ví" khi chưa có số dư: nói vì sao và khi nào có. `pendingText` đã định dạng tiền. */
 export function transferBlockedText(pendingText: string, auto = true): string {
   return auto
-    ? `Hoa hồng tự vào Ví Tubu mỗi sáng 8:00 khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: ${pendingText}.`
+    ? `Hoa hồng được duyệt khi đơn đã giao và hết thời gian đổi/trả, rồi tự vào Ví Tubu lúc 8:00 sáng kế tiếp. Đang chờ: ${pendingText}.`
     : `Hoa hồng chuyển được vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: ${pendingText}.`;
 }
 

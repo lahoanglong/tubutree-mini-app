@@ -839,7 +839,7 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     expect(btn).toBeEnabled();
     await screen.findByText(/Đang chờ: 9\.520đ ·/);
     fireEvent.click(btn);
-    expect(await screen.findByText('Hoa hồng tự vào Ví Tubu mỗi sáng 8:00 khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 9.520đ.')).toBeInTheDocument();
+    expect(await screen.findByText('Hoa hồng được duyệt khi đơn đã giao và hết thời gian đổi/trả, rồi tự vào Ví Tubu lúc 8:00 sáng kế tiếp. Đang chờ: 9.520đ.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /vào Ví$/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Đã hiểu' }));
     expect(screen.queryByText(/Hoa hồng tự vào Ví Tubu mỗi sáng 8:00 khi đơn đã giao/)).toBeNull();

@@ -518,6 +518,16 @@ psqlq -c "SELECT id, \"zaloId\", \"createdAt\" FROM users WHERE \"zaloId\" LIKE 
 - Migration `20261030110000_order_confirmed_payment_note` chỉ đổi thân mẫu ORDER_CONFIRMED khi thân còn đúng câu seed cũ. Sau deploy, xem thân mẫu bằng `psqlq -tAc "SELECT \"bodyTemplate\" FROM notification_templates WHERE code='ORDER_CONFIRMED'"`. Nếu không có `{{payment_note}}` (admin đã sửa chữ từ trước) thì đơn trả trước vẫn nhận câu cũ; muốn có câu "đã nhận đủ thanh toán" thì admin tự thêm `{{payment_note}}`.
 - Quay image về bản trước bản này: màn sửa mẫu tin của bản cũ không biết biến `{{payment_note}}`, nên admin không lưu được mẫu ORDER_CONFIRMED đang có biến đó. Tin vẫn gửi bình thường; chỉ việc sửa chữ mẫu này phải chờ deploy lại bản mới, hoặc xoá biến khỏi thân mẫu trước khi sửa.
 
+### 1.16 Hoa hồng vào Ví một lần mỗi ngày: rollback API làm tin hiện "( đơn)"
+
+Migration `20261031090000_commission_daily_summary_templates` đổi mẫu tin `COMMISSION_WALLET_CREDITED` thành "Tubu Tree đã chuyển {{amount}} hoa hồng ({{count}} đơn) vào Ví của bạn…". Quay API về bản cũ (không gửi biến `count`) thì tin hiện "( đơn)". Trả chữ cũ, chỉ khi mẫu còn đúng chữ mới (admin đã sửa thì giữ):
+
+```bash
+psqlq -c "UPDATE notification_templates SET \"bodyTemplate\" = '💰 Đã cộng {{amount}} hoa hồng vào Ví Tubu{{tax_note}}. Bạn dùng được ngay khi thanh toán đơn hàng.' WHERE code = 'COMMISSION_WALLET_CREDITED' AND channel = 'INAPP' AND \"bodyTemplate\" = '💰 Tubu Tree đã chuyển {{amount}} hoa hồng ({{count}} đơn) vào Ví của bạn{{tax_note}}. Bạn dùng được ngay khi thanh toán.';"
+```
+
+Mẫu `COMMISSION_APPROVED` vẫn dùng `{{count}}` và `{{amount}}` như bản cũ nên không cần trả lại.
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.
