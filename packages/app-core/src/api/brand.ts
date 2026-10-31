@@ -49,8 +49,8 @@ export interface BrandView {
   followerCount: number;
   certifications: BrandCert[];
   promotions: BrandPromotionView[];
-  /** Tổng sản phẩm công khai của nhãn (hiện "Tất cả (n)"); API cũ không trả. */
-  productCount: number;
+  /** Tổng sản phẩm công khai của nhãn (hiện "Tất cả (n)"); API cũ hoặc bản cache cũ không trả: nơi đọc phải xử lý `undefined`. */
+  productCount?: number;
   /** Tối đa 30 món đầu, chỉ để client cũ chạy được: danh sách đầy đủ lấy bằng `fetchBrandProducts`. */
   products: BrandProductView[];
   dealerRewards: DealerRewardView[];

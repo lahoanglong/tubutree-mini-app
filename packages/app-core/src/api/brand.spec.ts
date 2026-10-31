@@ -37,8 +37,10 @@ describe('brand — hợp đồng gọi API', () => {
     expect(calls[0]!.path).toBe('/brand/public/..%2Fauth%2Fme/products');
   });
 
-  it('BrandView mang productCount (tổng sản phẩm công khai, kiểm bằng typecheck)', () => {
-    const count: BrandView['productCount'] = 57;
-    expect(count).toBe(57);
+  it('BrandView.productCount là tuỳ chọn: API cũ và bản cache cũ không trả (kiểm bằng typecheck)', () => {
+    const cu: Pick<BrandView, 'productCount'> = {};
+    const moi: Pick<BrandView, 'productCount'> = { productCount: 57 };
+    expect(cu.productCount).toBeUndefined();
+    expect(moi.productCount).toBe(57);
   });
 });
