@@ -17,4 +17,17 @@ describe('HomeSettlingSkeleton', () => {
     const h = HOME_SETTLING_HEIGHTS;
     expect(heights).toEqual([h.shortcuts, h.flash, h.categories, h.products].map((n) => `${n}px`));
   });
+
+  it('danh mục theo số ô: tới 5 ô một hàng (148), từ 6 ô hai hàng (248)', () => {
+    const categoriesHeight = (cells?: number) => {
+      const r = render(<HomeSettlingSkeleton categoryCells={cells} />);
+      const h = (r.container.querySelector('[data-testid="home-settling"]')!.children[2] as HTMLElement).style.height;
+      r.unmount();
+      return h;
+    };
+    expect(categoriesHeight(4)).toBe('148px');
+    expect(categoriesHeight(5)).toBe('148px');
+    expect(categoriesHeight(6)).toBe('248px');
+    expect(categoriesHeight(undefined)).toBe(`${HOME_SETTLING_HEIGHTS.categories}px`);
+  });
 });

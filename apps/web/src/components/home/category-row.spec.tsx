@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { Baby, LayoutGrid } from 'lucide-react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { click, render, type Rendered } from '@/test-utils/dom';
+import { CATEGORY_CELL_HEIGHT, CATEGORY_LABEL_HEIGHT } from '@tubutree/app-core/home-layout';
 import type { CategoryEntry } from '@/lib/browse-categories';
 
 import { CategoryRow } from './category-row';
@@ -115,6 +116,16 @@ describe('CategoryRow web — lưới 2 hàng × 5 cột như Mini (Q7)', () => 
     expect(count({})).toBe(10);
     expect(count({ placeholderCount: 4 })).toBe(5);
     expect(count({ placeholderCount: 20 })).toBe(10);
+  });
+
+  it('ô khung chờ cao đúng ô thật (ô 56 + cách 4 + nhãn 32 = 92): khối phía dưới không nhảy khi danh mục về', () => {
+    const { c } = mount(0, { isLoading: true, entries: [], placeholderCount: 4 });
+    const cell = c.querySelector<HTMLElement>('[data-testid="category-row-skeleton"]')!;
+    expect(cell.style.gap).toBe('4px');
+    const [tile, labelSlot] = Array.from(cell.children) as HTMLElement[];
+    expect(tile!.style.height).toBe('56px');
+    expect(labelSlot!.style.height).toBe(`${CATEGORY_LABEL_HEIGHT}px`);
+    expect(CATEGORY_CELL_HEIGHT).toBe(56 + 4 + CATEGORY_LABEL_HEIGHT);
   });
 
   it('không còn lề âm ở mọi khổ: không `margin: 0 -16px` inline, `-mx-4` chỉ đi kèm tiền tố max-md', () => {

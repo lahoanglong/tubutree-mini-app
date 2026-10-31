@@ -1,17 +1,17 @@
 import { LayoutGrid } from 'lucide-react';
 import type { CategoryEntry } from '../../hooks/use-categories';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
+import { CATEGORY_GRID_MAX_CELLS, CATEGORY_LABEL_HEIGHT, CATEGORY_TILE_SIZE, categorySkeletonCells, SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
 import { Icon } from '../ui/icon';
 import { ScrollRow } from '../ui/scroll-row';
 import { SectionHeader } from '../ui/section-header';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 
-const TILE = 56;
-const LABEL_HEIGHT = 32;
+const TILE = CATEGORY_TILE_SIZE;
+const LABEL_HEIGHT = CATEGORY_LABEL_HEIGHT;
 /** Khung chờ không bao giờ dài hơn một màn (2 hàng × 5 cột): ô vượt màn chỉ có khi đã có dữ liệu thật. */
-const MAX_SKELETON_CELLS = 10;
+const MAX_SKELETON_CELLS = CATEGORY_GRID_MAX_CELLS;
 const TINTS: ShortcutTint[] = ['forest', 'sage', 'clay', 'amber', 'sky', 'rose'];
 
 // Tới 10 ô (kể cả "Tất cả"): xếp theo hàng, đọc trái sang phải như thứ tự đọc của trình đọc màn hình và "Tất cả" luôn ở cuối. Quá 10 ô mới xếp theo cột để cuộn ngang.
@@ -58,7 +58,7 @@ function Label({ children }: { children: string }) {
  * Tới 10 ô xếp theo hàng ("Tất cả" luôn cuối); quá 10 ô thì lưới xếp theo cột và cuộn ngang (mỗi cột đúng 1/5 bề rộng, ô thứ 6 thò ra mép để khách biết còn nữa), không cắt bớt danh mục.
  */
 export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholderCount = MAX_SKELETON_CELLS - 1 }: CategoryRowProps) {
-  const skeletonCells = Math.min(placeholderCount + 1, MAX_SKELETON_CELLS);
+  const skeletonCells = categorySkeletonCells(placeholderCount);
   const cells = isLoading ? skeletonCells : entries.length + (onSeeAll ? 1 : 0);
   const flow = cells <= MAX_SKELETON_CELLS ? ROW_FLOW : COLUMN_FLOW;
   return (
@@ -74,7 +74,9 @@ export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholde
           ? Array.from({ length: skeletonCells }, (_, i) => (
               <div key={i} data-testid="category-row-skeleton" aria-hidden="true" style={{ ...cellStyle, cursor: 'default' }}>
                 <Skeleton width={TILE} height={TILE} radius="var(--radius-card)" />
-                <Skeleton width={48} height={16} />
+                <div style={{ height: LABEL_HEIGHT, width: '100%', display: 'flex', justifyContent: 'center' }}>
+                  <Skeleton width={48} height={16} />
+                </div>
               </div>
             ))
           : (

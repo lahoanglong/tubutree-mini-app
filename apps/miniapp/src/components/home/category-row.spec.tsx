@@ -6,6 +6,7 @@ import type { CategoryEntry } from '../../hooks/use-categories';
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => vi.fn() }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { CATEGORY_CELL_HEIGHT, CATEGORY_LABEL_HEIGHT } from '@tubutree/app-core/home-layout';
 import { CategoryRow } from './category-row';
 
 const entries = (n: number): CategoryEntry[] =>
@@ -107,5 +108,15 @@ describe('CategoryRow — lưới 2 hàng × 5 cột (Q7)', () => {
     second.unmount();
     render(<CategoryRow entries={[]} isLoading onSelect={vi.fn()} placeholderCount={20} />);
     expect(screen.getAllByTestId('category-row-skeleton')).toHaveLength(10);
+  });
+
+  it('ô khung chờ cao đúng ô thật (ô 56 + cách 4 + nhãn 32 = 92): khối phía dưới không nhảy khi danh mục về', () => {
+    render(<CategoryRow entries={[]} isLoading onSelect={vi.fn()} placeholderCount={4} />);
+    const cell = screen.getAllByTestId('category-row-skeleton')[0]!;
+    expect(cell).toHaveStyle({ gap: '4px' });
+    const [tile, labelSlot] = Array.from(cell.children) as HTMLElement[];
+    expect(tile).toHaveStyle({ height: '56px' });
+    expect(labelSlot).toHaveStyle({ height: `${CATEGORY_LABEL_HEIGHT}px` });
+    expect(CATEGORY_CELL_HEIGHT).toBe(56 + 4 + CATEGORY_LABEL_HEIGHT);
   });
 });

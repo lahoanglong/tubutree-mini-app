@@ -2,14 +2,14 @@
 
 import { LayoutGrid } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
+import { CATEGORY_GRID_MAX_CELLS, CATEGORY_LABEL_HEIGHT, CATEGORY_TILE_SIZE, categorySkeletonCells, SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
 import type { CategoryEntry } from '@/lib/browse-categories';
 import { Icon, ScrollRow, SectionHeader, Skeleton, Text } from '@/components/mini';
 
-const TILE = 56;
-const LABEL_HEIGHT = 32;
+const TILE = CATEGORY_TILE_SIZE;
+const LABEL_HEIGHT = CATEGORY_LABEL_HEIGHT;
 /** Khung chờ không bao giờ dài hơn một màn (2 hàng × 5 cột): ô vượt màn chỉ có khi đã có dữ liệu thật. */
-const MAX_SKELETON_CELLS = 10;
+const MAX_SKELETON_CELLS = CATEGORY_GRID_MAX_CELLS;
 /** Điện thoại: hàng cuộn tràn ra mép màn như Mini (đệm 16px nằm trong hàng, cột thứ 6 thò ra mép). Chỉ dưới md, từ md hàng nằm trong khung trang nên không tràn ngang. */
 const SCROLL_BLEED = 'max-md:-mx-4 max-md:max-w-none max-md:px-4';
 const TINTS: ShortcutTint[] = ['forest', 'sage', 'clay', 'amber', 'sky', 'rose'];
@@ -59,7 +59,7 @@ function Label({ children }: { children: string }) {
  * còn nữa), không cắt bớt danh mục. Lề âm chỉ áp dưới md bằng lớp Tailwind (bản cũ đặt lề âm inline ở mọi khổ nên từ md hàng cuộn tràn khung trang).
  */
 export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholderCount = MAX_SKELETON_CELLS - 1 }: CategoryRowProps) {
-  const skeletonCells = Math.min(placeholderCount + 1, MAX_SKELETON_CELLS);
+  const skeletonCells = categorySkeletonCells(placeholderCount);
   const cells = isLoading ? skeletonCells : entries.length + (onSeeAll ? 1 : 0);
   const flow = cells <= MAX_SKELETON_CELLS ? ROW_FLOW : COLUMN_FLOW;
   return (
@@ -74,7 +74,9 @@ export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholde
           Array.from({ length: skeletonCells }, (_, i) => (
             <div key={i} data-testid="category-row-skeleton" aria-hidden="true" style={{ ...cellStyle, cursor: 'default' }}>
               <Skeleton width={TILE} height={TILE} radius="var(--radius-card)" />
-              <Skeleton width={48} height={16} />
+              <div style={{ height: LABEL_HEIGHT, width: '100%', display: 'flex', justifyContent: 'center' }}>
+                <Skeleton width={48} height={16} />
+              </div>
             </div>
           ))
         ) : (

@@ -120,7 +120,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const pageDown = shelves.bestSellerQuery.isError && shelves.bestSellerQuery.data === undefined;
 
   const blocks: Record<HomeRenderBlock, ReactNode> = {
-    settling: <HomeSettlingSkeleton />,
+    settling: <HomeSettlingSkeleton categoryCells={categories.data ? entries.length + 1 : undefined} />,
     search: <HomeHeader unreadCount={unreadCount} />,
     member:
       kind === 'returning' && unavailable ? (

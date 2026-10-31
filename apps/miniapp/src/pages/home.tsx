@@ -35,7 +35,7 @@ import { HomeHeader } from '../components/home/home-header';
 import { useHomeShelves } from '../components/home/use-home-shelves';
 import { useHomeFeed } from '../components/home/use-home-feed';
 import { refreshHomeQueries } from '../components/home/home-blocks';
-import { homeRenderOrder, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
+import { categorySkeletonCells, homeRenderOrder, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
 import { unreadNotificationCountQuery } from '@tubutree/app-core/queries/account';
 import { haptic } from '../utils/haptic';
 
@@ -95,7 +95,7 @@ export default function HomePage() {
   };
 
   const blocks: Record<HomeRenderBlock, ReactNode> = {
-    settling: <HomeSettlingSkeleton />,
+    settling: <HomeSettlingSkeleton categoryCells={categorySkeletonCells(categories.placeholderCount)} />,
     search: <HomeHeader unreadCount={unreadCount} />,
     member:
       kind === 'returning' && sessionFailed ? (
