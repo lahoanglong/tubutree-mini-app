@@ -80,12 +80,12 @@ describe('ShortcutGrid web — lối tắt', () => {
     expect(document.querySelector('[role="dialog"][aria-label="Kiếm tiền cùng Tubu"]')).not.toBeNull();
   });
 
-  it('Đổi rác tạm dừng nhưng khách còn yêu cầu đang mở: lối tắt vẫn hiện, ghi "Yêu cầu của tôi"', () => {
+  it('Đổi rác tạm dừng nhưng khách còn yêu cầu đang mở: lối tắt vẫn hiện, ghi "Yêu cầu"', () => {
     mocks.cfg = { isLoaded: true, waste: { enabled: false } };
     mocks.recycleOpen = true;
     const c = mount();
     expect(c.querySelectorAll('button')).toHaveLength(7);
-    expect(byText(c, 'button', 'Yêu cầu của tôi')).not.toBeNull();
+    expect(byText(c, 'button', 'Yêu cầu')).not.toBeNull();
     expect(byText(c, 'button', 'Đổi rác')).toBeNull();
     expect(mocks.recycleArgs).toEqual([true, true]);
   });
