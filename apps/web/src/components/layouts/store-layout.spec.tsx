@@ -34,6 +34,22 @@ describe('StoreLayout', () => {
     r.unmount();
   });
 
+  it('từ lg đầu shop là một thẻ lưới hai cột: bìa trái cao cả hai hàng, số liệu nằm cột phải hàng dưới, cùng một thẻ với đầu shop', () => {
+    const r = mountIt();
+    const head = r.container.querySelector<HTMLElement>('[data-testid="store-head"]')!;
+    const cls = head.className.split(/\s+/);
+    expect(cls).toEqual(expect.arrayContaining(['lg:grid', 'lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]', 'lg:grid-rows-[1fr_auto]', 'lg:rounded-card', 'lg:border']));
+    expect(cls.filter((c) => !c.startsWith('lg:'))).toEqual(['max-lg:contents']);
+    expect(head.contains(r.container.querySelector('[data-testid="h"]'))).toBe(true);
+    expect(head.contains(r.container.querySelector('[data-testid="s"]'))).toBe(true);
+    expect(head.contains(r.container.querySelector('[data-testid="t"]'))).toBe(false);
+    const statsCell = r.container.querySelector('[data-testid="s"]')!.parentElement!;
+    expect(statsCell.className).toEqual(expect.stringContaining('lg:col-start-2'));
+    expect(statsCell.className).toEqual(expect.stringContaining('lg:row-start-2'));
+    expect(statsCell.className.split(/\s+/)).toContain('contents');
+    r.unmount();
+  });
+
   it('không có số liệu hay tab thì bỏ ô tương ứng', () => {
     const r = render(<StoreLayout header={<b data-testid="h">đầu</b>}>x</StoreLayout>);
     expect(r.container.querySelector('[data-testid="s"]')).toBeNull();

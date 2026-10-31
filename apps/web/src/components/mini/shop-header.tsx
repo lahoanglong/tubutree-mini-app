@@ -24,7 +24,6 @@ export interface ShopHeaderProps {
 }
 
 export const SHOP_COVER_HEIGHT = 120;
-const AVATAR = 56;
 /** ~2 dòng ở 375px; ngắn hơn thì không cần nút "Xem thêm". */
 const NOTE_FOLD_CHARS = 90;
 
@@ -33,6 +32,10 @@ const CLAMP_2: CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, Web
 /**
  * Đầu trang shop dùng chung cho gian hàng CTV và thương hiệu (critique-store 3.1): bìa phẳng, avatar 56px đè mép bìa, tên, huy hiệu,
  * nút hành động ở hàng avatar (không còn thanh dính đáy). Bìa/avatar/dấu tích chỉ trang trí; tên là h1.
+ *
+ * Từ lg phần tử gốc là `contents`: bìa và khối thông tin thành hai ô của lưới do `StoreLayout` dựng (bìa bên trái, thông tin bên phải,
+ * số liệu ngay dưới thông tin), avatar không còn đè mép bìa mà đứng đầu hàng tên. Dùng ngoài `StoreLayout` thì không có lưới nhận hai ô đó.
+ * Phần khác nhau giữa điện thoại và lg nằm ở lớp Tailwind (không ở style nội tuyến, vì style nội tuyến đè lớp `lg:`).
  */
 export function ShopHeader({ title, coverUrl, avatarUrl, verified, badges, action, note }: ShopHeaderProps) {
   const [open, setOpen] = useState(false);
@@ -41,11 +44,16 @@ export function ShopHeader({ title, coverUrl, avatarUrl, verified, badges, actio
   const background = coverUrl ? `url("${coverUrl.replace(/["\\\r\n]/g, encodeURIComponent)}") center/cover` : 'var(--color-bg-cover)';
   const long = (note ?? '').length > NOTE_FOLD_CHARS;
   return (
-    <div style={{ background: 'var(--color-bg-canvas)' }}>
-      <div data-testid="shop-cover" aria-hidden="true" style={{ height: SHOP_COVER_HEIGHT, background }} />
-      <div style={{ padding: '0 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginTop: -(AVATAR / 2) }}>
-          <div style={{ position: 'relative', width: AVATAR, height: AVATAR, flex: '0 0 auto' }}>
+    <div className="lg:contents" style={{ background: 'var(--color-bg-canvas)' }}>
+      <div
+        data-testid="shop-cover"
+        aria-hidden="true"
+        className="h-[var(--shop-cover-h)] lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:h-auto lg:min-h-[200px]"
+        style={{ ['--shop-cover-h' as string]: `${SHOP_COVER_HEIGHT}px`, background }}
+      />
+      <div className="px-4 lg:col-start-2 lg:row-start-1 lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-start lg:gap-x-4 lg:gap-y-1 lg:px-6 lg:pb-2 lg:pt-6">
+        <div className="-mt-7 flex items-end justify-between gap-3 lg:contents">
+          <div className="relative h-14 w-14 flex-none lg:col-start-1 lg:row-span-3 lg:row-start-1 lg:h-[72px] lg:w-[72px]">
             <div
               data-testid="shop-avatar"
               style={{
@@ -65,14 +73,16 @@ export function ShopHeader({ title, coverUrl, avatarUrl, verified, badges, actio
               </span>
             )}
           </div>
-          {action && <div style={{ flex: '0 0 auto', paddingBottom: 2 }}>{action}</div>}
+          {action && <div className="flex-none pb-0.5 lg:col-start-3 lg:row-start-1 lg:pb-0">{action}</div>}
         </div>
-        <Heading variant="title-lg" as="h1" style={{ marginTop: 8, minWidth: 0, ...CLAMP_2 }}>
-          {title}
-        </Heading>
-        {badges && <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>{badges}</div>}
+        <div className="mt-2 min-w-0 lg:col-start-2 lg:row-start-1 lg:mt-0">
+          <Heading variant="title-lg" as="h1" style={{ minWidth: 0, ...CLAMP_2 }}>
+            {title}
+          </Heading>
+        </div>
+        {badges && <div className="mt-2 flex flex-wrap gap-1.5 lg:col-start-2 lg:row-start-2 lg:mt-0">{badges}</div>}
         {note && (
-          <div id={noteId} style={{ marginTop: 8 }}>
+          <div id={noteId} className="mt-2 lg:col-span-2 lg:col-start-2 lg:row-start-3 lg:mt-0">
             <Text data-testid="shop-note" variant="body-sm" tone="secondary" as="p" style={long && !open ? CLAMP_2 : undefined}>
               {note}
             </Text>

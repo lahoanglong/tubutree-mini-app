@@ -3,12 +3,13 @@ import type { ShopStat } from '@tubutree/app-core/commerce/shop-stats';
 
 /**
  * Hàng số liệu dưới đầu shop (critique-store ST-02): 1 đến 4 ô chia đều, số đậm và nhãn nhỏ ngăn bằng vạch mảnh. Mỗi ô đọc cả câu
- * (`spoken`: "4,6 sao"), vì nhãn nhìn thấy ("Đánh giá") và số rời nhau không đủ nghĩa. Rỗng thì không vẽ.
+ * (`spoken`: "4,6 sao"), vì nhãn nhìn thấy ("Đánh giá") và số rời nhau không đủ nghĩa. Rỗng thì không vẽ. Lề và viền ở lớp Tailwind để từ lg
+ * (nằm trong thẻ đầu shop của `StoreLayout`) đổi được.
  */
 export function ShopStatsRow({ stats }: { stats: ShopStat[] }) {
   if (stats.length === 0) return null;
   return (
-    <div style={{ display: 'flex', margin: '12px 16px 0', borderTop: '1px solid var(--color-border-subtle)', borderBottom: '1px solid var(--color-border-subtle)' }}>
+    <div className="mx-4 mt-3 flex border-y border-[color:var(--color-border-subtle)] lg:mx-6 lg:mb-4 lg:mt-1">
       {stats.map((s, i) => (
         <div
           key={s.label}

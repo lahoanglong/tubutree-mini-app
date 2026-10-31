@@ -50,6 +50,25 @@ describe('ShopHeader (web)', () => {
     expect(h1.style.minWidth).toBe('0px');
   });
 
+  it('từ lg gốc là contents: bìa cột trái cao hai hàng, thông tin cột phải, avatar và nút nằm trên hàng tên, không đè mép bìa', () => {
+    mount(<ShopHeader title="Shop" badges={<span>Chính hãng</span>} action={<button type="button">Theo dõi</button>} note="Đồ xanh" />);
+    const cover = q('shop-cover')!;
+    const root = cover.parentElement!;
+    expect(root.className.split(/\s+/)).toContain('lg:contents');
+    const coverCls = cover.className.split(/\s+/);
+    expect(coverCls).toEqual(expect.arrayContaining(['lg:col-start-1', 'lg:row-span-2', 'lg:row-start-1', 'lg:h-auto']));
+    const info = cover.nextElementSibling as HTMLElement;
+    expect(info.className.split(/\s+/)).toEqual(expect.arrayContaining(['lg:col-start-2', 'lg:row-start-1', 'lg:grid']));
+    const avatarRow = q('shop-avatar')!.parentElement!.parentElement!;
+    expect(avatarRow.className.split(/\s+/)).toEqual(expect.arrayContaining(['-mt-7', 'lg:contents']));
+    expect(q('shop-avatar')!.parentElement!.className.split(/\s+/)).toContain('lg:col-start-1');
+    const nameCell = document.querySelector('h1')!.parentElement!;
+    expect(nameCell.className.split(/\s+/)).toEqual(expect.arrayContaining(['lg:col-start-2', 'lg:row-start-1', 'lg:mt-0']));
+    // Không còn style nội tuyến nào đè được lớp lg: ở phần tử xếp lưới.
+    for (const el of [cover, info, nameCell, avatarRow]) expect(el.style.display).toBe('');
+    expect(info.style.padding).toBe('');
+  });
+
   it('badges và action hiện trong đầu shop', () => {
     mount(<ShopHeader title="Shop" badges={<span>Chính hãng</span>} action={<button type="button">Theo dõi</button>} />);
     expect(document.body.textContent).toContain('Chính hãng');

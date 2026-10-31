@@ -929,6 +929,35 @@ test.describe('Web khách: trang thương hiệu và gian hàng theo khung shop'
     expect(await page.locator('main [style*="linear-gradient"]').count()).toBe(0);
   });
 
+  test('đầu shop: từ lg bìa và thông tin cùng một hàng (bìa trái, avatar + tên + số liệu phải); điện thoại avatar đè mép bìa', async ({ page, api, request }) => {
+    const res = await request.get(`${API_ORIGIN}/api/storefront/public-list`).catch(() => null);
+    const slug = res?.ok() ? ((await res.json()) as { slug: string }[])[0]?.slug : undefined;
+    test.skip(!slug, 'DB e2e chưa có gian hàng công khai nào');
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    api.get('/config/public', {});
+    await page.goto(`/s/${slug}`);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 20_000 });
+    const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
+    const cover = await box('[data-testid="shop-cover"]');
+    const avatar = await box('[data-testid="shop-avatar"]');
+    const name = (await page.getByRole('heading', { level: 1 }).boundingBox())!;
+    if (phone(page)) {
+      expect(avatar.y, 'avatar đè mép dưới bìa').toBeLessThan(cover.y + cover.height);
+      expect(avatar.y + avatar.height).toBeGreaterThan(cover.y + cover.height);
+      expect(name.y).toBeGreaterThan(cover.y + cover.height);
+      return;
+    }
+    if ((page.viewportSize()?.width ?? 0) < 1024) return;
+    expect(avatar.x, 'avatar nằm bên phải bìa').toBeGreaterThanOrEqual(cover.x + cover.width);
+    expect(name.x).toBeGreaterThan(avatar.x);
+    expect(Math.abs(name.y - avatar.y), 'tên cùng hàng với avatar').toBeLessThan(40);
+    expect(avatar.y, 'avatar không đè bìa').toBeGreaterThanOrEqual(cover.y);
+    expect(avatar.y + avatar.height).toBeLessThanOrEqual(cover.y + cover.height);
+    const stat = await box('[data-testid="shop-stat"]');
+    expect(stat.x, 'số liệu cùng cột với thông tin, không dưới bìa').toBeGreaterThanOrEqual(cover.x + cover.width);
+    expect(stat.y + stat.height).toBeLessThanOrEqual(cover.y + cover.height + 1);
+  });
+
   test('gian hàng công khai: h1 tên shop, tab Shop và Sản phẩm, không bậc thấp nhất, không bìa gradient', async ({ page, api, request }) => {
     const res = await request.get(`${API_ORIGIN}/api/storefront/public-list`).catch(() => null);
     const slug = res?.ok() ? ((await res.json()) as { slug: string }[])[0]?.slug : undefined;
