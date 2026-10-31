@@ -72,6 +72,9 @@
       { "miniapp": "/recycle/desk", "web": "/doi-rac/quay", "private": true },
       { "miniapp": "/refill", "web": "/doi-rac", "private": true }
     ]},
+    { "lane": "ds", "items": [
+      { "miniapp": "/ds-gallery", "web": "/ds-gallery", "private": false }
+    ]},
     { "lane": "skip", "items": [
       { "miniapp": "/points/scan", "skip": "Q2: quét mã đơn sàn cần SĐT đã xác minh và máy quét QR, chỉ có ở Mini App" }
     ]}
