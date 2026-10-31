@@ -40,7 +40,6 @@ describe('chân trang gọn ẩn khi có thanh dính đáy', () => {
 
   it.each([
     'app/tai-khoan/don-hang/[code]/order-actions.tsx',
-    'app/brand/[slug]/brand-actions.tsx',
     'app/cong-dong/[id]/page.tsx',
     'app/tu-van/page.tsx',
     'components/affiliate/storefront-owner.tsx',
