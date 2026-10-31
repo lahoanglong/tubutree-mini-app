@@ -12,6 +12,8 @@ import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-ev
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { ZnsClient } from '../../src/modules/integrations/zns/zns.client';
 import { QUEUE_NOTIFICATIONS } from '../../src/jobs/queues';
+import { startOfVnDay } from '../../src/common/vn-time';
+import { DAILY_WALLET_TRANSFER_JOB } from '../../src/modules/affiliate/affiliate-auto-transfer-config';
 import { createOrder, createUser, pinConfig, warmPool } from './helpers';
 
 /**
@@ -27,7 +29,7 @@ describe('AffiliateService thông báo CTV (real Postgres)', () => {
 
   const TEMPLATES = [
     { id: 'nt-ctv-commission-new', code: CTV_NOTIFICATION.NEW, bodyTemplate: 'Có đơn mới từ link của bạn! Hoa hồng dự kiến {{amount}}.' },
-    { id: 'nt-ctv-commission-approved', code: CTV_NOTIFICATION.APPROVED, bodyTemplate: '{{count}} khoản hoa hồng (tổng {{amount}}) đã được duyệt.' },
+    { id: 'nt-ctv-commission-approved', code: CTV_NOTIFICATION.APPROVED, bodyTemplate: 'Đã duyệt hoa hồng của {{count}} đơn (tổng {{amount}}).' },
     { id: 'nt-ctv-payout-paid', code: CTV_NOTIFICATION.PAYOUT_PAID, bodyTemplate: 'Lệnh rút {{amount}} đã được chuyển khoản{{ref}}.' },
   ];
 
@@ -99,17 +101,21 @@ describe('AffiliateService thông báo CTV (real Postgres)', () => {
       },
     });
 
-    await affiliate.approveDueCommissions();
+    // Lượt ngày chỉ chạy từ 8:00 giờ VN và một lần mỗi ngày: xoá mốc của spec khác, chạy ở 9:00 hôm nay nếu giờ thật còn sớm.
+    await prisma.cronRun.deleteMany({ where: { job: DAILY_WALLET_TRANSFER_JOB } });
+    const real = new Date();
+    const day0 = startOfVnDay(real).getTime();
+    await affiliate.approveDueCommissions(real.getTime() >= day0 + 8 * 3600_000 ? real : new Date(day0 + 9 * 3600_000));
 
     const la = await logsFor(a.id, CTV_NOTIFICATION.APPROVED);
     expect(la).toHaveLength(1);
-    expect(bodyOf(la[0]!)).toBe('2 khoản hoa hồng (tổng 15.000đ) đã được duyệt.');
+    expect(bodyOf(la[0]!)).toBe('Đã duyệt hoa hồng của 2 đơn (tổng 15.000đ).');
     const lb = await logsFor(b.id, CTV_NOTIFICATION.APPROVED);
     expect(lb).toHaveLength(1);
-    expect(bodyOf(lb[0]!)).toBe('1 khoản hoa hồng (tổng 7.000đ) đã được duyệt.');
+    expect(bodyOf(lb[0]!)).toBe('Đã duyệt hoa hồng của 1 đơn (tổng 7.000đ).');
 
-    // Chạy lại: không còn gì để duyệt thì không báo thêm lần nữa.
-    await affiliate.approveDueCommissions();
+    // Chạy lại cùng ngày: lượt ngày đã xong nên không báo thêm.
+    await affiliate.approveDueCommissions(new Date());
     expect(await logsFor(a.id, CTV_NOTIFICATION.APPROVED)).toHaveLength(1);
   });
 
