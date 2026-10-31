@@ -253,7 +253,7 @@ Ghi từ báo cáo worker và review Opus của từng gói (`reviews/<gói>-{b,
 | R-55 | doirac | chờ chủ | Bố cục đầu trang Cộng đồng chung cho Mini và web (chip "Sự kiện" đang chung nhóm lọc ở Mini; web còn hàng Xếp hạng/Sự kiện/Đăng bài). |
 | R-56 | doirac | một phần, chờ chủ | Web cho đọc bài và chat khi chưa đăng nhập cần endpoint đọc công khai. |
 | R-70, R-75, R-148, R-149 | quantri | chuyển gói sau | Cần API đếm theo trạng thái hoặc đổi QueryClient dùng chung. |
-| R-77 | hieunang, goi-dau | một phần | Bước 1 xong ở PR #88: entry Mini 711 → 695 KB raw (222 → 217 KB gzip), dưới ngưỡng cảnh báo 700 KB; thẻ sản phẩm đầu không chậm hơn main ở 8 ca đo. Theo quyết định của chủ 31/10, kệ Mua lại, Bán chạy, Giờ vàng và dải Quà khách mới ở lại gói đầu, nên đích 600 KB chưa đạt; bước tiếp cần chủ chọn lại (tách thêm phần không thuộc Trang chủ, hoặc chấp nhận 695 KB). Số đo ở `perf/1028c-goi-dau/`. |
+| R-77 | hieunang, goi-dau | xong (chủ chấp nhận 695 KB) | PR #88: entry Mini 711 → 695 KB raw (222 → 217 KB gzip), dưới ngưỡng cảnh báo 700 KB; thẻ sản phẩm đầu không chậm hơn main ở 8 ca đo. Theo quyết định của chủ 31/10, kệ Mua lại, Bán chạy, Giờ vàng và dải Quà khách mới ở lại gói đầu, nên không tới đích 600 KB. Chủ chốt 31/10: chấp nhận 695 KB, đóng R-77, không làm bước 2. Số đo ở `perf/1028c-goi-dau/`. |
 | R-82 | hieunang | một phần | `/cart` 18 → 13 câu SQL ở lần gọi thứ hai với giỏ lane 5 (cùng công cụ với số gốc); giỏ lane 3 và lane 9 còn 8. Đích ≤ 8 chưa chắc đạt với mọi giỏ. `/home/me` còn 17–19 SQL (đích ≤ 12). |
 | R-83 | hieunang | chưa làm | `loading.tsx` cho `san-pham` làm trang không tồn tại trả 200 thay 404 nên đã bỏ; cần khung chờ phía client hoặc cách giữ 404. |
 | R-97 | muahang | một phần | Popup chi tiết hạng và đơn sàn chưa làm. |
