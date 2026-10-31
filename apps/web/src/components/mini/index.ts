@@ -43,6 +43,8 @@ export { SortBar } from './sort-bar';
 export type { SortBarProps, SortOption } from './sort-bar';
 export { VoucherTicket } from './voucher-ticket';
 export type { VoucherTicketProps } from './voucher-ticket';
+export { ShopSection } from './shop-section';
+export type { ShopSectionProps, ShopSectionItem } from './shop-section';
 export { ComboCard } from './combo-card';
 export type { ComboCardProps, ComboCardItem } from './combo-card';
 export { BannerCarousel, type BannerSlide, type BannerCarouselProps } from './banner-carousel';
