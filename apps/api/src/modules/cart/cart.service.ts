@@ -14,7 +14,8 @@ import { loadPublicVisibility } from '../storefront/public-visibility';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { resolveAttribution } from '../checkout/attribution';
 import { COUNTED_ORDER_WHERE } from '../../common/first-order';
-import { AddItemDto } from './dto/cart.dto';
+import { AddItemDto, MAX_ITEM_QUANTITY } from './dto/cart.dto';
+import { batchStockMessage, cartBatchRejected } from './cart.batch-error';
 import { isSellableVariation, productDiscontinuedError } from './sellable';
 import { isPartnerOwnedVariation } from './partner-goods';
 import {
@@ -60,12 +61,19 @@ export class CartService {
   ) {}
 
   private async ensureCart(userId: string): Promise<string> {
-    const cart = await this.prisma.cart.upsert({
-      where: { userId },
-      update: {},
-      create: { userId },
-    });
-    return cart.id;
+    try {
+      const cart = await this.prisma.cart.upsert({
+        where: { userId },
+        update: {},
+        create: { userId },
+      });
+      return cart.id;
+    } catch (err) {
+      // Hai lượt đầu tiên của khách chưa có giỏ (nhấn đúp, hai tab) cùng tạo dòng carts: lượt thua vi phạm unique userId (P2002).
+      // Giỏ đã có do lượt kia tạo nên đọc lại thay vì trả 500.
+      if ((err as { code?: string }).code !== 'P2002') throw err;
+      return (await this.prisma.cart.findUniqueOrThrow({ where: { userId } })).id;
+    }
   }
 
   /**
@@ -195,6 +203,8 @@ export class CartService {
         slug: it.variation.product.slug,
         thumbnail: publicImage('product', it.variation.productId, 'thumb', it.variation.product.thumbnail),
         unitPrice,
+        // Giá niêm yết trước sale và Giờ vàng: FE gạch giá và tính "Tiết kiệm" khi lớn hơn unitPrice (bằng nhau thì không vẽ gì).
+        listUnitPrice: it.variation.retailPrice,
         quantity: it.quantity,
         stock: it.variation.stock,
         weight: it.variation.weight ?? null,
@@ -470,6 +480,71 @@ export class CartService {
       );
     });
     return outcomes;
+  }
+
+  /**
+   * Thêm nhiều món vào giỏ một lượt ("Thêm cả combo"): TẤT CẢ hoặc không món nào. Khác `addItems` (mua lại đơn, bỏ qua dòng hỏng),
+   * ở đây một dòng không bán được hoặc vượt tồn thì ném lỗi `CART_BATCH_REJECTED` kèm variationId và giỏ giữ nguyên.
+   *
+   * Khoá dòng `carts` của khách (cùng khoá với `lockForCheckout`) trước khi đọc tồn và số lượng đang có: hai batch song song của
+   * một khách xếp hàng sau nhau, batch đến sau kiểm tồn trên số lượng của batch trước. Không khoá thì cả hai cùng đọc "giỏ chưa có
+   * món này" rồi cộng dồn vượt tồn. Dòng trùng variationId được gộp để tồn tính trên tổng; upsert theo thứ tự variationId để hai
+   * batch khác thứ tự dòng khoá hàng cùng thứ tự (không khoá chéo).
+   */
+  async addItemsBatch(userId: string, lines: { variationId: string; quantity: number }[], addSource: string | undefined, storefrontSlug?: string) {
+    const merged = new Map<string, number>();
+    for (const l of lines) merged.set(l.variationId, (merged.get(l.variationId) ?? 0) + l.quantity);
+    // DTO chỉ chặn từng dòng ≤ 999; dòng trùng được gộp nên trần phải tính lại trên tổng, nếu không 20 dòng × 999 ghi một dòng giỏ 19.980.
+    for (const quantity of merged.values()) {
+      if (quantity > MAX_ITEM_QUANTITY) throw new BadRequestException(`Mỗi món chỉ thêm tối đa ${MAX_ITEM_QUANTITY} sản phẩm một lần.`);
+    }
+    if (merged.size > 0) {
+      const cartId = await this.ensureCart(userId);
+      const variationIds = [...merged.keys()];
+      await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "carts" WHERE "id" = ${cartId} FOR NO KEY UPDATE`;
+        const variations = await tx.variation.findMany({ where: { id: { in: variationIds } }, include: ADD_ITEM_INCLUDE });
+        const existing = await tx.cartItem.findMany({ where: { cartId, variationId: { in: variationIds } }, select: { variationId: true, quantity: true } });
+        const byId = new Map(variations.map((v) => [v.id, v]));
+        const qtyInCart = new Map(existing.map((e) => [e.variationId, e.quantity]));
+        for (const [variationId, quantity] of merged) {
+          const variation = byId.get(variationId);
+          const productName = variation?.product.name ?? null;
+          let sellable: AddableVariation;
+          try {
+            sellable = this.assertSellable(variation);
+          } catch (err) {
+            if (err instanceof NotFoundException || err instanceof BadRequestException) {
+              // Món còn tên mà bị NotFound là ngừng bán/chưa duyệt: nêu tên để khách biết món nào (FE web chỉ giữ `message`). Thiếu biến thể thì không có tên để nêu.
+              const message = err instanceof NotFoundException && productName !== null ? `${productName} đã ngừng bán.` : err.message;
+              throw cartBatchRejected({ reason: 'UNAVAILABLE', variationId, productName, message });
+            }
+            throw err;
+          }
+          if ((qtyInCart.get(variationId) ?? 0) + quantity > sellable.stock) {
+            throw cartBatchRejected({ reason: 'STOCK', variationId, productName, message: batchStockMessage(sellable.product.name, sellable.stock) });
+          }
+        }
+        const byVariation = [...merged].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+        for (const [variationId, quantity] of byVariation) {
+          await tx.cartItem.upsert({
+            where: { cartId_variationId: { cartId, variationId } },
+            update: { quantity: { increment: quantity } },
+            create: { cartId, variationId, quantity },
+          });
+        }
+        await this.analytics.recordMany(
+          tx,
+          [...merged].map(([variationId, quantity]) => ({
+            eventName: 'add_to_cart',
+            userId,
+            platform: 'miniapp' as const,
+            props: { variationId, quantity, addSource: addSource ?? 'pdp' },
+          })),
+        );
+      });
+    }
+    return this.getCart(userId, storefrontSlug);
   }
 
   async updateItem(userId: string, itemId: string, quantity: number, storefrontSlug?: string) {

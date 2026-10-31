@@ -54,7 +54,8 @@ export interface Storefront {
   headerNote: string | null;
   /** Mã giới thiệu của chủ gian hàng CTV (API trả ở trang công khai; null với gian hàng khác). */
   referralCode?: string | null;
-  ownerTier: { name: string; emoji: string } | null;
+  /** `publicBadge=false` ở bậc thấp nhất: trang shop công khai không khoe huy hiệu đó (API luôn gửi cờ này). */
+  ownerTier: { name: string; emoji: string; publicBadge: boolean } | null;
   avatarUrl: string | null;
   coverUrl: string | null;
   theme: string;
