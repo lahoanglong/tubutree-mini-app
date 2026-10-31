@@ -254,4 +254,28 @@ export function HubLayout({ banner, aside, children }: { banner?: ReactNode; asi
 
 ## Điều chỉnh lúc làm
 
-(Điền khi làm: chỗ lệch kế hoạch và vì sao.)
+Các chỗ làm khác kế hoạch, và vì sao:
+
+- Hàng danh mục và lưới lối tắt trên web dùng lề âm chỉ ở điện thoại (`max-md:-mx-4` cho hàng danh mục, `max-md:-mx-2` cho lưới lối tắt). Kế hoạch ghi không dùng lề âm, nhưng Mini lộ nửa cột thứ 6 và lưới lối tắt sát mép hơn lề trang 8px; muốn web 375px giống Mini phải bù lề. Lề âm bị giới hạn bằng `max-md:` nên máy tính không bị ảnh hưởng, spec kiểm tra không có `-mx-` không giới hạn.
+- Thứ tự DOM của `HubLayout` là `aside` → `banner` → phần còn lại (đúng thứ tự Mini), không phải banner → aside → children như kế hoạch. Nhờ vậy điện thoại không cần đổi thứ tự bằng CSS; từ lg banner được đặt vào cột đầu bằng `lg:col-start-1 lg:row-start-1`. Khung bọc là `display: contents` dưới lg.
+- Giờ vàng trên web không chờ danh sách `upcoming` mới vẽ (giữ nguyên HTML ISR); dòng "suất kế tiếp" đến sau và chỗ 44px được giữ trước nhờ gợi ý đã lưu, nên trang không nhảy.
+- `PurchasedRail` và `BestSellerRail` (web) có thêm prop tuỳ chọn; trang Đơn hàng chuyển sang `BestSellerRailQuery` (sửa một dòng ở `tai-khoan/don-hang/page.tsx`).
+- `HomeInitial` có thêm `suggestSeed`, để HTML đầu và lưới sau hydrate cùng một thứ tự gợi ý.
+- `UpcomingFlashSales` không còn vẽ ở Trang chủ nhưng vẫn được export.
+- Web dùng `ProductGrid` và `ProductRail` từ `components/mini` (không có tham số `listSource`).
+- Banner và combos là chỗ trống (`null`) chờ P11 và P15.
+- Gỡ phần chết ở app-core: `SuggestTab`, `SUGGEST_TABS`, `shortcuts.rail`, `suggest.tabsLabel`, `bestSellers`.
+- Thư mục `apps/web/src/components/layouts/` do gói này tạo; P7, P8, P9 thêm layout của mình vào đó.
+- `home-block-error.tsx` trên web còn dùng kiểu cũ, chưa chỉnh theo Mini.
+- Nhãn lối tắt: bản đầu để một dòng và cắt `…` ("Mã giảm…", "Mua chu…" ở cả Mini lẫn web ở 375px, không riêng web như ghi lúc trước). Đã sửa: nhãn tối đa hai dòng, cao cố định 32px, ô vẫn 84px (đệm trên 4, khoảng cách 4, dòng 16). e2e đo tràn ngang và số dòng ở 375 và 320 trên hai app.
+- Vòng sửa sau review:
+  - Bán chạy nhất trở lại gói đầu (bản đầu đưa vào chunk `home-below` để nhẹ ~1,5 KB, nhưng chunk hỏng hay chậm làm kệ biến mất hoặc bật ra dưới Danh mục, và đó là kệ sản phẩm duy nhất của khách mới khi không có Giờ vàng). Entry Mini sau vòng sửa (gate `bundle-mini`): 621 KB raw / 193 KB gz, dưới trần mềm 690; bản đầu có kệ này nằm ngoài entry nhưng không đo riêng số trước/sau; số 682 KB là của bàn giao đợt 2 (trước P6), đo ở máy khác lúc đó.
+  - Danh mục: tới 10 ô (kể cả "Tất cả") xếp theo hàng để "Tất cả" luôn cuối và thứ tự nhìn khớp thứ tự đọc; quá 10 ô mới xếp theo cột và cuộn ngang. Khung chờ dùng cùng luật. Khi chỉ có ≤ 5 ô, lưới thấp còn một hàng (trước đây hai hàng với 2 ô trở lên).
+  - Gợi ý hôm nay (hai app): cả trang 1 là món đã nằm ở kệ trên mà còn trang sau thì tải tiếp (trước đây khối ẩn, trang 2 không bao giờ tải); ẩn khối chỉ khi hết trang.
+  - Web, request gộp: `/products/for-you` kèm `seed` vẫn lấy từ khối `/home/me` (trước đây lọt ra request lẻ, e2e `home-merged.web` đỏ); suất sắp mở chỉ hỏi khi phiên đã biết (`useAuthPhase() !== 'loading'`, vì `useAuthRestoring` là `false` ở lượt hydrate đầu), và khách chưa đăng nhập đi request lẻ chứ không khởi động `/home/me` (401, khoá định danh rỗng, mọi khối cá nhân sau đó lọt ra request lẻ).
+  - Hàng cuộn Mua lại trên web tên "Sản phẩm đã mua" như Mini (nhánh tích hợp đã sửa cùng chỗ ở 9a2e71994; bản P6 viết lại `purchased-rail.tsx` nên hai bên sẽ xung đột một dòng khi gộp, giữ dòng của P6 và nhãn này).
+  - e2e web (`shop.web.spec.ts`, `home-merged.web.spec.ts`) theo thiết kế mới: vùng "Bán chạy nhất" có hạng #1..#3 (mock 3 món, kệ chỉ hiện từ 3 món), "Gợi ý hôm nay" với chip danh mục, không còn nhóm "Nguồn gợi ý"; Mua lại một món là dòng 88px (không còn nút "Định kỳ" ở Trang chủ); thẻ đầu kệ Mua lại 3 món cách đầu kệ 48px (tiêu đề 44 + đệm 4, bằng Mini). Chạy cục bộ 42/42 xanh (Next dev + API giả), Mini 66/66 xanh.
+  - Hai spec vitest bị sót ở vòng đầu và đỏ ở gate đầy đủ: `orders-subscription-tab.spec` (Mini, mock thiếu `BestSellerRailQuery` sau khi Đơn hàng đổi sang nó) và `khoi-phuc/[hint]/page.spec` (web, khẳng định cũ "khách cũ không có Bán chạy"). Đã sửa; gate chạy lại: vitest-miniapp 5691/5691 (cả TZ=UTC), vitest-web 8372/8372, vitest-app-core 1561/1561. jest-api 12013/12013 chạy ở lượt đầu trên cùng mã API (vòng sửa không đụng API nên lượt hai dùng `--no-jest`).
+  - Bỏ hai khẳng định rỗng mang tiền đề sai (`buy-flow-4a`, `home-h`: "khách cũ không có kệ Bán chạy").
+- Chấp nhận, chưa sửa: "Xem tất cả" của Bán chạy nhất tới `/browse?sort=best_seller` (xếp theo tổng lượt bán) trong khi kệ xếp theo `best_seller_30d`. Trang Danh mục chưa nhận `best_seller_30d` và thuộc P7; chờ P7/P13 (`route-fallback.ts` đổi một dòng khi có). Hai thứ hạng đầu có thể khác kệ vừa xem.
+- **Cần chủ quyết:** hàng danh mục và lưới lối tắt trên web vẫn dùng lề âm giới hạn `max-md:` (`-mx-4`, `-mx-2`), `STICKY_SEARCH` có `-mx-4`: lệch yêu cầu gói "bỏ lề âm tay". Cùng khuôn với `RailShell` dùng chung (`-mx-4 max-w-none md:-mx-3`). Bỏ hẳn lề âm nghĩa là bỏ đệm 16px của khung trang ở điện thoại cho các khối này; chưa làm vì đổi nhịp lề cả trang.
