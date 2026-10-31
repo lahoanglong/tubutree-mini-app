@@ -384,32 +384,33 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
     expect(await tins(u.id)).toHaveLength(1);
   });
 
-  it('lượt ngày lỗi giữa chừng (gửi tin hỏng) không ghi mốc xong: giờ sau chạy lại và gửi đủ một tin', async () => {
-    await setFlag(false);
+  it('gửi tin hỏng không chặn mốc xong: cờ bật, A chuyển ok, B (thiếu MST) gửi tin hỏng; giờ sau A có khoản mới thì KHÔNG chuyển và không có tin thứ hai', async () => {
+    await clearMarker();
+    const a = await ctv();
+    const b = await ctv();
+    await commissionFor(a.id, 30_000, 'LOCKED');
+    await commissionFor(b.id, 6_000_000, 'LOCKED');
+    const notifications = moduleRef.get(NotificationsService);
+    const real = notifications.notify.bind(notifications);
+    const spy = jest.spyOn(notifications, 'notify').mockImplementation(async (userId, ...rest) => {
+      if (userId === b.id) throw new Error('zns down');
+      return real(userId, ...rest);
+    });
     try {
-      await clearMarker();
-      const u = await ctv();
-      await commissionFor(u.id, 30_000, 'LOCKED');
-      const notifications = moduleRef.get(NotificationsService);
-      const real = notifications.notify.bind(notifications);
-      let failed = false;
-      const spy = jest.spyOn(notifications, 'notify').mockImplementation(async (userId, ...rest) => {
-        if (userId === u.id && !failed) {
-          failed = true;
-          throw new Error('zns down');
-        }
-        return real(userId, ...rest);
-      });
       await affiliate.approveDueCommissions(dayNow());
-      spy.mockRestore();
-      expect(await tins(u.id)).toHaveLength(0);
-      expect(await prisma.cronRun.findUnique({ where: { job: DAILY_WALLET_TRANSFER_JOB } })).toBeNull();
-      await affiliate.approveDueCommissions(dayNow());
-      expect(await tins(u.id, CTV_NOTIFICATION.APPROVED)).toHaveLength(1);
+      expect((await state(a.id)).balance).toBe(30_000);
       expect(await prisma.cronRun.findUnique({ where: { job: DAILY_WALLET_TRANSFER_JOB } })).not.toBeNull();
-      await prisma.commission.updateMany({ where: { affiliateUserId: u.id }, data: { status: 'PAID', paidAt: new Date() } });
+      const later = await commissionFor(a.id, 12_000, 'LOCKED');
+      await affiliate.approveDueCommissions(dayNow());
+      const sa = await state(a.id);
+      expect(sa.balance).toBe(30_000);
+      expect(sa.payouts).toHaveLength(1);
+      expect(sa.commissions.find((c) => c.id === later.id)!.status).toBe('APPROVED');
+      expect(await tins(a.id)).toHaveLength(1);
+      expect(await tins(b.id)).toHaveLength(0);
     } finally {
-      await setFlag(true);
+      spy.mockRestore();
+      await prisma.commission.updateMany({ where: { affiliateUserId: { in: [a.id, b.id] } }, data: { status: 'PAID', paidAt: new Date() } });
     }
   });
 

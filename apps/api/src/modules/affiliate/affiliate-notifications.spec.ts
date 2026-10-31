@@ -125,13 +125,13 @@ describe('AffiliateService.runDailyWalletTransferIfDue (C-029: tin tổng "đã 
     expect(notify).not.toHaveBeenCalled();
   });
 
-  it('báo một CTV lỗi thì vẫn báo CTV còn lại, KHÔNG ghi mốc xong để giờ sau chạy lại', async () => {
+  it('báo một CTV lỗi thì vẫn báo CTV còn lại và vẫn ghi mốc xong (chạy lại trong ngày sẽ chuyển và báo lần hai)', async () => {
     const p = prismaForDaily([{ affiliateUserId: 'a', amount: 10_000 }, { affiliateUserId: 'b', amount: 7_000 }]);
     const { svc, notify } = build(p.parts);
     notify.mockRejectedValueOnce(new Error('zns down'));
-    await expect(svc.runDailyWalletTransferIfDue(NINE_VN)).resolves.toBe(false);
+    await expect(svc.runDailyWalletTransferIfDue(NINE_VN)).resolves.toBe(true);
     expect(notify).toHaveBeenCalledTimes(2);
-    expect(p.upsert).not.toHaveBeenCalled();
+    expect(p.upsert).toHaveBeenCalledTimes(1);
   });
 
   it('thiếu NotificationsService → không truy vấn khoản duyệt, vẫn ghi mốc xong', async () => {

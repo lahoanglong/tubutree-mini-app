@@ -1440,7 +1440,8 @@ export class AffiliateService {
    */
   @Cron(APPROVE_COMMISSIONS_CRON, { timeZone: CRON_TZ })
   @TrackCron()
-  async approveDueCommissions(now: Date = new Date()): Promise<void> {
+  async approveDueCommissions(at?: Date): Promise<void> {
+    const now = at instanceof Date && !Number.isNaN(at.getTime()) ? at : new Date();
     if (this.approveRunning) {
       markCronSkipped('RUNNING');
       return;
@@ -1500,9 +1501,8 @@ export class AffiliateService {
 
   /**
    * Lượt ngày: tự chuyển vào Ví rồi gửi tin tổng. Chưa tới 8:00 giờ VN, hoặc hôm nay đã có lượt xong thì không làm gì.
-   * Mốc xong (cron_runs.lastSuccessAt = `until`, mốc chặn trên của cửa sổ tin đã duyệt, để không khoản nào bị báo hai lần hay sót) chỉ ghi
-   * khi cả chuyển lẫn báo đều không lỗi; lỗi giữa chừng thì giờ sau chạy lại, và chạy lại không chuyển đôi (khoá idempotency theo tập
-   * khoản, tin theo CTV + ngày VN).
+   * Mốc xong (cron_runs.lastSuccessAt = `until`, mốc chặn trên của cửa sổ tin đã duyệt) ghi ngay khi vòng chuyển không hỏng cả vòng;
+   * lỗi gửi tin chỉ log. Vòng chuyển hỏng thì giờ sau chạy lại, và chạy lại không chuyển đôi (khoá idempotency theo tập khoản).
    */
   async runDailyWalletTransferIfDue(now: Date = new Date(), until: Date = now): Promise<boolean> {
     const vnHour = new Date(now.getTime() + VN_OFFSET_MS).getUTCHours();
@@ -1512,8 +1512,14 @@ export class AffiliateService {
     if (last && vnDateKey(last) === vnDateKey(now)) return false;
     const since = last ?? new Date(now.getTime() - 24 * 3600 * 1000);
     const transfer = await this.transferApproved();
-    const notified = await this.notifyCommissionsApproved(since, until);
-    if (!transfer.ok || !notified) return false;
+    if (!transfer.ok) return false;
+    // Mốc ghi ngay khi chuyển xong: chạy lại trong ngày sẽ chuyển lần hai cho CTV có khoản mới và báo lần hai. Tin hỏng chỉ log.
+    await this.markDailyTransferDone(now, until);
+    await this.notifyCommissionsApproved(since, until);
+    return true;
+  }
+
+  private async markDailyTransferDone(now: Date, until: Date): Promise<void> {
     const finished = new Date();
     const timing = { lastStartedAt: now, lastFinishedAt: finished, lastDurationMs: Math.max(0, finished.getTime() - now.getTime()) };
     await this.prisma.cronRun.upsert({
@@ -1521,7 +1527,6 @@ export class AffiliateService {
       create: { job: DAILY_WALLET_TRANSFER_JOB, ...timing, lastOutcome: 'OK', lastSuccessAt: until, consecutiveFailures: 0 },
       update: { ...timing, lastOutcome: 'OK', lastErrorCount: 0, lastSuccessAt: until, consecutiveFailures: 0 },
     });
-    return true;
   }
 
   /**

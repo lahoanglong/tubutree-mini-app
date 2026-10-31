@@ -175,6 +175,13 @@ describe('AffiliateService.approveDueCommissions (duyệt mỗi giờ, chuyển 
     expect(t.prisma.cronRun.upsert).toHaveBeenCalledTimes(1);
   });
 
+  it('đối số không phải Date hợp lệ (vd. scheduler truyền thứ khác) thì dùng giờ hiện tại', async () => {
+    const t = cron();
+    await expect(t.svc.approveDueCommissions('x' as unknown as Date)).resolves.toBeUndefined();
+    await expect(t.svc.approveDueCommissions(new Date('nope'))).resolves.toBeUndefined();
+    expect(t.updateMany).toHaveBeenCalledTimes(2);
+  });
+
   it('thua khoá advisory: không duyệt, không chuyển', async () => {
     const t = cron({ locked: false, count: 1 });
     await t.svc.approveDueCommissions(NINE_VN);
