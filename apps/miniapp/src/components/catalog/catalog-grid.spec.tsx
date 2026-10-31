@@ -4,9 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ProductCard } from '../../services/shop-api';
 
-const mocks = vi.hoisted(() => ({ navigate: vi.fn(), fetchActiveFlashSales: vi.fn() }));
+const mocks = vi.hoisted(() => ({ navigate: vi.fn(), fetchActiveFlashSales: vi.fn(), getPublicConfig: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => mocks.navigate }));
-vi.mock('../../services/shop-api', () => ({ fetchActiveFlashSales: mocks.fetchActiveFlashSales }));
+vi.mock('../../services/shop-api', () => ({ fetchActiveFlashSales: mocks.fetchActiveFlashSales, getPublicConfig: mocks.getPublicConfig }));
 vi.mock('../wishlist-heart', () => ({ WishlistHeart: () => null }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -28,6 +28,7 @@ describe('CatalogGrid', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    mocks.getPublicConfig.mockResolvedValue({ catalogLaunchDate: null });
   });
 
   it('2 thẻ; thẻ sale có badge -20%; thẻ hết hàng KHÔNG có badge % (lớp phủ trong suốt)', async () => {
@@ -81,7 +82,7 @@ describe('CatalogGrid', () => {
     renderGrid(undefined, [SALE]);
     const badge = await screen.findByText(/Giờ vàng -38%/);
     expect(badge.textContent).toBe('Giờ vàng -38%');
-    expect(badge.querySelector('svg')).not.toBeNull();
+    expect(badge.closest('[data-ds-part="image-badge"]')!.querySelector('svg')).not.toBeNull();
     expect(screen.getByText('75.000đ')).toBeInTheDocument();
     expect(screen.getByText('120.000đ')).toHaveStyle({ textDecoration: 'line-through' });
     expect(screen.queryByText('150.000đ')).toBeNull();
@@ -102,11 +103,22 @@ describe('CatalogGrid', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc', { state: { listSource: 'search' } });
   });
 
-  it('skeleton: đúng số thẻ, ẩn với trình đọc màn hình, thân thẻ 133px như thẻ thật', () => {
+  it('skeleton: đúng số thẻ, ẩn với trình đọc màn hình, thân thẻ 118px bằng thân thẻ thật', () => {
     render(<CatalogGridSkeleton count={4} />);
     const sk = screen.getByTestId('catalog-grid-skeleton');
     expect(sk).toHaveAttribute('aria-hidden', 'true');
     expect(screen.getAllByTestId('catalog-tile-skeleton')).toHaveLength(4);
-    expect(screen.getAllByTestId('catalog-tile-skeleton-body')[0]!.style.height).toBe('133px');
+    expect(screen.getAllByTestId('catalog-tile-skeleton-body')[0]!.style.height).toBe('118px');
+  });
+
+  it('thẻ không sao không đã bán cùng chiều cao thân thẻ với thẻ có đủ, dòng meta vẫn giữ chỗ 16px', () => {
+    const rich: ProductCard = { ...SALE, id: 'p4', slug: 'day-du', name: 'Đủ số', ratingAvg: 4.8, reviewCount: 30, sold: 1200 };
+    renderGrid(undefined, [SALE, rich]);
+    const bodies = Array.from(screen.getByTestId('catalog-grid').querySelectorAll<HTMLElement>('[data-ds-part="body"]'));
+    expect(bodies.map((b) => b.style.minHeight)).toEqual(['118px', '118px']);
+    const metas = Array.from(screen.getByTestId('catalog-grid').querySelectorAll<HTMLElement>('[data-ds-part="meta"]'));
+    expect(metas.map((m) => m.style.height)).toEqual(['16px', '16px']);
+    expect(metas[0]!.textContent).toBe('');
+    expect(metas[1]!.textContent).toMatch(/4,8/);
   });
 });

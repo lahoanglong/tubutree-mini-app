@@ -2,7 +2,7 @@ import { Sprout } from 'lucide-react';
 import type { StorefrontEdit } from '../services/storefront-api';
 import { apiMediaUrl } from '../services/api';
 import { Heading, Text } from './ui/text';
-import { ProductTile } from './ui/product-tile';
+import { ProductCard } from './ui/product-card';
 
 const MAX_TILES = 4;
 
@@ -33,7 +33,7 @@ export function StorefrontPreview({ sf }: { sf: StorefrontEdit }) {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
             {shown.map((it) => (
-              <ProductTile key={it.id} product={it.product} variant="grid" priceOverride={null} showWishlist={false} action="none" onPress={() => undefined} />
+              <ProductCard key={it.id} product={{ ...it.product, isFeatured: false }} variant="grid" showWishlist={false} />
             ))}
           </div>
         )}

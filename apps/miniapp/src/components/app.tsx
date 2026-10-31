@@ -113,6 +113,8 @@ const CommunityModerationPage = lazy(() => import('../pages/community-moderation
 const StaffPage = lazy(() => import('../pages/staff'));
 const MyPayrollPage = lazy(() => import('../pages/my-payroll'));
 const NotFoundPage = lazy(() => import('../pages/not-found'));
+// Chỉ bản dev: `import.meta.env.DEV` là hằng lúc build nên nhánh import bị bỏ, bản build không có chunk ds-gallery (ds-gallery-guard.spec).
+const DsGalleryPage: ComponentType = import.meta.env.DEV ? lazy(() => import('../pages/ds-gallery')) : () => null;
 
 /** Trang chủ rảnh thì tải sẵn mã các màn trên luồng mua hàng, để bấm thẻ SP không phải chờ tải mã. Lỗi mạng bỏ qua: lúc bấm sẽ tải lại. */
 function prefetchShoppingRoutes(): void {
@@ -270,6 +272,7 @@ export default function MyApp() {
                     <Route path="/admin/community" element={<RouteShell><CommunityModerationPage /></RouteShell>} />
                     <Route path="/staff" element={<RouteShell><StaffPage /></RouteShell>} />
                     <Route path="/my-payroll" element={<RouteShell><MyPayrollPage /></RouteShell>} />
+                    {import.meta.env.DEV && <Route path="/ds-gallery" element={<RouteShell><DsGalleryPage /></RouteShell>} />}
                     <Route path="*" element={<RouteShell><NotFoundPage /></RouteShell>} />
                   </AnimationRoutes>
                 </Suspense>

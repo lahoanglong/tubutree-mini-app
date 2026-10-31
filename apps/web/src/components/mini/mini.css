@@ -69,6 +69,17 @@
   transition-duration: var(--p-dur-press);
 }
 
+/* Tim yêu thích nảy khi chuyển sang "đã thích" (PL-14), như Mini App. */
+@keyframes tubu-heart-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.25); }
+  70% { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+.tubu-heart-pop {
+  animation: tubu-heart-pop 320ms var(--p-ease-spring);
+}
+
 /* Tab đang chọn của thanh dưới: icon nảy .88 → 1, như Mini App. */
 @keyframes tubu-tab-pop {
   0% {
@@ -143,6 +154,24 @@
 .tubu-tile-link:focus-visible::after {
   outline: 2px solid var(--color-border-focus);
   outline-offset: -2px;
+}
+
+/* Nhãn Giờ vàng trên ảnh: thẻ rộng giữ "Giờ vàng -x%", thẻ hẹp (kệ 148px, lưới ở máy 320-360px) đổi sang "-x%" để không chui dưới
+   nút tim 32px + lề 8px ở góc phải. Ngưỡng 164px: lưới 375px (167px) còn đủ chỗ, 360px (160px) thì không. Trình duyệt chưa có
+   container query giữ bản đầy đủ như trước. */
+.tubu-tile-media {
+  container-type: inline-size;
+}
+.tubu-badge-short {
+  display: none;
+}
+@container (max-width: 163.98px) {
+  .tubu-badge-long {
+    display: none;
+  }
+  .tubu-badge-short {
+    display: inline;
+  }
 }
 
 /* Chỉ trong SearchField: ô tìm của thanh đầu và trang quản trị vẫn giữ nút xoá native. */
@@ -309,6 +338,7 @@
   .tubu-rise,
   .tubu-pulse,
   .tubu-tab-pop,
+  .tubu-heart-pop,
   .mini-sheet-panel {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;

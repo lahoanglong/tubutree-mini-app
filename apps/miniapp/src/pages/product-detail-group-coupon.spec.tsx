@@ -139,7 +139,8 @@ describe('ProductDetailPage — áp mã mua chung sau khi thêm giỏ (E-9)', ()
     fireEvent.click(await addBtn());
     await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
-    fireEvent.click(await addBtn());
+    // Nút còn nhãn "Đã thêm" trong 1,2 giây sau lần bấm đầu; vẫn bấm thêm được.
+    fireEvent.click(await screen.findByRole('button', { name: /^(Thêm vào giỏ|Đã thêm)$/ }));
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
     expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
   });
@@ -156,7 +157,8 @@ describe('ProductDetailPage — áp mã mua chung sau khi thêm giỏ (E-9)', ()
     renderPdp({ variationId: 'v1' });
     fireEvent.click(await addBtn());
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalled());
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã thêm vào giỏ 🌿' })));
+    await screen.findByRole('button', { name: 'Đã thêm' });
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
     expect(mocks.applyCoupon).not.toHaveBeenCalled();
   });
 

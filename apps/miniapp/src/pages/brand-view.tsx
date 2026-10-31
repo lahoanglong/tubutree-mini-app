@@ -20,7 +20,7 @@ import { StorePageShell } from '../components/store-page-shell';
 import { Text, Heading } from '../components/ui/text';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
-import ProductCard from '../components/product-card';
+import { ProductGrid } from '../components/ui/product-grid';
 import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
 import { ScrollRow } from '../components/ui/scroll-row';
@@ -125,10 +125,7 @@ export default function BrandViewPage() {
           b.isVerified ? (
             // Pill đặc (không phải soft-tone chuẩn của Badge) để giữ đúng trọng lượng thị giác
             // "đã xác minh" như bản cũ (leaf-600 đặc/chữ trắng), chỉ đổi sang token ngữ nghĩa DS v2.
-            <Badge
-              tone="success"
-              style={{ background: 'var(--color-action-primary-bg)', color: 'var(--color-text-inverse)', display: 'inline-flex', alignItems: 'center', gap: 2 }}
-            >
+            <Badge tone="verified" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
               <Icon icon={Check} size="sm" tone="inverse" />
               Chính hãng
             </Badge>
@@ -255,16 +252,8 @@ export default function BrandViewPage() {
         {b.products.length > 0 && (
           <div style={{ marginTop: 16, padding: '0 16px' }}>
             <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Sản phẩm</Heading>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {b.products.map((p) => (
-                <ProductCard
-                  key={p.id}
-                  // Payload sản phẩm của trang nhãn không kèm `brand` (mọi SP đều thuộc nhãn này) —
-                  // ProductTile cần để hiện tên nhãn, dùng luôn tên nhãn của trang.
-                  product={{ ...p, brand: b.name }}
-                />
-              ))}
-            </div>
+            {/* Payload sản phẩm của trang nhãn không kèm `brand` (mọi SP đều thuộc nhãn này): đặt tên nhãn của trang cho đủ kiểu, thẻ không in lại. */}
+            <ProductGrid items={b.products.map((p) => ({ ...p, brand: b.name, isFeatured: false }))} variant="grid" showBrand={false} />
           </div>
         )}
 

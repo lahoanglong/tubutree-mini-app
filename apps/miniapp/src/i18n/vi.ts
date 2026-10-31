@@ -136,6 +136,7 @@ export const vi = {
     freeshipFrom: (min: string) => `Miễn phí giao hàng cho đơn từ ${min}`,
     freeshipAll: 'Miễn phí giao hàng cho mọi đơn hàng',
     added: 'Đã thêm vào giỏ 🌿',
+    addedShort: 'Đã thêm',
     variations: 'Phân loại',
     description: 'Mô tả sản phẩm',
     descriptionMore: 'Xem thêm',

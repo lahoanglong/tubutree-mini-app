@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { tileBodyHeight } from '@tubutree/app-core/commerce/tile-metrics';
 import BrandPage, { generateMetadata, revalidate } from './page';
 
 const mocks = vi.hoisted(() => ({ brand: null as unknown }));
@@ -107,14 +108,20 @@ describe('trang nhãn hàng /brand/[slug] — DS v2', () => {
 
   it('thẻ sản phẩm là thẻ chung của web (ProductCard): đúng liên kết, giá khuyến mãi, tên nhãn là nhãn của trang, có tim yêu thích', async () => {
     const box = await html();
-    const link = box.querySelector<HTMLAnchorElement>('a[href="/san-pham/nuoc-rua-chen"]')!;
-    expect(link.textContent).toContain('80.000');
-    expect(link.textContent).toContain('Bồ Hòn Xanh');
-    expect(link.textContent).toContain('Đã bán 12');
-    const card = link.parentElement!;
-    expect(card.className).toContain('rounded-card');
+    const card = box.querySelector<HTMLAnchorElement>('a[href="/san-pham/nuoc-rua-chen"]')!.closest('[data-ds="product-tile"]') as HTMLElement;
+    expect(card.textContent).toContain('80.000');
+    expect(card.textContent).toContain('Đã bán 12');
+    expect(card.className).toContain('tubu-press-card');
     expect(card.className).toContain('var(--elevation-1)');
-    expect(card.querySelector('button[aria-label="Thêm yêu thích"]')).not.toBeNull();
+    expect(card.style.borderRadius).toBe('var(--radius-card)');
+    expect(card.querySelector('button[aria-label^="Yêu thích"]')).not.toBeNull();
+  });
+
+  it('thẻ trong trang nhãn không in lại tên nhãn (như Mini App): không có dòng nhãn hiệu, thân thẻ thấp hơn thân thẻ lưới có nhãn hiệu 16px', async () => {
+    const card = (await html()).querySelector<HTMLAnchorElement>('a[href="/san-pham/nuoc-rua-chen"]')!.closest('[data-ds="product-tile"]') as HTMLElement;
+    expect(card.querySelector('[data-ds-part="brand"]')).toBeNull();
+    expect(card.textContent).not.toContain('Bồ Hòn Xanh');
+    expect((card.querySelector('[data-ds-part="body"]') as HTMLElement).style.minHeight).toBe(`${tileBodyHeight('grid', { brand: false })}px`);
   });
 
   // D7-28: cùng bề rộng với các trang khác (max-w-5xl), không còn khung hẹp max-w-3xl.
@@ -189,7 +196,7 @@ describe('trang nhãn hàng — theo dõi và chia sẻ', () => {
 describe('trang nhãn hàng — ảnh sản phẩm (D6-05)', () => {
   it('ảnh thẻ sản phẩm có width/height và tải lười không chặn render', async () => {
     mocks.brand = { ...BRAND, products: [{ ...BRAND.products[0], thumbnail: 'https://cdn.example/p.jpg' }] };
-    const img = (await html()).querySelector('a[href="/san-pham/nuoc-rua-chen"] img')!;
+    const img = (await html()).querySelector('a[href="/san-pham/nuoc-rua-chen"]')!.closest('[data-ds="product-tile"]')!.querySelector('img')!;
     expect(img.getAttribute('width')).toBe('400');
     expect(img.getAttribute('height')).toBe('400');
     expect(img.getAttribute('loading')).toBe('lazy');

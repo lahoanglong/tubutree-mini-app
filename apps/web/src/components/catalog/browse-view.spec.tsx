@@ -438,7 +438,7 @@ describe('BrowseView — đã xem gần đây', () => {
     const { container } = mount();
     await flush();
     const rail = container.querySelector('section[aria-label="Đã xem gần đây"]')!;
-    expect(rail.querySelectorAll('li')).toHaveLength(1);
+    expect(rail.querySelectorAll('[data-ds="product-tile"]')).toHaveLength(1);
     expect(rail.textContent).toContain('150.000đ');
     expect(rail.querySelector('a')!.getAttribute('href')).toBe('/san-pham/sp-9');
   });

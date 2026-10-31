@@ -4,11 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 import { ShoppingCart } from 'lucide-react';
 import type { ProductCard as CoreProductCard } from '@tubutree/app-core/api/catalog';
 import { boughtTogetherQuery, relatedQuery } from '@tubutree/app-core/queries/catalog';
-import ProductCard from '@/components/product-card';
+import { ProductRail } from '@/components/mini/product-rail';
 import { Skeleton } from '@/components/ui/skeleton';
 import { coreHttp } from '@/lib/core-http';
 import { pdpSectionTitle } from './pdp-sections';
-import { ScrollRail } from '@/components/scroll-rail';
 
 const FIVE_MIN = 5 * 60_000;
 
@@ -17,10 +16,8 @@ function Rail({ title, icon, products, loading }: { title: string; icon?: boolea
     return (
       <section aria-busy="true" className="mt-8">
         <Skeleton width={160} height={20} />
-        <div className="mt-3 flex gap-3 overflow-hidden">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} width={160} height={220} rounded="rounded-card" />
-          ))}
+        <div className="mt-3">
+          <ProductRail items={[]} variant="rail-md" label={title} loading skeletonCount={4} />
         </div>
       </section>
     );
@@ -33,13 +30,9 @@ function Rail({ title, icon, products, loading }: { title: string; icon?: boolea
         {icon && <ShoppingCart className="h-5 w-5" aria-hidden="true" />}
         {title}
       </h2>
-      <ScrollRail className="mt-3 flex gap-3 overflow-x-auto pb-2 max-md:-mx-4 max-md:px-4">
-        {products.map((p) => (
-          <li key={p.id} className="w-40 shrink-0 md:w-48">
-            <ProductCard product={p} />
-          </li>
-        ))}
-      </ScrollRail>
+      <div className="mt-3">
+        <ProductRail items={products} variant="rail-md" label={title} />
+      </div>
     </section>
   );
 }

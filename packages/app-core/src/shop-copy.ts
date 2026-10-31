@@ -1,5 +1,6 @@
 import { META_COPY } from './commerce/meta-copy';
 import { fillTemplate } from './copy-template';
+import { TILE_COPY } from './commerce/tile-copy';
 
 /**
  * Một nguồn chữ cho gian hàng (Mini App và web). Chữ của màn mua sắm chỉ thêm ở đây; số ký tự tối đa của từng khoá ở
@@ -8,9 +9,11 @@ import { fillTemplate } from './copy-template';
  * Đã bán hết) vì kế hoạch chốt sau báo cáo.
  *
  * Bảng là object literal thuần để bundler bỏ được khi không ai dùng (Mini App giữ gói đầu dưới 700 KB). Chữ nằm trên đường nạp của gói
- * đầu (dòng "Đã bán", sao) đặt ở `commerce/meta-copy.ts` để `card-meta` không kéo cả bảng này theo.
+ * đầu (dòng "Đã bán", sao, nhãn và chữ đọc của thẻ) đặt ở `commerce/meta-copy.ts` và `commerce/tile-copy.ts` để `card-meta` và
+ * `productCardView` không kéo cả bảng này theo; `SHOP_COPY` lấy lại nên chỉ có một nơi định nghĩa.
  */
 export const SHOP_COPY: Record<string, string> = {
+  ...TILE_COPY,
   // Giờ vàng
   'flash.title': 'Giờ vàng',
   'flash.seeAll': 'Xem tất cả',
@@ -22,7 +25,6 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.startsIn': 'Bắt đầu sau {t}',
   'flash.startsAt': 'Mở lúc {time}',
   'flash.startsAtDay': 'Mở lúc {time} ngày {day}',
-  'flash.badge': 'Giờ vàng -{pct}%',
   'flash.justOpened': 'Vừa mở bán',
   'flash.soldPct': 'Đã bán {n}%',
   'flash.almostGone': 'Sắp hết',
@@ -49,24 +51,12 @@ export const SHOP_COPY: Record<string, string> = {
   'rank.basis': 'Theo lượt bán 30 ngày qua',
   'rank.basisAll': 'Theo tổng lượt bán',
   'rank.tabAll': 'Tất cả',
-  'rank.spoken': 'Hạng {n} bán chạy',
   'rank.seeAll': 'Xem tất cả',
   'rank.emptyTitle': 'Chưa đủ lượt bán để xếp hạng',
   'rank.emptyCta': 'Xem sản phẩm trong danh mục',
 
   // Nhãn, tồn kho, giá đọc, dòng meta, số liệu shop
-  'badge.discount': '-{pct}%',
-  'badge.new': 'Mới',
-  'badge.featured': 'Tubu chọn',
-  'badge.loved': 'Được yêu thích',
-  'badge.freeship': 'Miễn phí giao hàng',
-  'badge.flashSpoken': 'Giờ vàng giảm {pct}%',
-  'badge.discountSpoken': 'Giảm {pct}%',
-  'stock.out': 'Tạm hết hàng',
   'stock.discontinued': 'Ngừng bán',
-  'price.spoken': 'Giá {price}',
-  'price.flashSpoken': 'Giá Giờ vàng {price}',
-  'price.compareSpoken': ', giá gốc {price}',
   'meta.rating': META_COPY.rating,
   'meta.sold': META_COPY.sold,
   'stats.products': 'Sản phẩm',
@@ -154,7 +144,6 @@ export const SHOP_COPY: Record<string, string> = {
   'combo.rule': 'Mua {n} giảm {pct}%',
   'combo.total': 'Tổng {price} · Tiết kiệm {save}',
   'combo.add': 'Thêm cả combo',
-  'combo.tileTag': 'Có combo',
   'combo.cartHint': 'Thêm {n} sản phẩm nữa để giảm combo {pct}%',
   'combo.cartReached': 'Đã đủ combo, giảm {x}',
   'combo.cartLost': 'Combo chưa đủ món nên chưa giảm',
@@ -168,6 +157,21 @@ export const SHOP_COPY: Record<string, string> = {
   'addon.lost': 'Đã bỏ giá mua kèm vì {name} không còn trong giỏ',
   'pdp.boughtTogether': 'Khách thường mua cùng',
 
+  // Bộ thành phần section-kit (SectionHeader, SortBar, ComboCard)
+  'section.seeAll': 'Xem tất cả',
+  'section.seeAllSpoken': 'Xem tất cả {title}',
+  'sort.groupLabel': 'Sắp xếp',
+  'sort.filter': 'Lọc',
+  'sort.filterCount': 'Lọc ({n})',
+  'sort.filterSpoken': 'Lọc, {n} bộ lọc đang bật',
+  'combo.badge': 'Combo -{pct}%',
+  'combo.setLabel': 'Mua cả bộ',
+  'combo.save': 'Tiết kiệm {save}',
+  'combo.addSpoken': 'Thêm cả combo {title}, {n} món, {price}',
+  'combo.seeItems': 'Xem từng món',
+  'combo.soldOut': 'Combo tạm hết',
+  'combo.itemsLabel': 'Gồm {n} món',
+  'combo.more': '+{n}',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */

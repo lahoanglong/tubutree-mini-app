@@ -268,6 +268,7 @@
   --tile-inset: var(--p-space-3);
   --rail-pad-block: var(--p-space-2) var(--p-space-4); /* chừa chỗ cho bóng và vòng focus của thẻ trong kệ */
   --section-header-h: 44px;
+  --sort-bar-top: 0px; /* SortBar sticky dính dưới header của trang; trang có header cố định đặt lại giá trị */
   --banner-ratio: 5 / 2;
   --badge-h-sm: 20px;
   --badge-h-md: 24px;

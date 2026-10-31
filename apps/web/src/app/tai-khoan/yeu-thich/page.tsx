@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { wishlistQuery } from '@tubutree/app-core/queries/wishlist';
-import ProductCard from '@/components/product-card';
+import { ProductGrid } from '@/components/mini';
 import { EmptyState } from '@/components/empty-state';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
@@ -11,7 +11,6 @@ import { ProductGridSkeleton } from '@/components/ui/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { GRID_PRODUCTS } from '@/lib/product-grid';
 import { loadErrorText } from '@/lib/error-text';
 import { useWishlistQuickAdd } from './quick-add';
 
@@ -65,11 +64,7 @@ export default function WishlistPage() {
           <h2 id="wishlist-list" className="sr-only">
             Danh sách sản phẩm yêu thích
           </h2>
-          <div className={GRID_PRODUCTS}>
-            {wishQ.data.map((p) => (
-              <ProductCard key={p.id} product={p} quickAdd={buttonFor(p)} />
-            ))}
-          </div>
+          <ProductGrid items={wishQ.data} variant="grid" renderImageOverlay={(p) => buttonFor(p)} />
           {feedback}
         </section>
       ) : (
