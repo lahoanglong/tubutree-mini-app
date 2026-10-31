@@ -109,6 +109,27 @@ body.with-back-btn .page.page-bleed {
   font-family: var(--font-body);
 }
 
+/* ── Vòng focus (WCAG 2.4.7, 1.4.11): ZaUI đặt `.zaui-btn:focus{outline:0}` và chỉ đổi nền khi :focus-visible (độ khác nền 1,1–1,3:1),
+   nên nút DS không có vòng nhìn thấy. Quy tắc chung phủ cả tim, chip và nút tự vẽ; thẻ sản phẩm có luật riêng ở `.tubu-tile-link` bên dưới. ── */
+:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+.zaui-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* ── Thanh dính (ô tìm, thanh đáy, StickyActionBar) che phần tử đang có focus khi Tab (WCAG 2.4.11): chừa chỗ cho trình duyệt
+   khi cuộn phần tử vào khung. `.zaui-page` là khung cuộn của Page. ── */
+.zaui-page {
+  scroll-padding-top: calc(var(--safe-top) + 64px);
+  scroll-padding-bottom: calc(72px + var(--safe-bottom));
+}
+.tubu-scroll-pad-sticky-bar {
+  scroll-padding-bottom: calc(96px + var(--safe-bottom));
+}
+
 /* ── Pressable: phản hồi chạm cho mọi element bấm được ── */
 .tubu-press {
   transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);

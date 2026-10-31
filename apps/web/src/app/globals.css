@@ -47,6 +47,19 @@ html[data-tenant-host] [data-site-search] {
   display: none;
 }
 
+/* Thanh dính che phần tử đang có focus khi Tab (WCAG 2.4.11): chừa chỗ khi trình duyệt cuộn phần tử vào khung.
+   Điện thoại có thêm thanh đáy (cao 60px + vùng an toàn). */
+html {
+  scroll-padding-top: calc(var(--header-h) + 16px);
+  scroll-padding-bottom: 16px;
+}
+@media (max-width: 767.98px) {
+  html {
+    scroll-padding-top: calc(var(--header-h) + 64px);
+    scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* Chiều cao thanh đầu máy tính (hai hàng h-16 + h-11 tính theo rem, nên chữ lớn không làm cột dính sát header, cộng hai đường viền 2px): cột dính của trang đặt dưới nó. Điện thoại không có thanh này. */
 :root {
   --header-h: 0px;
