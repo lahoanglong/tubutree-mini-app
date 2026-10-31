@@ -77,10 +77,11 @@ export function ProductCard({
     launchDate: launchDate ?? null,
   });
 
+  // Món ghim phân loại luôn mở đúng phân loại ghim (còn mở được khi Giờ vàng vừa hết); không ghim thì mở phân loại đang giảm Giờ vàng.
   const variationId = view.isFlash ? flash?.variationId : undefined;
   const navState = {
     ...(listSource ? { listSource } : null),
-    ...(variationId ? { variationId } : product.pinnedVariationId ? { pinnedVariationId: product.pinnedVariationId } : null),
+    ...(product.pinnedVariationId ? { pinnedVariationId: product.pinnedVariationId } : variationId ? { variationId } : null),
   };
 
   return (

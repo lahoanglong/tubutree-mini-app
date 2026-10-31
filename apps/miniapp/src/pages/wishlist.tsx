@@ -12,9 +12,8 @@ import { haptic } from '../utils/haptic';
 import { VariationSheet } from '../components/variation-sheet';
 import { AuthGate } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
-import ProductCard from '../components/product-card';
+import { ProductGrid } from '../components/ui/product-grid';
 import { PageHeader } from '../components/ui/page-header';
-import { ProductGridSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 
 /** Nút giỏ nhanh nổi ở góc dưới ảnh thẻ (ProductTile đặt vị trí): vùng chạm 44px bọc vòng trắng 32px, cùng kiểu với nút tim ở góc trên. */
@@ -93,25 +92,21 @@ export default function WishlistPage() {
       <AuthGate
         loading={
           <div style={{ padding: 16 }}>
-            <ProductGridSkeleton count={4} />
+            <ProductGrid items={[]} variant="grid" loading skeletonCount={4} />
           </div>
         }
       >
         <div style={{ padding: 16 }}>
           {wishQ.isLoading ? (
-            <ProductGridSkeleton count={4} />
+            <ProductGrid items={[]} variant="grid" loading skeletonCount={4} />
           ) : wishQ.isError && !wishQ.data ? (
             <ErrorState message={getLoadErrorMessage(wishQ.error)} onRetry={() => void wishQ.refetch()} />
           ) : wishQ.data && wishQ.data.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {wishQ.data.map((p) => (
-                <ProductCard
-                  key={p.id}
-                  product={p}
-                  imageOverlay={p.inStock !== false ? <QuickAddButton name={p.name} busy={busyId === p.id} onPress={() => void quickAdd(p)} /> : undefined}
-                />
-              ))}
-            </div>
+            <ProductGrid
+              items={wishQ.data}
+              variant="grid"
+              renderImageOverlay={(p) => (p.inStock !== false ? <QuickAddButton name={p.name} busy={busyId === p.id} onPress={() => void quickAdd(p)} /> : undefined)}
+            />
           ) : (
             <EmptyState
               art="sprout"

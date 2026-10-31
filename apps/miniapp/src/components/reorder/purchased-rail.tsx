@@ -179,7 +179,7 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
           ))}
         </div>
       ) : (
-        <RailShell label={vi.reorder.railTitle}>
+        <RailShell label="Sản phẩm đã mua">
           {items.map((p) => (
             <RailCell key={p.variationId} variant="rail-md">
               <ProductCard

@@ -18,6 +18,8 @@ export interface ProductGridProps {
   showWishlist?: boolean;
   /** Nút nổi trên ảnh của từng thẻ (giỏ nhanh ở Yêu thích). */
   renderImageOverlay?: (product: ProductCardData, index: number) => ReactNode;
+  /** Phần ngoài thẻ, ngay dưới thẻ trong cùng ô lưới (ghi chú của chủ gian hàng). */
+  renderAfter?: (product: ProductCardData, index: number) => ReactNode;
   onOpen?: (product: ProductCardData, index: number) => void;
 }
 
@@ -32,6 +34,7 @@ export function ProductGrid({
   showBrand,
   showWishlist,
   renderImageOverlay,
+  renderAfter,
   onOpen,
 }: ProductGridProps) {
   if (loading) {
@@ -46,8 +49,8 @@ export function ProductGrid({
   return (
     <ul role="list" data-testid="catalog-grid" style={GRID_STYLE}>
       {items.map((p, i) => (
-        <li key={p.id} style={{ minWidth: 0, display: 'flex' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+        <li key={`${p.id}:${i}`} style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: '1 1 auto', minWidth: 0 }}>
             <ProductCard
               product={p}
               variant={variant}
@@ -59,6 +62,7 @@ export function ProductGrid({
               onOpen={onOpen ? () => onOpen(p, i) : undefined}
             />
           </div>
+          {renderAfter?.(p, i)}
         </li>
       ))}
     </ul>

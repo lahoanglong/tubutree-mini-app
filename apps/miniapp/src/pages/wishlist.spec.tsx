@@ -37,8 +37,8 @@ vi.mock('../services/wishlist-api', () => ({ getWishlist: mocks.getWishlist }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.authStatus }),
 }));
-vi.mock('../components/product-card', () => ({
-  default: ({ product, imageOverlay }: { product: { id: string; name: string }; imageOverlay?: ReactNode }) => (
+vi.mock('../components/ui/product-card', () => ({
+  ProductCard: ({ product, imageOverlay }: { product: { id: string; name: string }; imageOverlay?: ReactNode }) => (
     <div data-testid="product-card">
       {product.name}
       {imageOverlay}

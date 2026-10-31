@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
-import { useNavigate } from 'zmp-ui';
 import { Bell, CheckCircle2, Clock, Zap } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -7,60 +6,37 @@ import {
   fetchUpcomingFlashSales,
   setFlashReminder,
   cancelFlashReminder,
+  type FlashSaleActiveItem,
   type UpcomingFlashItem,
 } from '../services/shop-api';
-import { formatVnd } from '../utils/format';
+import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
+import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { soldPercent } from '../utils/flash-display';
 import { haptic } from '../utils/haptic';
 import { serverNow } from '../utils/server-clock';
 import { vi } from '../i18n/vi';
 import { useCountdown } from '../hooks/use-countdown';
+import { useFlashExpiry } from '../hooks/use-flash-expiry';
 import { useAuthStore } from '../store/auth';
 import { browserStorage } from '../utils/recently-viewed';
 import { FLASH_SKELETON_HEIGHT, readFlashHint, writeFlashHint } from '@tubutree/app-core/home-layout';
 import { Skeleton } from './ui/skeleton';
 import { HomeBlockError } from './home/home-block-error';
 import { useBlockQuery } from './home/use-block-query';
-import { flashDisplay } from './catalog/catalog-pricing';
 import { Badge } from './ui/badge';
 import { Icon } from './ui/icon';
-import { PriceTag } from './ui/price-tag';
+import { ProductTile } from './ui/product-tile';
 import { ProgressBar } from './ui/progress-bar';
-import { ScrollRow } from './ui/scroll-row';
-import { linkKeyboardProps, rowKeyboardProps } from './ui/row-keyboard';
+import { RailCell, RailShell } from './ui/product-rail';
+import { rowKeyboardProps } from './ui/row-keyboard';
 import { Heading, Text } from './ui/text';
-import { ProductImage } from './ui/product-image';
 
 const PROMO_TITLE_STYLE: CSSProperties = { color: 'var(--color-promo-fg)', display: 'flex', alignItems: 'center', gap: 6 };
 
-const CARD_STYLE: CSSProperties = {
-  flex: '0 0 132px',
-  background: 'var(--color-bg-surface)',
-  borderRadius: 'var(--radius-card)',
-  overflow: 'hidden',
-  boxShadow: 'var(--elevation-1)',
-};
-
-const DISCOUNT_BADGE_STYLE: CSSProperties = {
-  position: 'absolute',
-  top: 6,
-  left: 6,
-  background: 'var(--color-flash-solid-bg)',
-  color: 'var(--color-flash-solid-fg)',
-};
-
-/** Tên SP tối đa 2 dòng; minHeight bằng đúng 2 dòng caption để thẻ 1 dòng và 2 dòng cao bằng nhau. */
-const NAME_CLAMP_STYLE: CSSProperties = {
-  display: '-webkit-box',
-  WebkitLineClamp: 2,
-  WebkitBoxOrient: 'vertical',
-  overflow: 'hidden',
-  minHeight: 40,
-};
-
-const VARIATION_LINE_STYLE: CSSProperties = { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
-
-const CARD_ROW_STYLE: CSSProperties = { gap: 12, padding: '0 16px' };
+/** Cuối thẻ Giờ vàng: 4 (cách giá) + 6 (thanh) + 2 + 16 (chữ đã bán). Luôn giữ chỗ để thẻ chưa bán được suất nào vẫn cao bằng thẻ khác. */
+const SOLD_FOOTER_HEIGHT = 28;
+/** Cuối thẻ "Sắp diễn ra": 8 (cách giá) + 44 (nút nhắc). */
+const REMIND_FOOTER_HEIGHT = 52;
 
 function FlashSkeleton() {
   return (
@@ -74,8 +50,6 @@ function FlashSkeleton() {
  * Ưu đãi giờ vàng — flash sale thật từ backend. Countdown êm đến mốc kết thúc sớm nhất.
  */
 export function FlashSale() {
-  const navigate = useNavigate();
-
   const q = useBlockQuery(
     useQuery({
       queryKey: ['flash-sales', 'active'],
@@ -85,6 +59,8 @@ export function FlashSale() {
   );
 
   const items = q.data ?? [];
+  // Một dòng phân loại dưới giá chỉ khi có thẻ cần; có thẻ cần thì mọi thẻ giữ chỗ để giá cùng kệ thẳng hàng.
+  const hasVariation = items.some((it) => Boolean(it.variationName));
 
   // Chỉ tính suất còn giờ: suất sớm nhất có thể đã hết mà danh sách chưa kịp tải lại (poll 60s) trong khi các suất khác còn chạy.
   // `expiredTick` tính lại ngay khi suất đang đếm về 0 để đồng hồ chuyển sang suất kế tiếp thay vì biến mất.
@@ -131,138 +107,121 @@ export function FlashSale() {
         )}
       </div>
 
-      <ScrollRow label={vi.flashSale.sectionName} style={CARD_ROW_STYLE}>
-        {items.map((item) => {
-          const { price, was, pct } = flashDisplay(item);
-          const soldPct = soldPercent(item.soldCount, item.quota);
-          return (
-            <div
-              key={item.itemId}
-              className="tubu-press"
-              // role=link (không phải button): thẻ mở trang sản phẩm; thẻ "Sắp diễn ra" chứa nút nhắc bên trong nên role=button sẽ lồng nút.
-              role="link"
-              {...linkKeyboardProps()}
-              onClick={() => {
-                haptic('light');
-                // Truyền variationId: sản phẩm nhiều phân loại thì flash chỉ gắn vào MỘT phân
-                // loại, mà PDP mặc định chọn phân loại đầu còn hàng → mở ra là giá thường,
-                // không badge, không đếm ngược. Khách tưởng bị treo giá (P1-3 audit mạch lạc).
-                navigate(`/product/${item.productSlug}`, { state: { variationId: item.variationId } });
-              }}
-              style={CARD_STYLE}
-            >
-              <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--color-bg-media)' }}>
-                <ProductImage src={item.thumbnail} brand="" />
-                {pct > 0 && (
-                  <Badge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
-                    -{pct}%
-                  </Badge>
-                )}
-              </div>
-              <div style={{ padding: 8 }}>
-                <Text variant="caption" style={NAME_CLAMP_STYLE}>
-                  {item.productName}
-                </Text>
-                {item.variationName && (
-                  <Text variant="caption" tone="secondary" style={VARIATION_LINE_STYLE}>
-                    {item.variationName}
-                  </Text>
-                )}
-                <div style={{ marginTop: 2 }}>
-                  <PriceTag value={price} flash={{ price }} size="sm" />
-                </div>
-                {was > price && (
-                  <Text variant="caption" tone="tertiary" as="div" style={{ textDecoration: 'line-through' }}>
-                    {formatVnd(was)}
-                  </Text>
-                )}
-                {soldPct > 0 && (
-                  <>
-                    <div style={{ marginTop: 4 }}>
-                      <ProgressBar value={soldPct} max={100} tone="flash" ariaLabel="Tỉ lệ đã bán" />
-                    </div>
-                    <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-                      {vi.flashSale.soldPct(soldPct)}
-                    </Text>
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </ScrollRow>
+      <RailShell label={vi.flashSale.sectionName}>
+        {items.map((item) => (
+          <RailCell key={item.itemId} variant="flash">
+            <ActiveFlashCard item={item} reserveVariation={hasVariation} />
+          </RailCell>
+        ))}
+      </RailShell>
     </div>
   );
 }
 
+/** Thẻ sản phẩm của một suất Giờ vàng: giá của đúng phân loại có suất (ghim phân loại để thẻ chỉ xét suất này). */
+function flashCardProduct(item: {
+  itemId: string;
+  productSlug: string;
+  productName: string;
+  thumbnail: string | null;
+  variationId: string;
+  retailPrice: number;
+  salePrice?: number | null;
+}): ProductCardData {
+  return {
+    id: item.itemId,
+    slug: item.productSlug,
+    name: item.productName,
+    brand: '',
+    thumbnail: item.thumbnail,
+    basePrice: item.retailPrice,
+    salePrice: item.salePrice ?? null,
+    repVariationId: item.variationId,
+    pinnedVariationId: item.variationId,
+    isFeatured: false,
+    inStock: true,
+  };
+}
+
+/** Thẻ Giờ vàng đang chạy: thẻ `flash` chung, thanh "đã bán" ở cuối. Về giá thường đúng mốc `endAt` dù danh sách chưa tải lại. */
+function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleActiveItem; reserveVariation: boolean }) {
+  useFlashExpiry(item.endAt);
+  const view = productCardView({ product: flashCardProduct(item), flash: item, variant: 'flash', now: serverNow() });
+  const soldPct = soldPercent(item.soldCount, item.quota);
+  return (
+    <ProductTile
+      view={view}
+      variant="flash"
+      href={`/product/${encodeURIComponent(item.productSlug)}`}
+      // variationId: sản phẩm nhiều phân loại thì flash chỉ gắn vào MỘT phân loại, mà PDP mặc định chọn phân loại đầu còn hàng,
+      // mở ra là giá thường, không nhãn, không đếm ngược. Khách tưởng bị treo giá (P1-3 audit mạch lạc).
+      navState={{ variationId: item.variationId }}
+      note={reserveVariation ? (item.variationName ?? '') : undefined}
+      footerHeight={SOLD_FOOTER_HEIGHT}
+      footer={
+        <div style={{ height: SOLD_FOOTER_HEIGHT, paddingTop: 4, boxSizing: 'border-box' }}>
+          {soldPct > 0 && (
+            <>
+              <ProgressBar value={soldPct} max={100} tone="flash" ariaLabel="Tỉ lệ đã bán" />
+              <Text variant="label" tone="tertiary" as="div" style={{ marginTop: 2, height: 16, lineHeight: '16px' }}>
+                {vi.flashSale.soldPct(soldPct)}
+              </Text>
+            </>
+          )}
+        </div>
+      }
+    />
+  );
+}
+
 /** 1 thẻ trong danh sách "Sắp diễn ra" — countdown riêng theo startAt của item. */
-function UpcomingFlashCard({
-  item,
-  pending,
-  onOpen,
-  onToggleRemind,
-}: {
-  item: UpcomingFlashItem;
-  pending: boolean;
-  onOpen: () => void;
-  onToggleRemind: () => void;
-}) {
+function UpcomingFlashCard({ item, pending, onToggleRemind }: { item: UpcomingFlashItem; pending: boolean; onToggleRemind: () => void }) {
   const startsIn = useCountdown(item.startAt);
-  const { price, pct } = flashDisplay(item);
+  const view = productCardView({ product: flashCardProduct(item), flash: item, variant: 'flash', now: serverNow() });
 
   return (
-    <div className="tubu-press" role="link" {...linkKeyboardProps()} onClick={onOpen} style={CARD_STYLE}>
-      <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--color-bg-media)' }}>
-        <ProductImage src={item.thumbnail} brand="" />
-        {pct > 0 && (
-          <Badge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
-            -{pct}%
-          </Badge>
-        )}
-      </div>
-      <div style={{ padding: 8 }}>
-        <Text variant="caption" style={NAME_CLAMP_STYLE}>
-          {item.productName}
-        </Text>
-        <div style={{ marginTop: 2 }}>
-          <PriceTag value={price} flash={{ price }} size="sm" />
-        </div>
-        {/* Đã tới giờ mở bán mà danh sách chưa tải lại: không còn gì để nhắc, chạm thẻ là vào xem. */}
-        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-          {startsIn ? vi.flashSale.startsIn(startsIn) : vi.flashSale.live}
-        </Text>
-        {startsIn && (
-          <div
-            role="button"
-            {...rowKeyboardProps()}
-            className="tubu-press"
-            onClick={(e: MouseEvent) => {
-              e.stopPropagation();
-              if (pending) return;
-              onToggleRemind();
-            }}
-            style={{
-              marginTop: 8,
-              textAlign: 'center',
-              minHeight: 44,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-              borderRadius: 'var(--radius-pill)',
-              fontSize: 'var(--type-label-size)',
-              fontWeight: 600,
-              opacity: pending ? 0.6 : 1,
-              background: item.reminded ? 'var(--color-action-secondary-bg)' : 'var(--color-action-primary-bg)',
-              color: item.reminded ? 'var(--color-action-secondary-fg)' : 'var(--color-action-primary-fg)',
-            }}
-          >
-            <Icon icon={item.reminded ? CheckCircle2 : Bell} size="sm" tone="current" />
-            {item.reminded ? vi.flashSale.reminded : vi.flashSale.remindMe}
+    <ProductTile
+      view={view}
+      variant="flash"
+      href={`/product/${encodeURIComponent(item.productSlug)}`}
+      // Đã tới giờ mở bán mà danh sách chưa tải lại: không còn gì để nhắc, chạm thẻ là vào xem.
+      note={startsIn ? vi.flashSale.startsIn(startsIn) : vi.flashSale.live}
+      footerHeight={startsIn ? REMIND_FOOTER_HEIGHT : undefined}
+      footer={
+        startsIn ? (
+          // Anh em của nút tên, nổi trên lớp phủ của nó (z-index 1): chạm nút nhắc không mở sản phẩm.
+          <div style={{ position: 'relative', zIndex: 1, marginTop: 8 }}>
+            <div
+              role="button"
+              {...rowKeyboardProps()}
+              className="tubu-press"
+              onClick={(e: MouseEvent) => {
+                e.stopPropagation();
+                if (pending) return;
+                onToggleRemind();
+              }}
+              style={{
+                textAlign: 'center',
+                minHeight: 44,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                borderRadius: 'var(--radius-pill)',
+                fontSize: 'var(--type-label-size)',
+                fontWeight: 600,
+                opacity: pending ? 0.6 : 1,
+                background: item.reminded ? 'var(--color-action-secondary-bg)' : 'var(--color-action-primary-bg)',
+                color: item.reminded ? 'var(--color-action-secondary-fg)' : 'var(--color-action-primary-fg)',
+              }}
+            >
+              <Icon icon={item.reminded ? CheckCircle2 : Bell} size="sm" tone="current" />
+              {item.reminded ? vi.flashSale.reminded : vi.flashSale.remindMe}
+            </div>
           </div>
-        )}
-      </div>
-    </div>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -271,7 +230,6 @@ function UpcomingFlashCard({
  * Cần đăng nhập (BE lấy userId từ JWT để trả trạng thái reminded) → gate theo auth.
  */
 export function UpcomingFlashSales() {
-  const navigate = useNavigate();
   const qc = useQueryClient();
   const authed = useAuthStore((s) => s.status === 'authenticated');
 
@@ -311,23 +269,20 @@ export function UpcomingFlashSales() {
         </Heading>
       </div>
 
-      <ScrollRow label="Sắp diễn ra" style={CARD_ROW_STYLE}>
+      <RailShell label="Sắp diễn ra">
         {items.map((item) => (
-          <UpcomingFlashCard
-            key={item.itemId}
-            item={item}
-            pending={remindMut.isPending && remindMut.variables?.itemId === item.itemId}
-            onOpen={() => {
-              haptic('light');
-              navigate(`/product/${item.productSlug}`);
-            }}
-            onToggleRemind={() => {
-              haptic('light');
-              remindMut.mutate({ itemId: item.itemId, reminded: item.reminded });
-            }}
-          />
+          <RailCell key={item.itemId} variant="flash">
+            <UpcomingFlashCard
+              item={item}
+              pending={remindMut.isPending && remindMut.variables?.itemId === item.itemId}
+              onToggleRemind={() => {
+                haptic('light');
+                remindMut.mutate({ itemId: item.itemId, reminded: item.reminded });
+              }}
+            />
+          </RailCell>
         ))}
-      </ScrollRow>
+      </RailShell>
     </div>
   );
 }

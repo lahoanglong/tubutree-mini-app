@@ -129,3 +129,58 @@ describe('ProductCard: tim và nút nổi', () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 });
+
+describe('ProductCard: luật giá thẻ (chuyển từ thẻ Yêu thích cũ)', () => {
+  const SALE: ProductCardData = { ...PRODUCT, id: 'p9', slug: 'nrc', name: 'Nước rửa chén', basePrice: 150_000, salePrice: 120_000 };
+  const FLASH = flashItem({ productSlug: 'nrc', variationId: 'v1', flashPrice: 99_000, retailPrice: 150_000, salePrice: 120_000 });
+
+  it('giá đang bán, giá gốc gạch, nhãn -20%; chạm mở sản phẩm không kèm state', () => {
+    const { ui } = setup({ flash: [], config: { catalogLaunchDate: null } });
+    render(ui({ product: SALE }));
+    expect(screen.getByText('-20%')).toBeInTheDocument();
+    expect(screen.getByText('120.000đ')).toBeInTheDocument();
+    expect(screen.getByText('150.000đ')).toHaveStyle({ textDecoration: 'line-through' });
+    fireEvent.click(screen.getByRole('button', { name: 'Nước rửa chén' }));
+    expect(navigate).toHaveBeenCalledWith('/product/nrc', undefined);
+  });
+
+  it('Giờ vàng rẻ hơn thì thắng: gạch giá đang bán của phân loại có suất, mở đúng phân loại', () => {
+    const { ui } = setup({ flash: [FLASH], config: { catalogLaunchDate: null } });
+    render(ui({ product: SALE }));
+    expect(screen.getByText('99.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Giờ vàng -18%')).toBeInTheDocument();
+    expect(screen.getByText('120.000đ')).toHaveStyle({ textDecoration: 'line-through' });
+    expect(screen.queryByText('150.000đ')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Nước rửa chén' }));
+    expect(navigate).toHaveBeenCalledWith('/product/nrc', { state: { variationId: 'v1' } });
+  });
+
+  it('B-140: món ghim phân loại khác, Giờ vàng của phân loại kia không thắng và mở phân loại ghim', () => {
+    const { ui } = setup({ flash: [FLASH], config: { catalogLaunchDate: null } });
+    render(ui({ product: { ...SALE, pinnedVariationId: 'v9', repVariationId: 'v9' } }));
+    expect(screen.getByText('120.000đ')).toBeInTheDocument();
+    expect(screen.queryByText('99.000đ')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Nước rửa chén' }));
+    expect(navigate).toHaveBeenCalledWith('/product/nrc', { state: { pinnedVariationId: 'v9' } });
+  });
+
+  it('Giờ vàng không rẻ hơn giá đang bán: giữ giá đang bán, không nhãn Giờ vàng, mở phân loại mặc định', () => {
+    const { ui } = setup({ flash: [{ ...FLASH, flashPrice: 130_000 }], config: { catalogLaunchDate: null } });
+    render(ui({ product: SALE }));
+    expect(screen.getByText('-20%')).toBeInTheDocument();
+    expect(screen.queryByText(/^Giờ vàng/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Nước rửa chén' }));
+    expect(navigate).toHaveBeenCalledWith('/product/nrc', undefined);
+  });
+
+  it('hết hàng: chữ hết hàng, không nhãn % lộ dưới lớp phủ; không giảm giá thì không nhãn, không giá gạch', () => {
+    const { ui } = setup({ flash: [], config: { catalogLaunchDate: null } });
+    const oos = render(ui({ product: { ...SALE, inStock: false } }));
+    expect(screen.getByText('Tạm hết hàng')).toBeInTheDocument();
+    expect(screen.queryByText(/^-\d+%$/)).toBeNull();
+    oos.unmount();
+    render(ui({ product: { ...SALE, salePrice: null } }));
+    expect(screen.getByText('150.000đ')).toBeInTheDocument();
+    expect(screen.queryByText(/^-\d+%$/)).toBeNull();
+  });
+});

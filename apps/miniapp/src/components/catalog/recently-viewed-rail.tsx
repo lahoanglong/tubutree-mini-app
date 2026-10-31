@@ -38,7 +38,19 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
           return (
             <RailCell key={it.slug} variant="rail-sm">
               <ProductCard
-                product={product ?? { id: it.slug, slug: it.slug, name: it.name, brand: '', thumbnail: it.thumbnail ?? null, basePrice: 0, salePrice: null, isFeatured: false, inStock: true }}
+                // Tên và ảnh luôn là của lần xem (như trước đây); chỉ giá và còn hàng lấy từ dữ liệu hiện hành.
+                product={{
+                  id: it.slug,
+                  brand: '',
+                  basePrice: 0,
+                  salePrice: null,
+                  isFeatured: false,
+                  inStock: true,
+                  ...product,
+                  slug: it.slug,
+                  name: it.name,
+                  thumbnail: it.thumbnail ?? product?.thumbnail ?? null,
+                }}
                 variant="rail-sm"
                 listSource="recently_viewed"
                 hidePrice={!product}

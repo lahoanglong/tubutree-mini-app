@@ -197,6 +197,16 @@ describe('ProductTile: bấm, nút phụ, ô trang trí', () => {
     expect(within(container).getByTestId('foot')).toBeInTheDocument();
     expect(body(container).style.minHeight).toBe(`${tileBodyHeight('flash', { note: true, footer: 28 })}px`);
   });
+
+  it('note rỗng giữ chỗ dòng ghi chú (thẻ cùng kệ không lệch giá); không truyền note thì không có dòng', () => {
+    const reserved = render(<ProductTile view={viewOf({}, 'rail-md')} variant="rail-md" href="/p" note="" />);
+    expect(body(reserved.container).style.minHeight).toBe(`${tileBodyHeight('rail-md', { note: true })}px`);
+    expect(reserved.container.querySelector('[data-ds-part="note"]')).not.toBeNull();
+    reserved.unmount();
+    const none = render(<ProductTile view={viewOf({}, 'rail-md')} variant="rail-md" href="/p" />);
+    expect(body(none.container).style.minHeight).toBe(`${tileBodyHeight('rail-md')}px`);
+    expect(none.container.querySelector('[data-ds-part="note"]')).toBeNull();
+  });
 });
 
 describe('ProductTile: cấu trúc truy cập', () => {

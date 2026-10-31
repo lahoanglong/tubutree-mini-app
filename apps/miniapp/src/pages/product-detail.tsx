@@ -29,7 +29,6 @@ import { WishlistHeart } from '../components/wishlist-heart';
 import { SubscribeSheet } from '../components/subscribe-sheet';
 import { VariationSheet, type VariationSheetMode } from '../components/variation-sheet';
 import { fetchReviews } from '../services/shop-api';
-import { tilePricing } from '../components/catalog/catalog-pricing';
 import { trackEvent } from '../services/analytics';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
@@ -66,7 +65,7 @@ import { PriceTag } from '../components/ui/price-tag';
 import { PointsEarnLine } from '../components/product/points-earn-line';
 import { Badge } from '../components/ui/badge';
 import { Icon } from '../components/ui/icon';
-import { ProductTile } from '../components/ui/product-tile';
+import { ProductRail } from '../components/ui/product-rail';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { ScrollRow } from '../components/ui/scroll-row';
 import { useScrollHints } from '../components/ui/use-scroll-hints';
@@ -507,7 +506,7 @@ export default function ProductDetailPage() {
         {/* Giờ vàng cho phân loại đang chọn — badge % + đếm ngược êm + đã bán bao nhiêu%. */}
         {flashItem && priceView.isFlash && (
           <Box flex alignItems="center" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-            <Badge tone="promo" size="sm" style={{ background: 'var(--color-flash-solid-bg)', color: 'var(--color-flash-solid-fg)' }}>
+            <Badge tone="flash" size="sm">
               -{flashPct}%
             </Badge>
             {flashLeft && (
@@ -943,18 +942,7 @@ export default function ProductDetailPage() {
             <ShoppingCart size={18} color="var(--color-text-primary)" strokeWidth={1.9} />
             <SectionTitle>Thường mua kèm</SectionTitle>
           </Box>
-          <Box
-            px={4}
-            pb={4}
-            className="scroll-x"
-            style={{ gap: 12 }}
-          >
-            {boughtTogether.data?.map((bp) => (
-              <Box key={bp.id} style={{ flex: '0 0 150px' }}>
-                <RelatedTile product={bp} flashSales={flashQ.data ?? []} />
-              </Box>
-            ))}
-          </Box>
+          <ProductRail label="Thường mua kèm" variant="rail-md" items={boughtTogether.data ?? []} />
         </>
       )}
 
@@ -964,18 +952,7 @@ export default function ProductDetailPage() {
           <Box pt={4} pb={2} px={4}>
             <SectionTitle>Cùng nhà {p.brand}</SectionTitle>
           </Box>
-          <Box
-            px={4}
-            pb={4}
-            className="scroll-x"
-            style={{ gap: 12 }}
-          >
-            {related.data?.map((rp) => (
-              <Box key={rp.id} style={{ flex: '0 0 150px' }}>
-                <RelatedTile product={rp} flashSales={flashQ.data ?? []} />
-              </Box>
-            ))}
-          </Box>
+          <ProductRail label={`Cùng nhà ${p.brand}`} variant="rail-md" items={related.data ?? []} />
         </>
       )}
 
@@ -1167,41 +1144,6 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
         </Box>
       )}
     </Box>
-  );
-}
-
-/** Card sản phẩm ở dải "Thường mua kèm"/"Cùng nhà {brand}" — dùng chung ProductTile (Task 23),
- * tự tính giá theo đúng quy tắc flash>sale>base y hệt ProductCard cũ (giữ nguyên logic điều hướng
- * + giá giờ vàng, chỉ đổi lớp trình bày — audit A4-06/A4-19). */
-function RelatedTile({ product, flashSales }: { product: ProductCardData; flashSales: FlashSaleActiveItem[] }) {
-  const navigate = useNavigate();
-  const flash = flashSales.find((f) => f.productSlug === product.slug);
-  const { price, compareAt, isFlash, salePct } = tilePricing(product, flashSales);
-  return (
-    <ProductTile
-      product={product}
-      variant="rail"
-      priceOverride={{ price, compareAt }}
-      badge={
-        // Y hệt ProductCard cũ: KHÔNG hiện badge giảm giá khi đã hết hàng — overlay "tạm hết
-        // hàng" của ProductTile là lớp phủ TRONG SUỐT (72% opacity), badge % có thể lộ ra dưới
-        // lớp phủ nếu không chặn ở đây (review fix, Task 24).
-        salePct > 0 && product.inStock ? (
-          <Badge
-            tone="promo"
-            size="sm"
-            style={isFlash ? { background: 'var(--color-flash-solid-bg)', color: 'var(--color-flash-solid-fg)' } : undefined}
-          >
-            -{salePct}%
-          </Badge>
-        ) : undefined
-      }
-      onPress={() => {
-        haptic('light');
-        // Mở đúng phân loại đang giảm giờ vàng (SP nhiều phân loại: flash chỉ gắn vào một).
-        navigate(`/product/${product.slug}`, flash ? { state: { variationId: flash.variationId } } : undefined);
-      }}
-    />
   );
 }
 

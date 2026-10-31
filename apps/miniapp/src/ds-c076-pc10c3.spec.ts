@@ -13,7 +13,6 @@ import { fileURLToPath } from 'node:url';
 const FILES_PC10C3 = [
   'src/components/reviews-section.tsx',
   'src/components/onboarding.tsx',
-  'src/components/product-card.tsx',
   'src/components/flash-sale.tsx',
   'src/components/checkout/voucher-sheet.tsx',
   'src/components/qr-code.tsx',

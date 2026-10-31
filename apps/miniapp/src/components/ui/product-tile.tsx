@@ -27,7 +27,7 @@ export interface ProductTileProps {
   /** Nút phụ cuối thẻ (Mua lại, Thêm), nhãn `addLabel`. */
   onAdd?: () => void;
   addLabel?: string;
-  /** Một dòng ghi chú dưới giá (phân loại, "Đã mua 3 lần"). */
+  /** Một dòng ghi chú dưới giá (phân loại, "Đã mua 3 lần"). Chuỗi rỗng giữ chỗ dòng đó để thẻ có ghi chú và thẻ không có vẫn thẳng giá trong cùng kệ. */
   note?: string;
   /** Web: ảnh LCP tải ngay. Mini App tải lười như cũ nên bỏ qua. */
   priority?: boolean;
@@ -99,7 +99,8 @@ export function ProductTile({
   const description = [rankSpoken, view.spoken.stock, view.spoken.badges, view.spoken.meta ?? null, hidePrice ? null : view.spoken.price]
     .filter((x): x is string => Boolean(x))
     .join(', ');
-  const bodyMin = tileBodyHeight(variant, { brand: hasBrand, note: Boolean(note), footer: footerHeight });
+  const hasNote = note !== undefined;
+  const bodyMin = tileBodyHeight(variant, { brand: hasBrand, note: hasNote, footer: footerHeight });
   const nameLine = caption ? 20 : 22;
 
   const open = () => {
@@ -287,8 +288,8 @@ export function ProductTile({
           <div data-ds-part="price" aria-hidden style={{ display: 'flex', minHeight: hidePrice ? TILE_METRICS.price + (STACKED.has(variant) ? TILE_METRICS.compare : 0) : undefined }}>
             {price}
           </div>
-          {note && (
-            <Text variant="label" tone="tertiary" as="div" style={{ height: TILE_METRICS.note, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...FIXED_LINE(TILE_METRICS.note) }}>
+          {hasNote && (
+            <Text data-ds-part="note" variant="label" tone="tertiary" as="div" style={{ height: TILE_METRICS.note, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...FIXED_LINE(TILE_METRICS.note) }}>
               {note}
             </Text>
           )}
