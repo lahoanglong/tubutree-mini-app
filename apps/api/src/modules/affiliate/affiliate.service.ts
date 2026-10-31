@@ -124,7 +124,6 @@ export const PERSONAL_TAX_ID_FORMAT_MESSAGE = 'Mã số thuế cá nhân gồm 1
 /** Chủ gian hàng mẫu (Storefront.isSample): không ghi công đơn, không sinh hoa hồng. */
 const SAMPLE_STOREFRONT_SELECT = { where: { isSample: true }, select: { id: true }, take: 1 } as const;
 
-@Injectable()
 const CLICKED_AT_SKEW_MS = 5 * 60_000;
 
 /** Thời điểm bấm client gửi lên: chỉ tin khi hợp lệ và không ở tương lai; ngày xấu hoặc quá lệch → null (tính từ now như cũ). */
@@ -135,6 +134,7 @@ function parseClickedAt(raw: string | undefined, now: Date): Date | null {
   return new Date(Math.min(t, now.getTime()));
 }
 
+@Injectable()
 export class AffiliateService {
   private readonly logger = new Logger(AffiliateService.name);
 

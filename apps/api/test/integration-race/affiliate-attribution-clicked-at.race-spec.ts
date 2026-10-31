@@ -39,7 +39,6 @@ describe('Ghi công CTV theo lúc bấm link (real Postgres, checkout thật)', 
   let checkout: CheckoutService;
   let cart: CartService;
   let affiliate: AffiliateService;
-  let orderStatus: OrderStatusService;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -86,7 +85,6 @@ describe('Ghi công CTV theo lúc bấm link (real Postgres, checkout thật)', 
     checkout = moduleRef.get(CheckoutService);
     cart = moduleRef.get(CartService);
     affiliate = moduleRef.get(AffiliateService);
-    orderStatus = moduleRef.get(OrderStatusService);
     await prisma.systemConfig.deleteMany({ where: { key: COMMISSION_ELIGIBLE_ROLES_KEY } });
     await setConfig(prisma, 'affiliate.attribution_days', 7);
   });
