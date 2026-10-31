@@ -636,6 +636,38 @@ describe('CartService guard tồn kho', () => {
     });
   });
 
+  describe('listUnitPrice: giá niêm yết để FE gạch giá và tính "Tiết kiệm"', () => {
+    const line = (id: string, retailPrice: number, salePrice: number | null) => ({
+      id: `ci-${id}`,
+      variationId: id,
+      quantity: 2,
+      variation: { isActive: true, productId: `p-${id}`, salePrice, retailPrice, stock: 50, name: id, product: { name: `SP ${id}`, slug: id, thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
+    });
+    const cartOf = (items: unknown[], flashMap = new Map()) => {
+      const prisma = {
+        cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique: jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items }) },
+      } as unknown as PrismaService;
+      const flashSvc = { resolveEffective: jest.fn().mockResolvedValue(flashMap) } as unknown as FlashSaleService;
+      return new CartService(prisma, coupons, config, flashSvc, analytics, combo).getCart('u1');
+    };
+
+    it('không sale, không Giờ vàng → listUnitPrice bằng unitPrice (FE không vẽ giá gạch)', async () => {
+      const l = (await cartOf([line('a', 50000, null)])).items[0]!;
+      expect(l).toMatchObject({ unitPrice: 50000, listUnitPrice: 50000 });
+    });
+
+    it('có salePrice → unitPrice là giá sale, listUnitPrice là retailPrice', async () => {
+      const l = (await cartOf([line('b', 50000, 42000)])).items[0]!;
+      expect(l).toMatchObject({ unitPrice: 42000, listUnitPrice: 50000 });
+    });
+
+    it('đang Giờ vàng → unitPrice là giá Giờ vàng, listUnitPrice vẫn là retailPrice (không phải salePrice)', async () => {
+      const flashMap = new Map([['c', { flashPrice: 33000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10, allowance: 5, perUserLeft: 5, quotaLeft: 9 }]]);
+      const l = (await cartOf([line('c', 50000, 42000)], flashMap as never)).items[0]!;
+      expect(l).toMatchObject({ unitPrice: 33000, isFlash: true, listUnitPrice: 50000 });
+    });
+  });
+
   it('applyCoupon: validate trên base KHÔNG flash (không phải subtotal đầy đủ)', async () => {
     const validateAndCompute = jest.fn().mockResolvedValue({ discount: 0, freeship: false });
     const prisma = {

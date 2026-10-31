@@ -195,6 +195,8 @@ export class CartService {
         slug: it.variation.product.slug,
         thumbnail: publicImage('product', it.variation.productId, 'thumb', it.variation.product.thumbnail),
         unitPrice,
+        // Giá niêm yết trước sale và Giờ vàng: FE gạch giá và tính "Tiết kiệm" khi lớn hơn unitPrice (bằng nhau thì không vẽ gì).
+        listUnitPrice: it.variation.retailPrice,
         quantity: it.quantity,
         stock: it.variation.stock,
         weight: it.variation.weight ?? null,
