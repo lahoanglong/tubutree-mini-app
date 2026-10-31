@@ -528,9 +528,14 @@ psqlq -c "UPDATE notification_templates SET \"bodyTemplate\" = '💰 Đã cộng
 
 Mẫu `COMMISSION_APPROVED` vẫn dùng `{{count}}` và `{{amount}}` như bản cũ nên không cần trả lại.
 
+Lượt ngày đầu tiên sau deploy (chưa có dòng `AffiliateService.dailyWalletTransfer` trong `cron_runs`):
+- Nếu deploy sau 8:00 thì lượt chuyển Ví và tin tổng chạy luôn ở lượt :00 kế tiếp, không đợi 8:00 hôm sau. Từ hôm sau chạy lúc 8:00.
+- Lượt này lấy cửa sổ 24 giờ cho tin "đã duyệt". CTV chưa được tự chuyển (thiếu MST, bị khoá, hoặc cờ tự chuyển đang tắt) có thể nhận lại một lần tin "đã duyệt" mà bản cũ đã gửi.
+- Sau 8:00 hôm sau, kiểm lượt ngày đã chạy: `psqlq -tAc "SELECT \"lastSuccessAt\" FROM cron_runs WHERE job = 'AffiliateService.dailyWalletTransfer'"`.
+
 ### 1.17 Ghi công CTV theo lúc bấm link: thứ tự deploy
 
-- Deploy API TRƯỚC, rồi mới deploy web và đẩy Mini App lên Live. Web và Mini App mới gửi thêm `clickedAgoMs` khi chạm giới thiệu, mà API cũ chạy `forbidNonWhitelisted` nên trả 400: web xoá bản chờ, Mini App mất chạm. Mini App mới chỉ gửi Live sau khi API mới đã lên.
+- Web và Mini App mới không được chạy cùng API cũ: chúng gửi thêm `clickedAgoMs` khi chạm giới thiệu, mà API cũ chạy `forbidNonWhitelisted` nên trả 400, web xoá bản chờ và Mini App mất chạm. Thứ tự Bước 8–9 giữ nguyên (web bật trước khi API mới lên là an toàn, vì API đang dừng từ Bước 5 nên web chỉ gặp 5xx và giữ bản chờ). Mini App mới chỉ gửi Live sau khi API mới đã lên (Bước 13).
 - Migration `20261031110000_referral_touch_clicked_at` chỉ thêm cột `clickedAt` (nullable, không backfill); chạy cùng các migration khác của bản.
 - Quay API về `:prev` thì phải quay cả web về bản trước; Mini App Live mới cũng phải kéo về bản cũ.
 - Mini App Live cũ (chưa gửi `clickedAgoMs`) vẫn chạy như trước: máy chủ ghi `clickedAt = now`, hạn tính từ lúc nhận, cho tới khi Mini App mới lên Live.
