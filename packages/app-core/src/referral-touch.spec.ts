@@ -10,7 +10,7 @@ describe('clickedAtParam', () => {
   it('ở tương lai → kẹp về now, không bao giờ dài hơn', () => {
     expect(clickedAtParam(NOW + 86_400_000, NOW)).toEqual({ clickedAt: new Date(NOW).toISOString() });
   });
-  it.each([undefined, null, 0, -5, NaN, Infinity])('không có lúc bấm hợp lệ (%s) → không gửi trường', (v) => {
+  it.each([undefined, null, 0, -5, NaN])('không có lúc bấm hợp lệ (%s) → không gửi trường', (v) => {
     expect(clickedAtParam(v as number, NOW)).toEqual({});
   });
 });

@@ -7,8 +7,7 @@ const norm = (code: string | null | undefined) => (code ?? '').trim().toUpperCas
 
 /** Thời điểm bấm link dạng ISO để gửi kèm lượt chạm; thiếu/hỏng/ở tương lai thì không gửi (máy chủ tính từ lúc nhận như cũ). */
 export function clickedAtParam(clickedAtMs: number | null | undefined, nowMs: number = Date.now()): { clickedAt: string } | Record<string, never> {
-  if (typeof clickedAtMs !== 'number' || !Number.isFinite(clickedAtMs) || clickedAtMs <= 0) return {};
-  return { clickedAt: new Date(Math.min(clickedAtMs, nowMs)).toISOString() };
+  return typeof clickedAtMs === 'number' && clickedAtMs > 0 ? { clickedAt: new Date(Math.min(clickedAtMs, nowMs)).toISOString() } : {};
 }
 
 export interface TouchMark {
@@ -22,9 +21,8 @@ export function serializeTouchMark(userId: string, code: string): string {
 
 /** Chuỗi cũ (chỉ có mã, không biết của ai) hay hỏng thì coi như không có dấu. */
 export function parseTouchMark(raw: string | null): TouchMark | null {
-  if (!raw) return null;
   try {
-    const p = JSON.parse(raw) as { u?: unknown; c?: unknown } | null;
+    const p = JSON.parse(raw ?? '') as { u?: unknown; c?: unknown } | null;
     return p && typeof p.u === 'string' && p.u && typeof p.c === 'string' && p.c ? { userId: p.u, code: p.c } : null;
   } catch {
     return null;
