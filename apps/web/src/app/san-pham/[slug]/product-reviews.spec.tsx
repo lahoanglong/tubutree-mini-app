@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { focusManager } from '@tanstack/react-query';
+import { renderToString } from 'react-dom/server';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -559,5 +560,22 @@ describe('ProductReviews (web) — mở từ chi tiết đơn (?danh-gia=<đơn>
       await mount();
       expect(window.location.search).toBe('?danh-gia=o2');
     });
+  });
+});
+
+describe('ProductReviews — lần dựng đầu khớp HTML máy chủ', () => {
+  it('cache đã có đánh giá (dải "Đánh giá nhanh" nạp trước): lần dựng đầu chưa hiện số đánh giá, không lệch lúc hydrate', () => {
+    mocks.list = LIST;
+    const client = new QueryClient();
+    client.setQueryData(['reviews', 'nuoc-rua-chen'], LIST);
+    const html = renderToString(
+      <QueryClientProvider client={client}>
+        <ProductReviews slug="nuoc-rua-chen" />
+      </QueryClientProvider>,
+    );
+    expect(html).toContain('Đánh giá');
+    expect(html).not.toContain('(3)');
+    expect(html).not.toContain('Nhận xét a');
+    expect(html).toContain('Đang tải');
   });
 });
