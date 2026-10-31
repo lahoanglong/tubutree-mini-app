@@ -279,6 +279,20 @@ describe('useScrollRestoration — đổi khoá ngay trong trang (hub ↔ danh s
     expect(scroller().scrollTop).toBe(0);
   });
 
+  it('PUSH lại đúng URL khi trang vẫn còn gắn (Back rồi chạm ngay lúc trang cũ chưa trượt ra hết, zmp-ui dùng lại phần tử) → về đầu trang', () => {
+    renderInPage(['/browse?sort=best_seller']);
+    scroller().scrollTop = 900;
+    act(() => { navigate('/browse?sort=best_seller'); });
+    expect(scroller().scrollTop).toBe(0);
+  });
+
+  it('REPLACE đúng URL hiện tại → giữ nguyên vị trí cuộn', () => {
+    renderInPage(['/browse?sort=best_seller']);
+    scroller().scrollTop = 900;
+    act(() => { navigate('/browse?sort=best_seller', { replace: true }); });
+    expect(scroller().scrollTop).toBe(900);
+  });
+
   it('REPLACE sang khoá khác (đổi sắp xếp, gỡ chip) → giữ nguyên vị trí cuộn', () => {
     renderInPage(['/browse?all=1']);
     scroller().scrollTop = 300;

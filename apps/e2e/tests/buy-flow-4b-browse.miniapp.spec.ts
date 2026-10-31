@@ -266,11 +266,13 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
 
     await page.goBack(); // về Trang chủ (rời Browse → vị trí được lưu)
     await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
+    expect(Number(await page.evaluate(() => sessionStorage.getItem('tubu_scroll:sort=best_seller')))).toBeGreaterThan(300); // vị trí cũ còn lưu
+    // Chạm ngay khi trang Danh mục cũ còn đang trượt ra: zmp-ui dùng lại chính phần tử đó (khoá trang theo pathname), vẫn phải về đầu.
     await seeAll.click({ timeout: 15_000 }); // PUSH tới CÙNG URL: không phải Back
     await expect(page).toHaveURL(/\/browse\?sort=best_seller$/, { timeout: 15_000 });
     await expect(page.getByTestId('result-count')).toHaveText('30 sản phẩm', { timeout: 15_000 });
     await expect(tilesOf(page).first()).toBeVisible();
-    expect(Number(await page.evaluate(() => sessionStorage.getItem('tubu_scroll:sort=best_seller')))).toBeGreaterThan(300); // vị trí cũ VẪN còn lưu
+    await page.waitForTimeout(600); // qua hết hiệu ứng chuyển trang: chỉ còn trang mới
     expect(await scrollTopOf(scrollerOf(page))).toBe(0);
   });
 

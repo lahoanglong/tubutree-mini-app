@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useNavigationType } from './use-navigation-type';
 
 export const SCROLL_KEY_PREFIX = 'tubu_scroll:';
@@ -77,10 +78,13 @@ export function useScrollRestoration(key: string, ready: boolean): { anchorRef: 
     };
   }, [key]);
 
-  const seenKey = useRef<string | null>(null);
+  // Theo từng lượt điều hướng (`location.key`), không chỉ theo khoá: zmp-ui khoá phần tử trang theo pathname, nên PUSH lại đúng URL
+  // lúc trang cũ còn đang trượt ra (Back rồi chạm ngay) dùng lại chính phần tử đó với scrollTop cũ, khoá không đổi.
+  const navKey = useLocation().key;
+  const seenNav = useRef<string | null>(null);
   useLayoutEffect(() => {
-    const first = seenKey.current === null;
-    seenKey.current = key;
+    const first = seenNav.current === null;
+    seenNav.current = navKey;
     if (first) return;
     restoredFor.current = null;
     if (navType === 'POP') {
@@ -91,8 +95,8 @@ export function useScrollRestoration(key: string, ready: boolean): { anchorRef: 
     const scroller = scrollerOf(anchorRef.current);
     if (scroller) scroller.scrollTop = 0;
     lastY.current = 0;
-    // navType cố ý không nằm trong deps: chỉ đọc nó đúng lúc khoá đổi.
-  }, [key]);
+    // navType cố ý không nằm trong deps: chỉ đọc nó đúng lúc điều hướng.
+  }, [key, navKey]);
 
   // Layout effect của trang chạy SAU layout effect của <Page> con (Page tự cuộn về 0 khi mount).
   useLayoutEffect(() => {
