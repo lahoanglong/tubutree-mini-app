@@ -180,13 +180,14 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
         </div>
       ) : (
         <RailShell label="Sản phẩm đã mua">
+          {/* Có món mua nhiều lần thì mọi thẻ giữ dòng ghi chú ('' giữ chỗ), không thì giá lệch 16px giữa thẻ có và không có ghi chú. */}
           {items.map((p) => (
             <RailCell key={p.variationId} variant="rail-md">
               <ProductCard
                 product={toCardProduct(p)}
                 variant="rail-md"
                 showWishlist={false}
-                note={p.timesBought > 1 ? vi.reorder.timesBought(p.timesBought) : undefined}
+                note={p.timesBought > 1 ? vi.reorder.timesBought(p.timesBought) : items.some((x) => x.timesBought > 1) ? '' : undefined}
                 addLabel={homeCopy.reorder.buy}
                 onAdd={() => openReorder(p)}
               />

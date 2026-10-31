@@ -227,6 +227,31 @@ describe('PurchasedRail', () => {
   });
 });
 
+describe('kệ cuộn (3 món trở lên)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.subs = true;
+    mocks.status = 'authenticated';
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+  });
+
+  it('có món mua nhiều lần, có món mua một lần: mọi thẻ giữ dòng ghi chú để giá thẳng hàng; không món nào mua lại thì không dòng ghi chú', async () => {
+    const three = (times: number[]) => times.map((timesBought, i) => ({ ...ITEM, variationId: `v${i}`, slug: `sp-${i}`, productName: `SP ${i}`, timesBought }));
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: three([3, 1, 1]), nextCursor: null });
+    const first = renderRail();
+    const region = await screen.findByRole('region', { name: 'Mua lại' });
+    await waitFor(() => expect(region.querySelectorAll('[data-ds="product-tile"]').length).toBe(3));
+    expect(region.querySelectorAll('[data-ds-part="note"]').length).toBe(3);
+    expect(region).toHaveTextContent('Đã mua 3 lần');
+    first.unmount();
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: three([1, 1, 1]), nextCursor: null });
+    renderRail();
+    const plain = await screen.findByRole('region', { name: 'Mua lại' });
+    await waitFor(() => expect(plain.querySelectorAll('[data-ds="product-tile"]').length).toBe(3));
+    expect(plain.querySelectorAll('[data-ds-part="note"]').length).toBe(0);
+  });
+});
+
 describe('rebuyPricing / phân loại đã mua (B-146)', () => {
   const FLASH = (over: Record<string, unknown> = {}) => ({
     itemId: 'f1', variationId: 'v1', productSlug: 'nuoc-rua-chen', flashPrice: 50_000, retailPrice: 65_000, salePrice: null,
