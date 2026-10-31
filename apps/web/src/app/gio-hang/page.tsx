@@ -5,6 +5,8 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { addToCart, getCart, getCartSelection, updateCartItem, removeCartItem, formatVnd, type CartLine } from '@/lib/shop-client';
 import { CouponBox, couponPreviewKey, PREVIEW_DEBOUNCE_MS, useSettled } from '@/components/coupon-box';
@@ -21,7 +23,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
-import { KeyValueRow, ProductThumb } from '@/components/mini';
+import { Countdown, KeyValueRow, ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
@@ -87,6 +89,8 @@ export default function CartPage() {
     [],
   );
   // Thanh hoàn tác chỉ mở sau khi máy chủ xoá xong: hoàn tác (thêm lại) không được vượt mặt lệnh xoá còn đang bay.
+  // Hết giờ Giờ vàng khi khách đang xem: lấy lại giỏ để máy chủ tính lại giá, không cần tải trang.
+  const refreshCart = () => void qc.invalidateQueries({ queryKey: ['cart'] });
   const removeWithUndo = (line: CartLine) =>
     remove.mutate(line.id, {
       onSuccess: () => {
@@ -166,6 +170,8 @@ export default function CartPage() {
   // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
   const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
   const payTotal = Math.max(0, shownSubtotal - shownCombo - shownDiscount - shownTier);
+  // Tiết kiệm nhờ giá giảm của dòng (chỉ hiển thị; tiền thật do máy chủ tính). Cùng phạm vi với tạm tính: dòng mua được đang chọn.
+  const saving = cartSaving(buyableSelected);
   const onPay = () => rememberCheckoutSelection(allSelected ? null : selectedItems.map((it) => it.id));
   // Lý do nút Thanh toán đang khoá (lời giải thích đầy đủ nằm ở khung tóm tắt; thanh dính đáy nhắc lại ngay cạnh nút).
   const payHint =
@@ -269,6 +275,7 @@ export default function CartPage() {
                     const soldOut = it.stock <= 0;
                     const atMax = !soldOut && it.quantity >= it.stock;
                     const busy = busyItemId === it.id;
+                    const compareAt = lineCompareAt(it);
                     return (
                       <div key={it.id} className="flex gap-3 p-3 max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
                         <label className="relative flex h-11 w-9 flex-none cursor-pointer items-center justify-center">
@@ -299,7 +306,8 @@ export default function CartPage() {
                           </div>
                           <div className="break-words text-caption text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">{it.variationName}</div>
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span className="font-semibold text-stone-900">{formatVnd(it.unitPrice)}</span>
+                            <span className={`font-semibold ${compareAt || it.isFlash ? 'text-[color:var(--color-text-price-deal)]' : 'text-stone-900'}`}>{formatVnd(it.unitPrice)}</span>
+                            {compareAt && <span className="text-caption text-[color:var(--color-text-price-compare)] line-through">{formatVnd(compareAt)}</span>}
                             {it.isFlash && (
                               <span
                                 data-testid="cart-flash-badge"
@@ -309,8 +317,14 @@ export default function CartPage() {
                                 Giá Giờ vàng
                               </span>
                             )}
-                            {it.isFlash && it.soldPct != null && Number.isFinite(it.soldPct) && clampPercent(it.soldPct) > 0 && (
-                              <span className="text-caption text-stone-600">Đã bán {clampPercent(it.soldPct)}%</span>
+                            {it.isFlash && it.flashEndAt ? (
+                              <span className="text-caption text-stone-600">
+                                <Countdown endAt={it.flashEndAt} mode="text" onEnd={refreshCart} />
+                              </span>
+                            ) : (
+                              it.isFlash && it.soldPct != null && Number.isFinite(it.soldPct) && clampPercent(it.soldPct) > 0 && (
+                                <span className="text-caption text-stone-600">Đã bán {clampPercent(it.soldPct)}%</span>
+                              )
                             )}
                           </div>
                           {/* Số của máy chủ (it.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi lệnh đổi số lượng của dòng còn bay, vì lúc đó số chưa phải của máy chủ. Từ md đã có cột tổng bên phải. */}
@@ -404,6 +418,11 @@ export default function CartPage() {
               <div className="mt-1 flex justify-between text-sm text-success-fg">
                 <span>Ưu đãi hạng thành viên</span>
                 <span>-{formatVnd(shownTier)}</span>
+              </div>
+            )}
+            {saving > 0 && (
+              <div data-testid="cart-saving" className="mt-1 text-right text-caption font-medium text-success-fg">
+                {fillCopy('cart.saving', { x: formatVnd(saving) })}
               </div>
             )}
             </div>
@@ -517,6 +536,11 @@ export default function CartPage() {
             {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" />}
             {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" />}
             <KeyValueRow label={shownCombo + shownDiscount + shownTier > 0 ? 'Tạm tính (đã giảm)' : 'Tạm tính'} value={formatVnd(payTotal)} emphasis />
+            {saving > 0 && (
+              <div data-testid="cart-saving" className="text-right text-caption font-medium text-success-fg">
+                {fillCopy('cart.saving', { x: formatVnd(saving) })}
+              </div>
+            )}
             {payHint ? (
               <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} mt-2 w-full`}>
                 Thanh toán ({selectedCount})
