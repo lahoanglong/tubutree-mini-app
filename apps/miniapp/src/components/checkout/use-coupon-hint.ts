@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CouponPreviewDTO, CouponPreviewRequest } from '@tubutree/shared-types';
-import { couponHint, pickBestCoupon, type CouponHint } from '@tubutree/app-core/coupon-use';
+import { autoCouponMemory, couponHint, pickBestCoupon, type CouponHint } from '@tubutree/app-core/coupon-use';
 import { getCoupons, type CouponDTO } from '../../services/account-api';
 import { applyCoupon, getCouponPreviews, removeCoupon } from '../../services/shop-api';
+import { getErrorMessage } from '../../services/api';
 import { cartKey } from '../../services/cart-key';
 import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../../utils/use-debounced';
 
@@ -40,60 +42,91 @@ export function useCouponHint(enabled: boolean, previewParams: CouponPreviewRequ
 }
 
 /**
- * Mã giảm giá ở màn thanh toán: tự áp mã giảm nhiều nhất khách đang có, đúng một lần cho mỗi lượt mở màn. Khách gỡ (hay tự
- * đổi mã) rồi thì không tự áp lại; giỏ đã có mã thì không tự áp và cũng không bao giờ tự áp về sau. Lỗi (mạng, mã vừa hết
- * hạn) im lặng: màn giữ như chưa áp và còn câu gợi ý. `enabled` tắt khi chưa đủ điều kiện (chưa đăng nhập, giỏ chưa tải
- * hay đã có mã). Gợi ý và tự áp dùng chung MỘT lần hỏi xem trước.
+ * Mã giảm giá ở màn thanh toán: tự áp mã giảm nhiều nhất khách đang có, đúng một lần cho mỗi lượt thanh toán. Khách gỡ (hay tự
+ * đổi mã) rồi thì không tự áp lại, kể cả khi tải lại trang (nhớ theo phiên, theo khách); giỏ đã có mã thì không tự áp. Lỗi
+ * khi tự áp (mạng, mã vừa hết hạn) im lặng: màn giữ như chưa áp và còn câu gợi ý. Gợi ý và tự áp dùng chung MỘT lần hỏi xem trước.
  */
 export function useCheckoutCoupon(opts: {
+  /** Có hỏi xem trước để gợi ý không (đã đăng nhập, giỏ có hàng và chưa có mã). */
   enabled: boolean;
-  /** Địa chỉ đã chốt (hoặc khách chưa có địa chỉ): số xem trước có cả phí giao được miễn nên mới đủ để chọn mã. */
-  addressReady: boolean;
+  /** Được phép tự áp: toàn giỏ (không phải thanh toán một phần) và địa chỉ đã chốt (hoặc chưa có địa chỉ nào). */
+  autoAllowed: boolean;
+  userId: string | null | undefined;
+  cartLoaded: boolean;
   currentCode: string | null | undefined;
   previewParams: CouponPreviewRequest | undefined;
   previewKey: string;
   onChanged: () => void;
-}): { hint: CouponHint | null; autoCode: string | null; remove: () => void; removing: boolean } {
-  const { enabled, currentCode, onChanged } = opts;
+}): { hint: CouponHint | null; autoCode: string | null; busy: boolean; remove: () => void; removing: boolean; forget: () => void } {
+  const { enabled, currentCode, onChanged, userId, cartLoaded } = opts;
   const queryClient = useQueryClient();
-  const settled = useRef(false);
-  const [autoCode, setAutoCode] = useState<string | null>(null);
+  const { openSnackbar } = useSnackbar();
+  const memory = useMemo(() => autoCouponMemory(browserSession(), userId), [userId]);
+  const settled = useRef(memory.off());
+  const [applied, setApplied] = useState<string | null>(() => memory.applied());
+
   useEffect(() => {
-    if (currentCode) settled.current = true;
-  }, [currentCode]);
+    if (!cartLoaded) return;
+    const stored = memory.applied();
+    if (currentCode) {
+      settled.current = true;
+      if (stored && stored !== currentCode.toUpperCase()) {
+        memory.markOff();
+        setApplied(null);
+      }
+    } else if (stored) {
+      memory.markOff();
+      settled.current = true;
+      setApplied(null);
+    }
+  }, [cartLoaded, currentCode, memory]);
+
   const data = useCouponPreviews(enabled, opts.previewParams, opts.previewKey);
 
   const applyMut = useMutation({
     mutationFn: (code: string) => applyCoupon(code),
     onSuccess: (cart, code) => {
+      memory.markApplied(code);
+      setApplied(code.toUpperCase());
       queryClient.setQueryData(cartKey(), cart);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
-      setAutoCode(code.toUpperCase());
       onChanged();
     },
   });
   const removeMut = useMutation({
     mutationFn: removeCoupon,
     onSuccess: (cart) => {
+      memory.markOff();
+      setApplied(null);
       queryClient.setQueryData(cartKey(), cart);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
-      setAutoCode(null);
       onChanged();
     },
+    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
   useEffect(() => {
-    if (!data || settled.current || !opts.addressReady) return;
+    if (!data || settled.current || !opts.autoAllowed) return;
     settled.current = true;
     const best = pickBestCoupon(data.previews, data.wallet);
     if (best) applyMut.mutate(best);
-  }, [data, applyMut.mutate, opts.addressReady]);
+  }, [data, applyMut.mutate, opts.autoAllowed]);
 
-  const isAuto = !!autoCode && !!currentCode && currentCode.toUpperCase() === autoCode;
+  const isAuto = !!applied && !!currentCode && currentCode.toUpperCase() === applied;
   return {
     hint: data ? couponHint(data.previews) : null,
-    autoCode: isAuto ? autoCode : null,
+    autoCode: isAuto ? applied : null,
+    busy: applyMut.isPending || removeMut.isPending,
     remove: () => removeMut.mutate(),
     removing: removeMut.isPending,
+    forget: () => memory.clear(),
   };
+}
+
+function browserSession(): Storage | null {
+  try {
+    return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+  } catch {
+    return null;
+  }
 }

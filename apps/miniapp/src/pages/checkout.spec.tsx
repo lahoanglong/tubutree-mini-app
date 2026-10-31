@@ -1757,4 +1757,90 @@ describe('CheckoutPage: tự áp mã giảm nhiều nhất, gợi ý khi chưa �
     expect(mocks.applyCoupon).not.toHaveBeenCalled();
     expect(screen.queryByText(/mã dùng được/)).toBeNull();
   });
+
+  it('tải lại trang sau khi gỡ → không tự áp lại; cờ nhớ theo phiên', async () => {
+    const first = renderPage();
+    fireEvent.click(await screen.findByTestId('coupon-auto-remove'));
+    await screen.findByText('Bạn có 2 mã dùng được · giảm đến 30.000đ');
+    first.unmount();
+    mocks.applyCoupon.mockClear();
+    renderPage();
+    await screen.findByText('Bạn có 2 mã dùng được · giảm đến 30.000đ');
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 450));
+    });
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
+  });
+
+  it('tải lại trang khi mã tự áp còn trên giỏ → vẫn hiện "Đã tự áp", không áp lại', async () => {
+    const first = renderPage();
+    await screen.findByTestId('coupon-auto-label');
+    first.unmount();
+    mocks.applyCoupon.mockClear();
+    mocks.getCart.mockResolvedValue(APPLIED);
+    renderPage();
+    expect(await screen.findByTestId('coupon-auto-label')).toHaveTextContent('Đã tự áp');
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
+  });
+
+  it('gỡ mã bằng tấm chọn mã rồi chọn lại đúng mã đó bằng tay → không còn nhãn "Đã tự áp"', async () => {
+    renderPage();
+    await screen.findByTestId('coupon-auto-label');
+    mocks.getCart.mockResolvedValue(CART);
+    await act(async () => {
+      (mocks.voucherProps[mocks.voucherProps.length - 1]!.onCouponApplied as () => void)();
+    });
+    await waitFor(() => expect(screen.queryByTestId('coupon-auto-label')).toBeNull());
+    mocks.getCart.mockResolvedValue(APPLIED);
+    await act(async () => {
+      (mocks.voucherProps[mocks.voucherProps.length - 1]!.onCouponApplied as () => void)();
+    });
+    expect(await screen.findByText('WELCOME30')).toBeInTheDocument();
+    expect(screen.queryByTestId('coupon-auto-label')).toBeNull();
+  });
+
+  it('thanh toán một phần giỏ → không tự áp, vẫn gợi ý', async () => {
+    mocks.getCart.mockResolvedValue({
+      ...CART,
+      items: [CART.items[0]!, { ...CART.items[0]!, id: 'ci2', variationId: 'v2' }],
+    });
+    mocks.locState = { itemIds: ['ci1'] };
+    renderPage();
+    expect(await screen.findByText('Bạn có 2 mã dùng được · giảm đến 30.000đ')).toBeInTheDocument();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 450));
+    });
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
+    mocks.locState = null;
+  });
+
+  it('đang tự áp mã → nút đặt hàng khoá cho tới khi áp xong', async () => {
+    let release!: (v: unknown) => void;
+    mocks.applyCoupon.mockReturnValue(new Promise((r) => (release = r)));
+    renderPage();
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledTimes(1));
+    const btn = (await screen.findByText(/Đặt hàng · /)).closest('button')!;
+    expect(btn).toBeDisabled();
+    await act(async () => {
+      release(APPLIED);
+    });
+    await waitFor(() => expect(btn).not.toBeDisabled());
+  });
+
+  it('đặt đơn xong → xoá trí nhớ mã tự áp', async () => {
+    renderPage();
+    await screen.findByTestId('coupon-auto-label');
+    expect(sessionStorage.getItem('tubu.autocoupon.applied:u1')).toBe('WELCOME30');
+    await placeOrderClick();
+    await waitFor(() => expect(sessionStorage.getItem('tubu.autocoupon.applied:u1')).toBeNull());
+    expect(sessionStorage.getItem('tubu.autocoupon.off:u1')).toBeNull();
+  });
+
+  it('gỡ lỗi → báo nhẹ bằng snackbar, mã vẫn nằm trên giỏ', async () => {
+    mocks.removeCoupon.mockRejectedValue(new Error('mạng'));
+    renderPage();
+    fireEvent.click(await screen.findByTestId('coupon-auto-remove'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    expect(screen.getByTestId('coupon-auto-label')).toBeInTheDocument();
+  });
 });

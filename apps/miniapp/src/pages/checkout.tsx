@@ -203,9 +203,14 @@ export default function CheckoutPage() {
   const couponPreviewParams = checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined;
   const couponPreviewKey = cartPreviewKey(checkoutItems);
   const couponReady = authed && !addresses.isLoading && cartHasItems && !!cart.data && !cart.data.couponCode;
+  // Thanh toán một phần giỏ ("Mua ngay", chọn vài món) không tự áp: mã nằm trên cả giỏ và còn lại sau khi đặt, khách sẽ nhận
+  // lời "mã đã bị gỡ" cho mã họ chưa từng chọn.
+  const wholeCart = !itemIds || itemIds.length === (cart.data?.items.length ?? 0);
   const autoCoupon = useCheckoutCoupon({
     enabled: couponReady,
-    addressReady: !!addressId || addresses.data?.length === 0,
+    autoAllowed: wholeCart && (!!addressId || addresses.data?.length === 0),
+    userId: user?.id,
+    cartLoaded: !!cart.data,
     currentCode: cart.data?.couponCode,
     previewParams: couponPreviewParams,
     previewKey: couponPreviewKey,
@@ -324,6 +329,7 @@ export default function CheckoutPage() {
       orderKeys.current.reset(); // đơn sau là đơn mới
       setPlaceNotice(null);
       clearCheckoutSelection(); // lựa chọn của đơn vừa đặt không được dính sang đơn sau
+      autoCoupon.forget();
       // Chuyển khoản: sang màn VietQR để khách quét trả ngay (Pancake đối soát → tự xác nhận).
       if ((o.paymentMethod ?? sentMethod.current) === 'BANK_TRANSFER') {
         navigate(`/bank-payment/${o.code}`, { replace: true });
@@ -471,7 +477,7 @@ export default function CheckoutPage() {
   // bug audit A4-01/A4-02/A4-04 mà lần migrate này phải sửa), không thêm được lớp bảo vệ nào mới.
   const overStockLine = checkoutItems.find((it) => it.quantity > it.stock);
   const shownCartIssue = overStockLine ? vi.checkout.overStock(overStockLine.productName, overStockLine.stock) : cartIssue;
-  const canPlace = !!addressId && quote.isSuccess && !quote.isFetching && !!invoiceValid && !overStockLine && (!!zeroNote || payment !== '');
+  const canPlace = !!addressId && quote.isSuccess && !quote.isFetching && !!invoiceValid && !overStockLine && (!!zeroNote || payment !== '') && !autoCoupon.busy;
 
   // Chưa có báo giá (chưa chọn địa chỉ) thì chưa biết tổng đơn → chưa khoá, chưa có lý do.
   const paymentMethods = [
@@ -501,7 +507,6 @@ export default function CheckoutPage() {
   const previewSubtotal = shownItems.reduce((s, it) => s + it.total, 0);
   // Chưa có báo giá: tiền hàng trừ combo (chỉ khi mua cả giỏ — chọn một phần thì máy chủ tính lại) rồi trừ mã, như checkout trừ.
   // Lựa chọn nhớ lại có thể bằng đúng mọi dòng của giỏ (vd còn lại sau khi dọn món đã xoá): vẫn là cả giỏ.
-  const wholeCart = !itemIds || itemIds.length === (cart.data?.items.length ?? 0);
   // Combo, mã và hạng của giỏ chỉ đúng cho cả giỏ (mã tính trên phần hàng sau combo, hạng trên phần còn lại); mua một phần thì máy chủ tính lại.
   const previewCombo = wholeCart ? (cart.data?.comboDiscount ?? 0) : 0;
   const previewDiscount = wholeCart && cart.data?.couponCode ? (cart.data.discount ?? 0) : 0;

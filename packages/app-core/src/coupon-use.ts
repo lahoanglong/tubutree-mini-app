@@ -85,3 +85,48 @@ export function pickBestCoupon(
   candidates.sort((a, b) => saving(b) - saving(a) || endsAt(a) - endsAt(b) || a.code.localeCompare(b.code));
   return candidates[0]?.code ?? null;
 }
+
+type MemoryStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+/**
+ * Trí nhớ theo phiên (sessionStorage) của mã tự áp ở thanh toán, khoá theo khách: tải lại trang hay đi sang màn khác rồi
+ * quay lại vẫn nhớ khách đã gỡ mã (không áp lại) và mã nào đang nằm trên giỏ là mã đã tự áp (còn nhãn "Đã tự áp").
+ * Mọi thao tác nuốt lỗi: trình duyệt chặn lưu trữ thì chỉ mất trí nhớ, không hỏng màn.
+ */
+export function autoCouponMemory(storage: MemoryStorage | null | undefined, userId: string | null | undefined) {
+  const uid = userId ?? '';
+  const appliedKey = `tubu.autocoupon.applied:${uid}`;
+  const offKey = `tubu.autocoupon.off:${uid}`;
+  const read = (k: string) => {
+    try {
+      return storage?.getItem(k) ?? null;
+    } catch {
+      return null;
+    }
+  };
+  const write = (k: string, v: string | null) => {
+    try {
+      if (v == null) storage?.removeItem(k);
+      else storage?.setItem(k, v);
+    } catch {
+      /* không lưu được thì thôi */
+    }
+  };
+  return {
+    /** Mã đã được tự áp (viết hoa) và chưa bị khách đổi/gỡ. */
+    applied: () => read(appliedKey),
+    /** Khách đã gỡ hoặc đổi mã tự áp: không tự áp nữa trong phiên này. */
+    off: () => read(offKey) === '1',
+    markApplied: (code: string) => write(appliedKey, code.toUpperCase()),
+    /** Khách gỡ hoặc đổi mã: quên mã đã tự áp và không tự áp lại. */
+    markOff: () => {
+      write(appliedKey, null);
+      write(offKey, '1');
+    },
+    /** Đặt đơn xong: lượt thanh toán sau bắt đầu lại từ đầu. */
+    clear: () => {
+      write(appliedKey, null);
+      write(offKey, null);
+    },
+  };
+}

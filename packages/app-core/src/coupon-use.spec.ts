@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { couponAutoCopy, couponHint, pickBestCoupon, couponHintText, couponUseCopy, couponUseOutcome, couponUseTarget } from './coupon-use';
+import { autoCouponMemory, couponAutoCopy, couponHint, pickBestCoupon, couponHintText, couponUseCopy, couponUseOutcome, couponUseTarget } from './coupon-use';
 
 describe('couponUseTarget', () => {
   it('giỏ có hàng → giỏ; giỏ trống hoặc chưa biết → sản phẩm', () => {
@@ -114,5 +114,40 @@ describe('couponAutoCopy', () => {
   it('nhãn theo chữ chủ chốt', () => {
     expect(couponAutoCopy.applied).toBe('Đã tự áp');
     expect(couponAutoCopy.remove).toBe('Gỡ');
+  });
+});
+
+describe('autoCouponMemory', () => {
+  const fake = () => {
+    const m = new Map<string, string>();
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) };
+  };
+
+  it('nhớ mã đã tự áp và cờ đã gỡ, tách theo khách, xoá khi đặt đơn xong', () => {
+    const st = fake();
+    const a = autoCouponMemory(st, 'u1');
+    expect(a.applied()).toBeNull();
+    expect(a.off()).toBe(false);
+    a.markApplied('giam30');
+    expect(autoCouponMemory(st, 'u1').applied()).toBe('GIAM30');
+    expect(autoCouponMemory(st, 'u2').applied()).toBeNull();
+    a.markOff();
+    expect(a.applied()).toBeNull();
+    expect(autoCouponMemory(st, 'u1').off()).toBe(true);
+    expect(autoCouponMemory(st, 'u2').off()).toBe(false);
+    a.markApplied('X');
+    a.clear();
+    expect(a.applied()).toBeNull();
+    expect(a.off()).toBe(false);
+  });
+
+  it('không có hoặc hỏng bộ nhớ → không ném lỗi, coi như chưa nhớ gì', () => {
+    const broken = { getItem: () => { throw new Error('x'); }, setItem: () => { throw new Error('x'); }, removeItem: () => { throw new Error('x'); } };
+    for (const st of [null, undefined, broken]) {
+      const a = autoCouponMemory(st, 'u1');
+      expect(() => { a.markApplied('A'); a.markOff(); a.clear(); }).not.toThrow();
+      expect(a.applied()).toBeNull();
+      expect(a.off()).toBe(false);
+    }
   });
 });
