@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 export interface StickyActionBarProps {
   primary: ReactNode;
@@ -9,8 +9,16 @@ export interface StickyActionBarProps {
 /** Thanh CTA dính đáy — safe-area MỘT LẦN ở đây, không phải mỗi trang tự cộng (audit A4-21: 10
  * thanh tự vẽ, 3 thiếu safe-area hoàn toàn). */
 export function StickyActionBar({ primary, secondary, summary }: StickyActionBarProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  // scroll-padding chỉ có tác dụng trên khung cuộn (.zaui-page): đánh dấu khung để Tab không để phần tử lọt dưới thanh (WCAG 2.4.11).
+  useEffect(() => {
+    const page = ref.current?.closest('.zaui-page');
+    page?.classList.add('tubu-scroll-pad-sticky-bar');
+    return () => page?.classList.remove('tubu-scroll-pad-sticky-bar');
+  }, []);
   return (
     <div
+      ref={ref}
       data-testid="sticky-bar"
       className="tubu-sticky-bar"
       style={{

@@ -62,4 +62,9 @@ describe('css/tokens.css: icon nảy khi chọn tab (polish PL-10)', () => {
     const css = readFileSync(resolve(__dirname, 'tokens.css'), 'utf8');
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{\s*\*,\s*\*::before,\s*\*::after\s*\{[^}]*animation-duration:\s*0\.01ms/);
   });
+
+  it('giảm chuyển động: quy tắc chung cũng đưa transition-duration về 0,01ms (phủ nhả nút và thẻ ép)', () => {
+    const css = readFileSync(resolve(__dirname, 'tokens.css'), 'utf8');
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{\s*\*,\s*\*::before,\s*\*::after\s*\{[^}]*transition-duration:\s*0\.01ms/);
+  });
 });

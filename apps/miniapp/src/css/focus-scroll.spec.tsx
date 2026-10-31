@@ -22,7 +22,7 @@ describe('css/tokens.css: vòng focus và scroll-padding (a11y A4, A7)', () => {
 
   it('quy tắc :focus-visible chung cho tim, chip, nút tự vẽ, đứng trước luật riêng của thẻ (.tubu-tile-link)', () => {
     const rules = loadRules();
-    const general = rules.findIndex((r) => r.selectorText === ':focus-visible');
+    const general = rules.findIndex((r) => r.selectorText.startsWith(':focus-visible'));
     const tile = rules.findIndex((r) => r.selectorText === '.tubu-tile-link:focus-visible');
     expect(general, 'thiếu :focus-visible chung').toBeGreaterThanOrEqual(0);
     expect(rules[general]!.style.getPropertyValue('outline')).toMatch(/2px solid var\(--color-border-focus\)/);
@@ -42,5 +42,24 @@ describe('css/tokens.css: vòng focus và scroll-padding (a11y A4, A7)', () => {
     const rule = loadRules().find((r) => r.selectorText === '.tubu-scroll-pad-sticky-bar');
     expect(rule, 'thiếu .tubu-scroll-pad-sticky-bar').toBeDefined();
     expect(rule!.style.getPropertyValue('scroll-padding-bottom')).toBe('calc(96px + var(--safe-bottom))');
+  });
+
+  it('ô nhập ZaUI focus không có vòng outline, nút vẫn có (tránh hai vòng viền)', () => {
+    const style = document.createElement('style');
+    style.textContent = `.zaui-input{outline:none}` + readFileSync(resolve(__dirname, 'tokens.css'), 'utf8');
+    document.head.appendChild(style);
+    const input = document.createElement('input');
+    input.className = 'zaui-input';
+    const ta = document.createElement('textarea');
+    const btn = document.createElement('button');
+    document.body.append(input, ta, btn);
+    const matchesFocusRing = (el: Element) => {
+      const sel = (Array.from(style.sheet!.cssRules) as CSSStyleRule[]).find((r) => r.selectorText?.startsWith(':focus-visible'))!.selectorText;
+      return el.matches(sel.replace(':focus-visible', ':scope'));
+    };
+    expect(matchesFocusRing(input)).toBe(false);
+    expect(matchesFocusRing(ta)).toBe(false);
+    expect(matchesFocusRing(btn)).toBe(true);
+    document.body.replaceChildren();
   });
 });

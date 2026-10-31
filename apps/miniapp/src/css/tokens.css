@@ -113,8 +113,8 @@ body.with-back-btn .page.page-bleed {
 }
 
 /* ── Vòng focus (WCAG 2.4.7, 1.4.11): ZaUI đặt `.zaui-btn:focus{outline:0}` và chỉ đổi nền khi :focus-visible (độ khác nền 1,1–1,3:1),
-   nên nút DS không có vòng nhìn thấy. Quy tắc chung phủ cả tim, chip và nút tự vẽ; thẻ sản phẩm có luật riêng ở `.tubu-tile-link` bên dưới. ── */
-:focus-visible {
+   nên nút DS không có vòng nhìn thấy. Ô nhập loại trừ: ZaUI đã đổi viền sang màu focus, thêm vòng nữa thành hai vòng khi chạm. Quy tắc chung phủ cả tim, chip và nút tự vẽ; thẻ sản phẩm có luật riêng ở `.tubu-tile-link` bên dưới. ── */
+:focus-visible:not(input, textarea, select, .zaui-input) {
   outline: 2px solid var(--color-border-focus);
   outline-offset: 2px;
 }
