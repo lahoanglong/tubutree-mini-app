@@ -47,6 +47,17 @@ describe('Countdown (web)', () => {
     expect(html.replace(/<[^>]+>/g, '')).not.toMatch(/\d/);
   });
 
+  it('text: khung giữ chỗ có nhãn ẩn cùng kiểu chữ với nhãn thật, không chữ số, nên bề rộng không bắt đầu từ 0', () => {
+    for (const kind of ['ends', 'starts'] as const) {
+      const html = renderToString(<Countdown endAt={iso(7_533_000)} mode="text" kind={kind} />);
+      const plain = html.replace(/<[^>]+>/g, '');
+      expect(plain).toContain(kind === 'ends' ? 'Kết thúc sau' : 'Bắt đầu sau');
+      expect(plain).not.toMatch(/\d/);
+      expect(html).toContain('visibility:hidden');
+      expect(html).toContain('font-size:var(--type-caption-size)');
+    }
+  });
+
   it('clock: ô số nhảy từng giây, aria-label chỉ đổi khi sang phút mới', () => {
     mountPlain(<Countdown endAt={iso(7_533_000)} mode="clock" />);
     expect(timer().textContent).toBe('02:05:33');

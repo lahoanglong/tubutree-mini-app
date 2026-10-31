@@ -34,6 +34,9 @@ const CELL: CSSProperties = {
   fontVariantNumeric: 'tabular-nums',
 };
 const COLON: CSSProperties = { color: 'var(--color-flash-fg)', fontSize: 'var(--type-label-size)', fontWeight: 700, lineHeight: 1 };
+const TEXT: CSSProperties = { color: 'var(--color-flash-fg)', fontSize: 'var(--type-caption-size)', fontWeight: 600 };
+// Hai dấu cách số (U+2007) rộng bằng hai chữ số: giữ chỗ cho "2 giờ 05 phút" mà HTML dựng sẵn không có chữ số nào.
+const FIGURE_SPACES = '\u2007\u2007';
 
 /**
  * Đồng hồ đếm ngược dùng chung (Q3): ô số nền stone-900 ở đầu khối Giờ vàng, chữ theo phút ở nơi khác. Chữ nhìn thấy là
@@ -42,7 +45,9 @@ const COLON: CSSProperties = { color: 'var(--color-flash-fg)', fontSize: 'var(--
  * khách hay lệch). Hết giờ thì ẩn, không hiện 00:00.
  *
  * Web: HTML dựng sẵn (ISR) có thể được trả sau giờ hết suất, nên render đầu và lúc hydrate chỉ có khung giữ chỗ không chữ số; giờ chỉ đọc sau
- * mount (bản Mini đọc ngay vì không có máy chủ dựng trang). Khung vẫn có ô rỗng để chiều rộng không nhảy khi số hiện ra.
+ * mount (bản Mini đọc ngay vì không có máy chủ dựng trang). Khung ẩn chiếm chỗ theo chế độ để phần tử bên cạnh không nhảy: clock vẽ ba ô rỗng
+ * (bề rộng thường gặp, từ 1 giờ trở lên), text vẽ nhãn ẩn "Kết thúc sau ?? giờ ?? phút" bằng dấu cách số (cùng bề rộng chữ số, không có chữ số
+ * nên hydrate không lệch). Khung chỉ được tính từ chế độ vì giờ còn lại chưa biết trước khi mount: dưới 1 giờ ô thật hẹp hơn khung ba ô.
  */
 export function Countdown({ endAt, mode, onEnd, kind = 'ends' }: CountdownProps) {
   const [now, setNow] = useState<number | null>(null);
@@ -77,13 +82,18 @@ export function Countdown({ endAt, mode, onEnd, kind = 'ends' }: CountdownProps)
   if (!frame) {
     return (
       <span role="timer" aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, visibility: 'hidden' }}>
-        {mode === 'clock' &&
+        {mode === 'clock' ? (
           [0, 1, 2].map((i) => (
             <span key={i} aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
               {i > 0 && <span style={COLON}>:</span>}
               <span style={CELL} />
             </span>
-          ))}
+          ))
+        ) : (
+          <span aria-hidden="true" style={TEXT}>
+            {fillCopy(key, { t: fillCopy('time.hoursMinutes', { h: FIGURE_SPACES, m: FIGURE_SPACES }) })}
+          </span>
+        )}
       </span>
     );
   }
@@ -110,7 +120,7 @@ export function Countdown({ endAt, mode, onEnd, kind = 'ends' }: CountdownProps)
           ))}
         </>
       ) : (
-        <span aria-hidden="true" style={{ color: 'var(--color-flash-fg)', fontSize: 'var(--type-caption-size)', fontWeight: 600 }}>
+        <span aria-hidden="true" style={TEXT}>
           {fillCopy(key, { t: frame.text })}
         </span>
       )}
