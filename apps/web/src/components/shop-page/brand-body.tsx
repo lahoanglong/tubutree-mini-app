@@ -22,7 +22,7 @@ import { SegmentedTabs } from '@/components/mini/segmented-tabs';
 import { ShopHeader } from '@/components/mini/shop-header';
 import { ShopStatsRow } from '@/components/mini/shop-stats-row';
 import { ShopTopBar } from '@/components/mini/shop-top-bar';
-import { Heading, Text } from '@/components/mini/text';
+import { Text } from '@/components/mini/text';
 import { VoucherTicket } from '@/components/mini/voucher-ticket';
 import { ShopProductsTab } from './shop-products-tab';
 
@@ -110,7 +110,7 @@ export function BrandBody({ brand: b, mapOriginId }: BrandBodyProps) {
                 <div className="px-4 md:px-0">
                   {b.certifications.length > 0 && (
                     <div className="mt-1">
-                      <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Chứng nhận</Heading>
+                      <SectionHeader title="Chứng nhận" />
                       <ScrollRow label="Chứng nhận" style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}>
                         {b.certifications.map((c) => (
                           <Badge key={c.code} tone="success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -146,7 +146,7 @@ export function BrandBody({ brand: b, mapOriginId }: BrandBodyProps) {
 
                   {hasStory && b.story && (
                     <div className="mt-4">
-                      <Heading variant="title-sm" as="h2" style={{ marginBottom: 4 }}>Câu chuyện thương hiệu</Heading>
+                      <SectionHeader title="Câu chuyện thương hiệu" />
                       <Text variant="body-sm" tone="secondary" as="p" data-testid="brand-story-teaser" style={{ margin: 0, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                         {b.story}
                       </Text>
@@ -191,7 +191,7 @@ export function BrandBody({ brand: b, mapOriginId }: BrandBodyProps) {
 
               {tab === 'story' && hasStory && (
                 <div className="px-4 md:px-0">
-                  <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Câu chuyện thương hiệu</Heading>
+                  <SectionHeader title="Câu chuyện thương hiệu" />
                   {b.origin && (
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-1.5">

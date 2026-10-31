@@ -86,7 +86,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-describe('/brand/[slug] — theo dõi nhãn', () => {
+describe('/brand/[slug] — theo dõi thương hiệu', () => {
   it('trao số người theo dõi cho thân trang; khách đăng nhập thì lấy số mới nhất từ API', async () => {
     const c = await mount(actions());
     expect(c.querySelector('[data-testid="followers"]')!.textContent).toBe('12 người theo dõi');
@@ -109,7 +109,7 @@ describe('/brand/[slug] — theo dõi nhãn', () => {
     await flush(5);
     expect(mocks.post).toHaveBeenCalledTimes(1);
     expect(mocks.post).toHaveBeenCalledWith('/brand/sachi/follow');
-    expect(c.querySelector('[role="status"]')?.textContent).toBe('Đã theo dõi nhãn');
+    expect(c.querySelector('[role="status"]')?.textContent).toBe('Đã theo dõi thương hiệu');
     expect(btn(c, 'Đang theo dõi')).toBeDefined();
     expect(c.textContent).toContain('13 người theo dõi');
   });
@@ -130,7 +130,7 @@ describe('/brand/[slug] — theo dõi nhãn', () => {
     const c = await mount(actions());
     click(btn(c, 'Theo dõi')!);
     await flush(5);
-    expect(c.querySelector('[role="alert"]')?.textContent).toBe('Cần đăng nhập để theo dõi nhãn.');
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe('Cần đăng nhập để theo dõi thương hiệu.');
     expect(btn(c, 'Theo dõi')).toBeDefined();
   });
 
@@ -160,7 +160,7 @@ describe('/brand/[slug] — chia sẻ', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     click(btn(c, 'Chia sẻ')!);
     const dlg = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    expect(dlg.querySelector('h2')?.textContent).toBe('Chia sẻ nhãn hàng');
+    expect(dlg.querySelector('h2')?.textContent).toBe('Chia sẻ thương hiệu');
     expect(dlg.textContent).toContain(`${window.location.origin}/brand/sachi`);
     expect(dlg.textContent).not.toContain('ref=');
     expect(dlg.querySelector('[data-qr-placeholder], img[alt="QR"]')).not.toBeNull();
@@ -174,7 +174,7 @@ describe('/brand/[slug] — chia sẻ', () => {
     click(btn(c, 'Chia sẻ')!);
     click(btn(document.body, 'Chia sẻ qua thiết bị')!);
     await flush(2);
-    expect(mocks.share).toHaveBeenCalledWith({ title: 'Cửa hàng Sachi', path: '/brand/sachi' });
+    expect(mocks.share).toHaveBeenCalledWith({ title: 'Sachi trên Tubu Tree', path: '/brand/sachi' });
   });
 
   it('Sao chép link chép link tuyệt đối và báo đã sao chép; chép lỗi thì nói chép tay', async () => {
@@ -235,7 +235,7 @@ describe('/brand/[slug] — dải chia sẻ kiếm tiền', () => {
     click(btn(document.body, 'Chia sẻ qua thiết bị')!);
     await flush(2);
     expect(mocks.share).toHaveBeenCalledWith({
-      title: 'Cửa hàng Sachi',
+      title: 'Sachi trên Tubu Tree',
       text: 'Mình tin dùng Sachi \u{1F33F} Ghé xem & ưu đãi nha',
       path: '/brand/sachi?ref=AFF1',
     });
@@ -244,7 +244,7 @@ describe('/brand/[slug] — dải chia sẻ kiếm tiền', () => {
   it('nhãn chưa có tỉ lệ hoa hồng: dải vẫn chia sẻ được, không in "nhận tới % hoa hồng"', async () => {
     mocks.ste = { ...eligible, maxAffiliateRate: 0 };
     const c = await mount(actions());
-    const strip = btn(c, /^Chia sẻ nhãn này/)!;
+    const strip = btn(c, /^Chia sẻ thương hiệu này/)!;
     expect(strip.textContent).not.toContain('%');
     click(strip);
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();

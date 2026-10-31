@@ -169,6 +169,11 @@ describe('trang thương hiệu /brand/[slug] — khung shop giống Mini App', 
   it('chương trình đại lý và nút "Đăng ký đại lý" cho khách lẻ như Mini App', async () => {
     const box = await html();
     expect(Array.from(box.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(expect.arrayContaining(['Chứng nhận', 'Sản phẩm nổi bật', 'Chương trình đại lý']));
+    // Q1: mọi tiêu đề khối của trang là Inter 16/700 (SectionHeader), không có h2 nào lẫn Fraunces (font-display).
+    for (const h of Array.from(box.querySelectorAll('h2'))) {
+      expect(h.style.fontFamily).toBe('var(--font-ui)');
+      expect(h.className).not.toContain('font-display');
+    }
     expect(box.textContent).toContain('Đạt doanh số 5.000.000');
     expect(box.querySelector('a[href="/dai-ly"]')?.textContent).toBe('Đăng ký đại lý');
   });

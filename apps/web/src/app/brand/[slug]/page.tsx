@@ -15,9 +15,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const b = await getBrand(slug);
-  if (!b) return { title: 'Nhãn hàng — Tubu Tree' };
+  if (!b) return { title: 'Thương hiệu — Tubu Tree' };
   const title = `${b.name}${b.isVerified ? ' ✓' : ''} — Tubu Tree`;
-  const description = b.tagline ?? 'Nhãn hàng sống xanh trên Tubu Tree';
+  const description = b.tagline ?? 'Thương hiệu sống xanh trên Tubu Tree';
   const img = b.coverUrl ?? b.logoUrl ?? b.products?.[0]?.thumbnail ?? undefined;
   return {
     title,

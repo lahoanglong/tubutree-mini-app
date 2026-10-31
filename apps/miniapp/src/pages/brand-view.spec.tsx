@@ -92,7 +92,10 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     expect(screen.getByText('Sống xanh mỗi ngày')).toBeInTheDocument();
     expect(screen.getByRole('group', { name: '12 người theo dõi' })).toBeInTheDocument();
     for (const h of ['Chứng nhận', 'Mã giảm giá của shop', 'Câu chuyện thương hiệu', 'Sản phẩm nổi bật', 'Chương trình đại lý']) {
-      expect(screen.getByRole('heading', { level: 2, name: h })).toBeInTheDocument();
+      const heading = screen.getByRole('heading', { level: 2, name: h });
+      expect(heading).toBeInTheDocument();
+      // Q1: tiêu đề khối là Inter (SectionHeader), không phải Fraunces của tiêu đề trang.
+      expect(heading.style.fontFamily).toBe('var(--font-ui)');
     }
     expect(screen.getByText('Câu chuyện của Sachi')).toBeInTheDocument();
     expect(screen.getByText(/Đạt doanh số 50\.000\.000đ \/ quý/)).toBeInTheDocument();
@@ -113,7 +116,7 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Theo dõi/ }));
     await waitFor(() => expect(mocks.followBrand).toHaveBeenCalledWith('sachi'));
-    expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+    expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success', text: expect.stringContaining('Đã theo dõi thương hiệu') }));
   });
 
   it('đang theo dõi thì bấm lại gọi unfollowBrand', async () => {
@@ -265,10 +268,10 @@ describe('BrandViewPage — cấu trúc và vùng chạm (C-076, C-114)', () => 
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
   });
 
-  it('nhãn không có (404): báo "Không tìm thấy nhãn hàng", nút sang Danh mục, không Thử lại, không hỏi theo dõi/chia sẻ', async () => {
+  it('thương hiệu không có (404): báo "Không tìm thấy thương hiệu", nút sang Danh mục, không Thử lại, không hỏi theo dõi/chia sẻ', async () => {
     mocks.getPublicBrand.mockRejectedValue({ isHttpError: true, response: { status: 404 } });
     renderPage();
-    expect(await screen.findByText('Không tìm thấy nhãn hàng')).toBeInTheDocument();
+    expect(await screen.findByText('Không tìm thấy thương hiệu')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /thử lại/i })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Xem Danh mục' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/browse', { replace: true });
@@ -308,8 +311,8 @@ describe('BrandViewPage — cấu trúc và vùng chạm (C-076, C-114)', () => 
     for (const rate of [0, null, undefined]) {
       mocks.getBrandShareToEarn.mockResolvedValue({ eligible: true, maxAffiliateRate: rate, referralCode: 'AFF1', brandSlug: 'sachi' });
       const { unmount } = renderPage();
-      const banner = await screen.findByRole('button', { name: /Chia sẻ nhãn này/ });
-      expect(banner).toHaveTextContent('Chia sẻ nhãn này');
+      const banner = await screen.findByRole('button', { name: /Chia sẻ thương hiệu này/ });
+      expect(banner).toHaveTextContent('Chia sẻ thương hiệu này');
       expect(banner.textContent).not.toMatch(/hoa hồng|nhận tới|%/);
       unmount();
     }
@@ -318,7 +321,7 @@ describe('BrandViewPage — cấu trúc và vùng chạm (C-076, C-114)', () => 
   it('banner share-to-earn là nút thật có thể dùng bàn phím', async () => {
     mocks.getBrandShareToEarn.mockResolvedValue({ eligible: true, maxAffiliateRate: 15, referralCode: 'AFF1', brandSlug: 'sachi' });
     renderPage();
-    const banner = await screen.findByRole('button', { name: /Chia sẻ nhãn này — nhận tới 15% hoa hồng/ });
+    const banner = await screen.findByRole('button', { name: /Chia sẻ thương hiệu này — nhận tới 15% hoa hồng/ });
     expect(banner.tagName).toBe('BUTTON');
   });
 });
@@ -400,7 +403,7 @@ describe('BrandViewPage — khung shop (tab, Theo dõi ở đầu, Sản phẩm 
     mocks.followBrand.mockRejectedValue(new Error('401'));
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Theo dõi' }));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning' })));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', text: 'Cần đăng nhập để theo dõi thương hiệu.' })));
     expect(mocks.getBrandFollowState).not.toHaveBeenCalled();
   });
 

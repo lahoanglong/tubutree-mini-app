@@ -20,7 +20,7 @@ import { shopStats } from '@tubutree/app-core/commerce/shop-stats';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { copyText } from '../utils/clipboard';
 import { serverNow } from '../utils/server-clock';
-import { Text, Heading } from '../components/ui/text';
+import { Text } from '../components/ui/text';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Icon } from '../components/ui/icon';
@@ -38,7 +38,7 @@ import { ShopProductsTab } from '../components/shop-page/shop-products-tab';
 import { findBrandOrigin } from '../utils/brand-origins';
 
 /** Tiêu đề khi chưa có tên nhãn (đang tải/lỗi); tải xong thì tên nhãn là h1 của ShopHeader. */
-const PAGE_TITLE = 'Nhãn hàng';
+const PAGE_TITLE = 'Thương hiệu';
 
 /** Số sản phẩm nổi bật trên tab Shop (kệ ngang); phần còn lại ở tab Sản phẩm. */
 const FEATURED_MAX = 10;
@@ -80,9 +80,9 @@ export default function BrandViewPage() {
       // thì bấm Theo dõi xong con số đứng im cả phút → người dùng bấm lại "cho chắc" và vô
       // tình bỏ theo dõi.
       void qc.invalidateQueries({ queryKey: ['public-brand', slug] });
-      notify({ text: r.following ? 'Đã theo dõi nhãn 💚' : 'Đã bỏ theo dõi', type: 'success' });
+      notify({ text: r.following ? 'Đã theo dõi thương hiệu 💚' : 'Đã bỏ theo dõi', type: 'success' });
     },
-    onError: () => notify({ text: 'Cần đăng nhập để theo dõi nhãn.', type: 'warning' }),
+    onError: () => notify({ text: 'Cần đăng nhập để theo dõi thương hiệu.', type: 'warning' }),
   });
   // Banner share-to-earn: chỉ AFFILIATE đăng nhập mới eligible; lỗi (401/chưa login) coi như ẩn.
   const steQ = useQuery({
@@ -118,8 +118,8 @@ export default function BrandViewPage() {
           {isNotFoundError(q.error) ? (
             <EmptyState
               art="search"
-              heading="Không tìm thấy nhãn hàng"
-              body="Nhãn này chưa được công khai hoặc liên kết đã cũ. Xem các nhãn khác trong Danh mục nhé."
+              heading="Không tìm thấy thương hiệu"
+              body="Thương hiệu này chưa được công khai hoặc liên kết đã cũ. Xem các thương hiệu khác trong Danh mục nhé."
               ctaLabel="Xem Danh mục"
               onCta={() => navigate('/browse', { replace: true })}
             />
@@ -203,7 +203,7 @@ export default function BrandViewPage() {
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <BadgePercent size={18} color="var(--color-action-secondary-fg)" aria-hidden />
               <Text variant="body-sm" style={{ fontWeight: 700, color: 'var(--color-action-secondary-fg)' }}>
-                {ste.maxAffiliateRate > 0 ? `Chia sẻ nhãn này — nhận tới ${ste.maxAffiliateRate}% hoa hồng` : 'Chia sẻ nhãn này'}
+                {ste.maxAffiliateRate > 0 ? `Chia sẻ thương hiệu này — nhận tới ${ste.maxAffiliateRate}% hoa hồng` : 'Chia sẻ thương hiệu này'}
               </Text>
             </span>
             <Text variant="caption" style={{ color: 'var(--color-text-brand)', marginTop: 2 }} as="span">
@@ -222,7 +222,7 @@ export default function BrandViewPage() {
           <div style={{ padding: '0 16px' }}>
             {b.certifications.length > 0 && (
               <div style={{ marginTop: 4 }}>
-                <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Chứng nhận</Heading>
+                <SectionHeader title="Chứng nhận" />
                 <ScrollRow label="Chứng nhận" style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}>
                   {b.certifications.map((c) => (
                     <Badge key={c.code} tone="success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -253,7 +253,7 @@ export default function BrandViewPage() {
 
             {hasStory && b.story && (
               <div style={{ marginTop: 16 }}>
-                <Heading variant="title-sm" as="h2" style={{ marginBottom: 4 }}>Câu chuyện thương hiệu</Heading>
+                <SectionHeader title="Câu chuyện thương hiệu" />
                 <Text variant="body-sm" tone="secondary" as="p" data-testid="brand-story-teaser" style={{ margin: 0, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                   {b.story}
                 </Text>
@@ -290,10 +290,7 @@ export default function BrandViewPage() {
 
             {b.dealerRewards.length > 0 && (
               <div style={{ marginTop: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                  <Store size={16} color="var(--color-text-brand)" aria-hidden />
-                  <Heading variant="title-sm" as="h2">Chương trình đại lý</Heading>
-                </div>
+                <SectionHeader title="Chương trình đại lý" icon={Store} />
                 {b.dealerRewards.map((d) => (
                   <div key={d.id} style={{ marginBottom: 8, background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-card)', padding: 12 }}>
                     <Text variant="body-sm" style={{ fontWeight: 700 }} as="div">{d.title}</Text>
@@ -315,7 +312,7 @@ export default function BrandViewPage() {
 
         {tab === 'story' && hasStory && (
           <div style={{ padding: '0 16px' }}>
-            <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Câu chuyện thương hiệu</Heading>
+            <SectionHeader title="Câu chuyện thương hiệu" />
             {b.origin && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
@@ -351,7 +348,7 @@ export default function BrandViewPage() {
         visible={shareOpen}
         onClose={() => setShareOpen(false)}
         slug={b.slug}
-        title={`Cửa hàng ${b.name}`}
+        title={`${b.name} trên Tubu Tree`}
         referralCode={myRef}
         thumbnail={b.coverUrl ?? b.logoUrl ?? b.products[0]?.thumbnail ?? undefined}
         pathPrefix="brand"

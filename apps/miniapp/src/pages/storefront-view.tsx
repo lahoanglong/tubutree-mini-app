@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Page, useParams, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, Share2, MapPin, Sparkles } from 'lucide-react';
+import { ChevronRight, Share2, Sparkles } from 'lucide-react';
 import { publicTier, planShopSections, shopTabs, storefrontStatsInput, uniqueShopProducts, type ShopTabKey } from '@tubutree/app-core/commerce/shop-page';
 import { shopStats } from '@tubutree/app-core/commerce/shop-stats';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -139,12 +139,6 @@ function StorefrontShop({ sf }: { sf: Storefront }) {
               </Badge>
             )}
             {tier && <TierBadge name={tier.name} emoji={tier.emoji} />}
-            {sf.warehouseCity && (
-              <Badge tone="neutral" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <MapPin size={12} />
-                Kho: {sf.warehouseCity}
-              </Badge>
-            )}
           </>
         }
       />

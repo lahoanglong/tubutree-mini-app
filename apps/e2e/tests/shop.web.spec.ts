@@ -595,7 +595,7 @@ test.describe('Web: nhãn hàng', () => {
     api.get(`/brand/${slug}/share-to-earn`, { eligible: true, maxAffiliateRate: 15, referralCode: 'AFF1', brandSlug: slug });
     await page.goto(`/brand/${slug}`);
     await page.getByRole('button', { name: /nhận tới 15% hoa hồng/ }).click();
-    const dialog = page.getByRole('dialog', { name: 'Chia sẻ nhãn hàng' });
+    const dialog = page.getByRole('dialog', { name: 'Chia sẻ thương hiệu' });
     await expect(dialog.getByText(new RegExp(`/brand/${slug}\\?ref=AFF1`)).first()).toBeVisible();
   });
 });

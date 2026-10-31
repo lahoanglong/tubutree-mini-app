@@ -11,6 +11,7 @@ import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { Button } from '@/components/mini/button';
 import { IconButton } from '@/components/mini/icon-button';
+import { SectionHeader } from '@/components/mini/section-header';
 import { Sheet } from '@/components/ui/sheet';
 import { QrCode } from '@/components/ui/qr-code';
 import { useAuth } from '@/lib/auth-context';
@@ -31,7 +32,7 @@ const HEART = '\u{1F49A}';
 export interface BrandActionParts {
   /** Theo dõi (nút chữ) và Chia sẻ (nút biểu tượng): đặt ở đầu shop. */
   buttons: ReactNode;
-  /** Kết quả theo dõi vừa bấm ("Đã theo dõi nhãn" hoặc lỗi cần đăng nhập). */
+  /** Kết quả theo dõi vừa bấm ("Đã theo dõi thương hiệu" hoặc lỗi cần đăng nhập). */
   note: ReactNode;
   /** Dải chia sẻ kiếm tiền cho CTV đủ điều kiện; null khi không đủ điều kiện hoặc API lỗi. */
   banner: ReactNode;
@@ -67,9 +68,9 @@ export function BrandActions({ slug, name, followerCount, children }: { slug: st
     mutationFn: () => (following ? unfollowBrand(coreHttp, slug) : followBrand(coreHttp, slug)),
     onSuccess: (r) => {
       qc.setQueryData(brandFollowQuery(coreHttp, slug).queryKey, r);
-      setNote({ text: r.following ? 'Đã theo dõi nhãn' : 'Đã bỏ theo dõi', error: false });
+      setNote({ text: r.following ? 'Đã theo dõi thương hiệu' : 'Đã bỏ theo dõi', error: false });
     },
-    onError: () => setNote({ text: 'Cần đăng nhập để theo dõi nhãn.', error: true }),
+    onError: () => setNote({ text: 'Cần đăng nhập để theo dõi thương hiệu.', error: true }),
   });
 
   const onFollow = () => {
@@ -101,7 +102,7 @@ export function BrandActions({ slug, name, followerCount, children }: { slug: st
     >
       <span className="flex items-center gap-1.5 text-sm font-bold text-forest-800">
         <BadgePercent className="h-[18px] w-[18px]" aria-hidden="true" />
-        {ste.maxAffiliateRate > 0 ? `Chia sẻ nhãn này — nhận tới ${ste.maxAffiliateRate}% hoa hồng` : 'Chia sẻ nhãn này'}
+        {ste.maxAffiliateRate > 0 ? `Chia sẻ thương hiệu này — nhận tới ${ste.maxAffiliateRate}% hoa hồng` : 'Chia sẻ thương hiệu này'}
       </span>
       <span className="mt-0.5 block text-xs text-forest-700">Bấm để lấy link + lời đăng gắn mã giới thiệu của bạn.</span>
     </button>
@@ -160,13 +161,13 @@ function BrandShareSheet({
   const share = async () => {
     setNote(null);
     const text = base[0];
-    const result = await platformBridge.share({ title: `Cửa hàng ${name}`, ...(text ? { text } : {}), path });
+    const result = await platformBridge.share({ title: `${name} trên Tubu Tree`, ...(text ? { text } : {}), path });
     if (result === 'copied') setNote({ text: 'Đã sao chép', error: false });
     else if (result === 'failed') setNote({ text: 'Không sao chép được — hãy chọn và chép thủ công.', error: true });
   };
 
   return (
-    <Sheet open onClose={onClose} title="Chia sẻ nhãn hàng" size="auto">
+    <Sheet open onClose={onClose} title="Chia sẻ thương hiệu" size="auto">
       <div className="mb-3 flex justify-center">
         <QrCode value={url} />
       </div>
@@ -256,10 +257,7 @@ export function BrandDealerBlock({ rewards }: { rewards: { id: string; title: st
 
   return (
     <section className="mt-6">
-      <h2 className="mb-2 flex items-center gap-1.5 font-display font-semibold text-stone-900">
-        <Store className="h-4 w-4 text-forest-600" aria-hidden="true" />
-        <span>Chương trình đại lý</span>
-      </h2>
+      <SectionHeader title="Chương trình đại lý" icon={Store} />
       <div className="space-y-2">
         {rewards.map((d) => (
           <div key={d.id} className="rounded-card border border-stone-200 bg-stone-0 p-3">
