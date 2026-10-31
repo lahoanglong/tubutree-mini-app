@@ -284,7 +284,8 @@ test.describe('Web admin nhân sự và lương', () => {
   });
 
   test('lương: chốt gửi year/month đang xem; mở lại có xác nhận', async ({ page, api }) => {
-    const now = new Date();
+    // Tháng đang xem tính theo giờ VN: 17:00–24:00 UTC ngày cuối tháng đã sang tháng sau.
+    const now = new Date(Date.now() + 7 * 3600_000);
     const month = {
       year: now.getUTCFullYear(), month: now.getUTCMonth() + 1, totalMinutes: 125, gross: 500_000, totalFines: 0, net: 500_000,
       status: 'OPEN', paidAt: null, proofImageUrl: null, note: null,
