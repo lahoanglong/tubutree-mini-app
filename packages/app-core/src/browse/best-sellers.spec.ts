@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BEST_SELLERS_ALL_KEY, bestSellerScope, bestSellerTabs, bestSellersRankFrom } from './best-sellers';
+import { BEST_SELLERS_ALL_KEY, bestSellerScope, bestSellerTabs, bestSellersHref, bestSellersRankFrom } from './best-sellers';
 import type { CategoryNode } from './category-tree';
 
 const node = (id: string, over: Partial<CategoryNode> = {}): CategoryNode => ({
@@ -62,5 +62,20 @@ describe('bestSellersRankFrom', () => {
     expect(bestSellersRankFrom(0)).toBe(1);
     expect(bestSellersRankFrom(-4)).toBe(1);
     expect(bestSellersRankFrom(Number.NaN)).toBe(1);
+  });
+});
+
+describe('bestSellersHref', () => {
+  it('địa chỉ trang theo nền: Mini /best-sellers, web /ban-chay', () => {
+    expect(bestSellersHref('mini')).toBe('/best-sellers');
+    expect(bestSellersHref('web')).toBe('/ban-chay');
+  });
+
+  it('giữ danh mục (mã hoá) và số trang; trang 1 không ghi page', () => {
+    expect(bestSellersHref('web', { category: 'c 1' })).toBe('/ban-chay?category=c+1');
+    expect(bestSellersHref('web', { category: 'c1', page: 2 })).toBe('/ban-chay?category=c1&page=2');
+    expect(bestSellersHref('mini', { page: 3 })).toBe('/best-sellers?page=3');
+    expect(bestSellersHref('mini', { page: 1 })).toBe('/best-sellers');
+    expect(bestSellersHref('mini', { category: '' , page: Number.NaN })).toBe('/best-sellers');
   });
 });

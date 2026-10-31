@@ -40,3 +40,17 @@ export function bestSellerScope(tabs: BestSellerTab[] | null, category: string |
 export function bestSellersRankFrom(startPage: number): number {
   return Number.isFinite(startPage) && startPage >= 1 ? (Math.floor(startPage) - 1) * BEST_SELLERS_PAGE_LIMIT + 1 : 1;
 }
+
+const PAGE_PATH = { mini: '/best-sellers', web: '/ban-chay' } as const;
+
+/**
+ * Địa chỉ trang Bán chạy nhất theo nền, giữ danh mục và số trang (trang 1 không ghi `page`). Là địa chỉ của chính trang này nên nằm
+ * cạnh nó thay vì đi qua `liveRoute` (lối vào từ nơi khác); `route-map.json` vẫn là nguồn khai route.
+ */
+export function bestSellersHref(platform: 'mini' | 'web', { category, page }: { category?: string; page?: number } = {}): string {
+  const qs = new URLSearchParams();
+  if (category) qs.set('category', category);
+  if (page !== undefined && Number.isFinite(page) && page > 1) qs.set('page', String(Math.floor(page)));
+  const s = qs.toString();
+  return s ? `${PAGE_PATH[platform]}?${s}` : PAGE_PATH[platform];
+}
