@@ -49,6 +49,22 @@ Khi bạn đăng nhập hoặc đặt hàng, bạn đồng ý để chúng tôi 
 - Nguồn bạn vào Tubu Tree (link giới thiệu của CTV, chiến dịch, thẻ trong hộp hàng, sàn thương mại điện tử) để chúng tôi tính ưu đãi, hoa hồng và đo hiệu quả chiến dịch.
 - Lịch sử thông báo đã gửi cho bạn.
 
+**Quyền Mini App xin trên điện thoại của bạn**
+
+Mini App xin các quyền dưới đây khi bạn dùng tính năng cần đến quyền đó. Điện thoại hoặc Zalo sẽ hỏi bạn trước khi cho phép, trừ rung. Bạn có thể từ chối; các tính năng khác vẫn dùng bình thường.
+- Tên và ảnh đại diện Zalo: khi bạn tạo địa chỉ nhận hàng đầu tiên hoặc bấm "Điền nhanh từ Zalo", để điền sẵn tên người nhận.
+- Số điện thoại Zalo: khi bạn đặt hàng, tạo địa chỉ nhận hàng đầu tiên, nhận quà khách mới, tham gia Mua chung, Đổi rác lấy quà, đăng ký CTV, tích điểm đơn sàn hoặc bấm chia sẻ số điện thoại. Số này dùng để gắn đơn hàng, Điểm Xanh và quà vào đúng tài khoản, điền sẵn số nhận hàng và để liên hệ bạn về đơn (xem mục 4).
+- Vị trí hiện tại: khi bạn tới bước chọn cách gửi trong Đổi rác lấy quà hoặc bấm "Dùng vị trí của tôi", để xếp các điểm nhận gần bạn lên trước. Vị trí chỉ dùng để tính khoảng cách lúc đó, chúng tôi không lưu lại.
+- Camera để quét mã QR: khi bạn bấm quét mã trên nhãn đơn sàn. Khi quét, chúng tôi chỉ nhận nội dung chữ của mã, không nhận hình ảnh.
+- Camera và thư viện ảnh: khi bạn chọn hoặc chụp ảnh, video để gửi kèm yêu cầu đổi trả, đánh giá, bài cộng đồng, ảnh đại diện, tin nhắn chat hoặc hồ sơ đại lý. Chúng tôi chỉ nhận ảnh, video bạn chọn gửi.
+- Lưu ảnh vào máy: khi bạn bấm lưu mã QR chuyển khoản.
+- Theo dõi Zalo OA và nhận thông báo: khi bạn bấm theo dõi Tubu Tree, để gửi thông báo về đơn hàng và ưu đãi qua Zalo.
+- Rung: điện thoại rung nhẹ khi bạn bấm một số nút; không cần cấp quyền và không thu thông tin nào.
+
+Với nhân viên Tubu Tree:
+- Lúc chấm công vào ca, vị trí và địa chỉ IP mạng được lưu cùng bản ghi chấm công để xác nhận có mặt ở nơi làm việc. Trong ca, khi bạn mở màn chấm công, ứng dụng kiểm tra lại vị trí và mạng khoảng 3 phút một lần; các lần này không lưu toạ độ, chỉ lưu thời điểm kiểm tra và việc bạn có ở ngoài nơi làm việc hay không. Ở ngoài nơi làm việc quá lâu thì ca tự kết thúc.
+- Nhân viên ở điểm nhận dùng camera để quét mã yêu cầu Đổi rác của khách; chỉ nội dung chữ của mã được gửi về hệ thống.
+
 **Nếu bạn là cộng tác viên (CTV), đại lý hoặc chủ gian hàng**
 - Mã số thuế cá nhân hoặc số căn cước công dân để kê khai và khấu trừ thuế.
 - Lịch sử hoa hồng, các lần chuyển hoa hồng vào Ví, thuế đã khấu trừ và các khoản thu hồi hoa hồng.
