@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FORBIDDEN_TERMS, SHOP_COPY, SHOP_COPY_MAX, fillCopy } from './shop-copy';
+import { FORBIDDEN_TERMS, SHOP_COPY, fillCopy } from './shop-copy';
+import { SHOP_COPY_MAX } from './shop-copy-budget';
 
 // Giá trị xấu nhất của từng biến để đo độ dài. Biến mang chữ tự do (name, title, a, b, when) không có ở đây:
 // khoá dùng chúng phải có max null.

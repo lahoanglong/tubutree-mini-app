@@ -34,7 +34,10 @@
 
 | File | Việc |
 |---|---|
-| `packages/app-core/src/shop-copy.ts` | `SHOP_COPY`, `SHOP_COPY_MAX`, `FORBIDDEN_TERMS`, `fillCopy` |
+| `packages/app-core/src/shop-copy.ts` | `SHOP_COPY` (object literal thuần), `FORBIDDEN_TERMS`, `fillCopy` |
+| `packages/app-core/src/shop-copy-budget.ts` | `SHOP_COPY_MAX` (chỉ spec dùng, không vào bản build) |
+| `packages/app-core/src/copy-template.ts` | `fillTemplate(template, vars, label?)` |
+| `packages/app-core/src/commerce/meta-copy.ts` | `META_COPY` ("Đã bán {n}", "★ {avg}"): chữ nằm trên đường nạp gói đầu, `SHOP_COPY` lấy lại |
 | `packages/app-core/src/commerce/card-meta.ts` | `formatRating`, `formatSoldShort`, `cardMetaLine` (+ `soldCountText` phụ) |
 | `packages/app-core/src/commerce/countdown.ts` | `countdownClock`, `countdownText`, `countdownSpoken`, `formatCountdown` (chuyển từ `countdown-format.ts`) |
 | `packages/app-core/src/commerce/flash-sold.ts` | `flashSoldText` |
@@ -60,7 +63,7 @@ Mỗi `*.spec.ts` nằm cạnh file của nó. Lệnh kiểm một file: `cd pac
 **Interfaces:**
 - Produces:
   - `SHOP_COPY: Record<string, string>`: khoá `nhóm.tên`, mẫu có `{tên}`.
-  - `SHOP_COPY_MAX: Record<string, number | null>`: số ký tự tối đa khi điền giá trị xấu nhất (`null` = câu dài, không giới hạn). Cùng tập khoá với `SHOP_COPY`.
+  - `SHOP_COPY_MAX: Record<string, number | null>` (ở `shop-copy-budget.ts`): số ký tự tối đa khi điền giá trị xấu nhất (`null` = câu dài, không giới hạn). Cùng tập khoá với `SHOP_COPY`; tách file để bản build không mang bảng ngân sách.
   - `FORBIDDEN_TERMS: readonly { pattern: RegExp; use: string }[]`.
   - `fillCopy(key: string, vars?: Record<string, string | number>): string`: ném lỗi khi khoá lạ hoặc thiếu biến.
 
@@ -72,7 +75,7 @@ Mỗi `*.spec.ts` nằm cạnh file của nó. Lệnh kiểm một file: `cd pac
   - Giá trị chốt: `rank.title==='Bán chạy nhất'`, `badge.freeship==='Miễn phí giao hàng'`, `badge.loved==='Được yêu thích'`, `badge.featured==='Tubu chọn'`, `coupon.title==='Mã giảm giá'`, `brand.title==='Thương hiệu'`, `stock.out==='Tạm hết hàng'`, `stock.discontinued==='Ngừng bán'`, `fillCopy('flash.endsIn',{t:'02:05:33'})==='Kết thúc sau 02:05:33'`, `flash.justOpened==='Vừa mở bán'`, `flash.almostGone==='Sắp hết'`, `flash.soldOut==='Đã bán hết'`.
   - `fillCopy` ném với khoá lạ và với biến thiếu; thay mọi lần xuất hiện của một biến.
 - [ ] **Step 2:** `npx vitest run src/shop-copy.spec.ts`, mong đợi FAIL (module chưa có).
-- [ ] **Step 3: Cài đặt** `shop-copy.ts`: một bảng `ENTRIES: Record<string, readonly [text: string, max: number | null]>`, `SHOP_COPY` và `SHOP_COPY_MAX` suy ra từ đó (thêm khoá chỉ ở một chỗ). Khoá và chữ chép đúng `review/ux-copy.md` mục B1–B7 (tên khoá giữ nguyên, hàm `x(a)` thành mẫu `{a}`), cộng nhóm phụ P2 cần: `badge.discount` (`-{pct}%`), `badge.new`, `badge.featured`, `badge.loved`, `badge.freeship`, `badge.flashSpoken`, `badge.discountSpoken`, `stock.out`, `stock.discontinued`, `price.spoken`, `price.flashSpoken`, `price.compareSpoken`, `meta.rating`, `meta.sold`, `stats.*`, `time.*` (`days`, `daysHours`, `hoursMinutes`, `hours`, `minutes`, `underMinute`, `daysClock`), `coupon.freeship|amount|percent|percentMax|tabClaim|tabMine|tabHistory|title|oneCodeHint`, `brand.title`. Ngoại lệ so với ux-copy: chữ Giờ vàng theo `02-ke-hoach.md` ở Global Constraints. `max` lấy ở cột "Tối đa" của ux-copy; chỗ đo thực tế vượt thì ghi số đo thực (ví dụ `flash.startsAtDay` 23). `FORBIDDEN_TERMS` theo bảng D2 của ux-copy và Q5.
+- [ ] **Step 3: Cài đặt** `shop-copy.ts` là object literal thuần (không gọi hàm lúc nạp, để bundler bỏ được khi không ai dùng; gói đầu Mini App phải giữ dưới 700 KB) và `shop-copy-budget.ts` cùng tập khoá; spec kiểm hai tập khoá bằng nhau. Khoá và chữ chép đúng `review/ux-copy.md` mục B1–B7 (tên khoá giữ nguyên, hàm `x(a)` thành mẫu `{a}`), cộng nhóm phụ P2 cần: `badge.discount` (`-{pct}%`), `badge.new`, `badge.featured`, `badge.loved`, `badge.freeship`, `badge.flashSpoken`, `badge.discountSpoken`, `stock.out`, `stock.discontinued`, `price.spoken`, `price.flashSpoken`, `price.compareSpoken`, `meta.rating`, `meta.sold`, `stats.*`, `time.*` (`days`, `daysHours`, `hoursMinutes`, `hours`, `minutes`, `underMinute`, `daysClock`), `coupon.freeship|amount|percent|percentMax|tabClaim|tabMine|tabHistory|title|oneCodeHint`, `brand.title`. Ngoại lệ so với ux-copy: chữ Giờ vàng theo `02-ke-hoach.md` ở Global Constraints. `max` lấy ở cột "Tối đa" của ux-copy; chỗ đo thực tế vượt thì ghi số đo thực (ví dụ `flash.startsAtDay` 23). `FORBIDDEN_TERMS` theo bảng D2 của ux-copy và Q5.
 - [ ] **Step 4:** chạy lại spec, mong đợi PASS.
 - [ ] **Step 5: Commit** `feat(app-core): shop-copy, bảng chữ mua sắm và thuật ngữ cấm`.
 
@@ -91,7 +94,7 @@ Mỗi `*.spec.ts` nằm cạnh file của nó. Lệnh kiểm một file: `cd pac
   - `formatSoldShort`: bảng ca của `apps/miniapp/src/utils/format.spec.ts:205-235` (null/undefined/0/-5/NaN → `null`; 1 → "Đã bán 1"; 999; 1000 → "Đã bán 1k+"; 1200 và 1234 → "Đã bán 1,2k+"; 999_999 → "Đã bán 1000k+"; 1_000_000 → "Đã bán 1tr+"; 2_500_000 → "Đã bán 2,5tr+"). Giữ nguyên hành vi, hai spec cũ là chứng minh không hồi quy.
   - `cardMetaLine({ratingAvg:4.8,sold:1234})==='★ 4,8 · Đã bán 1,2k+'`; `({ratingAvg:4.8})==='★ 4,8'`; `({sold:12})==='Đã bán 12'`; `({})===null`; `({ratingAvg:0,sold:0})===null`; `({ratingAvg:NaN,sold:5})==='Đã bán 5'` (Review Focus 2); `cardMetaLine({ratingAvg:5,sold:99_900}).length <= 22` (ux-copy ước 20; số đo thực của "★ 5,0 · Đã bán 99,9k+" là 21).
 - [ ] **Step 2:** chạy spec, mong đợi FAIL.
-- [ ] **Step 3: Cài đặt** như chữ ký trên; thân `formatSoldShort` chuyển nguyên từ bản miniapp, chữ qua `fillCopy('meta.sold',{n})`. Sau đó đổi `formatSold` ở hai app thành `export { formatSoldShort as formatSold } from '@tubutree/app-core/commerce/card-meta'` (xoá thân cũ và comment "Bản sao của…").
+- [ ] **Step 3: Cài đặt** như chữ ký trên; thân `formatSoldShort` chuyển nguyên từ bản miniapp, chữ qua `fillCopy('meta.sold',{n})`. Sau đó đổi `formatSold` ở hai app thành `export { formatSoldShort as formatSold } from '@tubutree/app-core/commerce/card-meta'` (xoá thân cũ và comment "Bản sao của…"). `formatSold` nằm trên đường nạp của gói đầu Mini App nên `card-meta` chỉ import `commerce/meta-copy` và `copy-template` (vài trăm byte), không import `shop-copy`; chạy `vite build` đo entry trước/sau (T9).
 - [ ] **Step 4:** chạy `card-meta.spec`, rồi `cd apps/miniapp && npx vitest run src/utils/format.spec.ts` và `cd apps/web && npx vitest run src/lib/api.spec.ts`, mong đợi PASS cả ba.
 - [ ] **Step 5: Commit** `feat(app-core): card-meta, formatSold dùng chung cho Mini App và web`.
 
@@ -237,7 +240,7 @@ Quy tắc (nguồn design-system B2–B3, ux-copy B3):
 
 - [ ] **Step 1:** `cd packages/app-core && npx tsc --noEmit && npx vitest run` (toàn bộ app-core một lần). Mong đợi 0 lỗi kiểu, mọi spec xanh (nền là 106 file / 1335 test, cộng spec mới).
 - [ ] **Step 2:** `cd apps/miniapp && npx tsc --noEmit`; `cd apps/web && npx next typegen >/dev/null && npx tsc --noEmit`; `pnpm lint:parity`. Mong đợi xanh.
-- [ ] **Step 3:** từ worktree: `bash docs/2026-10-28-review/tools/gate.sh /Users/longla/coding/tubutree-mini-app/.claude/worktrees/shop-P2 --base 64abdc5e5 --out /Users/longla/coding/tubutree-mini-app/.claude/worktrees/gate-P2.txt` đúng một lần. Bước FAIL: so với base; có sẵn thì ghi "có sẵn", do gói thì sửa tới PASS.
+- [ ] **Step 3:** `cd apps/api && npx prisma generate` (không thì `tsc-api` và `jest-api` đỏ vì thiếu client, không phải do gói). Từ worktree: `bash docs/2026-10-28-review/tools/gate.sh /Users/longla/coding/tubutree-mini-app/.claude/worktrees/shop-P2 --base 64abdc5e5 --out /Users/longla/coding/tubutree-mini-app/.claude/worktrees/gate-P2.txt` đúng một lần. Bước FAIL: so với base; có sẵn thì ghi "có sẵn", do gói thì sửa tới PASS.
 - [ ] **Step 4:** tự rà theo bảng dưới; mọi thứ commit (gate đọc `BASE..HEAD`).
 
 ## Self-review (đã đối chiếu)

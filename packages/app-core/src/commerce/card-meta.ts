@@ -1,5 +1,6 @@
 import type { ProductCard } from '../api/catalog';
-import { fillCopy } from '../shop-copy';
+import { fillTemplate } from '../copy-template';
+import { META_COPY } from './meta-copy';
 
 /** 4.8 → "4,8". Rác hoặc không dương → '' (thẻ chưa có đánh giá không in sao). Kẹp trần 5. */
 export function formatRating(avg: number): string {
@@ -20,7 +21,7 @@ export function soldCountText(n: number | null | undefined): string | null {
 /** "Đã bán" kiểu Shopee, một bản cho Mini App và web (thay hai bản `formatSold` cũ; spec cũ của hai app vẫn là chứng minh không đổi hành vi). */
 export function formatSoldShort(n: number | null | undefined): string | null {
   const count = soldCountText(n);
-  return count === null ? null : fillCopy('meta.sold', { n: count });
+  return count === null ? null : fillTemplate(META_COPY.sold, { n: count });
 }
 
 /**
@@ -29,6 +30,6 @@ export function formatSoldShort(n: number | null | undefined): string | null {
  */
 export function cardMetaLine(p: Pick<ProductCard, 'ratingAvg' | 'sold'>): string | null {
   const rating = formatRating(p.ratingAvg ?? 0);
-  const parts = [rating ? fillCopy('meta.rating', { avg: rating }) : null, formatSoldShort(p.sold)].filter((x): x is string => x !== null);
+  const parts = [rating ? fillTemplate(META_COPY.rating, { avg: rating }) : null, formatSoldShort(p.sold)].filter((x): x is string => x !== null);
   return parts.length > 0 ? parts.join(' · ') : null;
 }
