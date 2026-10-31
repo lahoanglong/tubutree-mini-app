@@ -310,7 +310,7 @@ describe('lúc bấm link (clickedAt) và dấu chạm theo người dùng', () 
   it('bản chờ: xem lại cùng nguồn trong app giữ lúc bấm cũ, mở lại từ link làm mới', () => {
     localStorage.clear();
     rememberEntryLink('an-shop', 'an123');
-    const first = readPendingRefs()[0].savedAt;
+    const first = readPendingRefs()[0]!.savedAt;
     vi.setSystemTime(new Date('2026-10-31T12:00:00Z'));
     rememberStorefront('an-shop', 'CTV', 'AN123');
     expect(readPendingRefs().find((p) => p.slug === 'an-shop')!.savedAt).toBe(first);
