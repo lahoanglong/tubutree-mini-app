@@ -26,6 +26,10 @@ export interface ProductCard {
   inStock: boolean;
   /** Ngày tạo (ISO) để dán nhãn "Mới"; thiếu khi API cũ hoặc nguồn không trả → không nhãn. */
   createdAt?: string;
+  /** Ai giao (cùng nghĩa với `ProductDetail.fulfiller`); thẻ chỉ gắn "Miễn phí giao hàng" khi biết chắc là Tubu giao. API cũ chưa trả → không nhãn. */
+  fulfiller?: ProductFulfiller;
+  /** API tính theo ngưỡng `catalog.loved_*` (sao, số đánh giá, đã bán) cho nhãn "Được yêu thích"; thiếu → không nhãn. */
+  isLoved?: boolean;
 }
 
 export interface VariationDetail {
