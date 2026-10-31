@@ -17,7 +17,7 @@ import { ProductRail } from './product-rail';
 import { Section } from './section';
 import { SectionHeader } from './section-header';
 
-/** Món trong bộ sưu tập của gian hàng; `variationId` là phân loại chủ shop gắn riêng cho món, thắng phân loại ghim và đại diện của thẻ. */
+/** Món trong bộ sưu tập của gian hàng; `variationId` là phân loại CTV ghim cho món, chưa lọc tồn kho; thẻ chỉ đổi sang nó (`pinnedVariationId`) khi còn hàng. */
 export interface ShopSectionItem {
   id: string;
   note?: string | null;
@@ -37,7 +37,12 @@ export interface ShopSectionProps {
 
 const asCard = (it: ShopSectionItem): ProductCardData => ({ ...it.product, isFeatured: it.product.isFeatured ?? false });
 const priceOf = (it: ShopSectionItem) => it.product.salePrice ?? it.product.basePrice;
-const variationOf = (it: ShopSectionItem) => it.variationId ?? it.product.pinnedVariationId ?? it.product.repVariationId;
+/**
+ * Phân loại gửi lên giỏ là đúng phân loại thẻ đang báo giá và còn hàng: ghim còn hàng, không thì đại diện. `it.variationId` là phân loại
+ * CTV ghim chưa lọc tồn kho (API chỉ đổi thành `pinnedVariationId` khi còn hàng), nên chỉ là đường lui khi món không có dữ liệu phân loại;
+ * dùng nó trước sẽ gửi phân loại hết hàng và máy chủ từ chối cả combo ở mọi lần bấm.
+ */
+const variationOf = (it: ShopSectionItem) => it.product.pinnedVariationId ?? it.product.repVariationId ?? it.variationId;
 
 /** Lỗi 4xx có lời nghiệp vụ ("Sản phẩm X đã hết hàng") thì đọc thẳng; còn lại câu cố định, vì lời "quá thời gian" chung chung sai nghĩa với lệnh tất cả-hoặc-không. */
 function comboErrorText(error: unknown): string {

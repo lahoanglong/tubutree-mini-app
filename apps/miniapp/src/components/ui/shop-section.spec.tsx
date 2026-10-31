@@ -136,13 +136,19 @@ describe('ShopSection combo', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['cart'] });
   });
 
-  it('phân loại: món của bộ sưu tập > phân loại CTV ghim > phân loại đại diện', async () => {
+  it('phân loại: ghim còn hàng > đại diện; ghim đã hết hàng thì gửi phân loại đại diện, không gửi phân loại ghim hỏng', async () => {
     mocks.addAll.mockResolvedValue({});
-    const items = [item(1, { pinnedVariationId: 'pin1' }, { variationId: 'own1' }), item(2, { pinnedVariationId: 'pin2' }), item(3)];
+    // Ba trạng thái thật của API (pinnedCardPrices): ghim còn hàng (variationId = pinned = rep), ghim hết hàng (variationId còn nguyên,
+    // pinned vắng, rep là phân loại khác còn hàng), không ghim (variationId null).
+    const items = [
+      item(1, { pinnedVariationId: 'V1', repVariationId: 'V1' }, { variationId: 'V1' }),
+      item(2, { repVariationId: 'V2b' }, { variationId: 'V2a' }),
+      item(3),
+    ];
     wrap(<ShopSection collection={combo({ items })} />);
     fireEvent.click(addButton());
     await waitFor(() => expect(mocks.addAll).toHaveBeenCalled());
-    expect(mocks.addAll.mock.calls[0]![0].map((l: { variationId: string }) => l.variationId)).toEqual(['own1', 'pin2', 'v3']);
+    expect(mocks.addAll.mock.calls[0]![0].map((l: { variationId: string }) => l.variationId)).toEqual(['V1', 'V2b', 'v3']);
   });
 
   it('lỗi của máy chủ: báo lỗi, giỏ không bị ghi (không làm mới, không setQueryData), bấm lại được', async () => {
