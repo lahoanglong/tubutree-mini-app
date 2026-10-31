@@ -38,7 +38,7 @@ test.describe('Web: yêu thích, nút giỏ nhanh', () => {
     const btn = page.getByRole('button', { name: 'Thêm Sản phẩm 1 vào giỏ' });
     await expect(btn).toBeVisible();
     await expect(page.getByRole('button', { name: 'Thêm Sản phẩm 2 vào giỏ' })).toHaveCount(0);
-    await expect(page.getByText('Hết hàng')).toBeVisible();
+    await expect(page.getByText('Tạm hết hàng', { exact: true })).toBeVisible();
     const box = (await btn.boundingBox())!;
     expect(box.width).toBeGreaterThanOrEqual(44);
     expect(box.height).toBeGreaterThanOrEqual(44);

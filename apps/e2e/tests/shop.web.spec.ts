@@ -745,7 +745,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     });
   }
 
-  test('kệ Mua lại 3 món 375px: thẻ đầu cách đầu kệ 36px, lề trái 16px, rộng 148px như Mini App', async ({ page, api }) => {
+  test('kệ Mua lại 3 món 375px: thẻ đầu cách đầu kệ 40px, lề trái 12px, rộng 148px như Mini App', async ({ page, api }) => {
     await login(page, api);
     mockHomeEngagement(api);
     api.get('/me/purchased-items', {
@@ -756,8 +756,9 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     const rail = page.getByRole('region', { name: 'Mua lại' });
     await expect(rail).toBeVisible({ timeout: 15_000 });
     const section = (await rail.boundingBox())!;
-    const tile = (await rail.locator('li').first().boundingBox())!;
-    expect({ top: tile.y - section.y, left: tile.x, width: tile.width }).toEqual({ top: 36, left: 16, width: 148 });
+    const tile = (await rail.locator('[data-ds="product-tile"]').first().boundingBox())!;
+    // Số đo của Mini App cùng dữ liệu (kệ chung P4: đệm khối 4px, thẻ đầu x=12).
+    expect({ top: tile.y - section.y, left: tile.x, width: tile.width }).toEqual({ top: 40, left: 12, width: 148 });
   });
 
   for (const withCookie of [true, false]) {

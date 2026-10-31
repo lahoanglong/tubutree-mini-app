@@ -190,7 +190,7 @@ export function PurchasedRail({ restoring = false }: { restoring?: boolean }) {
           ))}
         </div>
       ) : (
-        <RailShell label={reorderText.railTitle}>
+        <RailShell label="Sản phẩm đã mua">
           {/* Có món mua nhiều lần thì mọi thẻ giữ dòng ghi chú ('' giữ chỗ), không thì giá lệch 16px giữa thẻ có và không có ghi chú. */}
           {items.map((p) => (
             <RailCell key={p.variationId} variant="rail-md">
