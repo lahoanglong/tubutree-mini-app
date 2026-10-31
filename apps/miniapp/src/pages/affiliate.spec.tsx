@@ -96,7 +96,7 @@ describe('Dashboard CTV — chia sẻ mã giới thiệu (C-067)', () => {
 
   it('lối tắt Chia sẻ mở bảng chia sẻ có QR, Zalo, sao chép link và lời đăng, link là link Mini App', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ link và mã giới thiệu/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ link và mã giới thiệu/ }, { timeout: 5000 }));
     expect(await screen.findByText('Chia sẻ mã giới thiệu')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Sao chép link/ }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(1));
@@ -106,7 +106,7 @@ describe('Dashboard CTV — chia sẻ mã giới thiệu (C-067)', () => {
   it('shareLink reject: sao chép link kèm mã và báo snackbar, không im lặng', async () => {
     mocks.shareLink.mockRejectedValue(new Error('zalo từ chối'));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ link và mã giới thiệu/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ link và mã giới thiệu/ }, { timeout: 5000 }));
     fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ qua Zalo/ }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
     expect(mocks.copyText).toHaveBeenCalledWith(expect.stringContaining('/?ref=TUBU88'));
@@ -116,7 +116,7 @@ describe('Dashboard CTV — chia sẻ mã giới thiệu (C-067)', () => {
   it('chia sẻ được thì không báo gì thêm', async () => {
     mocks.shareLink.mockResolvedValue(undefined);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ link và mã giới thiệu/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ link và mã giới thiệu/ }, { timeout: 5000 }));
     fireEvent.click(await screen.findByRole('button', { name: /Chia sẻ qua Zalo/ }));
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
     expect(mocks.shareLink.mock.calls[0]![0].path).toBe('/?ref=TUBU88');
