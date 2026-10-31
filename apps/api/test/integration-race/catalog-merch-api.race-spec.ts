@@ -105,6 +105,12 @@ describe('catalog merch API (real Postgres)', () => {
     expect(node.children.map((c) => [c.id, c.productCount])).toEqual([[con.id, 2]]);
     expect(tree.find((c) => c.id === con.id)).toBeUndefined();
 
+    // Bộ chọn của admin và gian hàng CTV đọc danh sách phẳng: danh mục con phải có mặt, với số đếm của chính nó.
+    const flat = await fresh.categoriesFlat();
+    expect(flat.find((c) => c.id === cha.id)).toMatchObject({ parentId: null, productCount: 2 });
+    expect(flat.find((c) => c.id === con.id)).toMatchObject({ parentId: cha.id, productCount: 2 });
+    expect(flat.some((c) => 'children' in c)).toBe(false);
+
     const byParent = await fresh.list({ page: 1, limit: 10, category: cha.id, brand });
     expect(byParent.data.map((c) => c.id).sort()).toEqual([both.p.id, onlyChild.p.id].sort());
     expect(byParent.meta.total).toBe(2);

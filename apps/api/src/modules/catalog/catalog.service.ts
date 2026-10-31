@@ -141,7 +141,7 @@ export class CatalogService {
   // Khi scale → chuyển sang Redis (đã có trong compose), hoặc emit event từ sync job
   // để gọi invalidate trên TẤT CẢ instance.
   private brandsCache: { value: unknown; expiresAt: number } | null = null;
-  private categoriesCache: { value: CategoryNode[]; expiresAt: number } | null = null;
+  private categoriesCache: { tree: CategoryNode[]; flat: CategoryWithCount[]; expiresAt: number } | null = null;
   // Id con theo id cha, cho lọc `?category=<cha>` gồm cả con. Cùng hạn chế per-instance như categoriesCache.
   private categoryChildrenCache: { value: Map<string, string[]>; expiresAt: number } | null = null;
   private readonly TTL_MS = 60_000;
@@ -687,8 +687,21 @@ export class CatalogService {
    * dù gán cả cha lẫn con.
    */
   async categories(): Promise<CategoryNode[]> {
+    return (await this.loadCategories()).tree;
+  }
+
+  /**
+   * Cùng dữ liệu với `categories()` nhưng phẳng, mọi danh mục một dòng (không `children`, không bỏ danh mục nằm trong vòng
+   * `parentId`): cho bộ chọn của admin và gian hàng CTV, nơi danh mục con phải chọn được như danh mục gốc. Dạng dòng giữ
+   * như API trước khi có cây nên bản client cũ vẫn đọc được.
+   */
+  async categoriesFlat(): Promise<CategoryWithCount[]> {
+    return (await this.loadCategories()).flat;
+  }
+
+  private async loadCategories() {
     if (this.categoriesCache && this.categoriesCache.expiresAt > Date.now()) {
-      return this.categoriesCache.value;
+      return this.categoriesCache;
     }
     const [rows, products] = await Promise.all([
       this.prisma.category.findMany({ orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] }),
@@ -707,16 +720,17 @@ export class CatalogService {
       }
       for (const id of covered) counts.set(id, (counts.get(id) ?? 0) + 1);
     }
-    const nodes = new Map<string, CategoryNode>(rows.map((c) => [c.id, { ...c, productCount: counts.get(c.id) ?? 0, children: [] }]));
-    const value: CategoryNode[] = [];
+    const flat: CategoryWithCount[] = rows.map((c) => ({ ...c, productCount: counts.get(c.id) ?? 0 }));
+    const nodes = new Map<string, CategoryNode>(flat.map((c) => [c.id, { ...c, children: [] }]));
+    const tree: CategoryNode[] = [];
     for (const c of rows) {
       const node = nodes.get(c.id)!;
       const parent = c.parentId && c.parentId !== c.id ? nodes.get(c.parentId) : undefined;
       if (parent) parent.children.push(node);
-      else value.push(node);
+      else tree.push(node);
     }
-    this.categoriesCache = { value, expiresAt: Date.now() + this.TTL_MS };
-    return value;
+    this.categoriesCache = { tree, flat, expiresAt: Date.now() + this.TTL_MS };
+    return this.categoriesCache;
   }
 
   async suggest(q: string) {

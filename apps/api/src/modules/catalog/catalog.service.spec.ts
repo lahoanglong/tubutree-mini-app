@@ -1103,6 +1103,27 @@ describe('CatalogService.categories — productCount (dự án 4b)', () => {
       expect(cha.children.map((c) => [c.id, c.productCount])).toEqual([['con1', 2], ['con2', 1]]);
       expect(tree[1]!.productCount).toBe(0);
     });
+
+    it('categoriesFlat: mọi danh mục một dòng (gồm con, mồ côi, vòng), không children, productCount đã cộng con', async () => {
+      const flat = await build().categoriesFlat();
+      expect(flat.map((c) => c.id)).toEqual(['cha', 'con1', 'con2', 'mo-coi', 'ca', 'cb']);
+      expect(flat.map((c) => [c.id, c.productCount])).toEqual([
+        ['cha', 3], ['con1', 2], ['con2', 1], ['mo-coi', 0], ['ca', 1], ['cb', 1],
+      ]);
+      expect(flat.every((c) => !('children' in c))).toBe(true);
+      // Bộ chọn phải thấy danh mục con để gán sản phẩm vào lá và hiện tên danh mục sản phẩm đang mang.
+      expect(flat.find((c) => c.id === 'con1')).toMatchObject({ parentId: 'cha', name: 'con1' });
+    });
+
+    it('categories và categoriesFlat dùng chung một lần đọc DB trong 60 giây', async () => {
+      const categoryFindMany = jest.fn().mockResolvedValue(ROWS);
+      const productFindMany = jest.fn().mockResolvedValue(PRODUCTS);
+      const svc = new CatalogService({ category: { findMany: categoryFindMany }, product: { findMany: productFindMany } } as unknown as PrismaService);
+      await svc.categories();
+      await svc.categoriesFlat();
+      expect(categoryFindMany).toHaveBeenCalledTimes(1);
+      expect(productFindMany).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

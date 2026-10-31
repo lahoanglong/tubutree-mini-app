@@ -59,7 +59,8 @@ export interface PickerProduct {
 
 export interface StorefrontCategory { id: string; name: string; slug: string; image: string | null }
 /** Danh mục sản phẩm hiện có — dùng làm danh sách mẫu gian hàng (mỗi mẫu = 1 danh mục). */
-export const getStorefrontCategories = () => api.get('/categories').then((r) => r.data as StorefrontCategory[]);
+/** `flat: 1`: mọi danh mục một dòng, gồm cả danh mục con (mặc định `/categories` trả cây chỉ có gốc ở tầng ngoài). */
+export const getStorefrontCategories = () => api.get('/categories', { params: { flat: 1 } }).then((r) => r.data as StorefrontCategory[]);
 export const applyStorefrontTemplate = (categoryId: string) =>
   api.post('/storefront/me/apply-template', { categoryId }).then((r) => r.data as { collectionId: string; title: string; itemCount: number });
 

@@ -68,8 +68,10 @@ export class CatalogController {
   @Public()
   @PublicCache('STATIC')
   @Get('categories')
-  categories() {
-    return this.catalog.categories();
+  categories(@Query('flat') flat?: string) {
+    // Mặc định là cây cho trang mua sắm; `?flat=1` là danh sách phẳng cho bộ chọn danh mục (admin, gian hàng CTV),
+    // nơi danh mục con phải chọn được như danh mục gốc.
+    return flat === '1' || flat === 'true' ? this.catalog.categoriesFlat() : this.catalog.categories();
   }
 
   @Public()
