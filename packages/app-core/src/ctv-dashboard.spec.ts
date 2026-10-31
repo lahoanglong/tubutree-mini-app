@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CTV_TAB_KEYS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote } from './ctv-dashboard';
+import { commissionPendingNote, COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, nextMilestoneRows, transferBlockedText, transferHeroNote } from './ctv-dashboard';
 
 const ZERO = { monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0, totalConversions: 0 };
 
@@ -36,8 +36,8 @@ describe('transferBlockedText', () => {
 });
 
 describe('transferHeroNote và isAutoWalletTransfer', () => {
-  it('tự chuyển bật: phần còn lại là phần chưa tự vào Ví được, dặn bấm tay; tắt: dặn bấm để chuyển', () => {
-    expect(transferHeroNote(true)).toContain('chưa tự vào Ví được');
+  it('tự chuyển bật: phần còn lại chờ lượt 8:00, dặn bấm tay để nhận ngay; tắt: dặn bấm để chuyển', () => {
+    expect(transferHeroNote(true)).toContain('lúc 8:00 sáng');
     expect(transferHeroNote(false)).toBe('Bấm Chuyển vào Ví để chuyển phần này vào Ví Tubu.');
   });
   it('chỉ đúng false mới là tắt; API cũ chưa trả trường này coi như bật', () => {
@@ -102,5 +102,13 @@ describe('heroShowsWalletBalance', () => {
     expect(heroShowsWalletBalance(ctvHeroAmount(0, true, 5400000))).toBe(true);
     expect(heroShowsWalletBalance(ctvHeroAmount(120000, true, 5400000))).toBe(false);
     expect(heroShowsWalletBalance(ctvHeroAmount(0, true, undefined, true))).toBe(false);
+  });
+});
+
+describe('commissionPendingNote', () => {
+  it('chỉ hứa lịch 8:00 khi tự chuyển bật', () => {
+    expect(commissionPendingNote(true)).toContain('vào Ví lúc 8:00');
+    expect(commissionPendingNote(false)).toBe(COMMISSION_PENDING_NOTE);
+    expect(COMMISSION_PENDING_NOTE).not.toContain('8:00');
   });
 });

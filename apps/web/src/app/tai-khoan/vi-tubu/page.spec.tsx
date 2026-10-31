@@ -159,7 +159,7 @@ describe('/tai-khoan/vi-tubu — thẻ số dư và nguồn tiền', () => {
   it('"Hoa hồng đang chờ" cùng câu với trang CTV; có tiền chờ thì thẻ dẫn sang tab Hoa hồng; bằng 0 hoặc /ctv chưa có thì không là link (R-60)', async () => {
     let c = await mount();
     expect(c.textContent).toContain('Hoa hồng đang chờ');
-    expect(c.textContent).toContain('đơn chưa giao hoặc trong thời gian đổi/trả; khi được duyệt, vào Ví lúc 8:00 sáng kế tiếp');
+    expect(c.textContent).toContain('đơn chưa giao hoặc trong thời gian đổi/trả');
     expect(c.textContent).not.toContain('Hoa hồng chờ duyệt');
     const a = c.querySelector<HTMLAnchorElement>('a[href="/ctv?tab=commission"]');
     expect(a).not.toBeNull();

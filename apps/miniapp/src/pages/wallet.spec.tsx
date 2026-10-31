@@ -246,7 +246,7 @@ describe('WalletPage — điều hướng', () => {
   it('"Hoa hồng đang chờ" cùng câu với trang CTV, có tiền chờ thì chạm mở tab Hoa hồng; bằng 0 thì không bấm được (R-60)', async () => {
     stubLoaded();
     renderPage();
-    expect(await screen.findByText('đơn chưa giao hoặc trong thời gian đổi/trả; khi được duyệt, vào Ví lúc 8:00 sáng kế tiếp')).toBeInTheDocument();
+    expect(await screen.findByText('đơn chưa giao hoặc trong thời gian đổi/trả')).toBeInTheDocument();
     expect(screen.queryByText('Hoa hồng chờ duyệt')).toBeNull();
     fireEvent.click(screen.getByText('Hoa hồng đang chờ'));
     expect(mocks.navigate).toHaveBeenCalledWith('/affiliate?tab=commission');

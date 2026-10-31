@@ -858,7 +858,7 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     expect(await screen.findByText('Hoa hồng chuyển được vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 9.520đ.')).toBeInTheDocument();
   });
 
-  it('còn hoa hồng có thể chuyển: dưới số to có dòng nói đây là phần chưa tự vào Ví được; hết thì không có dòng đó', async () => {
+  it('còn hoa hồng có thể chuyển: dưới số to có dòng nói sẽ tự vào Ví lúc 8:00 và bấm được để nhận ngay; hết thì không có dòng đó', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue({
       todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 50_000,
       autoWalletTransfer: true,
@@ -866,7 +866,7 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
       tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
     renderPage();
-    expect(await screen.findByText(/Phần này chưa tự vào Ví được/)).toBeInTheDocument();
+    expect(await screen.findByText(/Tự vào Ví Tubu lúc 8:00 sáng/)).toBeInTheDocument();
   });
 
   it('dashboard đang tải: hero là khung chờ, không hiện "Đang chờ: 0đ"; về rồi mới hiện số', async () => {

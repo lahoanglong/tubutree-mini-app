@@ -356,7 +356,7 @@ describe('/ctv — bảng điều khiển', () => {
   it('còn hoa hồng có thể chuyển: dưới số to có dòng nói đây là phần chưa tự vào Ví, bấm tay; hết thì không có dòng đó', async () => {
     const a = mount();
     await flush();
-    expect(a.container.textContent).toContain('Phần này chưa tự vào Ví được');
+    expect(a.container.textContent).toContain('Tự vào Ví Tubu lúc 8:00 sáng');
     a.unmount();
     state.dash = { ...DASH, withdrawableCommission: 0 };
     const b = mount();
