@@ -37,3 +37,5 @@ export { SectionHeader } from './section-header';
 export type { SectionHeaderProps, IconName } from './section-header';
 export { Section } from './section';
 export type { SectionProps } from './section';
+export { SortBar } from './sort-bar';
+export type { SortBarProps, SortOption } from './sort-bar';
