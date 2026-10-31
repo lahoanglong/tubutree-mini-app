@@ -335,7 +335,7 @@ describe('/ctv — bảng điều khiển', () => {
     click(btn);
     await flush();
     const dialog = document.querySelector('[role="dialog"]');
-    expect(dialog?.textContent).toContain('Hoa hồng tự vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 30.000đ.');
+    expect(dialog?.textContent).toContain('Hoa hồng tự vào Ví Tubu mỗi sáng 8:00 khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 30.000đ.');
     expect(byText(dialog as HTMLElement, 'button', 'vào Ví')).toBeNull();
     click(byText(dialog as HTMLElement, 'button', 'Đã hiểu'));
     await flush();

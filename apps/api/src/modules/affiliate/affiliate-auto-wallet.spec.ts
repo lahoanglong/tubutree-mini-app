@@ -88,7 +88,7 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
     expect(t.notify).toHaveBeenCalledWith(
       'a',
       CTV_NOTIFICATION.AUTO_WALLET,
-      { amount: '5.400.000đ', tax_note: ' (đã khấu trừ thuế TNCN 600.000đ)' },
+      { amount: '5.400.000đ', count: '1', tax_note: ' (đã khấu trừ thuế TNCN 600.000đ)' },
       { dedupeKey: key },
     );
   });
@@ -97,7 +97,7 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
     const a = build({ rows: rows('a', 10_000), payout: { amount: 10_000, taxWithheld: 0 } });
     a.requestPayout.mockResolvedValue({ ok: true, method: 'WALLET_BALANCE', credited: 10_000, note: '' });
     await a.svc.autoTransferApprovedToWallet();
-    expect(a.notify.mock.calls[0][2]).toEqual({ amount: '10.000đ', tax_note: '' });
+    expect(a.notify.mock.calls[0][2]).toEqual({ amount: '10.000đ', count: '1', tax_note: '' });
   });
 
   it('thuế truy thu ăn hết (payout đã tạo, vào Ví 0đ) → báo "đã khấu trừ toàn bộ thuế", không báo "đã cộng", và CTV không nhận tin dặn bấm tay', async () => {
@@ -162,7 +162,22 @@ describe('AffiliateService.approveDueCommissions + tự chuyển vào Ví', () =
     });
     await t.svc.approveDueCommissions();
     expect(t.notify).toHaveBeenCalledTimes(1);
-    expect(t.notify).toHaveBeenCalledWith('b', CTV_NOTIFICATION.APPROVED, { count: '1', amount: '7.000đ' });
+    expect(t.notify).toHaveBeenCalledWith('b', CTV_NOTIFICATION.APPROVED, { count: '1', amount: '7.000đ' }, { dedupeKey: expect.stringMatching(/^commission-approved:b:/) });
+  });
+
+  it('chạy đúng một lần mỗi ngày lúc 8:00 giờ VN', () => {
+    const opts = Reflect.getMetadata('SCHEDULE_CRON_OPTIONS', AffiliateService.prototype.approveDueCommissions) as { cronTime: string; timeZone: string };
+    expect(opts.cronTime).toBe('0 0 8 * * *');
+    expect(opts.timeZone).toBe('Asia/Ho_Chi_Minh');
+  });
+
+  it('cờ tự chuyển tắt: duyệt xong chỉ gửi một tin tổng "đã duyệt" cho mỗi CTV, không chuyển Ví', async () => {
+    const t = cron({ count: 3, flag: false, approved: [{ affiliateUserId: 'a', amount: 10_000 }, { affiliateUserId: 'a', amount: 5_000 }, { affiliateUserId: 'a', amount: 1_000 }] });
+    const auto = jest.spyOn(t.svc, 'requestPayout');
+    await t.svc.approveDueCommissions();
+    expect(auto).not.toHaveBeenCalled();
+    expect(t.notify).toHaveBeenCalledTimes(1);
+    expect(t.notify).toHaveBeenCalledWith('a', CTV_NOTIFICATION.APPROVED, { count: '3', amount: '16.000đ' }, { dedupeKey: expect.any(String) });
   });
 
   it('tự chuyển ném lỗi thì cron vẫn báo CTV như cũ và không ném', async () => {

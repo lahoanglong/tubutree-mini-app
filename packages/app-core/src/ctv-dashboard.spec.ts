@@ -26,7 +26,7 @@ describe('ctvHeadline', () => {
 
 describe('transferBlockedText', () => {
   it('tự chuyển bật (mặc định): nói hoa hồng tự vào Ví khi nào, kèm số đang chờ', () => {
-    expect(transferBlockedText('9.520đ')).toBe('Hoa hồng tự vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 9.520đ.');
+    expect(transferBlockedText('9.520đ')).toBe('Hoa hồng tự vào Ví Tubu mỗi sáng 8:00 khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 9.520đ.');
   });
   it('tự chuyển tắt: không hứa tự vào Ví, chỉ nói khi nào chuyển được', () => {
     const t = transferBlockedText('9.520đ', false);

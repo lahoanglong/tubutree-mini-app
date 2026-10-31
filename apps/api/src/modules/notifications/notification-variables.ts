@@ -92,7 +92,7 @@ export const TEMPLATE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
   STOREFRONT_TRENDING_PRODUCTS: ['count', 'sample'],
   COMMISSION_NEW: ['amount'],
   COMMISSION_APPROVED: ['count', 'amount'],
-  COMMISSION_WALLET_CREDITED: ['amount', 'tax_note'],
+  COMMISSION_WALLET_CREDITED: ['amount', 'count', 'tax_note'],
   COMMISSION_WALLET_TAX_ONLY: ['amount', 'tax'],
   COMMISSION_PAYOUT_PAID: ['amount', 'ref'],
   COMMISSION_PAYOUT_APPROVED: ['amount'],

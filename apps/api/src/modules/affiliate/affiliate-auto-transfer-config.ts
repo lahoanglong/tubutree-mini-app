@@ -4,3 +4,6 @@
  */
 export const AFFILIATE_AUTO_WALLET_TRANSFER_KEY = 'affiliate.auto_wallet_transfer_enabled';
 export const DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED = true;
+
+/** 8:00 sáng giờ VN mỗi ngày: duyệt hoa hồng đủ hạn, tự chuyển vào Ví, mỗi CTV một tin tổng. */
+export const APPROVE_COMMISSIONS_CRON = '0 0 8 * * *';

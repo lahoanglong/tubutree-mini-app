@@ -48,7 +48,7 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
     affiliate = moduleRef.get(AffiliateService);
     config = moduleRef.get(SystemConfigService);
     for (const t of [
-      { id: 'nt-ctv-wallet-credited', code: CTV_NOTIFICATION.AUTO_WALLET, body: 'Đã cộng {{amount}} hoa hồng vào Ví Tubu{{tax_note}}.' },
+      { id: 'nt-ctv-wallet-credited', code: CTV_NOTIFICATION.AUTO_WALLET, body: 'Tubu Tree đã chuyển {{amount}} hoa hồng ({{count}} đơn) vào Ví của bạn{{tax_note}}.' },
       { id: 'nt-ctv-wallet-tax-only', code: CTV_NOTIFICATION.AUTO_WALLET_TAX_ONLY, body: 'Đã xử lý {{amount}}: khấu trừ thuế {{tax}}, chưa có tiền vào Ví.' },
       { id: 'nt-ctv-commission-approved', code: CTV_NOTIFICATION.APPROVED, body: '{{count}} khoản hoa hồng (tổng {{amount}}) đã được duyệt.' },
     ]) {
@@ -125,7 +125,7 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
 
     const logs = await prisma.notificationLog.findMany({ where: { userId: a.id, templateCode: CTV_NOTIFICATION.AUTO_WALLET } });
     expect(logs).toHaveLength(1);
-    expect((logs[0]!.payload as { body: string }).body).toBe('Đã cộng 100.000đ hoa hồng vào Ví Tubu.');
+    expect((logs[0]!.payload as { body: string }).body).toBe('Tubu Tree đã chuyển 100.000đ hoa hồng (2 đơn) vào Ví của bạn.');
   });
 
   it('chạy lại sau khi đã chuyển: không cộng thêm, không báo thêm', async () => {
@@ -156,7 +156,7 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
     expect(sm.balance).toBe(5_400_000);
     expect(sa.ledger[0]!.reason).toBe(sm.ledger[0]!.reason);
     const log = await prisma.notificationLog.findFirstOrThrow({ where: { userId: auto.id, templateCode: CTV_NOTIFICATION.AUTO_WALLET } });
-    expect((log.payload as { body: string }).body).toBe('Đã cộng 5.400.000đ hoa hồng vào Ví Tubu (đã khấu trừ thuế TNCN 600.000đ).');
+    expect((log.payload as { body: string }).body).toBe('Tubu Tree đã chuyển 5.400.000đ hoa hồng (1 đơn) vào Ví của bạn (đã khấu trừ thuế TNCN 600.000đ).');
   });
 
   it('thuế cộng dồn theo tháng như tay: hai lượt cron trong tháng, lượt 2 vượt ngưỡng thì truy thu', async () => {
@@ -261,6 +261,65 @@ describe('Hoa hồng đã duyệt tự vào Ví (real Postgres)', () => {
     expect(s.balance).toBe(80_000);
     expect(await prisma.notificationLog.count({ where: { userId: u.id, templateCode: CTV_NOTIFICATION.AUTO_WALLET } })).toBe(1);
     expect(await prisma.notificationLog.count({ where: { userId: u.id, templateCode: CTV_NOTIFICATION.APPROVED } })).toBe(0);
+  });
+
+  it('lượt 8:00: CTV có 3 hoa hồng đủ hạn nhận đúng tổng và đúng một tin tổng; chạy lại hoặc hai tiến trình chạy cùng lúc không chuyển hay báo thêm', async () => {
+    const u = await ctv();
+    await commissionFor(u.id, 10_000, 'LOCKED');
+    await commissionFor(u.id, 20_000, 'LOCKED');
+    await commissionFor(u.id, 30_000, 'LOCKED');
+    const results = await Promise.allSettled([affiliate.approveDueCommissions(), affiliate.approveDueCommissions()]);
+    expect(summarize(results).rejected).toHaveLength(0);
+    await affiliate.approveDueCommissions();
+    const s = await state(u.id);
+    expect(s.balance).toBe(60_000);
+    expect(s.ledger).toHaveLength(1);
+    expect(s.payouts).toHaveLength(1);
+    const logs = await prisma.notificationLog.findMany({ where: { userId: u.id } });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]!.templateCode).toBe(CTV_NOTIFICATION.AUTO_WALLET);
+    expect((logs[0]!.payload as { body: string }).body).toBe('Tubu Tree đã chuyển 60.000đ hoa hồng (3 đơn) vào Ví của bạn.');
+  });
+
+  it('lượt 8:00 đúng lúc CTV bấm Chuyển vào Ví: chỉ cộng một lần, không quá một tin', async () => {
+    for (let round = 0; round < 4; round++) {
+      const u = await ctv();
+      await commissionFor(u.id, 15_000, 'LOCKED');
+      await commissionFor(u.id, 25_000, 'LOCKED');
+      await prisma.commission.updateMany({ where: { affiliateUserId: u.id }, data: { status: 'APPROVED', approvedAt: new Date() } });
+      const [cron, manual] = await Promise.allSettled([
+        affiliate.approveDueCommissions(),
+        affiliate.requestPayout(u.id, 40_000, 'WALLET_BALANCE', undefined, `manual-8h-${u.id}`),
+      ]);
+      expect(cron.status).toBe('fulfilled');
+      if (manual.status === 'rejected') expect(String((manual.reason as Error).message)).toMatch(/đã được xử lý|không có hoa hồng khả dụng/i);
+      const s = await state(u.id);
+      expect(s.balance).toBe(40_000);
+      expect(s.ledger).toHaveLength(1);
+      expect(s.payouts).toHaveLength(1);
+      expect(await prisma.notificationLog.count({ where: { userId: u.id, templateCode: CTV_NOTIFICATION.AUTO_WALLET } })).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('cờ tự chuyển tắt: lượt 8:00 chỉ duyệt, Ví giữ nguyên, một tin tổng "đã duyệt" kèm số khoản', async () => {
+    await setFlag(false);
+    try {
+      const u = await ctv();
+      await commissionFor(u.id, 10_000, 'LOCKED');
+      await commissionFor(u.id, 20_000, 'LOCKED');
+      await commissionFor(u.id, 30_000, 'LOCKED');
+      await Promise.all([affiliate.approveDueCommissions(), affiliate.approveDueCommissions()]);
+      const s = await state(u.id);
+      expect(s.balance).toBe(0);
+      expect(s.commissions.map((c) => c.status)).toEqual(['APPROVED', 'APPROVED', 'APPROVED']);
+      const logs = await prisma.notificationLog.findMany({ where: { userId: u.id } });
+      expect(logs).toHaveLength(1);
+      expect(logs[0]!.templateCode).toBe(CTV_NOTIFICATION.APPROVED);
+      expect((logs[0]!.payload as { body: string }).body).toBe('3 khoản hoa hồng (tổng 60.000đ) đã được duyệt.');
+      await prisma.commission.updateMany({ where: { affiliateUserId: u.id }, data: { status: 'PAID', paidAt: new Date() } });
+    } finally {
+      await setFlag(true);
+    }
   });
 
   it('approveDueCommissions khi CTV thiếu MST: vẫn nhận tin "đã duyệt" dặn tự chuyển, tiền chưa vào Ví', async () => {

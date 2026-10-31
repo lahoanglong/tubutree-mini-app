@@ -71,7 +71,7 @@ import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanit
 import { loadDefaultRate, resolveVariationRate } from './commission-rate';
 import { loadPublicVisibility } from '../storefront/public-visibility';
 import type { PublicVisibilityOptions } from '../storefront/storefront-visibility';
-import { AFFILIATE_AUTO_WALLET_TRANSFER_KEY, DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED } from './affiliate-auto-transfer-config';
+import { APPROVE_COMMISSIONS_CRON, AFFILIATE_AUTO_WALLET_TRANSFER_KEY, DEFAULT_AFFILIATE_AUTO_WALLET_TRANSFER_ENABLED } from './affiliate-auto-transfer-config';
 import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
 import { TrackCron } from '../../common/cron-run/track-cron';
 import { SessionStateService } from '../auth/session-state.service';
@@ -1427,14 +1427,14 @@ export class AffiliateService {
   }
 
   /**
-   * Cron mỗi giờ: LOCKED quá hold_days → APPROVED.
+   * Cron 8:00 sáng giờ VN mỗi ngày: LOCKED quá hold_days → APPROVED, rồi tự chuyển vào Ví. Mỗi CTV nhận tối đa một tin tổng cho lượt này.
    * try/catch BẮT BUỘC: đây là job Nest @Cron chạy NGAY TRONG process API chính, không ai await
    * Promise nó trả về — một lỗi Prisma tạm thời (mất kết nối DB, timeout pool, deadlock...) văng
    * ra ngoài sẽ thành unhandledRejection; Node 20 mặc định (--unhandled-rejections=throw) CRASH
    * toàn bộ process mỗi khi cron này lỗi, tức sập API cho MỌI user mỗi giờ vì một lỗi có thể chỉ
-   * là nhất thời. Bắt lỗi + log để cron thử lại giờ sau thay vì sập process.
+   * là nhất thời. Bắt lỗi + log để cron thử lại lượt sau thay vì sập process.
    */
-  @Cron('0 0 * * * *', { timeZone: CRON_TZ })
+  @Cron(APPROVE_COMMISSIONS_CRON, { timeZone: CRON_TZ })
   @TrackCron()
   async approveDueCommissions(): Promise<void> {
     try {
@@ -1507,7 +1507,7 @@ export class AffiliateService {
           const result = await this.requestPayout(userId, total, 'WALLET_BALANCE', undefined, key);
           const net = ('credited' in result ? result.credited : undefined) ?? 0;
           credited.add(userId);
-          await this.notifyAutoWalletCredited(userId, net, total, key);
+          await this.notifyAutoWalletCredited(userId, net, total, ids.length, key);
         } catch (err) {
           const code = (err as { response?: { code?: string } }).response?.code;
           const msg = err instanceof Error ? err.message : String(err);
@@ -1522,7 +1522,7 @@ export class AffiliateService {
   }
 
   /** Tiền đã vào Ví xong: thông báo hỏng không được làm hỏng vòng chuyển của CTV khác (chỉ log). */
-  private async notifyAutoWalletCredited(userId: string, credited: number, gross: number, key: string): Promise<void> {
+  private async notifyAutoWalletCredited(userId: string, credited: number, gross: number, count: number, key: string): Promise<void> {
     if (!this.notifications) return;
     try {
       const payout = await this.prisma.payout.findUnique({ where: { idempotencyKey: key }, select: { taxWithheld: true } });
@@ -1534,7 +1534,7 @@ export class AffiliateService {
       await this.notifications.notify(
         userId,
         CTV_NOTIFICATION.AUTO_WALLET,
-        { amount: vnd(credited), tax_note: tax > 0 ? ` (đã khấu trừ thuế TNCN ${vnd(tax)})` : '' },
+        { amount: vnd(credited), count: String(count), tax_note: tax > 0 ? ` (đã khấu trừ thuế TNCN ${vnd(tax)})` : '' },
         { dedupeKey: key },
       );
     } catch (err) {
@@ -1563,10 +1563,12 @@ export class AffiliateService {
       }
       for (const [userId, sum] of perUser) {
         try {
-          await this.notifications.notify(userId, CTV_NOTIFICATION.APPROVED, {
-            count: String(sum.count),
-            amount: vnd(sum.amount),
-          });
+          await this.notifications.notify(
+            userId,
+            CTV_NOTIFICATION.APPROVED,
+            { count: String(sum.count), amount: vnd(sum.amount) },
+            { dedupeKey: `commission-approved:${userId}:${approvedAt.toISOString()}` },
+          );
         } catch (err) {
           this.logger.error(`Gửi thông báo hoa hồng được duyệt cho ${userId} lỗi: ${err instanceof Error ? err.message : err}`);
         }

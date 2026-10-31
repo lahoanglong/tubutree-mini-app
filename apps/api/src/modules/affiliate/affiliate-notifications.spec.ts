@@ -104,8 +104,8 @@ describe('AffiliateService.approveDueCommissions (C-029: được duyệt)', () 
     expect(stamp).toBeInstanceOf(Date);
     expect(p.findMany.mock.calls[0][0].where).toEqual({ status: 'APPROVED', approvedAt: stamp });
     expect(notify).toHaveBeenCalledTimes(2);
-    expect(notify).toHaveBeenCalledWith('a', CTV_NOTIFICATION.APPROVED, { count: '2', amount: '15.000đ' });
-    expect(notify).toHaveBeenCalledWith('b', CTV_NOTIFICATION.APPROVED, { count: '1', amount: '7.000đ' });
+    expect(notify).toHaveBeenCalledWith('a', CTV_NOTIFICATION.APPROVED, { count: '2', amount: '15.000đ' }, { dedupeKey: expect.stringMatching(/^commission-approved:a:/) });
+    expect(notify).toHaveBeenCalledWith('b', CTV_NOTIFICATION.APPROVED, { count: '1', amount: '7.000đ' }, { dedupeKey: expect.stringMatching(/^commission-approved:b:/) });
   });
 
   it('không có khoản nào đủ hạn → không truy vấn thêm, không báo', async () => {

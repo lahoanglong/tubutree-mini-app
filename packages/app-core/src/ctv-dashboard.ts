@@ -60,7 +60,7 @@ export function heroShowsWalletBalance(hero: { label: string; waiting: boolean }
 /** Lời cho ô "Chuyển vào Ví" khi chưa có số dư: nói vì sao và khi nào có. `pendingText` đã định dạng tiền. */
 export function transferBlockedText(pendingText: string, auto = true): string {
   return auto
-    ? `Hoa hồng tự vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: ${pendingText}.`
+    ? `Hoa hồng tự vào Ví Tubu mỗi sáng 8:00 khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: ${pendingText}.`
     : `Hoa hồng chuyển được vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: ${pendingText}.`;
 }
 

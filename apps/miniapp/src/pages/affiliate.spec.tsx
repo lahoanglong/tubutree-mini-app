@@ -839,10 +839,10 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     expect(btn).toBeEnabled();
     await screen.findByText(/Đang chờ: 9\.520đ ·/);
     fireEvent.click(btn);
-    expect(await screen.findByText('Hoa hồng tự vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 9.520đ.')).toBeInTheDocument();
+    expect(await screen.findByText('Hoa hồng tự vào Ví Tubu mỗi sáng 8:00 khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 9.520đ.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /vào Ví$/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Đã hiểu' }));
-    expect(screen.queryByText(/Hoa hồng tự vào Ví Tubu khi đơn đã giao/)).toBeNull();
+    expect(screen.queryByText(/Hoa hồng tự vào Ví Tubu mỗi sáng 8:00 khi đơn đã giao/)).toBeNull();
   });
 
   it('cờ tự chuyển tắt: hộp không hứa tự vào Ví', async () => {
@@ -905,7 +905,7 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     expect(busy).not.toBeNull();
     // Trong hộp (không tính thẻ hoa hồng phía sau) không có câu "Đang chờ".
     expect(busy!.parentElement!.textContent).not.toContain('Đang chờ');
-    expect(screen.queryByText(/Hoa hồng tự vào Ví Tubu khi đơn/)).toBeNull();
+    expect(screen.queryByText(/Hoa hồng tự vào Ví Tubu mỗi sáng 8:00 khi đơn/)).toBeNull();
     release({
       todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0,
       totalClicks: 0, totalConversions: 0, monthRevenue: 0,
