@@ -17,10 +17,9 @@ import { earnPctOf, percentLabel } from '../../utils/loyalty-copy';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Icon } from '../ui/icon';
-import { Skeleton } from '../ui/skeleton';
+import { GIFT_SECTION_PAD, NewCustomerGiftSkeleton } from './new-customer-gift-skeleton';
 import { Text } from '../ui/text';
 
-const SECTION_PAD = '0 16px 12px';
 
 interface Benefit {
   icon: LucideIcon;
@@ -132,7 +131,7 @@ export function NewCustomerGift() {
     : null;
 
   return (
-    <section aria-label={vi.home.newGift.title} style={{ padding: SECTION_PAD }}>
+    <section aria-label={vi.home.newGift.title} style={{ padding: GIFT_SECTION_PAD }}>
       <Card variant="flat" padding={0}>
         <div style={{ minHeight: HOME_HERO_HEIGHT, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px 0 16px' }}>
           <button
@@ -234,13 +233,5 @@ export function NewCustomerGift() {
         )}
       </Card>
     </section>
-  );
-}
-
-function NewCustomerGiftSkeleton() {
-  return (
-    <div data-testid="new-customer-gift-loading" aria-hidden="true" style={{ padding: SECTION_PAD }}>
-      <Skeleton height={HOME_HERO_HEIGHT} radius="var(--radius-card)" />
-    </div>
   );
 }

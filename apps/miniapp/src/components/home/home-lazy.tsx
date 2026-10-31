@@ -1,9 +1,8 @@
 import { useEffect, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
-import { HOME_HERO_HEIGHT } from '@tubutree/app-core/home-layout';
 import { isChunkError } from '../../utils/chunk-error';
-import { Skeleton } from '../ui/skeleton';
 import { PurchasedRail } from '../reorder/purchased-rail';
 import { BestSellerRail } from './best-seller-rail';
+import { NewCustomerGiftSkeleton } from './new-customer-gift-skeleton';
 import type * as BelowModule from './home-below';
 
 type Below = typeof BelowModule;
@@ -18,7 +17,7 @@ function setState(next: BelowState) {
 }
 
 export interface BelowState {
-  /** Chunk đã về (khối dựng được) HOẶC đã hỏng: Trang chủ thôi giữ khung chờ chung. */
+  /** Chunk đã về (khối dựng được) HOẶC đã hỏng. */
   ready: boolean;
   failed: boolean;
   error: unknown;
@@ -57,7 +56,7 @@ const subscribe = (l: () => void) => {
 };
 const getState = () => state;
 
-/** Trạng thái chunk các khối dưới màn đầu. Trang chủ giữ khung chờ chung tới khi `ready` để khối không hiện rồi đổi hình. */
+/** Trạng thái chunk các khối dưới màn đầu (chunk hỏng thì Trang chủ hiện dải lỗi có "Thử lại"). */
 export function useHomeBelow(): BelowState {
   const s = useSyncExternalStore(subscribe, getState, getState);
   useEffect(() => {
@@ -67,44 +66,26 @@ export function useHomeBelow(): BelowState {
 }
 
 // Không dùng React.lazy: chunk đã về thì khối dựng ngay trong cùng lượt vẽ (không bị treo thêm một nhịp), nên các khối dùng chung
-// query với Trang chủ gắn vào cùng lúc như khi chúng nằm trong gói đầu. Chưa về thì giữ chỗ đúng bằng hình lúc đang tải của chính khối đó
-// (hoặc không giữ chỗ nếu khối im lặng lúc tải): chỉ lần mở chưa biết loại khách mới có khung chờ chung, máy đã nhớ loại khách thì không,
-// nên khung xám thừa ở đây sẽ biến mất khi chunk về và kéo mọi thứ bên dưới lên.
-interface Slot {
-  /** Chiều cao ô xám; 0 = khối không vẽ gì lúc tải nên không giữ chỗ. */
-  height: number;
-  /** Lề trên và đệm dưới quanh ô xám, đúng như khung chờ của khối thật (lề trên là lề, không phải đệm, để cùng một phần tử thay chỗ nhau mà không bị tính là dịch chuyển). */
-  top?: number;
-  bottom?: number;
-}
-const SLOT_GIFT: Slot = { height: HOME_HERO_HEIGHT, bottom: 12 };
-const SLOT_NONE: Slot = { height: 0 };
-
-function Block({ slot, children }: { slot: Slot; children: (m: Below) => ReactNode }) {
+// query với Trang chủ gắn vào cùng lúc như khi chúng nằm trong gói đầu. Chưa về thì giữ chỗ bằng chính khung chờ của khối (dùng chung
+// component, không chép số) hoặc không giữ gì. Chỉ lần mở chưa biết loại khách mới có khung chờ chung và nó KHÔNG đợi chunk, nên khung xám
+// thừa ở đây sẽ biến mất khi chunk về và kéo mọi thứ bên dưới lên: chỉ khối nằm trong màn đầu mới được có chỗ giữ.
+//
+// Hành trình, Cộng đồng, Gợi ý không giữ chỗ vì chúng là ba khối CUỐI trang, mọi thứ chúng có thể đẩy đều nằm phía trên chúng nên không đẩy gì
+// (CLS 0). Chúng hiện muộn hơn main một nhịp chunk: Hành trình và Gợi ý trên main có vẽ ngay (thẻ bản đồ; tab và lưới xám) chứ không im lặng
+// lúc tải, và khi không có Giờ vàng thì Hành trình của khách cũ nằm gần mép màn 812 (y≈600), nên có thể thấy nó xuất hiện.
+function Block({ placeholder = null, children }: { placeholder?: ReactNode; children: (m: Below) => ReactNode }) {
   const { failed } = useSyncExternalStore(subscribe, getState, getState);
   if (below) return <>{children(below)}</>;
   // Chunk hỏng: Trang chủ hiện một dải lỗi có "Thử lại" (home.tsx), các khối không giữ chỗ vĩnh viễn.
   if (failed) return null;
-  if (slot.height === 0) return null;
-  const top = slot.top ?? 0;
-  const bottom = slot.bottom ?? 0;
-  return (
-    <div
-      data-testid="home-below-placeholder"
-      data-height={top + slot.height + bottom}
-      aria-hidden="true"
-      style={{ marginTop: top, padding: `0 16px ${bottom}px` }}
-    >
-      <Skeleton height={slot.height} radius="var(--radius-card)" />
-    </div>
-  );
+  return <>{placeholder}</>;
 }
 
 // Hai kệ sản phẩm và Giờ vàng (HomeFlashSale ở home.tsx, nạp thẳng từ ../flash-sale) nằm trong gói đầu như trước khi tách khối: thẻ sản phẩm đầu
 // không đợi thêm một request chunk, và Giờ vàng không hiện muộn hơn dữ liệu của nó (đo: nạp lười làm CLS khách mở lại tăng 0,0087 → 0,0211).
 export const HomePurchasedRail = (p: ComponentProps<typeof PurchasedRail>) => <PurchasedRail {...p} />;
 export const HomeBestSellerRail = () => <BestSellerRail />;
-export const HomeBrandJourney = () => <Block slot={SLOT_NONE}>{(m) => <m.BrandJourney />}</Block>;
-export const HomeCommunityPreview = () => <Block slot={SLOT_NONE}>{(m) => <m.CommunityPreview />}</Block>;
-export const HomeNewCustomerGift = () => <Block slot={SLOT_GIFT}>{(m) => <m.NewCustomerGift />}</Block>;
-export const HomeSuggestFeed = () => <Block slot={SLOT_NONE}>{(m) => <m.SuggestFeed />}</Block>;
+export const HomeBrandJourney = () => <Block>{(m) => <m.BrandJourney />}</Block>;
+export const HomeCommunityPreview = () => <Block>{(m) => <m.CommunityPreview />}</Block>;
+export const HomeNewCustomerGift = () => <Block placeholder={<NewCustomerGiftSkeleton />}>{(m) => <m.NewCustomerGift />}</Block>;
+export const HomeSuggestFeed = () => <Block>{(m) => <m.SuggestFeed />}</Block>;

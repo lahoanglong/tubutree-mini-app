@@ -48,7 +48,9 @@ import { haptic } from '../utils/haptic';
  * lại: dải "Quà khách mới" thay thẻ thành viên, không có Mua lại, Giờ vàng và Bán chạy đứng trước Danh mục. Thứ tự khối ở app-core (`homeBlockOrder`), dùng chung với web.
  * Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ (C-084), độc lập từng khối; kéo để làm mới vẫn dùng được.
  */
-// Chunk các khối dưới màn đầu tải song song với dữ liệu ngay khi mã trang chủ chạy, không đợi tới lúc render.
+// Chunk các khối dưới màn đầu tải song song với dữ liệu ngay khi mã trang chủ chạy, không đợi tới lúc render. Mã này chạy cả khi app mở thẳng
+// vào trang khác (deep link) vì Trang chủ nằm trong gói đầu; chunk hỏng ở đó thì khi khách về Trang chủ sẽ thấy dải lỗi có "Thử lại" (tải lại
+// app với lỗi kiểu chunk). Thẻ sản phẩm đầu không phụ thuộc chunk: khung chờ chung không đợi nó.
 void loadHomeBelow().catch(() => {});
 
 export default function HomePage() {
@@ -87,10 +89,9 @@ export default function HomePage() {
   const upcoming = useQuery({ queryKey: ['flash-sales', 'upcoming'], queryFn: fetchUpcomingFlashSales, enabled: authed, staleTime: 30_000 });
   const todo = useHomeTodoQueries();
   const belowState = useHomeBelow();
-  const belowReady = belowState.ready;
   const settling = useHomeSettling(
     kind,
-    !belowReady || todo.loading || flash.isLoading || (authed && upcoming.isLoading) || categories.isLoading,
+    todo.loading || flash.isLoading || (authed && upcoming.isLoading) || categories.isLoading,
     sessionFailed,
   );
 

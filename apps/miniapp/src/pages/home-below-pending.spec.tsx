@@ -2,7 +2,6 @@ import { render, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HOME_SETTLE_MAX_MS, homeRenderOrder } from '@tubutree/app-core/home-layout';
 
 // Khung chờ chung của Trang chủ ở cấp trang: Giờ vàng thật (khối hiện lỗi + "Thử lại"), giờ giả, StrictMode. home.spec.tsx mock Giờ vàng nên không thấy được.
 const chunk = vi.hoisted(() => {
@@ -90,12 +89,13 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('HomePage — chunk khối dưới màn đầu chưa về', () => {
-  it('dữ liệu đã về hết mà chunk chưa về: vẫn giữ khung chờ chung (không nhả sớm), chunk về thì nhả thành bố cục thật', async () => {
+  it('dữ liệu đã về hết mà chunk treo mãi: khung chờ chung vẫn tắt (thẻ sản phẩm không đợi chunk), chunk về sau cũng không bật lại', async () => {
     mocks.fetchActiveFlashSales.mockResolvedValue([]);
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
     renderHome();
-    await settle(HOME_SETTLE_MAX_MS - 500);
-    expect(blockOrder()).toEqual([...homeRenderOrder('new', true)]);
+    await settle(1000);
+    expect(blockOrder()).not.toContain('settling');
+    expect(blockOrder()).toContain('bestSellers');
     await act(async () => chunk.release());
     await settle();
     expect(blockOrder()).not.toContain('settling');
