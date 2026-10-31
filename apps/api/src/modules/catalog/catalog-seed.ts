@@ -4,6 +4,17 @@
  */
 export const SEED_PATTERN = /^\d{4}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/;
 
+const VN_OFFSET_MS = 7 * 3_600_000;
+
+/**
+ * Ngày VN `YYYYMMDD` của một mốc thời gian, cùng công thức với app-core `vnDateSeed` (API không import được app-core).
+ * Khối gộp `/home/me` dựng gợi ý với seed này để lần tải đầu trùng đúng bộ món mà các request lẻ có `seed` trả về trong ngày.
+ */
+export function vnDateSeed(now: number): string {
+  const d = new Date(now + VN_OFFSET_MS);
+  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
 /** FNV-1a trên `seed:id` rồi trộn thêm cho các id gần nhau không ra số gần nhau; 32-bit không dấu. */
 export function seedHash(seed: string, id: string): number {
   let h = 0x811c9dc5;

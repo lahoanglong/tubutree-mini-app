@@ -472,6 +472,21 @@ describe('CatalogService.getForYou (Feed "Dành cho bạn")', () => {
     expect(r).toHaveLength(10);
     expect(r[0]?.id).toBe('p14'); // sold cao nhất trước
   });
+
+  it('có seed: khối gộp /home/me (biết hasOrders) và request lẻ /products/for-you trong cùng ngày ra cùng bộ 10 món, cùng thứ tự', async () => {
+    const many = Array.from({ length: 30 }, (_, i) => ({ ...card(`p${i}`), isFeatured: true, soldExternal: i, soldApp: 0 }));
+    const make = () => setup({ product: { findMany: jest.fn().mockResolvedValue(many) } }).svc;
+    const ids = (r: { id: string }[]) => r.map((c) => c.id);
+
+    const fromBlock = ids(await make().getForYou('u1', { hasOrders: false, seed: '20261101' }));
+    const fromRequest = ids(await make().getForYou('u1', { seed: '20261101' }));
+    expect(fromBlock).toEqual(fromRequest);
+    expect(fromBlock).toHaveLength(10);
+
+    // Không seed vẫn là top 10 theo lượt bán (hành vi cũ); sang ngày khác đổi bộ món.
+    expect(ids(await make().getForYou('u1'))).toEqual(Array.from({ length: 10 }, (_, i) => `p${29 - i}`));
+    expect(ids(await make().getForYou('u1', { seed: '20261102' }))).not.toEqual(fromBlock);
+  });
 });
 
 describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {

@@ -1,4 +1,4 @@
-import { SEED_PATTERN, seedHash, seededOrder } from './catalog-seed';
+import { SEED_PATTERN, seedHash, seededOrder, vnDateSeed } from './catalog-seed';
 
 const row = (id: string, brandId: string | null = null) => ({ id, brandId });
 const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
@@ -8,6 +8,15 @@ describe('SEED_PATTERN', () => {
   it('nhận ngày YYYYMMDD, từ chối dạng khác', () => {
     expect(SEED_PATTERN.test('20261101')).toBe(true);
     for (const bad of ['2026-11-01', '1234567', '123456789', 'abc', '', '20261301', '20261100', '20261132']) expect(SEED_PATTERN.test(bad)).toBe(false);
+  });
+});
+
+describe('vnDateSeed', () => {
+  it('ngày theo giờ Việt Nam, qua nửa đêm VN thì đổi ngày dù UTC chưa đổi; khớp SEED_PATTERN', () => {
+    expect(vnDateSeed(Date.UTC(2026, 9, 31, 16, 59, 59))).toBe('20261031');
+    expect(vnDateSeed(Date.UTC(2026, 9, 31, 17, 0, 0))).toBe('20261101');
+    expect(vnDateSeed(Date.UTC(2026, 11, 31, 17, 0, 0))).toBe('20270101');
+    expect(SEED_PATTERN.test(vnDateSeed(Date.UTC(2026, 0, 5, 3, 0, 0)))).toBe(true);
   });
 });
 

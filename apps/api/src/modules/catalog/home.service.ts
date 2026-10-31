@@ -13,6 +13,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ACTIVE_ORDER_STATUSES } from '../orders/order-status-groups';
 import { WASTE_OPEN_STATUSES } from '../waste-exchange/waste.constants';
 import { CatalogService } from './catalog.service';
+import { vnDateSeed } from './catalog-seed';
 import type { ProductQuery } from './dto/product-query.dto';
 
 // Phải khớp SECTION_LIMIT / FEATURED_FETCH_LIMIT của miniapp (pages/home.tsx): client chỉ dùng khối
@@ -178,14 +179,15 @@ export class HomeService {
   }
 
   /** Phần theo người dùng — KHÔNG cache dùng chung. */
-  async getForUser(userId: string, purchasedLimit: number = DEFAULT_PURCHASED_LIMIT): Promise<HomeMe> {
+  async getForUser(userId: string, purchasedLimit: number = DEFAULT_PURCHASED_LIMIT, now: number = Date.now()): Promise<HomeMe> {
     // Một hạn chung cho cả request: thời gian chờ số đếm ăn vào hạn của mọi khối, nên tổng không vượt BLOCK_TIMEOUT_MS (Mini chỉ chờ 4 s).
     const deadline = Date.now() + BLOCK_TIMEOUT_MS;
+    const seed = vnDateSeed(now);
     const facts = this.userFactsOrNull(userId);
     const own = <T>(name: string, run: () => Promise<T>) => this.block(name, run, deadline);
     const withFacts = <T>(name: string, run: (f: UserFacts | null) => Promise<T>) => facts.then((f) => this.block(name, () => run(f), deadline));
     const [forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount] = await Promise.all([
-      withFacts('forYou', (f) => (f ? this.catalog.getForYou(userId, { hasOrders: f.hasOrders }) : this.catalog.getForYou(userId))),
+      withFacts('forYou', (f) => (f ? this.catalog.getForYou(userId, { hasOrders: f.hasOrders, seed }) : this.catalog.getForYou(userId, { seed }))),
       own('flashUpcoming', () => this.flashSale.listUpcoming(userId)),
       withFacts('purchasedItems', async (f) => (f && f.delivered === 0 ? { items: [], nextCursor: null } : this.purchased.list(userId, { limit: purchasedLimit }))),
       withFacts('activeOrderCount', async (f) => (f ? { count: f.active } : this.orders.activeCount(userId))),
