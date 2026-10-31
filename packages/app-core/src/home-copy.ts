@@ -36,7 +36,7 @@ export const homeCopy = {
   },
   shortcuts: { title: 'Lối tắt', rail: 'Lối tắt, vuốt ngang để xem thêm', all: 'Tất cả', allAria: 'Tất cả lối tắt' },
   reorder: { buy: 'Mua lại', subscribe: (pct: number) => `Định kỳ -${pct}%`, seeAll: 'Xem đơn hàng' },
-  categories: { title: 'Danh mục', rail: 'Danh mục, vuốt ngang để xem thêm' },
+  categories: { title: 'Danh mục', rail: 'Danh mục, vuốt ngang để xem thêm', all: 'Tất cả', allAria: 'Tất cả danh mục' },
   journey: {
     title: 'Hành trình nguyên liệu',
     body: (brands: number) => (brands > 0 ? `${brands} nhãn Việt, từ nhiều vùng đất` : 'Sản phẩm Tubu từ nhiều vùng đất Việt Nam'),

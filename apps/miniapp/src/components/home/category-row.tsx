@@ -1,75 +1,107 @@
+import { LayoutGrid } from 'lucide-react';
 import type { CategoryEntry } from '../../hooks/use-categories';
 import { homeCopy } from '@tubutree/app-core/home-copy';
+import { SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
 import { Icon } from '../ui/icon';
 import { ScrollRow } from '../ui/scroll-row';
+import { SectionHeader } from '../ui/section-header';
 import { Skeleton } from '../ui/skeleton';
-import { Heading, Text } from '../ui/text';
+import { Text } from '../ui/text';
 
-const ITEM_WIDTH = 72;
-const CIRCLE = 56;
+const TILE = 56;
+const LABEL_HEIGHT = 32;
+/** Khung chờ không bao giờ dài hơn một màn (2 hàng × 5 cột): ô vượt màn chỉ có khi đã có dữ liệu thật. */
+const MAX_SKELETON_CELLS = 10;
+const TINTS: ShortcutTint[] = ['forest', 'sage', 'clay', 'amber', 'sky', 'rose'];
 
 export interface CategoryRowProps {
   entries: CategoryEntry[];
   isLoading: boolean;
   onSelect: (entry: CategoryEntry) => void;
+  /** Có thì ô cuối lưới là "Tất cả" dẫn vào Danh mục. */
+  onSeeAll?: () => void;
+  /** Số danh mục của lần tải trước; khung chờ vẽ số ô này cộng ô "Tất cả" để bằng chiều cao lưới thật. */
   placeholderCount?: number;
 }
 
-/** Danh mục một hàng cuộn ngang ở Trang chủ: ô tròn có ảnh hoặc biểu tượng, nhãn tối đa hai dòng. */
-export function CategoryRow({ entries, isLoading, onSelect, placeholderCount = 5 }: CategoryRowProps) {
+const cellStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 4,
+  minHeight: 44,
+  minWidth: 0,
+  padding: '0 2px',
+  border: 'none',
+  background: 'transparent',
+  fontFamily: 'inherit',
+  cursor: 'pointer',
+} as const;
+
+function Label({ children }: { children: string }) {
   return (
-    <section aria-label={homeCopy.categories.title} style={{ padding: '4px 0 8px' }}>
-      <div style={{ padding: '8px 16px 4px' }}>
-        <Heading variant="title-sm" as="h2">
-          {homeCopy.categories.title}
-        </Heading>
+    <Text
+      variant="caption"
+      style={{ textAlign: 'center', fontWeight: 600, width: '100%', height: LABEL_HEIGHT, lineHeight: '16px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}
+    >
+      {children}
+    </Text>
+  );
+}
+
+/**
+ * Danh mục ở Trang chủ (Q7): lưới 2 hàng × 5 cột, ô vuông bo 56px nền màu xoay vòng (có ảnh thì vẽ ảnh), nhãn tối đa hai dòng. Ô cuối là "Tất cả".
+ * Quá 10 ô thì lưới xếp theo cột và cuộn ngang (mỗi cột đúng 1/5 bề rộng, ô thứ 6 thò ra mép để khách biết còn nữa), không cắt bớt danh mục.
+ */
+export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholderCount = MAX_SKELETON_CELLS - 1 }: CategoryRowProps) {
+  const skeletonCells = Math.min(placeholderCount + 1, MAX_SKELETON_CELLS);
+  return (
+    <section aria-label={homeCopy.categories.title}>
+      <div style={{ padding: '0 16px' }}>
+        <SectionHeader title={homeCopy.categories.title} />
       </div>
-      <ScrollRow label={homeCopy.categories.rail} style={{ gap: 8, padding: '4px 16px 8px' }}>
+      <ScrollRow
+        label={homeCopy.categories.rail}
+        style={{ display: 'grid', gridTemplateRows: 'repeat(2, auto)', gridAutoFlow: 'column', gridAutoColumns: '20%', rowGap: 8, padding: '4px 16px 8px' }}
+      >
         {isLoading
-          ? Array.from({ length: placeholderCount }, (_, i) => (
-              <div key={i} data-testid="category-row-skeleton" aria-hidden="true" style={{ flex: `0 0 ${ITEM_WIDTH}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                <Skeleton width={CIRCLE} height={CIRCLE} radius="var(--radius-pill)" />
+          ? Array.from({ length: skeletonCells }, (_, i) => (
+              <div key={i} data-testid="category-row-skeleton" aria-hidden="true" style={{ ...cellStyle, cursor: 'default' }}>
+                <Skeleton width={TILE} height={TILE} radius="var(--radius-card)" />
                 <Skeleton width={48} height={16} />
               </div>
             ))
-          : entries.map((e) => (
-              <button
-                key={`${e.kind}:${e.key}`}
-                type="button"
-                className="tubu-press"
-                onClick={() => onSelect(e)}
-                style={{
-                  flex: `0 0 ${ITEM_WIDTH}px`,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 6,
-                  minHeight: 44,
-                  padding: 0,
-                  border: 'none',
-                  background: 'transparent',
-                  fontFamily: 'inherit',
-                  cursor: 'pointer',
-                }}
-              >
-                <span
-                  aria-hidden
-                  style={{ width: CIRCLE, height: CIRCLE, borderRadius: 'var(--radius-pill)', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center', overflow: 'hidden' }}
-                >
-                  {e.image ? (
-                    <img src={e.image} alt="" width={CIRCLE} height={CIRCLE} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  ) : (
-                    <Icon icon={e.icon} size="lg" tone="brand" />
-                  )}
-                </span>
-                <Text
-                  variant="caption"
-                  style={{ textAlign: 'center', fontWeight: 600, width: '100%', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}
-                >
-                  {e.label}
-                </Text>
-              </button>
-            ))}
+          : (
+            <>
+              {entries.map((e, i) => {
+                const tint = SHORTCUT_TINT_VARS[TINTS[i % TINTS.length]!];
+                return (
+                  <button key={`${e.kind}:${e.key}`} type="button" className="tubu-press" onClick={() => onSelect(e)} style={cellStyle}>
+                    <span
+                      aria-hidden
+                      data-testid="category-tile"
+                      style={{ width: TILE, height: TILE, borderRadius: 'var(--radius-card)', background: tint.bg, color: tint.fg, display: 'grid', placeItems: 'center', overflow: 'hidden' }}
+                    >
+                      {e.image ? (
+                        <img src={e.image} alt="" width={TILE} height={TILE} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <Icon icon={e.icon} size="lg" tone="current" />
+                      )}
+                    </span>
+                    <Label>{e.label}</Label>
+                  </button>
+                );
+              })}
+              {onSeeAll && (
+                <button type="button" aria-label={homeCopy.categories.allAria} className="tubu-press" onClick={onSeeAll} style={cellStyle}>
+                  <span aria-hidden style={{ width: TILE, height: TILE, borderRadius: 'var(--radius-card)', background: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)', display: 'grid', placeItems: 'center' }}>
+                    <Icon icon={LayoutGrid} size="lg" tone="current" />
+                  </span>
+                  <Label>{homeCopy.categories.all}</Label>
+                </button>
+              )}
+            </>
+          )}
       </ScrollRow>
     </section>
   );

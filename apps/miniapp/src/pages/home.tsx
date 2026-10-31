@@ -131,6 +131,10 @@ export default function HomePage() {
           haptic('light');
           navigate(e.kind === 'category' ? `/browse?category=${encodeURIComponent(e.key)}` : `/browse?segment=${encodeURIComponent(e.key)}`);
         }}
+        onSeeAll={() => {
+          haptic('light');
+          navigate('/browse');
+        }}
       />
     ),
     bestSellers: <HomeBestSellerRail />,
