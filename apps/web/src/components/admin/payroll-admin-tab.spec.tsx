@@ -240,7 +240,7 @@ describe('PayrollAdminTab: thưởng/phạt và tính lại tháng', () => {
   // Khung thưởng/phạt nạp lười: lần mở đầu tiên đợi mô-đun về.
   const openAdjust = async (container: HTMLElement) => {
     click(container.querySelector('[aria-label="Thưởng/phạt · Lan"]'));
-    const until = Date.now() + 8000;
+    const until = Date.now() + 4000;
     while (Date.now() < until && !document.querySelector('[role=dialog] [data-adjust-submit]')) await flush(1);
     await flush();
   };
