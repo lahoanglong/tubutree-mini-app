@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Page, useParams, useNavigate } from 'zmp-ui';
 import { useNotify } from '../hooks/use-notify';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -14,21 +14,37 @@ import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { ShareSheet } from '../components/share-sheet';
 import { getDealerMe } from '../services/dealer-api';
-import { BadgePercent, Check, Leaf, MapPin, Plus, Share2, Sparkles, Store } from 'lucide-react';
+import { BadgePercent, Check, ChevronRight, Leaf, MapPin, Plus, Share2, Store } from 'lucide-react';
+import { brandStatsInput, followerStat, promotionVoucher, shopTabs, type ShopTabKey } from '@tubutree/app-core/commerce/shop-page';
+import { shopStats } from '@tubutree/app-core/commerce/shop-stats';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { copyText } from '../utils/clipboard';
-import { StorePageShell } from '../components/store-page-shell';
+import { serverNow } from '../utils/server-clock';
 import { Text, Heading } from '../components/ui/text';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
-import { ProductGrid } from '../components/ui/product-grid';
 import { Icon } from '../components/ui/icon';
+import { IconButton } from '../components/ui/icon-button';
 import { PageHeader } from '../components/ui/page-header';
+import { ProductRail } from '../components/ui/product-rail';
 import { ScrollRow } from '../components/ui/scroll-row';
-import { safeHexColor } from '../utils/hex-color';
+import { SectionHeader } from '../components/ui/section-header';
+import { SegmentedTabs } from '../components/ui/segmented-tabs';
+import { ShopHeader } from '../components/ui/shop-header';
+import { ShopStatsRow } from '../components/ui/shop-stats-row';
+import { ShopTopBar } from '../components/ui/shop-top-bar';
+import { VoucherTicket } from '../components/ui/voucher-ticket';
+import { ShopProductsTab } from '../components/shop-page/shop-products-tab';
 import { findBrandOrigin } from '../utils/brand-origins';
 
-/** Tiêu đề khi chưa có tên nhãn (đang tải/lỗi); tải xong thì tên nhãn là h1 của StorePageShell. */
+/** Tiêu đề khi chưa có tên nhãn (đang tải/lỗi); tải xong thì tên nhãn là h1 của ShopHeader. */
 const PAGE_TITLE = 'Nhãn hàng';
+
+/** Số sản phẩm nổi bật trên tab Shop (kệ ngang); phần còn lại ở tab Sản phẩm. */
+const FEATURED_MAX = 10;
+/** Cao thanh nút lùi cố định (56) cộng vùng an toàn phía trên: thanh tab dính ngay dưới nó. */
+const STICKY_TOP = 'calc(var(--safe-top, 0px) + 56px)';
+const TABS_HEIGHT = 62;
 
 export default function BrandViewPage() {
   const { slug = '' } = useParams<{ slug: string }>();
@@ -36,6 +52,8 @@ export default function BrandViewPage() {
   const qc = useQueryClient();
   const { notify } = useNotify();
   const [shareOpen, setShareOpen] = useState(false);
+  const [tab, setTab] = useState<ShopTabKey>('shop');
+  const tabsRef = useRef<HTMLDivElement>(null);
   const setSfContext = useStorefrontContext((s) => s.setContext);
   const q = useQuery({ queryKey: ['public-brand', slug], queryFn: () => getPublicBrand(slug), staleTime: 60_000 });
   // Đại lý đã duyệt vẫn thấy "Đăng ký đại lý" thì đọc như hồ sơ chưa được duyệt (P3-22).
@@ -80,6 +98,7 @@ export default function BrandViewPage() {
 
   const b = q.data;
   const mapOrigin = b ? findBrandOrigin({ slug, name: b.name }) : null;
+  const featured = useMemo(() => (b?.products ?? []).slice(0, FEATURED_MAX).map((p) => ({ ...p, brand: b?.name ?? '', isFeatured: false })), [b]);
 
   if (q.isLoading) {
     return (
@@ -112,15 +131,37 @@ export default function BrandViewPage() {
     );
   }
 
+  const hasStory = Boolean(b.story || b.origin || b.storyImages.length > 0);
+  const productCount = b.productCount ?? b.products.length;
+  const stats = [...shopStats(brandStatsInput(b)), ...[followerStat(b.followerCount)].filter((x) => x !== null)];
+  const tabs = shopTabs({ productCount, hasStory, hasCategories: false }).map((t) => ({
+    key: t.key,
+    label: t.count === undefined ? t.label : `${t.label} (${t.count})`,
+  }));
+  const openTab = (key: string) => {
+    setTab(key as ShopTabKey);
+    // Thanh tab dính nên nội dung mới đổi dưới tay khách: kéo thanh tab lên đầu thay vì để trang ở giữa chừng.
+    tabsRef.current?.scrollIntoView?.({ block: 'start' });
+  };
+  const copyPromoCode = (code: string) =>
+    void copyText(code).then((ok) =>
+      notify(
+        ok
+          ? { text: `Đã chép mã ${code} — dán ở bước thanh toán`, type: 'success', duration: 2600 }
+          : { text: `Mã giảm giá: ${code}`, type: 'info', duration: 3000 },
+      ),
+    );
+  const now = serverNow();
+
   return (
     <Page className="page page-bleed" style={{ background: 'var(--color-bg-canvas)' }}>
-      <StorePageShell
-        coverUrl={b.coverUrl}
-        coverHeight={96}
-        avatarUrl={b.logoUrl}
-        avatarFallback={<Icon icon={Leaf} size="lg" tone="inverse" />}
-        avatarSize={64}
+      <ShopTopBar title={b.name} />
+      <ShopHeader
         title={b.name}
+        coverUrl={b.coverUrl}
+        avatarUrl={b.logoUrl}
+        verified={b.isVerified}
+        note={b.tagline}
         badges={
           b.isVerified ? (
             // Pill đặc (không phải soft-tone chuẩn của Badge) để giữ đúng trọng lượng thị giác
@@ -131,155 +172,149 @@ export default function BrandViewPage() {
             </Badge>
           ) : undefined
         }
-        stickyBar={
-          <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+        action={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <Button
               variant="secondary"
-              style={{ flex: 1 }}
               icon={followQ.data?.following ? Check : Plus}
               loading={followMut.isPending}
               onPress={() => followMut.mutate()}
             >
-              {followQ.data?.following ? 'Đang theo dõi' : 'Theo dõi'}
+              {followQ.data?.following ? fillCopy('shop.following') : fillCopy('shop.follow')}
             </Button>
-            <Button style={{ flex: 1 }} icon={Share2} onPress={() => setShareOpen(true)}>
-              Chia sẻ
-            </Button>
+            <IconButton icon={Share2} label="Chia sẻ" onPress={() => setShareOpen(true)} />
           </div>
         }
-      >
-        <div style={{ padding: '0 16px' }}>
-          {b.tagline && <Text variant="body-sm" tone="secondary">{b.tagline}</Text>}
-          {b.followerCount > 0 && (
-            <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>{b.followerCount} người theo dõi</Text>
-          )}
-        </div>
+      />
+      <ShopStatsRow stats={stats} />
 
-        {eligible && ste?.eligible && (
-          <div style={{ marginTop: 12, padding: '0 16px' }}>
-            <button
-              type="button"
-              className="tubu-press"
-              onClick={() => setShareOpen(true)}
-              style={{
-                display: 'block', width: '100%', minHeight: 44, textAlign: 'left', font: 'inherit', cursor: 'pointer',
-                background: 'var(--color-action-secondary-bg)', border: '1px solid var(--color-action-secondary-border)',
-                borderRadius: 'var(--radius-card)', padding: 12,
-              }}
-            >
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <BadgePercent size={18} color="var(--color-action-secondary-fg)" aria-hidden />
-                <Text variant="body-sm" style={{ fontWeight: 700, color: 'var(--color-action-secondary-fg)' }}>
-                  {ste.maxAffiliateRate > 0 ? `Chia sẻ nhãn này — nhận tới ${ste.maxAffiliateRate}% hoa hồng` : 'Chia sẻ nhãn này'}
-                </Text>
-              </span>
-              <Text variant="caption" style={{ color: 'var(--color-text-brand)', marginTop: 2 }} as="span">
-                Bấm để lấy link + lời đăng gắn mã giới thiệu của bạn.
+      {eligible && ste?.eligible && (
+        <div style={{ marginTop: 12, padding: '0 16px' }}>
+          <button
+            type="button"
+            className="tubu-press"
+            onClick={() => setShareOpen(true)}
+            style={{
+              display: 'block', width: '100%', minHeight: 44, textAlign: 'left', font: 'inherit', cursor: 'pointer',
+              background: 'var(--color-action-secondary-bg)', border: '1px solid var(--color-action-secondary-border)',
+              borderRadius: 'var(--radius-card)', padding: 12,
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <BadgePercent size={18} color="var(--color-action-secondary-fg)" aria-hidden />
+              <Text variant="body-sm" style={{ fontWeight: 700, color: 'var(--color-action-secondary-fg)' }}>
+                {ste.maxAffiliateRate > 0 ? `Chia sẻ nhãn này — nhận tới ${ste.maxAffiliateRate}% hoa hồng` : 'Chia sẻ nhãn này'}
               </Text>
-            </button>
-          </div>
-        )}
+            </span>
+            <Text variant="caption" style={{ color: 'var(--color-text-brand)', marginTop: 2 }} as="span">
+              Bấm để lấy link + lời đăng gắn mã giới thiệu của bạn.
+            </Text>
+          </button>
+        </div>
+      )}
 
-        {b.certifications.length > 0 && (
-          <div style={{ marginTop: 16, padding: '0 16px' }}>
-            <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Chứng nhận</Heading>
-            <ScrollRow label="Chứng nhận" style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}>
-              {b.certifications.map((c) => (
-                <Badge key={c.code} tone="success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Icon icon={Leaf} size="sm" tone="brand" />
-                  {c.label}
-                </Badge>
-              ))}
-            </ScrollRow>
-          </div>
-        )}
+      <div ref={tabsRef} style={{ position: 'sticky', top: STICKY_TOP, zIndex: 3, background: 'var(--color-bg-canvas)', padding: '12px 16px 8px', minHeight: TABS_HEIGHT }}>
+        <SegmentedTabs items={tabs} value={tab} onChange={openTab} />
+      </div>
 
-        {b.promotions.length > 0 && (
-          <div style={{ marginTop: 16, padding: '0 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-              <Sparkles size={16} color="var(--color-promo-fg)" aria-hidden />
-              <Heading variant="title-sm" as="h2">Khuyến mãi</Heading>
-            </div>
-            {b.promotions.map((p) => (
-              <div
-                key={p.id}
-                style={{ marginBottom: 8, background: 'var(--color-promo-bg)', border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-card)', padding: 12, borderColor: safeHexColor(p.themeColor) }}
-              >
-                <Text variant="body-sm" style={{ fontWeight: 700, color: 'var(--color-promo-fg)' }}>{p.title}</Text>
-                {p.subtitle && <Text variant="caption" tone="secondary" as="div">{p.subtitle}</Text>}
-                {/* Có mã mà không hiện thì banner chỉ là lời quảng cáo: khách đọc xong không
-                    biết làm gì tiếp. Chạm để chép, dán ở bước thanh toán. */}
-                {p.couponCode && (
-                  <button
-                    type="button"
-                    aria-label={`Sao chép mã ${p.couponCode}`}
-                    className="tubu-press"
-                    onClick={() => {
-                      const code = p.couponCode!;
-                      void copyText(code).then((ok) =>
-                        notify(
-                          ok
-                            ? { text: `Đã chép mã ${code} — dán ở bước thanh toán`, type: 'success', duration: 2600 }
-                            : { text: `Mã giảm giá: ${code}`, type: 'info', duration: 3000 },
-                        ),
-                      );
-                    }}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      marginTop: 8,
-                      padding: '6px 12px',
-                      minHeight: 44,
-                      font: 'inherit',
-                      cursor: 'pointer',
-                      borderRadius: 'var(--radius-control)',
-                      border: '1px dashed var(--color-promo-fg)',
-                      background: 'var(--color-bg-surface)',
-                    }}
-                  >
-                    <Text variant="caption" style={{ fontWeight: 700, color: 'var(--color-promo-fg)', letterSpacing: 0.5 }}>
-                      {p.couponCode}
-                    </Text>
-                    <Text variant="caption" tone="tertiary">chạm để chép</Text>
-                  </button>
-                )}
+      <div role="tabpanel" aria-label={tabs.find((t) => t.key === tab)?.label} style={{ ['--sort-bar-top' as string]: `calc(var(--safe-top, 0px) + 56px + ${TABS_HEIGHT - 12}px)` }}>
+        {tab === 'shop' && (
+          <div style={{ padding: '0 16px' }}>
+            {b.certifications.length > 0 && (
+              <div style={{ marginTop: 4 }}>
+                <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Chứng nhận</Heading>
+                <ScrollRow label="Chứng nhận" style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}>
+                  {b.certifications.map((c) => (
+                    <Badge key={c.code} tone="success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Icon icon={Leaf} size="sm" tone="brand" />
+                      {c.label}
+                    </Badge>
+                  ))}
+                </ScrollRow>
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        {b.products.length > 0 && (
-          <div style={{ marginTop: 16, padding: '0 16px' }}>
-            <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Sản phẩm</Heading>
-            {/* Payload sản phẩm của trang nhãn không kèm `brand` (mọi SP đều thuộc nhãn này): đặt tên nhãn của trang cho đủ kiểu, thẻ không in lại. */}
-            <ProductGrid items={b.products.map((p) => ({ ...p, brand: b.name, isFeatured: false }))} variant="grid" showBrand={false} />
-          </div>
-        )}
+            {b.promotions.length > 0 && (
+              <div style={{ marginTop: 16 }} data-testid="brand-vouchers">
+                <SectionHeader title={fillCopy('shop.vouchers')} icon="ticket" />
+                {/* Phiếu chip chỉ có tiêu đề và điều kiện; mã nằm sau nút Sao chép (dán ở bước thanh toán). */}
+                <ScrollRow label={fillCopy('shop.vouchers')} style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}>
+                  {b.promotions.map((p) => (
+                    <VoucherTicket
+                      key={p.id}
+                      voucher={promotionVoucher(p, now)}
+                      variant="chip"
+                      primary={p.couponCode ? { label: 'Sao chép', onClick: () => copyPromoCode(p.couponCode!) } : undefined}
+                    />
+                  ))}
+                </ScrollRow>
+              </div>
+            )}
 
-        {b.dealerRewards.length > 0 && (
-          <div style={{ marginTop: 16, padding: '0 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-              <Store size={16} color="var(--color-text-brand)" aria-hidden />
-              <Heading variant="title-sm" as="h2">Chương trình đại lý</Heading>
-            </div>
-            {b.dealerRewards.map((d) => (
-              <div key={d.id} style={{ marginBottom: 8, background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-card)', padding: 12 }}>
-                <Text variant="body-sm" style={{ fontWeight: 700 }} as="div">{d.title}</Text>
-                {d.description && <Text variant="caption" tone="secondary" as="div">{d.description}</Text>}
-                <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-                  Đạt doanh số {formatVnd(d.threshold)} / {d.period === 'YEAR' ? 'năm' : 'quý'}
+            {hasStory && b.story && (
+              <div style={{ marginTop: 16 }}>
+                <Heading variant="title-sm" as="h2" style={{ marginBottom: 4 }}>Câu chuyện thương hiệu</Heading>
+                <Text variant="body-sm" tone="secondary" as="p" data-testid="brand-story-teaser" style={{ margin: 0, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                  {b.story}
                 </Text>
+                <button
+                  type="button"
+                  className="tubu-press tubu-hit-44"
+                  onClick={() => openTab('story')}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 2, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'var(--type-label-size)', fontWeight: 600, color: 'var(--color-text-brand)' }}
+                >
+                  {fillCopy('shop.readStory')}
+                  <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
+                </button>
               </div>
-            ))}
-            <Button variant="secondary" onPress={() => navigate('/dealer')}>
-              {alreadyDealer ? 'Vào kênh đại lý' : dealerQ.data?.status === 'PENDING' ? 'Xem hồ sơ đại lý' : 'Đăng ký đại lý'}
-            </Button>
+            )}
+
+            {featured.length > 0 && (
+              <div style={{ marginTop: 16 }} data-testid="brand-featured">
+                <SectionHeader
+                  title="Sản phẩm nổi bật"
+                  action={
+                    productCount > featured.length
+                      ? {
+                          label: fillCopy('shop.seeAllN', { n: productCount }),
+                          onPress: () => openTab('products'),
+                          spoken: fillCopy('shop.seeAllNSpoken', { n: productCount, title: 'Sản phẩm nổi bật' }),
+                        }
+                      : undefined
+                  }
+                />
+                {/* Payload sản phẩm của trang nhãn không kèm `brand` (mọi SP đều thuộc nhãn này): đặt tên nhãn của trang cho đủ kiểu, thẻ không in lại. */}
+                <ProductRail items={featured} variant="rail-md" label="Sản phẩm nổi bật" showBrand={false} />
+              </div>
+            )}
+
+            {b.dealerRewards.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <Store size={16} color="var(--color-text-brand)" aria-hidden />
+                  <Heading variant="title-sm" as="h2">Chương trình đại lý</Heading>
+                </div>
+                {b.dealerRewards.map((d) => (
+                  <div key={d.id} style={{ marginBottom: 8, background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)', borderRadius: 'var(--radius-card)', padding: 12 }}>
+                    <Text variant="body-sm" style={{ fontWeight: 700 }} as="div">{d.title}</Text>
+                    {d.description && <Text variant="caption" tone="secondary" as="div">{d.description}</Text>}
+                    <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
+                      Đạt doanh số {formatVnd(d.threshold)} / {d.period === 'YEAR' ? 'năm' : 'quý'}
+                    </Text>
+                  </div>
+                ))}
+                <Button variant="secondary" onPress={() => navigate('/dealer')}>
+                  {alreadyDealer ? 'Vào kênh đại lý' : dealerQ.data?.status === 'PENDING' ? 'Xem hồ sơ đại lý' : 'Đăng ký đại lý'}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
-        {(b.story || b.origin || b.storyImages.length > 0) && (
-          <div style={{ marginTop: 16, padding: '0 16px' }}>
+        {tab === 'products' && <ShopProductsTab source={{ kind: 'brand', slug: b.slug }} showBrand={false} />}
+
+        {tab === 'story' && hasStory && (
+          <div style={{ padding: '0 16px' }}>
             <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>Câu chuyện thương hiệu</Heading>
             {b.origin && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
@@ -310,7 +345,7 @@ export default function BrandViewPage() {
             )}
           </div>
         )}
-      </StorePageShell>
+      </div>
 
       <ShareSheet
         visible={shareOpen}
