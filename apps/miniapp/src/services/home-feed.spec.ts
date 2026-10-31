@@ -100,7 +100,8 @@ describe('home-feed', () => {
   });
 
   it('homeProductSlot chỉ nhận đúng 3 bộ tham số của Home', () => {
-    expect(homeProductSlot({ limit: 6, sort: 'best_seller' })).toBe('bestSellers');
+    expect(homeProductSlot({ limit: 12, sort: 'best_seller_30d' })).toBe('bestSellers');
+    expect(homeProductSlot({ limit: 6, sort: 'best_seller' })).toBeNull();
     expect(homeProductSlot({ limit: 6, sort: 'newest' })).toBe('newest');
     expect(homeProductSlot({ limit: 12 })).toBe('featured');
     expect(homeProductSlot({ limit: 12, brand: 'x' })).toBeNull();

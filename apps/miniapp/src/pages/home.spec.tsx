@@ -78,6 +78,9 @@ const card = (id: string, name: string) => ({
   id, slug: id, brand: 'Tubu', name, thumbnail: null, basePrice: 50000, salePrice: null, isFeatured: true, inStock: true,
 });
 const PAGE = (items: ReturnType<typeof card>[]) => ({ data: items, meta: { page: 1, limit: 6, total: items.length } });
+// Kệ Bán chạy nhất chỉ hiện từ 3 món (SHELVES), nên mock mặc định trả 4 món.
+const BEST_PAGE = () => PAGE([1, 2, 3, 4].map((n) => card(`bs${n}`, `Bán chạy ${n}`)));
+const BEST_QUERY = { limit: 12, sort: 'best_seller_30d' };
 
 function renderHome() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -106,16 +109,16 @@ describe('HomePage (phương án A, 9 khối)', () => {
     mocks.auth.status = 'authenticated';
     mocks.auth.user = { id: 'u1' };
     mocks.onRefresh = undefined;
-    mocks.fetchProducts.mockResolvedValue(PAGE([card('bs', 'Bán chạy nhất')]));
+    mocks.fetchProducts.mockResolvedValue(BEST_PAGE());
     mocks.fetchCategories.mockResolvedValue([]);
     mocks.unreadCount.mockResolvedValue({ count: 0 });
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
   });
 
-  it('khách mới: thẻ Quà khách mới thay thẻ thành viên, có kệ Bán chạy, không có Mua lại', async () => {
+  it('khách mới: thẻ Quà khách mới thay thẻ thành viên, có kệ Bán chạy nhất, không có Mua lại', async () => {
     const { qc } = renderHome();
     await waitFor(() => expect(settled(qc, ['purchased-items', 10])).toBe(true));
-    await screen.findByRole('region', { name: 'Bán chạy' });
+    await screen.findByRole('region', { name: 'Bán chạy nhất' });
     expect(mocks.fetchPurchasedItems).toHaveBeenCalledWith({ limit: 10 });
     expect(blockOrder()).toEqual(NEW);
     expect(block('member')).toBeNull();
@@ -127,17 +130,20 @@ describe('HomePage (phương án A, 9 khối)', () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1' }], nextCursor: null });
     renderHome();
     await waitFor(() => expect(blockOrder()).toEqual(RETURNING));
-    expect(RETURNING.slice(0, 5)).toEqual(['search', 'member', 'todo', 'shortcuts', 'purchased']);
-    expect(RETURNING).not.toContain('bestSellers');
+    // Giờ vàng đứng TRƯỚC Mua lại (Q6); Bán chạy nhất có ở cả hai loại khách (Q18).
+    expect(RETURNING.slice(0, 6)).toEqual(['search', 'member', 'todo', 'banner', 'shortcuts', 'flash']);
+    expect(RETURNING.indexOf('flash')).toBeLessThan(RETURNING.indexOf('purchased'));
+    expect(RETURNING).toContain('bestSellers');
     expect(screen.getByRole('region', { name: 'Thẻ thành viên' })).toBeInTheDocument();
   });
 
-  it('"Bán chạy" dùng sort=best_seller và "Xem tất cả" mở Browse đúng bộ sắp xếp', async () => {
+  it('"Bán chạy nhất" lấy 12 món theo 30 ngày, có hạng, và "Xem tất cả" mở Browse đúng bộ sắp xếp', async () => {
     renderHome();
-    const best = await screen.findByRole('region', { name: 'Bán chạy' });
-    expect(await within(best).findByText('Bán chạy nhất')).toBeInTheDocument();
-    expect(mocks.fetchProducts).toHaveBeenCalledWith({ limit: 6, sort: 'best_seller' });
-    await userEvent.setup().click(within(best).getByRole('button', { name: 'Xem tất cả Bán chạy' }));
+    const best = await screen.findByRole('region', { name: 'Bán chạy nhất' });
+    expect(await within(best).findByText('Bán chạy 1')).toBeInTheDocument();
+    expect(mocks.fetchProducts).toHaveBeenCalledWith(BEST_QUERY);
+    expect(best.querySelectorAll('[data-ds-part="rank"]')).toHaveLength(4);
+    await userEvent.setup().click(within(best).getByRole('button', { name: 'Xem tất cả Bán chạy nhất' }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/browse?sort=best_seller');
   });
 
@@ -157,7 +163,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     let down = true;
     mocks.fetchProducts.mockImplementation(async () => {
       if (down) throw new Error('boom');
-      return PAGE([card('bs', 'Bán chạy nhất')]);
+      return BEST_PAGE();
     });
     const { qc } = renderHome();
     await waitFor(() => expect(qc.getQueryState(['products', 'home-best-seller'])?.status).toBe('error'));
@@ -168,7 +174,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
 
     down = false;
     await userEvent.setup().click(within(strip).getByRole('button', { name: 'Thử lại' }));
-    expect(await screen.findByText('Bán chạy nhất')).toBeInTheDocument();
+    expect(await screen.findByText('Bán chạy 1')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByTestId('home-page-error')).toBeNull());
   });
 
@@ -182,13 +188,12 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(JSON.parse(localStorage.getItem(HOME_KIND_KEY) ?? 'null')).toEqual({ userId: 'u1', kind: 'returning' });
   });
 
-  it('đang khôi phục phiên (status loading) + đã nhớ khách cũ: bố cục khách cũ, không Bán chạy; chưa nhớ gì (máy mới hoặc khách cũ đổi máy) thì giữ chỗ thẻ thành viên chờ biết loại, không hứa quà khách mới', async () => {
+  it('đang khôi phục phiên (status loading) + đã nhớ khách cũ: bố cục khách cũ; chưa nhớ gì (máy mới hoặc khách cũ đổi máy) thì giữ chỗ thẻ thành viên chờ biết loại, không hứa quà khách mới', async () => {
     localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
     mocks.auth.status = 'loading';
     mocks.auth.user = null;
     const first = renderHome();
     expect(blockOrder()).toEqual(RETURNING);
-    expect(screen.queryByRole('region', { name: 'Bán chạy' })).toBeNull();
     first.unmount();
     localStorage.clear();
     renderHome();
@@ -196,7 +201,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
   });
 
-  it('R-156: khách cũ mất mạng lúc mở app (status error) và máy đã nhớ khách cũ: bố cục khách cũ kèm thẻ báo lỗi, không quà khách mới, không Bán chạy; máy chưa nhớ gì thì rơi về khách mới', async () => {
+  it('R-156: khách cũ mất mạng lúc mở app (status error) và máy đã nhớ khách cũ: bố cục khách cũ kèm thẻ báo lỗi, không quà khách mới; máy chưa nhớ gì thì rơi về khách mới', async () => {
     localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
     mocks.auth.status = 'error';
     mocks.auth.user = null;
@@ -206,36 +211,35 @@ describe('HomePage (phương án A, 9 khối)', () => {
     act(() => screen.getByTestId('member-card-unavailable').click());
     expect(mocks.restore).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Bán chạy' })).toBeNull();
     first.unmount();
     localStorage.clear();
     renderHome();
     expect(screen.getByRole('region', { name: 'Quà khách mới' })).toBeInTheDocument();
   });
 
-  it('khách cũ không nhận dải lỗi cấp trang dù kệ Bán chạy (khách cũ không thấy) lỗi: kệ này không được tải', async () => {
+  it('khách cũ cũng thấy kệ Bán chạy nhất nên nhận dải lỗi cấp trang khi API sập hẳn (không thẻ lỗi từng khối)', async () => {
     localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
-    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1' }], nextCursor: null });
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null });
     mocks.fetchProducts.mockRejectedValue(new Error('boom'));
     const { qc } = renderHome();
-    await waitFor(() => expect(settled(qc, ['purchased-items', 10])).toBe(true));
-    expect(mocks.fetchProducts).not.toHaveBeenCalledWith({ limit: 6, sort: 'best_seller' });
-    expect(screen.queryByTestId('home-page-error')).toBeNull();
-    expect(blockOrder()).toEqual(RETURNING);
+    await waitFor(() => expect(settled(qc, ['products', 'home-best-seller'])).toBe(true));
+    expect(mocks.fetchProducts).toHaveBeenCalledWith(BEST_QUERY);
+    expect(await screen.findByTestId('home-page-error')).toBeInTheDocument();
+    expect(screen.queryAllByTestId('home-block-error')).toHaveLength(0);
   });
 
-  it('khung chờ Bán chạy có đúng 6 ô (bằng giới hạn thật) khi đang tải', async () => {
+  it('khung chờ Bán chạy nhất có 5 ô thẻ hạng khi đang tải', async () => {
     mocks.fetchProducts.mockReturnValue(new Promise(() => {}));
     renderHome();
-    const best = await screen.findByRole('region', { name: 'Bán chạy' });
-    expect(within(best).getAllByTestId('catalog-tile-skeleton')).toHaveLength(6);
+    const best = await screen.findByRole('region', { name: 'Bán chạy nhất' });
+    expect(within(best).getAllByTestId('catalog-tile-skeleton')).toHaveLength(5);
   });
 
   it('khách chưa đăng nhập: không gọi notifications/purchased-items, bố cục khách mới', async () => {
     mocks.auth.status = 'guest';
     mocks.auth.user = null;
     renderHome();
-    await screen.findByRole('region', { name: 'Bán chạy' });
+    await screen.findByRole('region', { name: 'Bán chạy nhất' });
     expect(mocks.coreGet).not.toHaveBeenCalled();
     expect(mocks.fetchPurchasedItems).not.toHaveBeenCalled();
     expect(blockOrder()).toEqual(NEW);
@@ -251,7 +255,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
 
   it('kéo để làm mới làm mới MỌI truy vấn của Trang chủ', async () => {
     const { qc } = renderHome();
-    await screen.findByRole('region', { name: 'Bán chạy' });
+    await screen.findByRole('region', { name: 'Bán chạy nhất' });
     await waitFor(() => expect(mocks.unreadCount).toHaveBeenCalled());
     const before = {
       products: mocks.fetchProducts.mock.calls.length,
@@ -307,14 +311,14 @@ describe('HomePage (phương án A, 9 khối)', () => {
       expect([...seen]).toEqual([RETURNING.join('>')]);
     });
 
-    it('(b) lần đầu (chưa nhớ gì), đã đăng nhập: "unknown" (giữ chỗ thẻ thành viên, chưa có Mua lại/Quà/Bán chạy) khi đang tải, đổi sang "returning" khi có hàng, và nhớ lại', async () => {
+    it('(b) lần đầu (chưa nhớ gì), đã đăng nhập: "unknown" (giữ chỗ thẻ thành viên, chưa có Mua lại/Quà) khi đang tải, đổi sang "returning" khi có hàng, và nhớ lại', async () => {
       const d = deferred<{ items: object[]; nextCursor: null }>();
       mocks.fetchPurchasedItems.mockReturnValue(d.promise);
       renderHome();
       expect(blockOrder()).toEqual(UNKNOWN);
       expect(screen.getByTestId('member-card-loading')).toBeInTheDocument();
       expect(screen.getByTestId('home-settling')).toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: 'Bán chạy' })).toBeNull();
+      expect(screen.queryByRole('region', { name: 'Bán chạy nhất' })).toBeNull();
       await act(async () => {
         d.resolve({ items: [{ variationId: 'v1' }], nextCursor: null });
       });
@@ -379,7 +383,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
       const before = localStorage.getItem(HOME_KIND_KEY);
       renderHome();
       expect(blockOrder()).toEqual(NEW);
-      await screen.findByRole('region', { name: 'Bán chạy' });
+      await screen.findByRole('region', { name: 'Bán chạy nhất' });
       expect(blockOrder()).toEqual(NEW);
       expect(localStorage.getItem(HOME_KIND_KEY)).toBe(before);
     });

@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../services/api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   api: { get: mocks.get, post: vi.fn() },
-  getAccessToken: () => 'tok',
+  getAccessToken: () => (mocks.status === 'authenticated' ? 'tok' : null),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -109,8 +109,8 @@ describe('Trang chủ gộp request (C-037)', () => {
     // D2-07b: khối "Quà khách mới" (số công khai + ưu đãi của khách) đi cùng hai request gộp, không thêm request lẻ.
     expect(await screen.findByText(/^Mã 25\.000đ/)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    // Trang đầu của lưới gợi ý (không page, limit 12) lấy từ khối gộp; số yêu cầu đổi rác đang mở cũng lấy từ /home/me (không gọi /waste/me).
-    expect(paths().sort()).toEqual(['/feed', '/home', '/home/me', '/me/notifications/unread-count']);
+    // Lưới "Gợi ý hôm nay" là request riêng (xáo theo ngày, không có trong khối gộp); số yêu cầu đổi rác đang mở lấy từ /home/me (không gọi /waste/me).
+    expect(paths().sort()).toEqual(['/feed', '/home', '/home/me', '/me/notifications/unread-count', '/products']);
     expect(mocks.get.mock.calls.find(([u]) => u === '/home/me')?.[1]).toMatchObject({ params: { purchasedLimit: 10 } });
   });
 
@@ -131,7 +131,8 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByRole('region', { name: 'Quà khách mới' })).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/home']);
+    // Suất Giờ vàng sắp mở công khai nên khách cũng hỏi (request lẻ, không qua /home/me); không gọi /home/me.
+    expect(paths().sort()).toEqual(['/flash-sales/upcoming', '/home', '/products']);
   });
 
   it('API gộp cũ chưa có khối cấu hình/ưu đãi khách mới: hai khối đó lùi về request lẻ, phần còn lại vẫn từ gộp', async () => {
@@ -144,7 +145,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByText(/^Mã 25\.000đ/)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/config/public', '/feed', '/home', '/home/me', '/me/new-customer-offer', '/me/notifications/unread-count']);
+    expect(paths().sort()).toEqual(['/config/public', '/feed', '/home', '/home/me', '/me/new-customer-offer', '/me/notifications/unread-count', '/products']);
   });
 
   it('API cũ chưa có /home (404): lùi về từng request lẻ, trang vẫn đủ nội dung', async () => {
@@ -168,7 +169,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByText('LẻBrand')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/brands', '/feed', '/home', '/home/me', '/me/notifications/unread-count']);
+    expect(paths().sort()).toEqual(['/brands', '/feed', '/home', '/home/me', '/me/notifications/unread-count', '/products']);
   });
 
   it('kéo để làm mới: khối gộp được tải lại bằng request gộp, không bắn request lẻ', async () => {

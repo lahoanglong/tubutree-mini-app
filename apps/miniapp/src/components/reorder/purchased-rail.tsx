@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
@@ -73,6 +73,8 @@ export interface PurchasedRailProps {
   source: 'home_rail' | 'orders_tab';
   /** Đang khôi phục phiên: giữ chỗ kệ bằng khung chờ để khi phiên về nội dung bên dưới không bị đẩy. */
   restoring?: boolean;
+  /** Slug món đã nằm ở kệ xếp trên (Giờ vàng): không lặp lại ở đây; hết món thì khối ẩn. */
+  exclude?: ReadonlySet<string>;
 }
 
 /**
@@ -85,14 +87,15 @@ export interface PurchasedRailProps {
  * `target` là state (chỉ đổi khi chạm nút) nên danh tính ổn định — ReorderSheet khởi tạo lại lựa
  * chọn theo danh tính `target`, không được dựng target inline trong JSX.
  */
-export function PurchasedRail({ source, restoring = false }: PurchasedRailProps) {
+export function PurchasedRail({ source, restoring = false, exclude }: PurchasedRailProps) {
   const navigate = useNavigate();
   const q = useBlockQuery(usePurchasedItems(PURCHASED_RAIL_LIMIT));
   const [target, setTarget] = useState<ReorderTarget | null>(null);
   const [subscribeFor, setSubscribeFor] = useState<PurchasedItem | null>(null);
   // Đã mở sheet mua lại một lần thì giữ nó dựng: ZaUI Sheet còn trượt xuống ~200ms sau khi target về null.
   const [reorderMounted, setReorderMounted] = useState(false);
-  const hasItems = (q.data?.items.length ?? 0) > 0;
+  const items = useMemo(() => (q.data?.items ?? []).filter((p) => !exclude?.has(p.slug)), [q.data, exclude]);
+  const hasItems = items.length > 0;
   useEffect(() => {
     if (!hasItems) return;
     loadReorderSheet().catch(() => undefined);
@@ -106,7 +109,7 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
   const onHome = source === 'home_rail';
   // Khung chờ của Trang chủ cao đúng bằng khối lần trước (một dòng hay một kệ); chưa nhớ thì coi là một món, cỡ nhỏ nhất.
   const [hint] = useState(() => (onHome ? readPurchasedHint(browserStorage()) : 'none'));
-  const settledCount = !restoring && !q.isLoading && !q.isError && q.data ? q.data.items.length : null;
+  const settledCount = !restoring && !q.isLoading && !q.isError && q.data ? items.length : null;
   useEffect(() => {
     if (onHome && settledCount !== null) writePurchasedHint(browserStorage(), settledCount);
   }, [onHome, settledCount]);
@@ -139,7 +142,6 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
       </div>
     );
   }
-  const items = q.data?.items ?? [];
   // Chưa có món nào: lỗi thật (không phải API cũ 404) vẫn hiện khối lỗi kèm "Thử lại", khách cũ không thấy kệ biến mất im lặng.
   if (items.length === 0 && !(q.isError && !isEndpointMissing(q.error))) return null;
 

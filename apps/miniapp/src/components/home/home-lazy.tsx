@@ -80,7 +80,7 @@ function Block({ children }: { children: (m: Below) => ReactNode }) {
 // đầu không đợi thêm một request chunk; Giờ vàng không hiện muộn hơn dữ liệu của nó (đo: nạp lười làm CLS khách mở lại tăng 0,0087 → 0,0211); dải quà là hero
 // trong màn đầu nên hai query của nó chạy ngay lượt vẽ đầu và nó tự thu về null (khách đã có đơn) mà không đợi chunk.
 export const HomePurchasedRail = (p: ComponentProps<typeof PurchasedRail>) => <PurchasedRail {...p} />;
-export const HomeBestSellerRail = () => <BestSellerRail />;
+export const HomeBestSellerRail = (p: ComponentProps<typeof BestSellerRail>) => <BestSellerRail {...p} />;
 export const HomeBrandJourney = () => <Block>{(m) => <m.BrandJourney />}</Block>;
 export const HomeCommunityPreview = () => <Block>{(m) => <m.CommunityPreview />}</Block>;
 export const HomeNewCustomerGift = () => <NewCustomerGift />;

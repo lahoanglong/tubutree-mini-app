@@ -18,7 +18,7 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { OrderCard } from '../components/orders/order-card';
 import { ordersTabs, parseOrdersTab, type OrdersTabKey } from '../components/orders/orders-tabs';
 import { useHasSubscription } from '../hooks/use-has-subscription';
-import { BestSellerRail } from '../components/home/best-seller-rail';
+import { BestSellerRailQuery } from '../components/home/best-seller-rail';
 import { PurchasedRail } from '../components/reorder/purchased-rail';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
 import { orderReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
@@ -135,7 +135,7 @@ export default function OrdersPage() {
                 ctaLabel={vi.orders.emptyCta}
                 onCta={() => navigate('/browse')}
               />
-              <BestSellerRail />
+              <BestSellerRailQuery />
             </>
           ) : (
             <EmptyState variant="inline" art="box" heading={vi.orders.emptyTabHeading} />

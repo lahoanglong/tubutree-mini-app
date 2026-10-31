@@ -19,6 +19,9 @@ import type { ProductQuery } from './dto/product-query.dto';
 // gộp khi tham số truy vấn lẻ của nó trùng đúng các giá trị này.
 export const HOME_SECTION_LIMIT = 6;
 export const HOME_FEATURED_LIMIT = HOME_SECTION_LIMIT * 2;
+// Kệ Bán chạy nhất của Trang chủ lấy dư 2 món so với tối đa 10 của kệ để còn đủ sau khi bỏ món đã nằm ở kệ trên (Giờ vàng, Mua lại).
+// Theo lượt bán 30 ngày, khớp HOME_BEST_SELLER_LIMIT của app-core (queries/home.ts) và homeProductSlot của Mini App.
+export const HOME_BEST_SELLER_LIMIT = 12;
 
 const PUBLIC_TTL_MS = 20_000;
 // Flash sale: quota giảm theo từng đơn và giờ vàng bắt đầu/kết thúc đúng mốc nên không được tươi kém
@@ -116,7 +119,7 @@ export class HomeService {
 
   private async buildStatic(): Promise<HomeStatic> {
     const [bestSellers, featured, newest, categories, brands, publicConfig] = await Promise.all([
-      this.block('bestSellers', () => this.catalog.list(productQuery({ sort: 'best_seller' }))),
+      this.block('bestSellers', () => this.catalog.list(productQuery({ limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' }))),
       this.block('featured', () => this.catalog.list(productQuery({ limit: HOME_FEATURED_LIMIT }))),
       this.block('newest', () => this.catalog.list(productQuery({ sort: 'newest' }))),
       this.block('categories', () => this.catalog.categories()),

@@ -1,4 +1,4 @@
-import { HOME_FEATURED_LIMIT, HOME_SECTION_LIMIT, HomeService } from './home.service';
+import { HOME_BEST_SELLER_LIMIT, HOME_FEATURED_LIMIT, HOME_SECTION_LIMIT, HomeService } from './home.service';
 
 const page = (ids: string[]) => ({ data: ids.map((id) => ({ id })), meta: { page: 1, limit: 6, total: ids.length } });
 
@@ -48,7 +48,7 @@ describe('HomeService.getPublic', () => {
     const calls = catalog.list.mock.calls.map(([q]) => ({ sort: q.sort, limit: q.limit, page: q.page }));
     expect(calls).toEqual(
       expect.arrayContaining([
-        { sort: 'best_seller', limit: HOME_SECTION_LIMIT, page: 1 },
+        { sort: 'best_seller_30d', limit: HOME_BEST_SELLER_LIMIT, page: 1 },
         { sort: undefined, limit: HOME_FEATURED_LIMIT, page: 1 },
         { sort: 'newest', limit: HOME_SECTION_LIMIT, page: 1 },
       ]),

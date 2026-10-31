@@ -1,5 +1,5 @@
 import type { CancelReasonBody } from '@tubutree/app-core/cancel-reasons';
-import { api } from './api';
+import { api, getAccessToken } from './api';
 import { isHttpError } from './http';
 import { syncServerClock } from '../utils/server-clock';
 import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
@@ -444,8 +444,9 @@ export interface UpcomingFlashItem {
   startAt: string;
   reminded: boolean;
 }
+// Công khai (khách chưa đăng nhập vẫn xem suất sắp mở): chỉ hỏi khối gộp /home/me khi đã có phiên, khách chưa đăng nhập đi thẳng request lẻ.
 export const fetchUpcomingFlashSales = async () =>
-  (await takeMeBlock('flashUpcoming')) ?? api.get<UpcomingFlashItem[]>('/flash-sales/upcoming').then((r) => r.data);
+  ((getAccessToken() ? await takeMeBlock('flashUpcoming') : null) ?? (await api.get<UpcomingFlashItem[]>('/flash-sales/upcoming')).data);
 export const setFlashReminder = (itemId: string) =>
   api.post(`/flash-sales/items/${itemId}/remind`).then((r) => r.data);
 export const cancelFlashReminder = (itemId: string) =>
