@@ -19,9 +19,9 @@ export function homeBelowPreloadFiles(bundle: Record<string, Item>): string[] {
 }
 
 /** Thêm tên chunk vào `listAsyncJS` của app-config.json (không đổi gì khác). */
-export function appConfigWithAsyncJs<T extends { listAsyncJS?: string[] }>(config: T, files: string[]): T {
+export function appConfigWithAsyncJs<T extends Record<string, unknown>>(config: T, files: string[]): T {
   if (!files.length) return config;
-  return { ...config, listAsyncJS: [...new Set([...(config.listAsyncJS ?? []), ...files])] };
+  return { ...config, listAsyncJS: [...new Set([...((config.listAsyncJS as string[] | undefined) ?? []), ...files])] };
 }
 
 /** Tên chunk các thẻ modulepreload `./assets/...` trong index.html (đầu ra của build). */
@@ -31,10 +31,9 @@ export function modulePreloadFilesFromHtml(html: string): string[] {
     .filter((f): f is string => !!f);
 }
 
-/** Bước sau `zmp sync-config www/index.html`: lệnh đó chỉ đọc thẻ script/style/stylesheet nên làm rơi thẻ modulepreload. */
-export function addPreloadsToAppConfig(wwwDir: string): string[] {
-  const files = modulePreloadFilesFromHtml(readFileSync(`${wwwDir}/index.html`, 'utf8'));
-  const path = `${wwwDir}/app-config.json`;
+/** Bước sau `zmp sync-config www/index.html` (ghi app-config.json ở gốc app): lệnh đó chỉ đọc thẻ script/style/stylesheet nên làm rơi thẻ modulepreload. */
+export function addPreloadsToAppConfig(indexHtml: string, path: string): string[] {
+  const files = modulePreloadFilesFromHtml(readFileSync(indexHtml, 'utf8'));
   writeFileSync(path, JSON.stringify(appConfigWithAsyncJs(JSON.parse(readFileSync(path, 'utf8')), files)));
   return files;
 }
@@ -62,7 +61,7 @@ export function preloadHomeBelow(): Plugin {
     closeBundle: {
       order: 'post',
       handler() {
-        if (files.length) addPreloadsToAppConfig('www');
+        if (files.length) addPreloadsToAppConfig('www/index.html', 'www/app-config.json');
       },
     },
   };
