@@ -222,13 +222,35 @@ describe('Ghi công CTV theo lúc bấm link (real Postgres, checkout thật)', 
     expect(t.clickedAt).not.toBeNull();
   });
 
-  it('cùng người giới thiệu, chạm sau có slug gian hàng: bổ sung slug vào dòng chưa có slug', async () => {
+  it('cùng người giới thiệu, lượt sau có slug và ago lớn hơn lượt đầu (lúc bấm cũ hơn): vẫn bổ sung slug, không đổi lúc bấm và hạn', async () => {
     const { user: a, store } = await ctvWithStore();
     const b = await buyer();
     await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, kind: 'ctv', clickedAgoMs: 1000 });
-    expect((await touchOf(b.u.id)).storefrontSlug).toBeNull();
-    await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, storefrontSlug: store.slug, kind: 'ctv', clickedAgoMs: 1000 });
-    expect((await touchOf(b.u.id)).storefrontSlug).toBe(store.slug);
+    const before = await touchOf(b.u.id);
+    expect(before.storefrontSlug).toBeNull();
+    await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, storefrontSlug: store.slug, kind: 'ctv', clickedAgoMs: 5000 });
+    const after = await touchOf(b.u.id);
+    expect(after.storefrontSlug).toBe(store.slug);
+    expect(after.clickedAt).toEqual(before.clickedAt);
+    expect(after.expiresAt).toEqual(before.expiresAt);
+  });
+
+  it('dòng chạm đã hết hạn nhưng còn clickedAt (vd CTV cũ xoá tài khoản): chạm bù hợp lệ của CTV khác vẫn thay được', async () => {
+    const { user: a } = await ctvWithCode();
+    const { user: c } = await ctvWithCode();
+    const b = await buyer();
+    await prisma.referralTouch.create({
+      data: { userId: b.u.id, referrerUserId: a.id, kind: 'ctv', clickedAt: new Date(Date.now() - HOUR), expiresAt: new Date(Date.now() - 1000) },
+    });
+    await affiliate.recordTouch(b.u.id, { referralCode: c.referralCode!, clickedAgoMs: 2 * HOUR });
+    expect((await touchOf(b.u.id)).referrerUserId).toBe(c.id);
+  });
+
+  it('clickedAgoMs khổng lồ: không lỗi, không ghi công', async () => {
+    const { user: a } = await ctvWithCode();
+    const b = await buyer();
+    expect(await affiliate.recordTouch(b.u.id, { referralCode: a.referralCode!, clickedAgoMs: 1e16 })).toEqual({ ok: false });
+    expect(await prisma.referralTouch.count({ where: { userId: b.u.id } })).toBe(0);
   });
 
   async function ctvWithStore() {

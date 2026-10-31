@@ -3181,7 +3181,11 @@ describe('AffiliateService.recordTouch: hạn tính từ lúc khách bấm (clic
     const call = t.referralTouch.updateMany.mock.calls[0][0];
     expect(call.where).toEqual({
       userId: 'buyer1',
-      OR: [{ clickedAt: { lt: clicked } }, { clickedAt: null, expiresAt: { lt: new Date(clicked.getTime() + 7 * DAY) } }],
+      OR: [
+        { clickedAt: { lt: clicked } },
+        { clickedAt: null, expiresAt: { lt: new Date(clicked.getTime() + 7 * DAY) } },
+        { expiresAt: { lte: NOW } },
+      ],
     });
     expect(t.rec.recordBestEffort).toHaveBeenCalledTimes(1);
   });
@@ -3194,18 +3198,39 @@ describe('AffiliateService.recordTouch: hạn tính từ lúc khách bấm (clic
     expect(call.data.expiresAt.getTime()).toBe(NOW.getTime() - HOUR + 2 * DAY);
   });
 
-  it('chạm có slug cùng người giới thiệu và cùng lúc bấm được bổ sung vào dòng chưa có slug', async () => {
+  it('chạm cũ hơn nhưng có slug, cùng người giới thiệu: updateMany riêng chỉ bổ sung slug và loại, không đụng clickedAt/expiresAt', async () => {
     const t = setup('row');
+    t.referralTouch.updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
     await t.run(HOUR, 'an-shop');
-    const or = t.referralTouch.updateMany.mock.calls[0][0].where.OR;
-    expect(or[2]).toEqual({ referrerUserId: 'ctv1', storefrontSlug: null, clickedAt: { lte: new Date(NOW.getTime() - HOUR) } });
-    expect(t.referralTouch.updateMany.mock.calls[0][0].data.storefrontSlug).toBe('an-shop');
+    expect(t.referralTouch.updateMany).toHaveBeenCalledTimes(2);
+    expect(t.referralTouch.updateMany.mock.calls[1][0]).toEqual({
+      where: { userId: 'buyer1', referrerUserId: 'ctv1', storefrontSlug: null },
+      data: { storefrontSlug: 'an-shop', kind: 'ctv' },
+    });
+    expect(t.rec.recordBestEffort).not.toHaveBeenCalled();
   });
 
-  it('chạm không có slug thì không có nhánh bổ sung slug', async () => {
+  it('chạm đã thay được dòng thì không gọi bổ sung slug; chạm không slug không gọi bổ sung', async () => {
+    const t = setup('row');
+    await t.run(HOUR, 'an-shop');
+    expect(t.referralTouch.updateMany).toHaveBeenCalledTimes(1);
+    const u = setup('row');
+    u.referralTouch.updateMany.mockResolvedValue({ count: 0 });
+    await u.run(HOUR);
+    expect(u.referralTouch.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([1e16, 1e300, Number.MAX_VALUE])('clickedAgoMs %s: kẹp, trả ok:false (quá hạn), không ném lỗi và không ghi', async (huge) => {
+    const t = setup('none');
+    expect(await t.run(huge)).toEqual({ ok: false });
+    expect(t.referralTouch.create).not.toHaveBeenCalled();
+    expect(t.referralTouch.upsert).not.toHaveBeenCalled();
+  });
+
+  it('dòng đã hết hạn không chặn: điều kiện UPDATE có nhánh expiresAt <= now', async () => {
     const t = setup('row');
     await t.run(HOUR);
-    expect(t.referralTouch.updateMany.mock.calls[0][0].where.OR).toHaveLength(2);
+    expect(t.referralTouch.updateMany.mock.calls[0][0].where.OR).toContainEqual({ expiresAt: { lte: NOW } });
   });
 
   it('chạm bù cũ hơn chạm đang có (updateMany không khớp dòng nào): ok:true như cũ, không phát referral_touched', async () => {

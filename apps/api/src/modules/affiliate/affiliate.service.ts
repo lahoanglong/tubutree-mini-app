@@ -128,8 +128,8 @@ const SAMPLE_STOREFRONT_SELECT = { where: { isSample: true }, select: { id: true
  * Khoảng thời gian đã trôi kể từ lúc khách bấm link, do client đo bằng cùng một đồng hồ máy (không gửi giờ tuyệt đối để đồng hồ
  * lệch không làm mất hay kéo dài ghi công). Âm, không phải số hoặc không hữu hạn thì coi như không gửi.
  */
-function parseClickedAgo(raw: unknown): number | null {
-  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : null;
+function parseClickedAgo(raw: unknown, maxMs: number): number | null {
+  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? Math.min(raw, maxMs) : null;
 }
 
 @Injectable()
@@ -218,10 +218,12 @@ export class AffiliateService {
     const referrerUserId = await this.findEligibleReferrer(dto.referralCode, userId);
     if (!referrerUserId) return { ok: false };
     const days = await this.config.get<number>('affiliate.attribution_days', 7);
-    const ago = parseClickedAgo(dto.clickedAgoMs);
+    const dayMs = 24 * 60 * 60 * 1000;
+    // Kẹp ở hạn + 1 ngày: giá trị lớn hơn vẫn là chạm quá hạn, nhưng không làm ngày vượt biên (Invalid Date → 500).
+    const ago = parseClickedAgo(dto.clickedAgoMs, days * dayMs + dayMs);
     const clickedAt = new Date(now.getTime() - (ago ?? 0));
-    const expiresAt = new Date(clickedAt.getTime() + days * 24 * 60 * 60 * 1000);
-    if (ago !== null && expiresAt <= now) return { ok: false };
+    const expiresAt = new Date(clickedAt.getTime() + days * dayMs);
+    if (!Number.isFinite(expiresAt.getTime()) || (ago !== null && expiresAt <= now)) return { ok: false };
     const data = {
       referrerUserId,
       storefrontSlug: dto.storefrontSlug ?? null,
@@ -233,7 +235,7 @@ export class AffiliateService {
     if (ago !== null) {
       // Chạm bù mang khoảng thời gian từ lúc bấm: chỉ được thay chạm đang có khi lúc bấm mới hơn (so theo lúc bấm, không theo
       // hạn, vì admin đổi số ngày giữa chừng làm hạn không còn so được). Dòng cũ chưa có lúc bấm thì lấy hạn - số ngày hiện tại
-      // làm mốc, tức so hạn. Cùng người giới thiệu và cùng lúc bấm thì chạm có slug gian hàng được bổ sung vào dòng chưa có slug.
+      // làm mốc, tức so hạn. Dòng đã hết hạn (kể cả khi còn clickedAt, vd CTV xoá tài khoản đặt hạn = lúc đó) không chặn chạm hợp lệ.
       // Điều kiện nằm trong câu UPDATE nên hai chạm đồng thời cũng không ghi đè ngược.
       try {
         await this.prisma.referralTouch.create({ data: { userId, ...data } });
@@ -242,10 +244,18 @@ export class AffiliateService {
         const newer: Prisma.ReferralTouchWhereInput[] = [
           { clickedAt: { lt: clickedAt } },
           { clickedAt: null, expiresAt: { lt: expiresAt } },
+          { expiresAt: { lte: now } },
         ];
-        if (dto.storefrontSlug) newer.push({ referrerUserId, storefrontSlug: null, clickedAt: { lte: clickedAt } });
         const r = await this.prisma.referralTouch.updateMany({ where: { userId, OR: newer }, data });
         applied = r.count > 0;
+        // Cùng người giới thiệu mà dòng chưa có slug gian hàng (vd ?ref= rồi /s/<mã>): chỉ bổ sung slug và loại, không đụng lúc
+        // bấm hay hạn, vì lúc bấm của hai lượt lệch nhau theo độ trễ mạng.
+        if (!applied && dto.storefrontSlug) {
+          await this.prisma.referralTouch.updateMany({
+            where: { userId, referrerUserId, storefrontSlug: null },
+            data: { storefrontSlug: dto.storefrontSlug, kind: dto.kind ?? 'ctv' },
+          });
+        }
       }
     } else {
       await this.prisma.referralTouch.upsert({
