@@ -19,6 +19,9 @@
   --dur-slow: var(--p-dur-emphasize);
   --ease-out: var(--p-ease-out);
   --font-body: var(--font-ui);
+  --dur-press: var(--p-dur-press);
+  --dur-release: var(--p-dur-release);
+  --ease-spring: var(--p-ease-spring);
 
   /* Trắng/hổ phách trong suốt: không có token v2 tương ứng (--color-bg-scrim* là nền mờ tối/sáng khác
    * mục đích), nên định nghĩa tại đây để code chỉ tham chiếu tên, không rải rgba() thô. */
@@ -132,13 +135,23 @@ body.with-back-btn .page.page-bleed {
 
 /* ── Pressable: phản hồi chạm cho mọi element bấm được ── */
 .tubu-press {
-  transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
+  transition: transform var(--p-dur-release) var(--p-ease-out);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
+/* Nhấn nhanh, thả chậm; không đổi opacity (ảnh mờ 10% làm thẻ nhũn). Nút/chip/icon co 0,96, thẻ co nhẹ hơn. */
 .tubu-press:active {
-  transform: scale(0.97);
-  opacity: 0.9;
+  transform: scale(0.96);
+  transition-duration: var(--p-dur-press);
+}
+.tubu-press-card {
+  transition: transform var(--p-dur-release) var(--p-ease-out);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tubu-press-card:active {
+  transform: scale(0.985);
+  transition-duration: var(--p-dur-press);
 }
 
 /* ── Card tiêu chuẩn & Claymorphism — UI/UX Pro Max ── */
@@ -486,6 +499,11 @@ body.with-back-btn .page.page-bleed {
  */
 .tubu-btn {
   max-width: 100%;
+  transition: transform var(--p-dur-release) var(--p-ease-out);
+}
+.tubu-btn:active {
+  transform: scale(0.97);
+  transition-duration: var(--p-dur-press);
 }
 .tubu-btn .zaui-btn-container {
   max-width: 100%;

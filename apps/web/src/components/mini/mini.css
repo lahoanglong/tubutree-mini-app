@@ -10,6 +10,9 @@
   --dur-slow: var(--p-dur-emphasize);
   --ease-out: var(--p-ease-out);
   --font-body: var(--font-ui);
+  --dur-press: var(--p-dur-press);
+  --dur-release: var(--p-dur-release);
+  --ease-spring: var(--p-ease-spring);
 
   --color-skeleton-shimmer: rgba(255, 255, 255, 0.65);
   --color-media-dot-idle: rgba(255, 255, 255, 0.85);
@@ -48,13 +51,22 @@
 }
 
 .tubu-press {
-  transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
+  transition: transform var(--p-dur-release) var(--p-ease-out);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 .tubu-press:active {
-  transform: scale(0.97);
-  opacity: 0.9;
+  transform: scale(0.96);
+  transition-duration: var(--p-dur-press);
+}
+.tubu-press-card {
+  transition: transform var(--p-dur-release) var(--p-ease-out);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tubu-press-card:active {
+  transform: scale(0.985);
+  transition-duration: var(--p-dur-press);
 }
 
 .tubu-hit-44 {
@@ -287,7 +299,9 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
-  .tubu-press {
+  .tubu-press,
+  .tubu-press-card,
+  .tubu-btn {
     transition-duration: 0.01ms !important;
   }
 }
@@ -453,6 +467,11 @@
 
 .tubu-btn {
   max-width: 100%;
+  transition: transform var(--p-dur-release) var(--p-ease-out);
+}
+.tubu-btn:active {
+  transform: scale(0.97);
+  transition-duration: var(--p-dur-press);
 }
 .tubu-btn .zaui-btn-container {
   max-width: 100%;
