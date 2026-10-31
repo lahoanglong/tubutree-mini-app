@@ -49,11 +49,11 @@ describe('BrowseHub', () => {
     expect(http.get).toHaveBeenCalledWith('/products', { query: { sort: 'best_seller_30d', limit: 10 } });
   });
 
-  it('kệ "Xem tất cả" là liên kết thật tới danh sách xếp bán chạy', async () => {
+  it('kệ "Xem tất cả" là liên kết thật tới trang Bán chạy nhất', async () => {
     const c = mount();
     await flush();
     const link = region(c, 'Bán chạy nhất')!.querySelector<HTMLAnchorElement>('a[aria-label="Xem tất cả Bán chạy nhất"]')!;
-    expect(link.getAttribute('href')).toBe('/san-pham?sort=best_seller');
+    expect(link.getAttribute('href')).toBe('/ban-chay');
   });
 
   it('dữ liệu do server đưa vào hiện ngay, không gọi lại /products', async () => {

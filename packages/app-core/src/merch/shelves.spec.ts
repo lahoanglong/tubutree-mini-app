@@ -8,9 +8,9 @@ const routeMap = JSON.parse(readFileSync(fileURLToPath(new URL('../route-map.jso
 };
 const MINIAPP_ROUTES = new Set(routeMap.routes.flatMap((g) => g.items.map((i) => i.miniapp)));
 
-// Route do gói sau tạo (P12 `/flash-sale`, P13 `/best-sellers`); route-map.json chỉ nhận dòng khi app.tsx có <Route>, nên gói này chưa thêm được.
+// Route do gói sau tạo (P12 `/flash-sale`); route-map.json chỉ nhận dòng khi app.tsx có <Route>, nên gói này chưa thêm được.
 // Gói tạo route xoá dòng tương ứng ở đây.
-const PLANNED_ROUTES = ['/flash-sale', '/best-sellers'];
+const PLANNED_ROUTES = ['/flash-sale'];
 
 const LAYOUT_CAP = { rail: 10, line: 10, grid: 12, feed: 100 } as const;
 
