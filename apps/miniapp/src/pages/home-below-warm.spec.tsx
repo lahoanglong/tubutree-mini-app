@@ -35,6 +35,7 @@ vi.mock('../services/account-api', () => ({ getNotifications: mocks.getNotificat
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { status: string; user: { id: string } | null }) => unknown) => sel({ status: mocks.auth.status, user: mocks.auth.user }),
 }));
+vi.mock('../components/flash-sale', () => ({ FlashSale: () => <div data-testid="flash-sale-real" />, UpcomingFlashSales: () => null }));
 vi.mock('../components/reorder/purchased-rail', () => ({ PURCHASED_RAIL_LIMIT: 10, PurchasedRail: () => <div data-testid="purchased-rail-real" /> }));
 vi.mock('../components/home/best-seller-rail', () => ({ BEST_SELLER_LIMIT: 6, BestSellerRail: () => <div data-testid="best-seller-rail-real" /> }));
 vi.mock('../components/home/member-card', () => ({ MemberCard: () => null, MemberCardSkeleton: () => <div data-testid="member-card-loading" /> }));
@@ -51,7 +52,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 vi.mock('../components/home/home-below', async () => {
   await chunk.gate;
-  return { FlashSale: () => null, UpcomingFlashSales: () => null, BrandJourney: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null };
+  return { BrandJourney: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null };
 });
 
 import HomePage from './home';
@@ -109,14 +110,12 @@ describe('HomePage — mở lại khi máy đã nhớ loại khách, chunk khố
     expect(heightOf('purchased')).toBeUndefined();
   });
 
-  it('lần trước có Giờ vàng thì giữ chỗ 300px (gồm lề trên)', async () => {
+  it('lần trước có Giờ vàng thì Giờ vàng vẫn nằm trong gói đầu: không có ô giữ chỗ của chunk, khung chờ là của chính FlashSale', async () => {
     localStorage.setItem(FLASH_HINT_KEY, '1');
     renderHome();
     await settle(100);
-    expect(heightOf('flash')).toBe('300');
-    // Lề trên (không phải đệm) như FlashSkeleton: cùng một phần tử thay chỗ nhau nên không bị tính là dịch chuyển bố cục.
-    expect(document.querySelector<HTMLElement>('[data-home-block="flash"] [data-testid="home-below-placeholder"]')?.style.marginTop).toBe('16px');
-    expect(placeholders().length).toBeGreaterThan(0);
+    expect(heightOf('flash')).toBeUndefined();
+    expect(document.querySelector('[data-home-block="flash"] [data-testid="flash-sale-real"]')).not.toBeNull();
   });
 });
 

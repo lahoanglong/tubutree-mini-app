@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/auth';
 import { useCategories } from '../hooks/use-categories';
 import { useHomeCustomerKind } from '../hooks/use-home-customer-kind';
 import { usePurchasedItems } from '../hooks/use-purchased-items';
+import { FlashSale, UpcomingFlashSales } from '../components/flash-sale';
 import { PullToRefresh } from '../components/pull-to-refresh';
 import { PURCHASED_RAIL_LIMIT } from '../components/reorder/purchased-rail';
 import { BEST_SELLER_LIMIT } from '../components/home/best-seller-rail';
@@ -15,7 +16,6 @@ import {
   HomeBestSellerRail,
   HomeBrandJourney,
   HomeCommunityPreview,
-  HomeFlashSale,
   HomeNewCustomerGift,
   HomePurchasedRail,
   HomeSuggestFeed,
@@ -121,7 +121,10 @@ export default function HomePage() {
     // Lỗi tải Mua lại (kể cả 404 của API cũ) đưa trang về bố cục khách mới, nơi khối này không có mặt, nên khối tự có trạng thái lỗi riêng ở PurchasedRail.
     purchased: <HomePurchasedRail source="home_rail" restoring={restoring} />,
     flash: (
-      <HomeFlashSale />
+      <>
+        <FlashSale />
+        <UpcomingFlashSales />
+      </>
     ),
     categories: (
       <CategoryRow

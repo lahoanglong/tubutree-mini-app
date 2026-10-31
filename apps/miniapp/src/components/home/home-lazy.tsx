@@ -1,7 +1,6 @@
-import { useEffect, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
-import { FLASH_SKELETON_HEIGHT, HOME_HERO_HEIGHT, HOME_SETTLING_HEIGHTS as H, readFlashHint } from '@tubutree/app-core/home-layout';
+import { useEffect, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
+import { HOME_HERO_HEIGHT } from '@tubutree/app-core/home-layout';
 import { isChunkError } from '../../utils/chunk-error';
-import { browserStorage } from '../../utils/recently-viewed';
 import { Skeleton } from '../ui/skeleton';
 import { PurchasedRail } from '../reorder/purchased-rail';
 import { BestSellerRail } from './best-seller-rail';
@@ -79,7 +78,6 @@ interface Slot {
   bottom?: number;
 }
 const SLOT_GIFT: Slot = { height: HOME_HERO_HEIGHT, bottom: 12 };
-const SLOT_FLASH: Slot = { height: H.flash, top: FLASH_SKELETON_HEIGHT - H.flash };
 const SLOT_NONE: Slot = { height: 0 };
 
 function Block({ slot, children }: { slot: Slot; children: (m: Below) => ReactNode }) {
@@ -102,21 +100,8 @@ function Block({ slot, children }: { slot: Slot; children: (m: Below) => ReactNo
   );
 }
 
-export const HomeFlashSale = () => {
-  // Lần mở trước có Giờ vàng thì giữ chỗ (như FlashSale lúc tải); chưa nhớ thì chờ im lặng.
-  const [hadFlash] = useState(() => readFlashHint(browserStorage()));
-  return (
-    <Block slot={hadFlash ? SLOT_FLASH : SLOT_NONE}>
-      {(m) => (
-        <>
-          <m.FlashSale />
-          <m.UpcomingFlashSales />
-        </>
-      )}
-    </Block>
-  );
-};
-// Hai kệ sản phẩm nằm trong gói đầu (như trước khi tách khối): thẻ sản phẩm đầu không đợi thêm một request chunk.
+// Hai kệ sản phẩm và Giờ vàng (HomeFlashSale ở home.tsx, nạp thẳng từ ../flash-sale) nằm trong gói đầu như trước khi tách khối: thẻ sản phẩm đầu
+// không đợi thêm một request chunk, và Giờ vàng không hiện muộn hơn dữ liệu của nó (đo: nạp lười làm CLS khách mở lại tăng 0,0087 → 0,0211).
 export const HomePurchasedRail = (p: ComponentProps<typeof PurchasedRail>) => <PurchasedRail {...p} />;
 export const HomeBestSellerRail = () => <BestSellerRail />;
 export const HomeBrandJourney = () => <Block slot={SLOT_NONE}>{(m) => <m.BrandJourney />}</Block>;

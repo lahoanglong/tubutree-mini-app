@@ -49,7 +49,7 @@ vi.mock('../components/home/home-below', () => {
     chunk.failures -= 1;
     throw new Error(chunk.message);
   }
-  return { FlashSale: () => null, UpcomingFlashSales: () => null, BrandJourney: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null };
+  return { BrandJourney: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null };
 });
 
 import HomePage from './home';
