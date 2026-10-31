@@ -121,6 +121,7 @@ export default function HomePage() {
         error={shelves.flashQuery.error}
         onRetry={shelves.flashQuery.refetch}
         retrying={shelves.flashQuery.isFetching}
+        onExpire={shelves.onFlashEnd}
       />
     ),
     categories: (
@@ -141,6 +142,7 @@ export default function HomePage() {
     bestSellers: (
       <HomeBestSellerRail
         items={shelves.bestSellers}
+        ranks={shelves.bestSellerRanks}
         loading={shelves.bestSellerQuery.isLoading}
         error={shelves.bestSellerQuery.error}
         onRetry={shelves.bestSellerQuery.refetch}

@@ -17,6 +17,8 @@ const SKELETON_COUNT = 5;
 export interface BestSellerRailProps {
   /** Đã qua `composeHomeShelves` (bỏ món trùng kệ trên, 3–10 món); dưới 3 món thì rỗng và khối ẩn. */
   items: ProductCardData[];
+  /** Hạng thật của từng món (cùng chỉ số với `items`) khi kệ đã bỏ món trùng kệ trên; thiếu thì đánh #1..#n theo thứ tự. */
+  ranks?: readonly number[];
   loading: boolean;
   error?: unknown;
   onRetry?: () => unknown;
@@ -27,7 +29,7 @@ export interface BestSellerRailProps {
  * Bán chạy nhất (Q18, bản web của `best-seller-rail.tsx` ở Mini App) cho MỌI khách: một hàng thẻ có hạng #1..#n xếp theo lượt bán 30 ngày, "Xem tất cả" tới trang
  * xếp hạng. Đứng sau Danh mục; khách cũ trước đây chỉ thấy tab "Bán chạy" ở cuối lưới gợi ý, giờ cũng thấy kệ này.
  */
-export function BestSellerRail({ items, loading, error, onRetry, retrying }: BestSellerRailProps) {
+export function BestSellerRail({ items, ranks, loading, error, onRetry, retrying }: BestSellerRailProps) {
   const title = fillCopy('rank.title');
   if (!loading && items.length === 0) {
     return error ? <HomeBlockError title={title} error={error} onRetry={() => onRetry?.()} retrying={retrying} /> : null;
@@ -36,7 +38,7 @@ export function BestSellerRail({ items, loading, error, onRetry, retrying }: Bes
   return (
     <section aria-label={title}>
       <SectionHeader title={title} subtitle={fillCopy('rank.basis')} action={seeAll ? { to: seeAll } : undefined} />
-      <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} items={items} loading={loading} skeletonCount={SKELETON_COUNT} priorityCount={2} />
+      <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} items={items} loading={loading} skeletonCount={SKELETON_COUNT} priorityCount={2} />
     </section>
   );
 }

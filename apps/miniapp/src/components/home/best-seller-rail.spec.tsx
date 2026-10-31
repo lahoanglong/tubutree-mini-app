@@ -26,6 +26,13 @@ describe('BestSellerRail — Bán chạy nhất có hạng (Q18)', () => {
     expect(ranks).toEqual(['#1', '#2', '#3', '#4', '#5']);
   });
 
+  it('kệ đã bỏ món trùng kệ trên: thẻ ghi hạng thật được truyền vào (#2, #3, #5), không đánh lại từ #1', () => {
+    render(<BestSellerRail items={[card(2), card(3), card(5)]} ranks={[2, 3, 5]} loading={false} />);
+    const region = screen.getByRole('region', { name: 'Bán chạy nhất' });
+    const ranks = Array.from(region.querySelectorAll('[data-ds-part="rank"]')).map((el) => el.textContent);
+    expect(ranks).toEqual(['#2', '#3', '#5']);
+  });
+
   it('"Xem tất cả Bán chạy nhất" mở trang đang có theo route khai trong SHELVES', () => {
     render(<BestSellerRail items={cards(4)} loading={false} />);
     fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả Bán chạy nhất' }));

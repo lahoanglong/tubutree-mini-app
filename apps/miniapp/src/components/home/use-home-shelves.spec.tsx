@@ -1,7 +1,7 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ fetchFlash: vi.fn(), fetchPurchased: vi.fn(), fetchProducts: vi.fn(), status: 'authenticated' }));
 vi.mock('../../services/shop-api', () => ({
@@ -13,7 +13,8 @@ vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string })
 
 import { useHomeShelves } from './use-home-shelves';
 
-const flash = (slug: string) => ({ itemId: `i-${slug}`, variationId: 'v', productSlug: slug, productName: slug, thumbnail: null, flashPrice: 1, retailPrice: 2, soldCount: 0, quota: 5, endAt: '2099-01-01T00:00:00.000Z' });
+const flashEnding = (slug: string, endAt: string) => ({ itemId: `i-${slug}`, variationId: 'v', productSlug: slug, productName: slug, thumbnail: null, flashPrice: 1, retailPrice: 2, soldCount: 0, quota: 5, endAt });
+const flash = (slug: string) => flashEnding(slug, '2099-01-01T00:00:00.000Z');
 const bought = (slug: string) => ({ variationId: `v-${slug}`, productId: slug, slug, productName: slug, variationName: null, brand: '', thumbnail: null, price: 1, salePrice: null, stock: 3, inStock: true, timesBought: 1, retailOnly: false, lastPurchasedAt: '2026-01-01' });
 const card = (slug: string) => ({ id: `id-${slug}`, slug, brand: '', name: slug, thumbnail: null, basePrice: 1, salePrice: null, isFeatured: false, inStock: true });
 const page = (slugs: string[]) => ({ data: slugs.map(card), meta: { page: 1, limit: 12, total: slugs.length } });
@@ -74,5 +75,61 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
     expect(result.current.bestSellerQuery.isLoading).toBe(true);
     await waitFor(() => expect(result.current.flashQuery.isError).toBe(true));
     expect(result.current.flash).toEqual([]);
+  });
+
+  it('hạng thật của Bán chạy nhất: a (#1) ở Giờ vàng, x (#2) ở Mua lại thì các thẻ còn lại ghi #3..#6, không đánh lại từ #1', async () => {
+    const { result } = setup('returning');
+    await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['p1', 'p2', 'p3', 'p4']));
+    expect(result.current.bestSellerRanks).toEqual([3, 4, 5, 6]);
+  });
+
+  it('hạng thật khi món bị bỏ nằm giữa bảng: kệ bỏ "b", thẻ sau nó giữ hạng cũ (#1, #3, #4)', async () => {
+    mocks.fetchProducts.mockResolvedValue(page(['p1', 'b', 'p2', 'p3', 'p4']));
+    const { result } = setup('new');
+    await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['p1', 'p2', 'p3', 'p4']));
+    expect(result.current.bestSellerRanks).toEqual([1, 3, 4, 5]);
+  });
+
+  it('không có món nào bị bỏ thì hạng là #1..#n', async () => {
+    mocks.fetchFlash.mockResolvedValue([]);
+    mocks.fetchProducts.mockResolvedValue(page(['p1', 'p2', 'p3', 'p4']));
+    const { result } = setup('new');
+    await waitFor(() => expect(slugsOf(result.current.bestSellers)).toHaveLength(4));
+    expect(result.current.bestSellerRanks).toEqual([1, 2, 3, 4]);
+  });
+
+  describe('suất Giờ vàng đã quá giờ không chiếm món', () => {
+    const NOW = Date.parse('2026-11-01T03:00:00.000Z');
+    beforeEach(() => vi.useFakeTimers({ toFake: ['Date'] }).setSystemTime(NOW));
+    afterEach(() => vi.useRealTimers());
+
+    it('3 suất trong bộ nhớ, 1 đã quá giờ: còn 2 suất sống nên kệ ẩn và KHÔNG giữ món; cả ba món vẫn hiện ở Bán chạy nhất', async () => {
+      const gone = new Date(NOW - 1000).toISOString();
+      mocks.fetchFlash.mockResolvedValue([flash('a'), flash('b'), flashEnding('c', gone)]);
+      mocks.fetchProducts.mockResolvedValue(page(['a', 'b', 'c', 'p1']));
+      const { result } = setup('new');
+      await waitFor(() => expect(result.current.bestSellerQuery.isLoading).toBe(false));
+      await waitFor(() => expect(result.current.flashQuery.isLoading).toBe(false));
+      expect(result.current.flash).toEqual([]);
+      expect(result.current.flashSlugs.size).toBe(0);
+      expect(slugsOf(result.current.bestSellers)).toEqual(['a', 'b', 'c', 'p1']);
+      expect([...result.current.seen].sort()).toEqual(['a', 'b', 'c', 'p1']);
+    });
+
+    it('suất hết giờ giữa chừng: onFlashEnd tính lại, món hết giờ rời Giờ vàng và trở lại Bán chạy nhất với hạng đúng', async () => {
+      mocks.fetchFlash.mockResolvedValue([flash('a'), flash('b'), flash('c'), flashEnding('d', new Date(NOW + 60_000).toISOString())]);
+      mocks.fetchProducts.mockResolvedValue(page(['d', 'p1', 'p2', 'p3']));
+      const { result } = setup('new');
+      await waitFor(() => expect(result.current.flash).toHaveLength(4));
+      expect(slugsOf(result.current.bestSellers)).toEqual(['p1', 'p2', 'p3']);
+      expect(result.current.bestSellerRanks).toEqual([2, 3, 4]);
+
+      vi.setSystemTime(NOW + 61_000);
+      act(() => result.current.onFlashEnd());
+      expect(result.current.flash.map((f) => f.productSlug)).toEqual(['a', 'b', 'c']);
+      expect(slugsOf(result.current.bestSellers)).toEqual(['d', 'p1', 'p2', 'p3']);
+      expect(result.current.bestSellerRanks).toEqual([1, 2, 3, 4]);
+      expect(result.current.flashSlugs.has('d')).toBe(false);
+    });
   });
 });

@@ -82,6 +82,8 @@ export interface FlashSaleProps {
   onRetry?: () => unknown;
   /** Đang có request bay (tải lại sau lỗi, nhịp nền, hỏi lại dữ liệu dựng sẵn): chưa chốt thì chưa ghi dấu nhớ. */
   retrying?: boolean;
+  /** Gọi khi đồng hồ về 0 (suất sớm nhất hết giờ): chỗ nối dữ liệu tính lại chống trùng để món hết giờ trở lại kệ khác. */
+  onExpire?: () => void;
 }
 
 /**
@@ -92,7 +94,7 @@ export interface FlashSaleProps {
  * Khác Mini: kệ có trong HTML server (dữ liệu dựng sẵn) nên KHÔNG chờ suất sắp mở tải xong mới hiện, mà dòng "suất kế" vào sau; lần mở trước có dòng đó
  * thì chỗ của nó được giữ sẵn. Trước hydrate mọi suất coi là còn giờ (đúng như HTML máy chủ đã vẽ), sau hydrate mới tính theo giờ máy chủ thật.
  */
-export function FlashSale({ items, loading, error, onRetry, retrying = false }: FlashSaleProps) {
+export function FlashSale({ items, loading, error, onRetry, retrying = false, onExpire }: FlashSaleProps) {
   const titleId = useId();
   const hydrated = useHydrated();
   // Chờ biết phiên xong rồi mới hỏi: hỏi sớm thì đi request lẻ dù khách đã đăng nhập. Không dùng `useAuthRestoring`: ở lượt hydrate đầu nó là `false`
@@ -143,7 +145,16 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false }: 
         title={title}
         icon="zap"
         tone="promo"
-        trailing={<Countdown endAt={soonestEndAt} mode="clock" onEnd={() => setExpiredTick((n) => n + 1)} />}
+        trailing={
+          <Countdown
+            endAt={soonestEndAt}
+            mode="clock"
+            onEnd={() => {
+              setExpiredTick((n) => n + 1);
+              onExpire?.();
+            }}
+          />
+        }
         action={seeAll ? { to: seeAll } : undefined}
       />
       <RailShell label={`${title}, vuốt ngang để xem thêm`}>

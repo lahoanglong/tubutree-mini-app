@@ -35,6 +35,14 @@ describe('BestSellerRail web — Bán chạy nhất có hạng (Q18)', () => {
     expect(text.indexOf('#1')).toBeLessThan(text.indexOf('#2'));
   });
 
+  it('kệ đã bỏ món trùng kệ trên: thẻ ghi hạng thật được truyền vào (#2, #3, #5), không đánh lại từ #1', () => {
+    mounted = render(<BestSellerRail items={[card(2), card(3), card(5)]} ranks={[2, 3, 5]} loading={false} />);
+    const text = mounted.container.textContent ?? '';
+    for (const rank of ['#2', '#3', '#5']) expect(text).toContain(rank);
+    expect(text).not.toContain('#1');
+    expect(text).not.toContain('#4');
+  });
+
   it('rỗng và không lỗi thì ẩn cả khối; rỗng mà lỗi thì khối lỗi có "Thử lại"', () => {
     const onRetry = vi.fn();
     mounted = render(<BestSellerRail items={[]} loading={false} />);

@@ -145,6 +145,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
         error={shelves.flashQuery.error}
         onRetry={shelves.flashQuery.refetch}
         retrying={shelves.flashQuery.isFetching}
+        onExpire={shelves.onFlashEnd}
       />
     ),
     categories: (
@@ -160,6 +161,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     bestSellers: (
       <BestSellerRail
         items={shelves.bestSellers}
+        ranks={shelves.bestSellerRanks}
         loading={shelves.bestSellerQuery.isLoading}
         error={shelves.bestSellerQuery.error}
         onRetry={shelves.bestSellerQuery.refetch}

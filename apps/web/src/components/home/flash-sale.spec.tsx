@@ -28,7 +28,7 @@ import { resetFlashSales } from '@/lib/use-flash-sales';
 /** Khối thật được nối như Trang chủ: dữ liệu và chống trùng đến từ `useHomeShelves`, không tự tải. */
 function FlashSale({ initial }: { initial?: unknown[] }) {
   const s = useHomeShelves('new', { flash: initial as never });
-  return <FlashSaleBlock items={s.flash} loading={s.flashQuery.isLoading} error={s.flashQuery.error} onRetry={s.flashQuery.refetch} retrying={s.flashQuery.isFetching} />;
+  return <FlashSaleBlock items={s.flash} loading={s.flashQuery.isLoading} error={s.flashQuery.error} onRetry={s.flashQuery.refetch} retrying={s.flashQuery.isFetching} onExpire={s.onFlashEnd} />;
 }
 
 const HOUR = 3_600_000;
@@ -332,6 +332,21 @@ describe('FlashSale', () => {
     expect(c.querySelector('[role="timer"]')?.getAttribute('aria-label')).toMatch(/^Kết thúc sau/);
     const cells = Array.from(c.querySelectorAll('[data-testid="countdown-cell"]')).map((e) => e.textContent);
     expect(cells[0]).toMatch(/^0[12]$/);
+  });
+
+  it('đồng hồ về 0: gọi onExpire đúng một lần để chỗ nối dữ liệu tính lại chống trùng (món hết giờ trở lại kệ khác)', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(new Date('2026-10-28T10:00:00Z'));
+    const onExpire = vi.fn();
+    mounted = render(<FlashSaleBlock items={three({ endAt: '2026-10-28T10:01:00Z' }) as never} loading={false} onExpire={onExpire} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(onExpire).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(61_000);
+    });
+    expect(onExpire).toHaveBeenCalledTimes(1);
   });
 });
 

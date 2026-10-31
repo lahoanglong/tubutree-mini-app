@@ -48,6 +48,8 @@ export interface ProductRailProps {
   items: readonly ProductCardType[];
   variant: RailVariant;
   rankFrom?: number;
+  /** Hạng thật của từng thẻ (cùng chỉ số với `items`), thắng `rankFrom`: kệ đã bỏ món trùng kệ khác thì hạng không liền nhau, không được đánh số lại. */
+  ranks?: readonly number[];
   /** Tên vùng cuộn cho trình đọc màn hình. */
   label: string;
   showBrand?: boolean;
@@ -59,7 +61,7 @@ export interface ProductRailProps {
   onOpen?: (product: ProductCardType, index: number) => void;
 }
 
-export function ProductRail({ items, variant, rankFrom, label, showBrand, loading = false, skeletonCount = 6, priorityCount = 0, onOpen }: ProductRailProps) {
+export function ProductRail({ items, variant, rankFrom, ranks, label, showBrand, loading = false, skeletonCount = 6, priorityCount = 0, onOpen }: ProductRailProps) {
   return (
     <RailShell label={label}>
       {loading
@@ -73,7 +75,7 @@ export function ProductRail({ items, variant, rankFrom, label, showBrand, loadin
               <ProductCard
                 product={p}
                 variant={variant}
-                rank={rankFrom === undefined ? undefined : rankFrom + i}
+                rank={ranks?.[i] ?? (rankFrom === undefined ? undefined : rankFrom + i)}
                 showBrand={showBrand}
                 priority={i < priorityCount}
                 onOpen={onOpen ? () => onOpen(p, i) : undefined}

@@ -58,6 +58,8 @@ export interface FlashSaleProps {
   error?: unknown;
   onRetry?: () => unknown;
   retrying?: boolean;
+  /** Gọi khi đồng hồ về 0 (suất sớm nhất hết giờ): chỗ nối dữ liệu tính lại chống trùng để món hết giờ trở lại kệ khác. */
+  onExpire?: () => void;
 }
 
 /**
@@ -66,7 +68,7 @@ export interface FlashSaleProps {
  * (không hiện 00:00:00). Dưới `minItems` thì ẩn cả khối (kệ mỏng không đáng một khối).
  * Khối chờ suất sắp mở tải xong rồi mới hiện để dòng "suất kế" không đẩy khối bên dưới giữa chừng; lỗi tải suất sắp mở thì bỏ dòng, không báo lỗi.
  */
-export function FlashSale({ items, loading, error, onRetry, retrying }: FlashSaleProps) {
+export function FlashSale({ items, loading, error, onRetry, retrying, onExpire }: FlashSaleProps) {
   const navigate = useNavigate();
   const titleId = useId();
   // Chờ khôi phục phiên xong rồi mới hỏi: hỏi sớm thì chưa có token nên đi request lẻ dù khách đã đăng nhập, trong khi khối gộp /home/me đã có sẵn.
@@ -108,7 +110,16 @@ export function FlashSale({ items, loading, error, onRetry, retrying }: FlashSal
           title={title}
           icon="zap"
           tone="promo"
-          trailing={<Countdown endAt={soonestEndAt} mode="clock" onEnd={() => setExpiredTick((n) => n + 1)} />}
+          trailing={
+            <Countdown
+              endAt={soonestEndAt}
+              mode="clock"
+              onEnd={() => {
+                setExpiredTick((n) => n + 1);
+                onExpire?.();
+              }}
+            />
+          }
           action={seeAll ? { to: seeAll } : undefined}
         />
       </div>

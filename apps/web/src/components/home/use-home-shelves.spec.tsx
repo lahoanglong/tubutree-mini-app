@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 
@@ -11,10 +12,11 @@ import { resetFlashSales } from '@/lib/use-flash-sales';
 import { useHomeShelves, type HomeShelves } from './use-home-shelves';
 
 const HOUR = 3_600_000;
-const flashItem = (slug: string, i: number) => ({
+const flashEnding = (slug: string, i: number, endAt: string) => ({
   itemId: `f${i}`, variationId: `v${i}`, productSlug: slug, productName: slug, thumbnail: null,
-  retailPrice: 100000, flashPrice: 80000, quota: 10, soldCount: 1, endAt: new Date(Date.now() + HOUR).toISOString(),
+  retailPrice: 100000, flashPrice: 80000, quota: 10, soldCount: 1, endAt,
 });
+const flashItem = (slug: string, i: number) => flashEnding(slug, i, new Date(Date.now() + HOUR).toISOString());
 const card = (slug: string) => ({ id: `p-${slug}`, slug, name: slug, brand: 'B', thumbnail: null, basePrice: 1000, salePrice: null, repVariationId: `rv-${slug}`, isFeatured: false, inStock: true });
 const purchased = (slug: string) => ({
   productId: `p-${slug}`, variationId: `pv-${slug}`, slug, productName: slug, variationName: null, brand: 'B', thumbnail: null,
@@ -48,6 +50,7 @@ beforeEach(() => {
 afterEach(() => {
   mounted?.unmount();
   mounted = null;
+  vi.useRealTimers();
 });
 
 describe('useHomeShelves (web)', () => {
@@ -87,5 +90,57 @@ describe('useHomeShelves (web)', () => {
     expect(latest!.flash).toHaveLength(3);
     expect(latest!.bestSellers).toHaveLength(3);
     expect(latest!.flashQuery.isLoading).toBe(false);
+  });
+
+  it('hạng thật của Bán chạy nhất: a (#1) ở Giờ vàng thì các thẻ còn lại ghi #2..#5, không đánh lại từ #1', async () => {
+    const s = await mount('new');
+    expect(s.bestSellers.map((p) => p.slug)).toEqual(['x', 'y', 'z', 'w']);
+    expect(s.bestSellerRanks).toEqual([2, 3, 4, 5]);
+  });
+
+  it('hạng thật khi món bị bỏ nằm giữa bảng: Mua lại bỏ "y", thẻ sau nó giữ hạng cũ', async () => {
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/flash-sales/active') return [];
+      if (path.startsWith('/products')) return { data: ['x', 'y', 'z', 'w', 'v'].map(card), meta: { page: 1, limit: 12, total: 5 } };
+      if (path.includes('purchased')) return { items: ['y'].map(purchased), meta: { page: 1, limit: 10, total: 1 } };
+      return [];
+    });
+    const s = await mount('returning');
+    expect(s.bestSellers.map((p) => p.slug)).toEqual(['x', 'z', 'w', 'v']);
+    expect(s.bestSellerRanks).toEqual([1, 3, 4, 5]);
+  });
+
+  it('suất đã quá giờ không chiếm món: 3 suất trong bộ nhớ, 1 đã hết giờ thì kệ ẩn và KHÔNG giữ món (cả ba còn ở Bán chạy nhất)', async () => {
+    const gone = new Date(Date.now() - 1000).toISOString();
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/flash-sales/active') return [flashItem('a', 0), flashItem('b', 1), flashEnding('c', 2, gone)];
+      if (path.startsWith('/products')) return { data: ['a', 'b', 'c', 'x'].map(card), meta: { page: 1, limit: 12, total: 4 } };
+      return [];
+    });
+    const s = await mount('new');
+    expect(s.flash).toEqual([]);
+    expect(s.flashSlugs.size).toBe(0);
+    expect(s.bestSellers.map((p) => p.slug)).toEqual(['a', 'b', 'c', 'x']);
+    expect(s.bestSellerRanks).toEqual([1, 2, 3, 4]);
+  });
+
+  it('suất hết giờ giữa chừng: onFlashEnd tính lại, món hết giờ rời Giờ vàng và trở lại Bán chạy nhất với hạng đúng', async () => {
+    const NOW = Date.parse('2026-11-01T03:00:00.000Z');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/flash-sales/active') return [flashItem('a', 0), flashItem('b', 1), flashItem('c', 2), flashEnding('d', 3, new Date(NOW + 60_000).toISOString())];
+      if (path.startsWith('/products')) return { data: ['d', 'x', 'y', 'z'].map(card), meta: { page: 1, limit: 12, total: 4 } };
+      return [];
+    });
+    const first = await mount('new');
+    expect(first.flash.map((f) => f.productSlug)).toEqual(['a', 'b', 'c', 'd']);
+    expect(first.bestSellerRanks).toEqual([2, 3, 4]);
+
+    vi.setSystemTime(NOW + 61_000);
+    act(() => latest!.onFlashEnd());
+    expect(latest!.flash.map((f) => f.productSlug)).toEqual(['a', 'b', 'c']);
+    expect(latest!.bestSellers.map((p) => p.slug)).toEqual(['d', 'x', 'y', 'z']);
+    expect(latest!.bestSellerRanks).toEqual([1, 2, 3, 4]);
   });
 });

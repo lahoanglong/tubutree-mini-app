@@ -264,6 +264,25 @@ describe('FlashSale — hết giờ', () => {
       vi.useRealTimers();
     }
   });
+
+  it('đồng hồ về 0: gọi onExpire đúng một lần để chỗ nối dữ liệu tính lại chống trùng (món hết giờ trở lại kệ khác)', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-17T08:00:00.000Z'));
+      const onExpire = vi.fn();
+      renderFlash({ items: many(3, { endAt: '2026-10-17T08:01:00.000Z' }), onExpire });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(onExpire).not.toHaveBeenCalled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(61_000);
+      });
+      expect(onExpire).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('FlashSale — thẻ giờ vàng (C-076 di cư DS v2)', () => {
