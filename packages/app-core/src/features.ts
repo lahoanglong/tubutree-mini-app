@@ -3,7 +3,7 @@
  * cách đổi cờ ở đây, không phải dựng lại.
  */
 
-/** Chặng Mùa: tắt chờ chủ quyết; công cụ tạo mùa đã có ở admin. */
+/** Chặng Mùa chưa bật theo quyết định của chủ. Muốn bật: tạo mùa ở quản trị, kiểm `seasonpass.tiers` có bậc, đổi cờ thành true rồi phát hành lại web và Mini App. */
 export const SEASON_PASS_ENABLED = false;
 
 /**

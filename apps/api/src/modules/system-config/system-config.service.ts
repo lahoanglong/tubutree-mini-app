@@ -330,8 +330,6 @@ export class SystemConfigService {
     [ORDER_SOURCE_MAP_KEY]: orderSourceMapProblem,
     // Ngày mở bán cho nhãn "Mới" (giờ Việt Nam): sai dạng thì client bỏ qua mốc, nên chặn ngay lúc ghi để chủ shop thấy lỗi.
     [CATALOG_LAUNCH_DATE_KEY]: catalogLaunchDateProblem,
-    // Cờ bố cục Trang chủ cho khách mới: chỉ nhận boolean để chuỗi "false" không vô tình đổi thứ tự khối của mọi khách mới.
-    'home.new_customer_layout': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Cờ mở cho khách chưa đăng nhập xem trước bài cộng đồng: chỉ nhận boolean để chuỗi "false" không vô tình công khai bài của khách.
     'community.public_preview': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Link kênh cộng đồng mở ra ngoài app qua webview: chỉ https và tên miền mạng xã hội đã duyệt.

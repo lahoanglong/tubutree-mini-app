@@ -6771,12 +6771,6 @@
      },
      "opt": true
     },
-    "homeNewCustomerLayout": {
-     "s": {
-      "k": "bool"
-     },
-     "opt": true
-    },
     "aiAdvisorEnabled": {
      "s": {
       "k": "bool"

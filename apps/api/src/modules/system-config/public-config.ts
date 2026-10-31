@@ -79,7 +79,6 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     vndPerPointRedeem,
     maxRedeemPct,
     pointExpireMonths,
-    homeNewCustomerLayout,
     communityPublicPreview,
     dealerMaxDiscountPct,
     dealerReviewHours,
@@ -119,7 +118,6 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<number>('loyalty.vnd_per_point_redeem', 1),
     config.get<unknown>('loyalty.max_redeem_pct', LOYALTY_MAX_REDEEM_PCT_DEFAULT),
     config.get<unknown>('loyalty.point_expire_months', DEFAULT_POINT_EXPIRE_MONTHS),
-    config.get<unknown>('home.new_customer_layout', true),
     config.get<unknown>(PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_DEFAULT),
     config.get<unknown>('dealer.max_discount_pct', DEALER_MAX_DISCOUNT_PCT_DEFAULT),
     config.get<unknown>('dealer.review_hours', DEALER_REVIEW_HOURS_DEFAULT),
@@ -171,7 +169,6 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
       // Hệ số điểm theo hạng (id hạng → hệ số) và tên hạng, để trang sản phẩm tính số điểm của khách mà không gọi thêm API.
       ...tierTables(tierRows),
     },
-    homeNewCustomerLayout: homeNewCustomerLayout === true,
     // Ngày mở bán (YYYY-MM-DD giờ VN) cho nhãn "Mới"; chưa đặt hoặc hỏng thì null và client giữ luật 30 ngày.
     catalogLaunchDate: publicCatalogLaunchDate(catalogLaunchDate),
     // Chỉ boolean: true khi AI bật VÀ có provider dùng được. Miniapp ẩn mọi lối vào AI khi không phải true (kể cả API cũ không trả).
