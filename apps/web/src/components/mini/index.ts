@@ -29,3 +29,5 @@ export { ProgressBar, Meter } from './progress-bar';
 export { ScrollRow } from './scroll-row';
 export { TierBadge } from './tier-badge';
 export { BottomSheet, Dialog } from './bottom-sheet';
+export { Countdown } from './countdown';
+export type { CountdownProps } from './countdown';
