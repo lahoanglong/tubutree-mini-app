@@ -11,8 +11,11 @@ export function sortTab(sort?: CatalogSort): SortTab {
   return 'default';
 }
 
+/** Sắp xếp ghi vào URL của Danh mục: không gồm `best_seller_30d` (chỉ kệ Bán chạy nhất của hub dùng). */
+export type BrowseSort = 'best_seller' | 'newest' | 'price_asc' | 'price_desc';
+
 /** Sắp xếp mới khi chạm `tab`: tab giá đảo chiều khi đã ở giá; Phổ biến bỏ `sort` (thứ tự mặc định của API). */
-export function sortForTab(current: CatalogSort | undefined, tab: SortTab): CatalogSort | undefined {
+export function sortForTab(current: CatalogSort | undefined, tab: SortTab): BrowseSort | undefined {
   if (tab === 'price') return current === 'price_asc' ? 'price_desc' : 'price_asc';
   if (tab === 'default') return undefined;
   return tab;
