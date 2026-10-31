@@ -567,4 +567,25 @@ describe('lúc bấm link gửi kèm lượt chạm, dấu chạm theo người 
     expect(mocks.touch).toHaveBeenCalledTimes(3);
     expect(mocks.touch).toHaveBeenLastCalledWith({ referralCode: 'AN123', kind: 'brand' });
   });
+
+  it('lần mở gian hàng đầu của lần tải (khách bấm link) làm mới lúc bấm dù cùng mã; điều hướng trong app sau đó thì giữ', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-31T10:00:00Z'));
+      vi.resetModules();
+      const ctx = await import('@/lib/storefront-context');
+      const { StorefrontTracker: Fresh } = await import('./storefront-tracker');
+      ctx.clearStorefrontContext();
+      ctx.rememberStorefront('an-shop', 'CTV', 'AN123');
+      vi.setSystemTime(new Date('2026-10-31T15:00:00Z'));
+      const m = await mountKept(<Fresh slug="an-shop" type="CTV" referralCode="AN123" />);
+      expect(ctx.getStorefrontContext().clickedAt).toBe(Date.parse('2026-10-31T15:00:00Z'));
+      vi.setSystemTime(new Date('2026-10-31T18:00:00Z'));
+      await m.rerender(<Fresh slug="an-shop" type="CTV" referralCode="AN123" />);
+      expect(ctx.getStorefrontContext().clickedAt).toBe(Date.parse('2026-10-31T15:00:00Z'));
+      await m.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -68,11 +68,23 @@ function clickedAtFor(current: StorefrontContext, nextCode: string | null, fromL
   return norm(nextCode) === norm(current.referralCode) && current.clickedAt !== null ? current.clickedAt : Date.now();
 }
 
-/** Trang đầu tiên của lần tải này là /s/<mã> thì lần mở gian hàng đầu tiên là khách đến từ link, các lần sau là điều hướng trong app. */
-let landingOnStorefront = typeof window !== 'undefined' && window.location.pathname.startsWith('/s/');
+/**
+ * Lần mở gian hàng đầu tiên của lần tải trang, vẫn ở đúng địa chỉ lúc nạp, là khách đến từ link (kể cả link subdomain được middleware
+ * viết lại về /s/<mã>); điều hướng trong app đổi địa chỉ nên không tính. Tải lại trang (F5, quay lại tải lại) không phải bấm mới.
+ */
+const landingHref = typeof window !== 'undefined' ? window.location.href : null;
+let landingPending = true;
+function isFreshNavigation(): boolean {
+  try {
+    const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    return !nav || nav.type === 'navigate';
+  } catch {
+    return true;
+  }
+}
 export function consumeStorefrontLanding(): boolean {
-  const was = landingOnStorefront;
-  landingOnStorefront = false;
+  const was = landingPending && landingHref !== null && window.location.href === landingHref && isFreshNavigation();
+  landingPending = false;
   return was;
 }
 
@@ -168,15 +180,16 @@ export function rememberEntryLink(slug: string | null, ref: string | null): void
   if (!slug && !ref) return;
   const current = read();
   const referralCode = ref ? ref.trim().toUpperCase() || null : null;
+  const fresh = isFreshNavigation();
   write({
     slug: slug ?? null,
     referralCode,
     kind: slug ? 'CTV' : current.kind,
     referralEligible: eligibilityFor(current, referralCode, null),
-    // Mở lại link là một lượt bấm mới, kể cả cùng mã: hạn ghi công được làm mới như trước.
-    clickedAt: Date.now(),
+    // Mở lại link là một lượt bấm mới, kể cả cùng mã: hạn ghi công được làm mới như trước. Tải lại trang thì không.
+    clickedAt: clickedAtFor(current, referralCode, fresh),
   });
-  savePendingRef({ referralCode, slug: slug ?? null, kind: slug ? 'CTV' : null }, true);
+  savePendingRef({ referralCode, slug: slug ?? null, kind: slug ? 'CTV' : null }, fresh);
 }
 
 export interface PendingRef {

@@ -348,3 +348,72 @@ describe('lúc bấm link (clickedAt) và dấu chạm theo người dùng', () 
     expect(wasCtvTouched('u1', 'AN123')).toBe(true);
   });
 });
+
+describe('cờ "đến từ link": tải lại trang và link subdomain', () => {
+  const navType = (type: string | null) =>
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue(type ? ([{ type }] as unknown as PerformanceEntryList) : []);
+  async function freshModule(url: string) {
+    window.history.replaceState({}, '', url);
+    vi.resetModules();
+    sessionStorage.clear();
+    localStorage.clear();
+    return import('./storefront-context');
+  }
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('mở /s/<mã> bằng link: lần mở gian hàng đầu là từ link, lần sau (điều hướng trong app) thì không', async () => {
+    navType('navigate');
+    const m = await freshModule('/s/an-shop');
+    expect(m.consumeStorefrontLanding()).toBe(true);
+    expect(m.consumeStorefrontLanding()).toBe(false);
+  });
+
+  it('tải lại trang (reload) hoặc quay lại tải lại (back_forward): không phải bấm mới', async () => {
+    for (const type of ['reload', 'back_forward']) {
+      navType(type);
+      const m = await freshModule('/s/an-shop');
+      expect(m.consumeStorefrontLanding()).toBe(false);
+    }
+  });
+
+  it('link subdomain (đường dẫn vẫn là / sau khi viết lại): lần mount đầu ở đúng địa chỉ lúc nạp là từ link', async () => {
+    navType('navigate');
+    const m = await freshModule('/');
+    expect(m.consumeStorefrontLanding()).toBe(true);
+  });
+
+  it('vào trang chủ rồi điều hướng trong app sang /s/<mã> (địa chỉ đã đổi): không tính là từ link', async () => {
+    navType('navigate');
+    const m = await freshModule('/');
+    window.history.pushState({}, '', '/s/an-shop');
+    expect(m.consumeStorefrontLanding()).toBe(false);
+  });
+
+  it('không có Navigation Timing: giữ hành vi từ link', async () => {
+    navType(null);
+    const m = await freshModule('/s/an-shop');
+    expect(m.consumeStorefrontLanding()).toBe(true);
+  });
+
+  it('mở lại ?ref= bằng tải lại trang không làm mới lúc bấm; bằng link mới thì làm mới', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-31T10:00:00Z'));
+      navType('navigate');
+      const m = await freshModule('/');
+      m.rememberEntryLink(null, 'an123');
+      vi.setSystemTime(new Date('2026-10-31T12:00:00Z'));
+      navType('reload');
+      m.rememberEntryLink(null, 'an123');
+      expect(m.getStorefrontContext().clickedAt).toBe(Date.parse('2026-10-31T10:00:00Z'));
+      navType('navigate');
+      m.rememberEntryLink(null, 'an123');
+      expect(m.getStorefrontContext().clickedAt).toBe(Date.parse('2026-10-31T12:00:00Z'));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
