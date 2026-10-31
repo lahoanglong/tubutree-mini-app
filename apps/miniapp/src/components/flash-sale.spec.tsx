@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import type * as ZmpUi from 'zmp-ui';
+import type * as RouteFallback from '@tubutree/app-core/merch/route-fallback';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -22,7 +23,7 @@ vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) =>
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 // Trang Giờ vàng riêng chưa có (P12): mặc định lối vào ẩn; `flashPage` bật để kiểm cả nhánh khi trang đã có.
 vi.mock('@tubutree/app-core/merch/route-fallback', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@tubutree/app-core/merch/route-fallback')>();
+  const actual = await importOriginal<typeof RouteFallback>();
   return { ...actual, routeUsable: (r: string) => (r === '/flash-sale' && mocks.flashPage) || actual.routeUsable(r) };
 });
 

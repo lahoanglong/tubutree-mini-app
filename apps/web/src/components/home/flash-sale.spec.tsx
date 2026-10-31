@@ -4,6 +4,7 @@ import { renderToString } from 'react-dom/server';
 import { hydrateRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as RouteFallback from '@tubutree/app-core/merch/route-fallback';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets } from '@/test-utils/a11y';
 import { ApiError } from '@/lib/client-api';
@@ -15,7 +16,7 @@ vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase, useAuthRestoring: () => false }));
 // Trang Giờ vàng riêng chưa có (P12): mặc định lối vào ẩn; `flashPage` bật để kiểm cả nhánh khi trang đã có.
 vi.mock('@tubutree/app-core/merch/route-fallback', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@tubutree/app-core/merch/route-fallback')>();
+  const actual = await importOriginal<typeof RouteFallback>();
   return { ...actual, routeUsable: (r: string) => (r === '/flash-sale' && mocks.flashPage) || actual.routeUsable(r) };
 });
 
