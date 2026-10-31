@@ -74,6 +74,29 @@ describe('VoucherTicket', () => {
     expect(q('voucher-expiry')!.textContent).toBe('Còn 2 ngày');
   });
 
+  it('mã luôn là một ô không co, không cắt; điều kiện mới là phần bị cắt khi hàng hẹp', () => {
+    render(<VoucherTicket voucher={view({ condition: 'Đơn từ 500.000đ cho mọi sản phẩm', code: 'CHUADU' })} variant="ticket" primary={{ label: 'Dùng ngay', onClick: vi.fn() }} />);
+    const code = q('voucher-code')!;
+    expect(code.textContent).toBe(' · CHUADU');
+    expect(code.style.flex).toBe('0 0 auto');
+    expect(code.style.textOverflow).toBe('');
+    expect(code.style.whiteSpace).toBe('pre');
+    const cond = q('voucher-condition')!;
+    expect(cond.style.minWidth).toBe('0px');
+    expect(cond.style.textOverflow).toBe('ellipsis');
+    expect(cond.style.overflow).toBe('hidden');
+  });
+
+  it('chip chỉ có tiêu đề và điều kiện: không mã; ticket và row vẫn có mã', () => {
+    const { rerender } = render(<VoucherTicket voucher={view()} variant="chip" />);
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k');
+    expect(q('voucher-code')).toBeNull();
+    rerender(<VoucherTicket voucher={view({ condition: '' })} variant="chip" />);
+    expect(q('voucher-meta')).toBeNull();
+    rerender(<VoucherTicket voucher={view()} variant="row" />);
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k · FUWA3E');
+  });
+
   it('expiring: dòng hạn tông cảnh báo; không thì chữ phụ', () => {
     const { rerender } = render(<VoucherTicket voucher={view()} variant="ticket" expiring />);
     expect(q('voucher-expiry')!.style.color).toBe('var(--color-status-warning-fg)');

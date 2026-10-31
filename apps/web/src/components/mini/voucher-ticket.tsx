@@ -44,7 +44,9 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
   const inactive = v.state === 'used' || v.state === 'expired' || v.state === 'soldout';
   const ineligible = v.state === 'ineligible';
   const stamp = STAMP[v.state] ? fillCopy(STAMP[v.state]!) : null;
-  const meta = [v.condition, v.code].filter(Boolean).join(' · ');
+  // Chip chỉ có tiêu đề + điều kiện (kế hoạch P5); ticket/row thêm mã. Khi hàng không đủ chỗ thì điều kiện bị cắt (…), mã luôn đọc trọn.
+  const showCode = variant !== 'chip' && Boolean(v.code);
+  const showMeta = Boolean(v.condition) || showCode;
   const showExpiry = !inactive && v.expiry !== '';
   const reasonText = ineligible ? reason || v.condition : '';
   const showPrimary = primary && !inactive;
@@ -58,9 +60,18 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       <span style={{ ...(small ? TITLE_ONE_LINE : TITLE_CLAMP), fontSize: small ? 'var(--type-label-size)' : 'var(--type-body-sm-size)', lineHeight: small ? 'var(--type-label-lh)' : 'var(--type-body-sm-lh)', fontWeight: 700, color: text }}>
         {v.title}
       </span>
-      {meta && (
-        <span data-testid="voucher-meta" style={{ display: 'block', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {meta}
+      {showMeta && (
+        <span data-testid="voucher-meta" style={{ display: 'flex', minWidth: 0, fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-tertiary)' }}>
+          {v.condition && (
+            <span data-testid="voucher-condition" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {v.condition}
+            </span>
+          )}
+          {showCode && (
+            <span data-testid="voucher-code" style={{ flex: '0 0 auto', whiteSpace: 'pre' }}>
+              {v.condition ? ` · ${v.code}` : v.code}
+            </span>
+          )}
         </span>
       )}
       {showExpiry && variant !== 'chip' && (
