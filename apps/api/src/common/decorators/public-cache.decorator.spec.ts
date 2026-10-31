@@ -54,7 +54,9 @@ describe('Cache-Control cho API công khai (C-039)', () => {
 
   it('endpoint theo user KHÔNG được public cache', () => {
     expect(cacheControl(CatalogController, 'forYou')).toBeUndefined();
-    expect(cacheControl(FlashSaleController, 'upcoming')).toBeUndefined();
+    // /upcoming công khai (khách xem khung sắp tới) nhưng `reminded` theo khách có phiên: không được cache chung.
+    expect(isPublic(FlashSaleController, 'upcoming')).toBe(true);
+    expect(cacheControl(FlashSaleController, 'upcoming')).toBe('private, no-store');
     expect(cacheControl(HomeController, 'me')).toBe('private, no-store');
     expect(cacheControl(StorefrontController, 'me')).toBeUndefined();
   });

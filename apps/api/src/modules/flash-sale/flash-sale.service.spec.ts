@@ -767,6 +767,15 @@ describe('FlashSaleService.listUpcoming', () => {
     expect(arg.include.reminders).toEqual({ where: { userId: 'u1' }, select: { id: true } });
     expect(arg.orderBy).toEqual({ flashSale: { startAt: 'asc' } });
   });
+
+  it('khách chưa đăng nhập (không userId): không truy vấn reminders, mọi món reminded=false', async () => {
+    const findMany = jest.fn().mockResolvedValue([row({ reminders: undefined })]);
+    const prisma = { flashSaleItem: { findMany } } as any;
+    const list = await new FlashSaleService(prisma, config, notifications, lifecycle).listUpcoming(undefined, NOW);
+    expect(findMany.mock.calls[0][0].include).not.toHaveProperty('reminders');
+    expect(list).toHaveLength(1);
+    expect(list[0]?.reminded).toBe(false);
+  });
 });
 
 describe('FlashSaleService.notifyStartedFlashSales', () => {

@@ -568,8 +568,8 @@ export class FlashSaleService {
     return { ok: true };
   }
 
-  /** Danh sách item flash SẮP diễn ra (chưa bắt đầu) — cho FE mục "Sắp diễn ra" + nút Nhắc tôi. */
-  async listUpcoming(userId: string, now: Date = new Date()) {
+  /** Danh sách item flash SẮP diễn ra (chưa bắt đầu) — cho FE mục "Sắp diễn ra" + nút Nhắc tôi. Không `userId` (khách): không đọc nhắc, `reminded=false`. */
+  async listUpcoming(userId?: string, now: Date = new Date()) {
     const items = await this.prisma.flashSaleItem.findMany({
       where: {
         variation: SELLABLE_VARIATION_WHERE,
@@ -578,7 +578,7 @@ export class FlashSaleService {
       include: {
         flashSale: { select: { startAt: true } },
         variation: { include: { product: { select: { slug: true, name: true, thumbnail: true } } } },
-        reminders: { where: { userId }, select: { id: true } },
+        ...(userId ? { reminders: { where: { userId }, select: { id: true } } } : {}),
       },
       orderBy: { flashSale: { startAt: 'asc' } },
     });
@@ -592,7 +592,7 @@ export class FlashSaleService {
       retailPrice: it.variation.retailPrice,
       salePrice: it.variation.salePrice,
       startAt: it.flashSale.startAt,
-      reminded: it.reminders.length > 0,
+      reminded: (it.reminders?.length ?? 0) > 0,
     }));
   }
 

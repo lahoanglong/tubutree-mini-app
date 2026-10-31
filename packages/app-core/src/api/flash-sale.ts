@@ -36,6 +36,7 @@ export interface UpcomingFlashItem {
   startAt: string;
   reminded: boolean;
 }
+/** Công khai: không cần phiên. Có phiên thì `reminded` theo khách, không có thì luôn false (không dùng `anonymous` để khách đã đăng nhập vẫn có trạng thái nhắc). */
 export const fetchUpcomingFlashSales = (http: HttpClient) => http.get<UpcomingFlashItem[]>('/flash-sales/upcoming');
 export const setFlashReminder = (http: HttpClient, itemId: string) => http.post(`/flash-sales/items/${itemId}/remind`);
 export const cancelFlashReminder = (http: HttpClient, itemId: string) => http.delete(`/flash-sales/items/${itemId}/remind`);
