@@ -335,7 +335,7 @@ describe('/ctv — bảng điều khiển', () => {
     click(btn);
     await flush();
     const dialog = document.querySelector('[role="dialog"]');
-    expect(dialog?.textContent).toContain('Hoa hồng tự vào Ví Tubu khi đơn đã giao và hết thời gian đổi/trả. Đang chờ: 30.000đ.');
+    expect(dialog?.textContent).toContain('Hoa hồng được duyệt khi đơn đã giao và hết thời gian đổi/trả, rồi tự vào Ví Tubu lúc 8:00 sáng kế tiếp. Đang chờ: 30.000đ.');
     expect(byText(dialog as HTMLElement, 'button', 'vào Ví')).toBeNull();
     click(byText(dialog as HTMLElement, 'button', 'Đã hiểu'));
     await flush();
@@ -356,7 +356,7 @@ describe('/ctv — bảng điều khiển', () => {
   it('còn hoa hồng có thể chuyển: dưới số to có dòng nói đây là phần chưa tự vào Ví, bấm tay; hết thì không có dòng đó', async () => {
     const a = mount();
     await flush();
-    expect(a.container.textContent).toContain('Phần này chưa tự vào Ví được');
+    expect(a.container.textContent).toContain('Tự vào Ví Tubu lúc 8:00 sáng');
     a.unmount();
     state.dash = { ...DASH, withdrawableCommission: 0 };
     const b = mount();

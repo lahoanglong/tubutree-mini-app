@@ -25,7 +25,7 @@ import {
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { ShareSheet } from '../components/share-sheet';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
-import { AFFILIATE_PAGE_SIZE, affiliateNextCursor, COMMISSION_PENDING_NOTE, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, transferBlockedText, transferHeroNote, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
+import { AFFILIATE_PAGE_SIZE, affiliateNextCursor, commissionPendingNote, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, transferBlockedText, transferHeroNote, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
 import { getWallet } from '../services/account-api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -418,7 +418,7 @@ function Dashboard() {
               {formatVnd(hero.amount)}
             </Text>
             <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.9, marginTop: 4 }}>
-              Đang chờ: {formatVnd(head.pending)} · {COMMISSION_PENDING_NOTE}
+              Đang chờ: {formatVnd(head.pending)} · {commissionPendingNote(autoTransfer)}
             </Text>
             {head.big > 0 && (
               <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.9, marginTop: 4 }}>
