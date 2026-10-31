@@ -221,7 +221,7 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
     expect(out.communityPublicPreview).toBe(true);
   });
 
-  // Chuỗi "false" là truthy: chỉ boolean true thật mới bật, để cờ gõ nhầm không hứa freeship hay đổi bố cục.
+  // Chuỗi "false" là truthy: chỉ boolean true thật mới bật, để cờ gõ nhầm không hứa freeship hay mở xem trước cộng đồng.
   it.each(['true', 'false', 1, 'yes'])('cờ sai kiểu (%p) → coi là tắt', async (bad) => {
     const out = await makeController(
       makeConfig({ 'shipping.first_order_free_enabled': bad, 'community.public_preview': bad }),

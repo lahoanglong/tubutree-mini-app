@@ -249,7 +249,7 @@ bash ops/check-edge.sh --local
 
 ### 1.6 Việc của chủ dự án quanh ngày ra mắt (cấu hình đã chốt 2026-10-18)
 
-Các giá trị mặc định mới (hoa hồng giữ 10 ngày, freeship đơn đầu từ 199.000đ, bố cục khách mới, xem trước cộng đồng, duyệt gian hàng lần đầu, trần mã của nhân viên, tài khoản nhận tiền, SĐT kho Gomdon) đã nằm trong mã, dữ liệu nạp và migration `20261018200000_launch_owner_config`, không cần làm tay, TRỪ duyệt gian hàng (xem ngay dưới). Hạng thành viên, bậc đại lý, nhiệm vụ và 6 khoá kinh doanh (quyết định A8) nạp bằng `prisma:seed:reference --with-business-defaults` ở bước 7b, cũng không cần làm tay; `go-live:check` báo FAIL `db.membership_tiers` nếu thiếu. Việc dưới đây thì chủ dự án làm, theo thứ tự.
+Các giá trị mặc định mới (hoa hồng giữ 10 ngày, freeship đơn đầu từ 199.000đ, xem trước cộng đồng, duyệt gian hàng lần đầu, trần mã của nhân viên, tài khoản nhận tiền, SĐT kho Gomdon) đã nằm trong mã, dữ liệu nạp và migration `20261018200000_launch_owner_config`, không cần làm tay, TRỪ duyệt gian hàng (xem ngay dưới). Hạng thành viên, bậc đại lý, nhiệm vụ và 6 khoá kinh doanh (quyết định A8) nạp bằng `prisma:seed:reference --with-business-defaults` ở bước 7b, cũng không cần làm tay; `go-live:check` báo FAIL `db.membership_tiers` nếu thiếu. Việc dưới đây thì chủ dự án làm, theo thứ tự.
 
 **Duyệt gian hàng lần đầu cần việc tay (B3).** `storefront.require_approval` nay mặc định `true`, và migration `20261018170000_lr_storefront_moderation` KHÔNG điền `approvedAt` cho gian hàng có sẵn. Vì vậy mọi gian hàng CTV đã đăng trước ngày deploy bị ẨN khỏi khách (và ngừng ghi nhận đơn cho CTV) cho tới khi admin duyệt. Trước deploy, đếm trên PROD:
 
