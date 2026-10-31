@@ -114,7 +114,7 @@ export function PdpShippingRow({ children }: { children: ReactNode }) {
     <ListRow
       icon={<Icon icon={Truck} size="md" tone="brand" />}
       title={fillCopy('pdp.shipping')}
-      subtitle={<div className="flex flex-col gap-1">{children}</div>}
+      subtitle={<div className="flex flex-col gap-1 md:flex-row md:flex-wrap md:items-baseline md:gap-x-3 md:gap-y-0">{children}</div>}
       trailing="chevron"
       onPress={() => document.getElementById('pdp-promises')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
       style={{ boxShadow: 'inset 0 -1px 0 var(--color-border-subtle)' }}

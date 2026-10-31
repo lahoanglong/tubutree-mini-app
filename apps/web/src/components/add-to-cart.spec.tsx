@@ -925,7 +925,8 @@ describe('AddToCart — dòng "Phân loại ›" và hết giờ Giờ vàng (P8
       await flush();
       const row = rowButton(container)!;
       expect(row).not.toBeNull();
-      expect(row.className).toContain('md:hidden');
+      // Ẩn bằng khối bọc: ListRow đặt display:flex inline nên class md:hidden trên chính nó không thắng được.
+      expect(row.parentElement?.className).toContain('md:hidden');
       expect(row.textContent).toContain('250ml');
       expect(row.textContent).toContain('150.000đ');
       click(row);

@@ -334,17 +334,19 @@ export default function AddToCart({
     <div className="mt-4">
       {variations.length > 1 && selected && (
         // Điện thoại: dòng "Phân loại ›" như Mini App mở bảng chọn đủ ảnh, giá, tồn; chip bên dưới là lối tắt cho phân loại hay chọn.
-        <ListRow
-          className="md:hidden"
-          icon={<Icon icon={Layers} size="md" tone="brand" />}
-          title={fillCopy('pdp.variation')}
-          subtitle={`${selected.name} · ${formatVnd(selectedPricing?.price ?? 0)}`}
-          trailing="chevron"
-          onPress={() => {
-            setSheetOpened(true);
-            setSheetMode('add');
-          }}
-        />
+        // Khối bọc mới ẩn được ở máy tính: ListRow đặt display:flex inline nên class trên chính nó không thắng.
+        <div className="md:hidden">
+          <ListRow
+            icon={<Icon icon={Layers} size="md" tone="brand" />}
+            title={fillCopy('pdp.variation')}
+            subtitle={`${selected.name} · ${formatVnd(selectedPricing?.price ?? 0)}`}
+            trailing="chevron"
+            onPress={() => {
+              setSheetOpened(true);
+              setSheetMode('add');
+            }}
+          />
+        </div>
       )}
       {variations.length > 1 && (
         <div role="group" aria-labelledby="variation-label">
