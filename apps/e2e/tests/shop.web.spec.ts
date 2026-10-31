@@ -92,7 +92,7 @@ test.describe('Web khách: danh mục /san-pham', () => {
     await expect(page.getByRole('region', { name: 'Danh mục' })).toHaveCount(0);
     await expect(page.getByText('Sản phẩm 1')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Giá ⇅' }).click();
+    await page.getByRole('group', { name: 'Sắp xếp' }).getByRole('button', { name: /^Giá/ }).click();
     await expect(page).toHaveURL(/category=c-goi&sort=price_asc/);
     await refetchStale(page, api, 'GET', '/products', productCalls() + 1);
 
@@ -145,7 +145,7 @@ test.describe('Web khách: danh mục /san-pham', () => {
     await expect(page).toHaveURL(/\/san-pham\?all=1$/);
   });
 
-  test('"Xem thêm" tải trang kế và nối vào danh sách', async ({ page, api }) => {
+  test('"Xem thêm" tải trang kế và nối vào danh sách; từ lg là dãy số trang thay cho "Xem thêm"', async ({ page, api }, testInfo) => {
     mockCatalog(api);
     api.get('/products', ({ call }) =>
       call.query.get('page') === '2' ? pageOf([product(3)], 3, 2, 2) : pageOf([product(1), product(2)], 3, 1, 2),
@@ -153,6 +153,11 @@ test.describe('Web khách: danh mục /san-pham', () => {
     await page.goto('/san-pham?all=1');
     await refetchStale(page, api, 'GET', '/products');
     await expect(page.getByText('Sản phẩm 2')).toBeVisible();
+    if (testInfo.project.name === 'Web Customer') {
+      await expect(page.getByRole('navigation', { name: 'Phân trang' }).getByRole('link', { name: '2' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Xem thêm' })).toBeHidden();
+      await page.setViewportSize({ width: 900, height: 900 }); // dưới lg: luồng "Xem thêm" như điện thoại
+    }
     await page.getByRole('button', { name: 'Xem thêm' }).click();
     await expect(page.getByText('Sản phẩm 3')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Xem thêm' })).toHaveCount(0);
