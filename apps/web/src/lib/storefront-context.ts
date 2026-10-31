@@ -58,10 +58,22 @@ function eligibilityFor(current: StorefrontContext, nextCode: string | null, hin
   return norm(nextCode) === norm(current.referralCode) ? (current.referralEligible ?? hint) : hint;
 }
 
-/** Cùng mã thì giữ lúc bấm đã ghi; mã mới (hoặc chưa có lúc bấm) thì là lượt bấm vừa xảy ra. */
-function clickedAtFor(current: StorefrontContext, nextCode: string | null): number | null {
+/**
+ * Lượt đến từ link (mở `?ref=`, `/s/<mã>`) luôn là lúc bấm mới, kể cả cùng mã: hạn ghi công được làm mới. Điều hướng trong app
+ * thì cùng mã giữ lúc bấm đã ghi; mã mới (hoặc chưa có lúc bấm) là lượt bấm vừa xảy ra.
+ */
+function clickedAtFor(current: StorefrontContext, nextCode: string | null, fromLink = false): number | null {
   if (!nextCode) return null;
+  if (fromLink) return Date.now();
   return norm(nextCode) === norm(current.referralCode) && current.clickedAt !== null ? current.clickedAt : Date.now();
+}
+
+/** Trang đầu tiên của lần tải này là /s/<mã> thì lần mở gian hàng đầu tiên là khách đến từ link, các lần sau là điều hướng trong app. */
+let landingOnStorefront = typeof window !== 'undefined' && window.location.pathname.startsWith('/s/');
+export function consumeStorefrontLanding(): boolean {
+  const was = landingOnStorefront;
+  landingOnStorefront = false;
+  return was;
 }
 
 function read(): StorefrontContext {
@@ -114,7 +126,7 @@ export function getStorefrontContext(): StorefrontContext {
  * `slug` phải là slug gốc API trả về (không phải tham số URL: khách vào qua subdomain thì URL mang subdomain), và mã giới
  * thiệu lấy từ chủ gian hàng do API trả. CTV đổi subdomain thì subdomain không còn trùng mã giới thiệu (SELLER-4).
  */
-export function rememberStorefront(slug: string, type?: string, ownerReferralCode?: string | null): void {
+export function rememberStorefront(slug: string, type?: string, ownerReferralCode?: string | null, fromLink = false): void {
   const current = read();
   const code = type === 'CTV' && ownerReferralCode ? ownerReferralCode.trim().toUpperCase() : null;
   const referralCode = code || current.referralCode;
@@ -124,9 +136,9 @@ export function rememberStorefront(slug: string, type?: string, ownerReferralCod
     referralCode,
     // Mã của chủ gian hàng CTV là mã CTV (API chỉ trả mã cho gian hàng CTV); các loại khác không đổi mã đang có.
     referralEligible: eligibilityFor(current, referralCode, code ? true : null),
-    clickedAt: clickedAtFor(current, referralCode),
+    clickedAt: clickedAtFor(current, referralCode, fromLink),
   });
-  if (type === 'CTV') savePendingRef({ referralCode: code, slug, kind: 'CTV' });
+  if (type === 'CTV') savePendingRef({ referralCode: code, slug, kind: 'CTV' }, fromLink);
 }
 
 /** Slug chỉ được gắn vào đơn khi là gian hàng CTV — xem ghi chú ở `kind`. */
@@ -164,7 +176,7 @@ export function rememberEntryLink(slug: string | null, ref: string | null): void
     // Mở lại link là một lượt bấm mới, kể cả cùng mã: hạn ghi công được làm mới như trước.
     clickedAt: Date.now(),
   });
-  savePendingRef({ referralCode, slug: slug ?? null, kind: slug ? 'CTV' : null });
+  savePendingRef({ referralCode, slug: slug ?? null, kind: slug ? 'CTV' : null }, true);
 }
 
 export interface PendingRef {
@@ -191,12 +203,15 @@ function writePendingRefs(list: PendingRef[]): void {
  * Nhớ link vừa mở ở cuối danh sách (mới nhất), tối đa PENDING_REF_MAX link. Chạm bù lúc đăng nhập đi từ cũ đến mới để máy chủ
  * chọn như last-touch: mã khách thường bị máy chủ bỏ qua, nên link CTV mở trước đó vẫn được ghi công.
  */
-function savePendingRef(ref: Omit<PendingRef, 'savedAt'>): void {
+function savePendingRef(ref: Omit<PendingRef, 'savedAt'>, fromLink: boolean): void {
   if (typeof window === 'undefined' || (!ref.referralCode && !ref.slug)) return;
   if ((ref.referralCode?.length ?? 0) > MAX_TOUCH_FIELD_LENGTH || (ref.slug?.length ?? 0) > MAX_TOUCH_FIELD_LENGTH) return;
   const now = Date.now();
-  const kept = readPendingRefs(now).filter((p) => !samePendingSource(p, ref));
-  writePendingRefs([...kept, { ...ref, savedAt: now }].slice(-PENDING_REF_MAX));
+  const all = readPendingRefs(now);
+  const kept = all.filter((p) => !samePendingSource(p, ref));
+  // Lúc lưu là lúc bấm: xem lại cùng nguồn trong app không làm mới nó, chỉ lượt đến từ link mới làm mới.
+  const prev = all.find((p) => samePendingSource(p, ref));
+  writePendingRefs([...kept, { ...ref, savedAt: fromLink || !prev ? now : prev.savedAt }].slice(-PENDING_REF_MAX));
 }
 
 /** Các bản chờ còn trong hạn, cũ nhất trước (rỗng nếu không có hoặc hỏng; bản hết hạn bị dọn luôn). */

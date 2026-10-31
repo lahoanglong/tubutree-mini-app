@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import { ApiError } from '@/lib/client-api';
 import {
   clearPendingRef,
+  consumeStorefrontLanding,
   confirmReferralTouch,
   ctvSlugFor,
   getStorefrontContext,
@@ -109,7 +110,7 @@ export function StorefrontTracker({ slug, type, referralCode }: { slug: string; 
   const userId = user?.id;
 
   useEffect(() => {
-    rememberStorefront(slug, type, referralCode);
+    rememberStorefront(slug, type, referralCode, consumeStorefrontLanding());
   }, [slug, type, referralCode]);
 
   useEffect(() => {

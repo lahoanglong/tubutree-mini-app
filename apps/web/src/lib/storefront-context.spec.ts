@@ -182,7 +182,7 @@ describe('bản chờ nguồn giới thiệu trong localStorage', () => {
     const stored = JSON.parse(localStorage.getItem(KEY)!);
     expect(Array.isArray(stored)).toBe(true);
     expect(typeof stored[0].savedAt).toBe('number');
-    rememberEntryLink('an-shop', null);
+    rememberEntryLink('an-shop', 'an123');
     expect(readPendingRefs()).toMatchObject([
       { referralCode: 'ABC', slug: null, kind: null },
       { referralCode: null, slug: 'an-shop', kind: 'CTV' },
@@ -198,7 +198,7 @@ describe('bản chờ nguồn giới thiệu trong localStorage', () => {
   });
 
   it('link ?ref= thuần (vd mã khách thường ở nút chia sẻ) không đè bản chờ của link CTV mở trước đó', () => {
-    rememberEntryLink('an-shop', null);
+    rememberEntryLink('an-shop', 'an123');
     rememberEntryLink(null, 'KHACH01');
     expect(readPendingRefs().map((p) => p.referralCode ?? p.slug)).toEqual(['an-shop', 'KHACH01']);
   });
@@ -296,6 +296,27 @@ describe('lúc bấm link (clickedAt) và dấu chạm theo người dùng', () 
     expect(getStorefrontContext().clickedAt).toBe(first);
     rememberStorefront('binh-shop', 'CTV', 'BINH9');
     expect(getStorefrontContext().clickedAt).toBe(Date.parse('2026-10-31T12:00:00Z'));
+  });
+
+  it('mở lại /s/<mã> từ link (fromLink) là lượt bấm mới dù cùng mã; điều hướng trong app thì giữ', () => {
+    rememberStorefront('an-shop', 'CTV', 'AN123', true);
+    vi.setSystemTime(new Date('2026-10-31T13:00:00Z'));
+    rememberStorefront('an-shop', 'CTV', 'AN123');
+    expect(getStorefrontContext().clickedAt).toBe(Date.parse('2026-10-31T10:00:00Z'));
+    rememberStorefront('an-shop', 'CTV', 'AN123', true);
+    expect(getStorefrontContext().clickedAt).toBe(Date.parse('2026-10-31T13:00:00Z'));
+  });
+
+  it('bản chờ: xem lại cùng nguồn trong app giữ lúc bấm cũ, mở lại từ link làm mới', () => {
+    localStorage.clear();
+    rememberEntryLink('an-shop', 'an123');
+    const first = readPendingRefs()[0].savedAt;
+    vi.setSystemTime(new Date('2026-10-31T12:00:00Z'));
+    rememberStorefront('an-shop', 'CTV', 'AN123');
+    expect(readPendingRefs().find((p) => p.slug === 'an-shop')!.savedAt).toBe(first);
+    vi.setSystemTime(new Date('2026-10-31T14:00:00Z'));
+    rememberEntryLink('an-shop', 'an123');
+    expect(readPendingRefs().find((p) => p.slug === 'an-shop')!.savedAt).toBe(Date.parse('2026-10-31T14:00:00Z'));
   });
 
   it('bản lưu cũ chưa có clickedAt đọc ra null', () => {
