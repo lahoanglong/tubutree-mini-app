@@ -186,6 +186,15 @@ function secretRow(group: string, id: string, title: string, key: string, env: E
   return pass(group, id, title, `${key} ${describeSecret(v)}`);
 }
 
+function zaloOpenApiKeyRow(env: Env): CheckResult {
+  const title = 'API Key webhook Mini App Zalo (rút đồng ý, xoá dữ liệu)';
+  const v = envValue(env, 'ZALO_OPEN_API_KEY');
+  if (!v) {
+    return warn(G_ZALO, 'env.zalo.open_api_key', title, 'ZALO_OPEN_API_KEY chưa đặt', 'Zalo tự tạo khoá này ở mini.zalo.me/developers, Open APIs, bấm Cập nhật. Đặt vào .env và deploy TRƯỚC khi lưu Webhook URL trên console (API trả 401 tới lúc đó); Zalo bắt buộc có Webhook URL trước khi gửi xét duyệt.');
+  }
+  return pass(G_ZALO, 'env.zalo.open_api_key', title, `ZALO_OPEN_API_KEY ${describeSecret(v)}`);
+}
+
 function pancakeChecks(env: Env): CheckResult[] {
   const out: CheckResult[] = [];
   const missing = ['PANCAKE_API_KEY', 'PANCAKE_SHOP_ID'].filter((k) => !envValue(env, k));
@@ -323,10 +332,7 @@ function zaloChecks(env: Env): CheckResult[] {
     }),
   );
   out.push(
-    secretRow(G_ZALO, 'env.zalo.open_api_key', 'API Key webhook Mini App Zalo (rút đồng ý, xoá dữ liệu)', 'ZALO_OPEN_API_KEY', env, {
-      status: 'WARN',
-      hint: 'Lấy ở mini.zalo.me/developers, Open APIs, Cập nhật (Zalo tạo API Key). Zalo bắt buộc có Webhook URL trước khi gửi xét duyệt phiên bản; để trống thì API từ chối mọi request tới webhook này.',
-    }),
+    zaloOpenApiKeyRow(env),
   );
   return out;
 }
