@@ -4,10 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 
 const navigate = vi.hoisted(() => vi.fn());
-vi.mock('zmp-ui', async (orig) => ({ ...(await orig<typeof import('zmp-ui')>()), useNavigate: () => navigate }));
+vi.mock('zmp-ui', async (orig) => ({ ...(await orig<Record<string, unknown>>()), useNavigate: () => navigate }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../../services/shop-api', async (orig) => ({
-  ...(await orig<typeof import('../../services/shop-api')>()),
+  ...(await orig<Record<string, unknown>>()),
   fetchActiveFlashSales: vi.fn(() => new Promise(() => {})),
   getPublicConfig: vi.fn(() => new Promise(() => {})),
 }));

@@ -82,7 +82,7 @@ describe('CatalogGrid', () => {
     renderGrid(undefined, [SALE]);
     const badge = await screen.findByText(/Giờ vàng -38%/);
     expect(badge.textContent).toBe('Giờ vàng -38%');
-    expect(badge.querySelector('svg')).not.toBeNull();
+    expect(badge.closest('[data-ds-part="image-badge"]')!.querySelector('svg')).not.toBeNull();
     expect(screen.getByText('75.000đ')).toBeInTheDocument();
     expect(screen.getByText('120.000đ')).toHaveStyle({ textDecoration: 'line-through' });
     expect(screen.queryByText('150.000đ')).toBeNull();

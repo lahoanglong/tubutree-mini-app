@@ -13,7 +13,6 @@ import {
   fetchActiveFlashSales,
   type CartSummary,
   type VariationDetail,
-  type ProductCard as ProductCardData,
   type FlashSaleActiveItem,
 } from '../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage, isNotFoundError } from '../services/api';

@@ -8,7 +8,7 @@ import { productCardView, type CardVariant, type ProductCardView } from '@tubutr
 import { tileBodyHeight } from '@tubutree/app-core/commerce/tile-metrics';
 
 const navigate = vi.hoisted(() => vi.fn());
-vi.mock('zmp-ui', async (orig) => ({ ...(await orig<typeof import('zmp-ui')>()), useNavigate: () => navigate }));
+vi.mock('zmp-ui', async (orig) => ({ ...(await orig<Record<string, unknown>>()), useNavigate: () => navigate }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { ProductTile, TILE_NAME_MIN_HEIGHT } from './product-tile';

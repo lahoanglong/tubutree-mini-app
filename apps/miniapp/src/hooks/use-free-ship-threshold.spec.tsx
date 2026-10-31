@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../services/shop-api', async (orig) => ({ ...(await orig<typeof import('../services/shop-api')>()), getPublicConfig: vi.fn(() => new Promise(() => {})) }));
+vi.mock('../services/shop-api', async (orig) => ({ ...(await orig<Record<string, unknown>>()), getPublicConfig: vi.fn(() => new Promise(() => {})) }));
 
 import { useFreeShipThreshold } from './use-free-ship-threshold';
 
