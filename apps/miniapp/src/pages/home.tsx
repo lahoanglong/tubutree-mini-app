@@ -7,7 +7,7 @@ import { useAuthStore } from '../store/auth';
 import { useCategories } from '../hooks/use-categories';
 import { useHomeCustomerKind } from '../hooks/use-home-customer-kind';
 import { usePurchasedItems } from '../hooks/use-purchased-items';
-import { FlashSale, UpcomingFlashSales } from '../components/flash-sale';
+import { FlashSale } from '../components/flash-sale';
 import { PullToRefresh } from '../components/pull-to-refresh';
 import { PURCHASED_RAIL_LIMIT } from '../components/reorder/purchased-rail';
 import { BEST_SELLER_LIMIT } from '../components/home/best-seller-rail';
@@ -81,13 +81,14 @@ export default function HomePage() {
 
   // Lần mở đầu chưa biết loại khách: các khối dưới thẻ thành viên chờ dữ liệu quyết định hình dạng của chúng rồi hiện cùng lúc, nên tải sớm các
   // query mà khối nào cũng sẽ dùng (cùng khoá, không thêm request).
-  const flash = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 });
-  const upcoming = useQuery({ queryKey: ['flash-sales', 'upcoming'], queryFn: fetchUpcomingFlashSales, enabled: authed, staleTime: 30_000 });
+  const flash = useBlockQuery(useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 }));
+  // Khối Giờ vàng đọc cùng khoá này cho dòng "suất kế"; công khai nên khách chưa đăng nhập cũng tải.
+  const upcoming = useQuery({ queryKey: ['flash-sales', 'upcoming'], queryFn: fetchUpcomingFlashSales, staleTime: 30_000 });
   const todo = useHomeTodoQueries();
   const belowState = useHomeBelow();
   const settling = useHomeSettling(
     kind,
-    todo.loading || flash.isLoading || (authed && upcoming.isLoading) || categories.isLoading,
+    todo.loading || flash.isLoading || upcoming.isLoading || categories.isLoading,
     sessionFailed,
   );
 
@@ -120,12 +121,7 @@ export default function HomePage() {
     shortcuts: <ShortcutGrid />,
     // Lỗi tải Mua lại (kể cả 404 của API cũ) đưa trang về bố cục khách mới, nơi khối này không có mặt, nên khối tự có trạng thái lỗi riêng ở PurchasedRail.
     purchased: <HomePurchasedRail source="home_rail" restoring={restoring} />,
-    flash: (
-      <>
-        <FlashSale />
-        <UpcomingFlashSales />
-      </>
-    ),
+    flash: <FlashSale items={flash.data ?? []} loading={flash.isLoading} error={flash.error} onRetry={flash.refetch} retrying={flash.isFetching} />,
     categories: (
       <CategoryRow
         entries={categories.entries}

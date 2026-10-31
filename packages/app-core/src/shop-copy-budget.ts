@@ -24,6 +24,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'flash.buy': 12,
   'flash.remind': 12,
   'flash.reminded': 12,
+  'flash.nextSlot': 28,
   'flash.remindedToast': null,
   'flash.unremindToast': null,
   'flash.emptyTitle': null,

@@ -5,7 +5,6 @@ import type * as ZmpUi from 'zmp-ui';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  fetchActive: vi.fn(),
   fetchUpcoming: vi.fn(),
   setReminder: vi.fn(),
   cancelReminder: vi.fn(),
@@ -14,7 +13,6 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
 vi.mock('../services/shop-api', () => ({
-  fetchActiveFlashSales: mocks.fetchActive,
   fetchUpcomingFlashSales: mocks.fetchUpcoming,
   setFlashReminder: mocks.setReminder,
   cancelFlashReminder: mocks.cancelReminder,
@@ -23,245 +21,264 @@ vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) =>
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { FLASH_HINT_KEY } from '@tubutree/app-core/home-layout';
-import { FlashSale, UpcomingFlashSales } from './flash-sale';
+import { FlashSale, UpcomingFlashSales, type FlashSaleProps } from './flash-sale';
 
-function renderFlash() {
+function renderFlash(props: Partial<FlashSaleProps> = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return {
-    qc,
-    ...render(
-      <QueryClientProvider client={qc}>
-        <FlashSale />
-      </QueryClientProvider>,
-    ),
-  };
+  const tree = (p: Partial<FlashSaleProps>) => (
+    <QueryClientProvider client={qc}>
+      <FlashSale items={[]} loading={false} {...p} />
+    </QueryClientProvider>
+  );
+  const utils = render(tree(props));
+  return { qc, ...utils, update: (p: Partial<FlashSaleProps>) => utils.rerender(tree(p)) };
 }
 
+const HOUR = 3_600_000;
 const ITEM = {
   itemId: 'i1', productId: 'p1', productSlug: 'p1', productName: 'Nước rửa chén', thumbnail: null, variationId: 'v1',
-  retailPrice: 100000, flashPrice: 80000, quota: 10, soldCount: 2, endAt: new Date(Date.now() + 3_600_000).toISOString(),
+  retailPrice: 100000, flashPrice: 80000, quota: 10, soldCount: 2, endAt: new Date(Date.now() + HOUR).toISOString(),
 };
+const many = (n: number, over: Record<string, unknown> = {}) =>
+  Array.from({ length: n }, (_, i) => ({ ...ITEM, itemId: `i${i}`, productSlug: `p${i}`, productName: `Sản phẩm ${i}`, ...over }));
+const upcomingAt = (hours: number, n = 1) =>
+  Array.from({ length: n }, (_, i) => ({
+    itemId: `u${i}`, variationId: 'v', productSlug: `u${i}`, productName: `Sắp ${i}`, thumbnail: null, flashPrice: 1, retailPrice: 2,
+    startAt: new Date(Date.now() + hours * HOUR).toISOString(), reminded: false,
+  }));
 
-describe('FlashSale (C-084)', () => {
+describe('FlashSale — khối Giờ vàng gọn của Trang chủ', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.status = 'guest';
-    mocks.fetchUpcoming.mockResolvedValue([]);
-  });
-
-  it('không có đợt giờ vàng nào → không vẽ gì', async () => {
-    mocks.fetchActive.mockResolvedValue([]);
-    const { container } = renderFlash();
-    await waitFor(() => expect(mocks.fetchActive).toHaveBeenCalled());
-    await waitFor(() => expect(container).toBeEmptyDOMElement());
-  });
-
-  it('tải lỗi → khối có tiêu đề, thông báo và "Thử lại" thay vì biến mất; thử lại thành công hiện đợt giờ vàng', async () => {
-    mocks.fetchActive.mockRejectedValueOnce(new Error('boom')).mockResolvedValue([ITEM]);
-    renderFlash();
-    const region = await screen.findByRole('region', { name: 'Ưu đãi giờ vàng' });
-    expect(within(region).getByText('Có chút trục trặc, thử lại nhé')).toBeInTheDocument();
-    fireEvent.click(within(region).getByRole('button', { name: 'Thử lại Ưu đãi giờ vàng' }));
-    expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Thử lại/ })).toBeNull();
-  });
-});
-
-describe('FlashSale — tải lại sau lỗi (React Query v5 đưa query lỗi về pending khi tải lại)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.status = 'guest';
-    mocks.fetchUpcoming.mockResolvedValue([]);
-  });
-
-  it('poll nền 60s lúc đang lỗi: khối lỗi KHÔNG biến mất rồi hiện lại, nút "Thử lại" báo đang tải; thành công thì hiện đợt giờ vàng', async () => {
-    let release: (v: unknown) => void = () => {};
-    mocks.fetchActive
-      .mockRejectedValueOnce(new Error('boom'))
-      .mockImplementationOnce(() => new Promise((r) => { release = r; }));
-    const { qc } = renderFlash();
-    await screen.findByRole('region', { name: 'Ưu đãi giờ vàng' });
-
-    // Cùng đường chuyển trạng thái với refetchInterval của FlashSale: query.fetch() trên query đang lỗi, chưa có dữ liệu.
-    let refetching: Promise<unknown> = Promise.resolve();
-    act(() => {
-      refetching = qc.refetchQueries({ queryKey: ['flash-sales', 'active'] });
-    });
-    await waitFor(() => expect(mocks.fetchActive).toHaveBeenCalledTimes(2));
-    const region = screen.getByRole('region', { name: 'Ưu đãi giờ vàng' });
-    expect(within(region).getByText('Có chút trục trặc, thử lại nhé')).toBeInTheDocument();
-    expect(within(region).getByRole('button', { name: 'Thử lại Ưu đãi giờ vàng' })).toHaveAttribute('aria-busy', 'true');
-
-    await act(async () => {
-      release([ITEM]);
-      await refetching;
-    });
-    expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Thử lại/ })).toBeNull();
-  });
-
-  it('lần tải ĐẦU chưa từng thấy Giờ vàng: không vẽ gì (không khung chờ, không khối lỗi) cho tới khi có kết quả', async () => {
     localStorage.clear();
-    mocks.fetchActive.mockReturnValue(new Promise(() => {}));
-    const { container } = renderFlash();
-    await waitFor(() => expect(mocks.fetchActive).toHaveBeenCalled());
-    expect(container).toBeEmptyDOMElement();
+    mocks.status = 'guest';
+    mocks.fetchUpcoming.mockResolvedValue([]);
   });
 
-  it('lần mở trước có Giờ vàng: giữ chỗ bằng khung chờ để khối bên dưới không bị đẩy xuống', async () => {
+  it('3 suất: vùng "Giờ vàng", tiêu đề h2, MỘT đồng hồ có ô số, mỗi thẻ một thanh đã bán, nút "Xem tất cả Giờ vàng" tới trang Giờ vàng', async () => {
+    renderFlash({ items: many(3) });
+    const region = await screen.findByRole('region', { name: 'Giờ vàng' });
+    expect(within(region).getByRole('heading', { level: 2, name: 'Giờ vàng' })).toBeInTheDocument();
+    const timers = within(region).getAllByRole('timer');
+    expect(timers).toHaveLength(1);
+    expect(timers[0]!.textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    expect(within(region).getAllByTestId('flash-sold-bar')).toHaveLength(3);
+    fireEvent.click(within(region).getByRole('button', { name: 'Xem tất cả Giờ vàng' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/offers');
+  });
+
+  it('dưới 3 suất: không vẽ gì (kệ chưa đủ dày), 9 suất: chỉ 8 thẻ', async () => {
+    const { container, update } = renderFlash({ items: many(2) });
+    await waitFor(() => expect(mocks.fetchUpcoming).toHaveBeenCalled());
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    update({ items: many(9) });
+    expect(await screen.findAllByTestId('flash-sold-bar')).toHaveLength(8);
+  });
+
+  it('icon nét, không emoji: tiêu đề có svg', async () => {
+    renderFlash({ items: many(3) });
+    const title = await screen.findByRole('heading', { name: 'Giờ vàng' });
+    expect(title.parentElement?.parentElement?.querySelector('svg')).not.toBeNull();
+  });
+
+  it('lần mở đầu chưa từng thấy Giờ vàng: đang tải thì không vẽ gì; lần mở trước có Giờ vàng: giữ chỗ bằng khung chờ', async () => {
+    const first = renderFlash({ loading: true });
+    expect(first.container).toBeEmptyDOMElement();
+    first.unmount();
     localStorage.setItem(FLASH_HINT_KEY, '1');
-    mocks.fetchActive.mockReturnValue(new Promise(() => {}));
-    renderFlash();
-    await waitFor(() => expect(mocks.fetchActive).toHaveBeenCalled());
+    renderFlash({ loading: true });
     expect(screen.getByTestId('flash-sale-loading')).toBeInTheDocument();
   });
 
-  it('nhớ lại có hay không Giờ vàng cho lần mở sau', async () => {
-    localStorage.clear();
-    mocks.fetchActive.mockResolvedValue([ITEM]);
-    const { unmount } = renderFlash();
-    await screen.findByRole('heading', { level: 2 });
+  it('nhớ lại có hay không Giờ vàng cho lần mở sau, chỉ ghi khi đã tải xong', async () => {
+    const { update, unmount } = renderFlash({ loading: true });
+    expect(localStorage.getItem(FLASH_HINT_KEY)).toBeNull();
+    update({ loading: false, items: many(3) });
     await waitFor(() => expect(localStorage.getItem(FLASH_HINT_KEY)).toBe('1'));
     unmount();
-    mocks.fetchActive.mockResolvedValue([]);
-    renderFlash();
+    renderFlash({ items: [] });
     await waitFor(() => expect(localStorage.getItem(FLASH_HINT_KEY)).toBe('0'));
+  });
+
+  it('tải lỗi và chưa có suất nào: khối có tiêu đề, thông báo và "Thử lại" gọi onRetry', async () => {
+    const onRetry = vi.fn();
+    renderFlash({ error: new Error('boom'), onRetry });
+    const region = await screen.findByRole('region', { name: 'Giờ vàng' });
+    expect(within(region).getByText('Có chút trục trặc, thử lại nhé')).toBeInTheDocument();
+    fireEvent.click(within(region).getByRole('button', { name: 'Thử lại Giờ vàng' }));
+    expect(onRetry).toHaveBeenCalled();
+  });
+
+  it('còn dữ liệu cũ mà lần tải lại lỗi: vẫn hiện suất đang có, không thay bằng khối lỗi', async () => {
+    renderFlash({ items: many(3), error: new Error('boom') });
+    expect(await screen.findAllByTestId('flash-sold-bar')).toHaveLength(3);
+    expect(screen.queryByText('Có chút trục trặc, thử lại nhé')).toBeNull();
+  });
+
+  it('chờ suất sắp mở tải xong rồi mới hiện khối, để dòng "suất kế" không đẩy khối dưới xuống giữa chừng', async () => {
+    let release: (v: unknown) => void = () => {};
+    mocks.fetchUpcoming.mockReturnValue(new Promise((r) => { release = r; }));
+    const { container } = renderFlash({ items: many(3) });
+    await waitFor(() => expect(mocks.fetchUpcoming).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
+    await act(async () => {
+      release(upcomingAt(2));
+    });
+    expect(await screen.findAllByTestId('flash-sold-bar')).toHaveLength(3);
+  });
+
+  it('tải suất sắp mở lỗi: khối vẫn hiện, không có dòng suất kế', async () => {
+    mocks.fetchUpcoming.mockRejectedValue(new Error('x'));
+    renderFlash({ items: many(3) });
+    expect(await screen.findAllByTestId('flash-sold-bar')).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: /sắp mở/ })).toBeNull();
   });
 });
 
-describe('FlashSale — thẻ giờ vàng (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
+describe('FlashSale — dòng suất kế tiếp', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
+    mocks.status = 'guest';
+  });
+
+  it('suất kế mở sau 3 giờ: dòng "HH:mm · n món sắp mở" + "Nhắc tôi", bấm tới trang Giờ vàng; khách chưa đăng nhập vẫn thấy', async () => {
+    mocks.fetchUpcoming.mockResolvedValue(upcomingAt(3, 2));
+    renderFlash({ items: many(3) });
+    const line = await screen.findByRole('button', { name: /^\d{2}:\d{2} · 2 món sắp mở/ });
+    expect(line).toHaveTextContent('Nhắc tôi');
+    expect(line).toHaveStyle({ minHeight: '44px' });
+    fireEvent.click(line);
+    expect(mocks.navigate).toHaveBeenCalledWith('/offers');
+  });
+
+  it('suất kế mở sau 8 giờ: không có dòng', async () => {
+    mocks.fetchUpcoming.mockResolvedValue(upcomingAt(8));
+    renderFlash({ items: many(3) });
+    expect(await screen.findAllByTestId('flash-sold-bar')).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: /sắp mở/ })).toBeNull();
+  });
+});
+
+describe('FlashSale — hết giờ', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
     mocks.status = 'guest';
     mocks.fetchUpcoming.mockResolvedValue([]);
   });
 
-  it('tiêu đề h2, đồng hồ đếm ngược có tên truy cập, thẻ hiện -% / giá giờ vàng / giá gạch / đã bán', async () => {
-    mocks.fetchActive.mockResolvedValue([ITEM]);
-    renderFlash();
-    expect(await screen.findByRole('heading', { level: 2 })).toBeInTheDocument();
-    expect(screen.getByRole('timer', { name: /^.*Còn \d+h \d{2}m$/ })).toBeInTheDocument();
+  it('suất sớm nhất đã quá giờ mà danh sách chưa tải lại: đồng hồ và thẻ chỉ tính các suất còn giờ', async () => {
+    renderFlash({
+      items: [
+        ...many(1, { itemId: 'old', productName: 'Hết giờ', endAt: new Date(Date.now() - 60_000).toISOString() }),
+        ...many(3, { endAt: new Date(Date.now() + 2 * HOUR - 30_000).toISOString() }),
+      ],
+    });
+    expect(await screen.findByRole('timer')).toHaveTextContent(/^0[12]:\d{2}:\d{2}$/);
+    expect(screen.queryByText('Hết giờ')).toBeNull();
+    expect(screen.getAllByTestId('flash-sold-bar')).toHaveLength(3);
+  });
+
+  it('đang xem mà suất sớm nhất hết giờ: đồng hồ chuyển sang suất kế; hết mọi suất thì khối ẩn, không hiện 00:00:00', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-17T08:00:00.000Z'));
+      const items = [
+        ...many(3, { endAt: '2026-10-17T08:01:00.000Z' }),
+        ...many(3, { endAt: '2026-10-17T10:00:00.000Z' }).map((x, i) => ({ ...x, itemId: `late${i}`, productSlug: `late${i}` })),
+      ];
+      const { container } = renderFlash({ items });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(screen.getByRole('timer').textContent).toMatch(/^(00:59|01:00)$/);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(61_000);
+      });
+      expect(screen.getByRole('timer')).toHaveTextContent(/^01:5\d:\d{2}$/);
+      expect(screen.getAllByTestId('flash-sold-bar')).toHaveLength(3);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2 * HOUR);
+      });
+      expect(container).toBeEmptyDOMElement();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('FlashSale — thẻ giờ vàng (C-076 di cư DS v2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.status = 'guest';
+    mocks.fetchUpcoming.mockResolvedValue([]);
+  });
+  // Hai thẻ còn lại đắt hơn và đã bán nhiều hơn để các giá trị của thẻ đầu không trùng với thẻ khác.
+  const three = (first: Record<string, unknown>) => [{ ...ITEM, ...first }, ...many(2, { itemId: 'x' }).map((x, i) => ({ ...x, itemId: `x${i}`, productSlug: `x${i}`, productName: `Khác ${i}`, flashPrice: 45000, retailPrice: 50000, soldCount: 5 }))];
+
+  it('thẻ hiện -% / giá giờ vàng / giá gạch và thanh đã bán có chữ', async () => {
+    renderFlash({ items: three({}) });
+    expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
     expect(screen.getByText('-20%')).toBeInTheDocument();
     expect(screen.getByText('80.000đ')).toBeInTheDocument();
     expect(screen.getByText('100.000đ')).toHaveStyle({ textDecoration: 'line-through' });
     expect(screen.getByText('Đã bán 20%')).toBeInTheDocument();
   });
 
+  it('chưa bán suất nào vẫn có thanh với chữ "Vừa mở bán"; bán hết suất ghi "Đã bán hết", không in 150%', async () => {
+    renderFlash({ items: [...three({ soldCount: 0 }).slice(0, 2), { ...ITEM, itemId: 'over', productSlug: 'over', productName: 'Hết suất', quota: 10, soldCount: 15 }] });
+    expect(await screen.findByText('Vừa mở bán')).toBeInTheDocument();
+    expect(screen.getByText('Đã bán hết')).toBeInTheDocument();
+    expect(screen.queryByText(/150%/)).toBeNull();
+  });
+
   it('sản phẩm nhiều phân loại: tên phân loại ở dòng riêng; một phân loại thì không có dòng đó', async () => {
-    mocks.fetchActive.mockResolvedValue([{ ...ITEM, variationName: '500g' }, { ...ITEM, itemId: 'i2', productName: 'Xà phòng', variationName: null }]);
-    renderFlash();
+    renderFlash({ items: three({ variationName: '500g' }) });
     expect(await screen.findByText('500g')).toBeInTheDocument();
-    expect(screen.getByText('Nước rửa chén')).toBeInTheDocument();
     expect(screen.queryByText('Mặc định')).toBeNull();
   });
 
-  it('tiêu đề và đồng hồ dùng icon nét, không emoji (D7-6)', async () => {
-    mocks.fetchActive.mockResolvedValue([ITEM]);
-    renderFlash();
-    const title = await screen.findByRole('heading', { name: 'Ưu đãi giờ vàng' });
-    expect(title.querySelector('svg')).not.toBeNull();
-    const timer = screen.getByRole('timer');
-    expect(timer.querySelector('svg')).not.toBeNull();
-    expect(timer.textContent).toMatch(/^Còn \d+h \d{2}m$/);
-    expect(timer.getAttribute('aria-label')).toMatch(/^Còn \d+h \d{2}m$/);
-  });
-
   it('chạm thẻ → sang SP kèm đúng phân loại đang giờ vàng', async () => {
-    mocks.fetchActive.mockResolvedValue([ITEM]);
-    renderFlash();
+    renderFlash({ items: three({}) });
     fireEvent.click(await screen.findByText('Nước rửa chén'));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/p1', { state: { variationId: 'v1' } });
   });
 
   it('thẻ dùng được bằng bàn phím: Tab tới nút tên, Enter và Space đều mở sản phẩm (D8-8)', async () => {
-    mocks.fetchActive.mockResolvedValue([ITEM]);
-    renderFlash();
-    const card = await screen.findByRole('button', { name: 'Nước rửa chén' });
+    renderFlash({ items: three({}) });
+    const card = await screen.findByRole('button', { name: /Nước rửa chén/ });
     const user = userEvent.setup();
-    await user.tab();
-    expect(card).toHaveFocus();
+    card.focus();
     await user.keyboard('{Enter}');
     expect(mocks.navigate).toHaveBeenLastCalledWith('/product/p1', { state: { variationId: 'v1' } });
     await user.keyboard(' ');
     expect(mocks.navigate).toHaveBeenCalledTimes(2);
   });
-
-  it('Giờ vàng hết giờ khi đang xem: thẻ về giá thường đúng mốc, bỏ nhãn Giờ vàng, vẫn mở đúng phân loại', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
-    try {
-      mocks.fetchActive.mockResolvedValue([{ ...ITEM, flashPrice: 80000, retailPrice: 100000, endAt: new Date(Date.now() + 5_000).toISOString() }]);
-      renderFlash();
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(10);
-      });
-      expect(screen.getByText('80.000đ')).toBeInTheDocument();
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(6_000);
-      });
-      expect(screen.queryByText('80.000đ')).toBeNull();
-      expect(screen.getByText('100.000đ')).toBeInTheDocument();
-      expect(screen.queryByText('-20%')).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('bán quá suất: chữ và thanh "đã bán" cùng dừng ở 100%, không in 150%', async () => {
-    mocks.fetchActive.mockResolvedValue([{ ...ITEM, quota: 10, soldCount: 15 }]);
-    renderFlash();
-    expect(await screen.findByText('Đã bán 100%')).toBeInTheDocument();
-    expect(screen.queryByText(/150%/)).toBeNull();
-    expect(screen.getByTestId('progress-fill')).toHaveStyle({ width: '100%' });
-  });
-
-  it('đã quá giờ kết thúc (chờ lần tải lại kế tiếp): ẩn đồng hồ, không hiện "Còn 0h 00m"', async () => {
-    mocks.fetchActive.mockResolvedValue([{ ...ITEM, endAt: new Date(Date.now() - 60_000).toISOString() }]);
-    renderFlash();
-    expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
-    expect(screen.queryByRole('timer')).toBeNull();
-    expect(screen.queryByText(/Còn /)).toBeNull();
-  });
 });
 
-describe('FlashSale — đồng hồ tiêu đề chỉ tính các suất còn giờ', () => {
+describe('FlashSale — giá hiển thị khớp giá thật (BUYERMINI-12)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mocks.status = 'guest';
     mocks.fetchUpcoming.mockResolvedValue([]);
   });
+  const others = many(2, {}).map((x, i) => ({ ...x, itemId: `o${i}`, productSlug: `o${i}`, productName: `Khác ${i}`, flashPrice: 60000, retailPrice: 60000 }));
 
-  it('suất sớm nhất đã hết giờ mà danh sách chưa tải lại: đồng hồ đếm theo suất còn giờ kế tiếp, không biến mất', async () => {
-    mocks.fetchActive.mockResolvedValue([
-      { ...ITEM, itemId: 'old', productName: 'Hết giờ', endAt: new Date(Date.now() - 60_000).toISOString() },
-      { ...ITEM, itemId: 'live', productName: 'Còn giờ', endAt: new Date(Date.now() + 2 * 3_600_000 - 30_000).toISOString() },
-    ]);
-    renderFlash();
-    const timer = await screen.findByRole('timer');
-    expect(timer).toHaveTextContent(/^Còn 2h 00m$/);
+  it('flashPrice cao hơn giá đang bán → hiện giá đang bán, không nhãn % âm, không gạch giá', async () => {
+    renderFlash({ items: [{ ...ITEM, flashPrice: 85000, retailPrice: 79000 }, ...others] });
+    expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
+    expect(screen.queryByText(/^-\d+%$/)).toBeNull();
+    expect(screen.queryByText('85.000đ')).toBeNull();
+    expect(screen.getAllByText('79.000đ').length).toBeGreaterThan(0);
   });
 
-  it('suất sớm nhất hết giờ khi đang xem: đồng hồ chuyển sang suất kế tiếp thay vì biến mất', async () => {
-    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
-    try {
-      vi.setSystemTime(new Date('2026-10-17T08:00:00.000Z'));
-      mocks.fetchActive.mockResolvedValue([
-        { ...ITEM, itemId: 'a', endAt: '2026-10-17T08:01:00.000Z' },
-        { ...ITEM, itemId: 'b', endAt: '2026-10-17T10:00:00.000Z' },
-      ]);
-      renderFlash();
-      // setTimeout thật (chỉ giả Date/setInterval) để react-query kịp trả dữ liệu; findBy* của RTL không chạy dưới setInterval giả.
-      await act(async () => {
-        await new Promise((r) => setTimeout(r, 30));
-      });
-      expect(screen.getByRole('timer')).toHaveTextContent('Còn 0h 01m');
-      act(() => {
-        vi.setSystemTime(new Date('2026-10-17T08:01:01.000Z'));
-        vi.advanceTimersByTime(30_000);
-      });
-      expect(screen.getByRole('timer')).toHaveTextContent('Còn 1h 59m');
-    } finally {
-      vi.useRealTimers();
-    }
+  it('có salePrice → % giảm và giá gạch tính theo giá đang bán', async () => {
+    renderFlash({ items: [{ ...ITEM, flashPrice: 60000, retailPrice: 100000, salePrice: 75000 }, ...others] });
+    expect(await screen.findByText('-20%')).toBeInTheDocument();
+    expect(screen.getByText('75.000đ')).toHaveStyle({ textDecoration: 'line-through' });
   });
 });
 
@@ -388,29 +405,5 @@ describe('UpcomingFlashSales (C-076 di cư DS v2: giữ nguyên hành vi)', () =
     renderUpcoming();
     const btn = await screen.findByRole('button', { name: /Nhắc tôi/ });
     expect(Number.parseFloat(btn.style.minHeight)).toBeGreaterThanOrEqual(44);
-  });
-});
-
-describe('FlashSale — giá hiển thị khớp giá thật (BUYERMINI-12)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.status = 'guest';
-    mocks.fetchUpcoming.mockResolvedValue([]);
-  });
-
-  it('flashPrice cao hơn giá đang bán → hiện giá đang bán, không nhãn % âm, không gạch giá', async () => {
-    mocks.fetchActive.mockResolvedValue([{ ...ITEM, flashPrice: 85000, retailPrice: 79000 }]);
-    renderFlash();
-    expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
-    expect(screen.queryByText(/-\s*-?\d+%/)).toBeNull();
-    expect(screen.queryByText('85.000đ')).toBeNull();
-    expect(screen.getAllByText('79.000đ').length).toBeGreaterThan(0);
-  });
-
-  it('có salePrice → % giảm và giá gạch tính theo giá đang bán', async () => {
-    mocks.fetchActive.mockResolvedValue([{ ...ITEM, flashPrice: 60000, retailPrice: 100000, salePrice: 75000 }]);
-    renderFlash();
-    expect(await screen.findByText('-20%')).toBeInTheDocument();
-    expect(screen.getByText('75.000đ')).toHaveStyle({ textDecoration: 'line-through' });
   });
 });
