@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { productCardView, type CardVariant, type ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
-import { tileBodyHeight } from '@tubutree/app-core/commerce/tile-metrics';
+import { tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
 import { click } from '@/test-utils/dom';
 import { mount } from './harness';
 import { ProductTile, TILE_NAME_MIN_HEIGHT } from './product-tile';
@@ -86,6 +86,17 @@ describe('ProductTile: biến thể và khung', () => {
     expect(find(plain, '52.000đ').style.fontSize).toBe('var(--type-price-tile-size)');
     const deal = tile(viewOf({ basePrice: 52_000, salePrice: 39_000 }), 'grid');
     expect(find(deal, '39.000đ').style.color).toBe('var(--color-text-price-deal)');
+  });
+
+  it('thẻ xếp chồng giữ chỗ dòng giá gạch ngay dưới giá dù không giảm giá (số giá thẳng hàng khi cạnh thẻ có giá gạch); grid thì không', () => {
+    const reserved = `${TILE_METRICS.price + TILE_METRICS.compare}px`;
+    for (const variant of ['rail-sm', 'rail-md', 'flash', 'rank'] as const) {
+      const plain = tile(viewOf({}, variant), variant);
+      const sale = tile(viewOf({ salePrice: 39_000 }, variant), variant);
+      expect(part(plain, 'price')!.style.minHeight, `${variant} giá thường`).toBe(reserved);
+      expect(part(sale, 'price')!.style.minHeight, `${variant} giá giảm`).toBe(reserved);
+    }
+    expect(part(tile(viewOf({}, 'grid'), 'grid'), 'price')!.style.minHeight).toBe('');
   });
 
   it('giá gạch xếp chồng ở thẻ hẹp, cùng hàng ở grid', () => {

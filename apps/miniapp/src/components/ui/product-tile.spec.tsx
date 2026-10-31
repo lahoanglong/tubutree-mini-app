@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { productCardView, type CardVariant, type ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
-import { tileBodyHeight } from '@tubutree/app-core/commerce/tile-metrics';
+import { tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
 
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock('zmp-ui', async (orig) => ({ ...(await orig<Record<string, unknown>>()), useNavigate: () => navigate }));
@@ -83,6 +83,19 @@ describe('ProductTile: biến thể và khung', () => {
     plain.unmount();
     const deal = render(<ProductTile view={viewOf({ basePrice: 52_000, salePrice: 39_000 })} variant="grid" href="/p" />);
     expect(within(deal.container).getByText('39.000đ').style.color).toBe('var(--color-text-price-deal)');
+  });
+
+  it('thẻ xếp chồng giữ chỗ dòng giá gạch ngay dưới giá dù không giảm giá (số giá thẳng hàng khi cạnh thẻ có giá gạch); grid thì không', () => {
+    const reserved = `${TILE_METRICS.price + TILE_METRICS.compare}px`;
+    const priceBlock = (variant: CardVariant, over: Partial<ProductCard>) => {
+      const { container } = render(<ProductTile view={viewOf(over, variant)} variant={variant} href="/product/serum-x" />);
+      return container.querySelector('[data-ds-part="price"]') as HTMLElement;
+    };
+    for (const variant of ['rail-sm', 'rail-md', 'flash', 'rank'] as const) {
+      expect(priceBlock(variant, {}).style.minHeight, `${variant} giá thường`).toBe(reserved);
+      expect(priceBlock(variant, { salePrice: 39_000 }).style.minHeight, `${variant} giá giảm`).toBe(reserved);
+    }
+    expect(priceBlock('grid', {}).style.minHeight).toBe('');
   });
 
   it('giá gạch xếp chồng ở thẻ hẹp, cùng hàng ở grid', () => {

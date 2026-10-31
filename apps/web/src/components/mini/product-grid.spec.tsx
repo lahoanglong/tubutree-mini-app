@@ -78,6 +78,13 @@ describe('ProductRail', () => {
     expect(await width('rail-md')).toBe('var(--tile-w-md)');
   });
 
+  it('kệ tràn lề bằng class: dưới md bù lề 16px của trang, từ md chỉ bù đúng đệm 12px của kệ (thẻ đầu thẳng tiêu đề, không lấn cột nội dung)', async () => {
+    const region = (await mount(<ProductRail items={ITEMS.slice(0, 1)} variant="rail-md" label="Kệ" />)).querySelector('[role="region"]') as HTMLElement;
+    expect(region.className.split(' ')).toEqual(expect.arrayContaining(['-mx-4', 'md:-mx-3', 'max-w-none']));
+    expect(region.style.margin).toBe('');
+    expect(region.style.padding).toBe('var(--rail-pad-block)');
+  });
+
   it('có vùng cuộn có tên; loading vẽ khung chờ đúng số lượng', async () => {
     const c = await mount(<ProductRail items={[]} variant="rail-md" label="Sản phẩm bán chạy" loading skeletonCount={3} />);
     expect(c.querySelector('[role="region"]')!.getAttribute('aria-label')).toBe('Sản phẩm bán chạy');

@@ -290,7 +290,8 @@ export function ProductTile({
           </div>
         )}
         <div style={{ marginTop: 'auto', paddingTop: TILE_METRICS.gap, minWidth: 0 }}>
-          <div data-ds-part="price" aria-hidden style={{ display: 'flex', minHeight: hidePrice ? TILE_METRICS.price + (STACKED.has(variant) ? TILE_METRICS.compare : 0) : undefined }}>
+          {/* Thẻ xếp chồng luôn giữ chỗ dòng giá gạch ngay dưới giá: thẻ giá thường đứng cạnh thẻ đang giảm vẫn có số giá cùng độ cao. */}
+          <div data-ds-part="price" aria-hidden style={{ display: 'flex', minHeight: hidePrice || STACKED.has(variant) ? TILE_METRICS.price + (STACKED.has(variant) ? TILE_METRICS.compare : 0) : undefined }}>
             {price}
           </div>
           {hasNote && (

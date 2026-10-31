@@ -117,6 +117,29 @@ test.describe('Thẻ sản phẩm cùng nhịp ở 375px', () => {
   });
 });
 
+test.describe('Kệ Bán chạy 375px: số giá chính thẳng hàng', () => {
+  test.use({ viewport: { width: 375, height: 812 } });
+
+  test('thẻ giá thường đứng cạnh thẻ đang giảm vẫn có số giá cùng độ cao (khối giá giữ chỗ dòng giá gạch)', async ({ page, api }) => {
+    mockRhythm(api);
+    await page.goto('/');
+    const rail = page.getByRole('region', { name: 'Sản phẩm bán chạy' });
+    await expect(rail.locator('[data-ds="product-tile"]')).toHaveCount(FIXTURE.length, { timeout: 15_000 });
+    const tiles = await rail.evaluate((el) =>
+      Array.from(el.querySelectorAll<HTMLElement>('[data-ds="product-tile"]')).map((t) => {
+        const leaves = Array.from(t.querySelectorAll<HTMLElement>('[data-ds-part="price"] span')).filter((e) => e.children.length === 0 && /\d/.test(e.textContent ?? ''));
+        const compare = leaves.find((e) => getComputedStyle(e).textDecorationLine.includes('line-through'));
+        const number = leaves.find((e) => e !== compare)!;
+        return { hasCompare: Boolean(compare), numberTop: number.getBoundingClientRect().top, rowTop: t.getBoundingClientRect().top };
+      }),
+    );
+    expect(tiles.some((t) => t.hasCompare), 'có thẻ giá gạch').toBe(true);
+    expect(tiles.some((t) => !t.hasCompare), 'có thẻ giá thường').toBe(true);
+    expect(spread(tiles.map((t) => t.rowTop)), 'thẻ cùng một hàng kệ').toBeLessThanOrEqual(1);
+    expect(spread(tiles.map((t) => t.numberTop)), 'top số giá chính giữa các thẻ kệ').toBeLessThanOrEqual(1);
+  });
+});
+
 test.describe('Nhãn Giờ vàng trên ảnh không chui dưới nút tim', () => {
   for (const width of [320, 360, 375, 390]) {
     test(`${width}px: mép phải nhãn nằm trước nút tim ở lưới và kệ Bán chạy`, async ({ page, api }) => {

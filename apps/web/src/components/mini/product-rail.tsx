@@ -18,14 +18,18 @@ const WIDTH: Record<RailVariant, string> = {
   'rail-md': 'var(--tile-w-md)',
 };
 
+/** Lề âm của kệ (xem `RailShell`); `max-w-none` để ScrollRow không bị `max-width:100%` cắt lại bề rộng đã nới. */
+const BLEED = '-mx-4 max-w-none md:-mx-3';
+
 /**
  * Khung kệ ngang. Đệm của kệ chừa chỗ cho bóng và vòng focus của thẻ (cuộn ngang cắt phần tràn); các ô xếp trong một hàng flex căng
- * đủ chiều cao, nên thẻ cùng kệ thẳng hàng giá dù tên 1 hay 2 dòng. `arrows`: nút ‹ › từ md cho chuột. `bleed`: kệ tràn ra sát mép màn
- * hình bù lề 16px của trang (trang web có lề, Mini App thì kệ tự đã sát mép).
+ * đủ chiều cao, nên thẻ cùng kệ thẳng hàng giá dù tên 1 hay 2 dòng. `arrows`: nút ‹ › từ md cho chuột. `bleed`: kệ lùi lề âm để thẻ
+ * đầu kệ thẳng với tiêu đề: dưới md bù lề 16px của trang (kệ sát mép màn hình như Mini App), từ md bù đúng đệm 12px của kệ (không lấn
+ * ra ngoài cột nội dung quá phần đệm chừa bóng).
  */
 export function RailShell({ label, arrows = true, bleed = true, children }: { label: string; arrows?: boolean; bleed?: boolean; children: ReactNode }) {
   return (
-    <ScrollRow label={label} arrows={arrows} style={{ padding: 'var(--rail-pad-block)', ...(bleed ? { margin: '0 -16px', maxWidth: 'none' } : null) }}>
+    <ScrollRow label={label} arrows={arrows} className={bleed ? BLEED : undefined} style={{ padding: 'var(--rail-pad-block)' }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'stretch', width: 'max-content', minWidth: '100%' }}>{children}</div>
     </ScrollRow>
   );

@@ -138,8 +138,8 @@ export default async function BrandPage({
       {b.products.length > 0 && (
         <section className="mt-6 max-md:mt-4">
           <h2 className="mb-3 font-display font-semibold text-stone-900">Sản phẩm</h2>
-          {/* Payload sản phẩm của trang nhãn không kèm `brand` (mọi sản phẩm thuộc nhãn này): dùng tên nhãn của trang như Mini App. */}
-          <ProductGrid items={b.products.map((p) => ({ ...p, brand: b.name }) as ProductCardData)} variant="grid" />
+          {/* Payload sản phẩm của trang nhãn không kèm `brand` (mọi sản phẩm thuộc nhãn này): đặt tên nhãn của trang cho đủ kiểu, thẻ không in lại như Mini App. */}
+          <ProductGrid items={b.products.map((p) => ({ ...p, brand: b.name }) as ProductCardData)} variant="grid" showBrand={false} />
         </section>
       )}
 
