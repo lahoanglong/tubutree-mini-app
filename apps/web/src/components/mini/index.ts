@@ -43,3 +43,4 @@ export { VoucherTicket } from './voucher-ticket';
 export type { VoucherTicketProps } from './voucher-ticket';
 export { ComboCard } from './combo-card';
 export type { ComboCardProps, ComboCardItem } from './combo-card';
+export { BannerCarousel, type BannerSlide, type BannerCarouselProps } from './banner-carousel';
