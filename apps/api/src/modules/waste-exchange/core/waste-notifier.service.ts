@@ -123,6 +123,12 @@ export class WasteNotifierService {
       .catch((e: unknown) => this.logger.warn(`notify WASTE_GIFT_CANCELLED failed: ${String(e)}`));
   }
 
+  async giftExpired(userId: string, r: { id: string; giftName: string }, refundedPoints: number): Promise<void> {
+    await this.notifications
+      .notify(userId, 'WASTE_GIFT_EXPIRED', { gift_name: r.giftName, points: formatPoints(refundedPoints), redemption_id: r.id }, { dedupeKey: `waste-gift:${r.id}:EXPIRED` })
+      .catch((e: unknown) => this.logger.warn(`notify WASTE_GIFT_EXPIRED failed: ${String(e)}`));
+  }
+
   async perkReviewed(ownerUserId: string, p: { id: string; name: string }, approved: boolean, reviewEventId: string): Promise<void> {
     await this.notifications
       .notify(ownerUserId, 'WASTE_PERK_REVIEWED', { point: p.name, result: approved ? 'đã được duyệt' : 'chưa được duyệt', point_id: p.id }, { dedupeKey: `waste-perk:${p.id}:${reviewEventId}` })

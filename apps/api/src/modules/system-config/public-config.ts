@@ -13,6 +13,7 @@ import { MARKETPLACE_CLAIM_ENABLED_KEY, MARKETPLACE_CLAIM_MAX_AGE_KEY, normalize
 import { CHAT_ENABLED_KEY, CHAT_HOURS_KEY, DEFAULT_CHAT_HOURS, chatHoursProblem } from '../support-chat/support-chat.config';
 import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
 import { readCompanyIdentity } from './company-config';
+import { CATALOG_LAUNCH_DATE_KEY, publicCatalogLaunchDate } from '../catalog/catalog-launch-date';
 
 /** Chỉ hai trường công khai, để khoá phụ lưu thêm trong cấu hình không lọt ra endpoint công khai. */
 const pickHours = (v: { start: string; end: string }) => ({ start: v.start, end: v.end });
@@ -89,6 +90,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     chatEnabled,
     chatHours,
     company,
+    catalogLaunchDate,
     tierRows,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
@@ -128,6 +130,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<unknown>(CHAT_ENABLED_KEY, false),
     config.get<unknown>(CHAT_HOURS_KEY, DEFAULT_CHAT_HOURS),
     readCompanyIdentity(config),
+    config.get<unknown>(CATALOG_LAUNCH_DATE_KEY, ''),
     loadTiers().catch(() => [] as TierRow[]),
   ]);
   return {
@@ -169,6 +172,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
       ...tierTables(tierRows),
     },
     homeNewCustomerLayout: homeNewCustomerLayout === true,
+    // Ngày mở bán (YYYY-MM-DD giờ VN) cho nhãn "Mới"; chưa đặt hoặc hỏng thì null và client giữ luật 30 ngày.
+    catalogLaunchDate: publicCatalogLaunchDate(catalogLaunchDate),
     // Chỉ boolean: true khi AI bật VÀ có provider dùng được. Miniapp ẩn mọi lối vào AI khi không phải true (kể cả API cũ không trả).
     aiAdvisorEnabled: isAdvisorAvailable((k) => process.env[k]),
     // Miniapp chỉ gọi /feed/public-preview khi cờ này true (API vẫn tự kiểm cờ và trả 404 khi tắt).

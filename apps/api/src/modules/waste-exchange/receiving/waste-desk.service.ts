@@ -172,7 +172,7 @@ export class WasteDeskService {
       where: { code: norm },
       include: { user: { select: { id: true, fullName: true, phone: true } } },
     });
-    if (!r || r.status !== 'READY') return null;
+    if (!r) return null;
     if (!points.some((p) => p.status === 'ACTIVE' && (p.kind === 'WAREHOUSE' || p.giftHandoverEnabled))) return null;
     return {
       type: 'GIFT',
@@ -182,6 +182,11 @@ export class WasteDeskService {
         customerName: customerView(r.user, false).name,
         status: r.status,
         claimExpiresAt: r.claimExpiresAt === null ? null : r.claimExpiresAt.toISOString(),
+        // Quà đã trao hoặc đã huỷ chỉ để nhân viên giải thích cho khách: thêm trạng thái chi tiết, không thêm gì về khách.
+        ...(r.status === 'FULFILLED' ? { fulfilledAt: r.fulfilledAt?.toISOString() ?? null, pointsCost: r.pointsCost } : {}),
+        ...(r.status === 'CANCELLED'
+          ? { cancelledAt: r.cancelledAt?.toISOString() ?? null, cancelReason: r.cancelReason, pointsCost: r.pointsCost, refundedPoints: r.refundedPoints }
+          : {}),
       },
     };
   }

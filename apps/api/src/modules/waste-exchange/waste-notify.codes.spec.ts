@@ -28,17 +28,19 @@ const EXPECTED: [code: string, id: string, placeholders: string[], body: string]
 ];
 // Mẫu thêm sau lần phát hành đầu: chèn bằng migration riêng, không nằm trong khối WASTE TEMPLATES của migration gốc.
 const EXPIRING = ['WASTE_REQUEST_EXPIRING', 'nt-waste-request-expiring', ['code', 'until', 'next_step'], 'Yêu cầu {{code}} sắp hết hạn giữ chỗ vào ngày {{until}}. Bạn nhớ {{next_step}} trước ngày đó nhé.'] as const;
-const ALL = [...EXPECTED, [EXPIRING[0], EXPIRING[1], [...EXPIRING[2]], EXPIRING[3]] as (typeof EXPECTED)[number]];
+const GIFT_EXPIRED = ['WASTE_GIFT_EXPIRED', 'nt-waste-gift-expired', ['gift_name', 'points'], 'Quà {{gift_name}} đã quá hạn nhận nên Tubu Tree đã huỷ và hoàn {{points}} điểm vào tài khoản của bạn.'] as const;
+const ALL = [...EXPECTED, [EXPIRING[0], EXPIRING[1], [...EXPIRING[2]], EXPIRING[3]] as (typeof EXPECTED)[number], [GIFT_EXPIRED[0], GIFT_EXPIRED[1], [...GIFT_EXPIRED[2]], GIFT_EXPIRED[3]] as (typeof EXPECTED)[number]];
+const GIFT_EXPIRED_SQL = readFileSync(join(__dirname, '../../../prisma/migrations/20261030100000_waste_gift_expired_template/migration.sql'), 'utf-8');
 const EXPIRING_SQL = readFileSync(join(__dirname, '../../../prisma/migrations/20261029010000_waste_request_expiring_template/migration.sql'), 'utf-8');
 const render = (body: string, data: Record<string, string>) => body.replace(/\{\{(\w+)\}\}/g, (_m, k: string) => data[k] ?? '');
 
-describe('WASTE_TEMPLATE_CODES and the eleven templates', () => {
+describe('WASTE_TEMPLATE_CODES and the twelve templates', () => {
   const seeded = seededTemplates();
   const a = SQL.indexOf('-- BEGIN WASTE TEMPLATES');
   const b = SQL.indexOf('-- END WASTE TEMPLATES');
   const section = a >= 0 && b > a ? SQL.slice(a, b) : '';
 
-  it('exports the eleven codes in registry order', () => {
+  it('exports the twelve codes in registry order', () => {
     expect([...WASTE_TEMPLATE_CODES]).toEqual(ALL.map((e) => e[0]));
   });
   it('no waste code is in the promotion catalogue, so every one is always sent (spec 11.6)', () => {
@@ -76,6 +78,13 @@ describe('WASTE_TEMPLATE_CODES and the eleven templates', () => {
       { id: EXPIRING[1], code: EXPIRING[0], channel: 'INAPP', bodyTemplate: EXPIRING[3] },
     ]);
   });
+  it('the gift-expired template migration inserts exactly that one row, equal to the seed word for word, and ON CONFLICT DO NOTHING', () => {
+    expect(GIFT_EXPIRED_SQL).toContain('ON CONFLICT DO NOTHING;');
+    const tuples = [...GIFT_EXPIRED_SQL.matchAll(/\('([^']+)', '([A-Z_]+)', '([A-Z]+)', '([^']*)'\)/g)];
+    expect(tuples.map((m) => ({ id: m[1], code: m[2], channel: m[3], bodyTemplate: m[4] }))).toEqual([
+      { id: GIFT_EXPIRED[1], code: GIFT_EXPIRED[0], channel: 'INAPP', bodyTemplate: GIFT_EXPIRED[3] },
+    ]);
+  });
   it('migration content follows the order of spec 11.7: enums, tables, ordinary indexes, hand-written constraints, seed, config rows, templates', () => {
     const marks = ['CREATE TYPE "WasteItemStatus"', 'CREATE TABLE "waste_requests"', 'CREATE INDEX "waste_requests_trackingNorm_idx"', '-- BEGIN WASTE HAND-WRITTEN CONSTRAINTS', '-- BEGIN WASTE SEED DATA', '-- BEGIN WASTE CONFIG ROWS', '-- BEGIN WASTE TEMPLATES'];
     const pos = marks.map((m) => SQL.indexOf(m));
@@ -85,6 +94,9 @@ describe('WASTE_TEMPLATE_CODES and the eleven templates', () => {
     expect(SQL.lastIndexOf('CREATE INDEX "')).toBeLessThan(pos[3]!);
   });
   it('rendered sentences read correctly', () => {
+    expect(render(GIFT_EXPIRED[3], { gift_name: 'Túi vải Tubu', points: '30.000' })).toBe(
+      'Quà Túi vải Tubu đã quá hạn nhận nên Tubu Tree đã huỷ và hoàn 30.000 điểm vào tài khoản của bạn.',
+    );
     const body = (c: string) => EXPECTED.find((e) => e[0] === c)![3];
     expect(render(body('WASTE_POINTS_CREDITED'), { code: 'TR-A2C4E', result: 'Tubu đã cộng 12.000 Điểm Xanh và 4 giọt nước' })).toBe(
       'Yêu cầu TR-A2C4E đã đếm xong. Tubu đã cộng 12.000 Điểm Xanh và 4 giọt nước.',

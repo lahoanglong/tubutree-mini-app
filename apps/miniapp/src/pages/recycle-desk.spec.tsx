@@ -509,14 +509,14 @@ describe('/recycle/desk — xác nhận và từ chối (§4.10, §15.5)', () =>
 });
 
 describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
-  const GIFT = { id: 'red-1', giftName: 'Gói hạt giống Tubu', customerName: 'Ng*** A', status: 'READY' as const, claimExpiresAt: '2026-12-16T17:30:00.000Z' };
+  const GIFT = { id: 'red-1', giftName: 'Gói hạt giống Tubu', customerName: 'Ng*** A', status: 'READY' as const, claimExpiresAt: '2099-12-16T17:30:00.000Z' };
   beforeEach(() => { mocks.getDeskPoints.mockResolvedValue([WAREHOUSE_DESK]); mocks.deskLookup.mockResolvedValue({ type: 'GIFT', redemption: GIFT }); });
   it('mã QG- ở kho trao quà: tên quà, khách che, hạn nhận theo giờ VN, "Trao quà" gửi code + pointId', async () => {
     mocks.deskFulfilGift.mockResolvedValue(makeGiftRedemption({ status: 'FULFILLED' }));
     renderPage();
     await lookUp('qg-8k2m9p4t');
     expect(await screen.findByText('Gói hạt giống Tubu')).toBeInTheDocument();
-    expect(screen.getByText('Hạn nhận 17/12/2026')).toBeInTheDocument();
+    expect(screen.getByText('Hạn nhận 17/12/2099')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Trao quà' }));
     await waitFor(() => expect(mocks.deskFulfilGift).toHaveBeenCalledWith({ code: 'QG-8K2M9P4T', pointId: 'wh-1' }));
     expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã trao Gói hạt giống Tubu', type: 'success' }));
@@ -566,6 +566,37 @@ describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
     renderPage();
     await lookUp('QG-8K2M9P4T');
     expect(await screen.findByText(text)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
+  });
+  it('lượt đã huỷ do quá hạn: hiện lý do và điểm đã hoàn, chỉ đọc', async () => {
+    mocks.deskLookup.mockResolvedValue({
+      type: 'GIFT',
+      redemption: { ...GIFT, status: 'CANCELLED', cancelledAt: '2026-11-11T03:00:00.000Z', cancelReason: 'Quá hạn nhận', pointsCost: 30000, refundedPoints: 30000 },
+    });
+    renderPage();
+    await lookUp('QG-8K2M9P4T');
+    expect(await screen.findByText('Lượt đổi quà đã huỷ')).toBeInTheDocument();
+    expect(screen.getByText('Lý do: Quá hạn nhận')).toBeInTheDocument();
+    expect(screen.getByText(/Đã hoàn .*30\.000.* cho khách/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
+  });
+  it('lượt đã trao: hiện giờ trao và số điểm đã đổi, không có nút', async () => {
+    mocks.deskLookup.mockResolvedValue({
+      type: 'GIFT',
+      redemption: { ...GIFT, status: 'FULFILLED', fulfilledAt: '2026-11-10T03:00:00.000Z', pointsCost: 30000 },
+    });
+    renderPage();
+    await lookUp('QG-8K2M9P4T');
+    expect(await screen.findByText('Quà đã được trao')).toBeInTheDocument();
+    expect(screen.getByText(/^Trao lúc /)).toBeInTheDocument();
+    expect(screen.getByText(/Khách đổi bằng .*30\.000/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
+  });
+  it('quà còn READY nhưng đã quá hạn: báo quá hạn, không có nút Trao quà', async () => {
+    mocks.deskLookup.mockResolvedValue({ type: 'GIFT', redemption: { ...GIFT, claimExpiresAt: '2020-01-01T00:00:00.000Z' } });
+    renderPage();
+    await lookUp('QG-8K2M9P4T');
+    expect(await screen.findByText('Quà đã quá hạn nhận')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Trao quà' })).toBeNull();
   });
   it('đại lý: thẻ ưu đãi và báo cáo tháng hiện; kho thì không có thẻ ưu đãi', async () => {

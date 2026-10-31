@@ -6,7 +6,7 @@
  * Thêm mẫu hoặc thêm biến mới thì thêm vào đây cùng lúc, nếu không màn sửa mẫu từ chối biến đó.
  */
 export const TEMPLATE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
-  ORDER_CONFIRMED: ['order_code'],
+  ORDER_CONFIRMED: ['order_code', 'payment_note'],
   ORDER_SHIPPING: ['order_code'],
   ORDER_DELIVERED: ['order_code', 'points_note'],
   ORDER_CANCELLED: ['order_code', 'refund_note'],
@@ -135,6 +135,7 @@ export const TEMPLATE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
   WASTE_GIFT_CANCELLED: ['gift', 'points_note'],
   WASTE_PERK_REVIEWED: ['point', 'result'],
   WASTE_REQUEST_EXPIRING: ['code', 'until', 'next_step'],
+  WASTE_GIFT_EXPIRED: ['gift_name', 'points'],
 };
 
 /** Tên gọi dễ hiểu của biến, hiện trong màn sửa mẫu thay cho tên kỹ thuật. */
@@ -160,6 +161,7 @@ export const VARIABLE_LABELS: Readonly<Record<string, string>> = {
   freezes: 'số lượt giữ chuỗi',
   friend: 'tên người bạn',
   gift: 'tên quà',
+  gift_name: 'tên quà',
   hours: 'số giờ',
   item_count: 'số món',
   items: 'các món hàng',
@@ -175,6 +177,7 @@ export const VARIABLE_LABELS: Readonly<Record<string, string>> = {
   order_code: 'mã đơn hàng',
   owner: 'tên chủ cơ sở',
   paid: 'số tiền đã nhận',
+  payment_note: 'câu báo đã nhận đủ thanh toán (rỗng với đơn COD)',
   period: 'kỳ',
   phone: 'số điện thoại',
   point: 'tên điểm nhận',

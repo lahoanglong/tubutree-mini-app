@@ -91,7 +91,7 @@ test.describe('Đổi rác lấy quà — khách', () => {
 
     await expect(page.getByText('TR-7K3QP').first()).toBeVisible();
     const [created] = api.callsTo('POST', '/waste/requests');
-    const expected: CreateBody = { method: 'DROP_OFF', lines: [{ itemId: 'wi-carton', declaredQty: 3 }], pointId: 'wp-q1', consent: true };
+    const expected: CreateBody = { method: 'DROP_OFF', lines: [{ itemId: 'wi-carton', declaredQty: 3 }], pointId: 'wp-q1', consent: true, consentVersion: '2026-10-17.1' };
     expect(created?.body).toEqual(expected);
     expect(created?.headers['idempotency-key']).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
 

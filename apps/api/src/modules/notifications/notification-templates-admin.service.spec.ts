@@ -105,7 +105,10 @@ describe('NotificationTemplatesAdminService', () => {
     const { svc } = setup();
     const rows = await svc.list();
     const order = rows.find((r) => r.code === 'ORDER_CONFIRMED')!;
-    expect(order.variables).toEqual([{ key: 'order_code', label: 'mã đơn hàng' }]);
+    expect(order.variables).toEqual([
+      { key: 'order_code', label: 'mã đơn hàng' },
+      { key: 'payment_note', label: 'câu báo đã nhận đủ thanh toán (rỗng với đơn COD)' },
+    ]);
     expect(rows.find((r) => r.code === 'GAME_STREAK')!.variables).toBeNull();
   });
 

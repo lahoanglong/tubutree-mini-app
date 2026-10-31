@@ -15,6 +15,7 @@ const writeEvent = writeWasteEvent as unknown as jest.Mock;
 
 const ALREADY = 'Lượt đổi quà này đã được trao hoặc đã huỷ.';
 const NOT_FOUND_CODE = 'Không tìm thấy mã';
+const OVERDUE = 'Quà đã quá hạn nhận, quầy không trao được nữa. Tubu sẽ xử lý lượt đổi này và báo khách.';
 
 const ready = {
   id: 'r1',
@@ -27,7 +28,7 @@ const ready = {
   code: 'QG-ABCDEFGH',
   couponId: null,
   idempotencyKey: 'k',
-  claimExpiresAt: new Date('2026-12-16T00:00:00Z'),
+  claimExpiresAt: new Date('2099-12-16T00:00:00Z'),
   fulfilledAt: null,
   fulfilledByUserId: null,
   fulfilledPointId: null,
@@ -45,8 +46,12 @@ function setup() {
   const tx = {
     wasteGiftRedemption: {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      findUnique: jest.fn().mockResolvedValue(ready),
       findUniqueOrThrow: jest.fn().mockResolvedValue({ ...ready, status: 'FULFILLED', fulfilledAt: new Date('2026-10-18T00:00:00Z') }),
     },
+    user: { findUnique: jest.fn().mockResolvedValue({ isBlocked: false, metadata: null }) },
+    wasteUserFlags: { findUnique: jest.fn().mockResolvedValue(null) },
+    wasteRequest: { count: jest.fn().mockResolvedValue(0) },
     $executeRaw: jest.fn().mockResolvedValue(1),
   };
   const prisma = {
@@ -74,6 +79,7 @@ function setup() {
     giftCancelled: jest.fn(async () => {
       order.push('giftCancelled');
     }),
+    giftExpired: jest.fn().mockResolvedValue(undefined),
   };
   const svc = new WasteGiftRedemptionsService(prisma as never, access as never, config as never, rewards as never, notifier as never);
   const setRole = (role: 'STAFF' | 'ADMIN' | 'CUSTOMER') =>
@@ -98,7 +104,7 @@ describe('WasteGiftRedemptionsService.fulfilAtDesk', () => {
 
     expect(h.prisma.wasteGiftRedemption.findUnique).toHaveBeenCalledWith({ where: { code: 'QG-ABCDEFGH' } });
     expect(h.tx.wasteGiftRedemption.updateMany).toHaveBeenCalledWith({
-      where: { code: 'QG-ABCDEFGH', status: 'READY' },
+      where: { code: 'QG-ABCDEFGH', status: 'READY', OR: [{ claimExpiresAt: null }, { claimExpiresAt: { gte: expect.any(Date) } }] },
       data: { status: 'FULFILLED', fulfilledAt: expect.any(Date), fulfilledByUserId: 's1', fulfilledPointId: 'wh' },
     });
     expect(writeEvent).toHaveBeenCalledTimes(1);
@@ -127,6 +133,14 @@ describe('WasteGiftRedemptionsService.fulfilAtDesk', () => {
       expect.objectContaining({ kind: 'LOOKUP_MISS', actorUserId: 's1', actorRole: 'STAFF', pointId: 'wh', meta: lookupMissMeta(' qg-zzzz zzzz ') }),
     );
     expect(h.tx.wasteGiftRedemption.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('overdue READY row at the desk: 409 with the overdue sentence, no transaction', async () => {
+    h.prisma.wasteGiftRedemption.findUnique.mockResolvedValue({ ...ready, claimExpiresAt: new Date(Date.now() - 86_400_000) });
+
+    await expect(h.svc.fulfilAtDesk('s1', { code: 'QG-ABCDEFGH', pointId: 'wh' })).rejects.toThrow(new ConflictException(OVERDUE));
+
+    expect(h.prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('count 0 (already fulfilled or cancelled): 409 and no event', async () => {
@@ -158,18 +172,54 @@ describe('WasteGiftRedemptionsService.fulfilAtDesk', () => {
 });
 
 describe('WasteGiftRedemptionsService.fulfilById', () => {
-  it('hands over an OVERDUE READY row without any claimExpiresAt condition (spec 8)', async () => {
+  it('refuses an OVERDUE READY row before opening a transaction: the cron cancels and refunds it', async () => {
     h.access.assertWarehouseActor.mockResolvedValue({ id: 's1', role: 'ADMIN', phone: null });
     h.prisma.wasteGiftRedemption.findUnique.mockResolvedValue({ ...ready, claimExpiresAt: new Date(Date.now() - 86_400_000) });
 
-    const res = await h.svc.fulfilById('s1', 'r1', { code: 'qg-abcdefgh' });
+    await expect(h.svc.fulfilById('s1', 'r1', { code: 'qg-abcdefgh' })).rejects.toThrow(new ConflictException(OVERDUE));
+
+    expect(h.prisma.$transaction).not.toHaveBeenCalled();
+    expect(writeEvent).not.toHaveBeenCalled();
+  });
+
+  it('puts the claim-deadline condition in the updateMany where so the desk and the cron cannot both win', async () => {
+    h.access.assertWarehouseActor.mockResolvedValue({ id: 's1', role: 'ADMIN', phone: null });
+
+    await h.svc.fulfilById('s1', 'r1', { code: 'qg-abcdefgh' });
 
     expect(h.tx.wasteGiftRedemption.updateMany).toHaveBeenCalledWith({
-      where: { id: 'r1', status: 'READY' },
+      where: { id: 'r1', status: 'READY', OR: [{ claimExpiresAt: null }, { claimExpiresAt: { gte: expect.any(Date) } }] },
       data: expect.objectContaining({ fulfilledPointId: 'wh', fulfilledByUserId: 's1' }),
     });
-    expect(res.status).toBe('FULFILLED');
-    expect(writeEvent).toHaveBeenCalledWith(h.tx, expect.objectContaining({ kind: 'GIFT_FULFILLED', actorRole: 'ADMIN', pointId: 'wh' }));
+  });
+
+  it('count 0 because the deadline day ended between the read and the write: the overdue sentence, not the generic one', async () => {
+    h.tx.wasteGiftRedemption.updateMany.mockResolvedValue({ count: 0 });
+    h.tx.wasteGiftRedemption.findUnique.mockResolvedValue({ ...ready, claimExpiresAt: new Date('2026-10-15T09:00:00Z') });
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-17T03:00:00Z'));
+
+    await expect(h.svc.fulfilById('s1', 'r1', { code: 'QG-ABCDEFGH' })).rejects.toThrow(new ConflictException(OVERDUE));
+  });
+
+  it('the updateMany guard is the start of the VN day: a deadline earlier today does not block, one from yesterday does', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-17T07:00:00Z'));
+    h.access.assertWarehouseActor.mockResolvedValue({ id: 's1', role: 'ADMIN', phone: null });
+
+    await h.svc.fulfilById('s1', 'r1', { code: 'qg-abcdefgh' });
+
+    expect(h.tx.wasteGiftRedemption.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'r1', status: 'READY', OR: [{ claimExpiresAt: null }, { claimExpiresAt: { gte: new Date('2026-10-16T17:00:00Z') } }] },
+      }),
+    );
+  });
+
+  it('a deadline at 09:00 today (VN) is still open at 14:00 the same day; the desk is not refused up front', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-17T07:00:00Z'));
+    h.access.assertWarehouseActor.mockResolvedValue({ id: 's1', role: 'ADMIN', phone: null });
+    h.prisma.wasteGiftRedemption.findUnique.mockResolvedValue({ ...ready, claimExpiresAt: new Date('2026-10-17T02:00:00Z') });
+
+    await expect(h.svc.fulfilById('s1', 'r1', { code: 'qg-abcdefgh' })).resolves.toBeDefined();
   });
 
   it('wrong code: 404 plus one LOOKUP_MISS event pinned to the warehouse, nothing updated', async () => {
@@ -287,6 +337,18 @@ describe('WasteGiftRedemptionsService.cancel', () => {
     expect(h.prisma.$transaction).not.toHaveBeenCalled();
   });
 
+  it('customer blocked at account level (users.isBlocked) and no refundPoints in the body: 400, no transaction', async () => {
+    h.prisma.user.findUnique
+      .mockResolvedValueOnce({ id: 'a1', role: 'ADMIN', isBlocked: false, mergedIntoId: null, phone: '0900000000' })
+      .mockResolvedValueOnce({ isBlocked: true, metadata: null });
+
+    await expect(h.svc.cancel('a1', 'r1', { reason: 'Khách đổi ý' })).rejects.toThrow(
+      new BadRequestException('Khách đang bị khoá hoặc từng bị thu hồi điểm đổi rác: hãy chọn rõ có hoàn điểm hay không.'),
+    );
+
+    expect(h.prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('grant returns false: 500 with the pinned sentence, no notification', async () => {
     h.rewards.grant.mockResolvedValue(false);
 
@@ -341,6 +403,14 @@ describe('WasteGiftRedemptionsService.queue', () => {
     expect(row!.overdue).toBe(true);
   });
 
+  it('passes the cancel reason through so the queue can show an auto-cancel by deadline', async () => {
+    h.prisma.wasteGiftRedemption.findMany.mockResolvedValue([{ ...ready, status: 'CANCELLED', cancelReason: 'Quá hạn nhận', user }]);
+
+    const [row] = await h.svc.queue('a1', { status: 'CANCELLED' });
+
+    expect(row!.cancelReason).toBe('Quá hạn nhận');
+  });
+
   it('ADMIN sees the full code, userId, name and phone', async () => {
     h.prisma.wasteGiftRedemption.findMany.mockResolvedValue([{ ...ready, user }]);
 
@@ -368,5 +438,83 @@ describe('WasteGiftRedemptionsService.queue', () => {
         include: { user: { select: { id: true, fullName: true, phone: true } } },
       }),
     );
+  });
+});
+
+describe('WasteGiftRedemptionsService.expireOverdue', () => {
+  const NOW = new Date('2026-11-20T01:00:00Z');
+  const overdueRow = { ...ready, claimExpiresAt: new Date('2026-11-19T00:00:00Z') };
+
+  it('cancels with a guard on READY + overdue, refunds pointsCost through rewards.grant, restocks, one SYSTEM event, one notice', async () => {
+    h.prisma.wasteGiftRedemption.findMany.mockResolvedValueOnce([{ id: 'r1' }]);
+    h.tx.wasteGiftRedemption.findUnique.mockResolvedValue(overdueRow);
+
+    const res = await h.svc.expireOverdue(NOW);
+
+    expect(res).toEqual({ expired: 1, failed: 0, held: 0 });
+    expect(h.prisma.wasteGiftRedemption.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: wasteGiftOverdueWhere(NOW) }));
+    expect(h.tx.wasteGiftRedemption.updateMany).toHaveBeenCalledWith({
+      where: { id: 'r1', status: 'READY', claimExpiresAt: { lt: new Date('2026-11-19T17:00:00Z') } },
+      data: { status: 'CANCELLED', cancelledAt: NOW, cancelledByUserId: null, cancelReason: 'Quá hạn nhận', refundedPoints: 30_000 },
+    });
+    expect(h.rewards.grant).toHaveBeenCalledWith('u1', 30_000, 'GIFT_REFUND:QG-ABCDEFGH', 'GIFT_REFUND', 'r1', h.tx, expect.any(Date));
+    expect(h.tx.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(writeEvent).toHaveBeenCalledTimes(1);
+    expect(writeEvent).toHaveBeenCalledWith(
+      h.tx,
+      expect.objectContaining({
+        kind: 'GIFT_EXPIRED',
+        actorUserId: null,
+        actorRole: 'SYSTEM',
+        giftRedemptionId: 'r1',
+        meta: expect.objectContaining({ before: { status: 'READY' }, after: { status: 'CANCELLED', refundedPoints: 30_000 } }),
+      }),
+    );
+    expect(h.notifier.giftExpired).toHaveBeenCalledTimes(1);
+    expect(h.notifier.giftExpired).toHaveBeenCalledWith('u1', { id: 'r1', giftName: 'Túi vải Tubu' }, 30_000);
+  });
+
+  it.each([
+    ['blocked customer', () => h.tx.wasteUserFlags.findUnique.mockResolvedValue({ blockedAt: new Date() })],
+    ['customer with a REVERSED request', () => h.tx.wasteRequest.count.mockResolvedValue(1)],
+    ['account blocked at user level (no waste flag)', () => h.tx.user.findUnique.mockResolvedValue({ isBlocked: true, metadata: null })],
+    ['anonymized account', () => h.tx.user.findUnique.mockResolvedValue({ isBlocked: false, metadata: { anonymizedAt: '2026-11-01T00:00:00.000Z' } })],
+  ])('%s: the cron leaves the gift READY for the admin, no refund, no event, no notice', async (_n, arrange) => {
+    h.prisma.wasteGiftRedemption.findMany.mockResolvedValueOnce([{ id: 'r1' }]);
+    h.tx.wasteGiftRedemption.findUnique.mockResolvedValue(overdueRow);
+    arrange();
+
+    expect(await h.svc.expireOverdue(NOW)).toEqual({ expired: 0, failed: 0, held: 1 });
+
+    expect(h.tx.wasteGiftRedemption.updateMany).not.toHaveBeenCalled();
+    expect(h.rewards.grant).not.toHaveBeenCalled();
+    expect(writeEvent).not.toHaveBeenCalled();
+    expect(h.notifier.giftExpired).not.toHaveBeenCalled();
+  });
+
+  it('lost the race to the desk (count 0): no refund, no event, no notice', async () => {
+    h.prisma.wasteGiftRedemption.findMany.mockResolvedValueOnce([{ id: 'r1' }]);
+    h.tx.wasteGiftRedemption.findUnique.mockResolvedValue(overdueRow);
+    h.tx.wasteGiftRedemption.updateMany.mockResolvedValue({ count: 0 });
+
+    expect(await h.svc.expireOverdue(NOW)).toEqual({ expired: 0, failed: 0, held: 0 });
+
+    expect(h.rewards.grant).not.toHaveBeenCalled();
+    expect(writeEvent).not.toHaveBeenCalled();
+    expect(h.notifier.giftExpired).not.toHaveBeenCalled();
+  });
+
+  it('a failing row is counted and the next one still runs', async () => {
+    h.prisma.wasteGiftRedemption.findMany.mockResolvedValueOnce([{ id: 'r1' }, { id: 'r2' }]);
+    h.tx.wasteGiftRedemption.findUnique.mockResolvedValue(overdueRow);
+    h.rewards.grant.mockRejectedValueOnce(new Error('boom')).mockResolvedValue(true);
+
+    expect(await h.svc.expireOverdue(NOW)).toEqual({ expired: 1, failed: 1, held: 0 });
+    expect(h.notifier.giftExpired).toHaveBeenCalledTimes(1);
+  });
+
+  it('nothing overdue: nothing touched', async () => {
+    expect(await h.svc.expireOverdue(NOW)).toEqual({ expired: 0, failed: 0, held: 0 });
+    expect(h.prisma.$transaction).not.toHaveBeenCalled();
   });
 });

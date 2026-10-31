@@ -29,7 +29,7 @@ import { SR_ONLY } from '../components/ui/sr-only';
 import { Heading, Text } from '../components/ui/text';
 import { GuestLinkCard } from '../components/home/guest-link-card';
 import { useShareWithFallback } from '../components/share-sheet';
-import { getOwnedBrand, getOwnsBrand } from '../services/brand-owner-api';
+import { getAuthMeFlags, getOwnedBrand } from '../services/brand-owner-api';
 import { isNotFoundError } from '../services/api';
 import { getDealerMe } from '../services/dealer-api';
 import { getDeskPoints, WASTE_QUERY_KEYS } from '../services/waste-api';
@@ -117,7 +117,8 @@ export default function ProfilePage() {
   const subsQ = useQuery({ queryKey: ['subscriptions'], queryFn: getSubscriptions, enabled: authed && SUBSCRIPTIONS_IN_MINIAPP });
   const orderCountsQ = useQuery({ queryKey: ORDER_STATUS_COUNTS_KEY, queryFn: fetchOrderStatusCounts, enabled: authed });
 
-  const ownsBrandQ = useQuery({ queryKey: ['auth-me', 'owns-brand'], queryFn: getOwnsBrand, enabled: authed, retry: false });
+  const ownsBrandQ = useQuery({ queryKey: ['auth-me', 'flags'], queryFn: getAuthMeFlags, select: (f) => f.ownsBrand, enabled: authed, retry: false });
+  const hasDeskPointQ = useQuery({ queryKey: ['auth-me', 'flags'], queryFn: getAuthMeFlags, select: (f) => f.hasDeskPoint, enabled: authed, retry: false });
   const ownedBrandQ = useQuery({
     queryKey: ['owned-brand', 'profile'],
     queryFn: () =>
@@ -142,10 +143,10 @@ export default function ProfilePage() {
   const chatEnabled = cfg.chat?.enabled === true;
   const chatSummaryQ = useQuery({ ...supportChatSummaryQueryOptions(), enabled: authed && chatEnabled });
   const chatUnread = chatEnabled && (chatSummaryQ.data?.unreadCount ?? 0) > 0;
-  // Chỉ hỏi vai thường vận hành quầy (nhân viên/admin kho, đại lý có điểm đối tác) để khách thường không bị gọi thêm API. Nhân viên điểm đối tác
-  // mang vai CUSTOMER (admin thêm qua màn điểm) chưa có hàng này ở đây; họ vào quầy bằng màn Đổi rác. Cần API trả cờ nhẹ mới phủ được nhóm đó.
+  // Chỉ hỏi quầy khi có lý do (nhân viên/admin kho, đại lý, hoặc cờ hasDeskPoint của /auth/me cho nhân viên điểm đối tác mang vai CUSTOMER)
+  // để khách thường không bị gọi thêm API. Cờ chung một lần gọi /auth/me với ownsBrand; cờ đổi rác tắt thì điểm đối tác không mở quầy.
   const isStaffOrAdmin = user?.role === 'STAFF' || user?.role === 'ADMIN';
-  const mayHaveDesk = isStaffOrAdmin || (user?.role === 'DEALER' && cfg.waste.enabled);
+  const mayHaveDesk = isStaffOrAdmin || (user?.role === 'DEALER' && cfg.waste.enabled) || (hasDeskPointQ.data === true && cfg.waste.enabled);
   const deskQ = useQuery({ queryKey: WASTE_QUERY_KEYS.desk, queryFn: getDeskPoints, enabled: authed && mayHaveDesk, staleTime: 5 * 60_000, retry: false });
   const ownedBrand = ownsBrandQ.data === false ? null : ownedBrandQ.data;
   const ctvEntry = ctvMenuEntry(user?.role, ctvAccessQ.data);

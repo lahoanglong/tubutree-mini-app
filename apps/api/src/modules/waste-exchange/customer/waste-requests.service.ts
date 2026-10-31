@@ -11,7 +11,7 @@ import { WASTE_MESSAGES } from '../core/waste-messages';
 import { computeWastePublicFlags } from '../core/waste-public-config';
 import { generateWasteCode, normalizeTracking } from '../waste-codes';
 import { lockWasteCustomer, lockWasteTracking } from '../waste-locks';
-import { WASTE_CONSENT_VERSION, WASTE_OPEN_STATUSES } from '../waste.constants';
+import { WASTE_OPEN_STATUSES } from '../waste.constants';
 import { toRequestDetail, toRequestSummary, WASTE_REQUEST_FULL_INCLUDE, WASTE_REQUEST_SUMMARY_INCLUDE, type WasteRequestFull } from './waste-request.mapper';
 
 const CREATE_PRIOR_SELECT = { id: true, method: true, pointId: true, lines: { select: { itemId: true, declaredQty: true } } } as const;
@@ -59,7 +59,7 @@ export class WasteRequestsService {
     if (body.method === 'PICKUP') holdCfg.lanePickup = (await computeWastePublicFlags(this.systemConfig)).pickup;
     for (let attempt = 0; ; attempt++) {
       try {
-        const id = await this.prisma.$transaction((tx) => this.createInTx(tx, userId, idempotencyKey, body, holdCfg));
+        const id = await this.prisma.$transaction((tx) => this.createInTx(tx, userId, idempotencyKey, body, holdCfg, snap.rulesVersion));
         return await this.loadDetail(this.prisma, userId, id);
       } catch (e) {
         const code = (e as { code?: unknown })?.code;
@@ -221,7 +221,7 @@ export class WasteRequestsService {
     });
   }
 
-  private async createInTx(tx: Prisma.TransactionClient, userId: string, idempotencyKey: string, body: WasteCreateRequest, holdCfg: WasteHoldConfig): Promise<string> {
+  private async createInTx(tx: Prisma.TransactionClient, userId: string, idempotencyKey: string, body: WasteCreateRequest, holdCfg: WasteHoldConfig, rulesVersion: string): Promise<string> {
     await lockWasteCustomer(tx, userId);
     const now = new Date();
     const prior = await tx.wasteRequest.findUnique({ where: { userId_idempotencyKey: { userId, idempotencyKey } }, select: CREATE_PRIOR_SELECT });
@@ -229,6 +229,8 @@ export class WasteRequestsService {
       if (!this.sameCreateContent(prior, body)) throw new ConflictException(WASTE_MESSAGES.IDEMPOTENCY_CONFLICT);
       return prior.id;
     }
+    // Bản Mini cũ không gửi consentVersion: nhận và ghi phiên bản hiện hành, vì bản đó luôn đọc thể lệ mới nhất từ máy chủ.
+    if (body.consentVersion !== undefined && body.consentVersion !== rulesVersion) throw new BadRequestException(WASTE_MESSAGES.RULES_UPDATED);
     if (body.method === 'MAIL_IN' && !(body.packagingConsent === true && body.postagePaidConsent === true)) {
       throw new BadRequestException(WASTE_MESSAGES.MAILIN_CONSENT);
     }
@@ -257,7 +259,7 @@ export class WasteRequestsService {
         expiresAt: result.expiresAt,
         idempotencyKey,
         consentAt: now,
-        consentVersion: WASTE_CONSENT_VERSION,
+        consentVersion: rulesVersion,
         lines: {
           create: result.lines.map((l) => ({
             itemId: l.itemId,

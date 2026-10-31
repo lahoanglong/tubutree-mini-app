@@ -35,6 +35,7 @@ describe('WasteNotifierService (spec 10.2, 11.6; registry 4.4)', () => {
     ['shipLocked', (s) => s.shipLocked('u1', new Date('2026-10-18T01:02:03.000Z')), 'u1', 'WASTE_SHIP_LOCKED', {}, 'waste-lock:u1:2026-10-18T01:02:03.000Z'],
     ['giftCancelled refunded', (s) => s.giftCancelled('u1', { id: 'g1', giftName: 'Hạt giống rau' }, 50_000), 'u1', 'WASTE_GIFT_CANCELLED', { gift: 'Hạt giống rau', points_note: ' Tubu đã hoàn 50.000 Điểm Xanh vào tài khoản của bạn.', redemption_id: 'g1' }, 'waste-gift:g1:CANCELLED'],
     ['giftCancelled not refunded', (s) => s.giftCancelled('u1', { id: 'g1', giftName: 'Hạt giống rau' }, 0), 'u1', 'WASTE_GIFT_CANCELLED', { gift: 'Hạt giống rau', points_note: ' Lượt đổi này không được hoàn điểm.', redemption_id: 'g1' }, 'waste-gift:g1:CANCELLED'],
+    ['giftExpired', (s) => s.giftExpired('u1', { id: 'g1', giftName: 'Hạt giống rau' }, 50_000), 'u1', 'WASTE_GIFT_EXPIRED', { gift_name: 'Hạt giống rau', points: '50.000', redemption_id: 'g1' }, 'waste-gift:g1:EXPIRED'],
     ['perkReviewed approved', (s) => s.perkReviewed('o1', { id: 'p1', name: 'Tạp hoá Cô Ba' }, true, 'ev5'), 'o1', 'WASTE_PERK_REVIEWED', { point: 'Tạp hoá Cô Ba', result: 'đã được duyệt', point_id: 'p1' }, 'waste-perk:p1:ev5'],
     ['perkReviewed rejected', (s) => s.perkReviewed('o1', { id: 'p1', name: 'Tạp hoá Cô Ba' }, false, 'ev6'), 'o1', 'WASTE_PERK_REVIEWED', { point: 'Tạp hoá Cô Ba', result: 'chưa được duyệt', point_id: 'p1' }, 'waste-perk:p1:ev6'],
   ])('%s', async (_n, call, user, code, data, dedupeKey) => {
@@ -87,9 +88,9 @@ describe('WasteNotifierService (spec 10.2, 11.6; registry 4.4)', () => {
     expect(stripTrailingStop('Đã kiểm 3.5 kg')).toBe('Đã kiểm 3.5 kg');
   });
 
-  it('passes each of the eleven codes as a string literal to notify (notification-templates-seed gate)', () => {
+  it('passes each of the twelve codes as a string literal to notify (notification-templates-seed gate)', () => {
     const src = readFileSync(join(__dirname, 'waste-notifier.service.ts'), 'utf-8');
-    for (const code of ['WASTE_PARCEL_RECEIVED', 'WASTE_POINTS_CREDITED', 'WASTE_REQUEST_REJECTED', 'WASTE_REQUEST_EXPIRED', 'WASTE_REQUEST_EXPIRING', 'WASTE_PICKUP_STARTED', 'WASTE_PICKUP_CANCELLED', 'WASTE_POINTS_REVERSED', 'WASTE_SHIP_LOCKED', 'WASTE_GIFT_CANCELLED', 'WASTE_PERK_REVIEWED']) {
+    for (const code of ['WASTE_PARCEL_RECEIVED', 'WASTE_POINTS_CREDITED', 'WASTE_REQUEST_REJECTED', 'WASTE_REQUEST_EXPIRED', 'WASTE_REQUEST_EXPIRING', 'WASTE_PICKUP_STARTED', 'WASTE_PICKUP_CANCELLED', 'WASTE_POINTS_REVERSED', 'WASTE_SHIP_LOCKED', 'WASTE_GIFT_CANCELLED', 'WASTE_GIFT_EXPIRED', 'WASTE_PERK_REVIEWED']) {
       expect(src).toMatch(new RegExp(`notify\\(\\s*\\w+,\\s*'${code}'`));
     }
   });

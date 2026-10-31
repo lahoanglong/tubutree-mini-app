@@ -9,6 +9,8 @@ import type { PrismaService } from '../../prisma/prisma.service';
 const SEED = readFileSync(join(__dirname, '../../../prisma/seed.ts'), 'utf-8');
 const SQL = readFileSync(join(__dirname, '../../../prisma/migrations/20261020000000_waste_exchange/migration.sql'), 'utf-8');
 
+const OLD_CLAIM_DAYS_KEY = 'waste.gift_claim_days';
+const OLD_CLAIM_DAYS_DESC = 'Số ngày khách được nhận quà bằng mã, quá hạn thì lượt đổi vào danh sách admin xem lại.';
 type Row = { key: string; value: unknown; category?: string; description?: string; createOnly?: boolean };
 function seededRows(): Row[] {
   const start = SEED.indexOf('const SYSTEM_CONFIGS: ConfigSeed[] = [');
@@ -44,6 +46,7 @@ const EXPECTED: [key: string, type: string, def: unknown, min?: number, max?: nu
   ['waste.mailin_fee_table', 'json', FEE],
   ['waste.alert_thresholds', 'json', THRESHOLDS],
   ['waste.rules_text', 'string', ''],
+  ['waste.rules_version', 'string', '2026-10-17.1'],
 ];
 const DESC: Record<string, string> = {
   'waste.enabled': 'Cờ tổng của chương trình Đổi rác lấy quà, tắt thì khách không tạo được yêu cầu mới và bàn đại lý bị chặn, kho vẫn xử lý yêu cầu đã có.',
@@ -62,11 +65,12 @@ const DESC: Record<string, string> = {
   'waste.shortfall_lock_pct': 'Yêu cầu hoàn tất mà điểm cộng chưa tới (100 trừ ngần này) phần trăm điểm ước tính thì tính là một lần nhận thiếu.',
   'waste.shortfall_lock_streak': 'Số lần nhận thiếu liền nhau thì khoá đường gửi kho và thu kèm đơn của khách.',
   'waste.staff_daily_cap_points': 'Trần Điểm Xanh mỗi nhân viên kho hoặc điểm nhận được xác nhận trong một ngày.',
-  'waste.gift_claim_days': 'Số ngày khách được nhận quà bằng mã, quá hạn thì lượt đổi vào danh sách admin xem lại.',
+  'waste.gift_claim_days': 'Số ngày nhận quà bằng mã. Hết hạn thì quà tự huỷ và hoàn điểm, trừ khách bị khoá, bị thu hồi hoặc đã xoá tài khoản: admin xử lý.',
   'waste.point_inactive_days': 'Điểm nhận đối tác không có lượt xác nhận nào quá ngần này ngày kể từ lần xác nhận cuối hoặc lần kích hoạt thì bị ẩn khỏi danh sách khách.',
   'waste.mailin_fee_table': 'Bảng ước tính phí ship gửi kho theo vùng tỉnh, mỗi vùng có phí thấp và phí cao, cộng một vùng mặc định cho tỉnh chưa xếp.',
   'waste.alert_thresholds': 'Ngưỡng cảnh báo bất thường về điểm nhận và người xác nhận, chỉ để admin xem, không tự khoá ai.',
   'waste.rules_text': 'Thể lệ công khai của chương trình, tối đa 8000 ký tự, để trống thì mục Thể lệ hiện ghi chú sắp có.',
+  'waste.rules_version': 'Số phiên bản thể lệ, tối đa 32 ký tự. Đổi số này khi sửa nội dung thể lệ để khách đồng ý lại.',
 };
 const INTS = EXPECTED.filter((e) => e[1] === 'int') as [string, string, number, number, number][];
 const BOOLS = EXPECTED.filter((e) => e[1] === 'boolean').map((e) => e[0]);
@@ -89,7 +93,7 @@ const accepts = async (key: string, value: object | string | number | boolean): 
 };
 
 describe('WASTE_CONFIG_KEYS', () => {
-  it('has exactly the 21 keys of spec 11.5 in table order, with type, default and category', () => {
+  it('has exactly the 22 keys (21 of spec 11.5 plus the rules version) in table order, with type, default and category', () => {
     expect(Object.keys(WASTE_CONFIG_KEYS)).toEqual(EXPECTED.map((e) => e[0]));
     for (const [key, type, def, min, max] of EXPECTED) {
       expect(WASTE_CONFIG_KEYS[key as keyof typeof WASTE_CONFIG_KEYS]).toMatchObject({ type, default: def, category: 'waste', ...(min === undefined ? {} : { min, max }) });
@@ -127,7 +131,7 @@ describe('assertWasteConfigSeedRows', () => {
   });
 });
 
-describe('seed.ts and the migration carry the same 21 rows', () => {
+describe('seed.ts and the migrations carry the same 22 rows', () => {
   it('seed rows are literal, createOnly and equal to the record', () => {
     const rows = seededRows().filter((r) => r.key.startsWith('waste.'));
     expect(rows.map((r) => r.key)).toEqual(EXPECTED.map((e) => e[0]));
@@ -143,16 +147,49 @@ describe('seed.ts and the migration carry the same 21 rows', () => {
     expect(section).toContain('INSERT INTO "system_configs" ("key", "value", "description", "category", "updatedAt") VALUES');
     expect(section).toContain('ON CONFLICT ("key") DO NOTHING;');
     const tuples = [...section.matchAll(/^\s*\('(waste\.[a-z_]+)', '([^']*)'::jsonb, '([^']*)', 'waste', NOW\(\)\)[,;]?\s*$/gm)];
-    expect(tuples.map((m) => m[1])).toEqual(EXPECTED.map((e) => e[0]));
+    expect(tuples.map((m) => m[1])).toEqual(EXPECTED.slice(0, 21).map((e) => e[0]));
     for (const m of tuples) {
       const def = WASTE_CONFIG_KEYS[m[1] as keyof typeof WASTE_CONFIG_KEYS];
       expect(JSON.parse(m[2]!)).toEqual(def.default);
-      expect(m[3]).toBe(def.description);
+      expect(m[3]).toBe(m[1] === OLD_CLAIM_DAYS_KEY ? OLD_CLAIM_DAYS_DESC : def.description);
     }
   });
 });
 
+describe('waste.gift_claim_days description migration', () => {
+  const SQL_D = readFileSync(join(__dirname, '../../../prisma/migrations/20261030100002_waste_gift_claim_days_description/migration.sql'), 'utf-8');
+  it('rewrites the stale sentence only while the row still holds it, to the key description', () => {
+    expect(SQL_D).toContain('UPDATE "system_configs"');
+    expect(SQL_D).toContain(`SET "description" = '${WASTE_CONFIG_KEYS['waste.gift_claim_days'].description}'`);
+    expect(SQL_D).toContain(`AND "description" = '${OLD_CLAIM_DAYS_DESC}'`);
+    expect(SQL_D).toContain(`WHERE "key" = '${OLD_CLAIM_DAYS_KEY}'`);
+  });
+});
+
+describe('waste.rules_version migration', () => {
+  const SQL_V = readFileSync(join(__dirname, '../../../prisma/migrations/20261030100001_waste_rules_version/migration.sql'), 'utf-8');
+  it('inserts the one row with the old constant as value, the record description, ON CONFLICT DO NOTHING', () => {
+    expect(SQL_V).toContain('INSERT INTO "system_configs" ("key", "value", "description", "category", "updatedAt") VALUES');
+    expect(SQL_V).toContain('ON CONFLICT ("key") DO NOTHING;');
+    const tuples = [...SQL_V.matchAll(/\('(waste\.[a-z_]+)', '([^']*)'::jsonb, '([^']*)', 'waste', NOW\(\)\)/g)];
+    expect(tuples).toHaveLength(1);
+    expect(tuples[0]![1]).toBe('waste.rules_version');
+    expect(JSON.parse(tuples[0]![2]!)).toBe('2026-10-17.1');
+    expect(tuples[0]![3]).toBe(WASTE_CONFIG_KEYS['waste.rules_version'].description);
+  });
+});
+
 describe('write rules (SystemConfigService.set and the admin form rules)', () => {
+  it('waste.rules_version: a short non-blank string, at most 32 characters', async () => {
+    expect(await accepts('waste.rules_version', '2026-11-05.2')).toBe(true);
+    expect(await accepts('waste.rules_version', 'a'.repeat(32))).toBe(true);
+    expect(await accepts('waste.rules_version', 'a'.repeat(33))).toBe(false);
+    expect(await accepts('waste.rules_version', '')).toBe(false);
+    expect(await accepts('waste.rules_version', '   ')).toBe(false);
+    expect(await accepts('waste.rules_version', 5)).toBe(false);
+    expect(await accepts('waste.rules_version', {})).toBe(false);
+    expect(SystemConfigService.hasWriteRule('waste.rules_version')).toBe(true);
+  });
   it.each(INTS)('%s (%s): accepts min and max, rejects min-1, max+1 and a fraction', async (key, _t, _d, min, max) => {
     expect(await accepts(key, min)).toBe(true);
     expect(await accepts(key, max)).toBe(true);

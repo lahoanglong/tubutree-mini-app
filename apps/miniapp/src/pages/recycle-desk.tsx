@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { HAZARDOUS_DESK_NOTES } from '@tubutree/app-core/waste-copy';
-import { WAREHOUSE_ONLY_RETURN_NOTE, deskClosedText, deskDoneCopy, deskInitialLines, isPartnerWarehouseOnly } from '@tubutree/app-core/waste-desk';
+import { WAREHOUSE_ONLY_RETURN_NOTE, deskClosedText, deskDoneCopy, deskGiftReadOnly, deskInitialLines, isPartnerWarehouseOnly } from '@tubutree/app-core/waste-desk';
 import type { CSSProperties } from 'react';
 import { Input, Page, useSnackbar } from 'zmp-ui';
 import { CheckCircle2, ChevronDown, ScanLine } from 'lucide-react';
@@ -34,7 +34,7 @@ import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
-import { formatDate, formatNumber, formatPoints } from '../utils/format';
+import { formatDate, formatDateTime, formatNumber, formatPoints } from '../utils/format';
 import { DESK_REJECTION_OPTIONS, METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS } from '../utils/waste-labels';
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
@@ -49,11 +49,6 @@ const SELECT_STYLE: CSSProperties = {
   background: 'var(--color-bg-surface)',
   color: 'var(--color-text-primary)',
   font: 'inherit',
-};
-
-const GIFT_STATUS_TEXT: Record<Exclude<WasteDeskGiftDTO['status'], 'READY'>, string> = {
-  FULFILLED: 'Quà đã được trao',
-  CANCELLED: 'Lượt đổi quà đã huỷ',
 };
 
 interface DeskDone {
@@ -225,6 +220,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
 
   const request = lookup;
   const readOnly = !!request && isReadOnly(request);
+  const giftReadOnly = gift ? deskGiftReadOnly(gift, { dateTime: formatDateTime, points: formatPoints }) : null;
   // Bưu kiện tra bằng mã TR- ghi trên kiện (cơ sở khớp TR_CODE); không có cơ sở khớp máy chủ trả 409 (spec 15.3, 15.5).
   const match: WasteMatchInput | undefined =
     request && request.method !== 'DROP_OFF' && request.status !== 'RECEIVED' ? { parcelCode: request.code } : undefined;
@@ -450,8 +446,13 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
             </div>
             {!point.giftHandoverEnabled ? (
               <Text variant="body-md" as="div">Điểm này không trao quà</Text>
-            ) : gift.status !== 'READY' ? (
-              <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{GIFT_STATUS_TEXT[gift.status]}</Text>
+            ) : giftReadOnly ? (
+              <div style={{ ...COLUMN, gap: 2 }}>
+                <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{giftReadOnly.heading}</Text>
+                {giftReadOnly.notes.map((n) => (
+                  <Text key={n} variant="body-sm" tone="secondary" as="div">{n}</Text>
+                ))}
+              </div>
             ) : (
               <Button
                 size="lg"

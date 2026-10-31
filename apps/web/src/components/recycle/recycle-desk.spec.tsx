@@ -66,7 +66,7 @@ import { RecycleDesk, deskPreviewPoints } from './recycle-desk';
 const REQ = makeDeskRequest();
 const LINE0 = REQ.lines[0]!;
 const CONFIRMED = { requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 6000, dropsAwarded: 0, quota: { limit: 500_000, used: 126_000, remaining: 374_000 }, staffDailyCapRemaining: 150_000 };
-const GIFT = { id: 'red-1', giftName: 'Gói hạt giống Tubu', customerName: 'Ng*** A', status: 'READY', claimExpiresAt: '2026-12-16T17:30:00.000Z' };
+const GIFT = { id: 'red-1', giftName: 'Gói hạt giống Tubu', customerName: 'Ng*** A', status: 'READY', claimExpiresAt: '2099-12-16T17:30:00.000Z' };
 const CODE_LABEL = 'Mã yêu cầu hoặc mã nhận quà';
 
 let mounted: Rendered[] = [];
@@ -671,7 +671,7 @@ describe('/doi-rac/quay: trao quà ở kho (§8, §15.3)', () => {
     const c = await mount();
     await lookUp(c, 'qg-8k2m9p4t');
     expect(c.textContent).toContain('Gói hạt giống Tubu');
-    expect(c.textContent).toContain('Hạn nhận 17/12/2026');
+    expect(c.textContent).toContain('Hạn nhận 17/12/2099');
     click(button(c, 'Trao quà'));
     await flush(10);
     expect(calls('/waste/desk/gifts/fulfil')[0]!.body).toEqual({ code: 'QG-8K2M9P4T', pointId: 'wh-1' });
@@ -711,6 +711,33 @@ describe('/doi-rac/quay: trao quà ở kho (§8, §15.3)', () => {
     const c = await mount();
     await lookUp(c, 'QG-8K2M9P4T');
     expect(c.textContent).toContain(text);
+    expect(button(c, 'Trao quà')).toBeNull();
+  });
+  it('lượt đã huỷ do quá hạn: hiện lý do và điểm đã hoàn, chỉ đọc', async () => {
+    state.lookup = {
+      type: 'GIFT',
+      redemption: { ...GIFT, status: 'CANCELLED', cancelledAt: '2026-11-11T03:00:00.000Z', cancelReason: 'Quá hạn nhận', pointsCost: 30000, refundedPoints: 30000 },
+    };
+    const c = await mount();
+    await lookUp(c, 'QG-8K2M9P4T');
+    expect(c.textContent).toContain('Lượt đổi quà đã huỷ');
+    expect(c.textContent).toContain('Lý do: Quá hạn nhận');
+    expect(c.textContent).toMatch(/Đã hoàn 30\.000 điểm cho khách/);
+    expect(button(c, 'Trao quà')).toBeNull();
+  });
+  it('lượt đã trao: hiện giờ trao và số điểm đã đổi, không có nút', async () => {
+    state.lookup = { type: 'GIFT', redemption: { ...GIFT, status: 'FULFILLED', fulfilledAt: '2026-11-10T03:00:00.000Z', pointsCost: 30000 } };
+    const c = await mount();
+    await lookUp(c, 'QG-8K2M9P4T');
+    expect(c.textContent).toContain('Trao lúc 10:00 10/11/2026');
+    expect(c.textContent).toMatch(/Khách đổi bằng 30\.000 điểm/);
+    expect(button(c, 'Trao quà')).toBeNull();
+  });
+  it('quà còn READY nhưng đã quá hạn: báo quá hạn, không có nút Trao quà', async () => {
+    state.lookup = { type: 'GIFT', redemption: { ...GIFT, claimExpiresAt: '2020-01-01T00:00:00.000Z' } };
+    const c = await mount();
+    await lookUp(c, 'QG-8K2M9P4T');
+    expect(c.textContent).toContain('Quà đã quá hạn nhận');
     expect(button(c, 'Trao quà')).toBeNull();
   });
   it('lỗi trao quà hiện nguyên văn và giữ thẻ quà', async () => {

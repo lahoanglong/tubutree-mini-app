@@ -228,7 +228,7 @@ function GiftQueue({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed | nul
             )}
             {isAdmin && action?.id === r.id && action.kind === 'cancel' && (
               <div className="space-y-2">
-                <Field label="Lý do huỷ">
+                <Field label="Lý do huỷ" hint="Khách và quầy đều thấy lý do này">
                   <textarea name="cancelReason" rows={2} maxLength={CANCEL_REASON_MAX} className={INPUT_CLASS} value={reason} onChange={(e) => setReason(e.target.value)} />
                 </Field>
                 <fieldset className="space-y-1 text-xs text-stone-700">
@@ -268,6 +268,7 @@ function RedemptionSummary({ row: r }: { row: AdminGiftRedemptionRowDTO }) {
         <span className="font-mono">{codeText}</span>
         {r.claimExpiresAt && ` · Hạn nhận ${formatDate(r.claimExpiresAt)}`}
       </div>
+      {r.status === 'CANCELLED' && r.cancelReason && <div className="text-xs text-stone-700">{`Đã huỷ: ${r.cancelReason}`}</div>}
     </div>
   );
 }

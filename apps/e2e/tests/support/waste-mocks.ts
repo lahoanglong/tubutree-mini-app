@@ -196,6 +196,7 @@ export function mockWasteCustomer(
       ...opts.me,
     }),
   );
+  api.get('/waste/rules', { text: 'Thể lệ thử nghiệm', version: '2026-10-17.1' });
   api.get('/waste/items', WASTE_ITEMS.map(({ monthRemainingQty: _m, dayRemainingQty: _d, ...item }) => item));
   api.get('/waste/points', opts.points ?? []);
   api.post('/waste/preview', ({ call }): WastePreviewDTO => {

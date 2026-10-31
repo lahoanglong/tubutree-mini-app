@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { startOfVnDay } from '../../../common/vn-time';
 import { WASTE_OPEN_STATUSES } from '../waste.constants';
 
 export const WASTE_TO_COUNT_WHERE: Prisma.WasteRequestWhereInput = { method: { in: ['MAIL_IN', 'PICKUP'] }, status: 'RECEIVED' };
@@ -40,6 +41,7 @@ export function wasteOrderMismatchWhere(): Prisma.WasteRequestWhereInput {
   };
 }
 
+/** Khách chỉ thấy ngày hạn nhận, nên quà chỉ quá hạn khi cả ngày VN ghi trên hạn đã qua. */
 export function wasteGiftOverdueWhere(now: Date): Prisma.WasteGiftRedemptionWhereInput {
-  return { status: 'READY', claimExpiresAt: { lt: now } };
+  return { status: 'READY', claimExpiresAt: { lt: startOfVnDay(now) } };
 }

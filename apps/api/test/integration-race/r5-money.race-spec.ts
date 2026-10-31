@@ -127,6 +127,7 @@ describe('R5 tiền: trả hai lần, khoá người chuyển khoản, chuyển 
           expect.objectContaining({ kind: 'OVERPAYMENT', refKey: `ZALOPAY:${loser}`, amount: 44_000, method: 'MANUAL_TRANSFER', status: 'PENDING' }),
         ]);
         expect(sent('ORDER_CONFIRMED')).toHaveLength(1);
+        expect(sent('ORDER_CONFIRMED')[0]![2]).toMatchObject({ payment_note: ' Tubu Tree đã nhận đủ thanh toán.' });
         expect(sent('REFUND_OVERPAYMENT')).toHaveLength(1);
       }
     });

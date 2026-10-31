@@ -1,5 +1,6 @@
 import { useId, type CSSProperties, type ReactNode } from 'react';
 import { isNewProduct, NEW_PRODUCT_LABEL } from '@tubutree/app-core/product-badges';
+import { useCatalogLaunchDate } from '../../hooks/use-catalog-launch-date';
 import { brandAccent } from '../../utils/brands';
 import { vi } from '../../i18n/vi';
 import { formatSold } from '../../utils/format';
@@ -85,7 +86,8 @@ export function ProductTile({
   const compareAt = priceOverride?.compareAt !== undefined ? priceOverride.compareAt : hasSale ? p.basePrice : undefined;
   const isLine = variant === 'line' || variant === 'list';
   // Hết hàng đã có lớp phủ trên ảnh, thẻ dạng dòng chỉ có ảnh 64px: không chồng thêm nhãn.
-  const showNew = !isLine && p.inStock !== false && isNewProduct(p.createdAt);
+  const launchDate = useCatalogLaunchDate();
+  const showNew = launchDate !== undefined && !isLine && p.inStock !== false && isNewProduct(p.createdAt, Date.now(), launchDate);
   // Tên truy cập = tên sản phẩm; giá (và giá gốc gạch) là mô tả truy cập của thẻ.
   const priceId = useId();
 
