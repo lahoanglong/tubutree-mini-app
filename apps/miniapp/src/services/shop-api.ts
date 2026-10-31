@@ -425,6 +425,8 @@ export interface FlashSaleActiveItem {
   endAt: string;
   /** Giờ máy chủ lúc dựng danh sách; thiếu thì app dùng đồng hồ điện thoại. */
   serverNow?: string;
+  /** Giới hạn mua mỗi khách; API chưa gửi tới khi P12 làm `listActive`. */
+  perUserLimit?: number;
 }
 export const fetchActiveFlashSales = async () => {
   const items = (await takePublicBlock('flashActive')) ?? (await api.get<FlashSaleActiveItem[]>('/flash-sales/active')).data;
