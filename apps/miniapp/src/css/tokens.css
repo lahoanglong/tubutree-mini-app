@@ -255,6 +255,24 @@ body.with-back-btn .page.page-bleed {
   outline-offset: -2px;
 }
 
+/* Nhãn Giờ vàng trên ảnh: thẻ rộng giữ "Giờ vàng -x%", thẻ hẹp (kệ 148px, lưới ở máy 320-360px) đổi sang "-x%" để không chui dưới
+   nút tim 32px + lề 8px ở góc phải. Ngưỡng 164px: lưới 375px (167px) còn đủ chỗ, 360px (160px) thì không. Trình duyệt chưa có
+   container query giữ bản đầy đủ như trước. */
+.tubu-tile-media {
+  container-type: inline-size;
+}
+.tubu-badge-short {
+  display: none;
+}
+@container (max-width: 163.98px) {
+  .tubu-badge-long {
+    display: none;
+  }
+  .tubu-badge-short {
+    display: inline;
+  }
+}
+
 /* ── Ô tìm kiếm (SearchField): ẩn nút "x" gốc của WebKit/Blink (trùng nút xoá của DS) + vòng focus
    của khung (WCAG 2.4.7; ô nhập tự bỏ outline nên khung phải báo thay). Border nằm trong style
    nội tuyến nên vòng focus dùng box-shadow. ── */

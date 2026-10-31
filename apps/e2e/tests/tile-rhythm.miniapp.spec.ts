@@ -25,6 +25,17 @@ const FIXTURE: ProductCard[] = [
   card('8', 'Giấy gói quà tái chế khổ lớn dùng cho mọi dịp lễ trong năm', { sold: 12 }),
 ];
 
+function mockFlash(api: MockApi): void {
+  api.get('/flash-sales/active', () => {
+    const now = Date.now();
+    return [FIXTURE[0]!, FIXTURE[2]!, FIXTURE[4]!].map((p, i) => ({
+      itemId: `fi-${p.id}`, variationId: `v-${p.id}`, productSlug: p.slug, productName: p.name, variationName: null, thumbnail: p.thumbnail,
+      flashPrice: 59_000 + i * 1_000, retailPrice: p.basePrice, salePrice: p.salePrice, soldCount: 10, quota: 50,
+      endAt: new Date(now + 3 * 3_600_000).toISOString(), serverNow: new Date(now).toISOString(),
+    }));
+  });
+}
+
 function mockRhythm(api: MockApi): void {
   mockDiscovery(api);
   // Đăng ký SAU mockDiscovery để thắng mặc định.
@@ -104,4 +115,32 @@ test.describe('Thẻ sản phẩm cùng nhịp ở 375px', () => {
     const bodies = await grid.locator('[data-ds-part="body"]').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
     expect(bodies, 'chiều cao thân từng thẻ').toEqual(bodies.map(() => bodies[0]));
   });
+});
+
+test.describe('Nhãn Giờ vàng trên ảnh không chui dưới nút tim', () => {
+  for (const width of [320, 360, 375, 390]) {
+    test(`${width}px: mép phải nhãn nằm trước nút tim ở lưới và kệ Bán chạy`, async ({ page, api }) => {
+      await page.setViewportSize({ width, height: 812 });
+      mockRhythm(api);
+      mockFlash(api);
+      await page.goto('/');
+      await expect(page.getByRole('region', { name: 'Sản phẩm bán chạy' }).locator('[data-ds="product-tile"]').first()).toBeVisible({ timeout: 15_000 });
+      await page.getByRole('region', { name: 'Gợi ý cho bạn' }).scrollIntoViewIfNeeded();
+      await settled(page, page.getByRole('region', { name: 'Gợi ý cho bạn' }).getByTestId('catalog-grid'));
+      const checks = await page.evaluate(() =>
+        Array.from(document.querySelectorAll<HTMLElement>('[data-ds="product-tile"]'))
+          .map((t) => {
+            const badge = t.querySelector<HTMLElement>('[data-ds-part="image-badge"]');
+            const disc = t.querySelector<HTMLElement>('button[aria-label^="Yêu thích"] > span');
+            if (!badge || !disc) return null;
+            const label = Array.from(badge.querySelectorAll<HTMLElement>('.tubu-badge-long, .tubu-badge-short')).find((e) => getComputedStyle(e).display !== 'none');
+            return { variant: t.dataset.dsVariant ?? '', shown: label?.textContent ?? badge.textContent ?? '', gap: disc.getBoundingClientRect().left - badge.getBoundingClientRect().right };
+          })
+          .filter((c): c is { variant: string; shown: string; gap: number } => c !== null),
+      );
+      expect(checks.length).toBeGreaterThanOrEqual(2);
+      expect(checks.some((c) => c.variant === 'rail-md')).toBe(true);
+      for (const c of checks) expect(c.gap, `${c.variant} "${c.shown}" ở ${width}px`).toBeGreaterThanOrEqual(0);
+    });
+  }
 });

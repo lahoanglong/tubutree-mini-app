@@ -12,6 +12,8 @@ export interface CardBadge {
   text: string;
   /** Chữ cho trình đọc màn hình ("Giờ vàng giảm 25%"), vì "-25%" bị đọc thành "gạch ngang 25%". */
   spoken: string;
+  /** Bản rút gọn ("-25%") cho thẻ quá hẹp để chứa `text`; thẻ chọn bản vừa chỗ theo bề rộng khung ảnh. Thiếu thì `text` đã ngắn nhất. */
+  short?: string;
 }
 
 export interface ProductCardInput {
@@ -75,8 +77,9 @@ function imageBadgeOf(variant: CardVariant, isFlash: boolean, pct: number): Card
   if (slot === false || pct <= 0) return null;
   if (isFlash) {
     // Thẻ Giờ vàng 128px nằm trong khối đã có tiêu đề "Giờ vàng", nên chỉ "-x%" kèm biểu tượng.
-    const text = variant === 'flash' ? fillTileCopy('badge.discount', { pct }) : fillTileCopy('flash.badge', { pct });
-    return { kind: 'flash', text, spoken: fillTileCopy('badge.flashSpoken', { pct }) };
+    const spoken = fillTileCopy('badge.flashSpoken', { pct });
+    const short = fillTileCopy('badge.discount', { pct });
+    return variant === 'flash' ? { kind: 'flash', text: short, spoken } : { kind: 'flash', text: fillTileCopy('flash.badge', { pct }), short, spoken };
   }
   if (slot === 'flash') return null;
   return { kind: 'discount', text: fillTileCopy('badge.discount', { pct }), spoken: fillTileCopy('badge.discountSpoken', { pct }) };

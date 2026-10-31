@@ -112,7 +112,14 @@ export function ProductTile({
   const imageBadge = view.imageBadge;
   const badgeNode = imageBadge && (
     <Badge tone={BADGE_TONE[imageBadge.kind]} size="sm" icon={imageBadge.kind === 'flash' ? Zap : undefined}>
-      {imageBadge.text}
+      {imageBadge.short ? (
+        <>
+          <span className="tubu-badge-long">{imageBadge.text}</span>
+          <span className="tubu-badge-short">{imageBadge.short}</span>
+        </>
+      ) : (
+        imageBadge.text
+      )}
     </Badge>
   );
   const label = view.label;
@@ -152,6 +159,7 @@ export function ProductTile({
     >
       <div
         data-ds-part="media"
+        className="tubu-tile-media"
         style={{
           position: 'relative',
           background: 'var(--color-bg-media)',

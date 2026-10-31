@@ -176,7 +176,7 @@ function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleActiveItem
           {soldPct > 0 && (
             <>
               <ProgressBar value={soldPct} max={100} tone="flash" ariaLabel={flashSaleText.soldPct(soldPct)} />
-              <p className="mt-0.5 h-4 text-xs leading-4 text-stone-600">{flashSaleText.soldPct(soldPct)}</p>
+              <p className="mt-0.5 h-4 text-xs font-medium leading-4 text-stone-600">{flashSaleText.soldPct(soldPct)}</p>
             </>
           )}
         </div>

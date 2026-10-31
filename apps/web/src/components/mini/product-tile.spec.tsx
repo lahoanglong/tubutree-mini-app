@@ -118,6 +118,15 @@ describe('ProductTile: nhãn, hết hàng, hạng', () => {
     expect((b.querySelector('[data-ds-part="image-badge"] span') as HTMLElement).style.background).toBe('var(--color-promo-bg)');
   });
 
+  it('nhãn Giờ vàng vẽ cả chữ đầy đủ lẫn bản "-x%"; khung ảnh là vùng chứa để CSS chọn bản vừa chỗ, thẻ rộng không đổi chữ', () => {
+    const flash = viewOf({}, 'rail-md', { flash: { productSlug: 'serum-x', variationId: 'v1', flashPrice: 39_000, endAt: new Date(NOW + 3_600_000).toISOString() } });
+    const c = tile(flash, 'rail-md');
+    const badge = part(c, 'image-badge')!;
+    expect(badge.querySelector('.tubu-badge-long')?.textContent).toBe('Giờ vàng -25%');
+    expect(badge.querySelector('.tubu-badge-short')?.textContent).toBe('-25%');
+    expect(part(c, 'media')!.classList.contains('tubu-tile-media')).toBe(true);
+  });
+
   it('nhãn đầu tên vẽ cùng dòng với tên, tên vẫn cắt 2 dòng', () => {
     const c = tile(viewOf({ isFeatured: true }), 'grid');
     expect(link(c).textContent).toContain('Tubu chọn');

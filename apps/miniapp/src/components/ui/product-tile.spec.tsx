@@ -107,6 +107,15 @@ describe('ProductTile: nhãn, hết hàng, hạng', () => {
     expect((b.container.querySelector('[data-ds-part="image-badge"] span') as HTMLElement).style.background).toBe('var(--color-promo-bg)');
   });
 
+  it('nhãn Giờ vàng vẽ cả chữ đầy đủ lẫn bản "-x%"; khung ảnh là vùng chứa để CSS chọn bản vừa chỗ, thẻ rộng không đổi chữ', () => {
+    const flash = viewOf({}, 'rail-md', { flash: { productSlug: 'serum-x', variationId: 'v1', flashPrice: 39_000, endAt: new Date(NOW + 3_600_000).toISOString() } });
+    const { container } = render(<ProductTile view={flash} variant="rail-md" href="/p" />);
+    const badge = container.querySelector('[data-ds-part="image-badge"]') as HTMLElement;
+    expect(badge.querySelector('.tubu-badge-long')).toHaveTextContent('Giờ vàng -25%');
+    expect(badge.querySelector('.tubu-badge-short')).toHaveTextContent('-25%');
+    expect(container.querySelector('[data-ds-part="media"]')).toHaveClass('tubu-tile-media');
+  });
+
   it('nhãn đầu tên vẽ cùng dòng với tên, tên vẫn cắt 2 dòng', () => {
     render(<ProductTile view={viewOf({ isFeatured: true })} variant="grid" href="/p" />);
     const nameBtn = screen.getByRole('button', { name: 'Serum Bã Trầu' });

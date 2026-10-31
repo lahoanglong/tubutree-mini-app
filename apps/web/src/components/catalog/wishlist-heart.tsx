@@ -88,7 +88,7 @@ export function WishlistHeart({
       aria-label={productName ? `Yêu thích ${productName}` : liked ? 'Bỏ yêu thích' : 'Thêm yêu thích'}
       aria-pressed={liked}
       onClick={onClick}
-      className={`inline-flex h-11 w-11 items-center justify-center text-stone-700 ${floating ? 'absolute right-0.5 top-0.5' : 'rounded-control hover:bg-stone-50'} ${className}`}
+      className={`inline-flex h-11 w-11 items-center justify-center text-stone-600 ${floating ? 'absolute right-0.5 top-0.5' : 'rounded-control hover:bg-stone-50'} ${className}`}
     >
       {floating ? (
         <span data-testid="heart-disc" className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-0 shadow-[var(--elevation-1)]">

@@ -35,7 +35,7 @@ describe('giá và Giờ vàng', () => {
   it('Giờ vàng đang chạy thắng: giá Giờ vàng, gạch giá bán, nhãn flash trên ảnh', () => {
     const v = view({ flash: flash() });
     expect(v).toMatchObject({ price: 39_000, compareAt: 52_000, discountPct: 25, isFlash: true, isDeal: true });
-    expect(v.imageBadge).toEqual({ kind: 'flash', text: 'Giờ vàng -25%', spoken: 'Giờ vàng giảm 25%' });
+    expect(v.imageBadge).toEqual({ kind: 'flash', text: 'Giờ vàng -25%', short: '-25%', spoken: 'Giờ vàng giảm 25%' });
     expect(v.spoken.price).toBe('Giá Giờ vàng 39.000đ, giá gốc 52.000đ');
   });
 
@@ -164,6 +164,14 @@ describe('khe nhãn theo biến thể', () => {
     expect(rich('flash').imageBadge).toEqual({ kind: 'flash', text: '-25%', spoken: 'Giờ vàng giảm 25%' });
     expect(rich('flash').label).toBeNull();
     expect(view({ product: product({ salePrice: 39_000 }), variant: 'flash' }).imageBadge).toBeNull();
+  });
+
+  it('nhãn Giờ vàng ở thẻ có tim (grid, rail-md, rank) kèm bản rút gọn "-x%" để thẻ hẹp không bị tim đè; nhãn giảm giá thì không cần', () => {
+    for (const variant of ['grid', 'rail-md', 'rank'] as const) {
+      expect(rich(variant).imageBadge, variant).toMatchObject({ kind: 'flash', text: 'Giờ vàng -25%', short: '-25%' });
+    }
+    expect(view({ product: product({ salePrice: 39_000 }) }).imageBadge).not.toHaveProperty('short');
+    expect(rich('flash').imageBadge).not.toHaveProperty('short');
   });
 
   it('rank có nhãn ảnh, không nhãn đầu tên; line không nhãn nào', () => {
