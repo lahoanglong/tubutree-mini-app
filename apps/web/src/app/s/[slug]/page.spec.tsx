@@ -33,6 +33,8 @@ const SF = {
   themeColor: '#16a34a', collections: [{ id: 'c1', title: 'Nổi bật', items: [{ id: 'i1', product: PRODUCT }] }],
 };
 
+const TICK = '[role="img"][aria-label="Đã được Tubu Tree duyệt"]';
+
 const html = async () => {
   const el = (await StorefrontPage({ params: Promise.resolve({ slug: 'linh' }) })) as ReactElement;
   const box = document.createElement('div');
@@ -47,21 +49,21 @@ beforeEach(() => {
 describe('trang gian hàng /s/[slug] — tin cậy chỉ khi đúng sự thật (D3-02, D5-05)', () => {
   it('gian hàng CTV chưa được admin duyệt: không có tick xanh, không có chữ "CTV tuyển chọn"', async () => {
     const box = await html();
-    expect(box.querySelector('[data-verified-mark]')).toBeNull();
+    expect(box.querySelector(TICK)).toBeNull();
     expect(box.textContent).not.toContain('CTV tuyển chọn');
   });
 
   it('gian hàng CTV đã duyệt: có tick xanh và chữ "CTV tuyển chọn"', async () => {
     mocks.sf = { ...SF, approved: true };
     const box = await html();
-    expect(box.querySelector('[data-verified-mark]')).not.toBeNull();
+    expect(box.querySelector(TICK)).not.toBeNull();
     expect(box.textContent).toContain('CTV tuyển chọn');
   });
 
   it('API cũ chưa trả cờ approved: coi như chưa duyệt (không tự cấp tick)', async () => {
     const { approved: _omit, ...legacy } = SF;
     mocks.sf = legacy;
-    expect((await html()).querySelector('[data-verified-mark]')).toBeNull();
+    expect((await html()).querySelector(TICK)).toBeNull();
   });
 
   it('gian hàng đối tác: nhãn "Đối tác của Tubu Tree", không hứa "chính hãng"', async () => {
@@ -115,58 +117,75 @@ describe('trang gian hàng /s/[slug] — gian hàng mẫu và lối mở gian h�
   });
 });
 
-describe('trang gian hàng — kiểu Mini App ở điện thoại', () => {
-  it('trang hero: không đệm trang ở điện thoại; bìa 84px tràn mép, màu xanh đậm như Mini App (không theo màu chủ đề)', async () => {
+describe('trang gian hàng — khung shop giống Mini App', () => {
+  const col = (n: number) => ({ id: `c${n}`, title: `Bộ ${n}`, items: [{ id: `i${n}`, product: { ...PRODUCT, id: `p${n}`, slug: `sp-${n}`, name: `SP ${n}` } }] });
+
+  it('h1 là tên shop; bìa phẳng token không gradient; avatar là biểu tượng lá, không chữ cái', async () => {
     const box = await html();
-    expect(box.querySelector('main')!.className).toContain('max-md:px-0');
-    const cover = box.querySelector<HTMLElement>('[data-testid="storefront-cover"]')!;
-    expect(cover.className).toContain('max-md:h-[84px]');
-    expect(cover.className).toContain('max-md:[--sf-theme:var(--forest-700)]');
-    expect(cover.parentElement!.className).toContain('max-md:rounded-none');
+    expect(box.querySelector('h1')!.textContent).toBe('Shop của Linh');
+    const cover = box.querySelector<HTMLElement>('[data-testid="shop-cover"]')!;
+    expect(cover.getAttribute('style')).toContain('var(--color-bg-cover)');
+    expect(box.innerHTML).not.toContain('linear-gradient');
+    const avatar = box.querySelector('[data-testid="shop-avatar"]')!;
+    expect(avatar.querySelector('svg')).not.toBeNull();
+    expect(avatar.textContent).toBe('');
   });
 
-  it('đầu trang phẳng ở điện thoại: không viền, không bóng, avatar tròn 58px đè lên bìa', async () => {
+  it('hàng số liệu: "1 Sản phẩm"; tab Shop và "Sản phẩm (1)"; một bộ thì không có tab Danh mục', async () => {
     const box = await html();
-    const card = box.querySelector<HTMLElement>('[data-testid="storefront-header"]')!;
-    expect(card.className).toContain('max-md:border-0');
-    expect(card.className).toContain('max-md:bg-transparent');
-    expect(card.className).toContain('max-md:shadow-none');
-    const avatar = box.querySelector<HTMLElement>('[data-testid="storefront-avatar"]')!;
-    expect(avatar.className).toContain('max-md:h-[58px]');
-    expect(avatar.className).toContain('max-md:rounded-full');
-    expect(avatar.parentElement!.parentElement!.className).toContain('max-md:flex-col');
+    expect(box.querySelector('[data-testid="shop-stat"]')!.textContent).toContain('1');
+    expect(box.querySelector('[data-testid="shop-stat"]')!.textContent).toContain('Sản phẩm');
+    expect(Array.from(box.querySelectorAll('[role="tab"]')).map((t) => t.textContent)).toEqual(['Shop', 'Sản phẩm (1)']);
   });
 
-  it('dải cam kết chỉ cho máy tính; tiêu đề bộ sưu tập không thanh màu, không đếm sản phẩm ở điện thoại', async () => {
+  it('nhiều hơn một bộ: có tab Danh mục; tab Shop chỉ vẽ tối đa 6 khối', async () => {
+    mocks.sf = { ...SF, collections: Array.from({ length: 8 }, (_, i) => col(i + 1)) };
+    const box = await html();
+    expect(Array.from(box.querySelectorAll('[role="tab"]')).map((t) => t.textContent)).toContain('Danh mục');
+    expect(box.querySelectorAll('section[id^="shop-col-"]')).toHaveLength(6);
+  });
+
+  it('bậc CTV thấp nhất (publicBadge=false hoặc không có cờ) không hiện huy hiệu; bậc từ thứ 2 hiện', async () => {
+    mocks.sf = { ...SF, ownerTier: { name: 'Tân binh', emoji: '🌱', publicBadge: false } };
+    expect((await html()).textContent).not.toContain('Tân binh');
+    mocks.sf = { ...SF, ownerTier: { name: 'Tân binh', emoji: '🌱' } };
+    expect((await html()).textContent).not.toContain('Tân binh');
+    mocks.sf = { ...SF, ownerTier: { name: 'Cây Con', emoji: '🌿', publicBadge: true } };
+    expect((await html()).textContent).toContain('Cây Con');
+  });
+
+  it('dải cam kết chỉ cho máy tính (md trở lên)', async () => {
     const box = await html();
     expect(box.querySelector('section[aria-labelledby="cam-ket-gian-hang"]')!.className).toContain('max-md:hidden');
-    const head = Array.from(box.querySelectorAll('h2')).find((h) => h.textContent === 'Nổi bật')!.parentElement!;
-    expect(head.querySelector('[aria-hidden="true"]')!.className).toContain('max-md:hidden');
-    expect(Array.from(head.querySelectorAll('span')).find((x) => x.textContent === '(1 sản phẩm)')!.className).toContain('max-md:hidden');
   });
 
-  it('thẻ sản phẩm là thẻ chung của web (có tim); ghi chú của chủ nằm dưới thẻ', async () => {
+  it('thẻ sản phẩm là thẻ chung của web (có tim); ghi chú của chủ nằm trong thẻ', async () => {
     mocks.sf = { ...SF, collections: [{ id: 'c1', title: 'Nổi bật', items: [{ id: 'i1', note: 'Mình dùng hằng ngày', product: { ...PRODUCT, reviewCount: 8, ratingAvg: 4.5 } }] }] };
     const box = await html();
     const link = box.querySelector<HTMLAnchorElement>('a[href="/san-pham/binh-nuoc"]')!;
     const tile = link.closest('[data-ds="product-tile"]')!;
     expect(tile.textContent).toContain('4,5 sao');
     expect(tile.querySelector('button[aria-label^="Yêu thích"]')).not.toBeNull();
-    expect(tile.textContent).not.toContain('Mình dùng hằng ngày');
-    expect(box.textContent).toContain('Mình dùng hằng ngày');
+    expect(tile.textContent).toContain('Mình dùng hằng ngày');
   });
 
-  // D15-01: màu chủ đề do CTV nhập đi thẳng vào style.
+  // D15-01: màu chủ đề cũ không còn đi vào style: bìa là token phẳng, nên chuỗi độc không có đường nào lọt vào HTML.
   it.each(['red;background:url(https://evil.example/x)', '}body{display:none', 'url(javascript:alert(1))'])(
-    'màu chủ đề độc %j bị bỏ, dùng màu mặc định của token',
+    'màu chủ đề độc %j không xuất hiện trong HTML',
     async (bad) => {
       mocks.sf = { ...SF, themeColor: bad };
       const box = await html();
       expect(box.innerHTML).not.toContain('evil.example');
       expect(box.innerHTML).not.toContain('display:none');
-      expect(box.innerHTML).toContain('var(--color-action-primary-bg)');
     },
   );
+
+  it('kho, ngân hàng và hotline của gian hàng CTV không đi xuống thân trang client (SELLER-8)', async () => {
+    mocks.sf = { ...SF, warehouseAddress: '1 Lê Lợi', warehousePhone: '0912345678', bankAccountNo: '123456' };
+    const box = await html();
+    expect(box.textContent).not.toContain('0912345678');
+    expect(box.innerHTML).not.toContain('123456');
+  });
 });
 
 describe('trang gian hàng — trạng thái rỗng (D5-05)', () => {
@@ -271,30 +290,17 @@ describe('trang gian hàng /s/[slug] — canonical và thẻ chia sẻ (D3-10)',
 
 // Ở 640-767px lớp `sm:` thắng `max-md:` (Tailwind sắp khối max-md trước sm), nên bố cục điện thoại chỉ được đổi bằng `md:`.
 describe('trang gian hàng — khổ 640-767px vẫn là bố cục điện thoại', () => {
-  it('main, bìa, thẻ đầu trang và avatar không dùng lớp sm: đè lên lớp điện thoại', async () => {
-    const box = await html();
-    const main = box.querySelector('main')!;
+  it('main không dùng lớp sm: đè lên lớp điện thoại', async () => {
+    const main = (await html()).querySelector('main')!;
     expect(main.className).toContain('max-md:pb-[calc(90px+var(--safe-bottom))]');
     expect(main.className).not.toMatch(/(^|\s)sm:py-/);
-    const cover = box.querySelector<HTMLElement>('[data-testid="storefront-cover"]')!;
-    expect(cover.className).not.toMatch(/(^|\s)sm:h-/);
-    const card = box.querySelector<HTMLElement>('[data-testid="storefront-header"]')!;
-    expect(card.className).not.toMatch(/(^|\s)sm:(-mt|p)-/);
-    expect(box.querySelector('[data-testid="storefront-avatar"]')!.className).not.toMatch(/(^|\s)sm:(h|w)-/);
-  });
-
-  it('bìa ảnh thật cũng không bị sm:h đè lên chiều cao 84px', async () => {
-    mocks.sf = { ...SF, coverUrl: 'https://cdn.example/c.jpg' };
-    const img = (await html()).querySelector<HTMLElement>('img[src="https://cdn.example/c.jpg"]')!;
-    expect(img.className).toContain('max-md:h-[84px]');
-    expect(img.className).not.toMatch(/(^|\s)sm:h-/);
   });
 
   it('không có bộ sưu tập: vẫn chừa 90px đệm đáy cho chủ gian hàng; khách không có thanh dính đáy kéo họ rời gian hàng', async () => {
     mocks.sf = { ...SF, collections: [] };
     const box = await html();
     expect(box.querySelector('main')!.className).toContain('max-md:pb-[calc(90px+var(--safe-bottom))]');
-    expect(box.querySelector('[data-testid="storefront-header"] .max-md\\:fixed')).toBeNull();
+    expect(box.querySelector('[data-sticky-bar]')).toBeNull();
   });
 
   it('không className nào ghép max-md:<thuộc tính> với sm:<cùng thuộc tính> (sm: thắng ở 640-767px)', async () => {
@@ -310,22 +316,13 @@ describe('trang gian hàng — khổ 640-767px vẫn là bố cục điện tho�
   });
 });
 
-describe('trang gian hàng — nút chính cùng hàng với khối tên ở máy tính (D7-35)', () => {
-  it('không còn hàng riêng bên dưới avatar; khách không có nút đẩy ra danh mục ở đầu trang, chỉ có link phụ cuối trang', async () => {
+describe('trang gian hàng — lối sang Tubu Tree (D7-35)', () => {
+  it('khách không có nút đẩy ra danh mục ở đầu trang, chỉ có link phụ cuối trang', async () => {
     const box = await html();
-    const row = box.querySelector('h1')!.closest('div.md\\:justify-between')!;
-    expect(row.querySelector('a[href="/san-pham"]')).toBeNull();
-    const card = box.querySelector('[data-testid="storefront-header"]')!;
-    expect(card.querySelector(':scope > div.justify-end')).toBeNull();
+    const head = box.querySelector('h1')!.closest('[data-testid="store-layout"]')!;
+    const topLinks = Array.from(head.querySelectorAll('a[href="/san-pham"]')).filter((a) => a.textContent !== 'Xem thêm ở Tubu Tree');
+    expect(topLinks).toHaveLength(0);
     const more = Array.from(box.querySelectorAll('a')).find((a) => a.textContent === 'Xem thêm ở Tubu Tree');
     expect(more?.getAttribute('href')).toBe('/san-pham');
-  });
-});
-
-describe('trang gian hàng — avatar chữ cái theo màu chủ đề chỉ từ md', () => {
-  it('màu chủ đề đi qua biến CSS, không gán backgroundColor inline đè màu xanh đậm của điện thoại', async () => {
-    const avatar = (await html()).querySelector<HTMLElement>('[data-testid="storefront-avatar"]')!;
-    expect(avatar.getAttribute('style')).not.toMatch(/background-color/);
-    expect(avatar.className).toContain('max-md:bg-[var(--color-action-primary-bg)]');
   });
 });

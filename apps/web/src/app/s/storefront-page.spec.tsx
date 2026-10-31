@@ -133,8 +133,8 @@ describe('/s/[slug] — gian hàng mở qua subdomain', () => {
     expect(Array.from(mounted.container.querySelectorAll('a')).some((x) => x.getAttribute('href') === '/ctv/gian-hang')).toBe(true);
   });
 
-  it('hiện lý do giới thiệu của chủ dưới sản phẩm và huy hiệu bậc', async () => {
-    api.storefront = { ...SF, collections: [COL], ownerTier: { name: 'Cây Con', emoji: '🌿' } };
+  it('hiện lý do giới thiệu của chủ trong thẻ sản phẩm và huy hiệu bậc (từ bậc thứ 2)', async () => {
+    api.storefront = { ...SF, collections: [COL], ownerTier: { name: 'Cây Con', emoji: '🌿', publicBadge: true } };
     mounted = render(await StorefrontPage({ params: Promise.resolve({ slug: 'greenshop' }) }));
     expect(mounted.container.textContent).toContain('Mình dùng 3 tháng, da đỡ khô hẳn.');
     expect(mounted.container.textContent).toContain('Cây Con');
