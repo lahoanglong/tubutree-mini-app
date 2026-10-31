@@ -138,33 +138,33 @@ describe('mã đã được ghi công qua gian hàng CTV trong tab', () => {
   beforeEach(() => sessionStorage.clear());
 
   it('chưa đánh dấu thì không mã nào được coi là đã chạm; đánh dấu không phân biệt hoa thường', () => {
-    expect(wasCtvTouched('u1', ('AN123'))).toBe(false);
-    markCtvTouched('u1', (' an123 '));
-    expect(wasCtvTouched('u1', ('AN123'))).toBe(true);
-    expect(wasCtvTouched('u1', ('an123'))).toBe(true);
-    expect(wasCtvTouched('u1', ('KHAC'))).toBe(false);
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
+    markCtvTouched('u1', ' an123 ');
+    expect(wasCtvTouched('u1', 'AN123')).toBe(true);
+    expect(wasCtvTouched('u1', 'an123')).toBe(true);
+    expect(wasCtvTouched('u1', 'KHAC')).toBe(false);
   });
 
   it('nằm ở sessionStorage (sống qua tải lại trang) và bị xoá cùng ngữ cảnh gian hàng', () => {
-    markCtvTouched('u1', ('AN123'));
+    markCtvTouched('u1', 'AN123');
     expect(sessionStorage.length).toBe(1);
     clearStorefrontContext();
-    expect(wasCtvTouched('u1', ('AN123'))).toBe(false);
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
   });
 
   it('clearCtvTouched chỉ xoá dấu chạm CTV, giữ ngữ cảnh gian hàng của tab', () => {
     rememberStorefront('an-shop', 'CTV', 'AN123');
-    markCtvTouched('u1', ('AN123'));
+    markCtvTouched('u1', 'AN123');
     clearCtvTouched();
-    expect(wasCtvTouched('u1', ('AN123'))).toBe(false);
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
     expect(getStorefrontContext()).toMatchObject({ slug: 'an-shop', referralCode: 'AN123' });
   });
 
   it('ghi đè bằng mã CTV khác: chỉ nhớ mã sau cùng', () => {
-    markCtvTouched('u1', ('AN123'));
-    markCtvTouched('u1', ('BINH9'));
-    expect(wasCtvTouched('u1', ('AN123'))).toBe(false);
-    expect(wasCtvTouched('u1', ('BINH9'))).toBe(true);
+    markCtvTouched('u1', 'AN123');
+    markCtvTouched('u1', 'BINH9');
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
+    expect(wasCtvTouched('u1', 'BINH9')).toBe(true);
   });
 });
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest';
-import { useStorefrontContext } from './storefront-context';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearCtvTouched, updateCtvTouchMark, useStorefrontContext, wasCtvTouched } from './storefront-context';
 
 const ctx = () => useStorefrontContext.getState();
 
@@ -69,5 +69,53 @@ describe('storefront-context: referralEligible (mã giới thiệu có thật s�
     expect(JSON.parse(sessionStorage.getItem('tubu_sf_ctx')!).referralEligible).toBe(true);
     ctx().clear();
     expect(ctx().referralEligible).toBeNull();
+  });
+});
+
+describe('storefront-context: lúc bấm link và dấu chạm theo người dùng', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    ctx().clear();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-31T10:00:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('mở link ghi lúc bấm; cùng mã mở lại giữ lúc bấm đầu, mã mới thì ghi lại', () => {
+    ctx().setContext({ referralCode: 'AN123' });
+    const first = ctx().clickedAt;
+    expect(first).toBe(Date.parse('2026-10-31T10:00:00Z'));
+    vi.setSystemTime(new Date('2026-10-31T12:00:00Z'));
+    ctx().setContext({ slug: 'an', kind: 'ctv' });
+    expect(ctx().clickedAt).toBe(first);
+    ctx().setContext({ referralCode: 'BINH9' });
+    expect(ctx().clickedAt).toBe(Date.parse('2026-10-31T12:00:00Z'));
+  });
+
+  it('không có mã giới thiệu thì không có lúc bấm; clear() về null; bản lưu cũ đọc ra null', () => {
+    ctx().setContext({ slug: 'doi-tac', kind: 'brand' });
+    expect(ctx().clickedAt).toBeNull();
+    ctx().setContext({ referralCode: 'AN123' });
+    ctx().clear();
+    expect(ctx().clickedAt).toBeNull();
+  });
+
+  it('dấu chạm gắn người dùng, dấu dạng cũ (chỉ mã) không còn tính', () => {
+    updateCtvTouchMark('u1', 'AN123', 'ctv', true);
+    expect(wasCtvTouched('u1', 'AN123')).toBe(true);
+    expect(wasCtvTouched('u2', 'AN123')).toBe(false);
+    sessionStorage.setItem('tubu_sf_ctv_touched', 'AN123');
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
+  });
+
+  it('dấu đổi theo máy chủ: brand ghi công mã khác xoá dấu; ok:false giữ nguyên; clearCtvTouched xoá hẳn', () => {
+    updateCtvTouchMark('u1', 'AN123', 'ctv', true);
+    updateCtvTouchMark('u1', 'KHACH', 'brand', false);
+    expect(wasCtvTouched('u1', 'AN123')).toBe(true);
+    updateCtvTouchMark('u1', 'BINH9', 'brand', true);
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
+    updateCtvTouchMark('u1', 'AN123', 'ctv', true);
+    clearCtvTouched();
+    expect(wasCtvTouched('u1', 'AN123')).toBe(false);
   });
 });
