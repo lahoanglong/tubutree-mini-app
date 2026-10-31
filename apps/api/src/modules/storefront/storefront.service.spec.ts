@@ -905,6 +905,43 @@ describe('StorefrontService.getPublicBySlug', () => {
     ]);
   });
 
+  describe('getPublicBySlug: % combo trả cho trang kẹp theo storefront.max_combo_pct (checkout kẹp cùng trần, trang không hứa hơn)', () => {
+    const item = (id: string) => ({
+      id: `i-${id}`, note: null, variationId: null, isHidden: false,
+      product: {
+        id, name: `SP ${id}`, slug: id, thumbnail: null, brand: 'B', basePrice: 100_000, salePrice: null, ratingAvg: 0, reviewCount: 0,
+        isActive: true, affiliateBlocked: false, soldExternal: 0, soldApp: 0, approvalStatus: 'APPROVED', storefrontId: null, variations: [{ stock: 1 }],
+      },
+    });
+    const pcts = async (cfg: SystemConfigService, collections: Record<string, unknown>[]) => {
+      const prisma = makePrisma({
+        storefront: { findFirst: jest.fn().mockResolvedValue({
+          id: 's1', slug: 'ctv', title: 'Shop', isPublished: true, type: 'CTV', ownerUserId: 'u9', owner: { referralCode: 'ABCD1234' }, collections,
+        }) },
+      });
+      const r = await new StorefrontService(prisma, cfg, affiliate).getPublicBySlug('ctv');
+      return r.collections.map((c) => c.comboDiscountPct);
+    };
+    const capped = (max: number) =>
+      ({ get: async <T>(k: string, fb?: T): Promise<T> => (k === 'storefront.max_combo_pct' ? (max as unknown as T) : (fb as T)) }) as unknown as SystemConfigService;
+    const combo = (id: string, pct: number | null, products = ['p1', 'p2']) => ({
+      id, title: id, kind: 'COMBO', layout: 'GRID', comboDiscountPct: pct, items: products.map(item),
+    });
+
+    it('vượt trần → về trần; bằng/dưới trần → giữ nguyên; 0 giữ 0', async () => {
+      expect(await pcts(capped(20), [combo('a', 45), combo('b', 20), combo('c', 12), combo('d', 0)])).toEqual([20, 20, 12, 0]);
+    });
+
+    it('không cấu hình → trần mặc định 30', async () => {
+      expect(await pcts(config, [combo('a', 45), combo('b', 25)])).toEqual([30, 25]);
+    });
+
+    it('combo không còn sống (dưới 2 sản phẩm) vẫn null; bộ sưu tập thường không có % thì null', async () => {
+      const normal = { id: 'n', title: 'n', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, items: [item('p1')] };
+      expect(await pcts(capped(20), [combo('a', 45, ['p1']), normal])).toEqual([null, null]);
+    });
+  });
+
   it('404 nếu chưa publish', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(null) } });
     const svc = new StorefrontService(prisma, config, affiliate);

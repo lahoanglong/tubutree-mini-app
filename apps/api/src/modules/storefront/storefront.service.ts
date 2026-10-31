@@ -314,6 +314,8 @@ export class StorefrontService {
       },
     });
     if (!sf) throw new NotFoundException('Gian hàng không tồn tại hoặc chưa đăng.');
+    // Cùng trần với combo.service.ts lúc tính tiền: dữ liệu ghi trước khi có trần mà vượt thì trang không được hứa hơn số thật được trừ.
+    const maxComboPct = await this.config.get<number>('storefront.max_combo_pct', 30);
     // Huy hiệu bậc CHỈ cho gian hàng CTV (bậc tính theo doanh số cá nhân — MERCHANT/BRAND không
     // có khái niệm này). CHỈ trả tên+icon (getPublicTier), không lộ doanh thu/bonusPct thật cho
     // khách xem gian hàng.
@@ -362,7 +364,7 @@ export class StorefrontService {
         // giảm để trang gian hàng không hứa "Combo −X%".
         const comboLive = c.kind !== 'COMBO' || new Set(items.map((i) => i.product.id)).size >= MIN_COMBO_PRODUCTS;
         return {
-          id: c.id, title: c.title, kind: c.kind, layout: c.layout, comboDiscountPct: comboLive ? c.comboDiscountPct : null,
+          id: c.id, title: c.title, kind: c.kind, layout: c.layout, comboDiscountPct: comboLive && c.comboDiscountPct != null ? Math.min(c.comboDiscountPct, maxComboPct) : null,
           items: items.map((i) => ({
             id: i.id, note: i.note, variationId: i.variationId,
             product: {
