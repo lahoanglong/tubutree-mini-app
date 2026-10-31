@@ -1040,6 +1040,17 @@ describe('StorefrontService.getPublicBySlug', () => {
     expect(getPublicTier).toHaveBeenCalledWith('u1');
   });
 
+  it('ownerTier chuyển nguyên cờ publicBadge của getPublicTier (bậc thấp nhất = false) để FE ẩn huy hiệu', async () => {
+    const getPublicTier = jest.fn().mockResolvedValue({ name: 'Tân binh', emoji: '🌱', publicBadge: false });
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'linh', title: 'Shop', isPublished: true, type: 'CTV', ownerUserId: 'u1', collections: [],
+      }) },
+    });
+    const svc = new StorefrontService(prisma, config, { getPublicTier, commissionEligibleRoles: async () => new Set(['AFFILIATE']) } as unknown as AffiliateService);
+    expect((await svc.getPublicBySlug('linh')).ownerTier).toEqual({ name: 'Tân binh', emoji: '🌱', publicBadge: false });
+  });
+
   it('gian hàng MERCHANT/BRAND → ownerTier null, KHÔNG gọi affiliate (bậc chỉ có ý nghĩa cho CTV)', async () => {
     const getPublicTier = jest.fn();
     const prisma = makePrisma({
