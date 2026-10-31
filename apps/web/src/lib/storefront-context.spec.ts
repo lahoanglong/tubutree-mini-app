@@ -182,7 +182,7 @@ describe('bản chờ nguồn giới thiệu trong localStorage', () => {
     const stored = JSON.parse(localStorage.getItem(KEY)!);
     expect(Array.isArray(stored)).toBe(true);
     expect(typeof stored[0].savedAt).toBe('number');
-    rememberEntryLink('an-shop', 'an123');
+    rememberEntryLink('an-shop', null);
     expect(readPendingRefs()).toMatchObject([
       { referralCode: 'ABC', slug: null, kind: null },
       { referralCode: null, slug: 'an-shop', kind: 'CTV' },
@@ -198,7 +198,7 @@ describe('bản chờ nguồn giới thiệu trong localStorage', () => {
   });
 
   it('link ?ref= thuần (vd mã khách thường ở nút chia sẻ) không đè bản chờ của link CTV mở trước đó', () => {
-    rememberEntryLink('an-shop', 'an123');
+    rememberEntryLink('an-shop', null);
     rememberEntryLink(null, 'KHACH01');
     expect(readPendingRefs().map((p) => p.referralCode ?? p.slug)).toEqual(['an-shop', 'KHACH01']);
   });
