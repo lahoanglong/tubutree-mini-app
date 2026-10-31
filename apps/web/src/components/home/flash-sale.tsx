@@ -174,8 +174,8 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false, on
 }
 
 /**
- * Một dòng dưới kệ: suất kế mở lúc mấy giờ, có mấy món; bấm sang trang Giờ vàng, nơi đặt nhắc từng suất. Chưa có trang đó (`href` null)
- * thì chỉ là dòng thông tin, không hứa "Nhắc tôi": nút dẫn tới trang không có gì để nhắc là lạc.
+ * Một dòng dưới kệ: suất kế mở lúc mấy giờ, có mấy món; bấm sang trang Giờ vàng, nơi đặt nhắc từng suất. `href` null (kệ không khai lối xem
+ * tất cả) thì chỉ là dòng thông tin, không hứa "Nhắc tôi": nút dẫn tới nơi không có gì để nhắc là lạc.
  */
 function NextSlotLine({ slot, href }: { slot: NextFlashSlot; href: string | null }) {
   const label = (
@@ -278,8 +278,8 @@ function UpcomingFlashCard({ item, pending, onToggleRemind }: { item: UpcomingFl
 
 /**
  * "Sắp diễn ra" — flash sale đã lên lịch nhưng chưa mở bán, cho khách đặt nhắc. Cần đăng nhập (API lấy userId từ phiên để trả
- * trạng thái reminded) → chỉ chạy khi đã đăng nhập. Đặt/huỷ nhắc cập nhật ngay, lỗi thì hoàn lại. Trang Giờ vàng (P12) dùng khối này;
- * Trang chủ chỉ còn dòng "suất kế" dưới kệ Giờ vàng.
+ * trạng thái reminded) → chỉ chạy khi đã đăng nhập. Đặt/huỷ nhắc cập nhật ngay, lỗi thì hoàn lại. Trang Giờ vàng (`app/gio-vang`) có
+ * nút nhắc riêng theo từng suất; Trang chủ chỉ còn dòng "suất kế" dưới kệ Giờ vàng.
  */
 export function UpcomingFlashSales() {
   const qc = useQueryClient();

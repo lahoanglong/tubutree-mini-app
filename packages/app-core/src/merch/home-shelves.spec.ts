@@ -59,9 +59,11 @@ describe('seeAllHref', () => {
     expect(seeAllHref('home.purchased')).toBe('/orders');
     expect(seeAllHref('home.purchased', 'web')).toBe('/tai-khoan/don-hang');
   });
-  it('Giờ vàng chưa có trang riêng (P12): không trỏ vào Ưu đãi, trả null để khối ẩn "Xem tất cả"', () => {
-    expect(seeAllHref('home.flash')).toBeNull();
-    expect(seeAllHref('home.flash', 'web')).toBeNull();
+  it('Giờ vàng có trang riêng (P12): "Xem tất cả" của khối Trang chủ và của /offers trỏ tới đó', () => {
+    expect(seeAllHref('home.flash')).toBe('/flash-sale');
+    expect(seeAllHref('home.flash', 'web')).toBe('/gio-vang');
+    expect(seeAllHref('offers.flash')).toBe('/flash-sale');
+    expect(seeAllHref('offers.flash', 'web')).toBe('/gio-vang');
   });
   it('kệ không có lối xem tất cả trả null', () => {
     expect(seeAllHref('home.combos')).toBeNull();

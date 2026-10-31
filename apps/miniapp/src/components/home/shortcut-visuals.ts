@@ -14,7 +14,7 @@ export const SHORTCUT_ICONS: Record<HomeShortcutId, LucideIcon> = {
   community: MessagesSquare,
 };
 
-/** Đích điều hướng của lối tắt; `null` = mở sheet thay vì sang trang (Kiếm tiền). Giờ vàng đi qua `liveRoute` vì trang `/flash-sale` thuộc gói sau. */
+/** Đích điều hướng của lối tắt; `null` = mở sheet thay vì sang trang (Kiếm tiền). Giờ vàng đi qua `liveRoute` cùng nguồn với "Xem tất cả" của khối Giờ vàng. */
 export const SHORTCUT_ROUTES: Record<HomeShortcutId, string | null> = {
   flash: liveRoute('/flash-sale', 'mini'),
   orders: '/orders',

@@ -7,7 +7,6 @@ import {
   HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, CATEGORY_CELL_HEIGHT,
 } from './home-layout';
 import type { LoyaltyOverview } from './api/loyalty';
-import { routeUsable } from './merch/route-fallback';
 
 describe('homeBlockOrder', () => {
   it('khách cũ: header, thẻ thành viên, việc cần làm, banner, lối tắt, Giờ vàng trước Mua lại, Danh mục, Bán chạy nhất, combos, rồi một lưới gợi ý', () => {
@@ -46,15 +45,16 @@ describe('homeBlockOrder', () => {
 });
 
 describe('visibleHomeShortcuts', () => {
-  it('khai 9 lối tắt; khi mọi cờ bật hiện 8 (Giờ vàng chờ trang riêng ở P12), mở đầu bằng Mã giảm giá và không có Vườn Xanh (đã là tab giữa)', () => {
+  it('khai 9 lối tắt; khi mọi cờ bật hiện đủ 9, mở đầu bằng Giờ vàng và không có Vườn Xanh (đã là tab giữa)', () => {
     expect(HOME_SHORTCUTS).toHaveLength(9);
     const ids = visibleHomeShortcuts({ wasteEnabled: true, claimEnabled: true }).map((s) => s.id);
-    expect(ids).toEqual(['coupons', 'recycle', 'groupBuy', 'rewards', 'orders', 'claim', 'earn', 'community']);
+    expect(ids).toEqual(['flash', 'coupons', 'recycle', 'groupBuy', 'rewards', 'orders', 'claim', 'earn', 'community']);
     expect(ids).not.toContain('garden');
   });
-  it('ô Giờ vàng chỉ hiện khi /flash-sale có đích dùng được: Ưu đãi không có Giờ vàng, bấm vào là lạc', () => {
-    const ids = visibleHomeShortcuts({ wasteEnabled: true, claimEnabled: true }).map((s) => s.id);
-    expect(ids.includes('flash')).toBe(routeUsable('/flash-sale'));
+  it('ô Giờ vàng luôn hiện (trang /flash-sale đã có), không phụ thuộc cờ nào', () => {
+    for (const wasteEnabled of [false, true]) for (const claimEnabled of [false, true]) {
+      expect(visibleHomeShortcuts({ wasteEnabled, claimEnabled })[0]!.id).toBe('flash');
+    }
   });
   it('nhãn mọi lối tắt vừa MỘT dòng ở ô 5 cột (≤11 ký tự): nhãn xuống dòng làm hàng cao hơn khung chờ và đẩy cả trang (R-184); nhãn đầy đủ nằm ở ariaLabel', () => {
     for (const s of HOME_SHORTCUTS) expect(s.label.length, s.label).toBeLessThanOrEqual(11);
@@ -76,7 +76,7 @@ describe('visibleHomeShortcuts', () => {
   });
   it('cờ tắt thì ẩn mục, các mục còn lại giữ thứ tự', () => {
     const ids = visibleHomeShortcuts({ wasteEnabled: false, claimEnabled: false }).map((s) => s.id);
-    expect(ids).toEqual(['coupons', 'groupBuy', 'rewards', 'orders', 'earn', 'community']);
+    expect(ids).toEqual(['flash', 'coupons', 'groupBuy', 'rewards', 'orders', 'earn', 'community']);
   });
   it('Giờ vàng đi tới /flash-sale, Mã giảm giá ghi đúng chữ chốt', () => {
     expect(HOME_SHORTCUTS.find((s) => s.id === 'flash')).toMatchObject({ label: 'Giờ vàng' });
@@ -85,16 +85,16 @@ describe('visibleHomeShortcuts', () => {
 });
 
 describe('homeShortcutSlots (Q7: 4 ô cố định + "Tất cả")', () => {
-  it('4 ô cố định là Mã giảm giá, Đổi rác, Mua chung, Đổi quà (Giờ vàng vào đầu hàng khi có trang riêng); "Tất cả" liệt kê đủ mục còn hiển thị', () => {
+  it('4 ô cố định là Giờ vàng, Mã giảm giá, Đổi rác, Mua chung (Q7); "Tất cả" liệt kê đủ mục còn hiển thị', () => {
     expect(HOME_SHORTCUT_SLOTS).toBe(4);
     const { pinned, all } = homeShortcutSlots({ wasteEnabled: true, claimEnabled: true });
-    expect(pinned.map((s) => s.id)).toEqual(['coupons', 'recycle', 'groupBuy', 'rewards']);
+    expect(pinned.map((s) => s.id)).toEqual(['flash', 'coupons', 'recycle', 'groupBuy']);
     expect(all.map((s) => s.id)).toEqual(expect.arrayContaining(['earn', 'community', 'orders', 'rewards', 'claim']));
-    expect(all).toHaveLength(8);
+    expect(all).toHaveLength(9);
   });
   it('Đổi rác tắt thì ô trống được mục kế lấp, vẫn đủ 4 ô', () => {
     const { pinned } = homeShortcutSlots({ wasteEnabled: false, claimEnabled: false });
-    expect(pinned.map((s) => s.id)).toEqual(['coupons', 'groupBuy', 'rewards', 'orders']);
+    expect(pinned.map((s) => s.id)).toEqual(['flash', 'coupons', 'groupBuy', 'rewards']);
   });
 });
 

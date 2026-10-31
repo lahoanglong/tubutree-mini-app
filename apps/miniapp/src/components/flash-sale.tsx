@@ -136,8 +136,8 @@ export function FlashSale({ items, loading, error, onRetry, retrying, onExpire }
 }
 
 /**
- * Một dòng dưới kệ: suất kế mở lúc mấy giờ, có mấy món; bấm sang trang Giờ vàng, nơi đặt nhắc từng suất. Chưa có trang đó (`onOpen` trống)
- * thì chỉ là dòng thông tin, không hứa "Nhắc tôi": nút dẫn tới trang không có gì để nhắc là lạc.
+ * Một dòng dưới kệ: suất kế mở lúc mấy giờ, có mấy món; bấm sang trang Giờ vàng, nơi đặt nhắc từng suất. `onOpen` trống (kệ không khai lối xem
+ * tất cả) thì chỉ là dòng thông tin, không hứa "Nhắc tôi": nút dẫn tới nơi không có gì để nhắc là lạc.
  */
 function NextSlotLine({ slot, onOpen }: { slot: NextFlashSlot; onOpen?: () => void }) {
   const label = (
