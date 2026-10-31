@@ -15,6 +15,7 @@ import {
 } from './support/pilot-mocks';
 import { CHECKOUT_ADDRESS, mockCheckout } from './support/checkout-mocks';
 import type { AddressDTO } from '../../miniapp/src/services/shop-api';
+import type { Locator, Page } from '@playwright/test';
 
 /**
  * Zalo Mini App E2E — Design System v2, luồng pilot (product-detail, cart, storefront-view,
@@ -241,21 +242,23 @@ test.describe('Zalo Mini App E2E - Design System v2 pilot flow', () => {
     mockPilotStorefront(api);
     await page.goto(`/s/${PILOT_STOREFRONT_SLUG}`);
 
-    const outTile = page.getByRole('button', { name: OUT_OF_STOCK_NAME });
-    const inTile1 = page.getByRole('button', { name: IN_STOCK_NAME });
-    const inTile2 = page.getByRole('button', { name: IN_STOCK_NAME_2 });
+    // exact: thẻ có thêm nút tim "Yêu thích {tên}" nên tên khớp một phần trùng hai nút.
+    const outTile = page.getByRole('button', { name: OUT_OF_STOCK_NAME, exact: true });
+    const inTile1 = page.getByRole('button', { name: IN_STOCK_NAME, exact: true });
+    const inTile2 = page.getByRole('button', { name: IN_STOCK_NAME_2, exact: true });
     await expect(outTile).toBeVisible({ timeout: 15_000 });
     await expect(inTile1).toBeVisible();
     await expect(inTile2).toBeVisible();
 
     // Thẻ không lồng phần tử tương tác (C-072): overlay là anh em của nút tên, nên xét trong vỏ thẻ chứa nút đó.
-    const shell = (name: string) => page.locator('.tubu-press').filter({ has: page.getByRole('button', { name }) });
-    const overlay = /tạm hết/i;
-    await expect(shell(OUT_OF_STOCK_NAME).getByText(overlay)).toBeVisible();
-    await expect(shell(IN_STOCK_NAME).getByText(overlay)).toHaveCount(0);
-    await expect(shell(IN_STOCK_NAME_2).getByText(overlay)).toHaveCount(0);
+    const shell = (name: string) => page.locator('.tubu-press-card').filter({ has: page.getByRole('button', { name, exact: true }) });
+    // Khớp nguyên câu: chữ đọc ẩn của thẻ (aria-describedby) cũng chứa "Tạm hết hàng" kèm giá.
+    const overlay = (scope: Page | Locator) => scope.getByText('Tạm hết hàng', { exact: true });
+    await expect(overlay(shell(OUT_OF_STOCK_NAME))).toBeVisible();
+    await expect(overlay(shell(IN_STOCK_NAME))).toHaveCount(0);
+    await expect(overlay(shell(IN_STOCK_NAME_2))).toHaveCount(0);
     // Đúng 1 overlay trên cả trang.
-    await expect(page.getByText(overlay)).toHaveCount(1);
+    await expect(overlay(page)).toHaveCount(1);
   });
 
   test('Đơn đã giao: "Mua lại đơn này" mở sheet; CTA trong sheet hiện spinner rồi chuyển sang /cart', async ({ page, api }) => {

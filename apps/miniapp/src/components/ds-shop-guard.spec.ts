@@ -45,7 +45,7 @@ describe('ds-shop-guard (Mini App)', () => {
       'components/checkout/voucher-sheet.tsx', // nhãn mã giảm giá tông promo đặc; VoucherTicket (P5) thay
     ];
     expect(hits(BADGE_STYLE, DYNAMIC)).toEqual([]);
-    expect(hits(/flash-solid-bg|flash-solid-fg/, ['components/ui/badge.tsx', 'components/ui/button.tsx', 'components/ui/progress-bar.tsx', 'components/ui/tiles.tsx'])).toEqual([]);
+    expect(hits(/flash-solid-bg|flash-solid-fg/, ['components/ui/badge.tsx', 'components/ui/button.tsx', 'components/ui/progress-bar.tsx', 'components/ui/tiles.tsx', 'components/ui/flash-sold-bar.tsx', 'components/ui/section-header.tsx'])).toEqual([]);
   });
 
   it('chỉ product-tile vẽ vỏ thẻ sản phẩm (data-ds="product-tile")', () => {

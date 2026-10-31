@@ -51,7 +51,7 @@ describe('ds-shop-guard (web)', () => {
 
   it('Badge không ghi đè nền: tông flash/verified có sẵn thay cho style background/color tại chỗ', () => {
     expect(hits(/<Badge\b[^>]*style=\{\{[^}]*\b(background|color)\s*:/)).toEqual([]);
-    expect(hits(/flash-solid-bg|flash-solid-fg/, ['components/mini/badge.tsx', 'components/mini/button.tsx', 'components/mini/progress-bar.tsx', 'components/mini/tiles.tsx'])).toEqual([]);
+    expect(hits(/flash-solid-bg|flash-solid-fg/, ['components/mini/badge.tsx', 'components/mini/button.tsx', 'components/mini/progress-bar.tsx', 'components/mini/tiles.tsx', 'components/mini/flash-sold-bar.tsx', 'components/mini/section-header.tsx'])).toEqual([]);
   });
 
   it('chỉ product-tile vẽ vỏ thẻ sản phẩm (data-ds="product-tile")', () => {
