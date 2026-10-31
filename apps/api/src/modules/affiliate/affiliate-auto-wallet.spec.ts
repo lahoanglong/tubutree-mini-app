@@ -141,6 +141,17 @@ describe('AffiliateService.autoTransferApprovedToWallet', () => {
     expect(r.ok).toBe(true);
   });
 
+  it('từ chối nghiệp vụ (HttpException) chỉ log warn, không log error (tránh báo admin giả)', async () => {
+    const t = build({ rows: rows('a', 1_000) });
+    t.requestPayout.mockRejectedValue(new ConflictException('Dữ liệu hoa hồng đã thay đổi, vui lòng thử lại.'));
+    const logger = (t.svc as unknown as { logger: { error: () => void; warn: () => void } }).logger;
+    const err = jest.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    await t.svc.autoTransferApprovedToWallet();
+    expect(err).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+  });
+
   it('đã có ít nhất một CTV chuyển xong thì ok=true dù CTV khác lỗi thật (lỗi đó log error)', async () => {
     const t = build({ rows: [...rows('a', 1_000), ...rows('b', 2_000)] });
     t.requestPayout

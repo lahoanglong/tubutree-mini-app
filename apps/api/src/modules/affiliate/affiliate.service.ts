@@ -1621,8 +1621,12 @@ export class AffiliateService {
           if (code === PIT_TAX_ID_REQUIRED) this.logger.log(`Chưa tự chuyển hoa hồng của ${userId} vào Ví: cần mã số thuế, chờ CTV bấm Chuyển vào Ví.`);
           else {
             // Từ chối nghiệp vụ (đã bị bấm tay trước, dữ liệu vừa đổi) là ca bỏ qua có chủ ý; còn lại (DB chập...) là lỗi thật.
-            if (!(err instanceof HttpException)) realErrors++;
-            this.logger.error(`Tự chuyển hoa hồng của ${userId} vào Ví lỗi: ${msg}`);
+            // Log error chỉ cho lỗi thật: CronAwareLogger đếm log error để báo admin, nên từ chối nghiệp vụ chỉ warn.
+            if (err instanceof HttpException) this.logger.warn(`Tự chuyển hoa hồng của ${userId} vào Ví bị từ chối: ${msg}`);
+            else {
+              realErrors++;
+              this.logger.error(`Tự chuyển hoa hồng của ${userId} vào Ví lỗi: ${msg}`);
+            }
           }
         }
       }
