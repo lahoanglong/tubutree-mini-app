@@ -58,11 +58,24 @@ describe('ComboCard', () => {
     for (const comboTotal of [374000, 400000]) {
       const { unmount } = render(<ComboCard {...base} comboTotal={comboTotal} items={items(2)} onAddAll={() => {}} />);
       expect(screen.queryByText(/Tiết kiệm/)).toBeNull();
+      expect(screen.queryByText(/Combo -/)).toBeNull();
       expect(document.body.textContent).not.toMatch(/-\s?\d[\d.]*đ/);
       expect(document.body.textContent).not.toMatch(/\b0đ/);
       expect(screen.getByRole('button', { name: /Thêm cả combo/ })).toBeInTheDocument();
       unmount();
     }
+  });
+
+  it('pct dương nhưng không có khoản tiết kiệm (làm tròn nghìn: 35.000đ giảm 1% vẫn 35.000đ): không nhãn Combo', () => {
+    render(<ComboCard {...base} pct={1} total={35000} comboTotal={35000} items={items(2)} onAddAll={() => {}} />);
+    expect(screen.queryByText(/Combo -/)).toBeNull();
+    expect(screen.queryByText(/Tiết kiệm/)).toBeNull();
+  });
+
+  it('có tiết kiệm thì nhãn Combo -n% và dòng Tiết kiệm đi cùng nhau', () => {
+    render(<ComboCard {...base} items={items(2)} onAddAll={() => {}} />);
+    expect(screen.getByText('Combo -10%')).toBeInTheDocument();
+    expect(screen.getByText(/Tiết kiệm/)).toBeInTheDocument();
   });
 
   it('pct rác (0, NaN, âm): không nhãn Combo', () => {

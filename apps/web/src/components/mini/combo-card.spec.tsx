@@ -47,11 +47,24 @@ describe('ComboCard (web)', () => {
     for (const comboTotal of [374000, 400000]) {
       const m = mount(<ComboCard {...base} comboTotal={comboTotal} items={items(2)} onAddAll={() => {}} />);
       expect(text()).not.toContain('Tiết kiệm');
+      expect(text()).not.toContain('Combo -');
       expect(text()).not.toMatch(/-\s?\d[\d.]*đ/);
       expect(text()).not.toMatch(/\b0đ/);
       expect(btn(/Thêm cả combo/)).toBeTruthy();
       m.unmount();
     }
+  });
+
+  it('pct dương nhưng không có khoản tiết kiệm (35.000đ giảm 1% làm tròn nghìn vẫn 35.000đ): không nhãn Combo', () => {
+    mount(<ComboCard {...base} pct={1} total={35000} comboTotal={35000} items={items(2)} onAddAll={() => {}} />);
+    expect(text()).not.toContain('Combo -');
+    expect(text()).not.toContain('Tiết kiệm');
+  });
+
+  it('có tiết kiệm thì nhãn Combo -n% và dòng Tiết kiệm đi cùng nhau', () => {
+    mount(<ComboCard {...base} items={items(2)} onAddAll={() => {}} />);
+    expect(text()).toContain('Combo -10%');
+    expect(text()).toContain('Tiết kiệm');
   });
 
   it('pct rác: không nhãn Combo; items rỗng: render rỗng', () => {

@@ -37,7 +37,7 @@ const THUMB = 56;
 /**
  * Khối "mua cả bộ" của gian hàng và thương hiệu: dải ảnh nối bằng dấu "+", danh sách tên món, giá cả bộ kèm giá gạch, một nút chính.
  * Không dùng `ProductTile`: món trong combo không phải thẻ để bấm vào từng cái, chỉ là thành phần của bộ. Dải ảnh chỉ trang trí
- * (`aria-hidden`), danh sách tên mới là thông tin. Giá combo ≥ tổng lẻ thì không có dòng "Tiết kiệm" (không bao giờ "0đ" hay số âm).
+ * (`aria-hidden`), danh sách tên mới là thông tin. Giá combo ≥ tổng lẻ thì không có dòng "Tiết kiệm" (không bao giờ "0đ" hay số âm) và cũng không nhãn "Combo -n%": không quảng cáo mức giảm mà giá không có.
  */
 export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy = false, onSeeItems }: ComboCardProps) {
   if (items.length === 0) return null;
@@ -64,7 +64,7 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
         >
           {title}
         </h3>
-        {pctShown > 0 && (
+        {pctShown > 0 && saving > 0 && (
           <span style={{ flex: '0 0 auto', display: 'inline-flex' }}>
             <Badge tone="promo" size="sm">{fillCopy('combo.badge', { pct: pctShown })}</Badge>
           </span>
