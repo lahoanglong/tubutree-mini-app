@@ -46,7 +46,7 @@ import { ui, uiBar } from '@/lib/guest-ui';
 import { invalidateBalances } from '@/lib/balances';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
-import { CouponBox, COUPON_MUTATION_KEY, couponPreviewKey } from '@/components/coupon-box';
+import { CouponBox, COUPON_MUTATION_KEY, forgetAutoCoupon, couponPreviewKey } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ReferralCodeBox } from '@/components/referral-code-box';
 import { StickyActionBar } from '@/components/sticky-action-bar';
@@ -151,6 +151,8 @@ export default function CheckoutPage() {
   const checkoutItems = itemIds ? (cartQ.data?.items ?? []).filter((it) => itemIds.includes(it.id)) : (cartQ.data?.items ?? []);
   // Giỏ đã tải và không còn món nào (đặt xong rồi Back, mở lại tab cũ): không dựng form 0đ, không gọi báo giá (BE trả 400).
   const cartEmpty = cartLoaded && checkoutItems.length === 0;
+  // Thanh toán một phần giỏ không tự áp mã: mã nằm trên cả giỏ và còn lại sau khi đặt.
+  const wholeCart = !itemIds || itemIds.length === (cartQ.data?.items.length ?? 0);
 
   const userId = user?.id;
   useEffect(() => {
@@ -290,6 +292,7 @@ export default function CheckoutPage() {
       if (!isBank) setPlaced(order);
       if (wantInvoice) saveInvoice(userId, invoice);
       clearCheckoutSelection();
+      forgetAutoCoupon(userId);
       void qc.invalidateQueries({ queryKey: ['cart'] });
       void qc.invalidateQueries({ queryKey: ['orders'] });
       if (attachWaste && pickupReq) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.all });
@@ -744,7 +747,8 @@ export default function CheckoutPage() {
                 shippingFee={quote?.shippingFee ?? null}
                 notice={quote ? quote.couponNotice : cart.couponNotice}
                 disabled={place.isPending}
-                autoApply={!!addressId || addrQ.data?.length === 0}
+                autoApply={wholeCart && (!!addressId || addrQ.data?.length === 0)}
+                memoryUserId={userId}
                 preview={checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined}
                 previewKey={couponPreviewKey(checkoutItems)}
               />

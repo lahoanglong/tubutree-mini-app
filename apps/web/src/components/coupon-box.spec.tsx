@@ -32,7 +32,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
 
 import { useQuery } from '@tanstack/react-query';
 import { cartKey } from '@/lib/cart-key';
-import { CouponBox } from './coupon-box';
+import { CouponBox, forgetAutoCoupon } from './coupon-box';
 
 const c = (code: string, over: Record<string, unknown> = {}) => ({
   code, type: 'PERCENT', value: 30, minOrder: null, maxDiscount: 50000, endAt: '2030-01-01T00:00:00Z', ...over,
@@ -470,11 +470,11 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
     { code: 'BIG', eligible: false, reason: 'Cần đơn tối thiểu', discount: 999000 },
   ];
   /** Giỏ sống trong bộ nhớ đệm như ở trang thanh toán: áp/gỡ mã ghi vào đó và CouponBox đọc lại `currentCode`. */
-  function Harness({ initial = null, autoApply = true }: { initial?: string | null; autoApply?: boolean }) {
+  function Harness({ initial = null, autoApply = true, uid = 'u1' }: { initial?: string | null; autoApply?: boolean; uid?: string }) {
     const q = useQuery({ queryKey: cartKey(), queryFn: () => null, enabled: false, initialData: { couponCode: initial } as { couponCode: string | null } });
-    return <CouponBox currentCode={q.data?.couponCode ?? null} subtotal={300000} preview={{ addressId: 'a1' }} autoApply={autoApply} />;
+    return <CouponBox currentCode={q.data?.couponCode ?? null} subtotal={300000} preview={{ addressId: 'a1' }} autoApply={autoApply} memoryUserId={uid} />;
   }
-  const mountHarness = async (props: { initial?: string | null; autoApply?: boolean } = {}) => {
+  const mountHarness = async (props: { initial?: string | null; autoApply?: boolean; uid?: string } = {}) => {
     const r = render(<Harness {...props} />);
     mounted.push(r);
     await flush(10);
@@ -484,6 +484,7 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
   const remove = (box: HTMLElement) => box.querySelector<HTMLButtonElement>('[data-testid="coupon-auto-remove"]');
 
   beforeEach(() => {
+    sessionStorage.clear();
     state.coupons = [c('GIAM30'), c('FS', { type: 'FREESHIP', value: 15000, maxDiscount: null }), c('BIG', { minOrder: 900000 })];
     state.previews.mockResolvedValue(PREVIEWS);
   });
@@ -537,5 +538,60 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
     expect(box.querySelector('[role="alert"]')).toBeNull();
     expect(label(box)).toBeNull();
     expect(box.textContent).toContain('Bạn có 2 mã dùng được');
+  });
+
+  it('tải lại sau khi gỡ → không áp lại; theo từng khách', async () => {
+    const box = await mountHarness();
+    click(remove(box));
+    await flush(10);
+    mounted.pop()!.unmount();
+    state.applied = [];
+    await mountHarness();
+    expect(state.applied).toEqual([]);
+    await mountHarness({ uid: 'u2' });
+    expect(state.applied).toEqual(['GIAM30']);
+  });
+
+  it('tải lại khi mã tự áp còn trên giỏ → vẫn hiện "Đã tự áp"', async () => {
+    await mountHarness();
+    mounted.pop()!.unmount();
+    state.applied = [];
+    const box = await mountHarness({ initial: 'GIAM30' });
+    expect(label(box)!.textContent).toBe('Đã tự áp');
+    expect(state.applied).toEqual([]);
+  });
+
+  it('gỡ bằng ô mã rồi chọn lại đúng mã đó bằng tay → không còn nhãn', async () => {
+    const box = await mountHarness();
+    click(box.querySelector<HTMLButtonElement>('button[aria-expanded]'));
+    await flush(3);
+    click(byText(box, 'button', 'Bỏ mã đang áp dụng'));
+    await flush(10);
+    expect(label(box)).toBeNull();
+    click(box.querySelector<HTMLButtonElement>('button[aria-expanded]'));
+    await flush(3);
+    click(box.querySelector<HTMLButtonElement>('button[aria-label$="mã GIAM30"]'));
+    await flush(10);
+    expect(box.textContent).toContain('GIAM30');
+    expect(label(box)).toBeNull();
+  });
+
+  it('forgetAutoCoupon xoá trí nhớ của khách', async () => {
+    await mountHarness();
+    expect(sessionStorage.getItem('tubu.autocoupon.applied:u1')).toBe('GIAM30');
+    forgetAutoCoupon('u1');
+    expect(sessionStorage.getItem('tubu.autocoupon.applied:u1')).toBeNull();
+  });
+
+  it('đang tự áp mã → ô mã bận (nút gỡ và áp bị khoá)', async () => {
+    let release!: () => void;
+    state.applyGate = new Promise<void>((r) => (release = r));
+    const box = await mountHarness();
+    click(box.querySelector<HTMLButtonElement>('button[aria-expanded]'));
+    await flush(3);
+    expect(box.querySelector<HTMLButtonElement>('button[aria-label$="mã FS"]')!.disabled).toBe(true);
+    release();
+    await flush(10);
+    expect(label(box)).not.toBeNull();
   });
 });

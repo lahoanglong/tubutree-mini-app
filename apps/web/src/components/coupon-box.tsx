@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Ticket, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -19,7 +19,7 @@ import {
   isFreeshipRedundant,
   sortCouponsForCart,
 } from '@/lib/coupon-view';
-import { couponAutoCopy, couponHint, couponHintText, pickBestCoupon } from '@tubutree/app-core/coupon-use';
+import { autoCouponMemory, couponAutoCopy, couponHint, couponHintText, pickBestCoupon } from '@tubutree/app-core/coupon-use';
 import { autoCouponName } from '@/lib/coupon-name';
 import { cartKey } from '@/lib/cart-key';
 import { actionErrorText } from '@/lib/error-text';
@@ -73,6 +73,7 @@ export function CouponBox({
   band = false,
   appliedDiscount = 0,
   autoApply = false,
+  memoryUserId,
 }: {
   currentCode: string | null;
   subtotal: number;
@@ -103,6 +104,8 @@ export function CouponBox({
    * khi địa chỉ đã chốt để số xem trước có cả phí giao được miễn. Lỗi thì im lặng.
    */
   autoApply?: boolean;
+  /** Khách đang đăng nhập: khoá trí nhớ theo phiên của mã tự áp (tải lại trang không áp lại mã đã gỡ). */
+  memoryUserId?: string;
 }) {
   const qc = useQueryClient();
   const [code, setCode] = useState('');
@@ -141,6 +144,24 @@ export function CouponBox({
     return p ? p.eligible : isCouponEligible(c, subtotal);
   };
 
+  const memory = useMemo(() => autoCouponMemory(browserSession(), memoryUserId), [memoryUserId]);
+  const [autoCode, setAutoCode] = useState<string | null>(() => memory.applied());
+  const autoSettled = useRef(memory.off());
+  // Mã trên giỏ khác mã đã tự áp (khách đổi hoặc gỡ ở đâu đó): quên mã tự áp và không tự áp nữa.
+  useEffect(() => {
+    const stored = memory.applied();
+    if (currentCode) {
+      autoSettled.current = true;
+      if (stored && stored !== currentCode.toUpperCase()) {
+        memory.markOff();
+        setAutoCode(null);
+      }
+    } else if (stored) {
+      memory.markOff();
+      autoSettled.current = true;
+      setAutoCode(null);
+    }
+  }, [currentCode, memory]);
   const afterChange = (cart: Awaited<ReturnType<typeof applyCoupon>>) => {
     qc.setQueryData(cartKey(), cart);
     void qc.invalidateQueries({ queryKey: ['quote'] });
@@ -174,25 +195,22 @@ export function CouponBox({
     mutationFn: removeCoupon,
     onSuccess: (cart) => {
       showApplyWarning(null);
+      memory.markOff();
+      setAutoCode(null);
       afterChange(cart);
     },
     onError: (e) => setErr(actionErrorText(e)),
   });
-  const busy = apply.isPending || drop.isPending || disabled;
-
-  const [autoCode, setAutoCode] = useState<string | null>(null);
-  const autoSettled = useRef(false);
-  useEffect(() => {
-    if (currentCode) autoSettled.current = true;
-  }, [currentCode]);
   const autoApplyMut = useMutation({
     mutationKey: COUPON_MUTATION_KEY,
     mutationFn: (c: string) => applyCoupon(c),
     onSuccess: (cart, appliedCode) => {
+      memory.markApplied(appliedCode);
       setAutoCode(appliedCode.toUpperCase());
       afterChange(cart);
     },
   });
+  const busy = apply.isPending || drop.isPending || autoApplyMut.isPending || disabled;
   const autoMutate = autoApplyMut.mutate;
   useEffect(() => {
     if (!autoApply || autoSettled.current || currentCode || !previewTrusted) return;
@@ -457,4 +475,17 @@ export function CouponBox({
       )}
     </div>
   );
+}
+
+/** Đặt đơn xong: lượt thanh toán sau bắt đầu lại, mã tự áp của lượt này không còn được nhớ. */
+export function forgetAutoCoupon(userId: string | undefined): void {
+  autoCouponMemory(browserSession(), userId).clear();
+}
+
+function browserSession(): Storage | null {
+  try {
+    return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+  } catch {
+    return null;
+  }
 }
