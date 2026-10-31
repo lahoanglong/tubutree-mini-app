@@ -1392,6 +1392,22 @@ describe('CartService.addItemsBatch (thêm nhiều món một transaction: hỏn
     expect(txUpsert).toHaveBeenCalledTimes(1);
   });
 
+  it('hai lượt tạo giỏ đầu tiên của cùng khách song song (nhấn đúp "Thêm cả combo"): upsert thua tranh P2002 thì đọc giỏ đã có, không 500', async () => {
+    const { svc, cartUpsert, txUpsert } = setup([sellable('v1', 5)]);
+    cartUpsert.mockRejectedValue(Object.assign(new Error('Unique constraint failed on the fields: (`userId`)'), { code: 'P2002' }));
+    const findUniqueOrThrow = jest.fn().mockResolvedValue({ id: 'c1' });
+    (svc as unknown as { prisma: { cart: { findUniqueOrThrow: jest.Mock } } }).prisma.cart.findUniqueOrThrow = findUniqueOrThrow;
+    await svc.addItemsBatch('u-new', [{ variationId: 'v1', quantity: 1 }], undefined);
+    expect(findUniqueOrThrow).toHaveBeenCalledWith({ where: { userId: 'u-new' } });
+    expect(txUpsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('upsert giỏ lỗi khác P2002 (hạ tầng) vẫn ném ra, không nuốt', async () => {
+    const { svc, cartUpsert } = setup([sellable('v1', 5)]);
+    cartUpsert.mockRejectedValue(Object.assign(new Error('connection reset'), { code: 'P1001' }));
+    await expect(svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }], undefined)).rejects.toThrow('connection reset');
+  });
+
   it('không gửi addSource → sự kiện ghi addSource pdp', async () => {
     const { svc, analyticsSpy } = setup([sellable('v1', 5)]);
     await svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }], undefined);

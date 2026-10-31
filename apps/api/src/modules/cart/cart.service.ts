@@ -61,12 +61,19 @@ export class CartService {
   ) {}
 
   private async ensureCart(userId: string): Promise<string> {
-    const cart = await this.prisma.cart.upsert({
-      where: { userId },
-      update: {},
-      create: { userId },
-    });
-    return cart.id;
+    try {
+      const cart = await this.prisma.cart.upsert({
+        where: { userId },
+        update: {},
+        create: { userId },
+      });
+      return cart.id;
+    } catch (err) {
+      // Hai lượt đầu tiên của khách chưa có giỏ (nhấn đúp, hai tab) cùng tạo dòng carts: lượt thua vi phạm unique userId (P2002).
+      // Giỏ đã có do lượt kia tạo nên đọc lại thay vì trả 500.
+      if ((err as { code?: string }).code !== 'P2002') throw err;
+      return (await this.prisma.cart.findUniqueOrThrow({ where: { userId } })).id;
+    }
   }
 
   /**
