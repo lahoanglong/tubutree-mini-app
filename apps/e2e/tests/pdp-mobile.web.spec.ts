@@ -26,6 +26,7 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     api.get(`/products/${p!.slug}`, { variations: p!.variations });
     api.get(`/products/${p!.slug}/related`, []);
     api.get(`/products/${p!.slug}/bought-together`, []);
+    api.get('/products/for-you', []);
     api.get(`/products/${p!.slug}/reviews`, { average: 0, count: 0, videoCount: 0, distribution: {}, items: [] });
     api.get('/me/wishlist/ids', []);
     await page.setViewportSize({ width: 375, height: 812 });
