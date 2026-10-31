@@ -1,5 +1,6 @@
 import type { CheckInStatusResponse, CouponDTO, LoyaltyOverview } from './api/loyalty';
 import { decimalVi, tierProgressPercent } from './loyalty-copy';
+import { tileBodyHeight } from './commerce/tile-metrics';
 
 /**
  * Bố cục Trang chủ, thanh đáy, Ưu đãi và hàng trạng thái đơn của trang Cá nhân. Một nguồn cho Mini App và web khổ điện thoại:
@@ -11,22 +12,28 @@ export type HomeCustomerKind = 'returning' | 'new';
 export type HomeKindState = HomeCustomerKind | 'unknown';
 
 export type HomeBlockId =
-  | 'search' | 'member' | 'todo' | 'welcome' | 'shortcuts' | 'purchased' | 'flash' | 'categories' | 'bestSellers' | 'journey'
-  | 'community' | 'suggest';
+  | 'search' | 'member' | 'todo' | 'welcome' | 'banner' | 'shortcuts' | 'purchased' | 'flash' | 'categories' | 'bestSellers' | 'combos'
+  | 'journey' | 'community' | 'suggest';
+
+/** Header dính của Trang chủ (logo, ô tìm, chuông, giỏ): thay hàng logo 68px và ô tìm 54px cũ. */
+export const HOME_HEADER_HEIGHT = 56;
 
 // "Việc cần làm" có ở cả hai thứ tự: khách chưa có đơn đã giao vẫn có thể đang giữ một đơn chờ chuyển khoản, và khối tự rỗng khi không có việc.
-// Màn đầu gọn: thẻ thành viên (hoặc dải quà) một dòng, một hàng lối tắt, rồi tới món hàng. Thẻ thành viên và dải quà cao bằng nhau
-// (`HOME_HERO_HEIGHT`) nên đổi loại khách không làm các khối dưới nhảy. Danh mục xuống sau món hàng để món hàng nằm trong màn đầu.
+// Màn đầu gọn: header dính, thẻ thành viên (hoặc dải quà) một dòng, banner (tự ẩn khi không có chiến dịch), lối tắt, rồi tới món hàng:
+// Giờ vàng đứng TRƯỚC Mua lại để deal nằm trong màn đầu cả với khách cũ (Q6). Thẻ thành viên và dải quà cao bằng nhau (`HOME_HERO_HEIGHT`)
+// nên đổi loại khách không làm các khối dưới nhảy. `banner` và `combos` tự ẩn, không giữ chỗ, tới khi P11/P15 có dữ liệu.
 const RETURNING: readonly HomeBlockId[] = [
-  'search', 'member', 'todo', 'shortcuts', 'purchased', 'flash', 'categories', 'journey', 'community', 'suggest',
+  'search', 'member', 'todo', 'banner', 'shortcuts', 'flash', 'purchased', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
 ];
 const NEW: readonly HomeBlockId[] = [
-  'search', 'welcome', 'todo', 'shortcuts', 'flash', 'bestSellers', 'categories', 'journey', 'community', 'suggest',
+  'search', 'welcome', 'todo', 'banner', 'shortcuts', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
 ];
 
-// Chưa biết loại khách: giữ chỗ thẻ thành viên (khối `member` hiện khung chờ) và bỏ các khối chỉ một loại có (Mua lại, Quà khách mới,
-// Bán chạy), để phần đầu trang không đổi hình dạng khi loại khách được xác định.
-const UNKNOWN: readonly HomeBlockId[] = ['search', 'member', 'todo', 'shortcuts', 'flash', 'categories', 'journey', 'community', 'suggest'];
+// Chưa biết loại khách: giữ chỗ thẻ thành viên (khối `member` hiện khung chờ) và bỏ các khối chỉ một loại có (Mua lại, Quà khách mới),
+// để phần đầu trang không đổi hình dạng khi loại khách được xác định. Bán chạy nhất có ở cả hai loại nên ở lại.
+const UNKNOWN: readonly HomeBlockId[] = [
+  'search', 'member', 'todo', 'banner', 'shortcuts', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
+];
 
 /** Chiều cao cố định của thẻ thành viên và dải quà khách mới (không tính đệm dưới): hai khối thay chỗ nhau không làm trang nhảy. */
 export const HOME_HERO_HEIGHT = 64;
@@ -104,7 +111,7 @@ export function customerKind(purchasedCount: number | undefined): HomeCustomerKi
 
 // ---- Lối tắt ----
 
-export type HomeShortcutId = 'orders' | 'rewards' | 'recycle' | 'groupBuy' | 'coupons' | 'claim' | 'earn' | 'community';
+export type HomeShortcutId = 'flash' | 'orders' | 'rewards' | 'recycle' | 'groupBuy' | 'coupons' | 'claim' | 'earn' | 'community';
 export type ShortcutTint = 'forest' | 'sage' | 'clay' | 'amber' | 'sky' | 'rose';
 
 export interface HomeShortcutSpec {
@@ -125,22 +132,24 @@ export interface HomeFlags {
 }
 
 export const RECYCLE_REQUESTS_LABEL = 'Yêu cầu của tôi';
-/** Nhãn lối tắt Trang chủ (ô 76px, một dòng): ngắn hơn tên đầy đủ, câu đọc vẫn là tên đầy đủ. */
+/** Nhãn lối tắt Trang chủ (ô 5 cột, một dòng): ngắn hơn tên đầy đủ, câu đọc vẫn là tên đầy đủ. */
 export const RECYCLE_REQUESTS_SHORTCUT_LABEL = 'Yêu cầu';
 
+// Thứ tự = thứ tự ưu tiên: 4 mục đầu là 4 ô cố định (Q7), phần còn lại nằm trong sheet "Tất cả".
 export const HOME_SHORTCUTS: readonly HomeShortcutSpec[] = [
-  { id: 'orders', label: 'Đơn hàng', ariaLabel: 'Đơn hàng của tôi', tint: 'forest' },
-  { id: 'rewards', label: 'Đổi quà', ariaLabel: 'Đổi quà bằng Điểm Xanh', tint: 'clay' },
+  { id: 'flash', label: 'Giờ vàng', ariaLabel: 'Giờ vàng, ưu đãi có hạn', tint: 'amber' },
+  { id: 'coupons', label: 'Mã giảm giá', ariaLabel: 'Mã giảm giá của tôi và mã đang phát', tint: 'rose' },
   { id: 'recycle', label: 'Đổi rác', ariaLabel: 'Đổi rác lấy quà', tint: 'sage', flag: 'waste' },
   { id: 'groupBuy', label: 'Mua chung', ariaLabel: 'Mua chung giá tốt', tint: 'amber' },
-  { id: 'coupons', label: 'Mã của tôi', ariaLabel: 'Mã của tôi, mã giảm giá của bạn', tint: 'rose' },
+  { id: 'rewards', label: 'Đổi quà', ariaLabel: 'Đổi quà bằng Điểm Xanh', tint: 'clay' },
+  { id: 'orders', label: 'Đơn hàng', ariaLabel: 'Đơn hàng của tôi', tint: 'forest' },
   { id: 'claim', label: 'Đơn sàn', ariaLabel: 'Tích điểm đơn sàn, đơn mua trên sàn khác', tint: 'sky', flag: 'claim' },
   { id: 'earn', label: 'Kiếm tiền', ariaLabel: 'Kiếm tiền cùng Tubu', tint: 'amber' },
   { id: 'community', label: 'Cộng đồng', ariaLabel: 'Cộng đồng hỏi đáp', tint: 'sky' },
 ];
 
 /**
- * Một hàng cuộn ngang, không có Vườn Xanh (đã là tab giữa của thanh đáy). Mục có cờ tắt bị bỏ, hàng tự dồn. Riêng Đổi rác: chương trình tạm dừng mà khách còn yêu cầu đang mở thì vẫn hiện,
+ * Mục còn hiển thị theo thứ tự ưu tiên, không có Vườn Xanh (đã là tab giữa của thanh đáy). Mục có cờ tắt bị bỏ, hàng tự dồn. Riêng Đổi rác: chương trình tạm dừng mà khách còn yêu cầu đang mở thì vẫn hiện,
  * đổi nhãn thành "Yêu cầu" để khách còn vào theo dõi, không hứa tính năng đang tạm dừng.
  */
 export function visibleHomeShortcuts(flags: HomeFlags): HomeShortcutSpec[] {
@@ -152,6 +161,15 @@ export function visibleHomeShortcuts(flags: HomeFlags): HomeShortcutSpec[] {
     if (s.flag === 'claim') return flags.claimEnabled ? [s] : [];
     return [s];
   });
+}
+
+/** Số ô lối tắt cố định ở Trang chủ; còn lại vào sheet "Tất cả" (Q7). */
+export const HOME_SHORTCUT_SLOTS = 4;
+
+/** `pinned` = 4 ô cố định (mục cờ tắt bị bỏ thì mục kế lấp chỗ); `all` = mọi mục còn hiển thị, cho sheet "Tất cả". */
+export function homeShortcutSlots(flags: HomeFlags): { pinned: HomeShortcutSpec[]; all: HomeShortcutSpec[] } {
+  const all = visibleHomeShortcuts(flags);
+  return { pinned: all.slice(0, HOME_SHORTCUT_SLOTS), all };
 }
 
 // ---- Thanh đáy ----
@@ -426,8 +444,8 @@ export function dropForeignHomeHints(storage: RemovableStorage | null, userId: s
   return dropped;
 }
 
-/** Chiều cao khung chờ của "Việc cần làm" cho số dòng đã nhớ: mỗi dòng 60px cộng phần đệm của thẻ. */
-export const todoSkeletonHeight = (rows: number): number => rows * 60 + 18;
+/** Chiều cao khung chờ của "Việc cần làm" cho số dòng đã nhớ: mỗi việc một dòng 64px; khoảng cách giữa khối do vỏ khối giữ. */
+export const todoSkeletonHeight = (rows: number): number => rows * 64;
 
 /** Khoá nhớ "lần mở trước có Giờ vàng" để dựng khung chờ đúng chỗ; chỉ ghi '1' hoặc '0'. */
 export const FLASH_HINT_KEY = 'tubu_home_flash';
@@ -448,6 +466,43 @@ export function writeFlashHint(storage: MemoryStorage | null, hasFlash: boolean)
   } catch {
     /* kho bị chặn: lần sau không giữ chỗ, khối vẫn đúng */
   }
+}
+
+/** Khoá nhớ số món Mua lại lần mở trước ('one' | 'many'), để khung chờ có đúng chiều cao dòng 88px hay kệ nhiều món. */
+export const PURCHASED_HINT_KEY = 'tubu_home_purchased';
+export type PurchasedHint = 'none' | 'one' | 'many';
+
+/** Chưa nhớ, kho bị chặn hay giá trị lạ → 'none' (không giữ chỗ, chờ im lặng). */
+export function readPurchasedHint(storage: MemoryStorage | null): PurchasedHint {
+  if (!storage) return 'none';
+  try {
+    const v = storage.getItem(PURCHASED_HINT_KEY);
+    return v === 'one' || v === 'many' ? v : 'none';
+  } catch {
+    return 'none';
+  }
+}
+
+export function writePurchasedHint(storage: MemoryStorage | null, count: number): void {
+  try {
+    storage?.setItem(PURCHASED_HINT_KEY, count >= 2 ? 'many' : count === 1 ? 'one' : 'none');
+  } catch {
+    /* kho bị chặn: lần sau không giữ chỗ, khối vẫn đúng */
+  }
+}
+
+/** Chiều cao dòng Mua lại (1 món) và hàng tiêu đề khối (`--section-header-h`). */
+export const PURCHASED_LINE_HEIGHT = 88;
+export const SECTION_HEADER_HEIGHT = 44;
+/** Đệm trên và dưới của kệ ngang (`--rail-pad-block` = 8) và bề rộng ảnh thẻ `rail-md` (`--tile-w-md`). */
+const RAIL_PAD = 8;
+const TILE_MD_WIDTH = 148;
+
+/** Chiều cao khung chờ của khối Mua lại theo gợi ý nhớ: tiêu đề + một dòng 88, hay tiêu đề + kệ thẻ `rail-md`. */
+export function purchasedSkeletonHeight(hint: PurchasedHint): number {
+  if (hint === 'one') return SECTION_HEADER_HEIGHT + PURCHASED_LINE_HEIGHT;
+  if (hint === 'many') return SECTION_HEADER_HEIGHT + RAIL_PAD * 2 + TILE_MD_WIDTH + tileBodyHeight('rail-md');
+  return 0;
 }
 
 /** Chiều cao khung chờ của khối Giờ vàng (tiêu đề + một hàng thẻ; đo thật: Mini 302px, web 298px). */

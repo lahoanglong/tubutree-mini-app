@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'zmp-ui';
-import { Gift, HeartHandshake, MessagesSquare, Package, Recycle, ScanLine, Ticket, Users, type LucideIcon } from 'lucide-react';
+import { Gift, HeartHandshake, MessagesSquare, Package, Recycle, ScanLine, Ticket, Users, Zap, type LucideIcon } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { SHORTCUT_TINT_VARS, visibleHomeShortcuts, type HomeShortcutId } from '@tubutree/app-core/home-layout';
 import { usePublicConfig } from '../../hooks/use-public-config';
@@ -13,6 +13,7 @@ import { Text } from '../ui/text';
 import { EarnSheet } from './earn-sheet';
 
 const VISUALS: Record<HomeShortcutId, { Icon: LucideIcon; to: string | null }> = {
+  flash: { Icon: Zap, to: '/flash-sale' },
   orders: { Icon: Package, to: '/orders' },
   rewards: { Icon: Gift, to: '/rewards' },
   recycle: { Icon: Recycle, to: '/recycle' },

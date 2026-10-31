@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Gift, HeartHandshake, MessagesSquare, Package, Recycle, ScanLine, Ticket, Users, type LucideIcon } from 'lucide-react';
+import { Gift, HeartHandshake, MessagesSquare, Package, Recycle, ScanLine, Zap, Ticket, Users, type LucideIcon } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { SHORTCUT_TINT_VARS, visibleHomeShortcuts, type HomeShortcutId } from '@tubutree/app-core/home-layout';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -14,6 +14,7 @@ import { EarnSheet } from './earn-sheet';
 
 /** `to: null` = mở bảng "Kiếm tiền cùng Tubu". Đích là route web trong route-map; route chưa làm xong (pending) thì lối tắt ẩn. */
 const VISUALS: Record<HomeShortcutId, { Icon: LucideIcon; to: string | null }> = {
+  flash: { Icon: Zap, to: '/gio-vang' },
   orders: { Icon: Package, to: '/tai-khoan/don-hang' },
   rewards: { Icon: Gift, to: '/kho-qua' },
   recycle: { Icon: Recycle, to: '/doi-rac' },
