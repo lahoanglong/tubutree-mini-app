@@ -55,6 +55,28 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
     expect(filtered.url).toContain('uncategorized=1');
   });
 
+  it('bộ chọn danh mục lấy danh sách phẳng (?flat=1): danh mục con chọn được dù /categories mặc định chỉ trả gốc', async () => {
+    const m = mockFetch({
+      '/admin/product-categories/products': { body: PAGE },
+      '/admin/pancake/categories': { body: [] },
+      // Khoá có ?flat=1 đứng trước: mockFetch lấy khoá khớp đầu tiên.
+      '/categories?flat=1': {
+        body: [
+          { id: 'cha', parentId: null, name: 'Gia dụng', slug: 'gia-dung', sortOrder: 1, productCount: 2 },
+          { id: 'con', parentId: 'cha', name: 'Nhà bếp', slug: 'nha-bep', sortOrder: 1, productCount: 2 },
+        ],
+      },
+      '/categories': { body: [{ id: 'cha', parentId: null, name: 'Gia dụng', slug: 'gia-dung', sortOrder: 1, productCount: 2, children: [{ id: 'con', name: 'Nhà bếp' }] }] },
+    });
+    vi.stubGlobal('fetch', vi.fn(m.fn));
+    const r = render(<ProductCategoriesTab />);
+    mounted.push(r);
+    await flush();
+    const options = [...r.container.querySelectorAll('select[aria-label="Danh mục"] option')].map((o) => o.textContent ?? '');
+    expect(options.some((t) => t.includes('Nhà bếp'))).toBe(true);
+    expect(m.calls.some((c) => c.url.endsWith('/categories?flat=1'))).toBe(true);
+  });
+
   it('chip "Đang bán, thiếu ảnh" ghi số từ hộp việc; mở từ thẻ hộp việc thì bật sẵn', async () => {
     const m = mockFetch({
       '/admin/ops/inbox': { body: { generatedAt: '2026-10-28T03:00:00.000Z', items: [{ key: 'productsMissingImage', count: 7 }] } },

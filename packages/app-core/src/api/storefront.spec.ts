@@ -8,7 +8,7 @@ describe('storefront — đúng route, query, body', () => {
     [
       'getStorefrontCategories',
       (h) => s.getStorefrontCategories(h),
-      { method: 'get', path: '/categories' },
+      { method: 'get', path: '/categories', opts: { query: { flat: 1 } } },
     ],
     [
       'applyStorefrontTemplate',

@@ -25,7 +25,7 @@ describe('slugifyVi', () => {
 function makePrisma(overrides: any = {}) {
   return {
     brand: { findFirst: jest.fn(), findUnique: jest.fn(), findUniqueOrThrow: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
-    product: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    product: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0), updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     brandPromotion: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
     dealerReward: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
     variation: { findMany: jest.fn().mockResolvedValue([]) },
@@ -71,6 +71,17 @@ describe('BrandService.getPublicBySlug', () => {
     const out = await new BrandService(prisma, brandConfig).getPublicBySlug('sachi', NOW);
     expect(out.storyImages[0]).toBe('https://x.test/a.jpg');
     expect(out.storyImages[1]).toMatch(/^\/public-image\/brand\/b1\/1\?v=[0-9a-f]{16}$/);
+  });
+
+  it('trả productCount của sản phẩm công khai; danh sách products và productCount cùng một điều kiện (isActive + APPROVED + brandId)', async () => {
+    const prisma = makePrisma();
+    prisma.brand.findFirst.mockResolvedValue({ id: 'b1', slug: 'sachi', name: 'Sachi', certifications: [], storyImages: [], isVerified: false, followerCount: 0 });
+    prisma.product.count.mockResolvedValue(57);
+    const out = await new BrandService(prisma, brandConfig).getPublicBySlug('sachi', NOW);
+    expect(out.productCount).toBe(57);
+    const where = { brandId: 'b1', isActive: true, approvalStatus: 'APPROVED' };
+    expect(prisma.product.count).toHaveBeenCalledWith({ where });
+    expect(prisma.product.findMany).toHaveBeenCalledWith(expect.objectContaining({ where }));
   });
 
   it('lọc promotions theo isActive + khoảng thời gian', async () => {

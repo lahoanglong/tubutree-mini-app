@@ -76,7 +76,7 @@ export interface ProductSuggestion { slug: string; name: string; thumbnail: stri
 
 
 // ── Catalog có bộ lọc (dự án 4b) ──
-export type CatalogSort = 'best_seller' | 'newest' | 'price_asc' | 'price_desc';
+export type CatalogSort = 'best_seller' | 'best_seller_30d' | 'newest' | 'price_asc' | 'price_desc';
 export interface CatalogQuery {
   page: number;
   limit: number;
@@ -96,6 +96,11 @@ export interface CatalogPage extends PageResponse<ProductCard> {
   filtersIgnored: boolean;
 }
 
+/**
+ * Nút của cây danh mục (`GET /categories` trả cây: gốc là danh mục không cha, con lồng trong `children`).
+ * `productCount` của cha đã cộng cả con. API cũ (trước đợt shop 2026-10) trả danh sách phẳng thiếu `children`:
+ * nơi đọc dữ liệu từ API không chắc phiên bản dùng `children ?? []`.
+ */
 export interface CategoryDTO {
   id: string;
   parentId: string | null;
@@ -105,6 +110,7 @@ export interface CategoryDTO {
   sortOrder: number;
   /** Số SP đang bán (API từ 4b). Thiếu = API cũ → miniapp dùng 4 phân khúc. */
   productCount?: number;
+  children: CategoryDTO[];
 }
 
 /**

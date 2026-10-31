@@ -107,7 +107,7 @@ export interface StorefrontCategory {
 }
 /** Danh mục sản phẩm hiện có — dùng làm danh sách mẫu gian hàng (mỗi mẫu = 1 danh mục). */
 export const getStorefrontCategories = (http: HttpClient) =>
-  http.get<StorefrontCategory[]>('/categories');
+  http.get<StorefrontCategory[]>('/categories', { query: { flat: 1 } });
 export const applyStorefrontTemplate = (http: HttpClient, categoryId: string) =>
   http.post<{ collectionId: string; title: string; itemCount: number }>(
     '/storefront/me/apply-template',

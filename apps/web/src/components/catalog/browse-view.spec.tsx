@@ -52,8 +52,8 @@ const product = (n: number) => ({
 });
 const pageOf = <T,>(items: T[], total: number, page = 1, limit = 24) => ({ data: items, meta: { page, limit, total } });
 const CATEGORIES = [
-  { id: 'c-goi', parentId: null, name: 'Dầu gội', slug: 'dau-goi', image: null, sortOrder: 1, productCount: 4 },
-  { id: 'c-trong', parentId: null, name: 'Danh mục trống', slug: 'trong', image: null, sortOrder: 2, productCount: 0 },
+  { id: 'c-goi', parentId: null, name: 'Dầu gội', slug: 'dau-goi', image: null, sortOrder: 1, productCount: 4, children: [] },
+  { id: 'c-trong', parentId: null, name: 'Danh mục trống', slug: 'trong', image: null, sortOrder: 2, productCount: 0, children: [] },
 ];
 const BRANDS = [{ brand: 'Tubu', count: 3, slug: 'tubu-xanh' }, { brand: 'Mộc An', count: 2 }];
 
