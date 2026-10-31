@@ -775,7 +775,7 @@ function StickySummary({
             emphasis
           />
           {saving > 0 && (
-            <Text size="xSmall" data-testid="cart-saving" style={{ color: 'var(--color-text-success)', textAlign: 'right' }}>
+            <Text size="xSmall" data-testid="cart-saving" style={{ color: 'var(--color-text-success)', textAlign: 'right', marginTop: -4 }}>
               {fillCopy('cart.saving', { x: formatVnd(saving) })}
             </Text>
           )}
