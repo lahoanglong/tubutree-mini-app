@@ -1,0 +1,107 @@
+import type { Locator, Page } from '@playwright/test';
+import { test, expect, type MockApi } from './support/mock-api';
+import { THUMB } from './support/buy-flow-mocks';
+import { mockDiscovery } from './support/discovery-mocks';
+import type { PageResponse, ProductCard } from '../../miniapp/src/services/shop-api';
+
+/**
+ * Mini App 375px — thẻ sản phẩm cùng nhịp (gói P4). Dữ liệu cố ý lệch nhau: tên dài có dấu "Ẩ"/"Ổ" (cắt 2 dòng), tên ngắn (1 dòng), thiếu ảnh,
+ * thiếu sao và đã bán, hết hàng, có giá giảm (giá gạch). Dù vậy, trong mỗi hàng hai thẻ thì đáy hàng giá và chiều cao thẻ phải bằng nhau,
+ * và dòng meta luôn một dòng. API mock toàn bộ, không waitForTimeout.
+ */
+const card = (id: string, name: string, over: Partial<ProductCard> = {}): ProductCard => ({
+  id, slug: `sp-${id}`, name, brand: 'Tubu', thumbnail: THUMB, basePrice: 100_000, salePrice: null, isFeatured: false, inStock: true,
+  ratingAvg: 4.5, reviewCount: 12, sold: 340, ...over,
+});
+
+const FIXTURE: ProductCard[] = [
+  card('1', 'Ẩm Ổn Định Dầu Gội Thảo Mộc Bồ Kết Hương Sả Chanh Nguyên Chất Dung Tích Lớn Cho Cả Gia Đình'),
+  card('2', 'Xà phòng', { reviewCount: 0, ratingAvg: undefined, sold: undefined }),
+  card('3', 'Nước rửa chén sinh học hương chanh sả', { thumbnail: null, basePrice: 150_000, salePrice: 120_000 }),
+  card('4', 'Túi vải', { inStock: false, reviewCount: 3, sold: 12 }),
+  card('5', 'Bình giữ nhiệt inox 500ml họa tiết lá', { brand: 'Một Nhãn Hiệu Có Tên Rất Dài Để Thử Cắt Chữ', sold: 1234 }),
+  card('6', 'Kem chống nắng', { isFeatured: true, thumbnail: null, reviewCount: 0, ratingAvg: undefined, sold: undefined }),
+  card('7', 'Ống hút tre', { basePrice: 12_345_000, salePrice: 9_999_000 }),
+  card('8', 'Giấy gói quà tái chế khổ lớn dùng cho mọi dịp lễ trong năm', { sold: 12 }),
+];
+
+function mockRhythm(api: MockApi): void {
+  mockDiscovery(api);
+  // Đăng ký SAU mockDiscovery để thắng mặc định.
+  api.get('/products', (): PageResponse<ProductCard> => ({ data: FIXTURE, meta: { page: 1, limit: 20, total: FIXTURE.length } }));
+}
+
+interface RowMetrics {
+  cards: number;
+  heights: number[];
+  priceBottoms: number[];
+  metaHeights: number[];
+  names: string[];
+}
+
+/** Gom thẻ trong lưới theo hàng (cùng `top`) và đo trong trang, để mọi số lấy từ cùng một khung hình. */
+async function rowsOf(grid: Locator): Promise<RowMetrics[]> {
+  return grid.evaluate((el) => {
+    const byTop = new Map<number, HTMLElement[]>();
+    for (const li of Array.from(el.querySelectorAll<HTMLElement>(':scope > li'))) {
+      const tile = li.querySelector<HTMLElement>('[data-ds="product-tile"]')!;
+      const top = Math.round(tile.getBoundingClientRect().top);
+      byTop.set(top, [...(byTop.get(top) ?? []), tile]);
+    }
+    return Array.from(byTop.values()).map((tiles) => ({
+      cards: tiles.length,
+      heights: tiles.map((t) => t.getBoundingClientRect().height),
+      priceBottoms: tiles.map((t) => t.querySelector('[data-ds-part="price"]')!.getBoundingClientRect().bottom),
+      metaHeights: tiles.map((t) => t.querySelector('[data-ds-part="meta"]')!.getBoundingClientRect().height),
+      names: tiles.map((t) => t.querySelector('.tubu-tile-link')!.getAttribute('aria-label') ?? ''),
+    }));
+  });
+}
+
+const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
+
+function expectRhythm(rows: RowMetrics[]): void {
+  expect(rows.length).toBeGreaterThanOrEqual(3);
+  for (const row of rows) {
+    expect(row.cards, `hàng ${row.names.join(' | ')}`).toBe(2);
+    expect(spread(row.heights), `chiều cao thẻ hàng ${row.names.join(' | ')}`).toBeLessThanOrEqual(1);
+    expect(spread(row.priceBottoms), `đáy hàng giá ${row.names.join(' | ')}`).toBeLessThanOrEqual(1);
+    for (const h of row.metaHeights) expect(h, `meta ${row.names.join(' | ')}`).toBeLessThanOrEqual(16);
+  }
+}
+
+async function settled(page: Page, grid: Locator): Promise<void> {
+  await expect(grid.locator('[data-ds="product-tile"]')).toHaveCount(FIXTURE.length, { timeout: 15_000 });
+  await expect(page.getByTestId('catalog-grid-skeleton')).toHaveCount(0);
+}
+
+test.describe('Thẻ sản phẩm cùng nhịp ở 375px', () => {
+  test.use({ viewport: { width: 375, height: 812 } });
+
+  test('Danh mục: mọi hàng hai thẻ chênh đáy giá và chiều cao ≤ 1px dù tên, ảnh, sao, giá lệch nhau', async ({ page, api }) => {
+    mockRhythm(api);
+    await page.goto('/browse');
+    const grid = page.getByTestId('catalog-grid');
+    await settled(page, grid);
+    expectRhythm(await rowsOf(grid));
+  });
+
+  test('Trang chủ, khối Gợi ý cho bạn: cùng nhịp như Danh mục', async ({ page, api }) => {
+    mockRhythm(api);
+    await page.goto('/');
+    const section = page.getByRole('region', { name: 'Gợi ý cho bạn' });
+    await section.scrollIntoViewIfNeeded();
+    const grid = section.getByTestId('catalog-grid');
+    await settled(page, grid);
+    expectRhythm(await rowsOf(grid));
+  });
+
+  test('thẻ cao đúng số đo chung: mỗi biến thể grid dùng chiều cao thân thẻ có nhãn hiệu, không nhảy khi dữ liệu về', async ({ page, api }) => {
+    mockRhythm(api);
+    await page.goto('/browse');
+    const grid = page.getByTestId('catalog-grid');
+    await settled(page, grid);
+    const bodies = await grid.locator('[data-ds-part="body"]').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
+    expect(bodies, 'chiều cao thân từng thẻ').toEqual(bodies.map(() => bodies[0]));
+  });
+});

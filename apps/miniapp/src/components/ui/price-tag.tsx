@@ -56,8 +56,8 @@ export function PriceTag({ value, compareAt, flash, size = 'md', tone = 'default
               color: 'var(--color-text-price-compare)',
               textDecoration: 'line-through',
               whiteSpace: 'nowrap',
-              // Hàng ngang: số lớn thì giá gạch cắt bớt thay vì đẩy giá thật xuống dòng.
-              ...(stack ? { fontSize: 'var(--type-label-size)', lineHeight: '16px' } : { fontSize: 'var(--type-caption-size)', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }),
+              // Hàng ngang: số lớn thì giá gạch cắt bớt thay vì đẩy giá thật xuống dòng; dòng 16 để căn baseline không làm hàng giá cao quá 20.
+              ...(stack ? { fontSize: 'var(--type-label-size)', lineHeight: '16px' } : { fontSize: 'var(--type-caption-size)', lineHeight: '16px', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }),
             }}
           >
             {formatVnd(compareAt)}
