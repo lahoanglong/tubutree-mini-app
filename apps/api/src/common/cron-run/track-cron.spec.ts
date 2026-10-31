@@ -168,16 +168,20 @@ describe('TrackCron (chạy trên @nestjs/schedule + cron thật)', () => {
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
     it('lượt sau bị bỏ qua vì lượt trước còn chạy quá hangAfterMs: tính là hỏng, nói rõ treo từ lúc nào', async () => {
+      // Chỉ giả Date: đo "treo" theo đồng hồ giả để máy tải nặng không làm lượt hai trượt qua hangAfterMs (30 ms).
+      jest.useFakeTimers({ doNotFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'nextTick', 'queueMicrotask', 'hrtime', 'performance', 'requestAnimationFrame', 'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback'], now: new Date('2026-10-30T03:00:00Z') });
       const { mod, probe, registry } = await boot();
       const job = registry.getCronJob('probe.guarded');
       job.fireOnTick();
       await sleep(5);
+      jest.setSystemTime(new Date('2026-10-30T03:00:00.010Z'));
       job.fireOnTick();
       await until(() => reports.length > 0);
       expect(reports[0]).toMatchObject({ outcome: 'SKIPPED', alertAfter: 2 });
-      await sleep(40);
+      jest.setSystemTime(new Date('2026-10-30T03:00:00.050Z'));
       job.fireOnTick();
       await until(() => reports.length > 1);
+      jest.useRealTimers();
       expect(reports[1]).toMatchObject({ job: 'probe.guarded', outcome: 'ERRORS', errorCount: 1, alertAfter: 2 });
       expect(reports[1]!.errorLine).toMatch(/^Đang chạy treo từ \d{2}:\d{2}/);
       probe.release!();
