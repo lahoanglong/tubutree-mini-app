@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Box, Page, Text, useNavigate, useParams, useLocation } from 'zmp-ui';
-import { useNotify } from '../hooks/use-notify';
+import { announce, useNotify } from '../hooks/use-notify';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Clock } from 'lucide-react';
 import {
@@ -74,6 +74,7 @@ import { LeafGlyph } from '../components/ui/product-image';
 import { useSizedImage } from '../utils/image-src';
 
 const LOW_STOCK_THRESHOLD = 5;
+const ADDED_FLASH_MS = 1_200;
 const DESC_COLLAPSED_LINES = 4;
 // Khung chờ và khung lỗi chưa có tên sản phẩm; h1 ẩn giữ cho route luôn đúng một h1.
 const PDP_TITLE = 'Chi tiết sản phẩm';
@@ -136,6 +137,10 @@ export default function ProductDetailPage() {
   const autoPick = useRef<{ slug: string; id: string | null } | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [badgeBounce, setBadgeBounce] = useState(false);
+  // Nút "Thêm vào giỏ" tự xác nhận "Đã thêm" ADDED_FLASH_MS; bấm lại trong lúc đó thì tính lại cửa sổ từ lần bấm sau.
+  const [justAdded, setJustAdded] = useState(false);
+  const addedTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(addedTimer.current), []);
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [sheetMode, setSheetMode] = useState<VariationSheetMode | null>(null);
   const [showContentKit, setShowContentKit] = useState(false);
@@ -273,12 +278,13 @@ export default function ProductDetailPage() {
       queryClient.setQueryData(cartKey(), updatedCart);
       haptic('medium');
       setBadgeBounce(true);
+      clearTimeout(addedTimer.current);
+      setJustAdded(true);
+      addedTimer.current = setTimeout(() => setJustAdded(false), ADDED_FLASH_MS);
       if (note) dropGroupCouponState();
-      notify(
-        note
-          ? { text: `${vi.product.added} · ${note.text}`, type: note.ok ? 'success' : 'warning', duration: 3200, position: 'top' }
-          : { text: vi.product.added, type: 'success', duration: 2000, position: 'top' },
-      );
+      // Không có ghi chú thì nút đã xác nhận bằng mắt; thanh thông báo chỉ còn khi có điều cần nói thêm (mã mua chung). Người dùng đọc màn hình vẫn nghe.
+      if (note) notify({ text: `${vi.product.added} · ${note.text}`, type: note.ok ? 'success' : 'warning', duration: 3200, position: 'top' });
+      else announce('status', vi.product.added);
     },
     onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
   });
@@ -998,7 +1004,14 @@ export default function ProductDetailPage() {
                 onPress={handleAdd}
                 style={{ flex: 1 }}
               >
-                {vi.product.addToCart}
+                {justAdded ? (
+                  <span className="tubu-pop" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <Check size={16} strokeWidth={2.25} aria-hidden="true" />
+                    {vi.product.addedShort}
+                  </span>
+                ) : (
+                  vi.product.addToCart
+                )}
               </Button>
               {/* 2 dòng (nhãn + giá): "Mua ngay · 1.250.000đ" một dòng cần ~170px, trong khi mỗi nút
                   chỉ còn ~110-140px ở 320-390px → trước đây tràn khỏi màn hình. aria-label giữ
