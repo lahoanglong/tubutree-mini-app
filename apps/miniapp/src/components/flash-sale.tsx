@@ -22,7 +22,7 @@ import { vi } from '../i18n/vi';
 import { useCountdown } from '../hooks/use-countdown';
 import { useAuthStore } from '../store/auth';
 import { browserStorage } from '../utils/recently-viewed';
-import { FLASH_SKELETON_HEIGHT, readFlashHint, writeFlashHint } from '@tubutree/app-core/home-layout';
+import { FLASH_NEXT_SLOT_HEIGHT, FLASH_SKELETON_HEIGHT, readFlashHint, readFlashSlotHint, writeFlashHint } from '@tubutree/app-core/home-layout';
 import { Skeleton } from './ui/skeleton';
 import { HomeBlockError } from './home/home-block-error';
 import { Countdown } from './ui/countdown';
@@ -42,10 +42,10 @@ const SOLD_FOOTER_HEIGHT = 20;
 const REMIND_FOOTER_HEIGHT = 52;
 const FLASH_SHELF = shelf('home.flash');
 
-function FlashSkeleton() {
+function FlashSkeleton({ withNextSlot }: { withNextSlot: boolean }) {
   return (
     <div data-testid="flash-sale-loading" aria-hidden="true" style={{ padding: '0 16px' }}>
-      <Skeleton height={FLASH_SKELETON_HEIGHT - 16} radius="var(--radius-card)" />
+      <Skeleton height={FLASH_SKELETON_HEIGHT + (withNextSlot ? FLASH_NEXT_SLOT_HEIGHT : 0)} radius="var(--radius-card)" />
     </div>
   );
 }
@@ -69,7 +69,9 @@ export interface FlashSaleProps {
 export function FlashSale({ items, loading, error, onRetry, retrying }: FlashSaleProps) {
   const navigate = useNavigate();
   const titleId = useId();
-  const upcoming = useQuery({ queryKey: ['flash-sales', 'upcoming'], queryFn: fetchUpcomingFlashSales, staleTime: 30_000 });
+  // Chờ khôi phục phiên xong rồi mới hỏi: hỏi sớm thì chưa có token nên đi request lẻ dù khách đã đăng nhập, trong khi khối gộp /home/me đã có sẵn.
+  const sessionReady = useAuthStore((s) => s.status !== 'loading');
+  const upcoming = useQuery({ queryKey: ['flash-sales', 'upcoming'], queryFn: fetchUpcomingFlashSales, staleTime: 30_000, enabled: sessionReady });
 
   // `expiredTick` tính lại ngay khi suất đang đếm về 0 (Countdown.onEnd): đồng hồ chuyển sang suất kế tiếp thay vì biến mất, thẻ hết giờ rời kệ.
   const [expiredTick, setExpiredTick] = useState(0);
@@ -82,13 +84,15 @@ export function FlashSale({ items, loading, error, onRetry, retrying }: FlashSal
   const slot = useMemo(() => nextFlashSlot(upcoming.data ?? [], serverNow()), [upcoming.data, expiredTick]);
 
   // Lần mở trước có Giờ vàng thì giữ chỗ lúc tải (khối nằm sát màn đầu, chen vào sẽ đẩy cả trang); chưa nhớ thì chờ im lặng.
-  const [hadFlash] = useState(() => readFlashHint(browserStorage()));
+  const [hint] = useState(() => ({ had: readFlashHint(browserStorage()), nextSlot: readFlashSlotHint(browserStorage()) }));
   const settled = !loading && !error;
+  const hasSlot = slot !== null;
+  const slotKnown = !upcoming.isPending;
   useEffect(() => {
-    if (settled) writeFlashHint(browserStorage(), visible);
-  }, [settled, visible]);
+    if (settled && (!visible || slotKnown)) writeFlashHint(browserStorage(), visible, hasSlot);
+  }, [settled, visible, slotKnown, hasSlot]);
 
-  if (loading || (visible && upcoming.isLoading)) return hadFlash ? <FlashSkeleton /> : null;
+  if (loading || (visible && (!sessionReady || upcoming.isLoading))) return hint.had ? <FlashSkeleton withNextSlot={hint.nextSlot} /> : null;
   if (items.length === 0 && error) {
     return <HomeBlockError title={fillCopy('flash.title')} error={error} onRetry={() => onRetry?.()} retrying={retrying} />;
   }

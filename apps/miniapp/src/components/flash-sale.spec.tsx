@@ -20,7 +20,7 @@ vi.mock('../services/shop-api', () => ({
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.status }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
-import { FLASH_HINT_KEY } from '@tubutree/app-core/home-layout';
+import { FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT, FLASH_SKELETON_HEIGHT } from '@tubutree/app-core/home-layout';
 import { FlashSale, UpcomingFlashSales, type FlashSaleProps } from './flash-sale';
 
 function renderFlash(props: Partial<FlashSaleProps> = {}) {
@@ -90,6 +90,24 @@ describe('FlashSale — khối Giờ vàng gọn của Trang chủ', () => {
     expect(screen.getByTestId('flash-sale-loading')).toBeInTheDocument();
   });
 
+  it('khung chờ cao đúng khối thật: bằng FLASH_SKELETON_HEIGHT, cao thêm dòng suất kế khi lần mở trước có dòng đó', () => {
+    const heightOf = () => (screen.getByTestId('flash-sale-loading').firstElementChild as HTMLElement).style.height;
+    localStorage.setItem(FLASH_HINT_KEY, '1');
+    const a = renderFlash({ loading: true });
+    expect(heightOf()).toBe(`${FLASH_SKELETON_HEIGHT}px`);
+    a.unmount();
+    localStorage.setItem(FLASH_HINT_KEY, '2');
+    renderFlash({ loading: true });
+    expect(heightOf()).toBe(`${FLASH_SKELETON_HEIGHT + FLASH_NEXT_SLOT_HEIGHT}px`);
+  });
+
+  it('ghi nhớ kèm dòng suất kế khi khối hiện có dòng đó', async () => {
+    mocks.fetchUpcoming.mockResolvedValue(upcomingAt(2));
+    renderFlash({ items: many(3) });
+    await screen.findAllByTestId('flash-sold-bar');
+    await waitFor(() => expect(localStorage.getItem(FLASH_HINT_KEY)).toBe('2'));
+  });
+
   it('nhớ lại có hay không Giờ vàng cho lần mở sau, chỉ ghi khi đã tải xong', async () => {
     const { update, unmount } = renderFlash({ loading: true });
     expect(localStorage.getItem(FLASH_HINT_KEY)).toBeNull();
@@ -125,6 +143,16 @@ describe('FlashSale — khối Giờ vàng gọn của Trang chủ', () => {
       release(upcomingAt(2));
     });
     expect(await screen.findAllByTestId('flash-sold-bar')).toHaveLength(3);
+  });
+
+  it('phiên còn đang khôi phục: chưa hỏi suất sắp mở (chưa biết có dùng được khối gộp của khách đã đăng nhập không), xong phiên mới hỏi', async () => {
+    mocks.status = 'loading';
+    const { update } = renderFlash({ items: many(3) });
+    await act(async () => {});
+    expect(mocks.fetchUpcoming).not.toHaveBeenCalled();
+    mocks.status = 'guest';
+    update({ items: many(3) });
+    await waitFor(() => expect(mocks.fetchUpcoming).toHaveBeenCalledTimes(1));
   });
 
   it('tải suất sắp mở lỗi: khối vẫn hiện, không có dòng suất kế', async () => {

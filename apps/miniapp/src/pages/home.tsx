@@ -77,7 +77,7 @@ export default function HomePage() {
   // Lần mở đầu chưa biết loại khách: các khối dưới thẻ thành viên chờ dữ liệu quyết định hình dạng của chúng rồi hiện cùng lúc, nên tải sớm các
   // query mà khối nào cũng sẽ dùng (cùng khoá, không thêm request).
   // Khối Giờ vàng đọc cùng khoá này cho dòng "suất kế"; công khai nên khách chưa đăng nhập cũng tải.
-  const upcoming = useQuery({ queryKey: ['flash-sales', 'upcoming'], queryFn: fetchUpcomingFlashSales, staleTime: 30_000 });
+  const upcoming = useQuery({ queryKey: ['flash-sales', 'upcoming'], queryFn: fetchUpcomingFlashSales, staleTime: 30_000, enabled: !restoring });
   const todo = useHomeTodoQueries();
   const belowState = useHomeBelow();
   const settling = useHomeSettling(

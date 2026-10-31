@@ -30,40 +30,40 @@ async function waitHomeSettled(page: Page, api: MockApi): Promise<void> {
 }
 
 test.describe('Buy-flow 4b — Trang chủ', () => {
-  test('Khách cũ: tìm → thẻ thành viên → Việc cần làm → lối tắt → Mua lại → Danh mục → Gợi ý cho bạn; có lưới SP trong 5 khối đầu có nội dung', async ({ page, api }) => {
+  test('Khách cũ: tìm → thẻ thành viên → Việc cần làm → lối tắt → Mua lại → Danh mục → Bán chạy nhất → Gợi ý hôm nay', async ({ page, api }) => {
     mockDiscovery(api, { returning: true, shipping: true, subscription: true, forYou: [toCard(BINH_SUA)] });
     await page.goto('/');
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Việc cần làm' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible();
     await waitHomeSettled(page, api);
 
     const blocks = await visibleBlocks(page);
-    const order = ['search', 'member', 'todo', 'shortcuts', 'purchased', 'categories', 'suggest'];
+    const order = ['search', 'member', 'todo', 'shortcuts', 'purchased', 'categories', 'bestSellers', 'suggest'];
     expect(blocks.filter((b) => order.includes(b))).toEqual(order);
-    expect(blocks).not.toContain('bestSellers');
     expect(blocks).not.toContain('welcome');
   });
 
-  test('Khách mới: không thẻ thành viên / Mua lại / Việc cần làm; Bán chạy (theo số đã bán) và Danh mục đứng trước Gợi ý cho bạn', async ({ page, api }) => {
+  test('Khách mới: không thẻ thành viên / Mua lại / Việc cần làm; Danh mục rồi Bán chạy nhất (theo lượt bán 30 ngày) đứng trước Gợi ý hôm nay', async ({ page, api }) => {
     mockDiscovery(api, { forYou: [toCard(BINH_SUA)] });
     await page.goto('/');
-    const best = page.getByRole('region', { name: 'Bán chạy', exact: true });
+    const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true });
     await expect(best).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible();
     await waitHomeSettled(page, api);
 
     const blocks = await visibleBlocks(page);
-    const order = ['search', 'shortcuts', 'bestSellers', 'categories', 'suggest'];
+    const order = ['search', 'shortcuts', 'categories', 'bestSellers', 'suggest'];
     expect(blocks.filter((b) => order.includes(b))).toEqual(order);
     expect(blocks).not.toContain('member');
     await expect(page.getByRole('region', { name: 'Mua lại' })).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Việc cần làm' })).toHaveCount(0);
     expect(api.callsTo('GET', '/orders').filter((c) => c.query.get('status') === 'SHIPPING')).toEqual([]);
-    // Lưới chứa SP đầu tiên = bán chạy nhất (XA_PHONG 120 > BINH_SUA 80 > NRC 50 > KEM 10).
+    // Kệ chứa SP đầu tiên = bán chạy nhất (XA_PHONG 120 > BINH_SUA 80 > NRC 50 > KEM 10), thẻ hạng #1.
     await expect(best.locator('button.tubu-tile-link').first()).toHaveAccessibleName(new RegExp(XA_PHONG.name));
+    await expect(best.getByText('#1', { exact: true })).toBeVisible();
     await expect
-      .poll(() => api.callsTo('GET', '/products').some((c) => c.query.get('sort') === 'best_seller' && c.query.get('limit') === '6'), { timeout: 15_000 })
+      .poll(() => api.callsTo('GET', '/products').some((c) => c.query.get('sort') === 'best_seller_30d' && c.query.get('limit') === '12'), { timeout: 15_000 })
       .toBe(true);
   });
 
@@ -83,7 +83,7 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     mockDiscovery(api);
     api.get('/config/public', publicConfig({ aiAdvisorEnabled: true }));
     await page.goto('/');
-    await expect(page.getByRole('region', { name: 'Bán chạy', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Bán chạy nhất', exact: true })).toBeVisible({ timeout: 15_000 });
     await waitHomeSettled(page, api);
     await expect(page.getByText('Khám phá vườn')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Hỏi trợ lý AI 24/7' })).toHaveCount(0);
@@ -104,10 +104,10 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     await expect(page).toHaveURL(new RegExp(`/order/${SHIPPING_CODE}$`), { timeout: 15_000 });
   });
 
-  test('"Xem tất cả" của Bán chạy mở /browse?sort=best_seller, trang Danh mục xin đúng sắp xếp', async ({ page, api }) => {
+  test('"Xem tất cả" của Bán chạy nhất mở /browse?sort=best_seller, trang Danh mục xin đúng sắp xếp', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/');
-    await page.getByRole('button', { name: 'Xem tất cả Bán chạy' }).click({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Xem tất cả Bán chạy nhất' }).click({ timeout: 15_000 });
     await expect(page).toHaveURL(/\/browse\?sort=best_seller$/, { timeout: 15_000 });
     await expect
       .poll(() => api.callsTo('GET', '/products').some((c) => c.query.get('sort') === 'best_seller' && c.query.get('limit') !== '6'), { timeout: 15_000 })
@@ -127,13 +127,14 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
       localStorage.setItem('tubu_home_kind', JSON.stringify({ userId: 'user-4b', kind: 'returning' }));
     });
     await page.goto('/');
-    await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('purchased-rail-loading')).toBeVisible();
     const before = await visibleBlocks(page);
-    // Thứ tự của khách cũ: không có Bán chạy, Gợi ý cho bạn đứng sau Danh mục.
-    expect(before).not.toContain('bestSellers');
+    // Thứ tự của khách cũ: không có Quà khách mới, Danh mục rồi Bán chạy nhất đứng trước Gợi ý hôm nay.
+    expect(before).not.toContain('welcome');
     expect(before.indexOf('categories')).toBeGreaterThanOrEqual(0);
-    expect(before.indexOf('categories')).toBeLessThan(before.indexOf('suggest'));
+    expect(before.indexOf('categories')).toBeLessThan(before.indexOf('bestSellers'));
+    expect(before.indexOf('bestSellers')).toBeLessThan(before.indexOf('suggest'));
 
     release();
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
@@ -145,18 +146,21 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
   test('Trang chủ có đúng một h1 (logo) và các khối chính là landmark có tên', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/');
-    await expect(page.getByRole('region', { name: 'Bán chạy', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Bán chạy nhất', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
   });
 
-  test('Đã xem gần đây: mở 1 SP từ "Bán chạy" rồi vào Danh mục → khối "Đã xem gần đây" có SP đó', async ({ page, api }) => {
+  test('Đã xem gần đây: mở 1 SP từ "Bán chạy nhất" rồi vào Danh mục → khối "Đã xem gần đây" có SP đó', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/');
-    const best = page.getByRole('region', { name: 'Bán chạy', exact: true });
+    const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true });
     await expect(best).toBeVisible({ timeout: 15_000 });
     await waitHomeSettled(page, api);
 
-    await best.getByRole('button', { name: XA_PHONG.name, exact: true }).click();
+    // Thẻ hạng có tên đọc kèm "hạng 1": lấy thẻ đầu (bán chạy nhất) rồi kiểm tên thay vì khớp tên đúng từng chữ.
+    const first = best.locator('button.tubu-tile-link').first();
+    await expect(first).toHaveAccessibleName(new RegExp(XA_PHONG.name));
+    await first.click();
     await expect(page.getByText(`Mô tả ngắn ${XA_PHONG.name}`)).toBeVisible({ timeout: 15_000 });
     await expect
       .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('tubu_recently_viewed') ?? '[]').map((x: { slug: string }) => x.slug)), { timeout: 15_000 })
@@ -169,8 +173,8 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
   test('Analytics: chạm SP ở Trang chủ không bắn search_result_clicked (chỉ có khi đang tìm)', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/');
-    const best = page.getByRole('region', { name: 'Bán chạy', exact: true });
-    await best.getByRole('button', { name: XA_PHONG.name, exact: true }).click({ timeout: 15_000 });
+    const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true });
+    await best.locator('button.tubu-tile-link').first().click({ timeout: 15_000 });
     await expect(page.getByText(`Mô tả ngắn ${XA_PHONG.name}`)).toBeVisible({ timeout: 15_000 });
     await flushEvents(page);
     await expect.poll(() => api.callsTo('POST', '/events').length, { timeout: 15_000 }).toBeGreaterThan(0);
@@ -237,17 +241,17 @@ test.describe('Buy-flow 4b — bố cục 320/375/390, vùng chạm, khung chờ
     });
   }
 
-  test('375px: khung chờ "Bán chạy" (Trang chủ) và lưới kết quả (Danh mục) cao xấp xỉ thẻ thật (≤ 16px)', async ({ page, api }) => {
+  test('375px: khung chờ "Bán chạy nhất" (Trang chủ) và lưới kết quả (Danh mục) cao xấp xỉ thẻ thật (≤ 16px)', async ({ page, api }) => {
     await page.setViewportSize({ width: 375, height: 800 });
     mockDiscovery(api);
     const real = catalogHandler();
     const gate = gateOf();
     api.get('/products', async (ctx: MockContext) => {
-      if (ctx.call.query.get('sort') === 'best_seller') await gate.promise;
+      if (ctx.call.query.get('sort') === 'best_seller_30d') await gate.promise;
       return real(ctx);
     });
     await page.goto('/');
-    const best = page.getByRole('region', { name: 'Bán chạy', exact: true });
+    const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true });
     const skel = best.getByTestId('catalog-tile-skeleton').first();
     await expect(skel).toBeVisible({ timeout: 15_000 });
     const skelH = (await skel.boundingBox())!.height;

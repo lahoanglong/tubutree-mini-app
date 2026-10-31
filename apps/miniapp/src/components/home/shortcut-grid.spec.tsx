@@ -55,28 +55,28 @@ describe('ShortcutGrid — 4 ô cố định + "Tất cả" (Q7)', () => {
     render(<ShortcutGrid />);
     expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Tất cả lối tắt' }));
-    const dialog = screen.getByRole('dialog', { name: 'Tất cả lối tắt' });
+    const dialog = await screen.findByRole('dialog', { name: 'Tất cả lối tắt' });
     expect(rows(dialog)).toHaveLength(9);
     fireEvent.click(within(dialog).getByRole('button', { name: /Đơn hàng/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/orders');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Tất cả lối tắt' })).toBeNull());
   });
 
-  it('"Kiếm tiền" trong hộp thoại mở bảng chọn thay vì điều hướng', () => {
+  it('"Kiếm tiền" trong hộp thoại mở bảng chọn thay vì điều hướng', async () => {
     render(<ShortcutGrid />);
     fireEvent.click(screen.getByRole('button', { name: 'Tất cả lối tắt' }));
     mocks.navigate.mockClear();
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Tất cả lối tắt' })).getByRole('button', { name: /Kiếm tiền cùng Tubu/ }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Tất cả lối tắt' })).getByRole('button', { name: /Kiếm tiền cùng Tubu/ }));
     expect(mocks.navigate).not.toHaveBeenCalled();
-    expect(screen.getByRole('dialog', { name: 'Kiếm tiền cùng Tubu' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Kiếm tiền cùng Tubu' })).toBeInTheDocument();
   });
 
-  it('cờ Đổi rác và Tích điểm đơn sàn tắt: ô trống được Đổi quà lấp, vẫn đủ 4 ô + "Tất cả"; hộp thoại còn 7 mục', () => {
+  it('cờ Đổi rác và Tích điểm đơn sàn tắt: ô trống được Đổi quà lấp, vẫn đủ 4 ô + "Tất cả"; hộp thoại còn 7 mục', async () => {
     mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
     render(<ShortcutGrid />);
     expect(screen.getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(['Giờ vàng', 'Mã giảm giá', 'Mua chung', 'Đổi quà', 'Tất cả']);
     fireEvent.click(screen.getByRole('button', { name: 'Tất cả lối tắt' }));
-    const dialog = screen.getByRole('dialog', { name: 'Tất cả lối tắt' });
+    const dialog = await screen.findByRole('dialog', { name: 'Tất cả lối tắt' });
     expect(rows(dialog)).toHaveLength(7);
     expect(within(dialog).queryByRole('button', { name: /Đổi rác/ })).toBeNull();
     expect(within(dialog).queryByRole('button', { name: /sàn khác/ })).toBeNull();

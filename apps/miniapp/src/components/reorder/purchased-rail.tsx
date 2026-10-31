@@ -240,38 +240,41 @@ function RebuyLine({
   const caption = [item.variationName, item.timesBought > 1 ? vi.reorder.timesBought(item.timesBought) : null].filter(Boolean).join(' · ');
   return (
     <div data-testid="rebuy-line" style={{ height: PURCHASED_LINE_HEIGHT, padding: '0 16px', boxSizing: 'border-box' }}>
-      <Card variant="raised" padding={12} style={{ height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button
-          type="button"
-          aria-label={item.productName}
-          className="tubu-press"
-          onClick={onOpen}
-          style={{ display: 'flex', alignItems: 'center', gap: 12, flex: '1 1 auto', minWidth: 0, minHeight: 44, padding: 0, border: 'none', background: 'transparent', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}
-        >
-          <ProductThumb src={item.thumbnail} alt="" size={64} />
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <Text variant="body-sm" as="span" style={{ fontWeight: 600, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {item.productName}
-            </Text>
-            {caption && (
-              <Text variant="caption" tone="secondary" as="span" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {caption}
+      {/* Card bọc nội dung trong một div riêng nên hàng ngang (flex) phải nằm trong div đó, không đặt ở style của Card. */}
+      <Card variant="raised" padding={0}>
+        <div style={{ height: PURCHASED_LINE_HEIGHT, padding: 12, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            type="button"
+            aria-label={item.productName}
+            className="tubu-press"
+            onClick={onOpen}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, flex: '1 1 auto', minWidth: 0, minHeight: 44, padding: 0, border: 'none', background: 'transparent', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}
+          >
+            <ProductThumb src={item.thumbnail} alt="" size={64} />
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <Text variant="body-sm" as="span" style={{ fontWeight: 600, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {item.productName}
               </Text>
-            )}
-            <span style={{ display: 'block', marginTop: 2 }}>
-              <PriceTag value={pricing.price} compareAt={pricing.compareAt ?? undefined} size="sm" />
+              {caption && (
+                <Text variant="caption" tone="secondary" as="span" style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {caption}
+                </Text>
+              )}
+              <span style={{ display: 'block', marginTop: 2 }}>
+                <PriceTag value={pricing.price} compareAt={pricing.compareAt ?? undefined} size="sm" />
+              </span>
             </span>
-          </span>
-        </button>
-        {available ? (
-          <Button variant="secondary" onPress={onRebuy} style={{ flex: '0 0 auto', minWidth: 0, paddingInline: 14 }}>
-            {homeCopy.reorder.buy}
-          </Button>
-        ) : (
-          <Text variant="caption" tone="secondary" style={{ flex: '0 0 auto', maxWidth: 88, textAlign: 'right' }}>
-            {vi.reorder.unavailable}
-          </Text>
-        )}
+          </button>
+          {available ? (
+            <Button variant="secondary" onPress={onRebuy} style={{ flex: '0 0 auto', minWidth: 0, paddingInline: 14 }}>
+              {homeCopy.reorder.buy}
+            </Button>
+          ) : (
+            <Text variant="caption" tone="secondary" style={{ flex: '0 0 auto', maxWidth: 88, textAlign: 'right' }}>
+              {vi.reorder.unavailable}
+            </Text>
+          )}
+        </div>
       </Card>
     </div>
   );

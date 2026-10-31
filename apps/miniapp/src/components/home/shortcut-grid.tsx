@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'zmp-ui';
 import { LayoutGrid } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
@@ -9,9 +9,11 @@ import { useAuthStore } from '../../store/auth';
 import { haptic } from '../../utils/haptic';
 import { Icon } from '../ui/icon';
 import { Text } from '../ui/text';
-import { EarnSheet } from './earn-sheet';
 import { SHORTCUT_ICONS, SHORTCUT_ROUTES } from './shortcut-visuals';
-import { ShortcutsSheet } from './shortcuts-sheet';
+
+// Hai sheet chỉ mở khi khách chạm: nạp lười để gói đầu không gánh chúng, và chỉ dựng từ lần mở đầu (giữ dựng sau đó để sheet đóng có hiệu ứng).
+const EarnSheet = lazy(() => import('./earn-sheet').then((m) => ({ default: m.EarnSheet })));
+const ShortcutsSheet = lazy(() => import('./shortcuts-sheet').then((m) => ({ default: m.ShortcutsSheet })));
 
 const CELL_HEIGHT = 84;
 const CIRCLE = 44;
@@ -42,6 +44,8 @@ export function ShortcutGrid() {
   const cfg = usePublicConfig();
   const [earnOpen, setEarnOpen] = useState(false);
   const [allOpen, setAllOpen] = useState(false);
+  const [earnUsed, setEarnUsed] = useState(false);
+  const [allUsed, setAllUsed] = useState(false);
   const authed = useAuthStore((st) => st.status === 'authenticated');
   const recycleOpenRequests = useRecycleOpenRequests(authed, cfg.isLoaded && !cfg.waste.enabled);
   const { pinned, all } = homeShortcutSlots({
@@ -53,7 +57,10 @@ export function ShortcutGrid() {
   const open = (s: HomeShortcutSpec) => {
     const to = SHORTCUT_ROUTES[s.id];
     if (to) navigate(to);
-    else setEarnOpen(true);
+    else {
+      setEarnUsed(true);
+      setEarnOpen(true);
+    }
   };
 
   return (
@@ -89,6 +96,7 @@ export function ShortcutGrid() {
           className="tubu-press"
           onClick={() => {
             haptic('light');
+            setAllUsed(true);
             setAllOpen(true);
           }}
           style={cellStyle}
@@ -101,16 +109,24 @@ export function ShortcutGrid() {
           </Text>
         </button>
       </div>
-      <ShortcutsSheet
-        open={allOpen}
-        onClose={() => setAllOpen(false)}
-        items={all}
-        onSelect={(s) => {
-          setAllOpen(false);
-          open(s);
-        }}
-      />
-      <EarnSheet open={earnOpen} onClose={() => setEarnOpen(false)} />
+      {allUsed && (
+        <Suspense fallback={null}>
+          <ShortcutsSheet
+            open={allOpen}
+            onClose={() => setAllOpen(false)}
+            items={all}
+            onSelect={(s) => {
+              setAllOpen(false);
+              open(s);
+            }}
+          />
+        </Suspense>
+      )}
+      {earnUsed && (
+        <Suspense fallback={null}>
+          <EarnSheet open={earnOpen} onClose={() => setEarnOpen(false)} />
+        </Suspense>
+      )}
     </section>
   );
 }

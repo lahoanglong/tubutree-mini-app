@@ -111,7 +111,7 @@ export function catalogHandler(opts: { legacy?: boolean } = {}) {
       );
     });
     const sort = p.get('sort');
-    if (sort === 'best_seller' && !opts.legacy) rows = [...rows].sort((a, b) => b.soldTotal - a.soldTotal || a.id.localeCompare(b.id));
+    if ((sort === 'best_seller' || sort === 'best_seller_30d') && !opts.legacy) rows = [...rows].sort((a, b) => b.soldTotal - a.soldTotal || a.id.localeCompare(b.id));
     if (sort === 'price_asc') rows = [...rows].sort((a, b) => a.basePrice - b.basePrice || a.id.localeCompare(b.id));
     if (sort === 'price_desc') rows = [...rows].sort((a, b) => b.basePrice - a.basePrice || a.id.localeCompare(b.id));
     const page = Number(p.get('page') ?? 1);

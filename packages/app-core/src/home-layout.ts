@@ -452,20 +452,33 @@ export const HOME_BEST_SELLER_LIMIT = 12;
 
 /** Khoá nhớ "lần mở trước có Giờ vàng" để dựng khung chờ đúng chỗ; chỉ ghi '1' hoặc '0'. */
 export const FLASH_HINT_KEY = 'tubu_home_flash';
+/** Dòng "suất kế" dưới kệ Giờ vàng. */
+export const FLASH_NEXT_SLOT_HEIGHT = 44;
 
-/** Lần mở trước có suất Giờ vàng đang chạy không. Chưa nhớ hay không có kho → false (chờ im lặng, không giữ chỗ). */
-export function readFlashHint(storage: MemoryStorage | null): boolean {
-  if (!storage) return false;
+// '0' không có, '1' có Giờ vàng, '2' có Giờ vàng và dòng suất kế (khung chờ phải cao thêm `FLASH_NEXT_SLOT_HEIGHT`).
+function readFlashHintValue(storage: MemoryStorage | null): string | null {
+  if (!storage) return null;
   try {
-    return storage.getItem(FLASH_HINT_KEY) === '1';
+    return storage.getItem(FLASH_HINT_KEY);
   } catch {
-    return false;
+    return null;
   }
 }
 
-export function writeFlashHint(storage: MemoryStorage | null, hasFlash: boolean): void {
+/** Lần mở trước có suất Giờ vàng đang chạy không. Chưa nhớ hay không có kho → false (chờ im lặng, không giữ chỗ). */
+export function readFlashHint(storage: MemoryStorage | null): boolean {
+  const v = readFlashHintValue(storage);
+  return v === '1' || v === '2';
+}
+
+/** Lần mở trước Giờ vàng có kèm dòng suất kế không (chỉ có nghĩa khi `readFlashHint` đúng). */
+export function readFlashSlotHint(storage: MemoryStorage | null): boolean {
+  return readFlashHintValue(storage) === '2';
+}
+
+export function writeFlashHint(storage: MemoryStorage | null, hasFlash: boolean, hasNextSlot = false): void {
   try {
-    storage?.setItem(FLASH_HINT_KEY, hasFlash ? '1' : '0');
+    storage?.setItem(FLASH_HINT_KEY, hasFlash ? (hasNextSlot ? '2' : '1') : '0');
   } catch {
     /* kho bị chặn: lần sau không giữ chỗ, khối vẫn đúng */
   }
@@ -508,16 +521,16 @@ export function purchasedSkeletonHeight(hint: PurchasedHint): number {
   return 0;
 }
 
-/** Chiều cao khung chờ của khối Giờ vàng (tiêu đề + một hàng thẻ; đo thật: Mini 302px, web 298px). */
-export const FLASH_SKELETON_HEIGHT = 300;
+/** Chiều cao khối Giờ vàng chưa có dòng suất kế (đo thật Mini 375px: tiêu đề + một hàng thẻ). Khoảng cách tới khối kế do vỏ khối lo nên khung chờ cao đúng bằng số này. */
+export const FLASH_SKELETON_HEIGHT = 296;
 
 /**
- * Chiều cao bốn ô của khung chờ chung Trang chủ (`HomeSettlingSkeleton`): một hàng lối tắt, một khối cỡ Giờ vàng, một hàng danh mục, rồi hai hàng thẻ
- * hàng. Mini App và web dùng chung để khung chờ thay bằng khối thật không làm trang nhảy; đổi chiều cao khối thật thì sửa ở đây.
+ * Chiều cao bốn ô của khung chờ chung Trang chủ (`HomeSettlingSkeleton`): một hàng lối tắt, một khối cỡ Giờ vàng, danh mục lưới 2×5, rồi một kệ Bán chạy nhất.
+ * Mini App và web dùng chung để khung chờ thay bằng khối thật không làm trang nhảy; đổi chiều cao khối thật thì sửa ở đây (số đo Mini 375px).
  */
 export const HOME_SETTLING_HEIGHTS = {
-  shortcuts: 96,
-  flash: FLASH_SKELETON_HEIGHT - 16,
-  categories: 138,
-  products: 260,
+  shortcuts: 84,
+  flash: FLASH_SKELETON_HEIGHT,
+  categories: 248,
+  products: 298,
 } as const;

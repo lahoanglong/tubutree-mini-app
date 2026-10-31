@@ -3,6 +3,7 @@ import {
   clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
   visibleHomeShortcuts, homeRenderOrder, homeKeptOrder, homeSettling, homeShortcutSlots, HOME_HEADER_HEIGHT, HOME_SHORTCUT_SLOTS,
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
+  readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
 } from './home-layout';
 import type { LoyaltyOverview } from './api/loyalty';
 
@@ -97,6 +98,33 @@ describe('số đo khối Trang chủ mới', () => {
     expect(todoSkeletonHeight(1)).toBe(64);
     expect(todoSkeletonHeight(2)).toBe(128);
     expect(todoSkeletonHeight(0)).toBe(0);
+  });
+});
+
+describe('gợi ý nhớ Giờ vàng (có suất, có dòng suất kế)', () => {
+  const mem = () => {
+    const m = new Map<string, string>();
+    return { m, getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+  };
+  it('khứ hồi: có Giờ vàng, có thêm dòng suất kế, không có; chưa nhớ → không giữ chỗ', () => {
+    const st = mem();
+    expect([readFlashHint(st), readFlashSlotHint(st)]).toEqual([false, false]);
+    writeFlashHint(st, true);
+    expect([readFlashHint(st), readFlashSlotHint(st)]).toEqual([true, false]);
+    writeFlashHint(st, true, true);
+    expect([readFlashHint(st), readFlashSlotHint(st)]).toEqual([true, true]);
+    writeFlashHint(st, false, true);
+    expect([readFlashHint(st), readFlashSlotHint(st)]).toEqual([false, false]);
+    expect(st.m.get(FLASH_HINT_KEY)).toBe('0');
+  });
+  it('giá trị "1" của bản cũ vẫn đọc là có Giờ vàng, kho ném lỗi thì không văng', () => {
+    const st = mem();
+    st.setItem(FLASH_HINT_KEY, '1');
+    expect(readFlashHint(st)).toBe(true);
+    const boom = { getItem: () => { throw new Error('x'); }, setItem: () => { throw new Error('x'); } };
+    expect(readFlashSlotHint(boom)).toBe(false);
+    expect(() => writeFlashHint(boom, true, true)).not.toThrow();
+    expect(FLASH_NEXT_SLOT_HEIGHT).toBe(44);
   });
 });
 

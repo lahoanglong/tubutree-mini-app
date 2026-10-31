@@ -34,12 +34,12 @@ test.describe('Trang chủ — không nhảy bố cục', () => {
     });
     await page.goto('/');
     await expect(page.getByTestId('member-card-loading')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('region', { name: 'Bán chạy' })).toHaveCount(0);
-    expect(await blocks(page)).not.toContain('bestSellers');
+    // Khối chỉ khách mới có là "Quà khách mới" (welcome); "Bán chạy nhất" giờ có ở cả hai bố cục (Q18) nên không còn là dấu hiệu.
+    expect(await blocks(page)).not.toContain('welcome');
     gate.open();
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Bán chạy' })).toHaveCount(0);
+    expect(await blocks(page)).not.toContain('welcome');
   });
 
   test('thẻ thành viên: khung chờ cao bằng thẻ thật; thanh tiến độ giữ chỗ nên /me/loyalty về không đẩy gì', async ({ page, api }) => {
@@ -175,7 +175,7 @@ test.describe('Trang chủ — chấm đỏ Ưu đãi và Cộng đồng', () =>
 });
 
 test.describe('Trang chủ — vùng chạm 44px', () => {
-  test('chip dải thương hiệu và tab gợi ý có vùng chạm 44px quanh tâm (chip nhìn cao 36px)', async ({ page, api }) => {
+  test('chip dải thương hiệu và chip danh mục của Gợi ý hôm nay có vùng chạm 44px quanh tâm (chip nhìn cao 36px)', async ({ page, api }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     mockDiscovery(api, { returning: true, forYou: [toCard(BINH_SUA)] });
     await page.goto('/');
@@ -184,9 +184,9 @@ test.describe('Trang chủ — vùng chạm 44px', () => {
     const brandChip = journey.getByRole('region', { name: /Dải thương hiệu/ }).getByRole('button').first();
     await brandChip.scrollIntoViewIfNeeded();
     await expectChipHitArea44(brandChip);
-    const tab = page.getByRole('region', { name: 'Nguồn gợi ý' }).getByRole('button', { name: 'Bán chạy', exact: true });
-    await tab.scrollIntoViewIfNeeded();
-    await expectChipHitArea44(tab);
+    const chip = page.getByRole('region', { name: 'Lọc gợi ý theo danh mục' }).getByRole('button').first();
+    await chip.scrollIntoViewIfNeeded();
+    await expectChipHitArea44(chip);
   });
 });
 
@@ -212,7 +212,11 @@ test.describe('Đổi rác tạm dừng nhưng còn yêu cầu đang mở', () =
     const openCount = page.waitForResponse((r) => r.url().includes('/waste/me/open-count'));
     await page.goto('/');
     await openCount;
-    await expect(page.getByRole('button', { name: 'Đơn hàng của tôi' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('shortcut-grid')).toBeVisible({ timeout: 15_000 });
+    // Đơn hàng nằm ngoài 4 ô cố định: mở "Tất cả lối tắt" mới thấy đủ mục, và ở đó cũng không được có lối vào Yêu cầu.
+    await page.getByRole('button', { name: 'Tất cả lối tắt' }).click();
+    await expect(page.getByText('Đơn hàng của tôi', { exact: true })).toBeVisible();
+    await expect(page.getByText(/Yêu cầu của tôi/)).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Yêu cầu của tôi/ })).toHaveCount(0);
   });
 });
