@@ -92,13 +92,14 @@ afterEach(() => vi.useRealTimers());
 // Máy đã nhớ loại khách: không giữ khung chờ chung, nên khối chưa có chunk chỉ được giữ chỗ đúng bằng hình lúc đang tải của nó (không thì null),
 // để chunk về không làm khối bên dưới nhảy.
 describe('HomePage — mở lại khi máy đã nhớ loại khách, chunk khối dưới chưa về', () => {
-  it('không có khung chờ chung; Giờ vàng chưa từng có và Cộng đồng không giữ chỗ; Mua lại giữ đúng 216px', async () => {
+  it('không có khung chờ chung; Giờ vàng chưa từng có và Cộng đồng không giữ chỗ; Mua lại giữ chỗ bằng đúng khung chờ của kệ thật', async () => {
     renderHome();
     await settle(100);
     expect(document.querySelector('[data-testid="home-settling"]')).toBeNull();
     expect(heightOf('flash')).toBeUndefined();
     expect(heightOf('community')).toBeUndefined();
-    expect(heightOf('purchased')).toBe('216');
+    expect(heightOf('purchased')).toBeUndefined();
+    expect(document.querySelector('[data-home-block="purchased"] [data-testid="purchased-rail-loading"]')).not.toBeNull();
   });
 
   it('lần trước có Giờ vàng thì giữ chỗ 300px (gồm lề trên)', async () => {

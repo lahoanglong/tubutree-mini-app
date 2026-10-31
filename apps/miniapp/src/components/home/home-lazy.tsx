@@ -3,6 +3,7 @@ import { FLASH_SKELETON_HEIGHT, HOME_HERO_HEIGHT, HOME_SETTLING_HEIGHTS as H, re
 import { isChunkError } from '../../utils/chunk-error';
 import { browserStorage } from '../../utils/recently-viewed';
 import { Skeleton } from '../ui/skeleton';
+import { PurchasedRailSkeleton } from './purchased-rail-skeleton';
 import type * as BelowModule from './home-below';
 
 type Below = typeof BelowModule;
@@ -76,16 +77,17 @@ interface Slot {
   top?: number;
   bottom?: number;
 }
-const SLOT_PURCHASED: Slot = { height: 24 + 8 + 168, top: 4, bottom: 12 };
 const SLOT_GIFT: Slot = { height: HOME_HERO_HEIGHT, bottom: 12 };
 const SLOT_FLASH: Slot = { height: H.flash, top: FLASH_SKELETON_HEIGHT - H.flash };
 const SLOT_NONE: Slot = { height: 0 };
 
-function Block({ slot, children }: { slot: Slot; children: (m: Below) => ReactNode }) {
+function Block({ slot, placeholder, children }: { slot: Slot; placeholder?: ReactNode; children: (m: Below) => ReactNode }) {
   const { failed } = useSyncExternalStore(subscribe, getState, getState);
   if (below) return <>{children(below)}</>;
   // Chunk hỏng: Trang chủ hiện một dải lỗi có "Thử lại" (home.tsx), các khối không giữ chỗ vĩnh viễn.
-  if (failed || slot.height === 0) return null;
+  if (failed) return null;
+  if (placeholder) return <>{placeholder}</>;
+  if (slot.height === 0) return null;
   const top = slot.top ?? 0;
   const bottom = slot.bottom ?? 0;
   return (
@@ -115,7 +117,7 @@ export const HomeFlashSale = () => {
   );
 };
 export const HomePurchasedRail = (p: ComponentProps<Below['PurchasedRail']>) => (
-  <Block slot={SLOT_PURCHASED}>{(m) => <m.PurchasedRail {...p} />}</Block>
+  <Block slot={SLOT_NONE} placeholder={<PurchasedRailSkeleton />}>{(m) => <m.PurchasedRail {...p} />}</Block>
 );
 export const HomeBestSellerRail = () => <Block slot={{ height: H.products }}>{(m) => <m.BestSellerRail />}</Block>;
 export const HomeBrandJourney = () => <Block slot={SLOT_NONE}>{(m) => <m.BrandJourney />}</Block>;
