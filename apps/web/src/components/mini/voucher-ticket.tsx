@@ -30,8 +30,8 @@ const STAMP: Partial<Record<VoucherView['state'], string>> = { used: 'coupon.use
 
 const TITLE_CLAMP: CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' };
 const TITLE_ONE_LINE: CSSProperties = { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
-// Hai nửa vòng khuyết ở mép trên và dưới cuống (răng cưa vé): hai lớp mask phủ mỗi lớp nửa chiều cao, cộng lại thành một vé liền.
-const NOTCH = 'radial-gradient(circle at 72px 0, transparent 6px, #000 6.5px) top / 100% 51% no-repeat, radial-gradient(circle at 72px 100%, transparent 6px, #000 6.5px) bottom / 100% 51% no-repeat';
+// Mask chỉ đọc độ trong suốt nên màu là `black` (không phải màu vẽ, không đi qua token). Hai nửa vòng khuyết ở mép trên và dưới cuống (răng cưa vé): hai lớp mask phủ mỗi lớp nửa chiều cao, cộng lại thành một vé liền.
+const NOTCH = 'radial-gradient(circle at 72px 0, transparent 6px, black 6.5px) top / 100% 51% no-repeat, radial-gradient(circle at 72px 100%, transparent 6px, black 6.5px) bottom / 100% 51% no-repeat';
 
 /**
  * Phiếu mã giảm giá dùng chung (thay ba kiểu vẽ rời: coupon-card, chip PDP, phiếu trang thương hiệu). Một nút chính; răng cưa và
