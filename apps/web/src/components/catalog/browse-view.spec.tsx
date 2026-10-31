@@ -362,8 +362,18 @@ describe('BrowseView — sắp xếp', () => {
     const wrap = sortGroup(container).parentElement!.parentElement as HTMLElement;
     expect(wrap.className).toContain('sticky');
     expect(wrap.className).toContain('top-[var(--sort-bar-top,0px)]');
-    expect(wrap.className).toContain('lg:[&>div>button:last-child]:hidden');
+    expect(wrap.className).toContain('lg:[&>div>button:last-child]:!hidden');
     expect(wrap.closest('[data-browse-scope]')!.className).toContain('--sort-bar-top');
+  });
+
+  it('hàng ô tìm ở điện thoại cao 58px như Mini: ô 46px (44 + viền) trong đệm dọc 6px, giá trị khớp --sort-bar-top:58px', async () => {
+    nav.search = LIST;
+    const { container } = mount();
+    await flush();
+    const input = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+    expect(input.className).toContain('max-md:h-[46px]');
+    expect(input.closest('form')!.className).toContain('max-md:py-1.5');
+    expect(input.closest('[data-browse-scope]')!.className).toContain('max-md:[--sort-bar-top:58px]');
   });
 });
 

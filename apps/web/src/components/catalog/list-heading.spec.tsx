@@ -47,6 +47,12 @@ describe('ListHeading', () => {
     expect(count(c).style.marginLeft).toBe('auto');
   });
 
+  it('số sản phẩm đặt cỡ chữ theo token body-sm: chữ nền web 16px làm hàng cao hơn Mini 15px', () => {
+    const c = mount({ title: 'Chăm sóc da', count: 12, isLoading: false });
+    expect(count(c).style.fontSize).toBe('var(--type-body-sm-size)');
+    expect(count(c).style.lineHeight).toBe('var(--type-body-sm-lh)');
+  });
+
   it('tên dài không đẩy số ra ngoài khung: tiêu đề cắt một dòng', () => {
     const c = mount({ title: 'Rất dài '.repeat(20), count: 5, isLoading: false });
     const h = c.querySelector('h2')!;

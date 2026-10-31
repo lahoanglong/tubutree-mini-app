@@ -48,6 +48,7 @@ describe('CategoryChipRow', () => {
     expect(group.className).toContain('scroll-x');
     expect(group.className).toContain('-mx-4');
     expect(group.className).toContain('lg:hidden');
+    expect(group.style.maxWidth).toBe('none');
     expect(parseFloat(group.style.paddingTop)).toBeGreaterThanOrEqual(4);
     expect(parseFloat(group.style.paddingBottom)).toBeGreaterThanOrEqual(4);
   });

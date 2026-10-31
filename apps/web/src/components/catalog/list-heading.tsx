@@ -12,7 +12,8 @@ export interface ListHeadingProps {
 /**
  * Một tiêu đề + số kết quả cho cả danh sách, cùng MỘT hàng (như Mini App): tên bên trái cắt một dòng, số bên phải. Không có tên
  * (đang tìm) thì chỉ còn số. Số kết quả là vùng `aria-live="polite"`: lúc đang tải chỉ có khoảng trắng không-ngắt (giữ chiều cao một
- * dòng, không phát gì), khi có số mới trình đọc màn hình đọc đúng một lần.
+ * dòng, không phát gì), khi có số mới trình đọc màn hình đọc đúng một lần. Cỡ chữ của `p` đặt theo token body-sm vì chữ nền web 16px,
+ * Mini 15px: không đặt thì hàng cao hơn Mini 1,5px.
  */
 export function ListHeading({ title, count, isLoading }: ListHeadingProps) {
   return (
@@ -28,7 +29,7 @@ export function ListHeading({ title, count, isLoading }: ListHeadingProps) {
         aria-atomic="true"
         data-testid="result-count"
         className="md:!ml-0"
-        style={{ margin: 0, flex: '0 0 auto', whiteSpace: 'nowrap', marginLeft: title ? 'auto' : 0 }}
+        style={{ margin: 0, flex: '0 0 auto', whiteSpace: 'nowrap', marginLeft: title ? 'auto' : 0, fontSize: 'var(--type-body-sm-size)', lineHeight: 'var(--type-body-sm-lh)' }}
       >
         <Text variant="body-sm" tone="secondary">
           {isLoading || count === undefined ? ' ' : browseText.resultCount(count)}

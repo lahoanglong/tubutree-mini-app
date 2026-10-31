@@ -241,7 +241,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
           placeholder={browseText.searchPlaceholder}
           autoComplete="off"
           enterKeyHint="search"
-          className={`${ui.field} pl-9 pr-11 max-md:rounded-full max-md:border-[var(--color-border-subtle)]`}
+          className={`${ui.field} pl-9 pr-11 max-md:h-[46px] max-md:rounded-full max-md:border-[var(--color-border-subtle)]`}
         />
         {draft !== '' && (
           <button
@@ -271,7 +271,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   const showList = !showSuggest && !hubState;
 
   return (
-    // `--sort-bar-top`: SortBar dính ngay dưới hàng ô tìm dính ở điện thoại (58px, số đo của Mini App), dưới thanh đầu từ md. Phải là chuỗi lớp nguyên văn để Tailwind thấy.
+    // `--sort-bar-top`: SortBar dính ngay dưới hàng ô tìm dính ở điện thoại (58px = 46 ô tìm + 2x6 đệm, số đo của Mini App), dưới thanh đầu từ md. Phải là chuỗi lớp nguyên văn để Tailwind thấy.
     <div data-browse-scope className="max-md:[--sort-bar-top:58px] md:[--sort-bar-top:var(--header-h)]">
       <ListingLayout
         breadcrumb={<ListingBreadcrumb trail={trail} />}
@@ -326,8 +326,8 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
           />
         ) : (
           <>
-            {/* Dính ở khung bọc, không ở chính SortBar: cha của phần tử dính phải cao bằng cả danh sách. Từ lg cột lọc đã có nên nút Lọc ẩn đi. */}
-            <div className="sticky top-[var(--sort-bar-top,0px)] z-[2] -mx-4 md:mx-0 lg:[&>div>button:last-child]:hidden">
+            {/* Dính ở khung bọc, không ở chính SortBar: cha của phần tử dính phải cao bằng cả danh sách. Từ lg cột lọc đã có nên nút Lọc ẩn đi (`!hidden` vì nút có `display` ở style). */}
+            <div className="sticky top-[var(--sort-bar-top,0px)] z-[2] -mx-4 md:mx-0 lg:[&>div>button:last-child]:!hidden">
               <SortBar
                 value={sortTab(state.sort)}
                 options={browseSortOptions(state.sort, Boolean(state.q))}
