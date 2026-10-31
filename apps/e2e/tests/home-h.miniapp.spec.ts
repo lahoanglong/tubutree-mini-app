@@ -212,7 +212,7 @@ test.describe('Đổi rác tạm dừng nhưng còn yêu cầu đang mở', () =
     mockHomeEngagement(api);
     api.get('/waste/me/open-count', { count: 2 });
     await page.goto('/');
-    await expect(page.getByText('Yêu cầu của tôi', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: /Yêu cầu của tôi/ }).first()).toBeVisible({ timeout: 15_000 });
     await page.goto('/offers');
     await expect(page.getByText('Yêu cầu của tôi', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
     expect(api.callsTo('GET', '/waste/me/open-count').length).toBeGreaterThan(0);
@@ -224,9 +224,11 @@ test.describe('Đổi rác tạm dừng nhưng còn yêu cầu đang mở', () =
     mockDiscovery(api, { returning: true });
     mockHomeEngagement(api);
     api.get('/waste/me/open-count', { count: 0 });
+    const openCount = page.waitForResponse((r) => r.url().includes('/waste/me/open-count'));
     await page.goto('/');
-    await expect.poll(() => api.callsTo('GET', '/waste/me/open-count').length).toBeGreaterThan(0);
-    await expect(page.getByText('Yêu cầu của tôi', { exact: true })).toHaveCount(0);
+    await openCount;
+    await expect(page.getByRole('button', { name: 'Đơn hàng của tôi' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: /Yêu cầu của tôi/ })).toHaveCount(0);
   });
 });
 

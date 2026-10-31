@@ -69,7 +69,7 @@ describe('ShortcutGrid — một hàng lối tắt', () => {
     expect(screen.getByRole('dialog', { name: 'Kiếm tiền cùng Tubu' })).toBeInTheDocument();
   });
 
-  it('Đổi rác tạm dừng mà khách còn yêu cầu đang mở: vẫn hiện, ghi "Yêu cầu của tôi" và dẫn vào Đổi rác', () => {
+  it('Đổi rác tạm dừng mà khách còn yêu cầu đang mở: vẫn hiện, ghi "Yêu cầu" và dẫn vào Đổi rác', () => {
     mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
     mocks.openRequests = true;
     render(<ShortcutGrid />);
@@ -77,7 +77,7 @@ describe('ShortcutGrid — một hàng lối tắt', () => {
     expect(screen.queryByRole('button', { name: /Đổi rác/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Yêu cầu của tôi/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
-    expect(screen.getByText('Yêu cầu của tôi')).toBeInTheDocument();
+    expect(screen.getByText('Yêu cầu')).toBeInTheDocument();
   });
 
   it('chương trình đang chạy: không cần hỏi yêu cầu đang mở', () => {
