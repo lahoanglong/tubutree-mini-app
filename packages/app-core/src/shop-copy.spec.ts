@@ -93,6 +93,7 @@ describe('chữ của bộ thành phần section-kit', () => {
     expect(fillCopy('combo.save', { save: '36.700đ' })).toBe('Tiết kiệm 36.700đ');
     expect(fillCopy('combo.addSpoken', { title: 'Bếp xanh', n: 3, price: '337.300đ' })).toBe('Thêm cả combo Bếp xanh, 3 món, 337.300đ');
     expect(fillCopy('combo.seeItems')).toBe('Xem từng món');
+    expect(fillCopy('combo.soldOut')).toBe('Combo tạm hết');
     expect(fillCopy('combo.itemsLabel', { n: 3 })).toBe('Gồm 3 món');
     expect(fillCopy('combo.more', { n: 2 })).toBe('+2');
   });

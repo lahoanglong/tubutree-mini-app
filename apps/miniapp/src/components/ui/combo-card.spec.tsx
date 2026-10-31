@@ -107,6 +107,36 @@ describe('ComboCard', () => {
     expect(screen.getByRole('list', { name: 'Gồm 2 món' })).toHaveTextContent('Tạm hết hàng');
   });
 
+  it('có món hết hàng: nút thành "Combo tạm hết", aria-disabled, bấm hai lần không gọi onAddAll, bỏ dòng Tiết kiệm', () => {
+    const onAddAll = vi.fn();
+    render(<ComboCard {...base} items={[item(1), item(2, { stock: 'out', stockText: 'Tạm hết hàng' })]} onAddAll={onAddAll} />);
+    expect(screen.queryByRole('button', { name: /Thêm cả combo/ })).toBeNull();
+    const btn = screen.getByRole('button', { name: 'Combo tạm hết' });
+    expect(btn).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    expect(onAddAll).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Tiết kiệm/)).toBeNull();
+  });
+
+  it('hết hàng và đang busy: vẫn đọc "Combo tạm hết" (không spinner che nhãn), vẫn không gọi', () => {
+    const onAddAll = vi.fn();
+    render(<ComboCard {...base} items={[item(1, { stock: 'out' })]} onAddAll={onAddAll} busy />);
+    const btn = screen.getByRole('button', { name: 'Combo tạm hết' });
+    expect(btn).not.toHaveAttribute('aria-busy');
+    fireEvent.click(btn);
+    expect(onAddAll).not.toHaveBeenCalled();
+  });
+
+  it('hết hàng: "Xem từng món" vẫn dùng được; còn đủ hàng: nút thêm không aria-disabled', () => {
+    const onSeeItems = vi.fn();
+    const { rerender } = render(<ComboCard {...base} items={[item(1, { stock: 'out' })]} onAddAll={() => {}} onSeeItems={onSeeItems} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Xem từng món' }));
+    expect(onSeeItems).toHaveBeenCalledTimes(1);
+    rerender(<ComboCard {...base} items={[item(1, { stock: 'in' })]} onAddAll={() => {}} />);
+    expect(screen.getByRole('button', { name: /Thêm cả combo/ })).not.toHaveAttribute('aria-disabled');
+  });
+
   it('onSeeItems: nút phụ "Xem từng món" chỉ có khi truyền, bấm gọi một lần', () => {
     const onSeeItems = vi.fn();
     const { rerender } = render(<ComboCard {...base} items={items(2)} onAddAll={() => {}} />);

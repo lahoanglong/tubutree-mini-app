@@ -51,6 +51,18 @@ describe('VoucherTicket', () => {
     expect(screen.getByRole('button')).toHaveAccessibleDescription(/Đơn từ 250k/);
   });
 
+  it.each(['ticket', 'row'] as const)('ineligible không có reason (%s): điều kiện chỉ hiện một lần, không dòng lý do lặp', (variant) => {
+    render(<VoucherTicket voucher={view({ state: 'ineligible' })} variant={variant} primary={{ label: 'Dùng ngay', onClick: vi.fn() }} />);
+    expect(q('voucher-reason')).toBeNull();
+    expect(document.body.textContent!.split('Đơn từ 250k')).toHaveLength(2);
+  });
+
+  it('ineligible có reason: dòng lý do hiện, nút mô tả bằng đúng lý do (không kèm điều kiện)', () => {
+    render(<VoucherTicket voucher={view({ state: 'ineligible' })} variant="ticket" reason="Mua thêm 50k để dùng" primary={{ label: 'Dùng ngay', onClick: vi.fn() }} />);
+    expect(q('voucher-reason')).toHaveTextContent('Mua thêm 50k để dùng');
+    expect(screen.getByRole('button')).toHaveAccessibleDescription('Mua thêm 50k để dùng');
+  });
+
   it('busy: aria-disabled + aria-busy, bấm hai lần không gọi', () => {
     const onClick = vi.fn();
     render(<VoucherTicket voucher={view()} variant="ticket" primary={{ label: 'Lưu mã', onClick, busy: true }} />);

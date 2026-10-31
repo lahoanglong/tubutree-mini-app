@@ -172,6 +172,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'combo.save': 18,
   'combo.addSpoken': null,
   'combo.seeItems': 12,
+  'combo.soldOut': 13,
   'combo.itemsLabel': 12,
   'combo.more': 4,
 };

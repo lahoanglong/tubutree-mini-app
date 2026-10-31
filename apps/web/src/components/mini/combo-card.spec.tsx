@@ -88,6 +88,33 @@ describe('ComboCard (web)', () => {
     expect(onAddAll).not.toHaveBeenCalled();
   });
 
+  it('có món hết hàng: nút thành "Combo tạm hết", aria-disabled, bấm hai lần không gọi onAddAll, bỏ dòng Tiết kiệm', () => {
+    const onAddAll = vi.fn();
+    mount(<ComboCard {...base} items={[item(1), item(2, { stock: 'out', stockText: 'Tạm hết hàng' })]} onAddAll={onAddAll} />);
+    expect(btn(/Thêm cả combo/)).toBeUndefined();
+    const b = btn('Combo tạm hết')!;
+    expect(b.getAttribute('aria-disabled')).toBe('true');
+    click(b);
+    click(b);
+    expect(onAddAll).not.toHaveBeenCalled();
+    expect(text()).not.toContain('Tiết kiệm');
+  });
+
+  it('hết hàng và đang busy: vẫn đọc "Combo tạm hết" (không spinner), vẫn không gọi; "Xem từng món" dùng được; đủ hàng thì nút thêm không aria-disabled', () => {
+    const onAddAll = vi.fn();
+    const onSeeItems = vi.fn();
+    const a = mount(<ComboCard {...base} items={[item(1, { stock: 'out' })]} onAddAll={onAddAll} onSeeItems={onSeeItems} busy />);
+    const b = btn('Combo tạm hết')!;
+    expect(b.getAttribute('aria-busy')).toBeNull();
+    click(b);
+    expect(onAddAll).not.toHaveBeenCalled();
+    click(btn('Xem từng món')!);
+    expect(onSeeItems).toHaveBeenCalledTimes(1);
+    a.unmount();
+    mount(<ComboCard {...base} items={[item(1, { stock: 'in' })]} onAddAll={() => {}} />);
+    expect(btn(/Thêm cả combo/)!.getAttribute('aria-disabled')).toBeNull();
+  });
+
   it('món hết hàng hiện "Tạm hết hàng"; onSeeItems chỉ có khi truyền', () => {
     const onSeeItems = vi.fn();
     const a = mount(<ComboCard {...base} items={[item(1), item(2, { stock: 'out', stockText: 'Tạm hết hàng' })]} onAddAll={() => {}} />);

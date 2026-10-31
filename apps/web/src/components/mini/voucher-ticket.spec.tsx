@@ -47,6 +47,17 @@ describe('VoucherTicket (web)', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it('ineligible không có reason: điều kiện chỉ hiện một lần, không dòng lý do lặp, nút mô tả bằng dòng điều kiện', () => {
+    for (const variant of ['ticket', 'row'] as const) {
+      const a = mount(<VoucherTicket voucher={view({ state: 'ineligible' })} variant={variant} primary={{ label: 'Dùng ngay', onClick: vi.fn() }} />);
+      expect(q('voucher-reason')).toBeNull();
+      expect(document.body.textContent!.split('Đơn từ 250k')).toHaveLength(2);
+      const btn = buttons()[0]!;
+      expect(document.getElementById(btn.getAttribute('aria-describedby')!)!.textContent).toContain('Đơn từ 250k');
+      a.unmount();
+    }
+  });
+
   it('không điều kiện/hạn: không dòng trống, meta chỉ có mã; đủ thì "điều kiện · mã"', () => {
     const a = mount(<VoucherTicket voucher={view({ condition: '', expiry: '' })} variant="ticket" />);
     expect(q('voucher-expiry')).toBeNull();

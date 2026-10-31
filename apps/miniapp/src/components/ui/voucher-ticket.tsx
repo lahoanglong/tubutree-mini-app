@@ -45,10 +45,11 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
   const showCode = variant !== 'chip' && Boolean(v.code);
   const showMeta = Boolean(v.condition) || showCode;
   const showExpiry = !inactive && v.expiry !== '';
-  const reasonText = ineligible ? reason || v.condition : '';
+  // Không có `reason` thì không vẽ thêm dòng: điều kiện đã nằm ở dòng meta, nút trỏ aria-describedby về đó (không lặp chữ trên màn hình).
+  const reasonText = ineligible ? reason ?? '' : '';
   const showPrimary = primary && !inactive;
   const blocked = ineligible || Boolean(primary?.busy);
-  const describedBy = ineligible && reasonText ? `${uid}-reason` : undefined;
+  const describedBy = !ineligible ? undefined : reasonText ? `${uid}-reason` : v.condition ? `${uid}-meta` : undefined;
 
   const small = variant !== 'ticket';
   const text = inactive ? 'var(--color-text-tertiary)' : palette.fg;
@@ -58,7 +59,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
         {v.title}
       </span>
       {showMeta && (
-        <span data-testid="voucher-meta" style={{ display: 'block', minWidth: 0, fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-tertiary)', ...(variant === 'chip' ? TITLE_ONE_LINE : null) }}>
+        <span id={`${uid}-meta`} data-testid="voucher-meta" style={{ display: 'block', minWidth: 0, fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-tertiary)', ...(variant === 'chip' ? TITLE_ONE_LINE : null) }}>
           {v.condition}
           {v.condition && showCode ? ' · ' : null}
           {showCode && <span data-testid="voucher-code" style={{ whiteSpace: 'nowrap' }}>{v.code}</span>}

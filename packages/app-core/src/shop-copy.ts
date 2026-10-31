@@ -180,6 +180,7 @@ export const SHOP_COPY: Record<string, string> = {
   'combo.save': 'Tiết kiệm {save}',
   'combo.addSpoken': 'Thêm cả combo {title}, {n} món, {price}',
   'combo.seeItems': 'Xem từng món',
+  'combo.soldOut': 'Combo tạm hết',
   'combo.itemsLabel': 'Gồm {n} món',
   'combo.more': '+{n}',
 };

@@ -33,11 +33,15 @@ export interface ComboCardProps {
 const MAX_THUMBS = 3;
 const PLUS: CSSProperties = { color: 'var(--color-text-tertiary)', fontWeight: 600, fontSize: 'var(--type-body-md-size)', lineHeight: 1 };
 const THUMB = 56;
+/** Nút "Combo tạm hết": nhìn như nút khoá nhưng vẫn là `aria-disabled` (Tab tới được, đọc được tên) thay vì `disabled`. */
+const SOLD_OUT_BUTTON: CSSProperties = { background: 'var(--color-action-primary-bg-disabled)', color: 'var(--color-text-secondary)', cursor: 'default' };
 
 /**
  * Khối "mua cả bộ" của gian hàng và thương hiệu: dải ảnh nối bằng dấu "+", danh sách tên món, giá cả bộ kèm giá gạch, một nút chính.
  * Không dùng `ProductTile`: món trong combo không phải thẻ để bấm vào từng cái, chỉ là thành phần của bộ. Dải ảnh chỉ trang trí
  * (`aria-hidden`), danh sách tên mới là thông tin. Giá combo ≥ tổng lẻ thì không có dòng "Tiết kiệm" (không bao giờ "0đ" hay số âm) và cũng không nhãn "Combo -n%": không quảng cáo mức giảm mà giá không có.
+ * Có món `stock==='out'` thì không thể thêm cả bộ (API từ chối cả lô nếu thiếu một món): nút thành "Combo tạm hết", không gọi
+ * `onAddAll`, bỏ dòng "Tiết kiệm" (khoản tiết kiệm không mua được). "Xem từng món" vẫn có để khách chọn món còn hàng.
  */
 export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy = false, onSeeItems }: ComboCardProps) {
   if (items.length === 0) return null;
@@ -45,6 +49,7 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
   const extra = items.length - shown.length;
   const saving = Number.isFinite(total) && Number.isFinite(comboTotal) && total > comboTotal ? total - comboTotal : 0;
   const pctShown = Number.isFinite(pct) ? Math.round(pct) : 0;
+  const soldOut = items.some((it) => it.stock === 'out');
   return (
     <Card variant="outline" padding={12}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -108,16 +113,22 @@ export function ComboCard({ title, items, pct, total, comboTotal, onAddAll, busy
         <span style={{ fontSize: 'var(--type-caption-size)', color: 'var(--color-text-secondary)' }}>{fillCopy('combo.setLabel')}</span>
         <PriceTag value={comboTotal} compareAt={total} size="md" />
       </div>
-      {saving > 0 && (
+      {saving > 0 && !soldOut && (
         <div style={{ marginTop: 2, fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-text-price-deal)' }}>
           {fillCopy('combo.save', { save: vnd(saving) })}
         </div>
       )}
 
       <div style={{ marginTop: 10 }}>
-        <Button fullWidth loading={busy} aria-label={fillCopy('combo.addSpoken', { title, n: items.length, price: vnd(comboTotal) })} onPress={onAddAll}>
-          {fillCopy('combo.add')}
-        </Button>
+        {soldOut ? (
+          <Button fullWidth aria-disabled style={SOLD_OUT_BUTTON}>
+            {fillCopy('combo.soldOut')}
+          </Button>
+        ) : (
+          <Button fullWidth loading={busy} aria-label={fillCopy('combo.addSpoken', { title, n: items.length, price: vnd(comboTotal) })} onPress={onAddAll}>
+            {fillCopy('combo.add')}
+          </Button>
+        )}
       </div>
       {onSeeItems && (
         <button
