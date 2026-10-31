@@ -869,6 +869,19 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     expect(await screen.findByText(/Tự vào Ví Tubu lúc 8:00 sáng/)).toBeInTheDocument();
   });
 
+  it('bị khấu trừ thuế mà chưa khai MST: dòng dưới số to nhắc mã số thuế thay vì hứa 8:00', async () => {
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0, personalTaxId: null });
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 3_000_000,
+      autoWalletTransfer: true,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    expect(await screen.findByText(/chưa tự vào Ví được vì cần mã số thuế/)).toBeInTheDocument();
+    expect(screen.queryByText(/Tự vào Ví Tubu lúc 8:00 sáng/)).toBeNull();
+  });
+
   it('dashboard đang tải: hero là khung chờ, không hiện "Đang chờ: 0đ"; về rồi mới hiện số', async () => {
     let release!: (v: Awaited<ReturnType<typeof getAffiliateDashboard>>) => void;
     vi.mocked(getAffiliateDashboard).mockReturnValue(new Promise((r) => (release = r)));

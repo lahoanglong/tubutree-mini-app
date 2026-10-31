@@ -25,7 +25,7 @@ import {
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { ShareSheet } from '../components/share-sheet';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
-import { AFFILIATE_PAGE_SIZE, affiliateNextCursor, commissionPendingNote, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, transferBlockedText, transferHeroNote, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
+import { AFFILIATE_PAGE_SIZE, affiliateNextCursor, commissionPendingNote, CTV_TAB_KEYS, CTV_TABS, ctvHeadline, ctvHeroAmount, hasFirstOrder, heroShowsWalletBalance, isAutoWalletTransfer, needsTaxIdForAutoTransfer, transferBlockedText, transferHeroNote, type CtvTabKey } from '@tubutree/app-core/ctv-dashboard';
 import { getWallet } from '../services/account-api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -362,6 +362,8 @@ function Dashboard() {
 
   const head = ctvHeadline(d);
   const autoTransfer = isAutoWalletTransfer(d?.autoWalletTransfer);
+  const { affiliatePitWithhold: heroPit } = usePublicConfig();
+  const needsTaxId = needsTaxIdForAutoTransfer(head.big, heroPit, meQ.data?.personalTaxId);
   const hero = ctvHeroAmount(head.big, autoTransfer, walletQ.data?.walletBalance, walletQ.isLoading);
   const copyWithToast = (text: string, okText: string, failText = 'Không sao chép được — hãy chọn và chép thủ công.') =>
     void copyText(text).then((ok) => openSnackbar(ok ? { text: okText, type: 'success' } : { text: failText, type: 'error' }));
@@ -422,7 +424,7 @@ function Dashboard() {
             </Text>
             {head.big > 0 && (
               <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.9, marginTop: 4 }}>
-                {transferHeroNote(autoTransfer)}
+                {transferHeroNote(autoTransfer, needsTaxId)}
               </Text>
             )}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', marginTop: 12 }}>
