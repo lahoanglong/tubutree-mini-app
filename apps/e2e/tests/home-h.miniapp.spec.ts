@@ -137,7 +137,6 @@ test.describe('Trang chủ — khôi phục phiên chậm', () => {
     await expect(categories).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('member-card-loading')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toHaveCount(0);
-    await expect(page.getByRole('region', { name: 'Bán chạy', exact: true })).toHaveCount(0);
     const before = (await categories.boundingBox())!.y;
     await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
