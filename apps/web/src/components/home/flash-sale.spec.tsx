@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets } from '@/test-utils/a11y';
 import { ApiError } from '@/lib/client-api';
+import { TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
 
 // Chép ý nghĩa flash-sale.spec của Mini App: giờ vàng đang chạy, sắp diễn ra + nhắc, tải lại sau lỗi, giá khớp giá thật.
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), del: vi.fn(), phase: 'guest' }));
@@ -18,6 +19,8 @@ import { FLASH_HINT_KEY } from '@tubutree/app-core/home-layout';
 import { resetFlashSales } from '@/lib/use-flash-sales';
 
 const HOUR = 3_600_000;
+// Giá gạch của thẻ: phần tử có gạch ngang (chỉ PriceTag được vẽ gạch).
+const struck = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('span')).find((e) => e.style.textDecoration === 'line-through');
 const active = (over: Record<string, unknown> = {}) => ({
   itemId: 'i1', variationId: 'v1', productSlug: 'nuoc-rua-chen', productName: 'Nước rửa chén', thumbnail: null,
   retailPrice: 100000, flashPrice: 80000, quota: 10, soldCount: 2, endAt: new Date(Date.now() + HOUR).toISOString(), ...over,
@@ -184,7 +187,7 @@ describe('FlashSale', () => {
     expect(c.querySelector('[role="timer"]')?.getAttribute('aria-label')).toMatch(/^Còn \d+h \d{2}m$/);
     expect(c.textContent).toContain('-20%');
     expect(c.textContent).toContain('80.000đ');
-    expect(c.querySelector('s, del, .line-through')?.textContent).toBe('100.000đ');
+    expect(struck(c)?.textContent).toBe('100.000đ');
     expect(c.textContent).toContain('Đã bán 20%');
     expect(c.querySelector('a[href="/san-pham/nuoc-rua-chen?v=v1"]')).not.toBeNull();
   });
@@ -199,9 +202,17 @@ describe('FlashSale', () => {
   it('sản phẩm nhiều phân loại: tên phân loại ở dòng riêng một dòng, giống Mini App', async () => {
     activeResult = async () => [active({ variationName: '500g' })];
     const c = await mount(<FlashSale />);
-    const line = Array.from(c.querySelectorAll('p')).find((p) => p.textContent === '500g');
-    expect(line?.className).toContain('truncate');
+    const line = c.querySelector('[data-ds-part="note"]') as HTMLElement;
+    expect(line.textContent).toBe('500g');
+    expect(line.style.whiteSpace).toBe('nowrap');
+    expect(line.style.textOverflow).toBe('ellipsis');
     expect(c.textContent).not.toContain('Nước rửa chén · 500g');
+  });
+
+  it('có thẻ cần dòng phân loại thì mọi thẻ giữ chỗ dòng đó để giá cùng kệ thẳng hàng', async () => {
+    activeResult = async () => [active({ variationName: '500g' }), active({ itemId: 'b', productSlug: 'sp-b', variationName: null })];
+    const c = await mount(<FlashSale />);
+    expect(c.querySelectorAll('[data-ds-part="note"]').length).toBe(2);
   });
 
   it('giá Giờ vàng không rẻ hơn giá đang bán: liên kết không ép mở phân loại Giờ vàng', async () => {
@@ -222,24 +233,30 @@ describe('FlashSale', () => {
     activeResult = async () => [active({ soldCount: 4 })];
     const c = await mount(<FlashSale />);
     expect(c.querySelector('[role="progressbar"]')?.getAttribute('aria-label')).toBe('Đã bán 40%');
-    const name = c.querySelector('p.line-clamp-2')!;
-    expect(name.className).toContain('h-8');
-    expect(name.className).toContain('leading-4');
-    expect(name.className).not.toContain('min-h-');
+    const name = c.querySelector('a.tubu-tile-link > span') as HTMLElement;
+    expect(name.style.webkitLineClamp).toBe('2');
+    expect(name.style.minHeight).toBe(`${TILE_METRICS.nameCaption}px`);
+    expect(name.style.lineHeight).toBe('20px');
   });
 
-  it('flashPrice cao hơn giá đang bán → hiện giá đang bán, không nhãn % âm, không gạch giá; có salePrice thì % theo giá đang bán', async () => {
+  it('flashPrice cao hơn giá đang bán → hiện giá đang bán, không nhãn % âm; giá gạch là giá niêm yết như thẻ ở lưới (một sản phẩm không hai giá); có salePrice thì % theo giá đang bán', async () => {
     activeResult = async () => [active({ flashPrice: 90000, retailPrice: 100000, salePrice: 60000 })];
     let c = await mount(<FlashSale />);
     expect(c.textContent).toContain('60.000đ');
     expect(c.textContent).not.toMatch(/-\d+%|-0%/);
-    expect(c.querySelector('.line-through')).toBeNull();
+    expect(struck(c)?.textContent).toBe('100.000đ');
+    mounted!.unmount();
+    resetFlashSales();
+    activeResult = async () => [active({ flashPrice: 120000, retailPrice: 100000, salePrice: null })];
+    c = await mount(<FlashSale />);
+    expect(c.textContent).toContain('100.000đ');
+    expect(struck(c)).toBeUndefined();
     mounted!.unmount();
     resetFlashSales();
     activeResult = async () => [active({ flashPrice: 70000, retailPrice: 100000, salePrice: 80000 })];
     c = await mount(<FlashSale />);
     expect(c.textContent).toContain('-13%');
-    expect(c.querySelector('.line-through')?.textContent).toBe('80.000đ');
+    expect(struck(c)?.textContent).toBe('80.000đ');
   });
 
   it('đã quá giờ kết thúc (chờ lần tải lại kế tiếp): ẩn đồng hồ, không hiện "Còn 0h 00m"', async () => {
@@ -331,14 +348,12 @@ describe('UpcomingFlashSales', () => {
 });
 
 describe('FlashSale — khổ máy tính', () => {
-  it('thẻ giờ vàng rộng cố định từ md (ít món thì hàng ngắn lại, thẻ không phình), không giãn theo số món', async () => {
+  it('thẻ giờ vàng rộng cố định --tile-w-sm ở mọi khổ (ít món thì hàng ngắn lại, thẻ không phình), không giãn theo số món', async () => {
     activeResult = async () => [active()];
     const c = await mount(<FlashSale />);
-    const tile = c.querySelector('a[href="/san-pham/nuoc-rua-chen?v=v1"]')!;
-    expect(tile.className).toContain('sm:w-44');
-    expect(tile.className).toContain('lg:w-48');
-    expect(tile.className).not.toContain('md:flex-1');
-    expect(tile.parentElement!.className).not.toContain('md:flex-1');
+    const cell = c.querySelector('a[href="/san-pham/nuoc-rua-chen?v=v1"]')!.closest('[style*="--tile-w-sm"]') as HTMLElement;
+    expect(cell.style.width).toBe('var(--tile-w-sm)');
+    expect(cell.style.flex).toBe('0 0 auto');
   });
 
   it('thẻ chưa có ảnh dùng ô thay thế hình lá như thẻ sản phẩm', async () => {

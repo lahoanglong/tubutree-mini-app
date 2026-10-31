@@ -23,14 +23,14 @@ let server: string[] = [];
 let unmount: (() => void) | null = null;
 let qc: QueryClient;
 
-function mount(parentClick = vi.fn()) {
+function mount(parentClick = vi.fn(), productName?: string) {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
   qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   act(() => {
     root.render(
-      createElement(QueryClientProvider, { client: qc }, createElement('div', { onClick: parentClick }, createElement(WishlistHeart, { productId: 'p1' }))),
+      createElement(QueryClientProvider, { client: qc }, createElement('div', { onClick: parentClick }, createElement(WishlistHeart, { productId: 'p1', productName }))),
     );
   });
   unmount = () => {
@@ -82,6 +82,7 @@ describe('WishlistHeart', () => {
     expect(heart(container).className).toMatch(/\babsolute\b/);
     expect(heart(container).className).toContain('h-11');
     expect(container.querySelector('[data-testid="heart-disc"]')!.className).toMatch(/\bh-8\b.*\bw-8\b.*\brounded-full\b/);
+    expect(container.querySelector('svg')!.getAttribute('class')).toContain('h-[18px]');
   });
 
   it('khách chưa đăng nhập chạm tim thì sang đăng nhập và quay lại đúng trang, không nổi bọt lên thẻ cha', async () => {
@@ -127,5 +128,33 @@ describe('WishlistHeart', () => {
     expect(qc.getQueryData(['wishlist-ids'])).toEqual(['p1']);
     await flush(10);
     expect(heart(c).getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
+describe('WishlistHeart: nhãn có tên sản phẩm và tim nảy (PL-14, a11y A6)', () => {
+  it('có tên sản phẩm: nhãn cố định "Yêu thích {tên}", aria-pressed đổi theo trạng thái, nhãn không đổi', async () => {
+    const c = mount(vi.fn(), 'Nước rửa chén');
+    await flush();
+    expect(heart(c).getAttribute('aria-label')).toBe('Yêu thích Nước rửa chén');
+    expect(heart(c).getAttribute('aria-pressed')).toBe('false');
+    await click(heart(c));
+    await flush();
+    expect(heart(c).getAttribute('aria-label')).toBe('Yêu thích Nước rửa chén');
+    expect(heart(c).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('chạm để thích thì tim nảy; bỏ thích thì không; hết hiệu ứng thì gỡ lớp nảy', async () => {
+    const c = mount(vi.fn(), 'Nước rửa chén');
+    await flush();
+    await click(heart(c));
+    const icon = () => heart(c).querySelector('svg')!;
+    expect(icon().getAttribute('class')).toContain('tubu-heart-pop');
+    // jsdom không có AnimationEvent nên React nghe tên có tiền tố
+    act(() => {
+      icon().dispatchEvent(new Event('webkitAnimationEnd', { bubbles: true }));
+    });
+    expect(icon().getAttribute('class')).not.toContain('tubu-heart-pop');
+    await click(heart(c));
+    expect(icon().getAttribute('class')).not.toContain('tubu-heart-pop');
   });
 });

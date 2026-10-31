@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
 import { render, type Rendered } from '@/test-utils/dom';
+import { tileBodyHeight } from '@tubutree/app-core/commerce/tile-metrics';
 import { LineItemSkeleton, ProductCardSkeleton, ProductGridSkeleton, Skeleton } from './skeleton';
 
 let mounted: Rendered[] = [];
@@ -24,12 +25,15 @@ describe('Skeleton', () => {
   });
 
   it('lưới có đúng số thẻ, mặc định 6', () => {
-    expect(mount(<ProductGridSkeleton />).container.querySelectorAll('[data-skeleton]').length).toBe(6 * 5);
-    expect(mount(<ProductGridSkeleton count={2} />).container.querySelectorAll('[data-skeleton]').length).toBe(2 * 5);
+    expect(mount(<ProductGridSkeleton />).container.querySelectorAll('[data-testid="catalog-tile-skeleton"]').length).toBe(6);
+    expect(mount(<ProductGridSkeleton count={2} />).container.querySelectorAll('[data-testid="catalog-tile-skeleton"]').length).toBe(2);
   });
 
   it('thẻ sản phẩm và dòng hàng dựng được', () => {
-    expect(mount(<ProductCardSkeleton />).container.querySelectorAll('[data-skeleton]').length).toBe(5);
+    const card = mount(<ProductCardSkeleton />).container;
+    expect(card.querySelectorAll('.tubu-skeleton').length).toBe(5);
+    // Cùng số đo với thẻ thật (app-core), không phải số riêng của khung chờ.
+    expect((card.querySelector('[data-testid="catalog-tile-skeleton-body"]') as HTMLElement).style.height).toBe(`${tileBodyHeight('grid', { brand: true })}px`);
     expect(mount(<LineItemSkeleton />).container.querySelectorAll('[data-skeleton]').length).toBe(4);
   });
 });

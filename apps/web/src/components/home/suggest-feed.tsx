@@ -8,13 +8,8 @@ import { fetchProducts, type PageResponse, type ProductCard as ProductCardData }
 import { forYouQuery } from '@tubutree/app-core/queries/catalog';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
-import ProductCard, { PRIORITY_CARDS } from '@/components/product-card';
-import { ProductCardSkeleton } from '@/components/ui/skeleton';
-import { Button, Chip, Heading, ScrollRow, Text } from '@/components/mini';
+import { Button, Chip, Heading, PRIORITY_CARDS, ProductGrid, ScrollRow, Text } from '@/components/mini';
 import { HomeBlockError } from './home-block-error';
-import { GRID_PRODUCTS } from '@/lib/product-grid';
-
-const GRID = GRID_PRODUCTS;
 
 /**
  * MỘT lưới gợi ý cuộn vô tận ở cuối Trang chủ (bản web của `suggest-feed.tsx` ở Mini App), thay bốn lưới riêng. Ba nguồn đổi bằng
@@ -69,24 +64,12 @@ export function SuggestFeed({ initial }: { initial?: PageResponse<ProductCardDat
         ))}
       </ScrollRow>
       {loadingFirst ? (
-        <ul className={GRID} aria-hidden="true" data-testid="suggest-skeleton">
-          {Array.from({ length: 6 }, (_, i) => (
-            <li key={i}>
-              <ProductCardSkeleton />
-            </li>
-          ))}
-        </ul>
+        <ProductGrid items={[]} variant="grid" loading skeletonCount={6} />
       ) : items.length === 0 ? (
         pages.isError ? <HomeBlockError title={homeCopy.suggest.title} error={pages.error} onRetry={pages.refetch} retrying={pages.isFetching} /> : null
       ) : (
         <>
-          <ul className={GRID}>
-            {items.map((p, i) => (
-              <li key={p.id}>
-                <ProductCard product={p} priority={i < PRIORITY_CARDS && tab === 'for-you'} />
-              </li>
-            ))}
-          </ul>
+          <ProductGrid items={items} variant="grid" priorityCount={tab === 'for-you' ? PRIORITY_CARDS : 0} />
           <div ref={sentinel} aria-hidden style={{ height: 1 }} />
           {hasNextPage ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0' }}>

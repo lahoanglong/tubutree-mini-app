@@ -1,12 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { PurchasedItem } from '@tubutree/app-core/api/orders';
+import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
-import { formatVnd } from '@/lib/format-vnd';
 import { homeText, reorderText } from '@/lib/home-text';
 import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -22,8 +21,8 @@ import { useBlockQuery } from '@/components/home/use-block-query';
 import { ReorderSheet } from './reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 import { usePurchasedItems } from './use-purchased-items';
-import { ScrollRail } from '@/components/scroll-rail';
-import { ProductImage } from '@/components/mini/product-image';
+import { ProductCard } from '@/components/mini/product-card';
+import { RailCell, RailShell } from '@/components/mini/product-rail';
 import { announcePdpNavigation } from '@/components/skeletons/pdp-nav-event';
 
 /** Dùng CHUNG query key ['purchased-items', 10] với Trang chủ khi quyết định thứ tự khối. */
@@ -34,43 +33,24 @@ const ACTION_STYLE = { flex: '1 1 0', minWidth: 0, paddingInline: 12 } as const;
 
 export const PURCHASED_RAIL_LIMIT = 10;
 
-function RebuyTile({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void }) {
-  const name = item.variationName ? `${item.productName} · ${item.variationName}` : item.productName;
-  const pricing = rebuyPricing(item, useActiveFlashSales());
-  const onSale = pricing.compareAt != null;
-  return (
-    <li className="flex w-[148px] flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card sm:w-44">
-      <Link href={productHref(encodeURIComponent(item.slug), null, item.variationId)} className="block">
-        <div className="relative aspect-square w-full bg-stone-100">
-          <ProductImage src={item.thumbnail} brand={item.brand} alt={name} size={176} className="h-full w-full object-cover" />
-        </div>
-        <div className="p-2">
-          {item.brand && <p className="truncate text-xs text-stone-600">{item.brand}</p>}
-          <p className="line-clamp-2 h-8 text-xs leading-4 text-stone-900">{name}</p>
-          <div className="flex flex-wrap items-baseline gap-x-1.5">
-            <span className="text-sm font-bold text-stone-900">{formatVnd(pricing.price)}</span>
-            {onSale && <span className="text-xs text-stone-500 line-through">{formatVnd(pricing.compareAt!)}</span>}
-          </div>
-          <div className="mt-1 min-h-[1.25rem]">
-            {item.timesBought > 1 && (
-              <Badge tone="brand" size="sm">
-                {reorderText.timesBought(item.timesBought)}
-              </Badge>
-            )}
-          </div>
-        </div>
-      </Link>
-      <div className="mt-auto p-2 pt-0">
-        {item.inStock !== false && item.stock > 0 ? (
-          <button type="button" onClick={onRebuy} className={`${ui.btnSecondary} w-full`}>
-            {reorderText.cardCta}
-          </button>
-        ) : (
-          <p className="flex min-h-11 items-center justify-center text-xs text-stone-600">{reorderText.unavailable}</p>
-        )}
-      </div>
-    </li>
-  );
+/**
+ * Món đã mua dưới dạng thẻ sản phẩm: giá của đúng phân loại đã mua. Ghim phân loại để `ProductCard` chỉ xét Giờ vàng của chính phân loại đó
+ * và mở trang chi tiết ở phân loại này (`?pv=`), nên giá trên thẻ và giá ở trang là một (cùng luật với `rebuyPricing`).
+ */
+export function toCardProduct(p: PurchasedItem): ProductCardData {
+  return {
+    id: p.productId,
+    slug: p.slug,
+    name: p.variationName ? `${p.productName} · ${p.variationName}` : p.productName,
+    brand: p.brand,
+    thumbnail: p.thumbnail,
+    basePrice: p.price,
+    salePrice: p.salePrice,
+    repVariationId: p.variationId,
+    pinnedVariationId: p.variationId,
+    isFeatured: false,
+    inStock: p.inStock !== false && p.stock > 0,
+  };
 }
 
 /** Từ chừng này món trở lên mới dùng kệ cuộn ngang; ít hơn thì thẻ ngang thấp để không để trống nửa màn hình. */
@@ -210,11 +190,21 @@ export function PurchasedRail({ restoring = false }: { restoring?: boolean }) {
           ))}
         </div>
       ) : (
-        <ScrollRail className="-mx-1 -mt-1 flex gap-2.5 overflow-x-auto px-1 pb-3 pt-1 max-md:-mx-4 max-md:px-4">
+        <RailShell label={reorderText.railTitle}>
+          {/* Có món mua nhiều lần thì mọi thẻ giữ dòng ghi chú ('' giữ chỗ), không thì giá lệch 16px giữa thẻ có và không có ghi chú. */}
           {items.map((p) => (
-            <RebuyTile key={p.variationId} item={p} onRebuy={() => setTarget(itemReorderTarget(p))} />
+            <RailCell key={p.variationId} variant="rail-md">
+              <ProductCard
+                product={toCardProduct(p)}
+                variant="rail-md"
+                showWishlist={false}
+                note={p.timesBought > 1 ? reorderText.timesBought(p.timesBought) : items.some((x) => x.timesBought > 1) ? '' : undefined}
+                addLabel={reorderText.cardCta}
+                onAdd={p.inStock !== false && p.stock > 0 ? () => setTarget(itemReorderTarget(p)) : undefined}
+              />
+            </RailCell>
           ))}
-        </ScrollRail>
+        </RailShell>
       )}
       {notice && (
         <p role="status" className="mt-2 text-sm text-stone-700">

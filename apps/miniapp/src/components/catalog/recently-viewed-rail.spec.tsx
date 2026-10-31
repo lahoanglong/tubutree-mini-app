@@ -23,6 +23,9 @@ const FLASH = (slug: string, flashPrice: number) => ({
   flashPrice, retailPrice: 120000, salePrice: null, soldCount: 1, quota: 10, endAt: '2099-01-01T00:00:00.000Z',
 });
 
+/** Vỏ thẻ chứa nút tên: giá, ảnh và nhãn nằm ở đó chứ không nằm trong nút. */
+const tileOf = (name: string) => screen.getByRole('button', { name }).closest('[data-ds="product-tile"]') as HTMLElement;
+
 function renderRail(ui: ReactNode = <RecentlyViewedRail />) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
@@ -77,9 +80,9 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
   it('vùng cuộn ngang chừa đệm dưới đủ cho bóng đổ của thẻ (overflow cắt bóng nếu sát mép)', () => {
     recordRecentlyViewed({ slug: 'a', name: 'Sản phẩm A', thumbnail: null });
     renderRail();
-    const scroller = screen.getByRole('button', { name: 'Sản phẩm A' }).parentElement as HTMLElement;
+    const scroller = screen.getByRole('region', { name: 'Đã xem gần đây' });
     expect(scroller).toHaveClass('scroll-x');
-    expect(parseFloat(scroller.style.paddingBottom)).toBeGreaterThanOrEqual(12);
+    expect(scroller.style.padding).toBe('var(--rail-pad-block)');
   });
 
   it('cập nhật ngay khi có lượt xem mới (cùng tab)', async () => {
@@ -96,7 +99,7 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
     renderRail();
     const card = screen.getByRole('button', { name: 'Sản phẩm A' });
     await waitFor(() => expect(card).toHaveAccessibleDescription(/45\.000/));
-    const img = card.querySelector('img');
+    const img = tileOf('Sản phẩm A').querySelector('img');
     expect(img).not.toBeNull();
     expect(img).toHaveAttribute('alt', '');
     expect(img).toHaveAttribute('src', 'https://img.test/a.jpg');
@@ -105,7 +108,7 @@ describe('RecentlyViewedRail (spec 5b.4)', () => {
   it('sản phẩm không có ảnh vẫn hiện thẻ (khung ảnh trống, không có thẻ img)', () => {
     recordRecentlyViewed({ slug: 'a', name: 'Sản phẩm A', thumbnail: null });
     renderRail();
-    expect(screen.getByRole('button', { name: 'Sản phẩm A' }).querySelector('img')).toBeNull();
+    expect(tileOf('Sản phẩm A').querySelector('img')).toBeNull();
   });
 
   it('hiện tối đa 20 thẻ (giới hạn của kho lưu)', () => {
@@ -148,7 +151,7 @@ describe('RecentlyViewedRail — giá hiện hành, không giá chụp lúc xem 
     mocks.fetchProductsBySlugs.mockResolvedValue([liveProduct('nrc', { basePrice: 120000, salePrice: null })]);
     mocks.fetchActiveFlashSales.mockResolvedValue([FLASH('nrc', 79000)]);
     renderRail();
-    const card = screen.getByRole('button', { name: 'Nước rửa chén' });
+    const card = tileOf('Nước rửa chén');
     await waitFor(() => expect(card).toHaveTextContent('79.000'));
     expect(card).toHaveTextContent('120.000');
     expect(card.querySelector('[style*="line-through"]')).not.toBeNull();
@@ -161,7 +164,7 @@ describe('RecentlyViewedRail — giá hiện hành, không giá chụp lúc xem 
     );
     mocks.fetchProductsBySlugs.mockResolvedValue([liveProduct('a', { basePrice: 120000, salePrice: 99000 })]);
     renderRail();
-    const card = screen.getByRole('button', { name: 'Sản phẩm A' });
+    const card = tileOf('Sản phẩm A');
     await waitFor(() => expect(card).toHaveTextContent('99.000'));
   });
 
@@ -172,13 +175,13 @@ describe('RecentlyViewedRail — giá hiện hành, không giá chụp lúc xem 
     );
     mocks.fetchProductsBySlugs.mockRejectedValue(new Error('400'));
     renderRail();
-    const card = screen.getByRole('button', { name: 'Sản phẩm A' });
+    const card = tileOf('Sản phẩm A');
     expect(card).not.toHaveTextContent('120.000');
     await waitFor(() => expect(mocks.fetchProductsBySlugs).toHaveBeenCalled());
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });
-    expect(screen.getByRole('button', { name: 'Sản phẩm A' })).not.toHaveTextContent('đ');
+    expect(tileOf('Sản phẩm A')).not.toHaveTextContent('đ');
   });
 
   it('sản phẩm đã ẩn/chưa duyệt (API không trả về): thẻ biến mất; không còn thẻ nào thì ẩn cả dải', async () => {

@@ -3,11 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { suggestedRailQuery } from '@tubutree/app-core/queries/catalog';
-import { Heading } from '@/components/mini';
+import { Heading, ProductGrid } from '@/components/mini';
 import { EmptyState } from '@/components/mini/empty-state';
-import ProductCard from '@/components/product-card';
 import { coreHttp } from '@/lib/core-http';
-import { GRID_PRODUCTS } from '@/lib/product-grid';
 
 /**
  * Kệ "Có thể bạn thích" dưới giỏ trống (bản web của `suggested-rail.tsx`). Là phần phụ: đang tải, lỗi hay hết hàng thì không vẽ gì,
@@ -22,11 +20,7 @@ function SuggestedRail() {
       <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>
         Có thể bạn thích
       </Heading>
-      <div className={GRID_PRODUCTS}>
-        {items.map((p) => (
-          <ProductCard key={p.id} product={p} />
-        ))}
-      </div>
+      <ProductGrid items={items} variant="grid" />
     </section>
   );
 }

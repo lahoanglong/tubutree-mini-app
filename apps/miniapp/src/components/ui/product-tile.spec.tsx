@@ -1,299 +1,310 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, it, expect, vi } from 'vitest';
-import type { ReactElement } from 'react';
-import { ProductTile } from './product-tile';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ProductCard } from '@tubutree/app-core/api/catalog';
+import { productCardView, type CardVariant, type ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
+import { tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
 
-const PRODUCT = {
+const navigate = vi.hoisted(() => vi.fn());
+vi.mock('zmp-ui', async (orig) => ({ ...(await orig<Record<string, unknown>>()), useNavigate: () => navigate }));
+vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
+
+import { ProductTile, TILE_NAME_MIN_HEIGHT } from './product-tile';
+
+const NOW = Date.parse('2026-11-01T05:00:00Z');
+const VARIANTS: CardVariant[] = ['grid', 'rail-sm', 'rail-md', 'flash', 'rank', 'line'];
+
+const PRODUCT: ProductCard = {
   id: 'p1', slug: 'serum-x', name: 'Serum Bã Trầu', brand: 'Tubu', thumbnail: null,
-  basePrice: 52000, salePrice: null, inStock: true, reviewCount: 12, ratingAvg: 4.5, sold: 340,
+  basePrice: 52_000, salePrice: null, isFeatured: false, inStock: true, reviewCount: 12, ratingAvg: 4.5, sold: 340,
 };
 
-// ProductTile hiện WishlistHeart mặc định (showWishlist=true ở mọi variant trừ line/list) —
-// WishlistHeart dùng useQueryClient() (@tanstack/react-query), không có fallback no-op nếu thiếu
-// Provider ("No QueryClient set" throw ngay khi render). Bọc QueryClientProvider thật, giống
-// pattern address-form.spec.tsx đã dùng cho vấn đề tương tự.
-function renderTile(ui: ReactElement) {
-  const qc = new QueryClient();
-  // Config công khai đã về (chưa đặt mốc): thẻ áp luật 30 ngày ngay.
-  qc.setQueryData(['public-config'], { catalogLaunchDate: null });
-  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
-}
+const viewOf = (over: Partial<ProductCard> = {}, variant: CardVariant = 'grid', extra: Partial<Parameters<typeof productCardView>[0]> = {}): ProductCardView =>
+  productCardView({ product: { ...PRODUCT, ...over }, variant, now: NOW, ...extra });
 
-describe('ProductTile', () => {
-  it('grid variant shows price, name, out-of-stock overlay when inStock=false (fixes A4-06)', () => {
-    renderTile(<ProductTile product={{ ...PRODUCT, inStock: false }} variant="grid" onPress={() => {}} />);
-    expect(screen.getByText(/tạm hết|hết hàng/i)).toBeInTheDocument();
+const shell = (container: HTMLElement) => container.firstElementChild as HTMLElement;
+const body = (container: HTMLElement) => container.querySelector('[data-ds-part="body"]') as HTMLElement;
+// Thẻ line cao cố định ở vỏ (ảnh 64 + đệm), các biến thể khác ở thân thẻ.
+const fixedHeightOf = (container: HTMLElement, variant: CardVariant) => (variant === 'line' ? shell(container) : body(container)).style.minHeight;
+
+beforeEach(() => navigate.mockClear());
+
+describe('ProductTile: biến thể và khung', () => {
+  it.each(VARIANTS)('%s: có data-ds, class nhấn thẻ, ảnh vuông giữ chỗ (trừ line)', (variant) => {
+    const { container } = render(<ProductTile view={viewOf({}, variant)} variant={variant} href="/product/serum-x" />);
+    expect(shell(container)).toHaveAttribute('data-ds', 'product-tile');
+    expect(shell(container)).toHaveAttribute('data-ds-variant', variant);
+    expect(shell(container).className).toContain('tubu-press-card');
+    const media = container.querySelector('[data-ds-part="media"]') as HTMLElement;
+    if (variant === 'line') expect(media.style.height).toBe('64px');
+    else expect(media.style.aspectRatio).toBe('1 / 1');
   });
-  it('missing inStock (old API without the field) does NOT show the out-of-stock overlay', () => {
-    const { inStock: _omit, ...noStock } = PRODUCT;
-    renderTile(<ProductTile product={noStock as unknown as typeof PRODUCT} variant="grid" onPress={() => {}} />);
-    expect(screen.queryByText(/tạm hết|hết hàng/i)).not.toBeInTheDocument();
+
+  it.each(VARIANTS)('%s: thân thẻ cao đúng số đo chung kể cả khi thiếu sao và đã bán (meta=null)', (variant) => {
+    const withMeta = render(<ProductTile view={viewOf({}, variant)} variant={variant} href="/p" />);
+    const expected = tileBodyHeight(variant, { brand: variant === 'grid' || variant === 'rail-md' });
+    expect(fixedHeightOf(withMeta.container, variant)).toBe(`${expected}px`);
+    withMeta.unmount();
+    const bare = render(<ProductTile view={viewOf({ reviewCount: 0, ratingAvg: undefined, sold: undefined }, variant)} variant={variant} href="/p" />);
+    expect(viewOf({ ratingAvg: undefined, sold: undefined }, variant).meta).toBeNull();
+    expect(fixedHeightOf(bare.container, variant)).toBe(`${expected}px`);
   });
-  it('flash priceOverride wins over salePrice/basePrice and shows a flash badge', () => {
-    renderTile(<ProductTile product={{ ...PRODUCT, salePrice: 45000 }} priceOverride={{ price: 39000 }} variant="grid" onPress={() => {}} />);
-    expect(screen.getByText('39.000đ')).toBeInTheDocument();
+
+  it('thẻ grid/rail-md/rank giữ ô meta cao 16px dù meta=null (không nhảy)', () => {
+    for (const variant of ['grid', 'rail-md', 'rank'] as const) {
+      const { container, unmount } = render(<ProductTile view={viewOf({ ratingAvg: undefined, sold: undefined }, variant)} variant={variant} href="/p" />);
+      expect((container.querySelector('[data-ds-part="meta"]') as HTMLElement).style.height).toBe('16px');
+      unmount();
+    }
   });
-  it('action="rebuy" shows a Mua lại button instead of the default add-to-cart affordance', () => {
-    const onAction = vi.fn();
-    renderTile(<ProductTile product={PRODUCT} variant="line" action="rebuy" onPress={() => {}} onAction={onAction} />);
-    screen.getByText('Mua lại').click();
-    expect(onAction).toHaveBeenCalledTimes(1);
+
+  it('showBrand=false (brandLine=null) bỏ dòng nhãn hiệu và hạ chiều cao tương ứng', () => {
+    const { container } = render(<ProductTile view={viewOf({}, 'grid', { showBrand: false })} variant="grid" href="/p" />);
+    expect(container.querySelector('[data-ds-part="brand"]')).toBeNull();
+    expect(body(container).style.minHeight).toBe(`${tileBodyHeight('grid', { brand: false })}px`);
   });
-  it('imageOverlay nằm trong khung ảnh và bấm nó không mở thẻ', () => {
-    const onPress = vi.fn();
-    const onOverlay = vi.fn();
-    renderTile(
-      <ProductTile
-        product={PRODUCT}
-        variant="grid"
-        onPress={onPress}
-        imageOverlay={
-          <button type="button" aria-label="nút nổi" onClick={onOverlay}>
-            +
-          </button>
-        }
-      />,
+
+  it('tên cắt 2 dòng, cao tối thiểu TILE_NAME_MIN_HEIGHT, dòng 22px (không hạ: dấu hoa bị cắt)', () => {
+    expect(TILE_NAME_MIN_HEIGHT).toBe(44);
+    const long = 'Ẩm Ổn Định Dầu Gội Thảo Mộc Bồ Kết Hương Sả Chanh Nguyên Chất Dung Tích Lớn Cho Cả Gia Đình';
+    render(<ProductTile view={viewOf({ name: long })} variant="grid" href="/p" />);
+    const text = screen.getByRole('button', { name: long }).firstElementChild as HTMLElement;
+    expect(text.style.webkitLineClamp).toBe('2');
+    expect(text.style.minHeight).toBe('44px');
+    expect(text.style.lineHeight).toBe('22px');
+  });
+
+  it('giá thường màu giá thường, giá giảm màu tông deal; giá thẻ dùng bậc 16/700', () => {
+    const plain = render(<ProductTile view={viewOf()} variant="grid" href="/p" />);
+    expect(within(plain.container).getByText('52.000đ').style.color).toBe('var(--color-text-price)');
+    expect(within(plain.container).getByText('52.000đ').style.fontSize).toBe('var(--type-price-tile-size)');
+    plain.unmount();
+    const deal = render(<ProductTile view={viewOf({ basePrice: 52_000, salePrice: 39_000 })} variant="grid" href="/p" />);
+    expect(within(deal.container).getByText('39.000đ').style.color).toBe('var(--color-text-price-deal)');
+  });
+
+  it('thẻ xếp chồng giữ chỗ dòng giá gạch ngay dưới giá dù không giảm giá (số giá thẳng hàng khi cạnh thẻ có giá gạch); grid thì không', () => {
+    const reserved = `${TILE_METRICS.price + TILE_METRICS.compare}px`;
+    const priceBlock = (variant: CardVariant, over: Partial<ProductCard>) => {
+      const { container } = render(<ProductTile view={viewOf(over, variant)} variant={variant} href="/product/serum-x" />);
+      return container.querySelector('[data-ds-part="price"]') as HTMLElement;
+    };
+    for (const variant of ['rail-sm', 'rail-md', 'flash', 'rank'] as const) {
+      expect(priceBlock(variant, {}).style.minHeight, `${variant} giá thường`).toBe(reserved);
+      expect(priceBlock(variant, { salePrice: 39_000 }).style.minHeight, `${variant} giá giảm`).toBe(reserved);
+    }
+    expect(priceBlock('grid', {}).style.minHeight).toBe('');
+  });
+
+  it('giá gạch xếp chồng ở thẻ hẹp, cùng hàng ở grid', () => {
+    const sale = { basePrice: 52_000, salePrice: 39_000 };
+    const rail = render(<ProductTile view={viewOf(sale, 'rail-md')} variant="rail-md" href="/p" />);
+    expect((within(rail.container).getByText('39.000đ').parentElement as HTMLElement).style.flexDirection).toBe('column');
+    rail.unmount();
+    const grid = render(<ProductTile view={viewOf(sale, 'grid')} variant="grid" href="/p" />);
+    expect((within(grid.container).getByText('39.000đ').parentElement as HTMLElement).style.flexDirection).not.toBe('column');
+  });
+});
+
+describe('ProductTile: nhãn, hết hàng, hạng', () => {
+  it('nhãn ảnh Giờ vàng dùng tông flash (không ghi đè style), nhãn giảm giá dùng tông promo', () => {
+    const flash = viewOf({}, 'grid', { flash: { productSlug: 'serum-x', variationId: 'v1', flashPrice: 39_000, endAt: new Date(NOW + 3_600_000).toISOString() } });
+    const a = render(<ProductTile view={flash} variant="grid" href="/p" />);
+    const badge = a.container.querySelector('[data-ds-part="image-badge"] span') as HTMLElement;
+    expect(badge).toHaveTextContent('Giờ vàng -25%');
+    expect(badge.style.background).toBe('var(--color-flash-solid-bg)');
+    a.unmount();
+    const b = render(<ProductTile view={viewOf({ basePrice: 52_000, salePrice: 39_000 })} variant="grid" href="/p" />);
+    expect((b.container.querySelector('[data-ds-part="image-badge"] span') as HTMLElement).style.background).toBe('var(--color-promo-bg)');
+  });
+
+  it('nhãn Giờ vàng vẽ cả chữ đầy đủ lẫn bản "-x%"; khung ảnh là vùng chứa để CSS chọn bản vừa chỗ, thẻ rộng không đổi chữ', () => {
+    const flash = viewOf({}, 'rail-md', { flash: { productSlug: 'serum-x', variationId: 'v1', flashPrice: 39_000, endAt: new Date(NOW + 3_600_000).toISOString() } });
+    const { container } = render(<ProductTile view={flash} variant="rail-md" href="/p" />);
+    const badge = container.querySelector('[data-ds-part="image-badge"]') as HTMLElement;
+    expect(badge.querySelector('.tubu-badge-long')).toHaveTextContent('Giờ vàng -25%');
+    expect(badge.querySelector('.tubu-badge-short')).toHaveTextContent('-25%');
+    expect(container.querySelector('[data-ds-part="media"]')).toHaveClass('tubu-tile-media');
+  });
+
+  it('nhãn đầu tên vẽ cùng dòng với tên, tên vẫn cắt 2 dòng', () => {
+    render(<ProductTile view={viewOf({ isFeatured: true })} variant="grid" href="/p" />);
+    const nameBtn = screen.getByRole('button', { name: 'Serum Bã Trầu' });
+    expect(within(nameBtn).getByText('Tubu chọn')).toBeInTheDocument();
+    expect((nameBtn.firstElementChild as HTMLElement).style.webkitLineClamp).toBe('2');
+  });
+
+  it('hết hàng: chữ "Tạm hết hàng", không nhãn, vẫn vào được chi tiết, mô tả đọc có tình trạng và giá', () => {
+    const { container } = render(<ProductTile view={viewOf({ inStock: false, isFeatured: true, basePrice: 52_000, salePrice: 39_000 })} variant="grid" href="/product/serum-x" />);
+    expect(screen.getByText('Tạm hết hàng')).toBeInTheDocument();
+    expect(screen.queryByText('Tubu chọn')).toBeNull();
+    expect(container.querySelector('[data-ds-part="image-badge"]')).toBeNull();
+    const btn = screen.getByRole('button', { name: 'Serum Bã Trầu' });
+    expect(btn).toHaveAccessibleDescription(/^Tạm hết hàng, .*Giá 39\.000đ, giá gốc 52\.000đ$/);
+    fireEvent.click(btn);
+    expect(navigate).toHaveBeenCalledWith('/product/serum-x', undefined);
+  });
+
+  it('mô tả đọc theo thứ tự: tình trạng, nhãn, sao và đã bán, giá', () => {
+    render(<ProductTile view={viewOf({ basePrice: 52_000, salePrice: 39_000, ratingAvg: 4.8, sold: 1234 })} variant="grid" href="/p" />);
+    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveAccessibleDescription(
+      'Giảm 25%, 4,8 sao, đã bán hơn 1.200, Giá 39.000đ, giá gốc 52.000đ',
     );
-    const overlay = screen.getByRole('button', { name: 'nút nổi' });
-    // Khung phủ đúng vùng ảnh vuông nhưng không chặn chạm; chỉ khối chứa nút nhận chạm.
-    const frame = overlay.parentElement!.parentElement!;
-    expect(frame.style.aspectRatio).toBe('1 / 1');
-    expect(frame.style.pointerEvents).toBe('none');
-    expect(overlay.parentElement!.style.pointerEvents).toBe('auto');
-    fireEvent.click(overlay);
-    expect(onOverlay).toHaveBeenCalledTimes(1);
-    expect(onPress).not.toHaveBeenCalled();
   });
-  it('thứ tự Tab/đọc màn hình: nút tên sản phẩm, rồi tim, rồi nút nổi trên ảnh (không đọc "Thêm vào giỏ" trước tên)', () => {
-    renderTile(
-      <ProductTile
-        product={PRODUCT}
-        variant="grid"
-        onPress={() => {}}
-        imageOverlay={
-          <button type="button" aria-label="nút nổi">
-            +
-          </button>
-        }
-      />,
-    );
-    const names = screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'));
-    expect(names[0]).toBe('Serum Bã Trầu');
-    expect(names[names.length - 1]).toBe('nút nổi');
-    expect(names.indexOf('nút nổi')).toBeGreaterThan(names.indexOf('Serum Bã Trầu'));
-    expect(names).toHaveLength(3);
+
+  it('phần nhìn thấy của giá, meta, nhãn không bị đọc lại ngoài mô tả (aria-hidden)', () => {
+    const { container } = render(<ProductTile view={viewOf({ ratingAvg: 4.8, sold: 1234 })} variant="grid" href="/p" />);
+    expect((container.querySelector('[data-ds-part="meta"]') as HTMLElement).getAttribute('aria-hidden')).toBe('true');
+    expect((container.querySelector('[data-ds-part="price"]') as HTMLElement).getAttribute('aria-hidden')).toBe('true');
   });
-  it('onPress fires when the tile itself (not a nested button) is clicked', () => {
-    const onPress = vi.fn();
-    renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={onPress} />);
+
+  it('hạng: ruy-băng có số, đọc "Hạng n bán chạy", nhãn giảm xuống dưới ảnh; hạng 12 không tràn khỏi ảnh', () => {
+    const v = viewOf({ basePrice: 52_000, salePrice: 39_000 }, 'rank', { rank: 12 });
+    const { container } = render(<ProductTile view={v} variant="rank" href="/p" />);
+    const ribbon = container.querySelector('[data-ds-part="rank"]') as HTMLElement;
+    expect(ribbon).toHaveTextContent('12');
+    expect(ribbon.style.maxWidth).toBe('calc(100% - 16px)');
+    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveAccessibleDescription(/^Hạng 12 bán chạy/);
+    expect((container.querySelector('[data-ds-part="image-badge"]') as HTMLElement).style.bottom).toBe('8px');
+  });
+
+  it('hạng top 3 dùng màu hạng riêng, từ 4 dùng màu hạng thường, thiếu rank thì không ruy-băng', () => {
+    const one = render(<ProductTile view={viewOf({}, 'rank', { rank: 1 })} variant="rank" href="/p" />);
+    expect((one.container.querySelector('[data-ds-part="rank"]') as HTMLElement).style.background).toBe('var(--color-rank-1-bg)');
+    one.unmount();
+    const four = render(<ProductTile view={viewOf({}, 'rank', { rank: 4 })} variant="rank" href="/p" />);
+    expect((four.container.querySelector('[data-ds-part="rank"]') as HTMLElement).style.background).toBe('var(--color-rank-n-bg)');
+    four.unmount();
+    const none = render(<ProductTile view={viewOf({}, 'rank')} variant="rank" href="/p" />);
+    expect(none.container.querySelector('[data-ds-part="rank"]')).toBeNull();
+    expect(none.container.textContent).not.toContain('undefined');
+  });
+});
+
+describe('ProductTile: bấm, nút phụ, ô trang trí', () => {
+  it('bấm nút tên: onOpen rồi navigate(href, { state })', () => {
+    const onOpen = vi.fn();
+    render(<ProductTile view={viewOf()} variant="grid" href="/product/serum-x" navState={{ listSource: 'home' }} onOpen={onOpen} />);
     fireEvent.click(screen.getByRole('button', { name: 'Serum Bã Trầu' }));
-    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith('/product/serum-x', { state: { listSource: 'home' } });
   });
-  it('clicking "Mua lại" does NOT also fire the tile\'s onPress (click isolation, no accidental navigation)', () => {
-    const onPress = vi.fn();
-    const onAction = vi.fn();
-    renderTile(<ProductTile product={PRODUCT} variant="line" action="rebuy" onPress={onPress} onAction={onAction} />);
-    screen.getByText('Mua lại').click();
-    expect(onAction).toHaveBeenCalledTimes(1);
-    expect(onPress).not.toHaveBeenCalled();
+
+  it('onAdd vẽ nút phụ nhãn addLabel, bấm không điều hướng', () => {
+    const onAdd = vi.fn();
+    render(<ProductTile view={viewOf({}, 'rail-md')} variant="rail-md" href="/p" onAdd={onAdd} addLabel="Mua lại" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Mua lại' }));
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
   });
-  it('out-of-stock product with action="rebuy" still shows the overlay (A4-06 applies regardless of action)', () => {
-    renderTile(<ProductTile product={{ ...PRODUCT, inStock: false }} variant="line" action="rebuy" onPress={() => {}} onAction={() => {}} />);
-    expect(screen.getByText(/tạm hết|hết hàng/i)).toBeInTheDocument();
-    expect(screen.getByText('Mua lại')).toBeInTheDocument();
+
+  it('thẻ line: nút phụ cùng hàng, mặc định nhãn "Thêm"', () => {
+    render(<ProductTile view={viewOf({}, 'line')} variant="line" href="/p" onAdd={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Thêm' })).toBeInTheDocument();
   });
-  it('rail + rebuy: nút "Mua lại" nằm hàng riêng, full width, không bị min-width 120px của ZaUI làm tràn thẻ 148px', () => {
-    renderTile(<ProductTile product={PRODUCT} variant="rail" action="rebuy" showWishlist={false} onPress={() => {}} onAction={() => {}} />);
-    const btn = screen.getByRole('button', { name: 'Mua lại' });
-    expect(btn.className).toContain('zaui-btn-full-width');
-    expect(btn).toHaveStyle({ minWidth: '0px' });
+
+  it('hidePrice không in giá nhưng giữ chiều cao thân thẻ', () => {
+    const { container } = render(<ProductTile view={viewOf({}, 'rail-sm')} variant="rail-sm" href="/p" hidePrice />);
+    expect(container.textContent).not.toContain('52.000đ');
+    expect(body(container).style.minHeight).toBe(`${tileBodyHeight('rail-sm')}px`);
   });
-  it('bàn phím: nút tên nằm trong thứ tự Tab, Enter / Space gọi onPress; phím trên tim yêu thích KHÔNG kích hoạt thẻ', async () => {
-    const user = userEvent.setup();
-    const onPress = vi.fn();
-    renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={onPress} />);
+
+  it('note một dòng dưới giá và footer nằm trong thẻ, cộng vào chiều cao', () => {
+    const { container } = render(
+      <ProductTile view={viewOf({}, 'flash')} variant="flash" href="/p" note="Phân loại 500ml" footerHeight={28} footer={<div data-testid="foot" style={{ height: 28 }} />} />,
+    );
+    expect(screen.getByText('Phân loại 500ml')).toBeInTheDocument();
+    expect(within(container).getByTestId('foot')).toBeInTheDocument();
+    expect(body(container).style.minHeight).toBe(`${tileBodyHeight('flash', { note: true, footer: 28 })}px`);
+  });
+
+  it('note rỗng giữ chỗ dòng ghi chú (thẻ cùng kệ không lệch giá); không truyền note thì không có dòng', () => {
+    const reserved = render(<ProductTile view={viewOf({}, 'rail-md')} variant="rail-md" href="/p" note="" />);
+    expect(body(reserved.container).style.minHeight).toBe(`${tileBodyHeight('rail-md', { note: true })}px`);
+    expect(reserved.container.querySelector('[data-ds-part="note"]')).not.toBeNull();
+    reserved.unmount();
+    const none = render(<ProductTile view={viewOf({}, 'rail-md')} variant="rail-md" href="/p" />);
+    expect(body(none.container).style.minHeight).toBe(`${tileBodyHeight('rail-md')}px`);
+    expect(none.container.querySelector('[data-ds-part="note"]')).toBeNull();
+  });
+});
+
+describe('ProductTile: cấu trúc truy cập', () => {
+  const INTERACTIVE = 'button, a[href], input, select, textarea, [role="button"], [role="link"], [tabindex]:not([tabindex="-1"])';
+
+  it('thứ tự Tab: nút tên, rồi tim, rồi nút nổi trên ảnh, rồi nút phụ', () => {
+    render(
+      <ProductTile
+        view={viewOf({}, 'rail-md')}
+        variant="rail-md"
+        href="/p"
+        wishlist={<button type="button" aria-label="tim">♥</button>}
+        imageOverlay={<button type="button" aria-label="nút nổi">+</button>}
+        onAdd={() => {}}
+        addLabel="Mua lại"
+      />,
+    );
+    expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Serum Bã Trầu', 'tim', 'nút nổi', 'Mua lại']);
+  });
+
+  it('không phần tử bấm được nào chứa phần tử bấm được khác', () => {
+    const { container } = render(
+      <ProductTile view={viewOf({}, 'rail-md')} variant="rail-md" href="/p" wishlist={<button type="button" aria-label="tim">♥</button>} onAdd={() => {}} />,
+    );
+    const nested = Array.from(container.querySelectorAll(INTERACTIVE)).filter((el) => el.querySelector(INTERACTIVE));
+    expect(nested.map((el) => el.outerHTML.slice(0, 80))).toEqual([]);
+  });
+
+  it('nút tên không có định vị riêng, vỏ thẻ position:relative và isolation', () => {
+    const { container } = render(<ProductTile view={viewOf()} variant="grid" href="/p" />);
     const link = screen.getByRole('button', { name: 'Serum Bã Trầu' });
-    expect(link.tagName).toBe('BUTTON');
-    expect(link.tabIndex).toBe(0);
+    expect(link.className).toContain('tubu-tile-link');
+    expect(link.style.position).toBe('');
+    expect(shell(container).style.position).toBe('relative');
+    expect(shell(container).style.isolation).toBe('isolate');
+  });
+
+  it('tim, nút phụ nổi trên lớp phủ bằng z-index; ảnh chỉ để trang trí', () => {
+    const { container } = render(
+      <ProductTile
+        view={viewOf({ thumbnail: 'https://x/a.jpg' }, 'rail-md')}
+        variant="rail-md"
+        href="/p"
+        wishlist={<button type="button" aria-label="tim">♥</button>}
+        onAdd={() => {}}
+        addLabel="Mua lại"
+      />,
+    );
+    for (const name of ['tim', 'Mua lại']) {
+      let el: HTMLElement | null = screen.getByRole('button', { name });
+      let lifted = false;
+      while (el && el !== container) {
+        if (el.style.zIndex === '1') lifted = true;
+        el = el.parentElement;
+      }
+      expect(lifted, name).toBe(true);
+    }
+    expect(container.querySelector('img')).toHaveAttribute('alt', '');
+  });
+
+  it('bàn phím: Enter và Space ở nút tên điều hướng; phím trên tim không kích hoạt thẻ', async () => {
+    const user = userEvent.setup();
+    render(<ProductTile view={viewOf()} variant="grid" href="/p" wishlist={<button type="button" aria-label="tim">♥</button>} />);
+    const link = screen.getByRole('button', { name: 'Serum Bã Trầu' });
     link.focus();
     await user.keyboard('{Enter}');
     await user.keyboard(' ');
-    expect(onPress).toHaveBeenCalledTimes(2);
-    screen.getByRole('button', { name: /yêu thích/i }).focus();
+    expect(navigate).toHaveBeenCalledTimes(2);
+    screen.getByRole('button', { name: 'tim' }).focus();
     await user.keyboard('{Enter}');
-    expect(onPress).toHaveBeenCalledTimes(2);
-  });
-  it('thứ tự Tab và đọc: nút tên trước, tim yêu thích sau (tim không chen lên trước tên sản phẩm)', async () => {
-    const user = userEvent.setup();
-    renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={() => {}} />);
-    await user.tab();
-    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveFocus();
-    await user.tab();
-    expect(screen.getByRole('button', { name: /yêu thích/i })).toHaveFocus();
-  });
-  it('tên truy cập = tên sản phẩm; giá đang hiển thị nằm trong mô tả truy cập', () => {
-    renderTile(<ProductTile product={{ ...PRODUCT, salePrice: 45000 }} priceOverride={{ price: 39000 }} variant="grid" onPress={() => {}} />);
-    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveAccessibleDescription(/39.000/);
-  });
-  it('bọc giá cho aria-describedby phải là display:flex: span thường tạo line box 24px làm thẻ cao hơn 4px so với skeleton 133px (pin chiều cao thật: e2e Task 26)', () => {
-    renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={() => {}} />);
-    const tile = screen.getByRole('button', { name: 'Serum Bã Trầu' });
-    const wrapper = document.getElementById(tile.getAttribute('aria-describedby')!)!;
-    expect(wrapper).toHaveStyle({ display: 'flex' });
+    expect(navigate).toHaveBeenCalledTimes(2);
   });
 
-  describe('không lồng phần tử tương tác (C-072, axe nested-interactive)', () => {
-    const INTERACTIVE = 'button, a[href], input, select, textarea, [role="button"], [role="link"], [tabindex]:not([tabindex="-1"])';
-
-    function expectNoNestedInteractive(container: HTMLElement) {
-      const nested = Array.from(container.querySelectorAll(INTERACTIVE)).filter((el) => el.querySelector(INTERACTIVE));
-      expect(nested.map((el) => el.outerHTML.slice(0, 80))).toEqual([]);
-    }
-
-    it('thẻ lưới có tim: không phần tử bấm được nào chứa phần tử bấm được khác', () => {
-      const { container } = renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={() => {}} />);
-      expect(screen.getByRole('button', { name: /yêu thích/i })).toBeInTheDocument();
-      expectNoNestedInteractive(container);
-    });
-
-    it('thẻ kệ "Mua lại": nút Mua lại cũng không nằm trong phần tử bấm được', () => {
-      const { container } = renderTile(
-        <ProductTile product={PRODUCT} variant="rail" action="rebuy" showWishlist={false} onPress={() => {}} onAction={() => {}} />,
-      );
-      expect(screen.getByRole('button', { name: 'Mua lại' })).toBeInTheDocument();
-      expectNoNestedInteractive(container);
-    });
-
-    it('nút tên không có định vị riêng (để ::after phủ đúng cả thẻ) còn vỏ thẻ là position:relative', () => {
-      const { container } = renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={() => {}} />);
-      const link = screen.getByRole('button', { name: 'Serum Bã Trầu' });
-      expect(link.className).toContain('tubu-tile-link');
-      expect(link.style.position).toBe('');
-      expect((container.firstElementChild as HTMLElement).style.position).toBe('relative');
-    });
-
-    it('vỏ thẻ tạo stacking context riêng (isolation) để z-index 1 của tim/Mua lại không nổi lên trên thanh dính của trang', () => {
-      const { container } = renderTile(<ProductTile product={PRODUCT} variant="grid" onPress={() => {}} />);
-      expect((container.firstElementChild as HTMLElement).style.isolation).toBe('isolate');
-    });
-
-    it('tim và Mua lại nổi trên lớp phủ bằng z-index; ảnh chỉ để trang trí (tên đã có ở nút tên)', () => {
-      const { container } = renderTile(
-        <ProductTile product={{ ...PRODUCT, thumbnail: 'https://x/a.jpg' }} variant="grid" action="rebuy" onAction={() => {}} onPress={() => {}} />,
-      );
-      for (const name of [/yêu thích/i, 'Mua lại']) {
-        let el: HTMLElement | null = screen.getByRole('button', { name });
-        let lifted = false;
-        while (el && el !== container) {
-          if (el.style.zIndex === '1') lifted = true;
-          el = el.parentElement;
-        }
-        expect(lifted).toBe(true);
-      }
-      expect(container.querySelector('img')).toHaveAttribute('alt', '');
-    });
-
-    it('tokens.css có lớp phủ .tubu-tile-link::after kín thẻ và vòng focus vẽ trên lớp phủ', () => {
-      const css = readFileSync(resolve(__dirname, '../../css/tokens.css'), 'utf8');
-      const after = /\.tubu-tile-link::after\s*\{([^}]*)\}/.exec(css);
-      expect(after).not.toBeNull();
-      for (const decl of ['position: absolute', 'top: 0', 'right: 0', 'bottom: 0', 'left: 0']) expect(after![1]).toContain(decl);
-      expect(css).toMatch(/\.tubu-tile-link:focus-visible::after\s*\{[^}]*outline:/);
-    });
-  });
-
-  describe('nhãn "Mới" (tạo trong 30 ngày gần nhất)', () => {
-    const daysAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString();
-
-    it('tạo 5 ngày trước → có nhãn "Mới"', () => {
-      renderTile(<ProductTile product={{ ...PRODUCT, createdAt: daysAgo(5) }} variant="grid" onPress={() => {}} />);
-      expect(screen.getByText('Mới')).toBeInTheDocument();
-    });
-
-    it('tạo 31 ngày trước → không nhãn', () => {
-      renderTile(<ProductTile product={{ ...PRODUCT, createdAt: daysAgo(31) }} variant="grid" onPress={() => {}} />);
-      expect(screen.queryByText('Mới')).toBeNull();
-    });
-
-    it('thiếu createdAt (API cũ) → không nhãn, không đoán theo tiêu chí khác', () => {
-      renderTile(<ProductTile product={{ ...PRODUCT, reviewCount: 0, sold: 0 }} variant="grid" onPress={() => {}} />);
-      expect(screen.queryByText('Mới')).toBeNull();
-    });
-
-    it('hết hàng → không nhãn (lớp phủ hết hàng đã chiếm ảnh); thẻ dạng dòng 64px cũng không', () => {
-      const recent = { ...PRODUCT, createdAt: daysAgo(2) };
-      const out = renderTile(<ProductTile product={{ ...recent, inStock: false }} variant="grid" onPress={() => {}} />);
-      expect(screen.queryByText('Mới')).toBeNull();
-      out.unmount();
-      renderTile(<ProductTile product={recent} variant="line" onPress={() => {}} />);
-      expect(screen.queryByText('Mới')).toBeNull();
-    });
-
-    it('có mốc ngày mở bán (config công khai): tạo trước 00:00 giờ VN của ngày đó → không nhãn; tạo từ mốc → có nhãn', () => {
-      const withLaunch = (launch: string | null, createdAt: string) => {
-        const qc = new QueryClient();
-        qc.setQueryData(['public-config'], { catalogLaunchDate: launch });
-        const out = render(
-          <QueryClientProvider client={qc}>
-            <ProductTile product={{ ...PRODUCT, createdAt }} variant="grid" onPress={() => {}} />
-          </QueryClientProvider>,
-        );
-        const has = screen.queryByText('Mới') !== null;
-        out.unmount();
-        return has;
-      };
-      const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
-      const startOfTodayVn = new Date(`${today}T00:00:00+07:00`).getTime();
-      expect(withLaunch(today, new Date(startOfTodayVn - 1000).toISOString())).toBe(false);
-      expect(withLaunch(today, new Date(startOfTodayVn).toISOString())).toBe(true);
-      expect(withLaunch('', new Date(startOfTodayVn - 1000).toISOString())).toBe(true);
-      expect(withLaunch(null, new Date(startOfTodayVn - 1000).toISOString())).toBe(true);
-    });
-
-    it('config công khai chưa về: chưa gắn nhãn (không hiện rồi tắt); tải lỗi thì giữ luật 30 ngày', async () => {
-      const recent = { ...PRODUCT, createdAt: daysAgo(5) };
-      const pending = new QueryClient();
-      const out = render(
-        <QueryClientProvider client={pending}>
-          <ProductTile product={recent} variant="grid" onPress={() => {}} />
-        </QueryClientProvider>,
-      );
-      expect(screen.queryByText('Mới')).toBeNull();
-      out.unmount();
-      const failed = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-      await failed.prefetchQuery({ queryKey: ['public-config'], queryFn: () => Promise.reject(new Error('mạng')) });
-      render(
-        <QueryClientProvider client={failed}>
-          <ProductTile product={recent} variant="grid" onPress={() => {}} />
-        </QueryClientProvider>,
-      );
-      expect(await screen.findByText('Mới')).toBeInTheDocument();
-    });
-
-    it('tải lại config lỗi sau khi đã có mốc: giữ mốc cũ, thẻ tạo trước mốc vẫn không gắn Mới', async () => {
-      const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
-      const before = new Date(new Date(`${today}T00:00:00+07:00`).getTime() - 1000).toISOString();
-      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-      qc.setQueryData(['public-config'], { catalogLaunchDate: today });
-      render(
-        <QueryClientProvider client={qc}>
-          <ProductTile product={{ ...PRODUCT, createdAt: before }} variant="grid" onPress={() => {}} />
-        </QueryClientProvider>,
-      );
-      await qc.refetchQueries({ queryKey: ['public-config'] });
-      expect(qc.getQueryState(['public-config'])?.status).toBe('error');
-      expect(screen.queryByText('Mới')).toBeNull();
-    });
-
-    it('cùng nhãn giảm giá: hai nhãn xếp dọc ở góc ảnh, không chồng nhau', () => {
-      renderTile(<ProductTile product={{ ...PRODUCT, createdAt: daysAgo(2) }} badge={<span>-20%</span>} variant="grid" onPress={() => {}} />);
-      const stack = screen.getByText('-20%').parentElement as HTMLElement;
-      expect(stack).toContainElement(screen.getByText('Mới'));
-      expect(stack).toHaveStyle({ display: 'flex', flexDirection: 'column' });
-    });
+  it('tokens.css có lớp phủ .tubu-tile-link::after kín thẻ và vòng focus vẽ trên lớp phủ', () => {
+    const css = readFileSync(resolve(__dirname, '../../css/tokens.css'), 'utf8');
+    expect(css).toMatch(/\.tubu-tile-link::after\s*\{[^}]*top:\s*0;[^}]*right:\s*0;[^}]*bottom:\s*0;[^}]*left:\s*0;/);
+    expect(css).toMatch(/\.tubu-tile-link:focus-visible::after\s*\{[^}]*outline:\s*2px solid var\(--color-border-focus\)/);
   });
 });

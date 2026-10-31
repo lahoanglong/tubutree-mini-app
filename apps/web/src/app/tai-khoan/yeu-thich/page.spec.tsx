@@ -131,7 +131,7 @@ describe('/tai-khoan/yeu-thich — nút giỏ nhanh', () => {
     expect(addButton(c, 'Xà phòng')).toBeNull();
     expect(addButton(c, 'Nước rửa chén')!.className).toContain('h-11');
     expect(addButton(c, 'Nước rửa chén')!.className).toContain('w-11');
-    expect(c.textContent).toContain('Hết hàng');
+    expect(c.textContent).toContain('Tạm hết hàng');
     expect(c.textContent).toContain('-20%');
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);

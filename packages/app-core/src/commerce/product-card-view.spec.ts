@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProductCard } from '../api/catalog';
-import type { FlashPriceItem } from '../flash-price';
-import { productCardView, type CardVariant, type ProductCardInput } from './product-card-view';
+import { cardPricing, type FlashPriceItem } from '../flash-price';
+import { pickCardFlash, productCardView, type CardVariant, type ProductCardInput } from './product-card-view';
 
 const NOW = Date.parse('2026-11-01T05:00:00Z');
 const H = 3_600_000;
@@ -35,7 +35,7 @@ describe('giá và Giờ vàng', () => {
   it('Giờ vàng đang chạy thắng: giá Giờ vàng, gạch giá bán, nhãn flash trên ảnh', () => {
     const v = view({ flash: flash() });
     expect(v).toMatchObject({ price: 39_000, compareAt: 52_000, discountPct: 25, isFlash: true, isDeal: true });
-    expect(v.imageBadge).toEqual({ kind: 'flash', text: 'Giờ vàng -25%', spoken: 'Giờ vàng giảm 25%' });
+    expect(v.imageBadge).toEqual({ kind: 'flash', text: 'Giờ vàng -25%', short: '-25%', spoken: 'Giờ vàng giảm 25%' });
     expect(v.spoken.price).toBe('Giá Giờ vàng 39.000đ, giá gốc 52.000đ');
   });
 
@@ -166,6 +166,14 @@ describe('khe nhãn theo biến thể', () => {
     expect(view({ product: product({ salePrice: 39_000 }), variant: 'flash' }).imageBadge).toBeNull();
   });
 
+  it('nhãn Giờ vàng ở thẻ có tim (grid, rail-md, rank) kèm bản rút gọn "-x%" để thẻ hẹp không bị tim đè; nhãn giảm giá thì không cần', () => {
+    for (const variant of ['grid', 'rail-md', 'rank'] as const) {
+      expect(rich(variant).imageBadge, variant).toMatchObject({ kind: 'flash', text: 'Giờ vàng -25%', short: '-25%' });
+    }
+    expect(view({ product: product({ salePrice: 39_000 }) }).imageBadge).not.toHaveProperty('short');
+    expect(rich('flash').imageBadge).not.toHaveProperty('short');
+  });
+
   it('rank có nhãn ảnh, không nhãn đầu tên; line không nhãn nào', () => {
     expect(rich('rank').imageBadge?.kind).toBe('flash');
     expect(rich('rank').label).toBeNull();
@@ -190,5 +198,45 @@ describe('phần còn lại của view', () => {
     expect(view({ product: product({ isFeatured: true }), flash: flash() }).spoken.badges).toBe('Giờ vàng giảm 25%, Tubu chọn');
     expect(view({ product: product({ salePrice: 39_000 }) }).spoken.badges).toBe('Giảm 25%');
     expect(view().spoken.badges).toBeNull();
+  });
+});
+
+describe('spoken.meta', () => {
+  it('bản đọc của dòng ★ và đã bán, null khi không có meta', () => {
+    expect(view({ product: product({ ratingAvg: 4.8, sold: 1234 }) }).spoken.meta).toBe('4,8 sao, đã bán hơn 1.200');
+    expect(view().spoken.meta).toBeNull();
+  });
+});
+
+describe('pickCardFlash', () => {
+  it('chọn suất rẻ nhất còn hạn của đúng sản phẩm', () => {
+    const rep = product();
+    const items = [flash({ variationId: 'a', flashPrice: 41_000 }), flash({ variationId: 'b', flashPrice: 39_000 }), flash({ productSlug: 'khac', flashPrice: 1_000 })];
+    expect(pickCardFlash(rep, items, NOW)?.variationId).toBe('b');
+  });
+  it('hết hạn, sai slug, hoặc không rẻ hơn giá bán thì null', () => {
+    expect(pickCardFlash(product(), [flash({ endAt: iso(NOW - 1) })], NOW)).toBeNull();
+    expect(pickCardFlash(product(), [flash({ productSlug: 'khac' })], NOW)).toBeNull();
+    expect(pickCardFlash(product(), [flash({ flashPrice: 60_000 })], NOW)).toBeNull();
+    expect(pickCardFlash(product(), [], NOW)).toBeNull();
+  });
+  it('productCardView với suất đã chọn ra đúng giá của cardPricing', () => {
+    const p = product();
+    const items = [flash({ variationId: 'a', flashPrice: 41_000 }), flash({ variationId: 'b', flashPrice: 39_000 })];
+    const v = view({ product: p, flash: pickCardFlash(p, items, NOW) });
+    const expected = cardPricing(p, items, NOW);
+    expect(v).toMatchObject({ price: expected.price, compareAt: expected.compareAt, isFlash: expected.isFlash });
+  });
+  it('món gian hàng ghim phân loại chỉ xét suất của phân loại đó', () => {
+    const p = product({ pinnedVariationId: 'a' });
+    expect(pickCardFlash(p, [flash({ variationId: 'b', flashPrice: 30_000 })], NOW)).toBeNull();
+    expect(pickCardFlash(p, [flash({ variationId: 'a', flashPrice: 41_000 })], NOW)?.variationId).toBe('a');
+  });
+});
+
+describe('thumbnail', () => {
+  it('view mang ảnh của thẻ để ProductTile vẽ được chỉ từ view', () => {
+    expect(view({ product: product({ thumbnail: 'https://img.test/a.jpg' }) }).thumbnail).toBe('https://img.test/a.jpg');
+    expect(view().thumbnail).toBeNull();
   });
 });

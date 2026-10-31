@@ -173,26 +173,37 @@ describe('FlashSale — thẻ giờ vàng (C-076 di cư DS v2: giữ nguyên hà
     expect(mocks.navigate).toHaveBeenCalledWith('/product/p1', { state: { variationId: 'v1' } });
   });
 
-  it('thẻ là liên kết dùng được bằng bàn phím: Tab tới, Enter mở sản phẩm (D8-8)', async () => {
+  it('thẻ dùng được bằng bàn phím: Tab tới nút tên, Enter và Space đều mở sản phẩm (D8-8)', async () => {
     mocks.fetchActive.mockResolvedValue([ITEM]);
     renderFlash();
-    const card = await screen.findByRole('link', { name: /Nước rửa chén/ });
-    await userEvent.setup().tab();
+    const card = await screen.findByRole('button', { name: 'Nước rửa chén' });
+    const user = userEvent.setup();
+    await user.tab();
     expect(card).toHaveFocus();
-    await userEvent.keyboard('{Enter}');
-    expect(mocks.navigate).toHaveBeenCalledWith('/product/p1', { state: { variationId: 'v1' } });
+    await user.keyboard('{Enter}');
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/product/p1', { state: { variationId: 'v1' } });
+    await user.keyboard(' ');
+    expect(mocks.navigate).toHaveBeenCalledTimes(2);
   });
 
-  it('thẻ role=link chỉ kích hoạt bằng Enter: Space không mở sản phẩm (để trang cuộn như liên kết thật)', async () => {
-    mocks.fetchActive.mockResolvedValue([ITEM]);
-    renderFlash();
-    const card = await screen.findByRole('link', { name: /Nước rửa chén/ });
-    card.focus();
-    const spaceNotPrevented = fireEvent.keyDown(card, { key: ' ' });
-    expect(mocks.navigate).not.toHaveBeenCalled();
-    expect(spaceNotPrevented).toBe(true);
-    fireEvent.keyDown(card, { key: 'Enter' });
-    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+  it('Giờ vàng hết giờ khi đang xem: thẻ về giá thường đúng mốc, bỏ nhãn Giờ vàng, vẫn mở đúng phân loại', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      mocks.fetchActive.mockResolvedValue([{ ...ITEM, flashPrice: 80000, retailPrice: 100000, endAt: new Date(Date.now() + 5_000).toISOString() }]);
+      renderFlash();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(screen.getByText('80.000đ')).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6_000);
+      });
+      expect(screen.queryByText('80.000đ')).toBeNull();
+      expect(screen.getByText('100.000đ')).toBeInTheDocument();
+      expect(screen.queryByText('-20%')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('bán quá suất: chữ và thanh "đã bán" cùng dừng ở 100%, không in 150%', async () => {
@@ -341,7 +352,7 @@ describe('UpcomingFlashSales (C-076 di cư DS v2: giữ nguyên hành vi)', () =
     const user = userEvent.setup();
     const remind = await screen.findByRole('button', { name: /Nhắc tôi/ });
     await user.tab();
-    expect(screen.getByRole('link', { name: /Nước rửa chén/ })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Nước rửa chén' })).toHaveFocus();
     await user.tab();
     expect(remind).toHaveFocus();
     await user.keyboard(' ');
@@ -356,19 +367,21 @@ describe('UpcomingFlashSales (C-076 di cư DS v2: giữ nguyên hành vi)', () =
     await waitFor(() => expect(mocks.cancelReminder).toHaveBeenCalledWith('u1'));
   });
 
-  it('thẻ "Sắp diễn ra" cũng là link: Space không mở sản phẩm, Enter mở', async () => {
+  it('thẻ "Sắp diễn ra" cũng là nút tên: Enter và Space đều mở sản phẩm', async () => {
     renderUpcoming();
-    const card = await screen.findByRole('link', { name: /Nước rửa chén/ });
-    fireEvent.keyDown(card, { key: ' ' });
-    expect(mocks.navigate).not.toHaveBeenCalled();
-    fireEvent.keyDown(card, { key: 'Enter' });
-    expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc');
+    const card = await screen.findByRole('button', { name: 'Nước rửa chén' });
+    const user = userEvent.setup();
+    card.focus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    expect(mocks.navigate).toHaveBeenCalledTimes(2);
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/product/nrc', undefined);
   });
 
   it('chạm thẻ → mở sản phẩm (không kèm state)', async () => {
     renderUpcoming();
-    fireEvent.click(await screen.findByText('Nước rửa chén'));
-    expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc');
+    fireEvent.click(await screen.findByRole('button', { name: 'Nước rửa chén' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc', undefined);
   });
 
   it('nút nhắc cao tối thiểu 44px', async () => {

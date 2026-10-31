@@ -25,7 +25,7 @@ import { Text, Heading } from '../components/ui/text';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import ProductCard from '../components/product-card';
+import { ProductGrid } from '../components/ui/product-grid';
 
 /** Nhãn tin cậy chỉ cho gian hàng admin đã duyệt: tick và "CTV tuyển chọn" là lời cam kết của Tubu Tree, không phải của chủ shop tự gắn. */
 function trustBadgeLabel(sf: { type: 'CTV' | 'BRAND' | 'MERCHANT'; approved?: boolean }): string | null {
@@ -93,7 +93,7 @@ export default function StorefrontViewPage() {
              * background/color sang token ngữ nghĩa DS v2 thay vì hex/--leaf-* cũ. */}
             {sf.isSample && <Badge tone="promo">{SAMPLE_STOREFRONT_LABEL}</Badge>}
             {badgeLabel && (
-              <Badge tone="success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--color-action-primary-bg)', color: 'var(--color-text-inverse)' }}>
+              <Badge tone="verified" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <Sparkles size={12} />
                 {badgeLabel}
               </Badge>
@@ -142,19 +142,19 @@ export default function StorefrontViewPage() {
         {collections.map((col) => (
           <Box key={col.id} mt={4} px={4}>
             <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>{col.title}</Heading>
-            <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {col.items.map((it) => (
-                <div key={it.id}>
-                  <ProductCard product={it.product} />
-                  {it.note && (
-                    <Box flex alignItems="center" style={{ gap: 4, marginTop: 4, background: 'var(--color-status-success-bg)', padding: '4px 8px', borderRadius: 10 }}>
-                      <MessageSquare size={12} color="var(--color-status-success-fg)" />
-                      <Text variant="caption" style={{ color: 'var(--color-status-success-fg)' }}>{it.note}</Text>
-                    </Box>
-                  )}
-                </div>
-              ))}
-            </Box>
+            <ProductGrid
+              items={col.items.map((it) => ({ ...it.product, isFeatured: false }))}
+              variant="grid"
+              renderAfter={(_, i) => {
+                const note = col.items[i]?.note;
+                return note ? (
+                  <Box flex alignItems="center" style={{ gap: 4, marginTop: 4, background: 'var(--color-status-success-bg)', padding: '4px 8px', borderRadius: 10 }}>
+                    <MessageSquare size={12} color="var(--color-status-success-fg)" />
+                    <Text variant="caption" style={{ color: 'var(--color-status-success-fg)' }}>{note}</Text>
+                  </Box>
+                ) : null;
+              }}
+            />
           </Box>
         ))}
         {!isOwner && sf.type === 'CTV' && (

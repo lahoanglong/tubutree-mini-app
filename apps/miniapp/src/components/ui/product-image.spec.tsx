@@ -52,3 +52,35 @@ describe('ảnh đổi cỡ (R-5)', () => {
     expect(thumb.getAttribute('srcset')).toBeNull();
   });
 });
+
+describe('ảnh hiện dần và khung (PL-15)', () => {
+  const PANCAKE = 'https://content.pancake.vn/2-26/s800x800/a.jpg';
+
+  it('ảnh mới tải bắt đầu trong suốt rồi hiện hẳn khi load', () => {
+    const { container } = render(<div style={{ position: 'relative' }}><ProductImage src={PANCAKE} brand="Tubu" /></div>);
+    const img = container.querySelector('img')!;
+    expect(img.style.opacity).toBe('0');
+    fireEvent.load(img);
+    expect(img.style.opacity).toBe('1');
+  });
+
+  it('ảnh đã có trong bộ nhớ đệm (complete) hiện ngay, không chớp', () => {
+    const complete = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'complete');
+    Object.defineProperty(HTMLImageElement.prototype, 'complete', { configurable: true, get: () => true });
+    Object.defineProperty(HTMLImageElement.prototype, 'naturalWidth', { configurable: true, get: () => 800 });
+    try {
+      const { container } = render(<div style={{ position: 'relative' }}><ProductImage src={PANCAKE} brand="Tubu" /></div>);
+      expect(container.querySelector('img')!.style.opacity).toBe('1');
+    } finally {
+      if (complete) Object.defineProperty(HTMLImageElement.prototype, 'complete', complete);
+      else delete (HTMLImageElement.prototype as unknown as Record<string, unknown>).complete;
+      delete (HTMLImageElement.prototype as unknown as Record<string, unknown>).naturalWidth;
+    }
+  });
+
+  it('ô thay thế dùng nền trung tính, không nhuộm màu nhãn', () => {
+    const { container } = render(<div style={{ position: 'relative' }}><ProductImage src={null} brand="Tubu" /></div>);
+    const fallback = container.querySelector('[data-testid="product-image-fallback"]') as HTMLElement;
+    expect(fallback.querySelector('[style*="opacity"]')).toBeNull();
+  });
+});

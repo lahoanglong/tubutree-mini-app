@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardMetaLine, formatRating, formatSoldShort, soldCountText } from './card-meta';
+import { cardMetaLine, cardMetaSpoken, formatRating, formatSoldShort, soldCountText } from './card-meta';
 
 describe('formatRating', () => {
   it('dấu phẩy thập phân, một chữ số lẻ', () => {
@@ -77,5 +77,23 @@ describe('soldCountText: ngưỡng làm tròn', () => {
     expect(soldCountText(999_949_999)).toBe('999,9tr+');
     expect(soldCountText(999_950_000)).toBe('1 tỷ+');
     expect(soldCountText(1e9)).toBe('1 tỷ+');
+  });
+});
+
+describe('cardMetaSpoken', () => {
+  it('đọc sao và lượt bán thành chữ, làm tròn xuống theo đơn vị đang hiện', () => {
+    expect(cardMetaSpoken({ ratingAvg: 4.8, sold: 1234 })).toBe('4,8 sao, đã bán hơn 1.200');
+    expect(cardMetaSpoken({ ratingAvg: 4.8, sold: 52 })).toBe('4,8 sao, đã bán 52');
+    expect(cardMetaSpoken({ sold: 2_500_000 })).toBe('đã bán hơn 2.500.000');
+  });
+  it('thiếu nửa nào bỏ nửa đó, thiếu cả hai là null', () => {
+    expect(cardMetaSpoken({ ratingAvg: 4.5 })).toBe('4,5 sao');
+    expect(cardMetaSpoken({ sold: 7 })).toBe('đã bán 7');
+    expect(cardMetaSpoken({ ratingAvg: Number.NaN, sold: 0 })).toBeNull();
+  });
+  it('khớp dòng nhìn thấy: có dòng meta thì có bản đọc, và ngược lại', () => {
+    for (const p of [{}, { sold: 1 }, { ratingAvg: 3 }, { ratingAvg: 4.2, sold: 999_999 }]) {
+      expect(cardMetaSpoken(p) === null).toBe(cardMetaLine(p) === null);
+    }
   });
 });

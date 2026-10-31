@@ -83,3 +83,52 @@ describe('ảnh đổi cỡ (R-5)', () => {
     expect(container.querySelector('[data-testid="product-image-fallback"]')).not.toBeNull();
   });
 });
+
+describe('ảnh hiện dần, viền trung tính, ô thay thế không nhuộm màu nhãn (PL-15)', () => {
+  const proto = HTMLImageElement.prototype;
+  const setComplete = (complete: boolean) => {
+    Object.defineProperty(proto, 'complete', { configurable: true, get: () => complete });
+    Object.defineProperty(proto, 'naturalWidth', { configurable: true, get: () => (complete ? 400 : 0) });
+  };
+  const originals = { complete: Object.getOwnPropertyDescriptor(proto, 'complete'), naturalWidth: Object.getOwnPropertyDescriptor(proto, 'naturalWidth') };
+  afterEach(() => {
+    for (const key of ['complete', 'naturalWidth'] as const) {
+      const original = originals[key];
+      if (original) Object.defineProperty(proto, key, original);
+      else delete (proto as unknown as Record<string, unknown>)[key];
+    }
+  });
+
+  it('ảnh còn đang tải: trong suốt, tải xong thì hiện dần trong 200ms', () => {
+    setComplete(false);
+    const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src="https://img.test/a.jpg" brand="Tubu" /></div>);
+    const img = container.querySelector('img')!;
+    expect(img.style.opacity).toBe('0');
+    expect(img.style.transition).toContain('opacity 200ms');
+    act(() => {
+      img.dispatchEvent(new Event('load'));
+    });
+    expect(container.querySelector('img')!.style.opacity).toBe('1');
+  });
+
+  it('ảnh đã tải xong trước khi gắn sự kiện (bộ nhớ đệm, HTML dựng sẵn): hiện ngay', () => {
+    setComplete(true);
+    const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src="https://img.test/a.jpg" brand="Tubu" /></div>);
+    expect(container.querySelector('img')!.style.opacity).toBe('1');
+  });
+
+  it('viền trong 1px trung tính để ảnh nền trắng không hoà vào thân thẻ', () => {
+    setComplete(true);
+    const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src="https://img.test/a.jpg" brand="Tubu" /></div>);
+    const img = container.querySelector('img')!;
+    expect(img.style.outline).toBe('1px solid var(--color-media-outline)');
+    expect(img.style.outlineOffset).toBe('-1px');
+  });
+
+  it('ô thay thế chỉ có lá xanh trên nền khung ảnh: không tên nhãn, không nền ngả màu nhãn', () => {
+    const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src={null} brand="Polang" /></div>);
+    const fallback = container.querySelector('[data-testid="product-image-fallback"]') as HTMLElement;
+    expect(fallback.textContent).toBe('');
+    expect(fallback.querySelector('div')).toBeNull();
+  });
+});

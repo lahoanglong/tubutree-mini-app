@@ -1,6 +1,8 @@
 import { render } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
-import { Skeleton, ProductCardSkeleton, LineItemSkeleton } from './skeleton';
+import { tileBodyHeight } from '@tubutree/app-core/commerce/tile-metrics';
+import type { CardVariant } from '@tubutree/app-core/commerce/product-card-view';
+import { Skeleton, ProductCardSkeleton, ProductTileSkeleton, LineItemSkeleton } from './skeleton';
 
 /**
  * Regression test for Task 21's var-name codemod: Task 3's token file dropped the old
@@ -28,5 +30,28 @@ describe('Skeleton token names', () => {
     const row = container.firstElementChild as HTMLElement;
     expect(row.style.background).toBe('var(--color-bg-surface)');
     expect(row.style.borderRadius).toBe('var(--radius-card)');
+  });
+});
+
+describe('ProductTileSkeleton: dựng từ cùng số đo với thẻ thật (không nhảy khi tải xong)', () => {
+  const VARIANTS: CardVariant[] = ['grid', 'rail-sm', 'rail-md', 'flash', 'rank', 'line'];
+
+  it.each(VARIANTS)('%s: thân khung chờ cao đúng tileBodyHeight', (variant) => {
+    const { container } = render(<ProductTileSkeleton variant={variant} />);
+    const body = container.querySelector('[data-testid="catalog-tile-skeleton-body"]') as HTMLElement;
+    expect(body.style.height).toBe(`${tileBodyHeight(variant)}px`);
+  });
+
+  it('grid bỏ dòng nhãn hiệu thì thấp hơn 16px, note và footer cộng vào', () => {
+    const { container } = render(<ProductTileSkeleton variant="grid" brand={false} />);
+    expect((container.querySelector('[data-testid="catalog-tile-skeleton-body"]') as HTMLElement).style.height).toBe(`${tileBodyHeight('grid', { brand: false })}px`);
+    const flash = render(<ProductTileSkeleton variant="flash" note footerHeight={28} />);
+    expect((flash.container.querySelector('[data-testid="catalog-tile-skeleton-body"]') as HTMLElement).style.height).toBe(`${tileBodyHeight('flash', { note: true, footer: 28 })}px`);
+  });
+
+  it('ảnh giữ tỉ lệ 1:1 (trừ line), vỏ aria-hidden', () => {
+    const { container } = render(<ProductTileSkeleton variant="grid" />);
+    expect((container.firstElementChild as HTMLElement).getAttribute('aria-hidden')).toBe('true');
+    expect((container.querySelector('.tubu-skeleton') as HTMLElement).style.aspectRatio).toBe('1 / 1');
   });
 });

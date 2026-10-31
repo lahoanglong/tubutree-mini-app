@@ -107,14 +107,15 @@ describe('PdpRails', () => {
     const titles = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
     expect(titles).toEqual(['Thường mua kèm', 'Cùng nhà Xanh Việt']);
     expect(Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(['/san-pham/sp-2', '/san-pham/sp-3', '/san-pham/sp-1']);
-    expect(mocks.http.get).not.toHaveBeenCalled();
+    // Thẻ có thể hỏi cấu hình công khai (nhãn Mới, miễn phí giao); hai dải thì không được hỏi lại khi server đã đưa danh sách.
+    expect(mocks.http.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/config/public')).toEqual([]);
   });
   it('thiếu dữ liệu server thì tải ở trình duyệt: khung chờ rồi hiện; endpoint như Mini App', async () => {
     mocks.http.get.mockImplementation(async (p: string) => (p === '/products/dau-goi/related' ? [card(1)] : []));
     const { container } = mount(<PdpRails slug="dau-goi" brand="Xanh" />);
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
     await flush();
-    expect(mocks.http.get.mock.calls.map((c) => c[0]).sort()).toEqual(['/products/dau-goi/bought-together', '/products/dau-goi/related']);
+    expect(mocks.http.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/config/public').sort()).toEqual(['/products/dau-goi/bought-together', '/products/dau-goi/related']);
     expect(container.querySelectorAll('h2')).toHaveLength(1);
     expect(container.querySelector('h2')!.textContent).toBe('Cùng nhà Xanh');
   });

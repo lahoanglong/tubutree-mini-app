@@ -1,104 +1,156 @@
 import { useId, type CSSProperties, type ReactNode } from 'react';
-import { isNewProduct, NEW_PRODUCT_LABEL } from '@tubutree/app-core/product-badges';
-import { useCatalogLaunchDate } from '../../hooks/use-catalog-launch-date';
-import { brandAccent } from '../../utils/brands';
-import { vi } from '../../i18n/vi';
-import { formatSold } from '../../utils/format';
-import { WishlistHeart } from '../wishlist-heart';
-import { ProductImage } from './product-image';
-import { Badge } from './badge';
-import { PriceTag } from './price-tag';
-import { Text } from './text';
+import { useNavigate } from 'zmp-ui';
+import { Zap } from 'lucide-react';
+import type { CardBadge, CardVariant, ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
+import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
+import { tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
+import { haptic } from '../../utils/haptic';
+import { Badge, type BadgeTone } from './badge';
 import { Button } from './button';
+import { PriceTag } from './price-tag';
+import { ProductImage } from './product-image';
+import { SR_ONLY } from './sr-only';
 import { STRETCHED_LINK_CLASS, STRETCHED_LINK_RESET } from './stretched-link';
+import { Text } from './text';
 
-export interface ProductTileProduct {
-  id: string;
-  slug: string;
-  name: string;
-  brand: string;
-  thumbnail?: string | null;
-  basePrice: number;
-  salePrice?: number | null;
-  repVariationId?: string;
-  pinnedVariationId?: string;
-  inStock: boolean;
-  reviewCount?: number;
-  ratingAvg?: number;
-  sold?: number;
-  /** Ngày tạo (ISO): tạo trong 30 ngày gần nhất thì thẻ có nhãn "Mới". Thiếu thì không nhãn. */
-  createdAt?: string;
-}
+/** Chiều cao tối thiểu ô tên (2 dòng body-sm) — khung chờ dựng từ cùng số đo trong app-core. */
+export const TILE_NAME_MIN_HEIGHT = TILE_METRICS.name;
 
-/** Chiều cao tối thiểu ô tên (2 dòng) — skeleton của CatalogGrid dựng từ cùng hằng số này. */
-export const TILE_NAME_MIN_HEIGHT = 44;
-
-/** Nút tên thẻ: nút phủ cả thẻ (xem stretched-link.ts) trải hết bề ngang, cách dòng trên 2px. */
-const LINK_RESET: CSSProperties = { ...STRETCHED_LINK_RESET, display: 'block', width: '100%', margin: '2px 0 0' };
+/** Nút tên thẻ: nút phủ cả thẻ (xem stretched-link.ts) trải hết bề ngang. */
+const LINK_RESET: CSSProperties = { ...STRETCHED_LINK_RESET, display: 'block', width: '100%', margin: 0 };
 
 export interface ProductTileProps {
-  product: ProductTileProduct;
-  variant?: 'grid' | 'rail' | 'list' | 'line' | 'compact';
-  mode?: 'b2c' | 'ctv' | 'dealer';
-  /** compareAt: giá gạch do caller chọn (null = không gạch); bỏ trống thì gạch giá niêm yết khi giá hiển thị thấp hơn. */
-  priceOverride?: { price: number; compareAt?: number | null } | null;
-  showWishlist?: boolean;
-  action?: 'add' | 'rebuy' | 'subscribe' | 'none';
-  onAction?: () => void;
-  badge?: ReactNode;
-  /** Nút nổi trên ảnh (vd. giỏ nhanh): tile đặt ở góc phải dưới vùng ảnh, trên lớp phủ của nút tên; caller chỉ đưa nút, không tự định vị. */
+  view: ProductCardView;
+  variant: CardVariant;
+  /** Đường dẫn trang chi tiết; thẻ tự `navigate` (Mini App không có thẻ `<a>`, nút tên phủ cả thẻ). */
+  href: string;
+  /** Nút phụ cuối thẻ (Mua lại, Thêm), nhãn `addLabel`. */
+  onAdd?: () => void;
+  addLabel?: string;
+  /** Một dòng ghi chú dưới giá (phân loại, "Đã mua 3 lần"). Chuỗi rỗng giữ chỗ dòng đó để thẻ có ghi chú và thẻ không có vẫn thẳng giá trong cùng kệ. */
+  note?: string;
+  /** Web: ảnh LCP tải ngay. Mini App tải lười như cũ nên bỏ qua. */
+  priority?: boolean;
+  /** Nút tim do nơi gọi dựng (cần đăng nhập + API riêng, không thuộc bộ thành phần giao diện). */
+  wishlist?: ReactNode;
+  /** Nút nổi trên ảnh (giỏ nhanh): góc phải dưới vùng ảnh, trên lớp phủ của nút tên; caller chỉ đưa nút. */
   imageOverlay?: ReactNode;
-  onPress: () => void;
+  /** Phần cuối thẻ (thanh % đã bán, nút nhắc). Nơi gọi truyền `footerHeight` để thân thẻ giữ chiều cao cố định. */
+  footer?: ReactNode;
+  footerHeight?: number;
+  /** Chưa biết giá (đang tải): không in giá, vẫn giữ chỗ. */
+  hidePrice?: boolean;
+  /** State điều hướng (listSource, variationId của suất Giờ vàng, phân loại ghim). */
+  navState?: Record<string, unknown>;
+  onOpen?: () => void;
+}
+
+const BADGE_TONE: Record<CardBadge['kind'], BadgeTone> = {
+  flash: 'flash',
+  discount: 'promo',
+  combo: 'brand',
+  featured: 'verified',
+  loved: 'verified',
+  new: 'brand',
+  freeship: 'success',
+};
+
+const STACKED: ReadonlySet<CardVariant> = new Set(['rail-sm', 'rail-md', 'flash', 'rank']);
+const CAPTION_NAME: ReadonlySet<CardVariant> = new Set(['rail-sm', 'flash']);
+const FIXED_LINE = (px: number): CSSProperties => ({ lineHeight: `${px}px` });
+
+function rankBackground(rank: number): { background: string; color: string } {
+  if (rank >= 1 && rank <= 3) return { background: `var(--color-rank-${rank}-bg)`, color: 'var(--color-rank-fg)' };
+  return { background: 'var(--color-rank-n-bg)', color: 'var(--color-rank-n-fg)' };
 }
 
 /**
- * Thẻ sản phẩm dùng chung — thay `ProductCard` + 4 bản chép (flash-sale.tsx x2, storefront-view,
- * brand-view) + ~9 dòng hàng khác đang tự vẽ card riêng (audit A4-06/A4-19). Overlay "tạm hết
- * hàng" và khối giá giờ nằm Ở MỘT CHỖ DUY NHẤT — trước đây chỉ `product-card.tsx` có, storefront/
- * brand grid không, nên hàng hết vẫn hiện mua được ở đó (A4-06).
+ * Thẻ sản phẩm duy nhất (6 biến thể). Chỉ vẽ `ProductCardView` của app-core: giá, nhãn, meta, chữ đọc đã quyết ở đó, thẻ không tự tính gì.
+ * Thân thẻ cao cố định theo `tileBodyHeight` (tên 2 dòng, giá neo đáy, meta một dòng giữ chỗ cả khi trống) nên thẻ cùng hàng luôn
+ * thẳng giá; khung chờ dựng từ cùng số đo.
  *
- * Quy tắc giá flash>sale>base tính Ở CALLER (giữ đúng nơi mỗi trang đã tính hôm nay — tile không
- * tự fetch flash-sale), `priceOverride` chỉ là kết quả cuối cùng caller đưa xuống để hiển thị.
- * Tương tự, `badge` là ReactNode caller tự dựng (badge giờ vàng/sale% hôm nay mỗi nơi hiển thị
- * hơi khác nhau — không gói cứng logic đó vào tile để tránh phải đoán ý từng trang).
- *
- * Cấu trúc a11y: vỏ thẻ KHÔNG tương tác. Phần tử bấm được là nút tên (`.tubu-tile-link`, ::after phủ
- * cả thẻ), tim yêu thích và "Mua lại" là anh em của nó chứ không phải con — nên không còn
- * `role="button"` chứa nút lồng bên trong (axe nested-interactive, A4-015).
- *
- * `mode` chưa rẽ nhánh style gì trong bản này — giữ trong props để Task 24-28 (storefront/brand/
- * dealer) truyền xuống ngay từ đầu mà không phải đổi chữ ký component sau này.
+ * Cấu trúc a11y: vỏ thẻ KHÔNG tương tác. Phần tử bấm được là nút tên (`.tubu-tile-link`, ::after phủ cả thẻ); tim, nút nổi và nút phụ
+ * là anh em của nó (axe nested-interactive). Chữ nhìn thấy của nhãn/giá/meta là `aria-hidden` và được đọc MỘT lần qua `aria-describedby`
+ * của nút tên (tình trạng, nhãn, sao và đã bán, giá): "ngôi sao đen", "một phẩy hai ca cộng" và gạch ngang giá gốc không còn ra tai người nghe.
  */
 export function ProductTile({
-  product: p,
-  variant = 'grid',
-  priceOverride,
-  showWishlist = true,
-  action = 'none',
-  onAction,
-  badge,
+  view,
+  variant,
+  href,
+  onAdd,
+  addLabel = 'Thêm',
+  note,
+  wishlist,
   imageOverlay,
-  onPress,
+  footer,
+  footerHeight,
+  hidePrice,
+  navState,
+  onOpen,
 }: ProductTileProps) {
-  const standing = p.salePrice ?? p.basePrice;
-  const price = priceOverride ? priceOverride.price : standing;
-  const hasSale = price < p.basePrice;
-  const compareAt = priceOverride?.compareAt !== undefined ? priceOverride.compareAt : hasSale ? p.basePrice : undefined;
-  const isLine = variant === 'line' || variant === 'list';
-  // Hết hàng đã có lớp phủ trên ảnh, thẻ dạng dòng chỉ có ảnh 64px: không chồng thêm nhãn.
-  const launchDate = useCatalogLaunchDate();
-  const showNew = launchDate !== undefined && !isLine && p.inStock !== false && isNewProduct(p.createdAt, Date.now(), launchDate);
-  // Tên truy cập = tên sản phẩm; giá (và giá gốc gạch) là mô tả truy cập của thẻ.
-  const priceId = useId();
+  const navigate = useNavigate();
+  const descId = useId();
+  const isLine = variant === 'line';
+  const out = view.stock === 'out';
+  const hasBrand = view.brandLine !== null && (variant === 'grid' || variant === 'rail-md');
+  const caption = CAPTION_NAME.has(variant);
+  const hasMetaRow = variant === 'grid' || variant === 'rail-md' || variant === 'rank';
+  const rankSpoken = view.rank !== null && variant === 'rank' ? fillTileCopy('rank.spoken', { n: view.rank }) : null;
+  const description = [rankSpoken, view.spoken.stock, view.spoken.badges, view.spoken.meta ?? null, hidePrice ? null : view.spoken.price]
+    .filter((x): x is string => Boolean(x))
+    .join(', ');
+  const hasNote = note !== undefined;
+  const bodyMin = tileBodyHeight(variant, { brand: hasBrand, note: hasNote, footer: footerHeight });
+  const nameLine = caption ? 20 : 22;
+
+  const open = () => {
+    haptic('light');
+    onOpen?.();
+    navigate(href, navState ? { state: navState } : undefined);
+  };
+
+  const imageBadge = view.imageBadge;
+  const badgeNode = imageBadge && (
+    <Badge tone={BADGE_TONE[imageBadge.kind]} size="sm" icon={imageBadge.kind === 'flash' ? Zap : undefined}>
+      {imageBadge.short ? (
+        <>
+          <span className="tubu-badge-long">{imageBadge.text}</span>
+          <span className="tubu-badge-short">{imageBadge.short}</span>
+        </>
+      ) : (
+        imageBadge.text
+      )}
+    </Badge>
+  );
+  const label = view.label;
+
+  const price = hidePrice ? null : (
+    <PriceTag
+      value={view.price}
+      compareAt={view.compareAt}
+      size={isLine ? 'sm' : 'tile'}
+      tone={view.isDeal ? 'deal' : 'default'}
+      layout={STACKED.has(variant) ? 'stack' : 'inline'}
+    />
+  );
 
   return (
     <div
-      className="tubu-press"
+      data-ds="product-tile"
+      data-ds-variant={variant}
+      className="tubu-press-card"
       style={{
         position: 'relative',
         isolation: 'isolate',
-        display: isLine ? 'flex' : 'block',
+        display: 'flex',
+        flexDirection: isLine ? 'row' : 'column',
+        alignItems: isLine ? 'center' : undefined,
         gap: isLine ? 12 : 0,
+        height: '100%',
+        minWidth: 0,
+        boxSizing: 'border-box',
+        padding: isLine ? TILE_METRICS.inset : 0,
+        minHeight: isLine ? tileBodyHeight('line') : undefined,
         background: 'var(--color-bg-surface)',
         borderRadius: 'var(--radius-card)',
         boxShadow: 'var(--elevation-1)',
@@ -106,97 +158,126 @@ export function ProductTile({
       }}
     >
       <div
+        data-ds-part="media"
+        className="tubu-tile-media"
         style={{
           position: 'relative',
-          width: isLine ? 64 : undefined,
-          aspectRatio: isLine ? undefined : '1 / 1',
-          height: isLine ? 64 : undefined,
           background: 'var(--color-bg-media)',
-          flex: isLine ? '0 0 auto' : undefined,
+          flex: '0 0 auto',
+          overflow: 'hidden',
+          ...(isLine ? { width: 64, height: 64, borderRadius: 'var(--radius-media)' } : { aspectRatio: '1 / 1' }),
         }}
       >
-        <ProductImage src={p.thumbnail} brand={p.brand} />
-        {(badge || showNew) && (
-          <div style={{ position: 'absolute', top: 8, left: 8, ...(showNew ? { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 } : null) }}>
-            {badge}
-            {showNew && (
-              <Badge tone="brand" size="sm">
-                {NEW_PRODUCT_LABEL}
-              </Badge>
-            )}
-          </div>
-        )}
-        {p.inStock === false && (
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'var(--color-bg-scrim-light)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Text
-              variant="caption"
-              as="span"
+        <ProductImage src={view.thumbnail} brand={view.brandLine ?? ''} width={isLine ? 64 : undefined} />
+        <div aria-hidden>
+          {!isLine && variant === 'rank' && view.rank !== null && (
+            <span
+              data-ds-part="rank"
               style={{
-                background: 'var(--color-bg-surface)',
-                padding: '4px 12px',
-                borderRadius: 'var(--radius-pill)',
-                boxShadow: 'var(--elevation-1)',
+                position: 'absolute',
+                top: 0,
+                left: 8,
+                maxWidth: 'calc(100% - 16px)',
+                minWidth: 24,
+                height: 28,
+                padding: '0 6px',
+                boxSizing: 'border-box',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
+                borderRadius: '0 0 var(--radius-tag) var(--radius-tag)',
+                fontSize: 'var(--type-label-size)',
                 fontWeight: 700,
+                fontVariantNumeric: 'tabular-nums',
+                ...rankBackground(view.rank),
               }}
             >
-              {vi.product.outOfStock}
-            </Text>
-          </div>
-        )}
-      </div>
-      <div style={{ padding: isLine ? 0 : 10, flex: isLine ? 1 : undefined, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span
-            aria-hidden
-            style={{ width: 7, height: 7, borderRadius: '50%', background: brandAccent(p.brand), flex: '0 0 auto' }}
-          />
-          <Text variant="caption" tone="secondary" style={{ fontWeight: 600 }}>
-            {p.brand}
-          </Text>
+              #{view.rank}
+            </span>
+          )}
+          {imageBadge && !isLine && (
+            <div
+              data-ds-part="image-badge"
+              style={{ position: 'absolute', left: 8, ...(variant === 'rank' ? { bottom: 8 } : { top: 8 }) }}
+            >
+              {badgeNode}
+            </div>
+          )}
+          {out && (
+            <div style={{ position: 'absolute', inset: 0, background: 'var(--color-bg-scrim-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Text
+                variant="caption"
+                as="span"
+                style={{
+                  background: 'var(--color-bg-surface)',
+                  padding: isLine ? '2px 6px' : '4px 12px',
+                  borderRadius: 'var(--radius-pill)',
+                  boxShadow: 'var(--elevation-1)',
+                  fontWeight: 700,
+                  ...(isLine ? { fontSize: 'var(--type-label-size)', lineHeight: 'normal' } : null),
+                }}
+              >
+                {view.stockText}
+              </Text>
+            </div>
+          )}
         </div>
-        {/* aria-label trùng chữ hiển thị (không vi phạm "label in name"); giữ để mọi nơi tìm thẻ theo tên
-            truy cập (e2e, trình đọc màn hình) không phụ thuộc cấu trúc con. */}
-        <button
-          type="button"
-          className={STRETCHED_LINK_CLASS}
-          aria-label={p.name}
-          aria-describedby={priceId}
-          onClick={onPress}
-          style={LINK_RESET}
-        >
+      </div>
+
+      <div
+        data-ds-part="body"
+        style={{
+          flex: isLine ? 1 : '1 1 auto',
+          minWidth: 0,
+          minHeight: isLine ? undefined : bodyMin,
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: isLine ? 0 : 'var(--tile-inset)',
+        }}
+      >
+        {hasBrand && (
           <Text
-            variant="body-sm"
+            data-ds-part="brand"
+            variant="label"
+            tone="tertiary"
+            as="div"
+            aria-hidden
+            style={{ height: TILE_METRICS.brand, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...FIXED_LINE(TILE_METRICS.brand) }}
+          >
+            {view.brandLine}
+          </Text>
+        )}
+        {/* aria-label trùng chữ hiển thị (không vi phạm "label in name"); giữ để mọi nơi tìm thẻ theo tên truy cập (e2e, trình đọc màn hình) không phụ thuộc cấu trúc con. */}
+        <button type="button" className={STRETCHED_LINK_CLASS} aria-label={view.name} aria-describedby={descId} onClick={open} style={LINK_RESET}>
+          <Text
+            variant={caption ? 'caption' : 'body-sm'}
             as="span"
             style={{
               display: '-webkit-box',
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
-              minHeight: TILE_NAME_MIN_HEIGHT,
+              minHeight: isLine ? undefined : caption ? TILE_METRICS.nameCaption : TILE_METRICS.name,
+              ...FIXED_LINE(nameLine),
+              ...(isLine ? { fontWeight: 600 } : null),
             }}
           >
-            {p.name}
+            {label && (
+              <Badge tone={BADGE_TONE[label.kind]} size="sm" style={{ display: 'inline-block', verticalAlign: 'top', margin: '1px 4px 0 0', lineHeight: '16px' }}>
+                {label.text}
+              </Badge>
+            )}
+            {view.name}
           </Text>
         </button>
-        {/* Anh em của nút tên (không phải con) để không lồng phần tử tương tác. Đứng NGAY SAU nút tên trong DOM
-            để Tab/đọc đi tên rồi tới tim; vị trí thật do absolute theo vỏ thẻ (cha định vị gần nhất), khối 0x0
-            ở góc phải-trên giữ nguyên chỗ cũ của tim và nâng nó lên trên lớp phủ. */}
-        {showWishlist && !isLine && (
-          <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 1 }}>
-            <WishlistHeart productId={p.id} floating size={18} />
-          </div>
-        )}
-        {/* Nút nổi trên ảnh (giỏ nhanh) cũng là anh em của nút tên và đứng sau tim: Tab/đọc đi tên, tim, rồi tới nút. Khung này phủ đúng
-            vùng ảnh nhưng không chặn chạm (nút tên ::after vẫn nhận chạm lên ảnh), chỉ khối chứa nút nhận chạm. */}
+        <span id={descId} aria-hidden style={SR_ONLY}>
+          {description}
+        </span>
+        {/* Anh em của nút tên (không phải con) để không lồng phần tử tương tác. Đứng NGAY SAU nút tên trong DOM để Tab/đọc đi tên rồi tới tim; vị trí thật do absolute theo vỏ thẻ. */}
+        {wishlist && !isLine && <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 1 }}>{wishlist}</div>}
         {imageOverlay && (
           <div
             style={{
@@ -211,59 +292,47 @@ export function ProductTile({
             <div style={{ position: 'absolute', right: 2, bottom: 2, pointerEvents: 'auto' }}>{imageOverlay}</div>
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3, minHeight: 16 }}>
-          {(p.reviewCount ?? 0) > 0 ? (
-            <>
-              <span style={{ color: 'var(--color-rating)', fontSize: 11 }}>★</span>
-              <Text variant="caption" tone="secondary" style={{ fontWeight: 600 }}>
-                {p.ratingAvg?.toFixed(1)}
-              </Text>
-              <Text variant="caption" tone="disabled">
-                ({p.reviewCount})
-              </Text>
-            </>
-          ) : null}
-          {formatSold(p.sold) && (
-            <Text variant="caption" tone="tertiary" style={{ fontWeight: 600 }}>
-              {(p.reviewCount ?? 0) > 0 ? '· ' : ''}
-              {formatSold(p.sold)}
+        <div style={{ marginTop: 'auto', paddingTop: TILE_METRICS.gap, minWidth: 0 }}>
+          {/* Thẻ xếp chồng luôn giữ chỗ dòng giá gạch ngay dưới giá: thẻ giá thường đứng cạnh thẻ đang giảm vẫn có số giá cùng độ cao. */}
+          <div data-ds-part="price" aria-hidden style={{ display: 'flex', minHeight: hidePrice || STACKED.has(variant) ? TILE_METRICS.price + (STACKED.has(variant) ? TILE_METRICS.compare : 0) : undefined }}>
+            {price}
+          </div>
+          {hasNote && (
+            <Text data-ds-part="note" variant="label" tone="tertiary" as="div" style={{ height: TILE_METRICS.note, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...FIXED_LINE(TILE_METRICS.note) }}>
+              {note}
+            </Text>
+          )}
+          {hasMetaRow && (
+            <Text
+              data-ds-part="meta"
+              variant="label"
+              tone="tertiary"
+              as="div"
+              aria-hidden
+              style={{ height: TILE_METRICS.meta, marginTop: TILE_METRICS.metaGap, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...FIXED_LINE(TILE_METRICS.meta) }}
+            >
+              {view.meta}
             </Text>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
-          {/* display:flex: span thường tạo line box (strut 24px) → cao hơn PriceTag 20px, thẻ phình 4px so với skeleton. */}
-          <span id={priceId} style={{ display: 'flex' }}>
-            <PriceTag value={price} compareAt={compareAt} size="sm" />
-          </span>
-          {action === 'rebuy' && isLine && <RebuyButton onAction={onAction} />}
-        </div>
-        {/* Thẻ dạng khối (kệ Mua lại 148px): nút xuống hàng riêng dưới giá, full width. */}
-        {action === 'rebuy' && !isLine && <RebuyButton block onAction={onAction} />}
+        {footer}
+        {onAdd && !isLine && <AddButton block label={addLabel} onAdd={onAdd} />}
       </div>
+      {onAdd && isLine && <AddButton label={addLabel} onAdd={onAdd} />}
     </div>
   );
 }
 
 /**
- * Nút "Mua lại" của thẻ — dùng chung cho dạng dòng (cùng hàng với giá) và dạng khối (hàng riêng).
- *
- * Nó là anh em của nút tên (không lồng trong phần tử bấm được); `position:relative` + `zIndex:1` để
- * nổi trên lớp phủ `.tubu-tile-link::after`. `stopPropagation` vẫn giữ vì thẻ có thể nằm trong một
- * hàng cha tự bắt click (Button.onPress không nhận native event nên không tự chặn được).
- *
+ * Nút phụ của thẻ — anh em của nút tên (không lồng trong phần tử bấm được); `position:relative` + `zIndex:1` để nổi trên lớp phủ
+ * `.tubu-tile-link::after`. `stopPropagation` giữ vì thẻ có thể nằm trong hàng cha tự bắt click (Button.onPress không nhận native event).
  * `block`: `.zaui-btn` có min-width 120px nên không vừa thẻ 148px → full width và bỏ min-width.
  */
-function RebuyButton({ block = false, onAction }: { block?: boolean; onAction?: () => void }) {
+function AddButton({ block = false, label, onAdd }: { block?: boolean; label: string; onAdd: () => void }) {
   return (
-    <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', zIndex: 1, marginTop: block ? 8 : undefined }}>
-      <Button
-        size="md"
-        variant="secondary"
-        fullWidth={block}
-        style={block ? { minWidth: 0 } : undefined}
-        onPress={() => onAction?.()}
-      >
-        {vi.reorder.cardCta}
+    <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', zIndex: 1, marginTop: block ? 8 : undefined, flex: block ? undefined : '0 0 auto' }}>
+      <Button size="md" variant="secondary" fullWidth={block} style={block ? { minWidth: 0 } : undefined} onPress={() => onAdd()}>
+        {label}
       </Button>
     </div>
   );

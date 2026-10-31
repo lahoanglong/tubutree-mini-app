@@ -156,7 +156,7 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     await expect(best).toBeVisible({ timeout: 15_000 });
     await waitHomeSettled(page, api);
 
-    await best.getByRole('button', { name: XA_PHONG.name }).click();
+    await best.getByRole('button', { name: XA_PHONG.name, exact: true }).click();
     await expect(page.getByText(`Mô tả ngắn ${XA_PHONG.name}`)).toBeVisible({ timeout: 15_000 });
     await expect
       .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('tubu_recently_viewed') ?? '[]').map((x: { slug: string }) => x.slug)), { timeout: 15_000 })
@@ -170,7 +170,7 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     mockDiscovery(api);
     await page.goto('/');
     const best = page.getByRole('region', { name: 'Bán chạy', exact: true });
-    await best.getByRole('button', { name: XA_PHONG.name }).click({ timeout: 15_000 });
+    await best.getByRole('button', { name: XA_PHONG.name, exact: true }).click({ timeout: 15_000 });
     await expect(page.getByText(`Mô tả ngắn ${XA_PHONG.name}`)).toBeVisible({ timeout: 15_000 });
     await flushEvents(page);
     await expect.poll(() => api.callsTo('POST', '/events').length, { timeout: 15_000 }).toBeGreaterThan(0);

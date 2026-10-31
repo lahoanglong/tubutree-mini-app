@@ -1,3 +1,6 @@
+import type { CardVariant } from '@tubutree/app-core/commerce/product-card-view';
+import { tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
+
 /**
  * Skeleton loading theo spec §7.7: first-load dùng skeleton match đúng layout cuối,
  * KHÔNG spinner toàn màn hình. Shimmer 1.4s định nghĩa trong tokens.css.
@@ -19,26 +22,65 @@ export function Skeleton({ width = '100%', height = 16, radius, style }: Skeleto
   );
 }
 
-/** Skeleton 1 thẻ sản phẩm — khớp layout ProductCard (ảnh 1:1 + 3 dòng). */
-export function ProductCardSkeleton() {
+export interface ProductTileSkeletonProps {
+  variant?: CardVariant;
+  /** Có dòng nhãn hiệu không (mặc định theo biến thể, như thẻ thật). */
+  brand?: boolean;
+  note?: boolean;
+  footerHeight?: number;
+}
+
+/**
+ * Khung chờ của ProductTile: thân cao đúng `tileBodyHeight` (cùng số đo app-core với thẻ thật, bài học 4a: khung chờ lệch nội dung thật
+ * làm trang nhảy) và ảnh giữ tỉ lệ 1:1. e2e buy-flow-4b kiểm lệch ≤ 16px nên số đo này là chỗ duy nhất để đổi.
+ */
+export function ProductTileSkeleton({ variant = 'grid', brand, note = false, footerHeight }: ProductTileSkeletonProps) {
+  const hasBrand = brand ?? (variant === 'grid' || variant === 'rail-md');
+  const height = tileBodyHeight(variant, { brand: hasBrand, note, footer: footerHeight });
+  const caption = variant === 'rail-sm' || variant === 'flash';
+  const stacked = variant === 'rail-sm' || variant === 'rail-md' || variant === 'flash' || variant === 'rank';
+  const cardStyle: React.CSSProperties = {
+    background: 'var(--color-bg-surface)',
+    borderRadius: 'var(--radius-card)',
+    overflow: 'hidden',
+    boxShadow: 'var(--elevation-1)',
+  };
+  if (variant === 'line') {
+    return (
+      <div data-testid="catalog-tile-skeleton" aria-hidden="true" style={cardStyle}>
+        <div data-testid="catalog-tile-skeleton-body" style={{ height, padding: TILE_METRICS.inset, boxSizing: 'border-box', display: 'flex', gap: 12, alignItems: 'center' }}>
+          <Skeleton width={64} height={64} radius="var(--radius-media)" style={{ flex: '0 0 auto' }} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Skeleton width="75%" height={14} />
+            <Skeleton width={80} height={TILE_METRICS.price} />
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
-    <div
-      style={{
-        background: 'var(--color-bg-surface)',
-        borderRadius: 'var(--radius-card)',
-        overflow: 'hidden',
-        boxShadow: 'var(--elevation-1)',
-      }}
-    >
+    <div data-testid="catalog-tile-skeleton" aria-hidden="true" style={cardStyle}>
       <Skeleton height="auto" radius="0" style={{ aspectRatio: '1 / 1' }} />
-      <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 7 }}>
-        <Skeleton width={56} height={11} />
-        <Skeleton width="90%" height={13} />
-        <Skeleton width="60%" height={13} />
-        <Skeleton width={80} height={15} />
+      <div data-testid="catalog-tile-skeleton-body" style={{ height, padding: TILE_METRICS.inset, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+        {hasBrand && <Skeleton width={56} height={TILE_METRICS.brand - 4} style={{ marginBottom: 4 }} />}
+        <Skeleton width="90%" height={caption ? TILE_METRICS.nameCaption : TILE_METRICS.name} />
+        <div style={{ marginTop: 'auto', paddingTop: TILE_METRICS.gap }}>
+          <Skeleton width={80} height={TILE_METRICS.price} />
+          {stacked && <Skeleton width={48} height={TILE_METRICS.compare - 4} style={{ marginTop: 2, marginBottom: 2 }} />}
+          {note && <Skeleton width="60%" height={TILE_METRICS.note - 4} style={{ marginTop: 2, marginBottom: 2 }} />}
+          {(variant === 'grid' || variant === 'rail-md' || variant === 'rank') && (
+            <Skeleton width="50%" height={TILE_METRICS.meta - 4} style={{ marginTop: TILE_METRICS.metaGap + 2, marginBottom: 2 }} />
+          )}
+        </div>
+        {footerHeight ? <div style={{ height: footerHeight }} /> : null}
       </div>
     </div>
   );
+}
+
+/** Skeleton 1 thẻ sản phẩm lưới (tên cũ, giữ cho nơi đã gọi): chính là ProductTileSkeleton `grid`. */
+export function ProductCardSkeleton() {
+  return <ProductTileSkeleton variant="grid" />;
 }
 
 /** Grid skeleton 2 cột cho catalog/home. */

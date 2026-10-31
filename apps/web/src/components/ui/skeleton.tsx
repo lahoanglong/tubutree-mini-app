@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { ProductTileSkeleton } from '@/components/mini/skeleton';
 import { GRID_PRODUCTS } from '@/lib/product-grid';
 
 interface SkeletonProps {
@@ -13,19 +14,9 @@ export function Skeleton({ width = '100%', height = 16, rounded = 'rounded-contr
   return <div aria-hidden="true" data-skeleton className={`animate-pulse bg-stone-100 motion-reduce:animate-none ${rounded}`} style={{ width, height, ...style }} />;
 }
 
-/** Một thẻ sản phẩm: ảnh 1:1 và ba dòng chữ. */
+/** Một thẻ sản phẩm: cùng số đo với thẻ thật (`ProductTileSkeleton`), nên trang không nhảy khi dữ liệu về. */
 export function ProductCardSkeleton() {
-  return (
-    <div className="overflow-hidden rounded-card bg-stone-0 shadow-card">
-      <Skeleton height="auto" rounded="rounded-none" style={{ aspectRatio: '1 / 1' }} />
-      <div className="flex flex-col gap-2 p-3">
-        <Skeleton width={56} height={12} />
-        <Skeleton width="90%" height={14} />
-        <Skeleton width="60%" height={14} />
-        <Skeleton width={80} height={16} />
-      </div>
-    </div>
-  );
+  return <ProductTileSkeleton variant="grid" />;
 }
 
 /** Lưới khung chờ: 2 cột trên điện thoại, nhiều cột hơn từ md. */

@@ -148,7 +148,7 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     const grid = (await screen.findByRole('heading', { level: 2, name: 'Sản phẩm' })).parentElement!;
     await waitFor(() => expect(within(grid).getByText('60.000đ')).toBeInTheDocument());
     expect(within(grid).getByText('80.000đ')).toBeInTheDocument();
-    expect(within(grid).getByText(/Giờ vàng/)).toBeInTheDocument();
+    expect(within(grid).getByText('Giờ vàng -25%')).toBeInTheDocument();
     expect(within(grid).queryByText('100.000đ')).toBeNull();
   });
 

@@ -1,6 +1,8 @@
 import type { ProductCard } from '../api/catalog';
 import { fillTemplate } from '../copy-template';
+import { formatVnNumber } from '../number-format';
 import { META_COPY } from './meta-copy';
+import { fillTileCopy } from './tile-copy';
 
 /** 4.8 → "4,8". Rác hoặc không dương → '' (thẻ chưa có đánh giá không in sao). Kẹp trần 5. */
 export function formatRating(avg: number): string {
@@ -34,4 +36,26 @@ export function cardMetaLine(p: Pick<ProductCard, 'ratingAvg' | 'sold'>): string
   const rating = formatRating(p.ratingAvg ?? 0);
   const parts = [rating ? fillTemplate(META_COPY.rating, { avg: rating }) : null, formatSoldShort(p.sold)].filter((x): x is string => x !== null);
   return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+const UNIT: Record<string, number> = { k: 1e3, tr: 1e6, tỷ: 1e9 };
+
+/**
+ * Bản đọc của dòng meta: "★" bị đọc thành "ngôi sao đen" và "1,2k+" thành "một phẩy hai ca cộng" (a11y P2-4, P2-6), nên đọc "4,8 sao, đã bán
+ * hơn 1.200". Số "hơn" suy từ đúng chữ đang hiện (1,2k+ → 1.200) để người nghe và người nhìn nhận cùng một con số. Null khi dòng meta null.
+ */
+export function cardMetaSpoken(p: Pick<ProductCard, 'ratingAvg' | 'sold'>): string | null {
+  const rating = formatRating(p.ratingAvg ?? 0);
+  const shown = soldCountText(p.sold);
+  const parts: string[] = [];
+  if (rating) parts.push(fillTileCopy('meta.ratingSpoken', { avg: rating }));
+  if (shown !== null) {
+    const m = /^([\d,]+)\s?(k|tr|tỷ)\+$/.exec(shown);
+    parts.push(
+      m
+        ? fillTileCopy('meta.soldSpokenOver', { n: formatVnNumber(Math.round(parseFloat(m[1]!.replace(',', '.')) * UNIT[m[2]!]!)) })
+        : fillTileCopy('meta.soldSpoken', { n: shown }),
+    );
+  }
+  return parts.length > 0 ? parts.join(', ') : null;
 }

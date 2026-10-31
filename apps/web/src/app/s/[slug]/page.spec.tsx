@@ -149,9 +149,10 @@ describe('trang gian hàng — kiểu Mini App ở điện thoại', () => {
     mocks.sf = { ...SF, collections: [{ id: 'c1', title: 'Nổi bật', items: [{ id: 'i1', note: 'Mình dùng hằng ngày', product: { ...PRODUCT, reviewCount: 8, ratingAvg: 4.5 } }] }] };
     const box = await html();
     const link = box.querySelector<HTMLAnchorElement>('a[href="/san-pham/binh-nuoc"]')!;
-    expect(link.textContent).toContain('4.5 (8)');
-    expect(link.parentElement!.querySelector('button[aria-label="Thêm yêu thích"]')).not.toBeNull();
-    expect(link.textContent).not.toContain('Mình dùng hằng ngày');
+    const tile = link.closest('[data-ds="product-tile"]')!;
+    expect(tile.textContent).toContain('4,5 sao');
+    expect(tile.querySelector('button[aria-label^="Yêu thích"]')).not.toBeNull();
+    expect(tile.textContent).not.toContain('Mình dùng hằng ngày');
     expect(box.textContent).toContain('Mình dùng hằng ngày');
   });
 

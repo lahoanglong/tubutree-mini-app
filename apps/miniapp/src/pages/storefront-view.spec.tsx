@@ -280,6 +280,6 @@ describe('StorefrontViewPage: giá trong gian hàng khớp trang chủ và web (
     renderPage('abcd1234');
     await waitFor(() => expect(screen.getByText('165.000đ')).toBeInTheDocument());
     expect(screen.getByText('220.000đ')).toBeInTheDocument();
-    expect(screen.getByText(/Giờ vàng/)).toBeInTheDocument();
+    expect(screen.getByText('Giờ vàng -25%')).toBeInTheDocument();
   });
 });
