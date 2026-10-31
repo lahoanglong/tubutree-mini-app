@@ -17,7 +17,7 @@ const COLLAPSED_LINES_THRESHOLD = 220;
 export function PdpRating({ average, count }: { average: number | undefined; count: number | undefined }) {
   if (!count || count <= 0 || average == null) return null;
   return (
-    <p data-testid="pdp-rating" className="mt-1.5 flex items-center gap-1.5 text-sm text-stone-600">
+    <p data-testid="pdp-rating" className="flex items-center gap-1.5 text-sm text-stone-600">
       <span role="img" aria-label={`${average.toFixed(1)} trên 5 sao`} className="flex">
         {[1, 2, 3, 4, 5].map((n) => (
           <Star key={n} aria-hidden="true" className={`h-3.5 w-3.5 ${n <= Math.round(average) ? 'fill-promo-solid text-promo-solid' : 'text-stone-300'}`} />
@@ -59,7 +59,7 @@ export function PdpPromises({ children }: { children?: React.ReactNode }) {
   const { returnWindowDays } = usePublicConfig();
   const promises = ['Hàng chính hãng — nguồn gốc rõ ràng', returnsPromise(returnWindowDays), 'Sản phẩm xanh, an lành cho cả nhà'].filter((t): t is string => t !== null);
   return (
-    <section className="mt-8">
+    <section id="pdp-promises" className="mt-8 scroll-mt-20">
       <h2 className={pdpSectionTitle}>Cam kết Tubu</h2>
       <ul className="mt-2 flex flex-col gap-1.5">
         {promises.map((t) => (

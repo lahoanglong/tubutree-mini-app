@@ -17,6 +17,8 @@ export interface FlashSaleActiveItem {
   endAt: string;
   /** Giờ máy chủ lúc dựng danh sách; thiếu thì app dùng đồng hồ máy khách. */
   serverNow?: string;
+  /** Giới hạn mua mỗi khách (PDP ghi "Mỗi khách tối đa {n}"); API chưa gửi tới khi P12 làm `listActive`, thiếu thì không hiện dòng. */
+  perUserLimit?: number;
 }
 export const fetchActiveFlashSales = async (http: HttpClient) => {
   const items = await http.get<FlashSaleActiveItem[]>('/flash-sales/active', { anonymous: true });

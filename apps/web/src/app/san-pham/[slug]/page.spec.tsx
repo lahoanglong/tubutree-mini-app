@@ -17,7 +17,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getProduct: async () => api.product,
 }));
-vi.mock('@/components/add-to-cart', () => ({ default: () => null }));
+vi.mock('@/components/add-to-cart', () => ({ default: () => <div data-testid="add-to-cart" /> }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: async () => Promise.reject(new Error('offline')), post: vi.fn() } }));
 vi.mock('@/lib/core-http-server', () => ({
   createServerHttp: () => ({
@@ -325,6 +325,35 @@ describe('/san-pham/[slug] — ai giao hàng (R2-MERCHANT-7, R2-BUYERWEB-10)', (
   });
 });
 
+describe('/san-pham/[slug] — dòng "Vận chuyển ›" ngắn, lưu ý dài nằm ngoài nút', () => {
+  const asButton = (el: Element | null) => el?.closest('[role="button"]') ?? null;
+
+  it('hàng Tubu giao hộ đối tác: dòng bấm được chứa ai giao, lời báo giá lẻ là chữ thường dưới dòng', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'TUBU', partnerOwned: true, fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } };
+    const c = await mount();
+    const row = asButton(c.querySelector('[data-testid="pdp-fulfiller"]'))!;
+    expect(row).not.toBeNull();
+    expect(row.textContent).not.toContain('không dùng Điểm Xanh');
+    expect(asButton(c.querySelector('[data-testid="pdp-partner-note"]'))).toBeNull();
+  });
+
+  it('hàng gian hàng tự giao: dòng chỉ để đọc (không nút, không "›"), không có Cam kết Tubu để cuộn tới', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'MERCHANT', name: 'Gốm Minh An', shippingFee: 30000, freeShipFrom: null } };
+    const c = await mount();
+    expect(asButton(c.querySelector('[data-testid="pdp-fulfiller"]'))).toBeNull();
+    expect(asButton(c.querySelector('[data-testid="pdp-partner-note"]'))).toBeNull();
+  });
+
+  it('gian hàng tạm nghỉ: thông báo role=status không nằm trong nút nào, và không còn dòng Vận chuyển rỗng', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null } };
+    const c = await mount();
+    const note = c.querySelector('[data-testid="pdp-unavailable"]')!;
+    expect(note.getAttribute('role')).toBe('status');
+    expect(asButton(note)).toBeNull();
+    expect(Array.from(c.querySelectorAll('[role="button"]')).some((b) => b.textContent?.startsWith('Vận chuyển'))).toBe(false);
+  });
+});
+
 describe('/san-pham/[slug] — gian hàng tạm nghỉ hoặc đã ngừng bán (R3-MERCHANT-3)', () => {
   it('gian hàng tạm nghỉ: báo rõ chưa nhận đơn, không còn dòng phí giao/thanh toán', async () => {
     api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null } };
@@ -359,12 +388,16 @@ describe('/san-pham/[slug] — giá Giờ vàng khớp giỏ và đơn (R4-BUYER
     expect(c.querySelector('[data-testid="pdp-flash-badge"]')).toBeNull();
   });
 
-  it('có đợt Giờ vàng: giá Giờ vàng, giá đang bán gạch ngang và nhãn "Giờ vàng -20%"', async () => {
+  it('có đợt Giờ vàng: thanh Giờ vàng dưới ảnh có giá Giờ vàng, giá đang bán gạch ngang và -20%; giá lớn đầu trang không lặp lại', async () => {
     api.flash = [FLASH];
     const c = await mount();
-    expect(c.querySelector('[data-testid="pdp-price"]')!.textContent).toBe('120.000đ');
-    expect(c.querySelector('[data-testid="pdp-flash-badge"]')!.textContent).toContain('Giờ vàng -20%');
-    expect(Array.from(c.querySelectorAll('.line-through')).map((e) => e.textContent)).toContain('150.000đ');
+    const bar = c.querySelector('[data-testid="flash-price-bar"]')!;
+    expect(bar.textContent).toContain('120.000đ');
+    expect(bar.textContent).toContain('150.000đ');
+    expect(bar.textContent).toContain('-20%');
+    expect(bar.querySelector('[role="timer"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="pdp-price"]')).toBeNull();
+    expect(c.querySelector('[data-testid="pdp-flash-badge"]')).toBeNull();
   });
 });
 
@@ -435,13 +468,13 @@ describe('/san-pham/[slug] — đủ chức năng như Mini App', () => {
     expect(Array.from(c2.querySelectorAll('h2')).map((h) => h.textContent)).not.toContain('Thành phần');
   });
 
-  it('dải Thường mua kèm và Cùng nhà thương hiệu lấy từ server (ISR), trỏ tới trang sản phẩm', async () => {
+  it('dải Khách thường mua cùng và Cùng nhà thương hiệu lấy từ server (ISR), trỏ tới trang sản phẩm', async () => {
     api.related = [card(1)];
-    api.together = [card(2)];
+    api.together = [card(2), card(3), card(4)];
     const c = await mount();
     await flush();
     const h2 = Array.from(c.querySelectorAll('h2')).map((h) => h.textContent);
-    expect(h2).toEqual(expect.arrayContaining(['Thường mua kèm', 'Cùng nhà Xanh Việt']));
+    expect(h2).toEqual(expect.arrayContaining(['Khách thường mua cùng', 'Cùng nhà Xanh Việt']));
     expect(Array.from(c.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(expect.arrayContaining(['/san-pham/sp-1', '/san-pham/sp-2']));
   });
 
@@ -450,6 +483,98 @@ describe('/san-pham/[slug] — đủ chức năng như Mini App', () => {
     const c = await mount();
     await flush();
     expect(c.querySelector('h1')!.textContent).toBe('Dầu gội bồ kết');
-    expect(Array.from(c.querySelectorAll('h2')).map((h) => h.textContent)).not.toContain('Thường mua kèm');
+    expect(Array.from(c.querySelectorAll('h2')).map((h) => h.textContent)).not.toContain('Khách thường mua cùng');
+  });
+});
+
+describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () => {
+  const FLASH = { itemId: 'f1', variationId: 'v1', productSlug: 'dau-goi-bo-ket', flashPrice: 120000, retailPrice: 200000, salePrice: 150000, soldCount: 1, quota: 10, endAt: '2099-10-14T16:00:00.000Z' };
+
+  it('ảnh và thông tin nằm trong một thẻ (PdpLayout), cột thông tin không dính và không tự cuộn riêng', async () => {
+    const c = await mount();
+    const card = c.querySelector('[data-testid="pdp-card"]')!;
+    expect(card.querySelector('[data-testid="pdp-info"]')).not.toBeNull();
+    expect(card.querySelector('[aria-roledescription="carousel"]')).not.toBeNull();
+    expect(card.className).toContain('lg:grid-cols-[440px_minmax(0,1fr)]');
+    expect(c.innerHTML).not.toMatch(/lg:sticky|overflow-y-auto/);
+  });
+
+  it('thanh Giờ vàng nằm ngay dưới ảnh, trước khối thông tin', async () => {
+    api.flash = [FLASH];
+    const c = await mount();
+    const bar = c.querySelector('[data-testid="flash-price-bar"]')!;
+    const gallery = c.querySelector('[aria-roledescription="carousel"]')!;
+    const info = c.querySelector('[data-testid="pdp-info"]')!;
+    expect(gallery.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(bar.compareDocumentPosition(info) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('một dòng "Vận chuyển ›" gom giao hàng và freeship; hàng Tubu ghi Tubu Tree giao hàng', async () => {
+    api.product = { ...PRODUCT, fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
+    const c = await mount();
+    const row = Array.from(c.querySelectorAll<HTMLElement>('[role="button"]')).find((b) => b.textContent?.startsWith('Vận chuyển'))!;
+    expect(row).toBeDefined();
+    expect(row.querySelector('[data-testid="pdp-fulfiller"]')!.textContent).toContain('Tubu Tree giao hàng');
+    expect(row.querySelector('svg')).not.toBeNull();
+  });
+
+  it('Đánh giá nhanh: 2 đánh giá có chữ ngay trên danh sách đầy đủ', async () => {
+    const c = await mount();
+    await flush();
+    expect(c.querySelectorAll('[data-testid="quick-review"]')).toHaveLength(2);
+    const quick = c.querySelector('section[aria-label="Đánh giá nhanh"]')!;
+    const full = c.querySelector('#danh-gia')!;
+    expect(quick.compareDocumentPosition(full) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('thứ tự như Mini App (Q8): khối mua → Đánh giá nhanh → Thành phần, Cam kết, Mô tả → danh sách đầy đủ', async () => {
+    api.product = { ...PRODUCT, ingredients: [{ name: 'Bồ kết', percentage: null, benefit: null }] };
+    const c = await mount();
+    await flush();
+    const after = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const info = c.querySelector('[data-testid="pdp-info"]')!;
+    const quick = c.querySelector('section[aria-label="Đánh giá nhanh"]')!;
+    const ingredients = Array.from(c.querySelectorAll('h2')).find((h) => h.textContent === 'Thành phần')!;
+    expect(ingredients).toBeDefined();
+    expect(after(info, quick)).toBe(true);
+    expect(after(quick, ingredients)).toBe(true);
+    expect(after(quick, c.querySelector('#pdp-promises')!)).toBe(true);
+    expect(after(quick, c.querySelector('#pdp-description')!)).toBe(true);
+  });
+
+  it('Giờ vàng: "Đã bán" dời lên dòng đánh giá (dòng giá trống); hết Giờ vàng thì về dòng giá', async () => {
+    api.product = { ...PRODUCT, sold: 12 };
+    api.flash = [FLASH];
+    const c = await mount();
+    const sold = () => Array.from(c.querySelectorAll('span')).filter((s) => s.textContent === 'Đã bán 12');
+    expect(sold()).toHaveLength(1);
+    expect(sold()[0]!.parentElement).toBe(c.querySelector('[data-testid="pdp-rating"]')!.parentElement);
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    api.flash = [];
+    const c2 = await mount();
+    const sold2 = Array.from(c2.querySelectorAll('span')).filter((s) => s.textContent === 'Đã bán 12');
+    expect(sold2).toHaveLength(1);
+    expect(sold2[0]!.parentElement).not.toBe(c2.querySelector('[data-testid="pdp-rating"]')!.parentElement);
+  });
+
+  it('máy tính: khối mua đứng trước chứng nhận và "Đặt định kỳ" trong HTML (nút mua nằm trong 1280×800); điện thoại kéo hai khối đó lên bằng order', async () => {
+    const c = await mount();
+    const after = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const add = c.querySelector('[data-testid="add-to-cart"]')!;
+    const certs = c.querySelector('[data-testid="pdp-certs"]')!;
+    const subscribe = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Đặt định kỳ'))!;
+    expect(subscribe).toBeDefined();
+    expect(after(add, certs)).toBe(true);
+    expect(after(add, subscribe)).toBe(true);
+    // Điện thoại giữ thứ tự cũ như Mini App: chứng nhận (order 0) → Đặt định kỳ (1) → khối mua (2).
+    expect(certs.className).not.toMatch(/order-/);
+    expect(subscribe.closest('.max-md\\:order-1')).not.toBeNull();
+    expect(add.parentElement!.className).toContain('max-md:order-2');
+  });
+
+  it('chưa có Combo/Mua kèm (P15 điền): không có khối giữ chỗ', async () => {
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-bundle-slots"]')).toBeNull();
   });
 });

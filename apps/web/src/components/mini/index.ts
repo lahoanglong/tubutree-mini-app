@@ -33,6 +33,8 @@ export { TierBadge } from './tier-badge';
 export { BottomSheet, Dialog } from './bottom-sheet';
 export { Countdown } from './countdown';
 export type { CountdownProps } from './countdown';
+export { FlashPriceBar } from './flash-price-bar';
+export type { FlashPriceBarProps } from './flash-price-bar';
 export { FlashSoldBar } from './flash-sold-bar';
 export type { FlashSoldBarProps } from './flash-sold-bar';
 export { SectionHeader } from './section-header';

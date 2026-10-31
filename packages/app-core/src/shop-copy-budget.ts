@@ -162,6 +162,14 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'addon.cartLine': null,
   'addon.lost': null,
   'pdp.boughtTogether': null,
+  'pdp.offers': 12,
+  'pdp.shipping': 12,
+  'pdp.variation': 12,
+  'pdp.reviews': 12,
+  'pdp.reviewsAll': 18,
+  'pdp.alsoLike': 24,
+  'pdp.offerCount': 20,
+  'cart.saving': 20,
 
   // Bộ thành phần section-kit
   'section.seeAll': 10,

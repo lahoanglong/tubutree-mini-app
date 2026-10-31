@@ -314,13 +314,13 @@ describe('/gio-hang — chọn món để thanh toán một phần giỏ (R2-BUY
 });
 
 describe('/gio-hang — dòng giá Giờ vàng (R4-BUYER-4)', () => {
-  it('dòng đang tính giá Giờ vàng được ghi nhãn "Giá Giờ vàng" cạnh giá, dòng thường thì không', async () => {
+  it('dòng đang tính giá Giờ vàng được ghi nhãn "Giờ vàng" (như Mini App), dòng thường thì không', async () => {
     state.cart = cartOf([line({ unitPrice: 79000, isFlash: true }), line({ id: 'i2', variationId: 'v2', productName: 'Xà bông' })]);
     const { container } = await mount();
     const badges = container.querySelectorAll('[data-testid="cart-flash-badge"]');
     expect(badges).toHaveLength(1);
-    expect(badges[0]!.textContent).toContain('Giá Giờ vàng');
-    expect(badges[0]!.closest('div')!.textContent).toContain('79.000đ');
+    expect(badges[0]!.textContent).toBe('Giờ vàng');
+    expect(badges[0]!.closest('[data-testid="cart-line"]')!.textContent).toContain('79.000đ');
   });
 
   it('vượt giới hạn mua Giờ vàng: hiện câu giải thích của server, dòng tính giá thường không có nhãn', async () => {
@@ -566,5 +566,32 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
       expect(container.textContent).not.toContain('-3.000đ');
       expect(container.textContent).toContain('Tổng200.000đ');
     });
+  });
+});
+
+describe('/gio-hang — giá gạch, Tiết kiệm, Countdown Giờ vàng (P8)', () => {
+  it('dòng có giá niêm yết cao hơn giá bán: gạch giá niêm yết cạnh giá bán; khung tóm tắt và thanh dính ghi Tiết kiệm đúng số', async () => {
+    state.cart = cartOf([line({ unitPrice: 33000, listUnitPrice: 50000, quantity: 2, total: 66000 })]);
+    const { container } = await mount();
+    const strike = container.querySelector('.line-through');
+    expect(strike!.textContent).toBe('50.000đ');
+    expect(strike!.parentElement!.textContent).toContain('33.000đ');
+    const saving = Array.from(container.querySelectorAll('[data-testid="cart-saving"]')).map((e) => e.textContent);
+    expect(saving.length).toBeGreaterThanOrEqual(2);
+    expect(saving.every((t) => t === 'Tiết kiệm 34.000đ')).toBe(true);
+  });
+
+  it('thiếu listUnitPrice (API cũ), bằng hoặc thấp hơn giá bán: không gạch, không Tiết kiệm', async () => {
+    state.cart = cartOf([line({}), line({ id: 'i2', variationId: 'v2', listUnitPrice: 150000 }), line({ id: 'i3', variationId: 'v3', listUnitPrice: 100000 })]);
+    const { container } = await mount();
+    expect(container.querySelector('.line-through')).toBeNull();
+    expect(container.textContent).not.toContain('Tiết kiệm');
+  });
+
+  it('dòng Giờ vàng có giờ kết thúc: "Kết thúc sau …" (role timer) thay cho "Đã bán %"', async () => {
+    state.cart = cartOf([line({ isFlash: true, soldPct: 98, flashEndAt: new Date(Date.now() + 2 * 3_600_000 + 30_000).toISOString() })]);
+    const { container } = await mount();
+    expect(container.querySelector('[role="timer"]')!.textContent).toContain('Kết thúc sau 2 giờ 00 phút');
+    expect(container.textContent).not.toMatch(/Đã bán \d+%/);
   });
 });

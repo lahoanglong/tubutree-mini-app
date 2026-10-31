@@ -156,6 +156,15 @@ export const SHOP_COPY: Record<string, string> = {
   'addon.cartLine': 'Ưu đãi mua kèm',
   'addon.lost': 'Đã bỏ giá mua kèm vì {name} không còn trong giỏ',
   'pdp.boughtTogether': 'Khách thường mua cùng',
+  // PDP và giỏ (P8)
+  'pdp.offers': 'Ưu đãi',
+  'pdp.shipping': 'Vận chuyển',
+  'pdp.variation': 'Phân loại',
+  'pdp.reviews': 'Đánh giá',
+  'pdp.reviewsAll': 'Xem tất cả ({n})',
+  'pdp.alsoLike': 'Có thể bạn cũng thích',
+  'pdp.offerCount': '{n} mã giảm giá',
+  'cart.saving': 'Tiết kiệm {x}',
 
   // Bộ thành phần section-kit (SectionHeader, SortBar, ComboCard)
   'section.seeAll': 'Xem tất cả',

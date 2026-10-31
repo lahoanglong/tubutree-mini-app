@@ -149,23 +149,26 @@ describe('Chi tiết sản phẩm — vùng cuộn ngang focus được (axe scr
     expect(gallery).not.toHaveAttribute('tabindex');
   });
 
-  it('hàng mã giảm giá là vùng cuộn có tên; mỗi mã là nút Tab tới được', async () => {
-    mockOverflow(1012, 358);
-    renderPdp();
-    const row = await screen.findByRole('region', { name: 'Mã giảm giá có thể dùng' });
-    expect(row.className).toContain('scroll-x');
-    const chips = within(row).getAllByRole('button');
-    expect(chips.map((c) => c.getAttribute('aria-label'))).toEqual(['Sao chép mã GIAM10', 'Sao chép mã FREESHIP']);
-    for (const c of chips) expect(c.tabIndex).toBe(0);
-    // Bên trong đã có nút focus được nên hàng không thêm điểm dừng Tab riêng.
-    expect(row).not.toHaveAttribute('tabindex');
-  });
-
-  it('Enter và Space trên một mã sao chép đúng mã đó (bàn phím dùng được như chạm)', async () => {
+  it('mã giảm giá không còn là hàng cuộn ngang: dòng "Ưu đãi ›" là nút Tab tới được, mở hộp thoại có mỗi mã một nút "Sao chép"', async () => {
     const user = userEvent.setup();
     renderPdp();
-    const chip = await screen.findByRole('button', { name: 'Sao chép mã GIAM10' });
-    chip.focus();
+    const row = await screen.findByRole('button', { name: /Ưu đãi/ });
+    expect(screen.queryByRole('region', { name: 'Mã giảm giá có thể dùng' })).toBeNull();
+    expect(row.tabIndex).toBe(0);
+    await user.click(row);
+    const dialog = await screen.findByRole('dialog', { name: 'Mã giảm giá' });
+    const buttons = within(dialog).getAllByRole('button', { name: 'Sao chép' });
+    expect(buttons).toHaveLength(2);
+    for (const b of buttons) expect(b.tabIndex).toBe(0);
+  });
+
+  it('Enter và Space trên nút "Sao chép" của một mã chép đúng mã đó (bàn phím dùng được như chạm)', async () => {
+    const user = userEvent.setup();
+    renderPdp();
+    await user.click(await screen.findByRole('button', { name: /Ưu đãi/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mã giảm giá' });
+    const [first] = within(dialog).getAllByRole('button', { name: 'Sao chép' });
+    first!.focus();
     await user.keyboard('{Enter}');
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('GIAM10'));
     await user.keyboard(' ');

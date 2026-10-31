@@ -339,6 +339,7 @@ test.describe('Web khách: trang sản phẩm', () => {
     api.get(`/products/${p.slug}`, { variations: p.variations });
     api.get(`/products/${p.slug}/related`, []);
     api.get(`/products/${p.slug}/bought-together`, []);
+    api.get('/products/for-you', []);
     api.get(`/products/${p.slug}/reviews`, { average: 0, count: 0, videoCount: 0, distribution: {}, items: [] });
     api.get('/me/wishlist/ids', []);
     api.get('/me/coupons', over.coupons ?? [
@@ -382,7 +383,7 @@ test.describe('Web khách: trang sản phẩm', () => {
     api.get('/group-buy', [group('g1')]);
     api.get('/group-buy/g1', group('g1', { isOwner: true, joined: true }));
     await page.goto(`/san-pham/${p!.slug}`);
-    await expect(page.getByRole('button', { name: 'Sao chép mã GIAM20' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Ưu đãi/ })).toBeVisible();
     const call = async () => {
       const created = api.waitForCall('POST', '/group-buy');
       await page.getByRole('button', { name: /Mở nhóm mua chung/ }).click();
@@ -443,7 +444,10 @@ test.describe('Web khách: trang sản phẩm', () => {
     });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/san-pham/${p!.slug}`);
-    await expect(page.getByRole('button', { name: 'Sao chép mã SINHNHATXANH' })).toBeVisible();
+    // Mã gom về dòng "Ưu đãi ›"; mở hộp thoại thì mã dài nhất vẫn nằm gọn trong khung 390.
+    await page.getByRole('button', { name: /Ưu đãi/ }).click();
+    const sheet = page.getByRole('dialog', { name: 'Mã giảm giá' });
+    await expect(sheet.getByText('SINHNHATXANH')).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
     const box = await page.getByRole('button', { name: 'Chia sẻ', exact: true }).boundingBox();

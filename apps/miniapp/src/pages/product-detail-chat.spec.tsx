@@ -54,6 +54,8 @@ const product = {
   images: [], thumbnail: null, basePrice: 75_000, salePrice: null, certifications: [], ingredients: null, sold: 0, variations,
 };
 const related = { id: 'p2', slug: 'nuoc-rua', brand: 'Cô Lan', name: 'Nước rửa chén', thumbnail: null, basePrice: 65_000, salePrice: null, sold: 0 };
+// Dải "Khách thường mua cùng" ẩn khi dưới 3 món (kệ pdp.boughtTogether) và không trùng "Cùng nhà".
+const together = ['p3', 'p4', 'p5'].map((id) => ({ ...related, id, slug: id, name: `Mua cùng ${id}` }));
 
 function renderPdp() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -176,7 +178,7 @@ describe('ProductDetailPage — tên SP và tiêu đề mục cùng một kiểu
     mocks.hasOA = false;
     mocks.fetchProduct.mockResolvedValue(product);
     mocks.fetchRelated.mockResolvedValue([related]);
-    mocks.fetchBoughtTogether.mockResolvedValue([related]);
+    mocks.fetchBoughtTogether.mockResolvedValue(together);
   });
 
   it('tên SP là h1 đậm 600, cỡ title-md của DS (lớn hơn tiêu đề mục)', async () => {
@@ -187,7 +189,7 @@ describe('ProductDetailPage — tên SP và tiêu đề mục cùng một kiểu
     expect(h1.style.fontFamily).toBe('var(--font-ui)');
   });
 
-  it.each(['Phân loại', 'Cam kết Tubu', 'Mô tả sản phẩm', 'Thường mua kèm', 'Cùng nhà Cô Lan'])(
+  it.each(['Cam kết Tubu', 'Mô tả sản phẩm', 'Khách thường mua cùng', 'Cùng nhà Cô Lan'])(
     'tiêu đề mục "%s" là h2 Inter 16/600 (title-sm)',
     async (title) => {
       renderPdp();

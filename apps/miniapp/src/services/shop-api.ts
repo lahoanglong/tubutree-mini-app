@@ -84,6 +84,8 @@ export interface CartLine {
   slug: string;
   thumbnail: string | null;
   unitPrice: number;
+  /** Giá niêm yết của dòng (đã tính theo phân loại); lớn hơn `unitPrice` thì giỏ gạch giá và ghi Tiết kiệm. API cũ chưa trả. */
+  listUnitPrice?: number | null;
   quantity: number;
   stock: number;
   weight?: number | null;
@@ -427,6 +429,8 @@ export interface FlashSaleActiveItem {
   endAt: string;
   /** Giờ máy chủ lúc dựng danh sách; thiếu thì app dùng đồng hồ điện thoại. */
   serverNow?: string;
+  /** Giới hạn mua mỗi khách; API chưa gửi tới khi P12 làm `listActive`. */
+  perUserLimit?: number;
 }
 export const fetchActiveFlashSales = async () => {
   const items = (await takePublicBlock('flashActive')) ?? (await api.get<FlashSaleActiveItem[]>('/flash-sales/active')).data;
