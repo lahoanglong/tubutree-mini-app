@@ -153,10 +153,21 @@ describe('chế độ hub / danh sách (tham số all)', () => {
     expect(next('sort=newest', { ...CLEAR_SEARCH_PATCH })).toBe('sort=newest');
   });
 
-  it('activeFilterChips omitScope: tên danh mục/phân khúc đã ở tiêu đề nên không lặp thành chip', () => {
+  it('activeFilterChips titleScope: chỉ phạm vi đang làm tiêu đề mới bị bỏ chip, phạm vi khác vẫn hiện', () => {
     const s = { ...EMPTY_SEARCH_STATE, category: 'cat-a', segment: 'eco', brands: ['Tubu'] };
-    const labels = (omitScope: boolean) => activeFilterChips(s, { categoryName: 'Da', segmentName: 'Sống xanh' }, { omitScope }).map((c) => c.label);
-    expect(labels(false)).toEqual(['Da', 'Sống xanh', 'Tubu']);
-    expect(labels(true)).toEqual(['Tubu']);
+    const names = { categoryName: 'Da', segmentName: 'Sống xanh' };
+    const labels = (titleScope: 'category' | 'segment' | 'brand' | null) => activeFilterChips(s, names, { titleScope }).map((c) => c.label);
+    expect(labels(null)).toEqual(['Da', 'Sống xanh', 'Tubu']);
+    expect(labels('category')).toEqual(['Sống xanh', 'Tubu']);
+    expect(labels('segment')).toEqual(['Da', 'Tubu']);
+    expect(labels('brand')).toEqual(['Da', 'Sống xanh']);
+  });
+
+  it('activeFilterChips: nhiều nhãn thì nhãn không thể là tiêu đề, giữ đủ chip; danh mục chưa có tên thì chưa hiện, có nhãn dự phòng thì hiện', () => {
+    const many = { ...EMPTY_SEARCH_STATE, brands: ['Tubu', 'Mộc An'] };
+    expect(activeFilterChips(many, {}, { titleScope: 'brand' }).map((c) => c.label)).toEqual(['Tubu', 'Mộc An']);
+    const lost = { ...EMPTY_SEARCH_STATE, category: 'cat-xoa' };
+    expect(activeFilterChips(lost, {}, { titleScope: null })).toEqual([]);
+    expect(activeFilterChips(lost, { categoryName: 'Danh mục' }, { titleScope: null }).map((c) => c.patch)).toEqual([{ category: undefined }]);
   });
 });

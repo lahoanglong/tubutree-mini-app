@@ -113,14 +113,14 @@ test.describe('Danh mục — hub', () => {
     await expect.poll(async () => Math.abs((await scrollerOf(page).evaluate((el) => el.scrollTop)) - y), { timeout: 10_000 }).toBeLessThanOrEqual(4);
   });
 
-  test('vùng chạm: ô danh mục cao ≥ 88 và rộng ≥ 44; nút "Xem tất cả sản phẩm" cao ≥ 44; không tràn ngang', async ({ page, api }) => {
+  test('vùng chạm: ô danh mục cao ≥ 102 (cùng khung chờ) và rộng ≥ 44; nút "Xem tất cả sản phẩm" cao ≥ 44; không tràn ngang', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/browse');
     const cats = hubTiles(page);
     await expect(cats.getByRole('button', { name: 'Tất cả' })).toBeVisible({ timeout: 15_000 });
     for (const tile of await cats.getByRole('button').all()) {
       const box = (await tile.boundingBox())!;
-      expect(box.height).toBeGreaterThanOrEqual(88);
+      expect(box.height).toBeGreaterThanOrEqual(102); // đặt chỗ cho nhãn 2 dòng: bằng khung chờ, hàng không nhảy khi dữ liệu về
       expect(box.width).toBeGreaterThanOrEqual(44);
     }
     await page.getByRole('button', { name: 'Xem tất cả sản phẩm' }).scrollIntoViewIfNeeded();

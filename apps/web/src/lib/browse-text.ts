@@ -17,6 +17,7 @@ export function formatVndShort(amount: number): string {
 
 export const browseText = {
   title: 'Danh mục',
+  viewBrand: (brand: string) => `Xem trang thương hiệu ${brand}`,
   searchPlaceholder: 'Tìm sản phẩm...',
   searchLabel: 'Tìm sản phẩm',
   clearSearch: 'Xoá từ khoá',

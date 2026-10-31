@@ -235,6 +235,14 @@ Lệnh kiểm một file: `cd packages/app-core && npx vitest run src/<đường
 - **SEO web:** `/san-pham` gốc không còn liệt kê toàn bộ sản phẩm (hub chỉ có liên kết Bán chạy, ô danh mục là nút); `?all=1` vào `NOINDEX_PARAMS`; `?page=N` canonical lấy từ phân trang.
 - **Chưa chạy ở máy:** `shop.web.spec.ts` và `pdp-mobile.web.spec.ts` cần API thật, để CI.
 
+### Sửa sau review (đợt 3)
+
+- **Khung chờ ô danh mục khớp ô thật:** `HUB_TILE_HEIGHT = 102` (đặt chỗ cho nhãn 2 dòng) dùng cho cả `min-height` của ô lẫn khung chờ; `hubPlaceholderTiles(n)` chặn ở `HUB_CATEGORY_MAX` rồi cộng ô "Tất cả" (trước đây 12 danh mục gốc vẽ 13 khung chờ rồi co còn 9 ô). Ô một dòng nay cũng cao 102 (trước 88).
+- **Đổi sắp xếp/lọc/gửi từ khoá giữa lưới sâu về đầu danh sách:** `scrollDeltaToListTop` (app-core `browse/scroll.ts`) so điểm đánh dấu đặt ngay trước SortBar với vạch dính; chỉ cuộn NGƯỢC, khách ở gần đầu trang không bị kéo. Mini đặt `scrollTop` của `.zaui-page`, web `window.scrollBy`. Gọi trong `updateList` và `commit`; chưa xử lý hub -> danh sách bằng gửi từ khoá khi đã cuộn sâu ở hub (điểm đánh dấu chưa có trong DOM).
+- **Chip không lặp tiêu đề:** `activeFilterChips(s, names, { titleScope })` thay `omitScope`: chỉ phạm vi đang làm tiêu đề (`category` | `segment` | `brand`) bị bỏ chip. `?brand=Tubu` nay có tiêu đề "Tubu" và không còn chip "Bỏ lọc Tubu" (gỡ qua nút Lọc); hai nhãn trở lên giữ đủ chip. Danh mục không có trong cây (đã tải xong) hiện chip "Danh mục" để khách thấy và gỡ được.
+- **Chọn danh mục trong gợi ý ở hub là PUSH** (như chạm ô danh mục: Back về hub); trong danh sách vẫn replace.
+- **Chữ:** "Xem trang thương hiệu {brand}" (Mini `vi.browse.viewBrand`, web `browseText.viewBrand`), bỏ "nhãn hàng" theo Q5.
+
 ### Bẫy khi dựng lại ảnh chụp
 
 - `.scroll-x` (mini.css và tokens.css) có `max-width: 100%`: dòng `-mx-4` trên web bị chặn ở 343px. Hàng cuộn tràn mép phải đặt `maxWidth: 'none'` ở style.

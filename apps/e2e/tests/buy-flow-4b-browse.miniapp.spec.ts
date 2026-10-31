@@ -153,7 +153,9 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     });
     await expect(page).toHaveURL(/\/browse\?brand=Tubu&minPrice=100000&maxPrice=200000&inStock=1&rating=4$/, { timeout: 15_000 });
     await expect(page.getByTestId('result-count')).toHaveText('1 sản phẩm', { timeout: 15_000 });
-    await expect(page.getByRole('button', { name: 'Bỏ lọc Tubu' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Tubu' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Bỏ lọc Tubu' })).toHaveCount(0); // tên thương hiệu đã là tiêu đề, không lặp thành chip
+    await expect(page.getByRole('button', { name: 'Bỏ lọc Còn hàng' })).toBeVisible();
     await expect(filterButton(page, 4)).toHaveText('Lọc (4)');
 
     await flushEvents(page);
@@ -228,6 +230,26 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     await expect(tile).toBeInViewport(); // đúng chỗ cũ: thẻ vừa bấm đang nằm trong màn hình
   });
 
+  test('Đổi sắp xếp khi đang cuộn sâu: về đầu danh sách, thẻ đầu nằm dưới thanh sắp xếp (không bị hai thanh dính che)', async ({ page, api }) => {
+    mockDiscovery(api);
+    await page.goto('/browse?segment=eco');
+    await expect(page.getByTestId('result-count')).toHaveText('26 sản phẩm', { timeout: 15_000 });
+    await page.getByRole('button', { name: 'Túi Vải Canvas Tubu số 12', exact: true }).scrollIntoViewIfNeeded();
+    expect(await scrollTopOf(scrollerOf(page))).toBeGreaterThan(300); // đã cuộn sâu thật
+
+    const sortGroup = page.getByRole('group', { name: SORT_GROUP });
+    await sortGroup.getByRole('button', { name: /^Giá/ }).click();
+    await expect(page).toHaveURL(/\/browse\?segment=eco&sort=price_asc$/, { timeout: 15_000 });
+    await waitBrowseSettled(page, api);
+    await expect(tilesOf(page).first()).toBeVisible();
+
+    const bar = await sortGroup.boundingBox();
+    const first = await tilesOf(page).first().boundingBox();
+    expect(bar && first).toBeTruthy();
+    expect(first!.y).toBeGreaterThanOrEqual(bar!.y + bar!.height - 1); // thẻ đầu không nằm khuất sau thanh sắp xếp dính
+    expect(first!.y).toBeLessThan(page.viewportSize()!.height); // và đang trong màn hình
+  });
+
   test('Mở mới /browse bằng điều hướng thường (không phải Back) luôn bắt đầu từ đầu trang dù đã lưu vị trí cuộn', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/');
@@ -252,7 +274,7 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     expect(await scrollTopOf(scrollerOf(page))).toBe(0);
   });
 
-  test('Link cũ từ Trang chủ: ?segment=mom_baby lấy tên phân khúc làm tiêu đề (không chip); ?brand=Tubu và ?inStock=1 thành chip gỡ được; tham số lạ (utm) được giữ', async ({ page, api }) => {
+  test('Link cũ từ Trang chủ: ?segment=mom_baby lấy tên phân khúc làm tiêu đề (không chip); ?brand=Tubu lấy tên thương hiệu làm tiêu đề (không chip), ?inStock=1 thành chip gỡ được; tham số lạ (utm) được giữ', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/browse?segment=mom_baby');
     await expect(page.getByRole('heading', { level: 2, name: 'Cho mẹ & bé' })).toBeVisible({ timeout: 15_000 });
@@ -260,8 +282,9 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     await expect(page.getByRole('button', { name: 'Bỏ lọc Cho mẹ & bé' })).toHaveCount(0); // tên đã là tiêu đề, không lặp thành chip
 
     await page.goto('/browse?brand=Tubu');
-    await expect(page.getByRole('button', { name: 'Bỏ lọc Tubu' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { level: 2, name: 'Tubu' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('result-count')).toHaveText('28 sản phẩm', { timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'Bỏ lọc Tubu' })).toHaveCount(0); // tên thương hiệu đã là tiêu đề, không lặp thành chip
 
     await page.goto('/browse?utm_source=zalo&inStock=1');
     await expect(page.getByRole('button', { name: 'Bỏ lọc Còn hàng' })).toBeVisible({ timeout: 15_000 });

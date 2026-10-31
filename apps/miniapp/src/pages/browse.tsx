@@ -3,6 +3,7 @@ import { Page, useNavigate } from 'zmp-ui';
 import { ChevronRight } from 'lucide-react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { findCategory, chipScope } from '@tubutree/app-core/browse/category-tree';
+import { scrollDeltaToListTop } from '@tubutree/app-core/browse/scroll';
 import { browseSortOptions, sortForTab, sortTab, type SortTab } from '@tubutree/app-core/browse/sort';
 import { fetchActiveFlashSales, fetchBrands, fetchCatalog, type ProductCard, type ProductSuggestion } from '../services/shop-api';
 import { getLoadErrorMessage } from '../services/api';
@@ -34,7 +35,7 @@ import { uniqueById } from '../utils/unique-by-id';
 import { forgetTrackedSearch, shouldTrackSearch } from '../utils/search-tracking';
 import {
   CLEAR_SEARCH_PATCH, EMPTY_SEARCH_STATE, PAGE_LIMIT, activeFilterChips, activeFilterCount, changedFilterTypes, isBrowseHub, isBrowseRoot,
-  serializeSearchState, toCatalogQuery, withListMode, type FilterDraft, type SearchState,
+  serializeSearchState, toCatalogQuery, withListMode, type FilterDraft, type SearchState, type TitleScope,
 } from '../utils/search-state';
 
 /** Hàng ô tìm đo được 58px (ô 46px gồm viền + đệm dọc 6px mỗi phía): thanh sắp xếp dính ngay dưới nó (`--sort-bar-top`). */
@@ -79,9 +80,27 @@ export default function BrowsePage() {
   const queryClient = useQueryClient();
   const { state, urlKey, focusSearch, update, consumeFocus } = useSearchState();
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchRowRef = useRef<HTMLDivElement>(null);
+  const listTopRef = useRef<HTMLDivElement>(null);
   const hubState = isBrowseHub(state);
-  /** Mọi thay đổi khi đã ở danh sách: ở lại danh sách (gỡ chip cuối, về "Phổ biến" không đẩy khách về hub). */
-  const updateList = (patch: Partial<SearchState>) => update(withListMode(patch));
+  /**
+   * Kéo về đầu danh sách (thanh sắp xếp vừa chạm thanh dính) nếu khách đang cuộn sâu hơn. Thanh sắp xếp dính nên khách đổi sắp xếp hay lọc
+   * ngay giữa lưới; lưới đổi sang khung chờ ngắn, trình duyệt kẹp vị trí về giữa trang và hai hàng đầu nằm khuất dưới hai thanh dính. Cuộn
+   * TRƯỚC khi ghi URL; đổi bằng replace nên hook khôi phục cuộn không tự đưa về đầu.
+   */
+  const scrollToListTop = () => {
+    const sentinel = listTopRef.current;
+    const stuck = searchRowRef.current;
+    const scroller = sentinel?.closest<HTMLElement>('.zaui-page');
+    if (!sentinel || !stuck || !scroller) return;
+    const delta = scrollDeltaToListTop(sentinel.getBoundingClientRect().top, stuck.getBoundingClientRect().bottom);
+    if (delta !== 0) scroller.scrollTop += delta;
+  };
+  /** Mọi thay đổi khi đã ở danh sách: ở lại danh sách (gỡ chip cuối, về "Phổ biến" không đẩy khách về hub) và về đầu danh sách. */
+  const updateList = (patch: Partial<SearchState>) => {
+    scrollToListTop();
+    update(withListMode(patch));
+  };
 
   // Ô nhập theo `q` của URL mỗi khi URL đổi từ ngoài (Back, chạm từ khoá) — đặt trong render, không qua effect.
   const [draft, setDraft] = useState(state.q);
@@ -159,15 +178,21 @@ export default function BrowsePage() {
     stopEditing();
     setDraft(t);
     if (t.length >= 2) setRecent(pushRecentSearch(t));
+    scrollToListTop();
     update({ q: t });
-  };
-  const pickCategory = (e: CategoryEntry) => {
-    stopEditing();
-    update(e.kind === 'category' ? { category: e.key, segment: undefined, q: '' } : { segment: e.key, category: undefined, q: '' });
   };
   const pickHubCategory = (e: CategoryEntry) => {
     stopEditing();
     navigate(browseHref(e.kind === 'category' ? { category: e.key } : { segment: e.key }));
+  };
+  // Từ hub (kể cả khi đang gõ gợi ý) là mở MỚI như chạm ô danh mục: PUSH, Back về hub. Trong danh sách thì đổi phạm vi bằng replace.
+  const pickCategory = (e: CategoryEntry) => {
+    if (hubState) {
+      pickHubCategory(e);
+      return;
+    }
+    stopEditing();
+    update(e.kind === 'category' ? { category: e.key, segment: undefined, q: '' } : { segment: e.key, category: undefined, q: '' });
   };
   const pickSuggestion = (p: ProductSuggestion, index: number) => {
     trackSearchResultClicked({ q: draft.trim(), position: index + 1, source: 'suggest', slug: p.slug });
@@ -188,14 +213,20 @@ export default function BrowsePage() {
   const category = state.category ? findCategory(categories.categories, state.category) : null;
   const categoryName = category?.name;
   const segmentName = state.segment ? segmentLabel(state.segment) : undefined;
-  // Danh mục/phân khúc đã là tiêu đề của danh sách (hiện đúng một lần) nên không lặp thành chip; có từ khoá thì tiêu đề nhường chỗ cho ô tìm.
-  const chips = activeFilterChips(state, { categoryName, segmentName }, { omitScope: !state.q });
   const scope = state.category ? chipScope(categories.categories, state.category) : null;
   const noResults = !products.isLoading && !products.isError && list.length === 0;
   // Đã chọn danh mục, phân khúc hoặc đúng một nhãn thì nói rõ đang xem gì; nhãn công khai có thêm lối sang trang nhãn.
   const singleBrand = state.brands.length === 1 ? state.brands[0]! : null;
   const brandSlug = singleBrand ? (brands.data?.find((b) => b.brand === singleBrand)?.slug ?? null) : null;
   const listTitle = state.q ? null : categoryName ?? segmentName ?? singleBrand;
+  // Chỉ phạm vi đang làm tiêu đề (hiện đúng một lần) mới không lặp thành chip; có từ khoá thì tiêu đề nhường chỗ cho ô tìm. Danh mục không có
+  // trong cây (link cũ, đã xoá) không làm tiêu đề được: cây đã tải xong thì hiện chip "Danh mục" để khách thấy và gỡ được bộ lọc đó.
+  const titleScope: TitleScope | null = !listTitle ? null : categoryName ? 'category' : segmentName ? 'segment' : 'brand';
+  const chips = activeFilterChips(
+    state,
+    { categoryName: categoryName ?? (state.category && !categories.isLoading ? vi.browse.title : undefined), segmentName },
+    { titleScope },
+  );
 
   return (
     <Page className="page" style={PAGE_STYLE}>
@@ -209,7 +240,7 @@ export default function BrowsePage() {
       />
       <div ref={anchorRef} />
       <h1 style={SR_ONLY}>{vi.browse.title}</h1>
-      <div style={STICKY_SEARCH}>
+      <div ref={searchRowRef} data-testid="browse-search-row" style={STICKY_SEARCH}>
         <SearchField
           ref={inputRef}
           value={draft}
@@ -267,6 +298,7 @@ export default function BrowsePage() {
         />
       ) : (
         <>
+          <div ref={listTopRef} data-testid="browse-list-top" aria-hidden="true" />
           <SortBar
             sticky
             value={sortTab(state.sort)}

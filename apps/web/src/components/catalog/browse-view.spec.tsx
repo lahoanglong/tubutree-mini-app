@@ -225,6 +225,32 @@ describe('BrowseView — danh sách và trạng thái URL', () => {
     expect(productCalls()[0]).toEqual({ page: 1, limit: 20, sort: 'newest' });
   });
 
+  it('gợi ý ở hub: chạm danh mục là PUSH như chạm ô danh mục (Back về hub); trong danh sách là replace', async () => {
+    vi.useFakeTimers();
+    const hub = mount({ categories: CATEGORIES });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const input = hub.container.querySelector<HTMLInputElement>('input[type="search"]')!;
+    act(() => input.focus());
+    typeInto(input, 'dầu');
+    await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+    click(buttonByName(hub.container, /Dầu gội/));
+    expect(nav.pushes.at(-1)).toBe('/san-pham?category=c-goi');
+    expect(nav.replaces).toEqual([]);
+    mounted!.unmount();
+
+    nav.pushes = [];
+    nav.search = 'q=nuoc';
+    const list = mount({ categories: CATEGORIES });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const input2 = list.container.querySelector<HTMLInputElement>('input[type="search"]')!;
+    act(() => input2.focus());
+    typeInto(input2, 'dầu');
+    await act(async () => { await vi.advanceTimersByTimeAsync(350); });
+    click(buttonByName(list.container, /Dầu gội/));
+    expect(nav.replaces.at(-1)).toBe('/san-pham?category=c-goi');
+    expect(nav.pushes).toEqual([]);
+  });
+
   it('trong danh sách, chạm danh mục ở cột lọc ghi category vào URL (replace) và xoá q', async () => {
     nav.search = 'q=nuoc';
     const { container } = mount();
@@ -286,20 +312,59 @@ describe('BrowseView — danh sách và trạng thái URL', () => {
   });
 
   it('gỡ chip cuối khi đang xem danh sách ở lại danh sách (?all=1), không đẩy về hub', async () => {
-    nav.search = 'brand=Tubu';
+    nav.search = 'inStock=1';
     const { container } = mount({ brands: BRANDS });
     await flush();
-    click(buttonByName(container, 'Bỏ lọc Tubu'));
+    click(buttonByName(container, 'Bỏ lọc Còn hàng'));
     expect(nav.replaces.at(-1)).toBe('/san-pham?all=1');
     await flush();
     expect(container.querySelector('[role="group"][aria-label="Sắp xếp"]')).not.toBeNull();
+  });
+
+  it('?brand=Tubu: tên thương hiệu là tiêu đề DUY NHẤT (không chip trùng); thêm bộ lọc khác vẫn có chip; nhiều thương hiệu thì mỗi cái là chip', async () => {
+    nav.search = 'brand=Tubu';
+    const { container } = mount({ brands: BRANDS });
+    await flush();
+    expect([...container.querySelectorAll('h2')].map((h) => h.textContent)).toContain('Tubu');
+    expect(buttonByName(container, 'Bỏ lọc Tubu')).toBeNull();
+    mounted!.unmount();
+
+    nav.search = 'brand=Tubu&inStock=1';
+    const withStock = mount({ brands: BRANDS });
+    await flush();
+    expect(buttonByName(withStock.container, 'Bỏ lọc Còn hàng')).not.toBeNull();
+    expect(buttonByName(withStock.container, 'Bỏ lọc Tubu')).toBeNull();
+    mounted!.unmount();
+
+    nav.search = 'brand=Tubu%2CM%E1%BB%99c+An';
+    const two = mount({ brands: BRANDS });
+    await flush();
+    expect(buttonByName(two.container, 'Bỏ lọc Tubu')).not.toBeNull();
+    expect(buttonByName(two.container, 'Bỏ lọc Mộc An')).not.toBeNull();
+    expect([...two.container.querySelectorAll('h2')].map((h) => h.textContent)).not.toContain('Tubu');
+  });
+
+  it('?category=<id> không có trong cây (link cũ, đã xoá): không tên làm tiêu đề nhưng có chip "Danh mục" gỡ được; cây còn tải thì chưa hiện', async () => {
+    nav.search = 'category=c-da-xoa';
+    const { container } = mount({ categories: CATEGORIES });
+    await flush();
+    const chip = buttonByName(container, 'Bỏ lọc Danh mục');
+    expect(chip).not.toBeNull();
+    click(chip);
+    expect(nav.replaces.at(-1)).toBe('/san-pham?all=1');
+    mounted!.unmount();
+
+    routes['/categories'] = () => new Promise(() => undefined);
+    const loading = mount();
+    await flush();
+    expect(buttonByName(loading.container, 'Bỏ lọc Danh mục')).toBeNull();
   });
 
   it('nhãn đã công khai: lọc đúng một nhãn có liên kết tới /brand/:slug', async () => {
     nav.search = 'brand=Tubu';
     const { container } = mount({ brands: BRANDS });
     await flush();
-    expect(container.querySelector('a[href="/brand/tubu-xanh"]')!.textContent).toContain('Xem trang nhãn hàng Tubu');
+    expect(container.querySelector('a[href="/brand/tubu-xanh"]')!.textContent).toContain('Xem trang thương hiệu Tubu');
     mounted!.unmount();
     nav.search = 'brand=M%E1%BB%99c+An';
     mount({ brands: BRANDS });
@@ -364,6 +429,52 @@ describe('BrowseView — sắp xếp', () => {
     expect(wrap.className).toContain('top-[var(--sort-bar-top,0px)]');
     expect(wrap.className).toContain('lg:[&>div>button:last-child]:!hidden');
     expect(wrap.closest('[data-browse-scope]')!.className).toContain('--sort-bar-top');
+  });
+
+  describe('đổi sắp xếp / bộ lọc khi đang cuộn sâu: về đầu danh sách', () => {
+    /** jsdom không có layout: đặt mép trên điểm đánh dấu đầu danh sách (toạ độ khung nhìn) và vạch dính của thanh sắp xếp. */
+    const scrollSpy = (container: HTMLElement, sentinelTop: number, stuckTop = 58) => {
+      const sentinel = container.querySelector<HTMLElement>('[data-testid="browse-list-top"]')!;
+      vi.spyOn(sentinel, 'getBoundingClientRect').mockReturnValue({ top: sentinelTop, bottom: sentinelTop, left: 0, right: 0, width: 0, height: 0, x: 0, y: sentinelTop, toJSON: () => ({}) });
+      (sentinel.nextElementSibling as HTMLElement).style.top = `${stuckTop}px`;
+      return vi.spyOn(window, 'scrollBy').mockImplementation(() => undefined);
+    };
+
+    it('chạm tab sắp xếp khi điểm đánh dấu đã trượt lên trên vạch dính: cuộn ngược đúng độ lệch, rồi ghi URL', async () => {
+      nav.search = LIST;
+      const { container } = mount();
+      await flush();
+      const spy = scrollSpy(container, 140 - 2000);
+      click(buttonByName(sortGroup(container), 'Mới'));
+      expect(spy).toHaveBeenCalledWith({ top: 140 - 2000 - 58, behavior: 'instant' });
+      expect(nav.replaces.at(-1)).toBe('/san-pham?sort=newest');
+    });
+
+    it('gỡ chip lọc, chạm chip danh mục con và gửi từ khoá mới cũng về đầu danh sách', async () => {
+      nav.search = 'category=c-da&inStock=1';
+      routes['/categories'] = () => TREE;
+      const { container } = mount();
+      await flush();
+      const spy = scrollSpy(container, -900);
+      click(buttonByName(container, 'Bỏ lọc Còn hàng'));
+      expect(spy).toHaveBeenCalledTimes(1);
+      click(buttonByName(container.querySelector('[role="group"][aria-label="Danh mục con"]')!, 'Chống nắng'));
+      expect(spy).toHaveBeenCalledTimes(2);
+      act(() => {
+        container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+      expect(spy).toHaveBeenCalledTimes(3);
+    });
+
+    it('khách còn ở gần đầu trang (điểm đánh dấu chưa qua vạch dính) đổi sắp xếp: không bị kéo đi đâu', async () => {
+      nav.search = LIST;
+      const { container } = mount();
+      await flush();
+      const spy = scrollSpy(container, 110);
+      click(buttonByName(sortGroup(container), 'Bán chạy'));
+      expect(spy).not.toHaveBeenCalled();
+      expect(nav.replaces.at(-1)).toBe('/san-pham?sort=best_seller');
+    });
   });
 
   it('hàng ô tìm ở điện thoại cao 58px như Mini: ô 46px (44 + viền) trong đệm dọc 6px, giá trị khớp --sort-bar-top:58px', async () => {

@@ -368,12 +368,34 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     expect(await screen.findByRole('button', { name: 'Bỏ lọc Còn hàng' })).toBeInTheDocument();
   });
 
-  it('link cũ ?brand=Tubu → chip gỡ được; gỡ chip cuối → ?all=1 (ở lại danh sách, không về hub)', async () => {
-    renderAt('/browse?brand=Tubu');
-    fireEvent.click(await screen.findByRole('button', { name: 'Bỏ lọc Tubu' }));
+  it('link cũ ?inStock=1 → chip gỡ được; gỡ chip cuối → ?all=1 (ở lại danh sách, không về hub)', async () => {
+    renderAt('/browse?inStock=1');
+    fireEvent.click(await screen.findByRole('button', { name: 'Bỏ lọc Còn hàng' }));
     await waitFor(() => expect(loc()).toBe('/browse?all=1'));
     expect(await screen.findByRole('group', { name: 'Sắp xếp' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Danh mục' })).toBeNull();
+  });
+
+  it('link cũ ?brand=Tubu: tên thương hiệu là tiêu đề DUY NHẤT (không chip trùng), có lối sang trang thương hiệu; thêm bộ lọc khác vẫn có chip', async () => {
+    mocks.fetchBrands.mockResolvedValue([{ brand: 'Tubu', count: 2, slug: 'tubu-xanh' }]);
+    renderAt('/browse?brand=Tubu');
+    expect(await screen.findByRole('heading', { level: 2, name: 'Tubu' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Bỏ lọc Tubu' })).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Xem trang thương hiệu Tubu' })).toBeInTheDocument();
+    expect(screen.queryByText(/nhãn hàng/i)).toBeNull();
+  });
+
+  it('?brand=Tubu kèm ?inStock=1: chỉ chip "Còn hàng" hiện; hai thương hiệu thì không có tiêu đề nên cả hai là chip', async () => {
+    renderAt('/browse?brand=Tubu&inStock=1');
+    expect(await screen.findByRole('button', { name: 'Bỏ lọc Còn hàng' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Bỏ lọc Tubu' })).toBeNull();
+  });
+
+  it('?brand=Tubu,Mộc An: nhiều thương hiệu không có tiêu đề, mỗi thương hiệu là một chip gỡ được', async () => {
+    renderAt('/browse?brand=Tubu,M%E1%BB%99c%20An');
+    expect(await screen.findByRole('button', { name: 'Bỏ lọc Tubu' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Bỏ lọc Mộc An' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
   });
 
   it('link từ Trang chủ ?segment=eco → lọc theo phân khúc, tên phân khúc là tiêu đề DUY NHẤT (không chip trùng)', async () => {
@@ -385,7 +407,7 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     expect(screen.queryByRole('group', { name: 'Đổi danh mục' })).toBeNull();
   });
 
-  it('suggest: chạm danh mục trong gợi ý → ?segment=… (replace), bỏ q', async () => {
+  it('suggest ở hub: chạm danh mục trong gợi ý → ?segment=… là PUSH như chạm ô danh mục (Back về hub, không rời Danh mục)', async () => {
     renderAt('/browse');
     const input = screen.getByRole('searchbox');
     fireEvent.focus(input);
@@ -393,8 +415,35 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     const region = await screen.findByRole('region', { name: 'Gợi ý tìm kiếm' });
     fireEvent.click(within(region).getByRole('button', { name: /Cho mẹ & bé/ }));
     await waitFor(() => expect(loc()).toBe('/browse?segment=mom_baby'));
-    expect(navType()).toBe('REPLACE');
+    expect(navType()).toBe('PUSH');
     await waitFor(() => expect(catalogCalls().some((q) => q.segment === 'mom_baby')).toBe(true));
+  });
+
+  it('suggest trong danh sách: chạm danh mục → đổi phạm vi bằng REPLACE, bỏ q', async () => {
+    renderAt('/browse?q=nuoc');
+    const input = screen.getByRole('searchbox');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: 'me' } });
+    const region = await screen.findByRole('region', { name: 'Gợi ý tìm kiếm' });
+    fireEvent.click(within(region).getByRole('button', { name: /Cho mẹ & bé/ }));
+    await waitFor(() => expect(loc()).toBe('/browse?segment=mom_baby'));
+    expect(navType()).toBe('REPLACE');
+  });
+
+  it('?category=<id> không có trong cây (link cũ, danh mục đã xoá): không tiêu đề nhưng có chip "Danh mục" để khách thấy và gỡ bộ lọc', async () => {
+    mocks.fetchCategories.mockResolvedValue([cat('da', 'Chăm sóc da', 5)]);
+    renderAt('/browse?category=cat-da-xoa');
+    const chip = await screen.findByRole('button', { name: 'Bỏ lọc Danh mục' });
+    expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
+    fireEvent.click(chip);
+    await waitFor(() => expect(loc()).toBe('/browse?all=1'));
+  });
+
+  it('?category=<id> trong lúc cây còn tải: chưa hiện chip dự phòng (tên thật sẽ thành tiêu đề, không nháy chip rồi mất)', async () => {
+    mocks.fetchCategories.mockReturnValue(new Promise(() => undefined));
+    renderAt('/browse?category=da');
+    await screen.findByRole('group', { name: 'Sắp xếp' });
+    expect(screen.queryByRole('button', { name: 'Bỏ lọc Danh mục' })).toBeNull();
   });
 
   it('chạm kết quả khi đang tìm → search_result_clicked { q, position (1-based), source, slug }', async () => {
@@ -744,6 +793,56 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
         await act(async () => { release(pageOf([card('p1', 'Nước rửa chén'), card('p2', 'Xà phòng')])); });
         await listPainted();
         expect(scroller.scrollTop).toBe(640);
+      });
+
+      const scroller = () => document.querySelector('.zaui-page') as HTMLElement;
+      /** jsdom không có layout: đặt toạ độ khung nhìn của điểm đánh dấu đầu danh sách và mép dưới hàng ô tìm dính. */
+      const placeAt = (sentinelTop: number, stuckBottom: number) => {
+        const rect = (v: Partial<DOMRect>) => ({ top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}), ...v }) as DOMRect;
+        vi.spyOn(screen.getByTestId('browse-list-top'), 'getBoundingClientRect').mockReturnValue(rect({ top: sentinelTop }));
+        vi.spyOn(screen.getByTestId('browse-search-row'), 'getBoundingClientRect').mockReturnValue(rect({ bottom: stuckBottom }));
+      };
+
+      it('đổi sắp xếp khi đang cuộn sâu: về đầu danh sách (thanh sắp xếp chạm thanh dính), không giữ vị trí cũ làm khuất hai hàng đầu', async () => {
+        renderAt('/browse?all=1');
+        await listPainted();
+        const s = scroller();
+        s.scrollTop = 2000;
+        placeAt(140 - 2000, 58); // đầu danh sách nằm ở y=140 của trang; hàng ô tìm dính cao tới 58
+        fireEvent.click(screen.getByRole('button', { name: 'Mới' }));
+        expect(s.scrollTop).toBe(140 - 58);
+        await waitFor(() => expect(loc()).toBe('/browse?sort=newest'));
+        expect(navType()).toBe('REPLACE');
+      });
+
+      it('áp bộ lọc và gỡ chip lọc khi đang cuộn sâu cũng về đầu danh sách', async () => {
+        renderAt('/browse?inStock=1');
+        await listPainted();
+        const s = scroller();
+        s.scrollTop = 1500;
+        placeAt(180 - 1500, 58);
+        fireEvent.click(screen.getByRole('button', { name: 'Bỏ lọc Còn hàng' }));
+        expect(s.scrollTop).toBe(180 - 58);
+        await waitFor(() => expect(loc()).toBe('/browse?all=1'));
+
+        s.scrollTop = 1200;
+        placeAt(180 - 1200, 58);
+        fireEvent.click(await screen.findByRole('button', { name: 'Lọc' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Chỉ hiện còn hàng' }));
+        s.scrollTop = 1200;
+        fireEvent.click(await screen.findByRole('button', { name: /^Xem 2 sản phẩm$/ }, { timeout: 2000 }));
+        expect(s.scrollTop).toBe(180 - 58);
+      });
+
+      it('khách còn ở gần đầu trang (chưa cuộn qua đầu danh sách) đổi sắp xếp: không bị kéo đi đâu', async () => {
+        renderAt('/browse?all=1');
+        await listPainted();
+        const s = scroller();
+        s.scrollTop = 30;
+        placeAt(140 - 30, 58);
+        fireEvent.click(screen.getByRole('button', { name: 'Bán chạy' }));
+        expect(s.scrollTop).toBe(30);
+        await waitFor(() => expect(loc()).toBe('/browse?sort=best_seller'));
       });
 
       it('hub cũng khôi phục theo khoá rỗng khi mở lại bằng Back, ngay khi hub đã vẽ (không cần danh sách)', async () => {

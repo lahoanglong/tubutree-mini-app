@@ -420,7 +420,7 @@ export const vi = {
   browse: {
     title: 'Danh mục',
     categoryChips: 'Đổi danh mục',
-    viewBrand: (brand: string) => `Xem trang nhãn hàng ${brand}`,
+    viewBrand: (brand: string) => `Xem trang thương hiệu ${brand}`,
     searchPlaceholder: 'Tìm sản phẩm...',
     searchLabel: 'Tìm sản phẩm',
     clearSearch: 'Xoá từ khoá',

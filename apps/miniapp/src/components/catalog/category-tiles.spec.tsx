@@ -7,6 +7,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof Z
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import type { CategoryEntry } from '../../hooks/use-categories';
+import { HUB_CATEGORY_MAX, HUB_TILE_HEIGHT } from '@tubutree/app-core/browse/hub';
 import { CategoryTiles } from './category-tiles';
 
 const entry = (i: number, image: string | null = null): CategoryEntry => ({ kind: 'category', key: `c${i}`, label: `Danh mục ${i}`, icon: LayoutGrid, image });
@@ -43,6 +44,19 @@ describe('CategoryTiles', () => {
     expect(loading).toHaveAttribute('aria-hidden', 'true');
     expect(loading.children).toHaveLength(7);
     expect(screen.queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('đang tải với số ô của lần trước lớn hơn trần hub: khung chờ chặn ở 8 ô + "Tất cả", không co lại khi dữ liệu về', () => {
+    render(<CategoryTiles entries={many(12)} isLoading placeholderCount={12} onSelect={vi.fn()} onSelectAll={vi.fn()} />);
+    expect(screen.getByTestId('category-grid-loading').children).toHaveLength(HUB_CATEGORY_MAX + 1);
+  });
+
+  it('khung chờ cao đúng bằng ô thật (đặt chỗ cho nhãn 2 dòng): hàng không nhảy khi dữ liệu về', () => {
+    const { rerender } = render(<CategoryTiles entries={many(3)} isLoading placeholderCount={3} onSelect={vi.fn()} onSelectAll={vi.fn()} />);
+    const placeholderHeights = [...screen.getByTestId('category-grid-loading').children].map((c) => (c as HTMLElement).style.height);
+    expect(new Set(placeholderHeights)).toEqual(new Set([`${HUB_TILE_HEIGHT}px`]));
+    rerender(<CategoryTiles entries={many(3)} isLoading={false} placeholderCount={3} onSelect={vi.fn()} onSelectAll={vi.fn()} />);
+    for (const b of screen.getAllByRole('button')) expect(b.style.minHeight).toBe(`${HUB_TILE_HEIGHT}px`);
   });
 
   it('ô cao tối thiểu 88px (vùng chạm), ảnh danh mục thay icon và chỉ để trang trí', () => {

@@ -179,19 +179,24 @@ export interface ActiveFilterChip {
   patch: Partial<SearchState>;
 }
 
+/** Phạm vi đã là tiêu đề của danh sách (hiện đúng một lần), nên không lặp thành chip ngay dưới thanh sắp xếp. */
+export type TitleScope = 'category' | 'segment' | 'brand';
+
 /**
- * Chip "đang lọc" gỡ được từng cái. Danh mục chưa có tên (danh sách chưa tải) thì chưa hiện. `omitScope`: tên danh mục/phân khúc đã
- * là tiêu đề của danh sách (hiện đúng một lần), nên không lặp thành chip.
+ * Chip "đang lọc" gỡ được từng cái. Danh mục chưa có tên (danh sách chưa tải) thì chưa hiện; caller truyền nhãn dự phòng khi cây đã
+ * tải mà không có danh mục đó (link cũ, danh mục đã xoá) để bộ lọc vẫn nhìn thấy và gỡ được. `titleScope`: CHỈ phạm vi đang làm tiêu đề
+ * mới bị bỏ chip; các phạm vi còn lại (vd `?category=` kèm `?brand=`) vẫn là chip.
  */
 export function activeFilterChips(
   s: SearchState,
   names: { categoryName?: string; segmentName?: string },
-  opts: { omitScope?: boolean } = {},
+  opts: { titleScope?: TitleScope | null } = {},
 ): ActiveFilterChip[] {
   const chips: ActiveFilterChip[] = [];
-  if (!opts.omitScope && s.category && names.categoryName) chips.push({ key: 'category', label: names.categoryName, patch: { category: undefined } });
-  if (!opts.omitScope && s.segment) chips.push({ key: 'segment', label: names.segmentName ?? s.segment, patch: { segment: undefined } });
-  for (const b of s.brands) chips.push({ key: `brand:${b}`, label: b, patch: { brands: s.brands.filter((x) => x !== b) } });
+  if (opts.titleScope !== 'category' && s.category && names.categoryName) chips.push({ key: 'category', label: names.categoryName, patch: { category: undefined } });
+  if (opts.titleScope !== 'segment' && s.segment) chips.push({ key: 'segment', label: names.segmentName ?? s.segment, patch: { segment: undefined } });
+  const brandIsTitle = opts.titleScope === 'brand' && s.brands.length === 1;
+  if (!brandIsTitle) for (const b of s.brands) chips.push({ key: `brand:${b}`, label: b, patch: { brands: s.brands.filter((x) => x !== b) } });
   if (s.minPrice != null || s.maxPrice != null) {
     chips.push({ key: 'price', label: priceRangeLabel(s.minPrice, s.maxPrice), patch: { minPrice: undefined, maxPrice: undefined } });
   }

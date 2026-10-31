@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HUB_BRAND_MAX, HUB_BRAND_MIN, HUB_CATEGORY_MAX, hubBestSellers, hubBrands } from './hub';
+import { HUB_BRAND_MAX, HUB_BRAND_MIN, HUB_CATEGORY_MAX, HUB_TILE_HEIGHT, hubBestSellers, hubBrands, hubPlaceholderTiles } from './hub';
 
 const brand = (name: string, count: number) => ({ brand: name, count });
 const item = (id: string) => ({ id });
@@ -43,4 +43,24 @@ describe('hubBestSellers', () => {
 
 it('hub tối đa 8 danh mục gốc (≤8 cha theo thiết kế)', () => {
   expect(HUB_CATEGORY_MAX).toBe(8);
+});
+
+describe('hubPlaceholderTiles', () => {
+  it('đếm số ô thật sẽ vẽ (trần 8) cộng ô "Tất cả", không vượt khi lần tải trước nhiều hơn trần', () => {
+    expect(hubPlaceholderTiles(4)).toBe(5);
+    expect(hubPlaceholderTiles(HUB_CATEGORY_MAX)).toBe(HUB_CATEGORY_MAX + 1);
+    expect(hubPlaceholderTiles(12)).toBe(HUB_CATEGORY_MAX + 1);
+    expect(hubPlaceholderTiles(24)).toBe(HUB_CATEGORY_MAX + 1);
+  });
+
+  it('số hỏng hoặc 0 vẫn còn ô "Tất cả"', () => {
+    expect(hubPlaceholderTiles(0)).toBe(1);
+    expect(hubPlaceholderTiles(-3)).toBe(1);
+    expect(hubPlaceholderTiles(Number.NaN)).toBe(1);
+  });
+
+  it('chiều cao ô đặt chỗ cho nhãn 2 dòng, lớn hơn vùng chạm tối thiểu', () => {
+    expect(HUB_TILE_HEIGHT).toBe(8 + 40 + 6 + 2 * 20 + 8);
+    expect(HUB_TILE_HEIGHT).toBeGreaterThanOrEqual(88);
+  });
 });

@@ -3,6 +3,7 @@ import { LayoutGrid } from 'lucide-react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { click, render, type Rendered } from '@/test-utils/dom';
 import type { CategoryEntry } from '@/lib/browse-categories';
+import { HUB_CATEGORY_MAX, HUB_TILE_HEIGHT } from '@tubutree/app-core/browse/hub';
 import { CategoryTiles } from './category-tiles';
 
 const entry = (i: number, image: string | null = null): CategoryEntry => ({ kind: 'category', key: `c${i}`, label: `Danh mục ${i}`, icon: LayoutGrid, image });
@@ -48,6 +49,20 @@ describe('CategoryTiles', () => {
     expect(loading.getAttribute('aria-hidden')).toBe('true');
     expect(loading.children).toHaveLength(7);
     expect(c.querySelectorAll('button')).toHaveLength(0);
+  });
+
+  it('đang tải với số ô của lần trước lớn hơn trần hub: khung chờ chặn ở 8 ô + "Tất cả", không co lại khi dữ liệu về', () => {
+    const { c } = mount({ entries: many(12), isLoading: true, placeholderCount: 12 });
+    expect(c.querySelector('[data-testid="category-grid-loading"]')!.children).toHaveLength(HUB_CATEGORY_MAX + 1);
+  });
+
+  it('khung chờ cao đúng bằng ô thật (đặt chỗ cho nhãn 2 dòng): hàng không nhảy khi dữ liệu về', () => {
+    const loading = mount({ isLoading: true, placeholderCount: 3 });
+    const placeholderHeights = [...loading.c.querySelector('[data-testid="category-grid-loading"]')!.children].map((el) => (el as HTMLElement).style.height);
+    expect(new Set(placeholderHeights)).toEqual(new Set([`${HUB_TILE_HEIGHT}px`]));
+    mounted?.unmount();
+    const { c } = mount({ isLoading: false, placeholderCount: 3 });
+    for (const b of c.querySelectorAll<HTMLElement>('button')) expect(b.style.minHeight).toBe(`${HUB_TILE_HEIGHT}px`);
   });
 
   it('ô cao tối thiểu 88px (vùng chạm); ảnh danh mục thay icon và chỉ để trang trí', () => {
