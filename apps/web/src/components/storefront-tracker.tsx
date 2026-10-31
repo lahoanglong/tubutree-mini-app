@@ -16,7 +16,7 @@ import {
   type PendingRef,
 } from '@/lib/storefront-context';
 import { recordReferralTouch } from '@/lib/shop-client';
-import { clickedAtParam } from '@tubutree/app-core/referral-touch';
+import { clickedAgoParam } from '@tubutree/app-core/referral-touch';
 
 type TouchDto = Parameters<typeof recordReferralTouch>[0];
 
@@ -39,7 +39,7 @@ function touchFromPending(p: PendingRef): TouchDto | null {
     referralCode,
     ...(p.kind === 'CTV' && p.slug ? { storefrontSlug: p.slug } : {}),
     kind: p.kind === null || p.kind === 'CTV' ? 'ctv' : 'brand',
-    ...clickedAtParam(p.savedAt),
+    ...clickedAgoParam(p.savedAt),
   };
 }
 
@@ -120,7 +120,7 @@ export function StorefrontTracker({ slug, type, referralCode }: { slug: string; 
       referralCode,
       storefrontSlug: slug,
       kind: type === 'CTV' ? 'ctv' : 'brand',
-      ...clickedAtParam(clickedAt),
+      ...clickedAgoParam(clickedAt),
     });
   }, [slug, type, referralCode, status, userId]);
 
@@ -156,7 +156,7 @@ export function ReferralCapture() {
           referralCode,
           ...(storefrontSlug ? { storefrontSlug } : {}),
           kind: ctx.kind === null || ctx.kind === 'CTV' ? 'ctv' : 'brand',
-          ...clickedAtParam(ctx.clickedAt),
+          ...clickedAgoParam(ctx.clickedAt),
         }
       : null;
     void replayTouches(userId, session);

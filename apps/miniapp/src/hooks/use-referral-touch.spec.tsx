@@ -1,11 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ touch: vi.fn(), clicks: [] as Array<string | undefined> }));
-// clickedAt tách riêng để các ca cũ vẫn so nguyên dto; ca về lúc bấm đọc mocks.clicks.
+const mocks = vi.hoisted(() => ({ touch: vi.fn(), clicks: [] as Array<number | undefined> }));
+// clickedAgoMs tách riêng để các ca cũ vẫn so nguyên dto; ca về lúc bấm đọc mocks.clicks.
 vi.mock('../services/affiliate-api', () => ({
-  recordReferralTouch: ({ clickedAt, ...dto }: { clickedAt?: string }) => {
-    mocks.clicks.push(clickedAt);
+  recordReferralTouch: ({ clickedAgoMs, ...dto }: { clickedAgoMs?: number }) => {
+    mocks.clicks.push(clickedAgoMs);
     return mocks.touch(dto);
   },
 }));
@@ -154,7 +154,7 @@ describe('useReferralTouch: ghi chạm giới thiệu và nhớ mã có phải c
       mocks.touch.mockResolvedValue({ ok: true });
       renderHook(() => useReferralTouch(true));
       await waitFor(() => expect(mocks.touch).toHaveBeenCalledTimes(1));
-      expect(mocks.clicks).toEqual([clicked.toISOString()]);
+      expect(mocks.clicks).toEqual([5 * 3600_000]);
     } finally {
       vi.useRealTimers();
     }

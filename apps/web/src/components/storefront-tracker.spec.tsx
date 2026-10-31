@@ -3,12 +3,12 @@ import { act, cloneElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ status: 'authenticated', userId: 'u1', touch: vi.fn(), clicks: [] as Array<string | undefined> }));
+const mocks = vi.hoisted(() => ({ status: 'authenticated', userId: 'u1', touch: vi.fn(), clicks: [] as Array<number | undefined> }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: mocks.status, user: mocks.status === 'authenticated' ? { id: mocks.userId } : null }) }));
-// clickedAt tách riêng để các ca cũ vẫn so nguyên dto; ca về lúc bấm đọc mocks.clicks.
+// clickedAgoMs tách riêng để các ca cũ vẫn so nguyên dto; ca về lúc bấm đọc mocks.clicks.
 vi.mock('@/lib/shop-client', () => ({
-  recordReferralTouch: ({ clickedAt, ...dto }: { clickedAt?: string }) => {
-    mocks.clicks.push(clickedAt);
+  recordReferralTouch: ({ clickedAgoMs, ...dto }: { clickedAgoMs?: number }) => {
+    mocks.clicks.push(clickedAgoMs);
     return mocks.touch(dto);
   },
 }));
@@ -515,7 +515,7 @@ describe('lúc bấm link gửi kèm lượt chạm, dấu chạm theo người 
     mocks.status = 'authenticated';
     await m.rerender();
     expect(mocks.touch).toHaveBeenCalledTimes(1);
-    expect(mocks.clicks).toEqual([clicked.toISOString()]);
+    expect(mocks.clicks).toEqual([5 * HOUR]);
     await m.unmount();
   });
 
@@ -532,7 +532,7 @@ describe('lúc bấm link gửi kèm lượt chạm, dấu chạm theo người 
     const m = await mountKept();
     mocks.status = 'authenticated';
     await m.rerender();
-    expect(mocks.clicks).toEqual([clicked.toISOString()]);
+    expect(mocks.clicks).toEqual([20 * HOUR]);
     await m.unmount();
   });
 

@@ -5,9 +5,12 @@
 
 const norm = (code: string | null | undefined) => (code ?? '').trim().toUpperCase();
 
-/** Thời điểm bấm link dạng ISO để gửi kèm lượt chạm; thiếu/hỏng/ở tương lai thì không gửi (máy chủ tính từ lúc nhận như cũ). */
-export function clickedAtParam(clickedAtMs: number | null | undefined, nowMs: number = Date.now()): { clickedAt: string } | Record<string, never> {
-  return typeof clickedAtMs === 'number' && clickedAtMs > 0 ? { clickedAt: new Date(Math.min(clickedAtMs, nowMs)).toISOString() } : {};
+/**
+ * Khoảng thời gian đã trôi từ lúc bấm link, tính bằng cùng một đồng hồ máy (lúc bấm cũng do máy này ghi) nên đồng hồ lệch không
+ * ảnh hưởng. Máy chủ tự trừ từ giờ của nó. Thiếu lúc bấm thì không gửi (máy chủ tính từ lúc nhận); đồng hồ lùi làm âm thì gửi 0.
+ */
+export function clickedAgoParam(clickedAtMs: number | null | undefined, nowMs: number = Date.now()): { clickedAgoMs: number } | Record<string, never> {
+  return typeof clickedAtMs === 'number' && clickedAtMs > 0 ? { clickedAgoMs: Math.max(0, nowMs - clickedAtMs) } : {};
 }
 
 export interface TouchMark {

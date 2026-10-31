@@ -320,7 +320,7 @@ export const deleteAddress = (id: string) =>
   apiFetch<{ ok: boolean }>(`/me/addresses/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 /** Ghi "chạm" giới thiệu để attribution sống qua cả lúc mất phiên (BE giữ 3 ngày). */
-export const recordReferralTouch = (dto: { referralCode: string; storefrontSlug?: string; kind?: 'ctv' | 'brand'; clickedAt?: string }) =>
+export const recordReferralTouch = (dto: { referralCode: string; storefrontSlug?: string; kind?: 'ctv' | 'brand'; clickedAgoMs?: number }) =>
   apiFetch<{ ok: boolean }>('/affiliate/touch', { method: 'POST', body: dto });
 
 // Checkout

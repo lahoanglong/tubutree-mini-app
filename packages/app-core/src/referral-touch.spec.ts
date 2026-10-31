@@ -1,17 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { clickedAtParam, parseTouchMark, serializeTouchMark, touchMarkAfter, touchMarkMatches } from './referral-touch';
+import { clickedAgoParam, parseTouchMark, serializeTouchMark, touchMarkAfter, touchMarkMatches } from './referral-touch';
 
 const NOW = Date.parse('2026-10-31T12:00:00Z');
 
-describe('clickedAtParam', () => {
-  it('lúc bấm hợp lệ → ISO đúng lúc đó', () => {
-    expect(clickedAtParam(NOW - 3600_000, NOW)).toEqual({ clickedAt: '2026-10-31T11:00:00.000Z' });
+describe('clickedAgoParam', () => {
+  it('lúc bấm hợp lệ → khoảng thời gian đã trôi', () => {
+    expect(clickedAgoParam(NOW - 3600_000, NOW)).toEqual({ clickedAgoMs: 3600_000 });
   });
-  it('ở tương lai → kẹp về now, không bao giờ dài hơn', () => {
-    expect(clickedAtParam(NOW + 86_400_000, NOW)).toEqual({ clickedAt: new Date(NOW).toISOString() });
+  it('đồng hồ máy lệch bao nhiêu cũng chỉ ra khoảng trôi, không phụ thuộc giờ tuyệt đối', () => {
+    const skew = -10 * 86_400_000;
+    expect(clickedAgoParam(NOW + skew - 1000, NOW + skew)).toEqual({ clickedAgoMs: 1000 });
+  });
+  it('lúc bấm ở sau now (đồng hồ lùi) → 0, không bao giờ âm', () => {
+    expect(clickedAgoParam(NOW + 86_400_000, NOW)).toEqual({ clickedAgoMs: 0 });
   });
   it.each([undefined, null, 0, -5, NaN])('không có lúc bấm hợp lệ (%s) → không gửi trường', (v) => {
-    expect(clickedAtParam(v as number, NOW)).toEqual({});
+    expect(clickedAgoParam(v as number, NOW)).toEqual({});
   });
 });
 

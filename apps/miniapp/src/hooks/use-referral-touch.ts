@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { recordReferralTouch } from '../services/affiliate-api';
-import { clickedAtParam } from '@tubutree/app-core/referral-touch';
+import { clickedAgoParam } from '@tubutree/app-core/referral-touch';
 import { useAuthStore } from '../store/auth';
 import { updateCtvTouchMark, useStorefrontContext, wasCtvTouched } from '../store/storefront-context';
 
@@ -41,7 +41,7 @@ export function useReferralTouch(authed: boolean): void {
           referralCode: code,
           storefrontSlug: kind === 'ctv' ? (slug ?? undefined) : undefined,
           kind: kind === 'ctv' ? 'ctv' : 'brand',
-          ...clickedAtParam(clickedAt),
+          ...clickedAgoParam(clickedAt),
         });
         if (res && typeof res.ok === 'boolean') {
           confirmReferral(code, res.ok);
