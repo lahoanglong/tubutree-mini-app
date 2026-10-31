@@ -1,0 +1,54 @@
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+
+/**
+ * Bộ chặn "thẻ sản phẩm tự chế" của gói P4: mọi thẻ vẽ bằng `ProductCard`/`ProductTile`, giá gạch chỉ do `PriceTag` vẽ, nhãn Giờ vàng và
+ * đã duyệt là tông của `Badge` (không ghi đè màu tại chỗ). Quét nguồn (bỏ spec), nên thêm một thẻ vẽ tay là đỏ ngay.
+ */
+const SRC = fileURLToPath(new URL('..', import.meta.url));
+
+function sources(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) return sources(path);
+    return /\.(ts|tsx)$/.test(name) && !/\.(spec|test)\.|\.d\.ts$/.test(name) ? [path] : [];
+  });
+}
+
+const FILES = sources(SRC).map((path) => ({ rel: relative(SRC, path).split(sep).join('/'), text: readFileSync(path, 'utf8') }));
+const hits = (re: RegExp, allow: readonly string[] = []) => FILES.filter((f) => re.test(f.text) && !allow.includes(f.rel)).map((f) => f.rel);
+
+describe('ds-shop-guard (Mini App)', () => {
+  it('không còn thẻ cũ: CatalogTile, RelatedTile, ProductTileProduct, priceOverride, components/product-card', () => {
+    expect(hits(/\bCatalogTile\b|\bRelatedTile\b|\bProductTileProduct\b|\bpriceOverride\b/)).toEqual([]);
+    expect(hits(/from ['"](\.\.?\/)+(components\/)?product-card['"]/, ['components/ui/product-grid.tsx', 'components/ui/product-rail.tsx'])).toEqual([]);
+  });
+
+  it('gạch giá (line-through) chỉ ở PriceTag; ngoại lệ có sẵn là dòng giá ngoài thẻ sản phẩm', () => {
+    const NOT_A_CARD = [
+      'components/ui/price-tag.tsx',
+      'components/variation-sheet.tsx', // giá từng phân loại trong bảng chọn
+      'pages/product-detail.tsx', // khối giá lớn của trang chi tiết
+      'pages/cart.tsx', // dòng giỏ hàng
+      'pages/dealer.tsx', // bảng giá đại lý
+      'pages/external-points.tsx', // số điểm cũ bị gạch
+    ];
+    expect(hits(/line-through/, NOT_A_CARD)).toEqual([]);
+  });
+
+  it('Badge không ghi đè nền: tông flash/verified có sẵn thay cho style background/color tại chỗ', () => {
+    const BADGE_STYLE = /<Badge\b[^>]*style=\{\{[^}]*\b(background|color)\s*:/;
+    const DYNAMIC = [
+      'pages/loyalty.tsx', // màu hạng thành viên đến từ dữ liệu
+      'components/checkout/voucher-sheet.tsx', // nhãn mã giảm giá tông promo đặc; VoucherTicket (P5) thay
+    ];
+    expect(hits(BADGE_STYLE, DYNAMIC)).toEqual([]);
+    expect(hits(/flash-solid-bg|flash-solid-fg/, ['components/ui/badge.tsx', 'components/ui/button.tsx', 'components/ui/progress-bar.tsx', 'components/ui/tiles.tsx'])).toEqual([]);
+  });
+
+  it('chỉ product-tile vẽ vỏ thẻ sản phẩm (data-ds="product-tile")', () => {
+    expect(hits(/data-ds=["']product-tile["']/, ['components/ui/product-tile.tsx'])).toEqual([]);
+  });
+});
