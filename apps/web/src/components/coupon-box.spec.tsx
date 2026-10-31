@@ -594,4 +594,12 @@ describe('CouponBox — tự áp mã giảm nhiều nhất ở thanh toán', () 
     await flush(10);
     expect(label(box)).not.toBeNull();
   });
+
+  it('chưa biết khách (memoryUserId trống) → chưa tự áp', async () => {
+    const r = render(<CouponBox currentCode={null} subtotal={300000} preview={{ addressId: 'a1' }} autoApply />);
+    mounted.push(r);
+    await flush(10);
+    expect(state.applied).toEqual([]);
+    expect(r.container.textContent).toContain('Bạn có 2 mã dùng được');
+  });
 });

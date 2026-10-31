@@ -355,8 +355,7 @@ describe('/thanh-toan — tự áp mã giảm nhiều nhất', () => {
     expect(container.querySelector('[data-testid="coupon-auto-label"]')).toBeNull();
   });
 
-  it('thanh toán một phần giỏ → không tự áp mã', async () => {
-    state.twoItems = true;
+  it('"Mua ngay" khi giỏ chỉ có đúng món đó (có itemIds) → không tự áp mã', async () => {
     sessionStorage.setItem('tubu_checkout_selection', JSON.stringify({ itemIds: ['i1'] }));
     await mount();
     await settle();

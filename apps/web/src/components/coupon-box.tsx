@@ -147,6 +147,11 @@ export function CouponBox({
   const memory = useMemo(() => autoCouponMemory(browserSession(), memoryUserId), [memoryUserId]);
   const [autoCode, setAutoCode] = useState<string | null>(() => memory.applied());
   const autoSettled = useRef(memory.off());
+  // Khách về sau lần dựng đầu hoặc đổi tài khoản: đọc lại trí nhớ của khách đó.
+  useEffect(() => {
+    autoSettled.current = memory.off();
+    setAutoCode(memory.applied());
+  }, [memory]);
   // Mã trên giỏ khác mã đã tự áp (khách đổi hoặc gỡ ở đâu đó): quên mã tự áp và không tự áp nữa.
   useEffect(() => {
     const stored = memory.applied();
@@ -213,11 +218,11 @@ export function CouponBox({
   const busy = apply.isPending || drop.isPending || autoApplyMut.isPending || disabled;
   const autoMutate = autoApplyMut.mutate;
   useEffect(() => {
-    if (!autoApply || autoSettled.current || currentCode || !previewTrusted) return;
+    if (!autoApply || !memoryUserId || autoSettled.current || currentCode || !previewTrusted) return;
     autoSettled.current = true;
     const best = pickBestCoupon(previewsQ.data, couponsQ.data);
     if (best) autoMutate(best);
-  }, [autoApply, currentCode, previewTrusted, previewsQ.data, couponsQ.data, autoMutate]);
+  }, [autoApply, memoryUserId, memory, currentCode, previewTrusted, previewsQ.data, couponsQ.data, autoMutate]);
   const isAuto = !!autoCode && currentCode?.toUpperCase() === autoCode;
 
   return (

@@ -151,8 +151,6 @@ export default function CheckoutPage() {
   const checkoutItems = itemIds ? (cartQ.data?.items ?? []).filter((it) => itemIds.includes(it.id)) : (cartQ.data?.items ?? []);
   // Giỏ đã tải và không còn món nào (đặt xong rồi Back, mở lại tab cũ): không dựng form 0đ, không gọi báo giá (BE trả 400).
   const cartEmpty = cartLoaded && checkoutItems.length === 0;
-  // Thanh toán một phần giỏ không tự áp mã: mã nằm trên cả giỏ và còn lại sau khi đặt.
-  const wholeCart = !itemIds || itemIds.length === (cartQ.data?.items.length ?? 0);
 
   const userId = user?.id;
   useEffect(() => {
@@ -747,7 +745,8 @@ export default function CheckoutPage() {
                 shippingFee={quote?.shippingFee ?? null}
                 notice={quote ? quote.couponNotice : cart.couponNotice}
                 disabled={place.isPending}
-                autoApply={wholeCart && (!!addressId || addrQ.data?.length === 0)}
+                // Luồng có itemIds ("Mua ngay", chọn món) không tự áp, kể cả khi giỏ chỉ có đúng món đó: máy chủ giữ mã lại trên giỏ sau khi đặt.
+                autoApply={!itemIds && (!!addressId || addrQ.data?.length === 0)}
                 memoryUserId={userId}
                 preview={checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined}
                 previewKey={couponPreviewKey(checkoutItems)}
