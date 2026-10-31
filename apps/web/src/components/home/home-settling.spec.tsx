@@ -13,9 +13,19 @@ afterEach(() => {
 describe('HomeSettlingSkeleton', () => {
   it('bốn ô theo chiều cao chung ở app-core, giống Mini App (lối tắt, Giờ vàng, danh mục, hai hàng thẻ hàng)', () => {
     mounted = render(<HomeSettlingSkeleton />);
-    const heights = Array.from(mounted.container.querySelector('[data-testid="home-settling"]')!.children).map((el) => (el as HTMLElement).style.height);
+    const heights = Array.from(mounted.container.querySelector('[data-testid="home-settling"]')!.children).map((el) => ((el.firstElementChild ?? el) as HTMLElement).style.height);
     const h = HOME_SETTLING_HEIGHTS;
     expect(heights).toEqual([h.shortcuts, h.flash, h.categories, h.products].map((n) => `${n}px`));
+  });
+
+  it('khung chờ lối tắt ẩn từ lg như ShortcutGrid thật: không giữ ~100px mà khối thật không dùng, nên máy tính không nhảy lên khi khối về', () => {
+    mounted = render(<HomeSettlingSkeleton />);
+    const first = mounted.container.querySelector('[data-testid="home-settling"]')!.children[0] as HTMLElement;
+    expect(first.className).toContain('lg:hidden');
+    expect((first.firstElementChild as HTMLElement).style.height).toBe(`${HOME_SETTLING_HEIGHTS.shortcuts}px`);
+    // Ba khung còn lại luôn hiện: chỉ khung lối tắt theo điểm gãy của lưới thật.
+    const rest = Array.from(mounted.container.querySelector('[data-testid="home-settling"]')!.children).slice(1);
+    for (const el of rest) expect((el as HTMLElement).className).not.toContain('lg:hidden');
   });
 
   it('danh mục theo số ô: tới 5 ô một hàng (148), từ 6 ô hai hàng (248)', () => {
