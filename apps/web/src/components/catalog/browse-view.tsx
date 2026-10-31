@@ -254,7 +254,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
         e.preventDefault();
         commit(draft);
       }}
-      className="flex items-center gap-2 pb-2 max-md:sticky max-md:top-0 max-md:z-20 max-md:-mx-4 max-md:bg-[var(--color-bg-canvas)] max-md:px-4 max-md:py-1.5 lg:max-w-2xl"
+      className="flex items-center gap-2 pb-2 tubu-bleed max-md:sticky max-md:top-0 max-md:z-20 max-md:bg-[var(--color-bg-canvas)] max-md:px-4 max-md:py-1.5 lg:max-w-2xl"
     >
       <div className="relative min-w-0 flex-1">
         <label htmlFor="browse-q" className="sr-only">
@@ -360,7 +360,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
           <>
             {/* Dính ở khung bọc, không ở chính SortBar: cha của phần tử dính phải cao bằng cả danh sách. Từ lg cột lọc đã có nên nút Lọc ẩn đi (`!hidden` vì nút có `display` ở style). */}
             <div ref={listTopRef} data-testid="browse-list-top" aria-hidden="true" />
-            <div ref={sortStickyRef} className="sticky top-[var(--sort-bar-top,0px)] z-[2] -mx-4 md:mx-0 lg:[&>div>button:last-child]:!hidden">
+            <div ref={sortStickyRef} className="tubu-bleed sticky top-[var(--sort-bar-top,0px)] z-[2] lg:[&>div>button:last-child]:!hidden">
               <SortBar
                 value={sortTab(state.sort)}
                 options={browseSortOptions(state.sort, Boolean(state.q))}

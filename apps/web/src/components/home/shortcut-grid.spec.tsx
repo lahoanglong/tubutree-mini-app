@@ -148,11 +148,12 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
     }
   });
 
-  it('không còn lề âm -16px ở mọi khổ; điện thoại chỉ lùi 8px (max-md:-mx-2) để mép lưới cách mép màn 8px như Mini (ô rộng 359/5, không phải 343/5)', () => {
+  it('điện thoại: lưới tràn mép (.tubu-bleed) rồi đệm 8px (max-md:px-2) để mép lưới cách mép màn 8px như Mini (ô rộng 359/5, không phải 343/5); không lề âm tay', () => {
     const src = fs.readFileSync(path.join(__dirname, 'shortcut-grid.tsx'), 'utf8');
-    expect(src).not.toMatch(/margin: '0 -16px'|-mx-4/);
+    expect(src).not.toMatch(/margin: '0 -16px'|-mx-/);
     const cls = mount().querySelector('section')!.className;
-    expect(cls).toContain('max-md:-mx-2');
-    expect(cls).not.toMatch(/(?<!max-md:)-mx-/);
+    expect(cls).toContain('tubu-bleed');
+    expect(cls).toContain('max-md:px-2');
+    expect(cls).toContain('lg:hidden');
   });
 });
