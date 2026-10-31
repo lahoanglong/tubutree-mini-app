@@ -305,3 +305,18 @@ Hành vi: lg `StoreLayout` bìa tràn khung `max-w-frame` + thẻ đầu shop (a
 - Phủ spec P9: ShopHeader/ShopStatsRow/ShopTopBar/ShopSection (T3, T4, T8), tab (T1, T5, T6, T9), voucher chip (T6), combo + `addCartItemsBatch` (T2, T4), ẩn bậc (T1, T5), 6 khối (T1, T5, T9), `ProductCard showBrand=false`/`note` (T4, T6), việc mở đợt 2 ComboCard (T3), StoreLayout + phân trang số (T9), e2e guest + pilot (T7, T10).
 - Lệch có chủ ý so với đề: tab Sản phẩm CTV **không** gọi `fetchCatalog` (API `/products?slugs=` chỉ nhận ≤20 slug, chưa có endpoint theo gian hàng ở P3a/P3b): dùng danh sách món đã có trong phản hồi `/storefront/public/:slug`, sắp xếp + phân trang phía máy khách; ghi vào notes. Thương hiệu không có bộ sưu tập nên không có tab Danh mục (`shopTabs` có `hasCategories`).
 - Nhất quán kiểu: `ShopSort`, `ShopTab`, `ShopSectionProps`, `ShopHeaderProps`, `fetchBrandProducts`, `addAllToCart` dùng cùng tên ở T1–T9.
+
+## Kết quả thực hiện
+
+Lệch so với kế hoạch (đã làm khác và lý do):
+
+- Combo không có `%` hợp lệ hoặc dưới 2 sản phẩm khác nhau: vẽ như khối `line` (tối đa 5), không báo lỗi, vì nút "Thêm cả combo" không dùng được.
+- `ShopHeader` bản web là `'use client'` (ghi chú gập mở dùng state); props vẫn thuần dữ liệu nên trang server render được.
+- `ComboCard` web và `ShopSection` web làm ở Task 4 chứ không ở Task 8.
+- Thêm khóa chữ `shop.learnStore`, `shop.pagePrev`, `shop.pageNext`, `shop.pageN`; `SectionHeader` thêm biến thể `onPress`; `ProductGrid` Mini thêm `columns`; lưới/kệ thêm `noteOf`.
+- Nhãn tab dựng ở trang ("Sản phẩm (n)") vì `SegmentedTabs` render `count` không ngoặc nên tên truy cập thành "Sản phẩm45".
+- "Tất cả (n)" của một khối mở tab Sản phẩm đã lọc theo khối đó (chip bỏ lọc); tab Danh mục chỉ có khi có hơn một bộ sưu tập.
+- Web: `StorefrontBody` nhận `intro` (khối dựng sẵn ở server: subdomain, kho, hotline, dải cam kết) thay vì `isPartner`, để kho/ngân hàng không đi xuống client; `BrandActions` trả các phần qua `children`; không hiện huy hiệu "Kho: <thành phố>" ở web (khối kho tự giao đã có).
+- Mini e2e "khách" mô phỏng bằng kiểm tra chỉ đọc vì Mini luôn chạy với phiên giả; e2e web (`shop.web.spec.ts`) cần API thật nên chưa chạy cục bộ.
+- Sửa lỗi phát hiện khi chụp ảnh: tên shop trên thanh đầu bị nền nút lùi che (Mini, zIndex 199 thành 200); web `md:hidden` bị `display:flex` nội tuyến đè.
+- Xoá `apps/miniapp/src/utils/hex-color.ts` (không còn ai dùng sau khi bỏ `StorePageShell`).
