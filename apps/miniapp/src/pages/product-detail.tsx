@@ -478,7 +478,7 @@ export default function ProductDetailPage() {
   }
   if (merchant) {
     shippingLines.push(
-      <div key="merchant" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
+      <div key="store-name" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
         {merchant.name} tự giao
       </div>,
     );
