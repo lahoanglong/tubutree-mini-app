@@ -1,0 +1,59 @@
+{"loadAvg":"Load Avg: 8.68, 9.83, 13.47 ","cpu":"CPU usage: 46.69% user, 14.36% sys, 38.93% idle "}
+guest/cold before 0 firstCard 3331 gift undefined cls 0.0152
+guest/cold after 0 firstCard 3358 gift undefined cls 0.0152
+guest/cold before 1 firstCard 3327 gift undefined cls 0.0152
+guest/cold after 1 firstCard 3370 gift undefined cls 0.0152
+guest/cold before 2 firstCard 3361 gift undefined cls 0.0152
+guest/cold after 2 firstCard 3335 gift undefined cls 0.0152
+guest/warm before 0 firstCard 2241 gift 2241 cls 0.0087
+guest/warm after 0 firstCard 2115 gift 2115 cls 0.0087
+guest/warm before 1 firstCard 2217 gift 2217 cls 0.0087
+guest/warm after 1 firstCard 2045 gift 2045 cls 0.0087
+guest/warm before 2 firstCard 2223 gift 2223 cls 0.0087
+guest/warm after 2 firstCard 2045 gift 2045 cls 0.0087
+new/cold before 0 firstCard 2346 gift undefined cls 0.0152
+new/cold after 0 firstCard 2220 gift undefined cls 0.0152
+new/cold before 1 firstCard 2335 gift undefined cls 0.0152
+new/cold after 1 firstCard 2244 gift undefined cls 0.0152
+new/cold before 2 firstCard 2344 gift undefined cls 0.0152
+new/cold after 2 firstCard 2234 gift undefined cls 0.0152
+new/warm before 0 firstCard 2221 gift undefined cls 0.0087
+new/warm after 0 firstCard 1895 gift undefined cls 0.0087
+new/warm before 1 firstCard 2219 gift undefined cls 0.0087
+new/warm after 1 firstCard 2030 gift undefined cls 0.0087
+new/warm before 2 firstCard 2212 gift undefined cls 0.0087
+new/warm after 2 firstCard 1888 gift undefined cls 0.0087
+returning/cold before 0 firstCard 2617 gift undefined cls 0.0000
+returning/cold after 0 firstCard 2571 gift undefined cls 0.0000
+returning/cold before 1 firstCard 2615 gift undefined cls 0.0000
+returning/cold after 1 firstCard 2555 gift undefined cls 0.0000
+returning/cold before 2 firstCard 2599 gift undefined cls 0.0000
+returning/cold after 2 firstCard 2552 gift undefined cls 0.0000
+returning/warm before 0 firstCard 2235 gift undefined cls 0.0304
+returning/warm after 0 firstCard 2054 gift undefined cls 0.0304
+returning/warm before 1 firstCard 2222 gift undefined cls 0.0304
+returning/warm after 1 firstCard 2018 gift undefined cls 0.0304
+returning/warm before 2 firstCard 2239 gift undefined cls 0.0312
+returning/warm after 2 firstCard 1885 gift undefined cls 0.0304
+newpending/cold before 0 firstCard 2577 gift undefined cls 0.0795
+newpending/cold after 0 firstCard 2506 gift undefined cls 0.0795
+newpending/cold before 1 firstCard 2588 gift undefined cls 0.0795
+newpending/cold after 1 firstCard 2465 gift undefined cls 0.0795
+newpending/cold before 2 firstCard 2590 gift undefined cls 0.0795
+newpending/cold after 2 firstCard 2494 gift undefined cls 0.0795
+newpending/warm before 0 firstCard 2214 gift undefined cls 0.0882
+newpending/warm after 0 firstCard 2115 gift undefined cls 0.0882
+newpending/warm before 1 firstCard 2238 gift undefined cls 0.0882
+newpending/warm after 1 firstCard 2111 gift undefined cls 0.0882
+newpending/warm before 2 firstCard 2222 gift undefined cls 0.0882
+newpending/warm after 2 firstCard 1959 gift undefined cls 0.0882
+| ca | before thẻ đầu (ms) | after thẻ đầu (ms) | chênh | CLS trước | CLS sau | dải quà trước | dải quà sau | mẫu trước | mẫu sau |
+| guest/cold | 3331 | 3358 | 27 | 0.0152 | 0.0152 | null | null | 3331/3327/3361 | 3358/3370/3335 |
+| guest/warm | 2223 | 2045 | -178 | 0.0087 | 0.0087 | 2223.300000000745 | 2045.2000000011176 | 2241/2217/2223 | 2115/2045/2045 |
+| new/cold | 2344 | 2234 | -110 | 0.0152 | 0.0152 | null | null | 2346/2335/2344 | 2220/2244/2234 |
+| new/warm | 2219 | 1895 | -324 | 0.0087 | 0.0087 | null | null | 2221/2219/2212 | 1895/2030/1888 |
+| returning/cold | 2615 | 2555 | -60 | 0.0000 | 0.0000 | null | null | 2617/2615/2599 | 2571/2555/2552 |
+| returning/warm | 2235 | 2018 | -217 | 0.0304 | 0.0304 | null | null | 2235/2222/2239 | 2054/2018/1885 |
+| newpending/cold | 2588 | 2494 | -93 | 0.0795 | 0.0795 | null | null | 2577/2588/2590 | 2506/2465/2494 |
+| newpending/warm | 2222 | 2111 | -111 | 0.0882 | 0.0882 | null | null | 2214/2238/2222 | 2115/2111/1959 |
+FIN

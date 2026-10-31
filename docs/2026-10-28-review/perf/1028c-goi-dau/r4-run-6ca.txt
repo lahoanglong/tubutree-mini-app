@@ -1,0 +1,56 @@
+{"loadAvg":"Load Avg: 13.58, 18.31, 20.90 ","cpu":"CPU usage: 59.37% user, 12.59% sys, 28.3% idle "}
+   shift before 0.0152 @3513 DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y310→330 h266 | DIV. "Bán chạyXem tất cảBH.NongGiờ v" y576→596 h216
+guest/cold before 0 firstCard 3463 cls 0.0152
+   shift after 0.0152 @3378 DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y310→330 h266 | DIV. "Bán chạyXem tất cảBH.NongGiờ v" y576→596 h216
+guest/cold after 0 firstCard 3325 cls 0.0152
+guest/cold before 1 firstCard 3356 cls 0.0152
+guest/cold after 1 firstCard 3306 cls 0.0152
+guest/cold before 2 firstCard 3322 cls 0.0152
+guest/cold after 2 firstCard 3371 cls 0.0152
+   shift before 0.0087 @2235 DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y310→330 h265
+guest/warm before 0 firstCard 2232 cls 0.0087
+   shift after 0.0087 @1827 DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y310→330 h265
+guest/warm after 0 firstCard 1823 cls 0.0087
+guest/warm before 1 firstCard 2224 cls 0.0087
+guest/warm after 1 firstCard 1840 cls 0.0087
+guest/warm before 2 firstCard 2230 cls 0.0087
+guest/warm after 2 firstCard 1848 cls 0.0087
+   shift before 0.0152 @2440 DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y310→330 h265 | DIV. "Bán chạyXem tất cảBH.NongGiờ v" y575→595 h217
+new/cold before 0 firstCard 2382 cls 0.0152
+   shift after 0.0152 @2265 DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y310→330 h265 | DIV. "Bán chạyXem tất cảBH.NongGiờ v" y575→595 h217
+new/cold after 0 firstCard 2210 cls 0.0152
+new/cold before 1 firstCard 2353 cls 0.0152
+new/cold after 1 firstCard 2236 cls 0.0152
+new/cold before 2 firstCard 2363 cls 0.0152
+new/cold after 2 firstCard 2225 cls 0.0152
+   shift before 0.0087 @2248 DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y310→330 h265
+new/warm before 0 firstCard 2246 cls 0.0087
+   shift after 0.0087 @1847 DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y310→330 h265
+new/warm after 0 firstCard 1846 cls 0.0087
+new/warm before 1 firstCard 2244 cls 0.0087
+new/warm after 1 firstCard 1849 cls 0.0087
+new/warm before 2 firstCard 2227 cls 0.0087
+new/warm after 2 firstCard 1829 cls 0.0087
+returning/cold before 0 firstCard 2645 cls 0.0000
+returning/cold after 0 firstCard 2544 cls 0.0000
+returning/cold before 1 firstCard 2660 cls 0.0000
+returning/cold after 1 firstCard 2577 cls 0.0000
+returning/cold before 2 firstCard 2671 cls 0.0000
+returning/cold after 2 firstCard 2548 cls 0.0000
+   shift before 0.013 @2261 DIV. "" y384→404 h216 | DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y616→636 h176
+   shift before 0.0174 @2725 DIV. "Mua lạiXem tất cảNước rửa chén" y398→420 h225 | DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y637→659 h154 | DIV. "Đơn hàngĐổi quàMua chungMã của" y288→310 h116
+returning/warm before 0 firstCard 2257 cls 0.0304
+   shift after 0.013 @1847 DIV. "" y384→404 h216 | DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y616→636 h176
+   shift after 0.0174 @2636 DIV. "Mua lạiXem tất cảNước rửa chén" y398→420 h225 | DIV. "Ưu đãi giờ vàngCòn 3 ngày 3 gi" y637→659 h154 | DIV. "Đơn hàngĐổi quàMua chungMã của" y288→310 h116
+returning/warm after 0 firstCard 1844 cls 0.0304
+returning/warm before 1 firstCard 2247 cls 0.0304
+returning/warm after 1 firstCard 1835 cls 0.0304
+returning/warm before 2 firstCard 2249 cls 0.0304
+returning/warm after 2 firstCard 1818 cls 0.0304
+| ca | before thẻ đầu (ms) | after thẻ đầu (ms) | chênh | CLS trước | CLS sau | mẫu trước | mẫu sau |
+| guest/cold | 3356 | 3325 | -31 | 0.0152 | 0.0152 | 3463/3356/3322 | 3325/3306/3371 |
+| guest/warm | 2230 | 1840 | -390 | 0.0087 | 0.0087 | 2232/2224/2230 | 1823/1840/1848 |
+| new/cold | 2363 | 2225 | -138 | 0.0152 | 0.0152 | 2382/2353/2363 | 2210/2236/2225 |
+| new/warm | 2244 | 1846 | -398 | 0.0087 | 0.0087 | 2246/2244/2227 | 1846/1849/1829 |
+| returning/cold | 2660 | 2548 | -112 | 0.0000 | 0.0000 | 2645/2660/2671 | 2544/2577/2548 |
+| returning/warm | 2249 | 1835 | -414 | 0.0304 | 0.0304 | 2257/2247/2249 | 1844/1835/1818 |

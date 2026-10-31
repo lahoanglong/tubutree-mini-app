@@ -1,0 +1,44 @@
+{"loadAvg":"Load Avg: 7.81, 6.95, 9.65 ","cpu":"CPU usage: 81.56% user, 16.60% sys, 1.83% idle "}
+guest/cold before 0 firstCard 3341 gift 3523 loadGone 3523 cls 0.0152
+guest/cold after 0 firstCard 3316 gift 3510 loadGone 3510 cls 0.0152
+guest/cold before 1 firstCard 3337 gift 3511 loadGone 3511 cls 0.0152
+guest/cold after 1 firstCard 3327 gift 3512 loadGone 3512 cls 0.0152
+guest/cold before 2 firstCard 3313 gift 3494 loadGone 3494 cls 0.0152
+guest/cold after 2 firstCard 3359 gift 3551 loadGone 3551 cls 0.0152
+guest/warm before 0 firstCard 2218 gift 2218 loadGone 2218 cls 0.0087
+guest/warm after 0 firstCard 1862 gift 1998 loadGone 1998 cls 0.0087
+guest/warm before 1 firstCard 2222 gift 2222 loadGone 2222 cls 0.0087
+guest/warm after 1 firstCard 1847 gift 2003 loadGone 2003 cls 0.0087
+guest/warm before 2 firstCard 2217 gift 2217 loadGone 2217 cls 0.0087
+guest/warm after 2 firstCard 1837 gift 1980 loadGone 1980 cls 0.0087
+new/cold before 0 firstCard 2360 gift 2402 loadGone 2402 cls 0.0152
+new/cold after 0 firstCard 2216 gift 2254 loadGone 2254 cls 0.0152
+new/cold before 1 firstCard 2343 gift 2383 loadGone 2383 cls 0.0152
+new/cold after 1 firstCard 2228 gift 2269 loadGone 2269 cls 0.0152
+new/cold before 2 firstCard 2353 gift 2399 loadGone 2399 cls 0.0152
+new/cold after 2 firstCard 2255 gift 2296 loadGone 2296 cls 0.0152
+new/warm before 0 firstCard 2224 gift 2273 loadGone 2273 cls 0.0087
+new/warm after 0 firstCard 1841 gift 2175 loadGone 2175 cls 0.0087
+new/warm before 1 firstCard 2233 gift 2273 loadGone 2273 cls 0.0087
+new/warm after 1 firstCard 1849 gift 2186 loadGone 2186 cls 0.0087
+new/warm before 2 firstCard 2224 gift 2264 loadGone 2264 cls 0.0087
+new/warm after 2 firstCard 1847 gift 2189 loadGone 2189 cls 0.0087
+newpending/cold before 0 firstCard 2590 gift null loadGone null cls 0.0795
+newpending/cold after 0 firstCard 2482 gift null loadGone null cls 0.0795
+newpending/cold before 1 firstCard 2583 gift null loadGone null cls 0.0795
+newpending/cold after 1 firstCard 2476 gift null loadGone null cls 0.0795
+newpending/cold before 2 firstCard 2596 gift null loadGone 2351 cls 0.0795
+newpending/cold after 2 firstCard 2488 gift null loadGone null cls 0.0795
+newpending/warm before 0 firstCard 2236 gift null loadGone 2356 cls 0.0882
+newpending/warm after 0 firstCard 1834 gift null loadGone 2247 cls 0.0882
+newpending/warm before 1 firstCard 2247 gift null loadGone 2347 cls 0.0882
+newpending/warm after 1 firstCard 1862 gift null loadGone 2265 cls 0.0882
+newpending/warm before 2 firstCard 2238 gift null loadGone 2341 cls 0.0882
+newpending/warm after 2 firstCard 1840 gift null loadGone 2245 cls 0.0882
+| ca | before thẻ đầu (ms) | after thẻ đầu (ms) | chênh | CLS trước | CLS sau | dải quà hiện chữ trước | dải quà hiện chữ sau | khung xám dải quà tắt trước | sau | mẫu trước | mẫu sau |
+| guest/cold | 3337 | 3327 | -10 | 0.0152 | 0.0152 | 3511 | 3512 | 3511 | 3512 | 3341/3337/3313 | 3316/3327/3359 |
+| guest/warm | 2218 | 1847 | -370 | 0.0087 | 0.0087 | 2218 | 1998 | 2218 | 1998 | 2218/2222/2217 | 1862/1847/1837 |
+| new/cold | 2353 | 2228 | -125 | 0.0152 | 0.0152 | 2399 | 2269 | 2399 | 2269 | 2360/2343/2353 | 2216/2228/2255 |
+| new/warm | 2224 | 1847 | -377 | 0.0087 | 0.0087 | 2273 | 2186 | 2273 | 2186 | 2224/2233/2224 | 1841/1849/1847 |
+| newpending/cold | 2590 | 2482 | -107 | 0.0795 | 0.0795 | 0 | 0 | 2351 | 0 | 2590/2583/2596 | 2482/2476/2488 |
+| newpending/warm | 2238 | 1840 | -398 | 0.0882 | 0.0882 | 0 | 0 | 2347 | 2247 | 2236/2247/2238 | 1834/1862/1840 |
