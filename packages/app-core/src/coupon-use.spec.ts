@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { couponHint, couponHintText, couponUseCopy, couponUseOutcome, couponUseTarget } from './coupon-use';
+import { autoCouponMemory, couponAutoCopy, couponHint, pickBestCoupon, couponHintText, couponUseCopy, couponUseOutcome, couponUseTarget } from './coupon-use';
 
 describe('couponUseTarget', () => {
   it('giỏ có hàng → giỏ; giỏ trống hoặc chưa biết → sản phẩm', () => {
@@ -71,5 +71,83 @@ describe('couponHintText', () => {
   });
   it('chưa biết mức tiết kiệm → chỉ nói số mã, không hứa số 0đ', () => {
     expect(couponHintText({ count: 1, maxSaving: 0 }, fmt)).toBe('Bạn có 1 mã dùng được');
+  });
+});
+
+describe('pickBestCoupon', () => {
+  const pv = (code: string, discount: number, extra: Partial<{ eligible: boolean; freeshipSaving: number }> = {}) => ({
+    code,
+    eligible: true,
+    discount,
+    ...extra,
+  });
+
+  it('chọn mã tiết kiệm nhiều nhất, tính cả phí giao được miễn', () => {
+    expect(pickBestCoupon([pv('A', 20_000), pv('B', 10_000, { freeshipSaving: 25_000 }), pv('C', 30_000)], [])).toBe('B');
+  });
+
+  it('hoà mức tiết kiệm thì mã hết hạn sớm hơn; không biết hạn xếp sau', () => {
+    const wallet = [
+      { code: 'A', endAt: '2026-12-31T00:00:00Z' },
+      { code: 'B', endAt: '2026-11-30T00:00:00Z' },
+    ];
+    expect(pickBestCoupon([pv('A', 20_000), pv('B', 20_000), pv('Z', 20_000)], wallet)).toBe('B');
+    expect(pickBestCoupon([pv('Z', 20_000), pv('A', 20_000)], wallet)).toBe('A');
+  });
+
+  it('hoà cả hạn thì theo mã để kết quả ổn định', () => {
+    expect(pickBestCoupon([pv('B', 5_000), pv('A', 5_000)], [])).toBe('A');
+  });
+
+  it('bỏ mã không dùng được và mã không giảm gì', () => {
+    expect(pickBestCoupon([pv('A', 50_000, { eligible: false }), pv('B', 0), pv('C', 1_000)], [])).toBe('C');
+  });
+
+  it('không mã nào dùng được, rỗng hoặc chưa có số → null', () => {
+    expect(pickBestCoupon([pv('A', 50_000, { eligible: false }), pv('B', 0)], [])).toBeNull();
+    expect(pickBestCoupon([], [])).toBeNull();
+    expect(pickBestCoupon(null, null)).toBeNull();
+  });
+});
+
+describe('couponAutoCopy', () => {
+  it('nhãn theo chữ chủ chốt', () => {
+    expect(couponAutoCopy.applied).toBe('Đã tự áp');
+    expect(couponAutoCopy.remove).toBe('Gỡ');
+  });
+});
+
+describe('autoCouponMemory', () => {
+  const fake = () => {
+    const m = new Map<string, string>();
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) };
+  };
+
+  it('nhớ mã đã tự áp và cờ đã gỡ, tách theo khách, xoá khi đặt đơn xong', () => {
+    const st = fake();
+    const a = autoCouponMemory(st, 'u1');
+    expect(a.applied()).toBeNull();
+    expect(a.off()).toBe(false);
+    a.markApplied('giam30');
+    expect(autoCouponMemory(st, 'u1').applied()).toBe('GIAM30');
+    expect(autoCouponMemory(st, 'u2').applied()).toBeNull();
+    a.markOff();
+    expect(a.applied()).toBeNull();
+    expect(autoCouponMemory(st, 'u1').off()).toBe(true);
+    expect(autoCouponMemory(st, 'u2').off()).toBe(false);
+    a.markApplied('X');
+    a.clear();
+    expect(a.applied()).toBeNull();
+    expect(a.off()).toBe(false);
+  });
+
+  it('không có hoặc hỏng bộ nhớ → không ném lỗi, coi như chưa nhớ gì', () => {
+    const broken = { getItem: () => { throw new Error('x'); }, setItem: () => { throw new Error('x'); }, removeItem: () => { throw new Error('x'); } };
+    for (const st of [null, undefined, broken]) {
+      const a = autoCouponMemory(st, 'u1');
+      expect(() => { a.markApplied('A'); a.markOff(); a.clear(); }).not.toThrow();
+      expect(a.applied()).toBeNull();
+      expect(a.off()).toBe(false);
+    }
   });
 });

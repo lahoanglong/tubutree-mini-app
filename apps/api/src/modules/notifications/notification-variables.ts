@@ -58,6 +58,7 @@ export const TEMPLATE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
   CHAT_ORDER_POINTS_LINKED: ['points', 'count'],
   GAME_CHECKIN_REMINDER: ['streak', 'freezes'],
   TIER_DROP_NOTICE: ['tier', 'date', 'need'],
+  TIER_UPGRADED: ['tier'],
   GAME_TREE_THIRSTY: [],
   GAME_WATER_GIFT: ['amount'],
   GROUP_BUY_SUCCESS: ['discount', 'code', 'expires', 'product'],

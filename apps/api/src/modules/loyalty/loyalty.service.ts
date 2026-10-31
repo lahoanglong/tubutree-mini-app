@@ -32,6 +32,7 @@ import { pointsForGoods } from '../pricing/points-earn';
 import { freeShipThreshold } from '../pricing/pricing.service';
 import { DEFAULT_EARN_PCT, EARN_PCT_KEY } from './earn-rates';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { maskPhoneOrNull } from '../../common/mask-pii';
 import { formatPoints } from '../../common/format-points';
 import { assertActiveStaff } from '../../common/staff-access';
@@ -72,6 +73,7 @@ export class LoyaltyService {
     // rất nhiều test không liên quan tới dailyCheckIn — @Optional() + guard `?.` ở call site để
     // không phải sửa hàng loạt test đó (ngoài phạm vi Task 9).
     @Optional() private readonly analytics?: AnalyticsEventsService,
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
   /**
@@ -365,12 +367,40 @@ export class LoyaltyService {
       graceDays,
     });
     const graceChanged = (decision.graceUntil?.getTime() ?? null) !== (user.tierGraceUntil?.getTime() ?? null);
-    if (decision.tierId !== user.tierId || graceChanged) {
-      await this.prisma.user.update({
-        where: { id: userId },
+    if (decision.tierId !== user.tierId) {
+      // So-và-ghi theo hạng và ân hạn đã đọc: hai lượt tính song song chỉ một bên ghi được nên chỉ một bên báo lên hạng, và lượt hạ hạng đọc cũ không đè lượt vừa xoá ân hạn.
+      const moved = await this.prisma.user.updateMany({
+        where: { id: userId, tierId: user.tierId, tierGraceUntil: user.tierGraceUntil },
         data: { tierId: decision.tierId, tierGraceUntil: decision.graceUntil },
       });
+      if (moved.count === 1) await this.notifyTierUpgrade(userId, user.tierId, decision.tierId, tiers);
+    } else if (graceChanged) {
+      // Chỉ đổi ân hạn và chỉ khi hạng + hạn vẫn như đã đọc: không được kéo hạng vừa lên ở lượt song song về hạng cũ.
+      await this.prisma.user.updateMany({
+        where: { id: userId, tierId: user.tierId, tierGraceUntil: user.tierGraceUntil },
+        data: { tierGraceUntil: decision.graceUntil },
+      });
     }
+  }
+
+  /**
+   * Báo trong app khi khách lên hạng cao hơn. Không báo khi hạ hạng (đã có tin nhắc trước) hay khi lần đầu được gán đúng hạng đầu.
+   * Khoá chống trùng gồm ngày lịch VN: lên-xuống-lên lại cùng hạng cách nhau ít nhất một kỳ ân hạn nên vẫn được báo lại.
+   */
+  private async notifyTierUpgrade(userId: string, fromId: string | null, toId: string | null, tiers: MembershipTier[]): Promise<void> {
+    if (!this.notifications || !toId) return;
+    // Khách chưa có hạng được màn hạng coi như đang ở hạng đầu: đơn đầu đưa thẳng lên hạng cao hơn thì vẫn là lên hạng.
+    const from = fromId ? tiers.find((t) => t.id === fromId) : tiers.reduce<MembershipTier | undefined>((m, t) => (!m || t.sortOrder < m.sortOrder ? t : m), undefined);
+    const to = tiers.find((t) => t.id === toId);
+    if (!from || !to || to.sortOrder <= from.sortOrder) return;
+    const { year, month, day } = vnDateParts(new Date());
+    await this.notifications.notifySafe(
+      userId,
+      'TIER_UPGRADED',
+      { tier: to.name },
+      { dedupeKey: `tier-up:${to.id}:${year}-${month}-${day}` },
+      `tier=${to.id}`,
+    );
   }
 
   /**
