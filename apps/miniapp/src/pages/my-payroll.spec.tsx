@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { formatVnd } from '../utils/format';
 
 const mocks = vi.hoisted(() => ({
@@ -94,6 +94,17 @@ function renderPage() {
 }
 
 describe('Lương của tôi theo DS v2 (C-076, C-114)', () => {
+  // Trong một worker jsdom, lần dựng và truy vấn đầu tiên (khởi động lạnh) tốn hàng trăm ms và chạy ngay trong lần gọi đầu của lệnh chờ,
+  // ăn mất ngân sách 1 giây của nó: ca đầu file rớt ngẫu nhiên khi máy bận. Chạy trước một vòng ở đây để chi phí rơi vào hook; hạn 8 giây
+  // chỉ để vòng khởi động này không tự rớt, không nới lệnh chờ của ca nào.
+  beforeAll(async () => {
+    mocks.getMyPayroll.mockImplementation((year: number, month: number) => Promise.resolve(payroll(year, month)));
+    mocks.getHistory.mockResolvedValue(SESSIONS);
+    const { unmount } = renderPage();
+    await screen.findByText(/^Thực nhận tháng/, undefined, { timeout: 8000 });
+    unmount();
+  }, 20_000);
+
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-03-15T05:00:00Z'));

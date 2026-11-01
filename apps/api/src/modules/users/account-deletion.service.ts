@@ -191,13 +191,18 @@ export class AccountDeletionService {
       }
       ov = { reason, expectedWalletBalance: override.expectedWalletBalance };
     }
+    // Ghi chú cũng không bị ẩn danh theo tài khoản nên cùng quy tắc số điện thoại với lý do ghi đè Ví.
+    const note = typeof adminNote === 'string' ? adminNote.replace(INVISIBLE_CHARS, '').trim() : undefined;
+    if (note && containsPhone(note)) {
+      throw new BadRequestException('Ghi chú không được chứa số điện thoại của khách (ghi chú không bị ẩn danh), hãy bỏ đi.');
+    }
     let result;
     try {
-      result = await this.processOnce(requestId, adminId, adminNote, ov);
+      result = await this.processOnce(requestId, adminId, note, ov);
     } catch (err) {
       if (!isRetryableTxError(err)) throw err;
       this.logger.warn(`Yêu cầu xoá ${requestId}: xung đột giao dịch (${(err as Error).message}), chạy lại một lần.`);
-      result = await this.processOnce(requestId, adminId, adminNote, ov);
+      result = await this.processOnce(requestId, adminId, note, ov);
     }
     // Bộ nhớ đệm phiên (SessionStateService, TTL 5 giây) còn coi chủ vừa bị ẩn danh là đang đăng nhập: cắt ngay như khoá tài khoản.
     this.sessions?.invalidate(result.userId);
