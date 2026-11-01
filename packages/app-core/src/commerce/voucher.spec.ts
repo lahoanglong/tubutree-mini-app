@@ -166,6 +166,25 @@ describe('voucherView: tên admin nhắc lại số thì bỏ (một phiếu kh�
     // 5.000 không phải số của mã: để nguyên cả cụm.
     expect(view('Tặng 5.000 đồng vào ví', { value: 20_000 }).name).toBe('Tặng 5.000 đồng vào ví');
   });
+  it('đơn vị đôi ("20k vnđ", "20k đồng", "1,5tr đồng") là một con số: tiền tệ không ở lại làm đầu phần đuôi', () => {
+    const base = { value: 20_000, minOrder: 100_000 };
+    expect(view('Tặng 20k vnđ', base).name).toBeNull();
+    expect(view('Giảm 20k VND', base).name).toBeNull();
+    expect(view('Tặng 20k đồng', base).name).toBeNull();
+    expect(view('Tặng 20k đồng cho bạn mới', base).name).toBe('cho bạn mới');
+    expect(view('Tặng 20k vnđ cho bạn mới', base).name).toBe('cho bạn mới');
+    expect(view('Giảm 20k VND cho khách mới', base).name).toBe('cho khách mới');
+    expect(view('Giảm 1,5tr đồng cho khách mới', { value: 1_500_000, minOrder: 2_000_000 }).name).toBe('cho khách mới');
+    for (const t of ['Tặng 20k vnđ cho bạn mới', 'Tặng 20k đồng cho bạn mới', 'Giảm 20k VND cho khách mới', 'Mua 3 đơn giảm 20k đồng']) {
+      const name = view(t, base).name;
+      expect(name ?? '', t).not.toMatch(/k\s*(đồng|vnđ|VND)/i);
+      expect(name ?? '', t).not.toMatch(/^(đồng|vnđ|VND)/i);
+    }
+    // Số lạ: để nguyên cả cụm, kể cả chữ tiền tệ.
+    expect(view('Tặng 5k đồng vào ví', base).name).toBe('Tặng 5k đồng vào ví');
+    // "đồng" là chữ thường ("đồng hành"), không phải tiền: không bị nuốt.
+    expect(view('Giảm 20k đồng hành cùng bạn', base).name).toBe('đồng hành cùng bạn');
+  });
   it('số nhỏ không đơn vị (số đơn, số lượt, số bạn) là thông tin riêng: tên giữ, không bị coi là nhắc lại mã', () => {
     const base = { value: 20_000, minOrder: 300_000 };
     expect(view('Giảm 20k cho 3 đơn', base).name).toBe('cho 3 đơn');

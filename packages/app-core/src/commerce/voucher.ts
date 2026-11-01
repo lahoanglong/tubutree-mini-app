@@ -60,8 +60,13 @@ export function couponTitle(c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount'>
 const fold = (s: string): string => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase().replace(/\s+/g, ' ').trim();
 
 // Đơn vị chỉ tính khi không dính chữ cái liền sau ("10 trở lên" không phải "10tr"). Tiền viết bằng chữ ("đồng", "VND", "vnđ") cũng là đơn vị đồng:
-// nếu không, "20.000 đồng" bị đọc là số trần và "đồng" ở lại sau số đã rút gọn ("20k đồng").
-const FIGURE_RE = /(\d[\d.,]*)(\s*)(%|tr(?!\p{L})|k(?!\p{L})|đồng(?!\p{L})|dong(?!\p{L})|vn[đd](?!\p{L})|đ(?!\p{L})|₫)?/giu;
+// nếu không, "20.000 đồng" bị đọc là số trần và "đồng" ở lại sau số đã rút gọn ("20k đồng"). Đơn vị đôi ("20k vnđ", "1,5tr đồng") là MỘT đơn vị:
+// chữ tiền tệ sau k/tr thuộc về con số, không ở lại làm đầu phần đuôi. "đồng hành", "đồng thời" là chữ thường, không phải tiền.
+const CURRENCY = String.raw`(?:(?:đồng|dong)(?!\p{L})(?!\s+(?:hành|thời|hanh|thoi)(?!\p{L}))|(?:vn[đd]|đ)(?!\p{L})|₫)`;
+const FIGURE_SRC = String.raw`(\d[\d.,]*)(\s*)(%|(?:tr|k)(?!\p{L})(?:\s*${CURRENCY})?|${CURRENCY})?`;
+const FIGURE_RE = new RegExp(FIGURE_SRC, 'giu');
+// Mỗi mục là một con số (cả cụm đơn vị) hoặc một từ dính liền: cùng cách chia với FIGURE_RE nên cụm "20k vnđ" không bị tách ở khoảng trắng.
+const TOKEN_RE = new RegExp(`${FIGURE_SRC}|\\S+`, 'giu');
 
 /** Một số trong chữ tự do về cùng đơn vị (đồng, hoặc số âm cho phần trăm); số trần không đơn vị dưới 1.000 ("Tặng 5 lần") không phải tiền nên null. */
 function figureValue(rawText: string, unitText: string | undefined): number | null {
@@ -71,8 +76,8 @@ function figureValue(rawText: string, unitText: string | undefined): number | nu
   const whole = Number(raw.replace(/[.,]/g, ''));
   let n: number | null = null;
   if (unit === '%') n = -whole;
-  else if (unit === 'tr') n = Math.round(decimal * 1_000_000);
-  else if (unit === 'k') n = Math.round(decimal * 1_000);
+  else if (unit?.startsWith('tr')) n = Math.round(decimal * 1_000_000);
+  else if (unit?.startsWith('k')) n = Math.round(decimal * 1_000);
   else if (unit || whole >= 1_000) n = whole;
   return n !== null && Number.isFinite(n) && n !== 0 ? n : null;
 }
@@ -97,7 +102,11 @@ function knownFigures(c: CouponTerms): Set<number> {
 // Từ nối và từ đồng nghĩa với nhãn: tên chỉ gồm chúng (cùng từ của nhãn, điều kiện) và số của mã thì không thêm thông tin nào.
 const FILLER_WORDS = new Set(['va', 'cho', 'ban', 'tang', 'khi', 'mua', 'voi', 'ap', 'dung', 'freeship', 'ship']);
 
-const wordsOf = (s: string): string[] => fold(s).replace(/\d[\d.,]*\s*(?:%|tr\b|k\b|dong\b|vnd\b|d\b)?/g, ' ').split(/[^a-z]+/).filter(Boolean);
+// Cùng luật đơn vị với FIGURE_RE nhưng trên chữ đã `fold` (đ thành d, bỏ dấu).
+const FOLDED_CURRENCY = String.raw`(?:dong\b(?!\s+(?:hanh|thoi)\b)|vnd\b|d\b)`;
+const FOLDED_FIGURE_RE = new RegExp(String.raw`\d[\d.,]*\s*(?:%|(?:tr|k)\b(?:\s*${FOLDED_CURRENCY})?|${FOLDED_CURRENCY})?`, 'g');
+
+const wordsOf = (s: string): string[] => fold(s).replace(FOLDED_FIGURE_RE, ' ').split(/[^a-z]+/).filter(Boolean);
 
 /** Số trần dưới 1.000 không đơn vị ("3 đơn", "khi mua 2", "100 bạn"): không phải tiền nên không có trong nhãn, là số lượng mà tên đang nói. */
 function hasPlainSmallNumber(text: string): boolean {
@@ -144,7 +153,7 @@ function trimRepeatedLead(name: string, title: string): string {
   const labelFigures = new Set(figuresIn(title));
   const lead = new Set([...LEAD_SYNONYMS, ...wordsOf(title)]);
   let cut = -1;
-  for (const m of name.matchAll(/\S+/g)) {
+  for (const m of name.matchAll(TOKEN_RE)) {
     if (!wordsOf(m[0]).every((w) => lead.has(w))) break;
     const figures = figuresIn(m[0]);
     if (figures.length > 0) {
