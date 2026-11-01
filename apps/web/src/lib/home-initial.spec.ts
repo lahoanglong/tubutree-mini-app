@@ -4,6 +4,9 @@ const revalidates: (number | undefined)[] = [];
 let failAll = false;
 let failFlash = false;
 let failCampaigns = false;
+let failCombos = false;
+let comboList: { id: string; endAt: string }[] | null = null;
+const comboLimits: (number | undefined)[] = [];
 let campaignList: { id: string; endAt: string }[] | null = null;
 let flashList: { itemId: string; endAt: string }[] | null = null;
 const productCalls: Record<string, unknown>[] = [];
@@ -27,6 +30,15 @@ const bestSellerRows = [{ id: 'b1' }];
 vi.mock('@tubutree/app-core/api/flash-sale', () => ({
   fetchActiveFlashSales: async () => { if (failAll || failFlash) throw new Error('x'); return flashList ?? flashItems; },
 }));
+const comboItems = [{ id: 'cb1', endAt: '2099-01-01T00:00:00Z' }];
+vi.mock('@tubutree/app-core/api/bundle', () => ({
+  HOME_COMBOS_LIMIT: 4,
+  fetchHomeCombos: async (_http: unknown, limit?: number) => {
+    comboLimits.push(limit);
+    if (failAll || failCombos) throw new Error('x');
+    return comboList ?? comboItems;
+  },
+}));
 const campaignItems = [{ id: 'cp1', endAt: '2099-01-01T00:00:00Z' }];
 vi.mock('@tubutree/app-core/api/campaign', () => ({
   fetchCampaigns: async (_http: unknown, placement: string) => {
@@ -47,7 +59,7 @@ vi.mock('@tubutree/app-core/api/catalog', () => ({
 vi.mock('@tubutree/app-core/queries/config', () => ({ publicConfigQuery: () => ({ queryFn: async () => { if (failAll) throw new Error('x'); return { freeshipThreshold: 350000 }; } }) }));
 vi.mock('@tubutree/app-core/queries/home', () => ({ homeBestSellerQuery: () => ({ queryFn: async () => { if (failAll) throw new Error('x'); return bestSellerRows; } }) }));
 
-import { BUILD_GAP_REVALIDATE_S, CAMPAIGN_REVALIDATE_S, FLASH_REVALIDATE_S, loadHomeInitial } from './home-initial';
+import { BUILD_GAP_REVALIDATE_S, CAMPAIGN_REVALIDATE_S, COMBO_REVALIDATE_S, FLASH_REVALIDATE_S, loadHomeInitial } from './home-initial';
 
 afterEach(() => {
   productCalls.length = 0;
@@ -55,6 +67,9 @@ afterEach(() => {
   failAll = false;
   failFlash = false;
   failCampaigns = false;
+  failCombos = false;
+  comboList = null;
+  comboLimits.length = 0;
   campaignList = null;
   campaignPlacements.length = 0;
   vi.unstubAllEnvs();
@@ -150,6 +165,42 @@ describe('loadHomeInitial: banner chiến dịch có trong HTML đầu', () => {
   it('next build khi chỉ banner thiếu: vẫn thêm lệnh hạn ngắn để trang làm mới sớm', async () => {
     vi.stubEnv('NEXT_PHASE', 'phase-production-build');
     failCampaigns = true;
+    await loadHomeInitial();
+    expect(revalidates).toContain(BUILD_GAP_REVALIDATE_S);
+  });
+});
+
+describe('loadHomeInitial: kệ combo có trong HTML đầu', () => {
+  it('xin combo phía máy chủ với đúng số combo của kệ và hạn ngắn, để kệ không chen vào sau hydrate và Bán chạy nhất chống trùng được ngay lần vẽ đầu', async () => {
+    const initial = await loadHomeInitial();
+    expect(initial.combos).toEqual(comboItems);
+    expect(comboLimits).toEqual([4]);
+    expect(revalidates).toContain(COMBO_REVALIDATE_S);
+  });
+
+  it('lỗi riêng phần combo thì bỏ phần đó (client tự tải), các phần khác vẫn có', async () => {
+    failCombos = true;
+    const initial = await loadHomeInitial();
+    expect(initial.combos).toBeUndefined();
+    expect(initial.bestSellers).toEqual(bestSellerRows);
+  });
+
+  it('bỏ combo đã hết hạn khỏi bản dựng sẵn (trang ISR có thể cũ): kệ và món Bán chạy nhất không đổi sau hydrate', async () => {
+    comboList = [
+      { id: 'old', endAt: '2000-01-01T00:00:00Z' },
+      { id: 'live', endAt: '2099-01-01T00:00:00Z' },
+    ];
+    expect((await loadHomeInitial()).combos).toEqual([comboList[1]]);
+  });
+
+  it('không có combo nào thì trả mảng rỗng (khác undefined: server đã hỏi và không có)', async () => {
+    comboList = [];
+    expect((await loadHomeInitial()).combos).toEqual([]);
+  });
+
+  it('next build khi chỉ combo thiếu: vẫn thêm lệnh hạn ngắn để trang làm mới sớm', async () => {
+    vi.stubEnv('NEXT_PHASE', 'phase-production-build');
+    failCombos = true;
     await loadHomeInitial();
     expect(revalidates).toContain(BUILD_GAP_REVALIDATE_S);
   });

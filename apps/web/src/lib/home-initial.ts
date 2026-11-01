@@ -1,3 +1,4 @@
+import { HOME_COMBOS_LIMIT, fetchHomeCombos } from '@tubutree/app-core/api/bundle';
 import { fetchCampaigns } from '@tubutree/app-core/api/campaign';
 import { fetchActiveFlashSales } from '@tubutree/app-core/api/flash-sale';
 import { fetchBrands, fetchCategories, fetchProducts } from '@tubutree/app-core/api/catalog';
@@ -20,6 +21,9 @@ export const FLASH_REVALIDATE_S = 60;
 /** Banner chiến dịch đổi khi admin bật/tắt: bản dựng sẵn giữ ngắn như Giờ vàng, để banner đã tắt không nằm trong HTML tới 5 phút. */
 export const CAMPAIGN_REVALIDATE_S = 60;
 
+/** Combo bật/tắt hay hết hạn theo giờ: bản dựng sẵn giữ ngắn như Giờ vàng, để combo đã tắt không nằm trong HTML (và không chiếm món của Bán chạy nhất) tới 5 phút. */
+export const COMBO_REVALIDATE_S = 60;
+
 /** Dữ liệu công khai của Trang chủ cho trang ISR (bản thường và bản khôi phục phiên dùng chung). */
 export async function loadHomeInitial(): Promise<HomeInitial> {
   const http = createServerHttp();
@@ -33,20 +37,22 @@ export async function loadHomeInitial(): Promise<HomeInitial> {
   // (cùng hành vi getListOrEmptyAtBuild). Riêng `next build` thường chạy khi API chưa lên: không ném, client tự tải lại.
   const failed = grids.find((g): g is PromiseRejectedResult => g.status === 'rejected');
   if (failed && grids.every((g) => g.status === 'rejected') && process.env.NEXT_PHASE !== 'phase-production-build') throw failed.reason;
-  const [categories, brands, publicConfig, flash, campaigns] = await Promise.all([
+  const [categories, brands, publicConfig, flash, campaigns, combos] = await Promise.all([
     orUndefined(fetchCategories(http)),
     orUndefined(fetchBrands(http)),
     orUndefined(publicConfigQuery(http).queryFn()),
     orUndefined(fetchActiveFlashSales(createServerHttp({ revalidate: FLASH_REVALIDATE_S }))),
     orUndefined(fetchCampaigns(createServerHttp({ revalidate: CAMPAIGN_REVALIDATE_S }), 'HOME_TOP')),
+    orUndefined(fetchHomeCombos(createServerHttp({ revalidate: COMBO_REVALIDATE_S }), HOME_COMBOS_LIMIT)),
   ]);
   const [bestSellers, suggest] = grids.map((g) => (g.status === 'fulfilled' ? g.value : undefined));
-  if (process.env.NEXT_PHASE === 'phase-production-build' && [bestSellers, suggest, categories, brands, publicConfig, flash, campaigns].some((part) => part === undefined)) {
+  if (process.env.NEXT_PHASE === 'phase-production-build' && [bestSellers, suggest, categories, brands, publicConfig, flash, campaigns, combos].some((part) => part === undefined)) {
     // Next lấy hạn làm mới của trang từ hạn nhỏ nhất của các lệnh fetch trong lần dựng đó; lần dựng lại ở runtime có đủ dữ liệu trả hạn về 5 phút.
     await createServerHttp({ revalidate: BUILD_GAP_REVALIDATE_S }).get('/config/public').catch(() => undefined);
   }
-  // Hết giờ rồi thì không đưa vào HTML: lần tải ngay sau đó sẽ không còn, khối biến mất và trang nhảy.
+  // Hết giờ rồi thì không đưa vào HTML: lần tải ngay sau đó sẽ không còn, khối biến mất và trang nhảy (combo hết hạn còn chiếm món của Bán chạy nhất).
   const liveFlash = flash?.filter((it) => new Date(it.endAt).getTime() > Date.now());
   const liveCampaigns = campaigns?.filter((c) => new Date(c.endAt).getTime() > Date.now());
-  return { bestSellers, suggest, suggestSeed, categories, brands, publicConfig, flash: liveFlash, campaigns: liveCampaigns };
+  const liveCombos = combos?.filter((b) => new Date(b.endAt).getTime() > Date.now());
+  return { bestSellers, suggest, suggestSeed, categories, brands, publicConfig, flash: liveFlash, campaigns: liveCampaigns, combos: liveCombos };
 }
