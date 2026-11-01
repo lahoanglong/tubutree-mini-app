@@ -1,9 +1,12 @@
 import 'reflect-metadata';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
+import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
+import { PUBLIC_CACHE_POLICY_KEY } from '../../common/decorators/public-cache.decorator';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { ClaimCouponDto, CouponsController } from './coupons.controller';
 import type { CouponClaimService } from './coupon-claim.service';
+import type { CouponCollectService } from './coupon-collect.service';
 
 async function errorKeys(plain: Record<string, unknown>): Promise<string[]> {
   const errs = await validate(plainToInstance(ClaimCouponDto, plain), { whitelist: true, forbidNonWhitelisted: true });
@@ -33,5 +36,21 @@ describe('CouponsController — POST /coupons/claim', () => {
   it('mã hợp lệ (chữ thường, khoảng trắng đầu cuối) → không lỗi; trường lạ bị chặn', async () => {
     expect(await errorKeys({ code: ' shopee-ab12 ' })).toHaveLength(0);
     expect(await errorKeys({ code: 'ABC', userId: 'u2' })).toContain('whitelistValidation');
+  });
+});
+
+describe('CouponsController — GET /coupons/collectable', () => {
+  const handler = CouponsController.prototype.collectable;
+
+  it('công khai (khách chưa đăng nhập xem được), cache CATALOG, có throttle', () => {
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, handler)).toBe(true);
+    expect(Reflect.getMetadata(PUBLIC_CACHE_POLICY_KEY, handler)).toBe('CATALOG');
+    expect(Reflect.getMetadata('THROTTLER:LIMITdefault', handler)).toBe(60);
+  });
+
+  it('trả đúng danh sách của service', async () => {
+    const collectable = jest.fn().mockResolvedValue([{ code: 'X' }]);
+    const ctrl = new CouponsController({} as CouponClaimService, { collectable } as unknown as CouponCollectService);
+    expect(await ctrl.collectable()).toEqual([{ code: 'X' }]);
   });
 });
