@@ -111,11 +111,21 @@ describe('TodoStrip — Việc cần làm', () => {
 
   it('lần đầu chưa nhớ gì: chờ đơn thì im lặng (không khung chờ rồi sụp), có việc thì khối hiện', async () => {
     let release: (v: unknown) => void = () => {};
-    mocks.ordersFor.mockImplementation(() => new Promise((r) => { release = r; }));
-    renderStrip();
+    mocks.fetchHomeTodo.mockImplementation(() => new Promise((r) => { release = r; }));
+    const { container } = renderStrip();
     await waitFor(() => expect(mocks.fetchHomeTodo).toHaveBeenCalled());
     expect(screen.queryByTestId('todo-strip-loading')).toBeNull();
-    release(page([shippingOrder]));
+    expect(container).toBeEmptyDOMElement();
+    release({ pending: null, shipping: { order: shippingOrder, total: 1 }, processing: null });
+    await screen.findByText(/TUBU2/);
+  });
+
+  it('một lời con lỗi (partial): dòng còn lại vẫn hiện nhưng không ghi số dòng, để khung chờ lần sau không sai', async () => {
+    localStorage.setItem(TODO_ROWS_KEY, JSON.stringify({ userId: 'u1', rows: 2 }));
+    mocks.fetchHomeTodo.mockResolvedValue({ pending: null, shipping: { order: shippingOrder, total: 1 }, processing: null, partial: true });
+    renderStrip();
+    await screen.findByText(/TUBU2/);
+    expect(JSON.parse(localStorage.getItem(TODO_ROWS_KEY)!)).toEqual({ userId: 'u1', rows: 2 });
   });
 
   it('lần mở trước có 1 dòng việc: có khung chờ giữ chỗ; xong thì ghi lại số dòng mới', async () => {

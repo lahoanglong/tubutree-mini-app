@@ -46,4 +46,22 @@ describe('GET /orders/home-todo', () => {
     const list = jest.fn().mockResolvedValue(page([]));
     await expect(loadHomeTodo(list as never, 'u1')).resolves.toEqual({ pending: null, shipping: null, processing: null });
   });
+
+  it('một lời lỗi: phần đó null, các phần còn lại vẫn trả, đánh dấu partial để giao diện không ghi số dòng sai', async () => {
+    const list = jest.fn(async (_u: string, f: { status?: string; group?: string }) => {
+      if (f.status === 'PENDING_PAYMENT') throw new Error('db blip');
+      return f.status === 'SHIPPING' ? page([shippingOrder]) : page([]);
+    });
+    await expect(loadHomeTodo(list as never, 'u1')).resolves.toEqual({
+      pending: null,
+      shipping: { order: shippingOrder, total: 1 },
+      processing: null,
+      partial: true,
+    });
+  });
+
+  it('cả ba lỗi: ném lỗi như GET /orders (giao diện ẩn dải)', async () => {
+    const list = jest.fn().mockRejectedValue(new Error('down'));
+    await expect(loadHomeTodo(list as never, 'u1')).rejects.toThrow('down');
+  });
 });

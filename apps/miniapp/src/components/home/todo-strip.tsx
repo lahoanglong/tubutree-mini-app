@@ -110,7 +110,7 @@ export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
   const settled =
     authed &&
     (enabled
-      ? !todoQ.isLoading && !todoQ.isError
+      ? !todoQ.isLoading && !todoQ.isError && !todoQ.data?.partial
       : countQ.isSuccess);
   useEffect(() => {
     if (settled && userId) writeTodoRows(browserStorage(), userId, rows);

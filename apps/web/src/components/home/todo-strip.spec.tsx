@@ -125,6 +125,17 @@ describe('TodoStrip web — Việc cần làm', () => {
       expect(JSON.parse(window.localStorage.getItem(KEY)!)).toEqual({ userId: 'u1', rows: 2 });
     });
 
+    it('một lời con lỗi (partial): dòng còn lại vẫn hiện, không ghi số dòng sai', async () => {
+      window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u1', rows: 2 }));
+      mocks.get.mockImplementation(async (path: string) => {
+        if (path === '/orders/active-count') return { count: 2 };
+        return { pending: null, shipping: { order: shippingOrder, total: 1 }, processing: null, partial: true };
+      });
+      const c = await mount();
+      expect(c.textContent).toContain('TUBU2');
+      expect(JSON.parse(window.localStorage.getItem(KEY)!)).toEqual({ userId: 'u1', rows: 2 });
+    });
+
     it('không còn việc: ghi 0 để lần sau không dựng khung chờ', async () => {
       window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u1', rows: 2 }));
       mocks.active = 0;

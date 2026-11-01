@@ -101,7 +101,7 @@ export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
   const settled =
     authed &&
     (enabled
-      ? !todoQ.isLoading && !todoQ.isError
+      ? !todoQ.isLoading && !todoQ.isError && !todoQ.data?.partial
       : count.isSuccess);
   useEffect(() => {
     if (settled && userId) {
