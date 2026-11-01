@@ -413,7 +413,7 @@ export default function AddToCart({
         </div>
       )}
 
-      {/* Điện thoại: dòng này nằm ở khối thông tin chính dưới Điểm Xanh như Mini App (`PdpLowStock`), nên ẩn ở đây. */}
+      {/* Điện thoại: dòng nhắc tồn thấp nằm ở khối thông tin chính dưới Điểm Xanh như Mini App (`PdpLowStock`), nên ẩn ở đây. */}
       {available && (selected?.stock ?? 0) <= LOW_STOCK_NOTICE && (
         <p className="mt-3 text-sm font-medium text-warning-fg max-md:hidden">Chỉ còn {selected!.stock} sản phẩm</p>
       )}

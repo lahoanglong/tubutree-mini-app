@@ -98,11 +98,11 @@ describe('/san-pham/[slug] — tên nhãn dẫn sang trang nhãn hàng (BUYERWEB
 describe('/san-pham/[slug] — kiểu Mini App ở điện thoại', () => {
   const PRODUCT_TUBU = { ...PRODUCT, brandSlug: 'xanh-viet', fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
 
-  it('"Chỉ còn N" nằm trong khối thông tin chính dưới Điểm Xanh (như Mini App), không nằm trong dải Phân loại; gian hàng tạm nghỉ thì không nhắc', async () => {
+  it('"Còn N sản phẩm" nằm trong khối thông tin chính dưới Điểm Xanh (như Mini App), không nằm trong dải Phân loại; gian hàng tạm nghỉ thì không nhắc', async () => {
     api.product = { ...PRODUCT_TUBU, variations: [{ ...PRODUCT.variations[0]!, stock: 3 }] };
     const c = await mount();
     const note = c.querySelector('[data-testid="pdp-low-stock"]')!;
-    expect(note.textContent).toBe('Chỉ còn 3 sản phẩm');
+    expect(note.textContent).toBe('Còn 3 sản phẩm');
     expect(c.querySelector('[data-section="pdp-main"]')!.contains(note)).toBe(true);
     api.product = { ...PRODUCT_TUBU, fulfilment: 'MERCHANT', fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null }, variations: [{ ...PRODUCT.variations[0]!, stock: 3 }] };
     expect((await mount()).querySelector('[data-testid="pdp-low-stock"]')).toBeNull();

@@ -72,7 +72,7 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     });
     api.get('/flash-sales/active', []);
     api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
-    // Phân loại đầu hết hàng (nếu có từ hai phân loại), còn lại còn 3: để kiểm chip hết hàng khoá và dòng "Chỉ còn 3" ở khối thông tin chính.
+    // Phân loại đầu hết hàng (nếu có từ hai phân loại), còn lại còn 3: để kiểm chip hết hàng khoá và dòng "Còn 3 sản phẩm" ở khối thông tin chính.
     const multi = p!.variations.length > 1;
     api.get(`/products/${p!.slug}`, { variations: p!.variations.map((v, i) => ({ ...v, stock: multi && i === 0 ? 0 : 3 })) });
     api.get(`/products/${p!.slug}/related`, []);
@@ -122,9 +122,9 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     expect(ids.indexOf('pdp-quick-reviews')).toBeLessThan(ids.indexOf('pdp-quantity'));
     expect(ids.indexOf('pdp-quick-reviews')).toBeLessThan(ids.indexOf('pdp-reviews'));
 
-    // "Chỉ còn N" nằm trong khối thông tin chính (dưới giá/Điểm Xanh) như Mini App, không trôi xuống dải Phân loại.
+    // "Còn N sản phẩm" nằm trong khối thông tin chính (dưới giá/Điểm Xanh) như Mini App, không trôi xuống dải Phân loại.
     const low = page.locator('[data-testid="pdp-low-stock"]');
-    await expect(low).toHaveText('Chỉ còn 3 sản phẩm');
+    await expect(low).toHaveText('Còn 3 sản phẩm');
     const lowBox = (await low.boundingBox())!;
     const mainBox = (await page.locator('[data-section="pdp-main"]').boundingBox())!;
     expect(lowBox.y).toBeGreaterThanOrEqual(mainBox.y);

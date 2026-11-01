@@ -252,12 +252,12 @@ describe('PdpSubscribeRow', () => {
   });
 });
 
-describe('PdpLowStock ("Chỉ còn N" dưới Điểm Xanh, như Mini App ở điện thoại)', () => {
-  it('phân loại đang chọn còn từ 1 đến 5: nhắc "Chỉ còn N sản phẩm", chỉ hiện dưới md', async () => {
+describe('PdpLowStock ("Còn N sản phẩm" dưới Điểm Xanh, đúng chữ Mini App ở điện thoại)', () => {
+  it('phân loại đang chọn còn từ 1 đến 5: nhắc "Còn N sản phẩm", chỉ hiện dưới md', async () => {
     const { container } = mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />);
     await flush();
     const p = container.querySelector('[data-testid="pdp-low-stock"]')!;
-    expect(p.textContent).toBe('Chỉ còn 4 sản phẩm');
+    expect(p.textContent).toBe('Còn 4 sản phẩm');
     expect(p.className).toContain('md:hidden');
   });
   it('hết hàng hoặc còn nhiều hơn 5: không nhắc; lấy tồn kho thật thay bản ISR', async () => {
@@ -269,7 +269,7 @@ describe('PdpLowStock ("Chỉ còn N" dưới Điểm Xanh, như Mini App ở đ
     mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 2 });
     const few = mount(<PdpLowStock slug="dau-goi" variations={[{ id: 'v2', stock: 9 }]} />);
     await flush();
-    expect(few.container.textContent).toBe('Chỉ còn 2 sản phẩm');
+    expect(few.container.textContent).toBe('Còn 2 sản phẩm');
   });
 });
 

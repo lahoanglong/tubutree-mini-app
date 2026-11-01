@@ -247,8 +247,9 @@ interface PdpVariation {
 }
 
 /**
- * "Chỉ còn N sản phẩm" của phân loại đang chọn, dưới dòng Điểm Xanh như Mini App (điện thoại). Máy tính giữ dòng này trong khối mua
- * (`AddToCart`, ngay dưới chip), nên bản này ẩn từ md. Cùng ngưỡng và cùng tồn kho thật với bản trong khối mua.
+ * "Còn N sản phẩm" của phân loại đang chọn, dưới dòng Điểm Xanh, đúng chữ của Mini App (`vi.product.lowStock`, D2 chốt "Còn {n} sản phẩm").
+ * Máy tính giữ dòng cũ "Chỉ còn N" trong khối mua (`AddToCart`, ngay dưới chip; chữ đó thuộc gói chữ riêng), nên bản này ẩn từ md.
+ * Cùng ngưỡng và cùng tồn kho thật với bản trong khối mua.
  */
 export function PdpLowStock({ slug, variations }: { slug: string; variations: { id: string; stock: number }[] }) {
   const sel = usePdpSelection();
@@ -258,7 +259,7 @@ export function PdpLowStock({ slug, variations }: { slug: string; variations: { 
   if (stock <= 0 || stock > LOW_STOCK_NOTICE) return null;
   return (
     <p data-testid="pdp-low-stock" className="mt-1 text-xs font-medium text-warning-fg md:hidden">
-      Chỉ còn {stock} sản phẩm
+      Còn {stock} sản phẩm
     </p>
   );
 }
