@@ -405,7 +405,7 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     expect(await screen.findByRole('heading', { name: 'Nhóm đã đủ người của bạn' })).toBeInTheDocument();
     expect(screen.getByText('GBUY-DONE-ME')).toBeInTheDocument();
     expect(screen.getByText('5/5 người · đã đủ nhóm')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Mua ngay với mã giảm 20%' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mua ngay với mã giảm giá 20%' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-done', { state: { variationId: undefined, applyCoupon: 'GBUY-DONE-ME' } });
     expect(screen.queryByRole('button', { name: 'Nhóm đã đủ người' })).toBeNull();
   });
@@ -415,7 +415,7 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
       GROUP('done', { joined: true, status: 'SUCCESS', currentSize: 5, couponCode: 'GBUY-DONE-ME', variationId: 'v-rep' }),
     ]);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Mua ngay với mã giảm 20%' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mua ngay với mã giảm giá 20%' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-done', { state: { variationId: 'v-rep', applyCoupon: 'GBUY-DONE-ME' } });
   });
 

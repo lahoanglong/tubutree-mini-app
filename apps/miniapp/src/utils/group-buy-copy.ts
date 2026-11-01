@@ -13,6 +13,3 @@ export function groupBuyPitch(cfg?: GroupBuyConfig | null): string {
   }
   return 'Rủ bạn bè cho đủ nhóm, mỗi người nhận mã giảm giá';
 }
-
-/** Menu Cá nhân là danh sách tĩnh nên không đưa con số vào. */
-export const GROUP_BUY_MENU_HINT = 'Rủ bạn mua chung, đủ nhóm nhận mã giảm giá';

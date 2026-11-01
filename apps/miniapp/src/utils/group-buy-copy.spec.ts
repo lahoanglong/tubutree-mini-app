@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GROUP_BUY_MENU_HINT, groupBuyPitch } from './group-buy-copy';
+import { groupBuyPitch } from './group-buy-copy';
 
 // ENGAGE-20 / BUYERMINI-20: menu hứa "Tiết kiệm đến 30%" trong khi mua chung thật là mã giảm 15% (groupbuy.discount_pct)
 // chỉ phát sau khi đủ người.
@@ -20,10 +20,5 @@ describe('copy mua chung', () => {
   it('cấu hình hỏng (không phải số dương) → rơi về câu không số', () => {
     expect(groupBuyPitch({ discountPct: 0, targetSize: 3 })).not.toMatch(/\d/);
     expect(groupBuyPitch({ discountPct: Number.NaN, targetSize: 3 })).not.toMatch(/\d/);
-  });
-
-  it('gợi ý ở menu Cá nhân không chép cứng con số', () => {
-    expect(GROUP_BUY_MENU_HINT).not.toMatch(/\d/);
-    expect(GROUP_BUY_MENU_HINT).toBe('Rủ bạn mua chung, đủ nhóm nhận mã giảm giá');
   });
 });

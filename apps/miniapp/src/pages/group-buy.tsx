@@ -261,7 +261,7 @@ function GroupCard({
             </Text>
           )}
           <Button fullWidth onPress={onBuy} style={{ marginTop: 10 }}>
-            {`Mua ngay với mã giảm ${g.discountPct}%`}
+            {`Mua ngay với mã giảm giá ${g.discountPct}%`}
           </Button>
         </>
       ) : inOpenGroup ? (

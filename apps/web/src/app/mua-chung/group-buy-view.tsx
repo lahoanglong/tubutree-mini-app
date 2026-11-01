@@ -239,7 +239,7 @@ function GroupCard({
             </p>
           )}
           <Link href={g.couponCode ? `${productHref}?ma=${encodeURIComponent(g.couponCode)}` : productHref} className={`${ui.btnPrimary} mt-3 w-full`}>
-            {`Mua ngay với mã giảm ${g.discountPct}%`}
+            {`Mua ngay với mã giảm giá ${g.discountPct}%`}
           </Link>
         </>
       ) : inOpenGroup ? (
