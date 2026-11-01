@@ -62,7 +62,8 @@ export default function FlashSalePage() {
   const qc = useQueryClient();
   const { notify } = useNotify();
   const panelId = useId();
-  const authed = useAuthStore((s) => s.status === 'authenticated');
+  const authStatus = useAuthStore((s) => s.status);
+  const authed = authStatus === 'authenticated';
   const { categories } = useCategories();
 
   const slotsQ = useQuery({ ...flashSlotsQuery(coreHttp), staleTime: 15_000, refetchInterval: SLOTS_REFETCH_MS });
@@ -90,7 +91,10 @@ export default function FlashSalePage() {
     refetchInterval: activeTab?.status === 'LIVE' ? LIVE_ITEMS_REFETCH_MS : false,
   });
 
-  const login = () => void useAuthStore.getState().login();
+  // Phiên đang khôi phục thì chờ: mở thêm một lần đăng nhập song song chỉ làm hai lời gọi dẫm lên nhau.
+  const login = () => {
+    if (authStatus !== 'loading') void useAuthStore.getState().login();
+  };
 
   const buyMut = useMutation({
     mutationFn: async (item: FlashSlotItemData) => ({ cart: await addToCart(item.variationId, 1, 'buy_now'), variationId: item.variationId }),

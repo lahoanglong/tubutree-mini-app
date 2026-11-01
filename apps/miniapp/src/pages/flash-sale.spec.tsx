@@ -247,6 +247,18 @@ describe('Trang Giờ vàng: khách chưa đăng nhập', () => {
     expect(mocks.addToCart).not.toHaveBeenCalled();
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
+
+  it('phiên đang khôi phục (loading): bấm Mua ngay hay Nhắc tôi không mở thêm một lần đăng nhập song song', async () => {
+    mocks.status = 'loading';
+    serve({ items: { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c')]) } });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' }));
+    fireEvent.click(screen.getAllByRole('tab')[1]!);
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhắc tôi Sản phẩm c' }));
+    expect(mocks.login).not.toHaveBeenCalled();
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+    expect(mocks.setReminder).not.toHaveBeenCalled();
+  });
 });
 
 describe('Trang Giờ vàng: Nhắc tôi khi đã đăng nhập', () => {
