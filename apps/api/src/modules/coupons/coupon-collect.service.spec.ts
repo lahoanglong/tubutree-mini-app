@@ -101,18 +101,20 @@ describe('CouponCollectService.collectable', () => {
 
 describe('CouponCollectService.mine', () => {
   const NOW = new Date('2026-11-15T03:00:00Z');
-  const slim = (id: string, code: string, newCustomerOnly = false) => ({ id, code, newCustomerOnly });
+  const slim = (id: string, code: string, newCustomerOnly = false, perUserLimit = 1) => ({ id, code, newCustomerOnly, perUserLimit });
 
-  function makeMine(rows: unknown[], claimedIds: string[] = [], priorOrder = false) {
+  function makeMine(rows: unknown[], claimedIds: string[] = [], priorOrder = false, redeemed: Record<string, number> = {}) {
     const findMany = jest.fn().mockResolvedValue(rows);
     const claimFindMany = jest.fn().mockResolvedValue(claimedIds.map((couponId) => ({ couponId })));
     const orderFindFirst = jest.fn().mockResolvedValue(priorOrder ? { id: 'o1' } : null);
+    const redemptionGroupBy = jest.fn().mockResolvedValue(Object.entries(redeemed).map(([couponId, n]) => ({ couponId, _count: { _all: n } })));
     const prisma = {
       coupon: { findMany },
       couponClaim: { findMany: claimFindMany },
+      couponRedemption: { groupBy: redemptionGroupBy },
       order: { findFirst: orderFindFirst },
     } as unknown as PrismaService;
-    return { svc: new CouponCollectService(prisma), findMany, claimFindMany, orderFindFirst };
+    return { svc: new CouponCollectService(prisma), findMany, claimFindMany, orderFindFirst, redemptionGroupBy };
   }
 
   it('cùng tập mã với kho công khai: cùng where, cùng thứ tự, cùng trần', async () => {
@@ -129,7 +131,7 @@ describe('CouponCollectService.mine', () => {
 
   it('kho trống thì không đọc claim và không đọc đơn', async () => {
     const { svc, claimFindMany, orderFindFirst } = makeMine([]);
-    expect(await svc.mine('u1', NOW)).toEqual({ claimed: [], newCustomerOnly: [] });
+    expect(await svc.mine('u1', NOW)).toEqual({ claimed: [], newCustomerOnly: [], claimedIneligible: [] });
     expect(claimFindMany).not.toHaveBeenCalled();
     expect(orderFindFirst).not.toHaveBeenCalled();
   });
@@ -146,10 +148,26 @@ describe('CouponCollectService.mine', () => {
     expect((await makeMine(rows, [], false).svc.mine('u1', NOW)).newCustomerOnly).toEqual([]);
   });
 
-  it('mã chỉ-khách-mới đã nhận chỉ nằm ở claimed, và không tốn truy vấn đơn nếu không còn mã nào cần xét', async () => {
-    const { svc, orderFindFirst } = makeMine([slim('n', 'NEW', true)], ['n'], true);
-    expect(await svc.mine('u1', NOW)).toEqual({ claimed: ['NEW'], newCustomerOnly: [] });
-    expect(orderFindFirst).not.toHaveBeenCalled();
+  it('mã chỉ-khách-mới đã nhận, khách đã có đơn mà chưa dùng: vẫn ở claimed, thêm vào claimedIneligible (ví ẩn nó, nhưng khách chưa hề dùng)', async () => {
+    const { svc } = makeMine([slim('n', 'NEW', true)], ['n'], true);
+    expect(await svc.mine('u1', NOW)).toEqual({ claimed: ['NEW'], newCustomerOnly: [], claimedIneligible: ['NEW'] });
+  });
+
+  it('mã chỉ-khách-mới đã nhận và ĐÃ dùng đủ perUserLimit: không phải claimedIneligible (là "đã dùng")', async () => {
+    const { svc, redemptionGroupBy } = makeMine([slim('n', 'NEW', true, 1)], ['n'], true, { n: 1 });
+    expect((await svc.mine('u1', NOW)).claimedIneligible).toEqual([]);
+    expect(redemptionGroupBy).toHaveBeenCalledWith({ by: ['couponId'], where: { userId: 'u1', couponId: { in: ['n'] } }, _count: { _all: true } });
+  });
+
+  it('perUserLimit 0 là không giới hạn: đã từng dùng vẫn chưa "hết lượt", nên là claimedIneligible', async () => {
+    const { svc } = makeMine([slim('n', 'NEW', true, 0)], ['n'], true, { n: 3 });
+    expect((await svc.mine('u1', NOW)).claimedIneligible).toEqual(['NEW']);
+  });
+
+  it('khách chưa có đơn thì mã chỉ-khách-mới đã nhận không bị đánh dấu, và không tốn truy vấn dùng mã', async () => {
+    const { svc, redemptionGroupBy } = makeMine([slim('n', 'NEW', true)], ['n'], false);
+    expect(await svc.mine('u1', NOW)).toEqual({ claimed: ['NEW'], newCustomerOnly: [], claimedIneligible: [] });
+    expect(redemptionGroupBy).not.toHaveBeenCalled();
   });
 
   it('không có mã chỉ-khách-mới thì không đọc đơn', async () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CollectableCouponDTO, CollectableMineDTO } from '../api/coupon-collect';
 import type { CouponDTO, CouponHistoryDTO } from '../api/loyalty';
 import { voucherView } from './voucher';
-import { VOUCHER_TABS, collectRows, filterVouchers, historyRows, mineRows, voucherFilters } from './voucher-center';
+import { VOUCHER_TABS, collectRows, filterVouchers, historyRows, mineRows, voucherFilters, walletCodeSet } from './voucher-center';
 
 const NOW = Date.parse('2026-11-01T05:00:00Z');
 const D = 86_400_000;
@@ -161,6 +161,59 @@ describe('collectRows với phần riêng của khách (mine)', () => {
   it('coupon của dòng khớp view với cả mã used và ineligible', () => {
     const rows = collectRows([collectable('U'), collectable('I', { newCustomerOnly: true })], new Set(), NOW, mineOf({ claimed: ['U'], newCustomerOnly: ['I'] }));
     for (const r of rows) expect(voucherView(r.coupon, NOW)).toEqual(r.view);
+  });
+});
+
+describe('collectRows khi ví chưa tải được (walletCodes = null)', () => {
+  const mineOf = (over: Partial<CollectableMineDTO> = {}): CollectableMineDTO => ({ claimed: [], newCustomerOnly: [], ...over });
+
+  it('mã đã nhận không bị suy ra "Đã dùng": saved, đánh dấu chưa kiểm chứng, mã chưa nhận vẫn collectable', () => {
+    const rows = collectRows([collectable('HELD'), collectable('FREE')], null, NOW, mineOf({ claimed: ['HELD'] }));
+    const held = rows.find((r) => r.view.code === 'HELD')!;
+    expect(held.view.state).toBe('saved');
+    expect(held.unverified).toBe(true);
+    expect(rows.find((r) => r.view.code === 'FREE')!.view.state).toBe('collectable');
+    expect(rows.find((r) => r.view.code === 'FREE')!.unverified).toBeUndefined();
+  });
+
+  it('coupon của dòng khớp view', () => {
+    const [row] = collectRows([collectable('HELD')], null, NOW, mineOf({ claimed: ['HELD'] }));
+    expect(voucherView(row!.coupon, NOW)).toEqual(row!.view);
+  });
+});
+
+describe('walletCodeSet', () => {
+  it('ví lỗi mà chưa có dữ liệu: null (chưa biết); chưa lỗi: tập rỗng; lỗi nhưng còn dữ liệu cũ trong cache: dùng dữ liệu cũ', () => {
+    expect(walletCodeSet(undefined, true)).toBeNull();
+    expect(walletCodeSet(undefined, false)).toEqual(new Set());
+    expect(walletCodeSet([wallet('A')], true)).toEqual(new Set(['A']));
+  });
+});
+
+describe('collectRows với mã đã nhận mà không còn áp dụng (claimedIneligible)', () => {
+  const mineOf = (over: Partial<CollectableMineDTO> = {}): CollectableMineDTO => ({ claimed: [], newCustomerOnly: [], ...over });
+
+  it('đã nhận, chỉ-khách-mới, khách đã có đơn, ví không còn hiện: ineligible kèm lý do "không còn áp dụng", không phải used', () => {
+    const [row] = collectRows([collectable('I', { newCustomerOnly: true })], new Set(), NOW, mineOf({ claimed: ['I'], claimedIneligible: ['I'] }));
+    expect(row!.view.state).toBe('ineligible');
+    expect(row!.reason).toBe('Chỉ dành cho khách đặt đơn đầu tiên, nên không còn áp dụng');
+    expect(voucherView(row!.coupon, NOW)).toEqual(row!.view);
+  });
+
+  it('ví vẫn giữ mã thì ví quyết định (saved)', () => {
+    const [row] = collectRows([collectable('I', { newCustomerOnly: true })], new Set(['I']), NOW, mineOf({ claimed: ['I'], claimedIneligible: ['I'] }));
+    expect(row!.view.state).toBe('saved');
+  });
+
+  it('API cũ chưa có claimedIneligible: như trước, mã đã nhận ngoài ví là used', () => {
+    const [row] = collectRows([collectable('I', { newCustomerOnly: true })], new Set(), NOW, mineOf({ claimed: ['I'] }));
+    expect(row!.view.state).toBe('used');
+  });
+
+  it('ví lỗi (null) vẫn nhận ra mã không còn áp dụng từ API', () => {
+    const [row] = collectRows([collectable('I', { newCustomerOnly: true })], null, NOW, mineOf({ claimed: ['I'], claimedIneligible: ['I'] }));
+    expect(row!.view.state).toBe('ineligible');
+    expect(row!.unverified).toBeUndefined();
   });
 });
 

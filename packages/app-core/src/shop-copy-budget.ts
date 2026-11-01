@@ -168,6 +168,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.filterExpiring': 14,
   'coupon.tabsLabel': null,
   'coupon.newCustomerOnlyReason': null,
+  'coupon.claimedIneligibleReason': null,
+  'coupon.walletLoadError': null,
 
   // Combo và mua kèm
   'combo.title': null,

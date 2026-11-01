@@ -21,7 +21,10 @@ import { WASTE_QUERY_KEYS } from '../api/waste';
 
 export const loyaltyQuery = (http: HttpClient) => ({ queryKey: ['loyalty'] as const, queryFn: () => getLoyalty(http) });
 export const couponsQuery = (http: HttpClient) => ({ queryKey: ['coupons'] as const, queryFn: () => getCoupons(http) });
-/** Khoá con của ['coupons']: sau khi nhận mã, invalidate ['coupons'] làm mới cả ví, kho mã và lịch sử. staleTime khớp cache 30 giây của route. */
+/**
+ * Khoá con của ['coupons']: sau khi nhận mã, invalidate ['coupons'] làm mới cả ví, kho mã và lịch sử. staleTime 30 giây bằng `s-maxage` của route (CDN);
+ * trình duyệt còn giữ thêm `max-age=15`, nên lần tải lại ngay sau một lần nhận bị từ chối dùng `freshCollectableCouponsQuery` để đổi khoá cache.
+ */
 export const collectableCouponsQuery = (http: HttpClient) => ({
   queryKey: ['coupons', 'collectable'] as const,
   queryFn: () => fetchCollectableCoupons(http),

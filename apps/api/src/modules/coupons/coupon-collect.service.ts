@@ -43,6 +43,11 @@ export interface CollectableMine {
   claimed: string[];
   /** Mã chỉ dành cho khách mới trong kho, khi khách đã có đơn: bấm "Lưu mã" chỉ nhận lời từ chối. */
   newCustomerOnly: string[];
+  /**
+   * Mã trong kho mà khách đã nhận nhưng không còn áp dụng: chỉ dành cho khách mới, khách đã có đơn, và khách chưa dùng nó. Ví `/me/coupons` ẩn mã này
+   * (như mã đã dùng hết lượt) nên không phân biệt được hai trường hợp; mã đã dùng đủ `perUserLimit` không nằm ở đây, nó là "đã dùng".
+   */
+  claimedIneligible: string[];
 }
 
 /**
@@ -92,21 +97,35 @@ export class CouponCollectService {
   async mine(userId: string, now: Date = new Date()): Promise<CollectableMine> {
     const rows = await this.prisma.coupon.findMany({
       ...listedWindow(now),
-      select: { id: true, code: true, newCustomerOnly: true },
+      select: { id: true, code: true, newCustomerOnly: true, perUserLimit: true },
       take: COLLECTABLE_LIMIT,
     });
-    if (rows.length === 0) return { claimed: [], newCustomerOnly: [] };
+    if (rows.length === 0) return { claimed: [], newCustomerOnly: [], claimedIneligible: [] };
     const mine = await this.prisma.couponClaim.findMany({
       where: { userId, couponId: { in: rows.map((r) => r.id) } },
       select: { couponId: true },
     });
     const claimedIds = new Set(mine.map((m) => m.couponId));
-    // Chỉ hỏi đơn khi có mã chỉ-khách-mới chưa nhận: mã đã nhận thì đã nằm ở `claimed`.
-    const gated = rows.filter((r) => r.newCustomerOnly && !claimedIds.has(r.id));
-    const returning = gated.length > 0 && (await hasPriorOrder(this.prisma, userId));
+    // Chỉ hỏi đơn khi trong kho có mã chỉ-khách-mới (đã nhận hay chưa): luật ví là mã đó biến mất khi khách đã có đơn, bất kể đã nhận.
+    const gatedRows = rows.filter((r) => r.newCustomerOnly);
+    const returning = gatedRows.length > 0 && (await hasPriorOrder(this.prisma, userId));
+    const heldGated = returning ? gatedRows.filter((r) => claimedIds.has(r.id)) : [];
+    // Mã đã nhận mà đã dùng đủ lượt cá nhân thì là "đã dùng", cùng luật `perUserLimit <= 0 = không giới hạn` với `getAvailableCoupons`.
+    const used = heldGated.length
+      ? new Map(
+          (
+            await this.prisma.couponRedemption.groupBy({
+              by: ['couponId'],
+              where: { userId, couponId: { in: heldGated.map((r) => r.id) } },
+              _count: { _all: true },
+            })
+          ).map((g) => [g.couponId, g._count._all]),
+        )
+      : new Map<string, number>();
     return {
       claimed: rows.filter((r) => claimedIds.has(r.id)).map((r) => r.code),
-      newCustomerOnly: returning ? gated.map((r) => r.code) : [],
+      newCustomerOnly: returning ? gatedRows.filter((r) => !claimedIds.has(r.id)).map((r) => r.code) : [],
+      claimedIneligible: heldGated.filter((r) => !(r.perUserLimit > 0 && (used.get(r.id) ?? 0) >= r.perUserLimit)).map((r) => r.code),
     };
   }
 }
