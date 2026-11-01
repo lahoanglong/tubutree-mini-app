@@ -1,4 +1,5 @@
 import type { HttpClient } from '../http';
+import type { BundleDTO } from './bundle';
 import type { CampaignBanner } from './campaign';
 import type { CategoryDTO, PageResponse, ProductCard } from './catalog';
 import type { NotificationDTO } from './account';
@@ -25,6 +26,8 @@ export interface HomePublicDTO {
   publicConfig: Block<PublicConfig>;
   /** Banner chiến dịch HOME_TOP đang chạy, chưa lọc theo loại khách (blob công khai dùng chung). API cũ không có trường này. */
   campaigns?: Block<CampaignBanner[]>;
+  /** Combo toàn sàn đang chạy mà mọi món còn hàng (≤4), cùng nội dung `GET /bundles/combos?limit=4`. API cũ không có trường này. */
+  combos?: Block<BundleDTO[]>;
 }
 
 export interface HomeMeDTO {

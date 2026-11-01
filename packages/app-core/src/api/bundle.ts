@@ -35,6 +35,9 @@ export interface ProductBundles {
   addons: BundleDTO[];
 }
 
+/** Số combo của kệ Trang chủ (`maxItems` của `home.combos`); khối `combos` của `GET /home` cắt đúng số này nên chỉ request cùng `limit` mới dùng khối gộp. */
+export const HOME_COMBOS_LIMIT = 4;
+
 // Công khai và cache được: `anonymous` để khách đã đăng nhập không bị preflight CORS/refresh token vì dữ liệu không theo người.
 export const fetchProductBundles = (http: HttpClient, slug: string) =>
   http.get<ProductBundles>(`/products/${encodeURIComponent(slug)}/bundles`, { anonymous: true });

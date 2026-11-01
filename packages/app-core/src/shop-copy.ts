@@ -169,6 +169,7 @@ export const SHOP_COPY: Record<string, string> = {
   'addon.condition': 'Chỉ khi mua cùng {name}',
   'addon.add': 'Thêm {n} món vào giỏ',
   'addon.added': 'Đã thêm vào giỏ',
+  'addon.pickHint': 'Chọn món muốn mua kèm',
   'addon.pickSpoken': 'Chọn mua kèm {name}, {price}, giảm {pct}%',
   'addon.error': 'Chưa thêm được món mua kèm, bạn thử lại nhé',
   'addon.cartLine': 'Ưu đãi mua kèm',

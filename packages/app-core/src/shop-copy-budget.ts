@@ -175,6 +175,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'addon.condition': null,
   'addon.add': 20,
   'addon.added': 16,
+  'addon.pickHint': 24,
   'addon.pickSpoken': null,
   'addon.error': null,
   'addon.cartLine': null,

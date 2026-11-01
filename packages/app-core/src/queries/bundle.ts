@@ -1,8 +1,5 @@
 import type { HttpClient } from '../http';
-import { fetchHomeCombos, fetchProductBundles } from '../api/bundle';
-
-/** Khớp `maxItems` của kệ `home.combos`. */
-export const HOME_COMBOS_LIMIT = 4;
+import { HOME_COMBOS_LIMIT, fetchHomeCombos, fetchProductBundles } from '../api/bundle';
 
 export const bundleKeys = {
   product: (slug: string) => ['bundles', 'product', slug] as const,
