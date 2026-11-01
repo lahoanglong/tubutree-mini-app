@@ -50,6 +50,53 @@ test.describe('Trang sản phẩm Mini: CLS', () => {
   });
 });
 
+test.describe('Trang sản phẩm Mini: bộ tắt khi khách đang ở trang', () => {
+  test.beforeEach(({ api }) => mockDiscovery(api));
+
+  test('hai khối ở nguyên chỗ, ghi "Đã kết thúc", mờ; khung khối không đổi kích thước nên phần bên dưới không xê dịch', async ({ page, api }) => {
+    const bundles = { combos: [pdpCombo()], addons: [pdpAddon()] };
+    mockPdpBundles(api, bundles);
+    await page.clock.install(); // đẩy giờ qua hạn "tươi" 30 giây của truy vấn, không phải chờ thật
+    await page.goto(`/product/${PDP_SLUG}`);
+    await expect(page.getByRole('heading', { level: 1, name: NRC.name })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('pdp-combos')).toBeVisible();
+    await expect(page.getByTestId('pdp-addons')).toBeVisible();
+    const slots = page.getByTestId('pdp-bundle-slots');
+    await page.waitForLoadState('networkidle');
+    // Chiều cao khối và khoảng từ đáy khối tới phần tử kế bên dưới: hai số này đổi thì phần dưới đã xê dịch (vị trí tuyệt đối còn phụ thuộc phần trên trang).
+    const measure = () =>
+      slots.evaluate((el) => {
+        const next = el.nextElementSibling;
+        const box = el.getBoundingClientRect();
+        return { height: box.height, gapBelow: next ? next.getBoundingClientRect().top - box.bottom : null };
+      });
+    const before = await measure();
+    expect(before.gapBelow, 'có phần tử bên dưới để so').not.toBeNull();
+
+    // Khách ra Trang chủ rồi quay lại sau hơn 30 giây (dữ liệu cũ đã "ôi"): trang vẽ ngay từ bộ nhớ đệm, lần tải lại ngầm thì bộ đã tắt.
+    await page.evaluate(() => {
+      history.pushState(null, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await expect(page.getByTestId('pdp-bundle-slots')).toHaveCount(0);
+    await page.clock.fastForward(60_000);
+    bundles.combos = [];
+    bundles.addons = []; // bộ vừa tắt: lần tải lại sau đây không còn trả bộ nào
+    await page.goBack();
+    await expect(page.getByRole('heading', { level: 1, name: NRC.name })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('pdp-combos')).toHaveAttribute('aria-label', 'Combo ưu đãi · Đã kết thúc');
+    await expect(page.getByTestId('pdp-addons')).toHaveAttribute('aria-label', 'Mua kèm deal sốc · Đã kết thúc');
+    expect(api.callsTo('GET', '/products/:slug/bundles').length).toBeGreaterThanOrEqual(2);
+    await expect(page.getByTestId('bundle-ended')).toHaveCount(2);
+
+    await page.waitForLoadState('networkidle');
+    expect(await measure()).toEqual(before);
+    // Nội dung vẫn hiện (mờ) nhưng ẩn khỏi cây truy cập và không bấm được, nên chỉ tìm được khi tính cả phần tử ẩn.
+    await expect(page.getByRole('button', { name: /^Thêm cả combo/, includeHidden: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Thêm cả combo/ })).toHaveCount(0);
+  });
+});
+
 /** Mở Trang chủ bằng request gộp `/home` (đường chạy thật), đo CLS; có combo hay không là biến duy nhất giữa hai ca. */
 function mockMergedHomeWith(api: MockApi, combos: unknown[]): void {
   mockDiscovery(api, { returning: true });

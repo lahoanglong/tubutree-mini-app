@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BundleDTO, BundleItemDTO, ProductBundles } from '@tubutree/app-core/api/bundle';
@@ -181,3 +181,72 @@ describe('PdpBundles: Mua kèm deal sốc', () => {
     expect(screen.getAllByTestId('pdp-bundle-slots')).toHaveLength(1);
   });
 });
+
+describe('PdpBundles: khối đã hiện thì không gỡ giữa trang (giữ chỗ như web)', () => {
+  const KEY = ['bundles', 'product', 'sp-anchor'];
+  const ADDONS = [addon('a1', [item('x', { addonPrice: 40_000 }), item('y', { addonPrice: 70_000, product: card('y', { basePrice: 80_000 }) })])];
+  const COMBOS = [combo('c1', [item('a'), item('b')])];
+  // React Query báo thay đổi qua setTimeout(0): chờ khối vẽ lại thay vì giả định đã xong ngay sau setQueryData.
+  const label = (testId: string, text: string) => waitFor(() => expect(screen.getByTestId(testId)).toHaveAttribute('aria-label', text));
+  const shown = async (qc: ReturnType<typeof renderBlock>['qc']) => {
+    await screen.findByRole('region', { name: 'Combo ưu đãi' });
+    await act(async () => {
+      qc.setQueryData(KEY, { combos: [], addons: [] }); // tải lại: bộ vừa tắt/hết hạn, API không trả nữa
+    });
+  };
+
+  it('bộ vừa tắt khi khách đang ở trang: hai khối ở nguyên chỗ, tiêu đề "Đã kết thúc", mờ, inert, không thêm được vào giỏ', async () => {
+    const { qc } = renderBlock({ combos: COMBOS, addons: ADDONS });
+    await shown(qc);
+    await label('pdp-combos', 'Combo ưu đãi · Đã kết thúc');
+    await label('pdp-addons', 'Mua kèm deal sốc · Đã kết thúc');
+    for (const section of [screen.getByTestId('pdp-combos'), screen.getByTestId('pdp-addons')]) {
+      const body = within(section).getByTestId('bundle-ended');
+      expect(body).toHaveAttribute('inert');
+      expect(body).toHaveAttribute('aria-hidden', 'true');
+      expect(body).toHaveStyle({ opacity: '0.6' });
+    }
+    expect(screen.getAllByTestId('addon-row')).toHaveLength(2);
+    // jsdom không thi hành `inert`: ngay cả khi lần bấm lọt qua, giỏ vẫn không nhận gì (nút khoá, nút combo bị chặn).
+    fireEvent.click(within(screen.getByTestId('pdp-combos')).getByText(/Thêm cả combo/));
+    fireEvent.click(screen.getAllByTestId('addon-row')[0]!);
+    const add = within(screen.getByTestId('pdp-addons')).getByText('Thêm 1 món vào giỏ').closest('button')!;
+    expect(add).toBeDisabled();
+    fireEvent.click(add);
+    expect(mocks.addAll).not.toHaveBeenCalled();
+  });
+
+  it('bộ Mua kèm còn hạn nhưng mọi món vừa hết hàng, hay sản phẩm chính vừa hết (addonsSoldOut): "Tạm hết hàng", không phải "Đã kết thúc"', async () => {
+    const { qc } = renderBlock({ combos: COMBOS, addons: ADDONS });
+    await screen.findByRole('region', { name: 'Mua kèm deal sốc' });
+    await act(async () => {
+      qc.setQueryData(KEY, { combos: COMBOS, addons: [addon('a1', [item('x', { addonPrice: 40_000, inStock: false }), item('y', { addonPrice: 70_000, inStock: false })])] });
+    });
+    await label('pdp-addons', 'Mua kèm deal sốc · Tạm hết hàng');
+    expect(screen.getByTestId('pdp-combos')).toHaveAttribute('aria-label', 'Combo ưu đãi');
+    await act(async () => {
+      qc.setQueryData(KEY, { combos: COMBOS, addons: [], addonsSoldOut: true });
+    });
+    await label('pdp-addons', 'Mua kèm deal sốc · Tạm hết hàng');
+    expect(screen.getAllByTestId('addon-row')).toHaveLength(2);
+  });
+
+  it('bộ mới về sau khi đã giữ: hiện lại bình thường, hết mờ', async () => {
+    const { qc } = renderBlock({ combos: COMBOS, addons: [] });
+    await shown(qc);
+    await label('pdp-combos', 'Combo ưu đãi · Đã kết thúc');
+    await act(async () => {
+      qc.setQueryData(KEY, { combos: [combo('c2', [item('m'), item('n')])], addons: [] });
+    });
+    await label('pdp-combos', 'Combo ưu đãi');
+    expect(screen.queryByTestId('bundle-ended')).toBeNull();
+    expect(screen.getByText('Combo c2')).toBeInTheDocument();
+  });
+
+  it('chưa từng hiện mà tải ra rỗng: vẫn ẩn hẳn, không giữ chỗ', async () => {
+    const { container } = renderBlock({ combos: [], addons: [] });
+    await waitFor(() => expect(mocks.fetchBundles).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
