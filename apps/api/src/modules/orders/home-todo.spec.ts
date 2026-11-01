@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { OrdersController } from './orders.controller';
 import { loadHomeTodo } from './home-todo';
@@ -58,6 +59,21 @@ describe('GET /orders/home-todo', () => {
       processing: null,
       partial: true,
     });
+  });
+
+  it('lỗi một phần vẫn ghi log từng phần lỗi, không im lặng (trả 200 nên bộ lọc lỗi của Nest không thấy)', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      const list = jest.fn(async (_u: string, f: { status?: string; group?: string }) => {
+        if (f.status === 'PENDING_PAYMENT') throw new Error('db blip');
+        return page([]);
+      });
+      await loadHomeTodo(list as never, 'u1');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toMatch(/pending.*db blip/);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('cả ba lỗi: ném lỗi như GET /orders (giao diện ẩn dải)', async () => {
