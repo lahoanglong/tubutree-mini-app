@@ -81,6 +81,8 @@ const fold = (s: string): string => s.normalize('NFD').replace(/[\u0300-\u036f]/
 
 /** Tên đã in thương hiệu như một từ riêng ("Nước rửa chén Fuwa3e" với "Fuwa3e") thì dòng thương hiệu chỉ lặp lại; "Tubutree" không tính là chứa "Tubu". */
 function carriesBrand(name: string, brand: string): boolean {
+  // Xem trước gian hàng CTV và API cũ có thể thiếu trường: kiểu khai là string nhưng giá trị không được tin.
+  if (typeof name !== 'string' || typeof brand !== 'string') return false;
   const b = fold(brand);
   if (b === '') return false;
   const escaped = b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

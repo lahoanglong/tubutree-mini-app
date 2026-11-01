@@ -217,6 +217,15 @@ describe('khe nhãn theo biến thể', () => {
     expect(named('Sữa tắm lá bạc hà', '   ')).toBe('   ');
   });
 
+  it('dữ liệu thiếu thương hiệu hoặc tên (xem trước gian hàng CTV, API cũ) không làm thẻ ném lỗi: dòng thương hiệu giữ nguyên giá trị nhận được', () => {
+    const bare = (over: Record<string, unknown>) => view({ product: { ...product(), ...over } as unknown as ProductCard });
+    expect(() => bare({ brand: undefined })).not.toThrow();
+    expect(bare({ brand: undefined }).brandLine).toBeUndefined();
+    expect(bare({ brand: null }).brandLine).toBeNull();
+    expect(() => bare({ name: undefined })).not.toThrow();
+    expect(bare({ name: undefined }).brandLine).toBe('Tubu');
+  });
+
   it('showBrand=false và biến thể không có khe thì không giữ khe', () => {
     expect(view({ showBrand: false }).brandSlot).toBe(false);
     expect(view({ variant: 'rail-sm' }).brandSlot).toBe(false);
