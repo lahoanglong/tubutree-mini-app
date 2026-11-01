@@ -59,7 +59,6 @@ export function useSectionStyle(deps: SectionStyleDeps) {
       if (!busy.current) dispatch();
     };
     // Chỉ lúc rời màn; `dispatch` đọc mọi thứ qua ref.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {
