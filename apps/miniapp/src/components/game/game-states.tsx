@@ -1,5 +1,6 @@
 import { Skeleton } from '../ui/skeleton';
 import { EmptyState } from '../ui/empty-state';
+import { useBlockedMessage } from '../ui/auth-gate';
 import { vi } from '../../i18n/vi';
 import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 
@@ -15,5 +16,7 @@ export function GameSkeleton() {
 }
 
 export function GameLoginGate({ onLogin }: { onLogin: () => void }) {
-  return <EmptyState art="sprout" heading={gameNewbieCopy.loginToView} ctaLabel={vi.auth.loginCta} onCta={onLogin} />;
+  // Tài khoản bị khoá: nói lý do ngay trên cổng như feed/cộng đồng, không chỉ trong thanh báo sau khi bấm.
+  const blocked = useBlockedMessage();
+  return <EmptyState art="sprout" heading={gameNewbieCopy.loginToView} body={blocked ?? undefined} ctaLabel={vi.auth.loginCta} onCta={onLogin} />;
 }

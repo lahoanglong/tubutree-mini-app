@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
   haptic: vi.fn(),
   copyText: vi.fn(),
   couponUse: vi.fn(),
-  auth: { status: 'authenticated' as string },
+  auth: { status: 'authenticated' as string, error: undefined as string | undefined },
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
   features: { seasonPass: false },
   getLoyalty: vi.fn(),
@@ -59,7 +59,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publicConfig }));
 vi.mock('../store/auth', () => {
-  const state = () => ({ status: mocks.auth.status, user: { id: 'u1' }, login: mocks.login });
+  const state = () => ({ status: mocks.auth.status, error: mocks.auth.error, user: { id: 'u1' }, login: mocks.login });
   // getState: useLoginWithNotice đọc trạng thái sau login().
   return { useAuthStore: Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), { getState: state }) };
 });
@@ -146,6 +146,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.getDailyCheckInStatus.mockResolvedValue(null);
   mocks.auth.status = 'authenticated';
+  mocks.auth.error = undefined;
   mocks.features.seasonPass = false;
   mocks.wheel.cost = undefined;
   mocks.wheel.onSpin = undefined;
@@ -197,6 +198,17 @@ describe('GamePage — trạng thái trang', () => {
     expect(screen.queryByRole('button', { name: /Nhận nước hôm nay/ })).not.toBeInTheDocument();
     expect(mocks.api.getGameProfile).not.toHaveBeenCalled();
     expect(mocks.api.getMissions).not.toHaveBeenCalled();
+  });
+
+  it('tài khoản bị khoá: cổng nói lời máy chủ ngay, bấm đăng nhập lại thì thanh thông báo nhắc lại', async () => {
+    mocks.auth.status = 'idle';
+    mocks.auth.error = 'Tài khoản đã bị khoá.';
+    renderPage();
+    expect(screen.getByText('Tài khoản đã bị khoá.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: viText.auth.loginCta }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá.', type: 'error' }));
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+    expect(mocks.api.getGameProfile).not.toHaveBeenCalled();
   });
 
   it('lỗi tải hồ sơ: báo lỗi rõ ràng và "Thử lại" tải lại hồ sơ, không dựng phần còn lại', async () => {

@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
   fetchProduct: vi.fn(),
   addToCart: vi.fn(),
+  createGroupBuy: vi.fn(),
   login: vi.fn(),
   openSnackbar: vi.fn(),
   auth: { status: 'idle', error: undefined as string | undefined },
@@ -32,7 +33,7 @@ vi.mock('../services/shop-api', () => ({
   addToCart: mocks.addToCart,
 }));
 vi.mock('../services/account-api', () => ({ getCoupons: vi.fn().mockResolvedValue([]) }));
-vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: vi.fn() }));
+vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: mocks.createGroupBuy }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn().mockResolvedValue({ isAffiliate: false }) }));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
 vi.mock('../services/zmp-bridge', () => ({ shareLink: vi.fn(), openOAChat: vi.fn(), hasOA: false }));
@@ -67,18 +68,23 @@ function renderPdp() {
   );
 }
 
+const LOCKED = 'Tài khoản đã bị khoá.';
+
 describe('ProductDetailPage — tài khoản bị khoá bấm mua', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.auth = { status: 'idle', error: 'Tài khoản đã bị khoá.' };
-    mocks.login.mockResolvedValue(undefined);
+    // Khách chưa đăng nhập, chưa có lời nào; máy chủ chỉ báo khoá khi login() chạy (đọc lại trạng thái sau login).
+    mocks.auth = { status: 'idle', error: undefined };
+    mocks.login.mockImplementation(async () => {
+      mocks.auth = { status: 'idle', error: LOCKED };
+    });
     mocks.fetchProduct.mockResolvedValue(product);
   });
 
   it('Thêm vào giỏ: nói lời máy chủ bằng thanh thông báo, không thêm giỏ', async () => {
     renderPdp();
     fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ' }));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá.', type: 'error' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: LOCKED, type: 'error' }));
     expect(mocks.login).toHaveBeenCalledTimes(1);
     expect(mocks.addToCart).not.toHaveBeenCalled();
   });
@@ -86,12 +92,21 @@ describe('ProductDetailPage — tài khoản bị khoá bấm mua', () => {
   it('Mua ngay: nói lời máy chủ bằng thanh thông báo, không thêm giỏ', async () => {
     renderPdp();
     fireEvent.click(await screen.findByRole('button', { name: /^Mua ngay/ }));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá.', type: 'error' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: LOCKED, type: 'error' }));
+    expect(mocks.login).toHaveBeenCalledTimes(1);
     expect(mocks.addToCart).not.toHaveBeenCalled();
   });
 
-  it('khách đăng xuất bình thường (không có lời máy chủ): mở đăng nhập, không có thanh báo', async () => {
-    mocks.auth = { status: 'idle', error: undefined };
+  it('Mở nhóm mua chung: nói lời máy chủ bằng thanh thông báo, không mở nhóm', async () => {
+    renderPdp();
+    fireEvent.click(await screen.findByRole('button', { name: /Mở nhóm mua chung/ }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: LOCKED, type: 'error' }));
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+    expect(mocks.createGroupBuy).not.toHaveBeenCalled();
+  });
+
+  it('khách đăng xuất bình thường (login không ra lời máy chủ): mở đăng nhập, không có thanh báo', async () => {
+    mocks.login.mockImplementation(async () => {});
     renderPdp();
     fireEvent.click(await screen.findByRole('button', { name: 'Thêm vào giỏ' }));
     await waitFor(() => expect(mocks.login).toHaveBeenCalledTimes(1));

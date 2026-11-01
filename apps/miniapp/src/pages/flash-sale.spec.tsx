@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   login: vi.fn(),
   status: 'authenticated' as string,
+  error: undefined as string | undefined,
   http: vi.fn(),
   fetchUpcoming: vi.fn(),
   setReminder: vi.fn(),
@@ -32,7 +33,7 @@ vi.mock('../services/shop-api', async (importOriginal) => ({
   fetchCategories: mocks.fetchCategories,
 }));
 vi.mock('../store/auth', () => {
-  const state = () => ({ status: mocks.status, login: mocks.login });
+  const state = () => ({ status: mocks.status, error: mocks.error, login: mocks.login });
   return { useAuthStore: Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), { getState: () => state() }) };
 });
 vi.mock('../components/ui/countdown', () => ({
@@ -114,6 +115,7 @@ beforeEach(() => {
   vi.setSystemTime(NOW);
   vi.clearAllMocks();
   mocks.status = 'authenticated';
+  mocks.error = undefined;
   mocks.fetchUpcoming.mockResolvedValue([]);
   mocks.fetchCategories.mockResolvedValue([
     { id: 'food', slug: 'food', name: 'Thực phẩm', image: null, productCount: 9, children: [] },
@@ -274,6 +276,18 @@ describe('Trang Giờ vàng: khách chưa đăng nhập', () => {
     expect(mocks.login).toHaveBeenCalledTimes(1);
     expect(mocks.addToCart).not.toHaveBeenCalled();
     expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('máy chủ báo tài khoản bị khoá khi bấm Mua ngay: nói lời máy chủ bằng thanh thông báo, không thêm giỏ', async () => {
+    mocks.login.mockImplementationOnce(async () => {
+      mocks.error = 'Tài khoản đã bị khoá.';
+    });
+    serve({ items: { s12: itemsOf(S12, [item('a')]) } });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tài khoản đã bị khoá.', type: 'error' }));
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+    expect(mocks.addToCart).not.toHaveBeenCalled();
   });
 
   it('phiên đang khôi phục (loading): bấm Mua ngay hay Nhắc tôi không mở thêm một lần đăng nhập song song', async () => {
