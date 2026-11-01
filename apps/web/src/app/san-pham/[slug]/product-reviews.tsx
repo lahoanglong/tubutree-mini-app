@@ -159,8 +159,9 @@ export function ProductReviews({ slug }: { slug: string }) {
           Đánh giá{data && data.count > 0 ? ` (${data.count})` : ''}
         </h2>
         {hydrated && phase === 'guest' && (
-          <Link href={loginHref(returnTo)} className={`${ui.btnText} text-forest-700`}>
-            Đăng nhập để đánh giá
+          // Cùng nút ghost "Viết đánh giá" của Mini (chưa đăng nhập thì mở cổng đăng nhập), không phải link gạch chân.
+          <Link href={loginHref(returnTo)} className={`${ui.btnSecondary} ${mini.ghost}`}>
+            Viết đánh giá
           </Link>
         )}
         {elig && !target && (

@@ -245,14 +245,14 @@ describe('/san-pham/[slug] — thư viện ảnh (BUYERWEB-17)', () => {
 
 // R8: trang sản phẩm web có khối đánh giá (danh sách công khai và lối viết đánh giá) như Mini App.
 describe('/san-pham/[slug] — khối đánh giá (R8)', () => {
-  it('hiện số đánh giá, điểm trung bình và các đánh giá; khách chưa đăng nhập được mời đăng nhập để đánh giá', async () => {
+  it('hiện số đánh giá, điểm trung bình và các đánh giá; khách chưa đăng nhập thấy nút "Viết đánh giá" dẫn tới đăng nhập', async () => {
     const c = await mount();
     const section = c.querySelector('section#danh-gia')!;
     expect(section.querySelector('h2')?.textContent).toBe('Đánh giá (2)');
     expect(section.textContent).toContain('4.5');
     expect(section.textContent).toContain('Gội êm');
     expect(section.textContent).toContain('Thơm nhẹ');
-    const login = Array.from(section.querySelectorAll('a')).find((a) => a.textContent === 'Đăng nhập để đánh giá')!;
+    const login = Array.from(section.querySelectorAll('a')).find((a) => a.textContent === 'Viết đánh giá')!;
     expect(login.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fsan-pham%2Fdau-goi-bo-ket');
   });
 });
