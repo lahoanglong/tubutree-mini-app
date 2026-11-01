@@ -102,3 +102,16 @@ export function slotListView(items: readonly FlashSlotItem[], categoryId: string
   }
   return [...rows.filter((it) => !it.soldOut), ...rows.filter((it) => it.soldOut)];
 }
+
+/** Dòng ghi chú dưới giá của một món: tên phân loại có suất (chỉ khi sản phẩm nhiều phân loại) và giới hạn mua mỗi khách. Rỗng khi không có gì để nói. */
+export function slotItemNote(item: Pick<FlashSlotItem, 'variationName' | 'perUserLimit'>): string {
+  const limit = Number.isFinite(item.perUserLimit) && item.perUserLimit > 0 ? fillCopy('flash.limit', { n: item.perUserLimit }) : null;
+  return [item.variationName, limit].filter((x): x is string => Boolean(x)).join(' · ');
+}
+
+/** Tên đọc của nút "Mua ngay": nhãn nhìn thấy cộng tên sản phẩm, để danh sách nhiều nút giống nhau vẫn phân biệt được. */
+export const slotBuyLabel = (productName: string): string => `${fillCopy('flash.buy')} ${productName}`;
+
+/** Tên đọc của nút nhắc: chưa nhắc "Nhắc tôi {tên}"; đã nhắc nói trạng thái trước rồi việc nút làm, vẫn chứa chữ nhìn thấy "Đã đặt nhắc". */
+export const slotRemindLabel = (productName: string, reminded: boolean): string =>
+  reminded ? `${fillCopy('flash.reminded')} ${productName}, ${fillCopy('flash.unremind').toLowerCase()}` : `${fillCopy('flash.remind')} ${productName}`;

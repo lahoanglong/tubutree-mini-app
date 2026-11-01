@@ -9,13 +9,12 @@ import {
   type FlashSaleActiveItem,
   type UpcomingFlashItem,
 } from '../services/shop-api';
-import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { nextFlashSlot, slotClock, type NextFlashSlot } from '@tubutree/app-core/merch/flash-next-slot';
 import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
 import { shelf } from '@tubutree/app-core/merch/shelves';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { soldPercent } from '../utils/flash-display';
+import { flashCardProduct, soldPercent } from '../utils/flash-display';
 import { haptic } from '../utils/haptic';
 import { serverNow } from '../utils/server-clock';
 import { vi } from '../i18n/vi';
@@ -175,31 +174,6 @@ function NextSlotLine({ slot, onOpen }: { slot: NextFlashSlot; onOpen?: () => vo
       </span>
     </button>
   );
-}
-
-/** Thẻ sản phẩm của một suất Giờ vàng: giá của đúng phân loại có suất (ghim phân loại để thẻ chỉ xét suất này). */
-function flashCardProduct(item: {
-  itemId: string;
-  productSlug: string;
-  productName: string;
-  thumbnail: string | null;
-  variationId: string;
-  retailPrice: number;
-  salePrice?: number | null;
-}): ProductCardData {
-  return {
-    id: item.itemId,
-    slug: item.productSlug,
-    name: item.productName,
-    brand: '',
-    thumbnail: item.thumbnail,
-    basePrice: item.retailPrice,
-    salePrice: item.salePrice ?? null,
-    repVariationId: item.variationId,
-    pinnedVariationId: item.variationId,
-    isFeatured: false,
-    inStock: true,
-  };
 }
 
 /** Thẻ Giờ vàng đang chạy: thẻ `flash` chung, thanh "đã bán" có chữ ở cuối (luôn có, kể cả chưa bán suất nào: "Vừa mở bán"). */

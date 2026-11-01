@@ -205,6 +205,32 @@ describe('ProductTile: bấm, nút phụ, ô trang trí', () => {
     expect(screen.getByRole('button', { name: 'Thêm' })).toBeInTheDocument();
   });
 
+  it('thẻ line: action là nút tuỳ ý cùng hàng, bấm không điều hướng; bấm tên vẫn mở sản phẩm', () => {
+    const onPress = vi.fn();
+    render(
+      <ProductTile
+        view={viewOf({}, 'line')}
+        variant="line"
+        href="/product/serum-x"
+        action={
+          <button type="button" aria-pressed={false} onClick={onPress}>
+            Nhắc tôi Serum
+          </button>
+        }
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Nhắc tôi Serum' }));
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Serum Bã Trầu' }));
+    expect(navigate).toHaveBeenCalledWith('/product/serum-x', undefined);
+  });
+
+  it('action chỉ có ở biến thể line (thẻ dọc không có chỗ cho nó)', () => {
+    render(<ProductTile view={viewOf({}, 'grid')} variant="grid" href="/p" action={<button type="button">Nhắc tôi</button>} />);
+    expect(screen.queryByRole('button', { name: 'Nhắc tôi' })).not.toBeInTheDocument();
+  });
+
   it('hidePrice không in giá nhưng giữ chiều cao thân thẻ', () => {
     const { container } = render(<ProductTile view={viewOf({}, 'rail-sm')} variant="rail-sm" href="/p" hidePrice />);
     expect(container.textContent).not.toContain('52.000đ');

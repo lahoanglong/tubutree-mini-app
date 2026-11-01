@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { FlashSlot, FlashSlotItem } from '../api/flash-sale';
-import { FLASH_CHIP_MIN_ITEMS, initialSlotId, slotAfterEnd, slotCategoryChips, slotListView, slotTabs, tabKeyTarget } from './flash-slots';
+import {
+  FLASH_CHIP_MIN_ITEMS,
+  initialSlotId,
+  slotAfterEnd,
+  slotBuyLabel,
+  slotCategoryChips,
+  slotItemNote,
+  slotListView,
+  slotRemindLabel,
+  slotTabs,
+  tabKeyTarget,
+} from './flash-slots';
 
 // 13:00 ngày 1/11/2026 giờ VN.
 const NOW = Date.parse('2026-11-01T06:00:00Z');
@@ -150,5 +161,24 @@ describe('slotListView', () => {
     const items = [item('a', [], true), item('b', [])];
     slotListView(items, null, CATS);
     expect(items.map((i) => i.itemId)).toEqual(['a', 'b']);
+  });
+});
+
+describe('nhãn trên dòng món', () => {
+  it('slotItemNote: tên phân loại (nếu sản phẩm nhiều phân loại) và giới hạn mua mỗi khách, ngăn bằng dấu chấm giữa', () => {
+    expect(slotItemNote({ ...item('a', []), perUserLimit: 5 })).toBe('Mỗi khách tối đa 5');
+    expect(slotItemNote({ ...item('a', []), variationName: '500g', perUserLimit: 2 })).toBe('500g · Mỗi khách tối đa 2');
+  });
+
+  it('slotItemNote: không có giới hạn hợp lệ thì chỉ còn tên phân loại, hoặc rỗng (dòng vẫn giữ chỗ)', () => {
+    expect(slotItemNote({ ...item('a', []), variationName: '500g', perUserLimit: 0 })).toBe('500g');
+    expect(slotItemNote({ ...item('a', []), perUserLimit: 0 })).toBe('');
+    expect(slotItemNote({ ...item('a', []), perUserLimit: Number.NaN })).toBe('');
+  });
+
+  it('slotBuyLabel và slotRemindLabel: tên đọc của nút luôn chứa chữ nhìn thấy và tên sản phẩm', () => {
+    expect(slotBuyLabel('Serum')).toBe('Mua ngay Serum');
+    expect(slotRemindLabel('Serum', false)).toBe('Nhắc tôi Serum');
+    expect(slotRemindLabel('Serum', true)).toBe('Đã đặt nhắc Serum, bỏ nhắc');
   });
 });
