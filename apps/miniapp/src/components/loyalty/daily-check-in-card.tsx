@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react';
-import { CalendarCheck, Check, Gift, Sprout, type LucideIcon } from 'lucide-react';
+import { lazy, Suspense, useId, useState } from 'react';
+import { CalendarCheck, Check, ChevronDown, Gift, Sprout, type LucideIcon } from 'lucide-react';
 import { checkInCopy, checkInDayIcon, checkInTodayLine, type CheckInDayIcon } from '@tubutree/app-core/daily-check-in-copy';
 import { checkInDayAria, checkInRule } from '@tubutree/app-core/daily-check-in-guest-copy';
 import { getLoadErrorMessage } from '../../services/api';
@@ -16,15 +16,21 @@ const GuestPointsNote = lazy(() => import('./guest-points-note').then((m) => ({ 
 
 const DAY_ICON: Record<CheckInDayIcon, LucideIcon> = { check: Check, gift: Gift, sprout: Sprout };
 
+/** Bản gọn (Ưu đãi) đo ở 375px: tiêu đề + nút, 7 ô, dòng "Hôm nay nhận", nút mở luật. Khung chờ giữ đúng chiều cao này. */
+export const CHECK_IN_COMPACT_HEIGHT = 164;
+
 /**
  * Khối điểm danh DUY NHẤT của Mini App (trang Điểm Xanh và tab Ưu đãi): một nút cộng cả Điểm Xanh và giọt nước.
  * Ô ngày chỉ có số ngày và biểu tượng, lưới `minmax(0, 1fr)` để 7 ô luôn nằm gọn trong thẻ ở 320px; nút nằm dòng riêng.
+ * `compact` (Ưu đãi, nơi điểm danh chỉ là một khối trong trang dài): nút lên hàng tiêu đề, đoạn luật gập lại sau nút "Luật điểm danh" (aria-expanded).
  */
-export function DailyCheckInCard({ authed, margin }: { authed: boolean; margin?: string }) {
+export function DailyCheckInCard({ authed, margin, compact = false }: { authed: boolean; margin?: string; compact?: boolean }) {
   const { status, statusQ, view, pending, checkIn } = useCheckIn(authed);
+  const [ruleOpen, setRuleOpen] = useState(false);
+  const ruleId = useId();
   const wrap = margin ? { margin } : undefined;
 
-  if (statusQ.isLoading) return <div style={wrap}><Skeleton height={140} radius="var(--radius-card)" /></div>;
+  if (statusQ.isLoading) return <div style={wrap}><Skeleton height={compact ? CHECK_IN_COMPACT_HEIGHT : 140} radius="var(--radius-card)" /></div>;
   if (statusQ.isError) {
     return (
       <Card style={wrap} padding={16}>
@@ -37,11 +43,13 @@ export function DailyCheckInCard({ authed, margin }: { authed: boolean; margin?:
   const today = checkInTodayLine(status);
   return (
     <div style={wrap} data-testid="daily-check-in">
-      <Card padding={16}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <span style={{ width: 34, height: 34, borderRadius: 'var(--radius-control)', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-            <Icon icon={CalendarCheck} tone="brand" />
-          </span>
+      <Card padding={compact ? 12 : 16}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: compact ? 8 : 12 }}>
+          {!compact && (
+            <span style={{ width: 34, height: 34, borderRadius: 'var(--radius-control)', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+              <Icon icon={CalendarCheck} tone="brand" />
+            </span>
+          )}
           <div style={{ minWidth: 0, flex: 1 }}>
             <Heading variant="title-sm" as="h2">
               {checkInCopy.title}
@@ -50,6 +58,11 @@ export function DailyCheckInCard({ authed, margin }: { authed: boolean; margin?:
               {checkInCopy.cycleDay(status.currentCycleDay)}
             </Text>
           </div>
+          {compact && (
+            <Button disabled={!view.canCheckIn || pending} loading={pending} onPress={checkIn} style={{ flex: '0 0 auto' }}>
+              {view.buttonLabel}
+            </Button>
+          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 4, textAlign: 'center' }}>
@@ -88,12 +101,35 @@ export function DailyCheckInCard({ authed, margin }: { authed: boolean; margin?:
             <GuestPointsNote margin="10px 0 0" />
           </Suspense>
         )}
-        <Button fullWidth disabled={!view.canCheckIn || pending} loading={pending} onPress={checkIn} style={{ marginTop: 12 }}>
-          {view.buttonLabel}
-        </Button>
-        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
-          {checkInRule(status)}
-        </Text>
+        {!compact && (
+          <Button fullWidth disabled={!view.canCheckIn || pending} loading={pending} onPress={checkIn} style={{ marginTop: 12 }}>
+            {view.buttonLabel}
+          </Button>
+        )}
+        {compact ? (
+          <>
+            <button
+              type="button"
+              className="tubu-press tubu-hit-44"
+              aria-expanded={ruleOpen}
+              aria-controls={ruleId}
+              onClick={() => setRuleOpen((o) => !o)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minHeight: 44, margin: '0 0 -8px', padding: 0, border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-secondary)', cursor: 'pointer' }}
+            >
+              {checkInCopy.ruleToggle}
+              <ChevronDown size={14} aria-hidden="true" style={{ transform: ruleOpen ? 'rotate(180deg)' : undefined }} />
+            </button>
+            <div id={ruleId} hidden={!ruleOpen}>
+              <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4 }}>
+                {checkInRule(status)}
+              </Text>
+            </div>
+          </>
+        ) : (
+          <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
+            {checkInRule(status)}
+          </Text>
+        )}
       </Card>
     </div>
   );

@@ -86,3 +86,47 @@ describe('DailyCheckInCard: khách vãng lai không được hứa Điểm Xanh'
     expect(rule).not.toContain('Một lần bấm nhận cả Điểm Xanh');
   });
 });
+
+describe('DailyCheckInCard compact (Ưu đãi): luật gập lại', () => {
+  beforeEach(() => {
+    mocks.checkIn.mockReset();
+    mocks.status = base;
+  });
+
+  it('luật gập sẵn sau nút "Luật điểm danh" (aria-expanded); bấm mở đoạn luật, bấm lại gập; không còn luật đứng sẵn', () => {
+    render(<DailyCheckInCard authed compact />);
+    const toggle = screen.getByRole('button', { name: 'Luật điểm danh' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const rule = screen.getByText(/Một lần bấm nhận cả Điểm Xanh và giọt nước/);
+    expect(rule).not.toBeVisible();
+    expect(toggle.getAttribute('aria-controls')).toBe(rule.parentElement!.id);
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(rule).toBeVisible();
+    fireEvent.click(toggle);
+    expect(rule).not.toBeVisible();
+  });
+
+  it('nút Điểm danh nằm hàng tiêu đề (không full-width ở dòng riêng), vẫn đúng một nút Điểm danh và bấm gọi checkIn', () => {
+    render(<DailyCheckInCard authed compact />);
+    const heading = screen.getByRole('heading', { name: 'Điểm danh mỗi ngày' });
+    const button = screen.getByRole('button', { name: 'Điểm danh' });
+    expect(heading.parentElement!.parentElement).toContainElement(button);
+    fireEvent.click(button);
+    expect(mocks.checkIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('khách vãng lai: mở luật chỉ thấy bản không nhắc Điểm Xanh; bản đầy đủ vẫn vẽ luật sẵn và không có nút luật', async () => {
+    mocks.status = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
+    const { unmount } = render(<DailyCheckInCard authed compact />);
+    fireEvent.click(screen.getByRole('button', { name: 'Luật điểm danh' }));
+    const text = screen.getByTestId('daily-check-in').textContent ?? '';
+    expect(text).toContain('nhận giọt nước');
+    expect(text).not.toContain('Một lần bấm nhận cả Điểm Xanh');
+    unmount();
+    mocks.status = base;
+    render(<DailyCheckInCard authed />);
+    expect(screen.queryByRole('button', { name: 'Luật điểm danh' })).toBeNull();
+    expect(screen.getByText(/Một lần bấm nhận cả Điểm Xanh và giọt nước/)).toBeVisible();
+  });
+});

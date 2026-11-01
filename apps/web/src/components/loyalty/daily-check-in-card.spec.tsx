@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CheckInStatusResponse } from '@tubutree/app-core/api/loyalty';
-import { render, type Rendered } from '@/test-utils/dom';
+import { click, render, type Rendered } from '@/test-utils/dom';
 
-const mocks = vi.hoisted(() => ({ status: null as CheckInStatusResponse | null }));
+const mocks = vi.hoisted(() => ({ status: null as CheckInStatusResponse | null, checkIn: vi.fn() }));
 vi.mock('@/lib/use-check-in', () => ({
   useCheckIn: () => ({
     status: mocks.status,
     statusQ: { isLoading: false, isError: false, refetch: vi.fn() },
     view: mocks.status ? { canCheckIn: !mocks.status.checkedInToday, buttonLabel: mocks.status.checkedInToday ? 'Đã điểm danh' : 'Điểm danh' } : null,
     pending: false,
-    checkIn: vi.fn(),
+    checkIn: mocks.checkIn,
     message: null,
   }),
 }));
@@ -34,6 +34,7 @@ const base: CheckInStatusResponse = {
 let mounted: Rendered | null = null;
 beforeEach(() => {
   mocks.status = null;
+  mocks.checkIn.mockReset();
 });
 afterEach(() => {
   mounted?.unmount();
@@ -62,5 +63,40 @@ describe('DailyCheckInCard (web): khách vãng lai không được hứa Điểm
     expect(link.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fuu-dai');
     expect(mounted.container.querySelector('[aria-label="Ngày 1"]')).not.toBeNull();
     expect(text).not.toContain('Một lần bấm nhận cả Điểm Xanh');
+  });
+});
+
+describe('DailyCheckInCard compact (web, Ưu đãi): luật gập lại', () => {
+  const toggleOf = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
+  const ruleOf = (c: HTMLElement) => c.querySelector<HTMLElement>(`#${CSS.escape(toggleOf(c).getAttribute('aria-controls')!)}`)!;
+
+  it('luật gập sẵn sau nút "Luật điểm danh" (aria-expanded); bấm mở đoạn luật, bấm lại gập; không còn luật đứng sẵn', () => {
+    mocks.status = base;
+    mounted = render(<DailyCheckInCard authed compact />);
+    const c = mounted.container;
+    expect(toggleOf(c).textContent).toBe('Luật điểm danh');
+    expect(toggleOf(c).getAttribute('aria-expanded')).toBe('false');
+    expect(ruleOf(c).hidden).toBe(true);
+    expect(ruleOf(c).textContent).toContain('Một lần bấm nhận cả Điểm Xanh và giọt nước');
+    click(toggleOf(c));
+    expect(toggleOf(c).getAttribute('aria-expanded')).toBe('true');
+    expect(ruleOf(c).hidden).toBe(false);
+    click(toggleOf(c));
+    expect(ruleOf(c).hidden).toBe(true);
+  });
+
+  it('nút Điểm danh nằm hàng tiêu đề, đúng một nút Điểm danh, bấm gọi checkIn; bản đầy đủ không có nút luật', () => {
+    mocks.status = base;
+    mounted = render(<DailyCheckInCard authed compact />);
+    const c = mounted.container;
+    const buttons = [...c.querySelectorAll('button')].filter((b) => b.textContent === 'Điểm danh');
+    expect(buttons).toHaveLength(1);
+    expect(c.querySelector('h2')!.parentElement!.parentElement!.contains(buttons[0]!)).toBe(true);
+    click(buttons[0]!);
+    expect(mocks.checkIn).toHaveBeenCalledTimes(1);
+    mounted.unmount();
+    mounted = render(<DailyCheckInCard authed />);
+    expect(mounted.container.querySelector('button[aria-expanded]')).toBeNull();
+    expect(mounted.container.textContent).toContain('Một lần bấm nhận cả Điểm Xanh và giọt nước');
   });
 });

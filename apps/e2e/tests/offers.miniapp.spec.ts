@@ -100,6 +100,23 @@ test.describe('Ưu đãi — khách đã đăng nhập', () => {
     await expect.poll(() => new URL(page.url()).pathname + new URL(page.url()).search).toBe('/vouchers?tab=mine');
   });
 
+  test('Điểm danh gọn ở 375px: thẻ thấp (luật gập sẵn), mở luật bằng một chạm rồi gập lại', async ({ page }) => {
+    await page.goto('/offers');
+    const card = page.getByTestId('daily-check-in');
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    const h = Math.round((await card.boundingBox())!.height);
+    expect(h, `thẻ điểm danh cao ${h}px`).toBeLessThanOrEqual(170);
+    const toggle = card.getByRole('button', { name: 'Luật điểm danh' });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await expect(card.getByText(/Một lần bấm nhận cả Điểm Xanh/)).toBeHidden();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(card.getByText(/Một lần bấm nhận cả Điểm Xanh/)).toBeVisible();
+    await toggle.click();
+    await expect(card.getByText(/Một lần bấm nhận cả Điểm Xanh/)).toBeHidden();
+  });
+
   test('mã đã có trong ví không chiếm chỗ ở Nhận mã; Lưu mã gọi POST /coupons/claim đúng mã', async ({ page, api }) => {
     api.post('/coupons/claim', ({ call }) => {
       const code = (call.body as { code: string }).code;

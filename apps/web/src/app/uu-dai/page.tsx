@@ -107,7 +107,7 @@ function OffersContent() {
         <div data-testid="offers-points-row" className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
           <OffersPointsStrip loyalty={loyaltyQ} />
           <section aria-label={checkInCopy.title}>
-            <DailyCheckInCard authed={authed} />
+            <DailyCheckInCard authed={authed} compact />
           </section>
         </div>
 

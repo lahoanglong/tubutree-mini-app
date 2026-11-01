@@ -122,7 +122,7 @@ export default function OffersPage() {
 
           {/* Điểm danh */}
           <section aria-label={checkInCopy.title} style={{ padding: '12px 16px 0' }}>
-            <DailyCheckInCard authed={authed} />
+            <DailyCheckInCard authed={authed} compact />
           </section>
 
           {/* Mã của tôi */}
