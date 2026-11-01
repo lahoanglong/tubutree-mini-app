@@ -483,20 +483,22 @@ export function writeFlashHint(storage: MemoryStorage | null, hasFlash: boolean,
 
 /** Khoá nhớ "lần mở trước có banner chiến dịch" để dựng khung chờ đúng chỗ; chỉ ghi '1' hoặc '0'. */
 export const BANNER_HINT_KEY = 'tubu_home_banner';
+/** Banner đầu trang Ưu đãi có vị trí đặt riêng (OFFERS_TOP): dùng chung khoá với Trang chủ thì khung chờ hiện rồi biến mất khi chỉ Trang chủ có banner. */
+export const OFFERS_BANNER_HINT_KEY = 'tubu_offers_banner';
 
 /** Chưa nhớ, giá trị lạ hay không có kho → false (chờ im lặng, không giữ chỗ). */
-export function readBannerHint(storage: MemoryStorage | null): boolean {
+export function readBannerHint(storage: MemoryStorage | null, key: string = BANNER_HINT_KEY): boolean {
   if (!storage) return false;
   try {
-    return storage.getItem(BANNER_HINT_KEY) === '1';
+    return storage.getItem(key) === '1';
   } catch {
     return false;
   }
 }
 
-export function writeBannerHint(storage: MemoryStorage | null, hasBanner: boolean): void {
+export function writeBannerHint(storage: MemoryStorage | null, hasBanner: boolean, key: string = BANNER_HINT_KEY): void {
   try {
-    storage?.setItem(BANNER_HINT_KEY, hasBanner ? '1' : '0');
+    storage?.setItem(key, hasBanner ? '1' : '0');
   } catch {
     /* kho bị chặn: lần sau không giữ chỗ, khối vẫn đúng */
   }

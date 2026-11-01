@@ -176,6 +176,8 @@ export function promotionVoucher(p: { id: string; title: string; subtitle?: stri
     kind: 'shop',
     condition: p.subtitle ?? '',
     expiry: expiryText(Number.isNaN(end) ? null : end, now),
+    name: null,
+    quota: null,
     state: p.couponCode ? 'collectable' : 'saved',
   };
 }

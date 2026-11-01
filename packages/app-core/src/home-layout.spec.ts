@@ -5,7 +5,7 @@ import {
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
   readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
   HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, CATEGORY_CELL_HEIGHT,
-  BANNER_HINT_KEY, readBannerHint, writeBannerHint,
+  BANNER_HINT_KEY, OFFERS_BANNER_HINT_KEY, readBannerHint, writeBannerHint,
 } from './home-layout';
 import type { LoyaltyOverview } from './api/loyalty';
 
@@ -174,6 +174,19 @@ describe('gợi ý nhớ banner chiến dịch', () => {
     const boom = { getItem: () => { throw new Error('x'); }, setItem: () => { throw new Error('x'); } };
     expect(readBannerHint(boom)).toBe(false);
     expect(() => writeBannerHint(boom, true)).not.toThrow();
+  });
+  it('mỗi vị trí banner có gợi ý riêng: ghi khoá Ưu đãi không đổi khoá Trang chủ và ngược lại', () => {
+    const st = mem();
+    expect(OFFERS_BANNER_HINT_KEY).toBe('tubu_offers_banner');
+    expect(OFFERS_BANNER_HINT_KEY).not.toBe(BANNER_HINT_KEY);
+    writeBannerHint(st, true, OFFERS_BANNER_HINT_KEY);
+    expect(st.m.get(OFFERS_BANNER_HINT_KEY)).toBe('1');
+    expect(readBannerHint(st, OFFERS_BANNER_HINT_KEY)).toBe(true);
+    expect(readBannerHint(st)).toBe(false);
+    writeBannerHint(st, true);
+    writeBannerHint(st, false, OFFERS_BANNER_HINT_KEY);
+    expect(readBannerHint(st)).toBe(true);
+    expect(readBannerHint(st, OFFERS_BANNER_HINT_KEY)).toBe(false);
   });
   it('khung chờ banner cao đúng tỉ lệ 5:2 ở bề rộng 375 trừ đệm 16 hai bên', () => {
     expect(HOME_SETTLING_HEIGHTS.banner).toBe(Math.round((375 - 32) / 2.5));

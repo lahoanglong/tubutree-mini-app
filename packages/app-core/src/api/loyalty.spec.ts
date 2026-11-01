@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fakeHttp } from './fake-http';
 import {
+  getCouponHistory,
   getCoupons,
   getDailyCheckInStatus,
   getLoyalty,
@@ -24,6 +25,7 @@ describe('loyalty — hợp đồng gọi API', () => {
     await getLoyalty(http);
     await getPointsTransactions(http);
     await getCoupons(http);
+    await getCouponHistory(http);
     await getNewCustomerOffer(http);
     await getLoyaltyRewards(http);
     await getMyRedemptions(http);
@@ -34,6 +36,7 @@ describe('loyalty — hợp đồng gọi API', () => {
       { method: 'get', path: '/me/loyalty' },
       { method: 'get', path: '/me/points/transactions' },
       { method: 'get', path: '/me/coupons' },
+      { method: 'get', path: '/me/coupons/history' },
       { method: 'get', path: '/me/new-customer-offer' },
       { method: 'get', path: '/me/loyalty/rewards' },
       { method: 'get', path: '/me/loyalty/rewards/mine' },

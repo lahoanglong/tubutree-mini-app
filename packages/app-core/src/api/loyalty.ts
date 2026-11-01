@@ -89,7 +89,15 @@ export interface CouponDTO {
   endAt: string;
   /** Mã chỉ áp cho các sản phẩm này (mã mua chung); null/thiếu = mọi sản phẩm. */
   products?: { id: string; name: string }[] | null;
+  /** Tên admin đặt; API cũ chưa trả. */
+  title?: string | null;
 }
+
+/** Một dòng tab "Đã dùng–hết hạn": mã đã dùng hết lượt của khách hoặc mã đã nhận mà hết hạn. */
+export type CouponHistoryDTO = Pick<CouponDTO, 'code' | 'type' | 'value' | 'minOrder' | 'maxDiscount' | 'endAt' | 'title'> & {
+  state: 'used' | 'expired';
+  usedAt: string | null;
+};
 
 /** Khối "Quà khách mới": khách chưa có đơn (đúng định nghĩa đơn đầu của API) kèm voucher chào mừng còn dùng được. */
 export interface NewCustomerOffer {
@@ -223,6 +231,7 @@ export const nextPointsTxnCursor = (page: readonly PointsTxn[], limit = POINTS_T
   return last && page.length >= limit ? { before: last.createdAt, beforeId: last.id } : undefined;
 };
 export const getCoupons = (http: HttpClient) => http.get<CouponDTO[]>('/me/coupons');
+export const getCouponHistory = (http: HttpClient) => http.get<CouponHistoryDTO[]>('/me/coupons/history');
 export const getNewCustomerOffer = (http: HttpClient) => http.get<NewCustomerOffer>('/me/new-customer-offer');
 export const getLoyaltyPreview = (http: HttpClient) => http.get<LoyaltyPreviewDTO>('/loyalty/preview');
 export const getLoyaltyRewards = (http: HttpClient) => http.get<RewardCatalogDTO>('/me/loyalty/rewards');

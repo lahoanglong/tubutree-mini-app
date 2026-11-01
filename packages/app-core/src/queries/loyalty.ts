@@ -1,5 +1,6 @@
 import type { HttpClient } from '../http';
 import {
+  getCouponHistory,
   getCoupons,
   getDailyCheckInStatus,
   getLoyalty,
@@ -15,10 +16,18 @@ import {
   type PointsTxn,
   type PointsTxnCursor,
 } from '../api/loyalty';
+import { fetchCollectableCoupons } from '../api/coupon-collect';
 import { WASTE_QUERY_KEYS } from '../api/waste';
 
 export const loyaltyQuery = (http: HttpClient) => ({ queryKey: ['loyalty'] as const, queryFn: () => getLoyalty(http) });
 export const couponsQuery = (http: HttpClient) => ({ queryKey: ['coupons'] as const, queryFn: () => getCoupons(http) });
+/** Khoá con của ['coupons']: sau khi nhận mã, invalidate ['coupons'] làm mới cả ví, kho mã và lịch sử. staleTime khớp cache 30 giây của route. */
+export const collectableCouponsQuery = (http: HttpClient) => ({
+  queryKey: ['coupons', 'collectable'] as const,
+  queryFn: () => fetchCollectableCoupons(http),
+  staleTime: 30_000,
+});
+export const couponHistoryQuery = (http: HttpClient) => ({ queryKey: ['coupons', 'history'] as const, queryFn: () => getCouponHistory(http) });
 export const pointsTxnQuery = (http: HttpClient) => ({ queryKey: ['points-txn'] as const, queryFn: () => getPointsTransactions(http) });
 /** Khoá con của ['points-txn'] để invalidate làm mới cả hai. Dùng với useInfiniteQuery: initialPageParam và getNextPageParam lấy từ đây. */
 export const pointsTxnPagesQuery = (http: HttpClient) => ({

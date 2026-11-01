@@ -152,6 +152,16 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.emptyMineBody': 'Lưu mã ở mục Nhận mã, hoặc đổi Điểm Xanh lấy mã ở Đổi quà.',
   'coupon.emptyClaimTitle': 'Hôm nay chưa có mã mới',
   'coupon.oneCodeHint': 'Mỗi đơn dùng 1 mã',
+  'coupon.emptyHistoryTitle': 'Chưa có mã đã dùng hoặc hết hạn',
+  'coupon.emptyFilterTitle': 'Không có mã nào ở mục này',
+  'coupon.loadError': 'Chưa tải được mã giảm giá',
+  'coupon.allCount': 'Tất cả {n} mã',
+  'coupon.filterAll': 'Tất cả',
+  'coupon.filterDiscount': 'Giảm giá',
+  'coupon.filterFreeship': 'Miễn phí giao hàng',
+  'coupon.filterShop': 'Của shop',
+  'coupon.filterExpiring': 'Sắp hết hạn',
+  'coupon.tabsLabel': 'Nhóm mã giảm giá',
 
   // Combo và mua kèm
   'combo.title': 'Combo tiết kiệm',

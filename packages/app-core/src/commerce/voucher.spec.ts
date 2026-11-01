@@ -49,7 +49,27 @@ describe('voucherView', () => {
       condition: 'Đơn từ 199k',
       expiry: 'Dùng đến 11/11',
       state: 'saved',
+      name: null,
+      quota: null,
     });
+  });
+  it('name là tên admin đặt (title) đã trim; rỗng hoặc toàn khoảng trắng thì null', () => {
+    expect(voucherView(coupon({ title: '  Chào bạn mới  ' }), NOW).name).toBe('Chào bạn mới');
+    expect(voucherView(coupon({ title: '   ' }), NOW).name).toBeNull();
+    expect(voucherView(coupon({ title: null }), NOW).name).toBeNull();
+    expect(voucherView(coupon(), NOW).name).toBeNull();
+  });
+  it('quota "Còn n lượt" chỉ khi mã chưa nhận và còn 1 đến 10 lượt', () => {
+    const open = (remaining: number | null, over: Record<string, unknown> = {}) =>
+      voucherView({ ...coupon(), claimed: false, remaining, ...over }, NOW).quota;
+    expect(open(3)).toBe('Còn 3 lượt');
+    expect(open(1)).toBe('Còn 1 lượt');
+    expect(open(10)).toBe('Còn 10 lượt');
+    expect(open(11)).toBeNull();
+    expect(open(0)).toBeNull();
+    expect(open(null)).toBeNull();
+    expect(open(3, { claimed: true })).toBeNull();
+    expect(open(3, { endAt: iso(NOW - 1) })).toBeNull();
   });
   it('không có đơn tối thiểu thì điều kiện rỗng', () => {
     expect(voucherView(coupon({ minOrder: null }), NOW).condition).toBe('');

@@ -6,6 +6,7 @@ const DAY_MS = 86_400_000;
 // Việt Nam là UTC+7 quanh năm: cộng cố định 7 giờ rồi đọc bằng getUTC*, nên ngày hiện ra giống nhau dù máy khách đặt múi giờ nào.
 const VN_OFFSET_MS = 7 * 3_600_000;
 const EXPIRING_DAYS = 3;
+const QUOTA_SHOWN_MAX = 10;
 
 export interface VoucherView {
   id: string;
@@ -15,6 +16,10 @@ export interface VoucherView {
   /** "Đơn từ 199k"; rỗng khi không có đơn tối thiểu. */
   condition: string;
   expiry: string;
+  /** Tên admin đặt cho mã (đã trim); null khi chưa đặt: thẻ dùng nhãn theo loại giảm. */
+  name: string | null;
+  /** "Còn 3 lượt": chỉ mã chưa nhận còn 1 đến 10 lượt, để khách thấy gấp mà không lộ số lớn. */
+  quota: string | null;
   state: 'collectable' | 'saved' | 'used' | 'expired' | 'soldout' | 'ineligible';
 }
 
@@ -24,6 +29,8 @@ export interface VoucherFlags {
   used?: boolean;
   soldOut?: boolean;
   ineligible?: boolean;
+  /** Số lượt nhận còn lại của mã trong kho; null/thiếu = không giới hạn. */
+  remaining?: number | null;
   /** Mã của gian hàng: chỉ gọi nơi có nguồn chắc chắn. `CouponDTO.products` là mã mua chung nên không dùng để suy ra. */
   shop?: boolean;
 }
@@ -83,6 +90,11 @@ export function voucherView(c: CouponDTO & VoucherFlags, now: number): VoucherVi
     kind: c.type === 'FREESHIP' ? 'freeship' : c.shop ? 'shop' : 'discount',
     condition: c.minOrder ? fillCopy('coupon.minOrder', { min: vndShort(c.minOrder) }) : '',
     expiry: expiryText(endMs, now),
+    name: c.title?.trim() || null,
+    quota:
+      state === 'collectable' && typeof c.remaining === 'number' && c.remaining >= 1 && c.remaining <= QUOTA_SHOWN_MAX
+        ? fillCopy('coupon.usesLeft', { n: c.remaining })
+        : null,
     state,
   };
 }
