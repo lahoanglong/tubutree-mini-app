@@ -7,7 +7,7 @@ import { coreHttp } from './core-http';
 import { armHomeFeed, disarmHomeFeed, resetHomeFeed } from './home-feed';
 
 const pub = { publicConfig: { freeshipThreshold: 5 }, flashActive: [{ id: 'f' }] };
-const me = { flashUpcoming: [], forYou: [{ id: 'p' }], activeOrderCount: { count: 1 }, purchasedItems: { items: [], nextCursor: null }, shippingOrders: { data: [] } };
+const me = { flashUpcoming: [], forYou: [{ id: 'p' }], activeOrderCount: { count: 1 }, purchasedItems: { items: [], nextCursor: null } };
 const paths = () => apiFetch.mock.calls.map(([p]) => p as string);
 
 beforeEach(() => {
@@ -32,11 +32,16 @@ describe('web home-feed', () => {
     expect(await coreHttp.get('/products/for-you')).toEqual([{ id: 'p' }]);
     expect(await coreHttp.get('/orders/active-count')).toEqual({ count: 1 });
     expect(await coreHttp.get('/me/purchased-items', { query: { limit: 10 } })).toEqual({ items: [], nextCursor: null });
-    expect(await coreHttp.get('/orders', { query: { status: 'SHIPPING', page: 1, limit: 1 } })).toEqual({ data: [] });
     expect(paths()).toEqual(['/home', '/home/me?purchasedLimit=10']);
     // Lần hỏi lại (làm mới nền) đi request lẻ để lấy dữ liệu mới.
     expect(await coreHttp.get('/flash-sales/active')).toBe('SINGLE');
     expect(paths()).toContain('/flash-sales/active');
+  });
+
+  it('đơn đang giao không có trong /home/me: request lẻ đi thẳng', async () => {
+    armHomeFeed('u1');
+    expect(await coreHttp.get('/orders', { query: { status: 'SHIPPING', page: 1, limit: 1 } })).toBe('SINGLE');
+    expect(paths()).toEqual(['/orders?status=SHIPPING&page=1&limit=1']);
   });
 
   it('gợi ý cá nhân kèm seed ngày VN vẫn lấy từ khối gộp, không thêm request lẻ', async () => {

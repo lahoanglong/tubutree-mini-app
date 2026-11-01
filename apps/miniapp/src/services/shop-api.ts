@@ -671,11 +671,6 @@ export interface OrderListFilter {
 // Bug 1 fix: truoc day khong truyen page/limit -> BE mac dinh page=1 limit=20, khach co >20 don
 // khong bao gio xem duoc don cu hon qua app. Nhan them page/limit de orders.tsx phan trang duoc.
 export const fetchOrders = async (filter: OrderListFilter = {}, page = 1, limit = 20) => {
-  // Dải "đang giao" ở Trang chủ (1 đơn SHIPPING mới nhất) đã có sẵn trong /home/me.
-  if (filter.status === 'SHIPPING' && page === 1 && limit === 1) {
-    const fromFeed = await takeMeBlock('shippingOrders');
-    if (fromFeed) return fromFeed;
-  }
   return api
     .get<PageResponse<OrderView>>('/orders', {
       params: {

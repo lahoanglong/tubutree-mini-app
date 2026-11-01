@@ -109,10 +109,6 @@ export function takeHomeRequest(feed: HomeFeed, path: string, query: Query | und
       return keys.length === 0 ? feed.takeMe('newCustomerOffer') : null;
     case '/me/purchased-items':
       return only('limit') && isHomePurchasedRequest(q) ? feed.takeMe('purchasedItems') : null;
-    case '/orders':
-      return only('status', 'page', 'limit') && q.status === 'SHIPPING' && Number(q.page) === 1 && Number(q.limit) === 1
-        ? feed.takeMe('shippingOrders')
-        : null;
     case '/waste/me/open-count':
       return keys.length === 0
         ? feed.takeMe('wasteOpenRequestCount').then((n) => (typeof n === 'number' ? { count: n } : null))

@@ -36,7 +36,6 @@ export const HOME_ME: HomeMeDTO = {
     nextCursor: null,
   },
   activeOrderCount: { count: 0 },
-  shippingOrders: pageOf([], 1) as unknown as HomeMeDTO['shippingOrders'],
   subscriptions: [],
   notifications: [],
   newCustomerOffer: { isNewCustomer: false, welcomeVoucher: null } as HomeMeDTO['newCustomerOffer'],

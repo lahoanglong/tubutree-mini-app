@@ -63,6 +63,12 @@ describe('shop-api — buy-flow 4a', () => {
     expect(post).toHaveBeenLastCalledWith('/cart/items', { variationId: 'v1', quantity: 2, addSource: 'repurchase' }, {});
   });
 
+  it('fetchOrders đơn đang giao trang đầu limit 1 (Trang chủ, chat): gọi thẳng /orders, không đợi khối /home/me', async () => {
+    get.mockResolvedValue({ data: { data: [], meta: { page: 1, limit: 1, total: 0 } } });
+    await fetchOrders({ status: 'SHIPPING' }, 1, 1);
+    expect(get).toHaveBeenLastCalledWith('/orders', { params: { status: 'SHIPPING', page: 1, limit: 1 } });
+  });
+
   it('fetchOrders: status thắng group; không lọc → chỉ page/limit', async () => {
     get.mockResolvedValue({ data: { data: [], meta: { page: 1, limit: 20, total: 0 } } });
     await fetchOrders({ group: 'processing' }, 1, 20);

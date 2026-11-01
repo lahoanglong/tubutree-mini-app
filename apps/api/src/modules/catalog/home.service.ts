@@ -9,7 +9,6 @@ import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { buildPublicConfig, tierLoaderOf, type PublicConfigDTO } from '../system-config/public-config';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { listLiveBanners, type CampaignBannerDTO } from '../campaigns/campaign-public';
-import { paginated } from '../../common/pagination';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ACTIVE_ORDER_STATUSES } from '../orders/order-status-groups';
 import { WASTE_OPEN_STATUSES } from '../waste-exchange/waste.constants';
@@ -154,7 +153,6 @@ export class HomeService {
       hasOrders: count([...byStatus.keys()]) > 0,
       hasPriorOrder: count([...byStatus.keys()].filter((k) => k !== 'CANCELLED')) > 0,
       delivered: count(['DELIVERED']),
-      shipping: count(['SHIPPING']),
       active: count(ACTIVE_ORDER_STATUSES),
       wasteOpen,
     };
@@ -189,12 +187,11 @@ export class HomeService {
     const facts = this.userFactsOrNull(userId);
     const own = <T>(name: string, run: () => Promise<T>) => this.block(name, run, deadline);
     const withFacts = <T>(name: string, run: (f: UserFacts | null) => Promise<T>) => facts.then((f) => this.block(name, () => run(f), deadline));
-    const [forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount] = await Promise.all([
+    const [forYou, flashUpcoming, purchasedItems, activeOrderCount, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount] = await Promise.all([
       withFacts('forYou', (f) => (f ? this.catalog.getForYou(userId, { hasOrders: f.hasOrders, seed }) : this.catalog.getForYou(userId, { seed }))),
       own('flashUpcoming', () => this.flashSale.listUpcoming(userId)),
       withFacts('purchasedItems', async (f) => (f && f.delivered === 0 ? { items: [], nextCursor: null } : this.purchased.list(userId, { limit: purchasedLimit }))),
       withFacts('activeOrderCount', async (f) => (f ? { count: f.active } : this.orders.activeCount(userId))),
-      withFacts('shippingOrders', async (f) => (f && f.shipping === 0 ? paginated([], 1, 1, 0) : this.orders.list(userId, { status: 'SHIPPING' }, 1, 1))),
       own('subscriptions', () => this.subscriptions.list(userId)),
       own('notifications', () => this.notifications.listForUser(userId)),
       // Đã có đơn chưa huỷ thì kết quả luôn là "không phải khách mới", dù tài khoản thật hay khách vãng lai: khỏi đọc khách và đơn thêm lần nữa.
@@ -202,7 +199,7 @@ export class HomeService {
       // Chỉ một câu đếm (không gọi /waste/me nặng): để Trang chủ/Ưu đãi giữ lối vào Đổi rác cho khách còn yêu cầu mở khi chương trình tạm dừng.
       withFacts('wasteOpenRequestCount', async (f) => f?.wasteOpen ?? this.prisma.wasteRequest.count({ where: { userId, status: { in: [...WASTE_OPEN_STATUSES] } } })),
     ]);
-    return { forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount, purchasedLimit };
+    return { forYou, flashUpcoming, purchasedItems, activeOrderCount, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount, purchasedLimit };
   }
 }
 
@@ -210,7 +207,6 @@ interface UserFacts {
   hasOrders: boolean;
   hasPriorOrder: boolean;
   delivered: number;
-  shipping: number;
   active: number;
   wasteOpen: number;
 }
@@ -235,7 +231,6 @@ export interface HomeMe {
   flashUpcoming: Block<Awaited2<FlashSaleService['listUpcoming']>>;
   purchasedItems: Block<Awaited2<PurchasedItemsService['list']>>;
   activeOrderCount: Block<Awaited2<OrdersService['activeCount']>>;
-  shippingOrders: Block<Awaited2<OrdersService['list']>>;
   subscriptions: Block<Awaited2<SubscriptionsService['list']>>;
   notifications: Block<Awaited2<NotificationsService['listForUser']>>;
   newCustomerOffer: Block<Awaited2<LoyaltyService['getNewCustomerOffer']>>;
