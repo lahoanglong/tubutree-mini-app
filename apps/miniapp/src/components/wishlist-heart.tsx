@@ -3,7 +3,7 @@ import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-quer
 import { Heart } from 'lucide-react';
 import { getWishlistIds, addWishlist, removeWishlist } from '../services/wishlist-api';
 import { useAuthStore } from '../store/auth';
-import { useLoginWithNotice } from './ui/auth-gate';
+import { useLoginWithNotice } from '../hooks/use-login-notice';
 import { haptic } from '../utils/haptic';
 
 const IDS_KEY = ['wishlist-ids'];
