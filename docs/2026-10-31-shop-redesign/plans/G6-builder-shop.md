@@ -138,3 +138,15 @@
 - [ ] **Step 2:** chụp mini375, web375, web1280 (trình dựng, chi tiết khối, gian hàng) trước/sau vào `docs/2026-10-31-shop-redesign/screens/G6/` (gitignore); so từng cặp.
 - [ ] **Step 3:** vitest toàn bộ file đã sửa + `pnpm lint:parity` + `pnpm lint:vars`; e2e Mini `storefront-builder`, `storefront-signup`, `a11y-shop.miniapp`, `ds-parity.shop`; web `web-gate.sh tests/affiliate.web.spec.ts tests/ctv-375.web.spec.ts tests/shop.web.spec.ts` và `a11y-shop.web.spec.ts`.
 - [ ] **Step 4:** gate cuối `docs/2026-10-28-review/tools/gate.sh`, rồi bộ e2e Mini đầy đủ.
+
+## Ghi chú thực hiện (chỗ lệch kế hoạch)
+
+- Mini: nút lùi riêng trong chi tiết khối bị bỏ hẳn (chỉ còn `BackButton` nổi của app); spec `storefront-builder.spec.tsx` dựng thêm `<BackButton />` và bấm 'Quay lại'.
+- Mini: thẻ Thống kê cũng đặt `padding={16}` như thẻ hồ sơ, cho hai thẻ cùng lề.
+- Nút phụ đang tắt: thêm cặp token `--color-action-secondary-{bg,fg}-disabled` (4,70:1) ở `design-tokens`, Mini dùng qua `.tubu-btn.zaui-btn.zaui-btn-secondary[disabled]`; web `phoneSecondary` có thêm lớp trơn `tubu-phone-secondary` thay vì lớp `max-md:` mới (bánh cóc `max-md:`).
+- Web `mini.css` phản chiếu CSS nút của Mini (icon, nút chữ không rộng 120px, `tubu-btn-44`); đệm của `ShopTopBar` chuyển vào lớp CSS `tubu-shop-top-bar` vì chuỗi `'0 96px 0 64px'` thêm một chỗ px.
+- Món "Bài đăng mẫu" (kit) vào menu ⋯ của món ở cả hai app; hàng món vẫn cao khoảng 108px vì nút ghi chú 44px.
+- Web trình dựng từ lg: dùng `useMediaQuery(LG_UP)` + portal vào khe `PageHeader.actions` (`BUILDER_HEAD_SLOT`) thay vì nhân đôi cặp nút bằng `lg:hidden`/`hidden lg:flex`: hai bản mang chung trạng thái "đang đăng". Hằng `MD_UP`/`LG_UP` thêm ở `use-media-query.ts` (viết bằng số + `px` trong mẫu chuỗi nên không thêm chỗ px vào bánh cóc); `shop-products-tab.tsx` vẫn giữ `WIDE`/`TABLET` riêng vì spec của nó mock cả module.
+- `ShopSection` (web): kệ ít món chỉ thành lưới khi KHÔNG `preview`: khung "Khách sẽ thấy" của màn dựng là cột hẹp nên lưới sáu cột sẽ chật; ở đó giữ kệ ngang. Lưới cố định sáu cột nên bốn thẻ chiếm khoảng 2/3 hàng (không giãn bốn cột để thẻ không to hơn mọi lưới web khác).
+- e2e #36 cần gian hàng công khai có kệ ít món, kệ nhiều món và combo: thêm `support/lg-shelves-db.ts` (seed vào DB tạm, chủ riêng vì mỗi chủ một gian hàng) thay vì sửa seed của `a11y-db.ts`.
+- Baseline `ds-baseline.json` hạ (px: `section-detail` Mini 29→25, `shop-top-bar` web 4→3, `storefront-section-detail` web 1→0; max-md: `storefront-builder` web 4→3, `storefront-section-detail` web 14→12).
