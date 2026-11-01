@@ -2,6 +2,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readBaseline } from '../../../../scripts/uiux/ds-ratchet.mjs';
+import { guardViolations, ruleCounts } from '../../../../scripts/uiux/ds-shop-rules.mjs';
 
 /**
  * Bộ chặn "thẻ sản phẩm tự chế" của gói P4 (bản web của `apps/miniapp/src/components/ds-shop-guard.spec.ts`): mọi thẻ vẽ bằng
@@ -113,3 +115,42 @@ describe('ds-shop-guard (web)', () => {
     expect(bleedViolations(ok)).toEqual([]);
   });
 });
+
+/**
+ * Luật mở rộng của P17b (scripts/uiux/ds-shop-rules.mjs), mã cũ đang vi phạm nằm trong scripts/uiux/ds-baseline.json mục `guards.web` và chỉ được giảm:
+ * thẻ tự chế, giá gạch ngoài PriceTag, bậc primitive (bg-stone-100, var(--forest-700)) trong trang mua sắm. Web không có zmp-ui và openSnackbar:
+ * hai luật còn lại chặn mã chép nguyên từ Mini. Hạ baseline sau khi sửa: node scripts/uiux/ds-ratchet.mjs --write.
+ */
+describe('ds-shop-guard mở rộng (web): luật có baseline chỉ giảm', () => {
+  const baseline = readBaseline(fileURLToPath(new URL('../../../../scripts/uiux/ds-baseline.json', import.meta.url))).guards.web ?? {};
+  const check = (rel: string, text: string) => guardViolations({ platform: 'web', files: [{ rel, text }], baseline: {} }).errors;
+
+  it('mã thật không vượt baseline (file mới phải sạch)', () => {
+    const { errors, notices } = guardViolations({ platform: 'web', files: FILES, baseline });
+    expect(errors).toEqual([]);
+    if (notices.length > 0) console.warn(`ds-shop-guard: ${notices.length} luật đã giảm, hạ baseline:\n${notices.join('\n')}`);
+  });
+
+  it('web không import zmp-ui và không gọi openSnackbar', () => {
+    const counts = ruleCounts({ platform: 'web', files: FILES });
+    expect(counts['zmp-ui-import']).toEqual({});
+    expect(counts['open-snackbar']).toEqual({});
+  });
+
+  it.each([
+    ['tile-custom', 'components/home/new-rail.tsx', 'export const A = () => <ProductThumb src="a" />;'],
+    ['strike-element', 'app/ban-chay/x.tsx', 'export const A = () => <s>10.000đ</s>;'],
+    ['primitive-color', 'app/uu-dai/x.tsx', 'export const A = () => <div className="bg-stone-100 max-md:text-forest-700" />;'],
+    ['zmp-ui-import', 'components/y.tsx', "import { Button } from 'zmp-ui';"],
+    ['open-snackbar', 'lib/z.ts', "openSnackbar({ text: 'x' });"],
+  ])('fixture cố ý vi phạm: %s ở %s bị bắt', (ruleId, rel, text) => {
+    expect(check(rel, text).some((e) => e.startsWith(`${ruleId}:`) && e.includes(rel))).toBe(true);
+  });
+
+  it('chỗ hợp lệ không bị bắt: lớp ngữ nghĩa, [var(--color-*)], thành phần nền components/mini', () => {
+    expect(check('app/ban-chay/x.tsx', 'export const A = () => <div className="bg-[var(--color-bg-media)] text-fg-secondary" />;')).toEqual([]);
+    expect(check('components/mini/x.tsx', 'export const A = () => <div className="bg-stone-100" />;')).toEqual([]);
+    expect(check('app/tai-khoan/page.tsx', 'export const A = () => <div className="bg-stone-100" />;')).toEqual([]);
+  });
+});
+

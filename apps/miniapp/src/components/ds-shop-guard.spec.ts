@@ -2,6 +2,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readBaseline } from '../../../../scripts/uiux/ds-ratchet.mjs';
+import { guardViolations, ruleCounts } from '../../../../scripts/uiux/ds-shop-rules.mjs';
 
 /**
  * Bộ chặn "thẻ sản phẩm tự chế" của gói P4: mọi thẻ vẽ bằng `ProductCard`/`ProductTile`, giá gạch chỉ do `PriceTag` vẽ, nhãn Giờ vàng và
@@ -125,3 +127,41 @@ describe('ds-shop-guard (Mini App)', () => {
     expect(bleedHits([{ rel: 'pages/profile.tsx', text: "margin: '-12px -6px' }} /><div style={{ margin: '0 -16px' }} />" }])).toEqual(['pages/profile.tsx']);
   });
 });
+
+/**
+ * Luật mở rộng của P17b (scripts/uiux/ds-shop-rules.mjs), mã cũ đang vi phạm nằm trong scripts/uiux/ds-baseline.json mục `guards.miniapp` và chỉ được giảm:
+ * thẻ tự chế, giá gạch ngoài PriceTag, primitive màu ngoài css/ và components/ui, `Text` của zmp-ui trong trang mua sắm, gọi thẳng openSnackbar.
+ * Hạ baseline sau khi sửa: node scripts/uiux/ds-ratchet.mjs --write.
+ */
+describe('ds-shop-guard mở rộng (Mini App): luật có baseline chỉ giảm', () => {
+  const baseline = readBaseline(fileURLToPath(new URL('../../../../scripts/uiux/ds-baseline.json', import.meta.url))).guards.miniapp ?? {};
+  const check = (rel: string, text: string) => guardViolations({ platform: 'miniapp', files: [{ rel, text }], baseline: {} }).errors;
+
+  it('mã thật không vượt baseline (file mới phải sạch)', () => {
+    const { errors, notices } = guardViolations({ platform: 'miniapp', files: FILES, baseline });
+    expect(errors).toEqual([]);
+    if (notices.length > 0) console.warn(`ds-shop-guard: ${notices.length} luật đã giảm, hạ baseline:\n${notices.join('\n')}`);
+  });
+
+  it('baseline có đủ cả năm luật của Mini', () => {
+    expect(Object.keys(ruleCounts({ platform: 'miniapp', files: [] })).sort()).toEqual(['open-snackbar', 'primitive-color', 'strike-element', 'tile-custom', 'zmp-text']);
+  });
+
+  it.each([
+    ['tile-custom', 'pages/new-rail.tsx', 'export const A = () => <ProductImage src="a" />;'],
+    ['strike-element', 'components/home/x.tsx', 'export const A = () => <del>10.000đ</del>;'],
+    ['primitive-color', 'components/flash/x.tsx', "export const A = { background: 'var(--stone-100)' };"],
+    ['zmp-text', 'pages/offers.tsx', "import { Text } from 'zmp-ui';"],
+    ['open-snackbar', 'components/checkout/x.tsx', 'const { openSnackbar } = useSnackbar();'],
+  ])('fixture cố ý vi phạm: %s ở %s bị bắt', (ruleId, rel, text) => {
+    expect(check(rel, text).some((e) => e.startsWith(`${ruleId}:`) && e.includes(rel))).toBe(true);
+  });
+
+  it('chỗ hợp lệ không bị bắt: token ngữ nghĩa, useNotify, thành phần nền, Text của design system', () => {
+    expect(check('components/home/x.tsx', "export const A = { background: 'var(--color-bg-media)' };")).toEqual([]);
+    expect(check('pages/cart.tsx', "import { Text } from '../components/ui/text';\nconst { notify } = useNotify();")).toEqual([]);
+    expect(check('components/ui/product-tile.tsx', "export const A = { background: 'var(--stone-100)' };")).toEqual([]);
+    expect(check('hooks/use-notify.ts', 'const { openSnackbar } = useSnackbar();')).toEqual([]);
+  });
+});
+

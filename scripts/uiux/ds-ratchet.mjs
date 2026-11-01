@@ -13,6 +13,7 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from '
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
+import { loadPlatformFiles, ruleCounts } from './ds-shop-rules.mjs';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const BASELINE_FILE = join(REPO, 'scripts/uiux/ds-baseline.json');
@@ -163,9 +164,10 @@ export function main(argv = process.argv.slice(2)) {
   const maxMd = pick(current, 'maxMd');
 
   if (argv.includes('--write')) {
-    const prev = readBaseline(baselineFile);
-    writeBaseline(baselineFile, { px, maxMd, guards: prev.guards });
-    console.log(`ds-ratchet: đã ghi ${baselineFile} (px ${sum(px)} chỗ ở ${Object.keys(px).length} file, max-md ${sum(maxMd)} chỗ ở ${Object.keys(maxMd).length} file)`);
+    const guards = Object.fromEntries(['miniapp', 'web'].map((platform) => [platform, ruleCounts({ platform, files: loadPlatformFiles(root, platform) })]));
+    writeBaseline(baselineFile, { px, maxMd, guards });
+    const guardTotal = Object.values(guards).reduce((a, rules) => a + Object.values(rules).reduce((b, files) => b + sum(files), 0), 0);
+    console.log(`ds-ratchet: đã ghi ${baselineFile} (px ${sum(px)} chỗ ở ${Object.keys(px).length} file, max-md ${sum(maxMd)} chỗ ở ${Object.keys(maxMd).length} file, guards ${guardTotal} chỗ)`);
     return 0;
   }
 
