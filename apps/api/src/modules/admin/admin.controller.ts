@@ -347,6 +347,23 @@ export class ExportOrdersQuery {
   @IsOptional() @IsString() @MaxLength(100) storefront?: string;
 }
 
+/** Bộ lọc của số đếm theo trạng thái: đúng bộ lọc danh sách trừ `status` (mỗi chip tự là một trạng thái). */
+export class OrderStatusCountsQuery {
+  @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @IsOptional() @IsIn(['attention', 'all']) recycling?: RecyclingFilter;
+  @IsOptional() @IsIn(['pending', 'issued', 'all']) invoice?: InvoiceFilter;
+  @IsOptional() @IsIn([...PANCAKE_FILTERS]) pancake?: PancakeFilter;
+  @IsOptional() @IsCalendarDate() from?: string;
+  @IsOptional() @IsCalendarDate() to?: string;
+  @IsOptional() @IsIn([...ORDER_KINDS]) kind?: OrderKind;
+  @IsOptional() @IsIn([...ORDER_PAYMENT_STATUSES]) payment?: OrderPaymentFilter;
+  @IsOptional() @IsIn([...ORDER_LIST_PLATFORMS]) platform?: OrderListPlatform;
+  @IsOptional() @IsIn([...ORDER_QUEUES]) queue?: OrderQueue;
+  @IsOptional() @IsString() @MaxLength(64) referrerUserId?: string;
+  @IsOptional() @IsString() @MaxLength(64) userId?: string;
+  @IsOptional() @IsString() @MaxLength(100) storefront?: string;
+}
+
 export class ExportUsersQuery {
   @IsOptional() @IsString() @MaxLength(100) search?: string;
   /** `guests=1`: xuất cả phiên khách vãng lai (mặc định chỉ tài khoản thật, như danh sách). */
@@ -504,6 +521,13 @@ export class AdminController {
       storefront,
       order,
     });
+  }
+
+  /** Số đơn theo từng trạng thái cho hàng chip của tab Đơn hàng, theo đúng bộ lọc đang chọn (trừ trạng thái). */
+  @AllowStaff('CSKH', 'KHO', 'KE_TOAN')
+  @Get('orders/status-counts')
+  orderStatusCounts(@Query() q: OrderStatusCountsQuery, @CurrentUser() viewer: JwtPayload) {
+    return this.admin.orderStatusCounts(q, viewer);
   }
 
   /**

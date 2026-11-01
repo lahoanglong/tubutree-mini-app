@@ -139,6 +139,7 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
   const [note, setNote] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const pending = r.status === 'PENDING';
+  const noteHasPhone = containsPhone(note);
   const blocked = r.blockers.length > 0;
   const { confirm, ask, dialog } = useConfirm();
   // Chỉ bỏ qua được số dư Ví DƯƠNG; Ví âm hay vướng mắc khác vẫn phải giải quyết trước.
@@ -270,12 +271,18 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
               onChange={(e) => setNote(e.target.value)}
               className={INPUT_CLASS}
               disabled={mut.isPending}
+              aria-invalid={noteHasPhone || undefined}
             />
+            {noteHasPhone && (
+              <p role="alert" className="mt-1 text-xs text-danger-fg">
+                Ghi chú không được chứa số điện thoại của khách (ghi chú không bị ẩn danh).
+              </p>
+            )}
           </Field>
           <button
             type="button"
             onClick={() => void run()}
-            disabled={mut.isPending || blocked}
+            disabled={mut.isPending || blocked || noteHasPhone}
             className="min-h-11 rounded-control bg-danger-fg px-3.5 py-1.5 text-sm font-medium text-stone-0 hover:brightness-90 disabled:bg-stone-200 disabled:text-stone-500"
           >
             Xử lý (ẩn danh)
@@ -284,7 +291,7 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
             <button
               type="button"
               onClick={() => void runOverride()}
-              disabled={mut.isPending || !onlyWalletBlocked}
+              disabled={mut.isPending || !onlyWalletBlocked || noteHasPhone}
               className={BTN_DANGER_OUTLINE}
             >
               Xoá dù còn tiền Ví

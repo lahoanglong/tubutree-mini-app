@@ -517,6 +517,18 @@ export const listOrders = (
       recycling ? `&recycling=${recycling}` : ''
     }${invoice ? `&invoice=${invoice}` : ''}${pancake ? `&pancake=${pancake}` : ''}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}${orderExtraQuery(extra)}`,
   );
+export interface OrderStatusCounts {
+  all: number;
+  byStatus: Record<string, number>;
+}
+/** Số đơn theo từng trạng thái, cùng bộ lọc với danh sách (không có `status`, `order`, trang). */
+export const getOrderStatusCounts = (f: { search?: string; recycling?: RecyclingFilter; invoice?: InvoiceFilter; pancake?: PancakeFilter; from?: string; to?: string } & Omit<OrderListExtra, 'order'>) =>
+  apiFetch<OrderStatusCounts>(
+    `/admin/orders/status-counts?${(Object.entries(f) as [string, string | undefined][])
+      .filter(([, v]) => v)
+      .map(([k, v]) => `${k}=${encodeURIComponent(v!)}`)
+      .join('&')}`,
+  );
 /** Số đơn VAT chưa xuất xong (đọc meta.total, không tải danh sách). */
 export const countInvoicePending = () =>
   listOrders(1, undefined, undefined, undefined, 1, 'pending').then((r) => r.meta.total);

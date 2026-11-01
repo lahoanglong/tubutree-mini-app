@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   getAddresses: vi.fn(),
@@ -36,6 +36,16 @@ function renderPage() {
 }
 
 describe('Sổ địa chỉ: nút hành động (C-078)', () => {
+  // Trong một worker jsdom, lần dựng và truy vấn đầu tiên (khởi động lạnh) tốn hàng trăm ms và chạy ngay trong lần gọi đầu của lệnh chờ,
+  // ăn mất ngân sách 1 giây của nó: ca đầu file rớt ngẫu nhiên khi máy bận. Chạy trước một vòng ở đây để chi phí rơi vào hook; hạn 8 giây
+  // chỉ để vòng khởi động này không tự rớt, không nới lệnh chờ của ca nào.
+  beforeAll(async () => {
+    mocks.getAddresses.mockResolvedValue([ADDR]);
+    const { unmount } = renderPage();
+    await screen.findByRole('button', { name: 'Đặt mặc định' }, { timeout: 8000 });
+    unmount();
+  }, 20_000);
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getAddresses.mockResolvedValue([ADDR]);
