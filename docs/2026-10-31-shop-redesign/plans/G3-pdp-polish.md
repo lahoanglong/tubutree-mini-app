@@ -159,4 +159,11 @@
 
 ## Điều chỉnh lúc làm
 
-(điền khi làm)
+- **Task 3:** thêm hai khoá `pdp.brandShelf` ("Cùng thương hiệu") và `pdp.brandShelfLabel` ("Cùng thương hiệu {brand}") vào `shop-copy.ts` và `shop-copy-budget.ts` thay vì viết chữ thẳng; tên nhãn nằm ở `aria-label` của dải, tiêu đề hiện chữ cố định. `pdp-sections.spec.tsx` (PdpRails) cũng phải đổi vì còn khẳng định "Cùng nhà <nhãn>" (không có trong danh sách file của plan).
+- **Task 4:** tách thành `track?: 'flash' | 'neutral'` ở `FlashSoldBar` hai app (mặc định giữ rãnh cam nhạt cho thẻ trên nền trắng); chỉ `FlashPriceBar` truyền `neutral`.
+- **Task 5:** khoá `pdp.variation` không còn dòng nào dùng nên chuyển sang làm nhãn sr-only/máy tính của nhóm chip web (`id="variation-label"`), khỏi để khoá chết. Hộp đệm trên của chip khi không có dòng nào phía trên dùng `Box pt` (không thêm số px viết tay: ratchet px đỏ).
+- **Task 6:** hằng `PDP_FEED_SOURCE_LIMIT = 10` ở `pdp-view.ts`; sửa luôn comment "Cùng nhà" cũ ở đó; ghi hai dòng vào `DESIGN.md` (Nhật ký quyết định) cho Task 5 và 6.
+- **Task 7:** `FlashPriceBar` web thêm hai props chỉ có ở web (`className`, `priceRowClassName`), khai `propsDiff.webOnly` ở `docs/design/ds-map.json`; `PdpPrice` gom thành một `PriceRow` cho giá thường và giá Giờ vàng (bản chép tay lần đầu thêm một chỗ vi phạm `primitive-color` của ds-shop-guard). Phần để lại (ghi ở notes): thanh mua thu gọn dính (D-01 mục 5) và cột phụ "Cùng thương hiệu" dạng danh sách dọc (D-01 mục 4).
+- **Task 8:** thêm `apps/e2e/tests/support/pdp-product.ts` (`firstProduct`, `multiVariationProduct`); thứ tự khối chuẩn mới `main, certs, subscribe, offers, notes, variation-chips, quantity, bundles, quick-reviews, groupbuy, ...`, kiểm thêm chip liền Số lượng cách 7–9px và khối bắt buộc không vắng.
+- **Task 9:** ba hằng mới ở `phone-ui.ts` (`phoneBand`, `phoneBandPad`, `phoneBrandLabel`) và dùng lại `phoneBrandText` sẵn có; max-md 1057 → 1027 (phone-ui.ts +8, page.tsx −13, add-to-cart −11, pdp-sections −5, pdp-extras −6, pdp-quick-reviews −3). Spec `pdp-sections` đổi lớp kỳ vọng `max-md:text-[color:...]` thành `max-md:text-[var(...)]` (cùng màu, theo `phoneBrandText`).
+- **Chung:** lỡ `git add apps` kéo hai file chụp ảnh tạm vào commit d487c8462, đã gỡ ở b986f6d22 (hook chặn amend nên không viết lại lịch sử); cây cuối không còn hai file đó. Commit Task 4 để lỗi kiểu `noUncheckedIndexedAccess` ở spec web, sửa ở 52501c135.
