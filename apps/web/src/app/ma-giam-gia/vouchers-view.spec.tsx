@@ -215,13 +215,14 @@ describe('VouchersView (web)', () => {
     expect(buttons('Lưu mã')).toHaveLength(2);
   });
 
-  it('mã còn ít lượt hiện "Còn n lượt"; tên admin đặt ở hàng riêng; có chữ "Mỗi đơn dùng 1 mã"', async () => {
+  it('mã còn ít lượt hiện "Còn n lượt"; tên admin đặt cùng hàng điều kiện, mã ở hàng đáy; có chữ "Mỗi đơn dùng 1 mã"', async () => {
     responses['/coupons/collectable'] = [collectable('NEW10', { title: 'Chào bạn mới', usageLimit: 5, claimedCount: 2 })];
     mount();
     await flush();
     expect(text()).toContain('Còn 3 lượt');
     expect(document.querySelector('[data-testid="voucher-name"]')!.textContent).toBe('Chào bạn mới');
-    expect(document.querySelector('[data-testid="voucher-meta"]')!.textContent).toBe('Đơn từ 199k · NEW10');
+    expect(document.querySelector('[data-testid="voucher-meta"]')!.textContent).toBe('Đơn từ 199k');
+    expect(document.querySelector('[data-testid="voucher-foot"]')!.textContent).toContain('NEW10');
     expect(text()).toContain('Mỗi đơn dùng 1 mã');
   });
 

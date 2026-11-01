@@ -261,12 +261,13 @@ describe('VouchersPage (Mini)', () => {
     expect(mocks.login).not.toHaveBeenCalled();
   });
 
-  it('mã còn ít lượt hiện "Còn n lượt"; tên admin đặt hiện ở hàng riêng', async () => {
+  it('mã còn ít lượt hiện "Còn n lượt"; tên admin đặt cùng hàng điều kiện, mã ở hàng đáy', async () => {
     responses['/coupons/collectable'] = [collectable('NEW10', { title: 'Chào bạn mới', usageLimit: 5, claimedCount: 2 })];
     renderAt();
     expect(await screen.findByText('Còn 3 lượt')).toBeInTheDocument();
     expect(screen.getByTestId('voucher-name').textContent).toBe('Chào bạn mới');
-    expect(screen.getByTestId('voucher-meta').textContent).toBe('Đơn từ 199k · NEW10');
+    expect(screen.getByTestId('voucher-meta').textContent).toBe('Đơn từ 199k');
+    expect(screen.getByTestId('voucher-foot').textContent).toContain('NEW10');
   });
 
   it('có chữ "Mỗi đơn dùng 1 mã" trên trang', async () => {
