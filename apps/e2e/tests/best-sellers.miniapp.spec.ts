@@ -105,8 +105,8 @@ test.describe('Bán chạy nhất — trang xếp hạng', () => {
     await expect(tablist(page)).toBeInViewport();
     // Thanh dính nằm ngay dưới thanh Back cố định (vùng an toàn + 56px): cao hơn mức đó là chui dưới thanh Back, thấp hơn là trôi khỏi chỗ dính.
     const bar = (await tablist(page).locator('..').boundingBox())!;
-    expect(bar.y, 'thanh tab dính dưới thanh Back, không chui dưới nó').toBeGreaterThanOrEqual(56);
-    expect(bar.y).toBeLessThanOrEqual(56 + 64);
+    expect(bar.y, 'thanh tab dính dưới thanh Back, không chui dưới nó').toBeGreaterThanOrEqual(55);
+    expect(bar.y, 'và sát thanh Back, không để hở dải nội dung giữa hai thanh').toBeLessThanOrEqual(58);
     const hit = await tablist(page).getByRole('tab', { name: 'Tất cả' }).evaluate((el) => {
       const r = el.getBoundingClientRect();
       return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)?.closest('[role="tab"]') === el;

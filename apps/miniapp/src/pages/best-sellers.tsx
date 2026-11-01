@@ -21,10 +21,14 @@ import { uniqueById } from '../utils/unique-by-id';
 
 const PAGE_STYLE: CSSProperties = { background: 'var(--color-bg-canvas)', paddingBottom: 32 };
 
-/** Hàng tab dính ngay dưới thanh lùi đặc (cao 56px + vùng an toàn) mà `BackButton` vẽ khi cuộn: tab không chui dưới nó. */
+/**
+ * Hàng tab dính ngay dưới thanh lùi đặc (cao 56px + vùng an toàn) mà `BackButton` vẽ khi cuộn: tab không chui dưới nó. Vị trí dính tính từ
+ * chỗ nội dung của `.page` bắt đầu (đệm `--safe-top` + 48px khi có nút lùi), nên chỉ còn 56 - 48 = 8px; ghi 56px cộng vùng an toàn thì hở
+ * một dải 48px để thẻ cuộn lộ ra giữa thanh lùi và hàng tab.
+ */
 const TABS_BAR: CSSProperties = {
   position: 'sticky',
-  top: 'calc(var(--safe-top) + 56px)',
+  top: 8,
   zIndex: 2,
   padding: '8px 16px',
   background: 'var(--color-bg-canvas)',
