@@ -65,7 +65,9 @@ body {
 body.with-back-btn .page {
   padding-top: calc(var(--safe-top) + 48px);
 }
-/* Thanh dính của trang (vd. tab Vườn Xanh) phải nằm dưới thanh đặc của nút back (cao 56px + vùng an toàn), không thì bị nó che khi cuộn. */
+/* Thanh dính của trang (vd. tab Vườn Xanh) phải nằm dưới thanh đặc của nút back (cao 56px + vùng an toàn), không thì bị nó che khi cuộn.
+   Chỉ đúng cho trang KHÔNG có đệm `.page` (Vườn Xanh): `top` của phần tử dính đo từ mép nội dung của vùng cuộn nên trang có `.page` (đệm 48px + vùng an toàn)
+   tự trừ đệm đó (xem STICKY trong pages/flash-sale.tsx), dùng lớp này sẽ hở 48px. */
 body.with-back-btn .sticky-below-back {
   top: calc(var(--safe-top) + 56px) !important;
 }
