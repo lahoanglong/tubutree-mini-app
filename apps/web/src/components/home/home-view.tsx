@@ -127,7 +127,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const pageDown = shelves.bestSellerQuery.isError && shelves.bestSellerQuery.data === undefined;
 
   const blocks: Record<HomeRenderBlock, ReactNode> = {
-    settling: <HomeSettlingSkeleton categoryCells={categories.data ? entries.length + 1 : undefined} banner={banners.hinted} />,
+    settling: <HomeSettlingSkeleton categoryCells={categories.data ? entries.length + 1 : undefined} />,
     search: <HomeHeader unreadCount={unreadCount} />,
     member:
       kind === 'returning' && unavailable ? (
@@ -140,8 +140,9 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <NewCustomerGift initialConfig={initial.publicConfig} /> : null,
-    // Không có chiến dịch thì ẩn hẳn (không khung, không giữ chỗ), kể cả cột banner của HubLayout; chỉ giữ chỗ khi banner chưa về mà lần trước máy này có.
-    banner: banners.slides.length > 0 || (banners.loading && banners.hinted) ? <HomeBanner slides={banners.slides} /> : null,
+    // Không có chiến dịch thì ẩn hẳn (không khung, không giữ chỗ), kể cả cột banner của HubLayout; chỉ giữ chỗ khi lần trước máy này có banner mà nó chưa về
+    // hoặc còn chờ biết loại khách (chiến dịch riêng của loại khách chỉ hiện sau đó).
+    banner: banners.slides.length > 0 || (banners.hinted && (banners.loading || settling)) ? <HomeBanner slides={banners.slides} /> : null,
     // P15 (combo) nối dữ liệu; tới lúc đó khối rỗng và không giữ chỗ.
     combos: null,
     shortcuts: <ShortcutGrid />,
@@ -193,7 +194,10 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const head: readonly HomeRenderBlock[] = order.filter((id) => id === 'search');
   // Máy tính (HubLayout): thẻ thành viên hoặc dải quà cùng Việc cần làm ở `aside`, banner bên trái nó, mọi khối còn lại bên dưới. Điện thoại giữ đúng thứ tự Mini.
   const asideIds: readonly HomeRenderBlock[] = order.filter((id) => id === 'member' || id === 'welcome' || id === 'todo');
-  const hasBanner = order.includes('banner') && blocks.banner != null;
+  // Lúc `settling` thứ tự khối bị cắt ngay sau thẻ thành viên nên `banner` không có trong `order`, nhưng banner (hay khung giữ chỗ của nó) vẫn đứng ở slot banner của
+  // HubLayout: từ lg cột 8 có sẵn từ đầu (nếu chen vào khi hết chờ, thẻ thành viên co từ 12 xuống 4 cột và mọi khối dưới nhảy xuống), điện thoại slot là `contents`
+  // nên khung vẫn ngay dưới thẻ thành viên. Vì vậy khung chờ chung không tự vẽ khung banner: chỉ một khung ở mọi khổ.
+  const hasBanner = (order.includes('banner') || settling) && blocks.banner != null;
   const rest = order.filter((id) => !head.includes(id) && !asideIds.includes(id) && !(hasBanner && id === 'banner'));
   const body =
     asideIds.length === 0 ? (
