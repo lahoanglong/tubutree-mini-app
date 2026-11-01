@@ -107,7 +107,8 @@ export function ProductTile({
   const descId = useId();
   const isLine = variant === 'line';
   const out = view.stock === 'out';
-  const hasBrand = view.brandLine !== null && (variant === 'grid' || variant === 'rail-md');
+  // Khe thương hiệu giữ chỗ cả khi chữ bị ẩn vì tên đã chứa thương hiệu (`brandLine` null, `brandSlot` true): tên thẻ cùng hàng không lệch nhau 16px.
+  const hasBrand = (view.brandSlot ?? view.brandLine !== null) && (variant === 'grid' || variant === 'rail-md');
   const caption = CAPTION_NAME.has(variant);
   const hasMetaRow = variant === 'grid' || variant === 'rail-md' || variant === 'rank';
   const rankSpoken = view.rank !== null && variant === 'rank' ? (rankPlain ? fillTileCopy('rank.plain') : fillTileCopy('rank.spoken', { n: view.rank })) : null;

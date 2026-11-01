@@ -19,7 +19,17 @@ describe('CategoryTiles', () => {
     const region = screen.getByRole('region', { name: 'Danh mục' });
     expect(within(region).getByRole('heading', { level: 2, name: 'Danh mục' })).toBeInTheDocument();
     const names = within(region).getAllByRole('button').map((b) => b.getAttribute('aria-label'));
-    expect(names).toEqual([...many(8).map((e) => e.label), 'Tất cả']);
+    expect(names).toEqual(['Xem tất cả Danh mục', ...many(8).map((e) => e.label), 'Tất cả']);
+  });
+
+  it('quá 8 danh mục: tiêu đề có "Xem tất cả Danh mục" mở danh sách không lọc (như ô "Tất cả"); từ 8 trở xuống không có', () => {
+    const onSelectAll = vi.fn();
+    const { unmount } = render(<CategoryTiles entries={many(9)} isLoading={false} placeholderCount={4} onSelect={vi.fn()} onSelectAll={onSelectAll} />);
+    fireEvent.click(within(screen.getByTestId('section-header')).getByRole('button', { name: 'Xem tất cả Danh mục' }));
+    expect(onSelectAll).toHaveBeenCalledTimes(1);
+    unmount();
+    render(<CategoryTiles entries={many(8)} isLoading={false} placeholderCount={4} onSelect={vi.fn()} onSelectAll={vi.fn()} />);
+    expect(within(screen.getByTestId('section-header')).queryByRole('button')).toBeNull();
   });
 
   it('chạm ô gọi onSelect(mục); "Tất cả" gọi onSelectAll', () => {

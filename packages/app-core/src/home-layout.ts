@@ -583,6 +583,13 @@ export const CATEGORY_LABEL_HEIGHT = 32;
 export const CATEGORY_CELL_HEIGHT = CATEGORY_TILE_SIZE + 4 + CATEGORY_LABEL_HEIGHT;
 export const CATEGORY_GRID_COLUMNS = 5;
 export const CATEGORY_GRID_MAX_CELLS = 10;
+/** Lưới cuộn ngang (quá 10 ô): mỗi cột rộng 1/5,5 bề rộng khung nên cột thứ 6 ló gần nửa cột. Cột 1/5 chỉ ló phần đệm 16px, bị lớp mờ mép che hết. */
+export const CATEGORY_SCROLL_COLUMNS = 5.5;
+
+/** `cells` ô (kể cả "Tất cả") không vừa một màn 2 × 5: lưới xếp theo cột và cuộn ngang. */
+export function categoryGridScrolls(cells: number): boolean {
+  return cells > CATEGORY_GRID_MAX_CELLS;
+}
 
 /** Số ô khung chờ của Danh mục: số danh mục lần tải trước cộng ô "Tất cả", không quá một màn (10). */
 export function categorySkeletonCells(placeholderCount: number): number {

@@ -100,6 +100,14 @@ describe('BestSellersView — tiêu đề, tab, hạng', () => {
     expect(productCalls()).toEqual([{ sort: 'best_seller_30d', limit: 20, page: 1 }]);
   });
 
+  it('từ md hàng tab dính rộng bằng cả khung trang cộng đệm (lùi đúng đệm md 24px) để nền che bóng thẻ tràn ra mép phải khi cuộn; điện thoại giữ lùi 16px', async () => {
+    const { container } = mount();
+    await flush();
+    const band = container.querySelector<HTMLElement>('.sticky-below-back')!;
+    for (const cls of ['-mx-4', 'px-4', 'md:-mx-6', 'md:px-6']) expect(band.className, cls).toContain(cls);
+    expect(band.className).not.toMatch(/md:mx-0|md:px-0/);
+  });
+
   it('tab: tablist có tên, "Tất cả" đang chọn, danh mục hết hàng không thành tab', async () => {
     const { container } = mount();
     await flush();
