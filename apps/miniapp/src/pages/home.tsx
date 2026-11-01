@@ -118,7 +118,7 @@ export default function HomePage() {
     combos: <HomeCombos views={shelves.combos} />,
     shortcuts: <ShortcutGrid />,
     // Lỗi tải Mua lại (kể cả 404 của API cũ) đưa trang về bố cục khách mới, nơi khối này không có mặt, nên khối tự có trạng thái lỗi riêng ở PurchasedRail.
-    purchased: <HomePurchasedRail source="home_rail" restoring={restoring} exclude={shelves.flashSlugs} />,
+    purchased: <HomePurchasedRail source="home_rail" restoring={restoring} excludeVariations={shelves.flashVariationIds} />,
     flash: (
       <FlashSale
         items={shelves.flash}

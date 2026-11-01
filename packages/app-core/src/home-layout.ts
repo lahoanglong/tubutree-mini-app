@@ -444,8 +444,11 @@ export function dropForeignHomeHints(storage: RemovableStorage | null, userId: s
 /** Chiều cao khung chờ của "Việc cần làm" cho số dòng đã nhớ: mỗi việc một dòng 64px; khoảng cách giữa khối do vỏ khối giữ. */
 export const todoSkeletonHeight = (rows: number): number => rows * 64;
 
-/** Kệ Bán chạy nhất lấy dư 2 món so với tối đa 10 của kệ để đủ sau khi bỏ món đã nằm ở kệ trên; theo lượt bán 30 ngày. Khớp HOME_BEST_SELLER_LIMIT phía API. */
-export const HOME_BEST_SELLER_LIMIT = 12;
+/**
+ * Kệ Bán chạy nhất lấy dư so với tối đa 10 món của kệ để đủ sau khi bỏ món đã nằm ở kệ trên: dư 2 món, cộng chỗ cho bốn combo (`home.combos` tối đa 4) mỗi combo 3 món
+ * (combo chiếm slug các món của nó); lấy 12 món thì 3–4 combo dựng từ món bán chạy làm kệ tụt dưới 3 món và ẩn. Theo lượt bán 30 ngày. Khớp HOME_BEST_SELLER_LIMIT phía API.
+ */
+export const HOME_BEST_SELLER_LIMIT = 24;
 
 /** Khoá nhớ "lần mở trước có Giờ vàng" để dựng khung chờ đúng chỗ; chỉ ghi '1' hoặc '0'. */
 export const FLASH_HINT_KEY = 'tubu_home_flash';

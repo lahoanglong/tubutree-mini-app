@@ -41,8 +41,8 @@ export interface PurchasedRailProps {
   source?: 'home_rail' | 'orders_tab';
   /** Đang khôi phục phiên: giữ chỗ kệ bằng khung chờ để khi phiên về nội dung bên dưới không bị đẩy. */
   restoring?: boolean;
-  /** Slug món đã nằm ở kệ xếp trên (Giờ vàng): không lặp lại ở đây; hết món thì khối ẩn. */
-  exclude?: ReadonlySet<string>;
+  /** Phân loại đã nằm ở kệ xếp trên (Giờ vàng): không lặp lại ở đây; hết món thì khối ẩn. Theo phân loại, không theo sản phẩm: khách mua Can 5L vẫn thấy nó khi Can 1L đang Giờ vàng. */
+  excludeVariations?: ReadonlySet<string>;
 }
 
 /**
@@ -196,12 +196,12 @@ function RebuyLine({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void
  *
  * `target` là state (chỉ đổi khi chạm nút) nên danh tính ổn định — ReorderSheet khởi tạo lại lựa chọn theo danh tính `target`.
  */
-export function PurchasedRail({ source = 'orders_tab', restoring = false, exclude }: PurchasedRailProps) {
+export function PurchasedRail({ source = 'orders_tab', restoring = false, excludeVariations }: PurchasedRailProps) {
   const q = useBlockQuery(usePurchasedItems(PURCHASED_RAIL_LIMIT));
   const [target, setTarget] = useState<ReorderTarget | null>(null);
   const [subscribeFor, setSubscribeFor] = useState<PurchasedItem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const items = useMemo(() => (q.data?.items ?? []).filter((p) => !exclude?.has(p.slug)), [q.data, exclude]);
+  const items = useMemo(() => (q.data?.items ?? []).filter((p) => !excludeVariations?.has(p.variationId)), [q.data, excludeVariations]);
   const onHome = source === 'home_rail';
   // Khung chờ của Trang chủ cao đúng bằng khối lần trước (một dòng hay một kệ); chưa nhớ thì coi là một món. HTML server không có kho nên bản server là 'none'.
   const hint = useSyncExternalStore(subscribeNothing, () => (onHome ? readPurchasedHint(browserStorage()) : 'none'), (): PurchasedHint => 'none');

@@ -106,7 +106,7 @@ describe('HomePage — khung chờ chung (cấp trang)', () => {
     expect(blockOrder()).toEqual([...homeRenderOrder('unknown', true)]);
 
     // Biết là khách cũ nhưng Giờ vàng chưa về: vẫn giữ.
-    await act(async () => purchased.resolve({ items: [{ variationId: 'v1' }], nextCursor: null }));
+    await act(async () => purchased.resolve({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null }));
     await settle();
     expect(blockOrder()).toEqual([...homeRenderOrder('returning', true)]);
 

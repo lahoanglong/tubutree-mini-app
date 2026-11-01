@@ -39,6 +39,14 @@ describe('FlashSlotItem (web): khung đang diễn ra', () => {
     expect(c.textContent).toContain('Đã bán 60%');
   });
 
+  it('trình đọc nghe "Tối đa 5 sản phẩm mỗi khách, 500g", không nghe "gạch chéo" (F10a)', () => {
+    const c = show({ ...ITEM, variationName: '500g' });
+    expect(c.querySelector('[data-ds-part="note"]')!.getAttribute('aria-hidden')).toBe('true');
+    const spoken = c.querySelector(`#${CSS.escape(link(c).getAttribute('aria-describedby')!)}`)!.textContent!;
+    expect(spoken).toMatch(/Tối đa 5 sản phẩm mỗi khách, 500g$/);
+    expect(spoken).not.toContain('/');
+  });
+
   it('nút Mua ngay mang tên sản phẩm, bấm gọi onBuy và không đi theo liên kết sản phẩm', () => {
     const onBuy = vi.fn();
     const c = show(ITEM, { onBuy });

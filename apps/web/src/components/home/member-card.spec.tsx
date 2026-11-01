@@ -2,8 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 
-const mocks = vi.hoisted(() => ({ checkIn: vi.fn(), get: vi.fn() }));
-vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u1', fullName: 'Lan', pointsBalance: 120 } }) }));
+const mocks = vi.hoisted(() => ({ checkIn: vi.fn(), get: vi.fn(), fullName: 'Lan' as string | null }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u1', fullName: mocks.fullName, pointsBalance: 120 } }) }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'authenticated' }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, loyalty: { vndPerPointRedeem: 1000 } }) }));
@@ -24,6 +24,7 @@ afterEach(() => {
   mounted = null;
   mocks.checkIn.mockReset();
   mocks.get.mockReset();
+  mocks.fullName = 'Lan';
 });
 
 describe('MemberCard web — nền sáng như Mini App (HM-05)', () => {
@@ -49,5 +50,30 @@ describe('MemberCard web — nền sáng như Mini App (HM-05)', () => {
     const card = offline.querySelector('section')!.firstElementChild as HTMLElement;
     expect(card.style.height).toBe('64px');
     expect(card.style.background).not.toContain('gradient');
+  });
+});
+
+describe('MemberCard web — lời chào bằng tên gọi (P2 #7)', () => {
+  it('họ tên dài chào bằng từ cuối, không cắt "Chào Nguyễ…"', async () => {
+    mocks.fullName = 'Nguyễn Thị Quay Lại';
+    mocks.get.mockResolvedValue({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 });
+    const c = await mount(<MemberCard />);
+    expect(c.textContent).toContain('Chào Lại');
+    expect(c.textContent).not.toContain('Nguyễn');
+  });
+
+  it('tên gọi ngắn không dính dấu chấm giữa vào hạng: khoảng trắng đầu phần hạng không bị dòng flex nuốt', async () => {
+    mocks.fullName = 'Trần Văn An';
+    mocks.get.mockResolvedValue({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 });
+    const c = await mount(<MemberCard />);
+    const tier = Array.from(c.querySelectorAll('span')).find((s) => s.textContent?.includes('Mầm Xanh') && s.children.length > 0)!;
+    expect(tier.textContent).toMatch(/^\u00A0· /);
+  });
+
+  it('chưa có họ tên thì chào bạn', async () => {
+    mocks.fullName = null;
+    mocks.get.mockResolvedValue({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 });
+    const c = await mount(<MemberCard />);
+    expect(c.textContent).toContain('Chào bạn');
   });
 });

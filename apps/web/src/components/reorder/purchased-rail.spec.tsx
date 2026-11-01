@@ -264,14 +264,20 @@ describe('PurchasedRail — Trang chủ (Q6)', () => {
     expect(c.querySelectorAll('[role="region"] a.tubu-tile-link, [role="region"] .tubu-tile-link').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('bỏ món đã nằm ở Giờ vàng: món trùng không lặp lại, hết món thì khối ẩn', async () => {
+  it('bỏ phân loại đã nằm ở Giờ vàng: phân loại trùng không lặp lại, hết món thì khối ẩn', async () => {
     rail = async () => ({ items: [ITEM, { ...ITEM, variationId: 'v2', slug: 'sp-2', productName: 'Sản phẩm hai' }], nextCursor: null });
-    const c = await home({ exclude: new Set(['nuoc-rua-chen']) });
+    const c = await home({ excludeVariations: new Set(['v1']) });
     expect(c.textContent).not.toContain('Nước rửa chén');
     expect(c.querySelector('[data-testid="rebuy-line"]')).not.toBeNull();
     mounted!.unmount();
-    const none = await home({ exclude: new Set(['nuoc-rua-chen', 'sp-2']) });
+    const none = await home({ excludeVariations: new Set(['v1', 'v2']) });
     expect(none.textContent).toBe('');
+  });
+
+  it('Giờ vàng giữ phân loại khác của cùng sản phẩm thì phân loại đã mua vẫn hiện ở Mua lại (P2 #3)', async () => {
+    rail = async () => ({ items: [{ ...ITEM, variationId: 'v-5l', slug: 'can', productName: 'Can nước rửa', variationName: '5L' }, { ...ITEM, variationId: 'v2', slug: 'sp-2' }], nextCursor: null });
+    const c = await home({ excludeVariations: new Set(['v-1l']) });
+    expect(c.textContent).toContain('Can nước rửa');
   });
 
   it('khung chờ cao đúng dòng 88px + tiêu đề 44px khi chưa nhớ hay nhớ "một món"; cao hơn khi nhớ "nhiều món"', async () => {

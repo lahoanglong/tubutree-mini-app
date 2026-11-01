@@ -224,6 +224,16 @@ describe('ProductTile: nhãn, hết hàng, hạng', () => {
     expect((container.querySelector('[data-ds-part="image-badge"]') as HTMLElement).style.bottom).toBe('8px');
   });
 
+  it('rankPlain (hạng hụt vì kệ trên chiếm): ruy-băng ghi "Bán chạy" không số, màu hạng thường kể cả hạng 1, chữ đọc không nói hạng (P2 #4)', () => {
+    const { container } = render(<ProductTile view={viewOf({}, 'rank', { rank: 1 })} variant="rank" href="/p" rankPlain />);
+    const ribbon = container.querySelector('[data-ds-part="rank"]') as HTMLElement;
+    expect(ribbon).toHaveTextContent('Bán chạy');
+    expect(ribbon.textContent).not.toContain('#');
+    expect(ribbon.style.background).toBe('var(--color-rank-n-bg)');
+    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveAccessibleDescription(/^Bán chạy/);
+    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).not.toHaveAccessibleDescription(/Hạng/);
+  });
+
   it('hạng top 3 dùng màu hạng riêng, từ 4 dùng màu hạng thường, thiếu rank thì không ruy-băng', () => {
     const one = render(<ProductTile view={viewOf({}, 'rank', { rank: 1 })} variant="rank" href="/p" />);
     expect((one.container.querySelector('[data-ds-part="rank"]') as HTMLElement).style.background).toBe('var(--color-rank-1-bg)');
@@ -310,6 +320,24 @@ describe('ProductTile: bấm, nút phụ, ô trang trí', () => {
     expect(screen.getByText('Phân loại 500ml')).toBeInTheDocument();
     expect(within(container).getByTestId('foot')).toBeInTheDocument();
     expect(body(container).style.minHeight).toBe(`${tileBodyHeight('flash', { note: true, footer: 28 })}px`);
+  });
+
+  it('noteSpoken: dòng ghi chú nhìn thấy ẩn khỏi trình đọc, câu đọc vào mô tả của thẻ sau giá (F10a)', () => {
+    const { container } = render(<ProductTile view={viewOf({}, 'line')} variant="line" href="/p" note="Tối đa 2/khách · 500g" noteSpoken="Tối đa 2 sản phẩm mỗi khách, 500g" />);
+    const note = container.querySelector('[data-ds-part="note"]') as HTMLElement;
+    expect(note).toHaveTextContent('Tối đa 2/khách · 500g');
+    expect(note).toHaveAttribute('aria-hidden', 'true');
+    const btn = screen.getByRole('button', { name: 'Serum Bã Trầu' });
+    expect(btn).toHaveAccessibleDescription(/Giá 52\.000đ, Tối đa 2 sản phẩm mỗi khách, 500g$/);
+    expect(btn).not.toHaveAccessibleDescription(/\//);
+  });
+
+  it('noteSpoken rỗng: không thêm gì vào mô tả; không truyền noteSpoken thì dòng ghi chú giữ nguyên cho trình đọc', () => {
+    const empty = render(<ProductTile view={viewOf({}, 'line')} variant="line" href="/p" note="" noteSpoken="" />);
+    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveAccessibleDescription(/Giá 52\.000đ$/);
+    empty.unmount();
+    const plain = render(<ProductTile view={viewOf({}, 'line')} variant="line" href="/p" note="Phân loại 500ml" />);
+    expect(plain.container.querySelector('[data-ds-part="note"]')).not.toHaveAttribute('aria-hidden');
   });
 
   it('note rỗng giữ chỗ dòng ghi chú (thẻ cùng kệ không lệch giá); không truyền note thì không có dòng', () => {

@@ -21,9 +21,9 @@ import type { ProductQuery } from './dto/product-query.dto';
 // gộp khi tham số truy vấn lẻ của nó trùng đúng các giá trị này.
 export const HOME_SECTION_LIMIT = 6;
 export const HOME_FEATURED_LIMIT = HOME_SECTION_LIMIT * 2;
-// Kệ Bán chạy nhất của Trang chủ lấy dư 2 món so với tối đa 10 của kệ để còn đủ sau khi bỏ món đã nằm ở kệ trên (Giờ vàng, Mua lại).
-// Theo lượt bán 30 ngày, khớp HOME_BEST_SELLER_LIMIT của app-core (queries/home.ts) và homeProductSlot của Mini App.
-export const HOME_BEST_SELLER_LIMIT = 12;
+// Kệ Bán chạy nhất của Trang chủ lấy dư so với tối đa 10 của kệ để còn đủ sau khi bỏ món đã nằm ở kệ trên (Giờ vàng, Mua lại): dư 2 món cộng bốn combo × 3 món
+// (combo chiếm slug các món của nó). Theo lượt bán 30 ngày, khớp HOME_BEST_SELLER_LIMIT của app-core (home-layout.ts) và homeProductSlot của Mini App.
+export const HOME_BEST_SELLER_LIMIT = 24;
 // Khớp HOME_COMBOS_LIMIT của app-core (queries/bundle.ts) và `maxItems` của kệ `home.combos`.
 export const HOME_COMBOS_LIMIT = 4;
 

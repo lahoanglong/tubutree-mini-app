@@ -42,12 +42,22 @@ describe('BestSellerRail web — Bán chạy nhất có hạng (Q18)', () => {
     expect(text.indexOf('#1')).toBeLessThan(text.indexOf('#2'));
   });
 
-  it('kệ đã bỏ món trùng kệ trên: thẻ ghi hạng thật được truyền vào (#2, #3, #5), không đánh lại từ #1', () => {
+  it('hạng hụt vì kệ trên chiếm (#1, #2, #4) hay mất hạng 1 (#2, #3): thẻ chỉ ghi "Bán chạy" không số; hạng liền 1..k giữ số (P2 #4)', () => {
+    const badges = () => Array.from(mounted!.container.querySelectorAll('[data-ds-part="rank"]')).map((n) => n.textContent);
+    mounted = render(<BestSellerRail items={[card(1), card(2), card(4)]} ranks={[1, 2, 4]} loading={false} />);
+    expect(badges()).toEqual(['Bán chạy', 'Bán chạy', 'Bán chạy']);
+    mounted.unmount();
+    mounted = render(<BestSellerRail items={[card(2), card(3)]} ranks={[2, 3]} loading={false} />);
+    expect(badges()).toEqual(['Bán chạy', 'Bán chạy']);
+    mounted.unmount();
+    mounted = render(<BestSellerRail items={[card(1), card(2), card(3)]} ranks={[1, 2, 3]} loading={false} />);
+    expect(badges()).toEqual(['#1', '#2', '#3']);
+  });
+
+  it('kệ đã bỏ món trùng kệ trên (hạng #2, #3, #5): không đánh lại từ #1 và không ghi số hụt', () => {
     mounted = render(<BestSellerRail items={[card(2), card(3), card(5)]} ranks={[2, 3, 5]} loading={false} />);
     const text = mounted.container.textContent ?? '';
-    for (const rank of ['#2', '#3', '#5']) expect(text).toContain(rank);
-    expect(text).not.toContain('#1');
-    expect(text).not.toContain('#4');
+    for (const rank of ['#1', '#2', '#3', '#4', '#5']) expect(text).not.toContain(rank);
   });
 
   it('rỗng và không lỗi thì ẩn cả khối; rỗng mà lỗi thì khối lỗi có "Thử lại"', () => {

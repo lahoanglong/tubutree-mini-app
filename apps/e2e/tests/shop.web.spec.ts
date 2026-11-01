@@ -748,7 +748,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await page.goto('/');
     // login() chỉ đặt cờ phiên trong localStorage (không có cookie) nên HTML đầu là bản khách vãng lai; khi biết có phiên, các khối dưới
     // thẻ thành viên đổi sang khung chờ rồi dựng lại. Đo chip trước lúc đó thì chip bị gỡ khỏi trang giữa chừng.
-    await expect(page.getByText('Chào Nguyễn Văn An')).toBeVisible();
+    await expect(page.getByText('Chào An')).toBeVisible();
     await expect(page.getByTestId('home-settling')).toHaveCount(0);
     const chips = [
       page.getByRole('region', { name: /Dải thương hiệu/ }).getByRole('button').first(),
@@ -939,7 +939,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     expect(Math.abs(settled - firstHtml), `Danh mục ${firstHtml}px (HTML đầu) → ${settled}px (sau đăng nhập)`).toBeLessThanOrEqual(2);
   });
 
-  test('thẻ thành viên: tên rất dài cắt "…" trên một dòng, thẻ cao bằng thẻ tên ngắn (≤ 2px), không tràn ngang', async ({ page, api }) => {
+  test('thẻ thành viên: lời chào dùng tên gọi (từ cuối); tên gọi một từ rất dài cắt "…" trên một dòng, thẻ cao bằng thẻ tên ngắn (≤ 2px), không tràn ngang', async ({ page, api }) => {
     await login(page, api);
     api.get('/me/loyalty', {
       tier: { id: 't1', name: 'Hạt Giống', multiplier: 1, perks: null }, pointsBalance: 1800, pointsConvertedBalance: 0, tierPoints: 1800,
@@ -947,7 +947,8 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
       nextTier: { id: 't2', name: 'Mầm Xanh', minPoints: 3000, pointsToGo: 1200 },
     });
     const heights: number[] = [];
-    for (const name of ['An', 'Nguyễn Thị Phương Thảo Nguyên Vũ Khánh Linh Trần Gia Bảo']) {
+    const names = ['An', 'Nguyễn Thị Phương Thảo Nguyên Vũ Khánh Linh Trần Gia Bảo', `Trần ${'Anh'.repeat(20)}`];
+    for (const name of names) {
       api.post('/auth/refresh', {
         accessToken: 'e2e-token',
         user: { id: 'u1', fullName: name, referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER', pointsBalance: 60, pointsConvertedBalance: 0, walletBalance: 0 },
@@ -955,11 +956,13 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
       await page.goto('/');
       const card = page.getByRole('region', { name: 'Thẻ thành viên' });
       await expect(card).toContainText('1.800', { timeout: 15_000 });
-      await expect(card).toContainText(name);
+      const given = name.split(' ').pop()!;
+      await expect(card).toContainText(`Chào ${given}`);
+      if (name.includes(' ')) await expect(card).not.toContainText('Trần');
       heights.push((await card.boundingBox())!.height);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     }
-    expect(Math.abs(heights[1]! - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên dài ${heights[1]}px`).toBeLessThanOrEqual(2);
+    for (const [i, h] of heights.entries()) expect(Math.abs(h - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên ${names[i]} ${h}px`).toBeLessThanOrEqual(2);
   });
 });
 

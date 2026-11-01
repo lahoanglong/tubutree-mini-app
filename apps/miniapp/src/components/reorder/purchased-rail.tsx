@@ -73,8 +73,8 @@ export interface PurchasedRailProps {
   source: 'home_rail' | 'orders_tab';
   /** Đang khôi phục phiên: giữ chỗ kệ bằng khung chờ để khi phiên về nội dung bên dưới không bị đẩy. */
   restoring?: boolean;
-  /** Slug món đã nằm ở kệ xếp trên (Giờ vàng): không lặp lại ở đây; hết món thì khối ẩn. */
-  exclude?: ReadonlySet<string>;
+  /** Phân loại đã nằm ở kệ xếp trên (Giờ vàng): không lặp lại ở đây; hết món thì khối ẩn. Theo phân loại, không theo sản phẩm: khách mua Can 5L vẫn thấy nó khi Can 1L đang Giờ vàng. */
+  excludeVariations?: ReadonlySet<string>;
 }
 
 /**
@@ -87,14 +87,14 @@ export interface PurchasedRailProps {
  * `target` là state (chỉ đổi khi chạm nút) nên danh tính ổn định — ReorderSheet khởi tạo lại lựa
  * chọn theo danh tính `target`, không được dựng target inline trong JSX.
  */
-export function PurchasedRail({ source, restoring = false, exclude }: PurchasedRailProps) {
+export function PurchasedRail({ source, restoring = false, excludeVariations }: PurchasedRailProps) {
   const navigate = useNavigate();
   const q = useBlockQuery(usePurchasedItems(PURCHASED_RAIL_LIMIT));
   const [target, setTarget] = useState<ReorderTarget | null>(null);
   const [subscribeFor, setSubscribeFor] = useState<PurchasedItem | null>(null);
   // Đã mở sheet mua lại một lần thì giữ nó dựng: ZaUI Sheet còn trượt xuống ~200ms sau khi target về null.
   const [reorderMounted, setReorderMounted] = useState(false);
-  const items = useMemo(() => (q.data?.items ?? []).filter((p) => !exclude?.has(p.slug)), [q.data, exclude]);
+  const items = useMemo(() => (q.data?.items ?? []).filter((p) => !excludeVariations?.has(p.variationId)), [q.data, excludeVariations]);
   const hasItems = items.length > 0;
   useEffect(() => {
     if (!hasItems) return;

@@ -58,6 +58,14 @@ describe('FlashSlotItem: khung đang diễn ra', () => {
     render(<FlashSlotItem item={{ ...ITEM, variationName: '500g' }} {...base} />);
     expect(screen.getByText('Tối đa 5/khách · 500g')).toBeInTheDocument();
   });
+
+  it('trình đọc nghe "Tối đa 5 sản phẩm mỗi khách, 500g", không nghe "gạch chéo" (F10a)', () => {
+    render(<FlashSlotItem item={{ ...ITEM, variationName: '500g' }} {...base} />);
+    expect(screen.getByText('Tối đa 5/khách · 500g')).toHaveAttribute('aria-hidden', 'true');
+    const description = screen.getByRole('button', { name: 'Serum Bã Trầu' });
+    expect(description).toHaveAccessibleDescription(/Tối đa 5 sản phẩm mỗi khách, 500g$/);
+    expect(description).not.toHaveAccessibleDescription(/\//);
+  });
 });
 
 describe('FlashSlotItem: món hết suất', () => {

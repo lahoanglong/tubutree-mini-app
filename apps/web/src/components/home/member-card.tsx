@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Leaf } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { HOME_HERO_HEIGHT, memberCardAriaLabel, memberCardView } from '@tubutree/app-core/home-layout';
+import { givenName } from '@tubutree/app-core/person-name';
 import { loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -55,7 +56,7 @@ export function MemberCard() {
     pointsTotal: pointsSummary(loyaltyQ.data ?? user).total,
     vndPerPointRedeem: cfg.loyalty?.vndPerPointRedeem,
   });
-  const greeting = homeCopy.member.greeting(user.fullName ?? homeCopy.member.greetingFallback);
+  const greeting = homeCopy.member.greeting(givenName(user.fullName) ?? homeCopy.member.greetingFallback);
   const loyaltyFailed = loyaltyQ.isError && !loyaltyQ.data;
 
   return (
@@ -72,7 +73,7 @@ export function MemberCard() {
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{greeting}</span>
               {card.tierName && (
                 <span style={{ flex: '0 0 auto' }}>
-                  {' · '}
+                  {'\u00A0· '}
                   <Icon icon={Leaf} size="sm" tone="brand" style={{ verticalAlign: '-3px', display: 'inline' }} /> {card.tierName}
                 </span>
               )}
