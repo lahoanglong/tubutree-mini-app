@@ -48,6 +48,14 @@ describe('DailyCheckInCard: khách vãng lai không được hứa Điểm Xanh'
     expect(screen.getByLabelText('Ngày 1: +1.000 Điểm Xanh')).toBeInTheDocument();
   });
 
+  it('tiêu đề "Điểm danh mỗi ngày" dưới 22px: Inter, không Fraunces (Q1)', () => {
+    mocks.status = base;
+    render(<DailyCheckInCard authed />);
+    const h = screen.getByRole('heading', { name: 'Điểm danh mỗi ngày' });
+    expect(h.style.fontFamily).toContain('--font-ui');
+    expect(h.style.fontFamily).not.toContain('--font-display');
+  });
+
   it('khách vãng lai: giọt nước vẫn hiện, không chữ "+N Điểm Xanh", có câu và nút đăng nhập Zalo', async () => {
     mocks.status = { ...base, todayPoints: 0, pointsBlocked: 'GUEST' };
     render(<DailyCheckInCard authed />);

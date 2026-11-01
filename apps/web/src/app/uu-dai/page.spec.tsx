@@ -326,6 +326,14 @@ describe('/uu-dai — trang Ưu đãi', () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 
+  it('thẻ mời của khách: tiêu đề dưới 22px dùng Inter, không Fraunces (Q1)', async () => {
+    state.phase = 'guest';
+    const c = await mount();
+    const h = region(c, 'Điểm Xanh và điểm danh')!.querySelector<HTMLElement>('h2')!;
+    expect(h.style.fontFamily).toContain('--font-ui');
+    expect(h.style.fontFamily).not.toContain('--font-display');
+  });
+
   it('khách chưa đăng nhập: Giờ vàng, Nhận mã, rồi mỗi khối cần tài khoản một thẻ mời cùng nhãn "Đăng nhập", Đổi quà vẫn hiện; không gọi API riêng của khách', async () => {
     state.phase = 'guest';
     state.flash = [FLASH_ITEM];

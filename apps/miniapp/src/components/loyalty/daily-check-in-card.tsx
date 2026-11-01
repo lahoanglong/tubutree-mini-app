@@ -57,7 +57,7 @@ export function DailyCheckInCard({ authed, margin, compact = false }: { authed: 
             </span>
           )}
           <div style={{ minWidth: 0, flex: 1 }}>
-            <Heading variant="title-sm" as="h2">
+            <Heading variant="title-sm" as="h2" font="ui">
               {checkInCopy.title}
             </Heading>
             {compact ? (

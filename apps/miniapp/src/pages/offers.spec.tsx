@@ -229,6 +229,15 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     expect(mocks.getCoupons).not.toHaveBeenCalled();
   });
 
+  it('thẻ mời của khách: tiêu đề dưới 22px dùng Inter, không Fraunces (Q1)', async () => {
+    mocks.phase = 'guest';
+    renderPage();
+    const region = await screen.findByRole('region', { name: 'Điểm Xanh và điểm danh' });
+    const h = within(region).getByRole('heading', { level: 2 });
+    expect(h.style.fontFamily).toContain('--font-ui');
+    expect(h.style.fontFamily).not.toContain('--font-display');
+  });
+
   it('tên đọc của thẻ Điểm Xanh chứa hạng và số điểm đang hiển thị', async () => {
     renderPage();
     const card = await screen.findByRole('button', { name: /Hạng và lịch sử điểm/ });

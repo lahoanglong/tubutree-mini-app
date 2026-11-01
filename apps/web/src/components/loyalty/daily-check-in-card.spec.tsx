@@ -42,6 +42,14 @@ afterEach(() => {
 });
 
 describe('DailyCheckInCard (web): khách vãng lai không được hứa Điểm Xanh', () => {
+  it('tiêu đề "Điểm danh mỗi ngày" dưới 22px: Inter, không Fraunces (Q1)', () => {
+    mocks.status = base;
+    mounted = render(<DailyCheckInCard authed />);
+    const h = Array.from(mounted.container.querySelectorAll<HTMLElement>('h2')).find((e) => e.textContent === 'Điểm danh mỗi ngày')!;
+    expect(h.style.fontFamily).toContain('--font-ui');
+    expect(h.style.fontFamily).not.toContain('--font-display');
+  });
+
   it('user thật: hứa "+1.000 Điểm Xanh · +10 giọt nước", không có câu mời đăng nhập', () => {
     mocks.status = base;
     mounted = render(<DailyCheckInCard authed />);

@@ -17,4 +17,18 @@ describe('Text/Heading', () => {
     render(<Heading variant="display-lg" as="h2" data-testid="h2">Big</Heading>);
     expect(screen.getByTestId('h2').tagName).toBe('H2');
   });
+  it('Heading mặc định Fraunces (display); font="ui" đổi sang Inter 700 mà vẫn theo cỡ của variant (Q1: dưới 22px dùng Inter)', () => {
+    render(
+      <>
+        <Heading variant="title-sm" data-testid="d">Mặc định</Heading>
+        <Heading variant="title-md" font="ui" data-testid="u">Inter</Heading>
+      </>,
+    );
+    expect(screen.getByTestId('d').style.fontFamily).toBe('var(--font-display)');
+    const ui = screen.getByTestId('u');
+    expect(ui.style.fontFamily).toBe('var(--font-ui)');
+    expect(ui.style.fontWeight).toBe('700');
+    expect(ui.style.fontSize).toBe('var(--type-title-md-size)');
+    expect(ui.style.letterSpacing).toBe('-0.01em');
+  });
 });
