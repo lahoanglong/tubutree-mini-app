@@ -187,7 +187,43 @@ describe('AccountDeletionPanel (C-016)', () => {
       answerConfirm(true);
       await flush();
       const call = api.calls.find((c) => c.url.includes('/process'));
-      expect(call?.init?.body).toBe(JSON.stringify({ overrideWalletBalance: { reason: 'khách đã thu hồi đồng ý trên Zalo' } }));
+      expect(call?.init?.body).toBe(JSON.stringify({ overrideWalletBalance: { reason: 'khách đã thu hồi đồng ý trên Zalo', expectedWalletBalance: 50_000 } }));
+    });
+
+    it('lý do chứa số điện thoại bị chặn ngay trong hộp thoại, hộp nêu rõ không ghi tên/SĐT', async () => {
+      const { container } = await setup(wallet(50_000));
+      click(byText(container, 'button', 'Xoá dù còn tiền Ví'));
+      await flush();
+      const d = confirmDialog()!;
+      expect(d.textContent).toContain('không ghi tên hay số điện thoại khách');
+      typeInto(d.querySelector('textarea'), 'gọi khách 0912 345 678 xác nhận');
+      await flush();
+      expect(d.querySelector<HTMLButtonElement>('[data-confirm="accept"]')!.disabled).toBe(true);
+      expect(d.textContent).toContain('không được chứa số điện thoại');
+    });
+
+    it('lý do 9 emoji (18 đơn vị UTF-16 nhưng 9 ký tự) vẫn bị coi là ngắn', async () => {
+      const { container } = await setup(wallet(50_000));
+      click(byText(container, 'button', 'Xoá dù còn tiền Ví'));
+      await flush();
+      const d = confirmDialog()!;
+      typeInto(d.querySelector('textarea'), '😀'.repeat(9));
+      await flush();
+      expect(d.querySelector<HTMLButtonElement>('[data-confirm="accept"]')!.disabled).toBe(true);
+    });
+
+    it('Ví + vướng mắc khác: nút Xoá dù còn tiền Ví hiện nhưng khoá, kèm gợi ý liệt kê vướng mắc cần giải quyết', async () => {
+      const r = req({
+        user: { ...req().user!, walletBalance: 50_000 },
+        blockers: [
+          { code: 'WALLET_BALANCE', message: 'Ví Tubu còn 50.000đ mà khách chưa đồng ý bỏ số dư' },
+          { code: 'ORDER_IN_PROGRESS', message: 'còn 1 đơn hàng chưa hoàn tất' },
+        ],
+      });
+      const { container } = await setup(r);
+      const btn = byText(container, 'button', 'Xoá dù còn tiền Ví') as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+      expect(container.textContent).toContain('Cần giải quyết trước: còn 1 đơn hàng chưa hoàn tất');
     });
 
     it('huỷ hộp thoại thì không gọi API', async () => {
@@ -215,8 +251,9 @@ describe('AccountDeletionPanel (C-016)', () => {
 
     it('yêu cầu đã xử lý bằng ghi đè: hiện số tiền đã trừ và lý do', async () => {
       const { container } = await setup(
-        req({ status: 'RESOLVED', reviewedAt: '2026-10-02T03:00:00.000Z', walletOverrideAmount: 50_000, walletOverrideReason: 'khách mất liên lạc' }),
+        req({ status: 'RESOLVED', reviewedAt: '2026-10-02T03:00:00.000Z', walletOverrideAmount: 50_000, walletOverrideBy: 'adm1', walletOverrideByName: 'Admin Lan', walletOverrideReason: 'khách mất liên lạc' }),
       );
+      expect(container.textContent).toContain('bởi Admin Lan');
       expect(container.textContent).toContain('Xoá dù còn tiền Ví: đã trừ 50.000đ');
       expect(container.textContent).toContain('khách mất liên lạc');
     });

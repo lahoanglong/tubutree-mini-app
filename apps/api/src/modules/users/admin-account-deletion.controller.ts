@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { Transform, Type } from 'class-transformer';
-import { IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AccountDeletionService, OVERRIDE_REASON_MAX, OVERRIDE_REASON_MIN, type DeletionListStatus } from './account-deletion.service';
@@ -15,6 +15,9 @@ class WalletOverrideDto {
   @MinLength(OVERRIDE_REASON_MIN)
   @MaxLength(OVERRIDE_REASON_MAX)
   reason!: string;
+
+  /** Số dư Ví admin đã thấy trong hộp thoại xác nhận. */
+  @IsInt() @Min(1) expectedWalletBalance!: number;
 }
 
 class ProcessDeletionRequestDto {

@@ -26,8 +26,8 @@ describe('AdminAccountDeletionController (C-016)', () => {
     expect(svc.list).toHaveBeenCalledWith('ALL');
     await ctrl.process('admin-1', 'req-1', { note: 'ok' });
     expect(svc.process).toHaveBeenCalledWith('req-1', 'admin-1', 'ok', undefined);
-    await ctrl.process('admin-1', 'req-2', { overrideWalletBalance: { reason: 'khách mất liên lạc' } });
-    expect(svc.process).toHaveBeenCalledWith('req-2', 'admin-1', undefined, { reason: 'khách mất liên lạc' });
+    await ctrl.process('admin-1', 'req-2', { overrideWalletBalance: { reason: 'khách mất liên lạc', expectedWalletBalance: 5000 } });
+    expect(svc.process).toHaveBeenCalledWith('req-2', 'admin-1', undefined, { reason: 'khách mất liên lạc', expectedWalletBalance: 5000 });
   });
 
   it('từ chối status lạ ở query', async () => {
@@ -46,16 +46,19 @@ describe('AdminAccountDeletionController (C-016)', () => {
     });
 
     it('lý do được cắt khoảng trắng và nhận khi đủ 10 ký tự', async () => {
-      await expect(pipe.transform({ overrideWalletBalance: { reason: '   khách đã mất liên lạc   ' } }, meta())).resolves.toMatchObject({
-        overrideWalletBalance: { reason: 'khách đã mất liên lạc' },
+      await expect(pipe.transform({ overrideWalletBalance: { reason: '   khách đã mất liên lạc   ', expectedWalletBalance: 5000 } }, meta())).resolves.toMatchObject({
+        overrideWalletBalance: { reason: 'khách đã mất liên lạc', expectedWalletBalance: 5000 },
       });
     });
 
     it.each([
-      ['thiếu lý do', { overrideWalletBalance: {} }],
-      ['lý do ngắn (sau khi cắt)', { overrideWalletBalance: { reason: '  ngắn quá  ' } }],
-      ['lý do trống', { overrideWalletBalance: { reason: '          ' } }],
-      ['lý do quá 500 ký tự', { overrideWalletBalance: { reason: 'a'.repeat(501) } }],
+      ['thiếu lý do', { overrideWalletBalance: { expectedWalletBalance: 5000 } }],
+      ['lý do ngắn (sau khi cắt)', { overrideWalletBalance: { reason: '  ngắn quá  ', expectedWalletBalance: 5000 } }],
+      ['lý do trống', { overrideWalletBalance: { reason: '          ', expectedWalletBalance: 5000 } }],
+      ['thiếu số dư xác nhận', { overrideWalletBalance: { reason: 'khách mất liên lạc' } }],
+      ['số dư xác nhận 0', { overrideWalletBalance: { reason: 'khách mất liên lạc', expectedWalletBalance: 0 } }],
+      ['số dư xác nhận lẻ', { overrideWalletBalance: { reason: 'khách mất liên lạc', expectedWalletBalance: 1.5 } }],
+      ['lý do quá 500 ký tự', { overrideWalletBalance: { reason: 'a'.repeat(501), expectedWalletBalance: 5000 } }],
     ])('400: %s', async (_n, body) => {
       await expect(pipe.transform(body, meta())).rejects.toBeDefined();
     });

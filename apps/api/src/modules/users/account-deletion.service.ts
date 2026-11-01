@@ -51,7 +51,13 @@ export const OVERRIDE_REASON_MIN = 10;
 export const OVERRIDE_REASON_MAX = 500;
 export interface WalletOverride {
   reason: string;
+  /** Số dư Ví admin đã thấy và xác nhận trong hộp thoại; lệch với số dư dưới khoá thì không trừ. */
+  expectedWalletBalance: number;
 }
+
+/** Dãy từ 9 chữ số (cho phép cách bằng khoảng trắng, dấu chấm, gạch): giống số điện thoại. Lý do admin không được chứa vì nó không bị ẩn danh. */
+export const PHONE_LIKE = /\d(?:[\s.\-]?\d){8,}/;
+export const codePoints = (s: string) => [...s].length;
 
 export type DeletionListStatus = 'PENDING' | 'RESOLVED' | 'ALL';
 
@@ -140,8 +146,14 @@ export class AccountDeletionService {
     const consents = new Map([...latestPending].map(([uid, r]) => [uid, r.walletForfeitAmount]));
     const windowDays = pendingUsers.length > 0 ? await this.returnWindowDays() : 7;
     const blockers = pendingUsers.length > 0 ? await this.collectBlockers(this.prisma, pendingUsers, consents, windowDays, partnerCfg) : new Map();
+    const actorIds = [...new Set(requests.map((r) => r.walletOverrideBy).filter((x): x is string => !!x))];
+    const actors = actorIds.length
+      ? await this.prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true } })
+      : [];
+    const actorName = new Map(actors.map((a) => [a.id, a.fullName]));
     return requests.map((r) => ({
       ...r,
+      walletOverrideByName: r.walletOverrideBy ? (actorName.get(r.walletOverrideBy) ?? null) : null,
       user: byId.get(r.userId) ?? null,
       blockers: r.status === 'PENDING' ? (blockers.get(r.userId) ?? []) : [],
     }));
@@ -156,27 +168,35 @@ export class AccountDeletionService {
    * chạy lại khoá đủ đơn ngay từ đầu.
    */
   async process(requestId: string, adminId: string, adminNote?: string, override?: WalletOverride) {
-    let overrideReason: string | undefined;
+    let ov: WalletOverride | undefined;
     if (override) {
-      overrideReason = typeof override.reason === 'string' ? override.reason.trim() : '';
-      if (overrideReason.length < OVERRIDE_REASON_MIN || overrideReason.length > OVERRIDE_REASON_MAX) {
+      const reason = typeof override.reason === 'string' ? override.reason.trim() : '';
+      const n = codePoints(reason);
+      if (n < OVERRIDE_REASON_MIN || n > OVERRIDE_REASON_MAX) {
         throw new BadRequestException(`Lý do xoá dù còn tiền Ví phải từ ${OVERRIDE_REASON_MIN} đến ${OVERRIDE_REASON_MAX} ký tự.`);
       }
+      if (PHONE_LIKE.test(reason)) {
+        throw new BadRequestException('Lý do không được chứa số điện thoại hay dãy số dài của khách (lý do không bị ẩn danh), hãy bỏ đi.');
+      }
+      if (!Number.isInteger(override.expectedWalletBalance) || override.expectedWalletBalance < 1) {
+        throw new BadRequestException('Thiếu số dư Ví đã xác nhận (expectedWalletBalance).');
+      }
+      ov = { reason, expectedWalletBalance: override.expectedWalletBalance };
     }
     let result;
     try {
-      result = await this.processOnce(requestId, adminId, adminNote, overrideReason);
+      result = await this.processOnce(requestId, adminId, adminNote, ov);
     } catch (err) {
       if (!isRetryableTxError(err)) throw err;
       this.logger.warn(`Yêu cầu xoá ${requestId}: xung đột giao dịch (${(err as Error).message}), chạy lại một lần.`);
-      result = await this.processOnce(requestId, adminId, adminNote, overrideReason);
+      result = await this.processOnce(requestId, adminId, adminNote, ov);
     }
     // Bộ nhớ đệm phiên (SessionStateService, TTL 5 giây) còn coi chủ vừa bị ẩn danh là đang đăng nhập: cắt ngay như khoá tài khoản.
     this.sessions?.invalidate(result.userId);
     return result;
   }
 
-  private async processOnce(requestId: string, adminId: string, adminNote?: string, overrideReason?: string) {
+  private async processOnce(requestId: string, adminId: string, adminNote?: string, override?: WalletOverride) {
     // Đọc cấu hình đối soát trước khi mở tx (SystemConfigService đọc qua pool, không đọc trong lúc giữ tx), như setUserRole.
     const partnerCfg = await this.partnerStores?.settlementConfig();
     const windowDays = await this.returnWindowDays();
@@ -206,7 +226,24 @@ export class AccountDeletionService {
 
       if (user) {
         // Ghi đè của admin chỉ bỏ blocker số dư DƯƠNG: coi như "đã đồng ý" đúng số dư vừa đọc dưới khoá FOR UPDATE; Ví âm và mọi blocker khác vẫn chặn.
-        const overriding = overrideReason !== undefined && user.walletBalance > 0 && request.walletForfeitAmount !== user.walletBalance;
+        const overrideReason = override?.reason;
+        const overriding = override !== undefined;
+        if (override) {
+          // Số dư đọc dưới khoá FOR UPDATE: cộng Ví chen vào giữa lúc admin xem hộp thoại và lúc bấm thì không được trừ số lớn hơn số đã xác nhận.
+          if (user.walletBalance !== override.expectedWalletBalance) {
+            const message = `Ví vừa đổi từ ${vnd(override.expectedWalletBalance)} thành ${vnd(user.walletBalance)}, tải lại và xác nhận lại`;
+            throw new BadRequestException({
+              statusCode: 400,
+              error: 'Bad Request',
+              code: ACCOUNT_DELETION_BLOCKED,
+              message,
+              blockers: [{ code: 'WALLET_BALANCE', message }],
+            });
+          }
+          if (request.walletForfeitAmount === user.walletBalance) {
+            throw new BadRequestException('Khách đã đồng ý bỏ số dư, dùng nút Xử lý.');
+          }
+        }
         const consents = new Map([[user.id, overriding ? user.walletBalance : request.walletForfeitAmount]]);
         const blockers = (await this.collectBlockers(tx, [user], consents, windowDays, partnerCfg)).get(user.id) ?? [];
         if (blockers.length > 0) {
