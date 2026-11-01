@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   adminApprovePost: vi.fn(),
   adminRejectPost: vi.fn(),
   adminReports: vi.fn(),
+  getCommunityReportsCount: vi.fn(),
   adminResolveReport: vi.fn(),
   adminHidePost: vi.fn(),
   removeComment: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock('../services/feed-api', () => ({
   closeEvent: mocks.closeEvent,
   pickEventWinner: mocks.pickEventWinner,
 }));
+vi.mock('../services/staff-api', () => ({ getCommunityReportsCount: mocks.getCommunityReportsCount }));
 vi.mock('../services/api', () => ({
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
@@ -132,6 +134,7 @@ beforeEach(() => {
   mocks.adminApprovePost.mockResolvedValue({ ok: true });
   mocks.adminRejectPost.mockResolvedValue({ ok: true });
   mocks.adminReports.mockResolvedValue([REPORT('r1')]);
+  mocks.getCommunityReportsCount.mockResolvedValue(0);
   mocks.adminResolveReport.mockResolvedValue({ ok: true });
   mocks.adminHidePost.mockResolvedValue({ ok: true });
   mocks.removeComment.mockResolvedValue({ ok: true });
@@ -296,6 +299,37 @@ describe('CommunityModerationPage — báo cáo', () => {
     await screen.findByText('Tiêu đề a');
     goTab('Báo cáo');
     expect(await screen.findByText('Không có báo cáo nào')).toBeInTheDocument();
+  });
+});
+
+describe('CommunityModerationPage — số ở tab Báo cáo (R-75)', () => {
+  const reportsTab = () => screen.getByRole('tab', { name: /^Báo cáo/ });
+
+  it('tab Báo cáo hiện số báo cáo đang mở lấy từ hộp việc (communityReports), không phải độ dài danh sách', async () => {
+    mocks.getCommunityReportsCount.mockResolvedValue(73);
+    renderPage();
+    await waitFor(() => expect(reportsTab().textContent).toBe('Báo cáo73'));
+  });
+
+  it('hộp việc lỗi: không hiện số, không tải danh sách báo cáo khi chưa mở tab', async () => {
+    mocks.getCommunityReportsCount.mockRejectedValue(new Error('x'));
+    renderPage();
+    await waitFor(() => expect(mocks.getCommunityReportsCount).toHaveBeenCalled());
+    expect(reportsTab().textContent).toBe('Báo cáo');
+    expect(mocks.adminReports).not.toHaveBeenCalled();
+  });
+
+  it('0 báo cáo: không hiện số', async () => {
+    mocks.getCommunityReportsCount.mockResolvedValue(0);
+    mocks.adminReports.mockResolvedValue([]);
+    renderPage();
+    await waitFor(() => expect(mocks.getCommunityReportsCount).toHaveBeenCalled());
+    expect(reportsTab().textContent).toBe('Báo cáo');
+  });
+
+  it('đúng ba tab dùng chung với web (Chờ duyệt, Báo cáo, Sự kiện), nhãn ngắn', () => {
+    renderPage();
+    expect(screen.getAllByRole('tab').map((t) => t.textContent?.replace(/\d+$/, ''))).toEqual(['Chờ duyệt', 'Báo cáo', 'Sự kiện']);
   });
 });
 

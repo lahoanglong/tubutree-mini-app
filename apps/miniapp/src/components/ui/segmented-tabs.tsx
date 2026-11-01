@@ -4,7 +4,7 @@ import { useScrollHints } from './use-scroll-hints';
 export interface SegmentedTabItem {
   key: string;
   label: string;
-  count?: number;
+  count?: number | string;
 }
 
 export interface SegmentedTabsProps {
@@ -62,7 +62,7 @@ export function SegmentedTabs({ items, value, onChange, scroll }: SegmentedTabsP
             }}
           >
             {it.label}
-            {typeof it.count === 'number' && <span style={{ marginLeft: 4, opacity: 0.75 }}>{it.count}</span>}
+            {(typeof it.count === 'number' || typeof it.count === 'string') && <span style={{ marginLeft: 4, opacity: 0.75 }}>{it.count}</span>}
           </button>
         );
       })}
