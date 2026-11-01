@@ -10,6 +10,8 @@ const view = (patch: Partial<VoucherView> = {}): VoucherView => ({
   kind: 'discount',
   condition: 'Đơn từ 250k',
   expiry: 'Còn 2 ngày',
+  name: null,
+  quota: null,
   state: 'collectable',
   ...patch,
 });
@@ -107,6 +109,37 @@ describe('VoucherTicket', () => {
     expect(q('voucher-meta')).toBeNull();
     rerender(<VoucherTicket voucher={view()} variant="row" />);
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k · FUWA3E');
+  });
+
+  it('tên admin đặt đứng đầu dòng meta, trước điều kiện và mã; chỉ có tên và mã thì không dấu "·" thừa', () => {
+    const { rerender } = render(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="ticket" />);
+    expect(q('voucher-meta')!.textContent).toBe('Chào bạn mới · Đơn từ 250k · FUWA3E');
+    rerender(<VoucherTicket voucher={view({ name: 'Chào bạn mới', condition: '' })} variant="ticket" />);
+    expect(q('voucher-meta')!.textContent).toBe('Chào bạn mới · FUWA3E');
+    rerender(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="row" />);
+    expect(q('voucher-meta')!.textContent).toBe('Chào bạn mới · Đơn từ 250k · FUWA3E');
+  });
+
+  it('chip không vẽ tên: dòng meta một dòng chỉ còn điều kiện', () => {
+    render(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="chip" />);
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k');
+  });
+
+  it('quota "Còn 3 lượt" nằm sau dòng hạn, tông cảnh báo; không quota thì không dòng', () => {
+    const { rerender } = render(<VoucherTicket voucher={view({ quota: 'Còn 3 lượt' })} variant="ticket" />);
+    const quota = q('voucher-quota')!;
+    expect(quota.textContent).toBe('Còn 3 lượt');
+    expect(q('voucher-expiry')!.compareDocumentPosition(quota) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(quota.style.color).toBe('var(--color-status-warning-fg)');
+    rerender(<VoucherTicket voucher={view()} variant="ticket" />);
+    expect(q('voucher-quota')).toBeNull();
+  });
+
+  it('quota không vẽ ở chip hay ở mã không còn nhận được', () => {
+    const { rerender } = render(<VoucherTicket voucher={view({ quota: 'Còn 3 lượt' })} variant="chip" />);
+    expect(q('voucher-quota')).toBeNull();
+    rerender(<VoucherTicket voucher={view({ quota: 'Còn 3 lượt', state: 'soldout' })} variant="ticket" />);
+    expect(q('voucher-quota')).toBeNull();
   });
 
   it('expiring: dòng hạn tông cảnh báo; không thì chữ phụ', () => {

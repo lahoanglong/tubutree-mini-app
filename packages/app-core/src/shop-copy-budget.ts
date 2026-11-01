@@ -157,6 +157,17 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.emptyMineBody': null,
   'coupon.emptyClaimTitle': null,
   'coupon.oneCodeHint': null,
+  'coupon.emptyHistoryTitle': null,
+  'coupon.emptyFilterTitle': null,
+  'coupon.loadError': null,
+  'coupon.allCount': 16,
+  'coupon.filterAll': 12,
+  'coupon.filterDiscount': 12,
+  'coupon.filterFreeship': 18,
+  'coupon.filterShop': 12,
+  'coupon.filterExpiring': 14,
+  'coupon.tabsLabel': null,
+  'coupon.newCustomerOnlyReason': null,
 
   // Combo và mua kèm
   'combo.title': null,

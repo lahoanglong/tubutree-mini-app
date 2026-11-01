@@ -1462,6 +1462,11 @@ model Coupon {
   batchLink       Json?
   claims          CouponClaim[]
   campaignLinks   CampaignCoupon[]
+  /// Hiện ở mục "Nhận mã" công khai (GET /coupons/collectable). Chỉ mã CLAIM chung, không thuộc lô thẻ in (CHECK coupons_listed_claim_only_chk):
+  /// mã in thẻ mà liệt kê công khai thì ai cũng nhận được, mất ý nghĩa của thẻ.
+  listed          Boolean            @default(false)
+  /// Tên hiển thị ở kho mã; null = chỉ hiện nhãn giá trị.
+  title           String?
   /// Người tạo / sửa gần nhất qua trang quản trị (null = mã hệ thống hoặc tạo trước khi có cột). Nhân viên chỉ sửa được
   /// mã do nhân viên tạo và không dùng được mã do chính mình tạo.
   createdById     String?
@@ -1470,6 +1475,7 @@ model Coupon {
 
   @@index([batch])
   @@index([createdById, createdAt])
+  @@index([listed, endAt])
   @@map("coupons")
 }
 

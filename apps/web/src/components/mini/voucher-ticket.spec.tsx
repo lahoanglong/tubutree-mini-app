@@ -6,7 +6,7 @@ import { mount } from './harness';
 import { VoucherTicket } from './voucher-ticket';
 
 const view = (patch: Partial<VoucherView> = {}): VoucherView => ({
-  id: 'FUWA3E', code: 'FUWA3E', title: 'Giảm 15% (tối đa 45.000đ)', kind: 'discount', condition: 'Đơn từ 250k', expiry: 'Còn 2 ngày', state: 'collectable', ...patch,
+  id: 'FUWA3E', code: 'FUWA3E', title: 'Giảm 15% (tối đa 45.000đ)', kind: 'discount', condition: 'Đơn từ 250k', expiry: 'Còn 2 ngày', name: null, quota: null, state: 'collectable', ...patch,
 });
 const q = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 const buttons = () => Array.from(document.querySelectorAll<HTMLButtonElement>('button'));
@@ -91,6 +91,31 @@ describe('VoucherTicket (web)', () => {
     b.unmount();
     mount(<VoucherTicket voucher={view()} variant="row" />);
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k · FUWA3E');
+  });
+
+  it('tên admin đặt đứng đầu dòng meta, trước điều kiện và mã; chỉ có tên và mã thì không dấu "·" thừa; chip không vẽ tên', () => {
+    const a = mount(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="ticket" />);
+    expect(q('voucher-meta')!.textContent).toBe('Chào bạn mới · Đơn từ 250k · FUWA3E');
+    a.unmount();
+    const b = mount(<VoucherTicket voucher={view({ name: 'Chào bạn mới', condition: '' })} variant="row" />);
+    expect(q('voucher-meta')!.textContent).toBe('Chào bạn mới · FUWA3E');
+    b.unmount();
+    mount(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="chip" />);
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k');
+  });
+
+  it('quota "Còn 3 lượt" nằm sau dòng hạn, tông cảnh báo; không vẽ ở chip hay mã không còn nhận được', () => {
+    const a = mount(<VoucherTicket voucher={view({ quota: 'Còn 3 lượt' })} variant="ticket" />);
+    const quota = q('voucher-quota')!;
+    expect(quota.textContent).toBe('Còn 3 lượt');
+    expect(q('voucher-expiry')!.compareDocumentPosition(quota) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(quota.style.color).toBe('var(--color-status-warning-fg)');
+    a.unmount();
+    const b = mount(<VoucherTicket voucher={view({ quota: 'Còn 3 lượt' })} variant="chip" />);
+    expect(q('voucher-quota')).toBeNull();
+    b.unmount();
+    mount(<VoucherTicket voucher={view({ quota: 'Còn 3 lượt', state: 'soldout' })} variant="ticket" />);
+    expect(q('voucher-quota')).toBeNull();
   });
 
   it('onDetail: thân là nút anh em của nút chính, không lồng, bấm thân không gọi primary', () => {

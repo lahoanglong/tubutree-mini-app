@@ -43,8 +43,11 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
   const stamp = STAMP[v.state] ? fillCopy(STAMP[v.state]!) : null;
   // Chip chỉ có tiêu đề + điều kiện (kế hoạch P5), một dòng, quá dài thì cắt. Ticket/row thêm mã: không cắt gì, hàng hẹp thì mã xuống dòng nguyên khối (không bao giờ "500…" làm khách đọc nhầm số).
   const showCode = variant !== 'chip' && Boolean(v.code);
-  const showMeta = Boolean(v.condition) || showCode;
+  // Tên admin đặt là chữ tự do, có thể dài: chip một dòng không có chỗ cho nó.
+  const name = variant !== 'chip' ? v.name : null;
+  const showMeta = Boolean(name) || Boolean(v.condition) || showCode;
   const showExpiry = !inactive && v.expiry !== '';
+  const showQuota = !inactive && variant !== 'chip' && Boolean(v.quota);
   // Không có `reason` thì không vẽ thêm dòng: điều kiện đã nằm ở dòng meta, nút trỏ aria-describedby về đó (không lặp chữ trên màn hình).
   const reasonText = ineligible ? reason ?? '' : '';
   const showPrimary = primary && !inactive;
@@ -60,6 +63,8 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       </span>
       {showMeta && (
         <span id={`${uid}-meta`} data-testid="voucher-meta" style={{ display: 'block', minWidth: 0, fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-tertiary)', ...(variant === 'chip' ? TITLE_ONE_LINE : null) }}>
+          {name}
+          {name && (v.condition || showCode) ? ' · ' : null}
           {v.condition}
           {v.condition && showCode ? ' · ' : null}
           {showCode && <span data-testid="voucher-code" style={{ whiteSpace: 'nowrap' }}>{v.code}</span>}
@@ -68,6 +73,11 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       {showExpiry && variant !== 'chip' && (
         <span data-testid="voucher-expiry" style={{ display: 'block', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: expiring ? 'var(--color-status-warning-fg)' : 'var(--color-text-tertiary)' }}>
           {v.expiry}
+        </span>
+      )}
+      {showQuota && (
+        <span data-testid="voucher-quota" style={{ display: 'block', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', fontWeight: 600, color: 'var(--color-status-warning-fg)' }}>
+          {v.quota}
         </span>
       )}
       {reasonText && (

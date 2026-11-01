@@ -42,7 +42,7 @@ const hasHandBleed = (text: string) => NEG_TAILWIND.test(text) || NEG_LONGHAND.t
  * Miễn đúng đoạn mã, không miễn cả file: lề âm tràn mép mới thêm vào các file này vẫn bị bắt.
  */
 const TOUCH_AREA: Readonly<Record<string, readonly string[]>> = {
-  'pages/offers.tsx': ["margin: '-14px -6px'"],
+  'components/offers/offers-points-strip.tsx': ["margin: '-14px -6px'"],
   'pages/profile.tsx': ["margin: '-12px -6px'"],
   'pages/bank-payment.tsx': ["margin: '-6px -10px -6px 0'"],
   'pages/addresses.tsx': ['marginLeft: -8'],

@@ -78,13 +78,13 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
     expect(mount().querySelector('section')!.className).toContain('lg:hidden');
   });
 
-  it('Giờ vàng tới /gio-vang, Mã giảm giá tới mã của tôi, Đổi rác và Mua chung đúng route web', () => {
+  it('Giờ vàng tới /gio-vang, Mã giảm giá tới trang Mã giảm giá, Đổi rác và Mua chung đúng route web', () => {
     const c = mount();
     const press = (re: RegExp) => click(Array.from(c.querySelectorAll('button')).find((b) => re.test(b.getAttribute('aria-label') ?? '')) ?? null);
     press(/Giờ vàng/);
     expect(mocks.push).toHaveBeenLastCalledWith('/gio-vang');
     press(/Mã giảm giá/);
-    expect(mocks.push).toHaveBeenLastCalledWith('/uu-dai?section=coupons');
+    expect(mocks.push).toHaveBeenLastCalledWith('/ma-giam-gia');
     press(/Đổi rác/);
     expect(mocks.push).toHaveBeenLastCalledWith('/doi-rac');
     press(/Mua chung/);

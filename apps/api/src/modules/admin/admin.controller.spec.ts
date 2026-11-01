@@ -150,6 +150,13 @@ describe('CreateCouponDto — chuẩn hoá mã + chặn số vô lý (ADMINOPS-7
   };
   const run = (over: Record<string, unknown>) => asBodyDto(CreateCouponDto, { ...base, ...over });
 
+  it('tên hiển thị quá 60 ký tự hoặc listed không phải boolean → 400', async () => {
+    await expect(run({ title: 'x'.repeat(61) })).rejects.toBeDefined();
+    await expect(run({ listed: 'yes' })).rejects.toBeDefined();
+    const ok = (await run({ title: 'x'.repeat(60), listed: true })) as CreateCouponDto;
+    expect(ok.title).toHaveLength(60);
+  });
+
   it('mã chữ thường + khoảng trắng hai đầu → tự chuẩn hoá HOA, bỏ khoảng trắng', async () => {
     const dto = (await run({ code: '  summer10 ' })) as CreateCouponDto;
     expect(dto.code).toBe('SUMMER10');

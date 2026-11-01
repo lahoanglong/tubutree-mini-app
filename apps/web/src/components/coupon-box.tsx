@@ -359,6 +359,7 @@ export function CouponBox({
           )}
         </>
       )}
+      <p className="mt-2 text-caption text-[color:var(--color-text-tertiary)]">{fillCopy('coupon.oneCodeHint')}</p>
     </>
   );
 

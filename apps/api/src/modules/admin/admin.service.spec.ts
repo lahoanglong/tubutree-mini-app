@@ -766,6 +766,60 @@ describe('AdminService.createCoupon — ghi scopeMeta (Việc 9)', () => {
   });
 });
 
+describe('AdminService.createCoupon/updateCoupon: listed + title (kho mã P14)', () => {
+  const base = {
+    code: 'THU10',
+    type: 'PERCENT' as const,
+    value: 10,
+    maxDiscount: 30_000,
+    startAt: '2026-01-01T00:00:00.000Z',
+    endAt: '2099-12-31T00:00:00.000Z',
+  };
+
+  it('tạo mã CLAIM listed: ghi listed và tên đã cắt khoảng trắng', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'c1' });
+    await mkAdmin(makePrisma({ coupon: { create } })).createCoupon({ ...base, scope: 'CLAIM', usageLimit: 100, listed: true, title: '  Mừng bạn mới  ' });
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ listed: true, title: 'Mừng bạn mới' }) });
+  });
+
+  it('tạo mã không nói gì về listed: listed=false, title=null', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'c1' });
+    await mkAdmin(makePrisma({ coupon: { create } })).createCoupon({ ...base, scope: 'PUBLIC' });
+    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ listed: false, title: null }) });
+  });
+
+  it('tạo mã PUBLIC mà bật listed: 400, không ghi', async () => {
+    const create = jest.fn();
+    await expect(mkAdmin(makePrisma({ coupon: { create } })).createCoupon({ ...base, scope: 'PUBLIC', listed: true })).rejects.toThrow(/nhận qua thẻ/);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  const row = (over: Record<string, unknown>) => ({ id: 'c1', code: 'THU10', scope: 'CLAIM', batch: null, usageLimit: 100, startAt: new Date('2026-01-01'), endAt: new Date('2099-12-31'), ...over });
+
+  it('sửa: bật listed trên mã thuộc lô thẻ in → 400, không gọi update', async () => {
+    const update = jest.fn();
+    const prisma = makePrisma({ coupon: { findUnique: jest.fn().mockResolvedValue(row({ batch: 'LOT-1' })), update } });
+    await expect(mkAdmin(prisma).updateCoupon('c1', { listed: true })).rejects.toThrow(/lô thẻ/);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('sửa: bật listed + đặt tên trên mã CLAIM chung → ghi cả hai; title null xoá tên', async () => {
+    const update = jest.fn().mockResolvedValue({ id: 'c1' });
+    const prisma = makePrisma({ coupon: { findUnique: jest.fn().mockResolvedValue(row({})), update } });
+    await mkAdmin(prisma).updateCoupon('c1', { listed: true, title: 'Mừng bạn mới' });
+    expect(update).toHaveBeenLastCalledWith({ where: { id: 'c1' }, data: { listed: true, title: 'Mừng bạn mới' } });
+    await mkAdmin(prisma).updateCoupon('c1', { title: null });
+    expect(update).toHaveBeenLastCalledWith({ where: { id: 'c1' }, data: { title: null } });
+  });
+
+  it('sửa: tắt listed của mã lô thẻ in vẫn được (gỡ khỏi kho)', async () => {
+    const update = jest.fn().mockResolvedValue({ id: 'c1' });
+    const prisma = makePrisma({ coupon: { findUnique: jest.fn().mockResolvedValue(row({ batch: 'LOT-1' })), update } });
+    await mkAdmin(prisma).updateCoupon('c1', { listed: false });
+    expect(update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { listed: false } });
+  });
+});
+
 describe('AdminService.createCoupon — chặn giá trị gõ nhầm (ADMINOPS-8 vòng 2)', () => {
   const base = { code: 'SALE10', type: 'PERCENT' as const, value: 10, startAt: '2026-01-01T00:00:00.000Z', endAt: '2099-12-31T00:00:00.000Z', scope: 'PUBLIC' as const };
   const run = (over: Record<string, unknown>) => {

@@ -815,6 +815,12 @@ export interface AdminCoupon {
   newCustomerOnly?: boolean;
   /** Mã CLAIM: số khách đã nhận vào ví; mã khác: null. */
   claimedCount?: number | null;
+  /** Hiện ở mục Nhận mã của khách. Chỉ mã CLAIM không thuộc lô thẻ in bật được (API và DB cùng chặn). */
+  listed?: boolean;
+  /** Tên hiển thị do admin đặt (≤60 ký tự); null = dùng nhãn tự sinh từ loại mã. */
+  title?: string | null;
+  /** Lô thẻ in (mỗi mã một lượt cho một thẻ): có giá trị thì không hiện ở mục Nhận mã được. */
+  batch?: string | null;
 }
 export type CouponStatusFilter = '' | 'active' | 'inactive' | 'expired';
 export async function listCoupons(params: { page: number; limit: number; q?: string; status?: CouponStatusFilter }) {
@@ -823,7 +829,7 @@ export async function listCoupons(params: { page: number; limit: number; q?: str
   if (params.status) qs.set('status', params.status);
   return asPage(await apiFetch<AdminCoupon[] | Page<AdminCoupon>>(`/admin/coupons?${qs}`), params.page, params.limit);
 }
-export const updateCoupon = (id: string, patch: { isActive?: boolean; endAt?: string; usageLimit?: number | null }) =>
+export const updateCoupon = (id: string, patch: { isActive?: boolean; endAt?: string; usageLimit?: number | null; listed?: boolean; title?: string | null }) =>
   apiFetch<AdminCoupon>(`/admin/coupons/${id}`, { method: 'PATCH', body: patch });
 
 /** Lô mã in thẻ hộp hàng sàn (D2-03): mỗi mã một lượt nhận, một lượt dùng. */

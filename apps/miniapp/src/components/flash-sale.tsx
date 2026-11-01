@@ -41,7 +41,7 @@ const SOLD_FOOTER_HEIGHT = 20;
 const REMIND_FOOTER_HEIGHT = 52;
 const FLASH_SHELF = shelf('home.flash');
 
-function FlashSkeleton({ withNextSlot }: { withNextSlot: boolean }) {
+export function FlashSkeleton({ withNextSlot }: { withNextSlot: boolean }) {
   return (
     <div data-testid="flash-sale-loading" aria-hidden="true" style={{ padding: '0 16px' }}>
       <Skeleton height={FLASH_SKELETON_HEIGHT + (withNextSlot ? FLASH_NEXT_SLOT_HEIGHT : 0)} radius="var(--radius-card)" />
@@ -177,7 +177,7 @@ function NextSlotLine({ slot, onOpen }: { slot: NextFlashSlot; onOpen?: () => vo
 }
 
 /** Thẻ Giờ vàng đang chạy: thẻ `flash` chung, thanh "đã bán" có chữ ở cuối (luôn có, kể cả chưa bán suất nào: "Vừa mở bán"). */
-function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleActiveItem; reserveVariation: boolean }) {
+export function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleActiveItem; reserveVariation: boolean }) {
   const view = productCardView({ product: flashCardProduct(item), flash: item, variant: 'flash', now: serverNow() });
   const soldPct = soldPercent(item.soldCount, item.quota);
   return (

@@ -22,6 +22,7 @@ vi.mock('../../services/shop-api', () => ({
 }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { VoucherSheet } from './voucher-sheet';
 
 const COUPONS = [
@@ -98,7 +99,8 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
   it('tiêu đề h2, ghi chú 1 mã/đơn, ô nhập có tên truy cập, mô tả từng loại mã và điều kiện đơn tối thiểu', async () => {
     renderSheet();
     expect(await screen.findByRole('heading', { level: 2, name: 'Chọn mã giảm giá' })).toBeInTheDocument();
-    expect(screen.getByText('Mỗi đơn hàng chỉ áp dụng 1 mã giảm giá')).toBeInTheDocument();
+    expect(screen.getByText(fillCopy('coupon.oneCodeHint'))).toBeInTheDocument();
+    expect(screen.getByText('Mỗi đơn dùng 1 mã')).toBeInTheDocument();
     expect(screen.getByLabelText('Nhập mã giảm giá khác')).toBeInTheDocument();
     expect(await screen.findByText('Giảm 10% (tối đa 50.000đ)')).toBeInTheDocument();
     expect(screen.getByText('Miễn phí giao hàng')).toBeInTheDocument();

@@ -483,23 +483,55 @@ export function writeFlashHint(storage: MemoryStorage | null, hasFlash: boolean,
 
 /** Khoá nhớ "lần mở trước có banner chiến dịch" để dựng khung chờ đúng chỗ; chỉ ghi '1' hoặc '0'. */
 export const BANNER_HINT_KEY = 'tubu_home_banner';
+/** Banner đầu trang Ưu đãi có vị trí đặt riêng (OFFERS_TOP): dùng chung khoá với Trang chủ thì khung chờ hiện rồi biến mất khi chỉ Trang chủ có banner. */
+export const OFFERS_BANNER_HINT_KEY = 'tubu_offers_banner';
 
 /** Chưa nhớ, giá trị lạ hay không có kho → false (chờ im lặng, không giữ chỗ). */
-export function readBannerHint(storage: MemoryStorage | null): boolean {
+export function readBannerHint(storage: MemoryStorage | null, key: string = BANNER_HINT_KEY): boolean {
   if (!storage) return false;
   try {
-    return storage.getItem(BANNER_HINT_KEY) === '1';
+    return storage.getItem(key) === '1';
   } catch {
     return false;
   }
 }
 
-export function writeBannerHint(storage: MemoryStorage | null, hasBanner: boolean): void {
+export function writeBannerHint(storage: MemoryStorage | null, hasBanner: boolean, key: string = BANNER_HINT_KEY): void {
   try {
-    storage?.setItem(BANNER_HINT_KEY, hasBanner ? '1' : '0');
+    storage?.setItem(key, hasBanner ? '1' : '0');
   } catch {
     /* kho bị chặn: lần sau không giữ chỗ, khối vẫn đúng */
   }
+}
+
+/** Số thẻ tối đa của khối Nhận mã ở Ưu đãi (3 thẻ đầu); gợi ý không nhớ quá số này. */
+export const COLLECT_HINT_MAX = 3;
+export const COLLECT_HINT_KEY = 'tubu_offers_collect';
+const COLLECT_TICKET_HEIGHT = 88;
+const COLLECT_TICKET_GAP = 12;
+
+/** Số thẻ lần mở trước đã vẽ ở khối Nhận mã; chưa nhớ, giá trị lạ hay không có kho → 0 (chờ im lặng, không giữ chỗ). */
+export function readCollectHint(storage: MemoryStorage | null): number {
+  if (!storage) return 0;
+  try {
+    const n = Number(storage.getItem(COLLECT_HINT_KEY));
+    return Number.isInteger(n) && n > 0 ? Math.min(n, COLLECT_HINT_MAX) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function writeCollectHint(storage: MemoryStorage | null, count: number): void {
+  try {
+    storage?.setItem(COLLECT_HINT_KEY, String(Math.min(Math.max(Math.floor(count), 0), COLLECT_HINT_MAX)));
+  } catch {
+    /* kho bị chặn: lần sau không giữ chỗ, khối vẫn đúng */
+  }
+}
+
+/** Chiều cao `n` thẻ mã xếp dọc (thẻ `ticket` cao tối thiểu 88px, cách 12px); 0 thẻ thì không giữ chỗ. */
+export function collectSkeletonHeight(n: number): number {
+  return n <= 0 ? 0 : n * COLLECT_TICKET_HEIGHT + (n - 1) * COLLECT_TICKET_GAP;
 }
 
 /** Khoá nhớ số món Mua lại lần mở trước ('one' | 'many'), để khung chờ có đúng chiều cao dòng 88px hay kệ nhiều món. */

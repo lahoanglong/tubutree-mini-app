@@ -32,6 +32,12 @@ export class LoyaltyController {
     return this.loyalty.getAvailableCoupons(userId);
   }
 
+  /** Tab "Đã dùng – hết hạn" của Kho mã: mã khách đã dùng hết lượt hoặc đã nhận mà hết hạn. */
+  @Get('me/coupons/history')
+  couponHistory(@CurrentUser('sub') userId: string) {
+    return this.loyalty.getCouponHistory(userId);
+  }
+
   /** Khối "Quà khách mới" ở Trang chủ: khách chưa có đơn kèm voucher chào mừng còn dùng được. */
   @Get('me/new-customer-offer')
   newCustomerOffer(@CurrentUser('sub') userId: string) {
