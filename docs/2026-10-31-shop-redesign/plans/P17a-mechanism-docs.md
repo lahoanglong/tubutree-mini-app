@@ -25,7 +25,7 @@
 1. Thành phần đổi tên hoặc xoá file ở một app: `lint:parity` đỏ và nói rõ tên + file + app nào thiếu, không báo chung chung. Test ở T1 (bản đồ giả thiếu file web, thiếu export, lệch khoá props).
 2. Mục "Sắp có" không bị kiểm file, nhưng khi một tên sắp có đã xuất hiện ở `components` (gói quên chuyển mục) thì đỏ để bản đồ không giữ hai dòng một tên. Test ở T1.
 3. Chữ trong comment, tên biến, `className`, `data-testid`, đường dẫn import, kiểu literal không bị coi là chữ hiển thị (không báo giả); chữ trong JSX text, chuỗi có dấu tiếng Việt, `aria-label`/`title`/`placeholder` thì bị bắt. Test ở T3 (nguồn giả đối chứng "bắt đúng / bỏ qua đúng").
-4. File quản trị, spec, fixture không bị quét; một dòng miễn mà file đã sạch thì đỏ ("xoá dòng miễn"), một file vượt trần `max` thì đỏ (không được thêm vi phạm mới vào file đã miễn). Test ở T3.
+4. File quản trị, spec, fixture không bị quét; `max` của dòng miễn phải bằng đúng số hit hiện có: vượt thì đỏ (không được thêm vi phạm mới vào file đã miễn), thấp hơn thì đỏ ("hạ max xuống n", hoặc "xoá dòng miễn" khi file đã sạch). Chữ JSX ngắt dòng giữa hai từ vẫn bị bắt vì chữ được gộp khoảng trắng trước khi so mẫu. Test ở T3.
 5. Đổi `.gitignore` không làm lộ `.claude/worktrees` hay `settings.local.json` vào git, và skill thì vào git. Test ở T5 bằng `git check-ignore`.
 
 ---

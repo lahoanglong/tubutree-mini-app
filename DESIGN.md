@@ -180,7 +180,9 @@ Thuật ngữ cấm trong chữ khách đọc (`FORBIDDEN_TERMS`), cột phải 
 | `2h 05m`, `2h 5m` (mọi dạng `\d+h \d+m`) | countdownText, ví dụ "2 giờ 05 phút" |
 | HOT, SỐC, Nhanh tay | bỏ chữ giục mua |
 
-`packages/app-core/src/terminology.spec.ts` quét chữ hiển thị (cây cú pháp, không quét comment, tên biến, `className`, đường dẫn import) của `apps/miniapp/src` và `apps/web/src`, trừ quản trị. Mã cũ đang vi phạm nằm trong danh sách `EXEMPT` của spec, mỗi dòng có lý do và trần `max`: file đã miễn không được thêm vi phạm mới, và dòng miễn mà file đã sạch thì phải xoá. Sửa chữ cũ thì hạ `max` hoặc xoá dòng.
+`packages/app-core/src/terminology.spec.ts` quét chữ hiển thị (cây cú pháp, không quét comment, tên biến, `className`, đường dẫn import; xuống dòng và thụt lề trong JSX gộp thành một dấu cách như khách đọc) của `apps/miniapp/src` và `apps/web/src`, trừ quản trị. Mã cũ đang vi phạm nằm trong danh sách `EXEMPT` của spec, mỗi dòng có lý do và `max` bằng đúng số chỗ hiện có: thêm chỗ mới vào file đã miễn thì đỏ, sửa bớt mà không hạ `max` cũng đỏ ("hạ max xuống n"), sạch hẳn thì phải xoá dòng. Gói nào đổi hoặc bỏ chữ cũ ở file đã miễn chạy lại spec này và chỉnh `EXEMPT` ngay trong PR của mình; hai gói song song cùng đụng một file thì gói vào `main` sau chạy lại spec sau khi rebase.
+
+`formatCountdown` (chữ cũ "2h 05m") còn dùng ở thẻ "Sắp diễn ra" của khối Giờ vàng Trang chủ hai app qua `useCountdown`; spec có ca `it.fails` giữ lỗ này nhìn thấy cho tới khi hai màn đổi sang `countdownText`.
 
 ## Khuôn trang web máy tính
 

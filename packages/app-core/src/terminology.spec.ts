@@ -3,6 +3,7 @@ import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { formatCountdown } from './commerce/countdown';
 import { FORBIDDEN_TERMS } from './shop-copy';
 
 /**
@@ -44,7 +45,8 @@ function displayStrings(source: string, fileName: string): { line: number; text:
   const kind = /\.tsx$/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
   const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, kind);
   const out: { line: number; text: string }[] = [];
-  const push = (n: ts.Node, text: string) => out.push({ line: sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1, text });
+  // Trình duyệt gộp xuống dòng và thụt lề thành một dấu cách: "Vui\n   lòng" khách đọc là "Vui lòng", nên mẫu phải chạy trên chữ đã gộp.
+  const push = (n: ts.Node, text: string) => out.push({ line: sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1, text: text.replace(/\s+/g, ' ') });
   const visit = (n: ts.Node) => {
     if (ts.isImportDeclaration(n) || ts.isExportDeclaration(n) || ts.isLiteralTypeNode(n)) return;
     if (ts.isJsxText(n)) {
@@ -131,6 +133,7 @@ const EXEMPT: Exemption[] = [
   { file: 'apps/miniapp/src/components/error-boundary.tsx', use: USE.voice, max: 1, reason: REASON.VOICE },
   { file: 'apps/miniapp/src/components/storefront-pickers.tsx', use: USE.voice, max: 1, reason: REASON.VOICE },
   { file: 'apps/miniapp/src/i18n/vi.ts', use: USE.voice, max: 5, reason: REASON.VOICE },
+  { file: 'apps/miniapp/src/pages/about.tsx', use: USE.voice, max: 1, reason: REASON.VOICE },
   { file: 'apps/miniapp/src/pages/bank-payment.tsx', use: USE.voice, max: 5, reason: REASON.VOICE },
   { file: 'apps/miniapp/src/pages/checkout.tsx', use: USE.voice, max: 1, reason: REASON.VOICE },
   { file: 'apps/miniapp/src/pages/dealer.tsx', use: USE.voice, max: 2, reason: REASON.VOICE },
@@ -255,6 +258,7 @@ describe('displayStrings: chỉ lấy chữ khách đọc', () => {
     ["const BADGE = 'Flash sale';", 'Flash sale'],
     ["const LEFT = '2h 05m';", '2h 05m'],
     ["const hint = 'voucher của bạn';", 'voucher của bạn'],
+    ['<p>Mất kết nối. Vui\n            lòng thử lại</p>', 'Mất kết nối. Vui lòng thử lại'],
   ])('bắt %s', (src, expected) => {
     expect(texts(src, 'apps/miniapp/src/pages/x.tsx')).toContain(expected);
   });
@@ -290,6 +294,10 @@ describe('displayStrings: chỉ lấy chữ khách đọc', () => {
 
   it('file .ts đọc theo kiểu TS: hàm generic <T>(x) => x không sinh chữ giả', () => {
     expect(displayStrings('const f = <T>(a: T, ...r: unknown[]) => api.get(...r);', 'x.ts')).toEqual([]);
+  });
+
+  it('JSX ngắt dòng giữa hai từ vẫn đọc như một dấu cách', () => {
+    expect(texts('<p>\n  Chúng\n    tôi kết nối bạn\n</p>')).toEqual(['Chúng tôi kết nối bạn']);
   });
 
   it('ghi đúng số dòng của chuỗi', () => {
@@ -383,6 +391,19 @@ describe('findHits: ca vi phạm cố ý', () => {
   });
 });
 
+describe('findHits: câu JSX bị Prettier ngắt dòng', () => {
+  const at = (src: string) => findHits([{ file: 'apps/web/src/a.tsx', text: src }]).map((h) => h.use);
+
+  it('thuật ngữ hai từ bị ngắt dòng ở giữa vẫn bị bắt', () => {
+    expect(at('export const B = () => <p>Mất kết nối. Vui\n   lòng thử lại</p>;')).toContain('Bạn hoặc Tubu');
+    expect(at('export const B = () => <p>Nhận\n   mã giảm</p>;')).toContain('Mã giảm giá');
+  });
+
+  it('"Mã giảm giá" ngắt dòng ở giữa không bị bắt nhầm', () => {
+    expect(at('export const B = () => <p>Nhận mã giảm\n   giá</p>;')).toEqual([]);
+  });
+});
+
 describe('mã thật của apps/miniapp và apps/web', () => {
   const sources = loadSources();
   const hits = findHits(sources);
@@ -415,8 +436,18 @@ describe('mã thật của apps/miniapp và apps/web', () => {
     }
   });
 
-  it('dòng miễn mà file đã sạch thì phải xoá (không để miễn thừa)', () => {
-    const stale = EXEMPT.filter((e) => countOf(e.file, e.use) === 0).map((e) => `${e.file} [${e.use}]`);
-    expect(stale).toEqual([]);
+  it('trần max bằng đúng số chữ cũ còn lại: sửa bớt thì hạ max, sạch hẳn thì xoá dòng', () => {
+    const off = EXEMPT.filter((e) => countOf(e.file, e.use) < e.max).map((e) => {
+      const n = countOf(e.file, e.use);
+      return `${e.file} [${e.use}]: còn ${n}/${e.max}, ${n === 0 ? 'xoá dòng miễn' : `hạ max xuống ${n}`}`;
+    });
+    expect(off).toEqual([]);
+  });
+
+  // Chữ cũ của khối "Sắp diễn ra" ở Giờ vàng Trang chủ (Mini `components/flash-sale.tsx`, web `components/home/flash-sale.tsx`) ghép "Bắt đầu sau ${formatCountdown(...)}" trong chuỗi template, ngoài tầm quét chữ thô và ngoài ROOTS.
+  // Khi hai app đổi sang countdownText thì ca này thành xanh, vitest báo "expected to fail": lúc đó bỏ `.fails`.
+  it.fails('formatCountdown không còn ra dạng cấm "2h 05m" (D2 countdownText)', () => {
+    const shown = formatCountdown(2 * 3_600_000 + 5 * 60_000);
+    expect(FORBIDDEN_TERMS.filter((t) => t.pattern.test(shown)).map((t) => t.use)).toEqual([]);
   });
 });
