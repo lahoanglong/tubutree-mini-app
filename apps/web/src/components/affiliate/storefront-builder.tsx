@@ -26,7 +26,7 @@ import { pickerQuery, storefrontQuestsQuery } from '@tubutree/app-core/queries/s
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
-import { phoneCaption, phoneFlatCard, phoneSecondary, phoneSectionTitle } from '@/lib/phone-ui';
+import { phoneBrandText, phoneCaption, phoneFlatCard, phoneSecondary, phoneSectionTitle } from '@/lib/phone-ui';
 import { cssUrl } from '@/lib/safe-color';
 import { Badge } from '@/components/ui/badge';
 import { Sheet } from '@/components/ui/sheet';
@@ -462,7 +462,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
             <div className="flex items-center justify-between gap-2">
               <h2 className={`${ui.sectionTitle} ${phoneSectionTitle}`}>{BUILDER_COPY.sections}</h2>
               {sf.collections.length > 1 && (
-                <button type="button" className={ui.btnText} onClick={() => setSectionSort((v) => !v)}>
+                <button type="button" className={`${ui.btnText} ${phoneBrandText}`} onClick={() => setSectionSort((v) => !v)}>
                   {sectionSort ? BUILDER_COPY.sortDone : BUILDER_COPY.sort}
                 </button>
               )}

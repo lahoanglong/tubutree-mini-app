@@ -10,7 +10,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
-import { phoneFlatCard, phoneSectionTitle } from '@/lib/phone-ui';
+import { phoneFlatCard, phoneSecondary, phoneSectionTitle } from '@/lib/phone-ui';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { questPercent, statsRows } from './storefront-rules';
@@ -107,7 +107,7 @@ export function QuestList({ data, onNotice }: { data: QuestData; onNotice: Notif
                 Đã nhận
               </Badge>
             ) : q.done ? (
-              <button type="button" className={ui.btnSecondary} disabled={claimMut.isPending} onClick={() => claimMut.mutate(q.code)}>
+              <button type="button" className={`${ui.btnSecondary} ${phoneSecondary}`} disabled={claimMut.isPending} onClick={() => claimMut.mutate(q.code)}>
                 {claimMut.isPending && claimMut.variables === q.code ? 'Đang nhận…' : `Nhận ${formatCount(q.rewardPoints)} điểm`}
               </button>
             ) : (

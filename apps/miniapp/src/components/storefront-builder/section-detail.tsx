@@ -83,7 +83,8 @@ export function SectionDetail(p: SectionDetailProps) {
   return (
     <div data-testid="section-detail">
       <div style={{ background: 'var(--color-bg-surface)', padding: 'calc(8px + var(--safe-top)) 8px 12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        {/* Nút lùi nổi của app (44px, cách mép trái 12px) đè lên góc trái; lối quay về danh sách khối đứng ngay sau nó. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 52 }}>
           <button
             type="button"
             className="tubu-press"
