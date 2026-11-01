@@ -26,6 +26,13 @@ describe('BestSellerRail — Bán chạy nhất có hạng (Q18)', () => {
     expect(ranks).toEqual(['#1', '#2', '#3', '#4', '#5']);
   });
 
+  it('basis total (API cũ, xếp theo tổng lượt bán): phụ đề ghi "Theo tổng lượt bán", không còn "30 ngày qua"', () => {
+    render(<BestSellerRail items={cards(5)} basis="total" loading={false} />);
+    const region = screen.getByRole('region', { name: 'Bán chạy nhất' });
+    expect(within(region).getByText('Theo tổng lượt bán')).toBeInTheDocument();
+    expect(within(region).queryByText('Theo lượt bán 30 ngày qua')).toBeNull();
+  });
+
   it('kệ đã bỏ món trùng kệ trên: thẻ ghi hạng thật được truyền vào (#2, #3, #5), không đánh lại từ #1', () => {
     render(<BestSellerRail items={[card(2), card(3), card(5)]} ranks={[2, 3, 5]} loading={false} />);
     const region = screen.getByRole('region', { name: 'Bán chạy nhất' });

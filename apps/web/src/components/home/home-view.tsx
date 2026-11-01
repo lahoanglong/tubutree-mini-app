@@ -3,6 +3,7 @@
 import { Fragment, useLayoutEffect, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { BestSellersPage } from '@tubutree/app-core/api/browse';
 import type { CategoryDTO, PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
 import type { CampaignBanner } from '@tubutree/app-core/api/campaign';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
@@ -45,7 +46,7 @@ import { useHomeShelves } from './use-home-shelves';
 
 /** Phần công khai server đã tải cho trang ISR: có trong HTML đầu, React Query tiếp quản sau hydrate. */
 export interface HomeInitial {
-  bestSellers?: PageResponse<ProductCard>;
+  bestSellers?: BestSellersPage;
   /** Trang 1 của lưới gợi ý (chip "Tất cả"), xếp theo `suggestSeed`. */
   suggest?: PageResponse<ProductCard>;
   /** Hạt giống ngày VN lúc dựng trang: client dùng lại đúng hạt giống này để dữ liệu dựng sẵn khớp khoá và lưới không đổi thứ tự sau hydrate. */
@@ -171,6 +172,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
       <BestSellerRail
         items={shelves.bestSellers}
         ranks={shelves.bestSellerRanks}
+        basis={shelves.bestSellerBasis}
         loading={shelves.bestSellerQuery.isLoading}
         error={shelves.bestSellerQuery.error}
         onRetry={shelves.bestSellerQuery.refetch}

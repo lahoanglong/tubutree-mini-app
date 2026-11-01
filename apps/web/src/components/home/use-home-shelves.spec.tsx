@@ -62,6 +62,23 @@ describe('useHomeShelves (web)', () => {
     expect(JSON.stringify(call)).toContain('12');
   });
 
+  it('bestSellerBasis là days30 khi API trả theo 30 ngày', async () => {
+    const s = await mount('new');
+    expect(s.bestSellerBasis).toBe('days30');
+  });
+
+  it('API cũ từ chối best_seller_30d (400): kệ lùi về best_seller, vẫn có món và bestSellerBasis là total', async () => {
+    const base = mocks.get.getMockImplementation()!;
+    mocks.get.mockImplementation(async (path: string, opts?: { query?: { sort?: string } }) => {
+      if (path.startsWith('/products') && opts?.query?.sort === 'best_seller_30d') throw Object.assign(new Error('bad'), { status: 400 });
+      return base(path, opts);
+    });
+    const s = await mount('new');
+    expect(s.bestSellers.length).toBeGreaterThan(0);
+    expect(mocks.get.mock.calls.some(([, o]) => (o as { query?: { sort?: string } } | undefined)?.query?.sort === 'best_seller')).toBe(true);
+    expect(s.bestSellerBasis).toBe('total');
+  });
+
   it('Giờ vàng một thẻ mỗi sản phẩm; Bán chạy bỏ món đã ở Giờ vàng; seen gồm mọi món đang hiện', async () => {
     const s = await mount('new');
     expect(s.flash.map((f) => f.productSlug)).toEqual(['a', 'b', 'c']);
