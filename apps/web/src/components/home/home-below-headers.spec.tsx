@@ -66,6 +66,16 @@ describe('Hành trình nguyên liệu và Cộng đồng hỏi đáp dùng Secti
     expect(mocks.push).toHaveBeenCalledWith('/cau-chuyen');
   });
 
+  it('Hành trình nguyên liệu: thẻ bản đồ ẩn khỏi trình đọc và khỏi Tab (aria-hidden + tabIndex -1), "Xem bản đồ" ở tiêu đề là điều khiển đọc được duy nhất (H3 #3)', async () => {
+    const c = await mount(<BrandJourney initialBrands={[{ brand: 'Tubu', count: 4, slug: 'tubu' }]} />);
+    const card = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('nhãn Việt'))!;
+    expect(card.getAttribute('aria-hidden')).toBe('true');
+    expect(card.tabIndex).toBe(-1);
+    const readable = Array.from(c.querySelectorAll('a, button')).filter((e) => !e.closest('[aria-hidden="true"]') && /bản đồ/i.test(e.getAttribute('aria-label') ?? e.textContent ?? ''));
+    expect(readable).toHaveLength(1);
+    expect(readable[0]!.getAttribute('aria-label')).toBe('Xem bản đồ Hành trình nguyên liệu');
+  });
+
   it('Cộng đồng hỏi đáp: một SectionHeader, h2 chữ Inter 700, "Xem tất cả" mở /cong-dong', async () => {
     const c = await mount(<CommunityPreview />);
     expect(c.textContent).toContain('Lá cúc bị vàng');

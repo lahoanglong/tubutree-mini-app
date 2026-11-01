@@ -22,8 +22,11 @@ export function BrandJourney({ initialBrands }: { initialBrands?: { brand: strin
     <section aria-label={homeCopy.journey.title}>
       <SectionHeader title={homeCopy.journey.title} action={{ label: homeCopy.journey.cta, to: '/cau-chuyen' }} />
       <div style={{ background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-card)', padding: 12 }}>
+        {/* Cùng đích với nút "Xem bản đồ" ở tiêu đề: thẻ chỉ còn cho chạm/chuột; bàn phím và trình đọc đi qua đúng một điều khiển (như các kệ khác). */}
         <button
           type="button"
+          aria-hidden="true"
+          tabIndex={-1}
           className="tubu-press"
           onClick={() => router.push('/cau-chuyen')}
           style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', minHeight: 44, padding: 0, border: 'none', background: 'transparent', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}
