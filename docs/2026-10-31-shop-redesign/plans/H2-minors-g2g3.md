@@ -25,7 +25,7 @@
 
 1. Cột ô chọn giỏ web 24px nhưng vùng chạm phải còn 44px và bấm phần nhô ra vẫn đổi lựa chọn; từ md giữ bố cục cũ. Test: Task 1 (vitest lớp + e2e đo toạ độ ở 375 và 1280).
 2. Đường kẻ dưới hàng thông tin: chỉ có giữa các hàng, không sau hàng cuối, cả khi chỉ có "Ưu đãi" (không có "Vận chuyển") và khi chỉ có "Vận chuyển". Test: Task 4.
-3. Tên đọc của sao khi điểm là số nguyên (đánh giá của một khách: "5 trên 5 sao") và khi là trung bình ("4,4 trên 5 sao"). Test: Task 5.
+3. Tên đọc của sao: điểm trung bình đọc đúng số đang hiện ("4,4", "5,0") ở mọi nơi hiện điểm trung bình; hàng đánh giá của một khách đọc số nguyên ("5 trên 5 sao"). Test: Task 5.
 4. Test thứ tự khối PDP không được skip lặng lẽ khi DB e2e chỉ có sản phẩm một phân loại. Test: Task 6.
 5. Nút Theo dõi bấm đúng lúc trang vừa tải xong (trước hydrate) không được mất. Test: Task 9 (`--repeat-each=5`).
 
@@ -112,11 +112,11 @@
 
 **Interfaces:**
 - Consumes: `formatRating(avg: number): string` (`@tubutree/app-core/commerce/card-meta`, 4.4 -> "4,4"), hàm `PdpRating` đang dùng. Không viết hàm mới. `PdpRating` (`pdp-sections.tsx`) đã đúng, không đổi.
-- Produces: `aria-label` của `Stars`: số nguyên (đánh giá của một khách) giữ "5 trên 5 sao"; số lẻ (điểm trung bình) là `${formatRating(value)} trên 5 sao`, tức "4,4 trên 5 sao".
+- Produces: `Stars` nhận `spoken?: 'avg' | 'score'`. `'avg'` (mặc định, mọi nơi hiện điểm trung bình): `${formatRating(value)} trên 5 sao`, tức "4,4" và "5,0" đúng số đang hiện như `PdpRating`. `'score'` (hàng đánh giá của một khách): số nguyên, "5 trên 5 sao".
 
 - [ ] **Step 1: Test đỏ.** Mỗi app một ca: `<Stars value={4.4} />` có tên truy cập "4,4 trên 5 sao" (không có "4.4"); `value={5}` vẫn "5 trên 5 sao". Sửa ca Mini cũ chờ '3.6 trên 5 sao' thành '3,6 trên 5 sao'.
 - [ ] **Step 2: Chạy đỏ** hai spec (web `product-reviews.spec.tsx`, Mini `reviews-section.spec.tsx`).
-- [ ] **Step 3: Cài đặt:** `Number.isInteger(value) ? String(value) : formatRating(value)` ở nhãn; import `formatRating` ở web (Mini đã import).
+- [ ] **Step 3: Cài đặt:** `spoken === 'score' ? String(value) : formatRating(value) || String(value)` ở nhãn; hàng đánh giá một khách (`r.rating`, ở `ReviewsSection`/`ProductReviews` và hai `PdpQuickReviews`) truyền `spoken="score"`; import `formatRating` ở web (Mini đã import).
 - [ ] **Step 4: Chạy xanh.**
 - [ ] **Step 5: Commit** `fix(miniapp,web): tên đọc của Stars theo vi-VN "4,4 trên 5 sao" (G3 MINOR)`.
 
@@ -156,7 +156,7 @@
 **Files:**
 - Modify: `apps/e2e/tests/shop.web.spec.ts` (ca 'đăng nhập: Theo dõi gửi POST rồi đổi thành Đang theo dõi; bấm lại gửi DELETE')
 
-- [ ] **Step 1:** nút `Button` của `BrandActions` chỉ có `aria-pressed` khi đã hydrate và phiên đã `authenticated` (`aria-pressed={authed ? following : undefined}`): đó là tín hiệu chỉ client mới đặt. Đổi `getByRole('button', { name: 'Theo dõi' })` thành `getByRole('button', { name: 'Theo dõi', pressed: false })` trước lần bấm đầu, `{ name: 'Đang theo dõi', pressed: true }` trước lần bấm thứ hai; bỏ không dùng `waitForTimeout`.
+- [ ] **Step 1:** nút `Button` của `BrandActions` chỉ có thuộc tính `aria-pressed` khi đã hydrate và phiên đã `authenticated` (`aria-pressed={authed ? following : undefined}`): đó là tín hiệu chỉ client mới đặt. Bộ lọc `pressed: false` của Playwright KHÔNG dùng được (nút không có thuộc tính cũng coi là `pressed=false`, nên khớp ngay cả lúc HTML máy chủ và lúc phiên còn 'loading'). Chờ `toHaveAttribute('aria-pressed', 'false')` trên nút `exact: true`, cùng số người theo dõi lấy từ mock follow-state (37, khác số máy chủ), trước lần bấm đầu; lần bấm thứ hai chờ `aria-pressed="true"` và số 38; không `waitForTimeout`. Ca trả `/auth/refresh` chậm 1,5 giây để tái hiện máy nghẽn: bỏ bước chờ thì ca đỏ đúng lỗi CI #113 (đã kiểm: bản chờ `pressed: false` đỏ 3/3 lần với phiên chậm 3 giây, bản mới xanh).
 - [ ] **Step 2:** chạy `--repeat-each=5` ca này qua web-gate (Task 10) -> 5/5 xanh.
 - [ ] **Step 3: Commit** `test(e2e): Theo dõi thương hiệu chờ nút có aria-pressed (đã hydrate) trước khi bấm (CI #113)`.
 
@@ -177,6 +177,7 @@ Gate `gate.sh --base fd851f2f9`: 18 PASS, 0 FAIL (app-core 2294, Mini 6275 cả 
 - **Task 1 và 2 một commit** (cùng sửa `gio-hang/page.tsx` và `cart-mini.spec.tsx`).
 - **Task 2:** không thêm token rãnh thứ hai; rãnh dùng `--color-track` đã có (đang là "rãnh thanh tiến độ", Mini `ProgressBar` dùng sẵn, preset Tailwind `bg-track`), chỉ thêm `--color-progress-fill-from`.
 - **Task 3:** Mini đã ra đúng 500 nên ca mới xanh ngay (chỉ ghim hiện trạng, không có bước đỏ).
-- **Task 5:** số nguyên (điểm một khách chấm) giữ "5 trên 5 sao"; chỉ số lẻ qua `formatRating`.
+- **Task 5:** thêm prop `spoken?: 'avg' | 'score'` cho `Stars` (reviewer MINOR): mặc định `'avg'` đọc `formatRating` ("4,4", "5,0", khớp số đang hiện và `PdpRating`); hàng đánh giá một khách truyền `spoken="score"` để "5 trên 5 sao" không thành "5,0".
+- **Task 9:** reviewer chỉ ra bộ lọc `pressed: false` không chờ được hydrate (nút không có `aria-pressed` cũng khớp `pressed=false`); đổi sang `toHaveAttribute('aria-pressed', 'false')` + số người theo dõi từ mock (37/38), thêm khe phiên chậm 1,5 giây để ca đỏ khi bỏ bước chờ.
 - **Task 8:** chỉ ba file nguồn của kế hoạch. `group-buy.tsx`, `group-buy-view.tsx` ("Mua ngay với mã giảm n%"), `game-wheel.ts` và `home-copy.ts` (`groupBuyHint`, cùng câu với `GROUP_BUY_MENU_HINT`) vẫn còn "mã giảm" và vẫn trong `EXEMPT`; `REASON.COUPON` giữ, sửa lại câu giải thích.
 - **Task 4:** thêm prop `divider` cho `PdpCoupons` (hàng "Ưu đãi" cũng không kẻ khi là hàng cuối, như Mini), ngoài `PdpShippingRow` mà kế hoạch nêu.

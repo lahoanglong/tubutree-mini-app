@@ -610,26 +610,37 @@ test.describe('Web: nhãn hàng', () => {
     test.skip(!slug, 'DB e2e chưa có nhãn công khai nào');
     await signedIn(page);
     mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
+    // Phiên trả chậm như CI đang nghẽn: nút Theo dõi đã vẽ sẵn mà phiên còn 'loading' (bấm lúc này là noop). Không có khe này thì máy nhanh
+    // không bao giờ tái hiện được lỗi, và bỏ bước chờ ở dưới thì ca vẫn xanh.
+    await page.route('**/auth/refresh', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await route.fallback();
+    });
     api.get('/me/wishlist/ids', []);
-    api.get(`/brand/${slug}/follow-state`, { following: false, followerCount: 3 });
+    api.get(`/brand/${slug}/follow-state`, { following: false, followerCount: 37 });
     api.get(`/brand/${slug}/share-to-earn`, { eligible: false });
-    api.post(`/brand/${slug}/follow`, { following: true, followerCount: 4 });
-    api.delete(`/brand/${slug}/follow`, { following: false, followerCount: 3 });
+    api.post(`/brand/${slug}/follow`, { following: true, followerCount: 38 });
+    api.delete(`/brand/${slug}/follow`, { following: false, followerCount: 37 });
     await page.goto(`/brand/${slug}`);
-    // Nút có sẵn trong HTML từ server nhưng bấm trước khi trang hydrate thì click mất (không có lời gọi POST). `aria-pressed` chỉ client đặt,
-    // và chỉ khi phiên đã đăng nhập: chờ nó là chờ trang đã hydrate xong.
-    const follow = page.getByRole('button', { name: 'Theo dõi', pressed: false });
-    await expect(follow).toBeVisible();
+    // Nút Theo dõi có sẵn trong HTML từ server (không aria-pressed) và vẫn không aria-pressed lúc phiên còn đang tải: bấm lúc đó thì click mất,
+    // không có lời gọi POST (CI #113). Chỉ khi client đã hydrate, phiên đăng nhập xong và follow-state về thì mới có `aria-pressed="false"`
+    // và số người theo dõi 37 (số từ mock, không phải số của máy chủ), nên chờ cả hai trước khi bấm. Playwright coi nút không có
+    // aria-pressed là pressed=false, nên phải kiểm thuộc tính thật chứ không dùng bộ lọc `pressed`.
+    await expect(page.getByRole('group', { name: '37 người theo dõi' })).toBeVisible();
+    const follow = page.getByRole('button', { name: 'Theo dõi', exact: true });
+    await expect(follow).toHaveAttribute('aria-pressed', 'false');
     // waitForCall chỉ tính lời gọi mới: đăng ký trước khi bấm, không thì mock trả ngay và lời gọi đã qua.
     const followed = api.waitForCall('POST', `/brand/${slug}/follow`);
     await follow.click();
     await followed;
-    const following = page.getByRole('button', { name: 'Đang theo dõi', pressed: true });
-    await expect(following).toBeVisible();
+    const following = page.getByRole('button', { name: 'Đang theo dõi', exact: true });
+    await expect(following).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('group', { name: '38 người theo dõi' })).toBeVisible();
     const unfollowed = api.waitForCall('DELETE', `/brand/${slug}/follow`);
     await following.click();
     await unfollowed;
-    await expect(page.getByRole('button', { name: 'Theo dõi' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Theo dõi', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByRole('group', { name: '37 người theo dõi' })).toBeVisible();
   });
 
   test('khách chưa đăng nhập bấm Theo dõi: sang đăng nhập kèm returnTo về đúng trang nhãn', async ({ page, api, request }) => {
