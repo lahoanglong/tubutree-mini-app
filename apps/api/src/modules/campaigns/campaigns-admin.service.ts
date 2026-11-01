@@ -74,6 +74,18 @@ function toDetail(c: DetailRow, now: Date): AdminCampaignDetail {
 
 const isUniqueViolation = (e: unknown): boolean => e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
 
+/**
+ * Kiểm tồn tại chạy ngoài giao dịch nên sản phẩm/mã/chiến dịch bị xoá giữa chừng làm createMany vỡ khoá ngoại (P2003): chiến dịch mất thì
+ * 404, còn lại là mục vừa bị xoá nên 400 để admin tải lại danh sách thay vì 500.
+ */
+function rethrowForeignKey(e: unknown, what: string): never {
+  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+    if (String(e.meta?.field_name ?? '').includes('campaignId')) throw new NotFoundException('Không tìm thấy chiến dịch.');
+    throw new BadRequestException(`${what} vừa bị xoá, tải lại danh sách rồi chọn lại.`);
+  }
+  throw e;
+}
+
 /** Danh sách tối đa vài mục để báo lỗi gọn khi admin dán nhầm cả trăm mã. */
 const named = (items: readonly string[]) => items.slice(0, 5).join(', ');
 
@@ -200,7 +212,7 @@ export class CampaignsAdminService {
     const writes = ids.length > 0
       ? [clear, this.prisma.campaignProduct.createMany({ data: ids.map((productId, sortOrder) => ({ campaignId: id, productId, sortOrder })) })]
       : [clear];
-    await this.prisma.$transaction([this.lockRow(id), ...writes]);
+    await this.prisma.$transaction([this.lockRow(id), ...writes]).catch((e: unknown) => rethrowForeignKey(e, 'Có sản phẩm'));
     return { count: ids.length };
   }
 
@@ -226,7 +238,7 @@ export class CampaignsAdminService {
     const writes = codes.length > 0
       ? [clear, this.prisma.campaignCoupon.createMany({ data: codes.map((code, sortOrder) => ({ campaignId: id, couponId: byCode.get(code)!.id, sortOrder })) })]
       : [clear];
-    await this.prisma.$transaction([this.lockRow(id), ...writes]);
+    await this.prisma.$transaction([this.lockRow(id), ...writes]).catch((e: unknown) => rethrowForeignKey(e, 'Có mã'));
     return { count: codes.length };
   }
 }

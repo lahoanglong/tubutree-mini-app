@@ -125,6 +125,32 @@ describe('BestSellersView — tiêu đề, tab, hạng', () => {
     expect(nav.replaces.at(-1)).toBe('/ban-chay');
   });
 
+  it('chạm tab khác khi đã cuộn xuống: về đầu trang (window.scrollTo top 0); đang ở đầu trang hoặc chạm lại tab đang chọn thì không cuộn', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    const scrollY = vi.spyOn(window, 'scrollY', 'get');
+    try {
+      const { container } = mount();
+      await flush();
+      scrollY.mockReturnValue(0);
+      click(tab(container, 'Cho bé'));
+      await flush();
+      expect(scrollTo).not.toHaveBeenCalled();
+
+      scrollY.mockReturnValue(900);
+      click(tab(container, 'Cho bé'));
+      await flush();
+      expect(scrollTo).not.toHaveBeenCalled();
+
+      click(tab(container, 'Tất cả'));
+      await flush();
+      expect(scrollTo).toHaveBeenCalledTimes(1);
+      expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: 0 }));
+    } finally {
+      scrollTo.mockRestore();
+      scrollY.mockRestore();
+    }
+  });
+
   it('vào thẳng ?category=<gốc>: tab đó được chọn; id lạ sau khi cây tải thì "Tất cả" không lọc', async () => {
     nav.search = 'category=c-baby';
     const first = mount();

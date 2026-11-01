@@ -64,7 +64,7 @@ describe('CampaignBody (web): trang chiến dịch giống Mini App', () => {
     const c = await mount(<CampaignBody campaign={DETAIL} initialProducts={page([1, 2, 3], 1, 3)} />);
     expect(c.querySelector('h1')!.textContent).toBe('Giữa Thu');
     expect(c.textContent).toContain('Giảm sâu mùa trăng');
-    expect(c.querySelector('img')!.getAttribute('alt')).toBe('Giữa Thu');
+    expect(c.querySelector('img')!.getAttribute('alt')).toBe(''); // trang trí: h1 ngay trên đã gọi tên
     expect(c.textContent).toContain('Từ 01/11 đến 11/11');
     expect(mocks.get.mock.calls.filter(([p]) => String(p).startsWith('/me'))).toEqual([]);
     expect(headingProblems(c)).toEqual([]);
@@ -147,7 +147,7 @@ describe('CampaignBody (web): trang chiến dịch giống Mini App', () => {
 
   it('ảnh không phục vụ được (null): bỏ ảnh, trang vẫn đủ nội dung', async () => {
     const c = await mount(<CampaignBody campaign={{ ...DETAIL, image: null }} initialProducts={page([1], 1, 1)} />);
-    expect(c.querySelector('img[alt="Giữa Thu"]')).toBeNull();
+    expect(c.querySelector('img')).toBeNull();
     expect(c.querySelector('h1')!.textContent).toBe('Giữa Thu');
     expect(c.textContent).toContain('THU10');
   });

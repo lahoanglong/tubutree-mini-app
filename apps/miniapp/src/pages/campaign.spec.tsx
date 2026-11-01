@@ -79,7 +79,10 @@ describe('Trang chiến dịch (Mini)', () => {
     renderPage();
     expect(await screen.findByRole('heading', { level: 1, name: 'Giữa Thu' })).toBeInTheDocument();
     expect(screen.getByText('Giảm sâu mùa trăng')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Giữa Thu' })).toHaveStyle({ aspectRatio: 'var(--banner-ratio)' });
+    // Ảnh trang trí (alt rỗng): h1 ngay trên đã gọi tên, đọc lại lần nữa là trùng.
+    const hero = document.querySelector('img')!;
+    expect(hero.getAttribute('alt')).toBe('');
+    expect(hero).toHaveStyle({ aspectRatio: 'var(--banner-ratio)' });
     expect(screen.getByText('Từ 01/11 đến 11/11')).toBeInTheDocument();
   });
 

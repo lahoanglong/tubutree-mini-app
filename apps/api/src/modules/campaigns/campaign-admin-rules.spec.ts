@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/shared-types';
 import { assertWindow, campaignStatus, normalizeLink, slugFromTitle } from './campaign-admin-rules';
 
 const NOW = new Date('2026-11-05T05:00:00Z');
@@ -28,9 +29,10 @@ describe('normalizeLink', () => {
     expect(normalizeLink('CATEGORY', 'nha-bep')).toBe('nha-bep');
     for (const bad of [undefined, null, '', 'có dấu', 'a b', '-x']) expect(() => normalizeLink('PRODUCT', bad)).toThrow(BadRequestException);
   });
-  it('đích nội bộ phải là đường dẫn của app: một dấu "/" đầu, không URL ngoài, không khoảng trắng', () => {
+  it('đích nội bộ chỉ nhận giá trị trong danh sách chung CAMPAIGN_INTERNAL_TARGETS', () => {
+    for (const t of CAMPAIGN_INTERNAL_TARGETS) expect(normalizeLink('URL_INTERNAL', ` ${t.value} `)).toBe(t.value);
     expect(normalizeLink('URL_INTERNAL', '/offers')).toBe('/offers');
-    for (const bad of ['//evil.com', 'https://evil.com', 'javascript:alert(1)', '/a b', '', null, `/${'a'.repeat(200)}`]) {
+    for (const bad of ['/cart', '/offers/x', '/offers?a=1', '//evil.com', 'https://evil.com', 'javascript:alert(1)', '/a b', '', null, `/${'a'.repeat(200)}`]) {
       expect(() => normalizeLink('URL_INTERNAL', bad)).toThrow(BadRequestException);
     }
   });

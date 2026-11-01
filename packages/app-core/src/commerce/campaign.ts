@@ -1,6 +1,7 @@
 import type { CampaignBanner, CampaignCouponDTO } from '../api/campaign';
 import type { PageResponse, ProductCard } from '../api/catalog';
 import type { HomeKindState } from '../home-layout';
+import { CAMPAIGN_INTERNAL_TARGETS } from '@tubutree/shared-types';
 import { liveRoute } from '../merch/route-fallback';
 import { fillCopy } from '../shop-copy';
 import { sortVouchers, voucherView, type VoucherView } from './voucher';
@@ -12,19 +13,8 @@ export const CAMPAIGN_PRODUCTS_PAGE = 20;
 const VN_OFFSET_MS = 7 * 3_600_000;
 const ENTITY_SLUG = /^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$/;
 
-/**
- * Đích nội bộ admin được chọn cho banner (route Mini; `web` là route web tương ứng). Danh sách đóng: giá trị tự gõ không dẫn tới
- * đường dẫn nào ngoài app. Trang của gói khác còn chờ (Giờ vàng, Bán chạy, Mã giảm giá) đi qua `liveRoute` nên tự đổi khi trang thật có.
- */
-export const CAMPAIGN_INTERNAL_TARGETS: readonly { value: string; label: string; web: string }[] = [
-  { value: '/offers', label: 'Ưu đãi', web: '/uu-dai' },
-  { value: '/browse', label: 'Danh mục sản phẩm', web: '/san-pham' },
-  { value: '/flash-sale', label: 'Giờ vàng', web: '/gio-vang' },
-  { value: '/best-sellers', label: 'Bán chạy nhất', web: '/ban-chay' },
-  { value: '/vouchers', label: 'Mã giảm giá', web: '/ma-giam-gia' },
-  { value: '/group-buy', label: 'Mua chung', web: '/mua-chung' },
-  { value: '/rewards', label: 'Đổi quà', web: '/kho-qua' },
-];
+// Danh sách đích nằm ở shared-types để API và app dùng chung một nguồn.
+export { CAMPAIGN_INTERNAL_TARGETS };
 
 /**
  * Banner có hiện cho khách này không. `ALL` luôn hiện; `NEW`/`RETURNING` chỉ khi đã biết đúng loại khách (chưa biết thì chỉ `ALL`,

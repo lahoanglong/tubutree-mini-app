@@ -367,19 +367,21 @@
 }
 
 /*
- * Tràn mép (một nguồn cho mọi khối cần chạm mép màn hình, như Mini App không có đệm trang quanh khối): lùi lề âm đúng --space-block của
- * khung trang. Đệm ngang bên trong (px-4...) vẫn do nơi dùng đặt để nội dung thẳng cột trang. Phải đứng SAU .scroll-x: cùng độ đặc hiệu,
+ * Tràn mép (một nguồn cho mọi khối cần chạm mép màn hình, như Mini App không có đệm trang quanh khối): lùi lề âm đúng đệm ngang `px-4`
+ * của khung trang (PAGE_WIDE, apps/web/src/lib/page-frame.ts), cùng đơn vị rem nên cỡ chữ trình duyệt đổi thì hai bên vẫn khớp.
+ * Đệm ngang bên trong (px-4...) vẫn do nơi dùng đặt để nội dung thẳng cột trang. Phải đứng SAU .scroll-x: cùng độ đặc hiệu,
  * luật sau thắng, nên hàng cuộn đã nới lề không bị `max-width: 100%` cắt lại. `.tubu-bleed` chỉ dưới md (đúng mốc của `max-md:`: từ md khối
- * nằm trong khung); `.tubu-bleed-rail` là kệ sản phẩm, từ md lùi đúng đệm 12px của kệ để thẻ đầu thẳng tiêu đề.
+ * nằm trong khung); `.tubu-bleed-rail` là kệ sản phẩm, từ md lùi đúng đệm của kệ (`--rail-pad-block`, token px 12px: cùng đơn vị với đệm đó)
+ * để thẻ đầu thẳng tiêu đề.
  */
 @media not all and (min-width: 768px) {
   .tubu-bleed {
-    margin-inline: calc(var(--space-block) * -1);
+    margin-inline: -1rem;
     max-width: none;
   }
 }
 .tubu-bleed-rail {
-  margin-inline: calc(var(--space-block) * -1);
+  margin-inline: -1rem;
   max-width: none;
 }
 @media (min-width: 768px) {
@@ -388,12 +390,15 @@
   }
 }
 
-/* Hàng tab cuộn ngang (SegmentedTabs scroll): không vẽ thanh cuộn, như bản Mini; thanh 6px của globals.css sẽ chồng lên chân tab. */
-.scroll-x[role='tablist'] {
-  scrollbar-width: none;
-}
-.scroll-x[role='tablist']::-webkit-scrollbar {
-  display: none;
+/* Hàng tab cuộn ngang (SegmentedTabs scroll) dưới md: không vẽ thanh cuộn, như bản Mini; thanh 6px của globals.css sẽ chồng lên chân tab.
+   Từ md giữ thanh cuộn: người dùng chuột không vuốt được hàng tab tràn. */
+@media not all and (min-width: 768px) {
+  .scroll-x[role='tablist'] {
+    scrollbar-width: none;
+  }
+  .scroll-x[role='tablist']::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* Nút: bản DOM của zmp-ui Button (lớp zaui-btn*) với đúng kích thước/màu bản Mini App. */
