@@ -95,5 +95,9 @@ describe('cài đặt như Mini App (điện thoại)', () => {
     const del = buttons.findIndex((b) => b.textContent === 'Xoá tài khoản');
     expect(del).toBeGreaterThan(logout);
     expect(buttons[del]!.className).toContain('max-md:text-[color:var(--color-text-danger)]');
+    // Mini chỉ có chữ đỏ trơn, không nền không bóng.
+    expect(buttons[del]!.className).toContain('max-md:bg-transparent');
+    expect(buttons[del]!.className).toContain('max-md:shadow-none');
+    expect(buttons[del]!.className).not.toContain('elevation-1');
   });
 });

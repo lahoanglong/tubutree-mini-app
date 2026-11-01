@@ -96,7 +96,7 @@ export function AccountDeletionSection() {
           </div>
         </div>
       ) : (
-        <button type="button" onClick={() => setConfirming(true)} className={`${ui.btnSecondary} w-full text-danger-fg max-md:border-transparent max-md:bg-[var(--color-bg-surface)] max-md:text-[color:var(--color-text-danger)] max-md:shadow-[var(--elevation-1)]`}>
+        <button type="button" onClick={() => setConfirming(true)} className={`${ui.btnSecondary} w-full text-danger-fg max-md:border-transparent max-md:bg-transparent max-md:text-[color:var(--color-text-danger)] max-md:shadow-none`}>
           Xoá tài khoản
         </button>
       )}
