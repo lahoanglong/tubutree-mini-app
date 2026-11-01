@@ -170,18 +170,31 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers?tab=mine');
   });
 
-  it('Mã của tôi đúng 3 mã: đủ 3 phiếu, nút vẫn ghi "Xem tất cả" (chưa có gì bị ẩn)', async () => {
+  it('chấm đỏ: ví có 4 mã sắp hết hạn mà trang chỉ vẽ 3 thì chỉ 3 mã vào danh sách đã xem (mã thứ 4 chưa ai thấy)', async () => {
+    const soon = (i: number) => ({ ...COUPON, code: `SOON-${i}`, endAt: new Date(Date.now() + (i + 1) * 3_600_000).toISOString() });
+    mocks.getCoupons.mockResolvedValue([0, 1, 2, 3].map(soon));
+    renderPage();
+    const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
+    await waitFor(() => expect(within(mine).getAllByRole('group')).toHaveLength(3));
+    await waitFor(() => expect(localStorage.getItem('tubu_offers_seen_coupons')).not.toBeNull());
+    const seen = JSON.parse(localStorage.getItem('tubu_offers_seen_coupons')!) as { items: string[] };
+    expect(seen.items.map((k) => k.split('@')[0]).sort()).toEqual(['SOON-0', 'SOON-1', 'SOON-2']);
+  });
+
+  it('Mã của tôi đúng 3 mã: đủ 3 phiếu, nút cũng ghi "Tất cả (3)" (một mẫu, đếm đúng số trang đích sẽ vẽ)', async () => {
     mocks.getCoupons.mockResolvedValue(Array.from({ length: 3 }, (_, i) => ({ ...COUPON, code: `MA-${i}`, value: 10_000 * (i + 1) })));
     renderPage();
     const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
     await waitFor(() => expect(within(mine).getAllByRole('group')).toHaveLength(3));
-    expect(within(mine).getByRole('button', { name: 'Xem tất cả Mã của tôi' })).toHaveTextContent('Xem tất cả');
+    expect(within(mine).getByRole('button', { name: 'Tất cả (3) Mã của tôi' })).toHaveTextContent('Tất cả (3)');
   });
 
-  it('chưa có mã nào → trạng thái rỗng có hướng dẫn đổi quà', async () => {
+  it('chưa có mã nào → trạng thái rỗng có hướng dẫn đổi quà, không có nút xem tất cả', async () => {
     mocks.getCoupons.mockResolvedValue([]);
     renderPage();
     expect(await screen.findByText('Chưa có mã giảm giá khả dụng')).toBeInTheDocument();
+    const mine = screen.getByRole('region', { name: 'Mã của tôi' });
+    expect(within(mine).queryByRole('button', { name: /tất cả/i })).toBeNull();
   });
 
   it('?section=coupons cuộn tới phần mã giảm giá khi dữ liệu mã đã về', async () => {
@@ -208,12 +221,34 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     expect(await screen.findByText('Liên kết Zalo để giữ điểm và nhận quà')).toBeInTheDocument();
   });
 
+  it('tài khoản khách bị chặn Điểm Xanh: cả trang chỉ một nút "Liên kết Zalo" (ở thẻ mời), thẻ điểm danh không lặp ghi chú', async () => {
+    mocks.guest = true;
+    mocks.getCheckIn.mockResolvedValue({ checkedInToday: false, streakDays: 0, currentCycleDay: 1, todayPoints: 0, todayWater: 10, pointsBlocked: 'GUEST', rewards: REWARDS });
+    renderPage();
+    expect(await screen.findByRole('heading', { name: 'Điểm danh mỗi ngày' })).toBeInTheDocument();
+    // Ghi chú là chunk nạp lười: nạp trước rồi chờ một nhịp, để "không thấy" nghĩa là không vẽ chứ không phải chưa tới.
+    await import('../components/loyalty/guest-points-note');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getAllByRole('button', { name: 'Liên kết Zalo' })).toHaveLength(1);
+    expect(screen.queryByTestId('guest-points-note')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Đăng nhập Zalo' })).toBeNull();
+  });
+
   it('chưa đăng nhập → thẻ mời đăng nhập ở khối cần tài khoản, không gọi API ưu đãi', async () => {
     mocks.phase = 'guest';
     renderPage();
     expect(await screen.findByRole('region', { name: 'Điểm Xanh và điểm danh' })).toBeInTheDocument();
     expect(mocks.getLoyalty).not.toHaveBeenCalled();
     expect(mocks.getCoupons).not.toHaveBeenCalled();
+  });
+
+  it('thẻ mời của khách: tiêu đề dưới 22px dùng Inter, không Fraunces (Q1)', async () => {
+    mocks.phase = 'guest';
+    renderPage();
+    const region = await screen.findByRole('region', { name: 'Điểm Xanh và điểm danh' });
+    const h = within(region).getByRole('heading', { level: 2 });
+    expect(h.style.fontFamily).toContain('--font-ui');
+    expect(h.style.fontFamily).not.toContain('--font-display');
   });
 
   it('tên đọc của thẻ Điểm Xanh chứa hạng và số điểm đang hiển thị', async () => {
@@ -261,11 +296,11 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     expect(expiries[1]!.style.color).toBe('var(--color-text-tertiary)');
   });
 
-  it('Mã của tôi: mỗi thẻ có nút "Dùng ngay"; "Xem tất cả" tới /vouchers?tab=mine', async () => {
+  it('Mã của tôi: mỗi thẻ có nút "Dùng ngay"; "Tất cả (n)" tới /vouchers?tab=mine', async () => {
     renderPage();
     const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
     expect(await within(mine).findByRole('button', { name: 'Dùng ngay' })).toBeInTheDocument();
-    fireEvent.click(within(mine).getByRole('button', { name: /Xem tất cả/ }));
+    fireEvent.click(within(mine).getByRole('button', { name: /Tất cả \(1\)/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers?tab=mine');
   });
 

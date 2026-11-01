@@ -17,6 +17,7 @@ import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { VoucherTicket } from '../components/ui/voucher-ticket';
 import { useAuthPhase } from '../hooks/use-auth-phase';
+import { useMarkExpiringSeen } from '../hooks/use-offers-dot';
 import { useClaimCoupon } from '../hooks/use-claim-coupon';
 import { useCouponUse } from '../hooks/use-coupon-use';
 import { getLoadErrorMessage } from '../services/api';
@@ -69,6 +70,8 @@ export default function VouchersPage() {
   const activeFilter = filters.some((f) => f.key === filter) ? filter : 'all';
   const shown = filterVouchers(rows, activeFilter, now);
   const activeLabel = VOUCHER_TABS.find((t) => t.key === tab)!.label;
+  // Ghi "đã xem" cho mã sắp hết hạn chỉ ở tab Mã của tôi và chỉ các thẻ đang vẽ (đã qua chip lọc), cùng quy tắc với trang Ưu đãi.
+  useMarkExpiringSeen(authed && tab === 'mine' ? shown.map((r) => r.coupon) : undefined);
 
   const pickTab = (key: string) => {
     if (key === tab) return;

@@ -236,6 +236,7 @@ describe('/uu-dai — trang Ưu đãi', () => {
     state.coupons = [];
     c = await mount();
     expect(region(c, 'Mã của tôi')!.textContent).toContain('Chưa có mã giảm giá khả dụng');
+    expect(region(c, 'Mã của tôi')!.querySelector('button[aria-label*="ất cả"]')).toBeNull();
   });
 
   it('Mã của tôi chỉ xếp 3 phiếu; từ 4 mã trở lên nút ghi "Tất cả (n)", tên đọc giữ đủ số ("Tất cả (8) Mã của tôi")', async () => {
@@ -252,7 +253,15 @@ describe('/uu-dai — trang Ưu đãi', () => {
     const d = await mount();
     const three = region(d, 'Mã của tôi')!;
     expect(three.querySelectorAll('[role="group"]')).toHaveLength(3);
-    expect(three.querySelector('button[aria-label="Xem tất cả Mã của tôi"]')!.textContent).toBe('Xem tất cả');
+    expect(three.querySelector('button[aria-label="Tất cả (3) Mã của tôi"]')!.textContent).toBe('Tất cả (3)');
+  });
+
+  it('chấm đỏ: ví có 4 mã sắp hết hạn mà trang chỉ vẽ 3 thì chỉ 3 mã vào danh sách đã xem (mã thứ 4 chưa ai thấy)', async () => {
+    state.coupons = [0, 1, 2, 3].map((i) => ({ ...COUPON, code: `SOON-${i}`, endAt: new Date(Date.now() + (i + 1) * 3_600_000).toISOString() }));
+    const c = await mount();
+    expect(region(c, 'Mã của tôi')!.querySelectorAll('[role="group"]')).toHaveLength(3);
+    const seen = JSON.parse(localStorage.getItem('tubu_offers_seen_coupons')!) as { items: string[] };
+    expect(seen.items.map((k) => k.split('@')[0]).sort()).toEqual(['SOON-0', 'SOON-1', 'SOON-2']);
   });
 
   it('Mã của tôi lỗi: thông báo có lý do và nút Thử lại', async () => {
@@ -267,7 +276,7 @@ describe('/uu-dai — trang Ưu đãi', () => {
     const mine = region(c, 'Mã của tôi')!;
     click(byText(mine, 'button', 'Dùng ngay'));
     expect(state.use).toHaveBeenCalledWith('WELCOME20');
-    click(mine.querySelector('button[aria-label="Xem tất cả Mã của tôi"]'));
+    click(mine.querySelector('button[aria-label^="Tất cả ("]'));
     expect(state.push).toHaveBeenLastCalledWith('/ma-giam-gia?tab=mine');
   });
 
@@ -315,6 +324,14 @@ describe('/uu-dai — trang Ưu đãi', () => {
     state.search = 'section=coupons';
     await mount();
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+  });
+
+  it('thẻ mời của khách: tiêu đề dưới 22px dùng Inter, không Fraunces (Q1)', async () => {
+    state.phase = 'guest';
+    const c = await mount();
+    const h = region(c, 'Điểm Xanh và điểm danh')!.querySelector<HTMLElement>('h2')!;
+    expect(h.style.fontFamily).toContain('--font-ui');
+    expect(h.style.fontFamily).not.toContain('--font-display');
   });
 
   it('khách chưa đăng nhập: Giờ vàng, Nhận mã, rồi mỗi khối cần tài khoản một thẻ mời cùng nhãn "Đăng nhập", Đổi quà vẫn hiện; không gọi API riêng của khách', async () => {

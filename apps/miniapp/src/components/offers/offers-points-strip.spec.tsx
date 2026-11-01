@@ -39,6 +39,14 @@ describe('OffersPointsStrip — dải Điểm Xanh gọn ở trang Ưu đãi', (
     expect(screen.getAllByRole('button', { name: /Hạng và lịch sử điểm/ })).toHaveLength(1);
   });
 
+  it('số điểm (18px) dùng Inter, không Fraunces (Q1)', () => {
+    render(<OffersPointsStrip loyalty={loaded()} />);
+    const n = screen.getByText('120 điểm');
+    expect(n.style.fontFamily).toContain('--font-ui');
+    expect(n.style.fontFamily).not.toContain('--font-display');
+    expect(n.style.fontSize).toBe('var(--type-title-md-size)');
+  });
+
   it('có thanh tiến độ lên hạng kế; chưa tải được hạng thì không đoán hạng, báo lỗi và "Thử lại" gọi lại', () => {
     const refetch = vi.fn();
     const { rerender } = render(<OffersPointsStrip loyalty={loaded()} />);

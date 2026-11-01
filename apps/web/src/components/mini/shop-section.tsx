@@ -6,6 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
 import { collectionView } from '@tubutree/app-core/commerce/collection-view';
 import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
+import { seeAllLabel } from '@tubutree/app-core/commerce/see-all';
 import { comboTotals } from '@tubutree/app-core/commerce/shop-page';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -127,10 +128,11 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false }
   const noteById = new Map(shown.map((it) => [it.product.id, it.note ?? undefined]));
   const noteOf = (p: ProductCardType) => noteById.get(p.id);
   const hasMore = view.layout === 'combo' ? collection.items.length > shown.length : view.hasMore;
+  const seeAll = seeAllLabel(view.total);
   const action =
-    hasMore && onSeeAll
+    hasMore && onSeeAll && seeAll
       ? {
-          label: fillCopy('shop.seeAllN', { n: view.total }),
+          label: seeAll,
           onPress: onSeeAll,
           spoken: fillCopy('shop.seeAllNSpoken', { n: view.total, title: collection.title }),
         }

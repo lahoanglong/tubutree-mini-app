@@ -47,6 +47,14 @@ describe('OffersPointsStrip (web) — dải Điểm Xanh gọn ở trang Ưu đ�
     expect(c.querySelectorAll('button[aria-label$="Hạng và lịch sử điểm"]')).toHaveLength(1);
   });
 
+  it('số điểm (18px) dùng Inter, không Fraunces (Q1)', async () => {
+    const c = await mount(loaded());
+    const n = [...c.querySelectorAll<HTMLElement>('div')].find((e) => e.children.length === 0 && e.textContent === '120 điểm')!;
+    expect(n.style.fontFamily).toContain('--font-ui');
+    expect(n.style.fontFamily).not.toContain('--font-display');
+    expect(n.style.fontSize).toBe('var(--type-title-md-size)');
+  });
+
   it('có thanh tiến độ lên hạng kế; chưa tải được hạng thì không đoán hạng, báo lỗi và "Thử lại" gọi lại', async () => {
     const refetch = vi.fn();
     let c = await mount(loaded());

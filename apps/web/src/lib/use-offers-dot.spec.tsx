@@ -55,4 +55,12 @@ describe('chấm đỏ Ưu đãi theo tài khoản (web)', () => {
     const other = renderHook(() => useOffersDot(true));
     await waitFor(() => expect(other.result.current).not.toBeNull());
   });
+  it('chỉ đánh dấu mã được truyền vào: ví 4 mã sắp hết hạn, trang chỉ vẽ 3 thì chấm vẫn sáng cho mã thứ 4, vẽ cả 4 thì tắt', async () => {
+    mocks.coupons = [soon('A', 2), soon('B', 2), soon('C', 2), soon('D', 2)];
+    const three = both(mocks.coupons.slice(0, 3));
+    await waitFor(() => expect(localStorage.getItem('tubu_offers_seen_coupons')).not.toBeNull());
+    await waitFor(() => expect(three.result.current).toBe('coupon-expiring'));
+    const all = both(mocks.coupons);
+    await waitFor(() => expect(all.result.current).toBeNull());
+  });
 });

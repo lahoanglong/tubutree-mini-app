@@ -162,7 +162,6 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.emptyHistoryTitle': 'Chưa có mã đã dùng hoặc hết hạn',
   'coupon.emptyFilterTitle': 'Không có mã nào ở mục này',
   'coupon.loadError': 'Chưa tải được mã giảm giá',
-  'coupon.allCount': 'Tất cả {n} mã',
   'coupon.filterAll': 'Tất cả',
   'coupon.filterDiscount': 'Giảm giá',
   'coupon.filterFreeship': 'Miễn phí giao hàng',
@@ -175,6 +174,7 @@ export const SHOP_COPY: Record<string, string> = {
 
   // Ưu đãi khi chưa đăng nhập: mỗi khối cần tài khoản một thẻ mời, một nhãn nút chung ở hai app
   'login.cta': 'Đăng nhập',
+  'zalo.link': 'Liên kết Zalo',
   'offers.guestPointsTitle': 'Điểm Xanh và điểm danh',
   'offers.guestPointsBody': 'Đăng nhập để xem điểm, hạng và điểm danh nhận thưởng mỗi ngày.',
   'offers.guestMineBody': 'Đăng nhập để xem mã bạn đã lưu và dùng ngay khi mua hàng.',
@@ -269,7 +269,6 @@ export const SHOP_COPY: Record<string, string> = {
   'shop.following': 'Đang theo dõi',
   'shop.share': 'Chia sẻ',
   'shop.vouchers': 'Mã giảm giá của shop',
-  'shop.seeAllN': 'Tất cả ({n})',
   'shop.seeAllNSpoken': 'Xem tất cả {n} sản phẩm trong {title}',
   'shop.sortPopular': 'Phổ biến',
   'shop.sortNew': 'Mới',

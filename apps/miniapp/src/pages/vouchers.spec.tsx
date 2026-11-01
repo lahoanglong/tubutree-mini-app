@@ -261,12 +261,13 @@ describe('VouchersPage (Mini)', () => {
     expect(mocks.login).not.toHaveBeenCalled();
   });
 
-  it('mã còn ít lượt hiện "Còn n lượt"; tên admin đặt hiện ở hàng riêng', async () => {
+  it('mã còn ít lượt hiện "Còn n lượt"; tên admin đặt cùng hàng điều kiện, mã ở hàng đáy', async () => {
     responses['/coupons/collectable'] = [collectable('NEW10', { title: 'Chào bạn mới', usageLimit: 5, claimedCount: 2 })];
     renderAt();
     expect(await screen.findByText('Còn 3 lượt')).toBeInTheDocument();
     expect(screen.getByTestId('voucher-name').textContent).toBe('Chào bạn mới');
-    expect(screen.getByTestId('voucher-meta').textContent).toBe('Đơn từ 199k · NEW10');
+    expect(screen.getByTestId('voucher-meta').textContent).toBe('Đơn từ 199k');
+    expect(screen.getByTestId('voucher-foot').textContent).toContain('NEW10');
   });
 
   it('có chữ "Mỗi đơn dùng 1 mã" trên trang', async () => {
@@ -326,6 +327,18 @@ describe('VouchersPage (Mini)', () => {
     expect(await screen.findByRole('button', { name: 'Dùng ngay' })).toBeInTheDocument();
     expect(screen.getByText('Liên kết Zalo để giữ điểm và nhận quà')).toBeInTheDocument();
     expect(screen.getByText('Còn 2 ngày')).toBeInTheDocument();
+  });
+
+  it('chấm đỏ Ưu đãi: tab Mã của tôi ghi các mã sắp hết hạn đang vẽ vào danh sách đã xem; tab Nhận mã thì không ghi gì', async () => {
+    localStorage.clear();
+    responses['/me/coupons'] = [wallet('A', { endAt: iso(2 * DAY) }), wallet('B', { endAt: iso(DAY) }), wallet('C', { endAt: iso(2 * DAY) }), wallet('D', { endAt: iso(2 * DAY) }), wallet('LATE', { endAt: iso(20 * DAY) })];
+    renderAt();
+    await screen.findByText('Chào bạn mới');
+    expect(localStorage.getItem('tubu_offers_seen_coupons')).toBeNull();
+    pickTab('Mã của tôi');
+    await waitFor(() => expect(localStorage.getItem('tubu_offers_seen_coupons')).not.toBeNull());
+    const items = (JSON.parse(localStorage.getItem('tubu_offers_seen_coupons')!) as { items: string[] }).items;
+    expect(items.map((k) => k.split('@')[0]).sort()).toEqual(['A', 'B', 'C', 'D']);
   });
 
   it('Đã dùng–hết hạn: gọi lịch sử, thẻ đã dùng và hết hạn không có nút', async () => {

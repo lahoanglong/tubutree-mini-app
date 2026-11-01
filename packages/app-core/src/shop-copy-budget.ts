@@ -167,7 +167,6 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.emptyHistoryTitle': null,
   'coupon.emptyFilterTitle': null,
   'coupon.loadError': null,
-  'coupon.allCount': 16,
   'coupon.filterAll': 12,
   'coupon.filterDiscount': 12,
   'coupon.filterFreeship': 18,
@@ -179,6 +178,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'coupon.walletLoadError': null,
 
   'login.cta': 12,
+  'zalo.link': 14,
   'offers.guestPointsTitle': 26,
   'offers.guestPointsBody': null,
   'offers.guestMineBody': null,
@@ -274,7 +274,6 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'shop.following': 14,
   'shop.share': 10,
   'shop.vouchers': 22,
-  'shop.seeAllN': 12,
   'shop.seeAllNSpoken': null,
   'shop.sortPopular': 10,
   'shop.sortNew': 6,

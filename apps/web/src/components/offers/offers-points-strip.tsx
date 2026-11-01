@@ -63,7 +63,7 @@ export function OffersPointsStrip({ loyalty }: { loyalty: PointsStripQuery }) {
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
-            <Heading variant="title-md" as="div" tone="inverse" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <Heading variant="title-md" as="div" tone="inverse" font="ui" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {card?.pointsLabel}
             </Heading>
             {card?.valueLabel && (

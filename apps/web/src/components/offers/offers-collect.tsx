@@ -4,6 +4,7 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { seeAllLabel } from '@tubutree/app-core/commerce/see-all';
 import { collectRows } from '@tubutree/app-core/commerce/voucher-center';
 import { COLLECT_HINT_MAX, isCouponExpiring, readCollectHint, writeCollectHint } from '@tubutree/app-core/home-layout';
 import { collectableCouponsQuery, collectableMineQuery } from '@tubutree/app-core/queries/loyalty';
@@ -72,18 +73,14 @@ export function OffersCollect({ walletCodes, walletLoading }: { walletCodes: Rea
 
   const now = Date.now();
   // Cùng cách ghi với "Mã của tôi" ("Tất cả (n)"); tên đọc mang đủ nhãn nhìn thấy cộng đích đến.
-  const seeAll = fillCopy('section.seeAllCount', { n: all.length });
+  const seeAll = seeAllLabel(all.length);
   return (
     <section aria-labelledby={titleId}>
       <SectionHeader
         id={titleId}
         title={title}
         icon="ticket"
-        action={{
-          label: seeAll,
-          onPress: () => router.push('/ma-giam-gia'),
-          spoken: `${seeAll} ${fillCopy('coupon.title')}`,
-        }}
+        action={seeAll ? { label: seeAll, onPress: () => router.push('/ma-giam-gia'), spoken: `${seeAll} ${fillCopy('coupon.title')}` } : undefined}
       />
       {notice && (
         <p role={notice.error ? 'alert' : 'status'} className={`mb-2 text-caption ${notice.error ? 'text-danger-fg' : 'text-stone-700'}`}>

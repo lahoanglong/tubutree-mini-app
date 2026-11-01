@@ -18,7 +18,7 @@ export function GuestLinkCard({ title, body, cta }: { title: string; body: strin
   return (
     <section aria-label={title}>
       <Card variant="flat" padding={16}>
-        <Heading variant="title-sm" as="h2">
+        <Heading variant="title-sm" as="h2" font="ui">
           {title}
         </Heading>
         <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 4 }}>
