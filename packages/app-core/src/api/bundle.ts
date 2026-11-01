@@ -5,7 +5,7 @@ export type BundleKind = 'BUNDLE_PCT' | 'ADDON';
 
 export interface BundleItemDTO {
   productId: string;
-  /** Phân loại sẽ vào giỏ (ghim, hoặc đại diện của thẻ); null khi sản phẩm không còn phân loại bán được. */
+  /** Phân loại sẽ vào giỏ (ghim, hoặc đại diện của thẻ; món mua kèm luôn ghim); null khi sản phẩm không còn phân loại bán được. */
   variationId: string | null;
   /** Số đơn vị mỗi đơn được hưởng ưu đãi của bộ. */
   maxQty: number;

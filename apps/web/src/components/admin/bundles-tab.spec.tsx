@@ -27,6 +27,21 @@ vi.mock('./product-picker', () => ({
   ),
 }));
 
+// Món mua kèm chọn theo phân loại: mỗi lần bấm "Thêm món mua kèm" chọn món kế tiếp (p1/v1, p2/v2, ...), giá bán 50.000đ.
+vi.mock('./bundle-addon-picker', () => ({
+  AddonVariationPicker: ({ onPick }: { onPick: (v: { productId: string; productName: string; variationId: string; variationName: string; price: number }) => void }) => (
+    <button
+      type="button"
+      onClick={() => {
+        mocks.picked += 1;
+        onPick({ productId: `p${mocks.picked}`, productName: `Món ${mocks.picked}`, variationId: `v${mocks.picked}`, variationName: '250ml', price: 50_000 });
+      }}
+    >
+      Chọn: Thêm món mua kèm
+    </button>
+  ),
+}));
+
 import { BundlesTab } from './bundles-tab';
 
 const row = (id: string, over: Record<string, unknown> = {}) => ({
@@ -60,6 +75,12 @@ const basics = (c: HTMLElement) => {
 const pick = async (c: HTMLElement, times = 1) => {
   for (let i = 0; i < times; i++) {
     click(byText(c, 'button', 'Chọn: Thêm sản phẩm'));
+    await flush(1);
+  }
+};
+const pickAddon = async (c: HTMLElement, times = 1) => {
+  for (let i = 0; i < times; i++) {
+    click(byText(c, 'button', 'Chọn: Thêm món mua kèm'));
     await flush(1);
   }
 };
@@ -244,19 +265,21 @@ describe('BundlesTab: tạo bộ mua kèm', () => {
     await toAddon(c);
     expect(c.querySelector('[aria-label="% giảm mỗi món"]')).toBeNull();
     expect(byText(c, 'button', 'Chọn: Chọn sản phẩm chính')).not.toBeNull();
-    await pick(c, 3);
     expect(byText(c, 'button', 'Chọn: Thêm sản phẩm')).toBeNull();
+    await pickAddon(c, 3);
+    expect(byText(c, 'button', 'Chọn: Thêm món mua kèm')).toBeNull();
     expect(field(c, 'Giá mua kèm Món 1')).not.toBeNull();
+    expect(c.textContent).toContain('250ml');
   });
 
-  it('gửi sản phẩm chính và giá kèm (0đ hợp lệ), không có pct', async () => {
+  it('gửi sản phẩm chính, phân loại ghim và giá kèm (0đ hợp lệ), không có pct', async () => {
     const c = await mount();
     await toAddon(c);
     basics(c);
     click(byText(c, 'button', 'Chọn: Chọn sản phẩm chính'));
     await flush(1);
     expect(c.querySelector('[data-testid="bundle-anchor"]')!.textContent).toBe('Dầu gội');
-    await pick(c, 2);
+    await pickAddon(c, 2);
     typeInto(field(c, 'Giá mua kèm Món 1'), '39000');
     typeInto(field(c, 'Giá mua kèm Món 2'), '0');
     typeInto(field(c, 'Số lượng ưu đãi Món 2'), '2');
@@ -264,15 +287,28 @@ describe('BundlesTab: tạo bộ mua kèm', () => {
     expect(mocks.create.mock.calls[0]![0]).toEqual({
       kind: 'ADDON', title: 'Gội xả', anchorProductId: 'p0',
       startAt: '2026-10-31T17:00:00.000Z', endAt: '2026-11-09T17:00:00.000Z', isActive: true, sortOrder: 0,
-      items: [{ productId: 'p1', addonPrice: 39_000, maxQty: 1 }, { productId: 'p2', addonPrice: 0, maxQty: 2 }],
+      items: [{ productId: 'p1', variationId: 'v1', addonPrice: 39_000, maxQty: 1 }, { productId: 'p2', variationId: 'v2', addonPrice: 0, maxQty: 2 }],
     });
+  });
+
+  it('giá kèm không thấp hơn giá bán của phân loại đã chọn: báo lỗi ngay, chưa gọi API', async () => {
+    const c = await mount();
+    await toAddon(c);
+    basics(c);
+    click(byText(c, 'button', 'Chọn: Chọn sản phẩm chính'));
+    await flush(1);
+    await pickAddon(c, 1);
+    typeInto(field(c, 'Giá mua kèm Món 1'), '50000');
+    await save(c);
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('thấp hơn giá đang bán');
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 
   it('thiếu sản phẩm chính hoặc giá kèm: báo lỗi, chưa gọi API', async () => {
     const c = await mount();
     await toAddon(c);
     basics(c);
-    await pick(c, 1);
+    await pickAddon(c, 1);
     await save(c);
     expect(c.querySelector('[role="alert"]')!.textContent).toContain('sản phẩm chính');
     click(byText(c, 'button', 'Chọn: Chọn sản phẩm chính'));
@@ -326,7 +362,7 @@ describe('BundlesTab: trợ năng', () => {
     expect(unnamedControls(c)).toEqual([]);
     selectValue(field(c, 'Loại bộ'), 'ADDON');
     await flush(1);
-    await pick(c, 1);
+    await pickAddon(c, 1);
     expect(unlabeledFields(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
   });

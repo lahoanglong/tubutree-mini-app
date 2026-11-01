@@ -9,7 +9,8 @@ const draft = (o: Partial<BundleDraft> = {}): BundleDraft => ({
   ...emptyBundleDraft('BUNDLE_PCT'), title: 'Combo gội xả', pct: '10', startAt: '2026-11-01T00:00', endAt: '2026-11-10T23:59', items: [item('p1'), item('p2')], ...o,
 });
 const addon = (o: Partial<BundleDraft> = {}): BundleDraft =>
-  draft({ kind: 'ADDON', pct: '', anchor: { id: 'p0', name: 'Chính' }, items: [item('p1', { addonPrice: '39000' })], ...o });
+  draft({ kind: 'ADDON', pct: '', anchor: { id: 'p0', name: 'Chính' }, items: [item('p1', { addonPrice: '39000', variationId: 'v1' })], ...o });
+const pinned = (productId: string, o: Partial<BundleDraftItem> = {}) => item(productId, { variationId: `v-${productId}`, ...o });
 const error = (d: BundleDraft) => {
   const r = buildBundleInput(d);
   return r.ok ? null : r.error;
@@ -44,23 +45,27 @@ describe('buildBundleInput: mua kèm', () => {
   it('có sản phẩm chính, giá kèm nguyên không âm (0đ hợp lệ), không gửi pct', () => {
     expect(buildBundleInput(addon())).toMatchObject({
       ok: true,
-      input: { kind: 'ADDON', anchorProductId: 'p0', items: [{ productId: 'p1', addonPrice: 39_000, maxQty: 1 }] },
+      input: { kind: 'ADDON', anchorProductId: 'p0', items: [{ productId: 'p1', variationId: 'v1', addonPrice: 39_000, maxQty: 1 }] },
     });
-    const free = buildBundleInput(addon({ items: [item('p1', { addonPrice: '0' })] }));
+    const free = buildBundleInput(addon({ items: [pinned('p1', { addonPrice: '0' })] }));
     expect(free.ok && free.input.items[0]!.addonPrice).toBe(0);
     expect(free.ok && 'pct' in free.input).toBe(false);
   });
 
   it('thiếu sản phẩm chính, món trùng sản phẩm chính, quá 3 món', () => {
     expect(error(addon({ anchor: null }))).toMatch(/sản phẩm chính/);
-    expect(error(addon({ items: [item('p0', { addonPrice: '1' })] }))).toMatch(/khác sản phẩm chính/);
-    expect(error(addon({ items: ['a', 'b', 'c', 'd'].map((p) => item(p, { addonPrice: '1' })) }))).toMatch(/tối đa 3/);
+    expect(error(addon({ items: [pinned('p0', { addonPrice: '1' })] }))).toMatch(/khác sản phẩm chính/);
+    expect(error(addon({ items: ['a', 'b', 'c', 'd'].map((p) => pinned(p, { addonPrice: '1' })) }))).toMatch(/tối đa 3/);
   });
 
   it('giá kèm trống, âm, lẻ hoặc không thấp hơn giá đang bán (khi đã biết) thì từ chối', () => {
-    for (const bad of ['', '-1', '1.5', 'x']) expect(error(addon({ items: [item('p1', { addonPrice: bad })] }))).toMatch(/giá mua kèm/i);
-    expect(error(addon({ items: [item('p1', { addonPrice: '50000', price: 50_000 })] }))).toContain('thấp hơn giá đang bán');
-    expect(error(addon({ items: [item('p1', { addonPrice: '49999', price: 50_000 })] }))).toBeNull();
+    for (const bad of ['', '-1', '1.5', 'x']) expect(error(addon({ items: [pinned('p1', { addonPrice: bad })] }))).toMatch(/giá mua kèm/i);
+    expect(error(addon({ items: [pinned('p1', { addonPrice: '50000', price: 50_000 })] }))).toContain('thấp hơn giá đang bán');
+    expect(error(addon({ items: [pinned('p1', { addonPrice: '49999', price: 50_000 })] }))).toBeNull();
+  });
+
+  it('món mua kèm phải ghim phân loại: giá kèm cố định không áp được cho mọi phân loại của sản phẩm', () => {
+    expect(error(addon({ items: [item('p1', { addonPrice: '39000' })] }))).toMatch(/Chọn phân loại/);
   });
 });
 

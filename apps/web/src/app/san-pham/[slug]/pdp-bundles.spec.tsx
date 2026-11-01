@@ -81,6 +81,30 @@ describe('PdpBundles (web): ẩn hẳn khi không có gì để mời', () => {
   });
 });
 
+describe('PdpBundles (web): dữ liệu server của trang ISR có thể cũ tới 5 phút', () => {
+  const mountAt = async (fetchedAt: number | undefined) => {
+    const r = render(<PdpBundles slug="sp-anchor" initialBundles={{ combos: ONE_COMBO, addons: [] }} initialFetchedAt={fetchedAt} />);
+    mounted.push(r);
+    const first = r.container.querySelector('[data-testid="pdp-combos"]') !== null;
+    await flush();
+    return { first, c: r.container };
+  };
+
+  it('dữ liệu server đã quá 30 giây: hiện ngay, rồi tải lại; bộ vừa tắt biến mất khỏi trang', async () => {
+    mocks.get.mockResolvedValue({ combos: [], addons: [] });
+    const { first, c } = await mountAt(Date.now() - 5 * 60_000);
+    expect(first).toBe(true);
+    expect(mocks.get).toHaveBeenCalledWith('/products/sp-anchor/bundles', { anonymous: true });
+    expect(c.querySelector('[data-testid="pdp-combos"]')).toBeNull();
+  });
+
+  it('dữ liệu server còn mới: không tải lại', async () => {
+    const { c } = await mountAt(Date.now() - 1_000);
+    expect(mocks.get).not.toHaveBeenCalled();
+    expect(c.querySelector('[data-testid="pdp-combos"]')).not.toBeNull();
+  });
+});
+
 describe('PdpBundles (web): Combo ưu đãi', () => {
   it('vẽ thẻ combo nằm trong khối bọc của PDP, tiêu đề mục là h2', async () => {
     const c = await mount({ combos: ONE_COMBO, addons: [] });

@@ -14,6 +14,7 @@ import {
   type BundleDraft,
   type BundleDraftItem,
 } from '@/lib/admin-bundle-form';
+import { AddonVariationPicker, type PickedAddonVariation } from './bundle-addon-picker';
 import { ProductPicker } from './product-picker';
 import { BTN_LINK_DANGER, BTN_PRIMARY, BTN_SECONDARY, Field, FIELD_CLASS, INPUT_CLASS, TOUCH_H } from './ui';
 import { VnDateTimeInput } from './vn-date-input';
@@ -31,7 +32,7 @@ function addonSaving(item: BundleDraftItem): string | null {
 
 /**
  * Form tạo/sửa một bộ "Combo và mua kèm". Mốc giờ nhập theo giờ Việt Nam. Loại bộ chọn lúc tạo, không đổi khi sửa (đổi loại là đổi luật của món:
- * tạo bộ mới). Sửa gửi lại cả danh sách món, kể cả phân loại đã ghim mà form không đổi được. Luật hình thức kiểm ở `buildBundleInput`;
+ * tạo bộ mới). Món mua kèm luôn ghim một phân loại (giá kèm là con số cố định); muốn đổi phân loại thì bỏ món rồi thêm lại. Sửa gửi lại cả danh sách món, kể cả phân loại đã ghim. Luật hình thức kiểm ở `buildBundleInput`;
  * trần % theo cấu hình, giá kèm so với giá hiện tại của món mới chọn và hạn mức nhân viên do máy chủ quyết, lời báo lỗi hiện nguyên văn.
  */
 export function BundleForm({ initial, onDone, onCancel }: { initial?: AdminBundle; onDone: () => void; onCancel: () => void }) {
@@ -57,6 +58,15 @@ export function BundleForm({ initial, onDone, onCancel }: { initial?: AdminBundl
         : { ...d, items: [...d.items, { productId: p.id, name: p.label, variationId: null, variationName: null, price: null, addonPrice: '', maxQty: '1' }] },
     );
   };
+  const addAddonItem = (v: PickedAddonVariation) =>
+    setDraft((d) =>
+      d.items.some((i) => i.productId === v.productId) || d.items.length >= ADDON_MAX_ITEMS
+        ? d
+        : {
+            ...d,
+            items: [...d.items, { productId: v.productId, name: v.productName, variationId: v.variationId, variationName: v.variationName, price: v.price, addonPrice: '', maxQty: '1' }],
+          },
+    );
   const changeKind = (kind: AdminBundleKind) =>
     setDraft((d) => ({ ...emptyBundleDraft(kind), title: d.title, startAt: d.startAt, endAt: d.endAt, sortOrder: d.sortOrder, isActive: d.isActive }));
 
@@ -105,7 +115,7 @@ export function BundleForm({ initial, onDone, onCancel }: { initial?: AdminBundl
           <input aria-label="Tên bộ" maxLength={120} value={draft.title} onChange={(e) => set({ title: e.target.value })} className={INPUT_CLASS} />
         </Field>
         {draft.kind === 'BUNDLE_PCT' ? (
-          <Field label="% giảm mỗi món" hint="Không vượt trần cấu hình bundle.max_pct (mặc định 50%). Giỏ lấy mức giảm lớn hơn giữa combo gian hàng và bộ này, không cộng dồn.">
+          <Field label="% giảm mỗi món" hint="Không vượt trần % đang cấu hình (mặc định 50%). Giỏ lấy mức giảm lớn hơn giữa combo gian hàng và bộ này, không cộng dồn.">
             <input aria-label="% giảm mỗi món" type="number" min={1} max={100} step={1} inputMode="numeric" value={draft.pct} onChange={(e) => set({ pct: e.target.value })} className={`${field} w-28`} />
           </Field>
         ) : (
@@ -189,7 +199,12 @@ export function BundleForm({ initial, onDone, onCancel }: { initial?: AdminBundl
             ))}
           </ul>
         )}
-        {draft.items.length < maxItems && <ProductPicker mode="product" label="Thêm sản phẩm" value={null} onChange={addItem} />}
+        {draft.items.length < maxItems &&
+          (draft.kind === 'ADDON' ? (
+            <AddonVariationPicker onPick={addAddonItem} />
+          ) : (
+            <ProductPicker mode="product" label="Thêm sản phẩm" value={null} onChange={addItem} />
+          ))}
       </section>
 
       {error && (

@@ -10,7 +10,7 @@ export const BUNDLE_MAX_QTY = 10;
 export interface BundleDraftItem {
   productId: string;
   name: string;
-  /** Phân loại ghim của món (chỉ có khi sửa bộ có sẵn): form không đổi được nhưng phải gửi lại nguyên. */
+  /** Phân loại ghim của món: bắt buộc với món mua kèm (chọn ngay khi thêm); combo giảm % chỉ có khi sửa bộ có sẵn, form không đổi được nhưng gửi lại nguyên. */
   variationId: string | null;
   variationName: string | null;
   /** Giá đang bán nếu đã biết (món của bộ có sẵn); món vừa chọn chưa có, máy chủ kiểm sau. */
@@ -98,6 +98,7 @@ export function buildBundleInput(d: BundleDraft): { ok: true; input: AdminBundle
   const anchorId = d.anchor.id;
   if (d.items.some((i) => i.productId === anchorId)) return fail('Món mua kèm phải khác sản phẩm chính.');
   for (const i of d.items) {
+    if (!i.variationId) return fail(`Chọn phân loại cho "${i.name}": giá mua kèm chỉ áp cho đúng phân loại đó.`);
     if (!isIntText(i.addonPrice)) return fail(`Nhập giá mua kèm cho "${i.name}" (số nguyên từ 0 đồng trở lên).`);
     if (i.price !== null && Number(i.addonPrice) >= i.price) return fail(`Giá mua kèm của "${i.name}" phải thấp hơn giá đang bán (${vnd(i.price)}).`);
   }

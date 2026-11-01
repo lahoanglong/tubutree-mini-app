@@ -59,6 +59,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const product = await getProduct(slug);
   if (!product) notFound();
   const http = createServerHttp();
+  const bundlesFetchedAt = Date.now();
   const [related, boughtTogether, bundles] = await Promise.all([
     orUndefined(fetchRelated(http, product.slug)),
     orUndefined(fetchBoughtTogether(http, product.slug)),
@@ -179,10 +180,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               {/*
                 Thứ tự trong HTML là thứ tự đọc và bấm Tab ở máy tính: khối mua rồi mới tới chứng nhận và "Đặt định kỳ" (lối phụ), nên nút
                 "Thêm vào giỏ" không bị đẩy xuống dưới khung 1280×800. Điện thoại kéo chứng nhận và "Đặt định kỳ" lên trước khối mua như Mini App
-                bằng `order` (các hàng này hiển thị liền nhau nên lệch thứ tự Tab chỉ vài bước).
+                bằng `order` (các hàng này hiển thị liền nhau nên lệch thứ tự Tab chỉ vài bước). Combo/Mua kèm cũng đứng trước khối mua ở điện thoại
+                (Mini App: Combo/Mua kèm, rồi Số lượng, rồi Mở nhóm mua chung).
               */}
               {product.variations.length > 0 && (
-                <div className="max-md:order-2">
+                <div className="max-md:order-3">
                   <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} />
                 </div>
               )}
@@ -205,10 +207,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 </div>
               )}
 
-              <div className="max-md:order-3">
+              <div className="max-md:order-2">
+                <PdpBundles slug={product.slug} productName={product.name} initialBundles={bundles} initialFetchedAt={bundlesFetchedAt} />
+              </div>
+              <div className="max-md:order-4">
                 {!retailOnly && <PdpGroupBuyRow productId={product.id} slug={product.slug} />}
                 <PdpContentKitRow slug={product.slug} />
-                <PdpBundles slug={product.slug} productName={product.name} initialBundles={bundles} />
               </div>
             </div>
           }

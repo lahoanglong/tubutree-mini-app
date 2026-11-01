@@ -168,6 +168,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'combo.cartReached': null,
   'combo.cartLost': null,
   'combo.cartLine': null,
+  // Chữ của P15, không có trong ux-copy mục C: tiêu đề theo 01-thiet-ke §3 (PDP), nút theo review/a11y.md B7 ("Thêm {n} món vào giỏ", dài hơn "Thêm"
+  // vì có số món). Số ký tự là số đo thực của chữ ở trường hợp xấu nhất (n = 3), không phải con số của ux-copy.
   'combo.pdpTitle': 14,
   'combo.homeTitle': 18,
   'addon.title': 18,

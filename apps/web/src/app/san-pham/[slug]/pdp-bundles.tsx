@@ -63,13 +63,24 @@ function Status({ result, quiet }: { result: BundleAddResult | null; quiet?: boo
  * Danh sách đầu do server dựng sẵn (`initialBundles`) nên khối nằm trong HTML ngay lần vẽ đầu, không chèn thêm vào trang sau khi tải; server
  * lỗi thì trình duyệt tự tải. Ẩn hẳn, không giữ chỗ, khi chưa có bộ nào, đã hết hạn theo giờ máy chủ hay tải lỗi. Giá cuối luôn do giỏ tính lại.
  */
-export function PdpBundles({ slug, productName, initialBundles }: { slug: string; productName?: string; initialBundles?: ProductBundles }) {
+export function PdpBundles({
+  slug,
+  productName,
+  initialBundles,
+  initialFetchedAt,
+}: {
+  slug: string;
+  productName?: string;
+  initialBundles?: ProductBundles;
+  /** Lúc server lấy `initialBundles` (ms): trang ISR sống tới 5 phút, quá `STALE_MS` thì trình duyệt tải lại ngay sau khi hiển thị, bộ vừa tắt không treo ở trang. */
+  initialFetchedAt?: number;
+}) {
   const { add, busyId, result } = useBundleAdd();
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [justAdded, setJustAdded] = useState(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(flashTimer.current), []);
-  const query = useQuery({ ...productBundlesQuery(coreHttp, slug), initialData: initialBundles, staleTime: STALE_MS, retry: 0 });
+  const query = useQuery({ ...productBundlesQuery(coreHttp, slug), initialData: initialBundles, initialDataUpdatedAt: initialFetchedAt, staleTime: STALE_MS, retry: 0 });
 
   const now = serverNow();
   const combos = (query.data?.combos ?? []).flatMap((b) => comboView(b, now) ?? []).slice(0, PDP_COMBO_MAX);
