@@ -151,9 +151,28 @@ describe('voucherView: tên admin nhắc lại số thì bỏ (một phiếu kh�
     expect(v.title).toBe('Giảm 20k');
     expect(v.name).toBe('Giảm 20k cho đơn đầu tiên, tặng 5 lần dùng');
     expect(view('Đơn từ 150.000. Riêng khách mới', { value: 20_000, minOrder: 150_000 }).name).toBe('Đơn từ 150k. Riêng khách mới');
-    // "đồng" không phải đơn vị "đ" dính liền: không bị cắt chữ.
-    expect(view('Giảm 20000 đồng cho khách mới', { value: 20_000 }).name).toBe('Giảm 20k đồng cho khách mới');
     expect(view('Mua 10 trở lên được giảm 20k', { value: 20_000 }).name).toBe('Mua 10 trở lên được giảm 20k');
+  });
+  it('tiền viết bằng chữ ("đồng", "VND", "vnđ") đi cùng số thì đổi cả cụm, không bao giờ ra "20k đồng"', () => {
+    expect(view('Tặng 20.000 đồng cho bạn', { value: 20_000 }).name).toBeNull();
+    expect(view('Giảm 20.000 VND', { value: 20_000 }).name).toBeNull();
+    expect(view('Giảm 20.000vnđ', { value: 20_000 }).name).toBeNull();
+    expect(view('Tặng 20.000 đồng cho đơn đầu tiên', { value: 20_000 }).name).toBe('Tặng 20k cho đơn đầu tiên');
+    expect(view('Giảm 20000 đồng cho khách mới', { value: 20_000 }).name).toBe('Giảm 20k cho khách mới');
+    expect(view('Giảm 20.000 VND cho khách mới', { value: 20_000 }).name).toBe('Giảm 20k cho khách mới');
+    for (const t of ['Tặng 20.000 đồng cho đơn đầu tiên', 'Giảm 20.000 VND cho khách mới', 'Giảm 20000 đồng cho khách mới']) {
+      expect(view(t, { value: 20_000 }).name).not.toMatch(/k (đồng|VND)/);
+    }
+    // 5.000 không phải số của mã: để nguyên cả cụm.
+    expect(view('Tặng 5.000 đồng vào ví', { value: 20_000 }).name).toBe('Tặng 5.000 đồng vào ví');
+  });
+  it('số nhỏ không đơn vị (số đơn, số lượt, số bạn) là thông tin riêng: tên giữ, không bị coi là nhắc lại mã', () => {
+    const base = { value: 20_000, minOrder: 300_000 };
+    expect(view('Giảm 20k cho 3 đơn', base).name).toBe('Giảm 20k cho 3 đơn');
+    expect(view('Giảm 20.000đ cho 2 đơn', base).name).toBe('Giảm 20k cho 2 đơn');
+    expect(view('Giảm 20k khi mua 2', base).name).toBe('Giảm 20k khi mua 2');
+    expect(view('Giảm 20k cho 100 bạn', base).name).toBe('Giảm 20k cho 100 bạn');
+    expect(view('Freeship 2 đơn từ 99k', { type: 'FREESHIP', value: 0, minOrder: 99_000 }).name).toBe('Freeship 2 đơn từ 99k');
   });
   it('tên không nhắc số thì giữ, kể cả có số khác', () => {
     expect(view('Quà khách mới').name).toBe('Quà khách mới');
