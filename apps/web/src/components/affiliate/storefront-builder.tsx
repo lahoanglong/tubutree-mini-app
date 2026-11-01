@@ -241,7 +241,6 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   });
   const sectionStyle = useSectionStyle({
     send: (v) => layoutMut.mutate(v),
-    isPending: () => layoutMut.isPending,
     currentOf: (id) => {
       const c = qc.getQueryData<StorefrontEdit | null>(['my-storefront'])?.collections.find((x) => x.id === id);
       return c ? sectionStyleOf(c) : null;
