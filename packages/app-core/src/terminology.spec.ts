@@ -17,6 +17,9 @@ const NOT_SCANNED = [/\.(spec|test)\.tsx?$/, /(^|\/)admin\//, /(^|\/)components\
 
 // Chữ cái tiếng Việt có dấu: dấu hiệu chắc chắn của chữ khách đọc, vì tên mã, className, đường dẫn và id đều là ASCII.
 const VI_LETTER = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+// Chữ ASCII đọc như câu: chữ hoa đầu rồi chữ thường ("Freeship", "Flash sale"), hai từ cách nhau bằng dấu cách ("HSD 12/2026", "2h 05m") hoặc có "...".
+// Mã định danh như 'FREESHIP', 'voucher', 'flash-sale' không dính các dạng này nên không bị coi là chữ khách đọc; 'HSD', 'HOT' đứng một mình trong chuỗi thường chỉ bắt được khi nằm ở chữ JSX, thuộc tính chữ hoặc con trực tiếp của thẻ.
+const ASCII_PROSE = /^[A-Z][a-z]|\w \w|\.{3}/;
 // Thuộc tính mang chữ cho người đọc màn hình, đọc cả khi chữ không có dấu ("Voucher", "Freeship").
 const TEXT_ATTRS = new Set(['aria-label', 'title', 'alt', 'placeholder', 'label']);
 const CODE_ATTRS = new Set(['className', 'id', 'key', 'href']);
@@ -24,11 +27,13 @@ const CODE_ATTRS = new Set(['className', 'id', 'key', 'href']);
 // Biểu thức chỉ chuyển tiếp giá trị: `title={a ? 'x' : 'y'}` vẫn là chữ của thuộc tính, còn `title={fillCopy('khoá.chữ')}` thì chuỗi là khoá, không phải chữ.
 const isPassThrough = (n: ts.Node) => ts.isJsxExpression(n) || ts.isParenthesizedExpression(n) || ts.isConditionalExpression(n) || (ts.isBinaryExpression(n) && [ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken, ts.SyntaxKind.AmpersandAmpersandToken].includes(n.operatorToken.kind));
 
-function enclosingAttr(node: ts.Node): { name: string; direct: boolean } | null {
+/** Chỗ chuỗi nằm: giá trị thuộc tính JSX (`attr`), con của thẻ `<A>{'x'}</A>` (`child`), hoặc nơi khác. `direct` = chỉ qua biểu thức chuyển tiếp, chưa qua lời gọi hàm hay phép so sánh. */
+function enclosingSlot(node: ts.Node): { kind: 'attr'; name: string; direct: boolean } | { kind: 'child'; direct: boolean } | null {
   let direct = true;
   for (let p: ts.Node | undefined = node.parent; p; p = p.parent) {
-    if (ts.isJsxAttribute(p)) return { name: ts.isIdentifier(p.name) ? p.name.text : p.name.getText(), direct };
-    if (ts.isJsxElement(p) || ts.isJsxSelfClosingElement(p) || ts.isSourceFile(p)) return null;
+    if (ts.isJsxAttribute(p)) return { kind: 'attr', name: ts.isIdentifier(p.name) ? p.name.text : p.name.getText(), direct };
+    if (ts.isJsxElement(p) || ts.isJsxFragment(p)) return { kind: 'child', direct };
+    if (ts.isJsxSelfClosingElement(p) || ts.isSourceFile(p)) return null;
     if (!isPassThrough(p)) direct = false;
   }
   return null;
@@ -45,10 +50,12 @@ function displayStrings(source: string, fileName: string): { line: number; text:
     if (ts.isJsxText(n)) {
       if (n.text.trim() !== '') push(n, n.text);
     } else if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateHead(n) || ts.isTemplateMiddle(n) || ts.isTemplateTail(n)) {
-      const attr = enclosingAttr(n);
+      const slot = enclosingSlot(n);
+      const attr = slot?.kind === 'attr' ? slot : null;
       const isCode = attr !== null && (CODE_ATTRS.has(attr.name) || attr.name.startsWith('data-'));
       const isTextAttr = attr !== null && attr.direct && TEXT_ATTRS.has(attr.name);
-      if (!isCode && (VI_LETTER.test(n.text) || isTextAttr)) push(n, n.text);
+      const isChild = slot?.kind === 'child' && slot.direct;
+      if (!isCode && (VI_LETTER.test(n.text) || ASCII_PROSE.test(n.text) || isTextAttr || isChild)) push(n, n.text);
     }
     ts.forEachChild(n, visit);
   };
@@ -104,6 +111,7 @@ const USE = {
   stock: 'Còn {n} sản phẩm',
   flash: 'Giờ vàng (hoa chữ G)',
   expiry: 'Hạn dùng hoặc Dùng đến',
+  coupon: 'Mã giảm giá',
 } as const;
 
 // Mỗi lý do nêu vì sao chữ cũ còn đó và ai sẽ đổi: không có dòng nào là "đã chấp nhận vĩnh viễn".
@@ -116,6 +124,7 @@ const REASON = {
   STOCK: '"Chỉ còn n" viết trước đợt này; D2 chốt "Còn {n} sản phẩm" (brief §3.2), đổi thuộc gói chữ riêng',
   FLASH: '"giờ vàng" viết thường hoặc "Ưu đãi giờ vàng" (D2: luôn hoa chữ G, bỏ "Ưu đãi giờ vàng"); đổi thuộc gói chữ riêng',
   EXPIRY: '"HSD" viết tắt (D2: "Hạn dùng" hoặc "Dùng đến"); đổi thuộc gói chữ riêng, `/uu-dai` còn do P14 dựng lại',
+  COUPON: 'chữ Mua chung viết "mã giảm" thiếu chữ "giá" (D2: luôn "Mã giảm giá"); đổi thuộc gói chữ Mua chung riêng, hai app và `group-buy-copy.ts`/`pdp-logic.ts` cùng sửa một lượt',
 } as const;
 
 const EXEMPT: Exemption[] = [
@@ -217,6 +226,12 @@ const EXEMPT: Exemption[] = [
   { file: 'apps/miniapp/src/pages/about-data.ts', use: USE.expiry, max: 1, reason: REASON.EXPIRY },
   { file: 'apps/web/src/app/uu-dai/page.tsx', use: USE.expiry, max: 1, reason: REASON.EXPIRY },
   { file: 'apps/web/src/lib/faq-fallback.ts', use: USE.expiry, max: 1, reason: REASON.EXPIRY },
+  { file: 'apps/miniapp/src/pages/group-buy.tsx', use: USE.coupon, max: 1, reason: REASON.COUPON },
+  { file: 'apps/miniapp/src/pages/product-detail.tsx', use: USE.coupon, max: 1, reason: REASON.COUPON },
+  { file: 'apps/miniapp/src/utils/group-buy-copy.ts', use: USE.coupon, max: 2, reason: REASON.COUPON },
+  { file: 'apps/web/src/app/mua-chung/group-buy-view.tsx', use: USE.coupon, max: 1, reason: REASON.COUPON },
+  { file: 'apps/web/src/app/san-pham/[slug]/pdp-extras.tsx', use: USE.coupon, max: 1, reason: REASON.COUPON },
+  { file: 'apps/web/src/lib/pdp-logic.ts', use: USE.coupon, max: 1, reason: REASON.COUPON },
 ];
 
 // Đối chứng trên nguồn giả: mẫu quét phải bắt đúng chữ hiển thị và bỏ qua mã (comment, tên biến, className, import, kiểu literal).
@@ -232,8 +247,20 @@ describe('displayStrings: chỉ lấy chữ khách đọc', () => {
     ["const m = `Đang tải... ${n} món`;", 'Đang tải...'],
     ['<span>Flash sale</span>', 'Flash sale'],
     ["<input placeholder={ok ? 'Voucher' : undefined} />", 'Voucher'],
+    ["<Badge>{'Freeship'}</Badge>", 'Freeship'],
+    ["<Badge>{ok && 'HOT'}</Badge>", 'HOT'],
+    ["<Badge>{ok ? 'Flash sale' : null}</Badge>", 'Flash sale'],
+    ['<Chip text="Voucher" />', 'Voucher'],
+    ['<Chip text="Flash sale" />', 'Flash sale'],
+    ["const BADGE = 'Flash sale';", 'Flash sale'],
+    ["const LEFT = '2h 05m';", '2h 05m'],
+    ["const hint = 'voucher của bạn';", 'voucher của bạn'],
   ])('bắt %s', (src, expected) => {
-    expect(texts(src)).toContain(expected);
+    expect(texts(src, 'apps/miniapp/src/pages/x.tsx')).toContain(expected);
+  });
+
+  it('chuỗi ASCII đọc như câu trong file .ts cũng được bắt', () => {
+    expect(texts("export const BADGE = 'Flash sale';", 'apps/web/src/lib/badges.ts')).toContain('Flash sale');
   });
 
   it.each([
@@ -249,6 +276,14 @@ describe('displayStrings: chỉ lấy chữ khách đọc', () => {
     ["const kind = 'FREESHIP';"],
     ['const re = /Vui lòng/;'],
     ["<ScrollRow label={fillCopy('shop.vouchers')} />"],
+    ["<Badge>{fillCopy('badge.freeship')}</Badge>"],
+    ["<Badge>{kind === 'FREESHIP' && <Icon />}</Badge>"],
+    ["<Badge>{items.map((i) => i.kind === 'voucher' ? 1 : 2)}</Badge>"],
+    ["const key = ['voucher', id];"],
+    ["const kind = 'freeship';"],
+    ["const url = '/api/vouchers';"],
+    ["const css = 'flash-sale-row';"],
+    ['<Chip tone="FREESHIP" />'],
   ])('bỏ qua %s', (src) => {
     expect(displayStrings(src, 'x.tsx')).toEqual([]);
   });
@@ -280,20 +315,71 @@ describe('findHits: ca vi phạm cố ý', () => {
     expect(findHits([{ file, text: bad }])).toEqual([]);
   });
 
-  it.each([
-    ['Mất kết nối, vui lòng thử lại', 'Bạn hoặc Tubu'],
+  // Mỗi luật FORBIDDEN_TERMS phải có ít nhất một ca bắt và một ca bỏ qua (ux-copy D2), kể cả chữ ASCII không dấu.
+  const CATCH: [text: string, use: string][] = [
     ['Nhãn hàng của bạn', 'Thương hiệu'],
+    ['Theo dõi nhãn này', 'Thương hiệu'],
+    ['Cùng nhà', 'Thương hiệu'],
     ['Top bán chạy', 'Bán chạy nhất'],
+    ['Freeship cho đơn từ 299k', 'Miễn phí giao hàng'],
+    ['Kho voucher của bạn', 'Mã giảm giá'],
+    ['Rủ bạn mua chung, nhận mã giảm 15%', 'Mã giảm giá'],
+    ['Mã giảm', 'Mã giảm giá'],
     ['Flash sale hôm nay', 'Giờ vàng'],
-    ['Đang tải...', '… (một ký tự)'],
+    ['Ưu đãi giờ vàng', 'Giờ vàng (hoa chữ G)'],
+    ['HSD 12/2026', 'Hạn dùng hoặc Dùng đến'],
+    ['Chỉ còn 3 sản phẩm', 'Còn {n} sản phẩm'],
+    ['Mất kết nối, vui lòng thử lại', 'Bạn hoặc Tubu'],
+    ['Chúng tôi sẽ gọi lại', 'Bạn hoặc Tubu'],
     ['Mua tại cửa hàng', 'Gian hàng'],
-  ])('"%s" bị bắt (use: %s)', (text, use) => {
+    ['Đang tải...', '… (một ký tự)'],
+    ['Còn 2h 05m', 'countdownText, ví dụ "2 giờ 05 phút"'],
+    ['Còn 2h 5m', 'countdownText, ví dụ "2 giờ 05 phút"'],
+    ['Còn 12h 30m', 'countdownText, ví dụ "2 giờ 05 phút"'],
+    ['Hàng HOT', 'bỏ chữ giục mua'],
+    ['Giá SỐC', 'bỏ chữ giục mua'],
+    ['Nhanh tay kẻo hết', 'bỏ chữ giục mua'],
+  ];
+
+  it.each(CATCH)('"%s" bị bắt (use: %s)', (text, use) => {
     const hits = findHits([{ file: 'apps/web/src/a.tsx', text: `export const t = ${JSON.stringify(text)};` }]);
     expect(hits.map((h) => h.use)).toContain(use);
   });
 
-  it.each(['Giờ vàng', 'Bán chạy nhất', 'Mã giảm giá', 'Thương hiệu', 'Gian hàng', 'Miễn phí giao hàng', 'Đang tải…', 'Topping'])('"%s" sạch', (text) => {
+  it('mỗi luật của FORBIDDEN_TERMS có ít nhất một ca bắt', () => {
+    const uncovered = FORBIDDEN_TERMS.filter((t) => !CATCH.some(([text]) => t.pattern.test(text))).map((t) => String(t.pattern));
+    expect(uncovered).toEqual([]);
+  });
+
+  it.each([
+    'Giờ vàng',
+    'Bán chạy nhất',
+    'Mã giảm giá',
+    'Nhận mã giảm giá 15% cho đơn sau',
+    'mã giảm giá của shop',
+    'Thương hiệu',
+    'Gian hàng',
+    'Miễn phí giao hàng',
+    'Hạn dùng 12/2026',
+    'Còn 3 sản phẩm',
+    'Đang tải…',
+    'Kết thúc sau 2 giờ 05 phút',
+    'Topping',
+    'Hotline',
+    'Bạn thử lại nhé',
+  ])('"%s" sạch', (text) => {
     expect(findHits([{ file: 'apps/web/src/a.tsx', text: `export const t = ${JSON.stringify(text)};` }])).toEqual([]);
+  });
+
+  it.each([
+    ["export const B = () => <Badge>{'Freeship'}</Badge>;", 'Miễn phí giao hàng'],
+    ['export const B = () => <Chip text="Voucher" />;', 'Mã giảm giá'],
+    ["export const BADGE = 'Flash sale';", 'Giờ vàng'],
+    ["export const LEFT = '2h 05m';", 'countdownText, ví dụ "2 giờ 05 phút"'],
+    ["export const B = () => <Badge>{ok && 'HSD'}</Badge>;", 'Hạn dùng hoặc Dùng đến'],
+    ['export const B = () => <span>HOT</span>;', 'bỏ chữ giục mua'],
+  ])('chữ ASCII không dấu %s bị bắt', (text, use) => {
+    expect(findHits([{ file: 'apps/web/src/a.tsx', text }]).map((h) => h.use)).toContain(use);
   });
 });
 

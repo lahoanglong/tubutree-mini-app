@@ -169,6 +169,7 @@ Thuật ngữ cấm trong chữ khách đọc (`FORBIDDEN_TERMS`), cột phải 
 | Top | Bán chạy nhất |
 | Freeship | Miễn phí giao hàng |
 | voucher | Mã giảm giá |
+| mã giảm không có chữ "giá" theo sau | Mã giảm giá |
 | Flash sale | Giờ vàng |
 | giờ vàng viết thường | Giờ vàng (hoa chữ G) |
 | HSD | Hạn dùng hoặc Dùng đến |
@@ -176,7 +177,7 @@ Thuật ngữ cấm trong chữ khách đọc (`FORBIDDEN_TERMS`), cột phải 
 | Vui lòng, chúng tôi | Bạn hoặc Tubu |
 | cửa hàng | Gian hàng |
 | ba dấu chấm `...` | … (một ký tự) |
-| `2h 05m` | countdownText, ví dụ "2 giờ 05 phút" |
+| `2h 05m`, `2h 5m` (mọi dạng `\d+h \d+m`) | countdownText, ví dụ "2 giờ 05 phút" |
 | HOT, SỐC, Nhanh tay | bỏ chữ giục mua |
 
 `packages/app-core/src/terminology.spec.ts` quét chữ hiển thị (cây cú pháp, không quét comment, tên biến, `className`, đường dẫn import) của `apps/miniapp/src` và `apps/web/src`, trừ quản trị. Mã cũ đang vi phạm nằm trong danh sách `EXEMPT` của spec, mỗi dòng có lý do và trần `max`: file đã miễn không được thêm vi phạm mới, và dòng miễn mà file đã sạch thì phải xoá. Sửa chữ cũ thì hạ `max` hoặc xoá dòng.
