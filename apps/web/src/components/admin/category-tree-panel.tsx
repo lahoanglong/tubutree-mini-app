@@ -319,11 +319,12 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
         )}
       </div>
       <div role="status">{ok && <Notice tone="success">{ok}</Notice>}</div>
+      {/* Lỗi tải nằm ngoài thân: panel thu gọn (mở từ hộp việc) vẫn phải cho admin biết cây không tải được. */}
+      {error && !data && <LoadError onRetry={onRetry}>{error}</LoadError>}
       {open && (
         <div id={bodyId} className="space-y-3">
           <p className="text-xs text-stone-600">Sản phẩm chỉ gán vào mục không có mục con. Mini App cập nhật cây sau tối đa vài phút.</p>
           {loading && <p className="text-sm text-stone-500">Đang tải…</p>}
-          {error && !data && <LoadError onRetry={onRetry}>{error}</LoadError>}
           {data && (
             <>
               {tree.length === 0 && <p className="text-sm text-stone-500">Chưa có danh mục nào. Thêm danh mục gốc đầu tiên bên dưới.</p>}

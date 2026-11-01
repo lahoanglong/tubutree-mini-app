@@ -279,6 +279,20 @@ describe('CategoryTreePanel', () => {
     expect(calls('GET').length).toBeGreaterThan(before);
   });
 
+  it('lỗi tải hiện cả khi panel thu gọn, kèm Thử lại gọi lại API; mở ra vẫn chỉ một bản', async () => {
+    const { container, calls } = setup({ collapsible: true, startOpen: false, listStatus: 500 });
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ lỗi.');
+    expect(container.querySelector('ul[aria-label="Cây danh mục"]')).toBeNull();
+    const before = calls('GET').length;
+    click(byText(container, 'button', 'Thử lại'));
+    await flush();
+    expect(calls('GET').length).toBeGreaterThan(before);
+    click(exact('Mở rộng'));
+    await flush();
+    expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
+  });
+
   it('mọi nút trong cây mang tên mục trong tên truy cập (đọc màn hình biết đang thao tác mục nào)', async () => {
     const { container } = setup();
     await flush();
