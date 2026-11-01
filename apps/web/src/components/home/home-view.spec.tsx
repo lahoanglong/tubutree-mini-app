@@ -178,10 +178,10 @@ describe('HomeView — nội dung các khối', () => {
     expect(productCalls().some((q) => q.category === 'c-goi' && typeof q.seed === 'string')).toBe(true);
   });
 
-  it('"Bán chạy nhất" có nút Xem tất cả sang /san-pham?sort=best_seller', async () => {
+  it('"Bán chạy nhất" có nút Xem tất cả sang /ban-chay', async () => {
     const c = await mount();
     const seeAll = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem tất cả Bán chạy nhất"]');
-    expect(seeAll?.getAttribute('href')).toBe('/san-pham?sort=best_seller');
+    expect(seeAll?.getAttribute('href')).toBe('/ban-chay');
   });
 
   it('khối cách nhau bằng lề ở vỏ khối (space-block), không phải đệm trong khối; ô tìm dính và khung chờ không có lề', async () => {

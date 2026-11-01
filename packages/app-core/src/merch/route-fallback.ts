@@ -1,5 +1,5 @@
 /**
- * Đích thật của các lối "Xem tất cả" / lối tắt mà `SHELVES` khai theo route Mini. Trang của gói sau (`/flash-sale` P12, `/best-sellers` P13,
+ * Đích thật của các lối "Xem tất cả" / lối tắt mà `SHELVES` khai theo route Mini. Trang của gói sau (`/flash-sale` P12,
  * `/vouchers` P14) chưa có: trong lúc chờ, khách đi tới trang đang có thay vì màn không tìm thấy. Gói nào thêm route thì xoá dòng
  * `pending` của mình (cả hai nền) và route đó đi thẳng. Route Mini → route web cho những lối Trang chủ cần.
  */
@@ -7,7 +7,7 @@ interface Entry { mini: string; web: string; pending: boolean }
 
 const ENTRIES: Record<string, Entry> = {
   '/flash-sale': { mini: '/flash-sale', web: '/gio-vang', pending: true },
-  '/best-sellers': { mini: '/best-sellers', web: '/ban-chay', pending: true },
+  '/best-sellers': { mini: '/best-sellers', web: '/ban-chay', pending: false },
   '/vouchers': { mini: '/vouchers', web: '/ma-giam-gia', pending: true },
   '/orders': { mini: '/orders', web: '/tai-khoan/don-hang', pending: false },
   '/browse': { mini: '/browse', web: '/san-pham', pending: false },
@@ -19,7 +19,6 @@ const ENTRIES: Record<string, Entry> = {
  */
 const PENDING_TARGET: Record<string, { mini: string; web: string; usable: boolean }> = {
   '/flash-sale': { mini: '/offers', web: '/uu-dai', usable: false },
-  '/best-sellers': { mini: '/browse?sort=best_seller', web: '/san-pham?sort=best_seller', usable: true },
   '/vouchers': { mini: '/offers?section=coupons', web: '/uu-dai', usable: true },
 };
 

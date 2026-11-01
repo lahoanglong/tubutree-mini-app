@@ -61,6 +61,7 @@ const OnboardingGate: ComponentType<{ openedFromPartnerLink?: boolean }> = ONBOA
   : () => null;
 const loadBrowse = () => import('../pages/browse');
 const BrowsePage = lazy(loadBrowse);
+const BestSellersPage = lazy(() => import('../pages/best-sellers'));
 const loadProductDetail = () => import('../pages/product-detail');
 const ProductDetailPage = lazy(loadProductDetail);
 const loadCart = () => import('../pages/cart');
@@ -216,6 +217,7 @@ export default function MyApp() {
                   <AnimationRoutes>
                     <Route path="/" element={<RouteShell><HomePage /></RouteShell>} />
                     <Route path="/browse" element={<RouteShell skeleton="grid"><BrowsePage /></RouteShell>} />
+                    <Route path="/best-sellers" element={<RouteShell skeleton="grid"><BestSellersPage /></RouteShell>} />
                     <Route path="/product/:slug" element={<RouteShell skeleton="detail"><ProductDetailPage /></RouteShell>} />
                     <Route path="/cart" element={<RouteShell><CartPage /></RouteShell>} />
                     <Route path="/checkout" element={<RouteShell><CheckoutPage /></RouteShell>} />

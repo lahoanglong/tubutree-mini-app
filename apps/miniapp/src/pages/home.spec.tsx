@@ -137,14 +137,14 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(screen.getByRole('region', { name: 'Thẻ thành viên' })).toBeInTheDocument();
   });
 
-  it('"Bán chạy nhất" lấy 12 món theo 30 ngày, có hạng, và "Xem tất cả" mở Browse đúng bộ sắp xếp', async () => {
+  it('"Bán chạy nhất" lấy 12 món theo 30 ngày, có hạng, và "Xem tất cả" mở trang Bán chạy nhất (cùng thước đo 30 ngày)', async () => {
     renderHome();
     const best = await screen.findByRole('region', { name: 'Bán chạy nhất' });
     expect(await within(best).findByText('Bán chạy 1')).toBeInTheDocument();
     expect(mocks.fetchProducts).toHaveBeenCalledWith(BEST_QUERY);
     expect(best.querySelectorAll('[data-ds-part="rank"]')).toHaveLength(4);
     await userEvent.setup().click(within(best).getByRole('button', { name: 'Xem tất cả Bán chạy nhất' }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/browse?sort=best_seller');
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/best-sellers');
   });
 
   it('Danh mục dùng 4 phân khúc khi chưa có danh mục thật; không còn "Khám phá vườn"', async () => {

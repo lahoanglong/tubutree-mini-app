@@ -42,6 +42,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'rank.basis': 28,
   'rank.basisAll': 28,
   'rank.tabAll': 12,
+  'rank.tabsLabel': 20,
   'rank.spoken': null,
   'rank.seeAll': 10,
   'rank.emptyTitle': null,

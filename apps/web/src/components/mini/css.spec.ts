@@ -60,6 +60,12 @@ describe('mini.css không đổi giao diện máy tính', () => {
     expect(css).toMatch(/\.tubu-search-field input\[type='search'\]::-webkit-search-cancel-button/);
   });
 
+  it('hàng tab cuộn ngang ẩn thanh cuộn (bản Mini không vẽ nó; thanh 6px của globals.css chồng lên chân tab)', () => {
+    const rules = strip(css);
+    expect(rules).toMatch(/\.scroll-x\[role='tablist'\]\s*\{[^}]*scrollbar-width:\s*none/);
+    expect(rules).toMatch(/\.scroll-x\[role='tablist'\]::-webkit-scrollbar\s*\{[^}]*display:\s*none/);
+  });
+
   it('điện thoại: body cắt tràn ngang vì dải PageHeader tràn bằng 100vw (gồm cả thanh cuộn của trình duyệt máy tính thu hẹp)', () => {
     const globals = strip(read(join(dir, '../../app/globals.css')));
     const phone = [...globals.matchAll(/@media \(max-width: 767px\) \{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');

@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { hubBestSellers } from '@tubutree/app-core/browse/hub';
+import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
 import { shelf } from '@tubutree/app-core/merch/shelves';
 import { bestSellersQuery } from '@tubutree/app-core/queries/browse';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -12,9 +13,6 @@ import { Button, ProductRail, Section, SectionHeader } from '@/components/mini';
 import { BrandGrid, type HubBrand } from './brand-grid';
 import { CategoryTiles } from './category-tiles';
 import { RecentlyViewedRail } from './recently-viewed-rail';
-
-/** Chưa có trang bán chạy riêng: "Xem tất cả" mở danh sách xếp theo bán chạy. */
-export const BEST_SELLERS_LIST_ROUTE = '/san-pham?sort=best_seller';
 
 export interface BrowseHubProps {
   entries: CategoryEntry[];
@@ -44,13 +42,15 @@ export function BrowseHub({ entries, categoriesLoading, placeholderCount = 4, br
   const items = hubBestSellers(q.data);
   const showBestSellers = q.isLoading || items.length > 0;
   const title = fillCopy('rank.title');
+  // Hub không lọc theo danh mục, nên trang đích là bảng xếp hạng chung (cùng thước đo 30 ngày với kệ).
+  const seeAll = seeAllHref('browse.bestSellers', 'web');
   return (
     <div>
       <CategoryTiles entries={entries} isLoading={categoriesLoading} placeholderCount={placeholderCount} onSelect={onPickCategory} onSelectAll={onPickAll} />
       <RecentlyViewedRail />
       {showBestSellers && (
         <Section id="browse-best-sellers" label={title}>
-          <SectionHeader title={title} action={{ to: BEST_SELLERS_LIST_ROUTE }} />
+          <SectionHeader title={title} action={seeAll ? { to: seeAll } : undefined} />
           <ProductRail items={items} variant="rank" rankFrom={1} label={title} loading={q.isLoading} skeletonCount={max} />
         </Section>
       )}

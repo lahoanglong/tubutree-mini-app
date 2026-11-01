@@ -388,6 +388,14 @@
   }
 }
 
+/* Hàng tab cuộn ngang (SegmentedTabs scroll): không vẽ thanh cuộn, như bản Mini; thanh 6px của globals.css sẽ chồng lên chân tab. */
+.scroll-x[role='tablist'] {
+  scrollbar-width: none;
+}
+.scroll-x[role='tablist']::-webkit-scrollbar {
+  display: none;
+}
+
 /* Nút: bản DOM của zmp-ui Button (lớp zaui-btn*) với đúng kích thước/màu bản Mini App. */
 @keyframes loadingCircle {
   100% {

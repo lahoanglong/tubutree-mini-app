@@ -46,8 +46,16 @@ export function composeHomeShelves<F, P, C, B>(input: HomeShelvesInput<F, P, C, 
   };
 }
 
-/** Lối "Xem tất cả" của kệ theo nền đang chạy; kệ không khai lối, hoặc lối chưa có trang đúng nghĩa (`routeUsable`), thì null. */
-export function seeAllHref(shelfId: string, platform: 'mini' | 'web' = 'mini'): string | null {
+/** Route nhận `?category=`: lối xem tất cả của kệ đang lọc theo danh mục giữ phạm vi đó, để hạng trên kệ và ở trang đích cùng một thước đo. */
+const CATEGORY_AWARE = new Set(['/best-sellers']);
+
+/**
+ * Lối "Xem tất cả" của kệ theo nền đang chạy; kệ không khai lối, hoặc lối chưa có trang đúng nghĩa (`routeUsable`), thì null.
+ * `scope.category` chỉ gắn vào route nhận danh mục (Bán chạy nhất); kệ không lọc thì không truyền.
+ */
+export function seeAllHref(shelfId: string, platform: 'mini' | 'web' = 'mini', scope?: { category?: string | null }): string | null {
   const route = shelf(shelfId).seeAllRoute;
-  return route && routeUsable(route) ? liveRoute(route, platform) : null;
+  if (!route || !routeUsable(route)) return null;
+  const href = liveRoute(route, platform);
+  return scope?.category && CATEGORY_AWARE.has(route) ? `${href}?${new URLSearchParams({ category: scope.category })}` : href;
 }
