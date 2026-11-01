@@ -55,14 +55,14 @@ function clockMinutes(clock: string): number {
   return Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3, 5));
 }
 
-/** Mốc bắt đầu từng khung cho `days` ngày VN kể từ hôm nay; khung đã kết thúc bị bỏ. */
+/** Mốc bắt đầu từng khung cho `days` ngày VN kể từ hôm nay; khung đã bắt đầu (kể cả đang chạy dở) bị bỏ vì giờ bắt đầu của đợt mới tạo là chỗ duy nhất còn sửa được, đợt LIVE thì khoá (FLASH_START_LOCKED). */
 export function slotStartsFor(now: Date, clocks: readonly string[], days: number): Date[] {
   const day0 = vnDayStart(now).getTime();
   const out: Date[] = [];
   for (let d = 0; d < days; d++) {
     for (const clock of clocks) {
       const start = day0 + d * DAY_MS + clockMinutes(clock) * 60e3;
-      if (start + FLASH_SLOT_MINUTES * 60e3 > now.getTime()) out.push(new Date(start));
+      if (start > now.getTime()) out.push(new Date(start));
     }
   }
   return out;

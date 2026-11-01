@@ -42,7 +42,7 @@ export function FlashSlotGenerator({ onDone }: { onDone: () => void }) {
           {gen.isPending ? 'Đang tạo…' : `Tạo khung giờ ${SLOT_GENERATE_DAYS} ngày tới`}
         </button>
         <p className="min-w-0 basis-64 grow text-xs text-stone-600">
-          Tạo đợt rỗng 2 giờ theo các mốc mặc định (khoá flashsale.slots ở tab Cấu hình, giờ Việt Nam). Mốc đã có đợt hoặc đã kết thúc thì bỏ qua.
+          Tạo đợt rỗng 2 giờ theo các mốc mặc định (khoá flashsale.slots ở tab Cấu hình, giờ Việt Nam). Mốc đã có đợt hoặc đã bắt đầu thì bỏ qua.
         </p>
       </div>
       {msg && (
