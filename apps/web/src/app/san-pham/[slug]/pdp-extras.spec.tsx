@@ -425,4 +425,77 @@ describe('PdpPointsEarn — nối giá, số lượng, hệ số hạng vào l�
     await mountEarn({ qty: 2 });
     expect(line()).toBe('Nhận Điểm Xanh khi đơn giao thành công');
   });
+
+  describe('popup Cách tính Điểm Xanh', () => {
+    const btn = () => document.querySelector<HTMLButtonElement>('[data-testid="pdp-points-earn"]')!;
+    const dialog = () => document.querySelector('[role="dialog"]');
+    const openPopup = () => {
+      btn().focus();
+      click(btn());
+    };
+
+    it('dòng là nút có nhãn đọc màn hình, vùng bấm ≥ 44px, chữ dòng không đổi', async () => {
+      mocks.user = { tierId: 't2' };
+      await mountEarn({ qty: 2 });
+      expect(btn().tagName).toBe('BUTTON');
+      expect(btn().getAttribute('aria-label')).toContain('Xem cách tính Điểm Xanh');
+      expect(btn().className).toContain('min-h-11');
+      expect(line()).toBe('Nhận ~173 Điểm Xanh');
+      expect(dialog()).toBeNull();
+    });
+
+    it('có hạng: nói hạng và hệ số theo tierId', async () => {
+      mocks.user = { tierId: 't2' };
+      await mountEarn();
+      openPopup();
+      expect(dialog()?.getAttribute('aria-labelledby')).toBeTruthy();
+      expect(dialog()?.textContent).toContain('Cách tính Điểm Xanh');
+      expect(dialog()?.textContent).toContain('Hạng Lộc Biếc: ×1,5');
+    });
+
+    it('khách vãng lai: ×1 và mời đăng nhập', async () => {
+      mocks.phase = 'guest';
+      await mountEarn();
+      openPopup();
+      expect(dialog()?.textContent).toMatch(/hệ số ×1\. Đăng nhập/);
+    });
+
+    it('có giải thích dấu "~", điểm vào khi giao thành công và liên kết tới trang Điểm Xanh', async () => {
+      mocks.user = { tierId: 't1' };
+      await mountEarn();
+      openPopup();
+      const text = dialog()?.textContent ?? '';
+      expect(text).toContain('giảm giá, mã giảm giá và điểm dùng lúc thanh toán');
+      expect(text).toContain('Nhận Điểm Xanh khi đơn giao thành công');
+      expect(dialog()?.querySelector('a[href="/tai-khoan/diem-xanh"]')?.textContent).toBe('Xem các hạng Điểm Xanh');
+    });
+
+    it('cờ đơn sàn tắt: không có mục đơn sàn; bật: nguyên câu đơn sàn', async () => {
+      mocks.user = { tierId: 't1' };
+      await mountEarn();
+      openPopup();
+      expect(dialog()?.textContent).not.toContain('Đơn sàn');
+      mounted.forEach((m) => m.unmount());
+      mounted = [];
+      mocks.config = { ...mocks.config, loyalty: { ...(mocks.config.loyalty as object), earnPct: 2, marketplaceEarnPct: 1, marketplaceClaimEnabled: true } } as typeof mocks.config;
+      await mountEarn();
+      openPopup();
+      expect(dialog()?.textContent).toContain('Đơn sàn 1% · Mua tại Tubu Tree từ 2%, nhân theo hạng');
+    });
+
+    it('Esc đóng popup và trả focus về dòng; nút Đóng cũng đóng được', async () => {
+      mocks.user = { tierId: 't1' };
+      await mountEarn();
+      openPopup();
+      expect(dialog()).not.toBeNull();
+      act(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      });
+      expect(dialog()).toBeNull();
+      expect(document.activeElement).toBe(btn());
+      openPopup();
+      click(dialog()!.querySelector('button[aria-label="Đóng"]'));
+      expect(dialog()).toBeNull();
+    });
+  });
 });

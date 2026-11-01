@@ -26,6 +26,9 @@ import { formatVnd } from '@/lib/format-vnd';
 import { soldPercent } from '@/lib/flash-display';
 import { cardPricing, runningFlash, variationPricing } from '@/lib/flash-price';
 import { pointsEarnPreview, pointsEarnText } from '@/lib/points-earn';
+import { pointsEarnPopup, POINTS_EARN_POPUP } from '@tubutree/app-core/points-earn-popup';
+import { percentLabel, pointsBoostOf } from '@/lib/points-boost';
+import { pointsBoostText } from '@/lib/home-text';
 import { loginHref } from '@/lib/return-to';
 import { freeshipLine, groupBuyPitch, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
 import { platformBridge } from '@/lib/platform-bridge';
@@ -36,6 +39,7 @@ import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
 import { ContentKitSheet } from './content-kit-sheet';
 import { SubscribeSheet } from './subscribe-sheet';
+import { PointsEarnSheet } from './points-earn-sheet';
 import { actionErrorText } from '@/lib/error-text';
 
 type PointsEarnProduct = {
@@ -67,12 +71,31 @@ export function PdpPointsEarn({ product }: { product: PointsEarnProduct }) {
   const unit = selected ? variationPricing(selected, flash).price : cardPricing(product, flash).price;
   const tier = tierEarnFor(phase, user?.tierId, config.loyalty);
   const preview = pointsEarnPreview(unit * (selection?.quantity ?? 1), config.loyalty, tier?.multiplier ?? null);
+  const [open, setOpen] = useState(false);
   if (preview === null) return null;
+  const text = preview === 'generic' ? pointsEarnText.generic : pointsEarnText.line(preview.points);
+  const boost = pointsBoostOf(config.isLoaded ? config.loyalty : undefined);
+  const popup = pointsEarnPopup({
+    tier,
+    guest: phase === 'guest',
+    marketplace: boost?.kind === 'compare' ? pointsBoostText.sub(percentLabel(boost.marketplacePct), percentLabel(boost.appPct)) : null,
+  });
   return (
-    <p data-testid="pdp-points-earn" className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-[var(--color-text-brand)]">
-      <Leaf className="h-[15px] w-[15px] shrink-0" aria-hidden="true" />
-      <span>{preview === 'generic' ? pointsEarnText.generic : pointsEarnText.line(preview.points)}</span>
-    </p>
+    <>
+      <button
+        type="button"
+        data-testid="pdp-points-earn"
+        aria-label={`${text}. ${POINTS_EARN_POPUP.rowAria}`}
+        aria-haspopup="dialog"
+        onClick={() => setOpen(true)}
+        className="-mb-3 -mt-[7px] flex min-h-11 items-center gap-1.5 text-left text-xs font-semibold text-[var(--color-text-brand)]"
+      >
+        <Leaf className="h-[15px] w-[15px] shrink-0" aria-hidden="true" />
+        <span>{text}</span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      </button>
+      <PointsEarnSheet open={open} onClose={() => setOpen(false)} popup={popup} />
+    </>
   );
 }
 
