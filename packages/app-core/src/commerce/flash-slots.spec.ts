@@ -165,15 +165,21 @@ describe('slotListView', () => {
 });
 
 describe('nhãn trên dòng món', () => {
-  it('slotItemNote: tên phân loại (nếu sản phẩm nhiều phân loại) và giới hạn mua mỗi khách, ngăn bằng dấu chấm giữa', () => {
-    expect(slotItemNote({ ...item('a', []), perUserLimit: 5 })).toBe('Mỗi khách tối đa 5');
-    expect(slotItemNote({ ...item('a', []), variationName: '500g', perUserLimit: 2 })).toBe('500g · Mỗi khách tối đa 2');
+  it('slotItemNote: con số giới hạn mua mỗi khách đứng TRƯỚC tên phân loại (ghi chú dài bị cắt ở đuôi, con số phải còn nhìn thấy), ngăn bằng dấu chấm giữa', () => {
+    expect(slotItemNote({ ...item('a', []), perUserLimit: 5 })).toBe('Tối đa 5/khách');
+    expect(slotItemNote({ ...item('a', []), variationName: '500g', perUserLimit: 2 })).toBe('Tối đa 2/khách · 500g');
+    expect(slotItemNote({ ...item('a', []), variationName: 'Gói 80 tờ', perUserLimit: 2 }).startsWith('Tối đa 2/khách')).toBe(true);
   });
 
-  it('slotItemNote: không có giới hạn hợp lệ thì chỉ còn tên phân loại, hoặc rỗng (dòng vẫn giữ chỗ)', () => {
+  it('slotItemNote: không có giới hạn hợp lệ thì chỉ còn tên phân loại, hoặc rỗng (dòng vẫn giữ chỗ); không bao giờ in "Tối đa 0"', () => {
     expect(slotItemNote({ ...item('a', []), variationName: '500g', perUserLimit: 0 })).toBe('500g');
     expect(slotItemNote({ ...item('a', []), perUserLimit: 0 })).toBe('');
     expect(slotItemNote({ ...item('a', []), perUserLimit: Number.NaN })).toBe('');
+    expect(slotItemNote({ ...item('a', []), perUserLimit: -3 })).toBe('');
+  });
+
+  it('slotItemNote: giới hạn ba chữ số vẫn nói đủ con số, trong trần chữ của khoá', () => {
+    expect(slotItemNote({ ...item('a', []), perUserLimit: 100 })).toBe('Tối đa 100/khách');
   });
 
   it('slotBuyLabel và slotRemindLabel: tên đọc của nút luôn chứa chữ nhìn thấy và tên sản phẩm', () => {

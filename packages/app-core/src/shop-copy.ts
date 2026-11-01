@@ -36,6 +36,7 @@ export const SHOP_COPY: Record<string, string> = {
   'flash.soldOut': 'Đã bán hết',
   'flash.outOfStock': 'Hết hàng',
   'flash.limit': 'Mỗi khách tối đa {n}',
+  'flash.limitShort': 'Tối đa {n}/khách',
   'flash.buy': 'Mua ngay',
   'flash.remind': 'Nhắc tôi',
   'flash.reminded': 'Đã đặt nhắc',
