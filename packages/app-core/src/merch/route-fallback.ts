@@ -1,24 +1,22 @@
 /**
- * Đích thật của các lối "Xem tất cả" / lối tắt mà `SHELVES` khai theo route Mini. Trang của gói sau (`/vouchers` P14)
- * chưa có: trong lúc chờ, khách đi tới trang đang có thay vì màn không tìm thấy. Gói nào thêm route thì xoá dòng
- * `pending` của mình (cả hai nền) và route đó đi thẳng. Route Mini → route web cho những lối Trang chủ cần.
+ * Đích thật của các lối "Xem tất cả" / lối tắt mà `SHELVES` khai theo route Mini (route Mini → route web cho những lối Trang chủ cần). Hiện không route
+ * nào chờ: mọi trang đã có. Gói nào khai lối tới một trang chưa làm thì đặt `pending: true` ở đây và thêm dòng thay thế vào `PENDING_TARGET`
+ * (trang đang có thay vì màn không tìm thấy); trang xong thì xoá cả hai dấu đó.
  */
 interface Entry { mini: string; web: string; pending: boolean }
 
 const ENTRIES: Record<string, Entry> = {
   '/flash-sale': { mini: '/flash-sale', web: '/gio-vang', pending: false },
   '/best-sellers': { mini: '/best-sellers', web: '/ban-chay', pending: false },
-  '/vouchers': { mini: '/vouchers', web: '/ma-giam-gia', pending: true },
+  '/vouchers': { mini: '/vouchers', web: '/ma-giam-gia', pending: false },
   '/orders': { mini: '/orders', web: '/tai-khoan/don-hang', pending: false },
   '/browse': { mini: '/browse', web: '/san-pham', pending: false },
 };
 
 /**
- * `usable: false` = trang thay thế không hiện nội dung mà lối đó hứa: lối vào phải ẩn tới khi route thật có. Hiện chưa route nào ở trạng thái đó.
+ * `usable: false` = trang thay thế không hiện nội dung mà lối đó hứa: lối vào phải ẩn tới khi route thật có. Hiện không route nào chờ nên bảng rỗng.
  */
-const PENDING_TARGET: Record<string, { mini: string; web: string; usable: boolean }> = {
-  '/vouchers': { mini: '/offers?section=coupons', web: '/uu-dai', usable: true },
-};
+const PENDING_TARGET: Record<string, { mini: string; web: string; usable: boolean }> = {};
 
 /** Lối vào route này có đáng hiện không: route đã có thật, route lạ, hoặc route đang chờ mà trang thay thế vẫn đúng điều lối hứa. */
 export function routeUsable(miniRoute: string): boolean {

@@ -51,12 +51,12 @@ describe('ShortcutGrid — 4 ô cố định + "Tất cả" (Q7)', () => {
     }
   });
 
-  it('Giờ vàng tới trang Giờ vàng, Mã giảm giá tới mã của tôi, Đổi rác, Mua chung tới đúng trang; Đổi quà nằm trong "Tất cả"', () => {
+  it('Giờ vàng tới trang Giờ vàng, Mã giảm giá tới trang Mã giảm giá, Đổi rác, Mua chung tới đúng trang; Đổi quà nằm trong "Tất cả"', () => {
     render(<ShortcutGrid />);
     fireEvent.click(screen.getByRole('button', { name: /Giờ vàng/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/flash-sale');
     fireEvent.click(screen.getByRole('button', { name: /Mã giảm giá/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?section=coupons');
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers');
     fireEvent.click(screen.getByRole('button', { name: /Đổi rác/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
     fireEvent.click(screen.getByRole('button', { name: /Mua chung/ }));

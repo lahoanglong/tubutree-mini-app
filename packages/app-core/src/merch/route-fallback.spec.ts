@@ -2,22 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { liveRoute, routeUsable } from './route-fallback';
 
 describe('routeUsable', () => {
-  it('Giờ vàng đã có trang riêng (P12): lối vào dùng được, không còn là route chờ', () => {
-    expect(routeUsable('/flash-sale')).toBe(true);
-  });
-  it('Mã giảm giá đang chờ nhưng trang thay thế đúng nội dung; Bán chạy nhất đã có trang thật; route thật và route lạ dùng được', () => {
-    for (const r of ['/best-sellers', '/vouchers', '/orders', '/browse', '/somewhere']) expect(routeUsable(r)).toBe(true);
+  it('mọi route đã khai đều có trang thật (Giờ vàng, Bán chạy nhất, Mã giảm giá, Đơn hàng, Duyệt); route lạ cũng dùng được', () => {
+    for (const r of ['/flash-sale', '/best-sellers', '/vouchers', '/orders', '/browse', '/somewhere']) expect(routeUsable(r)).toBe(true);
   });
 });
 
 describe('liveRoute (nhận route Mini như SHELVES khai)', () => {
-  it('Mini: Giờ vàng đi thẳng tới trang của nó; route của gói sau (chưa có trang) trỏ về trang đang có', () => {
+  it('Mini: Giờ vàng và Mã giảm giá đi thẳng tới trang của chúng', () => {
     expect(liveRoute('/flash-sale', 'mini')).toBe('/flash-sale');
-    expect(liveRoute('/vouchers', 'mini')).toBe('/offers?section=coupons');
+    expect(liveRoute('/vouchers', 'mini')).toBe('/vouchers');
   });
   it('web: cùng ý, route web', () => {
     expect(liveRoute('/flash-sale', 'web')).toBe('/gio-vang');
-    expect(liveRoute('/vouchers', 'web')).toBe('/uu-dai');
+    expect(liveRoute('/vouchers', 'web')).toBe('/ma-giam-gia');
   });
   it('route đã có thật đổi sang route web tương ứng', () => {
     expect(liveRoute('/orders', 'mini')).toBe('/orders');
