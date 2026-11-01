@@ -136,3 +136,10 @@
 - Bốn việc: (1) Task 1, (2) Task 2, (3) Task 3, (4) Task 4; ảnh, e2e, gate ở Task 5. Mọi số, chuỗi trong test lấy từ báo cáo reviewer (`Freeship 30k cho đơn đầu`, `Giảm 100k cho khách mới`, `Tặng 20k vnđ`, `Tặng 20k đồng cho bạn mới`, `Giảm 20k VND`, `cho 3 đơn · Đơn từ 100k · GIAM20`).
 - Tên nhất quán: `trimRepeatedLead(name, title)` (Task 1 định nghĩa, Task 2 dùng), `FIGURE_RE`, `figureValue`, `wordsOf`, testid `voucher-meta`/`voucher-name`, `homeCopy.profile.guestCta`.
 - Hai biến thể của Task 3 (row và ticket) đều có test ở cả hai app.
+
+## Kết quả (sau khi làm)
+
+- Commit: Task 1 `01417f22b`, Task 2 `3156641d9`, Task 3 `eeb629970`, Task 4 `0f239f6d3`. Gate `gate.sh --base 334f0936b`: 0 FAIL (vitest app-core 2294, Mini 6273 hai múi giờ, web 9264, jest API 12562; lint-parity, lint-vars xanh; Mini entry 649 KB). e2e Mini đầy đủ 400 xanh, 10 skip có sẵn; e2e web `offers` + `pdp-mobile` xanh ở cả hai project.
+- Lệch kế hoạch: `shop-copy.ts`/`shop-copy-budget.ts` chỉ xoá khoá `zalo.link` (giữ `homeCopy.profile.guestCta` làm nguồn, vì `home-copy.ts` không được import `shop-copy.ts` mà không kéo bảng chữ vào gói đầu). Task 5 chụp ảnh bằng hai spec tạm (`h1-shots.*.spec.ts`, đã xoá) với mã mẫu `GIAM20`, `GIAMVND` ("Tặng 20k vnđ cho bạn mới"), `FS30` ("Freeship 30k cho đơn đầu"), `KHACHMOI` ("Giảm 100k cho khách mới").
+- Ảnh 375px trước/sau ở `docs/2026-10-31-shop-redesign/screens/H1/` (gitignore): `mini-pdp-sheet-*`, `web-pdp-sheet-*`, `mini-mine-*`.
+- Giới hạn còn lại: tên không chép nhãn ("Freeship 30k cho đơn đầu", "Giảm 100k cho khách mới") nay giữ nguyên nên co bằng "…" ở dòng ~100px của `ticket` (đã chấp nhận ở G1; số 30k, 100k vẫn đọc được ở chi tiết và ở `row`).
