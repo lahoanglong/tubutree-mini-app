@@ -55,7 +55,7 @@ function OffersContent() {
   const authed = phase === 'authenticated';
   const { user } = useAuth();
   const cfg = usePublicConfig();
-  const { use, notice: useNotice } = useCouponUse();
+  const { use: applyCoupon, notice: couponNotice } = useCouponUse();
   const [claimNoticeOpen, setClaimNoticeOpen] = useState(false);
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed });
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
@@ -124,9 +124,9 @@ function OffersContent() {
             }
             action={{ onPress: () => router.push('/ma-giam-gia?tab=mine'), spoken: fillCopy('section.seeAllSpoken', { title: fillCopy('coupon.tabMine') }) }}
           />
-          {useNotice && (
-            <p role={useNotice.error ? 'alert' : 'status'} className={`mb-2 text-caption ${useNotice.error ? 'text-danger-fg' : 'text-stone-700'}`}>
-              {useNotice.text}
+          {couponNotice && (
+            <p role={couponNotice.error ? 'alert' : 'status'} className={`mb-2 text-caption ${couponNotice.error ? 'text-danger-fg' : 'text-stone-700'}`}>
+              {couponNotice.text}
             </p>
           )}
           {couponsQ.isLoading ? (
@@ -140,7 +140,7 @@ function OffersContent() {
                   key={row.view.code}
                   voucher={row.view}
                   variant="ticket"
-                  primary={{ label: fillCopy('coupon.use'), onClick: () => void use(row.view.code) }}
+                  primary={{ label: fillCopy('coupon.use'), onClick: () => void applyCoupon(row.view.code) }}
                   expiring={isCouponExpiring(row.coupon, now)}
                 />
               ))}

@@ -37,7 +37,7 @@ export default function VouchersView() {
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
   const { claim, pendingCode, notice: claimNotice } = useClaimCoupon(returnTo);
-  const { use, notice: useNotice } = useCouponUse();
+  const { use: applyCoupon, notice: couponNotice } = useCouponUse();
 
   const collectableQ = useQuery(collectableCouponsQuery(coreHttp));
   const walletQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
@@ -64,7 +64,7 @@ export default function VouchersView() {
 
   const primaryFor = (row: VoucherRow) => {
     if (row.view.state === 'collectable') return { label: fillCopy('coupon.save'), onClick: () => void claim(row.view.code), busy: pendingCode === row.view.code };
-    if (row.view.state === 'saved') return { label: fillCopy('coupon.use'), onClick: () => void use(row.view.code) };
+    if (row.view.state === 'saved') return { label: fillCopy('coupon.use'), onClick: () => void applyCoupon(row.view.code) };
     return undefined;
   };
 
@@ -99,7 +99,7 @@ export default function VouchersView() {
     );
   }
 
-  const notice = useNotice ?? claimNotice;
+  const notice = couponNotice ?? claimNotice;
   return (
     <>
       <PageHeader title={fillCopy('coupon.title')} subtitle={fillCopy('coupon.oneCodeHint')} backHref="/uu-dai" />
