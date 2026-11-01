@@ -117,3 +117,9 @@ describe('khách vãng lai (pointsBlocked = GUEST): không hứa Điểm Xanh', 
     expect(guestCheckInCopy.cta).toBe('Đăng nhập Zalo');
   });
 });
+
+describe('checkInCopy.ruleToggle', () => {
+  it('nút mở luật điểm danh có tên đọc riêng', () => {
+    expect(checkInCopy.ruleToggle).toBe('Luật điểm danh');
+  });
+});

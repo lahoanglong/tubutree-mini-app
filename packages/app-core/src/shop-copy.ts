@@ -16,6 +16,7 @@ export const SHOP_COPY: Record<string, string> = {
   ...TILE_COPY,
   // Giờ vàng
   'flash.title': 'Giờ vàng',
+  'flash.todayTitle': 'Giờ vàng hôm nay',
   'flash.seeAll': 'Xem tất cả',
   'flash.tabsLabel': 'Khung giờ',
   'flash.chipsLabel': 'Danh mục',
@@ -168,6 +169,12 @@ export const SHOP_COPY: Record<string, string> = {
   'coupon.claimedIneligibleReason': 'Chỉ dành cho khách đặt đơn đầu tiên, nên không còn áp dụng',
   'coupon.walletLoadError': 'Chưa tải được mã bạn đã lưu',
 
+  // Ưu đãi khi chưa đăng nhập: mỗi khối cần tài khoản một thẻ mời, một nhãn nút chung ở hai app
+  'login.cta': 'Đăng nhập',
+  'offers.guestPointsTitle': 'Điểm Xanh và điểm danh',
+  'offers.guestPointsBody': 'Đăng nhập để xem điểm, hạng và điểm danh nhận thưởng mỗi ngày.',
+  'offers.guestMineBody': 'Đăng nhập để xem mã bạn đã lưu và dùng ngay khi mua hàng.',
+
   // Combo và mua kèm
   'combo.title': 'Combo tiết kiệm',
   'combo.rule': 'Mua {n} giảm {pct}%',
@@ -204,6 +211,7 @@ export const SHOP_COPY: Record<string, string> = {
   // Bộ thành phần section-kit (SectionHeader, SortBar, ComboCard)
   'section.seeAll': 'Xem tất cả',
   'section.seeAllSpoken': 'Xem tất cả {title}',
+  'section.seeAllCount': 'Tất cả ({n})',
   'sort.groupLabel': 'Sắp xếp',
   'sort.filter': 'Lọc',
   'sort.filterCount': 'Lọc ({n})',
