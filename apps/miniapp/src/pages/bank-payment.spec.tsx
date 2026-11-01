@@ -207,7 +207,8 @@ describe('Thanh toán chuyển khoản: hạn thanh toán (BUYERMINI-8)', () => 
     mocks.getBankQr.mockResolvedValue({ ...QR, paymentDeadline: new Date(Date.now() + 3_600_000).toISOString() });
     renderPage();
     const note = await screen.findByRole('note');
-    expect(note).toHaveTextContent(/Vui lòng chuyển khoản trước \d{2}:\d{2} \d{2}\/\d{2}\/\d{4}\. Quá hạn đơn sẽ tự huỷ/);
+    expect(note).not.toHaveTextContent(/hoàn/);
+    expect(note).toHaveTextContent(/^Chuyển khoản trước \d{2}:\d{2} \d{2}\/\d{2}\/\d{4} — quá hạn đơn sẽ tự huỷ\./);
   });
 
   it('API bản cũ không trả hạn → không hiện khung hạn', async () => {
@@ -299,7 +300,7 @@ describe('Thanh toán chuyển khoản: đếm ngược hạn thanh toán (D5-02
     const countdown = await screen.findByTestId('payment-countdown');
     expect(countdown).toHaveTextContent('Còn 2 giờ 30 phút để chuyển khoản');
     const note = countdown.closest('[role="note"]') as HTMLElement;
-    expect(note).toHaveTextContent(/Vui lòng chuyển khoản trước \d{2}:\d{2} \d{2}\/\d{2}\/\d{4}\. Quá hạn đơn sẽ tự huỷ/);
+    expect(note).toHaveTextContent(/^Chuyển khoản trước \d{2}:\d{2} \d{2}\/\d{2}\/\d{4} — quá hạn đơn sẽ tự huỷ\./);
     expect(within(note).getByTestId('payment-countdown')).toBe(countdown);
   });
 
