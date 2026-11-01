@@ -71,9 +71,11 @@ function OffersContent() {
   const coupons = useMemo(() => couponsQ.data ?? [], [couponsQ.data]);
   const walletCodes = useMemo(() => new Set(coupons.map((c) => c.code)), [coupons]);
   const rows = useMemo(() => mineRows(coupons, Date.now()), [coupons]);
-  const mine = minePreview(rows);
+  const mine = useMemo(() => minePreview(rows), [rows]);
   const seeAllMine = seeAllLabel(mine.total);
-  useMarkExpiringSeen(couponsQ.data);
+  // Chỉ mã đang vẽ (ba phiếu đầu) mới tính là đã xem: mã thứ tư trở đi giữ chấm đỏ tới khi khách thấy chúng ở trang Mã giảm giá.
+  const drawn = useMemo(() => mine.shown.map((r) => r.coupon), [mine]);
+  useMarkExpiringSeen(drawn);
   const wasteEnabled = cfg.isLoaded && cfg.waste.enabled;
   const recycleOpen = useRecycleOpenRequests(authed, cfg.isLoaded && !cfg.waste.enabled);
 

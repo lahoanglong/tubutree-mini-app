@@ -256,6 +256,14 @@ describe('/uu-dai — trang Ưu đãi', () => {
     expect(three.querySelector('button[aria-label="Tất cả (3) Mã của tôi"]')!.textContent).toBe('Tất cả (3)');
   });
 
+  it('chấm đỏ: ví có 4 mã sắp hết hạn mà trang chỉ vẽ 3 thì chỉ 3 mã vào danh sách đã xem (mã thứ 4 chưa ai thấy)', async () => {
+    state.coupons = [0, 1, 2, 3].map((i) => ({ ...COUPON, code: `SOON-${i}`, endAt: new Date(Date.now() + (i + 1) * 3_600_000).toISOString() }));
+    const c = await mount();
+    expect(region(c, 'Mã của tôi')!.querySelectorAll('[role="group"]')).toHaveLength(3);
+    const seen = JSON.parse(localStorage.getItem('tubu_offers_seen_coupons')!) as { items: string[] };
+    expect(seen.items.map((k) => k.split('@')[0]).sort()).toEqual(['SOON-0', 'SOON-1', 'SOON-2']);
+  });
+
   it('Mã của tôi lỗi: thông báo có lý do và nút Thử lại', async () => {
     state.fail.add('/me/coupons');
     const c = await mount();

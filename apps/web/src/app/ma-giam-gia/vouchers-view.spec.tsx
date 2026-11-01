@@ -70,6 +70,7 @@ const tab = (name: string) => [...document.querySelectorAll<HTMLElement>('[role=
 const groups = () => [...document.querySelectorAll('[role="group"]')].map((g) => g.getAttribute('aria-label'));
 
 beforeEach(() => {
+  localStorage.clear();
   nav.search = '';
   nav.replaces = [];
   nav.push.mockReset();
@@ -276,6 +277,17 @@ describe('VouchersView (web)', () => {
     await flush();
     expect(buttons('Dùng ngay')).toHaveLength(1);
     expect(text()).toContain('Còn 2 ngày');
+  });
+
+  it('chấm đỏ Ưu đãi: tab Mã của tôi ghi các mã sắp hết hạn đang vẽ vào danh sách đã xem; tab Nhận mã thì không ghi gì', async () => {
+    responses['/me/coupons'] = [wallet('A', { endAt: iso(2 * DAY) }), wallet('B', { endAt: iso(DAY) }), wallet('C', { endAt: iso(2 * DAY) }), wallet('D', { endAt: iso(2 * DAY) }), wallet('LATE', { endAt: iso(20 * DAY) })];
+    mount();
+    await flush();
+    expect(localStorage.getItem('tubu_offers_seen_coupons')).toBeNull();
+    click(tab('Mã của tôi'));
+    await flush();
+    const items = (JSON.parse(localStorage.getItem('tubu_offers_seen_coupons')!) as { items: string[] }).items;
+    expect(items.map((k) => k.split('@')[0]).sort()).toEqual(['A', 'B', 'C', 'D']);
   });
 
   it('Đã dùng–hết hạn: gọi lịch sử, thẻ đã dùng và hết hạn không có nút', async () => {

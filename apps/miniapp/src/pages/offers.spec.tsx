@@ -170,6 +170,17 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers?tab=mine');
   });
 
+  it('chấm đỏ: ví có 4 mã sắp hết hạn mà trang chỉ vẽ 3 thì chỉ 3 mã vào danh sách đã xem (mã thứ 4 chưa ai thấy)', async () => {
+    const soon = (i: number) => ({ ...COUPON, code: `SOON-${i}`, endAt: new Date(Date.now() + (i + 1) * 3_600_000).toISOString() });
+    mocks.getCoupons.mockResolvedValue([0, 1, 2, 3].map(soon));
+    renderPage();
+    const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
+    await waitFor(() => expect(within(mine).getAllByRole('group')).toHaveLength(3));
+    await waitFor(() => expect(localStorage.getItem('tubu_offers_seen_coupons')).not.toBeNull());
+    const seen = JSON.parse(localStorage.getItem('tubu_offers_seen_coupons')!) as { items: string[] };
+    expect(seen.items.map((k) => k.split('@')[0]).sort()).toEqual(['SOON-0', 'SOON-1', 'SOON-2']);
+  });
+
   it('Mã của tôi đúng 3 mã: đủ 3 phiếu, nút cũng ghi "Tất cả (3)" (một mẫu, đếm đúng số trang đích sẽ vẽ)', async () => {
     mocks.getCoupons.mockResolvedValue(Array.from({ length: 3 }, (_, i) => ({ ...COUPON, code: `MA-${i}`, value: 10_000 * (i + 1) })));
     renderPage();

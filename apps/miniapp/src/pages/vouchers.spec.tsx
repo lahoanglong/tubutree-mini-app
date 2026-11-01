@@ -328,6 +328,18 @@ describe('VouchersPage (Mini)', () => {
     expect(screen.getByText('Còn 2 ngày')).toBeInTheDocument();
   });
 
+  it('chấm đỏ Ưu đãi: tab Mã của tôi ghi các mã sắp hết hạn đang vẽ vào danh sách đã xem; tab Nhận mã thì không ghi gì', async () => {
+    localStorage.clear();
+    responses['/me/coupons'] = [wallet('A', { endAt: iso(2 * DAY) }), wallet('B', { endAt: iso(DAY) }), wallet('C', { endAt: iso(2 * DAY) }), wallet('D', { endAt: iso(2 * DAY) }), wallet('LATE', { endAt: iso(20 * DAY) })];
+    renderAt();
+    await screen.findByText('Chào bạn mới');
+    expect(localStorage.getItem('tubu_offers_seen_coupons')).toBeNull();
+    pickTab('Mã của tôi');
+    await waitFor(() => expect(localStorage.getItem('tubu_offers_seen_coupons')).not.toBeNull());
+    const items = (JSON.parse(localStorage.getItem('tubu_offers_seen_coupons')!) as { items: string[] }).items;
+    expect(items.map((k) => k.split('@')[0]).sort()).toEqual(['A', 'B', 'C', 'D']);
+  });
+
   it('Đã dùng–hết hạn: gọi lịch sử, thẻ đã dùng và hết hạn không có nút', async () => {
     responses['/me/coupons/history'] = [
       { code: 'USED1', title: null, type: 'AMOUNT', value: 20_000, minOrder: null, maxDiscount: null, endAt: iso(5 * DAY), state: 'used', usedAt: iso(-3600_000) },
