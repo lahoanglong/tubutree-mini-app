@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -21,6 +21,11 @@ function section(md: string, title: string): string | null {
 
 /** Mọi đoạn viết trong dấu huyền (`...`). */
 const codeSpans = (md: string) => [...md.matchAll(/`([^`\n]+)`/g)].map((m) => m[1]!);
+const walkSrc = (dir: string): string[] =>
+  readdirSync(join(REPO, dir)).flatMap((n) => (statSync(join(REPO, dir, n)).isDirectory() ? walkSrc(`${dir}/${n}`) : [`${dir}/${n}`]));
+/** Tên có `export function|const|class <Tên>` ở file .tsx không phải spec trong thư mục của một app. */
+const exportedIn = (dir: string, name: string) =>
+  walkSrc(dir).some((f) => /\.tsx$/.test(f) && !/\.spec\./.test(f) && new RegExp(`export (?:function|const|class) ${name}\\b`).test(read(f)));
 const REPO_PATH = /^(apps|packages|docs|scripts|\.claude|\.github)\//;
 const isCheckablePath = (s: string) => REPO_PATH.test(s) && !/[*<>{}\s]/.test(s);
 
@@ -57,6 +62,29 @@ describe('DESIGN.md', () => {
     const built = new Set(codeSpans(section(md, 'Thành phần') ?? ''));
     expect(dsMap.upcoming.map((u) => u.name).filter((n) => !soon.has(n))).toEqual([]);
     expect(dsMap.upcoming.map((u) => u.name).filter((n) => built.has(n))).toEqual([]);
+  });
+
+  it('mục sắp có không giữ thành phần đã có ở cả hai app (gói xong phải chuyển dòng sang components)', () => {
+    const stale = dsMap.upcoming
+      .map((u) => u.name)
+      .filter((n) => /^[A-Z]\w*$/.test(n) && exportedIn('apps/miniapp/src/components', n) && exportedIn('apps/web/src/components', n));
+    expect(stale).toEqual([]);
+  });
+
+  it('mục Kiểm tự động nêu bánh cóc px/max-md, ds-parity, axe, ds-shop-guard của P17b và lệnh tái tạo baseline', () => {
+    const body = section(md, 'Kiểm tự động') ?? '';
+    for (const s of [
+      'scripts/uiux/ds-ratchet.mjs',
+      'scripts/uiux/ds-baseline.json',
+      'node scripts/uiux/ds-ratchet.mjs --write',
+      'apps/e2e/tests/ds-parity.shop.spec.ts',
+      'apps/e2e/tests/a11y-shop.miniapp.spec.ts',
+      'apps/e2e/tests/a11y-shop.web.spec.ts',
+      'apps/e2e/tests/support/a11y-baseline.ts',
+    ]) {
+      expect(body, s).toContain(`\`${s}\``);
+    }
+    expect(body).not.toContain('Do gói P17b thêm sau');
   });
 
   it('bảng thuật ngữ cấm nêu đủ chữ thay thế của FORBIDDEN_TERMS', () => {

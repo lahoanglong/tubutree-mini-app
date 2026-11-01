@@ -90,6 +90,8 @@ jobs:
     - name: Run Playwright tests
       run: pnpm --filter @tubutree/e2e test
       env:
+        # Spec axe web (a11y-shop.web.spec.ts) seed gian hàng và thương hiệu mẫu vào DB CI: cần DATABASE_URL trong env của Playwright (apps/api/.env chỉ là dự phòng).
+        DATABASE_URL: postgresql://tubu:tubu@localhost:5434/tubutree
         E2E_WEB_PROD: '1'
         TEST_JWT_TOKEN: ${{ secrets.TEST_JWT_TOKEN }}
 

@@ -15,10 +15,9 @@ Làm đúng thứ tự dưới đây. Luật đầy đủ ở `DESIGN.md` (gốc
 6. **Làm Mini ở 375px trước**, rồi web cùng nhánh, cùng tên thành phần, cùng props. Web dưới `md` phải ra cùng số đo với Mini; từ `lg` dùng khuôn trong `apps/web/src/components/layouts/`.
 7. **Chỉ dùng token** semantic/component: không hex, không `var(--stone-…)`, không `fontSize` số, không lề âm ngang tay, giá gạch chỉ qua `PriceTag`. Thành phần mới có màu mới thì thêm cặp vào `apps/miniapp/src/css/contrast.spec.ts`, có nút mới thì thêm vào `apps/miniapp/src/components/ui/hit-target-guard.spec.tsx`.
 8. **Kiểm trước khi báo xong, dán output:**
-   - `pnpm lint:parity` (route và thành phần Mini ↔ web), `pnpm lint:vars`
+   - `pnpm lint:parity` (route, thành phần Mini ↔ web, bánh cóc px và `max-md:` so `scripts/uiux/ds-baseline.json`: chỉ được giảm, sửa mã chứ không nới baseline; sửa bớt mã cũ thì `node scripts/uiux/ds-ratchet.mjs --write`), `pnpm lint:vars`
    - `pnpm --filter @tubutree/app-core test` (có `terminology.spec`, `shop-copy.spec`, `shelves.spec`, `design-docs.spec`)
    - `pnpm --filter @tubutree/miniapp test` và `pnpm --filter @tubutree/web test` (có `ds-shop-guard.spec` mỗi app)
+   - Màn mua sắm đổi hình: `apps/e2e/tests/ds-parity.shop.spec.ts` (số đo 375px so bảng chuẩn) và `apps/e2e/tests/a11y-shop.miniapp.spec.ts`, `apps/e2e/tests/a11y-shop.web.spec.ts` (axe, serious/critical chặn)
    - Thành phần mới: thêm vào `docs/design/ds-map.json`, vẽ trong `/ds-gallery`, ghi vào mục Thành phần của `DESIGN.md`.
 9. **Chụp so 375px Mini ↔ web** màn đã đổi: `apps/e2e/tests/visual-tour.miniapp.spec.ts` và `apps/e2e/tests/visual-tour.web.spec.ts` (chạy khi có `VISUAL_DIR`), rồi `node apps/e2e/scripts/visual-pairs.mjs <VISUAL_DIR>` ghép cặp. Cách dựng API giả và cổng ở `docs/2026-10-31-shop-redesign/plans/handoff-wave2.md`. Chụp cả trạng thái chờ, rỗng, lỗi, hết hàng.
-
-Bài kiểm ratchet px, `max-md:`, e2e `ds-parity` và axe smoke do gói P17b thêm sau đợt 4; có rồi thì mục 8 cập nhật theo `DESIGN.md`.

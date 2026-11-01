@@ -129,7 +129,7 @@ export function ProductTile({
     <div
       data-ds="product-tile"
       data-ds-variant={variant}
-      className="tubu-press-card group shadow-[var(--elevation-1)] md:border md:border-stone-200 md:shadow-card md:[transition-property:transform,box-shadow,border-color] md:duration-300 md:hover:-translate-y-1 md:hover:border-forest-600/40 md:hover:shadow-raised"
+      className="tubu-press-card group [box-shadow:var(--elevation-1)] md:border md:border-stone-200 md:shadow-card md:[transition-property:transform,box-shadow,border-color] md:duration-300 md:hover:-translate-y-1 md:hover:border-forest-600/40 md:hover:shadow-raised"
       style={{
         position: 'relative',
         isolation: 'isolate',
