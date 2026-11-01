@@ -1,5 +1,5 @@
 /**
- * Đích thật của các lối "Xem tất cả" / lối tắt mà `SHELVES` khai theo route Mini. Trang của gói sau (`/best-sellers` P13,
+ * Đích thật của các lối "Xem tất cả" / lối tắt mà `SHELVES` khai theo route Mini. Trang của gói sau (`/flash-sale` P12, `/best-sellers` P13,
  * `/vouchers` P14) chưa có: trong lúc chờ, khách đi tới trang đang có thay vì màn không tìm thấy. Gói nào thêm route thì xoá dòng
  * `pending` của mình (cả hai nền) và route đó đi thẳng. Route Mini → route web cho những lối Trang chủ cần.
  */

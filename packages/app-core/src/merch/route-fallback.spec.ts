@@ -6,7 +6,7 @@ describe('routeUsable', () => {
     expect(routeUsable('/flash-sale')).toBe(true);
   });
   it('Bán chạy nhất và Mã giảm giá đang chờ nhưng trang thay thế đúng nội dung; route thật và route lạ dùng được', () => {
-    for (const r of ['/flash-sale', '/best-sellers', '/vouchers', '/orders', '/browse', '/somewhere']) expect(routeUsable(r)).toBe(true);
+    for (const r of ['/best-sellers', '/vouchers', '/orders', '/browse', '/somewhere']) expect(routeUsable(r)).toBe(true);
   });
 });
 
