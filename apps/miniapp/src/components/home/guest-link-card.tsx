@@ -12,14 +12,13 @@ import { isGuestUser } from '../../utils/guest-user';
 /**
  * Thẻ mời ở khối cần tài khoản. Hai đối tượng, một thẻ: tài khoản khách (đã vào bằng khách, chưa liên kết Zalo) liên kết Zalo để giữ điểm và nhận quà;
  * người chưa đăng nhập (pha `guest`) đăng nhập Zalo. Tài khoản thật không thấy thẻ này; đang khôi phục phiên hay mất mạng (`loading`, `unavailable`) cũng không,
- * vì người đó có thể đang có phiên. Tài khoản bị khoá thì thay lời mời bằng lời máy chủ.
+ * vì người đó có thể đang có phiên. Trang gọi truyền `body` là lời máy chủ khi tài khoản bị khoá.
  */
 export function GuestLinkCard({ title, body, cta }: { title: string; body: string; cta: string }) {
   const phase = useAuthPhase();
   const user = useAuthStore((s) => s.user);
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const ensurePhoneOrThrow = useAuthStore((s) => s.ensurePhoneOrThrow);
-  const blocked = useAuthStore((s) => (s.status === 'idle' ? (s.error ?? null) : null));
   const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle');
   const [failure, setFailure] = useState<string>(homeCopy.guestGift.failed);
   const visitor = phase === 'guest';
@@ -49,7 +48,7 @@ export function GuestLinkCard({ title, body, cta }: { title: string; body: strin
           {title}
         </Heading>
         <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 4 }}>
-          {visitor ? (blocked ?? body) : body}
+          {body}
         </Text>
         <div style={{ marginTop: 12 }}>
           <Button loading={state === 'busy'} onPress={link} style={{ minWidth: 0 }}>

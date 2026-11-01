@@ -18,7 +18,7 @@ import { useMarkExpiringSeen } from '../hooks/use-offers-dot';
 import { useRecycleOpenRequests } from '../hooks/use-recycle-open-requests';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { haptic } from '../utils/haptic';
-import { AuthPhaseView } from '../components/ui/auth-gate';
+import { AuthPhaseView, useBlockedMessage } from '../components/ui/auth-gate';
 import { Card } from '../components/ui/card';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Icon } from '../components/ui/icon';
@@ -53,6 +53,7 @@ export default function OffersPage() {
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
   const user = useAuthStore((s) => s.user);
+  const blocked = useBlockedMessage();
   const cfg = usePublicConfig();
   const { use } = useCouponUse();
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
@@ -110,8 +111,8 @@ export default function OffersPage() {
       <OffersCollect walletCodes={walletCodes} walletLoading={phase === 'loading' || (authed && couponsQ.isLoading)} />
       {phase === 'guest' ? (
         <>
-          {/* Mỗi khối cần tài khoản một thẻ mời, cùng một nhãn nút; Đổi quà và tiện ích vẫn hiện bên dưới. */}
-          <GuestLinkCard title={fillCopy('offers.guestPointsTitle')} body={fillCopy('offers.guestPointsBody')} cta={fillCopy('login.cta')} />
+          {/* Mỗi khối cần tài khoản một thẻ mời, cùng một nhãn nút; Đổi quà và tiện ích vẫn hiện bên dưới. Tài khoản bị khoá: lời máy chủ thay lời mời ở thẻ đầu (một lần, không lặp ở thẻ sau). */}
+          <GuestLinkCard title={fillCopy('offers.guestPointsTitle')} body={blocked ?? fillCopy('offers.guestPointsBody')} cta={fillCopy('login.cta')} />
           <GuestLinkCard title={fillCopy('coupon.tabMine')} body={fillCopy('offers.guestMineBody')} cta={fillCopy('login.cta')} />
         </>
       ) : !authed ? (
