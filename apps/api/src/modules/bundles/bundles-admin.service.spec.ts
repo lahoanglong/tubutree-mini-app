@@ -278,6 +278,26 @@ describe('BundlesAdminService.update', () => {
       expect(created(s)[0].refPrice).toBe(50_000);
     });
 
+    it('phân loại ghim sale xuống 30.000đ, thấp hơn giá kèm 39.000đ, rồi form gửi lại nguyên món: không 400, giữ giá tham chiếu 50.000đ (quản trị viên và nhân viên)', async () => {
+      const deep = product('p2', { variations: [{ id: 'p2-v', sku: 'p2', retailPrice: 50_000, salePrice: 30_000, stock: 3 }] });
+      const admin = setup({ current: addon(), products: [product('p1'), deep] });
+      await admin.svc.update('b1', { title: 'Mới', items: [dtoItem('p2', { addonPrice: 39_000, variationId: 'p2-v' })] } as never, ADMIN, NOW);
+      expect(created(admin)).toEqual([{ productId: 'p2', variationId: 'p2-v', addonPrice: 39_000, refPrice: 50_000, maxQty: 1, sortOrder: 0 }]);
+      const mine = addon([pinnedItem({ addonPrice: 45_000 })], { createdById: 'staff2' });
+      const staff = setup({ current: mine, creatorRole: 'STAFF', products: [product('p1'), deep] });
+      await staff.svc.update('b1', { items: [dtoItem('p2', { addonPrice: 45_000, variationId: 'p2-v' })] } as never, STAFF, NOW);
+      expect(created(staff)[0]).toMatchObject({ addonPrice: 45_000, refPrice: 50_000 });
+    });
+
+    it('đổi giá kèm khi phân loại đang sale dưới giá kèm mới: vẫn 400 (không còn giá tham chiếu giữ lại, so với giá đang bán)', async () => {
+      const deep = product('p2', { variations: [{ id: 'p2-v', sku: 'p2', retailPrice: 50_000, salePrice: 30_000, stock: 3 }] });
+      const s = setup({ current: addon(), products: [product('p1'), deep] });
+      await expect(
+        s.svc.update('b1', { items: [dtoItem('p2', { addonPrice: 40_000, variationId: 'p2-v' })] } as never, ADMIN, NOW),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(s.tx.bundle.update).not.toHaveBeenCalled();
+    });
+
     it('không đụng danh sách món (không gửi items): không ghi lại món nào', async () => {
       const s = setup({ current: addon(), products: [product('p1'), risen] });
       await s.svc.update('b1', { title: 'Mới' } as never, ADMIN, NOW);

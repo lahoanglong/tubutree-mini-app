@@ -224,7 +224,7 @@ export class BundlesAdminService {
         variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
       },
     });
-    const resolved = resolveBundleItems(content, new Map<string, CatalogProduct>(rows.map((p) => [p.id, p])));
+    const resolved = resolveBundleItems(content, new Map<string, CatalogProduct>(rows.map((p) => [p.id, p])), kept);
     if (staffCaps) assertStaffBundleCaps(content, capAtRefPrices(resolved, kept), staffCaps);
     return resolved;
   }

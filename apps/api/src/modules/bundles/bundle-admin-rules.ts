@@ -128,10 +128,14 @@ const effective = (v: { retailPrice: number; salePrice: number | null }) => v.sa
  * Luật theo dữ liệu catalog đã đọc: món và sản phẩm chính phải đang bán, đã duyệt, không phải hàng đối tác; `variationId` thuộc đúng
  * sản phẩm và còn bán; giá kèm phải thấp hơn giá đang bán của phân loại ghim (không thì bộ không giảm được đồng nào). Trả giá của từng
  * món theo thứ tự `content.items`.
+ *
+ * `kept`: giá tham chiếu giữ lại của từng món (`keptRefPrices`). Món giữ giá tham chiếu là món form gửi lại nguyên (cùng sản phẩm, phân loại
+ * và giá kèm), nên giá kèm đã hợp lệ lúc đặt: so với giá tham chiếu đó, không với giá đang bán, vì phân loại đang sale xuống dưới giá kèm
+ * không làm bộ sai (giỏ chỉ giảm 0 lúc đó) mà vẫn phải sửa được tên, giờ hay tắt bộ qua form.
  */
-export function resolveBundleItems(content: BundleContent, products: ReadonlyMap<string, CatalogProduct>): ResolvedBundleItem[] {
+export function resolveBundleItems(content: BundleContent, products: ReadonlyMap<string, CatalogProduct>, kept?: readonly (number | null)[]): ResolvedBundleItem[] {
   if (content.anchorProductId) sellable(products, content.anchorProductId);
-  return content.items.map((it) => {
+  return content.items.map((it, i) => {
     const p = sellable(products, it.productId);
     let price: number;
     let maxPrice: number;
@@ -145,8 +149,12 @@ export function resolveBundleItems(content: BundleContent, products: ReadonlyMap
       price = c.salePrice ?? c.basePrice;
       maxPrice = Math.max(price, ...p.variations.map(effective));
     }
-    if (content.kind === 'ADDON' && (it.addonPrice ?? 0) >= price) {
-      throw new BadRequestException(`Giá mua kèm của "${p.name}" phải thấp hơn giá đang bán (${formatVnd(price)}).`);
+    if (content.kind === 'ADDON') {
+      const ref = kept?.[i] ?? null;
+      const base = ref ?? price;
+      if ((it.addonPrice ?? 0) >= base) {
+        throw new BadRequestException(`Giá mua kèm của "${p.name}" phải thấp hơn ${ref === null ? 'giá đang bán' : 'giá lúc đặt giá kèm'} (${formatVnd(base)}).`);
+      }
     }
     return { price, maxPrice };
   });
