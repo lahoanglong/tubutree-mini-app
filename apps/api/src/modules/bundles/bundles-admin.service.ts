@@ -12,6 +12,7 @@ import {
   normalizeBundleContent,
   resolveBundleItems,
   type BundleContent,
+  type ResolvedBundleItem,
   type BundleKindValue,
   type BundleStatus,
   type CatalogProduct,
@@ -109,7 +110,7 @@ export class BundlesAdminService {
     const endAt = new Date(dto.endAt);
     assertBundleWindow(startAt, endAt);
     const content = normalizeBundleContent(dto, await readBundleMaxPct(this.config));
-    await this.validateContent(content, actor);
+    const resolved = await this.validateContent(content, actor);
     const created = await this.prisma.bundle.create({
       data: {
         kind: content.kind,
@@ -121,7 +122,7 @@ export class BundlesAdminService {
         isActive: dto.isActive ?? true,
         sortOrder: dto.sortOrder ?? 0,
         createdById: actorUserId(actor),
-        items: { create: content.items },
+        items: { create: withRefPrices(content, resolved) },
       },
       select: { id: true },
     });
@@ -140,6 +141,7 @@ export class BundlesAdminService {
     // Chỉ khi đụng tới % / sản phẩm chính / món mới kiểm lại catalog và trần: bật/tắt, đổi tên hay thứ tự vẫn làm được khi
     // sản phẩm trong bộ đã ngừng bán (đúng lúc cần tắt bộ).
     let content: BundleContent | undefined;
+    let resolved: ResolvedBundleItem[] = [];
     if (dto.pct !== undefined || dto.anchorProductId !== undefined || dto.items !== undefined) {
       content = normalizeBundleContent(
         {
@@ -150,7 +152,7 @@ export class BundlesAdminService {
         },
         await readBundleMaxPct(this.config),
       );
-      await this.validateContent(content, actor);
+      resolved = await this.validateContent(content, actor);
     }
 
     const data: Prisma.BundleUpdateInput = {
@@ -165,7 +167,7 @@ export class BundlesAdminService {
       // Hai người thay danh sách món cùng lúc: người sau chờ ở đây, không thì cả hai cùng xoá bản cũ rồi cùng ghi và bộ giữ món của cả hai.
       await tx.$queryRaw`SELECT "id" FROM "bundles" WHERE "id" = ${id} FOR UPDATE`;
       if (dto.items !== undefined && content) await tx.bundleItem.deleteMany({ where: { bundleId: id } });
-      await tx.bundle.update({ where: { id }, data: { ...data, ...(dto.items !== undefined && content ? { items: { create: content.items } } : {}) } });
+      await tx.bundle.update({ where: { id }, data: { ...data, ...(dto.items !== undefined && content ? { items: { create: withRefPrices(content, resolved) } } : {}) } });
     });
     return this.get(id, now);
   }
@@ -182,7 +184,7 @@ export class BundlesAdminService {
     return { ok: true };
   }
 
-  private async validateContent(content: BundleContent, actor: CouponActor): Promise<void> {
+  private async validateContent(content: BundleContent, actor: CouponActor): Promise<ResolvedBundleItem[]> {
     const ids = [...new Set([...(content.anchorProductId ? [content.anchorProductId] : []), ...content.items.map((i) => i.productId)])];
     const rows = await this.prisma.product.findMany({
       where: { id: { in: ids } },
@@ -199,6 +201,7 @@ export class BundlesAdminService {
     });
     const resolved = resolveBundleItems(content, new Map<string, CatalogProduct>(rows.map((p) => [p.id, p])));
     if (actor.staff) assertStaffBundleCaps(content, resolved, await loadStaffCouponCaps(this.config));
+    return resolved;
   }
 
   /** Nhân viên chỉ đụng bộ do nhân viên tạo (mẫu `assertStaffCreated` của Giờ vàng). */
@@ -213,6 +216,14 @@ export class BundlesAdminService {
     const users = await this.prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, role: true } });
     return new Set(users.filter((u) => u.role === 'STAFF').map((u) => u.id));
   }
+}
+
+/**
+ * Món ghi xuống kèm `refPrice`: ADDON lưu giá đang bán của phân loại ghim LÚC NÀY, làm trần khoản giảm mỗi đơn vị khi phân loại đổi giá về
+ * sau (`addonUnitDiscount`). BUNDLE_PCT không có giá cố định nên không cần.
+ */
+function withRefPrices(content: BundleContent, resolved: readonly ResolvedBundleItem[]) {
+  return content.items.map((it, i) => ({ ...it, refPrice: content.kind === 'ADDON' ? (resolved[i]?.price ?? null) : null }));
 }
 
 function toAdminBundle(b: DetailRow, now: Date, staffCreators: ReadonlySet<string>): AdminBundle {

@@ -82,8 +82,8 @@ describe('BundlesAdminService.create', () => {
     expect(data).toMatchObject({ kind: 'BUNDLE_PCT', title: 'Bộ đôi', pct: 10, anchorProductId: null, isActive: true, sortOrder: 0, createdById: 'admin1' });
     expect(data.startAt).toEqual(new Date('2026-11-05T00:00:00.000Z'));
     expect(data.items.create).toEqual([
-      { productId: 'p1', variationId: null, addonPrice: null, maxQty: 2, sortOrder: 0 },
-      { productId: 'p2', variationId: null, addonPrice: null, maxQty: 1, sortOrder: 1 },
+      { productId: 'p1', variationId: null, addonPrice: null, refPrice: null, maxQty: 2, sortOrder: 0 },
+      { productId: 'p2', variationId: null, addonPrice: null, refPrice: null, maxQty: 1, sortOrder: 1 },
     ]);
     expect(out).toMatchObject({ id: 'b1', status: 'live', createdByStaff: false });
     expect(out.items.map((i) => [i.productId, i.price])).toEqual([['p1', 100_000], ['p2', 100_000]]);
@@ -109,7 +109,16 @@ describe('BundlesAdminService.create', () => {
     await svc.create(createDto({ kind: 'ADDON', pct: undefined, anchorProductId: 'p1', items: [dtoItem('p2', { addonPrice: 0, variationId: 'p2-v' })] }) as never, ADMIN, NOW);
     const data = prisma.bundle.create.mock.calls[0][0].data;
     expect(data).toMatchObject({ kind: 'ADDON', pct: null, anchorProductId: 'p1' });
-    expect(data.items.create).toEqual([{ productId: 'p2', variationId: 'p2-v', addonPrice: 0, maxQty: 1, sortOrder: 0 }]);
+    expect(data.items.create).toEqual([{ productId: 'p2', variationId: 'p2-v', addonPrice: 0, refPrice: 100_000, maxQty: 1, sortOrder: 0 }]);
+  });
+
+  it('ADDON: giá tham chiếu là giá ĐANG BÁN của phân loại ghim lúc tạo (giá sale thắng giá lẻ), trần của khoản giảm về sau', async () => {
+    const sale = product('p2', { variations: [{ id: 'p2-v', sku: 'p2', retailPrice: 100_000, salePrice: 70_000, stock: 3 }] });
+    const { svc, prisma } = setup({ products: [product('p1'), sale] });
+    await svc.create(createDto({ kind: 'ADDON', pct: undefined, anchorProductId: 'p1', items: [dtoItem('p2', { addonPrice: 39_000, variationId: 'p2-v' })] }) as never, ADMIN, NOW);
+    expect(prisma.bundle.create.mock.calls[0][0].data.items.create).toEqual([
+      { productId: 'p2', variationId: 'p2-v', addonPrice: 39_000, refPrice: 70_000, maxQty: 1, sortOrder: 0 },
+    ]);
   });
 
   it('ADDON không ghim phân loại → 400, không ghi (giá kèm cố định không hợp với nhiều phân loại)', async () => {
@@ -205,9 +214,21 @@ describe('BundlesAdminService.update', () => {
     expect(tx.$queryRaw).toHaveBeenCalled();
     expect(tx.bundleItem.deleteMany).toHaveBeenCalledWith({ where: { bundleId: 'b1' } });
     expect(tx.bundle.update.mock.calls[0][0].data.items.create).toEqual([
-      { productId: 'p1', variationId: null, addonPrice: null, maxQty: 1, sortOrder: 0 },
-      { productId: 'p2', variationId: null, addonPrice: null, maxQty: 3, sortOrder: 1 },
+      { productId: 'p1', variationId: null, addonPrice: null, refPrice: null, maxQty: 1, sortOrder: 0 },
+      { productId: 'p2', variationId: null, addonPrice: null, refPrice: null, maxQty: 3, sortOrder: 1 },
     ]);
+  });
+
+  it('thay món ADDON ghi lại giá tham chiếu theo giá đang bán lúc sửa; đổi sản phẩm chính (không thay món) không ghi lại món', async () => {
+    const addon = detailRow({ kind: 'ADDON', pct: null, anchorProductId: 'p1', items: [{ ...detailRow().items[1]!, variationId: 'p2-v', addonPrice: 39_000, refPrice: 50_000 }] });
+    const sale = product('p2', { variations: [{ id: 'p2-v', sku: 'p2', retailPrice: 100_000, salePrice: 80_000, stock: 3 }] });
+    const re = setup({ current: addon, products: [product('p1'), sale] });
+    await re.svc.update('b1', { items: [dtoItem('p2', { addonPrice: 39_000, variationId: 'p2-v' })] } as never, ADMIN, NOW);
+    expect(re.tx.bundle.update.mock.calls[0][0].data.items.create).toEqual([{ productId: 'p2', variationId: 'p2-v', addonPrice: 39_000, refPrice: 80_000, maxQty: 1, sortOrder: 0 }]);
+    const keep = setup({ current: addon, products: [product('p1'), sale] });
+    await keep.svc.update('b1', { title: 'Mới' } as never, ADMIN, NOW);
+    expect(keep.tx.bundleItem.deleteMany).not.toHaveBeenCalled();
+    expect(keep.tx.bundle.update.mock.calls[0][0].data.items).toBeUndefined();
   });
 
   it('đổi pct kiểm lại trên nội dung gộp: vượt trần → 400, không ghi', async () => {

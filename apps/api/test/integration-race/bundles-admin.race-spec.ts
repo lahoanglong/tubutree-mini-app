@@ -88,6 +88,17 @@ describe('Quản trị bundle (real Postgres)', () => {
     ]);
   });
 
+  it('ADDON admin tạo: giá tham chiếu = giá đang bán của phân loại ghim lúc tạo, đường tính tiền đọc lại đúng; sửa tay giá phân loại về sau không đổi giá tham chiếu', async () => {
+    const [a, b] = [await product(), await product(50_000)];
+    const addon = await create({ kind: 'ADDON', title: `IT ${randCode(6)}`, anchorProductId: a.id, startAt: START, endAt: END, items: [{ productId: b.id, variationId: b.variationId, addonPrice: 39_000 }] });
+    await prisma.variation.update({ where: { id: b.variationId }, data: { retailPrice: 500_000 } });
+    const live = (await loadLiveBundles(prisma, NOW, [a.id])).find((x) => x.id === addon.id)!;
+    expect(live.items).toEqual([{ productId: b.id, variationId: b.variationId, addonPrice: 39_000, refPrice: 50_000, maxQty: 1 }]);
+    // Sửa bộ có thay món là lúc ghi lại giá tham chiếu theo giá đang bán (admin đã kiểm trần ở giá đó).
+    await admin.update(addon.id, { items: [{ productId: b.id, variationId: b.variationId, addonPrice: 399_000 }] } as never, ADMIN);
+    expect((await prisma.bundleItem.findFirstOrThrow({ where: { bundleId: addon.id } })).refPrice).toBe(500_000);
+  });
+
   it('tắt bộ rồi bộ không còn vào đường tính tiền; bật lại thì vào', async () => {
     const [a, b] = [await product(), await product()];
     const { id } = await create(pctBundle(a.id, b.id));

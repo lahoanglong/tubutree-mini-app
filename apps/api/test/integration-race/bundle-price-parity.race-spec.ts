@@ -466,6 +466,46 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
     for (const v of [p1.variationId, p1Large, p2.variationId]) expect(paidOf(b.o, v)).toBe(paidOf(a.o, v));
   });
 
+  it('ADDON: phân loại ghim tăng giá sau khi tạo bộ (50.000đ → 500.000đ): khoản giảm vẫn là 11.000đ, giá kèm công khai = giá dòng giỏ = báo giá = đơn (489.000đ)', async () => {
+    const main = await product(80_000);
+    const side = await product(50_000);
+    await bundle('ADDON', [{ productId: side.productId, variationId: side.variationId, addonPrice: 39_000 }], { anchor: main.productId }); // refPrice = 50.000 lúc tạo
+    await prisma.variation.update({ where: { id: side.variationId }, data: { retailPrice: 500_000 } }); // sửa tay hay đồng bộ Pancake về sau
+
+    const shown = (await publicBundles.forProduct(main.slug)).addons;
+    expect(shown).toHaveLength(1);
+    expect(shown[0]!.items[0]).toMatchObject({ variationId: side.variationId, addonPrice: 489_000 });
+
+    const b = await buyer();
+    await cart.addItem(b.userId, { variationId: main.variationId, quantity: 1 });
+    await cart.addItem(b.userId, { variationId: side.variationId, quantity: 1 });
+    const r = await cartQuoteOrder(b);
+    expect(r.c.comboDiscount).toBe(11_000); // không phải 461.000đ
+    expect(paidOf(r.o, side.variationId)).toBe(shown[0]!.items[0]!.addonPrice);
+    expect(r.numbers.order).toBe(80_000 + 489_000);
+
+    // Giá tụt xuống dưới giá tham chiếu (sale mới): giảm theo giá hiện tại, không bao giờ làm giá tăng, công khai vẫn khớp giỏ.
+    await prisma.variation.update({ where: { id: side.variationId }, data: { retailPrice: 500_000, salePrice: 45_000 } });
+    expect((await publicBundles.forProduct(main.slug)).addons[0]!.items[0]!.addonPrice).toBe(39_000);
+    const sale = await buyer();
+    await cart.addItem(sale.userId, { variationId: main.variationId, quantity: 1 });
+    await cart.addItem(sale.userId, { variationId: side.variationId, quantity: 1 });
+    expect(paidOf((await cartQuoteOrder(sale)).o, side.variationId)).toBe(39_000);
+  });
+
+  it('ADDON thiếu giá tham chiếu (dòng cũ/ghi tay có ghim phân loại): giỏ không giảm VÀ công khai không quảng cáo, không lệch giá', async () => {
+    const main = await product(80_000);
+    const side = await product(50_000);
+    await bundle('ADDON', [{ productId: side.productId, variationId: side.variationId, addonPrice: 39_000, refPrice: null }], { anchor: main.productId });
+    expect((await publicBundles.forProduct(main.slug)).addons).toEqual([]);
+    const b = await buyer();
+    await cart.addItem(b.userId, { variationId: main.variationId, quantity: 1 });
+    await cart.addItem(b.userId, { variationId: side.variationId, quantity: 1 });
+    const r = await cartQuoteOrder(b);
+    expect(r.c.comboDiscount).toBe(0);
+    expect(paidOf(r.o, side.variationId)).toBe(50_000);
+  });
+
   it('ADDON ghi tay không ghim phân loại (qua mặt admin): giỏ không giảm đồng nào, công khai không quảng cáo', async () => {
     const b = await buyer();
     const main = await product(80_000);

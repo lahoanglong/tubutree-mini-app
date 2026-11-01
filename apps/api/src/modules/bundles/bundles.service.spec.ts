@@ -20,6 +20,7 @@ const item = (productId: string, o: Record<string, unknown> = {}) => ({
   productId,
   variationId: null,
   addonPrice: null,
+  refPrice: null,
   maxQty: 1,
   sortOrder: 0,
   product: { storefrontId: null },
@@ -113,7 +114,7 @@ describe('BundlesService.forProduct', () => {
   });
 
   it('ADDON chỉ hiện ở sản phẩm chính; món kèm thiếu giá kèm thì bỏ bộ; ở trang của món kèm không hiện', async () => {
-    const addon = row({ id: 'a1', kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items: [item('p2', { addonPrice: 39_000, maxQty: 2, variationId: 'v2a' })] });
+    const addon = row({ id: 'a1', kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items: [item('p2', { refPrice: 50_000, addonPrice: 39_000, maxQty: 2, variationId: 'v2a' })] });
     const onAnchor = await setup({ rows: [addon], variations: [pin('v2a', 'p2')] }).svc.forProduct('sp-p1', NOW);
     expect(onAnchor.combos).toEqual([]);
     expect(onAnchor.addons).toHaveLength(1);
@@ -128,7 +129,7 @@ describe('BundlesService.forProduct', () => {
   });
 
   it('sản phẩm chính hết hàng: không hiện Mua kèm (không bỏ món chính vào giỏ được), combo vẫn hiện', async () => {
-    const addon = row({ id: 'a1', kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items: [item('p2', { addonPrice: 39_000, variationId: 'v2a' })] });
+    const addon = row({ id: 'a1', kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items: [item('p2', { refPrice: 50_000, addonPrice: 39_000, variationId: 'v2a' })] });
     const soldOut = { id: 'p1', storefrontId: null, variations: [] };
     const out = await setup({ rows: [addon, row({ id: 'c1' })], product: soldOut, variations: [pin('v2a', 'p2')] }).svc.forProduct('sp-p1', NOW);
     expect(out.addons).toEqual([]);
@@ -152,20 +153,47 @@ describe('BundlesService.forProduct', () => {
   it('ADDON: món có giá kèm không thấp hơn giá đang bán bị bỏ (không quảng cáo deal không giảm được); hết món thì bỏ bộ', async () => {
     const mk = (extra: unknown[]) =>
       row({ id: 'a1', kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items: extra });
-    const mixed = mk([item('p2', { addonPrice: 50_000, variationId: 'v2a' }), item('p3', { addonPrice: 10_000, variationId: 'v3a' })]);
+    const mixed = mk([item('p2', { refPrice: 50_000, addonPrice: 50_000, variationId: 'v2a' }), item('p3', { refPrice: 50_000, addonPrice: 10_000, variationId: 'v3a' })]);
     const cards = [card('p1'), card('p2'), card('p3')];
     const variations = [pin('v2a', 'p2'), pin('v3a', 'p3')];
     const out = await setup({ rows: [mixed], cards, variations }).svc.forProduct('sp-p1', NOW);
     expect(out.addons[0]!.items.map((i) => i.productId)).toEqual(['p3']);
-    const none = mk([item('p2', { addonPrice: 60_000, variationId: 'v2a' })]);
+    const none = mk([item('p2', { refPrice: 50_000, addonPrice: 60_000, variationId: 'v2a' })]);
     expect((await setup({ rows: [none], cards, variations }).svc.forProduct('sp-p1', NOW)).addons).toEqual([]);
+  });
+
+  describe('giá mua kèm công khai = giá giỏ tính (cùng addonPayPrice, trần theo giá tham chiếu lúc tạo)', () => {
+    const mk = (items: unknown[]) => row({ id: 'a1', kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items });
+    const kem = (o: Record<string, unknown> = {}) => item('p2', { variationId: 'v2a', addonPrice: 39_000, refPrice: 50_000, ...o });
+    const priced = async (items: unknown[], variation: Record<string, unknown>) =>
+      (await setup({ rows: [mk(items)], variations: [pin('v2a', 'p2', variation)] }).svc.forProduct('sp-p1', NOW)).addons[0]?.items[0];
+
+    it('phân loại tăng giá sau khi tạo (50.000đ → 500.000đ): giá kèm hiện đúng giá sau trần, 489.000đ, không phải 39.000đ', async () => {
+      expect(await priced([kem()], { retailPrice: 500_000 })).toMatchObject({ variationId: 'v2a', addonPrice: 489_000 });
+    });
+
+    it('giá hiện tại đúng giá tham chiếu hoặc thấp hơn: giá kèm giữ 39.000đ', async () => {
+      expect(await priced([kem()], { retailPrice: 50_000 })).toMatchObject({ addonPrice: 39_000 });
+      expect(await priced([kem()], { retailPrice: 60_000, salePrice: 45_000 })).toMatchObject({ addonPrice: 39_000 });
+    });
+
+    it('thiếu giá tham chiếu (dòng ghi tay): giỏ không giảm nên không quảng cáo, hết món thì bỏ cả bộ', async () => {
+      expect(await priced([kem({ refPrice: null })], {})).toBeUndefined();
+      const twoItems = mk([kem({ refPrice: null }), item('p3', { variationId: 'v3a', addonPrice: 10_000, refPrice: 50_000 })]);
+      const out = await setup({ rows: [twoItems], cards: [card('p1'), card('p2'), card('p3')], variations: [pin('v2a', 'p2'), pin('v3a', 'p3')] }).svc.forProduct('sp-p1', NOW);
+      expect(out.addons[0]!.items.map((i) => i.productId)).toEqual(['p3']);
+    });
+
+    it('giá kèm không thấp hơn giá tham chiếu: không giảm được đồng nào dù giá hiện tại cao, không quảng cáo', async () => {
+      expect(await priced([kem({ addonPrice: 50_000 })], { retailPrice: 500_000 })).toBeUndefined();
+    });
   });
 
   it('tối đa 2 combo và 3 bộ mua kèm', async () => {
     const combos = ['c1', 'c2', 'c3'].map((id) => row({ id }));
     expect((await setup({ rows: combos }).svc.forProduct('sp-p1', NOW)).combos.map((c) => c.id)).toEqual(['c1', 'c2']);
     const addons = ['a1', 'a2', 'a3', 'a4'].map((id) =>
-      row({ id, kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items: [item('p2', { addonPrice: 1000, variationId: 'v2a' })] }),
+      row({ id, kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items: [item('p2', { refPrice: 50_000, addonPrice: 1000, variationId: 'v2a' })] }),
     );
     expect((await setup({ rows: addons, variations: [pin('v2a', 'p2')] }).svc.forProduct('sp-p1', NOW)).addons.map((a) => a.id)).toEqual(['a1', 'a2', 'a3']);
   });
@@ -181,7 +209,7 @@ describe('BundlesService.forProduct', () => {
 describe('BundlesService: Giờ vàng (giỏ không đưa dòng Giờ vàng vào bundle, nên không quảng cáo bộ mà giỏ sẽ không giảm)', () => {
   const addon = (items: unknown[]) =>
     row({ id: 'a1', kind: 'ADDON', pct: null, anchorProductId: 'p1', anchorProduct: { storefrontId: null }, items });
-  const side = item('p2', { addonPrice: 39_000, variationId: 'v2a' });
+  const side = item('p2', { refPrice: 50_000, addonPrice: 39_000, variationId: 'v2a' });
 
   it('sản phẩm chính đang Giờ vàng: không hiện Mua kèm (giỏ không thấy sản phẩm chính nên tính 180.000đ thay vì giá kèm)', async () => {
     const base = { rows: [addon([side])], variations: [pin('v2a', 'p2')] };
@@ -191,7 +219,7 @@ describe('BundlesService: Giờ vàng (giỏ không đưa dòng Giờ vàng vào
   });
 
   it('món kèm đang Giờ vàng: món đó bị bỏ khỏi bộ; hết món thì bỏ bộ', async () => {
-    const two = addon([side, item('p3', { addonPrice: 10_000, variationId: 'v3a' })]);
+    const two = addon([side, item('p3', { refPrice: 50_000, addonPrice: 10_000, variationId: 'v3a' })]);
     const cards = [card('p1'), card('p2'), card('p3')];
     const variations = [pin('v2a', 'p2'), pin('v3a', 'p3')];
     const one = await setup({ rows: [two], cards, variations, flash: [{ variationId: 'v2a', productId: 'p2' }] }).svc.forProduct('sp-p1', NOW);
