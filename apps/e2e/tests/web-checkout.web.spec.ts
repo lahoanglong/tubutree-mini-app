@@ -104,8 +104,9 @@ test.describe('Web khách: thanh toán', () => {
     await expect(page.getByRole('link', { name: /^Thanh toán \(/ })).toBeVisible();
     await expect.poll(() => page.getByRole('main').ariaSnapshot()).toMatch(/250\.000đ/);
     const cart = await page.getByRole('main').ariaSnapshot();
-    expect(cart).toMatch(/Tổng\b/);
-    expect(cart.match(/\bTổng\b/g)).toHaveLength(1);
+    // Giỏ không giảm gì: số cạnh nút ghi "Tạm tính" (chưa gồm phí giao nên không gọi "Tổng"), hàng tạm tính phía trên gộp vào nên chỉ còn một.
+    expect(cart).toMatch(/Tạm tính/);
+    expect(cart.match(/Tạm tính/g)).toHaveLength(1);
   });
 
   test('375: thanh toán, giỏ hàng, tài khoản, Kho quà không tràn ngang', async ({ page, api }, testInfo) => {
