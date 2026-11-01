@@ -410,6 +410,19 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
     expect((await publicBundles.forProduct(main.slug)).addons).toEqual([]);
   });
 
+  it('ADDON: sản phẩm chính hết hàng thì công khai không hiện Mua kèm (món chính không vào giỏ được); còn hàng lại thì hiện', async () => {
+    const main = await product(80_000);
+    const side = await product(50_000);
+    await bundle('ADDON', [{ productId: side.productId, variationId: side.variationId, addonPrice: 39_000 }], { anchor: main.productId });
+    expect((await publicBundles.forProduct(main.slug)).addons).toHaveLength(1);
+    await prisma.variation.update({ where: { id: main.variationId }, data: { stock: 0 } });
+    expect((await publicBundles.forProduct(main.slug)).addons).toEqual([]);
+    await prisma.variation.update({ where: { id: main.variationId }, data: { stock: 3, isActive: false } });
+    expect((await publicBundles.forProduct(main.slug)).addons).toEqual([]);
+    await prisma.variation.update({ where: { id: main.variationId }, data: { stock: 3, isActive: true } });
+    expect((await publicBundles.forProduct(main.slug)).addons).toHaveLength(1);
+  });
+
   it('ADDON: sản phẩm chính đang Giờ vàng thì công khai không quảng cáo và giỏ không giảm; hết Giờ vàng thì cả hai cùng giảm 11.000đ', async () => {
     const side = await product(50_000);
     const anchor = await flashProduct(100_000, 50_000);
