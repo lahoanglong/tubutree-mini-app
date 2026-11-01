@@ -130,3 +130,28 @@
 - [ ] **Step 1: chụp "trước"** (làm TRƯỚC Task 1, trên mã base): spec tạm ở `docs/2026-10-31-shop-redesign/screens/F10b/` (thư mục gitignore; chép vào `apps/e2e/tests/` khi chạy, xoá sau) chụp Mini `/cart`, `/best-sellers`, `/flash-sale`, `/vouchers`, `/campaign/:slug` và web `/gio-hang` ở 375×812 vào `screens/F10b/before/`. Sau cùng chạy lại vào `after/`.
 - [ ] **Step 2: gate**: `cd apps/e2e && E2E_SCOPE=miniapp E2E_MINIAPP_PORT=3369 npx playwright test --workers=2 --reporter=line` (tắt server chụp ảnh trước), rồi `bash docs/2026-10-28-review/tools/gate.sh <worktree> --base 201046ff2 --out /Users/longla/coding/tubutree-mini-app/.claude/worktrees/gate-F10b.txt`. Bước FAIL: chạy lại ở base để phân biệt "có sẵn".
 - [ ] **Step 3: ghi** số đo chân dính trước/sau, đường dẫn ảnh, e2e cũ sửa theo thiết kế, vào phần cuối plan này; commit `docs(shop): F10b ghi kết quả`.
+
+---
+
+## Kết quả (ghi sau khi làm xong)
+
+**Commit:** 612249f5e (plan), 689e5631b (T1 bốn trang bỏ lớp `page`), c468f1a92 (T2 `strikePrice`), 5b2b326d1 (T3 chân dính gọn), f29580c86 (T4 gợi ý mã ngắn).
+
+**Số đo chân dính 375×812 (Playwright, `cart-footer.*`):**
+
+| Ca | Trước | Sau |
+| --- | --- | --- |
+| Mini, 3 dòng, đã đạt miễn phí giao, không giảm | 215px | 138px (≤150) |
+| Mini, đạt + dòng Giờ vàng + Tiết kiệm | không đo | 148px |
+| Mini, chưa đạt + dòng giảm combo | không đo | 173,5px (≤175) |
+| Mini, 8 dòng + dòng hết hàng | 263px | ≤190px (dòng cuối nằm trên chân, cả khi `--safe-bottom` 34px) |
+| Web, 3 dòng, đã đạt miễn phí giao, không giảm | 198px | ≤150px |
+| Web, chưa đạt + giảm combo | không đo | ≤180px (web hơn Mini ~5px vì thanh dùng chung có viền 1px + đệm 12px) |
+
+**Ảnh 375px** (gitignore): `docs/2026-10-31-shop-redesign/screens/F10b/before/` và `after/`: `mini-cart`, `mini-cart-not-reached`, `mini-best-sellers`, `mini-flash-sale`, `mini-vouchers`, `mini-campaign`, `web-cart`, `web-cart-not-reached`. Ảnh web "trước" chụp bằng cách tạm đặt `page.tsx` + `coupon-box.tsx` của base `201046ff2` rồi khôi phục. Spec chụp tạm lưu ở cùng thư mục (`f10b-shots.*.spec.ts`), bản trong `apps/e2e/tests/` đã xoá.
+
+**Tiền không đổi (P1 #6):** `cart.service.spec.ts` ca "tiền không đổi" (unitPrice 33.000, tổng 66.000, tạm tính 66.000, giảm 0, combo 0) và `cart-combo-equals-quote.race-spec.ts` ca Giờ vàng thắng giá sale (cart = quote = order = 66.000, `listUnitPrice` 50.000). Chỉ `listUnitPrice` (giá gạch, chỉ hiển thị) đổi từ giá niêm yết 59.000 sang giá đang bán 50.000.
+
+**Test cũ sửa theo thiết kế mới:** `flash-slots.miniapp.spec.ts` (bỏ so `topBefore`: hàng dính nay bằng đúng vị trí tự nhiên), `flash-sale.spec.tsx` (`top` là `var(--safe-top)`), `cart.service.spec.ts` (ca Giờ vàng kỳ vọng `listUnitPrice` 50.000), `cart.spec.tsx` Mini và `coupon-box.spec.tsx` web (chữ gợi ý bản ngắn). Không có test nào hỏng vì hồi quy.
+
+**E2E Mini cả bộ** (`E2E_SCOPE=miniapp --workers=2`): 354 passed, 10 skipped, 0 failed.
