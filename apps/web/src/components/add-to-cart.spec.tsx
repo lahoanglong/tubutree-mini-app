@@ -55,7 +55,8 @@ const mount = (variations = VARIATIONS) => {
   mounted.push(r);
   return r;
 };
-const addButton = (c: HTMLElement) => byText(c, 'button', /Thêm vào giỏ|Hết hàng|Đang thêm/) as HTMLButtonElement;
+// Neo đầu chữ: chip phân loại hết hàng cũng ghi "Hết hàng" nhưng bắt đầu bằng tên phân loại.
+const addButton = (c: HTMLElement) => byText(c, 'button', /^(Thêm vào giỏ|Hết hàng|Đang thêm)/) as HTMLButtonElement;
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -472,6 +473,62 @@ describe('AddToCart — gian hàng chưa nhận đơn (R3-MERCHANT-3)', () => {
     await flush();
     expect(mocks.addToCart).not.toHaveBeenCalled();
     expect(mocks.push).not.toHaveBeenCalled();
+  });
+});
+
+describe('AddToCart — khối mua xếp theo order cùng các khối khác của PDP ở điện thoại (như Mini App)', () => {
+  const order = (el: Element | null) => Number(/max-md:order-(\d+)/.exec(el?.className ?? '')?.[1] ?? 0);
+
+  it('gốc là `contents` để Phân loại, chip, Số lượng thành khối con của cột thông tin: Phân loại 4 → chip 5 → Số lượng 10', async () => {
+    const { container } = mount();
+    await flush();
+    expect(container.firstElementChild!.className).toContain('max-md:contents');
+    const row = container.querySelector('[data-section="pdp-variation"]')!;
+    const chips = container.querySelector('[data-section="pdp-variation-chips"]')!;
+    const qty = container.querySelector('[data-section="pdp-quantity"]')!;
+    expect([order(row), order(chips), order(qty)]).toEqual([4, 5, 10]);
+    for (const el of [row, chips, qty]) expect(el.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+  });
+
+  it('một phân loại: không có dòng "Phân loại ›" và không có chip (không để lại dải rỗng)', async () => {
+    const { container } = mount([VARIATIONS[0]!]);
+    await flush();
+    expect(container.querySelector('[data-section="pdp-variation"]')).toBeNull();
+    expect(container.querySelector('[data-section="pdp-variation-chips"]')).toBeNull();
+    expect(container.querySelector('[data-section="pdp-quantity"]')).not.toBeNull();
+  });
+});
+
+describe('AddToCart — chip phân loại hai dòng như Mini App', () => {
+  const FLASH_V2 = {
+    itemId: 'f2', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 200000, retailPrice: 300000,
+    salePrice: null, soldCount: 1, quota: 10, endAt: '2099-10-14T16:00:00.000Z',
+  };
+
+  it('chip đang Giờ vàng có ⚡ và chữ đọc "Giờ vàng", giá màu deal; chip thường không có ⚡', async () => {
+    mocks.getActiveFlashSales.mockResolvedValue([FLASH_V2]);
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    const { container } = mount();
+    await flush();
+    const flash = byText(container, 'button', /500ml/) as HTMLButtonElement;
+    const plain = byText(container, 'button', /250ml/) as HTMLButtonElement;
+    expect(flash.querySelector('svg')).not.toBeNull();
+    expect(flash.textContent).toContain('Giờ vàng');
+    const price = Array.from(flash.querySelectorAll('span')).find((x) => x.textContent?.includes('200.000đ'))!;
+    expect(price.className).toContain('max-md:text-[var(--color-text-price-deal)]');
+    expect(plain.querySelector('svg')).toBeNull();
+    expect(plain.className).toContain('min-h-11');
+    expect(flash.className).toContain('max-md:flex-col');
+  });
+
+  it('chip hết hàng: ghi "Hết hàng" thay giá, tên gạch ngang', async () => {
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 9 });
+    const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }, VARIATIONS[1]!]);
+    await flush();
+    const out = byText(container, 'button', /250ml/) as HTMLButtonElement;
+    expect(out.textContent).toContain('Hết hàng');
+    expect(out.textContent).not.toContain('150.000đ');
+    expect(out.querySelector('.line-through')!.textContent).toBe('250ml');
   });
 });
 

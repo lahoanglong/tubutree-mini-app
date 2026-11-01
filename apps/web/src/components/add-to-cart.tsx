@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Layers, ShoppingCart } from 'lucide-react';
+import { Layers, ShoppingCart, Zap } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { addToCart, applyCoupon, formatVnd, getCart, getProductStock } from '@/lib/shop-client';
@@ -302,7 +302,7 @@ export default function AddToCart({
 
   if (blockedReason) {
     return (
-      <div className="mt-4">
+      <div className="mt-4 max-md:order-10 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4">
         <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
           Tạm thời chưa mua được
         </button>
@@ -330,12 +330,14 @@ export default function AddToCart({
     </div>
   );
 
+  // Điện thoại: gốc là `contents` để Phân loại, chip và Số lượng thành khối con của cột thông tin trang sản phẩm, xếp bằng `order`
+  // xen giữa Combo/Đánh giá nhanh như Mini App (Phân loại → Combo/Mua kèm → Đánh giá nhanh → Số lượng). Máy tính giữ một khối liền.
   return (
-    <div className="mt-4">
+    <div className="mt-4 max-md:contents">
       {variations.length > 1 && selected && (
         // Điện thoại: dòng "Phân loại ›" như Mini App mở bảng chọn đủ ảnh, giá, tồn; chip bên dưới là lối tắt cho phân loại hay chọn.
         // Khối bọc mới ẩn được ở máy tính: ListRow đặt display:flex inline nên class trên chính nó không thắng.
-        <div className="md:hidden">
+        <div data-section="pdp-variation" className="md:hidden max-md:order-4 max-md:bg-[var(--color-bg-surface)] max-md:px-4">
           <ListRow
             icon={<Icon icon={Layers} size="md" tone="brand" />}
             title={fillCopy('pdp.variation')}
@@ -349,11 +351,16 @@ export default function AddToCart({
         </div>
       )}
       {variations.length > 1 && (
-        <div role="group" aria-labelledby="variation-label">
+        <div
+          role="group"
+          aria-labelledby="variation-label"
+          data-section="pdp-variation-chips"
+          className="max-md:order-5 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-3"
+        >
           <div id="variation-label" className="text-sm font-semibold text-stone-900 max-md:sr-only">
             Phân loại
           </div>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-2 max-md:mt-0">
             {variations.map((v) => {
               const out = v.stock <= 0;
               const active = v.id === selectedId;
@@ -367,14 +374,38 @@ export default function AddToCart({
                     userPicked.current = true;
                     setSelectedId(v.id);
                   }}
-                  className={`min-h-11 rounded-control border px-4 text-sm transition ${
+                  // Điện thoại: hai dòng (tên / giá) như chip của Mini App, viền 1,5px. Từ md giữ "tên · giá" một dòng để nút mua còn trong 1280×800.
+                  className={`min-h-11 rounded-control border px-4 text-sm transition max-md:flex max-md:flex-col max-md:items-start max-md:border-[1.5px] max-md:px-3.5 max-md:py-2 max-md:text-left ${
                     active
-                      ? 'border-forest-600 bg-forest-50 font-semibold text-forest-700'
-                      : 'border-stone-450 bg-stone-0 text-stone-800 hover:bg-stone-50'
-                  } ${out ? 'opacity-60 line-through' : ''}`}
+                      ? 'border-forest-600 bg-forest-50 font-semibold text-forest-700 max-md:border-[var(--color-border-selected)] max-md:bg-[var(--color-action-secondary-bg)]'
+                      : 'border-stone-450 bg-stone-0 text-stone-800 hover:bg-stone-50 max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]'
+                  } ${out ? 'opacity-60 max-md:opacity-[0.55]' : ''}`}
                 >
-                  {v.name} · {formatVnd(vp.price)}
-                  {vp.isFlash && <span className="ml-1.5 text-xs font-bold text-promo-fg">Giờ vàng</span>}
+                  <span className={`${active ? 'max-md:font-semibold' : 'max-md:font-normal'} ${out ? 'line-through' : ''} max-md:text-sm`}>{v.name}</span>
+                  <span aria-hidden="true" className="max-md:hidden">
+                    {' · '}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-0.5 max-md:text-xs max-md:font-normal ${
+                      out
+                        ? 'max-md:text-[var(--color-text-disabled)]'
+                        : vp.isFlash
+                          ? 'max-md:text-[var(--color-text-price-deal)]'
+                          : active
+                            ? 'max-md:text-[var(--color-text-brand)]'
+                            : 'max-md:text-[var(--color-text-secondary)]'
+                    }`}
+                  >
+                    {out ? (
+                      'Hết hàng'
+                    ) : (
+                      <>
+                        {vp.isFlash && <Zap className="hidden h-3 w-3 max-md:block" strokeWidth={2} aria-hidden="true" />}
+                        {formatVnd(vp.price)}
+                      </>
+                    )}
+                  </span>
+                  {vp.isFlash && !out && <span className="ml-1.5 text-xs font-bold text-promo-fg max-md:sr-only">Giờ vàng</span>}
                 </button>
               );
             })}
@@ -383,10 +414,10 @@ export default function AddToCart({
       )}
 
       {available && (selected?.stock ?? 0) <= LOW_STOCK_NOTICE && (
-        <p className="mt-3 text-sm font-medium text-warning-fg">Chỉ còn {selected!.stock} sản phẩm</p>
+        <p className="mt-3 text-sm font-medium text-warning-fg max-md:order-7 max-md:mt-0 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-3 max-md:text-xs">Chỉ còn {selected!.stock} sản phẩm</p>
       )}
 
-      <div className="mt-4 flex items-center gap-3 max-md:justify-between">
+      <div data-section="pdp-quantity" className="mt-4 flex items-center gap-3 max-md:order-10 max-md:mt-2 max-md:justify-between max-md:bg-[var(--color-bg-surface)] max-md:p-4">
         <span className="text-sm font-semibold text-stone-900 md:hidden">Số lượng</span>
         <QuantitySelector value={qty} max={maxQty} onChange={setQty} />
         {/* Từ md: nút thêm giỏ ngay cạnh số lượng. Dưới md hai nút nằm ở thanh dính đáy (bên dưới). */}
