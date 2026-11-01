@@ -601,6 +601,33 @@
 }
 .tubu-btn .zaui-btn-icon {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  margin-right: 8px;
+}
+.tubu-btn.zaui-btn-tertiary {
+  min-width: 0;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.tubu-btn.zaui-btn.zaui-btn-secondary[disabled] {
+  background-color: var(--color-action-secondary-bg-disabled);
+  color: var(--color-action-secondary-fg-disabled);
+}
+.tubu-btn.tubu-btn-44 {
+  height: 44px;
+}
+
+/* Nút phụ đang tắt của trang web dựng bằng `ui.btnSecondary` + `phoneSecondary`: dưới md dùng cùng cặp token với Mini (chữ be nhạt trên nền xanh nhạt
+ * không đọc nổi). Viết ở CSS thường để không thêm lớp `max-md:` cho bánh cóc; hai lớp lặp để thắng `disabled:text-stone-500` của Tailwind. */
+@media (max-width: 767px) {
+  .tubu-phone-secondary.tubu-phone-secondary:disabled {
+    background-color: var(--color-action-secondary-bg-disabled);
+    color: var(--color-action-secondary-fg-disabled);
+  }
 }
 .tubu-sticky-bar .tubu-btn {
   min-width: 0;
@@ -679,4 +706,9 @@
     transform: translateX(-50%);
     animation: none;
   }
+}
+
+/* Thanh tên shop trên đầu trang (ShopTopBar): chừa 64px cho nút lùi nổi bên trái và 96px cho nút Zalo của Mini App bên phải, như Mini, để tên shop không lệch tâm. */
+.tubu-shop-top-bar {
+  padding: 0 96px 0 64px;
 }

@@ -620,6 +620,30 @@ body.with-back-btn .page.page-bleed {
 }
 .tubu-btn .zaui-btn-icon {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* ZaUI đặt khung icon 24x24 cho icon 24px; icon của DS là 16px nên khung thừa 8px bên phải chữ (khoảng cách 16px thay vì 8px) và icon dính đỉnh khung. */
+  width: auto;
+  height: auto;
+  margin-right: 8px;
+}
+/* Nút chữ (variant ghost → ZaUI tertiary): `.zaui-btn` giữ rộng tối thiểu 120px và đệm 24px nên chữ "Sắp xếp" lùi vào ~30px khỏi mép phải;
+ * đệm 8px như nút chữ của web (`ui.btnText` px-2). Nút `fullWidth` đã tự bỏ min-width. */
+.tubu-btn.zaui-btn-tertiary {
+  min-width: 0;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+/* Nút phụ đang tắt: cặp token riêng thay cặp của nút chính (chữ be nhạt trên nền be, ~2:1). 4 lớp để thắng
+ * `.zaui-btn-secondary.zaui-btn-disabled[disabled]` của ZaUI bất kể thứ tự nạp. */
+.tubu-btn.zaui-btn.zaui-btn-secondary[disabled] {
+  background-color: var(--color-action-secondary-bg-disabled);
+  color: var(--color-action-secondary-fg-disabled);
+}
+/* Chiều cao đúng 44 (ZaUI `.zaui-btn` mặc định 48): thanh dính của màn dựng gian hàng bằng nút web (min-h-11). */
+.tubu-btn.tubu-btn-44 {
+  height: 44px;
 }
 /* Trong StickyActionBar: bỏ min-width 120px của ZaUI (để 2 nút + nút giỏ vừa 320px) và thu đệm
  * ngang 24 → 12px (nhãn có thêm 24px mỗi nút trước khi phải rút gọn). */

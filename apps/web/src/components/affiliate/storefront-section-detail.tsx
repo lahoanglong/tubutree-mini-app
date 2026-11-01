@@ -36,7 +36,6 @@ export interface StorefrontSectionDetailProps {
   onMoveBlocked: (itemId: string, dir: MoveDirection) => void;
   onItemMenu: (itemId: string) => void;
   onNote: (itemId: string) => void;
-  onKit: (slug: string) => void;
 }
 
 const samePinGroup = (a: { isPinned: boolean }, b: { isPinned: boolean }) => a.isPinned === b.isPinned;
@@ -104,39 +103,43 @@ export function StorefrontSectionDetail(p: StorefrontSectionDetailProps) {
   const lockNote = styleLockNote(col.kind);
 
   return (
-    <div data-testid="section-detail" className="space-y-4">
-      {/* Dưới md như dải đầu của Mini App: nền surface tràn mép, nút lùi nổi của app đè lên góc trái nên hàng đầu chừa 52px; từ md là khối thường. */}
-      <div className="max-md:mx-[calc(50%-50vw)] max-md:bg-[var(--color-bg-surface)] max-md:px-2 max-md:pb-3 max-md:pt-2">
-        <div className="-ml-2 flex items-center justify-between max-md:ml-0 max-md:pl-[52px]">
-          <button type="button" onClick={p.onBack} className="inline-flex min-h-11 items-center gap-0.5 px-2 text-sm font-medium text-forest-700">
-            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-            {BUILDER_COPY.back}
-          </button>
-          <MenuButton label={BUILDER_COPY.sectionOptions} onPress={p.onMenu} />
+    // Từ lg hai cột: trái là đầu khối, kiểu hiển thị, mức giảm và danh sách món; phải là khung "Khách sẽ thấy" (dính khi cuộn), thay vì cột phải bỏ trống.
+    <div data-testid="section-detail" className="space-y-4 lg:grid lg:grid-cols-[minmax(0,28rem)_minmax(0,1fr)] lg:items-start lg:gap-x-8 lg:space-y-0">
+      <div className="space-y-4 lg:col-start-1">
+        {/* Dưới md như dải đầu của Mini App: nền surface tràn mép, nút lùi nổi của app đè lên góc trái nên hàng đầu chỉ có ⋯ ở phải; từ md là khối thường có link lùi. */}
+        <div className="max-md:mx-[calc(50%-50vw)] max-md:bg-[var(--color-bg-surface)] max-md:px-2 max-md:pb-3 max-md:pt-2">
+          <div className="flex items-center justify-end md:-ml-2 md:justify-between">
+            {/* Dưới md nút lùi nổi của app là lối lùi duy nhất (như Mini); từ md không có nút nổi nên link này ở lại. */}
+            <button type="button" onClick={p.onBack} className="hidden min-h-11 items-center gap-0.5 px-2 text-sm font-medium text-forest-700 md:inline-flex">
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+              {BUILDER_COPY.back}
+            </button>
+            <MenuButton label={BUILDER_COPY.sectionOptions} onPress={p.onMenu} />
+          </div>
+          <div className="max-md:px-2">
+            <h2
+              ref={p.headingRef}
+              tabIndex={-1}
+              className="break-words font-display text-xl font-semibold text-stone-900 outline-none max-md:text-[length:var(--type-title-lg-size)] max-md:leading-[var(--type-title-lg-lh)] max-md:tracking-[-0.01em]"
+            >
+              {col.title}
+            </h2>
+            <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] max-md:text-[color:var(--color-text-tertiary)]">{view.countText}</p>
+          </div>
         </div>
-        <div className="max-md:px-2">
-          <h2
-            ref={p.headingRef}
-            tabIndex={-1}
-            className="break-words font-display text-xl font-semibold text-stone-900 outline-none max-md:text-[length:var(--type-title-lg-size)] max-md:leading-[var(--type-title-lg-lh)] max-md:tracking-[-0.01em]"
-          >
-            {col.title}
-          </h2>
-          <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] max-md:text-[color:var(--color-text-tertiary)]">{view.countText}</p>
-        </div>
-      </div>
 
-      <LayoutPicker value={p.pickedStyle ?? sectionStyleOf(col)} onChange={p.onStyle} options={styleOptions(col)} lockNote={lockNote} />
-      {col.kind === 'COMBO' && <ComboPctField pct={col.comboDiscountPct} onSave={p.onComboPct} />}
-      {view.warnings.map((w) => (
-        <div key={w} role="status" className="text-xs text-warning-fg">
-          {w}
-        </div>
-      ))}
+        <LayoutPicker value={p.pickedStyle ?? sectionStyleOf(col)} onChange={p.onStyle} options={styleOptions(col)} lockNote={lockNote} />
+        {col.kind === 'COMBO' && <ComboPctField pct={col.comboDiscountPct} onSave={p.onComboPct} />}
+        {view.warnings.map((w) => (
+          <div key={w} role="status" className="text-xs text-warning-fg">
+            {w}
+          </div>
+        ))}
+      </div>
 
       {/* Sắp xếp cần danh sách ↑↓ ngay màn đầu; khung xem trước cao cả ngàn px sẽ đẩy nó xuống, nên ẩn trong chế độ này. */}
       {shown.items.length > 0 && !p.sortMode && (
-        <section>
+        <section className="lg:sticky lg:top-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">
           <div className="mb-1.5 flex items-baseline gap-2">
             <div className="text-xs font-medium text-stone-700">{BUILDER_COPY.preview}</div>
             <div className="text-xs text-stone-600">{BUILDER_COPY.previewNote}</div>
@@ -148,7 +151,7 @@ export function StorefrontSectionDetail(p: StorefrontSectionDetailProps) {
         </section>
       )}
 
-      <div>
+      <div className="lg:col-start-1 lg:mt-4">
         <div className="flex items-center justify-between gap-2">
           <div className="text-xs font-medium text-stone-700">{BUILDER_COPY.itemsHeading}</div>
           {col.items.length > 1 && (
@@ -157,7 +160,7 @@ export function StorefrontSectionDetail(p: StorefrontSectionDetailProps) {
             </button>
           )}
         </div>
-        <ul className="grid list-none grid-cols-[minmax(0,1fr)] gap-x-6 p-0 md:grid-cols-2">
+        <ul className="grid list-none grid-cols-[minmax(0,1fr)] gap-x-6 p-0 md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)]">
           {col.items.map((it) => (
             <ItemRow key={it.id} it={it} list={col.items} productMap={p.productMap} p={p} />
           ))}
@@ -175,7 +178,6 @@ function ItemRow({ it, list, productMap, p }: { it: StorefrontItemEdit; list: St
   const prod = it.product ?? productMap.get(it.productId);
   const name = prod?.name ?? 'Sản phẩm';
   const price = prod?.salePrice ?? prod?.basePrice ?? 0;
-  const slug = prod?.slug;
   const at = list.findIndex((x) => x.id === it.id);
   const canMove = (dir: MoveDirection) => {
     const to = dir === 'up' ? at - 1 : at + 1;
@@ -229,11 +231,6 @@ function ItemRow({ it, list, productMap, p }: { it: StorefrontItemEdit; list: St
             <MessageSquarePlus className="h-4 w-4 shrink-0" aria-hidden="true" />
             {it.note ? `“${it.note}”` : 'Thêm lý do giới thiệu'}
           </button>
-          {slug && (
-            <button type="button" className={`${ui.btnText} ${phoneBrandText}`} onClick={() => p.onKit(slug)}>
-              Bài đăng mẫu
-            </button>
-          )}
         </div>
       )}
     </li>

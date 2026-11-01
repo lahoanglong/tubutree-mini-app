@@ -102,6 +102,46 @@ describe('ShopSection (web) vẽ theo layout', () => {
   });
 });
 
+describe('ShopSection (web) từ lg (G6 #36)', () => {
+  const rail = (n: number, preview = false) => <ShopSection collection={col({ layout: 'CAROUSEL', items: many(n) })} preview={preview} />;
+
+  it('kệ ngang ít món (<= 6): kệ giữ cho dưới lg, thêm lưới sáu cột chỉ hiện từ lg, cùng số thẻ', async () => {
+    const c = await mount(rail(4));
+    const railBox = c.querySelector('[data-testid="shop-rail"]')!;
+    const gridBox = c.querySelector('[data-testid="shop-rail-lg"]')!;
+    expect(railBox.className).toContain('lg:hidden');
+    expect(gridBox.className).toContain('hidden');
+    expect(gridBox.className).toContain('lg:block');
+    expect(gridBox.querySelector('ul')!.className).toContain('grid-cols-6');
+    expect(tiles(c, 'shop-rail')).toBe(4);
+    expect(tiles(c, 'shop-rail-lg')).toBe(4);
+  });
+
+  it('kệ nhiều món (> 6): chỉ có kệ ngang cuộn, không lưới thứ hai', async () => {
+    const c = await mount(rail(8));
+    expect(c.querySelector('[data-testid="shop-rail-lg"]')).toBeNull();
+    expect(c.querySelector('[data-testid="shop-rail"]')!.className).not.toContain('lg:hidden');
+    expect(tiles(c, 'shop-rail')).toBe(8);
+  });
+
+  it('xem trước (preview) ở cột hẹp của màn dựng: luôn là kệ ngang, không lưới sáu cột', async () => {
+    const c = await mount(rail(4, true));
+    expect(c.querySelector('[data-testid="shop-rail-lg"]')).toBeNull();
+    expect(c.querySelector('[data-testid="shop-rail"]')!.className).not.toContain('lg:hidden');
+  });
+
+  it('bố cục lưới và hàng dòng không đổi', async () => {
+    const g = await mount(<ShopSection collection={col({ layout: 'GRID', items: many(3) })} />);
+    expect(g.querySelector('[data-testid="shop-rail-lg"]')).toBeNull();
+  });
+
+  it('combo có trần bề rộng từ lg (576px), không giãn hết khung 1152px', async () => {
+    const items = [item(1), item(2), item(3)];
+    const c = await mount(<ShopSection collection={col({ kind: 'COMBO', comboDiscountPct: 10, items })} />);
+    expect(c.querySelector('[data-testid="shop-combo"]')!.className).toContain('lg:max-w-xl');
+  });
+});
+
 describe('ShopSection (web) combo', () => {
   const comboItems = [item(1), item(2, { basePrice: 50_000 }), item(3, { basePrice: 50_000 })];
   const combo = (over: Partial<ShopSectionProps['collection']> = {}) => col({ id: 'cb', title: 'Combo giặt', kind: 'COMBO', comboDiscountPct: 10, items: comboItems, ...over });

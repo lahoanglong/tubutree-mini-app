@@ -12,7 +12,7 @@ import { coreHttp } from '@/lib/core-http';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StorefrontBuilder } from '@/components/affiliate/storefront-builder';
+import { BUILDER_HEAD_SLOT, StorefrontBuilder } from '@/components/affiliate/storefront-builder';
 import { StorefrontSignupFlow } from '@/components/affiliate/storefront-signup';
 import { errText } from '@/components/affiliate/storefront-sheets';
 import BackLink from '@/components/back-link';
@@ -26,8 +26,10 @@ const TITLE = 'Gian hàng của tôi';
  * nên dải tiêu đề của trang không chiếm thêm một hàng. h1 "Gian hàng của tôi" vẫn nằm trong cây truy cập (chỉ ẩn bằng sr-only dưới md) nên trang luôn có đúng một h1;
  * khung bỏ đệm đỉnh để dải đầu của khối bắt đầu từ mép trên, chừa chỗ cho nút lùi nổi bằng lề trái của chính nó.
  */
-function Shell({ children, detail = false }: { children: ReactNode; detail?: boolean }) {
-  const header = <PageHeader title={TITLE} parentHref="/ctv" className="md:mt-1" />;
+function Shell({ children, detail = false, builder = false }: { children: ReactNode; detail?: boolean; builder?: boolean }) {
+  // `builder`: hàng tiêu đề có ô cho "Xem trước" và nút chính từ lg (trình dựng gắn nút vào đây; điện thoại dùng thanh dính đáy).
+  const slot = builder ? <div id={BUILDER_HEAD_SLOT} data-testid={BUILDER_HEAD_SLOT} className="hidden shrink-0 items-center gap-2 lg:flex" /> : undefined;
+  const header = <PageHeader title={TITLE} parentHref="/ctv" className="md:mt-1" actions={slot} />;
   return (
     <main className={`${PAGE_WIDE} py-6${detail ? ' max-md:pt-0' : ''}`}>
       <BackLink href="/ctv">
@@ -99,7 +101,7 @@ function CtvStorefront() {
   const khoi = sectionIdFromSearch(params?.toString() ?? '');
   const detail = khoi !== null && sf.collections.some((c) => c.id === khoi);
   return (
-    <Shell detail={detail}>
+    <Shell detail={detail} builder>
       <Suspense fallback={<Skeleton height={120} />}>
         <StorefrontBuilder sf={sf} />
       </Suspense>

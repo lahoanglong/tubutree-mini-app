@@ -313,7 +313,9 @@ test.describe('Web khách: CTV', () => {
     await expect.poll(() => api.callsTo('POST', '/storefront/me/collections/:id/items')).toHaveLength(1);
     expect(api.callsTo('POST', '/storefront/me/collections/:id/items')[0]!.body).toEqual({ productId: 'p2' });
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Gian hàng của tôi', exact: true }).click();
+    // Từ md có nút lùi trong trang; dưới md chỉ còn nút lùi nổi (một lối lùi như Mini App).
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    await page.getByRole('button', { name: phone ? 'Quay lại' : 'Gian hàng của tôi', exact: true }).click();
     await page.getByRole('button', { name: 'Gửi duyệt' }).click();
     await expect.poll(() => api.callsTo('POST', '/storefront/me/publish')).toHaveLength(1);
     expect(api.callsTo('POST', '/storefront/me/publish')[0]!.body).toEqual({ isPublished: true });

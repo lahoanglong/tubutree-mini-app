@@ -138,6 +138,9 @@
   --color-action-secondary-bg-pressed: var(--forest-100);
   --color-action-secondary-fg: var(--forest-700);
   --color-action-secondary-border: var(--forest-200, var(--forest-100));
+  /* Nút phụ đang tắt: chữ stone-500 trên stone-100 là 4,70:1 (chữ nút chính tắt stone-400 trên stone-200 chỉ ~2:1, không đọc nổi). Một cặp cho cả hai app. */
+  --color-action-secondary-bg-disabled: var(--stone-100);
+  --color-action-secondary-fg-disabled: var(--stone-500);
 
   --color-action-ghost-fg: var(--forest-600);
   --color-action-ghost-bg-pressed: var(--sage-50);

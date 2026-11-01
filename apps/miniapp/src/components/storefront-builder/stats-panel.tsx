@@ -45,7 +45,7 @@ export function StatsSection() {
   const hasLines = lines.length > 0 || orderLevel !== 0;
 
   return (
-    <Card style={CARD_MARGIN}>
+    <Card padding={16} style={CARD_MARGIN}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
         <Icon icon={TrendingUp} size="md" tone="brand" />
         <Heading variant="title-sm" as="h2">{BUILDER_COPY.stats30}</Heading>
