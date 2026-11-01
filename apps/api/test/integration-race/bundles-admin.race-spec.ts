@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { ForbiddenException } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
@@ -329,6 +330,28 @@ describe('Quản trị bundle (real Postgres)', () => {
       const exposure = bundleExposure({ kind: 'BUNDLE_PCT', pct: row.pct }, row.items.map((i) => ({ price: price[i.productId]!, addonPrice: null, maxQty: i.maxQty })));
       expect(exposure).toBeLessThanOrEqual(1_000_000);
       await prisma.user.deleteMany({ where: { id: staffUser.id } });
+    });
+
+    it('hồ kết nối chỉ 2 chỗ, hai PATCH đồng thời cùng bộ: cả hai xong lần lượt, không kẹt chờ kết nối thứ hai khi đang giữ khoá hàng', async () => {
+      const staffUser = await createRealUser(prisma, { role: 'STAFF' });
+      const staff = { id: staffUser.id, staff: true };
+      const [a, b] = [await product(), await product()];
+      const mine = await create(pctBundle(a.id, b.id, { pct: 10 }), staff);
+      // Hồ nhỏ: mỗi PATCH giữ một kết nối chờ khoá, nên chỗ thứ hai (đọc catalog/người tạo bằng prisma, không phải tx) không bao giờ có.
+      // Cấu hình lấy từ SystemConfigService dùng hồ chính, đọc trước giao dịch.
+      const small = new PrismaClient({ datasourceUrl: `${process.env.DATABASE_URL}${process.env.DATABASE_URL!.includes('?') ? '&' : '?'}connection_limit=2&pool_timeout=3` });
+      try {
+        const tight = new BundlesAdminService(small as never, moduleRef.get(SystemConfigService));
+        const results = await Promise.allSettled([
+          tight.update(mine.id, { pct: 12 } as never, staff),
+          tight.update(mine.id, { pct: 14 } as never, staff),
+        ]);
+        expect(results.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled']);
+        expect([12, 14]).toContain((await prisma.bundle.findUniqueOrThrow({ where: { id: mine.id } })).pct);
+      } finally {
+        await small.$disconnect();
+        await prisma.user.deleteMany({ where: { id: staffUser.id } });
+      }
     });
   });
 });

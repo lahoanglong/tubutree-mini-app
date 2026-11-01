@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { actorUserId, loadStaffCouponCaps, type CouponActor } from '../admin/coupon-input-rules';
+import { actorUserId, loadStaffCouponCaps, type CouponActor, type StaffCouponCaps } from '../admin/coupon-input-rules';
 import { VARIATION_ORDER_BY, cardPrices } from '../catalog/variation-order';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { readBundleMaxPct } from './bundle-read';
@@ -76,6 +76,9 @@ const DETAIL_INCLUDE = {
   },
 } satisfies Prisma.BundleInclude;
 
+/** Kết nối đọc: `PrismaService` hay `tx` của một giao dịch đang giữ khoá. */
+type Db = Pick<Prisma.TransactionClient, 'product' | 'user'>;
+
 type DetailRow = Prisma.BundleGetPayload<{ include: typeof DETAIL_INCLUDE }>;
 
 const STATUS_WHERE = (now: Date): Record<BundleStatus, Prisma.BundleWhereInput> => ({
@@ -115,7 +118,7 @@ export class BundlesAdminService {
     assertBundleWindow(startAt, endAt);
     const content = normalizeBundleContent(dto, await readBundleMaxPct(this.config));
     const kept = keptRefPrices(content, []);
-    const resolved = await this.validateContent(content, actor, kept);
+    const resolved = await this.validateContent(this.prisma, content, actor.staff ? await loadStaffCouponCaps(this.config) : null, kept);
     const created = await this.prisma.bundle.create({
       data: {
         kind: content.kind,
@@ -139,12 +142,17 @@ export class BundlesAdminService {
    * đồng thời mỗi cái gộp `dto` của mình với dòng cũ rồi qua trần (một cái đổi % , một cái đổi món), ghép lại vượt `coupon.staff_max_amount_vnd`.
    */
   async update(id: string, dto: UpdateBundleDto, actor: CouponActor, now: Date = new Date()): Promise<AdminBundle> {
+    const touchesContent = dto.pct !== undefined || dto.anchorProductId !== undefined || dto.items !== undefined;
+    // Cấu hình đọc TRƯỚC khi mở giao dịch: lần đọc đầu (cache nguội) đi qua một kết nối khác của hồ, mà trong giao dịch đang giữ khoá
+    // hàng thì nhiều PATCH cùng lúc sẽ chiếm hết hồ kết nối và không cái nào lấy được kết nối thứ hai.
+    const maxPct = touchesContent ? await readBundleMaxPct(this.config) : 0;
+    const staffCaps = touchesContent && actor.staff ? await loadStaffCouponCaps(this.config) : null;
     await this.prisma.$transaction(async (tx) => {
       // Hai người sửa cùng lúc: người sau chờ ở đây, rồi đọc lại bộ đã có thay đổi của người trước (nếu không, cả hai cùng xoá bản cũ rồi cùng ghi).
       await tx.$queryRaw`SELECT "id" FROM "bundles" WHERE "id" = ${id} FOR UPDATE`;
       const current = await tx.bundle.findUnique({ where: { id }, include: DETAIL_INCLUDE });
       if (!current) throw new NotFoundException('Không tìm thấy bộ combo/mua kèm.');
-      if (actor.staff) await this.assertStaffCreated(current.createdById);
+      if (actor.staff) await this.assertStaffCreated(tx, current.createdById);
 
       const startAt = dto.startAt === undefined ? undefined : new Date(dto.startAt);
       const endAt = dto.endAt === undefined ? undefined : new Date(dto.endAt);
@@ -155,7 +163,7 @@ export class BundlesAdminService {
       let content: BundleContent | undefined;
       let resolved: ResolvedBundleItem[] = [];
       let kept: (number | null)[] = [];
-      if (dto.pct !== undefined || dto.anchorProductId !== undefined || dto.items !== undefined) {
+      if (touchesContent) {
         content = normalizeBundleContent(
           {
             kind: current.kind,
@@ -163,10 +171,10 @@ export class BundlesAdminService {
             anchorProductId: dto.anchorProductId !== undefined ? dto.anchorProductId : current.anchorProductId,
             items: dto.items ?? current.items.map((i) => ({ productId: i.productId, variationId: i.variationId, addonPrice: i.addonPrice, maxQty: i.maxQty })),
           },
-          await readBundleMaxPct(this.config),
+          maxPct,
         );
         kept = keptRefPrices(content, current.items);
-        resolved = await this.validateContent(content, actor, kept);
+        resolved = await this.validateContent(tx, content, staffCaps, kept);
       }
 
       const replaceItems = dto.items !== undefined && content !== undefined;
@@ -190,17 +198,20 @@ export class BundlesAdminService {
     if (actor.staff) {
       const row = await this.prisma.bundle.findUnique({ where: { id }, select: { createdById: true } });
       if (!row) throw new NotFoundException('Không tìm thấy bộ combo/mua kèm.');
-      await this.assertStaffCreated(row.createdById);
+      await this.assertStaffCreated(this.prisma, row.createdById);
     }
     const { count } = await this.prisma.bundle.deleteMany({ where: { id } });
     if (count === 0) throw new NotFoundException('Không tìm thấy bộ combo/mua kèm.');
     return { ok: true };
   }
 
-  /** `kept`: giá tham chiếu giữ lại của từng món (`keptRefPrices`); trần nhân viên tính trên giá đã kẹp theo đó, không trên giá hiện tại. */
-  private async validateContent(content: BundleContent, actor: CouponActor, kept: readonly (number | null)[]): Promise<ResolvedBundleItem[]> {
+  /**
+   * `kept`: giá tham chiếu giữ lại của từng món (`keptRefPrices`); trần nhân viên tính trên giá đã kẹp theo đó, không trên giá hiện tại.
+   * `staffCaps` null là quản trị viên (không bị trần nhân viên). `db` là `tx` khi gọi dưới khoá hàng: không đi qua kết nối khác.
+   */
+  private async validateContent(db: Db, content: BundleContent, staffCaps: StaffCouponCaps | null, kept: readonly (number | null)[]): Promise<ResolvedBundleItem[]> {
     const ids = [...new Set([...(content.anchorProductId ? [content.anchorProductId] : []), ...content.items.map((i) => i.productId)])];
-    const rows = await this.prisma.product.findMany({
+    const rows = await db.product.findMany({
       where: { id: { in: ids } },
       select: {
         id: true,
@@ -214,13 +225,13 @@ export class BundlesAdminService {
       },
     });
     const resolved = resolveBundleItems(content, new Map<string, CatalogProduct>(rows.map((p) => [p.id, p])));
-    if (actor.staff) assertStaffBundleCaps(content, capAtRefPrices(resolved, kept), await loadStaffCouponCaps(this.config));
+    if (staffCaps) assertStaffBundleCaps(content, capAtRefPrices(resolved, kept), staffCaps);
     return resolved;
   }
 
   /** Nhân viên chỉ đụng bộ do nhân viên tạo (mẫu `assertStaffCreated` của Giờ vàng). */
-  private async assertStaffCreated(createdById: string | null): Promise<void> {
-    const creator = createdById ? await this.prisma.user.findUnique({ where: { id: createdById }, select: { role: true } }) : null;
+  private async assertStaffCreated(db: Db, createdById: string | null): Promise<void> {
+    const creator = createdById ? await db.user.findUnique({ where: { id: createdById }, select: { role: true } }) : null;
     if (creator?.role !== 'STAFF') throw new ForbiddenException(STAFF_BUNDLE_MSG);
   }
 

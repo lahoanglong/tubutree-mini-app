@@ -47,14 +47,25 @@ const detailRow = (o: Record<string, unknown> = {}) => ({
 
 function setup(o: { products?: unknown[]; current?: unknown; locked?: unknown; creatorRole?: string | null; maxPct?: number; caps?: Record<string, number> } = {}) {
   const current = o.current === undefined ? detailRow() : o.current;
+  const products = o.products ?? [product('p1'), product('p2')];
+  const creator = o.creatorRole === null ? null : { role: o.creatorRole ?? 'ADMIN' };
+  // Lệnh gọi bằng kết nối KHÁC (prisma, không phải tx) trong lúc giao dịch còn giữ khoá hàng: đủ N PATCH cùng lúc thì mỗi cái giữ một
+  // kết nối chờ khoá, cái giữ khoá cần thêm một kết nối mà hồ đã hết → cả nhóm quá hạn (P2028).
+  const lock = { held: false, outside: [] as string[] };
+  const viaOther = <A extends unknown[], R>(name: string, fn: (...a: A) => R) => (...a: A): R => {
+    if (lock.held) lock.outside.push(name);
+    return fn(...a);
+  };
   const tx = {
     $queryRaw: jest.fn().mockResolvedValue([]),
     bundleItem: { deleteMany: jest.fn().mockResolvedValue({ count: 2 }) },
     // Dòng đọc SAU khi giữ khoá: mặc định cùng dòng với lần đọc ngoài giao dịch, test race cho nó khác đi.
     bundle: { update: jest.fn().mockResolvedValue({}), findUnique: jest.fn().mockResolvedValue(o.locked === undefined ? current : o.locked) },
+    product: { findMany: jest.fn().mockResolvedValue(products) },
+    user: { findUnique: jest.fn().mockResolvedValue(creator) },
   };
   const prisma = {
-    product: { findMany: jest.fn().mockResolvedValue(o.products ?? [product('p1'), product('p2')]) },
+    product: { findMany: jest.fn(viaOther('product.findMany', () => Promise.resolve(products))) },
     bundle: {
       create: jest.fn().mockResolvedValue({ id: 'b1' }),
       findUnique: jest.fn().mockResolvedValue(current),
@@ -62,18 +73,25 @@ function setup(o: { products?: unknown[]; current?: unknown; locked?: unknown; c
       deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     user: {
-      findUnique: jest.fn().mockResolvedValue(o.creatorRole === null ? null : { role: o.creatorRole ?? 'ADMIN' }),
+      findUnique: jest.fn(viaOther('user.findUnique', () => Promise.resolve(creator))),
       findMany: jest.fn().mockResolvedValue([{ id: 'admin1', role: 'ADMIN' }]),
     },
-    $transaction: jest.fn().mockImplementation(async (fn: (t: typeof tx) => unknown) => fn(tx)),
+    $transaction: jest.fn().mockImplementation(async (fn: (t: typeof tx) => unknown) => {
+      lock.held = true;
+      try {
+        return await fn(tx);
+      } finally {
+        lock.held = false;
+      }
+    }),
   };
   const values: Record<string, unknown> = {
     'bundle.max_pct': o.maxPct ?? 50,
     'coupon.staff_max_percent': o.caps?.maxPercent ?? 20,
     'coupon.staff_max_amount_vnd': o.caps?.maxAmount ?? 30_000,
   };
-  const config = { get: jest.fn().mockImplementation(async (k: string, fb: unknown) => values[k] ?? fb) };
-  return { svc: new BundlesAdminService(prisma as never, config as never), prisma, tx };
+  const config = { get: jest.fn(viaOther('config.get', async (k: string, fb: unknown) => values[k] ?? fb)) };
+  return { svc: new BundlesAdminService(prisma as never, config as never), prisma, tx, lock };
 }
 
 describe('BundlesAdminService.create', () => {
@@ -207,6 +225,7 @@ describe('BundlesAdminService.update', () => {
     const { svc, prisma, tx } = setup({ products: [] });
     await svc.update('b1', { isActive: false, sortOrder: 3 } as never, ADMIN, NOW);
     expect(prisma.product.findMany).not.toHaveBeenCalled();
+    expect(tx.product.findMany).not.toHaveBeenCalled();
     expect(tx.bundleItem.deleteMany).not.toHaveBeenCalled();
     expect(tx.bundle.update.mock.calls[0][0]).toMatchObject({ where: { id: 'b1' }, data: { isActive: false, sortOrder: 3 } });
   });
@@ -302,6 +321,15 @@ describe('BundlesAdminService.update', () => {
     const { svc, tx } = setup();
     await expect(svc.update('b1', { endAt: '2026-11-04T00:00:00.000Z' } as never, ADMIN, NOW)).rejects.toBeInstanceOf(BadRequestException);
     expect(tx.bundle.update).not.toHaveBeenCalled();
+  });
+
+  it('trong lúc giữ khoá hàng chỉ dùng kết nối của giao dịch: catalog và người tạo đọc qua tx, cấu hình đọc trước khi mở giao dịch (không chiếm kết nối thứ hai)', async () => {
+    const s = setup({ creatorRole: 'STAFF', current: detailRow({ createdById: 'staff2' }), caps: { maxPercent: 20, maxAmount: 50_000 } });
+    await s.svc.update('b1', { pct: 20, items: [dtoItem('p1'), dtoItem('p2')] } as never, STAFF, NOW);
+    expect(s.lock.outside).toEqual([]);
+    expect(s.tx.product.findMany).toHaveBeenCalled();
+    expect(s.tx.user.findUnique).toHaveBeenCalled();
+    expect(s.tx.bundle.update).toHaveBeenCalled();
   });
 
   describe('kiểm trên dòng đọc SAU khi giữ khoá (hai PATCH đồng thời không lách trần nhân viên)', () => {
