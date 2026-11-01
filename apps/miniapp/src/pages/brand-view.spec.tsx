@@ -148,8 +148,8 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     renderPage();
     await screen.findByRole('heading', { level: 2, name: 'Sản phẩm nổi bật' });
     const rail = screen.getByTestId('brand-featured-rail');
-    expect(rail.style.marginLeft).toBe('-16px');
-    expect(rail.style.marginRight).toBe('-16px');
+    expect(rail.className).toContain('tubu-bleed');
+    expect(rail.style.margin).toBe('');
     expect(within(rail).getByRole('region', { name: 'Sản phẩm nổi bật' })).toBeInTheDocument();
   });
 

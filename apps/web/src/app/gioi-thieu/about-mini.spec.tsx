@@ -5,7 +5,7 @@ import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-util
 
 // mv-order: giới thiệu giống Mini App ở điện thoại. Gốc: chép ý about.spec.tsx (Mini App): hotline/email từ cấu hình, FAQ admin hoặc bản dự phòng, nhóm lọc, accordion, xoá tài khoản
 // có xác nhận, đăng xuất. Khác Mini App: chính sách là link sang /chinh-sach/<loai> (không sheet tóm tắt), liên hệ là tel:/mailto:,
-// và trang công khai nên khối Xoá tài khoản/Đăng xuất chỉ hiện khi đã đăng nhập.
+// và trang công khai nên Xoá tài khoản và Đăng xuất nằm ở Cài đặt.
 
 const mocks = vi.hoisted(() => ({
   auth: { status: 'authenticated' as string, initialized: true, sessionUnavailable: false, user: { id: 'u1' } as unknown, logout: vi.fn() },
@@ -113,9 +113,9 @@ describe('giới thiệu như Mini App (điện thoại)', () => {
     expect(policy.className).toContain('max-md:font-semibold');
   });
 
-  it('không còn nút Đăng xuất (chỉ có ở Cài đặt); Xoá tài khoản chữ đỏ', async () => {
+  it('không còn nút Đăng xuất và Xoá tài khoản (chỉ có ở Cài đặt)', async () => {
     const { container } = await mount();
     expect(byText(container, 'button', 'Đăng xuất')).toBeNull();
-    expect(button(container, 'Xoá tài khoản').className).toContain('max-md:text-[color:var(--color-text-danger)]');
+    expect(byText(container, 'button', 'Xoá tài khoản')).toBeNull();
   });
 });

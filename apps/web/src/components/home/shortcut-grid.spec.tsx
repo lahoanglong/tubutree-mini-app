@@ -67,9 +67,9 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
       expect(label.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
     }
   });
-  it('cờ bật hết: 4 ô cố định (Mã giảm giá, Đổi rác, Mua chung, Đổi quà) và ô "Tất cả", lưới 5 cột không cuộn ngang; chưa có trang Giờ vàng nên chưa có ô Giờ vàng', () => {
+  it('cờ bật hết: 4 ô cố định (Giờ vàng, Mã giảm giá, Đổi rác, Mua chung) và ô "Tất cả", lưới 5 cột không cuộn ngang; Giờ vàng là ô đầu tiên', () => {
     const c = mount();
-    expect(labels(c)).toEqual(['Mã giảm giá', 'Đổi rác', 'Mua chung', 'Đổi quà', 'Tất cả']);
+    expect(labels(c)).toEqual(['Giờ vàng', 'Mã giảm giá', 'Đổi rác', 'Mua chung', 'Tất cả']);
     expect(c.querySelector<HTMLElement>('[data-testid="shortcut-grid"]')!.style.display).toBe('grid');
     expect(c.querySelector('[role="group"][aria-label*="vuốt ngang"]')).toBeNull();
   });
@@ -78,9 +78,11 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
     expect(mount().querySelector('section')!.className).toContain('lg:hidden');
   });
 
-  it('Mã giảm giá tới mã của tôi, Đổi rác và Mua chung đúng route web', () => {
+  it('Giờ vàng tới /gio-vang, Mã giảm giá tới mã của tôi, Đổi rác và Mua chung đúng route web', () => {
     const c = mount();
     const press = (re: RegExp) => click(Array.from(c.querySelectorAll('button')).find((b) => re.test(b.getAttribute('aria-label') ?? '')) ?? null);
+    press(/Giờ vàng/);
+    expect(mocks.push).toHaveBeenLastCalledWith('/gio-vang');
     press(/Mã giảm giá/);
     expect(mocks.push).toHaveBeenLastCalledWith('/uu-dai?section=coupons');
     press(/Đổi rác/);
@@ -93,7 +95,7 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
     const c = mount();
     expect(allSheet()).toBeNull();
     openAll(c);
-    expect(sheetRows()).toHaveLength(7);
+    expect(sheetRows()).toHaveLength(8);
     expect(document.body.textContent).not.toContain('sàn khác');
     click(sheetRows().find((b) => /Đơn hàng/.test(b.textContent ?? '')) ?? null);
     expect(mocks.push).toHaveBeenLastCalledWith('/tai-khoan/don-hang');
@@ -109,12 +111,12 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
     expect(document.querySelector('[role="dialog"][aria-label="Kiếm tiền cùng Tubu"]')).not.toBeNull();
   });
 
-  it('cờ Đổi rác tắt: ô trống được Đổi quà lấp, vẫn đủ 4 ô + "Tất cả"; hộp thoại còn 6 mục', () => {
+  it('cờ Đổi rác tắt: ô trống được Đổi quà lấp, vẫn đủ 4 ô + "Tất cả"; hộp thoại còn 7 mục', () => {
     mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
     const c = mount();
-    expect(labels(c)).toEqual(['Mã giảm giá', 'Mua chung', 'Đổi quà', 'Đơn hàng', 'Tất cả']);
+    expect(labels(c)).toEqual(['Giờ vàng', 'Mã giảm giá', 'Mua chung', 'Đổi quà', 'Tất cả']);
     openAll(c);
-    expect(sheetRows()).toHaveLength(6);
+    expect(sheetRows()).toHaveLength(7);
     expect(byText(document.body, 'button', 'Đổi rác')).toBeNull();
   });
 
@@ -127,7 +129,7 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
 
   it('route còn pending thì lối tắt ẩn và mục kế lấp chỗ', () => {
     mocks.pending = new Set(['/points/scan', '/mua-chung']);
-    expect(labels(mount())).toEqual(['Mã giảm giá', 'Đổi rác', 'Đổi quà', 'Đơn hàng', 'Tất cả']);
+    expect(labels(mount())).toEqual(['Giờ vàng', 'Mã giảm giá', 'Đổi rác', 'Đổi quà', 'Tất cả']);
   });
 
   it('Đổi rác tạm dừng nhưng khách còn yêu cầu đang mở: vẫn hiện ở ô cố định, ghi "Yêu cầu"', () => {
@@ -148,11 +150,12 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
     }
   });
 
-  it('không còn lề âm -16px ở mọi khổ; điện thoại chỉ lùi 8px (max-md:-mx-2) để mép lưới cách mép màn 8px như Mini (ô rộng 359/5, không phải 343/5)', () => {
+  it('điện thoại: lưới tràn mép (.tubu-bleed) rồi đệm 8px (max-md:px-2) để mép lưới cách mép màn 8px như Mini (ô rộng 359/5, không phải 343/5); không lề âm tay', () => {
     const src = fs.readFileSync(path.join(__dirname, 'shortcut-grid.tsx'), 'utf8');
-    expect(src).not.toMatch(/margin: '0 -16px'|-mx-4/);
+    expect(src).not.toMatch(/margin: '0 -16px'|-mx-/);
     const cls = mount().querySelector('section')!.className;
-    expect(cls).toContain('max-md:-mx-2');
-    expect(cls).not.toMatch(/(?<!max-md:)-mx-/);
+    expect(cls).toContain('tubu-bleed');
+    expect(cls).toContain('max-md:px-2');
+    expect(cls).toContain('lg:hidden');
   });
 });

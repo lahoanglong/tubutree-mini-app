@@ -40,7 +40,6 @@ import { resolveAttribution } from './attribution';
 import {
   FlashQuotaLineError,
   FlashSaleService,
-  FLASH_OVER_LIMIT_MSG,
   type FlashQuotaLine,
   type FlashQuotaOutcome,
 } from '../flash-sale/flash-sale.service';
@@ -478,9 +477,9 @@ export class CheckoutService {
         const outcomes = flashLines.length > 0 ? await this.consumeFlashQuotas(tx, userId, flashLines, code) : [];
         const failed = outcomes.findIndex((o) => o !== 'OK');
         if (failed >= 0) {
-          // Vượt giới hạn mua = lỗi hợp lệ, giữ nguyên message. Hết suất/hết giờ → PRICE_CHANGED để FE hỏi lại giá mới
+          // Vượt giới hạn mua = lỗi hợp lệ sửa được ở giỏ (FLASH_LIMIT kèm giới hạn của suất). Hết suất/hết giờ → PRICE_CHANGED để FE hỏi lại giá mới
           // (không âm thầm tính giá flash đã hết).
-          if (outcomes[failed] === 'OVER_LIMIT') throw new BadRequestException(FLASH_OVER_LIMIT_MSG);
+          if (outcomes[failed] === 'OVER_LIMIT') throw await this.flashSale.overLimitError(tx, flashLines[failed]!.flashSaleItemId);
           this.logger.error(`consumeQuotas hết suất cho đơn ${code}, flashSaleItemId=${flashLines[failed]!.flashSaleItemId}`);
           throw new BadRequestException('PRICE_CHANGED');
         }

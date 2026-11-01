@@ -1,4 +1,5 @@
 import type { HttpClient } from '../http';
+import type { CampaignBanner } from './campaign';
 import type { CategoryDTO, PageResponse, ProductCard } from './catalog';
 import type { NotificationDTO } from './account';
 import type { PublicConfig } from './config';
@@ -22,6 +23,8 @@ export interface HomePublicDTO {
   brands: Block<{ brand: string; count: number; slug?: string | null }[]>;
   /** Cùng nội dung GET /config/public: khối "Quà khách mới" cần số công khai mà không tốn thêm request khi mở Trang chủ. */
   publicConfig: Block<PublicConfig>;
+  /** Banner chiến dịch HOME_TOP đang chạy, chưa lọc theo loại khách (blob công khai dùng chung). API cũ không có trường này. */
+  campaigns?: Block<CampaignBanner[]>;
 }
 
 export interface HomeMeDTO {

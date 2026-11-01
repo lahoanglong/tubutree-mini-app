@@ -8,6 +8,12 @@ describe('SegmentedTabs', () => {
     render(<SegmentedTabs items={items} value="all" onChange={() => {}} />);
     expect(screen.getByRole('tab', { name: /Tất cả/, selected: true })).toBeInTheDocument();
   });
+  it('`label` đặt tên cho dải tab (trình đọc màn hình đọc được "Danh mục bán chạy"); thiếu thì không có tên', () => {
+    const { rerender } = render(<SegmentedTabs items={items} value="all" onChange={() => {}} label="Danh mục bán chạy" />);
+    expect(screen.getByRole('tablist', { name: 'Danh mục bán chạy' })).toBeInTheDocument();
+    rerender(<SegmentedTabs items={items} value="all" onChange={() => {}} />);
+    expect(screen.getByRole('tablist')).not.toHaveAttribute('aria-label');
+  });
   it('calls onChange with the clicked key', () => {
     const onChange = vi.fn();
     render(<SegmentedTabs items={items} value="all" onChange={onChange} />);

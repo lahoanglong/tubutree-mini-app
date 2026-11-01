@@ -9,8 +9,8 @@ export function isStillDiscounted(it: { flashPrice: number; variation: { salePri
   return it.flashPrice < (it.variation.salePrice ?? it.variation.retailPrice);
 }
 
-/** Thứ tự cố định của suất đang chạy: sản phẩm nhiều suất không đổi thứ tự theo DB giữa hai lần gọi. */
-export const ACTIVE_FLASH_ORDER_BY = [{ flashPrice: 'asc' }, { variationId: 'asc' }, { id: 'asc' }] satisfies Prisma.FlashSaleItemOrderByWithRelationInput[];
+/** Thứ tự cố định của suất đang chạy: sản phẩm nhiều suất không đổi thứ tự theo DB giữa hai lần gọi. sortOrder đứng đầu để Trang chủ và trang Giờ vàng cùng một thứ tự. */
+export const ACTIVE_FLASH_ORDER_BY = [{ sortOrder: 'asc' }, { flashPrice: 'asc' }, { variationId: 'asc' }, { id: 'asc' }] satisfies Prisma.FlashSaleItemOrderByWithRelationInput[];
 
 /** Chỉ để hiển thị: phân loại hết hàng không được quảng bá Giờ vàng. Giỏ và thanh toán dùng điều kiện riêng, không bị ảnh hưởng. */
 export const activeFlashWhere = (now: Date) =>

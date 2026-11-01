@@ -2,37 +2,23 @@
 
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, TreePine } from 'lucide-react';
-import { requestAccountDeletion } from '@tubutree/app-core/api/account';
-import { walletQuery } from '@tubutree/app-core/queries/wallet';
-import {
-  WALLET_FORFEIT_AGREE,
-  WALLET_FORFEIT_LOADING,
-  WALLET_FORFEIT_UNKNOWN,
-  canSubmitDeletion,
-  walletForfeitConsent,
-  walletForfeitNotice,
-} from '@tubutree/app-core/account-deletion-copy';
 import type { FaqItem, PublicConfig, SupportContact } from '@tubutree/app-core/api/config';
 import { faqsQuery, publicConfigQuery, supportContactQuery } from '@tubutree/app-core/queries/config';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { fallbackFaq } from '@/lib/faq-fallback';
 import { ui } from '@/lib/guest-ui';
 import { formatPhoneDisplay } from '@/lib/phone-display';
-import { formatVnd } from '@/lib/format-vnd';
 import { platformBridge } from '@/lib/platform-bridge';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { actionErrorText } from '@/lib/error-text';
 
 const ALL_CATS = 'Tất cả';
 const FAQ_SKELETON_ROWS = 4;
 const STALE_MS = 10 * 60_000;
-const DELETE_OA_MESSAGE = 'Tôi muốn xoá tài khoản Tubu Tree';
 
 /** Khớp mặc định của API và web (DEFAULT_SUPPORT): khi không đọc được cấu hình vẫn còn đường liên hệ. */
 const DEFAULT_SUPPORT: SupportContact = { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null, hours: null };
@@ -46,9 +32,8 @@ const POLICY_LINKS = [
 
 const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`;
 
-/** Về Tubu Tree (cùng nội dung với `about.tsx` của Mini App): giới thiệu, FAQ, liên hệ, chính sách; khách đã đăng nhập có thêm xoá tài khoản và đăng xuất. */
+/** Về Tubu Tree (cùng nội dung với `about.tsx` của Mini App): giới thiệu, FAQ, liên hệ, chính sách; đăng xuất và xoá tài khoản nằm ở Cài đặt. */
 export function AboutView({ initialFaqs, initialConfig, initialSupport }: { initialFaqs?: FaqItem[]; initialConfig?: PublicConfig; initialSupport?: SupportContact }) {
-  const phase = useAuthPhase();
   return (
     <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
       <PageHeader title="Về Tubu Tree" />
@@ -80,11 +65,6 @@ export function AboutView({ initialFaqs, initialConfig, initialSupport }: { init
             </Link>
           ))}
         </Section>
-        {phase === 'authenticated' && (
-          <div className="md:col-span-2">
-            <AccountSection />
-          </div>
-        )}
       </div>
     </main>
   );
@@ -230,88 +210,5 @@ function SupportSection({ initialSupport }: { initialSupport?: SupportContact })
         </div>
       ))}
     </Section>
-  );
-}
-
-/** Ghi nhận yêu cầu xoá THẬT (không xoá ngay: CSKH xác minh và xử lý), cùng endpoint với Mini App. */
-function AccountSection() {
-  const [confirming, setConfirming] = useState(false);
-  const qc = useQueryClient();
-  const [agreed, setAgreed] = useState(false);
-  const walletQ = useQuery({ ...walletQuery(coreHttp), enabled: confirming });
-  const balance = walletQ.data?.walletBalance;
-  const del = useMutation({
-    mutationFn: () => requestAccountDeletion(coreHttp, undefined, walletForfeitConsent(balance, agreed)),
-    onError: () => {
-      setAgreed(false);
-      void qc.invalidateQueries({ queryKey: ['wallet'] });
-    },
-  });
-  const oa = platformBridge.oa.available;
-
-  return (
-    <div className="grid gap-3">
-      {del.isSuccess ? (
-        <div role="status" className="rounded-card bg-stone-100 p-4">
-          <p className="text-sm text-stone-900">{del.data.message}</p>
-          {oa && (
-            <button type="button" onClick={() => void platformBridge.oa.openChat(DELETE_OA_MESSAGE)} className={`${ui.btnSecondary} mt-3`}>
-              Nhắn Zalo OA về việc xoá tài khoản
-            </button>
-          )}
-        </div>
-      ) : confirming ? (
-        <div className="rounded-card bg-danger-bg p-4">
-          <p className="text-sm font-bold text-danger-fg">Xoá tài khoản vĩnh viễn?</p>
-          <p className="mt-1 text-xs text-stone-700">
-            Gửi yêu cầu để CSKH liên hệ xác minh và xử lý xoá tài khoản theo quy định — tài khoản CHƯA bị xoá ngay khi bạn bấm nút này.
-          </p>
-          {del.isError && (
-            <p role="alert" className={`mt-2 ${ui.error}`}>
-              {actionErrorText(del.error)}
-            </p>
-          )}
-          {walletQ.isLoading && <p className="mt-2 text-xs text-stone-600">{WALLET_FORFEIT_LOADING}</p>}
-          {walletQ.isError && (
-            <p role="alert" className={`mt-2 ${ui.error}`}>
-              {WALLET_FORFEIT_UNKNOWN}
-            </p>
-          )}
-          {balance !== undefined && balance > 0 && (
-            <div className="mt-3">
-              <p className="text-sm font-bold text-stone-900">{walletForfeitNotice(formatVnd(balance))}</p>
-              <label className="mt-2 flex min-h-11 items-start gap-2 text-xs text-stone-700">
-                <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 size-5 shrink-0" style={{ accentColor: 'var(--color-action-primary-bg)' }} />
-                <span>{WALLET_FORFEIT_AGREE}</span>
-              </label>
-            </div>
-          )}
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setConfirming(false);
-                setAgreed(false);
-              }}
-              className={`${ui.btnSecondary} w-24 shrink-0 ${mini.secondary}`}
-            >
-              Huỷ
-            </button>
-            <button
-              type="button"
-              disabled={del.isPending || !canSubmitDeletion(balance, agreed)}
-              onClick={() => del.mutate()}
-              className="inline-flex min-h-11 flex-1 items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 transition active:scale-95 disabled:opacity-60"
-            >
-              Gửi yêu cầu xoá
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button type="button" onClick={() => setConfirming(true)} className={`${ui.btnSecondary} w-full text-danger-fg max-md:border-transparent max-md:bg-[var(--color-bg-surface)] max-md:text-[color:var(--color-text-danger)] max-md:shadow-[var(--elevation-1)]`}>
-          Xoá tài khoản
-        </button>
-      )}
-    </div>
   );
 }

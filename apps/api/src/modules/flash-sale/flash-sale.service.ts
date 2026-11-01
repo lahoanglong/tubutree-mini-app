@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -11,13 +11,64 @@ import { assertStaffDailyBudget, loadStaffCouponCaps, type CouponActor } from '.
 import { TrackCron } from '../../common/cron-run/track-cron';
 import { publicImage } from '../../common/public-image';
 import { ACTIVE_FLASH_ORDER_BY, activeFlashWhere, isStillDiscounted } from './flash-active';
+import {
+  DEFAULT_SLOT_CLOCKS,
+  FLASH_SLOTS_KEY,
+  FLASH_SLOT_MINUTES,
+  SLOT_ITEM_ORDER_BY,
+  parseSlotClocks,
+  slotStartsFor,
+  slotStatus,
+  vnClock,
+  vnHorizonEnd,
+  type FlashSlotStatus,
+} from './flash-slots';
 
 export const FLASH_SOLD_OUT_MSG = 'Hết suất ưu đãi.';
+/** Câu của API cũ; client cũ vẫn khớp nó. Lỗi mới mang mã FLASH_LIMIT (xem overLimitError). */
 export const FLASH_OVER_LIMIT_MSG = 'Vượt giới hạn mua ưu đãi.';
+export const FLASH_LIMIT = 'FLASH_LIMIT';
+export const flashOverLimitMessage = (n: number) => `Giá Giờ vàng chỉ áp cho ${n} sản phẩm mỗi khách. Bạn giảm số lượng rồi đặt lại nhé.`;
 export const FLASH_ALREADY_STARTED_MSG = 'Ưu đãi đã bắt đầu.';
 export const FLASH_START_LOCKED_MSG = 'Đợt flash sale đã bắt đầu, không đổi được giờ bắt đầu. Chỉ sửa được tên, giờ kết thúc hoặc tắt đợt.';
 export const FLASH_ITEM_CLASH_MSG = 'Sản phẩm đã có trong đợt flash khác.';
 export const FLASH_ADMIN_SALE_MSG = 'Đợt flash sale do quản trị viên hoặc hệ thống tạo — nhân viên không sửa được, nhờ quản trị viên.';
+
+export interface FlashSlotDTO {
+  id: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+  status: FlashSlotStatus;
+  itemCount: number;
+}
+
+export interface FlashSlotItemDTO {
+  itemId: string;
+  variationId: string;
+  variationName: string | null;
+  productId: string;
+  productSlug: string;
+  productName: string;
+  thumbnail: string | null;
+  categoryIds: string[];
+  flashPrice: number;
+  retailPrice: number;
+  salePrice: number | null;
+  soldCount: number;
+  quota: number;
+  soldOut: boolean;
+  perUserLimit: number;
+}
+
+/** Quota giảm theo từng đơn và khung bắt đầu/kết thúc đúng mốc: cache RAM chỉ đủ gom request đồng thời (cùng TTL với khối Giờ vàng của /home). */
+const SLOT_CACHE_TTL_MS = 3_000;
+const SLOT_CACHE_MAX_KEYS = 50;
+
+interface SlotCacheEntry {
+  expiresAt: number;
+  data: unknown;
+}
 
 export interface FlashQuotaLine {
   flashSaleItemId: string;
@@ -81,6 +132,9 @@ const vnd = (n: number) => `${Math.round(n).toLocaleString('vi-VN')}đ`;
 @Injectable()
 export class FlashSaleService {
   private readonly logger = new Logger(FlashSaleService.name);
+  // Per-instance như cache của HomeService: chạy từ 2 replica trở lên thì chuyển sang Redis.
+  private readonly slotCache = new Map<string, SlotCacheEntry>();
+  private readonly slotInflight = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -163,22 +217,28 @@ export class FlashSaleService {
     return map;
   }
 
-  /** Danh sách item flash đang active còn quota — cho FE trang chủ. */
-  async listActive(now: Date = new Date()) {
+  /**
+   * Danh sách item flash đang active còn quota — cho FE trang chủ. `limit` chỉ cắt SAU khi đã loại món hết suất; khối gộp /home
+   * không truyền nó vì cache này còn nuôi giá Giờ vàng trên mọi thẻ sản phẩm.
+   */
+  async listActive(now: Date = new Date(), limit?: number) {
     const items = await this.prisma.flashSaleItem.findMany({
       where: activeFlashWhere(now),
       include: {
-        flashSale: { select: { endAt: true } },
+        flashSale: { select: { endAt: true, startAt: true, title: true } },
         variation: {
           include: { product: { select: { slug: true, name: true, thumbnail: true, _count: { select: { variations: { where: { isActive: true } } } } } } },
         },
       },
       orderBy: ACTIVE_FLASH_ORDER_BY,
     });
-    return items
+    const rows = items
       .filter((it) => it.soldCount < it.quota && isStillDiscounted(it))
       .map((it) => ({
         itemId: it.id,
+        saleId: it.flashSaleId,
+        title: it.flashSale.title,
+        startAt: it.flashSale.startAt,
         variationId: it.variationId,
         // Chỉ có khi sản phẩm bán nhiều phân loại: dải Giờ vàng ghi rõ suất giảm là của phân loại nào.
         variationName: (it.variation.product._count?.variations ?? 1) > 1 ? it.variation.name : null,
@@ -190,10 +250,130 @@ export class FlashSaleService {
         salePrice: it.variation.salePrice,
         soldCount: it.soldCount,
         quota: it.quota,
+        perUserLimit: it.perUserLimit,
         endAt: it.flashSale.endAt,
         // App đếm ngược theo giờ máy chủ chứ không theo đồng hồ điện thoại (điện thoại khách hay lệch vài phút).
         serverNow: now.toISOString(),
       }));
+    return limit === undefined ? rows : rows.slice(0, limit);
+  }
+
+  /**
+   * Cache RAM theo khoá, gom request đồng thời, kẹp tối đa SLOT_CACHE_MAX_KEYS khoá (khoá theo id từ URL nên không để khách làm đầy bộ nhớ).
+   * `build` trả null cho "không có" để 404 cũng được nhớ trong TTL; lỗi thì không nhớ.
+   */
+  private async cachedSlot<T>(key: string, nowMs: number, build: () => Promise<T>): Promise<T> {
+    const hit = this.slotCache.get(key);
+    if (hit && hit.expiresAt > nowMs) return hit.data as T;
+    let inflight = this.slotInflight.get(key) as Promise<T> | undefined;
+    if (!inflight) {
+      inflight = build().finally(() => this.slotInflight.delete(key));
+      this.slotInflight.set(key, inflight);
+    }
+    const data = await inflight;
+    this.slotCache.delete(key);
+    this.slotCache.set(key, { expiresAt: nowMs + SLOT_CACHE_TTL_MS, data });
+    while (this.slotCache.size > SLOT_CACHE_MAX_KEYS) this.slotCache.delete(this.slotCache.keys().next().value as string);
+    return data;
+  }
+
+  private slotDTO(
+    sale: { id: string; title: string; startAt: Date; endAt: Date },
+    now: Date,
+    itemCount: number,
+  ): FlashSlotDTO {
+    const status = slotStatus(sale, now);
+    return {
+      id: sale.id,
+      title: sale.title,
+      startAt: sale.startAt.toISOString(),
+      endAt: sale.endAt.toISOString(),
+      status,
+      itemCount: status === 'ENDED' ? 0 : itemCount,
+    };
+  }
+
+  /**
+   * Các khung Giờ vàng cho trang /flash-sale: mọi đợt đang bật, chưa kết thúc, bắt đầu trước 00:00 giờ VN của ngày kia, có ít nhất một món
+   * bán được. Khung là chính `FlashSale` (đợt nhập tay giờ lạ vẫn lên trang), không lọc theo `flashsale.slots`. Trạng thái tính lại theo
+   * giờ của lần gọi, không theo bản cache, để khung vừa hết giờ biến mất ngay.
+   */
+  async listSlots(now: Date = new Date()): Promise<{ serverNow: string; slots: FlashSlotDTO[] }> {
+    const sales = await this.cachedSlot('slots', now.getTime(), async () => {
+      const rows = await this.prisma.flashSale.findMany({
+        where: { isActive: true, endAt: { gt: now }, startAt: { lt: vnHorizonEnd(now) } },
+        orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
+        include: {
+          items: { where: { variation: SELLABLE_VARIATION_WHERE }, select: { flashPrice: true, variation: { select: { salePrice: true, retailPrice: true } } } },
+        },
+      });
+      return rows.map((r) => ({ id: r.id, title: r.title, startAt: r.startAt, endAt: r.endAt, itemCount: r.items.filter(isStillDiscounted).length }));
+    });
+    const slots = sales
+      .map((s) => this.slotDTO(s, now, s.itemCount))
+      .filter((s) => s.status !== 'ENDED' && s.itemCount > 0);
+    return { serverNow: now.toISOString(), slots };
+  }
+
+  /**
+   * Món của một khung. Món hết suất hoặc hết hàng thật vẫn trả với `soldOut: true` (trang làm mờ và đẩy xuống cuối); món không còn rẻ hơn
+   * giá đang bán bị loại như `listActive`. Khung đã kết thúc vẫn 200 với `items: []` (mở từ thông báo cũ); id lạ hoặc đợt tắt thì 404.
+   */
+  async listSlotItems(slotId: string, now: Date = new Date()): Promise<{ serverNow: string; slot: FlashSlotDTO; items: FlashSlotItemDTO[] }> {
+    const built = await this.cachedSlot(`slot:${slotId}`, now.getTime(), async () => {
+      const sale = await this.prisma.flashSale.findFirst({
+        where: { id: slotId, isActive: true },
+        include: {
+          items: {
+            where: { variation: SELLABLE_VARIATION_WHERE },
+            orderBy: SLOT_ITEM_ORDER_BY,
+            include: {
+              variation: {
+                include: { product: { select: { slug: true, name: true, thumbnail: true, categoryIds: true, _count: { select: { variations: { where: { isActive: true } } } } } } },
+              },
+            },
+          },
+        },
+      });
+      if (!sale) return null;
+      const items: FlashSlotItemDTO[] = sale.items.filter(isStillDiscounted).map((it) => ({
+        itemId: it.id,
+        variationId: it.variationId,
+        variationName: (it.variation.product._count?.variations ?? 1) > 1 ? it.variation.name : null,
+        productId: it.variation.productId,
+        productSlug: it.variation.product.slug,
+        productName: it.variation.product.name,
+        thumbnail: publicImage('product', it.variation.productId, 'thumb', it.variation.product.thumbnail),
+        categoryIds: it.variation.product.categoryIds,
+        flashPrice: it.flashPrice,
+        retailPrice: it.variation.retailPrice,
+        salePrice: it.variation.salePrice,
+        soldCount: it.soldCount,
+        quota: it.quota,
+        soldOut: it.soldCount >= it.quota || it.variation.stock <= 0,
+        perUserLimit: it.perUserLimit,
+      }));
+      return { sale: { id: sale.id, title: sale.title, startAt: sale.startAt, endAt: sale.endAt }, items };
+    });
+    if (!built) throw new NotFoundException('Không tìm thấy khung Giờ vàng.');
+    const slot = this.slotDTO(built.sale, now, built.items.length);
+    return { serverNow: now.toISOString(), slot, items: slot.status === 'ENDED' ? [] : built.items };
+  }
+
+  /**
+   * Lỗi "vượt giới hạn mua" của một dòng, chạy trên tx đang mở (đơn sắp bị huỷ cả giao dịch): đọc giới hạn của chính suất đó để câu trả lời
+   * nêu đúng con số. Mã `FLASH_LIMIT` + `limit` cho app biết đây là lỗi sửa được ở giỏ (giảm số lượng), không phải lỗi hệ thống.
+   */
+  async overLimitError(tx: Prisma.TransactionClient, flashSaleItemId: string): Promise<BadRequestException> {
+    const item = await tx.flashSaleItem.findUnique({ where: { id: flashSaleItemId }, select: { perUserLimit: true } });
+    if (!item) return new BadRequestException(FLASH_OVER_LIMIT_MSG);
+    return new BadRequestException({
+      statusCode: 400,
+      error: 'Bad Request',
+      code: FLASH_LIMIT,
+      limit: item.perUserLimit,
+      message: flashOverLimitMessage(item.perUserLimit),
+    });
   }
 
   /**
@@ -322,6 +502,31 @@ export class FlashSaleService {
   }
 
   /**
+   * Sinh đợt rỗng cho các khung mặc định (`flashsale.slots`, giờ VN) trong `days` ngày kể từ hôm nay (admin). Mốc đã kết thúc bị bỏ;
+   * mốc đã có đợt cùng giờ bắt đầu (kể cả đợt tắt) bị bỏ qua nên bấm hai lần không tạo trùng. Món thêm sau bằng addItem như đợt tạo tay.
+   */
+  async generateSlots(adminId: string, days: number, now: Date = new Date()): Promise<{ created: number; skipped: number }> {
+    if (!Number.isInteger(days) || days < 1 || days > 7) throw new BadRequestException('Số ngày tạo khung giờ phải từ 1 đến 7.');
+    const clocks = parseSlotClocks(await this.config.get<unknown>(FLASH_SLOTS_KEY, [...DEFAULT_SLOT_CLOCKS]));
+    const starts = slotStartsFor(now, clocks, days);
+    const maxDays = await this.maxSaleDays();
+    return this.prisma.$transaction(async (tx) => {
+      // Hai admin bấm cùng lúc: mỗi bên chỉ thấy bản chưa có đợt của bên kia nên cùng tạo; khoá để bên sau thấy đợt của bên trước.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'flash.generate_slots'}))`;
+      const existing = await tx.flashSale.findMany({ where: { startAt: { in: starts } }, select: { startAt: true } });
+      const taken = new Set(existing.map((e) => e.startAt.getTime()));
+      const fresh = starts.filter((s) => !taken.has(s.getTime()));
+      const rows = fresh.map((startAt) => {
+        const endAt = new Date(startAt.getTime() + FLASH_SLOT_MINUTES * 60e3);
+        assertSaleWindow(startAt, endAt, maxDays, false);
+        return { title: `Giờ vàng ${vnClock(startAt)}`, startAt, endAt, createdBy: adminId };
+      });
+      if (rows.length > 0) await tx.flashSale.createMany({ data: rows });
+      return { created: rows.length, skipped: starts.length - rows.length };
+    });
+  }
+
+  /**
    * Cập nhật đợt flash sale (admin). Đợt đã bắt đầu không đổi được giờ bắt đầu: đẩy sang tương lai thì giá flash biến mất
    * khỏi khách đang xem rồi đợt xoá được như đợt chưa bắt đầu (R3-UI-5). Đổi khung giờ cũng không được làm một biến thể
    * nằm trong hai đợt trùng giờ — addItem chặn điều đó lúc thêm, ở đây chặn lúc dời giờ.
@@ -435,7 +640,7 @@ export class FlashSaleService {
       orderBy: { startAt: 'desc' },
       include: {
         items: {
-          select: { id: true, variationId: true, flashPrice: true, quota: true, soldCount: true, perUserLimit: true },
+          select: { id: true, variationId: true, flashPrice: true, quota: true, soldCount: true, perUserLimit: true, sortOrder: true },
         },
       },
     });
@@ -450,7 +655,7 @@ export class FlashSaleService {
    */
   async addItem(
     saleId: string,
-    dto: { variationId: string; flashPrice: number; quota: number; perUserLimit?: number },
+    dto: { variationId: string; flashPrice: number; quota: number; perUserLimit?: number; sortOrder?: number },
     actor?: CouponActor,
   ) {
     const sale = await this.prisma.flashSale.findUnique({ where: { id: saleId } });
@@ -474,7 +679,14 @@ export class FlashSaleService {
     }
     if (dto.quota > variation.stock) throw new BadRequestException('Quota vượt tồn kho.');
     const perUserLimit = dto.perUserLimit ?? (await this.config.get<number>('flashsale.default_per_user_limit', 5));
-    const data = { flashSaleId: saleId, variationId: dto.variationId, flashPrice: dto.flashPrice, quota: dto.quota, perUserLimit };
+    const data = {
+      flashSaleId: saleId,
+      variationId: dto.variationId,
+      flashPrice: dto.flashPrice,
+      quota: dto.quota,
+      perUserLimit,
+      ...(dto.sortOrder === undefined ? {} : { sortOrder: dto.sortOrder }),
+    };
 
     // Cùng ba trần với mã do nhân viên tạo (coupon.staff_*): % mỗi đơn vị, tiền mỗi khách, tổng tiền cả ngày.
     const caps = actor?.staff ? await loadStaffCouponCaps(this.config) : null;
@@ -566,6 +778,14 @@ export class FlashSaleService {
     }
     await this.prisma.flashSaleItem.delete({ where: { id: itemId } });
     return { ok: true };
+  }
+
+  /** Ghim thứ tự món trong khung (admin): số nhỏ lên trước, mặc định 0; cùng số thì rẻ trước. */
+  async setItemSortOrder(itemId: string, sortOrder: number, actor?: CouponActor) {
+    const item = await this.prisma.flashSaleItem.findUnique({ where: { id: itemId }, select: { id: true, flashSale: { select: { createdBy: true } } } });
+    if (!item) throw new BadRequestException('Không tìm thấy sản phẩm flash.');
+    if (actor?.staff) await this.assertStaffCreated(item.flashSale.createdBy);
+    return this.prisma.flashSaleItem.update({ where: { id: itemId }, data: { sortOrder } });
   }
 
   /** Danh sách item flash SẮP diễn ra (chưa bắt đầu) — cho FE mục "Sắp diễn ra" + nút Nhắc tôi. Không `userId` (khách): không đọc nhắc, `reminded=false`. */

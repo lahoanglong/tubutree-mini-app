@@ -838,6 +838,28 @@ describe('CheckoutPage — hết hàng / vượt suất lúc đặt (BUYERMINI-1
     expect(mocks.navigate).toHaveBeenCalledWith('/cart');
   });
 
+  it('FLASH_LIMIT: banner nói giới hạn của suất bằng câu của kế hoạch, tải lại giỏ, có nút "Về giỏ hàng", không chỉ toast', async () => {
+    mocks.placeOrder.mockRejectedValue(
+      Object.assign(new Error('x'), { isHttpError: true, response: { status: 400, data: { code: 'FLASH_LIMIT', limit: 2, message: 'Vượt giới hạn.' } } }),
+    );
+    renderPage();
+    await placeOrderClick();
+    const banner = await screen.findByTestId('checkout-cart-issue');
+    expect(within(banner).getByText('Giá Giờ vàng chỉ áp cho 2 sản phẩm mỗi khách. Bạn giảm số lượng rồi đặt lại nhé.')).toBeInTheDocument();
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.getCart.mock.calls.length).toBeGreaterThan(1));
+    fireEvent.click(within(banner).getByRole('button', { name: 'Về giỏ hàng' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+  });
+
+  it('câu cũ "Vượt giới hạn mua ưu đãi." vẫn là lỗi sửa ở giỏ', async () => {
+    mocks.placeOrder.mockRejectedValue(badRequest('Vượt giới hạn mua ưu đãi.'));
+    renderPage();
+    await placeOrderClick();
+    const banner = await screen.findByTestId('checkout-cart-issue');
+    expect(within(banner).getByText('Vượt giới hạn mua ưu đãi.')).toBeInTheDocument();
+  });
+
   it('giỏ đang có dòng vượt tồn → báo ngay và khoá nút Đặt hàng', async () => {
     mocks.getCart.mockResolvedValue({ ...CART, items: [{ ...CART.items[0]!, quantity: 3, stock: 1, total: 150_000 }] });
     renderPage();

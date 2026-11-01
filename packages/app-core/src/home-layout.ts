@@ -1,7 +1,6 @@
 import type { CheckInStatusResponse, CouponDTO, LoyaltyOverview } from './api/loyalty';
 import { decimalVi, tierProgressPercent } from './loyalty-copy';
 import { tileBodyHeight } from './commerce/tile-metrics';
-import { routeUsable } from './merch/route-fallback';
 
 /**
  * Bố cục Trang chủ, thanh đáy, Ưu đãi và hàng trạng thái đơn của trang Cá nhân. Một nguồn cho Mini App và web khổ điện thoại:
@@ -155,13 +154,11 @@ export const HOME_SHORTCUTS: readonly HomeShortcutSpec[] = [
 ];
 
 /**
- * Mục còn hiển thị theo thứ tự ưu tiên, không có Vườn Xanh (đã là tab giữa của thanh đáy). Mục có cờ tắt hoặc chưa có trang đích (`routeUsable`) bị bỏ, hàng tự dồn. Riêng Đổi rác: chương trình tạm dừng mà khách còn yêu cầu đang mở thì vẫn hiện,
+ * Mục còn hiển thị theo thứ tự ưu tiên, không có Vườn Xanh (đã là tab giữa của thanh đáy). Mục có cờ tắt bị bỏ, hàng tự dồn. Riêng Đổi rác: chương trình tạm dừng mà khách còn yêu cầu đang mở thì vẫn hiện,
  * đổi nhãn thành "Yêu cầu" để khách còn vào theo dõi, không hứa tính năng đang tạm dừng.
  */
 export function visibleHomeShortcuts(flags: HomeFlags): HomeShortcutSpec[] {
   return HOME_SHORTCUTS.flatMap((s): HomeShortcutSpec[] => {
-    // Trang Giờ vàng chưa có (P12): Ưu đãi không có Giờ vàng nên ô này bị bỏ, mục kế lấp chỗ.
-    if (s.id === 'flash' && !routeUsable('/flash-sale')) return [];
     if (s.flag === 'waste') {
       if (flags.wasteEnabled) return [s];
       return flags.recycleOpenRequests ? [{ ...s, label: RECYCLE_REQUESTS_SHORTCUT_LABEL, ariaLabel: 'Yêu cầu của tôi về đổi rác' }] : [];
@@ -484,6 +481,27 @@ export function writeFlashHint(storage: MemoryStorage | null, hasFlash: boolean,
   }
 }
 
+/** Khoá nhớ "lần mở trước có banner chiến dịch" để dựng khung chờ đúng chỗ; chỉ ghi '1' hoặc '0'. */
+export const BANNER_HINT_KEY = 'tubu_home_banner';
+
+/** Chưa nhớ, giá trị lạ hay không có kho → false (chờ im lặng, không giữ chỗ). */
+export function readBannerHint(storage: MemoryStorage | null): boolean {
+  if (!storage) return false;
+  try {
+    return storage.getItem(BANNER_HINT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function writeBannerHint(storage: MemoryStorage | null, hasBanner: boolean): void {
+  try {
+    storage?.setItem(BANNER_HINT_KEY, hasBanner ? '1' : '0');
+  } catch {
+    /* kho bị chặn: lần sau không giữ chỗ, khối vẫn đúng */
+  }
+}
+
 /** Khoá nhớ số món Mua lại lần mở trước ('one' | 'many'), để khung chờ có đúng chiều cao dòng 88px hay kệ nhiều món. */
 export const PURCHASED_HINT_KEY = 'tubu_home_purchased';
 export type PurchasedHint = 'none' | 'one' | 'many';
@@ -547,6 +565,8 @@ export function categoriesBlockHeight(cells: number): number {
  * Mini App và web dùng chung để khung chờ thay bằng khối thật không làm trang nhảy; đổi chiều cao khối thật thì sửa ở đây (số đo Mini 375px).
  */
 export const HOME_SETTLING_HEIGHTS = {
+  // Banner tỉ lệ 5:2 (`--banner-ratio`) ở 375px trừ đệm 16 mỗi bên.
+  banner: Math.round((375 - 32) / 2.5),
   shortcuts: 84,
   flash: FLASH_SKELETON_HEIGHT,
   categories: categoriesBlockHeight(CATEGORY_GRID_MAX_CELLS),

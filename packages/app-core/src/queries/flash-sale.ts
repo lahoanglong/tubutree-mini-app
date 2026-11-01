@@ -1,5 +1,5 @@
 import type { HttpClient } from '../http';
-import { fetchActiveFlashSales, fetchUpcomingFlashSales } from '../api/flash-sale';
+import { fetchActiveFlashSales, fetchFlashSlotItems, fetchFlashSlots, fetchUpcomingFlashSales } from '../api/flash-sale';
 
 export const flashActiveQuery = (http: HttpClient) => ({
   queryKey: ['flash-sales', 'active'] as const,
@@ -8,6 +8,14 @@ export const flashActiveQuery = (http: HttpClient) => ({
 export const flashUpcomingQuery = (http: HttpClient) => ({
   queryKey: ['flash-sales', 'upcoming'] as const,
   queryFn: () => fetchUpcomingFlashSales(http),
+});
+export const flashSlotsQuery = (http: HttpClient) => ({
+  queryKey: ['flash-sales', 'slots'] as const,
+  queryFn: () => fetchFlashSlots(http),
+});
+export const flashSlotItemsQuery = (http: HttpClient, slotId: string) => ({
+  queryKey: ['flash-sales', 'slots', slotId, 'items'] as const,
+  queryFn: () => fetchFlashSlotItems(http, slotId),
 });
 
 export const FLASH_REFETCH_MS = 60_000;

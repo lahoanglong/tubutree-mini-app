@@ -32,6 +32,7 @@ function setup() {
     $queryRaw: jest.fn().mockResolvedValue(factRows()),
     membershipTier: { findMany: jest.fn().mockResolvedValue([]) },
     wasteRequest: { count: jest.fn().mockResolvedValue(2) },
+    campaign: { findMany: jest.fn().mockResolvedValue([]) },
   };
   const svc = new HomeService(
     catalog as never, flashSale as never, orders as never, purchased as never, subs as never, notifications as never, config as never, loyalty as never,
@@ -41,10 +42,10 @@ function setup() {
 }
 
 describe('HomeService.getPublic', () => {
-  it('gộp đủ 7 khối (kèm cấu hình công khai), dùng đúng tham số lẻ của Home', async () => {
+  it('gộp đủ 8 khối (kèm cấu hình công khai và banner chiến dịch), dùng đúng tham số lẻ của Home', async () => {
     const { svc, catalog } = setup();
     const r = await svc.getPublic(1000);
-    expect(Object.keys(r).sort()).toEqual(['bestSellers', 'brands', 'categories', 'featured', 'flashActive', 'newest', 'publicConfig']);
+    expect(Object.keys(r).sort()).toEqual(['bestSellers', 'brands', 'campaigns', 'categories', 'featured', 'flashActive', 'newest', 'publicConfig']);
     const calls = catalog.list.mock.calls.map(([q]) => ({ sort: q.sort, limit: q.limit, page: q.page }));
     expect(calls).toEqual(
       expect.arrayContaining([
@@ -134,6 +135,55 @@ describe('HomeService.getPublic', () => {
     expect(orders.list).not.toHaveBeenCalled();
     expect(flashSale.listUpcoming).not.toHaveBeenCalled();
     expect(catalog.getForYou).not.toHaveBeenCalled();
+  });
+});
+
+describe('HomeService.getPublic — banner chiến dịch', () => {
+  const liveRow = {
+    id: 'c1',
+    slug: 'giua-thu',
+    title: 'Giữa Thu',
+    image: 'https://cdn.example.com/a.jpg',
+    linkType: 'CAMPAIGN_PAGE',
+    linkValue: null,
+    audience: 'NEW',
+    startAt: new Date('2026-11-01T00:00:00Z'),
+    endAt: new Date('2026-11-11T16:59:59Z'),
+  };
+
+  it('khối campaigns là banner HOME_TOP đang chạy, hỏi không kèm đối tượng để blob dùng chung cho mọi khách', async () => {
+    const { svc, prisma } = setup();
+    prisma.campaign.findMany.mockResolvedValue([liveRow]);
+    const r = await svc.getPublic(1000);
+    expect(r.campaigns).toEqual([
+      { id: 'c1', slug: 'giua-thu', title: 'Giữa Thu', image: 'https://cdn.example.com/a.jpg', linkType: 'CAMPAIGN_PAGE', linkValue: null, audience: 'NEW', startAt: '2026-11-01T00:00:00.000Z', endAt: '2026-11-11T16:59:59.000Z' },
+    ]);
+    const where = prisma.campaign.findMany.mock.calls[0]![0].where;
+    expect(where).toMatchObject({ placement: 'HOME_TOP', isActive: true });
+    expect(where).not.toHaveProperty('audience');
+  });
+
+  it('không có chiến dịch: mảng rỗng (khác null = lỗi), client ẩn cả khối', async () => {
+    const { svc } = setup();
+    expect((await svc.getPublic(1000)).campaigns).toEqual([]);
+  });
+
+  it('truy vấn lỗi: chỉ khối campaigns null, các khối khác còn nguyên', async () => {
+    const { svc, prisma } = setup();
+    prisma.campaign.findMany.mockRejectedValue(new Error('db down'));
+    const r = await svc.getPublic(1000);
+    expect(r.campaigns).toBeNull();
+    expect(r.categories).toEqual([{ id: 'c1' }]);
+    expect(r.bestSellers).not.toBeNull();
+  });
+
+  it('cache chung 20s: hai request cùng TTL chỉ một lần findMany', async () => {
+    const { svc, prisma } = setup();
+    await svc.getPublic(1000);
+    await svc.getPublic(1000 + 15_000);
+    expect(prisma.campaign.findMany).toHaveBeenCalledTimes(1);
+    await svc.getPublic(1000 + 21_000);
+    expect(prisma.campaign.findMany).toHaveBeenCalledTimes(2);
   });
 });
 

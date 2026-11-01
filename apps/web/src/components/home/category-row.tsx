@@ -10,8 +10,8 @@ const TILE = CATEGORY_TILE_SIZE;
 const LABEL_HEIGHT = CATEGORY_LABEL_HEIGHT;
 /** Khung chờ không bao giờ dài hơn một màn (2 hàng × 5 cột): ô vượt màn chỉ có khi đã có dữ liệu thật. */
 const MAX_SKELETON_CELLS = CATEGORY_GRID_MAX_CELLS;
-/** Điện thoại: hàng cuộn tràn ra mép màn như Mini (đệm 16px nằm trong hàng, cột thứ 6 thò ra mép). Chỉ dưới md, từ md hàng nằm trong khung trang nên không tràn ngang. */
-const SCROLL_BLEED = 'max-md:-mx-4 max-md:max-w-none max-md:px-4';
+/** Điện thoại: hàng cuộn tràn ra mép màn như Mini (`.tubu-bleed` lùi lề trang, đệm 16px nằm trong hàng, cột thứ 6 thò ra mép). Chỉ dưới md, từ md hàng nằm trong khung trang nên không tràn ngang. */
+const SCROLL_BLEED = 'tubu-bleed max-md:px-4';
 const TINTS: ShortcutTint[] = ['forest', 'sage', 'clay', 'amber', 'sky', 'rose'];
 
 // Tới 10 ô (kể cả "Tất cả"): xếp theo hàng, đọc trái sang phải như thứ tự đọc của trình đọc màn hình và "Tất cả" luôn ở cuối. Quá 10 ô mới xếp theo cột để cuộn ngang.
@@ -56,7 +56,7 @@ function Label({ children }: { children: string }) {
 /**
  * Danh mục ở Trang chủ (Q7, bản web của `category-row.tsx` ở Mini App): lưới 2 hàng × 5 cột, ô vuông bo 56px nền màu xoay vòng (có ảnh thì vẽ ảnh),
  * nhãn tối đa hai dòng. Ô cuối là "Tất cả". Tới 10 ô xếp theo hàng; quá 10 ô thì lưới xếp theo cột và cuộn ngang (mỗi cột đúng 1/5 bề rộng, ô thứ 6 thò ra mép để khách biết
- * còn nữa), không cắt bớt danh mục. Lề âm chỉ áp dưới md bằng lớp Tailwind (bản cũ đặt lề âm inline ở mọi khổ nên từ md hàng cuộn tràn khung trang).
+ * còn nữa), không cắt bớt danh mục. Lề âm chỉ áp dưới md qua lớp `.tubu-bleed` (bản cũ đặt lề âm inline ở mọi khổ nên từ md hàng cuộn tràn khung trang).
  */
 export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholderCount = MAX_SKELETON_CELLS - 1 }: CategoryRowProps) {
   const skeletonCells = categorySkeletonCells(placeholderCount);

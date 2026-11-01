@@ -44,6 +44,7 @@ const PUBLIC_FEED = {
   flashActive: [],
   categories: [],
   brands: [{ brand: 'Cobote', count: 3 }],
+  campaigns: [],
   publicConfig: {
     freeshipThreshold: 350_000,
     subscribeDiscountPct: 0.17,
@@ -146,6 +147,31 @@ describe('Trang chủ gộp request (C-037)', () => {
     expect(await screen.findByText(/^Mã 25\.000đ/)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
     expect(paths().sort()).toEqual(['/config/public', '/feed', '/home', '/home/me', '/me/new-customer-offer', '/me/notifications/unread-count', '/products']);
+  });
+
+  it('banner chiến dịch đến từ khối gộp /home: hiện slide, không thêm request /campaigns', async () => {
+    const live = {
+      id: 'c1', slug: 'giua-thu', title: 'Giữa Thu', image: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', linkType: 'CAMPAIGN_PAGE', linkValue: null, audience: 'ALL',
+      startAt: new Date(Date.now() - 86_400_000).toISOString(), endAt: new Date(Date.now() + 86_400_000).toISOString(),
+    };
+    mocks.routes['/home'] = () => ({ data: { ...PUBLIC_FEED, campaigns: [live] } });
+    mocks.routes['/home/me'] = () => ({ data: ME_FEED });
+    renderHome();
+    expect(await screen.findByRole('link', { name: 'Giữa Thu' })).toHaveAttribute('href', '/campaign/giua-thu');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(paths()).not.toContain('/campaigns');
+  });
+
+  it('API gộp cũ chưa có khối campaigns: lùi về một request lẻ /campaigns?placement=HOME_TOP', async () => {
+    const { campaigns: _dropped, ...oldPublic } = PUBLIC_FEED;
+    mocks.routes['/home'] = () => ({ data: oldPublic });
+    mocks.routes['/home/me'] = () => ({ data: ME_FEED });
+    mocks.routes['/campaigns'] = () => ({ data: [] });
+    renderHome();
+    expect(await screen.findByText('Gợi ý riêng')).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(paths().filter((p) => p === '/campaigns')).toHaveLength(1);
+    expect(mocks.get.mock.calls.find(([u]) => u === '/campaigns')?.[1]).toMatchObject({ params: { placement: 'HOME_TOP' } });
   });
 
   it('API cũ chưa có /home (404): lùi về từng request lẻ, trang vẫn đủ nội dung', async () => {

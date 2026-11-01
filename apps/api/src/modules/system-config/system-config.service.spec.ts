@@ -367,6 +367,8 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
     ['catalog.loved_min_rating', 4.8, [-0.1, 5.1, 99, '4.8']],
     ['catalog.loved_min_reviews', 20, [-1, 1.5, 100_001, '20']],
     ['catalog.loved_min_sold', 50, [-1, 1.5, 10_000_001, '50']],
+    // Khung giờ mặc định Giờ vàng: mốc sai giờ, trùng, ngược hay quá 6 mốc làm nút sinh khung tạo đợt lệch.
+    ['flashsale.slots', ['12:00', '20:00'], [[], ['25:00'], ['9:00'], ['20:00', '12:00'], ['12:00', '12:00'], ['00:00', '01:00', '02:00', '03:00', '04:00', '05:00', '06:00'], '12:00', null, [12]]],
   ] as const)('%s: nhận giá trị hợp lệ, từ chối giá trị sai', async (key, fine, badValues) => {
     const ok = mk(fine);
     await ok.svc.set(key, fine as never, 'admin1');

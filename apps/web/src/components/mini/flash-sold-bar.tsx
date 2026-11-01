@@ -13,7 +13,7 @@ export interface FlashSoldBarProps {
 /**
  * Thanh % đã bán của Giờ vàng (polish PL-08). Cam trên rãnh chỉ đạt 1,85:1 nên thanh chỉ để trang trí (`aria-hidden`);
  * chữ luôn hiện và mang thông tin ("Vừa mở bán", "Đã bán 68%", "Sắp hết", "Đã bán hết"), a11y B3. Chữ đè lên thanh dùng stone-900
- * (đạt trên cả cam lẫn rãnh). Phần đã bán dựng bằng scaleX để chạy một lần lúc vào màn mà không đo lại bố cục.
+ * (đạt trên cả cam lẫn rãnh). Phần đã bán dựng bằng scaleX để chạy một lần lúc vào màn mà không đo lại bố cục; transition nằm ở CSS (.tubu-flash-fill) để prefers-reduced-motion tắt được.
  */
 export function FlashSoldBar({ soldPct, soldOut = false }: FlashSoldBarProps) {
   const ratio = Number.isFinite(soldPct) ? Math.min(1, Math.max(0, soldPct / 100)) : 0;
@@ -30,6 +30,7 @@ export function FlashSoldBar({ soldPct, soldOut = false }: FlashSoldBarProps) {
         {!soldOut && (
           <div
             data-testid="flash-sold-fill"
+            className="tubu-flash-fill"
             style={{
               width: '100%',
               height: '100%',
@@ -37,9 +38,6 @@ export function FlashSoldBar({ soldPct, soldOut = false }: FlashSoldBarProps) {
               background: 'var(--color-flash-solid-bg)',
               transformOrigin: 'left',
               transform: `scaleX(${shown ? ratio : 0})`,
-              transitionProperty: 'transform',
-              transitionDuration: '600ms',
-              transitionTimingFunction: 'var(--p-ease-out)',
             }}
           />
         )}

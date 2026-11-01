@@ -251,29 +251,32 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
   });
 
   test('Mở mới /browse bằng điều hướng thường (không phải Back) luôn bắt đầu từ đầu trang dù đã lưu vị trí cuộn', async ({ page, api }) => {
+    // Lối vào duy nhất từ Trang chủ là ô "Tất cả danh mục" (PUSH tới hub /browse, khoá cuộn rỗng); hub đủ dài để cuộn khi màn thấp.
+    await page.setViewportSize({ width: 375, height: 520 });
     mockDiscovery(api);
     await page.goto('/');
-    const seeAll = page.getByRole('button', { name: 'Xem tất cả Bán chạy' });
-    await seeAll.click({ timeout: 15_000 });
-    await expect(page).toHaveURL(/\/browse\?sort=best_seller$/, { timeout: 15_000 });
-    await expect(page.getByTestId('result-count')).toHaveText('30 sản phẩm', { timeout: 15_000 });
-    await waitBrowseSettled(page, api);
+    const allCategories = page.getByRole('button', { name: 'Tất cả danh mục' });
+    await allCategories.click({ timeout: 15_000 });
+    await expect(page).toHaveURL(/\/browse$/, { timeout: 15_000 });
+    const seeAllProducts = page.getByRole('button', { name: 'Xem tất cả sản phẩm' });
+    await expect(seeAllProducts).toBeVisible({ timeout: 15_000 });
+    const hubScroller = page.locator('.zaui-page', { has: seeAllProducts });
 
-    await scrollerOf(page).evaluate((el) => { el.scrollTop = 900; });
-    const y = await scrollTopOf(scrollerOf(page));
-    expect(y).toBeGreaterThan(300);
-    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('tubu_scroll:sort=best_seller')), { timeout: 5_000 }).toBe(String(Math.round(y)));
+    await seeAllProducts.scrollIntoViewIfNeeded();
+    const y = await scrollTopOf(hubScroller);
+    expect(y, 'hub phải đủ dài để cuộn được').toBeGreaterThan(40);
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('tubu_scroll:')), { timeout: 5_000 }).toBe(String(Math.round(y)));
 
     await page.goBack(); // về Trang chủ (rời Browse → vị trí được lưu)
     await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
-    expect(Number(await page.evaluate(() => sessionStorage.getItem('tubu_scroll:sort=best_seller')))).toBeGreaterThan(300); // vị trí cũ còn lưu
+    expect(Number(await page.evaluate(() => sessionStorage.getItem('tubu_scroll:')))).toBeGreaterThan(40); // vị trí cũ còn lưu
     // Chạm ngay khi trang Danh mục cũ còn đang trượt ra: zmp-ui dùng lại chính phần tử đó (khoá trang theo pathname), vẫn phải về đầu.
-    await seeAll.click({ timeout: 15_000 }); // PUSH tới CÙNG URL: không phải Back
-    await expect(page).toHaveURL(/\/browse\?sort=best_seller$/, { timeout: 15_000 });
-    await expect(page.getByTestId('result-count')).toHaveText('30 sản phẩm', { timeout: 15_000 });
-    await expect(tilesOf(page).first()).toBeVisible();
+    // dispatchEvent chứ không click(): click() chờ nút Trang chủ đứng yên, tức chờ hết hiệu ứng, và trang cũ đã trượt ra hết nên ca không còn bắt được lỗi.
+    await allCategories.dispatchEvent('click'); // PUSH tới CÙNG URL: không phải Back
+    await expect(page).toHaveURL(/\/browse$/, { timeout: 15_000 });
     await page.waitForTimeout(600); // qua hết hiệu ứng chuyển trang: chỉ còn trang mới
-    expect(await scrollTopOf(scrollerOf(page))).toBe(0);
+    await expect(seeAllProducts).toBeVisible({ timeout: 15_000 });
+    expect(await scrollTopOf(hubScroller)).toBe(0);
   });
 
   test('Link cũ từ Trang chủ: ?segment=mom_baby lấy tên phân khúc làm tiêu đề (không chip); ?brand=Tubu lấy tên thương hiệu làm tiêu đề (không chip), ?inStock=1 thành chip gỡ được; tham số lạ (utm) được giữ', async ({ page, api }) => {

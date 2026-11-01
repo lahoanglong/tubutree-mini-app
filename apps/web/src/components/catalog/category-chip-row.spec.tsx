@@ -46,9 +46,10 @@ describe('CategoryChipRow', () => {
   it('hàng cuộn ngang tràn mép màn hình điện thoại (như Mini), đệm dọc ≥ 4px để vùng chạm 44px không bị cắt, ẩn từ lg (cột lọc đã có cây)', () => {
     const { group } = mount('da');
     expect(group.className).toContain('scroll-x');
-    expect(group.className).toContain('-mx-4');
+    expect(group.className).toContain('tubu-bleed');
+    expect(group.className).not.toMatch(/-mx-/);
     expect(group.className).toContain('lg:hidden');
-    expect(group.style.maxWidth).toBe('none');
+    expect(group.style.maxWidth).toBe('');
     expect(parseFloat(group.style.paddingTop)).toBeGreaterThanOrEqual(4);
     expect(parseFloat(group.style.paddingBottom)).toBeGreaterThanOrEqual(4);
   });

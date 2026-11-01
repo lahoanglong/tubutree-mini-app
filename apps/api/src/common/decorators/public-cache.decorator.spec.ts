@@ -36,6 +36,8 @@ describe('Cache-Control cho API công khai (C-039)', () => {
     ['GET /products/:slug/bought-together', CatalogController, 'boughtTogether'],
     ['GET /home', HomeController, 'publicBlocks'],
     ['GET /flash-sales/active', FlashSaleController, 'active'],
+    ['GET /flash-sales/slots', FlashSaleController, 'slots'],
+    ['GET /flash-sales/slots/:id/items', FlashSaleController, 'slotItems'],
     ['GET /faqs', FaqController, 'list'],
     ['GET /geo/provinces', GeoController, 'provinces'],
     ['GET /geo/communes', GeoController, 'communes'],

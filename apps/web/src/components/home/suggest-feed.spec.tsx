@@ -107,7 +107,8 @@ describe('SuggestFeed (web) — Gợi ý hôm nay (Q9)', () => {
   it('điện thoại: hàng chip dính ngay dưới header 56px (top-14) và tràn mép màn như Mini; từ md không dính', async () => {
     const c = await mount();
     const row = c.querySelector('[role="region"][aria-label="Lọc gợi ý theo danh mục"]') as HTMLElement;
-    for (const cls of ['max-md:sticky', 'max-md:top-14', 'max-md:z-10', 'max-md:-mx-4', 'max-md:px-4']) expect(row.className).toContain(cls);
+    for (const cls of ['max-md:sticky', 'max-md:top-14', 'max-md:z-10', 'tubu-bleed', 'max-md:px-4']) expect(row.className).toContain(cls);
+    expect(row.className).not.toMatch(/-mx-/);
   });
 
   it('món có slug trong exclude (đã nằm ở kệ trên) không vẽ ở lưới', async () => {

@@ -60,7 +60,9 @@ const OnboardingGate: ComponentType<{ openedFromPartnerLink?: boolean }> = ONBOA
   ? lazy(() => import('./onboarding').then((m) => ({ default: m.OnboardingGate })))
   : () => null;
 const loadBrowse = () => import('../pages/browse');
+const CampaignPage = lazy(() => import('../pages/campaign'));
 const BrowsePage = lazy(loadBrowse);
+const BestSellersPage = lazy(() => import('../pages/best-sellers'));
 const loadProductDetail = () => import('../pages/product-detail');
 const ProductDetailPage = lazy(loadProductDetail);
 const loadCart = () => import('../pages/cart');
@@ -90,6 +92,7 @@ const RewardsMinePage = lazy(() => import('../pages/rewards-mine'));
 const ProfilePage = lazy(() => import('../pages/profile'));
 const LoyaltyPage = lazy(() => import('../pages/loyalty'));
 const OffersPage = lazy(() => import('../pages/offers'));
+const FlashSalePage = lazy(() => import('../pages/flash-sale'));
 const WalletPage = lazy(() => import('../pages/wallet'));
 const ExternalPointsPage = lazy(() => import('../pages/external-points'));
 const AddressesPage = lazy(() => import('../pages/addresses'));
@@ -216,6 +219,8 @@ export default function MyApp() {
                   <AnimationRoutes>
                     <Route path="/" element={<RouteShell><HomePage /></RouteShell>} />
                     <Route path="/browse" element={<RouteShell skeleton="grid"><BrowsePage /></RouteShell>} />
+                    <Route path="/best-sellers" element={<RouteShell skeleton="grid"><BestSellersPage /></RouteShell>} />
+                    <Route path="/campaign/:slug" element={<RouteShell skeleton="grid"><CampaignPage /></RouteShell>} />
                     <Route path="/product/:slug" element={<RouteShell skeleton="detail"><ProductDetailPage /></RouteShell>} />
                     <Route path="/cart" element={<RouteShell><CartPage /></RouteShell>} />
                     <Route path="/checkout" element={<RouteShell><CheckoutPage /></RouteShell>} />
@@ -245,6 +250,7 @@ export default function MyApp() {
                     <Route path="/profile" element={<RouteShell><ProfilePage /></RouteShell>} />
                     <Route path="/loyalty" element={<RouteShell><LoyaltyPage /></RouteShell>} />
                     <Route path="/offers" element={<RouteShell><OffersPage /></RouteShell>} />
+                    <Route path="/flash-sale" element={<RouteShell><FlashSalePage /></RouteShell>} />
                     <Route path="/wallet" element={<RouteShell><WalletPage /></RouteShell>} />
                     <Route path="/points/scan" element={<RouteShell><ExternalPointsPage /></RouteShell>} />
                     <Route path="/addresses" element={<RouteShell><AddressesPage /></RouteShell>} />

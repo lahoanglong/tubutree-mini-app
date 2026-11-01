@@ -95,10 +95,20 @@ describe('GET công khai không chờ phiên (R-78)', () => {
   it('/products, chi tiết SP, danh mục, thương hiệu, flash-sale, config công khai đi ngay khi phiên còn treo', async () => {
     const cap = captureFetch();
     setAuthReady(new Promise<void>(() => {}));
-    for (const url of ['/products', '/products/binh-xit', '/products/binh-xit/related', '/categories', '/brands', '/flash-sales/active', '/config/public']) {
+    for (const url of [
+      '/products',
+      '/products/binh-xit',
+      '/products/binh-xit/related',
+      '/categories',
+      '/brands',
+      '/flash-sales/active',
+      '/flash-sales/slots',
+      '/flash-sales/slots/s1/items',
+      '/config/public',
+    ]) {
       await api.get(url);
     }
-    expect(cap.calls()).toBe(7);
+    expect(cap.calls()).toBe(9);
   });
 
   it('endpoint theo người dùng và mọi lệnh ghi vẫn chờ phiên', async () => {
@@ -119,5 +129,10 @@ describe('GET công khai không chờ phiên (R-78)', () => {
     expect(isPublicGet('GET', '/products/a/b/c')).toBe(false);
     expect(isPublicGet('POST', '/products')).toBe(false);
     expect(isPublicGet('GET', '/flash-sales/active/extra')).toBe(false);
+    expect(isPublicGet('GET', '/flash-sales/slots?x=1')).toBe(true);
+    expect(isPublicGet('GET', '/flash-sales/slots/s1/items')).toBe(true);
+    expect(isPublicGet('GET', '/flash-sales/slots/s1/items/extra')).toBe(false);
+    // /upcoming trả `reminded` theo khách có phiên: phải chờ phiên để có token, không đi như khách.
+    expect(isPublicGet('GET', '/flash-sales/upcoming')).toBe(false);
   });
 });

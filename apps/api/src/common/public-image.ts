@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto';
 import { decodeServedImage } from './served-image';
 
-export type PublicImageKind = 'product' | 'brand' | 'academy';
+export type PublicImageKind = 'product' | 'brand' | 'academy' | 'campaign';
 
 export const PUBLIC_IMAGE_PREFIX = '/public-image';
 
-/** `thumb` = ảnh đại diện; số = ảnh thứ n của sản phẩm; `logo`/`cover` cho nhãn hàng và khoá học. */
+/** `thumb` = ảnh đại diện; số = ảnh thứ n của sản phẩm; `logo`/`cover` cho nhãn hàng, khoá học và chiến dịch (chỉ `cover`). */
 export type PublicImageSlot = 'thumb' | 'logo' | 'cover' | number;
 
-export const isPublicImageKind = (v: unknown): v is PublicImageKind => v === 'product' || v === 'brand' || v === 'academy';
+export const isPublicImageKind = (v: unknown): v is PublicImageKind => v === 'product' || v === 'brand' || v === 'academy' || v === 'campaign';
 
 /** Mã `v` theo nội dung ảnh: đổi ảnh thì URL đổi nên cache được lâu; ảnh này không mở được ảnh khác. */
 export function publicImageVersion(kind: PublicImageKind, id: string, slot: PublicImageSlot, image: string): string {

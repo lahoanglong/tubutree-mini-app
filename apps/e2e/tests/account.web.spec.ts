@@ -93,7 +93,7 @@ test.describe('Web khách: tài khoản', () => {
     await expect(page.getByRole('button', { name: 'Lưu thay đổi' })).toBeDisabled();
 
     await email.fill('an@tubu.vn');
-    await page.getByLabel('Ngày sinh').fill('1990-05-01');
+    await page.getByLabel('Ngày sinh').fill('01/05/1990');
     const saved = api.waitForCall('PATCH', '/me');
     await page.getByRole('button', { name: 'Lưu thay đổi' }).click();
     await expect(page.getByText('01/05/1990').first()).toBeVisible();
@@ -209,16 +209,15 @@ test.describe('Web khách: tài khoản', () => {
     await expect(page.getByRole('button', { name: 'Xoá tài khoản' })).toHaveCount(0);
   });
 
-  test('giới thiệu: đã đăng nhập gửi yêu cầu xoá tài khoản sau khi xác nhận', async ({ page, api }) => {
+  test('cài đặt: đã đăng nhập gửi yêu cầu xoá tài khoản sau khi xác nhận', async ({ page, api }) => {
     mockAccount(api, { fullName: 'Nguyễn Văn An', email: null, dob: null });
     api.get('/cart', { items: [], itemCount: 0, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, couponCode: null });
-    api.get('/faqs', []);
-    api.get('/config/public', { support: { hotline: null, email: null, zaloOaName: null } });
+    api.get('/me/notifications/prefs', { notifyPromo: true, notifyGarden: true });
     api.post('/me/deletion-request', { message: 'Đã ghi nhận yêu cầu xoá tài khoản' });
     api.get('/me/wallet', { walletBalance: 0, cashbackPending: 0, commissionApproved: 0, commissionPending: 0 });
-    await page.goto('/gioi-thieu');
+    await page.goto('/tai-khoan/cai-dat');
 
-    await expect(page.getByText('Tubu Tree bán những gì?')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Cài đặt', level: 1 })).toBeVisible();
     await page.getByRole('button', { name: 'Xoá tài khoản' }).click();
     await expect(page.getByText('Xoá tài khoản vĩnh viễn?')).toBeVisible();
     await expect(page.getByText(/Ví Tubu còn/)).toHaveCount(0);
@@ -228,14 +227,13 @@ test.describe('Web khách: tài khoản', () => {
     await expect(page.getByRole('status').filter({ hasText: 'Đã ghi nhận yêu cầu xoá tài khoản' })).toBeVisible();
   });
 
-  test('giới thiệu: Ví còn tiền phải tick đồng ý bỏ số dư; gửi kèm đúng số dư đã thấy', async ({ page, api }) => {
+  test('cài đặt: Ví còn tiền phải tick đồng ý bỏ số dư; gửi kèm đúng số dư đã thấy', async ({ page, api }) => {
     mockAccount(api, { fullName: 'Nguyễn Văn An', email: null, dob: null });
     api.get('/cart', { items: [], itemCount: 0, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, couponCode: null });
-    api.get('/faqs', []);
-    api.get('/config/public', { support: { hotline: null, email: null, zaloOaName: null } });
+    api.get('/me/notifications/prefs', { notifyPromo: true, notifyGarden: true });
     api.get('/me/wallet', { walletBalance: 50000, cashbackPending: 0, commissionApproved: 0, commissionPending: 0 });
     api.post('/me/deletion-request', { message: 'Đã ghi nhận yêu cầu xoá tài khoản' });
-    await page.goto('/gioi-thieu');
+    await page.goto('/tai-khoan/cai-dat');
 
     await page.getByRole('button', { name: 'Xoá tài khoản' }).click();
     await expect(page.getByText('Ví Tubu còn 50.000đ. Xoá tài khoản thì số dư này mất và không hoàn lại.')).toBeVisible();

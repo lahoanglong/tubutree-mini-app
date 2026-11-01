@@ -2,7 +2,6 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import type * as ZmpUi from 'zmp-ui';
-import type * as RouteFallback from '@tubutree/app-core/merch/route-fallback';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -11,7 +10,6 @@ const mocks = vi.hoisted(() => ({
   cancelReminder: vi.fn(),
   navigate: vi.fn(),
   status: 'guest',
-  flashPage: false,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
 vi.mock('../services/shop-api', () => ({
@@ -21,11 +19,6 @@ vi.mock('../services/shop-api', () => ({
 }));
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.status }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
-// Trang Giờ vàng riêng chưa có (P12): mặc định lối vào ẩn; `flashPage` bật để kiểm cả nhánh khi trang đã có.
-vi.mock('@tubutree/app-core/merch/route-fallback', async (importOriginal) => {
-  const actual = await importOriginal<typeof RouteFallback>();
-  return { ...actual, routeUsable: (r: string) => (r === '/flash-sale' && mocks.flashPage) || actual.routeUsable(r) };
-});
 
 import { FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT, FLASH_SKELETON_HEIGHT } from '@tubutree/app-core/home-layout';
 import { FlashSale, UpcomingFlashSales, type FlashSaleProps } from './flash-sale';
@@ -59,11 +52,10 @@ describe('FlashSale — khối Giờ vàng gọn của Trang chủ', () => {
     vi.clearAllMocks();
     localStorage.clear();
     mocks.status = 'guest';
-    mocks.flashPage = false;
     mocks.fetchUpcoming.mockResolvedValue([]);
   });
 
-  it('3 suất: vùng "Giờ vàng", tiêu đề h2, MỘT đồng hồ có ô số, mỗi thẻ một thanh đã bán; chưa có trang Giờ vàng thì không có "Xem tất cả"', async () => {
+  it('3 suất: vùng "Giờ vàng", tiêu đề h2, MỘT đồng hồ có ô số, mỗi thẻ một thanh đã bán, nút "Xem tất cả Giờ vàng"', async () => {
     renderFlash({ items: many(3) });
     const region = await screen.findByRole('region', { name: 'Giờ vàng' });
     expect(within(region).getByRole('heading', { level: 2, name: 'Giờ vàng' })).toBeInTheDocument();
@@ -71,15 +63,13 @@ describe('FlashSale — khối Giờ vàng gọn của Trang chủ', () => {
     expect(timers).toHaveLength(1);
     expect(timers[0]!.textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
     expect(within(region).getAllByTestId('flash-sold-bar')).toHaveLength(3);
-    expect(within(region).queryByRole('button', { name: 'Xem tất cả Giờ vàng' })).toBeNull();
   });
 
-  it('có trang Giờ vàng: nút "Xem tất cả Giờ vàng" điều hướng tới đó', async () => {
-    mocks.flashPage = true;
+  it('nút "Xem tất cả Giờ vàng" điều hướng tới trang Giờ vàng', async () => {
     renderFlash({ items: many(3) });
     const region = await screen.findByRole('region', { name: 'Giờ vàng' });
     fireEvent.click(within(region).getByRole('button', { name: 'Xem tất cả Giờ vàng' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/offers');
+    expect(mocks.navigate).toHaveBeenCalledWith('/flash-sale');
   });
 
   it('dưới 3 suất: không vẽ gì (kệ chưa đủ dày), 9 suất: chỉ 8 thẻ', async () => {
@@ -183,30 +173,16 @@ describe('FlashSale — dòng suất kế tiếp', () => {
     vi.clearAllMocks();
     localStorage.clear();
     mocks.status = 'guest';
-    mocks.flashPage = false;
   });
 
-  it('suất kế mở sau 3 giờ, chưa có trang Giờ vàng: dòng thông tin "HH:mm · n món sắp mở" cao 44, không nút, không hứa "Nhắc tôi"; khách chưa đăng nhập vẫn thấy', async () => {
-    mocks.fetchUpcoming.mockResolvedValue(upcomingAt(3, 2));
-    renderFlash({ items: many(3) });
-    const line = await screen.findByTestId('flash-next-slot');
-    expect(line).toHaveTextContent(/^\d{2}:\d{2} · 2 món sắp mở$/);
-    expect(line).not.toHaveTextContent('Nhắc tôi');
-    expect(line).toHaveStyle({ minHeight: '44px' });
-    expect(screen.queryByRole('button', { name: /sắp mở/ })).toBeNull();
-    fireEvent.click(line);
-    expect(mocks.navigate).not.toHaveBeenCalled();
-  });
-
-  it('suất kế mở sau 3 giờ, có trang Giờ vàng: dòng có "Nhắc tôi", bấm tới trang Giờ vàng', async () => {
-    mocks.flashPage = true;
+  it('suất kế mở sau 3 giờ: dòng có "Nhắc tôi" cao 44, bấm tới trang Giờ vàng (khách chưa đăng nhập vẫn thấy)', async () => {
     mocks.fetchUpcoming.mockResolvedValue(upcomingAt(3, 2));
     renderFlash({ items: many(3) });
     const line = await screen.findByRole('button', { name: /^\d{2}:\d{2} · 2 món sắp mở/ });
     expect(line).toHaveTextContent('Nhắc tôi');
     expect(line).toHaveStyle({ minHeight: '44px' });
     fireEvent.click(line);
-    expect(mocks.navigate).toHaveBeenCalledWith('/offers');
+    expect(mocks.navigate).toHaveBeenCalledWith('/flash-sale');
   });
 
   it('suất kế mở sau 8 giờ: không có dòng', async () => {
@@ -222,7 +198,6 @@ describe('FlashSale — hết giờ', () => {
     vi.clearAllMocks();
     localStorage.clear();
     mocks.status = 'guest';
-    mocks.flashPage = false;
     mocks.fetchUpcoming.mockResolvedValue([]);
   });
 
@@ -290,7 +265,6 @@ describe('FlashSale — thẻ giờ vàng (C-076 di cư DS v2)', () => {
     vi.clearAllMocks();
     localStorage.clear();
     mocks.status = 'guest';
-    mocks.flashPage = false;
     mocks.fetchUpcoming.mockResolvedValue([]);
   });
   // Hai thẻ còn lại đắt hơn và đã bán nhiều hơn để các giá trị của thẻ đầu không trùng với thẻ khác.
@@ -341,7 +315,6 @@ describe('FlashSale — giá hiển thị khớp giá thật (BUYERMINI-12)', ()
     vi.clearAllMocks();
     localStorage.clear();
     mocks.status = 'guest';
-    mocks.flashPage = false;
     mocks.fetchUpcoming.mockResolvedValue([]);
   });
   const others = many(2, {}).map((x, i) => ({ ...x, itemId: `o${i}`, productSlug: `o${i}`, productName: `Khác ${i}`, flashPrice: 60000, retailPrice: 60000 }));

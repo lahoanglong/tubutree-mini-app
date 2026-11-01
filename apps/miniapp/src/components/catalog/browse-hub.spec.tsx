@@ -99,11 +99,11 @@ describe('BrowseHub', () => {
     expect(container.lastElementChild).toContainElement(all);
   });
 
-  it('chạm "Xem tất cả" của kệ → điều hướng (PUSH) tới danh sách xếp bán chạy; nút lớn → onPickAll; ô thương hiệu → onPickBrand', async () => {
+  it('chạm "Xem tất cả" của kệ → điều hướng (PUSH) tới trang Bán chạy nhất (xếp theo 30 ngày); nút lớn → onPickAll; ô thương hiệu → onPickBrand', async () => {
     renderHub();
     await screen.findByRole('region', { name: 'Bán chạy nhất' });
     fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả Bán chạy nhất' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/browse?sort=best_seller');
+    expect(mocks.navigate).toHaveBeenCalledWith('/best-sellers');
     expect(handlers.onPickAll).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả sản phẩm' }));
     expect(handlers.onPickAll).toHaveBeenCalledTimes(1);

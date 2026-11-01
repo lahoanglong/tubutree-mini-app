@@ -451,7 +451,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       'Cài đặt',
     ]);
     const items = [...nav.querySelectorAll('button:not([aria-expanded])')];
-    expect(items).toHaveLength(51);
+    expect(items).toHaveLength(52);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
       [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button:not([aria-expanded])')].map(navLabel);
@@ -460,7 +460,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     );
     expect(group('Bán hàng')).toContain('Sản phẩm');
     expect(group('Hay dùng')).toEqual(['Hôm nay', 'Đơn hàng', 'Sản phẩm', 'Người dùng', 'Chat CSKH', 'Cộng đồng', 'Mã giảm giá', 'Đổi rác', 'Gian hàng', 'Duyệt SP đối tác', 'Đại lý']);
-    expect(group('Khuyến mãi và điểm')).toEqual(['Mã giảm giá', 'Giờ vàng', 'Tích điểm tại quầy', 'Tích điểm đơn sàn']);
+    expect(group('Khuyến mãi và điểm')).toEqual(['Mã giảm giá', 'Giờ vàng', 'Tích điểm tại quầy', 'Tích điểm đơn sàn', 'Chiến dịch']);
     expect(group('Đổi rác và game')).toEqual(['Đổi rác', 'Nhiệm vụ']);
     expect(group('Nhân sự')).toEqual(['Nhân sự & quyền', 'Duyệt ca', 'Lương', 'Chấm công']);
     expect(group('Tổng quan')).toContain('Báo cáo');
@@ -1670,6 +1670,16 @@ describe('admin/page — tab Flash Sale', () => {
     expect(container.textContent).toContain('Chưa có sản phẩm nào trong đợt này.');
   });
 
+  it('tab Giờ vàng có nút tạo khung mặc định và ô Thứ tự cho từng món (Q14), nút Lưu khoá khi chưa đổi', async () => {
+    mocks.flashSales = [SALE];
+    const { container } = await openSales();
+    expect(btn(container, 'Tạo khung giờ 2 ngày tới').disabled).toBe(false);
+    const order = container.querySelector<HTMLInputElement>('input[aria-label^="Thứ tự của"]');
+    expect(order?.value).toBe('0');
+    expect(order?.className).toContain('min-h-[44px]');
+    expect((container.querySelector('button[aria-label^="Lưu thứ tự của"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('sản phẩm trong đợt: dòng ngắt chữ được, Xoá là nút chữ danger 44px, thêm SP khoá tới khi chọn biến thể', async () => {
     mocks.flashSales = [SALE];
     const { container } = await openSales();
@@ -2560,7 +2570,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
     mocks.access = { role: 'STAFF', staffPermissions: perms };
   };
 
-  it('MARKETING: voucher, flash sale, nội dung, cộng đồng, báo cáo — không có đơn hàng, tiền, người dùng, cấu hình', async () => {
+  it('MARKETING: voucher, flash sale, chiến dịch, nội dung, cộng đồng, báo cáo — không có đơn hàng, tiền, người dùng, cấu hình', async () => {
     asStaff(['MARKETING']);
     const { container } = await mount();
     expect(navItems(container)).toEqual([
@@ -2570,6 +2580,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Đổi rác',
       'Báo cáo',
       'Giờ vàng',
+      'Chiến dịch',
       'Câu hỏi thường gặp',
       'Bộ nội dung CTV',
       'Học viện CTV',
@@ -2594,6 +2605,29 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Đơn đối tác & đối soát',
     ]);
     expect(mocks.refundsCalls).toBeGreaterThan(0);
+  });
+
+  it('tab Chiến dịch: ADMIN và nhân viên MARKETING mở được bằng ?tab=campaigns (tải danh sách /admin/campaigns); nhân viên CSKH thì không thấy mục và URL rơi về tab đầu', async () => {
+    const api = mockFetch({ '/admin/campaigns': { body: [] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    try {
+      window.history.replaceState(null, '', '/admin?tab=campaigns');
+      asStaff(['MARKETING']);
+      const marketing = await mount();
+      expect(navItems(marketing.container)).toContain('Chiến dịch');
+      expect(marketing.container.textContent).toContain('Chưa có chiến dịch nào');
+      expect(api.calls.some((c) => c.url.includes('/admin/campaigns'))).toBe(true);
+      marketing.unmount();
+      mounted = [];
+
+      window.history.replaceState(null, '', '/admin?tab=campaigns');
+      asStaff(['CSKH']);
+      const cskh = await mount();
+      expect(navItems(cskh.container)).not.toContain('Chiến dịch');
+      expect(cskh.container.textContent).not.toContain('Chưa có chiến dịch nào');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('ô tìm Hoàn tiền khách: KE_TOAN riêng bị che SĐT nên đòi đủ 10 số; KE_TOAN kiêm CSKH thấy đủ SĐT nên không đòi (cùng luật máy chủ)', async () => {
