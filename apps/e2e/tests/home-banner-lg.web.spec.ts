@@ -127,6 +127,11 @@ test.describe('Web Trang chủ, phiên chưa về, máy nhớ lần trước có
     expect(Math.abs(real.height - hold.height)).toBeLessThanOrEqual(2);
     const after = await cls(page);
     expect(after.value - before, `CLS +${(after.value - before).toFixed(4)}: ${after.detail}`).toBeLessThan(0.01);
+    // Có banner: `aside` chỉ 4 cột nên thẻ thành viên và Việc cần làm xếp dọc, mỗi thẻ rộng hết cột (cạnh nhau thì mỗi thẻ ~180px, cắt số điểm và tên).
+    const aside = await box(page, '[data-testid="home-aside"]');
+    const widths = await page.locator('[data-testid="home-aside"] > div:not(:empty)').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
+    expect(widths.length).toBeGreaterThan(0);
+    for (const w of widths) expect(w).toBeGreaterThanOrEqual(aside.width - 1);
   });
 
   test('dưới lg (điện thoại): chỉ MỘT khung giữ chỗ banner, ngay dưới thẻ thành viên; banner về không nhảy thêm', async ({ page, api, baseURL }) => {

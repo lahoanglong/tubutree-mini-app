@@ -218,8 +218,14 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
         // Banner rỗng thì không vẽ khung (không chừa cột trống); khối vẫn đứng đầu `rest` đúng thứ tự.
         banner={hasBanner ? wrap('banner') : undefined}
         aside={
-          // Từ md hai khối đứng cạnh nhau để dùng hết bề ngang; khối rỗng tự ẩn khỏi hàng.
-          <div className="md:flex md:gap-4 md:[&>div:empty]:hidden md:[&>div]:min-w-0 md:[&>div]:flex-1">{asideIds.map(wrap)}</div>
+          // Từ md hai khối đứng cạnh nhau để dùng hết bề ngang; khối rỗng tự ẩn khỏi hàng. Từ lg có banner thì `aside` chỉ còn 4 cột: hai thẻ cạnh nhau
+          // mỗi thẻ ~180px, cắt hết số điểm và tên khách, nên xếp dọc.
+          <div
+            data-testid="home-aside"
+            className={`md:flex md:gap-4 md:[&>div:empty]:hidden md:[&>div]:min-w-0 md:[&>div]:flex-1 ${hasBanner ? 'lg:flex-col lg:[&>div]:flex-none' : ''}`}
+          >
+            {asideIds.map(wrap)}
+          </div>
         }
       >
         {rest.map(wrap)}
