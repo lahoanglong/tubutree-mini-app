@@ -397,6 +397,17 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
     pageEl()?.scrollTo?.({ top: savedScroll.current });
   }, [inDetail]);
 
+  // Mở thẳng bằng link `?khoi=` (thông báo, chia sẻ) thì phía trước chưa có mục danh sách: dựng sẵn để nút lùi nổi toàn cục (lùi một bước khi có
+  // lịch sử) và "Gian hàng của tôi" cùng về danh sách thay vì nút nổi rời màn dựng. F5 giữ nguyên state của mục nên đã có dấu, không dựng lại.
+  const seededList = useRef(false);
+  useEffect(() => {
+    if (seededList.current || !sectionCol) return;
+    seededList.current = true;
+    if ((location.state as { builderSection?: boolean } | null)?.builderSection) return;
+    navigate(location.pathname, { replace: true });
+    navigate(sectionHref(location.pathname, sectionCol.id), { state: { builderSection: true } });
+  }, [sectionCol?.id]);
+
   const sheets = (
     <>
       <ActionMenu

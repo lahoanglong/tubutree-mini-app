@@ -1242,15 +1242,35 @@ describe('Màn dựng theo khối (P10)', () => {
         expect(router.idx).toBe(0);
       });
 
-      it('mở thẳng bằng link có ?khoi= (không có danh sách phía trước): vào trang chi tiết, "Gian hàng của tôi" thay mục hiện tại thay vì lùi ra ngoài', async () => {
+      const stackUrls = () => router.stack.map((l) => `${l.pathname}${l.search}`);
+
+      it.each([
+        ['nút "Quay lại" nổi', () => screen.getByRole('button', { name: 'Quay lại' })],
+        ['"Gian hàng của tôi" trong trang', () => screen.getByRole('button', { name: 'Gian hàng của tôi' })],
+      ])('mở thẳng bằng link ?khoi= (không có danh sách phía trước): dựng sẵn mục danh sách, %s cùng về danh sách', async (_name, target) => {
         mocks.getMyStorefront.mockResolvedValue(three());
         router.go('/storefront?khoi=c2', { replace: true });
+        renderWithBack();
+        expect(await screen.findByRole('heading', { level: 1, name: 'Bộ hai' })).toBeInTheDocument();
+        expect(stackUrls()).toEqual(['/storefront', '/storefront?khoi=c2']);
+        fireEvent.click(target());
+        expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
+        expect(screen.queryByTestId('section-detail')).not.toBeInTheDocument();
+        expect(here()).toBe('/storefront');
+        expect(router.idx).toBe(0);
+      });
+
+      it('F5 ở trang chi tiết (mục lịch sử còn dấu của màn dựng): không dựng thêm mục, "Gian hàng của tôi" lùi một bước', async () => {
+        mocks.getMyStorefront.mockResolvedValue(three());
+        router.go('/storefront', { replace: true });
+        router.go('/storefront?khoi=c2', { state: { builderSection: true } });
         renderPage();
         expect(await screen.findByRole('heading', { level: 1, name: 'Bộ hai' })).toBeInTheDocument();
+        expect(stackUrls()).toEqual(['/storefront', '/storefront?khoi=c2']);
         fireEvent.click(screen.getByRole('button', { name: 'Gian hàng của tôi' }));
         expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
-        expect(router.stack).toHaveLength(1);
-        expect(here()).toBe('/storefront');
+        expect(router.idx).toBe(0);
+        expect(router.stack).toHaveLength(2);
       });
 
       it('khối đang mở bị xoá: về danh sách khối, không kẹt ở trang chi tiết trống', async () => {
@@ -1284,6 +1304,8 @@ describe('Màn dựng theo khối (P10)', () => {
         router.go('/storefront?khoi=khong-co', { replace: true });
         renderPage();
         expect(await screen.findAllByTestId('section-card')).toHaveLength(3);
+        // Không có trang chi tiết để dựng mục danh sách phía trước.
+        expect(router.stack).toHaveLength(1);
       });
     });
 
