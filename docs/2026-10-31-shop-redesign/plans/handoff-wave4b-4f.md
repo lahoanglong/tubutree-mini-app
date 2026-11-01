@@ -75,7 +75,7 @@ Có 4 migration mới so với main (`git diff --name-only origin/main...HEAD --
 3. `20261101120000_bundles` (P15). Tạo kiểu `BundleKind` và hai bảng mới `bundles`, `bundle_items`, có khoá ngoại và chỉ mục. Có bốn ràng buộc CHECK: `pct` từ 1 đến 100, `endAt` sau `startAt`, `addonPrice` không âm, `maxQty` từ 1 đến 10. Rủi ro rất thấp: chỉ thêm bảng mới, rỗng. Bản ghi tay vi phạm sẽ bị DB từ chối.
 4. `20261101130000_bundle_item_ref_price` (F8). Thêm cột `refPrice` vào `bundle_items`, backfill, rồi thêm CHECK `refPrice >= 0`. Backfill: món ADDON có ghim phân loại lấy giá đang bán của phân loại làm giá tham chiếu. Đây là giá hiện tại, không phải giá lúc tạo, vì không có dữ liệu cũ hơn. Chấp nhận được vì bộ chưa từng lên PROD, nên trên PROD bước này cập nhật 0 hàng. Món ADDON thiếu `refPrice` không giảm và không được quảng cáo. Nếu sau này ai ghi bộ trực tiếp vào DB thì phải ghi `refPrice`.
 
-Cấu hình hệ thống mới: không có khoá nào bắt buộc nạp. `bundle.max_pct` (trần % của combo, mặc định 50 nằm trong mã `BUNDLE_MAX_PCT_DEFAULT`) và trần của nhân viên đọc từ cấu hình, chưa có thì dùng mặc định. P10 dùng `storefront.max_combo_pct` đã có từ trước, không thêm khoá. P16 dùng khoá khoá-xử-lý `catalog.category_tree` (khoá advisory trong DB, không phải cấu hình). Khoá `flashsale.slots` của đợt 4a đã nạp lúc deploy 01/11.
+Cấu hình hệ thống mới: không có khoá nào bắt buộc nạp. `bundle.max_pct` (trần % của combo, mặc định 50 nằm trong mã `BUNDLE_MAX_PCT_DEFAULT`) và trần của nhân viên đọc từ cấu hình, chưa có thì dùng mặc định. P10 dùng `storefront.max_combo_pct` đã có từ trước, không thêm khoá. P16 dùng `catalog.category_tree`, là khoá advisory trong DB, không phải cấu hình. Khoá `flashsale.slots` của đợt 4a đã nạp lúc deploy 01/11.
 
 Các việc chính cần nhớ khi deploy:
 - Mini: entry 641 KB (giới hạn 700), tổng 2140 KB, vượt mốc cảnh báo 2048 từ trước (gate-P15).
@@ -95,15 +95,15 @@ Các việc chính cần nhớ khi deploy:
 ## 4. Rủi ro đã biết, giới hạn còn lại
 
 1. **Chống trùng Trang chủ của combo lệch §5 (chờ chủ ký).** Thứ tự đúng theo thiết kế là Giờ vàng, Mua lại, Combo, Bán chạy. Hiện món của combo vẫn có thể hiện lại ở Bán chạy nhất. Lý do chưa sửa: trên web, khối combo chỉ tải ở trình duyệt; nếu combo lấy món thì Bán chạy (đã có sẵn trong HTML) mất món sau hydrate, làm kệ nhảy và phá các ca CLS. Muốn đúng §5 phải đưa combo vào yêu cầu `/home` gộp ở máy chủ trước. Đang làm ở F9 (mục 5).
-2. **Trần nhân viên của combo chưa đủ lúc tính tiền.** Hai lỗi cộng dồn: nhiều bộ trong cùng một đơn cộng khoản giảm vượt trần; và combo theo % khi giá sản phẩm tăng sau lúc tạo thì khoản giảm tăng theo. Chủ đã duyệt sửa trước khi merge (F8b, mục 5). Cho tới khi F8b gộp, đừng cho nhân viên tạo combo lớn.
+2. **Trần nhân viên của combo chưa đủ lúc tính tiền.** Hai lỗi cộng dồn: nhiều bộ trong cùng một đơn cộng khoản giảm vượt trần; và combo theo % khi giá sản phẩm tăng sau lúc tạo thì khoản giảm tăng theo. Chủ đã duyệt sửa trước khi merge (F8b, mục 5). Cho tới khi F8b gộp, nên cân nhắc trước khi cho nhân viên tạo combo lớn.
 3. **Giới hạn của F8 ("giữ khối").** Khi API báo `addonsSoldOut` (sản phẩm chính hết hàng, danh sách mua kèm rỗng) thì không có mã bộ để đối chiếu, nên coi mọi bộ đang giữ là hết hàng.
 4. **API công khai vẫn quảng cáo bộ cho chính nhân viên tạo** (cache chung). Giỏ chỉ giảm ít hơn quảng cáo, không bao giờ đắt hơn, giống Giờ vàng và mã giảm giá.
 5. **Không có quota toàn cục cho combo.** Chặn rủi ro bằng `maxQty` tối đa 10 mỗi đơn và bộ do nhân viên hoặc ADMIN tạo tay, có hạn.
 6. **Combo không áp cho dòng đang Giờ vàng** và bộ thiếu món vì món đó đang Giờ vàng thì không đủ bộ (cùng luật combo gian hàng). API công khai ẩn các bộ đó, không tra theo người mua, nên người đã hết suất cá nhân vẫn thấy bộ bị ẩn.
 7. **PDP web sản phẩm Giờ vàng có bộ: CLS 0,0715** (không có bộ 0,0715 đến 0,0771: cú nhảy là thanh Giờ vàng của P12, không phải khối bộ). Còn dưới ngưỡng 0,1 nhưng sát. Mốc cũ 0,0957 ở đợt 4a chưa xử lý, nếu thanh Giờ vàng cao thêm thì phải tải Giờ vàng ở máy chủ làm `initialData` cho `pdp-extras.tsx`.
 8. **`UpcomingFlashSales` chưa gắn vào Trang chủ nào** (F7a, Task 4). Thẻ chỉ có spec đơn vị. Việc đo bề rộng 112px lấy từ `TILE_METRICS.inset` và thẻ `flash` 128px, không có e2e 375px. Nếu gắn thẻ này vào Trang chủ sau này thì phải đo lại ở 375px.
-9. **Trình dựng (P10).** Kiểu khối NORMAL hay COMBO khoá sau khi tạo vì API chưa nhận `kind` khi sửa. Mini dính thấp 48px ở chỗ khác (`brand-view.tsx`) đã được F6 xử lý, còn `storefront-view` theo kiểm của P10.
-10. **Ảnh 375px còn thiếu** cho khối Combo trên Trang chủ web ở trạng thái nhiều bộ, và UI admin Giờ vàng (còn nợ từ 4a).
+9. **Trình dựng (P10).** Kiểu khối NORMAL hay COMBO khoá sau khi tạo vì API chưa nhận `kind` khi sửa.
+10. **Ảnh 375px còn nợ từ 4a:** UI admin Giờ vàng và món hết hàng ở khung sắp mở.
 11. **Đồng bộ Pancake và đường đối tác:** đường đối tác (`merchant.service`) không đi qua luật "chỉ gán vào mục lá" của P16 (ghi trong plan, giữ nguyên).
 12. **Máy tải nặng sinh FAIL giả** ở vitest nặng và một spec jest. Ca CLS chập chờn là lỗi thật, xem "Bẫy môi trường" của `handoff-wave4a.md`.
 
