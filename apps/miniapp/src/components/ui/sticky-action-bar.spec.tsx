@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { StickyActionBar } from './sticky-action-bar';
 
 describe('StickyActionBar', () => {
@@ -31,5 +31,47 @@ describe('StickyActionBar', () => {
     unmount();
     expect(host).not.toHaveClass('tubu-scroll-pad-sticky-bar');
     host.remove();
+  });
+});
+
+describe('StickyActionBar: lead, dense, chiều cao', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('`lead` nằm CÙNG HÀNG với nút chính, bên trái; nút giữ bề rộng riêng', () => {
+    render(<StickyActionBar primary={<button>Thanh toán</button>} lead={<span>Tạm tính 100.000đ</span>} />);
+    const row = screen.getByText('Thanh toán').parentElement!.parentElement as HTMLElement;
+    expect(row).toContainElement(screen.getByText('Tạm tính 100.000đ'));
+    expect(screen.getByText('Tạm tính 100.000đ').parentElement!.nextElementSibling).toBe(screen.getByText('Thanh toán').parentElement);
+    expect((screen.getByText('Thanh toán').parentElement as HTMLElement).style.flex).toContain('0 0 auto');
+  });
+
+  it('không có `lead` thì nút chiếm cả hàng như mọi trang khác', () => {
+    render(<StickyActionBar primary={<button>Mua ngay</button>} />);
+    expect((screen.getByText('Mua ngay').parentElement as HTMLElement).style.flex).toBe('1 1 0%');
+  });
+
+  it('`dense` đệm 10px (safe-area vẫn cộng một lần), không `dense` giữ 16px', () => {
+    const { unmount } = render(<StickyActionBar dense primary={<button>x</button>} />);
+    const bar = screen.getByTestId('sticky-bar');
+    expect(bar.style.paddingBottom).toBe('calc(10px + var(--safe-bottom))');
+    expect(bar.style.gap).toBe('4px');
+    unmount();
+    render(<StickyActionBar primary={<button>y</button>} />);
+    expect(screen.getByTestId('sticky-bar').style.gap).toBe('8px');
+  });
+
+  it('ghi chiều cao thật vào --sticky-bar-h khi gắn, cập nhật khi thanh đổi cao, gỡ khi tháo', () => {
+    let notify: () => void = () => {};
+    vi.stubGlobal('ResizeObserver', class { constructor(cb: () => void) { notify = cb; } observe() {} disconnect() {} });
+    let height = 140.2;
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => ({ height }) as DOMRect);
+    const { unmount } = render(<StickyActionBar primary={<button>x</button>} />);
+    expect(document.documentElement.style.getPropertyValue('--sticky-bar-h')).toBe('141px');
+    height = 190;
+    notify();
+    expect(document.documentElement.style.getPropertyValue('--sticky-bar-h')).toBe('190px');
+    unmount();
+    expect(document.documentElement.style.getPropertyValue('--sticky-bar-h')).toBe('');
+    rect.mockRestore();
   });
 });

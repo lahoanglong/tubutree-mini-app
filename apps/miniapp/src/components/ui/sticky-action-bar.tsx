@@ -4,11 +4,15 @@ export interface StickyActionBarProps {
   primary: ReactNode;
   secondary?: ReactNode;
   summary?: ReactNode;
+  /** Khối bên trái nút chính, CÙNG HÀNG với nút (vd tổng tiền của giỏ): nút giữ bề rộng riêng, khối này lấy phần còn lại. */
+  lead?: ReactNode;
+  /** Đệm và khoảng cách gọn (10px / 4px) cho thanh nhiều lớp như chân dính giỏ; mặc định giữ 16px / 8px của các trang khác. */
+  dense?: boolean;
 }
 
 /** Thanh CTA dính đáy — safe-area MỘT LẦN ở đây, không phải mỗi trang tự cộng (audit A4-21: 10
  * thanh tự vẽ, 3 thiếu safe-area hoàn toàn). */
-export function StickyActionBar({ primary, secondary, summary }: StickyActionBarProps) {
+export function StickyActionBar({ primary, secondary, summary, lead, dense }: StickyActionBarProps) {
   const ref = useRef<HTMLDivElement>(null);
   // scroll-padding chỉ có tác dụng trên khung cuộn (.zaui-page): đánh dấu khung để Tab không để phần tử lọt dưới thanh (WCAG 2.4.11).
   useEffect(() => {
@@ -16,6 +20,22 @@ export function StickyActionBar({ primary, secondary, summary }: StickyActionBar
     page?.classList.add('tubu-scroll-pad-sticky-bar');
     return () => page?.classList.remove('tubu-scroll-pad-sticky-bar');
   }, []);
+  // Chiều cao thật của thanh (đã gồm safe-area và lời báo hiện thêm): trang đệm đáy theo `--sticky-bar-h` thay vì một số cứng,
+  // nên thanh cao thêm hay máy có vùng an toàn đáy thì dòng cuối vẫn nằm trên thanh.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const write = () => root.style.setProperty('--sticky-bar-h', `${Math.ceil(el.getBoundingClientRect().height)}px`);
+    write();
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(write);
+    ro?.observe(el);
+    return () => {
+      ro?.disconnect();
+      root.style.removeProperty('--sticky-bar-h');
+    };
+  }, []);
+  const pad = dense ? 10 : 16;
   return (
     <div
       ref={ref}
@@ -24,17 +44,18 @@ export function StickyActionBar({ primary, secondary, summary }: StickyActionBar
       style={{
         position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 20,
         background: 'var(--color-bg-surface)', boxShadow: 'var(--elevation-3)',
-        padding: 16, paddingBottom: 'calc(16px + var(--safe-bottom))',
-        display: 'flex', flexDirection: 'column', gap: 8,
+        padding: `${pad}px 16px`, paddingBottom: `calc(${pad}px + var(--safe-bottom))`,
+        display: 'flex', flexDirection: 'column', gap: dense ? 4 : 8,
       }}
     >
       {summary}
-      <div style={{ display: 'flex', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: lead ? 'center' : undefined }}>
+        {lead && <div style={{ flex: 1, minWidth: 0 }}>{lead}</div>}
         {secondary}
         {/* minWidth 0: flex item mặc định min-width:auto = bề rộng nội dung → hàng CTA không co được
             và tràn khỏi màn hình ở 320-390px (PDP "Mua ngay · giá" chạm 421px). Nút bên trong co/rút
-            gọn nhờ .tubu-sticky-bar .tubu-btn (css/tokens.css). */}
-        <div style={{ flex: 1, minWidth: 0 }}>{primary}</div>
+            gọn nhờ .tubu-sticky-bar .tubu-btn (css/tokens.css). Có `lead` thì nút tự giữ bề rộng (đủ nhãn "Thanh toán (n)"). */}
+        <div style={lead ? { flex: '0 0 auto', minWidth: 148 } : { flex: 1, minWidth: 0 }}>{primary}</div>
       </div>
     </div>
   );

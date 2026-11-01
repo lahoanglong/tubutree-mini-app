@@ -231,7 +231,7 @@ export default function CartPage() {
   };
 
   return (
-    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 260 }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(var(--sticky-bar-h, 150px) + 16px)' }}>
       <PageHeader title="Giỏ hàng" />
       <StorefrontContextBar />
       <DiscontinuedNotice
@@ -676,6 +676,9 @@ function CouponRow({
   );
 }
 
+/** Dòng giảm giá trong chân dính: bỏ đệm dọc 6px mặc định của KeyValueRow (khoảng cách đã do thanh lo) để thêm một dòng giảm chỉ tốn ~24px. */
+const COMPACT_ROW = { padding: 0 } as const;
+
 /** Sticky summary + freeship progress (DI #1). */
 function StickySummary({
   summary,
@@ -730,11 +733,12 @@ function StickySummary({
 
   return (
     <StickyActionBar
+      dense
       summary={
         <>
           {coupon}
           {showFreeship && (
-            <Box style={{ marginBottom: 2 }}>
+            <Box>
               <Text size="xSmall" style={{ color: reached ? 'var(--color-text-success)' : 'var(--color-text-secondary)' }}>
                 {reached
                   ? tubuOnlyFreeship
@@ -742,58 +746,47 @@ function StickySummary({
                     : vi.cart.freeshipReached
                   : vi.cart.freeshipProgress(formatVnd(remaining)) + (tubuOnlyFreeship ? ' cho phần hàng Tubu Tree giao' : '')}
               </Text>
-              <Box
-                aria-hidden
-                style={{
-                  height: 5,
-                  background: 'var(--stone-200)',
-                  borderRadius: 'var(--radius-pill)',
-                  marginTop: 5,
-                  overflow: 'hidden',
-                }}
-              >
+              {/* Đã đạt thì chỉ còn dòng chữ: thanh đầy 100% không nói thêm gì mà tốn chiều cao của chân dính. */}
+              {!reached && (
                 <Box
+                  aria-hidden
+                  data-testid="freeship-bar"
                   style={{
-                    width: `${progressPct}%`,
-                    height: '100%',
-                    background: reached
-                      ? 'var(--forest-400)'
-                      : 'linear-gradient(90deg, var(--forest-200), var(--color-action-primary-bg))',
+                    height: 4,
+                    background: 'var(--stone-200)',
                     borderRadius: 'var(--radius-pill)',
-                    transition: 'width var(--dur-slow) var(--ease-out)',
+                    marginTop: 4,
+                    overflow: 'hidden',
                   }}
-                />
-              </Box>
+                >
+                  <Box
+                    style={{
+                      width: `${progressPct}%`,
+                      height: '100%',
+                      background: 'linear-gradient(90deg, var(--forest-200), var(--color-action-primary-bg))',
+                      borderRadius: 'var(--radius-pill)',
+                      transition: 'width var(--dur-slow) var(--ease-out)',
+                    }}
+                  />
+                </Box>
+              )}
             </Box>
           )}
 
           {comboDiscount > 0 && (
-            <KeyValueRow label={vi.cart.comboDiscount} value={`-${formatVnd(comboDiscount)}`} tone="success" />
+            <KeyValueRow label={vi.cart.comboDiscount} value={`-${formatVnd(comboDiscount)}`} tone="success" style={COMPACT_ROW} />
           )}
           {discount > 0 && (
-            <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(discount)}`} tone="success" />
+            <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(discount)}`} tone="success" style={COMPACT_ROW} />
           )}
-          {tierDiscount > 0 && <KeyValueRow label={vi.cart.tierDiscount} value={`-${formatVnd(tierDiscount)}`} tone="success" />}
+          {tierDiscount > 0 && <KeyValueRow label={vi.cart.tierDiscount} value={`-${formatVnd(tierDiscount)}`} tone="success" style={COMPACT_ROW} />}
           {subsetNotice && (
             <Text size="xSmall" role="status" data-testid="coupon-notice" style={{ color: 'var(--color-text-warning)' }}>
               {subsetNotice}
             </Text>
           )}
-          {/* Con số này ĐÃ trừ giảm giá và CHƯA gồm ship, trong khi "Tạm tính" ở màn Thanh toán
-              là tiền hàng gộp chưa trừ gì — cùng một nhãn, hai số khác nhau, khách tưởng bị đội
-              giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn, nhưng chỉ khi thật sự có giảm. */}
-          <KeyValueRow
-            label={comboDiscount + discount + tierDiscount > 0 ? vi.cart.subtotalAfterDiscount : vi.cart.subtotal}
-            value={formatVnd(Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount))}
-            emphasis
-          />
-          {saving > 0 && (
-            <Text size="xSmall" data-testid="cart-saving" style={{ color: 'var(--color-text-success)', textAlign: 'right', marginTop: -4 }}>
-              {fillCopy('cart.saving', { x: formatVnd(saving) })}
-            </Text>
-          )}
           {outOfStockNames.length > 0 && (
-            <Box flex alignItems="flex-start" role="status" style={{ gap: 4, marginTop: 4 }}>
+            <Box flex alignItems="flex-start" role="status" style={{ gap: 4 }}>
               <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
               <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>
                 {vi.cart.outOfStockBlocked(outOfStockNames)}
@@ -801,12 +794,33 @@ function StickySummary({
             </Box>
           )}
           {overStock && outOfStockNames.length === 0 && (
-            <Box flex alignItems="center" role="status" style={{ gap: 4, marginTop: 4 }}>
+            <Box flex alignItems="center" role="status" style={{ gap: 4 }}>
               <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />
               <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>
                 {vi.cart.overStockBlocked}
               </Text>
             </Box>
+          )}
+        </>
+      }
+      lead={
+        <>
+          {/* Con số này ĐÃ trừ giảm giá và CHƯA gồm ship, trong khi "Tạm tính" ở màn Thanh toán
+              là tiền hàng gộp chưa trừ gì — cùng một nhãn, hai số khác nhau, khách tưởng bị đội
+              giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn, nhưng chỉ khi thật sự có giảm. */}
+          <div style={{ fontSize: 12, lineHeight: '16px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
+            {comboDiscount + discount + tierDiscount > 0 ? vi.cart.subtotalAfterDiscount : vi.cart.subtotal}
+          </div>
+          <div
+            data-testid="cart-total-value"
+            style={{ fontSize: 18, lineHeight: '24px', fontWeight: 700, color: 'var(--color-text-primary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}
+          >
+            {formatVnd(Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount))}
+          </div>
+          {saving > 0 && (
+            <Text size="xSmall" data-testid="cart-saving" style={{ color: 'var(--color-text-success)', display: 'block', whiteSpace: 'nowrap' }}>
+              {fillCopy('cart.saving', { x: formatVnd(saving) })}
+            </Text>
           )}
         </>
       }

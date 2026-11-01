@@ -525,15 +525,15 @@ export default function CartPage() {
             <p
               id="cart-pay-hint"
               role={stockBlocked ? 'alert' : 'status'}
-              className={`mb-2 text-caption ${stockBlocked ? 'text-danger-fg' : 'text-stone-600'}`}
+              className={`mb-1 text-caption ${stockBlocked ? 'text-danger-fg' : 'text-stone-600'}`}
             >
               {payHint}
             </p>
           )}
           {phoneCoupon && couponBox(true)}
-          <div className="pb-1 pt-1">
+          <div className="mt-1 space-y-1">
             {showFreeship && (
-              <div className="mb-0.5">
+              <div>
                 <div className={`text-caption ${freeshipReached ? 'text-success-fg' : 'text-stone-600'}`}>
                   {freeshipReached
                     ? hasMerchant
@@ -541,36 +541,44 @@ export default function CartPage() {
                       : 'Bạn được miễn phí giao hàng 🌿'
                     : `Mua thêm ${formatVnd(barRemaining)} để được miễn phí giao hàng${hasMerchant ? ' cho phần hàng Tubu Tree giao' : ''}`}
                 </div>
-                <div aria-hidden="true" className="mt-[5px] h-[5px] overflow-hidden rounded-full bg-stone-200">
-                  <div
-                    data-testid="freeship-fill"
-                    className="h-full rounded-full transition-[width]"
-                    style={{
-                      width: `${freeshipPct}%`,
-                      background: freeshipReached ? 'var(--forest-400)' : 'linear-gradient(90deg, var(--forest-200), var(--color-action-primary-bg))',
-                    }}
-                  />
+                {/* Đã đạt thì chỉ còn dòng chữ: thanh đầy 100% không nói thêm gì mà tốn chiều cao của chân dính (giống Mini App). */}
+                {!freeshipReached && (
+                  <div data-testid="freeship-bar" aria-hidden="true" className="mt-1 h-1 overflow-hidden rounded-full bg-stone-200">
+                    <div
+                      data-testid="freeship-fill"
+                      className="h-full rounded-full transition-[width]"
+                      style={{ width: `${freeshipPct}%`, background: 'linear-gradient(90deg, var(--forest-200), var(--color-action-primary-bg))' }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+            {shownCombo > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownCombo)}`} tone="success" style={{ padding: 0 }} />}
+            {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" style={{ padding: 0 }} />}
+            {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" style={{ padding: 0 }} />}
+            {/* Tổng bên trái, nút bên phải CÙNG MỘT HÀNG (như Mini App): nút giữ bề rộng riêng, khối tổng lấy phần còn lại. */}
+            <div className="flex items-center gap-2.5">
+              <div className="min-w-0 flex-1 whitespace-nowrap">
+                <div className="text-xs leading-4 text-stone-600">{shownCombo + shownDiscount + shownTier > 0 ? 'Tạm tính (đã giảm)' : 'Tạm tính'}</div>
+                <div data-testid="cart-total-value" className="text-lg font-bold leading-6 tabular-nums text-stone-900">
+                  {formatVnd(payTotal)}
                 </div>
+                {saving > 0 && (
+                  <div data-testid="cart-saving" className="text-caption font-medium text-success-fg">
+                    {fillCopy('cart.saving', { x: formatVnd(saving) })}
+                  </div>
+                )}
               </div>
-            )}
-            {shownCombo > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownCombo)}`} tone="success" />}
-            {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" />}
-            {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" />}
-            <KeyValueRow label={shownCombo + shownDiscount + shownTier > 0 ? 'Tạm tính (đã giảm)' : 'Tạm tính'} value={formatVnd(payTotal)} emphasis />
-            {saving > 0 && (
-              <div data-testid="cart-saving" className="text-right text-caption font-medium text-success-fg">
-                {fillCopy('cart.saving', { x: formatVnd(saving) })}
-              </div>
-            )}
-            {payHint ? (
-              <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} mt-2 w-full`}>
-                Thanh toán ({selectedCount})
-              </button>
-            ) : (
-              <Link href="/thanh-toan" onClick={onPay} className={`${uiBar.primary} mt-2 w-full`}>
-                Thanh toán ({selectedCount})
-              </Link>
-            )}
+              {payHint ? (
+                <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} min-w-[148px] shrink-0`}>
+                  Thanh toán ({selectedCount})
+                </button>
+              ) : (
+                <Link href="/thanh-toan" onClick={onPay} className={`${uiBar.primary} min-w-[148px] shrink-0`}>
+                  Thanh toán ({selectedCount})
+                </Link>
+              )}
+            </div>
           </div>
         </StickyActionBar>
       )}

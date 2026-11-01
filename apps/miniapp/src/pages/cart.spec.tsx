@@ -780,6 +780,32 @@ describe('CartPage: giá gạch, Tiết kiệm, Countdown Giờ vàng, chân dí
     expect(within(body).queryByText('Mã giảm giá')).toBeNull();
   });
 
+  it('chân dính gọn: chưa đạt miễn phí giao thì có thanh tiến độ; đạt rồi chỉ còn một dòng chữ, không thanh', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    const first = renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    expect(screen.getByTestId('freeship-bar')).toBeInTheDocument();
+    first.unmount();
+    mocks.getCart.mockResolvedValue(summary({ subtotal: 250_000, freeship: true, items: [{ ...OK_LINE, unitPrice: 250_000, total: 250_000 }] }));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    expect(within(screen.getByTestId('sticky-bar')).getByText('Bạn được miễn phí giao hàng 🌿')).toBeInTheDocument();
+    expect(screen.queryByTestId('freeship-bar')).toBeNull();
+  });
+
+  it('chân dính gọn: tổng tiền cùng khối với nhãn (bên trái nút), Tiết kiệm nằm dưới số tiền', async () => {
+    const discounted = { ...OK_LINE, unitPrice: 33_000, listUnitPrice: 50_000, total: 33_000 };
+    mocks.getCart.mockResolvedValue(summary({ items: [discounted], subtotal: 33_000 }));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    const bar = screen.getByTestId('sticky-bar');
+    const total = within(bar).getByTestId('cart-total-value');
+    expect(total).toHaveTextContent('33.000đ');
+    expect(total.parentElement).toContainElement(within(bar).getByText('Tạm tính'));
+    expect(total.parentElement).toContainElement(within(bar).getByTestId('cart-saving'));
+    expect(total.parentElement).not.toContainElement(within(bar).getByRole('button', { name: 'Thanh toán (1)' }));
+  });
+
   it('bấm dòng mã trong chân dính mở tấm chọn mã', async () => {
     mocks.getCart.mockResolvedValue(summary({}));
     renderPage();

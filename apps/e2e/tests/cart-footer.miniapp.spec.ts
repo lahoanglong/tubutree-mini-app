@@ -1,0 +1,93 @@
+import type { Page } from '@playwright/test';
+import { test, expect, makeUser, mockSession } from './support/mock-api';
+import { mockFooterCart } from './support/cart-footer-mocks';
+
+/**
+ * Chân dính của giỏ Mini App ở 375px (review hình bước chốt, P1 #7, sơ đồ CT-04): cao khoảng 140px thay vì 265px, tổng tiền và nút Thanh toán
+ * cùng một hàng, đã đạt miễn phí giao thì chỉ còn một dòng chữ (không vẽ thanh đầy), và nội dung cuối giỏ không bị chân che dù chân cao thêm
+ * (lời báo hết hàng, dòng giảm) hay máy có vùng an toàn đáy (`--safe-bottom`). API mock toàn bộ.
+ */
+test.use({ viewport: { width: 375, height: 812 } });
+
+const bar = (page: Page) => page.getByTestId('sticky-bar');
+const payButton = (page: Page) => bar(page).getByRole('button', { name: /^Thanh toán/ });
+const mid = (b: { y: number; height: number }) => b.y + b.height / 2;
+const barHeight = async (page: Page) => Math.round((await bar(page).boundingBox())!.height);
+
+async function setSafeBottom(page: Page, px: number): Promise<void> {
+  await page.addInitScript((value) => {
+    document.addEventListener('DOMContentLoaded', () => document.documentElement.style.setProperty('--safe-bottom', `${value}px`));
+  }, px);
+}
+
+async function openCart(page: Page): Promise<void> {
+  await page.goto('/cart');
+  await expect(bar(page)).toBeVisible({ timeout: 15_000 });
+  await expect(payButton(page)).toBeVisible();
+}
+
+test.beforeEach(({ api }) => {
+  mockSession(api, makeUser({ id: 'user-cart-footer', fullName: 'Khách Giỏ' }));
+});
+
+test.describe('Giỏ Mini App: chân dính gọn', () => {
+  test('đã đạt miễn phí giao, không giảm gì: cao ≤150px, một dòng chữ không thanh, tổng và nút cùng một hàng', async ({ page, api }) => {
+    mockFooterCart(api, { lines: 3, reached: true });
+    await openCart(page);
+
+    const h = await barHeight(page);
+    expect(h, `chân dính cao ${h}px`).toBeLessThanOrEqual(150);
+    await expect(bar(page).getByText('Bạn được miễn phí giao hàng')).toBeVisible();
+    await expect(page.getByTestId('freeship-bar')).toHaveCount(0);
+
+    const total = (await page.getByTestId('cart-total-value').boundingBox())!;
+    const pay = (await payButton(page).boundingBox())!;
+    expect(Math.abs(mid(total) - mid(pay)), `tâm tổng ${Math.round(mid(total))}px, tâm nút ${Math.round(mid(pay))}px`).toBeLessThanOrEqual(12);
+    expect(pay.x, 'nút nằm bên phải số tiền').toBeGreaterThanOrEqual(total.x + total.width);
+    expect(pay.x + pay.width).toBeLessThanOrEqual(375);
+  });
+
+  test('chưa đạt miễn phí giao, có dòng giảm combo: vẫn có thanh tiến độ, cao ≤175px', async ({ page, api }) => {
+    mockFooterCart(api, { lines: 3, reached: false, combo: 6_000 });
+    await openCart(page);
+
+    await expect(page.getByTestId('freeship-bar')).toHaveCount(1);
+    await expect(bar(page).getByText('Giảm giá combo')).toBeVisible();
+    const h = await barHeight(page);
+    expect(h, `chân dính cao ${h}px`).toBeLessThanOrEqual(175);
+    const total = (await page.getByTestId('cart-total-value').boundingBox())!;
+    const pay = (await payButton(page).boundingBox())!;
+    expect(Math.abs(mid(total) - mid(pay))).toBeLessThanOrEqual(12);
+  });
+
+  for (const safe of [0, 34] as const) {
+    test(`giỏ 8 dòng có dòng hết hàng (--safe-bottom ${safe}px): cuộn hết thì dòng cuối nằm trên chân dính, chân cao đúng cộng vùng an toàn`, async ({ page, api }) => {
+      mockFooterCart(api, { lines: 8, reached: true, outOfStock: true });
+      await setSafeBottom(page, safe);
+      await openCart(page);
+      await expect(bar(page).getByRole('status')).toBeVisible();
+
+      const scroller = page.locator('.zaui-page', { has: page.getByTestId('cart-line').first() }).first();
+      await scroller.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+      await expect.poll(() => scroller.evaluate((el) => el.scrollTop), { timeout: 10_000 }).toBeGreaterThan(300);
+      const last = (await page.getByTestId('cart-line').last().boundingBox())!;
+      const top = (await bar(page).boundingBox())!.y;
+      expect(last.y + last.height, `dòng cuối kết thúc ở ${Math.round(last.y + last.height)}px, chân dính bắt đầu ở ${Math.round(top)}px`).toBeLessThanOrEqual(top);
+      expect(Math.round((await bar(page).boundingBox())!.y + (await barHeight(page)))).toBe(812);
+      // Lời báo hết hàng làm chân cao thêm một ít; trần này giữ để lời báo không phình chân thành nửa màn.
+      expect(await barHeight(page)).toBeLessThanOrEqual(190 + safe);
+    });
+  }
+
+  test('máy hẹp 320px: tổng và nút không tràn ngang, nút không rớt xuống dưới số tiền', async ({ page, api }) => {
+    mockFooterCart(api, { lines: 3, reached: true, combo: 6_000 });
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openCart(page);
+
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+    const total = (await page.getByTestId('cart-total-value').boundingBox())!;
+    const pay = (await payButton(page).boundingBox())!;
+    expect(pay.x + pay.width).toBeLessThanOrEqual(320);
+    expect(Math.abs(mid(total) - mid(pay))).toBeLessThanOrEqual(16);
+  });
+});
