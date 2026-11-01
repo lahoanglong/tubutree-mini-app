@@ -34,6 +34,8 @@ export const CATEGORY_MSG = {
   parentNotRoot: () => 'Chỉ có hai tầng: mục con không chứa thêm mục con.',
   hasChildrenCannotNest: (name: string) =>
     `Danh mục "${name}" đang có mục con nên không chuyển thành mục con được. Chuyển các mục con đi trước.`,
+  parentHasProducts: (name: string, n: number) =>
+    `Danh mục "${name}" đang có ${n} sản phẩm gắn thẳng. Khi có mục con, các sản phẩm này vẫn nằm ở "${name}" và chưa thuộc mục con nào; sau khi thêm, gán chúng sang mục con.`,
   duplicateName: (name: string) => `Đã có mục tên "${name}" ở cùng cấp.`,
   removeHasChildren: (name: string, n: number) => `Danh mục "${name}" còn ${n} mục con. Xoá hoặc chuyển các mục con trước.`,
   removeHasProducts: (name: string, n: number) =>

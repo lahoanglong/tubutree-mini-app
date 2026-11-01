@@ -58,10 +58,17 @@ interface Opts {
   list?: AdminCategoryList;
   mutate?: { status?: number; body: unknown };
   listStatus?: number;
+  /** Máy chủ đòi xác nhận gốc đang có sản phẩm gắn thẳng: câu trả về; lệnh gửi lại có `confirmDirectProducts` thì được. */
+  needsConfirm?: string;
 }
+const PARENT_HAS_PRODUCTS = 'CATEGORY_PARENT_HAS_PRODUCTS';
 function setup(opts: Opts = {}) {
   let list = opts.list ?? fixture();
-  const m = mockFetch({
+  const confirmGate = (init?: RequestInit) => {
+    if (!opts.needsConfirm || (JSON.parse(String(init?.body)) as { confirmDirectProducts?: boolean }).confirmDirectProducts) return null;
+    return { status: 400, body: { code: PARENT_HAS_PRODUCTS, message: opts.needsConfirm } };
+  };
+  const m: ReturnType<typeof mockFetch> = mockFetch({
     '/admin/categories/order': (init) => {
       if (opts.mutate) return opts.mutate;
       const body = JSON.parse(String(init?.body)) as { parentId: string | null; orderedIds: string[] };
@@ -71,9 +78,20 @@ function setup(opts: Opts = {}) {
       };
       return { body: list };
     },
-    '/admin/categories/': () => opts.mutate ?? { body: row('X', 'x', null, 0) },
+    '/admin/categories/': (init) => {
+      if (opts.mutate) return opts.mutate;
+      const gate = confirmGate(init);
+      if (gate) return gate;
+      // PATCH đổi cha thật: cây tải lại khác cây cũ, như máy chủ (react-query giữ nguyên tham chiếu khi dữ liệu y hệt).
+      if (init?.method === 'PATCH') {
+        const id = decodeURIComponent(m.calls.at(-1)!.url.split('/').pop()!);
+        const { parentId } = JSON.parse(String(init.body)) as { parentId?: string | null };
+        if (parentId !== undefined) list = { ...list, items: list.items.map((c) => (c.id === id ? { ...c, parentId } : c)) };
+      }
+      return { body: row('X', 'x', null, 0) };
+    },
     '/admin/categories': (init) => {
-      if (init?.method === 'POST') return opts.mutate ?? { body: row('N', 'n', null, 9) };
+      if (init?.method === 'POST') return opts.mutate ?? confirmGate(init) ?? { body: row('N', 'n', null, 9) };
       if (opts.listStatus) return { status: opts.listStatus, body: { message: 'Máy chủ lỗi.' } };
       return { body: list };
     },
@@ -198,6 +216,67 @@ describe('CategoryTreePanel', () => {
     expect(JSON.parse(String(calls('POST')[0]!.init!.body))).toEqual({ name: 'Nước giặt', parentId: 'B' });
   });
 
+  describe('gốc đang có sản phẩm gắn thẳng (máy chủ đòi xác nhận, mã CATEGORY_PARENT_HAS_PRODUCTS)', () => {
+    const MSG = 'Danh mục "Giặt tẩy" đang có 4 sản phẩm gắn thẳng. Khi có mục con, các sản phẩm này vẫn nằm ở "Giặt tẩy" và chưa thuộc mục con nào; sau khi thêm, gán chúng sang mục con.';
+    const addChild = (container: HTMLElement) => {
+      click(btn('Thêm mục con vào "Giặt tẩy"'));
+      typeInto(container.querySelector('input[aria-label="Tên mục con mới của \\"Giặt tẩy\\""]'), 'Nước giặt');
+      click(exact('Thêm'));
+    };
+
+    it('thêm mục con: hộp xác nhận nêu đúng câu của máy chủ; đồng ý thì gửi lại POST kèm confirmDirectProducts', async () => {
+      const { container, calls } = setup({ needsConfirm: MSG });
+      await flush();
+      addChild(container);
+      await flush();
+      expect(confirmDialog()?.textContent).toContain(MSG);
+      expect(container.querySelector('[role="alert"]')).toBeNull();
+      expect(calls('POST')).toHaveLength(1);
+      answerConfirm(true);
+      await flush();
+      const post = calls('POST');
+      expect(post).toHaveLength(2);
+      expect(JSON.parse(String(post[1]!.init!.body))).toEqual({ name: 'Nước giặt', parentId: 'B', confirmDirectProducts: true });
+      expect(container.querySelector('input[aria-label^="Tên mục con mới"]')).toBeNull();
+      expect(container.textContent).toContain('Đã thêm "Nước giặt".');
+    });
+
+    it('thêm mục con: Huỷ thì không gửi lại, không báo lỗi, ô nhập giữ tên đã gõ', async () => {
+      const { container, calls } = setup({ needsConfirm: MSG });
+      await flush();
+      addChild(container);
+      await flush();
+      answerConfirm(false);
+      await flush();
+      expect(calls('POST')).toHaveLength(1);
+      expect(container.querySelector('[role="alert"]')).toBeNull();
+      expect(container.querySelector<HTMLInputElement>('input[aria-label^="Tên mục con mới"]')!.value).toBe('Nước giặt');
+      expect(container.textContent).not.toContain('Đã thêm');
+    });
+
+    it('chuyển mục vào gốc đó: đồng ý thì gửi lại PATCH kèm confirmDirectProducts; Huỷ thì giữ lựa chọn', async () => {
+      const { container, calls } = setup({ needsConfirm: MSG });
+      await flush();
+      const sel = () => document.querySelector<HTMLSelectElement>('select[aria-label="Chuyển \\"Chăm sóc cá nhân\\" sang mục khác"]')!;
+      selectValue(sel(), 'B');
+      click(btn('Chuyển "Chăm sóc cá nhân" vào "Giặt tẩy"'));
+      await flush();
+      expect(confirmDialog()?.textContent).toContain(MSG);
+      answerConfirm(false);
+      await flush();
+      expect(calls('PATCH')).toHaveLength(1);
+      expect(sel().value).toBe('B');
+      expect(container.querySelector('[role="alert"]')).toBeNull();
+      click(btn('Chuyển "Chăm sóc cá nhân" vào "Giặt tẩy"'));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      const patch = calls('PATCH');
+      expect(patch).toHaveLength(3);
+      expect(JSON.parse(String(patch[2]!.init!.body))).toEqual({ parentId: 'B', confirmDirectProducts: true });
+    });
+  });
+
   it('đổi tên điền sẵn tên cũ, gửi PATCH { name }; Huỷ đóng ô và trả focus về nút Đổi tên', async () => {
     const { container, calls } = setup();
     await flush();
@@ -218,21 +297,46 @@ describe('CategoryTreePanel', () => {
     expect(document.activeElement).toBe(btn('Đổi tên "Chăm sóc cá nhân"'));
   });
 
-  it('ô "chuyển vào" chỉ có ở mục chưa có con và gửi PATCH { parentId }', async () => {
+  it('ô "chuyển vào" chỉ có ở mục chưa có con; chọn đích chưa ghi gì, bấm nút "Chuyển" mới gửi PATCH { parentId }', async () => {
     const { calls } = setup();
     await flush();
     expect(document.querySelector('select[aria-label="Chuyển \\"Nhà bếp\\" sang mục khác"]')).toBeNull();
     const sel = document.querySelector<HTMLSelectElement>('select[aria-label="Chuyển \\"Giặt tẩy\\" sang mục khác"]')!;
     expect([...sel.options].map((o) => o.textContent)).toEqual(['Chuyển…', 'Vào "Nhà bếp"', 'Vào "Chăm sóc cá nhân"']);
+    expect(btn('Chuyển "Giặt tẩy" vào "Nhà bếp"')).toBeNull();
     selectValue(sel, 'A');
     await flush();
+    // Mũi tên trên ô chọn đóng lại cũng ra onChange: chọn xong không được chuyển ngay.
+    expect(calls('PATCH')).toHaveLength(0);
+    const confirmBtn = btn('Chuyển "Giặt tẩy" vào "Nhà bếp"')!;
+    expect(confirmBtn.textContent).toBe('Chuyển');
+    click(confirmBtn);
+    await flush();
     expect(JSON.parse(String(calls('PATCH')[0]!.init!.body))).toEqual({ parentId: 'A' });
+    expect(btn('Chuyển "Giặt tẩy" vào "Nhà bếp"')).toBeNull();
+    expect(document.activeElement).toBe(btn('Đưa "Giặt tẩy" lên trên'));
     // Mục con có thêm lựa chọn "thành danh mục gốc".
     const child = document.querySelector<HTMLSelectElement>('select[aria-label="Chuyển \\"Chén bát\\" sang mục khác"]')!;
     expect([...child.options].map((o) => o.textContent)).toContain('Thành danh mục gốc');
     selectValue(child, '__root__');
     await flush();
+    expect(calls('PATCH')).toHaveLength(1);
+    click(btn('Chuyển "Chén bát" thành danh mục gốc'));
+    await flush();
     expect(JSON.parse(String(calls('PATCH')[1]!.init!.body))).toEqual({ parentId: null });
+  });
+
+  it('chuyển bị máy chủ từ chối: lỗi hiện cạnh mục, lựa chọn và nút "Chuyển" còn nguyên để thử lại', async () => {
+    const msg = 'Danh mục "Nhà bếp" đã đủ 8 mục con. Xoá bớt một mục con trước khi thêm.';
+    const { container } = setup({ mutate: { status: 400, body: { message: msg } } });
+    await flush();
+    const sel = () => document.querySelector<HTMLSelectElement>('select[aria-label="Chuyển \\"Giặt tẩy\\" sang mục khác"]')!;
+    selectValue(sel(), 'A');
+    click(btn('Chuyển "Giặt tẩy" vào "Nhà bếp"'));
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(msg);
+    expect(sel().value).toBe('A');
+    expect(btn('Chuyển "Giặt tẩy" vào "Nhà bếp"')).not.toBeNull();
   });
 
   it('xoá hỏi xác nhận trước, chỉ gọi DELETE khi đồng ý', async () => {
@@ -277,6 +381,20 @@ describe('CategoryTreePanel', () => {
     click(byText(container, 'button', 'Thử lại'));
     await flush();
     expect(calls('GET').length).toBeGreaterThan(before);
+  });
+
+  it('lỗi tải hiện cả khi panel thu gọn, kèm Thử lại gọi lại API; mở ra vẫn chỉ một bản', async () => {
+    const { container, calls } = setup({ collapsible: true, startOpen: false, listStatus: 500 });
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ lỗi.');
+    expect(container.querySelector('ul[aria-label="Cây danh mục"]')).toBeNull();
+    const before = calls('GET').length;
+    click(byText(container, 'button', 'Thử lại'));
+    await flush();
+    expect(calls('GET').length).toBeGreaterThan(before);
+    click(exact('Mở rộng'));
+    await flush();
+    expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
   });
 
   it('mọi nút trong cây mang tên mục trong tên truy cập (đọc màn hình biết đang thao tác mục nào)', async () => {

@@ -158,7 +158,7 @@ export function ProductCategoriesTab({
           className={`${FIELD_XS} w-full sm:w-72`}
         />
         <button type="button" aria-pressed={uncategorized} onClick={() => setUncategorized((v) => !v)} className={chipClass(uncategorized)}>
-          Chưa có danh mục{uncategorizedCount !== undefined ? ` (${uncategorizedCount})` : ''}
+          Đang bán, chưa có danh mục{uncategorizedCount !== undefined ? ` (${uncategorizedCount})` : ''}
         </button>
         <button type="button" aria-pressed={pancakeOnly} onClick={() => setPancakeOnly((v) => !v)} className={chipClass(pancakeOnly)}>
           Chỉ hàng Pancake

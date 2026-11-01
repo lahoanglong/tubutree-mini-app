@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { CATEGORY_PARENT_HAS_PRODUCTS } from '@tubutree/shared-types';
 import { ApiError } from '@/lib/client-api';
 import { buildCategoryTree, canAddChild, canAddRoot, moveInOrder, type CategoryNode } from '@/lib/category-tree';
 import {
@@ -20,6 +21,8 @@ type Msg = { at: string; text: string };
 
 const NAME_MAX = 60;
 const ROOT_VALUE = '__root__';
+/** Admin bấm Huỷ ở hộp xác nhận giữa chừng: không phải lỗi, không báo gì. */
+class Declined extends Error {}
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Không lưu được danh mục.');
 const formKeyOf = (f: Form | null) => (!f ? '' : f.kind === 'add' ? `add:${f.parentId ?? 'root'}` : `rename:${f.id}`);
 
@@ -51,6 +54,8 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
   const [ok, setOk] = useState('');
   const [failure, setFailure] = useState<Msg | null>(null);
   const [saving, setSaving] = useState(false);
+  // Đích đang chọn trong ô "Chuyển…" của từng mục: chọn chưa ghi gì, chỉ nút "Chuyển" mới gửi.
+  const [pick, setPick] = useState<Record<string, string>>({});
   const busy = useRef(false);
   const pendingFocus = useRef<string | null>(null);
   const hintId = useId();
@@ -95,6 +100,7 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
       void onChanged();
       return true;
     } catch (e) {
+      if (e instanceof Declined) return false;
       setFailure({ at, text: errText(e) });
       // 404/409: cây admin đang xem đã cũ so với máy chủ, tải lại để lần thử sau đúng dữ liệu.
       if (e instanceof ApiError && (e.status === 404 || e.status === 409)) void onChanged();
@@ -102,6 +108,21 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
     } finally {
       busy.current = false;
       setSaving(false);
+    }
+  };
+
+  /**
+   * Gốc đang có sản phẩm gắn thẳng sẽ thành mục cha mà vẫn giữ chúng: máy chủ đòi xác nhận bằng 400 mã riêng (đếm lúc ghi, dưới khoá cây).
+   * Hỏi bằng đúng câu của máy chủ, đồng ý thì gửi lại có cờ; Huỷ thì để nguyên ô nhập/lựa chọn.
+   */
+  const askParentConfirm = async (send: (confirmed: boolean) => Promise<unknown>, confirmLabel: string) => {
+    try {
+      return await send(false);
+    } catch (e) {
+      if (!(e instanceof ApiError) || e.code !== CATEGORY_PARENT_HAS_PRODUCTS) throw e;
+      const yes = await confirm({ title: 'Mục này đang có sản phẩm gắn thẳng', message: e.message, confirmLabel });
+      if (!yes) throw new Declined();
+      return send(true);
     }
   };
 
@@ -132,22 +153,23 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
     if (form.kind === 'add') {
       const at = formKeyOf(form);
       const body = form.parentId ? { name, parentId: form.parentId } : { name };
-      void run(at, () => createAdminCategory(body), { text: `Đã thêm "${name}".`, focus: `add:${form.parentId ?? 'root'}`, closeForm: true });
+      void run(at, () => askParentConfirm((confirmed) => createAdminCategory(confirmed ? { ...body, confirmDirectProducts: true } : body), 'Vẫn thêm'), { text: `Đã thêm "${name}".`, focus: `add:${form.parentId ?? 'root'}`, closeForm: true });
     } else {
       const id = form.id;
       void run(formKeyOf(form), () => updateAdminCategory(id, { name }), { text: `Đã đổi tên thành "${name}".`, focus: `rename:${id}`, closeForm: true });
     }
   };
 
-  const relocate = (item: AdminCategory, currentParent: string | null, value: string) => {
+  const relocate = async (item: AdminCategory, currentParent: string | null, value: string) => {
     if (!value) return;
     const target = value === ROOT_VALUE ? null : value;
     if (target === currentParent) return;
     const to = target ? tree.find((r) => r.id === target)?.name : null;
-    void run(item.id, () => updateAdminCategory(item.id, { parentId: target }), {
+    const moved = await run(item.id, () => askParentConfirm((confirmed) => updateAdminCategory(item.id, confirmed ? { parentId: target, confirmDirectProducts: true } : { parentId: target }), 'Vẫn chuyển'), {
       text: to ? `Đã chuyển "${item.name}" vào "${to}".` : `Đã chuyển "${item.name}" thành danh mục gốc.`,
       focus: `move:${item.id}:up`,
     });
+    if (moved) setPick(({ [item.id]: _done, ...rest }) => rest);
   };
 
   const remove = async (item: AdminCategory, parentId: string | null) => {
@@ -236,6 +258,8 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
     const hasChildren = !!node && node.children.length > 0;
     const renaming = form?.kind === 'rename' && form.id === item.id;
     const moveOpts = hasChildren ? [] : parentOptions(item, parentId);
+    const picked = moveOpts.find((o) => o.value === pick[item.id] && !o.disabled);
+    const pickedName = picked && picked.value !== ROOT_VALUE ? tree.find((r) => r.id === picked.value)?.name : null;
     const press = (dir: 'up' | 'down') => (dir === 'up' ? first : last) ? undefined : () => move(siblings, parentId, item, dir);
     return (
       <div className="space-y-2 py-2">
@@ -277,8 +301,8 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
             {moveOpts.length > 0 && (
               <select
                 aria-label={`Chuyển "${item.name}" sang mục khác`}
-                value=""
-                onChange={(e) => relocate(item, parentId, e.target.value)}
+                value={picked?.value ?? ''}
+                onChange={(e) => setPick((p) => ({ ...p, [item.id]: e.target.value }))}
                 className={`${FIELD_XS} max-w-[9.5rem]`}
               >
                 <option value="">Chuyển…</option>
@@ -288,6 +312,17 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
                   </option>
                 ))}
               </select>
+            )}
+            {picked && (
+              <button
+                type="button"
+                aria-label={pickedName ? `Chuyển "${item.name}" vào "${pickedName}"` : `Chuyển "${item.name}" thành danh mục gốc`}
+                disabled={saving}
+                onClick={() => void relocate(item, parentId, picked.value)}
+                className={BTN_XS_PRIMARY}
+              >
+                Chuyển
+              </button>
             )}
             <button type="button" aria-label={`Xoá "${item.name}"`} onClick={() => void remove(item, parentId)} className={BTN_XS_DANGER}>
               Xoá
@@ -319,11 +354,12 @@ export function CategoryTreePanel({ data, loading, error, onRetry, onChanged, op
         )}
       </div>
       <div role="status">{ok && <Notice tone="success">{ok}</Notice>}</div>
+      {/* Lỗi tải nằm ngoài thân: panel thu gọn (mở từ hộp việc) vẫn phải cho admin biết cây không tải được. */}
+      {error && !data && <LoadError onRetry={onRetry}>{error}</LoadError>}
       {open && (
         <div id={bodyId} className="space-y-3">
           <p className="text-xs text-stone-600">Sản phẩm chỉ gán vào mục không có mục con. Mini App cập nhật cây sau tối đa vài phút.</p>
           {loading && <p className="text-sm text-stone-500">Đang tải…</p>}
-          {error && !data && <LoadError onRetry={onRetry}>{error}</LoadError>}
           {data && (
             <>
               {tree.length === 0 && <p className="text-sm text-stone-500">Chưa có danh mục nào. Thêm danh mục gốc đầu tiên bên dưới.</p>}

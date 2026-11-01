@@ -3991,8 +3991,8 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     click(container.querySelector('[data-inbox="productsUncategorized"]')!);
     await flush();
     expect(window.location.search).toBe('?tab=productCategories');
-    const chip = [...container.querySelectorAll('button[aria-pressed="true"]')].find((b) => b.textContent?.startsWith('Chưa có danh mục'));
-    expect(chip?.textContent).toBe('Chưa có danh mục (3)');
+    const chip = [...container.querySelectorAll('button[aria-pressed="true"]')].find((b) => b.textContent?.startsWith('Đang bán, chưa có danh mục'));
+    expect(chip?.textContent).toBe('Đang bán, chưa có danh mục (3)');
     const last = api.calls.filter((c) => c.url.includes('/admin/product-categories/products')).at(-1)!.url;
     expect(last).toContain('uncategorized=1');
     expect(last).toContain('onSale=1');

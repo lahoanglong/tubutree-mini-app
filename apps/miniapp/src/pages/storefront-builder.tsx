@@ -242,7 +242,6 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   });
   const sectionStyle = useSectionStyle({
     send: (v) => layoutMut.mutate(v),
-    isPending: () => layoutMut.isPending,
     currentOf: (id) => {
       const c = qc.getQueryData<StorefrontEdit | null>(['my-storefront'])?.collections.find((x) => x.id === id);
       return c ? sectionStyleOf(c) : null;
@@ -371,7 +370,9 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
     lastOpened.current = id;
     setItemSort(false);
     // Mục lịch sử mới có đánh dấu để đóng lại bằng lùi một bước; không có `from` nên nút lùi nổi cũng chỉ lùi về đúng danh sách.
-    navigate(sectionHref(location.pathname, id), { replace: sectionId !== null, state: { builderSection: true } });
+    // Chỉ thay mục khi đang ở một trang chi tiết thật (giữ dấu của nó). Địa chỉ còn `?khoi=` của khối đã xoá vẫn đang hiện danh sách:
+    // thay mục đó rồi đánh dấu sẽ làm "Gian hàng của tôi" lùi ra ngoài màn dựng.
+    navigate(sectionHref(location.pathname, id), sectionCol !== null ? { replace: true, state: location.state } : { state: { builderSection: true } });
   };
   function closeSection() {
     setItemSort(false);
@@ -395,6 +396,17 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       ?.focus({ preventScroll: true });
     pageEl()?.scrollTo?.({ top: savedScroll.current });
   }, [inDetail]);
+
+  // Mở thẳng bằng link `?khoi=` (thông báo, chia sẻ) thì phía trước chưa có mục danh sách: dựng sẵn để nút lùi nổi toàn cục (lùi một bước khi có
+  // lịch sử) và "Gian hàng của tôi" cùng về danh sách thay vì nút nổi rời màn dựng. F5 giữ nguyên state của mục nên đã có dấu, không dựng lại.
+  const seededList = useRef(false);
+  useEffect(() => {
+    if (seededList.current || !sectionCol) return;
+    seededList.current = true;
+    if ((location.state as { builderSection?: boolean } | null)?.builderSection) return;
+    navigate(location.pathname, { replace: true });
+    navigate(sectionHref(location.pathname, sectionCol.id), { state: { builderSection: true } });
+  }, [sectionCol?.id]);
 
   const sheets = (
     <>

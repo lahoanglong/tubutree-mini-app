@@ -28,15 +28,32 @@ const row = (id: string, name: string, parentId: string | null, sortOrder: numbe
 });
 const LIMITS = { maxRoots: 8, maxChildren: 8 };
 
-const PRODUCTS = {
-  items: [
-    { id: 'p1', name: 'Nước rửa chén Tubu hương chanh 750ml', thumbnail: null, brand: 'Tubu Tree', pancakeId: 'pk1', isActive: true, categoryIds: [] },
-    { id: 'p2', name: 'Xà phòng thiên nhiên', thumbnail: null, brand: 'Tubu Tree', pancakeId: 'pk2', isActive: true, categoryIds: ['chen'] },
-    { id: 'p3', name: 'Bàn chải tre', thumbnail: null, brand: 'Tubu Tree', pancakeId: 'pk3', isActive: false, categoryIds: [] },
-  ],
-  total: 3,
-  nextCursor: null,
-} satisfies CategoryProductsPage;
+const PRODUCT_LIST: CategoryProductsPage['items'] = [
+  { id: 'p1', name: 'Nước rửa chén Tubu hương chanh 750ml', thumbnail: null, brand: 'Tubu Tree', pancakeId: 'pk1', isActive: true, categoryIds: [] },
+  { id: 'p2', name: 'Xà phòng thiên nhiên', thumbnail: null, brand: 'Tubu Tree', pancakeId: 'pk2', isActive: true, categoryIds: ['chen'] },
+  { id: 'p3', name: 'Bàn chải tre', thumbnail: null, brand: 'Tubu Tree', pancakeId: 'pk3', isActive: false, categoryIds: [] },
+];
+
+const fold = (t: string) => t.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/đ/g, 'd').toLowerCase();
+
+/**
+ * Giả `GET /admin/product-categories/products` áp bộ lọc như máy chủ: `onSale` = đang bật, `missingImage` chỉ tính hàng đang bán,
+ * `source=pancake` = có `pancakeId`, `q` khớp tên hoặc thương hiệu không dấu. Nhờ vậy số trên hộp việc và số dòng ở màn đích cùng nguồn.
+ */
+function productsPage(query: URLSearchParams): CategoryProductsPage {
+  const on = (key: string) => query.get(key) === '1';
+  const q = fold(query.get('q') ?? '');
+  const items = PRODUCT_LIST.filter(
+    (p) =>
+      (!on('uncategorized') || p.categoryIds.length === 0) &&
+      (!on('onSale') || p.isActive) &&
+      (!on('missingImage') || (p.isActive && p.thumbnail === null)) &&
+      (query.get('source') !== 'pancake' || p.pancakeId !== null) &&
+      (!q || fold(`${p.name} ${p.brand}`).includes(q)),
+  );
+  return { items, total: items.length, nextCursor: null };
+}
+const countOf = (query: string) => productsPage(new URLSearchParams(query)).total;
 
 function baseTree(): AdminCategoryList {
   return {
@@ -84,7 +101,7 @@ function mockTree(api: MockApi, initial: AdminCategoryList) {
   return () => list;
 }
 
-function mockAdmin(api: MockApi, tree: AdminCategoryList = baseTree(), inboxCount = 3) {
+function mockAdmin(api: MockApi, tree: AdminCategoryList = baseTree()) {
   api.post('/auth/refresh', ADMIN_LOGIN);
   api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 0, itemCount: 0 });
   api.get('/admin/customer-refunds', { data: [], meta: { page: 1, limit: 1, total: 0 } });
@@ -92,13 +109,13 @@ function mockAdmin(api: MockApi, tree: AdminCategoryList = baseTree(), inboxCoun
   api.get('/admin/ops/inbox', {
     generatedAt: '2026-11-01T03:00:00.000Z',
     items: [
-      { key: 'productsUncategorized', count: inboxCount },
-      { key: 'productsMissingImage', count: 2 },
+      { key: 'productsUncategorized', count: countOf('uncategorized=1&onSale=1') },
+      { key: 'productsMissingImage', count: countOf('missingImage=1') },
     ],
   });
   api.get('/admin/dashboard/today', { orders: { today: 5, yesterday: 3, week: 20 }, revenue: { today: 1500000, yesterday: 2000000, week: 9000000 }, newUsers: { today: 2, yesterday: 2, week: 11 } });
   api.get('/admin/analytics/retention-daily', []);
-  api.get('/admin/product-categories/products', PRODUCTS);
+  api.get('/admin/product-categories/products', ({ call }) => productsPage(call.query));
   api.get('/admin/pancake/categories', []);
   return mockTree(api, tree);
 }
@@ -168,6 +185,23 @@ test.describe('Admin: cây danh mục và gán sản phẩm', () => {
     await shot(page, 'error-400-375.png');
   });
 
+  test('chuyển mục: chọn đích chưa ghi gì, bấm nút "Chuyển" mới gửi PATCH (375px)', async ({ page, api }) => {
+    mockAdmin(api);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/admin?tab=productCategories');
+    await expect(page.getByRole('heading', { name: 'Cây danh mục' })).toBeVisible({ timeout: 20_000 });
+    await page.getByRole('combobox', { name: 'Chuyển "Giặt tẩy" sang mục khác' }).selectOption({ label: 'Vào "Nhà bếp"' });
+    const confirm = page.getByRole('button', { name: 'Chuyển "Giặt tẩy" vào "Nhà bếp"' });
+    await expect(confirm).toBeVisible();
+    expect(api.callsTo('PATCH', '/admin/categories/:id')).toHaveLength(0);
+    const box = await confirm.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    await shot(page, 'relocate-pick-375.png');
+    const patch = api.waitForCall('PATCH', '/admin/categories/:id');
+    await confirm.click();
+    expect((await patch).body).toEqual({ parentId: 'bep' });
+  });
+
   test('thêm gốc, đổi tên và xoá có hỏi xác nhận (1280px)', async ({ page, api }) => {
     const tree = mockAdmin(api);
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -211,8 +245,12 @@ test.describe('Admin: cây danh mục và gán sản phẩm', () => {
     expect(call.query.get('uncategorized')).toBe('1');
     expect(call.query.get('onSale')).toBe('1');
     await expect(page).toHaveURL(/tab=productCategories/);
-    await expect(page.getByRole('button', { name: /^Chưa có danh mục \(3\)$/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: /^Đang bán, chưa có danh mục \(1\)$/ })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('button', { name: 'Mở rộng' })).toHaveAttribute('aria-expanded', 'false');
+    // Số hàng khớp số trên thẻ: p2 đã có danh mục và p3 đang tắt nên không hiện.
+    await expect(page.getByText('1 sản phẩm khớp bộ lọc')).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: /^Chọn (?!tất cả)/ })).toHaveCount(1);
+    await expect(page.getByRole('checkbox', { name: 'Chọn Bàn chải tre' })).toHaveCount(0);
 
     await page.getByRole('checkbox', { name: 'Chọn Nước rửa chén Tubu hương chanh 750ml' }).check();
     await page.getByRole('combobox', { name: 'Danh mục', exact: true }).selectOption({ label: 'Nhà bếp (có mục con)' });

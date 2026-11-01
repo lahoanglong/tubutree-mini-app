@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { CATEGORY_PARENT_HAS_PRODUCTS } from '@tubutree/shared-types';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { CatalogService } from '../../src/modules/catalog/catalog.service';
@@ -96,12 +97,42 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
   }
 
   const rootCount = () => prisma.category.count({ where: { parentId: null } });
+  // Gốc seed của DB IT đang giữ sản phẩm gắn thẳng; các ca dưới đây thử trần/thứ tự chứ không thử luật xác nhận nên đã xác nhận sẵn.
+  const under = (parentId: string, label: string) => svc.create('it', { name: name(label), parentId, confirmDirectProducts: true });
   const childrenOf = (parentId: string) => prisma.category.findMany({ where: { parentId }, orderBy: { sortOrder: 'asc' } });
 
-  it('5 lệnh thêm mục con song song vào cha còn 2 chỗ: đúng 2 thành công, 3 bị 400, cha có đúng 8 con', async () => {
-    for (let i = 0; i < CATEGORY_MAX_CHILDREN - 2; i++) await svc.create('it', { name: name(`con-${i}`), parentId: capParent });
+  it('tạo mục con và gán SP vào cùng gốc lá song song: không bao giờ ra gốc vừa có con vừa giữ SP mà chưa ai xác nhận', async () => {
+    // Gốc seed đều đang giữ sản phẩm nên cần một gốc mới trống, không sản phẩm.
+    if ((await rootCount()) >= CATEGORY_MAX_ROOTS) throw new Error('Ca này cần một chỗ gốc trống trong DB IT.');
+    const host = (await svc.create('it', { name: name('goc-chay-dua') })).id;
+    const p = await product('chay-dua');
+    try {
+      const [created, assigned] = await Promise.allSettled([
+        svc.create('it', { name: name('con-chay-dua'), parentId: host }),
+        products.assign('it', [p.id], host, 'ADD'),
+      ]);
+      const hasChild = (await childrenOf(host)).length > 0;
+      const holdsProduct = (await categoriesOf(p.id)).includes(host);
+      expect(hasChild && holdsProduct).toBe(false);
+      // Thua cuộc đua thì bị từ chối đúng lý do, không phải lỗi lạ.
+      if (created.status === 'rejected') {
+        expect(created.reason).toBeInstanceOf(BadRequestException);
+        expect((created.reason as BadRequestException).getResponse()).toMatchObject({ code: CATEGORY_PARENT_HAS_PRODUCTS });
+      }
+      if (assigned.status === 'rejected') expect((assigned.reason as Error).message).toContain('có mục con');
+      expect([created.status, assigned.status].filter((x) => x === 'fulfilled')).toHaveLength(1);
+    } finally {
+      // Trả lại chỗ gốc: ca "đủ 8 gốc" bên dưới đếm số gốc có sẵn.
+      await products.assign('it', [p.id], host, 'REMOVE');
+      await prisma.category.deleteMany({ where: { parentId: host } });
+      await prisma.category.delete({ where: { id: host } });
+    }
+  });
 
-    const results = await Promise.allSettled(Array.from({ length: 5 }, (_, i) => svc.create('it', { name: name(`tranh-${i}`), parentId: capParent })));
+  it('5 lệnh thêm mục con song song vào cha còn 2 chỗ: đúng 2 thành công, 3 bị 400, cha có đúng 8 con', async () => {
+    for (let i = 0; i < CATEGORY_MAX_CHILDREN - 2; i++) await under(capParent, `con-${i}`);
+
+    const results = await Promise.allSettled(Array.from({ length: 5 }, (_, i) => under(capParent, `tranh-${i}`)));
 
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(2);
     const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
@@ -112,9 +143,9 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
 
   it('hai lệnh sắp xếp song song với hai thứ tự khác nhau: kết quả đúng một trong hai, sortOrder không trùng', async () => {
     const [a, b, c] = [
-      await svc.create('it', { name: name('x-a'), parentId: orderParent }),
-      await svc.create('it', { name: name('x-b'), parentId: orderParent }),
-      await svc.create('it', { name: name('x-c'), parentId: orderParent }),
+      await under(orderParent, 'x-a'),
+      await under(orderParent, 'x-b'),
+      await under(orderParent, 'x-c'),
     ];
     const forward = [a.id, b.id, c.id];
     const backward = [c.id, b.id, a.id];
@@ -127,13 +158,13 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
   });
 
   it('danh sách của admin thấy mục vừa tạo ngay (không qua cache 60s của /categories)', async () => {
-    const made = await svc.create('it', { name: name('thay-ngay'), parentId: listParent });
+    const made = await under(listParent, 'thay-ngay');
     const list = await svc.list();
     expect(list.items.find((i) => i.id === made.id)).toMatchObject({ parentId: listParent, productCount: 0 });
   });
 
   it('hai lệnh gán cùng 3 sản phẩm vào cùng danh mục lá song song: mỗi sản phẩm mang id đúng một lần', async () => {
-    const leaf = await svc.create('it', { name: name('la-gan'), parentId: orderParent });
+    const leaf = await under(orderParent, 'la-gan');
     const ps = [await product('g1'), await product('g2'), await product('g3')];
     const ids = ps.map((p) => p.id);
 
@@ -150,7 +181,7 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
   });
 
   it('hàng cũ mang categoryIds NULL vẫn gán được (câu gán không bỏ sót vì NULL)', async () => {
-    const leaf = await svc.create('it', { name: name('la-null'), parentId: orderParent });
+    const leaf = await under(orderParent, 'la-null');
     const p = await product('null');
     await prisma.$executeRaw`UPDATE "products" SET "categoryIds" = NULL WHERE "id" = ${p.id}`;
 
@@ -182,7 +213,7 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
   });
 
   it('đồng bộ Pancake: sản phẩm chưa có danh mục được điền theo bản đồ, lần sau không đổi', async () => {
-    const mapped = await svc.create('it', { name: name('la-ban-do'), parentId: orderParent });
+    const mapped = await under(orderParent, 'la-ban-do');
     const pancakeId = `it-cat-p-${tag}-sync1`;
     await syncOnce(pancakeId, mapped.id);
     const p = await prisma.product.findUniqueOrThrow({ where: { pancakeId } });
@@ -192,8 +223,8 @@ describe('Cây danh mục hai tầng (real Postgres)', () => {
   });
 
   it('đồng bộ Pancake đọc sản phẩm "chưa có danh mục" rồi admin gán xen giữa: danh mục admin còn nguyên, không bị đè', async () => {
-    const adminLeaf = await svc.create('it', { name: name('la-admin'), parentId: orderParent });
-    const mapped = await svc.create('it', { name: name('la-ban-do-2'), parentId: orderParent });
+    const adminLeaf = await under(orderParent, 'la-admin');
+    const mapped = await under(orderParent, 'la-ban-do-2');
     const pancakeId = `it-cat-p-${tag}-sync2`;
     await prisma.product.create({ data: { pancakeId, brand: 'IT', slug: `it-cat-${tag}-p-sync2`, name: `IT cat ${tag} sync`, description: 'IT', basePrice: 100_000 } });
     const id = (await prisma.product.findUniqueOrThrow({ where: { pancakeId } })).id;

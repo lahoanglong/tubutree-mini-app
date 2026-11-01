@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -11,12 +11,15 @@ import { CATEGORY_MAX_CHILDREN, CATEGORY_NAME_MAX } from './category-tree';
 export class CreateCategoryDto {
   @Trim() @IsString() @IsNotEmpty() @MaxLength(CATEGORY_NAME_MAX) name!: string;
   @IsOptional() @IsString() @MaxLength(64) parentId?: string;
+  /** Đã được hỏi và đồng ý: gốc đích đang có sản phẩm gắn thẳng sẽ thành mục cha mà vẫn giữ chúng (mã `CATEGORY_PARENT_HAS_PRODUCTS`). */
+  @IsOptional() @IsBoolean() confirmDirectProducts?: boolean;
 }
 
 export class UpdateCategoryDto {
   @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @MaxLength(CATEGORY_NAME_MAX) name?: string;
   /** `null` = chuyển lên tầng gốc; bỏ trường = giữ nguyên cha. */
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(64) parentId?: string | null;
+  @OptionalNotNull() @IsBoolean() confirmDirectProducts?: boolean;
 }
 
 export class ReorderCategoriesDto {
