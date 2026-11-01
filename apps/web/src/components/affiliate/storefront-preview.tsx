@@ -1,15 +1,16 @@
 import { Sprout } from 'lucide-react';
 import type { StorefrontEdit } from '@tubutree/app-core/api/storefront';
-import { ProductGrid } from '@/components/mini/product-grid';
-import type { ProductCard as ProductCardData } from '@/lib/api';
+import { planShopSections } from '@tubutree/app-core/commerce/shop-page';
+import { visibleCollection } from '@tubutree/app-core/commerce/storefront-builder';
+import { ShopSection } from '@/components/mini/shop-section';
 import { cssUrl } from '@/lib/safe-color';
 
-const MAX_TILES = 4;
-
-/** Bản xem trước cho chính chủ khi khách chưa xem được (nháp, chờ duyệt): cùng bố cục rút gọn và cùng thẻ sản phẩm với trang công khai /s/[slug]. */
+/**
+ * Bản xem trước cho chính chủ khi khách chưa xem được (nháp, chờ duyệt): dựng bằng chính `ShopSection` của tab Shop của trang công khai
+ * /s/[slug], với đúng phần khách thấy (món ẩn bị bỏ) và đúng trần số khối. Cả khung là `inert`: Tab/Enter không vào link, chủ không rời màn giữa chừng.
+ */
 export function StorefrontPreview({ sf }: { sf: StorefrontEdit }) {
-  const items = sf.collections.flatMap((c) => c.items).filter((it) => !it.isHidden && !it.hiddenReason);
-  const shown = items.slice(0, MAX_TILES);
+  const sections = planShopSections(sf.collections.map(visibleCollection)).main;
 
   return (
     <div data-testid="storefront-preview" inert className="overflow-hidden rounded-card border border-stone-200 bg-stone-50">
@@ -17,7 +18,7 @@ export function StorefrontPreview({ sf }: { sf: StorefrontEdit }) {
         className="h-[72px] bg-forest-700 bg-cover bg-center"
         style={sf.coverUrl ? { backgroundImage: cssUrl(sf.coverUrl) } : undefined}
       />
-      <div className="-mt-6 px-3 pb-3">
+      <div className="-mt-6 px-4 pb-3">
         <div
           className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border-[3px] border-stone-0 bg-forest-600 bg-cover bg-center"
           style={sf.avatarUrl ? { backgroundImage: cssUrl(sf.avatarUrl) } : undefined}
@@ -27,18 +28,15 @@ export function StorefrontPreview({ sf }: { sf: StorefrontEdit }) {
         <h3 className="mt-1.5 font-display text-base font-semibold text-stone-900">{sf.title}</h3>
         <div className="text-xs text-stone-600">/s/{sf.slug}</div>
         {sf.headerNote && <p className="mt-1.5 text-sm text-stone-700">{sf.headerNote}</p>}
-        {shown.length === 0 ? (
+        {sections.length === 0 ? (
           <p className="mt-2.5 text-xs text-stone-600">Chưa có sản phẩm nào.</p>
         ) : (
-          // Cùng thẻ sản phẩm với trang công khai (không tim: chủ chưa phải khách). Cả khung preview là `inert`: Tab/Enter không vào link, chủ không rời màn giữa chừng.
-          <ProductGrid
-            className="mt-2.5 grid grid-cols-2 gap-2"
-            variant="grid"
-            showWishlist={false}
-            items={shown.map((it) => ({ brand: '', isFeatured: false, inStock: true, ...(it.product as unknown as Partial<ProductCardData>) }) as ProductCardData)}
-          />
+          <div className="mt-2.5">
+            {sections.map((c) => (
+              <ShopSection key={c.id} collection={c} preview />
+            ))}
+          </div>
         )}
-        {items.length > shown.length && <p className="mt-2 text-xs text-stone-600">và {items.length - shown.length} sản phẩm khác</p>}
       </div>
     </div>
   );

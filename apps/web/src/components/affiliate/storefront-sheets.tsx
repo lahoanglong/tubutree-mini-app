@@ -19,7 +19,6 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { isPartnerStore } from '@/lib/partner-store';
 import { ui } from '@/lib/guest-ui';
-import { phoneSecondary } from '@/lib/phone-ui';
 import { Badge } from '@/components/ui/badge';
 import { EmptyStateInline } from './storefront-inline';
 import { ErrorState } from '@/components/ui/error-state';
@@ -435,36 +434,6 @@ function CollectionForm({ collection, onClose, onSaved }: { collection: Storefro
       <button type="button" className={`${ui.btnPrimary} w-full`} disabled={!title.trim() || saveMut.isPending} onClick={() => saveMut.mutate()}>
         {saveMut.isPending ? 'Đang lưu…' : 'Lưu'}
       </button>
-    </div>
-  );
-}
-
-/** Form tạo bộ sưu tập: chỉ cần TÊN do CTV đặt, giống Mini App. */
-export function NewCollectionForm({ onCreate, pending }: { onCreate: (dto: { title: string }, onSuccess: () => void) => void; pending: boolean }) {
-  const [title, setTitle] = useState('');
-
-  const submit = () => {
-    if (!title.trim()) return;
-    // Chỉ xoá tên khi tạo xong: bị từ chối hay mất mạng thì CTV còn tên để sửa.
-    onCreate({ title: title.trim() }, () => setTitle(''));
-  };
-
-  return (
-    <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none">
-      <div className="flex items-start gap-2">
-        <input
-          className={`${ui.field} flex-1`}
-          aria-label="Tên bộ sưu tập"
-          placeholder="Tên bộ sưu tập"
-          maxLength={80}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <button type="button" className={`${ui.btnSecondary} ${phoneSecondary}`} disabled={!title.trim() || pending} onClick={submit}>
-          <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
-          Tạo bộ sưu tập
-        </button>
-      </div>
     </div>
   );
 }

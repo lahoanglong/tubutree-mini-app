@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, type Rendered } from '@/test-utils/dom';
+import { flush, render, type Rendered } from '@/test-utils/dom';
 import type { StorefrontEdit } from '@tubutree/app-core/api/storefront';
 import { StorefrontPreview } from './storefront-preview';
 
@@ -21,14 +21,14 @@ const sf = {
 } as unknown as StorefrontEdit;
 
 describe('StorefrontPreview', () => {
-  it('cả khung preview là inert: link và nút bên trong không nhận Tab/Enter', () => {
+  it('cả khung preview là inert: link và nút bên trong không nhận Tab/Enter', async () => {
     mounted = render(<StorefrontPreview sf={sf} />);
+    await flush();
     const frame = mounted.container.querySelector('[data-testid="storefront-preview"]')!;
     expect(frame.hasAttribute('inert')).toBe(true);
     const focusables = frame.querySelectorAll('a[href], button');
     expect(focusables.length).toBeGreaterThan(0);
-    // Chủ chưa phải khách: thẻ xem trước không có tim.
-    expect(frame.querySelector('button[aria-label^="Yêu thích"]')).toBeNull();
+    // Thẻ dựng bằng chính ShopSection nên có cả tim như khách thấy; nó nằm trong khung inert nên không nhận Tab/Enter.
     for (const el of Array.from(focusables)) expect(el.closest('[inert]')).toBe(frame);
   });
 });

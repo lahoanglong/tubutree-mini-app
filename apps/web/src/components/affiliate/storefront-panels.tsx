@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Target, TrendingUp } from 'lucide-react';
-import { claimQuest, type QuestList } from '@tubutree/app-core/api/storefront';
+import { Check, ChevronDown, TrendingUp } from 'lucide-react';
+import { BUILDER_COPY } from '@tubutree/app-core/commerce/storefront-builder';
+import { claimQuest, type QuestList as QuestData } from '@tubutree/app-core/api/storefront';
 import { storefrontQuestsQuery, storefrontStatsQuery } from '@tubutree/app-core/queries/storefront';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
@@ -23,40 +25,56 @@ function StatBox({ value, label, brand }: { value: string; label: string; brand?
   );
 }
 
-/** "Thống kê 30 ngày": sản phẩm nào trong gian hàng đang bán chạy, để CTV biết mà tối ưu. */
+/**
+ * "Thống kê 30 ngày" ở đầu màn dựng khi gian hàng đã có khách thấy: ba ô số, bảng theo sản phẩm gập sau nút "Theo sản phẩm".
+ * Chỉ gắn vào cây khi LIVE nên gian hàng nháp không gọi API thống kê.
+ */
 export function StatsSection() {
   const statsQ = useQuery(storefrontStatsQuery(coreHttp));
+  const [open, setOpen] = useState(false);
   const data = statsQ.data;
   if (!data) return null;
   const rows = statsRows(data);
 
   return (
-    <section aria-label="Thống kê 30 ngày" className={`${ui.card} ${phoneFlatCard} p-4`}>
+    <section aria-label={BUILDER_COPY.stats30} className={`${ui.card} ${phoneFlatCard} p-4`}>
       <div className="mb-2.5 flex items-center gap-1.5">
         <TrendingUp className="h-5 w-5 text-forest-700" aria-hidden="true" />
-        <h2 className={`${ui.sectionTitle} ${phoneSectionTitle}`}>Thống kê 30 ngày</h2>
+        <h2 className={`${ui.sectionTitle} ${phoneSectionTitle}`}>{BUILDER_COPY.stats30}</h2>
       </div>
-      <div className="mb-3 flex gap-2">
+      <div className="flex gap-2">
         <StatBox value={String(data.orders30d)} label="Đơn 30 ngày" />
         <StatBox value={formatVnd(data.revenue30d)} label="Doanh thu" />
         <StatBox value={formatVnd(data.commission30d)} label="Hoa hồng" brand />
       </div>
       {rows.length === 0 ? (
-        <p className="text-xs text-stone-600">Chưa có đơn nào qua gian hàng — chia sẻ link để bắt đầu bán nhé.</p>
+        <p className="mt-3 text-xs text-stone-600">Chưa có đơn nào qua gian hàng — chia sẻ link để bắt đầu bán nhé.</p>
       ) : (
-        rows.map((r) => (
-          <div key={r.key} className="flex items-center justify-between gap-2 border-t border-stone-200 py-1.5">
-            <span className="min-w-0 flex-1 truncate text-sm text-stone-900">{r.name}</span>
-            <span className="whitespace-nowrap text-xs text-stone-600">{r.value}</span>
-          </div>
-        ))
+        <>
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+            className="mt-1 flex min-h-11 w-full items-center justify-between text-sm font-medium text-forest-700"
+          >
+            {BUILDER_COPY.statsByProduct}
+            <ChevronDown className={`h-4 w-4 transition-transform duration-150 ease-out ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+          </button>
+          {open &&
+            rows.map((r) => (
+              <div key={r.key} className="flex items-center justify-between gap-2 border-t border-stone-200 py-1.5">
+                <span className="min-w-0 flex-1 truncate text-sm text-stone-900">{r.name}</span>
+                <span className="whitespace-nowrap text-xs text-stone-600">{r.value}</span>
+              </div>
+            ))}
+        </>
       )}
     </section>
   );
 }
 
-/** "Hành trình gian hàng": chuỗi nhiệm vụ early-win thưởng Điểm Xanh; nhận thưởng từng nhiệm vụ đã đạt. */
-export function QuestSection({ data, onNotice }: { data: QuestList; onNotice: Notify }) {
+/** Chuỗi nhiệm vụ early-win thưởng Điểm Xanh, nằm trong sheet mở từ dải Hành trình. Nút nhận là nút phụ: màn dựng chỉ có một nút chính (thanh dính). */
+export function QuestList({ data, onNotice }: { data: QuestData; onNotice: Notify }) {
   const qc = useQueryClient();
   const claimMut = useMutation({
     mutationFn: (code: string) => claimQuest(coreHttp, code),
@@ -67,17 +85,13 @@ export function QuestSection({ data, onNotice }: { data: QuestList; onNotice: No
     onError: (e) => onNotice(actErrText(e), true),
   });
   return (
-    <section aria-label="Hành trình gian hàng" className={`${ui.card} ${phoneFlatCard} p-4`}>
+    <div>
       <div className="mb-1 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <Target className="h-5 w-5 text-forest-700" aria-hidden="true" />
-          <h2 className={`${ui.sectionTitle} ${phoneSectionTitle}`}>Hành trình gian hàng</h2>
-        </div>
+        <p className="text-xs font-medium text-forest-700">Đã nhận {formatCount(data.totalEarnedPoints)} điểm</p>
         <span className="text-xs text-stone-600">
           {data.level}/{data.levelMax}
         </span>
       </div>
-      <p className="mb-2.5 text-xs font-medium text-forest-700">Đã nhận {formatCount(data.totalEarnedPoints)} điểm</p>
       {data.quests.map((q) => (
         <div key={q.code} className="border-t border-stone-200 py-2">
           <div className="flex items-center justify-between gap-2">
@@ -93,12 +107,7 @@ export function QuestSection({ data, onNotice }: { data: QuestList; onNotice: No
                 Đã nhận
               </Badge>
             ) : q.done ? (
-              <button
-                type="button"
-                className={ui.btnPrimary}
-                disabled={claimMut.isPending}
-                onClick={() => claimMut.mutate(q.code)}
-              >
+              <button type="button" className={ui.btnSecondary} disabled={claimMut.isPending} onClick={() => claimMut.mutate(q.code)}>
                 {claimMut.isPending && claimMut.variables === q.code ? 'Đang nhận…' : `Nhận ${formatCount(q.rewardPoints)} điểm`}
               </button>
             ) : (
@@ -112,6 +121,6 @@ export function QuestSection({ data, onNotice }: { data: QuestList; onNotice: No
           </div>
         </div>
       ))}
-    </section>
+    </div>
   );
 }
