@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { AlertCircle, Check, ChevronRight } from 'lucide-react';
+import { fetchProductBundles } from '@tubutree/app-core/api/bundle';
 import { fetchBoughtTogether, fetchRelated } from '@tubutree/app-core/api/catalog';
 import { formatSold, getProduct, pdpFulfillerText, pdpPartnerNote, pdpUnavailableText } from '@/lib/api';
 import AddToCart from '@/components/add-to-cart';
@@ -18,7 +19,7 @@ import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/pro
 import { SITE_URL } from '@/lib/site';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
 import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow } from './pdp-extras';
-import { PdpBundleSlots } from './pdp-bundle-slots';
+import { PdpBundles } from './pdp-bundles';
 import { PdpQuickReviews } from './pdp-quick-reviews';
 import { PdpRails } from './pdp-rails';
 import { PdpLayout } from '@/components/layouts/pdp-layout';
@@ -58,9 +59,11 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const product = await getProduct(slug);
   if (!product) notFound();
   const http = createServerHttp();
-  const [related, boughtTogether] = await Promise.all([
+  const bundlesFetchedAt = Date.now();
+  const [related, boughtTogether, bundles] = await Promise.all([
     orUndefined(fetchRelated(http, product.slug)),
     orUndefined(fetchBoughtTogether(http, product.slug)),
+    orUndefined(fetchProductBundles(http, product.slug)),
   ]);
 
   const images = galleryImages(product);
@@ -177,10 +180,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               {/*
                 Thứ tự trong HTML là thứ tự đọc và bấm Tab ở máy tính: khối mua rồi mới tới chứng nhận và "Đặt định kỳ" (lối phụ), nên nút
                 "Thêm vào giỏ" không bị đẩy xuống dưới khung 1280×800. Điện thoại kéo chứng nhận và "Đặt định kỳ" lên trước khối mua như Mini App
-                bằng `order` (các hàng này hiển thị liền nhau nên lệch thứ tự Tab chỉ vài bước).
+                bằng `order` (các hàng này hiển thị liền nhau nên lệch thứ tự Tab chỉ vài bước). Combo/Mua kèm cũng đứng trước khối mua ở điện thoại
+                (Mini App: Combo/Mua kèm, rồi Số lượng, rồi Mở nhóm mua chung).
+                Bộ hết hạn hay tắt khi trang ISR đã cũ thì khối KHÔNG bị gỡ (PdpBundles giữ chỗ, ghi "Đã kết thúc"), nên chỗ này không nhảy; chỉ bộ
+                mới hiện sau khi tải (máy chủ lỗi lúc dựng, hay bộ vừa tạo sau lần dựng trang) là chèn thêm, như Mini App.
               */}
               {product.variations.length > 0 && (
-                <div className="max-md:order-2">
+                <div className="max-md:order-3">
                   <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} />
                 </div>
               )}
@@ -203,10 +209,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 </div>
               )}
 
-              <div className="max-md:order-3">
+              <div className="max-md:order-2">
+                <PdpBundles slug={product.slug} productName={product.name} initialBundles={bundles} initialFetchedAt={bundlesFetchedAt} />
+              </div>
+              <div className="max-md:order-4">
                 {!retailOnly && <PdpGroupBuyRow productId={product.id} slug={product.slug} />}
                 <PdpContentKitRow slug={product.slug} />
-                <PdpBundleSlots />
               </div>
             </div>
           }

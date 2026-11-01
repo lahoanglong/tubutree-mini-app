@@ -1,4 +1,4 @@
-import { HOME_BEST_SELLER_LIMIT, HOME_FEATURED_LIMIT, HOME_SECTION_LIMIT, HomeService } from './home.service';
+import { HOME_BEST_SELLER_LIMIT, HOME_COMBOS_LIMIT, HOME_FEATURED_LIMIT, HOME_SECTION_LIMIT, HomeService } from './home.service';
 
 const page = (ids: string[]) => ({ data: ids.map((id) => ({ id })), meta: { page: 1, limit: 6, total: ids.length } });
 
@@ -8,6 +8,7 @@ function setup() {
     categories: jest.fn().mockResolvedValue([{ id: 'c1' }]),
     brands: jest.fn().mockResolvedValue([{ brand: 'B', count: 1 }]),
     getForYou: jest.fn().mockResolvedValue([{ id: 'fy' }]),
+    cardsByIds: jest.fn().mockResolvedValue([]),
   };
   const flashSale = {
     listActive: jest.fn().mockResolvedValue([{ itemId: 'f1' }]),
@@ -33,6 +34,9 @@ function setup() {
     membershipTier: { findMany: jest.fn().mockResolvedValue([]) },
     wasteRequest: { count: jest.fn().mockResolvedValue(2) },
     campaign: { findMany: jest.fn().mockResolvedValue([]) },
+    bundle: { findMany: jest.fn().mockResolvedValue([]) },
+    variation: { findMany: jest.fn().mockResolvedValue([]) },
+    flashSaleItem: { findMany: jest.fn().mockResolvedValue([]) },
   };
   const svc = new HomeService(
     catalog as never, flashSale as never, orders as never, purchased as never, subs as never, notifications as never, config as never, loyalty as never,
@@ -42,10 +46,10 @@ function setup() {
 }
 
 describe('HomeService.getPublic', () => {
-  it('gộp đủ 8 khối (kèm cấu hình công khai và banner chiến dịch), dùng đúng tham số lẻ của Home', async () => {
+  it('gộp đủ 9 khối (kèm cấu hình công khai, banner chiến dịch và combo), dùng đúng tham số lẻ của Home', async () => {
     const { svc, catalog } = setup();
     const r = await svc.getPublic(1000);
-    expect(Object.keys(r).sort()).toEqual(['bestSellers', 'brands', 'campaigns', 'categories', 'featured', 'flashActive', 'newest', 'publicConfig']);
+    expect(Object.keys(r).sort()).toEqual(['bestSellers', 'brands', 'campaigns', 'categories', 'combos', 'featured', 'flashActive', 'newest', 'publicConfig']);
     const calls = catalog.list.mock.calls.map(([q]) => ({ sort: q.sort, limit: q.limit, page: q.page }));
     expect(calls).toEqual(
       expect.arrayContaining([
@@ -185,6 +189,46 @@ describe('HomeService.getPublic — banner chiến dịch', () => {
     expect(r.campaigns).toBeNull();
     expect(r.categories).toEqual([{ id: 'c1' }]);
     expect(r.bestSellers).not.toBeNull();
+  });
+
+  describe('khối combos (combo toàn sàn)', () => {
+    const comboRow = (id: string) => ({
+      id,
+      kind: 'BUNDLE_PCT',
+      title: `Combo ${id}`,
+      pct: 10,
+      endAt: new Date('2099-01-01T00:00:00Z'),
+      anchorProductId: null,
+      anchorProduct: null,
+      items: ['a', 'b'].map((n) => ({ productId: `${id}${n}`, variationId: null, addonPrice: null, maxQty: 1, product: { storefrontId: null } })),
+    });
+    const cardFor = (id: string) => ({ id, slug: id, brand: 'B', name: id, thumbnail: null, basePrice: 50_000, salePrice: null, repVariationId: `v-${id}`, isFeatured: false, inStock: true });
+
+    it('là combo đang chạy đủ hàng, cùng nội dung GET /bundles/combos, lấy đúng HOME_COMBOS_LIMIT combo', async () => {
+      const { svc, prisma, catalog } = setup();
+      prisma.bundle.findMany.mockResolvedValue([comboRow('c1'), comboRow('c2')]);
+      catalog.cardsByIds.mockImplementation(async (ids: string[]) => ids.map(cardFor));
+      const r = await svc.getPublic(1000);
+      expect(r.combos?.map((b) => b.id)).toEqual(['c1', 'c2']);
+      expect(r.combos?.[0]?.items.map((i) => i.variationId)).toEqual(['v-c1a', 'v-c1b']);
+      const where = prisma.bundle.findMany.mock.calls[0]![0].where;
+      expect(where).toMatchObject({ kind: 'BUNDLE_PCT', isActive: true });
+      expect(prisma.bundle.findMany.mock.calls[0]![0].take).toBe(HOME_COMBOS_LIMIT * 3);
+    });
+
+    it('không có combo: mảng rỗng (khác null = lỗi), client ẩn cả khối', async () => {
+      const { svc } = setup();
+      expect((await svc.getPublic(1000)).combos).toEqual([]);
+    });
+
+    it('truy vấn lỗi: chỉ khối combos null, các khối khác còn nguyên', async () => {
+      const { svc, prisma } = setup();
+      prisma.bundle.findMany.mockRejectedValue(new Error('db down'));
+      const r = await svc.getPublic(1000);
+      expect(r.combos).toBeNull();
+      expect(r.campaigns).toEqual([]);
+      expect(r.bestSellers).not.toBeNull();
+    });
   });
 
   it('cache chung 20s: hai request cùng TTL chỉ một lần findMany', async () => {

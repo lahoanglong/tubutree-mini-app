@@ -29,7 +29,7 @@ describe('refreshHomeQueries (A2-33: kéo để làm mới phải làm mới Đ�
     const invalidateQueries = vi.fn().mockResolvedValue(undefined);
     await refreshHomeQueries({ invalidateQueries } as unknown as QueryClient);
     expect(invalidateQueries.mock.calls.map(([f]) => f.queryKey[0])).toEqual([...HOME_QUERY_PREFIXES]);
-    expect(HOME_QUERY_PREFIXES).toEqual(expect.arrayContaining(['campaigns', 'products', 'for-you', 'flash-sales', 'cart', 'purchased-items', 'orders', 'subscriptions', 'categories', 'loyalty', 'coupons']));
+    expect(HOME_QUERY_PREFIXES).toEqual(expect.arrayContaining(['campaigns', 'products', 'for-you', 'flash-sales', 'cart', 'purchased-items', 'orders', 'subscriptions', 'categories', 'loyalty', 'coupons', 'bundles']));
   });
 });
 

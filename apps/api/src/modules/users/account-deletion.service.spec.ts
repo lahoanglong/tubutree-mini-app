@@ -476,3 +476,21 @@ describe('AccountDeletionService — đơn đã giao còn trong hạn đổi/tr�
     }
   });
 });
+
+describe('AccountDeletionService.process — ghi chú admin không chứa số điện thoại', () => {
+  it.each([
+    ['số liền', 'đã gọi khách 0912345678 xác nhận'],
+    ['số có khoảng trắng', 'gọi 0912 345 678'],
+    ['chèn ký tự độ rộng 0', 'gọi 091\u200B2345678'],
+  ])('ghi chú %s → 400, không động tới giao dịch', async (_n, note) => {
+    const { svc } = build([]);
+    const prisma = (svc as unknown as { prisma: { $transaction: jest.Mock } }).prisma;
+    await expect(svc.process('req-1', 'admin-1', note)).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('ghi chú có mã đơn TUBUSUB7659607093 vẫn nhận', async () => {
+    const { svc } = build([]);
+    await expect(svc.process('req-1', 'admin-1', 'đơn TUBUSUB7659607093 đã huỷ, khách đồng ý')).resolves.toMatchObject({ alreadyProcessed: false });
+  });
+});

@@ -1063,7 +1063,7 @@ export class CheckoutService {
       .reduce((s, l) => s + l.total, 0);
     const combo = await this.combo.computeForStorefront(
       storefrontSlug,
-      nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total })),
+      nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total, quantity: l.quantity })),
       userId,
     );
     const { goodsAfterCombo, couponLines } = goodsAfterComboOf(nonFlash, combo); // goodsAfterCombo = coupon base (loại flash)

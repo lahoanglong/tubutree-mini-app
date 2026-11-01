@@ -323,21 +323,22 @@ export class CartService {
     };
   }
 
-  /** Phần hàng tính mã của giỏ: loại giờ vàng, trừ combo của gian hàng ghi công (cùng hàm với checkout). */
+  /**
+   * Phần hàng tính mã của giỏ: loại giờ vàng, trừ combo (cùng hàm với checkout). Combo gồm combo của gian hàng ghi công và bundle
+   * toàn sàn; bundle áp cả khi không có gian hàng nên luôn hỏi `computeForStorefront`.
+   */
   private async couponBaseAfterCombo(
-    lines: { variationId: string; productId: string; total: number; isFlash: boolean }[],
+    lines: { variationId: string; productId: string; total: number; quantity: number; isFlash: boolean }[],
     userId: string,
     storefrontSlug: string | undefined,
   ) {
     const nonFlash = lines.filter((l) => !l.isFlash);
     const storefront = storefrontSlug ? await resolvePublishedStorefront(this.prisma, await loadPublicVisibility(this.config), storefrontSlug) : null;
-    const combo = storefront
-      ? await this.combo.computeForStorefront(
-          storefront.slug,
-          nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total })),
-          userId,
-        )
-      : { total: 0, perLine: {} };
+    const combo = await this.combo.computeForStorefront(
+      storefront?.slug ?? null,
+      nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total, quantity: l.quantity })),
+      userId,
+    );
     return { combo, ...goodsAfterComboOf(nonFlash, combo) };
   }
 

@@ -454,7 +454,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       'Cài đặt',
     ]);
     const items = [...nav.querySelectorAll('button:not([aria-expanded])')];
-    expect(items).toHaveLength(52);
+    expect(items).toHaveLength(53);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
       [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button:not([aria-expanded])')].map(navLabel);
@@ -463,7 +463,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     );
     expect(group('Bán hàng')).toContain('Sản phẩm');
     expect(group('Hay dùng')).toEqual(['Hôm nay', 'Đơn hàng', 'Sản phẩm', 'Người dùng', 'Chat CSKH', 'Cộng đồng', 'Mã giảm giá', 'Đổi rác', 'Gian hàng', 'Duyệt SP đối tác', 'Đại lý']);
-    expect(group('Khuyến mãi và điểm')).toEqual(['Mã giảm giá', 'Giờ vàng', 'Tích điểm tại quầy', 'Tích điểm đơn sàn', 'Chiến dịch']);
+    expect(group('Khuyến mãi và điểm')).toEqual(['Mã giảm giá', 'Giờ vàng', 'Tích điểm tại quầy', 'Tích điểm đơn sàn', 'Chiến dịch', 'Combo và mua kèm']);
     expect(group('Đổi rác và game')).toEqual(['Đổi rác', 'Nhiệm vụ']);
     expect(group('Nhân sự')).toEqual(['Nhân sự & quyền', 'Duyệt ca', 'Lương', 'Chấm công']);
     expect(group('Tổng quan')).toContain('Báo cáo');
@@ -2584,6 +2584,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Báo cáo',
       'Giờ vàng',
       'Chiến dịch',
+      'Combo và mua kèm',
       'Câu hỏi thường gặp',
       'Bộ nội dung CTV',
       'Học viện CTV',
@@ -2628,6 +2629,31 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       const cskh = await mount();
       expect(navItems(cskh.container)).not.toContain('Chiến dịch');
       expect(cskh.container.textContent).not.toContain('Chưa có chiến dịch nào');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('tab Combo và mua kèm: ADMIN và nhân viên MARKETING mở được bằng ?tab=bundles (tải /admin/bundles), đứng ngay sau Chiến dịch; nhân viên CSKH thì không thấy mục', async () => {
+    const api = mockFetch({ '/admin/bundles': { body: [] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    try {
+      window.history.replaceState(null, '', '/admin?tab=bundles');
+      asStaff(['MARKETING']);
+      const marketing = await mount();
+      const items = navItems(marketing.container);
+      expect(items).toContain('Combo và mua kèm');
+      expect(items.indexOf('Combo và mua kèm')).toBe(items.indexOf('Chiến dịch') + 1);
+      expect(marketing.container.textContent).toContain('Chưa có combo hay mua kèm nào');
+      expect(api.calls.some((c) => c.url.includes('/admin/bundles'))).toBe(true);
+      marketing.unmount();
+      mounted = [];
+
+      window.history.replaceState(null, '', '/admin?tab=bundles');
+      asStaff(['CSKH']);
+      const cskh = await mount();
+      expect(navItems(cskh.container)).not.toContain('Combo và mua kèm');
+      expect(cskh.container.textContent).not.toContain('Chưa có combo hay mua kèm nào');
     } finally {
       vi.unstubAllGlobals();
     }

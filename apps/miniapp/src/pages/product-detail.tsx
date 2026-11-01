@@ -73,7 +73,8 @@ import { cartKey, useCartKey } from '../services/cart-key';
 import { LeafGlyph } from '../components/ui/product-image';
 import { useSizedImage } from '../utils/image-src';
 import { FlashPriceBar } from '../components/product/flash-price-bar';
-import { PdpBundleSlots } from '../components/product/pdp-bundle-slots';
+import { PdpBundles } from '../components/product/pdp-bundles';
+import { useBundlesWait } from '../components/product/use-product-bundles';
 import { PdpOffersSheet } from '../components/product/pdp-offers-sheet';
 import { PdpQuickReviews } from '../components/product/pdp-quick-reviews';
 import { PdpFeed } from '../components/product/pdp-feed';
@@ -164,6 +165,8 @@ export default function ProductDetailPage() {
   });
   // "Đã xem gần đây" (spec 5b.4): ghi khi PDP mở THÀNH CÔNG. Đặt trước mọi early-return (luật hook).
   useRecordRecentlyViewed(product.isSuccess ? product.data : undefined);
+  // Combo/Mua kèm tải song song với sản phẩm; trang giữ khung chờ tối đa vài trăm ms để khối chèn cùng lần vẽ đầu, không đẩy các hàng bên dưới.
+  const bundlesWaiting = useBundlesWait(slug);
   const related = useQuery({
     queryKey: ['related', slug],
     queryFn: () => fetchRelated(slug!),
@@ -343,7 +346,7 @@ export default function ProductDetailPage() {
     onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  if (product.isLoading) return <PdpSkeleton />;
+  if (product.isLoading || (product.data && bundlesWaiting)) return <PdpSkeleton />;
   if (!product.data) {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
@@ -758,7 +761,7 @@ export default function ProductDetailPage() {
         </Box>
       )}
 
-      <PdpBundleSlots />
+      {slug && <PdpBundles slug={slug} productName={product.data?.name} />}
 
       {reviews.data && reviews.data.count > 0 && (
         <PdpQuickReviews average={reviews.data.average} count={reviews.data.count} items={reviews.data.items ?? []} onSeeAll={() => scrollToId('danh-gia')} />

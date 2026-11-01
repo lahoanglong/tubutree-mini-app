@@ -43,7 +43,7 @@ import { browserStorage } from '../utils/recently-viewed';
 
 /**
  * Trang chủ (màn đầu gọn, món hàng lên đầu): header dính 56px (logo, ô tìm, chuông, giỏ) → thẻ thành viên một dòng (khách cũ) hoặc dải Quà khách mới
- * → Việc cần làm → banner chiến dịch (ẩn hẳn khi không có) → 4 lối tắt + "Tất cả" → Giờ vàng → Mua lại (khách cũ) → Danh mục lưới 2×5 → Bán chạy nhất có hạng → combo (chờ P15)
+ * → Việc cần làm → banner chiến dịch (ẩn hẳn khi không có) → 4 lối tắt + "Tất cả" → Giờ vàng → Mua lại (khách cũ) → Danh mục lưới 2×5 → Bán chạy nhất có hạng → combo
  * → Hành trình nguyên liệu → Cộng đồng (chỉ đọc) → MỘT lưới Gợi ý hôm nay cuộn vô tận. Thứ tự khối ở app-core (`homeBlockOrder`), dùng chung với web;
  * `useHomeShelves` chống trùng món giữa các kệ hàng. Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ (C-084), độc lập từng khối; kéo để làm mới vẫn dùng được.
  */
@@ -113,9 +113,9 @@ export default function HomePage() {
     todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <HomeNewCustomerGift /> : null,
-    // Banner tự ẩn khi không có chiến dịch; combo (P15) chưa có dữ liệu nên trả null và không giữ chỗ.
+    // Banner và combo tự ẩn khi không có dữ liệu, không giữ chỗ.
     banner: <HomeBanner kind={kind} />,
-    combos: <HomeCombos />,
+    combos: <HomeCombos views={shelves.combos} />,
     shortcuts: <ShortcutGrid />,
     // Lỗi tải Mua lại (kể cả 404 của API cũ) đưa trang về bố cục khách mới, nơi khối này không có mặt, nên khối tự có trạng thái lỗi riêng ở PurchasedRail.
     purchased: <HomePurchasedRail source="home_rail" restoring={restoring} exclude={shelves.flashSlugs} />,
