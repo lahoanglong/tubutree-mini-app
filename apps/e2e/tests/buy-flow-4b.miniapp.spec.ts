@@ -104,15 +104,17 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     await expect(page).toHaveURL(new RegExp(`/order/${SHIPPING_CODE}$`), { timeout: 15_000 });
   });
 
-  test('"Xem tất cả" của Bán chạy nhất mở /browse?sort=best_seller, trang Danh mục xin đúng sắp xếp', async ({ page, api }) => {
+  test('"Xem tất cả" của Bán chạy nhất mở /best-sellers, trang đó xin đúng sắp xếp 30 ngày và xếp hạng từ #1', async ({ page, api }) => {
     mockDiscovery(api);
     await page.goto('/');
     await page.getByRole('button', { name: 'Xem tất cả Bán chạy nhất' }).click({ timeout: 15_000 });
-    await expect(page).toHaveURL(/\/browse\?sort=best_seller$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/best-sellers$/, { timeout: 15_000 });
     await expect
-      .poll(() => api.callsTo('GET', '/products').some((c) => c.query.get('sort') === 'best_seller' && c.query.get('limit') !== '6'), { timeout: 15_000 })
+      .poll(() => api.callsTo('GET', '/products').some((c) => c.query.get('sort') === 'best_seller_30d' && c.query.get('limit') === '20'), { timeout: 15_000 })
       .toBe(true);
-    await expect(page.getByTestId('catalog-grid').getByRole('button').first()).toHaveAccessibleName(new RegExp(XA_PHONG.name), { timeout: 15_000 });
+    const grid = page.getByTestId('catalog-grid');
+    await expect(grid.locator('[data-ds-part="rank"]').first()).toHaveText('#1', { timeout: 15_000 });
+    await expect(grid.getByRole('button').first()).toHaveAccessibleName(new RegExp(XA_PHONG.name));
   });
 
   test('Khách cũ đã được nhớ: thứ tự khối đúng ngay khi purchased-items còn chưa trả lời, và không xếp lại sau đó', async ({ page, api }) => {
