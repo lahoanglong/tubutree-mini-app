@@ -63,6 +63,41 @@ describe('SuggestFeed — Gợi ý hôm nay (Q9)', () => {
     expect(mocks.fetchCatalog.mock.calls[1]![0]).toEqual(mocks.fetchCatalog.mock.calls[0]![0]);
   });
 
+  it('lưới ở cuối trang: chưa tới gần màn thì không gọi API (lần mở Trang chủ bớt một request), chỉ có tiêu đề và chip, chưa có khung chờ; cách màn một màn hình thì tải', async () => {
+    mocks.authStatus = 'authenticated';
+    const observers: { cb: IntersectionObserverCallback; margin?: string; els: Element[] }[] = [];
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        els: Element[] = [];
+        constructor(cb: IntersectionObserverCallback, opts?: IntersectionObserverInit) {
+          observers.push({ cb, margin: opts?.rootMargin, els: this.els });
+        }
+        observe(el: Element) {
+          this.els.push(el);
+        }
+        disconnect() {}
+      },
+    );
+    try {
+      mount();
+      expect(await screen.findByRole('heading', { level: 2, name: 'Gợi ý hôm nay' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Tất cả' })).toBeInTheDocument();
+      expect(screen.queryByTestId('catalog-grid-skeleton')).toBeNull();
+      await new Promise((r) => setTimeout(r, 30));
+      expect(mocks.fetchCatalog).not.toHaveBeenCalled();
+      expect(mocks.fetchForYou).not.toHaveBeenCalled();
+      const near = observers.find((o) => o.els.some((el) => el.tagName === 'SECTION'))!;
+      expect(near.margin).toBe('100% 0px');
+      near.cb([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
+      await waitFor(() => expect(mocks.fetchCatalog).toHaveBeenCalledWith({ page: 1, limit: 20, seed: '20261101' }));
+      expect(mocks.fetchForYou).toHaveBeenCalledWith({ seed: '20261101' });
+      expect(await screen.findByText('Sản phẩm 1')).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('chip: "Tất cả" rồi danh mục tầng 1 nhiều hàng nhất; danh mục con không thành chip; đổi chip lọc theo category kèm seed', async () => {
     mocks.fetchCategories.mockResolvedValue([cat('c1', 'Mẹ và bé', 5), cat('c2', 'Tẩy rửa', 9), cat('c3', 'Con của mẹ bé', 50, 'c1')]);
     mount();
