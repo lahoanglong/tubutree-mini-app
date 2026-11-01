@@ -196,6 +196,32 @@ describe('khe nhãn theo biến thể', () => {
   it('trang thương hiệu truyền showBrand=false thì không in tên thương hiệu', () => {
     expect(view({ showBrand: false }).brandLine).toBeNull();
   });
+
+  it('ẩn dòng thương hiệu khi tên đã chứa thương hiệu (không dấu, không phân biệt hoa thường), khe vẫn giữ chỗ', () => {
+    const named = (name: string, brand: string) => view({ product: product({ name, brand }) });
+    const dup = named('Nước rửa chén sinh học Fuwa3e', 'Fuwa3e');
+    expect(dup.brandLine).toBeNull();
+    expect(dup.brandSlot).toBe(true);
+    expect(named('Dầu xả bồ kết Pơ Lang', 'PO LANG').brandLine).toBeNull();
+    expect(named('Băng vệ sinh Moc An', 'Mộc An').brandLine).toBeNull();
+    expect(named('Nước rửa chén sinh học', 'Fuwa3e').brandLine).toBe('Fuwa3e');
+    expect(named('Nước rửa chén sinh học', 'Fuwa3e').brandSlot).toBe(true);
+  });
+
+  it('chỉ ẩn khi khớp nguyên từ; thương hiệu có ký tự đặc biệt không làm khớp nổ', () => {
+    const named = (name: string, brand: string) => view({ product: product({ name, brand }) }).brandLine;
+    expect(named('Tubutree xà phòng', 'Tubu')).toBe('Tubu');
+    expect(named('Sữa A+ 900g', 'A+')).toBeNull();
+    expect(named('Sữa AA 900g', 'A+')).toBe('A+');
+    expect(named("Kem L'Occitane 50ml", "L'Occitane")).toBeNull();
+    expect(named('Sữa tắm lá bạc hà', '   ')).toBe('   ');
+  });
+
+  it('showBrand=false và biến thể không có khe thì không giữ khe', () => {
+    expect(view({ showBrand: false }).brandSlot).toBe(false);
+    expect(view({ variant: 'rail-sm' }).brandSlot).toBe(false);
+    expect(view({ variant: 'rail-md' }).brandSlot).toBe(true);
+  });
 });
 
 describe('phần còn lại của view', () => {
