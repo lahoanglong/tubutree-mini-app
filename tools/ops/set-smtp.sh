@@ -22,6 +22,8 @@ P="${P// /}"
 REMOTE=$(cat <<EOF
 set -euo pipefail
 umask 077
+# P tới qua biến môi trường của ssh; chuyển sang biến không export để các lệnh con (docker, cp...) không mang mật khẩu.
+PW=\$P; unset P
 cd '$DIR'
 DC="docker compose -f docker-compose.vietnix.yml"
 CID=\$(\$DC ps -q api </dev/null)
@@ -30,8 +32,9 @@ RUN_IMG=\$(docker inspect -f '{{.Image}}' "\$CID")
 LATEST_IMG=\$(docker image inspect -f '{{.Id}}' tubutree-api:latest)
 [ "\$RUN_IMG" = "\$LATEST_IMG" ] || { echo "DỪNG: tubutree-api:latest khác image API đang chạy (có deploy dở?). Không đổi gì; deploy cho xong rồi chạy lại."; exit 1; }
 RUN_HASH=\$(docker inspect -f '{{index .Config.Labels "com.docker.compose.config-hash"}}' "\$CID")
-CUR_HASH=\$(\$DC config --hash=api </dev/null | awk '{print \$2}')
-[ -n "\$CUR_HASH" ] && [ "\$RUN_HASH" = "\$CUR_HASH" ] || { echo "DỪNG: compose hoặc .env đã đổi so với lúc tạo container API (\$RUN_HASH khác \$CUR_HASH). Không đổi gì; kiểm git status, .env rồi deploy hoặc tạo lại API trước."; exit 1; }
+CUR_HASH=\$(\$DC config --hash=api </dev/null | awk '{print \$2}' || true)
+[ -n "\$CUR_HASH" ] || { echo "DỪNG: không tính được config hash của api (docker compose quá cũ?). Không đổi gì."; exit 1; }
+[ "\$RUN_HASH" = "\$CUR_HASH" ] || { echo "DỪNG: compose hoặc .env đã đổi so với lúc tạo container API (\$RUN_HASH khác \$CUR_HASH). Không đổi gì; kiểm git status, .env rồi deploy hoặc tạo lại API trước."; exit 1; }
 TS=\$(date +%Y%m%d-%H%M%S)-\$\$
 cp .env ".env.bak-smtp-\$TS"; chmod 600 ".env.bak-smtp-\$TS"
 KEYS='OPS_ALERT_EMAIL_TO|SMTP_HOST|SMTP_PORT|SMTP_SECURE|SMTP_USER|SMTP_PASS|SMTP_FROM'
@@ -40,12 +43,12 @@ trap 'rm -f "\$NEW"' EXIT
 {
   grep -vE "^(\$KEYS)=" ".env.bak-smtp-\$TS" || true
   printf '%s\n' 'OPS_ALERT_EMAIL_TO=$ADDR' 'SMTP_HOST=smtp.gmail.com' 'SMTP_PORT=465' 'SMTP_SECURE=true' 'SMTP_USER=$ADDR'
-  printf 'SMTP_PASS=%s\n' "\$P"
+  printf 'SMTP_PASS=%s\n' "\$PW"
   printf '%s\n' 'SMTP_FROM=$ADDR'
 } > "\$NEW"
 # Ghi đè nội dung thay vì mv để giữ quyền và chủ sở hữu của .env.
 cat "\$NEW" > .env
-unset P
+unset PW
 wait_healthy() {
   local s=unknown
   for _ in \$(seq 1 40); do

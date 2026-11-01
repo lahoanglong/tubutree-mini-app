@@ -26,10 +26,13 @@ NEW=$(mktemp)
 trap 'rm -f "$NEW"' EXIT
 printf '%s\n' "$CUR" > "$BAK"
 # Tách dòng theo khoảng trắng (cả tab) nhưng giữ nguyên khoảng trắng gốc khi ghép lại. Biến môi trường phải đứng ngay trước lệnh
-# chạy backup-db.sh: trước `bash`/`sh` nếu có, và chỉ sau lịch cron, sau một biến khác hoặc sau &&, ||, ;. Dạng khác thì dừng.
+# chạy backup-db.sh: trước `bash`/`sh` nếu có, và chỉ sau lịch cron, sau một biến khác hoặc sau &&, ||, ;. HEALTHCHECK_URL cũ
+# cũng phải nằm đúng chỗ đó và không dính ; & | (kiểu `export X=...;`), vì thay cả token sẽ nuốt mất dấu tách lệnh. Dạng khác thì dừng.
 printf '%s\n' "$CUR" | U="$U" awk '
-  function isAssign(t) { return t ~ /^[A-Za-z_][A-Za-z0-9_]*=/ }
+  function stop(m) { print m > "/dev/stderr"; bad = 1; exit 3 }
+  function isAssign(t) { return t ~ /^[A-Za-z_][A-Za-z0-9_]*=[^;&|]*$/ }
   function isSep(t) { return t == "&&" || t == "||" || t == ";" }
+  function isShell(t) { return t ~ /^(\/usr)?(\/bin\/)?(ba|da)?sh$/ }
   /^[ \t]*#/ || !/backup-db\.sh/ { print; next }
   {
     s = $0; lead = ""; n = 0
@@ -40,18 +43,17 @@ printf '%s\n' "$CUR" | U="$U" awk '
       else { tok[n] = s; gap[n] = ""; s = "" }
     }
     k = 0
-    for (i = 1; i <= n; i++) if (tok[i] ~ /(^|\/)backup-db\.sh$/) { if (k) { print "nhiều lệnh backup-db.sh trên một dòng" > "/dev/stderr"; bad = 1; exit 3 } k = i }
+    for (i = 1; i <= n; i++) if (tok[i] ~ /(^|\/)backup-db\.sh$/) { if (k) stop("nhiều lệnh backup-db.sh trên một dòng"); k = i }
     sched = (tok[1] ~ /^@/) ? 1 : 5
-    if (k <= sched) { print "không thấy đường dẫn backup-db.sh sau lịch cron" > "/dev/stderr"; bad = 1; exit 3 }
+    if (k <= sched) stop("không thấy đường dẫn backup-db.sh sau lịch cron")
+    for (i = k + 1; i <= n; i++) if (tok[i] ~ /^HEALTHCHECK_URL=/) stop("HEALTHCHECK_URL nằm sau backup-db.sh")
     h = 0
     for (i = sched + 1; i < k; i++) if (tok[i] ~ /^HEALTHCHECK_URL=/) { if (!h) h = i; else drop[i] = 1 }
-    for (i = k + 1; i <= n; i++) if (tok[i] ~ /^HEALTHCHECK_URL=/) { print "HEALTHCHECK_URL nằm sau backup-db.sh" > "/dev/stderr"; bad = 1; exit 3 }
-    j = k
-    if (!h) {
-      if (j - 1 > sched && tok[j - 1] ~ /^(\/usr)?(\/bin\/)?(ba|da)?sh$/) j--
-      p = j - 1
-      if (!(p == sched || isAssign(tok[p]) || isSep(tok[p]))) { print "trước lệnh backup có \"" tok[p] "\", không chèn được biến an toàn" > "/dev/stderr"; bad = 1; exit 3 }
-    }
+    j = (k - 1 > sched && isShell(tok[k - 1])) ? k - 1 : k
+    first = h ? h : j
+    p = first - 1
+    if (!(p == sched || isAssign(tok[p]) || isSep(tok[p]))) stop("trước biến có \"" tok[p] "\", không gắn biến an toàn")
+    for (i = first; i < j; i++) if (!isAssign(tok[i])) stop("giữa HEALTHCHECK_URL và lệnh backup có \"" tok[i] "\"")
     out = lead
     for (i = 1; i <= n; i++) {
       if (drop[i]) continue
