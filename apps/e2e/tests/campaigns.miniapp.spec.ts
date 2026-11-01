@@ -97,7 +97,9 @@ test.describe('Trang chiến dịch', () => {
     mockCampaigns(api, { details: { [CAMPAIGN_SLUG]: campaignDetail() } });
     await page.goto(`/campaign/${CAMPAIGN_SLUG}`);
     await expect(page.getByRole('heading', { level: 1, name: CAMPAIGN_TITLE })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('img', { name: CAMPAIGN_TITLE })).toBeVisible();
+    // Ảnh đầu là ảnh trang trí (alt rỗng): h1 ngay trên đã gọi tên chương trình, trình đọc màn hình không đọc lặp.
+    await expect(page.locator('img[alt=""][src^="data:image/svg+xml"]')).toBeVisible();
+    await expect(page.getByRole('img', { name: CAMPAIGN_TITLE })).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Mã giảm giá của chương trình' }).getByText(CAMPAIGN_CODE)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sao chép mã' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Sản phẩm trong chương trình' }).locator('[data-ds="product-tile"]')).toHaveCount(3);
