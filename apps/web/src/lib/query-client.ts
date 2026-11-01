@@ -17,6 +17,15 @@ function defaultStaleTime(query: { queryKey: readonly unknown[] }): number {
   return typeof head === 'string' && head.startsWith('admin-') && !LIVE_ADMIN_KEY.test(head) ? ADMIN_STALE_MS : 0;
 }
 
+declare module '@tanstack/react-query' {
+  interface Register {
+    mutationMeta: {
+      /** Thao tác không ghi gì (xem trước, tra cứu, xuất file...): xong thì không làm cũ các khoá admin. */
+      skipAdminInvalidate?: boolean;
+    };
+  }
+}
+
 const isAdminKey = (query: { queryKey: readonly unknown[] }) => typeof query.queryKey[0] === 'string' && query.queryKey[0].startsWith('admin-');
 
 /**
@@ -29,7 +38,10 @@ export function createQueryClient(): QueryClient {
   // Mutation nào xong (thành công hay lỗi) cũng làm cũ mọi khoá admin: nhiều mutation chỉ làm mới khoá của mình, mà màn khác
   // (Người dùng, hộp việc, số trên chip...) đọc cùng dữ liệu. staleTime 30 giây chỉ để đổi tab không gọi lại mạng.
   const mutationCache = new MutationCache({
-    onSettled: () => void client.invalidateQueries({ predicate: isAdminKey }),
+    onSettled: (_data, _error, _variables, _context, mutation) => {
+      if (mutation.meta?.skipAdminInvalidate) return;
+      void client.invalidateQueries({ predicate: isAdminKey });
+    },
   });
   const client: QueryClient = new QueryClient({
     mutationCache,

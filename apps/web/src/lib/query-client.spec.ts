@@ -60,3 +60,27 @@ describe('mutation thành công làm cũ mọi khoá admin (R-149)', () => {
     expect(client.getQueryState(['admin-ops-inbox'])?.isInvalidated).toBe(true);
   });
 });
+
+describe('mutation đánh dấu không ghi gì thì không làm cũ khoá admin (R-188)', () => {
+  const run = (client: ReturnType<typeof createQueryClient>, mutationFn: () => Promise<unknown>, meta?: { skipAdminInvalidate?: boolean }) =>
+    client.getMutationCache().build(client, { mutationFn, meta }).execute(undefined);
+
+  it('có cờ skipAdminInvalidate: thành công hay lỗi đều không invalidate', async () => {
+    const client = createQueryClient();
+    client.setQueryData(['admin-users', 1], { name: 'cũ' });
+    await run(client, async () => 'ok', { skipAdminInvalidate: true });
+    expect(client.getQueryState(['admin-users', 1])?.isInvalidated).toBe(false);
+    await run(client, async () => { throw new Error('x'); }, { skipAdminInvalidate: true }).catch(() => undefined);
+    expect(client.getQueryState(['admin-users', 1])?.isInvalidated).toBe(false);
+  });
+
+  it('không cờ (hoặc cờ false): vẫn invalidate cả khi thành công lẫn khi lỗi', async () => {
+    const client = createQueryClient();
+    client.setQueryData(['admin-users', 1], { name: 'cũ' });
+    await run(client, async () => 'ok');
+    expect(client.getQueryState(['admin-users', 1])?.isInvalidated).toBe(true);
+    client.setQueryData(['admin-users', 1], { name: 'mới' });
+    await run(client, async () => { throw new Error('x'); }, { skipAdminInvalidate: false }).catch(() => undefined);
+    expect(client.getQueryState(['admin-users', 1])?.isInvalidated).toBe(true);
+  });
+});

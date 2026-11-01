@@ -98,7 +98,7 @@ export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: view === 'queue',
   });
-  const lookup = useMutation({ mutationFn: (c: string) => lookupWasteRequests(c) });
+  const lookup = useMutation({ mutationFn: (c: string) => lookupWasteRequests(c), meta: { skipAdminInvalidate: true } });
 
   const queueRows = (queue.data?.pages ?? []).flatMap((p) => p.rows);
   const lookupRows = lookup.data ?? [];
@@ -697,6 +697,7 @@ function MatchPanel({ busy, onSubmit }: { busy: boolean; onSubmit: (requestId: s
   const [note, setNote] = useState('');
   const lookup = useMutation({
     mutationFn: (c: string) => lookupWasteRequests(c),
+    meta: { skipAdminInvalidate: true },
     onMutate: () => setPicked(null),
   });
   const found = lookup.data ?? [];

@@ -4,10 +4,11 @@ import { FeatureFlagsCard } from './feature-flags-card';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
 import type { ConfigRow } from '@/lib/admin-client';
 import { FEATURE_FLAGS } from '@/lib/admin-feature-flags';
+import { createQueryClient } from '@/lib/query-client';
 
 let mounted: Rendered[] = [];
-const mount = (ui: Parameters<typeof render>[0]) => {
-  const r = render(ui);
+const mount = (ui: Parameters<typeof render>[0], client?: Parameters<typeof render>[1]) => {
+  const r = render(ui, client);
   mounted.push(r);
   return r;
 };
@@ -65,6 +66,25 @@ describe('FeatureFlagsCard', () => {
     answerConfirm(false);
     await flush();
     expect(puts).toEqual([]);
+  });
+
+  it('huỷ ở hộp xác nhận: không có mutation nào chạy nên khoá admin khác không bị làm cũ; xác nhận thì có (R-188)', async () => {
+    const client = createQueryClient();
+    client.setQueryData(['admin-users', 1], { name: 'cũ' });
+    const api = mockFetch({ '/admin/config': () => ({ body: { ok: true } }) });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<FeatureFlagsCard rows={rows({ 'waste.enabled': true })} />, client);
+    click(sw(container, 'Đổi rác lấy quà'));
+    await flush();
+    answerConfirm(false);
+    await flush();
+    expect(client.getMutationCache().getAll()).toHaveLength(0);
+    expect(client.getQueryState(['admin-users', 1])?.isInvalidated).toBe(false);
+    click(sw(container, 'Đổi rác lấy quà'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(client.getQueryState(['admin-users', 1])?.isInvalidated).toBe(true);
   });
 
   it('API từ chối: hiện lỗi của API ngay dưới cờ đó', async () => {

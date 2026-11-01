@@ -70,19 +70,7 @@ export function PartnerRulesCard({ rows }: { rows: ConfigRow[] | undefined }) {
   }, [snapshot, loaded]);
 
   const save = useMutation({
-    mutationFn: async () => {
-      const built = buildPartnerRuleWrites(form, readPartnerRuleForm(rows));
-      if (!built.writes) throw new Error(built.error);
-      const current = (key: string) => configValue<unknown>(rows, key, PARTNER_RULE_FIELDS.find((f) => f.key === key)?.fallback);
-      const changed = built.writes.filter((w) => current(w.key) !== w.value);
-      if (changed.length === 0) return 0;
-      const ok = await confirm({
-        title: 'Lưu thay đổi hoa hồng và thời hạn?',
-        message: partnerRuleConfirmMessage(changed, current),
-        confirmLabel: 'Lưu thay đổi',
-        tone: changed.some((w) => isLoweredSla(w, current)) ? 'danger' : 'default',
-      });
-      if (!ok) return null;
+    mutationFn: async (changed: PartnerRuleWrite[]) => {
       const saved: string[] = [];
       for (const w of changed) {
         try {
@@ -103,8 +91,7 @@ export function PartnerRulesCard({ rows }: { rows: ConfigRow[] | undefined }) {
       return changed.length;
     },
     onSuccess: (n) => {
-      if (n === null) return;
-      setMsg({ ok: true, text: n === 0 ? 'Không có thay đổi.' : `Đã lưu ${n} mục.` });
+      setMsg({ ok: true, text: `Đã lưu ${n} mục.` });
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
     onError: (e) => {
@@ -112,6 +99,21 @@ export function PartnerRulesCard({ rows }: { rows: ConfigRow[] | undefined }) {
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
   });
+  const askSave = async () => {
+    const built = buildPartnerRuleWrites(form, readPartnerRuleForm(rows));
+    if (!built.writes) return setMsg({ ok: false, text: built.error ?? 'Không lưu được.' });
+    const current = (key: string) => configValue<unknown>(rows, key, PARTNER_RULE_FIELDS.find((f) => f.key === key)?.fallback);
+    const changed = built.writes.filter((w) => current(w.key) !== w.value);
+    if (changed.length === 0) return setMsg({ ok: true, text: 'Không có thay đổi.' });
+    const ok = await confirm({
+      title: 'Lưu thay đổi hoa hồng và thời hạn?',
+      message: partnerRuleConfirmMessage(changed, current),
+      confirmLabel: 'Lưu thay đổi',
+      tone: changed.some((w) => isLoweredSla(w, current)) ? 'danger' : 'default',
+    });
+    // Hỏi trước khi gọi mutate: bấm Huỷ thì không có mutation nào chạy, nên không làm cũ các khoá admin.
+    if (ok) save.mutate(changed);
+  };
 
   return (
     <section data-partner-rules aria-label="Hoa hồng cộng tác viên và hạn xử lý đối tác" className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
@@ -125,7 +127,7 @@ export function PartnerRulesCard({ rows }: { rows: ConfigRow[] | undefined }) {
         onSubmit={(e) => {
           e.preventDefault();
           setMsg(null);
-          save.mutate();
+          void askSave();
         }}
       >
         {PARTNER_RULE_FIELDS.map((f) => (

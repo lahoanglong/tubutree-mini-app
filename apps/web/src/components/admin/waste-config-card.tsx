@@ -102,23 +102,22 @@ export function WasteConfigCard({ rows, loyaltyRows }: { rows: ConfigRow[] | und
   const saved = (f: WasteConfigField): unknown => configValue<unknown>(rows, f.key, f.fallback);
 
   const write = useMutation({
-    mutationFn: async ({ f, next }: { f: WasteConfigField; next: unknown }) => {
-      const ok = await confirm({
-        title: 'Xác nhận đổi cấu hình đổi rác',
-        message: `${f.key}\n${JSON.stringify(saved(f))} → ${JSON.stringify(next)}\n\nÁp dụng ngay cho khách và nhân viên.`,
-        confirmLabel: 'Lưu thay đổi',
-      });
-      if (!ok) return false;
-      await setConfig(f.key, next);
-      return true;
-    },
-    onSuccess: (done, { f }) => {
-      if (!done) return;
+    mutationFn: ({ f, next }: { f: WasteConfigField; next: unknown }) => setConfig(f.key, next),
+    onSuccess: (_, { f }) => {
       setMsg({ ok: true, text: `Đã lưu ${f.key}.` });
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được.' }),
   });
+  // Hỏi trước khi gọi mutate: bấm Huỷ thì không có mutation nào chạy, nên không làm cũ các khoá admin.
+  const askWrite = async (f: WasteConfigField, next: unknown) => {
+    const ok = await confirm({
+      title: 'Xác nhận đổi cấu hình đổi rác',
+      message: `${f.key}\n${JSON.stringify(saved(f))} → ${JSON.stringify(next)}\n\nÁp dụng ngay cho khách và nhân viên.`,
+      confirmLabel: 'Lưu thay đổi',
+    });
+    if (ok) write.mutate({ f, next });
+  };
 
   const field = (key: string) => WASTE_CONFIG_FIELDS.find((f) => f.key === key)!;
   const effectiveInt = (key: string): number => {
@@ -176,7 +175,7 @@ export function WasteConfigCard({ rows, loyaltyRows }: { rows: ConfigRow[] | und
                     disabled={write.isPending || !rows}
                     onChange={() => {
                       setMsg(null);
-                      write.mutate({ f, next: saved(f) !== true });
+                      void askWrite(f, saved(f) !== true);
                     }}
                   />
                   <span>{saved(f) === true ? 'Đang bật' : 'Đang tắt'}</span>
@@ -216,7 +215,7 @@ export function WasteConfigCard({ rows, loyaltyRows }: { rows: ConfigRow[] | und
                     disabled={write.isPending || !rows || !!checked.error || !changed}
                     onClick={() => {
                       setMsg(null);
-                      write.mutate({ f, next: checked.value });
+                      void askWrite(f, checked.value);
                     }}
                   >
                     Lưu

@@ -17,18 +17,10 @@ export function FeatureFlagsCard({ rows, onOpenSupportChat }: { rows: ConfigRow[
 
   const toggle = useMutation({
     mutationFn: async ({ flag, next }: { flag: FeatureFlag; next: boolean }) => {
-      const ok = await confirm({
-        title: next ? `Bật "${flag.label}"?` : `Tắt "${flag.label}"?`,
-        message: `${flag.description}\n\n${next ? flag.onWarning ?? 'Có hiệu lực ngay.' : flag.offWarning ?? DEFAULT_OFF_WARNING}`,
-        confirmLabel: next ? 'Bật' : 'Tắt',
-        tone: next ? 'default' : 'danger',
-      });
-      if (!ok) return null;
       await setConfig(flag.key, next);
       return flag.key;
     },
     onSuccess: (key) => {
-      if (key === null) return;
       setFailure(null);
       setSavedKey(key);
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
@@ -38,6 +30,16 @@ export function FeatureFlagsCard({ rows, onOpenSupportChat }: { rows: ConfigRow[
       setFailure({ key: flag.key, text: e instanceof Error ? e.message : 'Không lưu được, thử lại sau.' });
     },
   });
+  // Hỏi trước khi gọi mutate: bấm Huỷ thì không có mutation nào chạy, nên không làm cũ các khoá admin.
+  const askToggle = async (flag: FeatureFlag, next: boolean) => {
+    const ok = await confirm({
+      title: next ? `Bật "${flag.label}"?` : `Tắt "${flag.label}"?`,
+      message: `${flag.description}\n\n${next ? flag.onWarning ?? 'Có hiệu lực ngay.' : flag.offWarning ?? DEFAULT_OFF_WARNING}`,
+      confirmLabel: next ? 'Bật' : 'Tắt',
+      tone: next ? 'default' : 'danger',
+    });
+    if (ok) toggle.mutate({ flag, next });
+  };
 
   return (
     <section aria-labelledby="feature-flags-title" data-feature-flags className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
@@ -58,7 +60,7 @@ export function FeatureFlagsCard({ rows, onOpenSupportChat }: { rows: ConfigRow[
                 aria-checked={on}
                 aria-label={flag.label}
                 disabled={!rows || toggle.isPending}
-                onClick={() => toggle.mutate({ flag, next: !on })}
+                onClick={() => void askToggle(flag, !on)}
                 className="mt-0.5 inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center sm:min-h-[36px] sm:min-w-[36px]"
               >
                 <span className={`relative inline-block h-6 w-11 rounded-full transition-colors ${on ? 'bg-forest-600' : 'bg-stone-400'} ${busy ? 'opacity-60' : ''}`}>

@@ -76,43 +76,32 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
 
   const saveToggle = useMutation({
     mutationFn: async (on: boolean) => {
-      // Chỉ bật mới cộng điểm cho khách; tắt là hướng an toàn nên lưu ngay.
-      if (on) {
-        const ok = await confirm({
-          title: 'Xác nhận đổi cấu hình tiền/điểm',
-          message: `${LOYALTY_KEYS.posEnabled}\nfalse → true\n\nThu ngân bắt đầu cộng điểm Xanh cho thành viên ngay.`,
-          confirmLabel: 'Lưu thay đổi',
-        });
-        if (!ok) return null;
-      }
       await setConfig(LOYALTY_KEYS.posEnabled, on);
       return on;
     },
-    onSuccess: (done, on) => {
-      if (done === null) return;
+    onSuccess: (_, on) => {
       setMsg({ ok: true, text: on ? 'Đã BẬT tích điểm tại quầy.' : 'Đã TẮT tích điểm tại quầy.' });
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được.' }),
   });
-
-  const saveNumbers = useMutation({
-    mutationFn: async () => {
-      const built = buildLoyaltyWrites(form);
-      if (!built.writes) throw new Error(built.error);
-      const before = readForm(rows);
-      const beforeWrites = buildLoyaltyWrites(before).writes ?? [];
-      const changed = built.writes.filter(
-        (w, i) => JSON.stringify(w.value) !== JSON.stringify(beforeWrites[i]?.value) || configValue(rows, w.key, undefined) === undefined,
-      );
-      if (changed.length === 0) return 0;
-      const oldByKey = new Map(beforeWrites.map((w) => [w.key, configValue<unknown>(rows, w.key, w.value)]));
+  // Hỏi trước khi gọi mutate: bấm Huỷ thì không có mutation nào chạy, nên không làm cũ các khoá admin.
+  const askToggle = async (on: boolean) => {
+    // Chỉ bật mới cộng điểm cho khách; tắt là hướng an toàn nên lưu ngay.
+    if (on) {
       const ok = await confirm({
         title: 'Xác nhận đổi cấu hình tiền/điểm',
-        message: `${changed.map((w) => `${w.key}\n${JSON.stringify(oldByKey.get(w.key))} → ${JSON.stringify(w.value)}`).join('\n\n')}\n\nÁp dụng ngay cho mọi lượt điểm danh và tích điểm của khách.`,
+        message: `${LOYALTY_KEYS.posEnabled}\nfalse → true\n\nThu ngân bắt đầu cộng điểm Xanh cho thành viên ngay.`,
         confirmLabel: 'Lưu thay đổi',
       });
-      if (!ok) return null;
+      if (!ok) return;
+    }
+    saveToggle.mutate(on);
+  };
+
+  type LoyaltyWrite = { key: string; value: unknown };
+  const saveNumbers = useMutation({
+    mutationFn: async (changed: LoyaltyWrite[]) => {
       // Tuần tự: lỗi ở khoá nào thì dừng và báo đúng khoá đó (các khoá trước đã lưu).
       for (const w of changed) {
         try {
@@ -124,8 +113,7 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       return changed.length;
     },
     onSuccess: (n) => {
-      if (n === null) return;
-      setMsg({ ok: true, text: n === 0 ? 'Không có thay đổi.' : `Đã lưu ${n} tham số tích điểm.` });
+      setMsg({ ok: true, text: `Đã lưu ${n} tham số tích điểm.` });
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
     onError: (e) => {
@@ -133,6 +121,23 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
   });
+  const askSaveNumbers = async () => {
+    const built = buildLoyaltyWrites(form);
+    if (!built.writes) return setMsg({ ok: false, text: built.error ?? 'Không lưu được.' });
+    const before = readForm(rows);
+    const beforeWrites = buildLoyaltyWrites(before).writes ?? [];
+    const changed = built.writes.filter(
+      (w, i) => JSON.stringify(w.value) !== JSON.stringify(beforeWrites[i]?.value) || configValue(rows, w.key, undefined) === undefined,
+    );
+    if (changed.length === 0) return setMsg({ ok: true, text: 'Không có thay đổi.' });
+    const oldByKey = new Map(beforeWrites.map((w) => [w.key, configValue<unknown>(rows, w.key, w.value)]));
+    const ok = await confirm({
+      title: 'Xác nhận đổi cấu hình tiền/điểm',
+      message: `${changed.map((w) => `${w.key}\n${JSON.stringify(oldByKey.get(w.key))} → ${JSON.stringify(w.value)}`).join('\n\n')}\n\nÁp dụng ngay cho mọi lượt điểm danh và tích điểm của khách.`,
+      confirmLabel: 'Lưu thay đổi',
+    });
+    if (ok) saveNumbers.mutate(changed);
+  };
 
   const weekTotal = form.checkin.reduce((s, v) => s + (Number.isFinite(Number(v)) ? Number(v) : 0), 0);
 
@@ -154,7 +159,7 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
             disabled={saveToggle.isPending || !rows}
             onChange={(e) => {
               setMsg(null);
-              saveToggle.mutate(e.target.checked);
+              void askToggle(e.target.checked);
             }}
           />
           <span className="font-medium">Bật tích điểm tại quầy (POS)</span>
@@ -174,7 +179,7 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
         onSubmit={(e) => {
           e.preventDefault();
           setMsg(null);
-          saveNumbers.mutate();
+          void askSaveNumbers();
         }}
       >
         <div>
