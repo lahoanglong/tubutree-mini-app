@@ -337,7 +337,7 @@ export function ProductReviews({ slug }: { slug: string }) {
               );
             })}
           </ul>
-          {items.length === 0 && <p className="py-6 text-center text-sm text-stone-600">Không có đánh giá khớp bộ lọc.</p>}
+          {items.length === 0 && <EmptyState variant="inline" art="search" heading="Không có đánh giá khớp bộ lọc." />}
           {items.length > visible && (
             <button type="button" className={`${ui.btnSecondary} ${mini.ghost} w-full`} onClick={() => setVisible((v) => v + PAGE_SIZE)}>
               Xem thêm ({items.length - visible})

@@ -161,7 +161,13 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(c.querySelectorAll('li.border-t')).toHaveLength(1);
     click(button(c, '4 sao'));
     expect(c.querySelectorAll('li.border-t')).toHaveLength(0);
+    // Như Mini App: trạng thái rỗng dùng EmptyState inline (hình kính lúp), không phải một dòng chữ nhỏ.
+    for (let n = 0; n < 40 && !c.textContent!.includes('Không có đánh giá khớp bộ lọc.'); n++) await flush();
     expect(c.textContent).toContain('Không có đánh giá khớp bộ lọc.');
+    const empty = c.querySelector<HTMLElement>('.tubu-rise')!;
+    expect(empty.querySelector('svg')).not.toBeNull();
+    expect(empty.textContent).toBe('Không có đánh giá khớp bộ lọc.');
+    expect(c.querySelector('p.text-center')).toBeNull();
   });
 
   it('chip "Có video" chỉ có khi sản phẩm có video; đổi bộ lọc đưa danh sách về 5 dòng đầu', async () => {
