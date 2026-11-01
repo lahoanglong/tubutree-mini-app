@@ -30,7 +30,7 @@ const SHORTHAND = /margin:\s*(['"])([^'"]*)\1/g;
 /** Giá trị lề ngang của shorthand `margin`: 1 giá trị cho cả bốn phía; 2 và 3 giá trị thì ngang là giá trị thứ hai; 4 giá trị thì phải (2) và trái (4). */
 function negativeHorizontalShorthand(text: string): boolean {
   return [...text.matchAll(SHORTHAND)].some((m) => {
-    const v = m[2].trim().split(/\s+/);
+    const v = (m[2] ?? '').trim().split(/\s+/);
     const horizontal = v.length === 1 ? [v[0]] : v.length === 4 ? [v[1], v[3]] : [v[1]];
     return horizontal.some((x) => /^-(?!0(?:px|rem|em|%)?$)/.test(x ?? ''));
   });
