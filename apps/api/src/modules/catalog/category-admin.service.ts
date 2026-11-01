@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { CATEGORY_PARENT_HAS_PRODUCTS } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CatalogService } from './catalog.service';
 import {
@@ -94,7 +95,7 @@ export class CategoryAdminService {
     };
   }
 
-  async create(adminId: string, dto: { name: string; parentId?: string | null }): Promise<AdminCategoryRow> {
+  async create(adminId: string, dto: { name: string; parentId?: string | null; confirmDirectProducts?: boolean }): Promise<AdminCategoryRow> {
     const name = this.cleanName(dto.name);
     const created = await this.write(async (tx, rows) => {
       const parentOf = effectiveParents(rows);
@@ -107,6 +108,7 @@ export class CategoryAdminService {
       const siblings = rows.filter((r) => parentOf.get(r.id) === parentId);
       this.assertRoom(rows, parentId, siblings.length);
       this.assertNameFree(name, siblings);
+      if (parentId && siblings.length === 0) await this.assertDirectProductsConfirmed(tx, rows.find((r) => r.id === parentId)!, dto.confirmDirectProducts);
       const slug = uniqueCategorySlug(categorySlugBase(name), new Set(rows.map((r) => r.slug)));
       const sortOrder = siblings.length ? Math.max(...siblings.map((s) => s.sortOrder)) + 1 : 0;
       return tx.category.create({ data: { name, slug, parentId, sortOrder }, select: TREE_SELECT });
@@ -115,7 +117,7 @@ export class CategoryAdminService {
     return this.rowOf(created.id);
   }
 
-  async update(adminId: string, id: string, patch: { name?: string; parentId?: string | null }): Promise<AdminCategoryRow> {
+  async update(adminId: string, id: string, patch: { name?: string; parentId?: string | null; confirmDirectProducts?: boolean }): Promise<AdminCategoryRow> {
     const name = patch.name === undefined ? undefined : this.cleanName(patch.name);
     await this.write(async (tx, rows) => {
       const row = rows.find((r) => r.id === id);
@@ -136,7 +138,9 @@ export class CategoryAdminService {
             if (parentOf.get(target.id) !== null) throw new BadRequestException(CATEGORY_MSG.parentNotRoot());
             if (rows.some((r) => parentOf.get(r.id) === id)) throw new BadRequestException(CATEGORY_MSG.hasChildrenCannotNest(row.name));
           }
-          this.assertRoom(rows, wanted, rows.filter((r) => parentOf.get(r.id) === wanted).length);
+          const group = rows.filter((r) => parentOf.get(r.id) === wanted);
+          this.assertRoom(rows, wanted, group.length);
+          if (wanted && group.length === 0) await this.assertDirectProductsConfirmed(tx, rows.find((r) => r.id === wanted)!, patch.confirmDirectProducts);
           targetParent = wanted;
           movedGroup = true;
         }
@@ -215,6 +219,18 @@ export class CategoryAdminService {
     if (!name) throw new BadRequestException('Tên danh mục không được để trống.');
     if (name.length > CATEGORY_NAME_MAX) throw new BadRequestException(`Tên danh mục tối đa ${CATEGORY_NAME_MAX} ký tự.`);
     return name;
+  }
+
+  /**
+   * Gốc đang là lá mà còn sản phẩm gắn thẳng thì khi có con, các sản phẩm đó ở lại cha và không thuộc con nào. Không chặn cứng: con chưa
+   * tồn tại thì không có chỗ chuyển sản phẩm xuống, nên lối duy nhất sẽ là gỡ rồi gán lại từng sản phẩm. Sản phẩm vẫn hiện ở trang của cha
+   * (`categoryScope` gồm id cha), nên chỉ cần admin biết và đồng ý. Đếm trong transaction đang giữ khoá cây: gán ADD xen giữa không lọt.
+   */
+  private async assertDirectProductsConfirmed(tx: Prisma.TransactionClient, parent: TreeRow, confirmed: boolean | undefined): Promise<void> {
+    if (confirmed) return;
+    const n = await tx.product.count({ where: { categoryIds: { has: parent.id } } });
+    if (n === 0) return;
+    throw new BadRequestException({ statusCode: 400, error: 'Bad Request', code: CATEGORY_PARENT_HAS_PRODUCTS, message: CATEGORY_MSG.parentHasProducts(parent.name, n) });
   }
 
   /** `count` = số mục đang ở nhóm đích (gốc khi parentId null). */

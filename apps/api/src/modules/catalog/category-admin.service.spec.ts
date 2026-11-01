@@ -3,6 +3,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import type { CatalogService } from './catalog.service';
 import type { HomeService } from './home.service';
 import { CategoryAdminService } from './category-admin.service';
+import { CATEGORY_PARENT_HAS_PRODUCTS } from '@tubutree/shared-types';
 import { CATEGORY_MSG } from './category-tree';
 
 interface Row {
@@ -105,6 +106,55 @@ describe('CategoryAdminService.create', () => {
     await svc.create('x', { name: 'Mới' }).catch(() => undefined);
     expect(catalog.invalidateCategoryCache).not.toHaveBeenCalled();
     expect(home.invalidateStatic).not.toHaveBeenCalled();
+  });
+});
+
+/** Lỗi 400 mang mã nghiệp vụ để giao diện hỏi xác nhận thay vì hiện lỗi. */
+const codeOf = (e: unknown) => (e instanceof BadRequestException ? (e.getResponse() as { code?: string }).code : undefined);
+
+describe('CategoryAdminService: gốc đang có sản phẩm gắn thẳng thành mục cha', () => {
+  const owned = [{ categoryIds: ['a'] }, { categoryIds: ['a', 'x'] }, { categoryIds: ['b'] }];
+
+  it('tạo mục con đầu tiên dưới gốc có 2 sản phẩm gắn thẳng: 400 mã riêng nêu số sản phẩm, không ghi, không làm mới cache', async () => {
+    const { svc, prisma, catalog, home } = make([root('a'), root('b', 1)], owned);
+    const err = await svc.create('x', { name: 'Con', parentId: 'a' }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(codeOf(err)).toBe(CATEGORY_PARENT_HAS_PRODUCTS);
+    expect((err as Error).message).toBe(CATEGORY_MSG.parentHasProducts('A', 2));
+    expect((err as Error).message).toContain('2 sản phẩm');
+    expect(prisma.category.create).not.toHaveBeenCalled();
+    expect(catalog.invalidateCategoryCache).not.toHaveBeenCalled();
+    expect(home.invalidateStatic).not.toHaveBeenCalled();
+  });
+
+  it('có confirmDirectProducts thì tạo được; sản phẩm vẫn giữ nguyên danh mục cha', async () => {
+    const { svc, rows } = make([root('a')], owned);
+    await expect(svc.create('x', { name: 'Con', parentId: 'a', confirmDirectProducts: true })).resolves.toMatchObject({ parentId: 'a' });
+    expect(rows.filter((r) => r.parentId === 'a')).toHaveLength(1);
+    expect(owned[0]!.categoryIds).toContain('a');
+  });
+
+  it('gốc không có sản phẩm gắn thẳng thì tạo con không cần xác nhận', async () => {
+    const { svc } = make([root('a'), root('c', 2)], owned);
+    await expect(svc.create('x', { name: 'Con', parentId: 'c' })).resolves.toMatchObject({ parentId: 'c' });
+  });
+
+  it('gốc đã có con từ trước (kể cả còn sản phẩm gắn thẳng từ dữ liệu cũ): thêm con tiếp không hỏi lại', async () => {
+    const { svc } = make([root('a'), child('a1', 'a')], owned);
+    await expect(svc.create('x', { name: 'Con hai', parentId: 'a' })).resolves.toMatchObject({ parentId: 'a' });
+  });
+
+  it('chuyển gốc lá vào gốc đang có sản phẩm gắn thẳng: chặn không cờ, có cờ thì được', async () => {
+    const { svc, rows } = make([root('a'), root('c', 2)], owned);
+    const err = await svc.update('x', 'c', { parentId: 'a' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe(CATEGORY_PARENT_HAS_PRODUCTS);
+    expect(rows.find((r) => r.id === 'c')!.parentId).toBeNull();
+    await expect(svc.update('x', 'c', { parentId: 'a', confirmDirectProducts: true })).resolves.toMatchObject({ id: 'c', parentId: 'a' });
+  });
+
+  it('chuyển vào gốc không có sản phẩm gắn thẳng thì không hỏi, dù chính mục được chuyển còn sản phẩm', async () => {
+    const { svc } = make([root('a'), root('b', 1), root('c', 2)], owned);
+    await expect(svc.update('x', 'b', { parentId: 'c' })).resolves.toMatchObject({ id: 'b', parentId: 'c' });
   });
 });
 
