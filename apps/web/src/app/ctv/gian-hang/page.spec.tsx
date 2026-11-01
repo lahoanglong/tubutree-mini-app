@@ -2263,4 +2263,18 @@ describe('từ lg: máy tính (G6 #35)', () => {
     const preview = document.querySelector('[data-testid="shop-section-preview"]')!;
     expect(preview.closest('section')?.className).toContain('lg:col-start-2');
   });
+
+  it('từ lg: vào chi tiết khối rồi quay lại danh sách, hai nút vẫn ở hàng tiêu đề (ô hàng tiêu đề dựng lại khi đổi trang)', async () => {
+    wide(true);
+    mount();
+    await flush();
+    await openFirstSection();
+    expect(document.querySelector('[data-testid="builder-head-actions"]')!.textContent).toBe('');
+    act(() => nav.api.back());
+    await flush();
+    const slot = document.querySelector('[data-testid="builder-head-actions"]')!;
+    expect(slot.isConnected).toBe(true);
+    expect(Array.from(slot.querySelectorAll('button, a')).map((e) => e.textContent?.trim())).toHaveLength(2);
+    expect(document.querySelector('[data-testid="builder-bar"]')).toBeNull();
+  });
 });

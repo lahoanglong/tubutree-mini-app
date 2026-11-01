@@ -134,9 +134,11 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   // Một bộ nút ở hai chỗ theo khổ (thanh dính đáy ở điện thoại, hàng tiêu đề từ lg) mang trạng thái nên chỉ vẽ một chỗ, không nhân đôi bằng lớp `lg:hidden`.
   const wide = useMediaQuery(LG_UP);
   const [headSlot, setHeadSlot] = useState<HTMLElement | null>(null);
+  // Chạy sau mỗi lần vẽ: trang dựng lại hàng tiêu đề khi vào/ra chi tiết khối (ô mới là nút DOM khác), nên không giữ nút DOM cũ theo `wide`.
   useEffect(() => {
-    setHeadSlot(wide ? document.getElementById(BUILDER_HEAD_SLOT) : null);
-  }, [wide]);
+    const el = wide ? document.getElementById(BUILDER_HEAD_SLOT) : null;
+    setHeadSlot((cur) => (cur === el ? cur : el));
+  });
   const [configOpen, setConfigOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
