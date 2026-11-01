@@ -9,8 +9,8 @@ describe('maskDobInput', () => {
     expect(maskDobInput('0503')).toBe('05/03');
     expect(maskDobInput('05031990')).toBe('05/03/1990');
   });
-  it('bỏ ký tự lạ và giới hạn 8 số', () => {
-    expect(maskDobInput('05a/03-1990999')).toBe('05/03/1990');
+  it('bỏ ký tự lạ, không cắt bớt chữ số (thừa số thì lời lỗi chỉ cách sửa)', () => {
+    expect(maskDobInput('05a/03-1990999')).toBe('05/03/1990999');
   });
   it('gõ ngày/tháng một số rồi / thì tự thêm số 0', () => {
     expect(maskDobInput('5/3/1990')).toBe('05/03/1990');
@@ -73,6 +73,14 @@ describe('maskDobInput sửa giữa ô và dấu ngăn khác', () => {
   });
   it('xoá dấu / của ngày đã đủ thì để nguyên, không hiện lại ngay', () => {
     expect(maskDobInput('0503/1990', prev)).toBe('0503/1990');
+  });
+  it('dán (inputType) vài số vào giữa ô không cắt chữ số, không ra ngày sai mà hợp lệ', () => {
+    expect(maskDobInput('05/03/201990', prev, 'insertFromPaste')).toBe('05/03/201990');
+    expect(maskDobInput('05/03/121990', prev, 'insertFromPaste')).toBe('05/03/121990');
+  });
+  it('dán (inputType) năm vào sau "05/03" thiếu dấu ngăn thì dựng lại đủ 8 số', () => {
+    expect(maskDobInput('05/031990', '05/03', 'insertFromPaste')).toBe('05/03/1990');
+    expect(maskDobInput('05031990', '', 'insertFromPaste')).toBe('05/03/1990');
   });
   it('dán (inputType) đè chuỗi trùng đầu hoặc đuôi vẫn chuẩn hoá', () => {
     expect(maskDobInput('1/3/1990', '11/03/1990', 'insertFromPaste')).toBe('01/03/1990');

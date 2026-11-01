@@ -32,17 +32,17 @@ function splitOverflow(parts: string[]): string[] {
   return out;
 }
 
-/** Thay cả ô (ô đang trống, dán, trình duyệt tự điền): chuẩn hoá toàn bộ về dd/mm/yyyy, tối đa 8 số. */
+/** Thay cả ô (ô đang trống, dán, trình duyệt tự điền): chuẩn hoá về dd/mm/yyyy, không cắt bớt chữ số nào. */
 function normalizeAll(t: string): string {
   const s = t.replace(/\/+/g, '/').replace(/^\//, '');
-  if (!s.includes('/')) return splitOverflow([s.slice(0, 8)]).join('/');
+  if (!s.includes('/')) return splitOverflow([s]).join('/');
   const iso = /^(\d{4})\/(\d{1,2})\/(\d{1,2})\/?$/.exec(s);
   if (iso) return `${pad2(iso[3]!)}/${pad2(iso[2]!)}/${iso[1]}`;
   const parts = s.split('/');
   const trailing = parts[parts.length - 1] === '';
   if (trailing) parts.pop();
   if (parts.length > 3) return parts.join('/');
-  return parts.map((x, i) => (i === 2 ? x.slice(0, 4) : i < parts.length - 1 || trailing ? pad2(x) : x)).join('/');
+  return parts.map((x, i) => (i < 2 && (i < parts.length - 1 || trailing) ? pad2(x) : x)).join('/');
 }
 
 /** Gõ thêm đúng một ký tự ở cuối ô. Dấu ngăn vừa gõ không hiện, chỉ đệm số 0 cho ngày/tháng 1 số; "/" hiện khi gõ số kế tiếp. */
@@ -69,7 +69,8 @@ const REPLACE_INPUT_TYPES = new Set(['insertFromPaste', 'insertFromDrop', 'inser
 /**
  * Ô ngày sinh gõ tay. ".", "-", ",", khoảng trắng là dấu ngăn như "/"; bỏ ký tự lạ. `prev` là giá trị ô trước khi sửa,
  * `inputType` lấy từ `e.nativeEvent.inputType` (không có thì đoán theo chuỗi).
- * - Ô đang trống, dán hoặc tự điền: chuẩn hoá cả ô, "5.3.1990" thành "05/03/1990".
+ * - Ô đang trống, dán hoặc tự điền: chuẩn hoá cả ô, "5.3.1990" thành "05/03/1990"; không cắt bớt chữ số, dán vài số vào
+ *   giữa ô thì chữ số thừa để nguyên cho lời lỗi chỉ cách sửa, không thành một ngày hợp lệ nhưng sai.
  * - Gõ thêm một ký tự ở cuối: tự thêm "/" và số 0.
  * - Sửa giữa ô (xoá, chèn, bôi đen thay): giữ nguyên như khách gõ, kể cả dấu ngăn, để con trỏ không nhảy và chữ số không
  *   bị dồn hay cắt. Riêng khi vừa gõ thêm số cho đủ 8 chữ số mà còn thiếu dấu ngăn (bàn phím số iPhone không có "/"),
@@ -78,15 +79,22 @@ const REPLACE_INPUT_TYPES = new Set(['insertFromPaste', 'insertFromDrop', 'inser
 export function maskDobInput(raw: string, prev?: string, inputType?: string): string {
   const typed = raw.replace(/[^\d./\-\s,]/g, '');
   const t = typed.replace(/[.\-\s,]/g, '/');
-  if (prev === undefined || prev === '' || (inputType !== undefined && REPLACE_INPUT_TYPES.has(inputType))) {
-    return normalizeAll(t);
-  }
-  const { start, inserted } = diffFrom(raw, prev);
-  if (inserted >= 2 && (start === 0 || inserted >= 6)) return normalizeAll(t);
-  if (raw.length === prev.length + 1 && raw.startsWith(prev)) return appendOne(t, prev);
   const digits = typed.replace(/\D/g, '');
-  const seps = typed.length - digits.length;
-  if (digits.length === 8 && prev.replace(/\D/g, '').length < 8 && seps < 2) return splitOverflow([digits]).join('/');
+  const rebuild8 = digits.length === 8 && typed.length - digits.length < 2;
+  const replaced =
+    prev === undefined ||
+    prev === '' ||
+    (inputType !== undefined && REPLACE_INPUT_TYPES.has(inputType)) ||
+    (() => {
+      const { start, inserted } = diffFrom(raw, prev);
+      return inserted >= 2 && (start === 0 || inserted >= 6);
+    })();
+  if (replaced) {
+    const out = normalizeAll(t);
+    return rebuild8 && !/^\d{2}\/\d{2}\/\d{4}$/.test(out) ? splitOverflow([digits]).join('/') : out;
+  }
+  if (raw.length === prev.length + 1 && raw.startsWith(prev)) return appendOne(t, prev);
+  if (rebuild8 && prev.replace(/\D/g, '').length < 8) return splitOverflow([digits]).join('/');
   return typed;
 }
 
