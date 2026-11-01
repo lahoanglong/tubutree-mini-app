@@ -16,7 +16,7 @@ export interface VoucherView {
   /** "Đơn từ 199k"; rỗng khi không có đơn tối thiểu. */
   condition: string;
   expiry: string;
-  /** Tên admin đặt cho mã (đã trim); null khi chưa đặt: thẻ dùng nhãn theo loại giảm. */
+  /** Tên admin đặt cho mã (đã trim, bỏ phần đầu chép lại nhãn: "Giảm 20k cho 3 đơn" thành "cho 3 đơn"); null khi chưa đặt hoặc chỉ chép lại nhãn. */
   name: string | null;
   /** "Còn 3 lượt": chỉ mã chưa nhận còn 1 đến 10 lượt, để khách thấy gấp mà không lộ số lớn. */
   quota: string | null;
@@ -131,6 +131,31 @@ function unifyFigures(name: string, c: CouponTerms): string {
   });
 }
 
+// Từ đồng nghĩa với nhãn mà admin hay mở đầu tên bằng ("Tặng 20k", "Freeship"): cùng loại với từ của nhãn khi cắt phần đầu chép lại.
+const LEAD_SYNONYMS = ['tang', 'freeship', 'ship'];
+
+/**
+ * Dòng tên trên phiếu rất hẹp (~100px ở 375px, cạnh điều kiện) và đứng ngay dưới nhãn, nên phần đầu chép lại nhãn ("Giảm 20k" của "Giảm 20k cho 3 đơn")
+ * chiếm đúng chỗ của phần mới ("cho 3 đơn") và đẩy phần mới ra khỏi tầm nhìn bằng "…". Chỉ cắt khi phần đầu có ít nhất một số của chính mã và mọi từ
+ * đứng trước số đó là từ của nhãn: "Giảm giá khách VIP" (từ "giá" không thuộc nhãn) giữ nguyên, vì cắt "Giảm" ra "giá khách VIP" mất nghĩa.
+ */
+function trimRepeatedLead(name: string, c: CouponTerms, title: string): string {
+  const known = knownFigures(c);
+  const lead = new Set([...LEAD_SYNONYMS, ...wordsOf(title)]);
+  let cut = -1;
+  for (const m of name.matchAll(/\S+/g)) {
+    if (!wordsOf(m[0]).every((w) => lead.has(w))) break;
+    const figures = figuresIn(m[0]);
+    if (figures.length > 0) {
+      if (!figures.every((n) => known.has(n))) break;
+      cut = m.index! + m[0].length;
+    } else if (/\d/.test(m[0])) break;
+  }
+  if (cut < 0) return name;
+  const tail = name.slice(cut).replace(/^[\s,;:.\-–—·]+/, '');
+  return tail === '' ? name : tail;
+}
+
 /** Số ngày lịch (giờ Việt Nam) kể từ epoch: hiệu hai số này là số ngày lịch còn lại, không phải cửa sổ 24 giờ. */
 function vnDay(ms: number): number {
   return Math.floor((ms + VN_OFFSET_MS) / DAY_MS);
@@ -180,7 +205,7 @@ export function voucherView(c: CouponDTO & VoucherFlags, now: number): VoucherVi
     kind: c.type === 'FREESHIP' ? 'freeship' : c.shop ? 'shop' : 'discount',
     condition,
     expiry: expiryText(endMs, now),
-    name: named && !restatesCoupon(named, c, [title, condition]) ? unifyFigures(named, c) : null,
+    name: named && !restatesCoupon(named, c, [title, condition]) ? trimRepeatedLead(unifyFigures(named, c), c, title) : null,
     quota:
       state === 'collectable' && typeof c.remaining === 'number' && c.remaining >= 1 && c.remaining <= QUOTA_SHOWN_MAX
         ? fillCopy('coupon.usesLeft', { n: c.remaining })

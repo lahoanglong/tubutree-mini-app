@@ -18,6 +18,7 @@ const WALLET = [
   { code: 'BEPXANH15', title: 'Chương trình tri ân khách hàng thân thiết mùa thu', type: 'PERCENT', value: 15, minOrder: 250_000, maxDiscount: 45_000, endAt: inDays(30) },
   { code: 'QUAKHACHMOI', title: 'Quà khách mới', type: 'AMOUNT', value: 30_000, minOrder: 0, maxDiscount: null, endAt: inDays(20) },
   { code: 'TUBU99', title: null, type: 'PERCENT', value: 99, minOrder: 999_000, maxDiscount: 999_000, endAt: inDays(40) },
+  { code: 'GIAM20', title: 'Giảm 20k cho 3 đơn', type: 'AMOUNT', value: 20_000, minOrder: 100_000, maxDiscount: null, endAt: inDays(14) },
 ];
 
 // Hàng đáy (hạn dùng · số lượt · mã) là một hàng `flex-wrap`: mã dài thì gãy xuống dòng riêng và phiếu cao thêm đúng một dòng caption (20px).
@@ -58,7 +59,17 @@ const COLLECT = [
   { code: 'NHANLOCXANH2026', title: 'Quà tri ân khách hàng thân thiết', type: 'AMOUNT', value: 50_000, minOrder: 300_000, maxDiscount: null, startAt: inDays(-1), endAt: inDays(5), newCustomerOnly: false, claimedCount: 7, usageLimit: 10 },
   { code: 'NHAN10', title: null, type: 'PERCENT', value: 10, minOrder: 200_000, maxDiscount: 40_000, startAt: inDays(-1), endAt: inDays(20), newCustomerOnly: false, claimedCount: 0, usageLimit: null },
   { code: 'FS99', title: 'Miễn phí giao hàng đơn từ 99.000đ', type: 'FREESHIP', value: 0, minOrder: 99_000, maxDiscount: null, startAt: inDays(-1), endAt: inDays(2), newCustomerOnly: false, claimedCount: 0, usageLimit: null },
+  { code: 'GIAM20', title: 'Giảm 20k cho 3 đơn', type: 'AMOUNT', value: 20_000, minOrder: 100_000, maxDiscount: null, startAt: inDays(-1), endAt: inDays(14), newCustomerOnly: false, claimedCount: 0, usageLimit: null },
 ];
+
+// "3 đơn" là thông tin mà phiếu không có chỗ nào khác để nói: dòng tên ~100px (cạnh điều kiện, cạnh nút "Lưu mã"/"Dùng ngay") phải hiện trọn phần mới, không "…".
+async function expectNameVisibleWhole(groups: Locator) {
+  const name = groups.getByTestId('voucher-name').filter({ hasText: 'cho 3 đơn' });
+  await expect(name).toBeVisible({ timeout: 15_000 });
+  await expect(name).toHaveText('cho 3 đơn');
+  const whole = await name.evaluate((el) => el.scrollWidth <= el.clientWidth);
+  expect(whole, 'tên "cho 3 đơn" bị cắt bằng "…"').toBe(true);
+}
 
 test.describe('Phiếu mã giảm giá ở 375px', () => {
   test.use({ viewport: { width: 375, height: 812 } });
@@ -74,11 +85,13 @@ test.describe('Phiếu mã giảm giá ở 375px', () => {
   test('Mã của tôi: phiếu 88 đến 96px (hàng đáy gãy thì 104px), nhãn một dòng, không trộn cách ghi số', async ({ page }) => {
     await page.goto('/vouchers?tab=mine');
     await expectCompactTickets(page.getByRole('tabpanel', { name: 'Mã của tôi' }).getByRole('group'), WALLET.length);
+    await expectNameVisibleWhole(page.getByRole('tabpanel', { name: 'Mã của tôi' }));
   });
 
   test('Nhận mã: phiếu có tên, mã dài và "Còn 3 lượt" vẫn trong khung 104px, cạnh phiếu trơn chênh không quá 16px', async ({ page }) => {
     await page.goto('/vouchers');
     await expectCompactTickets(page.getByRole('tabpanel', { name: 'Nhận mã' }).getByRole('group'), COLLECT.length);
+    await expectNameVisibleWhole(page.getByRole('tabpanel', { name: 'Nhận mã' }));
   });
 });
 
