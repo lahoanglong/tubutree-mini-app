@@ -56,10 +56,27 @@ describe('generateMetadata', () => {
     expect(m.robots).toBeUndefined();
   });
 
-  it('có category hoặc page từ 2 là noindex (cùng sản phẩm, chỉ khác lối vào); tham số theo dõi thì không', async () => {
-    expect((await generateMetadata({ searchParams: sp({ category: 'c-goi' }) })).robots).toEqual({ index: false, follow: true });
-    expect((await generateMetadata({ searchParams: sp({ page: '2' }) })).robots).toEqual({ index: false, follow: true });
-    expect((await generateMetadata({ searchParams: sp({ utm_source: 'zalo' }) })).robots).toBeUndefined();
+  it('?category= là noindex,follow và KHÔNG có canonical (không bao giờ noindex kèm canonical sang URL khác)', async () => {
+    for (const q of [{ category: 'c-goi' }, { category: 'c-goi', page: '3' }]) {
+      const m = await generateMetadata({ searchParams: sp(q) });
+      expect(m.robots).toEqual({ index: false, follow: true });
+      expect(m.alternates).toBeUndefined();
+    }
+  });
+
+  it('?page=N (N>=2) được lập chỉ mục, canonical tự trỏ về chính nó, tiêu đề có số trang', async () => {
+    const m = await generateMetadata({ searchParams: sp({ page: '2' }) });
+    expect(m.robots).toBeUndefined();
+    expect(m.alternates?.canonical).toBe('/ban-chay?page=2');
+    expect(m.title).toBe('Bán chạy nhất — Trang 2 | Tubu Tree');
+  });
+
+  it('?page=1, số lạ và tham số theo dõi chuẩn hoá về /ban-chay, được lập chỉ mục', async () => {
+    for (const q of [{ page: '1' }, { page: 'abc' }, { utm_source: 'zalo' }]) {
+      const m = await generateMetadata({ searchParams: sp(q) });
+      expect(m.robots).toBeUndefined();
+      expect(m.alternates?.canonical).toBe('/ban-chay');
+    }
   });
 });
 
@@ -79,8 +96,26 @@ describe('BestSellersPage (server)', () => {
     mocks.get.mockClear();
     mocks.view.mockClear();
     await render({ category: 'da-xoa' });
-    expect(productCalls().at(-1)).toEqual({ sort: 'best_seller_30d', limit: 20, page: 1 });
+    expect(productCalls()).toEqual([
+      { sort: 'best_seller_30d', limit: 20, page: 1, category: 'da-xoa' },
+      { sort: 'best_seller_30d', limit: 20, page: 1 },
+    ]);
     expect(viewProps().initial).toMatchObject({ category: undefined });
+    expect(viewProps().initial?.page.data).toHaveLength(1); // vẫn ra danh sách "Tất cả", không rỗng
+  });
+
+  it('gọi cây danh mục và danh sách song song; category hợp lệ thì chỉ một lần gọi danh sách', async () => {
+    let productsStarted!: () => void;
+    const started = new Promise<void>((r) => (productsStarted = r));
+    const baseCatalog = catalog;
+    catalog = (q) => {
+      productsStarted();
+      return baseCatalog(q);
+    };
+    // Cây chỉ trả về sau khi danh sách đã được gọi: gọi nối tiếp thì treo.
+    categories = () => started.then(() => CATEGORIES);
+    await render({ category: 'c-goi' });
+    expect(productCalls()).toEqual([{ sort: 'best_seller_30d', limit: 20, page: 1, category: 'c-goi' }]);
   });
 
   it('?page=2: trang 2; hạng sẽ tiếp nối ở view (startPage=2)', async () => {

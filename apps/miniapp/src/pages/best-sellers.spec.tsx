@@ -79,6 +79,17 @@ describe('BestSellersPage (Mini)', () => {
     expect(tabs().getByRole('tab', { name: 'Cho bé' })).toHaveAttribute('aria-selected', 'false');
   });
 
+  it('chạm tab khác: vùng cuộn .zaui-page về đầu trang trước khi đổi danh sách; chạm lại tab đang chọn thì không động vào', async () => {
+    renderAt();
+    await screen.findByText('Sản phẩm 1');
+    const scroller = document.querySelector<HTMLElement>('.zaui-page')!;
+    scroller.scrollTop = 800;
+    fireEvent.click(tabs().getByRole('tab', { name: 'Tất cả' }));
+    expect(scroller.scrollTop).toBe(800);
+    fireEvent.click(await tabs().findByRole('tab', { name: 'Cho bé' }));
+    expect(scroller.scrollTop).toBe(0);
+  });
+
   it('chạm tab danh mục: URL ?category= (replace), tab được chọn, tải lại theo danh mục và đánh hạng lại từ #1', async () => {
     renderAt();
     await screen.findByText('Sản phẩm 1');
