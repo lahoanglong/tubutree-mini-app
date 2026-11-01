@@ -318,9 +318,9 @@ Bảng dưới thay trạng thái của các mục cùng số trong bảng "Mụ
 | R-83 | để mở | PR #98 chỉ đo | Thẻ `<a>` 11,5–18 ms; `router.push` 73–88 ms (máy tải nặng có lượt 165 ms). Đo lại khi máy rảnh, thêm ca kệ Mua lại. |
 | R-82 | một phần | PR #98 chỉ đo | `GET /cart` giỏ 12 món: 7 câu SQL, có mã 8, không ghi. Đích độ trễ p97,5 ≤ 15 ms chưa kiểm được vì máy đo tải nặng. |
 | R-97 | xong | PR #104 (1028f-diem, `7682da5f0`) | Bấm dòng "Nhận ~X Điểm Xanh" mở popup "Cách tính Điểm Xanh". Không đổi luật điểm. |
-| R-16 | xong ở web; Mini chờ #106 | PR #107 (1028f-donhang) | `GET /orders/home-todo` thay ba lời `/orders` của dải Việc cần làm. Khách cũ: web 13 → 12, Mini 13/14 → 12/13 (mở lạnh/mở lại). Mini mở lại còn 13 vì lời `/products` trang 1 lưới Gợi ý hôm nay; phiên e1 bỏ lời này ở PR #106. Số đo `perf/1028f-donhang/`. |
+| R-16 | xong | PR #107 (1028f-donhang, `cefec4276`) và PR #106 | `GET /orders/home-todo` thay ba lời `/orders` của dải Việc cần làm. Khách cũ: web 13 → 12, Mini 13/14 → 12/13 (mở lạnh/mở lại). Lời `/products` trang 1 lưới Gợi ý hôm nay ở Mini do phiên e1 bỏ ở PR #106 (`d3f7599e3`), nên Mini mở lại dự kiến còn 12; chưa đo lại sau khi gộp hai PR. Số đo `perf/1028f-donhang/`. |
 
-Cả #97, #98, #100, #104 đã merge vào main nhưng chưa deploy (PROD `01ede3876` lúc 01/11 13:30).
+Cả #97, #98, #100, #104, #107 đã merge vào main nhưng chưa deploy (PROD `01ede3876` lúc 01/11 14:00).
 
 ### Mục mới
 
