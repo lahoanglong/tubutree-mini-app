@@ -68,8 +68,8 @@ const errorMessage = loadErrorText;
  * Trang Danh mục / Tìm kiếm của web, cùng hành vi với pages/browse.tsx của Mini App, hai chế độ theo URL. Gốc `/san-pham` chưa tìm,
  * chưa lọc, chưa `all=1` và đang ở trang 1 là HUB (ô danh mục, Đã xem, Bán chạy nhất, thương hiệu; KHÔNG tải danh sách). Có từ khoá,
  * danh mục, bộ lọc, sắp xếp, `all=1` hoặc `?page` từ 2 là DANH SÁCH: SortBar dính, một tiêu đề + số kết quả, chip danh mục con, lưới
- * 20 món mỗi trang. Toàn bộ trạng thái nằm trong URL (`useBrowseState`): từ hub chạm ô là PUSH (Back về hub), trong danh sách là
- * replace. Gõ chỉ hiện GỢI Ý; Enter hoặc chạm gợi ý mới ghi `q`.
+ * 20 món mỗi trang. Toàn bộ trạng thái nằm trong URL (`useBrowseState`): từ hub chạm ô hoặc gửi từ khoá là PUSH (Back về hub), trong
+ * danh sách là replace. Gõ chỉ hiện GỢI Ý; Enter hoặc chạm gợi ý mới ghi `q`.
  */
 export default function BrowseView({ initial = null, brands: initialBrands, categories: initialCategories, bestSellers }: BrowseViewProps) {
   const router = useRouter();
@@ -176,18 +176,24 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
     stopEditing();
     setDraft(state.q);
   };
+  /** Mở MỚI từ hub: PUSH, để Back về hub (trong danh sách mọi thay đổi là replace). */
+  const openFromHub = (patch: Partial<SearchState>) => {
+    stopEditing();
+    router.push(browseHref({ ...EMPTY_SEARCH_STATE, ...patch }));
+  };
   const commit = (term: string) => {
     const t = term.trim();
     stopEditing();
     setDraft(t);
     if (t.length >= 2) setRecent(pushRecentSearch(t));
+    // Từ hub gửi từ khoá là mở MỚI như chạm ô danh mục: PUSH (Back về hub) và router.push đưa danh sách về đầu trang; replace với
+    // scroll:false giữ vị trí cuộn sâu của hub nên danh sách mới hiện từ giữa trang. Gửi trống ở hub không có gì để mở.
+    if (hubState) {
+      if (t !== '') openFromHub({ q: t });
+      return;
+    }
     scrollToListTop();
     update({ q: t });
-  };
-  /** Mở MỚI từ hub: PUSH, để Back về hub (trong danh sách mọi thay đổi là replace). */
-  const openFromHub = (patch: Partial<SearchState>) => {
-    stopEditing();
-    router.push(browseHref({ ...EMPTY_SEARCH_STATE, ...patch }));
   };
   const pickHubCategory = (e: CategoryEntry) => openFromHub(e.kind === 'category' ? { category: e.key } : { segment: e.key });
   // Từ hub (kể cả khi đang gõ gợi ý) là mở MỚI như chạm ô danh mục: PUSH, Back về hub. Trong danh sách thì đổi phạm vi bằng replace.

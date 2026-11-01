@@ -501,7 +501,9 @@ describe('BrowseView — gõ tìm kiếm', () => {
     act(() => {
       container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
-    expect(nav.replaces.at(-1)).toBe('/san-pham?q=n%C6%B0%E1%BB%9Bc');
+    // Ở hub gửi từ khoá là mở MỚI: PUSH (Back về hub), không replace.
+    expect(nav.pushes.at(-1)).toBe('/san-pham?q=n%C6%B0%E1%BB%9Bc');
+    expect(nav.replaces).toEqual([]);
     expect(JSON.parse(localStorage.getItem('tubu_recent_searches')!)).toEqual(['nước']);
     expect(container.querySelector('section[aria-label="Gợi ý tìm kiếm"]')).toBeNull();
   });
@@ -529,6 +531,43 @@ describe('BrowseView — gõ tìm kiếm', () => {
     click(buttonByName(container, 'Xoá lịch sử tìm'));
     expect(localStorage.getItem('tubu_recent_searches')).toBeNull();
     expect(container.querySelector('section[aria-label="Gợi ý tìm kiếm"]')).toBeNull();
+  });
+
+  it('hub: chạm từ khoá gần đây ở bảng gợi ý là PUSH như chạm ô danh mục (Back về hub)', async () => {
+    localStorage.setItem('tubu_recent_searches', JSON.stringify(['xà phòng']));
+    const { container } = mount();
+    await flush();
+    act(() => container.querySelector<HTMLInputElement>('input[type="search"]')!.focus());
+    click(buttonByName(container, /xà phòng/));
+    expect(nav.pushes).toEqual(['/san-pham?q=x%C3%A0+ph%C3%B2ng']);
+    expect(nav.replaces).toEqual([]);
+  });
+
+  it('hub: gửi từ khoá trống hoặc toàn khoảng trắng không PUSH và không replace (không chồng mục lịch sử)', async () => {
+    const { container } = mount();
+    await flush();
+    const input = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+    act(() => input.focus());
+    typeInto(input, '   ');
+    act(() => {
+      container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(nav.pushes).toEqual([]);
+    expect(nav.replaces).toEqual([]);
+  });
+
+  it('danh sách: gửi từ khoá vẫn là replace (không push)', async () => {
+    nav.search = LIST;
+    const { container } = mount();
+    await flush();
+    const input = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+    act(() => input.focus());
+    typeInto(input, 'nước');
+    act(() => {
+      container.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(nav.replaces.at(-1)).toContain('q=');
+    expect(nav.pushes).toEqual([]);
   });
 
   it('nút Xoá từ khoá bỏ q khỏi URL; "Huỷ" trả ô về q đang lọc', async () => {
