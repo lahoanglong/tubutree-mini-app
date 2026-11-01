@@ -23,6 +23,9 @@ const miniShop = inAny(MINI_SHOP);
 const webShop = inAny(WEB_SHOP);
 const everywhere = () => true;
 
+// `<s` phải theo sau bởi khoảng trắng, `>` hoặc `/`: `\b` thôi chưa đủ vì bắt nhầm `<s.icon />` (biến tên s) và chữ "<số ngày>" trong chuỗi.
+const STRIKE_TAG = /<(?:del|s)(?=[\s>/])/;
+
 const MINI_PRIMITIVE = /var\(--(?:forest|sage|stone|clay|honey|terracotta|orange|red|amber|blue|navy|tubu-orange)(?:-\d+)?\)/;
 const WEB_PRIMITIVE =
   /\b(?:bg|text|border|ring|from|to|via|fill|stroke|divide|outline|decoration|placeholder)-(?:stone|forest|sage|clay|honey|terracotta|orange)-\d+\b|var\(--(?:forest|sage|stone|clay|honey|terracotta|orange|tubu-orange)(?:-\d+)?\)/;
@@ -39,7 +42,7 @@ export const GUARD_RULES = [
     id: 'strike-element',
     platform: 'miniapp',
     scope: (rel) => rel !== 'components/ui/price-tag.tsx',
-    pattern: /<del\b|<s>/,
+    pattern: STRIKE_TAG,
     why: 'giá gạch chỉ do PriceTag vẽ (đã có chữ đọc "giá gốc" cho trình đọc màn hình)',
   },
   {
@@ -74,7 +77,7 @@ export const GUARD_RULES = [
     id: 'strike-element',
     platform: 'web',
     scope: (rel) => rel !== 'components/mini/price-tag.tsx',
-    pattern: /<del\b|<s>/,
+    pattern: STRIKE_TAG,
     why: 'giá gạch chỉ do PriceTag vẽ (đã có chữ đọc "giá gốc" cho trình đọc màn hình)',
   },
   {

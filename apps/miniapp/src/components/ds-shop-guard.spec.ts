@@ -150,6 +150,7 @@ describe('ds-shop-guard mở rộng (Mini App): luật có baseline chỉ giảm
   it.each([
     ['tile-custom', 'pages/new-rail.tsx', 'export const A = () => <ProductImage src="a" />;'],
     ['strike-element', 'components/home/x.tsx', 'export const A = () => <del>10.000đ</del>;'],
+    ['strike-element', 'components/home/s.tsx', 'export const A = () => <s className="text-xs">10.000đ</s>;'],
     ['primitive-color', 'components/flash/x.tsx', "export const A = { background: 'var(--stone-100)' };"],
     ['zmp-text', 'pages/offers.tsx', "import { Text } from 'zmp-ui';"],
     ['open-snackbar', 'components/checkout/x.tsx', 'const { openSnackbar } = useSnackbar();'],

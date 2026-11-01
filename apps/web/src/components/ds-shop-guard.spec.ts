@@ -140,6 +140,7 @@ describe('ds-shop-guard mở rộng (web): luật có baseline chỉ giảm', ()
   it.each([
     ['tile-custom', 'components/home/new-rail.tsx', 'export const A = () => <ProductThumb src="a" />;'],
     ['strike-element', 'app/ban-chay/x.tsx', 'export const A = () => <s>10.000đ</s>;'],
+    ['strike-element', 'components/home/s.tsx', 'export const A = () => <s className="text-xs">10.000đ</s>;'],
     ['primitive-color', 'app/uu-dai/x.tsx', 'export const A = () => <div className="bg-stone-100 max-md:text-forest-700" />;'],
     ['shadow-var-color', 'components/mini/z.tsx', 'export const A = () => <div className="max-md:shadow-[var(--elevation-1)]" />;'],
     ['zmp-ui-import', 'components/y.tsx', "import { Button } from 'zmp-ui';"],

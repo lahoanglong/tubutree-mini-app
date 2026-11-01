@@ -110,7 +110,9 @@
     "lib/phone-ui.ts": 1
    },
    "strike-element": {
-    "app/merchant/product-form.tsx": 1
+    "app/merchant/product-form.tsx": 1,
+    "components/orders/subscriptions-panel.tsx": 1,
+    "components/recycle/waste-point-picker.tsx": 1
    },
    "tile-custom": {
     "app/cong-dong/[id]/page.tsx": 1,

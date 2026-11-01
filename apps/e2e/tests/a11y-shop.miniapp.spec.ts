@@ -24,6 +24,9 @@ const mockFlash = (api: MockApi): void => {
   });
 };
 
+/** Nút "Lưu mã" chỉ có khi khối Nhận mã đã thay khung chờ (đợi phiên khách ngã ngũ rồi mới dựng thẻ); đợi tiêu đề khối Giờ vàng thì axe quét lúc mã còn là khung chờ. */
+const VOUCHER_READY = 'button:has-text("Lưu mã")';
+
 interface Screen {
   name: string;
   path: string;
@@ -33,11 +36,11 @@ interface Screen {
 
 const SCREENS: Screen[] = [
   { name: 'Trang chủ', path: '/', ready: '[data-ds="product-tile"]', setup: (api) => { mockDiscovery(api, { returning: true }); mockFlash(api); } },
-  { name: 'Danh mục', path: '/browse', ready: 'h1, [role="heading"]', setup: (api) => mockDiscovery(api, { tree: true }) },
+  { name: 'Danh mục', path: '/browse', ready: '[data-ds="product-tile"]', setup: (api) => mockDiscovery(api, { tree: true }) },
   { name: 'Chi tiết sản phẩm', path: `/product/${CATALOG[0]!.slug}`, ready: 'h1', setup: (api) => mockDiscovery(api) },
   { name: 'Gian hàng CTV', path: `/s/${SHOP_SLUG}`, ready: 'h1', setup: mockShopPage },
   { name: 'Thương hiệu', path: `/brand/${BRAND_SLUG}`, ready: 'h1', setup: mockBrandPage },
-  { name: 'Ưu đãi', path: '/offers', ready: '[data-testid="section-header"]', setup: (api) => { mockNoSession(api); mockFlash(api); mockCollectable(api); } },
+  { name: 'Ưu đãi', path: '/offers', ready: VOUCHER_READY, setup: (api) => { mockNoSession(api); mockFlash(api); mockCollectable(api); } },
   { name: 'Giờ vàng', path: '/flash-sale', ready: '[data-ds="product-tile"][data-ds-variant="line"]', setup: (api) => { mockNoSession(api); mockFlashSlots(api); } },
 ];
 
