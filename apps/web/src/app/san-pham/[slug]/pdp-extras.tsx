@@ -383,7 +383,7 @@ export function PdpGroupBuyRow({ productId, slug }: { productId: string; slug: s
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold text-forest-700">
-            {create.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm khi đủ người'}
+            {create.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm giá khi đủ người'}
           </span>
           <span className="block text-xs text-stone-600">{groupBuyPitch(cfg.groupBuy)}</span>
         </span>

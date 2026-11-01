@@ -109,7 +109,8 @@ describe('PdpRails', () => {
     const { container } = mount(<PdpRails productId="cur" slug="dau-goi" brand="Xanh Việt" initialRelated={[card(1)]} initialBoughtTogether={many(2, 3)} />);
     await flush();
     const titles = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
-    expect(titles).toEqual(['Khách thường mua cùng', 'Cùng nhà Xanh Việt']);
+    expect(titles).toEqual(['Khách thường mua cùng', 'Cùng thương hiệu']);
+    expect(container.querySelector('[aria-label="Cùng thương hiệu Xanh Việt"]')).not.toBeNull();
     expect(Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(['/san-pham/sp-2', '/san-pham/sp-3', '/san-pham/sp-4', '/san-pham/sp-1']);
     // Hai dải không được hỏi lại khi server đã đưa danh sách; chỉ dải "Có thể bạn cũng thích" tải ở trình duyệt.
     expect(mocks.http.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/config/public' && p !== '/me/wishlist/ids')).toEqual(['/products/for-you']);
@@ -127,7 +128,7 @@ describe('PdpRails', () => {
     await flush();
     expect(mocks.http.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/config/public' && p !== '/me/wishlist/ids').sort()).toEqual(['/products/dau-goi/bought-together', '/products/dau-goi/related', '/products/for-you']);
     expect(container.querySelectorAll('h2')).toHaveLength(1);
-    expect(container.querySelector('h2')!.textContent).toBe('Cùng nhà Xanh');
+    expect(container.querySelector('h2')!.textContent).toBe('Cùng thương hiệu');
   });
   it('lỗi hoặc rỗng thì ẩn dải, không vỡ trang', async () => {
     mocks.http.get.mockRejectedValue(new Error('500'));
@@ -142,7 +143,7 @@ describe('PdpRails', () => {
     const { container } = mount(<PdpRails productId="p99" slug="dau-goi" brand="Xanh" initialRelated={brand} initialBoughtTogether={together} />);
     await flush();
     const titles = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
-    expect(titles).toEqual(['Khách thường mua cùng', 'Cùng nhà Xanh', 'Có thể bạn cũng thích']);
+    expect(titles).toEqual(['Khách thường mua cùng', 'Cùng thương hiệu', 'Có thể bạn cũng thích']);
     const feed = container.querySelector('section[aria-labelledby="pdp-feed-title"]')!;
     const hrefs = Array.from(feed.querySelectorAll('a')).map((a) => a.getAttribute('href'));
     expect(hrefs).toEqual(['/san-pham/sp-30', '/san-pham/sp-31', '/san-pham/sp-32', '/san-pham/sp-33', '/san-pham/sp-34']);

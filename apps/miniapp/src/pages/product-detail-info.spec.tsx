@@ -131,13 +131,15 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     expect(scroll).toHaveBeenCalled();
   });
 
-  it('"Khách thường mua cùng" (≥3 món), "Cùng nhà" và "Có thể bạn cũng thích" không trùng nhau và không có món đang xem', async () => {
+  it('"Khách thường mua cùng" (≥3 món), "Cùng thương hiệu" và "Có thể bạn cũng thích" không trùng nhau và không có món đang xem', async () => {
     mocks.fetchBoughtTogether.mockResolvedValue(cards('b', 3));
     mocks.fetchRelated.mockResolvedValue([...cards('n', 2), card('b0'), card('p1')]);
     mocks.fetchForYou.mockResolvedValue([card('p1'), card('b1'), card('n0'), ...cards('f', 5)]);
     renderPdp();
     expect(await screen.findByRole('heading', { level: 2, name: 'Khách thường mua cùng' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'Cùng nhà Cô Lan' })).toBeInTheDocument();
+    // Tiêu đề không kèm tên (tên dài xuống dòng, ux-copy UC-01); tên thương hiệu nằm ở nhãn đọc của dải.
+    expect(screen.getByRole('heading', { level: 2, name: 'Cùng thương hiệu' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Cùng thương hiệu Cô Lan')).toBeInTheDocument();
     const alsoLike = await screen.findByRole('heading', { level: 2, name: 'Có thể bạn cũng thích' });
     const feed = alsoLike.closest('section')!;
     expect(within(feed).getAllByRole('button', { name: /Sản phẩm f\d/ })).toHaveLength(5);
@@ -206,6 +208,6 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     renderPdp();
     await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
     expect(screen.queryByRole('heading', { name: 'Có thể bạn cũng thích' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Cùng nhà Cô Lan' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Cùng thương hiệu' })).toBeNull();
   });
 });

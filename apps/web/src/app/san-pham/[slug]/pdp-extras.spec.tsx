@@ -290,6 +290,8 @@ describe('PdpGroupBuyRow', () => {
     const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);
     expect(container.firstElementChild!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
     expect(byText(container, 'button', /Mở nhóm mua chung/)!.className).toContain('max-md:border-0');
+    // D2: luôn "mã giảm giá", không "mã giảm" thiếu chữ "giá".
+    expect(byText(container, 'button', /Mở nhóm mua chung/)!.textContent).toContain('nhận mã giảm giá khi đủ người');
   });
   it('đăng nhập: POST /group-buy {productId} rồi sang /mua-chung/<id>', async () => {
     mocks.http.post.mockResolvedValue({ id: 'g1' });

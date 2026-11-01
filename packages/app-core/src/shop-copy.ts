@@ -209,6 +209,9 @@ export const SHOP_COPY: Record<string, string> = {
   'pdp.reviews': 'Đánh giá',
   'pdp.reviewsAll': 'Xem tất cả ({n})',
   'pdp.alsoLike': 'Có thể bạn cũng thích',
+  // Tiêu đề dải không kèm tên (tên dài thì xuống dòng); tên thương hiệu nằm ở nhãn đọc của dải.
+  'pdp.brandShelf': 'Cùng thương hiệu',
+  'pdp.brandShelfLabel': 'Cùng thương hiệu {brand}',
   'pdp.offerCount': '{n} mã giảm giá',
   'cart.saving': 'Tiết kiệm {x}',
 

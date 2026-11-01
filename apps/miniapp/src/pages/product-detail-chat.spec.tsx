@@ -189,7 +189,7 @@ describe('ProductDetailPage — tên SP và tiêu đề mục cùng một kiểu
     expect(h1.style.fontFamily).toBe('var(--font-ui)');
   });
 
-  it.each(['Cam kết Tubu', 'Mô tả sản phẩm', 'Khách thường mua cùng', 'Cùng nhà Cô Lan'])(
+  it.each(['Cam kết Tubu', 'Mô tả sản phẩm', 'Khách thường mua cùng', 'Cùng thương hiệu'])(
     'tiêu đề khối "%s" là h2 Inter 16/700, -0.01em (Q1: khối trong luồng mua)',
     async (title) => {
       renderPdp();

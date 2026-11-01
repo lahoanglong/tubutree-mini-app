@@ -217,6 +217,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'pdp.reviews': 12,
   'pdp.reviewsAll': 18,
   'pdp.alsoLike': 24,
+  'pdp.brandShelf': 20,
+  'pdp.brandShelfLabel': null,
   'pdp.offerCount': 20,
   'cart.saving': 20,
 

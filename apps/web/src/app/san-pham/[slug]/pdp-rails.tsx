@@ -16,13 +16,14 @@ import { pdpSectionTitle } from './pdp-sections';
 const FIVE_MIN = 5 * 60_000;
 const POPULAR_LIMIT = 24;
 
-function Rail({ title, icon, products, loading }: { title: string; icon?: boolean; products: CoreProductCard[] | undefined; loading: boolean }) {
+/** `label` là tên đọc của dải khi khác tiêu đề nhìn thấy (dải thương hiệu: tiêu đề bỏ tên, nhãn đọc giữ tên). */
+function Rail({ title, label = title, icon, products, loading }: { title: string; label?: string; icon?: boolean; products: CoreProductCard[] | undefined; loading: boolean }) {
   if (loading) {
     return (
       <section aria-busy="true" className="mt-8 max-md:mt-4">
         <Skeleton width={160} height={20} />
         <div className="mt-3">
-          <ProductRail items={[]} variant="rail-md" label={title} loading skeletonCount={4} />
+          <ProductRail items={[]} variant="rail-md" label={label} loading skeletonCount={4} />
         </div>
       </section>
     );
@@ -36,14 +37,14 @@ function Rail({ title, icon, products, loading }: { title: string; icon?: boolea
         {title}
       </h2>
       <div className="mt-3">
-        <ProductRail items={products} variant="rail-md" label={title} />
+        <ProductRail items={products} variant="rail-md" label={label} />
       </div>
     </section>
   );
 }
 
 /**
- * "Khách thường mua cùng", "Cùng nhà {nhãn}" và "Có thể bạn cũng thích" (lưới cuối trang), không trùng nhau và không có món đang xem
+ * "Khách thường mua cùng", "Cùng thương hiệu" và "Có thể bạn cũng thích" (lưới cuối trang), không trùng nhau và không có món đang xem
  * (`pdpShelves`: trần và sàn lấy từ SHELVES). Danh sách đầu do server dựng sẵn (liên kết nội bộ cho công cụ tìm kiếm); thiếu thì tải ở
  * trình duyệt; lưới cuối chỉ tải ở trình duyệt. Giá Giờ vàng trên thẻ khớp giá thật qua `ProductCard`.
  */
@@ -78,7 +79,7 @@ export function PdpRails({
   return (
     <>
       <Rail title={fillCopy('pdp.boughtTogether')} icon products={shelves.boughtTogether} loading={together.isPending} />
-      <Rail title={`Cùng nhà ${brand}`} products={shelves.brand} loading={related.isPending} />
+      <Rail title={fillCopy('pdp.brandShelf')} label={fillCopy('pdp.brandShelfLabel', { brand })} products={shelves.brand} loading={related.isPending} />
       <PdpFeed items={shelves.feed} />
     </>
   );

@@ -816,7 +816,7 @@ export default function ProductDetailPage() {
           </Box>
           <Box style={{ flex: 1 }}>
             <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
-              {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm khi đủ người'}
+              {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm giá khi đủ người'}
             </Text>
             <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
               {groupBuyPitch(config.groupBuy)}
@@ -1000,9 +1000,9 @@ export default function ProductDetailPage() {
       {shelves.brand.length > 0 && (
         <>
           <Box pt={4} pb={2} px={4}>
-            <SectionTitle block>Cùng nhà {p.brand}</SectionTitle>
+            <SectionTitle block>{fillCopy('pdp.brandShelf')}</SectionTitle>
           </Box>
-          <ProductRail label={`Cùng nhà ${p.brand}`} variant="rail-md" items={shelves.brand} />
+          <ProductRail label={fillCopy('pdp.brandShelfLabel', { brand: p.brand })} variant="rail-md" items={shelves.brand} />
         </>
       )}
 

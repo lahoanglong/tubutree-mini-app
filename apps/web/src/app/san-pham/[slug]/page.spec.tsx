@@ -483,13 +483,15 @@ describe('/san-pham/[slug] — đủ chức năng như Mini App', () => {
     expect(Array.from(c2.querySelectorAll('h2')).map((h) => h.textContent)).not.toContain('Thành phần');
   });
 
-  it('dải Khách thường mua cùng và Cùng nhà thương hiệu lấy từ server (ISR), trỏ tới trang sản phẩm', async () => {
+  it('dải Khách thường mua cùng và Cùng thương hiệu lấy từ server (ISR), trỏ tới trang sản phẩm', async () => {
     api.related = [card(1)];
     api.together = [card(2), card(3), card(4)];
     const c = await mount();
     await flush();
     const h2 = Array.from(c.querySelectorAll('h2')).map((h) => h.textContent);
-    expect(h2).toEqual(expect.arrayContaining(['Khách thường mua cùng', 'Cùng nhà Xanh Việt']));
+    expect(h2).toEqual(expect.arrayContaining(['Khách thường mua cùng', 'Cùng thương hiệu']));
+    expect(h2).not.toContain('Cùng nhà Xanh Việt');
+    expect(c.querySelector('[aria-label="Cùng thương hiệu Xanh Việt"]')).not.toBeNull();
     expect(Array.from(c.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(expect.arrayContaining(['/san-pham/sp-1', '/san-pham/sp-2']));
   });
 
