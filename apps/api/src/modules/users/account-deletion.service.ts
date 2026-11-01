@@ -176,7 +176,7 @@ export class AccountDeletionService {
         throw new BadRequestException(`Lý do xoá dù còn tiền Ví phải từ ${OVERRIDE_REASON_MIN} đến ${OVERRIDE_REASON_MAX} ký tự.`);
       }
       if (PHONE_LIKE.test(reason)) {
-        throw new BadRequestException('Lý do không được chứa số điện thoại hay dãy số dài của khách (lý do không bị ẩn danh), hãy bỏ đi.');
+        throw new BadRequestException('Lý do không được chứa số điện thoại của khách (lý do không bị ẩn danh), hãy bỏ đi.');
       }
       if (!Number.isInteger(override.expectedWalletBalance) || override.expectedWalletBalance < 1) {
         throw new BadRequestException('Thiếu số dư Ví đã xác nhận (expectedWalletBalance).');

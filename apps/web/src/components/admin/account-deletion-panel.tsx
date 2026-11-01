@@ -189,7 +189,7 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
           const n = codePoints(t.trim());
           if (n < OVERRIDE_REASON_MIN) return `Lý do cần ít nhất ${OVERRIDE_REASON_MIN} ký tự.`;
           if (n > OVERRIDE_REASON_MAX) return `Lý do tối đa ${OVERRIDE_REASON_MAX} ký tự.`;
-          if (PHONE_LIKE.test(t)) return 'Lý do không được chứa số điện thoại hay dãy số dài của khách.';
+          if (PHONE_LIKE.test(t)) return 'Lý do không được chứa số điện thoại của khách.';
           return null;
         },
       },
