@@ -32,7 +32,23 @@ describe('maskDobInput sửa giữa ô và dấu ngăn khác', () => {
   it('chèn giữa hoặc bôi đen thay không đổi năm', () => {
     expect(maskDobInput('05/103/1990', prev)).toBe('05/103/1990');
     expect(maskDobInput('05/0/1990', prev)).toBe('05/0/1990');
-    expect(maskDobInput('05/03/11990', prev).slice(0, 6)).toBe('05/03/');
+    expect(maskDobInput('05/03/11990', prev)).toBe('05/03/11990');
+  });
+  it('bôi đen cả hai dấu / rồi xoá hoặc gõ thay không dồn chữ số', () => {
+    expect(maskDobInput('11990', prev)).toBe('11990');
+    expect(maskDobInput('1990', prev)).toBe('1990');
+    expect(maskDobInput('051990', prev)).toBe('051990');
+  });
+  it('xoá dấu / ở giữa thì để nguyên, không hiện lại', () => {
+    expect(maskDobInput('0503', '05/03')).toBe('0503');
+  });
+  it('dán đè cả ô bằng chuỗi ngắn hơn vẫn chuẩn hoá', () => {
+    expect(maskDobInput('5/3/1990', prev)).toBe('05/03/1990');
+    expect(maskDobInput('5.3.1990', prev)).toBe('05/03/1990');
+  });
+  it('trình duyệt tự điền yyyy-mm-dd thì đổi sang dd/mm/yyyy', () => {
+    expect(maskDobInput('1990-03-05', '')).toBe('05/03/1990');
+    expect(maskDobInput('1990-3-5', '05/03/1990')).toBe('05/03/1990');
   });
   it('gõ tiến: dấu ngăn vừa gõ ở cuối ô thì thêm số 0', () => {
     expect(maskDobInput('5/', '5')).toBe('05');
