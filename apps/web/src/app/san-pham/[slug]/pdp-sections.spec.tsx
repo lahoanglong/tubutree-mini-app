@@ -154,11 +154,13 @@ describe('PdpRails', () => {
   });
 });
 
-describe('tiêu đề mục của trang sản phẩm khổ điện thoại giống Mini App (chữ không chân Inter, không serif)', () => {
+describe('tiêu đề khối của trang sản phẩm: Inter 16/700 ở mọi khổ (Q1), không serif từ md', () => {
   const sans = (h: Element | null) => {
     expect(h).not.toBeNull();
-    expect(h!.className).toContain('max-md:font-ui');
-    expect(h!.className).toContain('max-md:font-semibold');
+    expect(h!.className).toContain('font-ui');
+    expect(h!.className).toContain('font-bold');
+    expect(h!.className).not.toContain('font-display');
+    expect(h!.className).not.toContain('max-md:');
   };
   it('Thành phần, Cam kết Tubu, Mô tả sản phẩm', () => {
     sans(mount(<PdpIngredients ingredients={[{ name: 'Gừng' }]} />).container.querySelector('h2'));

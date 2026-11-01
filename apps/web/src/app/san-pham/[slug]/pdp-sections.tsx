@@ -6,10 +6,10 @@ import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import type { ProductDetail } from '@/lib/api';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
-import { mini } from '@/components/order-mobile/mobile-ui';
 
-/** Tiêu đề mục: serif trên máy tính, trên điện thoại là SectionTitle không chân của Mini App. */
-export const pdpSectionTitle = `${ui.sectionTitle} ${mini.sectionTitle}`;
+/** Tiêu đề khối trong luồng mua (Q1): Inter 16/700, -0.01em ở mọi khổ, cùng số đo với `SectionTitle block` của Mini App. Fraunces chỉ cho tiêu đề trang. */
+export const pdpSectionTitle =
+  'font-ui text-[length:var(--type-title-sm-size)] font-bold leading-[var(--type-title-sm-lh)] tracking-[-0.01em] text-[var(--color-text-primary)]';
 
 const COLLAPSED_LINES_THRESHOLD = 220;
 

@@ -157,7 +157,8 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(c.textContent).toContain('Chưa có đánh giá');
     expect(c.textContent).toContain('Hãy là người đầu tiên chia sẻ trải nghiệm.');
     expect(c.querySelector('svg[aria-hidden]')).not.toBeNull();
-    expect(c.querySelector('h2')!.className).toContain('max-md:font-ui');
+    expect(c.querySelector('h2')!.className).toContain('font-ui');
+    expect(c.querySelector('h2')!.className).not.toContain('font-display');
   });
 
   it('khách chưa đăng nhập: không hỏi can-review, mời đăng nhập và quay lại đúng đơn đang mở', async () => {

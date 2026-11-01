@@ -131,7 +131,7 @@ export function PdpBundles({ slug, productName }: { slug: string; productName?: 
       combos={
         combos.length > 0 ? (
           <section aria-label={bundleHoldTitle('combo.pdpTitle', combosHeld)} data-testid="pdp-combos" style={SURFACE}>
-            <SectionTitle>{bundleHoldTitle('combo.pdpTitle', combosHeld)}</SectionTitle>
+            <SectionTitle block>{bundleHoldTitle('combo.pdpTitle', combosHeld)}</SectionTitle>
             <HeldBody held={combosHeld !== null}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
                 {combos.map((v) => (
@@ -156,7 +156,7 @@ export function PdpBundles({ slug, productName }: { slug: string; productName?: 
       addons={
         rows.length > 0 ? (
           <section aria-label={bundleHoldTitle('addon.title', addonsHeld)} data-testid="pdp-addons" style={SURFACE}>
-            <SectionTitle>{bundleHoldTitle('addon.title', addonsHeld)}</SectionTitle>
+            <SectionTitle block>{bundleHoldTitle('addon.title', addonsHeld)}</SectionTitle>
             <HeldBody held={addonsHeld !== null}>
               {productName && (
                 <Text variant="caption" tone="tertiary" as="p" style={{ margin: '2px 0 0' }}>
