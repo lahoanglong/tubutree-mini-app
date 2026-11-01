@@ -119,6 +119,31 @@ describe('FlashSlotItem (web): khung sắp diễn ra', () => {
     expect(onToggleRemind).not.toHaveBeenCalled();
   });
 
+  it('món hết hàng thật ở khung sắp mở: nút Nhắc tôi khoá (aria-disabled, mờ như ảnh), bấm không đặt nhắc', () => {
+    const onToggleRemind = vi.fn();
+    const c = show({ ...ITEM, soldOut: true, soldCount: 0 }, { slotStatus: 'UPCOMING', onToggleRemind });
+    const remind = button(c, 'Nhắc tôi Serum Bã Trầu')!;
+    expect(remind.getAttribute('aria-disabled')).toBe('true');
+    expect(remind.style.opacity).toBe('0.55');
+    expect((c.querySelector('[data-ds-part="media"]') as HTMLElement).style.opacity).toBe('0.55');
+    click(remind);
+    expect(onToggleRemind).not.toHaveBeenCalled();
+  });
+
+  it('món hết hàng nhưng khách đã đặt nhắc từ trước: vẫn bỏ nhắc được', () => {
+    const onToggleRemind = vi.fn();
+    const c = show({ ...ITEM, soldOut: true }, { slotStatus: 'UPCOMING', reminded: true, onToggleRemind });
+    const remind = button(c, 'Đã đặt nhắc Serum Bã Trầu, bỏ nhắc')!;
+    expect(remind.getAttribute('aria-disabled')).toBeNull();
+    click(remind);
+    expect(onToggleRemind).toHaveBeenCalledTimes(1);
+  });
+
+  it('món còn hàng ở khung sắp mở: nút Nhắc tôi không khoá', () => {
+    const c = show(ITEM, { slotStatus: 'UPCOMING' });
+    expect(button(c, 'Nhắc tôi Serum Bã Trầu')!.getAttribute('aria-disabled')).toBeNull();
+  });
+
   it('món sắp mở không vẽ thanh đã bán: không nói "Vừa mở bán" khi suất chưa mở', () => {
     const c = show({ ...ITEM, soldCount: 0 }, { slotStatus: 'UPCOMING' });
     expect(c.textContent).not.toMatch(/Vừa mở bán|Đã bán|Sắp hết/);

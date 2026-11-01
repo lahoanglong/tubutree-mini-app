@@ -120,6 +120,31 @@ describe('FlashSlotItem: khung sắp diễn ra', () => {
     expect(onToggleRemind).not.toHaveBeenCalled();
   });
 
+  it('món hết hàng thật ở khung sắp mở: nút Nhắc tôi khoá (aria-disabled, mờ như ảnh), bấm không đặt nhắc', () => {
+    const onToggleRemind = vi.fn();
+    const { container } = render(<FlashSlotItem item={{ ...ITEM, soldOut: true, soldCount: 0 }} {...base} slotStatus="UPCOMING" onToggleRemind={onToggleRemind} />);
+    const remind = screen.getByRole('button', { name: 'Nhắc tôi Serum Bã Trầu' });
+    expect(remind).toHaveAttribute('aria-disabled', 'true');
+    expect((remind as HTMLElement).style.opacity).toBe('0.55');
+    expect((container.querySelector('[data-ds-part="media"]') as HTMLElement).style.opacity).toBe('0.55');
+    fireEvent.click(remind);
+    expect(onToggleRemind).not.toHaveBeenCalled();
+  });
+
+  it('món hết hàng nhưng khách đã đặt nhắc từ trước: vẫn bỏ nhắc được', () => {
+    const onToggleRemind = vi.fn();
+    render(<FlashSlotItem item={{ ...ITEM, soldOut: true }} {...base} slotStatus="UPCOMING" reminded onToggleRemind={onToggleRemind} />);
+    const remind = screen.getByRole('button', { name: 'Đã đặt nhắc Serum Bã Trầu, bỏ nhắc' });
+    expect(remind).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(remind);
+    expect(onToggleRemind).toHaveBeenCalledTimes(1);
+  });
+
+  it('món còn hàng ở khung sắp mở: nút Nhắc tôi không khoá', () => {
+    render(<FlashSlotItem item={ITEM} {...base} slotStatus="UPCOMING" />);
+    expect(screen.getByRole('button', { name: 'Nhắc tôi Serum Bã Trầu' })).not.toHaveAttribute('aria-disabled');
+  });
+
   it('món sắp mở không vẽ thanh đã bán: không nói "Vừa mở bán" khi suất chưa mở', () => {
     const { container } = render(<FlashSlotItem item={{ ...ITEM, soldCount: 0 }} {...base} slotStatus="UPCOMING" />);
     expect(screen.queryByText('Vừa mở bán')).not.toBeInTheDocument();

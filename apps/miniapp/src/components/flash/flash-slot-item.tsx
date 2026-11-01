@@ -36,6 +36,8 @@ export interface FlashSlotItemProps {
 export function FlashSlotItem({ item, slotStatus, reminded, remindPending, onBuy, onToggleRemind }: FlashSlotItemProps) {
   const view = productCardView({ product: flashCardProduct(item), flash: item, variant: 'line', now: serverNow() });
   const upcoming = slotStatus === 'UPCOMING';
+  // Món hết hàng thật ở khung sắp mở: không đặt nhắc mới (tới giờ khách nhận thông báo cho món không mua được). Đã nhắc từ trước thì vẫn bỏ nhắc được.
+  const remindLocked = item.soldOut && !reminded;
   const action = upcoming ? (
     <Button
       size="md"
@@ -43,8 +45,10 @@ export function FlashSlotItem({ item, slotStatus, reminded, remindPending, onBuy
       loading={remindPending}
       aria-pressed={reminded}
       aria-label={slotRemindLabel(item.productName, reminded)}
-      style={ACTION_STYLE}
+      aria-disabled={remindLocked || undefined}
+      style={remindLocked ? SOLD_OUT_ACTION_STYLE : ACTION_STYLE}
       onPress={() => {
+        if (remindLocked) return;
         haptic('light');
         onToggleRemind();
       }}
