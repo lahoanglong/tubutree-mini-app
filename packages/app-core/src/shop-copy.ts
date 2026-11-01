@@ -260,6 +260,7 @@ export const FORBIDDEN_TERMS: readonly { pattern: RegExp; use: string }[] = [
   { pattern: /\bTop\b/, use: 'Bán chạy nhất' },
   { pattern: /Freeship/i, use: 'Miễn phí giao hàng' },
   { pattern: /voucher/i, use: 'Mã giảm giá' },
+  { pattern: /mã giảm(?! giá)/i, use: 'Mã giảm giá' },
   { pattern: /Flash sale/i, use: 'Giờ vàng' },
   { pattern: /giờ vàng/, use: 'Giờ vàng (hoa chữ G)' },
   { pattern: /\bHSD\b/, use: 'Hạn dùng hoặc Dùng đến' },
@@ -267,7 +268,7 @@ export const FORBIDDEN_TERMS: readonly { pattern: RegExp; use: string }[] = [
   { pattern: /Vui lòng|chúng tôi/i, use: 'Bạn hoặc Tubu' },
   { pattern: /cửa hàng/i, use: 'Gian hàng' },
   { pattern: /\.{3}/, use: '… (một ký tự)' },
-  { pattern: /\b\d+h \d{2}m\b/, use: 'countdownText, ví dụ "2 giờ 05 phút"' },
+  { pattern: /\b\d+h \d+m\b/, use: 'countdownText, ví dụ "2 giờ 05 phút"' },
   { pattern: /\bHOT\b|SỐC|Nhanh tay/, use: 'bỏ chữ giục mua' },
 ];
 

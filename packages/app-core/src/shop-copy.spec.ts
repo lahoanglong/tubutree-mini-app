@@ -65,8 +65,8 @@ describe('SHOP_COPY', () => {
 });
 
 describe('FORBIDDEN_TERMS', () => {
-  const caught = ['Nhãn hàng', 'Top bán chạy', 'Freeship', 'Kho voucher', 'Flash sale', 'ưu đãi giờ vàng', 'HSD', 'Chỉ còn 3', 'Vui lòng', 'chúng tôi', 'cửa hàng', 'Đang tải...', '2h 05m'];
-  const skipped = ['Giờ vàng', 'Bán chạy nhất', 'Topping', 'Miễn phí giao hàng', 'Hạn dùng', 'Còn 3 sản phẩm', 'Đang tải…', 'Gian hàng', 'Mã giảm giá', 'Thương hiệu'];
+  const caught = ['Nhãn hàng', 'Top bán chạy', 'Freeship', 'Kho voucher', 'Flash sale', 'ưu đãi giờ vàng', 'HSD', 'Chỉ còn 3', 'Vui lòng', 'chúng tôi', 'cửa hàng', 'Đang tải...', '2h 05m', '2h 5m', 'nhận mã giảm 15%', 'Mã giảm'];
+  const skipped = ['Giờ vàng', 'Bán chạy nhất', 'Topping', 'Miễn phí giao hàng', 'Hạn dùng', 'Còn 3 sản phẩm', 'Đang tải…', 'Gian hàng', 'Mã giảm giá', 'nhận mã giảm giá 15%', 'Thương hiệu', 'Kết thúc sau 2 giờ 05 phút'];
 
   it.each(caught)('bắt "%s"', (text) => {
     expect(hit(text).length).toBeGreaterThan(0);
