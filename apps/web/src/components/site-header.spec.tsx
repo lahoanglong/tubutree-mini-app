@@ -1,8 +1,10 @@
-import { renderToStaticMarkup } from 'react-dom/server';
+import { renderToStaticMarkup, renderToString } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ auth: { user: null as { fullName: string } | null, status: 'anonymous', initialized: true, sessionUnavailable: false }, cart: { itemCount: 0 }, notifications: [] as { status: string }[] }));
+const mocks = vi.hoisted(() => ({ auth: { user: null as { fullName: string } | null, status: 'anonymous', initialized: true, sessionUnavailable: false }, cart: { itemCount: 0 }, notifications: [] as { status: string }[], hydrated: false }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
+// Mặc định như máy chủ/hydrate đầu (useHydrated=false); chỉ ca cần pha phiên thật mới bật true để giả lập sau hydrate.
+vi.mock('@/lib/use-hydrated', () => ({ useHydrated: () => mocks.hydrated }));
 vi.mock('@tanstack/react-query', () => ({
   useQuery: (o: { queryKey: unknown[] }) => ({
     data: o.queryKey.join('/') === 'notifications/unread' ? { count: mocks.notifications.filter((n) => n.status !== 'READ').length } : mocks.cart,
@@ -43,9 +45,26 @@ describe('SiteHeader', () => {
   // R2-BUYERWEB-5: mất mạng lúc khôi phục phiên thì khách vẫn là khách đã đăng nhập, header không được mời đăng nhập lại.
   it('phiên tạm không khôi phục được (mất mạng): header giữ lối vào Tài khoản, không hiện Đăng nhập', () => {
     mocks.auth = { user: null, status: 'idle', initialized: true, sessionUnavailable: true };
-    const out = render();
-    expect(out).not.toContain('href="/dang-nhap"');
-    expect(out).toContain('href="/tai-khoan"');
+    mocks.hydrated = true;
+    try {
+      const out = render();
+      expect(out).not.toContain('href="/dang-nhap"');
+      expect(out).toContain('href="/tai-khoan"');
+    } finally {
+      mocks.hydrated = false;
+      mocks.auth = { user: null, status: 'anonymous', initialized: true, sessionUnavailable: false };
+    }
+  });
+
+  // Header không có dải báo mất kết nối riêng; trạng thái "phiên tạm lỗi" chỉ đổi nút Đăng nhập thành lối vào Tài khoản.
+  // Máy chủ không được mang trạng thái đó, nếu không hydrate lệch.
+  it('HTML máy chủ (lượt vẽ đầu) không mang trạng thái mất kết nối dù phiên tạm lỗi', () => {
+    mocks.auth = { user: null, status: 'idle', initialized: true, sessionUnavailable: true };
+    const out = renderToString(<SiteHeader />);
+    expect(out).not.toContain('role="alert"');
+    expect(out).not.toMatch(/mất kết nối/i);
+    expect(out).toContain('href="/dang-nhap"');
+    expect(out).not.toContain('href="/tai-khoan"');
     mocks.auth = { user: null, status: 'anonymous', initialized: true, sessionUnavailable: false };
   });
 
