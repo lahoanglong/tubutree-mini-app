@@ -49,7 +49,7 @@ function normalizeAll(t: string): string {
 function appendOne(t: string, prev: string): string {
   if (t.length === prev.length) return prev;
   if (t.endsWith('/')) {
-    if (prev.endsWith('/')) return prev;
+    if (t.endsWith('//')) return prev;
     const parts = t.slice(0, -1).split('/');
     const i = parts.length - 1;
     if (i >= 2) return prev;
@@ -63,26 +63,37 @@ function appendOne(t: string, prev: string): string {
   return out.join('/');
 }
 
+/** inputType của sự kiện input khi dán, kéo thả hoặc trình duyệt tự điền: chuẩn hoá cả ô. */
+const REPLACE_INPUT_TYPES = new Set(['insertFromPaste', 'insertFromDrop', 'insertReplacementText']);
+
 /**
- * Ô ngày sinh gõ tay. ".", "-", khoảng trắng như "/"; bỏ ký tự lạ. `prev` là giá trị ô trước khi sửa.
- * - Ô đang trống, dán hoặc tự điền (chèn từ 2 ký tự ở đầu ô, hoặc từ 6 ký tự): chuẩn hoá cả ô, "5.3.1990" thành "05/03/1990".
+ * Ô ngày sinh gõ tay. ".", "-", ",", khoảng trắng là dấu ngăn như "/"; bỏ ký tự lạ. `prev` là giá trị ô trước khi sửa,
+ * `inputType` lấy từ `e.nativeEvent.inputType` (không có thì đoán theo chuỗi).
+ * - Ô đang trống, dán hoặc tự điền: chuẩn hoá cả ô, "5.3.1990" thành "05/03/1990".
  * - Gõ thêm một ký tự ở cuối: tự thêm "/" và số 0.
- * - Mọi kiểu sửa khác (xoá, chèn hay bôi đen thay giữa ô): giữ nguyên như khách gõ, không dồn hay cắt chữ số;
- *   ô sai dạng thì lời lỗi `incomplete` chỉ cách sửa.
+ * - Sửa giữa ô (xoá, chèn, bôi đen thay): giữ nguyên như khách gõ, kể cả dấu ngăn, để con trỏ không nhảy và chữ số không
+ *   bị dồn hay cắt. Riêng khi vừa gõ thêm số cho đủ 8 chữ số mà còn thiếu dấu ngăn (bàn phím số iPhone không có "/"),
+ *   dựng lại dd/mm/yyyy: 8 chữ số chỉ có một cách đọc.
  */
-export function maskDobInput(raw: string, prev?: string): string {
-  const t = raw.replace(/[^\d./\-\s]/g, '').replace(/[.\-\s]/g, '/');
-  if (prev === undefined || prev === '') return normalizeAll(t);
+export function maskDobInput(raw: string, prev?: string, inputType?: string): string {
+  const typed = raw.replace(/[^\d./\-\s,]/g, '');
+  const t = typed.replace(/[.\-\s,]/g, '/');
+  if (prev === undefined || prev === '' || (inputType !== undefined && REPLACE_INPUT_TYPES.has(inputType))) {
+    return normalizeAll(t);
+  }
   const { start, inserted } = diffFrom(raw, prev);
   if (inserted >= 2 && (start === 0 || inserted >= 6)) return normalizeAll(t);
   if (raw.length === prev.length + 1 && raw.startsWith(prev)) return appendOne(t, prev);
-  return t;
+  const digits = typed.replace(/\D/g, '');
+  const seps = typed.length - digits.length;
+  if (digits.length === 8 && prev.replace(/\D/g, '').length < 8 && seps < 2) return splitOverflow([digits]).join('/');
+  return typed;
 }
 
 /** Trả `iso` khi ô có ngày hợp lệ; `error` nói rõ cần nhập lại gì. Ô trống không phải lỗi. `now` theo giờ máy khách. */
 export function validateDobVn(text: string, now: Date = new Date()): { iso: string | null; error: string | null } {
   if (text === '') return { iso: null, error: null };
-  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
+  const m = /^(\d{2})[/.\-\s,](\d{2})[/.\-\s,](\d{4})$/.exec(text);
   if (!m) return { iso: null, error: DOB_ERRORS.incomplete };
   const [d, mo, y] = [Number(m[1]), Number(m[2]), Number(m[3])];
   const dt = new Date(Date.UTC(y, mo - 1, d));

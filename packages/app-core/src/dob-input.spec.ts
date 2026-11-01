@@ -66,6 +66,27 @@ describe('maskDobInput sửa giữa ô và dấu ngăn khác', () => {
   it('gõ tiến tới đủ 4 số năm thì số thứ 5 không vào ô', () => {
     expect(maskDobInput('05/03/19901', prev)).toBe(prev);
   });
+  const typeSteps = (start: string, steps: string[]) => steps.reduce((v, raw) => maskDobInput(raw, v), start);
+  it('bàn phím số iPhone (không có "/"): lỡ xoá dấu / rồi gõ lại đủ 8 số thì tự dựng lại dd/mm/yyyy', () => {
+    expect(typeSteps('1990', ['21990', '251990', '2501990', '25031990'])).toBe('25/03/1990');
+    expect(typeSteps('05/1990', ['051/1990', '0512/1990'])).toBe('05/12/1990');
+  });
+  it('xoá dấu / của ngày đã đủ thì để nguyên, không hiện lại ngay', () => {
+    expect(maskDobInput('0503/1990', prev)).toBe('0503/1990');
+  });
+  it('dán (inputType) đè chuỗi trùng đầu hoặc đuôi vẫn chuẩn hoá', () => {
+    expect(maskDobInput('1/3/1990', '11/03/1990', 'insertFromPaste')).toBe('01/03/1990');
+    expect(maskDobInput('12/3/1990', '12/04/1990', 'insertReplacementText')).toBe('12/03/1990');
+  });
+  it('gõ dấu ngăn Android giữa ô giữ nguyên ký tự để con trỏ không nhảy, ngày vẫn hợp lệ', () => {
+    expect(maskDobInput('05.1990', '051990')).toBe('05.1990');
+    expect(validateDobVn('05.03/1990', NOW).iso).toBe('1990-03-05');
+  });
+  it('dấu phẩy (bàn phím số Gboard) cũng là dấu ngăn', () => {
+    let v = '';
+    for (const ch of '5,3,1990') v = maskDobInput(v + ch, v);
+    expect(v).toBe('05/03/1990');
+  });
   it('dán đè cả ô bằng chuỗi ngắn hơn vẫn chuẩn hoá', () => {
     expect(maskDobInput('5/3/1990', prev)).toBe('05/03/1990');
     expect(maskDobInput('5.3.1990', prev)).toBe('05/03/1990');

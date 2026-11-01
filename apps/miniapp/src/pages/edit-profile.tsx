@@ -276,7 +276,7 @@ export default function EditProfilePage() {
                 aria-invalid={dobError ? true : undefined}
                 onBlur={() => setDobTouched(true)}
                 onChange={(e) => {
-                  const text = maskDobInput(e.target.value, dobText);
+                  const text = maskDobInput(e.target.value, dobText, (e.nativeEvent as InputEvent).inputType);
                   setDobText(text);
                   setConfirmingDob(false);
                 }}
