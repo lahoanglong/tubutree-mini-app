@@ -7,7 +7,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import {
-  getMyStorefront, publishStorefront, updateStorefront,
+  getMyStorefront, publishStorefront,
   createCollection, updateCollection, deleteCollection, updateItem, removeItem, pickerProducts,
   reorderCollections, reorderItems, getQuests,
   type StorefrontEdit, type PickerProduct,
