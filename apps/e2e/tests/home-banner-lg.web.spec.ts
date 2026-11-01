@@ -1,15 +1,17 @@
 import type { Page } from '@playwright/test';
 import { expect, test, type MockApi } from './support/mock-api';
 import { campaignBanner, mockCampaigns } from './support/campaign-mocks';
+import { serverWithoutCampaigns } from './support/server-initial';
 
 /**
  * Web, Trang chủ: khách có cookie phiên, máy chưa nhớ loại khách (HTML dựng sẵn "chưa biết") và nhớ "lần trước có banner". Trong lúc phiên chưa về và
  * banner chưa về, khung giữ chỗ banner phải đứng đúng chỗ của banner thật: từ lg là cột 8 cạnh thẻ thành viên (HubLayout), dưới lg ngay dưới thẻ thành
  * viên; chỉ có MỘT khung ở mỗi khổ; banner về không làm trang nhảy.
  *
- * Danh sách chiến dịch phải đến từ trình duyệt (mock), nên spec chỉ đo được khi server KHÔNG dựng sẵn nó (lúc chạy với API chết/404 ở /campaigns). API thật
- * trả mảng (kể cả rỗng) thì server đã đưa vào HTML và trình duyệt không hỏi lại: spec tự bỏ qua. Dịch chuyển lúc hydrate vì gợi ý banner chỉ đọc được ở máy khách
- * (HTML server chưa biết) nằm ngoài phạm vi: số đo là phần tăng của CLS từ lúc khung giữ chỗ hiện tới khi banner về.
+ * Danh sách chiến dịch phải đến từ trình duyệt (mock). API thật trả mảng (kể cả rỗng) thì server đã đưa nó vào HTML và trình duyệt không hỏi lại, nên spec chặn
+ * tài liệu `/` và gỡ danh sách đó khỏi dữ liệu RSC (support/server-initial.ts): điều kiện dữ liệu chắc chắn có, không phụ thuộc API đang chạy trả gì, và
+ * spec không bao giờ tự bỏ qua. Dịch chuyển lúc hydrate vì gợi ý banner chỉ đọc được ở máy khách (HTML server chưa biết) nằm ngoài phạm vi: số đo là
+ * phần tăng của CLS từ lúc khung giữ chỗ hiện tới khi banner về.
  */
 
 const me = () => ({
@@ -69,6 +71,7 @@ async function openHome(page: Page, api: MockApi, baseURL: string): Promise<() =
       }
     }).observe({ type: 'layout-shift', buffered: true });
   });
+  const server = await serverWithoutCampaigns(page);
   // Câu trả lời đang bị giữ nên mock chưa ghi lời gọi: nhìn thẳng yêu cầu mạng của trình duyệt.
   const campaignRequest = page.waitForRequest((r) => r.url().includes('/campaigns') && r.url().includes('HOME_TOP'), { timeout: 40_000 });
   campaignRequest.catch(() => undefined);
@@ -77,9 +80,9 @@ async function openHome(page: Page, api: MockApi, baseURL: string): Promise<() =
   hydrated.catch(() => undefined);
   await page.goto('/');
   await hydrated;
-  // Mã máy khách đã chạy: không hỏi chiến dịch trong 5 s nữa nghĩa là server đã dựng sẵn.
-  const asked = await Promise.race([campaignRequest.then(() => true, () => false), new Promise<boolean>((r) => setTimeout(() => r(false), 5_000))]);
-  test.skip(!asked, 'server đã dựng sẵn danh sách chiến dịch vào HTML (API trả mảng): banner không về muộn từ trình duyệt nên không đo được');
+  expect(server.found(), 'HTML của "/" phải mang khoá campaigns trong dữ liệu RSC (dạng nhúng đổi thì sửa support/server-initial.ts)').toBeGreaterThan(0);
+  // Server không còn danh sách chiến dịch nên trình duyệt tự hỏi; mock giữ câu trả lời tới khi `release`.
+  await campaignRequest;
   return release;
 }
 
