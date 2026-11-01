@@ -54,6 +54,8 @@ const newSlot = <T>(): Slot<T> => ({ value: null, inflight: null });
 export class HomeService {
   private readonly logger = new Logger(HomeService.name);
   private staticSlot = newSlot<HomeStatic>();
+  // Tăng mỗi lần làm mới tay: lượt dựng đang bay lúc đó không được ghi bản cũ trở lại slot.
+  private epoch = 0;
   private flashSlot = newSlot<Block<HomePublic['flashActive']>>();
 
   constructor(
@@ -107,15 +109,23 @@ export class HomeService {
     return flash.map((it) => ('serverNow' in it ? { ...it, serverNow } : it)) as typeof flash;
   }
 
+  /** Bỏ phần tĩnh đã nhớ (danh mục, nhãn...) để lần gọi kế tiếp dựng lại; admin đổi cây danh mục gọi hàm này. */
+  invalidateStatic(): void {
+    this.epoch++;
+    this.staticSlot.value = null;
+    this.staticSlot.inflight = null;
+  }
+
   private async cached<T>(slot: Slot<T>, now: number, ttlMs: number, build: () => Promise<T>): Promise<T> {
     if (slot.value && slot.value.expiresAt > now) return slot.value.data;
+    const epoch = this.epoch;
     // Nhiều request cùng lúc khi cache hết hạn dùng chung một lần dựng, không đổ dồn xuống DB.
-    slot.inflight ??= build().finally(() => {
-      slot.inflight = null;
-    });
-    const data = await slot.inflight;
+    const inflight = (slot.inflight ??= build().finally(() => {
+      if (slot.inflight === inflight) slot.inflight = null;
+    }));
+    const data = await inflight;
     const degraded = data === null || (typeof data === 'object' && Object.values(data).some((v) => v === null));
-    slot.value = { data, expiresAt: now + (degraded ? Math.min(ttlMs, PUBLIC_DEGRADED_TTL_MS) : ttlMs) };
+    if (epoch === this.epoch) slot.value = { data, expiresAt: now + (degraded ? Math.min(ttlMs, PUBLIC_DEGRADED_TTL_MS) : ttlMs) };
     return data;
   }
 

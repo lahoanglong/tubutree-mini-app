@@ -1167,6 +1167,37 @@ describe('CatalogService.categories — productCount (dự án 4b)', () => {
   });
 });
 
+describe('CatalogService.invalidateCategoryCache — admin đổi cây danh mục', () => {
+  const CAT = (id: string, parentId: string | null = null) => ({ id, parentId, name: id, slug: id, image: null, sortOrder: 1 });
+
+  it('cây, danh sách phẳng và phạm vi con đều đọc lại ngay sau khi làm mới, không chờ hết 60 giây', async () => {
+    const categoryFindMany = jest
+      .fn()
+      .mockResolvedValueOnce([CAT('cha')])
+      .mockResolvedValue([CAT('cha'), CAT('con', 'cha')]);
+    const productFindMany = jest.fn().mockResolvedValue([]);
+    const svc = new CatalogService({
+      category: { findMany: categoryFindMany },
+      product: { findMany: productFindMany, count: jest.fn().mockResolvedValue(0) },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService);
+
+    expect((await svc.categories())[0]!.children).toEqual([]);
+    expect((await svc.categories())[0]!.children).toEqual([]); // còn trong cache
+    svc.invalidateCategoryCache();
+    expect((await svc.categories())[0]!.children.map((c) => c.id)).toEqual(['con']);
+    expect((await svc.categoriesFlat()).map((c) => c.id)).toEqual(['cha', 'con']);
+
+    // Phạm vi lọc theo cha cũng dùng cây mới: SP của mục con vừa thêm vào được gồm.
+    await svc.list({ page: 1, limit: 10, category: 'cha' });
+    const scopeCall = categoryFindMany.mock.calls.filter(([a]) => a?.select?.parentId).length;
+    expect(scopeCall).toBeGreaterThanOrEqual(1);
+    svc.invalidateCategoryCache();
+    await svc.list({ page: 1, limit: 10, category: 'cha' });
+    expect(categoryFindMany.mock.calls.filter(([a]) => a?.select?.parentId).length).toBe(scopeCall + 1);
+  });
+});
+
 describe('CatalogService.list — lọc theo danh mục cha gồm con (BG-13)', () => {
   const CAT = (id: string, parentId: string | null) => ({ id, parentId });
   function setup(rows = [CAT('cha', null), CAT('con1', 'cha'), CAT('con2', 'cha'), CAT('ca', 'cb'), CAT('cb', 'ca')]) {
