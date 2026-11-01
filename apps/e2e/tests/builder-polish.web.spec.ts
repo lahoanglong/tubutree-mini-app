@@ -1,8 +1,12 @@
-import { expect, test, type MockApi } from './support/mock-api';
+import { expect, reply, test, type MockApi } from './support/mock-api';
+import { mockDiscovery } from './support/discovery-mocks';
+import { assertSeededOnCi } from './support/a11y-db';
+import { LG_COMBO_ITEMS, LG_SHELF_FEW, LG_SHELF_MANY, LG_SHELVES_SLUG, seedLgShelves } from './support/lg-shelves-db';
 
 /**
- * G6 (P2 #35): trình dựng gian hàng ở web máy tính 1280px: hai nút lên hàng tiêu đề (không thanh dính đáy), chi tiết khối hai cột.
- * Mọi lời gọi /api/** đi qua mock (fixture `api`), nên không cần DB; trang gian hàng công khai (#36) do máy chủ dựng từ API thật nên đo ở vitest.
+ * G6 (P2 #35, #36): web máy tính 1280px. Trình dựng: hai nút lên hàng tiêu đề (không thanh dính đáy), chi tiết khối hai cột. Trang gian hàng công khai:
+ * ComboCard có trần bề rộng, kệ ít món thành lưới. Mọi lời gọi /api/** từ trình duyệt đi qua mock (fixture `api`); riêng trang công khai do máy chủ web
+ * dựng từ API thật nên dùng gian hàng mẫu của `seedLgShelves` trong DB tạm.
  */
 test.use({ viewport: { width: 1280, height: 800 } });
 
@@ -64,5 +68,57 @@ test.describe('Trình dựng gian hàng web 1280px (G6 #35)', () => {
     expect(box.x, 'khung xem trước ở cột phải').toBeGreaterThan(500);
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
+  });
+});
+
+test.describe('Gian hàng công khai web (G6 #36)', () => {
+  let seeded = false;
+  test.beforeAll(async () => {
+    seeded = await seedLgShelves();
+    assertSeededOnCi(seeded);
+  });
+  test.beforeEach(async ({ api }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer', 'khổ máy tính chỉ chạy ở project Web Customer');
+    test.skip(!seeded, 'DB e2e không phải DB tạm: không dựng được gian hàng mẫu');
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    api.get('/config/public', {});
+    api.get('/me/wishlist/ids', []);
+    mockDiscovery(api);
+  });
+
+  const section = (page: import('@playwright/test').Page, title: string) => page.locator('section').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+
+  test('1280px: ComboCard không rộng quá 600px; kệ ít món là lưới lấp hàng, kệ nhiều món vẫn là kệ ngang', async ({ page }) => {
+    await page.goto(`/s/${LG_SHELVES_SLUG}`);
+    const combo = page.getByTestId('shop-combo');
+    await expect(combo).toBeVisible({ timeout: 20_000 });
+    expect((await combo.boundingBox())!.width, 'ComboCard giãn hết khung').toBeLessThanOrEqual(600);
+    expect(LG_COMBO_ITEMS).toBeGreaterThanOrEqual(2);
+
+    const few = section(page, 'Kệ ít món');
+    await expect(few.getByTestId('shop-rail')).toBeHidden();
+    const grid = few.getByTestId('shop-rail-lg');
+    await expect(grid).toBeVisible();
+    const tiles = await grid.locator('[data-ds="product-tile"]').evaluateAll((els) => els.map((el) => el.getBoundingClientRect()));
+    expect(tiles).toHaveLength(LG_SHELF_FEW);
+    const frame = (await few.boundingBox())!;
+    const row = tiles[tiles.length - 1]!.right - tiles[0]!.left;
+    expect(row / frame.width, 'bốn thẻ chiếm cả hàng chứ không dồn trái').toBeGreaterThanOrEqual(0.6);
+    expect(Math.min(...tiles.map((t) => t.width)), 'thẻ không hẹp hơn thẻ kệ 148px').toBeGreaterThanOrEqual(148);
+
+    const many = section(page, 'Kệ nhiều món');
+    await expect(many.getByTestId('shop-rail-lg')).toHaveCount(0);
+    await expect(many.getByTestId('shop-rail')).toBeVisible();
+    expect(LG_SHELF_MANY).toBeGreaterThan(6);
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
+  test('375px: vẫn là kệ ngang như Mini, không có lưới', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(`/s/${LG_SHELVES_SLUG}`);
+    const few = section(page, 'Kệ ít món');
+    await expect(few.getByTestId('shop-rail')).toBeVisible({ timeout: 20_000 });
+    await expect(few.getByTestId('shop-rail-lg')).toBeHidden();
   });
 });
