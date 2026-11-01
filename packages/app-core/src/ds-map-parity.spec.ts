@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { checkDsParity, exportsSymbol, propKeys, type DsMap } from '../../../scripts/check-ds-parity.mjs';
+import { checkDsParity, exportsSymbol, paramKeys, propKeys, type DsMap } from '../../../scripts/check-ds-parity.mjs';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -86,6 +86,61 @@ describe('checkDsParity: khoá props', () => {
   });
 });
 
+describe('checkDsParity: props không khai tên kiểu thì đọc từ tham số của hàm', () => {
+  const inline = (extra = '') => `export function ProductTile(p: { view: string; href?: string; ${extra} }) { return null; }\n`;
+  const noProps = (): DsMap => ({ components: [{ name: 'ProductTile', miniapp: MINI, web: WEB }], webOnly: [], upcoming: [] });
+
+  it('kiểu inline khớp ở hai app thì xanh', () => {
+    expect(run(noProps(), files({ [MINI]: inline(), [WEB]: inline() })).errors).toEqual([]);
+  });
+
+  it('kiểu inline lệch một khoá thì đỏ dù map không khai props', () => {
+    const { errors } = run(noProps(), files({ [MINI]: inline(), [WEB]: inline('className?: string;') }));
+    expect(errors.some((e) => e.includes('ProductTile') && e.includes('className') && e.includes('web'))).toBe(true);
+  });
+
+  it('propsDiff có reason cho phép lệch của kiểu inline', () => {
+    const m = noProps();
+    m.components[0] = { ...m.components[0]!, propsDiff: { webOnly: ['className'], reason: 'web thêm lớp để đặt vào khuôn' } };
+    expect(run(m, files({ [MINI]: inline(), [WEB]: inline('className?: string;') })).errors).toEqual([]);
+  });
+
+  it('một bên không nhận tham số mà bên kia có thì đỏ (BackButton Mini không props, web có fallbackHref)', () => {
+    const none = 'export default function ProductTile() { return null; }\n';
+    const { errors } = run(noProps(), files({ [MINI]: none, [WEB]: inline() }));
+    expect(errors.some((e) => e.includes('view') && e.includes('web'))).toBe(true);
+  });
+
+  it('tham số mang tên interface cùng file thì đọc khoá của interface', () => {
+    const named = 'interface P { view: string; href?: string }\nexport function ProductTile(p: P) { return null; }\n';
+    expect(run(noProps(), files({ [MINI]: named, [WEB]: inline() })).errors).toEqual([]);
+  });
+
+  it('kiểu tham số nằm ngoài file thì đỏ và gợi ý propsUncompared', () => {
+    const outside = "import type { P } from './p';\nexport function ProductTile(p: P) { return null; }\n";
+    const { errors } = run(noProps(), files({ [MINI]: outside }));
+    expect(errors.some((e) => e.includes('ProductTile') && e.includes('không đọc được') && e.includes('propsUncompared'))).toBe(true);
+  });
+
+  it('propsUncompared có reason thì bỏ qua so props; thiếu reason hoặc đi cùng props thì đỏ', () => {
+    const outside = "import type { P } from './p';\nexport function ProductTile(p: P) { return null; }\n";
+    const f = files({ [MINI]: outside });
+    const m = noProps();
+    m.components[0] = { ...m.components[0]!, propsUncompared: 'kiểu props lấy từ thư viện ngoài' };
+    expect(run(m, f).errors).toEqual([]);
+    m.components[0] = { ...m.components[0]!, propsUncompared: ' ' };
+    expect(run(m, f).errors.some((e) => e.includes('propsUncompared') && e.includes('reason'))).toBe(true);
+    m.components[0] = { ...m.components[0]!, propsUncompared: 'có lý do', props: 'ProductTileProps' };
+    expect(run(m, f).errors.some((e) => e.includes('propsUncompared') && e.includes('props'))).toBe(true);
+  });
+
+  it('thành phần khai bằng const (memo, forwardRef, mũi tên) cũng đọc được tham số', () => {
+    const wrapped = 'export const ProductTile = memo(function ProductTile(p: { view: string; href?: string }) { return null; });\n';
+    const arrow = 'export const ProductTile = (p: { view: string; href?: string }) => null;\n';
+    expect(run(noProps(), files({ [MINI]: wrapped, [WEB]: arrow })).errors).toEqual([]);
+  });
+});
+
 describe('checkDsParity: webOnly và upcoming', () => {
   const LAYOUT = 'apps/web/src/components/layouts/hub-layout.tsx';
   const layoutFiles = files({ [LAYOUT]: 'export function HubLayout() { return null; }' });
@@ -115,6 +170,21 @@ describe('checkDsParity: webOnly và upcoming', () => {
   it('upcoming trùng tên với components (gói quên chuyển mục) thì đỏ', () => {
     const r = run(map({ upcoming: [{ name: 'ProductTile', package: 'P4', wave: '2' }] }));
     expect(r.errors.some((e) => e.includes('ProductTile') && e.includes('sắp có'))).toBe(true);
+  });
+
+  it('webOnly trùng tên với components thì đỏ (khuôn riêng web không được khai như thành phần chung)', () => {
+    const m = map({ webOnly: [{ name: 'ProductTile', web: WEB, reason: 'x' }] });
+    expect(run(m).errors.some((e) => e.includes('webOnly') && e.includes('ProductTile') && e.includes('components'))).toBe(true);
+  });
+
+  it('hai dòng webOnly cùng tên thì đỏ', () => {
+    const w = { name: 'HubLayout', web: LAYOUT, reason: 'lưới máy tính từ lg' };
+    expect(run(map({ webOnly: [w, w] }), layoutFiles).errors.some((e) => e.includes('HubLayout') && e.includes('trùng') && e.includes('webOnly'))).toBe(true);
+  });
+
+  it('hai dòng upcoming cùng tên thì đỏ', () => {
+    const u = { name: 'SectionCard', package: 'P10', wave: '4b' };
+    expect(run(map({ upcoming: [u, u] })).errors.some((e) => e.includes('SectionCard') && e.includes('trùng'))).toBe(true);
   });
 
   it('upcoming trùng tên với webOnly thì đỏ', () => {
@@ -157,8 +227,38 @@ describe('propKeys', () => {
     expect(propKeys('export type P = { a: string; b?: number };', 'P')).toEqual(['a', 'b']);
   });
 
+  it('giao và hợp của kiểu cùng file: gộp khoá mọi nhánh (ProgressBar)', () => {
+    const src = `interface Base { value: number; max: number }\nexport type P = Base & ({ label: string } | { label?: undefined; ariaLabel: string });`;
+    expect(propKeys(src, 'P')?.sort()).toEqual(['ariaLabel', 'label', 'max', 'value']);
+  });
+
+  it('kiểu nằm ngoài file hoặc có tham số kiểu thì null (không đoán)', () => {
+    expect(propKeys("import type { B } from './b';\nexport type P = B & { a: string };", 'P')).toBeNull();
+    expect(propKeys("export type P = Omit<HTMLAttributes<HTMLDivElement>, 'title'> & { a: string };", 'P')).toBeNull();
+  });
+
+  it('kiểu tự tham chiếu không làm treo', () => {
+    expect(propKeys('type A = B; type B = A;', 'A')).toBeNull();
+  });
+
   it('không khai thì null; nhắc trong comment không tính', () => {
     expect(propKeys('// interface P { a: string }\nexport function P() {}', 'P')).toBeNull();
+  });
+});
+
+describe('paramKeys', () => {
+  it.each([
+    ['export function A({ x }: { x: string; y?: number }) {}', ['x', 'y']],
+    ['export default function A() {}', []],
+    ['interface P { a: string }\nexport function A(p: P) {}', ['a']],
+    ['export const A = (p: { a: string }) => null;', ['a']],
+    ['export const A = memo(function A(p: { a: string; b?: number }) { return null; });', ['a', 'b']],
+    ['export const A = forwardRef<HTMLDivElement, { a: string }>((p, ref) => null);', null],
+    ['export function A(p) {}', null],
+    ['export function B() {}', null],
+    ['// export function A(p: { a: string }) {}', null],
+  ])('%s', (src, expected) => {
+    expect(paramKeys(src, 'A')).toEqual(expected);
   });
 });
 

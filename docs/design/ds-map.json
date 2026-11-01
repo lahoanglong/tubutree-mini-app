@@ -1,5 +1,5 @@
 {
-  "$comment": "Bản đồ thành phần giao diện Mini App ↔ web (nguồn sự thật cùng DESIGN.md). scripts/check-ds-parity.mjs (trong pnpm lint:parity) kiểm: components có file và export ở cả hai app, cùng khoá props trừ lệch có lý do ở propsDiff, screens là route Mini có trong route-map.json. screens là các màn mua sắm thành phần hiện diện qua chuỗi import (tính lúc lập bản đồ; thành phần nền như Button, Text, Icon dùng ở hầu hết màn nên không liệt kê). upcoming là thành phần gói khác đang làm: không kiểm file; gói nào xong thì chuyển dòng sang components.",
+  "$comment": "Bản đồ thành phần giao diện Mini App ↔ web (nguồn sự thật cùng DESIGN.md). scripts/check-ds-parity.mjs (trong pnpm lint:parity) kiểm: components có file và export ở cả hai app, cùng khoá props trừ lệch có lý do ở propsDiff (khoá đọc từ kiểu khai ở props, hoặc khi không khai thì từ kiểu tham số đầu của hàm thành phần; kiểu nằm ngoài file thì khai propsUncompared kèm lý do), screens là route Mini có trong route-map.json. screens là các màn mua sắm thành phần hiện diện qua chuỗi import (tính lúc lập bản đồ; thành phần nền như Button, Text, Icon dùng ở hầu hết màn nên không liệt kê). upcoming là thành phần gói khác đang làm: không kiểm file; gói nào xong thì chuyển dòng sang components.",
   "components": [
     {
       "name": "Badge",
@@ -89,7 +89,8 @@
     {
       "name": "EmptyState",
       "miniapp": "apps/miniapp/src/components/ui/empty-state.tsx",
-      "web": "apps/web/src/components/mini/empty-state.tsx"
+      "web": "apps/web/src/components/mini/empty-state.tsx",
+      "props": "EmptyStateProps"
     },
     {
       "name": "FlashSoldBar",
@@ -240,7 +241,16 @@
     {
       "name": "ProductImage",
       "miniapp": "apps/miniapp/src/components/ui/product-image.tsx",
-      "web": "apps/web/src/components/mini/product-image.tsx"
+      "web": "apps/web/src/components/mini/product-image.tsx",
+      "propsDiff": {
+        "webOnly": [
+          "alt",
+          "className",
+          "priority",
+          "size"
+        ],
+        "reason": "web: alt cho ảnh có nghĩa, className và size để ảnh vừa khung của khuôn máy tính, priority (fetchPriority high) cho ảnh ứng viên LCP khi render server; Mini luôn vẽ ảnh trang trí đúng khung thẻ"
+      }
     },
     {
       "name": "ProductRail",
@@ -301,6 +311,7 @@
       "name": "ProgressBar",
       "miniapp": "apps/miniapp/src/components/ui/progress-bar.tsx",
       "web": "apps/web/src/components/mini/progress-bar.tsx",
+      "props": "ProgressBarProps",
       "screens": [
         "/academy",
         "/academy/:courseId",
@@ -324,6 +335,14 @@
       "name": "QuantitySelector",
       "miniapp": "apps/miniapp/src/components/ui/quantity-selector.tsx",
       "web": "apps/web/src/components/mini/quantity-selector.tsx",
+      "props": "QuantitySelectorProps",
+      "propsDiff": {
+        "miniOnly": [
+          "editable",
+          "quickSteps"
+        ],
+        "reason": "bản web được map (components/mini/, sao Mini cũ, chỉ variation-sheet dùng) chưa có editable và quickSteps; bản web components/ui/quantity-selector.tsx đã có đủ và là bản add-to-cart, đặt lại, Đổi rác, đại lý dùng; hợp nhất hai bản web thuộc gói riêng"
+      },
       "screens": [
         "/",
         "/cart",
@@ -480,7 +499,8 @@
     {
       "name": "Skeleton",
       "miniapp": "apps/miniapp/src/components/ui/skeleton.tsx",
-      "web": "apps/web/src/components/mini/skeleton.tsx"
+      "web": "apps/web/src/components/mini/skeleton.tsx",
+      "props": "SkeletonProps"
     },
     {
       "name": "ProductTileSkeleton",
@@ -589,6 +609,15 @@
       "name": "WishlistHeart",
       "miniapp": "apps/miniapp/src/components/wishlist-heart.tsx",
       "web": "apps/web/src/components/catalog/wishlist-heart.tsx",
+      "propsDiff": {
+        "miniOnly": [
+          "size"
+        ],
+        "webOnly": [
+          "className"
+        ],
+        "reason": "Mini đổi cỡ icon tim bằng size; web cố định cỡ icon theo vùng chạm 44px và cho cha thêm lớp (className) để đặt vị trí trong khuôn"
+      },
       "screens": [
         "/",
         "/best-sellers",
@@ -631,7 +660,14 @@
     {
       "name": "BackButton",
       "miniapp": "apps/miniapp/src/components/back-button.tsx",
-      "web": "apps/web/src/components/mini/back-button.tsx"
+      "web": "apps/web/src/components/mini/back-button.tsx",
+      "propsDiff": {
+        "webOnly": [
+          "fallbackHref",
+          "className"
+        ],
+        "reason": "web có lịch sử trình duyệt: fallbackHref là trang đích khi mở thẳng link chia sẻ, className để PageHeader ẩn nút nổi từ md; Mini lấy lịch sử từ zmp-ui nên không nhận props"
+      }
     }
   ],
   "webOnly": [

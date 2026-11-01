@@ -211,7 +211,7 @@ Khung trang rộng: `PAGE_WIDE` ở `apps/web/src/lib/page-frame.ts`. Trang web 
 
 | Bài kiểm | Chặn gì |
 |---|---|
-| `pnpm lint:parity` | route Mini ↔ web (`route-map.json`) và thành phần Mini ↔ web (`ds-map.json`: file, export, khoá props) |
+| `pnpm lint:parity` | route Mini ↔ web (`route-map.json`) và thành phần Mini ↔ web (`ds-map.json`: file, export, khoá props của mọi thành phần: đọc từ kiểu khai ở `props`, hoặc từ kiểu tham số đầu của hàm; lệch phải khai `propsDiff` kèm lý do, kiểu nằm ngoài file thì `propsUncompared` kèm lý do) |
 | `pnpm lint:vars` | biến CSS chưa định nghĩa |
 | `packages/app-core/src/terminology.spec.ts` | thuật ngữ cấm trong chữ hiển thị |
 | `packages/app-core/src/shop-copy.spec.ts` | chữ mua sắm dính thuật ngữ cấm hoặc vượt ngân sách độ dài |

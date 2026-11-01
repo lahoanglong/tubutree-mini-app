@@ -4,6 +4,7 @@ export interface DsComponent {
   web: string;
   props?: string;
   propsDiff?: { miniOnly?: string[]; webOnly?: string[]; reason: string };
+  propsUncompared?: string;
   screens?: string[];
 }
 export interface DsMap {
@@ -13,4 +14,5 @@ export interface DsMap {
 }
 export function exportsSymbol(source: string, name: string): boolean;
 export function propKeys(source: string, typeName: string): string[] | null;
+export function paramKeys(source: string, funcName: string): string[] | null;
 export function checkDsParity(input: { map: DsMap; miniappRoutes: string[]; readFile: (repoRelativePath: string) => string | null }): { errors: string[]; warnings: string[] };
