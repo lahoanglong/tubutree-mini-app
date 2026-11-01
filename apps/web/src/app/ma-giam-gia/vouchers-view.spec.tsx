@@ -176,6 +176,37 @@ describe('VouchersView (web)', () => {
     expect(buttons('Lưu mã')).toHaveLength(1);
   });
 
+  it('mã khách-mới đã nhận mà khách đã có đơn (claimedIneligible): ghi "không còn áp dụng", không ghi Đã dùng, không có nút Lưu mã hay Dùng ngay', async () => {
+    responses['/coupons/collectable'] = [collectable('NEWONLY', { newCustomerOnly: true }), collectable('SHIP', { type: 'FREESHIP', value: 0 })];
+    responses['/coupons/collectable/mine'] = { claimed: ['NEWONLY'], newCustomerOnly: [], claimedIneligible: ['NEWONLY'] };
+    mount();
+    await flush();
+    expect(text()).toContain('Chỉ dành cho khách đặt đơn đầu tiên, nên không còn áp dụng');
+    // Nhãn tab "Đã dùng–hết hạn" cũng chứa chữ này: chỉ dấu trên thẻ mới tính.
+    expect(document.querySelector('[data-testid="voucher-stamp"]')).toBeNull();
+    expect(buttons('Lưu mã')).toHaveLength(1);
+    expect(button('Dùng ngay')).toBeNull();
+  });
+
+  it('ví tải lỗi: mã đã nhận không bị ghi Đã dùng, không có nút Dùng ngay, có dải báo lỗi và Thử lại tải lại ví', async () => {
+    responses['/coupons/collectable/mine'] = { claimed: ['NEW10'], newCustomerOnly: [] };
+    responses['/me/coupons'] = new ApiError('x', 500);
+    mount();
+    await flush(8);
+    expect(text()).toContain('Chưa tải được mã bạn đã lưu');
+    // Nhãn tab "Đã dùng–hết hạn" cũng chứa chữ này: chỉ dấu trên thẻ mới tính.
+    expect(document.querySelector('[data-testid="voucher-stamp"]')).toBeNull();
+    expect(button('Dùng ngay')).toBeNull();
+    expect(buttons('Lưu mã')).toHaveLength(1);
+    const before = callsTo('/me/coupons').length;
+    responses['/me/coupons'] = [wallet('NEW10')];
+    click(button('Thử lại'));
+    await flush(8);
+    expect(callsTo('/me/coupons').length).toBeGreaterThan(before);
+    expect(button('Dùng ngay')).not.toBeNull();
+    expect(text()).not.toContain('Chưa tải được mã bạn đã lưu');
+  });
+
   it('phần riêng của khách lỗi mạng: vẫn vẽ kho như cũ (máy chủ từ chối lúc nhận)', async () => {
     responses['/coupons/collectable/mine'] = new ApiError('x', 500);
     mount();
