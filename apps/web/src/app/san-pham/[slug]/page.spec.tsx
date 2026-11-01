@@ -367,6 +367,12 @@ describe('/san-pham/[slug] — dòng "Vận chuyển ›" ngắn, lưu ý dài n
     expect(asButton(note)).toBeNull();
     expect(Array.from(c.querySelectorAll('[role="button"]')).some((b) => b.textContent?.startsWith('Vận chuyển'))).toBe(false);
   });
+
+  it('điện thoại: ghi chú vận chuyển xếp order 4, trên chip phân loại (5) và Số lượng (6) để Số lượng sát phân loại', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null } };
+    const c = await mount();
+    expect(c.querySelector('[data-section="pdp-notes"]')!.className).toContain('max-md:order-4');
+  });
 });
 
 describe('/san-pham/[slug] — gian hàng tạm nghỉ hoặc đã ngừng bán (R3-MERCHANT-3)', () => {

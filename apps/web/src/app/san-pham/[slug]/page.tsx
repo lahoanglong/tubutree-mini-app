@@ -149,7 +149,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
               </div>
 
-              {/* Dòng thông tin kiểu Mini App: Ưu đãi › và Vận chuyển ›; "Phân loại ›" nằm trong khối mua (cùng chỗ giữ trạng thái chọn). */}
+              {/* Dòng thông tin kiểu Mini App: Ưu đãi › và Vận chuyển ›; chip phân loại và Số lượng nằm trong khối mua (cùng chỗ giữ trạng thái chọn). */}
               <div data-section="pdp-offers" className="mt-3 max-md:order-3 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:empty:hidden">
                 <PdpCoupons productId={product.id} />
                 {(fulfillerText || !fromStore) && (
@@ -166,12 +166,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                   </PdpShippingRow>
                 )}
               </div>
-              {/* Lưu ý dài (gian hàng tạm nghỉ, hàng đối tác chỉ bán giá lẻ) là chữ thường dưới dòng, không nằm trong nút "Vận chuyển ›". Điện thoại: cuối dải Phân loại như Mini App. */}
+              {/* Lưu ý dài (gian hàng tạm nghỉ, hàng đối tác chỉ bán giá lẻ) là chữ thường dưới dòng, không nằm trong nút "Vận chuyển ›". Điện thoại: ngay trên chip phân loại như Mini App. */}
               {(unavailableText || partnerNote) && (
                   <div
                     data-testid="pdp-shipping-notes"
                     data-section="pdp-notes"
-                    className="flex flex-col gap-1 py-2 max-md:order-6 max-md:bg-[var(--color-bg-surface)] max-md:px-4"
+                    className="flex flex-col gap-1 py-2 max-md:order-4 max-md:bg-[var(--color-bg-surface)] max-md:px-4"
                   >
                     {unavailableText && (
                       <p
@@ -194,13 +194,12 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               {/*
                 Thứ tự trong HTML là thứ tự đọc và bấm Tab ở máy tính: khối mua rồi mới tới chứng nhận và "Đặt định kỳ" (lối phụ), nên nút
                 "Thêm vào giỏ" không bị đẩy xuống dưới khung 1280×800. Điện thoại xếp lại bằng `max-md:order-N` theo thứ tự của Mini App:
-                thông tin chính 0, chứng nhận 1, Đặt định kỳ 2 (chỉ web: ngoại lệ có chủ đích), Ưu đãi + Vận chuyển 3, Phân loại 4,
-                chip phân loại 5, ghi chú vận chuyển 6, Combo/Mua kèm 8, Đánh giá nhanh 9, Số lượng 10, Mở nhóm mua chung + Nội dung bán hàng 11.
-                Phân loại, chip và Số lượng là ruột của AddToCart (gốc `contents`).
-                Hệ quả: thứ tự nhìn và thứ tự Tab/TalkBack lệch nhau ở điện thoại. Tab đi Ưu đãi/Vận chuyển, Phân loại, chip, rồi Số lượng
-                (trong DOM đứng ngay sau chip, trên màn hình nằm sau Combo và Đánh giá nhanh), thanh dính đáy, rồi mới tới chứng nhận, Đặt định kỳ,
-                Combo, Đánh giá nhanh. Chấp nhận để Số lượng và nút mua giữ chỗ cũ ở máy tính; nút mua thật của điện thoại ở thanh dính đáy
-                nên không phụ thuộc thứ tự này. Muốn khớp hoàn toàn thì tách hàng Số lượng khỏi AddToCart và dựng lại sau Đánh giá nhanh.
+                thông tin chính 0, chứng nhận 1, Đặt định kỳ 2 (chỉ web: ngoại lệ có chủ đích), Ưu đãi + Vận chuyển 3, ghi chú vận chuyển 4,
+                chip phân loại 5, Số lượng 6, Combo/Mua kèm 8, Đánh giá nhanh 9, Mở nhóm mua chung + Nội dung bán hàng 11.
+                Chip và Số lượng là ruột của AddToCart (gốc `contents`). Không có dòng "Phân loại ›" (chip đã đủ).
+                Hệ quả: thứ tự nhìn và thứ tự Tab/TalkBack lệch nhau ở điện thoại. Tab đi Ưu đãi/Vận chuyển, chip, Số lượng (trong DOM
+                đứng liền nhau và đúng chỗ trên màn hình), thanh dính đáy, rồi mới tới chứng nhận, Đặt định kỳ, Combo, Đánh giá nhanh.
+                Chấp nhận để nút mua giữ chỗ cũ ở máy tính; nút mua thật của điện thoại ở thanh dính đáy nên không phụ thuộc thứ tự này.
                 Bộ hết hạn hay tắt khi trang ISR đã cũ thì khối KHÔNG bị gỡ (PdpBundles giữ chỗ, ghi "Đã kết thúc"), nên chỗ này không nhảy; chỉ bộ
                 mới hiện sau khi tải (máy chủ lỗi lúc dựng, hay bộ vừa tạo sau lần dựng trang) là chèn thêm, như Mini App.
               */}

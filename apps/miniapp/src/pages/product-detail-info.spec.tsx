@@ -108,12 +108,27 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     expect(screen.queryByRole('button', { name: /Ưu đãi/ })).toBeNull();
   });
 
-  it('nhiều phân loại: dòng "Phân loại ›" ghi phân loại đang chọn và mở bảng chọn', async () => {
+  it('nhiều phân loại: không có dòng "Phân loại ›" (chip đã đủ), Số lượng ngay sau chip và trước Đánh giá nhanh', async () => {
+    mocks.fetchReviews.mockResolvedValue({
+      count: 3, average: 4.4,
+      items: [1, 2].map((n) => ({ id: `r${n}`, rating: 5, comment: `Rất tốt ${n}`, images: [], videoUrl: null, createdAt: '2026-10-01T00:00:00.000Z', author: 'Lan' })),
+    });
     renderPdp();
-    const row = await screen.findByRole('button', { name: /^Phân loại/ });
-    expect(row).toHaveTextContent('1L');
-    fireEvent.click(row);
-    expect(await screen.findByRole('group', { name: 'Phân loại' })).toBeInTheDocument();
+    const chips = await screen.findByRole('group', { name: 'Phân loại nhanh' });
+    expect(screen.queryByRole('button', { name: /^Phân loại/ })).toBeNull();
+    const qty = screen.getByText('Số lượng');
+    const quick = (await screen.findAllByTestId('quick-review'))[0]!;
+    expect(chips.compareDocumentPosition(qty) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(qty.compareDocumentPosition(quick) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('ghi chú vận chuyển nằm trên chip để Số lượng sát phân loại', async () => {
+    mocks.fetchProduct.mockResolvedValue({ ...product, partnerOwned: true });
+    renderPdp();
+    const chips = await screen.findByRole('group', { name: 'Phân loại nhanh' });
+    const notes = screen.getByTestId('pdp-shipping-notes');
+    expect(notes.compareDocumentPosition(chips) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(chips.compareDocumentPosition(screen.getByText('Số lượng')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('đánh giá nhanh: 2 đánh giá có chữ, "Xem tất cả (27)" cuộn tới danh sách đầy đủ', async () => {
