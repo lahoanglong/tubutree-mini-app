@@ -147,6 +147,34 @@ describe('coupon-collectable-last-slot: kho mã (real Postgres)', () => {
       const mine = await collect.mine(u.id);
       expect(mine.claimed).toContain(c.code);
       expect(mine.newCustomerOnly).not.toContain(c.code);
+      expect(mine.claimedIneligible).toContain(c.code);
+    });
+
+    it('mã chỉ-khách-mới đã nhận mà chưa có đơn: không vào claimedIneligible (ví vẫn hiện mã)', async () => {
+      const c = await coupon({ usageLimit: 100, newCustomerOnly: true });
+      const u = await realUser();
+      await claims.claim(u.id, c.code);
+      expect((await collect.mine(u.id)).claimedIneligible).not.toContain(c.code);
+    });
+
+    it('mã chỉ-khách-mới đã nhận, đã dùng hết lượt cá nhân rồi mới có đơn: là "đã dùng", không vào claimedIneligible', async () => {
+      const c = await coupon({ usageLimit: 100, perUserLimit: 1, newCustomerOnly: true });
+      const u = await realUser();
+      await claims.claim(u.id, c.code);
+      await prisma.couponRedemption.create({ data: { couponId: c.id, userId: u.id } });
+      await createOrder(prisma, { userId: u.id });
+      const mine = await collect.mine(u.id);
+      expect(mine.claimed).toContain(c.code);
+      expect(mine.claimedIneligible).not.toContain(c.code);
+    });
+
+    it('mã chỉ-khách-mới chưa nhận, khách đã có đơn: ở newCustomerOnly, không vào claimedIneligible', async () => {
+      const c = await coupon({ usageLimit: 100, newCustomerOnly: true });
+      const u = await realUser();
+      await createOrder(prisma, { userId: u.id });
+      const mine = await collect.mine(u.id);
+      expect(mine.newCustomerOnly).toContain(c.code);
+      expect(mine.claimedIneligible).not.toContain(c.code);
     });
   });
 
