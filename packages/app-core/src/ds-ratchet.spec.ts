@@ -21,6 +21,10 @@ describe('countPx: đếm px viết tay', () => {
     ['const s = { gap: compact ? 8 : 12 };', 2],
     ['const s = { borderRadius: 10, fontSize: 13 };', 2],
     ['const s = `calc(100% - ${x}px - 24px)`;', 1],
+    ['const c = <div className="[padding:12px_16px]" />;', 2],
+    ['const c = <div className="shadow-[0_2px_8px_rgba(0,0,0,.1)]" />;', 2],
+    ['const c = <div className="m-[10px_auto]" />;', 1],
+    ['const c = <div className="lg:grid-cols-[minmax(0,1fr)_360px]" />;', 1],
   ])('%s → %i', (src, n) => {
     expect(countPx(src, 'x.tsx')).toBe(n);
   });
@@ -35,6 +39,7 @@ describe('countPx: đếm px viết tay', () => {
     'const s = { gap: 0, padding: 1 };',
     "const s = { width: '100%', fontSize: 'var(--type-body-size)' };",
     'const s = { gap: spacing, padding: size * 2 };',
+    "const c = <div className=\"shadow-[inset_0_-1px_0_rgba(0,0,0,.1)]\" />;",
   ])('không đếm: %s', (src) => {
     expect(countPx(src, 'x.tsx')).toBe(0);
   });

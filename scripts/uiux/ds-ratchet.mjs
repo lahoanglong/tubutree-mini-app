@@ -46,8 +46,9 @@ const PX_PROPS = new Set(
   ],
 );
 
-// Lookbehind để `0.5px` không bị đọc thành `5px` và `a8px` (tên) không thành 8px.
-const PX_IN_TEXT = /(?<![\w.])-?(\d+(?:\.\d+)?)px\b/g;
+// Biên theo chữ và số chứ không theo `\w`: `_` là dấu ngăn của Tailwind (`[padding:12px_16px]`, `shadow-[0_2px_8px_...]`) nên phải đếm cả hai vế.
+// Lookbehind cũng để `0.5px` không bị đọc thành `5px` và `a8px` (tên) không thành 8px.
+const PX_IN_TEXT = /(?<![A-Za-z0-9.])-?(\d+(?:\.\d+)?)px(?![A-Za-z0-9])/g;
 const MAX_MD = /(?<![\w-])max-md:/g;
 
 const parse = (source, fileName) => ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, /\.tsx$/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
