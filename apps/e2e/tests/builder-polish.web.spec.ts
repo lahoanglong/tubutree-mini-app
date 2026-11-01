@@ -88,23 +88,34 @@ test.describe('Gian hàng công khai web (G6 #36)', () => {
 
   const section = (page: import('@playwright/test').Page, title: string) => page.locator('section').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
 
-  test('1280px: ComboCard không rộng quá 600px; kệ ít món là lưới lấp hàng, kệ nhiều món vẫn là kệ ngang', async ({ page }) => {
+  /** Số cột của `GRID_PRODUCTS` (lưới Sản phẩm) theo bề rộng cửa sổ: 5 từ lg (1024px), 6 từ xl (1280px); khe 16px từ md. */
+  const COLUMNS_AT = (width: number) => (width >= 1280 ? 6 : 5);
+  const GAP = 16;
+
+  async function expectProductsGridColumns(page: import('@playwright/test').Page, width: number): Promise<void> {
+    const few = section(page, 'Kệ ít món');
+    await expect(few.getByTestId('shop-rail')).toBeHidden();
+    const grid = few.getByTestId('shop-rail-lg');
+    await expect(grid).toBeVisible();
+    const box = (await grid.boundingBox())!;
+    const tiles = await grid.locator('[data-ds="product-tile"]').evaluateAll((els) => els.map((el) => el.getBoundingClientRect()));
+    expect(tiles).toHaveLength(LG_SHELF_FEW);
+    const cols = COLUMNS_AT(width);
+    const expected = (box.width - GAP * (cols - 1)) / cols;
+    for (const t of tiles) expect(Math.abs(t.width - expected), `thẻ rộng ${t.width}px, lưới Sản phẩm ${cols} cột cho ${expected}px`).toBeLessThanOrEqual(1);
+    expect(Math.abs(tiles[0]!.left - box.x), 'thẻ đầu sát mép trái lưới').toBeLessThanOrEqual(1);
+    // Hàng chưa đầy dồn trái là chủ ý (như hàng cuối của lưới Sản phẩm): thẻ liền nhau cách đúng một khe.
+    expect(Math.abs(tiles[1]!.left - tiles[0]!.right - GAP)).toBeLessThanOrEqual(1);
+  }
+
+  test('1280px: ComboCard không rộng quá 600px; kệ ít món là lưới cùng 6 cột với lưới Sản phẩm, kệ nhiều món vẫn là kệ ngang', async ({ page }) => {
     await page.goto(`/s/${LG_SHELVES_SLUG}`);
     const combo = page.getByTestId('shop-combo');
     await expect(combo).toBeVisible({ timeout: 20_000 });
     expect((await combo.boundingBox())!.width, 'ComboCard giãn hết khung').toBeLessThanOrEqual(600);
     expect(LG_COMBO_ITEMS).toBeGreaterThanOrEqual(2);
 
-    const few = section(page, 'Kệ ít món');
-    await expect(few.getByTestId('shop-rail')).toBeHidden();
-    const grid = few.getByTestId('shop-rail-lg');
-    await expect(grid).toBeVisible();
-    const tiles = await grid.locator('[data-ds="product-tile"]').evaluateAll((els) => els.map((el) => el.getBoundingClientRect()));
-    expect(tiles).toHaveLength(LG_SHELF_FEW);
-    const frame = (await few.boundingBox())!;
-    const row = tiles[tiles.length - 1]!.right - tiles[0]!.left;
-    expect(row / frame.width, 'bốn thẻ chiếm cả hàng chứ không dồn trái').toBeGreaterThanOrEqual(0.6);
-    expect(Math.min(...tiles.map((t) => t.width)), 'thẻ không hẹp hơn thẻ kệ 148px').toBeGreaterThanOrEqual(148);
+    await expectProductsGridColumns(page, 1280);
 
     const many = section(page, 'Kệ nhiều món');
     await expect(many.getByTestId('shop-rail-lg')).toHaveCount(0);
@@ -113,6 +124,31 @@ test.describe('Gian hàng công khai web (G6 #36)', () => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
   });
+
+  test('1100px (lg, dưới xl): kệ ít món là lưới 5 cột như lưới Sản phẩm', async ({ page }) => {
+    await page.setViewportSize({ width: 1100, height: 800 });
+    await page.goto(`/s/${LG_SHELVES_SLUG}`);
+    await expect(page.getByTestId('shop-combo')).toBeVisible({ timeout: 20_000 });
+    await expectProductsGridColumns(page, 1100);
+  });
+
+  for (const [label, width] of [['1280px', 1280], ['375px', 375]] as const) {
+    test(`${label}: kệ ít món chỉ có một bản thẻ trong cây trợ năng và một bản ảnh nhìn thấy (bản kia display:none)`, async ({ page }) => {
+      await page.setViewportSize({ width, height: width === 375 ? 812 : 800 });
+      await page.goto(`/s/${LG_SHELVES_SLUG}`);
+      const few = section(page, 'Kệ ít món');
+      await expect(few.getByTestId(width === 375 ? 'shop-rail' : 'shop-rail-lg')).toBeVisible({ timeout: 20_000 });
+      // Playwright bỏ phần tử display:none khỏi getByRole: hai bản cùng thấy được thì số liên kết gấp đôi.
+      const links = few.getByRole('link');
+      const names = await links.evaluateAll((els) => els.map((el) => (el.getAttribute('aria-label') ?? el.textContent ?? '').trim()));
+      const productLinks = await few.locator('a[href^="/san-pham/"]:visible').evaluateAll((els) => els.map((el) => el.getAttribute('href')));
+      expect(new Set(productLinks).size, 'mỗi sản phẩm một liên kết nhìn thấy').toBe(productLinks.length);
+      expect(productLinks).toHaveLength(LG_SHELF_FEW);
+      expect(new Set(names).size, `tên liên kết không trùng: ${names.join(' | ')}`).toBe(names.length);
+      const tilesShown = await few.locator('[data-ds="product-tile"]:visible').count();
+      expect(tilesShown).toBe(LG_SHELF_FEW);
+    });
+  }
 
   test('375px: vẫn là kệ ngang như Mini, không có lưới', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
