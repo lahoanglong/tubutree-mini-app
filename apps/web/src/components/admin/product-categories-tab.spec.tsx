@@ -57,7 +57,7 @@ function setup(props: { initialMissingImage?: boolean; initialUncategorized?: bo
 }
 
 describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
-  it('mặc định hiện mọi sản phẩm (không lọc sẵn), mục tên "Sản phẩm" kèm panel cây danh mục; chip "Chưa có danh mục" lấy số từ hộp việc và lọc hàng đang bán', async () => {
+  it('mặc định hiện mọi sản phẩm (không lọc sẵn), mục tên "Sản phẩm" kèm panel cây danh mục; chip "Đang bán, chưa có danh mục" lấy số từ hộp việc và lọc hàng đang bán', async () => {
     const { m, container } = setup();
     await flush();
     const list = m.calls.find((c) => c.url.includes('/admin/product-categories/products') && !c.url.includes('uncategorized=1'))!;
@@ -67,9 +67,9 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
     expect(byText(container, 'h3', 'Cây danh mục')).not.toBeNull();
     expect(container.textContent).toContain('Giặt tẩy');
     // Số cạnh chip là số của thẻ hộp việc (chỉ hàng đang bán), không đếm bằng một truy vấn danh sách riêng.
-    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Chưa có danh mục (2)')).toBe(true);
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Đang bán, chưa có danh mục (2)')).toBe(true);
     expect(m.calls.filter((c) => c.url.includes('/admin/product-categories/products'))).toHaveLength(1);
-    click(byText(container, 'button', 'Chưa có danh mục'));
+    click(byText(container, 'button', 'Đang bán, chưa có danh mục'));
     await flush();
     const filtered = m.calls.filter((c) => c.url.includes('/admin/product-categories/products')).at(-1)!;
     expect(filtered.url).toContain('uncategorized=1');
@@ -104,7 +104,7 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
   it('mở từ thẻ hộp việc (initialUncategorized): chip bật sẵn, lọc đang bán, panel cây thu gọn nhường chỗ cho danh sách', async () => {
     const { m, container } = setup({ initialUncategorized: true });
     await flush();
-    const chip = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Chưa có danh mục'))!;
+    const chip = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Đang bán, chưa có danh mục'))!;
     expect(chip.getAttribute('aria-pressed')).toBe('true');
     const first = m.calls.find((c) => c.url.includes('/admin/product-categories/products'))!;
     expect(first.url).toContain('uncategorized=1');

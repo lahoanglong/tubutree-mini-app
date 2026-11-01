@@ -211,7 +211,7 @@ test.describe('Admin: cây danh mục và gán sản phẩm', () => {
     expect(call.query.get('uncategorized')).toBe('1');
     expect(call.query.get('onSale')).toBe('1');
     await expect(page).toHaveURL(/tab=productCategories/);
-    await expect(page.getByRole('button', { name: /^Chưa có danh mục \(3\)$/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: /^Đang bán, chưa có danh mục \(3\)$/ })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('button', { name: 'Mở rộng' })).toHaveAttribute('aria-expanded', 'false');
 
     await page.getByRole('checkbox', { name: 'Chọn Nước rửa chén Tubu hương chanh 750ml' }).check();
