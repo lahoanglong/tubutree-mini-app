@@ -12,6 +12,7 @@ vi.mock('../../services/shop-api', () => ({
 vi.mock('../../services/bundle-api', () => ({ getHomeCombos: mocks.fetchCombos }));
 vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.status }) }));
 
+import { HOME_BEST_SELLER_LIMIT } from '@tubutree/app-core/home-layout';
 import { COMBO_HOLD_MS } from '@tubutree/app-core/merch/home-shelves';
 import { useHomeShelves } from './use-home-shelves';
 
@@ -48,10 +49,10 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
     mocks.fetchCombos.mockResolvedValue([]);
   });
 
-  it('Bán chạy nhất lấy 12 món theo 30 ngày; bỏ món đã ở Giờ vàng (a) và Mua lại (x)', async () => {
+  it('Bán chạy nhất lấy HOME_BEST_SELLER_LIMIT món theo 30 ngày; bỏ món đã ở Giờ vàng (a) và Mua lại (x)', async () => {
     const { result } = setup('returning');
     await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['p1', 'p2', 'p3', 'p4']));
-    expect(mocks.fetchProducts).toHaveBeenCalledWith({ limit: 12, sort: 'best_seller_30d' });
+    expect(mocks.fetchProducts).toHaveBeenCalledWith({ limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' });
     expect([...result.current.seen].sort()).toEqual(['a', 'b', 'c', 'p1', 'p2', 'p3', 'p4', 'x']);
   });
 
@@ -127,7 +128,7 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
     });
     const { result } = setup('new');
     await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['p1', 'p2', 'p3', 'p4']));
-    expect(mocks.fetchProducts).toHaveBeenCalledWith({ limit: 12, sort: 'best_seller' });
+    expect(mocks.fetchProducts).toHaveBeenCalledWith({ limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller' });
     expect(result.current.bestSellerBasis).toBe('total');
   });
 

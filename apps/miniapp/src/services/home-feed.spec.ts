@@ -4,6 +4,7 @@ vi.mock('./api', () => ({ api: { get: vi.fn(), post: vi.fn() }, getAccessToken: 
 const authState = vi.hoisted(() => ({ user: { id: 'u-a' } as { id: string } | null }));
 
 import { api, getAccessToken } from './api';
+import { HOME_BEST_SELLER_LIMIT } from '@tubutree/app-core/home-layout';
 import { armHomeFeed, homeFeedIdentity, disarmHomeFeed, homeProductSlot, resetHomeFeed, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
 
 const get = api.get as unknown as ReturnType<typeof vi.fn>;
@@ -100,7 +101,7 @@ describe('home-feed', () => {
   });
 
   it('homeProductSlot chỉ nhận đúng 3 bộ tham số của Home', () => {
-    expect(homeProductSlot({ limit: 12, sort: 'best_seller_30d' })).toBe('bestSellers');
+    expect(homeProductSlot({ limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' })).toBe('bestSellers');
     expect(homeProductSlot({ limit: 6, sort: 'best_seller' })).toBeNull();
     expect(homeProductSlot({ limit: 6, sort: 'newest' })).toBe('newest');
     expect(homeProductSlot({ limit: 12 })).toBe('featured');

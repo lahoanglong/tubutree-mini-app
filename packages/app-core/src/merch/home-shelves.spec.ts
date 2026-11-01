@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { HOME_BEST_SELLER_LIMIT } from '../home-layout';
 import { comboShelfEntry, composeHomeShelves, flashShelfEntry, purchasedShelfEntry, ranksAreSequential, seeAllHref, variationKey, type ShelfEntry } from './home-shelves';
 
 const e = <T,>(id: string, item: T): ShelfEntry<T> => ({ id, item });
@@ -160,6 +161,30 @@ describe('Mua lại chống trùng Giờ vàng theo phân loại (P2 #3)', () =>
   it('hai phân loại của một sản phẩm đều hiện ở Mua lại (không gộp theo slug)', () => {
     const r = composeHomeShelves({ ...none, purchased: [purchasedShelfEntry(boughtOf('can', 'v1l')), purchasedShelfEntry(boughtOf('can', 'v5l'))] });
     expect(r.purchased.map((p) => p.variationId)).toEqual(['v1l', 'v5l']);
+  });
+});
+
+describe('Bán chạy nhất không tụt dưới 3 món khi có 3–4 combo (F9 MINOR)', () => {
+  const slugs = (n: number) => Array.from({ length: n }, (_, i) => `sp${i + 1}`);
+  const comboOf = (id: string, items: string[]) => comboShelfEntry({ id, items: items.map((slug) => ({ slug })) });
+
+  it('bốn combo mỗi combo 3 món đều là 12 món bán chạy nhất, Giờ vàng chiếm 3 món và Mua lại 2 món kế tiếp: bảng HOME_BEST_SELLER_LIMIT món còn 7 món, không ẩn kệ', () => {
+    const board = slugs(HOME_BEST_SELLER_LIMIT);
+    const r = composeHomeShelves({
+      flash: board.slice(12, 15).map((p) => e(p, p)),
+      purchased: board.slice(15, 17).map((p, i) => purchasedShelfEntry({ slug: p, variationId: `v-${i}` })),
+      combos: [0, 1, 2, 3].map((k) => comboOf(`c${k}`, board.slice(k * 3, k * 3 + 3))),
+      bestSellers: board.map((p) => e(p, p)),
+    });
+    expect(r.combos).toHaveLength(4);
+    expect(r.bestSellers).toEqual(board.slice(17));
+    expect(r.bestSellers.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('bảng 12 món (cũ) với cùng tình huống thì chỉ còn 0 món: kệ ẩn', () => {
+    const board = slugs(12);
+    const r = composeHomeShelves({ ...none, combos: [0, 1, 2, 3].map((k) => comboOf(`c${k}`, board.slice(k * 3, k * 3 + 3))), bestSellers: board.map((p) => e(p, p)) });
+    expect(r.bestSellers).toEqual([]);
   });
 });
 

@@ -68,7 +68,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import HomePage from './home';
 import { homeBlockOrder } from '../components/home/home-blocks';
-import { homeRenderOrder } from '@tubutree/app-core/home-layout';
+import { HOME_BEST_SELLER_LIMIT, homeRenderOrder } from '@tubutree/app-core/home-layout';
 import { HOME_KIND_KEY } from '../hooks/use-home-customer-kind';
 import { loadHomeBelow } from '../components/home/home-lazy';
 
@@ -81,7 +81,7 @@ const card = (id: string, name: string) => ({
 const PAGE = (items: ReturnType<typeof card>[]) => ({ data: items, meta: { page: 1, limit: 6, total: items.length } });
 // Kệ Bán chạy nhất chỉ hiện từ 3 món (SHELVES), nên mock mặc định trả 4 món.
 const BEST_PAGE = () => PAGE([1, 2, 3, 4].map((n) => card(`bs${n}`, `Bán chạy ${n}`)));
-const BEST_QUERY = { limit: 12, sort: 'best_seller_30d' };
+const BEST_QUERY = { limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' };
 
 function renderHome() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -128,7 +128,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
   });
 
   it('khách cũ: thẻ thành viên, Việc cần làm, lối tắt, Mua lại, Giờ vàng, Danh mục, ... lưới gợi ý cuối', async () => {
-    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1' }], nextCursor: null });
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null });
     renderHome();
     await waitFor(() => expect(blockOrder()).toEqual(RETURNING));
     // Giờ vàng đứng TRƯỚC Mua lại (Q6); Bán chạy nhất có ở cả hai loại khách (Q18).
@@ -138,7 +138,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(screen.getByRole('region', { name: 'Thẻ thành viên' })).toBeInTheDocument();
   });
 
-  it('"Bán chạy nhất" lấy 12 món theo 30 ngày, có hạng, và "Xem tất cả" mở trang Bán chạy nhất (cùng thước đo 30 ngày)', async () => {
+  it('"Bán chạy nhất" lấy HOME_BEST_SELLER_LIMIT món theo 30 ngày, có hạng, và "Xem tất cả" mở trang Bán chạy nhất (cùng thước đo 30 ngày)', async () => {
     renderHome();
     const best = await screen.findByRole('region', { name: 'Bán chạy nhất' });
     expect(await within(best).findByText('Bán chạy 1')).toBeInTheDocument();
@@ -305,7 +305,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
       await waitFor(() => expect(mocks.fetchPurchasedItems).toHaveBeenCalled());
       expect(settled(qc, ['purchased-items', 10])).toBe(false);
       await act(async () => {
-        d.resolve({ items: [{ variationId: 'v1' }], nextCursor: null });
+        d.resolve({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null });
       });
       await waitFor(() => expect(settled(qc, ['purchased-items', 10])).toBe(true));
       obs.disconnect();
@@ -322,7 +322,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
       expect(screen.getByTestId('home-settling')).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Bán chạy nhất' })).toBeNull();
       await act(async () => {
-        d.resolve({ items: [{ variationId: 'v1' }], nextCursor: null });
+        d.resolve({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null });
       });
       await waitFor(() => expect(blockOrder()).toEqual(RETURNING));
       expect(storedKind()).toEqual({ userId: 'u1', kind: 'returning' });
@@ -335,7 +335,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
       await waitFor(() => expect(storedKind()).toEqual({ userId: 'u1', kind: 'new' }));
       expect(settled(qc, ['purchased-items', 10])).toBe(true);
       unmount();
-      mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1' }], nextCursor: null });
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null });
       renderHome();
       await waitFor(() => expect(storedKind()).toEqual({ userId: 'u1', kind: 'returning' }));
     });

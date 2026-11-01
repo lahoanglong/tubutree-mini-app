@@ -8,7 +8,7 @@ vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/use-hydrated', () => ({ useHydrated: () => mocks.hydrated }));
 
-import type { HomeKindState } from '@tubutree/app-core/home-layout';
+import { HOME_BEST_SELLER_LIMIT, type HomeKindState } from '@tubutree/app-core/home-layout';
 import { resetFlashSales } from '@/lib/use-flash-sales';
 import { useHomeShelves, type HomeShelves } from './use-home-shelves';
 
@@ -56,12 +56,12 @@ afterEach(() => {
 });
 
 describe('useHomeShelves (web)', () => {
-  it('Bán chạy nhất xin sort=best_seller_30d, 12 món', async () => {
+  it('Bán chạy nhất xin sort=best_seller_30d, HOME_BEST_SELLER_LIMIT món', async () => {
     await mount('new');
     const call = mocks.get.mock.calls.find(([p]) => String(p).startsWith('/products'));
     expect(call).toBeTruthy();
     expect(JSON.stringify(call)).toContain('best_seller_30d');
-    expect(JSON.stringify(call)).toContain('12');
+    expect(call![1]).toMatchObject({ query: { limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' } });
   });
 
   it('bestSellerBasis là days30 khi API trả theo 30 ngày', async () => {
