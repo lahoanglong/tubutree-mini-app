@@ -448,6 +448,24 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
     expect((await publicBundles.forProduct(main.slug)).addons).toHaveLength(1);
   });
 
+  it('thứ tự dòng trong giỏ (heap Postgres) không đổi khoản giảm: hai khách cùng nội dung, thêm món theo thứ tự ngược nhau, ra cùng số ở giỏ, báo giá và đơn', async () => {
+    const p1 = await product(100_000);
+    const p1Large = await addVariation(p1.productId, 300_000);
+    const p2 = await product(100_000);
+    await bundle('BUNDLE_PCT', [{ productId: p1.productId }, { productId: p2.productId }], { pct: 10 }); // maxQty 1: chỉ một phân loại của p1 được giảm
+
+    const forward = await buyer();
+    for (const v of [p1.variationId, p1Large, p2.variationId]) await cart.addItem(forward.userId, { variationId: v, quantity: 1 });
+    const backward = await buyer();
+    for (const v of [p2.variationId, p1Large, p1.variationId]) await cart.addItem(backward.userId, { variationId: v, quantity: 1 });
+
+    const a = await cartQuoteOrder(forward);
+    const b = await cartQuoteOrder(backward);
+    expect(b.c.comboDiscount).toBe(a.c.comboDiscount);
+    expect(b.numbers).toEqual(a.numbers);
+    for (const v of [p1.variationId, p1Large, p2.variationId]) expect(paidOf(b.o, v)).toBe(paidOf(a.o, v));
+  });
+
   it('ADDON ghi tay không ghim phân loại (qua mặt admin): giỏ không giảm đồng nào, công khai không quảng cáo', async () => {
     const b = await buyer();
     const main = await product(80_000);

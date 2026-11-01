@@ -382,3 +382,23 @@ describe('ComboService.computeForStorefront: nhân viên không hưởng bộ do
   });
 });
 
+describe('ComboService.computeForStorefront: thứ tự dòng giỏ không đổi khoản giảm', () => {
+  const config = { get: async (k: string, fb?: unknown) => (k === 'storefront.require_approval' ? false : fb) } as any;
+  const item = (productId: string) => ({ productId, variationId: null, addonPrice: null, refPrice: null, maxQty: 1, product: { storefrontId: null } });
+  const bundle = { id: 'b1', kind: 'BUNDLE_PCT', pct: 10, anchorProductId: null, anchorProduct: null, createdById: null, items: [item('p1'), item('p2')] };
+  const prismaOf = () => ({ bundle: { findMany: jest.fn().mockResolvedValue([bundle]) } }) as any;
+  // Hai phân loại khác giá của cùng một món, maxQty=1: chỉ một trong hai được giảm, phải luôn là cùng một dòng.
+  const cheap = { variationId: 'v1a', productId: 'p1', total: 100_000, quantity: 1 };
+  const dear = { variationId: 'v1b', productId: 'p1', total: 300_000, quantity: 1 };
+  const other = { variationId: 'v2', productId: 'p2', total: 100_000, quantity: 1 };
+
+  it.each([
+    ['rẻ, đắt, món kia', [cheap, dear, other]],
+    ['đắt, món kia, rẻ', [dear, other, cheap]],
+    ['món kia, đắt, rẻ', [other, dear, cheap]],
+  ])('thứ tự %s ra cùng số', async (_name, lines) => {
+    const out = await new ComboService(prismaOf(), config).computeForStorefront(null, lines);
+    expect(out).toEqual({ total: 20_000, perLine: { v1a: 10_000, v2: 10_000 } });
+  });
+});
+
