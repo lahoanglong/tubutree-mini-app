@@ -13,7 +13,9 @@ const linkClass = 'inline-flex min-h-11 items-center text-sm font-semibold text-
 function Row({ icon, children }: { icon: LucideIcon; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-2.5 text-sm">
-      <Icon icon={icon} size="sm" tone="brand" />
+      <span className="flex w-5 shrink-0 justify-center pt-px">
+        <Icon icon={icon} size="sm" tone="brand" />
+      </span>
       <div className="min-w-0">{children}</div>
     </div>
   );

@@ -8,7 +8,9 @@ import { Text } from '../ui/text';
 function Row({ icon, children }: { icon: LucideIcon; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      <Icon icon={icon} size="sm" tone="brand" />
+      <span style={{ width: 20, flex: '0 0 auto', display: 'flex', justifyContent: 'center', paddingTop: 1 }}>
+        <Icon icon={icon} size="sm" tone="brand" />
+      </span>
       <Text variant="body-sm" as="div" style={{ minWidth: 0 }}>
         {children}
       </Text>

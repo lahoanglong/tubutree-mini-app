@@ -88,7 +88,7 @@ export function PdpPointsEarn({ product }: { product: PointsEarnProduct }) {
         aria-label={`${text}. ${POINTS_EARN_POPUP.rowAria}`}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
-        className="-mb-3 -mt-[7px] flex min-h-11 items-center gap-1.5 text-left text-xs font-semibold text-[var(--color-text-brand)]"
+        className="-mb-[14px] -mt-[8px] flex min-h-11 items-center gap-1.5 text-left text-xs font-semibold text-[var(--color-text-brand)]"
       >
         <Leaf className="h-[15px] w-[15px] shrink-0" aria-hidden="true" />
         <span>{text}</span>
