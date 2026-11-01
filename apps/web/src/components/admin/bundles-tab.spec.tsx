@@ -367,3 +367,21 @@ describe('BundlesTab: trợ năng', () => {
     expect(unnamedControls(c)).toEqual([]);
   });
 });
+
+describe('BundlesTab: chữ trong form không lộ khoá cấu hình thô', () => {
+  // Khoá cấu hình dạng `bundle.max_pct`, `coupon.staff_max_percent` hay `ten_khoa_snake` là chữ của kỹ thuật viên, không phải của người quản trị.
+  const RAW_KEY = /\b[a-z]+\.[a-z0-9]+(?:_[a-z0-9]+)+\b|\b[a-z]+(?:_[a-z0-9]+)+\b/;
+
+  it('form tạo (cả hai loại), gồm gợi ý dưới ô: không có khoá thô, trần % được nói bằng chữ thường ngày', async () => {
+    const c = await mount();
+    await open(c);
+    await pick(c, 2);
+    expect(c.textContent).toContain('Không vượt trần % đang cấu hình');
+    expect(c.textContent ?? '').not.toMatch(RAW_KEY);
+    selectValue(field(c, 'Loại bộ'), 'ADDON');
+    await flush(1);
+    await pickAddon(c, 1);
+    expect(c.textContent ?? '').not.toMatch(RAW_KEY);
+  });
+});
+
