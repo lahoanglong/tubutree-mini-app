@@ -138,6 +138,7 @@ const EXPECTED: Record<string, Access> = {
   'POST /admin/flash-sales': [MARKETING],
   'DELETE /admin/flash-sales/:id': [MARKETING],
   'PATCH /admin/flash-sales/:id': [MARKETING],
+  'PATCH /admin/flash-sales/items/:itemId': [MARKETING],
   'POST /admin/flash-sales/:id/items': [MARKETING],
   'DELETE /admin/flash-sales/items/:itemId': [MARKETING],
   'POST /admin/gomdon/alerts/:alertId/resolve': [KHO],
