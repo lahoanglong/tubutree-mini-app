@@ -47,6 +47,15 @@ describe('sitemap', () => {
     expect(urls.filter((u) => u.includes('ds-gallery'))).toEqual([]);
   });
 
+  it('không nộp /uu-dai và /ma-giam-gia: hai trang công khai nhưng noindex (dùng route map thật)', async () => {
+    const actual = await vi.importActual<typeof import('@/lib/route-map')>('@/lib/route-map');
+    routeMocks.publicStaticRoutes.mockReturnValueOnce([...actual.publicStaticRoutes(), '/uu-dai', '/ma-giam-gia']);
+    const urls = (await sitemap()).map((e) => e.url);
+    expect(urls).toContain('https://app.tubutree.com/gioi-thieu');
+    expect(urls).not.toContain('https://app.tubutree.com/uu-dai');
+    expect(urls).not.toContain('https://app.tubutree.com/ma-giam-gia');
+  });
+
   it('/hoan-tien chỉ vào sitemap khi CASHBACK_ENABLED bật, vì trang đang noindex khi cờ tắt', async () => {
     routeMocks.publicStaticRoutes.mockReturnValue(['/', '/hoan-tien']);
     try {

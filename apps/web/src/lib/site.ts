@@ -15,10 +15,20 @@ export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'https://ap
 
 const BASE_PRIVATE_PATHS = ['/admin', '/merchant', '/tai-khoan', '/gio-hang', '/thanh-toan', '/dang-nhap'];
 
-/** Trang riêng tư/nội bộ — không được để công cụ tìm kiếm lập chỉ mục. Danh sách gốc + tiền tố các route `private` của route map. */
+/**
+ * Route công khai trong route map (`private: false`: khách chưa đăng nhập vẫn mở được) nhưng chính trang đánh dấu noindex vì nội dung
+ * là của riêng khách (ví mã, điểm). Vẫn `Disallow` trong robots như route riêng tư; robots không `allow` lại chúng (Google chọn `allow`
+ * khi hai luật dài bằng nhau) và sitemap không nộp chúng.
+ */
+export const NOINDEX_PUBLIC_PATHS = ['/uu-dai', '/ma-giam-gia'];
+
+/** Trang riêng tư/nội bộ — không được để công cụ tìm kiếm lập chỉ mục. Danh sách gốc + tiền tố các route `private` của route map + route công khai noindex. */
 export const PRIVATE_PATHS = [
-  ...BASE_PRIVATE_PATHS,
-  ...privatePrefixes().filter((p) => !BASE_PRIVATE_PATHS.some((b) => p === b || p.startsWith(`${b}/`))),
+  ...new Set([
+    ...BASE_PRIVATE_PATHS,
+    ...privatePrefixes().filter((p) => !BASE_PRIVATE_PATHS.some((b) => p === b || p.startsWith(`${b}/`))),
+    ...NOINDEX_PUBLIC_PATHS,
+  ]),
 ];
 
 /**
