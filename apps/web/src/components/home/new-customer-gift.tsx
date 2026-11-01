@@ -178,7 +178,7 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
 
 function NewCustomerGiftSkeleton() {
   return (
-    <div data-testid="new-customer-gift-loading" aria-hidden="true" className="pb-3">
+    <div data-testid="new-customer-gift-loading" aria-hidden="true">
       <Skeleton height={HOME_HERO_HEIGHT} radius="var(--radius-card)" />
     </div>
   );
