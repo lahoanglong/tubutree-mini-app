@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './support/mock-api';
-import { NRC, mockDiscovery } from './support/discovery-mocks';
+import { CATALOG, NRC, XA_PHONG, mockDiscovery, toCard } from './support/discovery-mocks';
 import { PDP_SLUG, homeCombos, mockPdpBundles, pdpAddon, pdpCombo } from './support/bundle-mocks';
 import { HOME_PUBLIC, mockMergedHome } from './support/home-merged';
 import type { MockApi } from './support/mock-api';
@@ -126,5 +126,23 @@ test.describe('Trang chủ Mini: CLS của kệ Combo tiết kiệm', () => {
     expect(api.callsTo('GET', '/bundles/combos')).toHaveLength(0);
     const cls = await readCls(page);
     expect(cls, `CLS ${cls.toFixed(4)} so với nền ${baseline.toFixed(4)}`).toBeLessThanOrEqual(baseline + 0.01);
+  });
+
+  test('Bán chạy nhất có món của combo (cùng request gộp): kệ không còn món ấy và CLS ≤ 0,02 (món không hiện rồi biến mất: vitest use-home-shelves giữ)', async ({ page, api }) => {
+    mockMergedHomeWith(api, homeCombos());
+    api.get('/home', {
+      ...HOME_PUBLIC,
+      combos: homeCombos(),
+      bestSellers: { data: CATALOG.slice(0, 8).map(toCard), meta: { page: 1, limit: 12, total: 8 } },
+    });
+    await trackLayoutShift(page);
+    await page.goto('/');
+    const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true });
+    await expect(best).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Combo tiết kiệm', exact: true })).toBeVisible();
+    await expect(best.getByText(XA_PHONG.name)).toHaveCount(0);
+    expect(api.callsTo('GET', '/bundles/combos')).toHaveLength(0);
+    const cls = await readCls(page);
+    expect(cls, `CLS ${cls.toFixed(4)}`).toBeLessThanOrEqual(0.02);
   });
 });

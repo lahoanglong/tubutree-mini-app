@@ -138,4 +138,47 @@ describe('applyShelfDedupe', () => {
     applyShelfDedupe(input);
     expect(input).toEqual(copy);
   });
+
+  describe('khoá phụ `also` (combo chiếm các món của nó)', () => {
+    const entry = (id: string, ...also: string[]) => ({ id, also });
+
+    it('kệ sau bỏ món mà combo đã chiếm qua `also`; hai combo chung một món không loại nhau (cùng kệ)', () => {
+      const out = applyShelfDedupe([
+        { id: 'home.bestSellers', items: items('p1', 'p2', 'p3', 'p4', 'p5', 'p6') },
+        { id: 'home.combos', items: [entry('c1', 'p1', 'p2'), entry('c2', 'p2')] },
+      ]);
+      expect(ids(out[1]!.items)).toEqual(['c1', 'c2']);
+      expect(ids(out[0]!.items)).toEqual(['p3', 'p4', 'p5', 'p6']);
+    });
+
+    it('combo chỉ chiếm xuống dưới: kệ hạng cao giữ món trùng nhưng không loại combo (Mua lại về sau không làm kệ combo biến mất)', () => {
+      const out = applyShelfDedupe([
+        { id: 'home.flash', items: items('p1', 'p7', 'p8') },
+        { id: 'home.purchased', items: items('p3', 'p4', 'p5') },
+        { id: 'home.combos', items: [entry('c1', 'p1', 'p2'), entry('c2', 'p3', 'p4')] },
+        { id: 'home.bestSellers', items: items('p1', 'p2', 'p3', 'p4', 'p9', 'p10', 'p11') },
+      ]);
+      expect(ids(out[0]!.items)).toEqual(['p1', 'p7', 'p8']);
+      expect(ids(out[1]!.items)).toEqual(['p3', 'p4', 'p5']);
+      expect(ids(out[2]!.items)).toEqual(['c1', 'c2']);
+      expect(ids(out[3]!.items)).toEqual(['p9', 'p10', 'p11']);
+    });
+
+    it('kệ combo dưới `minItems` thì ẩn và không chiếm món của kệ dưới', () => {
+      const out = applyShelfDedupe([
+        { id: 'home.combos', items: [entry('c1', 'p1', 'p2')] },
+        { id: 'home.bestSellers', items: items('p1', 'p2', 'p3', 'p4') },
+      ]);
+      expect(out[0]!.items).toEqual([]);
+      expect(ids(out[1]!.items)).toEqual(['p1', 'p2', 'p3', 'p4']);
+    });
+
+    it('món của combo không lọt sang kệ Gợi ý hôm nay (hạng thấp hơn)', () => {
+      const out = applyShelfDedupe([
+        { id: 'home.combos', items: [entry('c1', 'p1', 'p2'), entry('c2', 'p3', 'p4')] },
+        { id: 'home.suggest', items: items('p1', 'p3', 'p5', 'p6', 'p7', 'p8') },
+      ]);
+      expect(ids(out[1]!.items)).toEqual(['p5', 'p6', 'p7', 'p8']);
+    });
+  });
 });

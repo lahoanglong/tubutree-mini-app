@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect, reply } from './support/mock-api';
-import { NRC, mockDiscovery } from './support/discovery-mocks';
+import { BINH_SUA, NRC, XA_PHONG, mockDiscovery } from './support/discovery-mocks';
 import { COMBO_TITLE, HOME_COMBO_TITLES, PDP_SLUG, homeCombos, mockHomeCombos, mockPdpBundles, pdpAddon, pdpCombo } from './support/bundle-mocks';
 import { EMPTY_CART } from './support/shop-page-mocks';
 
@@ -108,6 +108,26 @@ test.describe('Trang chủ: Combo tiết kiệm', () => {
     const calls = api.callsTo('POST', '/cart/items/batch');
     expect(calls).toHaveLength(1);
     expect(calls[0]!.body).toMatchObject({ items: [{ variationId: VAR_NRC, quantity: 1 }, { variationId: 'var-p-xp', quantity: 1 }] });
+  });
+
+  test('món nằm trong combo không lặp lại ở Bán chạy nhất (§5: Combo đứng trước Bán chạy nhất); không có combo thì ba món bán chạy nhất vẫn ở đó', async ({ page, api }) => {
+    mockHomeCombos(api, []);
+    await page.goto('/');
+    const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true });
+    for (const x of [XA_PHONG, BINH_SUA, NRC]) await expect(best.getByText(x.name).first()).toBeVisible({ timeout: 15_000 });
+    await expect(best.locator('[data-ds-part="rank"]').first()).toHaveText('#1');
+  });
+
+  test('có 2 combo chứa ba món bán chạy nhất: kệ Bán chạy nhất bỏ ba món đó, thẻ còn lại giữ hạng thật (#4...)', async ({ page, api }) => {
+    mockHomeCombos(api, homeCombos());
+    await page.goto('/');
+    const rail = page.getByRole('region', { name: 'Combo tiết kiệm', exact: true });
+    await expect(rail).toBeVisible({ timeout: 15_000 });
+    const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true });
+    await expect(best).toBeVisible();
+    for (const x of [XA_PHONG, BINH_SUA, NRC]) await expect(best.getByText(x.name)).toHaveCount(0);
+    // Hạng thật đi theo món: KEM (bán thứ 4) mở đầu kệ với #4, không đánh lại từ #1.
+    await expect(best.locator('[data-ds-part="rank"]').first()).toHaveText('#4');
   });
 
   test('chỉ 1 combo (dưới mức tối thiểu của kệ): không hiện kệ, Bán chạy nhất vẫn có', async ({ page, api }) => {
