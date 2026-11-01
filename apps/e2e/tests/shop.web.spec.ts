@@ -748,7 +748,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await page.goto('/');
     // login() chỉ đặt cờ phiên trong localStorage (không có cookie) nên HTML đầu là bản khách vãng lai; khi biết có phiên, các khối dưới
     // thẻ thành viên đổi sang khung chờ rồi dựng lại. Đo chip trước lúc đó thì chip bị gỡ khỏi trang giữa chừng.
-    await expect(page.getByText('Chào Nguyễn Văn An')).toBeVisible();
+    await expect(page.getByText('Chào An')).toBeVisible();
     await expect(page.getByTestId('home-settling')).toHaveCount(0);
     const chips = [
       page.getByRole('region', { name: /Dải thương hiệu/ }).getByRole('button').first(),

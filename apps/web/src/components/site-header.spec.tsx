@@ -53,6 +53,15 @@ describe('SiteHeader', () => {
     expect(out).toContain('>An<');
   });
 
+  it('nút tài khoản dùng tên gọi như lời chào thẻ thành viên: họ tên có khoảng trắng thừa hay emoji vẫn ra từ cuối, thiếu tên thì "Tài khoản" (P2 #7)', () => {
+    mocks.auth = { user: { fullName: 'Nguyễn Thị Quay Lại ' }, status: 'authenticated', initialized: true, sessionUnavailable: false };
+    expect(render()).toContain('>Lại<');
+    mocks.auth = { user: { fullName: '🌸 Hoa 🌸' }, status: 'authenticated', initialized: true, sessionUnavailable: false };
+    expect(render()).toContain('>Hoa<');
+    mocks.auth = { user: { fullName: '' }, status: 'authenticated', initialized: true, sessionUnavailable: false };
+    expect(render()).toContain('>Tài khoản<');
+  });
+
   // R2-BUYERWEB-5: mất mạng lúc khôi phục phiên thì khách vẫn là khách đã đăng nhập, header không được mời đăng nhập lại.
   it('phiên tạm không khôi phục được (mất mạng): header giữ lối vào Tài khoản, không hiện Đăng nhập', () => {
     mocks.auth = { user: null, status: 'idle', initialized: true, sessionUnavailable: true };

@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { ShoppingBag, User } from 'lucide-react';
+import { givenName } from '@tubutree/app-core/person-name';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { getCart } from '@/lib/shop-client';
@@ -72,7 +73,7 @@ export default function SiteHeader() {
                 {user?.fullName ? user.fullName.slice(0, 1).toUpperCase() : <User className="h-3.5 w-3.5" aria-hidden="true" />}
               </div>
               <span className="max-w-[100px] truncate">
-                {user?.fullName ? user.fullName.split(' ').slice(-1)[0] : 'Tài khoản'}
+                {givenName(user?.fullName) ?? 'Tài khoản'}
               </span>
             </Link>
           ) : (

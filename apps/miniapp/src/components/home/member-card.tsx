@@ -4,6 +4,7 @@ import { useNavigate } from 'zmp-ui';
 import { ChevronRight, Leaf } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { HOME_HERO_HEIGHT, memberCardAriaLabel, memberCardView } from '@tubutree/app-core/home-layout';
+import { givenName } from '@tubutree/app-core/person-name';
 import { useCheckIn } from '../../hooks/use-check-in';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { vi } from '../../i18n/vi';
@@ -85,7 +86,7 @@ export function MemberCard() {
     pointsTotal: pointsSummary(loyaltyQ.data ?? user).total,
     vndPerPointRedeem: cfg.loyalty?.vndPerPointRedeem,
   });
-  const greeting = homeCopy.member.greeting(user.fullName ?? vi.auth.greetingFallback);
+  const greeting = homeCopy.member.greeting(givenName(user.fullName) ?? vi.auth.greetingFallback);
   const loyaltyFailed = loyaltyQ.isError && !loyaltyQ.data;
 
   return (
