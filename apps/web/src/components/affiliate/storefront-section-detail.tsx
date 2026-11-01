@@ -36,7 +36,6 @@ export interface StorefrontSectionDetailProps {
   onMoveBlocked: (itemId: string, dir: MoveDirection) => void;
   onItemMenu: (itemId: string) => void;
   onNote: (itemId: string) => void;
-  onKit: (slug: string) => void;
 }
 
 const samePinGroup = (a: { isPinned: boolean }, b: { isPinned: boolean }) => a.isPinned === b.isPinned;
@@ -105,10 +104,11 @@ export function StorefrontSectionDetail(p: StorefrontSectionDetailProps) {
 
   return (
     <div data-testid="section-detail" className="space-y-4">
-      {/* Dưới md như dải đầu của Mini App: nền surface tràn mép, nút lùi nổi của app đè lên góc trái nên hàng đầu chừa 52px; từ md là khối thường. */}
+      {/* Dưới md như dải đầu của Mini App: nền surface tràn mép, nút lùi nổi của app đè lên góc trái nên hàng đầu chỉ có ⋯ ở phải; từ md là khối thường có link lùi. */}
       <div className="max-md:mx-[calc(50%-50vw)] max-md:bg-[var(--color-bg-surface)] max-md:px-2 max-md:pb-3 max-md:pt-2">
-        <div className="-ml-2 flex items-center justify-between max-md:ml-0 max-md:pl-[52px]">
-          <button type="button" onClick={p.onBack} className="inline-flex min-h-11 items-center gap-0.5 px-2 text-sm font-medium text-forest-700">
+        <div className="flex items-center justify-end md:-ml-2 md:justify-between">
+          {/* Dưới md nút lùi nổi của app là lối lùi duy nhất (như Mini); từ md không có nút nổi nên link này ở lại. */}
+          <button type="button" onClick={p.onBack} className="hidden min-h-11 items-center gap-0.5 px-2 text-sm font-medium text-forest-700 md:inline-flex">
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             {BUILDER_COPY.back}
           </button>
@@ -175,7 +175,6 @@ function ItemRow({ it, list, productMap, p }: { it: StorefrontItemEdit; list: St
   const prod = it.product ?? productMap.get(it.productId);
   const name = prod?.name ?? 'Sản phẩm';
   const price = prod?.salePrice ?? prod?.basePrice ?? 0;
-  const slug = prod?.slug;
   const at = list.findIndex((x) => x.id === it.id);
   const canMove = (dir: MoveDirection) => {
     const to = dir === 'up' ? at - 1 : at + 1;
@@ -229,11 +228,6 @@ function ItemRow({ it, list, productMap, p }: { it: StorefrontItemEdit; list: St
             <MessageSquarePlus className="h-4 w-4 shrink-0" aria-hidden="true" />
             {it.note ? `“${it.note}”` : 'Thêm lý do giới thiệu'}
           </button>
-          {slug && (
-            <button type="button" className={`${ui.btnText} ${phoneBrandText}`} onClick={() => p.onKit(slug)}>
-              Bài đăng mẫu
-            </button>
-          )}
         </div>
       )}
     </li>

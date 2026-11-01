@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { EyeOff, Eye, Pencil, Pin, Plus, Settings, Share2, Trash2, UserRoundCog } from 'lucide-react';
+import { EyeOff, Eye, Pencil, Pin, Plus, Settings, Share2, Sparkles, Trash2, UserRoundCog } from 'lucide-react';
 import {
   createCollection,
   deleteCollection,
@@ -448,7 +448,6 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
             onMoveBlocked={(itemId, dir) => blockedMove(sectionCol.items, itemId, dir, nameOfItem(sectionCol.id, itemId), samePinGroup)}
             onItemMenu={setItemMenuId}
             onNote={(itemId) => setNoting({ id: itemId, note: sectionCol.items.find((i) => i.id === itemId)?.note ?? '' })}
-            onKit={setKitSlug}
           />
         </div>
       ) : (
@@ -471,7 +470,11 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
                     </Badge>
                   </div>
                   <div className={`break-words text-xs text-stone-600 ${phoneCaption}`}>{storefrontHost(sf)}</div>
-                  {!sf.coverUrl && <div className="text-xs text-forest-700 max-md:font-normal">Thêm ảnh bìa</div>}
+                  {!sf.coverUrl && (
+                    <button type="button" onClick={() => setProfileOpen(true)} className="tubu-hit-44 block text-left text-xs text-forest-700">
+                      Thêm ảnh bìa
+                    </button>
+                  )}
                 </div>
               </div>
               {view.code === 'LIVE' && <div className={`mt-2 text-xs text-stone-600 ${phoneCaption}`}>Gian hàng cập nhật sau vài phút khi bạn đổi nội dung.</div>}
@@ -592,6 +595,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
             ? [
                 { key: 'pin', label: menuItem.isPinned ? 'Bỏ ghim' : 'Ghim lên đầu', icon: Pin, onPress: () => itemMut.mutate({ id: menuItem.id, dto: { isPinned: !menuItem.isPinned } }) },
                 { key: 'hide', label: menuItem.isHidden ? 'Hiện sản phẩm' : 'Ẩn sản phẩm', icon: menuItem.isHidden ? Eye : EyeOff, onPress: () => itemMut.mutate({ id: menuItem.id, dto: { isHidden: !menuItem.isHidden } }) },
+                ...(menuItem.product?.slug ? [{ key: 'kit', label: 'Bài đăng mẫu', icon: Sparkles, onPress: () => setKitSlug(menuItem.product!.slug) }] : []),
                 { key: 'remove', label: BUILDER_COPY.removeItem, icon: Trash2, danger: true, onPress: () => setConfirmDeleteItem(menuItem.id) },
               ]
             : []

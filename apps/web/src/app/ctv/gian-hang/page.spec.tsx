@@ -585,7 +585,7 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
     const labels = Array.from(dialog()!.querySelectorAll('button'))
       .map((b) => b.textContent?.trim())
       .filter(Boolean);
-    expect(labels.slice(-3)).toEqual(['Ghim lên đầu', 'Ẩn sản phẩm', 'Xoá khỏi khối']);
+    expect(labels.slice(-4)).toEqual(['Ghim lên đầu', 'Ẩn sản phẩm', 'Bài đăng mẫu', 'Xoá khỏi khối']);
   });
 
   it('lỗi ghim: báo lỗi trên trang', async () => {
@@ -604,6 +604,9 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
     await flush();
     await openFirstSection();
     expect(hasBtn('Nội dung')).toBe(false);
+    // Từ G6 (P2 #30) "Bài đăng mẫu" nằm trong menu ⋯ của món, không còn nút chữ thứ hai trong hàng.
+    expect(hasBtn('Bài đăng mẫu')).toBe(false);
+    await openItemMenu();
     click(btn('Bài đăng mẫu'));
     await flush();
     expect(calls('get', '/affiliate/content-kit/tra-xanh')).toHaveLength(1);
@@ -622,6 +625,7 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
     mount();
     await flush();
     await openFirstSection();
+    await openItemMenu();
     click(btn('Bài đăng mẫu'));
     await flush();
     expect(dialog()?.textContent).toContain('mất mạng');
@@ -950,6 +954,14 @@ describe('link subdomain theo cờ', () => {
 });
 
 describe('hồ sơ và cấu hình gian hàng', () => {
+  it('"Thêm ảnh bìa" là nút (không còn chữ xanh như link mà không bấm được) và mở sheet hồ sơ (G6 #29)', async () => {
+    mount();
+    await flush();
+    click(btn('Thêm ảnh bìa'));
+    await flush();
+    expect(dialog()?.textContent).toContain('Hồ sơ gian hàng');
+  });
+
   it('chưa có ảnh bìa: lời mời thêm ảnh bìa; có ảnh thì không', async () => {
     const a = mount();
     await flush();
@@ -1218,7 +1230,9 @@ describe('kiểu Mini App ở điện thoại', () => {
     await flush();
     const cover = a.container.querySelector<HTMLElement>('[data-testid="profile-cover"]')!;
     expect(cover.className).toContain('max-md:bg-[linear-gradient(135deg,var(--sage-100),var(--forest-100))]');
-    expect(Array.from(a.container.querySelectorAll('div')).find((d) => d.textContent === 'Thêm ảnh bìa')!.className).toContain('max-md:font-normal');
+    const addCover = btn('Thêm ảnh bìa');
+    expect(addCover.className).toContain('tubu-hit-44');
+    expect(addCover.className).not.toMatch(/font-(medium|semibold|bold)/);
     a.unmount();
     state.sf = storefront({ coverUrl: 'https://cdn.example/c.jpg");background:red;("' });
     const b = mount();
@@ -1227,14 +1241,12 @@ describe('kiểu Mini App ở điện thoại', () => {
     expect(style).toContain('url("https://cdn.example/c.jpg%22);background:red;(%22")');
   });
 
-  it('chip bố cục không hiện ở điện thoại; "Bài đăng mẫu" xanh đậm không gạch chân; thanh dưới nền nhạt, không xuống dòng', async () => {
+  it('chip bố cục không hiện ở điện thoại; thanh dưới nền nhạt, không xuống dòng', async () => {
     state.sf = storefront({ isPublished: true });
     mount();
     await flush();
     const layout = Array.from(document.querySelectorAll('span')).find((s) => s.textContent === 'Lưới');
     if (layout) expect(layout.className).toContain('max-md:hidden');
-    const content = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Bài đăng mẫu');
-    if (content) expect(content.className).toContain('max-md:no-underline');
     const preview = document.querySelector<HTMLElement>('a[href^="/s/"]')!;
     expect(preview.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
     expect(btn('Chia sẻ gian hàng').className).toContain('max-md:whitespace-nowrap');
@@ -1636,6 +1648,16 @@ describe('màn dựng theo khối (P10)', () => {
       expect(document.activeElement).toBe(cardBtn('Bộ hai,'));
     });
 
+    it('nút lùi trong trang chi tiết chỉ hiện từ md (dưới md nút lùi nổi của app là lối lùi duy nhất, như Mini) (G6 #30)', async () => {
+      setThree();
+      mount();
+      await flush();
+      await openCard('Bộ hai,');
+      const back = btn('Gian hàng của tôi', $('[data-testid="section-detail"]')!);
+      expect(back.className).toContain('hidden');
+      expect(back.className).toContain('md:inline-flex');
+    });
+
     it('điện thoại: ở trang chi tiết dải tiêu đề của trang nhường chỗ (sr-only, vẫn một h1), danh sách giữ dải tiêu đề là con trực tiếp của khung', async () => {
       setThree();
       mount();
@@ -1665,14 +1687,16 @@ describe('màn dựng theo khối (P10)', () => {
       expect(document.querySelector('main > div.max-md\\:sr-only')).toBeNull();
     });
 
-    it('trang chi tiết: hàng đầu chừa 52px cho nút lùi nổi; nút Thêm sản phẩm rộng hết hàng ở điện thoại', async () => {
+    it('trang chi tiết: hàng đầu chỉ còn ⋯ ở phải dưới md (nút lùi nổi ở góc trái), từ md lùi và ⋯ hai đầu; nút Thêm sản phẩm rộng hết hàng ở điện thoại', async () => {
       setThree();
       mount();
       await flush();
       await openCard('Bộ hai,');
       const detail = $('[data-testid="section-detail"]')!;
       const back = btn('Gian hàng của tôi', detail);
-      expect(back.parentElement!.className).toContain('max-md:pl-[52px]');
+      expect(back.parentElement!.className).toContain('justify-end');
+      expect(back.parentElement!.className).toContain('md:justify-between');
+      expect(back.parentElement!.className).not.toContain('52px');
       const add = btn('Thêm sản phẩm', detail);
       expect(add.className).toContain('w-full');
     });
