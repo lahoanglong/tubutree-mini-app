@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FlashSlotItem as FlashSlotItemData } from '@tubutree/app-core/api/flash-sale';
 
@@ -129,6 +129,19 @@ describe('FlashSlotItem: khung sắp diễn ra', () => {
     expect((container.querySelector('[data-ds-part="media"]') as HTMLElement).style.opacity).toBe('0.55');
     fireEvent.click(remind);
     expect(onToggleRemind).not.toHaveBeenCalled();
+  });
+
+  it('món hết hàng ở khung sắp mở: dòng "Hết hàng" ngoài phần mờ, nút khoá có mô tả là lý do; khung đang chạy không thêm dòng này', () => {
+    const { container } = render(<FlashSlotItem item={{ ...ITEM, soldOut: true, soldCount: 0 }} {...base} slotStatus="UPCOMING" />);
+    const remind = screen.getByRole('button', { name: 'Nhắc tôi Serum Bã Trầu' });
+    expect(remind).toHaveAccessibleDescription('Hết hàng');
+    const reason = screen.getByText('Hết hàng');
+    expect(container.textContent).not.toContain('Đã bán');
+    for (let n: HTMLElement | null = reason; n && n !== container; n = n.parentElement) expect(n.style.opacity).toBe('');
+    cleanup();
+    const live = render(<FlashSlotItem item={{ ...ITEM, soldOut: true, soldCount: 10 }} {...base} slotStatus="LIVE" />);
+    expect(live.container.textContent).toContain('Đã bán hết');
+    expect(screen.queryByText('Hết hàng')).not.toBeInTheDocument();
   });
 
   it('món hết hàng nhưng khách đã đặt nhắc từ trước: vẫn bỏ nhắc được', () => {

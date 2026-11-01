@@ -1,7 +1,7 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/flash/flash-slot-item.tsx
-import type { CSSProperties } from 'react';
+import { useId, type CSSProperties } from 'react';
 import type { FlashSlotItem as FlashSlotItemData, FlashSlotStatus } from '@tubutree/app-core/api/flash-sale';
 import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { slotBuyLabel, slotItemNote, slotRemindLabel } from '@tubutree/app-core/commerce/flash-slots';
@@ -19,6 +19,8 @@ const SOLD_FOOTER_HEIGHT = 20;
 const ACTION_STYLE: CSSProperties = { minWidth: 0, maxWidth: 96, padding: '0 8px', fontSize: 'var(--type-label-size)', whiteSpace: 'nowrap' };
 /** Nút của món hết suất: mờ như ảnh (nút khoá bằng aria-disabled nên không tính tương phản chữ). */
 const SOLD_OUT_ACTION_STYLE: CSSProperties = { ...ACTION_STYLE, opacity: 0.55 };
+/** Dòng "Hết hàng" thay chỗ thanh đã bán ở khung sắp mở: chữ phụ nằm ngoài phần mờ nên giữ tương phản, cao đúng 16 như thanh. */
+const OUT_OF_STOCK_STYLE: CSSProperties = { fontSize: 'var(--type-label-size)', lineHeight: '16px', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' };
 
 export interface FlashSlotItemProps {
   item: FlashSlotItemData;
@@ -34,11 +36,12 @@ export interface FlashSlotItemProps {
  * Một dòng món của trang Giờ vàng: thẻ `line` chung + thanh đã bán có chữ ở cuối thân + một nút ở cuối hàng. Thanh đã bán chỉ vẽ khi khung đang diễn ra:
  * khung chưa mở thì chưa có suất nào bán, chữ "Vừa mở bán" của thanh sẽ nói ngược lại với dòng "Bắt đầu sau ..." ngay trên đó (chỗ thanh để trống đúng
  * chiều cao nên thẻ không nhảy khi khung mở). Món hết suất vẫn hiện nhưng ảnh và nút mờ, nút khoá (aria-disabled, không `disabled` thật để vẫn nằm trong
- * thứ tự Tab và đọc được lý do qua thanh "Đã bán hết"); chữ giữ nguyên độ đậm vì chữ thông tin mờ đi thì tụt dưới tương phản 4,5:1. Chạm nút không mở sản phẩm.
+ * thứ tự Tab; lý do đọc qua thanh "Đã bán hết" ở khung đang diễn ra, còn khung sắp mở không có thanh nên dòng "Hết hàng" thay chỗ và nút trỏ aria-describedby tới nó); chữ giữ nguyên độ đậm vì chữ thông tin mờ đi thì tụt dưới tương phản 4,5:1. Chạm nút không mở sản phẩm.
  */
 export function FlashSlotItem({ item, slotStatus, reminded, remindPending, onBuy, onToggleRemind }: FlashSlotItemProps) {
   const view = productCardView({ product: flashCardProduct(item), flash: item, variant: 'line', now: serverNow() });
   const upcoming = slotStatus === 'UPCOMING';
+  const outOfStockId = useId();
   // Món hết hàng thật ở khung sắp mở: không đặt nhắc mới (tới giờ khách nhận thông báo cho món không mua được). Đã nhắc từ trước thì vẫn bỏ nhắc được.
   const remindLocked = item.soldOut && !reminded;
   const action = upcoming ? (
@@ -49,6 +52,7 @@ export function FlashSlotItem({ item, slotStatus, reminded, remindPending, onBuy
       aria-pressed={reminded}
       aria-label={slotRemindLabel(item.productName, reminded)}
       aria-disabled={remindLocked || undefined}
+      aria-describedby={remindLocked ? outOfStockId : undefined}
       style={remindLocked ? SOLD_OUT_ACTION_STYLE : ACTION_STYLE}
       onPress={() => {
         if (remindLocked) return;
@@ -84,6 +88,11 @@ export function FlashSlotItem({ item, slotStatus, reminded, remindPending, onBuy
       footer={
         <div style={{ height: SOLD_FOOTER_HEIGHT, paddingTop: 4, boxSizing: 'border-box' }}>
           {!upcoming && <FlashSoldBar soldPct={soldPercent(item.soldCount, item.quota)} soldOut={item.soldOut} />}
+          {upcoming && item.soldOut && (
+            <span id={outOfStockId} style={OUT_OF_STOCK_STYLE}>
+              {fillCopy('flash.outOfStock')}
+            </span>
+          )}
         </div>
       }
       action={action}

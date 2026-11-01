@@ -63,10 +63,9 @@ describe('slotStartsFor', () => {
     expect(FLASH_SLOT_MINUTES).toBe(120);
   });
 
-  it('13:00 giờ VN, hai khung, 2 ngày: 12:00 hôm nay còn chạy nên còn đủ 4 mốc', () => {
+  it('13:00 giờ VN, hai khung, 2 ngày: 12:00 hôm nay đang chạy dở nên bị bỏ, còn 3 mốc', () => {
     const now = at('2026-11-01T06:00:00Z');
     expect(slotStartsFor(now, clocks, 2).map((d) => d.toISOString())).toEqual([
-      '2026-11-01T05:00:00.000Z',
       '2026-11-01T13:00:00.000Z',
       '2026-11-02T05:00:00.000Z',
       '2026-11-02T13:00:00.000Z',
@@ -80,6 +79,11 @@ describe('slotStartsFor', () => {
       '2026-11-02T05:00:00.000Z',
       '2026-11-02T13:00:00.000Z',
     ]);
+  });
+
+  it('biên: đúng 12:00:00.000 giờ VN thì khung 12:00 (start == now) bị bỏ, lùi 1 ms thì còn', () => {
+    expect(slotStartsFor(at('2026-11-01T05:00:00.000Z'), ['12:00'], 1)).toEqual([]);
+    expect(slotStartsFor(at('2026-11-01T04:59:59.999Z'), ['12:00'], 1).map((d) => d.toISOString())).toEqual(['2026-11-01T05:00:00.000Z']);
   });
 
   it('days <= 0 không sinh mốc nào', () => {

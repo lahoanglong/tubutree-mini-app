@@ -31,13 +31,13 @@ function setup(existing: Date[] = []) {
 const createdRows = (prisma: any): { title: string; startAt: Date; endAt: Date; createdBy: string }[] => prisma.flashSale.createMany.mock.calls[0][0].data;
 
 describe('FlashSaleService.generateSlots (khung mặc định flashsale.slots)', () => {
-  it('không cấu hình: dùng 12:00 và 20:00 giờ VN, 2 ngày ra 4 khung 2 giờ, tên "Giờ vàng HH:MM", ghi người tạo', async () => {
+  it('không cấu hình: dùng 12:00 và 20:00 giờ VN, 2 ngày lúc 13:00 ra 3 khung 2 giờ (12:00 hôm nay đã bắt đầu nên bỏ), tên "Giờ vàng HH:MM", ghi người tạo, không đợt nào bắt đầu trước now', async () => {
     const { prisma, svc } = setup();
-    await expect(svc().generateSlots('a1', 2, NOW)).resolves.toEqual({ created: 4, skipped: 0 });
+    await expect(svc().generateSlots('a1', 2, NOW)).resolves.toEqual({ created: 3, skipped: 0 });
     const rows = createdRows(prisma);
-    expect(rows.map((r) => r.title)).toEqual(['Giờ vàng 12:00', 'Giờ vàng 20:00', 'Giờ vàng 12:00', 'Giờ vàng 20:00']);
+    expect(rows.map((r) => r.title)).toEqual(['Giờ vàng 20:00', 'Giờ vàng 12:00', 'Giờ vàng 20:00']);
+    expect(rows.every((r) => r.startAt.getTime() > NOW.getTime())).toBe(true);
     expect(rows.map((r) => r.startAt.toISOString())).toEqual([
-      '2026-11-01T05:00:00.000Z',
       '2026-11-01T13:00:00.000Z',
       '2026-11-02T05:00:00.000Z',
       '2026-11-02T13:00:00.000Z',
@@ -59,10 +59,16 @@ describe('FlashSaleService.generateSlots (khung mặc định flashsale.slots)',
   it('khoá cấu hình hỏng thì về mặc định, không sinh khung rác', async () => {
     const { prisma, svc } = setup();
     await svc(cfg({ 'flashsale.slots': 'tối nay' })).generateSlots('a1', 1, NOW);
-    expect(createdRows(prisma).map((r) => r.title)).toEqual(['Giờ vàng 12:00', 'Giờ vàng 20:00']);
+    expect(createdRows(prisma).map((r) => r.title)).toEqual(['Giờ vàng 20:00']);
   });
 
-  it('mốc đã kết thúc bị bỏ: 14:00 giờ VN thì khung 12:00 hôm nay không tạo', async () => {
+  it('biên: đúng 12:00 giờ VN thì mốc 12:00 (start == now) không tạo', async () => {
+    const { prisma, svc } = setup();
+    await expect(svc().generateSlots('a1', 1, new Date('2026-11-01T05:00:00Z'))).resolves.toEqual({ created: 1, skipped: 0 });
+    expect(createdRows(prisma).map((r) => r.startAt.toISOString())).toEqual(['2026-11-01T13:00:00.000Z']);
+  });
+
+  it('mốc đã kết thúc: 14:00 giờ VN thì khung 12:00 hôm nay không tạo', async () => {
     const { prisma, svc } = setup();
     await expect(svc().generateSlots('a1', 1, new Date('2026-11-01T07:00:00Z'))).resolves.toEqual({ created: 1, skipped: 0 });
     expect(createdRows(prisma).map((r) => r.startAt.toISOString())).toEqual(['2026-11-01T13:00:00.000Z']);
@@ -70,17 +76,14 @@ describe('FlashSaleService.generateSlots (khung mặc định flashsale.slots)',
 
   it('chạy lần hai: mốc đã có đợt cùng giờ bắt đầu được bỏ qua, không tạo trùng', async () => {
     const { prisma, svc } = setup([new Date('2026-11-01T13:00:00Z'), new Date('2026-11-02T05:00:00Z')]);
-    await expect(svc().generateSlots('a1', 2, NOW)).resolves.toEqual({ created: 2, skipped: 2 });
-    expect(createdRows(prisma).map((r) => r.startAt.toISOString())).toEqual(['2026-11-01T05:00:00.000Z', '2026-11-02T13:00:00.000Z']);
+    await expect(svc().generateSlots('a1', 2, NOW)).resolves.toEqual({ created: 1, skipped: 2 });
+    expect(createdRows(prisma).map((r) => r.startAt.toISOString())).toEqual(['2026-11-02T13:00:00.000Z']);
   });
 
   it('mọi mốc đã có: không gọi createMany', async () => {
-    const all = [
-      new Date('2026-11-01T05:00:00Z'),
-      new Date('2026-11-01T13:00:00Z'),
-    ];
+    const all = [new Date('2026-11-01T13:00:00Z')];
     const { prisma, svc } = setup(all);
-    await expect(svc().generateSlots('a1', 1, NOW)).resolves.toEqual({ created: 0, skipped: 2 });
+    await expect(svc().generateSlots('a1', 1, NOW)).resolves.toEqual({ created: 0, skipped: 1 });
     expect(prisma.flashSale.createMany).not.toHaveBeenCalled();
   });
 
