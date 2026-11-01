@@ -376,7 +376,7 @@ export function CouponBox({
         <span className="flex-none text-sm font-medium text-[color:var(--color-text-primary)]">Mã giảm giá</span>
         {currentCode ? (
           <span className="flex min-w-0 items-center gap-2">
-            <span className="min-w-0 truncate rounded-control border border-dashed border-[var(--clay-500)] bg-[var(--clay-50)] px-1.5 py-0.5 text-[11px] font-bold text-[color:var(--clay-700)]">
+            <span className="min-w-0 truncate rounded-control border border-dashed border-[var(--clay-500)] bg-[var(--clay-50)] px-1.5 py-0.5 text-caption font-bold text-[color:var(--clay-700)]">
               {currentCode}
             </span>
             {appliedDiscount > 0 && (
