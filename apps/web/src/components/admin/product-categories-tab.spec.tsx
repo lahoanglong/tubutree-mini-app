@@ -20,61 +20,110 @@ const PAGE: CategoryProductsPage = {
   nextCursor: null,
 };
 
-function setup() {
+const cat = (id: string, name: string, parentId: string | null, sortOrder: number, productCount = 0, totalCount = productCount) => ({
+  id,
+  name,
+  slug: id,
+  parentId,
+  sortOrder,
+  productCount,
+  totalCount,
+});
+const LIMITS = { maxRoots: 8, maxChildren: 8 };
+const TREE = {
+  items: [cat('c1', 'Giặt tẩy', null, 0, 3), cat('c2', 'Nhà bếp', null, 1, 0), cat('c9', 'Gia dụng', null, 2, 0, 1), cat('c10', 'Dao thớt', 'c9', 0, 1)],
+  limits: LIMITS,
+};
+const INBOX = { generatedAt: '2026-11-01T03:00:00.000Z', items: [{ key: 'productsUncategorized', count: 2 }, { key: 'productsMissingImage', count: 7 }] };
+
+function setup(props: { initialMissingImage?: boolean; initialUncategorized?: boolean } = {}) {
+  let tree = TREE;
   const m = mockFetch({
     '/admin/product-categories/assign': { body: { requested: 2, changed: 1, unchanged: 1, category: { id: 'c2', name: 'Nhà bếp' } } },
     '/admin/product-categories/products': { body: PAGE },
     '/admin/pancake/categories': { body: [{ id: '865301', name: 'Bếp', path: 'Nhà > Bếp', mappedTo: 'c2' }] },
-    '/categories': {
-      body: [
-        { id: 'c1', name: 'Giặt tẩy', slug: 'a', sortOrder: 1, productCount: 3 },
-        { id: 'c2', name: 'Nhà bếp', slug: 'b', sortOrder: 2, productCount: 0 },
-      ],
+    '/admin/ops/inbox': { body: INBOX },
+    '/admin/categories/order': (init) => {
+      const b = JSON.parse(String(init?.body)) as { orderedIds: string[] };
+      tree = { ...tree, items: tree.items.map((c) => (b.orderedIds.includes(c.id) ? { ...c, sortOrder: b.orderedIds.indexOf(c.id) } : c)) };
+      return { body: tree };
     },
+    '/admin/categories': () => ({ body: tree }),
   });
   vi.stubGlobal('fetch', vi.fn(m.fn));
-  const r = render(<ProductCategoriesTab />);
+  const r = render(<ProductCategoriesTab {...props} />);
   mounted.push(r);
   return { m, container: r.container };
 }
 
 describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
-  it('mặc định hiện mọi sản phẩm (không lọc sẵn), mục tên "Sản phẩm"; bật chip mới lọc chưa có danh mục; hiện danh mục đã gán bằng tên', async () => {
+  it('mặc định hiện mọi sản phẩm (không lọc sẵn), mục tên "Sản phẩm" kèm panel cây danh mục; chip "Chưa có danh mục" lấy số từ hộp việc và lọc hàng đang bán', async () => {
     const { m, container } = setup();
     await flush();
     const list = m.calls.find((c) => c.url.includes('/admin/product-categories/products') && !c.url.includes('uncategorized=1'))!;
     expect(list.url).not.toContain('uncategorized=1');
     expect(list.url).not.toContain('source=pancake');
     expect(container.querySelector('h2')!.textContent).toBe('Sản phẩm');
+    expect(byText(container, 'h3', 'Cây danh mục')).not.toBeNull();
     expect(container.textContent).toContain('Giặt tẩy');
-    // Số cạnh chip lấy từ truy vấn riêng chỉ lọc "chưa có danh mục".
+    // Số cạnh chip là số của thẻ hộp việc (chỉ hàng đang bán), không đếm bằng một truy vấn danh sách riêng.
     expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Chưa có danh mục (2)')).toBe(true);
+    expect(m.calls.filter((c) => c.url.includes('/admin/product-categories/products'))).toHaveLength(1);
     click(byText(container, 'button', 'Chưa có danh mục'));
     await flush();
     const filtered = m.calls.filter((c) => c.url.includes('/admin/product-categories/products')).at(-1)!;
     expect(filtered.url).toContain('uncategorized=1');
+    expect(filtered.url).toContain('onSale=1');
   });
 
-  it('bộ chọn danh mục lấy danh sách phẳng (?flat=1): danh mục con chọn được dù /categories mặc định chỉ trả gốc', async () => {
-    const m = mockFetch({
-      '/admin/product-categories/products': { body: PAGE },
-      '/admin/pancake/categories': { body: [] },
-      // Khoá có ?flat=1 đứng trước: mockFetch lấy khoá khớp đầu tiên.
-      '/categories?flat=1': {
-        body: [
-          { id: 'cha', parentId: null, name: 'Gia dụng', slug: 'gia-dung', sortOrder: 1, productCount: 2 },
-          { id: 'con', parentId: 'cha', name: 'Nhà bếp', slug: 'nha-bep', sortOrder: 1, productCount: 2 },
-        ],
-      },
-      '/categories': { body: [{ id: 'cha', parentId: null, name: 'Gia dụng', slug: 'gia-dung', sortOrder: 1, productCount: 2, children: [{ id: 'con', name: 'Nhà bếp' }] }] },
-    });
-    vi.stubGlobal('fetch', vi.fn(m.fn));
-    const r = render(<ProductCategoriesTab />);
-    mounted.push(r);
+  it('bộ chọn danh mục theo thứ tự cây quản trị: mục con thụt "— ", mục cha có con ghi "(có mục con)"', async () => {
+    const { m, container } = setup();
     await flush();
-    const options = [...r.container.querySelectorAll('select[aria-label="Danh mục"] option')].map((o) => o.textContent ?? '');
-    expect(options.some((t) => t.includes('Nhà bếp'))).toBe(true);
-    expect(m.calls.some((c) => c.url.endsWith('/categories?flat=1'))).toBe(true);
+    const options = [...container.querySelectorAll('select[aria-label="Danh mục"] option')].map((o) => o.textContent ?? '');
+    expect(options).toEqual(['Chọn danh mục…', 'Giặt tẩy (3)', 'Nhà bếp (0)', 'Gia dụng (có mục con)', '— Dao thớt (1)']);
+    expect(m.calls.some((c) => c.url.endsWith('/admin/categories'))).toBe(true);
+    expect(m.calls.some((c) => c.url.includes('/categories?flat=1'))).toBe(false);
+  });
+
+  it('chọn mục cha có mục con: khoá "Gán danh mục", giải thích, vẫn cho "Gỡ danh mục"', async () => {
+    const { container } = setup();
+    await flush();
+    click(container.querySelector('label input[type="checkbox"]'));
+    selectValue(container.querySelector('select[aria-label="Danh mục"]'), 'c9');
+    await flush();
+    const buttons = () => Array.from(container.querySelectorAll('button'));
+    expect(buttons().find((b) => b.textContent === 'Gán danh mục')!.disabled).toBe(true);
+    expect(buttons().find((b) => b.textContent === 'Gỡ danh mục')!.disabled).toBe(false);
+    expect(container.textContent).toContain('Mục này có mục con. Chọn một mục con để gán.');
+    selectValue(container.querySelector('select[aria-label="Danh mục"]'), 'c10');
+    await flush();
+    expect(buttons().find((b) => b.textContent === 'Gán danh mục')!.disabled).toBe(false);
+    expect(container.textContent).not.toContain('Mục này có mục con');
+  });
+
+  it('mở từ thẻ hộp việc (initialUncategorized): chip bật sẵn, lọc đang bán, panel cây thu gọn nhường chỗ cho danh sách', async () => {
+    const { m, container } = setup({ initialUncategorized: true });
+    await flush();
+    const chip = [...container.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Chưa có danh mục'))!;
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
+    const first = m.calls.find((c) => c.url.includes('/admin/product-categories/products'))!;
+    expect(first.url).toContain('uncategorized=1');
+    expect(first.url).toContain('onSale=1');
+    expect(container.querySelector('ul[aria-label="Cây danh mục"]')).toBeNull();
+    click(byText(container, 'button', 'Mở rộng'));
+    await flush();
+    expect(container.querySelector('ul[aria-label="Cây danh mục"]')).not.toBeNull();
+  });
+
+  it('đổi thứ tự trong panel: gửi PUT order rồi bộ chọn danh mục đổi theo thứ tự mới', async () => {
+    const { m, container } = setup();
+    await flush();
+    click([...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Đưa "Nhà bếp" lên trên') ?? null);
+    await flush();
+    const put = m.calls.find((c) => c.init?.method === 'PUT')!;
+    expect(JSON.parse(String(put.init!.body))).toEqual({ parentId: null, orderedIds: ['c2', 'c1', 'c9'] });
+    const options = [...container.querySelectorAll('select[aria-label="Danh mục"] option')].map((o) => o.textContent ?? '');
+    expect(options.slice(1, 3)).toEqual(['Nhà bếp (0)', 'Giặt tẩy (3)']);
   });
 
   it('chip "Đang bán, thiếu ảnh" ghi số từ hộp việc; mở từ thẻ hộp việc thì bật sẵn', async () => {
@@ -82,7 +131,7 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
       '/admin/ops/inbox': { body: { generatedAt: '2026-10-28T03:00:00.000Z', items: [{ key: 'productsMissingImage', count: 7 }] } },
       '/admin/product-categories/products': { body: PAGE },
       '/admin/pancake/categories': { body: [] },
-      '/categories': { body: [] },
+      '/admin/categories': { body: { items: [], limits: LIMITS } },
     });
     vi.stubGlobal('fetch', vi.fn(m.fn));
     const r = render(<ProductCategoriesTab initialMissingImage />);
@@ -140,7 +189,7 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
     const m = mockFetch({
       '/admin/product-categories/products': { status: 503, body: { message: 'Máy chủ đang bận, vui lòng thử lại sau.' } },
       '/admin/pancake/categories': { body: [] },
-      '/categories': { status: 503, body: { message: 'Máy chủ đang bận, vui lòng thử lại sau.' } },
+      '/admin/categories': { status: 503, body: { message: 'Máy chủ đang bận, vui lòng thử lại sau.' } },
     });
     vi.stubGlobal('fetch', vi.fn(m.fn));
     const r = render(<ProductCategoriesTab />);
@@ -159,7 +208,7 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
       const m = mockFetch({
         '/admin/catalog-products/': (init) => ({ body: init?.method === 'PATCH' ? { ...detail, ...JSON.parse(String(init.body)) } : detail }),
         '/admin/product-categories/products': { body: PAGE },
-        '/categories': { body: [{ id: 'c1', name: 'Giặt tẩy', slug: 'a', sortOrder: 1, productCount: 3 }] },
+        '/admin/categories': { body: { items: [cat('c1', 'Giặt tẩy', null, 0, 3), cat('c9', 'Gia dụng', null, 1, 0, 1), cat('c10', 'Dao thớt', 'c9', 0, 1)], limits: LIMITS } },
       });
       vi.stubGlobal('fetch', vi.fn(m.fn));
       const r = render(<ProductCategoriesTab />);
@@ -234,6 +283,31 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
       click(container.querySelector('button[aria-label="Sửa Nước rửa chén"]'));
       await flush();
       expect(document.body.textContent).toContain('Chưa bật bán được: Đang bị Pancake giữ lại');
+    });
+
+    it('chip danh mục trong ngăn sửa: mục cha có con bị khoá, mục con ghi "Cha › Con" và lưu đúng id', async () => {
+      const { m, container } = editSetup();
+      await flush();
+      click(container.querySelector('button[aria-label="Sửa Nước rửa chén"]'));
+      await flush();
+      const parent = byText(document.body, 'button', 'Gia dụng') as HTMLButtonElement;
+      expect(parent.textContent).toBe('Gia dụng');
+      expect(parent.disabled).toBe(true);
+      click(byText(document.body, 'button', 'Gia dụng › Dao thớt'));
+      click(byText(document.body, 'button', 'Lưu'));
+      await flush();
+      const patch = m.calls.find((c) => c.init?.method === 'PATCH')!;
+      expect(JSON.parse(String(patch.init?.body))).toEqual({ categoryIds: ['c10'] });
+    });
+
+    it('sản phẩm đã nằm sẵn ở mục cha (dữ liệu cũ): chip mục cha vẫn bấm được để gỡ', async () => {
+      const { container } = editSetup({ ...DETAIL, categoryIds: ['c9'] });
+      await flush();
+      click(container.querySelector('button[aria-label="Sửa Nước rửa chén"]'));
+      await flush();
+      const parent = byText(document.body, 'button', 'Gia dụng') as HTMLButtonElement;
+      expect(parent.getAttribute('aria-pressed')).toBe('true');
+      expect(parent.disabled).toBe(false);
     });
   });
 });

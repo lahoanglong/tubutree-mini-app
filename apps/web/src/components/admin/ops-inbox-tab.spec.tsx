@@ -150,6 +150,7 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
       { key: 'storefrontsPending', count: 2 },
       { key: 'communityReports', count: 3 },
       { key: 'productsMissingImage', count: 4 },
+      { key: 'productsUncategorized', count: 5 },
     ]);
     const onOpen = vi.fn();
     const r = render(<OpsInboxTab onOpen={onOpen} />);
@@ -162,8 +163,10 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     expect(card('storefrontsPending').textContent).toContain('Gian hàng chờ duyệt');
     expect(card('communityReports').textContent).toContain('Báo cáo vi phạm cộng đồng');
     expect(card('productsMissingImage').textContent).toContain('Sản phẩm đang bán thiếu ảnh');
-    for (const k of ['bankTransferToConfirm', 'storefrontsPending', 'communityReports', 'productsMissingImage']) click(card(k));
-    expect(onOpen.mock.calls.map((c) => c[0])).toEqual(['bankTransferToConfirm', 'storefrontsPending', 'communityReports', 'productsMissingImage']);
+    expect(card('productsUncategorized').textContent).toContain('Sản phẩm đang bán chưa có danh mục');
+    const keys = ['bankTransferToConfirm', 'storefrontsPending', 'communityReports', 'productsMissingImage', 'productsUncategorized'];
+    for (const k of keys) click(card(k));
+    expect(onOpen.mock.calls.map((c) => c[0])).toEqual(keys);
   });
 
   it('thẻ đơn đại lý trả trước chờ xác nhận tiền ghi số giờ còn lại và mở đúng khoá', async () => {
@@ -407,11 +410,12 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     expect(badges).toEqual([['community', '5'], ['orders', '1'], ['inbox', '6']]);
   });
 
-  it('tổng ở mục "inbox" không cộng hàng đợi chất lượng danh mục (SP thiếu ảnh); mục Sản phẩm vẫn hiện số đó', async () => {
+  it('tổng ở mục "inbox" không cộng hàng đợi chất lượng danh mục (SP thiếu ảnh, chưa có danh mục); mục Sản phẩm hiện tổng hai số đó', async () => {
     stub([
       { key: 'bankTransferToConfirm', count: 1 },
       { key: 'storefrontsPending', count: 1 },
       { key: 'productsMissingImage', count: 44 },
+      { key: 'productsUncategorized', count: 6 },
     ]);
     const r = render(
       <>
@@ -422,7 +426,7 @@ describe('OpsInboxTab — trang "Hôm nay" (R-13, R-74, R-75, R-144)', () => {
     mounted.push(r);
     await flush();
     const badges = [...r.container.querySelectorAll('[data-inbox-badge]')].map((b) => [b.getAttribute('data-inbox-badge'), b.textContent?.replace(/[^0-9]/g, '')]);
-    expect(badges).toEqual([['inbox', '2'], ['productCategories', '44']]);
+    expect(badges).toEqual([['inbox', '2'], ['productCategories', '50']]);
   });
 
   it('enabled=false thì không gọi hộp việc (nhân viên không có quyền hộp việc khỏi nhận 403 mỗi phút)', async () => {

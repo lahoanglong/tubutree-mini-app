@@ -65,8 +65,6 @@ export const listCategoryProducts = (p: { q?: string; uncategorized: boolean; on
   if (p.cursor) sp.set('cursor', p.cursor);
   return apiFetch<CategoryProductsPage>(`/admin/product-categories/products?${sp.toString()}`);
 };
-/** `?flat=1`: mọi danh mục một dòng, gồm cả danh mục con (mặc định `/categories` trả cây chỉ có gốc ở tầng ngoài). */
-export const listCategoryOptions = () => apiFetch<CategoryOption[]>('/categories?flat=1');
 export const listAdminCategories = () => apiFetch<AdminCategoryList>('/admin/categories');
 export const createAdminCategory = (body: { name: string; parentId?: string | null }) =>
   apiFetch<AdminCategory>('/admin/categories', { method: 'POST', body });

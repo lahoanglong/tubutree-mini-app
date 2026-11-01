@@ -49,6 +49,7 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   shiftsPending: { title: 'Ca nhân viên chờ duyệt', hint: 'Nhân viên đã đăng ký ca từ hôm nay trở đi, chưa ai duyệt' },
   communityReports: { title: 'Báo cáo vi phạm cộng đồng', hint: 'Khách báo bài hoặc bình luận, chưa ai xem' },
   productsMissingImage: { title: 'Sản phẩm đang bán thiếu ảnh', hint: 'Khách không thấy hình, khó chốt đơn' },
+  productsUncategorized: { title: 'Sản phẩm đang bán chưa có danh mục', hint: 'Mini App chỉ xếp được sản phẩm vào mục khi đã có danh mục' },
   externalPoints: { title: 'Tích điểm đơn sàn cần xử lý', hint: 'Yêu cầu cần duyệt, mã chưa ghép được đơn, đơn đã cộng điểm bị hoàn một phần hoặc đã đóng' },
 };
 
@@ -72,10 +73,10 @@ const INBOX_TAB: Partial<Record<InboxKey, string>> = {
   externalPoints: 'externalClaims', supportChatUnforwarded: 'supportChat', zaloBridgeDown: 'supportChat',
   wasteToCount: 'waste', wasteUnmatched: 'waste', wasteBlockedPending: 'waste', wastePointsPending: 'waste', wastePerksPending: 'waste',
   wasteTransitOverdue: 'waste', wasteGiftOverdue: 'waste', wasteOrderMismatch: 'waste',
-  storefrontsPending: 'storefronts', productsMissingImage: 'productCategories', accountDeletionPending: 'users', shiftsPending: 'shiftApproval',
+  storefrontsPending: 'storefronts', productsMissingImage: 'productCategories', productsUncategorized: 'productCategories', accountDeletionPending: 'users', shiftsPending: 'shiftApproval',
 };
 
-const QUALITY_KEYS: ReadonlySet<InboxKey> = new Set<InboxKey>(['productsMissingImage']);
+const QUALITY_KEYS: ReadonlySet<InboxKey> = new Set<InboxKey>(['productsMissingImage', 'productsUncategorized']);
 
 /** Số việc chờ cạnh mục menu, lấy từ cùng truy vấn với trang "Hôm nay" (một request cho mọi mục). Mục `inbox` hiện tổng. */
 export function InboxBadge({ tab, enabled = true }: { tab: string; enabled?: boolean }) {

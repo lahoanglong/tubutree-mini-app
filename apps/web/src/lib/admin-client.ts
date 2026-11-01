@@ -1782,7 +1782,8 @@ export type InboxKey =
   | 'accountDeletionPending'
   | 'shiftsPending'
   | 'communityReports'
-  | 'productsMissingImage';
+  | 'productsMissingImage'
+  | 'productsUncategorized';
 export interface OpsInbox {
   generatedAt: string;
   items: {
