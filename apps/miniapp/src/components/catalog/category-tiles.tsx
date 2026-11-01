@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { LayoutGrid } from 'lucide-react';
-import { HUB_CATEGORY_MAX, HUB_TILE_HEIGHT, hubPlaceholderTiles } from '@tubutree/app-core/browse/hub';
+import { HUB_CATEGORY_MAX, HUB_TILE_HEIGHT, hubHasMoreCategories, hubPlaceholderTiles } from '@tubutree/app-core/browse/hub';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { CategoryEntry } from '../../hooks/use-categories';
 import { haptic } from '../../utils/haptic';
@@ -66,7 +66,7 @@ function Tile({ label, onPress, children }: { label: string; onPress: () => void
 }
 
 /**
- * Ô danh mục ở hub: 4 cột, tối đa `HUB_CATEGORY_MAX` ô rồi ô "Tất cả" (mở danh sách không lọc). Là `<button>` thật; tên truy cập là
+ * Ô danh mục ở hub: 4 cột, tối đa `HUB_CATEGORY_MAX` ô rồi ô "Tất cả" (mở danh sách không lọc); quá trần thì tiêu đề thêm "Xem tất cả" cùng đích. Là `<button>` thật; tên truy cập là
  * nhãn (ảnh/icon trang trí). Chưa có cây danh mục thì `entries` là 4 phân khúc dự phòng, hub vẫn đủ lối vào.
  */
 export function CategoryTiles({ entries, isLoading, placeholderCount, onSelect, onSelectAll }: CategoryTilesProps) {
@@ -74,7 +74,7 @@ export function CategoryTiles({ entries, isLoading, placeholderCount, onSelect, 
   return (
     <Section id="browse-categories" label={title}>
       <div style={{ padding: '0 16px' }}>
-        <SectionHeader title={title} />
+        <SectionHeader title={title} action={!isLoading && hubHasMoreCategories(entries.length) ? { onPress: onSelectAll } : undefined} />
         {isLoading ? (
           <div data-testid="category-grid-loading" aria-hidden="true" style={GRID}>
             {Array.from({ length: hubPlaceholderTiles(placeholderCount) }, (_, i) => (

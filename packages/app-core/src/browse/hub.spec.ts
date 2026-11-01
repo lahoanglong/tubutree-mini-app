@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HUB_BRAND_MAX, HUB_BRAND_MIN, HUB_CATEGORY_MAX, HUB_TILE_HEIGHT, hubBestSellers, hubBrands, hubPlaceholderTiles } from './hub';
+import { HUB_BRAND_MAX, HUB_BRAND_MIN, HUB_CATEGORY_MAX, HUB_TILE_HEIGHT, hubBestSellers, hubBrands, hubHasMoreCategories, hubPlaceholderTiles } from './hub';
 
 const brand = (name: string, count: number) => ({ brand: name, count });
 const item = (id: string) => ({ id });
@@ -62,5 +62,13 @@ describe('hubPlaceholderTiles', () => {
   it('chiều cao ô đặt chỗ cho nhãn 2 dòng, lớn hơn vùng chạm tối thiểu', () => {
     expect(HUB_TILE_HEIGHT).toBe(8 + 40 + 6 + 2 * 20 + 8);
     expect(HUB_TILE_HEIGHT).toBeGreaterThanOrEqual(88);
+  });
+});
+
+describe('hubHasMoreCategories', () => {
+  it('quá trần 8 danh mục gốc thì hub có "Xem tất cả" ở tiêu đề (lưới chỉ vẽ 8 ô); đúng 8 hoặc ít hơn thì không', () => {
+    expect(hubHasMoreCategories(HUB_CATEGORY_MAX)).toBe(false);
+    expect(hubHasMoreCategories(HUB_CATEGORY_MAX + 1)).toBe(true);
+    expect(hubHasMoreCategories(0)).toBe(false);
   });
 });

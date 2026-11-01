@@ -10,6 +10,11 @@ export const HUB_BRAND_MIN = 4;
  */
 export const HUB_TILE_HEIGHT = 102;
 
+/** Có nhiều danh mục gốc hơn số ô hub vẽ: tiêu đề khối hiện "Xem tất cả" (cùng đích với ô "Tất cả" cuối lưới) để khách thấy còn nữa. */
+export function hubHasMoreCategories(count: number): boolean {
+  return count > HUB_CATEGORY_MAX;
+}
+
 /** Số khung chờ của lưới ô danh mục: số ô thật sẽ có (trần `HUB_CATEGORY_MAX`) cộng ô "Tất cả"; số lần tải trước có thể lớn hơn trần. */
 export function hubPlaceholderTiles(placeholderCount: number): number {
   const n = Number.isFinite(placeholderCount) ? Math.max(0, Math.floor(placeholderCount)) : 0;
