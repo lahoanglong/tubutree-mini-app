@@ -2,6 +2,12 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 
+const MD_WIDTH = 768;
+const LG_WIDTH = 1024;
+/** Cùng điểm gãy `md:` và `lg:` của Tailwind; dùng khi một thành phần phải đổi chỗ theo khổ màn thay vì ẩn/hiện bằng lớp. */
+export const MD_UP = `(min-width: ${MD_WIDTH}px)`;
+export const LG_UP = `(min-width: ${LG_WIDTH}px)`;
+
 function mediaList(query: string): MediaQueryList | null {
   try {
     return typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(query) : null;

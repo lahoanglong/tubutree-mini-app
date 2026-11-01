@@ -29,7 +29,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
 import { phoneBrandText, phoneCaption, phoneFlatCard, phoneSecondary, phoneSectionTitle } from '@/lib/phone-ui';
-import { useMediaQuery } from '@/lib/use-media-query';
+import { LG_UP, useMediaQuery } from '@/lib/use-media-query';
 import { cssUrl } from '@/lib/safe-color';
 import { shallowPush, shallowReplace } from '@/lib/shallow-url';
 import { Badge } from '@/components/ui/badge';
@@ -132,7 +132,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const [pickerCol, setPickerCol] = useState<string | null>(null);
   const [kitSlug, setKitSlug] = useState<string | null>(null);
   // Một bộ nút ở hai chỗ theo khổ (thanh dính đáy ở điện thoại, hàng tiêu đề từ lg) mang trạng thái nên chỉ vẽ một chỗ, không nhân đôi bằng lớp `lg:hidden`.
-  const wide = useMediaQuery('(min-width: 1024px)');
+  const wide = useMediaQuery(LG_UP);
   const [headSlot, setHeadSlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
     setHeadSlot(wide ? document.getElementById(BUILDER_HEAD_SLOT) : null);

@@ -4,7 +4,7 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
-import { collectionView } from '@tubutree/app-core/commerce/collection-view';
+import { collectionView, railFitsRow } from '@tubutree/app-core/commerce/collection-view';
 import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { comboTotals } from '@tubutree/app-core/commerce/shop-page';
 import { serverNow } from '@tubutree/app-core/server-clock';
@@ -48,6 +48,8 @@ const priceOf = (it: ShopSectionItem) => it.product.salePrice ?? it.product.base
  */
 const variationOf = (it: ShopSectionItem) => it.product.pinnedVariationId ?? it.product.repVariationId ?? it.variationId;
 const LINE_GRID = 'grid grid-cols-1 gap-3 md:grid-cols-2';
+/** Lưới thay kệ ít món ở lg: sáu cột bằng bề rộng khung, khe 12px như khe giữa các thẻ kệ. */
+const RAIL_AS_GRID = 'grid grid-cols-6 gap-3';
 
 /** Lỗi 4xx có lời nghiệp vụ ("Sản phẩm X đã hết hàng") thì đọc thẳng; còn lại câu cố định, vì lời "mạng chậm, chưa rõ đã xong chưa" sai nghĩa với lệnh tất cả-hoặc-không. */
 function comboErrorText(error: unknown): string {
@@ -97,7 +99,7 @@ function ComboSection({ collection, pct, preview }: { collection: ShopSectionPro
 
   return (
     <Section id={`shop-col-${collection.id}`} label={collection.title}>
-      <div data-testid="shop-combo">
+      <div data-testid="shop-combo" className="lg:max-w-xl">
         <ComboCard title={collection.title} items={views} pct={pct} total={total} comboTotal={comboTotal} onAddAll={onAddAll} busy={mutation.isPending} />
         <div role="status" className="mt-2 text-sm">
           {result && <p className={result.ok ? 'text-success-fg' : 'text-danger-fg'}>{result.text}</p>}
@@ -127,6 +129,7 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false }
   const noteById = new Map(shown.map((it) => [it.product.id, it.note ?? undefined]));
   const noteOf = (p: ProductCardType) => noteById.get(p.id);
   const hasMore = view.layout === 'combo' ? collection.items.length > shown.length : view.hasMore;
+  const railAsGrid = layout === 'rail' && !preview && railFitsRow(cards.length);
   const action =
     hasMore && onSeeAll
       ? {
@@ -140,8 +143,13 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false }
     <Section id={`shop-col-${collection.id}`}>
       <SectionHeader title={collection.title} action={action} />
       {layout === 'rail' && (
-        <div data-testid="shop-rail">
+        <div data-testid="shop-rail" className={railAsGrid ? 'lg:hidden' : undefined}>
           <ProductRail items={cards} variant="rail-md" label={collection.title} showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} />
+        </div>
+      )}
+      {railAsGrid && (
+        <div data-testid="shop-rail-lg" className="hidden lg:block">
+          <ProductGrid items={cards} variant="grid" className={RAIL_AS_GRID} showBrand={showBrand} showWishlist noteOf={noteOf} />
         </div>
       )}
       {layout === 'grid' && (
