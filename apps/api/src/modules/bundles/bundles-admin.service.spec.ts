@@ -222,16 +222,68 @@ describe('BundlesAdminService.update', () => {
     ]);
   });
 
-  it('thay món ADDON ghi lại giá tham chiếu theo giá đang bán lúc sửa; đổi sản phẩm chính (không thay món) không ghi lại món', async () => {
-    const addon = detailRow({ kind: 'ADDON', pct: null, anchorProductId: 'p1', items: [{ ...detailRow().items[1]!, variationId: 'p2-v', addonPrice: 39_000, refPrice: 50_000 }] });
-    const sale = product('p2', { variations: [{ id: 'p2-v', sku: 'p2', retailPrice: 100_000, salePrice: 80_000, stock: 3 }] });
-    const re = setup({ current: addon, products: [product('p1'), sale] });
-    await re.svc.update('b1', { items: [dtoItem('p2', { addonPrice: 39_000, variationId: 'p2-v' })] } as never, ADMIN, NOW);
-    expect(re.tx.bundle.update.mock.calls[0][0].data.items.create).toEqual([{ productId: 'p2', variationId: 'p2-v', addonPrice: 39_000, refPrice: 80_000, maxQty: 1, sortOrder: 0 }]);
-    const keep = setup({ current: addon, products: [product('p1'), sale] });
-    await keep.svc.update('b1', { title: 'Mới' } as never, ADMIN, NOW);
-    expect(keep.tx.bundleItem.deleteMany).not.toHaveBeenCalled();
-    expect(keep.tx.bundle.update.mock.calls[0][0].data.items).toBeUndefined();
+  describe('giá tham chiếu khi sửa bộ ADDON (form luôn gửi lại cả danh sách món)', () => {
+    const pinnedItem = (o: Record<string, unknown> = {}) => ({ ...detailRow().items[1]!, variationId: 'p2-v', addonPrice: 39_000, refPrice: 50_000, ...o });
+    const addon = (items = [pinnedItem()], o: Record<string, unknown> = {}) => detailRow({ kind: 'ADDON', pct: null, anchorProductId: 'p1', items, ...o });
+    // Phân loại ghim đã tăng từ 50.000 lên 500.000 sau khi bộ được tạo (sửa tay hay đồng bộ Pancake).
+    const risen = product('p2', { variations: [{ id: 'p2-v', sku: 'p2', retailPrice: 500_000, salePrice: null, stock: 3 }] });
+    const created = (svc: { tx: { bundle: { update: jest.Mock } } }) => svc.tx.bundle.update.mock.calls[0][0].data.items.create;
+
+    it('gửi lại nguyên món (chỉ đổi giờ/tên): giữ giá tham chiếu 50.000, không bật lại theo giá hiện tại 500.000', async () => {
+      const s = setup({ current: addon(), products: [product('p1'), risen] });
+      await s.svc.update('b1', { title: 'Mới', items: [dtoItem('p2', { addonPrice: 39_000, variationId: 'p2-v' })] } as never, ADMIN, NOW);
+      expect(created(s)).toEqual([{ productId: 'p2', variationId: 'p2-v', addonPrice: 39_000, refPrice: 50_000, maxQty: 1, sortOrder: 0 }]);
+    });
+
+    it('đổi giá kèm, hay thêm món mới: giá tham chiếu lấy theo giá đang bán lúc sửa; dòng cũ thiếu giá tham chiếu cũng vậy', async () => {
+      const changed = setup({ current: addon(), products: [product('p1'), risen] });
+      await changed.svc.update('b1', { items: [dtoItem('p2', { addonPrice: 399_000, variationId: 'p2-v' })] } as never, ADMIN, NOW);
+      expect(created(changed)[0]).toMatchObject({ addonPrice: 399_000, refPrice: 500_000 });
+      const added = setup({ current: addon(), products: [product('p1'), risen, product('p3')] });
+      await added.svc.update(
+        'b1',
+        { items: [dtoItem('p2', { addonPrice: 39_000, variationId: 'p2-v' }), dtoItem('p3', { addonPrice: 10_000, variationId: 'p3-v' })] } as never,
+        ADMIN,
+        NOW,
+      );
+      expect(created(added).map((i: { productId: string; refPrice: number }) => [i.productId, i.refPrice])).toEqual([['p2', 50_000], ['p3', 100_000]]);
+      const legacy = setup({ current: addon([pinnedItem({ refPrice: null })]), products: [product('p1'), risen] });
+      await legacy.svc.update('b1', { items: [dtoItem('p2', { addonPrice: 39_000, variationId: 'p2-v' })] } as never, ADMIN, NOW);
+      expect(created(legacy)[0].refPrice).toBe(500_000);
+    });
+
+    it('phân loại tụt giá (sale 45.000) rồi form gửi lại nguyên món: giữ giá tham chiếu cũ, không hạ theo giá sale', async () => {
+      const sale = product('p2', { variations: [{ id: 'p2-v', sku: 'p2', retailPrice: 50_000, salePrice: 45_000, stock: 3 }] });
+      const s = setup({ current: addon(), products: [product('p1'), sale] });
+      await s.svc.update('b1', { items: [dtoItem('p2', { addonPrice: 39_000, variationId: 'p2-v' })] } as never, ADMIN, NOW);
+      expect(created(s)[0].refPrice).toBe(50_000);
+    });
+
+    it('không đụng danh sách món (không gửi items): không ghi lại món nào', async () => {
+      const s = setup({ current: addon(), products: [product('p1'), risen] });
+      await s.svc.update('b1', { title: 'Mới' } as never, ADMIN, NOW);
+      expect(s.tx.bundleItem.deleteMany).not.toHaveBeenCalled();
+      expect(s.tx.bundle.update.mock.calls[0][0].data.items).toBeUndefined();
+    });
+
+    it('nhân viên gia hạn bộ ADDON của mình (gửi lại nguyên món) khi phân loại đã tăng giá: qua, vì trần tính trên giá tham chiếu; đổi giá kèm thì tính theo giá hiện tại → 403', async () => {
+      // Giá kèm 45.000 trên giá tham chiếu 50.000: giảm 10% ≤ 20%, 5.000đ ≤ 30.000đ.
+      const mine = addon([pinnedItem({ addonPrice: 45_000 })], { createdById: 'staff2' });
+      const same = setup({ current: mine, creatorRole: 'STAFF', products: [product('p1'), risen] });
+      await same.svc.update('b1', { endAt: '2026-11-13T00:00:00.000Z', items: [dtoItem('p2', { addonPrice: 45_000, variationId: 'p2-v' })] } as never, STAFF, NOW);
+      expect(created(same)[0]).toMatchObject({ addonPrice: 45_000, refPrice: 50_000 });
+      const reprice = setup({ current: mine, creatorRole: 'STAFF', products: [product('p1'), risen] });
+      await expect(
+        reprice.svc.update('b1', { items: [dtoItem('p2', { addonPrice: 440_000, variationId: 'p2-v' })] } as never, STAFF, NOW),
+      ).rejects.toBeInstanceOf(ForbiddenException); // 60.000đ mỗi đơn vị trên 500.000đ > trần 30.000đ
+      expect(reprice.tx.bundle.update).not.toHaveBeenCalled();
+    });
+
+    it('chi tiết admin trả giá tham chiếu của từng món để form báo đúng khoản giảm giỏ sẽ cho', async () => {
+      const s = setup({ current: addon([pinnedItem({ product: { ...detailRow().items[1]!.product, variations: risen.variations } })]) });
+      const out = await s.svc.get('b1', NOW);
+      expect(out.items[0]).toMatchObject({ price: 500_000, refPrice: 50_000, addonPrice: 39_000 });
+    });
   });
 
   it('đổi pct kiểm lại trên nội dung gộp: vượt trần → 400, không ghi', async () => {

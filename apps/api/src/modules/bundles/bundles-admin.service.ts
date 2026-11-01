@@ -9,6 +9,8 @@ import {
   assertBundleWindow,
   assertStaffBundleCaps,
   bundleStatus,
+  capAtRefPrices,
+  keptRefPrices,
   normalizeBundleContent,
   resolveBundleItems,
   type BundleContent,
@@ -27,8 +29,10 @@ export interface AdminBundleItem {
   variationName: string | null;
   addonPrice: number | null;
   maxQty: number;
-  /** Giá đang bán của món (phân loại ghim hoặc đại diện) để form báo "giảm bao nhiêu". */
+  /** Giá đang bán của món (phân loại ghim hoặc đại diện) để so với giá kèm lúc nhập. */
   price: number;
+  /** ADDON: giá tham chiếu giữ lại (trần của khoản giảm giỏ cho mỗi đơn vị: `min(price, refPrice) − addonPrice`); null với combo hay dòng cũ chưa có. */
+  refPrice: number | null;
 }
 
 export interface AdminBundle {
@@ -110,7 +114,8 @@ export class BundlesAdminService {
     const endAt = new Date(dto.endAt);
     assertBundleWindow(startAt, endAt);
     const content = normalizeBundleContent(dto, await readBundleMaxPct(this.config));
-    const resolved = await this.validateContent(content, actor);
+    const kept = keptRefPrices(content, []);
+    const resolved = await this.validateContent(content, actor, kept);
     const created = await this.prisma.bundle.create({
       data: {
         kind: content.kind,
@@ -122,7 +127,7 @@ export class BundlesAdminService {
         isActive: dto.isActive ?? true,
         sortOrder: dto.sortOrder ?? 0,
         createdById: actorUserId(actor),
-        items: { create: withRefPrices(content, resolved) },
+        items: { create: withRefPrices(content, resolved, kept) },
       },
       select: { id: true },
     });
@@ -149,6 +154,7 @@ export class BundlesAdminService {
       // sản phẩm trong bộ đã ngừng bán (đúng lúc cần tắt bộ).
       let content: BundleContent | undefined;
       let resolved: ResolvedBundleItem[] = [];
+      let kept: (number | null)[] = [];
       if (dto.pct !== undefined || dto.anchorProductId !== undefined || dto.items !== undefined) {
         content = normalizeBundleContent(
           {
@@ -159,7 +165,8 @@ export class BundlesAdminService {
           },
           await readBundleMaxPct(this.config),
         );
-        resolved = await this.validateContent(content, actor);
+        kept = keptRefPrices(content, current.items);
+        resolved = await this.validateContent(content, actor, kept);
       }
 
       const replaceItems = dto.items !== undefined && content !== undefined;
@@ -170,7 +177,7 @@ export class BundlesAdminService {
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
         ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
         ...(content ? { pct: content.pct, anchorProduct: content.anchorProductId ? { connect: { id: content.anchorProductId } } : { disconnect: true } } : {}),
-        ...(replaceItems ? { items: { create: withRefPrices(content!, resolved) } } : {}),
+        ...(replaceItems ? { items: { create: withRefPrices(content!, resolved, kept) } } : {}),
       };
       if (replaceItems) await tx.bundleItem.deleteMany({ where: { bundleId: id } });
       await tx.bundle.update({ where: { id }, data });
@@ -190,7 +197,8 @@ export class BundlesAdminService {
     return { ok: true };
   }
 
-  private async validateContent(content: BundleContent, actor: CouponActor): Promise<ResolvedBundleItem[]> {
+  /** `kept`: giá tham chiếu giữ lại của từng món (`keptRefPrices`); trần nhân viên tính trên giá đã kẹp theo đó, không trên giá hiện tại. */
+  private async validateContent(content: BundleContent, actor: CouponActor, kept: readonly (number | null)[]): Promise<ResolvedBundleItem[]> {
     const ids = [...new Set([...(content.anchorProductId ? [content.anchorProductId] : []), ...content.items.map((i) => i.productId)])];
     const rows = await this.prisma.product.findMany({
       where: { id: { in: ids } },
@@ -206,7 +214,7 @@ export class BundlesAdminService {
       },
     });
     const resolved = resolveBundleItems(content, new Map<string, CatalogProduct>(rows.map((p) => [p.id, p])));
-    if (actor.staff) assertStaffBundleCaps(content, resolved, await loadStaffCouponCaps(this.config));
+    if (actor.staff) assertStaffBundleCaps(content, capAtRefPrices(resolved, kept), await loadStaffCouponCaps(this.config));
     return resolved;
   }
 
@@ -225,11 +233,11 @@ export class BundlesAdminService {
 }
 
 /**
- * Món ghi xuống kèm `refPrice`: ADDON lưu giá đang bán của phân loại ghim LÚC NÀY, làm trần khoản giảm mỗi đơn vị khi phân loại đổi giá về
- * sau (`addonUnitDiscount`). BUNDLE_PCT không có giá cố định nên không cần.
+ * Món ghi xuống kèm `refPrice`: ADDON giữ giá tham chiếu cũ của món không đổi (`kept`), còn lại lưu giá đang bán của phân loại ghim LÚC NÀY.
+ * Đó là trần khoản giảm mỗi đơn vị khi phân loại đổi giá về sau (`addonUnitDiscount`). BUNDLE_PCT không có giá cố định nên không cần.
  */
-function withRefPrices(content: BundleContent, resolved: readonly ResolvedBundleItem[]) {
-  return content.items.map((it, i) => ({ ...it, refPrice: content.kind === 'ADDON' ? (resolved[i]?.price ?? null) : null }));
+function withRefPrices(content: BundleContent, resolved: readonly ResolvedBundleItem[], kept: readonly (number | null)[]) {
+  return content.items.map((it, i) => ({ ...it, refPrice: content.kind === 'ADDON' ? (kept[i] ?? resolved[i]?.price ?? null) : null }));
 }
 
 function toAdminBundle(b: DetailRow, now: Date, staffCreators: ReadonlySet<string>): AdminBundle {
@@ -258,6 +266,7 @@ function toAdminBundle(b: DetailRow, now: Date, staffCreators: ReadonlySet<strin
         variationName: i.variation?.name ?? null,
         addonPrice: i.addonPrice,
         maxQty: i.maxQty,
+        refPrice: i.refPrice,
         price: pinned ? (pinned.salePrice ?? pinned.retailPrice) : (card.salePrice ?? card.basePrice),
       };
     }),

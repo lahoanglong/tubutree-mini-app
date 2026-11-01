@@ -7,7 +7,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { BundlesAdminService } from '../../src/modules/bundles/bundles-admin.service';
 import { loadLiveBundles } from '../../src/modules/bundles/bundle-read';
-import { bundleExposure } from '../../src/modules/bundles/bundle-rules';
+import { addonUnitDiscount, bundleExposure } from '../../src/modules/bundles/bundle-rules';
 import { createRealUser, createUser, pinConfig, randCode, warmPool } from './helpers';
 
 /**
@@ -97,6 +97,22 @@ describe('Quản trị bundle (real Postgres)', () => {
     expect(live.items).toEqual([{ productId: b.id, variationId: b.variationId, addonPrice: 39_000, refPrice: 50_000, maxQty: 1 }]);
     // Sửa bộ có thay món là lúc ghi lại giá tham chiếu theo giá đang bán (admin đã kiểm trần ở giá đó).
     await admin.update(addon.id, { items: [{ productId: b.id, variationId: b.variationId, addonPrice: 399_000 }] } as never, ADMIN);
+    expect((await prisma.bundleItem.findFirstOrThrow({ where: { bundleId: addon.id } })).refPrice).toBe(500_000);
+  });
+
+  it('sửa bộ ADDON chỉ đổi giờ kết thúc (form vẫn gửi lại nguyên món) sau khi phân loại tăng giá: giá tham chiếu giữ 50.000, giỏ vẫn giảm 11.000; chi tiết admin báo đúng khoản đó', async () => {
+    const [a, b] = [await product(), await product(50_000)];
+    const addon = await create({ kind: 'ADDON', title: `IT ${randCode(6)}`, anchorProductId: a.id, startAt: START, endAt: END, items: [{ productId: b.id, variationId: b.variationId, addonPrice: 39_000, maxQty: 2 }] });
+    await prisma.variation.update({ where: { id: b.variationId }, data: { retailPrice: 500_000 } });
+    const newEnd = new Date(NOW.getTime() + 2 * 86_400_000).toISOString();
+    const out = await admin.update(addon.id, { endAt: newEnd, items: [{ productId: b.id, variationId: b.variationId, addonPrice: 39_000, maxQty: 2 }] } as never, ADMIN);
+    expect((await prisma.bundleItem.findFirstOrThrow({ where: { bundleId: addon.id } })).refPrice).toBe(50_000);
+    expect(out.items[0]).toMatchObject({ price: 500_000, refPrice: 50_000 });
+    expect(out.endAt).toBe(newEnd);
+    const live = (await loadLiveBundles(prisma, NOW, [a.id])).find((x) => x.id === addon.id)!;
+    expect(addonUnitDiscount(500_000, 39_000, live.items[0]!.refPrice)).toBe(11_000);
+    // Đổi giá kèm là đặt lại giá: lấy giá đang bán lúc đó làm trần mới.
+    await admin.update(addon.id, { items: [{ productId: b.id, variationId: b.variationId, addonPrice: 399_000, maxQty: 2 }] } as never, ADMIN);
     expect((await prisma.bundleItem.findFirstOrThrow({ where: { bundleId: addon.id } })).refPrice).toBe(500_000);
   });
 
@@ -256,6 +272,23 @@ describe('Quản trị bundle (real Postgres)', () => {
       await expect(admin.update(adminOwned.id, { title: 'X' } as never, staff)).rejects.toBeInstanceOf(ForbiddenException);
       await expect(admin.remove(adminOwned.id, staff)).rejects.toBeInstanceOf(ForbiddenException);
       await admin.remove(mine.id, staff);
+      await prisma.user.deleteMany({ where: { id: staffUser.id } });
+    });
+
+    it('nhân viên gia hạn bộ ADDON của mình sau khi phân loại tăng giá 50.000 → 500.000: qua (trần tính trên giá tham chiếu, khoản giảm thật chỉ 5.000); đặt lại giá kèm theo giá mới thì 403', async () => {
+      restores.push(await pinConfig(prisma, 'coupon.staff_max_percent', 20));
+      restores.push(await pinConfig(prisma, 'coupon.staff_max_amount_vnd', 1_000_000));
+      const staffUser = await createRealUser(prisma, { role: 'STAFF' });
+      const staff = { id: staffUser.id, staff: true };
+      const [a, b] = [await product(), await product(50_000)];
+      const mine = await create({ kind: 'ADDON', title: `IT ${randCode(6)}`, anchorProductId: a.id, startAt: START, endAt: END, items: [{ productId: b.id, variationId: b.variationId, addonPrice: 45_000 }] }, staff);
+      await prisma.variation.update({ where: { id: b.variationId }, data: { retailPrice: 500_000 } });
+      const newEnd = new Date(NOW.getTime() + 2 * 86_400_000).toISOString();
+      const out = await admin.update(mine.id, { endAt: newEnd, items: [{ productId: b.id, variationId: b.variationId, addonPrice: 45_000 }] } as never, staff);
+      expect(out.endAt).toBe(newEnd);
+      expect(out.items[0]).toMatchObject({ price: 500_000, refPrice: 50_000 });
+      await expect(admin.update(mine.id, { items: [{ productId: b.id, variationId: b.variationId, addonPrice: 300_000 }] } as never, staff)).rejects.toBeInstanceOf(ForbiddenException);
+      expect((await prisma.bundleItem.findFirstOrThrow({ where: { bundleId: mine.id } })).addonPrice).toBe(45_000);
       await prisma.user.deleteMany({ where: { id: staffUser.id } });
     });
 

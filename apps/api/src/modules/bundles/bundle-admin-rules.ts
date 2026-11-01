@@ -150,6 +150,39 @@ export function resolveBundleItems(content: BundleContent, products: ReadonlyMap
   });
 }
 
+/** Món ADDON đang lưu của bộ, đủ để nhận ra món nào không đổi khi sửa. */
+export interface StoredBundleItem {
+  productId: string;
+  variationId: string | null;
+  addonPrice: number | null;
+  refPrice?: number | null;
+}
+
+/**
+ * Giá tham chiếu cũ của từng món trong `content` (theo thứ tự `content.items`), chỉ với bộ ADDON: món có cùng sản phẩm, phân loại và giá kèm
+ * với món đang lưu thì giữ giá tham chiếu cũ. Form sửa luôn gửi lại cả danh sách món (kể cả khi chỉ đổi giờ hay tên), nên nếu không giữ thì
+ * mọi lần lưu đều đặt lại trần theo giá hiện tại và khoản giảm đã bị chặn bật lên lại. Món mới, đổi giá kèm, đổi phân loại, hay dòng cũ
+ * thiếu giá tham chiếu thì `null`: lấy giá đang bán lúc này (người sửa vừa tự đặt lại giá kèm, hay dòng chưa có trần nào để giữ).
+ */
+export function keptRefPrices(content: BundleContent, previous: readonly StoredBundleItem[]): (number | null)[] {
+  return content.items.map((it) => {
+    if (content.kind !== 'ADDON') return null;
+    const same = previous.find((p) => p.productId === it.productId && p.variationId === it.variationId && p.addonPrice === it.addonPrice);
+    return same?.refPrice ?? null;
+  });
+}
+
+/**
+ * Giá làm cơ sở cho trần nhân viên: giá đang bán nhưng không vượt giá tham chiếu giữ lại, đúng thứ giỏ dùng để tính khoản giảm
+ * (`addonUnitDiscount`). Món không có giá tham chiếu giữ lại thì giữ nguyên giá đang bán.
+ */
+export function capAtRefPrices(resolved: readonly ResolvedBundleItem[], kept: readonly (number | null)[]): ResolvedBundleItem[] {
+  return resolved.map((r, i) => {
+    const ref = kept[i];
+    return ref == null ? r : { price: Math.min(r.price, ref), maxPrice: Math.min(r.maxPrice, ref) };
+  });
+}
+
 /**
  * Trần của nhân viên Marketing (cùng `coupon.staff_*` với mã giảm giá): % giảm mỗi món và số tiền tối đa một đơn được giảm nhờ bộ.
  * Bộ không có quota nên không có trần ngân sách ngày; `maxQty` là thứ giới hạn thiệt hại mỗi đơn. Số tiền tính trên `maxPrice`

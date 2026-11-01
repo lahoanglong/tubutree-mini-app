@@ -3,6 +3,8 @@ import {
   assertBundleWindow,
   assertStaffBundleCaps,
   bundleStatus,
+  capAtRefPrices,
+  keptRefPrices,
   normalizeBundleContent,
   resolveBundleItems,
   type BundleContent,
@@ -210,5 +212,32 @@ describe('assertStaffBundleCaps: trần nhân viên', () => {
   it('ADDON ghim phân loại đắt: % giảm tính trên giá phân loại ghim (500k → giá kèm 40k là giảm 92%) → 403', () => {
     const c = normalizeBundleContent(addonInput({ items: [item('p2', { addonPrice: 40_000, variationId: 'p2-l' })] }), 50);
     expect(() => assertStaffBundleCaps(c, same(500_000), { ...caps, maxAmount: 10_000_000 })).toThrow(ForbiddenException);
+  });
+});
+
+describe('keptRefPrices / capAtRefPrices: sửa bộ không làm giá tham chiếu bật lại theo giá hiện tại', () => {
+  const old = (o: Record<string, unknown> = {}) => ({ productId: 'p2', variationId: 'p2-a', addonPrice: 39_000, refPrice: 50_000, ...o });
+  const content = (items: ReturnType<typeof item>[]) => normalizeBundleContent(addonInput({ items }), 50);
+
+  it('món không đổi (cùng sản phẩm, phân loại, giá kèm) giữ giá tham chiếu cũ, kể cả khi form gửi lại nguyên danh sách', () => {
+    expect(keptRefPrices(content([item('p2', { addonPrice: 39_000, variationId: 'p2-a' })]), [old()])).toEqual([50_000]);
+  });
+
+  it('đổi giá kèm, đổi phân loại, món mới, hay dòng cũ thiếu giá tham chiếu → null (lấy giá đang bán lúc này)', () => {
+    expect(keptRefPrices(content([item('p2', { addonPrice: 40_000, variationId: 'p2-a' })]), [old()])).toEqual([null]);
+    expect(keptRefPrices(content([item('p2', { addonPrice: 39_000, variationId: 'p2-b' })]), [old()])).toEqual([null]);
+    expect(keptRefPrices(content([item('p3', { addonPrice: 39_000, variationId: 'p3-a' })]), [old()])).toEqual([null]);
+    expect(keptRefPrices(content([item('p2', { addonPrice: 39_000, variationId: 'p2-a' })]), [old({ refPrice: null })])).toEqual([null]);
+  });
+
+  it('BUNDLE_PCT không có giá tham chiếu để giữ', () => {
+    const pct = normalizeBundleContent(pctInput(), 50);
+    expect(keptRefPrices(pct, [old({ productId: 'p1', addonPrice: null, variationId: null, refPrice: 50_000 })])).toEqual([null, null]);
+  });
+
+  it('giá dùng cho trần nhân viên là giá đang bán nhưng không vượt giá tham chiếu giữ lại (50k → 500k vẫn tính 50k; tụt còn 30k thì tính 30k)', () => {
+    expect(capAtRefPrices([{ price: 500_000, maxPrice: 500_000 }], [50_000])).toEqual([{ price: 50_000, maxPrice: 50_000 }]);
+    expect(capAtRefPrices([{ price: 30_000, maxPrice: 30_000 }], [50_000])).toEqual([{ price: 30_000, maxPrice: 30_000 }]);
+    expect(capAtRefPrices([{ price: 500_000, maxPrice: 500_000 }], [null])).toEqual([{ price: 500_000, maxPrice: 500_000 }]);
   });
 });

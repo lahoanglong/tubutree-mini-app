@@ -6,6 +6,7 @@ import { vnd } from '@tubutree/app-core/commerce/money';
 import { createAdminBundle, updateAdminBundle, type AdminBundle, type AdminBundleKind } from '@/lib/admin-bundles-client';
 import {
   ADDON_MAX_ITEMS,
+  addonBasePrice,
   BUNDLE_MAX_QTY,
   BUNDLE_PCT_MAX_PRODUCTS,
   buildBundleInput,
@@ -22,12 +23,13 @@ import { VnDateTimeInput } from './vn-date-input';
 export const KIND_LABELS: Record<AdminBundleKind, string> = { BUNDLE_PCT: 'Combo giảm %', ADDON: 'Mua kèm (giá riêng)' };
 const errText = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
 
-/** "Giảm 11.000đ (22%)" khi đã biết cả giá bán lẫn giá kèm hợp lệ; chưa biết giá bán (món vừa chọn) thì không đoán. */
+/** "Giảm 11.000đ (22%)" khi đã biết cả giá bán lẫn giá kèm hợp lệ, tính đúng như giỏ (không vượt giá tham chiếu); chưa biết giá bán (món vừa chọn) thì không đoán. */
 function addonSaving(item: BundleDraftItem): string | null {
-  if (item.price === null || !/^\d+$/.test(item.addonPrice.trim())) return null;
+  const base = addonBasePrice(item);
+  if (base === null || !/^\d+$/.test(item.addonPrice.trim())) return null;
   const price = Number(item.addonPrice);
-  if (price >= item.price) return null;
-  return `Giảm ${vnd(item.price - price)} (${Math.round(((item.price - price) / item.price) * 100)}%)`;
+  if (price >= base) return null;
+  return `Giảm ${vnd(base - price)} (${Math.round(((base - price) / base) * 100)}%)`;
 }
 
 /**
@@ -55,7 +57,7 @@ export function BundleForm({ initial, onDone, onCancel }: { initial?: AdminBundl
     setDraft((d) =>
       d.items.some((i) => i.productId === p.id) || d.items.length >= maxItems
         ? d
-        : { ...d, items: [...d.items, { productId: p.id, name: p.label, variationId: null, variationName: null, price: null, addonPrice: '', maxQty: '1' }] },
+        : { ...d, items: [...d.items, { productId: p.id, name: p.label, variationId: null, variationName: null, price: null, refPrice: null, addonPrice: '', maxQty: '1' }] },
     );
   };
   const addAddonItem = (v: PickedAddonVariation) =>
@@ -64,7 +66,7 @@ export function BundleForm({ initial, onDone, onCancel }: { initial?: AdminBundl
         ? d
         : {
             ...d,
-            items: [...d.items, { productId: v.productId, name: v.productName, variationId: v.variationId, variationName: v.variationName, price: v.price, addonPrice: '', maxQty: '1' }],
+            items: [...d.items, { productId: v.productId, name: v.productName, variationId: v.variationId, variationName: v.variationName, price: v.price, refPrice: null, addonPrice: '', maxQty: '1' }],
           },
     );
   const changeKind = (kind: AdminBundleKind) =>
@@ -158,6 +160,9 @@ export function BundleForm({ initial, onDone, onCancel }: { initial?: AdminBundl
                     {i.name}
                     {i.variationName ? <span className="text-stone-500">{` · ${i.variationName}`}</span> : null}
                     {i.price !== null ? <span className="text-stone-500">{` · giá bán ${vnd(i.price)}`}</span> : null}
+                    {i.price !== null && i.refPrice !== null && i.refPrice < i.price ? (
+                      <span className="text-stone-500">{` · giảm tính theo giá ${vnd(i.refPrice)} lúc đặt giá kèm`}</span>
+                    ) : null}
                   </span>
                   <button type="button" aria-label={`Bỏ ${i.name} khỏi bộ`} onClick={() => set({ items: draft.items.filter((x) => x.productId !== i.productId) })} className={BTN_LINK_DANGER}>
                     Bỏ

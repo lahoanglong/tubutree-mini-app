@@ -15,6 +15,8 @@ export interface BundleDraftItem {
   variationName: string | null;
   /** Giá đang bán nếu đã biết (món của bộ có sẵn); món vừa chọn chưa có, máy chủ kiểm sau. */
   price: number | null;
+  /** Giá tham chiếu máy chủ đã giữ cho món mua kèm của bộ có sẵn (trần khoản giảm); món vừa chọn chưa có (máy chủ lấy giá đang bán lúc lưu). */
+  refPrice: number | null;
   /** Chữ gõ trong ô: để rỗng thì báo lỗi thay vì ngầm hiểu là 0đ. */
   addonPrice: string;
   maxQty: string;
@@ -49,6 +51,7 @@ export function draftFromBundle(b: AdminBundle): BundleDraft {
       variationId: i.variationId,
       variationName: i.variationName,
       price: i.price,
+      refPrice: i.refPrice,
       addonPrice: i.addonPrice === null ? '' : String(i.addonPrice),
       maxQty: String(i.maxQty),
     })),
@@ -58,6 +61,13 @@ export function draftFromBundle(b: AdminBundle): BundleDraft {
     isActive: b.isActive,
   };
 }
+
+/**
+ * Giá làm cơ sở khoản giảm của món mua kèm: giỏ chỉ giảm tối đa `min(giá đang bán, giá tham chiếu) − giá kèm` (`addonUnitDiscount` ở API),
+ * nên phân loại tăng giá sau khi tạo không làm khoản giảm lớn lên. null khi chưa biết giá đang bán (món vừa chọn).
+ */
+export const addonBasePrice = (i: { price: number | null; refPrice: number | null }): number | null =>
+  i.price === null ? null : i.refPrice === null ? i.price : Math.min(i.price, i.refPrice);
 
 const isIntText = (s: string): boolean => /^\d+$/.test(s.trim());
 const fail = (error: string) => ({ ok: false as const, error });
