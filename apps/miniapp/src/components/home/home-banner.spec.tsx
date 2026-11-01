@@ -1,14 +1,18 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type * as ZmpUi from 'zmp-ui';
+import type { BundleDTO, BundleItemDTO } from '@tubutree/app-core/api/bundle';
 import type { CampaignBanner } from '@tubutree/app-core/api/campaign';
+import { comboView } from '@tubutree/app-core/commerce/bundle-view';
 import type { HomeKindState } from '@tubutree/app-core/home-layout';
 import { BANNER_HINT_KEY } from '@tubutree/app-core/home-layout';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ fetchHome: vi.fn(), navigate: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fetchHome: vi.fn(), navigate: vi.fn(), notify: vi.fn(), addAll: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
 vi.mock('../../services/campaign-api', () => ({ fetchHomeCampaigns: mocks.fetchHome }));
+vi.mock('../../hooks/use-notify', () => ({ useNotify: () => ({ notify: mocks.notify }) }));
+vi.mock('../../services/cart-batch', () => ({ addAllToCart: mocks.addAll }));
 
 import { HomeBanner } from './home-banner';
 import { HomeCombos } from './home-combos';
@@ -138,9 +142,47 @@ describe('HomeBanner — banner chiến dịch của Trang chủ', () => {
   });
 });
 
-describe('Khối combo của Trang chủ (chờ P15)', () => {
-  it('chưa có combo: HomeCombos không vẽ gì, không giữ chỗ', () => {
-    const { container } = render(<HomeCombos />);
+const bundleItem = (id: string): BundleItemDTO => ({
+  productId: id, variationId: `v-${id}`, maxQty: 1, addonPrice: null, inStock: true,
+  product: { id, slug: `sp-${id}`, brand: 'Tubu', name: `Sản phẩm ${id}`, thumbnail: null, basePrice: 100_000, salePrice: null, isFeatured: false, inStock: true, repVariationId: `v-${id}` },
+});
+const bundle = (id: string): BundleDTO => ({
+  id, kind: 'BUNDLE_PCT', title: `Combo ${id}`, pct: 10, endAt: new Date(Date.now() + DAY).toISOString(), anchorProductId: null, items: [bundleItem(`${id}a`), bundleItem(`${id}b`)],
+});
+const views = (...ids: string[]) => ids.flatMap((id) => comboView(bundle(id), Date.now()) ?? []);
+
+describe('Khối combo của Trang chủ', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.addAll.mockResolvedValue({});
+  });
+
+  function renderCombos(v: ReturnType<typeof views>) {
+    const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    return render(
+      <QueryClientProvider client={qc}>
+        <HomeCombos views={v} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it('không có combo: không vẽ gì, không giữ chỗ', () => {
+    const { container } = renderCombos([]);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('hai combo: vùng "Combo tiết kiệm" với hai thẻ, mỗi thẻ có nút thêm cả combo', () => {
+    renderCombos(views('c1', 'c2'));
+    const region = screen.getByRole('region', { name: 'Combo tiết kiệm' });
+    expect(within(region).getByText('Combo c1')).toBeInTheDocument();
+    expect(within(region).getByText('Combo c2')).toBeInTheDocument();
+    expect(within(region).getAllByRole('button', { name: /^Thêm cả combo/ })).toHaveLength(2);
+  });
+
+  it('"Thêm cả combo" gửi đúng các món của combo đó', async () => {
+    renderCombos(views('c1', 'c2'));
+    fireEvent.click(screen.getByRole('button', { name: /^Thêm cả combo Combo c2/ }));
+    await waitFor(() => expect(mocks.addAll).toHaveBeenCalledWith([{ variationId: 'v-c2a', quantity: 1 }, { variationId: 'v-c2b', quantity: 1 }]));
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
   });
 });

@@ -3,11 +3,12 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), phase: 'authenticated' }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), phase: 'authenticated', hydrated: true }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
+vi.mock('@/lib/use-hydrated', () => ({ useHydrated: () => mocks.hydrated }));
 
-import type { HomeKindState } from '@tubutree/app-core/home-layout';
+import { HOME_BEST_SELLER_LIMIT, type HomeKindState } from '@tubutree/app-core/home-layout';
 import { resetFlashSales } from '@/lib/use-flash-sales';
 import { useHomeShelves, type HomeShelves } from './use-home-shelves';
 
@@ -40,6 +41,7 @@ beforeEach(() => {
   resetFlashSales();
   latest = null;
   mocks.phase = 'authenticated';
+  mocks.hydrated = true;
   mocks.get.mockReset().mockImplementation(async (path: string) => {
     if (path === '/flash-sales/active') return ['a', 'b', 'a', 'c'].map(flashItem);
     if (path.startsWith('/products')) return { data: ['a', 'x', 'y', 'z', 'w'].map(card), meta: { page: 1, limit: 12, total: 5 } };
@@ -54,20 +56,95 @@ afterEach(() => {
 });
 
 describe('useHomeShelves (web)', () => {
-  it('Bán chạy nhất xin sort=best_seller_30d, 12 món', async () => {
+  it('Bán chạy nhất xin sort=best_seller_30d, HOME_BEST_SELLER_LIMIT món', async () => {
     await mount('new');
     const call = mocks.get.mock.calls.find(([p]) => String(p).startsWith('/products'));
     expect(call).toBeTruthy();
     expect(JSON.stringify(call)).toContain('best_seller_30d');
-    expect(JSON.stringify(call)).toContain('12');
+    expect(call![1]).toMatchObject({ query: { limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' } });
+  });
+
+  it('bestSellerBasis là days30 khi API trả theo 30 ngày', async () => {
+    const s = await mount('new');
+    expect(s.bestSellerBasis).toBe('days30');
+  });
+
+  it('API cũ từ chối best_seller_30d (400): kệ lùi về best_seller, vẫn có món và bestSellerBasis là total', async () => {
+    const base = mocks.get.getMockImplementation()!;
+    mocks.get.mockImplementation(async (path: string, opts?: { query?: { sort?: string } }) => {
+      if (path.startsWith('/products') && opts?.query?.sort === 'best_seller_30d') throw Object.assign(new Error('bad'), { status: 400 });
+      return base(path, opts);
+    });
+    const s = await mount('new');
+    expect(s.bestSellers.length).toBeGreaterThan(0);
+    expect(mocks.get.mock.calls.some(([, o]) => (o as { query?: { sort?: string } } | undefined)?.query?.sort === 'best_seller')).toBe(true);
+    expect(s.bestSellerBasis).toBe('total');
   });
 
   it('Giờ vàng một thẻ mỗi sản phẩm; Bán chạy bỏ món đã ở Giờ vàng; seen gồm mọi món đang hiện', async () => {
     const s = await mount('new');
     expect(s.flash.map((f) => f.productSlug)).toEqual(['a', 'b', 'c']);
     expect(s.bestSellers.map((p) => p.slug)).toEqual(['x', 'y', 'z', 'w']);
-    expect(Array.from(s.flashSlugs).sort()).toEqual(['a', 'b', 'c']);
+    // Mọi phân loại đang Giờ vàng, kể cả v2 của suất "a" thứ hai bị gộp vào một thẻ: Mua lại cũng phải bỏ nó (H3 #2).
+    expect(Array.from(s.flashVariationIds).sort()).toEqual(['v0', 'v1', 'v2', 'v3']);
     expect(s.seen.has('a') && s.seen.has('x')).toBe(true);
+  });
+
+  it('Mua lại chống trùng theo phân loại: món đã mua "b" ở phân loại khác (pv-b) không nằm trong flashVariationIds, sản phẩm vẫn bị chiếm slug nên Bán chạy bỏ nó (P2 #3)', async () => {
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/flash-sales/active') return ['a', 'b', 'c'].map(flashItem);
+      if (path.startsWith('/products')) return { data: ['b', 'x', 'y', 'z'].map(card), meta: { page: 1, limit: 12, total: 4 } };
+      if (path.includes('purchased')) return { items: [purchased('b')], meta: { page: 1, limit: 10, total: 1 } };
+      return [];
+    });
+    const s = await mount('returning');
+    expect(s.flashVariationIds.has('pv-b')).toBe(false);
+    expect(s.flashVariationIds.has('v1')).toBe(true);
+    expect(s.bestSellers.map((p) => p.slug)).toEqual(['x', 'y', 'z']);
+    expect(s.seen.has('b')).toBe(true);
+  });
+
+  it('sản phẩm có hai phân loại cùng Giờ vàng, khách đã mua phân loại bị ẩn khỏi kệ: Mua lại không hiện nó (H3 #2)', async () => {
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/flash-sales/active') return ['a', 'b', 'a', 'c'].map(flashItem);
+      if (path.startsWith('/products')) return { data: ['x', 'y', 'z', 'w'].map(card), meta: { page: 1, limit: 12, total: 4 } };
+      if (path.includes('purchased')) return { items: [{ ...purchased('a'), variationId: 'v2' }, purchased('q')], meta: { page: 1, limit: 10, total: 2 } };
+      return [];
+    });
+    const s = await mount('returning');
+    expect(s.flash.map((f) => f.productSlug)).toEqual(['a', 'b', 'c']);
+    expect(s.flash.some((f) => f.variationId === 'v2')).toBe(false);
+    expect(s.flashVariationIds.has('v2')).toBe(true);
+    const rail = [{ ...purchased('a'), variationId: 'v2' }, purchased('q')].filter((p) => !s.flashVariationIds.has(p.variationId));
+    expect(rail.map((p) => p.slug)).toEqual(['q']);
+  });
+
+  it('9 sản phẩm Giờ vàng, kệ chỉ vẽ 8: sản phẩm bị cắt khỏi kệ không nằm trong tập loại trừ, khách đã mua nó vẫn thấy ở Mua lại (H3 #2)', async () => {
+    const slugs = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9'];
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/flash-sales/active') return [...slugs.map(flashItem), flashItem('f1', 90)];
+      if (path.startsWith('/products')) return { data: ['x', 'y', 'z'].map(card), meta: { page: 1, limit: 12, total: 3 } };
+      if (path.includes('purchased')) return { items: [{ ...purchased('f9'), variationId: 'v8' }, purchased('q')], meta: { page: 1, limit: 10, total: 2 } };
+      return [];
+    });
+    const s = await mount('returning');
+    expect(s.flash.map((f) => f.productSlug)).toEqual(slugs.slice(0, 8));
+    // flashItem(slug, i) dùng variationId `v${i}`: f9 là v8 (bị cắt), f1 thứ hai là v90 (cùng sản phẩm đang vẽ).
+    expect(s.flashVariationIds.has('v8')).toBe(false);
+    expect(s.flashVariationIds.has('v7')).toBe(true);
+    expect(s.flashVariationIds.has('v90')).toBe(true);
+    expect(s.flashVariationIds.size).toBe(9);
+  });
+
+  it('suất của phân loại thứ hai đã quá giờ thì không nằm trong tập loại trừ dù sản phẩm vẫn ở Giờ vàng bằng phân loại còn hạn (H3 #2)', async () => {
+    const gone = new Date(Date.now() - 1000).toISOString();
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/flash-sales/active') return [flashItem('a', 0), flashItem('b', 1), flashItem('c', 2), flashEnding('a', 3, gone)];
+      if (path.startsWith('/products')) return { data: ['x', 'y', 'z'].map(card), meta: { page: 1, limit: 12, total: 3 } };
+      return [];
+    });
+    const s = await mount('new');
+    expect(Array.from(s.flashVariationIds).sort()).toEqual(['v0', 'v1', 'v2']);
   });
 
   it('khách cũ: món Mua lại cũng nằm trong seen (trừ món đã ở Giờ vàng); khách mới không gọi kệ Mua lại', async () => {
@@ -119,7 +196,7 @@ describe('useHomeShelves (web)', () => {
     });
     const s = await mount('new');
     expect(s.flash).toEqual([]);
-    expect(s.flashSlugs.size).toBe(0);
+    expect(s.flashVariationIds.size).toBe(0);
     expect(s.bestSellers.map((p) => p.slug)).toEqual(['a', 'b', 'c', 'x']);
     expect(s.bestSellerRanks).toEqual([1, 2, 3, 4]);
   });
@@ -142,5 +219,162 @@ describe('useHomeShelves (web)', () => {
     expect(latest!.flash.map((f) => f.productSlug)).toEqual(['a', 'b', 'c']);
     expect(latest!.bestSellers.map((p) => p.slug)).toEqual(['d', 'x', 'y', 'z']);
     expect(latest!.bestSellerRanks).toEqual([1, 2, 3, 4]);
+  });
+
+  describe('kệ combo', () => {
+    const comboDto = (id: string, a: string, b: string, endAt = new Date(Date.now() + HOUR).toISOString()) => ({
+      id, kind: 'BUNDLE_PCT', title: `Combo ${id}`, pct: 10, endAt, anchorProductId: null,
+      items: [a, b].map((slug) => ({ productId: `p-${slug}`, variationId: `rv-${slug}`, maxQty: 1, addonPrice: null, inStock: true, product: card(slug) })),
+    });
+    const withCombos = (combos: unknown[]) =>
+      mocks.get.mockImplementation(async (path: string) => {
+        if (path === '/flash-sales/active') return [];
+        if (path === '/bundles/combos') return combos;
+        if (path.startsWith('/products')) return { data: ['x', 'y', 'z', 'w'].map(card), meta: { page: 1, limit: 12, total: 4 } };
+        return [];
+      });
+
+    it('hỏi /bundles/combos với limit 4, ẩn danh (cùng request mà khối gộp /home thay thế)', async () => {
+      withCombos([]);
+      await mount('new');
+      expect(mocks.get).toHaveBeenCalledWith('/bundles/combos', { query: { limit: 4 }, anonymous: true });
+    });
+
+    const SIX = ['x', 'y', 'z', 'w', 'v', 'u'];
+    const sixProducts = { data: SIX.map(card), meta: { page: 1, limit: 12, total: 6 } };
+    const withCombosAndSix = (combos: unknown[]) =>
+      mocks.get.mockImplementation(async (path: string) => {
+        if (path === '/flash-sales/active') return [];
+        if (path === '/bundles/combos') return combos;
+        if (path.startsWith('/products')) return sixProducts;
+        return [];
+      });
+
+    it('từ 2 combo còn hạn trở lên thì có kệ; combo chiếm món của mình: Bán chạy nhất bỏ x, y, z, hạng thật giữ nguyên, `seen` có cả ba', async () => {
+      withCombosAndSix([comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z')]);
+      const s = await mount('new');
+      expect(s.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
+      expect(s.bestSellers.map((p) => p.slug)).toEqual(['w', 'v', 'u']);
+      expect(s.bestSellerRanks).toEqual([4, 5, 6]);
+      expect([...s.seen].filter((k) => SIX.includes(k)).sort()).toEqual(['u', 'v', 'w', 'x', 'y', 'z']);
+    });
+
+    it('combo chiếm món làm Bán chạy nhất dưới 3 món thì kệ ấy ẩn (không để khung rỗng)', async () => {
+      withCombos([comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z')]);
+      const s = await mount('new');
+      expect(s.combos).toHaveLength(2);
+      expect(s.bestSellers).toEqual([]);
+    });
+
+    it('combo chứa món đang ở Giờ vàng vẫn hiện (không bị Giờ vàng loại) và vẫn chiếm món của Bán chạy nhất; Giờ vàng giữ a', async () => {
+      mocks.get.mockImplementation(async (path: string) => {
+        if (path === '/flash-sales/active') return ['a', 'b', 'c'].map(flashItem);
+        if (path === '/bundles/combos') return [comboDto('c1', 'a', 'y'), comboDto('c2', 'a', 'z')];
+        if (path.startsWith('/products')) return sixProducts;
+        return [];
+      });
+      const s = await mount('new');
+      expect(s.flash.map((f) => f.productSlug)).toEqual(['a', 'b', 'c']);
+      expect(s.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
+      expect(s.bestSellers.map((p) => p.slug)).toEqual(['x', 'w', 'v', 'u']);
+    });
+
+    it('Mua lại về sau HTML đầu và giữ chính món của combo (x): kệ combo không biến mất ở lần vẽ nào, Bán chạy nhất không đổi', async () => {
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => (release = resolve));
+      mocks.get.mockImplementation(async (path: string) => {
+        if (path === '/flash-sales/active') return [];
+        if (path.includes('purchased')) {
+          await held;
+          return { items: ['x'].map(purchased), meta: { page: 1, limit: 10, total: 1 } };
+        }
+        return [];
+      });
+      const renders: { combos: number; best: string }[] = [];
+      function Initial() {
+        latest = useHomeShelves('returning', { combos: [comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z')] as never, bestSellers: sixProducts });
+        renders.push({ combos: latest.combos.length, best: latest.bestSellers.map((p) => p.slug).join() });
+        return null;
+      }
+      mounted = render(<Initial />);
+      await flush(8);
+      expect(renders.at(-1)).toEqual({ combos: 2, best: 'w,v,u' });
+      const beforeRelease = renders.length;
+      act(() => release());
+      await flush(8);
+      expect(renders.length).toBeGreaterThan(beforeRelease);
+      expect(renders.every((r) => r.combos === 2 && r.best === 'w,v,u')).toBe(true);
+    });
+
+    it('combo dựng sẵn ở máy chủ có ngay ở lần vẽ đầu: kệ combo và Bán chạy nhất đã bỏ món trùng trong HTML đầu, không hỏi lại /bundles/combos', async () => {
+      function Initial() {
+        latest = useHomeShelves('new', { combos: [comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z')] as never, bestSellers: sixProducts });
+        return null;
+      }
+      mounted = render(<Initial />);
+      expect(latest!.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
+      expect(latest!.bestSellers.map((p) => p.slug)).toEqual(['w', 'v', 'u']);
+      await flush(8);
+      expect(mocks.get).not.toHaveBeenCalledWith('/bundles/combos', expect.anything());
+    });
+
+    it('HTML ISR cũ hơn hạn tươi (combosAt quá 60 giây): hydrate hỏi lại ngay, combo đã tắt rời kệ và món của nó trở về Bán chạy nhất; còn tươi thì không hỏi', async () => {
+      withCombosAndSix([]);
+      function Initial({ combosAt }: { combosAt: number }) {
+        latest = useHomeShelves('new', { combos: [comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z')] as never, combosAt, bestSellers: sixProducts });
+        return null;
+      }
+      mounted = render(<Initial combosAt={Date.now() - 2 * 60_000} />);
+      expect(latest!.combos).toHaveLength(2);
+      await flush(8);
+      expect(mocks.get).toHaveBeenCalledWith('/bundles/combos', expect.anything());
+      expect(latest!.combos).toEqual([]);
+      expect(latest!.bestSellers.map((p) => p.slug)).toEqual(SIX);
+
+      mounted.unmount();
+      mocks.get.mockClear();
+      mounted = render(<Initial combosAt={Date.now() - 5_000} />);
+      await flush(8);
+      expect(mocks.get).not.toHaveBeenCalledWith('/bundles/combos', expect.anything());
+    });
+
+    it('lượt hydrate đầu vẫn vẽ combo mà HTML dựng sẵn đã vẽ dù vừa quá hạn; sau hydrate combo ấy mới bị bỏ và thôi chiếm món', async () => {
+      const gone = new Date(Date.now() - 1000).toISOString();
+      mocks.hydrated = false;
+      function Initial() {
+        latest = useHomeShelves('new', { combos: [comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z', gone)] as never, bestSellers: sixProducts });
+        return null;
+      }
+      mounted = render(<Initial />);
+      expect(latest!.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
+      expect(latest!.bestSellers.map((p) => p.slug)).toEqual(['w', 'v', 'u']);
+
+      mocks.hydrated = true;
+      act(() => latest!.onFlashEnd());
+      expect(latest!.combos).toEqual([]);
+      expect(latest!.bestSellers.map((p) => p.slug)).toEqual(SIX);
+    });
+
+    it('dưới 2 combo hoặc combo đã hết hạn theo giờ máy chủ: kệ rỗng', async () => {
+      withCombos([comboDto('c1', 'x', 'y')]);
+      expect((await mount('new')).combos).toEqual([]);
+      mounted!.unmount();
+      resetFlashSales();
+      latest = null;
+      withCombos([comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z', new Date(Date.now() - 1000).toISOString())]);
+      expect((await mount('new')).combos).toEqual([]);
+    });
+
+    it('API combo lỗi: kệ rỗng, các kệ khác vẫn có', async () => {
+      mocks.get.mockImplementation(async (path: string) => {
+        if (path === '/bundles/combos') throw new Error('offline');
+        if (path === '/flash-sales/active') return [];
+        if (path.startsWith('/products')) return { data: ['x', 'y', 'z'].map(card), meta: { page: 1, limit: 12, total: 3 } };
+        return [];
+      });
+      const s = await mount('new');
+      expect(s.combos).toEqual([]);
+      expect(s.bestSellers).toHaveLength(3);
+    });
   });
 });

@@ -17,7 +17,7 @@ vi.mock('@/lib/core-http', () => ({
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase, useAuthRestoring: () => mocks.restoring }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: mocks.phase === 'authenticated' ? mocks.user : null }) }));
 vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/use-flash-sales')>()), useActiveFlashSales: () => [] }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }), usePathname: () => '/' }));
 const routeState = vi.hoisted(() => ({ pending: new Set<string>() }));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => !routeState.pending.has(p) }));
 
@@ -26,7 +26,7 @@ import { homeBlockOrder } from './home-blocks';
 import { HOME_SETTLE_MAX_MS, homeKeptOrder, homeRenderOrder } from '@tubutree/app-core/home-layout';
 import { resetFlashSales } from '@/lib/use-flash-sales';
 import { HOME_KIND_KEY } from './use-home-customer-kind';
-import { BANNER_HINT_KEY } from '@tubutree/app-core/home-layout';
+import { BANNER_HINT_KEY, HOME_BEST_SELLER_LIMIT } from '@tubutree/app-core/home-layout';
 import type { CampaignBanner } from '@tubutree/app-core/api/campaign';
 
 const CONFIG = {
@@ -80,6 +80,7 @@ beforeEach(() => {
     '/flash-sales/active': () => [],
     '/flash-sales/upcoming': () => [],
     '/campaigns': () => [],
+    '/bundles/combos': () => [],
   };
   mocks.get.mockReset().mockImplementation(async (path: string, opts?: { query?: Record<string, unknown> }) => {
     const h = routes[path];
@@ -108,6 +109,21 @@ describe('HomeView — thứ tự khối (9 khối, một lưới gợi ý)', ()
     expect(region(c, 'Thẻ thành viên')).not.toBeNull();
     expect(region(c, 'Quà khách mới')).toBeNull();
     expect(region(c, 'Mua lại')).not.toBeNull();
+  });
+
+  it('Mua lại bỏ phân loại đang Giờ vàng mà kệ không vẽ thẻ riêng (phân loại thứ hai của cùng sản phẩm), vẫn giữ món khác (H3 #2)', async () => {
+    const flashItem = (slug: string, variationId: string) => ({
+      itemId: `i-${variationId}`, variationId, productSlug: slug, productName: `Giờ vàng ${slug}`, thumbnail: null,
+      retailPrice: 100000, flashPrice: 80000, quota: 10, soldCount: 1, endAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    const bought = (slug: string, variationId: string, productName: string) => ({ variationId, productId: `p-${slug}`, slug, productName, variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' });
+    routes['/flash-sales/active'] = () => [flashItem('a', 'v-a-1l'), flashItem('b', 'v-b'), flashItem('c', 'v-c'), flashItem('a', 'v-a-5l')];
+    routes['/me/purchased-items'] = () => ({ items: [bought('a', 'v-a-5l', 'Đã mua Can 5L'), bought('x', 'v-x', 'Đã mua món khác')], nextCursor: null });
+    const c = await mount();
+    const rail = region(c, 'Mua lại');
+    expect(rail).not.toBeNull();
+    expect(rail!.textContent).toContain('Đã mua món khác');
+    expect(rail!.textContent).not.toContain('Đã mua Can 5L');
   });
 
   it('khách cũ đã được nhớ: ngay từ khung hình đầu đã theo thứ tự returning, dù purchased-items còn tải', async () => {
@@ -147,13 +163,13 @@ describe('HomeView — thứ tự khối (9 khối, một lưới gợi ý)', ()
 });
 
 describe('HomeView — nội dung các khối', () => {
-  it('"Bán chạy nhất" xin sort=best_seller_30d, 12 món, có hạng #1..#3, cho cả khách cũ; lưới gợi ý xin trang đầu kèm seed và không gọi newest/nổi bật riêng', async () => {
+  it('"Bán chạy nhất" xin sort=best_seller_30d, HOME_BEST_SELLER_LIMIT món, có hạng #1..#3, cho cả khách cũ; lưới gợi ý xin trang đầu kèm seed và không gọi newest/nổi bật riêng', async () => {
     const c = await mount();
     const calledSorts = productCalls().map((q) => q.sort);
     expect(calledSorts).toEqual(expect.arrayContaining(['best_seller_30d', undefined]));
     expect(calledSorts).not.toContain('newest');
     const best = productCalls().find((q) => q.sort === 'best_seller_30d')!;
-    expect(best.limit).toBe(12);
+    expect(best.limit).toBe(HOME_BEST_SELLER_LIMIT);
     const shelf = region(c, 'Bán chạy nhất')!;
     expect(shelf.textContent).toContain('Hạng nhất A');
     for (const rank of ['#1', '#2', '#3']) expect(shelf.textContent).toContain(rank);
@@ -331,17 +347,71 @@ describe('HomeView — banner chiến dịch (P11)', () => {
     expect(localStorage.getItem(BANNER_HINT_KEY)).toBe('1');
   });
 
-  it('giữ khung chờ chung khi lần mở trước có banner: khung banner đúng tỉ lệ đứng đầu khung chờ; không có gợi ý thì không giữ chỗ', async () => {
+  it('khung chờ chung không tự vẽ khung banner: không có gợi ý thì không giữ chỗ; có gợi ý thì khung giữ chỗ nằm ở cột banner của HubLayout, chỉ một khung', async () => {
     mocks.phase = 'loading';
     mocks.restoring = true;
     mocks.get.mockImplementation(() => new Promise(() => undefined));
     const none = await mount();
-    const noneKids = Array.from(none.querySelector('[data-testid="home-settling"]')!.children);
-    expect(noneKids).toHaveLength(4);
+    expect(none.querySelector('[data-testid="home-settling"]')!.children).toHaveLength(4);
+    expect(none.querySelector('[data-hub-part="banner"]')).toBeNull();
+    expect(none.querySelector('[data-testid="home-banner-loading"]')).toBeNull();
     mounted?.unmount();
     localStorage.setItem(BANNER_HINT_KEY, '1');
     const hinted = await mount();
-    expect(hinted.querySelector('[data-testid="home-settling"]')!.children).toHaveLength(5);
+    expect(hinted.querySelector('[data-testid="home-settling"]')!.children).toHaveLength(4);
+    const slot = hinted.querySelector<HTMLElement>('[data-hub-part="banner"]')!;
+    expect(slot.className).toContain('lg:col-span-8');
+    expect(slot.querySelectorAll('[data-testid="home-banner-loading"]')).toHaveLength(1);
+    expect(hinted.querySelectorAll('[data-testid="home-banner-loading"]')).toHaveLength(1);
+    // Thứ tự DOM của điện thoại: thẻ thành viên → banner → khung chờ chung.
+    const order = Array.from(hinted.querySelectorAll<HTMLElement>('[data-home-block]')).map((el) => el.dataset.homeBlock);
+    expect(order).toEqual(['search', 'member', 'banner', 'settling']);
+  });
+
+  it('khung chờ chung + server đã có chiến dịch: banner thật đứng ở cột banner ngay trong lúc chờ (không đợi hết chờ mới chen vào hàng đầu)', async () => {
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    mocks.get.mockImplementation(() => new Promise(() => undefined));
+    const c = await mount(<HomeView initial={{ campaigns: [campaign('a')] }} />);
+    expect(c.querySelector('[data-testid="home-settling"]')).not.toBeNull();
+    expect(c.querySelector('[data-hub-part="banner"]')!.querySelector('a[href="/chien-dich/chien-dich-a"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="home-banner-loading"]')).toBeNull();
+  });
+
+  const settlingWithHint = async (campaigns: CampaignBanner[] | undefined) => {
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    localStorage.setItem(BANNER_HINT_KEY, '1');
+    mocks.get.mockImplementation(() => new Promise(() => undefined));
+    return mount(<HomeView initial={campaigns ? { campaigns } : {}} />);
+  };
+
+  it('khung chờ chung + có gợi ý banner + server đã hỏi và không có chiến dịch nào (mọi đối tượng): không giữ chỗ, biết loại khách cũng không hiện thêm banner', async () => {
+    const c = await settlingWithHint([]);
+    expect(c.querySelector('[data-testid="home-settling"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="home-banner-loading"]')).toBeNull();
+    expect(c.querySelector('[data-hub-part="banner"]')).toBeNull();
+  });
+
+  it('khung chờ chung + có gợi ý + server chỉ có chiến dịch RETURNING: giữ chỗ (khách cũ sẽ thấy khi biết loại)', async () => {
+    const c = await settlingWithHint([campaign('r', { audience: 'RETURNING' })]);
+    expect(c.querySelector('[data-testid="home-settling"]')).not.toBeNull();
+    expect(c.querySelector('[data-hub-part="banner"]')!.querySelectorAll('[data-testid="home-banner-loading"]')).toHaveLength(1);
+  });
+
+  it('khung chờ chung + có gợi ý + server chỉ có chiến dịch NEW: giữ chỗ (khách mới sẽ thấy khi biết loại)', async () => {
+    const c = await settlingWithHint([campaign('n', { audience: 'NEW' })]);
+    expect(c.querySelector('[data-hub-part="banner"]')!.querySelectorAll('[data-testid="home-banner-loading"]')).toHaveLength(1);
+  });
+
+  it('khung chờ chung + có gợi ý + chiến dịch riêng đã hết hạn theo giờ máy: không giữ chỗ', async () => {
+    const c = await settlingWithHint([campaign('r', { audience: 'RETURNING', endAt: '2020-06-01T00:00:00Z' })]);
+    expect(c.querySelector('[data-testid="home-banner-loading"]')).toBeNull();
+  });
+
+  it('khung chờ chung + có gợi ý + server không có dữ liệu chiến dịch (API lỗi lúc dựng): vẫn giữ chỗ trong lúc chờ client hỏi', async () => {
+    const c = await settlingWithHint(undefined);
+    expect(c.querySelector('[data-hub-part="banner"]')!.querySelectorAll('[data-testid="home-banner-loading"]')).toHaveLength(1);
   });
 
   it('banner chưa về mà máy nhớ lần trước có: khung giữ chỗ cùng tỉ lệ ở đúng vị trí banner; không nhớ thì không có gì', async () => {
@@ -680,5 +750,36 @@ describe('HomeView — khung chờ chung ở cấp trang: truy vấn quyết đ�
     await tick(50);
     expect(blockOrder(live.container)).toEqual([...homeBlockOrder('new')]);
     expect(region(live.container, 'Bán chạy nhất')!.textContent).toContain('Hạng nhất A');
+  });
+});
+
+describe('HomeView — Combo tiết kiệm (P15)', () => {
+  const comboItem = (id: string) => ({ productId: id, variationId: `v-${id}`, maxQty: 1, addonPrice: null, inStock: true, product: { ...card(id, `Món ${id}`), repVariationId: `v-${id}` } });
+  const combo = (id: string, a: string, b: string) => ({
+    id, kind: 'BUNDLE_PCT', title: `Combo ${id}`, pct: 10, endAt: new Date(Date.now() + 86_400_000).toISOString(), anchorProductId: null, items: [comboItem(a), comboItem(b)],
+  });
+
+  it('có từ 2 combo: kệ đứng sau Bán chạy nhất, đúng thứ tự khối, hỏi /bundles/combos?limit=4', async () => {
+    routes['/bundles/combos'] = () => [combo('c1', 'm1', 'm2'), combo('c2', 'm3', 'm4')];
+    const c = await mount();
+    expect(blockOrder(c)).toEqual([...homeBlockOrder('new')]);
+    expect(region(c, 'Combo tiết kiệm')).not.toBeNull();
+    expect(block(c, 'combos').contains(region(c, 'Combo tiết kiệm'))).toBe(true);
+    expect(block(c, 'bestSellers').compareDocumentPosition(block(c, 'combos')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(calls('/bundles/combos')[0]![1]).toEqual({ query: { limit: 4 }, anonymous: true });
+  });
+
+  it('chỉ 1 combo hoặc API lỗi: ẩn hẳn kệ, trang vẫn đủ khối khác', async () => {
+    routes['/bundles/combos'] = () => [combo('c1', 'm1', 'm2')];
+    const one = await mount();
+    expect(region(one, 'Combo tiết kiệm')).toBeNull();
+    expect(region(one, 'Bán chạy nhất')).not.toBeNull();
+    mounted!.unmount();
+    routes['/bundles/combos'] = () => {
+      throw new Error('offline');
+    };
+    const failed = await mount();
+    expect(region(failed, 'Combo tiết kiệm')).toBeNull();
+    expect(region(failed, 'Bán chạy nhất')).not.toBeNull();
   });
 });

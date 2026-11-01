@@ -1,6 +1,6 @@
 import { applyShelfDedupe } from '../merch/shelves';
 
-/** Dòng giỏ có giá niêm yết cao hơn giá bán mới gạch giá; API cũ chưa trả `listUnitPrice` thì không gạch. */
+/** Dòng giỏ có giá gạch (`listUnitPrice`, luật `strikePrice`) cao hơn giá bán mới gạch giá; API cũ chưa trả `listUnitPrice` thì không gạch. */
 export function lineCompareAt(l: { unitPrice: number; listUnitPrice?: number | null }): number | null {
   return typeof l.listUnitPrice === 'number' && l.listUnitPrice > l.unitPrice ? l.listUnitPrice : null;
 }
@@ -11,8 +11,17 @@ export function lineSaving(l: { unitPrice: number; listUnitPrice?: number | null
   return was === null ? 0 : (was - l.unitPrice) * l.quantity;
 }
 
-export function cartSaving(items: readonly { unitPrice: number; listUnitPrice?: number | null; quantity: number }[]): number {
-  return items.reduce((sum, l) => sum + lineSaving(l), 0);
+/**
+ * "Tiết kiệm" của giỏ: giá gạch của các dòng + giảm combo đang hiển thị (`comboDiscount`, cùng số với dòng "Giảm giá combo", nên giỏ chọn một phần
+ * chưa có giá phần chọn thì truyền 0 chứ không mượn số của cả giỏ). Mã giảm giá và ưu đãi hạng không cộng: mỗi cái đã có dòng riêng ngay trên.
+ * Chỉ để hiển thị; số tiền khách trả do API tính.
+ */
+export function cartSaving(
+  items: readonly { unitPrice: number; listUnitPrice?: number | null; quantity: number }[],
+  comboDiscount = 0,
+): number {
+  const combo = Number.isFinite(comboDiscount) && comboDiscount > 0 ? comboDiscount : 0;
+  return items.reduce((sum, l) => sum + lineSaving(l), 0) + combo;
 }
 
 interface QuickReviewInput {
@@ -39,7 +48,13 @@ export function pickQuickReviews<T extends QuickReviewInput>(items: readonly T[]
 const BRAND_RAIL_MAX = 8;
 
 /**
- * Ba dải cuối PDP không trùng nhau và không có món đang xem: "Khách thường mua cùng" (kệ `pdp.boughtTogether`) > "Cùng nhà" >
+ * Số món lấy làm nguồn cho dải "Có thể bạn cũng thích". `GET /products/for-you` của API trả tối đa 10 món nên Mini chỉ bao giờ có
+ * ngần ấy; khách web chưa đăng nhập (nguồn bán chạy) lấy cùng trần để hai app dài bằng nhau.
+ */
+export const PDP_FEED_SOURCE_LIMIT = 10;
+
+/**
+ * Ba dải cuối PDP không trùng nhau và không có món đang xem: "Khách thường mua cùng" (kệ `pdp.boughtTogether`) > "Cùng thương hiệu" >
  * "Có thể bạn cũng thích" (kệ `pdp.related`). Trần/sàn lấy từ `SHELVES`; dải dưới sàn thì ẩn và không chiếm món của dải dưới.
  */
 export function pdpShelves<T extends { id: string }>(i: { currentId: string; boughtTogether: T[]; brand: T[]; feed: T[] }): {

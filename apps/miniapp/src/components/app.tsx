@@ -63,6 +63,7 @@ const loadBrowse = () => import('../pages/browse');
 const CampaignPage = lazy(() => import('../pages/campaign'));
 const BrowsePage = lazy(loadBrowse);
 const BestSellersPage = lazy(() => import('../pages/best-sellers'));
+const VouchersPage = lazy(() => import('../pages/vouchers'));
 const loadProductDetail = () => import('../pages/product-detail');
 const ProductDetailPage = lazy(loadProductDetail);
 const loadCart = () => import('../pages/cart');
@@ -211,6 +212,8 @@ export default function MyApp() {
             <NotifyRegion />
             <ZMPRouter>
               <ScreenTracker />
+              {/* Thứ tự Tab theo DOM: nút lùi (fixed, góc trên trái) đứng trước nội dung chính và thanh dưới để bàn phím và trình đọc màn hình gặp nó đầu tiên. */}
+              <BackButton />
               {/* Loại điều hướng thật cho trang con — useNavigationType của react-router luôn là POP trong AnimationRoutes. */}
               <LivePathnameProvider>
               <NavigationTypeProvider>
@@ -220,6 +223,7 @@ export default function MyApp() {
                     <Route path="/" element={<RouteShell><HomePage /></RouteShell>} />
                     <Route path="/browse" element={<RouteShell skeleton="grid"><BrowsePage /></RouteShell>} />
                     <Route path="/best-sellers" element={<RouteShell skeleton="grid"><BestSellersPage /></RouteShell>} />
+                    <Route path="/vouchers" element={<RouteShell><VouchersPage /></RouteShell>} />
                     <Route path="/campaign/:slug" element={<RouteShell skeleton="grid"><CampaignPage /></RouteShell>} />
                     <Route path="/product/:slug" element={<RouteShell skeleton="detail"><ProductDetailPage /></RouteShell>} />
                     <Route path="/cart" element={<RouteShell><CartPage /></RouteShell>} />
@@ -286,7 +290,6 @@ export default function MyApp() {
               </NavigationTypeProvider>
               </LivePathnameProvider>
               <BottomNav />
-              <BackButton />
               {ONBOARDING_SURVEY_ENABLED && (
                 <SilentBoundary>
                   <Suspense fallback={null}>

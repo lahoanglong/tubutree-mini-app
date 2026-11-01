@@ -16,7 +16,7 @@ export const SHORTCUT_ICONS: Record<HomeShortcutId, LucideIcon> = {
 
 /**
  * Đích điều hướng của lối tắt; `null` = mở sheet thay vì sang trang (Kiếm tiền). Đích là route web trong route-map; route chưa làm xong (pending)
- * thì lối tắt ẩn. Giờ vàng đi qua `liveRoute` cùng nguồn với "Xem tất cả" của khối Giờ vàng.
+ * thì lối tắt ẩn. Giờ vàng và Mã giảm giá đi qua `liveRoute` cùng nguồn với "Xem tất cả" của khối tương ứng.
  */
 export const SHORTCUT_ROUTES: Record<HomeShortcutId, string | null> = {
   flash: liveRoute('/flash-sale', 'web'),
@@ -24,7 +24,7 @@ export const SHORTCUT_ROUTES: Record<HomeShortcutId, string | null> = {
   rewards: '/kho-qua',
   recycle: '/doi-rac',
   groupBuy: '/mua-chung',
-  coupons: '/uu-dai?section=coupons',
+  coupons: liveRoute('/vouchers', 'web'),
   claim: '/points/scan',
   earn: null,
   community: '/cong-dong',

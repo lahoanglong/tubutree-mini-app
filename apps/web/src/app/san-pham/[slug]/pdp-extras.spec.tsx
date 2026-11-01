@@ -45,7 +45,7 @@ vi.mock('./content-kit-sheet', () => ({
 
 import { PdpSelectionProvider, usePdpSelection } from '@/components/pdp-selection';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { PdpChatButton, PdpContentKitRow, PdpPointsEarn, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpSubscribeRow } from './pdp-extras';
+import { PdpChatButton, PdpContentKitRow, PdpLowStock, PdpPointsEarn, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpShippingRow, PdpSubscribeRow } from './pdp-extras';
 
 const VARIATIONS = [
   { id: 'v1', stock: 0 },
@@ -166,6 +166,25 @@ describe('PdpCoupons (dòng "Ưu đãi ›" mở hộp thoại mã)', () => {
   });
 });
 
+describe('đường kẻ dưới hàng thông tin: chỉ giữa các hàng, hàng cuối không vẽ (như Mini App, G3 MINOR)', () => {
+  const row = (c: HTMLElement, label: string) => Array.from(c.querySelectorAll<HTMLElement>('[role="button"], div')).find((b) => b.textContent?.startsWith(label) && b.style !== undefined && b.querySelector('svg'))!;
+  const hasLine = (el: HTMLElement) => el.style.boxShadow.includes('inset 0 -1px 0');
+
+  it('"Vận chuyển ›" luôn là hàng cuối của khối thông tin nên không có đường kẻ dưới (không còn đường xám trên chip phân loại)', () => {
+    const { container } = mount(<PdpShippingRow>Tubu Tree giao hàng</PdpShippingRow>);
+    expect(hasLine(row(container, 'Vận chuyển'))).toBe(false);
+  });
+  it('hàng "Ưu đãi ›" có đường kẻ khi sau nó còn hàng Vận chuyển (mặc định), không có khi nó là hàng cuối (divider=false)', async () => {
+    mocks.http.get.mockResolvedValue([coupon('ALL')]);
+    const withNext = mount(<PdpCoupons productId="p1" />);
+    await flush();
+    expect(hasLine(row(withNext.container, 'Ưu đãi'))).toBe(true);
+    const last = mount(<PdpCoupons productId="p1" divider={false} />);
+    await flush();
+    expect(hasLine(row(last.container, 'Ưu đãi'))).toBe(false);
+  });
+});
+
 describe('PdpFlashBar', () => {
   const item = (over: Record<string, unknown> = {}) => ({ itemId: 'i1', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 100000, retailPrice: 150000, soldCount: 30, quota: 40, endAt: new Date(Date.now() + 90 * 60_000 + 20_000).toISOString(), ...over });
   const PRODUCT = { slug: 'dau-goi', basePrice: 150000, salePrice: null, variations: [{ id: 'v1', retailPrice: 150000, salePrice: null }, { id: 'v2', retailPrice: 150000, salePrice: null }] };
@@ -182,6 +201,15 @@ describe('PdpFlashBar', () => {
     expect(t).toContain('Đã bán 75%');
     expect(t).toContain('Mỗi khách tối đa 2');
     expect(t).not.toMatch(/Còn \d/);
+  });
+  it('máy tính: dải bo góc như ảnh (md:rounded-sheet), cách ảnh một nhịp; dòng giá của dải ẩn từ lg vì giá deal đã nằm ở cột thông tin', async () => {
+    mocks.flash = [item()];
+    const { container } = mount(<PdpFlashBar product={PRODUCT} />);
+    await flush();
+    const bar = container.querySelector('[data-testid="flash-price-bar"]')!;
+    expect(bar.className).toContain('md:rounded-sheet');
+    expect(bar.className).toContain('md:mt-3');
+    expect(container.querySelector('[data-testid="flash-price-row"]')!.className).toContain('lg:hidden');
   });
   it('đợt của phân loại khác thì không hiện; bán quá suất thì thanh ghi "Đã bán hết", không bao giờ quá 100%', async () => {
     mocks.flash = [item({ variationId: 'v1' })];
@@ -252,11 +280,51 @@ describe('PdpSubscribeRow', () => {
   });
 });
 
+describe('PdpLowStock ("Còn N sản phẩm" dưới Điểm Xanh, đúng chữ Mini App ở điện thoại)', () => {
+  it('phân loại đang chọn còn từ 1 đến 5: nhắc "Còn N sản phẩm", chỉ hiện dưới md', async () => {
+    const { container } = mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />);
+    await flush();
+    const p = container.querySelector('[data-testid="pdp-low-stock"]')!;
+    expect(p.textContent).toBe('Còn 4 sản phẩm');
+    expect(p.className).toContain('md:hidden');
+  });
+  it('hết hàng hoặc còn nhiều hơn 5: không nhắc; lấy tồn kho thật thay bản ISR', async () => {
+    expect(mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />, 'v1').container.innerHTML).toBe('');
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 6 });
+    const many = mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />);
+    await flush();
+    expect(many.container.innerHTML).toBe('');
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 2 });
+    const few = mount(<PdpLowStock slug="dau-goi" variations={[{ id: 'v2', stock: 9 }]} />);
+    await flush();
+    expect(few.container.textContent).toBe('Còn 2 sản phẩm');
+  });
+});
+
+describe('PdpFreeship / PdpShippingRow: cỡ chữ như Mini App ở điện thoại', () => {
+  it('dòng miễn phí giao: 12px đậm màu thương hiệu dưới md (cùng dòng "Tubu Tree giao hàng")', async () => {
+    mocks.getCart.mockResolvedValue({ items: [], itemCount: 0, freeshipThreshold: 150000 });
+    const { container } = mount(<PdpFreeship />);
+    await flush();
+    const p = container.querySelector('[data-testid="pdp-freeship"]')!;
+    expect(p.className).toContain('max-md:text-xs');
+    expect(p.className).toContain('max-md:font-semibold');
+    expect(p.className).toContain('max-md:text-[var(--color-text-brand)]');
+  });
+});
+
 describe('PdpGroupBuyRow', () => {
+  it('điện thoại: là dải trắng riêng (không viền, không bo) như Mini App', () => {
+    const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);
+    expect(container.firstElementChild!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+    expect(byText(container, 'button', /Mở nhóm mua chung/)!.className).toContain('max-md:border-0');
+    // D2: luôn "mã giảm giá", không "mã giảm" thiếu chữ "giá".
+    expect(byText(container, 'button', /Mở nhóm mua chung/)!.textContent).toContain('nhận mã giảm giá khi đủ người');
+  });
   it('đăng nhập: POST /group-buy {productId} rồi sang /mua-chung/<id>', async () => {
     mocks.http.post.mockResolvedValue({ id: 'g1' });
     const { container } = mount(<PdpGroupBuyRow productId="p1" slug="dau-goi" />);
-    expect(container.textContent).toContain('Rủ đủ 3 người, mỗi người nhận mã giảm 15% khi nhóm đủ');
+    expect(container.textContent).toContain('Rủ đủ 3 người, mỗi người nhận mã giảm giá 15% khi nhóm đủ');
     click(byText(container, 'button', /Mở nhóm mua chung/));
     await flush();
     expect(mocks.http.post).toHaveBeenCalledWith('/group-buy', { productId: 'p1' });
@@ -322,6 +390,12 @@ describe('PdpChatButton', () => {
     const { container } = mount(<PdpChatButton productName="Dầu gội" productSlug="dau-goi" />);
     click(byText(container, 'button', 'Chat với Tubu Tree'));
     expect(mocks.oa.openChat).toHaveBeenCalledWith('Mình muốn hỏi về sản phẩm: Dầu gội');
+  });
+  it('điện thoại: nút phụ nền xanh nhạt không viền như ZaUI secondary của Mini App', () => {
+    const { container } = mount(<PdpChatButton productName="Dầu gội" productSlug="dau-goi" />);
+    const btn = byText(container, 'button', 'Chat với Tubu Tree')!;
+    expect(btn.className).toContain('max-md:border-transparent');
+    expect(btn.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
   });
   it('OA chưa cấu hình thì không hiện nút', () => {
     mocks.oa.available = false;

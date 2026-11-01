@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { Box, Page, Text, useNavigate, useParams, useLocation } from 'zmp-ui';
 import { announce, useNotify } from '../hooks/use-notify';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Ticket, Layers, Zap } from 'lucide-react';
+import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Ticket, Zap } from 'lucide-react';
 import {
   fetchProduct,
   fetchRelated,
@@ -48,6 +48,7 @@ import { serverNow } from '../utils/server-clock';
 import { cardPricing, defaultVariationFor, isFlashRunning, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
+import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
@@ -73,7 +74,8 @@ import { cartKey, useCartKey } from '../services/cart-key';
 import { LeafGlyph } from '../components/ui/product-image';
 import { useSizedImage } from '../utils/image-src';
 import { FlashPriceBar } from '../components/product/flash-price-bar';
-import { PdpBundleSlots } from '../components/product/pdp-bundle-slots';
+import { PdpBundles } from '../components/product/pdp-bundles';
+import { useBundlesWait } from '../components/product/use-product-bundles';
 import { PdpOffersSheet } from '../components/product/pdp-offers-sheet';
 import { PdpQuickReviews } from '../components/product/pdp-quick-reviews';
 import { PdpFeed } from '../components/product/pdp-feed';
@@ -164,6 +166,8 @@ export default function ProductDetailPage() {
   });
   // "Đã xem gần đây" (spec 5b.4): ghi khi PDP mở THÀNH CÔNG. Đặt trước mọi early-return (luật hook).
   useRecordRecentlyViewed(product.isSuccess ? product.data : undefined);
+  // Combo/Mua kèm tải song song với sản phẩm; trang giữ khung chờ tối đa vài trăm ms để khối chèn cùng lần vẽ đầu, không đẩy các hàng bên dưới.
+  const bundlesWaiting = useBundlesWait(slug);
   const related = useQuery({
     queryKey: ['related', slug],
     queryFn: () => fetchRelated(slug!),
@@ -343,7 +347,7 @@ export default function ProductDetailPage() {
     onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  if (product.isLoading) return <PdpSkeleton />;
+  if (product.isLoading || (product.data && bundlesWaiting)) return <PdpSkeleton />;
   if (!product.data) {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
@@ -529,16 +533,6 @@ export default function ProductDetailPage() {
       onPress: fromStore ? undefined : () => scrollToId('pdp-promises'),
     });
   }
-  if (variations.length > 1 && selected) {
-    const sel = variationPricing(selected, flashList);
-    infoRows.push({
-      key: 'variation',
-      icon: <Icon icon={Layers} size="md" tone="brand" />,
-      title: fillCopy('pdp.variation'),
-      subtitle: `${selected.name} · ${formatVnd(sel.price)}`,
-      onPress: () => setSheetMode('add'),
-    });
-  }
 
   return (
     <Page className="page page-bleed" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
@@ -612,7 +606,7 @@ export default function ProductDetailPage() {
               <>
                 <Stars value={ratingData.average} size={14} />
                 <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
-                  {ratingData.average.toFixed(1)} · {ratingData.count} đánh giá
+                  {formatRating(ratingData.average)} · {ratingData.count} đánh giá
                 </Text>
               </>
             )}
@@ -714,9 +708,9 @@ export default function ProductDetailPage() {
         )}
       </Box>
 
-      {/* ── Dòng thông tin (Ưu đãi, Vận chuyển, Phân loại): mỗi dòng một "›" ── */}
-      {(infoRows.length > 0 || shippingNotes.length > 0) && (
-        <Box px={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+      {/* ── Dòng thông tin (Ưu đãi, Vận chuyển) ›, ghi chú, chip phân loại; Số lượng liền ngay dưới. Không có dòng "Phân loại ›": chip đã nêu đủ tên, giá, hết hàng, và Thêm giỏ/Mua ngay vẫn mở bảng chọn ── */}
+      {(infoRows.length > 0 || shippingNotes.length > 0 || variations.length > 1) && (
+        <Box px={4} pt={infoRows.length > 0 || shippingNotes.length > 0 ? 0 : 3} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           {infoRows.map((row, i) => (
             <ListRow
               key={row.key}
@@ -728,8 +722,23 @@ export default function ProductDetailPage() {
               style={i < infoRows.length - 1 ? { boxShadow: 'inset 0 -1px 0 var(--color-border-subtle)' } : undefined}
             />
           ))}
+          {shippingNotes.length > 0 && (
+            <div
+              data-testid="pdp-shipping-notes"
+              style={{
+                display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 0 12px',
+                fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-tertiary)',
+              }}
+            >
+              {shippingNotes}
+            </div>
+          )}
           {variations.length > 1 && (
-            <div role="group" aria-label="Phân loại nhanh" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 12 }}>
+            <div
+              role="group"
+              aria-label="Phân loại nhanh"
+              style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 12 }}
+            >
               {variations.map((v) => (
                 <VariationChip
                   key={v.id}
@@ -744,27 +753,10 @@ export default function ProductDetailPage() {
               ))}
             </div>
           )}
-          {shippingNotes.length > 0 && (
-            <div
-              data-testid="pdp-shipping-notes"
-              style={{
-                display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 0 12px',
-                fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-tertiary)',
-              }}
-            >
-              {shippingNotes}
-            </div>
-          )}
         </Box>
       )}
 
-      <PdpBundleSlots />
-
-      {reviews.data && reviews.data.count > 0 && (
-        <PdpQuickReviews average={reviews.data.average} count={reviews.data.count} items={reviews.data.items ?? []} onSeeAll={() => scrollToId('danh-gia')} />
-      )}
-
-      {/* ── Số lượng ── */}
+      {/* ── Số lượng: liền dưới phân loại, trước Combo và Đánh giá nhanh ── */}
       <Box p={4} mt={2} flex alignItems="center" justifyContent="space-between" style={{ background: 'var(--color-bg-surface)' }}>
         <Text bold size="small">
           {vi.product.quantity}
@@ -778,6 +770,12 @@ export default function ProductDetailPage() {
           }}
         />
       </Box>
+
+      {slug && <PdpBundles slug={slug} productName={product.data?.name} />}
+
+      {reviews.data && reviews.data.count > 0 && (
+        <PdpQuickReviews average={reviews.data.average} count={reviews.data.count} items={reviews.data.items ?? []} onSeeAll={() => scrollToId('danh-gia')} />
+      )}
 
       {/* ── Mua chung (§6.14.8) ── */}
       {!retailOnly && (
@@ -812,7 +810,7 @@ export default function ProductDetailPage() {
           </Box>
           <Box style={{ flex: 1 }}>
             <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
-              {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm khi đủ người'}
+              {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm giá khi đủ người'}
             </Text>
             <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
               {groupBuyPitch(config.groupBuy)}
@@ -854,7 +852,7 @@ export default function ProductDetailPage() {
       {/* ── Thành phần (spec §6.2 — niềm tin cho persona sợ hoá chất) ── */}
       {p.ingredients && p.ingredients.length > 0 && (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <SectionTitle style={{ marginBottom: 10 }}>Thành phần</SectionTitle>
+          <SectionTitle block style={{ marginBottom: 10 }}>Thành phần</SectionTitle>
           <Box flex flexDirection="column" style={{ gap: 10 }}>
             {p.ingredients.map((ing, i) => (
               <Box key={i} flex style={{ gap: 10 }}>
@@ -890,7 +888,7 @@ export default function ProductDetailPage() {
 
       {/* ── Cam kết / chính sách (tín hiệu an tâm trước mua — trước đây PDP không có) ── */}
       <Box id="pdp-promises" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-        <SectionTitle style={{ marginBottom: 8 }}>Cam kết Tubu</SectionTitle>
+        <SectionTitle block style={{ marginBottom: 8 }}>Cam kết Tubu</SectionTitle>
         <Box flex flexDirection="column" style={{ gap: 6 }}>
           {['Hàng chính hãng — nguồn gốc rõ ràng', returnsPromise(config.returnWindowDays), 'Sản phẩm xanh, an lành cho cả nhà'].filter((t): t is string => t !== null).map((t) => (
             <Box key={t} flex alignItems="center" style={{ gap: 8 }}>
@@ -986,7 +984,7 @@ export default function ProductDetailPage() {
         <>
           <Box pt={4} pb={2} px={4} flex alignItems="center" style={{ gap: 6 }}>
             <ShoppingCart size={18} color="var(--color-text-primary)" strokeWidth={1.9} />
-            <SectionTitle>{fillCopy('pdp.boughtTogether')}</SectionTitle>
+            <SectionTitle block>{fillCopy('pdp.boughtTogether')}</SectionTitle>
           </Box>
           <ProductRail label={fillCopy('pdp.boughtTogether')} variant="rail-md" items={shelves.boughtTogether} />
         </>
@@ -996,9 +994,9 @@ export default function ProductDetailPage() {
       {shelves.brand.length > 0 && (
         <>
           <Box pt={4} pb={2} px={4}>
-            <SectionTitle>Cùng nhà {p.brand}</SectionTitle>
+            <SectionTitle block>{fillCopy('pdp.brandShelf')}</SectionTitle>
           </Box>
-          <ProductRail label={`Cùng nhà ${p.brand}`} variant="rail-md" items={shelves.brand} />
+          <ProductRail label={fillCopy('pdp.brandShelfLabel', { brand: p.brand })} variant="rail-md" items={shelves.brand} />
         </>
       )}
 
@@ -1273,7 +1271,7 @@ function CollapsibleDescription({ text }: { text: string }) {
   const isLong = text.length > 220;
   return (
     <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-      <SectionTitle>{vi.product.description}</SectionTitle>
+      <SectionTitle block>{vi.product.description}</SectionTitle>
       <Text
         size="small"
         style={{

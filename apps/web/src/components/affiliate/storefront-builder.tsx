@@ -1,9 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, Ellipsis, EyeOff, ImagePlus, MessageSquarePlus, Pencil, Pin, Eye, Plus, Settings, Share2, Trash2, UserRoundCog } from 'lucide-react';
+import { EyeOff, Eye, Pencil, Pin, Plus, Settings, Share2, Sparkles, Trash2, UserRoundCog } from 'lucide-react';
 import {
   createCollection,
   deleteCollection,
@@ -11,41 +13,39 @@ import {
   removeItem,
   reorderCollections,
   reorderItems,
+  updateCollection,
   updateItem,
   type PickerProduct,
   type StorefrontEdit,
 } from '@tubutree/app-core/api/storefront';
 import { STOREFRONT_REORDER_MUTATION, moveInList, withReorderedCollections, withReorderedItems, type MoveDirection } from '@tubutree/app-core/storefront-order';
 import { STOREFRONT_REVIEW_PROMISE, storefrontPublishCopy, storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
+import {
+  BUILDER_COPY, comboPctOutcome, moveAnnouncement, moveBlockReason, moveBlockedAnnouncement, overflowSectionsNotice, questStripView,
+  sectionCardView, sectionHref, sectionIdFromSearch, sectionStyleOf, type newSectionDto,
+} from '@tubutree/app-core/commerce/storefront-builder';
 import { pickerQuery, storefrontQuestsQuery } from '@tubutree/app-core/queries/storefront';
 import { coreHttp } from '@/lib/core-http';
-import { formatVnd } from '@/lib/format-vnd';
+import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
 import { phoneBrandText, phoneCaption, phoneFlatCard, phoneSecondary, phoneSectionTitle } from '@/lib/phone-ui';
 import { cssUrl } from '@/lib/safe-color';
+import { shallowPush, shallowReplace } from '@/lib/shallow-url';
 import { Badge } from '@/components/ui/badge';
 import { Sheet } from '@/components/ui/sheet';
+import { MoveButtons } from '@/components/mini/move-buttons';
+import { QuestStrip } from '@/components/mini/quest-strip';
+import { SectionCard } from '@/components/mini/section-card';
+import { StorefrontNewSection } from './storefront-new-section';
 import { StorefrontPreview } from './storefront-preview';
+import { StorefrontSectionDetail } from './storefront-section-detail';
+import { useSectionStyle } from './use-section-style';
 import { ContentKitSheet, StorefrontShareSheet } from './storefront-share';
-import { QuestSection, StatsSection } from './storefront-panels';
-import { KIND_LABEL, LAYOUT_LABEL, storefrontHost } from './storefront-rules';
-import { CollectionSheet, ConfigSheet, actErrText, NewCollectionForm, PickerSheet, ProfileSheet, type Notify } from './storefront-sheets';
+import { QuestList, StatsSection } from './storefront-panels';
+import { storefrontHost } from './storefront-rules';
+import { CollectionSheet, ConfigSheet, actErrText, PickerSheet, ProfileSheet, type Notify } from './storefront-sheets';
 
 type Notice = { text: string; error: boolean } | null;
-
-function IconButton({ icon: Icon, label, active, danger, disabled, onPress }: { icon: typeof Pin; label: string; active?: boolean; danger?: boolean; disabled?: boolean; onPress: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      disabled={disabled}
-      onClick={onPress}
-      className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-stone-100 disabled:opacity-35 disabled:hover:bg-transparent ${danger ? 'text-danger-fg' : active ? 'text-forest-700' : 'text-stone-600'}`}
-    >
-      <Icon className="h-4 w-4" aria-hidden="true" />
-    </button>
-  );
-}
 
 interface MenuAction {
   key: string;
@@ -118,24 +118,47 @@ function ConfirmSheet({
   );
 }
 
+/** `useLayoutEffect` chạy trước khi trình duyệt vẽ nhưng cảnh báo khi dựng ở máy chủ (không có gì để bố trí ở đó); máy chủ dùng `useEffect` (không chạy). */
+const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
+/** Ô ở hàng tiêu đề của trang (`PageHeader.actions`) nhận "Xem trước" và nút chính từ lg; trang dựng ô, trình dựng gắn nút vào đó bằng portal. */
+export const BUILDER_HEAD_SLOT = 'builder-head-actions';
+
 export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const qc = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [notice, setNotice] = useState<Notice>(null);
   const notify: Notify = (text, error = false) => setNotice({ text, error });
   const [pickerCol, setPickerCol] = useState<string | null>(null);
   const [kitSlug, setKitSlug] = useState<string | null>(null);
+  // Một bộ nút ở hai chỗ (thanh dính đáy `lg:hidden`, ô hàng tiêu đề `hidden lg:flex`): CSS chọn bản nhìn thấy theo khổ nên không có khung nào nút ở sai chỗ
+  // (quyết định bằng JS media query từng làm nút tới trễ một khung và đẩy hàng tiêu đề ~14px). Cả hai bản đọc cùng `actions()` nên chung trạng thái "Đang gửi…".
+  const [headSlot, setHeadSlot] = useState<HTMLElement | null>(null);
+  // Chạy sau mỗi lần vẽ, trước khi trình duyệt vẽ: trang dựng lại hàng tiêu đề khi vào/ra chi tiết khối (ô mới là nút DOM khác), nên không giữ nút DOM cũ.
+  useIsoLayoutEffect(() => {
+    const el = document.getElementById(BUILDER_HEAD_SLOT);
+    setHeadSlot((cur) => (cur === el ? cur : el));
+  });
   const [configOpen, setConfigOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [confirmUnpublish, setConfirmUnpublish] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [questOpen, setQuestOpen] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
   const [itemMenuId, setItemMenuId] = useState<string | null>(null);
   const [colMenuId, setColMenuId] = useState<string | null>(null);
+  // Trang chi tiết là một mục lịch sử của chính trang này (`?khoi=`), không phải route mới: nút lùi nổi (điện thoại) và nút lùi của trình duyệt
+  // trả về danh sách khối. h1 của trang vẫn là "Gian hàng của tôi".
+  const sectionId = sectionIdFromSearch(searchParams.toString());
+  const [sectionSort, setSectionSort] = useState(false);
+  const [itemSort, setItemSort] = useState(false);
   const view = storefrontStatusView(sf);
   const publishCopy = storefrontPublishCopy(sf);
-  // Hành trình gian hàng đứng đầu trang cho tới khi nhận đủ thưởng: ở cuối trang thì CTV mới không thấy.
+  // Hành trình gian hàng thu thành một dải 56px; thưởng chờ nhận thì dải nói thẳng ra.
   const questsQ = useQuery(storefrontQuestsQuery(coreHttp));
-  const questsOpen = !!questsQ.data && questsQ.data.level < questsQ.data.levelMax;
   const [editingCol, setEditingCol] = useState<string | null>(null);
   const [confirmDeleteCol, setConfirmDeleteCol] = useState<string | null>(null);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<string | null>(null);
@@ -155,6 +178,16 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
     return qc.invalidateQueries({ queryKey: ['my-storefront'] });
   };
   const fail = (e: unknown) => notify(actErrText(e), true);
+
+  // Vùng đọc riêng cho việc dời chỗ: câu vị trí mới không lẫn với thông báo thành công/lỗi. Xoá rồi ghi lại để cùng một câu hai lần liên tiếp vẫn được đọc.
+  const [moveText, setMoveText] = useState('');
+  const moveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(moveTimer.current), []);
+  const announce = (text: string) => {
+    clearTimeout(moveTimer.current);
+    setMoveText('');
+    moveTimer.current = setTimeout(() => setMoveText(text), 0);
+  };
 
   const publishMut = useMutation({
     mutationFn: () => publishStorefront(coreHttp, true),
@@ -177,14 +210,31 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
     },
   });
   const newColMut = useMutation({
-    mutationFn: (dto: Parameters<typeof createCollection>[1]) => createCollection(coreHttp, dto),
-    onSuccess: () => void refresh(),
+    mutationFn: (dto: ReturnType<typeof newSectionDto>) => createCollection(coreHttp, dto),
+    onSuccess: (created, dto) => {
+      // Khối mới hiện ngay trong trang chi tiết, không chờ lần tải lại.
+      qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) =>
+        old && created?.id ? { ...old, collections: [...old.collections, { ...created, items: created.items ?? [] }] } : old,
+      );
+      setNewOpen(false);
+      if (created?.id) {
+        openSection(created.id);
+        setPickerCol(created.id);
+      }
+      void refresh();
+      // Máy chủ kẹp `%` theo trần cấu hình: thấp hơn số vừa nhập thì nói rõ, không để CTV tưởng đã được đúng số đó.
+      if (dto.kind === 'COMBO' && typeof dto.comboDiscountPct === 'number') {
+        const out = comboPctOutcome(dto.comboDiscountPct, created?.comboDiscountPct);
+        if (out.clamped) notify(out.text, true);
+      }
+    },
     onError: fail,
   });
   const deleteColMut = useMutation({
     mutationFn: (id: string) => deleteCollection(coreHttp, id),
-    onSuccess: () => {
+    onSuccess: (_d, id) => {
       setConfirmDeleteCol(null);
+      if (id === sectionId) closeSection();
       void refresh();
     },
     onError: (e) => {
@@ -192,6 +242,43 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
       fail(e);
     },
   });
+  const patchCollection = (id: string, patch: Partial<{ layout: 'GRID' | 'CAROUSEL' | 'STACK'; comboDiscountPct: number | null }>) =>
+    qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) => (old ? { ...old, collections: old.collections.map((c) => (c.id === id ? { ...c, ...patch } : c)) } : old));
+  // Chỉ gửi trường đổi (không kèm kind/title): API nhận từng phần, và Thường ↔ Combo chưa đổi được sau khi tạo.
+  const layoutMut = useMutation({
+    mutationFn: (v: { id: string; layout: 'GRID' | 'CAROUSEL' | 'STACK' }) => updateCollection(coreHttp, v.id, { layout: v.layout }),
+    onSuccess: (data, v) => {
+      patchCollection(v.id, { layout: data?.layout ?? v.layout });
+      announce(BUILDER_COPY.layoutSaved);
+      void refresh();
+    },
+    onError: fail,
+    onSettled: (_d, _e, v) => sectionStyle.settled(v.id, v.layout),
+  });
+  const sectionStyle = useSectionStyle({
+    send: (v) => layoutMut.mutate(v),
+    currentOf: (id) => {
+      const c = qc.getQueryData<StorefrontEdit | null>(['my-storefront'])?.collections.find((x) => x.id === id);
+      return c ? sectionStyleOf(c) : null;
+    },
+  });
+  const comboMut = useMutation({
+    mutationFn: (v: { id: string; pct: number }) => updateCollection(coreHttp, v.id, { comboDiscountPct: v.pct }),
+  });
+  /** Máy chủ kẹp `%` theo trần `storefront.max_combo_pct`; màn đọc lại số đã lưu và nói rõ khi nó thấp hơn số vừa nhập. */
+  const saveComboPct = async (id: string, pct: number): Promise<number | null> => {
+    try {
+      const data = await comboMut.mutateAsync({ id, pct });
+      const out = comboPctOutcome(pct, data?.comboDiscountPct);
+      patchCollection(id, { comboDiscountPct: out.saved });
+      notify(out.text, out.clamped);
+      void refresh();
+      return out.saved;
+    } catch (e) {
+      fail(e);
+      return null;
+    }
+  };
   const itemMut = useMutation({
     mutationFn: (v: { id: string; dto: { isPinned?: boolean; isHidden?: boolean } }) => updateItem(coreHttp, v.id, v.dto),
     onSuccess: () => void refresh(),
@@ -239,18 +326,43 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
     ...optimisticOrder,
     onMutate: (v) => optimisticOrder.onMutate(v.update),
   });
+
+  // Hàng đổi chỗ làm React gỡ-gắn nút nên trình duyệt đánh rơi focus; nhớ nút vừa bấm rồi trả focus sau khi danh sách vẽ lại.
+  const pendingFocus = useRef<{ id: string; dir: MoveDirection } | null>(null);
+  useEffect(() => {
+    const want = pendingFocus.current;
+    if (!want) return;
+    const btn = Array.from(document.querySelectorAll<HTMLElement>('[data-move-id]')).find((b) => b.dataset.moveId === want.id && b.dataset.moveDir === want.dir);
+    if (btn) {
+      pendingFocus.current = null;
+      btn.focus();
+    }
+  }, [sf.collections]);
+
   const moveCollection = (id: string, dir: MoveDirection) => {
     const next = moveInList(sf.collections, id, dir);
     if (!next) return;
     const ids = next.map((c) => c.id);
+    pendingFocus.current = { id, dir };
+    announce(moveAnnouncement({ name: sf.collections.find((c) => c.id === id)?.title ?? '', dir, index: ids.indexOf(id), total: ids.length }));
     moveColMut.mutate({ ids, update: (old) => withReorderedCollections(old, ids) });
+  };
+  const nameOfItem = (collectionId: string, itemId: string) => {
+    const it = sf.collections.find((c) => c.id === collectionId)?.items.find((i) => i.id === itemId);
+    return (it && (it.product ?? productMap.get(it.productId))?.name) || 'Sản phẩm';
   };
   const moveItem = (collectionId: string, itemId: string, dir: MoveDirection) => {
     const col = sf.collections.find((c) => c.id === collectionId);
     const next = col && moveInList(col.items, itemId, dir, samePinGroup);
     if (!next) return;
     const ids = next.map((i) => i.id);
+    pendingFocus.current = { id: itemId, dir };
+    announce(moveAnnouncement({ name: nameOfItem(collectionId, itemId), dir, index: ids.indexOf(itemId), total: ids.length }));
     moveItemMut.mutate({ collectionId, ids, update: (old) => withReorderedItems(old, collectionId, ids) });
+  };
+  const blockedMove = <T extends { id: string }>(list: readonly T[], id: string, dir: MoveDirection, name: string, same?: (a: T, b: T) => boolean) => {
+    const reason = moveBlockReason(list, id, dir, same);
+    if (reason) announce(moveBlockedAnnouncement({ name, dir, reason }));
   };
   const delItemMut = useMutation({
     mutationFn: (id: string) => removeItem(coreHttp, id),
@@ -264,200 +376,228 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
     },
   });
 
+  // Mở/đóng trang chi tiết: vào tiêu đề khối khi mở; khi lùi lại thì về đúng thẻ vừa mở.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const lastOpened = useRef<string | null>(null);
+  // Mục lịch sử của trang chi tiết có dấu `builderSection` trong history.state khi phía trước nó là danh sách khối: đóng bằng lùi một bước.
+  // Dấu nằm ở state của mục (không ở biến trong bộ nhớ) nên F5 vẫn còn; Next giữ state tuỳ biến của mục qua F5 và lùi/tiến.
+  const hasListBehind = () => (window.history.state as { builderSection?: boolean } | null)?.builderSection === true;
+  const openSection = (id: string) => {
+    lastOpened.current = id;
+    setItemSort(false);
+    if (sectionId !== null) {
+      shallowReplace(sectionHref(pathname, id), hasListBehind() ? { builderSection: true } : {});
+      return;
+    }
+    shallowPush(sectionHref(pathname, id), { builderSection: true });
+  };
+  function closeSection() {
+    setItemSort(false);
+    if (sectionId !== null && hasListBehind()) router.back();
+    else shallowReplace(pathname);
+  }
+
   // API từ chối đăng gian hàng chưa có sản phẩm; chặn ngay ở nút để CTV biết cần làm gì thay vì nhận lỗi.
   const itemCount = sf.collections.reduce((n, c) => n + c.items.length, 0);
   const editing = sf.collections.find((c) => c.id === editingCol) ?? null;
   const menuItem = sf.collections.flatMap((c) => c.items).find((i) => i.id === itemMenuId) ?? null;
   const menuCol = sf.collections.find((c) => c.id === colMenuId) ?? null;
+  const sectionCol = sf.collections.find((c) => c.id === sectionId) ?? null;
+  const inDetail = sectionCol !== null;
+  useEffect(() => {
+    if (inDetail) {
+      headingRef.current?.focus();
+      return;
+    }
+    const id = lastOpened.current;
+    if (!id) return;
+    lastOpened.current = null;
+    Array.from(document.querySelectorAll<HTMLElement>('[data-section-id]'))
+      .find((el) => el.dataset.sectionId === id)
+      ?.querySelector('button')
+      ?.focus();
+  }, [inDetail]);
+
+  // Mở thẳng bằng link `?khoi=` (chia sẻ, tab mới) thì phía trước chưa có mục danh sách: dựng sẵn để nút lùi nổi (`router.back()` khi có lịch sử
+  // trong web, không thì lên trang cha) và "Gian hàng của tôi" cùng về danh sách. F5 còn dấu của mục nên không dựng lại.
+  const seededList = useRef(false);
+  useEffect(() => {
+    if (seededList.current || !sectionCol) return;
+    seededList.current = true;
+    if (hasListBehind()) return;
+    shallowReplace(pathname);
+    shallowPush(sectionHref(pathname, sectionCol.id), { builderSection: true });
+    // Một lần khi trang chi tiết đầu tiên xuất hiện; `hasListBehind` và `pathname` đọc ngay lúc đó.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionCol?.id]);
+
+  const pickedStyle = sectionCol && sectionStyle.picked?.id === sectionCol.id ? sectionStyle.picked.style : null;
+  const overflow = overflowSectionsNotice(sf.collections);
+
+  // "Xem trước" và nút chính (Chia sẻ / Đăng): một nguồn cho thanh dính đáy (`grow` = flex-1, hai nút bằng nhau) và hàng tiêu đề từ lg (bề rộng theo chữ).
+  const actions = (grow: string) => (
+    <>
+      {view.canShare ? (
+        <Link href={`/s/${sf.slug}`} className={`${ui.btnSecondary} ${phoneSecondary} ${grow}`}>
+          Xem trước
+        </Link>
+      ) : (
+        <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} ${grow}`} onClick={() => setPreviewOpen(true)}>
+          Xem trước
+        </button>
+      )}
+      {view.canShare ? (
+        <button type="button" className={`${ui.btnPrimary} min-w-0 ${grow} max-md:overflow-hidden max-md:whitespace-nowrap`} aria-label="Chia sẻ gian hàng" onClick={() => setShareOpen(true)}>
+          <Share2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          Chia sẻ
+        </button>
+      ) : sf.isPublished ? (
+        <button
+          type="button"
+          className={`${ui.btnPrimary} min-w-0 ${grow}`}
+          disabled
+          aria-label={view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau khi Tubu duyệt' : 'Chia sẻ gian hàng'}
+        >
+          {view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau' : 'Chia sẻ'}
+        </button>
+      ) : (
+        <button type="button" className={`${ui.btnPrimary} ${grow}`} disabled={itemCount === 0 || publishMut.isPending} onClick={() => publishMut.mutate()}>
+          {publishMut.isPending ? 'Đang gửi…' : publishCopy.button}
+        </button>
+      )}
+    </>
+  );
 
   return (
     <div className="pb-4">
       <div role="status" aria-live="polite">
         {notice && <p className={`mb-3 text-sm ${notice.error ? 'text-danger-fg' : 'font-medium text-success-fg'}`}>{notice.text}</p>}
       </div>
+      <div data-testid="move-status" role="status" aria-live="polite" className="sr-only">
+        {moveText}
+      </div>
 
-      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-6">
-        <div className="space-y-3">
-          <div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <h2 className="font-display text-lg font-semibold text-stone-900">{sf.title}</h2>
-              {/* Không có nhãn này thì CTV không biết gian hàng đã đăng hay còn nháp: "Xem trước" ra trang lỗi mà không hiểu vì sao. */}
-              <Badge tone={view.tone} size="sm">
-                {view.label}
-              </Badge>
-            </div>
-            <div className={`text-xs text-stone-600 ${phoneCaption}`}>{storefrontHost(sf)}</div>
-            {view.code === 'LIVE' && <div className={`text-xs text-stone-600 ${phoneCaption}`}>Gian hàng cập nhật sau vài phút khi bạn đổi nội dung.</div>}
-            {(view.hint || sf.publicHiddenReason) && (
-              <div data-testid="hidden-reason" role="status" className={`mt-2 rounded-control bg-warning-bg px-3 py-2 text-xs text-warning-fg ${phoneCaption}`}>
-                {view.code === 'PENDING_APPROVAL' ? view.hint : (sf.publicHiddenReason ?? view.hint)}
+      {sectionCol ? (
+        <StorefrontSectionDetail
+          col={sectionCol}
+          productMap={productMap}
+          sortMode={itemSort}
+          headingRef={headingRef}
+          pickedStyle={pickedStyle}
+          onBack={closeSection}
+          onMenu={() => setColMenuId(sectionCol.id)}
+          onStyle={(style) => {
+            if (style !== 'COMBO') sectionStyle.choose(sectionCol.id, style);
+          }}
+          onComboPct={(pct) => saveComboPct(sectionCol.id, pct)}
+          onAddItem={() => setPickerCol(sectionCol.id)}
+          onToggleSort={() => setItemSort((v) => !v)}
+          onMoveItem={(itemId, dir) => moveItem(sectionCol.id, itemId, dir)}
+          onMoveBlocked={(itemId, dir) => blockedMove(sectionCol.items, itemId, dir, nameOfItem(sectionCol.id, itemId), samePinGroup)}
+          onItemMenu={setItemMenuId}
+          onNote={(itemId) => setNoting({ id: itemId, note: sectionCol.items.find((i) => i.id === itemId)?.note ?? '' })}
+        />
+      ) : (
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-x-6">
+          <div className="lg:col-start-1">
+            <div className={`${ui.card} ${phoneFlatCard} p-4`}>
+              <div className="flex items-center gap-3">
+                <div
+                  aria-hidden="true"
+                  data-testid="profile-cover"
+                  className="h-14 w-14 shrink-0 rounded-control bg-forest-50 bg-cover bg-center max-md:bg-[linear-gradient(135deg,var(--sage-100),var(--forest-100))]"
+                  style={sf.coverUrl ? { backgroundImage: cssUrl(sf.coverUrl) } : undefined}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <h2 className="break-words font-display text-lg font-semibold text-stone-900">{sf.title}</h2>
+                    {/* Không có nhãn này thì CTV không biết gian hàng đã đăng hay còn nháp: "Xem trước" ra trang lỗi mà không hiểu vì sao. */}
+                    <Badge tone={view.tone} size="sm">
+                      {view.label}
+                    </Badge>
+                  </div>
+                  <div className={`break-words text-xs text-stone-600 ${phoneCaption}`}>{storefrontHost(sf)}</div>
+                  {!sf.coverUrl && (
+                    <button type="button" onClick={() => setProfileOpen(true)} className="tubu-hit-44 block text-left text-xs text-forest-700">
+                      Thêm ảnh bìa
+                    </button>
+                  )}
+                </div>
               </div>
-            )}
-            <div className="mt-3 flex gap-2">
-              <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} flex-1`} onClick={() => setProfileOpen(true)}>
-                <UserRoundCog className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                Sửa hồ sơ
-              </button>
-              <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} flex-1`} onClick={() => setConfigOpen(true)}>
-                <Settings className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                Cài đặt
-              </button>
+              {view.code === 'LIVE' && <div className={`mt-2 text-xs text-stone-600 ${phoneCaption}`}>Gian hàng cập nhật sau vài phút khi bạn đổi nội dung.</div>}
+              {(view.hint || sf.publicHiddenReason) && (
+                <div data-testid="hidden-reason" role="status" className={`mt-2 rounded-control bg-warning-bg px-3 py-2 text-xs text-warning-fg ${phoneCaption}`}>
+                  {view.code === 'PENDING_APPROVAL' ? view.hint : (sf.publicHiddenReason ?? view.hint)}
+                </div>
+              )}
+              <div className="mt-3 flex gap-2">
+                <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} flex-1`} onClick={() => setProfileOpen(true)}>
+                  <UserRoundCog className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                  Sửa hồ sơ
+                </button>
+                <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} flex-1`} onClick={() => setConfigOpen(true)}>
+                  <Settings className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                  Cài đặt
+                </button>
+              </div>
             </div>
           </div>
 
-          {questsOpen && questsQ.data && <QuestSection data={questsQ.data} onNotice={notify} />}
+          <div className="mt-3 space-y-3 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0">
+            {view.code === 'LIVE' && <StatsSection />}
+            {questsQ.data && <QuestStrip {...questStripView(questsQ.data, (n) => `${formatCount(n)} điểm`)} onOpen={() => setQuestOpen(true)} />}
+          </div>
 
-          {/* Hồ sơ gian hàng: đúng thứ khách nhìn thấy đầu tiên, và là điều kiện của nhiệm vụ "Hoàn thiện hồ sơ gian hàng". */}
-          <button
-            type="button"
-            aria-label="Sửa hồ sơ gian hàng"
-            onClick={() => setProfileOpen(true)}
-            className="block w-full overflow-hidden rounded-card bg-stone-0 text-left shadow-card"
-          >
-            <div
-              data-testid="profile-cover"
-              className="flex h-24 items-center justify-center gap-1.5 bg-forest-50 bg-cover bg-center max-md:bg-[linear-gradient(135deg,var(--sage-100),var(--forest-100))]"
-              style={sf.coverUrl ? { backgroundImage: cssUrl(sf.coverUrl) } : undefined}
-            >
-              {!sf.coverUrl && (
-                <>
-                  <ImagePlus className="h-4 w-4 text-forest-700" aria-hidden="true" />
-                  <span className="text-xs font-semibold text-forest-700 max-md:font-normal">Thêm ảnh bìa</span>
-                </>
+          <div className="mt-3 space-y-3 lg:col-start-1">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className={`${ui.sectionTitle} ${phoneSectionTitle}`}>{BUILDER_COPY.sections}</h2>
+              {sf.collections.length > 1 && (
+                <button type="button" className={`${ui.btnText} ${phoneBrandText}`} onClick={() => setSectionSort((v) => !v)}>
+                  {sectionSort ? BUILDER_COPY.sortDone : BUILDER_COPY.sort}
+                </button>
               )}
             </div>
-            <div className="flex items-center gap-2.5 p-3">
-              <div
-                className="-mt-7 h-12 w-12 shrink-0 rounded-full border-2 border-stone-0 bg-stone-200 bg-cover bg-center"
-                style={sf.avatarUrl ? { backgroundImage: cssUrl(sf.avatarUrl) } : undefined}
-              />
-              <div className={`min-w-0 flex-1 text-sm ${sf.headerNote ? 'text-stone-900' : 'text-stone-600'}`}>
-                {sf.headerNote || 'Ảnh đại diện, ảnh bìa và lời nhắn là thứ khách nhìn thấy đầu tiên.'}
-              </div>
-              <Pencil className="h-4 w-4 text-stone-600" aria-hidden="true" />
-            </div>
-          </button>
-
-          {sf.collections.map((col) => (
-            <section key={col.id} aria-label={col.title} className={`${ui.card} ${phoneFlatCard} p-4`}>
-              <div className="mb-1 flex items-center gap-1">
-                <div className="min-w-0 flex-1">
-                  <h2 className={`${ui.sectionTitle} ${phoneSectionTitle}`}>{col.title}</h2>
-                  <div className="mt-0.5 flex flex-wrap gap-1">
-                    {col.kind === 'COMBO' && (
-                      <Badge tone="promo" size="sm">
-                        {KIND_LABEL.COMBO}
-                        {col.comboDiscountPct != null ? ` ${col.comboDiscountPct}%` : ''}
-                      </Badge>
-                    )}
-                    <Badge tone="neutral" size="sm" className="max-md:hidden">
-                      {LAYOUT_LABEL[col.layout] ?? LAYOUT_LABEL.GRID}
-                    </Badge>
-                  </div>
+            {sf.collections.length === 0 && <p className="text-sm text-stone-700">{BUILDER_COPY.empty}</p>}
+            {sf.collections.map((col) =>
+              sectionSort ? (
+                <div key={col.id} data-testid="section-sort-row" className="flex min-h-14 items-center gap-1 rounded-card bg-stone-0 pl-3 shadow-card">
+                  <div className="min-w-0 flex-1 truncate text-sm text-stone-900">{col.title}</div>
+                  <MoveButtons
+                    id={col.id}
+                    name={col.title}
+                    scope="section"
+                    canUp={!!moveInList(sf.collections, col.id, 'up')}
+                    canDown={!!moveInList(sf.collections, col.id, 'down')}
+                    onMove={(dir) => moveCollection(col.id, dir)}
+                    onBlocked={(dir) => blockedMove(sf.collections, col.id, dir, col.title)}
+                  />
                 </div>
-                <IconButton icon={ChevronUp} label="Đưa lên" disabled={!moveInList(sf.collections, col.id, 'up')} onPress={() => moveCollection(col.id, 'up')} />
-                <IconButton icon={ChevronDown} label="Đưa xuống" disabled={!moveInList(sf.collections, col.id, 'down')} onPress={() => moveCollection(col.id, 'down')} />
-                <IconButton icon={Ellipsis} label="Tuỳ chọn bộ sưu tập" onPress={() => setColMenuId(col.id)} />
-              </div>
-              <div className="grid gap-x-6 md:grid-cols-2">
-                {col.items.map((it) => {
-                  const prod = it.product ?? productMap.get(it.productId);
-                  const name = prod?.name ?? 'Sản phẩm';
-                  const price = prod?.salePrice ?? prod?.basePrice ?? 0;
-                  const slug = prod?.slug;
-                  return (
-                    <div key={it.id} className="border-b border-stone-200 py-1">
-                      <div className="flex items-center">
-                        <div className="min-w-0 flex-1">
-                          <div className={`text-sm ${it.isHidden || it.hiddenReason ? 'text-stone-500' : 'text-stone-900'}`}>{name}</div>
-                          <div className="text-sm font-semibold tabular-nums text-stone-900">{formatVnd(price)}</div>
-                          {(it.isPinned || it.hiddenReason) && (
-                            <div className="mt-0.5 flex flex-wrap gap-1">
-                              {it.isPinned && (
-                                <Badge tone="brand" size="sm" icon={Pin}>
-                                  Đã ghim
-                                </Badge>
-                              )}
-                              {it.hiddenReason && (
-                                <Badge tone="warning" size="sm" className="max-w-full !whitespace-normal">
-                                  Khách không thấy: {it.hiddenReason}
-                                </Badge>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        <IconButton icon={ChevronUp} label="Đưa lên" disabled={!moveInList(col.items, it.id, 'up', samePinGroup)} onPress={() => moveItem(col.id, it.id, 'up')} />
-                        <IconButton icon={ChevronDown} label="Đưa xuống" disabled={!moveInList(col.items, it.id, 'down', samePinGroup)} onPress={() => moveItem(col.id, it.id, 'down')} />
-                        <IconButton icon={Ellipsis} label="Tuỳ chọn sản phẩm" onPress={() => setItemMenuId(it.id)} />
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setNoting({ id: it.id, note: it.note ?? '' })}
-                          className={`flex min-h-11 min-w-0 flex-1 items-center gap-1 text-left text-xs ${it.note ? 'italic text-stone-700' : 'text-forest-700'}`}
-                        >
-                          <MessageSquarePlus className="h-4 w-4 shrink-0" aria-hidden="true" />
-                          {it.note ? `“${it.note}”` : 'Thêm lý do giới thiệu'}
-                        </button>
-                        {slug && (
-                          <button type="button" className={`${ui.btnText} ${phoneBrandText}`} onClick={() => setKitSlug(slug)}>
-                            Bài đăng mẫu
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} mt-2`} onClick={() => setPickerCol(col.id)}>
-                <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
-                Thêm sản phẩm
-              </button>
-            </section>
-          ))}
-
-          <NewCollectionForm pending={newColMut.isPending} onCreate={(dto, onSuccess) => newColMut.mutate(dto, { onSuccess })} />
+              ) : (
+                <SectionCard key={col.id} view={sectionCardView(col, sf.collections)} onOpen={() => openSection(col.id)} />
+              ),
+            )}
+            {overflow && <p className="text-xs text-stone-700">{overflow}</p>}
+            <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} w-full`} onClick={() => setNewOpen(true)}>
+              <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
+              {BUILDER_COPY.addSection}
+            </button>
+          </div>
         </div>
+      )}
 
-        <div className="mt-3 space-y-3 lg:mt-0">
-          <StatsSection />
-          {!questsOpen && questsQ.data && <QuestSection data={questsQ.data} onNotice={notify} />}
+      {!sectionCol && (
+        <div data-testid="builder-bar" className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-stone-200 bg-stone-0 px-4 py-3 lg:hidden" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}>
+          {!sf.isPublished && itemCount === 0 && <p className="mb-2 text-xs text-stone-700">Thêm ít nhất 1 sản phẩm để đăng gian hàng.</p>}
+          <div className="mx-auto flex max-w-5xl gap-2">{actions('flex-1')}</div>
         </div>
-      </div>
-
-      <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-stone-200 bg-stone-0 px-4 py-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}>
-        {!sf.isPublished && itemCount === 0 && <p className="mb-2 text-xs text-stone-700">Thêm ít nhất 1 sản phẩm để đăng gian hàng.</p>}
-        <div className="mx-auto flex max-w-5xl gap-2">
-          {view.canShare ? (
-            <Link href={`/s/${sf.slug}`} className={`${ui.btnSecondary} ${phoneSecondary} flex-1`}>
-              Xem trước
-            </Link>
-          ) : (
-            <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} flex-1`} onClick={() => setPreviewOpen(true)}>
-              Xem trước
-            </button>
-          )}
-          {view.canShare ? (
-            <button type="button" className={`${ui.btnPrimary} min-w-0 flex-1 max-md:overflow-hidden max-md:whitespace-nowrap`} aria-label="Chia sẻ gian hàng" onClick={() => setShareOpen(true)}>
-              <Share2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              Chia sẻ
-            </button>
-          ) : sf.isPublished ? (
-            <button
-              type="button"
-              className={`${ui.btnPrimary} min-w-0 flex-1`}
-              disabled
-              aria-label={view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau khi Tubu duyệt' : 'Chia sẻ gian hàng'}
-            >
-              {view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau' : 'Chia sẻ'}
-            </button>
-          ) : (
-            <button type="button" className={`${ui.btnPrimary} flex-1`} disabled={itemCount === 0 || publishMut.isPending} onClick={() => publishMut.mutate()}>
-              {publishMut.isPending ? 'Đang gửi…' : publishCopy.button}
-            </button>
-          )}
-        </div>
-      </div>
+      )}
+      {!sectionCol && headSlot && createPortal(
+        <>
+          {!sf.isPublished && itemCount === 0 && <p className="text-xs text-stone-700">Thêm ít nhất 1 sản phẩm để đăng gian hàng.</p>}
+          {actions('')}
+        </>,
+        headSlot,
+      )}
 
       <StorefrontShareSheet open={shareOpen} onClose={() => setShareOpen(false)} slug={sf.slug} title={sf.title} referralCode={sf.referralCode ?? null} />
       <ContentKitSheet open={!!kitSlug} onClose={() => setKitSlug(null)} productSlug={kitSlug ?? ''} />
@@ -480,25 +620,27 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
             ? [
                 { key: 'pin', label: menuItem.isPinned ? 'Bỏ ghim' : 'Ghim lên đầu', icon: Pin, onPress: () => itemMut.mutate({ id: menuItem.id, dto: { isPinned: !menuItem.isPinned } }) },
                 { key: 'hide', label: menuItem.isHidden ? 'Hiện sản phẩm' : 'Ẩn sản phẩm', icon: menuItem.isHidden ? Eye : EyeOff, onPress: () => itemMut.mutate({ id: menuItem.id, dto: { isHidden: !menuItem.isHidden } }) },
-                { key: 'remove', label: 'Xoá khỏi bộ sưu tập', icon: Trash2, danger: true, onPress: () => setConfirmDeleteItem(menuItem.id) },
+                ...(menuItem.product?.slug ? [{ key: 'kit', label: 'Bài đăng mẫu', icon: Sparkles, onPress: () => setKitSlug(menuItem.product!.slug) }] : []),
+                { key: 'remove', label: BUILDER_COPY.removeItem, icon: Trash2, danger: true, onPress: () => setConfirmDeleteItem(menuItem.id) },
               ]
             : []
         }
       />
       <ActionMenu
         open={!!menuCol}
-        title={menuCol?.title ?? 'Bộ sưu tập'}
+        title={menuCol?.title ?? BUILDER_COPY.sections}
         onClose={() => setColMenuId(null)}
         actions={
           menuCol
             ? [
-                { key: 'rename', label: 'Sửa bộ sưu tập', icon: Pencil, onPress: () => setEditingCol(menuCol.id) },
-                { key: 'delete', label: 'Xoá bộ sưu tập', icon: Trash2, danger: true, onPress: () => setConfirmDeleteCol(menuCol.id) },
+                { key: 'rename', label: BUILDER_COPY.renameSection, icon: Pencil, onPress: () => setEditingCol(menuCol.id) },
+                { key: 'delete', label: BUILDER_COPY.deleteSection, icon: Trash2, danger: true, onPress: () => setConfirmDeleteCol(menuCol.id) },
               ]
             : []
         }
       />
       <CollectionSheet collection={editing} onClose={() => setEditingCol(null)} onSaved={(t) => { notify(t); void refresh(); }} />
+      <StorefrontNewSection open={newOpen} onClose={() => setNewOpen(false)} pending={newColMut.isPending} onCreate={(dto) => newColMut.mutate(dto)} />
 
       <ConfirmSheet
         open={confirmUnpublish}
@@ -511,8 +653,8 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
       />
       <ConfirmSheet
         open={!!confirmDeleteCol}
-        title="Xoá bộ sưu tập này?"
-        actionLabel="Xoá bộ sưu tập"
+        title={BUILDER_COPY.deleteSectionConfirm}
+        actionLabel={BUILDER_COPY.deleteSection}
         pending={deleteColMut.isPending}
         onClose={() => setConfirmDeleteCol(null)}
         onConfirm={() => confirmDeleteCol && deleteColMut.mutate(confirmDeleteCol)}
@@ -525,6 +667,10 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
         onClose={() => setConfirmDeleteItem(null)}
         onConfirm={() => confirmDeleteItem && delItemMut.mutate(confirmDeleteItem)}
       />
+
+      <Sheet open={questOpen} onClose={() => setQuestOpen(false)} title={BUILDER_COPY.questOpen}>
+        {questsQ.data && <QuestList data={questsQ.data} onNotice={notify} />}
+      </Sheet>
 
       <Sheet
         open={previewOpen}

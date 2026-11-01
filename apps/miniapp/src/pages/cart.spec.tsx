@@ -687,7 +687,7 @@ describe('CartPage: gợi ý mã dùng được ở dòng "Mã giảm giá" (ch�
     expect(screen.queryByText(/mã dùng được/)).toBeNull();
   });
 
-  it('giỏ chưa có mã, có mã dùng được → "Bạn có N mã dùng được · giảm đến X", hỏi đúng tham số, không gọi áp mã', async () => {
+  it('giỏ chưa có mã, có mã dùng được → "N mã · giảm đến X" (bản ngắn, vừa một dòng), hỏi đúng tham số, không gọi áp mã', async () => {
     mocks.getCart.mockResolvedValue(summary({}));
     mocks.getCouponPreviews.mockResolvedValue([
       preview('WELCOME30', { discount: 30_000 }),
@@ -695,7 +695,7 @@ describe('CartPage: gợi ý mã dùng được ở dòng "Mã giảm giá" (ch�
       preview('BIG', { eligible: false, reason: 'Cần đơn tối thiểu 500.000đ', discount: 100_000 }),
     ]);
     renderPage();
-    expect(await screen.findByText('Bạn có 2 mã dùng được · giảm đến 30.000đ')).toBeInTheDocument();
+    expect(await screen.findByText('2 mã · giảm đến 30k')).toBeInTheDocument();
     expect(screen.queryByText('Chọn hoặc nhập mã giảm giá')).toBeNull();
     expect(mocks.getCouponPreviews).toHaveBeenCalledTimes(1);
     expect(mocks.getCouponPreviews).toHaveBeenCalledWith({ storefrontSlug: undefined, itemIds: undefined });
@@ -749,6 +749,46 @@ describe('CartPage: giá gạch, Tiết kiệm, Countdown Giờ vàng, chân dí
     expect(screen.queryByText(/Tiết kiệm/)).toBeNull();
   });
 
+  // P2 #12: "Tiết kiệm" gồm cả giảm combo (đúng số dòng "Giảm giá combo" đang hiện) và dùng một màu deal như PDP.
+  describe('Tiết kiệm cộng cả giảm combo', () => {
+    const discounted = { ...OK_LINE, unitPrice: 33_000, listUnitPrice: 50_000, quantity: 2, total: 66_000 };
+
+    it('vừa giá gạch (34.000đ) vừa combo (5.000đ): ghi tổng 39.000đ, số tiền phải trả không đổi', async () => {
+      mocks.getCart.mockResolvedValue(summary({ items: [discounted], subtotal: 66_000, itemCount: 2, comboDiscount: 5_000 }));
+      renderPage();
+      await screen.findByText('Xà bông thảo mộc');
+      const bar = screen.getByTestId('sticky-bar');
+      expect(within(bar).getByTestId('cart-saving')).toHaveTextContent('Tiết kiệm 39.000đ');
+      expect(within(bar).getByTestId('cart-total-value')).toHaveTextContent('61.000đ');
+    });
+
+    it('chỉ có combo (không dòng nào gạch giá): vẫn ghi Tiết kiệm đúng số combo', async () => {
+      mocks.getCart.mockResolvedValue(summary({ comboDiscount: 5_000 }));
+      renderPage();
+      await screen.findByText('Xà bông thảo mộc');
+      expect(within(screen.getByTestId('sticky-bar')).getByTestId('cart-saving')).toHaveTextContent('Tiết kiệm 5.000đ');
+    });
+
+    it('chọn một phần giỏ khi chưa có giá phần chọn: không mượn số combo của cả giỏ', async () => {
+      const lineB = { ...OK_LINE, id: 'ci-b', variationId: 'v-b', productName: 'Dầu gội', slug: 'dg', unitPrice: 100_000, total: 100_000 };
+      mocks.getCart.mockResolvedValue(summary({ items: [{ ...discounted, quantity: 1, total: 33_000 }, lineB], subtotal: 133_000, itemCount: 2, comboDiscount: 15_000 }));
+      mocks.getCartSelection.mockRejectedValue(new Error('chưa có giá phần chọn'));
+      renderPage();
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Dầu gội' }));
+      await waitFor(() => expect(within(screen.getByTestId('sticky-bar')).getByTestId('cart-total-value')).toHaveTextContent('33.000đ'));
+      expect(within(screen.getByTestId('sticky-bar')).getByTestId('cart-saving')).toHaveTextContent('Tiết kiệm 17.000đ');
+    });
+
+    it('một màu deal như dòng "Tiết kiệm" ở PDP, không còn xanh', async () => {
+      mocks.getCart.mockResolvedValue(summary({ items: [discounted], subtotal: 66_000, itemCount: 2 }));
+      renderPage();
+      await screen.findByText('Xà bông thảo mộc');
+      const saving = within(screen.getByTestId('sticky-bar')).getByTestId('cart-saving');
+      expect(saving.style.color).toBe('var(--color-text-price-deal)');
+      expect(saving.style.fontWeight).toBe('600');
+    });
+  });
+
   it('dòng Giờ vàng: "Kết thúc sau …" thay cho "Đã bán %", đọc được bằng role timer', async () => {
     const flash = { ...OK_LINE, isFlash: true, soldPct: 98, flashEndAt: new Date(Date.now() + 2 * 3_600_000 + 30_000).toISOString() };
     mocks.getCart.mockResolvedValue(summary({ items: [flash] }));
@@ -778,6 +818,40 @@ describe('CartPage: giá gạch, Tiết kiệm, Countdown Giờ vàng, chân dí
     expect(within(bar).getByRole('button', { name: 'Thanh toán (1)' })).toBeInTheDocument();
     const body = screen.getByRole('region', { name: 'Sản phẩm trong giỏ' });
     expect(within(body).queryByText('Mã giảm giá')).toBeNull();
+  });
+
+  it('chân dính gọn: chưa đạt miễn phí giao thì có thanh tiến độ; đạt rồi chỉ còn một dòng chữ, không thanh', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    const first = renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    const barEl = screen.getByTestId('freeship-bar');
+    expect(barEl).toBeInTheDocument();
+    // Trang mua sắm chỉ dùng token ngữ nghĩa (P2 #15): rãnh --color-track, không trỏ bậc primitive --stone-200/--forest-200.
+    expect(barEl.getAttribute('style')).toContain('var(--color-track)');
+    expect(barEl.outerHTML).not.toMatch(/var\(--(?:stone|forest)-\d+\)/);
+    // Đầu dải màu của phần đã đầy là token riêng của thanh tiến độ (cùng web), không mượn token viền của nút phụ.
+    const fillEl = barEl.firstElementChild as HTMLElement;
+    expect(fillEl.getAttribute('style')).toContain('var(--color-progress-fill-from)');
+    expect(fillEl.getAttribute('style')).not.toContain('action-secondary-border');
+    first.unmount();
+    mocks.getCart.mockResolvedValue(summary({ subtotal: 250_000, freeship: true, items: [{ ...OK_LINE, unitPrice: 250_000, total: 250_000 }] }));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    expect(within(screen.getByTestId('sticky-bar')).getByText('Bạn được miễn phí giao hàng 🌿')).toBeInTheDocument();
+    expect(screen.queryByTestId('freeship-bar')).toBeNull();
+  });
+
+  it('chân dính gọn: tổng tiền cùng khối với nhãn (bên trái nút), Tiết kiệm nằm dưới số tiền', async () => {
+    const discounted = { ...OK_LINE, unitPrice: 33_000, listUnitPrice: 50_000, total: 33_000 };
+    mocks.getCart.mockResolvedValue(summary({ items: [discounted], subtotal: 33_000 }));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    const bar = screen.getByTestId('sticky-bar');
+    const total = within(bar).getByTestId('cart-total-value');
+    expect(total).toHaveTextContent('33.000đ');
+    expect(total.parentElement).toContainElement(within(bar).getByText('Tạm tính'));
+    expect(total.parentElement).toContainElement(within(bar).getByTestId('cart-saving'));
+    expect(total.parentElement).not.toContainElement(within(bar).getByRole('button', { name: 'Thanh toán (1)' }));
   });
 
   it('bấm dòng mã trong chân dính mở tấm chọn mã', async () => {

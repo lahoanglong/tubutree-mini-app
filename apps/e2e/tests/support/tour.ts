@@ -42,6 +42,8 @@ export const TOUR: Record<string, Omit<TourEntry, 'key'>> = {
   '/product/:slug': { name: 'Chi tiết sản phẩm', miniapp: `/product/${TOUR_PRODUCT_SLUG}`, web: `/san-pham/${TOUR_PRODUCT_SLUG}`, role: 'CUSTOMER' },
   '/wishlist': { name: 'Yêu thích', miniapp: '/wishlist', web: '/tai-khoan/yeu-thich', role: 'CUSTOMER' },
   '/flash-sale': { name: 'Giờ vàng', miniapp: '/flash-sale', web: '/gio-vang', role: 'CUSTOMER' },
+  '/offers': { name: 'Ưu đãi', miniapp: '/offers', web: '/uu-dai', role: 'CUSTOMER' },
+  '/vouchers': { name: 'Mã giảm giá', miniapp: '/vouchers', web: '/ma-giam-gia', role: 'CUSTOMER' },
   '/group-buy': { name: 'Mua chung', miniapp: '/group-buy', web: '/mua-chung', role: 'CUSTOMER' },
   '/group-buy/:id': { name: 'Chi tiết nhóm mua chung', miniapp: '/group-buy/g1', web: '/mua-chung/g1', role: 'CUSTOMER' },
   '/brand/:slug': { name: 'Thương hiệu', miniapp: '/brand/visante', web: '/brand/visante', role: 'CUSTOMER' },

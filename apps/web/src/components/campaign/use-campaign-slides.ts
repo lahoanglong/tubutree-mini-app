@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { CampaignBanner, CampaignPlacement } from '@tubutree/app-core/api/campaign';
-import { campaignSlides } from '@tubutree/app-core/commerce/campaign';
+import { campaignSlides, campaignsRevealByKind } from '@tubutree/app-core/commerce/campaign';
 import type { HomeKindState } from '@tubutree/app-core/home-layout';
 import { campaignsQuery } from '@tubutree/app-core/queries/campaign';
 import { serverNow } from '@tubutree/app-core/server-clock';
@@ -21,7 +21,7 @@ export function useCampaignSlides(
   placement: CampaignPlacement,
   kind: HomeKindState,
   initial?: CampaignBanner[],
-): { slides: BannerSlide[]; loading: boolean; loaded: boolean } {
+): { slides: BannerSlide[]; loading: boolean; loaded: boolean; revealable: boolean } {
   const q = useQuery({
     ...campaignsQuery(coreHttp, placement),
     staleTime: STALE,
@@ -30,5 +30,10 @@ export function useCampaignSlides(
   });
   const hydrated = useHydrated();
   const slides = useMemo(() => campaignSlides(q.data, { kind, platform: 'web', now: hydrated ? serverNow() : undefined }), [q.data, kind, hydrated]);
-  return { slides, loading: q.isLoading, loaded: q.isSuccess };
+  // Chỉ có nghĩa khi chưa biết loại khách: danh sách API gồm mọi đối tượng, nên không có chiến dịch NEW/RETURNING còn hạn thì biết loại cũng không hiện thêm.
+  const revealable = useMemo(
+    () => kind === 'unknown' && campaignsRevealByKind(q.data, { platform: 'web', now: hydrated ? serverNow() : undefined }),
+    [q.data, kind, hydrated],
+  );
+  return { slides, loading: q.isLoading, loaded: q.isSuccess, revealable };
 }

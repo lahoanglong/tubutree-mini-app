@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   fetchForYou: vi.fn(),
   fetchReviews: vi.fn(),
   getCoupons: vi.fn(),
+  getProductBundles: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -29,6 +30,7 @@ vi.mock('../services/shop-api', () => ({
   addToCart: vi.fn(),
 }));
 vi.mock('../services/account-api', () => ({ getCoupons: mocks.getCoupons }));
+vi.mock('../services/bundle-api', () => ({ getProductBundles: mocks.getProductBundles }));
 vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: vi.fn() }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn().mockResolvedValue({ isAffiliate: false }) }));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
@@ -45,6 +47,7 @@ vi.mock('../components/storefront-context-bar', () => ({ StorefrontContextBar: (
 vi.mock('../components/ui/cart-badge', () => ({ CartBadge: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { PDP_BUNDLES_WAIT_MS } from '../components/product/use-product-bundles';
 import ProductDetailPage from './product-detail';
 
 const FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
@@ -82,6 +85,7 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     mocks.fetchForYou.mockResolvedValue([]);
     mocks.fetchReviews.mockResolvedValue({ count: 0, average: 0, items: [] });
     mocks.getCoupons.mockResolvedValue([]);
+    mocks.getProductBundles.mockResolvedValue({ combos: [], addons: [] });
   });
 
   it('có mã dùng được: dòng "Ưu đãi" ghi số mã, bấm mở hộp thoại "Mã giảm giá"; mã mua chung của SP khác không tính', async () => {
@@ -104,12 +108,27 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     expect(screen.queryByRole('button', { name: /Ưu đãi/ })).toBeNull();
   });
 
-  it('nhiều phân loại: dòng "Phân loại ›" ghi phân loại đang chọn và mở bảng chọn', async () => {
+  it('nhiều phân loại: không có dòng "Phân loại ›" (chip đã đủ), Số lượng ngay sau chip và trước Đánh giá nhanh', async () => {
+    mocks.fetchReviews.mockResolvedValue({
+      count: 3, average: 4.4,
+      items: [1, 2].map((n) => ({ id: `r${n}`, rating: 5, comment: `Rất tốt ${n}`, images: [], videoUrl: null, createdAt: '2026-10-01T00:00:00.000Z', author: 'Lan' })),
+    });
     renderPdp();
-    const row = await screen.findByRole('button', { name: /^Phân loại/ });
-    expect(row).toHaveTextContent('1L');
-    fireEvent.click(row);
-    expect(await screen.findByRole('group', { name: 'Phân loại' })).toBeInTheDocument();
+    const chips = await screen.findByRole('group', { name: 'Phân loại nhanh' });
+    expect(screen.queryByRole('button', { name: /^Phân loại/ })).toBeNull();
+    const qty = screen.getByText('Số lượng');
+    const quick = (await screen.findAllByTestId('quick-review'))[0]!;
+    expect(chips.compareDocumentPosition(qty) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(qty.compareDocumentPosition(quick) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('ghi chú vận chuyển nằm trên chip để Số lượng sát phân loại', async () => {
+    mocks.fetchProduct.mockResolvedValue({ ...product, partnerOwned: true });
+    renderPdp();
+    const chips = await screen.findByRole('group', { name: 'Phân loại nhanh' });
+    const notes = screen.getByTestId('pdp-shipping-notes');
+    expect(notes.compareDocumentPosition(chips) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(chips.compareDocumentPosition(screen.getByText('Số lượng')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('đánh giá nhanh: 2 đánh giá có chữ, "Xem tất cả (27)" cuộn tới danh sách đầy đủ', async () => {
@@ -121,17 +140,21 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     });
     renderPdp();
     expect(await screen.findAllByTestId('quick-review')).toHaveLength(2);
+    // Điểm trung bình kiểu vi-VN ở hàng sao đầu trang (P2 #16): "4,4", không "4.4".
+    expect(screen.getByText('4,4 · 27 đánh giá')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả (27)' }));
     expect(scroll).toHaveBeenCalled();
   });
 
-  it('"Khách thường mua cùng" (≥3 món), "Cùng nhà" và "Có thể bạn cũng thích" không trùng nhau và không có món đang xem', async () => {
+  it('"Khách thường mua cùng" (≥3 món), "Cùng thương hiệu" và "Có thể bạn cũng thích" không trùng nhau và không có món đang xem', async () => {
     mocks.fetchBoughtTogether.mockResolvedValue(cards('b', 3));
     mocks.fetchRelated.mockResolvedValue([...cards('n', 2), card('b0'), card('p1')]);
     mocks.fetchForYou.mockResolvedValue([card('p1'), card('b1'), card('n0'), ...cards('f', 5)]);
     renderPdp();
     expect(await screen.findByRole('heading', { level: 2, name: 'Khách thường mua cùng' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'Cùng nhà Cô Lan' })).toBeInTheDocument();
+    // Tiêu đề không kèm tên (tên dài xuống dòng, ux-copy UC-01); tên thương hiệu nằm ở nhãn đọc của dải.
+    expect(screen.getByRole('heading', { level: 2, name: 'Cùng thương hiệu' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Cùng thương hiệu Cô Lan')).toBeInTheDocument();
     const alsoLike = await screen.findByRole('heading', { level: 2, name: 'Có thể bạn cũng thích' });
     const feed = alsoLike.closest('section')!;
     expect(within(feed).getAllByRole('button', { name: /Sản phẩm f\d/ })).toHaveLength(5);
@@ -147,7 +170,51 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
     expect(screen.queryByRole('heading', { name: 'Khách thường mua cùng' })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Có thể bạn cũng thích' })).toBeNull();
+    await waitFor(() => expect(mocks.getProductBundles).toHaveBeenCalledWith('xa-phong'));
     expect(screen.queryByTestId('pdp-bundle-slots')).toBeNull();
+  });
+
+  it('có combo và mua kèm: hiện hai khối ngay trên đánh giá, mua kèm ghi điều kiện mua cùng sản phẩm này', async () => {
+    const item = (id: string, o: Record<string, unknown> = {}) => ({
+      productId: id, variationId: `v-${id}`, maxQty: 1, addonPrice: null, inStock: true,
+      product: { ...card(id), repVariationId: `v-${id}`, isFeatured: false }, ...o,
+    });
+    mocks.getProductBundles.mockResolvedValue({
+      combos: [{ id: 'c1', kind: 'BUNDLE_PCT', title: 'Bộ đôi', pct: 10, endAt: END, anchorProductId: null, items: [item('p1'), item('p2')] }],
+      addons: [{ id: 'a1', kind: 'ADDON', title: 'Kèm', pct: null, endAt: END, anchorProductId: 'p1', items: [item('p3', { addonPrice: 40_000 })] }],
+    });
+    renderPdp();
+    expect(await screen.findByRole('region', { name: 'Combo ưu đãi' })).toBeInTheDocument();
+    const addons = screen.getByRole('region', { name: 'Mua kèm deal sốc' });
+    expect(within(addons).getByText('Chỉ khi mua cùng Xà phòng sả chanh')).toBeInTheDocument();
+  });
+
+  describe('khung chờ giữ tới khi bộ về (khối nằm giữa màn đầu, chèn sau sẽ đẩy các hàng bên dưới)', () => {
+    const item = (id: string) => ({ productId: id, variationId: `v-${id}`, maxQty: 1, addonPrice: null, inStock: true, product: { ...card(id), repVariationId: `v-${id}`, isFeatured: false } });
+    const combo = { id: 'c1', kind: 'BUNDLE_PCT', title: 'Bộ đôi', pct: 10, endAt: END, anchorProductId: null, items: [item('p1'), item('p2')] };
+
+    it('bộ về chậm hơn sản phẩm một chút: tiêu đề sản phẩm và khối Combo hiện CÙNG lúc, không có lần vẽ trang mà thiếu khối', async () => {
+      mocks.getProductBundles.mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve({ combos: [combo], addons: [] }), 80)));
+      renderPdp();
+      await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+      expect(screen.getByRole('region', { name: 'Combo ưu đãi' })).toBeInTheDocument();
+    });
+
+    it('bộ về rỗng hoặc lỗi: trang hiện ngay khi biết kết quả, không chờ hết hạn chờ', async () => {
+      mocks.getProductBundles.mockRejectedValue(new Error('mạng'));
+      const started = Date.now();
+      renderPdp();
+      await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+      expect(Date.now() - started).toBeLessThan(PDP_BUNDLES_WAIT_MS);
+      expect(screen.queryByTestId('pdp-bundle-slots')).toBeNull();
+    });
+
+    it('API bộ treo: hết hạn chờ thì trang vẫn hiện, không có khối', async () => {
+      mocks.getProductBundles.mockReturnValue(new Promise(() => {}));
+      renderPdp();
+      await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' }, { timeout: 2_000 });
+      expect(screen.queryByTestId('pdp-bundle-slots')).toBeNull();
+    });
   });
 
   it('dải gợi ý trả sai dạng (không phải mảng): trang vẫn dựng, chỉ ẩn dải đó', async () => {
@@ -156,6 +223,6 @@ describe('ProductDetailPage — dòng thông tin, đánh giá nhanh, dải gợi
     renderPdp();
     await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
     expect(screen.queryByRole('heading', { name: 'Có thể bạn cũng thích' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Cùng nhà Cô Lan' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Cùng thương hiệu' })).toBeNull();
   });
 });

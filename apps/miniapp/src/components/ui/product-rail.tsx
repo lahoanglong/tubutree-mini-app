@@ -42,10 +42,14 @@ export interface ProductRailProps {
   rankFrom?: number;
   /** Hạng thật của từng thẻ (cùng chỉ số với `items`), thắng `rankFrom`: kệ đã bỏ món trùng kệ khác thì hạng không liền nhau, không được đánh số lại. */
   ranks?: readonly number[];
+  /** Mọi thẻ ghi "Bán chạy" không số (hạng hụt vì kệ trên chiếm món). */
+  rankPlain?: boolean;
   /** Tên vùng cuộn cho trình đọc màn hình. */
   label: string;
   listSource?: string;
   showBrand?: boolean;
+  /** Mặc định có tim yêu thích; màn dựng gian hàng truyền false cho khung xem trước (khung inert, chủ chưa phải khách). */
+  showWishlist?: boolean;
   /** Đang tải: vẽ `skeletonCount` khung chờ cùng số đo với thẻ thật. */
   loading?: boolean;
   skeletonCount?: number;
@@ -54,7 +58,7 @@ export interface ProductRailProps {
   onOpen?: (product: ProductCardData, index: number) => void;
 }
 
-export function ProductRail({ items, variant, rankFrom, ranks, label, listSource, showBrand, loading = false, skeletonCount = 6, noteOf, onOpen }: ProductRailProps) {
+export function ProductRail({ items, variant, rankFrom, ranks, rankPlain, label, listSource, showBrand, showWishlist, loading = false, skeletonCount = 6, noteOf, onOpen }: ProductRailProps) {
   const notes = noteOf ? items.map((p, i) => noteOf(p, i)) : null;
   const reserveNote = notes?.some((n) => !!n) ?? false;
   return (
@@ -71,8 +75,10 @@ export function ProductRail({ items, variant, rankFrom, ranks, label, listSource
                 product={p}
                 variant={variant}
                 rank={ranks?.[i] ?? (rankFrom === undefined ? undefined : rankFrom + i)}
+                rankPlain={rankPlain}
                 listSource={listSource}
                 showBrand={showBrand}
+                showWishlist={showWishlist}
                 note={notes?.[i] || (reserveNote ? '' : undefined)}
                 onOpen={onOpen ? () => onOpen(p, i) : undefined}
               />

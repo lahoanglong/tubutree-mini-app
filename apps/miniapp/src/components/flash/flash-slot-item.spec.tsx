@@ -36,7 +36,7 @@ describe('FlashSlotItem: khung đang diễn ra', () => {
     expect(container.querySelector('[data-ds-variant="line"]')).not.toBeNull();
     expect(container.textContent).toContain('79.000đ');
     expect(container.textContent).toContain('129.000đ');
-    expect(screen.getByText('Mỗi khách tối đa 5')).toBeInTheDocument();
+    expect(screen.getByText('Tối đa 5/khách')).toBeInTheDocument();
     expect(screen.getByText('Đã bán 60%')).toBeInTheDocument();
   });
 
@@ -54,9 +54,17 @@ describe('FlashSlotItem: khung đang diễn ra', () => {
     expect(navigate).toHaveBeenCalledWith('/product/serum-x', { state: { variationId: 'v-flash' } });
   });
 
-  it('tên phân loại hiện cùng dòng giới hạn khi sản phẩm nhiều phân loại', () => {
+  it('tên phân loại hiện sau con số giới hạn, cùng một dòng, khi sản phẩm nhiều phân loại', () => {
     render(<FlashSlotItem item={{ ...ITEM, variationName: '500g' }} {...base} />);
-    expect(screen.getByText('500g · Mỗi khách tối đa 5')).toBeInTheDocument();
+    expect(screen.getByText('Tối đa 5/khách · 500g')).toBeInTheDocument();
+  });
+
+  it('trình đọc nghe "Tối đa 5 sản phẩm mỗi khách, 500g", không nghe "gạch chéo" (F10a)', () => {
+    render(<FlashSlotItem item={{ ...ITEM, variationName: '500g' }} {...base} />);
+    expect(screen.getByText('Tối đa 5/khách · 500g')).toHaveAttribute('aria-hidden', 'true');
+    const description = screen.getByRole('button', { name: 'Serum Bã Trầu' });
+    expect(description).toHaveAccessibleDescription(/Tối đa 5 sản phẩm mỗi khách, 500g$/);
+    expect(description).not.toHaveAccessibleDescription(/\//);
   });
 });
 
@@ -79,7 +87,7 @@ describe('FlashSlotItem: món hết suất', () => {
 
   it('chữ (tên, giá, ghi chú) không bị làm mờ: không tổ tiên nào của chữ mang opacity', () => {
     const { container } = render(<FlashSlotItem item={SOLD} {...base} />);
-    for (const node of [screen.getByText('Mỗi khách tối đa 5'), screen.getByRole('button', { name: 'Serum Bã Trầu' })]) {
+    for (const node of [screen.getByText('Tối đa 5/khách'), screen.getByRole('button', { name: 'Serum Bã Trầu' })]) {
       for (let el: Element | null = node; el && el !== container.parentElement; el = el.parentElement) expect(opacityOf(el)).toBe('');
     }
   });

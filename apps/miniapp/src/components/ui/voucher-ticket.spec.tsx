@@ -6,10 +6,12 @@ import { VoucherTicket } from './voucher-ticket';
 const view = (patch: Partial<VoucherView> = {}): VoucherView => ({
   id: 'FUWA3E',
   code: 'FUWA3E',
-  title: 'Giảm 15% (tối đa 45.000đ)',
+  title: 'Giảm 15%, tối đa 45k',
   kind: 'discount',
   condition: 'Đơn từ 250k',
   expiry: 'Còn 2 ngày',
+  name: null,
+  quota: null,
   state: 'collectable',
   ...patch,
 });
@@ -33,7 +35,7 @@ describe('VoucherTicket', () => {
     render(<VoucherTicket voucher={view({ state })} variant="ticket" primary={{ label: 'Dùng ngay', onClick: vi.fn() }} />);
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.getByText(stamp)).toBeVisible();
-    expect(screen.getByRole('group')).toHaveAccessibleName(`Giảm 15% (tối đa 45.000đ), ${stamp}`);
+    expect(screen.getByRole('group')).toHaveAccessibleName(`Giảm 15%, tối đa 45k, ${stamp}`);
   });
 
   it('ineligible: nút aria-disabled mô tả bằng reason, bấm không gọi onClick', () => {
@@ -77,36 +79,119 @@ describe('VoucherTicket', () => {
   it('không đơn tối thiểu và không hạn: không dòng trống, dòng meta không có dấu "·" thừa', () => {
     render(<VoucherTicket voucher={view({ condition: '', expiry: '' })} variant="ticket" />);
     expect(q('voucher-expiry')).toBeNull();
-    expect(q('voucher-meta')!.textContent).toBe('FUWA3E');
+    expect(q('voucher-meta')).toBeNull();
+    expect(q('voucher-foot')!.textContent).toBe('FUWA3E');
   });
 
-  it('có đủ điều kiện, mã và hạn: meta "Đơn từ 250k · FUWA3E" và dòng hạn riêng', () => {
-    render(<VoucherTicket voucher={view()} variant="ticket" />);
-    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k · FUWA3E');
+  it('ticket: meta chỉ còn điều kiện; hạn dùng, số lượt và mã cùng một hàng đáy theo thứ tự đó', () => {
+    render(<VoucherTicket voucher={view({ quota: 'Còn 3 lượt' })} variant="ticket" />);
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k');
+    const foot = q('voucher-foot')!;
+    expect(foot.style.display).toBe('flex');
+    expect(foot.style.flexWrap).toBe('wrap');
+    expect(Array.from(foot.querySelectorAll('[data-testid]')).map((n) => n.getAttribute('data-testid'))).toEqual(['voucher-expiry', 'voucher-quota', 'voucher-code']);
     expect(q('voucher-expiry')!.textContent).toBe('Còn 2 ngày');
+    expect(q('voucher-code')!.textContent).toBe('FUWA3E');
   });
 
-  it('ticket và row: mã là một khối không ngắt giữa chừng, meta không nowrap/ellipsis (hẹp thì xuống dòng, không cắt điều kiện hay mã)', () => {
-    render(<VoucherTicket voucher={view({ condition: 'Đơn từ 500k', code: 'CHUADU' })} variant="ticket" primary={{ label: 'Dùng ngay', onClick: vi.fn() }} />);
+  it('ticket và row: mã là một khối không ngắt giữa chừng, điều kiện không nowrap/ellipsis (hẹp thì xuống dòng, không cắt điều kiện hay mã)', () => {
+    const { rerender } = render(<VoucherTicket voucher={view({ condition: 'Đơn từ 500k', code: 'CHUADU' })} variant="ticket" primary={{ label: 'Dùng ngay', onClick: vi.fn() }} />);
     const code = q('voucher-code')!;
     expect(code.textContent).toBe('CHUADU');
     expect(code.style.whiteSpace).toBe('nowrap');
+    expect(q('voucher-foot')!.contains(code)).toBe(true);
     const meta = q('voucher-meta')!;
-    expect(meta.textContent).toBe('Đơn từ 500k · CHUADU');
+    expect(meta.textContent).toBe('Đơn từ 500k');
     expect(meta.style.whiteSpace).toBe('');
     expect(meta.style.textOverflow).toBe('');
+    rerender(<VoucherTicket voucher={view({ condition: 'Đơn từ 500k', code: 'CHUADU' })} variant="row" primary={{ label: 'Dùng ngay', onClick: vi.fn() }} />);
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 500k · CHUADU');
+    expect(q('voucher-code')!.style.whiteSpace).toBe('nowrap');
   });
 
   it('chip chỉ có tiêu đề và điều kiện: không mã; ticket và row vẫn có mã', () => {
     const { rerender } = render(<VoucherTicket voucher={view()} variant="chip" />);
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k');
-    expect(q('voucher-meta')!.style.whiteSpace).toBe('nowrap');
-    expect(q('voucher-meta')!.style.textOverflow).toBe('ellipsis');
     expect(q('voucher-code')).toBeNull();
+    expect(q('voucher-foot')).toBeNull();
     rerender(<VoucherTicket voucher={view({ condition: '' })} variant="chip" />);
     expect(q('voucher-meta')).toBeNull();
     rerender(<VoucherTicket voucher={view()} variant="row" />);
     expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k · FUWA3E');
+  });
+
+  it('ticket: tên admin đặt có hàng riêng (một dòng, co bằng "…"), meta chỉ còn điều kiện và mã; row đặt tên sau điều kiện', () => {
+    const { rerender } = render(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="ticket" />);
+    expect(q('voucher-name')!.textContent).toBe('Chào bạn mới');
+    expect(q('voucher-name')!.style.whiteSpace).toBe('nowrap');
+    expect(q('voucher-name')!.style.textOverflow).toBe('ellipsis');
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k');
+    rerender(<VoucherTicket voucher={view({ name: 'Chào bạn mới', condition: '' })} variant="ticket" />);
+    expect(q('voucher-meta')).toBeNull();
+    expect(q('voucher-foot')!.textContent).toBe('Còn 2 ngày ·FUWA3E');
+    rerender(<VoucherTicket voucher={view()} variant="ticket" />);
+    expect(q('voucher-name')).toBeNull();
+    rerender(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="row" />);
+    expect(q('voucher-name')).toBeNull();
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k · Chào bạn mới · FUWA3E');
+    rerender(<VoucherTicket voucher={view({ name: 'Chào bạn mới', condition: '' })} variant="row" />);
+    expect(q('voucher-meta')!.textContent).toBe('Chào bạn mới · FUWA3E');
+  });
+
+  it('row: tên đã cắt ("cho 3 đơn") đứng sau điều kiện, không dẫn đầu dòng meta; ticket giữ tên ở hàng riêng', () => {
+    const voucher = view({ title: 'Giảm 20k', condition: 'Đơn từ 100k', code: 'GIAM20', id: 'GIAM20', name: 'cho 3 đơn' });
+    const { rerender } = render(<VoucherTicket voucher={voucher} variant="row" />);
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 100k · cho 3 đơn · GIAM20');
+    expect(q('voucher-meta')!.textContent!.startsWith('cho')).toBe(false);
+    rerender(<VoucherTicket voucher={{ ...voucher, condition: '' }} variant="row" />);
+    expect(q('voucher-meta')!.textContent).toBe('cho 3 đơn · GIAM20');
+    rerender(<VoucherTicket voucher={voucher} variant="ticket" />);
+    expect(q('voucher-name')!.textContent).toBe('cho 3 đơn');
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 100k');
+  });
+
+  it('ticket: điều kiện và tên admin cùng một hàng (điều kiện trước, nguyên khối; tên sau, co bằng "…"), mã nằm ở hàng đáy', () => {
+    render(<VoucherTicket voucher={view({ name: 'Quà tri ân khách hàng thân thiết' })} variant="ticket" />);
+    const meta = q('voucher-meta')!;
+    const name = q('voucher-name')!;
+    expect(meta.parentElement).toBe(name.parentElement);
+    expect(meta.parentElement!.style.display).toBe('flex');
+    expect(meta.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(meta.style.flex).toBe('0 0 auto');
+    expect(name.style.minWidth).toBe('0px');
+    expect(q('voucher-foot')!.contains(q('voucher-code'))).toBe(true);
+  });
+
+  it('chip không vẽ tên: dòng meta chỉ còn điều kiện', () => {
+    render(<VoucherTicket voucher={view({ name: 'Chào bạn mới' })} variant="chip" />);
+    expect(q('voucher-meta')!.textContent).toBe('Đơn từ 250k');
+  });
+
+  it('chip: chữ phụ dài được hai dòng (không nowrap) để mã ở cuối câu không bị cắt thành "…"; tiêu đề vẫn một dòng', () => {
+    const sub = 'Giảm 15% đơn từ 250.000đ với mã BEPXANH15';
+    const { container } = render(<VoucherTicket voucher={view({ condition: sub })} variant="chip" />);
+    const meta = q('voucher-meta')!;
+    expect(meta.textContent).toBe(sub);
+    expect(meta.style.whiteSpace).toBe('');
+    expect(meta.style.getPropertyValue('-webkit-line-clamp') || (meta.style as unknown as Record<string, string>).WebkitLineClamp).toBe('2');
+    expect(container.querySelector<HTMLElement>('[data-testid="voucher-body"] > span')!.style.whiteSpace).toBe('nowrap');
+  });
+
+  it('quota "Còn 3 lượt" nằm sau dòng hạn, tông cảnh báo; không quota thì không dòng', () => {
+    const { rerender } = render(<VoucherTicket voucher={view({ quota: 'Còn 3 lượt' })} variant="ticket" />);
+    const quota = q('voucher-quota')!;
+    expect(quota.textContent).toBe('Còn 3 lượt');
+    expect(q('voucher-expiry')!.compareDocumentPosition(quota) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(quota.style.color).toBe('var(--color-status-warning-fg)');
+    rerender(<VoucherTicket voucher={view()} variant="ticket" />);
+    expect(q('voucher-quota')).toBeNull();
+  });
+
+  it('quota không vẽ ở chip hay ở mã không còn nhận được', () => {
+    const { rerender } = render(<VoucherTicket voucher={view({ quota: 'Còn 3 lượt' })} variant="chip" />);
+    expect(q('voucher-quota')).toBeNull();
+    rerender(<VoucherTicket voucher={view({ quota: 'Còn 3 lượt', state: 'soldout' })} variant="ticket" />);
+    expect(q('voucher-quota')).toBeNull();
   });
 
   it('expiring: dòng hạn tông cảnh báo; không thì chữ phụ', () => {
@@ -117,7 +202,7 @@ describe('VoucherTicket', () => {
   });
 
   it('tiêu đề rất dài vẫn còn nút: thân co được (min-width 0), nút không co', () => {
-    render(<VoucherTicket voucher={view({ title: 'Giảm 15% (tối đa 45.000đ) cho mọi đơn hàng mỹ phẩm thiên nhiên của thương hiệu' })} variant="ticket" primary={{ label: 'Lưu mã', onClick: vi.fn() }} />);
+    render(<VoucherTicket voucher={view({ title: 'Giảm 15%, tối đa 45k cho mọi đơn hàng mỹ phẩm thiên nhiên của thương hiệu' })} variant="ticket" primary={{ label: 'Lưu mã', onClick: vi.fn() }} />);
     expect(q('voucher-body')!.style.minWidth).toBe('0px');
     expect(screen.getByRole('button', { name: 'Lưu mã' }).style.flex).toBe('0 0 auto');
   });

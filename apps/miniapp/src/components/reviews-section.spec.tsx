@@ -129,7 +129,8 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     // Cùng kiểu với các tiêu đề mục khác của trang sản phẩm: Inter title-sm, không serif.
     expect(title.style.fontFamily).toBe('var(--font-ui)');
     expect(title.style.fontSize).toBe('var(--type-title-sm-size)');
-    expect(screen.getByText('4.3')).toBeInTheDocument();
+    expect(screen.getByText('4,3')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '4,3 trên 5 sao' })).toBeInTheDocument();
     expect(screen.getByText('Đã mua')).toBeInTheDocument();
     expect(screen.getAllByRole('img', { name: '5 trên 5 sao' })).toHaveLength(2);
   });
@@ -797,8 +798,25 @@ describe('ReviewsSection: can-review lỗi (R5-BUYER-3)', () => {
 describe('Stars', () => {
   it('có tên truy cập "n trên 5 sao" và vẽ 5 ngôi sao', () => {
     const { container } = render(<Stars value={3.6} size={12} />);
-    expect(screen.getByRole('img', { name: '3.6 trên 5 sao' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '3,6 trên 5 sao' })).toBeInTheDocument();
     expect(container.querySelectorAll('svg')).toHaveLength(5);
+  });
+
+  it('điểm trung bình 4.4 đọc "4,4 trên 5 sao" như số đang hiện (vi-VN), không "4.4"', () => {
+    render(<Stars value={4.4} />);
+    expect(screen.getByRole('img', { name: '4,4 trên 5 sao' })).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /4\.4/ })).toBeNull();
+  });
+
+  it('điểm trung bình tròn đọc "5,0 trên 5 sao" như số đang hiện, không "5"', () => {
+    render(<Stars value={5} />);
+    expect(screen.getByRole('img', { name: '5,0 trên 5 sao' })).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: '5 trên 5 sao' })).toBeNull();
+  });
+
+  it('điểm một khách chấm (spoken="score") là số nguyên: "5 trên 5 sao", không "5,0"', () => {
+    render(<Stars value={5} spoken="score" />);
+    expect(screen.getByRole('img', { name: '5 trên 5 sao' })).toBeInTheDocument();
   });
 });
 

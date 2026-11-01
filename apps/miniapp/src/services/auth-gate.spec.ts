@@ -134,5 +134,12 @@ describe('GET công khai không chờ phiên (R-78)', () => {
     expect(isPublicGet('GET', '/flash-sales/slots/s1/items/extra')).toBe(false);
     // /upcoming trả `reminded` theo khách có phiên: phải chờ phiên để có token, không đi như khách.
     expect(isPublicGet('GET', '/flash-sales/upcoming')).toBe(false);
+    // Combo/Mua kèm là @Public + cache CATALOG (cùng nội dung cho mọi người): không chờ phiên, để khối vào cùng lần vẽ đầu của trang sản phẩm.
+    expect(isPublicGet('GET', '/products/nuoc-rua-chen-tubu/bundles')).toBe(true);
+    expect(isPublicGet('GET', '/bundles/combos?limit=4')).toBe(true);
+    expect(isPublicGet('POST', '/products/nuoc-rua-chen-tubu/bundles')).toBe(false);
+    expect(isPublicGet('GET', '/products/for-you/bundles')).toBe(false);
+    expect(isPublicGet('GET', '/products/a/bundles/extra')).toBe(false);
+    expect(isPublicGet('GET', '/bundles/combos/extra')).toBe(false);
   });
 });

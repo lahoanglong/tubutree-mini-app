@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { mount } from './harness';
 import { ShopTopBar } from './shop-top-bar';
 
+const css = readFileSync(join(__dirname, 'mini.css'), 'utf8');
 const bar = () => document.querySelector<HTMLElement>('[data-testid="shop-top-bar"]')!;
 function scrollWindowTo(y: number) {
   Object.defineProperty(window, 'scrollY', { value: y, configurable: true });
@@ -29,6 +32,13 @@ describe('ShopTopBar (web)', () => {
     expect(bar().textContent).toBe('Gian hàng Lan');
     scrollWindowTo(10);
     expect(bar().getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('chừa 64px bên trái cho nút lùi và 96px bên phải cho nút Zalo như Mini, để tên shop không lệch tâm (G6 #31)', () => {
+    scrollWindowTo(0);
+    mount(<ShopTopBar title="Shop" threshold={100} />);
+    expect(bar().className).toContain('tubu-shop-top-bar');
+    expect(css).toMatch(/\.tubu-shop-top-bar \{\s*padding: 0 96px 0 64px;/);
   });
 
   it('không chặn chạm vào nút lùi nằm dưới; chỉ hiện ở khổ điện thoại', () => {

@@ -59,10 +59,10 @@ describe('OrdersPage (tab gốc)', () => {
     mocks.getSubscriptions.mockResolvedValue([]);
   });
 
-  it('tiêu đề "Đơn hàng", có nút Quay lại (trang con của Cá nhân); 7 tab gồm "Định kỳ"', async () => {
+  it('tiêu đề "Đơn hàng" (trang con của Cá nhân: nút Quay lại là nút nổi của vỏ app, trang không tự vẽ); 7 tab gồm "Định kỳ"', async () => {
     renderPage();
     expect(screen.getByRole('heading', { name: 'Đơn hàng' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Quay lại' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Quay lại' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
       'Tất cả', 'Chờ thanh toán', 'Đang xử lý', 'Đang giao', 'Đã giao', 'Đã huỷ/hoàn', 'Định kỳ',
     ]);

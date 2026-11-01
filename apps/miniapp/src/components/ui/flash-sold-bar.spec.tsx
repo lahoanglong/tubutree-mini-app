@@ -39,6 +39,13 @@ describe('FlashSoldBar', () => {
     expect(css).toMatch(/\.tubu-flash-fill\s*\{[^}]*transition-property:\s*transform[^}]*transition-duration:\s*600ms/);
   });
 
+  it('mặc định rãnh là nền cam nhạt; track="neutral" đổi sang --color-track để thấy được trên nền cam của thanh Giờ vàng', () => {
+    const { rerender } = render(<FlashSoldBar soldPct={68} />);
+    expect(track().style.background).toBe('var(--color-flash-bg)');
+    rerender(<FlashSoldBar soldPct={68} track="neutral" />);
+    expect(track().style.background).toBe('var(--color-track)');
+  });
+
   it('hết suất: chữ "Đã bán hết" thắng phần trăm, không phần cam', () => {
     render(<FlashSoldBar soldPct={10} soldOut />);
     expect(screen.getByText('Đã bán hết')).toBeVisible();

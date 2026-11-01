@@ -41,11 +41,14 @@ const ITEM = {
 };
 const many = (n: number, over: Record<string, unknown> = {}) =>
   Array.from({ length: n }, (_, i) => ({ ...ITEM, itemId: `i${i}`, productSlug: `p${i}`, productName: `Sản phẩm ${i}`, ...over }));
-const upcomingAt = (hours: number, n = 1) =>
-  Array.from({ length: n }, (_, i) => ({
+// Một mốc chung cho cả n món: gọi Date.now() riêng từng món thì máy CI chậm có lúc lệch 1ms, nextFlashSlot đếm thành "1 món".
+const upcomingAt = (hours: number, n = 1) => {
+  const startAt = new Date(Date.now() + hours * HOUR).toISOString();
+  return Array.from({ length: n }, (_, i) => ({
     itemId: `u${i}`, variationId: 'v', productSlug: `u${i}`, productName: `Sắp ${i}`, thumbnail: null, flashPrice: 1, retailPrice: 2,
-    startAt: new Date(Date.now() + hours * HOUR).toISOString(), reminded: false,
+    startAt, reminded: false,
   }));
+};
 
 describe('FlashSale — khối Giờ vàng gọn của Trang chủ', () => {
   beforeEach(() => {
@@ -352,10 +355,10 @@ describe('UpcomingFlashSales — mốc bắt đầu', () => {
     mocks.status = 'authenticated';
   });
 
-  it('còn thời gian: "Bắt đầu sau Xh YYm" và nút nhắc', async () => {
+  it('còn thời gian: "Sau 1 giờ 59 phút" theo luật chữ (không "1h 59m"), ngắn để vừa thẻ 112px, và nút nhắc', async () => {
     mocks.fetchUpcoming.mockResolvedValue([UPCOMING]);
     renderUpcoming();
-    expect(await screen.findByText(/^Bắt đầu sau \d+h \d{2}m$/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Sau [12] giờ \d{2} phút$/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Nhắc tôi/ })).toBeInTheDocument();
   });
 

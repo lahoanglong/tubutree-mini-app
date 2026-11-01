@@ -1,10 +1,11 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/pages/flash-sale.tsx
-import { useId, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cancelFlashReminder, setFlashReminder, type FlashSlotItem as FlashSlotItemData, type UpcomingFlashItem } from '@tubutree/app-core/api/flash-sale';
+import { remindIntentAction } from '@tubutree/app-core/commerce/flash-remind-intent';
 import { initialSlotId, slotAfterEnd, slotCategoryChips, slotListView, slotTabs } from '@tubutree/app-core/commerce/flash-slots';
 import { slotClock } from '@tubutree/app-core/merch/flash-next-slot';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
@@ -17,6 +18,7 @@ import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { PAGE_NARROW } from '@/lib/page-frame';
+import { clearPendingRemind, rememberPendingRemind, takePendingRemind } from '@/lib/pending-remind';
 import { loginHref } from '@/lib/return-to';
 import { addToCart } from '@/lib/shop-client';
 import { Chip, EmptyState, ProductTileSkeleton, Skeleton, SlotTabs, Text, slotTabId } from '@/components/mini';
@@ -134,6 +136,25 @@ export default function FlashSlotsView() {
     onSettled: () => void qc.invalidateQueries({ queryKey: upcomingKey }),
   });
 
+  // Khách bấm "Nhắc tôi" lúc chưa đăng nhập đã được đưa đi đăng nhập (suất nằm ở sessionStorage, xem lib/pending-remind.ts). Quay về với phiên và danh sách
+  // nhắc đã tải thì đặt nhắc, đúng một lần; quay về mà vẫn là khách (bỏ dở đăng nhập) thì xoá, để lần đăng nhập sau không tự đặt một nhắc đã bị lãng quên.
+  const intentHandled = useRef(false);
+  const upcomingList = upcomingQ.isSuccess ? upcomingQ.data : null;
+  useEffect(() => {
+    if (phase === 'guest') {
+      clearPendingRemind();
+      return;
+    }
+    if (!authed || !upcomingList || intentHandled.current) return;
+    intentHandled.current = true;
+    const intent = takePendingRemind();
+    if (intent && remindIntentAction(intent, upcomingList) === 'remind') {
+      remindMut.mutate({ itemId: intent.itemId, reminded: false, startAt: intent.startAt });
+    }
+    // `remindMut` đổi tham chiếu mỗi lần render nên không đưa vào phụ thuộc: chạy lại theo phiên và danh sách nhắc là đủ.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, authed, upcomingList]);
+
   const clearMessages = () => {
     setNotice('');
     setError('');
@@ -178,6 +199,7 @@ export default function FlashSlotsView() {
   };
 
   const onToggleRemind = (item: FlashSlotItemData) => {
+    if (phase === 'guest' && activeSlot) rememberPendingRemind({ itemId: item.itemId, startAt: activeSlot.startAt });
     if (needSession() || !activeSlot) return;
     clearMessages();
     remindMut.mutate({ itemId: item.itemId, reminded: reminded.has(item.itemId), startAt: activeSlot.startAt });

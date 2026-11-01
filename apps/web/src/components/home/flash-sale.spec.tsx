@@ -265,15 +265,15 @@ describe('FlashSale', () => {
     expect(c.querySelector('[data-testid="flash-sold-bar"]')?.getAttribute('data-state')).toBe('soldout');
   });
 
-  // D7-29: tên SP cao đúng 2 dòng, không lòi dòng 3. Thanh "đã bán" chỉ để trang trí (aria-hidden): chữ mang thông tin.
-  it('thanh "đã bán" luôn có chữ (kể cả chưa bán suất nào) và chỉ để trang trí; tên sản phẩm cao đúng hai dòng', async () => {
+  // D7-29: tên SP không lòi dòng thừa (Q11: thẻ Giờ vàng ở Trang chủ đúng một dòng). Thanh "đã bán" chỉ để trang trí (aria-hidden): chữ mang thông tin.
+  it('thanh "đã bán" luôn có chữ (kể cả chưa bán suất nào) và chỉ để trang trí; tên sản phẩm cao đúng một dòng', async () => {
     activeResult = async () => three({ soldCount: 4 });
     const c = await mount(<FlashSale />);
     expect(c.querySelector('[data-testid="flash-sold-bar"]')?.textContent).toContain('Đã bán 40%');
     expect(c.querySelector('[data-testid="flash-sold-track"]')?.getAttribute('aria-hidden')).toBe('true');
     const name = c.querySelector('a.tubu-tile-link > span') as HTMLElement;
-    expect(name.style.webkitLineClamp).toBe('2');
-    expect(name.style.minHeight).toBe(`${TILE_METRICS.nameCaption}px`);
+    expect(name.style.webkitLineClamp).toBe('1');
+    expect(name.style.minHeight).toBe(`${TILE_METRICS.nameFlash}px`);
     expect(name.style.lineHeight).toBe('20px');
     mounted!.unmount();
     resetFlashSales();
@@ -419,11 +419,13 @@ describe('UpcomingFlashSales', () => {
     expect(mocks.get).not.toHaveBeenCalled();
   });
 
-  it('còn thời gian: "Bắt đầu sau Xh YYm" và nút nhắc cao tối thiểu 44px', async () => {
+  it('còn thời gian: "Sau 59 phút" theo luật chữ (không "0h 59m"), ngắn để vừa thẻ 112px, và nút nhắc cao tối thiểu 44px', async () => {
     upcomingResult = async () => [upcoming()];
     const c = await mount(<UpcomingFlashSales />);
     expect(c.querySelector('h2')?.textContent).toContain('Sắp diễn ra');
-    expect(c.textContent).toMatch(/Bắt đầu sau \d+h \d{2}m/);
+    expect(c.textContent).toMatch(/Sau (\d+ giờ \d{2} phút|\d+ phút)/);
+    expect(c.textContent).not.toMatch(/Bắt đầu sau/);
+    expect(c.textContent).not.toMatch(/\d+h \d+m/);
     expect(byText(c, 'button', 'Nhắc tôi')).not.toBeNull();
     expect(smallTouchTargets(c)).toEqual([]);
   });

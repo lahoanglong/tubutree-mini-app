@@ -189,15 +189,16 @@ describe('ProductDetailPage — tên SP và tiêu đề mục cùng một kiểu
     expect(h1.style.fontFamily).toBe('var(--font-ui)');
   });
 
-  it.each(['Cam kết Tubu', 'Mô tả sản phẩm', 'Khách thường mua cùng', 'Cùng nhà Cô Lan'])(
-    'tiêu đề mục "%s" là h2 Inter 16/600 (title-sm)',
+  it.each(['Cam kết Tubu', 'Mô tả sản phẩm', 'Khách thường mua cùng', 'Cùng thương hiệu'])(
+    'tiêu đề khối "%s" là h2 Inter 16/700, -0.01em (Q1: khối trong luồng mua)',
     async (title) => {
       renderPdp();
       await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
       const h2 = await screen.findByRole('heading', { level: 2, name: title });
       expect(h2.style.fontFamily).toBe('var(--font-ui)');
       expect(h2.style.fontSize).toBe('var(--type-title-sm-size)');
-      expect(h2.style.fontWeight).toBe('var(--type-title-sm-weight)');
+      expect(h2.style.fontWeight).toBe('700');
+      expect(h2.style.letterSpacing).toBe('-0.01em');
     },
   );
 });

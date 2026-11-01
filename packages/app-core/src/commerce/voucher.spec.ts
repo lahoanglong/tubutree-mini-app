@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CouponDTO } from '../api/loyalty';
 import { vnd, vndShort } from './money';
-import { couponLabel, sortVouchers, voucherView } from './voucher';
+import { couponLabel, couponTitle, sortVouchers, voucherView } from './voucher';
 
 const NOW = Date.parse('2026-11-01T05:00:00Z');
 const D = 86_400_000;
@@ -44,12 +44,32 @@ describe('voucherView', () => {
     expect(voucherView(coupon(), NOW)).toEqual({
       id: 'TUBU30',
       code: 'TUBU30',
-      title: 'Giảm 30.000đ',
+      title: 'Giảm 30k',
       kind: 'discount',
       condition: 'Đơn từ 199k',
       expiry: 'Dùng đến 11/11',
       state: 'saved',
+      name: null,
+      quota: null,
     });
+  });
+  it('name là tên admin đặt (title) đã trim; rỗng hoặc toàn khoảng trắng thì null', () => {
+    expect(voucherView(coupon({ title: '  Chào bạn mới  ' }), NOW).name).toBe('Chào bạn mới');
+    expect(voucherView(coupon({ title: '   ' }), NOW).name).toBeNull();
+    expect(voucherView(coupon({ title: null }), NOW).name).toBeNull();
+    expect(voucherView(coupon(), NOW).name).toBeNull();
+  });
+  it('quota "Còn n lượt" chỉ khi mã chưa nhận và còn 1 đến 10 lượt', () => {
+    const open = (remaining: number | null, over: Record<string, unknown> = {}) =>
+      voucherView({ ...coupon(), claimed: false, remaining, ...over }, NOW).quota;
+    expect(open(3)).toBe('Còn 3 lượt');
+    expect(open(1)).toBe('Còn 1 lượt');
+    expect(open(10)).toBe('Còn 10 lượt');
+    expect(open(11)).toBeNull();
+    expect(open(0)).toBeNull();
+    expect(open(null)).toBeNull();
+    expect(open(3, { claimed: true })).toBeNull();
+    expect(open(3, { endAt: iso(NOW - 1) })).toBeNull();
   });
   it('không có đơn tối thiểu thì điều kiện rỗng', () => {
     expect(voucherView(coupon({ minOrder: null }), NOW).condition).toBe('');
@@ -90,6 +110,121 @@ describe('voucherView', () => {
     expect(voucherView({ ...coupon(), ineligible: true, claimed: false }, NOW).state).toBe('ineligible');
     expect(voucherView({ ...coupon(), claimed: false }, NOW).state).toBe('collectable');
     expect(voucherView({ ...coupon(), claimed: true }, NOW).state).toBe('saved');
+  });
+});
+
+describe('couponTitle (nhãn trên thẻ: một cách ghi số, rút gọn)', () => {
+  it('số tiền, phần trăm có và không có trần, freeship', () => {
+    expect(couponTitle({ type: 'AMOUNT', value: 20_000, maxDiscount: null })).toBe('Giảm 20k');
+    expect(couponTitle({ type: 'PERCENT', value: 10, maxDiscount: 50_000 })).toBe('Giảm 10%, tối đa 50k');
+    expect(couponTitle({ type: 'PERCENT', value: 15, maxDiscount: null })).toBe('Giảm 15%');
+    expect(couponTitle({ type: 'FREESHIP', value: 0, maxDiscount: null })).toBe('Miễn phí giao hàng');
+  });
+  it('số không tròn nghìn thì đủ số (cùng luật vndShort), triệu rút gọn', () => {
+    expect(couponTitle({ type: 'AMOUNT', value: 12_500, maxDiscount: null })).toBe('Giảm 12.500đ');
+    expect(couponTitle({ type: 'AMOUNT', value: 1_500_000, maxDiscount: null })).toBe('Giảm 1,5tr');
+  });
+});
+
+describe('voucherView: tên admin nhắc lại số thì bỏ (một phiếu không hai cách ghi số)', () => {
+  const view = (title: string | null, over: Partial<CouponDTO> = {}) => voucherView(coupon({ title, ...over }), NOW);
+  it('tên nhắc lại số của nhãn hoặc điều kiện thì name null, điều kiện giữ', () => {
+    expect(view('Giảm 10% tối đa 50.000đ', { type: 'PERCENT', value: 10, maxDiscount: 50_000, minOrder: 300_000 }).name).toBeNull();
+    const ship = view('Miễn phí giao hàng đơn từ 99.000đ', { type: 'FREESHIP', value: 0, minOrder: 99_000 });
+    expect(ship.name).toBeNull();
+    expect(ship.condition).toBe('Đơn từ 99k');
+    expect(view('Giảm 20.000đ đơn từ 150k', { value: 20_000, minOrder: 150_000 }).name).toBeNull();
+    expect(view('Giảm 20k', { value: 20_000 }).name).toBeNull();
+    expect(view('Đơn từ 1,5tr tặng bạn', { minOrder: 1_500_000 }).name).toBeNull();
+    expect(view('Giảm 30000đ', { value: 30_000 }).name).toBeNull();
+  });
+  it('tên nhắc lại nguyên chữ nhãn (không số) cũng bỏ', () => {
+    expect(view('Miễn phí giao hàng', { type: 'FREESHIP', value: 0, minOrder: null }).name).toBeNull();
+  });
+  it('tên còn phạm vi hay đối tượng ngoài số của mã thì giữ (phiếu không có chỗ nào khác nói điều đó)', () => {
+    expect(view('Giảm 20k cho đơn đầu tiên', { value: 20_000 }).name).toBe('cho đơn đầu tiên');
+    expect(view('Giảm 10% riêng mỹ phẩm', { type: 'PERCENT', value: 10, maxDiscount: null }).name).toBe('riêng mỹ phẩm');
+    expect(view('Giảm 10% tối đa 50.000đ cho khách mới', { type: 'PERCENT', value: 10, maxDiscount: 50_000, minOrder: null }).name).toBe('cho khách mới');
+  });
+  it('tên được giữ ghi số của mã theo cách của phiếu (một cách ghi số), số lạ để nguyên', () => {
+    const v = view('Giảm 20.000đ cho đơn đầu tiên, tặng 5 lần dùng', { value: 20_000, minOrder: 150_000 });
+    expect(v.title).toBe('Giảm 20k');
+    expect(v.name).toBe('cho đơn đầu tiên, tặng 5 lần dùng');
+    expect(view('Đơn từ 150.000. Riêng khách mới', { value: 20_000, minOrder: 150_000 }).name).toBe('Đơn từ 150k. Riêng khách mới');
+    expect(view('Mua 10 trở lên được giảm 20k', { value: 20_000 }).name).toBe('Mua 10 trở lên được giảm 20k');
+  });
+  it('tiền viết bằng chữ ("đồng", "VND", "vnđ") đi cùng số thì đổi cả cụm, không bao giờ ra "20k đồng"', () => {
+    expect(view('Tặng 20.000 đồng cho bạn', { value: 20_000 }).name).toBeNull();
+    expect(view('Giảm 20.000 VND', { value: 20_000 }).name).toBeNull();
+    expect(view('Giảm 20.000vnđ', { value: 20_000 }).name).toBeNull();
+    expect(view('Tặng 20.000 đồng cho đơn đầu tiên', { value: 20_000 }).name).toBe('cho đơn đầu tiên');
+    expect(view('Giảm 20000 đồng cho khách mới', { value: 20_000 }).name).toBe('cho khách mới');
+    expect(view('Giảm 20.000 VND cho khách mới', { value: 20_000 }).name).toBe('cho khách mới');
+    for (const t of ['Tặng 20.000 đồng cho đơn đầu tiên', 'Giảm 20.000 VND cho khách mới', 'Giảm 20000 đồng cho khách mới']) {
+      expect(view(t, { value: 20_000 }).name).not.toMatch(/k (đồng|VND)/);
+    }
+    // 5.000 không phải số của mã: để nguyên cả cụm.
+    expect(view('Tặng 5.000 đồng vào ví', { value: 20_000 }).name).toBe('Tặng 5.000 đồng vào ví');
+  });
+  it('đơn vị đôi ("20k vnđ", "20k đồng", "1,5tr đồng") là một con số: tiền tệ không ở lại làm đầu phần đuôi', () => {
+    const base = { value: 20_000, minOrder: 100_000 };
+    expect(view('Tặng 20k vnđ', base).name).toBeNull();
+    expect(view('Giảm 20k VND', base).name).toBeNull();
+    expect(view('Tặng 20k đồng', base).name).toBeNull();
+    expect(view('Tặng 20k đồng cho bạn mới', base).name).toBe('cho bạn mới');
+    expect(view('Tặng 20k vnđ cho bạn mới', base).name).toBe('cho bạn mới');
+    expect(view('Giảm 20k VND cho khách mới', base).name).toBe('cho khách mới');
+    expect(view('Giảm 1,5tr đồng cho khách mới', { value: 1_500_000, minOrder: 2_000_000 }).name).toBe('cho khách mới');
+    for (const t of ['Tặng 20k vnđ cho bạn mới', 'Tặng 20k đồng cho bạn mới', 'Giảm 20k VND cho khách mới', 'Mua 3 đơn giảm 20k đồng']) {
+      const name = view(t, base).name;
+      expect(name ?? '', t).not.toMatch(/k\s*(đồng|vnđ|VND)/i);
+      expect(name ?? '', t).not.toMatch(/^(đồng|vnđ|VND)/i);
+    }
+    // Số lạ: để nguyên cả cụm, kể cả chữ tiền tệ.
+    expect(view('Tặng 5k đồng vào ví', base).name).toBe('Tặng 5k đồng vào ví');
+    // "đồng" là chữ thường ("đồng hành"), không phải tiền: không bị nuốt.
+    expect(view('Giảm 20k đồng hành cùng bạn', base).name).toBe('đồng hành cùng bạn');
+    expect(view('Giảm 20k đồng loạt cho mọi đơn', base).name).toBe('đồng loạt cho mọi đơn');
+    expect(view('Giảm 20k đồng giá mọi món', base).name).toBe('đồng giá mọi món');
+    expect(view('Tặng 20k đồng ý nhận quà', base).name).toBe('đồng ý nhận quà');
+  });
+  it('số nhỏ không đơn vị (số đơn, số lượt, số bạn) là thông tin riêng: tên giữ, không bị coi là nhắc lại mã', () => {
+    const base = { value: 20_000, minOrder: 300_000 };
+    expect(view('Giảm 20k cho 3 đơn', base).name).toBe('cho 3 đơn');
+    expect(view('Giảm 20.000đ cho 2 đơn', base).name).toBe('cho 2 đơn');
+    expect(view('Giảm 20k khi mua 2', base).name).toBe('khi mua 2');
+    expect(view('Giảm 20k cho 100 bạn', base).name).toBe('cho 100 bạn');
+    expect(view('Freeship 2 đơn từ 99k', { type: 'FREESHIP', value: 0, minOrder: 99_000 }).name).toBe('Freeship 2 đơn từ 99k');
+  });
+  it('phần đầu tên chép lại nhãn thì cắt để dòng tên nhỏ bắt đầu bằng phần mới (dòng ~100px không đẩy "3 đơn" ra khỏi tầm nhìn)', () => {
+    const base = { value: 20_000, minOrder: 300_000 };
+    expect(view('Giảm 20k, cho 3 đơn', base).name).toBe('cho 3 đơn');
+    expect(view('Tặng 20k cho khách mới', base).name).toBe('cho khách mới');
+    expect(view('GIẢM 20K cho 3 đơn', base).name).toBe('cho 3 đơn');
+    // Không có số của mã trong phần đầu thì không cắt: "Giảm" bỏ ra thành "giá khách VIP" mất nghĩa.
+    expect(view('Giảm giá khách VIP', base).name).toBe('Giảm giá khách VIP');
+    // Phần đầu mở bằng từ ngoài nhãn thì giữ nguyên, kể cả sau đó có số của mã.
+    expect(view('Khách mới giảm 20k', base).name).toBe('Khách mới giảm 20k');
+    expect(view('Đơn từ 300k tặng 20k cho 3 đơn', base).name).toBe('Đơn từ 300k tặng 20k cho 3 đơn');
+    // Số lạ đứng giữa phần đầu: dừng ở đó, không cắt qua số của đơn.
+    expect(view('Giảm 20k 3 đơn', base).name).toBe('3 đơn');
+    expect(view('Tặng 3 đơn giảm 20k', base).name).toBe('Tặng 3 đơn giảm 20k');
+  });
+  it('phần đầu chỉ bị cắt khi chép đúng nhãn: số của đơn tối thiểu hay trần giảm đứng đầu tên thì tên giữ nguyên (số vẫn hiện trên phiếu)', () => {
+    // FREESHIP có trần 30k nhưng nhãn "Miễn phí giao hàng" không in số nào: "Freeship 30k" không chép nhãn.
+    const ship = { type: 'FREESHIP' as const, value: 0, maxDiscount: 30_000, minOrder: null };
+    expect(view('Freeship 30k cho đơn đầu', ship).name).toBe('Freeship 30k cho đơn đầu');
+    // Nhãn "Giảm 20k": 100k là đơn tối thiểu, không phải số của nhãn.
+    expect(view('Giảm 100k cho khách mới', { value: 20_000, minOrder: 100_000 }).name).toBe('Giảm 100k cho khách mới');
+    const pct = { type: 'PERCENT' as const, value: 10, maxDiscount: 50_000, minOrder: 300_000 };
+    // Nhãn "Giảm 10%, tối đa 50k": chữ và số đều của nhãn thì cắt; 300k (đơn tối thiểu) thì không.
+    expect(view('Giảm 10% tối đa 50k cho khách mới', pct).name).toBe('cho khách mới');
+    expect(view('Giảm 300k cho khách mới', pct).name).toBe('Giảm 300k cho khách mới');
+  });
+  it('tên không nhắc số thì giữ, kể cả có số khác', () => {
+    expect(view('Quà khách mới').name).toBe('Quà khách mới');
+    expect(view('Tặng 5 lần dùng', { value: 30_000, minOrder: 199_000 }).name).toBe('Tặng 5 lần dùng');
+    expect(view('  ').name).toBeNull();
   });
 });
 

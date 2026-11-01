@@ -103,11 +103,25 @@ export function slotListView(items: readonly FlashSlotItem[], categoryId: string
   return [...rows.filter((it) => !it.soldOut), ...rows.filter((it) => it.soldOut)];
 }
 
-/** Dòng ghi chú dưới giá của một món: tên phân loại có suất (chỉ khi sản phẩm nhiều phân loại) và giới hạn mua mỗi khách. Rỗng khi không có gì để nói. */
+/**
+ * Dòng ghi chú dưới giá của một món: giới hạn mua mỗi khách rồi tên phân loại (chỉ khi sản phẩm nhiều phân loại). Con số giới hạn đứng ĐẦU vì ghi chú
+ * một dòng nowrap bị cắt ở đuôi trên thẻ 375px: tên phân loại bị cắt thì khách vẫn thấy mình mua được mấy, còn mất con số thì dòng vô nghĩa. Rỗng khi không có gì để nói.
+ */
 export function slotItemNote(item: Pick<FlashSlotItem, 'variationName' | 'perUserLimit'>): string {
-  const limit = Number.isFinite(item.perUserLimit) && item.perUserLimit > 0 ? fillCopy('flash.limit', { n: item.perUserLimit }) : null;
-  return [item.variationName, limit].filter((x): x is string => Boolean(x)).join(' · ');
+  const limit = hasLimit(item) ? fillCopy('flash.limitShort', { n: item.perUserLimit }) : null;
+  return [limit, item.variationName].filter((x): x is string => Boolean(x)).join(' · ');
 }
+
+/**
+ * Bản đọc của `slotItemNote` cho trình đọc màn hình: "Tối đa 2 sản phẩm mỗi khách, 500g". Dòng nhìn thấy dùng "/" để vừa thẻ 375px nhưng
+ * trình đọc nói "gạch chéo"; thẻ ẩn dòng ghi chú khỏi cây trợ năng và đưa câu này vào mô tả của thẻ.
+ */
+export function slotItemNoteSpoken(item: Pick<FlashSlotItem, 'variationName' | 'perUserLimit'>): string {
+  const limit = hasLimit(item) ? fillCopy('flash.limitSpoken', { n: item.perUserLimit }) : null;
+  return [limit, item.variationName].filter((x): x is string => Boolean(x)).join(', ');
+}
+
+const hasLimit = (item: Pick<FlashSlotItem, 'perUserLimit'>): boolean => Number.isFinite(item.perUserLimit) && item.perUserLimit > 0;
 
 /** Tên đọc của nút "Mua ngay": nhãn nhìn thấy cộng tên sản phẩm, để danh sách nhiều nút giống nhau vẫn phân biệt được. */
 export const slotBuyLabel = (productName: string): string => `${fillCopy('flash.buy')} ${productName}`;

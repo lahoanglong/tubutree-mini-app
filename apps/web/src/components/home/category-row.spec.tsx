@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 describe('CategoryRow web — lưới 2 hàng × 5 cột như Mini (Q7)', () => {
-  it('vùng tên "Danh mục" với tiêu đề h2 (SectionHeader); quá 10 ô: lưới xếp theo cột, 2 hàng, mỗi cột 1/5 bề rộng', () => {
+  it('vùng tên "Danh mục" với tiêu đề h2 (SectionHeader); quá 10 ô: lưới xếp theo cột, 2 hàng, mỗi cột 1/5,5 bề rộng (cột thứ 6 ló nửa cột)', () => {
     const { c, grid } = mount(12);
     const section = c.querySelector('section[aria-label="Danh mục"]')!;
     expect(section.querySelector('h2')?.textContent).toBe('Danh mục');
@@ -35,7 +35,41 @@ describe('CategoryRow web — lưới 2 hàng × 5 cột như Mini (Q7)', () => 
     expect(grid.style.display).toBe('grid');
     expect(grid.style.gridAutoFlow).toBe('column');
     expect(grid.style.gridTemplateRows).toBe('repeat(2, auto)');
-    expect(grid.style.gridAutoColumns).toBe('20%');
+    expect(grid.style.gridAutoColumns).toMatch(/^calc\((18\.18\d*%|100% \/ 5\.5)\)$/);
+  });
+
+  it('quá 10 ô: tiêu đề có "Xem tất cả Danh mục" (onSeeAll); chạm gọi onSeeAll', () => {
+    const { c, onSeeAll } = mount(12);
+    const header = c.querySelector('[data-testid="section-header"]')!;
+    const action = header.querySelector<HTMLButtonElement>('button[aria-label="Xem tất cả Danh mục"]');
+    expect(action).not.toBeNull();
+    click(action);
+    expect(onSeeAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('tới 10 ô hoặc không có onSeeAll: tiêu đề không có "Xem tất cả"', () => {
+    for (const [n, over] of [[3, {}], [9, {}], [12, { onSeeAll: undefined }]] as const) {
+      const { c } = mount(n, over);
+      expect(c.querySelector('[data-testid="section-header"] button')).toBeNull();
+      mounted?.unmount();
+    }
+  });
+
+  it('web: hàng cuộn có nút ‹ › (chuột không vuốt ngang được), chỉ quá 10 ô; tới 10 ô không có nút', () => {
+    const proto = HTMLElement.prototype;
+    const orig = { sw: Object.getOwnPropertyDescriptor(proto, 'scrollWidth'), cw: Object.getOwnPropertyDescriptor(proto, 'clientWidth') };
+    Object.defineProperty(proto, 'scrollWidth', { configurable: true, get: () => 1000 });
+    Object.defineProperty(proto, 'clientWidth', { configurable: true, get: () => 400 });
+    try {
+      const next = 'button[aria-label="Xem các mục tiếp"]';
+      expect(mount(12).c.querySelector(next)).not.toBeNull();
+      mounted?.unmount();
+      expect(mount(6).c.querySelector(next)).toBeNull();
+    } finally {
+      if (orig.sw) Object.defineProperty(proto, 'scrollWidth', orig.sw);
+      if (orig.cw) Object.defineProperty(proto, 'clientWidth', orig.cw);
+      else delete (proto as unknown as Record<string, unknown>).clientWidth;
+    }
   });
 
   it('tới 10 ô (kể cả "Tất cả"): xếp theo hàng, 5 cột 1/5 bề rộng, không xếp theo cột', () => {
@@ -103,6 +137,24 @@ describe('CategoryRow web — lưới 2 hàng × 5 cột như Mini (Q7)', () => 
   it('mỗi ô cao tối thiểu 44px', () => {
     const { c } = mount(2);
     for (const b of Array.from(c.querySelectorAll('button'))) expect(b.style.minHeight).toBe('44px');
+  });
+
+  it('cột 5,5 hẹp (~62px): ô không đệm ngang để nhãn dùng đủ cột, nhãn chữ caption tối đa hai dòng, cao đúng LABEL_HEIGHT (H3 #5)', () => {
+    const { c } = mount(12);
+    const cell = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Danh mục 0')!;
+    expect(cell.style.paddingLeft).toBe('0px');
+    expect(cell.style.paddingRight).toBe('0px');
+    const label = Array.from(cell.querySelectorAll<HTMLElement>('*')).find((e) => e.textContent === 'Danh mục 0' && e.children.length === 0)!;
+    expect(label.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
+    expect(label.style.height).toBe(`${CATEGORY_LABEL_HEIGHT}px`);
+  });
+
+  it('cột 5,5 chỉ vừa ~62px: nhãn siết chữ -0,01em (cứu "Chăm sóc" dài 62,6px); lưới tới 10 ô cột 20% vẫn chữ thường (H3 #5)', () => {
+    const labelOf = (c: HTMLElement) =>
+      Array.from(c.querySelectorAll<HTMLElement>('button *')).find((e) => e.textContent === 'Danh mục 0' && e.children.length === 0)!;
+    expect(labelOf(mount(12).c).style.letterSpacing).toBe('-0.01em');
+    mounted!.unmount();
+    expect(labelOf(mount(6).c).style.letterSpacing).toBe('');
   });
 
   it('đang tải: khung chờ 10 ô mặc định; theo số ô nhớ thì ít hơn (cộng ô "Tất cả"), tối đa 10', () => {

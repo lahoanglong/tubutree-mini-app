@@ -361,7 +361,7 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
 
   it('nói rõ cơ chế: đủ người thì nhận mã giảm theo % của nhóm (mã giảm % trên biến thể khách mua, không phải số tiền cố định)', async () => {
     renderPage();
-    const hints = await screen.findAllByText(`Đủ nhóm: mỗi người nhận mã giảm 20% cho đơn từ ${formatVnd(80_000)}`);
+    const hints = await screen.findAllByText(`Đủ nhóm: mỗi người nhận mã giảm giá 20% cho đơn từ ${formatVnd(80_000)}`);
     expect(hints).toHaveLength(2);
     expect(screen.queryByText(new RegExp(`mã giảm ${formatVnd(20_000)}`))).toBeNull();
   });
@@ -384,7 +384,7 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
   it('Q18: đơn từ ghi đúng đơn tối thiểu của mã (biến thể rẻ nhất), không phải giá nhóm của sản phẩm', async () => {
     mocks.listGroupBuys.mockResolvedValue([GROUP('a', { unitPrice: 365_500, basePrice: 430_000, minOrder: 102_000, discountPct: 15 })]);
     renderPage();
-    expect((await screen.findAllByText(`Đủ nhóm: mỗi người nhận mã giảm 15% cho đơn từ ${formatVnd(102_000)}`)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(`Đủ nhóm: mỗi người nhận mã giảm giá 15% cho đơn từ ${formatVnd(102_000)}`)).length).toBeGreaterThan(0);
   });
 
   it('R2-BUYERMINI-4: người mở nhóm vào nhóm của chính mình không thấy banner "Bạn được mời"', async () => {
@@ -405,7 +405,7 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     expect(await screen.findByRole('heading', { name: 'Nhóm đã đủ người của bạn' })).toBeInTheDocument();
     expect(screen.getByText('GBUY-DONE-ME')).toBeInTheDocument();
     expect(screen.getByText('5/5 người · đã đủ nhóm')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Mua ngay với mã giảm 20%' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mua ngay với mã giảm giá 20%' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-done', { state: { variationId: undefined, applyCoupon: 'GBUY-DONE-ME' } });
     expect(screen.queryByRole('button', { name: 'Nhóm đã đủ người' })).toBeNull();
   });
@@ -415,7 +415,7 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
       GROUP('done', { joined: true, status: 'SUCCESS', currentSize: 5, couponCode: 'GBUY-DONE-ME', variationId: 'v-rep' }),
     ]);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Mua ngay với mã giảm 20%' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mua ngay với mã giảm giá 20%' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/sp-done', { state: { variationId: 'v-rep', applyCoupon: 'GBUY-DONE-ME' } });
   });
 

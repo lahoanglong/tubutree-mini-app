@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   reviews: null as unknown,
   related: [] as unknown,
   together: [] as unknown,
+  bundles: { combos: [], addons: [] } as unknown,
   serverFails: false,
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -23,6 +24,7 @@ vi.mock('@/lib/core-http-server', () => ({
   createServerHttp: () => ({
     get: async (path: string) => {
       if (api.serverFails) throw new Error('API tạm lỗi');
+      if (path.endsWith('/bundles')) return api.bundles;
       return path.endsWith('/related') ? api.related : api.together;
     },
   }),
@@ -74,6 +76,7 @@ beforeEach(() => {
   api.reviews = REVIEWS;
   api.related = [];
   api.together = [];
+  api.bundles = { combos: [], addons: [] };
   api.serverFails = false;
 });
 afterEach(() => {
@@ -95,12 +98,24 @@ describe('/san-pham/[slug] — tên nhãn dẫn sang trang nhãn hàng (BUYERWEB
 describe('/san-pham/[slug] — kiểu Mini App ở điện thoại', () => {
   const PRODUCT_TUBU = { ...PRODUCT, brandSlug: 'xanh-viet', fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
 
+  it('"Còn N sản phẩm" nằm trong khối thông tin chính dưới Điểm Xanh (như Mini App), không nằm trong dải Phân loại; gian hàng tạm nghỉ thì không nhắc', async () => {
+    api.product = { ...PRODUCT_TUBU, variations: [{ ...PRODUCT.variations[0]!, stock: 3 }] };
+    const c = await mount();
+    const note = c.querySelector('[data-testid="pdp-low-stock"]')!;
+    expect(note.textContent).toBe('Còn 3 sản phẩm');
+    expect(c.querySelector('[data-section="pdp-main"]')!.contains(note)).toBe(true);
+    api.product = { ...PRODUCT_TUBU, fulfilment: 'MERCHANT', fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null }, variations: [{ ...PRODUCT.variations[0]!, stock: 3 }] };
+    expect((await mount()).querySelector('[data-testid="pdp-low-stock"]')).toBeNull();
+  });
+
   it('trang hero: ảnh tràn mép, khối thông tin nền trắng có đệm, không đệm trang ở điện thoại', async () => {
     api.product = PRODUCT_TUBU;
     const c = await mount();
     expect(c.querySelector('main')!.className).toContain('max-md:px-0');
     expect(c.querySelector('[aria-roledescription="carousel"]')!.className).toContain('max-md:rounded-none');
-    expect(c.querySelector('[data-testid="pdp-info"]')!.className).toContain('max-md:bg-stone-0');
+    // Mỗi khối là một dải trắng riêng (nền canvas hở 8px giữa hai dải như Mini App), cột thông tin tự nó không tô nền.
+    expect(c.querySelector('[data-testid="pdp-info"]')!.className).not.toContain('max-md:bg-');
+    expect(c.querySelector('[data-section="pdp-main"]')!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
   });
 
   it('chống tràn ngang ở điện thoại: lưới một cột minmax(0,1fr), cột thông tin min-w-0 (jsdom không đo layout, e2e 390px kiểm thật)', async () => {
@@ -230,14 +245,14 @@ describe('/san-pham/[slug] — thư viện ảnh (BUYERWEB-17)', () => {
 
 // R8: trang sản phẩm web có khối đánh giá (danh sách công khai và lối viết đánh giá) như Mini App.
 describe('/san-pham/[slug] — khối đánh giá (R8)', () => {
-  it('hiện số đánh giá, điểm trung bình và các đánh giá; khách chưa đăng nhập được mời đăng nhập để đánh giá', async () => {
+  it('hiện số đánh giá, điểm trung bình và các đánh giá; khách chưa đăng nhập thấy nút "Viết đánh giá" dẫn tới đăng nhập', async () => {
     const c = await mount();
     const section = c.querySelector('section#danh-gia')!;
     expect(section.querySelector('h2')?.textContent).toBe('Đánh giá (2)');
-    expect(section.textContent).toContain('4.5');
+    expect(section.textContent).toContain('4,5');
     expect(section.textContent).toContain('Gội êm');
     expect(section.textContent).toContain('Thơm nhẹ');
-    const login = Array.from(section.querySelectorAll('a')).find((a) => a.textContent === 'Đăng nhập để đánh giá')!;
+    const login = Array.from(section.querySelectorAll('a')).find((a) => a.textContent === 'Viết đánh giá')!;
     expect(login.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fsan-pham%2Fdau-goi-bo-ket');
   });
 });
@@ -352,6 +367,12 @@ describe('/san-pham/[slug] — dòng "Vận chuyển ›" ngắn, lưu ý dài n
     expect(asButton(note)).toBeNull();
     expect(Array.from(c.querySelectorAll('[role="button"]')).some((b) => b.textContent?.startsWith('Vận chuyển'))).toBe(false);
   });
+
+  it('điện thoại: ghi chú vận chuyển xếp order 4, trên chip phân loại (5) và Số lượng (6) để Số lượng sát phân loại', async () => {
+    api.product = { ...PRODUCT, fulfilment: 'MERCHANT', fulfiller: { kind: 'UNAVAILABLE', reason: 'STORE_PAUSED', name: 'Gốm Minh An', shippingFee: null, freeShipFrom: null } };
+    const c = await mount();
+    expect(c.querySelector('[data-section="pdp-notes"]')!.className).toContain('max-md:order-4');
+  });
 });
 
 describe('/san-pham/[slug] — gian hàng tạm nghỉ hoặc đã ngừng bán (R3-MERCHANT-3)', () => {
@@ -433,7 +454,7 @@ describe('/san-pham/[slug] — đủ chức năng như Mini App', () => {
     api.product = { ...PRODUCT, sold: 1250 };
     const c = await mount();
     expect(c.querySelector('button[aria-label="Thêm yêu thích"]')).not.toBeNull();
-    expect(c.querySelector('[data-testid="pdp-rating"]')!.textContent).toContain('4.5 · 8 đánh giá');
+    expect(c.querySelector('[data-testid="pdp-rating"]')!.textContent).toContain('4,5 · 8 đánh giá');
     expect(c.textContent).toContain('Đã bán 1,3k+');
   });
 
@@ -468,13 +489,15 @@ describe('/san-pham/[slug] — đủ chức năng như Mini App', () => {
     expect(Array.from(c2.querySelectorAll('h2')).map((h) => h.textContent)).not.toContain('Thành phần');
   });
 
-  it('dải Khách thường mua cùng và Cùng nhà thương hiệu lấy từ server (ISR), trỏ tới trang sản phẩm', async () => {
+  it('dải Khách thường mua cùng và Cùng thương hiệu lấy từ server (ISR), trỏ tới trang sản phẩm', async () => {
     api.related = [card(1)];
     api.together = [card(2), card(3), card(4)];
     const c = await mount();
     await flush();
     const h2 = Array.from(c.querySelectorAll('h2')).map((h) => h.textContent);
-    expect(h2).toEqual(expect.arrayContaining(['Khách thường mua cùng', 'Cùng nhà Xanh Việt']));
+    expect(h2).toEqual(expect.arrayContaining(['Khách thường mua cùng', 'Cùng thương hiệu']));
+    expect(h2).not.toContain('Cùng nhà Xanh Việt');
+    expect(c.querySelector('[aria-label="Cùng thương hiệu Xanh Việt"]')).not.toBeNull();
     expect(Array.from(c.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(expect.arrayContaining(['/san-pham/sp-1', '/san-pham/sp-2']));
   });
 
@@ -496,6 +519,21 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(card.querySelector('[data-testid="pdp-info"]')).not.toBeNull();
     expect(card.querySelector('[aria-roledescription="carousel"]')).not.toBeNull();
     expect(card.className).toContain('lg:grid-cols-[440px_minmax(0,1fr)]');
+    expect(c.innerHTML).not.toMatch(/lg:sticky|overflow-y-auto/);
+  });
+
+  it('từ lg nửa dưới hai cột: Thành phần + Cam kết + Mô tả bên trái, Đánh giá bên phải; dải gợi ý vẫn cả bề ngang bên dưới', async () => {
+    const c = await mount();
+    await flush();
+    const cols = c.querySelector('[data-testid="pdp-below-cols"]')!;
+    expect(cols.className).toContain('lg:grid-cols-2');
+    const [left, right] = Array.from(cols.children) as HTMLElement[];
+    expect(left!.textContent).toContain('Cam kết Tubu');
+    expect(left!.textContent).toContain('Mô tả sản phẩm');
+    expect(left!.querySelector('#danh-gia')).toBeNull();
+    expect(right!.querySelector('#danh-gia')).not.toBeNull();
+    // Dải gợi ý là anh em kế tiếp của hai cột, không nằm trong cột nào.
+    expect(cols.nextElementSibling!.className).toContain('max-md:pb-6');
     expect(c.innerHTML).not.toMatch(/lg:sticky|overflow-y-auto/);
   });
 
@@ -567,14 +605,73 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(subscribe).toBeDefined();
     expect(after(add, certs)).toBe(true);
     expect(after(add, subscribe)).toBe(true);
-    // Điện thoại giữ thứ tự cũ như Mini App: chứng nhận (order 0) → Đặt định kỳ (1) → khối mua (2).
-    expect(certs.className).not.toMatch(/order-/);
-    expect(subscribe.closest('.max-md\\:order-1')).not.toBeNull();
-    expect(add.parentElement!.className).toContain('max-md:order-2');
+    // Điện thoại giữ thứ tự như Mini App: chứng nhận (order 1) → Đặt định kỳ (2); khối mua tách phần Phân loại và Số lượng ra bằng `contents` (xem add-to-cart.spec).
+    expect(certs.className).toContain('max-md:order-1');
+    expect(subscribe.closest('.max-md\\:order-2')).not.toBeNull();
+    expect(add.parentElement!.className).toContain('max-md:contents');
   });
 
-  it('chưa có Combo/Mua kèm (P15 điền): không có khối giữ chỗ', async () => {
-    const c = await mount();
-    expect(c.querySelector('[data-testid="pdp-bundle-slots"]')).toBeNull();
+  describe('Combo ưu đãi và Mua kèm deal sốc (P15)', () => {
+    const FUTURE = new Date(Date.now() + 86_400_000).toISOString();
+    const cardOf = (id: string) => ({ id, slug: `sp-${id}`, brand: 'Tubu', name: `Sản phẩm ${id}`, thumbnail: null, basePrice: 100_000, salePrice: null, isFeatured: false, inStock: true, repVariationId: `v-${id}` });
+    const itemOf = (id: string, addonPrice: number | null = null) => ({ productId: id, variationId: `v-${id}`, maxQty: 1, addonPrice, inStock: true, product: cardOf(id) });
+    const BUNDLES = {
+      combos: [{ id: 'c1', kind: 'BUNDLE_PCT', title: 'Combo gội xả', pct: 10, endAt: FUTURE, anchorProductId: null, items: [itemOf('a'), itemOf('b')] }],
+      addons: [{ id: 'a1', kind: 'ADDON', title: 'Kèm', pct: null, endAt: FUTURE, anchorProductId: 'p1', items: [itemOf('x', 60_000)] }],
+    };
+
+    it('chưa có bộ nào: không có khối giữ chỗ', async () => {
+      const c = await mount();
+      expect(c.querySelector('[data-testid="pdp-bundle-slots"]')).toBeNull();
+    });
+
+    it('có bộ từ máy chủ: khối nằm ngay trong HTML dựng sẵn (không chờ trình duyệt tải thêm, nên không xê dịch trang)', async () => {
+      api.bundles = BUNDLES;
+      const html = await import('react-dom/server').then(async ({ renderToString }) => {
+        const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+        const ui = await ProductPage({ params: Promise.resolve({ slug: 'dau-goi-bo-ket' }) });
+        return renderToString(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>);
+      });
+      expect(html).toContain('data-testid="pdp-combos"');
+      expect(html).toContain('Combo gội xả');
+      expect(html).toContain('data-testid="pdp-addons"');
+      expect(html).toContain('Chỉ khi mua cùng Dầu gội bồ kết');
+    });
+
+    it('điện thoại: thứ tự khối như Mini App (Ưu đãi/Vận chuyển → Combo/Mua kèm → Đánh giá nhanh → Mở nhóm mua chung); máy tính giữ khối mua trước trong HTML', async () => {
+      api.bundles = BUNDLES;
+      api.product = { ...PRODUCT, fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
+      const c = await mount();
+      await flush();
+      const info = c.querySelector('[data-testid="pdp-info"]')!;
+      const order = (el: Element) => Number(/max-md:order-(\d+)/.exec(el.closest('[class*="max-md:order-"]')?.className ?? '')?.[1] ?? 0);
+      // sort ổn định: cùng order thì giữ thứ tự DOM, đúng như flex xếp.
+      const visual = Array.from(info.querySelectorAll('[data-section]'))
+        .map((el) => ({ id: el.getAttribute('data-section')!, order: order(el) }))
+        .sort((a, b) => a.order - b.order)
+        .map((x) => x.id);
+      expect(visual).toEqual(['pdp-main', 'pdp-certs', 'pdp-subscribe', 'pdp-offers', 'pdp-bundles', 'pdp-quick-reviews', 'pdp-groupbuy']);
+      const add = c.querySelector('[data-testid="add-to-cart"]')!;
+      const slots = c.querySelector('[data-testid="pdp-bundle-slots"]')!;
+      const quick = c.querySelector('[data-section="pdp-quick-reviews"]')!;
+      const after = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(after(add, slots)).toBe(true);
+      expect(after(slots, quick)).toBe(true);
+    });
+
+    it('không có đánh giá có chữ và không có bộ: không dựng Đánh giá nhanh, không khối bộ (không dải rỗng)', async () => {
+      api.reviews = { ...REVIEWS, items: REVIEWS.items.map((r) => ({ ...r, comment: null })) };
+      const c = await mount();
+      await flush();
+      expect(c.querySelector('[data-section="pdp-quick-reviews"]')).toBeNull();
+      expect(c.querySelector('[data-testid="pdp-bundle-slots"]')).toBeNull();
+    });
+
+    it('máy chủ lỗi: trang vẫn dựng, trình duyệt thử tải rồi ẩn khối khi cũng lỗi', async () => {
+      api.serverFails = true;
+      const c = await mount();
+      expect(c.querySelector('[data-testid="add-to-cart"]')).not.toBeNull();
+      expect(c.querySelector('[data-testid="pdp-bundle-slots"]')).toBeNull();
+    });
   });
 });

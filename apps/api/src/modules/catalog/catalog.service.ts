@@ -19,6 +19,7 @@ import { TrackCron } from '../../common/cron-run/track-cron';
 import { publicImages, publicProductThumb } from '../../common/public-image';
 import { publicImage } from '../../common/public-image';
 import { seedHash, seededOrder } from './catalog-seed';
+import { childrenByParent, expandCategoryScope } from './category-scope';
 import { CATALOG_LOVED_KEYS, DEFAULT_LOVED_THRESHOLDS, LOVED_THRESHOLD_MAX, isLoved, sanitizeLovedThreshold, type LovedThresholds } from './catalog-loved';
 
 /**
@@ -137,8 +138,8 @@ export class CatalogService {
   // !!! HẠN CHẾ — KHÔNG AN TOÀN KHI SCALE:
   // - Cache PER-INSTANCE (field RAM) → khi tăng số replica API ≥ 2, mỗi replica có cache
   //   riêng + skew tới 60s giữa các replica → khách thấy dữ liệu khác nhau giữa request.
-  // - Sync Pancake job + admin sửa Category KHÔNG gọi invalidate → brand/category mới
-  //   trễ tới 60s. Tăng TTL ở đây mà không có invalidate sẽ làm vấn đề rõ hơn.
+  // - Sync Pancake job KHÔNG gọi invalidate → brand mới trễ tới 60s; admin đổi cây danh mục thì gọi
+  //   `invalidateCategoryCache()` (chỉ instance nhận lệnh). Tăng TTL ở đây mà không có invalidate sẽ làm vấn đề rõ hơn.
   // Khi scale → chuyển sang Redis (đã có trong compose), hoặc emit event từ sync job
   // để gọi invalidate trên TẤT CẢ instance.
   private brandsCache: { value: unknown; expiresAt: number } | null = null;
@@ -698,30 +699,19 @@ export class CatalogService {
     return value;
   }
 
-  /** `[id, ...mọi con cháu]` của một danh mục; id lạ hoặc danh mục lá trả `[id]`. Có `visited` nên vòng `parentId` không treo. */
+  /** `[id, ...mọi con cháu]` của một danh mục (xem `expandCategoryScope`), cây đọc từ cache 60 giây. */
   private async categoryScope(id: string): Promise<string[]> {
     if (!this.categoryChildrenCache || this.categoryChildrenCache.expiresAt <= Date.now()) {
       const rows = await this.prisma.category.findMany({ select: { id: true, parentId: true } });
-      const children = new Map<string, string[]>();
-      for (const r of rows) {
-        if (!r.parentId) continue;
-        const list = children.get(r.parentId) ?? [];
-        list.push(r.id);
-        children.set(r.parentId, list);
-      }
-      this.categoryChildrenCache = { value: children, expiresAt: Date.now() + this.TTL_MS };
+      this.categoryChildrenCache = { value: childrenByParent(rows), expiresAt: Date.now() + this.TTL_MS };
     }
-    const children = this.categoryChildrenCache.value;
-    const scope = [id];
-    const visited = new Set(scope);
-    for (let i = 0; i < scope.length; i++) {
-      for (const child of children.get(scope[i]!) ?? []) {
-        if (visited.has(child)) continue;
-        visited.add(child);
-        scope.push(child);
-      }
-    }
-    return scope;
+    return expandCategoryScope(this.categoryChildrenCache.value, id);
+  }
+
+  /** Admin đổi cây danh mục: `/categories`, `?flat=1` và phạm vi lọc theo cha đọc lại ngay thay vì chờ hết 60 giây. */
+  invalidateCategoryCache(): void {
+    this.categoriesCache = null;
+    this.categoryChildrenCache = null;
   }
 
   /**

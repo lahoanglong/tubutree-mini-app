@@ -1,7 +1,7 @@
 import { useId, type CSSProperties } from 'react';
 import type { FlashSlotItem as FlashSlotItemData, FlashSlotStatus } from '@tubutree/app-core/api/flash-sale';
 import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
-import { slotBuyLabel, slotItemNote, slotRemindLabel } from '@tubutree/app-core/commerce/flash-slots';
+import { slotBuyLabel, slotItemNote, slotItemNoteSpoken, slotRemindLabel } from '@tubutree/app-core/commerce/flash-slots';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { flashCardProduct, soldPercent } from '../../utils/flash-display';
 import { haptic } from '../../utils/haptic';
@@ -83,6 +83,7 @@ export function FlashSlotItem({ item, slotStatus, reminded, remindPending, onBuy
       // Sản phẩm nhiều phân loại thì Giờ vàng chỉ gắn vào MỘT phân loại: mở trang chi tiết đúng phân loại đó, không ra giá thường.
       navState={{ variationId: item.variationId }}
       note={slotItemNote(item)}
+      noteSpoken={slotItemNoteSpoken(item)}
       dimMedia={item.soldOut}
       footerHeight={SOLD_FOOTER_HEIGHT}
       footer={

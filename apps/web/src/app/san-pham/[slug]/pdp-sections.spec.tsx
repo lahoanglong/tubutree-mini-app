@@ -34,8 +34,8 @@ const card = (n: number) => ({ id: `p${n}`, slug: `sp-${n}`, brand: 'Xanh', name
 describe('PdpRating', () => {
   it('có đánh giá thì ghi điểm trung bình và số đánh giá, sao có tên truy cập', () => {
     const { container } = mount(<PdpRating average={4.5} count={8} />);
-    expect(container.textContent).toContain('4.5 · 8 đánh giá');
-    expect(container.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('4.5 trên 5 sao');
+    expect(container.textContent).toContain('4,5 · 8 đánh giá');
+    expect(container.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('4,5 trên 5 sao');
   });
   it('chưa có đánh giá thì không hiện', () => {
     expect(mount(<PdpRating average={0} count={0} />).container.innerHTML).toBe('');
@@ -109,7 +109,8 @@ describe('PdpRails', () => {
     const { container } = mount(<PdpRails productId="cur" slug="dau-goi" brand="Xanh Việt" initialRelated={[card(1)]} initialBoughtTogether={many(2, 3)} />);
     await flush();
     const titles = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
-    expect(titles).toEqual(['Khách thường mua cùng', 'Cùng nhà Xanh Việt']);
+    expect(titles).toEqual(['Khách thường mua cùng', 'Cùng thương hiệu']);
+    expect(container.querySelector('[aria-label="Cùng thương hiệu Xanh Việt"]')).not.toBeNull();
     expect(Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(['/san-pham/sp-2', '/san-pham/sp-3', '/san-pham/sp-4', '/san-pham/sp-1']);
     // Hai dải không được hỏi lại khi server đã đưa danh sách; chỉ dải "Có thể bạn cũng thích" tải ở trình duyệt.
     expect(mocks.http.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/config/public' && p !== '/me/wishlist/ids')).toEqual(['/products/for-you']);
@@ -127,7 +128,7 @@ describe('PdpRails', () => {
     await flush();
     expect(mocks.http.get.mock.calls.map((c) => c[0]).filter((p) => p !== '/config/public' && p !== '/me/wishlist/ids').sort()).toEqual(['/products/dau-goi/bought-together', '/products/dau-goi/related', '/products/for-you']);
     expect(container.querySelectorAll('h2')).toHaveLength(1);
-    expect(container.querySelector('h2')!.textContent).toBe('Cùng nhà Xanh');
+    expect(container.querySelector('h2')!.textContent).toBe('Cùng thương hiệu');
   });
   it('lỗi hoặc rỗng thì ẩn dải, không vỡ trang', async () => {
     mocks.http.get.mockRejectedValue(new Error('500'));
@@ -142,7 +143,7 @@ describe('PdpRails', () => {
     const { container } = mount(<PdpRails productId="p99" slug="dau-goi" brand="Xanh" initialRelated={brand} initialBoughtTogether={together} />);
     await flush();
     const titles = Array.from(container.querySelectorAll('h2')).map((h) => h.textContent);
-    expect(titles).toEqual(['Khách thường mua cùng', 'Cùng nhà Xanh', 'Có thể bạn cũng thích']);
+    expect(titles).toEqual(['Khách thường mua cùng', 'Cùng thương hiệu', 'Có thể bạn cũng thích']);
     const feed = container.querySelector('section[aria-labelledby="pdp-feed-title"]')!;
     const hrefs = Array.from(feed.querySelectorAll('a')).map((a) => a.getAttribute('href'));
     expect(hrefs).toEqual(['/san-pham/sp-30', '/san-pham/sp-31', '/san-pham/sp-32', '/san-pham/sp-33', '/san-pham/sp-34']);
@@ -154,11 +155,36 @@ describe('PdpRails', () => {
   });
 });
 
-describe('tiêu đề mục của trang sản phẩm khổ điện thoại giống Mini App (chữ không chân Inter, không serif)', () => {
+describe('khối nửa dưới là dải trắng cách nhau 8px ở điện thoại (như Mini App)', () => {
+  const band = (el: Element | null, id: string) => {
+    expect(el).not.toBeNull();
+    expect(el!.getAttribute('data-section')).toBe(id);
+    expect(el!.className).toContain('max-md:mt-2');
+    expect(el!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+    expect(el!.className).toContain('max-md:p-4');
+  };
+  it('Thành phần, Cam kết Tubu, Mô tả sản phẩm', () => {
+    band(mount(<PdpIngredients ingredients={[{ name: 'Gừng' }]} />).container.querySelector('section'), 'pdp-ingredients');
+    band(mount(<PdpPromises />).container.querySelector('section'), 'pdp-promises');
+    band(mount(<PdpDescription text="Ngắn gọn" />).container.querySelector('section'), 'pdp-description');
+  });
+  it('chữ phụ cỡ Mini App: cam kết 12px, mô tả 14px; "Xem thêm" là chữ thương hiệu không gạch chân', () => {
+    expect(mount(<PdpPromises />).container.querySelector('li')!.className).toContain('max-md:text-xs');
+    const long = mount(<PdpDescription text={'x'.repeat(300)} />).container;
+    expect(long.querySelector('p')!.className).toContain('max-md:text-sm');
+    const more = byText(long, 'button', 'Xem thêm')!;
+    expect(more.className).toContain('max-md:no-underline');
+    expect(more.className).toContain('max-md:text-[var(--color-text-brand)]');
+  });
+});
+
+describe('tiêu đề khối của trang sản phẩm: Inter 16/700 ở mọi khổ (Q1), không serif từ md', () => {
   const sans = (h: Element | null) => {
     expect(h).not.toBeNull();
-    expect(h!.className).toContain('max-md:font-ui');
-    expect(h!.className).toContain('max-md:font-semibold');
+    expect(h!.className).toContain('font-ui');
+    expect(h!.className).toContain('font-bold');
+    expect(h!.className).not.toContain('font-display');
+    expect(h!.className).not.toContain('max-md:');
   };
   it('Thành phần, Cam kết Tubu, Mô tả sản phẩm', () => {
     sans(mount(<PdpIngredients ingredients={[{ name: 'Gừng' }]} />).container.querySelector('h2'));

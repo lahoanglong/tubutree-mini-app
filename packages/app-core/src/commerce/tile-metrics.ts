@@ -10,8 +10,10 @@ export const TILE_METRICS = {
   brand: 16,
   /** Tên 2 dòng body-sm. */
   name: 44,
-  /** Tên 2 dòng caption (thẻ hẹp rail-sm, flash). */
+  /** Tên 2 dòng caption (thẻ hẹp rail-sm). */
   nameCaption: 40,
+  /** Tên 1 dòng caption: thẻ Giờ vàng ở Trang chủ chỉ có chỗ cho một dòng (thiết kế Q11), nên cắt "…" thay vì cao thêm 20px. */
+  nameFlash: 20,
   gap: 4,
   /** Khoảng giữa hàng giá và meta. */
   metaGap: 2,
@@ -22,6 +24,14 @@ export const TILE_METRICS = {
   note: 16,
   line: 80,
 } as const;
+
+/**
+ * Dòng meta đầy đủ dài nhất mà hai CSS (`tokens.css`, `mini.css`) coi là "ngắn": "★ 5,0 · Đã bán 99,9k+" (21 ký tự) rộng 127,25px ở Inter 12px/500. Dài hơn
+ * ("★ 5,0 · Đã bán 123,4k+": lượt bán từ 100k) rộng tới ~137px nên thẻ gắn `data-long` và chỉ giữ bản đầy đủ khi ô meta từ 148px.
+ * Số đo này đúng trên mọi máy vì Inter đi kèm app (`packages/design-tokens/src/fonts.css`), không phụ thuộc chữ hệ thống; rủi ro duy nhất là
+ * chữ dự phòng trong lúc `font-display: swap` chưa tải xong hoặc ký tự nằm ngoài bộ chữ của file woff2, chỉ kéo dài ô meta trong khoảnh khắc đó.
+ */
+export const META_SHORT_MAX_CHARS = 21;
 
 export interface TileBodyOptions {
   /** Có dòng nhãn hiệu không; mặc định có ở grid và rail-md, không ở biến thể khác. */
@@ -47,7 +57,8 @@ export function tileBodyHeight(variant: CardVariant, o: TileBodyOptions = {}): n
     case 'rank':
       return M.inset + M.name + M.gap + M.price + M.compare + M.metaGap + M.meta + M.inset + extra;
     case 'rail-sm':
-    case 'flash':
       return M.inset + M.nameCaption + M.gap + M.price + M.compare + M.inset + extra;
+    case 'flash':
+      return M.inset + M.nameFlash + M.gap + M.price + M.compare + M.inset + extra;
   }
 }

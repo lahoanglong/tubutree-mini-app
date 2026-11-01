@@ -26,7 +26,23 @@ describe('CategoryTiles', () => {
     const { c } = mount({ entries: many(10) });
     const region = c.querySelector('section[aria-label="Danh mục"]')!;
     expect(region.querySelector('h2')!.textContent).toBe('Danh mục');
-    expect(names(region)).toEqual([...many(8).map((e) => e.label), 'Tất cả']);
+    expect(names(region)).toEqual(['Xem tất cả Danh mục', ...many(8).map((e) => e.label), 'Tất cả']);
+  });
+
+  it('quá 8 danh mục: tiêu đề có "Xem tất cả Danh mục" mở danh sách không lọc (như ô "Tất cả"); từ 8 trở xuống không có', () => {
+    const { c, onSelectAll } = mount({ entries: many(9) });
+    const action = c.querySelector<HTMLButtonElement>('[data-testid="section-header"] button[aria-label="Xem tất cả Danh mục"]');
+    expect(action).not.toBeNull();
+    click(action);
+    expect(onSelectAll).toHaveBeenCalledTimes(1);
+    mounted?.unmount();
+    expect(mount({ entries: many(8) }).c.querySelector('[data-testid="section-header"] button')).toBeNull();
+  });
+
+  it('lg: tiêu đề h2 "Danh mục" ẩn vì trang đã có h1 "Danh mục" (không lặp h1 rồi h2 cùng chữ); điện thoại vẫn có', () => {
+    const { c } = mount();
+    const h2 = c.querySelector('section[aria-label="Danh mục"] h2')!;
+    expect(h2.closest('.lg\\:hidden')).not.toBeNull();
   });
 
   it('chạm ô gọi onSelect(mục); "Tất cả" gọi onSelectAll', () => {

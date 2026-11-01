@@ -437,7 +437,7 @@ model Product {
   shortDesc        String?
   images           String[]
   thumbnail        String?
-  categoryIds      String[]
+  categoryIds      String[]              @default([])
   tags             String[]
   isActive         Boolean               @default(true)
   /// REMOVED = đồng bộ Pancake tự tắt vì sản phẩm không còn trên Pancake (xem Variation.pancakeHold).
@@ -473,6 +473,8 @@ model Product {
   /// Bản sửa nội dung đang chờ duyệt của sản phẩm đang bán (R3-MERCHANT-4); sản phẩm vẫn bán với nội dung của chính dòng này.
   editDraft        ProductEditDraft?
   campaignLinks    CampaignProduct[]
+  bundleItems      BundleItem[]
+  bundleAnchors    Bundle[]              @relation("BundleAnchor")
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
@@ -618,6 +620,60 @@ model CampaignCoupon {
   @@id([campaignId, couponId])
   @@index([couponId])
   @@map("campaign_coupons")
+}
+
+enum BundleKind {
+  /// Mua đủ bộ thì mỗi món giảm `pct`%.
+  BUNDLE_PCT
+  /// Mua sản phẩm chính (`anchorProductId`) thì món kèm có giá riêng `addonPrice`.
+  ADDON
+}
+
+/// Combo và mua kèm toàn sàn (Tubu tài trợ). Khoản giảm quy về `comboPerLine`/`Order.comboDiscount`, mỗi dòng lấy khoản lớn nhất so với combo gian hàng.
+model Bundle {
+  id              String       @id @default(cuid())
+  kind            BundleKind
+  title           String
+  /// BUNDLE_PCT: % giảm mỗi món của bộ (kẹp `bundle.max_pct` lúc ghi và lúc tính tiền); ADDON: không dùng.
+  pct             Int?
+  /// ADDON: sản phẩm chính phải có trong giỏ. SetNull khi sản phẩm bị xoá: bộ ADDON không còn chính thì không áp.
+  anchorProductId String?
+  anchorProduct   Product?     @relation("BundleAnchor", fields: [anchorProductId], references: [id], onDelete: SetNull)
+  isActive        Boolean      @default(true)
+  startAt         DateTime
+  endAt           DateTime
+  sortOrder       Int          @default(0)
+  createdById     String?
+  items           BundleItem[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([isActive, startAt, endAt])
+  @@index([anchorProductId])
+  @@map("bundles")
+}
+
+model BundleItem {
+  bundleId    String
+  bundle      Bundle     @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// Ghim phân loại: chỉ phân loại này được hưởng; NULL = mọi phân loại của sản phẩm.
+  variationId String?
+  variation   Variation? @relation(fields: [variationId], references: [id], onDelete: SetNull)
+  /// ADDON: giá mua kèm mỗi đơn vị (≥ 0, CHECK ở migration).
+  addonPrice  Int?
+  /// ADDON: giá đang bán của phân loại ghim LÚC TẠO/SỬA bộ. Trần của khoản giảm mỗi đơn vị (`refPrice − addonPrice`) khi phân loại đổi giá
+  /// về sau; NULL (dòng ghi tay) = không giảm. Chỉ ghi qua admin, BUNDLE_PCT luôn NULL.
+  refPrice    Int?
+  /// Số đơn vị mỗi đơn được hưởng giá/giảm của bộ (chặn rủi ro vì bộ không có quota toàn cục).
+  maxQty      Int        @default(1)
+  sortOrder   Int        @default(0)
+
+  @@id([bundleId, productId])
+  @@index([productId])
+  @@index([variationId])
+  @@map("bundle_items")
 }
 
 enum DealerRewardType {
@@ -853,6 +909,7 @@ model Variation {
   dealerPriceHistory DealerPriceHistory[]
   subscriptions      Subscription[]
   flashSaleItems     FlashSaleItem[]
+  bundleItems        BundleItem[]
   pancakeLinks       MerchantPancakeLink[]
 
   @@index([productId])
@@ -1462,6 +1519,11 @@ model Coupon {
   batchLink       Json?
   claims          CouponClaim[]
   campaignLinks   CampaignCoupon[]
+  /// Hiện ở mục "Nhận mã" công khai (GET /coupons/collectable). Chỉ mã CLAIM chung, không thuộc lô thẻ in (CHECK coupons_listed_claim_only_chk):
+  /// mã in thẻ mà liệt kê công khai thì ai cũng nhận được, mất ý nghĩa của thẻ.
+  listed          Boolean            @default(false)
+  /// Tên hiển thị ở kho mã; null = chỉ hiện nhãn giá trị.
+  title           String?
   /// Người tạo / sửa gần nhất qua trang quản trị (null = mã hệ thống hoặc tạo trước khi có cột). Nhân viên chỉ sửa được
   /// mã do nhân viên tạo và không dùng được mã do chính mình tạo.
   createdById     String?
@@ -1470,6 +1532,7 @@ model Coupon {
 
   @@index([batch])
   @@index([createdById, createdAt])
+  @@index([listed, endAt])
   @@map("coupons")
 }
 

@@ -255,7 +255,7 @@ describe('/gio-hang — chọn món để thanh toán một phần giỏ (R2-BUY
     expect(container.textContent).toContain('Giảm giá combo');
     expect(container.textContent).toContain('-25.000đ');
     expect(container.textContent).toContain('-10.000đ');
-    expect(container.textContent).toContain('Tổng215.000đ');
+    expect(container.textContent).toContain('Tạm tính (đã giảm)215.000đ');
   });
 
   it('ưu đãi hạng thành viên: dòng riêng, tổng = tạm tính − combo − mã − hạng; chọn một phần thì ẩn', async () => {
@@ -263,7 +263,7 @@ describe('/gio-hang — chọn món để thanh toán một phần giỏ (R2-BUY
     const { container } = await mount();
     expect(container.textContent).toContain('Ưu đãi hạng thành viên');
     expect(container.textContent).toContain('-4.000đ');
-    expect(container.textContent).toContain('Tổng211.000đ');
+    expect(container.textContent).toContain('Tạm tính (đã giảm)211.000đ');
     click(pick(container, 'Dầu gội'));
     await flush(2);
     expect(container.textContent).not.toContain('Ưu đãi hạng thành viên');
@@ -273,12 +273,12 @@ describe('/gio-hang — chọn món để thanh toán một phần giỏ (R2-BUY
     state.cart = { ...two(), couponCode: 'WELCOME', comboDiscount: 0, discount: 10000 };
     const { container } = await mount();
     expect(container.textContent).not.toContain('combo');
-    expect(container.textContent).toContain('Tổng240.000đ');
+    expect(container.textContent).toContain('Tạm tính (đã giảm)240.000đ');
     mounted.pop()!.unmount();
     state.cart = { ...two(), couponCode: 'WELCOME', discount: 10000 };
     const again = await mount();
     expect(again.container.textContent).not.toContain('combo');
-    expect(again.container.textContent).toContain('Tổng240.000đ');
+    expect(again.container.textContent).toContain('Tạm tính (đã giảm)240.000đ');
   });
 
   it('combo cũng chỉ hiện khi chọn cả giỏ (chọn một phần do báo giá thanh toán tính lại)', async () => {
@@ -413,7 +413,7 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     expect(container.textContent).toContain('-3.000đ');
     expect(container.textContent).toContain('Ưu đãi hạng thành viên');
     expect(container.textContent).toContain('-1.000đ');
-    expect(container.textContent).toContain('Tổng91.000đ');
+    expect(container.textContent).toContain('Tạm tính (đã giảm)91.000đ');
     expect(container.textContent).not.toContain('tính lại ở bước thanh toán');
   });
 
@@ -428,7 +428,7 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     await settle();
     expect(state.selection).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain('-25.000đ');
-    expect(container.textContent).toContain('Tổng211.000đ');
+    expect(container.textContent).toContain('Tạm tính (đã giảm)211.000đ');
   });
 
   it('cả giỏ ngay từ đầu: không gọi giá phần chọn', async () => {
@@ -453,7 +453,7 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     click(pick(container, 'Xà phòng'));
     await settle();
     expect(container.querySelector('[data-testid="coupon-notice"]')!.textContent).toContain('Đơn tối thiểu 200.000đ');
-    expect(container.textContent).toContain('Tổng150.000đ');
+    expect(container.textContent).toContain('Tạm tính150.000đ');
   });
 
   it('chưa có giá phần chọn (đang chờ hoặc lỗi): không hiện số của cả giỏ, tổng là tạm tính phần chọn', async () => {
@@ -463,7 +463,7 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     click(pick(container, 'Dầu gội'));
     await settle();
     expect(container.textContent).not.toContain('Giảm giá combo');
-    expect(container.textContent).toContain('Tổng100.000đ');
+    expect(container.textContent).toContain('Tạm tính100.000đ');
   });
 
   it('bỏ mã khi đang chọn một phần: hỏi lại giá phần chọn, không còn giảm giá của mã cũ', async () => {
@@ -472,7 +472,7 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     const { container } = await mount();
     click(pick(container, 'Dầu gội'));
     await settle();
-    expect(container.textContent).toContain('Tổng97.000đ');
+    expect(container.textContent).toContain('Tạm tính (đã giảm)97.000đ');
     state.cart = { ...two(), couponCode: null, discount: 0, comboDiscount: 0, tierDiscount: 0 };
     state.selection.mockResolvedValueOnce({ ...cartOf([]), couponCode: null, subtotal: 100000, comboDiscount: 0, discount: 0, tierDiscount: 0 });
     click(container.querySelector('button[aria-label="Bỏ mã giảm giá WELCOME"]'));
@@ -480,7 +480,7 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     await vi.waitFor(() => expect(state.selection).toHaveBeenCalledTimes(2), { timeout: 3000, interval: 50 });
     await settle();
     expect(container.textContent).not.toContain('-3.000đ');
-    expect(container.textContent).toContain('Tổng100.000đ');
+    expect(container.textContent).toContain('Tạm tính100.000đ');
   });
 
   it('áp mã khi đang chọn một phần: hỏi lại giá phần chọn và hiện mức giảm của mã mới', async () => {
@@ -489,7 +489,7 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     const { container } = await mount();
     click(pick(container, 'Dầu gội'));
     await settle();
-    expect(container.textContent).toContain('Tổng100.000đ');
+    expect(container.textContent).toContain('Tạm tính100.000đ');
     state.cart = { ...two(), couponCode: 'WELCOME' };
     state.selection.mockResolvedValueOnce({ ...cartOf([]), couponCode: 'WELCOME', subtotal: 100000, comboDiscount: 0, discount: 3000, tierDiscount: 0 });
     typeInto(container.querySelector('#coupon-code'), 'welcome');
@@ -498,7 +498,7 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     await vi.waitFor(() => expect(state.selection).toHaveBeenCalledTimes(2), { timeout: 3000, interval: 50 });
     await settle();
     expect(container.textContent).toContain('-3.000đ');
-    expect(container.textContent).toContain('Tổng97.000đ');
+    expect(container.textContent).toContain('Tạm tính (đã giảm)97.000đ');
   });
 
   it('giá phần chọn đổi so với giỏ đã tải (hết giờ vàng): tạm tính và tổng theo chính tạm tính của phần chọn', async () => {
@@ -508,8 +508,8 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     click(pick(container, 'Dầu gội'));
     await settle();
     expect(container.textContent).toContain('Tạm tính90.000đ');
-    expect(container.textContent).toContain('Tổng87.000đ');
-    expect(container.textContent).not.toContain('Tổng97.000đ');
+    expect(container.textContent).toContain('Tạm tính (đã giảm)87.000đ');
+    expect(container.textContent).not.toContain('Tạm tính (đã giảm)97.000đ');
   });
 
   it('chưa có giá phần chọn: không hiện câu giải thích mã của cả giỏ (không thuộc phần đang chọn)', async () => {
@@ -542,11 +542,11 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
       const { container } = await mount();
       click(pick(container, 'Dầu gội'));
       await settle();
-      expect(container.textContent).toContain('Tổng197.000đ');
+      expect(container.textContent).toContain('Tạm tính (đã giảm)197.000đ');
       click(pick(container, 'Nước rửa'));
       await flush(3);
       expect(container.textContent).not.toContain('-3.000đ');
-      expect(container.textContent).toContain('Tổng100.000đ');
+      expect(container.textContent).toContain('Tạm tính100.000đ');
     });
 
     it('hỏi lại cùng lựa chọn (đang tải, còn số cũ trong bộ nhớ): không hiện số cũ cho tới khi trả lời xong', async () => {
@@ -555,7 +555,7 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
       const { container } = await mount();
       click(pick(container, 'Dầu gội'));
       await settle();
-      expect(container.textContent).toContain('Tổng197.000đ');
+      expect(container.textContent).toContain('Tạm tính (đã giảm)197.000đ');
       click(pick(container, 'Dầu gội'));
       await settle();
       expect(container.textContent).not.toContain('-3.000đ');
@@ -564,7 +564,7 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
       await settle();
       expect(state.selection).toHaveBeenCalledTimes(2);
       expect(container.textContent).not.toContain('-3.000đ');
-      expect(container.textContent).toContain('Tổng200.000đ');
+      expect(container.textContent).toContain('Tạm tính200.000đ');
     });
   });
 });

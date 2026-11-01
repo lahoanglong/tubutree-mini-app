@@ -69,7 +69,7 @@ export function CampaignBody({ campaign: c, initialProducts }: { campaign: Campa
             src={c.image}
             alt=""
             decoding="async"
-            className="md:max-h-80"
+            className="md:mx-auto md:max-w-3xl"
             style={{ display: 'block', width: '100%', aspectRatio: 'var(--banner-ratio)', objectFit: 'cover', borderRadius: 'var(--radius-media)' }}
           />
         )}

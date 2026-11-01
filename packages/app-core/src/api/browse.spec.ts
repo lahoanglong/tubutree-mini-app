@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { HttpClient } from '../http';
-import { fetchBestSellers, fetchBestSellersPage } from './browse';
+import { bestSellersWithBasis, fetchBestSellers, fetchBestSellersPage } from './browse';
 
 const card = (id: string) => ({ id, slug: id, brand: 'Tubu', name: id, thumbnail: null, basePrice: 1, salePrice: null, isFeatured: false, inStock: true });
 const page = (ids: string[]) => ({ data: ids.map(card), meta: { page: 1, limit: 10, total: ids.length } });
@@ -37,6 +37,7 @@ describe('fetchBestSellersPage', () => {
     expect(get).toHaveBeenCalledWith('/products', { query: { sort: 'best_seller_30d', limit: 20, page: 2, category: 'c1' } });
     expect(out.meta).toEqual({ page: 2, limit: 20, total: 45 });
     expect(out.data.map((p) => p.id)).toEqual(['a', 'b']);
+    expect(out.basis).toBe('days30');
   });
 
   it('không gửi category khi thiếu; limit đổi được', async () => {
@@ -50,11 +51,38 @@ describe('fetchBestSellersPage', () => {
     const out = await fetchBestSellersPage(clientOf(get), { page: 1, category: 'c1' });
     expect(get).toHaveBeenNthCalledWith(2, '/products', { query: { sort: 'best_seller', limit: 20, page: 1, category: 'c1' } });
     expect(out.data.map((p) => p.id)).toEqual(['x']);
+    // Thước đo đổi thành tổng lượt bán: trang phải nói đúng thước đo, không còn "30 ngày qua".
+    expect(out.basis).toBe('total');
   });
 
   it('lỗi khác 400 ném tiếp, không gọi lại', async () => {
     const get = vi.fn().mockRejectedValue({ status: 500 });
     await expect(fetchBestSellersPage(clientOf(get), { page: 1 })).rejects.toEqual({ status: 500 });
     expect(get).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('bestSellersWithBasis', () => {
+  it('thước đo 30 ngày trả được thì basis days30, chỉ gọi một lần', async () => {
+    const load = vi.fn().mockResolvedValue(page(['a']));
+    const out = await bestSellersWithBasis(load);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledWith('best_seller_30d');
+    expect(out.basis).toBe('days30');
+    expect(out.data.map((p) => p.id)).toEqual(['a']);
+  });
+
+  it('API cũ từ chối best_seller_30d (400): lùi về best_seller và basis total', async () => {
+    const load = vi.fn().mockRejectedValueOnce({ status: 400 }).mockResolvedValueOnce(page(['x']));
+    const out = await bestSellersWithBasis(load);
+    expect(load).toHaveBeenNthCalledWith(2, 'best_seller');
+    expect(out.basis).toBe('total');
+    expect(out.data.map((p) => p.id)).toEqual(['x']);
+  });
+
+  it('lỗi khác 400 ném tiếp, không lùi', async () => {
+    const load = vi.fn().mockRejectedValue({ status: 500 });
+    await expect(bestSellersWithBasis(load)).rejects.toEqual({ status: 500 });
+    expect(load).toHaveBeenCalledTimes(1);
   });
 });

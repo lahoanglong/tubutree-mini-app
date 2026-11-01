@@ -41,19 +41,3 @@ export function countdownSpoken(ms: number): string {
   if (p.h > 0) return p.m > 0 ? fillCopy('time.hoursMinutes', { h: p.h, m: p.m }) : fillCopy('time.hours', { h: p.h });
   return p.totalMin > 0 ? fillCopy('time.minutes', { m: p.m }) : fillCopy('time.underMinute');
 }
-
-/**
- * Chữ đếm ngược cho `ms` còn lại, làm tròn LÊN theo phút (phút cuối không hiện "0h 00m" khi chưa hết giờ). Hết giờ → ''.
- * Dưới 24 giờ: "Xh YYm". Từ 24 giờ: "N ngày H giờ" (bỏ "H giờ" khi tròn ngày), vì "143h 52m" khó đọc.
- * Bản cũ của Mini App và web; màn mới dùng `countdownText`/`countdownClock`.
- */
-export function formatCountdown(ms: number): string {
-  if (!(ms > 0)) return '';
-  const totalMin = Math.ceil(ms / 60_000);
-  if (totalMin >= 24 * 60) {
-    const days = Math.floor(totalMin / (24 * 60));
-    const hours = Math.floor((totalMin % (24 * 60)) / 60);
-    return hours > 0 ? `${days} ngày ${hours} giờ` : `${days} ngày`;
-  }
-  return `${Math.floor(totalMin / 60)}h ${(totalMin % 60).toString().padStart(2, '0')}m`;
-}

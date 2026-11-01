@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   fetchProducts: vi.fn(),
   fetchCategories: vi.fn(),
   fetchPurchasedItems: vi.fn(),
+  fetchFlash: vi.fn(),
   unreadCount: vi.fn(),
   coreGet: vi.fn(),
   auth: { status: 'authenticated' as 'authenticated' | 'guest' | 'loading' | 'error', user: { id: 'u1' } as { id: string } | null },
@@ -24,7 +25,7 @@ vi.mock('../services/shop-api', () => ({
   fetchProducts: mocks.fetchProducts,
   fetchCategories: mocks.fetchCategories,
   fetchPurchasedItems: mocks.fetchPurchasedItems,
-  fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
+  fetchActiveFlashSales: mocks.fetchFlash,
   fetchUpcomingFlashSales: vi.fn().mockResolvedValue([]),
   getCart: vi.fn(),
 }));
@@ -34,7 +35,7 @@ vi.mock('../services/core-http', () => ({
     get: (path: string) => {
       mocks.coreGet(path);
       if (path === '/me/notifications/unread-count') return mocks.unreadCount();
-      if (path === '/campaigns') return Promise.resolve([]);
+      if (path === '/campaigns' || path === '/bundles/combos') return Promise.resolve([]);
       return Promise.reject(new Error(`không mock ${path}`));
     },
   },
@@ -44,7 +45,11 @@ vi.mock('../store/auth', () => ({
 }));
 // Mỗi khối mới đã có test riêng; ở đây chỉ kiểm thứ tự, khối lỗi/khung chờ của Bán chạy và hành vi cấp trang.
 vi.mock('../components/flash-sale', () => ({ FlashSale: () => null, UpcomingFlashSales: () => null }));
-vi.mock('../components/reorder/purchased-rail', () => ({ PURCHASED_RAIL_LIMIT: 10, PurchasedRail: () => <section aria-label="Mua lại" /> }));
+// Kệ Mua lại echo tập loại trừ Home truyền xuống (`data-excluded`) để test thấy Home có nối `flashVariationIds` vào kệ; phép lọc của kệ có test riêng.
+vi.mock('../components/reorder/purchased-rail', () => ({
+  PURCHASED_RAIL_LIMIT: 10,
+  PurchasedRail: ({ excludeVariations }: { excludeVariations?: ReadonlySet<string> }) => <section aria-label="Mua lại" data-excluded={[...(excludeVariations ?? [])].sort().join(',')} />,
+}));
 vi.mock('../components/home/member-card', () => ({
   MemberCard: () => <section aria-label="Thẻ thành viên" />,
   MemberCardSkeleton: () => <div data-testid="member-card-loading" />,
@@ -68,7 +73,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import HomePage from './home';
 import { homeBlockOrder } from '../components/home/home-blocks';
-import { homeRenderOrder } from '@tubutree/app-core/home-layout';
+import { HOME_BEST_SELLER_LIMIT, homeRenderOrder } from '@tubutree/app-core/home-layout';
 import { HOME_KIND_KEY } from '../hooks/use-home-customer-kind';
 import { loadHomeBelow } from '../components/home/home-lazy';
 
@@ -81,7 +86,7 @@ const card = (id: string, name: string) => ({
 const PAGE = (items: ReturnType<typeof card>[]) => ({ data: items, meta: { page: 1, limit: 6, total: items.length } });
 // Kệ Bán chạy nhất chỉ hiện từ 3 món (SHELVES), nên mock mặc định trả 4 món.
 const BEST_PAGE = () => PAGE([1, 2, 3, 4].map((n) => card(`bs${n}`, `Bán chạy ${n}`)));
-const BEST_QUERY = { limit: 12, sort: 'best_seller_30d' };
+const BEST_QUERY = { limit: HOME_BEST_SELLER_LIMIT, sort: 'best_seller_30d' };
 
 function renderHome() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -114,6 +119,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     mocks.fetchCategories.mockResolvedValue([]);
     mocks.unreadCount.mockResolvedValue({ count: 0 });
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [], nextCursor: null });
+    mocks.fetchFlash.mockResolvedValue([]);
   });
 
   it('khách mới: thẻ Quà khách mới thay thẻ thành viên, có kệ Bán chạy nhất, không có Mua lại', async () => {
@@ -127,8 +133,17 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(blockOrder()[blockOrder().length - 1]).toBe('suggest');
   });
 
+  it('khách cũ: Home truyền mọi phân loại đang Giờ vàng (kể cả phân loại thứ hai của cùng sản phẩm) cho kệ Mua lại để bỏ (H3 #2)', async () => {
+    const f = (slug: string, variationId: string) => ({ itemId: `i-${variationId}`, variationId, productSlug: slug, productName: slug, thumbnail: null, flashPrice: 1, retailPrice: 2, soldCount: 0, quota: 5, endAt: '2099-01-01T00:00:00.000Z' });
+    mocks.fetchFlash.mockResolvedValue([f('a', 'v-a-1l'), f('b', 'v-b'), f('c', 'v-c'), f('a', 'v-a-5l')]);
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v-a-5l', slug: 'a' }], nextCursor: null });
+    renderHome();
+    await waitFor(() => expect(blockOrder()).toEqual(RETURNING));
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Mua lại' })).toHaveAttribute('data-excluded', 'v-a-1l,v-a-5l,v-b,v-c'));
+  });
+
   it('khách cũ: thẻ thành viên, Việc cần làm, lối tắt, Mua lại, Giờ vàng, Danh mục, ... lưới gợi ý cuối', async () => {
-    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1' }], nextCursor: null });
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null });
     renderHome();
     await waitFor(() => expect(blockOrder()).toEqual(RETURNING));
     // Giờ vàng đứng TRƯỚC Mua lại (Q6); Bán chạy nhất có ở cả hai loại khách (Q18).
@@ -138,7 +153,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(screen.getByRole('region', { name: 'Thẻ thành viên' })).toBeInTheDocument();
   });
 
-  it('"Bán chạy nhất" lấy 12 món theo 30 ngày, có hạng, và "Xem tất cả" mở trang Bán chạy nhất (cùng thước đo 30 ngày)', async () => {
+  it('"Bán chạy nhất" lấy HOME_BEST_SELLER_LIMIT món theo 30 ngày, có hạng, và "Xem tất cả" mở trang Bán chạy nhất (cùng thước đo 30 ngày)', async () => {
     renderHome();
     const best = await screen.findByRole('region', { name: 'Bán chạy nhất' });
     expect(await within(best).findByText('Bán chạy 1')).toBeInTheDocument();
@@ -241,8 +256,8 @@ describe('HomePage (phương án A, 9 khối)', () => {
     mocks.auth.user = null;
     renderHome();
     await screen.findByRole('region', { name: 'Bán chạy nhất' });
-    // Chỉ banner (công khai) được gọi; không có gì của riêng người dùng.
-    expect(mocks.coreGet.mock.calls.map((c) => c[0]).filter((p) => p !== '/campaigns')).toEqual([]);
+    // Chỉ banner và combo (công khai) được gọi; không có gì của riêng người dùng.
+    expect(mocks.coreGet.mock.calls.map((c) => c[0]).filter((p) => p !== '/campaigns' && p !== '/bundles/combos')).toEqual([]);
     expect(mocks.fetchPurchasedItems).not.toHaveBeenCalled();
     expect(blockOrder()).toEqual(NEW);
   });
@@ -252,7 +267,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     renderHome();
     expect(await screen.findByRole('button', { name: 'Thông báo, 73 chưa đọc' })).toBeInTheDocument();
     // Một lời gọi đếm nhỏ, không tải trang tin nào: khách có hơn 50 tin chưa đọc thấy đúng số như ở Cá nhân.
-    expect(mocks.coreGet.mock.calls.map((c) => c[0]).filter((p) => p !== '/campaigns')).toEqual(['/me/notifications/unread-count']);
+    expect(mocks.coreGet.mock.calls.map((c) => c[0]).filter((p) => p !== '/campaigns' && p !== '/bundles/combos')).toEqual(['/me/notifications/unread-count']);
   });
 
   it('kéo để làm mới làm mới MỌI truy vấn của Trang chủ', async () => {
@@ -305,7 +320,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
       await waitFor(() => expect(mocks.fetchPurchasedItems).toHaveBeenCalled());
       expect(settled(qc, ['purchased-items', 10])).toBe(false);
       await act(async () => {
-        d.resolve({ items: [{ variationId: 'v1' }], nextCursor: null });
+        d.resolve({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null });
       });
       await waitFor(() => expect(settled(qc, ['purchased-items', 10])).toBe(true));
       obs.disconnect();
@@ -322,7 +337,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
       expect(screen.getByTestId('home-settling')).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Bán chạy nhất' })).toBeNull();
       await act(async () => {
-        d.resolve({ items: [{ variationId: 'v1' }], nextCursor: null });
+        d.resolve({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null });
       });
       await waitFor(() => expect(blockOrder()).toEqual(RETURNING));
       expect(storedKind()).toEqual({ userId: 'u1', kind: 'returning' });
@@ -335,7 +350,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
       await waitFor(() => expect(storedKind()).toEqual({ userId: 'u1', kind: 'new' }));
       expect(settled(qc, ['purchased-items', 10])).toBe(true);
       unmount();
-      mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1' }], nextCursor: null });
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null });
       renderHome();
       await waitFor(() => expect(storedKind()).toEqual({ userId: 'u1', kind: 'returning' }));
     });

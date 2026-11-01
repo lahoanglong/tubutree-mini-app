@@ -48,6 +48,7 @@ import {
   type RecyclingFilter,
 } from './admin-order-filter';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
+import { COUPON_TITLE_MAX } from './coupon-input-rules';
 import { DEALER_PRICE_CSV_MAX_LENGTH } from './dealer-price-import';
 import { soldExternalRowsOrThrow } from './sold-external-csv';
 
@@ -245,6 +246,9 @@ export class CreateCouponDto {
   scopeMeta?: { tierId?: string; userId?: string };
   // Chỉ khách chưa có đơn nào (trừ đơn huỷ) dùng được. Bỏ trống = false.
   @IsOptional() @IsBoolean() newCustomerOnly?: boolean;
+  // Hiện ở mục "Nhận mã" công khai; chỉ mã CLAIM chung (service chặn phần còn lại, assertListable).
+  @IsOptional() @IsBoolean() listed?: boolean;
+  @IsOptional() @IsString() @MaxLength(COUPON_TITLE_MAX) title?: string;
 }
 export class ListCouponsQuery extends PaginationQuery {
   @IsOptional() @IsString() @MaxLength(64) q?: string;
@@ -255,6 +259,9 @@ export class UpdateCouponDto {
   @OptionalNotNull() @IsBoolean() isActive?: boolean;
   @OptionalNotNull() @IsDateString() endAt?: string;
   @IsOptional() @ValidateIf((_o, v) => v !== null) @IsInt() @Min(1) usageLimit?: number | null;
+  @OptionalNotNull() @IsBoolean() listed?: boolean;
+  /** null xoá tên hiển thị. */
+  @IsOptional() @ValidateIf((_o, v) => v !== null) @IsString() @MaxLength(COUPON_TITLE_MAX) title?: string | null;
 }
 export class ImportDealerPricesDto {
   @IsString() @IsNotEmpty() @MaxLength(100) tierId!: string;

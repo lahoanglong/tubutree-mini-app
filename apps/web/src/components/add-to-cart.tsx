@@ -3,26 +3,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Layers, ShoppingCart } from 'lucide-react';
+import { ShoppingCart, Zap } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { addToCart, applyCoupon, formatVnd, getCart, getProductStock } from '@/lib/shop-client';
+import { addToCart, applyCoupon, formatVnd, getCart } from '@/lib/shop-client';
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ui, uiBar } from '@/lib/guest-ui';
-import { phoneSecondary } from '@/lib/phone-ui';
+import { phoneBand, phoneBandPad, phoneSecondary } from '@/lib/phone-ui';
 import { CountBadge } from '@/components/mini/badge';
-import { Icon } from '@/components/mini/icon';
-import { ListRow } from '@/components/mini/list-row';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { defaultVariationFor, pickDefaultVariation, runningFlash, variationPricing } from '@/lib/flash-price';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
 import dynamic from 'next/dynamic';
 import type { VariationSheetMode } from './variation-sheet';
 import { useActiveFlashSales, useFlashSalesLoaded } from '@/lib/use-flash-sales';
 import { usePdpSelection } from './pdp-selection';
+import { LOW_STOCK_NOTICE, useProductStock } from './pdp-stock';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
@@ -46,9 +45,6 @@ function isPhoneWidth(): boolean {
     return false;
   }
 }
-
-/** Còn từng này trở xuống thì nhắc "Chỉ còn N" để khách biết nên chốt sớm. */
-const LOW_STOCK_NOTICE = 5;
 
 /** Mã của nhóm mua chung (`GBUY-<nhóm>-<người>`), đúng dạng máy chủ cấp. */
 const GROUP_COUPON_CODE = /^GBUY-[A-Z0-9-]+$/;
@@ -81,12 +77,7 @@ export default function AddToCart({
   const qc = useQueryClient();
   const phase = useAuthPhase();
   // Tồn kho trong HTML là bản ISR (tối đa 5 phút tuổi). Khi mở trang hỏi lại tồn kho thật; lỗi/chưa xong thì dùng bản ISR.
-  const stockQ = useQuery({
-    queryKey: ['product-stock', slug],
-    queryFn: () => getProductStock(slug),
-    staleTime: 30_000,
-    retry: 0,
-  });
+  const stockQ = useProductStock(slug);
   const variations = useMemo(
     () => isrVariations.map((v) => ({ ...v, stock: stockQ.data?.[v.id] ?? v.stock })),
     [isrVariations, stockQ.data],
@@ -302,7 +293,7 @@ export default function AddToCart({
 
   if (blockedReason) {
     return (
-      <div className="mt-4">
+      <div className={`mt-4 max-md:order-6 ${phoneBand}`}>
         <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
           Tạm thời chưa mua được
         </button>
@@ -330,30 +321,22 @@ export default function AddToCart({
     </div>
   );
 
+  // Điện thoại: gốc là `contents` để chip và Số lượng thành khối con của cột thông tin trang sản phẩm, xếp bằng `order` như Mini App
+  // (Ưu đãi/Vận chuyển → ghi chú → chip → Số lượng → Combo/Mua kèm → Đánh giá nhanh). Không có dòng "Phân loại ›": chip đã đủ tên, giá,
+  // hết hàng, và Thêm vào giỏ/Mua ngay vẫn mở bảng chọn từ 2 phân loại. Máy tính giữ một khối liền.
   return (
-    <div className="mt-4">
-      {variations.length > 1 && selected && (
-        // Điện thoại: dòng "Phân loại ›" như Mini App mở bảng chọn đủ ảnh, giá, tồn; chip bên dưới là lối tắt cho phân loại hay chọn.
-        // Khối bọc mới ẩn được ở máy tính: ListRow đặt display:flex inline nên class trên chính nó không thắng.
-        <div className="md:hidden">
-          <ListRow
-            icon={<Icon icon={Layers} size="md" tone="brand" />}
-            title={fillCopy('pdp.variation')}
-            subtitle={`${selected.name} · ${formatVnd(selectedPricing?.price ?? 0)}`}
-            trailing="chevron"
-            onPress={() => {
-              setSheetOpened(true);
-              setSheetMode('add');
-            }}
-          />
-        </div>
-      )}
+    <div className="mt-4 max-md:contents">
       {variations.length > 1 && (
-        <div role="group" aria-labelledby="variation-label">
+        <div
+          role="group"
+          aria-labelledby="variation-label"
+          data-section="pdp-variation-chips"
+          className={`max-md:order-5 ${phoneBandPad} max-md:pb-3`}
+        >
           <div id="variation-label" className="text-sm font-semibold text-stone-900 max-md:sr-only">
-            Phân loại
+            {fillCopy('pdp.variation')}
           </div>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-2 max-md:mt-0">
             {variations.map((v) => {
               const out = v.stock <= 0;
               const active = v.id === selectedId;
@@ -363,18 +346,49 @@ export default function AddToCart({
                   key={v.id}
                   type="button"
                   aria-pressed={active}
-                  onClick={() => {
-                    userPicked.current = true;
-                    setSelectedId(v.id);
-                  }}
-                  className={`min-h-11 rounded-control border px-4 text-sm transition ${
+                  // Hết hàng thì khoá hẳn như chip của Mini App: không chọn được (chọn xong nút mua chỉ đổi thành "Hết hàng", khó hiểu) và control
+                  // đang khoá được miễn luật tương phản, nên chữ mờ "Hết hàng" không bị tính là chữ nhạt đang tương tác.
+                  disabled={out}
+                  onClick={
+                    out
+                      ? undefined
+                      : () => {
+                          userPicked.current = true;
+                          setSelectedId(v.id);
+                        }
+                  }
+                  // Điện thoại: hai dòng (tên / giá) như chip của Mini App, viền 1,5px. Từ md giữ "tên · giá" một dòng để nút mua còn trong 1280×800.
+                  className={`min-h-11 rounded-control border px-4 text-sm transition max-md:flex max-md:flex-col max-md:items-start max-md:border-[1.5px] max-md:px-3.5 max-md:py-2 max-md:text-left ${
                     active
-                      ? 'border-forest-600 bg-forest-50 font-semibold text-forest-700'
-                      : 'border-stone-450 bg-stone-0 text-stone-800 hover:bg-stone-50'
-                  } ${out ? 'opacity-60 line-through' : ''}`}
+                      ? 'border-forest-600 bg-forest-50 font-semibold text-forest-700 max-md:border-[var(--color-border-selected)] max-md:bg-[var(--color-action-secondary-bg)]'
+                      : 'border-stone-450 bg-stone-0 text-stone-800 hover:bg-stone-50 max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]'
+                  } ${out ? 'opacity-60 max-md:opacity-[0.55]' : ''}`}
                 >
-                  {v.name} · {formatVnd(vp.price)}
-                  {vp.isFlash && <span className="ml-1.5 text-xs font-bold text-promo-fg">Giờ vàng</span>}
+                  <span className={`${active ? 'max-md:font-semibold' : 'max-md:font-normal'} ${out ? 'line-through' : ''} max-md:text-sm`}>{v.name}</span>
+                  <span aria-hidden="true" className="max-md:hidden">
+                    {' · '}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-0.5 max-md:text-xs max-md:font-normal ${
+                      out
+                        ? 'max-md:text-[var(--color-text-disabled)]'
+                        : vp.isFlash
+                          ? 'max-md:text-[var(--color-text-price-deal)]'
+                          : active
+                            ? 'max-md:text-[var(--color-text-brand)]'
+                            : 'max-md:text-[var(--color-text-secondary)]'
+                    }`}
+                  >
+                    {out ? (
+                      'Hết hàng'
+                    ) : (
+                      <>
+                        {vp.isFlash && <Zap className="hidden h-3 w-3 max-md:block" strokeWidth={2} aria-hidden="true" />}
+                        {formatVnd(vp.price)}
+                      </>
+                    )}
+                  </span>
+                  {vp.isFlash && !out && <span className="ml-1.5 text-xs font-bold text-promo-fg max-md:sr-only">Giờ vàng</span>}
                 </button>
               );
             })}
@@ -382,11 +396,12 @@ export default function AddToCart({
         </div>
       )}
 
+      {/* Điện thoại: dòng nhắc tồn thấp nằm ở khối thông tin chính dưới Điểm Xanh như Mini App (`PdpLowStock`), nên ẩn ở đây. */}
       {available && (selected?.stock ?? 0) <= LOW_STOCK_NOTICE && (
-        <p className="mt-3 text-sm font-medium text-warning-fg">Chỉ còn {selected!.stock} sản phẩm</p>
+        <p className="mt-3 text-sm font-medium text-warning-fg max-md:hidden">Chỉ còn {selected!.stock} sản phẩm</p>
       )}
 
-      <div className="mt-4 flex items-center gap-3 max-md:justify-between">
+      <div data-section="pdp-quantity" className={`mt-4 flex items-center gap-3 max-md:order-6 max-md:justify-between ${phoneBand}`}>
         <span className="text-sm font-semibold text-stone-900 md:hidden">Số lượng</span>
         <QuantitySelector value={qty} max={maxQty} onChange={setQty} />
         {/* Từ md: nút thêm giỏ ngay cạnh số lượng. Dưới md hai nút nằm ở thanh dính đáy (bên dưới). */}

@@ -1,4 +1,4 @@
-import { useId, type CSSProperties } from 'react';
+import { Fragment, useId, type CSSProperties, type ReactNode } from 'react';
 import { Store, Tag, Truck, type LucideIcon } from 'lucide-react';
 import type { VoucherView } from '@tubutree/app-core/commerce/voucher';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -28,7 +28,7 @@ const STAMP: Partial<Record<VoucherView['state'], string>> = { used: 'coupon.use
 const TITLE_CLAMP: CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' };
 const TITLE_ONE_LINE: CSSProperties = { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 // Mask chỉ đọc độ trong suốt nên màu là `black` (không phải màu vẽ, không đi qua token). Hai nửa vòng khuyết ở mép trên và dưới cuống (răng cưa vé): hai lớp mask phủ mỗi lớp nửa chiều cao, cộng lại thành một vé liền.
-const NOTCH = 'radial-gradient(circle at 72px 0, transparent 6px, black 6.5px) top / 100% 51% no-repeat, radial-gradient(circle at 72px 100%, transparent 6px, black 6.5px) bottom / 100% 51% no-repeat';
+const NOTCH = 'radial-gradient(circle at 64px 0, transparent 6px, black 6.5px) top / 100% 51% no-repeat, radial-gradient(circle at 64px 100%, transparent 6px, black 6.5px) bottom / 100% 51% no-repeat';
 
 /**
  * Phiếu mã giảm giá dùng chung (thay ba kiểu vẽ rời: coupon-card, chip PDP, phiếu trang thương hiệu). Một nút chính; răng cưa và
@@ -41,10 +41,58 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
   const inactive = v.state === 'used' || v.state === 'expired' || v.state === 'soldout';
   const ineligible = v.state === 'ineligible';
   const stamp = STAMP[v.state] ? fillCopy(STAMP[v.state]!) : null;
-  // Chip chỉ có tiêu đề + điều kiện (kế hoạch P5), một dòng, quá dài thì cắt. Ticket/row thêm mã: không cắt gì, hàng hẹp thì mã xuống dòng nguyên khối (không bao giờ "500…" làm khách đọc nhầm số).
+  // Chip chỉ có tiêu đề + điều kiện (kế hoạch P5), tối đa hai dòng (chữ phụ của khuyến mãi thương hiệu hay kết bằng "với mã X": một dòng sẽ cắt mất mã). Ticket/row thêm mã: không cắt gì,
+  // hàng hẹp thì mã xuống dòng nguyên khối (không bao giờ "500…" làm khách đọc nhầm số).
   const showCode = variant !== 'chip' && Boolean(v.code);
-  const showMeta = Boolean(v.condition) || showCode;
+  // Tên admin đặt là chữ tự do, có thể dài: chip một dòng không có chỗ cho nó. Ở ticket tên đứng hàng riêng, co bằng "…" (không đẩy điều kiện và mã xuống dòng,
+  // phiếu giữ ~88px); hàng chọn mã (row) giữ tên trong dòng meta, SAU điều kiện: tên đã bỏ phần đầu chép nhãn ("cho 3 đơn") là mảnh chữ thường chỉ đọc được
+  // ngay dưới nhãn hoặc sau điều kiện, đứng đầu dòng thì thành mảnh lơ lửng.
+  const name = variant !== 'chip' ? v.name : null;
+  const ticket = variant === 'ticket';
+  const metaName = ticket ? null : name;
+  // Ở ticket mã đứng ở hàng đáy cạnh hạn dùng (để phiếu có tên, mã dài hay hạn dùng không cao hơn phiếu trơn quá một dòng); row giữ mã trong dòng meta.
+  const codeInMeta = showCode && !ticket;
+  const showMeta = Boolean(metaName) || Boolean(v.condition) || codeInMeta;
   const showExpiry = !inactive && v.expiry !== '';
+  const showQuota = !inactive && variant !== 'chip' && Boolean(v.quota);
+  const captionStyle: CSSProperties = { fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)' };
+  const expiryNode = showExpiry && (
+    <span data-testid="voucher-expiry" style={{ ...captionStyle, color: expiring ? 'var(--color-status-warning-fg)' : 'var(--color-text-tertiary)' }}>
+      {v.expiry}
+    </span>
+  );
+  const quotaNode = showQuota && (
+    <span data-testid="voucher-quota" style={{ ...captionStyle, fontWeight: 600, color: 'var(--color-status-warning-fg)' }}>
+      {v.quota}
+    </span>
+  );
+  const codeNode = showCode && (
+    <span data-testid="voucher-code" style={{ whiteSpace: 'nowrap' }}>
+      {v.code}
+    </span>
+  );
+  // Hàng đáy của ticket: hạn dùng · số lượt · mã. Mã (dài nhất, ví dụ 15 ký tự) đứng cuối để hàng hẹp chỉ gãy ở mã: hạn và số lượt đi cùng nhau trên một dòng, phiếu có cả ba cao nhiều nhất hai dòng đáy. Mỗi mục nguyên khối (nowrap) và dấu "·" dính đuôi mục trước, nên gãy dòng không cắt giữa mã hay dấu.
+  const footItems: { key: string; node: ReactNode }[] = [];
+  if (ticket) {
+    if (expiryNode) footItems.push({ key: 'expiry', node: expiryNode });
+    if (quotaNode) footItems.push({ key: 'quota', node: quotaNode });
+    if (codeNode) footItems.push({ key: 'code', node: <span style={{ ...captionStyle, color: 'var(--color-text-tertiary)' }}>{codeNode}</span> });
+  }
+  const metaParts: ReactNode[] = [v.condition || null, metaName, codeInMeta ? codeNode : null].filter(Boolean);
+  const metaNode = showMeta && (
+    <span
+      id={`${uid}-meta`}
+      data-testid="voucher-meta"
+      style={{ display: 'block', minWidth: 0, ...captionStyle, color: 'var(--color-text-tertiary)', ...(variant === 'chip' ? TITLE_CLAMP : null), ...(ticket ? { flex: '0 0 auto', maxWidth: '100%' } : null) }}
+    >
+      {metaParts.map((part, i) => (
+        <Fragment key={i}>
+          {i > 0 ? ' · ' : null}
+          {part}
+        </Fragment>
+      ))}
+    </span>
+  );
   // Không có `reason` thì không vẽ thêm dòng: điều kiện đã nằm ở dòng meta, nút trỏ aria-describedby về đó (không lặp chữ trên màn hình).
   const reasonText = ineligible ? reason ?? '' : '';
   const showPrimary = primary && !inactive;
@@ -58,18 +106,32 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       <span style={{ ...(small ? TITLE_ONE_LINE : TITLE_CLAMP), fontSize: small ? 'var(--type-label-size)' : 'var(--type-body-sm-size)', lineHeight: small ? 'var(--type-label-lh)' : 'var(--type-body-sm-lh)', fontWeight: 700, color: text }}>
         {v.title}
       </span>
-      {showMeta && (
-        <span id={`${uid}-meta`} data-testid="voucher-meta" style={{ display: 'block', minWidth: 0, fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-text-tertiary)', ...(variant === 'chip' ? TITLE_ONE_LINE : null) }}>
-          {v.condition}
-          {v.condition && showCode ? ' · ' : null}
-          {showCode && <span data-testid="voucher-code" style={{ whiteSpace: 'nowrap' }}>{v.code}</span>}
+      {ticket && (showMeta || name) ? (
+        // Ticket: điều kiện (nguyên khối) và tên admin chung một hàng, tên co bằng "…" ở đuôi; mỗi dòng caption là 20px nên một hàng riêng cho tên làm phiếu cao hơn phiếu trơn.
+        <span style={{ display: 'flex', alignItems: 'baseline', columnGap: 'var(--p-space-2)', minWidth: 0, ...captionStyle, color: 'var(--color-text-tertiary)' }}>
+          {metaNode}
+          {showMeta && name && <span aria-hidden="true" style={{ flex: '0 0 auto' }}>·</span>}
+          {name && (
+            <span data-testid="voucher-name" style={{ ...TITLE_ONE_LINE, flex: '1 1 0', minWidth: 0 }}>
+              {name}
+            </span>
+          )}
+        </span>
+      ) : (
+        metaNode
+      )}
+      {footItems.length > 0 && (
+        <span data-testid="voucher-foot" style={{ display: 'flex', flexWrap: 'wrap', columnGap: 'var(--p-space-2)', ...captionStyle }}>
+          {footItems.map((item, i) => (
+            <span key={item.key} style={{ whiteSpace: 'nowrap' }}>
+              {item.node}
+              {i < footItems.length - 1 && <span aria-hidden="true" style={{ ...captionStyle, color: 'var(--color-text-tertiary)' }}> ·</span>}
+            </span>
+          ))}
         </span>
       )}
-      {showExpiry && variant !== 'chip' && (
-        <span data-testid="voucher-expiry" style={{ display: 'block', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: expiring ? 'var(--color-status-warning-fg)' : 'var(--color-text-tertiary)' }}>
-          {v.expiry}
-        </span>
-      )}
+      {!ticket && expiryNode && variant !== 'chip' && <span style={{ display: 'block' }}>{expiryNode}</span>}
+      {!ticket && quotaNode && <span style={{ display: 'block' }}>{quotaNode}</span>}
       {reasonText && (
         <span id={`${uid}-reason`} data-testid="voucher-reason" style={{ display: 'block', fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)', color: 'var(--color-status-warning-fg)' }}>
           {reasonText}
@@ -82,7 +144,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       )}
     </>
   );
-  const bodyStyle: CSSProperties = { flex: '1 1 auto', minWidth: 0, textAlign: 'left', padding: variant === 'ticket' ? '10px 12px' : '6px 0' };
+  const bodyStyle: CSSProperties = { flex: '1 1 auto', minWidth: 0, textAlign: 'left', padding: variant === 'ticket' ? '8px 10px 8px 12px' : '6px 0', ...(variant === 'ticket' ? { display: 'flex', flexDirection: 'column', justifyContent: 'center' } : null) };
   const bodyNode = onDetail ? (
     <button
       type="button"
@@ -115,7 +177,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
         alignSelf: 'center',
         minHeight: 36,
         minWidth: 44,
-        padding: '0 14px',
+        padding: '0 12px',
         border: 'none',
         borderRadius: 'var(--radius-pill)',
         fontFamily: 'inherit',
@@ -126,7 +188,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
         cursor: blocked ? 'default' : 'pointer',
         background: blocked ? 'var(--color-action-primary-bg-disabled)' : 'var(--color-action-primary-bg)',
         color: blocked ? 'var(--color-text-secondary)' : 'var(--color-action-primary-fg)',
-        marginRight: variant === 'ticket' ? 12 : 0,
+        marginRight: variant === 'ticket' ? 10 : 0,
       }}
     >
       {primary.label}
@@ -145,7 +207,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
       >
         <div
           data-testid="voucher-stub"
-          style={{ flex: '0 0 72px', width: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', background: inactive ? 'var(--color-bg-chip)' : palette.stubBg, color: inactive ? 'var(--color-text-tertiary)' : palette.stubFg }}
+          style={{ flex: '0 0 64px', width: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', background: inactive ? 'var(--color-bg-chip)' : palette.stubBg, color: inactive ? 'var(--color-text-tertiary)' : palette.stubFg }}
         >
           <Icon size={24} strokeWidth={1.75} aria-hidden="true" />
         </div>

@@ -71,6 +71,13 @@ describe('SectionTitle / KeyValueRow', () => {
     expect(h.style.fontFamily).toBe('var(--font-ui)');
   });
 
+  it('SectionTitle block: tiêu đề khối trong luồng mua Inter 16/700, -0.01em (Q1)', () => {
+    const h = mount(<SectionTitle block>Cam kết Tubu</SectionTitle>).container.querySelector('h2')!;
+    expect(h.style.fontSize).toBe('var(--type-title-sm-size)');
+    expect(h.style.fontWeight).toBe('700');
+    expect(h.style.letterSpacing).toBe('-0.01em');
+  });
+
   it('KeyValueRow hiện nhãn và giá trị; emphasis đậm hơn và to hơn', () => {
     const plain = mount(<KeyValueRow label="Phí ship" value="15.000đ" />).container;
     expect(plain.textContent).toBe('Phí ship15.000đ');

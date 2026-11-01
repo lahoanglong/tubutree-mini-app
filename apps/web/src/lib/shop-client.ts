@@ -18,7 +18,7 @@ export interface CartLine {
   slug: string;
   thumbnail: string | null;
   unitPrice: number;
-  /** Giá niêm yết trước sale và Giờ vàng: lớn hơn `unitPrice` thì dòng đang giảm (gạch giá, "Tiết kiệm"). API cũ chưa trả. */
+  /** Giá gạch của dòng theo `strikePrice` (giá đang bán khi Giờ vàng thắng, còn lại giá niêm yết): lớn hơn `unitPrice` thì dòng đang giảm (gạch giá, "Tiết kiệm"). API cũ chưa trả. */
   listUnitPrice?: number | null;
   quantity: number;
   stock: number;

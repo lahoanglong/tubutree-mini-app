@@ -100,6 +100,14 @@ describe('BestSellersView — tiêu đề, tab, hạng', () => {
     expect(productCalls()).toEqual([{ sort: 'best_seller_30d', limit: 20, page: 1 }]);
   });
 
+  it('từ md hàng tab dính rộng bằng cả khung trang cộng đệm (lùi đúng đệm md 24px) để nền che bóng thẻ tràn ra mép phải khi cuộn; điện thoại giữ lùi 16px', async () => {
+    const { container } = mount();
+    await flush();
+    const band = container.querySelector<HTMLElement>('.sticky-below-back')!;
+    for (const cls of ['-mx-4', 'px-4', 'md:-mx-6', 'md:px-6']) expect(band.className, cls).toContain(cls);
+    expect(band.className).not.toMatch(/md:mx-0|md:px-0/);
+  });
+
   it('tab: tablist có tên, "Tất cả" đang chọn, danh mục hết hàng không thành tab', async () => {
     const { container } = mount();
     await flush();
@@ -149,6 +157,18 @@ describe('BestSellersView — tiêu đề, tab, hạng', () => {
       scrollTo.mockRestore();
       scrollY.mockRestore();
     }
+  });
+
+  it('đang lọc theo danh mục mà cây chưa về: vùng danh sách mang tên trang chứ không phải "Tất cả"; cây về thì mang tên danh mục', async () => {
+    nav.search = 'category=c-baby';
+    let release!: () => void;
+    routes['/categories'] = () => new Promise((resolve) => { release = () => resolve(TREE); });
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('[role="tabpanel"]')!.getAttribute('aria-label')).toBe('Bán chạy nhất');
+    release();
+    await flush();
+    expect(container.querySelector('[role="tabpanel"]')!.getAttribute('aria-label')).toBe('Cho bé');
   });
 
   it('vào thẳng ?category=<gốc>: tab đó được chọn; id lạ sau khi cây tải thì "Tất cả" không lọc', async () => {
@@ -261,5 +281,23 @@ describe('BestSellersView — rỗng và lỗi', () => {
     click(byText(alert, 'button', 'Thử lại'));
     await flush();
     expect(ranks(container)).toHaveLength(40);
+  });
+
+  it('dòng thước đo: "Theo lượt bán 30 ngày qua"; API cũ từ chối best_seller_30d (400) thì lùi về best_seller và ghi "Theo tổng lượt bán"', async () => {
+    const first = mount();
+    await flush();
+    expect(first.container.textContent).toContain('Theo lượt bán 30 ngày qua');
+    expect(first.container.textContent).not.toContain('Theo tổng lượt bán');
+    first.unmount();
+
+    routes['/products'] = (q) => {
+      if (q?.sort === 'best_seller_30d') throw Object.assign(new Error('400'), { status: 400 });
+      return pageOf(1, 20, 1, 45);
+    };
+    const legacy = mount();
+    await flush();
+    expect(productCalls().map((q) => q?.sort)).toContain('best_seller');
+    expect(legacy.container.textContent).toContain('Theo tổng lượt bán');
+    expect(legacy.container.textContent).not.toContain('Theo lượt bán 30 ngày qua');
   });
 });

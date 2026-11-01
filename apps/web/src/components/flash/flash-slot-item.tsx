@@ -4,7 +4,7 @@
 import { useId, type CSSProperties } from 'react';
 import type { FlashSlotItem as FlashSlotItemData, FlashSlotStatus } from '@tubutree/app-core/api/flash-sale';
 import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
-import { slotBuyLabel, slotItemNote, slotRemindLabel } from '@tubutree/app-core/commerce/flash-slots';
+import { slotBuyLabel, slotItemNote, slotItemNoteSpoken, slotRemindLabel } from '@tubutree/app-core/commerce/flash-slots';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { flashCardProduct, soldPercent } from '@/lib/flash-display';
@@ -83,6 +83,7 @@ export function FlashSlotItem({ item, slotStatus, reminded, remindPending, onBuy
       // Sản phẩm nhiều phân loại thì Giờ vàng chỉ gắn vào MỘT phân loại: `?v=` mở trang chi tiết đúng phân loại đó (chỉ khi suất thật sự rẻ hơn), không ra giá thường.
       href={productHref(encodeURIComponent(item.productSlug), view.isFlash ? item.variationId : null)}
       note={slotItemNote(item)}
+      noteSpoken={slotItemNoteSpoken(item)}
       dimMedia={item.soldOut}
       footerHeight={SOLD_FOOTER_HEIGHT}
       footer={

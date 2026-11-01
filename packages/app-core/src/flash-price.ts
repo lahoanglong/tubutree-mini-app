@@ -1,3 +1,4 @@
+import { strikePrice } from '@tubutree/shared-types';
 import { serverNow } from './server-clock';
 
 /**
@@ -90,11 +91,20 @@ export function cardPricing(
         Number(isRep(b)) - Number(isRep(a)) ||
         (a.variationId < b.variationId ? -1 : a.variationId > b.variationId ? 1 : 0),
     )[0];
+  // `standingOf` chỉ chọn suất thắng (giá khách trả). Giá gạch chỉ đến từ `strikePrice`, cùng luật với PDP và dòng giỏ.
   if (item) {
-    const view = discountView(item.flashPrice, standingOf(item));
+    const own = item.retailPrice != null;
+    const view = discountView(
+      item.flashPrice,
+      strikePrice({
+        retailPrice: own ? item.retailPrice! : product.basePrice,
+        salePrice: own ? item.salePrice : product.salePrice,
+        flashPrice: item.flashPrice,
+      }),
+    );
     return { price: item.flashPrice, isFlash: true, salePct: view.salePct, compareAt: view.compareAt, flashVariationId: item.variationId };
   }
-  const view = discountView(cardStanding, product.basePrice);
+  const view = discountView(cardStanding, strikePrice({ retailPrice: product.basePrice, salePrice: product.salePrice }));
   return { price: cardStanding, isFlash: false, salePct: view.salePct, compareAt: view.compareAt };
 }
 
@@ -137,7 +147,7 @@ export function variationPricing(
   const standing = v.salePrice ?? v.retailPrice;
   const isFlash = !!item && item.flashPrice < standing;
   const price = isFlash ? item!.flashPrice : standing;
-  const view = discountView(price, isFlash ? standing : v.retailPrice);
+  const view = discountView(price, strikePrice({ retailPrice: v.retailPrice, salePrice: v.salePrice, flashPrice: item?.flashPrice }));
   return { price, isFlash, salePct: view.salePct, compareAt: view.compareAt, ...(isFlash && item!.endAt ? { endAt: item!.endAt } : {}) };
 }
 

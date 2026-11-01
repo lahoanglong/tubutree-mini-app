@@ -17,6 +17,9 @@ export const mini = {
   /** Nút phụ nền xanh nhạt không viền (--color-action-secondary-*), thay nút trắng viền stone-450. */
   secondary:
     'max-md:border-transparent max-md:bg-[var(--color-action-secondary-bg)] max-md:text-[color:var(--color-action-secondary-fg)] max-md:hover:bg-[var(--color-action-secondary-bg-pressed)]',
+  /** Nút chữ thương hiệu không nền không viền (Button ghost của Mini App), thay nút trắng viền stone-450 của ui.btnSecondary. */
+  ghost:
+    'max-md:border-transparent max-md:bg-transparent max-md:text-[color:var(--color-action-ghost-fg)] max-md:hover:bg-transparent',
   /** Ô ảnh/icon nền --color-bg-subtle (sage-50) thay bg-stone-100. */
   thumb: 'max-md:bg-[var(--color-bg-subtle)]',
 } as const;

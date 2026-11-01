@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { collectionView } from '@tubutree/app-core/commerce/collection-view';
 import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
+import { seeAllLabel } from '@tubutree/app-core/commerce/see-all';
 import { comboTotals } from '@tubutree/app-core/commerce/shop-page';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useNotify } from '../../hooks/use-notify';
@@ -116,10 +117,11 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false }
   const noteById = new Map(shown.map((it) => [it.product.id, it.note ?? undefined]));
   const noteOf = (p: ProductCardData) => noteById.get(p.id);
   const hasMore = layout === view.layout ? view.hasMore : collection.items.length > shown.length;
+  const seeAll = seeAllLabel(view.total);
   const action =
-    hasMore && onSeeAll
+    hasMore && onSeeAll && seeAll
       ? {
-          label: fillCopy('shop.seeAllN', { n: view.total }),
+          label: seeAll,
           onPress: onSeeAll,
           spoken: fillCopy('shop.seeAllNSpoken', { n: view.total, title: collection.title }),
         }
@@ -131,12 +133,12 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false }
       {layout === 'rail' && (
         // Lề âm bù lề trang 16px của cột chứa (kệ có đệm 12px chừa bóng thẻ): thẻ đầu kệ thẳng với tiêu đề và với kệ Trang chủ, như BLEED của web.
         <div data-testid="shop-rail" className="tubu-bleed">
-          <ProductRail items={cards} variant="rail-md" label={collection.title} showBrand={showBrand} noteOf={noteOf} />
+          <ProductRail items={cards} variant="rail-md" label={collection.title} showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} />
         </div>
       )}
       {layout === 'grid' && (
         <div data-testid="shop-grid">
-          <ProductGrid items={cards} variant="grid" showBrand={showBrand} noteOf={noteOf} />
+          <ProductGrid items={cards} variant="grid" showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} />
         </div>
       )}
       {layout === 'line' && (

@@ -119,6 +119,16 @@ describe('BestSellersPage (Mini)', () => {
     expect(productCalls().at(-1)).toEqual({ sort: 'best_seller_30d', limit: 20, page: 1 });
   });
 
+  it('đang lọc theo danh mục mà cây chưa về: vùng danh sách mang tên trang chứ không phải "Tất cả"; cây về thì mang tên danh mục', async () => {
+    let release!: () => void;
+    mocks.fetchCategories.mockImplementation(() => new Promise((resolve) => { release = () => resolve(TREE); }));
+    renderAt('/best-sellers?category=c-baby');
+    await screen.findByText('Sản phẩm 100');
+    expect(screen.getByRole('tabpanel')).toHaveAccessibleName('Bán chạy nhất');
+    release();
+    await waitFor(() => expect(screen.getByRole('tabpanel')).toHaveAccessibleName('Cho bé'));
+  });
+
   it('cây danh mục rỗng hoặc lỗi (như PROD hiện nay): chỉ còn tab "Tất cả", danh sách vẫn hiện', async () => {
     mocks.fetchCategories.mockResolvedValue([]);
     const first = renderAt();
@@ -186,5 +196,15 @@ describe('BestSellersPage (Mini)', () => {
     renderAt();
     await screen.findByText('Sản phẩm 1');
     expect(productCalls().map((q) => q.sort)).toEqual(['best_seller_30d', 'best_seller']);
+    // Đang xếp theo tổng lượt bán nên dòng thước đo không được vẫn ghi "30 ngày qua".
+    expect(screen.getByText('Theo tổng lượt bán')).toBeInTheDocument();
+    expect(screen.queryByText('Theo lượt bán 30 ngày qua')).not.toBeInTheDocument();
+  });
+
+  it('API có best_seller_30d: dòng thước đo ghi "Theo lượt bán 30 ngày qua"', async () => {
+    renderAt();
+    await screen.findByText('Sản phẩm 1');
+    expect(screen.getByText('Theo lượt bán 30 ngày qua')).toBeInTheDocument();
+    expect(screen.queryByText('Theo tổng lượt bán')).not.toBeInTheDocument();
   });
 });

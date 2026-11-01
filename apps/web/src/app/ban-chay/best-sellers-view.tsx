@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import type { CategoryDTO, PageResponse, ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import {
-  BEST_SELLERS_ALL_KEY, BEST_SELLERS_PAGE_LIMIT, bestSellerScope, bestSellerTabs, bestSellersHref, bestSellersRankFrom,
+  BEST_SELLERS_ALL_KEY, BEST_SELLERS_PAGE_LIMIT, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersBasisCopy, bestSellersHref, bestSellersRankFrom,
 } from '@tubutree/app-core/browse/best-sellers';
 import { bestSellersListQuery } from '@tubutree/app-core/queries/browse';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
@@ -66,7 +66,7 @@ export default function BestSellersView({ initial = null, categories: initialCat
   const tabs = categoriesQ.isLoading ? null : bestSellerTabs(categoriesQ.data);
   const scope = bestSellerScope(tabs, params.get('category'));
   const tabItems = tabs ?? bestSellerTabs(undefined);
-  const activeLabel = tabItems.find((t) => t.key === scope.tab)?.label ?? fillCopy('rank.tabAll');
+  const activeLabel = bestSellerPanelLabel(tabs, scope.tab);
   const page = parsePage(params.get('page'));
 
   const seeded = initial !== null && initial.category === scope.category && initial.startPage === page ? initial : null;
@@ -115,9 +115,9 @@ export default function BestSellersView({ initial = null, categories: initialCat
   return (
     <>
       <ListingBreadcrumb trail={[{ label: fillCopy('browse.crumbHome'), href: '/' }, { label: title }]} />
-      <PageHeader title={title} subtitle={fillCopy('rank.basis')} parentHref="/" />
-      {/* Hàng tab dính dưới thanh lùi đặc ở điện thoại (`sticky-below-back` đặt top đúng), dưới thanh đầu từ md. */}
-      <div className="sticky-below-back sticky top-0 z-[2] -mx-4 bg-[var(--color-bg-canvas)] px-4 py-2 md:top-[var(--header-h)] md:mx-0 md:px-0">
+      <PageHeader title={title} subtitle={bestSellersBasisCopy(products.data?.pages)} parentHref="/" />
+      {/* Hàng tab dính dưới thanh lùi đặc ở điện thoại (`sticky-below-back` đặt top đúng), dưới thanh đầu từ md. Từ md nền lùi đúng đệm khung (24px) mỗi bên: bóng thẻ tràn ra ngoài khung nếu nền hẹp hơn thì lộ thành vệt ở mép phải khi cuộn. */}
+      <div className="sticky-below-back sticky top-0 z-[2] -mx-4 bg-[var(--color-bg-canvas)] px-4 py-2 md:top-[var(--header-h)] md:-mx-6 md:px-6">
         <div className="md:w-fit md:max-w-full">
           <SegmentedTabs scroll label={fillCopy('rank.tabsLabel')} items={tabItems} value={scope.tab} onChange={pickTab} />
         </div>

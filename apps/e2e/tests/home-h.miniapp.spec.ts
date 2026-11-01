@@ -92,7 +92,7 @@ test.describe('Trang chủ — không nhảy bố cục', () => {
 });
 
 test.describe('Trang chủ — thẻ thành viên tên dài', () => {
-  test('tên rất dài cắt "…" trên một dòng: thẻ cao bằng thẻ tên ngắn (≤ 2px) và không tràn ngang', async ({ page, api }) => {
+  test('lời chào dùng tên gọi (từ cuối); tên gọi một từ rất dài vẫn cắt "…" trên một dòng: thẻ cao bằng thẻ tên ngắn (≤ 2px) và không tràn ngang', async ({ page, api }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     mockDiscovery(api, { returning: true });
     api.get('/me/loyalty', {
@@ -101,7 +101,8 @@ test.describe('Trang chủ — thẻ thành viên tên dài', () => {
       nextTier: { id: 't2', name: 'Mầm Xanh', minPoints: 3000, pointsToGo: 1200 },
     });
     const heights: number[] = [];
-    for (const name of ['An', 'Nguyễn Thị Phương Thảo Nguyên Vũ Khánh Linh Trần Gia Bảo']) {
+    const names = ['An', 'Nguyễn Thị Phương Thảo Nguyên Vũ Khánh Linh Trần Gia Bảo', `Trần ${'Anh'.repeat(20)}`];
+    for (const name of names) {
       api.post('/auth/refresh', { ...E2E_TOKENS, user: makeUser({ id: 'user-4b', fullName: name }) });
       api.post('/auth/guest', { ...E2E_TOKENS, user: makeUser({ id: 'user-4b', fullName: name }) });
       api.post('/auth/zalo-mini-app', { ...E2E_TOKENS, user: makeUser({ id: 'user-4b', fullName: name }) });
@@ -109,11 +110,13 @@ test.describe('Trang chủ — thẻ thành viên tên dài', () => {
       await page.goto('/');
       const card = page.getByRole('region', { name: 'Thẻ thành viên' });
       await expect(card).toContainText('1.800', { timeout: 15_000 });
-      await expect(card).toContainText(name);
+      const given = name.split(' ').pop()!;
+      await expect(card).toContainText(`Chào ${given}`);
+      if (name.includes(' ')) await expect(card).not.toContainText('Trần');
       heights.push((await card.boundingBox())!.height);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     }
-    expect(Math.abs(heights[1]! - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên dài ${heights[1]}px`).toBeLessThanOrEqual(2);
+    for (const [i, h] of heights.entries()) expect(Math.abs(h - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên ${names[i]} ${h}px`).toBeLessThanOrEqual(2);
   });
 });
 
@@ -155,7 +158,7 @@ test.describe('Trang chủ — chấm đỏ Ưu đãi và Cộng đồng', () =>
     await expect(page.getByTestId('offers-dot')).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: /^Ưu đãi/ }).click();
     await expect(page.getByRole('heading', { name: /Ưu đãi/ }).first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Sắp hết hạn').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('group', { name: /Giảm 10%/ }).getByText('Còn 2 ngày')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('offers-dot')).toBeVisible();
   });
 
@@ -165,7 +168,7 @@ test.describe('Trang chủ — chấm đỏ Ưu đãi và Cộng đồng', () =>
     await page.goto('/');
     await expect(page.getByTestId('offers-dot')).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: /^Ưu đãi/ }).click();
-    await expect(page.getByText('Sắp hết hạn').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('group', { name: /Giảm 10%/ }).getByText('Còn 2 ngày')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('offers-dot')).toHaveCount(0);
     await page.goto('/');
     await expect(page.getByRole('region', { name: 'Cộng đồng' })).toBeVisible({ timeout: 15_000 });

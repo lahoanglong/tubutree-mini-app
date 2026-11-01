@@ -4,8 +4,9 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
-import { collectionView } from '@tubutree/app-core/commerce/collection-view';
+import { collectionView, railFitsRow } from '@tubutree/app-core/commerce/collection-view';
 import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
+import { seeAllLabel } from '@tubutree/app-core/commerce/see-all';
 import { comboTotals } from '@tubutree/app-core/commerce/shop-page';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -97,7 +98,7 @@ function ComboSection({ collection, pct, preview }: { collection: ShopSectionPro
 
   return (
     <Section id={`shop-col-${collection.id}`} label={collection.title}>
-      <div data-testid="shop-combo">
+      <div data-testid="shop-combo" className="lg:max-w-xl">
         <ComboCard title={collection.title} items={views} pct={pct} total={total} comboTotal={comboTotal} onAddAll={onAddAll} busy={mutation.isPending} />
         <div role="status" className="mt-2 text-sm">
           {result && <p className={result.ok ? 'text-success-fg' : 'text-danger-fg'}>{result.text}</p>}
@@ -127,10 +128,12 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false }
   const noteById = new Map(shown.map((it) => [it.product.id, it.note ?? undefined]));
   const noteOf = (p: ProductCardType) => noteById.get(p.id);
   const hasMore = view.layout === 'combo' ? collection.items.length > shown.length : view.hasMore;
+  const seeAll = seeAllLabel(view.total);
+  const railAsGrid = layout === 'rail' && !preview && railFitsRow(cards.length);
   const action =
-    hasMore && onSeeAll
+    hasMore && onSeeAll && seeAll
       ? {
-          label: fillCopy('shop.seeAllN', { n: view.total }),
+          label: seeAll,
           onPress: onSeeAll,
           spoken: fillCopy('shop.seeAllNSpoken', { n: view.total, title: collection.title }),
         }
@@ -140,13 +143,19 @@ export function ShopSection({ collection, showBrand, onSeeAll, preview = false }
     <Section id={`shop-col-${collection.id}`}>
       <SectionHeader title={collection.title} action={action} />
       {layout === 'rail' && (
-        <div data-testid="shop-rail">
-          <ProductRail items={cards} variant="rail-md" label={collection.title} showBrand={showBrand} noteOf={noteOf} />
+        <div data-testid="shop-rail" className={railAsGrid ? 'lg:hidden' : undefined}>
+          <ProductRail items={cards} variant="rail-md" label={collection.title} showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} />
+        </div>
+      )}
+      {railAsGrid && (
+        <div data-testid="shop-rail-lg" className="hidden lg:block">
+          {/* Lưới mặc định (`GRID_PRODUCTS`: 5 cột lg, 6 cột xl) như tab Sản phẩm: thẻ cùng bề rộng; hàng chưa đầy dồn trái như hàng cuối của lưới đó. */}
+          <ProductGrid items={cards} variant="grid" showBrand={showBrand} showWishlist noteOf={noteOf} />
         </div>
       )}
       {layout === 'grid' && (
         <div data-testid="shop-grid">
-          <ProductGrid items={cards} variant="grid" showBrand={showBrand} noteOf={noteOf} />
+          <ProductGrid items={cards} variant="grid" showBrand={showBrand} showWishlist={!preview} noteOf={noteOf} />
         </div>
       )}
       {layout === 'line' && (

@@ -35,8 +35,16 @@ describe('FlashSlotItem (web): khung đang diễn ra', () => {
     expect(c.querySelector('[data-ds-variant="line"]')).not.toBeNull();
     expect(c.textContent).toContain('79.000đ');
     expect(c.textContent).toContain('129.000đ');
-    expect(c.textContent).toContain('Mỗi khách tối đa 5');
+    expect(c.textContent).toContain('Tối đa 5/khách');
     expect(c.textContent).toContain('Đã bán 60%');
+  });
+
+  it('trình đọc nghe "Tối đa 5 sản phẩm mỗi khách, 500g", không nghe "gạch chéo" (F10a)', () => {
+    const c = show({ ...ITEM, variationName: '500g' });
+    expect(c.querySelector('[data-ds-part="note"]')!.getAttribute('aria-hidden')).toBe('true');
+    const spoken = c.querySelector(`#${CSS.escape(link(c).getAttribute('aria-describedby')!)}`)!.textContent!;
+    expect(spoken).toMatch(/Tối đa 5 sản phẩm mỗi khách, 500g$/);
+    expect(spoken).not.toContain('/');
   });
 
   it('nút Mua ngay mang tên sản phẩm, bấm gọi onBuy và không đi theo liên kết sản phẩm', () => {
@@ -55,9 +63,9 @@ describe('FlashSlotItem (web): khung đang diễn ra', () => {
     expect(link(c).getAttribute('aria-label')).toBe('Serum Bã Trầu');
   });
 
-  it('tên phân loại hiện cùng dòng giới hạn khi sản phẩm nhiều phân loại', () => {
+  it('tên phân loại hiện sau con số giới hạn, cùng một dòng, khi sản phẩm nhiều phân loại', () => {
     const c = show({ ...ITEM, variationName: '500g' });
-    expect(c.textContent).toContain('500g · Mỗi khách tối đa 5');
+    expect(c.textContent).toContain('Tối đa 5/khách · 500g');
   });
 });
 

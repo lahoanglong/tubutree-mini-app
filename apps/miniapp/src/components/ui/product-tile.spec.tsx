@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { productCardView, type CardVariant, type ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
-import { tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
+import { META_SHORT_MAX_CHARS, tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
 
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock('zmp-ui', async (orig) => ({ ...(await orig<Record<string, unknown>>()), useNavigate: () => navigate }));
@@ -66,6 +66,20 @@ describe('ProductTile: biến thể và khung', () => {
     expect(body(container).style.minHeight).toBe(`${tileBodyHeight('grid', { brand: false })}px`);
   });
 
+  it('tên đã chứa thương hiệu: không in chữ nhưng giữ khe, thân cao bằng thẻ có thương hiệu (tên các thẻ cùng hàng thẳng hàng)', () => {
+    for (const variant of ['grid', 'rail-md'] as const) {
+      const { container, unmount } = render(
+        <ProductTile view={viewOf({ name: 'Serum Bã Trầu Tubu', brand: 'Tubu' }, variant)} variant={variant} href="/p" />,
+      );
+      const brand = container.querySelector('[data-ds-part="brand"]') as HTMLElement;
+      expect(brand).not.toBeNull();
+      expect(brand.textContent).toBe('');
+      expect(brand.style.height).toBe('16px');
+      expect(body(container).style.minHeight).toBe(`${tileBodyHeight(variant, { brand: true })}px`);
+      unmount();
+    }
+  });
+
   it('tên cắt 2 dòng, cao tối thiểu TILE_NAME_MIN_HEIGHT, dòng 22px (không hạ: dấu hoa bị cắt)', () => {
     expect(TILE_NAME_MIN_HEIGHT).toBe(44);
     const long = 'Ẩm Ổn Định Dầu Gội Thảo Mộc Bồ Kết Hương Sả Chanh Nguyên Chất Dung Tích Lớn Cho Cả Gia Đình';
@@ -74,6 +88,60 @@ describe('ProductTile: biến thể và khung', () => {
     expect(text.style.webkitLineClamp).toBe('2');
     expect(text.style.minHeight).toBe('44px');
     expect(text.style.lineHeight).toBe('22px');
+  });
+
+  it('thẻ Giờ vàng cắt tên một dòng (Q11, cao 20px); các thẻ caption khác (rail-sm) vẫn hai dòng 40px', () => {
+    const name = 'Khăn ướt không cồn Bé Na';
+    const flash = render(<ProductTile view={viewOf({ name }, 'flash')} variant="flash" href="/p" />);
+    const flashName = screen.getByRole('button', { name }).firstElementChild as HTMLElement;
+    expect(flashName.style.webkitLineClamp).toBe('1');
+    expect(flashName.style.minHeight).toBe(`${TILE_METRICS.nameFlash}px`);
+    flash.unmount();
+    render(<ProductTile view={viewOf({ name }, 'rail-sm')} variant="rail-sm" href="/p" />);
+    const railName = screen.getByRole('button', { name }).firstElementChild as HTMLElement;
+    expect(railName.style.webkitLineClamp).toBe('2');
+    expect(railName.style.minHeight).toBe(`${TILE_METRICS.nameCaption}px`);
+  });
+
+  it('dòng meta mang bản gọn (data-compact) khi có đủ sao và lượt bán: thẻ hẹp tự đổi sang bản gọn bằng container query, chữ đầy đủ vẫn là textContent của ô meta', () => {
+    const { container } = render(<ProductTile view={viewOf({ ratingAvg: 4.7, sold: 8200 }, 'rank')} variant="rank" href="/p" />);
+    const meta = container.querySelector('[data-ds-part="meta"]') as HTMLElement;
+    expect(meta.textContent).toBe('★ 4,7 · Đã bán 8,2k+');
+    expect(meta.className).toContain('tubu-tile-meta');
+    expect(meta.querySelector('.tubu-meta-text')!.getAttribute('data-compact')).toBe('Đã bán 8,2k+');
+    expect(meta.querySelector('.tubu-meta-full')!.textContent).toBe('★ 4,7 · Đã bán 8,2k+');
+  });
+
+  it('meta chỉ có một nửa (bản gọn trùng bản đầy đủ) hoặc không có gì thì không thêm bản gọn', () => {
+    for (const over of [{ ratingAvg: undefined, sold: 12 }, { ratingAvg: 4.5, sold: undefined }, { ratingAvg: undefined, sold: undefined }]) {
+      const { container, unmount } = render(<ProductTile view={viewOf(over, 'rank')} variant="rank" href="/p" />);
+      expect(container.querySelector('[data-compact]')).toBeNull();
+      unmount();
+    }
+  });
+
+  it('lượt bán từ 100k làm chữ đầy đủ dài hơn trần "ngắn" nên ô gắn data-long; chữ đầy đủ xấu nhất của ngưỡng thường thì không', () => {
+    const attr = (over: Partial<ProductCard>) => {
+      const { container, unmount } = render(<ProductTile view={viewOf({ ratingAvg: 5, ...over }, 'rank')} variant="rank" href="/p" />);
+      const v = container.querySelector('.tubu-meta-text')!.hasAttribute('data-long');
+      unmount();
+      return v;
+    };
+    expect(viewOf({ ratingAvg: 5, sold: 99_900 }, 'rank').meta).toHaveLength(META_SHORT_MAX_CHARS);
+    expect(attr({ sold: 99_900 })).toBe(false);
+    expect(attr({ sold: 8_200 })).toBe(false);
+    expect(attr({ sold: 123_400 })).toBe(true);
+    expect(attr({ sold: 99_900_000 })).toBe(true);
+  });
+
+  it('CSS: ô meta là container; dưới 132px (rank 112px, lưới 320px 122px) chữ gọn thay chữ đầy đủ, rail-md 132px và lưới 360px/375px giữ sao; chữ dài (data-long) đổi dưới 148px', () => {
+    const css = readFileSync(resolve(__dirname, '../../css/tokens.css'), 'utf8');
+    expect(css).toMatch(/\.tubu-tile-meta\s*\{[^}]*container-type:\s*inline-size/);
+    expect(css).toMatch(/\.tubu-meta-text\[data-compact\]::after\s*\{[^}]*content:\s*attr\(data-compact\)/);
+    expect(css).toMatch(/@container \(max-width: 131\.98px\)\s*\{\s*\.tubu-meta-text\[data-compact\] > \.tubu-meta-full\s*\{\s*display:\s*none/);
+    expect(css).toMatch(/@container \(max-width: 147\.98px\)\s*\{\s*\.tubu-meta-text\[data-compact\]\[data-long\] > \.tubu-meta-full\s*\{\s*display:\s*none/);
+    // Ngưỡng cũ 147.98px làm mất sao ở mọi thẻ rail-md và lưới 360px dù chữ đầy đủ vẫn vừa.
+    expect(css).not.toMatch(/@container \(max-width: 147\.98px\)\s*\{\s*\.tubu-meta-text\[data-compact\] >/);
   });
 
   it('giá thường màu giá thường, giá giảm màu tông deal; giá thẻ dùng bậc 16/700', () => {
@@ -170,6 +238,16 @@ describe('ProductTile: nhãn, hết hàng, hạng', () => {
     expect((container.querySelector('[data-ds-part="image-badge"]') as HTMLElement).style.bottom).toBe('8px');
   });
 
+  it('rankPlain (hạng hụt vì kệ trên chiếm): ruy-băng ghi "Bán chạy" không số, màu hạng thường kể cả hạng 1, chữ đọc không nói hạng (P2 #4)', () => {
+    const { container } = render(<ProductTile view={viewOf({}, 'rank', { rank: 1 })} variant="rank" href="/p" rankPlain />);
+    const ribbon = container.querySelector('[data-ds-part="rank"]') as HTMLElement;
+    expect(ribbon).toHaveTextContent('Bán chạy');
+    expect(ribbon.textContent).not.toContain('#');
+    expect(ribbon.style.background).toBe('var(--color-rank-n-bg)');
+    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveAccessibleDescription(/^Bán chạy/);
+    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).not.toHaveAccessibleDescription(/Hạng/);
+  });
+
   it('hạng top 3 dùng màu hạng riêng, từ 4 dùng màu hạng thường, thiếu rank thì không ruy-băng', () => {
     const one = render(<ProductTile view={viewOf({}, 'rank', { rank: 1 })} variant="rank" href="/p" />);
     expect((one.container.querySelector('[data-ds-part="rank"]') as HTMLElement).style.background).toBe('var(--color-rank-1-bg)');
@@ -256,6 +334,24 @@ describe('ProductTile: bấm, nút phụ, ô trang trí', () => {
     expect(screen.getByText('Phân loại 500ml')).toBeInTheDocument();
     expect(within(container).getByTestId('foot')).toBeInTheDocument();
     expect(body(container).style.minHeight).toBe(`${tileBodyHeight('flash', { note: true, footer: 28 })}px`);
+  });
+
+  it('noteSpoken: dòng ghi chú nhìn thấy ẩn khỏi trình đọc, câu đọc vào mô tả của thẻ sau giá (F10a)', () => {
+    const { container } = render(<ProductTile view={viewOf({}, 'line')} variant="line" href="/p" note="Tối đa 2/khách · 500g" noteSpoken="Tối đa 2 sản phẩm mỗi khách, 500g" />);
+    const note = container.querySelector('[data-ds-part="note"]') as HTMLElement;
+    expect(note).toHaveTextContent('Tối đa 2/khách · 500g');
+    expect(note).toHaveAttribute('aria-hidden', 'true');
+    const btn = screen.getByRole('button', { name: 'Serum Bã Trầu' });
+    expect(btn).toHaveAccessibleDescription(/Giá 52\.000đ, Tối đa 2 sản phẩm mỗi khách, 500g$/);
+    expect(btn).not.toHaveAccessibleDescription(/\//);
+  });
+
+  it('noteSpoken rỗng: không thêm gì vào mô tả; không truyền noteSpoken thì dòng ghi chú giữ nguyên cho trình đọc', () => {
+    const empty = render(<ProductTile view={viewOf({}, 'line')} variant="line" href="/p" note="" noteSpoken="" />);
+    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveAccessibleDescription(/Giá 52\.000đ$/);
+    empty.unmount();
+    const plain = render(<ProductTile view={viewOf({}, 'line')} variant="line" href="/p" note="Phân loại 500ml" />);
+    expect(plain.container.querySelector('[data-ds-part="note"]')).not.toHaveAttribute('aria-hidden');
   });
 
   it('note rỗng giữ chỗ dòng ghi chú (thẻ cùng kệ không lệch giá); không truyền note thì không có dòng', () => {

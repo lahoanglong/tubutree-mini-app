@@ -28,6 +28,13 @@ describe('BestSellerRail web — Bán chạy nhất có hạng (Q18)', () => {
     expect(section.querySelector('a[aria-label="Xem tất cả Bán chạy nhất"]')?.getAttribute('href')).toBe('/ban-chay');
   });
 
+  it('basis total (API cũ, xếp theo tổng lượt bán): phụ đề ghi "Theo tổng lượt bán", không còn "30 ngày qua"', () => {
+    mounted = render(<BestSellerRail items={cards(4)} basis="total" loading={false} />);
+    const section = mounted.container.querySelector('section[aria-label="Bán chạy nhất"]')!;
+    expect(section.textContent).toContain('Theo tổng lượt bán');
+    expect(section.textContent).not.toContain('30 ngày qua');
+  });
+
   it('mỗi thẻ có hạng #1, #2, #3... theo thứ tự lượt bán', () => {
     mounted = render(<BestSellerRail items={cards(4)} loading={false} />);
     const text = mounted.container.textContent ?? '';
@@ -35,12 +42,22 @@ describe('BestSellerRail web — Bán chạy nhất có hạng (Q18)', () => {
     expect(text.indexOf('#1')).toBeLessThan(text.indexOf('#2'));
   });
 
-  it('kệ đã bỏ món trùng kệ trên: thẻ ghi hạng thật được truyền vào (#2, #3, #5), không đánh lại từ #1', () => {
+  it('hạng hụt vì kệ trên chiếm (#1, #2, #4) hay mất hạng 1 (#2, #3): thẻ chỉ ghi "Bán chạy" không số; hạng liền 1..k giữ số (P2 #4)', () => {
+    const badges = () => Array.from(mounted!.container.querySelectorAll('[data-ds-part="rank"]')).map((n) => n.textContent);
+    mounted = render(<BestSellerRail items={[card(1), card(2), card(4)]} ranks={[1, 2, 4]} loading={false} />);
+    expect(badges()).toEqual(['Bán chạy', 'Bán chạy', 'Bán chạy']);
+    mounted.unmount();
+    mounted = render(<BestSellerRail items={[card(2), card(3)]} ranks={[2, 3]} loading={false} />);
+    expect(badges()).toEqual(['Bán chạy', 'Bán chạy']);
+    mounted.unmount();
+    mounted = render(<BestSellerRail items={[card(1), card(2), card(3)]} ranks={[1, 2, 3]} loading={false} />);
+    expect(badges()).toEqual(['#1', '#2', '#3']);
+  });
+
+  it('kệ đã bỏ món trùng kệ trên (hạng #2, #3, #5): không đánh lại từ #1 và không ghi số hụt', () => {
     mounted = render(<BestSellerRail items={[card(2), card(3), card(5)]} ranks={[2, 3, 5]} loading={false} />);
     const text = mounted.container.textContent ?? '';
-    for (const rank of ['#2', '#3', '#5']) expect(text).toContain(rank);
-    expect(text).not.toContain('#1');
-    expect(text).not.toContain('#4');
+    for (const rank of ['#1', '#2', '#3', '#4', '#5']) expect(text).not.toContain(rank);
   });
 
   it('rỗng và không lỗi thì ẩn cả khối; rỗng mà lỗi thì khối lỗi có "Thử lại"', () => {
@@ -69,6 +86,17 @@ describe('BestSellerRailQuery (tab Đơn hàng): tự tải, cùng khoá với T
     mounted = render(<BestSellerRailQuery />);
     await flush(8);
     expect(JSON.stringify(mocks.get.mock.calls[0])).toContain('best_seller_30d');
+    expect(mounted.container.textContent).toContain('#1');
+  });
+
+  it('API cũ từ chối best_seller_30d (400): tự lùi về best_seller và phụ đề ghi "Theo tổng lượt bán"', async () => {
+    mocks.get.mockImplementation(async (_path: string, opts?: { query?: { sort?: string } }) => {
+      if (opts?.query?.sort === 'best_seller_30d') throw Object.assign(new Error('bad'), { status: 400 });
+      return { data: cards(5), meta: { page: 1, limit: 12, total: 5 } };
+    });
+    mounted = render(<BestSellerRailQuery />);
+    await flush(8);
+    expect(mounted.container.textContent).toContain('Theo tổng lượt bán');
     expect(mounted.container.textContent).toContain('#1');
   });
 

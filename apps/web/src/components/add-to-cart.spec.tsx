@@ -55,7 +55,8 @@ const mount = (variations = VARIATIONS) => {
   mounted.push(r);
   return r;
 };
-const addButton = (c: HTMLElement) => byText(c, 'button', /Thêm vào giỏ|Hết hàng|Đang thêm/) as HTMLButtonElement;
+// Neo đầu chữ: chip phân loại hết hàng cũng ghi "Hết hàng" nhưng bắt đầu bằng tên phân loại.
+const addButton = (c: HTMLElement) => byText(c, 'button', /^(Thêm vào giỏ|Hết hàng|Đang thêm)/) as HTMLButtonElement;
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -475,6 +476,86 @@ describe('AddToCart — gian hàng chưa nhận đơn (R3-MERCHANT-3)', () => {
   });
 });
 
+describe('AddToCart — khối mua xếp theo order cùng các khối khác của PDP ở điện thoại (như Mini App)', () => {
+  const order = (el: Element | null) => Number(/max-md:order-(\d+)/.exec(el?.className ?? '')?.[1] ?? 0);
+
+  it('gốc là `contents` để chip và Số lượng thành khối con của cột thông tin: chip 5 → Số lượng 6, không còn dòng "Phân loại ›"', async () => {
+    const { container } = mount();
+    await flush();
+    expect(container.firstElementChild!.className).toContain('max-md:contents');
+    const chips = container.querySelector('[data-section="pdp-variation-chips"]')!;
+    const qty = container.querySelector('[data-section="pdp-quantity"]')!;
+    expect(container.querySelector('[data-section="pdp-variation"]')).toBeNull();
+    expect([order(chips), order(qty)]).toEqual([5, 6]);
+    for (const el of [chips, qty]) expect(el.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+  });
+
+  it('một phân loại: không có dòng "Phân loại ›" và không có chip (không để lại dải rỗng)', async () => {
+    const { container } = mount([VARIATIONS[0]!]);
+    await flush();
+    expect(container.querySelector('[data-section="pdp-variation"]')).toBeNull();
+    expect(container.querySelector('[data-section="pdp-variation-chips"]')).toBeNull();
+    expect(container.querySelector('[data-section="pdp-quantity"]')).not.toBeNull();
+  });
+});
+
+describe('AddToCart — chip phân loại hai dòng như Mini App', () => {
+  const FLASH_V2 = {
+    itemId: 'f2', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 200000, retailPrice: 300000,
+    salePrice: null, soldCount: 1, quota: 10, endAt: '2099-10-14T16:00:00.000Z',
+  };
+
+  it('chip đang Giờ vàng có ⚡ và chữ đọc "Giờ vàng", giá màu deal; chip thường không có ⚡', async () => {
+    mocks.getActiveFlashSales.mockResolvedValue([FLASH_V2]);
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    const { container } = mount();
+    await flush();
+    const flash = byText(container, 'button', /500ml/) as HTMLButtonElement;
+    const plain = byText(container, 'button', /250ml/) as HTMLButtonElement;
+    expect(flash.querySelector('svg')).not.toBeNull();
+    expect(flash.textContent).toContain('Giờ vàng');
+    const price = Array.from(flash.querySelectorAll('span')).find((x) => x.textContent?.includes('200.000đ'))!;
+    expect(price.className).toContain('max-md:text-[var(--color-text-price-deal)]');
+    expect(plain.querySelector('svg')).toBeNull();
+    expect(plain.className).toContain('min-h-11');
+    expect(flash.className).toContain('max-md:flex-col');
+  });
+
+  it('chip hết hàng: ghi "Hết hàng" thay giá, tên gạch ngang', async () => {
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 9 });
+    const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }, VARIATIONS[1]!]);
+    await flush();
+    const out = byText(container, 'button', /250ml/) as HTMLButtonElement;
+    expect(out.textContent).toContain('Hết hàng');
+    expect(out.textContent).not.toContain('150.000đ');
+    expect(out.querySelector('.line-through')!.textContent).toBe('250ml');
+  });
+
+  it('chip hết hàng khoá như chip của Mini App: disabled, bấm vào không đổi phân loại đang chọn', async () => {
+    mocks.getProductStock.mockResolvedValue({ v1: 0, v2: 9 });
+    const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }, VARIATIONS[1]!]);
+    await flush();
+    const out = byText(container, 'button', /250ml/) as HTMLButtonElement;
+    const other = byText(container, 'button', /500ml/) as HTMLButtonElement;
+    expect(out.disabled).toBe(true);
+    expect(other.disabled).toBe(false);
+    expect(other.getAttribute('aria-pressed')).toBe('true');
+    click(out);
+    await flush();
+    expect(out.getAttribute('aria-pressed')).toBe('false');
+    expect(other.getAttribute('aria-pressed')).toBe('true');
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 300.000đ');
+  });
+
+  it('"Chỉ còn N" trong khối mua chỉ hiện từ md (điện thoại dùng dòng ở khối thông tin chính)', async () => {
+    mocks.getProductStock.mockResolvedValue({ v1: 3, v2: 9 });
+    const { container } = mount();
+    await flush();
+    const note = Array.from(container.querySelectorAll('p')).find((x) => x.textContent === 'Chỉ còn 3 sản phẩm')!;
+    expect(note.className).toContain('max-md:hidden');
+  });
+});
+
 describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', () => {
   const FLASH_V2 = {
     itemId: 'f2', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 200000, retailPrice: 300000,
@@ -774,6 +855,13 @@ describe('AddToCart — Mua ngay', () => {
     expect(r.container.querySelector('[data-testid="sticky-bar"]')).toBeNull();
   });
 
+  it('gian hàng tạm nghỉ: khối "Tạm thời chưa mua được" xếp ở điện thoại ngay sau chip (order 6), cùng chỗ Số lượng', async () => {
+    const r = render(<AddToCart slug="dau-goi" variations={VARIATIONS} blockedReason="Tạm nghỉ." />);
+    mounted.push(r);
+    await flush();
+    expect(r.container.firstElementChild!.className).toContain('max-md:order-6');
+  });
+
   describe('thanh CTA dính đáy (điện thoại)', () => {
     it('hiện giá theo phân loại và số lượng đang chọn, kèm "Thêm vào giỏ" và "Mua ngay"', async () => {
       const { container } = mount();
@@ -913,23 +1001,19 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
   });
 });
 
-describe('AddToCart — dòng "Phân loại ›" và hết giờ Giờ vàng (P8)', () => {
+describe('AddToCart — bảng chọn Phân loại và hết giờ Giờ vàng (P8)', () => {
   const rowButton = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('[role="button"]')).find((b) => b.textContent?.startsWith('Phân loại')) ?? null;
 
-  it('nhiều phân loại: có dòng "Phân loại ›" (chỉ điện thoại) ghi phân loại đang chọn và giá khách trả; bấm mở bảng chọn', async () => {
+  it('nhiều phân loại: không có dòng "Phân loại ›" (chip đủ tên, giá, hết hàng); bảng chọn vẫn mở khi bấm Thêm vào giỏ ở điện thoại', async () => {
     const realMatchMedia = window.matchMedia;
     window.matchMedia = ((q: string) => ({ matches: q.includes('max-width: 767px'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as never;
     try {
       mocks.sheetProps = null;
       const { container } = mount();
       await flush();
-      const row = rowButton(container)!;
-      expect(row).not.toBeNull();
-      // Ẩn bằng khối bọc: ListRow đặt display:flex inline nên class md:hidden trên chính nó không thắng được.
-      expect(row.parentElement?.className).toContain('md:hidden');
-      expect(row.textContent).toContain('250ml');
-      expect(row.textContent).toContain('150.000đ');
-      click(row);
+      expect(rowButton(container)).toBeNull();
+      expect(container.querySelector('[data-section="pdp-variation"]')).toBeNull();
+      click(addButton(container));
       await flush();
       expect(mocks.sheetProps).not.toBeNull();
     } finally {

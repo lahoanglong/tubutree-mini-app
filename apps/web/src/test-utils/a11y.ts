@@ -70,15 +70,21 @@ export function headingProblems(root: ParentNode): string[] {
   return problems;
 }
 
+const px44 = (value: string) => /^\d+(?:\.\d+)?px$/.test(value) && parseFloat(value) >= 44;
+const hasHit44 = (el: HTMLElement) =>
+  el.classList.contains('tubu-hit-44-square') ||
+  (el.classList.contains('tubu-hit-44') && (/\b(?:min-w-11|w-11)\b/.test(el.className) || px44(el.style.minWidth)));
+
 /**
- * Nút/ô nhập chưa khai vùng chạm 44px (`min-h-11`/`h-11`). jsdom không dàn trang nên kiểm theo lớp Tailwind;
- * radio/checkbox bỏ qua vì nhãn bao quanh mới là vùng chạm, liên kết trong đoạn văn bỏ qua (ngoại lệ inline của WCAG 2.5.8).
+ * Nút/ô nhập chưa khai vùng chạm 44px (`min-h-11`/`h-11`, `tubu-hit-44-square` vẽ vùng chạm vuông 44px bằng ::after, hoặc `tubu-hit-44` kèm
+ * chiều rộng tối thiểu 44px như Chip: ::after của `tubu-hit-44` chỉ giãn theo chiều dọc). jsdom không dàn trang nên kiểm theo lớp Tailwind
+ * và style nội tuyến; radio/checkbox bỏ qua vì nhãn bao quanh mới là vùng chạm, liên kết trong đoạn văn bỏ qua (ngoại lệ inline của WCAG 2.5.8).
  */
 export function smallTouchTargets(root: ParentNode): string[] {
   return Array.from(
     root.querySelectorAll<HTMLElement>('button, input:not([type="radio"]):not([type="checkbox"]):not([type="hidden"]), select, textarea'),
   )
-    .filter((el) => !/\b(?:min-h-11|h-11)\b/.test(el.className) && !(/^\d+(?:\.\d+)?px$/.test(el.style.minHeight) && parseFloat(el.style.minHeight) >= 44))
+    .filter((el) => !/\b(?:min-h-11|h-11)\b/.test(el.className) && !px44(el.style.minHeight) && !hasHit44(el))
     .map((el) => el.outerHTML.slice(0, 120));
 }
 

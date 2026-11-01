@@ -6,6 +6,7 @@ import { listCoupons, updateCoupon, type AdminCoupon, type CouponStatusFilter } 
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
+import { CouponListing } from './coupon-listing';
 import { VnDateInput } from './vn-date-input';
 import { BTN_SMALL, BTN_XS_SECONDARY, FIELD_CLASS, FIELD_XS, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
 
@@ -111,6 +112,12 @@ export function CouponList() {
     patch.mutate({ id: c.id, body: { endAt }, done: `Đã đổi hạn mã ${c.code} đến hết ${formatDate(endAt)}.` }, { onSuccess: onDone });
   };
 
+  const saveListing = (c: AdminCoupon, next: { listed: boolean; title: string | null }) => {
+    setMsg(null);
+    const done = next.listed ? `Mã ${c.code} sẽ hiện ở mục Nhận mã của khách.` : c.listed ? `Đã ẩn mã ${c.code} khỏi mục Nhận mã.` : `Đã lưu tên hiển thị của mã ${c.code}.`;
+    patch.mutate({ id: c.id, body: { listed: next.listed, title: next.title }, done });
+  };
+
   const total = q.data?.meta.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const now = Date.now();
@@ -159,7 +166,7 @@ export function CouponList() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-mono font-semibold text-stone-900">{c.code}</span>
                 <div className="flex flex-wrap gap-1">
-                  {c.scope === 'CLAIM' && <ToneBadge tone="neutral">Ẩn · thẻ hộp hàng</ToneBadge>}
+                  {c.scope === 'CLAIM' && (c.listed ? <ToneBadge tone="success">Hiện ở mục Nhận mã</ToneBadge> : <ToneBadge tone="neutral">Ẩn · thẻ hộp hàng</ToneBadge>)}
                   {c.newCustomerOnly && <ToneBadge tone="info">Chỉ khách mới</ToneBadge>}
                   <ToneBadge tone={st.tone}>{st.label}</ToneBadge>
                 </div>
@@ -179,6 +186,8 @@ export function CouponList() {
                 </button>
                 <EndDateForm coupon={c} pending={patch.isPending} onCommit={extend} />
               </div>
+              {/* key theo giá trị đã lưu: sau khi lưu xong, danh sách tải lại và ô nhập dựng lại đúng với dữ liệu máy chủ. */}
+              <CouponListing key={`${c.id}:${c.listed}:${c.title ?? ''}`} coupon={c} pending={patch.isPending} onSave={(next) => saveListing(c, next)} />
             </li>
           );
         })}

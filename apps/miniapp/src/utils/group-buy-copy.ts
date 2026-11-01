@@ -9,10 +9,7 @@ export interface GroupBuyConfig {
  */
 export function groupBuyPitch(cfg?: GroupBuyConfig | null): string {
   if (cfg && cfg.discountPct > 0 && cfg.targetSize > 0) {
-    return `Rủ đủ ${cfg.targetSize} người, mỗi người nhận mã giảm ${cfg.discountPct}% khi nhóm đủ`;
+    return `Rủ đủ ${cfg.targetSize} người, mỗi người nhận mã giảm giá ${cfg.discountPct}% khi nhóm đủ`;
   }
   return 'Rủ bạn bè cho đủ nhóm, mỗi người nhận mã giảm giá';
 }
-
-/** Menu Cá nhân là danh sách tĩnh nên không đưa con số vào. */
-export const GROUP_BUY_MENU_HINT = 'Rủ bạn mua chung, đủ nhóm nhận mã giảm';

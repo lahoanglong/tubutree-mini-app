@@ -24,6 +24,8 @@ export interface ProductCardProps {
   /** Suất Giờ vàng của nơi gọi (dải Giờ vàng đã có suất trong tay); thiếu thì chọn từ danh sách suất đang chạy, `null` là tắt Giờ vàng. */
   flash?: FlashItem | null;
   rank?: number;
+  /** Hạng không ghi số (xem `ProductTile.rankPlain`). */
+  rankPlain?: boolean;
   inCombo?: boolean;
   showBrand?: boolean;
   note?: string;
@@ -56,6 +58,7 @@ export function ProductCard({
   variant,
   flash: flashProp,
   rank,
+  rankPlain,
   inCombo,
   showBrand,
   note,
@@ -94,6 +97,7 @@ export function ProductCard({
       variant={variant}
       href={productHref(product.slug, view.isFlash ? flash?.variationId : undefined, product.pinnedVariationId)}
       note={note}
+      rankPlain={rankPlain}
       priority={priority}
       onAdd={onAdd}
       addLabel={addLabel}

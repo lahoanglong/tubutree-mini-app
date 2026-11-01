@@ -3,7 +3,7 @@ import { useNavigate } from 'zmp-ui';
 import { Zap } from 'lucide-react';
 import type { CardBadge, CardVariant, ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
-import { tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
+import { META_SHORT_MAX_CHARS, tileBodyHeight, TILE_METRICS } from '@tubutree/app-core/commerce/tile-metrics';
 import { haptic } from '../../utils/haptic';
 import { Badge, type BadgeTone } from './badge';
 import { Button } from './button';
@@ -29,6 +29,8 @@ export interface ProductTileProps {
   addLabel?: string;
   /** Một dòng ghi chú dưới giá (phân loại, "Đã mua 3 lần"). Chuỗi rỗng giữ chỗ dòng đó để thẻ có ghi chú và thẻ không có vẫn thẳng giá trong cùng kệ. */
   note?: string;
+  /** Câu đọc thay dòng `note` cho trình đọc màn hình (ghi chú nhìn thấy có ký hiệu như "/" đọc thành "gạch chéo"). Có thì dòng `note` bị ẩn khỏi cây trợ năng và câu này nằm cuối mô tả của thẻ; rỗng thì không đọc gì thêm. */
+  noteSpoken?: string;
   /** Web: ảnh LCP tải ngay. Mini App tải lười như cũ nên bỏ qua. */
   priority?: boolean;
   /** Nút tim do nơi gọi dựng (cần đăng nhập + API riêng, không thuộc bộ thành phần giao diện). */
@@ -44,6 +46,8 @@ export interface ProductTileProps {
   action?: ReactNode;
   /** Chưa biết giá (đang tải): không in giá, vẫn giữ chỗ. */
   hidePrice?: boolean;
+  /** Hạng hụt vì kệ trên đã chiếm món (Bán chạy nhất đã chống trùng): ruy-băng ghi "Bán chạy" thay "#n" và dùng màu hạng thường, để khách không tưởng kệ lỗi. */
+  rankPlain?: boolean;
   /** State điều hướng (listSource, variationId của suất Giờ vàng, phân loại ghim). */
   navState?: Record<string, unknown>;
   onOpen?: () => void;
@@ -61,10 +65,12 @@ const BADGE_TONE: Record<CardBadge['kind'], BadgeTone> = {
 
 const STACKED: ReadonlySet<CardVariant> = new Set(['rail-sm', 'rail-md', 'flash', 'rank']);
 const CAPTION_NAME: ReadonlySet<CardVariant> = new Set(['rail-sm', 'flash']);
+/** Thẻ Giờ vàng cắt tên một dòng (Q11); các thẻ còn lại hai dòng. */
+const NAME_LINES = (variant: CardVariant): 1 | 2 => (variant === 'flash' ? 1 : 2);
 const FIXED_LINE = (px: number): CSSProperties => ({ lineHeight: `${px}px` });
 
-function rankBackground(rank: number): { background: string; color: string } {
-  if (rank >= 1 && rank <= 3) return { background: `var(--color-rank-${rank}-bg)`, color: 'var(--color-rank-fg)' };
+function rankBackground(rank: number, plain: boolean): { background: string; color: string } {
+  if (!plain && rank >= 1 && rank <= 3) return { background: `var(--color-rank-${rank}-bg)`, color: 'var(--color-rank-fg)' };
   return { background: 'var(--color-rank-n-bg)', color: 'var(--color-rank-n-fg)' };
 }
 
@@ -84,6 +90,7 @@ export function ProductTile({
   onAdd,
   addLabel = 'Thêm',
   note,
+  noteSpoken,
   wishlist,
   imageOverlay,
   footer,
@@ -91,6 +98,7 @@ export function ProductTile({
   dimMedia,
   action,
   hidePrice,
+  rankPlain = false,
   navState,
   onOpen,
 }: ProductTileProps) {
@@ -98,11 +106,12 @@ export function ProductTile({
   const descId = useId();
   const isLine = variant === 'line';
   const out = view.stock === 'out';
-  const hasBrand = view.brandLine !== null && (variant === 'grid' || variant === 'rail-md');
+  // Khe thương hiệu giữ chỗ cả khi chữ bị ẩn vì tên đã chứa thương hiệu (`brandLine` null, `brandSlot` true): tên thẻ cùng hàng không lệch nhau 16px.
+  const hasBrand = (view.brandSlot ?? view.brandLine !== null) && (variant === 'grid' || variant === 'rail-md');
   const caption = CAPTION_NAME.has(variant);
   const hasMetaRow = variant === 'grid' || variant === 'rail-md' || variant === 'rank';
-  const rankSpoken = view.rank !== null && variant === 'rank' ? fillTileCopy('rank.spoken', { n: view.rank }) : null;
-  const description = [rankSpoken, view.spoken.stock, view.spoken.badges, view.spoken.meta ?? null, hidePrice ? null : view.spoken.price]
+  const rankSpoken = view.rank !== null && variant === 'rank' ? (rankPlain ? fillTileCopy('rank.plain') : fillTileCopy('rank.spoken', { n: view.rank })) : null;
+  const description = [rankSpoken, view.spoken.stock, view.spoken.badges, view.spoken.meta ?? null, hidePrice ? null : view.spoken.price, noteSpoken ?? null]
     .filter((x): x is string => Boolean(x))
     .join(', ');
   const hasNote = note !== undefined;
@@ -198,10 +207,10 @@ export function ProductTile({
                 fontSize: 'var(--type-label-size)',
                 fontWeight: 700,
                 fontVariantNumeric: 'tabular-nums',
-                ...rankBackground(view.rank),
+                ...rankBackground(view.rank, rankPlain),
               }}
             >
-              #{view.rank}
+              {rankPlain ? fillTileCopy('rank.plain') : `#${view.rank}`}
             </span>
           )}
           {imageBadge && !isLine && (
@@ -264,10 +273,10 @@ export function ProductTile({
             as="span"
             style={{
               display: '-webkit-box',
-              WebkitLineClamp: 2,
+              WebkitLineClamp: NAME_LINES(variant),
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
-              minHeight: isLine ? undefined : caption ? TILE_METRICS.nameCaption : TILE_METRICS.name,
+              minHeight: isLine ? undefined : variant === 'flash' ? TILE_METRICS.nameFlash : caption ? TILE_METRICS.nameCaption : TILE_METRICS.name,
               ...FIXED_LINE(nameLine),
               ...(isLine ? { fontWeight: 600 } : null),
             }}
@@ -305,20 +314,27 @@ export function ProductTile({
             {price}
           </div>
           {hasNote && (
-            <Text data-ds-part="note" variant="label" tone="tertiary" as="div" style={{ height: TILE_METRICS.note, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...FIXED_LINE(TILE_METRICS.note) }}>
+            <Text data-ds-part="note" aria-hidden={noteSpoken !== undefined || undefined} variant="label" tone="tertiary" as="div" style={{ height: TILE_METRICS.note, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...FIXED_LINE(TILE_METRICS.note) }}>
               {note}
             </Text>
           )}
           {hasMetaRow && (
             <Text
               data-ds-part="meta"
+              className="tubu-tile-meta"
               variant="label"
               tone="tertiary"
               as="div"
               aria-hidden
               style={{ height: TILE_METRICS.meta, marginTop: TILE_METRICS.metaGap, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...FIXED_LINE(TILE_METRICS.meta) }}
             >
-              {view.meta}
+              {view.metaCompact && view.metaCompact !== view.meta ? (
+                <span className="tubu-meta-text" data-compact={view.metaCompact} data-long={(view.meta?.length ?? 0) > META_SHORT_MAX_CHARS ? '' : undefined}>
+                  <span className="tubu-meta-full">{view.meta}</span>
+                </span>
+              ) : (
+                view.meta
+              )}
             </Text>
           )}
         </div>

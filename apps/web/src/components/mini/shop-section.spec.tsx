@@ -88,6 +88,75 @@ describe('ShopSection (web) vẽ theo layout', () => {
     expect(c.querySelector('[data-ds-part="brand"]')).toBeNull();
     expect(Array.from(c.querySelectorAll('[data-ds-part="note"]')).map((n) => n.textContent)).toEqual(['Mình dùng mỗi ngày', '', '']);
   });
+
+  it('xem trước (preview) không vẽ tim yêu thích ở lưới lẫn kệ ngang; khách thật thì có', async () => {
+    for (const layout of ['GRID', 'CAROUSEL'] as const) {
+      const c = col({ layout, items: many(3) });
+      const live = await mount(<ShopSection collection={c} />);
+      expect(live.querySelectorAll('button[aria-label^="Yêu thích"]').length).toBeGreaterThan(0);
+      mounted.pop()!.unmount();
+      const owner = await mount(<ShopSection collection={c} preview />);
+      expect(owner.querySelectorAll('button[aria-label^="Yêu thích"]')).toHaveLength(0);
+      mounted.pop()!.unmount();
+    }
+  });
+});
+
+describe('ShopSection (web) từ lg (G6 #36)', () => {
+  const rail = (n: number, preview = false) => <ShopSection collection={col({ layout: 'CAROUSEL', items: many(n) })} preview={preview} />;
+
+  it('kệ ngang ít món (<= 6): kệ giữ cho dưới lg, thêm lưới cùng cột với lưới Sản phẩm chỉ hiện từ lg, cùng số thẻ', async () => {
+    const c = await mount(rail(4));
+    const railBox = c.querySelector('[data-testid="shop-rail"]')!;
+    const gridBox = c.querySelector('[data-testid="shop-rail-lg"]')!;
+    expect(railBox.className).toContain('lg:hidden');
+    expect(gridBox.className).toContain('hidden');
+    expect(gridBox.className).toContain('lg:block');
+    // Cùng lớp cột với lưới Sản phẩm (`GRID_PRODUCTS`): thẻ bằng bề rộng thẻ của lưới đó, không tự đặt sáu cột riêng (H3 #6).
+    const gridClasses = gridBox.querySelector('ul')!.className.split(/\s+/);
+    for (const cls of ['grid-cols-2', 'md:grid-cols-3', 'lg:grid-cols-5', 'xl:grid-cols-6', 'md:gap-4']) expect(gridClasses, cls).toContain(cls);
+    expect(gridClasses).not.toContain('grid-cols-6');
+    expect(tiles(c, 'shop-rail')).toBe(4);
+    expect(tiles(c, 'shop-rail-lg')).toBe(4);
+  });
+
+  it('hai bản của kệ ít món chỉ cách nhau bằng CSS (một bản display:none ở mỗi khổ), cùng thẻ và ảnh đều lazy nên bản ẩn không tải ảnh (H3 #8)', async () => {
+    const withImage = (n: number) => item(n, { thumbnail: `https://cdn.test/sp-${n}.jpg` });
+    const c = await mount(<ShopSection collection={col({ layout: 'CAROUSEL', items: [1, 2, 3, 4].map(withImage) })} />);
+    const railBox = c.querySelector('[data-testid="shop-rail"]')!;
+    const gridBox = c.querySelector('[data-testid="shop-rail-lg"]')!;
+    // Dưới lg `shop-rail-lg` có `hidden`, từ lg `shop-rail` có `lg:hidden`: luôn đúng một bản nhìn thấy.
+    expect(gridBox.className.split(/\s+/)).toEqual(expect.arrayContaining(['hidden', 'lg:block']));
+    expect(railBox.className.split(/\s+/)).toContain('lg:hidden');
+    const imgs = (box: Element) => Array.from(box.querySelectorAll('img'));
+    expect(imgs(railBox)).toHaveLength(4);
+    expect(imgs(gridBox)).toHaveLength(4);
+    for (const img of [...imgs(railBox), ...imgs(gridBox)]) expect(img.getAttribute('loading')).toBe('lazy');
+  });
+
+  it('kệ nhiều món (> 6): chỉ có kệ ngang cuộn, không lưới thứ hai', async () => {
+    const c = await mount(rail(8));
+    expect(c.querySelector('[data-testid="shop-rail-lg"]')).toBeNull();
+    expect(c.querySelector('[data-testid="shop-rail"]')!.className).not.toContain('lg:hidden');
+    expect(tiles(c, 'shop-rail')).toBe(8);
+  });
+
+  it('xem trước (preview) ở cột hẹp của màn dựng: luôn là kệ ngang, không lưới sáu cột', async () => {
+    const c = await mount(rail(4, true));
+    expect(c.querySelector('[data-testid="shop-rail-lg"]')).toBeNull();
+    expect(c.querySelector('[data-testid="shop-rail"]')!.className).not.toContain('lg:hidden');
+  });
+
+  it('bố cục lưới và hàng dòng không đổi', async () => {
+    const g = await mount(<ShopSection collection={col({ layout: 'GRID', items: many(3) })} />);
+    expect(g.querySelector('[data-testid="shop-rail-lg"]')).toBeNull();
+  });
+
+  it('combo có trần bề rộng từ lg (576px), không giãn hết khung 1152px', async () => {
+    const items = [item(1), item(2), item(3)];
+    const c = await mount(<ShopSection collection={col({ kind: 'COMBO', comboDiscountPct: 10, items })} />);
+    expect(c.querySelector('[data-testid="shop-combo"]')!.className).toContain('lg:max-w-xl');
+  });
 });
 
 describe('ShopSection (web) combo', () => {

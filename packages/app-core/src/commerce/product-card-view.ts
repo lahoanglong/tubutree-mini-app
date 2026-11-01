@@ -1,7 +1,7 @@
 import type { ProductCard } from '../api/catalog';
 import { cardPricing, type FlashPriceItem } from '../flash-price';
 import { isNewProduct } from '../product-badges';
-import { cardMetaLine, cardMetaSpoken } from './card-meta';
+import { cardMetaCompact, cardMetaLine, cardMetaSpoken } from './card-meta';
 import { vnd } from './money';
 import { fillTileCopy, type TileCopyKey } from './tile-copy';
 
@@ -36,7 +36,10 @@ export interface ProductCardView {
   id: string;
   slug: string;
   name: string;
+  /** Chữ dòng thương hiệu; null khi biến thể không có khe, trang tắt (`showBrand=false`) hoặc tên đã chứa thương hiệu. */
   brandLine: string | null;
+  /** Khe dòng thương hiệu có giữ chỗ không: true khi biến thể có khe và `showBrand !== false`, kể cả khi `brandLine` null vì tên đã chứa thương hiệu (thẻ cùng hàng giữ tên thẳng hàng, khung chờ khỏi lệch). Optional để fixture của gói khác vẫn biên dịch. */
+  brandSlot?: boolean;
   /** Ảnh của thẻ; optional để fixture của gói khác (không có ảnh) vẫn biên dịch. */
   thumbnail?: string | null;
   price: number;
@@ -49,6 +52,8 @@ export interface ProductCardView {
   /** Một nhãn đứng đầu dòng tên: combo > Tubu chọn > Được yêu thích > Mới > Miễn phí giao hàng. */
   label: CardBadge | null;
   meta: string | null;
+  /** Bản gọn của `meta` (chỉ "Đã bán 8,2k+") cho thẻ quá hẹp; thẻ chọn bản vừa chỗ theo bề rộng ô meta. Optional để fixture của gói khác vẫn biên dịch. */
+  metaCompact?: string | null;
   stock: 'in' | 'out';
   stockText: string | null;
   rank: number | null;
@@ -71,6 +76,18 @@ const plain = (kind: CardBadgeKind, key: TileCopyKey): CardBadge => {
   const text = fillTileCopy(key);
   return { kind, text, spoken: text };
 };
+
+const fold = (s: string): string => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase().replace(/\s+/g, ' ').trim();
+
+/** Tên đã in thương hiệu như một từ riêng ("Nước rửa chén Fuwa3e" với "Fuwa3e") thì dòng thương hiệu chỉ lặp lại; "Tubutree" không tính là chứa "Tubu". */
+function carriesBrand(name: string, brand: string): boolean {
+  // Xem trước gian hàng CTV và API cũ có thể thiếu trường: kiểu khai là string nhưng giá trị không được tin.
+  if (typeof name !== 'string' || typeof brand !== 'string') return false;
+  const b = fold(brand);
+  if (b === '') return false;
+  const escaped = b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9])${escaped}($|[^a-z0-9])`).test(fold(name));
+}
 
 function imageBadgeOf(variant: CardVariant, isFlash: boolean, pct: number): CardBadge | null {
   const slot = SLOTS[variant].image;
@@ -109,6 +126,7 @@ export function productCardView(input: ProductCardInput): ProductCardView {
   const imageBadge = inStock ? imageBadgeOf(variant, pricing.isFlash, pricing.salePct) : null;
   const label = inStock ? labelOf(input, pricing.price) : null;
   const stockText = inStock ? null : fillTileCopy('stock.out');
+  const brandSlot = SLOTS[variant].brand && input.showBrand !== false;
   const priceNow = fillTileCopy(pricing.isFlash ? 'price.flashSpoken' : 'price.spoken', { price: vnd(pricing.price) });
   const badges = [imageBadge, label].filter((b): b is CardBadge => b !== null).map((b) => b.spoken);
 
@@ -116,7 +134,8 @@ export function productCardView(input: ProductCardInput): ProductCardView {
     id: p.id,
     slug: p.slug,
     name: p.name,
-    brandLine: SLOTS[variant].brand && input.showBrand !== false ? p.brand : null,
+    brandLine: brandSlot && !carriesBrand(p.name, p.brand) ? p.brand : null,
+    brandSlot,
     thumbnail: p.thumbnail ?? null,
     price: pricing.price,
     compareAt: pricing.compareAt,
@@ -126,6 +145,7 @@ export function productCardView(input: ProductCardInput): ProductCardView {
     imageBadge,
     label,
     meta: cardMetaLine(p),
+    metaCompact: cardMetaCompact(p),
     stock: inStock ? 'in' : 'out',
     stockText,
     rank: input.rank ?? null,

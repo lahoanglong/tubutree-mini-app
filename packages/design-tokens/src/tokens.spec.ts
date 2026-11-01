@@ -117,6 +117,7 @@ describe('design-tokens/tokens.css: commerce tokens (P1 tokens-a11y)', () => {
     ['--color-bg-cover', 'var(--forest-700)'],
     ['--color-bg-chip', 'var(--stone-100)'],
     ['--color-track', 'var(--stone-200)'],
+    ['--color-progress-fill-from', 'var(--forest-200)'],
     ['--color-media-outline', 'rgba(28,26,22,.06)'],
     ['--color-verified-bg', 'var(--forest-600)'],
     ['--color-verified-fg', 'var(--stone-0)'],

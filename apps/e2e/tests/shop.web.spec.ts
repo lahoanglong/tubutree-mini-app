@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, makeOrder, makeUser, mockSession, reply, test, type MockApi } from './support/mock-api';
-import { mockHomeEngagement } from './support/discovery-mocks';
+import { checkInStatus, mockHomeEngagement } from './support/discovery-mocks';
+import { assertSeededOnCi, firstPublicBrandSlug, seedShopScreens } from './support/a11y-db';
 import { expectChipHitArea44 } from './support/hit-area';
 import { shortcutLabelProblems } from './support/shortcut-labels';
 
@@ -599,29 +600,47 @@ test.describe('Web: mua chung', () => {
 
 test.describe('Web: nhãn hàng', () => {
   const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT}`;
+  // Seed riêng (idempotent), không dựa vào a11y-shop.web.spec.ts chạy trước: chạy lẻ file này hay đổi thứ tự project vẫn có nhãn công khai.
+  test.beforeAll(async () => assertSeededOnCi(await seedShopScreens()));
 
-  async function firstBrandSlug(request: import('@playwright/test').APIRequestContext) {
-    const res = await request.get(`${API_ORIGIN}/api/brands`).catch(() => null);
-    if (!res?.ok()) return null;
-    return ((await res.json()) as { slug?: string | null }[]).find((b) => b.slug)?.slug ?? null;
-  }
+  const firstBrandSlug = (request: import('@playwright/test').APIRequestContext) => firstPublicBrandSlug(request, API_ORIGIN);
 
   test('đăng nhập: Theo dõi gửi POST rồi đổi thành Đang theo dõi; bấm lại gửi DELETE', async ({ page, api, request }) => {
     const slug = await firstBrandSlug(request);
     test.skip(!slug, 'DB e2e chưa có nhãn công khai nào');
     await signedIn(page);
     mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
-    api.get(`/brand/${slug}/follow-state`, { following: false, followerCount: 3 });
+    // Phiên trả chậm như CI đang nghẽn: nút Theo dõi đã vẽ sẵn mà phiên còn 'loading' (bấm lúc này là noop). Không có khe này thì máy nhanh
+    // không bao giờ tái hiện được lỗi, và bỏ bước chờ ở dưới thì ca vẫn xanh.
+    await page.route('**/auth/refresh', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await route.fallback();
+    });
+    api.get('/me/wishlist/ids', []);
+    api.get(`/brand/${slug}/follow-state`, { following: false, followerCount: 37 });
     api.get(`/brand/${slug}/share-to-earn`, { eligible: false });
-    api.post(`/brand/${slug}/follow`, { following: true, followerCount: 4 });
-    api.delete(`/brand/${slug}/follow`, { following: false, followerCount: 3 });
+    api.post(`/brand/${slug}/follow`, { following: true, followerCount: 38 });
+    api.delete(`/brand/${slug}/follow`, { following: false, followerCount: 37 });
     await page.goto(`/brand/${slug}`);
-    await page.getByRole('button', { name: 'Theo dõi' }).click();
-    await api.waitForCall('POST', `/brand/${slug}/follow`);
-    await expect(page.getByRole('button', { name: 'Đang theo dõi' })).toBeVisible();
-    await page.getByRole('button', { name: 'Đang theo dõi' }).click();
-    await api.waitForCall('DELETE', `/brand/${slug}/follow`);
-    await expect(page.getByRole('button', { name: 'Theo dõi' })).toBeVisible();
+    // Nút Theo dõi có sẵn trong HTML từ server (không aria-pressed) và vẫn không aria-pressed lúc phiên còn đang tải: bấm lúc đó thì click mất,
+    // không có lời gọi POST (CI #113). Chỉ khi client đã hydrate, phiên đăng nhập xong và follow-state về thì mới có `aria-pressed="false"`
+    // và số người theo dõi 37 (số từ mock, không phải số của máy chủ), nên chờ cả hai trước khi bấm. Playwright coi nút không có
+    // aria-pressed là pressed=false, nên phải kiểm thuộc tính thật chứ không dùng bộ lọc `pressed`.
+    await expect(page.getByRole('group', { name: '37 người theo dõi' })).toBeVisible();
+    const follow = page.getByRole('button', { name: 'Theo dõi', exact: true });
+    await expect(follow).toHaveAttribute('aria-pressed', 'false');
+    // waitForCall chỉ tính lời gọi mới: đăng ký trước khi bấm, không thì mock trả ngay và lời gọi đã qua.
+    const followed = api.waitForCall('POST', `/brand/${slug}/follow`);
+    await follow.click();
+    await followed;
+    const following = page.getByRole('button', { name: 'Đang theo dõi', exact: true });
+    await expect(following).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('group', { name: '38 người theo dõi' })).toBeVisible();
+    const unfollowed = api.waitForCall('DELETE', `/brand/${slug}/follow`);
+    await following.click();
+    await unfollowed;
+    await expect(page.getByRole('button', { name: 'Theo dõi', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByRole('group', { name: '37 người theo dõi' })).toBeVisible();
   });
 
   test('khách chưa đăng nhập bấm Theo dõi: sang đăng nhập kèm returnTo về đúng trang nhãn', async ({ page, api, request }) => {
@@ -641,6 +660,7 @@ test.describe('Web: nhãn hàng', () => {
     test.skip(!slug, 'DB e2e chưa có nhãn công khai nào');
     await signedIn(page);
     mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
+    api.get('/me/wishlist/ids', []);
     api.get(`/brand/${slug}/follow-state`, { following: false, followerCount: 3 });
     api.get(`/brand/${slug}/share-to-earn`, { eligible: true, maxAffiliateRate: 15, referralCode: 'AFF1', brandSlug: slug });
     await page.goto(`/brand/${slug}`);
@@ -693,9 +713,39 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await expect(page.getByRole('region', { name: 'Cộng đồng' })).toBeVisible();
     await expect(page.getByTestId('offers-dot')).toBeVisible();
     await page.getByRole('link', { name: /^Ưu đãi/ }).click();
-    await expect(page.getByText('Sắp hết hạn').first()).toBeVisible();
+    await expect(page.getByTestId('voucher-expiry').filter({ hasText: 'Còn 2 ngày' })).toBeVisible();
     await expect(page.getByTestId('offers-dot')).toBeVisible();
   });
+
+  for (const checkedIn of [false, true]) {
+    test(`Ưu đãi ${checkedIn ? 'đã' : 'chưa'} điểm danh: khung chờ Điểm danh cao đúng thẻ thật, Mã của tôi và Đổi quà không bị đẩy khi thẻ về`, async ({ page, api }) => {
+      await login(page, api);
+      let release!: () => void;
+      const hold = new Promise<void>((resolve) => { release = resolve; });
+      mockHomeEngagement(api, { checkedIn, expiringInDays: 2 });
+      api.get('/me/daily-check-in', async () => {
+        await hold;
+        return checkInStatus(checkedIn);
+      });
+      await page.goto('/uu-dai');
+      const skeleton = page.getByRole('region', { name: 'Điểm danh mỗi ngày', exact: true }).locator('.tubu-skeleton');
+      await expect(skeleton).toBeVisible();
+      // Mọi khối khác đã vẽ xong khi thẻ còn là khung chờ: cú nhảy đo được chỉ còn do thẻ về.
+      await expect(page.getByRole('region', { name: 'Mã của tôi', exact: true }).getByTestId('voucher-expiry').first()).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Điểm Xanh của bạn' })).toBeVisible();
+      const top = async (name: string) => (await page.getByRole('region', { name, exact: true }).boundingBox())!.y;
+      const placeholderH = (await skeleton.boundingBox())!.height;
+      const mineY = await top('Mã của tôi');
+      const rewardsY = await top('Đổi quà');
+      release();
+      const card = page.getByTestId('daily-check-in');
+      await expect(card).toBeVisible();
+      await expect(skeleton).toHaveCount(0);
+      expect((await card.boundingBox())!.height, 'thẻ thật lệch khung chờ').toBeCloseTo(placeholderH, 0);
+      expect(await top('Mã của tôi'), 'Mã của tôi bị đẩy khi thẻ về').toBeCloseTo(mineY, 0);
+      expect(await top('Đổi quà'), 'Đổi quà bị đẩy khi thẻ về').toBeCloseTo(rewardsY, 0);
+    });
+  }
 
   test('đã điểm danh + mã sắp hết hạn: mở Ưu đãi xong thì chấm đỏ tắt', async ({ page, api }) => {
     await login(page, api);
@@ -703,7 +753,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await page.goto('/');
     await expect(page.getByTestId('offers-dot')).toBeVisible();
     await page.getByRole('link', { name: /^Ưu đãi/ }).click();
-    await expect(page.getByText('Sắp hết hạn').first()).toBeVisible();
+    await expect(page.getByTestId('voucher-expiry').filter({ hasText: 'Còn 2 ngày' })).toBeVisible();
     await expect(page.getByTestId('offers-dot')).toHaveCount(0);
   });
 
@@ -714,7 +764,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await page.goto('/');
     // login() chỉ đặt cờ phiên trong localStorage (không có cookie) nên HTML đầu là bản khách vãng lai; khi biết có phiên, các khối dưới
     // thẻ thành viên đổi sang khung chờ rồi dựng lại. Đo chip trước lúc đó thì chip bị gỡ khỏi trang giữa chừng.
-    await expect(page.getByText('Chào Nguyễn Văn An')).toBeVisible();
+    await expect(page.getByText('Chào An')).toBeVisible();
     await expect(page.getByTestId('home-settling')).toHaveCount(0);
     const chips = [
       page.getByRole('region', { name: /Dải thương hiệu/ }).getByRole('button').first(),
@@ -905,7 +955,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     expect(Math.abs(settled - firstHtml), `Danh mục ${firstHtml}px (HTML đầu) → ${settled}px (sau đăng nhập)`).toBeLessThanOrEqual(2);
   });
 
-  test('thẻ thành viên: tên rất dài cắt "…" trên một dòng, thẻ cao bằng thẻ tên ngắn (≤ 2px), không tràn ngang', async ({ page, api }) => {
+  test('thẻ thành viên: lời chào dùng tên gọi (từ cuối); tên gọi một từ rất dài cắt "…" trên một dòng, thẻ cao bằng thẻ tên ngắn (≤ 2px), không tràn ngang', async ({ page, api }) => {
     await login(page, api);
     api.get('/me/loyalty', {
       tier: { id: 't1', name: 'Hạt Giống', multiplier: 1, perks: null }, pointsBalance: 1800, pointsConvertedBalance: 0, tierPoints: 1800,
@@ -913,7 +963,8 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
       nextTier: { id: 't2', name: 'Mầm Xanh', minPoints: 3000, pointsToGo: 1200 },
     });
     const heights: number[] = [];
-    for (const name of ['An', 'Nguyễn Thị Phương Thảo Nguyên Vũ Khánh Linh Trần Gia Bảo']) {
+    const names = ['An', 'Nguyễn Thị Phương Thảo Nguyên Vũ Khánh Linh Trần Gia Bảo', `Trần ${'Anh'.repeat(20)}`];
+    for (const name of names) {
       api.post('/auth/refresh', {
         accessToken: 'e2e-token',
         user: { id: 'u1', fullName: name, referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER', pointsBalance: 60, pointsConvertedBalance: 0, walletBalance: 0 },
@@ -921,23 +972,24 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
       await page.goto('/');
       const card = page.getByRole('region', { name: 'Thẻ thành viên' });
       await expect(card).toContainText('1.800', { timeout: 15_000 });
-      await expect(card).toContainText(name);
+      const given = name.split(' ').pop()!;
+      await expect(card).toContainText(`Chào ${given}`);
+      if (name.includes(' ')) await expect(card).not.toContainText('Trần');
       heights.push((await card.boundingBox())!.height);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     }
-    expect(Math.abs(heights[1]! - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên dài ${heights[1]}px`).toBeLessThanOrEqual(2);
+    for (const [i, h] of heights.entries()) expect(Math.abs(h - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên ${names[i]} ${h}px`).toBeLessThanOrEqual(2);
   });
 });
 
 test.describe('Web khách: trang thương hiệu và gian hàng theo khung shop', () => {
   const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT}`;
+  test.beforeAll(async () => assertSeededOnCi(await seedShopScreens()));
   const phone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 768;
 
   /** Thương hiệu công khai đầu tiên và tổng sản phẩm của nó (phân trang thật, 20 mỗi trang). */
   async function brandWithTotal(request: import('@playwright/test').APIRequestContext) {
-    const list = await request.get(`${API_ORIGIN}/api/brands`).catch(() => null);
-    if (!list?.ok()) return null;
-    const slug = ((await list.json()) as { slug?: string | null }[]).find((b) => b.slug)?.slug;
+    const slug = await firstPublicBrandSlug(request, API_ORIGIN);
     if (!slug) return null;
     const res = await request.get(`${API_ORIGIN}/api/brand/public/${slug}/products?page=1&limit=20`).catch(() => null);
     if (!res?.ok()) return null;
@@ -949,6 +1001,11 @@ test.describe('Web khách: trang thương hiệu và gian hàng theo khung shop'
     test.skip(!brand || brand.total === 0, 'DB e2e chưa có thương hiệu công khai nào có sản phẩm');
     api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
     api.get('/config/public', {});
+    // Tab Sản phẩm tải trang từ trình duyệt: chuyển sang API thật để ca vẫn rẽ nhánh theo tổng sản phẩm thật (brandWithTotal).
+    api.get(`/brand/public/${brand!.slug}/products`, async ({ call }) => {
+      const res = await request.get(`${API_ORIGIN}/api/brand/public/${brand!.slug}/products?${call.query.toString()}`);
+      return reply(res.status(), await res.json());
+    });
     await page.goto(`/brand/${brand!.slug}`);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 20_000 });
     await page.getByRole('tab', { name: /^Sản phẩm/ }).click();

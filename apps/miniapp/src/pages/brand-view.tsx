@@ -15,6 +15,7 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { ShareSheet } from '../components/share-sheet';
 import { getDealerMe } from '../services/dealer-api';
 import { BadgePercent, Check, ChevronRight, Leaf, MapPin, Plus, Share2, Store } from 'lucide-react';
+import { seeAllLabel } from '@tubutree/app-core/commerce/see-all';
 import { brandStatsInput, followerStat, promotionVoucher, shopTabs, type ShopTabKey } from '@tubutree/app-core/commerce/shop-page';
 import { shopStats } from '@tubutree/app-core/commerce/shop-stats';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -42,8 +43,11 @@ const PAGE_TITLE = 'Thương hiệu';
 
 /** Số sản phẩm nổi bật trên tab Shop (kệ ngang); phần còn lại ở tab Sản phẩm. */
 const FEATURED_MAX = 10;
-/** Cao thanh nút lùi cố định (56) cộng vùng an toàn phía trên: thanh tab dính ngay dưới nó. */
-const STICKY_TOP = 'calc(var(--safe-top, 0px) + 56px)';
+/**
+ * Thanh tab dính ngay dưới thanh lùi đặc (cao 56px cộng `--safe-top`). `top` của phần tử dính đo từ mép NỘI DUNG của `.zaui-page`, mà trang này
+ * là `page-bleed` (đệm đầu đúng `--safe-top`), nên chỉ còn 56px: cộng thêm `--safe-top` lần nữa thì hở đúng chừng đó px trên máy tai thỏ.
+ */
+const STICKY_TOP = 56;
 const TABS_HEIGHT = 62;
 
 export default function BrandViewPage() {
@@ -133,6 +137,8 @@ export default function BrandViewPage() {
 
   const hasStory = Boolean(b.story || b.origin || b.storyImages.length > 0);
   const productCount = b.productCount ?? b.products.length;
+  // Chỉ có nút khi tab Sản phẩm có nhiều hơn số đang hiện; số trong nhãn là tổng của tab đó.
+  const featuredSeeAll = productCount > featured.length ? seeAllLabel(productCount) : null;
   const stats = [...shopStats(brandStatsInput(b)), ...[followerStat(b.followerCount)].filter((x) => x !== null)];
   const tabs = shopTabs({ productCount, hasStory, hasCategories: false }).map((t) => ({
     key: t.key,
@@ -213,11 +219,11 @@ export default function BrandViewPage() {
         </div>
       )}
 
-      <div ref={tabsRef} style={{ position: 'sticky', top: STICKY_TOP, zIndex: 3, background: 'var(--color-bg-canvas)', padding: '12px 16px 8px', minHeight: TABS_HEIGHT }}>
+      <div ref={tabsRef} data-testid="brand-tabs-sticky" style={{ position: 'sticky', top: STICKY_TOP, zIndex: 3, background: 'var(--color-bg-canvas)', padding: '12px 16px 8px', minHeight: TABS_HEIGHT }}>
         <SegmentedTabs items={tabs} value={tab} onChange={openTab} />
       </div>
 
-      <div role="tabpanel" aria-label={tabs.find((t) => t.key === tab)?.label} style={{ ['--sort-bar-top' as string]: `calc(var(--safe-top, 0px) + 56px + ${TABS_HEIGHT - 12}px)` }}>
+      <div role="tabpanel" aria-label={tabs.find((t) => t.key === tab)?.label} style={{ ['--sort-bar-top' as string]: `${STICKY_TOP + TABS_HEIGHT - 12}px` }}>
         {tab === 'shop' && (
           <div style={{ padding: '0 16px' }}>
             {b.certifications.length > 0 && (
@@ -274,9 +280,9 @@ export default function BrandViewPage() {
                 <SectionHeader
                   title="Sản phẩm nổi bật"
                   action={
-                    productCount > featured.length
+                    featuredSeeAll
                       ? {
-                          label: fillCopy('shop.seeAllN', { n: productCount }),
+                          label: featuredSeeAll,
                           onPress: () => openTab('products'),
                           spoken: fillCopy('shop.seeAllNSpoken', { n: productCount, title: 'Sản phẩm nổi bật' }),
                         }

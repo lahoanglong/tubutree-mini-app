@@ -1,8 +1,9 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { flashSlotItemsQuery, flashSlotsQuery } from '@tubutree/app-core/queries/flash-sale';
 import { initialSlotId, slotAfterEnd, slotCategoryChips, slotListView, slotTabs } from '@tubutree/app-core/commerce/flash-slots';
+import { remindIntentAction, type RemindIntent } from '@tubutree/app-core/commerce/flash-remind-intent';
 import { slotClock } from '@tubutree/app-core/merch/flash-next-slot';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { FlashSlotItem as FlashSlotItemData } from '@tubutree/app-core/api/flash-sale';
@@ -43,19 +44,14 @@ const STRIP: React.CSSProperties = {
   background: 'var(--color-bg-surface)',
 };
 
-/** Thanh đặc của nút lùi cao 56px (+ vùng an toàn) và đệm đầu của `.page` khi có nút lùi là 48px (+ vùng an toàn): xem back-button.tsx, css/tokens.css. */
-const BACK_BAR_HEIGHT = 56;
-const PAGE_TOP_PADDING = 48;
-
 /**
  * Dải tab và đồng hồ dính khi cuộn (thiết kế §5): khung 14 món cao cỡ 1800px, khách cuộn xuống vẫn đổi được khung và thấy giờ còn lại mà không cuộn ngược.
- * `top` của phần tử dính đo từ mép NỘI DUNG của vùng cuộn (`.zaui-page`, đã đo ở WebKit lẫn Chromium), không từ mép ngoài: muốn dính ngay dưới thanh nút lùi
- * (56px + vùng an toàn tính từ đỉnh màn hình) thì trừ đệm đầu của trang (48px + vùng an toàn), còn 8px và không phụ thuộc tai thỏ. Vì vậy KHÔNG dùng lớp
- * `sticky-below-back` (nó ép `top` bằng 56px + vùng an toàn và dính thấp 48px). z-index dưới nút lùi (200) và trên thẻ món.
+ * Trang không dùng lớp `page` (PageHeader đã tự chừa chỗ cho nút lùi và vùng an toàn), nên `top` đo từ mép trên vùng cuộn: ghi `--safe-top` như trang
+ * Vườn Xanh, còn lớp `sticky-below-back` đẩy xuống dưới thanh lùi đặc (56px + vùng an toàn) khi có nút lùi. z-index dưới nút lùi (200) và trên thẻ món.
  */
 const STICKY: React.CSSProperties = {
   position: 'sticky',
-  top: BACK_BAR_HEIGHT - PAGE_TOP_PADDING,
+  top: 'var(--safe-top)',
   zIndex: 5,
   background: 'var(--color-bg-surface)',
   boxShadow: '0 1px 0 var(--color-border-subtle)',
@@ -149,6 +145,29 @@ export default function FlashSalePage() {
 
   const reminded = useMemo(() => new Set((upcomingQ.data ?? []).filter((u) => u.reminded).map((u) => u.itemId)), [upcomingQ.data]);
 
+  // Khách bấm "Nhắc tôi" lúc chưa đăng nhập: nhớ suất ở bộ nhớ trang (Mini đăng nhập tại chỗ, không tải lại trang) rồi đặt nhắc khi phiên lên và
+  // đã biết suất đó có đang được nhắc không. `sawLogin` phân biệt "chưa kịp vào đăng nhập" với "đăng nhập xong mà không thành": lúc sau bỏ ý định.
+  const pendingRemind = useRef<{ intent: RemindIntent; sawLogin: boolean } | null>(null);
+  const upcomingList = upcomingQ.isSuccess ? upcomingQ.data : null;
+  useEffect(() => {
+    const pending = pendingRemind.current;
+    if (!pending) return;
+    if (authStatus === 'loading') {
+      pending.sawLogin = true;
+      return;
+    }
+    if (authStatus !== 'authenticated') {
+      if (pending.sawLogin) pendingRemind.current = null;
+      return;
+    }
+    if (!upcomingList) return;
+    pendingRemind.current = null;
+    if (remindIntentAction(pending.intent, upcomingList) === 'remind') {
+      remindMut.mutate({ itemId: pending.intent.itemId, reminded: false, startAt: pending.intent.startAt });
+    }
+    // `remindMut` đổi tham chiếu mỗi lần render nên không đưa vào phụ thuộc: chạy lại theo phiên và danh sách nhắc là đủ.
+  }, [authStatus, upcomingList]);
+
   const pick = (id: string) => {
     setPickedId(id);
     setCategoryId(null);
@@ -180,6 +199,7 @@ export default function FlashSalePage() {
 
   const onToggleRemind = (item: FlashSlotItemData) => {
     if (!authed) {
+      if (authStatus !== 'loading' && activeSlot) pendingRemind.current = { intent: { itemId: item.itemId, startAt: activeSlot.startAt }, sawLogin: false };
       login();
       return;
     }
@@ -243,7 +263,7 @@ export default function FlashSalePage() {
       );
     body = (
       <>
-        <div data-testid="flash-sticky" style={STICKY}>
+        <div data-testid="flash-sticky" className="sticky-below-back" style={STICKY}>
           <SlotTabs tabs={tabs} value={activeId} onChange={pick} panelId={panelId} />
           <div style={STRIP}>
             {activeTab.status === 'LIVE' ? (
@@ -295,7 +315,7 @@ export default function FlashSalePage() {
   }
 
   return (
-    <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(24px + var(--safe-bottom))' }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(24px + var(--safe-bottom))' }}>
       <PageHeader title={fillCopy('flash.title')} />
       <div role="status" style={endedNotice ? { padding: '8px 16px', background: 'var(--color-status-info-bg)', color: 'var(--color-status-info-fg)', fontSize: 'var(--type-body-sm-size)' } : undefined}>
         {endedNotice}

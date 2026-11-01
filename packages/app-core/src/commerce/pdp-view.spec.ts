@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cartSaving, lineCompareAt, lineSaving, pdpShelves, pickQuickReviews } from './pdp-view';
+import { cartSaving, lineCompareAt, lineSaving, PDP_FEED_SOURCE_LIMIT, pdpShelves, pickQuickReviews } from './pdp-view';
 
 describe('lineSaving / lineCompareAt', () => {
   it('niêm yết cao hơn giá bán: tiết kiệm = chênh × số lượng, gạch giá niêm yết', () => {
@@ -28,6 +28,29 @@ describe('lineSaving / lineCompareAt', () => {
       ]),
     ).toBe(37_000);
     expect(cartSaving([])).toBe(0);
+  });
+
+  // "Tiết kiệm" ở giỏ = giá gạch + giảm combo đang hiển thị (P2 #12). Mã giảm giá và ưu đãi hạng có dòng riêng nên không cộng ở đây.
+  describe('cartSaving cộng cả giảm combo', () => {
+    const gach = [{ unitPrice: 33_000, listUnitPrice: 50_000, quantity: 2 }];
+    const khongGach = [{ unitPrice: 10_000, listUnitPrice: 10_000, quantity: 5 }];
+
+    it('vừa gạch vừa combo: cộng hai khoản', () => expect(cartSaving(gach, 65_250)).toBe(34_000 + 65_250));
+    it('chỉ combo (không dòng nào gạch): đúng số combo, không "0đ"', () => expect(cartSaving(khongGach, 65_250)).toBe(65_250));
+    it('chỉ gạch, combo 0 hoặc bỏ trống: như cũ', () => {
+      expect(cartSaving(gach, 0)).toBe(34_000);
+      expect(cartSaving(gach)).toBe(34_000);
+    });
+    it.each([[-5_000], [Number.NaN], [Number.POSITIVE_INFINITY]])('combo không hợp lệ (%s) coi như 0, không bao giờ làm số tiết kiệm âm', (combo) => {
+      expect(cartSaving(gach, combo)).toBe(34_000);
+      expect(cartSaving([], combo)).toBe(0);
+    });
+    it('hàm thuần chỉ đọc: không đổi dòng giỏ (tiền khách trả không đi qua đây)', () => {
+      const lines = [{ unitPrice: 33_000, listUnitPrice: 50_000, quantity: 2 }];
+      const before = JSON.stringify(lines);
+      cartSaving(lines, 65_250);
+      expect(JSON.stringify(lines)).toBe(before);
+    });
   });
 });
 
@@ -94,5 +117,12 @@ describe('pdpShelves', () => {
     expect(out.boughtTogether).toEqual([]);
     expect(out.brand).toEqual([]);
     expect(out.feed).toHaveLength(5);
+  });
+});
+
+describe('PDP_FEED_SOURCE_LIMIT', () => {
+  // `/products/for-you` của API trả tối đa 10 món (Mini chỉ có thể nhận ngần ấy); khách web lấy cùng trần từ nguồn bán chạy để hai app dài bằng nhau.
+  it('bằng trần 10 món của /products/for-you', () => {
+    expect(PDP_FEED_SOURCE_LIMIT).toBe(10);
   });
 });

@@ -118,6 +118,17 @@
   transform: translate(-50%, -50%);
 }
 
+/* Ô chọn đầu dòng giỏ (điện thoại): khung chạm 44px chỉ chiếm 24px bề ngang bố cục như `.tubu-hit-flush` của Mini App (đệm 10px + lề âm 10px hai phía,
+   `min-width` thắng `w-9` mà không cần lớp `max-md:`), nên ô 24px cách ảnh đúng khoảng 12px của hàng; 44px chạm nhô lên đệm của thẻ và khe cột. Từ md giữ cột 36px cũ. */
+@media (max-width: 767.98px) {
+  .tubu-hit-flush {
+    box-sizing: border-box;
+    padding-inline: 10px;
+    margin-inline: -10px;
+    min-width: 44px;
+  }
+}
+
 /* ── Link nằm giữa câu (Điều khoản, Chính sách): đệm dọc của phần tử inline làm hộp chạm cao 44px mà không đổi chiều cao dòng ── */
 .tubu-inline-link {
   padding-block: 13px;
@@ -170,6 +181,35 @@
     display: none;
   }
   .tubu-badge-short {
+    display: inline;
+  }
+}
+
+/* Dòng meta của thẻ ("★ 4,7 · Đã bán 8,2k+"): ô meta là container; chữ đầy đủ xấu nhất ("★ 5,0 · Đã bán 99,9k+", 21 ký tự) rộng 127,25px (Inter 12px/500, đo
+   ở Chromium) nên chỉ container hẹp hơn 132px (kệ hạng 112px, lưới 320px 122px) đổi sang chữ gọn ("Đã bán 8,2k+", thuộc tính data-compact), để không bao giờ cắt
+   giữa số; kệ rail-md (132px), lưới 360px (142px) và 375px (149px) vẫn giữ nguyên "★ ... · Đã bán ..." (§4 Q4). Lượt bán từ 100k ("123,4k+", "99,9tr+") làm chữ dài hơn 21 ký tự,
+   rộng tới ~137px, nên ô gắn data-long và chỉ giữ bản đầy đủ từ 148px. Chữ gọn đi qua ::after nên không thêm chữ vào DOM (ô meta aria-hidden, textContent vẫn là
+   chữ đầy đủ). Trình duyệt chưa có container query giữ bản đầy đủ. */
+.tubu-tile-meta {
+  container-type: inline-size;
+}
+.tubu-meta-text[data-compact]::after {
+  content: attr(data-compact);
+  display: none;
+}
+@container (max-width: 131.98px) {
+  .tubu-meta-text[data-compact] > .tubu-meta-full {
+    display: none;
+  }
+  .tubu-meta-text[data-compact]::after {
+    display: inline;
+  }
+}
+@container (max-width: 147.98px) {
+  .tubu-meta-text[data-compact][data-long] > .tubu-meta-full {
+    display: none;
+  }
+  .tubu-meta-text[data-compact][data-long]::after {
     display: inline;
   }
 }
@@ -572,6 +612,33 @@
 }
 .tubu-btn .zaui-btn-icon {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  margin-right: 8px;
+}
+.tubu-btn.zaui-btn-tertiary {
+  min-width: 0;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.tubu-btn.zaui-btn.zaui-btn-secondary[disabled] {
+  background-color: var(--color-action-secondary-bg-disabled);
+  color: var(--color-action-secondary-fg-disabled);
+}
+.tubu-btn.tubu-btn-44 {
+  height: 44px;
+}
+
+/* Nút phụ đang tắt của trang web dựng bằng `ui.btnSecondary` + `phoneSecondary`: dưới md dùng cùng cặp token với Mini (chữ be nhạt trên nền xanh nhạt
+ * không đọc nổi). Viết ở CSS thường để không thêm lớp `max-md:` cho bánh cóc; hai lớp lặp để thắng `disabled:text-stone-500` của Tailwind. */
+@media (max-width: 767px) {
+  .tubu-phone-secondary.tubu-phone-secondary:disabled {
+    background-color: var(--color-action-secondary-bg-disabled);
+    color: var(--color-action-secondary-fg-disabled);
+  }
 }
 .tubu-sticky-bar .tubu-btn {
   min-width: 0;
@@ -650,4 +717,9 @@
     transform: translateX(-50%);
     animation: none;
   }
+}
+
+/* Thanh tên shop trên đầu trang (ShopTopBar): chừa 64px cho nút lùi nổi bên trái và 96px cho nút Zalo của Mini App bên phải, như Mini, để tên shop không lệch tâm. */
+.tubu-shop-top-bar {
+  padding: 0 96px 0 64px;
 }

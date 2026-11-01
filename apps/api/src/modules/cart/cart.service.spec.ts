@@ -16,8 +16,8 @@ const flash = { resolveEffective: jest.fn().mockResolvedValue(new Map()) } as un
 // trong nhóm này đi tới nhánh addItem() thành công (đều throw sớm), nên record()/recordBestEffort()
 // không bao giờ được gọi ở đây.
 const analytics = { record: jest.fn(), recordBestEffort: jest.fn() } as unknown as AnalyticsEventsService;
-// Không gửi gian hàng thì giỏ không gọi combo; ca có gian hàng ở race spec cart-combo-equals-quote.
-const combo = { computeForStorefront: jest.fn() } as unknown as ComboService;
+// Giỏ luôn hỏi combo (bundle áp cả khi không có gian hàng); stub mặc định không giảm. Ca có combo thật ở race spec cart-combo-equals-quote và bundle-price-parity.
+const combo = { computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }) } as unknown as ComboService;
 
 describe('CartService guard tồn kho', () => {
   it('addItem: chặn sản phẩm không khả dụng (inactive/không tồn tại)', async () => {
@@ -661,10 +661,35 @@ describe('CartService guard tồn kho', () => {
       expect(l).toMatchObject({ unitPrice: 42000, listUnitPrice: 50000 });
     });
 
-    it('đang Giờ vàng → unitPrice là giá Giờ vàng, listUnitPrice vẫn là retailPrice (không phải salePrice)', async () => {
-      const flashMap = new Map([['c', { flashPrice: 33000, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10, allowance: 5, perUserLeft: 5, quotaLeft: 9 }]]);
-      const l = (await cartOf([line('c', 50000, 42000)], flashMap as never)).items[0]!;
+    const flashOf = (id: string, flashPrice: number, allowance = 5) =>
+      new Map([[id, { flashPrice, itemId: 'fi1', endAt: new Date(), soldCount: 1, quota: 10, allowance, perUserLeft: allowance, quotaLeft: 9 }]]) as never;
+
+    it('đang Giờ vàng thắng giá sale → listUnitPrice là giá đang bán trước Giờ vàng (khớp thẻ và trang Giờ vàng), không phải giá niêm yết', async () => {
+      const l = (await cartOf([line('c', 59000, 50000)], flashOf('c', 33000))).items[0]!;
       expect(l).toMatchObject({ unitPrice: 33000, isFlash: true, listUnitPrice: 50000 });
+    });
+
+    it('đang Giờ vàng, không có giá sale → gạch giá niêm yết (cũng là giá đang bán)', async () => {
+      const l = (await cartOf([line('c2', 59000, null)], flashOf('c2', 33000))).items[0]!;
+      expect(l).toMatchObject({ unitPrice: 33000, isFlash: true, listUnitPrice: 59000 });
+    });
+
+    it('Giờ vàng không rẻ hơn giá đang bán → không gạch ngược: listUnitPrice là giá niêm yết, giá khách trả vẫn là giá đang bán', async () => {
+      const l = (await cartOf([line('d', 59000, 50000)], flashOf('d', 55000))).items[0]!;
+      expect(l).toMatchObject({ unitPrice: 50000, listUnitPrice: 59000 });
+    });
+
+    it('vượt suất Giờ vàng (giỏ tính giá thường cả dòng) → gạch giá niêm yết như dòng không Giờ vàng', async () => {
+      // SL 2 > allowance 1: dòng mua giá thường (50.000), nên gạch 59.000 chứ không gạch 50.000 vì Giờ vàng không áp.
+      const l = (await cartOf([line('e', 59000, 50000)], flashOf('e', 33000, 1))).items[0]!;
+      expect(l).toMatchObject({ unitPrice: 50000, isFlash: false, listUnitPrice: 59000 });
+    });
+
+    it('chỉ đổi số hiển thị: tiền khách trả của dòng Giờ vàng có giá sale giữ nguyên (đơn giá, thành tiền, tạm tính, giảm)', async () => {
+      // Số vàng lấy từ hành vi trước khi đổi nguồn giá gạch: 2 × 33.000 = 66.000, không giảm gì.
+      const cart = await cartOf([line('c', 59000, 50000)], flashOf('c', 33000));
+      expect(cart.items[0]).toMatchObject({ unitPrice: 33000, total: 66000, quantity: 2 });
+      expect(cart).toMatchObject({ subtotal: 66000, discount: 0, comboDiscount: 0, itemCount: 2 });
     });
   });
 
@@ -1441,5 +1466,33 @@ describe('CartService.addItemsBatch (thêm nhiều món một transaction: hỏn
     await svc.addItemsBatch('u1', [{ variationId: 'v1', quantity: 1 }], undefined);
     const events = (analyticsSpy.recordMany as jest.Mock).mock.calls[0][1] as { props: { addSource: string } }[];
     expect(events[0]!.props.addSource).toBe('pdp');
+  });
+});
+
+describe('CartService.getCart: combo toàn sàn (bundle)', () => {
+  const row = {
+    id: 'c1',
+    couponCode: null,
+    user: { tierId: null, phone: '0900000001', zaloId: 'z1' },
+    items: [
+      { id: 'ci-a', variationId: 'a', quantity: 2, variation: { isActive: true, productId: 'p-a', salePrice: null, retailPrice: 10000, stock: 5, name: 'a', product: { isActive: true, approvalStatus: 'APPROVED', name: 'SP a', slug: 'a', thumbnail: null } } },
+    ],
+  };
+  const build = (result: { total: number; perLine: Record<string, number> }) => {
+    const computeForStorefront = jest.fn().mockResolvedValue(result);
+    const prisma = {
+      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique: jest.fn().mockResolvedValue(row) },
+      order: { findFirst: jest.fn().mockResolvedValue(null) },
+      membershipTier: { findUnique: jest.fn().mockResolvedValue(null) },
+    } as unknown as PrismaService;
+    const svc = new CartService(prisma, coupons, config, flash, analytics, { computeForStorefront } as unknown as ComboService);
+    return { svc, computeForStorefront };
+  };
+
+  it('không có gian hàng ghi công vẫn hỏi combo (bundle áp cho mọi giỏ), kèm số lượng từng dòng', async () => {
+    const { svc, computeForStorefront } = build({ total: 2000, perLine: { a: 2000 } });
+    const cart = await svc.getCart('u1');
+    expect(computeForStorefront).toHaveBeenCalledWith(null, [{ variationId: 'a', productId: 'p-a', total: 20000, quantity: 2 }], 'u1');
+    expect(cart.comboDiscount).toBe(2000);
   });
 });

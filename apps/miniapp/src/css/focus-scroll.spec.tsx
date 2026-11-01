@@ -38,10 +38,10 @@ describe('css/tokens.css: vòng focus và scroll-padding (a11y A4, A7)', () => {
     expect(rule!.style.getPropertyValue('scroll-padding-bottom')).toBe('calc(72px + var(--safe-bottom))');
   });
 
-  it('trang có StickyActionBar tăng phần chừa đáy lên 96px bằng lớp riêng', () => {
+  it('trang có StickyActionBar chừa đáy đúng chiều cao thật của thanh (--sticky-bar-h, đã gồm vùng an toàn) cộng khe 8px; chưa có biến thì dự phòng 96px + vùng an toàn', () => {
     const rule = loadRules().find((r) => r.selectorText === '.tubu-scroll-pad-sticky-bar');
     expect(rule, 'thiếu .tubu-scroll-pad-sticky-bar').toBeDefined();
-    expect(rule!.style.getPropertyValue('scroll-padding-bottom')).toBe('calc(96px + var(--safe-bottom))');
+    expect(rule!.style.getPropertyValue('scroll-padding-bottom')).toBe('calc(var(--sticky-bar-h, calc(96px + var(--safe-bottom))) + 8px)');
   });
 
   it('ô nhập ZaUI focus không có vòng outline, nút vẫn có (tránh hai vòng viền)', () => {

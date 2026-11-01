@@ -82,7 +82,7 @@ export const homeCopy = {
     recycleHint: 'Đổi bao bì lấy Điểm Xanh',
     recyclePausedHint: 'Chương trình đang tạm dừng, xem yêu cầu còn mở',
     claimHint: 'Quét mã trên phiếu giao hàng',
-    groupBuyHint: 'Rủ bạn mua chung, đủ nhóm nhận mã giảm',
+    groupBuyHint: 'Rủ bạn mua chung, đủ nhóm nhận mã giảm giá',
     couponsTitle: 'Mã giảm giá của tôi',
     couponsCount: (n: number) => `${n} mã`,
     couponsEmptyHeading: 'Chưa có mã giảm giá khả dụng',

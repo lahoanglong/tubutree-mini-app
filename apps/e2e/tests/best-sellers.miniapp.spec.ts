@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { test, expect, reply } from './support/mock-api';
-import { BINH_SUA, XA_PHONG, mockDiscovery } from './support/discovery-mocks';
+import { BINH_SUA, CATEGORY_TREE, XA_PHONG, mockDiscovery } from './support/discovery-mocks';
 import { expectChipHitArea44 } from './support/hit-area';
 
 /**
@@ -24,12 +24,40 @@ test.describe('Bán chạy nhất — trang xếp hạng', () => {
     await expect(tablist(page).getByRole('tab')).toHaveText(['Tất cả', 'Chăm sóc da', 'Tẩy rửa sinh học', 'Cho bé'], { timeout: 15_000 });
     await expect(tablist(page).getByRole('tab', { name: 'Tất cả' })).toHaveAttribute('aria-selected', 'true');
     await expect(ranks(page)).toHaveCount(20, { timeout: 15_000 });
+    await expect(page.getByText('Theo lượt bán 30 ngày qua', { exact: true })).toBeVisible();
     await expect(ranks(page).first()).toHaveText('#1');
     await expect(ranks(page).nth(19)).toHaveText('#20');
     await expect(grid(page).getByRole('button').first()).toHaveAccessibleName(new RegExp(XA_PHONG.name));
 
     const listCalls = productQueries(api.callsTo('GET', '/products'));
     expect(listCalls).toEqual([{ sort: 'best_seller_30d', limit: '20', page: '1' }]);
+  });
+
+  test('API cũ từ chối best_seller_30d (400): trang lùi về best_seller và dòng thước đo ghi "Theo tổng lượt bán"', async ({ page, api }) => {
+    mockDiscovery(api, { legacy: true });
+    await page.goto('/best-sellers');
+    await expect(page.getByRole('heading', { level: 1, name: 'Bán chạy nhất' })).toBeVisible({ timeout: 15_000 });
+    await expect(grid(page)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Theo tổng lượt bán', { exact: true })).toBeVisible();
+    await expect(page.getByText('Theo lượt bán 30 ngày qua')).toHaveCount(0);
+    expect(productQueries(api.callsTo('GET', '/products')).map((q) => q.sort)).toEqual(['best_seller_30d', 'best_seller']);
+  });
+
+  test('cây danh mục chưa về: ?category= không mang tên "Tất cả"; cây về thì mang tên danh mục', async ({ page, api }) => {
+    mockDiscovery(api, { tree: true });
+    // Giữ cây danh mục tới khi test nhả: không dựa vào độ trễ cố định (khẳng định có thử lại sẽ đợi qua cả lúc cây về).
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    api.get('/categories', async () => {
+      await held;
+      return CATEGORY_TREE;
+    });
+    await page.goto('/best-sellers?category=cat-baby');
+    await expect(grid(page)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('tabpanel')).toHaveAttribute('aria-label', 'Bán chạy nhất');
+    release();
+    await expect(page.getByRole('tabpanel', { name: 'Cho bé' })).toBeVisible({ timeout: 15_000 });
+    await expect(tablist(page).getByRole('tab', { name: 'Cho bé' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('chạm tab danh mục: URL ?category=, hạng đánh lại từ #1 trong danh mục; "Tất cả" trả về bảng chung', async ({ page, api }) => {

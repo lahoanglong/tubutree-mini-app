@@ -85,11 +85,12 @@ describe('allocateComboDiscounts (thuần)', () => {
 });
 
 describe('ComboService.computeForStorefront', () => {
-  function makePrisma(collections: any[] | null) {
+  function makePrisma(collections: any[] | null, bundles: any[] = [], ownerUserId: string | null = null) {
     return {
       storefront: {
-        findFirst: jest.fn().mockResolvedValue(collections === null ? null : { collections }),
+        findFirst: jest.fn().mockResolvedValue(collections === null ? null : { ownerUserId, collections }),
       },
+      bundle: { findMany: jest.fn().mockResolvedValue(bundles) },
     } as any;
   }
   // Config mặc định trần 30% (fallback), test riêng override khi cần trần khác.
@@ -248,6 +249,7 @@ describe('ComboService.computeForStorefront', () => {
           collections: [{ comboDiscountPct: 30, items: [{ productId: 'p1', isHidden: false }, { productId: 'p2', isHidden: false }] }],
         }),
       },
+      bundle: { findMany: jest.fn().mockResolvedValue([]) },
     } as any;
     const lines = [
       { variationId: 'v1', productId: 'p1', total: 100 },
@@ -256,5 +258,259 @@ describe('ComboService.computeForStorefront', () => {
     const svc = new ComboService(prisma, config);
     expect((await svc.computeForStorefront('ctv-shop', lines, 'ctv1')).total).toBe(0);
     expect((await svc.computeForStorefront('ctv-shop', lines, 'buyer2')).total).toBe(60);
+  });
+});
+
+describe('ComboService.computeForStorefront: combo toàn sàn (bundle)', () => {
+  const config = { get: async (k: string, fb?: unknown) => (k === 'storefront.require_approval' ? false : fb) } as any;
+  const bundle = (id: string, pct: number, createdById: string | null = null) => ({
+    id,
+    kind: 'BUNDLE_PCT',
+    pct,
+    anchorProductId: null,
+    anchorProduct: null,
+    createdById,
+    items: [
+      { productId: 'p1', variationId: null, addonPrice: null, refPrice: null, maxQty: 1, product: { storefrontId: null } },
+      { productId: 'p2', variationId: null, addonPrice: null, refPrice: null, maxQty: 1, product: { storefrontId: null } },
+    ],
+  });
+  const lines = [
+    { variationId: 'v1', productId: 'p1', total: 100_000, quantity: 1 },
+    { variationId: 'v2', productId: 'p2', total: 100_000, quantity: 1 },
+  ];
+  const storeCombo = (pct: number) => [{ comboDiscountPct: pct, items: [{ productId: 'p1', isHidden: false, product: { storefrontId: null } }, { productId: 'p2', isHidden: false, product: { storefrontId: null } }] }];
+  const makePrisma = (collections: any[] | null, bundles: any[], ownerUserId: string | null = null, buyerRole: string | null = 'STAFF', adminIds: string[] = []) =>
+    ({
+      storefront: { findFirst: jest.fn().mockResolvedValue(collections === null ? null : { ownerUserId, collections }) },
+      bundle: { findMany: jest.fn().mockResolvedValue(bundles) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue(buyerRole === null ? null : { role: buyerRole }),
+        findMany: jest.fn().mockResolvedValue(adminIds.map((id) => ({ id }))),
+      },
+    }) as any;
+
+  it('không gian hàng (slug null) vẫn giảm theo bundle đang chạy, không truy vấn gian hàng', async () => {
+    const prisma = makePrisma([], [bundle('b1', 10)]);
+    const out = await new ComboService(prisma, config).computeForStorefront(null, lines);
+    expect(out).toEqual({ total: 20_000, perLine: { v1: 10_000, v2: 10_000 } });
+    expect(prisma.storefront.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('combo gian hàng 10% và bundle 20% cùng dòng: lấy 20%, không cộng 30%', async () => {
+    const out = await new ComboService(makePrisma(storeCombo(10), [bundle('b1', 20)]), config).computeForStorefront('linh-shop', lines);
+    expect(out.perLine).toEqual({ v1: 20_000, v2: 20_000 });
+    expect(out.total).toBe(40_000);
+  });
+
+  it('combo gian hàng 30% lớn hơn bundle 10%: lấy 30%', async () => {
+    const out = await new ComboService(makePrisma(storeCombo(30), [bundle('b1', 10)]), config).computeForStorefront('linh-shop', lines);
+    expect(out.perLine).toEqual({ v1: 30_000, v2: 30_000 });
+  });
+
+  it('chủ gian hàng mua ở chính gian hàng mình mất combo gian hàng nhưng vẫn được bundle toàn sàn', async () => {
+    const out = await new ComboService(makePrisma(storeCombo(30), [bundle('b1', 10)], 'owner'), config).computeForStorefront('linh-shop', lines, 'owner');
+    expect(out.perLine).toEqual({ v1: 10_000, v2: 10_000 });
+  });
+
+  it('bundle.max_pct đọc lại ở nơi tính tiền: bộ lưu 90% khi trần 25% chỉ giảm 25%', async () => {
+    const capped = { get: async (k: string, fb?: unknown) => (k === 'bundle.max_pct' ? 25 : fb) } as any;
+    const out = await new ComboService(makePrisma([], [bundle('b1', 90)]), capped).computeForStorefront(null, lines);
+    expect(out.perLine).toEqual({ v1: 25_000, v2: 25_000 });
+  });
+
+  it('dòng chưa có quantity coi như 1; không bundle thì kết quả y như combo gian hàng', async () => {
+    const noQty = lines.map(({ quantity: _q, ...l }) => l);
+    expect((await new ComboService(makePrisma(storeCombo(10), []), config).computeForStorefront('linh-shop', noQty)).total).toBe(20_000);
+  });
+
+  it('giỏ rỗng không truy vấn bundle', async () => {
+    const prisma = makePrisma([], [bundle('b1', 10)]);
+    expect(await new ComboService(prisma, config).computeForStorefront(null, [])).toEqual({ total: 0, perLine: {} });
+    expect(prisma.bundle.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('ComboService.computeForStorefront: nhân viên không hưởng bộ do chính mình tạo', () => {
+  const config = { get: async (k: string, fb?: unknown) => (k === 'storefront.require_approval' ? false : fb) } as any;
+  const item = (productId: string, o: Record<string, unknown> = {}) => ({ productId, variationId: null, addonPrice: null, refPrice: null, maxQty: 1, product: { storefrontId: null }, ...o });
+  const pct = (id: string, createdById: string | null, p = 10) => ({ id, kind: 'BUNDLE_PCT', pct: p, anchorProductId: null, anchorProduct: null, createdById, items: [item('p1'), item('p2')] });
+  const addon = (id: string, createdById: string | null) => ({
+    id,
+    kind: 'ADDON',
+    pct: null,
+    anchorProductId: 'p1',
+    anchorProduct: { storefrontId: null },
+    createdById,
+    items: [item('p2', { variationId: 'v2', addonPrice: 39_000, refPrice: 50_000 })],
+  });
+  const lines = [
+    { variationId: 'v1', productId: 'p1', total: 100_000, quantity: 1 },
+    { variationId: 'v2', productId: 'p2', total: 50_000, quantity: 1 },
+  ];
+  const prismaOf = (bundles: any[], role: string | null = 'STAFF') =>
+    ({ bundle: { findMany: jest.fn().mockResolvedValue(bundles) }, user: { findUnique: jest.fn().mockResolvedValue(role === null ? null : { role }) } }) as any;
+  const compute = (prisma: any, buyerId?: string) => new ComboService(prisma, config).computeForStorefront(null, lines, buyerId);
+
+  it('người tạo (nhân viên) tự mua: BUNDLE_PCT và ADDON do mình tạo đều không giảm', async () => {
+    expect(await compute(prismaOf([pct('b1', 'staff1')]), 'staff1')).toEqual({ total: 0, perLine: {} });
+    expect(await compute(prismaOf([addon('a1', 'staff1')]), 'staff1')).toEqual({ total: 0, perLine: {} });
+  });
+
+  it('người tạo là ADMIN thì được hưởng (như mã giảm giá và Giờ vàng)', async () => {
+    expect((await compute(prismaOf([pct('b1', 'admin1')], 'ADMIN'), 'admin1')).total).toBe(15_000);
+    expect(await compute(prismaOf([addon('a1', 'admin1')], 'ADMIN'), 'admin1')).toEqual({ total: 11_000, perLine: { v2: 11_000 } });
+  });
+
+  it('không tra được người mua (role không rõ) thì coi như nhân viên: chặn', async () => {
+    expect((await compute(prismaOf([pct('b1', 'staff1')], null), 'staff1')).total).toBe(0);
+  });
+
+  it('khách khác mua bộ của nhân viên vẫn được giảm, và không tốn thêm một lần tra vai trò', async () => {
+    const prisma = prismaOf([pct('b1', 'staff1')]);
+    expect((await compute(prisma, 'buyer9')).total).toBe(15_000);
+    expect((await compute(prisma)).total).toBe(15_000);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('bộ không rõ người tạo (null) không chặn ai, không tra vai trò', async () => {
+    const prisma = prismaOf([pct('b1', null)]);
+    expect((await compute(prisma, 'staff1')).total).toBe(15_000);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('giỏ có bộ của nhân viên (bị chặn) và bộ của người khác: chỉ bộ của người khác áp', async () => {
+    const out = await compute(prismaOf([pct('mine', 'staff1', 40), pct('other', 'admin1', 10)]), 'staff1');
+    expect(out.perLine).toEqual({ v1: 10_000, v2: 5_000 });
+  });
+});
+
+describe('ComboService.computeForStorefront: thứ tự dòng giỏ không đổi khoản giảm', () => {
+  const config = { get: async (k: string, fb?: unknown) => (k === 'storefront.require_approval' ? false : fb) } as any;
+  const item = (productId: string) => ({ productId, variationId: null, addonPrice: null, refPrice: null, maxQty: 1, product: { storefrontId: null } });
+  const bundle = { id: 'b1', kind: 'BUNDLE_PCT', pct: 10, anchorProductId: null, anchorProduct: null, createdById: null, items: [item('p1'), item('p2')] };
+  const prismaOf = () => ({ bundle: { findMany: jest.fn().mockResolvedValue([bundle]) } }) as any;
+  // Hai phân loại khác giá của cùng một món, maxQty=1: chỉ một trong hai được giảm, phải luôn là cùng một dòng.
+  const cheap = { variationId: 'v1a', productId: 'p1', total: 100_000, quantity: 1 };
+  const dear = { variationId: 'v1b', productId: 'p1', total: 300_000, quantity: 1 };
+  const other = { variationId: 'v2', productId: 'p2', total: 100_000, quantity: 1 };
+
+  it.each([
+    ['rẻ, đắt, món kia', [cheap, dear, other]],
+    ['đắt, món kia, rẻ', [dear, other, cheap]],
+    ['món kia, đắt, rẻ', [other, dear, cheap]],
+  ])('thứ tự %s ra cùng số', async (_name, lines) => {
+    const out = await new ComboService(prismaOf(), config).computeForStorefront(null, lines);
+    expect(out).toEqual({ total: 20_000, perLine: { v1a: 10_000, v2: 10_000 } });
+  });
+});
+
+
+describe('ComboService.computeForStorefront: trần tổng của bộ do nhân viên tạo (coupon.staff_max_amount_vnd)', () => {
+  const config = { get: async (k: string, fb?: unknown) => (k === 'storefront.require_approval' ? false : fb) } as any;
+  const withCap = (maxAmount: unknown) => ({ get: async (k: string, fb?: unknown) => (k === 'coupon.staff_max_amount_vnd' ? maxAmount : k === 'storefront.require_approval' ? false : fb) }) as any;
+  /** Bộ mua kèm: chính P, món ghim `productId` giá tham chiếu 340.000đ, giá kèm 240.000đ → giảm đúng 100.000đ mỗi bộ (bằng trần mặc định). */
+  const addonOn = (id: string, productId: string, createdById: string | null) => ({
+    id,
+    kind: 'ADDON',
+    pct: null,
+    anchorProductId: 'P',
+    anchorProduct: { storefrontId: null },
+    createdById,
+    items: [{ productId, variationId: `v${productId}`, addonPrice: 240_000, refPrice: 340_000, maxQty: 1, product: { storefrontId: null } }],
+  });
+  const pctBundle = (id: string, p: number, createdById: string | null) => ({
+    id,
+    kind: 'BUNDLE_PCT',
+    pct: p,
+    anchorProductId: null,
+    anchorProduct: null,
+    createdById,
+    items: ['pA', 'pB'].map((productId) => ({ productId, variationId: null, addonPrice: null, refPrice: null, maxQty: 1, product: { storefrontId: null } })),
+  });
+  const cartPXY = [
+    { variationId: 'vP', productId: 'P', total: 80_000, quantity: 1 },
+    { variationId: 'vX', productId: 'X', total: 340_000, quantity: 1 },
+    { variationId: 'vY', productId: 'Y', total: 340_000, quantity: 1 },
+  ];
+  const makePrisma = (bundles: any[], adminIds: string[] = [], buyerRole: string | null = 'STAFF') =>
+    ({
+      storefront: { findFirst: jest.fn().mockResolvedValue(null) },
+      bundle: { findMany: jest.fn().mockResolvedValue(bundles) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue(buyerRole === null ? null : { role: buyerRole }),
+        findMany: jest.fn().mockResolvedValue(adminIds.map((id) => ({ id }))),
+      },
+    }) as any;
+
+  it('hai bộ của hai nhân viên, mỗi bộ đúng trần một mình, cộng lại 200.000đ: giỏ chỉ giảm đúng trần, và tra vai trò bằng MỘT truy vấn', async () => {
+    const prisma = makePrisma([addonOn('B1', 'X', 's1'), addonOn('B2', 'Y', 's2')]);
+    const out = await new ComboService(prisma, config).computeForStorefront(null, cartPXY);
+    expect(out).toEqual({ total: 100_000, perLine: { vX: 100_000 } });
+    expect(prisma.user.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.user.findMany.mock.calls[0][0]).toMatchObject({ where: { role: 'ADMIN' } });
+    expect([...prisma.user.findMany.mock.calls[0][0].where.id.in].sort()).toEqual(['s1', 's2']);
+  });
+
+  it('cùng hai bộ nhưng người tạo là ADMIN: không kẹp (200.000đ)', async () => {
+    const prisma = makePrisma([addonOn('B1', 'X', 'a1'), addonOn('B2', 'Y', 'a2')], ['a1', 'a2']);
+    expect((await new ComboService(prisma, config).computeForStorefront(null, cartPXY)).total).toBe(200_000);
+  });
+
+  it('một bộ ADMIN và hai bộ nhân viên: ADMIN nguyên vẹn, nhân viên kẹp riêng ở trần', async () => {
+    const lines = [...cartPXY, { variationId: 'vZ', productId: 'Z', total: 340_000, quantity: 1 }];
+    const prisma = makePrisma([addonOn('A1', 'X', 'a1'), addonOn('B1', 'Y', 's1'), addonOn('B2', 'Z', 's2')], ['a1']);
+    const out = await new ComboService(prisma, config).computeForStorefront(null, lines);
+    expect(out.total).toBe(200_000);
+    expect(out.perLine.vX).toBe(100_000);
+  });
+
+  it('BUNDLE_PCT của nhân viên sau khi giá tăng lên 400.000đ mỗi món (thô 240.000đ): kẹp ở trần', async () => {
+    const lines = [
+      { variationId: 'vA', productId: 'pA', total: 400_000, quantity: 1 },
+      { variationId: 'vB', productId: 'pB', total: 400_000, quantity: 1 },
+    ];
+    const out = await new ComboService(makePrisma([pctBundle('b', 30, 's1')]), config).computeForStorefront(null, lines);
+    expect(out.total).toBe(100_000);
+  });
+
+  it('tổng thô không vượt trần: không tra vai trò (không thêm truy vấn ở đường thường)', async () => {
+    const prisma = makePrisma([addonOn('B1', 'X', 's1')]);
+    const out = await new ComboService(prisma, config).computeForStorefront(null, cartPXY);
+    expect(out.total).toBe(100_000);
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
+  });
+
+  it('không bộ nào: không tra gì; toàn bộ createdById null và vượt trần: không có id để tra nhưng vẫn kẹp', async () => {
+    const none = makePrisma([]);
+    expect((await new ComboService(none, config).computeForStorefront(null, cartPXY)).total).toBe(0);
+    expect(none.user.findMany).not.toHaveBeenCalled();
+    const unknown = makePrisma([addonOn('B1', 'X', null), addonOn('B2', 'Y', null)]);
+    expect((await new ComboService(unknown, config).computeForStorefront(null, cartPXY)).total).toBe(100_000);
+    expect(unknown.user.findMany).not.toHaveBeenCalled();
+  });
+
+  it('trần đọc từ coupon.staff_max_amount_vnd; giá trị cấu hình hỏng về mặc định 100.000đ', async () => {
+    const two = () => makePrisma([addonOn('B1', 'X', 's1'), addonOn('B2', 'Y', 's2')]);
+    expect((await new ComboService(two(), withCap(50_000)).computeForStorefront(null, cartPXY)).total).toBe(50_000);
+    expect((await new ComboService(two(), withCap('rác')).computeForStorefront(null, cartPXY)).total).toBe(100_000);
+  });
+
+  it('combo gian hàng không bị trần nhân viên: dòng lấy khoản lớn hơn giữa combo gian hàng và phần bộ đã kẹp', async () => {
+    const prisma = makePrisma([addonOn('B1', 'X', 's1'), addonOn('B2', 'Y', 's2')]);
+    prisma.storefront.findFirst.mockResolvedValue({
+      ownerUserId: null,
+      collections: [{ comboDiscountPct: 20, items: ['X', 'Y'].map((productId) => ({ productId, isHidden: false, product: { storefrontId: null } })) }],
+    });
+    const out = await new ComboService(prisma, config).computeForStorefront('linh-shop', cartPXY);
+    expect(out.perLine).toEqual({ vX: 100_000, vY: 68_000 }); // vY: bộ nhân viên bị cắt về 0 nên combo gian hàng 20% × 340.000đ giữ nguyên, không bị trần nhân viên cắt theo
+  });
+
+  it('người mua chính là người tạo một bộ: bộ đó bị loại trước (nhân viên không tự hưởng), phần còn lại vẫn tính trần', async () => {
+    const lines = [...cartPXY, { variationId: 'vZ', productId: 'Z', total: 340_000, quantity: 1 }];
+    const prisma = makePrisma([addonOn('B1', 'X', 'buyer'), addonOn('B2', 'Y', 's2'), addonOn('B3', 'Z', 's3')]);
+    const out = await new ComboService(prisma, config).computeForStorefront(null, lines, 'buyer');
+    expect(out.total).toBe(100_000);
+    expect(out.perLine.vX).toBeUndefined();
   });
 });

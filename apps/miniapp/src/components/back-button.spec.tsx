@@ -12,6 +12,7 @@ vi.mock('../store/storefront-context', () => ({
 }));
 
 import BackButton from './back-button';
+import { ShopTopBar } from './ui/shop-top-bar';
 
 describe('BackButton — ROOTS từ nav-config', () => {
   beforeEach(() => {
@@ -79,5 +80,19 @@ describe('BackButton — ROOTS từ nav-config', () => {
     });
     expect(bar.dataset.scrolled).toBe('false');
     page.remove();
+  });
+  it('nút lùi vẽ trên thanh tên shop dù thanh đứng trước hay sau nó trong DOM (thứ tự vẽ không phụ thuộc thứ tự DOM)', () => {
+    mocks.location = { pathname: '/s/lan', search: '', state: null };
+    render(
+      <>
+        <ShopTopBar title="Gian hàng Lan" />
+        <BackButton />
+      </>,
+    );
+    const z = (el: HTMLElement) => Number(el.style.zIndex);
+    const button = screen.getByRole('button', { name: 'Quay lại' });
+    const bar = document.querySelector('[data-back-bar]') as HTMLElement;
+    expect(z(button)).toBeGreaterThan(z(screen.getByTestId('shop-top-bar')));
+    expect(z(screen.getByTestId('shop-top-bar'))).toBeGreaterThan(z(bar));
   });
 });

@@ -129,7 +129,7 @@ describe('/mua-chung — danh sách nhóm', () => {
 
   it('nói rõ cơ chế: đủ người thì nhận mã giảm theo % của nhóm (mã giảm % trên biến thể khách mua, không phải số tiền cố định)', async () => {
     const c = await mount();
-    expect(c.textContent).toContain(`Đủ nhóm: mỗi người nhận mã giảm 20% cho đơn từ ${formatVnd(80_000)}`);
+    expect(c.textContent).toContain(`Đủ nhóm: mỗi người nhận mã giảm giá 20% cho đơn từ ${formatVnd(80_000)}`);
     expect(c.textContent).not.toContain(`mã giảm ${formatVnd(20_000)}`);
   });
 
@@ -143,14 +143,14 @@ describe('/mua-chung — danh sách nhóm', () => {
   it('Q18: đơn từ ghi đúng đơn tối thiểu của mã (minOrder) khi API trả, thiếu thì dùng giá nhóm', async () => {
     mocks.list = [GROUP('a', { unitPrice: 365_500, basePrice: 430_000, minOrder: 102_000, discountPct: 15 })];
     const c = await mount();
-    expect(c.textContent).toContain(`Đủ nhóm: mỗi người nhận mã giảm 15% cho đơn từ ${formatVnd(102_000)}`);
+    expect(c.textContent).toContain(`Đủ nhóm: mỗi người nhận mã giảm giá 15% cho đơn từ ${formatVnd(102_000)}`);
     expect(c.textContent).not.toContain(`dùng cho đơn từ ${formatVnd(365_500)}`);
   });
 
   it('% lấy từ discountPct của nhóm, không tính lại từ basePrice - unitPrice', async () => {
     mocks.list = [GROUP('a', { discountPct: 15, basePrice: 100_000, unitPrice: 80_000 })];
     const c = await mount();
-    expect(c.textContent).toContain('mỗi người nhận mã giảm 15%');
+    expect(c.textContent).toContain('mỗi người nhận mã giảm giá 15%');
     expect(c.textContent).not.toContain('mã giảm 20%');
   });
 
@@ -407,7 +407,7 @@ describe('/mua-chung/[id] — nhóm được mời', () => {
     expect(Array.from(c.querySelectorAll('h2')).map((h) => h.textContent)).toContain('Nhóm đã đủ người của bạn');
     expect(c.textContent).toContain('GBUY-DONE-ME');
     expect(c.textContent).toContain('5/5 người · đã đủ nhóm');
-    const buy = Array.from(c.querySelectorAll('a')).find((a) => a.textContent === 'Mua ngay với mã giảm 20%');
+    const buy = Array.from(c.querySelectorAll('a')).find((a) => a.textContent === 'Mua ngay với mã giảm giá 20%');
     // Mã đi theo link để trang sản phẩm áp vào giỏ sau khi thêm giỏ.
     expect(buy?.getAttribute('href')).toBe('/san-pham/sp-done?ma=GBUY-DONE-ME');
     expect(c.querySelector('a[href="/san-pham/sp-done"]')).not.toBeNull();
@@ -417,7 +417,7 @@ describe('/mua-chung/[id] — nhóm được mời', () => {
   it('E-9: nhóm đủ người mà API chưa trả mã thì nút mua ngay về trang sản phẩm trơn, không có ?ma=', async () => {
     mocks.list = [GROUP('done', { joined: true, status: 'SUCCESS', currentSize: 5 })];
     const c = await mount();
-    const buy = Array.from(c.querySelectorAll('a')).find((a) => a.textContent === 'Mua ngay với mã giảm 20%');
+    const buy = Array.from(c.querySelectorAll('a')).find((a) => a.textContent === 'Mua ngay với mã giảm giá 20%');
     expect(buy?.getAttribute('href')).toBe('/san-pham/sp-done');
   });
 });

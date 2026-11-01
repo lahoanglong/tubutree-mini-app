@@ -72,6 +72,86 @@ describe('/gio-hang — thanh dính đáy', () => {
     expect(bar(c)!.textContent).toContain(`Tạm tính (đã giảm)${total}`);
   });
 
+  it('chân dính gọn: chưa đạt miễn phí giao có thanh tiến độ; đạt rồi chỉ còn một dòng chữ, không thanh', async () => {
+    const c = await mount();
+    expect(bar(c)!.querySelector('[data-testid="freeship-bar"]')).not.toBeNull();
+    state.cart = cartOf([line({})], { freeship: true, freeshipThreshold: 200000 });
+    const reached = await mount();
+    expect(bar(reached)!.textContent).toContain('Bạn được miễn phí giao hàng');
+    expect(bar(reached)!.querySelector('[data-testid="freeship-bar"]')).toBeNull();
+  });
+
+  it('chân dính gọn: nhãn và số tiền cùng một khối bên trái, nút Thanh toán là khối riêng cùng hàng', async () => {
+    state.cart = cartOf([line({ unitPrice: 33000, listUnitPrice: 50000, quantity: 1, total: 33000 })], { subtotal: 33000 });
+    const c = await mount();
+    const total = bar(c)!.querySelector<HTMLElement>('[data-testid="cart-total-value"]')!;
+    expect(total.textContent).toBe('33.000đ');
+    expect(total.parentElement!.textContent).toContain('Tạm tính');
+    expect(total.parentElement!.querySelector('[data-testid="cart-saving"]')).not.toBeNull();
+    const link = bar(c)!.querySelector<HTMLAnchorElement>('a[href="/thanh-toan"]')!;
+    expect(total.parentElement!.contains(link)).toBe(false);
+    expect(link.parentElement).toBe(total.parentElement!.parentElement);
+  });
+
+  // P2 #12: "Tiết kiệm" gồm cả giảm combo (đúng số dòng "Giảm giá combo") và dùng MỘT màu deal như PDP.
+  describe('"Tiết kiệm" cộng cả giảm combo, một màu deal', () => {
+    const savings = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('[data-testid="cart-saving"]'));
+
+    it('vừa giá gạch (34.000đ) vừa combo (5.000đ): khung tóm tắt và thanh dính cùng ghi 39.000đ, tổng phải trả không đổi', async () => {
+      state.cart = cartOf([line({ unitPrice: 33000, listUnitPrice: 50000, quantity: 2, total: 66000 })], { subtotal: 66000, comboDiscount: 5000 });
+      const c = await mount();
+      expect(savings(c).length).toBeGreaterThanOrEqual(2);
+      expect(savings(c).map((e) => e.textContent)).toEqual(savings(c).map(() => 'Tiết kiệm 39.000đ'));
+      expect(bar(c)!.textContent).toContain('Tạm tính (đã giảm)61.000đ');
+    });
+
+    it('chỉ có combo (không dòng nào gạch giá): vẫn ghi Tiết kiệm đúng số combo', async () => {
+      state.cart = cartOf([line({})], { comboDiscount: 5000 });
+      const c = await mount();
+      expect(savings(c).map((e) => e.textContent)).toContain('Tiết kiệm 5.000đ');
+    });
+
+    it('chọn một phần giỏ khi chưa có giá phần chọn: không mượn số combo của cả giỏ', async () => {
+      state.cart = cartOf(
+        [line({ unitPrice: 33000, listUnitPrice: 50000, quantity: 1, total: 33000 }), line({ id: 'i2', variationId: 'v2', productName: 'Xà bông', unitPrice: 100000, quantity: 1, total: 100000 })],
+        { subtotal: 133000, comboDiscount: 15000 },
+      );
+      const c = await mount();
+      click(c.querySelector('input[aria-label="Chọn Xà bông để thanh toán"]'));
+      await flush(3);
+      expect(savings(c).map((e) => e.textContent)).toEqual(savings(c).map(() => 'Tiết kiệm 17.000đ'));
+    });
+
+    it('màu deal (--color-text-price-deal) như dòng "Tiết kiệm" của PDP, không còn xanh success', async () => {
+      state.cart = cartOf([line({ unitPrice: 33000, listUnitPrice: 50000, quantity: 1, total: 33000 })], { subtotal: 33000 });
+      const c = await mount();
+      for (const el of savings(c)) {
+        expect(el.className).toContain('text-[color:var(--color-text-price-deal)]');
+        expect(el.className).not.toContain('text-success-fg');
+      }
+    });
+  });
+
+  // MINOR F10b: máy 320px, khối tổng chỉ còn ~130px. Hàng cuối xuống dòng có chủ đích thay vì cắt chữ hay chui dưới nút (cùng khuôn với StickyActionBar Mini).
+  it('hàng tổng + nút là flex-wrap: khối tổng grow 1000 không min-w-0, nút basis 9.25rem grow 1 không co; số tiền và nhãn không ngắt, "Tiết kiệm" được xuống dòng', async () => {
+    state.cart = cartOf([line({ unitPrice: 33000, listUnitPrice: 50000, quantity: 1, total: 33000 })], { subtotal: 33000 });
+    const c = await mount();
+    const total = bar(c)!.querySelector<HTMLElement>('[data-testid="cart-total-value"]')!;
+    const lead = total.parentElement!;
+    const link = bar(c)!.querySelector<HTMLAnchorElement>('a[href="/thanh-toan"]')!;
+    const row = lead.parentElement!;
+    expect(row.className).toMatch(/\bflex-wrap\b/);
+    expect(lead.className).toContain('flex-[1000_1_0%]');
+    expect(lead.className).not.toMatch(/\bmin-w-0\b/);
+    expect(lead.className).not.toMatch(/\bwhitespace-nowrap\b/);
+    expect(total.className).toMatch(/\bwhitespace-nowrap\b/);
+    expect(lead.firstElementChild!.className).toMatch(/\bwhitespace-nowrap\b/);
+    const saving = lead.querySelector<HTMLElement>('[data-testid="cart-saving"]')!;
+    expect(saving.className).not.toMatch(/\bwhitespace-nowrap\b/);
+    expect(link.className).toContain('flex-[1_0_9.25rem]');
+    expect(link.className).not.toMatch(/\bshrink-0\b|\bmin-w-\[9\.25rem\]/);
+  });
+
   it('bấm trên thanh dính cũng nhớ phần giỏ đang chọn (toàn giỏ khi chọn hết)', async () => {
     const c = await mount();
     const link = bar(c)!.querySelector<HTMLAnchorElement>('a[href="/thanh-toan"]')!;

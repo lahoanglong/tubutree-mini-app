@@ -50,7 +50,7 @@ vi.mock('@/lib/reviews-client', async (importOriginal) => ({
   },
 }));
 
-import { ProductReviews } from './product-reviews';
+import { ProductReviews, Stars } from './product-reviews';
 
 const review = (id: string, rating: number, extra: Record<string, unknown> = {}) => ({
   id,
@@ -128,7 +128,7 @@ describe('ProductReviews (web) — danh sách công khai', () => {
   it('tiêu đề kèm số đánh giá, điểm trung bình, phân bổ sao và mọi đánh giá đang hiện; ảnh API ghép gốc API', async () => {
     const c = await mount();
     expect(c.querySelector('h2')?.textContent).toBe('Đánh giá (3)');
-    expect(c.textContent).toContain('4.3');
+    expect(c.textContent).toContain('4,3');
     expect(c.querySelectorAll('li.border-t')).toHaveLength(3);
     expect(c.querySelector('[aria-label="Phân bổ số sao"]')?.textContent).toContain('5');
     expect(c.querySelector<HTMLImageElement>('img[alt="Ảnh đánh giá"]')!.src).toMatch(/\/reviews\/c\/images\/0\?v=1$/);
@@ -149,6 +149,52 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(c.querySelectorAll('li.border-t')).toHaveLength(7);
   });
 
+  it('hàng chip lọc như Mini App: Tất cả (chọn sẵn), 5/4/3 sao, Có ảnh; chọn chip thì chỉ còn đánh giá khớp', async () => {
+    const c = await mount();
+    const chips = () => Array.from(c.querySelectorAll<HTMLButtonElement>('button[aria-pressed]'));
+    expect(chips().map((b) => b.textContent)).toEqual(['Tất cả', '5 sao', '4 sao', '3 sao', 'Có ảnh']);
+    expect(chips()[0]!.getAttribute('aria-pressed')).toBe('true');
+    click(button(c, '5 sao'));
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(2);
+    expect(button(c, '5 sao')!.getAttribute('aria-pressed')).toBe('true');
+    click(button(c, 'Có ảnh'));
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(1);
+    click(button(c, '4 sao'));
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(0);
+    // Như Mini App: trạng thái rỗng dùng EmptyState inline (hình kính lúp), không phải một dòng chữ nhỏ.
+    for (let n = 0; n < 40 && !c.textContent!.includes('Không có đánh giá khớp bộ lọc.'); n++) await flush();
+    expect(c.textContent).toContain('Không có đánh giá khớp bộ lọc.');
+    const empty = c.querySelector<HTMLElement>('.tubu-rise')!;
+    expect(empty.querySelector('svg')).not.toBeNull();
+    expect(empty.textContent).toBe('Không có đánh giá khớp bộ lọc.');
+    expect(c.querySelector('p.text-center')).toBeNull();
+  });
+
+  it('chip "Có video" chỉ có khi sản phẩm có video; đổi bộ lọc đưa danh sách về 5 dòng đầu', async () => {
+    mocks.list = { ...LIST, count: 8, videoCount: 1, items: Array.from({ length: 8 }, (_, i) => review(`r${i}`, 5, i === 6 ? { videoUrl: 'https://cdn/v.mp4' } : {})) };
+    const c = await mount();
+    expect(button(c, /^Có video/)!.textContent).toBe('Có video(1)');
+    click(button(c, 'Xem thêm (3)'));
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(8);
+    click(button(c, '5 sao'));
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(5);
+    click(button(c, /^Có video/));
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(1);
+  });
+
+  it('điện thoại: dải trắng riêng; "Viết đánh giá" và "Xem thêm (n)" là nút chữ thương hiệu, không viền như Mini App', async () => {
+    mocks.list = { ...LIST, count: 7, items: Array.from({ length: 7 }, (_, i) => review(`r${i}`, 5)) };
+    const c = await mount();
+    const section = c.querySelector('section#danh-gia')!;
+    expect(section.getAttribute('data-section')).toBe('pdp-reviews');
+    expect(section.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+    for (const name of ['Viết đánh giá', 'Xem thêm (2)']) {
+      const b = button(c, name)!;
+      expect(b.className).toContain('max-md:bg-transparent');
+      expect(b.className).toContain('max-md:border-transparent');
+    }
+  });
+
   it('chưa có đánh giá → lời mời viết đánh giá đầu tiên', async () => {
     mocks.list = { count: 0, average: 0, distribution: {}, items: [] };
     const c = await mount();
@@ -157,16 +203,21 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(c.textContent).toContain('Chưa có đánh giá');
     expect(c.textContent).toContain('Hãy là người đầu tiên chia sẻ trải nghiệm.');
     expect(c.querySelector('svg[aria-hidden]')).not.toBeNull();
-    expect(c.querySelector('h2')!.className).toContain('max-md:font-ui');
+    expect(c.querySelector('h2')!.className).toContain('font-ui');
+    expect(c.querySelector('h2')!.className).not.toContain('font-display');
   });
 
-  it('khách chưa đăng nhập: không hỏi can-review, mời đăng nhập và quay lại đúng đơn đang mở', async () => {
+  it('khách chưa đăng nhập: không hỏi can-review, nút ghost "Viết đánh giá" mở cổng đăng nhập và quay lại đúng đơn đang mở', async () => {
     mocks.auth = { status: 'idle', initialized: true, sessionUnavailable: false };
     mocks.search = 'danh-gia=o2';
     const c = await mount();
     expect(mocks.eligCalls).toBe(0);
-    const login = byText(c, 'a', 'Đăng nhập để đánh giá')!;
+    const login = byText(c, 'a', 'Viết đánh giá')!;
     expect(login.getAttribute('href')).toBe(`/dang-nhap?returnTo=${encodeURIComponent('/san-pham/nuoc-rua-chen?danh-gia=o2')}`);
+    // Như nút ghost của Mini (reviews-section.tsx): chữ thương hiệu, không nền, không viền, không gạch chân.
+    expect(login.className).toContain('max-md:bg-transparent');
+    expect(login.className).not.toContain('underline');
+    expect(byText(c, 'a', 'Đăng nhập để đánh giá')).toBeNull();
     expect(form(c)).toBeNull();
   });
 
@@ -577,5 +628,23 @@ describe('ProductReviews — lần dựng đầu khớp HTML máy chủ', () => 
     expect(html).not.toContain('(3)');
     expect(html).not.toContain('Nhận xét a');
     expect(html).toContain('Đang tải');
+  });
+});
+
+describe('Stars: tên đọc theo vi-VN (G3 MINOR)', () => {
+  it('điểm trung bình 4.4 đọc "4,4 trên 5 sao" như số đang hiện, không "4.4"', () => {
+    const r = render(<Stars value={4.4} />);
+    mounted.push(r);
+    expect(r.container.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('4,4 trên 5 sao');
+  });
+  it('điểm trung bình tròn đọc "5,0 trên 5 sao" như số đang hiện, không "5"', () => {
+    const r = render(<Stars value={5} />);
+    mounted.push(r);
+    expect(r.container.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('5,0 trên 5 sao');
+  });
+  it('điểm một khách chấm (spoken="score") là số nguyên: "5 trên 5 sao", không "5,0"', () => {
+    const r = render(<Stars value={5} small spoken="score" />);
+    mounted.push(r);
+    expect(r.container.querySelector('[role="img"]')!.getAttribute('aria-label')).toBe('5 trên 5 sao');
   });
 });

@@ -174,6 +174,18 @@ describe('khe nhãn theo biến thể', () => {
     expect(rich('flash').imageBadge).not.toHaveProperty('short');
   });
 
+  it('metaCompact (bản gọn cho thẻ hẹp) có ở mọi biến thể, meta và bản đọc giữ nguyên bản đầy đủ', () => {
+    for (const variant of ['grid', 'rail-sm', 'rail-md', 'flash', 'rank', 'line'] as const) {
+      const v = view({ product: product({ ratingAvg: 4.8, sold: 1234 }), variant });
+      expect(v.metaCompact, variant).toBe('Đã bán 1,2k+');
+      expect(v.meta, variant).toBe('★ 4,8 · Đã bán 1,2k+');
+      expect(v.spoken.meta, variant).toBe('4,8 sao, đã bán hơn 1.200');
+    }
+    const bare = view({ product: product({ ratingAvg: undefined, sold: undefined }) });
+    expect(bare.meta).toBeNull();
+    expect(bare.metaCompact).toBeNull();
+  });
+
   it('rank có nhãn ảnh, không nhãn đầu tên; line không nhãn nào', () => {
     expect(rich('rank').imageBadge?.kind).toBe('flash');
     expect(rich('rank').label).toBeNull();
@@ -183,6 +195,41 @@ describe('khe nhãn theo biến thể', () => {
 
   it('trang thương hiệu truyền showBrand=false thì không in tên thương hiệu', () => {
     expect(view({ showBrand: false }).brandLine).toBeNull();
+  });
+
+  it('ẩn dòng thương hiệu khi tên đã chứa thương hiệu (không dấu, không phân biệt hoa thường), khe vẫn giữ chỗ', () => {
+    const named = (name: string, brand: string) => view({ product: product({ name, brand }) });
+    const dup = named('Nước rửa chén sinh học Fuwa3e', 'Fuwa3e');
+    expect(dup.brandLine).toBeNull();
+    expect(dup.brandSlot).toBe(true);
+    expect(named('Dầu xả bồ kết Pơ Lang', 'PO LANG').brandLine).toBeNull();
+    expect(named('Băng vệ sinh Moc An', 'Mộc An').brandLine).toBeNull();
+    expect(named('Nước rửa chén sinh học', 'Fuwa3e').brandLine).toBe('Fuwa3e');
+    expect(named('Nước rửa chén sinh học', 'Fuwa3e').brandSlot).toBe(true);
+  });
+
+  it('chỉ ẩn khi khớp nguyên từ; thương hiệu có ký tự đặc biệt không làm khớp nổ', () => {
+    const named = (name: string, brand: string) => view({ product: product({ name, brand }) }).brandLine;
+    expect(named('Tubutree xà phòng', 'Tubu')).toBe('Tubu');
+    expect(named('Sữa A+ 900g', 'A+')).toBeNull();
+    expect(named('Sữa AA 900g', 'A+')).toBe('A+');
+    expect(named("Kem L'Occitane 50ml", "L'Occitane")).toBeNull();
+    expect(named('Sữa tắm lá bạc hà', '   ')).toBe('   ');
+  });
+
+  it('dữ liệu thiếu thương hiệu hoặc tên (xem trước gian hàng CTV, API cũ) không làm thẻ ném lỗi: dòng thương hiệu giữ nguyên giá trị nhận được', () => {
+    const bare = (over: Record<string, unknown>) => view({ product: { ...product(), ...over } as unknown as ProductCard });
+    expect(() => bare({ brand: undefined })).not.toThrow();
+    expect(bare({ brand: undefined }).brandLine).toBeUndefined();
+    expect(bare({ brand: null }).brandLine).toBeNull();
+    expect(() => bare({ name: undefined })).not.toThrow();
+    expect(bare({ name: undefined }).brandLine).toBe('Tubu');
+  });
+
+  it('showBrand=false và biến thể không có khe thì không giữ khe', () => {
+    expect(view({ showBrand: false }).brandSlot).toBe(false);
+    expect(view({ variant: 'rail-sm' }).brandSlot).toBe(false);
+    expect(view({ variant: 'rail-md' }).brandSlot).toBe(true);
   });
 });
 

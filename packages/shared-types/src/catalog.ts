@@ -37,6 +37,9 @@ export interface ProductDTO {
   variations: VariationDTO[];
 }
 
+/** Mã lỗi ổn định: thêm mục con vào gốc đang có sản phẩm gắn thẳng (hoặc chuyển mục vào gốc đó) cần admin xác nhận. API trả 400 mang mã này; gửi lại kèm `confirmDirectProducts: true` thì làm. */
+export const CATEGORY_PARENT_HAS_PRODUCTS = 'CATEGORY_PARENT_HAS_PRODUCTS';
+
 export interface ProductListQuery {
   brand?: string;
   category?: string;

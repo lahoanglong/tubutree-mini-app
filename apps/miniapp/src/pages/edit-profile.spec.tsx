@@ -76,7 +76,8 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
 
   it('mỗi ô nhập có nhãn gắn với ô (đọc màn hình) và điền sẵn từ hồ sơ', async () => {
     renderPage();
-    expect(await screen.findByLabelText('Họ và tên')).toHaveValue('Lan');
+    // Ô có trước khi hồ sơ về: đợi giá trị, không chỉ đợi ô (máy tải nặng thì findByLabelText trả ô còn rỗng).
+    await waitFor(() => expect(screen.getByLabelText('Họ và tên')).toHaveValue('Lan'));
     expect(screen.getByLabelText('Email')).toHaveValue('lan@tubu.vn');
     expect(screen.getByLabelText('Ngày sinh')).toHaveValue('01/05/1990');
   });

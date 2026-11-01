@@ -8,6 +8,7 @@ import { fillTemplate } from '../copy-template';
 export const TILE_COPY = {
   'flash.badge': 'Giờ vàng -{pct}%',
   'rank.spoken': 'Hạng {n} bán chạy',
+  'rank.plain': 'Bán chạy',
   'badge.discount': '-{pct}%',
   'badge.new': 'Mới',
   'badge.featured': 'Tubu chọn',

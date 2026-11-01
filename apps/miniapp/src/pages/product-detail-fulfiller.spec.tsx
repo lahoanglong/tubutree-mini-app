@@ -133,7 +133,7 @@ describe('ProductDetailPage — ai giao hàng (D4, R2-BUYERMINI-1)', () => {
     expect(screen.queryByText(/không dùng Điểm Xanh/)).toBeNull();
     const subscribe = screen.getByText(/Đặt định kỳ/).closest('[role="button"]') as HTMLElement;
     expect(subscribe.style.minHeight).toBe('44px');
-    expect(screen.getByText(/Mở nhóm mua chung/)).toBeInTheDocument();
+    expect(screen.getByText(/Mở nhóm mua chung — nhận mã giảm giá khi đủ người/)).toBeInTheDocument();
     expect(screen.queryByText(/tự giao/)).toBeNull();
   });
 

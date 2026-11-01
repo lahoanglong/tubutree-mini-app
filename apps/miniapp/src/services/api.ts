@@ -109,7 +109,8 @@ const authModule = () => (authModulePromise ??= loadAuthModule());
  */
 const PUBLIC_GET_PATHS = [
   /^\/products$/,
-  /^\/products\/(?!for-you(?:\/|$))[^/]+(?:\/related|\/bought-together)?$/,
+  /^\/products\/(?!for-you(?:\/|$))[^/]+(?:\/related|\/bought-together|\/bundles)?$/,
+  /^\/bundles\/combos$/,
   /^\/categories$/,
   /^\/brands$/,
   /^\/flash-sales\/active$/,
