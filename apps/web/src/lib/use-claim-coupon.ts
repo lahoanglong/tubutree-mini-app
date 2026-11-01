@@ -53,7 +53,9 @@ export function useClaimCoupon(returnTo: string) {
       try {
         await claimCoupon(coreHttp, code);
         setNotice({ code, text: fillCopy('coupon.savedToast'), error: false });
-        await qc.invalidateQueries({ queryKey: ['coupons'] });
+        // Ví trước, phần còn lại sau: nếu "đã nhận" (mine) về trước ví thì mã vừa lưu nháy "Đã dùng" cho tới khi ví về.
+        await qc.invalidateQueries({ queryKey: ['coupons'], exact: true });
+        await qc.invalidateQueries({ queryKey: ['coupons'], predicate: (q) => q.queryKey.length > 1 });
         return true;
       } catch (e) {
         setNotice({ code, text: actionErrorText(e), error: true });

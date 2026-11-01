@@ -52,7 +52,7 @@ describe('useClaimCoupon', () => {
     expect(mocks.notify).not.toHaveBeenCalled();
   });
 
-  it('thành công: gọi claim đúng mã, báo "Đã lưu vào Mã của tôi", làm mới cả ví lẫn kho, trả true', async () => {
+  it('thành công: gọi claim đúng mã, báo "Đã lưu vào Mã của tôi", làm mới ví rồi tới kho, trả true', async () => {
     const { result, invalidate } = setup();
     let ok: boolean | undefined;
     await act(async () => {
@@ -61,7 +61,11 @@ describe('useClaimCoupon', () => {
     expect(ok).toBe(true);
     expect(mocks.claimCoupon).toHaveBeenCalledWith('TUBU30');
     expect(mocks.notify).toHaveBeenCalledWith({ text: 'Đã lưu vào Mã của tôi', type: 'success' });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['coupons'] });
+    // Ví làm mới trước, kho/mã đã nhận/lịch sử sau (xem hook).
+    expect(invalidate.mock.calls.map(([f]) => f)).toEqual([
+      { queryKey: ['coupons'], exact: true },
+      { queryKey: ['coupons'], predicate: expect.any(Function) },
+    ]);
     expect(result.current.pendingCode).toBeNull();
   });
 

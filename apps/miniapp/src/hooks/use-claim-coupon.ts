@@ -37,7 +37,9 @@ export function useClaimCoupon() {
         await claimCoupon(code);
         haptic('light');
         notify({ text: fillCopy('coupon.savedToast'), type: 'success' });
-        await qc.invalidateQueries({ queryKey: ['coupons'] });
+        // Ví trước, phần còn lại sau: nếu "đã nhận" (mine) về trước ví thì mã vừa lưu nháy "Đã dùng" cho tới khi ví về.
+        await qc.invalidateQueries({ queryKey: ['coupons'], exact: true });
+        await qc.invalidateQueries({ queryKey: ['coupons'], predicate: (q) => q.queryKey.length > 1 });
         return true;
       } catch (e) {
         notify({ text: getErrorMessage(e), type: 'error' });

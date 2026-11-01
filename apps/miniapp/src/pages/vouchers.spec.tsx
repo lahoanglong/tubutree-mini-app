@@ -141,6 +141,27 @@ describe('VouchersPage (Mini)', () => {
     expect(screen.getAllByRole('button', { name: 'Lưu mã' })).toHaveLength(1);
   });
 
+  it('sau khi lưu mã, ví làm mới xong rồi mới hỏi lại phần đã nhận: thẻ không nháy Đã dùng giữa hai lần tải', async () => {
+    renderAt();
+    const save = await screen.findAllByRole('button', { name: 'Lưu mã' });
+    let releaseWallet: (v: unknown) => void = () => undefined;
+    const mineBefore = callsTo('/coupons/collectable/mine').length;
+    mocks.coreGet.mockImplementation(async (path: string) => {
+      if (path === '/me/coupons') return new Promise((r) => (releaseWallet = r));
+      if (path === '/coupons/collectable/mine') return { claimed: ['NEW10'], newCustomerOnly: [] };
+      return responses[path];
+    });
+    fireEvent.click(save[0]!);
+    await waitFor(() => expect(callsTo('/me/coupons').length).toBeGreaterThanOrEqual(2));
+    // Ví chưa về: chưa được hỏi lại "đã nhận", nếu không mã vừa lưu hiện Đã dùng khi ví còn cũ.
+    expect(callsTo('/coupons/collectable/mine')).toHaveLength(mineBefore);
+    expect(screen.queryByText('Đã dùng')).toBeNull();
+    releaseWallet([wallet('NEW10')]);
+    await waitFor(() => expect(callsTo('/coupons/collectable/mine').length).toBe(mineBefore + 1));
+    expect(await screen.findByRole('button', { name: 'Dùng ngay' })).toBeInTheDocument();
+    expect(screen.queryByText('Đã dùng')).toBeNull();
+  });
+
   it('mã đã có trong ví hiện Dùng ngay ngay từ đầu; bấm gọi use với đúng mã', async () => {
     responses['/me/coupons'] = [wallet('NEW10')];
     renderAt();

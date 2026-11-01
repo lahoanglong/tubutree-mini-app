@@ -83,7 +83,11 @@ describe('useClaimCoupon (web)', () => {
     expect(ok).toBe(true);
     expect(mocks.post).toHaveBeenCalledWith('/coupons/claim', { code: 'NEW10' });
     expect(api.notice).toEqual({ code: 'NEW10', text: 'Đã lưu vào Mã của tôi', error: false });
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['coupons'] });
+    // Ví làm mới trước, kho/mã đã nhận/lịch sử sau (xem hook).
+    expect(invalidate.mock.calls.map(([f]) => f)).toEqual([
+      { queryKey: ['coupons'], exact: true },
+      { queryKey: ['coupons'], predicate: expect.any(Function) },
+    ]);
     expect(api.pendingCode).toBeNull();
   });
 
