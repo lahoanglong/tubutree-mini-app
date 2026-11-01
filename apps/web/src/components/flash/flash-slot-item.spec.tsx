@@ -64,20 +64,30 @@ describe('FlashSlotItem (web): khung đang diễn ra', () => {
 describe('FlashSlotItem (web): món hết suất', () => {
   const SOLD = { ...ITEM, soldOut: true, soldCount: 10 };
 
-  it('hàng mờ, thanh ghi "Đã bán hết", nút Mua ngay khoá bằng aria-disabled và không gọi onBuy', () => {
+  const opacityOf = (el: Element | null) => (el as HTMLElement).style.opacity;
+
+  it('ảnh và nút mờ, thanh ghi "Đã bán hết", nút Mua ngay khoá bằng aria-disabled và không gọi onBuy', () => {
     const onBuy = vi.fn();
     const c = show(SOLD, { onBuy });
-    expect((c.firstElementChild as HTMLElement).style.opacity).toBe('0.55');
+    expect(opacityOf(c.querySelector('[data-ds-part="media"]'))).toBe('0.55');
     expect(c.textContent).toContain('Đã bán hết');
     const buy = button(c, 'Mua ngay Serum Bã Trầu')!;
     expect(buy.getAttribute('aria-disabled')).toBe('true');
+    expect(opacityOf(buy)).toBe('0.55');
     click(buy);
     expect(onBuy).not.toHaveBeenCalled();
   });
 
-  it('hàng còn suất không mờ', () => {
+  it('chữ (tên, giá, ghi chú) không bị làm mờ: vỏ thẻ và thân thẻ không mang opacity', () => {
+    const c = show(SOLD);
+    expect(opacityOf(c.firstElementChild)).toBe('');
+    expect(opacityOf(c.querySelector('[data-ds-part="body"]'))).toBe('');
+  });
+
+  it('hàng còn suất không mờ ở ảnh lẫn nút', () => {
     const c = show(ITEM);
-    expect((c.firstElementChild as HTMLElement).style.opacity).toBe('');
+    expect(opacityOf(c.querySelector('[data-ds-part="media"]'))).toBe('');
+    expect(opacityOf(button(c, 'Mua ngay Serum Bã Trầu'))).toBe('');
   });
 });
 
@@ -109,9 +119,20 @@ describe('FlashSlotItem (web): khung sắp diễn ra', () => {
     expect(onToggleRemind).not.toHaveBeenCalled();
   });
 
-  it('món sắp mở vẫn hiện thanh đã bán (Vừa mở bán), không in 0%', () => {
+  it('món sắp mở không vẽ thanh đã bán: không nói "Vừa mở bán" khi suất chưa mở', () => {
     const c = show({ ...ITEM, soldCount: 0 }, { slotStatus: 'UPCOMING' });
-    expect(c.textContent).toContain('Vừa mở bán');
+    expect(c.textContent).not.toMatch(/Vừa mở bán|Đã bán|Sắp hết/);
+    expect(c.querySelector('[data-testid="flash-sold-bar"]')).toBeNull();
+  });
+
+  it('chỗ thanh để trống cao đúng bằng khi khung đang diễn ra, thẻ không nhảy lúc khung mở', () => {
+    const footerHeight = (status: 'LIVE' | 'UPCOMING') => {
+      const c = show(ITEM, { slotStatus: status });
+      const footer = Array.from(c.querySelectorAll('[data-ds-part="body"] > div')).find((d) => (d as HTMLElement).style.height === '20px');
+      return footer ? (footer as HTMLElement).style.height : null;
+    };
+    expect(footerHeight('UPCOMING')).toBe('20px');
+    expect(footerHeight('LIVE')).toBe('20px');
   });
 });
 

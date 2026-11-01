@@ -9,6 +9,9 @@ import { mockFlashSlots } from './support/flash-slot-mocks';
 
 const buyButtons = (page: import('@playwright/test').Page) => page.getByRole('button', { name: /^Mua ngay Sản phẩm Giờ vàng/ });
 
+/** Dòng `li` của một nút Mua ngay/Nhắc tôi: món hết suất thì ảnh và nút mờ, thân thẻ (chữ) không mờ để chữ giữ tương phản 4,5:1. */
+const rowOf = (btn: import('@playwright/test').Locator) => btn.locator('xpath=ancestor::li[1]');
+
 const CART_LINE = {
   id: 'cart-line-3', variationId: 'var-flash-3', productName: 'Sản phẩm Giờ vàng 3', variationName: null, slug: 'san-pham-gio-vang-3', thumbnail: null,
   unitPrice: 52_000, quantity: 1, stock: 8, total: 52_000, fulfiller: { kind: 'TUBU', storefrontId: null, name: 'Tubu Tree' },
@@ -64,7 +67,32 @@ test.describe('Web khách: Giờ vàng theo khung, đã đăng nhập', () => {
     const names = await buyButtons(page).evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
     expect(names.slice(-2)).toEqual(['Mua ngay Sản phẩm Giờ vàng 1', 'Mua ngay Sản phẩm Giờ vàng 2']);
     await expect(buyButtons(page).last()).toHaveAttribute('aria-disabled', 'true');
-    await expect(buyButtons(page).last().locator('xpath=ancestor::li[1]/div')).toHaveCSS('opacity', '0.55');
+    await expect(rowOf(buyButtons(page).last()).locator('[data-ds-part="media"]')).toHaveCSS('opacity', '0.55');
+    await expect(rowOf(buyButtons(page).last()).locator('[data-ds-part="body"]')).toHaveCSS('opacity', '1');
+    await expect(buyButtons(page).last()).toHaveCSS('opacity', '0.55');
+  });
+
+  test('khung 14 món cao hơn màn hình: cuộn tới cuối vẫn thấy dải tab và đồng hồ dưới thanh trên cùng, đổi khung được mà không cuộn ngược', async ({ page }) => {
+    await page.goto('/gio-vang');
+    const tablist = page.getByRole('tablist', { name: 'Khung giờ' });
+    await expect(tablist).toBeVisible();
+    await expect(buyButtons(page)).toHaveCount(14);
+    const sticky = page.getByTestId('flash-sticky');
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect.poll(() => page.evaluate(() => window.scrollY), { timeout: 10_000 }).toBeGreaterThan(600);
+    // `top` đã tính: điện thoại là dưới thanh nút lùi (56px), máy tính là dưới thanh đầu trang của site (--header-h).
+    const stickyTop = await sticky.evaluate((el) => parseFloat(getComputedStyle(el).top));
+    expect(stickyTop).toBeGreaterThan(0);
+    await expect.poll(async () => Math.abs((await sticky.boundingBox())!.y - stickyTop), { timeout: 5_000 }).toBeLessThanOrEqual(1);
+    // Đã cuộn thật: món đầu danh sách trôi khỏi màn hình trong khi dải tab vẫn ghim.
+    await expect(buyButtons(page).first()).not.toBeInViewport();
+    const siteHeader = page.locator('header[data-site-header]');
+    if (await siteHeader.isVisible()) expect((await siteHeader.boundingBox())!.y + (await siteHeader.boundingBox())!.height).toBeLessThanOrEqual(stickyTop + 1);
+    await expect(page.getByRole('timer')).toBeInViewport();
+    await expect(page.getByRole('tab', { name: '12:00, đang diễn ra' })).toBeInViewport();
+    await page.getByRole('tab', { name: '20:00, sắp diễn ra' }).click();
+    await expect(page.getByRole('tab', { name: '20:00, sắp diễn ra' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('button', { name: 'Nhắc tôi Sản phẩm Giờ vàng 21', exact: true })).toBeVisible();
   });
 
   test('chip danh mục lọc danh sách, Tất cả trả đủ món', async ({ page }) => {

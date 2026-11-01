@@ -63,20 +63,31 @@ describe('FlashSlotItem: khung đang diễn ra', () => {
 describe('FlashSlotItem: món hết suất', () => {
   const SOLD = { ...ITEM, soldOut: true, soldCount: 10 };
 
-  it('hàng mờ, thanh ghi "Đã bán hết", nút Mua ngay khoá bằng aria-disabled và không gọi onBuy', () => {
+  const opacityOf = (el: Element | null) => (el as HTMLElement).style.opacity;
+
+  it('ảnh và nút mờ, thanh ghi "Đã bán hết", nút Mua ngay khoá bằng aria-disabled và không gọi onBuy', () => {
     const onBuy = vi.fn();
     const { container } = render(<FlashSlotItem item={SOLD} {...base} onBuy={onBuy} />);
-    expect((container.firstElementChild as HTMLElement).style.opacity).toBe('0.55');
+    expect(opacityOf(container.querySelector('[data-ds-part="media"]'))).toBe('0.55');
     expect(screen.getByText('Đã bán hết')).toBeInTheDocument();
     const buy = screen.getByRole('button', { name: 'Mua ngay Serum Bã Trầu' });
     expect(buy).toHaveAttribute('aria-disabled', 'true');
+    expect(opacityOf(buy)).toBe('0.55');
     fireEvent.click(buy);
     expect(onBuy).not.toHaveBeenCalled();
   });
 
-  it('hàng còn suất không mờ', () => {
+  it('chữ (tên, giá, ghi chú) không bị làm mờ: không tổ tiên nào của chữ mang opacity', () => {
+    const { container } = render(<FlashSlotItem item={SOLD} {...base} />);
+    for (const node of [screen.getByText('Mỗi khách tối đa 5'), screen.getByRole('button', { name: 'Serum Bã Trầu' })]) {
+      for (let el: Element | null = node; el && el !== container.parentElement; el = el.parentElement) expect(opacityOf(el)).toBe('');
+    }
+  });
+
+  it('hàng còn suất không mờ ở ảnh lẫn nút', () => {
     const { container } = render(<FlashSlotItem item={ITEM} {...base} />);
-    expect((container.firstElementChild as HTMLElement).style.opacity).toBe('');
+    expect(opacityOf(container.querySelector('[data-ds-part="media"]'))).toBe('');
+    expect(opacityOf(screen.getByRole('button', { name: 'Mua ngay Serum Bã Trầu' }))).toBe('');
   });
 });
 
@@ -109,9 +120,22 @@ describe('FlashSlotItem: khung sắp diễn ra', () => {
     expect(onToggleRemind).not.toHaveBeenCalled();
   });
 
-  it('món sắp mở vẫn hiện thanh đã bán (Vừa mở bán), không in 0%', () => {
-    render(<FlashSlotItem item={{ ...ITEM, soldCount: 0 }} {...base} slotStatus="UPCOMING" />);
-    expect(screen.getByText('Vừa mở bán')).toBeInTheDocument();
+  it('món sắp mở không vẽ thanh đã bán: không nói "Vừa mở bán" khi suất chưa mở', () => {
+    const { container } = render(<FlashSlotItem item={{ ...ITEM, soldCount: 0 }} {...base} slotStatus="UPCOMING" />);
+    expect(screen.queryByText('Vừa mở bán')).not.toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/Vừa mở bán|Đã bán|Sắp hết/);
+    expect(container.querySelector('[data-testid="flash-sold-bar"]')).toBeNull();
+  });
+
+  it('chỗ thanh để trống cao đúng bằng khi khung đang diễn ra, thẻ không nhảy lúc khung mở', () => {
+    const heightOfFooter = (status: 'LIVE' | 'UPCOMING') => {
+      const { container, unmount } = render(<FlashSlotItem item={ITEM} {...base} slotStatus={status} />);
+      const footer = Array.from(container.querySelectorAll('[data-ds-part="body"] > div')).find((d) => (d as HTMLElement).style.height === '20px');
+      unmount();
+      return footer ? (footer as HTMLElement).style.height : null;
+    };
+    expect(heightOfFooter('UPCOMING')).toBe('20px');
+    expect(heightOfFooter('LIVE')).toBe('20px');
   });
 });
 

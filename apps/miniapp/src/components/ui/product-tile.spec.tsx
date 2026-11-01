@@ -231,6 +231,18 @@ describe('ProductTile: bấm, nút phụ, ô trang trí', () => {
     expect(screen.queryByRole('button', { name: 'Nhắc tôi' })).not.toBeInTheDocument();
   });
 
+  it('dimMedia chỉ làm mờ vùng ảnh, thân thẻ giữ chữ nguyên độ đậm', () => {
+    const { container } = render(<ProductTile view={viewOf({}, 'line')} variant="line" href="/p" dimMedia />);
+    expect((container.querySelector('[data-ds-part="media"]') as HTMLElement).style.opacity).toBe('0.55');
+    expect((container.querySelector('[data-ds-part="body"]') as HTMLElement).style.opacity).toBe('');
+    expect((container.firstElementChild as HTMLElement).style.opacity).toBe('');
+  });
+
+  it('không có dimMedia thì ảnh không mờ', () => {
+    const { container } = render(<ProductTile view={viewOf({}, 'line')} variant="line" href="/p" />);
+    expect((container.querySelector('[data-ds-part="media"]') as HTMLElement).style.opacity).toBe('');
+  });
+
   it('hidePrice không in giá nhưng giữ chiều cao thân thẻ', () => {
     const { container } = render(<ProductTile view={viewOf({}, 'rail-sm')} variant="rail-sm" href="/p" hidePrice />);
     expect(container.textContent).not.toContain('52.000đ');

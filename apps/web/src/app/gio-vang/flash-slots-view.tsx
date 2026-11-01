@@ -33,6 +33,12 @@ const OFFLINE_TEXT = 'Chưa kết nối được tới Tubu Tree. Bạn kiểm t
 
 /** Dải ngang tràn hai mép màn điện thoại như Mini App (trang web có lề 16px); từ md nằm trong cột. */
 const BLEED = 'max-md:mx-[calc(50%-50vw)]';
+/**
+ * Dải tab và đồng hồ dính khi cuộn (thiết kế §5), như `pages/flash-sale.tsx` của Mini App. Điện thoại: tràn hai mép, `.sticky-below-back` (globals.css) đặt `top`
+ * dưới thanh đặc của nút lùi; từ md dưới thanh đầu trang của site (`--header-h`, z-40). z-index dưới cả hai và trên thẻ món.
+ */
+const STICKY_CLASS = `sticky-below-back sticky top-[var(--header-h)] z-10 ${BLEED}`;
+const STICKY_STYLE: CSSProperties = { background: 'var(--color-bg-surface)', boxShadow: '0 1px 0 var(--color-border-subtle)' };
 const STRIP: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -227,22 +233,25 @@ export default function FlashSlotsView() {
       );
     body = (
       <>
-        <div className={BLEED}>
+        <div data-testid="flash-sticky" className={STICKY_CLASS} style={STICKY_STYLE}>
           <SlotTabs tabs={tabs} value={activeId} onChange={pick} panelId={panelId} />
-        </div>
-        <div role="tabpanel" id={panelId} aria-labelledby={slotTabId(activeId)} className={BLEED}>
           <div style={STRIP}>
             {activeTab.status === 'LIVE' ? (
               <>
-                <Text variant="body-sm" tone="secondary">
-                  {fillCopy('flash.slotLive')}
-                </Text>
+                {/* Chữ nhìn thấy ẩn với trình đọc: tên đọc của đồng hồ (role="timer") đã là "Kết thúc sau ...". */}
+                <span aria-hidden="true">
+                  <Text variant="body-sm" tone="secondary">
+                    {fillCopy('flash.endsLabel')}
+                  </Text>
+                </span>
                 <Countdown key={activeId} endAt={activeSlot.endAt} mode="clock" onEnd={onSlotEnd} />
               </>
             ) : (
               <Countdown key={activeId} endAt={activeSlot.startAt} kind="starts" mode="text" onEnd={onSlotStart} />
             )}
           </div>
+        </div>
+        <div role="tabpanel" id={panelId} aria-labelledby={slotTabId(activeId)} className={BLEED}>
           {chips.length > 0 && (
             <div role="group" aria-label={fillCopy('flash.chipsLabel')} className="scroll-x" style={{ gap: 8, padding: '6px 16px', background: 'var(--color-bg-surface)' }}>
               <Chip selected={chosen === null} onPress={() => setCategoryId(null)}>

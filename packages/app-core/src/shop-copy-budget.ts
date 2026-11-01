@@ -13,6 +13,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'flash.slotTomorrow': 12,
   'flash.slotEnded': 12,
   'flash.endsIn': 22,
+  'flash.endsLabel': 12,
   'flash.startsIn': 22,
   'flash.startsAt': 22,
   'flash.startsAtDay': 23,

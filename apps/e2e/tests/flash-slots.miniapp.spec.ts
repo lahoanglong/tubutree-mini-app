@@ -14,6 +14,9 @@ test.use({ viewport: { width: 375, height: 812 } });
 
 const buyButtons = (page: import('@playwright/test').Page) => page.getByRole('button', { name: /^Mua ngay Sản phẩm Giờ vàng/ });
 
+/** Dòng `li` của một nút Mua ngay/Nhắc tôi: món hết suất thì ảnh và nút mờ, thân thẻ (chữ) không mờ để chữ giữ tương phản 4,5:1. */
+const rowOf = (btn: import('@playwright/test').Locator) => btn.locator('xpath=ancestor::li[1]');
+
 /** Danh sách Giờ vàng công khai nên hiện trước khi phiên khôi phục xong; chạm Mua ngay/Nhắc tôi lúc đó bị bỏ qua. Lời gọi /flash-sales/upcoming chỉ đi khi đã đăng nhập. */
 const sessionReady = (api: MockApi) => expect.poll(() => api.callsTo('GET', '/flash-sales/upcoming').length, { timeout: 15_000 }).toBeGreaterThan(0);
 
@@ -54,8 +57,30 @@ test.describe('Mini App — Giờ vàng theo khung: khách đã đăng nhập', 
     expect(names.slice(-2)).toEqual(['Mua ngay Sản phẩm Giờ vàng 1', 'Mua ngay Sản phẩm Giờ vàng 2']);
     const last = buyButtons(page).last();
     await expect(last).toHaveAttribute('aria-disabled', 'true');
-    await expect(last.locator('xpath=ancestor::li[1]/div')).toHaveCSS('opacity', '0.55');
-    await expect(buyButtons(page).first().locator('xpath=ancestor::li[1]/div')).toHaveCSS('opacity', '1');
+    await expect(last).toHaveCSS('opacity', '0.55');
+    await expect(rowOf(last).locator('[data-ds-part="media"]')).toHaveCSS('opacity', '0.55');
+    await expect(rowOf(last).locator('[data-ds-part="body"]')).toHaveCSS('opacity', '1');
+    await expect(buyButtons(page).first()).toHaveCSS('opacity', '1');
+    await expect(rowOf(buyButtons(page).first()).locator('[data-ds-part="media"]')).toHaveCSS('opacity', '1');
+  });
+
+  test('khung 14 món cao hơn màn hình: cuộn tới cuối vẫn thấy dải tab và đồng hồ dưới thanh nút lùi, đổi khung được mà không cuộn ngược', async ({ page }) => {
+    await page.goto('/flash-sale');
+    const tablist = page.getByRole('tablist', { name: 'Khung giờ' });
+    await expect(tablist).toBeVisible({ timeout: 15_000 });
+    await expect(buyButtons(page)).toHaveCount(14);
+    const scroller = page.locator('.zaui-page', { has: tablist }).first();
+    const topBefore = (await tablist.boundingBox())!.y;
+    await scroller.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+    await expect.poll(() => scroller.evaluate((el) => el.scrollTop), { timeout: 10_000 }).toBeGreaterThan(600);
+    // Dính ngay dưới thanh đặc của nút lùi: cao 56px (cộng vùng an toàn, 0 ở trình duyệt thật). Cao hơn nữa thì có khe hở lộ thẻ món cuộn qua.
+    await expect.poll(async () => Math.round((await tablist.boundingBox())!.y), { timeout: 5_000 }).toBe(56);
+    expect((await tablist.boundingBox())!.y).toBeLessThan(topBefore);
+    await expect(page.getByRole('timer')).toBeInViewport();
+    await expect(page.getByRole('tab', { name: '12:00, đang diễn ra' })).toBeInViewport();
+    await page.getByRole('tab', { name: '20:00, sắp diễn ra' }).click();
+    await expect(page.getByRole('tab', { name: '20:00, sắp diễn ra' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('button', { name: 'Nhắc tôi Sản phẩm Giờ vàng 21', exact: true })).toBeVisible();
   });
 
   test('chip danh mục lọc danh sách; chọn lại Tất cả trả đủ 14 món', async ({ page }) => {

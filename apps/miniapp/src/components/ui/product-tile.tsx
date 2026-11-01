@@ -38,6 +38,8 @@ export interface ProductTileProps {
   /** Phần cuối thẻ (thanh % đã bán, nút nhắc). Nơi gọi truyền `footerHeight` để thân thẻ giữ chiều cao cố định. */
   footer?: ReactNode;
   footerHeight?: number;
+  /** Làm mờ riêng vùng ảnh (món hết suất của Giờ vàng): chữ không mờ để giữ tương phản, mờ cả thẻ thì giá và chữ phụ tụt dưới 4,5:1. */
+  dimMedia?: boolean;
   /** Nút tuỳ ý cuối hàng của thẻ `line` (Mua ngay, Nhắc tôi), thay chỗ nút `onAdd`; thẻ dọc không có chỗ nên bỏ qua. Nơi gọi tự đặt tên truy cập. */
   action?: ReactNode;
   /** Chưa biết giá (đang tải): không in giá, vẫn giữ chỗ. */
@@ -86,6 +88,7 @@ export function ProductTile({
   imageOverlay,
   footer,
   footerHeight,
+  dimMedia,
   action,
   hidePrice,
   navState,
@@ -169,6 +172,7 @@ export function ProductTile({
           flex: '0 0 auto',
           overflow: 'hidden',
           ...(isLine ? { width: 64, height: 64, borderRadius: 'var(--radius-media)' } : { aspectRatio: '1 / 1' }),
+          ...(dimMedia ? { opacity: 0.55 } : null),
         }}
       >
         <ProductImage src={view.thumbnail} brand={view.brandLine ?? ''} width={isLine ? 64 : undefined} />

@@ -157,6 +157,31 @@ describe('Trang Giờ vàng (web): khung giờ và danh sách', () => {
     expect(tabs(c)[0]!.getAttribute('aria-controls')).toBe(panel.id);
   });
 
+  it('dải tab và đồng hồ nằm trong một khối dính, danh sách thì ở ngoài khối đó (cuộn danh sách dài không mất tab và đồng hồ)', async () => {
+    const c = await mount();
+    const sticky = c.querySelector('[data-testid="flash-sticky"]') as HTMLElement;
+    expect(sticky.className).toMatch(/\bsticky\b/);
+    expect(sticky.className).toContain('sticky-below-back');
+    expect(sticky.className).toContain('top-[var(--header-h)]');
+    expect(sticky.querySelector('[role="tablist"]')).not.toBeNull();
+    expect(sticky.querySelector('[data-testid="countdown-ends-clock"]')).not.toBeNull();
+    expect(sticky.contains(named(c, 'Mua ngay Sản phẩm a'))).toBe(false);
+    expect((c.querySelector('[role="tabpanel"]') as HTMLElement).contains(sticky)).toBe(false);
+    click(tabs(c)[1]!);
+    await flush(4);
+    expect(sticky.querySelector('[data-testid="countdown-starts-text"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="flash-sticky"]')).toBe(sticky);
+  });
+
+  it('đồng hồ khung đang diễn ra có nhãn "Kết thúc sau", không lặp "Đang diễn ra" của tab', async () => {
+    const c = await mount();
+    const sticky = c.querySelector('[data-testid="flash-sticky"]') as HTMLElement;
+    expect(sticky.textContent).toContain('Kết thúc sau');
+    expect(sticky.textContent!.split('Đang diễn ra').length - 1).toBe(1);
+    const label = Array.from(sticky.querySelectorAll('span')).find((s) => s.textContent === 'Kết thúc sau')!;
+    expect(label.closest('[aria-hidden="true"]')).not.toBeNull();
+  });
+
   it('khung đang diễn ra có đồng hồ tới giờ kết thúc; khung sắp diễn ra có đếm ngược tới giờ bắt đầu', async () => {
     const c = await mount();
     expect(c.querySelector('[data-testid="countdown-ends-clock"]')!.getAttribute('data-end')).toBe(S12.endAt);

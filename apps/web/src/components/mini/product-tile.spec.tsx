@@ -223,6 +223,18 @@ describe('ProductTile: liên kết, nút phụ, ô trang trí', () => {
     expect(c.textContent).not.toContain('Nhắc tôi');
   });
 
+  it('dimMedia chỉ làm mờ vùng ảnh, thân thẻ giữ chữ nguyên độ đậm', () => {
+    const c = tile(viewOf({}, 'line'), 'line', { dimMedia: true });
+    expect((c.querySelector('[data-ds-part="media"]') as HTMLElement).style.opacity).toBe('0.55');
+    expect((c.querySelector('[data-ds-part="body"]') as HTMLElement).style.opacity).toBe('');
+    expect((c.firstElementChild as HTMLElement).style.opacity).toBe('');
+  });
+
+  it('không có dimMedia thì ảnh không mờ', () => {
+    const c = tile(viewOf({}, 'line'), 'line');
+    expect((c.querySelector('[data-ds-part="media"]') as HTMLElement).style.opacity).toBe('');
+  });
+
   it('thẻ line: nút phụ cùng hàng, mặc định nhãn "Thêm"', () => {
     const c = tile(viewOf({}, 'line'), 'line', { onAdd: () => {} });
     expect(Array.from(c.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Thêm']);

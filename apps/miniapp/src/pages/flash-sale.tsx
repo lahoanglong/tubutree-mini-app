@@ -42,6 +42,24 @@ const STRIP: React.CSSProperties = {
   background: 'var(--color-bg-surface)',
 };
 
+/** Thanh đặc của nút lùi cao 56px (+ vùng an toàn) và đệm đầu của `.page` khi có nút lùi là 48px (+ vùng an toàn): xem back-button.tsx, css/tokens.css. */
+const BACK_BAR_HEIGHT = 56;
+const PAGE_TOP_PADDING = 48;
+
+/**
+ * Dải tab và đồng hồ dính khi cuộn (thiết kế §5): khung 14 món cao cỡ 1800px, khách cuộn xuống vẫn đổi được khung và thấy giờ còn lại mà không cuộn ngược.
+ * `top` của phần tử dính đo từ mép NỘI DUNG của vùng cuộn (`.zaui-page`, đã đo ở WebKit lẫn Chromium), không từ mép ngoài: muốn dính ngay dưới thanh nút lùi
+ * (56px + vùng an toàn tính từ đỉnh màn hình) thì trừ đệm đầu của trang (48px + vùng an toàn), còn 8px và không phụ thuộc tai thỏ. Vì vậy KHÔNG dùng lớp
+ * `sticky-below-back` (nó ép `top` bằng 56px + vùng an toàn và dính thấp 48px). z-index dưới nút lùi (200) và trên thẻ món.
+ */
+const STICKY: React.CSSProperties = {
+  position: 'sticky',
+  top: BACK_BAR_HEIGHT - PAGE_TOP_PADDING,
+  zIndex: 5,
+  background: 'var(--color-bg-surface)',
+  boxShadow: '0 1px 0 var(--color-border-subtle)',
+};
+
 function ListSkeleton() {
   return (
     <div data-testid="flash-items-loading" aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 16px 0' }}>
@@ -223,20 +241,25 @@ export default function FlashSalePage() {
       );
     body = (
       <>
-        <SlotTabs tabs={tabs} value={activeId} onChange={pick} panelId={panelId} />
-        <div role="tabpanel" id={panelId} aria-labelledby={slotTabId(activeId)}>
+        <div data-testid="flash-sticky" style={STICKY}>
+          <SlotTabs tabs={tabs} value={activeId} onChange={pick} panelId={panelId} />
           <div style={STRIP}>
             {activeTab.status === 'LIVE' ? (
               <>
-                <Text variant="body-sm" tone="secondary">
-                  {fillCopy('flash.slotLive')}
-                </Text>
+                {/* Chữ nhìn thấy ẩn với trình đọc: tên đọc của đồng hồ (role="timer") đã là "Kết thúc sau ...". */}
+                <span aria-hidden="true">
+                  <Text variant="body-sm" tone="secondary">
+                    {fillCopy('flash.endsLabel')}
+                  </Text>
+                </span>
                 <Countdown key={activeId} endAt={activeSlot.endAt} mode="clock" onEnd={onSlotEnd} />
               </>
             ) : (
               <Countdown key={activeId} endAt={activeSlot.startAt} kind="starts" mode="text" onEnd={onSlotStart} />
             )}
           </div>
+        </div>
+        <div role="tabpanel" id={panelId} aria-labelledby={slotTabId(activeId)}>
           {chips.length > 0 && (
             <div role="group" aria-label={fillCopy('flash.chipsLabel')} className="scroll-x" style={{ gap: 8, padding: '6px 16px', background: 'var(--color-bg-surface)' }}>
               <Chip

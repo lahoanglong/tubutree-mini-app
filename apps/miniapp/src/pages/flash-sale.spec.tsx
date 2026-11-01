@@ -139,6 +139,34 @@ describe('Trang Giờ vàng: khung giờ và danh sách', () => {
     expect(tabs[0]).toHaveAttribute('aria-controls', panel.id);
   });
 
+  it('dải tab và đồng hồ nằm trong một khối dính, danh sách thì ở ngoài khối đó (cuộn danh sách dài không mất tab và đồng hồ)', async () => {
+    serve({ items: { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c')]) } });
+    renderPage();
+    const sticky = await screen.findByTestId('flash-sticky');
+    expect(sticky.style.position).toBe('sticky');
+    // Đo từ mép nội dung của `.page` (đệm đầu 48px khi có nút lùi): 56px của thanh nút lùi trừ 48px còn 8px.
+    expect(sticky.style.top).toBe('8px');
+    expect(sticky.className).not.toContain('sticky-below-back');
+    expect(within(sticky).getByRole('tablist')).toBeInTheDocument();
+    expect(within(sticky).getByTestId('countdown-ends-clock')).toBeInTheDocument();
+    const buy = await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' });
+    expect(sticky.contains(buy)).toBe(false);
+    expect(screen.getByRole('tabpanel').contains(sticky)).toBe(false);
+    fireEvent.click(screen.getAllByRole('tab')[1]!);
+    const starts = await screen.findByTestId('countdown-starts-text');
+    expect(sticky.contains(starts)).toBe(true);
+    expect(screen.getByTestId('flash-sticky')).toBe(sticky);
+  });
+
+  it('đồng hồ khung đang diễn ra có nhãn "Kết thúc sau", không lặp "Đang diễn ra" của tab', async () => {
+    serve({ items: { s12: itemsOf(S12, [item('a')]) } });
+    renderPage();
+    const sticky = await screen.findByTestId('flash-sticky');
+    expect(within(sticky).getByText('Kết thúc sau')).toBeInTheDocument();
+    expect(within(sticky).getAllByText('Đang diễn ra')).toHaveLength(1);
+    expect(within(sticky).getByText('Kết thúc sau').closest('[aria-hidden="true"]')).not.toBeNull();
+  });
+
   it('khung đang diễn ra có đồng hồ HH:MM:SS tới giờ kết thúc; khung sắp diễn ra có đếm ngược tới giờ bắt đầu', async () => {
     serve({ items: { s12: itemsOf(S12, [item('a')]), s20: itemsOf(S20, [item('c')]) } });
     renderPage();
