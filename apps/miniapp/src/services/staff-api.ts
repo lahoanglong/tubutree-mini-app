@@ -53,3 +53,9 @@ export const getShiftsPendingCount = () =>
   api
     .get<{ items: { key: string; count: number }[] }>('/admin/ops/inbox')
     .then((r) => r.data.items.find((i) => i.key === 'shiftsPending')?.count ?? 0);
+
+/** Số báo cáo vi phạm cộng đồng đang mở (khoá communityReports của hộp việc); chỉ ADMIN gọi được. */
+export const getCommunityReportsCount = () =>
+  api
+    .get<{ items: { key: string; count: number }[] }>('/admin/ops/inbox')
+    .then((r) => r.data.items.find((i) => i.key === 'communityReports')?.count);

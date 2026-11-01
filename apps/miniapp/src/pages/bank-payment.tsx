@@ -21,7 +21,7 @@ import { ErrorState } from '../components/ui/empty-state';
 import { SupportHotline } from '../components/support-hotline';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { platformBridge } from '../services/platform-bridge';
-import { BANK_QR_HINT, BANK_QR_SAVED, BANK_QR_SAVE_FAILED } from '@tubutree/app-core/bank-payment-copy';
+import { BANK_DEADLINE_LEAD, BANK_DEADLINE_TAIL, BANK_QR_HINT, BANK_QR_SAVED, BANK_QR_SAVE_FAILED } from '@tubutree/app-core/bank-payment-copy';
 import type { SaveImageResult } from '@tubutree/app-core/bridge';
 
 const PAGE_TITLE = 'Thanh toán chuyển khoản';
@@ -313,8 +313,7 @@ export default function BankPaymentPage() {
         {data.paymentDeadline && (
           <Box mt={2} p={3} role="note" style={{ background: 'var(--color-status-warning-bg)', borderRadius: 'var(--radius-control)' }}>
             <Text size="small" style={{ color: 'var(--color-status-warning-fg)' }}>
-              Vui lòng chuyển khoản trước <b>{formatDateTime(data.paymentDeadline)}</b>. Quá hạn đơn sẽ tự huỷ; tiền chuyển sau đó
-              Tubu sẽ hoàn lại cho bạn.
+              {BANK_DEADLINE_LEAD} <b>{formatDateTime(data.paymentDeadline)}</b> {BANK_DEADLINE_TAIL}
             </Text>
             {/* Không phải vùng đọc tự động: đồng hồ đổi mỗi 15 giây, đọc lại liên tục sẽ làm phiền người dùng trình đọc màn hình. */}
             {remaining.text && (

@@ -3,6 +3,7 @@
 import { createContext, useContext, useState } from 'react';
 import Link from 'next/link';
 import { addComment } from '@tubutree/app-core/api/feed';
+import { communityViewLabel, communityViewsFor, reportsTabCount, type CommunityView } from '@tubutree/app-core/community-moderation-views';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import {
   approveCommunityPost,
@@ -28,17 +29,9 @@ import { formatDateTime } from '@/lib/format-date';
 import { EventsPanel } from './community-events-panel';
 import { useConfirm } from './confirm-dialog';
 import { safeEvidenceImage } from './evidence-images';
-import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, LoadError, chipClass, Notice, ToneBadge } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, ListSkeleton, LoadError, chipClass, Notice, ToneBadge } from './ui';
 
-export type CommunityView = 'pending' | 'reports' | 'published' | 'unanswered' | 'events';
-
-const VIEWS: { k: CommunityView; label: string }[] = [
-  { k: 'pending', label: 'Chờ duyệt' },
-  { k: 'reports', label: 'Báo cáo vi phạm' },
-  { k: 'published', label: 'Đã đăng' },
-  { k: 'unanswered', label: 'Chưa trả lời' },
-  { k: 'events', label: 'Sự kiện' },
-];
+export type { CommunityView };
 
 const KIND_LABELS: Record<CommunityPostKind, string> = {
   MANUAL: 'Chia sẻ',
@@ -70,14 +63,14 @@ const isStale = (e: unknown): e is ApiError => e instanceof ApiError && (e.statu
  */
 export function CommunityModerationTab({ initialView = 'pending', isAdmin = false }: { initialView?: CommunityView; isAdmin?: boolean }) {
   const [picked, setView] = useState<CommunityView>(initialView);
-  const views = isAdmin ? VIEWS : VIEWS.filter((v) => v.k !== 'events');
+  const views = communityViewsFor({ platform: 'web', isAdmin });
   const view = views.some((v) => v.k === picked) ? picked : 'pending';
   const [staleNotice, setStaleNotice] = useState<string | null>(null);
   const reports = useQuery({ queryKey: QUERY_KEYS.reports, queryFn: listCommunityReports }).data;
   // adminReports chỉ trả tối đa 50 báo cáo; số thật lấy từ hộp việc (cùng số với thẻ ở trang Hôm nay), chưa có thì ghi "50+" khi đủ trần.
   const inbox = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000, retry: false }).data;
   const inboxCount = inbox?.items.find((i) => i.key === 'communityReports')?.count;
-  const reportCount = inboxCount ?? (reports ? (reports.length >= 50 ? '50+' : reports.length) : undefined);
+  const reportCount = reportsTabCount(inboxCount, reports?.length);
   return (
     <StaleNoticeContext.Provider value={setStaleNotice}>
       <div className="space-y-3">
@@ -94,8 +87,8 @@ export function CommunityModerationTab({ initialView = 'pending', isAdmin = fals
                 setView(v.k);
               }}
             >
-              {v.label}
-              {v.k === 'reports' && reportCount !== undefined && reportCount !== 0 ? ` (${reportCount})` : ''}
+              {communityViewLabel(v, 'web')}
+              {v.k === 'reports' && reportCount !== undefined ? ` (${reportCount})` : ''}
             </button>
           ))}
         </div>
@@ -187,7 +180,7 @@ function PendingList() {
   const q = useQuery({ queryKey: QUERY_KEYS.pending, queryFn: listCommunityPending });
   return (
     <div className="space-y-2">
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {q.isLoading && <ListSkeleton label="Đang tải danh sách" rows={3} className="h-24" />}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách bài chờ duyệt.</LoadError>}
       {q.data && (
         <>
@@ -243,7 +236,7 @@ function ReportsList({ isAdmin }: { isAdmin: boolean }) {
   const q = useQuery({ queryKey: QUERY_KEYS.reports, queryFn: listCommunityReports });
   return (
     <div className="space-y-2">
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {q.isLoading && <ListSkeleton label="Đang tải danh sách" rows={3} className="h-24" />}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách báo cáo vi phạm.</LoadError>}
       {q.data && (
         <>
@@ -324,7 +317,7 @@ function PublishedList({ canPin }: { canPin: boolean }) {
   const items = q.data?.pages.flatMap((pg) => pg.items) ?? [];
   return (
     <div className="space-y-2">
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {q.isLoading && <ListSkeleton label="Đang tải danh sách" rows={3} className="h-24" />}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách bài đã đăng.</LoadError>}
       {q.data && items.length === 0 && <p className="text-xs text-stone-500">Chưa có bài nào được đăng.</p>}
       <ul className="space-y-2">
@@ -390,7 +383,7 @@ function UnansweredList() {
   const q = useQuery({ queryKey: QUERY_KEYS.unanswered, queryFn: listCommunityUnanswered });
   return (
     <div className="space-y-2">
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {q.isLoading && <ListSkeleton label="Đang tải danh sách" rows={3} className="h-24" />}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách câu hỏi chưa trả lời.</LoadError>}
       {q.data && (
         <>

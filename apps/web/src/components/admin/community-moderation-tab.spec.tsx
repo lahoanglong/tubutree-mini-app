@@ -177,7 +177,7 @@ describe('CommunityModerationTab — bài chờ duyệt', () => {
 
   it('trạng thái tải, rỗng và lỗi tải', async () => {
     const loading = setup();
-    expect(loading.r.container.textContent).toContain('Đang tải');
+    expect(loading.r.container.querySelector('[role="status"][aria-busy="true"][aria-label="Đang tải danh sách"]')).not.toBeNull();
     await flush();
     loading.r.unmount();
     mounted = [];

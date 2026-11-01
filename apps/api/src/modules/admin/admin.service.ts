@@ -939,6 +939,19 @@ export class AdminService {
     return buildAdminOrderWhere({ ...filter, searchUserIds, searchOrderIds, exactPhoneOnly, ...(storefrontId ? { storefrontId } : {}) });
   }
 
+  /** Số đơn theo trạng thái với cùng điều kiện lọc của danh sách (bỏ `status`): chip "Tất cả" là tổng các trạng thái. */
+  async orderStatusCounts(f: Omit<AdminOrderFilterInput, 'status'>, viewer: OrderActor = { role: 'ADMIN' }): Promise<{ all: number; byStatus: Record<string, number> }> {
+    const where = await this.adminOrderWhere(f, { exactPhoneOnly: !seesFullOrderPhones(viewer) });
+    const rows = await this.prisma.order.groupBy({ by: ['status'], where, _count: { _all: true } });
+    const byStatus: Record<string, number> = {};
+    let all = 0;
+    for (const r of rows) {
+      byStatus[r.status] = r._count._all;
+      all += r._count._all;
+    }
+    return { all, byStatus };
+  }
+
   /**
    * Slug hoặc subdomain gian hàng → id. Gõ không khớp gian hàng nào thì trả id không thể trùng ai (danh sách rỗng): bỏ lọc
    * sẽ hiện mọi đơn như thể đã lọc xong.

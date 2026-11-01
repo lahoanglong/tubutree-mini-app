@@ -173,7 +173,6 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
     setNotice(null);
     setComposing(true);
   };
-  const linkBtn = `${ui.btnSecondary} flex-none whitespace-nowrap px-3.5 max-md:px-3`;
 
   return (
     <FeedShell>
@@ -181,11 +180,6 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
 
       <div className="flex flex-col gap-3 max-md:-mx-4 max-md:gap-2 max-md:bg-stone-0 max-md:px-3 max-md:pb-1 md:contents">
         <div className="flex items-center gap-2 max-md:gap-1.5">
-          {isWebRouteReady('/cong-dong/su-kien') && (
-            <Link href="/cong-dong/su-kien" aria-label="Sự kiện" className={linkBtn}>
-              Sự kiện
-            </Link>
-          )}
           <button type="button" onClick={openComposer} className={`${ui.btnPrimary} whitespace-nowrap max-md:flex-1 max-md:px-3 md:ml-auto`}>
             <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Đăng bài
@@ -227,6 +221,15 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
         {/* Điện thoại: danh mục và sắp xếp nằm chung một hàng cuộn ngang để bài đầu lên sớm hơn. */}
         <div className="flex flex-col gap-3 max-md:-mx-3 max-md:flex-row max-md:items-center max-md:gap-2 max-md:overflow-x-auto max-md:px-3 max-md:py-1">
           <div role="group" aria-label="Chọn danh mục" className="flex gap-2 overflow-x-auto max-md:shrink-0 max-md:overflow-visible md:flex-wrap">
+            {isWebRouteReady('/cong-dong/su-kien') && (
+              <Link
+                href="/cong-dong/su-kien"
+                aria-label="Sự kiện"
+                className="tubu-hit-44 inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-stone-450 bg-stone-0 px-3.5 text-sm font-medium text-stone-800 hover:bg-stone-50 max-md:border-transparent max-md:bg-stone-100 max-md:text-stone-600"
+              >
+                Sự kiện
+              </Link>
+            )}
             <Chip selected={!category} onClick={() => setCategory(undefined)}>
               Tất cả
             </Chip>

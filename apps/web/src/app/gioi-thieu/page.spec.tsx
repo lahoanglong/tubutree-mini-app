@@ -5,7 +5,7 @@ import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-util
 
 // Chép ý about.spec.tsx (Mini App): hotline/email từ cấu hình, FAQ admin hoặc bản dự phòng, nhóm lọc, accordion, xoá tài khoản
 // có xác nhận, đăng xuất. Khác Mini App: chính sách là link sang /chinh-sach/<loai> (không sheet tóm tắt), liên hệ là tel:/mailto:,
-// và trang công khai nên khối Xoá tài khoản/Đăng xuất chỉ hiện khi đã đăng nhập.
+// và trang công khai nên Xoá tài khoản và Đăng xuất nằm ở Cài đặt.
 
 const mocks = vi.hoisted(() => ({
   auth: { status: 'authenticated' as string, initialized: true, sessionUnavailable: false, user: { id: 'u1' } as unknown, logout: vi.fn() },
@@ -284,95 +284,9 @@ describe('/gioi-thieu: chính sách', () => {
 });
 
 describe('/gioi-thieu: tài khoản', () => {
-  it('Xoá tài khoản: bấm, hỏi lại, "Gửi yêu cầu xoá" gọi API đúng một lần; "Huỷ" quay về', async () => {
+  it('không còn nút Xoá tài khoản và Đăng xuất ở trang Giới thiệu (nằm ở Cài đặt)', async () => {
     const { container } = await mount();
-    click(button(container, 'Xoá tài khoản'));
-    expect(container.textContent).toContain('Xoá tài khoản vĩnh viễn?');
-    click(button(container, 'Huỷ'));
-    expect(container.textContent).not.toContain('Xoá tài khoản vĩnh viễn?');
-    expect(mocks.post).not.toHaveBeenCalled();
-
-    click(button(container, 'Xoá tài khoản'));
-    await flush();
-    click(button(container, 'Gửi yêu cầu xoá'));
-    await flush();
-    expect(mocks.post).toHaveBeenCalledTimes(1);
-    expect(mocks.post.mock.calls[0]![0]).toBe('/me/deletion-request');
-    expect(container.querySelector('[role="status"]')?.textContent).toContain('Đã ghi nhận yêu cầu');
-    expect(byText(container, 'button', 'Gửi yêu cầu xoá')).toBeNull();
-  });
-
-  it('Ví còn tiền: hiện số dư mất, nút gửi bị khoá tới khi tick đồng ý, rồi gửi kèm đúng số dư đã thấy', async () => {
-    setup({ wallet: { walletBalance: 20000 } });
-    const { container } = await mount();
-    click(button(container, 'Xoá tài khoản'));
-    await flush();
-    expect(container.textContent).toContain('Ví Tubu còn 20.000đ. Xoá tài khoản thì số dư này mất và không hoàn lại.');
-    expect(button(container, 'Gửi yêu cầu xoá').disabled).toBe(true);
-    click(container.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
-    await flush();
-    expect(button(container, 'Gửi yêu cầu xoá').disabled).toBe(false);
-    click(button(container, 'Gửi yêu cầu xoá'));
-    await flush();
-    expect(mocks.post).toHaveBeenCalledWith('/me/deletion-request', { reason: undefined, acknowledgedWalletBalance: 20000, acceptWalletForfeit: true });
-  });
-
-  it('máy chủ từ chối vì số dư đã đổi: bỏ tick, tải lại số dư, khách phải đồng ý lại với số mới', async () => {
-    let calls = 0;
-    mocks.get.mockImplementation(async (path: string) => {
-      if (path === '/faqs') return FAQS;
-      if (path === '/config/public') return { support: SUPPORT };
-      if (path === '/me/wallet') return { walletBalance: ++calls === 1 ? 20000 : 30000 };
-      throw new Error(`unexpected ${path}`);
-    });
-    mocks.post.mockRejectedValueOnce(new Error('Số dư Ví Tubu vừa đổi'));
-    const { container } = await mount();
-    click(button(container, 'Xoá tài khoản'));
-    await flush();
-    click(container.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
-    await flush();
-    click(button(container, 'Gửi yêu cầu xoá'));
-    await flush(8);
-    expect(container.textContent).toContain('Ví Tubu còn 30.000đ');
-    expect(container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false);
-    expect(button(container, 'Gửi yêu cầu xoá').disabled).toBe(true);
-  });
-
-  it('chưa biết số dư (tải lỗi): không cho gửi', async () => {
-    setup({ wallet: new Error('mạng') });
-    const { container } = await mount();
-    click(button(container, 'Xoá tài khoản'));
-    await flush(8);
-    expect(container.textContent).toContain('Chưa tải được số dư Ví Tubu');
-    expect(button(container, 'Gửi yêu cầu xoá').disabled).toBe(true);
-  });
-
-  it('gửi yêu cầu lỗi: báo lỗi và cho gửi lại', async () => {
-    mocks.post.mockRejectedValueOnce(new Error('Máy chủ bận'));
-    const { container } = await mount();
-    click(button(container, 'Xoá tài khoản'));
-    await flush();
-    click(button(container, 'Gửi yêu cầu xoá'));
-    await flush();
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ bận');
-    click(button(container, 'Gửi yêu cầu xoá'));
-    await flush();
-    expect(mocks.post).toHaveBeenCalledTimes(2);
-  });
-
-  it('có OA cấu hình: sau khi gửi yêu cầu có nút nhắn Zalo OA để trao đổi trực tiếp', async () => {
-    mocks.oaAvailable = true;
-    const { container } = await mount();
-    click(button(container, 'Xoá tài khoản'));
-    await flush();
-    click(button(container, 'Gửi yêu cầu xoá'));
-    await flush();
-    click(button(container, 'Nhắn Zalo OA về việc xoá tài khoản'));
-    expect(mocks.openChat).toHaveBeenCalledWith('Tôi muốn xoá tài khoản Tubu Tree');
-  });
-
-  it('không còn nút Đăng xuất ở trang Giới thiệu (chỉ có ở Cài đặt)', async () => {
-    const { container } = await mount();
+    expect(byText(container, 'button', 'Xoá tài khoản')).toBeNull();
     expect(byText(container, 'button', 'Đăng xuất')).toBeNull();
   });
 });

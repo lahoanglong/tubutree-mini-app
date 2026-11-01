@@ -36,6 +36,8 @@ import { Heading, Text } from '../components/ui/text';
 import { formatDate, formatNumber, formatPoints, formatVnd } from '../utils/format';
 import { timeAgo } from '../utils/time-ago';
 import { vi } from '../i18n/vi';
+import { communityViewLabel, communityViewsFor, reportsTabCount, type CommunityView } from '@tubutree/app-core/community-moderation-views';
+import { getCommunityReportsCount } from '../services/staff-api';
 import { KIND_LABEL } from '../components/community/post-card';
 import { ImageUpload } from '../components/image-upload';
 
@@ -77,20 +79,23 @@ export default function CommunityModerationPage() {
   return <ModerationHub />;
 }
 
-type Tab = 'pending' | 'reports' | 'events';
+type Tab = Extract<CommunityView, 'pending' | 'reports' | 'events'>;
 
 function ModerationHub() {
   const [tab, setTab] = useState<Tab>('pending');
+  // Chỉ đọc số từ hộp việc (không tải danh sách báo cáo khi khách chưa mở tab). Khoá nằm dưới 'admin-community-reports' nên xử lý xong một báo cáo là số tự làm mới.
+  const inboxQ = useQuery({ queryKey: ['admin-community-reports', 'count'], queryFn: getCommunityReportsCount, retry: false });
+  const reportCount = reportsTabCount(inboxQ.data, undefined);
   return (
     <Page style={{ ...PAGE_BG, paddingBottom: 96 }}>
       <PageHeader title={vi.community.moderation} />
       <div style={{ padding: '12px 16px 0' }}>
         <SegmentedTabs
-          items={[
-            { key: 'pending', label: vi.community.tabPending },
-            { key: 'reports', label: vi.community.tabReports },
-            { key: 'events', label: vi.community.events },
-          ]}
+          items={communityViewsFor({ platform: 'mini', isAdmin: true }).map((v) => ({
+            key: v.k,
+            label: communityViewLabel(v, 'mini'),
+            ...(v.k === 'reports' && reportCount !== undefined ? { count: reportCount } : {}),
+          }))}
           value={tab}
           onChange={(key) => setTab(key as Tab)}
         />

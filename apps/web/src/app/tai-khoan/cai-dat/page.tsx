@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
 import { fetchNotifyPrefs, saveNotifyPrefs, type NotifyPrefs } from '@tubutree/app-core/api/account';
+import { AccountDeletionSection } from '@/components/account/account-deletion-section';
 import { applyFontScale, readFontScale, saveFontScale, type FontScale } from '@/components/account/font-scale';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { mini } from '@/components/order-mobile/mobile-ui';
@@ -26,7 +27,7 @@ const FONT_OPTIONS: { scale: FontScale; label: string; glyph: string }[] = [
   { scale: 'large', label: 'Lớn', glyph: 'text-lg' },
 ];
 
-/** Cài đặt (cùng nội dung với `settings.tsx` của Mini App): thông báo lưu trên server, cỡ chữ, liên kết hồ sơ/địa chỉ, đăng xuất. */
+/** Cài đặt (cùng nội dung với `settings.tsx` của Mini App): thông báo lưu trên server, cỡ chữ, liên kết hồ sơ/địa chỉ, đăng xuất, xoá tài khoản. */
 export default function SettingsPage() {
   const { logout } = useAuth();
   const phase = useAuthPhase();
@@ -159,6 +160,8 @@ export default function SettingsPage() {
           Đăng xuất
         </button>
       </div>
+
+      <AccountDeletionSection />
     </div>,
   );
 }

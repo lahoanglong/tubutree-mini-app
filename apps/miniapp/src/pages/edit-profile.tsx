@@ -3,6 +3,7 @@ import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { Camera, Gift, Loader2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatDobDisplay, profileCopy } from '@tubutree/app-core/account-copy';
+import { DOB_PLACEHOLDER, maskDobInput, validateDobVn } from '@tubutree/app-core/dob-input';
 import { getMe, updateMe } from '../services/account-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -37,7 +38,8 @@ export default function EditProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarChanged, setAvatarChanged] = useState(false);
   const canChangeAvatar = isCloudinaryConfigured();
-  const [dob, setDob] = useState('');
+  const [dobText, setDobText] = useState('');
+  const [dobTouched, setDobTouched] = useState(false);
   const [touched, setTouched] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [confirmingDob, setConfirmingDob] = useState(false);
@@ -54,13 +56,16 @@ export default function EditProfilePage() {
       setEmail(meQ.data.email ?? '');
       // `||` vì chuỗi rỗng cũng là chưa có ảnh; ảnh Zalo đã lưu vào user lúc đăng nhập.
       setAvatarUrl(meQ.data.avatarUrl || useAuthStore.getState().user?.avatarUrl || null);
-      setDob(meQ.data.dob ?? '');
     }
   }, [meQ.data]);
 
   // Ngày sinh chưa đặt mà khách vừa chọn: hỏi xác nhận trước khi lưu vì API không cho sửa lại.
-  const dobNew = !meQ.data?.dob && dob !== '';
+  const dobEditable = !meQ.data?.dob;
+  const dobCheck = validateDobVn(dobText);
+  const dob = dobEditable ? (dobCheck.iso ?? '') : (meQ.data?.dob ?? '');
+  const dobNew = dobEditable && dob !== '';
   const dobDisplay = formatDobDisplay(dob);
+  const dobError = dobEditable && (dobTouched || dobText.length === 10) ? dobCheck.error : null;
   const emailInvalid = touched && email.trim() !== '' && !EMAIL.test(email.trim());
 
   const handlePickAvatar = () => {
@@ -262,12 +267,17 @@ export default function EditProfilePage() {
           </Field>
 
           <div>
-            <Field label="Ngày sinh">
+            <Field label="Ngày sinh" error={dobError ?? undefined}>
               <input
-                {...(meQ.data?.dob ? { type: 'text', value: formatDobDisplay(meQ.data.dob) || dob } : { type: 'date', lang: 'vi', value: dob })}
-                readOnly={Boolean(meQ.data?.dob) || confirmingDob}
+                {...(dobEditable
+                  ? { type: 'text', inputMode: 'numeric', placeholder: DOB_PLACEHOLDER, autoComplete: 'bday', value: dobText }
+                  : { type: 'text', value: formatDobDisplay(meQ.data?.dob) || dob })}
+                readOnly={!dobEditable || confirmingDob}
+                aria-invalid={dobError ? true : undefined}
+                onBlur={() => setDobTouched(true)}
                 onChange={(e) => {
-                  setDob(e.target.value);
+                  const text = maskDobInput(e.target.value, dobText, (e.nativeEvent as InputEvent).inputType);
+                  setDobText(text);
                   setConfirmingDob(false);
                 }}
                 style={{
@@ -276,7 +286,7 @@ export default function EditProfilePage() {
                   minHeight: 44,
                   padding: 12,
                   borderRadius: 'var(--radius-control)',
-                  border: '1px solid var(--color-border-default)',
+                  border: `1px solid ${dobError ? 'var(--color-status-danger-fg)' : 'var(--color-border-default)'}`,
                   fontFamily: 'inherit',
                   fontSize: 'var(--type-body-sm-size)',
                   background: 'var(--color-bg-surface)',
@@ -329,6 +339,10 @@ export default function EditProfilePage() {
               onPress={() => {
                 setTouched(true);
                 if (email.trim() !== '' && !EMAIL.test(email.trim())) return;
+                if (dobEditable && dobCheck.error) {
+                  setDobTouched(true);
+                  return;
+                }
                 if (dobNew) setConfirmingDob(true);
                 else save.mutate();
               }}

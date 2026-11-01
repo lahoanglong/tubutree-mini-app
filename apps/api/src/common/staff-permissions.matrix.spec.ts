@@ -174,6 +174,7 @@ const EXPECTED: Record<string, Access> = {
   'POST /admin/ops/webhook-events/:source/:id/dismiss': ADMIN_ONLY,
   'POST /admin/ops/webhook-events/:source/:id/retry': ADMIN_ONLY,
   'GET /admin/orders': [CSKH, KHO, KE_TOAN],
+  'GET /admin/orders/status-counts': [CSKH, KHO, KE_TOAN],
   'POST /admin/orders/:id/confirm-payment': [KE_TOAN],
   'POST /admin/orders/:id/gomdon/cancel-waybill': [KHO],
   'POST /admin/orders/:id/gomdon/mark-handled': [KHO],

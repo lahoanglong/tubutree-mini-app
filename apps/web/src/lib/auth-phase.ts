@@ -4,6 +4,7 @@ import { useContext, useSyncExternalStore } from 'react';
 import { useAuth } from './auth-context';
 import { hasSessionMarker } from './client-api';
 import { HomeRestoreHintContext } from './home-restore-context';
+import { useHydrated } from './use-hydrated';
 
 export type AuthPhase = 'loading' | 'guest' | 'unavailable' | 'authenticated';
 
@@ -14,9 +15,14 @@ export type AuthPhase = 'loading' | 'guest' | 'unavailable' | 'authenticated';
  *
  * 'unavailable' = cờ phiên còn nhưng mất mạng/API tạm lỗi lúc khôi phục: khách KHÔNG phải khách vãng lai, đừng
  * mời đăng nhập lại (vòng OAuth thừa) mà nói mất kết nối và cho thử lại.
+ *
+ * Lượt vẽ đầu (máy chủ và hydrate) luôn là 'loading': máy chủ không có phiên, còn khối Suspense của trang dựng sẵn hydrate muộn, lúc phiên
+ * đã khôi phục xong; trả pha thật ngay lúc đó thì HTML lệch ("Hydration failed", React #418).
  */
 export function useAuthPhase(): AuthPhase {
   const { status, initialized, sessionUnavailable } = useAuth();
+  const hydrated = useHydrated();
+  if (!hydrated) return 'loading';
   if (status === 'authenticated') return 'authenticated';
   if (initialized === false || status === 'loading') return 'loading';
   return sessionUnavailable ? 'unavailable' : 'guest';

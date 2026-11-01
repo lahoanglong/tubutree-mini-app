@@ -413,14 +413,24 @@ describe('FeedView — xem trước công khai khi chưa đăng nhập (cờ com
 });
 
 describe('/cong-dong — giao diện điện thoại như Mini App', () => {
-  it('nút Sự kiện có chữ nhìn thấy, không icon, viền chữ nhật (D6-05)', async () => {
+  it('Sự kiện là chip đầu hàng danh mục như Mini App (R-55): chữ nhìn thấy, không icon, bo tròn, đứng trước Tất cả', async () => {
     mocks.ready.add('/cong-dong/su-kien');
     const { container } = await mount();
     const events = container.querySelector('a[aria-label="Sự kiện"]')!;
     expect(events.textContent?.trim()).toBe('Sự kiện');
     expect(events.querySelector('svg')).toBeNull();
-    expect(events.className).toContain('border');
-    expect(events.className).not.toContain('rounded-full');
+    expect(events.className).toContain('rounded-full');
+    const group = container.querySelector('[role="group"][aria-label="Chọn danh mục"]')!;
+    expect(group.firstElementChild).toBe(events);
+    expect(group.children[1]?.textContent?.trim()).toBe('Tất cả');
+    expect(events.closest('[role="group"]')).toBe(group);
+  });
+
+  it('hàng nút đầu trang chỉ còn một nút Đăng bài (và tìm kiếm), không còn nút Sự kiện riêng', async () => {
+    mocks.ready.add('/cong-dong/su-kien');
+    const { container } = await mount();
+    const post = exact(container, 'button', 'Đăng bài')!;
+    expect(post.parentElement!.querySelector('a')).toBeNull();
   });
 
   it('đã đăng nhập: không có câu phụ đề dưới tiêu đề để bài đầu lên sớm hơn (D6-05)', async () => {
