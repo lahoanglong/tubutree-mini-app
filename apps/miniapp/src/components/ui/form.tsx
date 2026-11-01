@@ -85,14 +85,18 @@ function forwardPaddingTap(e: MouseEvent<HTMLDivElement>) {
   e.currentTarget.querySelector('input')?.click();
 }
 
-function hitArea(testId: string, children: ReactNode, decorative: boolean) {
+// `flush`: khung chạm vẫn 44x44 nhưng chỉ chiếm đúng 24px bề ngang của bố cục (margin âm 10px mỗi phía bù đệm trái 10px; ô nằm sát mép trái của cột 24px),
+// phần nhô ra là vùng chạm thêm trên đệm của thẻ và khe giữa các cột. Dùng cho ô chọn đầu dòng (giỏ: cột 24 + khoảng 12, PL-19) thay vì chiếm cả 44px.
+const FLUSH_HIT = { boxSizing: 'border-box', paddingLeft: 10, marginLeft: -10, marginRight: -10 } as const;
+
+function hitArea(testId: string, children: ReactNode, decorative: boolean, flush = false) {
   return (
     <div
       data-testid={testId}
       aria-hidden={decorative || undefined}
       {...(decorative ? INERT : null)}
       onClick={decorative ? undefined : forwardPaddingTap}
-      style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center' }}
+      style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', ...(flush ? FLUSH_HIT : null) }}
     >
       {children}
     </div>
@@ -128,13 +132,17 @@ const DECORATIVE_INPUT = { tabIndex: -1 } as const;
 // needed inside a <Checkbox.Group>) — forwarding React.ComponentProps<typeof ZCheckbox> as-is
 // would force every standalone caller to pass a meaningless `value`. Make it optional here and
 // default it, since a standalone Checkbox never reads it.
-export type CheckboxProps = Omit<ComponentProps<typeof ZCheckbox>, 'value'> & { value?: string | number };
+export type CheckboxProps = Omit<ComponentProps<typeof ZCheckbox>, 'value'> & {
+  value?: string | number;
+  /** Ô chọn đầu dòng: chiếm cột 24px, vùng chạm 44px nhô ra hai phía (xem `FLUSH_HIT`). Mặc định false: khung chiếm 44px như mọi chỗ khác. */
+  flush?: boolean;
+};
 
 /** Checkbox đã theme sẵn qua ZaUI bridge (Task 4) — wrapper này CHỈ thêm vùng chạm tối thiểu
  * 44px, không tự vẽ lại hành vi check/uncheck (audit DS v2 44px touch target). */
-export function Checkbox({ value = '', ...rest }: CheckboxProps) {
+export function Checkbox({ value = '', flush = false, ...rest }: CheckboxProps) {
   const decorative = !hasName(rest);
-  return hitArea('checkbox-hit-area', <ZCheckbox value={value} {...(decorative ? DECORATIVE_INPUT : null)} {...rest} />, decorative);
+  return hitArea('checkbox-hit-area', <ZCheckbox value={value} {...(decorative ? DECORATIVE_INPUT : null)} {...rest} />, decorative, flush);
 }
 
 export type RadioProps = ComponentProps<typeof ZRadio>;

@@ -474,12 +474,12 @@ function CartLineRow({
         background: 'var(--color-bg-surface)',
         borderRadius: 'var(--radius-card)',
         display: 'flex',
-        gap: 10,
+        gap: 12,
         alignItems: 'center',
         boxShadow: 'var(--elevation-1)',
       }}
     >
-      <Checkbox checked={selected} onChange={onToggleSelect}>
+      <Checkbox flush checked={selected} onChange={onToggleSelect}>
         <span style={SR_ONLY}>{`Chọn ${line.productName}`}</span>
       </Checkbox>
       <Box
@@ -757,7 +757,7 @@ function StickySummary({
                   data-testid="freeship-bar"
                   style={{
                     height: 4,
-                    background: 'var(--stone-200)',
+                    background: 'var(--color-track)',
                     borderRadius: 'var(--radius-pill)',
                     marginTop: 4,
                     overflow: 'hidden',
@@ -767,7 +767,7 @@ function StickySummary({
                     style={{
                       width: `${progressPct}%`,
                       height: '100%',
-                      background: 'linear-gradient(90deg, var(--forest-200), var(--color-action-primary-bg))',
+                      background: 'linear-gradient(90deg, var(--color-action-secondary-border), var(--color-action-primary-bg))',
                       borderRadius: 'var(--radius-pill)',
                       transition: 'width var(--dur-slow) var(--ease-out)',
                     }}
